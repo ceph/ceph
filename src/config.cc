@@ -313,7 +313,7 @@ md_config_t g_conf = {
 
   // --- journaler ---
   journaler_allow_split_entries: true,
-  journaler_safe: false,  // wait for COMMIT on journal writes
+  journaler_safe: true,  // wait for COMMIT on journal writes
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
   journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)

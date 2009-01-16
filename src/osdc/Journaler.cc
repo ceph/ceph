@@ -235,6 +235,8 @@ void Journaler::_finish_flush(int r, __s64 start, utime_t stamp, bool safe)
       safe_pos = flush_pos;
     else
       safe_pos = *pending_safe.begin();
+    if (ack_pos < safe_pos)
+      ack_pos = safe_pos;
     
     if (ack_barrier.count(start)) {
       ack_barrier.erase(start);
@@ -259,13 +261,12 @@ void Journaler::_finish_flush(int r, __s64 start, utime_t stamp, bool safe)
 	   << dendl;
 
   // kick waiters <= ack_pos
-  if (!safe) {
-    while (!waitfor_ack.empty()) {
-      if (waitfor_ack.begin()->first > ack_pos) break;
-      finish_contexts(waitfor_ack.begin()->second);
-      waitfor_ack.erase(waitfor_ack.begin());
-    }
-  } else {
+  while (!waitfor_ack.empty()) {
+    if (waitfor_ack.begin()->first > ack_pos) break;
+    finish_contexts(waitfor_ack.begin()->second);
+    waitfor_ack.erase(waitfor_ack.begin());
+  }
+  if (safe) {
     while (!waitfor_safe.empty()) {
       if (waitfor_safe.begin()->first > safe_pos) break;
       finish_contexts(waitfor_safe.begin()->second);
@@ -341,19 +342,27 @@ void Journaler::_do_flush()
   // flush _start_ pos to _finish_flush
   utime_t now = g_clock.now();
   SnapContext snapc;
+
+  Context *onack = 0;
+  if (!g_conf.journaler_safe) {
+    onack = new C_Flush(this, flush_pos, now, false);  // on ACK
+    pending_ack.insert(flush_pos);
+  }
+
+  Context *onsafe = new C_Flush(this, flush_pos, now, true);  // on COMMIT
+  pending_safe.insert(flush_pos);
+
   filer.write(ino, &layout, snapc,
 	      flush_pos, len, write_buf, 
 	      CEPH_OSD_OP_INCLOCK_FAIL,
-	      new C_Flush(this, flush_pos, now, false),  // on ACK
-	      new C_Flush(this, flush_pos, now, true));  // on COMMIT
-  pending_ack.insert(flush_pos);
-  pending_safe.insert(flush_pos);
+	      onack, onsafe);
   
+ 
   // adjust pointers
   flush_pos = write_pos;
   write_buf.clear();  
   
-  dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << dendl;
+  dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << "/" << safe_pos << dendl;
 }
 
 
