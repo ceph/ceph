@@ -567,6 +567,7 @@ no_change:
 
 		/* set dir completion flag? */
 		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
+		    ceph_ino(inode) != CEPH_INO_ROOT &&
 		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_RDCACHE)) {
 			dout(10, " marking %p complete (empty)\n", inode);
 			ci->i_ceph_flags |= CEPH_I_COMPLETE;
@@ -774,6 +775,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (!rinfo->head->result &&
 		    req->r_locked_dir) {
 			struct ceph_inode_info *ci = ceph_inode(req->r_locked_dir);
+			dout(10, " clearing %p complete (empty trace)\n",
+			     req->r_locked_dir);
 			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
 		}
 
@@ -985,6 +988,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		if (update_parent) {
 			struct ceph_inode_info *ci = ceph_inode(parent->d_inode);
+			dout(10, " updated parent, clearing %p complete\n", parent->d_inode);
 			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
 		}
 

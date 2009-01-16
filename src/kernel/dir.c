@@ -830,6 +830,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	}
 
 	dout(20, "dentry_revalidate %p no lease\n", dentry);
+	dout(10, " clearing %p complete (d_revalidate)\n", dir);
 	ceph_i_clear(dir, CEPH_I_COMPLETE|CEPH_I_READDIR);
 	d_drop(dentry);
 	return 0;
@@ -845,6 +846,7 @@ static void ceph_dentry_release(struct dentry *dentry)
 		dentry->d_fsdata = NULL;
 	}
 
+	dout(10, " clearing %p complete (d_release)\n", dentry->d_parent);
 	ceph_i_clear(dentry->d_parent->d_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
 }
 
