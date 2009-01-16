@@ -3964,13 +3964,15 @@ void Server::_rename_prepare(MDRequest *mdr,
 	oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
       pi = srcdnl->get_inode()->project_inode();
       pi->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
+      destdn->push_projected_linkage(srcdnl->get_inode());
     }
-    destdn->push_projected_linkage(srcdnl->get_inode());
   }
 
   // src
-  if (srcdn->is_auth())
+  if (srcdn->is_auth()) {
     mdr->more()->pvmap[srcdn] = srcdn->pre_dirty();
+    srcdn->push_projected_linkage();  // push null linkage
+  }
 
   if (!silent) {
     if (pi) {
@@ -4020,7 +4022,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), tpi, 0, &snapbl);
     } else if (destdnl->is_remote()) {
       metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
-      mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent);
+      mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent, CEPH_NOSNAP, 0, destdnl);
       tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode(), tpi);
     }
   }
@@ -4029,15 +4031,15 @@ void Server::_rename_prepare(MDRequest *mdr,
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
       if (!destdnl->is_null())
-	mdcache->journal_cow_dentry(mdr, metablob, destdn);
+	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
-      mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn());
+      mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
       ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode(), pi);
     } else {
       if (!destdnl->is_null())
-	mdcache->journal_cow_dentry(mdr, metablob, destdn);
+	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
       metablob->add_primary_dentry(destdn, true, destdnl->get_inode(), pi); 
@@ -4049,14 +4051,14 @@ void Server::_rename_prepare(MDRequest *mdr,
       srcdnl->get_inode()->snaprealm->project_past_parent(destdn->get_dir()->inode->find_snaprealm(), snapbl);
     
     if (!destdnl->is_null())
-      mdcache->journal_cow_dentry(mdr, metablob, destdn);
+      mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
       destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
     ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), pi, 0, &snapbl); 
   }
     
   // src
-  mdcache->journal_cow_dentry(mdr, metablob, srcdn);
+  mdcache->journal_cow_dentry(mdr, metablob, srcdn, CEPH_NOSNAP, 0, srcdnl);
   metablob->add_null_dentry(srcdn, true);
 
   // new subtree?
@@ -4111,8 +4113,12 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
       destdn->get_dir()->unlink_inode(destdn);
-      straydnl = straydn->pop_projected_linkage();
 
+      if (straydn->is_auth())
+	straydnl = straydn->pop_projected_linkage();
+      else
+	straydn->get_dir()->link_primary_inode(straydn, oldin);
+      
       if (straydn->is_auth()) {
 	SnapRealm *oldparent = destdn->get_dir()->inode->find_snaprealm();
 	bool isnew = false;
@@ -4140,7 +4146,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   if (srcdnl->is_remote()) {
     if (!linkmerge) {
       srcdn->get_dir()->unlink_inode(srcdn);
-      destdnl = destdn->pop_projected_linkage();
+      if (destdn->is_auth())
+	destdnl = destdn->pop_projected_linkage();
+      else
+	destdn->get_dir()->link_remote_inode(destdn, in);
       destdn->link_remote(in);
       if (destdn->is_auth())
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
@@ -4156,7 +4165,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdn->get_dir()->unlink_inode(destdn);
     }
     srcdn->get_dir()->unlink_inode(srcdn);
-    destdnl = destdn->pop_projected_linkage();
+    if (destdn->is_auth())
+      destdnl = destdn->pop_projected_linkage();
+    else
+      destdn->get_dir()->link_primary_inode(destdn, in);
 
     // srcdn inode import?
     if (!srcdn->is_auth() && destdn->is_auth()) {
@@ -4172,8 +4184,9 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       destdnl->get_inode()->state_set(CInode::STATE_AUTH);
     }
 
-    if (destdn->is_auth())
+    if (destdn->is_auth()) {
       destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
+    }
 
     // snap parent update?
     if (destdn->is_auth() && destdnl->get_inode()->snaprealm)
@@ -4181,8 +4194,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
   }
 
   // src
-  if (srcdn->is_auth())
+  if (srcdn->is_auth()) {
     srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
+    srcdnl = srcdn->pop_projected_linkage();
+  }
   
   // apply remaining projected inodes (nested)
   mdr->apply();

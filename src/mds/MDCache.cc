@@ -1044,12 +1044,13 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 }
 
 void MDCache::journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows,
-				 CInode **pcow_inode)
+				 CInode **pcow_inode, CDentry::linkage_t *dnl)
 {
   dout(10) << "journal_cow_dentry follows " << follows << " on " << *dn << dendl;
 
   // nothing to cow on a null dentry, fix caller
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (!dnl)
+    dnl = dn->get_projected_linkage();
   assert(!dnl->is_null());
 
   if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
