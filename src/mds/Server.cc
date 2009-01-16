@@ -2426,7 +2426,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   cap->set_wanted(0);
 
   // put locks in excl mode
-  newi->filelock.set_state(LOCK_LONER);
+  newi->filelock.set_state(LOCK_EXCL);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());

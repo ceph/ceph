@@ -25,7 +25,7 @@
 
 #include "CDentry.h"
 #include "SimpleLock.h"
-#include "FileLock.h"
+//#include "FileLock.h"
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
@@ -432,7 +432,7 @@ public:
   SimpleLock authlock;
   SimpleLock linklock;
   ScatterLock dirfragtreelock;
-  FileLock   filelock;
+  ScatterLock filelock;
   SimpleLock xattrlock;
   SimpleLock snaplock;
   ScatterLock nestlock;

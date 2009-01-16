@@ -1478,7 +1478,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 	(!pin->can_auth_pin() ||
 	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 //true
-	 !mds->locker->scatter_wrlock_try(&pin->nestlock, mut, false)
+	 !mds->locker->wrlock_start(&pin->nestlock, (MDRequest*)mut, true) // can cast only because i'm passing nowait=true
 	 )) {  // ** do not initiate.. see above comment **
       dout(10) << "predirty_journal_parents can't wrlock one of " << pin->versionlock << " or " << pin->nestlock
 	       << " on " << *pin << dendl;
@@ -2815,7 +2815,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
       // scatter the dirlock, just in case?
       if (!survivor && in->is_dir() && in->has_subtree_root_dirfrag())
-	in->filelock.set_state(LOCK_SCATTER);
+	in->filelock.set_state(LOCK_MIX);
 
       if (ack) {
 	ack->add_inode_base(in);
@@ -3099,12 +3099,12 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 	  } 
 	  
 	  // scatterlock?
-	  if (is.filelock == LOCK_SCATTER ||
-	      is.filelock == LOCK_SCATTER_LOCK)  // replica still has wrlocks
-	    in->filelock.set_state(LOCK_SCATTER);
-	  if (is.nestlock == LOCK_SCATTER ||
-	      is.nestlock == LOCK_SCATTER_LOCK)  // replica still has wrlocks
-	    in->nestlock.set_state(LOCK_SCATTER);
+	  if (is.filelock == LOCK_MIX ||
+	      is.filelock == LOCK_MIX_LOCK)  // replica still has wrlocks
+	    in->filelock.set_state(LOCK_MIX);
+	  if (is.nestlock == LOCK_MIX ||
+	      is.nestlock == LOCK_MIX_LOCK)  // replica still has wrlocks
+	    in->nestlock.set_state(LOCK_MIX);
 	  
 	  // auth pin?
 	  if (strong->authpinned_inodes.count(in->vino())) {
@@ -3499,10 +3499,10 @@ void MDCache::process_reconnected_caps()
       if (issued & CEPH_CAP_ANY_WR) {
 	in->loner_cap = -1;
 	if (issued & ((CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) {
-	  in->filelock.set_state(LOCK_LONER);
+	  in->filelock.set_state(LOCK_EXCL);
 	  in->choose_loner();
 	} else {
-	  in->filelock.set_state(LOCK_MIXED);
+	  in->filelock.set_state(LOCK_MIX);
 	}
       }
     } else {
@@ -4028,7 +4028,7 @@ void MDCache::do_file_recover()
 	       << " " << *in << dendl;
       in->state_clear(CInode::STATE_NEEDSRECOVER);
       in->auth_unpin(this);
-      mds->locker->file_eval_gather(&in->filelock);
+      mds->locker->eval_gather(&in->filelock);
     }
   }
 }
@@ -4755,14 +4755,14 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   
   // note: this code calls _eval more often than it needs to!
   // fix lock
-  if (in->authlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->authlock);
-  if (in->linklock.remove_replica(from)) mds->locker->simple_eval_gather(&in->linklock);
-  if (in->dirfragtreelock.remove_replica(from)) mds->locker->simple_eval_gather(&in->dirfragtreelock);
-  if (in->filelock.remove_replica(from)) mds->locker->file_eval_gather(&in->filelock);
-  if (in->snaplock.remove_replica(from)) mds->locker->simple_eval_gather(&in->snaplock);
-  if (in->xattrlock.remove_replica(from)) mds->locker->simple_eval_gather(&in->xattrlock);
+  if (in->authlock.remove_replica(from)) mds->locker->eval_gather(&in->authlock);
+  if (in->linklock.remove_replica(from)) mds->locker->eval_gather(&in->linklock);
+  if (in->dirfragtreelock.remove_replica(from)) mds->locker->eval_gather(&in->dirfragtreelock);
+  if (in->filelock.remove_replica(from)) mds->locker->eval_gather(&in->filelock);
+  if (in->snaplock.remove_replica(from)) mds->locker->eval_gather(&in->snaplock);
+  if (in->xattrlock.remove_replica(from)) mds->locker->eval_gather(&in->xattrlock);
 
-  if (in->nestlock.remove_replica(from)) mds->locker->scatter_eval_gather(&in->nestlock);
+  if (in->nestlock.remove_replica(from)) mds->locker->eval_gather(&in->nestlock);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)
@@ -4772,7 +4772,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   // fix lock
   if (dn->lock.remove_replica(from) ||
       !dn->is_replicated())
-    mds->locker->simple_eval_gather(&dn->lock);
+    mds->locker->eval_gather(&dn->lock);
 }
 
 
@@ -5295,7 +5295,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     // must read directory hard data (permissions, x bit) to traverse
     if (!noperm && 
-	!mds->locker->simple_rdlock_try(&cur->authlock, 0)) {
+	!mds->locker->rdlock_try(&cur->authlock, 0)) {
       dout(7) << "traverse: waiting on authlock rdlock on " << *cur << dendl;
       cur->authlock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
       return 1;

@@ -50,7 +50,6 @@ class Capability;
 class LogSegment;
 
 class SimpleLock;
-class FileLock;
 class ScatterLock;
 class LocalLock;
 class MDCache;
@@ -87,15 +86,18 @@ public:
 
   void eval_gather(SimpleLock *lock);
   void eval_cap_gather(CInode *in);
-protected:
+  void eval(SimpleLock *lock);
+
+  bool rdlock_try(SimpleLock *lock, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut);
   void rdlock_finish(SimpleLock *lock, Mutation *mut);
-  bool xlock_start(SimpleLock *lock, MDRequest *mut);
-public:
-  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
-protected:
-  bool wrlock_start(SimpleLock *lock, MDRequest *mut);
+
+  void wrlock_force(SimpleLock *lock, Mutation *mut);
+  bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
   void wrlock_finish(SimpleLock *lock, Mutation *mut);
+
+  bool xlock_start(SimpleLock *lock, MDRequest *mut);
+  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
 
   // simple
 public:
@@ -131,13 +133,13 @@ public:
 
 protected:
   bool scatter_lock_fastpath(ScatterLock *lock);  // called by LogSegment::try_to_expire
-  void scatter_lock(ScatterLock *lock);  // called by LogSegment::try_to_expire
+  void scatter_lock(ScatterLock *lock, bool nowait=false);  // called by LogSegment::try_to_expire
 
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void _scatter_replica_lock(ScatterLock *lock, int auth);
   void scatter_sync(ScatterLock *lock);
   bool scatter_scatter_fastpath(ScatterLock *lock);
-  void scatter_scatter(ScatterLock *lock);
+  void scatter_scatter(ScatterLock *lock, bool nowait=false);
   void scatter_tempsync(ScatterLock *lock);
   bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mut);
   void scatter_rdlock_finish(ScatterLock *lock, Mutation *mut);
@@ -179,27 +181,27 @@ protected:
 
   // file
 public:
-  void file_eval_gather(FileLock *lock);
-  void try_file_eval(FileLock *lock);
-  void file_eval(FileLock *lock);
+  void file_eval_gather(ScatterLock *lock);
+  void try_file_eval(ScatterLock *lock);
+  void file_eval(ScatterLock *lock);
 protected:
-  void handle_file_lock(FileLock *lock, MLock *m);
-  bool file_sync(FileLock *lock);
-  void file_lock(FileLock *lock);
-  void file_mixed(FileLock *lock);
-  void file_loner(FileLock *lock);
-  bool file_rdlock_try(FileLock *lock, Context *con);
-  bool file_rdlock_start(FileLock *lock, MDRequest *mut);
-  void file_rdlock_finish(FileLock *lock, Mutation *mut);
-  bool file_wrlock_force(FileLock *lock, Mutation *mut);
-  bool file_wrlock_start(FileLock *lock, MDRequest *mut);
-  void file_wrlock_finish(FileLock *lock, Mutation *mut);
-  bool file_xlock_start(FileLock *lock, MDRequest *mut);
-  void file_xlock_finish(FileLock *lock, Mutation *mut);
+  void handle_file_lock(ScatterLock *lock, MLock *m);
+  bool file_sync(ScatterLock *lock);
+  void file_lock(ScatterLock *lock);
+  void file_mixed(ScatterLock *lock);
+  void file_loner(ScatterLock *lock);
+  bool file_rdlock_try(ScatterLock *lock, Context *con);
+  bool file_rdlock_start(ScatterLock *lock, MDRequest *mut);
+  void file_rdlock_finish(ScatterLock *lock, Mutation *mut);
+  bool file_wrlock_force(ScatterLock *lock, Mutation *mut);
+  bool file_wrlock_start(ScatterLock *lock, MDRequest *mut);
+  void file_wrlock_finish(ScatterLock *lock, Mutation *mut);
+  bool file_xlock_start(ScatterLock *lock, MDRequest *mut);
+  void file_xlock_finish(ScatterLock *lock, Mutation *mut);
 
-  xlist<FileLock*> updated_filelocks;
+  xlist<ScatterLock*> updated_filelocks;
 public:
-  void mark_updated_Filelock(FileLock *lock);
+  void mark_updated_Filelock(ScatterLock *lock);
 
   // -- file i/o --
  public:

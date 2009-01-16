@@ -17,13 +17,24 @@ struct sm_state_t {
   int replica_caps;
 };
 
-#define ANY 1 //static const char ANY  = 1;  // auth + replica
-#define AUTH 2 //static const char AUTH = 2;  // auth
-#define XCL 3 //static const char XCL  = 3;  // auth + exclusive cilent
+struct sm_t {
+  struct sm_state_t *states;
+  int allowed_ever_auth;
+  int allowed_ever_replica;
+  int careful;
+  int can_remote_xlock;
+};
 
-extern struct sm_state_t sm_simplelock[];
-extern struct sm_state_t sm_filelock[];
-extern struct sm_state_t sm_scatterlock[];
+#define ANY  1 // auth or replica
+#define AUTH 2 // auth only
+#define XCL  3 // auth or exclusive client
+#define FW   4 // fw to auth, if replica
+
+extern struct sm_t sm_simplelock;
+extern struct sm_t sm_filelock;
+extern struct sm_t sm_scatterlock;
+
+
 
 
 // -- lock states --
@@ -49,6 +60,20 @@ extern struct sm_state_t sm_scatterlock[];
 
 // * = loner mode
 
+#define LOCK_MIX      13
+#define LOCK_SYNC_MIX 14
+#define LOCK_LOCK_MIX 15
+#define LOCK_EXCL_MIX 16
+#define LOCK_MIX_SYNC 17
+#define LOCK_MIX_SYNC2 18
+#define LOCK_MIX_LOCK 19
+#define LOCK_MIX_EXCL 20
+
+#define LOCK_TSYN      21
+#define LOCK_TSYN_LOCK 22
+#define LOCK_TSYN_MIX  23
+#define LOCK_LOCK_TSYN 24
+#define LOCK_MIX_TSYN  25
 
 
 #endif
