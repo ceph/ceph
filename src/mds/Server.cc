@@ -5118,7 +5118,8 @@ public:
     dn->pop_projected_linkage();
 
     // dirty inode, dn, dir
-    newi->mark_dirty(newi->inode.version + 1, mdr->ls);
+    newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
+    newi->mark_dirty(newi->inode.version+1, mdr->ls);
 
     mdr->apply();
 
@@ -5179,7 +5180,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   dn->push_projected_linkage(in);
 
   in->inode.mode = req->head.args.open.mode | S_IFREG;
-  in->inode.version = dn->pre_dirty() - 1;
+  in->inode.version = dn->pre_dirty();
   in->inode.max_size = (cmode & CEPH_FILE_MODE_WR) ? in->get_layout_size_increment() : 0;
   in->inode.rstat.rfiles = 1;
 
