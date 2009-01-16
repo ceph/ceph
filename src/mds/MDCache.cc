@@ -4836,6 +4836,7 @@ void MDCache::trim_client_rdcaps()
 	     << " wanted " << ccap_string(cap->wanted())
 	     << " on " << *in << dendl;
     in->remove_client_cap(client);
+    mds->locker->eval_cap_gather(in);
   }
 }
 
