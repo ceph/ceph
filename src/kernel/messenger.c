@@ -1342,8 +1342,8 @@ accept:
 	     con->connect_seq, peer_gseq, replace ? "replace" : "new");
 
 	con->out_reply.tag = CEPH_MSGR_TAG_READY;
-	con->out_reply.global_seq = get_global_seq(con->msgr, 0);
-	con->out_reply.connect_seq = peer_cseq + 1;
+	con->out_reply.global_seq = cpu_to_le32(get_global_seq(con->msgr, 0));
+	con->out_reply.connect_seq = cpu_to_le32(peer_cseq + 1);
 
 	retry = false;
 	prepare_read_tag(con);
@@ -1470,7 +1470,7 @@ static int read_partial_message(struct ceph_connection *con)
 	if (data_len > CEPH_MSG_MAX_DATA_LEN)
 		return -EIO;
 
-	data_off = le32_to_cpu(m->hdr.data_off);
+	data_off = le16_to_cpu(m->hdr.data_off);
 	if (data_len == 0)
 		goto no_data;
 
@@ -2160,7 +2160,7 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	dup = ceph_msg_new(le16_to_cpu(old->hdr.type),
 			   le32_to_cpu(old->hdr.front_len),
 			   le32_to_cpu(old->hdr.data_len),
-			   le32_to_cpu(old->hdr.data_off),
+			   le16_to_cpu(old->hdr.data_off),
 			   old->pages);
 	if (!dup)
 		return ERR_PTR(-ENOMEM);
@@ -2299,7 +2299,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->hdr.type = cpu_to_le16(type);
 	m->hdr.front_len = cpu_to_le32(front_len);
 	m->hdr.data_len = cpu_to_le32(page_len);
-	m->hdr.data_off = cpu_to_le32(page_off);
+	m->hdr.data_off = cpu_to_le16(page_off);
 	m->hdr.priority = 0;
 	m->hdr.mon_protocol = CEPH_MON_PROTOCOL;
 	m->hdr.monc_protocol = CEPH_MONC_PROTOCOL;
