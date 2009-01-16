@@ -1632,7 +1632,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 		up_write(&mdsc->snap_rwsem);
 		check_caps = 1; /* we may have sent a RELEASE to the old auth */
 		goto done;
-
 	}
 
 	/* preallocate space for xattrs? */
@@ -1694,6 +1693,7 @@ bad:
 	return;
 
 release:
+	up_write(&mdsc->snap_rwsem);
 	send_cap_msg(mdsc, vino.ino, CEPH_CAP_OP_RELEASE,
 		     0, 0, 0,
 		     seq, 0,
