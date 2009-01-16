@@ -422,7 +422,7 @@ private:
   
 
   // for giving to clients
-  bool encode_inodestat(bufferlist& bl, Session *session, snapid_t snapid=CEPH_NOSNAP, bool projected=false);
+  bool encode_inodestat(bufferlist& bl, Session *session, snapid_t snapid=CEPH_NOSNAP);
 
 
   // -- locks --

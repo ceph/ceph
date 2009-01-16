@@ -540,7 +540,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   snapid_t snapid = CEPH_NOSNAP;
   CInode *snapdiri = 0;
   if (tracei || tracedn)
-    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true, mdr);
+    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, mdr);
 
   messenger->send_message(reply, client_inst);
 
@@ -622,7 +622,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr);
     messenger->send_message(reply, client_inst);
   }
   
@@ -668,7 +668,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    bool expose_projected_inode, MDRequest *mdr)
+			    MDRequest *mdr)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -701,7 +701,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
   }
 
-  in->encode_inodestat(bl, session, snapid, expose_projected_inode);
+  in->encode_inodestat(bl, session, snapid);
   dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
@@ -715,7 +715,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
     // back to the live tree
     snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, session, snapid, false);
+    in->encode_inodestat(bl, session, snapid);
     numi++;
     dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
@@ -735,8 +735,6 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
  dentry:
   dout(15) << "set_trace_dist " << *dn << dendl;
-
-  expose_projected_inode = false;
 
   ::encode(dn->get_name(), bl);
   if (snapid == CEPH_NOSNAP)
