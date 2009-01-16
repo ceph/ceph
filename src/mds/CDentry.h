@@ -207,11 +207,12 @@ public:
     return get_projected_linkage()->inode;
   }
 
-  bool use_projected(int client) {
-    return lock.can_read_projected(client);
+  bool use_projected(int client, Mutation *mut) {
+    return lock.can_read_projected(client) || 
+      lock.get_xlocked_by() == mut;
   }
-  linkage_t *get_linkage(int client) {
-    return use_projected(client) ? get_projected_linkage() : get_linkage();
+  linkage_t *get_linkage(int client, Mutation *mut) {
+    return use_projected(client, mut) ? get_projected_linkage() : get_linkage();
   }
 
   // ref counts: pin ourselves in the LRU when we're pinned.

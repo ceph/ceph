@@ -525,9 +525,6 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
     return;
   }
 
-  // mark xlocks "done", indicating that we are exposing uncommitted changes
-  mds->locker->set_xlocks_done(mdr);
-
   MClientRequest *req = mdr->client_request;
   entity_inst_t client_inst = req->get_orig_source_inst();
   if (client_inst.name.is_mds())
@@ -545,9 +542,12 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, true, mdr);
 
-  mdr->did_early_reply = true;
-
   messenger->send_message(reply, client_inst);
+
+  // mark xlocks "done", indicating that we are exposing uncommitted changes
+  mds->locker->set_xlocks_done(mdr);
+
+  mdr->did_early_reply = true;
 }
 
 /*
@@ -685,7 +685,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   // start with dentry or inode?
   if (!in) {
     assert(dn);
-    in = dn->get_linkage(client)->get_inode();
+    in = dn->get_linkage(client, mdr)->get_inode();
     goto dentry;
   }
 
@@ -725,7 +725,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
   if (!dn) {
     dn = in->get_projected_parent_dn();
-    if (dn && !dn->use_projected(client))
+    if (dn && !dn->use_projected(client, mdr))
       dn = NULL;
     if (!dn)
       dn = in->get_parent_dn();
@@ -1309,7 +1309,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
       return 0;
     }
     */
-    if (!dn->get_linkage(client)->is_null()) {
+    if (!dn->get_linkage(client, mdr)->is_null()) {
       // name already exists
       dout(10) << "dentry " << dname << " exists in " << *dir << dendl;
       if (!okexist) {
@@ -1510,7 +1510,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
     ref = mdcache->get_inode(refpath.get_ino());
   else {
     CDentry *dn = trace[trace.size()-1];
-    bool dnp = dn->use_projected(client);
+    bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
 
     // if no inode (null or unattached remote), fw to dentry auth?
@@ -1635,7 +1635,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     }
       
     // exists?
-    if (!dn || dn->get_linkage(client)->is_null()) {
+    if (!dn || dn->get_linkage(client, mdr)->is_null()) {
       dout(7) << "dentry " << dname << " dne in " << *dir << dendl;
       reply_request(mdr, -ENOENT);
       return 0;
@@ -1651,7 +1651,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
 
   for (int i=0; i<(int)trace.size(); i++) 
     rdlocks.insert(&trace[i]->lock);
-  if (dn->get_linkage(client)->is_null())
+  if (dn->get_linkage(client, mdr)->is_null())
     xlocks.insert(&dn->lock);                 // new dn, xlock
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
@@ -2207,7 +2207,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
     CDentry *dn = it->second;
     it++;
 
-    bool dnp = dn->use_projected(client);
+    bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
 
     if (dnl->is_null())
@@ -3107,7 +3107,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
     return;
   }
 
-  CDentry::linkage_t *dnl = dn->get_linkage(client);
+  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
   if (dnl->is_null()) {
     reply_request(mdr, -ENOENT);
     return;
@@ -5223,7 +5223,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
     mdcache->request_forward(mdr, dn->authority().first);
     return;
   }
-  CDentry::linkage_t *dnl = dn->get_linkage(client);
+  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
 
   // dir only
   CInode *diri = dnl->get_inode();
