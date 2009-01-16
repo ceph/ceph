@@ -1373,13 +1373,15 @@ void Locker::handle_client_lease(MClientLease *m)
     delete m;
     return;
   } 
-  if (l->seq != m->get_seq()) {
+  if ((m->get_action() == CEPH_MDS_LEASE_REVOKE_ACK) &&
+      (l->seq != m->get_seq())) {
     dout(7) << "handle_client_lease lease seq " << l->seq << " != " << m->get_seq() << dendl;
     delete m;
     return;
   }
 
   switch (m->get_action()) {
+  case CEPH_MDS_LEASE_REVOKE_ACK:
   case CEPH_MDS_LEASE_RELEASE:
     {
       dout(7) << "handle_client_lease client" << client

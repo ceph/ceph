@@ -23,6 +23,7 @@ static const char *get_lease_action_name(int a) {
   case CEPH_MDS_LEASE_REVOKE: return "revoke";
   case CEPH_MDS_LEASE_RELEASE: return "release";
   case CEPH_MDS_LEASE_RENEW: return "renew";
+  case CEPH_MDS_LEASE_REVOKE_ACK: return "revoke ack";
   default: assert(0); return 0;
   }
 }

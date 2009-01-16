@@ -1057,9 +1057,10 @@ struct ceph_mds_caps {
 } __attribute__ ((packed));
 
 
-#define CEPH_MDS_LEASE_REVOKE  1  /*    mds  -> client */
-#define CEPH_MDS_LEASE_RELEASE 2  /* client  -> mds    */
-#define CEPH_MDS_LEASE_RENEW   3  /* client <-> mds    */
+#define CEPH_MDS_LEASE_REVOKE           1  /*    mds  -> client */
+#define CEPH_MDS_LEASE_RELEASE          2  /* client  -> mds    */
+#define CEPH_MDS_LEASE_RENEW            3  /* client <-> mds    */
+#define CEPH_MDS_LEASE_REVOKE_ACK       4  /* client  -> mds    */
 
 struct ceph_mds_lease {
 	__u8 action;

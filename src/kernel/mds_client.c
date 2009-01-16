@@ -1839,7 +1839,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 release:
 	iput(inode);
 	/* let's just reuse the same message */
-	h->action = CEPH_MDS_LEASE_RELEASE;
+	h->action = CEPH_MDS_LEASE_REVOKE_ACK;
 	ceph_msg_get(msg);
 	ceph_send_msg_mds(mdsc, msg, mds);
 	mutex_unlock(&session->s_mutex);
