@@ -2637,6 +2637,9 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
   mdcache->journal_dirty_inode(mdr, &le->metablob, targeti);
 
+  // do this after predirty_*, to avoid funky extra dnl arg
+  dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+
   early_reply(mdr, targeti, dn);
 
   mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
@@ -5176,8 +5179,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   // it's a file.
   dn->push_projected_linkage(in);
 
-  in->inode.mode = req->head.args.open.mode;
-  in->inode.mode |= S_IFREG;
+  in->inode.mode = req->head.args.open.mode | S_IFREG;
   in->inode.version = dn->pre_dirty() - 1;
   in->inode.max_size = (cmode & CEPH_FILE_MODE_WR) ? in->get_layout_size_increment() : 0;
   in->inode.rstat.rfiles = 1;
