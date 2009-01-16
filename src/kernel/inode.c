@@ -958,6 +958,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 				d_delete(dn);
 				dput(dn);
+				update_parent = 1;
 				goto retry_lookup;
 			}
 			dout(10, "dn %p correct %p ino %llx.%llx\n",
@@ -974,7 +975,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				goto out_dir_no_inode;
 			}
 			newdn = splice_dentry(dn, in, &have_lease);
-			update_parent = 1;
 
 			if (IS_ERR(newdn)) {
 				goto no_mutex_find_alias;
