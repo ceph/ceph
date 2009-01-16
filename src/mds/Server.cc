@@ -3082,7 +3082,6 @@ void Server::handle_client_unlink(MDRequest *mdr)
 
   CDentry *dn = trace[trace.size()-1];
   assert(dn);
-  CDentry::linkage_t *dnl = dn->get_linkage(client);
   
   // is it my dentry?
   if (!dn->is_auth()) {
@@ -3105,6 +3104,12 @@ void Server::handle_client_unlink(MDRequest *mdr)
   if (!dn->lock.can_read(client) && dn->lock.get_xlocked_by() != mdr) {
     dout(10) << "waiting on xlocked dentry " << *dn << dendl;
     dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+
+  CDentry::linkage_t *dnl = dn->get_linkage(client);
+  if (dnl->is_null()) {
+    reply_request(mdr, -ENOENT);
     return;
   }
 
