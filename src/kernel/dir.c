@@ -389,6 +389,7 @@ struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
 			     dentry, dir);
 			ceph_init_dentry(dentry);
 			d_add(dentry, NULL);
+			dentry->d_time = ci->i_version;
 			return 0;
 		}
 		spin_unlock(&dir->i_lock);
