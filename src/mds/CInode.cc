@@ -1301,18 +1301,15 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 
 
 bool CInode::encode_inodestat(bufferlist& bl, Session *session,
-			      snapid_t snapid, bool projected)
+			      snapid_t snapid)
 {
   int client = session->inst.name.num();
 
   bool valid = true;
 
   // pick a version!
-  inode_t *i;
-  if (projected)
-    i = get_projected_inode();
-  else 
-    i = &inode;
+  inode_t *oi = &inode;
+  inode_t *pi = get_projected_inode();
 
   map<string, bufferptr> *pxattrs = &xattrs;
 
@@ -1329,7 +1326,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	       << " " << p->second.inode.rstat
 	       << dendl;
       assert(p->second.first <= snapid && snapid <= p->first);
-      i = &p->second.inode;
+      pi = oi = &p->second.inode;
       pxattrs = &p->second.xattrs;
     }
   }
@@ -1339,9 +1336,14 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
    */
   struct ceph_mds_reply_inode e;
   memset(&e, 0, sizeof(e));
-  e.ino = i->ino;
+  e.ino = oi->ino;
   e.snapid = snapid ? (__u64)snapid:CEPH_NOSNAP;  // 0 -> NOSNAP
-  e.version = i->version;
+  e.rdev = oi->rdev;
+
+  // "fake" a version that is old (stable) version, +1 if projected.
+  e.version = (oi->version * 2) + is_projected();
+
+  inode_t *i = filelock.is_xlocked_by_client(client) ? pi:oi;
   e.layout = i->layout;
   e.size = i->size;
   e.max_size = i->max_size;
@@ -1350,23 +1352,27 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   i->mtime.encode_timeval(&e.mtime);
   i->atime.encode_timeval(&e.atime);
   e.time_warp_seq = i->time_warp_seq;
-  e.mode = i->mode;
-  e.uid = i->uid;
-  e.gid = i->gid;
-  e.nlink = i->nlink;
-  
+
   e.files = i->dirstat.nfiles;
   e.subdirs = i->dirstat.nsubdirs;
   i->rstat.rctime.encode_timeval(&e.rctime);
   e.rbytes = i->rstat.rbytes;
   e.rfiles = i->rstat.rfiles;
   e.rsubdirs = i->rstat.rsubdirs;
+
+  i = authlock.is_xlocked_by_client(client) ? pi:oi;
+  e.mode = i->mode;
+  e.uid = i->uid;
+  e.gid = i->gid;
+
+  i = linklock.is_xlocked_by_client(client) ? pi:oi;
+  e.nlink = i->nlink;
   
-  e.rdev = i->rdev;
   e.fragtree.nsplits = dirfragtree._splits.size();
 
   Capability *cap = get_client_cap(client);
 
+  i = xattrlock.is_xlocked_by_client(client) ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_RDCACHE) &&
     cap->client_xattr_version == i->xattr_version;
   

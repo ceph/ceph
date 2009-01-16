@@ -423,8 +423,14 @@ static int fill_inode(struct inode *inode,
 
 	spin_lock(&inode->i_lock);
 
+	/*
+	 * provided version will be odd if inode value is projected,
+	 * even if stable.  skip the update if we have a newer info
+	 * (e.g., due to inode info racing form multiple MDSs), or if
+	 * we are getting projected (unstable) inode info.
+	 */
 	if (le64_to_cpu(info->version) > 0 &&
-	    ci->i_version == le64_to_cpu(info->version))
+	    (ci->i_version & ~1) > le64_to_cpu(info->version))
 		goto no_change;
 
 	issued = __ceph_caps_issued(ci, NULL);
