@@ -1491,7 +1491,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 
 	spin_lock(&inode->i_lock);
 	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
-		dout(0, "chmod holding auth EXCL, doing locally\n");
+		dout(10, "chmod holding auth EXCL, doing locally\n");
 		inode->i_mode = attr->ia_mode;
 		inode->i_ctime = CURRENT_TIME;
 		ci->i_dirty_caps |= CEPH_CAP_AUTH_EXCL;
@@ -1651,7 +1651,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr: %p gid %d -> %d\n", inode,
 		     inode->i_uid, attr->ia_uid);
 	if (ia_valid & ATTR_MODE)
-		dout(0, "setattr: %p mode 0%o -> 0%o\n", inode, inode->i_mode,
+		dout(10, "setattr: %p mode 0%o -> 0%o\n", inode, inode->i_mode,
 		     attr->ia_mode);
 	if (ia_valid & ATTR_SIZE)
 		dout(10, "setattr: %p size %lld -> %lld\n", inode,
