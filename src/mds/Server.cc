@@ -3172,8 +3172,8 @@ void Server::handle_client_unlink(MDRequest *mdr)
     return;
 
   if (in->is_dir() &&
-      in->inode.dirstat.size() != 0) {
-    dout(10) << " not empty, dirstat.size() = " << in->inode.dirstat.size()
+      in->get_projected_inode()->dirstat.size() != 0) {
+    dout(10) << " not empty, dirstat.size() = " << in->get_projected_inode()->dirstat.size()
 	     << " on " << *in << dendl;
     reply_request(mdr, -ENOTEMPTY);
     return;
@@ -3379,8 +3379,7 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
     assert(dir);
 
     // does the frag _look_ empty?
-    if (false &&  // FIXME: need to look at _projected_ directory size.
-	dir->get_num_head_items()) {
+    if (dir->inode->get_projected_inode()->dirstat.size() > 0) {	
       dout(10) << "dir_is_nonempty still " << dir->get_num_head_items() 
 	       << " cached items in frag " << *dir << dendl;
       reply_request(mdr, -ENOTEMPTY);
@@ -3644,8 +3643,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   
   if (oldin &&
       oldin->is_dir() &&
-      oldin->inode.dirstat.size() != 0) {
-    dout(10) << " target inode dir not empty, dirstat.size() = " << oldin->inode.dirstat.size() 
+      oldin->get_projected_inode()->dirstat.size() != 0) {
+    dout(10) << " target inode dir not empty, dirstat.size() = " << oldin->get_projected_inode()->dirstat.size() 
 	     << " on " << *oldin << dendl;
     reply_request(mdr, -ENOTEMPTY);
     return;
