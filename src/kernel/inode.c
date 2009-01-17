@@ -343,30 +343,24 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 		ci->i_truncate_seq = truncate_seq;
 	}
 
-	if (issued & CEPH_CAP_FILE_EXCL) {
-		/*
-		 * if we hold EXCL cap, we have the most up to date
-		 * values for everything except possibly ctime.
-		 */
+	if (issued & (CEPH_CAP_FILE_EXCL|
+		      CEPH_CAP_FILE_WR|
+		      CEPH_CAP_FILE_WRBUFFER)) {
 		if (timespec_compare(ctime, &inode->i_ctime) > 0)
 			inode->i_ctime = *ctime;
-		if (ceph_seq_cmp(time_warp_seq, ci->i_time_warp_seq) > 0)
-			derr(0, "WARNING: %p mds time_warp_seq %llu > %llu\n",
-			     inode, time_warp_seq, ci->i_time_warp_seq);
-	} else if (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) {
 		if (ceph_seq_cmp(time_warp_seq, ci->i_time_warp_seq) > 0) {
 			/* the MDS did a utimes() */
-			inode->i_ctime = *ctime;
 			inode->i_mtime = *mtime;
 			inode->i_atime = *atime;
 			ci->i_time_warp_seq = time_warp_seq;
 		} else if (time_warp_seq == ci->i_time_warp_seq) {
-			if (timespec_compare(ctime, &inode->i_ctime) > 0)
-				inode->i_ctime = *ctime;
+			/* nobody did utimes(); take the max */
 			if (timespec_compare(mtime, &inode->i_mtime) > 0)
 				inode->i_mtime = *mtime;
 			if (timespec_compare(atime, &inode->i_atime) > 0)
 				inode->i_atime = *atime;
+		} else if (issued & CEPH_CAP_FILE_EXCL) {
+			/* we did a utimes(); ignore mds values */
 		} else {
 			warn = 1;
 		}
