@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 do_killall() {
 	pg=`pgrep -f crun.*$1`

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ./stop.sh
 rm core*

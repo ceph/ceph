@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 killall cmon cmds crun
 
