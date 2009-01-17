@@ -1343,12 +1343,25 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   // "fake" a version that is old (stable) version, +1 if projected.
   e.version = (oi->version * 2) + is_projected();
 
-  inode_t *i = filelock.is_xlocked_by_client(client) ? pi:oi;
+
+  Capability *cap = get_client_cap(client);
+  bool pfile = filelock.is_xlocked_by_client(client) ||
+    (cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
+  bool pauth = authlock.is_xlocked_by_client(client);
+  bool plink = linklock.is_xlocked_by_client(client);
+  bool pxattr = xattrlock.is_xlocked_by_client(client);
+
+  inode_t *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+  i->ctime.encode_timeval(&e.ctime);
+  
+  dout(20) << " pfile " << pfile << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
+	   << " ctime " << i->ctime << dendl;
+
+  i = pfile ? pi:oi;
   e.layout = i->layout;
   e.size = i->size;
   e.max_size = i->max_size;
   e.truncate_seq = i->truncate_seq;
-  i->ctime.encode_timeval(&e.ctime);
   i->mtime.encode_timeval(&e.mtime);
   i->atime.encode_timeval(&e.atime);
   e.time_warp_seq = i->time_warp_seq;
@@ -1360,19 +1373,17 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.rfiles = i->rstat.rfiles;
   e.rsubdirs = i->rstat.rsubdirs;
 
-  i = authlock.is_xlocked_by_client(client) ? pi:oi;
+  i = pauth ? pi:oi;
   e.mode = i->mode;
   e.uid = i->uid;
   e.gid = i->gid;
 
-  i = linklock.is_xlocked_by_client(client) ? pi:oi;
+  i = plink ? pi:oi;
   e.nlink = i->nlink;
   
   e.fragtree.nsplits = dirfragtree._splits.size();
 
-  Capability *cap = get_client_cap(client);
-
-  i = xattrlock.is_xlocked_by_client(client) ? pi:oi;
+  i = pxattr ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_RDCACHE) &&
     cap->client_xattr_version == i->xattr_version;
   
