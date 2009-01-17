@@ -853,7 +853,7 @@ void Paxos::update_observers()
       ver = get_latest(bl);
       if (ver) {
 	dout(10) << " sending summary state v" << ver << " to " << observer->inst << dendl;
-	mon->messenger->send_message(new MMonObserveNotify(machine_id, bl, ver, true),
+	mon->messenger->send_message(new MMonObserveNotify(mon->monmap->fsid, machine_id, bl, ver, true),
 				     observer->inst);
 	observer->last_version = ver;
 	continue;
@@ -863,7 +863,7 @@ void Paxos::update_observers()
     for (ver = observer->last_version + 1; ver <= last_committed; ver++) {
       if (read(ver, bl)) {
 	dout(10) << " sending state v" << ver << " to " << observer->inst << dendl;
-	mon->messenger->send_message(new MMonObserveNotify(machine_id, bl, ver, false),
+	mon->messenger->send_message(new MMonObserveNotify(mon->monmap->fsid, machine_id, bl, ver, false),
 				     observer->inst);
 	observer->last_version = ver;
       }
