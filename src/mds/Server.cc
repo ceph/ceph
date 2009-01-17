@@ -4825,10 +4825,15 @@ public:
     // notify any clients
     mds->locker->issue_truncate(in);
 
-    // purge
-    mds->mdcache->purge_inode(in, in->inode.size, old_size, mdr->ls);
-    mds->mdcache->wait_for_purge(in, in->inode.size, 
-				 new C_MDS_truncate_purged(mds, mdr));
+    if (old_size <= in->inode.size) {
+      // forward truncate.  done!
+      mds->server->reply_request(mdr, 0);
+    } else {
+      // purge
+      mds->mdcache->purge_inode(in, in->inode.size, old_size, mdr->ls);
+      mds->mdcache->wait_for_purge(in, in->inode.size, 
+				   new C_MDS_truncate_purged(mds, mdr));
+    }
   }
 };
 
@@ -4880,7 +4885,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
-  pi->size = le64_to_cpu(req->head.args.truncate.length);
+  pi->size = req->head.args.truncate.length;
   pi->rstat.rbytes = pi->size;
   pi->truncate_seq++;
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
