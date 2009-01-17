@@ -10,6 +10,7 @@ let start_all=1
 let start_mon=0
 let start_mds=0
 let start_osd=0
+let localhost=0
 norestart=""
 valgrind=""
 MON_ADDR=""
@@ -31,6 +32,9 @@ while [ $# -ge 1 ]; do
 case $1 in
 	-d | --debug )
 	debug=1
+	;;
+        -l | --localhost )
+	localhost=1
 	;;
 	--new | -n )
 	new=1
@@ -108,12 +112,17 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 
 # figure machine's ip
-HOSTNAME=`hostname`
-IP=`host $HOSTNAME | grep 'has address' | cut -d ' ' -f 4`
+if [ $localhost -eq 1 ]; then
+    IP="127.0.0.1"
+else
+    HOSTNAME=`hostname`
+    echo hostname $HOSTNAME
+    IP=`host $HOSTNAME | grep 'has address' | cut -d ' ' -f 4`
+fi
+echo "ip $IP"
+
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
 [ "$CEPH_PORT" == "" ] && CEPH_PORT=6789
-echo hostname $HOSTNAME
-echo "ip $IP"
 
 if [ $start_mon -eq 1 ]; then
 	if [ $new -eq 1 ]; then
