@@ -5297,7 +5297,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
     // must read directory hard data (permissions, x bit) to traverse
     if (!noperm && 
-	!mds->locker->rdlock_try(&cur->authlock, 0)) {
+	!mds->locker->rdlock_try(&cur->authlock, client, 0)) {
       dout(7) << "traverse: waiting on authlock rdlock on " << *cur << dendl;
       cur->authlock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
       return 1;

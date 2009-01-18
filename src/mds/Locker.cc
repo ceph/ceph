@@ -534,12 +534,13 @@ void Locker::eval(SimpleLock *lock)
 // ------------------
 // rdlock
 
-bool Locker::rdlock_try(SimpleLock *lock, Context *con)
+bool Locker::rdlock_try(SimpleLock *lock, int client, Context *con)
 {
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // can read?  grab ref.
-  if (lock->can_rdlock(-1)) 
+#warning fixme
+  if (lock->can_rdlock(client)) 
     return true;
   
   // wait!
