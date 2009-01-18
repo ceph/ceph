@@ -445,8 +445,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		return ceph_lookup_open(dir, dentry, nd, mode, 1);
 	}
 
-	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE_ALL,
-			      0, 1);
+	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE, 0, 1);
 }
 
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
