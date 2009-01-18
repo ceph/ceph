@@ -1237,7 +1237,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, 0, 0);
+		ceph_check_caps(ci, 0, 0, NULL);
 	} else {
 		spin_unlock(&inode->i_lock);
 	}
@@ -1261,7 +1261,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_unlock(&ci->vfs_inode.i_lock);
 
 	if (last && ci->i_vino.snap == CEPH_NOSNAP)
-		ceph_check_caps(ci, 0, 0);
+		ceph_check_caps(ci, 0, 0, NULL);
 }
 
 
@@ -1322,7 +1322,7 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 	spin_unlock(&inode->i_lock);
 
 	if (check)
-		ceph_check_caps(ci, 0, 0);
+		ceph_check_caps(ci, 0, 0, NULL);
 out:
 	iput(inode);
 }
@@ -1368,7 +1368,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
 		truncate_inode_pages(inode->i_mapping, to);
 		if (wrbuffer_refs == 0)
-			ceph_check_caps(ci, 0, 0);
+			ceph_check_caps(ci, 0, 0, NULL);
 	} else {
 		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
 	}
@@ -1643,7 +1643,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		     inode->i_uid, attr->ia_uid);
 	if (ia_valid & ATTR_GID)
 		dout(10, "setattr: %p gid %d -> %d\n", inode,
-		     inode->i_uid, attr->ia_uid);
+		     inode->i_gid, attr->ia_gid);
 	if (ia_valid & ATTR_MODE)
 		dout(10, "setattr: %p mode 0%o -> 0%o\n", inode, inode->i_mode,
 		     attr->ia_mode);
