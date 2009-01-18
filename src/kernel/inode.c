@@ -393,7 +393,7 @@ static int fill_inode(struct inode *inode,
 	struct ceph_mds_reply_inode *info = iinfo->in;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int i;
-	int issued;
+	int issued, implemented;
 	struct timespec mtime, atime, ctime;
 	u32 nsplits;
 	void *xattr_data = NULL;
@@ -427,7 +427,8 @@ static int fill_inode(struct inode *inode,
 	    (ci->i_version & ~1) > le64_to_cpu(info->version))
 		goto no_change;
 
-	issued = __ceph_caps_issued(ci, NULL);
+	issued = __ceph_caps_issued(ci, &implemented);
+	issued |= implemented;
 
 	/* update inode */
 	ci->i_version = le64_to_cpu(info->version);
