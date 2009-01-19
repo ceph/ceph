@@ -83,6 +83,7 @@ public:
 
   void drop_locks(Mutation *mut);
   void set_xlocks_done(Mutation *mut);
+  void drop_rdlocks(Mutation *mut);
 
   void eval_gather(SimpleLock *lock);
   void eval_cap_gather(CInode *in);

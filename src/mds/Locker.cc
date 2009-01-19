@@ -366,6 +366,12 @@ void Locker::drop_locks(Mutation *mut)
     wrlock_finish(*mut->wrlocks.begin(), mut);
 }
 
+void Locker::drop_rdlocks(Mutation *mut)
+{
+  while (!mut->rdlocks.empty()) 
+    rdlock_finish(*mut->rdlocks.begin(), mut);
+}
+
 
 // generics
 

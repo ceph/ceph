@@ -554,6 +554,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   // mark xlocks "done", indicating that we are exposing uncommitted changes
   mds->locker->set_xlocks_done(mdr);
+  mds->locker->drop_rdlocks(mdr);
 
   mdr->did_early_reply = true;
 }

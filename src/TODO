@@ -6,7 +6,7 @@ v0.6
 
 v0.7
 - ENOSPC
-- async metadata ops
+- fully async file creation
 
 v0.8
 - cas?
@@ -40,7 +40,6 @@ repair
       on cdir store is sufficient if mdlog survives...
   - or what the hell, full trace?
 - mds scrubbing
-/- rados scrubbing
 
 
 timer
