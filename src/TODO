@@ -2,7 +2,7 @@ v0.6
 /- fold observer into cmonctl/ceph?
 /- osd scrub
 /- async metadata
-- async lstat
+/- async lstat
 
 v0.7
 - ENOSPC
@@ -47,7 +47,6 @@ timer
 - each SafeTimer should just be its own thread.
 
 kernel client
-- orderly replay of unsafe ops during reconnect
 - avoid pinning inodes with expireable caps?
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
 - include 'sync' in op when cap revocation is waiting on writeback
@@ -113,7 +112,6 @@ mds
 - move root inode into stray dir
 - make recovery work with early replies
   - purge each session's unused preallocated inodes
-- xlock vs wrlock.. need more lock states?
 - dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
@@ -122,7 +120,6 @@ mds
   - include snaps for all (primary+remote) parents
 - how do we properly clean up inodes when doing a snap purge?
   - when they are mid-recover?  see 136470cf7ca876febf68a2b0610fa3bb77ad3532
-- whats with the 'clear if dirtyscattered' bit in decode_import_inode()?
 - what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
 - proper handling of cache expire messages during rejoin phase?
   -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
@@ -136,11 +133,9 @@ mds
   - mds lock last_change stamp?
 - handle slow client reconnect (i.e. after mds has gone active)
 - fix reconnect/rejoin open file weirdness
-- can we get rid of the dirlock remote auth_pin weirdness on subtree roots?
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 - make truncate faster with a trunc_seq, attached to objects as attributes?
-- could mark dir complete in EMetaBlob by counting how many dentries are dirtied in the current log epoch in CDir...
 - FIXME how to journal/store root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
