@@ -283,6 +283,8 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 	unsigned long ttl;
 	struct rb_node *p;
 
+	if (implemented)
+		*implemented = 0;
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
 
