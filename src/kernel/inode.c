@@ -530,7 +530,6 @@ no_change:
 	case S_IFCHR:
 	case S_IFSOCK:
 		init_special_inode(inode, inode->i_mode, inode->i_rdev);
-		inode->i_op = &ceph_file_iops;
 		break;
 	case S_IFREG:
 		inode->i_op = &ceph_file_iops;

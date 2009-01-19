@@ -436,13 +436,21 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	dout(5, "lookup in dir %p dentry %p '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
-	/* open (but not create!) intent? */
-	if (nd &&
-	    (nd->flags & LOOKUP_OPEN) &&
-	    (nd->flags & LOOKUP_CONTINUE) == 0 && /* only open last component */
-	    !(nd->intent.open.flags & O_CREAT)) {
-		int mode = nd->intent.open.create_mode & ~current->fs->umask;
-		return ceph_lookup_open(dir, dentry, nd, mode, 1);
+	if (dentry->d_inode) {
+		switch (dentry->d_inode->i_mode) {
+			case S_IFREG:
+			case S_IFLNK:
+			case S_IFDIR:
+				/* open (but not create!) intent? */
+				if (nd &&
+				    (nd->flags & LOOKUP_OPEN) &&
+				    (nd->flags & LOOKUP_CONTINUE) == 0 && /* only open last component */
+				    !(nd->intent.open.flags & O_CREAT)) {
+					int mode = nd->intent.open.create_mode & ~current->fs->umask;
+					return ceph_lookup_open(dir, dentry, nd, mode, 1);
+				}
+
+		}
 	}
 
 	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE, 0, 1);
