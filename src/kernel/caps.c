@@ -745,7 +745,13 @@ retry_locked:
 	
 	retain = want;
 	if (!mdsc->stopping) {
-		retain |= CEPH_CAP_PIN | CEPH_CAP_ANY_RDCACHE;
+		/*
+		 * we cannot retain anything outside of
+		 * (wanted|EXPIREABLE), or else we run the risk of the
+		 * MDS' wanted value getting out of sync, and we have
+		 * no mechanism to adjust that (besides open()).
+		 */
+		retain |= CEPH_CAP_EXPIREABLE;
 
 		/* keep any EXCL bits too, while we are holding caps anyway */
 		if (want || S_ISDIR(inode->i_mode))
