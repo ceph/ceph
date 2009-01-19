@@ -137,7 +137,9 @@ public:
   C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv) :
     mds(m), session(se), open(s), cmapv(mv), inotablev(0) { }
   C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv, deque<inodeno_t>& i, version_t iv) :
-    mds(m), session(se), open(s), cmapv(mv), inos(i), inotablev(iv) { }
+    mds(m), session(se), open(s), cmapv(mv), inotablev(iv) {
+    inos.swap(i);
+  }
   void finish(int r) {
     assert(r == 0);
     mds->server->_session_logged(session, open, cmapv, inos, inotablev);
@@ -183,30 +185,36 @@ void Server::handle_client_session(MClientSession *m)
     break;
     
   case CEPH_SESSION_REQUEST_CLOSE:
-    if (!session || session->is_closing()) {
-      dout(10) << "already closing|dne, dropping this req" << dendl;
-      return;
+    {
+      if (!session || session->is_closing()) {
+	dout(10) << "already closing|dne, dropping this req" << dendl;
+	return;
+      }
+      if (m->seq < session->get_push_seq()) {
+	dout(10) << "old push seq " << m->seq << " < " << session->get_push_seq() 
+		 << ", dropping" << dendl;
+	return;
+      }
+      if (m->seq != session->get_push_seq()) {
+	dout(10) << "old push seq " << m->seq << " != " << session->get_push_seq() 
+		 << ", BUGGY!" << dendl;
+	assert(0);
+      }
+      mds->sessionmap.set_state(session, Session::STATE_CLOSING);
+      pv = ++mds->sessionmap.projected;
+      
+      deque<inodeno_t> both = session->prealloc_inos;
+      both.insert(both.end(), session->pending_prealloc_inos.begin(), 
+		  session->pending_prealloc_inos.end());
+      if (both.size()) {
+	mds->inotable->project_release_ids(both);
+	piv = mds->inotable->get_projected_version();
+      } else
+	piv = 0;
+      
+      mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv, both, piv),
+			  new C_MDS_session_finish(mds, session, false, pv, both, piv));
     }
-    if (m->seq < session->get_push_seq()) {
-      dout(10) << "old push seq " << m->seq << " < " << session->get_push_seq() 
-	       << ", dropping" << dendl;
-      return;
-    }
-    if (m->seq != session->get_push_seq()) {
-      dout(10) << "old push seq " << m->seq << " != " << session->get_push_seq() 
-	       << ", BUGGY!" << dendl;
-      assert(0);
-    }
-    mds->sessionmap.set_state(session, Session::STATE_CLOSING);
-    pv = ++mds->sessionmap.projected;
-    if (session->prealloc_inos.size()) {
-      assert(session->projected_inos == 0);
-      mds->inotable->project_release_ids(session->prealloc_inos);
-      piv = mds->inotable->get_projected_version();
-    } else
-      piv = 0;
-    mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv, session->prealloc_inos, piv),
-			new C_MDS_session_finish(mds, session, false, pv, session->prealloc_inos, piv));
     break;
 
   default:
@@ -1365,11 +1373,12 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
     assert(0); // just for now.
   }
     
-  int want = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
-  if (want > 0) {
-    mds->inotable->project_alloc_ids(mdr->prealloc_inos, want);
+  int got = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+  if (got > 0) {
+    mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
-    mdr->session->projected_inos += mdr->prealloc_inos.size();
+    mdr->session->pending_prealloc_inos.insert(mdr->session->pending_prealloc_inos.end(),
+					       mdr->prealloc_inos.begin(), mdr->prealloc_inos.end());
     mds->sessionmap.projected++;
     dout(10) << "prepare_new_inode prealloc " << mdr->prealloc_inos << dendl;
   }
@@ -1412,9 +1421,11 @@ void Server::apply_allocated_inos(MDRequest *mdr)
   if (mdr->prealloc_inos.size()) {
     for (deque<inodeno_t>::iterator p = mdr->prealloc_inos.begin();
 	 p != mdr->prealloc_inos.end();
-	 p++)
-      session->prealloc_inos.push_back(*p);
-    session->projected_inos -= mdr->prealloc_inos.size();
+	 p++) {
+      assert(session->pending_prealloc_inos.front() == *p);
+      session->prealloc_inos.push_back(session->pending_prealloc_inos.front());
+      session->pending_prealloc_inos.pop_front();
+    }
     mds->sessionmap.version++;
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }

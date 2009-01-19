@@ -48,35 +48,35 @@ void InoTable::reset_state()
 
 inodeno_t InoTable::project_alloc_id(inodeno_t id) 
 {
+  dout(10) << "project_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
   assert(is_active());
   if (!id)
     id = projected_free.start();
   projected_free.erase(id);
-  dout(10) << "project_alloc_id " << id << dendl;
   ++projected_version;
   return id;
 }
 void InoTable::apply_alloc_id(inodeno_t id)
 {
-  dout(10) << "apply_alloc_id " << id << dendl;
+  dout(10) << "apply_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
   free.erase(id);
   ++version;
 }
 
 void InoTable::project_alloc_ids(deque<inodeno_t>& ids, int want) 
 {
+  dout(10) << "project_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
   assert(is_active());
   for (int i=0; i<want; i++) {
     inodeno_t id = projected_free.start();
     projected_free.erase(id);
     ids.push_back(id);
   }
-  dout(10) << "project_alloc_ids " << ids << dendl;
   ++projected_version;
 }
 void InoTable::apply_alloc_ids(deque<inodeno_t>& ids)
 {
-  dout(10) << "apply_alloc_ids " << ids << dendl;
+  dout(10) << "apply_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
   for (deque<inodeno_t>::iterator p = ids.begin();
        p != ids.end();
        p++) 
@@ -87,14 +87,14 @@ void InoTable::apply_alloc_ids(deque<inodeno_t>& ids)
 
 void InoTable::project_release_ids(deque<inodeno_t>& ids) 
 {
-  dout(10) << "project_release_ids " << ids << dendl;
+  dout(10) << "project_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
   for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++)
     projected_free.insert(*p);
   ++projected_version;
 }
 void InoTable::apply_release_ids(deque<inodeno_t>& ids) 
 {
-  dout(10) << "apply_release_ids " << ids << dendl;
+  dout(10) << "apply_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
   for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++)
     free.insert(*p);
   ++version;

@@ -52,7 +52,7 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
-  int projected_inos;               // journaling prealloc, will be added to prealloc_inos
+  deque<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
   deque<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   deque<inodeno_t> used_inos;       // journaling use
 
@@ -77,7 +77,7 @@ public:
     return ino;
   }
   int get_num_projected_prealloc_inos() {
-    return prealloc_inos.size() + projected_inos;
+    return prealloc_inos.size() + pending_prealloc_inos.size();
   }
 
   int get_client() { return inst.name.num(); }
@@ -143,7 +143,6 @@ public:
   Session() : 
     state(STATE_UNDEF), 
     session_list_item(this),
-    projected_inos(0),
     cap_push_seq(0) { }
 
   void encode(bufferlist& bl) const {
