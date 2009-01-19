@@ -3655,11 +3655,12 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
   if (realm->have_past_parents_open()) {
     dout(10) << "do_cap_import " << session->inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
     MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
-					in->inode,
+					in->ino(),
 					realm->inode->ino(),
 					cap->get_last_seq(),
 					cap->pending(), cap->wanted(), 0,
 					cap->get_mseq());
+    in->encode_cap_message(reap, cap);
     reap->head.ttl_ms = g_conf.mds_rdcap_ttl_ms;
     realm->build_snap_trace(reap->snapbl);
     mds->send_message_client(reap, session->inst);

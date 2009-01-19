@@ -1528,13 +1528,32 @@ void Client::check_caps(Inode *in, bool is_delayed)
     cap->issued &= like;
 
     MClientCaps *m = new MClientCaps(op,
-				     in->inode,
+				     in->ino(),
 				     0,
 				     cap->seq,
 				     cap->issued,
 				     wanted,
 				     cap->flushing,
 				     cap->mseq);
+    
+    m->head.uid = in->inode.uid;
+    m->head.gid = in->inode.gid;
+    m->head.mode = in->inode.mode;
+
+    m->head.nlink = in->inode.nlink;
+
+    m->head.xattr_len = 0; // FIXME
+
+    m->head.layout = in->inode.layout;
+    m->head.size = in->inode.size;
+    m->head.max_size = in->inode.max_size;
+    m->head.truncate_seq = in->inode.truncate_seq;
+    in->inode.mtime.encode_timeval(&m->head.mtime);
+    in->inode.atime.encode_timeval(&m->head.atime);
+    in->inode.ctime.encode_timeval(&m->head.ctime);
+    m->head.time_warp_seq = in->inode.time_warp_seq;
+
+
     in->reported_size = in->inode.size;
     m->set_max_size(in->wanted_max_size);
     in->requested_max_size = in->wanted_max_size;

@@ -539,7 +539,6 @@ bool Locker::rdlock_try(SimpleLock *lock, int client, Context *con)
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // can read?  grab ref.
-#warning fixme
   if (lock->can_rdlock(client)) 
     return true;
   
@@ -1018,11 +1017,12 @@ bool Locker::issue_caps(CInode *in)
 		<< dendl;
 
 	MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
-					 in->inode,
+					 in->ino(),
 					 in->find_snaprealm()->inode->ino(),
 					 cap->get_last_seq(),
 					 after, wanted, 0,
 					 cap->get_mseq());
+	in->encode_cap_message(m, cap);
 
 	// include xattrs if they're newer than what the client has
 	if ((after & CEPH_CAP_XATTR_RDCACHE) &&
@@ -1049,13 +1049,14 @@ void Locker::issue_truncate(CInode *in)
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
-    mds->send_message_client(new MClientCaps(CEPH_CAP_OP_TRUNC,
-					     in->inode,
-					     in->find_snaprealm()->inode->ino(),
-					     cap->get_last_seq(),
-					     cap->pending(), cap->wanted(), 0,
-					     cap->get_mseq()),
-			     it->first);
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_TRUNC,
+				     in->ino(),
+				     in->find_snaprealm()->inode->ino(),
+				     cap->get_last_seq(),
+				     cap->pending(), cap->wanted(), 0,
+				     cap->get_mseq());
+    in->encode_cap_message(m, cap);			     
+    mds->send_message_client(m, it->first);
   }
 
   // should we increase max_size?
@@ -1339,13 +1340,14 @@ void Locker::share_inode_max_size(CInode *in)
     Capability *cap = it->second;
     if (cap->pending() & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
-      mds->send_message_client(new MClientCaps(CEPH_CAP_OP_GRANT,
-					       in->inode,
-					       in->find_snaprealm()->inode->ino(),
-					       cap->get_last_seq(),
-					       cap->pending(), cap->wanted(), 0,
-					       cap->get_mseq()),
-			       client);
+      MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
+				       in->ino(),
+				       in->find_snaprealm()->inode->ino(),
+				       cap->get_last_seq(),
+				       cap->pending(), cap->wanted(), 0,
+				       cap->get_mseq());
+      in->encode_cap_message(m, cap);
+      mds->send_message_client(m, client);
     }
   }
 }
@@ -1429,7 +1431,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       // case we get a dup response, so whatever.)
       MClientCaps *ack = 0;
       if (m->get_dirty()) {
-	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->inode, 0, 0, 0, 0, m->get_dirty(), 0);
+	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, m->get_dirty(), 0);
 	ack->set_snap_follows(follows);
       }
       if (!_do_cap_update(in, m->get_dirty(), 0, follows, m, ack)) {
@@ -1459,7 +1461,7 @@ void Locker::handle_client_caps(MClientCaps *m)
     if (m->get_dirty() && in->is_auth()) {
       dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
 	      << " seq " << m->get_seq() << " on " << *in << dendl;
-      ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->inode, 0, m->get_seq(),
+      ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, m->get_seq(),
 			    m->get_caps(), 0, m->get_dirty(), 0);
     }
     if (m->get_caps() == 0) {

@@ -1203,6 +1203,8 @@ start:
 		inode->i_mode = le32_to_cpu(grant->mode);
 		inode->i_uid = le32_to_cpu(grant->uid);
 		inode->i_gid = le32_to_cpu(grant->gid);
+		dout(20, "%p mode 0%o uid.gid %d.%d\n", inode, inode->i_mode, 
+		     inode->i_uid, inode->i_gid);
 	}
 	
 	if ((issued & CEPH_CAP_LINK_EXCL) == 0) {

@@ -47,6 +47,7 @@ class MDCache;
 class LogSegment;
 class SnapRealm;
 class Session;
+class MClientCaps;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -423,6 +424,7 @@ private:
 
   // for giving to clients
   bool encode_inodestat(bufferlist& bl, Session *session, snapid_t snapid=CEPH_NOSNAP);
+  void encode_cap_message(MClientCaps *m, Capability *cap);
 
 
   // -- locks --

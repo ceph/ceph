@@ -29,6 +29,7 @@
 #include "common/Clock.h"
 
 #include "messages/MLock.h"
+#include "messages/MClientCaps.h"
 
 #include <string>
 #include <stdio.h>
@@ -1465,7 +1466,48 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   return valid;
 }
 
+void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
+{
+  int client = cap->get_client();
 
+  bool pfile = filelock.is_xlocked_by_client(client) ||
+    (cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
+  bool pauth = authlock.is_xlocked_by_client(client);
+  bool plink = linklock.is_xlocked_by_client(client);
+  bool pxattr = xattrlock.is_xlocked_by_client(client);
+ 
+  inode_t *oi = &inode;
+  inode_t *pi = get_projected_inode();
+  inode_t *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+  i->ctime.encode_timeval(&m->head.ctime);
+  
+  dout(20) << "encode_cap_message pfile " << pfile
+	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
+	   << " ctime " << i->ctime << dendl;
+
+  i = pfile ? pi:oi;
+  m->head.layout = i->layout;
+  m->head.size = i->size;
+  m->head.max_size = i->max_size;
+  m->head.truncate_seq = i->truncate_seq;
+  i->mtime.encode_timeval(&m->head.mtime);
+  i->atime.encode_timeval(&m->head.atime);
+  m->head.time_warp_seq = i->time_warp_seq;
+
+  i = pauth ? pi:oi;
+  m->head.mode = i->mode;
+  m->head.uid = i->uid;
+  m->head.gid = i->gid;
+
+  i = plink ? pi:oi;
+  m->head.nlink = i->nlink;
+
+  /*
+  i = pxattr ? pi:oi;
+  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_RDCACHE) &&
+    cap->client_xattr_version == i->xattr_version;
+  */
+}
 
 
 

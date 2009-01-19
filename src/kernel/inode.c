@@ -439,6 +439,8 @@ static int fill_inode(struct inode *inode,
 		inode->i_mode = le32_to_cpu(info->mode);
 		inode->i_uid = le32_to_cpu(info->uid);
 		inode->i_gid = le32_to_cpu(info->gid);
+		dout(20, "%p mode 0%o uid.gid %d.%d\n", inode, inode->i_mode, 
+		     inode->i_uid, inode->i_gid);
 	}
 
 	if ((issued & CEPH_CAP_LINK_EXCL) == 0) {

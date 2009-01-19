@@ -63,7 +63,7 @@ class MClientCaps : public Message {
 
   MClientCaps() {}
   MClientCaps(int op,
-	      inode_t& inode,
+	      inodeno_t ino,
 	      inodeno_t realm,
 	      long seq,
 	      int caps,
@@ -73,30 +73,13 @@ class MClientCaps : public Message {
     Message(CEPH_MSG_CLIENT_CAPS) {
     memset(&head, 0, sizeof(head));
     head.op = op;
-    head.ino = inode.ino;
+    head.ino = ino;
     head.realm = realm;
     head.seq = seq;
     head.caps = caps;
     head.wanted = wanted;
     head.dirty = dirty;
     head.migrate_seq = mseq;
-
-    head.uid = inode.uid;
-    head.gid = inode.gid;
-    head.mode = inode.mode;
-
-    head.nlink = inode.nlink;
-
-    head.xattr_len = 0; // FIXME
-
-    head.layout = inode.layout;
-    head.size = inode.size;
-    head.max_size = inode.max_size;
-    head.truncate_seq = inode.truncate_seq;
-    inode.mtime.encode_timeval(&head.mtime);
-    inode.atime.encode_timeval(&head.atime);
-    inode.ctime.encode_timeval(&head.ctime);
-    head.time_warp_seq = inode.time_warp_seq;
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,

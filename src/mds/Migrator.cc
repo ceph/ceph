@@ -904,7 +904,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
     dout(7) << "finish_export_inode telling client" << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
-				     in->inode,
+				     in->ino(),
 				     in->find_snaprealm()->inode->ino(),
 				     cap->get_last_seq(), 
 				     cap->pending(), cap->wanted(), 0,
