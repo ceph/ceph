@@ -3625,6 +3625,9 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (!srcdn->is_auth() && srcdnl->is_primary())
     xlocks.insert(&srci->versionlock);
 
+  // we need to update srci's ctime.  xlock its least contended lock to do that...
+  xlocks.insert(&srci->linklock);
+
   // xlock oldin (for nlink--)
   if (oldin) {
     xlocks.insert(&oldin->linklock);
