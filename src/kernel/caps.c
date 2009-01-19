@@ -743,9 +743,7 @@ retry_locked:
 	
 	retain = want;
 	if (!mdsc->stopping) {
-		retain |= CEPH_CAP_PIN |
-			(S_ISDIR(inode->i_mode) ? CEPH_CAP_ANY_RDCACHE :
-			 CEPH_CAP_ANY_RD);
+		retain |= CEPH_CAP_PIN | CEPH_CAP_ANY_RDCACHE;
 
 		/* keep any EXCL bits too, while we are holding caps anyway */
 		if (want || S_ISDIR(inode->i_mode))
