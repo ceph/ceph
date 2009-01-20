@@ -162,7 +162,7 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = mkcephfs.sh mkfs.sh restart.sh startnew.sh vstartnew.sh stop.sh crun
+EXTRA_DIST = dstart.sh dstop.sh mkcephfs.sh montest.sh restart.sh stop.sh verify-mds-journal.sh vstart.sh crun
 
 # cleaning
 clean-local:
@@ -268,6 +268,8 @@ noinst_HEADERS = \
         client/fuse.h\
         client/fuse_ll.h\
         client/hadoop/CephFSInterface.h\
+	cm.txt\
+	common/debug.h\
 	common/lockdep.h\
 	common/BackTrace.h\
         common/Clock.h\
@@ -306,6 +308,7 @@ noinst_HEADERS = \
         ebofs/types.h\
         include/Context.h\
         include/Distribution.h\
+	include/LogEntry.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
@@ -370,6 +373,8 @@ noinst_HEADERS = \
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
+	mds/locks.c\
+	mds/locks.h\
         mds/Anchor.h\
         mds/AnchorClient.h\
         mds/AnchorServer.h\
@@ -449,6 +454,7 @@ noinst_HEADERS = \
         messages/MHeartbeat.h\
         messages/MInodeFileCaps.h\
         messages/MLock.h\
+	messages/MLog.h\
         messages/MMDSBeacon.h\
         messages/MMDSBoot.h\
         messages/MMDSCacheRejoin.h\
@@ -483,6 +489,7 @@ noinst_HEADERS = \
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\
         messages/MOSDPing.h\
+	messages/MOSDScrub.h\
         messages/MOSDSubOp.h\
         messages/MOSDSubOpReply.h\
         messages/MPGStats.h\
@@ -494,6 +501,7 @@ noinst_HEADERS = \
         mon/ClientMap.h\
         mon/ClientMonitor.h\
         mon/Elector.h\
+	mon/LogMonitor.h\
         mon/MDSMonitor.h\
         mon/MonClient.h\
         mon/MonMap.h\

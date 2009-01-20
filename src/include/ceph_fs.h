@@ -31,7 +31,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 012\n"
+#define CEPH_BANNER "ceph 013\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 /*
@@ -40,12 +40,12 @@
  * internal cluster protocols separately from the public,
  * client-facing protocol.
  */
-#define CEPH_OSD_PROTOCOL     3 /* cluster internal */
-#define CEPH_MDS_PROTOCOL     4 /* cluster internal */
+#define CEPH_OSD_PROTOCOL     4 /* cluster internal */
+#define CEPH_MDS_PROTOCOL     5 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL    3 /* public/client */
-#define CEPH_MDSC_PROTOCOL    4 /* public/client */
-#define CEPH_MONC_PROTOCOL    4 /* public/client */
+#define CEPH_OSDC_PROTOCOL    4 /* public/client */
+#define CEPH_MDSC_PROTOCOL    5 /* public/client */
+#define CEPH_MONC_PROTOCOL    6 /* public/client */
 
 
 /*

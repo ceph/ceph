@@ -1,3 +1,16 @@
+ceph (0.6-1) unstable; urgency=low
+
+  * OSD scrub, fixes
+  * async metadata ops
+
+ceph (0.5-1) unstable; urgency=low
+
+  * OSD bug fixes
+  * btrfs ioctl interface
+  * efficient snap recovery
+  * throttled osd recovery
+  * forced unmount
+
 ceph (0.4-1) unstable; urgency=low
 
   * Snapshots.
