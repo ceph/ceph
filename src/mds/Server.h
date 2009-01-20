@@ -60,7 +60,7 @@ public:
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
 
   void handle_client_session(class MClientSession *m);
-  void _session_logged(Session *session, bool open, version_t pv);
+  void _session_logged(Session *session, bool open, version_t pv, deque<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<__u32,entity_inst_t> &cm);
   void finish_force_open_sessions(map<__u32,entity_inst_t> &cm);
   void terminate_sessions();
@@ -75,10 +75,12 @@ public:
   void handle_client_request(MClientRequest *m);
 
   void dispatch_client_request(MDRequest *mdr);
+  void early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
-		      snapid_t snapid, CInode *snapdiri);
+		      snapid_t snapid, CInode *snapdiri,
+		      MDRequest *mdr = 0);
 
   void encode_empty_dirstat(bufferlist& bl);
   void encode_infinite_lease(bufferlist& bl);
@@ -93,7 +95,9 @@ public:
   CDir *validate_dentry_dir(MDRequest *mdr, CInode *diri, const string& dname);
   CDir *traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dname, bool okexist=false);
-  CInode* prepare_new_inode(MDRequest *mdr, CDir *dir);
+  CInode* prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino);
+  void journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob);
+  void apply_allocated_inos(MDRequest *mdr);
 
   CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_dft=false);
   CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);

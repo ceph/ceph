@@ -35,7 +35,7 @@ ARGS="-d"
 
 # build and inject an initial osd map
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap # --pgbits 2
-$CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
+$CEPH_BIN/cmonctl osd setmap 2 -i .ceph_osdmap
 
 for osd in 0 #1 2 3 #4 5 6 7 8 9 10 11 12 13 14 15
 do

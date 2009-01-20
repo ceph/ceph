@@ -1019,7 +1019,7 @@ more:
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_num_pages;
 	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le32(off);
+	reqm->hdr.data_off = cpu_to_le16(off);
 
 	rc = do_sync_request(osdc, req);
 out:
@@ -1081,7 +1081,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_num_pages;
 	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le32(off);
+	reqm->hdr.data_off = cpu_to_le16(off);
 
 	rc = do_sync_request(osdc, req);
 	ceph_osdc_put_request(req);
@@ -1119,7 +1119,7 @@ int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 	reqm->pages = req->r_pages;
 	reqm->nr_pages = req->r_num_pages = num_pages;
 	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le32(off);
+	reqm->hdr.data_off = cpu_to_le16(off);
 
 	rc = start_request(osdc, req);
 	return rc;

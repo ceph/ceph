@@ -206,7 +206,7 @@ static int ceph_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off
   while (res == 0) {
     int r = client->readdirplus_r(dirp, &de, &st, &stmask);
     if (r != 0) break;
-    int stneed = CEPH_STAT_MASK_INODE | CEPH_STAT_MASK_TYPE;
+    int stneed = CEPH_STAT_CAP_TYPE;
     res = filler(buf,
                  de.d_name,
 		 ((stmask & stneed) == stneed) ? &st:0,

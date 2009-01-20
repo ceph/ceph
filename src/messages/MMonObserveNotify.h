@@ -19,14 +19,15 @@
 
 class MMonObserveNotify : public Message {
  public:
+  ceph_fsid_t fsid;
   int32_t machine_id;
   bufferlist bl;
   version_t ver;
   bool is_latest;
   
   MMonObserveNotify() : Message(MSG_MON_OBSERVE_NOTIFY) {}
-  MMonObserveNotify(int id, bufferlist& b, version_t v, bool l) :
-    Message(MSG_MON_OBSERVE_NOTIFY), machine_id(id), bl(b), ver(v), is_latest(l) {}
+  MMonObserveNotify(ceph_fsid_t& f, int id, bufferlist& b, version_t v, bool l) :
+    Message(MSG_MON_OBSERVE_NOTIFY), fsid(f), machine_id(id), bl(b), ver(v), is_latest(l) {}
     
   
   const char *get_type_name() { return "mon_observe_notify"; }
@@ -38,6 +39,7 @@ class MMonObserveNotify : public Message {
   }
   
   void encode_payload() {
+    ::encode(fsid, payload);
     ::encode(machine_id, payload);
     ::encode(bl, payload);
     ::encode(ver, payload);
@@ -45,6 +47,7 @@ class MMonObserveNotify : public Message {
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(fsid, p);
     ::decode(machine_id, p);
     ::decode(bl, p);
     ::decode(ver, p);

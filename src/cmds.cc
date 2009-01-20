@@ -43,7 +43,7 @@ int main(int argc, const char **argv)
   const char *monhost = 0;
   int whoami = -1;
   bool standby = false;  // by default, i'll start active.
-  int standby_replay_for = 0;
+  int standby_replay_for = -1;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--standby") == 0) 
       standby = true;

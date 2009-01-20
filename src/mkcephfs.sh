@@ -28,7 +28,7 @@ $CEPH_BIN/cmon $ARGS mondata/mon0 --debug_mon 20 --debug_ms 1
 
 # build and inject an initial osd map
 $CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 --print .ceph_osdmap
-$CEPH_BIN/cmonctl osd setmap -i .ceph_osdmap
+$CEPH_BIN/cmonctl osd setmap 2 -i .ceph_osdmap
 
 # stop monitor
 killall cmon

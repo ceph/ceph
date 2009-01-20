@@ -53,31 +53,37 @@ using namespace std;
 
 // CAPS
 
-typedef __u32 capseq_t;
-
-inline string cap_string(int cap)
+inline string gcap_string(int cap)
 {
   string s;
-  /*
-  s = "[";
-  if (cap & CEPH_CAP_PIN) s += " pin";
-  if (cap & CEPH_CAP_RDCACHE) s += " rdcache";
-  if (cap & CEPH_CAP_RD) s += " rd";
-  if (cap & CEPH_CAP_WR) s += " wr";
-  if (cap & CEPH_CAP_WRBUFFER) s += " wrbuffer";
-  if (cap & CEPH_CAP_WRBUFFER) s += " wrextend";
-  if (cap & CEPH_CAP_LAZYIO) s += " lazyio";
-  if (cap & CEPH_CAP_EXCL) s += " excl";
-  s += " ]";
-  */
+  if (cap & CEPH_CAP_GRDCACHE) s += "c";
+  if (cap & CEPH_CAP_GEXCL) s += "x";
+  if (cap & CEPH_CAP_GRD) s += "r";
+  if (cap & CEPH_CAP_GWR) s += "w";
+  if (cap & CEPH_CAP_GWRBUFFER) s += "b";
+  if (cap & CEPH_CAP_GWREXTEND) s += "a";
+  if (cap & CEPH_CAP_GLAZYIO) s += "l";
+  return s;
+}
+inline string ccap_string(int cap)
+{
+  string s;
   if (cap & CEPH_CAP_PIN) s += "p";
-  if (cap & CEPH_CAP_RDCACHE) s += "c";
-  if (cap & CEPH_CAP_RD) s += "r";
-  if (cap & CEPH_CAP_WR) s += "w";
-  if (cap & CEPH_CAP_WRBUFFER) s += "b";
-  if (cap & CEPH_CAP_WRBUFFER) s += "a";
-  if (cap & CEPH_CAP_LAZYIO) s += "l";
-  if (cap & CEPH_CAP_EXCL) s += "x";
+
+  int a = (cap >> CEPH_CAP_SAUTH) & 3;
+  if (a) s += 'A' + gcap_string(a);
+
+  a = (cap >> CEPH_CAP_SLINK) & 3;
+  if (a) s += 'L' + gcap_string(a);
+
+  a = (cap >> CEPH_CAP_SXATTR) & 3;
+  if (a) s += 'X' + gcap_string(a);
+
+  a = cap >> CEPH_CAP_SFILE;
+  if (a) s += 'F' + gcap_string(a);
+
+  if (s.length() == 0)
+    s = "-";
   return s;
 }
 
@@ -288,18 +294,19 @@ struct inode_t {
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
-  uint64_t   truncate_seq;
+  uint32_t   truncate_seq;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  uint64_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  // dirfrag, recursive accounting
+  // dirfrag, recursive accountin
   frag_info_t dirstat;
   nest_info_t rstat, accounted_rstat;
  
   // special stuff
   version_t version;           // auth only
   version_t file_data_version; // auth only
+  version_t xattr_version;
 
   // file type
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
@@ -332,6 +339,7 @@ struct inode_t {
 
     ::encode(version, bl);
     ::encode(file_data_version, bl);
+    ::encode(xattr_version, bl);
   }
   void decode(bufferlist::iterator &p) {
     ::decode(ino, p);
@@ -359,6 +367,7 @@ struct inode_t {
 
     ::decode(version, p);
     ::decode(file_data_version, p);
+    ::decode(xattr_version, p);
   }
 };
 WRITE_CLASS_ENCODER(inode_t)
@@ -868,12 +877,13 @@ struct ClientLease {
   int mask;                 // CEPH_STAT_MASK_*
   MDSCacheObject *parent;
 
+  ceph_seq_t seq;
   utime_t ttl;
   xlist<ClientLease*>::item session_lease_item; // per-session list
   xlist<ClientLease*>::item lease_item;         // global list
 
   ClientLease(int c, MDSCacheObject *p) : 
-    client(c), mask(0), parent(p),
+    client(c), mask(0), parent(p), seq(0),
     session_lease_item(this),
     lease_item(this) { }
 };
@@ -1248,6 +1258,7 @@ inline ostream& operator<<(ostream& out, mdsco_db_line_prefix o) {
   o.object->print_db_line_prefix(out);
   return out;
 }
+
 
 
 

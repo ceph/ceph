@@ -32,6 +32,7 @@ class CDentry;
 class Mutation;
 class MDRequest;
 class EMetaBlob;
+class SnapRealm;
 
 class Message;
 
@@ -49,7 +50,6 @@ class Capability;
 class LogSegment;
 
 class SimpleLock;
-class FileLock;
 class ScatterLock;
 class LocalLock;
 class MDCache;
@@ -82,32 +82,35 @@ public:
 		     set<SimpleLock*> &xlocks);
 
   void drop_locks(Mutation *mut);
+  void set_xlocks_done(Mutation *mut);
+  void drop_rdlocks(Mutation *mut);
 
   void eval_gather(SimpleLock *lock);
-protected:
+  void eval_cap_gather(CInode *in);
+  void eval(SimpleLock *lock);
+
+  bool rdlock_try(SimpleLock *lock, int client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut);
   void rdlock_finish(SimpleLock *lock, Mutation *mut);
-  bool xlock_start(SimpleLock *lock, MDRequest *mut);
-public:
-  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
-protected:
-  bool wrlock_start(SimpleLock *lock, MDRequest *mut);
+
+  void wrlock_force(SimpleLock *lock, Mutation *mut);
+  bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
   void wrlock_finish(SimpleLock *lock, Mutation *mut);
+
+  bool xlock_start(SimpleLock *lock, MDRequest *mut);
+  void xlock_finish(SimpleLock *lock, Mutation *mut);  // public for Server's slave UNXLOCK
 
   // simple
 public:
   void try_simple_eval(SimpleLock *lock);
-  void simple_eval_gather(SimpleLock *lock);
   bool simple_rdlock_try(SimpleLock *lock, Context *con);
 protected:
   void simple_eval(SimpleLock *lock);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
-  void simple_sync(SimpleLock *lock);
+
+  bool simple_sync(SimpleLock *lock);
   void simple_lock(SimpleLock *lock);
-  bool simple_rdlock_start(SimpleLock *lock, MDRequest *mut);
-  void simple_rdlock_finish(SimpleLock *lock, Mutation *mut);
-  bool simple_xlock_start(SimpleLock *lock, MDRequest *mut);
-  void simple_xlock_finish(SimpleLock *lock, Mutation *mut);
+  void simple_xlock(SimpleLock *lock);
 
 public:
   bool dentry_can_rdlock_trace(vector<CDentry*>& trace);
@@ -118,32 +121,16 @@ public:
 public:
   void try_scatter_eval(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
-  void scatter_eval_gather(ScatterLock *lock);
 
   void scatter_tick();
   void scatter_nudge(ScatterLock *lock, Context *c);
 
 protected:
-  bool scatter_lock_fastpath(ScatterLock *lock);  // called by LogSegment::try_to_expire
-  void scatter_lock(ScatterLock *lock);  // called by LogSegment::try_to_expire
-
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
   void _scatter_replica_lock(ScatterLock *lock, int auth);
-  void scatter_sync(ScatterLock *lock);
   bool scatter_scatter_fastpath(ScatterLock *lock);
-  void scatter_scatter(ScatterLock *lock);
+  void scatter_scatter(ScatterLock *lock, bool nowait=false);
   void scatter_tempsync(ScatterLock *lock);
-  bool scatter_rdlock_start(ScatterLock *lock, MDRequest *mut);
-  void scatter_rdlock_finish(ScatterLock *lock, Mutation *mut);
-public:
-  bool scatter_wrlock_try(ScatterLock *lock, Mutation *mut, bool initiate);
-protected:
-  bool scatter_wrlock_start(ScatterLock *lock, MDRequest *mut);
-public:
-  void scatter_wrlock_finish(ScatterLock *lock, Mutation *mut);
-protected:
-  bool scatter_xlock_start(ScatterLock *lock, MDRequest *mut);
-  void scatter_xlock_finish(ScatterLock *lock, Mutation *mut);
 
   void scatter_writebehind(ScatterLock *lock);
   class C_Locker_ScatterWB : public Context {
@@ -173,29 +160,21 @@ protected:
 
   // file
 public:
-  void file_eval_gather(FileLock *lock);
-  void try_file_eval(FileLock *lock);
+  void try_file_eval(ScatterLock *lock);
+  void file_eval(ScatterLock *lock);
 protected:
-  void file_eval(FileLock *lock);
-  void handle_file_lock(FileLock *lock, MLock *m);
-  bool file_sync(FileLock *lock);
-  void file_lock(FileLock *lock);
-  void file_mixed(FileLock *lock);
-  void file_loner(FileLock *lock);
-  bool file_rdlock_try(FileLock *lock, Context *con);
-  bool file_rdlock_start(FileLock *lock, MDRequest *mut);
-  void file_rdlock_finish(FileLock *lock, Mutation *mut);
-  bool file_wrlock_force(FileLock *lock, Mutation *mut);
-  void file_wrlock_finish(FileLock *lock, Mutation *mut);
-  bool file_xlock_start(FileLock *lock, MDRequest *mut);
-  void file_xlock_finish(FileLock *lock, Mutation *mut);
+  void handle_file_lock(ScatterLock *lock, MLock *m);
+  void file_mixed(ScatterLock *lock);
+  void file_excl(ScatterLock *lock);
 
-
+  xlist<ScatterLock*> updated_filelocks;
+public:
+  void mark_updated_Filelock(ScatterLock *lock);
 
   // -- file i/o --
  public:
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session, bool& is_new);
+  Capability* issue_new_caps(CInode *in, int mode, Session *session, bool& is_new, SnapRealm *conrealm=0);
   bool issue_caps(CInode *in);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
@@ -204,18 +183,18 @@ protected:
 
  protected:
   void handle_client_caps(class MClientCaps *m);
-  void _do_cap_update(CInode *in, int had, int wanted, snapid_t follows, MClientCaps *m,
-		      MClientCaps *ack=0, capseq_t releasecap=0);
-  void _finish_release_cap(CInode *in, int client, capseq_t seq, MClientCaps *ack);
+  bool _do_cap_update(CInode *in, Capability *cap, int had, int wanted, snapid_t follows, MClientCaps *m,
+		      MClientCaps *ack=0, ceph_seq_t releasecap=0);
+  void _finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClientCaps *ack);
 
 
   void request_inode_file_caps(CInode *in);
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, Mutation *mut, bool share, int client,
-			  MClientCaps *ack, capseq_t releasecap);
+  void file_update_finish(CInode *in, Mutation *mut, bool share, int client, Capability *cap,
+			  MClientCaps *ack, ceph_seq_t releasecap);
 public:
-  bool check_inode_max_size(CInode *in, bool forceupdate=false, __u64 newsize=0);
+  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0);
 private:
   void share_inode_max_size(CInode *in);
 

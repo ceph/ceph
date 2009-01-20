@@ -49,13 +49,16 @@ struct LeaseStat {
   // this matches ceph_mds_reply_lease
   __u16 mask;
   __u32 duration_ms;  
+  __u32 seq;
   void encode(bufferlist &bl) const {
     ::encode(mask, bl);
     ::encode(duration_ms, bl);
+    ::encode(seq, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(mask, bl);
     ::decode(duration_ms, bl);
+    ::decode(seq, bl);
   }
 };
 WRITE_CLASS_ENCODER(LeaseStat)
@@ -92,6 +95,8 @@ struct DirStat {
 struct InodeStat {
   vinodeno_t vino;
   version_t version;
+  ceph_mds_reply_cap cap;
+
   ceph_file_layout layout;
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
@@ -104,7 +109,10 @@ struct InodeStat {
   
   string  symlink;   // symlink content (if symlink)
   fragtree_t dirfragtree;
-  map<string, bufferptr> xattrs;
+
+  version_t xattr_version;
+  bufferlist xattrbl;
+  //map<string, bufferptr> xattrs;
 
  public:
   InodeStat() {}
@@ -119,6 +127,7 @@ struct InodeStat {
     vino.snapid = snapid_t(e.snapid);
     version = e.version;
     layout = e.layout;
+    cap = e.cap;
     size = e.size;
     max_size = e.max_size;
     truncate_seq = e.truncate_seq;
@@ -149,13 +158,9 @@ struct InodeStat {
       n--;
     }
     ::decode(symlink, p);
-
-    bufferlist xbl;
-    ::decode(xbl, p);
-    if (xbl.length()) {
-      bufferlist::iterator q = xbl.begin();
-      ::decode(xattrs, q);
-    }
+    
+    xattr_version = e.xattr_version;
+    ::decode(xattrbl, p);
   }
   
   // see CInode::encode_inodestat for encoder.
@@ -179,24 +184,18 @@ public:
 
   int get_result() { return (__s32)(__u32)st.result; }
 
-  unsigned get_file_caps() { return st.file_caps; }
-  unsigned get_file_caps_seq() { return st.file_caps_seq; }
-  unsigned get_file_caps_mseq() { return st.file_caps_mseq; }
-  //uint64_t get_file_data_version() { return st.file_data_version; }
-  
   void set_result(int r) { st.result = r; }
-  void set_file_caps(unsigned char c) { st.file_caps = c; }
-  void set_file_caps_seq(capseq_t s) { st.file_caps_seq = s; }
-  void set_file_caps_mseq(capseq_t s) { st.file_caps_mseq = s; }
-  //void set_file_data_version(uint64_t v) { st.file_data_version = v; }
+
+  void set_unsafe() { st.safe = 0; }
 
   MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
     memset(&st, 0, sizeof(st));
-    this->st.tid = req->get_tid();
-    this->st.op = req->get_op();
-    this->st.result = result;
+    st.tid = req->get_tid();
+    st.op = req->get_op();
+    st.result = result;
+    st.safe = 1;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
@@ -204,6 +203,10 @@ public:
     o << " = " << get_result();
     if (get_result() <= 0)
       o << " " << strerror(-get_result());
+    if (st.safe)
+      o << " safe";
+    else
+      o << " unsafe";
     o << ")";
   }
 

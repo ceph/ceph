@@ -107,12 +107,12 @@ static int ceph_set_page_dirty(struct page *page,
 		}
 		BUG_ON(!capsnap);
 		BUG_ON(capsnap->context != snapc);
-		capsnap->dirty++;
+		capsnap->dirty_pages++;
 		dout(20, "%p set_page_dirty %p snap %lld %d/%d -> %d/%d"
 		     " snapc %p seq %lld (%d snaps)\n",
 		     mapping->host, page, capsnap->follows,
-		     ci->i_wrbuffer_ref-1, capsnap->dirty-1,
-		     ci->i_wrbuffer_ref, capsnap->dirty,
+		     ci->i_wrbuffer_ref-1, capsnap->dirty_pages-1,
+		     ci->i_wrbuffer_ref, capsnap->dirty_pages,
 		     snapc, snapc->seq, snapc->num_snaps);
 	}
 	spin_unlock(&inode->i_lock);
@@ -333,11 +333,11 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode)
 	list_for_each(p, &ci->i_cap_snaps) {
 		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
 		dout(20, " cap_snap %p snapc %p has %d dirty pages\n", capsnap,
-		     capsnap->context, capsnap->dirty);
-		if (capsnap->dirty)
+		     capsnap->context, capsnap->dirty_pages);
+		if (capsnap->dirty_pages)
 			break;
 	}
-	if (capsnap && capsnap->dirty) {
+	if (capsnap && capsnap->dirty_pages) {
 		snapc = ceph_get_snap_context(capsnap->context);
 	} else if (ci->i_snap_realm) {
 		snapc = ceph_get_snap_context(ci->i_snap_realm->cached_context);

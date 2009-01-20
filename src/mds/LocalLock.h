@@ -19,13 +19,9 @@
 #include "SimpleLock.h"
 
 class LocalLock : public SimpleLock {
-protected:
-  int num_wrlock;
-
 public:
-  LocalLock(MDSCacheObject *o, int t, int wo) : 
-    SimpleLock(o, t, wo),
-    num_wrlock(0) { 
+  LocalLock(MDSCacheObject *o, int t, int ws) : 
+    SimpleLock(o, t, ws) {
     set_state(LOCK_LOCK); // always.
   }
 
@@ -43,18 +39,6 @@ public:
   }
   bool is_wrlocked() { return num_wrlock > 0; }
   int get_num_wrlocks() { return num_wrlock; }
-
-
-  void print(ostream& out) {
-    out << "(";
-    out << get_lock_type_name(get_type());
-    if (is_xlocked())
-      out << " x=" << get_xlocked_by();
-    if (is_wrlocked()) 
-      out << " wr=" << get_num_wrlocks();
-    out << ")";
-  }
-
 };
 
 

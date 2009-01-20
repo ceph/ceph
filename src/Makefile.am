@@ -20,6 +20,8 @@ crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcommon.a libcrush.a
 
+mount_ceph_SOURCES = mount.ceph.c
+
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
 cmds_LDADD = libcommon.a libmds.a libosdc.a libcrush.a libcommon.a
@@ -43,7 +45,8 @@ bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	ceph \
 	mkmonfs monmaptool osdmaptool crushtool \
-	streamtest dupstore dumpjournal testmsgr
+	streamtest dupstore dumpjournal testmsgr \
+	mount.ceph
 
 bin_SCRIPTS = crun
 
@@ -205,6 +208,7 @@ libmon_a_SOURCES = \
 
 libmds_a_SOURCES = \
 	mds/MDS.cc \
+	mds/locks.c \
 	mds/journal.cc \
 	mds/Server.cc \
 	mds/MDCache.cc \
@@ -373,7 +377,6 @@ noinst_HEADERS = \
         mds/CDir.h\
         mds/CInode.h\
         mds/Capability.h\
-        mds/FileLock.h\
         mds/InoTable.h\
         mds/LocalLock.h\
         mds/Locker.h\

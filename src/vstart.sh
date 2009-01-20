@@ -1,7 +1,7 @@
 #!/bin/bash
 
 [ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
-[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=3
+[ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=1
 [ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
 
 let new=0
@@ -10,6 +10,7 @@ let start_all=1
 let start_mon=0
 let start_mds=0
 let start_osd=0
+let localhost=0
 norestart=""
 valgrind=""
 MON_ADDR=""
@@ -31,6 +32,9 @@ while [ $# -ge 1 ]; do
 case $1 in
 	-d | --debug )
 	debug=1
+	;;
+        -l | --localhost )
+	localhost=1
 	;;
 	--new | -n )
 	new=1
@@ -75,12 +79,12 @@ ARGS="-f"
 if [ $debug -eq 0 ]; then
 	CMON_ARGS="--debug_mon 10 --debug_ms 1"
 	COSD_ARGS=""
-	CMDS_ARGS=""
+	CMDS_ARGS="--debug_ms 1"
 else
 	echo "** going verbose **"
 	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
 	COSD_ARGS="--lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 0"
+	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 1"
 fi
 
 if [ "$MON_ADDR" != "" ]; then
@@ -108,12 +112,17 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 
 # figure machine's ip
-HOSTNAME=`hostname`
-IP=`host $HOSTNAME | grep $HOSTNAME | cut -d ' ' -f 4`
+if [ $localhost -eq 1 ]; then
+    IP="127.0.0.1"
+else
+    HOSTNAME=`hostname`
+    echo hostname $HOSTNAME
+    IP=`host $HOSTNAME | grep 'has address' | cut -d ' ' -f 4`
+fi
+echo "ip $IP"
+
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
 [ "$CEPH_PORT" == "" ] && CEPH_PORT=6789
-echo hostname $HOSTNAME
-echo "ip $IP"
 
 if [ $start_mon -eq 1 ]; then
 	if [ $new -eq 1 ]; then
@@ -146,14 +155,15 @@ if [ $start_mon -eq 1 ]; then
 	# start monitors
 	if [ $start_mon -ne 0 ]; then
 		for f in `seq 0 $((CEPH_NUM_MON-1))`; do
-			$CEPH_BIN/cmon $ARGS -d $CMON_ARGS mondata/mon$f
+		    $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
 		done
+		sleep 1
 	fi
 
 	if [ $new -eq 1 ]; then
 	# build and inject an initial osd map
 		$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
-		$CEPH_BIN/ceph osd setmap -i .ceph_osdmap
+		$CEPH_BIN/ceph osd setmap 2 -i .ceph_osdmap 
 	fi
 fi
 
@@ -181,6 +191,7 @@ if [ $start_mds -eq 1 ]; then
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_BIN/ceph mds set_max_mds 2
 	done
+	$CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."

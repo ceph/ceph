@@ -273,9 +273,14 @@ private:
 
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
-  // ino's i've allocated
-  list<inodeno_t> allocated_inos;
-  version_t inotablev;
+  inodeno_t opened_ino;
+  
+  // ino (pre)allocation.  may involve both inotable AND session state.
+  version_t inotablev, sessionmapv;
+  inodeno_t allocated_ino;            // inotable
+  deque<inodeno_t> preallocated_inos; // inotable + session
+  inodeno_t used_preallocated_ino;    //            session
+  entity_name_t client_name;          //            session
 
   // inodes i've truncated
   list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
@@ -289,9 +294,13 @@ private:
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
     ::encode(table_tids, bl);
-    ::encode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::encode(inotablev, bl);
+    ::encode(opened_ino, bl);
+    ::encode(allocated_ino, bl);
+    ::encode(used_preallocated_ino, bl);
+    ::encode(preallocated_inos, bl);
+    ::encode(client_name, bl);
+    ::encode(inotablev, bl);
+    ::encode(sessionmapv, bl);
     ::encode(truncated_inodes, bl);
     ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
@@ -300,9 +309,13 @@ private:
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
     ::decode(table_tids, bl);
-    ::decode(allocated_inos, bl);
-    if (!allocated_inos.empty())
-      ::decode(inotablev, bl);
+    ::decode(opened_ino, bl);
+    ::decode(allocated_ino, bl);
+    ::decode(used_preallocated_ino, bl);
+    ::decode(preallocated_inos, bl);
+    ::decode(client_name, bl);
+    ::decode(inotablev, bl);
+    ::decode(sessionmapv, bl);
     ::decode(truncated_inodes, bl);
     ::decode(destroyed_inodes, bl);
     ::decode(client_reqs, bl);
@@ -314,10 +327,9 @@ private:
   off_t my_offset;
 
   // for replay, in certain cases
-  LogSegment *_segment;
+  //LogSegment *_segment;
 
-  EMetaBlob() : last_subtree_map(0), my_offset(0), _segment(0) { }
-  EMetaBlob(MDLog *mdl);  // defined in journal.cc
+  EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
 
   void print(ostream& out) {
     for (list<dirfrag_t>::iterator p = lump_order.begin();
@@ -333,11 +345,24 @@ private:
 
   void add_table_transaction(int table, version_t tid) {
     table_tids.push_back(pair<__u8, version_t>(table, tid));
-  }  
+  }
 
-  void add_allocated_ino(inodeno_t ino, version_t tablev) {
-    allocated_inos.push_back(ino);
-    inotablev = tablev;
+  void add_opened_ino(inodeno_t ino) {
+    assert(!opened_ino);
+    opened_ino = ino;
+  }
+
+  void set_ino_alloc(inodeno_t alloc,
+		     inodeno_t used_prealloc,
+		     deque<inodeno_t>& prealloc,
+		     entity_name_t client,
+		     version_t sv, version_t iv) {
+    allocated_ino = alloc;
+    used_preallocated_ino = used_prealloc;
+    preallocated_inos = prealloc;
+    client_name = client;
+    sessionmapv = sv;
+    inotablev = iv;
   }
 
   void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
@@ -374,8 +399,8 @@ private:
   void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			 inodeno_t rino=0, unsigned char rdt=0) {
     if (!rino) {
-      rino = dn->get_remote_ino();
-      rdt = dn->get_remote_d_type();
+      rino = dn->get_projected_linkage()->get_remote_ino();
+      rdt = dn->get_projected_linkage()->get_remote_d_type();
     }
     lump.nremote++;
     if (dirty)
@@ -401,7 +426,7 @@ private:
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
 			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
     if (!in) 
-      in = dn->get_inode();
+      in = dn->get_projected_linkage()->get_inode();
 
     // make note of where this inode was last journaled
     in->last_journaled = my_offset;
@@ -440,14 +465,14 @@ private:
   }
   inode_t *add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
     // primary or remote
-    if (dn->is_remote()) {
+    if (dn->get_projected_linkage()->is_remote()) {
       add_remote_dentry(dn, dirty);
       return 0;
-    } else if (dn->is_null()) {
+    } else if (dn->get_projected_linkage()->is_null()) {
       add_null_dentry(dn, dirty);
       return 0;
     }
-    assert(dn->is_primary());
+    assert(dn->get_projected_linkage()->is_primary());
     return add_primary_dentry(dn, dirty);
   }
 
@@ -500,7 +525,7 @@ private:
     
     // stop at root/stray
     CInode *diri = dir->get_inode();
-    if (!diri->get_parent_dn())
+    if (!diri->get_projected_parent_dn())
       return;
 
     // journaled?
@@ -520,8 +545,15 @@ private:
       out << " " << lump_order.front() << ", " << lump_map.size() << " dirs";
     if (!table_tids.empty())
       out << " table_tids=" << table_tids;
-    if (!allocated_inos.empty())
-      out << " inos=" << allocated_inos << " v" << inotablev;
+    if (allocated_ino || preallocated_inos.size()) {
+      if (allocated_ino)
+	out << " alloc_ino=" << allocated_ino;
+      if (preallocated_inos.size())
+	out << " prealloc_ino=" << preallocated_inos;
+      if (used_preallocated_ino)
+	out << " used_prealloc_ino=" << used_preallocated_ino;
+      out << " v" << inotablev;
+    }
     out << "]";
   }
 

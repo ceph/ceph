@@ -16,7 +16,6 @@
 #define __MEXPORTDIRCANCEL_H
 
 #include "msg/Message.h"
-#include "mds/CInode.h"
 #include "include/types.h"
 
 class MExportDirCancel : public Message {

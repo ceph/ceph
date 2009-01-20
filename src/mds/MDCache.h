@@ -58,17 +58,6 @@ class ESubtreeMap;
 
 // MDCache
 
-//typedef const char* pchar;
-
-
-struct PVList {
-  map<MDSCacheObject*,version_t> ls;
-
-  version_t add(MDSCacheObject* o, version_t v) {
-    return ls[o] = v;
-  }
-};
-
 struct Mutation {
   metareqid_t reqid;
   LogSegment *ls;  // the log segment i'm committing to
@@ -101,7 +90,7 @@ struct Mutation {
   // for applying projected inode changes
   list<CInode*> projected_inodes;
   list<CDir*> projected_fnodes;
-  list<ScatterLock*> updated_scatterlocks;
+  list<ScatterLock*> updated_locks;
 
   list<CInode*> dirty_cow_inodes;
   list<CDentry*> dirty_cow_dentries;
@@ -122,6 +111,12 @@ struct Mutation {
 
   bool is_master() { return slave_to_mds < 0; }
   bool is_slave() { return slave_to_mds >= 0; }
+
+  int get_client() {
+    if (reqid.name.is_client())
+      return reqid.name.num();
+    return -1;
+  }
 
   // pin items in cache
   void pin(MDSCacheObject *o) {
@@ -191,8 +186,8 @@ struct Mutation {
     }
   }
   
-  void add_updated_scatterlock(ScatterLock *lock) {
-    updated_scatterlocks.push_back(lock);
+  void add_updated_lock(ScatterLock *lock) {
+    updated_locks.push_back(lock);
   }
 
   void add_cow_inode(CInode *in) {
@@ -217,8 +212,8 @@ struct Mutation {
 	 p++) 
       (*p)->_mark_dirty(ls);
 
-    for (list<ScatterLock*>::iterator p = updated_scatterlocks.begin();
-	 p != updated_scatterlocks.end();
+    for (list<ScatterLock*>::iterator p = updated_locks.begin();
+	 p != updated_locks.end();
 	 p++)
       (*p)->set_updated();
   }
@@ -260,12 +255,18 @@ struct MDRequest : public Mutation {
   CInode *ref_snapdiri;
   snapid_t ref_snapid;
 
+  inodeno_t alloc_ino, used_prealloc_ino;  
+  deque<inodeno_t> prealloc_inos;
+
+  Capability *cap;
+  int snap_caps;
+  bool did_early_reply;
+
   // -- i am a slave request
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
-
 
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
@@ -316,18 +317,21 @@ struct MDRequest : public Mutation {
   // ---------------------------------------------------
   MDRequest() : 
     session(0), client_request(0), ref(0), ref_snapdiri(0), ref_snapid(CEPH_NOSNAP),
+    alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
     session(0), client_request(req), ref(0), ref_snapdiri(0),
+    alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
     session(0), client_request(0), ref(0), ref_snapdiri(0),
+    alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
@@ -341,7 +345,10 @@ struct MDRequest : public Mutation {
   }
 
   bool slave_did_prepare() { return more()->slave_commit; }
-  
+
+  bool did_ino_allocation() {
+    return alloc_ino || used_prealloc_ino || prealloc_inos.size();
+  }      
 
   void print(ostream &out) {
     out << "request(" << reqid;
@@ -405,6 +412,13 @@ public:
     client_leases[pool].push_back(&r->lease_item);
     r->ttl = ttl;
   }
+
+  void trim_client_leases();
+
+  // -- client caps --
+  xlist<Capability*> client_rdcaps;
+  
+  void trim_client_rdcaps();
 
 
   // -- discover --
@@ -513,7 +527,7 @@ public:
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
   CInode *cow_inode(CInode *in, snapid_t last);
   void journal_cow_dentry(Mutation *mut, EMetaBlob *metablob, CDentry *dn, snapid_t follows=CEPH_NOSNAP,
-			  CInode **pcow_inode=0);
+			  CInode **pcow_inode=0, CDentry::linkage_t *dnl=0);
   void journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP,
 			  CInode **pcow_inode=0);
   inode_t *journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
@@ -739,8 +753,6 @@ public:
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
 
-  void trim_client_leases();
-
   // shutdown
   void shutdown_start();
   void shutdown_check();
@@ -781,19 +793,18 @@ public:
   
 
  public:
-  CInode *create_inode();
   void add_inode(CInode *in);
 
   void remove_inode(CInode *in);
  protected:
   void touch_inode(CInode *in) {
     if (in->get_parent_dn())
-      touch_dentry(in->get_parent_dn());
+      touch_dentry(in->get_projected_parent_dn());
   }
   void touch_dentry(CDentry *dn) {
     // touch ancestors
-    if (dn->get_dir()->get_inode()->get_parent_dn())
-      touch_dentry(dn->get_dir()->get_inode()->get_parent_dn());
+    if (dn->get_dir()->get_inode()->get_projected_parent_dn())
+      touch_dentry(dn->get_dir()->get_inode()->get_projected_parent_dn());
     
     // touch me
     if (dn->is_auth())
@@ -857,14 +868,14 @@ public:
   int inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item>& inopath);
   
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
-  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr);
+  CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected=false);
   void open_remote_ino(inodeno_t ino, Context *fin, inodeno_t hadino=0, version_t hadv=0);
   void open_remote_ino_2(inodeno_t ino,
                          vector<Anchor>& anchortrace,
 			 inodeno_t hadino, version_t hadv,
                          Context *onfinish);
-  void open_remote_dentry(CDentry *dn, Context *fin);
-  void _open_remote_dentry_finish(int r, CDentry *dn, Context *fin);
+  void open_remote_dentry(CDentry *dn, bool projected, Context *fin);
+  void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
   C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);
 

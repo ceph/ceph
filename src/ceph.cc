@@ -341,7 +341,7 @@ void send_command()
   messenger->send_message(m, monmap.get_inst(mon));
 
   resend_event = new C_Resend;
-  timer.add_event_after(5.0, resend_event);
+  timer.add_event_after(15.0, resend_event);
 }
 
 int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)

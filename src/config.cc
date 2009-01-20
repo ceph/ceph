@@ -313,7 +313,7 @@ md_config_t g_conf = {
 
   // --- journaler ---
   journaler_allow_split_entries: true,
-  journaler_safe: false,  // wait for COMMIT on journal writes
+  journaler_safe: true,  // wait for COMMIT on journal writes
   journaler_write_head_interval: 15,
   journaler_cache: false, // cache writes for later readback
   journaler_prefetch_periods: 50,   // * journal object size (1~MB? see above)
@@ -340,7 +340,13 @@ md_config_t g_conf = {
   mds_tick_interval: 5,
   mds_scatter_nudge_interval: 5,  // how quickly dirstat changes propagate up the hierarchy
 
+  mds_client_prealloc_inos: 100,
+  mds_early_reply: true,
+
+  mds_rdcap_ttl_ms: 60*1000,
+
   mds_log: true,
+  mds_log_unsafe: false,      // only wait for log sync, when it's mostly safe to do so
   mds_log_max_events: -1,
   mds_log_max_segments: 100,  // segment size defined by FileLayout, above
   mds_log_max_expiring: 20,
@@ -868,6 +874,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 
     else if (strcmp(args[i], "--mds_decay_halflife") == 0) 
       g_conf.mds_decay_halflife = atoi(args[++i]);
+
+    else if (strcmp(args[i], "--mds_early_reply") == 0) 
+      g_conf.mds_early_reply = atoi(args[++i]);
+    else if (strcmp(args[i], "--mds_client_prealloc_inos") == 0) 
+      g_conf.mds_client_prealloc_inos = atoi(args[++i]);
 
     else if (strcmp(args[i], "--mds_bal_interval") == 0) 
       g_conf.mds_bal_interval = atoi(args[++i]);

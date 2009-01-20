@@ -94,6 +94,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct dentry *dentry;
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
+	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
 	int flags, fmode, wantcaps;
 
@@ -130,13 +131,14 @@ int ceph_open(struct inode *inode, struct file *file)
 	dentry = d_find_alias(inode);
 	if (!dentry)
 		return -ESTALE;  /* yuck */
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
+	if ((ceph_caps_issued(ceph_inode(inode)) & CEPH_CAP_FILE_EXCL) == 0)
+		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
 		goto out;
 	}
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	if (!err)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
@@ -166,6 +168,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct file *file = nd->intent.open.file;
+	struct inode *parent_inode = get_dentry_parent_inode(file->f_dentry);
 	struct ceph_mds_request *req;
 	int err;
 	int flags = nd->intent.open.flags - 1;  /* silly vfs! */
@@ -177,11 +180,12 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
-	if (flags & O_CREAT)
-		ceph_mdsc_lease_release(mdsc, dir, NULL, CEPH_LOCK_ICONTENT);
+	if ((flags & O_CREAT) &&
+	    (ceph_caps_issued(ceph_inode(dir)) & CEPH_CAP_FILE_EXCL) == 0)
+		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	req->r_last_dentry = dget(dentry); /* use this dentry in fill_trace */
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
-	err = ceph_mdsc_do_request(mdsc, req);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	if (!err)
 		err = ceph_init_file(req->r_last_inode, file, req->r_fmode);
@@ -297,15 +301,16 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
 	     ceph_vinop(inode), pos, (unsigned)len, inode);
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_RD,
-							 CEPH_CAP_RDCACHE,
+				       ceph_get_cap_refs(ci,
+							 CEPH_CAP_FILE_RD,
+							 CEPH_CAP_FILE_RDCACHE,
 							 &got, -1));
 	if (ret < 0)
 		goto out;
 	dout(10, "aio_read %llx.%llx %llu~%u got cap refs %d\n",
 	     ceph_vinop(inode), pos, (unsigned)len, got);
 
-	if ((got & CEPH_CAP_RDCACHE) == 0 ||
+	if ((got & CEPH_CAP_FILE_RDCACHE) == 0 ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		/* hmm, this isn't really async... */
 		ret = ceph_sync_read(filp, iov->iov_base, len, ppos);
@@ -341,7 +346,7 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 	}
 	spin_unlock(&inode->i_lock);
 	if (check)
-		ceph_check_caps(ci, 0);
+		ceph_check_caps(ci, 0, 0, NULL);
 }
 
 /*
@@ -377,8 +382,9 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
 	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci, CEPH_CAP_WR,
-							 CEPH_CAP_WRBUFFER,
+				       ceph_get_cap_refs(ci,
+							 CEPH_CAP_FILE_WR,
+							 CEPH_CAP_FILE_WRBUFFER,
 							 &got, endoff));
 	if (ret < 0)
 		goto out;
@@ -386,7 +392,7 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u  got cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
 
-	if ((got & CEPH_CAP_WRBUFFER) == 0) {
+	if ((got & CEPH_CAP_FILE_WRBUFFER) == 0) {
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
 			&iocb->ki_pos);
 	} else {
@@ -397,6 +403,9 @@ retry_snap:
 			ret = sync_page_range(inode, mapping, pos, ret);
 		}
 	}
+	if (ret >= 0)
+		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
+
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %d\n",
 	     inode, pos, (unsigned)iov->iov_len, got);
@@ -420,7 +429,6 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	ret = write_inode_now(inode, 1);
 	if (ret < 0)
 		return ret;
-
 	/*
 	 * HMM: should we also ensure that caps are flushed to mds?
 	 * It's not strictly necessary, since with the data on the
@@ -428,7 +436,7 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	 * Not mtime, though.
 	 */
 
-	return 0;
+	return ret;
 }
 
 const struct file_operations ceph_file_fops = {

@@ -971,17 +971,21 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
     }
-    else if (m->cmd[1] == "setmap") {
+    else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
       OSDMap map;
       map.decode(m->get_data());
+      epoch_t e = atoi(m->cmd[2].c_str());
       if (ceph_fsid_compare(&map.fsid, &mon->monmap->fsid) == 0) {
-	map.epoch = pending_inc.epoch;  // make sure epoch is correct
-	map.encode(pending_inc.fullmap);
-	string rs = "set osd map";
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
-	return true;
-      }
-      ss << "osdmap fsid " << map.fsid << " does not match monitor fsid " << mon->monmap->fsid;
+	if (pending_inc.epoch == e) {
+	  map.epoch = pending_inc.epoch;  // make sure epoch is correct
+	  map.encode(pending_inc.fullmap);
+	  string rs = "set osd map";
+	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	  return true;
+	} else
+	  ss << "next osdmap epoch " << pending_inc.epoch << " != " << e;
+      } else
+	  ss << "osdmap fsid " << map.fsid << " does not match monitor fsid " << mon->monmap->fsid;
       err = -EINVAL;
     }
     else if (m->cmd[1] == "setmaxosd" && m->cmd.size() > 2) {

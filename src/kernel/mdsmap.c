@@ -81,20 +81,19 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	for (i = 0; i < n; i++) {
 		s32 mds, inc, state;
 		u64 state_seq;
+		struct ceph_entity_addr addr;
 
-		*p += sizeof(m->m_addr[0]);  /* skip addr key */
+		*p += sizeof(addr);  /* skip addr key */
 		ceph_decode_32(p, mds);
 		ceph_decode_32(p, inc);
 		ceph_decode_32(p, state);
 		ceph_decode_64(p, state_seq);
-		dout(10, "mdsmap_decode %d/%d mds%d.%d state %d\n",
-		     i+1, n, mds, inc, state);
+		ceph_decode_copy(p, &addr, sizeof(addr));
+		dout(10, "mdsmap_decode %d/%d mds%d.%d %u.%u.%u.%u:%u state %d\n",
+		     i+1, n, mds, inc, IPQUADPORT(addr.ipaddr), state);
 		if (mds >= 0 && mds < m->m_max_mds && state > 0) {
 			m->m_state[mds] = state;
-			ceph_decode_copy(p, &m->m_addr[mds],
-					 sizeof(*m->m_addr));
-		} else {
-			*p += sizeof(m->m_addr[0]);  /* skip it */
+			m->m_addr[mds] = addr;
 		}
 		*p += sizeof(struct ceph_timespec);
 	}

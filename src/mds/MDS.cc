@@ -388,6 +388,10 @@ void MDS::tick()
   if (laggy)
     return;
 
+  // make sure mds log flushes, trims periodically
+  mdlog->flush();
+  mdlog->trim();
+
   // log
   mds_load_t load = balancer->get_load();
   
@@ -1271,13 +1275,13 @@ bool MDS::_dispatch(Message *m)
 
   // HACK FOR NOW
   if (is_active() || is_stopping()) {
-    // flush log to disk after every op.  for now.
-    //mdlog->flush();
-    mdlog->trim();
+    if (is_stopping())
+      mdlog->trim();
 
     // trim cache
     mdcache->trim();
     mdcache->trim_client_leases();
+    mdcache->trim_client_rdcaps();
   }
 
   
@@ -1317,7 +1321,7 @@ bool MDS::_dispatch(Message *m)
     } while (dest == whoami);
     mdcache->migrator->export_dir_nicely(dir,dest);
   }
-  // hack: thrash exports
+  // hack: thrash fragments
   for (int i=0; i<g_conf.mds_thrash_fragments; i++) {
     if (!is_active()) break;
     dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf.mds_thrash_fragments << dendl;

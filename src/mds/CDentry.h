@@ -86,13 +86,37 @@ public:
     return dentry_key_t(last, name.c_str()); 
   }
 
+public:
+  struct linkage_t {
+    CInode *inode;
+    inodeno_t remote_ino;
+    unsigned char remote_d_type;
+    
+    linkage_t() : inode(0), remote_ino(0), remote_d_type(0) {}
+
+    // dentry type is primary || remote || null
+    // inode ptr is required for primary, optional for remote, undefined for null
+    bool is_primary() { return remote_ino == 0 && inode != 0; }
+    bool is_remote() { return remote_ino > 0; }
+    bool is_null() { return (remote_ino == 0 && inode == 0) ? true:false; }
+
+    CInode *get_inode() { return inode; }
+    inodeno_t get_remote_ino() { return remote_ino; }
+    unsigned char get_remote_d_type() { return remote_d_type; }
+
+    void set_remote(inodeno_t ino, unsigned char d_type) { 
+      remote_ino = ino;
+      remote_d_type = d_type;
+      inode = 0;
+    }
+    void link_remote(CInode *in);
+  };
+  
 protected:
-  inodeno_t remote_ino;      // if remote dentry
-  unsigned char remote_d_type;
-
-  CInode *inode; // linked inode (if any)
   CDir *dir;     // containing dirfrag
-
+  linkage_t linkage;
+  list<linkage_t> projected;
+  
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
 
@@ -106,10 +130,7 @@ protected:
 
   friend class Migrator;
   friend class Locker;
-  friend class Renamer;
-  friend class Server;
   friend class MDCache;
-  friend class MDS;
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
@@ -118,15 +139,13 @@ public:
   // lock
   SimpleLock lock;
 
-
  public:
   // cons
   CDentry(const nstring& n, 
 	  snapid_t f, snapid_t l) :
     name(n),
     first(f), last(l),
-    remote_ino(0), remote_d_type(0),
-    inode(0), dir(0),
+    dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
@@ -135,23 +154,66 @@ public:
 	  snapid_t f, snapid_t l) :
     name(n),
     first(f), last(l),
-    remote_ino(ino), remote_d_type(dt),
-    inode(0), dir(0),
+    dir(0),
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) { }
+    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) {
+    linkage.remote_ino = ino;
+    linkage.remote_d_type = dt;
+  }
 
-  CInode *get_inode() const { return inode; }
   CDir *get_dir() const { return dir; }
   const nstring& get_name() const { return name; }
-  inodeno_t get_ino();
 
-  inodeno_t get_remote_ino() { return remote_ino; }
-  unsigned char get_remote_d_type() { return remote_d_type; }
-  void set_remote(inodeno_t ino, unsigned char d_type) { 
-    remote_ino = ino;
-    remote_d_type = d_type;
+  /*
+  CInode *get_inode() const { return linkage.inode; }
+  inodeno_t get_remote_ino() { return linkage.remote_ino; }
+  unsigned char get_remote_d_type() { return linkage.remote_d_type; }
+
+  // dentry type is primary || remote || null
+  // inode ptr is required for primary, optional for remote, undefined for null
+  bool is_primary() { return linkage.is_primary(); }
+  bool is_remote() { return linkage.is_remote(); }
+  bool is_null() { return linkage.is_null(); }
+
+  inodeno_t get_ino();
+  */
+
+  linkage_t *get_linkage() { return &linkage; }
+
+  linkage_t *_project_linkage() {
+    projected.push_back(linkage_t());
+    return &projected.back();
+  }
+  void push_projected_linkage() {
+    _project_linkage();
+  }
+  void push_projected_linkage(inodeno_t ino, char d_type) {
+    linkage_t *p = _project_linkage();
+    p->remote_ino = ino;
+    p->remote_d_type = d_type;
+  }
+  void push_projected_linkage(CInode *inode); 
+  linkage_t *pop_projected_linkage();
+
+  bool is_projected() { return projected.size(); }
+
+  linkage_t *get_projected_linkage() {
+    if (projected.size())
+      return &projected.back();
+    return &linkage;
+  }
+  CInode *get_projected_inode() {
+    return get_projected_linkage()->inode;
+  }
+
+  bool use_projected(int client, Mutation *mut) {
+    return lock.can_read_projected(client) || 
+      lock.get_xlocked_by() == mut;
+  }
+  linkage_t *get_linkage(int client, Mutation *mut) {
+    return use_projected(client, mut) ? get_projected_linkage() : get_linkage();
   }
 
   // ref counts: pin ourselves in the LRU when we're pinned.
@@ -171,15 +233,9 @@ public:
   
   void adjust_nested_anchors(int by);
 
-  // dentry type is primary || remote || null
-  // inode ptr is required for primary, optional for remote, undefined for null
-  bool is_primary() { return remote_ino == 0 && inode != 0; }
-  bool is_remote() { return remote_ino > 0; }
-  bool is_null() { return (remote_ino == 0 && inode == 0) ? true:false; }
-
   // remote links
-  void link_remote(CInode *in);
-  void unlink_remote();
+  void link_remote(linkage_t *dnl, CInode *in);
+  void unlink_remote(linkage_t *dnl);
   
   // copy cons
   CDentry(const CDentry& m);
@@ -211,8 +267,8 @@ public:
     __u32 nonce = add_replica(mds);
     ::encode(nonce, bl);
     ::encode(first, bl);
-    ::encode(remote_ino, bl);
-    ::encode(remote_d_type, bl);
+    ::encode(linkage.remote_ino, bl);
+    ::encode(linkage.remote_d_type, bl);
     __s32 ls = lock.get_replica_state();
     ::encode(ls, bl);
   }

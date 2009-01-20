@@ -22,21 +22,24 @@ class MClientCaps : public Message {
  public:
   struct ceph_mds_caps head;
   bufferlist snapbl;
+  bufferlist xattrbl;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
-  capseq_t get_seq() { return head.seq; }
-  capseq_t get_mseq() { return head.migrate_seq; }
+  int      get_dirty() { return head.dirty; }
+  ceph_seq_t get_seq() { return head.seq; }
+  ceph_seq_t get_mseq() { return head.migrate_seq; }
 
   inodeno_t get_ino() { return inodeno_t(head.ino); }
+  inodeno_t get_realm() { return inodeno_t(head.realm); }
 
   __u64 get_size() { return head.size;  }
   __u64 get_max_size() { return head.max_size;  }
-  __u64 get_truncate_seq() { return head.truncate_seq; }
+  __u32 get_truncate_seq() { return head.truncate_seq; }
   utime_t get_ctime() { return utime_t(head.ctime); }
   utime_t get_mtime() { return utime_t(head.mtime); }
   utime_t get_atime() { return utime_t(head.atime); }
-  __u64 get_time_warp_seq() { return head.time_warp_seq; }
+  __u32 get_time_warp_seq() { return head.time_warp_seq; }
 
   ceph_file_layout& get_layout() { return head.layout; }
 
@@ -60,36 +63,32 @@ class MClientCaps : public Message {
 
   MClientCaps() {}
   MClientCaps(int op,
-	      inode_t& inode,
+	      inodeno_t ino,
 	      inodeno_t realm,
 	      long seq,
 	      int caps,
 	      int wanted,
-	      int mseq) :
-    Message(CEPH_MSG_CLIENT_CAPS) {
-    memset(&head, 0, sizeof(head));
-    head.op = op;
-    head.ino = inode.ino;
-    head.seq = seq;
-    head.caps = caps;
-    head.wanted = wanted;
-    head.layout = inode.layout;
-    head.size = inode.size;
-    head.max_size = inode.max_size;
-    head.truncate_seq = inode.truncate_seq;
-    head.migrate_seq = mseq;
-    inode.mtime.encode_timeval(&head.mtime);
-    inode.atime.encode_timeval(&head.atime);
-    inode.ctime.encode_timeval(&head.ctime);
-    head.time_warp_seq = inode.time_warp_seq;
-  }
-  MClientCaps(int op,
-	      inodeno_t ino,
+	      int dirty,
 	      int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
+    head.realm = realm;
+    head.seq = seq;
+    head.caps = caps;
+    head.wanted = wanted;
+    head.dirty = dirty;
+    head.migrate_seq = mseq;
+  }
+  MClientCaps(int op,
+	      inodeno_t ino, inodeno_t realm,
+	      int mseq) :
+    Message(CEPH_MSG_CLIENT_CAPS) {
+    memset(&head, 0, sizeof(head));
+    head.op = op;
+    head.ino = ino;
+    head.realm = realm;
     head.migrate_seq = mseq;
   }
 
@@ -98,17 +97,23 @@ class MClientCaps : public Message {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " seq " << head.seq 
-	<< " caps=" << cap_string(head.caps)
-	<< " wanted=" << cap_string(head.wanted)
-	<< " size " << head.size << "/" << head.max_size;
+	<< " caps=" << ccap_string(head.caps)
+	<< " dirty=" << ccap_string(head.dirty)
+	<< " wanted=" << ccap_string(head.wanted);
+    out << " follows " << snapid_t(head.snap_follows);
+    if (head.migrate_seq)
+      out << " mseq " << head.migrate_seq;
+
+    out << " size " << head.size << "/" << head.max_size;
     if (head.truncate_seq)
       out << " ts " << head.truncate_seq;
     out << " mtime " << utime_t(head.mtime);
     if (head.time_warp_seq)
       out << " tws " << head.time_warp_seq;
-    out << " follows " << snapid_t(head.snap_follows);
-    if (head.migrate_seq)
-      out << " mseq " << head.migrate_seq;
+
+    if (head.xattr_version)
+      out << " xattrs(v=" << head.xattr_version << " l=" << xattrbl.length() << ")";
+
     out << ")";
   }
   
@@ -116,11 +121,14 @@ class MClientCaps : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.snap_trace_len, snapbl, p);
+    ::decode_nohead(head.xattr_len, xattrbl, p);
   }
   void encode_payload() {
     head.snap_trace_len = snapbl.length();
+    head.xattr_len = xattrbl.length();
     ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
+    ::encode_nohead(xattrbl, payload);
   }
 };
 

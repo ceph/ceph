@@ -34,7 +34,6 @@ char *mount_resolve_dest(char *orig_str)
 	char *mount_path;
 	char *tok, *p, *port_str;
 	int len, pos;
-	int rc;
 
 	mount_path = strrchr(orig_str, ':');
 	if (!mount_path) {
@@ -63,7 +62,6 @@ char *mount_resolve_dest(char *orig_str)
 	tok = strtok(orig_str, ",");
 
 	while (tok) {
-		int i;
 		struct hostent *ent;
 		char addr[16];
 
@@ -112,13 +110,11 @@ char *mount_resolve_dest(char *orig_str)
 static int parse_options(char ** optionsp, int * filesys_flags)
 {
 	const char * data;
-	char * percent_char = NULL;
 	char * value = NULL;
 	char * next_keyword = NULL;
 	char * out = NULL;
 	int out_len = 0;
 	int word_len;
-	int rc = 0;
 	int skip;
 	int pos = 0;
 
@@ -192,7 +188,6 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 			}
 			
 		}
-nocopy:
 		data = next_keyword;
 	}
 
@@ -240,7 +235,6 @@ int main(int argc, char *argv[])
 		}
 	}
 
-out:
 	free(new_argv);	
 	exit(0);
 }

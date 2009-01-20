@@ -71,8 +71,8 @@ void MDLog::reopen_logger(utime_t start, bool append)
 
     mdlog_logtype.add_set("expos");
     mdlog_logtype.add_set("wrpos");
-
-    mdlog_logtype.add_avg("jlat");
+    mdlog_logtype.add_avg("jacklat");
+    mdlog_logtype.add_avg("jsafelat");
   }
 
 }
@@ -147,7 +147,7 @@ void MDLog::append()
 
 // -------------------------------------------------
 
-void MDLog::submit_entry( LogEvent *le, Context *c ) 
+void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe ) 
 {
   if (!g_conf.mds_log) {
     // hack: log is disabled.
@@ -191,7 +191,13 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
   
   if (c) {
     unflushed = 0;
-    journaler->flush(c);
+    
+    if (!g_conf.mds_log_unsafe)
+      wait_safe = true;
+
+    journaler->flush(wait_safe ? 0:c);
+    if (wait_safe)
+      journaler->wait_for_flush(0, c);
   }
   else
     unflushed++;
@@ -211,9 +217,12 @@ void MDLog::submit_entry( LogEvent *le, Context *c )
 
 void MDLog::wait_for_sync( Context *c )
 {
+  if (!g_conf.mds_log_unsafe)
+    return wait_for_safe(c);
+
   if (g_conf.mds_log) {
     // wait
-    journaler->flush(c);
+    journaler->wait_for_flush(c, 0);
   } else {
     // hack: bypass.
     c->finish(0);
@@ -224,7 +233,7 @@ void MDLog::wait_for_safe( Context *c )
 {
   if (g_conf.mds_log) {
     // wait
-    journaler->flush(0, c);
+    journaler->wait_for_flush(0, c);
   } else {
     // hack: bypass.
     c->finish(0);
@@ -237,9 +246,6 @@ void MDLog::flush()
   if (unflushed)
     journaler->flush();
   unflushed = 0;
-
-  // trim
-  trim();
 }
 
 void MDLog::cap()
@@ -263,8 +269,10 @@ void MDLog::start_new_segment(Context *onsync)
 
   ESubtreeMap *le = mds->mdcache->create_subtree_map();
   submit_entry(le, new C_MDL_WroteSubtreeMap(this, mds->mdlog->get_write_pos()));
-  if (onsync)
+  if (onsync) {
     wait_for_sync(onsync);  
+    flush();
+  }
 
   logger->inc("segadd");
   logger->set("seg", segments.size());

@@ -44,19 +44,19 @@ class MMDSCacheRejoin : public Message {
   // -- types --
   struct inode_strong { 
     int32_t caps_wanted;
-    int32_t dirlock, nestlock;
+    int32_t filelock, nestlock;
     inode_strong() {}
     inode_strong(int cw, int dl, int nl) : 
       caps_wanted(cw),
-      dirlock(dl), nestlock(nl) { }
+      filelock(dl), nestlock(nl) { }
     void encode(bufferlist &bl) const {
       ::encode(caps_wanted, bl);
-      ::encode(dirlock, bl);
+      ::encode(filelock, bl);
       ::encode(nestlock, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(caps_wanted, bl);
-      ::decode(dirlock, bl);
+      ::decode(filelock, bl);
       ::decode(nestlock, bl);
     }
   };
@@ -198,7 +198,7 @@ class MMDSCacheRejoin : public Message {
   void add_scatterlock_state(CInode *in) {
     if (inode_scatterlocks.count(in->ino()))
       return;  // already added this one
-    in->encode_lock_state(CEPH_LOCK_IDIR, inode_scatterlocks[in->ino()].first);
+    in->encode_lock_state(CEPH_LOCK_IFILE, inode_scatterlocks[in->ino()].first);
     in->encode_lock_state(CEPH_LOCK_INEST, inode_scatterlocks[in->ino()].second);
   }
 

@@ -189,7 +189,7 @@ class MDSMap {
 
   epoch_t get_last_failure() const { return last_failure; }
 
-  int get_max_mds() const { return max_mds; }
+  unsigned get_max_mds() const { return max_mds; }
   void set_max_mds(int m) { max_mds = m; }
 
   int get_tableserver() const { return tableserver; }

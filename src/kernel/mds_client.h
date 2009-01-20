@@ -74,7 +74,6 @@ struct ceph_mds_reply_info_parsed {
 
 	int trace_numi, trace_numd, trace_snapdirpos;
 	struct ceph_mds_reply_info_in *trace_in;
-	struct ceph_mds_reply_lease   **trace_ilease;
 	struct ceph_mds_reply_dirfrag **trace_dir;
 	char                          **trace_dname;
 	u32                           *trace_dname_len;
@@ -82,7 +81,6 @@ struct ceph_mds_reply_info_parsed {
 
 	struct ceph_mds_reply_dirfrag *dir_dir;
 	int                           dir_nr;
-	struct ceph_mds_reply_lease   **dir_ilease;
 	char                          **dir_dname;
 	u32                           *dir_dname_len;
 	struct ceph_mds_reply_lease   **dir_dlease;
@@ -117,10 +115,11 @@ struct ceph_mds_session {
 	unsigned long     s_cap_ttl;  /* when session caps expire */
 	unsigned long     s_renew_requested; /* last time we sent a renew req */
 	struct list_head  s_caps;     /* all caps issued by this session */
+	struct list_head  s_rdcaps;   /* just the readonly caps */
 	int               s_nr_caps;
-	struct list_head  s_inode_leases, s_dentry_leases; /* and leases */
 	atomic_t          s_ref;
 	struct completion s_completion;
+	struct list_head  s_unsafe;   /* unsafe requests */
 };
 
 /*
@@ -154,6 +153,9 @@ struct ceph_mds_request {
 	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
 	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
+	struct inode	*r_listener;
+	struct list_head r_listener_item;
+
 	/* references to the trailing dentry and inode from parsing the
 	 * mds response.  also used to feed a VFS-provided dentry into
 	 * the reply handler */
@@ -172,7 +174,9 @@ struct ceph_mds_request {
 
 	atomic_t          r_ref;
 	struct completion r_completion;
-	int		  r_got_reply;
+	struct completion r_safe_completion;
+	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
+	bool		  r_got_unsafe, r_got_safe;
 };
 
 /*
@@ -208,8 +212,23 @@ struct ceph_mds_client {
 
 extern const char *ceph_mds_op_name(int op);
 
-extern struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *,
-						       int mds);
+extern struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *, int mds);
+
+inline static struct ceph_mds_session *
+ceph_get_mds_session(struct ceph_mds_session *s)
+{
+	atomic_inc(&s->s_ref);
+	return s;
+}
+
+/*
+ * requests
+ */
+static inline void ceph_mdsc_get_request(struct ceph_mds_request *req)
+{
+	atomic_inc(&req->r_ref);
+}
+
 extern void ceph_put_mds_session(struct ceph_mds_session *s);
 
 extern void ceph_send_msg_mds(struct ceph_mds_client *mdsc,
@@ -242,6 +261,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 u64 ino2, const char *path2,
 			 struct dentry *ref, int want_auth);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
+				struct inode *listener,
 				struct ceph_mds_request *req);
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
@@ -251,5 +271,7 @@ extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 
 extern void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
 				       struct ceph_mds_session *session);
+extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
+						    u64 tid);
 
 #endif

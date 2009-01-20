@@ -17,7 +17,6 @@
 #define __MLOCK_H
 
 #include "msg/Message.h"
-#include "mds/SimpleLock.h"
 
 // for replicas
 #define LOCK_AC_SYNC        -1

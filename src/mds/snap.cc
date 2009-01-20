@@ -192,6 +192,7 @@ void SnapRealm::check_cache()
   cached_seq = seq;
   build_snap_set(cached_snaps, cached_seq, cached_last_created, cached_last_destroyed,
 		 0, CEPH_NOSNAP);
+  build_snap_trace(cached_snap_trace);
   
   dout(10) << "check_cache rebuilt " << cached_snaps
 	   << " seq " << seq
@@ -404,7 +405,11 @@ void SnapRealm::split_at(SnapRealm *child)
 
 }
 
-
+const bufferlist& SnapRealm::get_snap_trace()
+{
+  check_cache();
+  return cached_snap_trace;
+}
 
 void SnapRealm::build_snap_trace(bufferlist& snapbl)
 {

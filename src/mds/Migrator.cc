@@ -598,7 +598,9 @@ void Migrator::export_dir(CDir *dir, int dest)
   dir->state_set(CDir::STATE_EXPORTING);
 
   // send ExportDirDiscover (ask target)
-  mds->send_message_mds(new MExportDirDiscover(dir), dest);
+  filepath path;
+  dir->inode->make_path(path);
+  mds->send_message_mds(new MExportDirDiscover(path, dir->dirfrag()), dest);
 
   // start the freeze, but hold it up with an auth_pin.
   dir->auth_pin(this);
@@ -766,7 +768,8 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     MExportDirNotify *notify = new MExportDirNotify(dir->dirfrag(), true,
 						    pair<int,int>(mds->get_nodeid(),CDIR_AUTH_UNKNOWN),
 						    pair<int,int>(mds->get_nodeid(),export_peer[dir]));
-    notify->copy_bounds(bounds);
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
     mds->send_message_mds(notify, p->first);
     
   }
@@ -799,6 +802,7 @@ void Migrator::export_go(CDir *dir)
 
   // first sync log to flush out e.g. any cap imports
   mds->mdlog->wait_for_sync(new C_M_ExportGo(this, dir));
+  mds->mdlog->flush();
 }
 
 void Migrator::export_go_synced(CDir *dir)
@@ -900,12 +904,11 @@ void Migrator::finish_export_inode_caps(CInode *in)
     dout(7) << "finish_export_inode telling client" << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
-					     in->inode,
-					     in->find_snaprealm()->inode->ino(),
-                                             cap->get_last_seq(), 
-                                             cap->pending(),
-                                             cap->wanted(),
-					     cap->get_mseq());
+				     in->ino(),
+				     in->find_snaprealm()->inode->ino(),
+				     cap->get_last_seq(), 
+				     cap->pending(), cap->wanted(), 0,
+				     cap->get_mseq());
     mds->send_message_client(m, it->first);
   }
   in->clear_client_caps();
@@ -934,7 +937,6 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   in->linklock.export_twiddle();
   in->dirfragtreelock.export_twiddle();
   in->filelock.export_twiddle();
-  in->dirlock.export_twiddle();
 
   // mark auth
   assert(in->is_auth());
@@ -981,7 +983,7 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
   CDir::map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
     CDentry *dn = it->second;
-    CInode *in = dn->get_inode();
+    CInode *in = dn->get_linkage()->get_inode();
     
     num_exported++;
     
@@ -998,17 +1000,17 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
     // points to...
     
     // null dentry?
-    if (dn->is_null()) {
+    if (dn->get_linkage()->is_null()) {
       exportbl.append("N", 1);  // null dentry
       continue;
     }
     
-    if (dn->is_remote()) {
+    if (dn->get_linkage()->is_remote()) {
       // remote link
       exportbl.append("L", 1);  // remote link
       
-      inodeno_t ino = dn->get_remote_ino();
-      unsigned char d_type = dn->get_remote_d_type();
+      inodeno_t ino = dn->get_linkage()->get_remote_ino();
+      unsigned char d_type = dn->get_linkage()->get_remote_d_type();
       ::encode(ino, exportbl);
       ::encode(d_type, exportbl);
       continue;
@@ -1069,13 +1071,13 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
   CDir::map_t::iterator it;
   for (it = dir->begin(); it != dir->end(); it++) {
     CDentry *dn = it->second;
-    CInode *in = dn->get_inode();
+    CInode *in = dn->get_linkage()->get_inode();
 
     // dentry
     dn->finish_export();
 
     // inode?
-    if (dn->is_primary()) {
+    if (dn->get_linkage()->is_primary()) {
       finish_export_inode(in, now, finished);
 
       // subdirs?
@@ -1135,6 +1137,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(new C_MDS_ExportFinishLogged(this, dir));
+  mds->mdlog->flush();
   
   delete m;
 }
@@ -1170,8 +1173,8 @@ void Migrator::export_reverse(CDir *dir)
     dir->abort_export();
     for (CDir::map_t::iterator p = dir->items.begin(); p != dir->items.end(); ++p) {
       p->second->abort_export();
-      if (!p->second->is_primary()) continue;
-      CInode *in = p->second->get_inode();
+      if (!p->second->get_linkage()->is_primary()) continue;
+      CInode *in = p->second->get_linkage()->get_inode();
       in->abort_export();
       if (in->is_dir())
 	in->get_nested_dirfrags(rq);
@@ -1231,7 +1234,8 @@ void Migrator::export_logged_finish(CDir *dir)
 				    pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
 				    pair<int,int>(dest, CDIR_AUTH_UNKNOWN));
 
-    notify->copy_bounds(bounds);
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
     
     mds->send_message_mds(notify, *p);
   }
@@ -1688,6 +1692,7 @@ void Migrator::handle_export_dir(MExportDir *m)
   // log it
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(onlogged);
+  mds->mdlog->flush();
 
   // note state
   import_state[dir->dirfrag()] = IMPORT_LOGGINGSTART;
@@ -1775,8 +1780,8 @@ void Migrator::import_reverse(CDir *dir)
 	dn->mark_clean();
 
       // inode?
-      if (dn->is_primary()) {
-	CInode *in = dn->get_inode();
+      if (dn->get_linkage()->is_primary()) {
+	CInode *in = dn->get_linkage()->get_inode();
 	in->state_clear(CDentry::STATE_AUTH);
 	in->clear_replica_map();
 	if (in->is_dirty()) 
@@ -1838,7 +1843,8 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
       new MExportDirNotify(dir->dirfrag(), true,
 			   pair<int,int>(mds->get_nodeid(), CDIR_AUTH_UNKNOWN),
 			   pair<int,int>(import_peer[dir->dirfrag()], CDIR_AUTH_UNKNOWN));
-    notify->copy_bounds(bounds);
+    for (set<CDir*>::iterator i = bounds.begin(); i != bounds.end(); i++)
+      notify->get_bounds().push_back((*i)->dirfrag());
     mds->send_message_mds(notify, *p);
   }
 }
@@ -1988,8 +1994,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   decode_import_inode_caps(in, blp, cap_imports);
 
   // link before state  -- or not!  -sage
-  if (dn->inode != in) {
-    assert(!dn->inode);
+  if (dn->get_linkage()->get_inode() != in) {
+    assert(!dn->get_linkage()->get_inode());
     dn->dir->link_primary_inode(dn, in);
   }
  
@@ -2003,9 +2009,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   
   // clear if dirtyscattered, since we're going to journal this
   //  but not until we _actually_ finish the import...
-  if (in->dirlock.is_updated()) {
-    updated_scatterlocks.push_back(&in->dirlock);
-    mds->locker->mark_updated_scatterlock(&in->dirlock);
+  if (in->filelock.is_updated()) {
+    updated_scatterlocks.push_back(&in->filelock);
+    mds->locker->mark_updated_scatterlock(&in->filelock);
   }
 
   // adjust replica list
@@ -2042,8 +2048,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int from,
 
     Capability *cap = in->get_client_cap(it->first);
     if (!cap) {
-      cap = in->add_client_cap(it->first);
-      session->touch_cap(cap);
+      cap = in->add_client_cap(it->first, session, &mds->mdcache->client_rdcaps);
     }
     cap->merge(it->second);
 
@@ -2137,7 +2142,7 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     
     if (icode == 'N') {
       // null dentry
-      assert(dn->is_null());  
+      assert(dn->get_linkage()->is_null());  
       
       // fall thru
     }
@@ -2147,8 +2152,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
       unsigned char d_type;
       ::decode(ino, blp);
       ::decode(d_type, blp);
-      if (dn->is_remote()) {
-	assert(dn->get_remote_ino() == ino);
+      if (dn->get_linkage()->is_remote()) {
+	assert(dn->get_linkage()->get_remote_ino() == ino);
       } else {
 	dir->link_remote_inode(dn, ino, d_type);
       }
@@ -2296,6 +2301,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_safe(finish);
+  mds->mdlog->flush();
 
   delete ex;
 }

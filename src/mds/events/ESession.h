@@ -26,24 +26,38 @@ class ESession : public LogEvent {
   bool open;    // open or close
   version_t cmapv;  // client map version
 
+  deque<inodeno_t> inos;
+  version_t inotablev;
+
  public:
   ESession() : LogEvent(EVENT_SESSION) { }
   ESession(entity_inst_t inst, bool o, version_t v) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),
     open(o),
-    cmapv(v) {
+    cmapv(v),
+    inotablev(0) {
   }
-  
+  ESession(entity_inst_t inst, bool o, version_t v, deque<inodeno_t>& i, version_t iv) :
+    LogEvent(EVENT_SESSION),
+    client_inst(inst),
+    open(o),
+    cmapv(v),
+    inos(i), inotablev(iv) { }
+
   void encode(bufferlist &bl) const {
     ::encode(client_inst, bl);
     ::encode(open, bl);
     ::encode(cmapv, bl);
+    ::encode(inos, bl);
+    ::encode(inotablev, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(client_inst, bl);
     ::decode(open, bl);
     ::decode(cmapv, bl);
+    ::decode(inos, bl);
+    ::decode(inotablev, bl);
   }
 
 
@@ -52,6 +66,8 @@ class ESession : public LogEvent {
       out << "ESession " << client_inst << " open cmapv " << cmapv;
     else
       out << "ESession " << client_inst << " close cmapv " << cmapv;
+    if (inos.size())
+      out << " (" << inos.size() << " inos, v" << inotablev << ")";
   }
   
   void update_segment();

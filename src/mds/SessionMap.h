@@ -29,6 +29,7 @@ class CInode;
 
 #include "Capability.h"
 
+
 /* 
  * session
  */
@@ -51,6 +52,34 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
+  deque<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
+  deque<inodeno_t> prealloc_inos;   // preallocated, ready to use.
+  deque<inodeno_t> used_inos;       // journaling use
+
+  inodeno_t take_ino(inodeno_t ino = 0) {
+    assert(!prealloc_inos.empty());
+
+    if (ino) {
+      deque<inodeno_t>::iterator p;
+      for (p = prealloc_inos.begin(); p != prealloc_inos.end(); p++) 
+	if (*p == ino)
+	  break;
+      if (p != prealloc_inos.end())
+	prealloc_inos.erase(p);
+      else
+	ino = 0;
+    }
+    if (!ino) {
+      ino = prealloc_inos.front();
+      prealloc_inos.pop_front();
+    }
+    used_inos.push_back(ino);
+    return ino;
+  }
+  int get_num_projected_prealloc_inos() {
+    return prealloc_inos.size() + pending_prealloc_inos.size();
+  }
+
   int get_client() { return inst.name.num(); }
 
   bool is_undef() { return state == STATE_UNDEF; }
@@ -72,7 +101,7 @@ public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
 
-  void touch_cap(Capability *cap) {
+  void add_cap(Capability *cap) {
     caps.push_back(&cap->session_caps_item);
   }
   void touch_lease(ClientLease *r) {
@@ -120,11 +149,17 @@ public:
     ::encode(inst, bl);
     ::encode(cap_push_seq, bl);
     ::encode(completed_requests, bl);
+    ::encode(prealloc_inos, bl);   // hacky, see below.
+    ::encode(used_inos, bl);
   }
   void decode(bufferlist::iterator& p) {
     ::decode(inst, p);
     ::decode(cap_push_seq, p);
     ::decode(completed_requests, p);
+    ::decode(prealloc_inos, p);
+    ::decode(used_inos, p);
+    prealloc_inos.insert(prealloc_inos.begin(), used_inos.begin(), used_inos.end());  // HACK
+    used_inos.clear();
   }
 };
 WRITE_CLASS_ENCODER(Session)

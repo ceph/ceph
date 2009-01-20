@@ -135,7 +135,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for dirlock flush on " << *in << dendl;
     if (!gather) gather = new C_Gather;
-    mds->locker->scatter_nudge(&in->dirlock, gather->new_sub());
+    mds->locker->scatter_nudge(&in->filelock, gather->new_sub());
   }
   for (xlist<CInode*>::iterator p = dirty_dirfrag_dirfragtree.begin(); !p.end(); ++p) {
     CInode *in = *p;
@@ -245,6 +245,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 	      << ", waiting for safe journal flush" << dendl;
       if (!gather) gather = new C_Gather;
       mds->mdlog->wait_for_safe(gather->new_sub());
+      mds->mdlog->flush();
     }
   }
 
@@ -274,11 +275,12 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
-EMetaBlob::EMetaBlob(MDLog *mdlog) :
-  last_subtree_map(mdlog->get_last_segment_offset()),
-  my_offset(mdlog->get_write_pos()) 
-{
-}
+EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0),
+				     inotablev(0), sessionmapv(0),
+				     allocated_ino(0),
+				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),
+				     my_offset(mdlog ? mdlog->get_write_pos() : 0) //, _segment(0)
+{ }
 
 void EMetaBlob::update_segment(LogSegment *ls)
 {
@@ -291,8 +293,10 @@ void EMetaBlob::update_segment(LogSegment *ls)
   // -> handled directly by Server.cc, replay()
 
   // alloc table update?
-  if (!allocated_inos.empty())
+  if (inotablev)
     ls->inotablev = inotablev;
+  if (sessionmapv)
+    ls->sessionmapv = sessionmapv;
 
   // truncated inodes
   // -> handled directly by Server.cc
@@ -307,7 +311,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << dendl;
 
-  if (!logseg) logseg = _segment;
+  //if (!logseg) logseg = _segment;
   assert(logseg);
 
   // walk through my dirs (in order!)
@@ -347,7 +351,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
-      dir->get_inode()->dirlock.set_updated();
+      dir->get_inode()->filelock.set_updated();
     }
     if (lump.is_new())
       dir->mark_new(logseg);
@@ -391,10 +395,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	mds->mdcache->add_inode(in);
-	if (!dn->is_null()) {
-	  if (dn->is_primary())
+	if (!dn->get_linkage()->is_null()) {
+	  if (dn->get_linkage()->is_primary())
 	    dout(-10) << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn 
-		     << " " << *dn->get_inode()
+		     << " " << *dn->get_linkage()->get_inode()
 		     << " should be " << p->inode.ino
 		     << dendl;
 	  dir->unlink_inode(dn);
@@ -404,7 +408,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (p->dirty) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
-	if (dn->get_inode() != in && in->get_parent_dn()) {
+	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  in->get_parent_dn()->get_dir()->unlink_inode(in->get_parent_dn());
 	}
@@ -418,8 +422,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	}
 	if (in->inode.is_symlink()) in->symlink = p->symlink;
 	if (p->dirty) in->_mark_dirty(logseg);
-	if (dn->get_inode() != in) {
-	  if (!dn->is_null())  // note: might be remote.  as with stray reintegration.
+	if (dn->get_linkage()->get_inode() != in) {
+	  if (!dn->get_linkage()->is_null())  // note: might be remote.  as with stray reintegration.
 	    dir->unlink_inode(dn);
 	  dir->link_primary_inode(dn, in);
 	  dout(10) << "EMetaBlob.replay linked " << *in << dendl;
@@ -441,11 +445,11 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
-	if (!dn->is_null()) {
+	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
 	}
-	dn->set_remote(p->ino, p->d_type);
+	dn->get_linkage()->set_remote(p->ino, p->d_type);
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
@@ -466,7 +470,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
       } else {
 	dn->first = p->dnfirst;
-	if (!dn->is_null()) {
+	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
 	  dir->unlink_inode(dn);
 	}
@@ -488,23 +492,57 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     client->got_journaled_agree(p->second, logseg);
   }
 
+  // opened ino?
+  if (opened_ino) {
+    CInode *in = mds->mdcache->get_inode(opened_ino);
+    assert(in);
+    dout(10) << "EMetaBlob.replay noting opened inode " << *in << dendl;
+    logseg->open_files.push_back(&in->xlist_open_file);
+  }
+
   // allocated_inos
-  if (!allocated_inos.empty()) {
+  if (inotablev) {
     if (mds->inotable->get_version() >= inotablev) {
       dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
-      for (list<inodeno_t>::iterator p = allocated_inos.begin();
-	   p != allocated_inos.end();
-	   ++p) {
-	dout(10) << " EMetaBlob.replay inotable " << *p << " tablev " << inotablev
-		 << " - 1 == table " << mds->inotable->get_version() << dendl;
-	assert(inotablev-1 == mds->inotable->get_version());
-	
-	inodeno_t ino = mds->inotable->alloc_id();
-	assert(ino == *p);       // this should match.
-      }	
+      dout(10) << " EMetaBlob.replay inotable v " << inotablev
+	       << " - 1 == table " << mds->inotable->get_version()
+	       << " allocated+used " << allocated_ino
+	       << " prealloc " << preallocated_inos
+	       << dendl;
+      if (allocated_ino)
+	mds->inotable->replay_alloc_id(allocated_ino);
+      if (preallocated_inos.size())
+	mds->inotable->replay_alloc_ids(preallocated_inos);
       assert(inotablev == mds->inotable->get_version());
+    }
+  }
+  if (sessionmapv) {
+    if (mds->sessionmap.version >= sessionmapv) {
+      dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
+	       << " <= table " << mds->sessionmap.version << dendl;
+    } else {
+      dout(10) << " EMetaBlob.replay sessionmap v" << sessionmapv
+	       << " -(1|2) == table " << mds->sessionmap.version
+	       << " prealloc " << preallocated_inos
+	       << " used " << used_preallocated_ino
+	       << dendl;
+      Session *session = mds->sessionmap.get_session(client_name);
+      assert(session);
+      if (used_preallocated_ino) {
+	inodeno_t i = session->take_ino();
+	assert(i == used_preallocated_ino);
+	session->used_inos.clear();
+	mds->sessionmap.projected = ++mds->sessionmap.version;
+      }
+      if (preallocated_inos.size()) {
+	session->prealloc_inos.insert(session->prealloc_inos.end(),
+				      preallocated_inos.begin(),
+				      preallocated_inos.end());
+	mds->sessionmap.projected = ++mds->sessionmap.version;
+      }
+      assert(sessionmapv == mds->sessionmap.version);
     }
   }
 
@@ -554,6 +592,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 void ESession::update_segment()
 {
   _segment->sessionmapv = cmapv;
+  if (inos.size() && inotablev)
+    _segment->inotablev = inotablev;
 }
 
 void ESession::replay(MDS *mds)
@@ -576,6 +616,20 @@ void ESession::replay(MDS *mds)
 	mds->sessionmap.remove_session(session);
     }
   }
+
+  if (inos.size() && inotablev) {
+    if (mds->inotable->get_version() >= inotablev) {
+      dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
+	       << " >= " << inotablev << ", noop" << dendl;
+    } else {
+      dout(10) << "ESession.replay inotable " << mds->inotable->get_version()
+	       << " < " << inotablev << " " << (open ? "add":"remove") << dendl;
+      assert(!open);  // for now
+      mds->inotable->replay_release_ids(inos);
+      assert(mds->inotable->get_version() == inotablev);
+    }
+  }
+
   update_segment();
 }
 

@@ -16,7 +16,6 @@
 #define __MEXPORTDIRDISCOVER_H
 
 #include "msg/Message.h"
-#include "mds/CInode.h"
 #include "include/types.h"
 
 class MExportDirDiscover : public Message {
@@ -33,12 +32,12 @@ class MExportDirDiscover : public Message {
   MExportDirDiscover() :     
     Message(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
-  MExportDirDiscover(CDir *dir) : 
+  MExportDirDiscover(filepath& p, dirfrag_t df) : 
     Message(MSG_MDS_EXPORTDIRDISCOVER),
-    started(false) {
-    dir->get_inode()->make_path(path);
-    dirfrag = dir->dirfrag();
-  }
+    dirfrag(df),
+    path(p),
+    started(false)
+  { }
   const char *get_type_name() { return "ExDis"; }
   void print(ostream& o) {
     o << "export_discover(" << dirfrag << " " << path << ")";

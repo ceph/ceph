@@ -17,7 +17,6 @@
 #define __MEXPORTDIRPREP_H
 
 #include "msg/Message.h"
-#include "mds/CInode.h"
 #include "include/types.h"
 
 class MExportDirPrep : public Message {

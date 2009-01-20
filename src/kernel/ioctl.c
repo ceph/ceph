@@ -16,7 +16,7 @@ static long ceph_ioctl_get_layout(struct file *file, void __user *arg)
 	struct ceph_inode_info *ci = ceph_inode(file->f_dentry->d_inode);
 	int err;
 
-	err = ceph_do_getattr(file->f_dentry, CEPH_STAT_MASK_LAYOUT);
+	err = ceph_do_getattr(file->f_dentry, CEPH_STAT_CAP_LAYOUT);
 	if (!err) {
 		if (copy_to_user(arg, &ci->i_layout, sizeof(ci->i_layout)))
 			return -EFAULT;
@@ -28,6 +28,7 @@ static long ceph_ioctl_get_layout(struct file *file, void __user *arg)
 static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 {
 	struct inode *inode = file->f_dentry->d_inode;
+	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	struct ceph_mds_client *mdsc = &ceph_sb_to_client(inode->i_sb)->mdsc;
 	char *path;
 	int pathlen;
@@ -51,8 +52,8 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	kfree(path);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.setlayout.layout = layout;
-	ceph_mdsc_lease_release(mdsc, inode, NULL, CEPH_LOCK_ICONTENT);
-	err = ceph_mdsc_do_request(mdsc, req);
+	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	return err;
 }

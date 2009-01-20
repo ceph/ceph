@@ -718,29 +718,22 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
 				       1, path, 0, NULL,
 				       NULL, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
-	req->r_expected_cap = kmalloc(sizeof(struct ceph_cap), GFP_NOFS);
-	if (!req->r_expected_cap) {
-		root = ERR_PTR(-ENOMEM);
-		goto out;
-	}
 	reqhead = req->r_request->front.iov_base;
-	reqhead->args.open.flags = cpu_to_le32(O_DIRECTORY);
-	reqhead->args.open.mode = 0;
-	err = ceph_mdsc_do_request(mdsc, req);
+	reqhead->args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
+	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
 		root = req->r_last_dentry;
 		dget(root);
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
 	} else
 		root = ERR_PTR(err);
-out:
 	ceph_mdsc_put_request(req);
 	return root;
 }
@@ -815,14 +808,6 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		err = PTR_ERR(root);
 		goto out;
 	}
-
-	/*
-	 * Drop the reference we just got, since the VFS doesn't give
-	 * us a reliable way to drop it later when a particular
-	 * vfsmount goes away.  If the directory we just mounted on is
-	 * renamed on the server, we are screwed.
-	 */
-	ceph_put_fmode(ceph_inode(root->d_inode), CEPH_FILE_MODE_PIN);
 
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;

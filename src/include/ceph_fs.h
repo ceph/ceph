@@ -101,6 +101,18 @@ struct ceph_timespec {
 
 
 /*
+ * Rollover-safe type and comparator for 32-bit sequence numbers.
+ * Comparator returns -1, 0, or 1.
+ */
+typedef __u32 ceph_seq_t;
+
+static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
+{
+	return ((__s32)a - (__s32)b);
+}
+
+
+/*
  * "Frags" are a way to describe a subset of a 32-bit number space,
  * using a mask and a value to match against that mask.  Any given frag
  * (subset of the number space) can be partitioned into 2^n sub-frags.
@@ -424,7 +436,7 @@ struct ceph_entity_addr {
 static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
 					     const struct ceph_entity_addr *b)
 {
-	return le32_to_cpu(a->nonce) == le32_to_cpu(b->nonce) &&
+	return a->nonce == b->nonce &&
 		a->ipaddr.sin_addr.s_addr == b->ipaddr.sin_addr.s_addr;
 }
 
@@ -601,34 +613,12 @@ struct ceph_mds_getmap {
 #define CEPH_LOCK_ISNAP       2
 #define CEPH_LOCK_IVERSION    4     /* mds internal */
 #define CEPH_LOCK_IFILE       8     /* mds internal */
-#define CEPH_LOCK_IDIR        16    /* mds internal */
 #define CEPH_LOCK_IAUTH       32
 #define CEPH_LOCK_ILINK       64
 #define CEPH_LOCK_IDFT        128   /* dir frag tree */
 #define CEPH_LOCK_INEST       256   /* mds internal */
 #define CEPH_LOCK_IXATTR      512
 #define CEPH_LOCK_INO         2048  /* immutable inode bits; not a lock */
-
-/* alias for either filelock or dirlock */
-#define CEPH_LOCK_ICONTENT    (CEPH_LOCK_IFILE|CEPH_LOCK_IDIR)
-
-/*
- * stat masks are defined in terms of the locks that cover inode fields.
- */
-#define CEPH_STAT_MASK_INODE    CEPH_LOCK_INO
-#define CEPH_STAT_MASK_TYPE     CEPH_LOCK_INO  /* mode >> 12 */
-#define CEPH_STAT_MASK_SYMLINK  CEPH_LOCK_INO
-#define CEPH_STAT_MASK_UID      CEPH_LOCK_IAUTH
-#define CEPH_STAT_MASK_GID      CEPH_LOCK_IAUTH
-#define CEPH_STAT_MASK_MODE     CEPH_LOCK_IAUTH
-#define CEPH_STAT_MASK_NLINK    CEPH_LOCK_ILINK
-#define CEPH_STAT_MASK_LAYOUT   CEPH_LOCK_ICONTENT
-#define CEPH_STAT_MASK_MTIME    CEPH_LOCK_ICONTENT
-#define CEPH_STAT_MASK_SIZE     CEPH_LOCK_ICONTENT
-#define CEPH_STAT_MASK_ATIME    CEPH_LOCK_ICONTENT  /* fixme */
-#define CEPH_STAT_MASK_XATTR    CEPH_LOCK_IXATTR
-#define CEPH_STAT_MASK_INODE_ALL (CEPH_LOCK_ICONTENT | CEPH_LOCK_IAUTH | \
-				  CEPH_LOCK_ILINK | CEPH_LOCK_INO)
 
 /* client_session ops */
 enum {
@@ -752,6 +742,7 @@ struct ceph_mds_request_head {
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
+	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 
 	union {
 		struct {
@@ -819,10 +810,8 @@ struct ceph_mds_reply_head {
 	ceph_tid_t tid;
 	__le32 op;
 	__le32 result;
-	__le32 file_caps;
-	__le32 file_caps_seq;
-	__le32 file_caps_mseq;
 	__le32 mdsmap_epoch;
+	__u8 safe;
 } __attribute__ ((packed));
 
 /* one for each node split */
@@ -836,20 +825,29 @@ struct ceph_frag_tree_head {
 	struct ceph_frag_tree_split splits[];
 } __attribute__ ((packed));
 
+struct ceph_mds_reply_cap {
+	__le32 caps, wanted;
+	__le32 seq, mseq;
+	__le64 realm;
+	__le32 ttl_ms;  /* ttl, in ms.  if readonly and unwanted. */
+} __attribute__ ((packed));
+
 struct ceph_mds_reply_inode {
 	__le64 ino;
 	__le64 snapid;
+	__le32 rdev;
 	__le64 version;
+	struct ceph_mds_reply_cap cap;
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
-	__le64 time_warp_seq;
-	__le32 rdev;
+	__le32 time_warp_seq;
+	__le64 size, max_size, truncate_seq;
 	__le32 mode, uid, gid;
 	__le32 nlink;
-	__le64 size, max_size, truncate_seq;
 	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
 	struct ceph_timespec rctime;
 	struct ceph_frag_tree_head fragtree;
+	__le64 xattr_version;
 } __attribute__ ((packed));
 /* followed by frag array, then symlink string, then xattr blob */
 
@@ -857,6 +855,7 @@ struct ceph_mds_reply_inode {
 struct ceph_mds_reply_lease {
 	__le16 mask;
 	__le32 duration_ms;
+	__le32 seq;
 } __attribute__ ((packed));
 
 struct ceph_mds_reply_dirfrag {
@@ -895,15 +894,78 @@ static inline int ceph_flags_to_mode(int flags)
 	return CEPH_FILE_MODE_RD;
 }
 
-/* client file caps */
-#define CEPH_CAP_PIN       1  /* no specific capabilities beyond the pin */
-#define CEPH_CAP_RDCACHE   2  /* client can cache reads */
-#define CEPH_CAP_RD        4  /* client can read */
-#define CEPH_CAP_WR        8  /* client can write */
-#define CEPH_CAP_WRBUFFER 16  /* client can buffer writes */
-#define CEPH_CAP_WREXTEND 32  /* client can extend EOF */
-#define CEPH_CAP_LAZYIO   64  /* client can perform lazy io */
-#define CEPH_CAP_EXCL    128  /* exclusive/loner access */
+
+/* capability bits */
+#define CEPH_CAP_PIN         1  /* no specific capabilities beyond the pin */
+
+/* generic cap bits */
+#define CEPH_CAP_GRDCACHE    1  /* client can cache reads */
+#define CEPH_CAP_GEXCL       2  /* client has exclusive access, can update */
+#define CEPH_CAP_GRD         4  /* (filelock) client can read */ 
+#define CEPH_CAP_GWR         8  /* (filelock) client can write */
+#define CEPH_CAP_GWRBUFFER  16  /* (filelock) client can buffer writes */
+#define CEPH_CAP_GWREXTEND  32  /* (filelock) client can extend EOF */
+#define CEPH_CAP_GLAZYIO    64  /* (filelock) client can perform lazy io */
+
+/* per-lock shift */
+#define CEPH_CAP_SAUTH      2
+#define CEPH_CAP_SLINK      4
+#define CEPH_CAP_SXATTR     6
+#define CEPH_CAP_SFILE      8   /* goes at the end (uses >2 cap bits) */
+
+/* composed values */
+#define CEPH_CAP_AUTH_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SAUTH)
+#define CEPH_CAP_AUTH_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SAUTH)
+#define CEPH_CAP_LINK_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SLINK)
+#define CEPH_CAP_LINK_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SLINK)
+#define CEPH_CAP_XATTR_RDCACHE (CEPH_CAP_GRDCACHE  << CEPH_CAP_SXATTR)
+#define CEPH_CAP_XATTR_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SXATTR)
+#define CEPH_CAP_FILE(x)    (x << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_RD       (CEPH_CAP_GRD       << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_WR       (CEPH_CAP_GWR       << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_WRBUFFER (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_WREXTEND (CEPH_CAP_GWREXTEND << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_LAZYIO   (CEPH_CAP_GLAZYIO   << CEPH_CAP_SFILE)
+
+/* cap masks (for stat/getattr) */
+#define CEPH_STAT_CAP_INODE    CEPH_CAP_PIN
+#define CEPH_STAT_CAP_TYPE     CEPH_CAP_PIN  /* mode >> 12 */
+#define CEPH_STAT_CAP_SYMLINK  CEPH_CAP_PIN
+#define CEPH_STAT_CAP_UID      CEPH_CAP_AUTH_RDCACHE
+#define CEPH_STAT_CAP_GID      CEPH_CAP_AUTH_RDCACHE
+#define CEPH_STAT_CAP_MODE     CEPH_CAP_AUTH_RDCACHE
+#define CEPH_STAT_CAP_NLINK    CEPH_CAP_LINK_RDCACHE
+#define CEPH_STAT_CAP_LAYOUT   CEPH_CAP_FILE_RDCACHE
+#define CEPH_STAT_CAP_MTIME    CEPH_CAP_FILE_RDCACHE
+#define CEPH_STAT_CAP_SIZE     CEPH_CAP_FILE_RDCACHE
+#define CEPH_STAT_CAP_ATIME    CEPH_CAP_FILE_RDCACHE  /* fixme */
+#define CEPH_STAT_CAP_XATTR    CEPH_CAP_XATTR_RDCACHE
+#define CEPH_STAT_CAP_INODE_ALL (CEPH_CAP_PIN |			\
+				 CEPH_CAP_AUTH_RDCACHE |	\
+				 CEPH_CAP_LINK_RDCACHE |	\
+				 CEPH_CAP_FILE_RDCACHE |	\
+				 CEPH_CAP_XATTR_RDCACHE)
+
+#define CEPH_CAP_ANY_RDCACHE (CEPH_CAP_AUTH_RDCACHE |			\
+			      CEPH_CAP_LINK_RDCACHE |			\
+			      CEPH_CAP_XATTR_RDCACHE |			\
+			      CEPH_CAP_FILE_RDCACHE)
+#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_RDCACHE | CEPH_CAP_FILE_RD)
+
+#define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
+			   CEPH_CAP_LINK_EXCL |		\
+			   CEPH_CAP_XATTR_EXCL |	\
+			   CEPH_CAP_FILE_EXCL)
+#define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)
+#define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
+
+/*
+ * these cap bits time out, if no others are held and nothing is
+ * registered as 'wanted' by the client.
+ */
+#define CEPH_CAP_EXPIREABLE (CEPH_CAP_PIN|CEPH_CAP_ANY_RDCACHE)
 
 static inline int ceph_caps_for_mode(int mode)
 {
@@ -912,16 +974,25 @@ static inline int ceph_caps_for_mode(int mode)
 		return CEPH_CAP_PIN;
 	case CEPH_FILE_MODE_RD:
 		return CEPH_CAP_PIN |
-			CEPH_CAP_RD | CEPH_CAP_RDCACHE;
+			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
+			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
 	case CEPH_FILE_MODE_RDWR:
 		return CEPH_CAP_PIN |
-			CEPH_CAP_RD | CEPH_CAP_RDCACHE |
-			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
-			CEPH_CAP_EXCL;
+			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE |
+			  CEPH_CAP_GWR | CEPH_CAP_GWRBUFFER |
+			  CEPH_CAP_GEXCL) << CEPH_CAP_SFILE) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
+			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
 	case CEPH_FILE_MODE_WR:
 		return CEPH_CAP_PIN |
-			CEPH_CAP_WR | CEPH_CAP_WRBUFFER |
-			CEPH_CAP_EXCL;
+			((CEPH_CAP_GWR | CEPH_CAP_GWRBUFFER |
+			  CEPH_CAP_GEXCL) << CEPH_CAP_SFILE) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
+			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
+			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
 	}
 	return 0;
 }
@@ -931,12 +1002,11 @@ enum {
 	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify */
 	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
-	CEPH_CAP_OP_RELEASED,    /* mds->client close out cap */
-	CEPH_CAP_OP_FLUSHEDSNAP, /* mds->client flushed snap */
-	CEPH_CAP_OP_ACK,       /* client->mds ack (if prior grant was recall) */
-	CEPH_CAP_OP_REQUEST,   /* client->mds request (update wanted bits) */
+	CEPH_CAP_OP_UPDATE,    /* client->mds update */
+	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed.  if caps=0, cap also released. */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
-	CEPH_CAP_OP_RELEASE,   /* client->mds request release cap */
+	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
+	CEPH_CAP_OP_RELEASE,   /* client->mds release (clean) cap */
 };
 
 static inline const char *ceph_cap_op_name(int op)
@@ -946,11 +1016,10 @@ static inline const char *ceph_cap_op_name(int op)
 	case CEPH_CAP_OP_TRUNC: return "trunc";
 	case CEPH_CAP_OP_EXPORT: return "export";
 	case CEPH_CAP_OP_IMPORT: return "import";
-	case CEPH_CAP_OP_RELEASED: return "released";
-	case CEPH_CAP_OP_FLUSHEDSNAP: return "flushedsnap";
-	case CEPH_CAP_OP_ACK: return "ack";
-	case CEPH_CAP_OP_REQUEST: return "request";
+	case CEPH_CAP_OP_UPDATE: return "update";
+	case CEPH_CAP_OP_FLUSH_ACK: return "flush_ack";
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
+	case CEPH_CAP_OP_FLUSHSNAP_ACK: return "flushsnap_ack";
 	case CEPH_CAP_OP_RELEASE: return "release";
 	default: return "???";
 	}
@@ -961,29 +1030,44 @@ static inline const char *ceph_cap_op_name(int op)
  */
 struct ceph_mds_caps {
 	__le32 op;
-	__le64 ino;
+	__le64 ino, realm;
 	__le32 seq;
-	__le32 caps, wanted;
-	__le64 size, max_size;
-	__le64 truncate_seq;
+	__le32 caps, wanted, dirty;
 	__le32 migrate_seq;
-	struct ceph_timespec mtime, atime, ctime;
-	struct ceph_file_layout layout;
-	__le64 time_warp_seq;
 	__le64 snap_follows;
 	__le32 snap_trace_len;
+	__le32 ttl_ms;  /* for IMPORT op only */
+
+	/* authlock */
+	__le32 uid, gid, mode;
+
+	/* linklock */
+	__le32 nlink;
+
+	/* xattrlock */
+	__le32 xattr_len;
+	__le64 xattr_version;
+
+	/* filelock */
+	__le64 size, max_size;
+	__le32 truncate_seq;
+	struct ceph_timespec mtime, atime, ctime;
+	struct ceph_file_layout layout;
+	__le32 time_warp_seq;
 } __attribute__ ((packed));
 
 
-#define CEPH_MDS_LEASE_REVOKE  1  /*    mds  -> client */
-#define CEPH_MDS_LEASE_RELEASE 2  /* client  -> mds    */
-#define CEPH_MDS_LEASE_RENEW   3  /* client <-> mds    */
+#define CEPH_MDS_LEASE_REVOKE           1  /*    mds  -> client */
+#define CEPH_MDS_LEASE_RELEASE          2  /* client  -> mds    */
+#define CEPH_MDS_LEASE_RENEW            3  /* client <-> mds    */
+#define CEPH_MDS_LEASE_REVOKE_ACK       4  /* client  -> mds    */
 
 struct ceph_mds_lease {
 	__u8 action;
 	__le16 mask;
 	__le64 ino;
 	__le64 first, last;
+	__le32 seq;
 } __attribute__ ((packed));
 /* followed by a __le32+string for dname */
 

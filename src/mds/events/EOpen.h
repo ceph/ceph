@@ -34,8 +34,8 @@ public:
   void add_clean_inode(CInode *in) {
     if (!in->is_base()) {
       inode_t *pi = in->get_projected_inode();
-      metablob.add_dir_context(in->get_parent_dn()->get_dir());
-      metablob.add_primary_dentry(in->get_parent_dn(), false, 0, pi);
+      metablob.add_dir_context(in->get_projected_parent_dn()->get_dir());
+      metablob.add_primary_dentry(in->get_projected_parent_dn(), false, 0, pi);
       inos.push_back(in->ino());
     }
   }

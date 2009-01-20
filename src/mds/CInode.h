@@ -25,11 +25,11 @@
 
 #include "CDentry.h"
 #include "SimpleLock.h"
-#include "FileLock.h"
 #include "ScatterLock.h"
 #include "LocalLock.h"
 #include "Capability.h"
 #include "snap.h"
+#include "SessionMap.h"
 
 #include <list>
 #include <vector>
@@ -46,6 +46,8 @@ class CInode;
 class MDCache;
 class LogSegment;
 class SnapRealm;
+class Session;
+class MClientCaps;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -115,8 +117,7 @@ class CInode : public MDSCacheObject {
   static const int WAIT_AUTHLOCK_OFFSET        = 4;
   static const int WAIT_LINKLOCK_OFFSET        = 4 +   SimpleLock::WAIT_BITS;
   static const int WAIT_DIRFRAGTREELOCK_OFFSET = 4 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET        = 4 + 3*SimpleLock::WAIT_BITS; // same
-  static const int WAIT_DIRLOCK_OFFSET         = 4 + 3*SimpleLock::WAIT_BITS; // same
+  static const int WAIT_FILELOCK_OFFSET        = 4 + 3*SimpleLock::WAIT_BITS;
   static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
   static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
   static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
@@ -229,7 +230,8 @@ public:
   // parent dentries in cache
   CDentry         *parent;             // primary link
   set<CDentry*>    remote_parents;     // if hard linked
-  CDentry         *projected_parent;   // for in-progress rename
+
+  list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
   pair<int,int> inode_auth;
 
@@ -285,7 +287,7 @@ private:
     last_journaled(0), last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
-    parent(0), projected_parent(0),
+    parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
     xlist_dirty(this), xlist_caps(this), xlist_open_file(this), 
@@ -300,7 +302,6 @@ private:
     linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
     dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
     filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
-    dirlock(this, CEPH_LOCK_IDIR, WAIT_DIRLOCK_OFFSET),
     xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
     snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
     nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
@@ -342,7 +343,7 @@ private:
 
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
-  CDentry* get_projected_parent_dn() { return projected_parent ? projected_parent:parent; }
+  CDentry* get_projected_parent_dn() { return projected_parent.size() ? projected_parent.back():parent; }
   CDir *get_parent_dir();
   CInode *get_parent_inode();
   
@@ -358,7 +359,8 @@ private:
 
   // -- misc -- 
   bool is_ancestor_of(CInode *other);
-  void make_path_string(string& s);
+  void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
+  void make_path_string_projected(string& s);  
   void make_path(filepath& s);
   void make_anchor_trace(vector<class Anchor>& trace);
   void name_stray_dentry(string& dname);
@@ -421,7 +423,8 @@ private:
   
 
   // for giving to clients
-  bool encode_inodestat(bufferlist& bl, snapid_t snapid=CEPH_NOSNAP);
+  bool encode_inodestat(bufferlist& bl, Session *session, snapid_t snapid=CEPH_NOSNAP);
+  void encode_cap_message(MClientCaps *m, Capability *cap);
 
 
   // -- locks --
@@ -430,8 +433,7 @@ public:
   SimpleLock authlock;
   SimpleLock linklock;
   ScatterLock dirfragtreelock;
-  FileLock   filelock;
-  ScatterLock dirlock;
+  ScatterLock filelock;
   SimpleLock xattrlock;
   SimpleLock snaplock;
   ScatterLock nestlock;
@@ -442,7 +444,6 @@ public:
     case CEPH_LOCK_IAUTH: return &authlock;
     case CEPH_LOCK_ILINK: return &linklock;
     case CEPH_LOCK_IDFT: return &dirfragtreelock;
-    case CEPH_LOCK_IDIR: return &dirlock;
     case CEPH_LOCK_IXATTR: return &xattrlock;
     case CEPH_LOCK_ISNAP: return &snaplock;
     case CEPH_LOCK_INEST: return &nestlock;
@@ -479,8 +480,9 @@ public:
   // client caps
   int loner_cap;
 
-  bool choose_loner() {
-    assert(loner_cap < 0);
+  bool try_choose_loner() {
+    if (loner_cap >= 0)
+      return true;
 
     if (!mds_caps_wanted.empty())
       return false;
@@ -491,7 +493,7 @@ public:
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale() &&
-	  (it->second->wanted() & (CEPH_CAP_WR|CEPH_CAP_RD))) {
+	  ((it->second->wanted() & CEPH_CAP_ANY_WR) || inode.is_dir())) {
 	if (n)
 	  return false;
 	n++;
@@ -503,6 +505,21 @@ public:
     }
     return false;
   }
+  
+  bool try_drop_loner() {
+    if (loner_cap < 0)
+      return true;
+
+    int other_allowed = get_caps_allowed(false);
+    Capability *cap = get_client_cap(loner_cap);
+    if (!cap ||
+	(cap->issued() & ~other_allowed) == 0) {
+      loner_cap = -1;
+      return true;
+    }
+    return false;
+  }
+
 
   int count_nonstale_caps() {
     int n = 0;
@@ -531,7 +548,7 @@ public:
     if (c) return c->pending();
     return 0;
   }
-  Capability *add_client_cap(int client, SnapRealm *conrealm=0) {
+  Capability *add_client_cap(int client, Session *session, xlist<Capability*> *rdcaps_list, SnapRealm *conrealm=0) {
     if (client_caps.empty()) {
       get(PIN_CAPS);
       if (conrealm)
@@ -542,10 +559,12 @@ public:
     }
 
     assert(client_caps.count(client) == 0);
-    Capability *cap = client_caps[client] = new Capability;
-    cap->set_inode(this);
+    Capability *cap = client_caps[client] = new Capability(this, client, rdcaps_list);
+    if (session)
+      session->add_cap(cap);
+
     cap->client_follows = first-1;
-   
+  
     containing_realm->add_cap(client, cap);
     
     return cap;
@@ -555,7 +574,11 @@ public:
     Capability *cap = client_caps[client];
 
     cap->session_caps_item.remove_myself();
+    cap->rdcaps_item.remove_myself();
     containing_realm->remove_cap(client, cap);
+
+    if (client == loner_cap)
+      loner_cap = -1;
 
     delete cap;
     client_caps.erase(client);
@@ -578,15 +601,16 @@ public:
     containing_realm = realm;
   }
 
-  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr) {
+  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session, xlist<Capability*> *rdcaps_list) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      cap = add_client_cap(client);
+      cap = add_client_cap(client, session, rdcaps_list);
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }
+    cap->set_last_issue_stamp(g_clock.recent_now());
     inode.size = MAX(inode.size, icr.size);
     inode.mtime = MAX(inode.mtime, utime_t(icr.mtime));
     inode.atime = MAX(inode.atime, utime_t(icr.atime));
@@ -604,8 +628,38 @@ public:
     }
   }
 
+  // caps allowed
+  int get_caps_liked() {
+    return CEPH_CAP_PIN |
+      (is_dir() ? CEPH_CAP_ANY_RDCACHE : CEPH_CAP_ANY_RD);
+  }
+  int get_caps_allowed_ever() {
+    return 
+      CEPH_CAP_PIN |
+      (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
+      (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_allowed_ever() << linklock.get_cap_shift());
+  }
+  int get_caps_allowed(bool loner) {
+    return 
+      CEPH_CAP_PIN |
+      (filelock.gcaps_allowed(loner) << filelock.get_cap_shift()) |
+      (authlock.gcaps_allowed(loner) << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_allowed(loner) << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_allowed(loner) << linklock.get_cap_shift());
+  }
+  int get_caps_careful() {
+    return 
+      (filelock.gcaps_careful() << filelock.get_cap_shift()) |
+      (authlock.gcaps_careful() << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_careful() << linklock.get_cap_shift());
+  }
+
   // caps issued, wanted
-  int get_caps_issued(int *ploner = 0, int *pother = 0) {
+  int get_caps_issued(int *ploner = 0, int *pother = 0,
+		      int shift = 0, int mask = 0xffff) {
     int c = 0;
     int loner = 0, other = 0;
     if (!is_auth())
@@ -620,11 +674,11 @@ public:
       else
 	other |= i;
     }
-    if (ploner) *ploner = loner;
-    if (pother) *pother = other;
+    if (ploner) *ploner = (loner >> shift) & mask;
+    if (pother) *pother = (other >> shift) & mask;
     return c;
   }
-  int get_caps_wanted(int *ploner = 0, int *pother = 0) {
+  int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
     int w = 0;
     int loner = 0, other = 0;
     for (map<int,Capability*>::iterator it = client_caps.begin();
@@ -648,8 +702,8 @@ public:
 	other |= it->second;
         //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
       }
-    if (ploner) *ploner = loner;
-    if (pother) *pother = other;
+    if (ploner) *ploner = (loner >> shift) & mask;
+    if (pother) *pother = (other >> shift) & mask;
     return w;
   }
 
@@ -661,11 +715,7 @@ public:
     authlock.replicate_relax();
     linklock.replicate_relax();
     dirfragtreelock.replicate_relax();
-
-    if ((get_caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == 0) 
-      filelock.replicate_relax();
-
-    dirlock.replicate_relax();
+    filelock.replicate_relax();
     xattrlock.replicate_relax();
     snaplock.replicate_relax();
     nestlock.replicate_relax();
@@ -729,10 +779,6 @@ public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
     parent = p;
-    if (projected_parent) {
-      assert(projected_parent == p);
-      projected_parent = 0;
-    }
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
@@ -742,6 +788,15 @@ public:
   void remove_remote_parent(CDentry *p);
   int num_remote_parents() {
     return remote_parents.size(); 
+  }
+
+  void push_projected_parent(CDentry *dn) {
+    projected_parent.push_back(dn);
+  }
+  void pop_projected_parent() {
+    assert(projected_parent.size());
+    parent = projected_parent.front();
+    projected_parent.pop_front();
   }
 
   void print(ostream& out);

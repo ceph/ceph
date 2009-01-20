@@ -18,52 +18,7 @@
 
 #include "SimpleLock.h"
 
-
-// lock state machine states:
-//  Sync  --  Lock  --  sCatter
-//  Tempsync _/
-//                              auth repl
-#define LOCK_SYNC__          // R .  R .  rdlocks allowed on auth and replicas
-#define LOCK_GLOCKS     -20  // r .  r .  waiting for replicas+rdlocks (auth), or rdlocks to release (replica)
-#define LOCK_GSCATTERS  -28  // r .  r .  
-
-#define LOCK_GSYNCL__        // . w       LOCK on replica.
-#define LOCK_LOCK__          // . W  . .
-#define LOCK_GTEMPSYNCL -21  // . w       LOCK on replica.
-
-#define LOCK_GLOCKC     -22  // . wp . wp waiting for replicas+wrlocks (auth), or wrlocks to release (replica)
-#define LOCK_SCATTER     23  // . Wp . WP mtime updates on replicas allowed, no reads.  stable here.
-#define LOCK_GTEMPSYNCC -24  // . wp . wp GLOCKC|LOCK on replica
-
-#define LOCK_GSCATTERT  -25  // r .       LOCK on replica.
-#define LOCK_GLOCKT     -26  // r .       LOCK on replica.
-#define LOCK_TEMPSYNC    27  // R .       LOCK on replica.
-
-
-inline const char *get_scatterlock_state_name(int s) {
-  switch(s) {
-  case LOCK_SYNC: return "Sync";
-  case LOCK_GLOCKS: return "gLockS";
-  case LOCK_GSCATTERS: return "gScatterS";
-    
-  case LOCK_GSYNCL: return "gSyncL";
-  case LOCK_LOCK: return "Lock";
-  case LOCK_GTEMPSYNCL: return "gTempsyncL";
-    
-  case LOCK_GLOCKC: return "gLockC";
-  case LOCK_SCATTER: return "sCatter";
-  case LOCK_GTEMPSYNCC: return "gTempsyncC";
-    
-  case LOCK_GSCATTERT: return "gsCatterT";
-  case LOCK_GLOCKT: return "gLockT";
-  case LOCK_TEMPSYNC: return "Tempsync";
-    
-  default: assert(0); return 0;
-  }
-}
-
 class ScatterLock : public SimpleLock {
-  int num_wrlock;
   bool updated;
   utime_t last_scatter;
 
@@ -71,46 +26,12 @@ public:
   xlist<ScatterLock*>::item xlistitem_updated;
   utime_t update_stamp;
 
-  ScatterLock(MDSCacheObject *o, int t, int wo) : 
-    SimpleLock(o, t, wo),
-    num_wrlock(0),
+  ScatterLock(MDSCacheObject *o, int t, int ws) : 
+    SimpleLock(o, t, ws),
     updated(false),
     xlistitem_updated(this) {}
   ~ScatterLock() {
     xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
-  }
-
-  int get_replica_state() const {
-    switch (state) {
-    case LOCK_SYNC: 
-      return LOCK_SYNC;
-      
-    case LOCK_GSCATTERS:  // hrm.
-    case LOCK_GLOCKS:
-    case LOCK_GSYNCL:
-    case LOCK_LOCK:
-    case LOCK_GTEMPSYNCL:
-    case LOCK_GLOCKC:
-      return LOCK_LOCK;
-
-    case LOCK_SCATTER:
-      return LOCK_SCATTER;
-
-    case LOCK_GTEMPSYNCC:
-    case LOCK_GSCATTERT:
-    case LOCK_GLOCKT:
-    case LOCK_TEMPSYNC:
-      return LOCK_LOCK;
-    default:
-      assert(0);
-      return 0;
-    }
-  }
-
-  // true if we are gathering and need the replica's data to be consistent
-  bool must_gather() {
-    return (state == LOCK_GTEMPSYNCC ||
-	    state == LOCK_GLOCKC);
   }
 
   void set_updated() { 
@@ -131,67 +52,13 @@ public:
   void set_last_scatter(utime_t t) { last_scatter = t; }
   utime_t get_last_scatter() { return last_scatter; }
 
-  void replicate_relax() {
-  }
-
-  void export_twiddle() {
-    clear_gather();
-    state = get_replica_state();
-  }
-
-  // rdlock
-  bool can_rdlock(MDRequest *mdr) {
-    return state == LOCK_SYNC || state == LOCK_TEMPSYNC;
-  }
-  bool can_rdlock_soon() {
-    return state == LOCK_GTEMPSYNCC;
-  }
-  
-  // xlock
-  bool can_xlock_soon() {
-    if (parent->is_auth())
-      return (state == LOCK_GLOCKC ||
-	      state == LOCK_GLOCKS);
-    else
-      return false;
-  }
-
-  // wrlock
-  bool can_wrlock() {
-    return 
-      state == LOCK_SCATTER ||
-      (parent->is_auth() && state == LOCK_LOCK);
-  }
-  void get_wrlock(bool force=false) {
-    assert(can_wrlock() || force);
-    if (num_wrlock == 0) parent->get(MDSCacheObject::PIN_LOCK);
-    ++num_wrlock;
-  }
-  void put_wrlock() {
-    --num_wrlock;
-    if (num_wrlock == 0) parent->put(MDSCacheObject::PIN_LOCK);
-  }
-  bool is_wrlocked() { return num_wrlock > 0; }
-  int get_num_wrlocks() { return num_wrlock; }
-
   void print(ostream& out) {
     out << "(";
-    out << get_lock_type_name(get_type()) << " ";
-    out << get_scatterlock_state_name(get_state());
-    if (!get_gather_set().empty()) out << " g=" << get_gather_set();
-    if (get_num_client_lease())
-      out << " c=" << get_num_client_lease();
-    if (is_rdlocked()) 
-      out << " r=" << get_num_rdlocks();
-    if (is_xlocked())
-      out << " x=" << get_xlocked_by();
-    if (is_wrlocked()) 
-      out << " wr=" << get_num_wrlocks();
+    _print(out);
     if (updated)
       out << " updated";
     out << ")";
   }
-
 };
 
 #endif

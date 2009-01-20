@@ -42,19 +42,90 @@ void InoTable::reset_state()
   //  uint64_t end = ((uint64_t)(mds->get_nodeid()+2) << 25) - 1;
   //#endif
   free.insert(start, end);
+
+  projected_free.m = free.m;
 }
 
-inodeno_t InoTable::alloc_id() 
+inodeno_t InoTable::project_alloc_id(inodeno_t id) 
 {
+  dout(10) << "project_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
   assert(is_active());
-  
-  // pick one
-  inodeno_t id = free.start();
-  free.erase(id);
-  dout(10) << "alloc id " << id << dendl;
-
-  version++;
-  
+  if (!id)
+    id = projected_free.start();
+  projected_free.erase(id);
+  ++projected_version;
   return id;
+}
+void InoTable::apply_alloc_id(inodeno_t id)
+{
+  dout(10) << "apply_alloc_id " << id << " to " << projected_free << "/" << free << dendl;
+  free.erase(id);
+  ++version;
+}
+
+void InoTable::project_alloc_ids(deque<inodeno_t>& ids, int want) 
+{
+  dout(10) << "project_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
+  assert(is_active());
+  for (int i=0; i<want; i++) {
+    inodeno_t id = projected_free.start();
+    projected_free.erase(id);
+    ids.push_back(id);
+  }
+  ++projected_version;
+}
+void InoTable::apply_alloc_ids(deque<inodeno_t>& ids)
+{
+  dout(10) << "apply_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
+  for (deque<inodeno_t>::iterator p = ids.begin();
+       p != ids.end();
+       p++) 
+    free.erase(*p);
+  ++version;
+}
+
+
+void InoTable::project_release_ids(deque<inodeno_t>& ids) 
+{
+  dout(10) << "project_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
+  for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++)
+    projected_free.insert(*p);
+  ++projected_version;
+}
+void InoTable::apply_release_ids(deque<inodeno_t>& ids) 
+{
+  dout(10) << "apply_release_ids " << ids << " to " << projected_free << "/" << free << dendl;
+  for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++)
+    free.insert(*p);
+  ++version;
+}
+
+
+//
+
+void InoTable::replay_alloc_id(inodeno_t id) 
+{
+  dout(10) << "replay_alloc_id " << id << dendl;
+  free.erase(id);
+  projected_free.erase(id);
+  projected_version = ++version;
+}
+void InoTable::replay_alloc_ids(deque<inodeno_t>& ids) 
+{
+  dout(10) << "replay_alloc_ids " << ids << dendl;
+  for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++) {
+    free.erase(*p);
+    projected_free.erase(*p);
+  }
+  projected_version = ++version;
+}
+void InoTable::replay_release_ids(deque<inodeno_t>& ids) 
+{
+  dout(10) << "replay_release_ids " << ids << dendl;
+  for (deque<inodeno_t>::iterator p = ids.begin(); p != ids.end(); p++) {
+    free.insert(*p);
+    projected_free.insert(*p);
+  }
+  projected_version = ++version;
 }
 

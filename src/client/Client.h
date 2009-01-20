@@ -90,6 +90,7 @@ class Dentry : public LRUObject {
   int     ref;                       // 1 if there's a dir beneath me.
   int lease_mds;
   utime_t lease_ttl;
+  ceph_seq_t lease_seq;
   
   void get() { 
     assert(ref == 0); ref++; lru_pin(); 
@@ -100,7 +101,7 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0) { }
 };
 
 class Dir {
@@ -161,21 +162,23 @@ inline ostream& operator<<(ostream& out, const SnapRealm& r) {
 struct InodeCap {
   unsigned issued;
   unsigned implemented;
+  unsigned wanted;   // as known to mds.
+  unsigned flushing;
   __u64 seq;
   __u32 mseq;  // migration seq
 
-  InodeCap() : issued(0), implemented(0), seq(0), mseq(0) {}
+  InodeCap() : issued(0), implemented(0), wanted(0), flushing(0), seq(0), mseq(0) {}
 };
 
 struct CapSnap {
   //snapid_t follows;  // map key
   SnapContext context;
-  int issued;
+  int issued, dirty;
   __u64 size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
-  bool writing, dirty;
-  CapSnap() : issued(0), size(0), time_warp_seq(0), writing(false), dirty(false) {}
+  bool writing, dirty_data;
+  CapSnap() : issued(0), dirty(0), size(0), time_warp_seq(0), writing(false), dirty_data(false) {}
 };
 
 
@@ -183,8 +186,6 @@ class Inode {
  public:
   inode_t   inode;    // the actual inode
   snapid_t  snapid;
-  int       lease_mask, lease_mds;
-  utime_t   lease_ttl;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -193,12 +194,13 @@ class Inode {
 
   // per-mds caps
   map<int,InodeCap*> caps;            // mds -> InodeCap
+  unsigned dirty_caps;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
-  capseq_t exporting_mseq;
+  ceph_seq_t exporting_mseq;
   utime_t hold_caps_until;
-  xlist<Inode*>::item cap_delay_item;
+  xlist<Inode*>::item cap_item;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -260,11 +262,11 @@ class Inode {
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     //inode(_inode),
     snapid(vino.snapid),
-    lease_mask(0), lease_mds(-1),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
+    dirty_caps(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    cap_delay_item(this),
+    cap_item(this),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
@@ -328,30 +330,24 @@ class Inode {
   }
   int caps_wanted() {
     int want = caps_file_wanted() | caps_used();
-    if (want & CEPH_CAP_WRBUFFER)
-      want |= CEPH_CAP_EXCL;
+    if (want & (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE))
+      want |= CEPH_CAP_FILE_EXCL;
     return want;
   }
-
-  int get_effective_lease_mask(utime_t now) {
-    int havemask = 0;
-    if (now < lease_ttl && lease_mds >= 0)
-      havemask |= lease_mask;
-    if (caps_issued() & CEPH_CAP_EXCL) 
-      havemask |= CEPH_LOCK_ICONTENT;
-    if (havemask & CEPH_LOCK_ICONTENT)
-      havemask |= CEPH_LOCK_ICONTENT;   // hack: if we have one, we have both, for the purposes of below
-    return havemask;
+  int caps_dirty() {
+    int flushing = dirty_caps;
+    for (map<int,InodeCap*>::iterator it = caps.begin();
+         it != caps.end();
+         it++)
+      flushing |= it->second->flushing;
+    return flushing;
   }
 
   bool have_valid_size() {
     // RD+RDCACHE or WR+WRBUFFER => valid size
-    if ((caps_issued() & (CEPH_CAP_RD|CEPH_CAP_RDCACHE)) == (CEPH_CAP_RD|CEPH_CAP_RDCACHE))
+    if ((caps_issued() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_RDCACHE)) == (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_RDCACHE))
       return true;
-    if ((caps_issued() & (CEPH_CAP_WR|CEPH_CAP_WRBUFFER)) == (CEPH_CAP_WR|CEPH_CAP_WRBUFFER))
-      return true;
-    // otherwise, look for lease or EXCL...
-    if (get_effective_lease_mask(g_clock.now()) & CEPH_LOCK_ICONTENT)
+    if ((caps_issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) == (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER))
       return true;
     return false;
   }
@@ -627,7 +623,8 @@ protected:
   Inode*                 root;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
-  xlist<Inode*> delayed_caps;
+  // all inodes with caps sit on either cap_list or delayed_caps.
+  xlist<Inode*> delayed_caps, cap_list;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
   SnapRealm *get_snap_realm(inodeno_t r) {
@@ -829,8 +826,7 @@ protected:
 
   // file caps
   void add_update_cap(Inode *in, int mds,
-		      bufferlist& snapbl,
-		      unsigned issued, unsigned seq, unsigned mseq);
+		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
 
@@ -842,8 +838,8 @@ protected:
   void handle_cap_import(Inode *in, class MClientCaps *m);
   void handle_cap_export(Inode *in, class MClientCaps *m);
   void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_released(Inode *in, class MClientCaps *m);
-  void handle_cap_flushedsnap(Inode *in, class MClientCaps *m);
+  void handle_cap_flush_ack(Inode *in, class MClientCaps *m);
+  void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void check_caps(Inode *in, bool is_delayed);
@@ -867,15 +863,15 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
-  Inode* insert_trace(MClientReply *reply, utime_t ttl);
+  Inode* insert_trace(MClientReply *reply, utime_t ttl, int mds);
   void update_inode_file_bits(Inode *in,
 			      __u64 truncat_seq,__u64 size,
 			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
-  void update_inode(Inode *in, InodeStat *st, LeaseStat *l, utime_t ttl);
+  void update_inode(Inode *in, InodeStat *st, utime_t ttl, int mds);
   Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			     InodeStat *ist, LeaseStat *ilease, 
-			     utime_t from);
+			     InodeStat *ist,
+			     utime_t from, int mds);
 
 
   // ----------------------
