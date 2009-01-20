@@ -236,8 +236,13 @@ retry:
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
 								    realmino);
-		ci->i_snap_realm = realm;
-		list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
+		if (realm) {
+			ci->i_snap_realm = realm;
+			list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
+		} else {
+			derr(0, "couldn't find snap realm mdsc=%p realmino=%llu\n",
+				mdsc, realmino);
+		}
 	}
 
 	/*

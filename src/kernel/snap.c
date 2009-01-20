@@ -58,7 +58,31 @@ int ceph_debug_snap = -1;
  */
 
 /*
- * find/create the realm rooted at @ino and bump its ref count.
+ * create and get the realm rooted at @ino and bump its ref count.
+ *
+ * caller must hold snap_rwsem for write.
+ */
+struct ceph_snap_realm *ceph_create_snap_realm(struct ceph_mds_client *mdsc,
+					    u64 ino)
+{
+	struct ceph_snap_realm *realm;
+
+	realm = kzalloc(sizeof(*realm), GFP_NOFS);
+	if (!realm)
+		return ERR_PTR(-ENOMEM);
+	radix_tree_insert(&mdsc->snap_realms, ino, realm);
+	realm->nref = 0;    /* tree does not take a ref */
+	realm->ino = ino;
+	INIT_LIST_HEAD(&realm->children);
+	INIT_LIST_HEAD(&realm->child_item);
+	INIT_LIST_HEAD(&realm->inodes_with_caps);
+	dout(20, "create_snap_realm %llx %p\n", realm->ino, realm);
+	realm->nref = 1;
+	return realm;
+}
+
+/*
+ * find and get (if found) the realm rooted at @ino and bump its ref count.
  *
  * caller must hold snap_rwsem for write.
  */
@@ -68,21 +92,11 @@ struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 	struct ceph_snap_realm *realm;
 
 	realm = radix_tree_lookup(&mdsc->snap_realms, ino);
-	if (!realm) {
-		realm = kzalloc(sizeof(*realm), GFP_NOFS);
-		if (!realm)
-			return ERR_PTR(-ENOMEM);
-		radix_tree_insert(&mdsc->snap_realms, ino, realm);
-		realm->nref = 0;    /* tree does not take a ref */
-		realm->ino = ino;
-		INIT_LIST_HEAD(&realm->children);
-		INIT_LIST_HEAD(&realm->child_item);
-		INIT_LIST_HEAD(&realm->inodes_with_caps);
-		dout(20, "get_snap_realm created %llx %p\n", realm->ino, realm);
+	if (realm) {
+		dout(20, "get_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
+		     realm->nref, realm->nref+1);
+		realm->nref++;
 	}
-	dout(20, "get_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
-	     realm->nref, realm->nref+1);
-	realm->nref++;
 	return realm;
 }
 
@@ -128,6 +142,11 @@ static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
 	parent = ceph_get_snap_realm(mdsc, parentino);
 	if (IS_ERR(parent))
 		return PTR_ERR(parent);
+	if (!parent) {
+		parent = ceph_create_snap_realm(mdsc, parentino);
+		if (IS_ERR(parent))
+			return PTR_ERR(parent);
+	}
 	dout(20, "adjust_snap_realm_parent %llx %p: %llx %p -> %llx %p\n",
 	     realm->ino, realm, realm->parent_ino, realm->parent,
 	     parentino, parent);
@@ -435,6 +454,13 @@ more:
 		err = PTR_ERR(realm);
 		goto fail;
 	}
+	if (!realm) {
+		realm = ceph_create_snap_realm(mdsc, le64_to_cpu(ri->ino));
+		if (IS_ERR(realm)) {
+			err = PTR_ERR(realm);
+			goto fail;
+		}
+	}
 	if (!first) {
 		/* take note if this is the first realm in the trace
 		 * (the most deeply nested)... we will return if (with
@@ -643,6 +669,11 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 		realm = ceph_get_snap_realm(mdsc, split);
 		if (IS_ERR(realm))
 			goto out;
+		if (!realm) {
+			realm = ceph_create_snap_realm(mdsc, split);
+			if (IS_ERR(realm))
+				goto out;
+		}
 
 		dout(10, "splitting snap_realm %llx %p\n", realm->ino, realm);
 		for (i = 0; i < num_split_inos; i++) {
@@ -703,6 +734,8 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 				ceph_get_snap_realm(mdsc,
 					   le64_to_cpu(split_realms[i]));
 			if (IS_ERR(child))
+				continue;
+			if (!child)
 				continue;
 			adjust_snap_realm_parent(mdsc, child, realm->ino);
 			ceph_put_snap_realm(mdsc, child);
