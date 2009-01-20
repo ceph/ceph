@@ -281,7 +281,7 @@ static const char *session_state_name(int s)
 /*
  * called under mdsc->mutex
  */
-struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *mdsc,
+struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *mdsc,
 						int mds)
 {
 	struct ceph_mds_session *session;
@@ -289,7 +289,7 @@ struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *mdsc,
 	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == NULL)
 		return NULL;
 	session = mdsc->sessions[mds];
-	dout(30, "lookup_mds_session %p %d -> %d\n", session,
+	dout(30, "get_mds_session %p %d -> %d\n", session,
 	     atomic_read(&session->s_ref), atomic_read(&session->s_ref)+1);
 	atomic_inc(&session->s_ref);
 	return session;
@@ -951,7 +951,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	seq = le64_to_cpu(h->seq);
 
 	mutex_lock(&mdsc->mutex);
-	session = __ceph_lookup_mds_session(mdsc, mds);
+	session = __ceph_get_mds_session(mdsc, mds);
 	if (session && mdsc->mdsmap)
 		/* FIXME: this ttl calculation is generous */
 		session->s_ttl = jiffies + HZ*mdsc->mdsmap->m_session_autoclose;
@@ -1173,7 +1173,7 @@ retry:
 	}
 
 	/* get session */
-	session = __ceph_lookup_mds_session(mdsc, mds);
+	session = __ceph_get_mds_session(mdsc, mds);
 	if (!session)
 		session = register_session(mdsc, mds);
 	dout(30, "do_request mds%d session %p state %s\n", mds, session,
@@ -1314,7 +1314,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	if (req->r_session && req->r_session->s_mds != mds) {
 		ceph_put_mds_session(req->r_session);
-		req->r_session = __ceph_lookup_mds_session(mdsc, mds);
+		req->r_session = __ceph_get_mds_session(mdsc, mds);
 	}
 	if (req->r_session == NULL) {
 		derr(1, "got reply on %llu, but no session for mds%d\n",
@@ -1433,8 +1433,8 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		     from_mds);
 		req->r_num_fwd = fwd_seq;
 		put_request_sessions(req);
-		req->r_session = __ceph_lookup_mds_session(mdsc, next_mds);
-		req->r_fwd_session = __ceph_lookup_mds_session(mdsc, from_mds);
+		req->r_session = __ceph_get_mds_session(mdsc, next_mds);
+		req->r_fwd_session = __ceph_get_mds_session(mdsc, from_mds);
 	} else {
 		/* no, resend. */
 		/* forward race not possible; mds would drop */
@@ -1507,7 +1507,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	dout(1, "reconnect to recovering mds%d\n", mds);
 
 	/* find session */
-	session = __ceph_lookup_mds_session(mdsc, mds);
+	session = __ceph_get_mds_session(mdsc, mds);
 	down_read(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);    /* drop lock for duration */
 
@@ -1791,7 +1791,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* find session */
 	mutex_lock(&mdsc->mutex);
-	session = __ceph_lookup_mds_session(mdsc, mds);
+	session = __ceph_get_mds_session(mdsc, mds);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		derr(0, "WTF, got lease but no session for mds%d\n", mds);
@@ -1945,7 +1945,7 @@ static void delayed_work(struct work_struct *work)
 		mdsc->last_renew_caps = jiffies;
 
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
+		struct ceph_mds_session *s = __ceph_get_mds_session(mdsc, i);
 		if (s == NULL)
 			continue;
 		if (s->s_state == CEPH_MDS_SESSION_CLOSING) {
@@ -2016,7 +2016,7 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 	dout(10, "drop_leases\n");
 	mutex_lock(&mdsc->mutex);
 	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
+		struct ceph_mds_session *s = __ceph_get_mds_session(mdsc, i);
 		if (!s)
 			continue;
 		mutex_unlock(&mdsc->mutex);
@@ -2082,7 +2082,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 		dout(10, "closing sessions\n");
 		n = 0;
 		for (i = 0; i < mdsc->max_sessions; i++) {
-			session = __ceph_lookup_mds_session(mdsc, i);
+			session = __ceph_get_mds_session(mdsc, i);
 			if (!session)
 				continue;
 			mutex_unlock(&mdsc->mutex);

@@ -643,7 +643,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 
 	/* find session */
 	mutex_lock(&mdsc->mutex);
-	session = __ceph_lookup_mds_session(mdsc, mds);
+	session = __ceph_get_mds_session(mdsc, mds);
 	if (session)
 		down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
