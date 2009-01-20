@@ -50,6 +50,17 @@ int ceph_debug_snap = -1;
  * is attached to any writes sent to OSDs.
  */
 
+
+/*
+ * increase ref count for the realm
+ *
+ * caller must hold snap_rwsem for write.
+ */
+static void get_realm(struct ceph_snap_realm *realm)
+{
+	realm->nref++;
+}
+
 /*
  * Unfortunately error handling is a bit mixed here.  If we get a snap
  * update, but don't have enough memory to update our realm hierarchy,
@@ -77,7 +88,6 @@ struct ceph_snap_realm *ceph_create_snap_realm(struct ceph_mds_client *mdsc,
 	INIT_LIST_HEAD(&realm->child_item);
 	INIT_LIST_HEAD(&realm->inodes_with_caps);
 	dout(20, "create_snap_realm %llx %p\n", realm->ino, realm);
-	realm->nref = 1;
 	return realm;
 }
 
@@ -95,7 +105,7 @@ struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 	if (realm) {
 		dout(20, "get_snap_realm %llx %p %d -> %d\n", realm->ino, realm,
 		     realm->nref, realm->nref+1);
-		realm->nref++;
+		get_realm(realm);
 	}
 	return realm;
 }
@@ -156,6 +166,7 @@ static int adjust_snap_realm_parent(struct ceph_mds_client *mdsc,
 	}
 	realm->parent_ino = parentino;
 	realm->parent = parent;
+	get_realm(parent);
 	list_add(&realm->child_item, &parent->children);
 	return 1;
 }
@@ -466,7 +477,7 @@ more:
 		 * (the most deeply nested)... we will return if (with
 		 * nref bumped) to the caller. */
 		first = realm;
-		realm->nref++;
+		get_realm(realm);
 	}
 
 	if (le64_to_cpu(ri->seq) > realm->seq) {
@@ -533,7 +544,6 @@ more:
 	if (p == e && invalidate)
 		rebuild_snap_realms(realm);
 
-	ceph_put_snap_realm(mdsc, realm);
 	if (p < e)
 		goto more;
 
@@ -673,6 +683,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			realm = ceph_create_snap_realm(mdsc, split);
 			if (IS_ERR(realm))
 				goto out;
+			get_realm(realm);
 		}
 
 		dout(10, "splitting snap_realm %llx %p\n", realm->ino, realm);
@@ -773,7 +784,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			list_add(&ci->i_snap_realm_item,
 				 &realm->inodes_with_caps);
 			ci->i_snap_realm = realm;
-			realm->nref++;
+			get_realm(realm);
 		split_skip_inode:
 			spin_unlock(&inode->i_lock);
 			iput(inode);
