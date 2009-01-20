@@ -205,7 +205,7 @@ private:
   bool stale;
 
 public:
-  int releasing;   // only allow a single in-progress release (it may be waiting for log to flush)
+  int updating;   // do not release or expire until all updates commit
 
   snapid_t client_follows;
   version_t client_xattr_version;
@@ -222,7 +222,7 @@ public:
     _pending(0), _issued(0), _num_revoke(0),
     last_sent(0),
     mseq(0),
-    suppress(0), stale(false), releasing(0),
+    suppress(0), stale(false), updating(0),
     client_follows(0), client_xattr_version(0),
     session_caps_item(this), rdcaps_list(rl), rdcaps_item(this), snaprealm_caps_item(this) { }
   
@@ -255,6 +255,10 @@ public:
     int i = issued();
     check_rdcaps_list(i, i, _wanted, w);
     _wanted = w;
+  }
+
+  bool can_expire() {
+    return updating == 0;
   }
 
   ceph_seq_t get_last_seq() { return last_sent; }

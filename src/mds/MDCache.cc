@@ -4825,6 +4825,12 @@ void MDCache::trim_client_rdcaps()
 	       << " on " << *in << dendl;
       continue;
     }
+    if (!cap->can_expire()) {
+      dout(20) << " skipping client" << client
+	       << " stamp " << cap->get_last_issue_stamp()
+	       << " (can't expire) on " << *in << dendl;
+      continue;
+    }
     if (cap->get_last_issue_stamp() > cutoff) {
       dout(20) << " stopping at client" << client
 	       << " stamp " << cap->get_last_issue_stamp() << " > cutoff " << cutoff
