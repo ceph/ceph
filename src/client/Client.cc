@@ -2429,25 +2429,8 @@ int Client::unmount()
   lru.lru_set_max(0);
   trim_cache();
 
-  // flush delayed caps
-  xlist<Inode*>::iterator p = delayed_caps.begin();
-  while (!p.end()) {
-    Inode *in = *p;
-    ++p;
-    delayed_caps.pop_front();
-    check_caps(in, true);
-  }
-
-  // other caps, too
-  p = cap_list.begin();
-  while (!p.end()) {
-    Inode *in = *p;
-    ++p;
-    check_caps(in, true);
-  }
-
   if (g_conf.client_oc) {
-    // release any/all caps
+    // flush/release all buffered data
     hash_map<vinodeno_t, Inode*>::iterator next;
     for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
          p != inode_map.end(); 
@@ -2466,6 +2449,23 @@ int Client::unmount()
 	put_inode(in);
       }
     }
+  }
+
+  // flush delayed caps
+  xlist<Inode*>::iterator p = delayed_caps.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
+    delayed_caps.pop_front();
+    check_caps(in, true);
+  }
+
+  // other caps, too
+  p = cap_list.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
+    check_caps(in, true);
   }
 
   //if (0) {// hack
