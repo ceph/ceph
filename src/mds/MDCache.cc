@@ -304,9 +304,13 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   CDir *straydir = stray->get_or_open_dirfrag(this, fg);
   
   CDentry *straydn = straydir->lookup(straydname);
-  if (!straydn) 
+  if (!straydn)
     straydn = straydir->add_null_dentry(straydname);
-  
+  else
+    assert(straydn->get_projected_linkage()->is_null());
+
+  straydn->first = in->first;
+
   return straydn;
 }
 
