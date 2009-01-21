@@ -46,6 +46,7 @@ timer
 - each SafeTimer should just be its own thread.
 
 kernel client
+- flock, fnctl locks
 - avoid pinning inodes with expireable caps?
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
 - include 'sync' in op when cap revocation is waiting on writeback

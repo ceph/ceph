@@ -301,6 +301,10 @@ class Inode {
   void get_cap_ref(int cap);
   bool put_cap_ref(int cap);
 
+  bool is_any_caps() {
+    return caps.size() || exporting_mds >= 0;
+  }
+
   int caps_issued() {
     int c = exporting_issued | snap_caps;
     for (map<int,InodeCap*>::iterator it = caps.begin();
@@ -838,10 +842,11 @@ protected:
   void handle_cap_import(Inode *in, class MClientCaps *m);
   void handle_cap_export(Inode *in, class MClientCaps *m);
   void handle_cap_trunc(Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(Inode *in, class MClientCaps *m);
+  void handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
-  void handle_cap_grant(Inode *in, class MClientCaps *m);
+  void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
+  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain);
   void check_caps(Inode *in, bool is_delayed);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);

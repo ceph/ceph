@@ -1440,13 +1440,88 @@ void Client::cap_delay_requeue(Inode *in)
   delayed_caps.push_back(&in->cap_item);
 }
 
+void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain)
+{
+  int held = cap->issued | cap->implemented;
+  int revoking = cap->implemented & ~cap->issued;
+  int dropping = cap->issued & ~retain;
+  int op = (retain == 0) ? CEPH_CAP_OP_RELEASE : CEPH_CAP_OP_UPDATE;
+
+  dout(10) << "send_cap " << *in
+	   << " mds" << mds << " seq " << cap->seq
+	   << " used " << ccap_string(used)
+	   << " want " << ccap_string(want)
+	   << " retain " << ccap_string(retain)
+	   << " held "<< ccap_string(held)
+	   << " revoking " << ccap_string(revoking)
+	   << " dropping " << ccap_string(dropping)
+	   << dendl;
+
+
+  int dirty = in->caps_dirty();
+  cap->flushing |= dirty & held;
+  if (cap->flushing) {
+    dout(10) << " flushing " << ccap_string(cap->flushing) << dendl;
+    in->dirty_caps &= ~cap->flushing;
+  }
+
+  cap->issued &= retain;
+
+  if (revoking && (revoking & used) == 0) {
+    cap->implemented = cap->issued;
+  }
+  
+  MClientCaps *m = new MClientCaps(op,
+				   in->ino(),
+				   0,
+				   cap->seq,
+				   cap->issued,
+				   want,
+				   cap->flushing,
+				   cap->mseq);
+    
+  m->head.uid = in->inode.uid;
+  m->head.gid = in->inode.gid;
+  m->head.mode = in->inode.mode;
+  
+  m->head.nlink = in->inode.nlink;
+  
+  m->head.xattr_len = 0; // FIXME
+  
+  m->head.layout = in->inode.layout;
+  m->head.size = in->inode.size;
+  m->head.max_size = in->inode.max_size;
+  m->head.truncate_seq = in->inode.truncate_seq;
+  in->inode.mtime.encode_timeval(&m->head.mtime);
+  in->inode.atime.encode_timeval(&m->head.atime);
+  in->inode.ctime.encode_timeval(&m->head.ctime);
+  m->head.time_warp_seq = in->inode.time_warp_seq;
+  
+  
+  in->reported_size = in->inode.size;
+  m->set_max_size(in->wanted_max_size);
+  in->requested_max_size = in->wanted_max_size;
+  m->set_snap_follows(in->snaprealm->get_snap_context().seq);
+  messenger->send_message(m, mdsmap->get_inst(mds));
+  
+  if (cap->flushing == 0 && cap->issued == 0)
+    remove_cap(in, mds);
+}
+
+
 void Client::check_caps(Inode *in, bool is_delayed)
 {
   unsigned wanted = in->caps_wanted();
   unsigned used = in->caps_used();
-  int like = wanted;
-  if (!unmounting)
-    like |= CEPH_CAP_PIN | (in->inode.is_dir() ? CEPH_CAP_ANY_RDCACHE:CEPH_CAP_ANY_RD);
+
+  int retain = wanted;
+  if (!unmounting) {
+    retain |= CEPH_CAP_PIN | CEPH_CAP_EXPIREABLE;
+    
+    /* keep any EXCL bits too, while we are holding caps anyway */
+    if (wanted || in->inode.is_dir())
+      retain |= CEPH_CAP_ANY_EXCL;
+  }
   
   dout(10) << "check_caps on " << *in
 	   << " wanted " << ccap_string(wanted)
@@ -1486,14 +1561,6 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	in->wanted_max_size > in->requested_max_size)
       goto ack;
 
-    /* completed revocation? */
-    if (revoking && (revoking && used) == 0) {
-      dout(10) << "completed revocation of " << ccap_string(cap->implemented & ~cap->issued) << dendl;
-      goto ack;
-    }
-    if (!revoking && unmounting)
-      goto ack;
-
     /* approaching file_max? */
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
 	(in->inode.size << 1) >= in->inode.max_size &&
@@ -1502,11 +1569,18 @@ void Client::check_caps(Inode *in, bool is_delayed)
       goto ack;
     }
 
-    if (wanted == cap->wanted &&   // mds knows what we want.
-	cap->issued & ~like)       // and we don't have anything we wouldn't like
+    /* completed revocation? */
+    if (revoking && (revoking && used) == 0) {
+      dout(10) << "completed revocation of " << ccap_string(cap->implemented & ~cap->issued) << dendl;
+      goto ack;
+    }
+
+    if (!revoking && unmounting && (used == 0))
+      goto ack;
+
+    if (wanted == cap->wanted &&         // mds knows what we want.
+	(cap->issued & ~retain) == 0)    // and we don't have anything we wouldn't like
       continue;   
-    //if ((cap->issued & ~wanted) == 0)
-    //continue;     /* nothing extra, all good */
 
     if (now < in->hold_caps_until) {
       dout(10) << "delaying cap release" << dendl;
@@ -1514,54 +1588,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
     
   ack:
-    int op = CEPH_CAP_OP_UPDATE;
-    if (like == 0)
-      op = CEPH_CAP_OP_RELEASE;
-    else
-      op = CEPH_CAP_OP_UPDATE;
-    
-    cap->flushing |= in->caps_dirty() & cap->issued;
-    if (cap->flushing) {
-      dout(10) << " flushing " << ccap_string(cap->flushing) << dendl;
-      in->dirty_caps &= ~cap->flushing;
-    }
-    cap->issued &= like;
-
-    MClientCaps *m = new MClientCaps(op,
-				     in->ino(),
-				     0,
-				     cap->seq,
-				     cap->issued,
-				     wanted,
-				     cap->flushing,
-				     cap->mseq);
-    
-    m->head.uid = in->inode.uid;
-    m->head.gid = in->inode.gid;
-    m->head.mode = in->inode.mode;
-
-    m->head.nlink = in->inode.nlink;
-
-    m->head.xattr_len = 0; // FIXME
-
-    m->head.layout = in->inode.layout;
-    m->head.size = in->inode.size;
-    m->head.max_size = in->inode.max_size;
-    m->head.truncate_seq = in->inode.truncate_seq;
-    in->inode.mtime.encode_timeval(&m->head.mtime);
-    in->inode.atime.encode_timeval(&m->head.atime);
-    in->inode.ctime.encode_timeval(&m->head.ctime);
-    m->head.time_warp_seq = in->inode.time_warp_seq;
-
-
-    in->reported_size = in->inode.size;
-    m->set_max_size(in->wanted_max_size);
-    in->requested_max_size = in->wanted_max_size;
-    m->set_snap_follows(in->snaprealm->get_snap_context().seq);
-    messenger->send_message(m, mdsmap->get_inst(mds));
-
-    if (cap->flushing == 0 && cap->issued == 0)
-      remove_cap(in, mds);
+    send_cap(in, mds, cap, used, wanted, retain);
   }
 }
 
@@ -1781,7 +1808,7 @@ void Client::remove_cap(Inode *in, int mds)
   dout(10) << "remove_cap mds" << mds << " on " << *in << dendl;
   assert(in->caps.count(mds));
   in->caps.erase(mds);
-  if (in->caps.empty()) {
+  if (!in->is_any_caps()) {
     dout(15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
@@ -2053,11 +2080,12 @@ void Client::handle_caps(MClientCaps *m)
     messenger->send_message(m, m->get_source_inst());
     return;
   }
+  InodeCap *cap = in->caps[mds];
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
-  case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, m);
-  case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, m);
+  case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, mds, cap, m);
+  case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, mds, cap, m);
   default:
     delete m;
   }
@@ -2149,12 +2177,8 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   delete m;
 }
 
-void Client::handle_cap_flush_ack(Inode *in, MClientCaps *m)
+void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 {
-  int mds = m->get_source().num();
-  assert(in->caps[mds]);
-  InodeCap *cap = in->caps[mds];
-
   int cleaned = m->get_dirty() & ~m->get_caps();
   dout(5) << "handle_cap_flush_ack mds" << mds
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in << dendl;
@@ -2162,8 +2186,7 @@ void Client::handle_cap_flush_ack(Inode *in, MClientCaps *m)
   dout(5) << "  cap->flushing now " << ccap_string(cap->flushing)
 	  << ", in->caps_dirty() now " << ccap_string(in->caps_dirty()) << dendl;
 
-  if (m->get_caps() == 0 &&
-      m->get_seq() == cap->seq) {
+  if (m->get_caps() == 0 && m->get_seq() == cap->seq) {
     assert(in->caps_dirty() == 0);
     remove_cap(in, mds);
   }
@@ -2192,39 +2215,20 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
 }
 
 
-void Client::handle_cap_grant(Inode *in, MClientCaps *m)
+void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 {
-  int mds = m->get_source().num();
-  assert(in->caps.count(mds));
-  InodeCap *cap = in->caps[mds];
-  cap->seq = m->get_seq();
-  in->inode.layout = m->get_layout();
-
-  // don't want it?
-  /*
-  int wanted = in->caps_wanted();
-  if (wanted == 0) {
-    dout(5) << "handle_cap_grant on ino " << m->get_ino() 
-            << " seq " << m->get_seq() 
-            << " " << ccap_string(m->get_caps()) 
-            << ", which we don't want caps for, releasing." << dendl;
-    m->set_op(CEPH_CAP_OP_RELEASE);
-    m->set_caps(0);
-    m->set_wanted(0);
-    messenger->send_message(m, m->get_source_inst());
-    return;
-  }
-  */
-
   int used = in->caps_used();
 
-  // update per-mds caps
   const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
   dout(5) << "handle_cap_grant on in " << m->get_ino() 
           << " mds" << mds << " seq " << m->get_seq() 
           << " caps now " << ccap_string(new_caps) 
           << " was " << ccap_string(old_caps) << dendl;
+
+  cap->seq = m->get_seq();
+
+  in->inode.layout = m->get_layout();
   
   // update inode
   int issued = in->caps_issued();
@@ -2269,14 +2273,16 @@ void Client::handle_cap_grant(Inode *in, MClientCaps *m)
 
     if ((used & ~new_caps) & CEPH_CAP_FILE_WRBUFFER)
       _flush(in);
-    else 
+    else {
       check_caps(in, false);
+    }
 
   } else if (old_caps == new_caps) {
     dout(10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
   } else {
     dout(10) << "  grant, new caps are " << ccap_string(new_caps & ~old_caps) << dendl;
-    cap->issued = cap->implemented = new_caps;
+    cap->issued = new_caps;
+    cap->implemented |= new_caps;
   }
 
   // wake up waiters
