@@ -82,8 +82,9 @@ ostream& operator<<(ostream& out, CDentry& dn)
 
   out << " " << dn.lock;
 
+  if (dn.get_projected_version() != dn.get_version())
+    out << " pv=" << dn.get_projected_version();
   out << " v=" << dn.get_version();
-  out << " pv=" << dn.get_projected_version();
 
   out << " inode=" << dn.get_linkage()->get_inode();
 
