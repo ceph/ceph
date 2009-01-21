@@ -572,7 +572,7 @@ static inline void ceph_put_snap_context(struct ceph_snap_context *sc)
  */
 struct ceph_snap_realm {
 	u64 ino;
-	int nref;
+	atomic_t nref;
 	u64 created, seq;
 	u64 parent_ino;
 	u64 parent_since;   /* snapid when our current parent became so */
@@ -585,6 +585,8 @@ struct ceph_snap_realm {
 	struct ceph_snap_realm *parent;
 	struct list_head children;       /* list of child realms */
 	struct list_head child_item;
+
+	struct list_head empty_item;     /* if i have ref==0 */
 
 	/* the current set of snaps for this realm */
 	struct ceph_snap_context *cached_context;
@@ -611,15 +613,15 @@ struct ceph_snap_realm *ceph_get_snap_realm(struct ceph_mds_client *mdsc,
 					    u64 ino);
 extern void ceph_put_snap_realm(struct ceph_mds_client *mdsc,
 				struct ceph_snap_realm *realm);
-extern struct ceph_snap_realm *ceph_update_snap_trace(struct ceph_mds_client *m,
-						      void *p, void *e,
-						      bool deletion);
+extern int ceph_update_snap_trace(struct ceph_mds_client *m,
+				  void *p, void *e, bool deletion);
 extern void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 				struct ceph_snap_context *snapc);
 extern int __ceph_finish_cap_snap(struct ceph_inode_info *ci,
 				  struct ceph_cap_snap *capsnap);
+extern void ceph_cleanup_empty_realms(struct ceph_mds_client *mdsc);
 
 /*
  * a cap_snap is "pending" if it is still awaiting an in-progress

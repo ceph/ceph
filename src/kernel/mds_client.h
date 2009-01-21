@@ -41,11 +41,13 @@
  *
  * session->s_mutex
  *         mdsc->mutex
- *                 mdsc->snap_rwsem
+ *
+ *         mdsc->snap_rwsem
  *
  *         inode->i_lock
  *                 mdsc->snap_flush_lock
  *                 mdsc->cap_delay_lock
+ *
  *
  */
 
@@ -194,11 +196,16 @@ struct ceph_mds_client {
 	int                     stopping;      /* true if shutting down */
 
 	/*
-	 * snap_rwsem will cover cap linkage into snaprealms, and realm
-	 * snap contexts.  (later, we can do per-realm snap contexts locks..)
+	 * snap_rwsem will cover cap linkage into snaprealms, and
+	 * realm snap contexts.  (later, we can do per-realm snap
+	 * contexts locks..)  the empty list contains realms with no
+	 * references (implying they contain no inodes with caps) that
+	 * should be destroyed.
 	 */
 	struct rw_semaphore     snap_rwsem;
 	struct radix_tree_root  snap_realms;
+	struct list_head        snap_empty;
+	spinlock_t              snap_empty_lock;  /* protect snap_empty */
 
 	u64                    last_tid;      /* most recent mds request */
 	struct radix_tree_root request_tree;  /* pending mds requests */

@@ -847,16 +847,20 @@ retry_locked:
 	BUG_ON(!ci->i_snap_realm->cached_context);
 	if (page->private &&
 	    (void *)page->private != ci->i_snap_realm->cached_context) {
-		/* this page is already dirty in another (older) snap
-		 * context!  is it writeable now? */
+		/*
+		 * this page is already dirty in another (older) snap
+		 * context!  is it writeable now?
+		 */
 		snapc = get_oldest_context(inode);
 		up_read(&mdsc->snap_rwsem);
 
 		if (snapc != (void *)page->private) {
 			dout(10, " page %p snapc %p not current or oldest\n",
 			     page, (void *)page->private);
-			/* queue for writeback, and wait for snapc
-			 * to be writeable or written */
+			/*
+			 * queue for writeback, and wait for snapc to
+			 * be writeable or written
+			 */
 			snapc = ceph_get_snap_context((void *)page->private);
 			unlock_page(page);
 			if (ceph_queue_writeback(inode))

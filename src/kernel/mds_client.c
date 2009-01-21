@@ -1262,7 +1262,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	u64 tid;
 	int err, result;
 	int mds;
-	struct ceph_snap_realm *realm = NULL;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		return;
@@ -1332,8 +1331,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		list_add_tail(&req->r_unsafe_item, &req->r_session->s_unsafe);
 	}
 
-	/* take the snap sem -- we may be are adding a cap here */
-	down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&req->r_session->s_mutex);
@@ -1349,10 +1346,15 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
 	/* snap trace */
-	if (rinfo->snapblob_len)
-		realm = ceph_update_snap_trace(mdsc, rinfo->snapblob,
+	if (rinfo->snapblob_len) {
+		down_write(&mdsc->snap_rwsem);
+		ceph_update_snap_trace(mdsc, rinfo->snapblob,
 			       rinfo->snapblob + rinfo->snapblob_len,
 			       le32_to_cpu(head->op) == CEPH_MDS_OP_RMSNAP);
+		downgrade_write(&mdsc->snap_rwsem);
+	} else {
+		down_read(&mdsc->snap_rwsem);
+	}
 
 	/* insert trace into our cache */
 	err = ceph_fill_trace(mdsc->client->sb, req, req->r_session);
@@ -1366,9 +1368,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 
 done:
-	if (realm)
-		ceph_put_snap_realm(mdsc, realm);
-	up_write(&mdsc->snap_rwsem);
+	up_read(&mdsc->snap_rwsem);
 
 	if (err) {
 		req->r_err = err;
@@ -1508,7 +1508,6 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 
 	/* find session */
 	session = __ceph_get_mds_session(mdsc, mds);
-	down_read(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);    /* drop lock for duration */
 
 	if (session) {
@@ -1530,6 +1529,8 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		dout(20, "no session for mds%d, will send short reconnect\n",
 		     mds);
 	}
+
+	down_read(&mdsc->snap_rwsem);
 
 retry:
 	/* build reply */
@@ -1657,11 +1658,11 @@ send:
 	}
 
 out:
+	up_read(&mdsc->snap_rwsem);
 	if (session) {
 		mutex_unlock(&session->s_mutex);
 		ceph_put_mds_session(session);
 	}
-	up_read(&mdsc->snap_rwsem);
 	mutex_lock(&mdsc->mutex);
 	return;
 
@@ -1996,6 +1997,8 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->stopping = 0;
 	init_rwsem(&mdsc->snap_rwsem);
 	INIT_RADIX_TREE(&mdsc->snap_realms, GFP_NOFS);
+	INIT_LIST_HEAD(&mdsc->snap_empty);
+	spin_lock_init(&mdsc->snap_empty_lock);	
 	mdsc->last_tid = 0;
 	INIT_RADIX_TREE(&mdsc->request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
@@ -2109,6 +2112,8 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	WARN_ON(!list_empty(&mdsc->cap_delay_list));
 
 	mutex_unlock(&mdsc->mutex);
+
+	ceph_cleanup_empty_realms(mdsc);
 
 	cancel_delayed_work_sync(&mdsc->delayed_work); /* cancel timer */
 

@@ -754,6 +754,8 @@ out:
  *
  * FIXME: we should check inode.version to avoid races between traces
  * from multiple MDSs after, say, a ancestor directory is renamed.
+ *
+ * Called with snap_rwsem (read).
  */
 int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		    struct ceph_mds_session *session)

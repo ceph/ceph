@@ -171,7 +171,7 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
  *
  * Bump i_count when adding it's first cap.
  *
- * Caller should hold session snap_rwsem, s_mutex.
+ * Caller should hold session snap_rwsem (read), s_mutex.
  *
  * @fmode can be negative, in which case it is ignored.
  */
@@ -345,7 +345,15 @@ int __ceph_caps_dirty(struct ceph_inode_info *ci)
 }
 
 /*
- * caller should hold i_lock, snap_rwsem, and session s_mutex.
+ * called under i_lock
+ */
+static int __ceph_is_any_caps(struct ceph_inode_info *ci)
+{
+	return !RB_EMPTY_ROOT(&ci->i_caps) || ci->i_cap_exporting_mds >= 0;
+}
+
+/*
+ * caller should hold i_lock, and session s_mutex.
  * returns true if this is the last cap.  if so, caller should iput.
  */
 static int __ceph_remove_cap(struct ceph_cap *cap)
@@ -368,7 +376,7 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 
 	kfree(cap);
 
-	if (RB_EMPTY_ROOT(&ci->i_caps)) {
+	if (!__ceph_is_any_caps(ci)) {
 		list_del_init(&ci->i_snap_realm_item);
 		ceph_put_snap_realm(mdsc, ci->i_snap_realm);
 		ci->i_snap_realm = NULL;
@@ -378,7 +386,7 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 }
 
 /*
- * caller should hold snap_rwsem and session s_mutex.
+ * caller should hold session s_mutex.
  */
 void ceph_remove_cap(struct ceph_cap *cap)
 {
@@ -418,7 +426,7 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 
 /*
  * Cancel delayed work on cap.
- * caller hold s_mutex, snap_rwsem.
+ * caller hold s_mutex
  */
 static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 			       struct ceph_inode_info *ci)
@@ -496,7 +504,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
  * Note that this will leave behind any locked pages... FIXME!
  *
  * called with i_lock, then drops it.
- * caller should hold snap_rwsem, s_mutex.
+ * caller should hold snap_rwsem (read), s_mutex.
  */
 static void __send_cap(struct ceph_mds_client *mdsc,
 		       struct ceph_mds_session *session,
@@ -858,18 +866,6 @@ retry_locked:
 		}
 
 ack:
-		/* take snap_rwsem before session mutex */
-		if (!took_snap_rwsem) {
-			if (down_read_trylock(&mdsc->snap_rwsem) == 0) {
-				dout(10, "inverting snap/in locks on %p\n",
-				     inode);
-				spin_unlock(&inode->i_lock);
-				down_read(&mdsc->snap_rwsem);
-				took_snap_rwsem = 1;
-				goto retry;
-			}
-			took_snap_rwsem = 1;
-		}
 		if (session && session != cap->session) {
 			dout(30, "oops, wrong session %p mutex\n", session);
 			mutex_unlock(&session->s_mutex);
@@ -881,9 +877,25 @@ ack:
 				dout(10, "inverting session/ino locks on %p\n",
 				     session);
 				spin_unlock(&inode->i_lock);
+				if (took_snap_rwsem) {
+					up_read(&mdsc->snap_rwsem);
+					took_snap_rwsem = 0;
+				}
 				mutex_lock(&session->s_mutex);
 				goto retry;
 			}
+		}
+		/* take snap_rwsem after session mutex */
+		if (!took_snap_rwsem) {
+			if (down_read_trylock(&mdsc->snap_rwsem) == 0) {
+				dout(10, "inverting snap/in locks on %p\n",
+				     inode);
+				spin_unlock(&inode->i_lock);
+				down_read(&mdsc->snap_rwsem);
+				took_snap_rwsem = 1;
+				goto retry;
+			}
+			took_snap_rwsem = 1;
 		}
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
@@ -1114,7 +1126,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
  * Handle a cap GRANT message from the MDS.  (Note that a GRANT may
  * actually be a revocation if it specifies a smaller cap set.)
  *
- * caller holds s_mutex.  NOT snap_rwsem.
+ * caller holds s_mutex.
  * return value:
  *  0 - ok
  *  1 - send the msg back to mds
@@ -1387,7 +1399,7 @@ static void handle_cap_flush_ack(struct inode *inode,
  * Handle FLUSHSNAP_ACK.  MDS has flushed snap data to disk and we can
  * throw away our cap_snap.
  *
- * Caller hold s_mutex, snap_rwsem.
+ * Caller hold s_mutex.
  */
 static void handle_cap_flushsnap_ack(struct inode *inode,
 				     struct ceph_mds_caps *m,
@@ -1428,7 +1440,7 @@ static void handle_cap_flushsnap_ack(struct inode *inode,
 /*
  * Handle TRUNC from MDS, indicating file truncation.
  *
- * caller hold s_mutex, NOT snap_rwsem.
+ * caller hold s_mutex.
  */
 static void handle_cap_trunc(struct inode *inode,
 			     struct ceph_mds_caps *trunc,
@@ -1481,7 +1493,7 @@ static void handle_cap_trunc(struct inode *inode,
  * indicated by mseq), make note of the migrating cap bits for the
  * duration (until we see the corresponding IMPORT).
  *
- * caller holds s_mutex, snap_rwsem
+ * caller holds s_mutex
  */
 static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 			      struct ceph_mds_session *session)
@@ -1532,7 +1544,7 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
  * Handle cap IMPORT.  If there are temp bits from an older EXPORT,
  * clean them up.
  *
- * caller holds s_mutex, snap_rwsem
+ * caller holds s_mutex.
  */
 static void handle_cap_import(struct ceph_mds_client *mdsc, 
 			      struct inode *inode, struct ceph_mds_caps *im,
@@ -1546,7 +1558,6 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	unsigned seq = le32_to_cpu(im->seq);
 	unsigned mseq = le32_to_cpu(im->migrate_seq);
 	u64 realmino = le64_to_cpu(im->realm);
-	struct ceph_snap_realm *realm;
 	unsigned long ttl_ms = le32_to_cpu(im->ttl_ms);
 
 	if (ci->i_cap_exporting_mds >= 0 &&
@@ -1563,11 +1574,13 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 		     inode, ci, mds, mseq);
 	}
 	
-	realm = ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
-				       false);
+	down_write(&mdsc->snap_rwsem);
+	ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
+			       false);
+	downgrade_write(&mdsc->snap_rwsem);
 	ceph_add_cap(inode, session, -1, issued, wanted, seq, mseq, realmino,
 		     ttl_ms, jiffies - ttl_ms/2, NULL);
-	ceph_put_snap_realm(mdsc, realm);
+	up_read(&mdsc->snap_rwsem);
 }
 
 
@@ -1575,8 +1588,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
  * Handle a CEPH_CAPS message from the MDS.
  *
  * Identify the appropriate session, inode, and call the right handler
- * based on the cap op.  Take read or write lock on snap_rwsem as
- * appropriate.
+ * based on the cap op.
  */
 void ceph_handle_caps(struct ceph_mds_client *mdsc,
 		      struct ceph_msg *msg)
@@ -1611,8 +1623,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	/* find session */
 	mutex_lock(&mdsc->mutex);
 	session = __ceph_get_mds_session(mdsc, mds);
-	if (session)
-		down_write(&mdsc->snap_rwsem);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got cap but no session for mds%d\n", mds);
@@ -1636,12 +1646,10 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	switch (op) {
 	case CEPH_CAP_OP_FLUSHSNAP_ACK:
 		handle_cap_flushsnap_ack(inode, h, session);
-		up_write(&mdsc->snap_rwsem);
 		goto done;
 
 	case CEPH_CAP_OP_EXPORT:
 		handle_cap_export(inode, h, session);
-		up_write(&mdsc->snap_rwsem);
 		if (list_empty(&session->s_caps))
 			ceph_mdsc_flushed_all_caps(mdsc, session);
 		goto done;
@@ -1650,7 +1658,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 		handle_cap_import(mdsc, inode, h, session,
 				  msg->front.iov_base + sizeof(*h),
 				  le32_to_cpu(h->snap_trace_len));
-		up_write(&mdsc->snap_rwsem);
 		check_caps = 1; /* we may have sent a RELEASE to the old auth */
 		goto done;
 	}
@@ -1672,7 +1679,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	/* note that each of these drops i_lock for us */
 	switch (op) {
 	case CEPH_CAP_OP_GRANT:
-		up_write(&mdsc->snap_rwsem);
 		r = handle_cap_grant(inode, h, session, cap,&xattr_data);
 		if (r == 1) {
 			dout(10, " sending reply back to mds%d\n", mds);
@@ -1686,19 +1692,16 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	case CEPH_CAP_OP_FLUSH_ACK:
 		handle_cap_flush_ack(inode, h, session, cap);
-		up_write(&mdsc->snap_rwsem);
 		if (list_empty(&session->s_caps))
 			ceph_mdsc_flushed_all_caps(mdsc, session);
 		break;
 
 	case CEPH_CAP_OP_TRUNC:
-		up_write(&mdsc->snap_rwsem);
 		handle_cap_trunc(inode, h, session);
 		break;
 
 	default:
 		spin_unlock(&inode->i_lock);
-		up_write(&mdsc->snap_rwsem);
 		derr(10, " unknown cap op %d %s\n", op, ceph_cap_op_name(op));
 	}
 
@@ -1719,7 +1722,6 @@ bad:
 	return;
 
 release:
-	up_write(&mdsc->snap_rwsem);
 	send_cap_msg(mdsc, vino.ino, CEPH_CAP_OP_RELEASE,
 		     0, 0, 0,
 		     seq, 0,
