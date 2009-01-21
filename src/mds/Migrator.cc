@@ -906,7 +906,7 @@ void Migrator::finish_export_inode_caps(CInode *in)
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
 				     in->ino(),
 				     in->find_snaprealm()->inode->ino(),
-				     cap->get_last_seq(), 
+				     cap->get_cap_id(), cap->get_last_seq(), 
 				     cap->pending(), cap->wanted(), 0,
 				     cap->get_mseq());
     mds->send_message_client(m, it->first);

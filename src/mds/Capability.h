@@ -98,6 +98,8 @@ private:
   CInode *inode;
   int client;
 
+  __u64 cap_id;
+
   __u32 _wanted;     // what the client wants (ideally)
 
   utime_t last_issue_stamp;
@@ -216,8 +218,9 @@ public:
 
   xlist<Capability*>::item snaprealm_caps_item;
 
-  Capability(CInode *i, int c, xlist<Capability*> *rl) : 
+  Capability(CInode *i, __u64 id, int c, xlist<Capability*> *rl) : 
     inode(i), client(c),
+    cap_id(id),
     _wanted(0),
     _pending(0), _issued(0), _num_revoke(0),
     last_sent(0),
@@ -236,6 +239,8 @@ public:
   }
 
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
+
+  __u64 get_cap_id() { return cap_id; }
 
   //ceph_seq_t get_last_issue() { return last_issue; }
 

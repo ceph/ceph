@@ -548,27 +548,8 @@ public:
     if (c) return c->pending();
     return 0;
   }
-  Capability *add_client_cap(int client, Session *session, xlist<Capability*> *rdcaps_list, SnapRealm *conrealm=0) {
-    if (client_caps.empty()) {
-      get(PIN_CAPS);
-      if (conrealm)
-	containing_realm = conrealm;
-      else
-	containing_realm = find_snaprealm();
-      containing_realm->inodes_with_caps.push_back(&xlist_caps);
-    }
-
-    assert(client_caps.count(client) == 0);
-    Capability *cap = client_caps[client] = new Capability(this, client, rdcaps_list);
-    if (session)
-      session->add_cap(cap);
-
-    cap->client_follows = first-1;
-  
-    containing_realm->add_cap(client, cap);
-    
-    return cap;
-  }
+  Capability *add_client_cap(int client, Session *session,
+			     xlist<Capability*> *rdcaps_list, SnapRealm *conrealm=0);
   void remove_client_cap(int client) {
     assert(client_caps.count(client) == 1);
     Capability *cap = client_caps[client];

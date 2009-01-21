@@ -134,6 +134,7 @@ struct ceph_cap {
 	struct list_head session_caps;   /* per-session caplist */
 	struct list_head session_rdcaps; /* per-session rdonly caps */
 	int mds;
+	u64 cap_id;
 	int issued;       /* latest, from the mds */
 	int implemented;  /* what we've implemented (for tracking revocation) */
 	int flushing;     /* dirty fields being written back to mds */
@@ -701,7 +702,7 @@ extern const char *ceph_cap_string(int c);
 extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			     struct ceph_msg *msg);
 extern int ceph_add_cap(struct inode *inode,
-			struct ceph_mds_session *session,
+			struct ceph_mds_session *session, u64 cap_id,
 			int fmode, unsigned issued, unsigned wanted,
 			unsigned cap, unsigned seq, u64 realmino,
 			unsigned ttl_ms, unsigned long ttl_from,

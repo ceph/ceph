@@ -32,6 +32,7 @@ class MClientCaps : public Message {
 
   inodeno_t get_ino() { return inodeno_t(head.ino); }
   inodeno_t get_realm() { return inodeno_t(head.realm); }
+  __u64 get_cap_id() { return head.cap_id; }
 
   __u64 get_size() { return head.size;  }
   __u64 get_max_size() { return head.max_size;  }
@@ -65,6 +66,7 @@ class MClientCaps : public Message {
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
+	      __u64 id,
 	      long seq,
 	      int caps,
 	      int wanted,
@@ -75,6 +77,7 @@ class MClientCaps : public Message {
     head.op = op;
     head.ino = ino;
     head.realm = realm;
+    head.cap_id = id;
     head.seq = seq;
     head.caps = caps;
     head.wanted = wanted;
@@ -83,12 +86,13 @@ class MClientCaps : public Message {
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      int mseq) :
+	      __u64 id, int mseq) :
     Message(CEPH_MSG_CLIENT_CAPS) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
     head.realm = realm;
+    head.cap_id = id;
     head.migrate_seq = mseq;
   }
 
@@ -96,6 +100,7 @@ class MClientCaps : public Message {
   void print(ostream& out) {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
+	<< " " << head.cap_id
 	<< " seq " << head.seq 
 	<< " caps=" << ccap_string(head.caps)
 	<< " dirty=" << ccap_string(head.dirty)

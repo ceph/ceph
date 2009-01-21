@@ -389,7 +389,7 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
 
   if (st->cap.caps) {
     if (in->snapid == CEPH_NOSNAP)
-      add_update_cap(in, mds, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm));
+      add_update_cap(in, mds, st->cap.cap_id, st->cap.caps, st->cap.seq, st->cap.mseq, inodeno_t(st->cap.realm));
     else {
       in->snap_caps |= st->cap.caps;
     }
@@ -1474,7 +1474,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   MClientCaps *m = new MClientCaps(op,
 				   in->ino(),
 				   0,
-				   cap->seq,
+				   cap->cap_id, cap->seq,
 				   cap->issued,
 				   want,
 				   cap->flushing,
@@ -1681,7 +1681,7 @@ void Client::flush_snaps(Inode *in)
 	     << " on " << *in << dendl;
     if (p->second.dirty_data || p->second.writing)
       continue;
-    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino(), in->snaprealm->ino, mseq);
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino(), in->snaprealm->ino, 0, mseq);
     m->head.snap_follows = p->first;
     m->head.size = p->second.size;
     m->head.caps = p->second.issued;
@@ -1764,7 +1764,7 @@ void Client::_flushed(Inode *in)
  * handle caps update from mds.  including mds to mds caps transitions.
  * do not block.
  */
-void Client::add_update_cap(Inode *in, int mds,
+void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm)
 {
   InodeCap *cap = 0;
@@ -1790,6 +1790,7 @@ void Client::add_update_cap(Inode *in, int mds,
   }
 
   unsigned old_caps = cap->issued;
+  cap->cap_id = cap_id;
   cap->issued |= issued;
   cap->implemented |= issued;
   cap->seq = seq;
@@ -2097,7 +2098,7 @@ void Client::handle_cap_import(Inode *in, MClientCaps *m)
 
   // add/update it
   update_snap_trace(m->snapbl);
-  add_update_cap(in, mds, 
+  add_update_cap(in, mds, m->get_cap_id(),
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm());
   
   if (m->get_mseq() > in->exporting_mseq) {

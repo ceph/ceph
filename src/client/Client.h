@@ -160,6 +160,7 @@ inline ostream& operator<<(ostream& out, const SnapRealm& r) {
 }
 
 struct InodeCap {
+  __u64 cap_id;
   unsigned issued;
   unsigned implemented;
   unsigned wanted;   // as known to mds.
@@ -829,7 +830,7 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
-  void add_update_cap(Inode *in, int mds,
+  void add_update_cap(Inode *in, int mds, __u64 cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);

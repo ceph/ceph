@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     5 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    4 /* public/client */
-#define CEPH_MDSC_PROTOCOL    5 /* public/client */
+#define CEPH_MDSC_PROTOCOL    6 /* public/client */
 #define CEPH_MONC_PROTOCOL    6 /* public/client */
 
 
@@ -827,6 +827,7 @@ struct ceph_frag_tree_head {
 
 struct ceph_mds_reply_cap {
 	__le32 caps, wanted;
+	__le64 cap_id;
 	__le32 seq, mseq;
 	__le64 realm;
 	__le32 ttl_ms;  /* ttl, in ms.  if readonly and unwanted. */
@@ -1031,6 +1032,7 @@ static inline const char *ceph_cap_op_name(int op)
 struct ceph_mds_caps {
 	__le32 op;
 	__le64 ino, realm;
+	__le64 cap_id;
 	__le32 seq;
 	__le32 caps, wanted, dirty;
 	__le32 migrate_seq;
@@ -1074,6 +1076,7 @@ struct ceph_mds_lease {
 
 /* client reconnect */
 struct ceph_mds_cap_reconnect {
+	__le64 cap_id;
 	__le32 wanted;
 	__le32 issued;
 	__le64 size;

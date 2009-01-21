@@ -504,7 +504,9 @@ no_change:
 	/* were we issued a capability? */
 	if (info->cap.caps) {
 		if (ceph_snap(inode) == CEPH_NOSNAP) {
-			ceph_add_cap(inode, session, cap_fmode,
+			ceph_add_cap(inode, session,
+				     le64_to_cpu(info->cap.cap_id),
+				     cap_fmode,
 				     le32_to_cpu(info->cap.caps),
 				     le32_to_cpu(info->cap.wanted),
 				     le32_to_cpu(info->cap.seq),

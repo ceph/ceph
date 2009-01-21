@@ -176,7 +176,7 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
  * @fmode can be negative, in which case it is ignored.
  */
 int ceph_add_cap(struct inode *inode,
-		 struct ceph_mds_session *session,
+		 struct ceph_mds_session *session, u64 cap_id,
 		 int fmode, unsigned issued, unsigned wanted,
 		 unsigned seq, unsigned mseq, u64 realmino,
 		 unsigned ttl_ms, unsigned long ttl_from,
@@ -188,8 +188,8 @@ int ceph_add_cap(struct inode *inode,
 	int mds = session->s_mds;
 	int is_first = 0;
 
-	dout(10, "add_cap on %p mds%d cap %s seq %d\n", inode,
-	     session->s_mds, ceph_cap_string(issued), seq);
+	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
+	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
 retry:
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(inode, mds);
@@ -260,6 +260,7 @@ retry:
 	dout(10, "add_cap inode %p (%llx.%llx) cap %s now %s seq %d mds%d\n",
 	     inode, ceph_vinop(inode), ceph_cap_string(issued),
 	     ceph_cap_string(issued|cap->issued), seq, mds);
+	cap->cap_id = cap_id;
 	cap->issued = issued;
 	cap->implemented |= issued;
 	cap->seq = seq;
@@ -445,7 +446,7 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
  *
  * Caller should be holding s_mutex.
  */
-static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
+static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 			 int caps, int wanted, int dirty, u64 seq, u64 mseq,
 			 u64 size, u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
@@ -456,9 +457,9 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
-	dout(10, "send_cap_msg %s %llx caps %s wanted %s dirty %s seq %llu/%llu"
-	     " follows %lld size %llu\n", ceph_cap_op_name(op), ino,
-	     ceph_cap_string(caps), ceph_cap_string(wanted),
+	dout(10, "send_cap_msg %s %llx %llx caps %s wanted %s dirty %s"
+	     " seq %llu/%llu follows %lld size %llu\n", ceph_cap_op_name(op),
+	     cid, ino, ceph_cap_string(caps), ceph_cap_string(wanted),
 	     ceph_cap_string(dirty),
 	     seq, mseq, follows, size);
 
@@ -470,6 +471,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, int op,
 
 	memset(fc, 0, sizeof(*fc));
 
+	fc->cap_id = cpu_to_le64(cid);
 	fc->op = cpu_to_le32(op);
 	fc->seq = cpu_to_le32(seq);
 	fc->migrate_seq = cpu_to_le32(mseq);
@@ -514,6 +516,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 {
 	struct ceph_inode_info *ci = cap->ci;
 	struct inode *inode = &ci->vfs_inode;
+	u64 cap_id = cap->cap_id;
 	int held = cap->issued | cap->implemented;
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~retain;
@@ -528,7 +531,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	gid_t gid;
 	int dirty;
 	int flushing;
-	int last_cap = 0;	
+	int last_cap = 0;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
 	     cap, cap->session,
@@ -587,7 +590,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
 	}
 
-	send_cap_msg(mdsc, ceph_vino(inode).ino,
+	send_cap_msg(mdsc, ceph_vino(inode).ino, cap_id,
 		     op, keep, want, flushing, seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
@@ -674,7 +677,7 @@ retry:
 
 		dout(10, "flush_snaps %p cap_snap %p follows %lld size %llu\n",
 		     inode, capsnap, next_follows, capsnap->size);
-		send_cap_msg(mdsc, ceph_vino(inode).ino,
+		send_cap_msg(mdsc, ceph_vino(inode).ino, 0,
 			     CEPH_CAP_OP_FLUSHSNAP, capsnap->issued, 0,
 			     capsnap->dirty, 0, mseq,
 			     capsnap->size, 0,
@@ -1543,6 +1546,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	unsigned mseq = le32_to_cpu(im->migrate_seq);
 	u64 realmino = le64_to_cpu(im->realm);
 	unsigned long ttl_ms = le32_to_cpu(im->ttl_ms);
+	u64 cap_id = le64_to_cpu(im->cap_id);
 
 	if (ci->i_cap_exporting_mds >= 0 &&
 	    ceph_seq_cmp(ci->i_cap_exporting_mseq, mseq) < 0) {
@@ -1562,7 +1566,8 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
 			       false);
 	downgrade_write(&mdsc->snap_rwsem);
-	ceph_add_cap(inode, session, -1, issued, wanted, seq, mseq, realmino,
+	ceph_add_cap(inode, session, cap_id, -1,
+		     issued, wanted, seq, mseq, realmino,
 		     ttl_ms, jiffies - ttl_ms/2, NULL);
 	up_read(&mdsc->snap_rwsem);
 }
@@ -1586,6 +1591,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	int op;
 	u32 seq;
 	struct ceph_vino vino;
+	u64 cap_id;
 	u64 size, max_size;
 	int check_caps = 0;
 	void *xattr_data = NULL;
@@ -1600,6 +1606,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	op = le32_to_cpu(h->op);
 	vino.ino = le64_to_cpu(h->ino);
 	vino.snap = CEPH_NOSNAP;
+	cap_id = le64_to_cpu(h->cap_id);
 	seq = le32_to_cpu(h->seq);
 	size = le64_to_cpu(h->size);
 	max_size = le64_to_cpu(h->max_size);
@@ -1706,7 +1713,7 @@ bad:
 	return;
 
 release:
-	send_cap_msg(mdsc, vino.ino, CEPH_CAP_OP_RELEASE,
+	send_cap_msg(mdsc, vino.ino, cap_id, CEPH_CAP_OP_RELEASE,
 		     0, 0, 0,
 		     seq, 0,
 		     size, 0, NULL, NULL, 0,

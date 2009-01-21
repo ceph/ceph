@@ -106,6 +106,8 @@ MDCache::MDCache(MDS *m)
 
   did_shutdown_log_cap = false;
 
+  last_cap_id = 0;
+
   client_lease_durations[0] = 5.0;
   client_lease_durations[1] = 30.0;
   client_lease_durations[2] = 300.0;
@@ -3659,7 +3661,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
     MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
 					in->ino(),
 					realm->inode->ino(),
-					cap->get_last_seq(),
+					cap->get_cap_id(), cap->get_last_seq(),
 					cap->pending(), cap->wanted(), 0,
 					cap->get_mseq());
     in->encode_cap_message(reap, cap);

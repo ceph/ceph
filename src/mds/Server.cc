@@ -428,6 +428,10 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     for (map<inodeno_t, cap_reconnect_t>::iterator p = m->caps.begin();
 	 p != m->caps.end();
 	 ++p) {
+      // make sure our last_cap_id is MAX over all issued caps
+      if (p->second.capinfo.cap_id > mdcache->last_cap_id)
+	mdcache->last_cap_id = p->second.capinfo.cap_id;
+
       CInode *in = mdcache->get_inode(p->first);
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
@@ -449,7 +453,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	inode_t fake_inode;
 	memset(&fake_inode, 0, sizeof(fake_inode));
 	fake_inode.ino = p->first;
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0);
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
 	//stale->head.migrate_seq = 0; // FIXME ******
 	mds->send_message_client(stale, m->get_source_inst());
 

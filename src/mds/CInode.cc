@@ -493,6 +493,34 @@ void CInode::name_stray_dentry(string& dname)
 }
 
 
+Capability *CInode::add_client_cap(int client, Session *session, 
+				   xlist<Capability*> *rdcaps_list, SnapRealm *conrealm)
+{
+  if (client_caps.empty()) {
+    get(PIN_CAPS);
+    if (conrealm)
+      containing_realm = conrealm;
+    else
+      containing_realm = find_snaprealm();
+    containing_realm->inodes_with_caps.push_back(&xlist_caps);
+  }
+  
+  assert(client_caps.count(client) == 0);
+  Capability *cap = client_caps[client] = new Capability(this, ++mdcache->last_cap_id, client, rdcaps_list);
+  if (session)
+    session->add_cap(cap);
+  
+  cap->client_follows = first-1;
+  
+  containing_realm->add_cap(client, cap);
+  
+  return cap;
+}
+
+
+
+
+
 version_t CInode::pre_dirty()
 {    
   assert(parent || projected_parent.size());
@@ -1422,6 +1450,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       cap->touch();   // move to back of session cap LRU
       e.cap.caps = issue;
       e.cap.wanted = cap->wanted();
+      e.cap.cap_id = cap->get_cap_id();
       e.cap.seq = cap->get_last_seq();
       dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();

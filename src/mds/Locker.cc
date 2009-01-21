@@ -1031,7 +1031,7 @@ bool Locker::issue_caps(CInode *in)
 	MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
 					 in->ino(),
 					 in->find_snaprealm()->inode->ino(),
-					 cap->get_last_seq(),
+					 cap->get_cap_id(), cap->get_last_seq(),
 					 after, wanted, 0,
 					 cap->get_mseq());
 	in->encode_cap_message(m, cap);
@@ -1064,7 +1064,7 @@ void Locker::issue_truncate(CInode *in)
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_TRUNC,
 				     in->ino(),
 				     in->find_snaprealm()->inode->ino(),
-				     cap->get_last_seq(),
+				     cap->get_cap_id(), cap->get_last_seq(),
 				     cap->pending(), cap->wanted(), 0,
 				     cap->get_mseq());
     in->encode_cap_message(m, cap);			     
@@ -1355,7 +1355,7 @@ void Locker::share_inode_max_size(CInode *in)
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
 				       in->ino(),
 				       in->find_snaprealm()->inode->ino(),
-				       cap->get_last_seq(),
+				       cap->get_cap_id(), cap->get_last_seq(),
 				       cap->pending(), cap->wanted(), 0,
 				       cap->get_mseq());
       in->encode_cap_message(m, cap);
@@ -1443,7 +1443,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       // case we get a dup response, so whatever.)
       MClientCaps *ack = 0;
       if (m->get_dirty()) {
-	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, m->get_dirty(), 0);
+	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, 0, m->get_dirty(), 0);
 	ack->set_snap_follows(follows);
       }
       if (!_do_cap_update(in, cap, m->get_dirty(), 0, follows, m, ack)) {
@@ -1459,52 +1459,55 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   // for this and all subsequent versions of this inode,
   while (1) {
-    // filter wanted based on what we could ever give out (given auth/replica status)
-    int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
-    cap->confirm_receipt(m->get_seq(), m->get_caps());
-    dout(10) << " follows " << follows
-	     << " retains " << ccap_string(m->get_caps())
-	     << " dirty " << ccap_string(m->get_caps())
-	     << " on " << *in << dendl;
-    
-    MClientCaps *ack = 0;
-    ceph_seq_t releasecap = 0;
-    
-    if (m->get_dirty() && in->is_auth()) {
-      dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
-	      << " seq " << m->get_seq() << " on " << *in << dendl;
-      ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, m->get_seq(),
-			    m->get_caps(), 0, m->get_dirty(), 0);
-    }
-    if (m->get_caps() == 0) {
+    if (cap->get_cap_id() != m->get_cap_id()) {
+      dout(7) << " ignoring client capid " << m->get_cap_id() << " != my " << cap->get_cap_id() << dendl;
+    } else {
+      // filter wanted based on what we could ever give out (given auth/replica status)
+      int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
+      cap->confirm_receipt(m->get_seq(), m->get_caps());
+      dout(10) << " follows " << follows
+	       << " retains " << ccap_string(m->get_caps())
+	       << " dirty " << ccap_string(m->get_caps())
+	       << " on " << *in << dendl;
       
-      assert(ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) <= 0);
-      if (m->get_seq() == cap->get_last_sent()) {
-	dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
-	releasecap = m->get_seq();
-      } else {
-	dout(7) << " NOT releasing request client" << client << " seq " << m->get_seq()
-		<< " < last_sent " << cap->get_last_sent() << " on " << *in << dendl;
+      MClientCaps *ack = 0;
+      ceph_seq_t releasecap = 0;
+      
+      if (m->get_dirty() && in->is_auth()) {
+	dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
+		<< " seq " << m->get_seq() << " on " << *in << dendl;
+	ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
+			      m->get_caps(), 0, m->get_dirty(), 0);
+      }
+      if (m->get_caps() == 0) {
+	assert(ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) <= 0);
+	if (m->get_seq() == cap->get_last_sent()) {
+	  dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
+	  releasecap = m->get_seq();
+	} else {
+	  dout(7) << " NOT releasing request client" << client << " seq " << m->get_seq()
+		  << " < last_sent " << cap->get_last_sent() << " on " << *in << dendl;
+	}
+      }
+      if (wanted != cap->wanted()) {
+	dout(10) << " wanted " << ccap_string(cap->wanted())
+		 << " -> " << ccap_string(wanted) << dendl;
+	cap->set_wanted(wanted);
+      }
+      
+      if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack, releasecap)) {
+	// no update, ack now.
+	if (releasecap)
+	  _finish_release_cap(in, client, releasecap, ack);
+	else if (ack)
+	  mds->send_message_client(ack, client);
+	
+	eval_cap_gather(in);
+	if (in->filelock.is_stable())
+	  file_eval(&in->filelock);
       }
     }
-    if (wanted != cap->wanted()) {
-      dout(10) << " wanted " << ccap_string(cap->wanted())
-	       << " -> " << ccap_string(wanted) << dendl;
-      cap->set_wanted(wanted);
-    }
-    
-    if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack, releasecap)) {
-      // no update, ack now.
-      if (releasecap)
-	_finish_release_cap(in, client, releasecap, ack);
-      else if (ack)
-	mds->send_message_client(ack, client);
-      
-      eval_cap_gather(in);
-      if (in->filelock.is_stable())
-	file_eval(&in->filelock);
-    }
-      
+
     // done?
     if (in->last == CEPH_NOSNAP)
       break;
