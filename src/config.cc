@@ -36,6 +36,8 @@ atomic_t buffer_total_alloc;
 
 #include "osd/osd_types.h"
 
+#include "common/ConfUtils.h"
+
 int buffer::list::read_file(const char *fn)
 {
   struct stat st;
@@ -604,7 +606,10 @@ void parse_config_file(char *fname)
   cf.parse();
 
 #define CF_READ(section, type, field, inout) \
-  cf.read_#type(section, ##field, &inout, inout)
+  cf.read_##type((char *)section, (char *)#field, &inout, inout)
+
+#define CF_READ_STR(section, type, field, inout) \
+  cf.read_##type((char *)section, (char *)#field, (char **)&inout, (char *)inout)
 
   CF_READ("global", int, num_mon, g_conf.num_mon);
   CF_READ("global", int, num_mon, g_conf.num_mds);
@@ -614,11 +619,11 @@ void parse_config_file(char *fname)
   CF_READ("global", bool, file_logs, g_conf.file_logs);
   CF_READ("global", bool, log, g_conf.log);
   CF_READ("global", int, log_interval, g_conf.log_interval);
-  CF_READ("global", str, log_name, g_conf.log_name);
+  CF_READ_STR("global", str_alloc, log_name, g_conf.log_name);
   CF_READ("global", bool, log_messages, g_conf.log_messages);
   CF_READ("global", bool, log_pins, g_conf.log_pins);
-  CF_READ("global", bool, dout_dir, g_conf.dout_dir);
-  CF_READ("global", bool, dout_sym_dir, g_conf.dout_sym_dir);
+  CF_READ_STR("global", str_alloc, dout_dir, g_conf.dout_dir);
+  CF_READ_STR("global", str_alloc, dout_sym_dir, g_conf.dout_sym_dir);
 }
 
 void parse_config_options(std::vector<const char*>& args, bool open)

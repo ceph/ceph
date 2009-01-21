@@ -214,6 +214,7 @@ static int _str_cat(char *str1, int max, char *str2)
 
 void ConfFile::dump()
 {
+#if 0
 	std::list<struct conf_line *>::iterator iter, end;
 	struct conf_line *cl;
 	char line[MAX_LINE];
@@ -243,6 +244,22 @@ void ConfFile::dump()
 			printf("line=%s\n", line);
 		}
 	}
+#endif
+	ConfMap *cur_map;
+	ConfMap::iterator map_iter, map_end;
+	SectionMap::iterator sec_iter, sec_end;
+
+	sec_end = sections.end();
+
+	for (sec_iter = sections.begin(); sec_iter != sec_end; ++sec_iter) {
+		cur_map = sec_iter->second;
+		map_end = cur_map->end();
+
+		for (map_iter = cur_map->begin(); map_iter != map_end; ++map_iter) {
+			
+		}
+	}
+
 }
 
 int ConfFile::parse()
@@ -403,6 +420,22 @@ int ConfFile::read_str(char *section, char *var, char *val, int size, char *def_
 	return 1;
 notfound:
 	strncpy(val, def_val, size);
+	return 0;
+}
+
+int ConfFile::read_str_alloc(char *section, char *var, char **val, char *def_val)
+{
+	struct conf_line *cl;
+
+	cl = _find_var(section, var);
+	if (!cl || !cl->val)
+		goto notfound;
+
+	*val = strdup(cl->val);
+
+	return 1;
+notfound:
+	*val = strdup(def_val);
 	return 0;
 }
 
