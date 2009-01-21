@@ -10,6 +10,8 @@
 #include <list>
 #include <string>
 
+#include "ConfUtils.h"
+
 using namespace std;
 
 struct ltstr
@@ -196,31 +198,6 @@ out:
 	free(dup);
 	return ret;
 }
-
-typedef map<string, struct conf_line *> ConfMap;
-
-class ConfFile {
-	int fd;
-	char *filename;
-	map<string, ConfMap *> sections;
-	ConfMap map;
-	list<struct conf_line *> list;
-
-	struct conf_line *_find_var(char *section, char* var);
-public:
-	ConfFile(char *fname) : filename(strdup(fname)) {}
-	~ConfFile() { free(filename); }
-
-	int parse();
-	int read_int(char *section, char *var, int *val, int def_val);
-	int read_bool(char *section, char *var, bool *val, bool def_val);
-	int read_str(char *section, char *var, char *val, int size, char *def_val);
-	int read_float(char *section, char *var, float *val, float def_val);
-
-	int write_int(char *section, char *var, int val);
-
-	void dump();
-};
 
 static int _str_cat(char *str1, int max, char *str2)
 {
