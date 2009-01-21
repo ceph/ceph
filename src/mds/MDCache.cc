@@ -309,8 +309,6 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   else
     assert(straydn->get_projected_linkage()->is_null());
 
-  straydn->first = in->first;
-
   return straydn;
 }
 

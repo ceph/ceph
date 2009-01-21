@@ -3274,6 +3274,8 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
     // primary link.  add stray dentry.
     assert(straydn);
+    straydn->first = dnl->get_inode()->find_snaprealm()->get_newest_seq()+1;
+
     mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
     mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
     le->metablob.add_primary_dentry(straydn, true, dnl->get_inode(), pi, 0, &snapbl);
