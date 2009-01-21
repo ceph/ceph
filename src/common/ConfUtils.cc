@@ -265,12 +265,14 @@ void ConfFile::dump()
 int ConfFile::parse()
 {
 	char *buf;
-	int len, i, l;
+	int len, i, l, map_index;
 	char line[MAX_LINE];
 	struct conf_line *cl;
 	ConfMap *cur_map;
+	ConfUnsortedMap *cur_map;
 
 	cur_map = new ConfMap;
+	cur_unsorted_map = new ConfMap;
 	sections["global"] = cur_map;
 #define BUF_SIZE 4096
 	fd = open(filename, O_RDWR);
@@ -278,6 +280,8 @@ int ConfFile::parse()
 		return 0;
 
 	l = 0;
+	map_index = 0;
+
 	buf = (char *)malloc(BUF_SIZE);
 	do {
 		len = read(fd, buf, BUF_SIZE);
@@ -293,10 +297,13 @@ int ConfFile::parse()
 				list.push_back(cl);
 				if (cl->var) {
 					(*cur_map)[cl->var] = cl;
+					(*cur_unsorted_map)[map_index] = cl;
 					printf("cl->var <---- '%s'\n", cl->var);
 				} else if (cl->section) {
 					printf("cur_map <---- '%s'\n", cl->section);
+					map_index = 0;
 					cur_map = new ConfMap;
+					cur_unsorted_map = new ConfUnsortedMap;
 					sections[cl->section] = cur_map;
 				}
 				l = 0;
