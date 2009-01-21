@@ -517,21 +517,18 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	int held = cap->issued | cap->implemented;
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~retain;
+	int op = (retain == 0) ? CEPH_CAP_OP_RELEASE : CEPH_CAP_OP_UPDATE;
 	int keep;
 	u64 seq, mseq, time_warp_seq, follows;
 	u64 size, max_size;
 	struct timespec mtime, atime;
 	int wake = 0;
-	int op = CEPH_CAP_OP_UPDATE;
 	mode_t mode;
 	uid_t uid;
 	gid_t gid;
 	int dirty;
 	int flushing;
 	int last_cap = 0;	
-
-	if (retain == 0)
-		op = CEPH_CAP_OP_RELEASE;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
 	     cap, cap->session,
@@ -1155,25 +1152,12 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	int tried_invalidate = 0;
 	int ret;
 
-	dout(10, "handle_cap_grant inode %p ci %p mds%d seq %d %s\n",
-	     inode, ci, mds, seq, ceph_cap_string(newcaps));
+	dout(10, "handle_cap_grant inode %p cap %p mds%d seq %d %s\n",
+	     inode, cap, mds, seq, ceph_cap_string(newcaps));
 	dout(10, " size %llu max_size %llu, i_size %llu\n", size, max_size,
 		inode->i_size);
 start:
 
-	/* do we have this cap? */
-	cap = __get_cap_for_mds(inode, mds);
-	if (!cap) {
-		/*
-		 * then ignore.  never reply to cap messages out of turn,
-		 * or we'll be mixing up different instances of caps on the
-		 * same inode, and confuse the mds.
-		 */
-		dout(10, "no cap on %p ino %llx.%llx from mds%d, ignoring\n",
-		     inode, ci->i_vino.ino, ci->i_vino.snap, mds);
-		goto out;
-	}
-	dout(10, " cap %p\n", cap);
 	cap->gen = session->s_cap_gen;
 
 	/*
