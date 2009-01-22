@@ -518,6 +518,17 @@ void Server::reconnect_tick()
  * some generic stuff for finishing off requests
  */
 
+void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
+{
+  early_reply(mdr, in, dn);
+
+  mdr->committing = true;
+  mdlog->submit_entry(le, fin,
+		      mdr->did_ino_allocation());
+  
+  if (mdr->did_early_reply)
+    mds->locker->drop_rdlocks(mdr);
+}
 
 /*
  * send generic response (just an error code)
@@ -558,7 +569,6 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   // mark xlocks "done", indicating that we are exposing uncommitted changes
   mds->locker->set_xlocks_done(mdr);
-  mds->locker->drop_rdlocks(mdr);
 
   mdr->did_early_reply = true;
 }
@@ -1852,9 +1862,7 @@ void Server::handle_client_utime(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  early_reply(mdr, cur, 0);
-
-  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 
@@ -1898,9 +1906,7 @@ void Server::handle_client_chmod(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
 
-  early_reply(mdr, cur, 0);
-
-  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 
@@ -1943,9 +1949,7 @@ void Server::handle_client_chown(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  early_reply(mdr, cur, 0);
-
-  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 void Server::handle_client_setlayout(MDRequest *mdr)
@@ -1986,9 +1990,7 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  early_reply(mdr, cur, 0);
-
-  mdlog->submit_entry(le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 
@@ -2085,6 +2087,9 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   fin->xattrs.swap(cur->xattrs);
 
   mdlog->submit_entry(le, fin);
+
+  if (mdr->did_early_reply)
+    mds->locker->drop_rdlocks(mdr);
 }
 
 void Server::handle_client_removexattr(MDRequest *mdr)
@@ -2142,6 +2147,9 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   fin->xattrs.swap(cur->xattrs);
 
   mdlog->submit_entry(le, fin);
+
+  if (mdr->did_early_reply)
+    mds->locker->drop_rdlocks(mdr);
 }
 
 
@@ -2380,12 +2388,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  early_reply(mdr, newi, 0);
-
-  // log + wait
-  mdr->committing = true;
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows),
-		      mdr->did_ino_allocation());
+  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2449,12 +2452,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&newi->xlist_open_file);
 
-  early_reply(mdr, newi, 0);
-
-  // log + wait
-  mdr->committing = true;
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows),
-		      mdr->did_ino_allocation());
+  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2495,12 +2493,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  early_reply(mdr, newi, 0);
-
-  // log + wait
-  mdr->committing = true;
-  mdlog->submit_entry(le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows),
-		      mdr->did_ino_allocation());
+  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2653,9 +2646,7 @@ void Server::_link_local(MDRequest *mdr, CDentry *dn, CInode *targeti)
   // do this after predirty_*, to avoid funky extra dnl arg
   dn->push_projected_linkage(targeti->ino(), targeti->d_type());
 
-  early_reply(mdr, targeti, dn);
-
-  mdlog->submit_entry(le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
+  journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_local_finish(mds, mdr, dn, targeti, dnpv, tipv));
 }
 
 void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
@@ -2758,10 +2749,7 @@ void Server::_link_remote(MDRequest *mdr, bool inc, CDentry *dn, CInode *targeti
   // mark committing (needed for proper recovery)
   mdr->committing = true;
 
-  early_reply(mdr, targeti, dn);
-
-  // log + wait
-  mdlog->submit_entry(le, new C_MDS_link_remote_finish(mds, mdr, inc, dn, targeti));
+  journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(mds, mdr, inc, dn, targeti));
 }
 
 void Server::_link_remote_finish(MDRequest *mdr, bool inc,
@@ -3298,10 +3286,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
 
   dn->push_projected_linkage();
 
-  early_reply(mdr, 0, dn);
-
-  // log + wait
-  mdlog->submit_entry(le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
+  journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(mds, mdr, dn, straydn));
 }
 
 void Server::_unlink_local_finish(MDRequest *mdr, 
@@ -3821,13 +3806,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
 
-  // mark committing (needed for proper recovery)
-  mdr->committing = true;
-  
-  early_reply(mdr, srci, destdn);
-
-  // log + wait
-  mdlog->submit_entry(le, fin);
+  journal_and_reply(mdr, srci, destdn, le, fin);
 }
 
 
@@ -5242,11 +5221,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->xlist_open_file);
 
-  early_reply(mdr, in, 0);
-
-  // log + wait
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
-  mdlog->submit_entry(le, fin, mdr->did_ino_allocation());
+  journal_and_reply(mdr, in, 0, le, fin);
 }
 
 

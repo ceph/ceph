@@ -107,7 +107,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- put projected inos in session, so we can close the session without flushing the journal
+- fix xattr projection
 - linkage vs cdentry replicas and remote rename....
 - move root inode into stray dir
 - make recovery work with early replies

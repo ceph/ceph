@@ -74,6 +74,8 @@ public:
   // -- requests --
   void handle_client_request(MClientRequest *m);
 
+  void journal_and_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn, 
+			 LogEvent *le, Context *fin);
   void dispatch_client_request(MDRequest *mdr);
   void early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn);
   void reply_request(MDRequest *mdr, int r = 0, CInode *tracei = 0, CDentry *tracedn = 0);
