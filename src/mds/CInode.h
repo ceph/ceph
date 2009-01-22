@@ -162,6 +162,9 @@ class CInode : public MDSCacheObject {
   // projected values (only defined while dirty)
   list<inode_t*>   projected_inode;
 
+  // if xattr* is null, it is defined to be the same as the previous version
+  list<map<string,bufferptr>*>   projected_xattrs;
+  
   version_t get_projected_version() {
     if (projected_inode.empty())
       return inode.version;
@@ -178,7 +181,17 @@ class CInode : public MDSCacheObject {
     else
       return projected_inode.back();
   }
-  inode_t *project_inode();
+  map<string,bufferptr> *get_projected_xattrs() {
+    if (!projected_xattrs.empty())
+      for (list<map<string,bufferptr>*>::reverse_iterator p = projected_xattrs.rbegin();
+	   p != projected_xattrs.rend();
+	   p++)
+	if (*p)
+	  return *p;
+    return &xattrs;
+  }
+
+  inode_t *project_inode(map<string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
   inode_t *get_previous_projected_inode() {

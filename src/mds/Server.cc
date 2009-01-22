@@ -2001,7 +2001,6 @@ class C_MDS_inode_xattr_update_finish : public Context {
   MDRequest *mdr;
   CInode *in;
 public:
-  map<string, bufferptr> xattrs;
 
   C_MDS_inode_xattr_update_finish(MDS *m, MDRequest *r, CInode *i) :
     mds(m), mdr(r), in(i) { }
@@ -2011,8 +2010,6 @@ public:
     // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
     
-    in->xattrs.swap(xattrs);
-
     mdr->apply();
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
@@ -2060,36 +2057,25 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;
 
   // project update
-  inode_t *pi = cur->project_inode();
+  map<string,bufferptr> *px = new map<string,bufferptr>;
+  inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   pi->xattr_version++;
+  px->erase(name);
+  (*px)[name] = buffer::create(len);
+  if (len)
+    req->get_data().copy(0, len, (*px)[name].c_str());
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setxattr");
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi, 0, 0, px);
 
-  C_MDS_inode_xattr_update_finish *fin = new C_MDS_inode_xattr_update_finish(mds, mdr, cur);
-  fin->xattrs = cur->xattrs;
-
-  cur->xattrs.erase(name);
-  cur->xattrs[name] = buffer::create(len);
-  if (len)
-    req->get_data().copy(0, len, cur->xattrs[name].c_str());
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
-
-  early_reply(mdr, cur, 0);
-
-  fin->xattrs.swap(cur->xattrs);
-
-  mdlog->submit_entry(le, fin);
-
-  if (mdr->did_early_reply)
-    mds->locker->drop_rdlocks(mdr);
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
 
 void Server::handle_client_removexattr(MDRequest *mdr)
@@ -2123,35 +2109,23 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   dout(10) << "removexattr '" << name << "' on " << *cur << dendl;
 
   // project update
-  inode_t *pi = cur->project_inode();
+  map<string,bufferptr> *px = new map<string,bufferptr>;
+  inode_t *pi = cur->project_inode(px);
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   pi->xattr_version++;
+  px->erase(name);
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "removexattr");
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi, 0, 0, px);
 
-  C_MDS_inode_xattr_update_finish *fin = new C_MDS_inode_xattr_update_finish(mds, mdr, cur);
-  fin->xattrs = cur->xattrs;
-
-  cur->xattrs.erase(name);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi);
-
-  early_reply(mdr, cur, 0);
-
-  fin->xattrs.swap(cur->xattrs);
-
-  mdlog->submit_entry(le, fin);
-
-  if (mdr->did_early_reply)
-    mds->locker->drop_rdlocks(mdr);
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
-
 
 
 // =================================================================

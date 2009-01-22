@@ -164,13 +164,18 @@ void CInode::print(ostream& out)
 }
 
 
-inode_t *CInode::project_inode() 
+inode_t *CInode::project_inode(map<string,bufferptr> *px) 
 {
   if (projected_inode.empty()) {
     projected_inode.push_back(new inode_t(inode));
+    if (px)
+      *px = xattrs;
   } else {
     projected_inode.push_back(new inode_t(*projected_inode.back()));
+    if (px)
+      *px = *get_projected_xattrs();
   }
+  projected_xattrs.push_back(px);
   dout(15) << "project_inode " << projected_inode.back() << dendl;
   return projected_inode.back();
 }
@@ -183,7 +188,15 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   mark_dirty(projected_inode.front()->version, ls);
   inode = *projected_inode.front();
   delete projected_inode.front();
+
+  map<string,bufferptr> *px = projected_xattrs.front();
+  if (px) {
+    xattrs = *px;
+    delete px;
+  }
+
   projected_inode.pop_front();
+  projected_xattrs.pop_front();
 }
 
 
@@ -1340,7 +1353,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   inode_t *oi = &inode;
   inode_t *pi = get_projected_inode();
 
-  map<string, bufferptr> *pxattrs = &xattrs;
+  map<string, bufferptr> *pxattrs = 0;
 
   if (snapid && is_multiversion()) {
 
@@ -1475,6 +1488,10 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (!had_latest_xattrs &&
       cap &&
       (cap->pending() & CEPH_CAP_XATTR_RDCACHE)) {
+    
+    if (!pxattrs)
+      pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
+
     ::encode(*pxattrs, xbl);
     if (cap)
       cap->client_xattr_version = i->xattr_version;

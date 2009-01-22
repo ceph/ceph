@@ -419,12 +419,14 @@ private:
 
   // return remote pointer to to-be-journaled inode
   inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+			      map<string,bufferptr> *px=0) {
     return add_primary_dentry(add_dir(dn->get_dir(), false),
-			      dn, dirty, in, pi, pdft, psnapbl);
+			      dn, dirty, in, pi, pdft, psnapbl, px);
   }
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0) {
+			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+			      map<string,bufferptr> *px=0) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
@@ -443,7 +445,9 @@ private:
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
 					  dn->first, dn->last,
 					  dn->get_projected_version(), 
-					  in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
+					  in->inode, in->dirfragtree,
+					  px ? *px : in->xattrs,
+					  in->symlink, snapbl,
 					  dirty));
       if (pi) lump.get_dfull().front().inode = *pi;
       return &lump.get_dfull().front().inode;
@@ -451,7 +455,9 @@ private:
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
 					 dn->first, dn->last,
 					 dn->get_projected_version(),
-					 in->inode, in->dirfragtree, in->xattrs, in->symlink, snapbl,
+					 in->inode, in->dirfragtree,
+					 px ? *px : in->xattrs,
+					 in->symlink, snapbl,
 					 dirty));
       if (pi) lump.get_dfull().back().inode = *pi;
       return &lump.get_dfull().back().inode;
