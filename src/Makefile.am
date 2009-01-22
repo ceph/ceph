@@ -183,6 +183,7 @@ libcommon_a_SOURCES = \
 	common/assert.cc \
 	common/debug.cc \
 	common/WorkQueue.cc \
+	common/ConfUtils.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
@@ -274,6 +275,7 @@ noinst_HEADERS = \
 	common/BackTrace.h\
         common/Clock.h\
         common/Cond.h\
+        common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
         common/LogType.h\

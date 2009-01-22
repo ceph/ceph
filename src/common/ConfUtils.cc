@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include <map>
 #include <list>
@@ -25,7 +26,7 @@ struct ltstr
 static const char *_def_delim=" \t\n\r";
 static const char *_eq_delim="= \t\n\r";
 static const char *_eol_delim="\n\r";
-static const char *_pr_delim="[] \t\n\r";
+/* static const char *_pr_delim="[] \t\n\r"; */
 
 
 static int is_delim(char c, const char *delim)
@@ -41,10 +42,8 @@ static int is_delim(char c, const char *delim)
 
 char *get_next_tok(char *str, const char *delim, int alloc, char **p)
 {
-	char *tok;
 	int i=0;
 	char *out;
-	int is_str = 0;
 
 	while (*str && is_delim(*str, delim)) {
 		str++;
@@ -82,7 +81,6 @@ char *get_next_tok(char *str, const char *delim, int alloc, char **p)
 
 char *get_next_delim(char *str, const char *delim, int alloc, char **p)
 {
-	char *tok;
 	int i=0;
 	char *out;
 
@@ -105,7 +103,6 @@ char *get_next_delim(char *str, const char *delim, int alloc, char **p)
 
 static int _parse_section(char *str, ConfLine *parsed)
 {
-	char *open, *close;
 	char *name = NULL;
 	char *p;
 	int ret = 0;
@@ -147,7 +144,6 @@ static int _parse_section(char *str, ConfLine *parsed)
 	if (*line)	
 		parsed->set_section(line);
 
-out:
 	return ret;
 }
 
@@ -155,8 +151,6 @@ int parse_line(char *line, ConfLine *parsed)
 {
 	char *dup=strdup(line);
 	char *p = NULL;
-	char *tok;
-	int i;
 	char *eq;
 	int ret = 0;
 
@@ -203,7 +197,7 @@ out:
 
 static int _str_cat(char *str1, int max, char *str2)
 {
-	int len;
+	int len = 0;
 
 	if (max)
 		len = snprintf(str1, max, "%s", str2);
@@ -299,6 +293,9 @@ ConfFile::~ConfFile()
 
 		delete sec;
 	}
+
+	if (fd >= 0)
+		close(fd);
 }
 
 int ConfLine::output(char *line, int max_len)
@@ -324,7 +321,7 @@ int ConfLine::output(char *line, int max_len)
 }
 
 
-void ConfFile::dump()
+void ConfFile::_dump(int fd)
 {
 	SectionList::iterator sec_iter, sec_end;
 	 ConfLine *cl;
@@ -334,8 +331,6 @@ void ConfFile::dump()
 	
 
 	sec_end=sections_list.end();
-
-	printf("------ config starts here ------\n");
 
 	for (sec_iter=sections_list.begin(); sec_iter != sec_end; ++sec_iter) {
 		ConfList::iterator iter, end;
@@ -352,10 +347,21 @@ void ConfFile::dump()
 			if (cl) {
 				line[0] = '\0';
 				cl->output(line, MAX_LINE);
-				printf("%s\n", line);
+				::write(fd, line, strlen(line));
+				::write(fd, "\n", 1);
 			}
 		}
 	}
+}
+
+void ConfFile::dump()
+{
+	SectionList::iterator sec_iter, sec_end;
+
+	sec_end=sections_list.end();
+
+	printf("------ config starts here ------\n");
+	_dump(STDOUT_FILENO);
 	printf("------  config ends here  ------\n");
 }
 
@@ -413,6 +419,34 @@ int ConfFile::parse()
 	return 1;
 }
 
+int ConfFile::flush()
+{
+	int rc;
+
+	if (fd < 0) {
+		fd = open(filename, O_RDWR | O_CREAT);
+
+		if (fd < 0) {
+			printf("error opening file %s errno=%d\n", filename, errno);
+			return 0;
+		}
+	} else {
+		rc = lseek(fd, 0, SEEK_SET);
+		if (rc < 0) {
+			printf("error seeking file %s errno = %d\n", filename, errno);
+			return 0;
+		}
+	}
+
+	_dump(fd);
+	rc = fsync(fd);
+
+	if (rc < 0)
+		return 0;
+
+	return 1;
+}
+
 ConfLine *ConfFile::_find_var(const char *section, const char* var)
 {
 	SectionMap::iterator iter = sections.find(section);
@@ -453,7 +487,6 @@ ConfLine *ConfFile::_add_var(const char *section, const char* var)
 		memset(cl, 0, sizeof(ConfLine));
 		snprintf(buf, sizeof(buf), "[%s]", section);
 		cl->set_prefix(buf);
-		cl->set_mid(" = ");
 		sec->conf_list.push_back(cl);
 	} else {
 		sec = iter->second;
@@ -477,6 +510,7 @@ static void _conf_copy(T *dst_val, T def_val)
 	*dst_val = def_val;
 }
 
+template<char *>
 static void _conf_copy(char **dst_val, char *def_val)
 {
 	*dst_val = strdup(def_val);
@@ -507,7 +541,7 @@ static void _conf_decode(char **dst_val, char *str_val)
 
 	if (*str_val == '"') {
 		str_val++;
-		for (len-1; len > 0; len--) {
+		for (len = len-1; len > 0; len--) {
 			if (str_val[len] == '"')
 				break;
 		}
@@ -529,7 +563,7 @@ static void _conf_encode(char *dst_str, int len, int val)
 
 static void _conf_encode(char *dst_str, int len, float val)
 {
-	snprintf(dst_str, len, "%f", val);
+	snprintf(dst_str, len, "%g", val);
 }
 
 static void _conf_encode(char *dst_str, int len, bool val)
@@ -537,11 +571,11 @@ static void _conf_encode(char *dst_str, int len, bool val)
 	snprintf(dst_str, len, "%s", (val ? "true" : "false"));
 }
 
-static void _conf_encode(char *dst_str, int len, char *val)
+static void _conf_encode(char *dst_str, int max_len, char *val)
 {
 	int have_delim = 0;
 	int i;
-	len = strlen(val);
+	int len = strlen(val);
 
 	for (i=0; i<len; i++) {
 		if (is_delim(val[i], _def_delim)) {
@@ -551,9 +585,9 @@ static void _conf_encode(char *dst_str, int len, char *val)
 	}
 
 	if (have_delim)
-		snprintf(dst_str, len, """%s""", val);
+		snprintf(dst_str, max_len, "\"%s\"", val);
 	else
-		snprintf(dst_str, len, "%s", val);
+		snprintf(dst_str, max_len, "%s", val);
 
 	return;
 }
@@ -572,6 +606,10 @@ int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 	return 1;
 notfound:
 	_conf_copy<T>(val, def_val);
+
+	if (auto_update)
+		_write<T>(section, var, def_val);
+
 	return 0;
 }
 
@@ -601,9 +639,9 @@ int ConfFile::read(const char *section, const char *var, bool *val, bool def_val
 	return _read<bool>(section, var, val, def_val);
 }
 
-int ConfFile::read(const char *section, const char *var, char **val, char *def_val)
+int ConfFile::read(const char *section, const char *var, char **val, const char *def_val)
 {
-	return _read<char *>(section, var, val, def_val);
+	return _read<char *>(section, var, val, (char *)def_val);
 }
 
 int ConfFile::read(const char *section, const char *var, float *val, float def_val)
@@ -631,7 +669,7 @@ int ConfFile::write(const char *section, const char *var, char *val)
 {
 	return _write<char *>(section, var, val);
 }
-
+#if 0
 void parse_test(char *line)
 {
 	ConfLine cl;
@@ -645,21 +683,39 @@ void parse_test(char *line)
 	printf("val: '%s'\n", cl.get_val());
 	printf("suf: '%s'\n", cl.get_suffix());
 	printf("section: '%s'\n", cl.get_section());
-
 }
 
 int main(int argc, char *argv[])
 {
 	ConfFile cf(argv[1]);
 	int val;
+	char *str_val;
+	float fval;
+	bool bval;
 	cf.parse();
 	cf.dump();
+
+	cf.set_auto_update(true);
+
 	cf.read("core", "repositoryformatversion", &val, 12);
-	cf.write("core", "lola", 15);
-	cf.write("zore", "lola", 15);
+	cf.read("foo", "lala1", &val, 10);
+	cf.read("foo", "lala2", &val, 11);
+	cf.read("foo", "lala3", &val, 12);
+	cf.read("foo2", "lala4", &val, 13);
+	cf.read("foo", "lala5", &val, 14);
+	cf.read("foo", "lala6", &fval, 14.2);
+	cf.read("foo", "lala7", &bval, false);
+
+	cf.read("foo", "str", &str_val, "hello world2");
+
+	printf("read str=%s\n", str_val);
+	printf("read bool=%d\n", bval);
+	printf("read float=%f\n", fval);
 	cf.dump();
+	cf.flush();
 
 	printf("read val=%d\n", val);
 
 	return 0;
 }
+#endif

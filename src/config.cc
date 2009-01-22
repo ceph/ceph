@@ -203,6 +203,8 @@ md_config_t g_conf = {
 
   dout_dir: "out",    // if daemonize == true
   dout_sym_dir: "out",    // if daemonize == true
+
+  conf_file: "ceph.conf",
   
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -599,31 +601,35 @@ void sighup_handler(int signum)
 }
 
 
-void parse_config_file(char *fname)
+#define CF_READ(section, var, inout) \
+  cf.read(section, var, &g_conf.inout, g_conf.inout)
+
+#define CF_READ_STR(section, var, inout) \
+  cf.read(section, var, (char **)&g_conf.inout, (char *)g_conf.inout)
+
+void parse_config_file(const char *fname)
 {
   ConfFile cf(fname);
 
+  cf.set_auto_update(true);
+
   cf.parse();
 
-#define CF_READ(section, type, field, inout) \
-  cf.read_##type((char *)section, (char *)#field, &inout, inout)
+  CF_READ("global", "num_mon", num_mon);
+  CF_READ("global", "num_mds", num_mds);
+  CF_READ("global", "num_osd", num_osd);
+  CF_READ("global", "mkfs", mkfs);
+  CF_READ("global", "daemonize", daemonize);
+  CF_READ_STR("global", "file_logs", file_logs);
+  CF_READ("global", "log", log);
+  CF_READ("global", "log_interval", log_interval);
+  CF_READ_STR("global", "str_alloc", log_name);
+  CF_READ("global", "log_messages", log_messages);
+  CF_READ("global", "log_pins", log_pins);
+  CF_READ_STR("global", "dout_dir", dout_dir);
+  CF_READ_STR("global", "dout_sym_dir", dout_sym_dir);
 
-#define CF_READ_STR(section, type, field, inout) \
-  cf.read_##type((char *)section, (char *)#field, (char **)&inout, (char *)inout)
-
-  CF_READ("global", int, num_mon, g_conf.num_mon);
-  CF_READ("global", int, num_mon, g_conf.num_mds);
-  CF_READ("global", int, num_mon, g_conf.num_osd);
-  CF_READ("global", bool, mkfs, g_conf.mkfs);
-  CF_READ("global", bool, daemonize, g_conf.daemonize);
-  CF_READ("global", bool, file_logs, g_conf.file_logs);
-  CF_READ("global", bool, log, g_conf.log);
-  CF_READ("global", int, log_interval, g_conf.log_interval);
-  CF_READ_STR("global", str_alloc, log_name, g_conf.log_name);
-  CF_READ("global", bool, log_messages, g_conf.log_messages);
-  CF_READ("global", bool, log_pins, g_conf.log_pins);
-  CF_READ_STR("global", str_alloc, dout_dir, g_conf.dout_dir);
-  CF_READ_STR("global", str_alloc, dout_sym_dir, g_conf.dout_sym_dir);
+  cf.flush();
 }
 
 void parse_config_options(std::vector<const char*>& args, bool open)
@@ -705,6 +711,8 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if (//strcmp(args[i], "-o") == 0 ||
 	     strcmp(args[i], "--dout_sym_dir") == 0) 
       g_conf.dout_sym_dir = args[++i];
+    else if (strcmp(args[i], "--conf_file") == 0) 
+      g_conf.conf_file = args[++i];
 
     else if (strcmp(args[i], "--lockdep") == 0)
       g_lockdep = atoi(args[++i]);
@@ -1186,6 +1194,8 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       nargs.push_back(args[i]);
     }
   }
+
+  parse_config_file(g_conf.conf_file);
 
   // open log file?
   if (open)

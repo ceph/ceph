@@ -61,6 +61,7 @@ typedef std::list<ConfSection *> SectionList;
 class ConfFile {
 	int fd;
 	char *filename;
+	bool auto_update;
 
 	SectionMap sections;
 	SectionList sections_list;
@@ -70,19 +71,20 @@ class ConfFile {
 	ConfLine *_add_var(const char *section, const char* var);
 
 	template<typename T>
-	int _read(const char *section, const char *var, T *val, T def_val);
+	int _read(const char *section, const char *var, T *val, const T def_val);
 
 	template<typename T>
-	int _write(const char *section, const char *var, T val);
+	int _write(const char *section, const char *var, const T val);
+
+	void _dump(int fd);
 public:
-	ConfFile(char *fname) : filename(strdup(fname)) {}
+	ConfFile(const char *fname) : fd(-1), filename(strdup(fname)), auto_update(false) {}
 	~ConfFile();
 
 	int parse();
 	int read(const char *section, const char *var, int *val, int def_val);
 	int read(const char *section, const char *var, bool *val, bool def_val);
-/* 	int read(const char *section, const char *var, char *val, int size, char *def_val); */
-	int read(const char *section, const char *var, char **val, char *def_val); /* allocates new val */
+	int read(const char *section, const char *var, char **val, const char *def_val);
 	int read(const char *section, const char *var, float *val, float def_val);
 
 	int write(const char *section, const char *var, int val);
@@ -91,6 +93,8 @@ public:
 	int write(const char *section, const char *var, char *val);
 
 	void dump();
+	int flush();
+	void set_auto_update(bool update) { auto_update = update; }
 };
 
 #endif
