@@ -30,9 +30,6 @@ extern const char *get_pool_name(int pool);
 
 #include "common/Mutex.h"
 
-extern std::map<int,float> g_fake_osd_down;
-extern std::map<int,float> g_fake_osd_out;
-
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
@@ -69,11 +66,6 @@ struct md_config_t {
 
   bool fake_clock;
   bool fakemessenger_serialize;
-
-  int fake_osdmap_expand;
-  int fake_osdmap_updates;
-  int fake_osd_mttf;
-  int fake_osd_mttr;
 
   int osd_remount_at;
 

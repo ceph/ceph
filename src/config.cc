@@ -172,8 +172,6 @@ const char *get_pool_name(int pool)
 
 // fake osd failures: osd -> time
 std::map<entity_name_t,float> g_fake_kill_after;
-std::map<int,float> g_fake_osd_down;
-std::map<int,float> g_fake_osd_out;
 
 entity_addr_t g_my_addr;
 
@@ -206,11 +204,6 @@ md_config_t g_conf = {
   
   fake_clock: false,
   fakemessenger_serialize: true,
-
-  fake_osdmap_expand: 0,
-  fake_osdmap_updates: 0,
-  fake_osd_mttf: 0,
-  fake_osd_mttr: 0,
 
   osd_remount_at: 0,
 
@@ -652,15 +645,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if (strcmp(args[i], "--mkfs") == 0) 
       g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
 
-    else if (strcmp(args[i], "--fake_osdmap_expand") == 0) 
-      g_conf.fake_osdmap_expand = atoi(args[++i]);
-    else if (strcmp(args[i], "--fake_osdmap_updates") == 0) 
-      g_conf.fake_osdmap_updates = atoi(args[++i]);
-    else if (strcmp(args[i], "--fake_osd_mttf") == 0) 
-      g_conf.fake_osd_mttf = atoi(args[++i]);
-    else if (strcmp(args[i], "--fake_osd_mttr") == 0) 
-      g_conf.fake_osd_mttr = atoi(args[++i]);
-
     else if (strcmp(args[i], "--fake_kill_osd_after") == 0) {
       g_fake_kill_after[entity_name_t(entity_name_t::TYPE_OSD, atoi(args[i+1]))] = atof(args[i+2]); 
       i += 2;
@@ -678,16 +662,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       i += 2;
     }
 
-    else if (strcmp(args[i], "--fake_osd_down") == 0) {
-      int osd = atoi(args[++i]);
-      float when = atof(args[++i]);
-      g_fake_osd_down[osd] = when;
-    }
-    else if (strcmp(args[i], "--fake_osd_out") == 0) {
-      int osd = atoi(args[++i]);
-      float when = atof(args[++i]);
-      g_fake_osd_out[osd] = when;
-    }
     else if (strcmp(args[i], "--osd_remount_at") == 0) 
       g_conf.osd_remount_at = atoi(args[++i]);
     //else if (strcmp(args[i], "--fake_osd_sync") == 0) 
