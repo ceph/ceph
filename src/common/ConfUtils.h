@@ -34,20 +34,29 @@ class ConfFile {
 	SectionList sections_list;
 	ConfList global_list;
 
-	struct conf_line *_find_var(char *section, char* var);
-	struct conf_line *_add_var(char *section, char* var);
+	struct conf_line *_find_var(const char *section, const char* var);
+	struct conf_line *_add_var(const char *section, const char* var);
+
+	template<typename T>
+	int _read(const char *section, const char *var, T *val, T def_val);
+
+	template<typename T>
+	int _write(const char *section, const char *var, T val);
 public:
 	ConfFile(char *fname) : filename(strdup(fname)) {}
 	~ConfFile() { free(filename); }
 
 	int parse();
-	int read_int(char *section, char *var, int *val, int def_val);
-	int read_bool(char *section, char *var, bool *val, bool def_val);
-	int read_str(char *section, char *var, char *val, int size, char *def_val);
-	int read_str_alloc(char *section, char *var, char **val, char *def_val);
-	int read_float(char *section, char *var, float *val, float def_val);
+	int read(const char *section, const char *var, int *val, int def_val);
+	int read(const char *section, const char *var, bool *val, bool def_val);
+/* 	int read(const char *section, const char *var, char *val, int size, char *def_val); */
+	int read(const char *section, const char *var, char **val, char *def_val); /* allocates new val */
+	int read(const char *section, const char *var, float *val, float def_val);
 
-	int write_int(char *section, char *var, int val);
+	int write(const char *section, const char *var, int val);
+	int write(const char *section, const char *var, bool val);
+	int write(const char *section, const char *var, float val);
+	int write(const char *section, const char *var, char *val);
 
 	void dump();
 };
