@@ -620,10 +620,10 @@ void parse_config_file(const char *fname)
   CF_READ("global", "num_osd", num_osd);
   CF_READ("global", "mkfs", mkfs);
   CF_READ("global", "daemonize", daemonize);
-  CF_READ_STR("global", "file_logs", file_logs);
+  CF_READ("global", "file_logs", file_logs);
   CF_READ("global", "log", log);
   CF_READ("global", "log_interval", log_interval);
-  CF_READ_STR("global", "str_alloc", log_name);
+  CF_READ_STR("global", "log_name", log_name);
   CF_READ("global", "log_messages", log_messages);
   CF_READ("global", "log_pins", log_pins);
   CF_READ_STR("global", "dout_dir", dout_dir);

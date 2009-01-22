@@ -131,8 +131,6 @@ static int _parse_section(char *str, ConfLine *parsed)
 			free(name);
 		name = get_next_tok(p, _def_delim, 1, &p);
 
-		printf("name='%s' line='%s'\n", name, line);
-
 		if (*name) {
 			if (*line)
 				snprintf(line, MAX_LINE, "%s %s", line, name);
@@ -365,10 +363,35 @@ void ConfFile::dump()
 	printf("------  config ends here  ------\n");
 }
 
+ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
+{
+	ConfSection *sec;
+#define BUF_SIZE 4096
+	char *buf;
+
+	buf = (char *)malloc(BUF_SIZE);
+
+	sec = new ConfSection(section);
+	sections[section] = sec;
+	sections_list.push_back(sec);
+
+	if (!cl) {
+		cl = new ConfLine();
+		snprintf(buf, BUF_SIZE, "[%s]", section);
+		cl->set_prefix(buf);
+	}
+	sec->conf_list.push_back(cl);
+
+	free(buf);
+
+	return sec;
+}
+
+
 int ConfFile::parse()
 {
 	char *buf;
-	int len, i, l, map_index;
+	int len, i, l;
 	char line[MAX_LINE];
 	ConfLine *cl;
 	ConfSection *section;
@@ -376,13 +399,11 @@ int ConfFile::parse()
 	section = new ConfSection("global");
 	sections["global"] = section;
 	sections_list.push_back(section);
-#define BUF_SIZE 4096
 	fd = open(filename, O_RDWR);
 	if (fd < 0)
 		return 0;
 
 	l = 0;
-	map_index = 0;
 
 	buf = (char *)malloc(BUF_SIZE);
 	do {
@@ -398,16 +419,11 @@ int ConfFile::parse()
 				parse_line(line, cl);
 				if (cl->get_var()) {
 					section->conf_map[cl->get_var()] = cl;
-					printf("cl->var <---- '%s'\n", cl->get_var());
+					global_list.push_back(cl);
+					section->conf_list.push_back(cl);
 				} else if (cl->get_section()) {
-					printf("cur_map <---- '%s'\n", cl->get_section());
-					map_index = 0;
-					section = new ConfSection(cl->get_section());
-					sections[cl->get_section()] = section;
-					sections_list.push_back(section);
+					section = _add_section(cl->get_section(), cl);
 				}
-				global_list.push_back(cl);
-				section->conf_list.push_back(cl);
 				l = 0;
 				break;
 			default:
@@ -415,6 +431,8 @@ int ConfFile::parse()
 			}
 		}
 	} while (len);
+
+	free(buf);
 
 	return 1;
 }
@@ -424,7 +442,7 @@ int ConfFile::flush()
 	int rc;
 
 	if (fd < 0) {
-		fd = open(filename, O_RDWR | O_CREAT);
+		fd = open(filename, O_RDWR | O_CREAT, 0644);
 
 		if (fd < 0) {
 			printf("error opening file %s errno=%d\n", filename, errno);
@@ -476,18 +494,9 @@ ConfLine *ConfFile::_add_var(const char *section, const char* var)
 	ConfSection *sec;
 	ConfMap::iterator cm_iter;
 	ConfLine *cl;
-	char buf[128];
 
 	if (iter == sections.end() ) {
-		sec = new ConfSection(section);
-		sections[section] = sec;
-		sections_list.push_back(sec);
-
-		cl = (ConfLine *)malloc(sizeof(ConfLine));
-		memset(cl, 0, sizeof(ConfLine));
-		snprintf(buf, sizeof(buf), "[%s]", section);
-		cl->set_prefix(buf);
-		sec->conf_list.push_back(cl);
+		sec = _add_section(section, NULL);
 	} else {
 		sec = iter->second;
 	}
@@ -549,33 +558,47 @@ static void _conf_decode(char **dst_val, char *str_val)
 
 	*dst_val = (char *)malloc(len + 1);
 	strncpy(*dst_val, str_val, len);
+	(*dst_val)[len] = '\0';
 }
 
-static void _conf_decode(float *dst_val, char *str_val)
+static int _conf_decode(float *dst_val, char *str_val)
 {
 	*dst_val = atof(str_val);
+
+	return 1;
 }
 
-static void _conf_encode(char *dst_str, int len, int val)
+static int _conf_encode(char *dst_str, int len, int val)
 {
 	snprintf(dst_str, len, "%d", val);
+
+	return 1;
 }
 
-static void _conf_encode(char *dst_str, int len, float val)
+static int _conf_encode(char *dst_str, int len, float val)
 {
 	snprintf(dst_str, len, "%g", val);
+
+	return 1;
 }
 
-static void _conf_encode(char *dst_str, int len, bool val)
+static int _conf_encode(char *dst_str, int len, bool val)
 {
 	snprintf(dst_str, len, "%s", (val ? "true" : "false"));
+
+	return 1;
 }
 
-static void _conf_encode(char *dst_str, int max_len, char *val)
+static int _conf_encode(char *dst_str, int max_len, char *val)
 {
 	int have_delim = 0;
 	int i;
-	int len = strlen(val);
+	int len;
+
+	if (!val)
+		return 0;
+
+	len = strlen(val);
 
 	for (i=0; i<len; i++) {
 		if (is_delim(val[i], _def_delim)) {
@@ -589,7 +612,7 @@ static void _conf_encode(char *dst_str, int max_len, char *val)
 	else
 		snprintf(dst_str, max_len, "%s", val);
 
-	return;
+	return 1;
 }
 
 template<typename T>
@@ -619,11 +642,13 @@ int ConfFile::_write(const char *section, const char *var, T val)
 	ConfLine *cl;
 	char line[MAX_LINE];
 
+	if (!_conf_encode(line, MAX_LINE, val))
+		return 0;
+
 	cl = _find_var(section, var);
 	if (!cl)
 		cl = _add_var(section, var);
 
-	_conf_encode(line, MAX_LINE, val);
 	cl->set_val(line);
 	
 	return 1;

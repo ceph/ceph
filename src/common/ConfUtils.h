@@ -76,6 +76,7 @@ class ConfFile {
 	template<typename T>
 	int _write(const char *section, const char *var, const T val);
 
+	ConfSection *_add_section(const char *section, ConfLine *cl);
 	void _dump(int fd);
 public:
 	ConfFile(const char *fname) : fd(-1), filename(strdup(fname)), auto_update(false) {}
