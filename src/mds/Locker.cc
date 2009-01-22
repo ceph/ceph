@@ -1501,11 +1501,11 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  _finish_release_cap(in, client, releasecap, ack);
 	else if (ack)
 	  mds->send_message_client(ack, client);
-	
-	eval_cap_gather(in);
-	if (in->filelock.is_stable())
-	  file_eval(&in->filelock);
       }
+	
+      eval_cap_gather(in);
+      if (in->filelock.is_stable())
+	file_eval(&in->filelock);
     }
 
     // done?
