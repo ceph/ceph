@@ -845,7 +845,7 @@ void parse_config_file(const char *fname, bool dump_conf)
 #endif
 
   if (dump_conf)
-    cf.flush();
+    cf.dump();
 }
 
 void parse_config_options(std::vector<const char*>& args, bool open)

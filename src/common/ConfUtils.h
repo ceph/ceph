@@ -14,11 +14,12 @@ class ConfLine {
 	char *val;
 	char *suffix;
 	char *section;
+	char *norm_var;
 
 	void _set(char **dst, const char *val);
 public:
 	ConfLine() : prefix(NULL), var(NULL), mid(NULL), val(NULL),
-		   suffix(NULL), section(NULL) {}
+		   suffix(NULL), section(NULL), norm_var(NULL) {}
 	~ConfLine();
 
 	void set_prefix(const char *val);
@@ -34,6 +35,7 @@ public:
 	char *get_val() { return val; }
 	char *get_suffix() { return suffix; }
 	char *get_section() { return section; }
+	char *get_norm_var();
 
 	int output(char *line, int max_len);
 };
@@ -59,7 +61,6 @@ typedef std::map<std::string, ConfSection *> SectionMap;
 typedef std::list<ConfSection *> SectionList;
 
 class ConfFile {
-	int fd;
 	char *filename;
 	bool auto_update;
 
@@ -78,8 +79,9 @@ class ConfFile {
 
 	ConfSection *_add_section(const char *section, ConfLine *cl);
 	void _dump(int fd);
+	int _parse(char *filename, ConfSection **psection);
 public:
-	ConfFile(const char *fname) : fd(-1), filename(strdup(fname)), auto_update(false) {}
+	ConfFile(const char *fname) : filename(strdup(fname)), auto_update(false) {}
 	~ConfFile();
 
 	int parse();

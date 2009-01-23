@@ -100,9 +100,13 @@ static char *get_next_name(char *str, int alloc, char **p)
 			i++;
 		}
 
+		i--;
+
 		while (str[i] && is_delim(str[i], _def_delim)) {
 			i--;
 		}
+
+		i++;
 	}
 
 	if (alloc) {
@@ -118,7 +122,7 @@ static char *get_next_name(char *str, int alloc, char **p)
 
 	return out;
 }
-
+#if 0
 static char *str_trim(char *str)
 {
 	char *head = str;
@@ -142,15 +146,19 @@ static char *str_trim(char *str)
 done:
 	return head;
 }
+#endif
 
 /*
  * normalizes a var name, removes extra spaces; e.g., 'foo  bar' -> 'foo bar'
  */
-static char *normalize_name(char *name)
+static char *normalize_name(const char *name)
 {
 	char *newname, *p;
 	int i, len;
 	int last_delim = 0, had_delim = 0, had_non_delim = 0;
+
+	if (!name)
+		return NULL;
 
 	len = strlen(name);
 	newname = (char *)malloc(len + 1);
@@ -175,6 +183,7 @@ static char *normalize_name(char *name)
 
 		last_delim = now_delim;
 	}
+	*p = '\0';
 
 	return newname;
 }
@@ -253,7 +262,6 @@ int parse_line(char *line, ConfLine *parsed)
 	char *p = NULL;
 	char *eq;
 	int ret = 0;
-	char *var_name;
 
 	memset(parsed, 0, sizeof(ConfLine));
 
@@ -272,7 +280,7 @@ int parse_line(char *line, ConfLine *parsed)
 			return _parse_section(p, parsed);
 	}
 
-	parsed->set_var(get_next_tok(p, _def_delim, 1, &p));
+	parsed->set_var(get_next_name(p, 1, &p));
 	if (!*p)
 		goto out;
 
@@ -343,6 +351,11 @@ void ConfLine::set_prefix(const char *val)
 void ConfLine::set_var(const char *val)
 {
 	_set(&var, val);
+
+	if (norm_var) {
+		free(norm_var);
+		norm_var = NULL;
+	}
 }
 
 void ConfLine::set_mid(const char *val)
@@ -364,6 +377,15 @@ void ConfLine::set_section(const char *val)
 {
 	_set(&section, val);
 }
+
+char *ConfLine::get_norm_var()
+{
+	if (!norm_var)
+		norm_var = normalize_name(var);
+
+	return norm_var;
+}
+
 
 ConfLine::~ConfLine()
 {
@@ -395,9 +417,6 @@ ConfFile::~ConfFile()
 
 		delete sec;
 	}
-
-	if (fd >= 0)
-		close(fd);
 }
 
 int ConfLine::output(char *line, int max_len)
@@ -492,17 +511,15 @@ ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
 }
 
 
-int ConfFile::parse()
+int ConfFile::_parse(char *filename, ConfSection **psection)
 {
 	char *buf;
 	int len, i, l;
 	char line[MAX_LINE];
 	ConfLine *cl;
-	ConfSection *section;
+	ConfSection *section = *psection;
+	int fd;
 
-	section = new ConfSection("global");
-	sections["global"] = section;
-	sections_list.push_back(section);
 	fd = open(filename, O_RDWR);
 	if (fd < 0)
 		return 0;
@@ -522,9 +539,15 @@ int ConfFile::parse()
 				cl = new ConfLine();
 				parse_line(line, cl);
 				if (cl->get_var()) {
-					section->conf_map[cl->get_var()] = cl;
-					global_list.push_back(cl);
-					section->conf_list.push_back(cl);
+					if (strcmp(cl->get_var(), "include") == 0) {
+						if (!_parse(cl->get_val(), &section)) {
+							printf("error parsing %s\n", cl->get_val());
+						}
+					} else {
+						section->conf_map[cl->get_norm_var()] = cl;
+						global_list.push_back(cl);
+						section->conf_list.push_back(cl);
+					}
 				} else if (cl->get_section()) {
 					section = _add_section(cl->get_section(), cl);
 				}
@@ -538,30 +561,36 @@ int ConfFile::parse()
 
 	free(buf);
 
+	*psection = section;
+
 	return 1;
+}
+
+int ConfFile::parse()
+{
+	ConfSection *section;
+
+	section = new ConfSection("global");
+	sections["global"] = section;
+	sections_list.push_back(section);
+
+	return _parse(filename, &section);
 }
 
 int ConfFile::flush()
 {
 	int rc;
+	int fd;
+
+	fd = open(filename, O_RDWR | O_CREAT, 0644);
 
 	if (fd < 0) {
-		fd = open(filename, O_RDWR | O_CREAT, 0644);
-
-		if (fd < 0) {
-			printf("error opening file %s errno=%d\n", filename, errno);
-			return 0;
-		}
-	} else {
-		rc = lseek(fd, 0, SEEK_SET);
-		if (rc < 0) {
-			printf("error seeking file %s errno = %d\n", filename, errno);
-			return 0;
-		}
+		printf("error opening file %s errno=%d\n", filename, errno);
+		return 0;
 	}
 
 	_dump(fd);
-	rc = fsync(fd);
+	rc = close(fd);
 
 	if (rc < 0)
 		return 0;
@@ -575,12 +604,16 @@ ConfLine *ConfFile::_find_var(const char *section, const char* var)
 	ConfSection *sec;
 	ConfMap::iterator cm_iter;
 	ConfLine *cl;
+	char *norm_var;
 
 	if (iter == sections.end() )
 		goto notfound;
 
 	sec = iter->second;
-	cm_iter = sec->conf_map.find(var);
+	norm_var = normalize_name(var);
+
+	cm_iter = sec->conf_map.find(norm_var);
+	free(norm_var);
 
 	if (cm_iter == sec->conf_map.end())
 		goto notfound;
@@ -914,7 +947,7 @@ int main(int argc, char *argv[])
 	char *s;
 
 
-	s = "  hello    world   =   kaka  ";
+	s = "  hello    world=   kaka  ";
 
 	printf("s'%s'\n", s);
 	s = get_next_name(s, 1, NULL);
@@ -938,6 +971,7 @@ int main(int argc, char *argv[])
 	cf.read("foo", "lala7", &bval, false);
 
 	cf.read("foo", "str", &str_val, "hello world2");
+	cf.read("foo", "  two  words   are  good  ", &str_val, "hello world5");
 
 	printf("read str=%s\n", str_val);
 	printf("read bool=%d\n", bval);
