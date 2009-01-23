@@ -1489,7 +1489,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 		  << " < last_sent " << cap->get_last_sent() << " on " << *in << dendl;
 	}
       }
-      if (wanted != cap->wanted()) {
+      if (ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) == 0 &&
+	  wanted != cap->wanted()) {
 	dout(10) << " wanted " << ccap_string(cap->wanted())
 		 << " -> " << ccap_string(wanted) << dendl;
 	cap->set_wanted(wanted);
