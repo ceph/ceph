@@ -3229,6 +3229,11 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   pi->ctime = mdr->now;
 
   if (dnl->is_primary()) {
+    // primary link.  add stray dentry.
+    assert(straydn);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
+    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+
     // project snaprealm, too
     bufferlist snapbl;
     if (!dnl->get_inode()->snaprealm) {
@@ -3238,14 +3243,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     } else
       dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->snaprealm, snapbl);
 
-    // primary link.  add stray dentry.
-    assert(straydn);
-
-    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, -1);
-    mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), straydn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-
     straydn->first = dnl->get_inode()->first;
-
     le->metablob.add_primary_dentry(straydn, true, dnl->get_inode(), pi, 0, &snapbl);
   } else {
     // remote link.  update remote inode.
@@ -4003,6 +4001,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 	destdnl->get_inode()->close_snaprealm(true);  // or a matching join
       } else
 	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->snaprealm, snapbl);
+      straydn->first = destdnl->get_inode()->first;
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), tpi, 0, &snapbl);
     } else if (destdnl->is_remote()) {
       metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
