@@ -84,13 +84,21 @@ public:
 
 	int parse();
 	int read(const char *section, const char *var, int *val, int def_val);
+	int read(const char *section, const char *var, unsigned int *val, unsigned int def_val);
+	int read(const char *section, const char *var, long long *val, long long def_val);
+	int read(const char *section, const char *var, unsigned long long *val, unsigned long long def_val);
 	int read(const char *section, const char *var, bool *val, bool def_val);
 	int read(const char *section, const char *var, char **val, const char *def_val);
 	int read(const char *section, const char *var, float *val, float def_val);
+	int read(const char *section, const char *var, double *val, double def_val);
 
 	int write(const char *section, const char *var, int val);
+	int write(const char *section, const char *var, unsigned int val);
+	int write(const char *section, const char *var, long long val);
+	int write(const char *section, const char *var, unsigned long long val);
 	int write(const char *section, const char *var, bool val);
 	int write(const char *section, const char *var, float val);
+	int write(const char *section, const char *var, double val);
 	int write(const char *section, const char *var, char *val);
 
 	void dump();

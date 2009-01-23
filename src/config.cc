@@ -604,6 +604,9 @@ void sighup_handler(int signum)
 #define CF_READ(section, var, inout) \
   cf.read(section, var, &g_conf.inout, g_conf.inout)
 
+#define CF_READ_TYPE(section, var, type, inout) \
+  cf.read(section, var, (type *)&g_conf.inout, (type)g_conf.inout)
+
 #define CF_READ_STR(section, var, inout) \
   cf.read(section, var, (char **)&g_conf.inout, (char *)g_conf.inout)
 
@@ -628,6 +631,217 @@ void parse_config_file(const char *fname)
   CF_READ("global", "log_pins", log_pins);
   CF_READ_STR("global", "dout_dir", dout_dir);
   CF_READ_STR("global", "dout_sym_dir", dout_sym_dir);
+
+  CF_READ("debug", "debug", debug);
+  CF_READ("debug", "debug_lockdep", debug_lockdep);
+  CF_READ("debug", "debug_mds", debug_mds);
+  CF_READ("debug", "debug_mds_balancer", debug_mds_balancer);
+  CF_READ("debug", "debug_mds_log_expire", debug_mds_log_expire);
+  CF_READ("debug", "debug_buffer", debug_buffer);
+  CF_READ("debug", "debug_filer", debug_filer);
+  CF_READ("debug", "debug_journaler", debug_journaler);
+  CF_READ("debug", "debug_client", debug_client);
+  CF_READ("debug", "debug_ebofs", debug_ebofs);
+  CF_READ("debug", "debug_journal", debug_journal);
+  CF_READ("debug", "debug_ns", debug_ns);
+  CF_READ("debug", "debug_mon", debug_mon);
+  CF_READ("debug", "debug_tp", debug_tp);
+  CF_READ("debug", "use_abspaths", use_abspaths);
+
+  CF_READ("clock", "clock_lock", clock_lock);
+  CF_READ("clock", "clock_tare", clock_tare);
+
+  CF_READ("messenger", "ms_tcp_nodelay", ms_tcp_nodelay);
+  CF_READ("messenger", "ms_retry_interval", ms_retry_interval);
+  CF_READ("messenger", "ms_fail_interval", ms_fail_interval);
+  CF_READ("messenger", "ms_die_on_failure", ms_die_on_failure);
+  CF_READ("messenger", "ms_stripe_osds", ms_stripe_osds);
+  CF_READ("messenger", "ms_skip_rank0", ms_skip_rank0);
+  CF_READ("messenger", "ms_overlay_clients", ms_overlay_clients);
+
+  CF_READ("mon", "mon_tick_interval", mon_tick_interval);
+  CF_READ("mon", "mon_osd_down_out_interval", mon_osd_down_out_interval);
+  CF_READ("mon", "mon_lease", mon_lease);
+  CF_READ("mon", "mon_lease_renew_interval", mon_lease_renew_interval);
+  CF_READ("mon", "mon_lease_ack_timeout", mon_lease_ack_timeout);
+  CF_READ("mon", "mon_lease_timeout", mon_lease_timeout);
+  CF_READ("mon", "mon_accept_timeout", mon_accept_timeout);
+  CF_READ("mon", "mon_stop_on_last_unmount", mon_stop_on_last_unmount);
+  CF_READ("mon", "mon_stop_with_last_mds", mon_stop_with_last_mds);
+  CF_READ("mon", "mon_allow_mds_bully", mon_allow_mds_bully);
+  CF_READ("mon", "mon_pg_create_interval", mon_pg_create_interval);
+
+  CF_READ("paxos", "paxos_propose_interval", paxos_propose_interval);
+  CF_READ("paxos", "paxos_observer_timeout", paxos_observer_timeout);
+
+  CF_READ("client", "client_cache_size", client_cache_size);
+  CF_READ("client", "client_cache_mid", client_cache_mid);
+  CF_READ("client", "client_cache_stat_ttl", client_cache_stat_ttl);
+  CF_READ("client", "client_cache_readdir_ttl", client_cache_readdir_ttl);
+  CF_READ("client", "client_use_random_mds", client_use_random_mds);
+  CF_READ("client", "client_mount_timeout", client_mount_timeout);
+  CF_READ("client", "client_tick_interval", client_tick_interval);
+  CF_READ("client", "client_hack_balance_reads", client_hack_balance_reads);
+  CF_READ_STR("client", "client_trace", client_trace);
+  CF_READ_TYPE("client", "client_readahead_min", long long, client_readahead_min);
+  CF_READ_TYPE("client", "client_readahead_max_bytes", long long, client_readahead_max_bytes);
+  CF_READ_TYPE("client", "client_readahead_max_periods", long long, client_readahead_max_periods);
+  CF_READ_STR("client", "client_snapdir", client_snapdir);
+
+  CF_READ("fuse", "fuse_direct_io", fuse_direct_io);
+  CF_READ("fuse", "fuse_ll", fuse_ll);
+
+  CF_READ("client_oc", "client_oc", client_oc);
+  CF_READ("client_oc", "client_oc_size", client_oc_size);
+  CF_READ("client_oc", "client_oc_max_dirty", client_oc_max_dirty);
+  CF_READ("client_oc", "client_oc_target_dirty", client_oc_target_dirty);
+  CF_READ_TYPE("client_oc", "client_oc_max_sync_write", unsigned long long, client_oc_max_sync_write);
+
+  CF_READ("objecter", "objecter_buffer_uncommitted", objecter_buffer_uncommitted);
+  CF_READ("objecter", "objecter_map_request_interval", objecter_map_request_interval);
+  CF_READ("objecter", "objecter_tick_interval", objecter_tick_interval);
+  CF_READ("objecter", "objecter_timeout", objecter_timeout);
+
+  CF_READ("journaler", "journaler_allow_split_entries", journaler_allow_split_entries);
+  CF_READ("journaler", "journaler_safe", journaler_safe);
+  CF_READ("journaler", "journaler_write_head_interval", journaler_write_head_interval);
+  CF_READ("journaler", "journaler_cache", journaler_cache);
+  CF_READ("journaler", "journaler_prefetch_periods", journaler_prefetch_periods);
+  CF_READ("journaler", "journaler_batch_interval", journaler_batch_interval);
+  CF_READ_TYPE("journaler", "journaler_batch_max", unsigned long long, journaler_batch_max);
+
+  CF_READ("mds", "mds_cache_size", mds_cache_size);
+  CF_READ("mds", "mds_cache_mid", mds_cache_mid);
+  CF_READ("mds", "mds_decay_halflife", mds_decay_halflife);
+  CF_READ("mds", "mds_beacon_interval", mds_beacon_interval);
+  CF_READ("mds", "mds_beacon_grace", mds_beacon_grace);
+  CF_READ("mds", "mds_blacklist_interval", mds_blacklist_interval);
+  CF_READ("mds", "mds_session_timeout", mds_session_timeout);
+  CF_READ("mds", "mds_session_autoclose", mds_session_autoclose);
+  CF_READ("mds", "mds_client_lease", mds_client_lease);
+  CF_READ("mds", "mds_reconnect_timeout", mds_reconnect_timeout);
+  CF_READ("mds", "mds_tick_interval", mds_tick_interval);
+  CF_READ("mds", "mds_scatter_nudge_interval", mds_scatter_nudge_interval);
+  CF_READ("mds", "mds_client_prealloc_inos", mds_client_prealloc_inos);
+  CF_READ("mds", "mds_early_reply", mds_early_reply);
+  CF_READ("mds", "mds_log", mds_log);
+  CF_READ("mds", "mds_log_max_events", mds_log_max_events);
+  CF_READ("mds", "mds_log_max_segments", mds_log_max_segments);
+  CF_READ("mds", "mds_log_max_expiring", mds_log_max_expiring);
+  CF_READ("mds", "mds_log_pad_entry", mds_log_pad_entry);
+  CF_READ("mds", "mds_log_eopen_size", mds_log_eopen_size);
+  CF_READ("mds", "mds_bal_sample_interval", mds_bal_sample_interval);
+  CF_READ("mds", "mds_bal_replicate_threshold", mds_bal_replicate_threshold);
+  CF_READ("mds", "mds_bal_unreplicate_threshold", mds_bal_unreplicate_threshold);
+  CF_READ("mds", "mds_bal_frag", mds_bal_frag);
+  CF_READ("mds", "mds_bal_split_size", mds_bal_split_size);
+  CF_READ("mds", "mds_bal_split_rd", mds_bal_split_rd);
+  CF_READ("mds", "mds_bal_split_wr", mds_bal_split_wr);
+  CF_READ("mds", "mds_bal_merge_size", mds_bal_merge_size);
+  CF_READ("mds", "mds_bal_merge_rd", mds_bal_merge_rd);
+  CF_READ("mds", "mds_bal_merge_wr", mds_bal_merge_wr);
+  CF_READ("mds", "mds_bal_interval", mds_bal_interval);
+  CF_READ("mds", "mds_bal_fragment_interval", mds_bal_fragment_interval);
+  CF_READ("mds", "mds_bal_idle_threshold", mds_bal_idle_threshold);
+  CF_READ("mds", "mds_bal_max", mds_bal_max);
+  CF_READ("mds", "mds_bal_max_until", mds_bal_max_until);
+  CF_READ("mds", "mds_bal_mode", mds_bal_mode);
+  CF_READ("mds", "mds_bal_min_rebalance", mds_bal_min_rebalance);
+  CF_READ("mds", "mds_bal_min_start", mds_bal_min_start);
+  CF_READ("mds", "mds_bal_need_min", mds_bal_need_min);
+  CF_READ("mds", "mds_bal_need_max", mds_bal_need_max);
+  CF_READ("mds", "mds_bal_midchunk", mds_bal_midchunk);
+  CF_READ("mds", "mds_bal_minchunk", mds_bal_minchunk);
+  CF_READ("mds", "mds_trim_on_rejoin", mds_trim_on_rejoin);
+  CF_READ("mds", "mds_shutdown_check", mds_shutdown_check);
+  CF_READ("mds", "mds_verify_export_dirauth", mds_verify_export_dirauth);
+  CF_READ("mds", "mds_local_osd", mds_local_osd);
+  CF_READ("mds", "mds_thrash_exports", mds_thrash_exports);
+  CF_READ("mds", "mds_thrash_fragments", mds_thrash_fragments);
+  CF_READ("mds", "mds_dump_cache_on_map", mds_dump_cache_on_map);
+  CF_READ("mds", "mds_dump_cache_after_rejoin", mds_dump_cache_after_rejoin);
+  CF_READ("mds", "mds_hack_log_expire_for_better_stats", mds_hack_log_expire_for_better_stats);
+
+  CF_READ("osd", "osd_rep", osd_rep);
+  CF_READ("osd", "osd_balance_reads", osd_balance_reads);
+  CF_READ("osd", "osd_flash_crowd_iat_threshold", osd_flash_crowd_iat_threshold);
+  CF_READ("osd", "osd_flash_crowd_iat_alpha", osd_flash_crowd_iat_alpha);
+  CF_READ("osd", "osd_balance_reads_temp", osd_balance_reads_temp);
+  CF_READ("osd", "osd_shed_reads", osd_shed_reads);
+  CF_READ("osd", "osd_shed_reads_min_latency", osd_shed_reads_min_latency);
+  CF_READ("osd", "osd_shed_reads_min_latency_diff", osd_shed_reads_min_latency_diff);
+  CF_READ("osd", "osd_shed_reads_min_latency_ratio", osd_shed_reads_min_latency_ratio);
+  CF_READ("osd", "osd_immediate_read_from_cache", osd_immediate_read_from_cache);
+  CF_READ("osd", "osd_exclusive_caching", osd_exclusive_caching);
+  CF_READ("osd", "osd_stat_refresh_interval", osd_stat_refresh_interval);
+  CF_READ("osd", "osd_min_pg_size_without_alive", osd_min_pg_size_without_alive);
+  CF_READ("osd", "osd_pg_bits", osd_pg_bits);
+  CF_READ("osd", "osd_lpg_bits", osd_lpg_bits);
+  CF_READ("osd", "osd_object_layout", osd_object_layout);
+  CF_READ("osd", "osd_pg_layout", osd_pg_layout);
+  CF_READ("osd", "osd_min_rep", osd_min_rep);
+  CF_READ("osd", "osd_max_rep", osd_max_rep);
+  CF_READ("osd", "osd_min_raid_width", osd_min_raid_width);
+  CF_READ("osd", "osd_max_raid_width", osd_max_raid_width);
+  CF_READ("osd", "osd_maxthreads", osd_maxthreads);
+  CF_READ("osd", "osd_max_opq", osd_max_opq);
+  CF_READ("osd", "osd_mkfs", osd_mkfs);
+  CF_READ("osd", "osd_age", osd_age);
+  CF_READ("osd", "osd_age_time", osd_age_time);
+  CF_READ("osd", "osd_heartbeat_interval", osd_heartbeat_interval);
+  CF_READ("osd", "osd_mon_heartbeat_interval", osd_mon_heartbeat_interval);
+  CF_READ("osd", "osd_heartbeat_grace", osd_heartbeat_grace);
+  CF_READ("osd", "osd_mon_report_interval", osd_mon_report_interval);
+  CF_READ("osd", "osd_replay_window", osd_replay_window);
+  CF_READ("osd", "osd_max_pull", osd_max_pull);
+  CF_READ("osd", "osd_preserve_trimmed_log", osd_preserve_trimmed_log);
+  CF_READ("osd", "osd_recovery_delay_start", osd_recovery_delay_start);
+  CF_READ("osd", "osd_recovery_max_active", osd_recovery_max_active);
+  CF_READ("osd", "osd_auto_weight", osd_auto_weight);
+
+  CF_READ("filestore", "filestore", filestore);
+  CF_READ("filestore", "filestore_sync_interval", filestore_sync_interval);
+  CF_READ("filestore", "filestore_fake_attrs", filestore_fake_attrs);
+  CF_READ("filestore", "filestore_fake_collections", filestore_fake_collections);
+  CF_READ_STR("filestore", "filestore_dev", filestore_dev);
+  CF_READ("filestore", "filestore_btrfs_trans", filestore_btrfs_trans);
+
+  CF_READ("ebofs", "ebofs", ebofs);
+  CF_READ("ebofs", "ebofs_cloneable", ebofs_cloneable);
+  CF_READ("ebofs", "ebofs_verify", ebofs_verify);
+  CF_READ("ebofs", "ebofs_commit_ms", ebofs_commit_ms);
+  CF_READ("ebofs", "ebofs_oc_size", ebofs_oc_size);
+  CF_READ("ebofs", "ebofs_cc_size", ebofs_cc_size);
+  CF_READ_TYPE("ebofs", "ebofs_bc_size", unsigned long long, ebofs_bc_size);
+  CF_READ_TYPE("ebofs", "ebofs_bc_max_dirty", unsigned long long, ebofs_bc_max_dirty);
+  CF_READ("ebofs", "ebofs_max_prefetch", ebofs_max_prefetch);
+  CF_READ("ebofs", "ebofs_realloc", ebofs_realloc);
+  CF_READ("ebofs", "ebofs_verify_csum_on_read", ebofs_verify_csum_on_read);
+
+  CF_READ("journal", "journal_dio", journal_dio);
+  CF_READ("journal", "journal_max_write_bytes", journal_max_write_bytes);
+  CF_READ("journal", "journal_max_write_entries", journal_max_write_entries);
+
+  CF_READ("bdev", "bdev_lock", bdev_lock);
+  CF_READ("bdev", "bdev_iothreads", bdev_iothreads);
+  CF_READ("bdev", "bdev_idle_kick_after_ms", bdev_idle_kick_after_ms);
+  CF_READ("bdev", "bdev_el_fw_max_ms", bdev_el_fw_max_ms);
+  CF_READ("bdev", "bdev_el_bw_max_ms", bdev_el_bw_max_ms);
+  CF_READ("bdev", "bdev_el_bidir", bdev_el_bidir);
+  CF_READ("bdev", "bdev_iov_max", bdev_iov_max);
+  CF_READ("bdev", "bdev_debug_check_io_overlap", bdev_debug_check_io_overlap);
+  CF_READ("bdev", "bdev_fake_mb", bdev_fake_mb);
+  CF_READ("bdev", "bdev_fake_max_mb", bdev_fake_max_mb);
+#ifdef USE_OSBDB
+  CF_READ("bdstore", "bdbstore", bdbstore);
+  CF_READ("bdstore", "bdstore_debug", debug_bdbstore);
+  CF_READ("bdstore", "bdbstore_btree", bdbstore_btree);
+  CF_READ("bdstore", "bdbstore_ffactor", bdbstore_ffactor);
+  CF_READ("bdstore", "bdbstore_nelem", bdbstore_nelem);
+  CF_READ("bdstore", "bdbstore_pagesize", bdbstore_pagesize);
+  CF_READ("bdstore", "bdbstore_cachesize", bdbstore_cachesize);
+  CF_READ("bdstore", "bdbstore_transactional", bdbstore_transactional);
+#endif
 
   cf.flush();
 }

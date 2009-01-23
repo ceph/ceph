@@ -531,6 +531,20 @@ static void _conf_decode(int *dst_val, char *str_val)
 	*dst_val = atoi(str_val);
 }
 
+static void _conf_decode(unsigned int *dst_val, char *str_val)
+{
+	*dst_val = strtoul(str_val, NULL, 0);
+}
+
+static void _conf_decode(unsigned long long *dst_val, char *str_val)
+{
+	*dst_val = strtoull(str_val, NULL, 0);
+}
+static void _conf_decode(long long *dst_val, char *str_val)
+{
+	*dst_val = strtoll(str_val, NULL, 0);
+}
+
 static void _conf_decode(bool *dst_val, char *str_val)
 {
 	if (strcasecmp(str_val, "true")==0) {
@@ -568,6 +582,13 @@ static int _conf_decode(float *dst_val, char *str_val)
 	return 1;
 }
 
+static int _conf_decode(double *dst_val, char *str_val)
+{
+	*dst_val = atof(str_val);
+
+	return 1;
+}
+
 static int _conf_encode(char *dst_str, int len, int val)
 {
 	snprintf(dst_str, len, "%d", val);
@@ -575,9 +596,37 @@ static int _conf_encode(char *dst_str, int len, int val)
 	return 1;
 }
 
+static int _conf_encode(char *dst_str, int len, unsigned int val)
+{
+	snprintf(dst_str, len, "%u", val);
+
+	return 1;
+}
+
+static int _conf_encode(char *dst_str, int len, long long val)
+{
+	snprintf(dst_str, len, "%lld", val);
+
+	return 1;
+}
+
+static int _conf_encode(char *dst_str, int len, unsigned long long val)
+{
+	snprintf(dst_str, len, "%llu", val);
+
+	return 1;
+}
+
 static int _conf_encode(char *dst_str, int len, float val)
 {
 	snprintf(dst_str, len, "%g", val);
+
+	return 1;
+}
+
+static int _conf_encode(char *dst_str, int len, double val)
+{
+	snprintf(dst_str, len, "%lg", val);
 
 	return 1;
 }
@@ -659,6 +708,23 @@ int ConfFile::read(const char *section, const char *var, int *val, int def_val)
 	return _read<int>(section, var, val, def_val);
 }
 
+int ConfFile::read(const char *section, const char *var, unsigned int *val, unsigned int def_val)
+{
+	return _read<unsigned int>(section, var, val, def_val);
+}
+
+int ConfFile::read(const char *section, const char *var, long long *val, 
+		   long long def_val)
+{
+	return _read<long long>(section, var, val, def_val);
+}
+
+int ConfFile::read(const char *section, const char *var, unsigned long long *val, 
+		   unsigned long long def_val)
+{
+	return _read<unsigned long long>(section, var, val, def_val);
+}
+
 int ConfFile::read(const char *section, const char *var, bool *val, bool def_val)
 {
 	return _read<bool>(section, var, val, def_val);
@@ -674,9 +740,29 @@ int ConfFile::read(const char *section, const char *var, float *val, float def_v
 	return _read<float>(section, var, val, def_val);
 }
 
+int ConfFile::read(const char *section, const char *var, double *val, double def_val)
+{
+	return _read<double>(section, var, val, def_val);
+}
+
 int ConfFile::write(const char *section, const char *var, int val)
 {
 	return _write<int>(section, var, val);
+}
+
+int ConfFile::write(const char *section, const char *var, unsigned int val)
+{
+	return _write<unsigned int>(section, var, val);
+}
+
+int ConfFile::write(const char *section, const char *var, long long val)
+{
+	return _write<long long>(section, var, val);
+}
+
+int ConfFile::write(const char *section, const char *var, unsigned long long val)
+{
+	return _write<unsigned long long>(section, var, val);
 }
 
 int ConfFile::write(const char *section, const char *var, bool val)
@@ -689,6 +775,10 @@ int ConfFile::write(const char *section, const char *var, float val)
 	return _write<float>(section, var, val);
 }
 
+int ConfFile::write(const char *section, const char *var, double val)
+{
+	return _write<double>(section, var, val);
+}
 
 int ConfFile::write(const char *section, const char *var, char *val)
 {
