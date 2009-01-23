@@ -205,6 +205,7 @@ md_config_t g_conf = {
   dout_sym_dir: "out",    // if daemonize == true
 
   conf_file: "ceph.conf",
+  dump_conf: false,
   
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -610,11 +611,11 @@ void sighup_handler(int signum)
 #define CF_READ_STR(section, var, inout) \
   cf.read(section, var, (char **)&g_conf.inout, (char *)g_conf.inout)
 
-void parse_config_file(const char *fname)
+void parse_config_file(const char *fname, bool dump_conf)
 {
   ConfFile cf(fname);
 
-  cf.set_auto_update(true);
+  cf.set_auto_update(dump_conf);
 
   cf.parse();
 
@@ -843,12 +844,22 @@ void parse_config_file(const char *fname)
   CF_READ("bdstore", "bdbstore_transactional", bdbstore_transactional);
 #endif
 
-  cf.flush();
+  if (dump_conf)
+    cf.flush();
 }
 
 void parse_config_options(std::vector<const char*>& args, bool open)
 {
   std::vector<const char*> nargs;
+
+  for (unsigned i=0; i<args.size(); i++) {
+    if (strcmp(args[i], "--conf_file") == 0) 
+      g_conf.conf_file = args[++i];
+    else if (strcmp(args[i], "--dump_conf") == 0) 
+      g_conf.dump_conf = true;
+  }
+
+  parse_config_file(g_conf.conf_file, g_conf.dump_conf);
 
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i],"--bind") == 0) 
@@ -1408,8 +1419,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       nargs.push_back(args[i]);
     }
   }
-
-  parse_config_file(g_conf.conf_file);
 
   // open log file?
   if (open)

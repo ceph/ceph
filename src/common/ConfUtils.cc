@@ -25,6 +25,7 @@ struct ltstr
 
 static const char *_def_delim=" \t\n\r";
 static const char *_eq_delim="= \t\n\r";
+static const char *_eq_nospace_delim="=\t\n\r";
 static const char *_eol_delim="\n\r";
 /* static const char *_pr_delim="[] \t\n\r"; */
 
@@ -40,7 +41,7 @@ static int is_delim(char c, const char *delim)
 	return 0;
 }
 
-char *get_next_tok(char *str, const char *delim, int alloc, char **p)
+static char *get_next_tok(char *str, const char *delim, int alloc, char **p)
 {
 	int i=0;
 	char *out;
@@ -77,9 +78,110 @@ char *get_next_tok(char *str, const char *delim, int alloc, char **p)
 	return out;
 }
 
+static char *get_next_name(char *str, int alloc, char **p)
+{
+	int i=0;
+	char *out;
+
+	while (*str && is_delim(*str, _def_delim)) {
+		str++;
+	}
+
+	if (*str == '"') {
+		while (str[i] && !is_delim(str[i], _eol_delim)) {
+			i++;
+			if (str[i] == '"') {
+				i++;
+				break;
+			}
+		}
+	} else {
+		while (str[i] && !is_delim(str[i], _eq_nospace_delim)) {
+			i++;
+		}
+
+		while (str[i] && is_delim(str[i], _def_delim)) {
+			i--;
+		}
+	}
+
+	if (alloc) {
+		out = (char *)malloc(i+1);
+		memcpy(out, str, i);
+		out[i] = '\0';
+	} else {
+		out = str;
+	}
+
+	if (p)
+		*p = &str[i];
+
+	return out;
+}
+
+static char *str_trim(char *str)
+{
+	char *head = str;
+	char *tail;
+
+	while (*head && is_delim(*head, _def_delim))
+		++head;
+
+	head = strdup(head);
+
+	if (!(*head))
+		goto done;
+
+	tail = &head[strlen(head)-1];
+
+	while (*tail && is_delim(*tail, _def_delim))
+		--tail;
+
+	*(tail + 1) = '\0';
+
+done:
+	return head;
+}
+
+/*
+ * normalizes a var name, removes extra spaces; e.g., 'foo  bar' -> 'foo bar'
+ */
+static char *normalize_name(char *name)
+{
+	char *newname, *p;
+	int i, len;
+	int last_delim = 0, had_delim = 0, had_non_delim = 0;
+
+	len = strlen(name);
+	newname = (char *)malloc(len + 1);
+
+	p = newname;
+
+	for (i=0; i < len; i++) {
+		int now_delim = is_delim(name[i], _def_delim);
+
+		if (!now_delim) {
+
+			if (had_delim && had_non_delim)
+				*p++ = ' ';
+
+			*p++ = name[i];
+
+			had_non_delim = 1;
+			had_delim = 0;
+		} else {
+			had_delim = 1;
+		}
+
+		last_delim = now_delim;
+	}
+
+	return newname;
+}
+
 #define MAX_LINE 256
 
-char *get_next_delim(char *str, const char *delim, int alloc, char **p)
+static char *get_next_delim(char *str, const char *delim, int alloc, char **p)
 {
 	int i=0;
 	char *out;
@@ -151,6 +253,7 @@ int parse_line(char *line, ConfLine *parsed)
 	char *p = NULL;
 	char *eq;
 	int ret = 0;
+	char *var_name;
 
 	memset(parsed, 0, sizeof(ConfLine));
 
@@ -160,6 +263,7 @@ int parse_line(char *line, ConfLine *parsed)
 		goto out;
 
 	switch (*p) {
+		case ';':
 		case '#':
 			parsed->set_suffix(p);
 			goto out;
@@ -807,8 +911,20 @@ int main(int argc, char *argv[])
 	char *str_val;
 	float fval;
 	bool bval;
+	char *s;
+
+
+	s = "  hello    world   =   kaka  ";
+
+	printf("s'%s'\n", s);
+	s = get_next_name(s, 1, NULL);
+
+	printf("str_trim='%s'\n", s);
+
 	cf.parse();
 	cf.dump();
+
+
 
 	cf.set_auto_update(true);
 

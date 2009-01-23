@@ -65,6 +65,7 @@ struct md_config_t {
   const char *dout_sym_dir;
 
   const char *conf_file;
+  bool dump_conf;
 
   bool fake_clock;
   bool fakemessenger_serialize;
