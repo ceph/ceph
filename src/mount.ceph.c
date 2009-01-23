@@ -66,10 +66,12 @@ char *mount_resolve_dest(char *orig_str)
 		char addr[16];
 
 		port_str = strchr(tok, ':');
-		*port_str = 0;
-		port_str++;
-		if (!*port_str)
-			port_str = NULL;
+		if (port_str) {
+			*port_str = 0;
+			port_str++;
+			if (!*port_str)
+				port_str = NULL;
+		}
 
 		ent = gethostbyname(tok);
 
