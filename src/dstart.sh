@@ -29,6 +29,8 @@ done
 
 ARGS="--dout_dir /data/`hostname`"
 
+MOUNTOPTIONS="-o notreelog,flushoncommit"
+
 if [ $debug -eq 0 ]; then
     CMON_ARGS="--debug_mon 10 --debug_ms 1"
     COSD_ARGS=""
@@ -123,10 +125,10 @@ do
 	   echo mkfs btrfs
 	   ssh root@cosd$host cd $HOME/ceph/src \; umount $devm \; \
 	       $HOME/src/btrfs-progs-unstable/mkfs.btrfs $dev \; \
-	       mount -t btrfs $dev $devm
+	       mount -t btrfs $MOUNTOPTIONS $dev $devm
        else
 	   echo mounting btrfs
-	   ssh root@cosd$host cd $HOME/ceph/src \; mount $dev $devm
+	   ssh root@cosd$host cd $HOME/ceph/src \; mount -t btrfs $MOUNTOPTIONS $dev $devm
        fi
    fi
 
