@@ -545,6 +545,9 @@ static int ceph_writepages_start(struct address_space *mapping,
 	struct ceph_osd_request *req = NULL;
 	int do_sync = atomic_read(&ci->i_want_sync_writeout);
 
+	if (ceph_caps_revoking(ci) & CEPH_CAP_FILE_WRBUFFER)
+		do_sync = 1;
+
 	client = ceph_inode_to_client(inode);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
 		dout(1, "writepage on forced umount\n");

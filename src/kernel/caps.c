@@ -277,6 +277,38 @@ retry:
 }
 
 /*
+ * Return true if cap has not timed out and belongs to the current
+ * generation of the MDS session.
+ */
+static int __cap_is_valid(struct ceph_cap *cap)
+{
+	unsigned long ttl;
+	u32 gen;
+
+	spin_lock(&cap->session->s_cap_lock);
+	gen = cap->session->s_cap_gen;
+	ttl = cap->session->s_cap_ttl;
+	spin_unlock(&cap->session->s_cap_lock);
+
+	if (cap->gen < gen || time_after_eq(jiffies, ttl)) {
+		dout(30, "__cap_is_valid %p cap %p issued %s "
+		     "but STALE (gen %u vs %u)\n", &cap->ci->vfs_inode,
+		     cap, ceph_cap_string(cap->issued), cap->gen, gen);
+		return 0;
+	}
+
+	if (time_after_eq(jiffies, cap->expires) &&
+	    (cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
+		dout(30, "__cap_is_valid %p cap %p issued %s "
+		     "but readonly and expired\n", &cap->ci->vfs_inode,
+		     cap, ceph_cap_string(cap->issued));
+		return 0;
+	}
+
+	return 1;
+}
+
+/*
  * Return set of valid cap bits issued to us.  Note that caps time
  * out, and may be invalidated in bulk if the client session times out
  * and session->s_cap_gen is bumped.
@@ -285,35 +317,14 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 {
 	int have = ci->i_snap_caps;
 	struct ceph_cap *cap;
-	u32 gen;
-	unsigned long ttl;
 	struct rb_node *p;
 
 	if (implemented)
 		*implemented = 0;
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
-
-		spin_lock(&cap->session->s_cap_lock);
-		gen = cap->session->s_cap_gen;
-		ttl = cap->session->s_cap_ttl;
-		spin_unlock(&cap->session->s_cap_lock);
-
-		if (cap->gen < gen || time_after_eq(jiffies, ttl)) {
-			dout(30, "__ceph_caps_issued %p cap %p issued %s "
-			     "but STALE (gen %u vs %u)\n", &ci->vfs_inode,
-			     cap, ceph_cap_string(cap->issued), cap->gen, gen);
+		if (!__cap_is_valid(cap))
 			continue;
-		}
-
-		if (time_after_eq(jiffies, cap->expires) &&
-		    (cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
-			dout(30, "__ceph_caps_issued %p cap %p issued %s "
-			     "but readonly and expired\n", &ci->vfs_inode,
-			     cap, ceph_cap_string(cap->issued));
-			continue;
-		}
-
 		dout(30, "__ceph_caps_issued %p cap %p issued %s\n",
 		     &ci->vfs_inode, cap, ceph_cap_string(cap->issued));
 		have |= cap->issued;
@@ -336,6 +347,8 @@ int __ceph_caps_dirty(struct ceph_inode_info *ci)
 
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
+		if (!__cap_is_valid(cap))
+			continue;
 		dout(30, "__ceph_caps_dirty %p cap %p flushing %s\n",
 		     inode, cap, ceph_cap_string(cap->flushing));
 		dirty |= cap->flushing;
@@ -343,6 +356,28 @@ int __ceph_caps_dirty(struct ceph_inode_info *ci)
 	dout(30, "__ceph_caps_dirty %p dirty %s\n", inode,
 	     ceph_cap_string(dirty));
 	return dirty;
+}
+
+/*
+ * Return mask of caps currently being revoked by an MDS.
+ */
+int ceph_caps_revoking(struct ceph_inode_info *ci)
+{
+	struct inode *inode = &ci->vfs_inode;
+	struct ceph_cap *cap;
+	struct rb_node *p;
+	int revoking = 0;
+
+	spin_lock(&inode->i_lock);
+	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+		cap = rb_entry(p, struct ceph_cap, ci_node);
+		if (__cap_is_valid(cap))
+			revoking |= cap->implemented & ~cap->issued;
+	}
+	spin_unlock(&inode->i_lock);
+	dout(30, "ceph_caps_revoking %p revoking %s\n", inode,
+	     ceph_cap_string(revoking));
+	return revoking;
 }
 
 /*

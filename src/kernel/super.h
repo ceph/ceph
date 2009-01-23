@@ -435,6 +435,7 @@ static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 }
 
 extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
+extern int ceph_caps_revoking(struct ceph_inode_info *ci);
 
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
