@@ -237,7 +237,7 @@ void Paxos::handle_last(MMonPaxos *last)
     collect_timeout_event = 0;
 
     collect(last->pn);
-  } else {
+  } else if (last->pn == accepted_pn) {
     // yes, they accepted our pn.  great.
     num_last++;
     dout(10) << " they accepted our pn, we now have " 
@@ -280,6 +280,9 @@ void Paxos::handle_last(MMonPaxos *last)
 	finish_contexts(waiting_for_writeable);
       }
     }
+  } else {
+    // no, this is an old message, discard
+    dout(10) << "old pn, ignoring" << dendl;
   }
 
   delete last;
