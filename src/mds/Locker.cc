@@ -1604,7 +1604,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
     if (change_max &&
 	!in->filelock.can_wrlock(client) &&
-	(dirty & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_EXCL)) == 0) {  // not already writing dirty file data
+	(cap->issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_EXCL)) == 0) {  // not already issued WR access
       dout(10) << " i want to change file_max, but lock won't allow it; will retry" << dendl;
       check_inode_max_size(in);  // this will fail, and schedule a waiter.
       change_max = false;
@@ -1702,7 +1702,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
 							   client, cap, ack, releasecap));
   // only flush immediately if the lock is unstable
-  if (!in->filelock.is_stable())
+  if (!in->filelock.is_stable() || change_max)
     mds->mdlog->flush();
 
   return true;
