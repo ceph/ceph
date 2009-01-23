@@ -3372,129 +3372,100 @@ void OSD::handle_op(MOSDOp *op)
     }
   }
 
-  if (!op->get_source().is_osd()) {
-    // REGULAR OP (non-replication)
+  // we don't need encoded payload anymore
+  op->clear_payload();
 
-    // note original source
-    op->clear_payload();    // and hose encoded payload (in case we forward)
-
-    // have pg?
-    if (!pg) {
-      dout(7) << "hit non-existent pg " 
-              << pgid 
-              << ", waiting" << dendl;
-      waiting_for_pg[pgid].push_back(op);
+  // have pg?
+  if (!pg) {
+    dout(7) << "hit non-existent pg " 
+	    << pgid 
+	    << ", waiting" << dendl;
+    waiting_for_pg[pgid].push_back(op);
+    return;
+  }
+  
+  // pg must be same-ish...
+  if (!op->is_modify()) {
+    // read
+    if (!pg->same_for_read_since(op->get_map_epoch())) {
+      dout(7) << "handle_rep_op pg changed " << pg->info.history
+	      << " after " << op->get_map_epoch() 
+	      << ", dropping" << dendl;
+      assert(op->get_map_epoch() < osdmap->get_epoch());
+      pg->unlock();
+      delete op;
       return;
     }
-
-    // pg must be same-ish...
-    if (!op->is_modify()) {
-      // read
-      if (!pg->same_for_read_since(op->get_map_epoch())) {
-	dout(7) << "handle_rep_op pg changed " << pg->info.history
-		<< " after " << op->get_map_epoch() 
-		<< ", dropping" << dendl;
-	assert(op->get_map_epoch() < osdmap->get_epoch());
-	pg->unlock();
-	delete op;
-	return;
-      }
-      
-      if (op->get_oid().snap > 0) {
-	// snap read.  hrm.
-	// are we missing a revision that we might need?
-	// let's get them all.
-	for (unsigned i=0; i<op->get_snaps().size(); i++) {
-	  object_t oid = op->get_oid();
-	  oid.snap = op->get_snaps()[i];
-	  if (pg->is_missing_object(oid)) {
-	    dout(10) << "handle_op _may_ need missing rev " << oid << ", pulling" << dendl;
-	    pg->wait_for_missing_object(op->get_oid(), op);
-	    pg->unlock();
-	    return;
-	  }
+    
+    if (op->get_oid().snap > 0) {
+      // snap read.  hrm.
+      // are we missing a revision that we might need?
+      // let's get them all.
+      for (unsigned i=0; i<op->get_snaps().size(); i++) {
+	object_t oid = op->get_oid();
+	oid.snap = op->get_snaps()[i];
+	if (pg->is_missing_object(oid)) {
+	  dout(10) << "handle_op _may_ need missing rev " << oid << ", pulling" << dendl;
+	  pg->wait_for_missing_object(op->get_oid(), op);
+	  pg->unlock();
+	  return;
 	}
-      }
-
-    } else {
-      // modify
-      if ((!pg->is_primary() ||
-	   !pg->same_for_modify_since(op->get_map_epoch()))) {
-	dout(7) << "handle_op pg changed " << pg->info.history
-		<< " after " << op->get_map_epoch() 
-		<< ", dropping" << dendl;
-	assert(op->get_map_epoch() < osdmap->get_epoch());
-	pg->unlock();
-	delete op;
-	return;
-      }
-
-      // scrubbing?
-      if (pg->is_scrubbing()) {
-	dout(10) << *pg << " is scrubbing, deferring op " << *op << dendl;
-	pg->waiting_for_active.push_back(op);
-	pg->unlock();
-	return;
       }
     }
     
-    // pg must be active.
-    if (!pg->is_active()) {
-      // replay?
-      if (op->get_version().version > 0) {
-        if (op->get_version() > pg->info.last_update) {
-          dout(7) << *pg << " queueing replay at " << op->get_version()
-                  << " for " << *op << dendl;
-          pg->replay_queue[op->get_version()] = op;
-	  pg->unlock();
-          return;
-        } else {
-          dout(7) << *pg << " replay at " << op->get_version() << " <= " << pg->info.last_update 
-                  << " for " << *op
-                  << ", will queue for WRNOOP" << dendl;
-        }
-      }
-      
-      dout(7) << *pg << " not active (yet)" << dendl;
+  } else {
+    // modify
+    if ((!pg->is_primary() ||
+	 !pg->same_for_modify_since(op->get_map_epoch()))) {
+      dout(7) << "handle_op pg changed " << pg->info.history
+	      << " after " << op->get_map_epoch() 
+	      << ", dropping" << dendl;
+      assert(op->get_map_epoch() < osdmap->get_epoch());
+      pg->unlock();
+      delete op;
+      return;
+    }
+    
+    // scrubbing?
+    if (pg->is_scrubbing()) {
+      dout(10) << *pg << " is scrubbing, deferring op " << *op << dendl;
       pg->waiting_for_active.push_back(op);
       pg->unlock();
       return;
     }
-    
-    // missing object?
-    if (pg->is_missing_object(op->get_oid())) {
-      pg->wait_for_missing_object(op->get_oid(), op);
-      pg->unlock();
-      return;
-    }
-
-    dout(10) << "handle_op " << *op << " in " << *pg << dendl;
-
-  } else {
-    // REPLICATION OP (it's from another OSD)
-
-    // have pg?
-    if (!pg) {
-      derr(-7) << "handle_rep_op " << *op 
-               << " pgid " << pgid << " dne" << dendl;
-      delete op;
-      //assert(0); // wtf, shouldn't happen.
-      return;
-    }
-    
-    // check osd map: same set, or primary+acker?
-    if (!pg->same_for_rep_modify_since(op->get_map_epoch())) {
-      dout(10) << "handle_rep_op pg changed " << pg->info.history
-               << " after " << op->get_map_epoch() 
-               << ", dropping" << dendl;
-      pg->unlock();
-      delete op;
-      return;
-    }
-
-    assert(pg->get_role() >= 0);
-    dout(7) << "handle_rep_op " << op << " in " << *pg << dendl;
   }
+  
+  // pg must be active.
+  if (!pg->is_active()) {
+    // replay?
+    if (op->get_version().version > 0) {
+      if (op->get_version() > pg->info.last_update) {
+	dout(7) << *pg << " queueing replay at " << op->get_version()
+		<< " for " << *op << dendl;
+	pg->replay_queue[op->get_version()] = op;
+	pg->unlock();
+	return;
+      } else {
+	dout(7) << *pg << " replay at " << op->get_version() << " <= " << pg->info.last_update 
+		<< " for " << *op
+		<< ", will queue for WRNOOP" << dendl;
+      }
+    }
+    
+    dout(7) << *pg << " not active (yet)" << dendl;
+    pg->waiting_for_active.push_back(op);
+    pg->unlock();
+    return;
+  }
+  
+  // missing object?
+  if (pg->is_missing_object(op->get_oid())) {
+    pg->wait_for_missing_object(op->get_oid(), op);
+    pg->unlock();
+    return;
+  }
+  
+  dout(10) << "handle_op " << *op << " in " << *pg << dendl;
 
   // proprocess op? 
   if (pg->preprocess_op(op, now)) {
@@ -3554,6 +3525,18 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   } 
 
   PG *pg = _lookup_lock_pg(pgid);
+
+  // same pg?
+  //  if pg changes _at all_, we reset and repeer!
+  if (op->map_epoch < pg->info.history.same_since) {
+    dout(10) << "handle_sub_op pg changed " << pg->info.history
+	     << " after " << op->map_epoch 
+	     << ", dropping" << dendl;
+    pg->unlock();
+    delete op;
+    return;
+  }
+
   if (g_conf.osd_maxthreads < 1) {
     pg->do_sub_op(op);    // do it now
   } else {

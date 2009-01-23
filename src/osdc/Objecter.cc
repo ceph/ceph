@@ -215,25 +215,6 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
     
     other.swap(pg.acting);
 
-    if (g_conf.osd_rep == OSD_REP_PRIMARY) {
-      // same primary?
-      if (!other.empty() &&
-          !pg.acting.empty() &&
-          other[0] == pg.acting[0]) 
-        continue;
-    }
-    else if (g_conf.osd_rep == OSD_REP_SPLAY) {
-      // same primary and acker?
-      if (!other.empty() &&
-          !pg.acting.empty() &&
-          other[0] == pg.acting[0] &&
-          other[other.size() > 1 ? 1:0] == pg.acting[pg.acting.size() > 1 ? 1:0]) 
-        continue;
-    }
-    else if (g_conf.osd_rep == OSD_REP_CHAIN) {
-      // any change is significant.
-    }
-    
     // changed significantly.
     dout(10) << "scan_pgs pg " << pgid 
              << " (" << pg.active_tids << ")"

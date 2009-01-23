@@ -1764,17 +1764,8 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 	   << dendl;  
 
   // sanity checks
-  if (op->map_epoch < info.history.same_primary_since) {
-    dout(10) << "sub_op_modify discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
-    delete op;
-    return;
-  }
-  if (!is_active()) {
-    dout(10) << "sub_op_modify not active" << dendl;
-    delete op;
-    return;
-  }
+  assert(op->map_epoch >= info.history.same_primary_since);
+  assert(is_active());
   assert(is_replica());
   
   // note peer's stat
@@ -2246,16 +2237,8 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
           << " from " << op->get_source()
           << dendl;
 
-  if (op->map_epoch < info.history.same_primary_since) {
-    dout(10) << "sub_op_pull discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
-    delete op;
-    return;
-  }
-
   assert(!is_primary());  // we should be a replica or stray.
 
-  // push it back!
   push(poid, op->get_source().num(), op->data_subset, op->clone_subsets);
   delete op;
 }
@@ -2281,24 +2264,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   interval_set<__u64> data_subset;
   map<pobject_t, interval_set<__u64> > clone_subsets;
-
-  if (!is_primary()) {
-    // non-primary should only accept pushes from the current primary.
-    if (op->map_epoch < info.history.same_primary_since) {
-      dout(10) << "sub_op_push discarding old sub_op from "
-	       << op->map_epoch << " < " << info.history.same_primary_since << dendl;
-      delete op;
-      return;
-    }
-    // FIXME: actually, no, what i really want here is a personal "same_role_since"
-    if (!is_active()) {
-      dout(10) << "sub_op_push not active" << dendl;
-      delete op;
-      return;
-    }
-  } else {
-    // primary will accept pushes anytime.
-  }
 
   // are we missing (this specific version)?
   //  (if version is wrong, it is either old (we don't want it) or 
@@ -2498,31 +2463,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
 void ReplicatedPG::on_osd_failure(int o)
 {
-  dout(10) << "on_osd_failure " << o << dendl;
-
-  // artificially ack failed osds
-  xlist<RepGather*>::iterator p = repop_queue.begin();
-  while (!p.end()) {
-    RepGather *repop = *p;
-    ++p;
-    dout(-1) << " artificialling acking repop tid " << repop->rep_tid << dendl;
-    if (repop->waitfor_ack.count(o) ||
-	repop->waitfor_nvram.count(o) ||
-	repop->waitfor_disk.count(o))
-      repop_ack(repop, -EIO, CEPH_OSD_OP_ONDISK, o);
-  }
-  
-  // remove from pushing map
-  {
-    map<object_t, pair<eversion_t,int> >::iterator p = pulling.begin();
-    while (p != pulling.end())
-      if (p->second.second == o) {
-	dout(10) << " forgetting pull of " << p->first << " " << p->second.first
-		 << " from osd" << o << dendl;
-	pulling.erase(p++);
-      } else
-	p++;
-  }
+  //dout(10) << "on_osd_failure " << o << dendl;
 }
 
 void ReplicatedPG::on_shutdown()
@@ -2548,47 +2489,20 @@ void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
 
-  // apply all local repops
-  //  (pg is inactive; we will repeer)
-  for (xlist<RepGather*>::iterator p = repop_queue.begin();
-       !p.end(); ++p)
-    if (!(*p)->applied)
-      apply_repop(*p);
-
-  xlist<RepGather*>::iterator p = repop_queue.begin(); 
-  while (!p.end()) {
-    RepGather *repop = *p;
-    ++p;
-
-    if (!is_primary()) {
-      // no longer primary.  hose repops.
-      dout(-1) << " aborting repop tid " << repop->rep_tid << dendl;
-      repop->aborted = true;
-      repop->queue_item.remove_myself();
-      repop_map.erase(repop->rep_tid);
-      repop->put();
-    } else {
-      // still primary. artificially ack+commit any replicas who dropped out of the pg
-      dout(-1) << " checking for dropped osds on repop tid " << repop->rep_tid << dendl;
-      set<int> all;
-      set_union(repop->waitfor_disk.begin(), repop->waitfor_disk.end(),
-		repop->waitfor_ack.begin(), repop->waitfor_ack.end(),
-		inserter(all, all.begin()));
-      for (set<int>::iterator q = all.begin(); q != all.end(); q++) {
-	if (*q == osd->get_nodeid())
-	  continue;
-	bool have = false;
-	for (unsigned i=1; i<acting.size(); i++)
-	  if (acting[i] == *q) 
-	    have = true;
-	if (!have)
-	  repop_ack(repop, -EIO, CEPH_OSD_OP_ONDISK, *q);
-      }
-    }
+  // apply all repops
+  while (!repop_queue.empty()) {
+    RepGather *repop = repop_queue.front();
+    repop_queue.pop_front();
+    dout(10) << " applying repop tid " << repop->rep_tid << dendl;
+    if (!repop->applied)
+      apply_repop(repop);
+    repop->aborted = true;
+    repop->put();
   }
   
-  // clear pushing map
+  // clear pushing/pulling maps
   pushing.clear();
+  pulling.clear();
 }
 
 void ReplicatedPG::on_role_change()
