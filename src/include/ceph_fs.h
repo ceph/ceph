@@ -1254,6 +1254,10 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 	case CEPH_OSD_OP_SCRUB: return "scrub";
 
+	case CEPH_OSD_OP_GREP: return "grep";
+	case CEPH_OSD_OP_APPEND: return "append";
+	case CEPH_OSD_OP_STARTSYNC: return "startsync";
+
 	default: return "???";
 	}
 }

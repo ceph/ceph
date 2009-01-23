@@ -89,13 +89,14 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
  * build osd request message only.
  */
 static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, short opc,
-					struct ceph_snap_context *snapc)
+					struct ceph_snap_context *snapc,
+					int do_sync)
 {
 	struct ceph_msg *req;
 	struct ceph_osd_request_head *head;
 	struct ceph_osd_op *op;
 	__le64 *snaps;
-	size_t size = sizeof(*head) + sizeof(*op);
+	size_t size = sizeof(*head) + (1 + do_sync)*sizeof(*op);
 	int i;
 
 	if (snapc)
@@ -111,8 +112,13 @@ static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, short opc,
 	/* encode head */
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = 0;
-	head->num_ops = cpu_to_le16(1);
+	head->num_ops = cpu_to_le16(1 + do_sync);
 	op->op = cpu_to_le16(opc);
+
+	if (do_sync) {
+		op++;
+		op->op = cpu_to_le16(CEPH_OSD_OP_STARTSYNC);
+	}
 
 	if (snapc) {
 		head->snap_seq = cpu_to_le64(snapc->seq);
@@ -131,7 +137,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 					       struct ceph_file_layout *layout,
 					       struct ceph_vino vino,
 					       u64 off, u64 *plen, int op,
-					       struct ceph_snap_context *snapc)
+					       struct ceph_snap_context *snapc,
+					       int do_sync)
 {
 	struct ceph_osd_request *req;
 	struct ceph_msg *msg;
@@ -143,7 +150,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	msg = new_request_msg(osdc, op, snapc);
+	msg = new_request_msg(osdc, op, snapc, do_sync);
 	if (IS_ERR(msg)) {
 		kfree(req);
 		return ERR_PTR(PTR_ERR(msg));
@@ -804,7 +811,7 @@ int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
 
 more:
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, NULL);
+				    CEPH_OSD_OP_READ, NULL, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -876,7 +883,7 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	dout(10, "readpage on ino %llx.%llx at %lld~%lld\n", vino.ino,
 	     vino.snap, off, len);
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, NULL);
+				    CEPH_OSD_OP_READ, NULL, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	BUG_ON(len != PAGE_CACHE_SIZE);
@@ -920,7 +927,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 
 	/* alloc request, w/ optimistically-sized page vector */
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, NULL);
+				    CEPH_OSD_OP_READ, NULL, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -986,7 +993,7 @@ int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
 
 more:
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_WRITE, snapc);
+				    CEPH_OSD_OP_WRITE, snapc, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqm = req->r_request;
@@ -1068,7 +1075,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	BUG_ON(vino.snap != CEPH_NOSNAP);
 
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_WRITE, snapc);
+				    CEPH_OSD_OP_WRITE, snapc, 0);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	reqm = req->r_request;

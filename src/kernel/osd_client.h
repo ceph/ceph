@@ -96,7 +96,8 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_file_layout *layout,
 				      struct ceph_vino vino,
 				      u64 offset, u64 *len, int op,
-				      struct ceph_snap_context *snapc);
+				      struct ceph_snap_context *snapc,
+				      int do_sync);
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
 extern int ceph_osdc_readpage(struct ceph_osd_client *osdc,

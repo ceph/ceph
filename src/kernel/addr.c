@@ -543,6 +543,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
 	struct ceph_osd_request *req = NULL;
+	int do_sync = atomic_read(&ci->i_want_sync_writeout);
 
 	client = ceph_inode_to_client(inode);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
@@ -700,7 +701,8 @@ get_more_pages:
 							    ceph_vino(inode),
 							    offset, &len,
 							    CEPH_OSD_OP_WRITE,
-							    snapc);
+							    snapc,
+							    do_sync);
 				max_pages = req->r_num_pages;
 				pages = req->r_pages;
 				req->r_callback = writepages_finish;

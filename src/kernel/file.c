@@ -370,6 +370,7 @@ static ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	loff_t endoff = pos + iov->iov_len;
 	int got = 0;
 	int ret;
+	int do_sync = (file->f_flags & O_SYNC) || IS_SYNC(inode);
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -396,12 +397,16 @@ retry_snap:
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
 			&iocb->ki_pos);
 	} else {
+		if (do_sync)
+			atomic_inc(&ci->i_want_sync_writeout);
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 
 		if (ret >= 0 &&
 	    	    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)) {
 			ret = sync_page_range(inode, mapping, pos, ret);
 		}
+		if (do_sync)
+			atomic_dec(&ci->i_want_sync_writeout);
 	}
 	if (ret >= 0)
 		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;

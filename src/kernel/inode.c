@@ -260,19 +260,23 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_caps = RB_ROOT;
 	ci->i_dirty_caps = 0;
-	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
-		ci->i_nr_by_mode[i] = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
-	INIT_LIST_HEAD(&ci->i_cap_snaps);
-	ci->i_snap_caps = 0;
-	ci->i_head_snapc = NULL;
-
-	ci->i_wanted_max_size = 0;
-	ci->i_requested_max_size = 0;
-
+	ci->i_hold_caps_until = 0;
+	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 	ci->i_cap_exporting_mds = 0;
 	ci->i_cap_exporting_mseq = 0;
 	ci->i_cap_exporting_issued = 0;
+	INIT_LIST_HEAD(&ci->i_cap_snaps);
+	ci->i_head_snapc = NULL;
+	ci->i_snap_caps = 0;
+
+	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
+		ci->i_nr_by_mode[i] = 0;
+
+	ci->i_max_size = 0;
+	ci->i_reported_size = 0;
+	ci->i_wanted_max_size = 0;
+	ci->i_requested_max_size = 0;
 
 	ci->i_rd_ref = 0;
 	ci->i_rdcache_ref = 0;
@@ -281,8 +285,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_wrbuffer_ref_head = 0;
 	ci->i_rdcache_gen = 0;
 	ci->i_rdcache_revoking = 0;
-	ci->i_hold_caps_until = 0;
-	INIT_LIST_HEAD(&ci->i_cap_delay_list);
+	atomic_set(&ci->i_want_sync_writeout, 0);
 
 	ci->i_snap_realm = NULL;
 	INIT_LIST_HEAD(&ci->i_snap_realm_item);
