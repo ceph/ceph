@@ -272,11 +272,15 @@ static int map_osds(struct ceph_osd_client *osdc,
 		if (ceph_osd_is_up(osdc->osdmap, osds[i]))
 			osds[j++] = osds[i];
 	num = j;
+	dout(20, "map_osds req %p maps to %d osds\n", req, num);
 
 	/* same? */
 	if (num == req->r_pg_num_osds &&
-	    memcpy(osds, req->r_pg_osds, sizeof(osds[0]) * num) == 0)
+	    memcmp(osds, req->r_pg_osds, sizeof(osds[0]) * num) == 0)
 		return 0;
+
+	memcpy(req->r_pg_osds, osds, sizeof(osds[0]) * num);
+	req->r_pg_num_osds = num;
 	return 1;
 }
 
