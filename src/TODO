@@ -49,7 +49,6 @@ kernel client
 - flock, fnctl locks
 - avoid pinning inodes with expireable caps?
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
-- include 'sync' in op when cap revocation is waiting on writeback
 - make osd retry writes if failure after ack..
 - ACLs
 - reconnect path should include pathbase, not just a string?
