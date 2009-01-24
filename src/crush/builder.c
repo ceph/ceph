@@ -211,8 +211,8 @@ crush_make_list_bucket(int type, int size,
 		bucket->item_weights[i] = weights[i];
 		w += weights[i];
 		bucket->sum_weights[i] = w;
-		printf("pos %d item %d weight %d sum %d\n",
-		       i, items[i], weights[i], bucket->sum_weights[i]);
+		/*printf("pos %d item %d weight %d sum %d\n",
+		  i, items[i], weights[i], bucket->sum_weights[i]);*/
 	}
 
 	bucket->h.weight = w;
