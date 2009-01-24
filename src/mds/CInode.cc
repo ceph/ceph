@@ -1404,6 +1404,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.size = i->size;
   e.max_size = i->max_size;
   e.truncate_seq = i->truncate_seq;
+  e.truncate_size = i->truncate_size;
   i->mtime.encode_timeval(&e.mtime);
   i->atime.encode_timeval(&e.atime);
   e.time_warp_seq = i->time_warp_seq;
@@ -1536,6 +1537,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->head.size = i->size;
   m->head.max_size = i->max_size;
   m->head.truncate_seq = i->truncate_seq;
+  m->head.truncate_size = i->truncate_size;
   i->mtime.encode_timeval(&m->head.mtime);
   i->atime.encode_timeval(&m->head.atime);
   m->head.time_warp_seq = i->time_warp_seq;

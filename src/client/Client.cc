@@ -323,7 +323,8 @@ void Client::trim_cache()
 
 
 void Client::update_inode_file_bits(Inode *in,
-				    __u64 truncate_seq, __u64 size,
+				    __u64 truncate_seq, __u64 truncate_size,
+				    __u64 size,
 				    __u64 time_warp_seq, utime_t ctime,
 				    utime_t mtime,
 				    utime_t atime,
@@ -336,6 +337,7 @@ void Client::update_inode_file_bits(Inode *in,
     dout(10) << "size " << in->inode.size << " -> " << size << dendl;
     in->inode.size = size;
     in->reported_size = size;
+    in->inode.truncate_size = truncate_size;
   }
 
   // be careful with size, mtime, atime
@@ -427,7 +429,7 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
     in->inode.ctime = st->ctime;
     in->inode.max_size = st->max_size;  // right?
 
-    update_inode_file_bits(in, st->truncate_seq, st->size,
+    update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
 			   in->caps_issued());
   }
@@ -1492,6 +1494,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   m->head.size = in->inode.size;
   m->head.max_size = in->inode.max_size;
   m->head.truncate_seq = in->inode.truncate_seq;
+  m->head.truncate_size = in->inode.truncate_size;
   in->inode.mtime.encode_timeval(&m->head.mtime);
   in->inode.atime.encode_timeval(&m->head.atime);
   in->inode.ctime.encode_timeval(&m->head.ctime);
@@ -2249,7 +2252,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     ::decode(in->xattrs, p);
     in->inode.xattr_version = m->head.xattr_version;
   }
-  update_inode_file_bits(in, m->get_truncate_seq(), m->get_size(),
+  update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
 			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps);
 
   // max_size

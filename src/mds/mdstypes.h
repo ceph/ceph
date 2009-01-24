@@ -295,6 +295,7 @@ struct inode_t {
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
   uint32_t   truncate_seq;
+  uint64_t   truncate_size;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
@@ -329,6 +330,7 @@ struct inode_t {
     ::encode(size, bl);
     ::encode(max_size, bl);
     ::encode(truncate_seq, bl);
+    ::encode(truncate_size, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
     ::encode(time_warp_seq, bl);
@@ -357,6 +359,7 @@ struct inode_t {
     ::decode(size, p);
     ::decode(max_size, p);
     ::decode(truncate_seq, p);
+    ::decode(truncate_size, p);
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);

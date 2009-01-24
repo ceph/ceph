@@ -871,7 +871,7 @@ protected:
 
   Inode* insert_trace(MClientReply *reply, utime_t ttl, int mds);
   void update_inode_file_bits(Inode *in,
-			      __u64 truncat_seq,__u64 size,
+			      __u64 truncate_seq, __u64 truncate_size, __u64 size,
 			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
   void update_inode(Inode *in, InodeStat *st, utime_t ttl, int mds);

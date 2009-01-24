@@ -37,6 +37,7 @@ class MClientCaps : public Message {
   __u64 get_size() { return head.size;  }
   __u64 get_max_size() { return head.max_size;  }
   __u32 get_truncate_seq() { return head.truncate_seq; }
+  __u64 get_truncate_size() { return head.truncate_size; }
   utime_t get_ctime() { return utime_t(head.ctime); }
   utime_t get_mtime() { return utime_t(head.mtime); }
   utime_t get_atime() { return utime_t(head.atime); }

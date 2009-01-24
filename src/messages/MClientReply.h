@@ -101,6 +101,7 @@ struct InodeStat {
   unsigned mode, uid, gid, nlink, rdev;
   loff_t size, max_size;
   version_t truncate_seq;
+  __u64 truncate_size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
 
@@ -131,6 +132,7 @@ struct InodeStat {
     size = e.size;
     max_size = e.max_size;
     truncate_seq = e.truncate_seq;
+    truncate_size = e.truncate_size;
     ctime.decode_timeval(&e.ctime);
     mtime.decode_timeval(&e.mtime);
     atime.decode_timeval(&e.atime);
