@@ -113,7 +113,7 @@ public:
       if (--nref == 0) {
 	delete op;
 	delete this;
-	generic_dout(0) << "deleting " << this << dendl;
+	//generic_dout(0) << "deleting " << this << dendl;
       }
     }
   };
