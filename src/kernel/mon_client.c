@@ -423,7 +423,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	if (monc->monmap == NULL)
 		return -ENOMEM;
 	mutex_init(&monc->statfs_mutex);
-	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_ATOMIC);
+	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
 	monc->num_statfs_requests = 0;
 	monc->last_tid = 0;
 	INIT_DELAYED_WORK(&monc->statfs_delayed_work, do_statfs_check);
