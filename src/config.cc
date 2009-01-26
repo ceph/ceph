@@ -260,6 +260,7 @@ md_config_t g_conf = {
   ms_stripe_osds: false,
   ms_skip_rank0: false,
   ms_overlay_clients: false,
+  ms_nocrc: false,
 
 
   // --- mon ---
@@ -659,6 +660,7 @@ void parse_config_file(const char *fname, bool dump_conf)
   CF_READ("messenger", "ms_stripe_osds", ms_stripe_osds);
   CF_READ("messenger", "ms_skip_rank0", ms_skip_rank0);
   CF_READ("messenger", "ms_overlay_clients", ms_overlay_clients);
+  CF_READ("messenger", "ms_no_crc", ms_nocrc);
 
   CF_READ("mon", "mon_tick_interval", mon_tick_interval);
   CF_READ("mon", "mon_osd_down_out_interval", mon_osd_down_out_interval);
@@ -896,6 +898,8 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.ms_overlay_clients = true;
     else if (strcmp(args[i], "--ms_die_on_failure") == 0)
       g_conf.ms_die_on_failure = true;
+    else if (strcmp(args[i], "--ms_nocrc") == 0)
+      g_conf.ms_nocrc = true;
 
     /*else if (strcmp(args[i], "--tcp_log") == 0)
       g_conf.tcp_log = true;

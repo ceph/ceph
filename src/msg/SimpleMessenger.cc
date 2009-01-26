@@ -732,7 +732,8 @@ int Rank::EntityMessenger::send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
-  m->calc_data_crc();
+  if (!g_conf.ms_nocrc)
+    m->calc_data_crc();
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
@@ -753,7 +754,8 @@ int Rank::EntityMessenger::forward_message(Message *m, entity_inst_t dest)
   // set envelope
   m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
-  m->calc_data_crc();
+  if (!g_conf.ms_nocrc)
+    m->calc_data_crc();
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
@@ -777,7 +779,8 @@ int Rank::EntityMessenger::lazy_send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
-  m->calc_data_crc();
+  if (!g_conf.ms_nocrc)
+    m->calc_data_crc();
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << "lazy " << m->get_source()
@@ -1779,7 +1782,8 @@ void Rank::Pipe::writer()
 	// encode and copy out of *m
         if (m->empty_payload()) 
 	  m->encode_payload();
-	m->calc_front_crc();
+	if (!g_conf.ms_nocrc)
+	  m->calc_front_crc();
 
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
@@ -1847,10 +1851,12 @@ Message *Rank::Pipe::read_message()
            << dendl;
 
   // verify header crc
-  __u32 header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
-  if (header_crc != header.crc) {
-    dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
-    return 0;
+  if (!g_conf.ms_nocrc) {
+    __u32 header_crc = crc32c_le(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
+    if (header_crc != header.crc) {
+      dout(0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
+      return 0;
+    }
   }
 
   // ok, now it's safe to change the header..
@@ -2012,7 +2018,8 @@ int Rank::Pipe::write_message(Message *m)
   header.front_len = m->get_payload().length();
   header.data_len = m->get_data().length();
   footer.flags = 0;
-  m->calc_header_crc();
+  if (!g_conf.ms_nocrc)
+    m->calc_header_crc();
 
   bufferlist blist = m->get_payload();
   blist.append(m->get_data());

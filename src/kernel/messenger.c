@@ -1418,6 +1418,8 @@ static int read_partial_message(struct ceph_connection *con)
 	int ret;
 	int to, want, left;
 	unsigned front_len, data_len, data_off;
+	struct ceph_client *client = con->msgr->parent;
+	int crc = !(client->mount_args.flags & CEPH_MOUNT_NOCRC);
 
 	dout(20, "read_partial_message con %p msg %p\n", con, m);	
 
@@ -1430,7 +1432,7 @@ static int read_partial_message(struct ceph_connection *con)
 		if (ret <= 0)
 			return ret;
 		con->in_base_pos += ret;
-		if (con->in_base_pos == sizeof(m->hdr)) {
+		if (con->in_base_pos == sizeof(m->hdr) && crc) {
 			u32 crc = crc32c_le(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
 			if (crc != le32_to_cpu(m->hdr.crc)) {
@@ -1460,7 +1462,7 @@ static int read_partial_message(struct ceph_connection *con)
 		if (ret <= 0)
 			return ret;
 		m->front.iov_len += ret;
-		if (m->front.iov_len == front_len)
+		if (m->front.iov_len == front_len && crc)
 			con->in_front_crc = crc32c_le(0, m->front.iov_base,
 						      m->front.iov_len);
 	}
@@ -1510,7 +1512,7 @@ static int read_partial_message(struct ceph_connection *con)
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
-		if (ret > 0)
+		if (ret > 0 && crc)
 			con->in_data_crc =
 				crc32c_le(con->in_data_crc,
 					  p + con->in_msg_pos.page_pos, ret);
@@ -1541,7 +1543,7 @@ no_data:
 	dout(20, "read_partial_message got msg %p\n", m);
 
 	/* crc ok? */
-	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
+	if (crc && con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
 		derr(0, "read_partial_message %p front crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_front_crc, m->footer.front_crc);
