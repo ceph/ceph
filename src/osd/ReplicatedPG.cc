@@ -1615,12 +1615,12 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
 
   // version
-  eversion_t av = log.top;
+  eversion_t at_version = log.top;
   if (!noop) {
-    av.epoch = osd->osdmap->get_epoch();
-    av.version++;
-    assert(av > info.last_update);
-    assert(av > log.top);
+    at_version.epoch = osd->osdmap->get_epoch();
+    at_version.version++;
+    assert(at_version > info.last_update);
+    assert(at_version > log.top);
   }
 
   // snap
@@ -1632,11 +1632,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   ProjectedObjectInfo *pinfo = get_projected_object(poid);
 
   // set version in op, for benefit of client and our eventual reply
-  op->set_version(av);
+  op->set_version(at_version);
 
   dout(10) << "op_modify " << opname 
            << " " << poid.oid 
-           << " ov " << pinfo->version << " av " << av 
+           << " ov " << pinfo->version << " av " << at_version 
 	   << " snapc " << snapc
 	   << " snapset " << pinfo->snapset
            << dendl;  
@@ -1671,10 +1671,12 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(op, noop, rep_tid, pinfo, av, snapc);
+  RepGather *repop = new_repop(op, noop, rep_tid, pinfo, at_version, snapc);
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
-									
+								
+  eversion_t old_last_update = at_version;
+	
   // trim log?
   eversion_t trim_to = is_clean() ? peers_complete_thru : eversion_t();
   if (log.top.version - log.bottom.version > info.stats.num_objects)
@@ -1684,11 +1686,19 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (!noop) {
     // log and update later.
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
-			pinfo->exists, pinfo->size, pinfo->version, av,
+			pinfo->exists, pinfo->size, pinfo->version, at_version,
 			pinfo->snapset, snapc,
 			op->get_inc_lock(), trim_to);
   }
   
+  // keep peer_info up to date
+  for (unsigned i=1; i<acting.size(); i++) {
+    Info &in = peer_info[acting[i]];
+    in.last_update = at_version;
+    if (in.last_complete == old_last_update)
+      in.last_update = at_version;
+  }
+
   // (logical) local ack.
   // (if alone, this will apply the update.)
   assert(repop->waitfor_ack.count(whoami));
