@@ -1191,6 +1191,7 @@ void OSD::do_mon_report()
     retry = true;
   }
   if (osdmap->exists(whoami) && 
+      up_thru_pending &&
       up_thru_pending < osdmap->get_up_thru(whoami)) {
     dout(10) << "up_thru_pending " << up_thru_pending << " < " << osdmap->get_up_thru(whoami) 
 	     << " -- still pending" << dendl;
