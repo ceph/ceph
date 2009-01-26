@@ -2679,7 +2679,7 @@ int ReplicatedPG::recover_replicas(int max)
   dout(-10) << "recover_replicas" << dendl;
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
-  for (unsigned i=0; i<acting.size(); i++) {
+  for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
     assert(peer_missing.count(peer));
 

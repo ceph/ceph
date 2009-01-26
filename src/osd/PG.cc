@@ -1355,10 +1355,11 @@ void PG::activate(ObjectStore::Transaction& t,
 	}
       }
 
+      Missing& pm = peer_missing[peer];
+
       // update local version of peer's missing list!
       if (m) {
         eversion_t plu = peer_info[peer].last_update;
-        Missing& pm = peer_missing[peer];
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              p++) 
@@ -1373,14 +1374,14 @@ void PG::activate(ObjectStore::Transaction& t,
       }
 
       // update our missing
-      if (peer_missing[peer].num_missing() == 0) {
+      if (pm.num_missing() == 0) {
 	peer_info[peer].last_complete = peer_info[peer].last_update;
         dout(10) << "activate peer osd" << peer << " already uptodate, " << peer_info[peer] << dendl;
 	assert(peer_info[peer].is_uptodate());
         uptodate_set.insert(peer);
       } else {
         dout(10) << "activate peer osd" << peer << " " << peer_info[peer]
-                 << " missing " << peer_missing[peer] << dendl;
+                 << " missing " << pm << dendl;
       }
             
     }
