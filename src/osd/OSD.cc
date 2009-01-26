@@ -3140,7 +3140,8 @@ void OSD::generate_backlog(PG *pg)
 {
   pg->lock();
   dout(10) << *pg << " generate_backlog" << dendl;
-  
+  assert(!pg->is_active());
+
   map<eversion_t,PG::Log::Entry> omap;
   if (!pg->build_backlog_map(omap))
     goto out;
@@ -3156,6 +3157,7 @@ void OSD::generate_backlog(PG *pg)
     dout(10) << *pg << " generate_backlog aborting" << dendl;
     goto out2;
   }
+  assert(!pg->is_active());
 
   if (!pg->is_primary()) {
     dout(10) << *pg << "  sending info+missing+backlog to primary" << dendl;
@@ -3166,7 +3168,6 @@ void OSD::generate_backlog(PG *pg)
     messenger->send_message(m, osdmap->get_inst(pg->get_primary()));
   } else {
     dout(10) << *pg << "  generated backlog, peering" << dendl;
-    assert(!pg->is_active());
 
     map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
     ObjectStore::Transaction t;
