@@ -494,10 +494,12 @@ void Paxos::handle_commit(MMonPaxos *commit)
   for (map<version_t,bufferlist>::iterator p = commit->values.begin();
        p != commit->values.end();
        ++p) {
-    assert(p->first == last_committed+1);
-    last_committed = p->first;
-    dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
-    mon->store->put_bl_sn(p->second, machine_name, last_committed, false);
+    assert(p->first <= last_committed+1);
+    if (p->first == last_committed+1) {
+      last_committed = p->first;
+      dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
+      mon->store->put_bl_sn(p->second, machine_name, last_committed, false);
+    }
   }
   mon->store->sync();
   mon->store->put_int(last_committed, machine_name, "last_committed");
