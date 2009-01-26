@@ -1674,6 +1674,11 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   RepGather *repop = new_repop(op, noop, rep_tid, pinfo, av, snapc);
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
+									
+  // trim log?
+  eversion_t trim_to = is_clean() ? peers_complete_thru : eversion_t();
+  if (log.top.version - log.bottom.version > info.stats.num_objects)
+    trim_to = peers_complete_thru;
 
   // we are acker.
   if (!noop) {
@@ -1681,7 +1686,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
 			pinfo->exists, pinfo->size, pinfo->version, av,
 			pinfo->snapset, snapc,
-			op->get_inc_lock(), peers_complete_thru);
+			op->get_inc_lock(), trim_to);
   }
   
   // (logical) local ack.

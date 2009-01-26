@@ -1606,9 +1606,11 @@ void PG::write_log(ObjectStore::Transaction& t)
   for (list<Log::Entry>::iterator p = log.log.begin();
        p != log.log.end();
        p++) {
-    if (bl.length() % 4096 == 0)
-      ondisklog.block_map[bl.length()] = p->version;
+    __u64 olen = bl.length();
     ::encode(*p, bl);
+    if (olen % 4096 < bl.length() % 4096)
+      ondisklog.block_map[olen] = p->version;
+
     /*
     if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
       bufferptr bp(4096 - sizeof(*p));
@@ -1664,7 +1666,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   t.collection_setattr(info.pgid.to_coll(), "ondisklog", blb);
 
   if (!g_conf.osd_preserve_trimmed_log)
-    t.zero(0, info.pgid.to_log_pobject(), 0, ondisklog.bottom);
+    t.zero(0, info.pgid.to_log_pobject(), 0, ondisklog.bottom & ~4095);
 }
 
 
@@ -1692,7 +1694,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 	   << " adding " << bl.length() <<  dendl;
  
   // update block map?
-  if (ondisklog.top % 4096 == 0) 
+  if (ondisklog.top % 4096 < (ondisklog.top + bl.length()) % 4096)
     ondisklog.block_map[ondisklog.top] = logversion;
 
   t.write(0, info.pgid.to_log_pobject(), ondisklog.top, bl.length(), bl );
@@ -1705,8 +1707,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 
   
   // trim?
-  if (trim_to > log.bottom &&
-      is_clean()) {
+  if (trim_to > log.bottom) {
     dout(10) << " trimming " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_bottom = log.bottom;
@@ -1747,13 +1748,14 @@ void PG::read_log(ObjectStore *store)
     bufferlist::iterator p = bl.begin();
     assert(log.log.empty());
     while (!p.end()) {
+      loff_t opos = ondisklog.bottom + p.get_off();
       ::decode(e, p);
       loff_t pos = ondisklog.bottom + p.get_off();
       dout(10) << "read_log " << pos << " " << e << dendl;
 
       if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
-        if (pos % 4096 == 0)
-	  ondisklog.block_map[pos] = e.version;
+        if (opos % 4096 < pos % 4096)
+	  ondisklog.block_map[opos] = e.version;
         log.log.push_back(e);
       } else {
 	dout(10) << "read_log ignoring entry at " << pos << dendl;
