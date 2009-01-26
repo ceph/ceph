@@ -2466,29 +2466,8 @@ void ReplicatedPG::on_osd_failure(int o)
   //dout(10) << "on_osd_failure " << o << dendl;
 }
 
-void ReplicatedPG::on_shutdown()
+void ReplicatedPG::apply_and_flush_repops()
 {
-  dout(10) << "on_shutdown" << dendl;
-
-  // apply all local repops
-  //  (pg is inactive; we will repeer)
-  xlist<RepGather*>::iterator p = repop_queue.begin();
-  while (!p.end()) {
-    RepGather *repop = *p;
-    ++p;
-    dout(10) << " applying + aborting " << *repop << dendl;
-    if (!repop->applied)
-      apply_repop(repop);
-    repop->aborted = true;
-    repop->queue_item.remove_myself();
-    repop->put();
-  }
-}
-
-void ReplicatedPG::on_change()
-{
-  dout(10) << "on_change" << dendl;
-
   // apply all repops
   while (!repop_queue.empty()) {
     RepGather *repop = repop_queue.front();
@@ -2497,8 +2476,21 @@ void ReplicatedPG::on_change()
     if (!repop->applied)
       apply_repop(repop);
     repop->aborted = true;
+    repop_map.erase(repop->rep_tid);
     repop->put();
   }
+}
+
+void ReplicatedPG::on_shutdown()
+{
+  dout(10) << "on_shutdown" << dendl;
+  apply_and_flush_repops();
+}
+
+void ReplicatedPG::on_change()
+{
+  dout(10) << "on_change" << dendl;
+  apply_and_flush_repops();
   
   // clear pushing/pulling maps
   pushing.clear();

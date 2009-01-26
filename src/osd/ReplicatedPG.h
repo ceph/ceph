@@ -110,6 +110,7 @@ public:
       nref++;
     }
     void put() {
+      assert(nref > 0);
       if (--nref == 0) {
 	delete op;
 	delete this;
@@ -223,6 +224,7 @@ protected:
   // -- scrub --
   int _scrub(ScrubMap& map);
 
+  void apply_and_flush_repops();
 
 
 public:
