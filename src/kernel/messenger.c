@@ -1281,7 +1281,7 @@ static int process_accept(struct ceph_connection *con)
 			/* old attempt or peer didn't get the READY */
 			con->out_reply.tag = CEPH_MSGR_TAG_RETRY_SESSION;
 			con->out_reply.connect_seq =
-				cpu_to_le32(con->connect_seq);
+				cpu_to_le32(existing->connect_seq);
 			goto reply;
 		}
 
