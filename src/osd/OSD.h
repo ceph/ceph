@@ -75,6 +75,8 @@ protected:
 
   void tick();
 
+  void _dispatch(Message *m);
+
 public:
   int get_nodeid() { return whoami; }
   
@@ -266,6 +268,12 @@ private:
     finished.splice(finished.end(), ls);
     finished_lock.Unlock();
   }
+  void push_waiters(list<class Message*>& ls) {
+    finished_lock.Lock();
+    finished.splice(finished.begin(), ls);
+    finished_lock.Unlock();
+  }
+  void do_waiters();
   
   // -- op queue --
   deque<PG*> op_queue;
