@@ -1333,12 +1333,12 @@ void PG::activate(ObjectStore::Transaction& t,
       if (peer_info[peer].last_update == info.last_update) {
         // empty log
 	if (activator_map) {
-	  dout(10) << "activate - peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
+	  dout(10) << "activate peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
 	  if (activator_map->count(peer) == 0)
 	    (*activator_map)[peer] = new MOSDPGInfo(osd->osdmap->get_epoch());
 	  (*activator_map)[peer]->pg_info.push_back(info);
 	} else {
-	  dout(10) << "activate - peer osd" << peer << " is up to date, but sending pg_log anyway" << dendl;
+	  dout(10) << "activate peer osd" << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
 	}
       } 
@@ -1367,8 +1367,7 @@ void PG::activate(ObjectStore::Transaction& t,
       }
       
       if (m) {
-	dout(10) << "activate sending " << m->log << " " << m->missing
-		 << " to osd" << peer << dendl;
+	dout(10) << "activate peer osd" << peer << " sending " << m->log << " " << m->missing << dendl;
 	//m->log.print(cout);
 	osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
       }

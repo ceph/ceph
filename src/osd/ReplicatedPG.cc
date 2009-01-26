@@ -2681,9 +2681,12 @@ int ReplicatedPG::recover_replicas(int max)
   // this is FAR from an optimal recovery order.  pretty lame, really.
   for (unsigned i=0; i<acting.size(); i++) {
     int peer = acting[i];
+    assert(peer_missing.count(peer));
 
-    if (peer_missing.count(peer) == 0 ||
-        peer_missing[peer].num_missing() == 0) 
+    dout(10) << " peer osd" << peer << " missing " << peer_missing[peer] << dendl;
+    dout(20) << "   " << peer_missing[peer].missing << dendl;
+
+    if (peer_missing[peer].num_missing() == 0) 
       continue;
     
     // oldest first!
