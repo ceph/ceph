@@ -1025,6 +1025,7 @@ void PG::peer(ObjectStore::Transaction& t,
   int newest_update_osd = osd->whoami;
 
   oldest_update = info.last_update;  // only of acting (current) osd set.
+  int oldest_who = osd->whoami;
   peers_complete_thru = info.last_complete;
   
   for (map<int,Info>::iterator it = peer_info.begin();
@@ -1032,6 +1033,7 @@ void PG::peer(ObjectStore::Transaction& t,
        it++) {
     if (osd->osdmap->is_down(it->first))
       continue;
+    dout(10) << " have info from osd" << it->first << ": " << it->second << dendl;
     if (it->second.last_update > newest_update ||
 	(it->second.last_update == newest_update &&    // prefer osds in the prior set
 	 prior_set.count(newest_update_osd) == 0)) {
@@ -1039,8 +1041,10 @@ void PG::peer(ObjectStore::Transaction& t,
       newest_update_osd = it->first;
     }
     if (is_acting(it->first)) {
-      if (it->second.last_update < oldest_update) 
+      if (it->second.last_update < oldest_update) {
         oldest_update = it->second.last_update;
+	oldest_who = it->first;
+      }
       if (it->second.last_complete < peers_complete_thru)
         peers_complete_thru = it->second.last_complete;
     }
@@ -1098,7 +1102,7 @@ void PG::peer(ObjectStore::Transaction& t,
     dout(10) << " newest_update " << info.last_update << " (me)" << dendl;
   }
 
-  dout(10) << " oldest_update " << oldest_update << dendl;
+  dout(10) << " oldest_update " << oldest_update << " (osd" << oldest_who << ")" << dendl;
 
   if (is_down()) {
     dout(10) << " down.  we wait." << dendl;    
