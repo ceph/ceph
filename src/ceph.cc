@@ -102,6 +102,12 @@ void handle_notify(MMonObserveNotify *notify)
 	  << (notify->is_latest ? " (latest)" : "")
 	  << dendl;
   
+  if (ceph_fsid_compare(&notify->fsid, &monmap.fsid)) {
+    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << monmap.fsid << dendl;
+    delete notify;
+    return;
+  }
+
   if (map_ver[notify->machine_id] >= notify->ver)
     return;
   
