@@ -33,7 +33,7 @@ public:
   
   void print(ostream& out) {
     if (type.length())
-      out << type << " ";
+      out << "EUpdate " << type << " ";
     out << metablob;
   }
 

@@ -1616,7 +1616,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
 
   // do the update.
-  EUpdate *le = new EUpdate(mds->mdlog, "size|max_size|mtime|ctime|atime update");
+  EUpdate *le = new EUpdate(mds->mdlog, "cap update");
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
 
