@@ -390,7 +390,9 @@ void MDS::tick()
 
   // make sure mds log flushes, trims periodically
   mdlog->flush();
-  mdlog->trim();
+
+  if (is_active() || is_stopping())
+    mdlog->trim();  // NOT during recovery!
 
   // log
   mds_load_t load = balancer->get_load();
