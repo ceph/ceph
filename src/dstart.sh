@@ -137,7 +137,7 @@ do
        ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
    echo starting cosd
-   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; LD_PRELOAD=./gprof-helper.so ./crun $norestart ./cosd $devm --dout_dir /data/cosd$host $COSD_ARGS -f &
+   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./crun $norestart ./cosd $devm --dout_dir /data/cosd$host $COSD_ARGS -f &
 
  done
 done
