@@ -1719,10 +1719,25 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
+  if (osdmap) {
+    dout(3) << "handle_osd_map epochs [" 
+            << m->get_first() << "," << m->get_last() 
+            << "], i have " << osdmap->get_epoch()
+            << dendl;
+  } else {
+    dout(3) << "handle_osd_map epochs [" 
+            << m->get_first() << "," << m->get_last() 
+            << "], i have none"
+            << dendl;
+    osdmap = new OSDMap;
+  }
+
   state = STATE_ACTIVE;
 
   // pause, requeue op queue
   //wait_for_no_ops();
+  
+  osd_lock.Unlock();
   op_tp.pause();
   op_wq.lock();
   list<Message*> rq;
@@ -1737,6 +1752,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
   op_wq.unlock();
   push_waiters(rq);
+  osd_lock.Lock();
 
   recovery_tp.pause();
   disk_tp.pause_new();   // _process() may be waiting for a replica message
@@ -1746,19 +1762,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   ObjectStore::Transaction t;
   
-  if (osdmap) {
-    dout(3) << "handle_osd_map epochs [" 
-            << m->get_first() << "," << m->get_last() 
-            << "], i have " << osdmap->get_epoch()
-            << dendl;
-  } else {
-    dout(3) << "handle_osd_map epochs [" 
-            << m->get_first() << "," << m->get_last() 
-            << "], i have none"
-            << dendl;
-    osdmap = new OSDMap;
-  }
-
   logger->inc("mapmsg");
 
   // store them?
