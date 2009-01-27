@@ -3335,16 +3335,8 @@ void OSD::reply_op_error(MOSDOp *op, int err)
   delete op;
 }
 
-
 void OSD::handle_op(MOSDOp *op)
 {
-  // throttle?  FIXME PROBABLY!
-  while (pending_ops > g_conf.osd_max_opq) {
-    dout(10) << "enqueue_op waiting for pending_ops " << pending_ops 
-	     << " to drop to " << g_conf.osd_max_opq << dendl;
-    op_queue_cond.Wait(osd_lock);
-  }
-
   // require same or newer map
   if (!require_same_or_newer_map(op, op->get_map_epoch()))
     return;
@@ -3359,6 +3351,7 @@ void OSD::handle_op(MOSDOp *op)
   // share our map with sender, if they're old
   _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
 
+  throttle_op_queue();
 
   // calc actual pgid
   pg_t pgid = osdmap->raw_pg_to_pg(op->get_pg());
@@ -3535,6 +3528,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
     return;
   } 
 
+  throttle_op_queue();
+
   PG *pg = _lookup_lock_pg(pgid);
 
   // same pg?
@@ -3671,6 +3666,16 @@ void OSD::dequeue_op(PG *pg)
 
 
 
+
+void OSD::throttle_op_queue()
+{
+  // throttle?  FIXME PROBABLY!
+  while (pending_ops > g_conf.osd_max_opq) {
+    dout(10) << "enqueue_op waiting for pending_ops " << pending_ops 
+	     << " to drop to " << g_conf.osd_max_opq << dendl;
+    op_queue_cond.Wait(osd_lock);
+  }
+}
 
 void OSD::wait_for_no_ops()
 {

@@ -311,7 +311,7 @@ private:
   Cond  op_queue_cond;
   
   void wait_for_no_ops();
-
+  void throttle_op_queue();
   void enqueue_op(PG *pg, Message *op);
   void dequeue_op(PG *pg);
   static void static_dequeueop(OSD *o, PG *pg) {
