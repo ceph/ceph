@@ -386,7 +386,10 @@ void MDLog::_expired(LogSegment *ls)
     // trim expired segments?
     while (!segments.empty()) {
       ls = segments.begin()->second;
-      if (!expired_segments.count(ls)) break;
+      if (!expired_segments.count(ls)) {
+	dout(10) << "_expired  waiting for " << ls->offset << " to expire first" << dendl;
+	break;
+      }
       
       expired_events -= ls->num_events;
       expired_segments.erase(ls);
