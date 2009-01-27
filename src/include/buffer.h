@@ -814,17 +814,19 @@ public:
     }
     void append(const ptr& bp, unsigned off, unsigned len) {
       assert(len+off <= bp.length());
-      if (!_buffers.empty() &&
-	  _buffers.back().get_raw() == bp.get_raw() &&
-	  _buffers.back().end() == bp.start() + off) {
-	// yay contiguous with tail bp!
-	_buffers.back().set_length(_buffers.back().length()+len);
-	_len += len;
-      } else {
-	// add new item to list
-	ptr tempbp(bp, off, len);
-	push_back(tempbp);
+      if (!_buffers.empty()) {
+	ptr &l = _buffers.back();
+	if (l.get_raw() == bp.get_raw() &&
+	    l.end() == bp.start() + off) {
+	  // yay contiguous with tail bp!
+	  l.set_length(l.length()+len);
+	  _len += len;
+	  return;
+	}
       }
+      // add new item to list
+      ptr tempbp(bp, off, len);
+      push_back(tempbp);
     }
     void append(const list& bl) {
       _len += bl._len;
