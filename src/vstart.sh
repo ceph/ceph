@@ -99,7 +99,7 @@ fi
 
 
 # sudo if btrfs
-test -d dev/osd0 && test -e dev/sudo && SUDO="sudo"
+test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ $start_all -eq 1 ]; then
 	$SUDO ./stop.sh
