@@ -158,9 +158,9 @@ struct md_config_t {
   double   client_tick_interval;
   bool client_hack_balance_reads;
   const char *client_trace;
-  loff_t client_readahead_min;
-  loff_t client_readahead_max_bytes;
-  loff_t client_readahead_max_periods;
+  long long client_readahead_min;
+  long long client_readahead_max_bytes;
+  long long client_readahead_max_periods;
   const char *client_snapdir;
   int fuse_direct_io;
   bool fuse_ll;
@@ -170,7 +170,7 @@ struct md_config_t {
   int      client_oc_size;
   int      client_oc_max_dirty;
   int      client_oc_target_dirty;
-  size_t   client_oc_max_sync_write;
+  long long unsigned   client_oc_max_sync_write;
 
   // objecter
   bool  objecter_buffer_uncommitted;
@@ -185,7 +185,7 @@ struct md_config_t {
   bool  journaler_cache;
   int   journaler_prefetch_periods;
   double journaler_batch_interval;
-  size_t journaler_batch_max;
+  long long unsigned journaler_batch_max;
   
   // mds
   int   mds_cache_size;
@@ -316,8 +316,8 @@ struct md_config_t {
   int   ebofs_commit_ms;
   int   ebofs_oc_size;
   int   ebofs_cc_size;
-  __u64 ebofs_bc_size;
-  __u64 ebofs_bc_max_dirty;
+  unsigned long long ebofs_bc_size;
+  unsigned long long ebofs_bc_max_dirty;
   unsigned ebofs_max_prefetch;
   bool  ebofs_realloc;
   bool ebofs_verify_csum_on_read;
