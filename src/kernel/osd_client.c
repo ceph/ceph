@@ -740,7 +740,7 @@ static void handle_timeout(struct work_struct *work)
 		next_tid = req->r_tid + 1;
 		if (time_after(jiffies, req->r_last_stamp + timeout) &&
 		    req->r_last_osd >= 0 &&
-		    radix_tree_lookup(&pings, req->r_pg_osds[0]) == 0) {
+		    radix_tree_lookup(&pings, req->r_last_osd) == 0) {
 			struct ceph_entity_name n = {
 				.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD),
 				.num = cpu_to_le32(req->r_last_osd)
@@ -756,7 +756,7 @@ static void handle_timeout(struct work_struct *work)
 	t = 0;
 	while (radix_tree_gang_lookup(&pings, (void **)&req, t, 1)) {
 		radix_tree_delete(&pings, req->r_last_osd);
-		t = req->r_pg_osds[0] + 1;
+		t = req->r_last_osd + 1;
 	}
 	mutex_unlock(&osdc->request_mutex);
 
