@@ -25,7 +25,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v008"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v009"
 
 
 
@@ -277,6 +277,37 @@ inline bool operator>=(const eversion_t& l, const eversion_t& r) {
 inline ostream& operator<<(ostream& out, const eversion_t e) {
   return out << e.epoch << "'" << e.version;
 }
+
+
+
+struct object_info_t {
+  eversion_t version, prior_version;
+  osd_reqid_t last_reqid;
+  utime_t mtime;
+
+  void encode(bufferlist& bl) const {
+    ::encode(version, bl);
+    ::encode(prior_version, bl);
+    ::encode(last_reqid, bl);
+    ::encode(mtime, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(version, bl);
+    ::decode(prior_version, bl);
+    ::decode(last_reqid, bl);
+    ::decode(mtime, bl);
+  }
+  void decode(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
+    decode(p);
+  }
+
+  object_info_t() {}
+  object_info_t(bufferlist& bl) {
+    decode(bl);
+  }
+};
+WRITE_CLASS_ENCODER(object_info_t)
 
 
 

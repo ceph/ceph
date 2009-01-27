@@ -541,14 +541,14 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
     Log::Entry e;
     e.oid = it->oid;
     bufferlist bv;
-    osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
-    e.version.decode(bv);
+    osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
+    object_info_t oi(bv);
+    e.version = oi.version;
+    e.prior_version = oi.prior_version;
+    e.reqid = oi.last_reqid;
     if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
       e.op = Log::Entry::CLONE;
       osd->store->getattr(info.pgid.to_coll(), poid, "snaps", e.snaps);
-      bufferlist bfv;
-      osd->store->getattr(info.pgid.to_coll(), poid, "from_version", bfv);
-      e.prior_version.decode(bfv);
     } else {
       e.op = Log::Entry::BACKLOG;           // FIXME if/when we do smarter op codes!
     }
@@ -1786,13 +1786,13 @@ void PG::read_log(ObjectStore *store)
       
       pobject_t poid(info.pgid.pool(), 0, i->oid);
       bufferlist bv;
-      int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
-      eversion_t v;
+      int r = osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
+      object_info_t oi;
       if (r >= 0)
-	v = eversion_t(bv);
-      if (r < 0 || v < i->version) {
+	oi.decode(bv);
+      if (r < 0 || oi.version < i->version) {
 	dout(15) << "read_log  missing " << *i << dendl;
-	missing.add(i->oid, i->version, v);
+	missing.add(i->oid, i->version, oi.version);
       }
     }
   }
@@ -1993,11 +1993,13 @@ void PG::build_scrub_map(ScrubMap &map)
 void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
 {
   eversion_t v;
-  po->attrs["version"].copy_out(0, sizeof(v), (char *)&v);
+  bufferlist bv;
+  bv.push_back(po->attrs["oi"]);
+  object_info_t oi(bv);
   if (bad_peer != acting[0]) {
-    peer_missing[bad_peer].add(po->poid.oid, v, eversion_t());
+    peer_missing[bad_peer].add(po->poid.oid, oi.version, eversion_t());
   } else {
-    missing.add(po->poid.oid, v, eversion_t());
+    missing.add(po->poid.oid, oi.version, eversion_t());
     missing_loc[po->poid.oid].insert(ok_peer);
     log.last_requested = object_t();
   }

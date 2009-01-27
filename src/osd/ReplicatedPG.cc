@@ -825,16 +825,19 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       pobject_t head, pobject_t coid,
-			       eversion_t ov, eversion_t v, bufferlist& snapsbl)
+			       eversion_t ov, eversion_t v, osd_reqid_t& reqid, bufferlist& snapsbl)
 {
   t.clone(info.pgid.to_coll(), head, coid);
   t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
-  bufferlist bv(sizeof(v));
-  ::encode(v, bv);
-  t.setattr(info.pgid.to_coll(), coid, "version", bv);
-  bufferlist bov(sizeof(v));
-  ::encode(ov, bov);
-  t.setattr(info.pgid.to_coll(), coid, "from_version", bov);
+
+  object_info_t pi;
+  pi.version = v;
+  pi.prior_version = ov;
+  pi.last_reqid = reqid;
+  pi.mtime = g_clock.now();
+  bufferlist bv(sizeof(pi));
+  ::encode(pi, bv);
+  t.setattr(info.pgid.to_coll(), coid, "oi", bv);
 }
 
 void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& stats,
@@ -871,7 +874,7 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
     ::encode(snaps, snapsbl);
     
     // prepare clone
-    _make_clone(t, poid, coid, old_version, at_version, snapsbl);
+    _make_clone(t, poid, coid, old_version, at_version, reqid, snapsbl);
     
     // add to snap bound collections
     coll_t fc = make_snap_collection(t, snaps[0]);
@@ -1150,7 +1153,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 				       pobject_t poid,
 				       vector<ceph_osd_op>& ops, bufferlist& bl,
-				       bool& exists, __u64& size, eversion_t& version,
+				       bool& exists, __u64& size,
+				       object_info_t& oi,
 				       eversion_t at_version,
 				       SnapSet& snapset, SnapContext& snapc,
 				       __u32 inc_lock, eversion_t trim_to)
@@ -1159,7 +1163,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   eversion_t log_version = at_version;
   assert(!ops.empty());
   
-  eversion_t old_version = version;
+  eversion_t old_version = oi.version;
 
   // apply ops
   bool did_snap = false;
@@ -1178,7 +1182,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   }
 
   // finish.
-  version = at_version;
+  oi.version = at_version;
   if (exists) {
     if (inc_lock) {
       bufferlist b(sizeof(inc_lock));
@@ -1186,9 +1190,13 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       t.setattr(info.pgid.to_coll(), poid, "inc_lock", b);
     }
 
-    bufferlist bv(sizeof(at_version));
-    ::encode(at_version, bv);
-    t.setattr(info.pgid.to_coll(), poid, "version", bv);
+    oi.version = at_version;
+    oi.prior_version = old_version;
+    oi.last_reqid = reqid;
+    oi.mtime = g_clock.now();
+    bufferlist bv(sizeof(oi));
+    ::encode(oi, bv);
+    t.setattr(info.pgid.to_coll(), poid, "oi", bv);
 
     bufferlist snapsetbl;
     ::encode(snapset, snapsetbl);
@@ -1399,7 +1407,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
   wr->old_exists = repop->pinfo->exists;
   wr->old_size = repop->pinfo->size;
-  wr->old_version = repop->pinfo->version;
+  wr->old_version = repop->pinfo->oi.version;
   wr->snapset = repop->pinfo->snapset;
   wr->snapc = repop->snapc;
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
@@ -1502,9 +1510,9 @@ ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t 
     pinfo->size = st.st_size;
     
     bufferlist bv;
-    r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
+    r = osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
     assert(r >= 0);
-    pinfo->version.decode(bv);
+    pinfo->oi.decode(bv);
     
     if (poid.oid.snap == CEPH_NOSNAP) {
       bufferlist bl;
@@ -1636,7 +1644,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   dout(10) << "op_modify " << opname 
            << " " << poid.oid 
-           << " ov " << pinfo->version << " av " << at_version 
+           << " ov " << pinfo->oi.version << " av " << at_version 
 	   << " snapc " << snapc
 	   << " snapset " << pinfo->snapset
            << dendl;  
@@ -1686,7 +1694,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (!noop) {
     // log and update later.
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
-			pinfo->exists, pinfo->size, pinfo->version, at_version,
+			pinfo->exists, pinfo->size, pinfo->oi, at_version,
 			pinfo->snapset, snapc,
 			op->get_inc_lock(), trim_to);
   }
@@ -1799,9 +1807,11 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   osd->logger->inc("r_wrb", op->get_data().length());
   
   if (!op->noop) {
+    object_info_t oi;
+    oi.version = op->old_version;
     prepare_transaction(t, op->reqid,
 			op->poid, op->ops, op->get_data(),
-			op->old_exists, op->old_size, op->old_version, op->version,
+			op->old_exists, op->old_size, oi, op->version,
 			op->snapset, op->snapc,
 			op->inc_lock, op->pg_trim_to);
   }
@@ -2079,19 +2089,17 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
 
   // are we doing a clone on the replica?
   if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {	
-    bufferlist bv, bfv;
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
+    bufferlist bv;
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
     assert(r >= 0);
-    r = osd->store->getattr(info.pgid.to_coll(), poid, "from_version", bfv);
-    assert(r >= 0);
-    eversion_t version(bv), from_version(bfv);
+    object_info_t oi(bv);
     
     pobject_t head = poid;
     head.oid.snap = CEPH_NOSNAP;
     if (peer_missing[peer].is_missing(head.oid) &&
-	peer_missing[peer].have_old(head.oid) == from_version) {
+	peer_missing[peer].have_old(head.oid) == oi.prior_version) {
       dout(10) << "push_to_replica osd" << peer << " has correct old " << head
-	       << " v" << from_version 
+	       << " v" << oi.prior_version 
 	       << ", pushing " << poid << " attrs as a clone op" << dendl;
       interval_set<__u64> data_subset;
       map<pobject_t, interval_set<__u64> > clone_subsets;
@@ -2173,12 +2181,12 @@ void ReplicatedPG::push(pobject_t poid, int peer,
     size = bl.length();
   }
   bufferlist bv;
-  osd->store->getattr(info.pgid.to_coll(), poid, "version", bv);
-  eversion_t v(bv);
+  osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
+  object_info_t oi(bv);
   osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
 
   // ok
-  dout(7) << "push " << poid << " v " << v 
+  dout(7) << "push " << poid << " v " << oi.version 
 	  << " size " << size
 	  << " subset " << data_subset
           << " data " << bl.length()
@@ -2195,7 +2203,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   push[0].offset = 0;
   push[0].length = size;
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false, 0,
-				   osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
+				   osd->osdmap->get_epoch(), osd->get_tid(), 0, oi.version);
   subop->data_subset.swap(data_subset);
   subop->clone_subsets.swap(clone_subsets);
   subop->set_data(bl);   // note: claims bl, set length above here!
@@ -2203,7 +2211,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
   
   if (is_primary()) {
-    peer_missing[peer].got(poid.oid, v);
+    peer_missing[peer].got(poid.oid, oi.version);
     pushing[poid.oid].insert(peer);
   }
 }
@@ -2640,7 +2648,7 @@ int ReplicatedPG::recover_primary(int max)
 		     << " to " << poid << " v" << latest->version
 		     << " snaps " << latest->snaps << dendl;
 	    ObjectStore::Transaction t;
-	    _make_clone(t, head, poid, latest->prior_version, latest->version,
+	    _make_clone(t, head, poid, latest->prior_version, latest->version, latest->reqid,
 			latest->snaps);
 	    osd->store->apply_transaction(t);
 	    missing.got(latest->oid, latest->version);
@@ -2851,13 +2859,14 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
     stat.num_objects++;
 
     // basic checks.
-    eversion_t v;
-    if (p->attrs.count("version") == 0) {
-      dout(0) << "scrub no 'version' attr on " << poid << dendl;
+    if (p->attrs.count("oi") == 0) {
+      dout(0) << "scrub no 'oi' attr on " << poid << dendl;
       errors++;
       continue;
     }
-    p->attrs["version"].copy_out(0, sizeof(v), (char *)&v);
+    bufferlist bv;
+    bv.push_back(p->attrs["oi"]);
+    object_info_t oi(bv);
 
     stat.num_bytes += p->size;
     stat.num_kb += SHIFT_ROUND_UP(p->size, 10);

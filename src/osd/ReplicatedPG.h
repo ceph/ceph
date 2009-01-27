@@ -37,7 +37,8 @@ public:
     SnapSet snapset;
     bool exists;
     __u64 size;
-    eversion_t version;
+
+    object_info_t oi;
     
     ProjectedObjectInfo() : ref(0), exists(false), size(0) {}
   };
@@ -178,7 +179,7 @@ protected:
 
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
-		   eversion_t ov, eversion_t v, bufferlist& snaps);
+		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, bufferlist& snaps);
   void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& st,
 		     pobject_t poid, loff_t old_size,
 		     eversion_t old_version, eversion_t& at_version,
@@ -191,7 +192,7 @@ protected:
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
-			   bool& exists, __u64& size, eversion_t& version,
+			   bool& exists, __u64& size, object_info_t& oi,
 			   eversion_t at_version,
 			   SnapSet& snapset, SnapContext& snapc,
 			   __u32 inc_lock, eversion_t trim_to);

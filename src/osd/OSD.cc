@@ -2492,14 +2492,14 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       PG *child = children[pgid];
       assert(child);
       bufferlist bv;
-      store->getattr(parentid.to_coll(), poid, "version", bv);
-      eversion_t v(bv);
+      store->getattr(parentid.to_coll(), poid, "oi", bv);
+      object_info_t oi(bv);
 
-      if (v > child->info.last_update) {
-	child->info.last_update = v;
-	dout(25) << "        tagging pg with v " << v << "  > " << child->info.last_update << dendl;
+      if (oi.version > child->info.last_update) {
+	child->info.last_update = oi.version;
+	dout(25) << "        tagging pg with v " << oi.version << "  > " << child->info.last_update << dendl;
       } else {
-	dout(25) << "    not tagging pg with v " << v << " <= " << child->info.last_update << dendl;
+	dout(25) << "    not tagging pg with v " << oi.version << " <= " << child->info.last_update << dendl;
       }
       t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
       t.collection_remove(parentid.to_coll(), poid);
