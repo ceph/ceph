@@ -5,10 +5,12 @@ v0.6
 /- async lstat
 
 v0.7
+/- smart osd sync
+/- osd bug fixes
+- async xattrs
 - ENOSPC
 - fully async file creation
 - fast truncate
-/- smart osd sync
 
 v0.8
 - cas?
