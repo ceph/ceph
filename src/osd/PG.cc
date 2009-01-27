@@ -271,7 +271,7 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
     
     if (ne.version > oe.version) {
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : older, missing" << dendl;
-      assert(missing.is_missing(ne.oid));
+      assert(ne.is_delete() || missing.is_missing(ne.oid));
       return false;
     }
     if (ne.version == oe.version) {
