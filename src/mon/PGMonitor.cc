@@ -121,7 +121,7 @@ bool PGMonitor::update_from_paxos()
   mon->store->put_int(paxosv, "pgmap", "last_consumed");
 
   // dump pgmap summaries?  (useful for debugging)
-  if (1) {
+  if (0) {
     stringstream ds;
     pg_map.dump(ds);
     bufferlist d;
