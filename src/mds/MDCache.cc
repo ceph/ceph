@@ -1145,8 +1145,8 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 					  CDir *parent, int linkunlink)
 {
   dout(10) << "project_rstat_inode_to_frag [" << ofirst << "," << last << "]" << dendl;
-  dout(10) << "  inode           rstat " << inode.rstat << dendl;
-  dout(10) << "  inode accounted_rstat " << inode.accounted_rstat << dendl;
+  dout(20) << "  inode           rstat " << inode.rstat << dendl;
+  dout(20) << "  inode accounted_rstat " << inode.accounted_rstat << dendl;
   nest_info_t delta;
   if (linkunlink == 0) {
     delta.add(inode.rstat);
@@ -1156,7 +1156,7 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
   } else {
     delta.add(inode.rstat);
   }
-  dout(10) << "                  delta " << delta << dendl;
+  dout(20) << "                  delta " << delta << dendl;
 
   inode.accounted_rstat = inode.rstat;
 
@@ -1174,7 +1174,7 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
     if (last == CEPH_NOSNAP) {
       first = MAX(ofirst, parent->first);
       prstat = &pf->rstat;
-      dout(10) << " projecting to head [" << first << "," << last << "] " << *prstat << dendl;
+      dout(20) << " projecting to head [" << first << "," << last << "] " << *prstat << dendl;
 
       if (first > parent->first &&
 	  !(pf->rstat == pf->accounted_rstat)) {
@@ -1236,17 +1236,17 @@ void MDCache::project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapi
 	  dout(10) << " projecting to new dirty_old_rstat [" << first << "," << last << "]" << dendl;
 	}
       }
-      dout(10) << " projecting to dirty_old_rstat [" << first << "," << last << "]" << dendl;
+      dout(20) << " projecting to dirty_old_rstat [" << first << "," << last << "]" << dendl;
       parent->dirty_old_rstat[last].first = first;
       prstat = &parent->dirty_old_rstat[last].rstat;
     }
     
     // apply
-    dout(10) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
+    dout(20) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
     assert(last >= first);
     prstat->add(delta);
     inode.accounted_rstat = inode.rstat;
-    dout(10) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
+    dout(20) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
 
     last = first-1;
   }
@@ -1257,11 +1257,11 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 					  CInode *pin, bool cow_head)
 {
   dout(10) << "project_rstat_frag_to_inode [" << ofirst << "," << last << "]" << dendl;
-  dout(10) << "  frag           rstat " << rstat << dendl;
-  dout(10) << "  frag accounted_rstat " << accounted_rstat << dendl;
+  dout(20) << "  frag           rstat " << rstat << dendl;
+  dout(20) << "  frag accounted_rstat " << accounted_rstat << dendl;
   nest_info_t delta = rstat;
   delta.sub(accounted_rstat);
-  dout(10) << "                 delta " << delta << dendl;
+  dout(20) << "                 delta " << delta << dendl;
 
   accounted_rstat = rstat;
 
@@ -1313,9 +1313,9 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       pi = &pin->old_inodes[last].inode;
       pin->dirty_old_rstats.insert(last);
     }
-    dout(10) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
+    dout(20) << " projecting to [" << first << "," << last << "] " << pi->rstat << dendl;
     pi->rstat.add(delta);
-    dout(15) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
+    dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
     
     last = first-1;
   }
@@ -1445,8 +1445,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       if (cur->first > first)
 	first = cur->first;
 
-      dout(10) << "    frag head is [" << parent->first << ",head] " << dendl;
-      dout(10) << " inode update is [" << first << "," << cur->last << "]" << dendl;
+      dout(20) << "    frag head is [" << parent->first << ",head] " << dendl;
+      dout(20) << " inode update is [" << first << "," << cur->last << "]" << dendl;
 
       /*
        * FIXME.  this incompletely propagates rstats to _old_ parents
@@ -1454,7 +1454,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
        * blow hard link backpointers to make this work properly...
        */
       snapid_t floor = parentdn->first;
-      dout(10) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
+      dout(20) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
 
       if (cur->last >= floor)
 	project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
@@ -1513,13 +1513,13 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     // dirstat
     if (do_parent_mtime || linkunlink) {
-      dout(15) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
-      dout(15) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
+      dout(20) << "predirty_journal_parents take_diff " << pf->fragstat << dendl;
+      dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false;
       pi->dirstat.take_diff(pf->fragstat, pf->accounted_fragstat, touched_mtime);
       if (touched_mtime)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
-      dout(15) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+      dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
     }
 
     /* 
