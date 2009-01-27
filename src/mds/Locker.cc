@@ -1036,15 +1036,6 @@ bool Locker::issue_caps(CInode *in)
 					 cap->get_mseq());
 	in->encode_cap_message(m, cap);
 
-	// include xattrs if they're newer than what the client has
-	if ((after & CEPH_CAP_XATTR_RDCACHE) &&
-	    in->inode.xattr_version > cap->client_xattr_version) {
-	  dout(10) << "    including xattrs v " << in->inode.xattr_version << dendl;
-	  ::encode(in->xattrs, m->xattrbl);
-	  m->head.xattr_version = in->inode.xattr_version;
-	  cap->client_xattr_version = in->inode.xattr_version;
-	}
-	
 	mds->send_message_client(m, it->first);
       }
     }
@@ -1617,7 +1608,15 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");
-  inode_t *pi = in->project_inode();
+
+  // xattrs update?
+  map<string,bufferptr> *px = 0;
+  if ((dirty & CEPH_CAP_XATTR_EXCL) && 
+      m->xattrbl.length() &&
+      m->head.xattr_version > in->get_projected_inode()->xattr_version)
+    px = new map<string,bufferptr>;
+
+  inode_t *pi = in->project_inode(px);
   pi->version = in->pre_dirty();
 
   Mutation *mut = new Mutation;
@@ -1690,6 +1689,16 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
 
     wrlock_force(&in->authlock, mut);
+  }
+
+  // xattr
+  if (px) {
+    dout(7) << " xattrs v" << pi->xattr_version << " -> " << m->head.xattr_version << dendl;
+    pi->xattr_version = m->head.xattr_version;
+    bufferlist::iterator p = m->xattrbl.begin();
+    ::decode(*px, p);
+
+    wrlock_force(&in->xattrlock, mut);
   }
   
   mut->auth_pin(in);

@@ -1548,11 +1548,15 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   i = plink ? pi:oi;
   m->head.nlink = i->nlink;
 
-  /*
   i = pxattr ? pi:oi;
-  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_RDCACHE) &&
-    cap->client_xattr_version == i->xattr_version;
-  */
+  map<string,bufferptr> *ix = pxattr ? get_projected_xattrs() : &xattrs;
+  if ((cap->pending() & CEPH_CAP_XATTR_RDCACHE) &&
+      i->xattr_version > cap->client_xattr_version) {
+    dout(10) << "    including xattrs v " << i->xattr_version << dendl;
+    ::encode(*ix, m->xattrbl);
+    m->head.xattr_version = i->xattr_version;
+    cap->client_xattr_version = i->xattr_version;
+  }
 }
 
 
