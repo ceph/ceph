@@ -224,7 +224,7 @@ protected:
   // -- scrub --
   int _scrub(ScrubMap& map);
 
-  void apply_and_flush_repops();
+  void apply_and_flush_repops(bool requeue);
 
 
 public:
@@ -261,7 +261,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
   out << " pct=" << repop.pg_complete_thru;
-  out << " op=" << *(repop.op);
+  if (repop.op)
+    out << " op=" << *(repop.op);
   out << ")";
   return out;
 }

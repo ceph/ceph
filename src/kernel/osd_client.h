@@ -32,8 +32,6 @@ struct ceph_osd_request;
  */
 typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 
-#define MAX_PG_SIZE 10
-
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
@@ -49,8 +47,7 @@ struct ceph_osd_request {
 	struct inode *r_inode;                /* needed for async write */
 	struct writeback_control *r_wbc;
 
-	int               r_pg_osds[MAX_PG_SIZE];   /* pg osds */
-	int               r_pg_num_osds;
+	int               r_last_osd;   /* pg osds */
 	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_last_stamp;
 

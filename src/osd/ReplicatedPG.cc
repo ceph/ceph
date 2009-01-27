@@ -2481,8 +2481,10 @@ void ReplicatedPG::on_osd_failure(int o)
   //dout(10) << "on_osd_failure " << o << dendl;
 }
 
-void ReplicatedPG::apply_and_flush_repops()
+void ReplicatedPG::apply_and_flush_repops(bool requeue)
 {
+  list<Message*> rq;
+
   // apply all repops
   while (!repop_queue.empty()) {
     RepGather *repop = repop_queue.front();
@@ -2492,20 +2494,30 @@ void ReplicatedPG::apply_and_flush_repops()
       apply_repop(repop);
     repop->aborted = true;
     repop_map.erase(repop->rep_tid);
+
+    if (requeue) {
+      dout(10) << " requeuing " << *repop->op << dendl;
+      rq.push_back(repop->op);
+      repop->op = 0;
+    }
+
     repop->put();
   }
+
+  if (requeue)
+    osd->push_waiters(rq);
 }
 
 void ReplicatedPG::on_shutdown()
 {
   dout(10) << "on_shutdown" << dendl;
-  apply_and_flush_repops();
+  apply_and_flush_repops(false);
 }
 
 void ReplicatedPG::on_change()
 {
   dout(10) << "on_change" << dendl;
-  apply_and_flush_repops();
+  apply_and_flush_repops(is_primary());
   
   // clear pushing/pulling maps
   pushing.clear();

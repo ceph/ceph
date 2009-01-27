@@ -215,6 +215,10 @@ void Objecter::scan_pgs(set<pg_t>& changed_pgs)
     
     other.swap(pg.acting);
 
+    if (other.size() && pg.acting.size() &&
+	other[0] == pg.acting[0])
+      continue;  // same primary.
+
     // changed significantly.
     dout(10) << "scan_pgs pg " << pgid 
              << " (" << pg.active_tids << ")"

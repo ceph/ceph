@@ -250,8 +250,8 @@ static int map_osds(struct ceph_osd_client *osdc,
 {
 	int ruleno;
 	unsigned pps; /* placement ps */
-	int osds[MAX_PG_SIZE];
-	int i, j, num;
+	int osds[10], osd = -1;
+	int i, num;
 
 	ruleno = crush_find_rule(osdc->osdmap->crush, req->r_pgid.pg.pool,
 				 req->r_pgid.pg.type, req->r_pgid.pg.size);
@@ -274,20 +274,15 @@ static int map_osds(struct ceph_osd_client *osdc,
 			    min_t(int, req->r_pgid.pg.size, ARRAY_SIZE(osds)),
 			    req->r_pgid.pg.preferred, osdc->osdmap->osd_weight);
 
-	/* filter out down osds */
-	for (i = 0, j = 0; i < num; i++)
-		if (ceph_osd_is_up(osdc->osdmap, osds[i]))
-			osds[j++] = osds[i];
-	num = j;
-	dout(20, "map_osds req %p maps to %d osds\n", req, num);
-
-	/* same? */
-	if (num == req->r_pg_num_osds &&
-	    memcmp(osds, req->r_pg_osds, sizeof(osds[0]) * num) == 0)
+	/* primary is first up osd */
+	for (i = 0; i < num; i++)
+		if (ceph_osd_is_up(osdc->osdmap, osds[i])) {
+			osd = osds[i];
+			break;
+		}
+	if (req->r_last_osd == osd)
 		return 0;
-
-	memcpy(req->r_pg_osds, osds, sizeof(osds[0]) * num);
-	req->r_pg_num_osds = num;
+	req->r_last_osd = osd;
 	return 1;
 }
 
@@ -301,13 +296,13 @@ static int send_request(struct ceph_osd_client *osdc,
 	int osd;
 
 	map_osds(osdc, req);
-	if (req->r_pg_num_osds == 0) {
+	if (req->r_last_osd < 0) {
 		dout(10, "send_request %p no up osds in pg\n", req);
 		ceph_monc_request_osdmap(&osdc->client->monc,
 					 osdc->osdmap->epoch+1);
 		return 0;
 	}
-	osd = req->r_pg_osds[0];
+	osd = req->r_last_osd;
 
 	dout(10, "send_request %p tid %llu to osd%d flags %d\n",
 	     req, req->r_tid, osd, req->r_flags);
@@ -417,7 +412,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 		if (map_osds(osdc, req) == 0)
 			continue;  /* no change */
 
-		if (req->r_pg_num_osds == 0) {
+		if (req->r_last_osd < 0) {
 			dout(20, "tid %llu maps to no valid osd\n", req->r_tid);
 			needmap++;  /* request a newer map */
 			memset(&req->r_last_osd_addr, 0,
@@ -426,7 +421,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 		}
 
 		dout(20, "kicking tid %llu osd%d\n", req->r_tid,
-		     req->r_pg_osds[0]);
+		     req->r_last_osd);
 		get_request(req);
 		mutex_unlock(&osdc->request_mutex);
 		req->r_request = ceph_msg_maybe_dup(req->r_request);
@@ -744,15 +739,13 @@ static void handle_timeout(struct work_struct *work)
 			break;
 		next_tid = req->r_tid + 1;
 		if (time_after(jiffies, req->r_last_stamp + timeout) &&
-		    req->r_pg_num_osds > 0 &&
+		    req->r_last_osd >= 0 &&
 		    radix_tree_lookup(&pings, req->r_pg_osds[0]) == 0) {
-			int osd = req->r_pg_osds[0];
 			struct ceph_entity_name n = {
 				.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD),
-				.num = cpu_to_le32(osd)
+				.num = cpu_to_le32(req->r_last_osd)
 			};
-
-			radix_tree_insert(&pings, osd, req);
+			radix_tree_insert(&pings, req->r_last_osd, req);
 			ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
 		}
 
@@ -762,7 +755,7 @@ static void handle_timeout(struct work_struct *work)
 
 	t = 0;
 	while (radix_tree_gang_lookup(&pings, (void **)&req, t, 1)) {
-		radix_tree_delete(&pings, req->r_pg_osds[0]);
+		radix_tree_delete(&pings, req->r_last_osd);
 		t = req->r_pg_osds[0] + 1;
 	}
 	mutex_unlock(&osdc->request_mutex);
