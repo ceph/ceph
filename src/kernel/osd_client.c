@@ -722,6 +722,8 @@ static void handle_timeout(struct work_struct *work)
 	struct ceph_osd_request *req;
 	int got;
 	int timeout = osdc->client->mount_args.osd_timeout * HZ;
+	RADIX_TREE(pings, GFP_NOFS);  /* only send 1 ping per osd */
+	unsigned long t;
 
 	dout(10, "timeout\n");
 	down_read(&osdc->map_sem);
@@ -742,16 +744,26 @@ static void handle_timeout(struct work_struct *work)
 			break;
 		next_tid = req->r_tid + 1;
 		if (time_after(jiffies, req->r_last_stamp + timeout) &&
-		    req->r_pg_num_osds > 0) {
+		    req->r_pg_num_osds > 0 &&
+		    radix_tree_lookup(&pings, req->r_pg_osds[0]) == 0) {
+			int osd = req->r_pg_osds[0];
 			struct ceph_entity_name n = {
 				.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD),
-				.num = cpu_to_le32(req->r_pg_osds[0])
+				.num = cpu_to_le32(osd)
 			};
+
+			radix_tree_insert(&pings, osd, req);
 			ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
 		}
 
 		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
 					     next_tid, 1);
+	}
+
+	t = 0;
+	while (radix_tree_gang_lookup(&pings, (void **)&req, t, 1)) {
+		radix_tree_delete(&pings, req->r_pg_osds[0]);
+		t = req->r_pg_osds[0] + 1;
 	}
 	mutex_unlock(&osdc->request_mutex);
 
