@@ -1199,7 +1199,7 @@ void OSD::do_mon_report()
   }
   pg_stat_queue_lock.Lock();
   if (!pg_stat_queue.empty() || osd_stat_pending) {
-    dout(30) << "pg_stat_queue not empty" << dendl;
+    dout(10) << "pg_stat_queue not empty" << dendl;
     retry = true;
   }
   pg_stat_queue_lock.Unlock();
@@ -1744,6 +1744,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   while (!op_queue.empty()) {
     PG *pg = op_queue.back();
     op_queue.pop_back();
+    pending_ops--;
     Message *m = pg->op_queue.back();
     pg->op_queue.pop_back();
     pg->put();
