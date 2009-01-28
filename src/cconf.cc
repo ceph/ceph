@@ -20,7 +20,7 @@ void usage()
 
 int main(int argc, const char **argv) 
 {
-  const char *fname = NULL, *section = NULL;
+  const char *fname = "ceph.conf", *section = NULL;
   const char *key = NULL, *defval = NULL;
   char *val;
   int param = 0;
