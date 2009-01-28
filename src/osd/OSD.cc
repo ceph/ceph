@@ -2492,7 +2492,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       PG *child = children[pgid];
       assert(child);
       bufferlist bv;
-      store->getattr(parentid.to_coll(), poid, "oi", bv);
+      store->getattr(parentid.to_coll(), poid, OI_ATTR, bv);
       object_info_t oi(bv);
 
       if (oi.version > child->info.last_update) {

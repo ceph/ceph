@@ -508,4 +508,14 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
   p.copy(len, s);
 }
 
+
+// full bl decoder
+template<class T>
+inline void decode(T o, bufferlist& bl)
+{
+  bufferlist::iterator p = bl.begin();
+  decode(o, p);
+  assert(p.end());
+}
+
 #endif

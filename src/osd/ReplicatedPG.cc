@@ -447,21 +447,21 @@ bool ReplicatedPG::snap_trimmer()
 
       ObjectStore::Transaction t;
 
-      // load clone snap list
+      // load clone info
       bufferlist bl;
-      osd->store->getattr(info.pgid.to_coll(), coid, "snaps", bl);
-      bufferlist::iterator blp = bl.begin();
-      vector<snapid_t> snaps;
-      ::decode(snaps, blp);
+      osd->store->getattr(info.pgid.to_coll(), coid, OI_ATTR, bl);
+      object_info_t coi(bl);
 
-      // load head snapset	
+      // load head info
       pobject_t head = coid;
       head.oid.snap = CEPH_NOSNAP;
       bl.clear();
-      osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
-      blp = bl.begin();
-      SnapSet snapset;
-      ::decode(snapset, blp);
+      osd->store->getattr(info.pgid.to_coll(), head, OI_ATTR, bl);
+      object_info_t hoi(bl);
+
+      vector<snapid_t>& snaps = coi.snaps;
+      SnapSet& snapset = hoi.snapset;
+
       dout(10) << coid << " old head " << head << " snapset " << snapset << dendl;
 
       // remove snaps
@@ -508,9 +508,10 @@ bool ReplicatedPG::snap_trimmer()
       } else {
 	// save adjusted snaps for this object
 	dout(10) << coid << " snaps " << snaps << " -> " << newsnaps << dendl;
+	coi.snaps.swap(newsnaps);
 	bl.clear();
-	::encode(newsnaps, bl);
-	t.setattr(info.pgid.to_coll(), coid, "snaps", bl);
+	::encode(coi, bl);
+	t.setattr(info.pgid.to_coll(), coid, OI_ATTR, bl);
 
 	if (snaps[0] != newsnaps[0]) {
 	  t.collection_remove(info.pgid.to_snap_coll(snaps[0]), coid);
@@ -532,8 +533,8 @@ bool ReplicatedPG::snap_trimmer()
 	info.stats.num_objects--;
       } else {
 	bl.clear();
-	::encode(snapset, bl);
-	t.setattr(info.pgid.to_coll(), head, "snapset", bl);
+	::encode(hoi, bl);
+	t.setattr(info.pgid.to_coll(), head, OI_ATTR, bl);
       }
 
       osd->store->apply_transaction(t);
@@ -577,30 +578,26 @@ int ReplicatedPG::pick_read_snap(pobject_t& poid)
   pobject_t head = poid;
   head.oid.snap = CEPH_NOSNAP;
 
-  SnapSet snapset;
-  {
-    bufferlist bl;
-    int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
-    if (r < 0)
-      return -ENOENT;  // if head doesn't exist, no snapped version will either.
-    bufferlist::iterator p = bl.begin();
-    ::decode(snapset, p);
-  }
+  bufferlist bl;
+  int r = osd->store->getattr(info.pgid.to_coll(), head, OI_ATTR, bl);
+  if (r < 0)
+    return -ENOENT;  // if head doesn't exist, no snapped version will either.
+  object_info_t hoi(bl);
 
-  dout(10) << "pick_read_snap " << poid << " snapset " << snapset << dendl;
+  dout(10) << "pick_read_snap " << poid << " snapset " << hoi.snapset << dendl;
   snapid_t want = poid.oid.snap;
 
   // head?
-  if (want > snapset.seq) {
-    if (snapset.head_exists) {
+  if (want > hoi.snapset.seq) {
+    if (hoi.snapset.head_exists) {
       dout(10) << "pick_read_snap  " << head
-	       << " want " << want << " > snapset seq " << snapset.seq
+	       << " want " << want << " > snapset seq " << hoi.snapset.seq
 	       << " -- HIT" << dendl;
       poid = head;
       return 0;
     } else {
       dout(10) << "pick_read_snap  " << head
-	       << " want " << want << " > snapset seq " << snapset.seq
+	       << " want " << want << " > snapset seq " << hoi.snapset.seq
 	       << " but head_exists = false -- DNE" << dendl;
       return -ENOENT;
     }
@@ -608,36 +605,34 @@ int ReplicatedPG::pick_read_snap(pobject_t& poid)
 
   // which clone would it be?
   unsigned k = 0;
-  while (k<snapset.clones.size() && snapset.clones[k] < want)
+  while (k<hoi.snapset.clones.size() && hoi.snapset.clones[k] < want)
     k++;
-  if (k == snapset.clones.size()) {
+  if (k == hoi.snapset.clones.size()) {
     dout(10) << "pick_read_snap  no clones with last >= want " << want << " -- DNE" << dendl;
     return -ENOENT;
   }
   
   // check clone
-  poid.oid.snap = snapset.clones[k];
+  poid.oid.snap = hoi.snapset.clones[k];
 
   if (missing.is_missing(poid.oid)) {
     dout(20) << "pick_read_snap  " << poid << " missing, try again later" << dendl;
     return -EAGAIN;
   }
 
-  vector<snapid_t> snaps;
-  {
-    bufferlist bl;
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "snaps", bl);
-    if (r < 0) {
-      dout(20) << "pick_read_snap  " << poid << " dne, wtf" << dendl;
-      assert(0);
-      return -ENOENT;
-    }
-    bufferlist::iterator p = bl.begin();
-    ::decode(snaps, p);
+  // clone
+  bl.clear();
+  r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bl);
+  if (r < 0) {
+    dout(20) << "pick_read_snap  " << poid << " dne, wtf" << dendl;
+    assert(0);
+    return -ENOENT;
   }
-  dout(20) << "pick_read_snap  " << poid << " snaps " << snaps << dendl;
-  snapid_t first = snaps[snaps.size()-1];
-  snapid_t last = snaps[0];
+  object_info_t coi(bl);
+
+  dout(20) << "pick_read_snap  " << poid << " snaps " << coi.snaps << dendl;
+  snapid_t first = coi.snaps[coi.snaps.size()-1];
+  snapid_t last = coi.snaps[0];
   if (first <= want) {
     dout(20) << "pick_read_snap  " << poid << " [" << first << "," << last << "] contains " << want << " -- HIT" << dendl;
     return 0;
@@ -727,8 +722,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     __u32 cur = 0;
     osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
     if (b.length()) {
-      bufferlist::iterator bp = b.begin();
-      ::decode(cur, bp);
+      ::decode(cur, b);
       if (cur > op->get_inc_lock()) {
 	dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 		 << " on " << poid << dendl;
@@ -825,56 +819,52 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       pobject_t head, pobject_t coid,
-			       eversion_t ov, eversion_t v, osd_reqid_t& reqid, bufferlist& snapsbl)
+			       eversion_t ov, eversion_t v, osd_reqid_t& reqid, vector<snapid_t>& snaps)
 {
-  t.clone(info.pgid.to_coll(), head, coid);
-  t.setattr(info.pgid.to_coll(), coid, "snaps", snapsbl);
-
-  object_info_t pi;
+  object_info_t pi(coid);
   pi.version = v;
   pi.prior_version = ov;
   pi.last_reqid = reqid;
   pi.mtime = g_clock.now();
-  bufferlist bv(sizeof(pi));
+  pi.snaps.swap(snaps);
+  bufferlist bv;
   ::encode(pi, bv);
-  t.setattr(info.pgid.to_coll(), coid, "oi", bv);
+
+  t.clone(info.pgid.to_coll(), head, coid);
+  t.setattr(info.pgid.to_coll(), coid, OI_ATTR, bv);
 }
 
 void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& stats,
-				 pobject_t poid, loff_t old_size,
-				 eversion_t old_version, eversion_t& at_version, 
-				 SnapSet& snapset, SnapContext& snapc)
+				 pobject_t poid, loff_t old_size, object_info_t& oi,
+				 eversion_t& at_version, SnapContext& snapc)
 {
   // clone?
   assert(poid.oid.snap == CEPH_NOSNAP);
-  dout(20) << "snapset=" << snapset << "  snapc=" << snapc << dendl;;
+  dout(20) << "snapset=" << oi.snapset << "  snapc=" << snapc << dendl;;
   
   // use newer snapc?
-  if (snapset.seq > snapc.seq) {
-    snapc.seq = snapset.seq;
-    snapc.snaps = snapset.snaps;
+  if (oi.snapset.seq > snapc.seq) {
+    snapc.seq = oi.snapset.seq;
+    snapc.snaps = oi.snapset.snaps;
     dout(10) << " using newer snapc " << snapc << dendl;
   }
   
-  if (snapset.head_exists &&           // head exists
+  if (oi.snapset.head_exists &&           // head exists
       snapc.snaps.size() &&            // there are snaps
-      snapc.snaps[0] > snapset.seq) {  // existing object is old
+      snapc.snaps[0] > oi.snapset.seq) {  // existing object is old
     // clone
     pobject_t coid = poid;
     coid.oid.snap = snapc.seq;
     
     unsigned l;
-    for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > snapset.seq; l++) ;
+    for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > oi.snapset.seq; l++) ;
     
     vector<snapid_t> snaps(l);
     for (unsigned i=0; i<l; i++)
       snaps[i] = snapc.snaps[i];
     
-    bufferlist snapsbl;
-    ::encode(snaps, snapsbl);
-    
     // prepare clone
-    _make_clone(t, poid, coid, old_version, at_version, reqid, snapsbl);
+    _make_clone(t, poid, coid, oi.version, at_version, reqid, snaps);
     
     // add to snap bound collections
     coll_t fc = make_snap_collection(t, snaps[0]);
@@ -886,24 +876,24 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
     
     stats.num_objects++;
     stats.num_object_clones++;
-    snapset.clones.push_back(coid.oid.snap);
-    snapset.clone_size[coid.oid.snap] = old_size;
-    snapset.clone_overlap[coid.oid.snap].insert(0, old_size);
+    oi.snapset.clones.push_back(coid.oid.snap);
+    oi.snapset.clone_size[coid.oid.snap] = old_size;
+    oi.snapset.clone_overlap[coid.oid.snap].insert(0, old_size);
     
     // log clone
-    dout(10) << "cloning v " << old_version
+    dout(10) << "cloning v " << oi.version
 	     << " to " << coid << " v " << at_version
 	     << " snaps=" << snaps << dendl;
-    Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, old_version, reqid);
-    cloneentry.snaps = snapsbl;
+    Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, oi.version, reqid);
+    ::encode(snaps, cloneentry.snaps);
     add_log_entry(cloneentry, logbl);
 
     at_version.version++;
   }
   
   // update snapset with latest snap context
-  snapset.seq = snapc.seq;
-  snapset.snaps = snapc.snaps;
+  oi.snapset.seq = snapc.seq;
+  oi.snapset.snaps = snapc.snaps;
 }
 
 
@@ -1153,10 +1143,8 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 				       pobject_t poid,
 				       vector<ceph_osd_op>& ops, bufferlist& bl,
-				       bool& exists, __u64& size,
-				       object_info_t& oi,
-				       eversion_t at_version,
-				       SnapSet& snapset, SnapContext& snapc,
+				       bool& exists, __u64& size, object_info_t& oi,
+				       eversion_t at_version, SnapContext& snapc,
 				       __u32 inc_lock, eversion_t trim_to)
 {
   bufferlist log_bl;
@@ -1172,13 +1160,13 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     // clone?
     if (!did_snap && poid.oid.snap &&
 	!ceph_osd_op_type_lock(ops[i].op)) {     // is a (non-lock) modification
-      prepare_clone(t, log_bl, reqid, info.stats, poid, size, old_version, at_version,
-		    snapset, snapc);
+      prepare_clone(t, log_bl, reqid, info.stats, poid, size, oi,
+		    at_version, snapc);
       did_snap = true;
     }
     prepare_simple_op(t, reqid, info.stats, poid, size, exists,
 		      ops[i], bp,
-		      snapset, snapc);
+		      oi.snapset, snapc);
   }
 
   // finish.
@@ -1194,13 +1182,10 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     oi.prior_version = old_version;
     oi.last_reqid = reqid;
     oi.mtime = g_clock.now();
+
     bufferlist bv(sizeof(oi));
     ::encode(oi, bv);
-    t.setattr(info.pgid.to_coll(), poid, "oi", bv);
-
-    bufferlist snapsetbl;
-    ::encode(snapset, snapsetbl);
-    t.setattr(info.pgid.to_coll(), poid, "snapset", snapsetbl);
+    t.setattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
   }
 
   // append to log
@@ -1408,7 +1393,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   wr->old_exists = repop->pinfo->exists;
   wr->old_size = repop->pinfo->size;
   wr->old_version = repop->pinfo->oi.version;
-  wr->snapset = repop->pinfo->snapset;
+  wr->snapset = repop->pinfo->oi.snapset;
   wr->snapc = repop->snapc;
   wr->get_data() = repop->op->get_data();   // _copy_ bufferlist
   if (is_complete_pg())
@@ -1498,11 +1483,9 @@ ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t 
     return pinfo;    // already had it
   }
 
-  dout(10) << "get_projected_object " << poid << " reading from disk" << dendl;
-
   // pull info off disk
   pinfo->poid = poid;
-  
+    
   struct stat st;
   int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
   if (r == 0) {
@@ -1510,24 +1493,16 @@ ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t 
     pinfo->size = st.st_size;
     
     bufferlist bv;
-    r = osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
+    r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
     assert(r >= 0);
     pinfo->oi.decode(bv);
-    
-    if (poid.oid.snap == CEPH_NOSNAP) {
-      bufferlist bl;
-      int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
-      if (r >= 0) {
-	bufferlist::iterator p = bl.begin();
-	::decode(pinfo->snapset, p);
-      }
-    } else 
-      assert(poid.oid.snap == 0);   // no snapshotting.
   } else {
+    pinfo->oi.poid = poid;
     pinfo->exists = false;
     pinfo->size = 0;
   }
 
+  dout(10) << "get_projected_object " << poid << " read " << pinfo->oi << dendl;
   return pinfo;
 }
 
@@ -1565,9 +1540,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     bufferlist b;
     osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
     if (b.length()) {
-      bufferlist::iterator bp = b.begin();
       __u32 cur = 0;
-      ::decode(cur, bp);
+      ::decode(cur, b);
       if (cur > op->get_inc_lock()) {
 	dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
 		 << " on " << poid << dendl;
@@ -1646,13 +1620,13 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << " " << poid.oid 
            << " ov " << pinfo->oi.version << " av " << at_version 
 	   << " snapc " << snapc
-	   << " snapset " << pinfo->snapset
+	   << " snapset " << pinfo->oi.snapset
            << dendl;  
 
   // verify snap ordering
   if ((op->get_flags() & CEPH_OSD_OP_ORDERSNAP) &&
-      snapc.seq < pinfo->snapset.seq) {
-    dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << pinfo->snapset.seq
+      snapc.seq < pinfo->oi.snapset.seq) {
+    dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << pinfo->oi.snapset.seq
 	     << " on " << poid << dendl;
     osd->reply_op_error(op, -EOLDSNAPC);
     return;
@@ -1694,8 +1668,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   if (!noop) {
     // log and update later.
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
-			pinfo->exists, pinfo->size, pinfo->oi, at_version,
-			pinfo->snapset, snapc,
+			pinfo->exists, pinfo->size, pinfo->oi,
+			at_version, snapc,
 			op->get_inc_lock(), trim_to);
   }
   
@@ -1807,13 +1781,13 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   osd->logger->inc("r_wrb", op->get_data().length());
   
   if (!op->noop) {
-    object_info_t oi;
+    object_info_t oi(op->poid);
     oi.version = op->old_version;
+    oi.snapset = op->snapset;
     prepare_transaction(t, op->reqid,
 			op->poid, op->ops, op->get_data(),
 			op->old_exists, op->old_size, oi, op->version,
-			op->snapset, op->snapc,
-			op->inc_lock, op->pg_trim_to);
+			op->snapc, op->inc_lock, op->pg_trim_to);
   }
   
   C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
@@ -2033,14 +2007,12 @@ bool ReplicatedPG::pull(pobject_t poid)
 
     // check snapset
     bufferlist bl;
-    int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+    int r = osd->store->getattr(info.pgid.to_coll(), head, OI_ATTR, bl);
     assert(r >= 0);
-    SnapSet snapset;
-    bufferlist::iterator blp = bl.begin();
-    ::decode(snapset, blp);
-    dout(10) << " snapset " << snapset << dendl;
+    object_info_t oi(bl);
+    dout(10) << " snapset " << oi.snapset << dendl;
     
-    calc_clone_subsets(snapset, poid, missing,
+    calc_clone_subsets(oi.snapset, poid, missing,
 		       data_subset, clone_subsets);
     // FIXME: this may overestimate if we are pulling multiple clones in parallel...
     dout(10) << " pulling " << data_subset << ", will clone " << clone_subsets
@@ -2087,13 +2059,13 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
   map<pobject_t, interval_set<__u64> > clone_subsets;
   interval_set<__u64> data_subset;
 
+  bufferlist bv;
+  r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
+  assert(r >= 0);
+  object_info_t oi(bv);
+  
   // are we doing a clone on the replica?
   if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {	
-    bufferlist bv;
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
-    assert(r >= 0);
-    object_info_t oi(bv);
-    
     pobject_t head = poid;
     head.oid.snap = CEPH_NOSNAP;
     if (peer_missing[peer].is_missing(head.oid) &&
@@ -2116,27 +2088,18 @@ void ReplicatedPG::push_to_replica(pobject_t poid, int peer)
     }
     
     bufferlist bl;
-    r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+    r = osd->store->getattr(info.pgid.to_coll(), head, OI_ATTR, bl);
     assert(r >= 0);
-    bufferlist::iterator blp = bl.begin();
-    SnapSet snapset;
-    ::decode(snapset, blp);
-    dout(15) << "push_to_replica head snapset is " << snapset << dendl;
+    object_info_t hoi(bl);
+    dout(15) << "push_to_replica head snapset is " << hoi.snapset << dendl;
 
-    calc_clone_subsets(snapset, poid, peer_missing[peer],
+    calc_clone_subsets(hoi.snapset, poid, peer_missing[peer],
 		       data_subset, clone_subsets);
   } else {
     // pushing head.
     // base this on partially on replica's clones?
-    bufferlist bl;
-    int r = osd->store->getattr(info.pgid.to_coll(), poid, "snapset", bl);
-    assert(r >= 0);
-    bufferlist::iterator blp = bl.begin();
-    SnapSet snapset;
-    ::decode(snapset, blp);
-    dout(15) << "push_to_replica head snapset is " << snapset << dendl;
-
-    calc_head_subsets(snapset, poid, peer_missing[peer], data_subset, clone_subsets);
+    dout(15) << "push_to_replica head snapset is " << oi.snapset << dendl;
+    calc_head_subsets(oi.snapset, poid, peer_missing[peer], data_subset, clone_subsets);
   }
 
   dout(10) << "push_to_replica " << poid << " pushing " << data_subset
@@ -2180,10 +2143,12 @@ void ReplicatedPG::push(pobject_t poid, int peer,
     osd->store->read(info.pgid.to_coll(), poid, 0, 0, bl);
     size = bl.length();
   }
-  bufferlist bv;
-  osd->store->getattr(info.pgid.to_coll(), poid, "oi", bv);
-  object_info_t oi(bv);
+
   osd->store->getattrs(info.pgid.to_coll(), poid, attrset);
+
+  bufferlist bv;
+  bv.push_back(attrset[OI_ATTR]);
+  object_info_t oi(bv);
 
   // ok
   dout(7) << "push " << poid << " v " << oi.version 
@@ -2315,16 +2280,14 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       assert(!missing.is_missing(head.oid));
 
       bufferlist bl;
-      int r = osd->store->getattr(info.pgid.to_coll(), head, "snapset", bl);
+      int r = osd->store->getattr(info.pgid.to_coll(), head, OI_ATTR, bl);
       assert(r >= 0);
-      bufferlist::iterator blp = bl.begin();
-      SnapSet snapset;
-      ::decode(snapset, blp);
+      object_info_t hoi(bl);
       
       clone_subsets.clear();   // forget what pusher said; recalculate cloning.
 
       interval_set<__u64> data_needed;
-      calc_clone_subsets(snapset, poid, missing, data_needed, clone_subsets);
+      calc_clone_subsets(hoi.snapset, poid, missing, data_needed, clone_subsets);
       
       dout(10) << "sub_op_push need " << data_needed << ", got " << data_subset << dendl;
       if (!data_needed.subset_of(data_subset)) {
@@ -2400,17 +2363,15 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   t.setattrs(info.pgid.to_coll(), poid, op->attrset);
   if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP &&
-      op->attrset.count("snaps")) {
+      op->attrset.count(OI_ATTR)) {
     bufferlist bl;
-    bl.push_back(op->attrset["snaps"]);
-    vector<snapid_t> snaps;
-    bufferlist::iterator p = bl.begin();
-    ::decode(snaps, p);
-    if (snaps.size()) {
-      coll_t lc = make_snap_collection(t, snaps[0]);
+    bl.push_back(op->attrset[OI_ATTR]);
+    object_info_t oi(bl);
+    if (oi.snaps.size()) {
+      coll_t lc = make_snap_collection(t, oi.snaps[0]);
       t.collection_add(lc, info.pgid.to_coll(), poid);
-      if (snaps.size() > 1) {
-	coll_t hc = make_snap_collection(t, snaps[snaps.size()-1]);
+      if (oi.snaps.size() > 1) {
+	coll_t hc = make_snap_collection(t, oi.snaps[oi.snaps.size()-1]);
 	t.collection_add(hc, info.pgid.to_coll(), poid);
       }
     }
@@ -2647,9 +2608,10 @@ int ReplicatedPG::recover_primary(int max)
 	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
 		     << " to " << poid << " v" << latest->version
 		     << " snaps " << latest->snaps << dendl;
+	    vector<snapid_t> snaps;
+	    ::decode(snaps, latest->snaps);
 	    ObjectStore::Transaction t;
-	    _make_clone(t, head, poid, latest->prior_version, latest->version, latest->reqid,
-			latest->snaps);
+	    _make_clone(t, head, poid, latest->prior_version, latest->version, latest->reqid, snaps);
 	    osd->store->apply_transaction(t);
 	    missing.got(latest->oid, latest->version);
 	    missing_loc.erase(latest->oid);
@@ -2859,14 +2821,16 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
     stat.num_objects++;
 
     // basic checks.
-    if (p->attrs.count("oi") == 0) {
-      dout(0) << "scrub no 'oi' attr on " << poid << dendl;
+    if (p->attrs.count(OI_ATTR) == 0) {
+      dout(0) << "scrub no '" << OI_ATTR << "' attr on " << poid << dendl;
       errors++;
       continue;
     }
     bufferlist bv;
-    bv.push_back(p->attrs["oi"]);
+    bv.push_back(p->attrs[OI_ATTR]);
     object_info_t oi(bv);
+
+    dout(20) << "scrub  " << poid << " " << oi << dendl;
 
     stat.num_bytes += p->size;
     stat.num_kb += SHIFT_ROUND_UP(p->size, 10);
@@ -2884,16 +2848,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	errors++;
       }
 
-      bufferlist bl;
-      if (p->attrs.count("snapset") == 0) {
-	dout(0) << "no 'snapset' attr on " << p->poid << dendl;
-	errors++;
-	continue;
-      }
-      bl.push_back(p->attrs["snapset"]);
-      bufferlist::iterator blp = bl.begin();
-      ::decode(snapset, blp);
-      dout(20) << "scrub  " << poid << " snapset " << snapset << dendl;
+      snapset = oi.snapset;
       if (!snapset.head_exists)
 	assert(p->size == 0); // make sure object is 0-sized.
 
@@ -2922,24 +2877,6 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
       stat.num_object_clones++;
       
       assert(poid.oid.snap == snapset.clones[curclone]);
-      bufferlist bl;
-      if (p->attrs.count("snaps") == 0) {
-	dout(0) << "no 'snaps' attr on " << p->poid << dendl;
-	errors++;
-	continue;
-      }
-      bl.push_back(p->attrs["snaps"]);
-      bufferlist::iterator blp = bl.begin();
-      vector<snapid_t> snaps;
-      ::decode(snaps, blp);
-      
-      eversion_t from;
-      if (p->attrs.count("from_version") == 0) {
-	dout(0) << "no 'from_version' attr on " << p->poid << dendl;
-	errors++;
-	continue;
-      }
-      p->attrs["from_version"].copy_out(0, sizeof(from), (char *)&from);
 
       assert(p->size == snapset.clone_size[curclone]);
 

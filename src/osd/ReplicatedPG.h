@@ -34,13 +34,12 @@ public:
     int ref;
     pobject_t poid;
 
-    SnapSet snapset;
     bool exists;
     __u64 size;
 
     object_info_t oi;
     
-    ProjectedObjectInfo() : ref(0), exists(false), size(0) {}
+    ProjectedObjectInfo() : ref(0), exists(false), size(0), oi(poid) {}
   };
 
 
@@ -179,11 +178,10 @@ protected:
 
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
-		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, bufferlist& snaps);
+		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, vector<snapid_t>& snaps);
   void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& st,
-		     pobject_t poid, loff_t old_size,
-		     eversion_t old_version, eversion_t& at_version,
-		     SnapSet& snapset, SnapContext& snapc);
+		     pobject_t poid, loff_t old_size, object_info_t& oi,
+		     eversion_t& at_version, SnapContext& snapc);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			pobject_t poid, __u64& old_size, bool& exists,
@@ -193,8 +191,7 @@ protected:
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
 			   bool& exists, __u64& size, object_info_t& oi,
-			   eversion_t at_version,
-			   SnapSet& snapset, SnapContext& snapc,
+			   eversion_t at_version, SnapContext& snapc,
 			   __u32 inc_lock, eversion_t trim_to);
   
   friend class C_OSD_ModifyCommit;

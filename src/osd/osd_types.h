@@ -280,37 +280,6 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 
 
 
-struct object_info_t {
-  eversion_t version, prior_version;
-  osd_reqid_t last_reqid;
-  utime_t mtime;
-
-  void encode(bufferlist& bl) const {
-    ::encode(version, bl);
-    ::encode(prior_version, bl);
-    ::encode(last_reqid, bl);
-    ::encode(mtime, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(version, bl);
-    ::decode(prior_version, bl);
-    ::decode(last_reqid, bl);
-    ::decode(mtime, bl);
-  }
-  void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
-    decode(p);
-  }
-
-  object_info_t() {}
-  object_info_t(bufferlist& bl) {
-    decode(bl);
-  }
-};
-WRITE_CLASS_ENCODER(object_info_t)
-
-
-
 /** osd_stat
  * aggregate stats for an osd
  */
@@ -743,6 +712,66 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 	     << cs.clones
 	     << (cs.head_exists ? "+head":"");
 }
+
+
+
+#define OI_ATTR "_"
+
+struct object_info_t {
+  pobject_t poid;
+
+  eversion_t version, prior_version;
+  osd_reqid_t last_reqid;
+  utime_t mtime;
+
+  SnapSet snapset;         // [head]
+  vector<snapid_t> snaps;  // [clone]
+
+  void encode(bufferlist& bl) const {
+    ::encode(poid, bl);
+    ::encode(version, bl);
+    ::encode(prior_version, bl);
+    ::encode(last_reqid, bl);
+    ::encode(mtime, bl);
+    if (poid.oid.snap == CEPH_NOSNAP)
+      ::encode(snapset, bl);
+    else
+      ::encode(snaps, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(poid, bl);
+    ::decode(version, bl);
+    ::decode(prior_version, bl);
+    ::decode(last_reqid, bl);
+    ::decode(mtime, bl);
+    if (poid.oid.snap == CEPH_NOSNAP)
+      ::decode(snapset, bl);
+    else
+      ::decode(snaps, bl);
+  }
+  void decode(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
+    decode(p);
+  }
+
+  object_info_t(pobject_t p) : poid(p) {}
+  object_info_t(bufferlist& bl) {
+    decode(bl);
+  }
+};
+WRITE_CLASS_ENCODER(object_info_t)
+
+
+inline ostream& operator<<(ostream& out, const object_info_t& oi) {
+  out << oi.poid << "(" << oi.version
+      << " " << oi.last_reqid;
+  if (oi.poid.oid.snap == CEPH_NOSNAP)
+    out << " " << oi.snapset << ")";
+  else
+    out << " " << oi.snaps << ")";
+  return out;
+}
+
 
 
 /*
