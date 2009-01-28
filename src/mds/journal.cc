@@ -155,8 +155,10 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
     LogSegment *ls = mds->mdlog->get_current_segment();
-    for (xlist<CInode*>::iterator p = open_files.begin(); !p.end(); ++p) {
+    xlist<CInode*>::iterator p = open_files.begin();
+    while (!p.end()) {
       CInode *in = *p;
+      ++p;
       dout(20) << "try_to_expire requeueing open file " << *in << dendl;
       assert(in->is_any_caps());
       if (!le) le = new EOpen(mds->mdlog);
