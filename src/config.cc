@@ -327,7 +327,7 @@ md_config_t g_conf = {
   mds_decay_halflife: 5,
 
   mds_beacon_interval: 4, //30.0,
-  mds_beacon_grace: 30, //60*60.0,
+  mds_beacon_grace: 15, //60*60.0,
   mds_blacklist_interval: 24.0*60.0,  // how long to blacklist failed nodes
 
   mds_session_timeout: 60,    // cap bits and leases time out if client idle
