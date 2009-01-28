@@ -1419,7 +1419,7 @@ static int read_partial_message(struct ceph_connection *con)
 	int to, want, left;
 	unsigned front_len, data_len, data_off;
 	struct ceph_client *client = con->msgr->parent;
-	int crc = !(client->mount_args.flags & CEPH_MOUNT_NOCRC);
+	int datacrc = !(client->mount_args.flags & CEPH_MOUNT_NOCRC);
 
 	dout(20, "read_partial_message con %p msg %p\n", con, m);	
 
@@ -1432,7 +1432,7 @@ static int read_partial_message(struct ceph_connection *con)
 		if (ret <= 0)
 			return ret;
 		con->in_base_pos += ret;
-		if (con->in_base_pos == sizeof(m->hdr) && crc) {
+		if (con->in_base_pos == sizeof(m->hdr)) {
 			u32 crc = crc32c_le(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
 			if (crc != le32_to_cpu(m->hdr.crc)) {
@@ -1462,7 +1462,7 @@ static int read_partial_message(struct ceph_connection *con)
 		if (ret <= 0)
 			return ret;
 		m->front.iov_len += ret;
-		if (m->front.iov_len == front_len && crc)
+		if (m->front.iov_len == front_len)
 			con->in_front_crc = crc32c_le(0, m->front.iov_base,
 						      m->front.iov_len);
 	}
@@ -1512,7 +1512,7 @@ static int read_partial_message(struct ceph_connection *con)
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
-		if (ret > 0 && crc)
+		if (ret > 0 && datacrc)
 			con->in_data_crc =
 				crc32c_le(con->in_data_crc,
 					  p + con->in_msg_pos.page_pos, ret);
@@ -1543,14 +1543,16 @@ no_data:
 	dout(20, "read_partial_message got msg %p\n", m);
 
 	/* crc ok? */
-	if (crc && con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
+	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
 		derr(0, "read_partial_message %p front crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_front_crc, m->footer.front_crc);
 		print_section("front", (u8 *)&m->front.iov_base, sizeof(m->front.iov_len));
 		return -EBADMSG;
 	}
-	if (con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
+	if (datacrc &&
+	    (le32_to_cpu(m->footer.flags) & CEPH_MSG_FOOTER_NOCRC) == 0 &&
+	    con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
 		int cur_page, data_pos;
 		derr(0, "read_partial_message %p data crc %u != expected %u\n",
 		     con->in_msg,
