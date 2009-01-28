@@ -184,9 +184,8 @@ protected:
 		     eversion_t& at_version, SnapContext& snapc);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
-			pobject_t poid, __u64& old_size, bool& exists,
-			ceph_osd_op& op, bufferlist::iterator& bp,
-			SnapSet& snapset, SnapContext& snapc); 
+			pobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
+			ceph_osd_op& op, bufferlist::iterator& bp, SnapContext& snapc); 
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
@@ -208,7 +207,7 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
-  int pick_read_snap(pobject_t& poid);
+  int pick_read_snap(pobject_t& poid, object_info_t& coi);
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 

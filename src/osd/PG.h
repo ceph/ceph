@@ -654,7 +654,7 @@ protected:
   
   hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
 
-  bool block_if_wrlocked(MOSDOp* op);
+  bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
 
 
   // stats

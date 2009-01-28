@@ -1855,23 +1855,16 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
 // If the target object of the operation op is locked for writing by another client, the function puts op to the waiting queue waiting_for_wr_unlock
 // returns true if object was locked, otherwise returns false
 // 
-bool PG::block_if_wrlocked(MOSDOp* op)
+bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
 {
   pobject_t poid(info.pgid.pool(), 0, op->get_oid());
 
-  bufferlist bs;
-  int len = osd->store->getattr(info.pgid.to_coll(), poid, "wrlock", bs);
-  if (len > 0) {
-    entity_name_t source;
-    bufferlist::iterator bp = bs.begin();
-    ::decode(source, bp);
-    //dout(0) << "getattr returns " << len << " on " << oid << dendl;
-  
-    if (source != op->get_orig_source()) {
-      //the object is locked for writing by someone else -- add the op to the waiting queue      
-      waiting_for_wr_unlock[poid.oid].push_back(op);
-      return true;
-    }
+  if (oi.wrlock_by.tid &&
+      oi.wrlock_by.name != op->get_orig_source()) {
+    //the object is locked for writing by someone else -- add the op to the waiting queue      
+    dout(10) << "blocked on wrlock on " << oi << dendl;
+    waiting_for_wr_unlock[poid.oid].push_back(op);
+    return true;
   }
   
   return false; //the object wasn't locked, so the operation can be handled right away

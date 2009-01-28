@@ -724,6 +724,7 @@ struct object_info_t {
   osd_reqid_t last_reqid;
   utime_t mtime;
 
+  osd_reqid_t wrlock_by;   // [head]
   SnapSet snapset;         // [head]
   vector<snapid_t> snaps;  // [clone]
 
@@ -733,9 +734,10 @@ struct object_info_t {
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
     ::encode(mtime, bl);
-    if (poid.oid.snap == CEPH_NOSNAP)
+    if (poid.oid.snap == CEPH_NOSNAP) {
       ::encode(snapset, bl);
-    else
+      ::encode(wrlock_by, bl);
+    } else
       ::encode(snaps, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -744,9 +746,10 @@ struct object_info_t {
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);
     ::decode(mtime, bl);
-    if (poid.oid.snap == CEPH_NOSNAP)
+    if (poid.oid.snap == CEPH_NOSNAP) {
       ::decode(snapset, bl);
-    else
+      ::decode(wrlock_by, bl);
+    } else
       ::decode(snaps, bl);
   }
   void decode(bufferlist& bl) {
@@ -765,6 +768,8 @@ WRITE_CLASS_ENCODER(object_info_t)
 inline ostream& operator<<(ostream& out, const object_info_t& oi) {
   out << oi.poid << "(" << oi.version
       << " " << oi.last_reqid;
+  if (oi.wrlock_by.tid)
+    out << " wrlock_by=" << oi.wrlock_by;
   if (oi.poid.oid.snap == CEPH_NOSNAP)
     out << " " << oi.snapset << ")";
   else
