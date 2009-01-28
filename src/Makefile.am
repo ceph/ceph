@@ -19,6 +19,8 @@ crushtool_SOURCES = crushtool.cc
 crushtool_LDADD = libcommon.a libcrush.a
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcommon.a libcrush.a
+cconf_SOURCES = cconf.cc
+cconf_LDADD = libcommon.a
 
 mount_ceph_SOURCES = mount.ceph.c
 
@@ -43,7 +45,7 @@ csyn_LDADD = libcommon.a libclient.a libosdc.a libcrush.a libcommon.a
 
 bin_PROGRAMS = \
 	cmon cmds cosd csyn \
-	ceph \
+	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
 	mount.ceph
