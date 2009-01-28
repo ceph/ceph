@@ -41,7 +41,6 @@ public:
   // subop metadata
   tid_t rep_tid;
   eversion_t version;
-  uint32_t inc_lock;
 
   bool old_exists;
   __u64 old_size;
@@ -70,7 +69,6 @@ public:
     ::decode(acks_wanted, p);
     ::decode(rep_tid, p);
     ::decode(version, p);
-    ::decode(inc_lock, p);
     ::decode(old_exists, p);
     ::decode(old_size, p);
     ::decode(old_version, p);
@@ -93,7 +91,6 @@ public:
     ::encode(acks_wanted, payload);
     ::encode(rep_tid, payload);
     ::encode(version, payload);
-    ::encode(inc_lock, payload);
     ::encode(old_exists, payload);
     ::encode(old_size, payload);
     ::encode(old_version, payload);
@@ -112,7 +109,7 @@ public:
 
 
   MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, bool noop_, int aw,
-	    epoch_t mape, tid_t rtid, unsigned il, eversion_t v) :
+	    epoch_t mape, tid_t rtid, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
     reqid(r),
@@ -122,7 +119,6 @@ public:
     ops(o), noop(noop_),   
     rep_tid(rtid),
     version(v),
-    inc_lock(il),
     old_exists(false), old_size(0)
   {
     memset(&peer_stat, 0, sizeof(peer_stat));

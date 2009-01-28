@@ -716,22 +716,6 @@ void ReplicatedPG::op_read(MOSDOp *op)
       goto done;    // we have no revision for this request.
   } 
   
-  // check inc_lock?
-  if (op->get_inc_lock() > 0) {
-    bufferlist b;
-    __u32 cur = 0;
-    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
-    if (b.length()) {
-      ::decode(cur, b);
-      if (cur > op->get_inc_lock()) {
-	dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
-		 << " on " << poid << dendl;
-	result = -EINCLOCKED;
-	goto done;
-      }
-    }
-  }
-
   for (vector<ceph_osd_op>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     switch (p->op) {
     case CEPH_OSD_OP_READ:
@@ -1145,7 +1129,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
 				       vector<ceph_osd_op>& ops, bufferlist& bl,
 				       bool& exists, __u64& size, object_info_t& oi,
 				       eversion_t at_version, SnapContext& snapc,
-				       __u32 inc_lock, eversion_t trim_to)
+				       eversion_t trim_to)
 {
   bufferlist log_bl;
   eversion_t log_version = at_version;
@@ -1172,12 +1156,6 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   // finish.
   oi.version = at_version;
   if (exists) {
-    if (inc_lock) {
-      bufferlist b(sizeof(inc_lock));
-      ::encode(inc_lock, b);
-      t.setattr(info.pgid.to_coll(), poid, "inc_lock", b);
-    }
-
     oi.version = at_version;
     oi.prior_version = old_version;
     oi.last_reqid = reqid;
@@ -1389,7 +1367,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   MOSDSubOp *wr = new MOSDSubOp(repop->op->get_reqid(), info.pgid, poid,
 				repop->op->ops, repop->noop, acks_wanted,
 				osd->osdmap->get_epoch(), 
-				repop->rep_tid, repop->op->get_inc_lock(), repop->at_version);
+				repop->rep_tid, repop->at_version);
   wr->old_exists = repop->pinfo->exists;
   wr->old_size = repop->pinfo->size;
   wr->old_version = repop->pinfo->oi.version;
@@ -1535,22 +1513,6 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       block_if_wrlocked(op)) 
     return; // op will be handled later, after the object unlocks
   
-  // check inc_lock?
-  if (op->get_inc_lock() > 0) {
-    bufferlist b;
-    osd->store->getattr(info.pgid.to_coll(), poid, "inc_lock", b);
-    if (b.length()) {
-      __u32 cur = 0;
-      ::decode(cur, b);
-      if (cur > op->get_inc_lock()) {
-	dout(10) << " inc_lock " << cur << " > " << op->get_inc_lock()
-		 << " on " << poid << dendl;
-	osd->reply_op_error(op, -EINCLOCKED);
-	return;
-      }
-    }
-  }
-
   // balance-reads set?
 #if 0
   char v;
@@ -1670,7 +1632,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
     prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
 			pinfo->exists, pinfo->size, pinfo->oi,
 			at_version, snapc,
-			op->get_inc_lock(), trim_to);
+			trim_to);
   }
   
   // keep peer_info up to date
@@ -1787,7 +1749,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     prepare_transaction(t, op->reqid,
 			op->poid, op->ops, op->get_data(),
 			op->old_exists, op->old_size, oi, op->version,
-			op->snapc, op->inc_lock, op->pg_trim_to);
+			op->snapc, op->pg_trim_to);
   }
   
   C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
@@ -2028,7 +1990,7 @@ bool ReplicatedPG::pull(pobject_t poid)
   vector<ceph_osd_op> pull(1);
   pull[0].op = CEPH_OSD_OP_PULL;
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, false, CEPH_OSD_OP_ACK,
-				   osd->osdmap->get_epoch(), tid, 0, v);
+				   osd->osdmap->get_epoch(), tid, v);
   subop->data_subset.swap(data_subset);
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
@@ -2168,7 +2130,7 @@ void ReplicatedPG::push(pobject_t poid, int peer,
   push[0].offset = 0;
   push[0].length = size;
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, push, false, 0,
-				   osd->osdmap->get_epoch(), osd->get_tid(), 0, oi.version);
+				   osd->osdmap->get_epoch(), osd->get_tid(), oi.version);
   subop->data_subset.swap(data_subset);
   subop->clone_subsets.swap(clone_subsets);
   subop->set_data(bl);   // note: claims bl, set length above here!

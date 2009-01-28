@@ -2050,7 +2050,7 @@ void PG::scrub()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, scrub, false, 0,
-				     osd->osdmap->get_epoch(), osd->get_tid(), 0, v);
+				     osd->osdmap->get_epoch(), osd->get_tid(), v);
     osd->messenger->send_message(subop, //new MOSDPGScrub(info.pgid, osd->osdmap->get_epoch()),
 				 osd->osdmap->get_inst(acting[i]));
   }

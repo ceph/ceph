@@ -192,7 +192,7 @@ protected:
 			   vector<ceph_osd_op>& ops, bufferlist& bl,
 			   bool& exists, __u64& size, object_info_t& oi,
 			   eversion_t at_version, SnapContext& snapc,
-			   __u32 inc_lock, eversion_t trim_to);
+			   eversion_t trim_to);
   
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
