@@ -1286,7 +1286,7 @@ void ceph_inode_writeback(struct work_struct *work)
 	struct inode *inode = &ci->vfs_inode;
 
 	dout(10, "writeback %p\n", inode);
-	filemap_write_and_wait(&inode->i_data);
+	filemap_fdatawrite(&inode->i_data);
 	iput(inode);
 }
 
