@@ -1155,47 +1155,53 @@ struct ceph_mds_snap_realm {
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 
 enum {
+	/** data **/
 	/* read */
 	CEPH_OSD_OP_READ       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 1,
 	CEPH_OSD_OP_STAT       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 2,
 
-	CEPH_OSD_OP_GETXATTR   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
-	CEPH_OSD_OP_GETXATTRS  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 2,
+	/* fancy read */
+	CEPH_OSD_OP_GREP       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 3,
+	CEPH_OSD_OP_MASKTRUNC  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 4,
 
-	/* subop */
-	CEPH_OSD_OP_PULL           = CEPH_OSD_OP_MODE_SUB | 1,
-	CEPH_OSD_OP_PUSH           = CEPH_OSD_OP_MODE_SUB | 2,
-	CEPH_OSD_OP_BALANCEREADS   = CEPH_OSD_OP_MODE_SUB | 3,
-	CEPH_OSD_OP_UNBALANCEREADS = CEPH_OSD_OP_MODE_SUB | 4,
-	CEPH_OSD_OP_SCRUB          = CEPH_OSD_OP_MODE_SUB | 5,
-
-	/* object data */
+	/* write */
 	CEPH_OSD_OP_WRITE      = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
 	CEPH_OSD_OP_WRITEFULL  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 2,
 	CEPH_OSD_OP_TRUNCATE   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 3,
 	CEPH_OSD_OP_ZERO       = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 4,
 	CEPH_OSD_OP_DELETE     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 5,
 
-	/* object attrs */
+	/* fancy write */
+	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 6,
+	CEPH_OSD_OP_STARTSYNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 7,
+	CEPH_OSD_OP_SETTRUNC   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 8,
+	CEPH_OSD_OP_TRIMTRUNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 9,
+
+	/** attrs **/
+	/* read */
+	CEPH_OSD_OP_GETXATTR   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
+	CEPH_OSD_OP_GETXATTRS  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 2,
+
+	/* write */
 	CEPH_OSD_OP_SETXATTR   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 1,
 	CEPH_OSD_OP_SETXATTRS  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 2,
 	CEPH_OSD_OP_RESETXATTRS= CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 3,
 	CEPH_OSD_OP_RMXATTR    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 4,
 
-	/* lock */
+	/** subop **/
+	CEPH_OSD_OP_PULL           = CEPH_OSD_OP_MODE_SUB | 1,
+	CEPH_OSD_OP_PUSH           = CEPH_OSD_OP_MODE_SUB | 2,
+	CEPH_OSD_OP_BALANCEREADS   = CEPH_OSD_OP_MODE_SUB | 3,
+	CEPH_OSD_OP_UNBALANCEREADS = CEPH_OSD_OP_MODE_SUB | 4,
+	CEPH_OSD_OP_SCRUB          = CEPH_OSD_OP_MODE_SUB | 5,
+
+	/** lock **/
 	CEPH_OSD_OP_WRLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 1,
 	CEPH_OSD_OP_WRUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 2,
 	CEPH_OSD_OP_RDLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 3,
 	CEPH_OSD_OP_RDUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
 	CEPH_OSD_OP_UPLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
-
-	/* fancy read */
-	CEPH_OSD_OP_GREP       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 3,
-
-	/* fancy write */
-	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 6,
-	CEPH_OSD_OP_STARTSYNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 7,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -1230,23 +1236,26 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_READ: return "read";
 	case CEPH_OSD_OP_STAT: return "stat";
 
+	case CEPH_OSD_OP_GREP: return "grep";
+	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
+
 	case CEPH_OSD_OP_WRITE: return "write";
 	case CEPH_OSD_OP_DELETE: return "delete";
 	case CEPH_OSD_OP_TRUNCATE: return "truncate";
 	case CEPH_OSD_OP_ZERO: return "zero";
 	case CEPH_OSD_OP_WRITEFULL: return "writefull";
 
+	case CEPH_OSD_OP_APPEND: return "append";
+	case CEPH_OSD_OP_STARTSYNC: return "startsync";
+	case CEPH_OSD_OP_SETTRUNC: return "settrunc";
+	case CEPH_OSD_OP_TRIMTRUNC: return "trimtrunc";
+
+	case CEPH_OSD_OP_GETXATTR: return "getxattr";
+	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";
 	case CEPH_OSD_OP_SETXATTR: return "setxattr";
 	case CEPH_OSD_OP_SETXATTRS: return "setxattrs";
 	case CEPH_OSD_OP_RESETXATTRS: return "resetxattrs";
 	case CEPH_OSD_OP_RMXATTR: return "rmxattr";
-
-	case CEPH_OSD_OP_WRLOCK: return "wrlock";
-	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";
-	case CEPH_OSD_OP_RDLOCK: return "rdlock";
-	case CEPH_OSD_OP_RDUNLOCK: return "rdunlock";
-	case CEPH_OSD_OP_UPLOCK: return "uplock";
-	case CEPH_OSD_OP_DNLOCK: return "dnlock";
 
 	case CEPH_OSD_OP_PULL: return "pull";
 	case CEPH_OSD_OP_PUSH: return "push";
@@ -1254,9 +1263,12 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
 	case CEPH_OSD_OP_SCRUB: return "scrub";
 
-	case CEPH_OSD_OP_GREP: return "grep";
-	case CEPH_OSD_OP_APPEND: return "append";
-	case CEPH_OSD_OP_STARTSYNC: return "startsync";
+	case CEPH_OSD_OP_WRLOCK: return "wrlock";
+	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";
+	case CEPH_OSD_OP_RDLOCK: return "rdlock";
+	case CEPH_OSD_OP_RDUNLOCK: return "rdunlock";
+	case CEPH_OSD_OP_UPLOCK: return "uplock";
+	case CEPH_OSD_OP_DNLOCK: return "dnlock";
 
 	default: return "???";
 	}
@@ -1286,11 +1298,14 @@ struct ceph_osd_op {
 	union {
 		struct {
 			__le64 offset, length;
-			__le32 seq;
 		};
 		struct {
 			__le32 name_len;
 			__le32 value_len;
+		};
+		struct {
+			__le64 truncate_size;
+			__le32 truncate_seq;
 		};
 	};
 } __attribute__ ((packed));

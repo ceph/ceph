@@ -728,6 +728,8 @@ struct object_info_t {
   SnapSet snapset;         // [head]
   vector<snapid_t> snaps;  // [clone]
 
+  bufferlist truncate_info;  // bah.. messy layering.
+
   void encode(bufferlist& bl) const {
     ::encode(poid, bl);
     ::encode(version, bl);
@@ -739,6 +741,7 @@ struct object_info_t {
       ::encode(wrlock_by, bl);
     } else
       ::encode(snaps, bl);
+    ::encode(truncate_info, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(poid, bl);
@@ -751,6 +754,7 @@ struct object_info_t {
       ::decode(wrlock_by, bl);
     } else
       ::decode(snaps, bl);
+    ::decode(truncate_info, bl);
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();

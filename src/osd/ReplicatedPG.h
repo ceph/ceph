@@ -185,7 +185,7 @@ protected:
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			pobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
-			ceph_osd_op& op, bufferlist::iterator& bp, SnapContext& snapc); 
+			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl,

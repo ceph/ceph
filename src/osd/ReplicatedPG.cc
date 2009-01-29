@@ -755,6 +755,69 @@ void ReplicatedPG::op_read(MOSDOp *op)
       }
       break;
       
+    case CEPH_OSD_OP_MASKTRUNC:
+      if (p != op->ops.begin()) {
+	ceph_osd_op& rd = *(p - 1);
+	ceph_osd_op& m = *p;
+
+	// are we beyond truncate_size?
+	if (rd.offset + rd.length > m.truncate_size) {	
+	  __u32 seq;
+	  interval_set<__u64> tm;
+	  bufferlist::iterator p = oi.truncate_info.begin();
+	  ::decode(seq, p);
+	  ::decode(tm, p);
+
+	  // truncated portion of the read
+	  unsigned from = MAX(rd.offset, m.truncate_size);  // also end of data
+	  unsigned to = rd.offset + rd.length;
+  	  unsigned trim = to-from;
+
+	  rd.length = rd.length - trim;
+
+	  dout(10) << " masktrunc " << m << ": overlap " << from << "~" << trim << dendl;
+
+	  bufferlist keep;
+	  keep.substr_of(data, 0, data.length() - trim);
+	  bufferlist truncated;  // everthing after 'from'
+	  truncated.substr_of(data, data.length() - trim, trim);
+	  keep.swap(data);
+
+	  if (seq == rd.truncate_seq) {
+	    // keep any valid extents beyond 'from'
+	    unsigned data_end = from;
+	    for (map<__u64,__u64>::iterator q = tm.m.begin();
+		 q != tm.m.end();
+		 q++) {
+	      unsigned s = MAX(q->first, from);
+	      unsigned e = MIN(q->first+q->second, to);
+	      if (e > s) {
+		unsigned l = e-s;
+		dout(10) << "   " << q->first << "~" << q->second << " overlap " << s << "~" << l << dendl;
+
+		// add in zeros?
+		if (s > data_end) {
+		  bufferptr bp(s-from);
+		  bp.zero();
+		  data.push_back(bp);
+		  dout(20) << "  adding " << bp.length() << " zeros" << dendl;
+		  rd.length = rd.length + bp.length();
+		  data_end += bp.length();
+		}
+		
+		bufferlist b;
+		b.substr_of(truncated, s-from, l);
+		dout(20) << "  adding " << b.length() << " bytes from " << s << "~" << l << dendl;
+		data.claim_append(b);
+		rd.length = rd.length + l;
+		data_end += l;
+	      }
+	    } // for
+	  } // seq == rd.truncate_eq
+	}
+      }
+      break;
+
     default:
       dout(1) << "unrecognized osd op " << p->op
 	      << " " << ceph_osd_op_name(p->op)
@@ -891,9 +954,10 @@ void ReplicatedPG::add_interval_usage(interval_set<__u64>& s, pg_stat_t& stats)
 // low level object operations
 int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 				    pobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
-				    ceph_osd_op& op, bufferlist::iterator& bp,
+				    vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp,
 				    SnapContext& snapc)
 {
+  ceph_osd_op& op = ops[opn];
   int eop = op.op;
 
   // munge ZERO -> DELETE or TRUNCATE?
@@ -1094,16 +1158,45 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     {
       // just do it inline; this works because we are happy to execute
       // fancy op on replicas as well.
-      ceph_osd_op newop;
+      vector<ceph_osd_op> nops(1);
+      ceph_osd_op& newop = nops[0];
       newop.op = CEPH_OSD_OP_WRITE;
       newop.offset = old_size;
       newop.length = op.length;
-      prepare_simple_op(t, reqid, st, poid, old_size, exists, oi, newop, bp, snapc);
+      prepare_simple_op(t, reqid, st, poid, old_size, exists, oi, nops, 0, bp, snapc);
     }
     break;
 
   case CEPH_OSD_OP_STARTSYNC:
     t.start_sync();
+    break;
+
+  case CEPH_OSD_OP_SETTRUNC:
+    if (opn > 0 && ops[opn-1].op == CEPH_OSD_OP_WRITE) {
+      // set truncate seq over preceeding write's range
+      ceph_osd_op& wr = ops[opn-1];
+
+      __u32 seq = 0;
+      interval_set<__u64> tm;
+      bufferlist::iterator p;
+      if (oi.truncate_info.length()) {
+	p = oi.truncate_info.begin();
+	::decode(seq, p);
+      }
+      if (seq < op.truncate_seq) {
+	seq = op.truncate_seq;
+	tm.insert(wr.offset, wr.length);
+      } else {
+	if (oi.truncate_info.length())
+	  ::decode(tm, p);
+	interval_set<__u64> n;
+	n.insert(wr.offset, wr.length);
+	tm.union_of(n);
+      }
+      oi.truncate_info.clear();
+      ::encode(seq, oi.truncate_info);
+      ::encode(tm, oi.truncate_info);
+    }
     break;
 
   default:
@@ -1143,7 +1236,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
       did_snap = true;
     }
     prepare_simple_op(t, reqid, info.stats, poid, size, exists, oi,
-		      ops[i], bp, snapc);
+		      ops, i, bp, snapc);
   }
 
   // finish.
