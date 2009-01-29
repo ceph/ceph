@@ -4,16 +4,18 @@ SCRIPT_BIN=`dirname $0`
 . $SCRIPT_BIN/common.sh
 
 let debug=0
-let start_all=1
-let start_mon=0
-let start_mds=0
-let start_osd=0
+let do_start=0
+let do_stop=0
+let select_mon=0
+let select_mds=0
+let select_osd=0
 let localhost=0
+let noselection=1
 norestart=""
 valgrind=""
 MON_ADDR=""
 
-usage="usage: $0 [option]... [mon] [mds] [osd]\n"
+usage="usage: $0 < start | stop | restart > [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t--norestart\n"
@@ -41,16 +43,30 @@ case $1 in
 	valgrind="--valgrind"
 	;;
 	mon | cmon )
-	start_mon=1
-	start_all=0
+	select_mon=1
+	noselection=0
 	;;
 	mds | cmds )
-	start_mds=1
-	start_all=0
+	select_mds=1
+	noselection=0
 	;;
 	osd | cosd )
-	start_osd=1
-	start_all=0
+	select_osd=1
+	noselection=0
+	;;
+	start )
+	[ $do_stop -eq 1 ] && usage_exit
+	do_start=1
+	;;
+	stop )
+	[ $do_start -eq 1 ] && usage_exit
+	do_stop=1
+	;;
+	restart )
+	[ $do_start -eq 1 ] && usage_exit
+	[ $do_stop -eq 1 ] && usage_exit
+	do_start=1
+	do_stop=1
 	;;
 	-m )
 	[ "$2" == "" ] && usage_exit
@@ -68,14 +84,27 @@ esac
 shift
 done
 
+[ $do_start -eq 0 ] && [ $do_stop -eq 0 ] && usage_exit
+
+if [ $do_stop -eq 1 ]; then
+	stop_str=""
+	[ $select_mon -eq 1 ] && stop_str=$stop_str" mon"
+	[ $select_mds -eq 1 ] && stop_str=$stop_str" mds"
+	[ $select_osd -eq 1 ] && stop_str=$stop_str" osd"
+	$SCRIPT_BIN/stop.sh $stop_str
+fi
+
+[ $do_start -eq 0 ] && exit
+
+
 [ "$startup_conf_file" == "" ] && startup_conf_file="startup.conf"
 
 CCONF="$CCONF_BIN --conf_file $startup_conf_file"
 
-if [ $start_all -eq 1 ]; then
-	start_mon=1
-	start_mds=1
-	start_osd=1
+if [ $noselection -eq 1 ]; then
+	select_mon=1
+	select_mds=1
+	select_osd=1
 fi
 
 get_val CEPH_NUM_MON "$CEPH_NUM_MON" global num_mon 3
@@ -107,10 +136,6 @@ fi
 # lockdep everywhere?
 # export CEPH_ARGS="--lockdep 1"
 
-
-if [ $start_all -eq 1 ]; then
-	$SUDO $SCRIPT_BIN/stop.sh
-fi
 $SUDO rm -f core*
 
 test -d out || mkdir out
@@ -132,7 +157,7 @@ echo "ip $IP"
 [ "$CEPH_PORT" == "" ] && CEPH_PORT=6789
 
 #mon
-if [ $start_mon -eq 1 ]; then
+if [ $select_mon -eq 1 ]; then
 	for f in `seq 0 $((CEPH_NUM_MON-1))`; do
 		get_conf mon_data_path mondata "mon data path" mon$mon mon global
 		get_conf mon_data_file mon$mon "mon data file" mon$mon mon global
@@ -150,7 +175,7 @@ if [ $start_mon -eq 1 ]; then
 fi
 
 #osd
-if [ $start_osd -eq 1 ]; then
+if [ $select_osd -eq 1 ]; then
 	for osd in `seq 0 $((CEPH_NUM_OSD-1))`
 	do
 		get_conf_bool use_sudo 0 sudo osd$osd osd global
@@ -174,7 +199,7 @@ if [ $start_osd -eq 1 ]; then
 fi
 
 # mds
-if [ $start_mds -eq 1 ]; then
+if [ $select_mds -eq 1 ]; then
 	for mds in `seq 0 $((CEPH_NUM_MDS-1))`
 	do
 		get_conf conf_file $startup_conf_file "conf file" mds$mds mds global
