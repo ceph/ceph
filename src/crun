@@ -1,5 +1,8 @@
 #!/bin/sh
 
+SCRIPT_BIN=`dirname $0`
+. $SCRIPT_BIN/common.sh
+
 daemon=0
 valgrind=""
 
@@ -15,10 +18,17 @@ while [ $# -ge 1 ]; do
 	    daemon=1
 	    shift
 	    ;;
+	--conf_file )
+	    startup_conf_file=$2
+	    shift
+	    ;;
 	* )
 	    break
     esac
 done
+
+[ "$startup_conf_file" == "" ] && startup_conf_file="startup.conf"
+CCONF="$CCONF_BIN --conf_file $startup_conf_file"
 
 orig_args=$*
 
@@ -30,6 +40,9 @@ while [ $# -ge 1 ]; do
        esac
        shift
 done
+
+get_conf_bool do_ulimit 0 "ulimit core" crun global
+[ "$do_ulimit" != "0" ] && ulimit -c unlimited
 
 while [ true ]; do
 	$valgrind $orig_args

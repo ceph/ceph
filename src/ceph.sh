@@ -1,53 +1,7 @@
 #!/bin/bash
 
-
-[ "$CCONF_BIN" == "" ] && CCONF_BIN=`dirname $0`/cconf
-
-get_val() {
-  if [ "$2" != "" ]; then
-	export $1=$2
-  else
-	export $1=`$CCONF "$3" "$4" "$5"`
-  fi
-}
-
-get_val_bool() {
-  if [ "$2" != "" ]; then
-	export $1=$2
-  else
-	tmp=`$CCONF "$3" "$4" "$5"`
-	export $1=$5
-
-	[ "$tmp" == "0" ] && export $1=0
-	[ "$tmp" == "false" ] && export $1=0
-	[ "$tmp" == "1" ] && export $1=1
-	[ "$tmp" == "true" ] && export $1=1
-  fi
-}
-
-get_conf() {
-	var=$1
-	def=$2
-	key=$3
-	shift; shift; shift
-
-	tmp=""
-	while [ $# -ge 1 ]; do
-		tmp=$tmp" -s $1"
-	shift
-	done
-	eval $var=`$CCONF $tmp "$key" "$def"`
-}
-
-get_conf_bool() {
-	get_conf $*
-
-	eval "val=$"$1
-	[ "$val" == "0" ] && export $1=0
-	[ "$val" == "false" ] && export $1=0
-	[ "$val" == "1" ] && export $1=1
-	[ "$val" == "true" ] && export $1=1
-}
+SCRIPT_BIN=`dirname $0`
+. $SCRIPT_BIN/common.sh
 
 let debug=0
 let start_all=1
@@ -115,6 +69,7 @@ shift
 done
 
 [ "$startup_conf_file" == "" ] && startup_conf_file="startup.conf"
+
 CCONF="$CCONF_BIN --conf_file $startup_conf_file"
 
 if [ $start_all -eq 1 ]; then
@@ -154,7 +109,7 @@ fi
 
 
 if [ $start_all -eq 1 ]; then
-	$SUDO ./stop.sh
+	$SUDO $SCRIPT_BIN/stop.sh
 fi
 $SUDO rm -f core*
 
@@ -183,6 +138,12 @@ if [ $start_mon -eq 1 ]; then
 		get_conf mon_data_file mon$mon "mon data file" mon$mon mon global
 		get_conf conf_file $startup_conf_file "conf file" mon$mon mon global
 
+		get_conf ssh_host "" "ssh host" mon$mon mon global
+		[ "$ssh_host" != "" ] && SSH_HOST="ssh $ssh_host" || SSH_HOST=""
+		get_conf cd_path "" "ssh path" mon$mon mon global
+		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
+
+		echo $SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS $mon_data_path/$mon_data_file &
 	done
 	sleep 1
@@ -198,10 +159,15 @@ if [ $start_osd -eq 1 ]; then
 		get_conf CEPH_PORT $CEPH_PORT "mon port" osd$osd osd global
 		get_conf CEPH_HOST $IP "mon host" osd$osd osd global
 
-		SUDO=""
-		[ "$use_sudo" != "0" ] && SUDO="sudo"
+		[ "$use_sudo" != "0" ] && SUDO="sudo" || SUDO=""
+
+		get_conf ssh_host "" "ssh host" osd$osd osd global
+		[ "$ssh_host" != "" ] && SSH_HOST="ssh $ssh_host" || SSH_HOST=""
+		get_conf cd_path "" "ssh path" osd$osd osd global
+		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
 		echo start osd$osd
+		echo $SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd --conf_file $conf_file \
 			-m $CEPH_HOST:$CEPH_PORT $osd_dev $ARGS $COSD_ARGS &
 	done
@@ -212,10 +178,16 @@ if [ $start_mds -eq 1 ]; then
 	for mds in `seq 0 $((CEPH_NUM_MDS-1))`
 	do
 		get_conf conf_file $startup_conf_file "conf file" mds$mds mds global
+		get_conf ssh_host "" "ssh host" mds$mds mds global
+		[ "$ssh_host" != "" ] && SSH_HOST="ssh $ssh_host" || SSH_HOST=""
+		get_conf cd_path "" "ssh path" mds$mds mds global
+		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
+
+		echo $SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
 			-m $CEPH_HOST:$CEPH_PORT $ARGS $CMDS_ARGS &
 	done
-	$CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
+	echo $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
 fi
 
 echo "started. stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
