@@ -295,7 +295,7 @@ struct inode_t {
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size;    // client(s) are auth to write this much...
   uint32_t   truncate_seq;
-  uint64_t   truncate_size;
+  uint64_t   truncate_size, truncate_from;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
@@ -314,6 +314,8 @@ struct inode_t {
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
+  bool is_truncating() const { return truncate_size != -1ull; }
+
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
     ::encode(rdev, bl);
@@ -331,6 +333,7 @@ struct inode_t {
     ::encode(max_size, bl);
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
+    ::encode(truncate_from, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
     ::encode(time_warp_seq, bl);
@@ -360,6 +363,7 @@ struct inode_t {
     ::decode(max_size, p);
     ::decode(truncate_seq, p);
     ::decode(truncate_size, p);
+    ::decode(truncate_from, p);
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);

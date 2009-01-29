@@ -113,15 +113,16 @@ class CInode : public MDSCacheObject {
   static const __u64 WAIT_ANCHORED    = (1<<1);
   static const __u64 WAIT_UNANCHORED  = (1<<2);
   static const __u64 WAIT_FROZEN      = (1<<3);
+  static const __u64 WAIT_TRUNC       = (1<<4);
   
-  static const int WAIT_AUTHLOCK_OFFSET        = 4;
-  static const int WAIT_LINKLOCK_OFFSET        = 4 +   SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 4 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET        = 4 + 3*SimpleLock::WAIT_BITS;
-  static const int WAIT_VERSIONLOCK_OFFSET     = 4 + 4*SimpleLock::WAIT_BITS;
-  static const int WAIT_XATTRLOCK_OFFSET       = 4 + 5*SimpleLock::WAIT_BITS;
-  static const int WAIT_SNAPLOCK_OFFSET        = 4 + 6*SimpleLock::WAIT_BITS;
-  static const int WAIT_NESTLOCK_OFFSET        = 4 + 7*SimpleLock::WAIT_BITS;
+  static const int WAIT_AUTHLOCK_OFFSET        = 5;
+  static const int WAIT_LINKLOCK_OFFSET        = 5 +   SimpleLock::WAIT_BITS;
+  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 5 + 2*SimpleLock::WAIT_BITS;
+  static const int WAIT_FILELOCK_OFFSET        = 5 + 3*SimpleLock::WAIT_BITS;
+  static const int WAIT_VERSIONLOCK_OFFSET     = 5 + 4*SimpleLock::WAIT_BITS;
+  static const int WAIT_XATTRLOCK_OFFSET       = 5 + 5*SimpleLock::WAIT_BITS;
+  static const int WAIT_SNAPLOCK_OFFSET        = 5 + 6*SimpleLock::WAIT_BITS;
+  static const int WAIT_NESTLOCK_OFFSET        = 5 + 7*SimpleLock::WAIT_BITS;
 
   static const __u64 WAIT_ANY_MASK	= (__u64)(-1);
 

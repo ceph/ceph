@@ -823,6 +823,9 @@ public:
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
  public:
+  // truncate
+  void truncate_inode(CInode *in, LogSegment *ls);
+
   // inode purging
   void purge_inode(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls);
   void _do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize);

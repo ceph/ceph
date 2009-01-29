@@ -1401,7 +1401,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
   in->inode.layout = g_default_file_layout;
-  
+
+  in->inode.truncate_size = -1ull;  // not truncated, yet!
+
   in->inode.uid = mdr->client_request->get_caller_uid();
   in->inode.gid = mdr->client_request->get_caller_gid();
   in->inode.ctime = in->inode.mtime = in->inode.atime = mdr->now;   // now
@@ -4768,15 +4770,13 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 // ===================================
 // TRUNCATE, FSYNC
 
-class C_MDS_truncate_purged : public Context {
+struct DelayTrunc : public Context {
   MDS *mds;
-  MDRequest *mdr;
-public:
-  C_MDS_truncate_purged(MDS *m, MDRequest *r) :
-    mds(m), mdr(r) {}
+  CInode *in;
+  LogSegment *ls;
+  DelayTrunc(MDS *m, CInode *i, LogSegment *l) : mds(m), in(i), ls(l) {}
   void finish(int r) {
-    assert(r == 0);
-    mds->server->reply_request(mdr, 0);
+    mds->mdcache->truncate_inode(in, ls);
   }
 };
 
@@ -4790,24 +4790,18 @@ public:
   void finish(int r) {
     assert(r == 0);
 
-    // apply to cache
-    __u64 old_size = in->inode.size;
+    // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
-
     mdr->apply();
 
     // notify any clients
     mds->locker->issue_truncate(in);
+    //mds->mdcache->truncate_inode(in, mdr->ls);
+    mds->timer.add_event_after(10.0, new DelayTrunc(mds, in, mdr->ls));
 
-    if (old_size <= in->inode.size) {
-      // forward truncate.  done!
-      mds->server->reply_request(mdr, 0);
-    } else {
-      // purge
-      mds->mdcache->purge_inode(in, in->inode.size, old_size, mdr->ls);
-      mds->mdcache->wait_for_purge(in, in->inode.size, 
-				   new C_MDS_truncate_purged(mds, mdr));
-    }
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+
+    mds->server->reply_request(mdr, 0);
   }
 };
 
@@ -4833,39 +4827,55 @@ void Server::handle_client_truncate(MDRequest *mdr)
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->filelock);
+  wrlocks.insert(&cur->filelock);
   mds->locker->include_snap_rdlocks(rdlocks, cur);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
   
   // already the correct size?
-  if (cur->inode.size == req->head.args.truncate.length) {
+  inode_t *pi = cur->get_projected_inode();
+  __u64 old_size = MAX(pi->size, req->head.args.truncate.old_length);
+  if (old_size == req->head.args.truncate.length) {
     reply_request(mdr, 0);
+    return;
+  }
+
+  if (old_size > req->head.args.truncate.length && pi->is_truncating()) {
+    dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
   // prepare
   version_t pdv = cur->pre_dirty();
   utime_t ctime = g_clock.real_now();
-  Context *fin = new C_MDS_truncate_logged(mds, mdr, cur);
-  
-  // log + wait
+
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
   le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
-  inode_t *pi = cur->project_inode();
+  pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
-  pi->size = req->head.args.truncate.length;
-  pi->rstat.rbytes = pi->size;
-  pi->truncate_seq++;
+  if (old_size > req->head.args.truncate.length) {
+    // truncate to smaller size
+    pi->truncate_from = old_size;
+    pi->size = req->head.args.truncate.length;
+    pi->rstat.rbytes = pi->size;
+    pi->truncate_size = pi->size;
+    pi->truncate_seq++;
+  } else {
+    // truncate to larger size
+    pi->size = req->head.args.truncate.length;
+    pi->rstat.rbytes = pi->size;
+  }
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  mdlog->submit_entry(le, fin);
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_truncate_logged(mds, mdr, cur));
 }
 
 

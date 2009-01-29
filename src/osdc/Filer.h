@@ -127,6 +127,45 @@ class Filer {
     return 0;
   }
 
+  int truncate(inodeno_t ino,
+	       ceph_file_layout *layout,
+	       const SnapContext& snapc,
+	       __u64 offset,
+	       size_t len,
+	       __u32 truncate_seq,
+	       int flags,
+	       Context *onack,
+	       Context *oncommit) {
+    bufferlist bl;
+    vector<ObjectExtent> extents;
+    file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
+    if (extents.size() == 1) {
+      vector<ceph_osd_op> ops(1);
+      memset(&ops[0], 0, sizeof(ops[0]));
+      ops[0].op = CEPH_OSD_OP_TRIMTRUNC;
+      ops[0].truncate_seq = truncate_seq;
+      ops[0].truncate_size = extents[0].offset;
+      objecter->modify(extents[0].oid, extents[0].layout, ops, snapc, bl, flags, onack, oncommit);
+    } else {
+      C_Gather *gack = 0, *gcom = 0;
+      if (onack)
+	gack = new C_Gather(onack);
+      if (oncommit)
+	gcom = new C_Gather(oncommit);
+      for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
+	vector<ceph_osd_op> ops(1);
+	memset(&ops[0], 0, sizeof(ops[0]));
+	ops[0].op = CEPH_OSD_OP_TRIMTRUNC;
+	ops[0].truncate_size = p->offset;
+	ops[0].truncate_seq = truncate_seq;
+	objecter->modify(extents[0].oid, p->layout, ops, snapc, bl, flags,
+			 gack ? gack->new_sub():0,
+			 gcom ? gcom->new_sub():0);
+      }
+    }
+    return 0;
+  }
+
   int zero(inodeno_t ino,
 	   ceph_file_layout *layout,
 	   const SnapContext& snapc,

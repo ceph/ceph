@@ -4078,6 +4078,31 @@ void MDCache::set_root(CInode *in)
 
 
 
+void MDCache::truncate_inode(CInode *in, LogSegment *ls)
+{
+  inode_t *pi = in->get_projected_inode();
+  dout(10) << "truncate_inode " << pi->truncate_from << " -> " << pi->truncate_size
+	   << " on " << *in
+	   << dendl;
+
+  SnapRealm *realm = in->find_snaprealm();
+  SnapContext nullsnap;
+  const SnapContext *snapc;
+  if (realm) {
+    dout(10) << " realm " << *realm << dendl;
+    snapc = &realm->get_snap_context();
+  } else {
+    dout(10) << " NO realm, using null context" << dendl;
+    snapc = &nullsnap;
+    assert(in->last == CEPH_NOSNAP);
+  }
+  dout(10) << "truncate_inode snapc " << snapc << " on " << *in << dendl;
+  mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
+		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, 0,
+		       0, 0);//new C_MDC_PurgeFinish(this, in, newsize, oldsize));
+
+
+}
 
 // **************
 // Inode purging -- reliably removing deleted file's objects
@@ -4106,7 +4131,7 @@ public:
 };
 
 /* purge_inode in
- * will be called by on unlink or rmdir or truncate or purge
+ * will be called by on unlink or rmdir or purge
  * caller responsible for journaling a matching EUpdate
  */
 void MDCache::purge_inode(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls)
