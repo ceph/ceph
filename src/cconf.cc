@@ -65,7 +65,7 @@ int main(int argc, const char **argv)
     usage();
 
   ConfFile cf(fname);
-  cf.parse();
+  parse_config_file(&cf, true);
 
   for (unsigned i=0; i<sections.size(); i++) {
     cf.read(sections[i], key, (char **)&val, NULL);
