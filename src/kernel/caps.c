@@ -1476,38 +1476,14 @@ static void handle_cap_trunc(struct inode *inode,
 	u64 size = le64_to_cpu(trunc->size);
 	int queue_trunc = 0;
 
-	dout(10, "handle_cap_trunc inode %p ci %p mds%d seq %d\n", inode, ci,
-	     mds, seq);
-
-	/*
-	 * vmtruncate lazily; we can't block on i_mutex in the message
-	 * handler path, or we deadlock against osd op replies needed
-	 * to complete the writes holding i_lock.  vmtruncate will
-	 * also block on page locks held by writes...
-	 *
-	 * if its an expansion, and there is no truncate pending, we
-	 * don't need to truncate.
-	 */
-	if (ci->i_vmtruncate_to < 0 && size > inode->i_size) {
-		dout(10, "clean fwd truncate, no vmtruncate needed\n");
-	} else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to) {
-		dout(10, "trunc to %lld < %lld already queued\n",
-		     ci->i_vmtruncate_to, size);
-	} else {
-		/* we need to trunc even smaller */
-		dout(10, "queueing trunc %lld -> %lld\n", inode->i_size, size);
-		ci->i_vmtruncate_to = size;
-		queue_trunc = 1;
-	}
-	i_size_write(inode, size);
-	ci->i_reported_size = size;
+	dout(10, "handle_cap_trunc inode %p mds%d seq %d\n", inode, mds, seq);
+	queue_trunc = __ceph_queue_vmtruncate(inode, size);
 	spin_unlock(&inode->i_lock);
 
-	if (queue_trunc) {
+	if (queue_trunc)
 		if (queue_work(ceph_client(inode->i_sb)->trunc_wq,
-			   &ci->i_vmtruncate_work))
-			   igrab(inode);
-	}
+			       &ci->i_vmtruncate_work))
+			igrab(inode);
 }
 
 /*
