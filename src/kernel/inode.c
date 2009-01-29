@@ -1683,7 +1683,8 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		return PTR_ERR(req);
 	reqh = req->r_request->front.iov_base;
 	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
+	reqh->args.truncate.old_length = cpu_to_le64(inode->i_size);
+	//ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);

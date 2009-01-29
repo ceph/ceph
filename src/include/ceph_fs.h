@@ -780,7 +780,7 @@ struct ceph_mds_request_head {
 			__le32 mode;
 		} __attribute__ ((packed)) open;
 		struct {
-			__le64 length;
+			__le64 length, old_length;
 		} __attribute__ ((packed)) truncate;
 		struct {
 			__le32 flags;
