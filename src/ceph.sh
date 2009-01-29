@@ -168,7 +168,7 @@ if [ $select_mon -eq 1 ]; then
 		get_conf cd_path "" "ssh path" mon$mon mon global
 		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
-		echo $SSH_HOST $CD_PATH \
+		$SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS $mon_data_path/$mon_data_file &
 	done
 	sleep 1
@@ -192,7 +192,7 @@ if [ $select_osd -eq 1 ]; then
 		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
 		echo start osd$osd
-		echo $SSH_HOST $CD_PATH \
+		$SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd --conf_file $conf_file \
 			-m $CEPH_HOST:$CEPH_PORT $osd_dev $ARGS $COSD_ARGS &
 	done
@@ -208,11 +208,11 @@ if [ $select_mds -eq 1 ]; then
 		get_conf cd_path "" "ssh path" mds$mds mds global
 		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
-		echo $SSH_HOST $CD_PATH \
+		$SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
 			-m $CEPH_HOST:$CEPH_PORT $ARGS $CMDS_ARGS &
 	done
-	echo $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
+	$CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
 fi
 
 echo "started. stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
