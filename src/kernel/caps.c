@@ -1277,7 +1277,8 @@ start:
 	ceph_decode_timespec(&atime, &grant->atime);
 	ceph_decode_timespec(&ctime, &grant->ctime);
 	ceph_fill_file_bits(inode, issued,
-			    le32_to_cpu(grant->truncate_seq), size,
+			    le32_to_cpu(grant->truncate_seq),
+			    le64_to_cpu(grant->truncate_size), size,
 			    le32_to_cpu(grant->time_warp_seq), &ctime, &mtime,
 			    &atime);
 

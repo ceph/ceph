@@ -247,7 +247,6 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	dout(10, "alloc_inode %p\n", &ci->vfs_inode);
 
 	ci->i_version = 0;
-	ci->i_truncate_seq = 0;
 	ci->i_time_warp_seq = 0;
 	ci->i_ceph_flags = 0;
 	ci->i_symlink = NULL;
@@ -272,6 +271,9 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
+
+	ci->i_truncate_seq = 0;
+	ci->i_truncate_size = 0;
 
 	ci->i_max_size = 0;
 	ci->i_reported_size = 0;
@@ -330,7 +332,7 @@ void ceph_destroy_inode(struct inode *inode)
  * truncate() increments the corresponding _seq values on the MDS.
  */
 void ceph_fill_file_bits(struct inode *inode, int issued,
-			 u64 truncate_seq, u64 size,
+			 u32 truncate_seq, u64 truncate_size, u64 size,
 			 u64 time_warp_seq, struct timespec *ctime,
 			 struct timespec *mtime, struct timespec *atime)
 {
@@ -345,6 +347,8 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 		ci->i_reported_size = size;
 		ci->i_truncate_seq = truncate_seq;
 	}
+	if (truncate_seq >= ci->i_truncate_seq)
+		ci->i_truncate_size = truncate_size;
 
 	if (issued & (CEPH_CAP_FILE_EXCL|
 		      CEPH_CAP_FILE_WR|
@@ -379,7 +383,7 @@ void ceph_fill_file_bits(struct inode *inode, int issued,
 		}
 	}
 	if (warn) /* time_warp_seq shouldn't go backwards */
-		dout(10, "%p mds time_warp_seq %llu < %llu\n",
+		dout(10, "%p mds time_warp_seq %llu < %u\n",
 		     inode, time_warp_seq, ci->i_time_warp_seq);
 }
 
@@ -455,7 +459,8 @@ static int fill_inode(struct inode *inode,
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
 	ceph_fill_file_bits(inode, issued,
-			    le64_to_cpu(info->truncate_seq),
+			    le32_to_cpu(info->truncate_seq),
+			    le64_to_cpu(info->truncate_size),
 			    le64_to_cpu(info->size),
 			    le32_to_cpu(info->time_warp_seq),
 			    &ctime, &mtime, &atime);

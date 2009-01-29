@@ -240,7 +240,8 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 
 	ret = ceph_osdc_sync_read(&client->osdc, ceph_vino(inode),
 				  &ci->i_layout,
-				  pos, count, data);
+				  pos, count, ci->i_truncate_seq,
+				  ci->i_truncate_size, data);
 	if (ret > 0)
 		*offset = pos + ret;
 	return ret;
@@ -267,7 +268,8 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	ret = ceph_osdc_sync_write(&client->osdc, ceph_vino(inode),
 				   &ci->i_layout,
 				   ci->i_snap_realm->cached_context,
-				   pos, count, data);
+				   pos, count, ci->i_truncate_seq,
+				   ci->i_truncate_size, data);
 	if (ret > 0) {
 		pos += ret;
 		*offset = pos;

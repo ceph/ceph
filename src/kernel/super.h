@@ -211,7 +211,7 @@ struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */
 
 	u64 i_version;
-	u64 i_truncate_seq, i_time_warp_seq;
+	u32 i_time_warp_seq;
 
 	unsigned i_ceph_flags;
 
@@ -255,10 +255,13 @@ struct ceph_inode_info {
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */
 
-	loff_t i_max_size;            /* max file size authorized by mds */
-	loff_t i_reported_size; /* (max_)size reported to or requested of mds */
-	loff_t i_wanted_max_size;     /* offset we'd like to write too */
-	loff_t i_requested_max_size;  /* max_size we've requested */
+	u32 i_truncate_seq;
+	u64 i_truncate_size;
+
+	u64 i_max_size;            /* max file size authorized by mds */
+	u64 i_reported_size; /* (max_)size reported to or requested of mds */
+	u64 i_wanted_max_size;     /* offset we'd like to write too */
+	u64 i_requested_max_size;  /* max_size we've requested */
 
 	struct timespec i_old_atime;
 
@@ -673,7 +676,7 @@ extern struct inode *ceph_get_inode(struct super_block *sb,
 				    struct ceph_vino vino);
 extern struct inode *ceph_get_snapdir(struct inode *parent);
 extern void ceph_fill_file_bits(struct inode *inode, int issued,
-				u64 truncate_seq, u64 size,
+				u32 truncate_seq, u64 truncate_size, u64 size,
 				u64 time_warp_seq, struct timespec *ctime,
 				struct timespec *mtime, struct timespec *atime);
 extern int ceph_fill_trace(struct super_block *sb,

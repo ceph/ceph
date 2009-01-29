@@ -842,7 +842,8 @@ struct ceph_mds_reply_inode {
 	struct ceph_file_layout layout;
 	struct ceph_timespec ctime, mtime, atime;
 	__le32 time_warp_seq;
-	__le64 size, max_size, truncate_seq, truncate_size;
+	__le64 size, max_size, truncate_size;
+	__le32 truncate_seq;
 	__le32 mode, uid, gid;
 	__le32 nlink;
 	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
