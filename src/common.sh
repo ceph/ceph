@@ -1,7 +1,8 @@
 
-[ "$CCONF_BIN" == "" ] && CCONF_BIN=`dirname $0`/../bin/cconf
-
+[ "$CCONF_BIN" == "" ] && CCONF_BIN=$CEPH_BIN/cconf
+[ -e $CCONF_BIN ] || CCONF_BIN=`dirname $0`/../bin/cconf
 [ -e $CCONF_BIN ] || CCONF_BIN=`dirname $0`/cconf
+[ -e $CCONF_BIN ] || CCONF_BIN=bin/cconf
 
 get_val() {
   [ "$2" != "" ] && export $1=$2 || export $1=`$CCONF "$3" "$4" "$5"`
