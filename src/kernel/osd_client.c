@@ -86,41 +86,66 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
 }
 
 /*
- * build osd request message only.
+ * build new request AND message, calculate layout, and adjust file
+ * extent as needed.  include addition truncate or sync osd ops.
  */
-static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, short opc,
-					struct ceph_snap_context *snapc,
-					int do_sync, int do_trunc)
+struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
+					       struct ceph_file_layout *layout,
+					       struct ceph_vino vino,
+					       u64 off, u64 *plen, int opcode,
+					       struct ceph_snap_context *snapc,
+					       int do_sync,
+					       u32 truncate_seq,
+					       u64 truncate_size)
 {
-	struct ceph_msg *req;
+	struct ceph_osd_request *req;
+	struct ceph_msg *msg;
+	int num_pages = calc_pages_for(off, *plen);
 	struct ceph_osd_request_head *head;
 	struct ceph_osd_op *op;
 	__le64 *snaps;
+	int do_trunc = truncate_seq && (off + *plen > truncate_size);
 	int num_op = 1 + do_sync + do_trunc;
-	size_t size = sizeof(*head) + num_op*sizeof(*op);
+	size_t msg_size = sizeof(*head) + num_op*sizeof(*op);
 	int i;
 
+	/* we may overallocate here, if our write extent is shortened below */
+	req = kzalloc(sizeof(*req) + num_pages*sizeof(void *), GFP_NOFS);
+	if (req == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	/* create message */
 	if (snapc)
-		size += sizeof(u64) * snapc->num_snaps;
-	req = ceph_msg_new(CEPH_MSG_OSD_OP, size, 0, 0, NULL);
-	if (IS_ERR(req))
-		return req;
-	memset(req->front.iov_base, 0, req->front.iov_len);
-	head = req->front.iov_base;
+		msg_size += sizeof(u64) * snapc->num_snaps;
+	msg = ceph_msg_new(CEPH_MSG_OSD_OP, msg_size, 0, 0, NULL);
+	if (IS_ERR(msg)) {
+		kfree(req);
+		return ERR_PTR(PTR_ERR(msg));
+	}
+	memset(msg->front.iov_base, 0, msg->front.iov_len);
+	head = msg->front.iov_base;
 	op = (void *)(head + 1);
 	snaps = (void *)(op + num_op);
 
-	/* encode head */
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = 0;
 	head->num_ops = cpu_to_le16(num_op);
-	op->op = cpu_to_le16(opc);
+	op->op = cpu_to_le16(opcode);
 
+	req->r_request = msg;
+	req->r_snapc = ceph_get_snap_context(snapc);
+
+	/* calculate max write size, pgid */
+	calc_layout(osdc, vino, layout, off, plen, req);
+	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
+
+	/* additional ops */
 	if (do_trunc) {
 		op++;
-		op->op = cpu_to_le16(opc == CEPH_OSD_OP_READ ? 
+		op->op = cpu_to_le16(opcode == CEPH_OSD_OP_READ ? 
 			     CEPH_OSD_OP_MASKTRUNC : CEPH_OSD_OP_SETTRUNC);
-		/* call set_trunc later */
+		op->truncate_seq = truncate_seq;
+		op->truncate_size = truncate_size - (off - (op-1)->offset);
 	}
 	if (do_sync) {
 		op++;
@@ -132,63 +157,6 @@ static struct ceph_msg *new_request_msg(struct ceph_osd_client *osdc, short opc,
 		for (i = 0; i < snapc->num_snaps; i++)
 			snaps[i] = cpu_to_le64(snapc->snaps[i]);
 	}
-	return req;
-}
-
-/*
- * Set truncate op's truncate_size relative to object offset,
- * after we calculate the layout.
- */
-static void set_trunc(struct ceph_osd_request *req, u64 file_off,
-		      u32 truncate_seq, u64 truncate_size)
-{
-	struct ceph_osd_request_head *head = req->r_request->front.iov_base;
-	struct ceph_osd_op *op = (void *)(head + 1);
-	struct ceph_osd_op *top = op + 1;
-
-	op->truncate_seq = truncate_seq;
-	op->truncate_size = truncate_size - (file_off - top->offset);
-}
-
-/*
- * build new request AND message, calculate layout, and adjust file
- * extent as needed.
- */
-struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
-					       struct ceph_file_layout *layout,
-					       struct ceph_vino vino,
-					       u64 off, u64 *plen, int op,
-					       struct ceph_snap_context *snapc,
-					       int do_sync,
-					       u32 truncate_seq,
-					       u64 truncate_size)
-{
-	struct ceph_osd_request *req;
-	struct ceph_msg *msg;
-	int num_pages = calc_pages_for(off, *plen);
-	struct ceph_osd_request_head *head;
-	int do_trunc = off + *plen > truncate_size;
-
-	/* we may overallocate here, if our write extent is shortened below */
-	req = kzalloc(sizeof(*req) + num_pages*sizeof(void *), GFP_NOFS);
-	if (req == NULL)
-		return ERR_PTR(-ENOMEM);
-
-	msg = new_request_msg(osdc, op, snapc, do_sync, do_trunc);
-	if (IS_ERR(msg)) {
-		kfree(req);
-		return ERR_PTR(PTR_ERR(msg));
-	}
-	req->r_request = msg;
-	req->r_snapc = ceph_get_snap_context(snapc);
-
-	/* calculate max write size, pgid */
-	calc_layout(osdc, vino, layout, off, plen, req);
-	if (do_trunc)
-		set_trunc(req, off, truncate_seq, truncate_size);
-
-	head = msg->front.iov_base;
-	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 
 	atomic_set(&req->r_ref, 1);
 	init_completion(&req->r_completion);
