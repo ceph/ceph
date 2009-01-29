@@ -3,6 +3,7 @@
 let new=0
 let debug=0
 let stopfirst=1
+let ramjournal=0
 norestart="--norestart"
 
 while [ $# -ge 1 ]; do
@@ -22,6 +23,9 @@ while [ $# -ge 1 ]; do
 	--nostop )
 	    stopfirst=0
 	    ;;
+	--ramjournal )
+	    ramjournal=1
+	    ;;
     esac
     shift
 done
@@ -34,7 +38,7 @@ MOUNTOPTIONS="-o notreelog,flushoncommit"
 if [ $debug -eq 0 ]; then
     CMON_ARGS="--debug_mon 10 --debug_ms 1"
     COSD_ARGS=""
-    CMDS_ARGS="--file_layout_pg_size 3"
+    CMDS_ARGS="--file_layout_pg_size 3 --debug_ms 1"
 else
     echo "** going verbose **"
     CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
@@ -126,6 +130,9 @@ do
 	   ssh root@cosd$host cd $HOME/ceph/src \; umount $devm \; \
 	       $HOME/src/btrfs-progs-unstable/mkfs.btrfs $dev \; \
 	       mount -t btrfs $MOUNTOPTIONS $dev $devm
+	   if [ $ramjournal -eq 1 ]; then
+	       ssh root@cosd$host dd if=/dev/zero of=/r/osd$osd.journal bs=1048576 count=1 seek=128
+           fi
        else
 	   echo mounting btrfs
 	   ssh root@cosd$host cd $HOME/ceph/src \; mount -t btrfs $MOUNTOPTIONS $dev $devm
