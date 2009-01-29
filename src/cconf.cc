@@ -14,17 +14,18 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cconf [--conf_file filename] <section> <key> [defval]" << std::endl;
+  cerr << "usage: cconf [--conf_file filename] [-s] <section> [[-s section] ... ] <key> [default]" << std::endl;
   exit(1);
 }
 
 int main(int argc, const char **argv) 
 {
-  const char *fname = "ceph.conf", *section = NULL;
+  const char *fname = "ceph.conf";
   const char *key = NULL, *defval = NULL;
   char *val;
   int param = 0;
   vector<const char*> args;
+  vector<const char *> sections;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
@@ -37,10 +38,17 @@ int main(int argc, const char **argv)
         fname = args[++i];
       else
 	usage();
+    } else if (strcmp(args[i], "-s") == 0) {
+      if (param == 0)
+          param++;
+      if (i < args.size() - 1)
+        sections.push_back(args[++i]);
+      else
+	usage();
     } else {
       switch (param) {
       	case 0:
-	    section = args[i];
+	    sections.push_back(args[i]);
 	    break;
 	case 1:
 	    key = args[i];
@@ -57,14 +65,21 @@ int main(int argc, const char **argv)
     usage();
 
   ConfFile cf(fname);
-
   cf.parse();
-  cf.read(section, key, (char **)&val, defval);
 
-  if (val)
-    cout << val << std::endl;
-  else
-    exit(1);
+  for (unsigned i=0; i<sections.size(); i++) {
+    cf.read(sections[i], key, (char **)&val, NULL);
 
-  exit(0);
+    if (val) {
+      cout << val << std::endl;
+      exit(0);
+    }
+  }
+
+  if (defval) {
+    cout << defval << std::endl;
+    exit(0);
+  }
+
+  exit(1);
 }
