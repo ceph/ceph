@@ -538,6 +538,9 @@ void MDSMonitor::tick()
       last_beacon[p->second.addr] = g_clock.now();
 
   if (mon->osdmon()->paxos->is_writeable()) {
+
+    bool propose_osdmap = false;
+
     map<entity_addr_t, utime_t>::iterator p = last_beacon.begin();
     while (p != last_beacon.end()) {
       entity_addr_t addr = p->first;
@@ -593,7 +596,7 @@ void MDSMonitor::tick()
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
 	  mon->osdmon()->blacklist(addr, until);
-	  mon->osdmon()->propose_pending();
+	  propose_osdmap = true;
 	}
 	
 	do_propose = true;
@@ -614,6 +617,10 @@ void MDSMonitor::tick()
       
       last_beacon.erase(addr);
     }
+
+    if (propose_osdmap)
+      mon->osdmon()->propose_pending();
+
   }
 
 
