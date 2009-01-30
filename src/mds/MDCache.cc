@@ -6673,16 +6673,26 @@ void MDCache::purge_stray(CDentry *dn)
   dn->state_set(CDentry::STATE_PURGING);
   dn->get(CDentry::PIN_PURGING);
 
+  
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.
-  //
-  // as a result, we adjust EPurgeFinish::replay to forgive us if hte
-  // inode isn't in the cache.  If we later decide to journal our
-  // intent here, add that assertion back.
-
-  purge_inode(in, 0, in->inode.size, mds->mdlog->get_current_segment());
-  waiting_for_purge[in][0].push_back(new C_MDC_PurgeStrayPurged(this, dn));
+  
+  SnapRealm *realm = in->find_snaprealm();
+  SnapContext nullsnap;
+  const SnapContext *snapc;
+  if (realm) {
+    dout(10) << " realm " << *realm << dendl;
+    snapc = &realm->get_snap_context();
+  } else {
+    dout(10) << " NO realm, using null context" << dendl;
+    snapc = &nullsnap;
+    assert(in->last == CEPH_NOSNAP);
+  }
+  dout(10) << "truncate_inode snapc " << snapc << " on " << *in << dendl;
+  mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,
+		     0, in->inode.size, 0,
+		     0, new C_MDC_PurgeStrayPurged(this, dn));
 }
 
 class C_MDC_PurgeStrayLogged : public Context {
