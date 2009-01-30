@@ -53,12 +53,16 @@ class MOSDOpReply : public Message {
   // osdmap
   epoch_t get_map_epoch() { return head.osdmap_epoch; }
 
+  osd_reqid_t get_reqid() { return osd_reqid_t(get_dest(),
+					       head.client_inc,
+					       head.tid); }
 
 public:
   MOSDOpReply(MOSDOp *req, __s32 result, epoch_t e, int acktype) :
     Message(CEPH_MSG_OSD_OPREPLY) {
     memset(&head, 0, sizeof(head));
     head.tid = req->head.tid;
+    head.client_inc = req->head.client_inc;
     ops = req->ops;
     head.result = result;
     head.flags =
@@ -86,7 +90,7 @@ public:
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
-    out << "osd_op_reply(" << get_tid()
+    out << "osd_op_reply(" << get_reqid()
 	<< " " << head.oid << " " << ops;
     if (is_modify()) {
       if (is_ondisk())

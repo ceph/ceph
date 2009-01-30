@@ -43,7 +43,7 @@
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     5 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL    4 /* public/client */
+#define CEPH_OSDC_PROTOCOL    5 /* public/client */
 #define CEPH_MDSC_PROTOCOL    6 /* public/client */
 #define CEPH_MONC_PROTOCOL    6 /* public/client */
 
@@ -1335,6 +1335,7 @@ struct ceph_osd_request_head {
 
 struct ceph_osd_reply_head {
 	ceph_tid_t           tid;
+	__le32               client_inc;
 	__le32               flags;
 	struct ceph_object   oid;
 	struct ceph_object_layout layout;
