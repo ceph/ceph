@@ -137,6 +137,8 @@ fi
 
 #mon
 if [ $select_mon -eq 1 ]; then
+	$CEPH_BIN/osdmaptool --clobber --createsimple 4 .ceph_osdmap # --pgbits 2
+
 	str="$CEPH_BIN/monmaptool --create --clobber"
 	for mon in `seq 0 $((CEPH_NUM_MON-1))`; do
 		get_conf mon_data_path $def_mon_data_path "mon data path" mon$mon mon global
@@ -153,8 +155,9 @@ if [ $select_mon -eq 1 ]; then
 	echo $str
 	$str
 
-	$CEPH_BIN/osdmaptool --clobber --createsimple 4 .ceph_osdmap # --pgbits 2
-	$CEPH_BIN/mkmonfs --clobber mondata/mon$mon --mon $mon --monmap .ceph_monmap --osdmap .ceph_osdmap
+	for mon in `seq 0 $((CEPH_NUM_MON-1))`; do
+		$CEPH_BIN/mkmonfs --clobber mondata/mon$mon --mon $mon --monmap .ceph_monmap --osdmap .ceph_osdmap
+	done
 fi
 
 #osd
