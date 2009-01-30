@@ -4819,9 +4819,27 @@ void MDCache::trim_client_rdcaps()
 	     << " issued " << ccap_string(cap->issued())
 	     << " wanted " << ccap_string(cap->wanted())
 	     << " on " << *in << dendl;
-    in->remove_client_cap(client);
-    mds->locker->eval_cap_gather(in);
+    remove_client_cap(in, client);
   }
+}
+
+void MDCache::remove_client_cap(CInode *in, int client, bool eval)
+{
+  in->remove_client_cap(client);
+
+  if (!in->is_auth())
+    mds->locker->request_inode_file_caps(in);
+  
+  if (eval)
+    mds->locker->eval_cap_gather(in);
+
+  // unlinked stray?  may need to purge (e.g., after all caps are released)
+  if (in->inode.nlink == 0 &&
+      !in->is_any_caps() &&
+      in->is_auth() && 
+	in->get_parent_dn() &&
+      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
+    eval_stray(in->get_parent_dn());
 }
 
 
@@ -6449,7 +6467,10 @@ void MDCache::eval_stray(CDentry *dn)
 	    !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn)))
 	  return;
 	in->snaprealm->prune_past_parents();
-	if (in->snaprealm->has_past_parents()) return;  // not until some snaps are deleted.
+	if (in->snaprealm->has_past_parents()) {
+	  dout(20) << "  has past parents " << in->snaprealm->past_parents << dendl;
+	  return;  // not until some snaps are deleted.
+	}
       }
     }
     if (dn->is_replicated() || in->is_any_caps() || in->is_any_leases()) return;  // wait

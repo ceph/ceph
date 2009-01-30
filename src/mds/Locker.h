@@ -187,8 +187,9 @@ public:
 		      MClientCaps *ack=0, ceph_seq_t releasecap=0);
   void _finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClientCaps *ack);
 
-
+public:
   void request_inode_file_caps(CInode *in);
+protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
   void file_update_finish(CInode *in, Mutation *mut, bool share, int client, Capability *cap,

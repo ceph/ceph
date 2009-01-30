@@ -79,6 +79,11 @@ struct snaplink_t {
 };
 WRITE_CLASS_ENCODER(snaplink_t)
 
+inline ostream& operator<<(ostream& out, const snaplink_t &l)
+{
+  return out << l.ino << "@" << l.first;
+}
+
 struct SnapRealm {
   // realm state
   snapid_t seq;                     // basically, a version/seq # for changes to _this_ realm.

@@ -1533,20 +1533,11 @@ void Locker::_finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClient
 	     << " > " << seq << dendl;
     delete ack;
   } else {
-    in->remove_client_cap(client);
-    if (!in->is_auth())
-      request_inode_file_caps(in);
+    
+    mdcache->remove_client_cap(in, client, false);
     
     if (ack)
       mds->send_message_client(ack, client);
-
-    // unlinked stray?  may need to purge (e.g., after all caps are released)
-    if (in->inode.nlink == 0 &&
-	!in->is_any_caps() &&
-	in->is_auth() && 
-	in->get_parent_dn() &&
-	in->get_parent_dn()->get_dir()->get_inode()->is_stray())
-      mdcache->eval_stray(in->get_parent_dn());
   }
 }
 

@@ -421,6 +421,8 @@ public:
   
   void trim_client_rdcaps();
 
+  void remove_client_cap(CInode *in, int client, bool eval=true);
+
 
   // -- discover --
   // waiters
