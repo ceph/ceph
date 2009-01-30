@@ -1,13 +1,8 @@
-v0.6
-/- fold observer into cmonctl/ceph?
-/- osd scrub
-/- async metadata
-/- async lstat
-
 v0.7
 /- smart osd sync
 /- osd bug fixes
-- fast truncate
+/- fast truncate
+- start/stop script
 
 v0.8
 - fully async file creation
@@ -75,22 +70,15 @@ kernel client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
 
-kclient items to review
-- fill_trace locking
-- async trunc
-- async writeback
-- cache invalidation race, locking problems
-  - cap changes are serialized by i_lock, but (thorough) cache invalidation may block..
-
 vfs issues
 - real_lookup() race:
   1- hash lookup find no dentry
   2- real_lookup() takes dir i_mutex, but then finds a dentry
   3- drops mutex, then calld d_revalidate.  if that fails, we return ENOENT (instead of looping?)
 - vfs_rename_dir()
+- a getattr mask would be really nice
 
 filestore
-- sort object lists by ino
 - get file csum?
 
 btrfs
@@ -136,7 +124,6 @@ mds
 - fix reconnect/rejoin open file weirdness
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
-- make truncate faster with a trunc_seq, attached to objects as attributes?
 - FIXME how to journal/store root and stray inode content? 
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
@@ -161,7 +148,7 @@ osdmon
 - monitor needs to monitor some osds...
 
 pgmon
-- include osd vector with pg state
+/- include osd vector with pg state
   - check for orphan pgs
 - monitor pg states, notify on out?
 - watch osd utilization; adjust overload in cluster map
