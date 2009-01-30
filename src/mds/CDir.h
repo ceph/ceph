@@ -211,7 +211,6 @@ protected:
   // state
   version_t committing_version;
   version_t committed_version;
-  //version_t committed_version_equivalent;  // in case of, e.g., temporary file
 
 
   // lock nesting, freeze
@@ -434,7 +433,6 @@ private:
   // -- dirtyness --
   version_t get_committing_version() { return committing_version; }
   version_t get_committed_version() { return committed_version; }
-  //version_t get_committed_version_equivalent() { return committed_version_equivalent; }
   void set_committed_version(version_t v) { committed_version = v; }
 
   void mark_complete() { state_set(STATE_COMPLETE); }

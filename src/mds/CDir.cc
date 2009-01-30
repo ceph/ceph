@@ -60,7 +60,6 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " v=" << dir.get_version();
     out << " cv=" << dir.get_committing_version();
     out << "/" << dir.get_committed_version();
-    //out << "/" << dir.get_committed_version_equivalent();
   } else {
     pair<int,int> a = dir.authority();
     out << " rep@" << a.first;
@@ -158,7 +157,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   projected_version = 0;
 
   committing_version = 0;
-  //committed_version_equivalent = 
   committed_version = 0;
 
   // dir_auth
@@ -1576,7 +1574,6 @@ void CDir::encode_export(bufferlist& bl)
   ::encode(fnode, bl);
   ::encode(dirty_old_rstat, bl);
   ::encode(committed_version, bl);
-  //::encode(committed_version_equivalent, bl);
 
   ::encode(state, bl);
   ::encode(dir_rep, bl);
@@ -1606,7 +1603,6 @@ void CDir::decode_import(bufferlist::iterator& blp)
   ::decode(dirty_old_rstat, blp);
   projected_version = fnode.version;
   ::decode(committed_version, blp);
-  //::decode(committed_version_equivalent, blp);
   committing_version = committed_version;
 
   unsigned s;
