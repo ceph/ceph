@@ -1298,7 +1298,8 @@ int Rank::Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_WAIT) {
-      dout(3) << "connect got WAIT (connection race), and lo, the wait is already over" << dendl;
+      dout(3) << "connect got WAIT (connection race)" << dendl;
+      state = STATE_WAIT;
       goto stop_locked;
     }
 
@@ -1736,7 +1737,7 @@ void Rank::Pipe::writer()
 {
   lock.Lock();
 
-  while (state != STATE_CLOSED) { // && state != STATE_WAIT) {
+  while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
     // standby?
     if (!q.empty() && state == STATE_STANDBY)
       state = STATE_CONNECTING;
