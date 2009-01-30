@@ -4770,16 +4770,6 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 // ===================================
 // TRUNCATE, FSYNC
 
-struct DelayTrunc : public Context {
-  MDS *mds;
-  CInode *in;
-  LogSegment *ls;
-  DelayTrunc(MDS *m, CInode *i, LogSegment *l) : mds(m), in(i), ls(l) {}
-  void finish(int r) {
-    mds->mdcache->truncate_inode(in, ls);
-  }
-};
-
 class C_MDS_truncate_logged : public Context {
   MDS *mds;
   MDRequest *mdr;
@@ -4796,8 +4786,7 @@ public:
 
     // notify any clients
     mds->locker->issue_truncate(in);
-    //mds->mdcache->truncate_inode(in, mdr->ls);
-    mds->timer.add_event_after(10.0, new DelayTrunc(mds, in, mdr->ls));
+    mds->mdcache->truncate_inode(in, mdr->ls);
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
@@ -4855,7 +4844,6 @@ void Server::handle_client_truncate(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "truncate");
   le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_inode_truncate(cur->ino(), req->head.args.truncate.length, cur->inode.size);
   pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;
@@ -4867,6 +4855,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
     pi->rstat.rbytes = pi->size;
     pi->truncate_size = pi->size;
     pi->truncate_seq++;
+    le->metablob.add_truncate_start(cur->ino());
   } else {
     // truncate to larger size
     pi->size = req->head.args.truncate.length;
@@ -5083,7 +5072,7 @@ void Server::handle_client_opent(MDRequest *mdr)
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
   le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_inode_truncate(cur->ino(), 0, cur->inode.size);
+  le->metablob.add_inode_purge(cur->ino(), 0, cur->inode.size);
   inode_t *pi = cur->project_inode();
   pi->mtime = ctime;
   pi->ctime = ctime;

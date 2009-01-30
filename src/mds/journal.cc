@@ -230,6 +230,25 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     }
   }
 
+  // truncating
+  for (set<CInode*>::iterator p = truncating_inodes.begin();
+       p != truncating_inodes.end();
+       p++) {
+    dout(10) << "try_to_expire waiting for truncate of " << **p << dendl;
+    if (!gather) gather = new C_Gather;
+    (*p)->add_waiter(CInode::WAIT_TRUNC, gather->new_sub());
+  }
+  
+  // purging
+  for (map<CInode*, map<loff_t,loff_t> >::iterator p = purging_inodes.begin();
+       p != purging_inodes.end();
+       ++p) {
+    CInode *in = p->first;
+    dout(10) << "try_to_expire waiting for purge of " << *in << dendl;
+    if (!gather) gather = new C_Gather;
+    mds->mdcache->wait_for_purge(in, p->second.begin()->first, gather->new_sub());
+  }
+
   // FIXME client requests...?
   // audit handling of anchor transactions?
 
@@ -548,13 +567,32 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
     }
   }
 
-  // truncated inodes
-  for (list< triple<inodeno_t,uint64_t,uint64_t> >::iterator p = truncated_inodes.begin();
-       p != truncated_inodes.end();
+  // truncating inodes
+  for (list<inodeno_t>::iterator p = truncate_start.begin();
+       p != truncate_start.end();
+       p++) {
+    CInode *in = mds->mdcache->get_inode(*p);
+    assert(in);
+    mds->mdcache->add_recovered_truncate(in, logseg);
+  }
+  for (map<inodeno_t,__u64>::iterator p = truncate_finish.begin();
+       p != truncate_finish.end();
+       p++) {
+    LogSegment *ls = mds->mdlog->get_segment(p->second);
+    if (ls) {
+      CInode *in = mds->mdcache->get_inode(p->first);
+      assert(in);
+      ls->truncating_inodes.erase(in);
+    }
+  }
+
+  // purging inodes
+  for (list< triple<inodeno_t,uint64_t,uint64_t> >::iterator p = purging_inodes.begin();
+       p != purging_inodes.end();
        ++p) {
     CInode *in = mds->mdcache->get_inode(p->first);
     assert(in);
-    dout(10) << "EMetaBlob.replay will purge truncated " 
+    dout(10) << "EMetaBlob.replay will purging " 
 	     << p->third << " -> " << p->second
 	     << " on " << *in << dendl;
     mds->mdcache->add_recovered_purge(in, p->second, p->third, logseg);

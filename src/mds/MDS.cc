@@ -1030,6 +1030,7 @@ void MDS::recovery_done()
   anchorclient->finish_recovery();
   snapclient->finish_recovery();
   
+  mdcache->start_recovered_truncates();
   mdcache->start_recovered_purges();
   mdcache->do_file_recover();
   

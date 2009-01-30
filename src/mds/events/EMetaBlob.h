@@ -333,7 +333,10 @@ private:
   entity_name_t client_name;          //            session
 
   // inodes i've truncated
-  list< triple<inodeno_t,uint64_t,uint64_t> > truncated_inodes;
+  list<inodeno_t> truncate_start;        // start truncate 
+  map<inodeno_t,__u64> truncate_finish;  // finished truncate (started in segment blah)
+
+  list< triple<inodeno_t,uint64_t,uint64_t> > purging_inodes;
   vector<inodeno_t> destroyed_inodes;
 
   // idempotent op(s)
@@ -351,7 +354,9 @@ private:
     ::encode(client_name, bl);
     ::encode(inotablev, bl);
     ::encode(sessionmapv, bl);
-    ::encode(truncated_inodes, bl);
+    ::encode(truncate_start, bl);
+    ::encode(truncate_finish, bl);
+    ::encode(purging_inodes, bl);
     ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
   } 
@@ -366,7 +371,9 @@ private:
     ::decode(client_name, bl);
     ::decode(inotablev, bl);
     ::decode(sessionmapv, bl);
-    ::decode(truncated_inodes, bl);
+    ::decode(truncate_start, bl);
+    ::decode(truncate_finish, bl);
+    ::decode(purging_inodes, bl);
     ::decode(destroyed_inodes, bl);
     ::decode(client_reqs, bl);
   }
@@ -415,8 +422,15 @@ private:
     inotablev = iv;
   }
 
-  void add_inode_truncate(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
-    truncated_inodes.push_back(triple<inodeno_t,uint64_t,uint64_t>(ino, newsize, oldsize));
+  void add_truncate_start(inodeno_t ino) {
+    truncate_start.push_back(ino);
+  }
+  void add_truncate_finish(inodeno_t ino, __u64 segoff) {
+    truncate_finish[ino] = segoff;
+  }
+
+  void add_inode_purge(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
+    purging_inodes.push_back(triple<inodeno_t,uint64_t,uint64_t>(ino, newsize, oldsize));
   }
   void add_destroyed_inode(inodeno_t ino) {
     destroyed_inodes.push_back(ino);

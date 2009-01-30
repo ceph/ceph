@@ -825,6 +825,13 @@ public:
  public:
   // truncate
   void truncate_inode(CInode *in, LogSegment *ls);
+  void _truncate_inode(CInode *in, LogSegment *ls);
+  void truncate_inode_finish(CInode *in, LogSegment *ls);
+  void truncate_inode_logged(CInode *in, Mutation *mut);
+
+  void add_recovered_truncate(CInode *in, LogSegment *ls);
+  void remove_recovered_truncate(CInode *in);
+  void start_recovered_truncates();
 
   // inode purging
   void purge_inode(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls);

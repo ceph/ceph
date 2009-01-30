@@ -72,6 +72,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_IMPORTINGCAPS =    15;
   static const int PIN_PASTSNAPPARENT =  -16;
   static const int PIN_OPENINGSNAPPARENTS = 17;
+  static const int PIN_TRUNCATING =       18;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -91,6 +92,7 @@ class CInode : public MDSCacheObject {
     case PIN_IMPORTINGCAPS: return "importingcaps";
     case PIN_PASTSNAPPARENT: return "pastsnapparent";
     case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
+    case PIN_TRUNCATING: return "truncating";
     default: return generic_pin_name(p);
     }
   }

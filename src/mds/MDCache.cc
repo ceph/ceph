@@ -4076,14 +4076,42 @@ void MDCache::set_root(CInode *in)
 
 
 
-
+// ----------------------------
+// truncate
 
 void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 {
   inode_t *pi = in->get_projected_inode();
-  dout(10) << "truncate_inode " << pi->truncate_from << " -> " << pi->truncate_size
+  dout(10) << "truncate_inode "
+	   << pi->truncate_from << " -> " << pi->truncate_size
 	   << " on " << *in
 	   << dendl;
+
+  ls->truncating_inodes.insert(in);
+  
+  _truncate_inode(in, ls);
+}
+
+struct C_MDC_TruncateFinish : public Context {
+  MDCache *mdc;
+  CInode *in;
+  LogSegment *ls;
+  C_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
+    mdc(c), in(i), ls(l) {}
+  void finish(int r) {
+    mdc->truncate_inode_finish(in, ls);
+  }
+};
+
+void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
+{
+  inode_t *pi = in->get_projected_inode();
+  dout(10) << "_truncate_inode "
+	   << pi->truncate_from << " -> " << pi->truncate_size
+	   << " on " << *in << dendl;
+
+  in->get(CInode::PIN_TRUNCATING);
+  in->auth_pin(this);
 
   SnapRealm *realm = in->find_snaprealm();
   SnapContext nullsnap;
@@ -4099,13 +4127,82 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
   dout(10) << "truncate_inode snapc " << snapc << " on " << *in << dendl;
   mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
 		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, 0,
-		       0, 0);//new C_MDC_PurgeFinish(this, in, newsize, oldsize));
-
-
+		       0, new C_MDC_TruncateFinish(this, in, ls));
 }
 
-// **************
-// Inode purging -- reliably removing deleted file's objects
+struct C_MDC_TruncateLogged : public Context {
+  MDCache *mdc;
+  CInode *in;
+  Mutation *mut;
+  C_MDC_TruncateLogged(MDCache *m, CInode *i, Mutation *mu) : mdc(m), in(i), mut(mu) {}
+  void finish(int r) {
+    mdc->truncate_inode_logged(in, mut);
+  }
+};
+
+void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
+{
+  dout(10) << "truncate_inode_finish " << *in << dendl;
+
+  ls->truncating_inodes.erase(in);
+
+  // update
+  inode_t *pi = in->project_inode();
+  pi->version = in->pre_dirty();
+  pi->truncate_from = 0;
+  pi->truncate_size = (__u64)-1ull;
+
+  Mutation *mut = new Mutation;
+  mut->ls = mds->mdlog->get_current_segment();
+  mut->add_projected_inode(in);
+
+  EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
+  le->metablob.add_dir_context(in->get_parent_dir());
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in, pi);
+  le->metablob.add_truncate_finish(in->ino(), ls->offset);
+
+  journal_dirty_inode(mut, &le->metablob, in);
+  mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
+}
+
+void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
+{
+  dout(10) << "truncate_inode_logged " << *in << dendl;
+  mut->apply();
+  delete mut;
+
+  in->put(CInode::PIN_TRUNCATING);
+  in->auth_unpin(this);
+
+  list<Context*> waiters;
+  in->take_waiting(CInode::WAIT_TRUNC, waiters);
+  mds->queue_waiters(waiters);
+}
+
+
+void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
+{
+  ls->truncating_inodes.insert(in);
+}
+
+void MDCache::start_recovered_truncates()
+{
+  dout(10) << "start_recovered_truncates" << dendl;
+  for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+       p != mds->mdlog->segments.end();
+       p++) {
+    LogSegment *ls = p->second;
+    for (set<CInode*>::iterator q = ls->truncating_inodes.begin();
+	 q != ls->truncating_inodes.end();
+	 q++)
+      _truncate_inode(*q, ls);
+  }
+}
+
+
+
+// ----------------------------
+// purge
 
 class C_MDC_PurgeFinish : public Context {
   MDCache *mdc;
