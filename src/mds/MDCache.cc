@@ -6540,10 +6540,15 @@ void MDCache::purge_stray(CDentry *dn)
     snapc = &nullsnap;
     assert(in->last == CEPH_NOSNAP);
   }
-  dout(10) << "purge_stray snapc " << snapc << " on " << *in << dendl;
-  mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,
-		     0, in->inode.size, 0,
-		     0, new C_MDC_PurgeStrayPurged(this, dn));
+
+  __u64 to = MAX(in->inode.size, in->inode.max_size);
+  dout(10) << "purge_stray 0~" << to << " snapc " << snapc << " on " << *in << dendl;
+  if (to)
+    mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,
+		       0, to, 0,
+		       0, new C_MDC_PurgeStrayPurged(this, dn));
+  else
+    _purge_stray_purged(dn);
 }
 
 class C_MDC_PurgeStrayLogged : public Context {
