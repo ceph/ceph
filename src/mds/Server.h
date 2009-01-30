@@ -123,7 +123,7 @@ public:
   // open
   void handle_client_open(MDRequest *mdr);
   void handle_client_openc(MDRequest *mdr);  // O_CREAT variant.
-  void handle_client_opent(MDRequest *mdr);  // O_TRUNC variant.
+  void handle_client_opent(MDRequest *mdr, int cmode);  // O_TRUNC variant.
 
   // namespace changes
   void handle_client_mknod(MDRequest *mdr);

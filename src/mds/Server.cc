@@ -4937,7 +4937,7 @@ void Server::handle_client_open(MDRequest *mdr)
 	return;
       }
 
-      handle_client_opent(mdr);
+      handle_client_opent(mdr, cmode);
       return;
     }
   } 
@@ -4996,10 +4996,12 @@ void Server::handle_client_open(MDRequest *mdr)
 }
 
 
-void Server::handle_client_opent(MDRequest *mdr)
+void Server::handle_client_opent(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->ref;
   assert(in);
+
+  dout(10) << "handle_client_opent " << *in << dendl;
 
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
@@ -5023,7 +5025,6 @@ void Server::handle_client_opent(MDRequest *mdr)
   
   // do the open
   bool is_new = false;
-  int cmode = ceph_flags_to_mode(mdr->client_request->head.args.open.flags);
   SnapRealm *realm = in->find_snaprealm();
   Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
   if (is_new)
