@@ -41,10 +41,25 @@ while [ $# -ge 1 ]; do
        shift
 done
 
+core_sig[11]=1
+core_sig[3]=1
+core_sig[4]=1
+core_sig[5]=1
+core_sig[6]=1
+core_sig[8]=1
+
+
 get_conf_bool do_ulimit 0 "ulimit core" crun global
 [ "$do_ulimit" != "0" ] && ulimit -c unlimited
 
 while [ true ]; do
 	$valgrind $orig_args
+	exit_code=$?
 	[ $daemon -eq 1 ] && exit
+
+	if [ $exit_code -gt 128 ]; then
+		[ "${core_sig[$(($exit_code-128))]}" != "1" ] && exit
+	else
+		exit
+	fi
 done
