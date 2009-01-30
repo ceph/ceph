@@ -25,8 +25,6 @@
 #include "events/EOpen.h"
 #include "events/ECommitted.h"
 
-#include "events/EPurgeFinish.h"
-
 #include "events/EExport.h"
 #include "events/EImportStart.h"
 #include "events/EImportFinish.h"
@@ -239,16 +237,6 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather->new_sub());
   }
   
-  // purging
-  for (map<CInode*, map<loff_t,loff_t> >::iterator p = purging_inodes.begin();
-       p != purging_inodes.end();
-       ++p) {
-    CInode *in = p->first;
-    dout(10) << "try_to_expire waiting for purge of " << *in << dendl;
-    if (!gather) gather = new C_Gather;
-    mds->mdcache->wait_for_purge(in, p->second.begin()->first, gather->new_sub());
-  }
-
   // FIXME client requests...?
   // audit handling of anchor transactions?
 
@@ -584,18 +572,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       assert(in);
       ls->truncating_inodes.erase(in);
     }
-  }
-
-  // purging inodes
-  for (list< triple<inodeno_t,uint64_t,uint64_t> >::iterator p = purging_inodes.begin();
-       p != purging_inodes.end();
-       ++p) {
-    CInode *in = mds->mdcache->get_inode(p->first);
-    assert(in);
-    dout(10) << "EMetaBlob.replay will purging " 
-	     << p->third << " -> " << p->second
-	     << " on " << *in << dendl;
-    mds->mdcache->add_recovered_purge(in, p->second, p->third, logseg);
   }
 
   // destroyed inodes
@@ -943,30 +919,6 @@ void EFragment::replay(MDS *mds)
   metablob.replay(mds, _segment);
 }
 
-
-
-// -----------------------
-// EPurgeFinish
-
-
-void EPurgeFinish::update_segment()
-{
-  // ** update purge lists?
-}
-
-void EPurgeFinish::replay(MDS *mds)
-{
-  dout(10) << "EPurgeFinish.replay " << ino << " " << oldsize << " -> " << newsize << dendl;
-  CInode *in = mds->mdcache->get_inode(ino);
-
-  // if we don't have *in at this point, it's because purge_stray is lazy and
-  // doesn't jouranl it's intent to purge.  no worries, if *in isn't in the cache,
-  // it's not in the purge table either.  we'll eval_stray when we finish
-  // recovery.
-  //assert(in);
-  if (in)
-    mds->mdcache->remove_recovered_purge(in, newsize, oldsize);
-}
 
 
 

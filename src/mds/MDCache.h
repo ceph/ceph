@@ -833,22 +833,6 @@ public:
   void remove_recovered_truncate(CInode *in);
   void start_recovered_truncates();
 
-  // inode purging
-  void purge_inode(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls);
-  void _do_purge_inode(CInode *in, loff_t newsize, loff_t oldsize);
-  void purge_inode_finish(CInode *in, loff_t newsize, loff_t oldsize);
-  void purge_inode_finish_2(CInode *in, loff_t newsize, loff_t oldsize);
-  bool is_purging(CInode *in, loff_t newsize, loff_t oldsize) {
-    return purging.count(in) && purging[in].count(newsize);
-  }
-  void wait_for_purge(CInode *in, loff_t newsize, Context *c) {
-    waiting_for_purge[in][newsize].push_back(c);
-  }
-
-  void add_recovered_purge(CInode *in, loff_t newsize, loff_t oldsize, LogSegment *ls);
-  void remove_recovered_purge(CInode *in, loff_t newsize, loff_t oldsize);
-  void start_recovered_purges();
-
 
  public:
   CDir *get_auth_container(CDir *in);

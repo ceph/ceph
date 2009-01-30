@@ -1031,7 +1031,6 @@ void MDS::recovery_done()
   snapclient->finish_recovery();
   
   mdcache->start_recovered_truncates();
-  mdcache->start_recovered_purges();
   mdcache->do_file_recover();
   
   // tell connected clients

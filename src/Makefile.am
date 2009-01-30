@@ -414,7 +414,6 @@ noinst_HEADERS = \
         mds/events/EImportStart.h\
         mds/events/EMetaBlob.h\
         mds/events/EOpen.h\
-        mds/events/EPurgeFinish.h\
         mds/events/ESession.h\
         mds/events/ESessions.h\
         mds/events/ESlaveUpdate.h\

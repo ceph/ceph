@@ -336,7 +336,6 @@ private:
   list<inodeno_t> truncate_start;        // start truncate 
   map<inodeno_t,__u64> truncate_finish;  // finished truncate (started in segment blah)
 
-  list< triple<inodeno_t,uint64_t,uint64_t> > purging_inodes;
   vector<inodeno_t> destroyed_inodes;
 
   // idempotent op(s)
@@ -356,7 +355,6 @@ private:
     ::encode(sessionmapv, bl);
     ::encode(truncate_start, bl);
     ::encode(truncate_finish, bl);
-    ::encode(purging_inodes, bl);
     ::encode(destroyed_inodes, bl);
     ::encode(client_reqs, bl);
   } 
@@ -373,7 +371,6 @@ private:
     ::decode(sessionmapv, bl);
     ::decode(truncate_start, bl);
     ::decode(truncate_finish, bl);
-    ::decode(purging_inodes, bl);
     ::decode(destroyed_inodes, bl);
     ::decode(client_reqs, bl);
   }
@@ -429,9 +426,6 @@ private:
     truncate_finish[ino] = segoff;
   }
 
-  void add_inode_purge(inodeno_t ino, uint64_t newsize, uint64_t oldsize) {
-    purging_inodes.push_back(triple<inodeno_t,uint64_t,uint64_t>(ino, newsize, oldsize));
-  }
   void add_destroyed_inode(inodeno_t ino) {
     destroyed_inodes.push_back(ino);
   }

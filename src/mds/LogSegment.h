@@ -49,7 +49,6 @@ class LogSegment {
 
   //xlist<CInode*>  purging_inodes;
   set<CInode*> truncating_inodes;
-  map<CInode*, map<loff_t,loff_t> > purging_inodes;
 
   map<int, hash_set<version_t> > pending_commit_tids;  // mdstable
   set<metareqid_t> uncommitted_masters;
