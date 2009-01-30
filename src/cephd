@@ -101,7 +101,7 @@ if [ $do_stop -eq 1 ]; then
 	[ $select_mon -eq 1 ] && stop_str=$stop_str" mon"
 	[ $select_mds -eq 1 ] && stop_str=$stop_str" mds"
 	[ $select_osd -eq 1 ] && stop_str=$stop_str" osd"
-	$SCRIPT_BIN/stop.sh $stop_str
+	$SCRIPT_BIN/ceph_stop $stop_str
 fi
 
 [ $do_start -eq 0 ] && exit
