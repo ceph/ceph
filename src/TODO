@@ -110,6 +110,8 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- make sure eval_stray is reliably called on unlinked stray inodes
+  - caps may be removed by trim_client_rdcaps, remove session, etc.
 - linkage vs cdentry replicas and remote rename....
 - move root inode into stray dir
 - make recovery work with early replies
