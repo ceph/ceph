@@ -734,13 +734,10 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 
 	if ((ceph_caps_issued(ceph_inode(dir)) & CEPH_CAP_FILE_EXCL) == 0)
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
-	ceph_mdsc_lease_release(mdsc, dir, dentry,
-				CEPH_LOCK_DN);
-	if ((ceph_caps_issued(ceph_inode(dir)) & CEPH_CAP_FILE_EXCL) == 0)
-		ceph_release_caps(inode, CEPH_CAP_LINK_RDCACHE);
+	ceph_mdsc_lease_release(mdsc, dir, dentry, CEPH_LOCK_DN);
+	ceph_release_caps(inode, CEPH_CAP_LINK_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	ceph_mdsc_put_request(req);
-
 	return err;
 }
 
