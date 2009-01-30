@@ -6540,7 +6540,7 @@ void MDCache::purge_stray(CDentry *dn)
     snapc = &nullsnap;
     assert(in->last == CEPH_NOSNAP);
   }
-  dout(10) << "truncate_inode snapc " << snapc << " on " << *in << dendl;
+  dout(10) << "purge_stray snapc " << snapc << " on " << *in << dendl;
   mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,
 		     0, in->inode.size, 0,
 		     0, new C_MDC_PurgeStrayPurged(this, dn));
@@ -6595,7 +6595,7 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   assert(dn->get_projected_linkage()->is_null());
 
   dn->dir->mark_dirty(pdv, ls);
-  touch_dentry_bottom(dn);  // drop as quickly as possible.
+  touch_dentry_bottom(dn);  // drop dn as quickly as possible.
 }
 
 
