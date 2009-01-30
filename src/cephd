@@ -11,7 +11,7 @@ def_osd_dev=dev/osd\$osd
 
 
 SCRIPT_BIN=`dirname $0`
-. $SCRIPT_BIN/common.sh
+. $SCRIPT_BIN/ceph_common.sh
 
 let debug=0
 let do_start=0
