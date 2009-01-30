@@ -130,7 +130,6 @@ mds
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too
-- try_remove_unlinked_dn thing
 - rename: importing inode... also journal imported client map?
 - rerun destro trace against latest, with various journal lengths
 - cap/lease length heuristics

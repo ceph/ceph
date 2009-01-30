@@ -261,6 +261,7 @@ public:
 
   void mark_new();
   bool is_new() { return state_test(STATE_NEW); }
+  void clear_new() { state_clear(STATE_NEW); }
   
   // -- replication
   void encode_replica(int mds, bufferlist& bl) {

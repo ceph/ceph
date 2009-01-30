@@ -60,7 +60,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " v=" << dir.get_version();
     out << " cv=" << dir.get_committing_version();
     out << "/" << dir.get_committed_version();
-    out << "/" << dir.get_committed_version_equivalent();
+    //out << "/" << dir.get_committed_version_equivalent();
   } else {
     pair<int,int> a = dir.authority();
     out << " rep@" << a.first;
@@ -158,7 +158,8 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   projected_version = 0;
 
   committing_version = 0;
-  committed_version_equivalent = committed_version = 0;
+  //committed_version_equivalent = 
+  committed_version = 0;
 
   // dir_auth
   dir_auth = CDIR_AUTH_DEFAULT;
@@ -443,36 +444,20 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
 {
   assert(dn->dir == this);
   assert(dn->get_linkage()->is_null());
-  assert(dn->is_dirty());
   
-  /* FIXME: there is a bug in this.  i think new dentries are properly
-     identified.. e.g. maybe a dentry exists, is committed, is removed, is now
-     dirty+null, then reused and mistakenly considered new.. then it is removed, 
-     we remove it here, the dir is fetched, and the dentry exists again.  
-     
-     somethign like that...
-  */
-  return;
-
-
   // no pins (besides dirty)?
-  if (dn->get_num_ref() != 1) 
+  if (dn->get_num_ref() != dn->is_dirty()) 
     return;
 
   // was the dn new?  or is the dir complete (i.e. we don't need negatives)? 
   if (dn->is_new() || is_complete()) {
     dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << dendl;
-    dn->mark_clean();
+    if (dn->is_dirty())
+      dn->mark_clean();
     remove_dentry(dn);
 
-    if (!is_projected() &&
-	committing_version == committed_version &&
-	num_dirty == 0) {
-      dout(10) << "try_remove_unlinked_dn committed_equivalent now " << get_version() 
-	       << " vs committed " << committed_version
-	       << dendl;
-      committed_version_equivalent = committed_version;    
-    }
+    // NOTE: we may not have any more dirty dentries, but the fnode
+    // still changed, so the directory must remain dirty.
   }
 }
 
@@ -1430,6 +1415,9 @@ void CDir::_commit(version_t want)
     
     n++;
 
+    // clear dentry NEW flag, if any.  we can no longer silently drop it.
+    dn->clear_new();
+
     // primary or remote?
     if (dn->linkage.is_remote()) {
       inodeno_t ino = dn->linkage.get_remote_ino();
@@ -1588,7 +1576,7 @@ void CDir::encode_export(bufferlist& bl)
   ::encode(fnode, bl);
   ::encode(dirty_old_rstat, bl);
   ::encode(committed_version, bl);
-  ::encode(committed_version_equivalent, bl);
+  //::encode(committed_version_equivalent, bl);
 
   ::encode(state, bl);
   ::encode(dir_rep, bl);
@@ -1618,7 +1606,7 @@ void CDir::decode_import(bufferlist::iterator& blp)
   ::decode(dirty_old_rstat, blp);
   projected_version = fnode.version;
   ::decode(committed_version, blp);
-  ::decode(committed_version_equivalent, blp);
+  //::decode(committed_version_equivalent, blp);
   committing_version = committed_version;
 
   unsigned s;
