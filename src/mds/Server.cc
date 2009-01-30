@@ -4923,11 +4923,20 @@ void Server::handle_client_open(MDRequest *mdr)
     set<SimpleLock*> rdlocks = mdr->rdlocks;
     set<SimpleLock*> wrlocks = mdr->wrlocks;
     set<SimpleLock*> xlocks = mdr->xlocks;
-    xlocks.insert(&cur->filelock);
+    wrlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    if (cur->inode.size > 0) {
+    inode_t *pi = cur->get_projected_inode();
+    if (pi->size > 0) {
+      // wait for pending truncate?
+      if (pi->is_truncating()) {
+	dout(10) << " waiting for pending truncate from " << pi->truncate_from
+		 << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+	cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+
       handle_client_opent(mdr);
       return;
     }
@@ -5001,89 +5010,48 @@ void Server::_do_open(MDRequest *mdr, CInode *cur)
 }
 
 
-class C_MDS_open_truncate_purged : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CInode *in;
-  version_t pv;
-  utime_t ctime;
-public:
-  C_MDS_open_truncate_purged(MDS *m, MDRequest *r, CInode *i, version_t pdv, utime_t ct) :
-    mds(m), mdr(r), in(i), 
-    pv(pdv),
-    ctime(ct) { }
-  void finish(int r) {
-    assert(r == 0);
-
-    // do the open
-    mds->server->_do_open(mdr, in);
-  }
-};
-
-class C_MDS_open_truncate_logged : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CInode *in;
-  version_t pv;
-  utime_t ctime;
-public:
-  C_MDS_open_truncate_logged(MDS *m, MDRequest *r, CInode *i, version_t pdv, utime_t ct) :
-    mds(m), mdr(r), in(i), 
-    pv(pdv),
-    ctime(ct) { }
-  void finish(int r) {
-    assert(r == 0);
-
-    // apply to cache
-    in->inode.size = 0;
-    in->inode.rstat.rbytes = 0;
-    in->inode.ctime = ctime;
-    in->inode.mtime = ctime;
-    in->pop_and_dirty_projected_inode(mdr->ls);
-    
-    mdr->apply();
-
-    // notify any clients
-    mds->locker->issue_truncate(in);
-
-    // hit pop
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
-
-    // purge also...
-    mds->mdcache->purge_inode(in, 0, in->inode.size, mdr->ls);
-    mds->mdcache->wait_for_purge(in, 0,
-				 new C_MDS_open_truncate_purged(mds, mdr, in, pv, ctime));
-  }
-};
-
-
 void Server::handle_client_opent(MDRequest *mdr)
 {
-  CInode *cur = mdr->ref;
-  assert(cur);
+  CInode *in = mdr->ref;
+  assert(in);
 
-  // prepare
-  version_t pdv = cur->pre_dirty();
-  utime_t ctime = g_clock.real_now();
-  Context *fin = new C_MDS_open_truncate_logged(mds, mdr, cur, 
-						pdv, ctime);
-  
-  // log + wait
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "open_truncate");
-  le->metablob.add_client_req(mdr->reqid);
-  le->metablob.add_inode_purge(cur->ino(), 0, cur->inode.size);
-  inode_t *pi = cur->project_inode();
-  pi->mtime = ctime;
-  pi->ctime = ctime;
-  pi->version = pdv;
+
+  // prepare
+  inode_t *pi = in->project_inode();
+  pi->mtime = pi->ctime = g_clock.real_now();
+  pi->version = in->pre_dirty();
+
+  pi->truncate_from = pi->size;
   pi->size = 0;
   pi->rstat.rbytes = 0;
+  pi->truncate_size = 0;
   pi->truncate_seq++;
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+
+  le->metablob.add_truncate_start(in->ino());
+  le->metablob.add_client_req(mdr->reqid);
+
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in);
   
-  mdlog->submit_entry(le, fin);
+  // do the open
+  bool is_new = false;
+  int cmode = ceph_flags_to_mode(mdr->client_request->head.args.open.flags);
+  SnapRealm *realm = in->find_snaprealm();
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
+  if (is_new)
+    cap->dec_suppress();
+
+  in->authlock.set_state(LOCK_EXCL);
+  mdr->cap = cap;
+
+  // make sure ino gets into the journal
+  le->metablob.add_opened_ino(in->ino());
+  LogSegment *ls = mds->mdlog->get_current_segment();
+  ls->open_files.push_back(&in->xlist_open_file);
+  
+  journal_and_reply(mdr, in, 0, le, new C_MDS_truncate_logged(mds, mdr, in));
 }
 
 
@@ -5114,7 +5082,6 @@ public:
     mdr->pin(newi);
     mdr->trace.push_back(dn);
 
-    // ok, do the open.
     mds->server->reply_request(mdr, 0);
   }
 };
