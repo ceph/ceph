@@ -792,7 +792,7 @@ retry_locked:
 	want = file_wanted | used;
 	
 	retain = want;
-	if (!mdsc->stopping) {
+	if (!mdsc->stopping && inode->i_nlink > 0) {
 		/*
 		 * we cannot retain anything outside of
 		 * (wanted|EXPIREABLE), or else we run the risk of the
