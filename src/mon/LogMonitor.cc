@@ -76,7 +76,7 @@ void LogMonitor::tick()
 
 }
 
-void LogMonitor::create_initial()
+void LogMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;

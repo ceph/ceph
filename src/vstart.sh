@@ -126,6 +126,12 @@ echo "ip $IP"
 
 if [ $start_mon -eq 1 ]; then
 	if [ $new -eq 1 ]; then
+	# build and inject an initial osd map
+		$CEPH_BIN/osdmaptool --clobber --createsimple 4 .ceph_osdmap # --pgbits 2
+#		$CEPH_BIN/ceph osd setmap 2 -i .ceph_osdmap 
+	fi
+
+	if [ $new -eq 1 ]; then
 		if [ `echo $IP | grep '^127\\.'` ]
 		then
 			echo
@@ -148,7 +154,7 @@ if [ $start_mon -eq 1 ]; then
 
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
-			$CEPH_BIN/mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap
+			$CEPH_BIN/mkmonfs --clobber mondata/mon$f --mon $f --monmap .ceph_monmap --osdmap .ceph_osdmap
 		done
 	fi
 
@@ -159,12 +165,6 @@ if [ $start_mon -eq 1 ]; then
 		    $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
 		done
 		sleep 1
-	fi
-
-	if [ $new -eq 1 ]; then
-	# build and inject an initial osd map
-		$CEPH_BIN/osdmaptool --clobber --createsimple .ceph_monmap 4 .ceph_osdmap # --pgbits 2
-		$CEPH_BIN/ceph osd setmap 2 -i .ceph_osdmap 
 	fi
 fi
 

@@ -107,23 +107,19 @@ void OSDMonitor::fake_reorg()
 /************ MAPS ****************/
 
 
-void OSDMonitor::create_initial()
+void OSDMonitor::create_initial(bufferlist& bl)
 {
-  dout(10) << "create_initial for " << mon->monmap->fsid << " from g_conf" << dendl;
+  dout(0) << "create_initial for " << mon->monmap->fsid << dendl;
 
   OSDMap newmap;
+  newmap.decode(bl);
   newmap.epoch = 1;
   newmap.set_fsid(mon->monmap->fsid);
   newmap.ctime = g_clock.now();
-  newmap.crush.create(); // empty crush map
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap);
 }
-
-
-
-
 
 bool OSDMonitor::update_from_paxos()
 {

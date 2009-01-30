@@ -42,6 +42,8 @@
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 
+#include "osd/OSDMap.h"
+
 #include "config.h"
 
 #define DOUT_SUBSYS mon
@@ -521,7 +523,7 @@ void Monitor::tick()
  * this is the closest thing to a traditional 'mkfs' for ceph.
  * initialize the monitor state machines to their initial values.
  */
-int Monitor::mkfs()
+int Monitor::mkfs(bufferlist& osdmapbl)
 {
   // create it
   int err = store->mkfs();
@@ -544,13 +546,15 @@ int Monitor::mkfs()
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;
+    bufferlist bl;
     dout(10) << "initializing " << svc->get_machine_name() << dendl;
     svc->paxos->init();
     svc->create_pending();
-    svc->create_initial();
-
+    if (svc->paxos->machine_id == PAXOS_OSDMAP)
+      svc->create_initial(osdmapbl);
+    else
+      svc->create_initial(bl);
     // commit to paxos
-    bufferlist bl;
     svc->encode_pending(bl);
     store->put_bl_sn(bl, svc->get_machine_name(), 1);
     store->put_int(1, svc->get_machine_name(), "last_committed");

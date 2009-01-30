@@ -48,7 +48,7 @@ private:
 
   // svc
 public:  
-  void create_initial();
+  void create_initial(bufferlist& bl);
 private:
   bool update_from_paxos();
   void create_pending();  // prepare a new pending

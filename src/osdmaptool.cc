@@ -29,7 +29,7 @@ using namespace std;
 
 void usage(const char *me)
 {
-  cout << me << " usage: [--print] [--createsimple <monmapfile> <numosd> [--clobber] [--pgbits <bitsperosd>]] <mapfilename>" << std::endl;
+  cout << me << " usage: [--print] [--createsimple <numosd> [--clobber] [--pgbits <bitsperosd>]] <mapfilename>" << std::endl;
   cout << me << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << me << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
   exit(1);
@@ -50,7 +50,6 @@ int main(int argc, const char **argv)
   const char *fn = 0;
   bool print = false;
   bool createsimple = false;
-  const char *monmapfn = 0;
   int num_osd = 0, num_dom = 0;
   int pg_bits = g_conf.osd_pg_bits;
   int lpg_bits = g_conf.osd_lpg_bits;
@@ -67,7 +66,6 @@ int main(int argc, const char **argv)
       print = true;
     else if (strcmp(args[i], "--createsimple") == 0) {
       createsimple = true;
-      monmapfn = args[++i];
       num_osd = atoi(args[++i]);
     } else if (strcmp(args[i], "--clobber") == 0) 
       clobber = true;
@@ -113,17 +111,13 @@ int main(int argc, const char **argv)
   }
 
   if (createsimple) {
-    MonMap monmap;
-    int r = monmap.read(monmapfn);
-    if (r < 0) {
-      cerr << me << ": can't read monmap from " << monmapfn << ": " << strerror(r) << std::endl;
-      exit(1);
-    }
     if (num_osd < 1) {
       cerr << me << ": osd count must be > 0" << std::endl;
       exit(1);
     }
-    osdmap.build_simple(0, monmap.fsid, num_osd, num_dom, pg_bits, lpg_bits, 0);
+    ceph_fsid_t fsid;
+    memset(&fsid, 0, sizeof(ceph_fsid_t));
+    osdmap.build_simple(0, fsid, num_osd, num_dom, pg_bits, lpg_bits, 0);
     modified = true;
   }
 

@@ -51,6 +51,16 @@ if [ $stopfirst -eq 1 ]; then
     ./dstop.sh
 fi
 
+if [ $new -eq 1 ]; then
+    # build and inject an initial osd map
+    ./osdmaptool --clobber --createsimple 32 --num_dom 4 .ceph_osdmap
+
+    # use custom crush map to separate data from metadata
+    ./crushtool -c cm.txt -o cm
+    ./osdmaptool --clobber --import-crush cm .ceph_osdmap
+
+#    ./ceph osd setmap 2 -i .ceph_osdmap
+fi
 
 # mkmonfs
 if [ $new -eq 1 ]; then
@@ -86,23 +96,11 @@ if [ $new -eq 1 ]; then
     
     # build a fresh fs monmap, mon fs
     ./monmaptool --create --clobber --add $IP:6789 --print .ceph_monmap
-    ./mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap
+    ./mkmonfs --clobber mondata/mon0 --mon 0 --monmap .ceph_monmap --osdmap .ceph_osdmap
 fi
 
 # monitor
 ./cmon -d mondata/mon0 $ARGS $CMON_ARGS
-
-if [ $new -eq 1 ]; then
-    # build and inject an initial osd map
-    ./osdmaptool --clobber --createsimple .ceph_monmap 32 --num_dom 4 .ceph_osdmap
-
-    # use custom crush map to separate data from metadata
-    ./crushtool -c cm.txt -o cm
-    ./osdmaptool --clobber --import-crush cm .ceph_osdmap
-
-    ./ceph osd setmap 2 -i .ceph_osdmap
-fi
-
 
 # osds
 savelog -l cosd

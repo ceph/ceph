@@ -60,7 +60,7 @@ class MDSMonitor : public PaxosService {
 
 
   // service methods
-  void create_initial();
+  void create_initial(bufferlist& bl);
   bool update_from_paxos();
   void create_pending(); 
   void encode_pending(bufferlist &bl);

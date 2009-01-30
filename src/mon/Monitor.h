@@ -32,6 +32,8 @@
 #include "Elector.h"
 #include "Paxos.h"
 
+#include "osd/OSDMap.h"
+
 
 class MonitorStore;
 
@@ -159,7 +161,7 @@ public:
 
   void stop_cluster();
 
-  int mkfs();
+  int mkfs(bufferlist& osdmapbl);
 
 };
 

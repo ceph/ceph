@@ -94,7 +94,7 @@ public:
   void propose_pending();     // propose current pending as new paxos state
 
   // you implement
-  virtual void create_initial() = 0;
+  virtual void create_initial(bufferlist& bl) = 0;
   virtual bool update_from_paxos() = 0;    // assimilate latest state from paxos
   virtual void create_pending() = 0;       // [leader] create new pending structures
   virtual void encode_pending(bufferlist& bl) = 0; // [leader] finish and encode pending for next paxos state

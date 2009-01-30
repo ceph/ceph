@@ -33,7 +33,7 @@ private:
   bufferlist pending_inc;
   version_t log_version;
 
-  void create_initial();
+  void create_initial(bufferlist& bl);
   bool update_from_paxos();
   void create_pending();  // prepare a new pending
   void encode_pending(bufferlist &bl);  // propose pending update to peers

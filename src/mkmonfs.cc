@@ -37,6 +37,7 @@ int main(int argc, const char **argv)
   const char *fsdir = 0;
   int whoami = -1;
   const char *monmapfn = 0;
+  const char *osdmapfn = 0;
   for (unsigned i = 0; i < args.size(); i++) {
     if (strcmp(args[i], "--clobber") == 0)
       clobber = true;
@@ -44,6 +45,8 @@ int main(int argc, const char **argv)
       whoami = atoi(args[++i]);
     else if (strcmp(args[i], "--monmap") == 0) 
       monmapfn = args[++i];
+    else if (strcmp(args[i], "--osdmap") == 0) 
+      osdmapfn = args[++i];
     else if (!fsdir)
       fsdir = args[i];
     else 
@@ -63,17 +66,21 @@ int main(int argc, const char **argv)
   }
 
   // load monmap
-  bufferlist monmapbl;
+  bufferlist monmapbl, osdmapbl;
   int err = monmapbl.read_file(monmapfn);
   if (err < 0)
     exit(1);
   MonMap monmap;
   monmap.decode(monmapbl);
 
+  err = osdmapbl.read_file(osdmapfn);
+  if (err < 0)
+    exit(1);
+
   // go
   MonitorStore store(fsdir);
   Monitor mon(whoami, &store, 0, &monmap);
-  mon.mkfs();
+  mon.mkfs(osdmapbl);
   cout << argv[0] << ": created monfs at " << fsdir 
        << " for mon" << whoami
        << std::endl;

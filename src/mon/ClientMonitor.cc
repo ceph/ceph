@@ -102,7 +102,7 @@ void ClientMonitor::create_pending()
 	   << dendl;
 }
 
-void ClientMonitor::create_initial()
+void ClientMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
 }

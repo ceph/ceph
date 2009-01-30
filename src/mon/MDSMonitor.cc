@@ -57,7 +57,7 @@ void MDSMonitor::print_map(MDSMap &m, int dbl)
 
 // service methods
 
-void MDSMonitor::create_initial()
+void MDSMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial" << dendl;
   pending_mdsmap.max_mds = 1;
