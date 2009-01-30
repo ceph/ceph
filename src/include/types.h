@@ -381,12 +381,20 @@ inline ostream& operator<<(ostream& out, const ceph_fsid_t& f) {
 inline ostream& operator<<(ostream& out, const ceph_osd_op& op) {
   out << ceph_osd_op_name(op.op);
   if (ceph_osd_op_type_data(op.op)) {
-    if (op.op == CEPH_OSD_OP_SETTRUNC ||
-	op.op == CEPH_OSD_OP_MASKTRUNC ||
-	op.op == CEPH_OSD_OP_TRIMTRUNC)
+    switch (op.op) {
+    case CEPH_OSD_OP_DELETE:
+      break;
+    case CEPH_OSD_OP_TRUNCATE:
+      out << " " << op.offset;
+      break;
+    case CEPH_OSD_OP_SETTRUNC:
+    case CEPH_OSD_OP_MASKTRUNC:
+    case CEPH_OSD_OP_TRIMTRUNC:
       out << " " << op.truncate_seq << "@" << op.truncate_size;      
-    else
+      break;
+    default:
       out << " " << op.offset << "~" << op.length;
+    }
   } else if (ceph_osd_op_type_attr(op.op))
     out << " " << op.name_len << "+" << op.value_len;
   return out;
