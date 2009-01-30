@@ -4742,6 +4742,13 @@ void MDCache::inode_remove_replica(CInode *in, int from)
   if (in->xattrlock.remove_replica(from)) mds->locker->eval_gather(&in->xattrlock);
 
   if (in->nestlock.remove_replica(from)) mds->locker->eval_gather(&in->nestlock);
+
+  // trim?
+  if (in->inode.nlink == 0 &&
+      in->get_parent_dn() &&
+      in->get_parent_dn()->get_dir()->get_inode()->is_stray() &&
+      !in->is_any_caps())
+    eval_stray(in->get_parent_dn());
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from)
@@ -4835,11 +4842,14 @@ void MDCache::remove_client_cap(CInode *in, int client, bool eval)
 
   // unlinked stray?  may need to purge (e.g., after all caps are released)
   if (in->inode.nlink == 0 &&
-      !in->is_any_caps() &&
-      in->is_auth() && 
-	in->get_parent_dn() &&
-      in->get_parent_dn()->get_dir()->get_inode()->is_stray())
-    eval_stray(in->get_parent_dn());
+      in->get_parent_dn() &&
+      in->get_parent_dn()->get_dir()->get_inode()->is_stray() &&
+      !in->is_any_caps()) {
+    if (!in->is_auth())
+      touch_dentry_bottom(in->get_parent_dn());  // move to bottom of lru so that we trim quickly!
+    else if (!in->is_replicated())
+      eval_stray(in->get_parent_dn());
+  }
 }
 
 
