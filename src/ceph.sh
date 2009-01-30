@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# some defaults
+def_mon_data_path=mondata
+def_mon_data_file="mon\$mon"
+def_mon_port=6789
+def_num_mon=3
+def_num_osd=1
+def_num_mds=1
+def_osd_dev=dev/osd\$osd
+
+
 SCRIPT_BIN=`dirname $0`
 . $SCRIPT_BIN/common.sh
 
@@ -107,9 +117,9 @@ if [ $noselection -eq 1 ]; then
 	select_osd=1
 fi
 
-get_val CEPH_NUM_MON "$CEPH_NUM_MON" global num_mon 3
-get_val CEPH_NUM_OSD "$CEPH_NUM_OSD" global "osd num" 1
-get_val CEPH_NUM_MDS "$CEPH_NUM_MDS" global num_mds 3
+get_val CEPH_NUM_MON "$CEPH_NUM_MON" global num_mon $def_num_mon
+get_val CEPH_NUM_OSD "$CEPH_NUM_OSD" global "osd num" $def_num_osd
+get_val CEPH_NUM_MDS "$CEPH_NUM_MDS" global num_mds $def_num_mds
 
 ARGS="-f"
 
@@ -124,9 +134,9 @@ else
 	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 1"
 fi
 
-get_val MON_HOST "$MON_HOST" global "mon host" ""
-[ "$MON_HOST" != "" ] && get_val MON_PORT "$MON_PORT" global "mon port" ""
-[ "$MON_PORT" != "" ] && MON_ADDR=$MON_HOST:$MON_PORT
+# get_val MON_HOST "$MON_HOST" global "mon host" ""
+# [ "$MON_HOST" != "" ] && get_val MON_PORT "$MON_PORT" global "mon port" ""
+# [ "$MON_PORT" != "" ] && MON_ADDR=$MON_HOST:$MON_PORT
 
 if [ "$MON_ADDR" != "" ]; then
 	CMON_ARGS=$CMON_ARGS" -m "$MON_ADDR
@@ -156,17 +166,17 @@ fi
 echo "ip $IP"
 
 [ "$CEPH_BIN" == "" ] && CEPH_BIN=.
-[ "$MON_PORT" == "" ] && MON_PORT=6789
+[ "$MON_PORT" == "" ] && MON_PORT=$def_mon_port
 [ "$MON_HOST" == "" ] && MON_HOST=$IP
 
 #mon
 if [ $select_mon -eq 1 ]; then
 	for mon in `seq 0 $((CEPH_NUM_MON-1))`; do
-		get_conf mon_data_path mondata "mon data path" mon$mon mon global
-		get_conf mon_data_file mon$mon "mon data file" mon$mon mon global
+		get_conf mon_data_path $def_mon_data_path "mon data path" mon$mon mon global
+		get_conf mon_data_file $def_mon_data_file "mon data file" mon$mon mon global
 		get_conf conf_file $startup_conf_file "conf file" mon$mon mon global
-		get_conf MON_PORT $MON_PORT "mon port" mon$osd mon global
-		get_conf CEPH_HOST $MON_HOST "mon host" mon$osd mon global
+		get_conf MON_PORT $MON_PORT "mon port" mon$mon mon global
+		get_conf CEPH_HOST $MON_HOST "mon host" mon$mon mon global
 
 		get_conf ssh_host "" "ssh host" mon$mon mon global
 		[ "$ssh_host" != "" ] && SSH_HOST="ssh $ssh_host" || SSH_HOST=""
@@ -174,6 +184,8 @@ if [ $select_mon -eq 1 ]; then
 		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
 		$SSH_HOST $CD_PATH \
+		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS $mon_data_path/$mon_data_file &
+		echo $SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS $mon_data_path/$mon_data_file &
 	done
 	sleep 1
@@ -184,7 +196,7 @@ if [ $select_osd -eq 1 ]; then
 	for osd in `seq 0 $((CEPH_NUM_OSD-1))`
 	do
 		get_conf_bool use_sudo 0 sudo osd$osd osd global
-		get_conf osd_dev dev/osd$osd "osd dev" osd$osd osd global
+		get_conf osd_dev $def_osd_dev "osd dev" osd$osd osd global
 		get_conf conf_file $startup_conf_file "conf file" osd$osd osd global
 		get_conf MON_PORT $MON_PORT "mon port" osd$osd osd global
 		get_conf CEPH_HOST $MON_HOST "mon host" osd$osd osd global
@@ -197,9 +209,12 @@ if [ $select_osd -eq 1 ]; then
 		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
 		echo start osd$osd
+		echo $SSH_HOST $CD_PATH \
+		$CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd --conf_file $conf_file \
+			$osd_dev $ARGS $COSD_ARGS -m $MON_HOST:$MON_PORT &
 		$SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd --conf_file $conf_file \
-			$osd_dev $ARGS $COSD_ARGS &
+			$osd_dev $ARGS $COSD_ARGS -m $MON_HOST:$MON_PORT &
 	done
 fi
 
@@ -215,10 +230,14 @@ if [ $select_mds -eq 1 ]; then
 		get_conf cd_path "" "ssh path" mds$mds mds global
 		[ "$ssh_host" != "" ] && CD_PATH="cd $cd_path \\;" || CD_PATH=""
 
+		echo $SSH_HOST $CD_PATH \
+		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
+			$ARGS $CMDS_ARGS &
 		$SSH_HOST $CD_PATH \
 		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
 			$ARGS $CMDS_ARGS &
 	done
+	echo $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
 	$CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
 fi
 
