@@ -4952,26 +4952,12 @@ void Server::handle_client_open(MDRequest *mdr)
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
   }
-  
-  // do it
-  _do_open(mdr, cur);
-}
 
-void Server::_do_open(MDRequest *mdr, CInode *cur)
-{
-  MClientRequest *req = mdr->client_request;
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
-  if (cur->inode.is_dir()) 
-    cmode = CEPH_FILE_MODE_PIN;
 
   if (mdr->ref_snapid == CEPH_NOSNAP) {
     // register new cap
     bool is_new = false;
     Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
-    
-    // drop our locks (they may interfere with us issuing new caps)
-    //mdcache->request_drop_locks(mdr);
-    
     if (is_new)
       cap->dec_suppress();  // stop suppressing messages on new cap
     

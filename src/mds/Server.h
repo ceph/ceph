@@ -124,7 +124,6 @@ public:
   void handle_client_open(MDRequest *mdr);
   void handle_client_openc(MDRequest *mdr);  // O_CREAT variant.
   void handle_client_opent(MDRequest *mdr);  // O_TRUNC variant.
-  void _do_open(MDRequest *mdr, CInode *ref);
 
   // namespace changes
   void handle_client_mknod(MDRequest *mdr);
