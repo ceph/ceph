@@ -557,12 +557,6 @@ public:
 
   void _logged_slave_commit(int from, metareqid_t reqid);
 
-
-  // inode purging
-  map<CInode*, map<loff_t, loff_t> > purging;  // inode -> newsize -> oldsize
-  map<CInode*, map<loff_t, LogSegment*> > purging_ls;
-  map<CInode*, map<loff_t, list<Context*> > > waiting_for_purge;
-  
   // -- recovery --
 protected:
   set<int> recovery_set;
