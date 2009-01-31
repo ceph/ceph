@@ -109,7 +109,7 @@ void OSDMonitor::fake_reorg()
 
 void OSDMonitor::create_initial(bufferlist& bl)
 {
-  dout(0) << "create_initial for " << mon->monmap->fsid << dendl;
+  dout(10) << "create_initial for " << mon->monmap->fsid << dendl;
 
   OSDMap newmap;
   newmap.decode(bl);
