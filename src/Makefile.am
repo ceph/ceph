@@ -191,6 +191,7 @@ libcommon_a_SOURCES = \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
 	mds/MDSMap.cc \
+	common/tls.cc \
 	config.cc
 
 libcrush_a_SOURCES = \
