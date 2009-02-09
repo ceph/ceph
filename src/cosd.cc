@@ -32,6 +32,7 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
+#include "common/common_init.h"
 
 void usage() 
 {
@@ -50,7 +51,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  parse_config_options(args);
+  common_init(args);
 
   if (g_conf.clock_tare) g_clock.tare();
 

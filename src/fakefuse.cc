@@ -30,6 +30,7 @@ using namespace std;
 #include "client/fuse_ll.h"
 
 #include "common/Timer.h"
+#include "common/common_init.h"
 
 #include "msg/FakeMessenger.h"
 #include "messages/MMonCommand.h"
@@ -68,7 +69,7 @@ int main(int argc, const char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  parse_config_options(args);
+  common_init(args);
 
   // start messenger thread
   fakemessenger_startthread();

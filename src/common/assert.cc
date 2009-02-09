@@ -4,6 +4,8 @@
 
 #include "BackTrace.h"
 
+#include "common/tls.h"
+
 void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *func)
 {
   BackTrace bt(1);

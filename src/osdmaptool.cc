@@ -26,6 +26,7 @@ using namespace std;
 
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
+#include "common/common_init.h"
 
 void usage(const char *me)
 {
@@ -43,7 +44,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  parse_config_options(args);
+  common_init(args);
 
   const char *me = argv[0];
 

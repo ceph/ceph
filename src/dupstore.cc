@@ -15,6 +15,7 @@
 #include <iostream>
 #include "ebofs/Ebofs.h"
 #include "os/FileStore.h"
+#include "common/common_init.h"
 
 #include <ext/hash_map>
 using __gnu_cxx::hash_map;
@@ -85,7 +86,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  parse_config_options(args);
+  common_init(args);
 
   // args
   if (args.size() != 4) 

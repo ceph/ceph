@@ -33,6 +33,7 @@ using namespace std;
 #include "messages/MMonCommand.h"
 
 #include "common/Timer.h"
+#include "common/common_init.h"
 
 
 class C_Test : public Context {
@@ -65,7 +66,7 @@ int main(int argc, const char **argv)
   g_conf.mon_stop_on_last_unmount = true;
   g_conf.mon_stop_with_last_mds = true;
 
-  parse_config_options(args);
+  common_init(args);
 
   int start = 0;
 

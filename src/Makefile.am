@@ -192,6 +192,7 @@ libcommon_a_SOURCES = \
 	osd/OSDMap.cc \
 	mds/MDSMap.cc \
 	common/tls.cc \
+	common/common_init.cc \
 	config.cc
 
 libcrush_a_SOURCES = \
@@ -278,6 +279,7 @@ noinst_HEADERS = \
 	common/lockdep.h\
 	common/BackTrace.h\
         common/Clock.h\
+        common/common_init.h\
         common/Cond.h\
         common/ConfUtils.h\
         common/DecayCounter.h\
@@ -290,6 +292,7 @@ noinst_HEADERS = \
         common/Thread.h\
         common/ThreadPool.h\
         common/Timer.h\
+        common/tls.h\
 	common/WorkQueue.h\
 	common/LogClient.h\
         config.h\

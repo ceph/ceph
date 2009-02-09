@@ -34,6 +34,7 @@ using namespace std;
 #include "msg/SimpleMessenger.h"
 
 #include "common/Timer.h"
+#include "common/common_init.h"
 
 
 class C_Test : public Context {
@@ -201,7 +202,7 @@ int main(int argc, const char **argv)
 
   env_to_vec(args);
 
-  parse_config_options(args);
+  common_init(args);
   parse_syn_options(args);
 
 

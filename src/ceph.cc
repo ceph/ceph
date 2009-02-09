@@ -26,6 +26,7 @@ using namespace std;
 #include "messages/MMonCommandAck.h"
 
 #include "common/Timer.h"
+#include "common/common_init.h"
 
 #ifndef DARWIN
 #include <envz.h>
@@ -521,7 +522,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  parse_config_options(args);
+  common_init(args);
 
   vec_to_argv(args, argc, argv);
 
