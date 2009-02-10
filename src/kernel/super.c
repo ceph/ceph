@@ -27,6 +27,9 @@ int ceph_debug_mask = 0xffffffff;
 int ceph_debug_console;
 int ceph_debug_super = -1;   /* for this file */
 
+struct list_head ceph_clients;
+static spinlock_t _clients_list_lock = SPIN_LOCK_UNLOCKED;
+
 #define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
 #include "super.h"
@@ -36,7 +39,6 @@ int ceph_debug_super = -1;   /* for this file */
 void ceph_dispatch(void *p, struct ceph_msg *msg);
 void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 		     struct ceph_entity_name *peer_name);
-
 
 /*
  * super ops
@@ -1026,6 +1028,9 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		dout(20, "get_sb got existing client %p\n", client);
 	} else {
 		dout(20, "get_sb using new client %p\n", client);
+		spin_lock(&_clients_list_lock);
+		list_add(&client->clients_all, &ceph_clients);
+		spin_unlock(&_clients_list_lock);
 
 		err = ceph_init_bdi(sb, client);
 		if (err < 0)
@@ -1091,6 +1096,7 @@ static int __init init_ceph(void)
 	if (!ceph_kobj)
 		goto out;
 #endif
+	INIT_LIST_HEAD(&ceph_clients);
 
 	ret = ceph_proc_init();
 	if (ret < 0)

@@ -110,6 +110,7 @@ struct ceph_client {
 	struct kobject *client_kobj;
 
 	struct backing_dev_info backing_dev_info;
+	struct list_head clients_all;
 };
 
 static inline struct ceph_client *ceph_client(struct super_block *sb)
