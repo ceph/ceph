@@ -28,3 +28,8 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
   while (1)
     *p-- = 0;  // make myself core dump.
 }
+
+void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *func)
+{
+	*_dout << "WARNING: assert(" << assertion << ") at: " << file << ":" << line << ": " << func << "()" << std::endl;
+}

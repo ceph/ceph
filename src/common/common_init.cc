@@ -4,7 +4,8 @@
 
 void common_init(std::vector<const char*>& args, bool open)
 {
-  parse_config_options(args, open);
   tls_init();
+  tls_get_val()->disable_assert = 0;
+  parse_config_options(args, open);
 }
 

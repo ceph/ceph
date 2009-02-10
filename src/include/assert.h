@@ -2,6 +2,7 @@
 #define __CEPH_ASSERT_H
 
 #include <features.h>
+#include "common/tls.h"
 
 #if defined __cplusplus && __GNUC_PREREQ (2,95)
 # define __CEPH_ASSERT_VOID_CAST static_cast<void>
@@ -26,10 +27,25 @@
 
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
   __attribute__ ((__noreturn__));
-
+extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
+#if 0
 #define assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+#else
+#define assert(expr)							\
+  do {									\
+	static int __assert_flag = 0;					\
+	struct TlsData *tls = tls_get_val();				\
+	if (!__assert_flag && tls && tls->disable_assert) {		\
+		__assert_flag = 1;					\
+		__ceph_assert_warn(__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION); \
+	}								\
+	((expr)								\
+	? __CEPH_ASSERT_VOID_CAST (0)					\
+	: __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION)); \
+  } while (0)
+#endif
 
 #endif

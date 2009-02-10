@@ -22,12 +22,11 @@ static void _tls_destructor(void *value)
   pthread_setspecific(_tls_key, NULL);
 }
 
-void *tls_get_ptr()
+struct TlsData *tls_get_val()
 {
   void *val;
 
   if (!_initialized) {
-    derr(0) << "tls not initialized" << std::endl;
     return NULL;
   }
 
@@ -36,13 +35,14 @@ void *tls_get_ptr()
   if (!val) {
     int ret;
     val = malloc(sizeof(struct TlsData));
+    memset(val, 0, sizeof(struct TlsData));
     ret = pthread_setspecific(_tls_key, val);
 
     if (ret)
       return NULL;
   }
 
-  return val;
+  return (struct TlsData *)val;
 }
 
 int tls_init()
@@ -51,6 +51,7 @@ int tls_init()
 
   if (!_initialized) {
     ret = pthread_key_create(&_tls_key, _tls_destructor);
+    _initialized = 1;
   }
  
   return ret; 
