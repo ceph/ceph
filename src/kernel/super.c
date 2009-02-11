@@ -28,7 +28,7 @@ int ceph_debug_console;
 int ceph_debug_super = -1;   /* for this file */
 
 struct list_head ceph_clients;
-static spinlock_t _clients_list_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t ceph_clients_list_lock = SPIN_LOCK_UNLOCKED;
 
 #define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
@@ -251,6 +251,7 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	if (first) {
 		char name[10];
 		client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
+		ceph_proc_register_client(client);
 		client->msgr->inst.name = msg->hdr.dst.name;
 		sprintf(name, "client%d", client->whoami);
 		dout(1, "i am %s, fsid is %llx.%llx\n", name,
@@ -1028,9 +1029,9 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		dout(20, "get_sb got existing client %p\n", client);
 	} else {
 		dout(20, "get_sb using new client %p\n", client);
-		spin_lock(&_clients_list_lock);
+		spin_lock(&ceph_clients_list_lock);
 		list_add(&client->clients_all, &ceph_clients);
-		spin_unlock(&_clients_list_lock);
+		spin_unlock(&ceph_clients_list_lock);
 
 		err = ceph_init_bdi(sb, client);
 		if (err < 0)

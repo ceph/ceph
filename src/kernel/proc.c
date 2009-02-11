@@ -140,6 +140,7 @@ static int ceph_debug_mask_write(struct file *file, const char __user *buffer,
 }
 
 static struct proc_dir_entry *proc_fs_ceph;
+static struct proc_dir_entry *proc_fs_ceph_clients;
 
 int ceph_proc_init(void)
 {
@@ -172,14 +173,37 @@ int ceph_proc_init(void)
 	if (pde)
 		pde->write_proc = ceph_debug_mask_write;
 
+	proc_fs_ceph_clients = proc_mkdir("clients", proc_fs_ceph);
+
 	return 0;
 }
 
 void ceph_proc_cleanup(void)
 {
+	struct list_head *p;
+	struct ceph_client *client;
+	char str[16];
+
+	spin_lock(&ceph_clients_list_lock);
+	list_for_each(p, &ceph_clients) {
+		client = list_entry(p, struct ceph_client, clients_all);
+		snprintf(str, sizeof(str), "%d", client->whoami);
+		remove_proc_entry(str, proc_fs_ceph_clients);
+	}
+	spin_unlock(&ceph_clients_list_lock);
+	remove_proc_entry("clients", proc_fs_ceph_clients);
+
 	remove_proc_entry("debug", proc_fs_ceph);
 	remove_proc_entry("debug_msgr", proc_fs_ceph);
 	remove_proc_entry("debug_console", proc_fs_ceph);
 	remove_proc_entry("debug_mask", proc_fs_ceph);
 	remove_proc_entry("fs/ceph", NULL);
+}
+
+void ceph_proc_register_client(struct ceph_client *client)
+{
+	char str[16];
+
+	snprintf(str, sizeof(str), "%d", client->whoami);
+	client->proc_entry = proc_mkdir(str, proc_fs_ceph_clients);
 }

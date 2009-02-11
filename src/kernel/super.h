@@ -79,6 +79,10 @@ enum {
 
 extern struct kobject *ceph_kobj;
 
+extern struct list_head ceph_clients;
+extern spinlock_t ceph_clients_list_lock;
+
+
 /*
  * per-filesystem client state
  *
@@ -111,6 +115,7 @@ struct ceph_client {
 
 	struct backing_dev_info backing_dev_info;
 	struct list_head clients_all;
+	struct proc_dir_entry *proc_entry;
 };
 
 static inline struct ceph_client *ceph_client(struct super_block *sb)
@@ -785,6 +790,7 @@ extern const struct export_operations ceph_export_ops;
 /* proc.c */
 extern int ceph_proc_init(void);
 extern void ceph_proc_cleanup(void);
+extern void ceph_proc_register_client(struct ceph_client *client);
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {
