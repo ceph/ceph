@@ -200,10 +200,19 @@ void ceph_proc_cleanup(void)
 	remove_proc_entry("fs/ceph", NULL);
 }
 
+static int ceph_proc_client_read(char *page, char **start, off_t off,
+		       int count, int *eof, void *data)
+{
+	return 0;
+}
+
 void ceph_proc_register_client(struct ceph_client *client)
 {
 	char str[16];
+	struct proc_dir_entry *pde;
 
 	snprintf(str, sizeof(str), "%d", client->whoami);
 	client->proc_entry = proc_mkdir(str, proc_fs_ceph_clients);
+
+	pde = create_proc_read_entry("data", 0, client->proc_entry, ceph_proc_client_read, client);
 }
