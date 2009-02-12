@@ -2,6 +2,7 @@
 #include <linux/proc_fs.h>
 #include <linux/ctype.h>
 #include <linux/uaccess.h>
+#include <linux/seq_file.h>
 
 
 #include "ceph_debug.h"
@@ -200,19 +201,43 @@ void ceph_proc_cleanup(void)
 	remove_proc_entry("fs/ceph", NULL);
 }
 
-static int ceph_proc_client_read(char *page, char **start, off_t off,
-		       int count, int *eof, void *data)
+static int ceph_client_data_proc_show(struct seq_file *sf, void *v)
 {
+	struct ceph_client *client = sf->private;
+
+	seq_printf(sf, "client%d\n", client->whoami);
+
 	return 0;
 }
+
+static int ceph_client_data_proc_open(struct inode *inode, struct file *file)
+{
+	int ret;
+	struct proc_dir_entry *pde = PDE(inode);
+	struct seq_file *sf;
+
+	ret = single_open(file, ceph_client_data_proc_show, NULL);
+	sf = file->private_data;
+
+	sf->private = pde->data;
+
+	return ret;
+}
+
+static const struct file_operations ceph_client_data_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ceph_client_data_proc_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
 
 void ceph_proc_register_client(struct ceph_client *client)
 {
 	char str[16];
-	struct proc_dir_entry *pde;
 
 	snprintf(str, sizeof(str), "%d", client->whoami);
 	client->proc_entry = proc_mkdir(str, proc_fs_ceph_clients);
 
-	pde = create_proc_read_entry("data", 0, client->proc_entry, ceph_proc_client_read, client);
+	proc_create_data("data", 0, client->proc_entry, &ceph_client_data_fops, client);
 }
