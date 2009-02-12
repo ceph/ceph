@@ -356,7 +356,8 @@ int OSD::init()
   // mount.
   dout(2) << "mounting " << dev_path << dendl;
   store = create_object_store(dev_path);
-  assert(store);
+  if (!store)
+    return -ENODEV;
   int r = store->mount();
   if (r < 0) return -1;
   
@@ -370,7 +371,9 @@ int OSD::init()
   }
   
   // load up "current" osdmap
-  assert(!osdmap);
+  assert_warn(!osdmap);
+  if (osdmap)
+    return -1;
   osdmap = new OSDMap;
   if (superblock.current_epoch) {
     bufferlist bl;
@@ -382,7 +385,9 @@ int OSD::init()
   load_pgs();
   
   dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
-  assert(whoami == superblock.whoami);
+  assert_warn(whoami == superblock.whoami);
+  if (whoami != superblock.whoami)
+    return -EINVAL;
     
   // log
   char name[80];

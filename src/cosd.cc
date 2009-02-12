@@ -148,7 +148,10 @@ int main(int argc, const char **argv)
 
   // start osd
   OSD *osd = new OSD(whoami, m, hbm, &monmap, dev);
-  osd->init();
+  if (osd->init() < 0) {
+    cout << "error initializing osd" << std::endl;
+    return 1;
+  }
 
   rank.wait();
 
