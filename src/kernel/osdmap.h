@@ -54,6 +54,30 @@ static inline bool ceph_osdmap_flag(struct ceph_osdmap *map, int flag)
 	return map && (map->flags & flag);
 }
 
+static inline char *ceph_osdmap_state_str(char *str, int len, int state)
+{
+	int flag = 0;
+
+	if (!len)
+		goto done;
+
+	*str = '\0';
+	if (state) {
+		if (state & CEPH_OSD_EXISTS) {
+			snprintf(str, len, "exists");
+			flag = 1;
+		}
+		if (state & CEPH_OSD_UP) {
+			snprintf(str, len, "%s%s%s", str, (flag ? ", " : ""), "up");
+			flag = 1;
+		}
+	} else {
+		snprintf(str, len, "doesn't exist");
+	}
+done:
+	return str;
+}
+
 static inline struct ceph_entity_addr *ceph_osd_addr(struct ceph_osdmap *map,
 						     int osd)
 {

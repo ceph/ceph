@@ -204,9 +204,41 @@ void ceph_proc_cleanup(void)
 static int ceph_client_data_proc_show(struct seq_file *sf, void *v)
 {
 	struct ceph_client *client = sf->private;
+	int i;
 
-	seq_printf(sf, "client%d\n", client->whoami);
+	seq_printf(sf, "Client%d:\n", client->whoami);
+	seq_printf(sf, "----------\n");
+	seq_printf(sf, "mon:\n");
+	seq_printf(sf, "\tfsid\t%llx.%llx\n", le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
+					le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+	seq_printf(sf, "\tepoch\t%d\n", client->monc.monmap->epoch);
 
+	for (i=0; i<client->monc.monmap->num_mon; i++) {
+		struct ceph_entity_inst *inst = &client->monc.monmap->mon_inst[i];
+		seq_printf(sf, "\t%s%d\t%u.%u.%u.%u:%u\n",
+						ENTITY_NAME(inst->name),
+						IPQUADPORT(inst->addr.ipaddr));
+	}
+	seq_printf(sf, "mds:\n");
+	for (i=0; i<client->mdsc.mdsmap->m_max_mds; i++) {
+		struct ceph_entity_addr *addr = &client->mdsc.mdsmap->m_addr[i];
+		int state = client->mdsc.mdsmap->m_state[i];
+		seq_printf(sf, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
+						i,
+						IPQUADPORT(addr->ipaddr),
+						ceph_mdsmap_state_str(state));
+	}
+	seq_printf(sf, "osd:\n");
+	for (i=0; i<client->osdc.osdmap->max_osd; i++) {
+		struct ceph_entity_addr *addr = &client->osdc.osdmap->osd_addr[i];
+		int state = client->osdc.osdmap->osd_state[i];
+#define LARGE_ENOUGH_BUF 16
+		char buf[LARGE_ENOUGH_BUF];
+		seq_printf(sf, "\tosd%d\t%u.%u.%u.%u:%u\t(%s)\n",
+						i,
+						IPQUADPORT(addr->ipaddr),
+						ceph_osdmap_state_str(buf, sizeof(buf), state));
+	}
 	return 0;
 }
 
