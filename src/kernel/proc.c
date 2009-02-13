@@ -183,17 +183,15 @@ void ceph_proc_cleanup(void)
 {
 	struct list_head *p;
 	struct ceph_client *client;
-	char str[16];
 
 	spin_lock(&ceph_clients_list_lock);
 	list_for_each(p, &ceph_clients) {
 		client = list_entry(p, struct ceph_client, clients_all);
-		snprintf(str, sizeof(str), "%d", client->whoami);
-		remove_proc_entry(str, proc_fs_ceph_clients);
+		ceph_proc_unregister_client(client);
 	}
 	spin_unlock(&ceph_clients_list_lock);
-	remove_proc_entry("clients", proc_fs_ceph_clients);
 
+	remove_proc_entry("clients", proc_fs_ceph);
 	remove_proc_entry("debug", proc_fs_ceph);
 	remove_proc_entry("debug_msgr", proc_fs_ceph);
 	remove_proc_entry("debug_console", proc_fs_ceph);
@@ -272,4 +270,13 @@ void ceph_proc_register_client(struct ceph_client *client)
 	client->proc_entry = proc_mkdir(str, proc_fs_ceph_clients);
 
 	proc_create_data("data", 0, client->proc_entry, &ceph_client_data_fops, client);
+}
+
+void ceph_proc_unregister_client(struct ceph_client *client)
+{
+	char str[16];
+
+	remove_proc_entry("data", client->proc_entry);
+	snprintf(str, sizeof(str), "%d", client->whoami);
+	remove_proc_entry(str, proc_fs_ceph_clients);
 }

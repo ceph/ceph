@@ -791,6 +791,7 @@ extern const struct export_operations ceph_export_ops;
 extern int ceph_proc_init(void);
 extern void ceph_proc_cleanup(void);
 extern void ceph_proc_register_client(struct ceph_client *client);
+extern void ceph_proc_unregister_client(struct ceph_client *client);
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {

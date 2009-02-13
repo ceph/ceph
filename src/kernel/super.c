@@ -690,6 +690,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 		destroy_workqueue(client->trunc_wq);
 	if (client->msgr)
 		ceph_messenger_destroy(client->msgr);
+	ceph_proc_unregister_client(client);
 	kfree(client);
 	dout(10, "destroy_client %p done\n", client);
 }
