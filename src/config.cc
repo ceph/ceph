@@ -863,9 +863,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     cf.dump();
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--bind") == 0) 
-      assert(parse_ip_port(args[++i], g_my_addr));
-    else if (strcmp(args[i], "--nummon") == 0) 
+    if (strcmp(args[i],"--bind") == 0)  {
+      assert_warn(parse_ip_port(args[++i], g_my_addr));
+      exit(1);
+    } else if (strcmp(args[i], "--nummon") == 0) 
       g_conf.num_mon = atoi(args[++i]);
     else if (strcmp(args[i], "--nummds") == 0) 
       g_conf.num_mds = atoi(args[++i]);
@@ -1337,7 +1338,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       if (strcmp(args[i], "linear") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_LINEAR;
       else if (strcmp(args[i], "hashino") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_HASHINO;
       else if (strcmp(args[i], "hash") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_HASH;
-      else assert(0);
+      else {
+        assert_warn(0);
+        exit(1);
+      }
     }
     
     else if (strcmp(args[i], "--osd_pg_layout") == 0) {
@@ -1346,7 +1350,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       else if (strcmp(args[i], "hash") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_HASH;
       else if (strcmp(args[i], "hybrid") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_HYBRID;
       else if (strcmp(args[i], "crush") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_CRUSH;
-      else assert(0);
+      else {
+        assert_warn(0);
+        exit(1);
+      }
     }
     
     else if (strcmp(args[i], "--kill_after") == 0) 

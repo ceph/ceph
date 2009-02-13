@@ -72,7 +72,9 @@ int main(int argc, const char **argv)
   cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
 
   Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
-  assert(m);
+  assert_warn(m);
+  if (!m)
+    return 1;
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());

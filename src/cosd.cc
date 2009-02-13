@@ -131,9 +131,13 @@ int main(int argc, const char **argv)
   g_timer.shutdown();
 
   Messenger *m = rank.register_entity(entity_name_t::OSD(whoami));
-  assert(m);
+  assert_warn(m);
+  if (!m)
+    return 1;
   Messenger *hbm = rank.register_entity(entity_name_t::OSD(whoami));
-  assert(hbm);
+  assert_warn(hbm);
+  if (!hbm)
+    return 1;
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
   rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());

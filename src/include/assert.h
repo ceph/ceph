@@ -51,6 +51,9 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+
+#define assert_protocol(expr)	assert(expr)
+#define assert_disk(expr)	assert(expr)
 #endif
 
 #endif
