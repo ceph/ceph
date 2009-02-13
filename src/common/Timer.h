@@ -119,12 +119,12 @@ class Timer {
   }
 
   // schedule events
-  void add_event_after(double seconds,
+  virtual void add_event_after(double seconds,
                        Context *callback);
-  void add_event_at(utime_t when,
+  virtual void add_event_at(utime_t when,
                     Context *callback);
-  bool cancel_event(Context *callback);
-  void cancel_all_events();
+  virtual bool cancel_event(Context *callback);
+  virtual void cancel_all_events();
 
   // execute pending events
   void execute_pending();
@@ -140,7 +140,7 @@ class Timer {
  * and then call join() to ensure any concurrently exectuting events (in other
  * threads) get flushed.
  */
-class SafeTimer {
+class SafeTimer : public Timer {
   Mutex&        lock;
   Cond          cond;
   map<Context*,Context*> scheduled;  // actual -> wrapper
@@ -161,7 +161,7 @@ public:
 
   void add_event_after(double seconds, Context *c);
   void add_event_at(utime_t when, Context *c);
-  void cancel_event(Context *c);
+  bool cancel_event(Context *c);
   void cancel_all();
   void join();
 

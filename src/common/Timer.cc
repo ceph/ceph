@@ -218,7 +218,7 @@ void Timer::add_event_after(double seconds,
 {
   utime_t when = g_clock.now();
   when += seconds;
-  add_event_at(when, callback);
+  Timer::add_event_at(when, callback);
 }
 
 void Timer::add_event_at(utime_t when,
@@ -279,7 +279,7 @@ void SafeTimer::add_event_after(double seconds, Context *c)
   Context *w = new EventWrapper(this, c);
   dout(DBL) << "SafeTimer.add_event_after wrapping " << c << " with " << w << dendl;
   scheduled[c] = w;
-  g_timer.add_event_after(seconds, w);
+  Timer::add_event_after(seconds, w);
 }
 
 void SafeTimer::add_event_at(utime_t when, Context *c)
@@ -288,7 +288,7 @@ void SafeTimer::add_event_at(utime_t when, Context *c)
   Context *w = new EventWrapper(this, c);
   dout(DBL) << "SafeTimer.add_event_at wrapping " << c << " with " << w << dendl;
   scheduled[c] = w;
-  g_timer.add_event_at(when, w);
+  Timer::add_event_at(when, w);
 }
 
 void SafeTimer::EventWrapper::finish(int r)
@@ -316,12 +316,12 @@ void SafeTimer::EventWrapper::finish(int r)
   timer->lock.Unlock();
 }
 
-void SafeTimer::cancel_event(Context *c) 
+bool SafeTimer::cancel_event(Context *c) 
 {
   assert(lock.is_locked());
   assert(scheduled.count(c));
 
-  if (g_timer.cancel_event(scheduled[c])) {
+  if (Timer::cancel_event(scheduled[c])) {
     // hosed wrapper.  hose original event too.
     delete c;
   } else {
@@ -360,5 +360,6 @@ SafeTimer::~SafeTimer()
     derr(0) << "SafeTimer.~SafeTimer " << scheduled.size() << " events scheduled, " 
 	    << canceled.size() << " canceled but unflushed" 
 	    << dendl;
+    assert(0);
   }
 }
