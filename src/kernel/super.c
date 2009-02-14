@@ -673,6 +673,10 @@ static void ceph_destroy_client(struct ceph_client *client)
 {
 	dout(10, "destroy_client %p\n", client);
 
+	spin_lock(&ceph_clients_list_lock);
+	list_del(&client->clients_all);
+	spin_unlock(&ceph_clients_list_lock);
+
 	/* unmount */
 	ceph_mdsc_stop(&client->mdsc);
 	ceph_monc_stop(&client->monc);
