@@ -195,7 +195,7 @@ static void __cleanup_empty_realms(struct ceph_mds_client *mdsc)
 
 	spin_lock(&mdsc->snap_empty_lock);
 	while (!list_empty(&mdsc->snap_empty)) {
-		realm = list_entry(&mdsc->snap_empty, struct ceph_snap_realm,
+		realm = list_entry(mdsc->snap_empty.next, struct ceph_snap_realm,
 				   empty_item);
 		list_del(&realm->empty_item);
 		spin_unlock(&mdsc->snap_empty_lock);
