@@ -265,11 +265,24 @@ static const struct file_operations ceph_client_data_fops = {
 void ceph_proc_register_client(struct ceph_client *client)
 {
 	char str[16];
+	struct proc_dir_entry *p;
 
 	snprintf(str, sizeof(str), "%d", client->whoami);
 	client->proc_entry = proc_mkdir(str, proc_fs_ceph_clients);
 
-	proc_create_data("data", 0, client->proc_entry, &ceph_client_data_fops, client);
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 25)
+	p = create_proc_entry("data", 0, client->proc_entry);
+#else
+	p = proc_create_data("data", 0, client->proc_entry, &ceph_client_data_fops, client);
+#endif
+	if (!p) {
+		derr(0, "couldn't create data proc entry\n");
+	}
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 25)
+	p->owner = THIS_MODULE;
+	p->proc_fops = &ceph_client_data_fops;
+	p->data = client;
+#endif
 }
 
 void ceph_proc_unregister_client(struct ceph_client *client)
