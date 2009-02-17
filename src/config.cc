@@ -644,6 +644,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("debug", "ebofs", debug_ebofs);
   CF_READ("debug", "journal", debug_journal);
   CF_READ("debug", "ns", debug_ns);
+  CF_READ("debug", "ms", debug_ms);
   CF_READ("debug", "mon", debug_mon);
   CF_READ("debug", "tp", debug_tp);
   CF_READ("debug", "use abspaths", use_abspaths);
