@@ -50,7 +50,7 @@ bin_PROGRAMS = \
 	streamtest dupstore dumpjournal testmsgr \
 	mount.ceph
 
-bin_SCRIPTS = crun cephd ceph_stop ceph_common.sh
+bin_SCRIPTS = crun cephd ceph_stop ceph_common.sh ceph_init
 
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
@@ -165,7 +165,7 @@ noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = dstart.sh dstop.sh mkcephfs.sh montest.sh restart.sh stop.sh verify-mds-journal.sh vstart.sh \
-	     crun cephd ceph_stop ceph_common.sh
+	     crun cephd ceph_stop ceph_common.sh ceph_init
 
 # cleaning
 clean-local:
