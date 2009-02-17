@@ -1757,12 +1757,26 @@ void Server::handle_client_stat(MDRequest *mdr)
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  
+
+  /*
+   * if client currently holds the EXCL cap on a field, do not rdlock
+   * it; client's stat() will result in valid info if _either_ EXCL
+   * cap is held or MDS rdlocks and reads the value here.
+   *
+   * handling this case here is easier than weakening rdlock
+   * semantics... that would cause problems elsewhere.
+   */
+  int client = mdr->get_client();
+  int issued = 0;
+  Capability *cap = ref->get_client_cap(client);
+  if (cap)
+    issued = cap->issued();
+
   int mask = req->head.args.stat.mask;
-  if (mask & CEPH_CAP_LINK_RDCACHE) rdlocks.insert(&ref->linklock);
-  if (mask & CEPH_CAP_AUTH_RDCACHE) rdlocks.insert(&ref->authlock);
-  if (mask & CEPH_CAP_FILE_RDCACHE) rdlocks.insert(&ref->filelock);
-  if (mask & CEPH_CAP_XATTR_RDCACHE) rdlocks.insert(&ref->xattrlock);
+  if ((mask & CEPH_CAP_LINK_RDCACHE) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
+  if ((mask & CEPH_CAP_AUTH_RDCACHE) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
+  if ((mask & CEPH_CAP_FILE_RDCACHE) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
+  if ((mask & CEPH_CAP_XATTR_RDCACHE) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
