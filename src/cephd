@@ -7,13 +7,14 @@ def_mon_port=6789
 def_num_mon=3
 def_num_osd=1
 def_num_mds=1
+def_debug=0
 def_osd_dev=dev/osd\$osd
 
 
 SCRIPT_BIN=`dirname $0`
 . $SCRIPT_BIN/ceph_common.sh
 
-let debug=0
+let debug=$def_debug
 let do_start=0
 let do_stop=0
 let select_mon=0
@@ -120,6 +121,8 @@ fi
 get_val CEPH_NUM_MON "$CEPH_NUM_MON" global num_mon $def_num_mon
 get_val CEPH_NUM_OSD "$CEPH_NUM_OSD" global "osd num" $def_num_osd
 get_val CEPH_NUM_MDS "$CEPH_NUM_MDS" global num_mds $def_num_mds
+
+[ $debug -eq 0 ] && get_conf_bool debug 0 debug global
 
 ARGS="-f"
 
