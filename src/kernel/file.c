@@ -430,10 +430,13 @@ out:
 static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	int ret;
 
 	dout(10, "fsync on inode %p\n", inode);
+	atomic_inc(&ci->i_want_sync_writeout);
 	ret = write_inode_now(inode, 1);
+	atomic_dec(&ci->i_want_sync_writeout);
 	if (ret < 0)
 		return ret;
 	/*
