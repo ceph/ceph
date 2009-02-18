@@ -17,14 +17,14 @@ while (<>) {
     chomp;
     my ($stamp) = /^\S+ (\S+) /;
 
-    my ($who,$tid) = /osd\d+ <.. (\D+\d+) \S+ \S+ osd_op\(\S+:(\d+)/;
+    my ($who,$tid) = /osd\d+ <.. (\D+\d+) \S+ \S+ osd_op\((\S+)/;
     if (defined $tid) {
 	my $req = "$who:$tid";
 	$r{$req} = $stamp unless exists $r{$req};
 	next;
     }
 
-    my ($who,$tid) = /\d+ -- \S+ osd\d+ --> (\D+\d+) \S+ \S+ osd_op_reply\((\d+)/;
+    my ($who,$tid) = /\d+ -- \S+ osd\d+ --> (\D+\d+) \S+ \S+ osd_op_reply\((\S+) /;
     if (defined $tid) {
 	my $req = "$who:$tid";
 	if (exists $r{$req}) {
