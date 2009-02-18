@@ -120,7 +120,7 @@ struct ceph_mds_session {
 	struct list_head  s_rdcaps;   /* just the readonly caps */
 	int               s_nr_caps;
 	atomic_t          s_ref;
-	struct completion s_completion;
+	struct list_head  s_waiting;  /* waiting requests */
 	struct list_head  s_unsafe;   /* unsafe requests */
 };
 
@@ -148,6 +148,8 @@ struct ceph_mds_request {
 	unsigned long r_started;  /* start time to measure timeout against */
 	unsigned long r_request_started; /* start time for mds request only,
 					    used to measure lease durations */
+
+	struct list_head r_wait;
 
 	/* for choosing which mds to send this request to */
 	struct dentry *r_direct_dentry;
@@ -189,7 +191,8 @@ struct ceph_mds_client {
 	struct mutex            mutex;         /* all nested structures */
 
 	struct ceph_mdsmap      *mdsmap;
-	struct completion       map_waiters, session_close_waiters;
+	struct completion       session_close_waiters;
+	struct list_head        waiting_for_map;
 
 	struct ceph_mds_session **sessions;    /* NULL for mds if no session */
 	int                     max_sessions;  /* len of s_mds_sessions */
@@ -219,7 +222,7 @@ struct ceph_mds_client {
 
 extern const char *ceph_mds_op_name(int op);
 
-extern struct ceph_mds_session *__ceph_get_mds_session(struct ceph_mds_client *, int mds);
+extern struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *, int mds);
 
 inline static struct ceph_mds_session *
 ceph_get_mds_session(struct ceph_mds_session *s)

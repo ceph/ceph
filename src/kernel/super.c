@@ -1050,6 +1050,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	return 0;
 
 out_splat:
+	ceph_mdsc_close_sessions(&client->mdsc);
 	up_write(&sb->s_umount);
 	deactivate_super(sb);
 	goto out_final;

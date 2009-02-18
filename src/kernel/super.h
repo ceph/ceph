@@ -26,6 +26,9 @@
 #define CEPH_BLOCK_SHIFT   20  /* 1 MB */
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
+#define CEPH_MOUNT_TIMEOUT  (60*HZ)
+#define CEPH_CAP_DELAY      (5*HZ)  /* cap release delay */
+
 /*
  * subtract jiffies
  */
@@ -131,7 +134,7 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
  * capabilities.
  *
  * Each cap is referenced by the inode's i_caps tree and by a per-mds
- * session capability list.
+ * session capability list(s).
  */
 struct ceph_cap {
 	struct ceph_inode_info *ci;

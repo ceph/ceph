@@ -44,6 +44,9 @@ timer
 - each SafeTimer should just be its own thread.
 
 kernel client
+- async mds requests
+- pass dentries directly into mds requests; rebuild messages on message retry
+- optional or no fill_trace?
 - flock, fnctl locks
 - async xattrs
 - avoid pinning inodes with expireable caps?

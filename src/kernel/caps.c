@@ -446,7 +446,7 @@ void ceph_remove_cap(struct ceph_cap *cap)
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 				struct ceph_inode_info *ci)
 {
-	ci->i_hold_caps_until = round_jiffies(jiffies + HZ * 5);
+	ci->i_hold_caps_until = round_jiffies(jiffies + CEPH_CAP_DELAY);
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
 	     ci->i_hold_caps_until);
 	spin_lock(&mdsc->cap_delay_lock);
@@ -691,7 +691,7 @@ retry:
 		if (!session) {
 			spin_unlock(&inode->i_lock);
 			mutex_lock(&mdsc->mutex);
-			session = __ceph_get_mds_session(mdsc, mds);
+			session = __ceph_lookup_mds_session(mdsc, mds);
 			mutex_unlock(&mdsc->mutex);
 			if (session) {
 				dout(10, "inverting session/ino locks on %p\n",
@@ -1625,7 +1625,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	/* find session */
 	mutex_lock(&mdsc->mutex);
-	session = __ceph_get_mds_session(mdsc, mds);
+	session = __ceph_lookup_mds_session(mdsc, mds);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got cap but no session for mds%d\n", mds);

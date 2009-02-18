@@ -718,7 +718,7 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 
 	/* find session */
 	mutex_lock(&mdsc->mutex);
-	session = __ceph_get_mds_session(mdsc, mds);
+	session = __ceph_lookup_mds_session(mdsc, mds);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
 		dout(10, "WTF, got snap but no session for mds%d\n", mds);
