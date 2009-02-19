@@ -848,10 +848,12 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 		return ERR_PTR(-ENOMEM);
 	req->r_started = jiffies;
 	req->r_resend_mds = -1;
+	INIT_LIST_HEAD(&req->r_listener_item);
 	req->r_fmode = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	init_completion(&req->r_completion);
 	init_completion(&req->r_safe_completion);
+	INIT_LIST_HEAD(&req->r_unsafe_item);
 
 	req->r_op = op;
 	if (dentry)
@@ -1313,7 +1315,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	if (head->safe) {
 		req->r_got_safe = true;
 		__unregister_listener(req);
-		req->r_got_safe = true;
 		complete(&req->r_safe_completion);
 
 		if (req->r_got_unsafe) {
