@@ -3437,8 +3437,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   int client = mdr->get_client();
   dout(7) << "handle_client_rename " << *req << dendl;
 
-  filepath destpath = req->get_filepath2();
-  filepath srcpath = req->get_filepath();
+  filepath destpath = req->get_filepath();
+  filepath srcpath = req->get_filepath2();
   if (destpath.depth() == 0 || srcpath.depth() == 0) {
     reply_request(mdr, -EINVAL);
     return;
