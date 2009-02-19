@@ -162,8 +162,6 @@ struct ceph_mds_request {
 	unsigned long r_request_started; /* start time for mds request only,
 					    used to measure lease durations */
 
-	struct list_head r_wait;
-
 	/* for choosing which mds to send this request to */
 	int r_direct_mode;
 	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
@@ -187,6 +185,7 @@ struct ceph_mds_request {
 	int               r_resend_mds; /* mds to resend to next, if any*/
 
 	atomic_t          r_ref;
+	struct list_head  r_wait;
 	struct completion r_completion;
 	struct completion r_safe_completion;
 	ceph_mds_request_callback_t r_callback;

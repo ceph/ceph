@@ -851,6 +851,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	INIT_LIST_HEAD(&req->r_listener_item);
 	req->r_fmode = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
+	INIT_LIST_HEAD(&req->r_wait);
 	init_completion(&req->r_completion);
 	init_completion(&req->r_safe_completion);
 	INIT_LIST_HEAD(&req->r_unsafe_item);
