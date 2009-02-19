@@ -2673,8 +2673,8 @@ int Client::rename(const char *relfrom, const char *relto)
 int Client::_rename(const filepath &from, const filepath &to, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
-  req->set_filepath(from);
-  req->set_filepath2(to);
+  req->set_filepath(to);
+  req->set_filepath2(from);
  
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
