@@ -869,7 +869,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	if (old_dentry)
 		req->r_old_dentry = dget(old_dentry);
 	req->r_path1 = path1;
-	req->r_path2 = path2;	
+	req->r_path2 = path2;
 	req->r_direct_mode = mode;
 	return req;
 }
@@ -889,6 +889,86 @@ static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 }
 
 /*
+ * build a dentry's path.  allocate on heap; caller must kfree.  based
+ * on build_path_from_dentry in fs/cifs/dir.c.
+ *
+ * encode hidden .snap dirs as a double /, i.e.
+ *   foo/.snap/bar -> foo//bar
+ */
+static char *build_path(struct dentry *dentry, int *plen, u64 *base, int mds)
+{
+	struct dentry *temp;
+	char *path;
+	int len, pos;
+
+	if (dentry == NULL)
+		return ERR_PTR(-EINVAL);
+
+retry:
+	len = 0;
+	for (temp = dentry; !IS_ROOT(temp);) {
+		struct inode *inode = temp->d_inode;
+		if (inode && ceph_snap(inode) == CEPH_SNAPDIR)
+			len++;  /* slash only */
+		else
+			len += 1 + temp->d_name.len;
+		temp = temp->d_parent;
+		if (temp == NULL) {
+			derr(1, "corrupt dentry %p\n", dentry);
+			return ERR_PTR(-EINVAL);
+		}
+	}
+	if (len)
+		len--;  /* no leading '/' */
+
+	path = kmalloc(len+1, GFP_NOFS);
+	if (path == NULL)
+		return ERR_PTR(-ENOMEM);
+	pos = len;
+	path[pos] = 0;	/* trailing null */
+	for (temp = dentry; !IS_ROOT(temp) && pos != 0; ) {
+		if (temp->d_inode &&
+		    ceph_snap(temp->d_inode) == CEPH_SNAPDIR) {
+			dout(50, "build_path_dentry path+%d: %p SNAPDIR\n",
+			     pos, temp);
+		} else {
+			pos -= temp->d_name.len;
+			if (pos < 0)
+				break;
+			strncpy(path + pos, temp->d_name.name,
+				temp->d_name.len);
+			dout(50, "build_path_dentry path+%d: %p '%.*s'\n",
+			     pos, temp, temp->d_name.len, path + pos);
+		}
+		if (pos)
+			path[--pos] = '/';
+		temp = temp->d_parent;
+		if (temp == NULL) {
+			derr(1, "corrupt dentry\n");
+			kfree(path);
+			return ERR_PTR(-EINVAL);
+		}
+	}
+	if (pos != 0) {
+		derr(1, "did not end path lookup where expected, "
+		     "namelen is %d, pos is %d\n", len, pos);
+		/* presumably this is only possible if racing with a
+		   rename of one of the parent directories (we can not
+		   lock the dentries above us to prevent this, but
+		   retrying should be harmless) */
+		kfree(path);
+		goto retry;
+	}
+
+	*base = ceph_ino(temp->d_inode);
+	*plen = len;
+	dout(10, "build_path_dentry on %p %d built %llx '%.*s'\n",
+	     dentry, atomic_read(&dentry->d_count), *base, len, path);
+	return path;
+}
+
+
+/*
  * called under mdsc->mutex
  */
 static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
@@ -901,21 +981,30 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	const char *path2 = req->r_path2;
 	u64 ino1 = 1, ino2 = 0;
 	int pathlen1 = 0, pathlen2 = 0;
+	int pathlen;
 	void *p, *end;
+	u32 fhlen = 0;
 
-	if (path1)
-		pathlen1 = strlen(path1);
-	else
-		path1 = ceph_build_path(req->r_dentry, &pathlen1, &ino1, mds);
-	if (path2)
-		pathlen2 = strlen(path2);
-	else if (req->r_old_dentry)
-		path2 = ceph_build_path(req->r_old_dentry, &pathlen2, &ino2,
-					mds);
+	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
+		fhlen = *(int *)req->r_path2;
+		path2 = 0;
+		pathlen = sizeof(u32) + fhlen*sizeof(struct ceph_inopath_item);
+	} else {
+		if (path1)
+			pathlen1 = strlen(path1);
+		else
+			path1 = build_path(req->r_dentry, &pathlen1, &ino1,
+					   mds);
+		if (path2)
+			pathlen2 = strlen(path2);
+		else if (req->r_old_dentry)
+			path2 = build_path(req->r_old_dentry, &pathlen2, &ino2,
+					   mds);
+		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
+	}
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST,
-			   sizeof(*head) + pathlen1 + pathlen2 +
-			   2*(sizeof(u32)+sizeof(u64)), 0, 0, NULL);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, sizeof(*head) + pathlen,
+			   0, 0, NULL);
 	if (IS_ERR(msg))
 		goto out;
 
@@ -931,14 +1020,20 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	head->caller_gid = cpu_to_le32(current->fsgid);
 	head->args = req->r_args;
 
-	ceph_encode_filepath(&p, end, ino1, path1);
-	ceph_encode_filepath(&p, end, ino2, path2);
-	if (path1)
-		dout(10, "create_request_message path1 %llx/%s\n",
-		     ino1, path1);
-	if (path2)
-		dout(10, "create_request_message path2 %llx/%s\n",
-		     ino2, path2);
+	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
+		ceph_encode_32(&p, fhlen);
+		memcpy(p, path1, fhlen * sizeof(struct ceph_inopath_item));
+		p += fhlen * sizeof(struct ceph_inopath_item);
+	} else {
+		ceph_encode_filepath(&p, end, ino1, path1);
+		ceph_encode_filepath(&p, end, ino2, path2);
+		if (path1)
+			dout(10, "create_request_message path1 %llx/%s\n",
+			     ino1, path1);
+		if (path2)
+			dout(10, "create_request_message path2 %llx/%s\n",
+			     ino2, path2);
+	}
 
  	BUG_ON(p != end);
 
@@ -1584,8 +1679,7 @@ retry:
 
 		dentry = d_find_alias(inode);
 		if (dentry) {
-			path = ceph_build_path(dentry, &pathlen,
-					       &pathbase, 9999);
+			path = build_path(dentry, &pathlen, &pathbase, -1);
 			if (IS_ERR(path)) {
 				err = PTR_ERR(path);
 				BUG_ON(err);
