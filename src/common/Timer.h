@@ -94,7 +94,7 @@ class Timer {
     num_event(0)
   { 
   }
-  ~Timer() { 
+  virtual ~Timer() {
     // stop.
     cancel_timer();
 
