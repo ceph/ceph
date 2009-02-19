@@ -1033,6 +1033,10 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		if (path2)
 			dout(10, "create_request_message path2 %llx/%s\n",
 			     ino2, path2);
+		if (req->r_dentry)
+			kfree(path1);
+		if (req->r_old_dentry)
+			kfree(path2);
 	}
 
  	BUG_ON(p != end);
