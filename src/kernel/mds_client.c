@@ -600,19 +600,6 @@ static struct ceph_msg *create_session_msg(u32 op, u64 seq)
 }
 
 /*
- * Register request with mon_client for a new mds map. 
- *
- * called under mdsc->mutex.
- */
-static void request_new_map(struct ceph_mds_client *mdsc)
-{
-	dout(30, "request_new_map enter\n");
-	mutex_unlock(&mdsc->mutex);
-	ceph_monc_request_mdsmap(&mdsc->client->monc, mdsc->mdsmap->m_epoch+1);
-	mutex_lock(&mdsc->mutex);
-}
-
-/*
  * send session open request.
  *
  * called under mdsc->mutex
@@ -630,7 +617,6 @@ static int __open_session(struct ceph_mds_client *mdsc,
 	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
 	session->s_state = CEPH_MDS_SESSION_OPENING;
 	session->s_renew_requested = jiffies;
-	mutex_unlock(&mdsc->mutex);
 
 	/* send connect message */
 	msg = create_session_msg(CEPH_SESSION_REQUEST_OPEN, session->s_seq);
@@ -641,7 +627,6 @@ static int __open_session(struct ceph_mds_client *mdsc,
 	ceph_send_msg_mds(mdsc, msg, mds);
 
 out:
-	mutex_lock(&mdsc->mutex);
 	return 0;
 }
 
@@ -1122,7 +1107,8 @@ static int __do_request(struct ceph_mds_client *mdsc,
 	    ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
 		dout(30, "do_request no mds or not active, waiting for map\n");
 		list_add(&req->r_wait, &mdsc->waiting_for_map);
-		request_new_map(mdsc);
+		ceph_monc_request_mdsmap(&mdsc->client->monc,
+					 mdsc->mdsmap->m_epoch+1);
 		goto out;
 	}
 
@@ -1137,7 +1123,8 @@ static int __do_request(struct ceph_mds_client *mdsc,
 		    session->s_state == CEPH_MDS_SESSION_CLOSING)
 			__open_session(mdsc, session);
 		list_add(&req->r_wait, &session->s_waiting);
-		request_new_map(mdsc);
+		ceph_monc_request_mdsmap(&mdsc->client->monc,
+					 mdsc->mdsmap->m_epoch+1);
 		goto out_session;
 	}
 
@@ -1150,10 +1137,8 @@ static int __do_request(struct ceph_mds_client *mdsc,
 
 	err = __prepare_send_request(mdsc, req, mds);
 	if (!err) {
-		mutex_unlock(&mdsc->mutex);
 		ceph_msg_get(req->r_request);
 		ceph_send_msg_mds(mdsc, req->r_request, mds);
-		mutex_lock(&mdsc->mutex);
 	}
 
 out_session:
