@@ -318,10 +318,14 @@ void SafeTimer::EventWrapper::finish(int r)
 
 bool SafeTimer::cancel_event(Context *c) 
 {
+  bool ret;
+
   assert(lock.is_locked());
   assert(scheduled.count(c));
 
-  if (Timer::cancel_event(scheduled[c])) {
+  ret = Timer::cancel_event(scheduled[c]);
+
+  if (ret) {
     // hosed wrapper.  hose original event too.
     delete c;
   } else {
@@ -329,6 +333,7 @@ bool SafeTimer::cancel_event(Context *c)
     canceled[c] = scheduled[c];
   }
   scheduled.erase(c);
+  return ret;
 }
 
 void SafeTimer::cancel_all()
