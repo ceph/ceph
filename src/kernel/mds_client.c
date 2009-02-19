@@ -396,12 +396,10 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			ceph_msg_put(req->r_reply);
 			destroy_reply_info(&req->r_reply_info);
 		}
-		if (req->r_direct_dentry)
-			dput(req->r_direct_dentry);
 		if (req->r_last_inode)
 			iput(req->r_last_inode);
-		if (req->r_last_dentry)
-			dput(req->r_last_dentry);
+		if (req->r_dentry)
+			dput(req->r_dentry);
 		if (req->r_old_dentry)
 			dput(req->r_old_dentry);
 		kfree(req->r_expected_cap);
@@ -426,24 +424,6 @@ static struct ceph_mds_request *__lookup_request(struct ceph_mds_client *mdsc,
 }
 
 /*
- * allocate and initialize a new request.  mostly zeroed.
- */
-static struct ceph_mds_request *new_request(struct ceph_msg *msg)
-{
-	struct ceph_mds_request *req;
-
-	req = kzalloc(sizeof(*req), GFP_NOFS);
-	req->r_request = msg;
-	req->r_started = jiffies;
-	req->r_resend_mds = -1;
-	req->r_fmode = -1;
-	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
-	init_completion(&req->r_completion);
-	init_completion(&req->r_safe_completion);
-	return req;
-}
-
-/*
  * Register an in-flight request, and assign a tid in msg request header.
  *
  * Called under mdsc->mutex.
@@ -452,10 +432,9 @@ static void __register_request(struct ceph_mds_client *mdsc,
 			       struct inode *listener,
 			       struct ceph_mds_request *req)
 {
-	struct ceph_mds_request_head *head = req->r_request->front.iov_base;
 	struct ceph_inode_info *ci;
+
 	req->r_tid = ++mdsc->last_tid;
-	head->tid = cpu_to_le64(req->r_tid);
 	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
 	ceph_mdsc_get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
@@ -503,7 +482,7 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	int mds = -1;
 	u32 hash = req->r_direct_hash;
 	bool is_hash = req->r_direct_is_hash;
-	struct dentry *dentry = req->r_direct_dentry;
+	struct dentry *dentry = req->r_dentry;
 	struct ceph_inode_info *ci;
 	int mode = req->r_direct_mode;
 
@@ -865,82 +844,33 @@ void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
 }
 
 
-
 /*
- * create an mds request and message.
- *
- * slight hacky weirdness: if op is a FINDINODE, ino1 is the _length_
- * of path1, and path1 isn't null terminated (it's an nfs filehandle
- * fragment).  path2 is not used in that case.
+ * Create an mds request.
  */
 struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
-			 u64 ino1, const char *path1,
-			 u64 ino2, const char *path2,
-			 struct dentry *ref, int mode)
+			 struct dentry *dentry, struct dentry *old_dentry,
+			 const char *path1, const char *path2, int mode)
 {
-	struct ceph_msg *msg;
-	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *head;
-	void *p, *end;
-	int pathlen;
+	struct ceph_mds_request *req = kzalloc(sizeof(*req), GFP_NOFS);
 
-	if (op == CEPH_MDS_OP_FINDINODE) {
-		pathlen = sizeof(u32) + ino1*sizeof(struct ceph_inopath_item);
-	} else {
-		pathlen = 2*(sizeof(ino1) + sizeof(u32));
-		if (path1)
-			pathlen += strlen(path1);
-		if (path2)
-			pathlen += strlen(path2);
-	}
+	if (!req)
+		return ERR_PTR(-ENOMEM);
+	req->r_started = jiffies;
+	req->r_resend_mds = -1;
+	req->r_fmode = -1;
+	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
+	init_completion(&req->r_completion);
+	init_completion(&req->r_safe_completion);
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST,
-			   sizeof(struct ceph_mds_request_head) + pathlen,
-			   0, 0, NULL);
-	if (IS_ERR(msg))
-		return ERR_PTR(PTR_ERR(msg));
-	req = new_request(msg);
-	if (IS_ERR(req)) {
-		ceph_msg_put(msg);
-		return req;
-	}
-	head = msg->front.iov_base;
-	p = msg->front.iov_base + sizeof(*head);
-	end = msg->front.iov_base + msg->front.iov_len;
-
-	/* dentry used to direct mds request? */
-	req->r_direct_dentry = dget(ref);
+	req->r_op = op;
+	if (dentry)
+		req->r_dentry = dget(dentry);
+	if (old_dentry)
+		req->r_old_dentry = dget(old_dentry);
+	req->r_path1 = path1;
+	req->r_path2 = path2;	
 	req->r_direct_mode = mode;
-
-	/* tid, oldest_client_tid, retry_attempt set later. */
-	head->mdsmap_epoch = cpu_to_le32(mdsc->mdsmap->m_epoch);
-	head->num_fwd = 0;
-	head->mds_wants_replica_in_dirino = 0;
-	head->op = cpu_to_le32(op);
-	head->caller_uid = cpu_to_le32(current->fsuid);
-	head->caller_gid = cpu_to_le32(current->fsgid);
-	memset(&head->args, 0, sizeof(head->args));
-
-	/* encode paths */
-	if (op == CEPH_MDS_OP_FINDINODE) {
-		ceph_encode_32(&p, ino1);
-		memcpy(p, path1, ino1 * sizeof(struct ceph_inopath_item));
-		p += ino1 * sizeof(struct ceph_inopath_item);
-	} else {
-		ceph_encode_filepath(&p, end, ino1, path1);
-		ceph_encode_filepath(&p, end, ino2, path2);
-		if (path1)
-			dout(10, "create_request path1 %llx/%s\n",
-			     ino1, path1);
-		if (path2)
-			dout(10, "create_request path2 %llx/%s\n",
-			     ino2, path2);
-	}
-	dout_flag(10, DOUT_MASK_PROTOCOL, "create_request op %d=%s -> %p\n", op,
-	     ceph_mds_op_name(op), req);
-
-	BUG_ON(p != end);
 	return req;
 }
 
@@ -961,19 +891,89 @@ static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 /*
  * called under mdsc->mutex
  */
-static void __prepare_send_request(struct ceph_mds_client *mdsc,
-				   struct ceph_mds_request *req)
+static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
+					       struct ceph_mds_request *req,
+					       int mds)
+{
+	struct ceph_msg *msg;
+	struct ceph_mds_request_head *head;
+	const char *path1 = req->r_path1;
+	const char *path2 = req->r_path2;
+	u64 ino1 = 1, ino2 = 0;
+	int pathlen1 = 0, pathlen2 = 0;
+	void *p, *end;
+
+	if (path1)
+		pathlen1 = strlen(path1);
+	else
+		path1 = ceph_build_path(req->r_dentry, &pathlen1, &ino1, mds);
+	if (path2)
+		pathlen2 = strlen(path2);
+	else if (req->r_old_dentry)
+		path2 = ceph_build_path(req->r_old_dentry, &pathlen2, &ino2,
+					mds);
+
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST,
+			   sizeof(*head) + pathlen1 + pathlen2 +
+			   2*(sizeof(u32)+sizeof(u64)), 0, 0, NULL);
+	if (IS_ERR(msg))
+		goto out;
+
+	head = msg->front.iov_base;
+	p = msg->front.iov_base + sizeof(*head);
+	end = msg->front.iov_base + msg->front.iov_len;
+
+	head->mdsmap_epoch = cpu_to_le32(mdsc->mdsmap->m_epoch);
+	head->num_fwd = 0;
+	head->mds_wants_replica_in_dirino = 0;
+	head->op = cpu_to_le32(req->r_op);
+	head->caller_uid = cpu_to_le32(current->fsuid);
+	head->caller_gid = cpu_to_le32(current->fsgid);
+	head->args = req->r_args;
+
+	ceph_encode_filepath(&p, end, ino1, path1);
+	ceph_encode_filepath(&p, end, ino2, path2);
+	if (path1)
+		dout(10, "create_request_message path1 %llx/%s\n",
+		     ino1, path1);
+	if (path2)
+		dout(10, "create_request_message path2 %llx/%s\n",
+		     ino2, path2);
+
+ 	BUG_ON(p != end);
+
+out:
+	return msg;
+}
+
+/*
+ * called under mdsc->mutex
+ */
+static int __prepare_send_request(struct ceph_mds_client *mdsc,
+				  struct ceph_mds_request *req,
+				  int mds)
 {
 	struct ceph_mds_request_head *rhead;
-
-	/* if there are other references on this message, e.g., if we are
-	 * told to forward it and the previous copy is still in flight, dup
-	 * it. */
-	req->r_request = ceph_msg_maybe_dup(req->r_request);
+	struct ceph_msg *msg;
 
 	req->r_attempts++;
+	dout(10, "prepare_send_request %p tid %lld %s (attempt %d)\n", req,
+	     req->r_tid, ceph_mds_op_name(req->r_op), req->r_attempts);
 
-	rhead = req->r_request->front.iov_base;
+	if (req->r_request) {
+		ceph_msg_put(req->r_request);
+		req->r_request = NULL;
+	}
+	msg = create_request_message(mdsc, req, mds);
+	if (IS_ERR(msg)) {
+		req->r_reply = ERR_PTR(PTR_ERR(msg));
+		complete(&req->r_completion);
+		return -PTR_ERR(msg);
+	}
+	req->r_request = msg;
+
+	rhead = msg->front.iov_base;
+	rhead->tid = cpu_to_le64(req->r_tid);
 	rhead->retry_attempt = cpu_to_le32(req->r_attempts - 1);
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
 	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
@@ -982,6 +982,7 @@ static void __prepare_send_request(struct ceph_mds_client *mdsc,
 		rhead->ino = cpu_to_le64(ceph_ino(req->r_last_inode));
 	else
 		rhead->ino = 0;
+	return 0;
 }
 
 /*
@@ -1035,14 +1036,14 @@ static int __do_request(struct ceph_mds_client *mdsc,
 	if (req->r_request_started == 0)   /* note request start time */
 		req->r_request_started = jiffies;
 
-	__prepare_send_request(mdsc, req);
+	err = __prepare_send_request(mdsc, req, mds);
+	if (!err) {
+		mutex_unlock(&mdsc->mutex);
+		ceph_msg_get(req->r_request);
+		ceph_send_msg_mds(mdsc, req->r_request, mds);
+		mutex_lock(&mdsc->mutex);
+	}
 
-	mutex_unlock(&mdsc->mutex);
-	ceph_msg_get(req->r_request);
-	ceph_send_msg_mds(mdsc, req->r_request, mds);
-	mutex_lock(&mdsc->mutex);
-
-	err = 0;
 out_session:
 	ceph_put_mds_session(session);
 out:
@@ -1462,15 +1463,18 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 {
 	struct list_head *p, *n;
 	struct ceph_mds_request *req;
+	int err;
 
 	dout(10, "replay_unsafe_requests mds%d\n", session->s_mds);
 
 	mutex_lock(&mdsc->mutex);
 	list_for_each_safe(p, n, &session->s_unsafe) {
 		req = list_entry(p, struct ceph_mds_request, r_unsafe_item);
-		__prepare_send_request(mdsc, req);
-		ceph_msg_get(req->r_request);
-		ceph_send_msg_mds(mdsc, req->r_request, session->s_mds);
+		err = __prepare_send_request(mdsc, req, session->s_mds);
+		if (!err) {
+			ceph_msg_get(req->r_request);
+			ceph_send_msg_mds(mdsc, req->r_request, session->s_mds);
+		}
 	}
 	mutex_unlock(&mdsc->mutex);
 }

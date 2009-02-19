@@ -914,23 +914,23 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		 *  - only if there is no existing dn, and
 		 *  - only if parent is correct
 		 */
-		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
-			if (!dn && req->r_last_dentry->d_parent == parent) {
-				dn = req->r_last_dentry;
+		if (d == rinfo->trace_numd-1 && req->r_dentry) {
+			if (!dn && req->r_dentry->d_parent == parent) {
+				dn = req->r_dentry;
 				dout(10, "fill_trace provided dn %p '%.*s'\n",
 				     dn, dn->d_name.len, dn->d_name.name);
 				ceph_init_dentry(dn);  /* just in case */
-			} else if (dn == req->r_last_dentry) {
+			} else if (dn == req->r_dentry) {
 				dout(10, "fill_trace matches provided dn %p\n",
 				     dn);
-				dput(req->r_last_dentry);
+				dput(req->r_dentry);
 			} else {
 				dout(10, "fill_trace NOT using provided dn %p "
-				     "(parent %p)\n", req->r_last_dentry,
-				     req->r_last_dentry->d_parent);
-				dput(req->r_last_dentry);
+				     "(parent %p)\n", req->r_dentry,
+				     req->r_dentry->d_parent);
+				dput(req->r_dentry);
 			}
-			req->r_last_dentry = NULL;
+			req->r_dentry = NULL;
 		}
 
 		if (!dn) {
@@ -1094,11 +1094,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		 * we couldn't take i_mutex for this dir, so do not
 		 * lookup or relink any existing dentry.
 		 */
-		if (d == rinfo->trace_numd-1 && req->r_last_dentry) {
-			dn = req->r_last_dentry;
+		if (d == rinfo->trace_numd-1 && req->r_dentry) {
+			dn = req->r_dentry;
 			dout(10, "fill_trace using provided dn %p\n", dn);
 			ceph_init_dentry(dn);
-			req->r_last_dentry = NULL;
+			req->r_dentry = NULL;
 		}
 
 		/* null dentry? */
@@ -1154,9 +1154,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dput(parent);
 
 	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
-	if (req->r_last_dentry)
-		dput(req->r_last_dentry);
-	req->r_last_dentry = dn;
+	if (req->r_dentry)
+		dput(req->r_dentry);
+	req->r_dentry = dn;
 	if (req->r_last_inode)
 		iput(req->r_last_inode);
 	req->r_last_inode = in;
@@ -1171,7 +1171,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 			     struct ceph_mds_session *session)
 {
-	struct dentry *parent = req->r_last_dentry;
+	struct dentry *parent = req->r_dentry;
 	struct ceph_mds_reply_info_parsed *rinfo = &req->r_reply_info;
 	struct qstr dname;
 	struct dentry *dn;
@@ -1468,30 +1468,17 @@ static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
 						struct dentry *dentry,
 						int ia_valid, int op)
 {
-	char *path;
-	int pathlen;
-	struct ceph_mds_request *req;
-	u64 pathbase;
 	int issued = ceph_caps_issued(ceph_inode(dentry->d_inode));
+	int mode = USE_ANY_MDS;
 
 	if ((ia_valid & ATTR_FILE) ||
-	    (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER))) {
-		dout(5, "prepare_setattr dentry %p (inode %llx.%llx)\n", dentry,
-		     ceph_vinop(dentry->d_inode));
-		req = ceph_mdsc_create_request(mdsc, op,
-					       ceph_ino(dentry->d_inode),
-					       "", 0, NULL,
-					       dentry, USE_CAP_MDS);
-	} else {
-		dout(5, "prepare_setattr dentry %p (full path)\n", dentry);
-		path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
-		if (IS_ERR(path))
-			return ERR_PTR(PTR_ERR(path));
-		req = ceph_mdsc_create_request(mdsc, op, pathbase, path, 0,
-					       NULL, dentry, USE_ANY_MDS);
-		kfree(path);
-	}
-	return req;
+	    (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)))
+		mode = USE_CAP_MDS;
+
+	dout(5, "prepare_setattr dentry %p (inode %llx.%llx)\n", dentry,
+	     ceph_vinop(dentry->d_inode));
+	return ceph_mdsc_create_request(mdsc, op, dentry, NULL,
+					NULL, NULL, mode);
 }
 
 static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
@@ -1503,7 +1490,6 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *reqh;
 	int err;
 	int mask = 0;
 
@@ -1524,16 +1510,15 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LCHOWN);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqh = req->r_request->front.iov_base;
 	if (ia_valid & ATTR_UID) {
-		reqh->args.chown.uid = cpu_to_le32(attr->ia_uid);
+		req->r_args.chown.uid = cpu_to_le32(attr->ia_uid);
 		mask |= CEPH_CHOWN_UID;
 	}
 	if (ia_valid & ATTR_GID) {
-		reqh->args.chown.gid = cpu_to_le32(attr->ia_gid);
+		req->r_args.chown.gid = cpu_to_le32(attr->ia_gid);
 		mask |= CEPH_CHOWN_GID;
 	}
-	reqh->args.chown.mask = cpu_to_le32(mask);
+	req->r_args.chown.mask = cpu_to_le32(mask);
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
@@ -1549,7 +1534,6 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *reqh;
 	int err;
 
 	spin_lock(&inode->i_lock);
@@ -1566,8 +1550,7 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	req = prepare_setattr(mdsc, dentry, attr->ia_valid, CEPH_MDS_OP_LCHMOD);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqh = req->r_request->front.iov_base;
-	reqh->args.chmod.mode = cpu_to_le32(attr->ia_mode);
+	req->r_args.chmod.mode = cpu_to_le32(attr->ia_mode);
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
@@ -1584,7 +1567,6 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *reqh;
 	int err;
 
 	/* if i hold CAP_EXCL, i can change [am]time any way i like */
@@ -1628,15 +1610,14 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LUTIME);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqh = req->r_request->front.iov_base;
-	ceph_encode_timespec(&reqh->args.utime.mtime, &attr->ia_mtime);
-	ceph_encode_timespec(&reqh->args.utime.atime, &attr->ia_atime);
+	ceph_encode_timespec(&req->r_args.utime.mtime, &attr->ia_mtime);
+	ceph_encode_timespec(&req->r_args.utime.atime, &attr->ia_atime);
 
-	reqh->args.utime.mask = 0;
+	req->r_args.utime.mask = 0;
 	if (ia_valid & ATTR_ATIME)
-		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_ATIME);
+		req->r_args.utime.mask |= cpu_to_le32(CEPH_UTIME_ATIME);
 	if (ia_valid & ATTR_MTIME)
-		reqh->args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
+		req->r_args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
 
 	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
@@ -1654,7 +1635,6 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *reqh;
 	int err;
 
 	dout(10, "truncate: ia_size %d i_size %d\n",
@@ -1680,9 +1660,8 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LTRUNCATE);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqh = req->r_request->front.iov_base;
-	reqh->args.truncate.length = cpu_to_le64(attr->ia_size);
-	reqh->args.truncate.old_length = cpu_to_le64(inode->i_size);
+	req->r_args.truncate.length = cpu_to_le64(attr->ia_size);
+	req->r_args.truncate.old_length = cpu_to_le64(inode->i_size);
 	//ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
@@ -2051,10 +2030,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *rhead;
-	char *path;
-	int pathlen;
-	u64 pathbase;
 	int err;
 	int i, nr_pages;
 	struct page **pages = NULL;
@@ -2090,18 +2065,12 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 
 	/* do request */
-	path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
-	if (IS_ERR(path))
-		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
-				       pathbase, path, 0, name,
-				       dentry, USE_AUTH_MDS);
-	kfree(path);
+				       dentry, NULL, NULL, NULL, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	rhead = req->r_request->front.iov_base;
-	rhead->args.setxattr.flags = cpu_to_le32(flags);
+	req->r_args.setxattr.flags = cpu_to_le32(flags);
 
 	req->r_request->pages = pages;
 	req->r_request->nr_pages = nr_pages;
@@ -2128,9 +2097,6 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	struct inode *inode = dentry->d_inode;
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_mds_request *req;
-	char *path;
-	int pathlen;
-	u64 pathbase;
 	int err;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
@@ -2143,13 +2109,8 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (_ceph_match_vir_xattr(name) != NULL)
 		return -EOPNOTSUPP;
 
-	path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
-	if (IS_ERR(path))
-		return PTR_ERR(path);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
-				       pathbase, path, 0, name,
-				       dentry, USE_AUTH_MDS);
-	kfree(path);
+				       dentry, NULL, NULL, NULL, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 

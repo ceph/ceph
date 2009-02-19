@@ -138,7 +138,14 @@ enum {
  * an in-flight mds request
  */
 struct ceph_mds_request {
-	u64             r_tid;      /* transaction id */
+	u64 r_tid;                   /* transaction id */
+
+	int r_op;
+	struct dentry *r_dentry;
+	struct dentry *r_old_dentry; /* rename from or link from */
+	const char *r_path1, *r_path2;
+	union ceph_mds_request_args r_args;
+
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info_parsed r_reply_info;
@@ -152,7 +159,6 @@ struct ceph_mds_request {
 	struct list_head r_wait;
 
 	/* for choosing which mds to send this request to */
-	struct dentry *r_direct_dentry;
 	int r_direct_mode;
 	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
 	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
@@ -164,8 +170,6 @@ struct ceph_mds_request {
 	 * mds response.  also used to feed a VFS-provided dentry into
 	 * the reply handler */
 	struct inode     *r_last_inode;
-	struct dentry    *r_last_dentry;
-	struct dentry    *r_old_dentry;   /* for rename */
 	struct ceph_cap  *r_expected_cap; /* preallocate cap if we expect one */
 	int               r_fmode;        /* file mode, if expecting cap */
 	struct ceph_mds_session *r_session;
@@ -267,9 +271,9 @@ extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc,
 
 extern struct ceph_mds_request *
 ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
-			 u64 ino1, const char *path1,
-			 u64 ino2, const char *path2,
-			 struct dentry *ref, int want_auth);
+			 struct dentry *dentry, struct dentry *old_dentry,
+			 const char *path1, const char *path2,
+			 int mode);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct inode *listener,
 				struct ceph_mds_request *req);

@@ -734,6 +734,52 @@ static inline const char *ceph_mds_op_name(int op)
 	}
 }
 
+union ceph_mds_request_args {
+	struct {
+		__le32 mask;
+	} __attribute__ ((packed)) stat;
+	struct {
+		__le32 mask;
+	} __attribute__ ((packed)) fstat;
+	struct {
+		__le32 frag;
+	} __attribute__ ((packed)) readdir;
+	struct {
+		struct ceph_timespec mtime;
+		struct ceph_timespec atime;
+		struct ceph_timespec ctime;
+		__le32 mask;
+	} __attribute__ ((packed)) utime;
+	struct {
+		__le32 mode;
+	} __attribute__ ((packed)) chmod;
+	struct {
+		__le32 uid;
+		__le32 gid;
+		__le32 mask;
+	} __attribute__ ((packed)) chown;
+	struct {
+		__le32 mode;
+		__le32 rdev;
+	} __attribute__ ((packed)) mknod;
+	struct {
+		__le32 mode;
+	} __attribute__ ((packed)) mkdir;
+	struct {
+		__le32 flags;
+		__le32 mode;
+	} __attribute__ ((packed)) open;
+	struct {
+		__le64 length, old_length;
+	} __attribute__ ((packed)) truncate;
+	struct {
+		__le32 flags;
+	} __attribute__ ((packed)) setxattr;
+	struct {
+		struct ceph_file_layout layout;
+	} __attribute__ ((packed)) setlayout;
+} __attribute__ ((packed));
+
 struct ceph_mds_request_head {
 	ceph_tid_t tid, oldest_client_tid;
 	ceph_epoch_t mdsmap_epoch; /* on client */
@@ -743,52 +789,7 @@ struct ceph_mds_request_head {
 	__le32 op;
 	__le32 caller_uid, caller_gid;
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
-
-	union {
-		struct {
-			__le32 mask;
-		} __attribute__ ((packed)) stat;
-		struct {
-			__le32 mask;
-		} __attribute__ ((packed)) fstat;
-		struct {
-			__le32 frag;
-		} __attribute__ ((packed)) readdir;
-		struct {
-			struct ceph_timespec mtime;
-			struct ceph_timespec atime;
-			struct ceph_timespec ctime;
-			__le32 mask;
-		} __attribute__ ((packed)) utime;
-		struct {
-			__le32 mode;
-		} __attribute__ ((packed)) chmod;
-		struct {
-			__le32 uid;
-			__le32 gid;
-			__le32 mask;
-		} __attribute__ ((packed)) chown;
-		struct {
-			__le32 mode;
-			__le32 rdev;
-		} __attribute__ ((packed)) mknod;
-		struct {
-			__le32 mode;
-		} __attribute__ ((packed)) mkdir;
-		struct {
-			__le32 flags;
-			__le32 mode;
-		} __attribute__ ((packed)) open;
-		struct {
-			__le64 length, old_length;
-		} __attribute__ ((packed)) truncate;
-		struct {
-			__le32 flags;
-		} __attribute__ ((packed)) setxattr;
-		struct {
-			struct ceph_file_layout layout;
-		} __attribute__ ((packed)) setlayout;
-	} __attribute__ ((packed)) args;
+	union ceph_mds_request_args args;
 } __attribute__ ((packed));
 
 /* masks for utimes() */

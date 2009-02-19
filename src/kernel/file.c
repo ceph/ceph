@@ -25,11 +25,7 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	u64 pathbase;
-	char *path;
-	int pathlen;
 	struct ceph_mds_request *req;
-	struct ceph_mds_request_head *rhead;
 	int want_auth = USE_ANY_MDS;
 
 	if (flags & (O_WRONLY|O_RDWR|O_CREAT|O_TRUNC))
@@ -37,13 +33,8 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 
 	dout(5, "prepare_open_request dentry %p name '%s' flags %d\n", dentry,
 	     dentry->d_name.name, flags);
-	path = ceph_build_path(dentry, &pathlen, &pathbase, 0);
-	if (IS_ERR(path))
-		return ERR_PTR(PTR_ERR(path));
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, pathbase, path,
-				       0, NULL,
-				       dentry, want_auth);
-	kfree(path);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, dentry, NULL,
+				       NULL, NULL, want_auth);
 	if (IS_ERR(req))
 		goto out;
 	req->r_expected_cap = kmalloc(sizeof(struct ceph_cap), GFP_NOFS);
@@ -52,10 +43,8 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 		return ERR_PTR(-ENOMEM);
 	}
 	req->r_fmode = ceph_flags_to_mode(flags);
-
-	rhead = req->r_request->front.iov_base;
-	rhead->args.open.flags = cpu_to_le32(flags);
-	rhead->args.open.mode = cpu_to_le32(create_mode);
+	req->r_args.open.flags = cpu_to_le32(flags);
+	req->r_args.open.mode = cpu_to_le32(create_mode);
 out:
 	return req;
 }
@@ -183,7 +172,6 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	if ((flags & O_CREAT) &&
 	    (ceph_caps_issued(ceph_inode(dir)) & CEPH_CAP_FILE_EXCL) == 0)
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
-	req->r_last_dentry = dget(dentry); /* use this dentry in fill_trace */
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);

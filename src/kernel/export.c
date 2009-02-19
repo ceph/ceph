@@ -79,9 +79,10 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 
 	inode = ceph_find_inode(sb, vino);
 	if (!inode) {
+#warning fixme
+		/*
 		struct ceph_mds_request *req;
 		derr(10, "fh_to_dentry %llx.%x -- no inode\n", vino.ino, hash);
-
 		req = ceph_mdsc_create_request(mdsc,
 					       CEPH_MDS_OP_FINDINODE,
 					       len, (char *)fh, 0, NULL,
@@ -90,7 +91,7 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 			return ERR_PTR(PTR_ERR(req));
 		err = ceph_mdsc_do_request(mdsc, NULL, req);
 		ceph_mdsc_put_request(req);
-
+		*/
 		inode = ceph_find_inode(sb, vino);
 		if (!inode)
 			return ERR_PTR(err ? err : -ESTALE);
