@@ -429,37 +429,42 @@ static struct ceph_mds_request *__lookup_request(struct ceph_mds_client *mdsc,
  * Called under mdsc->mutex.
  */
 static void __register_request(struct ceph_mds_client *mdsc,
-			       struct inode *listener,
 			       struct ceph_mds_request *req)
 {
-	struct ceph_inode_info *ci;
-
 	req->r_tid = ++mdsc->last_tid;
 	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
 	ceph_mdsc_get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
+}
+
+static void __register_listener(struct ceph_mds_request *req,
+				struct inode *listener)
+{
+	struct ceph_inode_info *ci = ceph_inode(listener);
+
 	req->r_listener = listener;
-	if (listener) {
-		ci = ceph_inode(listener);
-		spin_lock(&ci->i_listener_lock);
-		list_add_tail(&req->r_listener_item, &ci->i_listener_list);
-		spin_unlock(&ci->i_listener_lock);
-	}
+	spin_lock(&ci->i_listener_lock);
+	list_add_tail(&req->r_listener_item, &ci->i_listener_list);
+	spin_unlock(&ci->i_listener_lock);
 }
 
 static void __unregister_request(struct ceph_mds_client *mdsc,
 				 struct ceph_mds_request *req)
 {
-	struct ceph_inode_info *ci;
 	dout(30, "__unregister_request %p tid %lld\n", req, req->r_tid);
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
+	ceph_mdsc_put_request(req);
+}
+
+static void __unregister_listener(struct ceph_mds_request *req)
+{
 	if (req->r_listener) {
-		ci = ceph_inode(req->r_listener);
+		struct ceph_inode_info *ci = ceph_inode(req->r_listener);
+
 		spin_lock(&ci->i_listener_lock);
-		list_del(&req->r_listener_item);
+		list_del_init(&req->r_listener_item);
 		spin_unlock(&ci->i_listener_lock);
 	}
-	ceph_mdsc_put_request(req);
 }
 
 static bool __have_session(struct ceph_mds_client *mdsc, int mds)
@@ -1184,8 +1189,7 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 			break;
 		nexttid = reqs[got-1]->r_tid + 1;
 		for (i = 0; i < got; i++) {
-			if (!reqs[i]->r_got_unsafe &&
-			    ((reqs[i]->r_session &&
+			if (((reqs[i]->r_session &&
 			      reqs[i]->r_session->s_mds == mds) ||
 			     (all && reqs[i]->r_fwd_session &&
 			      reqs[i]->r_fwd_session->s_mds == mds))) {
@@ -1202,7 +1206,7 @@ void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
 {
 	dout(30, "submit_request on %p\n", req);
 	mutex_lock(&mdsc->mutex);
-	__register_request(mdsc, NULL, req);
+	__register_request(mdsc, req);
 	__do_request(mdsc, req);
 	mutex_unlock(&mdsc->mutex);
 }
@@ -1220,7 +1224,9 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	dout(30, "do_request on %p\n", req);
 
 	mutex_lock(&mdsc->mutex);
-	__register_request(mdsc, listener, req);
+	__register_request(mdsc, req);
+	if (listener)
+		__register_listener(req, listener);
 	__do_request(mdsc, req);
 
 	if (!req->r_reply) {
@@ -1301,26 +1307,30 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		return;
 	}
 
-	if (head->safe) {
+	if (!req->r_got_unsafe && !req->r_got_safe)
 		__unregister_request(mdsc, req);
+
+	if (head->safe) {
+		req->r_got_safe = true;
+		__unregister_listener(req);
 		req->r_got_safe = true;
 		complete(&req->r_safe_completion);
-	}
 
-	if (req->r_got_unsafe && head->safe) {
-		/* 
-		 * We already handled the unsafe response, now do the
-		 * cleanup.  No need to examine the response; the MDS
-		 * doesn't include any result info in the safe
-		 * response.  And even if it did, there is nothing
-		 * useful we could do with a revised return value.
-		 */
-		dout(10, "got safe reply %llu, mds%d\n", tid, mds);
-		BUG_ON(req->r_session == NULL);
-		list_del_init(&req->r_unsafe_item);
-		mutex_unlock(&mdsc->mutex);
-		ceph_mdsc_put_request(req);
-		return;
+		if (req->r_got_unsafe) {
+			/*
+			 * We already handled the unsafe response, now do the
+			 * cleanup.  No need to examine the response; the MDS
+			 * doesn't include any result info in the safe
+			 * response.  And even if it did, there is nothing
+			 * useful we could do with a revised return value.
+			 */
+			dout(10, "got safe reply %llu, mds%d\n", tid, mds);
+			BUG_ON(req->r_session == NULL);
+			list_del_init(&req->r_unsafe_item);
+			mutex_unlock(&mdsc->mutex);
+			ceph_mdsc_put_request(req);
+			return;
+		}
 	}
 
 	if (req->r_session && req->r_session->s_mds != mds) {
@@ -1336,9 +1346,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 	BUG_ON(req->r_reply);
 
-	if (head->safe)
-		req->r_got_safe = true;
-	else {
+	if (!head->safe) {
 		req->r_got_unsafe = true;
 		list_add_tail(&req->r_unsafe_item, &req->r_session->s_unsafe);
 	}

@@ -44,6 +44,7 @@ timer
 - each SafeTimer should just be its own thread.
 
 kernel client
+- flush unsafe mds requests when closing mds sessions
 - async mds requests
 - pass dentries directly into mds requests; rebuild messages on message retry
 - optional or no fill_trace?
