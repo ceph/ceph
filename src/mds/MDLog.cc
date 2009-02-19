@@ -188,19 +188,24 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
     logger->set("ev", num_events);
     logger->set("wrpos", journaler->get_write_pos());
   }
-  
+
+  unflushed++;
+
   if (c) {
-    unflushed = 0;
     
     if (!g_conf.mds_log_unsafe)
       wait_safe = true;
 
-    journaler->flush(wait_safe ? 0:c);
+    if (0) {
+      unflushed = 0;
+      journaler->flush();
+    }
+
     if (wait_safe)
       journaler->wait_for_flush(0, c);
+    else
+      journaler->wait_for_flush(c, 0);      
   }
-  else
-    unflushed++;
   
   // start a new segment?
   //  FIXME: should this go elsewhere?

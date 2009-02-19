@@ -168,6 +168,7 @@ void Server::handle_client_session(MClientSession *m)
     pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv),
 			new C_MDS_session_finish(mds, session, true, pv));
+    mdlog->flush();
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
@@ -214,6 +215,7 @@ void Server::handle_client_session(MClientSession *m)
       
       mdlog->submit_entry(new ESession(m->get_source_inst(), false, pv, both, piv),
 			  new C_MDS_session_finish(mds, session, false, pv, both, piv));
+      mdlog->flush();
     }
     break;
 
@@ -317,6 +319,7 @@ void Server::terminate_sessions()
     version_t pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(session->inst, false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));
+    mdlog->flush();
   }
 }
 
@@ -367,6 +370,7 @@ void Server::find_idle_sessions()
     version_t pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(session->inst, false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));
+    mdlog->flush();
   }
 
 }
@@ -400,6 +404,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     version_t pv = ++mds->sessionmap.projected;
     mdlog->submit_entry(new ESession(session->inst, false, pv),
 			new C_MDS_session_finish(mds, session, false, pv));
+    mdlog->flush();
   } else {
     
     // snaprealms
@@ -527,6 +532,8 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
   
   if (mdr->did_early_reply)
     mds->locker->drop_rdlocks(mdr);
+  else
+    mdlog->flush();
 }
 
 /*
@@ -2873,6 +2880,7 @@ void Server::handle_slave_link_prep(MDRequest *mdr)
   mdcache->journal_dirty_inode(mdr, &le->commit, targeti);
 
   mdlog->submit_entry(le, new C_MDS_SlaveLinkPrep(this, mdr, targeti));
+  mdlog->flush();
 }
 
 class C_MDS_SlaveLinkCommit : public Context {
@@ -2935,6 +2943,7 @@ void Server::_commit_slave_link(MDRequest *mdr, int r, CInode *targeti)
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_commit", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_COMMIT, ESlaveUpdate::LINK);
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    mdlog->flush();
   } else {
     do_link_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
   }
@@ -3015,6 +3024,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   le->commit.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
   
   mdlog->submit_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr));
+  mdlog->flush();
 }
 
 void Server::_link_rollback_finish(Mutation *mut, MDRequest *mdr)
@@ -4391,6 +4401,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
     _rename_prepare(mdr, &le->commit, &blah, srcdn, destdn, straydn);
 
     mdlog->submit_entry(le, new C_MDS_SlaveRenamePrep(this, mdr, srcdn, destdn, straydn));
+    mdlog->flush();
   } else {
     // don't journal.
     dout(10) << "not journaling: i'm not auth for anything, and srci has no caps" << dendl;
@@ -4491,6 +4502,7 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
     mdr->cleanup();
 
     mdlog->submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    mdlog->flush();
   } else {
     if (srcdn->is_auth() && destdnl->is_primary() &&
 	destdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
@@ -4717,6 +4729,7 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   
   mdlog->submit_entry(le, new C_MDS_LoggedRenameRollback(this, mut, mdr,
 							 srcdnl->get_inode(), destdn->get_dir()));
+  mdlog->flush();
 }
 
 void Server::_rename_rollback_finish(Mutation *mut, MDRequest *mdr, CInode *in, CDir *olddir)
@@ -5401,6 +5414,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
+  mdlog->flush();
 }
 
 void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
@@ -5546,6 +5560,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
+  mdlog->flush();
 }
 
 void Server::_rmsnap_finish(MDRequest *mdr, CInode *diri, snapid_t snapid)
