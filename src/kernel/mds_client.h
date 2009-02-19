@@ -134,6 +134,12 @@ enum {
 	USE_AUTH_MDS,   /* prefer authoritative mds for this metadata item */
 };
 
+struct ceph_mds_request;
+struct ceph_mds_client;
+
+typedef void (*ceph_mds_request_callback_t) (struct ceph_mds_client *mdsc,
+					     struct ceph_mds_request *req);
+
 /*
  * an in-flight mds request
  */
@@ -183,6 +189,7 @@ struct ceph_mds_request {
 	atomic_t          r_ref;
 	struct completion r_completion;
 	struct completion r_safe_completion;
+	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
 	bool		  r_got_unsafe, r_got_safe;
 };
@@ -274,6 +281,8 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 			 struct dentry *dentry, struct dentry *old_dentry,
 			 const char *path1, const char *path2,
 			 int mode);
+extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
+				     struct ceph_mds_request *req);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 				struct inode *listener,
 				struct ceph_mds_request *req);

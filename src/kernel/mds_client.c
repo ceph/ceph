@@ -992,7 +992,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	} else {
 		if (path1)
 			pathlen1 = strlen(path1);
-		else
+		else if (req->r_dentry)
 			path1 = build_path(req->r_dentry, &pathlen1, &ino1,
 					   mds);
 		if (path2)
@@ -1042,6 +1042,19 @@ out:
 }
 
 /*
+ * called under mdsc->mutex if error, under no mutex if
+ * success.
+ */
+static void complete_request(struct ceph_mds_client *mdsc,
+			     struct ceph_mds_request *req)
+{
+	if (req->r_callback)
+		req->r_callback(mdsc, req);
+	else
+		complete(&req->r_completion);
+}
+
+/*
  * called under mdsc->mutex
  */
 static int __prepare_send_request(struct ceph_mds_client *mdsc,
@@ -1062,7 +1075,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 	msg = create_request_message(mdsc, req, mds);
 	if (IS_ERR(msg)) {
 		req->r_reply = ERR_PTR(PTR_ERR(msg));
-		complete(&req->r_completion);
+		complete_request(mdsc, req);
 		return -PTR_ERR(msg);
 	}
 	req->r_request = msg;
@@ -1146,7 +1159,7 @@ out:
 
 finish:
 	req->r_reply = ERR_PTR(err);
-	complete(&req->r_completion);
+	complete_request(mdsc, req);
 	goto out;
 }
 
@@ -1195,6 +1208,15 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 	}
 }
 
+void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
+			      struct ceph_mds_request *req)
+{
+	dout(30, "submit_request on %p\n", req);
+	mutex_lock(&mdsc->mutex);
+	__register_request(mdsc, NULL, req);
+	__do_request(mdsc, req);
+	mutex_unlock(&mdsc->mutex);
+}
 
 /*
  * Synchrously perform an mds request.  Take care of all of the
@@ -1205,7 +1227,6 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_request *req)
 {
 	int err;
-	int safe = 0;
 
 	dout(30, "do_request on %p\n", req);
 
@@ -1231,17 +1252,14 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	if (IS_ERR(req->r_reply)) {
 		err = PTR_ERR(req->r_reply);
 		req->r_reply = NULL;
-		safe = 1;
+
+		/* clean up */
+		__unregister_request(mdsc, req);
+		if (!list_empty(&req->r_unsafe_item))
+		    list_del_init(&req->r_unsafe_item);
+		complete(&req->r_safe_completion);
 	} else {
 		err = le32_to_cpu(req->r_reply_info.head->result);
-		safe = req->r_reply_info.head->safe;
-	}
-
-	if (safe) {
-		complete(&req->r_safe_completion);
-		__unregister_request(mdsc, req);
-		ceph_msg_put(req->r_request);
-		req->r_request = NULL;
 	}
 	mutex_unlock(&mdsc->mutex);
 
@@ -1294,6 +1312,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		return;
 	}
 
+	if (head->safe) {
+		__unregister_request(mdsc, req);
+		req->r_got_safe = true;
+		complete(&req->r_safe_completion);
+	}
+
 	if (req->r_got_unsafe && head->safe) {
 		/* 
 		 * We already handled the unsafe response, now do the
@@ -1304,9 +1328,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		 */
 		dout(10, "got safe reply %llu, mds%d\n", tid, mds);
 		BUG_ON(req->r_session == NULL);
-		complete(&req->r_safe_completion);
-		__unregister_request(mdsc, req);
-		req->r_got_safe = true;
 		list_del_init(&req->r_unsafe_item);
 		mutex_unlock(&mdsc->mutex);
 		ceph_mdsc_put_request(req);
@@ -1368,7 +1389,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			ceph_readdir_prepopulate(req, req->r_session);
 	}
 
-
 done:
 	up_read(&mdsc->snap_rwsem);
 
@@ -1382,7 +1402,7 @@ done:
 	mutex_unlock(&req->r_session->s_mutex);
 
 	/* kick calling process */
-	complete(&req->r_completion);
+	complete_request(mdsc, req);
 	ceph_mdsc_put_request(req);
 
 	return;
