@@ -712,7 +712,6 @@ get_more_pages:
 						    snapc, do_sync,
 						    ci->i_truncate_seq,
 						    ci->i_truncate_size);
-	dout(1, "do_sync(2)=%d\n", do_sync);
 				max_pages = req->r_num_pages;
 				pages = req->r_pages;
 				req->r_callback = writepages_finish;
