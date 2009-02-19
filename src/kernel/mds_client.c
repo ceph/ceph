@@ -967,8 +967,8 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_request_head *head;
-	const char *path1 = req->r_path1;
-	const char *path2 = req->r_path2;
+	char *path1 = (char *)req->r_path1;
+	char *path2 = (char *)req->r_path2;
 	u64 ino1 = 1, ino2 = 0;
 	int pathlen1 = 0, pathlen2 = 0;
 	int pathlen;
