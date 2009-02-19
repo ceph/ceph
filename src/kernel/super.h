@@ -279,8 +279,6 @@ struct ceph_inode_info {
 				   pages. */
 	u32 i_rdcache_revoking; /* RDCACHE gen to async invalidate, if any */
 
-	atomic_t i_want_sync_writeout; /* non-zero if writepages should sync */
-
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
 	struct list_head i_snap_flush_item;

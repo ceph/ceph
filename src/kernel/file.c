@@ -372,7 +372,6 @@ static ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 	loff_t endoff = pos + iov->iov_len;
 	int got = 0;
 	int ret;
-	int do_sync = (file->f_flags & O_SYNC) || IS_SYNC(inode);
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -399,16 +398,12 @@ retry_snap:
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
 			&iocb->ki_pos);
 	} else {
-		if (do_sync)
-			atomic_inc(&ci->i_want_sync_writeout);
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 
 		if (ret >= 0 &&
 	    	    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)) {
 			ret = sync_page_range(inode, mapping, pos, ret);
 		}
-		if (do_sync)
-			atomic_dec(&ci->i_want_sync_writeout);
 	}
 	if (ret >= 0)
 		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
@@ -430,13 +425,10 @@ out:
 static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 {
 	struct inode *inode = dentry->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
 	int ret;
 
 	dout(10, "fsync on inode %p\n", inode);
-	atomic_inc(&ci->i_want_sync_writeout);
-	ret = write_inode_now(inode, 1);
-	atomic_dec(&ci->i_want_sync_writeout);
+	ret = filemap_write_and_wait(inode->i_mapping);
 	if (ret < 0)
 		return ret;
 	/*

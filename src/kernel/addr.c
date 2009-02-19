@@ -548,7 +548,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
 	struct ceph_osd_request *req = NULL;
-	int do_sync = atomic_read(&ci->i_want_sync_writeout);
+	int do_sync = !current_is_pdflush();
 
 	if (ceph_caps_revoking(ci) & CEPH_CAP_FILE_WRBUFFER)
 		do_sync = 1;
@@ -712,6 +712,7 @@ get_more_pages:
 						    snapc, do_sync,
 						    ci->i_truncate_seq,
 						    ci->i_truncate_size);
+	dout(1, "do_sync(2)=%d\n", do_sync);
 				max_pages = req->r_num_pages;
 				pages = req->r_pages;
 				req->r_callback = writepages_finish;
