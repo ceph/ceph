@@ -214,7 +214,7 @@ class Objecter {
 	       const SnapContext& snapc, bufferlist &bl, int flags,
 	       Context *onack, Context *oncommit) {
     ModifyOp *wr = new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit);
-    wr->bl.swap(bl);
+    wr->bl = bl;
     return modify_submit(wr);
   }
 
