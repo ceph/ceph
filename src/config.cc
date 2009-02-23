@@ -38,6 +38,13 @@ atomic_t buffer_total_alloc;
 
 #include "common/ConfUtils.h"
 
+/*
+struct foobar {
+  foobar() { cerr << "config.cc init" << std::endl; }
+  ~foobar() { cerr << "config.cc shutdown" << std::endl; }
+} asdf;
+*/
+
 int buffer::list::read_file(const char *fn)
 {
   struct stat st;
