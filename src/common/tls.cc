@@ -47,7 +47,7 @@ struct TlsData *tls_get_val()
 
 int tls_init()
 {
-  int ret;
+  int ret = 0;
 
   if (!_initialized) {
     ret = pthread_key_create(&_tls_key, _tls_destructor);
