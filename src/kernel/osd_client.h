@@ -94,7 +94,7 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_vino vino,
 				      u64 offset, u64 *len, int op,
 				      struct ceph_snap_context *snapc,
-				      int do_sync, u32 truncate_eq,
+				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size);
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
