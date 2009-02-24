@@ -3,6 +3,8 @@ ceph (0.6-1) unstable; urgency=low
   * OSD scrub, fixes
   * async metadata ops
 
+ -- sage <sage@newdream.net>  Thu, 1 Jan 2009 13:57:22 -0800
+
 ceph (0.5-1) unstable; urgency=low
 
   * OSD bug fixes
@@ -10,6 +12,8 @@ ceph (0.5-1) unstable; urgency=low
   * efficient snap recovery
   * throttled osd recovery
   * forced unmount
+
+ -- sage <sage@newdream.net>  Thu, 13 Nov 2008 13:57:22 -0800
 
 ceph (0.4-1) unstable; urgency=low
 
