@@ -4104,7 +4104,7 @@ struct C_MDC_TruncateFinish : public Context {
 
 void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 {
-  inode_t *pi = in->get_projected_inode();
+  inode_t *pi = &in->inode;
   dout(10) << "_truncate_inode "
 	   << pi->truncate_from << " -> " << pi->truncate_size
 	   << " on " << *in << dendl;
