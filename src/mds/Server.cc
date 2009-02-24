@@ -4812,7 +4812,8 @@ public:
 
     // notify any clients
     mds->locker->issue_truncate(in);
-    mds->mdcache->truncate_inode(in, mdr->ls);
+    if (in->inode.is_truncating())
+      mds->mdcache->truncate_inode(in, mdr->ls);
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
@@ -4832,11 +4833,12 @@ void Server::handle_client_truncate(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
+  dout(10) << "handle_client_truncate " << req->head.args.truncate.length << " on " << *cur << dendl;
+
   if (mdr->ref_snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EINVAL);
     return;
   }
-    
 
   // xlock inode
   set<SimpleLock*> rdlocks = mdr->rdlocks;
