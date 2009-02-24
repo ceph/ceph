@@ -1,5 +1,12 @@
 usr/bin/ceph
+usr/bin/cconf
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
+usr/bin/csyn
+usr/sbin/mount.ceph
+usr/bin/cephd
 usr/bin/crun
+usr/bin/ceph_init
+usr/bin/ceph_stop
+usr/bin/ceph_common.sh
