@@ -1,6 +1,7 @@
 #!/bin/sh
 
 repo=$1
+arch=$2
 
 rm ceph-*.tar.gz
 rm -r ceph-0.?
@@ -11,7 +12,7 @@ cd ceph-0.?
 dpkg-buildpackage -rfakeroot
 cd ..
 
-rsync -v --progress *amd64.{deb,changes} ceph.newdream.net:debian/dists/$repo/main/binary-amd64
+rsync -v --progress *$arch.{deb,changes} ceph.newdream.net:debian/dists/$repo/main/binary-$arch
 rsync -v --progress ceph_* ceph.newdream.net:debian/dists/$repo/main/source
 
 # rebuild index
