@@ -4844,7 +4844,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  wrlocks.insert(&cur->filelock);
+  xlocks.insert(&cur->filelock);
   mds->locker->include_snap_rdlocks(rdlocks, cur);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
