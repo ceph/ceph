@@ -47,7 +47,9 @@ bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
-	streamtest dupstore dumpjournal testmsgr \
+	streamtest dupstore dumpjournal testmsgr
+
+sbin_PROGRAMS = \
 	mount.ceph
 
 bin_SCRIPTS = crun cephd ceph_stop ceph_common.sh ceph_init
