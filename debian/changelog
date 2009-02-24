@@ -1,3 +1,12 @@
+ceph (0.7-1) unstable; urgency=low
+
+  * smart osd sync
+  * osd bug fixes	
+  * fast truncate
+  * improved start/stop scripts
+
+ -- sage <sage@newdream.net>  Thu, 1 Jan 2009 13:57:22 -0800
+
 ceph (0.6-1) unstable; urgency=low
 
   * OSD scrub, fixes
