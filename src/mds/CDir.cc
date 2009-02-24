@@ -1708,7 +1708,7 @@ void CDir::set_dir_auth(pair<int,int> a)
     dout(10) << " new subtree root, adjusting auth_pins" << dendl;
     
     // adjust nested auth pins
-    inode->adjust_nested_auth_pins(-get_cum_auth_pins());
+    inode->adjust_nested_auth_pins(get_cum_auth_pins() ? -1:0);
     
     // unpin parent of frozen dir/tree?
     if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
@@ -1718,7 +1718,7 @@ void CDir::set_dir_auth(pair<int,int> a)
     dout(10) << " old subtree root, adjusting auth_pins" << dendl;
     
     // adjust nested auth pins
-    inode->adjust_nested_auth_pins(get_cum_auth_pins());
+    inode->adjust_nested_auth_pins(get_cum_auth_pins() ? 1:0);
 
     // pin parent of frozen dir/tree?
     if (inode->is_auth() && (is_frozen_tree_root() || is_frozen_dir()))
@@ -1768,7 +1768,8 @@ void CDir::auth_pin(void *by)
   if (is_subtree_root()) return;  // no.
   //assert(!is_import());
 
-  inode->adjust_nested_auth_pins(1);
+  if (get_cum_auth_pins() == 1)
+    inode->adjust_nested_auth_pins(1);
 }
 
 void CDir::auth_unpin(void *by) 
@@ -1793,7 +1794,8 @@ void CDir::auth_unpin(void *by)
   if (is_subtree_root()) return;  // no.
   //assert(!is_import());
 
-  inode->adjust_nested_auth_pins(-1);
+  if (get_cum_auth_pins() == 0)
+    inode->adjust_nested_auth_pins(-1);
 }
 
 void CDir::adjust_nested_auth_pins(int inc, int dirinc) 
@@ -1813,7 +1815,10 @@ void CDir::adjust_nested_auth_pins(int inc, int dirinc)
     return; // no, stop.
 
   // yes.
-  inode->adjust_nested_auth_pins(inc);
+  if (get_cum_auth_pins() == 0)
+    inode->adjust_nested_auth_pins(-1);
+  else if (get_cum_auth_pins() == inc)      
+    inode->adjust_nested_auth_pins(1);
 }
 
 void CDir::adjust_nested_anchors(int by)
