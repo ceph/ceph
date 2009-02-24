@@ -1,13 +1,15 @@
 #!/bin/sh
 
+vers=`grep AM_INIT_AUTOMAKE configure.ac | head -1 | cut '-d '  -f 2 | sed 's/)//'`
+echo vers $vers
+
 repo=$1
 arch=$2
 
-rm ceph-*.tar.gz
-rm -r ceph-0.?
+rm -r ceph-$vers
 make dist
 tar zxvf ceph-*.tar.gz
-cd ceph-0.?
+cd ceph-$vers
 ./autogen.sh
 dpkg-buildpackage -rfakeroot
 cd ..
