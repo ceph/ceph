@@ -5,6 +5,9 @@
 
 struct kobject ceph_kobj;
 
+/*
+ * per-client attributes
+ */
 struct kobj_type client_type = {
 	.sysfs_ops = &kobj_sysfs_ops,
 };
@@ -21,7 +24,95 @@ ssize_t fsid_show(struct kobject *k_client, struct kobj_attribute *attr,
 	       le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
 }
 
-#define ADD_ATTR(a, n, m, sh, st) \
+ssize_t monmap_show(struct kobject *k_client, struct kobj_attribute *attr,
+		    char *buf)
+{
+	struct ceph_client *client = to_client(k_client);
+	int i, pos;
+
+	if (client->monc.monmap == NULL)
+		return 0;
+
+	pos = sprintf(buf, "epoch %d\n", client->monc.monmap->epoch);
+	for (i = 0; i < client->monc.monmap->num_mon; i++) {
+		struct ceph_entity_inst *inst =
+			&client->monc.monmap->mon_inst[i];
+
+		if (pos > PAGE_SIZE - 128)
+			break; /* be conservative */
+		pos += sprintf(buf + pos, "\t%s%d\t%u.%u.%u.%u:%u\n",
+			       ENTITY_NAME(inst->name),
+			       IPQUADPORT(inst->addr.ipaddr));
+	}
+	return pos;
+}
+
+ssize_t mdsmap_show(struct kobject *k_client, struct kobj_attribute *attr,
+		    char *buf)
+{
+	struct ceph_client *client = to_client(k_client);
+	int i, pos;
+
+	if (client->mdsc.mdsmap == NULL)
+		return 0;
+	pos = sprintf(buf, "epoch %d\n", client->mdsc.mdsmap->m_epoch);
+	pos += sprintf(buf + pos, "root %d\n", client->mdsc.mdsmap->m_root);
+	pos += sprintf(buf + pos, "session_timeout %d\n",
+		       client->mdsc.mdsmap->m_session_timeout);
+	pos += sprintf(buf + pos, "session_autoclose %d\n",
+		       client->mdsc.mdsmap->m_session_autoclose);
+	for (i = 0; i < client->mdsc.mdsmap->m_max_mds; i++) {
+		struct ceph_entity_addr *addr = &client->mdsc.mdsmap->m_addr[i];
+		int state = client->mdsc.mdsmap->m_state[i];
+
+		if (pos > PAGE_SIZE - 128)
+			break; /* be conservative */
+		pos += sprintf(buf+pos, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
+			       i,
+			       IPQUADPORT(addr->ipaddr),
+			       ceph_mdsmap_state_str(state));
+	}
+	return pos;
+}
+
+ssize_t osdmap_show(struct kobject *k_client, struct kobj_attribute *attr,
+		    char *buf)
+{
+	struct ceph_client *client = to_client(k_client);
+	int i, pos;
+
+	if (client->osdc.osdmap == NULL)
+		return 0;
+	pos = sprintf(buf, "epoch %d\n", client->osdc.osdmap->epoch);
+	pos += sprintf(buf + pos, "pg_num %d / %d\n",
+		       client->osdc.osdmap->pg_num,
+		       client->osdc.osdmap->pg_num_mask);
+	pos += sprintf(buf + pos, "lpg_num %d / %d\n",
+		       client->osdc.osdmap->lpg_num,
+		       client->osdc.osdmap->lpg_num_mask);
+	pos += sprintf(buf + pos, "flags%s%s\n",
+		       (client->osdc.osdmap->flags & CEPH_OSDMAP_NEARFULL) ?
+		       " NEARFULL":"",
+		       (client->osdc.osdmap->flags & CEPH_OSDMAP_FULL) ?
+		       " FULL":"");
+	for (i = 0; i < client->osdc.osdmap->max_osd; i++) {
+		struct ceph_entity_addr *addr =
+			&client->osdc.osdmap->osd_addr[i];
+		int state = client->osdc.osdmap->osd_state[i];
+		char sb[64];
+
+		if (pos > PAGE_SIZE - 128)
+			break; /* be conservative */
+		pos += sprintf(buf + pos,
+		       "\tosd%d\t%u.%u.%u.%u:%u\t%3d%%\t(%s)\n",
+		       i, IPQUADPORT(addr->ipaddr),
+		       ((client->osdc.osdmap->osd_weight[i]*100) >> 16),
+		       ceph_osdmap_state_str(sb, sizeof(sb), state));
+	}
+	return pos;
+}
+
+#define ADD_CLIENT_ATTR(a, n, m, sh, st) \
 	client->a.attr.name = n; \
 	client->a.attr.mode = m; \
 	client->a.show = sh; \
@@ -38,7 +129,10 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	if (ret)
 		goto out;
 
-	ADD_ATTR(k_fsid, "fsid", 0400, fsid_show, NULL);
+	ADD_CLIENT_ATTR(k_fsid, "fsid", 0400, fsid_show, NULL);
+	ADD_CLIENT_ATTR(k_monmap, "monmap", 0400, monmap_show, NULL);
+	ADD_CLIENT_ATTR(k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
+	ADD_CLIENT_ATTR(k_mdsmap, "osdmap", 0400, osdmap_show, NULL);
 	return 0;
 
 out:
@@ -54,7 +148,7 @@ void ceph_sysfs_client_cleanup(struct ceph_client *client)
 }
 
 /*
- * /sys/fs/ceph attrs
+ * ceph attrs
  */
 struct ceph_attr {
 	struct attribute attr;
@@ -84,7 +178,7 @@ struct kobj_type ceph_type = {
 };
 
 /*
- * simple int attrs
+ * simple int attrs (debug levels)
  */
 static ssize_t attr_show(struct kobject *ko, struct attribute *a, char *buf)
 {

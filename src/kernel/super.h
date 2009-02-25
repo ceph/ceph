@@ -93,7 +93,7 @@ extern spinlock_t ceph_clients_list_lock;
 struct ceph_client {
 	u32 whoami;                   /* my client number */
 	struct kobject kobj;
-	struct kobj_attribute k_fsid;
+	struct kobj_attribute k_fsid, k_monmap, k_mdsmap, k_osdmap;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;

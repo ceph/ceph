@@ -35,8 +35,7 @@ struct ceph_osdmap {
 
 	u32 max_osd;       /* size of osd_state, _offload, _addr arrays */
 	u8 *osd_state;     /* CEPH_OSD_* */
-	u32 *osd_offload;  /* 0 = normal, 0x10000 = 100% offload (failed) */
-	u32 *osd_weight;
+	u32 *osd_weight;   /* 0 = failed, 0x10000 = 100% normal */
 	struct ceph_entity_addr *osd_addr;
 
 	/* the CRUSH map specifies the mapping of placement groups to
