@@ -131,27 +131,27 @@ int OSD::find_osd_dev(char *result, int whoami)
 }
 
 
-ObjectStore *OSD::create_object_store(const char *dev)
+ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
 {
   struct stat st;
   if (::stat(dev, &st) != 0)
     return 0;
 
   if (g_conf.ebofs) 
-    return new Ebofs(dev);
+    return new Ebofs(dev, jdev);
   if (g_conf.filestore)
-    return new FileStore(dev);
+    return new FileStore(dev, jdev);
 
   if (S_ISDIR(st.st_mode))
-    return new FileStore(dev);
+    return new FileStore(dev, jdev);
   else
-    return new Ebofs(dev);
+    return new Ebofs(dev, jdev);
 }
 
 
-int OSD::mkfs(const char *dev, ceph_fsid_t fsid, int whoami)
+int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
 {
-  ObjectStore *store = create_object_store(dev);
+  ObjectStore *store = create_object_store(dev, jdev);
   if (!store)
     return -ENOENT;
   int err = store->mkfs();    
@@ -219,7 +219,7 @@ int OSD::mkfs(const char *dev, ceph_fsid_t fsid, int whoami)
 
 int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami)
 {
-  ObjectStore *store = create_object_store(dev);
+  ObjectStore *store = create_object_store(dev, NULL);
   if (!store)
 	return -ENODEV;
   int err = store->mount();
@@ -251,7 +251,7 @@ int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& who
 
 LogType osd_logtype;
 
-OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) : 
+OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, const char *jdev) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   messenger(m),
@@ -259,7 +259,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev) :
   store(NULL),
   monmap(mm),
   logclient(messenger, monmap),
-  whoami(id), dev_name(dev),
+  whoami(id), dev_name(dev), journal_name(jdev),
   boot_epoch(0), last_active_epoch(0),
   state(STATE_BOOTING),
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
@@ -347,15 +347,15 @@ int OSD::init()
     // mkfs?
     if (g_conf.osd_mkfs) {
       dout(2) << "mkfs on local store" << dendl;
-      r = mkfs(dev_path, monmap->fsid, whoami);
+      r = mkfs(dev_path, journal_name, monmap->fsid, whoami);
       if (r < 0) 
 	return r;
     }
   }
   
   // mount.
-  dout(2) << "mounting " << dev_path << dendl;
-  store = create_object_store(dev_path);
+  dout(2) << "mounting " << dev_path << " " << journal_name << dendl;
+  store = create_object_store(dev_path, journal_name);
   if (!store)
     return -ENODEV;
   int r = store->mount();

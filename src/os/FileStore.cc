@@ -229,8 +229,22 @@ void FileStore::get_coname(coll_t cid, pobject_t oid, char *s)
   append_oname(oid, s);
 }
 
+int FileStore::open_journal()
+{
+  struct stat st;
+  char fn[100];
 
-
+  if (journalpath.length() == 0) {
+    sprintf(fn, "%s.journal", basedir.c_str());
+    if (::stat(fn, &st) == 0)
+      journalpath = fn;
+  }
+  if (journalpath.length()) {
+    dout(10) << "open_journal at " << journalpath << dendl;
+    journal = new FileJournal(fsid, &finisher, journalpath.c_str(), g_conf.journal_dio);
+  }
+  return 0;
+}
 
 int FileStore::mkfs()
 {
@@ -269,10 +283,8 @@ int FileStore::mkfs()
   dout(10) << "mkfs fsid is " << fsid << dendl;
 
   // journal?
-  struct stat st;
-  sprintf(fn, "%s.journal", basedir.c_str());
-  if (::stat(fn, &st) == 0) {
-    journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
+  open_journal();
+  if (journal) {
     if (journal->create() < 0) {
       dout(0) << "mkfs error creating journal on " << fn << dendl;
     } else {
@@ -347,7 +359,7 @@ int FileStore::mount()
     //system(cmd);
   }
 
-  dout(5) << "basedir " << basedir << dendl;
+  dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
   
   // make sure global base dir exists
   struct stat st;
@@ -422,13 +434,7 @@ int FileStore::mount()
   dout(5) << "mount op_seq is " << op_seq << dendl;
 
   // journal
-  sprintf(fn, "%s.journal", basedir.c_str());
-  if (::stat(fn, &st) == 0) {
-    dout(10) << "mount opening journal at " << fn << dendl;
-    journal = new FileJournal(fsid, &finisher, fn, g_conf.journal_dio);
-  } else {
-    dout(10) << "mount no journal at " << fn << dendl;
-  }
+  open_journal();
   r = journal_replay();
   if (r == -EINVAL) {
     dout(0) << "mount got EINVAL on journal open, not mounting" << dendl;

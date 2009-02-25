@@ -62,7 +62,7 @@ protected:
   LogClient   logclient;
 
   int whoami;
-  const char *dev_name;
+  const char *dev_name, *journal_name;
 
   class C_Tick : public Context {
     OSD *osd;
@@ -696,13 +696,13 @@ private:
  private:
   virtual bool dispatch_impl(Message *m);
  public:
-  OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev = 0);
+  OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev = 0, const char *jdev = 0);
   ~OSD();
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static ObjectStore *create_object_store(const char *dev);
-  static int mkfs(const char *dev, ceph_fsid_t fsid, int whoami);
+  static ObjectStore *create_object_store(const char *dev, const char *jdev);
+  static int mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami);
   static int peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami);
 
   // startup/shutdown

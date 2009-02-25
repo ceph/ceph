@@ -36,7 +36,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cosd <device> [-m monitor] [--mkfs_for_osd <nodeid>]" << std::endl;
+  cerr << "usage: cosd <device> [-j journalfileordev] [-m monitor] [--mkfs_for_osd <nodeid>]" << std::endl;
   cerr << "   -d              daemonize" << std::endl;
   cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
   cerr << "   --debug_ms N    set message debug level (e.g. 1)" << std::endl;
@@ -56,7 +56,7 @@ int main(int argc, const char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // osd specific args
-  const char *dev = 0;
+  const char *dev = 0, *journaldev = 0;
   int whoami = -1;
   bool mkfs = 0;
   for (unsigned i=0; i<args.size(); i++) {
@@ -65,6 +65,8 @@ int main(int argc, const char **argv)
       whoami = atoi(args[++i]);
     } else if (strcmp(args[i],"--dev") == 0) 
       dev = args[++i];
+    else if (strcmp(args[i],"-j") == 0)
+      journaldev = args[++i];
     else if (!dev)
       dev = args[i];
     else {
@@ -89,7 +91,7 @@ int main(int argc, const char **argv)
     return -1;
 
   if (mkfs) {
-    int err = OSD::mkfs(dev, monmap.fsid, whoami);
+    int err = OSD::mkfs(dev, journaldev, monmap.fsid, whoami);
     if (err < 0) {
       cerr << "error creating empty object store in " << dev << ": " << strerror(-err) << std::endl;
       exit(1);
@@ -124,7 +126,7 @@ int main(int argc, const char **argv)
 
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
-       << " dev " << dev
+       << " dev " << dev << " " << journaldev
        << " fsid " << monmap.fsid
        << std::endl;
 
@@ -151,7 +153,7 @@ int main(int argc, const char **argv)
   rank.start();
 
   // start osd
-  OSD *osd = new OSD(whoami, m, hbm, &monmap, dev);
+  OSD *osd = new OSD(whoami, m, hbm, &monmap, dev, journaldev);
   if (osd->init() < 0) {
     cout << "error initializing osd" << std::endl;
     return 1;

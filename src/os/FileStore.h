@@ -35,7 +35,7 @@ using namespace __gnu_cxx;
 // fake attributes in memory, if we need to.
 
 class FileStore : public JournalingObjectStore {
-  string basedir;
+  string basedir, journalpath;
   __u64 fsid;
   
   int btrfs;
@@ -76,9 +76,11 @@ class FileStore : public JournalingObjectStore {
 
   void sync_fs(); // actuall sync underlying fs
 
+  int open_journal();
+
  public:
-  FileStore(const char *base) : 
-    basedir(base),
+  FileStore(const char *base, const char *jdev = 0) : 
+    basedir(base), journalpath(jdev ? jdev:""),
     btrfs(false), btrfs_trans_start_end(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
