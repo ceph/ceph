@@ -76,7 +76,7 @@ if [ $new -eq 1 ]; then
     test -d out || mkdir out
     rm -f out/* /data/cosd*/*
 
-    test -d gmon && ssh cosd0 rm -rf ceph/src/gmon/*
+    test -d gmon && ssh root@localhost rm -rf ceph/src/gmon/*
 
 
     # figure machine's ip
@@ -108,9 +108,9 @@ cp -p cosd.0 cosd
 
 for host in `cd dev/hosts ; ls`
 do
- ssh root@cosd$host killall cosd
+ ssh root@$host killall cosd
 
- test -d devm && ssh root@cosd$host modprobe btrfs  #crc32c \; insmod $HOME/src/btrfs-unstable/fs/btrfs/btrfs.ko
+ test -d devm && ssh root@$host modprobe btrfs  #crc32c \; insmod $HOME/src/btrfs-unstable/fs/btrfs/btrfs.ko
 
  for osd in `cd dev/hosts/$host ; ls`
  do
@@ -125,24 +125,24 @@ do
        test -d $devm || mkdir -p $devm
        if [ $new -eq 1 ]; then
 	   echo mkfs btrfs
-	   ssh root@cosd$host cd $HOME/ceph/src \; umount $devm \; \
+	   ssh root@$host cd $HOME/ceph/src \; umount $devm \; \
 	       $HOME/src/btrfs-progs-unstable/mkfs.btrfs $dev \; \
 	       mount -t btrfs $MOUNTOPTIONS $dev $devm
 	   if [ $ramjournal -eq 1 ]; then
-	       ssh root@cosd$host dd if=/dev/zero of=/r/osd$osd.journal bs=1048576 count=1 seek=128
+	       ssh root@$host dd if=/dev/zero of=/r/osd$osd.journal bs=1048576 count=1 seek=128
            fi
        else
 	   echo mounting btrfs
-	   ssh root@cosd$host cd $HOME/ceph/src \; mount -t btrfs $MOUNTOPTIONS $dev $devm
+	   ssh root@$host cd $HOME/ceph/src \; mount -t btrfs $MOUNTOPTIONS $dev $devm
        fi
    fi
 
    if [ $new -eq 1 ]; then
        echo mkfs
-       ssh root@cosd$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
+       ssh root@$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
    echo starting cosd
-   ssh root@cosd$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./crun $norestart ./cosd $devm --dout_dir /data/cosd$host $COSD_ARGS -f &
+   ssh root@$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./crun $norestart ./cosd $devm --dout_dir /data/$host $COSD_ARGS -f &
 
  done
 done
