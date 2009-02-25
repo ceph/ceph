@@ -214,14 +214,16 @@ void Paxos::handle_last(MMonPaxos *last)
       stash_latest(last_committed, last->latest_value);
     }
     */
+    bool big_sync = last->last_committed - last_committed > 5;
     for (version_t v = last_committed+1;
 	 v <= last->last_committed;
 	 v++) {
-      mon->store->put_bl_sn(last->values[v], machine_name, v, false);
+      mon->store->put_bl_sn(last->values[v], machine_name, v, !big_sync);
       dout(10) << "committing " << v << " " 
 	       << last->values[v].length() << " bytes" << dendl;
     }
-    mon->store->sync();
+    if (big_sync)
+      mon->store->sync();
     last_committed = last->last_committed;
     mon->store->put_int(last_committed, machine_name, "last_committed");
     dout(10) << "last_committed now " << last_committed << dendl;
@@ -491,6 +493,7 @@ void Paxos::handle_commit(MMonPaxos *commit)
   }
 
   // commit locally.
+  bool big_sync = commit->values.size() > 2;
   for (map<version_t,bufferlist>::iterator p = commit->values.begin();
        p != commit->values.end();
        ++p) {
@@ -498,10 +501,11 @@ void Paxos::handle_commit(MMonPaxos *commit)
     if (p->first == last_committed+1) {
       last_committed = p->first;
       dout(10) << " storing " << last_committed << " (" << p->second.length() << " bytes)" << dendl;
-      mon->store->put_bl_sn(p->second, machine_name, last_committed, false);
+      mon->store->put_bl_sn(p->second, machine_name, last_committed, !big_sync);
     }
   }
-  mon->store->sync();
+  if (big_sync)
+    mon->store->sync();
   mon->store->put_int(last_committed, machine_name, "last_committed");
   
   delete commit;
@@ -982,4 +986,3 @@ version_t Paxos::get_latest(bufferlist& bl)
   dout(10) << "get_latest v" << latest_stashed << " len " << bl.length() << dendl;
   return latest_stashed;  
 }
-
