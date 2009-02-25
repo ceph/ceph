@@ -44,8 +44,6 @@ repair
 
 kernel client
 - flush unsafe mds requests when closing mds sessions
-- async mds requests
-- pass dentries directly into mds requests; rebuild messages on message retry
 - optional or no fill_trace?
 - flock, fnctl locks
 - async xattrs
