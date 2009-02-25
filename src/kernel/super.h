@@ -80,8 +80,6 @@ enum {
 };
 
 
-extern struct kobject *ceph_kobj;
-
 extern struct list_head ceph_clients;
 extern spinlock_t ceph_clients_list_lock;
 
@@ -94,6 +92,8 @@ extern spinlock_t ceph_clients_list_lock;
  */
 struct ceph_client {
 	u32 whoami;                   /* my client number */
+	struct kobject kobj;
+	struct kobj_attribute k_fsid;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
@@ -113,8 +113,6 @@ struct ceph_client {
 	struct workqueue_struct *wb_wq;
 	struct workqueue_struct *pg_inv_wq;
 	struct workqueue_struct *trunc_wq;
-
-	struct kobject *client_kobj;
 
 	struct backing_dev_info backing_dev_info;
 	struct list_head clients_all;
@@ -792,6 +790,12 @@ extern int ceph_proc_init(void);
 extern void ceph_proc_cleanup(void);
 extern void ceph_proc_register_client(struct ceph_client *client);
 extern void ceph_proc_unregister_client(struct ceph_client *client);
+
+/* sysfs.c */
+extern int ceph_sysfs_client_init(struct ceph_client *client);
+extern void ceph_sysfs_client_cleanup(struct ceph_client *client);
+extern int ceph_sysfs_init(void);
+extern void ceph_sysfs_cleanup(void);
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {

@@ -386,6 +386,7 @@ noinst_HEADERS = \
 	kernel/snap.c\
 	kernel/super.c\
 	kernel/super.h\
+	kernel/sysfs.c\
 	kernel/types.h\
 	mds/locks.c\
 	mds/locks.h\

@@ -249,22 +249,13 @@ static void handle_monmap(struct ceph_client *client, struct ceph_msg *msg)
 	kfree(old);
 
 	if (first) {
-		char name[10];
 		client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
-		ceph_proc_register_client(client);
 		client->msgr->inst.name = msg->hdr.dst.name;
-		sprintf(name, "client%d", client->whoami);
-		dout(1, "i am %s, fsid is %llx.%llx\n", name,
-		     le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
-		     le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-		client->client_kobj = kobject_create_and_add(name, ceph_kobj);
-		/*
-		  client->fsid_kobj = kobject_create_and_add("fsid",
-		  client->client_kobj);
-		*/
-#endif
+		dout(1, "i am client%d, fsid is %llx.%llx\n", client->whoami,
+		    le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
+		    le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+		ceph_proc_register_client(client);
+		ceph_sysfs_client_init(client);
 	}
 }
 
@@ -683,10 +674,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 	ceph_monc_stop(&client->monc);
 	ceph_osdc_stop(&client->osdc);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-	if (client->client_kobj)
-		kobject_put(client->client_kobj);
-#endif
+	ceph_sysfs_client_cleanup(client);
 	if (client->wb_wq)
 		destroy_workqueue(client->wb_wq);
 	if (client->pg_inv_wq)
@@ -1084,29 +1072,24 @@ static struct file_system_type ceph_fs_type = {
 	.fs_flags	= FS_RENAME_DOES_D_MOVE,
 };
 
-struct kobject *ceph_kobj;
-
 static int __init init_ceph(void)
 {
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
+	INIT_LIST_HEAD(&ceph_clients);
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_init();
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-	ret = -ENOMEM;
-	ceph_kobj = kobject_create_and_add("ceph", fs_kobj);
-	if (!ceph_kobj)
+	ret = ceph_sysfs_init();
+	if (ret < 0)
 		goto out;
-#endif
-	INIT_LIST_HEAD(&ceph_clients);
 
 	ret = ceph_proc_init();
 	if (ret < 0)
-		goto out_kobj;
+		goto out_sysfs;
 
 	ret = ceph_msgr_init();
 	if (ret < 0)
@@ -1127,12 +1110,9 @@ out_msgr:
 	ceph_msgr_exit();
 out_proc:
 	ceph_proc_cleanup();
-out_kobj:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-	kobject_put(ceph_kobj);
-	ceph_kobj = NULL;
+out_sysfs:
+	ceph_sysfs_cleanup();
 out:
-#endif
 	return ret;
 }
 
@@ -1143,10 +1123,7 @@ static void __exit exit_ceph(void)
 	destroy_inodecache();
 	ceph_msgr_exit();
 	ceph_proc_cleanup();
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-	kobject_put(ceph_kobj);
-	ceph_kobj = NULL;
-#endif
+	ceph_sysfs_cleanup();
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_finalize();
 #endif
