@@ -1444,7 +1444,8 @@ void FileStore::sync_entry()
 void FileStore::_start_sync()
 {
   dout(10) << "start_sync" << dendl;
-  sync_cond.Signal();
+  if (!journal)   // don't do a big sync if the journal is on
+    sync_cond.Signal();
 }
 
 void FileStore::sync()
