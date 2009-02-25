@@ -122,7 +122,7 @@ int Ebofs::mount()
 
   // open journal
   if (journalfn) {
-    journal = new FileJournal(sb->fsid, &finisher, journalfn, g_conf.journal_dio);
+    journal = new FileJournal(sb->fsid, &finisher, NULL, journalfn, g_conf.journal_dio);
     int err = journal->open(op_seq+1);
     if (err < 0) {
       dout(3) << "mount journal " << journalfn << " open failed" << dendl;
@@ -265,7 +265,7 @@ int Ebofs::mkfs()
 
   // create journal?
   if (journalfn) {
-    Journal *journal = new FileJournal(super_fsid, &finisher, journalfn, g_conf.journal_dio);
+    Journal *journal = new FileJournal(super_fsid, &finisher, NULL, journalfn, g_conf.journal_dio);
     if (journal->create() < 0) {
       dout(3) << "mount journal " << journalfn << " created failed" << dendl;
     } else {

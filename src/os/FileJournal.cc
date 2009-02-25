@@ -271,6 +271,15 @@ bool FileJournal::check_for_wrap(__u64 seq, off64_t *pos, off64_t size, bool can
   if (full_commit_seq || full_restart_seq)
     return false;
 
+  if (do_sync_cond) {
+    __s64 approxroom = header.wrap ?
+      header.wrap + *pos - header.start :
+      header.max_size + header.start - *pos;
+    if (approxroom < (header.max_size >> 1) &&
+	approxroom + size > (header.max_size >> 1))
+      do_sync_cond->Signal();  // initiate a real commit so we can trim
+  }
+
   // does it fit?
   if (header.wrap) {
     // we're wrapped.  don't overwrite ourselves.

@@ -132,8 +132,8 @@ private:
   }
 
  public:
-  FileJournal(__u64 fsid, Finisher *fin, const char *f, bool dio=false) : 
-    Journal(fsid, fin), fn(f),
+  FileJournal(__u64 fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
+    Journal(fsid, fin, sync_cond), fn(f),
     max_size(0), block_size(0),
     directio(dio),
     writing(false), must_write_header(false),

@@ -241,7 +241,7 @@ int FileStore::open_journal()
   }
   if (journalpath.length()) {
     dout(10) << "open_journal at " << journalpath << dendl;
-    journal = new FileJournal(fsid, &finisher, journalpath.c_str(), g_conf.journal_dio);
+    journal = new FileJournal(fsid, &finisher, &sync_cond, journalpath.c_str(), g_conf.journal_dio);
   }
   return 0;
 }

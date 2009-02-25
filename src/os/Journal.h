@@ -24,9 +24,11 @@ class Journal {
 protected:
   __u64 fsid;
   Finisher *finisher;
+  Cond *do_sync_cond;
 
 public:
-  Journal(__u64 f, Finisher *fin) : fsid(f), finisher(fin) { }
+  Journal(__u64 f, Finisher *fin, Cond *c=0) : fsid(f), finisher(fin),
+					       do_sync_cond(c) { }
   virtual ~Journal() { }
 
   virtual int create() = 0;
