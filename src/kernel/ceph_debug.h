@@ -11,7 +11,7 @@ extern int ceph_debug_mask;
 
 /*
  * different debug levels for different modules.  These default to -1.
- * If they are >=, then they override the global ceph_debug value.
+ * If they are >= 0, then they override the global ceph_debug value.
  */
 extern int ceph_debug_addr;
 extern int ceph_debug_caps;
@@ -80,7 +80,7 @@ static struct _debug_mask_name _debug_mask_names[] = {
 		{0, NULL}
 };
 
-static inline int ceph_get_debug_mask(char *name)
+static inline int ceph_get_debug_mask(const char *name)
 {
 	int i = 0;
 
