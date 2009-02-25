@@ -2,9 +2,9 @@ v0.7
 /- smart osd sync
 /- osd bug fixes
 /- fast truncate
-- start/stop scripts
+/- updated debian package
+- improved start/stop scripts
 - proc/sysfs cleanup
-- debian package?
 
 v0.8
 - fully async file creation
