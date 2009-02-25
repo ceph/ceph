@@ -354,7 +354,7 @@ int OSD::init()
   }
   
   // mount.
-  dout(2) << "mounting " << dev_path << " " << journal_name << dendl;
+  dout(2) << "mounting " << dev_path << " " << (journal_name ? journal_name : "(no journal)") << dendl;
   store = create_object_store(dev_path, journal_name);
   if (!store)
     return -ENODEV;
