@@ -907,8 +907,8 @@ retry_locked:
 	/* past end of file? */
 	i_size = inode->i_size;   /* caller holds i_mutex */
 	if (page_off >= i_size ||
-	    (pos_in_page == 0 && (pos+len) >= i_size) &&
-	    end_in_page - pos_in_page != PAGE_CACHE_SIZE) {
+	    (pos_in_page == 0 && (pos+len) >= i_size &&
+	     end_in_page - pos_in_page != PAGE_CACHE_SIZE)) {
 		zero_user_segments(page,
 				   0, pos_in_page,
 				   end_in_page, PAGE_CACHE_SIZE);
