@@ -351,6 +351,7 @@ noinst_HEADERS = \
         include/uofs.h\
         include/utime.h\
         include/xlist.h\
+	kernel/Kconfig\
         kernel/Makefile\
 	kernel/addr.c\
 	kernel/caps.c\
@@ -370,6 +371,7 @@ noinst_HEADERS = \
 	kernel/inode.c\
 	kernel/ioctl.c\
 	kernel/ioctl.h\
+	kernel/kbuild.patch\
 	kernel/mds_client.c\
 	kernel/mds_client.h\
 	kernel/mdsmap.c\

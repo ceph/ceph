@@ -256,7 +256,8 @@ can also be enabled via .config.
 EOF
 
 git add fs/ceph/Makefile
-git commit -F - <<EOF fs/Kconfig fs/Makefile fs/ceph/Makefile
+git add fs/ceph/Kconfig
+git commit -F - <<EOF fs/Kconfig fs/ceph/Kconfig fs/Makefile fs/ceph/Makefile
 ceph: Kconfig, Makefile
 
 Kconfig options and Makefile.
