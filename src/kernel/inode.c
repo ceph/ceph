@@ -452,7 +452,7 @@ static int fill_inode(struct inode *inode,
 		goto no_change;
 
 	issued = __ceph_caps_issued(ci, &implemented);
-	issued |= implemented;
+	issued |= implemented | __ceph_caps_dirty(ci);
 
 	/* update inode */
 	ci->i_version = le64_to_cpu(info->version);

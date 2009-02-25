@@ -1178,7 +1178,7 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(grant->seq);
 	int newcaps = le32_to_cpu(grant->caps);
-	int issued, used, wanted, dirty;
+	int issued, implemented, used, wanted, dirty;
 	u64 size = le64_to_cpu(grant->size);
 	u64 max_size = le64_to_cpu(grant->max_size);
 	struct timespec mtime, atime, ctime;
@@ -1242,7 +1242,8 @@ start:
 		goto start;
 	}
 
-	issued = __ceph_caps_issued(ci, NULL);
+	issued = __ceph_caps_issued(ci, &implemented);
+	issued |= implemented | __ceph_caps_dirty(ci);
 
 	if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
 		inode->i_mode = le32_to_cpu(grant->mode);
