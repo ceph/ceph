@@ -11,11 +11,11 @@ index 93945dd..928b98b 100644
  source "fs/ncpfs/Kconfig"
  source "fs/coda/Kconfig"
 diff --git a/fs/Makefile b/fs/Makefile
-index 38bc735..624c5d2 100644
+index 38bc735..e11fa80 100644
 --- a/fs/Makefile
 +++ b/fs/Makefile
-@@ -122,3 +122,4 @@ obj-$(CONFIG_DEBUG_FS)              += debugfs/
- obj-$(CONFIG_OCFS2_FS)         += ocfs2/
- obj-$(CONFIG_BTRFS_FS)         += btrfs/
+@@ -122,3 +122,4 @@ obj-$(CONFIG_DEBUG_FS)		+= debugfs/
+ obj-$(CONFIG_OCFS2_FS)		+= ocfs2/
+ obj-$(CONFIG_BTRFS_FS)		+= btrfs/
  obj-$(CONFIG_GFS2_FS)           += gfs2/
-+obj-$(CONFIG_CEPH_FS)           += ceph/
++obj-$(CONFIG_CEPH_FS)		+= ceph/

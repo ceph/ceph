@@ -11,10 +11,10 @@ test -e $cephtree/src/kernel/super.h || exit 0
 mkdir fs/ceph
 mkdir fs/ceph/crush
 cp $cephtree/src/kernel/Makefile fs/ceph
+cp $cephtree/src/kernel/Kconfig fs/ceph
 cp $cephtree/src/kernel/*.[ch] fs/ceph
 cp $cephtree/src/kernel/crush/*.[ch] fs/ceph/crush
 cp $cephtree/src/kernel/ceph.txt Documentation/filesystems
-git apply $cephtree/src/kernel/kbuild.patch
 
 # build the patch sequence
 git branch -D series_start
@@ -255,6 +255,7 @@ can also be enabled via .config.
 
 EOF
 
+git apply $cephtree/src/kernel/kbuild.patch
 git add fs/ceph/Makefile
 git add fs/ceph/Kconfig
 git commit -F - <<EOF fs/Kconfig fs/ceph/Kconfig fs/Makefile fs/ceph/Makefile
