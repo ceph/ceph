@@ -840,7 +840,11 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 
 	/* get a page*/
 retry:
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
+	page = grab_cache_page_write_begin(mapping, index, 0);
+#else
 	page = __grab_cache_page(mapping, index);
+#endif
 	if (!page)
 		return -ENOMEM;
 	*pagep = page;

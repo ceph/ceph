@@ -1005,8 +1005,13 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	head->num_fwd = 0;
 	head->mds_wants_replica_in_dirino = 0;
 	head->op = cpu_to_le32(req->r_op);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
+	head->caller_uid = cpu_to_le32(current_fsuid());
+	head->caller_gid = cpu_to_le32(current_fsgid());
+#else
 	head->caller_uid = cpu_to_le32(current->fsuid);
 	head->caller_gid = cpu_to_le32(current->fsgid);
+#endif
 	head->args = req->r_args;
 
 	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
