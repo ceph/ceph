@@ -245,7 +245,7 @@ EOF
 git add fs/ceph/ceph_debug.h
 git add fs/ceph/ceph_tools.h
 git add fs/ceph/ceph_tools.c
-git add fs/ceph/proc.c
+git add fs/ceph/sysfs.c
 git commit -F - <<EOF
 ceph: debugging
 
