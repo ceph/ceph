@@ -6,10 +6,43 @@
 struct kobject ceph_kobj;
 
 /*
+ * default kobject attribute operations.  duplicated here from
+ * kobject.c because kobj_sysfs_ops is not exported to modules.
+ */
+static ssize_t kobj_attr_show(struct kobject *kobj, struct attribute *attr,
+			      char *buf)
+{
+	struct kobj_attribute *kattr;
+	ssize_t ret = -EIO;
+
+	kattr = container_of(attr, struct kobj_attribute, attr);
+	if (kattr->show)
+		ret = kattr->show(kobj, kattr, buf);
+	return ret;
+}
+
+static ssize_t kobj_attr_store(struct kobject *kobj, struct attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct kobj_attribute *kattr;
+	ssize_t ret = -EIO;
+
+	kattr = container_of(attr, struct kobj_attribute, attr);
+	if (kattr->store)
+		ret = kattr->store(kobj, kattr, buf, count);
+	return ret;
+}
+
+static struct sysfs_ops generic_sysfs_ops = {
+	.show	= kobj_attr_show,
+	.store	= kobj_attr_store,
+};
+
+/*
  * per-client attributes
  */
 struct kobj_type client_type = {
-	.sysfs_ops = &kobj_sysfs_ops,
+	.sysfs_ops = &generic_sysfs_ops,
 };
 
 #define to_client(c) container_of(c, struct ceph_client, kobj)
