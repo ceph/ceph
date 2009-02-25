@@ -79,6 +79,14 @@ enum {
 	CEPH_MOUNT_SHUTDOWN,
 };
 
+struct ceph_client_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct ceph_client *, struct ceph_client_attr *,
+			char *);
+	ssize_t (*store)(struct ceph_client *, struct ceph_client_attr *,
+			 const char *, size_t);
+};
+
 /*
  * per-filesystem client state
  *
@@ -88,7 +96,7 @@ enum {
 struct ceph_client {
 	u32 whoami;                   /* my client number */
 	struct kobject kobj;
-	struct kobj_attribute k_fsid, k_monmap, k_mdsmap, k_osdmap;
+	struct ceph_client_attr k_fsid, k_monmap, k_mdsmap, k_osdmap;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;

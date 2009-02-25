@@ -9,33 +9,34 @@ struct kobject ceph_kobj;
  * default kobject attribute operations.  duplicated here from
  * kobject.c because kobj_sysfs_ops is not exported to modules.
  */
-static ssize_t kobj_attr_show(struct kobject *kobj, struct attribute *attr,
-			      char *buf)
+static ssize_t client_attr_show(struct kobject *kobj, struct attribute *attr,
+				char *buf)
 {
-	struct kobj_attribute *kattr;
+	struct ceph_client_attr *a =
+		container_of(attr, struct ceph_client_attr, attr);
+	struct ceph_client *c = container_of(kobj, struct ceph_client, kobj);
 	ssize_t ret = -EIO;
 
-	kattr = container_of(attr, struct kobj_attribute, attr);
-	if (kattr->show)
-		ret = kattr->show(kobj, kattr, buf);
+	if (a->show)
+		ret = a->show(c, a, buf);
 	return ret;
 }
 
-static ssize_t kobj_attr_store(struct kobject *kobj, struct attribute *attr,
-			       const char *buf, size_t count)
+static ssize_t client_attr_store(struct kobject *kobj, struct attribute *attr,
+				 const char *buf, size_t count)
 {
-	struct kobj_attribute *kattr;
+	struct ceph_client_attr *a = container_of(attr, struct ceph_client_attr, attr);
+	struct ceph_client *c = container_of(kobj, struct ceph_client, kobj);
 	ssize_t ret = -EIO;
 
-	kattr = container_of(attr, struct kobj_attribute, attr);
-	if (kattr->store)
-		ret = kattr->store(kobj, kattr, buf, count);
+	if (a->store)
+		ret = a->store(c, a, buf, count);
 	return ret;
 }
 
 static struct sysfs_ops generic_sysfs_ops = {
-	.show	= kobj_attr_show,
-	.store	= kobj_attr_store,
+	.show	= client_attr_show,
+	.store	= client_attr_store,
 };
 
 /*
@@ -47,20 +48,17 @@ struct kobj_type client_type = {
 
 #define to_client(c) container_of(c, struct ceph_client, kobj)
 
-ssize_t fsid_show(struct kobject *k_client, struct kobj_attribute *attr,
-		  char *buf)
+static ssize_t fsid_show(struct ceph_client *client,
+			 struct ceph_client_attr *attr, char *buf)
 {
-	struct ceph_client *client = to_client(k_client);
-	
 	return sprintf(buf, "%llx.%llx\n",
 	       le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
 	       le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
 }
 
-ssize_t monmap_show(struct kobject *k_client, struct kobj_attribute *attr,
-		    char *buf)
+static ssize_t monmap_show(struct ceph_client *client,
+			   struct ceph_client_attr *attr, char *buf)
 {
-	struct ceph_client *client = to_client(k_client);
 	int i, pos;
 
 	if (client->monc.monmap == NULL)
@@ -80,10 +78,9 @@ ssize_t monmap_show(struct kobject *k_client, struct kobj_attribute *attr,
 	return pos;
 }
 
-ssize_t mdsmap_show(struct kobject *k_client, struct kobj_attribute *attr,
-		    char *buf)
+static ssize_t mdsmap_show(struct ceph_client *client,
+			   struct ceph_client_attr *attr, char *buf)
 {
-	struct ceph_client *client = to_client(k_client);
 	int i, pos;
 
 	if (client->mdsc.mdsmap == NULL)
@@ -108,10 +105,9 @@ ssize_t mdsmap_show(struct kobject *k_client, struct kobj_attribute *attr,
 	return pos;
 }
 
-ssize_t osdmap_show(struct kobject *k_client, struct kobj_attribute *attr,
-		    char *buf)
+static ssize_t osdmap_show(struct ceph_client *client,
+			   struct ceph_client_attr *attr, char *buf)
 {
-	struct ceph_client *client = to_client(k_client);
 	int i, pos;
 
 	if (client->osdc.osdmap == NULL)
@@ -185,25 +181,28 @@ void ceph_sysfs_client_cleanup(struct ceph_client *client)
  */
 struct ceph_attr {
 	struct attribute attr;
-	ssize_t (*show)(struct kobject *, struct attribute *, char *);
-	ssize_t (*store)(struct kobject *, struct attribute *, const char *, size_t);
+	ssize_t (*show)(struct ceph_attr *, char *);
+	ssize_t (*store)(struct ceph_attr *, const char *, size_t);
 	int *val;
 };
 
-static ssize_t ceph_show(struct kobject *ko, struct attribute *a, char *buf)
+static ssize_t ceph_attr_show(struct kobject *ko, struct attribute *a,
+			      char *buf)
 {
-	return container_of(a, struct ceph_attr, attr)->show(ko, a, buf);
+	struct ceph_attr *ca = container_of(a, struct ceph_attr, attr);
+	return ca->show(ca, buf);
 }
 
-static ssize_t ceph_store(struct kobject *ko, struct attribute *a,
-			  const char *buf, size_t len)
+static ssize_t ceph_attr_store(struct kobject *ko, struct attribute *a,
+			       const char *buf, size_t len)
 {
-	return container_of(a, struct ceph_attr, attr)->store(ko, a, buf, len);
+	struct ceph_attr *ca = container_of(a, struct ceph_attr, attr);
+	return ca->store(ca, buf, len);
 }
 
 struct sysfs_ops ceph_sysfs_ops = {
-	.show = ceph_show,
-	.store = ceph_store,
+	.show = ceph_attr_show,
+	.store = ceph_attr_store,
 };
 
 struct kobj_type ceph_type = {
@@ -213,29 +212,24 @@ struct kobj_type ceph_type = {
 /*
  * simple int attrs (debug levels)
  */
-static ssize_t attr_show(struct kobject *ko, struct attribute *a, char *buf)
+static ssize_t int_attr_show(struct ceph_attr *a, char *buf)
 {
-	struct ceph_attr *ca = container_of(a, struct ceph_attr, attr);
-
-	return sprintf(buf, "%d\n", *ca->val);
+	return sprintf(buf, "%d\n", *a->val);
 }
 
-static ssize_t attr_store(struct kobject *ko, struct attribute *a,
-			  const char *buf, size_t len)
+static ssize_t int_attr_store(struct ceph_attr *a, const char *buf, size_t len)
 {
-	struct ceph_attr *ca = container_of(a, struct ceph_attr, attr);
-
-	if (sscanf(buf, "%d", ca->val) < 1)
+	if (sscanf(buf, "%d", a->val) < 1)
 		return 0;
 	return len;
 }
 
-#define DECLARE_DEBUG_ATTR(_name)				      \
-	struct ceph_attr ceph_attr_##_name = {		      \
-		.attr = { .name = __stringify(_name), .mode = 0600 }, \
-		.show = attr_show,				      \
-		.store = attr_store,				      \
-		.val = &ceph_##_name,				      \
+#define DECLARE_DEBUG_ATTR(_name)					\
+	struct ceph_attr ceph_attr_##_name = {				\
+		.attr = { .name = __stringify(_name), .mode = 0600 },	\
+		.show = int_attr_show,					\
+		.store = int_attr_store,				\
+		.val = &ceph_##_name,					\
 	};
 
 DECLARE_DEBUG_ATTR(debug);
@@ -245,8 +239,34 @@ DECLARE_DEBUG_ATTR(debug_console);
 /*
  * ceph_debug_mask
  */
-static ssize_t debug_mask_show(struct kobject *ko, struct attribute *a,
-			       char *buf)
+struct _debug_mask_name {
+	int mask;
+	char *name;
+};
+
+static struct _debug_mask_name _debug_mask_names[] = {
+		{DOUT_MASK_ADDR, "addr"},
+		{DOUT_MASK_CAPS, "caps"},
+		{DOUT_MASK_DIR, "dir"},
+		{DOUT_MASK_EXPORT, "export"},
+		{DOUT_MASK_FILE, "file"},
+		{DOUT_MASK_INODE, "inode"},
+		{DOUT_MASK_IOCTL, "ioctl"},
+		{DOUT_MASK_MDSC, "mdsc"},
+		{DOUT_MASK_MDSMAP, "mdsmap"},
+		{DOUT_MASK_MSGR, "msgr"},
+		{DOUT_MASK_MON, "mon"},
+		{DOUT_MASK_OSDC, "osdc"},
+		{DOUT_MASK_OSDMAP, "osdmap"},
+		{DOUT_MASK_SNAP, "snap"},
+		{DOUT_MASK_SUPER, "super"},
+		{DOUT_MASK_PROTOCOL, "protocol"},
+		{DOUT_MASK_PROC, "proc"},
+		{DOUT_MASK_TOOLS, "tools"},
+		{0, NULL}
+};
+
+static ssize_t debug_mask_show(struct ceph_attr *a, char *buf)
 {
 	int i = 0, pos;
 
@@ -262,15 +282,28 @@ static ssize_t debug_mask_show(struct kobject *ko, struct attribute *a,
 	return pos;
 }
 
-static ssize_t debug_mask_store(struct kobject *ko, struct attribute *a,
-				const char *buf, size_t len)
+static int get_debug_mask(const char *name, int len)
+{
+	int i = 0;
+
+	while (_debug_mask_names[i].name) {
+		if (strncmp(_debug_mask_names[i].name, name, len) == 0)
+			return _debug_mask_names[i].mask;
+		i++;
+	}
+	return 0;
+}
+
+static ssize_t debug_mask_store(struct ceph_attr *a, const char *buf,
+				size_t len)
 {
 	const char *next = buf, *tok;
 
-	do {
+	while (1) {
 		tok = next;
-		next = strpbrk(tok, " \t\r\n") + 1;
-		printk("tok %p next %p\n", tok, next);
+		next = strpbrk(tok, " \t\r\n");
+		if (!next)
+			break;
 		if (isdigit(*tok)) {
 			ceph_debug_mask = simple_strtol(tok, NULL, 0);
 		} else {
@@ -282,7 +315,7 @@ static ssize_t debug_mask_store(struct kobject *ko, struct attribute *a,
 				tok++;
 			} else if (*tok == '+')
 				tok++;
-			mask = ceph_get_debug_mask(tok);
+			mask = get_debug_mask(tok, next-tok);
 			if (mask) {
 				if (remove)
 					ceph_debug_mask &= ~mask;
@@ -290,7 +323,8 @@ static ssize_t debug_mask_store(struct kobject *ko, struct attribute *a,
 					ceph_debug_mask |= mask;
 			}
 		}
-	} while (next);
+		next++;
+	}
 
 	return len;
 }
