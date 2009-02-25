@@ -79,11 +79,6 @@ enum {
 	CEPH_MOUNT_SHUTDOWN,
 };
 
-
-extern struct list_head ceph_clients;
-extern spinlock_t ceph_clients_list_lock;
-
-
 /*
  * per-filesystem client state
  *
@@ -784,12 +779,6 @@ extern long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* export.c */
 extern const struct export_operations ceph_export_ops;
-
-/* proc.c */
-extern int ceph_proc_init(void);
-extern void ceph_proc_cleanup(void);
-extern void ceph_proc_register_client(struct ceph_client *client);
-extern void ceph_proc_unregister_client(struct ceph_client *client);
 
 /* sysfs.c */
 extern int ceph_sysfs_client_init(struct ceph_client *client);

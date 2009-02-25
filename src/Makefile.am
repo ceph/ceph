@@ -382,7 +382,6 @@ noinst_HEADERS = \
 	kernel/osd_client.h\
 	kernel/osdmap.c\
 	kernel/osdmap.h\
-	kernel/proc.c\
 	kernel/snap.c\
 	kernel/super.c\
 	kernel/super.h\
