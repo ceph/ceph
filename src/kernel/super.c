@@ -1125,5 +1125,6 @@ module_exit(exit_ceph);
 
 MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
 MODULE_AUTHOR("Sage Weil <sage@newdream.net>");
+MODULE_AUTHOR("Yehuda Sadeh <yehuda@hq.newdream.net>");
 MODULE_DESCRIPTION("Ceph filesystem for Linux");
 MODULE_LICENSE("GPL");
