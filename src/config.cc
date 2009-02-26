@@ -895,8 +895,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.file_logs = true;
     }
 
-    else if (strcmp(args[i], "--ms_hosts") == 0)
-      g_conf.ms_hosts = args[++i];
     else if (strcmp(args[i], "--ms_stripe_osds") == 0)
       g_conf.ms_stripe_osds = true;
     else if (strcmp(args[i], "--ms_skip_rank0") == 0)

@@ -122,7 +122,6 @@ struct md_config_t {
   bool tcp_multi_dispatch;
   */
 
-  const char *ms_hosts;
   bool ms_tcp_nodelay;
   double ms_retry_interval;
   double ms_fail_interval;
