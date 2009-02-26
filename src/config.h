@@ -285,7 +285,6 @@ struct md_config_t {
   int   osd_max_raid_width;
   int   osd_maxthreads;
   int   osd_max_opq;
-  bool  osd_mkfs;
   float   osd_age;
   int   osd_age_time;
   int   osd_heartbeat_interval;  

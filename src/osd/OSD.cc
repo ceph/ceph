@@ -95,42 +95,6 @@ static ostream& _prefix(ostream& out, int whoami, OSDMap *osdmap) {
 }
 
 
-
-
-
-const char *osd_base_path = "./osddata";
-const char *ebofs_base_path = "./dev";
-
-int OSD::find_osd_dev(char *result, int whoami)
-{
-  if (!g_conf.ebofs) {// || !g_conf.osbdb) {
-    sprintf(result, "%s/osddata/osd%d", osd_base_path, whoami);
-    return 0;
-  }
-
-  char hostname[100];
-  hostname[0] = 0;
-  gethostname(hostname,100);
-
-  // try in this order:
-  // dev/osd$num
-  // dev/osd.$hostname
-  // dev/osd.all
-  struct stat sta;
-
-  sprintf(result, "%s/osd%d", ebofs_base_path, whoami);
-  if (::lstat(result, &sta) == 0) return 0;
-
-  sprintf(result, "%s/osd.%s", ebofs_base_path, hostname);    
-  if (::lstat(result, &sta) == 0) return 0;
-    
-  sprintf(result, "%s/osd.all", ebofs_base_path);
-  if (::lstat(result, &sta) == 0) return 0;
-
-  return -ENOENT;
-}
-
-
 ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
 {
   struct stat st;
@@ -259,7 +223,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   store(NULL),
   monmap(mm),
   logclient(messenger, monmap),
-  whoami(id), dev_name(dev), journal_name(jdev),
+  whoami(id),
+  dev_path(dev), journal_path(jdev),
   boot_epoch(0), last_active_epoch(0),
   state(STATE_BOOTING),
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
@@ -333,29 +298,9 @@ int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
 
-  char dev_path[100];
-  if (dev_name) 
-    strcpy(dev_path, dev_name);
-  else {
-    // search for a suitable dev path, based on our identity
-    int r = find_osd_dev(dev_path, whoami);
-    if (r < 0) {
-      dout(0) << "*** unable to find a dev for osd" << whoami << dendl;
-      return r;
-    }
-
-    // mkfs?
-    if (g_conf.osd_mkfs) {
-      dout(2) << "mkfs on local store" << dendl;
-      r = mkfs(dev_path, journal_name, monmap->fsid, whoami);
-      if (r < 0) 
-	return r;
-    }
-  }
-  
   // mount.
-  dout(2) << "mounting " << dev_path << " " << (journal_name ? journal_name : "(no journal)") << dendl;
-  store = create_object_store(dev_path, journal_name);
+  dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
+  store = create_object_store(dev_path, journal_path);
   if (!store)
     return -ENODEV;
   int r = store->mount();

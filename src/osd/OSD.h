@@ -62,7 +62,7 @@ protected:
   LogClient   logclient;
 
   int whoami;
-  const char *dev_name, *journal_name;
+  const char *dev_path, *journal_path;
 
   class C_Tick : public Context {
     OSD *osd;

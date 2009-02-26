@@ -428,7 +428,6 @@ md_config_t g_conf = {
 
   osd_maxthreads: 2,    // 0 == no threading
   osd_max_opq: 10,
-  osd_mkfs: false,
   osd_age: .8,
   osd_age_time: 0,
   osd_heartbeat_interval: 1,
@@ -794,7 +793,6 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("osd", "max raid width", osd_max_raid_width);
   CF_READ("osd", "maxthreads", osd_maxthreads);
   CF_READ("osd", "max opq", osd_max_opq);
-  CF_READ("osd", "mkfs", osd_mkfs);
   CF_READ("osd", "age", osd_age);
   CF_READ("osd", "age time", osd_age_time);
   CF_READ("osd", "heartbeat interval", osd_heartbeat_interval);
@@ -914,9 +912,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if (strcmp(args[i], "--tcp_multi_out") == 0)
       g_conf.tcp_multi_out = atoi(args[++i]);
     */
-
-    else if (strcmp(args[i], "--mkfs") == 0) 
-      g_conf.osd_mkfs = g_conf.mkfs = 1; //atoi(args[++i]);
 
     else if (strcmp(args[i], "--fake_kill_osd_after") == 0) {
       g_fake_kill_after[entity_name_t(entity_name_t::TYPE_OSD, atoi(args[i+1]))] = atof(args[i+2]); 
@@ -1298,8 +1293,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.osd_rep = OSD_REP_SPLAY;
     else if (strcmp(args[i], "--osd_rep_primary") == 0) 
       g_conf.osd_rep = OSD_REP_PRIMARY;
-    else if (strcmp(args[i], "--osd_mkfs") == 0) 
-      g_conf.osd_mkfs = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_heartbeat_interval") == 0) 
       g_conf.osd_heartbeat_interval = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_heartbeat_grace") == 0) 
