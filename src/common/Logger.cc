@@ -165,9 +165,9 @@ void Logger::_flush()
   if (wrote_header_last > 10) {
     out << "#" << type->num_keys;
     for (int i=0; i<type->num_keys; i++) {
-      out << "\t" << type->key_name[i];
+      out << "\t" << (type->key_name[i] ? type->key_name[i] : "???");
       if (type->avg_keys[i]) 
-	out << "\t" << type->key_name[i] << "*\t" << type->key_name[i] << "~";
+	out << "\t(n)\t(var)";
     }
     out << std::endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
     wrote_header_last = 0;

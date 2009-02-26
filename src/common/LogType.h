@@ -31,7 +31,7 @@ class LogType {
 
  public:
   LogType(int first, int tail) :
-    first_key(first), num_keys(tail-first),
+    first_key(first), num_keys(tail-first - 1),
     key_name(num_keys), inc_keys(num_keys), avg_keys(num_keys) {
     for (int i=0; i<num_keys; i++) {
       key_name[i] = 0;
@@ -40,7 +40,7 @@ class LogType {
     }
   }
   int lookup_key(int key, bool isnew=false) {
-    int i = key - first_key;
+    int i = key - first_key - 1;
     assert(i >= 0 && i < num_keys);
     assert(isnew || key_name[i]);
     return i;
