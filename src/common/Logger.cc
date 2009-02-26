@@ -118,7 +118,8 @@ Logger::Logger(string fn, LogType *type, bool append)
       filename += "/";
     }
 
-    filename = "log/";
+    filename = g_conf.logger_dir;
+    filename += "/";
     if (g_conf.log_name) {
       filename += g_conf.log_name;
       ::mkdir( filename.c_str(), 0755 );   // make sure dir exists

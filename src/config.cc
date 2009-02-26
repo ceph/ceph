@@ -208,8 +208,9 @@ md_config_t g_conf = {
 
   logger_calc_variance: true,
 
-  dout_dir: "out",    // if daemonize == true
+  dout_dir: "out",        // if daemonize == true
   dout_sym_dir: "out",    // if daemonize == true
+  logger_dir: "log",
 
   conf_file: "ceph.conf",
   dump_conf: false,
@@ -258,7 +259,6 @@ md_config_t g_conf = {
   clock_tare: false,
   
   // --- messenger ---
-  ms_hosts: ".ceph_hosts",
   ms_tcp_nodelay: true,
   ms_retry_interval: 2.0,  // how often to attempt reconnect 
   ms_fail_interval: 15.0,  // fail after this long
@@ -637,6 +637,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("global", "log pins", log_pins);
   CF_READ_STR("global", "dout dir", dout_dir);
   CF_READ_STR("global", "dout sym dir", dout_sym_dir);
+  CF_READ_STR("global", "logger dir", logger_dir);
 
   CF_READ("debug", "debug", debug);
   CF_READ("debug", "lockdep", debug_lockdep);
@@ -943,6 +944,8 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if (//strcmp(args[i], "-o") == 0 ||
 	     strcmp(args[i], "--dout_sym_dir") == 0) 
       g_conf.dout_sym_dir = args[++i];
+    else if (strcmp(args[i], "--logger_dir") == 0) 
+      g_conf.logger_dir = args[++i];
     else if (strcmp(args[i], "--conf_file") == 0) 
       g_conf.conf_file = args[++i];
 
