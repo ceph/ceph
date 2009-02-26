@@ -909,9 +909,13 @@ retry_locked:
 	if (page_off >= i_size ||
 	    (pos_in_page == 0 && (pos+len) >= i_size &&
 	     end_in_page - pos_in_page != PAGE_CACHE_SIZE)) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 		zero_user_segments(page,
 				   0, pos_in_page,
 				   end_in_page, PAGE_CACHE_SIZE);
+#else
+		simple_prepare_write(file, page, pos_in_page, end_in_page);
+#endif
 		return 0;
 	}
 
