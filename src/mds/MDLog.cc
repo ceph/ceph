@@ -34,7 +34,7 @@
 
 // cons/des
 
-LogType mdlog_logtype;
+LogType mdlog_logtype(l_mdl_first, l_mdl_last);
 
 
 MDLog::~MDLog()
@@ -55,24 +55,23 @@ void MDLog::reopen_logger(utime_t start, bool append)
   static bool didit = false;
   if (!didit) {
     didit = true;
-    mdlog_logtype.add_inc("evadd");
-    mdlog_logtype.add_inc("evex");
-    mdlog_logtype.add_inc("evtrm");
-    mdlog_logtype.add_set("ev");
-    mdlog_logtype.add_set("evexg");
-    mdlog_logtype.add_set("evexd");
+    mdlog_logtype.add_inc(l_mdl_evadd, "evadd");
+    mdlog_logtype.add_inc(l_mdl_evex, "evex");
+    mdlog_logtype.add_inc(l_mdl_evtrm, "evtrm");
+    mdlog_logtype.add_set(l_mdl_ev, "ev");
+    mdlog_logtype.add_set(l_mdl_evexg, "evexg");
+    mdlog_logtype.add_set(l_mdl_evexd, "evexd");
 
-    mdlog_logtype.add_inc("segadd");
-    mdlog_logtype.add_inc("segex");
-    mdlog_logtype.add_inc("segtrm");    
-    mdlog_logtype.add_set("seg");
-    mdlog_logtype.add_set("segexg");
-    mdlog_logtype.add_set("segexd");
+    mdlog_logtype.add_inc(l_mdl_segadd, "segadd");
+    mdlog_logtype.add_inc(l_mdl_segex, "segex");
+    mdlog_logtype.add_inc(l_mdl_segtrm, "segtrm");    
+    mdlog_logtype.add_set(l_mdl_seg, "seg");
+    mdlog_logtype.add_set(l_mdl_segexg, "segexg");
+    mdlog_logtype.add_set(l_mdl_segexd, "segexd");
 
-    mdlog_logtype.add_set("expos");
-    mdlog_logtype.add_set("wrpos");
-    mdlog_logtype.add_avg("jacklat");
-    mdlog_logtype.add_avg("jsafelat");
+    mdlog_logtype.add_set(l_mdl_expos, "expos");
+    mdlog_logtype.add_set(l_mdl_wrpos, "wrpos");
+    mdlog_logtype.add_avg(l_mdl_jlat, "jlat");
   }
 
 }
@@ -89,7 +88,9 @@ void MDLog::init_journaler()
   
   // log streamer
   if (journaler) delete journaler;
-  journaler = new Journaler(log_inode.ino, &log_inode.layout, mds->objecter, logger, &mds->mds_lock);
+  journaler = new Journaler(log_inode.ino, &log_inode.layout, mds->objecter, 
+			    logger, l_mdl_jlat,
+			    &mds->mds_lock);
 }
 
 void MDLog::write_head(Context *c) 
@@ -121,8 +122,8 @@ void MDLog::create(Context *c)
   journaler->reset();
   write_head(c);
 
-  logger->set("expos", journaler->get_expire_pos());
-  logger->set("wrpos", journaler->get_write_pos());
+  logger->set(l_mdl_expos, journaler->get_expire_pos());
+  logger->set(l_mdl_wrpos, journaler->get_write_pos());
 }
 
 void MDLog::open(Context *c)
@@ -140,7 +141,7 @@ void MDLog::append()
   journaler->set_read_pos(journaler->get_write_pos());
   journaler->set_expire_pos(journaler->get_write_pos());
 
-  logger->set("expos", journaler->get_write_pos());
+  logger->set(l_mdl_expos, journaler->get_write_pos());
 }
 
 
@@ -184,9 +185,9 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   delete le;
 
   if (logger) {
-    logger->inc("evadd");
-    logger->set("ev", num_events);
-    logger->set("wrpos", journaler->get_write_pos());
+    logger->inc(l_mdl_evadd);
+    logger->set(l_mdl_ev, num_events);
+    logger->set(l_mdl_wrpos, journaler->get_write_pos());
   }
 
   unflushed++;
@@ -279,8 +280,8 @@ void MDLog::start_new_segment(Context *onsync)
     flush();
   }
 
-  logger->inc("segadd");
-  logger->set("seg", segments.size());
+  logger->inc(l_mdl_segadd);
+  logger->set(l_mdl_seg, segments.size());
 }
 
 void MDLog::_logged_subtree_map(loff_t off)
@@ -358,8 +359,8 @@ void MDLog::try_expire(LogSegment *ls)
     _expired(ls);
   }
   
-  logger->set("segexg", expiring_segments.size());
-  logger->set("evexg", expiring_events);
+  logger->set(l_mdl_segexg, expiring_segments.size());
+  logger->set(l_mdl_evexg, expiring_events);
 }
 
 void MDLog::_maybe_expired(LogSegment *ls) 
@@ -385,8 +386,8 @@ void MDLog::_expired(LogSegment *ls)
     expired_segments.insert(ls);
     expired_events += ls->num_events;
     
-    logger->inc("evex", ls->num_events);
-    logger->inc("segex");
+    logger->inc(l_mdl_evex, ls->num_events);
+    logger->inc(l_mdl_segex);
     
     // trim expired segments?
     while (!segments.empty()) {
@@ -403,19 +404,19 @@ void MDLog::_expired(LogSegment *ls)
       journaler->set_expire_pos(ls->offset);  // this was the oldest segment, adjust expire pos
       journaler->write_head(0);
       
-      logger->set("expos", ls->offset);
-      logger->inc("segtrm");
-      logger->inc("evtrm", ls->num_events);
+      logger->set(l_mdl_expos, ls->offset);
+      logger->inc(l_mdl_segtrm);
+      logger->inc(l_mdl_evtrm, ls->num_events);
       
       segments.erase(ls->offset);
       delete ls;
     }
   }
 
-  logger->set("ev", num_events);
-  logger->set("evexd", expired_events);
-  logger->set("seg", segments.size());
-  logger->set("segexd", expired_segments.size());
+  logger->set(l_mdl_ev, num_events);
+  logger->set(l_mdl_evexd, expired_events);
+  logger->set(l_mdl_seg, segments.size());
+  logger->set(l_mdl_segexd, expired_segments.size());
 }
 
 
@@ -504,7 +505,7 @@ void MDLog::_replay_thread()
     // new segment?
     if (le->get_type() == EVENT_SUBTREEMAP) {
       segments[pos] = new LogSegment(pos);
-      logger->set("seg", segments.size());
+      logger->set(l_mdl_seg, segments.size());
     }
 
     // have we seen an import map yet?
@@ -526,7 +527,7 @@ void MDLog::_replay_thread()
     }
     delete le;
 
-    logger->set("rdpos", pos);
+    logger->set(l_mdl_rdpos, pos);
 
     // drop lock for a second, so other events/messages (e.g. beacon timer!) can go off
     mds->mds_lock.Unlock();
@@ -541,7 +542,7 @@ void MDLog::_replay_thread()
     // move read pointer _back_ to first subtree map we saw, for eventual trimming
     journaler->set_read_pos(new_expire_pos);
     journaler->set_expire_pos(new_expire_pos);
-    logger->set("expos", new_expire_pos);
+    logger->set(l_mdl_expos, new_expire_pos);
   }
 
   // kick waiter(s)

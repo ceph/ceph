@@ -26,7 +26,15 @@ class EUpdate;
 class MMDSSlaveRequest;
 struct SnapInfo;
 
-
+enum {
+  l_mdss_first = 1000,
+  l_mdss_hcreq,
+  l_mdss_hsreq,
+  l_mdss_hcsess,
+  l_mdss_dcreq,
+  l_mdss_dsreq,
+  l_mdss_last,
+};
 
 class Server {
   MDS *mds;

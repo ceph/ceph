@@ -18,105 +18,48 @@
 
 #include "include/types.h"
 
-#include <string>
-#include <fstream>
-using std::string;
-using std::ofstream;
-
-#include <ext/hash_map>
-#include <ext/hash_set>
-using __gnu_cxx::hash_map;
-using __gnu_cxx::hash_set;
-
-#include "Mutex.h"
-
+#include <vector>
+using std::vector;
 
 class LogType {
  protected:
-  hash_map<intptr_t, int> keymap;  
-  vector<const char*>   keys;
-  set<int>              inc_keys;
-  vector<bool> avg;
-
-  int version;
-
-  // HACK to avoid the hash table as often as possible...
-  // cache recent key name lookups in a small ring buffer
-  const static int cache_keys = 10;
-  intptr_t kc_ptr[cache_keys];
-  int kc_val[cache_keys];
-  int kc_pos;
+  int first_key, num_keys;
+  vector<const char*> key_name;
+  vector<bool> inc_keys, avg_keys;
 
   friend class Logger;
 
  public:
-  LogType() {
-    version = 1;
-
-    for (int i=0;i<cache_keys;i++)
-      kc_ptr[i] = 0;
-    kc_pos = 0;
-  }
-  int add_key(const char* key, bool is_inc) {
-    int i = lookup_key(key);
-    if (i >= 0) return i;
-
-    i = keys.size();
-    keys.push_back(key);
-    avg.push_back(false);
-
-    intptr_t p = (intptr_t)key;
-    keymap[p] = i;
-    if (is_inc) inc_keys.insert(i);
-
-    version++;
-    return i;
-  }
-  int add_inc(const char* key) {
-    return add_key(key, true);
-  }
-  int add_set(const char *key) {
-    return add_key(key, false);
-  }
-  int add_avg(const char *key) {
-    int i = add_key(key, true);
-    avg[i] = true;
-    return i;
-  }
-  
-  bool have_key(const char* key) {
-    return lookup_key(key) < 0;
-  }
-
-  int lookup_key(const char* key) {
-    intptr_t p = (intptr_t)key;
-
-    if (keymap.count(p)) 
-      return keymap[p];
-
-    // try kc ringbuffer
-    int pos = kc_pos-1;
-    for (int j=0; j<cache_keys; j++) {
-      if (pos < 0) pos = cache_keys - 1;
-      if (kc_ptr[pos] == p) return kc_val[pos];
-      pos--;
+  LogType(int first, int tail) :
+    first_key(first), num_keys(tail-first),
+    key_name(num_keys), inc_keys(num_keys), avg_keys(num_keys) {
+    for (int i=0; i<num_keys; i++) {
+      key_name[i] = 0;
+      inc_keys[i] = 0;
+      avg_keys[i] = 0;
     }
-
-    for (unsigned i=0; i<keys.size(); i++)
-      if (strcmp(keys[i], key) == 0) {
-        keymap[p] = i;
-
-        // put in kc ringbuffer
-        kc_ptr[kc_pos] = p;
-        kc_val[kc_pos] = i;
-        kc_pos++;
-        if (kc_pos == cache_keys) kc_pos = 0;
-
-        return i; 
-      }
-    return -1;
   }
-
+  int lookup_key(int key, bool isnew=false) {
+    int i = key - first_key;
+    assert(i >= 0 && i < num_keys);
+    assert(isnew || key_name[i]);
+    return i;
+  }
+  void add_key(int key, const char *name, bool is_inc, bool is_avg) {
+    int i = lookup_key(key, true);
+    key_name[i] = name;
+    inc_keys[i] = is_inc;
+    avg_keys[i] = is_avg;
+  }
+  void add_inc(int key, const char *name) {
+    return add_key(key, name, true, false);
+  }
+  void add_set(int key, const char *name) {
+    return add_key(key, name, false, false);
+  }
+  void add_avg(int key, const char *name) {
+    return add_key(key, name, true, true);
+  }
 };
 
 #endif

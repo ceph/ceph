@@ -94,6 +94,7 @@ public:
   Filer filer;
 
   Logger *logger;
+  int logger_key_lat;
 
   Mutex *lock;
   SafeTimer timer;
@@ -189,9 +190,9 @@ public:
   friend class C_Trim;
 
 public:
-  Journaler(inodeno_t ino_, ceph_file_layout *layout_, Objecter *obj, Logger *l, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
+  Journaler(inodeno_t ino_, ceph_file_layout *layout_, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
     ino(ino_), layout(*layout_), 
-    objecter(obj), filer(objecter), logger(l), 
+    objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     lock(lk), timer(*lk), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
     write_pos(0), flush_pos(0), ack_pos(0), safe_pos(0),

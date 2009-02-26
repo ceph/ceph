@@ -16,6 +16,27 @@
 #ifndef __MDLOG_H
 #define __MDLOG_H
 
+enum {
+  l_mdl_first = 5000,
+  l_mdl_evadd,
+  l_mdl_evex,
+  l_mdl_evtrm,
+  l_mdl_ev,
+  l_mdl_evexg,
+  l_mdl_evexd,
+  l_mdl_segadd,
+  l_mdl_segex,
+  l_mdl_segtrm,
+  l_mdl_seg,
+  l_mdl_segexg,
+  l_mdl_segexd,
+  l_mdl_expos,
+  l_mdl_wrpos,
+  l_mdl_rdpos,
+  l_mdl_jlat,
+  l_mdl_last,
+};
+
 #include "include/types.h"
 #include "include/Context.h"
 

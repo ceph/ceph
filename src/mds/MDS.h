@@ -35,6 +35,50 @@
 #include "SessionMap.h"
 
 
+enum {
+  l_mds_first = 2000,
+  l_mds_req,
+  l_mds_reply,
+  l_mds_replyl,
+  l_mds_fw,
+  l_mds_dir_f,
+  l_mds_dir_c,
+  l_mds_dir_sp,
+  l_mds_dir_ffc,
+  l_mds_c,
+  l_mds_ctop,
+  l_mds_cbot,
+  l_mds_cptail,
+  l_mds_cpin,
+  l_mds_cex,
+  l_mds_dis,
+  l_mds_t,
+  l_mds_thit,
+  l_mds_tfw,
+  l_mds_tdis,
+  l_mds_tdirf,
+  l_mds_trino,
+  l_mds_tlock,
+  l_mds_l,
+  l_mds_q,
+  l_mds_popanyd,
+  l_mds_popnest,
+  l_mds_buf,
+  l_mds_sm,
+  l_mds_ex,
+  l_mds_iex,
+  l_mds_im,
+  l_mds_iim,
+  l_mds_last,
+};
+
+enum {
+  l_mdc_first = 3000,
+  l_mdc_last,
+};
+
+
+
 class filepath;
 
 class OSDMap;

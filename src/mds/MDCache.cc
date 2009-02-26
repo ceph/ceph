@@ -127,11 +127,11 @@ void MDCache::log_stat(Logger *logger)
     //logger->set("pop", (int)get_root()->pop_nested.meta_load(now));
     //logger->set("popauth", (int)get_root()->pop_auth_subtree_nested.meta_load(now));
   }
-  logger->set("c", lru.lru_get_size());
-  logger->set("cpin", lru.lru_get_num_pinned());
-  logger->set("ctop", lru.lru_get_top());
-  logger->set("cbot", lru.lru_get_bot());
-  logger->set("cptail", lru.lru_get_pintail());
+  logger->set(l_mds_c, lru.lru_get_size());
+  logger->set(l_mds_cpin, lru.lru_get_num_pinned());
+  logger->set(l_mds_ctop, lru.lru_get_top());
+  logger->set(l_mds_cbot, lru.lru_get_bot());
+  logger->set(l_mds_cptail, lru.lru_get_pintail());
 }
 
 
@@ -4328,7 +4328,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
     migrator->export_empty_import(dir);
   
-  if (mds->logger) mds->logger->inc("cex");
+  if (mds->logger) mds->logger->inc(l_mds_cex);
 }
 
 
@@ -5229,7 +5229,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     return 1;
   }
 
-  if (mds->logger) mds->logger->inc("t");
+  if (mds->logger) mds->logger->inc(l_mds_t);
 
   // start trace
   trace.clear();
@@ -5284,7 +5284,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	discover_path(cur, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
-	if (mds->logger) mds->logger->inc("tdis");
+	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
       }
     }
@@ -5352,7 +5352,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	(dnl->is_null() || !noperm)) {
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
-      if (mds->logger) mds->logger->inc("tlock");
+      if (mds->logger) mds->logger->inc(l_mds_tlock);
       return 1;
     }
     
@@ -5371,7 +5371,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
           open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req));
-	  if (mds->logger) mds->logger->inc("trino");
+	  if (mds->logger) mds->logger->inc(l_mds_trino);
           return 1;
         }        
       }
@@ -5468,7 +5468,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
         curdir->fetch(_get_waiter(mdr, req));
-	if (mds->logger) mds->logger->inc("tdirf");
+	if (mds->logger) mds->logger->inc(l_mds_tdirf);
         return 1;
       }
     } else {
@@ -5480,7 +5480,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), _get_waiter(mdr, req),
 		      onfail == MDS_TRAVERSE_DISCOVERXLOCK);
-	if (mds->logger) mds->logger->inc("tdis");
+	if (mds->logger) mds->logger->inc(l_mds_tdis);
         return 1;
       } 
       if (onfail == MDS_TRAVERSE_FORWARD) {
@@ -5509,7 +5509,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	else
 	  mds->forward_message_mds(req, dauth.first);
 	
-	if (mds->logger) mds->logger->inc("tfw");
+	if (mds->logger) mds->logger->inc(l_mds_tfw);
 	return 2;
       }    
       if (onfail == MDS_TRAVERSE_FAIL)
@@ -5522,7 +5522,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   // success.
   if (psnapid)
     *psnapid = snapid;
-  if (mds->logger) mds->logger->inc("thit");
+  if (mds->logger) mds->logger->inc(l_mds_thit);
   return 0;
 }
 
@@ -5975,8 +5975,8 @@ void MDCache::request_finish(MDRequest *mdr)
   }
 
   if (mdr->client_request && mds->logger) {
-    mds->logger->inc("reply");
-    mds->logger->favg("replyl", g_clock.now() - mdr->client_request->get_recv_stamp());
+    mds->logger->inc(l_mds_reply);
+    mds->logger->favg(l_mds_replyl, g_clock.now() - mdr->client_request->get_recv_stamp());
   }
 
   delete mdr->client_request;
@@ -5992,7 +5992,7 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
   mds->forward_message_mds(mdr->client_request, who);  
   request_cleanup(mdr);
 
-  if (mds->logger) mds->logger->inc("fw");
+  if (mds->logger) mds->logger->inc(l_mds_fw);
 }
 
 
@@ -6084,11 +6084,11 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // log some stats *****
   if (mds->logger) {
-    mds->logger->set("c", lru.lru_get_size());
-    mds->logger->set("cpin", lru.lru_get_num_pinned());
-    mds->logger->set("ctop", lru.lru_get_top());
-    mds->logger->set("cbot", lru.lru_get_bot());
-    mds->logger->set("cptail", lru.lru_get_pintail());
+    mds->logger->set(l_mds_c, lru.lru_get_size());
+    mds->logger->set(l_mds_cpin, lru.lru_get_num_pinned());
+    mds->logger->set(l_mds_ctop, lru.lru_get_top());
+    mds->logger->set(l_mds_cbot, lru.lru_get_bot());
+    mds->logger->set(l_mds_cptail, lru.lru_get_pintail());
     //mds->logger->set("buf",buffer_total_alloc);
   }
 

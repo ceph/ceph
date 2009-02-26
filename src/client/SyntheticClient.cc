@@ -778,8 +778,8 @@ int SyntheticClient::run()
                 && i > 0
                 && i < iarg1-1
                 ) {
-              client_logger->finc("trsum", (double)lat);
-              client_logger->inc("trnum");
+              //client_logger->finc("trsum", (double)lat);
+              //client_logger->inc("trnum");
             }
           }
 	  dout(1) << "done " << dendl;
@@ -1704,7 +1704,6 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   int r = client->getdir(basedir, contents);
   utime_t e = g_clock.now();
   e -= s;
-  if (client_logger) client_logger->finc("readdir", e);
   if (r < 0) {
     dout(0) << "read_dirs couldn't readdir " << basedir << ", stopping" << dendl;
     return -1;
@@ -1719,7 +1718,6 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
     }
     utime_t e = g_clock.now();
     e -= s;
-    if (client_logger) client_logger->finc("stat", e);
   }
 
   if (depth > 0) 
@@ -2172,8 +2170,6 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     utime_t lat = g_clock.now();
     lat -= starts.front();
     starts.pop_front();
-    if (client_logger) 
-      client_logger->favg("owrlat", lat);
   }
 
   lock.Lock();
@@ -2280,9 +2276,9 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     lat -= start;
     if (client_logger) {
       if (write) 
-	client_logger->favg("owrlat", lat);
+	client_logger->favg(l_c_owrlat, lat);
       else 
-	client_logger->favg("ordlat", lat);
+	client_logger->favg(l_c_ordlat, lat);
     }
   }
 

@@ -67,15 +67,15 @@ using namespace std;
 
 void Server::reopen_logger(utime_t start, bool append)
 {
-  static LogType mdserver_logtype;
+  static LogType mdserver_logtype(l_mdss_first, l_mdss_last);
   static bool didit = false;
   if (!didit) {
     didit = true;
-    mdserver_logtype.add_inc("hcreq"); // handle client req
-    mdserver_logtype.add_inc("hsreq"); // slave
-    mdserver_logtype.add_inc("hcsess");    // client session
-    mdserver_logtype.add_inc("dcreq"); // dispatch client req
-    mdserver_logtype.add_inc("dsreq"); // slave
+    mdserver_logtype.add_inc(l_mdss_hcreq,"hcreq"); // handle client req
+    mdserver_logtype.add_inc(l_mdss_hsreq, "hsreq"); // slave
+    mdserver_logtype.add_inc(l_mdss_hcsess, "hcsess");    // client session
+    mdserver_logtype.add_inc(l_mdss_dcreq, "dcreq"); // dispatch client req
+    mdserver_logtype.add_inc(l_mdss_dsreq, "dsreq"); // slave
   }
 
   if (logger) 
@@ -806,7 +806,7 @@ void Server::handle_client_request(MClientRequest *req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
 
-  if (logger) logger->inc("hcreq");
+  if (logger) logger->inc(l_mdss_hcreq);
 
   if (!mds->is_active() &&
       !(mds->is_stopping() && req->get_orig_source().is_mds())) {
@@ -869,7 +869,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  if (logger) logger->inc("dcreq");
+  if (logger) logger->inc(l_mdss_dcreq);
 
   if (mdr->ref) {
     dout(7) << "dispatch_client_request " << *req << " ref " << *mdr->ref << dendl;
@@ -985,7 +985,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  if (logger) logger->inc("hsreq");
+  if (logger) logger->inc(l_mdss_hsreq);
 
   // reply?
   if (m->is_reply()) {
@@ -1081,7 +1081,7 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     return;
   }
 
-  if (logger) logger->inc("dsreq");
+  if (logger) logger->inc(l_mdss_dsreq);
 
   switch (mdr->slave_request->get_op()) {
   case MMDSSlaveRequest::OP_XLOCK:

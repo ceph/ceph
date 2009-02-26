@@ -215,7 +215,7 @@ void Journaler::_finish_flush(int r, __s64 start, utime_t stamp, bool safe)
   if (logger) {
     utime_t lat = g_clock.now();
     lat -= stamp;
-    logger->favg(safe ? "jsafelat" : "jacklat", lat);
+    logger->favg(logger_key_lat, lat);
   }
 
   // adjust ack_pos

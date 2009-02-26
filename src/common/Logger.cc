@@ -106,99 +106,77 @@ static void flush_all_loggers()
 
 // ---------
 
-Logger::Logger(string fn, LogType *type, bool append)
+void Logger::_open_log()
 {
-  logger_lock.Lock();
-  {
-    filename = "";
-    if (g_conf.use_abspaths) {
-      char cwd[200];
-      getcwd(cwd, 200);
-      filename = cwd;
-      filename += "/";
-    }
+  Mutex::Locker l(logger_lock);
 
-    filename = g_conf.logger_dir;
+  filename = "";
+  if (g_conf.use_abspaths) {
+    char cwd[200];
+    getcwd(cwd, 200);
+    filename = cwd;
     filename += "/";
-    if (g_conf.log_name) {
-      filename += g_conf.log_name;
-      ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
-      filename += "/";
-    }
-    filename += fn;
-
-    if (append)
-      out.open(filename.c_str(), ofstream::out|ofstream::app);
-    else
-      out.open(filename.c_str(), ofstream::out);
-
-    this->type = type;
-    wrote_header = -1;
-    wrote_header_last = 0;
-    
-    version = 0;
-
-    if (logger_list.empty()) {
-      // init logger
-      if (!g_conf.clock_tare)
-	start = g_clock.now();  // time 0!  otherwise g_clock does it for us.
-
-      last_flush = 0;
-
-      // call manually the first time; then it'll schedule itself.
-      flush_all_loggers();      
-    }
-    logger_list.push_back(this);
   }
-  logger_lock.Unlock();
+  
+  filename = g_conf.logger_dir;
+  filename += "/";
+  if (g_conf.log_name) {
+    filename += g_conf.log_name;
+    ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
+    filename += "/";
+  }
+  filename += name;
+
+  if (append)
+    out.open(filename.c_str(), ofstream::out|ofstream::app);
+  else
+    out.open(filename.c_str(), ofstream::out);
+  
+  if (logger_list.empty()) {
+    // init logger
+    if (!g_conf.clock_tare)
+      start = g_clock.now();  // time 0!  otherwise g_clock does it for us.
+    
+    last_flush = 0;
+    
+    // call manually the first time; then it'll schedule itself.
+    flush_all_loggers();      
+  }
+  logger_list.push_back(this);
 }
+
 
 Logger::~Logger()
 {
-  logger_lock.Lock();
-  {
-    _flush();
-    out.close();
-    logger_list.remove(this); // slow, but rare.
-    if (logger_list.empty()) 
-      logger_event = 0;       // stop the timer events.
-  }
-  logger_lock.Unlock();
-}
-
-
-/*
-void Logger::flush()
-{
-  logger_lock.Lock();
+  Mutex::Locker l(logger_lock);
+  
   _flush();
-  logger_lock.Unlock();
+  out.close();
+  logger_list.remove(this); // slow, but rare.
+  if (logger_list.empty()) 
+    logger_event = 0;       // stop the timer events.
 }
-*/
+
 
 void Logger::_flush()
 {
   // header?
   wrote_header_last++;
-  if (wrote_header != type->version ||
-      wrote_header_last > 10) {
-    out << "#" << type->keymap.size();
-    for (unsigned i=0; i<type->keys.size(); i++) {
-      out << "\t" << type->keys[i];
-      if (type->avg[i]) 
-	out << "\t" << type->keys[i] << "*\t" << type->keys[i] << "~";
+  if (wrote_header_last > 10) {
+    out << "#" << type->num_keys;
+    for (int i=0; i<type->num_keys; i++) {
+      out << "\t" << type->key_name[i];
+      if (type->avg_keys[i]) 
+	out << "\t" << type->key_name[i] << "*\t" << type->key_name[i] << "~";
     }
     out << std::endl;  //out << "\t (" << type->keymap.size() << ")" << endl;
-    wrote_header = type->version;
     wrote_header_last = 0;
   }
 
-  maybe_resize(type->keys.size());
-  
   // write line to log
   out << last_flush;
-  for (unsigned i=0; i<type->keys.size(); i++) {
-    if (type->avg[i]) {
+  for (int i=0; i<type->num_keys; i++) {
+    if (type->avg_keys[i]) {
       if (vals[i] > 0) {
 	double avg = (fvals[i] / (double)vals[i]);
 	double var = 0.0;
@@ -222,8 +200,8 @@ void Logger::_flush()
   out << std::endl;
   
   // reset the counters
-  for (unsigned i=0; i<type->keys.size(); i++) {
-    if (type->inc_keys.count(i)) {
+  for (int i=0; i<type->num_keys; i++) {
+    if (type->inc_keys[i]) {
       this->vals[i] = 0;
       this->fvals[i] = 0;
     }
@@ -232,42 +210,33 @@ void Logger::_flush()
 
 
 
-long Logger::inc(const char *key, long v)
+long Logger::inc(int key, long v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  if (i < 0) i = type->add_inc(key);
-  maybe_resize(i+1);
-
   vals[i] += v;
   long r = vals[i];
   logger_lock.Unlock();
   return r;
 }
 
-double Logger::finc(const char *key, double v)
+double Logger::finc(int key, double v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  if (i < 0) i = type->add_inc(key);
-  maybe_resize(i+1);
-
   fvals[i] += v;
   double r = fvals[i];
   logger_lock.Unlock();
   return r;
 }
 
-long Logger::set(const char *key, long v)
+long Logger::set(int key, long v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  if (i < 0) i = type->add_set(key);
-  maybe_resize(i+1);
-
   //cout << this << " set " << i << " to " << v << std::endl;
   long r = vals[i] = v;
   logger_lock.Unlock();
@@ -275,28 +244,22 @@ long Logger::set(const char *key, long v)
 }
 
 
-double Logger::fset(const char *key, double v)
+double Logger::fset(int key, double v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  if (i < 0) i = type->add_set(key);
-  maybe_resize(i+1);
-
   //cout << this << " fset " << i << " to " << v << std::endl;
   double r = fvals[i] = v;
   logger_lock.Unlock();
   return r;
 }
 
-double Logger::favg(const char *key, double v)
+double Logger::favg(int key, double v)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  if (i < 0) i = type->add_avg(key);
-  maybe_resize(i+1);
-
   vals[i]++;
   double r = fvals[i] = v;
   if (g_conf.logger_calc_variance)
@@ -305,13 +268,11 @@ double Logger::favg(const char *key, double v)
   return r;
 }
 
-long Logger::get(const char* key)
+long Logger::get(int key)
 {
   if (!g_conf.log) return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
-  maybe_resize(i+1);
-
   long r = 0;
   if (i >= 0 && i < (int)vals.size())
     r = vals[i];

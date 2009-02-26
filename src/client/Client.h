@@ -16,6 +16,15 @@
 #ifndef __CLIENT_H
 #define __CLIENT_H
 
+enum {
+  l_c_first = 20000,
+  l_c_reply,
+  l_c_lat,
+  l_c_owrlat,
+  l_c_ordlat,
+  l_c_wrlat,
+  l_c_last,
+};
 
 #include "mds/MDSMap.h"
 #include "osd/OSDMap.h"

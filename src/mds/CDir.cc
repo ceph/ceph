@@ -631,7 +631,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
-  if (cache->mds->logger) cache->mds->logger->inc("dir_sp");
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_sp);
 
   assert(is_complete() || !is_auth());
 
@@ -1034,7 +1034,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   auth_pin(this);
   state_set(CDir::STATE_FETCHING);
 
-  if (cache->mds->logger) cache->mds->logger->inc("dir_f");
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_f);
 
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this);
@@ -1360,7 +1360,7 @@ void CDir::_commit(version_t want)
   // complete?
   if (!is_complete()) {
     dout(7) << "commit not complete, fetching first" << dendl;
-    if (cache->mds->logger) cache->mds->logger->inc("dir_ffc");
+    if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_ffc);
     fetch(new C_Dir_RetryCommit(this, want));
     return;
   }
@@ -1374,7 +1374,7 @@ void CDir::_commit(version_t want)
     state_set(STATE_COMMITTING);
   }
   
-  if (cache->mds->logger) cache->mds->logger->inc("dir_c");
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_c);
 
   // snap purge?
   SnapRealm *realm = inode->find_snaprealm();

@@ -213,8 +213,6 @@ int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& who
 
 // cons/des
 
-LogType osd_logtype;
-
 OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, const char *jdev) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
@@ -335,49 +333,50 @@ int OSD::init()
     return -EINVAL;
     
   // log
+  static LogType osd_logtype(l_osd_first, l_osd_last);
   char name[80];
   sprintf(name, "osd%d", whoami);
   logger = new Logger(name, (LogType*)&osd_logtype);
-  osd_logtype.add_set("opq");
-  osd_logtype.add_inc("op");
-  osd_logtype.add_inc("c_rd");
-  osd_logtype.add_inc("c_rdb");
-  osd_logtype.add_inc("c_wr");
-  osd_logtype.add_inc("c_wrb");
+  osd_logtype.add_set(l_osd_opq, "opq");
+  osd_logtype.add_inc(l_osd_op, "op");
+  osd_logtype.add_inc(l_osd_c_rd, "c_rd");
+  osd_logtype.add_inc(l_osd_c_rdb, "c_rdb");
+  osd_logtype.add_inc(l_osd_c_wr, "c_wr");
+  osd_logtype.add_inc(l_osd_c_wrb,"c_wrb");
   
-  osd_logtype.add_inc("r_wr");
-  osd_logtype.add_inc("r_wrb");
+  osd_logtype.add_inc(l_osd_r_wr, "r_wr");
+  osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");
 
-  osd_logtype.add_inc("r_push");
-  osd_logtype.add_inc("r_pushb");
-  osd_logtype.add_inc("r_pull");
-  osd_logtype.add_inc("r_pullb");
+  osd_logtype.add_inc(l_osd_r_push, "r_push");
+  osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
+  osd_logtype.add_inc(l_osd_r_pull, "r_pull");
+  osd_logtype.add_inc(l_osd_r_pullb, "r_pullb");
   
-  osd_logtype.add_set("qlen");
-  osd_logtype.add_set("rqlen");
-  osd_logtype.add_set("rdlat");
-  osd_logtype.add_set("rdlatm");
-  osd_logtype.add_set("fshdin");
-  osd_logtype.add_set("fshdout");
-  osd_logtype.add_inc("shdout");
-  osd_logtype.add_inc("shdin");
+  osd_logtype.add_set(l_osd_qlen, "qlen");
+  osd_logtype.add_set(l_osd_rqlen, "rqlen");
+  osd_logtype.add_set(l_osd_rdlat, "rdlat");
+  osd_logtype.add_set(l_osd_rdlatm, "rdlatm");
+  osd_logtype.add_set(l_osd_fshdin, "fshdin");
+  osd_logtype.add_set(l_osd_fshdout, "fshdout");
+  osd_logtype.add_inc(l_osd_shdout, "shdout");
+  osd_logtype.add_inc(l_osd_shdin, "shdin");
 
-  osd_logtype.add_set("loadavg");
+  osd_logtype.add_set(l_osd_loadavg, "loadavg");
 
-  osd_logtype.add_inc("rlsum");
-  osd_logtype.add_inc("rlnum");
+  osd_logtype.add_inc(l_osd_rlsum, "rlsum");
+  osd_logtype.add_inc(l_osd_rlnum, "rlnum");
 
-  osd_logtype.add_set("numpg");
-  osd_logtype.add_set("hbto");
-  osd_logtype.add_set("hbfrom");
+  osd_logtype.add_set(l_osd_numpg, "numpg");
+  osd_logtype.add_set(l_osd_hbto, "hbto");
+  osd_logtype.add_set(l_osd_hbfrom, "hbfrom");
   
-  osd_logtype.add_set("buf");
+  osd_logtype.add_set(l_osd_buf, "buf");
   
-  osd_logtype.add_inc("map");
-  osd_logtype.add_inc("mapi");
-  osd_logtype.add_inc("mapidup");
-  osd_logtype.add_inc("mapf");
-  osd_logtype.add_inc("mapfdup");
+  osd_logtype.add_inc(l_osd_map, "map");
+  osd_logtype.add_inc(l_osd_mapi, "mapi");
+  osd_logtype.add_inc(l_osd_mapidup, "mapidup");
+  osd_logtype.add_inc(l_osd_mapf, "mapf");
+  osd_logtype.add_inc(l_osd_mapfdup, "mapfdup");
   
   // i'm ready!
   messenger->set_dispatcher(this);
@@ -828,12 +827,12 @@ void OSD::_refresh_my_stat(utime_t now)
 
     my_stat.read_latency_mine = my_stat.read_latency * (1.0 - frac_rd_ops_shed_in);
 
-    logger->fset("qlen", my_stat.qlen);
-    logger->fset("rqlen", my_stat.recent_qlen);
-    logger->fset("rdlat", my_stat.read_latency);
-    logger->fset("rdlatm", my_stat.read_latency_mine);
-    logger->fset("fshdin", my_stat.frac_rd_ops_shed_in);
-    logger->fset("fshdout", my_stat.frac_rd_ops_shed_out);
+    logger->fset(l_osd_qlen, my_stat.qlen);
+    logger->fset(l_osd_rqlen, my_stat.recent_qlen);
+    logger->fset(l_osd_rdlat, my_stat.read_latency);
+    logger->fset(l_osd_rdlatm, my_stat.read_latency_mine);
+    logger->fset(l_osd_fshdin, my_stat.frac_rd_ops_shed_in);
+    logger->fset(l_osd_fshdout, my_stat.frac_rd_ops_shed_out);
     dout(30) << "_refresh_my_stat " << my_stat << dendl;
 
     stat_rd_ops = 0;
@@ -1003,7 +1002,7 @@ void OSD::heartbeat()
   if (in.is_open()) {
     float oneminavg;
     in >> oneminavg;
-    logger->fset("loadavg", oneminavg);
+    logger->fset(l_osd_loadavg, oneminavg);
     in.close();
   }
 
@@ -1057,8 +1056,8 @@ void OSD::heartbeat()
     }
   }
 
-  if (logger) logger->set("hbto", heartbeat_to.size());
-  if (logger) logger->set("hbfrom", heartbeat_from.size());
+  if (logger) logger->set(l_osd_hbto, heartbeat_to.size());
+  if (logger) logger->set(l_osd_hbfrom, heartbeat_from.size());
 
   
   // hmm.. am i all alone?
@@ -1713,7 +1712,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   ObjectStore::Transaction t;
   
-  logger->inc("mapmsg");
+  logger->inc(l_osd_map);
 
   // store them?
   for (map<epoch_t,bufferlist>::iterator p = m->maps.begin();
@@ -1722,7 +1721,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     pobject_t poid = get_osdmap_pobject_name(p->first);
     if (store->exists(0, poid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << dendl;
-      logger->inc("mapfdup");
+      logger->inc(l_osd_mapfdup);
       bufferlist bl;
       get_map_bl(p->first, bl);
       dout(10) << " .. it is " << bl.length() << " bytes" << dendl;
@@ -1740,7 +1739,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         superblock.oldest_map == 0)
       superblock.oldest_map = p->first;
 
-    logger->inc("mapf");
+    logger->inc(l_osd_mapf);
   }
   for (map<epoch_t,bufferlist>::iterator p = m->incremental_maps.begin();
        p != m->incremental_maps.end();
@@ -1748,7 +1747,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     pobject_t poid = get_inc_osdmap_pobject_name(p->first);
     if (store->exists(0, poid)) {
       dout(10) << "handle_osd_map already had incremental map epoch " << p->first << dendl;
-      logger->inc("mapidup");
+      logger->inc(l_osd_mapidup);
       bufferlist bl;
       get_inc_map_bl(p->first, bl);
       dout(10) << " .. it is " << bl.length() << " bytes" << dendl;
@@ -1766,7 +1765,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         superblock.oldest_map == 0)
       superblock.oldest_map = p->first;
 
-    logger->inc("mapi");
+    logger->inc(l_osd_mapi);
   }
 
   // advance if we can
@@ -2148,7 +2147,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
   do_queries(query_map);
   do_infos(info_map);
 
-  logger->set("numpg", pg_map.size());
+  logger->set(l_osd_numpg, pg_map.size());
 
   wake_all_pg_waiters();   // the pg mapping may have shifted
 
@@ -3310,7 +3309,7 @@ void OSD::handle_op(MOSDOp *op)
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
 
 
-  logger->set("buf", buffer_total_alloc.test());
+  logger->set(l_osd_buf, buffer_total_alloc.test());
 
   utime_t now = g_clock.now();
 
@@ -3545,7 +3544,7 @@ void OSD::enqueue_op(PG *pg, Message *op)
   // add to pg's op_queue
   pg->op_queue.push_back(op);
   pending_ops++;
-  logger->set("opq", pending_ops);
+  logger->set(l_osd_opq, pending_ops);
   
   // add pg to threadpool queue
   pg->get();   // we're exposing the pointer, here.
@@ -3607,7 +3606,7 @@ void OSD::dequeue_op(PG *pg)
       op_queue_cond.Signal();
     
     pending_ops--;
-    logger->set("opq", pending_ops);
+    logger->set(l_osd_opq, pending_ops);
     if (pending_ops == 0 && waiting_for_no_ops)
       no_pending_ops.Signal();
   }

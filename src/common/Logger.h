@@ -26,47 +26,46 @@ using std::vector;
 using std::string;
 using std::ofstream;
 
+
 #include "LogType.h"
 
 
 class Logger {
  protected:
+  // my type
+  string name, filename;
+  bool append;
+  LogType *type;
+
   // values for this instance
   vector<long> vals;
   vector<double> fvals;
   vector< vector<double> > vals_to_avg;
 
-  void maybe_resize(unsigned s) {
-    while (s >= vals.size()) {
-      vals.push_back(0);
-      fvals.push_back(0.0);
-      vals_to_avg.push_back(vector<double>());
-    }
-  }
-
-  // my type
-  LogType *type;
-  int version;
-
-  string filename;
   ofstream out;
 
   // what i've written
   //int last_logged;
-  int wrote_header;
   int wrote_header_last;
 
  public:
-  Logger(string fn, LogType *type, bool append=false);
+  Logger(string n, LogType *t, bool ap=false) :
+    name(n), append(ap), type(t),
+    vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
+    wrote_header_last(10000) {
+    _open_log();
+  }
   ~Logger();
 
-  long inc(const char *s, long v = 1);
-  long set(const char *s, long v);
-  long get(const char *s);
+  void _open_log();
 
-  double fset(const char *s, double v);
-  double finc(const char *s, double v);
-  double favg(const char *s, double v);
+  long inc(int f, long v = 1);
+  long set(int f, long v);
+  long get(int f);
+
+  double fset(int f, double v);
+  double finc(int f, double v);
+  double favg(int f, double v);
 
   //void flush();
   void _flush();

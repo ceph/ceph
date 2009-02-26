@@ -330,7 +330,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 	op->set_peer_stat(osd->my_stat);
 	osd->messenger->forward_message(op, osd->osdmap->get_inst(shedto));
 	osd->stat_rd_ops_shed_out++;
-	osd->logger->inc("shdout");
+	osd->logger->inc(l_osd_shdout);
 	return true;
       }
     }
@@ -373,7 +373,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 {
   //dout(15) << "do_op " << *op << dendl;
 
-  osd->logger->inc("op");
+  osd->logger->inc(l_osd_op);
 
   if (op->is_modify())
     op_modify(op);
@@ -386,7 +386,7 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
 {
   dout(15) << "do_sub_op " << *op << dendl;
 
-  osd->logger->inc("subop");
+  osd->logger->inc(l_osd_subop);
 
   if (op->ops.size() >= 1) {
     ceph_osd_op& first = op->ops[0];
@@ -673,7 +673,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 		<< ", them = " << op->get_peer_stat().read_latency
 		<< (osd->my_stat.read_latency_mine > op->get_peer_stat().read_latency ? " WTF":"")
 		<< dendl;
-      osd->logger->inc("shdin");
+      osd->logger->inc(l_osd_shdin);
 
       // does it look like they were wrong to do so?
       Mutex::Locker lock(osd->peer_stat_lock);
@@ -733,8 +733,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	}
 	dout(10) << " read got " << r << " / " << p->length << " bytes from obj " << oid << dendl;
       }
-      osd->logger->inc("c_rd");
-      osd->logger->inc("c_rdb", p->length);
+      osd->logger->inc(l_osd_c_rd);
+      osd->logger->inc(l_osd_c_rdb, p->length);
       break;
       
     case CEPH_OSD_OP_STAT:
@@ -1459,8 +1459,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
     utime_t now = g_clock.now();
     now -= repop->start;
-    osd->logger->finc("rlsum", now);
-    osd->logger->inc("rlnum", 1);
+    osd->logger->finc(l_osd_rlsum, now);
+    osd->logger->inc(l_osd_rlnum, 1);
   }
 
   // done.
@@ -1745,8 +1745,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   }
 
   if (op->get_data().length()) {
-    osd->logger->inc("c_wr");
-    osd->logger->inc("c_wrb", op->get_data().length());
+    osd->logger->inc(l_osd_c_wr);
+    osd->logger->inc(l_osd_c_wrb, op->get_data().length());
   }
 
   // note my stats
@@ -1878,8 +1878,8 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 
   // do op
   int ackerosd = acting[0];
-  osd->logger->inc("r_wr");
-  osd->logger->inc("r_wrb", op->get_data().length());
+  osd->logger->inc(l_osd_r_wr);
+  osd->logger->inc(l_osd_r_wrb, op->get_data().length());
   
   if (!op->noop) {
     object_info_t oi(op->poid);
@@ -2259,8 +2259,8 @@ void ReplicatedPG::push(pobject_t poid, int peer,
           << " to osd" << peer
           << dendl;
 
-  osd->logger->inc("r_push");
-  osd->logger->inc("r_pushb", bl.length());
+  osd->logger->inc(l_osd_r_push);
+  osd->logger->inc(l_osd_r_pushb, bl.length());
   
   // send
   osd_reqid_t rid;  // useless?
@@ -2496,8 +2496,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   unsigned r = osd->store->apply_transaction(t);
   assert(r == 0);
 
-  osd->logger->inc("r_pull");
-  osd->logger->inc("r_pullb", data.length());
+  osd->logger->inc(l_osd_r_pull);
+  osd->logger->inc(l_osd_r_pullb, data.length());
 
   if (is_primary()) {
 

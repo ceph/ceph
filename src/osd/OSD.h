@@ -40,6 +40,44 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+enum {
+  l_osd_first = 10000,
+  l_osd_opq,
+  l_osd_op,
+  l_osd_c_rd,
+  l_osd_c_rdb,
+  l_osd_c_wr,
+  l_osd_c_wrb,
+  l_osd_r_wr,
+  l_osd_r_wrb,
+  l_osd_subop,
+  l_osd_r_push,
+  l_osd_r_pushb,
+  l_osd_r_pull,
+  l_osd_r_pullb,
+  l_osd_qlen,
+  l_osd_rqlen,
+  l_osd_rdlat,
+  l_osd_rdlatm,
+  l_osd_fshdin,
+  l_osd_fshdout,
+  l_osd_shdout,
+  l_osd_shdin,
+  l_osd_loadavg,
+  l_osd_rlsum,
+  l_osd_rlnum,
+  l_osd_numpg,
+  l_osd_hbto,
+  l_osd_hbfrom,
+  l_osd_buf,
+  l_osd_map,
+  l_osd_mapi,
+  l_osd_mapidup,
+  l_osd_mapf,
+  l_osd_mapfdup,
+  l_osd_last,
+};
+
 class Messenger;
 class Message;
 class Logger;

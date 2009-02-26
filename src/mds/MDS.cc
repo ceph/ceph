@@ -151,17 +151,20 @@ MDS::~MDS() {
 
 void MDS::reopen_logger(utime_t start)
 {
-  static LogType mds_logtype, mds_cache_logtype;
+  static LogType mds_logtype(l_mds_first, l_mds_last);
+  static LogType mds_cache_logtype(l_mdc_first, l_mdc_last);
+
   static bool didit = false;
   if (!didit) {
     didit = true;
     
-    //mds_logtype.add_inc("req");
-    mds_logtype.add_inc("reply");
-    mds_logtype.add_inc("fw");
+    mds_logtype.add_inc(l_mds_req, "req");
+    mds_logtype.add_inc(l_mds_reply, "reply");
+    mds_logtype.add_avg(l_mds_replyl, "replyl");
+    mds_logtype.add_inc(l_mds_fw, "fw");
     
-    mds_logtype.add_inc("dir_f");
-    mds_logtype.add_inc("dir_c");
+    mds_logtype.add_inc(l_mds_dir_f, "dir_f");
+    mds_logtype.add_inc(l_mds_dir_c, "dir_c");
     //mds_logtype.add_inc("mkdir");
 
     /*
@@ -178,44 +181,42 @@ void MDS::reopen_logger(utime_t start)
     mds_logtype.add_inc("dirt5");
     */
 
-    mds_logtype.add_set("c");
-    mds_logtype.add_set("ctop");
-    mds_logtype.add_set("cbot");
-    mds_logtype.add_set("cptail");  
-    mds_logtype.add_set("cpin");
-    mds_logtype.add_inc("cex");
-    mds_logtype.add_inc("dis");
+    mds_logtype.add_set(l_mds_c, "c");
+    mds_logtype.add_set(l_mds_ctop, "ctop");
+    mds_logtype.add_set(l_mds_cbot, "cbot");
+    mds_logtype.add_set(l_mds_cptail, "cptail");  
+    mds_logtype.add_set(l_mds_cpin, "cpin");
+    mds_logtype.add_inc(l_mds_cex, "cex");
+    mds_logtype.add_inc(l_mds_dis, "dis");
 
-    mds_logtype.add_inc("t"); 
-    mds_logtype.add_inc("thit");
-    mds_logtype.add_inc("tfw");
-    mds_logtype.add_inc("tdis");
-    mds_logtype.add_inc("tdirf");
-    mds_logtype.add_inc("trino");
-    mds_logtype.add_inc("tlock");
+    mds_logtype.add_inc(l_mds_t, "t"); 
+    mds_logtype.add_inc(l_mds_thit, "thit");
+    mds_logtype.add_inc(l_mds_tfw, "tfw");
+    mds_logtype.add_inc(l_mds_tdis, "tdis");
+    mds_logtype.add_inc(l_mds_tdirf, "tdirf");
+    mds_logtype.add_inc(l_mds_trino, "trino");
+    mds_logtype.add_inc(l_mds_tlock, "tlock");
     
-    mds_logtype.add_set("l");
-    mds_logtype.add_set("q");
-    mds_logtype.add_set("popanyd");
-    mds_logtype.add_set("popnest");
+    mds_logtype.add_set(l_mds_l, "l");
+    mds_logtype.add_set(l_mds_q, "q");
+    mds_logtype.add_set(l_mds_popanyd, "popanyd");
+    mds_logtype.add_set(l_mds_popnest, "popnest");
     
-    mds_logtype.add_set("buf");
+    mds_logtype.add_set(l_mds_buf, "buf");
     
-    mds_logtype.add_set("sm");
-    mds_logtype.add_inc("ex");
-    mds_logtype.add_inc("iex");
-    mds_logtype.add_inc("im");
-    mds_logtype.add_inc("iim");
+    mds_logtype.add_set(l_mds_sm, "sm");
+    mds_logtype.add_inc(l_mds_ex, "ex");
+    mds_logtype.add_inc(l_mds_iex, "iex");
+    mds_logtype.add_inc(l_mds_im, "im");
+    mds_logtype.add_inc(l_mds_iim, "iim");
     /*
     mds_logtype.add_inc("imex");  
     mds_logtype.add_set("nex");
     mds_logtype.add_set("nim");
     */
 
-    mds_logtype.add_avg("replyl");
-
   }
- 
+
   if (whoami < 0) return;
 
   // flush+close old log
@@ -398,12 +399,12 @@ void MDS::tick()
   mds_load_t load = balancer->get_load();
   
   if (logger) {
-    req_rate = logger->get("req");
+    req_rate = logger->get(l_mds_req);
     
-    logger->fset("l", (int)load.mds_load());
-    logger->set("q", messenger->get_dispatch_queue_len());
-    logger->set("buf", buffer_total_alloc.test());
-    logger->set("sm", mdcache->num_subtrees());
+    logger->fset(l_mds_l, (int)load.mds_load());
+    logger->set(l_mds_q, messenger->get_dispatch_queue_len());
+    logger->set(l_mds_buf, buffer_total_alloc.test());
+    logger->set(l_mds_sm, mdcache->num_subtrees());
 
     mdcache->log_stat(logger);
   }

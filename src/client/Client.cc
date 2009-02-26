@@ -75,7 +75,7 @@ using namespace std;
 
 // static logger
 Mutex client_logger_lock("client_logger_lock");
-LogType client_logtype;
+LogType client_logtype(l_c_first, l_c_last);
 Logger  *client_logger = 0;
 
 
@@ -251,26 +251,11 @@ void Client::init()
   // logger?
   client_logger_lock.Lock();
   if (client_logger == 0) {
-    client_logtype.add_inc("lsum");
-    client_logtype.add_inc("lnum");
-    client_logtype.add_inc("lwsum");
-    client_logtype.add_inc("lwnum");
-    client_logtype.add_inc("lrsum");
-    client_logtype.add_inc("lrnum");
-    client_logtype.add_inc("trsum");
-    client_logtype.add_inc("trnum");
-    client_logtype.add_inc("wrlsum");
-    client_logtype.add_inc("wrlnum");
-    client_logtype.add_inc("lstatsum");
-    client_logtype.add_inc("lstatnum");
-    client_logtype.add_inc("ldirsum");
-    client_logtype.add_inc("ldirnum");
-    client_logtype.add_inc("readdir");
-    client_logtype.add_inc("stat");
-    client_logtype.add_avg("owrlat");
-    client_logtype.add_avg("ordlat");
-    client_logtype.add_inc("owr");
-    client_logtype.add_inc("ord");
+    client_logtype.add_inc(l_c_reply, "reply");
+    client_logtype.add_avg(l_c_lat, "lat");
+    client_logtype.add_avg(l_c_lat, "wrlat");
+    client_logtype.add_avg(l_c_lat, "owrlat");
+    client_logtype.add_avg(l_c_lat, "ordlat");
     
     char s[80];
     char hostname[80];
@@ -922,26 +907,8 @@ MClientReply *Client::make_request(MClientRequest *req,
     utime_t lat = g_clock.real_now();
     lat -= start;
     dout(20) << "lat " << lat << dendl;
-    client_logger->finc("lsum",(double)lat);
-    client_logger->inc("lnum");
-
-    if (nojournal) {
-      client_logger->finc("lrsum",(double)lat);
-      client_logger->inc("lrnum");
-    } else {
-      client_logger->finc("lwsum",(double)lat);
-      client_logger->inc("lwnum");
-    }
-    
-    if (op == CEPH_MDS_OP_STAT) {
-      client_logger->finc("lstatsum",(double)lat);
-      client_logger->inc("lstatnum");
-    }
-    else if (op == CEPH_MDS_OP_READDIR) {
-      client_logger->finc("ldirsum",(double)lat);
-      client_logger->inc("ldirnum");
-    }
-
+    client_logger->favg(l_c_lat,(double)lat);
+    client_logger->favg(l_c_reply,(double)lat);
   }
 
   return reply;
@@ -3967,10 +3934,8 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   // time
   utime_t lat = g_clock.real_now();
   lat -= start;
-  if (client_logger) {
-    client_logger->finc("wrlsum",(double)lat);
-    client_logger->inc("wrlnum");
-  }
+  if (client_logger)
+    client_logger->favg(l_c_wrlat,(double)lat);
     
   // assume success for now.  FIXME.
   __u64 totalwritten = size;
