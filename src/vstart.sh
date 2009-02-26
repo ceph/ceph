@@ -15,6 +15,8 @@ norestart=""
 valgrind=""
 MON_ADDR=""
 
+conf="workingdir.conf"
+
 usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
@@ -77,14 +79,14 @@ fi
 ARGS="-f"
 
 if [ $debug -eq 0 ]; then
-	CMON_ARGS="--debug_mon 10 --debug_ms 1"
-	COSD_ARGS=""
-	CMDS_ARGS="--debug_ms 1"
+	CMON_ARGS="--conf_file $conf --debug_mon 10 --debug_ms 1"
+	COSD_ARGS="--conf_file $conf "
+	CMDS_ARGS="--conf_file $conf --debug_ms 1"
 else
 	echo "** going verbose **"
-	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
-	COSD_ARGS="--lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 1"
+	CMON_ARGS="--conf_file $conf --lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
+	COSD_ARGS="--conf_file $conf --lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+	CMDS_ARGS="--conf_file $conf --lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20 --mds_thrash_fragments 0 --mds_thrash_exports 1"
 fi
 
 if [ "$MON_ADDR" != "" ]; then
@@ -108,6 +110,7 @@ $SUDO rm -f core*
 
 test -d out || mkdir out
 $SUDO rm -f out/*
+test -d log && rm log/*
 test -d gmon && $SUDO rm -rf gmon/*
 
 

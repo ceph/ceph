@@ -208,9 +208,9 @@ md_config_t g_conf = {
 
   logger_calc_variance: true,
 
-  dout_dir: "out",        // if daemonize == true
-  dout_sym_dir: "out",    // if daemonize == true
-  logger_dir: "log",
+  dout_dir: "/var/log/ceph",        // if daemonize == true
+  dout_sym_dir: "/var/log/ceph",    // if daemonize == true
+  logger_dir: "/var/log/ceph/stat",
 
   conf_file: "ceph.conf",
   dump_conf: false,
