@@ -857,7 +857,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
   std::vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--conf_file") == 0) 
+    bool isarg = i+1 < args.size();  // is more?
+  
+    if (isarg && (strcmp(args[i], "--conf_file") == 0 ||
+		  strcmp(args[i], "-c") == 0)) 
       g_conf.conf_file = args[++i];
     else if (strcmp(args[i], "--dump_conf") == 0) 
       g_conf.dump_conf = true;
@@ -870,27 +873,29 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     cf.dump();
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--bind") == 0)  {
+    bool isarg = i+1 < args.size();  // is more?
+
+    if (strcmp(args[i],"--bind") == 0 && isarg)  {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
       exit(1);
-    } else if (strcmp(args[i], "--nummon") == 0) 
+    } else if (strcmp(args[i], "--nummon") == 0 && isarg) 
       g_conf.num_mon = atoi(args[++i]);
-    else if (strcmp(args[i], "--nummds") == 0) 
+    else if (strcmp(args[i], "--nummds") == 0 && isarg) 
       g_conf.num_mds = atoi(args[++i]);
-    else if (strcmp(args[i], "--numclient") == 0) 
+    else if (strcmp(args[i], "--numclient") == 0 && isarg) 
       g_conf.num_client = atoi(args[++i]);
-    else if (strcmp(args[i], "--numosd") == 0) 
+    else if (strcmp(args[i], "--numosd") == 0 && isarg) 
       g_conf.num_osd = atoi(args[++i]);
     
-    else if (strcmp(args[i], "--mon_host") == 0 ||
-	     strcmp(args[i], "-m") == 0)
+    else if ((strcmp(args[i], "--mon_host") == 0 ||
+	      strcmp(args[i], "-m") == 0) && isarg)
       g_conf.mon_host = args[++i];    
-    else if (strcmp(args[i], "--daemonize") == 0 ||
-	     strcmp(args[i], "-d") == 0) {
+    else if ((strcmp(args[i], "--daemonize") == 0 ||
+	      strcmp(args[i], "-d") == 0) && isarg) {
       g_conf.daemonize = true;
       g_conf.file_logs = true;
-    } else if (strcmp(args[i], "--foreground") == 0 ||
-	     strcmp(args[i], "-f") == 0) {
+    } else if ((strcmp(args[i], "--foreground") == 0 ||
+		strcmp(args[i], "-f") == 0) && isarg) {
       g_conf.daemonize = false;
       g_conf.file_logs = true;
     }
@@ -929,364 +934,363 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       i += 2;
     }
 
-    else if (strcmp(args[i], "--osd_remount_at") == 0) 
+    else if (strcmp(args[i], "--osd_remount_at") == 0 && isarg) 
       g_conf.osd_remount_at = atoi(args[++i]);
     //else if (strcmp(args[i], "--fake_osd_sync") == 0) 
     //g_conf.fake_osd_sync = atoi(args[++i]);
 
     
     
-    else if (//strcmp(args[i], "-o") == 0 ||
-	     strcmp(args[i], "--dout_dir") == 0) 
+    else if (strcmp(args[i], "--dout_dir") == 0 && isarg) 
       g_conf.dout_dir = args[++i];
     else if (//strcmp(args[i], "-o") == 0 ||
-	     strcmp(args[i], "--dout_sym_dir") == 0) 
+	     strcmp(args[i], "--dout_sym_dir") == 0 && isarg) 
       g_conf.dout_sym_dir = args[++i];
-    else if (strcmp(args[i], "--logger_dir") == 0) 
+    else if (strcmp(args[i], "--logger_dir") == 0 && isarg) 
       g_conf.logger_dir = args[++i];
-    else if (strcmp(args[i], "--conf_file") == 0) 
+    else if (strcmp(args[i], "--conf_file") == 0 && isarg) 
       g_conf.conf_file = args[++i];
 
-    else if (strcmp(args[i], "--lockdep") == 0)
+    else if (strcmp(args[i], "--lockdep") == 0 && isarg)
       g_lockdep = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--debug") == 0) 
+    else if (strcmp(args[i], "--debug") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug = atoi(args[++i]);
       else 
         g_debug_after_conf.debug = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_lockdep") == 0) 
+    else if (strcmp(args[i], "--debug_lockdep") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_lockdep = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_lockdep = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_mds") == 0) 
+    else if (strcmp(args[i], "--debug_mds") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_mds_balancer") == 0) 
+    else if (strcmp(args[i], "--debug_mds_balancer") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds_balancer = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_balancer = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_mds_log") == 0) 
+    else if (strcmp(args[i], "--debug_mds_log") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds_log = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_log = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_mds_log_expire") == 0) 
+    else if (strcmp(args[i], "--debug_mds_log_expire") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds_log_expire = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_log_expire = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_mds_migrator") == 0) 
+    else if (strcmp(args[i], "--debug_mds_migrator") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_mds_migrator = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mds_migrator = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_buffer") == 0) 
+    else if (strcmp(args[i], "--debug_buffer") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_buffer = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_buffer = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_timer") == 0) 
+    else if (strcmp(args[i], "--debug_timer") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_timer = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_timer = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_filer") == 0) 
+    else if (strcmp(args[i], "--debug_filer") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_filer = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_filer = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_objecter") == 0) 
+    else if (strcmp(args[i], "--debug_objecter") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_objecter = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_objecter = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_journaler") == 0) 
+    else if (strcmp(args[i], "--debug_journaler") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_journaler = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_journaler = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_objectcacher") == 0) 
+    else if (strcmp(args[i], "--debug_objectcacher") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_objectcacher = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_objectcacher = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_client") == 0) 
+    else if (strcmp(args[i], "--debug_client") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_client = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_client = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_osd") == 0) 
+    else if (strcmp(args[i], "--debug_osd") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_osd = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_osd = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_ebofs") == 0) 
+    else if (strcmp(args[i], "--debug_ebofs") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_ebofs = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_ebofs = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_filestore") == 0) 
+    else if (strcmp(args[i], "--debug_filestore") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_filestore = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_filestore = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_journal") == 0) 
+    else if (strcmp(args[i], "--debug_journal") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_journal = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_journal = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_bdev") == 0) 
+    else if (strcmp(args[i], "--debug_bdev") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_bdev = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_bdev = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_ms") == 0) 
+    else if (strcmp(args[i], "--debug_ms") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_ms = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_ms = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_mon") == 0) 
+    else if (strcmp(args[i], "--debug_mon") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_mon = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_mon = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_paxos") == 0) 
+    else if (strcmp(args[i], "--debug_paxos") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_paxos = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_paxos = atoi(args[++i]);
-    else if (strcmp(args[i], "--debug_tp") == 0) 
+    else if (strcmp(args[i], "--debug_tp") == 0 && isarg) 
       if (!g_conf.debug_after) 
         g_conf.debug_tp = atoi(args[++i]);
       else 
         g_debug_after_conf.debug_tp = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--debug_after") == 0) {
+    else if (strcmp(args[i], "--debug_after") == 0 && isarg) {
       g_conf.debug_after = atoi(args[++i]);
       g_debug_after_conf = g_conf;
     }
 
-    else if (strcmp(args[i], "--log") == 0) 
+    else if (strcmp(args[i], "--log") == 0 && isarg) 
       g_conf.log = atoi(args[++i]);
-    else if (strcmp(args[i], "--log_name") == 0) 
+    else if (strcmp(args[i], "--log_name") == 0 && isarg) 
       g_conf.log_name = args[++i];
 
-    else if (strcmp(args[i], "--fakemessenger_serialize") == 0) 
+    else if (strcmp(args[i], "--fakemessenger_serialize") == 0 && isarg) 
       g_conf.fakemessenger_serialize = atoi(args[++i]);
 
 
-    else if (strcmp(args[i], "--clock_lock") == 0) 
+    else if (strcmp(args[i], "--clock_lock") == 0 && isarg) 
       g_conf.clock_lock = atoi(args[++i]);
-    else if (strcmp(args[i], "--clock_tare") == 0) 
+    else if (strcmp(args[i], "--clock_tare") == 0 && isarg) 
       g_conf.clock_tare = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0) 
+    else if (strcmp(args[i], "--objecter_buffer_uncommitted") == 0 && isarg) 
       g_conf.objecter_buffer_uncommitted = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--journaler_safe") == 0) 
+    else if (strcmp(args[i], "--journaler_safe") == 0 && isarg) 
       g_conf.journaler_safe = atoi(args[++i]);
-    else if (strcmp(args[i], "--journaler_cache") == 0) 
+    else if (strcmp(args[i], "--journaler_cache") == 0 && isarg) 
       g_conf.journaler_cache = atoi(args[++i]);
-    else if (strcmp(args[i], "--journaler_batch_interval") == 0) 
+    else if (strcmp(args[i], "--journaler_batch_interval") == 0 && isarg) 
       g_conf.journaler_batch_interval = atof(args[++i]);
-    else if (strcmp(args[i], "--journaler_batch_max") == 0) 
+    else if (strcmp(args[i], "--journaler_batch_max") == 0 && isarg) 
       g_conf.journaler_batch_max = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_cache_size") == 0) 
+    else if (strcmp(args[i], "--mds_cache_size") == 0 && isarg) 
       g_conf.mds_cache_size = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_beacon_interval") == 0) 
+    else if (strcmp(args[i], "--mds_beacon_interval") == 0 && isarg) 
       g_conf.mds_beacon_interval = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_beacon_grace") == 0) 
+    else if (strcmp(args[i], "--mds_beacon_grace") == 0 && isarg) 
       g_conf.mds_beacon_grace = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_log") == 0) 
+    else if (strcmp(args[i], "--mds_log") == 0 && isarg) 
       g_conf.mds_log = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_max_events") == 0) 
+    else if (strcmp(args[i], "--mds_log_max_events") == 0 && isarg) 
       g_conf.mds_log_max_events = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_max_segments") == 0) 
+    else if (strcmp(args[i], "--mds_log_max_segments") == 0 && isarg) 
       g_conf.mds_log_max_segments = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_log_max_expiring") == 0) 
+    else if (strcmp(args[i], "--mds_log_max_expiring") == 0 && isarg) 
       g_conf.mds_log_max_expiring = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_shutdown_check") == 0) 
+    else if (strcmp(args[i], "--mds_shutdown_check") == 0 && isarg) 
       g_conf.mds_shutdown_check = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_decay_halflife") == 0) 
+    else if (strcmp(args[i], "--mds_decay_halflife") == 0 && isarg) 
       g_conf.mds_decay_halflife = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_early_reply") == 0) 
+    else if (strcmp(args[i], "--mds_early_reply") == 0 && isarg) 
       g_conf.mds_early_reply = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_client_prealloc_inos") == 0) 
+    else if (strcmp(args[i], "--mds_client_prealloc_inos") == 0 && isarg) 
       g_conf.mds_client_prealloc_inos = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_bal_interval") == 0) 
+    else if (strcmp(args[i], "--mds_bal_interval") == 0 && isarg) 
       g_conf.mds_bal_interval = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_rep") == 0) 
+    else if (strcmp(args[i], "--mds_bal_rep") == 0 && isarg) 
       g_conf.mds_bal_replicate_threshold = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_unrep") == 0) 
+    else if (strcmp(args[i], "--mds_bal_unrep") == 0 && isarg) 
       g_conf.mds_bal_unreplicate_threshold = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_max") == 0) 
+    else if (strcmp(args[i], "--mds_bal_max") == 0 && isarg) 
       g_conf.mds_bal_max = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_max_until") == 0) 
+    else if (strcmp(args[i], "--mds_bal_max_until") == 0 && isarg) 
       g_conf.mds_bal_max_until = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_bal_frag") == 0) 
+    else if (strcmp(args[i], "--mds_bal_frag") == 0 && isarg) 
       g_conf.mds_bal_frag = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_split_size") == 0) 
+    else if (strcmp(args[i], "--mds_bal_split_size") == 0 && isarg) 
       g_conf.mds_bal_split_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_split_rd") == 0) 
+    else if (strcmp(args[i], "--mds_bal_split_rd") == 0 && isarg) 
       g_conf.mds_bal_split_rd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_split_wr") == 0) 
+    else if (strcmp(args[i], "--mds_bal_split_wr") == 0 && isarg) 
       g_conf.mds_bal_split_wr = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_merge_size") == 0) 
+    else if (strcmp(args[i], "--mds_bal_merge_size") == 0 && isarg) 
       g_conf.mds_bal_merge_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_merge_rd") == 0) 
+    else if (strcmp(args[i], "--mds_bal_merge_rd") == 0 && isarg) 
       g_conf.mds_bal_merge_rd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_merge_wr") == 0) 
+    else if (strcmp(args[i], "--mds_bal_merge_wr") == 0 && isarg) 
       g_conf.mds_bal_merge_wr = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_bal_fragment_interval") == 0) 
+    else if (strcmp(args[i], "--mds_bal_fragment_interval") == 0 && isarg) 
       g_conf.mds_bal_fragment_interval = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mds_bal_mode") == 0) 
+    else if (strcmp(args[i], "--mds_bal_mode") == 0 && isarg) 
       g_conf.mds_bal_mode = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_min_start") == 0) 
+    else if (strcmp(args[i], "--mds_bal_min_start") == 0 && isarg) 
       g_conf.mds_bal_min_start = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_need_min") == 0) 
+    else if (strcmp(args[i], "--mds_bal_need_min") == 0 && isarg) 
       g_conf.mds_bal_need_min = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_need_max") == 0) 
+    else if (strcmp(args[i], "--mds_bal_need_max") == 0 && isarg) 
       g_conf.mds_bal_need_max = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_midchunk") == 0) 
+    else if (strcmp(args[i], "--mds_bal_midchunk") == 0 && isarg) 
       g_conf.mds_bal_midchunk = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_bal_minchunk") == 0) 
+    else if (strcmp(args[i], "--mds_bal_minchunk") == 0 && isarg) 
       g_conf.mds_bal_minchunk = atoi(args[++i]);
     
-    else if (strcmp(args[i], "--mds_local_osd") == 0) 
+    else if (strcmp(args[i], "--mds_local_osd") == 0 && isarg) 
       g_conf.mds_local_osd = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_thrash_exports") == 0) 
+    else if (strcmp(args[i], "--mds_thrash_exports") == 0 && isarg) 
       g_conf.mds_thrash_exports = atoi(args[++i]);
-    else if (strcmp(args[i], "--mds_thrash_fragments") == 0) 
+    else if (strcmp(args[i], "--mds_thrash_fragments") == 0 && isarg) 
       g_conf.mds_thrash_fragments = atoi(args[++i]);
     else if (strcmp(args[i], "--mds_dump_cache_on_map") == 0) 
       g_conf.mds_dump_cache_on_map = true;
 
-    else if (strcmp(args[i], "--mds_hack_log_expire_for_better_stats") == 0) 
+    else if (strcmp(args[i], "--mds_hack_log_expire_for_better_stats") == 0 && isarg) 
       g_conf.mds_hack_log_expire_for_better_stats = atoi(args[++i]);
     
     else if (strcmp(args[i], "--client_use_random_mds") == 0)
       g_conf.client_use_random_mds = true;
-    else if (strcmp(args[i], "--client_cache_size") == 0)
+    else if (strcmp(args[i], "--client_cache_size") == 0 && isarg)
       g_conf.client_cache_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_cache_stat_ttl") == 0)
+    else if (strcmp(args[i], "--client_cache_stat_ttl") == 0 && isarg)
       g_conf.client_cache_stat_ttl = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_cache_readdir_ttl") == 0)
+    else if (strcmp(args[i], "--client_cache_readdir_ttl") == 0 && isarg)
       g_conf.client_cache_readdir_ttl = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_trace") == 0)
+    else if (strcmp(args[i], "--client_trace") == 0 && isarg)
       g_conf.client_trace = args[++i];
 
-    else if (strcmp(args[i], "--client_readahead_min") == 0)
+    else if (strcmp(args[i], "--client_readahead_min") == 0 && isarg)
       g_conf.client_readahead_min = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_readahead_max_bytes") == 0)
+    else if (strcmp(args[i], "--client_readahead_max_bytes") == 0 && isarg)
       g_conf.client_readahead_max_bytes = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_readahead_max_periods") == 0)
+    else if (strcmp(args[i], "--client_readahead_max_periods") == 0 && isarg)
       g_conf.client_readahead_max_periods = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--fuse_direct_io") == 0)
+    else if (strcmp(args[i], "--fuse_direct_io") == 0 && isarg)
       g_conf.fuse_direct_io = atoi(args[++i]);
-    else if (strcmp(args[i], "--fuse_ll") == 0)
+    else if (strcmp(args[i], "--fuse_ll") == 0 && isarg)
       g_conf.fuse_ll = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0)
+    else if (strcmp(args[i], "--mon_osd_down_out_interval") == 0 && isarg)
       g_conf.mon_osd_down_out_interval = atoi(args[++i]);
-    else if (strcmp(args[i], "--mon_stop_on_last_unmount") == 0) 
+    else if (strcmp(args[i], "--mon_stop_on_last_unmount") == 0 && isarg) 
       g_conf.mon_stop_on_last_unmount = atoi(args[++i]);
-    else if (strcmp(args[i], "--mon_stop_with_last_mds") == 0)
+    else if (strcmp(args[i], "--mon_stop_with_last_mds") == 0 && isarg)
       g_conf.mon_stop_with_last_mds = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--client_oc") == 0)
+    else if (strcmp(args[i], "--client_oc") == 0 && isarg)
       g_conf.client_oc = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_oc_size") == 0)
+    else if (strcmp(args[i], "--client_oc_size") == 0 && isarg)
       g_conf.client_oc_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--client_oc_max_dirty") == 0)
+    else if (strcmp(args[i], "--client_oc_max_dirty") == 0 && isarg)
       g_conf.client_oc_max_dirty = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--client_hack_balance_reads") == 0)
+    else if (strcmp(args[i], "--client_hack_balance_reads") == 0 && isarg)
       g_conf.client_hack_balance_reads = atoi(args[++i]);
 
     else if (strcmp(args[i], "--ebofs") == 0) 
       g_conf.ebofs = true;
-    else if (strcmp(args[i], "--ebofs_cloneable") == 0)
+    else if (strcmp(args[i], "--ebofs_cloneable") == 0 && isarg)
       g_conf.ebofs_cloneable = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_verify") == 0)
+    else if (strcmp(args[i], "--ebofs_verify") == 0 && isarg)
       g_conf.ebofs_verify = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_commit_ms") == 0)
+    else if (strcmp(args[i], "--ebofs_commit_ms") == 0 && isarg)
       g_conf.ebofs_commit_ms = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_oc_size") == 0)
+    else if (strcmp(args[i], "--ebofs_oc_size") == 0 && isarg)
       g_conf.ebofs_oc_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_cc_size") == 0)
+    else if (strcmp(args[i], "--ebofs_cc_size") == 0 && isarg)
       g_conf.ebofs_cc_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_bc_size") == 0)
+    else if (strcmp(args[i], "--ebofs_bc_size") == 0 && isarg)
       g_conf.ebofs_bc_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_bc_max_dirty") == 0)
+    else if (strcmp(args[i], "--ebofs_bc_max_dirty") == 0 && isarg)
       g_conf.ebofs_bc_max_dirty = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_verify_csum_on_read") == 0)
+    else if (strcmp(args[i], "--ebofs_verify_csum_on_read") == 0 && isarg)
       g_conf.ebofs_verify_csum_on_read = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_max_prefetch") == 0)
+    else if (strcmp(args[i], "--ebofs_max_prefetch") == 0 && isarg)
       g_conf.ebofs_max_prefetch = atoi(args[++i]);
-    else if (strcmp(args[i], "--ebofs_realloc") == 0)
+    else if (strcmp(args[i], "--ebofs_realloc") == 0 && isarg)
       g_conf.ebofs_realloc = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--journal_dio") == 0)
+    else if (strcmp(args[i], "--journal_dio") == 0 && isarg)
       g_conf.journal_dio = atoi(args[++i]);      
-    else if (strcmp(args[i], "--journal_max_write_entries") == 0)
+    else if (strcmp(args[i], "--journal_max_write_entries") == 0 && isarg)
       g_conf.journal_max_write_entries = atoi(args[++i]);      
-    else if (strcmp(args[i], "--journal_max_write_bytes") == 0)
+    else if (strcmp(args[i], "--journal_max_write_bytes") == 0 && isarg)
       g_conf.journal_max_write_bytes = atoi(args[++i]);      
 
     else if (strcmp(args[i], "--filestore") == 0)
       g_conf.filestore = true;
-    else if (strcmp(args[i], "--filestore_sync_interval") == 0)
+    else if (strcmp(args[i], "--filestore_sync_interval") == 0 && isarg)
       g_conf.filestore_sync_interval = atoi(args[++i]);
-    else if (strcmp(args[i], "--filestore_dev") == 0) 
+    else if (strcmp(args[i], "--filestore_dev") == 0 && isarg) 
       g_conf.filestore_dev = args[++i];
     else if (strcmp(args[i], "--filestore_fake_attrs") == 0) 
       g_conf.filestore_fake_attrs = true;//atoi(args[++i]);
     else if (strcmp(args[i], "--filestore_fake_collections") == 0) 
       g_conf.filestore_fake_collections = true;//atoi(args[++i]);
-    else if (strcmp(args[i], "--filestore_btrfs_trans") == 0) 
+    else if (strcmp(args[i], "--filestore_btrfs_trans") == 0 && isarg) 
       g_conf.filestore_btrfs_trans = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--osd_balance_reads") == 0) 
+    else if (strcmp(args[i], "--osd_balance_reads") == 0 && isarg) 
       g_conf.osd_balance_reads = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_flash_crowd_iat_threshold") == 0) 
+    else if (strcmp(args[i], "--osd_flash_crowd_iat_threshold") == 0 && isarg) 
       g_conf.osd_flash_crowd_iat_threshold = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_flash_crowd_iat_alpha") == 0) 
+    else if (strcmp(args[i], "--osd_flash_crowd_iat_alpha") == 0 && isarg) 
       g_conf.osd_flash_crowd_iat_alpha = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--osd_shed_reads") == 0) 
+    else if (strcmp(args[i], "--osd_shed_reads") == 0 && isarg) 
       g_conf.osd_shed_reads = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_shed_reads_min_latency") == 0) 
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency") == 0 && isarg) 
       g_conf.osd_shed_reads_min_latency = atof(args[++i]);
-    else if (strcmp(args[i], "--osd_shed_reads_min_latency_diff") == 0) 
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency_diff") == 0 && isarg) 
       g_conf.osd_shed_reads_min_latency_diff = atof(args[++i]);
-    else if (strcmp(args[i], "--osd_shed_reads_min_latency_ratio") == 0) 
+    else if (strcmp(args[i], "--osd_shed_reads_min_latency_ratio") == 0 && isarg) 
       g_conf.osd_shed_reads_min_latency_ratio = atof(args[++i]);
 
-    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0)
+    else if ( strcmp(args[i],"--osd_immediate_read_from_cache" ) == 0 && isarg)
       g_conf.osd_immediate_read_from_cache = atoi(args[++i]);
-    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0)
+    else if ( strcmp(args[i],"--osd_exclusive_caching" ) == 0 && isarg)
       g_conf.osd_exclusive_caching = atoi(args[++i]);
 
-    else if ( strcmp(args[i],"--osd_stat_refresh_interval" ) == 0)
+    else if ( strcmp(args[i],"--osd_stat_refresh_interval" ) == 0 && isarg)
       g_conf.osd_stat_refresh_interval = atof(args[++i]);
 
-    else if (strcmp(args[i], "--osd_rep") == 0) 
+    else if (strcmp(args[i], "--osd_rep") == 0 && isarg) 
       g_conf.osd_rep = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_rep_chain") == 0) 
       g_conf.osd_rep = OSD_REP_CHAIN;
@@ -1294,48 +1298,48 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.osd_rep = OSD_REP_SPLAY;
     else if (strcmp(args[i], "--osd_rep_primary") == 0) 
       g_conf.osd_rep = OSD_REP_PRIMARY;
-    else if (strcmp(args[i], "--osd_heartbeat_interval") == 0) 
+    else if (strcmp(args[i], "--osd_heartbeat_interval") == 0 && isarg) 
       g_conf.osd_heartbeat_interval = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_heartbeat_grace") == 0) 
+    else if (strcmp(args[i], "--osd_heartbeat_grace") == 0 && isarg) 
       g_conf.osd_heartbeat_grace = atoi(args[++i]);
     
-    else if (strcmp(args[i], "--osd_age") == 0) 
+    else if (strcmp(args[i], "--osd_age") == 0 && isarg) 
       g_conf.osd_age = atof(args[++i]);
-    else if (strcmp(args[i], "--osd_age_time") == 0) 
+    else if (strcmp(args[i], "--osd_age_time") == 0 && isarg) 
       g_conf.osd_age_time = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_pg_bits") == 0) 
+    else if (strcmp(args[i], "--osd_pg_bits") == 0 && isarg) 
       g_conf.osd_pg_bits = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_max_rep") == 0) 
+    else if (strcmp(args[i], "--osd_max_rep") == 0 && isarg) 
       g_conf.osd_max_rep = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_maxthreads") == 0) 
+    else if (strcmp(args[i], "--osd_maxthreads") == 0 && isarg) 
       g_conf.osd_maxthreads = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_max_pull") == 0) 
+    else if (strcmp(args[i], "--osd_max_pull") == 0 && isarg) 
       g_conf.osd_max_pull = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_preserve_trimmed_log") == 0) 
+    else if (strcmp(args[i], "--osd_preserve_trimmed_log") == 0 && isarg) 
       g_conf.osd_preserve_trimmed_log = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--osd_recovery_delay_start") == 0) 
+    else if (strcmp(args[i], "--osd_recovery_delay_start") == 0 && isarg) 
       g_conf.osd_recovery_delay_start = atof(args[++i]);
-    else if (strcmp(args[i], "--osd_recovery_max_active") == 0) 
+    else if (strcmp(args[i], "--osd_recovery_max_active") == 0 && isarg) 
       g_conf.osd_recovery_max_active = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--osd_auto_weight") == 0) 
+    else if (strcmp(args[i], "--osd_auto_weight") == 0 && isarg) 
       g_conf.osd_auto_weight = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--bdev_lock") == 0) 
+    else if (strcmp(args[i], "--bdev_lock") == 0 && isarg) 
       g_conf.bdev_lock = atoi(args[++i]);
-    else if (strcmp(args[i], "--bdev_el_bidir") == 0) 
+    else if (strcmp(args[i], "--bdev_el_bidir") == 0 && isarg) 
       g_conf.bdev_el_bidir = atoi(args[++i]);
-    else if (strcmp(args[i], "--bdev_iothreads") == 0) 
+    else if (strcmp(args[i], "--bdev_iothreads") == 0 && isarg) 
       g_conf.bdev_iothreads = atoi(args[++i]);
-    else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0) 
+    else if (strcmp(args[i], "--bdev_idle_kick_after_ms") == 0 && isarg) 
       g_conf.bdev_idle_kick_after_ms = atoi(args[++i]);
-    else if (strcmp(args[i], "--bdev_fake_mb") == 0) 
+    else if (strcmp(args[i], "--bdev_fake_mb") == 0 && isarg) 
       g_conf.bdev_fake_mb = atoi(args[++i]);
-    else if (strcmp(args[i], "--bdev_fake_max_mb") == 0) 
+    else if (strcmp(args[i], "--bdev_fake_max_mb") == 0 && isarg) 
       g_conf.bdev_fake_max_mb = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--osd_object_layout") == 0) {
+    else if (strcmp(args[i], "--osd_object_layout") == 0 && isarg) {
       i++;
       if (strcmp(args[i], "linear") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_LINEAR;
       else if (strcmp(args[i], "hashino") == 0) g_conf.osd_object_layout = CEPH_OBJECT_LAYOUT_HASHINO;
@@ -1346,7 +1350,7 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       }
     }
     
-    else if (strcmp(args[i], "--osd_pg_layout") == 0) {
+    else if (strcmp(args[i], "--osd_pg_layout") == 0 && isarg) {
       i++;
       if (strcmp(args[i], "linear") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_LINEAR;
       else if (strcmp(args[i], "hash") == 0) g_conf.osd_pg_layout = CEPH_PG_LAYOUT_HASH;
@@ -1358,42 +1362,42 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       }
     }
     
-    else if (strcmp(args[i], "--kill_after") == 0) 
+    else if (strcmp(args[i], "--kill_after") == 0 && isarg) 
       g_conf.kill_after = atoi(args[++i]);
-    else if (strcmp(args[i], "--tick") == 0) 
+    else if (strcmp(args[i], "--tick") == 0 && isarg) 
       g_conf.tick = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--file_layout_unit") == 0) 
+    else if (strcmp(args[i], "--file_layout_unit") == 0 && isarg) 
       g_default_file_layout.fl_stripe_unit = atoi(args[++i]);
-    else if (strcmp(args[i], "--file_layout_count") == 0) 
+    else if (strcmp(args[i], "--file_layout_count") == 0 && isarg) 
       g_default_file_layout.fl_stripe_count = atoi(args[++i]);
-    else if (strcmp(args[i], "--file_layout_osize") == 0) 
+    else if (strcmp(args[i], "--file_layout_osize") == 0 && isarg) 
       g_default_file_layout.fl_object_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--file_layout_pg_type") == 0) 
+    else if (strcmp(args[i], "--file_layout_pg_type") == 0 && isarg) 
       g_default_file_layout.fl_pg_type = atoi(args[++i]);
-    else if (strcmp(args[i], "--file_layout_pg_size") == 0) 
+    else if (strcmp(args[i], "--file_layout_pg_size") == 0 && isarg) 
       g_default_file_layout.fl_pg_size = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--meta_dir_layout_unit") == 0) 
+    else if (strcmp(args[i], "--meta_dir_layout_unit") == 0 && isarg) 
       g_default_mds_dir_layout.fl_stripe_unit = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_dir_layout_scount") == 0) 
+    else if (strcmp(args[i], "--meta_dir_layout_scount") == 0 && isarg) 
       g_default_mds_dir_layout.fl_stripe_count = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_dir_layout_osize") == 0) 
+    else if (strcmp(args[i], "--meta_dir_layout_osize") == 0 && isarg) 
       g_default_mds_dir_layout.fl_object_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_dir_layout_pg_type") == 0) 
+    else if (strcmp(args[i], "--meta_dir_layout_pg_type") == 0 && isarg) 
       g_default_mds_dir_layout.fl_pg_type = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_dir_layout_pg_size") == 0) 
+    else if (strcmp(args[i], "--meta_dir_layout_pg_size") == 0 && isarg) 
       g_default_mds_dir_layout.fl_pg_size = atoi(args[++i]);
 
-    else if (strcmp(args[i], "--meta_log_layout_unit") == 0) 
+    else if (strcmp(args[i], "--meta_log_layout_unit") == 0 && isarg) 
       g_default_mds_log_layout.fl_stripe_unit = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_log_layout_scount") == 0) 
+    else if (strcmp(args[i], "--meta_log_layout_scount") == 0 && isarg) 
       g_default_mds_log_layout.fl_stripe_count = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_log_layout_osize") == 0) 
+    else if (strcmp(args[i], "--meta_log_layout_osize") == 0 && isarg) 
       g_default_mds_log_layout.fl_object_size = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_log_layout_pg_type") == 0) 
+    else if (strcmp(args[i], "--meta_log_layout_pg_type") == 0 && isarg) 
       g_default_mds_log_layout.fl_pg_type = atoi(args[++i]);
-    else if (strcmp(args[i], "--meta_log_layout_pg_size") == 0) {
+    else if (strcmp(args[i], "--meta_log_layout_pg_size") == 0 && isarg) {
       g_default_mds_log_layout.fl_pg_size = atoi(args[++i]);
       if (!g_default_mds_log_layout.fl_pg_size)
         g_conf.mds_log = false;
@@ -1407,22 +1411,22 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if (strcmp(args[i], "--bdbstore-btree") == 0) {
       g_conf.bdbstore_btree = true;
     }
-    else if (strcmp(args[i], "--bdbstore-hash-ffactor") == 0) {
+    else if (strcmp(args[i], "--bdbstore-hash-ffactor") == 0 && isarg) {
       g_conf.bdbstore_ffactor = atoi(args[++i]);
     }
-    else if (strcmp(args[i], "--bdbstore-hash-nelem") == 0) {
+    else if (strcmp(args[i], "--bdbstore-hash-nelem") == 0 && isarg) {
       g_conf.bdbstore_nelem = atoi(args[++i]);
     }
-    else if (strcmp(args[i], "--bdbstore-hash-pagesize") == 0) {
+    else if (strcmp(args[i], "--bdbstore-hash-pagesize") == 0 && isarg) {
       g_conf.bdbstore_pagesize = atoi(args[++i]);
     }
-    else if (strcmp(args[i], "--bdbstore-cachesize") == 0) {
+    else if (strcmp(args[i], "--bdbstore-cachesize") == 0 && isarg) {
       g_conf.bdbstore_cachesize = atoi(args[++i]);
     }
     else if (strcmp(args[i], "--bdbstore-transactional") == 0) {
       g_conf.bdbstore_transactional = true;
     }
-    else if (strcmp(args[i], "--debug-bdbstore") == 0) {
+    else if (strcmp(args[i], "--debug-bdbstore") == 0 && isarg) {
       g_conf.debug_bdbstore = atoi(args[++i]);
     }
 #endif // USE_OSBDB
