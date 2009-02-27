@@ -1,64 +1,22 @@
 #!/bin/sh
 
-SCRIPT_BIN=`dirname $0`
-. $SCRIPT_BIN/ceph_common.sh
+sleep=5
 
-daemon=0
-valgrind=""
-
-# explicit -n/--norestart?
-while [ $# -ge 1 ]; do
-    case $1 in
-	-n | --norestart )
-	    daemon=1
-	    shift
-	    ;;
-	--valgrind )
-	    valgrind="valgrind"
-	    daemon=1
-	    shift
-	    ;;
-	--conf_file )
-	    startup_conf_file=$2
-	    shift
-	    ;;
-	* )
-	    break
-    esac
-done
-
-[ "$startup_conf_file" == "" ] && startup_conf_file="startup.conf"
-CCONF="$CCONF_BIN --conf_file $startup_conf_file"
-
-orig_args=$*
-
-# implicit from any -d?
-while [ $# -ge 1 ]; do
-       case $1 in
-               -d | --daemon )
-               daemon=1
-       esac
-       shift
-done
-
-core_sig[11]=1
 core_sig[3]=1
 core_sig[4]=1
 core_sig[5]=1
 core_sig[6]=1
 core_sig[8]=1
-
-
-get_conf_bool do_ulimit 0 "ulimit core" crun global
-[ "$do_ulimit" != "0" ] && ulimit -c unlimited
+core_sig[11]=1
 
 while [ true ]; do
-	$valgrind $orig_args
+	$*
 	exit_code=$?
-	[ $daemon -eq 1 ] && exit
 
 	if [ $exit_code -gt 128 ]; then
 		[ "${core_sig[$(($exit_code-128))]}" != "1" ] && exit
+		echo crun: $1 dumped core, restarting in $sleep seconds...
+		sleep $sleep
 	else
 		exit
 	fi
