@@ -10,7 +10,7 @@ core_sig[8]=1
 core_sig[11]=1
 
 while [ true ]; do
-	$*
+	"$@"
 	exit_code=$?
 
 	if [ $exit_code -gt 128 ]; then
