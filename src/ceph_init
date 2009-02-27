@@ -8,7 +8,7 @@ def_num_mon=3
 def_num_osd=1
 def_num_mds=1
 def_osd_dev=dev/osd\$osd
-
+def_startup_conf_file="/etc/ceph/startup.conf"
 
 SCRIPT_BIN=`dirname $0`
 . $SCRIPT_BIN/ceph_common.sh
@@ -65,7 +65,7 @@ done
 
 [ $do_init -eq 0 ] && usage_exit
 
-[ "$startup_conf_file" == "" ] && startup_conf_file="startup.conf"
+[ "$startup_conf_file" == "" ] && startup_conf_file=$def_startup_conf_file
 
 CCONF="$CCONF_BIN --conf_file $startup_conf_file"
 
