@@ -208,11 +208,11 @@ md_config_t g_conf = {
 
   logger_calc_variance: true,
 
-  dout_dir: "/var/log/ceph",        // if daemonize == true
-  dout_sym_dir: "/var/log/ceph",    // if daemonize == true
-  logger_dir: "/var/log/ceph/stat",
+  dout_dir: INSTALL_PREFIX "/var/log/ceph",        // if daemonize == true
+  dout_sym_dir: INSTALL_PREFIX "/var/log/ceph",    // if daemonize == true
+  logger_dir: INSTALL_PREFIX "/var/log/ceph/stat",
+  conf_file: INSTALL_PREFIX "/etc/ceph.conf",
 
-  conf_file: "ceph.conf",
   dump_conf: false,
   
   fake_clock: false,
