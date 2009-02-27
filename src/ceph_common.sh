@@ -1,11 +1,6 @@
 
-[ "$CCONF_BIN" == "" ] && CCONF_BIN=$CEPH_BIN/cconf
-[ -e $CCONF_BIN ] || CCONF_BIN=`dirname $0`/../bin/cconf
-[ -e $CCONF_BIN ] || CCONF_BIN=`dirname $0`/cconf
-[ -e $CCONF_BIN ] || CCONF_BIN=bin/cconf
-
 get_val() {
-  [ "$2" != "" ] && export $1=$2 || export $1=`$CCONF "$3" "$4" "$5"`
+  [ "$2" != "" ] && export $1=$2 || export $1=`$CCONF -c $conf "$3" "$4" "$5"`
 }
 
 get_val_bool() {
@@ -33,7 +28,7 @@ get_conf() {
 		tmp=$tmp" -s $1"
 	shift
 	done
-	eval $var=`$CCONF $tmp "$key" "$def"`
+	eval $var=`$CCONF -c $conf $tmp "$key" "$def"`
 }
 
 get_conf_bool() {

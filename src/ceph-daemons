@@ -14,7 +14,9 @@ else
 fi
 
 CCONF="$BINDIR/cconf"
-startup_conf=$ETCDIR"/startup.conf"
+conf=$ETCDIR"/startup.conf"
+cluster_conf=$ETCDIR"/cluster.conf"
+ARGS="-f"
 
 . $LIBDIR/ceph_common.sh
 
@@ -58,7 +60,7 @@ case $1 in
 	    [ "$2" == "" ] && usage_exit
 	    options="$options $1"
 	    shift
-	    startup_conf=$1
+	    conf=$1
 	    ;;
     *)
 	    echo unrecognized option \'$1\'
@@ -75,21 +77,23 @@ what="$@"
 
 if [[ $what = "" ]]; then
     # extract list of monitors, mdss, osds defined in startup.conf
-    what=`$CCONF -c $startup_conf -l mon | egrep -v '^mon$' ; \
-	$CCONF -c $startup_conf -l mds | egrep -v '^mds$' ; \
-	$CCONF -c $startup_conf -l osd | egrep -v '^osd$'`
+    what=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
+	$CCONF -c $conf -l mds | egrep -v '^mds$' ; \
+	$CCONF -c $conf -l osd | egrep -v '^osd$'`
 fi
 
 hostname=`hostname | cut -d . -f 1`
-for item in $what; do
-    type=`echo $item | cut -c 1-3` 
+for name in $what; do
+    type=`echo $name | cut -c 1-3` 
+    sections="$name $type global"
+    num=`echo $name | cut -c 4-`
 
     # this host?
-    host=`$CCONF -c $startup_conf -s $item -s $type -s global host`
+    host=`$CCONF -c $conf -s $name -s $type -s global host`
     ssh=""
     cmd=""
     if [[ $host != "" ]]; then
-	#echo host for $item is $host, i am $hostname
+	#echo host for $name is $host, i am $hostname
 	if [[ $host != $hostname ]]; then
 	    # skip, unless we're starting remote daemons too
 	    if [[ $allhosts -eq 0 ]]; then
@@ -98,55 +102,55 @@ for item in $what; do
 
 	    # we'll need to ssh into that host
 	    ssh="ssh root@$host"
-	    cd_path=`$CCONF -c $startup_conf -s $item -s $type -s global "ssh path"`
+	    cd_path=`$CCONF -c $conf -s $name -s $type -s global "ssh path"`
 	fi
     else
 	host=$hostname
     fi
 
-    get_conf conf_file "$startup_conf" "conf file" $item $type global
-    get_conf mon_addr "$monaddr" "mon addr" $item $type global
+    get_conf conf_file "$cluster_conf" "conf file" $sections
+    get_conf mon_addr "$monaddr" "mon addr" $sections
     [ "$mon_addr" != "" ] && mon_addr_cmd="-m $mon_addr"
-    # extract item-specific options from $startup_conf
+    # extract name-specific options from $conf
     
-    if [[ $item =~ "mon" ]]; then
-	get_conf mon_data_path "$def_mon_data_path" "mon data path" mon$mon mon global
-	get_conf mon_data_file "$def_mon_data_file" "mon data file" mon$mon mon global
-	
-	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmon $mon_data_path/$mon_data_file &"
+    if [[ $name =~ "mon" ]]; then
+	get_conf mon_path "" "mon path" $sections
 
+	echo mon_path=$mon_path sections=`echo $sections`
+	
+	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmon $ARGS $mon_path &"
 	echo "cmd=$cmd"
     fi
 
-    if [[ $item =~ "mds" ]]; then
-	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
+    if [[ $name =~ "mds" ]]; then
+	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmds $ARGS --conf_file $conf_file \
 			$mon_addr_cmd &"
 	echo cmd=$cmd
 
     fi
 
-    if [[ $item =~ "osd" ]]; then
-	get_conf osd_data "" "osd data" osd$osd osd global
-	get_conf osd_journal "" "osd journal" osd$osd osd global
+    if [[ $name =~ "osd" ]]; then
+	get_conf osd_data "" "osd data" $sections
+	get_conf osd_journal "" "osd journal" $sections
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/osd --conf_file $conf_file \
-			$mon_addr_cmd $osd_journal_cmd &"
+	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cosd $ARGS --conf_file $conf_file \
+			$mon_addr_cmd $osd_data $osd_journal_cmd &"
 	echo $cmd
     fi
 
     case "$command" in
 	start)
-	    echo Starting ceph $item on $host...
-            # $cmd
+	    echo Starting ceph $name on $host...
+            eval $cmd
 	    ;;
 	
 	stop)
-	    echo Stopping ceph $item on $host...
+	    echo Stopping ceph $name on $host...
 	    ;;
 	
 	restart)
-	    $0 $options stop $item
-	    $0 $options start $item
+	    $0 $options stop $name
+	    $0 $options start $name
 	    ;;
 	
 	*)
