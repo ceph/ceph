@@ -45,12 +45,6 @@ case $1 in
     -l | --localhost )
 	    localhost=1
 	    ;;
-    --norestart )
-	    restartoncoredump=1
-	    ;;
-    --restart)
-	    restartoncoredump=0
-	    ;;
     --allhosts)
 	    allhosts=1;
 	    ;;
@@ -119,13 +113,13 @@ for item in $what; do
 	get_conf mon_data_path "$def_mon_data_path" "mon data path" mon$mon mon global
 	get_conf mon_data_file "$def_mon_data_file" "mon data file" mon$mon mon global
 	
-	cmd="$ssh $cd_path $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $mon_data_path/$mon_data_file &"
+	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmon $mon_data_path/$mon_data_file &"
 
 	echo "cmd=$cmd"
     fi
 
     if [[ $item =~ "mds" ]]; then
-	cmd="$ssh $cd_path $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
+	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
 			$mon_addr_cmd &"
 	echo cmd=$cmd
 
@@ -135,7 +129,7 @@ for item in $what; do
 	get_conf osd_data "" "osd data" osd$osd osd global
 	get_conf osd_journal "" "osd journal" osd$osd osd global
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	cmd="$ssh $cd_path $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/osd --conf_file $conf_file \
+	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/osd --conf_file $conf_file \
 			$mon_addr_cmd $osd_journal_cmd &"
 	echo $cmd
     fi
