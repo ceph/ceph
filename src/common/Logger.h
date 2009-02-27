@@ -52,7 +52,7 @@ class Logger {
  public:
   Logger(string n, LogType *t, bool ap=false) :
     name(n), append(ap), type(t), open(false),
-    vals(t->num_keys), fvals(t->num_keys),
+    vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
     wrote_header_last(10000) {
     _open_log();
   }
