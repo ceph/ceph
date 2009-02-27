@@ -384,6 +384,8 @@ void MDS::tick()
   // reschedule
   reset_tick();
 
+  _dout_check_log();
+
   logclient.send_log();
 
   if (laggy)

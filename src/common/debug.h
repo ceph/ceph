@@ -24,6 +24,12 @@ extern void _dout_open_log();
 extern int _dout_rename_output_file();  // after calling daemon()
 extern int _dout_create_courtesy_output_symlink(const char *type, int n);
 
+static inline void _dout_check_log() {
+  _dout_lock.Lock();
+  if (_dout_need_open)
+    _dout_open_log();
+  _dout_lock.Unlock();
+}
 
 static inline void _dout_begin_line() {
   _dout_lock.Lock();

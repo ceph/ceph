@@ -505,6 +505,8 @@ void Monitor::tick()
 {
   tick_timer = 0;
 
+  _dout_check_log();
+
   // ok go.
   dout(11) << "tick" << dendl;
   

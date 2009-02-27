@@ -1083,6 +1083,8 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(5) << "tick" << dendl;
 
+  _dout_check_log();
+
   if (got_sigterm) {
     dout(0) << "got SIGTERM, shutting down" << dendl;
     messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
