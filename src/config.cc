@@ -211,7 +211,7 @@ md_config_t g_conf = {
   dout_dir: INSTALL_PREFIX "/var/log/ceph",        // if daemonize == true
   dout_sym_dir: INSTALL_PREFIX "/var/log/ceph",    // if daemonize == true
   logger_dir: INSTALL_PREFIX "/var/log/ceph/stat",
-  conf_file: INSTALL_PREFIX "/etc/ceph.conf",
+  conf_file: INSTALL_PREFIX "/etc/ceph/ceph.conf",
 
   dump_conf: false,
   
