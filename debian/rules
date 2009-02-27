@@ -24,4 +24,5 @@ common-install-arch::
 	chmod +x $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
 	( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src ; tar -cjf ceph.tar.bz2 modules )
 #	rm -rf $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules
+	find $(DEB_DH_INSTALL_SOURCEDIR)
 
