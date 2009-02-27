@@ -109,6 +109,10 @@ static void flush_all_loggers()
 void Logger::_open_log()
 {
   Mutex::Locker l(logger_lock);
+  struct stat st;
+
+  if (!g_conf.log)
+    return;
 
   filename = "";
   if (g_conf.use_abspaths) {
@@ -119,6 +123,11 @@ void Logger::_open_log()
   }
   
   filename = g_conf.logger_dir;
+
+  // make (feeble) attempt to create logger_dir
+  if (::stat(filename.c_str(), &st))
+    ::mkdir(filename.c_str(), 0750);
+
   filename += "/";
   if (g_conf.log_name) {
     filename += g_conf.log_name;
@@ -127,11 +136,15 @@ void Logger::_open_log()
   }
   filename += name;
 
-  if (append)
-    out.open(filename.c_str(), ofstream::out|ofstream::app);
-  else
-    out.open(filename.c_str(), ofstream::out);
-  
+  out.open(filename.c_str(), append ? ofstream::out|ofstream::app : ofstream::out);
+  if (!out.is_open()) {
+    generic_dout(0) << "failed to open '" << filename << "'" << dendl;
+    return; // we fail
+  }
+
+  // success
+  open = true;
+
   if (logger_list.empty()) {
     // init logger
     if (!g_conf.clock_tare)
@@ -212,7 +225,8 @@ void Logger::_flush()
 
 long Logger::inc(int key, long v)
 {
-  if (!g_conf.log) return 0;
+  if (!open || !g_conf.log)
+    return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   vals[i] += v;
@@ -223,7 +237,8 @@ long Logger::inc(int key, long v)
 
 double Logger::finc(int key, double v)
 {
-  if (!g_conf.log) return 0;
+  if (!open || !g_conf.log)
+    return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   fvals[i] += v;
@@ -234,7 +249,8 @@ double Logger::finc(int key, double v)
 
 long Logger::set(int key, long v)
 {
-  if (!g_conf.log) return 0;
+  if (!open || !g_conf.log)
+    return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   //cout << this << " set " << i << " to " << v << std::endl;
@@ -246,7 +262,8 @@ long Logger::set(int key, long v)
 
 double Logger::fset(int key, double v)
 {
-  if (!g_conf.log) return 0;
+  if (!open || !g_conf.log)
+    return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   //cout << this << " fset " << i << " to " << v << std::endl;
@@ -257,7 +274,8 @@ double Logger::fset(int key, double v)
 
 double Logger::favg(int key, double v)
 {
-  if (!g_conf.log) return 0;
+  if (!open || !g_conf.log)
+    return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   vals[i]++;
@@ -270,7 +288,8 @@ double Logger::favg(int key, double v)
 
 long Logger::get(int key)
 {
-  if (!g_conf.log) return 0;
+  if (!open || !g_conf.log)
+    return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
   long r = 0;

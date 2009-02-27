@@ -36,11 +36,12 @@ class Logger {
   string name, filename;
   bool append;
   LogType *type;
+  bool open;
 
   // values for this instance
   vector<long> vals;
   vector<double> fvals;
-  vector< vector<double> > vals_to_avg;
+  vector< vector<double> > vals_to_avg;  // for calculating variance
 
   ofstream out;
 
@@ -50,8 +51,8 @@ class Logger {
 
  public:
   Logger(string n, LogType *t, bool ap=false) :
-    name(n), append(ap), type(t),
-    vals(t->num_keys), fvals(t->num_keys), vals_to_avg(t->num_keys),
+    name(n), append(ap), type(t), open(false),
+    vals(t->num_keys), fvals(t->num_keys),
     wrote_header_last(10000) {
     _open_log();
   }
