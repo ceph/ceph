@@ -77,7 +77,7 @@ done
 
 command=$1
 shift
-what=$*
+what="$@"
 
 if [[ $what = "" ]]; then
     # extract list of monitors, mdss, osds defined in startup.conf
