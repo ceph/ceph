@@ -4,6 +4,7 @@ usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/csyn
-usr/sbin/mount.ceph
 usr/bin/crun
+usr/sbin/mount.ceph
+usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
