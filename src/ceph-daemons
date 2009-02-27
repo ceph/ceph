@@ -32,6 +32,7 @@ localhost=
 debug=
 restartoncoredump=
 monaddr=
+allhosts=0
 
 while [[ $1 =~ '-' ]]; do     # FIXME: why not '^-'?
 case $1 in
@@ -49,6 +50,9 @@ case $1 in
 	    ;;
     --restart)
 	    restartoncoredump=0
+	    ;;
+    --allhosts)
+	    allhosts=1;
 	    ;;
     -m )
 	    [ "$2" == "" ] && usage_exit
@@ -82,8 +86,29 @@ if [[ $what = "" ]]; then
 	$CCONF -c $startup_conf -l osd | egrep -v '^osd$'`
 fi
 
+hostname=`hostname | cut -d . -f 1`
+
 for item in $what; do
-    
+    type=`echo $item | cut -c 1-3` 
+
+    # this host?
+    host=`$CCONF -c $startup_conf -s $item -s $type host`
+    ssh=""
+    if [[ $host != "" ]]; then
+	#echo host for $item is $host, i am $hostname
+	if [[ $host != $hostname ]]; then
+	    # skip, unless we're starting remote daemons too
+	    if [[ $allhosts -eq 0 ]]; then
+		continue;
+	    fi
+
+	    # we'll need to ssh into that host
+	    ssh="ssh root@$host"
+	fi
+    else
+	host=$hostname
+    fi
+
     # extract item-specific options from $startup_conf
     echo asdf
     if [[ $item =~ "mon" ]]; then
@@ -100,11 +125,11 @@ for item in $what; do
 
     case "$command" in
 	start)
-	    echo Starting ceph $item...
+	    echo Starting ceph $item on $host...
 	    ;;
 	
 	stop)
-	    echo Stopping ceph $item...
+	    echo Stopping ceph $item on $host...
 	    ;;
 	
 	restart)
