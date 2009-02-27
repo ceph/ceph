@@ -26,7 +26,7 @@ get_conf() {
 	tmp=""
 	while [ $# -ge 1 ]; do
 		tmp=$tmp" -s $1"
-	shift
+		shift
 	done
 	eval $var=`$CCONF -c $conf $tmp "$key" "$def"`
 }
