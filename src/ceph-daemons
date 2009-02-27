@@ -87,13 +87,13 @@ if [[ $what = "" ]]; then
 fi
 
 hostname=`hostname | cut -d . -f 1`
-
 for item in $what; do
     type=`echo $item | cut -c 1-3` 
 
     # this host?
-    host=`$CCONF -c $startup_conf -s $item -s $type host`
+    host=`$CCONF -c $startup_conf -s $item -s $type -s global host`
     ssh=""
+    cmd=""
     if [[ $host != "" ]]; then
 	#echo host for $item is $host, i am $hostname
 	if [[ $host != $hostname ]]; then
@@ -104,28 +104,46 @@ for item in $what; do
 
 	    # we'll need to ssh into that host
 	    ssh="ssh root@$host"
+	    cd_path=`$CCONF -c $startup_conf -s $item -s $type -s global "ssh path"`
 	fi
     else
 	host=$hostname
     fi
 
+    get_conf conf_file "$startup_conf" "conf file" $item $type global
+    get_conf mon_addr "$monaddr" "mon addr" $item $type global
+    [ "$mon_addr" != "" ] && mon_addr_cmd="-m $mon_addr"
     # extract item-specific options from $startup_conf
-    echo asdf
+    
     if [[ $item =~ "mon" ]]; then
-	echo asdf
+	get_conf mon_data_path "$def_mon_data_path" "mon data path" mon$mon mon global
+	get_conf mon_data_file "$def_mon_data_file" "mon data file" mon$mon mon global
+	
+	cmd="$ssh $cd_path $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $mon_data_path/$mon_data_file &"
+
+	echo "cmd=$cmd"
     fi
 
     if [[ $item =~ "mds" ]]; then
-	echo asdf
+	cmd="$ssh $cd_path $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds --conf_file $conf_file \
+			$mon_addr_cmd &"
+	echo cmd=$cmd
+
     fi
 
     if [[ $item =~ "osd" ]]; then
-	echo asdf
+	get_conf osd_data "" "osd data" osd$osd osd global
+	get_conf osd_journal "" "osd journal" osd$osd osd global
+	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
+	cmd="$ssh $cd_path $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/osd --conf_file $conf_file \
+			$mon_addr_cmd $osd_journal_cmd &"
+	echo $cmd
     fi
 
     case "$command" in
 	start)
 	    echo Starting ceph $item on $host...
+            # $cmd
 	    ;;
 	
 	stop)
