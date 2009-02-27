@@ -14,7 +14,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cconf [--conf_file filename] [-s] <section> [[-s section] ... ] <key> [default]" << std::endl;
+  cerr << "usage: cconf [--conf_file filename] [-l|--list_sections prefix] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
   exit(1);
 }
 
@@ -22,6 +22,7 @@ int main(int argc, const char **argv)
 {
   const char *fname = g_conf.conf_file;
   const char *key = NULL, *defval = NULL;
+  const char *list_sections = 0;
   char *val;
   int param = 0;
   vector<const char*> args;
@@ -37,6 +38,12 @@ int main(int argc, const char **argv)
 	strcmp(args[i], "-c") == 0) {
       if (i < args.size() - 1)
         fname = args[++i];
+      else
+	usage();
+    } else if (strcmp(args[i], "-l") == 0 ||
+	       strcmp(args[i], "--list_sections") == 0) {
+      if (i < args.size() - 1)
+	list_sections = args[++i];
       else
 	usage();
     } else if (strcmp(args[i], "-s") == 0) {
@@ -62,11 +69,21 @@ int main(int argc, const char **argv)
     }
   }
 
-  if ((param < 1) || (param > 3))
+  if (!list_sections && (param < 1 || param > 3))
     usage();
 
   ConfFile cf(fname);
   parse_config_file(&cf, true);
+
+  if (list_sections) {
+    for (std::list<ConfSection*>::const_iterator p = cf.get_section_list().begin();
+	 p != cf.get_section_list().end();
+	 p++) {
+      if (strncmp(list_sections, (*p)->get_name().c_str(), strlen(list_sections)) == 0)
+	cout << (*p)->get_name() << std::endl;
+    }
+    return 0;
+  }
 
   for (unsigned i=0; i<sections.size(); i++) {
     cf.read(sections[i], key, (char **)&val, NULL);

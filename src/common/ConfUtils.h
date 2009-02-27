@@ -55,6 +55,8 @@ class ConfSection
 public:
 	~ConfSection();
 	ConfSection(std::string sec_name) : name(sec_name) { }
+
+	const std::string& get_name() { return name; }
 };
 
 typedef std::map<std::string, ConfSection *> SectionMap;
@@ -83,6 +85,8 @@ class ConfFile {
 public:
 	ConfFile(const char *fname) : filename(strdup(fname)), auto_update(false) {}
 	~ConfFile();
+
+	const SectionList& get_section_list() { return sections_list; }
 
 	int parse();
 	int read(const char *section, const char *var, int *val, int def_val);
