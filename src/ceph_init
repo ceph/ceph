@@ -131,7 +131,7 @@ then
 	echo
 fi
 
-[ "$CEPH_BIN" == "" ] && CEPH_BIN=.
+[ "$CEPH_BIN" == "" ] && CEPH_BIN=`dirname $0`
 [ "$MON_PORT" == "" ] && MON_PORT=$def_mon_port
 [ "$MON_HOST" == "" ] && MON_HOST=$IP
 
