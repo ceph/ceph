@@ -20,7 +20,7 @@ void usage()
 
 int main(int argc, const char **argv) 
 {
-  const char *fname = "ceph.conf";
+  const char *fname = g_conf.conf_file;
   const char *key = NULL, *defval = NULL;
   char *val;
   int param = 0;
@@ -33,7 +33,8 @@ int main(int argc, const char **argv)
     usage();
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--conf_file") == 0) {
+    if (strcmp(args[i], "--conf_file") == 0 ||
+	strcmp(args[i], "-c") == 0) {
       if (i < args.size() - 1)
         fname = args[++i];
       else
