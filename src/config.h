@@ -47,6 +47,7 @@ struct md_config_t {
 
   bool mkfs;
   
+  const char *monmap_file;
   const char *mon_host;
   bool daemonize;
   bool file_logs;
