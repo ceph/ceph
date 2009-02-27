@@ -82,9 +82,10 @@ if [[ $what = "" ]]; then
 	$CCONF -c $conf -l osd | egrep -v '^osd$'`
 fi
 
+# get hostname, minus any domain
 hostname=`hostname | cut -d . -f 1`
 for name in $what; do
-    type=`echo $name | cut -c 1-3` 
+    type=`echo $item | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     sections="$name $type global"
     num=`echo $name | cut -c 4-`
 

@@ -70,10 +70,10 @@ int MonClient::get_monmap(MonMap *pmonmap)
     return 0;
 
   // file?
-  const char *monmap_fn = ".ceph_monmap";
+  const char *monmap_fn = g_conf.monmap_file;
   int r = pmonmap->read(monmap_fn);
   if (r >= 0) {
-    cout << "[opened monmap at .ceph_monmap fsid " << pmonmap->fsid << "]" << std::endl;
+    cout << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << std::endl;
     return 0;
   }
 

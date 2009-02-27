@@ -52,8 +52,8 @@ bin_PROGRAMS = \
 sbin_PROGRAMS = \
 	mount.ceph
 
-bin_SCRIPTS = crun cephd ceph_stop ceph_common.sh ceph_init
-
+bin_SCRIPTS = crun
+sbin_SCRIPTS = mkcephfs
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a
@@ -166,8 +166,15 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = dstart.sh dstop.sh mkcephfs.sh montest.sh restart.sh verify-mds-journal.sh vstart.sh \
-	     crun cephd ceph_stop ceph_common.sh ceph_init
+EXTRA_DIST = dstart.sh dstop.sh montest.sh restart.sh verify-mds-journal.sh vstart.sh \
+	     crun ceph_common.sh ceph_init ceph-daemons
+
+install-data-local:
+	mkdir -p $(DESTDIR)$(libdir)/ceph
+	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
+	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
+	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons
+	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons
 
 # cleaning
 clean-local:

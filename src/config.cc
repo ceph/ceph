@@ -194,6 +194,7 @@ md_config_t g_conf = {
 
   mkfs: false,
 
+  monmap_file: ".ceph_monmap",
   mon_host: 0,
   daemonize: false,
   file_logs: false,
@@ -890,6 +891,8 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if (strcmp(args[i], "--numosd") == 0 && isarg) 
       g_conf.num_osd = atoi(args[++i]);
     
+    else if (strcmp(args[i], "--monmap_file") == 0 && isarg)
+      g_conf.monmap_file = args[++i];
     else if ((strcmp(args[i], "--mon_host") == 0 ||
 	      strcmp(args[i], "-m") == 0) && isarg)
       g_conf.mon_host = args[++i];    
