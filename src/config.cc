@@ -211,6 +211,8 @@ md_config_t g_conf = {
   dout_dir: INSTALL_PREFIX "/var/log/ceph",        // if daemonize == true
   dout_sym_dir: INSTALL_PREFIX "/var/log/ceph",    // if daemonize == true
   logger_dir: INSTALL_PREFIX "/var/log/ceph/stat",
+  pid_file: 0,
+
   conf_file: INSTALL_PREFIX "/etc/ceph/ceph.conf",
 
   dump_conf: false,
@@ -252,7 +254,7 @@ md_config_t g_conf = {
   debug_after: 0,
   
   // -- misc --
-  use_abspaths: false,      // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
+  use_abspaths: false, // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
 
   // --- clock ---
   clock_lock: false,
@@ -638,6 +640,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ_STR("global", "dout dir", dout_dir);
   CF_READ_STR("global", "dout sym dir", dout_sym_dir);
   CF_READ_STR("global", "logger dir", logger_dir);
+  CF_READ_STR("global", "pid file", pid_file);
 
   CF_READ("debug", "debug", debug);
   CF_READ("debug", "lockdep", debug_lockdep);
@@ -939,8 +942,7 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     //else if (strcmp(args[i], "--fake_osd_sync") == 0) 
     //g_conf.fake_osd_sync = atoi(args[++i]);
 
-    
-    
+        
     else if (strcmp(args[i], "--dout_dir") == 0 && isarg) 
       g_conf.dout_dir = args[++i];
     else if (//strcmp(args[i], "-o") == 0 ||
@@ -948,6 +950,9 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.dout_sym_dir = args[++i];
     else if (strcmp(args[i], "--logger_dir") == 0 && isarg) 
       g_conf.logger_dir = args[++i];
+    else if ((strcmp(args[i], "--pid_file") == 0 ||
+	      strcmp(args[i], "-p") == 0) && isarg) 
+      g_conf.pid_file = args[++i];
     else if (strcmp(args[i], "--conf_file") == 0 && isarg) 
       g_conf.conf_file = args[++i];
 

@@ -336,6 +336,39 @@ class C_Debug : public Context {
   }
 };
 
+
+static void write_pid_file(int pid)
+{
+  if (!g_conf.pid_file)
+    return;
+
+  int fd = ::open(g_conf.pid_file, O_CREAT|O_TRUNC|O_WRONLY, 0644);
+  if (fd >= 0) {
+    char buf[20];
+    int len = sprintf(buf, "%d\n", pid);
+    ::write(fd, buf, len);
+    ::close(fd);
+  }
+}
+
+static void remove_pid_file()
+{
+  if (!g_conf.pid_file)
+    return;
+
+  // only remove it if it has OUR pid in it!
+  int fd = ::open(g_conf.pid_file, O_RDONLY);
+  if (fd >= 0) {
+    char actual[20], correct[20];
+    sprintf(correct, "%d\n", getpid());
+    ::read(fd, actual, 20);
+    ::close(fd);
+
+    if (strncmp(actual, correct, 20) == 0)
+      ::unlink(g_conf.pid_file);
+  }
+}
+
 int Rank::start(bool nodaemon)
 {
   // register at least one entity, first!
@@ -360,8 +393,20 @@ int Rank::start(bool nodaemon)
 	      << dendl;
     }
     dout(1) << "rank.start daemonizing" << dendl;
-    daemon(1, 0);  /* fixme.. we should chdir(/) too! */
+
+    // be polite
+    if (g_conf.use_abspaths)
+      ::chdir("/");
+
+    pid_t child = fork();
+    if (child) {
+      write_pid_file(child);
+      _exit(0);
+    }
+
     _dout_rename_output_file();
+  } else {
+    write_pid_file(getpid());
   }
 
   // some debug hackery?
@@ -595,6 +640,7 @@ void Rank::wait()
 
   dout(10) << "wait: done." << dendl;
   dout(1) << "shutdown complete." << dendl;
+  remove_pid_file();
   started = false;
   my_type = -1;
 }

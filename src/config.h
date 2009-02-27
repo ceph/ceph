@@ -64,6 +64,7 @@ struct md_config_t {
   const char *dout_dir;
   const char *dout_sym_dir;
   const char *logger_dir;
+  const char *pid_file;
 
   const char *conf_file;
   bool dump_conf;
