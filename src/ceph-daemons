@@ -1,0 +1,121 @@
+#!/bin/sh
+# Start/stop ceph daemons
+
+# if we start up as ./ceph-daemons, assume everything else is in the
+# current directory too.
+if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
+    BINDIR=.
+    LIBDIR=.
+    ETCDIR=.
+else
+    BINDIR=/usr/bin
+    LIBDIR=/usr/lib/ceph
+    ETCDIR=/etc/ceph
+fi
+
+CCONF="$BINDIR/cconf"
+startup_conf=$ETCDIR"/startup.conf"
+
+. $LIBDIR/ceph_common.sh
+
+usage_exit() {
+    echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
+    printf "\t-c conffile.conf\n"
+    printf "\t--valgrind\trun via valgrind\n"
+    exit
+}
+
+## command line options
+options=
+valgrind=
+localhost=
+debug=
+restartoncoredump=
+monaddr=
+
+while [[ $1 =~ '-' ]]; do     # FIXME: why not '^-'?
+case $1 in
+    --valgrind)
+	    valgrind=1
+	    ;;
+    --novalgrind)
+	    valgrind=0
+	    ;;
+    -l | --localhost )
+	    localhost=1
+	    ;;
+    --norestart )
+	    restartoncoredump=1
+	    ;;
+    --restart)
+	    restartoncoredump=0
+	    ;;
+    -m )
+	    [ "$2" == "" ] && usage_exit
+	    options="$options $1"
+	    shift
+	    MON_ADDR=$1
+	    ;;
+    --conf_file | -c)
+	    [ "$2" == "" ] && usage_exit
+	    options="$options $1"
+	    shift
+	    startup_conf=$1
+	    ;;
+    *)
+	    echo unrecognized option \'$1\'
+	    usage_exit
+	    ;;
+esac
+options="$options $1"
+shift
+done
+
+command=$1
+shift
+what=$*
+
+if [[ $what = "" ]]; then
+    # extract list of monitors, mdss, osds defined in startup.conf
+    what=`$CCONF -c $startup_conf -l mon | egrep -v '^mon$' ; \
+	$CCONF -c $startup_conf -l mds | egrep -v '^mds$' ; \
+	$CCONF -c $startup_conf -l osd | egrep -v '^osd$'`
+fi
+
+for item in $what; do
+    
+    # extract item-specific options from $startup_conf
+    echo asdf
+    if [[ $item =~ "mon" ]]; then
+	echo asdf
+    fi
+
+    if [[ $item =~ "mds" ]]; then
+	echo asdf
+    fi
+
+    if [[ $item =~ "osd" ]]; then
+	echo asdf
+    fi
+
+    case "$command" in
+	start)
+	    echo Starting ceph $item...
+	    ;;
+	
+	stop)
+	    echo Stopping ceph $item...
+	    ;;
+	
+	restart)
+	    $0 $options stop $item
+	    $0 $options start $item
+	    ;;
+	
+	*)
+	    usage_exit
+	    ;;
+    esac
+done
+
+exit 0
