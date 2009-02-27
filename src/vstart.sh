@@ -99,7 +99,7 @@ fi
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ $start_all -eq 1 ]; then
-	$SUDO ./ceph_stop
+	$SUDO ./stop.sh
 fi
 $SUDO rm -f core*
 
@@ -160,7 +160,7 @@ if [ $start_mon -eq 1 ]; then
 	if [ $start_mon -ne 0 ]; then
 		for f in `seq 0 $((CEPH_NUM_MON-1))`; do
 		    echo $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
-		    $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
+		    $valgrind $CEPH_BIN/cmon -p out/mon$f.pid $ARGS $CMON_ARGS mondata/mon$f &
 		done
 		sleep 1
 	fi
@@ -176,7 +176,7 @@ if [ $start_osd -eq 1 ]; then
 		fi
 		echo start osd$osd
 		echo $valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
-		$valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
+		$valgrind $SUDO $CEPH_BIN/cosd -p out/osd$f.pid -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
 # echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 	done
 fi
