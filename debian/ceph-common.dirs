@@ -1,1 +1,3 @@
 usr/bin
+var/log/ceph
+var/log/ceph/stat
