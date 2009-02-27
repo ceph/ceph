@@ -1632,7 +1632,7 @@ void Client::flush_snaps(Inode *in)
 
   // pick auth mds
   int mds = -1;
-  int mseq;
+  int mseq = 0;
   for (map<int,InodeCap*>::iterator p = in->caps.begin(); p != in->caps.end(); p++) {
     if (p->second->issued & CEPH_CAP_ANY_WR) {
       mds = p->first;
