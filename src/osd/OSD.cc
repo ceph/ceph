@@ -347,6 +347,8 @@ int OSD::init()
   osd_logtype.add_inc(l_osd_r_wr, "r_wr");
   osd_logtype.add_inc(l_osd_r_wrb, "r_wrb");
 
+  osd_logtype.add_inc(l_osd_subop, "subop");
+
   osd_logtype.add_inc(l_osd_r_push, "r_push");
   osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
   osd_logtype.add_inc(l_osd_r_pull, "r_pull");
@@ -377,6 +379,9 @@ int OSD::init()
   osd_logtype.add_inc(l_osd_mapidup, "mapidup");
   osd_logtype.add_inc(l_osd_mapf, "mapf");
   osd_logtype.add_inc(l_osd_mapfdup, "mapfdup");
+
+  osd_logtype.validate();
+
   
   // i'm ready!
   messenger->set_dispatcher(this);

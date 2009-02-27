@@ -47,6 +47,7 @@ class LogType {
   }
   void add_key(int key, const char *name, bool is_inc, bool is_avg) {
     int i = lookup_key(key, true);
+    assert(!key_name[i]);  // only register each type once!
     key_name[i] = name;
     inc_keys[i] = is_inc;
     avg_keys[i] = is_avg;
@@ -59,6 +60,10 @@ class LogType {
   }
   void add_avg(int key, const char *name) {
     return add_key(key, name, true, true);
+  }
+  void validate() {
+    for (int i=0; i<num_keys; i++)
+      assert(key_name[i]);
   }
 };
 

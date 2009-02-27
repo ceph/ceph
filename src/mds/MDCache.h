@@ -26,11 +26,11 @@
 #include "include/Context.h"
 #include "events/EMetaBlob.h"
 
+class Logger;
+
 class MDS;
 class Migrator;
 class Renamer;
-
-class Logger;
 
 class Message;
 class Session;

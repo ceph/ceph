@@ -253,9 +253,10 @@ void Client::init()
   if (client_logger == 0) {
     client_logtype.add_inc(l_c_reply, "reply");
     client_logtype.add_avg(l_c_lat, "lat");
-    client_logtype.add_avg(l_c_lat, "wrlat");
-    client_logtype.add_avg(l_c_lat, "owrlat");
-    client_logtype.add_avg(l_c_lat, "ordlat");
+    client_logtype.add_avg(l_c_wrlat, "wrlat");
+    client_logtype.add_avg(l_c_owrlat, "owrlat");
+    client_logtype.add_avg(l_c_ordlat, "ordlat");
+    client_logtype.validate();
     
     char s[80];
     char hostname[80];

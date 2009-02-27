@@ -148,7 +148,7 @@ class MDS : public Dispatcher {
   MDSTableClient *get_table_client(int t);
   MDSTableServer *get_table_server(int t);
 
-  Logger       *logger, *logger2;
+  Logger       *logger;
 
 
  protected:

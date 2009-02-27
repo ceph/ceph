@@ -118,7 +118,7 @@ MDS::MDS(int whoami_, Messenger *m, MonMap *mm) :
 
   want_state = state = MDSMap::STATE_BOOT;
 
-  logger = logger2 = 0;
+  logger = 0;
 }
 
 MDS::~MDS() {
@@ -142,7 +142,6 @@ MDS::~MDS() {
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) { delete logger; logger = 0; }
-  if (logger2) { delete logger2; logger2 = 0; }
   
   if (messenger)
     messenger->destroy();
@@ -152,7 +151,6 @@ MDS::~MDS() {
 void MDS::reopen_logger(utime_t start)
 {
   static LogType mds_logtype(l_mds_first, l_mds_last);
-  static LogType mds_cache_logtype(l_mdc_first, l_mdc_last);
 
   static bool didit = false;
   if (!didit) {
@@ -165,6 +163,8 @@ void MDS::reopen_logger(utime_t start)
     
     mds_logtype.add_inc(l_mds_dir_f, "dir_f");
     mds_logtype.add_inc(l_mds_dir_c, "dir_c");
+    mds_logtype.add_inc(l_mds_dir_sp, "dir_sp");
+    mds_logtype.add_inc(l_mds_dir_ffc, "dir_ffc");
     //mds_logtype.add_inc("mkdir");
 
     /*
@@ -215,13 +215,13 @@ void MDS::reopen_logger(utime_t start)
     mds_logtype.add_set("nim");
     */
 
+    mds_logtype.validate();
   }
 
   if (whoami < 0) return;
 
   // flush+close old log
   if (logger) delete logger;
-  if (logger2) delete logger2;
 
   // log
   char name[80];
@@ -231,11 +231,6 @@ void MDS::reopen_logger(utime_t start)
 
   logger = new Logger(name, (LogType*)&mds_logtype, append);
   logger->set_start(start);
-
-  char n[80];
-  sprintf(n, "mds%d.cache", whoami);
-  logger2 = new Logger(n, (LogType*)&mds_cache_logtype, append);
-  logger2->set_start(start);
 
   mdlog->reopen_logger(start, append);
   server->reopen_logger(start, append);
