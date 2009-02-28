@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# if we start up as ./mkfs.ceph, assume everything else is in the
-# current directory too.
-if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
+# if we start up with "./", assume everything else is in the current
+# directory too.
+if [ `dirname $0` = "." ] && [ $PWD != "/usr/sbin" ]; then
     BINDIR=.
     LIBDIR=.
     ETCDIR=.
@@ -102,15 +102,19 @@ for name in $what; do
 	host=$hostname
     fi
 
+    get_conf conf_file "$runtime_conf" "conf file" $sections
+
     if [[ $type = "mon" ]]; then
 	get_conf mon_path "" "mon data" $sections
-	$BINDIR/mkmonfs $clobber $mon_path --mon $num --monmap $monmap --osdmap $osdmap || exit 1
+	$BINDIR/mkmonfs -c $conf_file $clobber $mon_path --mon $num \
+	    --monmap $monmap --osdmap $osdmap || exit 1
     fi
 
     if [[ $type = "osd" ]]; then
 	get_conf osd_path "" "osd data" $sections
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	$ssh $BINDIR/cosd --monmap_file $monmap --mkfs_for_osd $num $osd_path || exit 1
+	$ssh $BINDIR/cosd -c $conf_file --monmap_file $monmap \
+	    --mkfs_for_osd $num $osd_path || exit 1
     fi
 
 done

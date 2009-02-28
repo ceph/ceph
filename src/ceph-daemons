@@ -121,7 +121,7 @@ for name in $what; do
     fi
 
     get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
-    get_conf conf_file "$cluster_conf" "conf file" $sections
+    get_conf conf_file "$runtime_conf" "conf file" $sections
     get_conf mon_addr "$monaddr" "mon addr" $sections
     [ "$mon_addr" != "" ] && mon_addr_cmd="-m $mon_addr"
     # extract name-specific options from $conf
