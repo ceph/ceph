@@ -113,7 +113,6 @@ for name in $what; do
     get_conf mon_addr "$monaddr" "mon addr" $sections
     [ "$mon_addr" != "" ] && mon_addr_cmd="-m $mon_addr"
     # extract name-specific options from $conf
-    
     if [[ $name =~ "mon" ]]; then
 	get_conf mon_path "" "mon path" $sections
 
