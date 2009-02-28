@@ -863,12 +863,16 @@ void parse_config_options(std::vector<const char*>& args, bool open)
   for (unsigned i=0; i<args.size(); i++) {
     bool isarg = i+1 < args.size();  // is more?
   
-    if (isarg && (strcmp(args[i], "--conf_file") == 0 ||
-		  strcmp(args[i], "-c") == 0)) 
+    if ((strcmp(args[i], "--conf_file") == 0 ||
+	 strcmp(args[i], "-c") == 0) && isarg) 
       g_conf.conf_file = args[++i];
     else if (strcmp(args[i], "--dump_conf") == 0) 
       g_conf.dump_conf = true;
+    else
+      nargs.push_back(args[i]);
   }
+  args.swap(nargs);
+  nargs.clear();
 
   ConfFile cf(g_conf.conf_file);
 
@@ -956,8 +960,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if ((strcmp(args[i], "--pid_file") == 0 ||
 	      strcmp(args[i], "-p") == 0) && isarg) 
       g_conf.pid_file = args[++i];
-    else if (strcmp(args[i], "--conf_file") == 0 && isarg) 
-      g_conf.conf_file = args[++i];
 
     else if (strcmp(args[i], "--lockdep") == 0 && isarg)
       g_lockdep = atoi(args[++i]);
