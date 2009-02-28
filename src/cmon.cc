@@ -56,11 +56,14 @@ int main(int argc, const char **argv)
   // args
   const char *fsdir = 0;
   for (unsigned i=0; i<args.size(); i++) {
-    if (!fsdir)
-      fsdir = args[i];
-    else 
-      usage();
+    if (args[i][0] != '-') {
+      if (!fsdir)
+        fsdir = args[i];
+      else if (fsdir)
+        usage();
+    }
   }
+
   if (!fsdir)
     usage();
 
