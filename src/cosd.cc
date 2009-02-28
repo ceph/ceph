@@ -126,7 +126,7 @@ int main(int argc, const char **argv)
 
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
-       << " dev " << dev << " " << journaldev
+       << " dev " << dev << " " << (journaldev ? journaldev:"")
        << " fsid " << monmap.fsid
        << std::endl;
 
