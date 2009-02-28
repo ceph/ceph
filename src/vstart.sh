@@ -11,7 +11,6 @@ let start_mon=0
 let start_mds=0
 let start_osd=0
 let localhost=0
-norestart=""
 valgrind=""
 MON_ADDR=""
 
@@ -21,7 +20,6 @@ usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-n, --new\n"
-usage=$usage"\t--norestart\n"
 usage=$usage"\t--valgrind\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 
@@ -40,9 +38,6 @@ case $1 in
 	;;
 	--new | -n )
 	new=1
-	;;
-	--norestart )
-	norestart="--norestart"
 	;;
 	--valgrind )
 	valgrind="--valgrind"
@@ -104,7 +99,7 @@ fi
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 if [ $start_all -eq 1 ]; then
-	$SUDO ./ceph_stop
+	$SUDO ./stop.sh
 fi
 $SUDO rm -f core*
 
@@ -164,8 +159,8 @@ if [ $start_mon -eq 1 ]; then
 	# start monitors
 	if [ $start_mon -ne 0 ]; then
 		for f in `seq 0 $((CEPH_NUM_MON-1))`; do
-		    echo $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
-		    $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
+		    echo $valgrind $CEPH_BIN/cmon $ARGS $CMON_ARGS mondata/mon$f &
+		    $valgrind $CEPH_BIN/cmon -p out/mon$f.pid $ARGS $CMON_ARGS mondata/mon$f &
 		done
 		sleep 1
 	fi
@@ -180,8 +175,8 @@ if [ $start_osd -eq 1 ]; then
 			$SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 		fi
 		echo start osd$osd
-		echo $CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
-		$CEPH_BIN/crun $norestart $valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
+		echo $valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
+		$valgrind $SUDO $CEPH_BIN/cosd -p out/osd$f.pid -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS &
 # echo valgrind --leak-check=full --show-reachable=yes $CEPH_BIN/cosd dev/osd$osd --debug_ms 1 --debug_osd 20 --debug_filestore 10 --debug_ebofs 20 #1>out/o$osd #& #--debug_osd 40
 	done
 fi
@@ -190,8 +185,8 @@ fi
 if [ $start_mds -eq 1 ]; then
 	for mds in `seq 0 $((CEPH_NUM_MDS-1))`
 	do
-		echo $CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
-		$CEPH_BIN/crun $norestart $valgrind $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
+		echo $valgrind $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
+		$valgrind $CEPH_BIN/cmds $ARGS $CMDS_ARGS &
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
