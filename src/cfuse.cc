@@ -50,7 +50,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   vec_to_argv(args, argc, argv);
 
   // FUSE will chdir("/"); be ready.
-  g_conf.use_abspaths = true;
+  g_conf.chdir_root = true;
 
   if (g_conf.clock_tare) g_clock.tare();
 

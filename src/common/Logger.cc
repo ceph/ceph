@@ -115,7 +115,7 @@ void Logger::_open_log()
     return;
 
   filename = "";
-  if (g_conf.use_abspaths && g_conf.logger_dir[0] != '/') {
+  if (g_conf.chdir_root && g_conf.logger_dir[0] != '/') {
     char cwd[200];
     getcwd(cwd, 200);
     filename = cwd;

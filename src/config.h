@@ -107,7 +107,7 @@ struct md_config_t {
   int debug_after;
 
   // misc
-  bool use_abspaths;
+  bool chdir_root;
 
   // clock
   bool clock_lock;

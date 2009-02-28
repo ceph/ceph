@@ -255,7 +255,7 @@ md_config_t g_conf = {
   debug_after: 0,
   
   // -- misc --
-  use_abspaths: false, // make monitorstore et al use absolute path (to workaround FUSE chdir("/"))
+  chdir_root: false,
 
   // --- clock ---
   clock_lock: false,
@@ -658,7 +658,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("debug", "ms", debug_ms);
   CF_READ("debug", "mon", debug_mon);
   CF_READ("debug", "tp", debug_tp);
-  CF_READ("debug", "use abspaths", use_abspaths);
+  CF_READ("debug", "chdir root", chdir_root);
 
   CF_READ("clock", "lock", clock_lock);
   CF_READ("clock", "tare", clock_tare);

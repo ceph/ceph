@@ -63,7 +63,7 @@ int MonitorStore::mount()
     return -errno;
   }
 
-  if (g_conf.use_abspaths && dir[0] != '/') {
+  if (g_conf.chdir_root && dir[0] != '/') {
     // combine it with the cwd, in case fuse screws things up (i.e. fakefuse)
     string old = dir;
     char cwd[200];
