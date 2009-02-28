@@ -53,26 +53,29 @@ stop_daemon() {
 
 ## command line options
 options=
-valgrind=
-localhost=
-debug=
-restartoncoredump=
-monaddr=
+
+dovalgrind=0
+docrun=1
 allhosts=0
+debug=0
+monaddr=
 
 while [[ $1 =~ '-' ]]; do     # FIXME: why not '^-'?
 case $1 in
     --valgrind)
-	    valgrind=1
+	    dovalgrind=1
 	    ;;
     --novalgrind)
-	    valgrind=0
-	    ;;
-    -l | --localhost )
-	    localhost=1
+	    dovalgrind=0
 	    ;;
     --allhosts)
 	    allhosts=1;
+	    ;;
+    --restart)
+	    docrun=1
+	    ;;
+    --norestart)
+	    docrun=0
 	    ;;
     -m )
 	    [ "$2" == "" ] && usage_exit
@@ -138,21 +141,34 @@ for name in $what; do
     # extract name-specific options from $conf
     if [[ $name =~ "mon" ]]; then
 	get_conf mon_path "" "mon path" $sections
-	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmon $ARGS $mon_path &"
+	cmd="$BINDIR/cmon $mon_path"
     fi
 
     if [[ $name =~ "mds" ]]; then
-	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cmds $ARGS --conf_file $conf_file \
-			$mon_addr_cmd &"
+	cmd="$BINDIR/cmds -c $conf_file $mon_addr_cmd"
     fi
 
     if [[ $name =~ "osd" ]]; then
 	get_conf osd_data "" "osd data" $sections
 	get_conf osd_journal "" "osd journal" $sections
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	cmd="$ssh $cd_path $CEPH_BIN/crun $valgrind $CEPH_BIN/cosd $ARGS --conf_file $conf_file \
-			$mon_addr_cmd $osd_data $osd_journal_cmd &"
+	cmd="$BINDIR/cosd -c $conf_file \
+			$mon_addr_cmd $osd_data $osd_journal_cmd"
     fi
+
+    # build final command
+    wrap=""
+    runmode="-d"
+
+    get_conf_bool crun "$docrun" "restart on core dump" $sections
+    [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
+
+    get_conf_bool valgrind "$dovalgrind" "valgrind" $sections
+    [[ $valgrind -eq 1]] && wrap="$wrap valgrind"
+
+    [[ $wrap != "" ]] && runmode="-f &"
+
+    cmd="$ssh $wrap $cmd $runmode"
 
     case "$command" in
 	start)
