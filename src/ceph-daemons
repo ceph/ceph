@@ -127,35 +127,39 @@ for name in $what; do
     # extract name-specific options from $conf
     if [[ $name =~ "mon" ]]; then
 	get_conf mon_path "" "mon path" $sections
-	cmd="$BINDIR/cmon $mon_path"
-	echo cmd=$cmd
+	module_opt="$mon_path"
+	module_bin="$BINDIR/cmon"
     fi
 
     if [[ $name =~ "mds" ]]; then
-	cmd="$BINDIR/cmds --conf_file $conf_file $mon_addr_cmd"
+	module_opt="--conf_file $conf_file $mon_addr_cmd"
+	module_bin="$BINDIR/cmds"
     fi
 
     if [[ $name =~ "osd" ]]; then
 	get_conf osd_data "" "osd data" $sections
 	get_conf osd_journal "" "osd journal" $sections
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	cmd="$BINDIR/cosd --conf_file $conf_file \
+	module_opt="--conf_file $conf_file \
 			$mon_addr_cmd $osd_data $osd_journal_cmd"
+	module_bin="$BINDIR/cosd"
     fi
 
     # build final command
     wrap=""
-    runmode="-d"
+    runflags="-d"
+    runmode=""
 
     get_conf_bool crun "$docrun" "restart on core dump" $sections
     [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
 
     get_conf_bool valgrind "$dovalgrind" "valgrind" $sections
+    echo valgrind=$valgrind
     [[ $valgrind -eq 1 ]] && wrap="$wrap valgrind"
 
-    [[ $wrap != "" ]] && runmode="-f &"
+    [[ $wrap != "" ]] && runflags="-f" && runmode="&"
 
-    cmd="$ssh $wrap $cmd $runmode"
+    cmd="$ssh $wrap $module_bin $runflags $module_opt $runmode"
 
     case "$command" in
 	start)
