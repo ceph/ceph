@@ -1,8 +1,8 @@
 
 CCONF="$BINDIR/cconf"
 
-conf=$ETCDIR"/startup.conf"
-cluster_conf=$ETCDIR"/cluster.conf"
+conf=$ETCDIR"/cluster.conf"
+runtime_conf=$ETCDIR"/ceph.conf"
 
 hostname=`hostname | cut -d . -f 1`
 

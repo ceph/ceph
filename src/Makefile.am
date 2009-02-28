@@ -166,8 +166,8 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = dstart.sh dstop.sh montest.sh restart.sh verify-mds-journal.sh vstart.sh \
-	     crun ceph_common.sh ceph_init ceph-daemons
+EXTRA_DIST = verify-mds-journal.sh vstart.sh \
+	     crun ceph_common.sh ceph-daemons
 
 install-data-local:
 	mkdir -p $(DESTDIR)$(libdir)/ceph
