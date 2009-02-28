@@ -217,6 +217,8 @@ md_config_t g_conf = {
   conf_file: INSTALL_PREFIX "/etc/ceph/ceph.conf",
 
   dump_conf: false,
+
+  chdir_root: true,  // chdir("/") after daemonizing. if true, we generate absolute paths as needed.
   
   fake_clock: false,
   fakemessenger_serialize: true,
@@ -254,9 +256,6 @@ md_config_t g_conf = {
   
   debug_after: 0,
   
-  // -- misc --
-  chdir_root: false,
-
   // --- clock ---
   clock_lock: false,
   clock_tare: false,
@@ -642,6 +641,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ_STR("global", "dout sym dir", dout_sym_dir);
   CF_READ_STR("global", "logger dir", logger_dir);
   CF_READ_STR("global", "pid file", pid_file);
+  CF_READ("global", "chdir root", chdir_root);
 
   CF_READ("debug", "debug", debug);
   CF_READ("debug", "lockdep", debug_lockdep);
@@ -658,7 +658,6 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("debug", "ms", debug_ms);
   CF_READ("debug", "mon", debug_mon);
   CF_READ("debug", "tp", debug_tp);
-  CF_READ("debug", "chdir root", chdir_root);
 
   CF_READ("clock", "lock", clock_lock);
   CF_READ("clock", "tare", clock_tare);

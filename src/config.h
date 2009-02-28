@@ -70,6 +70,8 @@ struct md_config_t {
   const char *conf_file;
   bool dump_conf;
 
+  bool chdir_root;
+
   bool fake_clock;
   bool fakemessenger_serialize;
 
@@ -105,9 +107,6 @@ struct md_config_t {
   int debug_tp;
 
   int debug_after;
-
-  // misc
-  bool chdir_root;
 
   // clock
   bool clock_lock;
