@@ -12,9 +12,6 @@ else
     ETCDIR=/etc/ceph
 fi
 
-CCONF="$BINDIR/cconf"
-conf=$ETCDIR"/cluster.conf"
-
 . $LIBDIR/ceph_common.sh
 
 usage_exit() {
@@ -55,18 +52,7 @@ esac
 shift
 done
 
-what=$*
-
-if [[ $what = "" ]]; then
-    # extract list of monitors, mdss, osds defined in startup.conf
-    what=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
-	$CCONF -c $conf -l mds | egrep -v '^mds$' ; \
-	$CCONF -c $conf -l osd | egrep -v '^osd$'`
-fi
-
-# get hostname, minus any domain
-hostname=`hostname | cut -d . -f 1`
-
+get_name_list "$@"
 
 # create the monmap if we're doing mon0
 if [[ $what =~ "mon0" ]]; then

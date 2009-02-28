@@ -13,14 +13,6 @@ else
     ETCDIR=/etc/ceph
 fi
 
-CCONF="$BINDIR/cconf"
-conf=$ETCDIR"/startup.conf"
-cluster_conf=$ETCDIR"/cluster.conf"
-ARGS="-f"
-
-# get hostname, minus any domain
-hostname=`hostname | cut -d . -f 1`
-
 . $LIBDIR/ceph_common.sh
 
 usage_exit() {
@@ -100,14 +92,8 @@ done
 
 command=$1
 shift
-what="$@"
 
-if [[ $what = "" ]]; then
-    # extract list of monitors, mdss, osds defined in startup.conf
-    what=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
-	$CCONF -c $conf -l mds | egrep -v '^mds$' ; \
-	$CCONF -c $conf -l osd | egrep -v '^osd$'`
-fi
+get_name_list "$@"
 
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
@@ -119,7 +105,7 @@ for name in $what; do
     ssh=""
     cmd=""
     if [[ $host != "" ]]; then
-	#echo host for $name is $host, i am $hostname
+	echo host for $name is $host, i am $hostname
 	if [[ $host != $hostname ]]; then
 	    # skip, unless we're starting remote daemons too
 	    if [[ $allhosts -eq 0 ]]; then
@@ -164,7 +150,7 @@ for name in $what; do
     [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
 
     get_conf_bool valgrind "$dovalgrind" "valgrind" $sections
-    [[ $valgrind -eq 1]] && wrap="$wrap valgrind"
+    [[ $valgrind -eq 1 ]] && wrap="$wrap valgrind"
 
     [[ $wrap != "" ]] && runmode="-f &"
 
