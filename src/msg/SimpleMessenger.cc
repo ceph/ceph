@@ -359,13 +359,17 @@ static void remove_pid_file()
   // only remove it if it has OUR pid in it!
   int fd = ::open(g_conf.pid_file, O_RDONLY);
   if (fd >= 0) {
-    char actual[20], correct[20];
-    sprintf(correct, "%d\n", getpid());
-    ::read(fd, actual, 20);
+    char buf[20];
+    ::read(fd, buf, 20);
     ::close(fd);
+    int a = atoi(buf);
 
-    if (strncmp(actual, correct, 20) == 0)
+    if (a == getpid())
       ::unlink(g_conf.pid_file);
+    else
+      dout(0) << "strange, pid file " << g_conf.pid_file 
+	      << " has " << a << ", not expected " << getpid()
+	      << dendl;
   }
 }
 
