@@ -93,6 +93,19 @@ options="$options $1"
 shift
 done
 
+
+# build mon_addr_arg with all mon addrs
+n=0
+mon_addr_arg=""
+while [ 1 ]; do
+    name="mon$n"
+    get_conf mon_addr "" "mon addr" $name "mon" "global"
+    [ "$mon_addr" == "" ] && break
+    mon_addr_arg="$mon_addr_arg -m $mon_addr"
+    n=$(($n + 1))
+done
+
+
 command=$1
 shift
 
@@ -108,9 +121,6 @@ for name in $what; do
     get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
     get_conf conf_file "$runtime_conf" "conf file" $sections
 
-    get_conf mon_addr "$monaddr" "mon addr" $sections
-    [ "$mon_addr" != "" ] && mon_addr_cmd="-m $mon_addr"
-
     # extract name-specific options from $conf
     if [[ $name =~ "mon" ]]; then
 	get_conf mon_data "" "mon data" $sections
@@ -119,7 +129,7 @@ for name in $what; do
     fi
 
     if [[ $name =~ "mds" ]]; then
-	module_opt="$mon_addr_cmd"
+	module_opt="$mon_addr_arg"
 	module_bin="$BINDIR/cmds"
     fi
 
@@ -127,7 +137,7 @@ for name in $what; do
 	get_conf osd_data "" "osd data" $sections
 	get_conf osd_journal "" "osd journal" $sections
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	module_opt="$mon_addr_cmd $osd_data $osd_journal_cmd"
+	module_opt="$mon_addr_arg $osd_data $osd_journal_cmd"
 	module_bin="$BINDIR/cosd"
     fi
 
