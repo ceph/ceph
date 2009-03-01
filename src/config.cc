@@ -641,6 +641,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ_STR("global", "dout sym dir", dout_sym_dir);
   CF_READ_STR("global", "logger dir", logger_dir);
   CF_READ_STR("global", "pid file", pid_file);
+  CF_READ_STR("global", "monmap file", monmap_file);
   CF_READ("global", "chdir root", chdir_root);
 
   CF_READ("debug", "debug", debug);
