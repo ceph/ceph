@@ -172,6 +172,8 @@ EXTRA_DIST = verify-mds-journal.sh vstart.sh \
 install-data-local:
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
+	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(libdir)/ceph/sample.ceph.conf
+	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(libdir)/ceph/sample.cluster.conf
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
 	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons
 	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons

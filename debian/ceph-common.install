@@ -8,3 +8,5 @@ usr/bin/crun
 usr/sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
+etc/ceph/sample.ceph.conf
+etc/ceph/sample.cluster.conf
