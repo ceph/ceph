@@ -7,6 +7,42 @@ runtime_conf=$ETCDIR"/ceph.conf"
 hostname=`hostname | cut -d . -f 1`
 
 
+check_host() {
+    # what host is this daemon assigned to?
+    host=`$CCONF -c $conf -s $name -s $type host`
+    ssh=""
+    dir=$PWD
+    if [[ $host != "" ]]; then
+	#echo host for $name is $host, i am $hostname
+	if [[ $host != $hostname ]]; then
+	    # skip, unless we're starting remote daemons too
+	    if [[ $allhosts -eq 0 ]]; then
+		return 1
+	    fi
+
+	    # we'll need to ssh into that host
+	    ssh="ssh root@$host"
+	    get_conf dir "$dir" "ssh path" $sections
+	fi
+    else
+	host=$hostname
+    fi
+
+    echo -n "=== $name === "
+
+    return 0
+}
+
+do_cmd() {
+    [[ $verbose = 1 ]] && echo "--- $host:$dir# $1"
+    if [[ $ssh = "" ]]; then
+	ulimit -c unlimited
+	bash -c "$1" || (echo failed. ; exit 1)
+    else
+	$ssh "cd $dir ; ulimit -c unlimited ; $1" || (echo failed. ; exit 1)
+    fi
+}
+
 get_name_list() {
     orig=$1
 

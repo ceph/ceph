@@ -26,7 +26,7 @@ numosd=
 
 while [ $# -ge 1 ]; do
 case $1 in
-    --allhosts)
+    --allhosts | -a)
 	    allhosts=1
 	    ;;
     --clobber_old_data)
@@ -84,37 +84,33 @@ for name in $what; do
     num=`echo $name | cut -c 4-`
     sections="$name $type global"
 
-    # what host is this daemon assigned to?
-    host=`$CCONF -c $conf -s $name -s $type host`
-    ssh=""
-    if [[ $host != "" ]]; then
-	#echo host for $name is $host, i am $hostname
-	if [[ $host != $hostname ]]; then
-	    # skip, unless we're starting remote daemons too
-	    if [[ $allhosts -eq 0 ]]; then
-		continue;
-	    fi
-
-	    # we'll need to ssh into that host
-	    ssh="ssh root@$host"
-	fi
-    else
-	host=$hostname
-    fi
+    check_host || continue
 
     get_conf conf_file "$runtime_conf" "conf file" $sections
 
+    if [[ $ssh = 1 ]] && [[ ! $pushed_to =~ " $host " ]]; then
+	scp $osdmap $host:$osdmap
+	scp $monmap $host:$monmap
+	pushed_to="$pushed_to $host "
+    fi
+
     if [[ $type = "mon" ]]; then
-	get_conf mon_path "" "mon data" $sections
-	$BINDIR/mkmonfs -c $conf_file $clobber $mon_path --mon $num \
-	    --monmap $monmap --osdmap $osdmap || exit 1
+	get_conf mon_data "" "mon data" $sections
+	do_cmd "$BINDIR/mkmonfs $clobber $mon_data --mon $num --monmap $monmap --osdmap $osdmap"
     fi
 
     if [[ $type = "osd" ]]; then
 	get_conf osd_path "" "osd data" $sections
+	get_conf btrfs_path "$osd_path" "btrfs path" $sections  # mount point defaults so osd path
+	get_conf btrfs_devs "" "btrfs devs" $sections
+	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
+	
+	if [ $mkbtrfs -eq 1 ]; then
+	    do_cmd "modprobe btrfs ; umount $btrfs_path ; mkfs.btrfs $btrfs_devs ; mount -t btrfs $first_dev $btrfs_path"
+	fi
+
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	$ssh $BINDIR/cosd -c $conf_file --monmap_file $monmap \
-	    --mkfs_for_osd $num $osd_path || exit 1
+	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_path"
     fi
 
 done

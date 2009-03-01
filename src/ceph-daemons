@@ -27,25 +27,25 @@ stop_daemon() {
     daemon=$2
     pidfile=$3
     echo -n "Stopping ceph $name on $host..."
-    while [ 1 ]; do
+    do_cmd "while [ 1 ]; do 
 	[ -e $pidfile ] || break
 	pid=`cat $pidfile`
-	while [ -e /proc/$pid ] && grep -q $daemon /proc/$pid/cmdline ; do
-	    cmd="kill $pid"
-	    [[ $host != $hostname ]] && cmd="ssh $host $cmd"
-	    echo -n $cmd...
-	    $cmd
+	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
+	    cmd=\"kill \$pid\"
+	    echo -n \$cmd...
+	    \$cmd
 	    sleep 1
 	    continue
 	done
 	break
-    done
+    done"
     echo done
 }
 
 ## command line options
 options=
 
+version=0
 dovalgrind=0
 docrun=1
 allhosts=0
@@ -54,13 +54,16 @@ monaddr=
 
 while [[ $1 =~ '-' ]]; do     # FIXME: why not '^-'?
 case $1 in
+    -v | --verbose)
+	    verbose=1
+	    ;;
     --valgrind)
 	    dovalgrind=1
 	    ;;
     --novalgrind)
 	    dovalgrind=0
 	    ;;
-    --allhosts)
+    --allhosts | -a)
 	    allhosts=1;
 	    ;;
     --restart)
@@ -100,39 +103,23 @@ for name in $what; do
     num=`echo $name | cut -c 4-`
     sections="$name $type global"
 
-    # this host?
-    host=`$CCONF --conf_file $conf -s $name -s $type -s global host`
-    ssh=""
-    cmd=""
-    if [[ $host != "" ]]; then
-	echo host for $name is $host, i am $hostname
-	if [[ $host != $hostname ]]; then
-	    # skip, unless we're starting remote daemons too
-	    if [[ $allhosts -eq 0 ]]; then
-		continue;
-	    fi
-
-	    # we'll need to ssh into that host
-	    ssh="ssh root@$host"
-	    cd_path=`$CCONF --conf_file $conf -s $name -s $type -s global "ssh path"`
-	fi
-    else
-	host=$hostname
-    fi
+    check_host || continue
 
     get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
     get_conf conf_file "$runtime_conf" "conf file" $sections
+
     get_conf mon_addr "$monaddr" "mon addr" $sections
     [ "$mon_addr" != "" ] && mon_addr_cmd="-m $mon_addr"
+
     # extract name-specific options from $conf
     if [[ $name =~ "mon" ]]; then
-	get_conf mon_path "" "mon path" $sections
-	module_opt="$mon_path"
+	get_conf mon_data "" "mon data" $sections
+	module_opt="$mon_data"
 	module_bin="$BINDIR/cmon"
     fi
 
     if [[ $name =~ "mds" ]]; then
-	module_opt="--conf_file $conf_file $mon_addr_cmd"
+	module_opt="$mon_addr_cmd"
 	module_bin="$BINDIR/cmds"
     fi
 
@@ -140,32 +127,31 @@ for name in $what; do
 	get_conf osd_data "" "osd data" $sections
 	get_conf osd_journal "" "osd journal" $sections
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	module_opt="--conf_file $conf_file \
-			$mon_addr_cmd $osd_data $osd_journal_cmd"
+	module_opt="$mon_addr_cmd $osd_data $osd_journal_cmd"
 	module_bin="$BINDIR/cosd"
     fi
 
-    # build final command
-    wrap=""
-    runflags="-d"
-    runmode=""
-
-    get_conf_bool crun "$docrun" "restart on core dump" $sections
-    [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
-
-    get_conf_bool valgrind "$dovalgrind" "valgrind" $sections
-    echo valgrind=$valgrind
-    [[ $valgrind -eq 1 ]] && wrap="$wrap valgrind"
-
-    [[ $wrap != "" ]] && runflags="-f" && runmode="&"
-
-    cmd="$ssh $wrap $module_bin $runflags $module_opt $runmode"
+    module_opt="-p $pid_file -c $conf_file $module_opt"
 
     case "$command" in
 	start)
+            # build final command
+	    wrap=""
+	    runflags="-d"
+	    runmode=""
+	    
+	    get_conf_bool crun "$docrun" "restart on core dump" $sections
+	    [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
+	    
+	    get_conf_bool valgrind "$dovalgrind" "valgrind" $sections
+	    [[ $valgrind -eq 1 ]] && wrap="$wrap valgrind"
+	    
+	    [[ $wrap != "" ]] && runflags="-f" && runmode="&"
+	    
+	    cmd="$wrap $module_bin $runflags $module_opt $runmode"
+	    
 	    echo Starting ceph $name on $host...
-	    echo $cmd
-            eval $cmd
+            do_cmd "$cmd"
 	    ;;
 	
 	stop)
