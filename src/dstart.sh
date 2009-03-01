@@ -33,7 +33,7 @@ while [ $# -ge 1 ]; do
 done
 
 
-ARGS="--dout_dir /data/`hostname`"
+ARGS="--log_dir /data/`hostname`"
 
 MOUNTOPTIONS="-o notreelog,flushoncommit"
 
@@ -144,7 +144,7 @@ do
        ssh root@$host cd $HOME/ceph/src \; ./cosd --mkfs_for_osd $osd $devm # --osd_auto_weight 1
    fi
    echo starting cosd
-   ssh root@$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./crun $norestart ./cosd $devm --dout_dir /data/$host $COSD_ARGS -f &
+   ssh root@$host cd $HOME/ceph/src \; ulimit -c unlimited \; ./crun $norestart ./cosd $devm --log_dir /data/$host $COSD_ARGS -f &
 
  done
 done

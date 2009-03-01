@@ -23,27 +23,27 @@ bool _dout_need_open = true;
 void _dout_open_log()
 {
   // logging enabled?
-  if (!(g_conf.dout_dir && g_conf.file_logs)) {
+  if (!(g_conf.log_dir && g_conf.file_logs)) {
     _dout_need_open = false;
     return;
   }
 
   // calculate log dir, filename, etc.
   if (!_dout_path[0]) {
-    if (g_conf.dout_dir[0] == '/') 
-      strcpy(_dout_dir, g_conf.dout_dir);
+    if (g_conf.log_dir[0] == '/') 
+      strcpy(_dout_dir, g_conf.log_dir);
     else {
       getcwd(_dout_dir, 100);
       strcat(_dout_dir, "/");
-      strcat(_dout_dir, g_conf.dout_dir);
+      strcat(_dout_dir, g_conf.log_dir);
     }
 
-    if (g_conf.dout_sym_dir[0] == '/') 
-      strcpy(_dout_symlink_dir, g_conf.dout_sym_dir);
+    if (g_conf.log_sym_dir[0] == '/') 
+      strcpy(_dout_symlink_dir, g_conf.log_sym_dir);
     else {
       getcwd(_dout_symlink_dir, 100);
       strcat(_dout_symlink_dir, "/");
-      strcat(_dout_symlink_dir, g_conf.dout_sym_dir);
+      strcat(_dout_symlink_dir, g_conf.log_sym_dir);
     }
 
     char hostname[80];
@@ -69,7 +69,7 @@ void _dout_open_log()
 
 int _dout_rename_output_file()  // after calling daemon()
 {
-  if (g_conf.dout_dir && g_conf.file_logs) {
+  if (g_conf.log_dir && g_conf.file_logs) {
     char oldpath[1000];
     char hostname[80];
     gethostname(hostname, 79);
@@ -90,7 +90,7 @@ int _dout_rename_output_file()  // after calling daemon()
 
 int _dout_create_courtesy_output_symlink(const char *type, int n)
 {
-  if (g_conf.dout_dir && g_conf.file_logs) {
+  if (g_conf.log_dir && g_conf.file_logs) {
     if (_dout_need_open)
       _dout_open_log();
 

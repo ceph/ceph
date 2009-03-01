@@ -6092,7 +6092,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
     //mds->logger->set("buf",buffer_total_alloc);
   }
 
-  if (g_conf.log_pins) {
+  //if (g_conf.log_pins) {
     // pin
     /*
 for (int i=0; i<CInode::NUM_PINS; i++) {
@@ -6111,7 +6111,7 @@ for (int i=0; i<CInode::NUM_PINS; i++) {
       it->second);
       }
     */
-  }
+  //}
 
 }
 

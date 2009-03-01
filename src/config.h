@@ -40,10 +40,10 @@ extern const char *get_pool_name(int pool);
 extern entity_addr_t g_my_addr;
 
 struct md_config_t {
-  int  num_mon;
-  int  num_mds;
-  int  num_osd;
-  int  num_client;
+  int num_mon;
+  int num_mds;
+  int num_osd;
+  int num_client;
 
   bool mkfs;
   
@@ -52,19 +52,16 @@ struct md_config_t {
   bool daemonize;
   bool file_logs;
 
-  // profiling
-  bool  log;
-  int   log_interval;
-  const char *log_name;
-
-  bool log_messages;
-  bool log_pins;
-
+  // logger (profiling)
+  bool logger;
+  int logger_interval;
   bool logger_calc_variance;
-
-  const char *dout_dir;
-  const char *dout_sym_dir;
+  const char *logger_subdir;
   const char *logger_dir;
+
+  const char *log_dir;
+  const char *log_sym_dir;
+
   const char *pid_file;
 
   const char *conf_file;

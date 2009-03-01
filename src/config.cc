@@ -200,18 +200,15 @@ md_config_t g_conf = {
   file_logs: false,
 
   // profiling and debugging
-  log: true,
-  log_interval: 1,
-  log_name: (char*)0,
-
-  log_messages: true,
-  log_pins: true,
-
+  logger: true,
+  logger_interval: 1,
   logger_calc_variance: true,
-
-  dout_dir: INSTALL_PREFIX "/var/log/ceph",        // if daemonize == true
-  dout_sym_dir: INSTALL_PREFIX "/var/log/ceph",    // if daemonize == true
+  logger_subdir: 0,
   logger_dir: INSTALL_PREFIX "/var/log/ceph/stat",
+
+  log_dir: INSTALL_PREFIX "/var/log/ceph",        // if daemonize == true
+  log_sym_dir: INSTALL_PREFIX "/var/log/ceph",    // if daemonize == true
+
   pid_file: 0,
 
   conf_file: INSTALL_PREFIX "/etc/ceph/ceph.conf",
@@ -630,18 +627,20 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("global", "num mds", num_mds);
   CF_READ("global", "num osd", num_osd);
   CF_READ("global", "mkfs", mkfs);
+  CF_READ_STR("global", "monmap file", monmap_file);
   CF_READ("global", "daemonize", daemonize);
   CF_READ("global", "file logs", file_logs);
-  CF_READ("global", "log", log);
-  CF_READ("global", "log interval", log_interval);
-  CF_READ_STR("global", "log name", log_name);
-  CF_READ("global", "log messages", log_messages);
-  CF_READ("global", "log pins", log_pins);
-  CF_READ_STR("global", "dout dir", dout_dir);
-  CF_READ_STR("global", "dout sym dir", dout_sym_dir);
+  CF_READ("global", "logger", logger);
+  CF_READ("global", "logger interval", logger_interval);
+  CF_READ_STR("global", "logger calc variance", logger_subdir);
+  CF_READ_STR("global", "logger subdir", logger_subdir);
   CF_READ_STR("global", "logger dir", logger_dir);
+
+  CF_READ_STR("global", "log dir", log_dir);
+  CF_READ_STR("global", "log sym dir", log_sym_dir);
+
   CF_READ_STR("global", "pid file", pid_file);
-  CF_READ_STR("global", "monmap file", monmap_file);
+
   CF_READ("global", "chdir root", chdir_root);
 
   CF_READ("debug", "debug", debug);
@@ -950,11 +949,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     //g_conf.fake_osd_sync = atoi(args[++i]);
 
         
-    else if (strcmp(args[i], "--dout_dir") == 0 && isarg) 
-      g_conf.dout_dir = args[++i];
+    else if (strcmp(args[i], "--log_dir") == 0 && isarg) 
+      g_conf.log_dir = args[++i];
     else if (//strcmp(args[i], "-o") == 0 ||
-	     strcmp(args[i], "--dout_sym_dir") == 0 && isarg) 
-      g_conf.dout_sym_dir = args[++i];
+	     strcmp(args[i], "--log_sym_dir") == 0 && isarg) 
+      g_conf.log_sym_dir = args[++i];
     else if (strcmp(args[i], "--logger_dir") == 0 && isarg) 
       g_conf.logger_dir = args[++i];
     else if ((strcmp(args[i], "--pid_file") == 0 ||
@@ -1085,10 +1084,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_debug_after_conf = g_conf;
     }
 
-    else if (strcmp(args[i], "--log") == 0 && isarg) 
-      g_conf.log = atoi(args[++i]);
-    else if (strcmp(args[i], "--log_name") == 0 && isarg) 
-      g_conf.log_name = args[++i];
+    else if (strcmp(args[i], "--logger") == 0 && isarg) 
+      g_conf.logger = atoi(args[++i]);
+    else if (strcmp(args[i], "--logger_subdir") == 0 && isarg) 
+      g_conf.logger_subdir = args[++i];
 
     else if (strcmp(args[i], "--fakemessenger_serialize") == 0 && isarg) 
       g_conf.fakemessenger_serialize = atoi(args[++i]);

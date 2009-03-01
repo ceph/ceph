@@ -81,18 +81,18 @@ static void flush_all_loggers()
   int now_sec = fromstart.sec();
 
   // do any catching up we need to
-  while (now_sec - last_flush >= g_conf.log_interval) {
+  while (now_sec - last_flush >= g_conf.logger_interval) {
     generic_dout(20) << "fromstart " << fromstart << " last_flush " << last_flush << " flushing" << dendl;
     for (list<Logger*>::iterator p = logger_list.begin();
 	 p != logger_list.end();
 	 ++p) 
       (*p)->_flush();
-    last_flush += g_conf.log_interval;
+    last_flush += g_conf.logger_interval;
   }
 
   // schedule next flush event
   utime_t next;
-  next.sec_ref() = start.sec() + last_flush + g_conf.log_interval;
+  next.sec_ref() = start.sec() + last_flush + g_conf.logger_interval;
   next.usec_ref() = start.usec();
   generic_dout(20) << "logger now=" << now
 		   << "  start=" << start 
@@ -111,7 +111,7 @@ void Logger::_open_log()
   Mutex::Locker l(logger_lock);
   struct stat st;
 
-  if (!g_conf.log)
+  if (!g_conf.logger)
     return;
 
   filename = "";
@@ -129,8 +129,8 @@ void Logger::_open_log()
     ::mkdir(filename.c_str(), 0750);
 
   filename += "/";
-  if (g_conf.log_name) {
-    filename += g_conf.log_name;
+  if (g_conf.logger_subdir) {
+    filename += g_conf.logger_subdir;
     ::mkdir( filename.c_str(), 0755 );   // make sure dir exists
     filename += "/";
   }
@@ -225,7 +225,7 @@ void Logger::_flush()
 
 long Logger::inc(int key, long v)
 {
-  if (!open || !g_conf.log)
+  if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -237,7 +237,7 @@ long Logger::inc(int key, long v)
 
 double Logger::finc(int key, double v)
 {
-  if (!open || !g_conf.log)
+  if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -249,7 +249,7 @@ double Logger::finc(int key, double v)
 
 long Logger::set(int key, long v)
 {
-  if (!open || !g_conf.log)
+  if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -262,7 +262,7 @@ long Logger::set(int key, long v)
 
 double Logger::fset(int key, double v)
 {
-  if (!open || !g_conf.log)
+  if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -274,7 +274,7 @@ double Logger::fset(int key, double v)
 
 double Logger::favg(int key, double v)
 {
-  if (!open || !g_conf.log)
+  if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
@@ -288,7 +288,7 @@ double Logger::favg(int key, double v)
 
 long Logger::get(int key)
 {
-  if (!open || !g_conf.log)
+  if (!open || !g_conf.logger)
     return 0;
   logger_lock.Lock();
   int i = type->lookup_key(key);
