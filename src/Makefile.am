@@ -53,7 +53,6 @@ sbin_PROGRAMS = \
 	mount.ceph
 
 bin_SCRIPTS = crun
-sbin_SCRIPTS = mkcephfs
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a
@@ -167,16 +166,16 @@ noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh \
-	     crun ceph_common.sh ceph-daemons
+	     crun ceph_common.sh ceph-daemons mkcephfs
 
 install-data-local:
+	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
-	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(libdir)/ceph/sample.ceph.conf
-	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(libdir)/ceph/sample.cluster.conf
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
 	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons
-	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons
+	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
+	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(sysconfdir)/ceph/sample.cluster.conf
 
 # cleaning
 clean-local:
@@ -566,4 +565,6 @@ noinst_HEADERS = \
         osdc/Filer.h\
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
-        osdc/Objecter.h
+        osdc/Objecter.h\
+	sample.ceph.conf\
+	sample.cluster.conf
