@@ -12,12 +12,13 @@ else
     ETCDIR=/etc/ceph
 fi
 
-. $LIBDIR/ceph_common.sh
-
 usage_exit() {
     echo "usage: $0 [--allhosts] [-c conffile.conf] [--clobber_old_data] [--mkbtrfs]"
     exit
 }
+
+. $LIBDIR/ceph_common.sh
+
 
 allhosts=0
 clobber=""

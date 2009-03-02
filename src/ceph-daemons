@@ -13,14 +13,15 @@ else
     ETCDIR=/etc/ceph
 fi
 
-. $LIBDIR/ceph_common.sh
-
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
     printf "\t-c conffile.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
     exit
 }
+
+. $LIBDIR/ceph_common.sh
+
 
 stop_daemon() {
     name=$1
@@ -93,7 +94,6 @@ options="$options $1"
 shift
 done
 
-
 # build mon_addr_arg with all mon addrs
 n=0
 mon_addr_arg=""
@@ -115,9 +115,9 @@ for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     num=`echo $name | cut -c 4-`
     sections="$name $type global"
-
+echo $name
     check_host || continue
-
+echo $name
     get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
     get_conf conf_file "$runtime_conf" "conf file" $sections
 
@@ -171,6 +171,11 @@ for name in $what; do
 	restart)
 	    $0 $options stop $name
 	    $0 $options start $name
+	    ;;
+
+	cleanlogs)
+	    get_conf log_dir "/var/log/ceph" "log dir" $sections
+	    do_cmd "for f in $log_dir/$name*; do rm `readlink $f` ; rm $f ; done"
 	    ;;
 	
 	*)
