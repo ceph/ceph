@@ -166,14 +166,14 @@ noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh \
-	     crun ceph_common.sh ceph-daemons mkcephfs
+	     crun ceph_common.sh init-ceph mkcephfs
 
 install-data-local:
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
-	$(install_sh_SCRIPT) -m 0755 ceph-daemons $(DESTDIR)$(sysconfdir)/init.d/ceph-daemons
+	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)$(sysconfdir)/init.d/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
 	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(sysconfdir)/ceph/sample.cluster.conf
 
