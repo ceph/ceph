@@ -4,8 +4,10 @@ ceph (0.7-1) unstable; urgency=low
   * osd bug fixes	
   * fast truncate
   * improved start/stop scripts
+  * new cluster configuration files, framework
+  * /proc/fs/ceph -> /sys/fs/ceph on kclient
 
- -- sage <sage@newdream.net>  Thu, 1 Jan 2009 13:57:22 -0800
+ -- sage <sage@newdream.net>  Thu, 5 Mar 2009 13:57:22 -0800
 
 ceph (0.6-1) unstable; urgency=low
 
