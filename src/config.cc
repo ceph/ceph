@@ -387,8 +387,6 @@ md_config_t g_conf = {
   mds_hack_log_expire_for_better_stats: false,
 
   // --- osd ---
-  osd_rep: OSD_REP_PRIMARY,
-
   osd_balance_reads: false,  // send from client to replica
   osd_flash_crowd_iat_threshold: 0,//100,
   osd_flash_crowd_iat_alpha: 0.125,
@@ -760,7 +758,6 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("mds", "dump cache after rejoin", mds_dump_cache_after_rejoin);
   CF_READ("mds", "hack log expire for better stats", mds_hack_log_expire_for_better_stats);
 
-  CF_READ("osd", "rep", osd_rep);
   CF_READ("osd", "balance reads", osd_balance_reads);
   CF_READ("osd", "flash crowd iat threshold", osd_flash_crowd_iat_threshold);
   CF_READ("osd", "flash crowd iat alpha", osd_flash_crowd_iat_alpha);
@@ -1271,14 +1268,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if ( strcmp(args[i],"--osd_stat_refresh_interval" ) == 0 && isarg)
       g_conf.osd_stat_refresh_interval = atof(args[++i]);
 
-    else if (strcmp(args[i], "--osd_rep") == 0 && isarg) 
-      g_conf.osd_rep = atoi(args[++i]);
-    else if (strcmp(args[i], "--osd_rep_chain") == 0) 
-      g_conf.osd_rep = OSD_REP_CHAIN;
-    else if (strcmp(args[i], "--osd_rep_splay") == 0) 
-      g_conf.osd_rep = OSD_REP_SPLAY;
-    else if (strcmp(args[i], "--osd_rep_primary") == 0) 
-      g_conf.osd_rep = OSD_REP_PRIMARY;
     else if (strcmp(args[i], "--osd_heartbeat_interval") == 0 && isarg) 
       g_conf.osd_heartbeat_interval = atoi(args[++i]);
     else if (strcmp(args[i], "--osd_heartbeat_grace") == 0 && isarg) 

@@ -140,10 +140,7 @@ class Objecter {
     // acker - where i read, and receive acks from
     int acker() {
       if (acting.empty()) return -1;
-      if (g_conf.osd_rep == OSD_REP_PRIMARY)
-        return acting[0];
-      else
-        return acting[acting.size() > 1 ? 1:0];
+      return acting[0];
     }
   };
 

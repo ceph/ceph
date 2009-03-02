@@ -120,8 +120,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   pobject_t poid(info.pgid.pool(), 0, oid);
 
   // -- load balance reads --
-  if (is_primary() &&
-      g_conf.osd_rep == OSD_REP_PRIMARY) {
+  if (is_primary()) {
     // -- read on primary+acker ---
     
     // test
