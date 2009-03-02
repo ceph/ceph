@@ -175,9 +175,16 @@ echo $name
 
 	cleanlogs)
 	    get_conf log_dir "/var/log/ceph" "log dir" $sections
-	    do_cmd "for f in $log_dir/$name*; do rm `readlink $f` ; rm $f ; done"
+	    get_conf log_sym_dir "/var/log/ceph" "log sym dir" $sections
+	    do_cmd "for f in $log_sym_dir/$name*; do rm -f \`readlink \$f\` ; rm -f \$f ; done"
 	    ;;
-	
+
+	cleanalllogs)
+	    get_conf log_dir "/var/log/ceph" "log dir" $sections
+	    get_conf log_sym_dir "/var/log/ceph" "log sym dir" $sections
+	    do_cmd "rm -f $log_dir/* $log_sym_dir/*"
+	    ;;
+
 	*)
 	    usage_exit
 	    ;;
