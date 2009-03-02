@@ -4800,9 +4800,10 @@ class C_MDS_truncate_logged : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
+  bool smaller;
 public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i) :
-    mds(m), mdr(r), in(i) {}
+  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, bool sm) :
+    mds(m), mdr(r), in(i), smaller(sm) {}
   void finish(int r) {
     assert(r == 0);
 
@@ -4812,7 +4813,7 @@ public:
 
     // notify any clients
     mds->locker->issue_truncate(in);
-    if (in->inode.is_truncating())
+    if (smaller && in->inode.is_truncating())
       mds->mdcache->truncate_inode(in, mdr->ls);
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
@@ -4833,7 +4834,8 @@ void Server::handle_client_truncate(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  dout(10) << "handle_client_truncate " << req->head.args.truncate.length << " on " << *cur << dendl;
+  dout(10) << "handle_client_truncate " << cur->get_projected_inode()->size << " -> " << req->head.args.truncate.length
+	   << " on " << *cur << dendl;
 
   if (mdr->ref_snapid != CEPH_NOSNAP) {
     reply_request(mdr, -EINVAL);
@@ -4858,10 +4860,14 @@ void Server::handle_client_truncate(MDRequest *mdr)
     return;
   }
 
-  if (old_size > req->head.args.truncate.length && pi->is_truncating()) {
+  // trunc from bigger -> smaller
+  bool smaller = req->head.args.truncate.length < old_size;
+
+  if (smaller && pi->is_truncating()) {
     dout(10) << " waiting for pending truncate from " << pi->truncate_from
 	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
     cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+    mds->mdlog->flush();
     return;
   }
 
@@ -4876,7 +4882,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   pi->mtime = ctime;
   pi->ctime = ctime;
   pi->version = pdv;
-  if (old_size > req->head.args.truncate.length) {
+  if (smaller) {
     // truncate to smaller size
     pi->truncate_from = old_size;
     pi->size = req->head.args.truncate.length;
@@ -4892,7 +4898,7 @@ void Server::handle_client_truncate(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_truncate_logged(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_truncate_logged(mds, mdr, cur, smaller));
 }
 
 
@@ -5066,7 +5072,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->xlist_open_file);
   
-  journal_and_reply(mdr, in, 0, le, new C_MDS_truncate_logged(mds, mdr, in));
+  journal_and_reply(mdr, in, 0, le, new C_MDS_truncate_logged(mds, mdr, in, true));
 }
 
 

@@ -4123,7 +4123,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     snapc = &nullsnap;
     assert(in->last == CEPH_NOSNAP);
   }
-  dout(10) << "truncate_inode snapc " << snapc << " on " << *in << dendl;
+  dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
 		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, 0,
 		       0, new C_MDC_TruncateFinish(this, in, ls));
