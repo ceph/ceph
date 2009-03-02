@@ -114,4 +114,9 @@ for name in $what; do
 	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_path"
     fi
 
+    if [[ $type = "mds" ]]; then
+	# do nothing
+	echo
+    fi
+
 done

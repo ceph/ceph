@@ -173,6 +173,10 @@ for name in $what; do
 	    stop_daemon $name c$type $pid_file -9
 	    ;;
 	    
+	killall)
+	    echo "killall c$type on $host"
+	    do_cmd "killall -9 c$type"
+	    ;;
 	
 	restart)
 	    $0 $options stop $name
