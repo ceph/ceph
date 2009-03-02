@@ -256,10 +256,6 @@ md_config_t g_conf = {
   ms_retry_interval: 2.0,  // how often to attempt reconnect 
   ms_fail_interval: 15.0,  // fail after this long
   ms_die_on_failure: false,
-
-  ms_stripe_osds: false,
-  ms_skip_rank0: false,
-  ms_overlay_clients: false,
   ms_nocrc: false,
 
 
@@ -659,9 +655,6 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("messenger", "retry interval", ms_retry_interval);
   CF_READ("messenger", "fail interval", ms_fail_interval);
   CF_READ("messenger", "die on failure", ms_die_on_failure);
-  CF_READ("messenger", "stripe osds", ms_stripe_osds);
-  CF_READ("messenger", "skip rank0", ms_skip_rank0);
-  CF_READ("messenger", "overlay clients", ms_overlay_clients);
   CF_READ("messenger", "no crc", ms_nocrc);
 
   CF_READ("mon", "tick interval", mon_tick_interval);
@@ -902,14 +895,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       g_conf.log_to_stdout = false;
     }
 
-    else if (strcmp(args[i], "--ms_stripe_osds") == 0)
-      g_conf.ms_stripe_osds = true;
-    else if (strcmp(args[i], "--ms_skip_rank0") == 0)
-      g_conf.ms_skip_rank0 = true;
-    else if (strcmp(args[i], "--ms_overlay_clients") == 0)
-      g_conf.ms_overlay_clients = true;
-    else if (strcmp(args[i], "--ms_die_on_failure") == 0)
-      g_conf.ms_die_on_failure = true;
     else if (strcmp(args[i], "--ms_nocrc") == 0)
       g_conf.ms_nocrc = true;
 

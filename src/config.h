@@ -120,10 +120,6 @@ struct md_config_t {
   double ms_retry_interval;
   double ms_fail_interval;
   bool ms_die_on_failure;
-
-  bool ms_stripe_osds;
-  bool ms_skip_rank0;
-  bool ms_overlay_clients;
   bool ms_nocrc;
 
   // mon
