@@ -118,7 +118,6 @@ struct ceph_client {
 	struct workqueue_struct *trunc_wq;
 
 	struct backing_dev_info backing_dev_info;
-	struct list_head clients_all;
 	struct proc_dir_entry *proc_entry;
 };
 

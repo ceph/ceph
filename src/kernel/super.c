@@ -27,9 +27,6 @@ int ceph_debug_mask = 0xffffffff;
 int ceph_debug_console;
 int ceph_debug_super = -1;   /* for this file */
 
-struct list_head ceph_clients;
-spinlock_t ceph_clients_list_lock = SPIN_LOCK_UNLOCKED;
-
 #define DOUT_MASK DOUT_MASK_SUPER
 #define DOUT_VAR ceph_debug_super
 #include "super.h"
@@ -663,11 +660,6 @@ static void ceph_destroy_client(struct ceph_client *client)
 {
 	dout(10, "destroy_client %p\n", client);
 
-	spin_lock(&ceph_clients_list_lock);
-	if (!list_empty(&client->clients_all))
-		list_del(&client->clients_all);
-	spin_unlock(&ceph_clients_list_lock);
-
 	/* unmount */
 	ceph_mdsc_stop(&client->mdsc);
 	ceph_monc_stop(&client->monc);
@@ -1019,10 +1011,6 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		dout(20, "get_sb got existing client %p\n", client);
 	} else {
 		dout(20, "get_sb using new client %p\n", client);
-		spin_lock(&ceph_clients_list_lock);
-		list_add(&client->clients_all, &ceph_clients);
-		spin_unlock(&ceph_clients_list_lock);
-
 		err = ceph_init_bdi(sb, client);
 		if (err < 0)
 			goto out_splat;
@@ -1075,7 +1063,6 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
-	INIT_LIST_HEAD(&ceph_clients);
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_init();
