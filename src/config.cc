@@ -185,7 +185,8 @@ std::map<entity_name_t,float> g_fake_kill_after;
 entity_addr_t g_my_addr;
 
 md_config_t g_debug_after_conf;
-
+md_config_t g_conf;
+#if 0
 md_config_t g_conf = {
   num_mon: 1,
   num_mds: 1,
@@ -481,7 +482,7 @@ md_config_t g_conf = {
   bdbstore_transactional: false
 #endif // USE_OSBDB
 };
-
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -587,6 +588,7 @@ void parse_config_option_string(string& s)
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
+  preparse_config_options(nargs, false);
   parse_config_options(nargs, false);
 }
 
@@ -605,7 +607,7 @@ void sighup_handler(int signum)
 #define CF_READ_STR(section, var, inout) \
   cf->read(section, var, (char **)&g_conf.inout, (char *)g_conf.inout)
 
-void parse_config_file(ConfFile *cf, bool auto_update)
+void parse_config_file0(ConfFile *cf, bool auto_update)
 {
   cf->set_auto_update(true);
 
@@ -838,7 +840,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
 #endif
 }
 
-void parse_config_options(std::vector<const char*>& args, bool open)
+void parse_config_options0(std::vector<const char*>& args, bool open)
 {
   std::vector<const char*> nargs;
 
@@ -867,7 +869,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 
     if (strcmp(args[i],"--bind") == 0 && isarg)  {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
-      exit(1);
     } else if (strcmp(args[i], "--nummon") == 0 && isarg) 
       g_conf.num_mon = atoi(args[++i]);
     else if (strcmp(args[i], "--nummds") == 0 && isarg) 
@@ -1414,3 +1415,276 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 }
 
 
+#define STRINGIFY(x) #x
+
+typedef enum {
+	NONE, INT, STR, DOUBLE, FLOAT, BOOL
+} opt_type_t;
+
+
+
+struct config_option {
+	const char *section;
+	const char *conf_name;
+	const char *name;
+	void *val_ptr;
+       
+	const char *def_val;
+	opt_type_t type;
+	char char_option;  // if any
+};
+
+#define OPTION(section, name, schar, type, def_val) \
+       { STRINGIFY(section), NULL, STRINGIFY(name), \
+         &g_conf.name, STRINGIFY(def_val), type, schar }
+
+static struct config_option config_optionsp[] = {
+	OPTION(debug, debug, 0, INT, 0),
+	OPTION(debug, debug_ms, 0, INT, 0),
+	OPTION(debug, debug_mds, 0, INT, 0),
+	OPTION(global, daemonize, 'd', BOOL, false),
+	OPTION(global, conf_file, 'c', STR, ceph.conf),
+	OPTION(mon, mon_lease, 'z', FLOAT, 1.129),
+	
+};
+
+static bool set_conf_val(void *field, opt_type_t type, const char *val)
+{
+	switch (type) {
+	case BOOL:
+		if (strcasecmp(val, "false") == 0)
+			*(bool *)field = false;
+		else if (strcasecmp(val, "true") == 0)
+			*(bool *)field = true;
+		else
+			*(bool *)field = (bool)atoi(val);
+		break;
+	case INT:
+		*(int *)field = atoi(val);
+		break;
+	case STR:
+		*(char **)field = strdup(val);
+		break;
+	case FLOAT:
+		*(float *)field = atof(val);
+		break;
+	case DOUBLE:
+		*(double *)field = strtod(val, NULL);
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
+static void set_conf_name(config_option *opt)
+{
+  char *newsection = (char *)opt->section;
+  char *newconf = (char *)opt->name;
+  int i;
+
+  if (opt->section[0] == 0) {
+    newsection = strdup("global");
+  }
+
+  if (strncmp(newsection, opt->name, strlen(newsection)) == 0) {
+    /* if key starts with the name of the section, remove name of the section
+       unless key equals to it */
+
+    if (strcmp(newsection, opt->name) == 0)
+      goto done;
+
+    newconf = strdup(&opt->name[strlen(newsection)+1]);
+  } else {
+    newconf = strdup(opt->name);
+  }
+
+  i = 0;
+  while (newconf[i]) {
+    if (newconf[i] == '_')
+      newconf[i] = ' ';
+
+    ++i;
+  }
+
+  done:
+    opt->section = newsection;
+    opt->conf_name = (const char *)newconf;
+}
+
+static bool init_g_conf()
+{
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (!set_conf_val(opt->val_ptr,
+		      opt->type,
+		      opt->def_val)) {
+      cerr << "error initializing g_conf value num " << i << std::endl;
+      return false;
+    }
+
+    set_conf_name(opt);
+  }
+
+  return true;
+}
+
+static bool g_conf_initialized = init_g_conf();
+
+static bool cmd_is_char(const char *cmd)
+{
+	return ((cmd[0] == '-') &&
+		cmd[1] && !cmd[2]);
+}
+
+static bool cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos)
+{
+	unsigned int i;
+	unsigned int len = strlen(opt);
+
+	*val_pos = 0;
+
+	if (!*cmd)
+		return false;
+
+	if (char_opt && cmd_is_char(cmd))
+		return (char_opt == cmd[1]);
+
+	if ((cmd[0] != '-') || (cmd[1] != '-'))
+		return false;
+
+	for (i=0; i<len; i++) {
+		if ((opt[i] == '_') || (opt[i] == '-')) {
+			switch (cmd[i+2]) {
+			case '-':
+			case '_':
+				continue;
+			default:
+				break;
+			}
+		}
+
+		if (cmd[i+2] != opt[i])
+			return false;
+	}
+
+	if (cmd[i+2] == '=')
+		*val_pos = i+3;
+	else if (cmd[i+2])
+		return false;
+
+	return true;
+}
+
+#define OPT_READ_TYPE(section, var, type, inout) \
+  cf->read(section, var, (type *)inout, *(type *)inout)
+
+void parse_config_file(ConfFile *cf, bool auto_update)
+{
+  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
+
+  cf->set_auto_update(true);
+  cf->parse();
+
+  for (int i=0; i<opt_len; i++) {
+    config_option *opt = &config_optionsp[i];
+
+    switch (opt->type) {
+    case STR:
+      OPT_READ_TYPE(opt->section, opt->conf_name, char *, opt->val_ptr);
+      break;
+    case BOOL:
+      OPT_READ_TYPE(opt->section, opt->conf_name, bool, opt->val_ptr);
+      break;
+    case INT:
+      OPT_READ_TYPE(opt->section, opt->conf_name, int, opt->val_ptr);
+      break;
+    case FLOAT:
+      OPT_READ_TYPE(opt->section, opt->conf_name, float, opt->val_ptr);
+      break;
+    case DOUBLE:
+      OPT_READ_TYPE(opt->section, opt->conf_name, double, opt->val_ptr);
+      break;
+    default:
+      break;
+    }
+  }
+  
+}
+
+void preparse_config_options(std::vector<const char*>& args, bool open)
+{
+  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
+  unsigned int val_pos;
+
+  std::vector<const char*> nargs;
+
+  for (unsigned i=0; i<args.size(); i++) {
+    bool isarg = i+1 < args.size();  // is more?
+#define NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
+#define SET_ARG_VAL(dest, type) \
+	set_conf_val(dest, type, NEXT_VAL)
+#define SET_BOOL_ARG_VAL(dest) \
+	set_conf_val(dest, BOOL, (val_pos ? &args[i][val_pos] : "false"))
+#define CMD_EQ(str_cmd, char_cmd) \
+	cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
+
+    if (CMD_EQ("conf_file", 'c'))
+	SET_ARG_VAL(&g_conf.conf_file, STR);
+    else if (CMD_EQ("dump_conf", 0))
+	SET_BOOL_ARG_VAL(&g_conf.dump_conf);
+    else
+      nargs.push_back(args[i]);
+  }
+  args.swap(nargs);
+  nargs.clear();
+
+  cout << "reading " << g_conf.conf_file << std::endl;
+
+  ConfFile cf(g_conf.conf_file);
+
+  parse_config_file(&cf, true);
+  if (g_conf.dump_conf)
+    cf.dump();
+}
+
+void parse_config_options(std::vector<const char*>& args, bool open)
+{
+  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
+  unsigned int val_pos;
+
+  std::vector<const char*> nargs;
+  for (unsigned i=0; i<args.size(); i++) {
+    bool isarg = i+1 < args.size();  // is more?
+
+    if (CMD_EQ("bind", 0))
+      assert_warn(parse_ip_port(args[++i], g_my_addr));
+    else  {
+      int optn;
+
+      for (optn = 0; optn < opt_len; optn++) {
+	if (cmd_equals(args[i], 
+		  config_optionsp[optn].name,
+		  config_optionsp[optn].char_option,
+		  &val_pos)) {
+	  SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+	  break;
+	}
+      }
+
+      if (optn == opt_len)
+        nargs.push_back(args[i]);
+    }
+  }
+  args.swap(nargs);
+  nargs.clear();
+
+  cout << g_conf.mon_lease << std::endl;
+
+  exit(0);
+}

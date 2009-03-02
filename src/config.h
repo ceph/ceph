@@ -353,6 +353,7 @@ void argv_to_vec(int argc, const char **argv,
 void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
 
+void preparse_config_options(std::vector<const char*>& args, bool open=true);
 void parse_config_options(std::vector<const char*>& args, bool open=true);
 void parse_config_option_string(string& s);
 
