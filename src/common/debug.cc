@@ -23,7 +23,7 @@ bool _dout_need_open = true;
 void _dout_open_log()
 {
   // logging enabled?
-  if (!(g_conf.log_dir && g_conf.file_logs)) {
+  if (!g_conf.log_dir || g_conf.log_to_stdout) {
     _dout_need_open = false;
     return;
   }
@@ -69,7 +69,7 @@ void _dout_open_log()
 
 int _dout_rename_output_file()  // after calling daemon()
 {
-  if (g_conf.log_dir && g_conf.file_logs) {
+  if (g_conf.log_dir && !g_conf.log_to_stdout) {
     char oldpath[1000];
     char hostname[80];
     gethostname(hostname, 79);
@@ -90,7 +90,7 @@ int _dout_rename_output_file()  // after calling daemon()
 
 int _dout_create_courtesy_output_symlink(const char *type, int n)
 {
-  if (g_conf.log_dir && g_conf.file_logs) {
+  if (g_conf.log_dir && !g_conf.log_to_stdout) {
     if (_dout_need_open)
       _dout_open_log();
 

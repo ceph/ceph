@@ -101,11 +101,6 @@ int main(int argc, const char **argv)
   ObjectStore *fs = new Ebofs(filename, journal);
   //ObjectStore *fs = new FileStore(filename);
 
-  if (g_conf.mkfs && 
-      fs->mkfs() < 0) {
-    cout << "mkfs failed" << std::endl;
-    return -1;
-  }
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;
     return -1;

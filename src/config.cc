@@ -192,12 +192,9 @@ md_config_t g_conf = {
   num_osd: 4,
   num_client: 1,
 
-  mkfs: false,
-
   monmap_file: ".ceph_monmap",
   mon_host: 0,
   daemonize: false,
-  file_logs: false,
 
   // profiling and debugging
   logger: true,
@@ -208,6 +205,7 @@ md_config_t g_conf = {
 
   log_dir: INSTALL_PREFIX "/var/log/ceph",        // if daemonize == true
   log_sym_dir: INSTALL_PREFIX "/var/log/ceph",    // if daemonize == true
+  log_to_stdout: true,
 
   pid_file: 0,
 
@@ -220,11 +218,7 @@ md_config_t g_conf = {
   fake_clock: false,
   fakemessenger_serialize: true,
 
-  osd_remount_at: 0,
-
   kill_after: 0,
-
-  tick: 0,
 
   debug: 0,
   debug_lockdep: 0,
@@ -626,10 +620,9 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   CF_READ("global", "num mon", num_mon);
   CF_READ("global", "num mds", num_mds);
   CF_READ("global", "num osd", num_osd);
-  CF_READ("global", "mkfs", mkfs);
   CF_READ_STR("global", "monmap file", monmap_file);
   CF_READ("global", "daemonize", daemonize);
-  CF_READ("global", "file logs", file_logs);
+  CF_READ("global", "log to stdout", log_to_stdout);
   CF_READ("global", "logger", logger);
   CF_READ("global", "logger interval", logger_interval);
   CF_READ_STR("global", "logger calc variance", logger_subdir);
@@ -902,11 +895,11 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     else if ((strcmp(args[i], "--daemonize") == 0 ||
 	      strcmp(args[i], "-d") == 0) && isarg) {
       g_conf.daemonize = true;
-      g_conf.file_logs = true;
+      g_conf.log_to_stdout = false;
     } else if ((strcmp(args[i], "--foreground") == 0 ||
 		strcmp(args[i], "-f") == 0) && isarg) {
       g_conf.daemonize = false;
-      g_conf.file_logs = true;
+      g_conf.log_to_stdout = false;
     }
 
     else if (strcmp(args[i], "--ms_stripe_osds") == 0)
@@ -943,12 +936,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
       i += 2;
     }
 
-    else if (strcmp(args[i], "--osd_remount_at") == 0 && isarg) 
-      g_conf.osd_remount_at = atoi(args[++i]);
-    //else if (strcmp(args[i], "--fake_osd_sync") == 0) 
-    //g_conf.fake_osd_sync = atoi(args[++i]);
-
-        
     else if (strcmp(args[i], "--log_dir") == 0 && isarg) 
       g_conf.log_dir = args[++i];
     else if (//strcmp(args[i], "-o") == 0 ||
@@ -1373,8 +1360,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
     
     else if (strcmp(args[i], "--kill_after") == 0 && isarg) 
       g_conf.kill_after = atoi(args[++i]);
-    else if (strcmp(args[i], "--tick") == 0 && isarg) 
-      g_conf.tick = atoi(args[++i]);
 
     else if (strcmp(args[i], "--file_layout_unit") == 0 && isarg) 
       g_default_file_layout.fl_stripe_unit = atoi(args[++i]);

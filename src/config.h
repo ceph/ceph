@@ -45,12 +45,11 @@ struct md_config_t {
   int num_osd;
   int num_client;
 
-  bool mkfs;
+  //bool mkfs;
   
   const char *monmap_file;
   const char *mon_host;
   bool daemonize;
-  bool file_logs;
 
   // logger (profiling)
   bool logger;
@@ -61,6 +60,7 @@ struct md_config_t {
 
   const char *log_dir;
   const char *log_sym_dir;
+  bool log_to_stdout;
 
   const char *pid_file;
 
@@ -72,11 +72,7 @@ struct md_config_t {
   bool fake_clock;
   bool fakemessenger_serialize;
 
-  int osd_remount_at;
-
   int kill_after;
-
-  int tick;
 
   int debug;
   int debug_lockdep;
