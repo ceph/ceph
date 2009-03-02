@@ -360,9 +360,8 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 
 	/* send request and wait */
 	err = send_statfs(monc, req.tid, 0);
-	if (err)
-		return err;
-	err = wait_for_completion_interruptible(&req.completion);
+	if (!err)
+		err = wait_for_completion_interruptible(&req.completion);
 
 	mutex_lock(&monc->statfs_mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
@@ -371,9 +370,9 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		cancel_delayed_work(&monc->statfs_delayed_work);
 	mutex_unlock(&monc->statfs_mutex);
 
-	if (err == -EINTR)
-		return err;
-	return req.result;
+	if (!err)
+		err = req.result;
+	return err;
 }
 
 /*
