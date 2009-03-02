@@ -2,3 +2,4 @@ usr/bin
 var/log/ceph
 var/log/ceph/stat
 etc/ceph
+usr/share/doc/ceph

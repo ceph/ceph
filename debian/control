@@ -7,52 +7,15 @@ Standards-Version: 3.7.2
 
 Package: ceph
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, ceph-mon, ceph-osd, ceph-mds, ceph-fuse, ceph-source, ceph-common
-Recommends: fuse-utils
+Depends: ${shlibs:Depends}, ${misc:Depends}, libedit, libboost
+Recommends: fuse-utils, ceph-fuse, ceph-kclient-source
 Description: Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
-
-Package: ceph-common
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
- .
- This is the common package with shared dependencies.
-
-Package: ceph-mon
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
- .
- This is the monitor package and contains the monitor daemon and associated
- utilities.
-
-Package: ceph-mds
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
- .
- This is the meta data server package and contains the meta data server daemon.
-
-Package: ceph-osd
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
- .
- This is the object storage package and contains the object storage daemon.
 
 Package: ceph-fuse
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse
 Description: Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
@@ -60,7 +23,7 @@ Description: Ceph distributed file system
  This is the ceph fuse package and contains the ceph fuse for mounting ceph
  with fuse.
 
-Package: ceph-source
+Package: ceph-kclient-source
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: Ceph distributed file system
@@ -68,22 +31,3 @@ Description: Ceph distributed file system
  excellent performance, reliability, and scalability.
  .
  This is the ceph kernel source package for use with module-assistant.
-
-Package: ceph-misc
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
- .
- This is the ceph misc installed binaries.
-
-Package: ceph-doc
-Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
- Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
- .
- This is the ceph documentation.
-

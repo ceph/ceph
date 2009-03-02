@@ -5,6 +5,11 @@ usr/bin/monmaptool
 usr/bin/osdmaptool
 usr/bin/csyn
 usr/bin/crun
+usr/bin/cmon
+usr/bin/cmds
+usr/bin/cosd
+usr/bin/dupstore
+usr/bin/mkmonfs
 usr/sbin/mount.ceph
 usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
