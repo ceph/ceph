@@ -62,7 +62,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 		ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
 		return -ENOMEM;
 	}
-	cf->mode = fmode;
+	cf->fmode = fmode;
 	file->private_data = cf;
 	return 0;
 }
@@ -115,7 +115,8 @@ int ceph_open(struct inode *inode, struct file *file)
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
-	dout(10, "open fmode %d, don't have caps %d\n", fmode, wantcaps);
+	dout(10, "open fmode %d, don't have caps %s\n", fmode,
+	     ceph_cap_string(wantcaps));
 
 	dentry = d_find_alias(inode);
 	if (!dentry)
@@ -188,21 +189,7 @@ int ceph_release(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 
 	dout(5, "release inode %p file %p\n", inode, file);
-
-	/*
-	 * MYSTERY: why is file->f_flags now different than
-	 * file->f_flags (actually, nd->intent.open.flags) on
-	 * open?  e.g., on ceph_lookup_open,
-	 *   ceph_file: opened 000000006fa3ebd0 flags 0101102 mode 2 nr now 1.\
-	 *  wanted 0 -> 30
-	 * and on release,
-	 *   ceph_file: released 000000006fa3ebd0 flags 0100001 mode 3 nr now \
-	 * -1.  wanted 30 was 30
-	 *
-	 * Huh.  Well, for now, store the open mode in ceph_file_info.
-	 */
-
-	ceph_put_fmode(ci, cf->mode);
+	ceph_put_fmode(ci, cf->fmode);
 	if (cf->last_readdir)
 		ceph_mdsc_put_request(cf->last_readdir);
 	kfree(cf->dir_info);

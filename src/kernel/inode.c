@@ -1300,7 +1300,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	spin_lock(&ci->vfs_inode.i_lock);
 	dout(20, "put_mode %p fmode %d %d -> %d\n", &ci->vfs_inode, fmode,
 	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
-	WARN_ON(ci->i_nr_by_mode[fmode] == 0);
+	BUG_ON(ci->i_nr_by_mode[fmode] == 0);
 	if (--ci->i_nr_by_mode[fmode] == 0)
 		last++;
 	spin_unlock(&ci->vfs_inode.i_lock);
