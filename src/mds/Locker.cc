@@ -2991,7 +2991,6 @@ void Locker::file_eval(ScatterLock *lock)
   assert(lock->is_stable());
 
   if (lock->is_xlocked() || 
-      lock->is_wrlocked() || 
       lock->get_parent()->is_frozen()) return;
 
   if (lock->get_state() == LOCK_EXCL) {
@@ -3016,8 +3015,8 @@ void Locker::file_eval(ScatterLock *lock)
   
   // * -> loner?
   else if (lock->get_state() != LOCK_EXCL &&
-	   !lock->is_rdlocked() &&
-	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+	   //!lock->is_rdlocked() &&
+	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) || in->inode.is_dir()) &&
 	   in->try_choose_loner()) {
     dout(7) << "file_eval stable, bump to loner " << *lock
@@ -3027,8 +3026,8 @@ void Locker::file_eval(ScatterLock *lock)
 
   // * -> mixed?
   else if (lock->get_state() != LOCK_MIX &&
-	   !lock->is_rdlocked() &&
-	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
+	   //!lock->is_rdlocked() &&
+	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   (wanted & CEPH_CAP_GRD) &&
 	   (wanted & CEPH_CAP_GWR)) {
     dout(7) << "file_eval stable, bump to mixed " << *lock
