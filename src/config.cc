@@ -839,7 +839,7 @@ void parse_config_file0(ConfFile *cf, bool auto_update)
   CF_READ("bdstore", "transactional", bdbstore_transactional);
 #endif
 }
-
+#if 0
 void parse_config_options0(std::vector<const char*>& args, bool open)
 {
   std::vector<const char*> nargs;
@@ -1413,12 +1413,12 @@ void parse_config_options0(std::vector<const char*>& args, bool open)
 
   args = nargs;
 }
-
+#endif
 
 #define STRINGIFY(x) #x
 
 typedef enum {
-	NONE, INT, STR, DOUBLE, FLOAT, BOOL
+	NONE, INT, LONGLONG, STR, DOUBLE, FLOAT, BOOL
 } opt_type_t;
 
 
@@ -1434,18 +1434,238 @@ struct config_option {
 	char char_option;  // if any
 };
 
-#define OPTION(section, name, schar, type, def_val) \
+#define OPTION_DEF(section, name, schar, type, def_val) \
        { STRINGIFY(section), NULL, STRINGIFY(name), \
          &g_conf.name, STRINGIFY(def_val), type, schar }
 
+#define OPTION_STR(section, name, schar, type, def_val) \
+       { STRINGIFY(section), NULL, STRINGIFY(name), \
+         &g_conf.name, def_val, type, schar }
+
+#define OPTION_BOOL OPTION_DEF
+#define OPTION_INT OPTION_DEF
+#define OPTION_LONGLONG OPTION_DEF
+#define OPTION_FLOAT OPTION_DEF
+#define OPTION_DOUBLE OPTION_DEF
+
+#define OPTION(section, name, schar, type, def_val) OPTION_##type(section, name, schar, type, def_val)
+
 static struct config_option config_optionsp[] = {
-	OPTION(debug, debug, 0, INT, 0),
-	OPTION(debug, debug_ms, 0, INT, 0),
-	OPTION(debug, debug_mds, 0, INT, 0),
+	OPTION(global, num_mon, 0, INT, 1),
+	OPTION(global, num_mds, 0, INT, 1),
+	OPTION(global, num_osd, 0, INT, 4),
+	OPTION(global, num_client, 0, INT, 1),
+	OPTION(mon, monmap_file, 0, STR, ".ceph_monmap"),
+	OPTION(mon, mon_host, 'm', STR, 0),
 	OPTION(global, daemonize, 'd', BOOL, false),
-	OPTION(global, conf_file, 'c', STR, ceph.conf),
-	OPTION(mon, mon_lease, 'z', FLOAT, 1.129),
-	
+	OPTION(global, logger, 0, BOOL, true),
+	OPTION(global, logger_interval, 0, INT, 1),
+	OPTION(global, logger_calc_variance, 0, BOOL, true),
+	OPTION(global, logger_subdir, 0, STR, 0),
+	OPTION(global, logger_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph/stat"),
+	OPTION(global, log_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),
+	OPTION(global, log_sym_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),
+	OPTION(global, log_to_stdout, 0, BOOL, true),
+	OPTION(global, pid_file, 'p', STR, 0),
+	OPTION(global, conf_file, 'c', STR, INSTALL_PREFIX "etc/ceph/ceph.conf"),
+	OPTION(global, dump_conf, 0, BOOL, false),
+	OPTION(global, chdir_root, 0, BOOL, true),
+	OPTION(global, fake_clock, 0, BOOL, false),
+	OPTION(global, fakemessenger_serialize, 0, BOOL, true),
+	OPTION(global, kill_after, 0, INT, 0),
+	OPTION(debug, debug, 0, INT, 0),
+	OPTION(debug, debug_lockdep, 0, INT, 0),
+	OPTION(debug, debug_mds, 0, INT, 1),
+	OPTION(debug, debug_mds_balancer, 0, INT, 1),
+	OPTION(debug, debug_mds_log, 0, INT, 1),
+	OPTION(debug, debug_mds_log_expire, 0, INT, 1),
+	OPTION(debug, debug_mds_migrator, 0, INT, 1),
+	OPTION(debug, debug_buffer, 0, INT, 0),
+	OPTION(debug, debug_timer, 0, INT, 0),
+	OPTION(debug, debug_filer, 0, INT, 0),
+	OPTION(debug, debug_objecter, 0, INT, 0),
+	OPTION(debug, debug_journaler, 0, INT, 0),
+	OPTION(debug, debug_objectcacher, 0, INT, 0),
+	OPTION(debug, debug_client, 0, INT, 0),
+	OPTION(debug, debug_osd, 0, INT, 0),
+	OPTION(debug, debug_ebofs, 0, INT, 1),
+	OPTION(debug, debug_filestore, 0, INT, 1),
+	OPTION(debug, debug_journal, 0, INT, 1),
+	OPTION(debug, debug_bdev, 0, INT, 1),
+	OPTION(debug, debug_ns, 0, INT, 0),
+	OPTION(debug, debug_ms, 0, INT, 0),
+	OPTION(debug, debug_mon, 0, INT, 1),
+	OPTION(debug, debug_paxos, 0, INT, 0),
+	OPTION(debug, debug_tp, 0, INT, 0),
+	OPTION(debug, debug_after, 0, INT, 0),
+	OPTION(clock, clock_lock, 0, BOOL, false),
+	OPTION(clock, clock_tare, 0, BOOL, false),
+	OPTION(global, ms_tcp_nodelay, 0, BOOL, true),
+	OPTION(global, ms_retry_interval, 0, DOUBLE, 2.0),
+	OPTION(global, ms_fail_interval, 0, DOUBLE, 15.0),
+	OPTION(global, ms_die_on_failure, 0, BOOL, false),
+	OPTION(global, ms_nocrc, 0, BOOL, false),
+	OPTION(mon, mon_tick_interval, 0, INT, 5),
+	OPTION(mon, mon_osd_down_out_interval, 0, INT, 5),
+	OPTION(mon, mon_lease, 0, FLOAT, 5),
+	OPTION(mon, mon_lease_renew_interval, 0, FLOAT, 3),
+	OPTION(mon, mon_lease_ack_timeout, 0, FLOAT, 10.0),
+	OPTION(mon, mon_lease_timeout, 0, FLOAT, 10.0),
+	OPTION(mon, mon_accept_timeout, 0, FLOAT, 10.0),
+	OPTION(mon, mon_stop_on_last_unmount, 0, BOOL, false),
+	OPTION(mon, mon_stop_with_last_mds, 0, BOOL, false),
+	OPTION(mon, mon_allow_mds_bully, 0, BOOL, false),
+	OPTION(mon, mon_pg_create_interval, 0, FLOAT, 30.0),
+	OPTION(paxos, paxos_propose_interval, 0, DOUBLE, 1.0),
+	OPTION(paxos, paxos_observer_timeout, 0, DOUBLE, 5*60),
+	OPTION(client, client_cache_size, 0, INT, 1000),
+	OPTION(client, client_cache_mid, 0, FLOAT, .5),
+	OPTION(client, client_cache_stat_ttl, 0, INT, 0),
+	OPTION(client, client_cache_readdir_ttl, 0, INT, 1),
+	OPTION(client, client_use_random_mds, 0, BOOL, false),
+	OPTION(client, client_mount_timeout, 0, DOUBLE, 10.0),
+	OPTION(client, client_tick_interval, 0, DOUBLE, 1.0),
+	OPTION(client, client_hack_balance_reads, 0, BOOL, false),
+	OPTION(client, client_trace, 0, STR, 0),
+	OPTION(client, client_readahead_min, 0, LONGLONG, 128*1024),
+	OPTION(client, client_readahead_max_bytes, 0, LONGLONG, 0),
+	OPTION(client, client_readahead_max_periods, 0, LONGLONG, 4),
+	OPTION(client, client_snapdir, 0, STR, ".snap"),
+	OPTION(global, fuse_direct_io, 0, INT, 0),
+	OPTION(global, fuse_ll, 0, BOOL, true),
+	OPTION(client_oc, client_oc, 0, BOOL, true),
+	OPTION(client_oc, client_oc_size, 0, INT, 1024*1024* 64),
+	OPTION(client_oc, client_oc_max_dirty, 0, INT, 1024*1024* 48),
+	OPTION(client_oc, client_oc_target_dirty, 0, INT, 1024*1024* 8),
+	OPTION(client_oc, client_oc_max_sync_write, 0, LONGLONG, 128*1024),
+	OPTION(objecter, objecter_buffer_uncommitted, 0, BOOL, true),
+	OPTION(objecter, objecter_map_request_interval, 0, DOUBLE, 15.0),
+	OPTION(objecter, objecter_tick_interval, 0, DOUBLE, 5.0),
+	OPTION(objecter, objecter_timeout, 0, DOUBLE, 10.0),
+	OPTION(journaler, journaler_allow_split_entries, 0, BOOL, true),
+	OPTION(journaler, journaler_safe, 0, BOOL, true),
+	OPTION(journaler, journaler_write_head_interval, 0, INT, 15),
+	OPTION(journaler, journaler_cache, 0, BOOL, false),
+	OPTION(journaler, journaler_prefetch_periods, 0, INT, 50),
+	OPTION(journaler, journaler_batch_interval, 0, DOUBLE, .001),
+	OPTION(journaler, journaler_batch_max, 0, LONGLONG, 0),
+	OPTION(mds, mds_cache_size, 0, INT, 300000),
+	OPTION(mds, mds_cache_mid, 0, FLOAT, .7),
+	OPTION(mds, mds_decay_halflife, 0, FLOAT, 5),
+	OPTION(mds, mds_beacon_interval, 0, FLOAT, 4),
+	OPTION(mds, mds_beacon_grace, 0, FLOAT, 15),
+	OPTION(mds, mds_blacklist_interval, 0, FLOAT, 24.0*60.0),
+	OPTION(mds, mds_session_timeout, 0, FLOAT, 60),
+	OPTION(mds, mds_session_autoclose, 0, FLOAT, 300),
+	OPTION(mds, mds_client_lease, 0, FLOAT, 120),
+	OPTION(mds, mds_reconnect_timeout, 0, FLOAT, 30),
+	OPTION(mds, mds_tick_interval, 0, FLOAT, 5),
+	OPTION(mds, mds_scatter_nudge_interval, 0, FLOAT, 5),
+	OPTION(mds, mds_client_prealloc_inos, 0, INT, 1000),
+	OPTION(mds, mds_early_reply, 0, BOOL, true),
+	OPTION(mds, mds_rdcap_ttl_ms, 0, INT, 60*1000),
+	OPTION(mds, mds_log, 0, BOOL, true),
+	OPTION(mds, mds_log_unsafe, 0, BOOL, false),
+	OPTION(mds, mds_log_max_events, 0, INT, -1),
+	OPTION(mds, mds_log_max_segments, 0, INT, 100),
+	OPTION(mds, mds_log_max_expiring, 0, INT, 20),
+	OPTION(mds, mds_log_pad_entry, 0, INT, 128),
+	OPTION(mds, mds_log_eopen_size, 0, INT, 100),
+	OPTION(mds, mds_bal_sample_interval, 0, FLOAT, 3.0),
+	OPTION(mds, mds_bal_replicate_threshold, 0, FLOAT, 8000),
+	OPTION(mds, mds_bal_unreplicate_threshold, 0, FLOAT, 0),
+	OPTION(mds, mds_bal_frag, 0, BOOL, true),
+	OPTION(mds, mds_bal_split_size, 0, INT, 10000),
+	OPTION(mds, mds_bal_split_rd, 0, FLOAT, 25000),
+	OPTION(mds, mds_bal_split_wr, 0, FLOAT, 10000),
+	OPTION(mds, mds_bal_merge_size, 0, INT, 50),
+	OPTION(mds, mds_bal_merge_rd, 0, FLOAT, 1000),
+	OPTION(mds, mds_bal_merge_wr, 0, FLOAT, 1000),
+	OPTION(mds, mds_bal_interval, 0, INT, 10),
+	OPTION(mds, mds_bal_fragment_interval, 0, INT, -1),
+	OPTION(mds, mds_bal_idle_threshold, 0, FLOAT, 0),
+	OPTION(mds, mds_bal_max, 0, INT, -1),
+	OPTION(mds, mds_bal_max_until, 0, INT, -1),
+	OPTION(mds, mds_bal_mode, 0, INT, 0),
+	OPTION(mds, mds_bal_min_rebalance, 0, FLOAT, .1),
+	OPTION(mds, mds_bal_min_start, 0, FLOAT, .2),
+	OPTION(mds, mds_bal_need_min, 0, FLOAT, .8),
+	OPTION(mds, mds_bal_need_max, 0, FLOAT, 1.2),
+	OPTION(mds, mds_bal_midchunk, 0, FLOAT, .3),
+	OPTION(mds, mds_bal_minchunk, 0, FLOAT, .001),
+	OPTION(mds, mds_trim_on_rejoin, 0, BOOL, true),
+	OPTION(mds, mds_shutdown_check, 0, INT, 0),
+	OPTION(mds, mds_verify_export_dirauth, 0, BOOL, true),
+	OPTION(mds, mds_local_osd, 0, BOOL, false),
+	OPTION(mds, mds_thrash_exports, 0, INT, 0),
+	OPTION(mds, mds_thrash_fragments, 0, INT, 0),
+	OPTION(mds, mds_dump_cache_on_map, 0, BOOL, false),
+	OPTION(mds, mds_dump_cache_after_rejoin, 0, BOOL, true),
+	OPTION(mds, mds_hack_log_expire_for_better_stats, 0, BOOL, false),
+	OPTION(osd, osd_balance_reads, 0, BOOL, false),
+	OPTION(osd, osd_flash_crowd_iat_threshold, 0, INT, 0),
+	OPTION(osd, osd_flash_crowd_iat_alpha, 0, DOUBLE, 0.125),
+	OPTION(osd, osd_balance_reads_temp, 0, DOUBLE, 100),
+	OPTION(osd, osd_shed_reads, 0, INT, false),
+	OPTION(osd, osd_shed_reads_min_latency, 0, DOUBLE, .01),
+	OPTION(osd, osd_shed_reads_min_latency_diff, 0, DOUBLE, .01),
+	OPTION(osd, osd_shed_reads_min_latency_ratio, 0, DOUBLE, 1.5),
+	OPTION(osd, osd_immediate_read_from_cache, 0, BOOL, false),
+	OPTION(osd, osd_exclusive_caching, 0, BOOL, true),
+	OPTION(osd, osd_stat_refresh_interval, 0, DOUBLE, .5),
+	OPTION(osd, osd_min_pg_size_without_alive, 0, INT, 2),
+	OPTION(osd, osd_pg_bits, 0, INT, 6),
+	OPTION(osd, osd_lpg_bits, 0, INT, 1),
+	OPTION(osd, osd_object_layout, 0, INT, CEPH_OBJECT_LAYOUT_HASHINO),
+	OPTION(osd, osd_pg_layout, 0, INT, CEPH_PG_LAYOUT_CRUSH),
+	OPTION(osd, osd_min_rep, 0, INT, 2),
+	OPTION(osd, osd_max_rep, 0, INT, 3),
+	OPTION(osd, osd_min_raid_width, 0, INT, 3),
+	OPTION(osd, osd_max_raid_width, 0, INT, 2),
+	OPTION(osd, osd_maxthreads, 0, INT, 2),
+	OPTION(osd, osd_max_opq, 0, INT, 10),
+	OPTION(osd, osd_age, 0, FLOAT, .8),
+	OPTION(osd, osd_age_time, 0, INT, 0),
+	OPTION(osd, osd_heartbeat_interval, 0, INT, 1),
+	OPTION(osd, osd_mon_heartbeat_interval, 0, INT, 30),
+	OPTION(osd, osd_heartbeat_grace, 0, INT, 20),
+	OPTION(osd, osd_mon_report_interval, 0, INT, 5),
+	OPTION(osd, osd_replay_window, 0, INT, 45),
+	OPTION(osd, osd_max_pull, 0, INT, 2),
+	OPTION(osd, osd_preserve_trimmed_log, 0, BOOL, true),
+	OPTION(osd, osd_recovery_delay_start, 0, FLOAT, 15),
+	OPTION(osd, osd_recovery_max_active, 0, INT, 5),
+	OPTION(osd, osd_auto_weight, 0, BOOL, false),
+	OPTION(global, filestore, 0, BOOL, false),
+	OPTION(global, filestore_sync_interval, 0, DOUBLE, .2),
+	OPTION(global, filestore_fake_attrs, 0, BOOL, false),
+	OPTION(global, filestore_fake_collections, 0, BOOL, false),
+	OPTION(global, filestore_dev, 0, STR, 0),
+	OPTION(global, filestore_btrfs_trans, 0, BOOL, true),
+	OPTION(ebofs, ebofs, 0, BOOL, false),
+	OPTION(ebofs, ebofs_cloneable, 0, BOOL, true),
+	OPTION(ebofs, ebofs_verify, 0, BOOL, false),
+	OPTION(ebofs, ebofs_commit_ms, 0, INT, 200),
+	OPTION(ebofs, ebofs_oc_size, 0, INT, 10000),
+	OPTION(ebofs, ebofs_cc_size, 0, INT, 10000),
+	OPTION(ebofs, ebofs_bc_size, 0, LONGLONG, 50*256),
+	OPTION(ebofs, ebofs_bc_max_dirty, 0, LONGLONG, 30*256),
+	OPTION(ebofs, ebofs_max_prefetch, 0, INT, 1000),
+	OPTION(ebofs, ebofs_realloc, 0, BOOL, false),
+	OPTION(ebofs, ebofs_verify_csum_on_read, 0, BOOL, true),
+	OPTION(journal, journal_dio, 0, BOOL, false),
+	OPTION(journal, journal_max_write_bytes, 0, INT, 0),
+	OPTION(journal, journal_max_write_entries, 0, INT, 100),
+	OPTION(bdev, bdev_lock, 0, BOOL, true),
+	OPTION(bdev, bdev_iothreads, 0, INT, 1),
+	OPTION(bdev, bdev_idle_kick_after_ms, 0, INT, 100),
+	OPTION(bdev, bdev_el_fw_max_ms, 0, INT, 10000),
+	OPTION(bdev, bdev_el_bw_max_ms, 0, INT, 3000),
+	OPTION(bdev, bdev_el_bidir, 0, BOOL, false),
+	OPTION(bdev, bdev_iov_max, 0, INT, 512),
+	OPTION(bdev, bdev_debug_check_io_overlap, 0, BOOL, true),
+	OPTION(bdev, bdev_fake_mb, 0, INT, 0),
+	OPTION(bdev, bdev_fake_max_mb, 0, INT, 0),
 };
 
 static bool set_conf_val(void *field, opt_type_t type, const char *val)
@@ -1462,8 +1682,14 @@ static bool set_conf_val(void *field, opt_type_t type, const char *val)
 	case INT:
 		*(int *)field = atoi(val);
 		break;
+	case LONGLONG:
+		*(long long *)field = atoll(val);
+		break;
 	case STR:
-		*(char **)field = strdup(val);
+		if (val)
+		  *(char **)field = strdup(val);
+	        else
+		  *(char **)field = NULL;
 		break;
 	case FLOAT:
 		*(float *)field = atof(val);
@@ -1619,13 +1845,11 @@ void parse_config_file(ConfFile *cf, bool auto_update)
 
 void preparse_config_options(std::vector<const char*>& args, bool open)
 {
-  int opt_len = sizeof(config_optionsp)/sizeof(config_option);
   unsigned int val_pos;
 
   std::vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
-    bool isarg = i+1 < args.size();  // is more?
 #define NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
 #define SET_ARG_VAL(dest, type) \
 	set_conf_val(dest, type, NEXT_VAL)
@@ -1644,8 +1868,6 @@ void preparse_config_options(std::vector<const char*>& args, bool open)
   args.swap(nargs);
   nargs.clear();
 
-  cout << "reading " << g_conf.conf_file << std::endl;
-
   ConfFile cf(g_conf.conf_file);
 
   parse_config_file(&cf, true);
@@ -1662,9 +1884,15 @@ void parse_config_options(std::vector<const char*>& args, bool open)
   for (unsigned i=0; i<args.size(); i++) {
     bool isarg = i+1 < args.size();  // is more?
 
-    if (CMD_EQ("bind", 0))
+    if (CMD_EQ("bind", 0)) {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
-    else  {
+    } else if (CMD_EQ("daemonize", 'd')) {
+      g_conf.daemonize = true;
+      g_conf.log_to_stdout = false;
+    } else if (CMD_EQ("foreground", 'f')) {
+      g_conf.daemonize = false;
+      g_conf.log_to_stdout = false;
+    } else  {
       int optn;
 
       for (optn = 0; optn < opt_len; optn++) {
@@ -1672,7 +1900,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 		  config_optionsp[optn].name,
 		  config_optionsp[optn].char_option,
 		  &val_pos)) {
-	  SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+	  if (isarg || val_pos || config_optionsp[optn].type == BOOL)
+	    SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+	  else
+	    continue;
 	  break;
 	}
       }
@@ -1684,7 +1915,12 @@ void parse_config_options(std::vector<const char*>& args, bool open)
   args.swap(nargs);
   nargs.clear();
 
-  cout << g_conf.mon_lease << std::endl;
+ // open log file?
 
-  exit(0);
+  if (open)
+    _dout_open_log();
+  
+  signal(SIGHUP, sighup_handler);
+
+  args = nargs;
 }
