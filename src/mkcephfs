@@ -24,6 +24,7 @@ allhosts=0
 clobber=""
 mkbtrfs=0
 numosd=
+usecrushmap=
 
 while [ $# -ge 1 ]; do
 case $1 in
@@ -42,8 +43,14 @@ case $1 in
 	    conf=$1
 	    ;;
     --numosd)
+	    [ "$2" == "" ] && usage_exit
 	    shift
 	    numosd=$1
+	    ;;
+    --crushmap)
+	    [ "$2" == "" ] && usage_exit
+	    shift
+	    usecrushmap=$1
 	    ;;
     *)
 	    echo unrecognized option \'$1\'
@@ -77,6 +84,14 @@ if [[ $what =~ "mon0" ]]; then
 	echo max osd in $conf is $maxosd, num osd is $numosd
     fi
     $BINDIR/osdmaptool --clobber --createsimple $numosd $osdmap || exit 1
+
+    # import crush map?
+    get_conf crushmapsrc "$usecrushmap" "crush map" mon0 mon global
+    if [[ $crushmapsrc != "" ]]; then
+	crushmap="/tmp/crushmap.$$"
+	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
+	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
+    fi
 fi
 
 # create monitors, osds
