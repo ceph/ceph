@@ -7,7 +7,7 @@ Standards-Version: 3.7.2
 
 Package: ceph
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libedit, libboost
+Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2
 Recommends: fuse-utils, ceph-fuse, ceph-kclient-source
 Description: Ceph distributed file system
  Ceph is a distributed network file system designed to provide
@@ -15,7 +15,7 @@ Description: Ceph distributed file system
 
 Package: ceph-fuse
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse
+Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse2
 Description: Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
