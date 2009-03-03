@@ -447,8 +447,8 @@ void CDir::try_remove_unlinked_dn(CDentry *dn)
   if (dn->get_num_ref() != dn->is_dirty()) 
     return;
 
-  // was the dn new?  or is the dir complete (i.e. we don't need negatives)? 
-  if (dn->is_new() || is_complete()) {
+  // was the dn new?
+  if (dn->is_new()) {
     dout(10) << "try_remove_unlinked_dn " << *dn << " in " << *this << dendl;
     if (dn->is_dirty())
       dn->mark_clean();
