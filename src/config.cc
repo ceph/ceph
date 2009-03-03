@@ -741,13 +741,18 @@ void parse_startup_config_options(std::vector<const char*>& args)
 #define NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
 #define SET_ARG_VAL(dest, type) \
 	set_conf_val(dest, type, NEXT_VAL)
+#define SAFE_SET_ARG_VAL(dest, type) \
+	do { \
+          if (isarg || val_pos || config_optionsp[optn].type == BOOL) \
+		SET_ARG_VAL(dest, type); \
+	} while (0)
 #define SET_BOOL_ARG_VAL(dest) \
-	set_conf_val(dest, BOOL, (val_pos ? &args[i][val_pos] : "false"))
+	set_conf_val(dest, BOOL, (val_pos ? &args[i][val_pos] : "true"))
 #define CMD_EQ(str_cmd, char_cmd) \
 	cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
     if (CMD_EQ("conf_file", 'c')) {
-	SET_ARG_VAL(&g_conf.conf_file, STR);
+	SAFE_SET_ARG_VAL(&g_conf.conf_file, STR);
     } else if (CMD_EQ("dump_conf", 0)) {
 	SET_BOOL_ARG_VAL(&g_conf.dump_conf);
     } else if (CMD_EQ("bind", 0)) {
@@ -783,7 +788,9 @@ void parse_config_options(std::vector<const char*>& args)
     int optn;
 
     for (optn = 0; optn < opt_len; optn++) {
-      if (cmd_equals(args[i], 
+      if (CMD_EQ("conf_file", 'c')) {
+	SAFE_SET_ARG_VAL(&g_conf.conf_file, STR);
+      else if (cmd_equals(args[i],
 	    config_optionsp[optn].name,
 	    config_optionsp[optn].char_option,
 	    &val_pos)) {
