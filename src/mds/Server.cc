@@ -2286,11 +2286,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
     dir->log_mark_dirty();
 
   // yay, reply
-  MClientReply *reply = new MClientReply(req);
+  MClientReply *reply = new MClientReply(req, 0);
   reply->set_dir_bl(dirbl);
-  
   dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
-  reply->set_result(0);
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
@@ -4996,13 +4994,13 @@ void Server::handle_client_open(MDRequest *mdr)
     if (is_new)
       cap->dec_suppress();  // stop suppressing messages on new cap
     
-    dout(12) << "_do_open issued caps " << ccap_string(cap->pending())
+    dout(12) << "open issued caps " << ccap_string(cap->pending())
 	     << " for " << req->get_orig_source()
 	     << " on " << *cur << dendl;
     mdr->cap = cap;
   } else {
     int caps = ceph_caps_for_mode(cmode);
-    dout(12) << "_do_open issued IMMUTABLE SNAP caps " << ccap_string(caps)
+    dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
 	     << " for " << req->get_orig_source()
 	     << " snapid " << mdr->ref_snapid
 	     << " on " << *cur << dendl;
