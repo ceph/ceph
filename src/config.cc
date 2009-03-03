@@ -348,13 +348,13 @@ static struct config_option config_optionsp[] = {
 	OPTION(global, logger_calc_variance, 0, BOOL, true),
 	OPTION(global, logger_subdir, 0, STR, 0),
 	OPTION(global, logger_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph/stat"),
-	OPTION(global, log_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),
-	OPTION(global, log_sym_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),
+	OPTION(global, log_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),		// if daemonize == true
+	OPTION(global, log_sym_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),		// if daemonize == true
 	OPTION(global, log_to_stdout, 0, BOOL, true),
 	OPTION(global, pid_file, 'p', STR, 0),
 	OPTION(global, conf_file, 'c', STR, INSTALL_PREFIX "etc/ceph/ceph.conf"),
 	OPTION(global, dump_conf, 0, BOOL, false),
-	OPTION(global, chdir_root, 0, BOOL, true),
+	OPTION(global, chdir_root, 0, BOOL, true),	// chdir("/") after daemonizing. if true, we generate absolute paths as needed.
 	OPTION(global, fake_clock, 0, BOOL, false),
 	OPTION(global, fakemessenger_serialize, 0, BOOL, true),
 	OPTION(global, kill_after, 0, INT, 0),
@@ -376,7 +376,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug, debug_ebofs, 0, INT, 1),
 	OPTION(debug, debug_filestore, 0, INT, 1),
 	OPTION(debug, debug_journal, 0, INT, 1),
-	OPTION(debug, debug_bdev, 0, INT, 1),
+	OPTION(debug, debug_bdev, 0, INT, 1),         // block device
 	OPTION(debug, debug_ns, 0, INT, 0),
 	OPTION(debug, debug_ms, 0, INT, 0),
 	OPTION(debug, debug_mon, 0, INT, 1),
@@ -385,78 +385,80 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug, debug_after, 0, INT, 0),
 	OPTION(clock, clock_lock, 0, BOOL, false),
 	OPTION(clock, clock_tare, 0, BOOL, false),
-	OPTION(global, ms_tcp_nodelay, 0, BOOL, true),
-	OPTION(global, ms_retry_interval, 0, DOUBLE, 2.0),
-	OPTION(global, ms_fail_interval, 0, DOUBLE, 15.0),
-	OPTION(global, ms_die_on_failure, 0, BOOL, false),
-	OPTION(global, ms_nocrc, 0, BOOL, false),
+	OPTION(messenger, ms_tcp_nodelay, 0, BOOL, true),
+	OPTION(messenger, ms_retry_interval, 0, DOUBLE, 2.0),  // how often to attempt reconnect
+	OPTION(messenger, ms_fail_interval, 0, DOUBLE, 15.0),  // fail after this long
+	OPTION(messenger, ms_die_on_failure, 0, BOOL, false),
+	OPTION(messenger, ms_nocrc, 0, BOOL, false),
 	OPTION(mon, mon_tick_interval, 0, INT, 5),
-	OPTION(mon, mon_osd_down_out_interval, 0, INT, 5),
-	OPTION(mon, mon_lease, 0, FLOAT, 5),
-	OPTION(mon, mon_lease_renew_interval, 0, FLOAT, 3),
-	OPTION(mon, mon_lease_ack_timeout, 0, FLOAT, 10.0),
-	OPTION(mon, mon_lease_timeout, 0, FLOAT, 10.0),
-	OPTION(mon, mon_accept_timeout, 0, FLOAT, 10.0),
+	OPTION(mon, mon_osd_down_out_interval, 0, INT, 5),  // seconds
+	OPTION(mon, mon_lease, 0, FLOAT, 5),  		    // lease interval
+	OPTION(mon, mon_lease_renew_interval, 0, FLOAT, 3), // on leader, to renew the lease
+	OPTION(mon, mon_lease_ack_timeout, 0, FLOAT, 10.0), // on leader, if lease isn't acked by all peons
+	OPTION(mon, mon_lease_timeout, 0, FLOAT, 10.0),     // on peon, if lease isn't extended
+	OPTION(mon, mon_accept_timeout, 0, FLOAT, 10.0),    // on leader, if paxos update isn't accepted
 	OPTION(mon, mon_stop_on_last_unmount, 0, BOOL, false),
 	OPTION(mon, mon_stop_with_last_mds, 0, BOOL, false),
-	OPTION(mon, mon_allow_mds_bully, 0, BOOL, false),
-	OPTION(mon, mon_pg_create_interval, 0, FLOAT, 30.0),
-	OPTION(paxos, paxos_propose_interval, 0, DOUBLE, 1.0),
-	OPTION(paxos, paxos_observer_timeout, 0, DOUBLE, 5*60),
+	OPTION(mon, mon_allow_mds_bully, 0, BOOL, false),   // allow a booting mds to (forcibly) claim an mds # .. FIXME
+	OPTION(mon, mon_pg_create_interval, 0, FLOAT, 30.0), // no more than every 30s
+	OPTION(paxos, paxos_propose_interval, 0, DOUBLE, 1.0),  // gather updates for this long before proposing a map update
+	OPTION(paxos, paxos_observer_timeout, 0, DOUBLE, 5*60), // gather updates for this long before proposing a map update
 	OPTION(client, client_cache_size, 0, INT, 1000),
 	OPTION(client, client_cache_mid, 0, FLOAT, .5),
-	OPTION(client, client_cache_stat_ttl, 0, INT, 0),
-	OPTION(client, client_cache_readdir_ttl, 0, INT, 1),
+	OPTION(client, client_cache_stat_ttl, 0, INT, 0), // seconds until cached stat results become invalid
+	OPTION(client, client_cache_readdir_ttl, 0, INT, 1),  // 1 second only
 	OPTION(client, client_use_random_mds, 0, BOOL, false),
-	OPTION(client, client_mount_timeout, 0, DOUBLE, 10.0),
+	OPTION(client, client_mount_timeout, 0, DOUBLE, 10.0),  // retry every N seconds
 	OPTION(client, client_tick_interval, 0, DOUBLE, 1.0),
 	OPTION(client, client_hack_balance_reads, 0, BOOL, false),
 	OPTION(client, client_trace, 0, STR, 0),
-	OPTION(client, client_readahead_min, 0, LONGLONG, 128*1024),
-	OPTION(client, client_readahead_max_bytes, 0, LONGLONG, 0),
-	OPTION(client, client_readahead_max_periods, 0, LONGLONG, 4),
+	OPTION(client, client_readahead_min, 0, LONGLONG, 128*1024),  // readahead at _least_ this much.
+	OPTION(client, client_readahead_max_bytes, 0, LONGLONG, 0),  //8 * 1024*1024,
+	OPTION(client, client_readahead_max_periods, 0, LONGLONG, 4),  // as multiple of file layout period (object size * num stripes)
 	OPTION(client, client_snapdir, 0, STR, ".snap"),
-	OPTION(global, fuse_direct_io, 0, INT, 0),
-	OPTION(global, fuse_ll, 0, BOOL, true),
+	OPTION(fuse, fuse_direct_io, 0, INT, 0),
+	OPTION(fuse, fuse_ll, 0, BOOL, true),
 	OPTION(client_oc, client_oc, 0, BOOL, true),
-	OPTION(client_oc, client_oc_size, 0, INT, 1024*1024* 64),
-	OPTION(client_oc, client_oc_max_dirty, 0, INT, 1024*1024* 48),
-	OPTION(client_oc, client_oc_target_dirty, 0, INT, 1024*1024* 8),
-	OPTION(client_oc, client_oc_max_sync_write, 0, LONGLONG, 128*1024),
-	OPTION(objecter, objecter_buffer_uncommitted, 0, BOOL, true),
-	OPTION(objecter, objecter_map_request_interval, 0, DOUBLE, 15.0),
+	OPTION(client_oc, client_oc_size, 0, INT, 1024*1024* 64),    // MB * n
+	OPTION(client_oc, client_oc_max_dirty, 0, INT, 1024*1024* 48),    // MB * n  (dirty OR tx.. bigish)
+	OPTION(client_oc, client_oc_target_dirty, 0, INT, 1024*1024* 8), // target dirty (keep this smallish)
+	// note: the max amount of "in flight" dirty data is roughly (max - target)
+	OPTION(client_oc, client_oc_max_sync_write, 0, LONGLONG, 128*1024),   // sync writes >= this use wrlock
+	OPTION(objecter, objecter_buffer_uncommitted, 0, BOOL, true),  // this must be true for proper failure handling
+	OPTION(objecter, objecter_map_request_interval, 0, DOUBLE, 15.0), // request a new map every N seconds, if we have pending io
 	OPTION(objecter, objecter_tick_interval, 0, DOUBLE, 5.0),
-	OPTION(objecter, objecter_timeout, 0, DOUBLE, 10.0),
+	OPTION(objecter, objecter_timeout, 0, DOUBLE, 10.0),    // before we ask for a map
 	OPTION(journaler, journaler_allow_split_entries, 0, BOOL, true),
-	OPTION(journaler, journaler_safe, 0, BOOL, true),
+	OPTION(journaler, journaler_safe, 0, BOOL, true),  // wait for COMMIT on journal writes
 	OPTION(journaler, journaler_write_head_interval, 0, INT, 15),
-	OPTION(journaler, journaler_cache, 0, BOOL, false),
-	OPTION(journaler, journaler_prefetch_periods, 0, INT, 50),
-	OPTION(journaler, journaler_batch_interval, 0, DOUBLE, .001),
-	OPTION(journaler, journaler_batch_max, 0, LONGLONG, 0),
+	OPTION(journaler, journaler_cache, 0, BOOL, false), // cache writes for later readback
+	OPTION(journaler, journaler_prefetch_periods, 0, INT, 50),   // * journal object size (1~MB? see above)
+	OPTION(journaler, journaler_batch_interval, 0, DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
+	OPTION(journaler, journaler_batch_max, 0, LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
 	OPTION(mds, mds_cache_size, 0, INT, 300000),
 	OPTION(mds, mds_cache_mid, 0, FLOAT, .7),
 	OPTION(mds, mds_decay_halflife, 0, FLOAT, 5),
 	OPTION(mds, mds_beacon_interval, 0, FLOAT, 4),
 	OPTION(mds, mds_beacon_grace, 0, FLOAT, 15),
-	OPTION(mds, mds_blacklist_interval, 0, FLOAT, 24.0*60.0),
-	OPTION(mds, mds_session_timeout, 0, FLOAT, 60),
-	OPTION(mds, mds_session_autoclose, 0, FLOAT, 300),
-	OPTION(mds, mds_client_lease, 0, FLOAT, 120),
-	OPTION(mds, mds_reconnect_timeout, 0, FLOAT, 30),
+	OPTION(mds, mds_blacklist_interval, 0, FLOAT, 24.0*60.0),  // how long to blacklist failed nodes
+	OPTION(mds, mds_session_timeout, 0, FLOAT, 60),    // cap bits and leases time out if client idle
+	OPTION(mds, mds_session_autoclose, 0, FLOAT, 300), // autoclose idle session 
+	OPTION(mds, mds_client_lease, 0, FLOAT, 120),      // (assuming session stays alive)
+	OPTION(mds, mds_reconnect_timeout, 0, FLOAT, 30),  // seconds to wait for clients during mds restart
+							   //  make it (mds_session_timeout - mds_beacon_grace)
 	OPTION(mds, mds_tick_interval, 0, FLOAT, 5),
-	OPTION(mds, mds_scatter_nudge_interval, 0, FLOAT, 5),
+	OPTION(mds, mds_scatter_nudge_interval, 0, FLOAT, 5),  // how quickly dirstat changes propagate up the hierarchy
 	OPTION(mds, mds_client_prealloc_inos, 0, INT, 1000),
 	OPTION(mds, mds_early_reply, 0, BOOL, true),
 	OPTION(mds, mds_rdcap_ttl_ms, 0, INT, 60*1000),
 	OPTION(mds, mds_log, 0, BOOL, true),
-	OPTION(mds, mds_log_unsafe, 0, BOOL, false),
+	OPTION(mds, mds_log_unsafe, 0, BOOL, false),      // only wait for log sync, when it's mostly safe to do so
 	OPTION(mds, mds_log_max_events, 0, INT, -1),
-	OPTION(mds, mds_log_max_segments, 0, INT, 100),
+	OPTION(mds, mds_log_max_segments, 0, INT, 100),  // segment size defined by FileLayout, above
 	OPTION(mds, mds_log_max_expiring, 0, INT, 20),
 	OPTION(mds, mds_log_pad_entry, 0, INT, 128),
-	OPTION(mds, mds_log_eopen_size, 0, INT, 100),
-	OPTION(mds, mds_bal_sample_interval, 0, FLOAT, 3.0),
+	OPTION(mds, mds_log_eopen_size, 0, INT, 100),   // # open inodes per log entry
+	OPTION(mds, mds_bal_sample_interval, 0, FLOAT, 3.0),  // every 5 seconds
 	OPTION(mds, mds_bal_replicate_threshold, 0, FLOAT, 8000),
 	OPTION(mds, mds_bal_unreplicate_threshold, 0, FLOAT, 0),
 	OPTION(mds, mds_bal_frag, 0, BOOL, true),
@@ -466,18 +468,18 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds, mds_bal_merge_size, 0, INT, 50),
 	OPTION(mds, mds_bal_merge_rd, 0, FLOAT, 1000),
 	OPTION(mds, mds_bal_merge_wr, 0, FLOAT, 1000),
-	OPTION(mds, mds_bal_interval, 0, INT, 10),
-	OPTION(mds, mds_bal_fragment_interval, 0, INT, -1),
+	OPTION(mds, mds_bal_interval, 0, INT, 10),           // seconds
+	OPTION(mds, mds_bal_fragment_interval, 0, INT, -1),      // seconds
 	OPTION(mds, mds_bal_idle_threshold, 0, FLOAT, 0),
 	OPTION(mds, mds_bal_max, 0, INT, -1),
 	OPTION(mds, mds_bal_max_until, 0, INT, -1),
 	OPTION(mds, mds_bal_mode, 0, INT, 0),
-	OPTION(mds, mds_bal_min_rebalance, 0, FLOAT, .1),
-	OPTION(mds, mds_bal_min_start, 0, FLOAT, .2),
-	OPTION(mds, mds_bal_need_min, 0, FLOAT, .8),
+	OPTION(mds, mds_bal_min_rebalance, 0, FLOAT, .1),  // must be this much above average before we export anything
+	OPTION(mds, mds_bal_min_start, 0, FLOAT, .2),      // if we need less than this, we don't do anything
+	OPTION(mds, mds_bal_need_min, 0, FLOAT, .8),       // take within this range of what we need
 	OPTION(mds, mds_bal_need_max, 0, FLOAT, 1.2),
-	OPTION(mds, mds_bal_midchunk, 0, FLOAT, .3),
-	OPTION(mds, mds_bal_minchunk, 0, FLOAT, .001),
+	OPTION(mds, mds_bal_midchunk, 0, FLOAT, .3),       // any sub bigger than this taken in full
+	OPTION(mds, mds_bal_minchunk, 0, FLOAT, .001),     // never take anything smaller than this
 	OPTION(mds, mds_trim_on_rejoin, 0, BOOL, true),
 	OPTION(mds, mds_shutdown_check, 0, INT, 0),
 	OPTION(mds, mds_verify_export_dirauth, 0, BOOL, true),
@@ -490,65 +492,65 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd, osd_balance_reads, 0, BOOL, false),
 	OPTION(osd, osd_flash_crowd_iat_threshold, 0, INT, 0),
 	OPTION(osd, osd_flash_crowd_iat_alpha, 0, DOUBLE, 0.125),
-	OPTION(osd, osd_balance_reads_temp, 0, DOUBLE, 100),
-	OPTION(osd, osd_shed_reads, 0, INT, false),
-	OPTION(osd, osd_shed_reads_min_latency, 0, DOUBLE, .01),
-	OPTION(osd, osd_shed_reads_min_latency_diff, 0, DOUBLE, .01),
-	OPTION(osd, osd_shed_reads_min_latency_ratio, 0, DOUBLE, 1.5),
-	OPTION(osd, osd_immediate_read_from_cache, 0, BOOL, false),
-	OPTION(osd, osd_exclusive_caching, 0, BOOL, true),
+	OPTION(osd, osd_balance_reads_temp, 0, DOUBLE, 100),  // send from client to replica
+	OPTION(osd, osd_shed_reads, 0, INT, false),     // forward from primary to replica
+	OPTION(osd, osd_shed_reads_min_latency, 0, DOUBLE, .01),       // min local latency
+	OPTION(osd, osd_shed_reads_min_latency_diff, 0, DOUBLE, .01),  // min latency difference
+	OPTION(osd, osd_shed_reads_min_latency_ratio, 0, DOUBLE, 1.5),  // 1.2 == 20% higher than peer
+	OPTION(osd, osd_immediate_read_from_cache, 0, BOOL, false), // osds to read from the cache immediately?
+	OPTION(osd, osd_exclusive_caching, 0, BOOL, true),         // replicas evict replicated writes
 	OPTION(osd, osd_stat_refresh_interval, 0, DOUBLE, .5),
-	OPTION(osd, osd_min_pg_size_without_alive, 0, INT, 2),
-	OPTION(osd, osd_pg_bits, 0, INT, 6),
-	OPTION(osd, osd_lpg_bits, 0, INT, 1),
+	OPTION(osd, osd_min_pg_size_without_alive, 0, INT, 2),  // smallest pg we allow to activate without telling the monitor
+	OPTION(osd, osd_pg_bits, 0, INT, 6),  // bits per osd
+	OPTION(osd, osd_lpg_bits, 0, INT, 1),  // bits per osd
 	OPTION(osd, osd_object_layout, 0, INT, CEPH_OBJECT_LAYOUT_HASHINO),
 	OPTION(osd, osd_pg_layout, 0, INT, CEPH_PG_LAYOUT_CRUSH),
 	OPTION(osd, osd_min_rep, 0, INT, 2),
 	OPTION(osd, osd_max_rep, 0, INT, 3),
 	OPTION(osd, osd_min_raid_width, 0, INT, 3),
 	OPTION(osd, osd_max_raid_width, 0, INT, 2),
-	OPTION(osd, osd_maxthreads, 0, INT, 2),
+	OPTION(osd, osd_maxthreads, 0, INT, 2),    // 0 == no threading
 	OPTION(osd, osd_max_opq, 0, INT, 10),
 	OPTION(osd, osd_age, 0, FLOAT, .8),
 	OPTION(osd, osd_age_time, 0, INT, 0),
 	OPTION(osd, osd_heartbeat_interval, 0, INT, 1),
-	OPTION(osd, osd_mon_heartbeat_interval, 0, INT, 30),
+	OPTION(osd, osd_mon_heartbeat_interval, 0, INT, 30),  // if no peers, ping monitor
 	OPTION(osd, osd_heartbeat_grace, 0, INT, 20),
-	OPTION(osd, osd_mon_report_interval, 0, INT, 5),
+	OPTION(osd, osd_mon_report_interval, 0, INT, 5),  // pg stats, failures, up_thru, boot.
 	OPTION(osd, osd_replay_window, 0, INT, 45),
 	OPTION(osd, osd_max_pull, 0, INT, 2),
 	OPTION(osd, osd_preserve_trimmed_log, 0, BOOL, true),
 	OPTION(osd, osd_recovery_delay_start, 0, FLOAT, 15),
 	OPTION(osd, osd_recovery_max_active, 0, INT, 5),
 	OPTION(osd, osd_auto_weight, 0, BOOL, false),
-	OPTION(global, filestore, 0, BOOL, false),
-	OPTION(global, filestore_sync_interval, 0, DOUBLE, .2),
-	OPTION(global, filestore_fake_attrs, 0, BOOL, false),
-	OPTION(global, filestore_fake_collections, 0, BOOL, false),
-	OPTION(global, filestore_dev, 0, STR, 0),
-	OPTION(global, filestore_btrfs_trans, 0, BOOL, true),
+	OPTION(filestore, filestore, 0, BOOL, false),
+	OPTION(filestore, filestore_sync_interval, 0, DOUBLE, .2),    // seconds
+	OPTION(filestore, filestore_fake_attrs, 0, BOOL, false),
+	OPTION(filestore, filestore_fake_collections, 0, BOOL, false),
+	OPTION(filestore, filestore_dev, 0, STR, 0),
+	OPTION(filestore, filestore_btrfs_trans, 0, BOOL, true),
 	OPTION(ebofs, ebofs, 0, BOOL, false),
 	OPTION(ebofs, ebofs_cloneable, 0, BOOL, true),
 	OPTION(ebofs, ebofs_verify, 0, BOOL, false),
-	OPTION(ebofs, ebofs_commit_ms, 0, INT, 200),
-	OPTION(ebofs, ebofs_oc_size, 0, INT, 10000),
-	OPTION(ebofs, ebofs_cc_size, 0, INT, 10000),
-	OPTION(ebofs, ebofs_bc_size, 0, LONGLONG, 50*256),
-	OPTION(ebofs, ebofs_bc_max_dirty, 0, LONGLONG, 30*256),
-	OPTION(ebofs, ebofs_max_prefetch, 0, INT, 1000),
-	OPTION(ebofs, ebofs_realloc, 0, BOOL, false),
+	OPTION(ebofs, ebofs_commit_ms, 0, INT, 200),       // 0 = no forced commit timeout (for debugging/tracing)
+	OPTION(ebofs, ebofs_oc_size, 0, INT, 10000),      // onode cache
+	OPTION(ebofs, ebofs_cc_size, 0, INT, 10000),      // cnode cache
+	OPTION(ebofs, ebofs_bc_size, 0, LONGLONG, 50*256), // 4k blocks, *256 for MB
+	OPTION(ebofs, ebofs_bc_max_dirty, 0, LONGLONG, 30*256), // before write() will block
+	OPTION(ebofs, ebofs_max_prefetch, 0, INT, 1000), // 4k blocks
+	OPTION(ebofs, ebofs_realloc, 0, BOOL, false),    // hrm, this can cause bad fragmentation, don't use!
 	OPTION(ebofs, ebofs_verify_csum_on_read, 0, BOOL, true),
 	OPTION(journal, journal_dio, 0, BOOL, false),
 	OPTION(journal, journal_max_write_bytes, 0, INT, 0),
 	OPTION(journal, journal_max_write_entries, 0, INT, 100),
 	OPTION(bdev, bdev_lock, 0, BOOL, true),
-	OPTION(bdev, bdev_iothreads, 0, INT, 1),
-	OPTION(bdev, bdev_idle_kick_after_ms, 0, INT, 100),
-	OPTION(bdev, bdev_el_fw_max_ms, 0, INT, 10000),
-	OPTION(bdev, bdev_el_bw_max_ms, 0, INT, 3000),
-	OPTION(bdev, bdev_el_bidir, 0, BOOL, false),
-	OPTION(bdev, bdev_iov_max, 0, INT, 512),
-	OPTION(bdev, bdev_debug_check_io_overlap, 0, BOOL, true),
+	OPTION(bdev, bdev_iothreads, 0, INT, 1),         // number of ios to queue with kernel
+	OPTION(bdev, bdev_idle_kick_after_ms, 0, INT, 100),  // ms
+	OPTION(bdev, bdev_el_fw_max_ms, 0, INT, 10000),      // restart elevator at least once every 1000 ms
+	OPTION(bdev, bdev_el_bw_max_ms, 0, INT, 3000),       // restart elevator at least once every 300 ms
+	OPTION(bdev, bdev_el_bidir, 0, BOOL, false),          // bidirectional elevator?
+	OPTION(bdev, bdev_iov_max, 0, INT, 512),            // max # iov's to collect into a single readv()/writev() call
+	OPTION(bdev, bdev_debug_check_io_overlap, 0, BOOL, true),  // [DEBUG] check for any pending io overlaps
 	OPTION(bdev, bdev_fake_mb, 0, INT, 0),
 	OPTION(bdev, bdev_fake_max_mb, 0, INT, 0),
 };
