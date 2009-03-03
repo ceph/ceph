@@ -295,10 +295,6 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 	mutex_lock(&monc->statfs_mutex);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
 	if (req) {
-		radix_tree_delete(&monc->statfs_request_tree, tid);
-		monc->num_statfs_requests--;
-		if (monc->num_statfs_requests == 0)
-			cancel_delayed_work(&monc->statfs_delayed_work);
 		req->buf->f_total = reply->st.f_total;
 		req->buf->f_free = reply->st.f_free;
 		req->buf->f_avail = reply->st.f_avail;
@@ -364,12 +360,19 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 
 	/* send request and wait */
 	err = send_statfs(monc, req.tid, 0);
-	if (err)
-		return err;
-	err = wait_for_completion_interruptible(&req.completion);
-	if (err == -EINTR)
-		return err;
-	return req.result;
+	if (!err)
+		err = wait_for_completion_interruptible(&req.completion);
+
+	mutex_lock(&monc->statfs_mutex);
+	radix_tree_delete(&monc->statfs_request_tree, req.tid);
+	monc->num_statfs_requests--;
+	if (monc->num_statfs_requests == 0)
+		cancel_delayed_work(&monc->statfs_delayed_work);
+	mutex_unlock(&monc->statfs_mutex);
+
+	if (!err)
+		err = req.result;
+	return err;
 }
 
 /*

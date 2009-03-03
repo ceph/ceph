@@ -13,8 +13,6 @@ else
     ETCDIR=/etc/ceph
 fi
 
-. $LIBDIR/ceph_common.sh
-
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
     printf "\t-c conffile.conf\n"
@@ -22,16 +20,20 @@ usage_exit() {
     exit
 }
 
+. $LIBDIR/ceph_common.sh
+
+
 stop_daemon() {
     name=$1
     daemon=$2
     pidfile=$3
+    signal=$4
     echo -n "Stopping ceph $name on $host..."
     do_cmd "while [ 1 ]; do 
 	[ -e $pidfile ] || break
-	pid=`cat $pidfile`
+	pid=\`cat $pidfile\`
 	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
-	    cmd=\"kill \$pid\"
+	    cmd=\"kill $signal \$pid\"
 	    echo -n \$cmd...
 	    \$cmd
 	    sleep 1
@@ -92,7 +94,6 @@ esac
 options="$options $1"
 shift
 done
-
 
 # build mon_addr_arg with all mon addrs
 n=0
@@ -167,12 +168,33 @@ for name in $what; do
 	stop)
 	    stop_daemon $name c$type $pid_file
 	    ;;
+
+	forcestop)
+	    stop_daemon $name c$type $pid_file -9
+	    ;;
+	    
+	killall)
+	    echo "killall c$type on $host"
+	    do_cmd "killall -9 c$type"
+	    ;;
 	
 	restart)
 	    $0 $options stop $name
 	    $0 $options start $name
 	    ;;
-	
+
+	cleanlogs)
+	    get_conf log_dir "/var/log/ceph" "log dir" $sections
+	    get_conf log_sym_dir "/var/log/ceph" "log sym dir" $sections
+	    do_cmd "for f in $log_sym_dir/$name*; do rm -f \`readlink \$f\` ; rm -f \$f ; done"
+	    ;;
+
+	cleanalllogs)
+	    get_conf log_dir "/var/log/ceph" "log dir" $sections
+	    get_conf log_sym_dir "/var/log/ceph" "log sym dir" $sections
+	    do_cmd "rm -f $log_dir/* $log_sym_dir/*"
+	    ;;
+
 	*)
 	    usage_exit
 	    ;;

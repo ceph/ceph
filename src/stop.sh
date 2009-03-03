@@ -38,7 +38,7 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
-	killall crun cmon cmds cosd
+	killall cmon cmds cosd
 	pkill -f valgrind.bin.\*cmon
 	pkill -f valgrind.bin.\*cosd
 	pkill -f valgrind.bin.\*cmds

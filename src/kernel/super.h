@@ -118,8 +118,6 @@ struct ceph_client {
 	struct workqueue_struct *trunc_wq;
 
 	struct backing_dev_info backing_dev_info;
-	struct list_head clients_all;
-	struct proc_dir_entry *proc_entry;
 };
 
 static inline struct ceph_client *ceph_client(struct super_block *sb)

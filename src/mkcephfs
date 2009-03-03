@@ -12,12 +12,13 @@ else
     ETCDIR=/etc/ceph
 fi
 
-. $LIBDIR/ceph_common.sh
-
 usage_exit() {
     echo "usage: $0 [--allhosts] [-c conffile.conf] [--clobber_old_data] [--mkbtrfs]"
     exit
 }
+
+. $LIBDIR/ceph_common.sh
+
 
 allhosts=0
 clobber=""
@@ -111,6 +112,11 @@ for name in $what; do
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
 	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_path"
+    fi
+
+    if [[ $type = "mds" ]]; then
+	# do nothing
+	echo
     fi
 
 done

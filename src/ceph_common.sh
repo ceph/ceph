@@ -7,6 +7,13 @@ runtime_conf=$ETCDIR"/ceph.conf"
 hostname=`hostname | cut -d . -f 1`
 
 
+# make sure cluster.conf exists
+if [ ! -e $conf ]; then
+    echo "$0: Cluster conf $conf not found"
+    usage_exit
+fi
+
+
 check_host() {
     # what host is this daemon assigned to?
     host=`$CCONF -c $conf -s $name -s $type host`
