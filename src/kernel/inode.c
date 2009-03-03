@@ -862,7 +862,10 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		err = fill_inode(in, &rinfo->trace_in[0],
 				 rinfo->trace_numd ?
 				 rinfo->trace_dir[0] : NULL,
-				 session, req->r_request_started, -1);
+				 session, req->r_request_started,
+				 (rinfo->trace_numd == 0 &&
+				  le32_to_cpu(rinfo->head->result) == 0) ?
+				 req->r_fmode : -1);
 		if (err < 0)
 			return err;
 		if (unlikely(sb->s_root == NULL))
