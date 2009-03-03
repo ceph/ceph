@@ -738,12 +738,13 @@ void parse_startup_config_options(std::vector<const char*>& args)
   std::vector<const char*> nargs;
 
   for (unsigned i=0; i<args.size(); i++) {
+    bool isarg = i+1 < args.size();  // is more?
 #define NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
 #define SET_ARG_VAL(dest, type) \
 	set_conf_val(dest, type, NEXT_VAL)
 #define SAFE_SET_ARG_VAL(dest, type) \
 	do { \
-          if (isarg || val_pos || config_optionsp[optn].type == BOOL) \
+          if (isarg || val_pos) \
 		SET_ARG_VAL(dest, type); \
 	} while (0)
 #define SET_BOOL_ARG_VAL(dest) \
@@ -790,7 +791,7 @@ void parse_config_options(std::vector<const char*>& args)
     for (optn = 0; optn < opt_len; optn++) {
       if (CMD_EQ("conf_file", 'c')) {
 	SAFE_SET_ARG_VAL(&g_conf.conf_file, STR);
-      else if (cmd_equals(args[i],
+      } else if (cmd_equals(args[i],
 	    config_optionsp[optn].name,
 	    config_optionsp[optn].char_option,
 	    &val_pos)) {
