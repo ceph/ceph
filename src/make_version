@@ -1,0 +1,26 @@
+#!/bin/bash
+
+
+dname=`dirname $0`
+
+git_ver=`git-rev-parse HEAD 2>/dev/null`
+
+[ -e $dname/.make_last_ver ] && \
+  [ -e $dname/ceph_ver.h ] && \
+  [ "$git_ver" == "`cat $dname/.make_last_ver`" ] && exit
+
+
+print_all() {
+echo "#ifndef __CEPH_VERSION_H"
+echo "#define __CEPH_VERSION_H"
+echo
+echo "#define CEPH_GIT_VER `git-rev-parse HEAD 2>/dev/null`"
+echo
+echo "#endif"
+
+}
+
+print_all > $dname/ceph_ver.h
+
+echo $git_ver > $dname/.make_last_ver
+	

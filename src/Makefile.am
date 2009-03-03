@@ -160,7 +160,7 @@ AM_LDFLAGS =
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a libebofs.a 
+	libos.a libebofs.a
 
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
@@ -177,6 +177,11 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
 	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(sysconfdir)/ceph/sample.cluster.conf
 
+ceph_ver.h : $(all_sources)
+#	./make_version
+
+ceph_ver.c : ceph_ver.h
+
 # cleaning
 clean-local:
 	-rm *.so
@@ -185,6 +190,11 @@ clean-local:
 
 # libs
 libcommon_a_SOURCES = \
+	ceph_ver.c \
+	$(libcommon_files)
+
+# this list ommits the ceph_ver.c file
+libcommon_files = \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
@@ -568,3 +578,11 @@ noinst_HEADERS = \
         osdc/Objecter.h\
 	sample.ceph.conf\
 	sample.cluster.conf
+
+all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \
+	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
+	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
+	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
+	$(libcrush_so_a_SOURCES) $(libcommon_files) $(libcrush_a_SOURCES)  \
+	$(libmon_a_SOURCES) $(libmds_a_SOURCES) $(libebofs_a_SOURCES) $(libos_a_SOURCES) $(libosd_a_SOURCES) \
+	$(libosdc_a_SOURCES) $(libclient_a_SOURCES)
