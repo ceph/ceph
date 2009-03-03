@@ -1324,6 +1324,11 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
+
+  // make max_size increase timely
+  if (new_max)
+    mds->mdlog->flush();
+
   return true;
 }
 
