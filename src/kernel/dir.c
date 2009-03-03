@@ -243,20 +243,18 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 
 	if (err == -ENOENT) {
 		/* no trace? */
+		err = 0;
 		if (req->r_reply_info.trace_numd == 0) {
 			dout(20, "ENOENT and no trace, dentry %p inode %p\n",
 			     dentry, dentry->d_inode);
 			ceph_init_dentry(dentry);
 			if (dentry->d_inode) {
 				d_drop(dentry);
-				req->r_dentry = d_alloc(dentry->d_parent,
-							&dentry->d_name);
-				d_rehash(req->r_dentry);
+				err = -ENOENT;
 			} else {
 				d_add(dentry, NULL);
 			}
 		}
-		err = 0;
 	}
 	if (err)
 		dentry = ERR_PTR(err);
