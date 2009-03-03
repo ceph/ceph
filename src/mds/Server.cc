@@ -4812,9 +4812,10 @@ public:
     mdr->apply();
 
     // notify any clients
-    mds->locker->issue_truncate(in);
-    if (smaller && in->inode.is_truncating())
+    if (smaller && in->inode.is_truncating()) {
+      mds->locker->issue_truncate(in);
       mds->mdcache->truncate_inode(in, mdr->ls);
+    }
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
