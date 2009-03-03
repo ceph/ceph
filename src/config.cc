@@ -333,6 +333,10 @@ struct config_option {
 
 #define OPTION(section, name, schar, type, def_val) OPTION_##type(section, name, schar, type, def_val)
 
+#define OPTION_ALT(section, conf_name, name, schar, type, def_val) \
+       { STRINGIFY(section), NULL, STRINGIFY(conf_name), \
+         &g_conf.name, STRINGIFY(def_val), type, schar }
+
 static struct config_option config_optionsp[] = {
 	OPTION(global, num_mon, 0, INT, 1),
 	OPTION(global, num_mds, 0, INT, 1),
@@ -382,11 +386,11 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug, debug_tp, 0, INT, 0),
 	OPTION(clock, clock_lock, 0, BOOL, false),
 	OPTION(clock, clock_tare, 0, BOOL, false),
-	OPTION(messenger, ms_tcp_nodelay, 0, BOOL, true),
-	OPTION(messenger, ms_retry_interval, 0, DOUBLE, 2.0),  // how often to attempt reconnect
-	OPTION(messenger, ms_fail_interval, 0, DOUBLE, 15.0),  // fail after this long
-	OPTION(messenger, ms_die_on_failure, 0, BOOL, false),
-	OPTION(messenger, ms_nocrc, 0, BOOL, false),
+	OPTION_ALT(messenger, tcp_nodelay, ms_tcp_nodelay, 0, BOOL, true),
+	OPTION_ALT(messenger, retry_interval, ms_retry_interval, 0, DOUBLE, 2.0),  // how often to attempt reconnect
+	OPTION_ALT(messenger, fail_interval, ms_fail_interval, 0, DOUBLE, 15.0),  // fail after this long
+	OPTION_ALT(messenger, die_on_failure, ms_die_on_failure, 0, BOOL, false),
+	OPTION_ALT(messenger, no_crc, ms_nocrc, 0, BOOL, false),
 	OPTION(mon, mon_tick_interval, 0, INT, 5),
 	OPTION(mon, mon_osd_down_out_interval, 0, INT, 5),  // seconds
 	OPTION(mon, mon_lease, 0, FLOAT, 5),  		    // lease interval
@@ -790,10 +794,10 @@ void parse_config_options(std::vector<const char*>& args, bool open)
 
         break;
       }
-
-      if (optn == opt_len)
-        nargs.push_back(args[i]);
     }
+
+    if (optn == opt_len)
+        nargs.push_back(args[i]);
   }
 
  // open log file?
