@@ -178,7 +178,7 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(sysconfdir)/ceph/sample.cluster.conf
 
 ceph_ver.h : $(all_sources)
-#	./make_version
+	./make_version
 
 ceph_ver.c : ceph_ver.h
 
