@@ -791,7 +791,6 @@ void parse_config_options(std::vector<const char*>& args)
     for (optn = 0; optn < opt_len; optn++) {
       if (CMD_EQ("lockdep", '\0')) {
 	SAFE_SET_ARG_VAL(&g_lockdep, INT);
-	break;
       } else if (cmd_equals(args[i],
 	    config_optionsp[optn].name,
 	    config_optionsp[optn].char_option,
@@ -800,9 +799,10 @@ void parse_config_options(std::vector<const char*>& args)
 	    SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
         else
           continue;
-
-        break;
+      } else {
+        continue;
       }
+      break;
     }
 
     if (optn == opt_len)
