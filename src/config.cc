@@ -290,7 +290,6 @@ void parse_config_option_string(string& s)
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
-  preparse_config_options(nargs, false);
   parse_config_options(nargs, false);
 }
 
@@ -743,12 +742,21 @@ void preparse_config_options(std::vector<const char*>& args, bool open)
 #define CMD_EQ(str_cmd, char_cmd) \
 	cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
-    if (CMD_EQ("conf_file", 'c'))
+    if (CMD_EQ("conf_file", 'c')) {
 	SET_ARG_VAL(&g_conf.conf_file, STR);
-    else if (CMD_EQ("dump_conf", 0))
+    } else if (CMD_EQ("dump_conf", 0)) {
 	SET_BOOL_ARG_VAL(&g_conf.dump_conf);
-    else
+    } else if (CMD_EQ("bind", 0)) {
+      assert_warn(parse_ip_port(args[++i], g_my_addr));
+    } else if (CMD_EQ("daemonize", 'd')) {
+      g_conf.daemonize = true;
+      g_conf.log_to_stdout = false;
+    } else if (CMD_EQ("foreground", 'f')) {
+      g_conf.daemonize = false;
+      g_conf.log_to_stdout = false;
+    } else {
       nargs.push_back(args[i]);
+    }
   }
   args.swap(nargs);
   nargs.clear();
@@ -768,29 +776,19 @@ void parse_config_options(std::vector<const char*>& args, bool open)
   std::vector<const char*> nargs;
   for (unsigned i=0; i<args.size(); i++) {
     bool isarg = i+1 < args.size();  // is more?
+    int optn;
 
-    if (CMD_EQ("bind", 0)) {
-      assert_warn(parse_ip_port(args[++i], g_my_addr));
-    } else if (CMD_EQ("daemonize", 'd')) {
-      g_conf.daemonize = true;
-      g_conf.log_to_stdout = false;
-    } else if (CMD_EQ("foreground", 'f')) {
-      g_conf.daemonize = false;
-      g_conf.log_to_stdout = false;
-    } else  {
-      int optn;
-
-      for (optn = 0; optn < opt_len; optn++) {
-	if (cmd_equals(args[i], 
-		  config_optionsp[optn].name,
-		  config_optionsp[optn].char_option,
-		  &val_pos)) {
-	  if (isarg || val_pos || config_optionsp[optn].type == BOOL)
+    for (optn = 0; optn < opt_len; optn++) {
+      if (cmd_equals(args[i], 
+	    config_optionsp[optn].name,
+	    config_optionsp[optn].char_option,
+	    &val_pos)) {
+        if (isarg || val_pos || config_optionsp[optn].type == BOOL)
 	    SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
-	  else
-	    continue;
-	  break;
-	}
+        else
+          continue;
+
+        break;
       }
 
       if (optn == opt_len)
