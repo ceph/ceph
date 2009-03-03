@@ -1912,8 +1912,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
         nargs.push_back(args[i]);
     }
   }
-  args.swap(nargs);
-  nargs.clear();
 
  // open log file?
 
