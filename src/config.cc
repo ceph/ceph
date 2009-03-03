@@ -290,7 +290,7 @@ void parse_config_option_string(string& s)
     *p++ = 0;
     while (*p && *p == ' ') p++;
   }
-  parse_config_options(nargs, false);
+  parse_config_options(nargs);
 }
 
 void sighup_handler(int signum)
@@ -731,7 +731,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   
 }
 
-void preparse_config_options(std::vector<const char*>& args, bool open)
+void parse_startup_config_options(std::vector<const char*>& args)
 {
   unsigned int val_pos;
 
@@ -772,7 +772,7 @@ void preparse_config_options(std::vector<const char*>& args, bool open)
     cf.dump();
 }
 
-void parse_config_options(std::vector<const char*>& args, bool open)
+void parse_config_options(std::vector<const char*>& args)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
   unsigned int val_pos;
@@ -800,11 +800,6 @@ void parse_config_options(std::vector<const char*>& args, bool open)
         nargs.push_back(args[i]);
   }
 
- // open log file?
-
-  if (open)
-    _dout_open_log();
-  
   signal(SIGHUP, sighup_handler);
 
   args = nargs;
