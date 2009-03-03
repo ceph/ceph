@@ -88,6 +88,7 @@ if [[ $what =~ "mon0" ]]; then
     # import crush map?
     get_conf crushmapsrc "$usecrushmap" "crush map" mon0 mon global
     if [[ $crushmapsrc != "" ]]; then
+	echo Building crush map from $crushmapsrc
 	crushmap="/tmp/crushmap.$$"
 	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
 	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
