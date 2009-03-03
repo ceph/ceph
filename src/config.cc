@@ -789,8 +789,8 @@ void parse_config_options(std::vector<const char*>& args)
     int optn;
 
     for (optn = 0; optn < opt_len; optn++) {
-      if (CMD_EQ("conf_file", 'c')) {
-	SAFE_SET_ARG_VAL(&g_conf.conf_file, STR);
+      if (CMD_EQ("lockdep", ' ')) {
+	SAFE_SET_ARG_VAL(&g_lockdep, INT);
       } else if (cmd_equals(args[i],
 	    config_optionsp[optn].name,
 	    config_optionsp[optn].char_option,
