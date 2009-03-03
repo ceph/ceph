@@ -274,6 +274,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_truncate_seq = 0;
 	ci->i_truncate_size = 0;
+	ci->i_truncate_pending = 0;
 
 	ci->i_max_size = 0;
 	ci->i_reported_size = 0;
@@ -295,7 +296,6 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
 	INIT_WORK(&ci->i_pg_inv_work, ceph_inode_invalidate_pages);
 
-	ci->i_vmtruncate_to = -1;
 	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
 
 	INIT_LIST_HEAD(&ci->i_listener_list);
@@ -323,31 +323,22 @@ void ceph_destroy_inode(struct inode *inode)
 
 
 /*
- * Helper to fill in size, ctime, mtime, and atime.  We have to be
+ * Helpers to fill in size, ctime, mtime, and atime.  We have to be
  * careful because either the client or MDS may have more up to date
  * info, depending on which capabilities are held, and whether
  * time_warp_seq or truncate_seq have increased.  Ordinarily, mtime
  * and size are monotonically increasing, except when utimes() or
  * truncate() increments the corresponding _seq values on the MDS.
  */
-int ceph_fill_file_bits(struct inode *inode, int issued,
-			u32 truncate_seq, u64 truncate_size, u64 size,
-			u64 time_warp_seq, struct timespec *ctime,
-			struct timespec *mtime, struct timespec *atime)
+int ceph_fill_file_size(struct inode *inode, int issued,
+			u32 truncate_seq, u64 truncate_size, u64 size)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int warn = 0;
 	int queue_trunc = 0;
 
 	if (ceph_seq_cmp(truncate_seq, ci->i_truncate_seq) > 0 ||
 	    (truncate_seq == ci->i_truncate_seq && size > inode->i_size)) {
 		dout(10, "size %lld -> %llu\n", inode->i_size, size);
-
-		if (issued & (CEPH_CAP_FILE_RDCACHE|CEPH_CAP_FILE_RD|
-			      CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER|
-			      CEPH_CAP_FILE_EXCL))
-			queue_trunc = __ceph_queue_vmtruncate(inode, size);
-
 		inode->i_size = size;
 		inode->i_blocks = (size + (1<<9) - 1) >> 9;
 		ci->i_reported_size = size;
@@ -355,6 +346,11 @@ int ceph_fill_file_bits(struct inode *inode, int issued,
 			dout(10, "truncate_seq %u -> %u\n",
 			     ci->i_truncate_seq, truncate_seq);
 			ci->i_truncate_seq = truncate_seq;
+			ci->i_truncate_pending++;
+			if (issued & (CEPH_CAP_FILE_RDCACHE|CEPH_CAP_FILE_RD|
+				      CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER|
+				      CEPH_CAP_FILE_EXCL))
+				queue_trunc = 1;
 		}
 	}
 	if (ceph_seq_cmp(truncate_seq, ci->i_truncate_seq) >= 0 &&
@@ -363,6 +359,15 @@ int ceph_fill_file_bits(struct inode *inode, int issued,
 		     truncate_size);
 		ci->i_truncate_size = truncate_size;
 	}
+	return queue_trunc;
+}
+
+void ceph_fill_file_time(struct inode *inode, int issued,
+			 u64 time_warp_seq, struct timespec *ctime,
+			 struct timespec *mtime, struct timespec *atime)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int warn = 0;
 
 	if (issued & (CEPH_CAP_FILE_EXCL|
 		      CEPH_CAP_FILE_WR|
@@ -399,8 +404,6 @@ int ceph_fill_file_bits(struct inode *inode, int issued,
 	if (warn) /* time_warp_seq shouldn't go backwards */
 		dout(10, "%p mds time_warp_seq %llu < %u\n",
 		     inode, time_warp_seq, ci->i_time_warp_seq);
-
-	return queue_trunc;
 }
 
 /*
@@ -475,12 +478,13 @@ static int fill_inode(struct inode *inode,
 	ceph_decode_timespec(&atime, &info->atime);
 	ceph_decode_timespec(&mtime, &info->mtime);
 	ceph_decode_timespec(&ctime, &info->ctime);
-	queue_trunc = ceph_fill_file_bits(inode, issued,
+	queue_trunc = ceph_fill_file_size(inode, issued,
 					  le32_to_cpu(info->truncate_seq),
 					  le64_to_cpu(info->truncate_size),
-					  le64_to_cpu(info->size),
-					  le32_to_cpu(info->time_warp_seq),
-					  &ctime, &mtime, &atime);
+					  le64_to_cpu(info->size));
+	ceph_fill_file_time(inode, issued,
+			    le32_to_cpu(info->time_warp_seq),
+			    &ctime, &mtime, &atime);
 
 	ci->i_max_size = le64_to_cpu(info->max_size);
 	ci->i_layout = info->layout;
@@ -1384,37 +1388,6 @@ void ceph_vmtruncate_work(struct work_struct *work)
 	iput(inode);
 }
 
-int __ceph_queue_vmtruncate(struct inode *inode, __u64 size)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int queue_trunc = 0;
-
-	/*
-	 * vmtruncate lazily; we can't block on i_mutex in the message
-	 * handler path, or we deadlock against osd op replies needed
-	 * to complete the writes holding i_lock.  vmtruncate will
-	 * also block on page locks held by writes...
-	 *
-	 * if its an expansion, and there is no truncate pending, we
-	 * don't need to truncate.
-	 */
-	if (ci->i_vmtruncate_to < 0 && size > inode->i_size) {
-		dout(10, "clean fwd truncate, no vmtruncate needed\n");
-	} else if (ci->i_vmtruncate_to >= 0 && size >= ci->i_vmtruncate_to) {
-		dout(10, "trunc to %lld < %lld already queued\n",
-		     ci->i_vmtruncate_to, size);
-	} else {
-		/* we need to trunc even smaller */
-		dout(10, "queueing trunc %lld -> %lld\n", inode->i_size, size);
-		ci->i_vmtruncate_to = size;
-		queue_trunc = 1;
-	}
-	i_size_write(inode, size);
-	ci->i_reported_size = size;
-
-	return queue_trunc;
-}
-
 /*
  * called with i_mutex held.
  *
@@ -1424,23 +1397,33 @@ int __ceph_queue_vmtruncate(struct inode *inode, __u64 size)
 void __ceph_do_pending_vmtruncate(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	loff_t to;
-	int wrbuffer_refs;
+	u64 to;
+	int wrbuffer_refs, wake = 0;
 
 	spin_lock(&inode->i_lock);
-	to = ci->i_vmtruncate_to;
-	ci->i_vmtruncate_to = -1;
+	if (ci->i_truncate_pending == 0) {
+		dout(10, "__do_pending_vmtruncate %p none pending\n", inode);
+		spin_unlock(&inode->i_lock);
+		return;
+	}
+	to = ci->i_truncate_size;
 	wrbuffer_refs = ci->i_wrbuffer_ref;
+	dout(10, "__do_pending_vmtruncate %p (%d) to %lld\n", inode,
+	     ci->i_truncate_pending, to);
 	spin_unlock(&inode->i_lock);
 
-	if (to >= 0) {
-		dout(10, "__do_pending_vmtruncate %p to %lld\n", inode, to);
-		truncate_inode_pages(inode->i_mapping, to);
-		if (wrbuffer_refs == 0)
-			ceph_check_caps(ci, 0, 0, NULL);
-	} else {
-		dout(10, "__do_pending_vmtruncate %p nothing to do\n", inode);
-	}
+	truncate_inode_pages(inode->i_mapping, to);
+
+	spin_lock(&inode->i_lock);
+	ci->i_truncate_pending--;
+	if (ci->i_truncate_pending == 0)
+		wake = 1;
+	spin_unlock(&inode->i_lock);
+
+	if (wrbuffer_refs == 0)
+		ceph_check_caps(ci, 0, 0, NULL);
+	if (wake)
+		wake_up(&ci->i_cap_wq);
 }
 
 /*

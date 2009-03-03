@@ -1004,10 +1004,13 @@ int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		}
 	}
 	have = __ceph_caps_issued(ci, &implemented);
-	/* HACK: force sync writes...
-	have &= ~CEPH_CAP_WRBUFFER;
-	implemented &= ~CEPH_CAP_WRBUFFER;
-	*/
+
+	/*
+	 * disallow writes while a truncate is pending
+	 */
+	if (ci->i_truncate_pending)
+		have &= ~CEPH_CAP_FILE_WR;
+
 	if ((have & need) == need) {
 		/*
 		 * Look at (implemented & ~have & not) so that we keep waiting
@@ -1274,12 +1277,13 @@ start:
 	}
 
 	/* size/ctime/mtime/atime? */
+	ceph_fill_file_size(inode, issued,
+			    le32_to_cpu(grant->truncate_seq),
+			    le64_to_cpu(grant->truncate_size), size);
 	ceph_decode_timespec(&mtime, &grant->mtime);
 	ceph_decode_timespec(&atime, &grant->atime);
 	ceph_decode_timespec(&ctime, &grant->ctime);
-	ceph_fill_file_bits(inode, issued,
-			    le32_to_cpu(grant->truncate_seq),
-			    le64_to_cpu(grant->truncate_size), size,
+	ceph_fill_file_time(inode, issued,
 			    le32_to_cpu(grant->time_warp_seq), &ctime, &mtime,
 			    &atime);
 
@@ -1474,11 +1478,20 @@ static void handle_cap_trunc(struct inode *inode,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int mds = session->s_mds;
 	int seq = le32_to_cpu(trunc->seq);
+	u32 truncate_seq = le32_to_cpu(trunc->truncate_seq);
+	u64 truncate_size = le64_to_cpu(trunc->truncate_size);
 	u64 size = le64_to_cpu(trunc->size);
+	int implemented = 0;
+	int dirty = __ceph_caps_dirty(ci);
+	int issued = __ceph_caps_issued(ceph_inode(inode), &implemented);
 	int queue_trunc = 0;
+	
+	issued |= implemented | dirty;
 
-	dout(10, "handle_cap_trunc inode %p mds%d seq %d\n", inode, mds, seq);
-	queue_trunc = __ceph_queue_vmtruncate(inode, size);
+	dout(10, "handle_cap_trunc inode %p mds%d seq %d to %lld seq %d\n",
+	     inode, mds, seq, truncate_size, truncate_seq);
+	queue_trunc = ceph_fill_file_size(inode, issued,
+					  truncate_seq, truncate_size, size);
 	spin_unlock(&inode->i_lock);
 
 	if (queue_trunc)

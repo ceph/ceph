@@ -263,8 +263,9 @@ struct ceph_inode_info {
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */
 
-	u32 i_truncate_seq;
-	u64 i_truncate_size;
+	u32 i_truncate_seq;        /* last truncate to smaller size */
+	u64 i_truncate_size;       /*  and the size we last truncated down to */
+	int i_truncate_pending;    /*  still need to call vmtruncate */
 
 	u64 i_max_size;            /* max file size authorized by mds */
 	u64 i_reported_size; /* (max_)size reported to or requested of mds */
@@ -288,7 +289,6 @@ struct ceph_inode_info {
 	struct work_struct i_wb_work;  /* writeback work */
 	struct work_struct i_pg_inv_work;  /* page invalidation work */
 
-	loff_t i_vmtruncate_to;        /* delayed truncate work */
 	struct work_struct i_vmtruncate_work;
 
 	struct list_head i_listener_list; /* requests we pend on */
@@ -681,10 +681,11 @@ extern void ceph_destroy_inode(struct inode *inode);
 extern struct inode *ceph_get_inode(struct super_block *sb,
 				    struct ceph_vino vino);
 extern struct inode *ceph_get_snapdir(struct inode *parent);
-extern int ceph_fill_file_bits(struct inode *inode, int issued,
-			       u32 truncate_seq, u64 truncate_size, u64 size,
-			       u64 time_warp_seq, struct timespec *ctime,
-			       struct timespec *mtime, struct timespec *atime);
+extern int ceph_fill_file_size(struct inode *inode, int issued,
+			       u32 truncate_seq, u64 truncate_size, u64 size);
+extern void ceph_fill_file_time(struct inode *inode, int issued,
+				u64 time_warp_seq, struct timespec *ctime,
+				struct timespec *mtime, struct timespec *atime);
 extern int ceph_fill_trace(struct super_block *sb,
 			   struct ceph_mds_request *req,
 			   struct ceph_mds_session *session);
@@ -697,7 +698,6 @@ extern int ceph_dentry_lease_valid(struct dentry *dentry);
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
-extern int __ceph_queue_vmtruncate(struct inode *inode, __u64 size);
 extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
 extern int ceph_do_getattr(struct dentry *dentry, int mask);
