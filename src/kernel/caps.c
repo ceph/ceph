@@ -272,6 +272,7 @@ retry:
 	spin_unlock(&inode->i_lock);
 	if (is_first)
 		igrab(inode);
+	wake_up(&ci->i_cap_wq);
 	kfree(new_cap);
 	return 0;
 }
