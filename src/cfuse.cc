@@ -71,6 +71,9 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start up network
   rank.bind();
   cout << "bound to " << rank.get_rank_addr() << ", mounting ceph" << std::endl;
+
+  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &monmap);
+
   rank.start();
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
@@ -78,7 +81,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
 
   // start client
-  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &monmap);
   client->init();
     
   // start up fuse
