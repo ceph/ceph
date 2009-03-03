@@ -389,7 +389,7 @@ int FileStore::mount()
 	     << " " << strerror(errno)
 	     << dendl;*/
     if (x != y) {
-      derr(0) << "xattrs don't appear to work (" << strerror(errno) << "), specify --filestore_fake_attrs to fake them (in memory)." << dendl;
+      derr(0) << "xattrs don't appear to work (" << strerror(errno) << ") on " << basedir << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
       return -errno;
     }
   }
