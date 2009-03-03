@@ -184,7 +184,6 @@ std::map<entity_name_t,float> g_fake_kill_after;
 
 entity_addr_t g_my_addr;
 
-md_config_t g_debug_after_conf;
 md_config_t g_conf;
 
 #include <stdlib.h>
@@ -382,7 +381,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug, debug_mon, 0, INT, 1),
 	OPTION(debug, debug_paxos, 0, INT, 0),
 	OPTION(debug, debug_tp, 0, INT, 0),
-	OPTION(debug, debug_after, 0, INT, 0),
 	OPTION(clock, clock_lock, 0, BOOL, false),
 	OPTION(clock, clock_tare, 0, BOOL, false),
 	OPTION(messenger, ms_tcp_nodelay, 0, BOOL, true),

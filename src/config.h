@@ -99,8 +99,6 @@ struct md_config_t {
   int debug_paxos;
   int debug_tp;
 
-  int debug_after;
-
   // clock
   bool clock_lock;
   bool clock_tare;
@@ -339,7 +337,6 @@ struct md_config_t {
 };
 
 extern md_config_t g_conf;     
-extern md_config_t g_debug_after_conf;     
 
 
 
