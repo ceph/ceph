@@ -665,15 +665,17 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 static void ceph_dentry_release(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
-	
+	struct inode *parent_inode = dentry->d_parent->d_inode;
+
 	if (di) {
 		ceph_put_mds_session(di->lease_session);
 		kfree(di);
 		dentry->d_fsdata = NULL;
 	}
-
-	dout(10, " clearing %p complete (d_release)\n", dentry->d_parent);
-	ceph_i_clear(dentry->d_parent->d_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
+	if (parent_inode) {
+		dout(10, " clearing %p complete (d_release)\n", parent_inode);
+		ceph_i_clear(parent_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
+	}
 }
 
 static int ceph_snapdir_dentry_revalidate(struct dentry *dentry,
