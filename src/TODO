@@ -160,3 +160,9 @@ simplemessenger
 objectcacher
 - read locks?
 - maintain more explicit inode grouping instead of wonky hashes
+
+cas
+- chunking.  see TTTD in
+   ESHGHI, K.
+   A framework for analyzing and improving content-based chunking algorithms.
+   Tech. Rep. HPL-2005-30(R.1), Hewlett Packard Laboratories, Palo Alto, 2005. 
