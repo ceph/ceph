@@ -1765,10 +1765,8 @@ void CDir::auth_pin(void *by)
 	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
 
   // nest pins?
-  if (is_subtree_root()) return;  // no.
-  //assert(!is_import());
-
-  if (get_cum_auth_pins() == 1)
+  if (!is_subtree_root() &&
+      get_cum_auth_pins() == 1)
     inode->adjust_nested_auth_pins(1);
 }
 
@@ -1788,13 +1786,13 @@ void CDir::auth_unpin(void *by)
 	   << " count now " << auth_pins << " + " << nested_auth_pins << dendl;
   assert(auth_pins >= 0);
   
+  int newcum = get_cum_auth_pins();
+
   maybe_finish_freeze();  // pending freeze?
   
   // nest?
-  if (is_subtree_root()) return;  // no.
-  //assert(!is_import());
-
-  if (get_cum_auth_pins() == 0)
+  if (!is_subtree_root() &&
+      newcum == 0)
     inode->adjust_nested_auth_pins(-1);
 }
 
@@ -1808,17 +1806,17 @@ void CDir::adjust_nested_auth_pins(int inc, int dirinc)
   assert(nested_auth_pins >= 0);
   assert(dir_auth_pins >= 0);
 
+  int newcum = get_cum_auth_pins();
+
   maybe_finish_freeze();  // pending freeze?
   
-  // adjust my inode?
-  if (is_subtree_root()) 
-    return; // no, stop.
-
-  // yes.
-  if (get_cum_auth_pins() == 0)
-    inode->adjust_nested_auth_pins(-1);
-  else if (get_cum_auth_pins() == inc)      
-    inode->adjust_nested_auth_pins(1);
+  // nest?
+  if (!is_subtree_root()) {
+    if (newcum == 0)
+      inode->adjust_nested_auth_pins(-1);
+    else if (newcum == inc)      
+      inode->adjust_nested_auth_pins(1);
+  }
 }
 
 void CDir::adjust_nested_anchors(int by)
