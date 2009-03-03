@@ -518,7 +518,7 @@ static inline int ceph_queue_page_invalidation(struct inode *inode)
  * keep readdir buffers attached to file->private_data
  */
 struct ceph_file_info {
-	int mode;      /* initialized on open */
+	int fmode;     /* initialized on open */
 	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
 	struct ceph_mds_request *last_readdir;
 

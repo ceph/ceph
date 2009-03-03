@@ -243,20 +243,18 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 
 	if (err == -ENOENT) {
 		/* no trace? */
+		err = 0;
 		if (req->r_reply_info.trace_numd == 0) {
 			dout(20, "ENOENT and no trace, dentry %p inode %p\n",
 			     dentry, dentry->d_inode);
 			ceph_init_dentry(dentry);
 			if (dentry->d_inode) {
 				d_drop(dentry);
-				req->r_dentry = d_alloc(dentry->d_parent,
-							&dentry->d_name);
-				d_rehash(req->r_dentry);
+				err = -ENOENT;
 			} else {
 				d_add(dentry, NULL);
 			}
 		}
-		err = 0;
 	}
 	if (err)
 		dentry = ERR_PTR(err);
@@ -667,15 +665,17 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 static void ceph_dentry_release(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
-	
+	struct inode *parent_inode = dentry->d_parent->d_inode;
+
 	if (di) {
 		ceph_put_mds_session(di->lease_session);
 		kfree(di);
 		dentry->d_fsdata = NULL;
 	}
-
-	dout(10, " clearing %p complete (d_release)\n", dentry->d_parent);
-	ceph_i_clear(dentry->d_parent->d_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
+	if (parent_inode) {
+		dout(10, " clearing %p complete (d_release)\n", parent_inode);
+		ceph_i_clear(parent_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
+	}
 }
 
 static int ceph_snapdir_dentry_revalidate(struct dentry *dentry,
