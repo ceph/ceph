@@ -277,11 +277,10 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 
 	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
 	     ceph_vinop(inode), pos, (unsigned)len, inode);
-	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci,
-							 CEPH_CAP_FILE_RD,
-							 CEPH_CAP_FILE_RDCACHE,
-							 &got, -1));
+	ret = ceph_wait_for_caps(ci,
+				 CEPH_CAP_FILE_RD,
+				 CEPH_CAP_FILE_RDCACHE,
+				 &got, -1);
 	if (ret < 0)
 		goto out;
 	dout(10, "aio_read %llx.%llx %llu~%u got cap refs %d\n",
@@ -358,11 +357,10 @@ retry_snap:
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
-	ret = wait_event_interruptible(ci->i_cap_wq,
-				       ceph_get_cap_refs(ci,
-							 CEPH_CAP_FILE_WR,
-							 CEPH_CAP_FILE_WRBUFFER,
-							 &got, endoff));
+	ret = ceph_wait_for_caps(ci,
+				 CEPH_CAP_FILE_WR,
+				 CEPH_CAP_FILE_WRBUFFER,
+				 &got, endoff);
 	if (ret < 0)
 		goto out;
 

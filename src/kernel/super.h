@@ -739,6 +739,9 @@ static inline void ceph_release_caps(struct inode *inode, int mask)
 	ceph_check_caps(ceph_inode(inode), 1, mask, NULL);
 }
 
+extern int ceph_wait_for_caps(struct ceph_inode_info *ci, int need, int want, int *got,
+		      loff_t endoff);
+
 /* addr.c */
 extern const struct address_space_operations ceph_aops;
 extern int ceph_mmap(struct file *file, struct vm_area_struct *vma);

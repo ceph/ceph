@@ -1817,3 +1817,10 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 			iput(inode);
 	}
 }
+
+int ceph_wait_for_caps(struct ceph_inode_info *ci, int need, int want, int *got,
+		      loff_t endoff)
+{
+	return wait_event_interruptible(ci->i_cap_wq,
+				       ceph_get_cap_refs(ci, need, want, got, endoff));
+}
