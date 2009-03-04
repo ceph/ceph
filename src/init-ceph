@@ -53,6 +53,7 @@ docrun=1
 allhosts=0
 debug=0
 monaddr=
+dobtrfs=1
 
 while [[ $1 =~ '-' ]]; do     # FIXME: why not '^-'?
 case $1 in
@@ -79,6 +80,12 @@ case $1 in
 	    options="$options $1"
 	    shift
 	    MON_ADDR=$1
+	    ;;
+    --btrfs)
+	    dobtrfs=1
+	    ;;
+    --nobtrfs)
+	    dobtrfs=1
 	    ;;
     --conf_file | -c)
 	    [ "$2" == "" ] && usage_exit
@@ -140,6 +147,10 @@ for name in $what; do
 	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
 	module_opt="$mon_addr_arg $osd_data $osd_journal_cmd"
 	module_bin="$BINDIR/cosd"
+
+	get_conf btrfs_path "$osd_path" "btrfs path" $sections  # mount point defaults so osd path
+	get_conf btrfs_devs "" "btrfs devs" $sections
+	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
 
     module_opt="-p $pid_file -c $conf_file $module_opt"
@@ -162,6 +173,7 @@ for name in $what; do
 	    cmd="$wrap $module_bin $runflags $module_opt $runmode"
 	    
 	    echo Starting ceph $name on $host...
+	    [ $dobtrfs -eq 1 ] && do_cmd "mount -t btrfs $first_dev $btrfs_path"
             do_cmd "$cmd"
 	    ;;
 	
