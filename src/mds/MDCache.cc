@@ -4162,6 +4162,10 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 
   journal_dirty_inode(mut, &le->metablob, in);
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
+
+  // flush immediately if there are readers/writers waiting
+  if (in->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
+    mds->mdlog->flush();
 }
 
 void MDCache::truncate_inode_logged(CInode *in, Mutation *mut)
