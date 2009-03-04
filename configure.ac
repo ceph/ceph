@@ -103,31 +103,31 @@ AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_MSG_ERROR([Sorry, you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
 AC_LANG([C])
-AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h fcntl.h netdb.h netinet/in.h stdint.h stdlib.h string.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h unistd.h utime.h])
+AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
-AC_HEADER_STDBOOL
-AC_C_CONST
-AC_TYPE_UID_T
-AC_C_INLINE
-AC_TYPE_INT16_T
-AC_TYPE_INT32_T
-AC_TYPE_INT64_T
-AC_TYPE_INT8_T
-AC_TYPE_MODE_T
-AC_TYPE_OFF_T
-AC_TYPE_PID_T
-AC_TYPE_SIZE_T
-AC_TYPE_SSIZE_T
-AC_CHECK_MEMBERS([struct stat.st_blksize])
-AC_STRUCT_ST_BLOCKS
-AC_CHECK_MEMBERS([struct stat.st_rdev])
-AC_HEADER_TIME
-AC_STRUCT_TM
-AC_TYPE_UINT16_T
-AC_TYPE_UINT32_T
-AC_TYPE_UINT64_T
-AC_TYPE_UINT8_T
+#AC_HEADER_STDBOOL
+#AC_C_CONST
+#AC_TYPE_UID_T
+#AC_C_INLINE
+#AC_TYPE_INT16_T
+#AC_TYPE_INT32_T
+#AC_TYPE_INT64_T
+#AC_TYPE_INT8_T
+#AC_TYPE_MODE_T
+#AC_TYPE_OFF_T
+#AC_TYPE_PID_T
+#AC_TYPE_SIZE_T
+#AC_TYPE_SSIZE_T
+#AC_CHECK_MEMBERS([struct stat.st_blksize])
+#AC_STRUCT_ST_BLOCKS
+#AC_CHECK_MEMBERS([struct stat.st_rdev])
+#AC_HEADER_TIME
+#AC_STRUCT_TM
+#AC_TYPE_UINT16_T
+#AC_TYPE_UINT32_T
+#AC_TYPE_UINT64_T
+#AC_TYPE_UINT8_T
 
 # Checks for library functions.
 #AC_FUNC_CHOWN
