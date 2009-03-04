@@ -71,7 +71,7 @@ void MDLog::reopen_logger(utime_t start, bool append)
 
     mdlog_logtype.add_set(l_mdl_expos, "expos");
     mdlog_logtype.add_set(l_mdl_wrpos, "wrpos");
-    mdlog_logtype.add_set(l_mdl_wrpos, "rdpos");
+    mdlog_logtype.add_set(l_mdl_rdpos, "rdpos");
     mdlog_logtype.add_avg(l_mdl_jlat, "jlat");
     mdlog_logtype.validate();
   }
