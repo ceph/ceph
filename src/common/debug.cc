@@ -5,9 +5,14 @@
 #include "Mutex.h"
 #include "Clock.h"
 
+#include "ceph_ver.h"
+
 #include <fstream>
 #include <iostream>
 using namespace std;
+
+#define _STR(x) #x
+#define STRINGIFY(x) _STR(x)
 
 // debug output
 Mutex _dout_lock("_dout_lock", false, false /* no lockdep */);  
@@ -65,6 +70,7 @@ void _dout_open_log()
     _dout = out;
     *_dout << g_clock.now() << " --- opened log " << _dout_path << " ---" << std::endl;
   }
+  *_dout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
 }
 
 int _dout_rename_output_file()  // after calling daemon()
