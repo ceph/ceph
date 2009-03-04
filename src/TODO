@@ -3,7 +3,7 @@ v0.7
 /- osd bug fixes
 /- fast truncate
 /- updated debian package
-- improved start/stop scripts
+/- improved start/stop scripts
 /- proc/sysfs cleanup
 
 v0.8
