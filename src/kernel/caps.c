@@ -227,12 +227,13 @@ retry:
 		session->s_nr_caps++;
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
-	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
-		/* move to tail of session rdcaps lru */
-		if (!list_empty(&cap->session_rdcaps))
-		    list_del(&cap->session_rdcaps);
+
+	/* move to tail of session rdcaps lru? */
+	if (!list_empty(&cap->session_rdcaps))
+		list_del(&cap->session_rdcaps);
+	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0)
 		list_add_tail(&cap->session_rdcaps, &session->s_rdcaps);
-	}
+
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
 								    realmino);
