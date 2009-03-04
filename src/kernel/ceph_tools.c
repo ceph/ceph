@@ -30,11 +30,6 @@ struct alloc_data {
 	u32 suffix_magic;
 };
 
-struct stack_frame {
-	struct stack_frame *next_frame;
-	unsigned long return_address;
-};
-
 void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 {
 	struct alloc_data *p = kmalloc(size+sizeof(struct alloc_data), flags);
