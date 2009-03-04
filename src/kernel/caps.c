@@ -1805,12 +1805,14 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 
 		/* wanted? */
 		wanted = __ceph_caps_wanted(cap->ci);
-		if (wanted == 0) {
+		if ((ceph_inode(inode)->i_dirty_caps & cap->issued) == 0 &&
+		    wanted == 0 && cap->flushing == 0) {
 			dout(20, " dropping %p cap %p\n", inode, cap);
 			last_cap = __ceph_remove_cap(cap);
 		} else {
-			dout(20, " keeping %p cap %p (wanted %s)\n", inode, cap,
-			     ceph_cap_string(wanted));
+			dout(20, " keeping %p cap %p (wanted %s flushing %s)\n",
+			     inode, cap, ceph_cap_string(wanted),
+			     ceph_cap_string(cap->flushing));
 		}
 		spin_unlock(&inode->i_lock);
 		if (last_cap)
