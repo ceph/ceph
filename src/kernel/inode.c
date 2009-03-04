@@ -1289,28 +1289,6 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 }
 
 /*
- * Drop open file reference.  If we were the last open file,
- * we may need to release capabilities to the MDS (or schedule
- * their delayed release).
- */
-void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
-{
-	int last = 0;
-
-	spin_lock(&ci->vfs_inode.i_lock);
-	dout(20, "put_mode %p fmode %d %d -> %d\n", &ci->vfs_inode, fmode,
-	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
-	BUG_ON(ci->i_nr_by_mode[fmode] == 0);
-	if (--ci->i_nr_by_mode[fmode] == 0)
-		last++;
-	spin_unlock(&ci->vfs_inode.i_lock);
-
-	if (last && ci->i_vino.snap == CEPH_NOSNAP)
-		ceph_check_caps(ci, 0, 0, NULL);
-}
-
-
-/*
  * Write back inode data in a worker thread.  (This can't be done
  * in the message handler context.)
  */
