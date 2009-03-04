@@ -880,7 +880,7 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 		       struct page *page)
 {
 	struct ceph_osd_request *req;
-	int rc;
+	int rc, read = 0;
 
 	dout(10, "readpage on ino %llx.%llx at %lld~%lld\n", vino.ino,
 	     vino.snap, off, len);
@@ -893,17 +893,28 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 
 	req->r_pages[0] = page;
 	rc = do_sync_request(osdc, req);
-	ceph_osdc_put_request(req);
 
+	if (rc == 0) {
+		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
+		struct ceph_osd_op *rop = (void *)(head + 1);
+		read = le64_to_cpu(rop->length);
+		rc = len;
+	} else if (rc == -ENOENT) {
+		rc = len;
+	}
+	if (read < PAGE_CACHE_SIZE) {
+		dout(10, "readpage zeroing %p from %d\n", page, read);
+		zero_user_segment(page, read, PAGE_CACHE_SIZE);
+	}
+
+	ceph_osdc_put_request(req);
 	dout(10, "readpage result %d\n", rc);
-	if (rc == -ENOENT)
-		rc = 0;		/* object page dne; caller will zero it */
 	return rc;
 }
 
 /*
- * read some contiguous pages from page_list.
- *  - we stop if pages aren't contiguous, or when we hit an object boundary
+ * Read some contiguous pages from page_list.  Return number of bytes
+ * read (or zeroed).
  */
 int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct address_space *mapping,
@@ -917,8 +928,9 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	struct ceph_osd_op *op;
 	struct page *page;
 	pgoff_t next_index;
-	int contig_pages;
-	int rc = 0;
+	int contig_pages = 0;
+	int i = 0;
+	int rc = 0, read = 0;
 
 	/*
 	 * for now, our strategy is simple: start with the
@@ -936,11 +948,11 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	/* find adjacent pages */
+	/* build vector from page_list */
 	next_index = list_entry(page_list->prev, struct page, lru)->index;
-	contig_pages = 0;
 	list_for_each_entry_reverse(page, page_list, lru) {
 		if (page->index == next_index) {
+			dout(20, "readpages page %d %p\n", contig_pages, page);
 			req->r_pages[contig_pages] = page;
 			contig_pages++;
 			next_index++;
@@ -948,9 +960,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			break;
 		}
 	}
-	dout(10, "readpages found %d/%d contig\n", contig_pages, num_pages);
-	if (contig_pages == 0)
-		goto out;
+	BUG_ON(!contig_pages);
 	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
 		  len);
 	req->r_num_pages = contig_pages;
@@ -962,12 +972,31 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	rc = do_sync_request(osdc, req);
 
 	if (rc == 0) {
-		/* on success, return bytes read */
 		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
 		struct ceph_osd_op *rop = (void *)(head + 1);
-		rc = le64_to_cpu(rop->length);
+		read = le64_to_cpu(rop->length);
+		rc = len;
+	} else if (rc == -ENOENT) {
+		rc = len;
 	}
-out:
+
+	/* zero trailing pages on success */
+	if (read < (contig_pages << PAGE_CACHE_SHIFT)) {
+		if (read & ~PAGE_CACHE_MASK) {
+			i = read >> PAGE_CACHE_SHIFT;
+			page = req->r_pages[i];
+			dout(20, "readpages zeroing %d %p from %d\n", i, page,
+			     (int)(read & ~PAGE_CACHE_MASK));
+			zero_user_segment(page, read & ~PAGE_CACHE_MASK,
+					  PAGE_CACHE_SIZE);
+		}
+		for (i = read << PAGE_CACHE_SHIFT; i < contig_pages; i++) {
+			page = req->r_pages[i];
+			dout(20, "readpages zeroing %d %p\n", i, page);
+			zero_user_segment(page, 0, PAGE_CACHE_SIZE);
+		}
+	}
+
 	ceph_osdc_put_request(req);
 	dout(10, "readpages result %d\n", rc);
 	return rc;
