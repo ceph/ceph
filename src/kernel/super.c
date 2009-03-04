@@ -13,6 +13,7 @@
 /* debug levels; defined in super.h */
 
 #include "ceph_debug.h"
+#include "ceph_ver.h"
 
 /*
  * global debug value.
@@ -1063,6 +1064,7 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
+	dout(0, "ceph (%s)\n", STRINGIFY(CEPH_GIT_VER));
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_init();
