@@ -76,6 +76,7 @@ void Server::reopen_logger(utime_t start, bool append)
     mdserver_logtype.add_inc(l_mdss_hcsess, "hcsess");    // client session
     mdserver_logtype.add_inc(l_mdss_dcreq, "dcreq"); // dispatch client req
     mdserver_logtype.add_inc(l_mdss_dsreq, "dsreq"); // slave
+    mdserver_logtype.validate();
   }
 
   if (logger) 
