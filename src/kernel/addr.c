@@ -8,7 +8,7 @@
 #include <linux/task_io_accounting_ops.h>
 
 #include "ceph_debug.h"
-int ceph_debug_addr = -1;
+int ceph_debug_addr __read_mostly = -1;
 #define DOUT_MASK DOUT_MASK_ADDR
 #define DOUT_VAR ceph_debug_addr
 #include "super.h"
@@ -237,13 +237,6 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 		SetPageError(page);
 		goto out;
 	}
-	if (unlikely(err < PAGE_CACHE_SIZE)) {
-		void *kaddr = kmap_atomic(page, KM_USER0);
-		dout(10, "readpage zeroing tail %d bytes of page %p\n",
-		     (int)PAGE_CACHE_SIZE - err, page);
-		memset(kaddr + err, 0, PAGE_CACHE_SIZE - err);
-		kunmap_atomic(kaddr, KM_USER0);
-	}
 	SetPageUptodate(page);
 
 out:
@@ -287,11 +280,8 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 
 	/* set uptodate and add to lru in pagevec-sized chunks */
 	pagevec_init(&pvec, 0);
-	if (rc > 0)
-		rc += offset & ~PAGE_CACHE_MASK;
 	for (; rc > 0; rc -= PAGE_CACHE_SIZE) {
-		if (list_empty(page_list))
-			break;  /* WTF */
+		BUG_ON(list_empty(page_list));
 		page = list_entry(page_list->prev, struct page, lru);
 		list_del(&page->lru);
 
@@ -951,10 +941,11 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 
 	/* zero the stale part of the page if we did a short copy */
 	if (copied < len) {
-		void *kaddr = kmap_atomic(page, KM_USER0);
-		memset(kaddr + from + copied, 0, len - copied);
-		flush_dcache_page(page);
-		kunmap_atomic(kaddr, KM_USER0);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+		zero_user_segment(page, from+copied, len);
+#else
+		zero_user_page(page, from+copied, len-copied, KM_USER0);
+#endif
 	}
 
 	/* did file size increase? */

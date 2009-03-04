@@ -6,7 +6,7 @@
 
 #include "ceph_debug.h"
 
-int ceph_debug_mdsc = -1;
+int ceph_debug_mdsc __read_mostly = -1;
 #define DOUT_VAR ceph_debug_mdsc
 #define DOUT_MASK DOUT_MASK_MDSC
 #include "super.h"

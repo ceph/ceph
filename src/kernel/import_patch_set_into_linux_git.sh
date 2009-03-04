@@ -44,6 +44,7 @@ EOF
 
 git add fs/ceph/types.h
 git add fs/ceph/super.h
+git add fs/ceph/ceph_ver.h
 git commit -F - <<EOF
 ceph: client types
 

@@ -4899,6 +4899,10 @@ void Server::handle_client_truncate(MDRequest *mdr)
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
   journal_and_reply(mdr, cur, 0, le, new C_MDS_truncate_logged(mds, mdr, cur, smaller));
+
+  // flush immediately if there are readers/writers waiting
+  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
+    mds->mdlog->flush();
 }
 
 

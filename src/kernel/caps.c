@@ -5,7 +5,7 @@
 
 #include "ceph_debug.h"
 
-int ceph_debug_caps = -1;
+int ceph_debug_caps __read_mostly = -1;
 #define DOUT_MASK DOUT_MASK_CAPS
 #define DOUT_VAR ceph_debug_caps
 #include "super.h"
@@ -227,12 +227,13 @@ retry:
 		session->s_nr_caps++;
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
-	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
-		/* move to tail of session rdcaps lru */
-		if (!list_empty(&cap->session_rdcaps))
-		    list_del(&cap->session_rdcaps);
+
+	/* move to tail of session rdcaps lru? */
+	if (!list_empty(&cap->session_rdcaps))
+		list_del(&cap->session_rdcaps);
+	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0)
 		list_add_tail(&cap->session_rdcaps, &session->s_rdcaps);
-	}
+
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
 								    realmino);
@@ -1805,12 +1806,14 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 
 		/* wanted? */
 		wanted = __ceph_caps_wanted(cap->ci);
-		if (wanted == 0) {
+		if ((ceph_inode(inode)->i_dirty_caps & cap->issued) == 0 &&
+		    wanted == 0 && cap->flushing == 0) {
 			dout(20, " dropping %p cap %p\n", inode, cap);
 			last_cap = __ceph_remove_cap(cap);
 		} else {
-			dout(20, " keeping %p cap %p (wanted %s)\n", inode, cap,
-			     ceph_cap_string(wanted));
+			dout(20, " keeping %p cap %p (wanted %s flushing %s)\n",
+			     inode, cap, ceph_cap_string(wanted),
+			     ceph_cap_string(cap->flushing));
 		}
 		spin_unlock(&inode->i_lock);
 		if (last_cap)

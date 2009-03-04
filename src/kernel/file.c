@@ -5,7 +5,7 @@
 
 #include "ceph_debug.h"
 
-int ceph_debug_file = -1;
+int ceph_debug_file __read_mostly = -1;
 #define DOUT_MASK DOUT_MASK_FILE
 #define DOUT_VAR ceph_debug_file
 #include "super.h"
