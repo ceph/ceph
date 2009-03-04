@@ -232,7 +232,7 @@ void vec_to_argv(std::vector<const char*>& args,
     argv[argc++] = args[i];
 }
 
-bool parse_ip_port(const char *s, entity_addr_t& a)
+bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
 {
   int count = 0; // digit count
   int off = 0;
@@ -256,7 +256,7 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
       return false;           // no digits
     }
     if (count < 3 && *s != '.') {
-      cerr << "should period at " << off << std::endl;
+      cerr << "should be period at " << off << std::endl;
       return false;   // should have 3 periods
     }
     s++; off++;
@@ -270,6 +270,8 @@ bool parse_ip_port(const char *s, entity_addr_t& a)
     if (count == 4 && *(s-1) != ':') break;
     if (count == 5) break;  
   }
+  if (end)
+    *end = s;
   
   return true;
 }
@@ -342,7 +344,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(global, num_mds, 0, INT, 1),
 	OPTION(global, num_osd, 0, INT, 4),
 	OPTION(global, num_client, 0, INT, 1),
-	OPTION(mon, monmap_file, 0, STR, ".ceph_monmap"),
+	OPTION(mon, monmap_file, 'M', STR, 0),
 	OPTION(mon, mon_host, 'm', STR, 0),
 	OPTION(global, daemonize, 'd', BOOL, false),
 	OPTION(global, logger, 0, BOOL, true),
@@ -354,7 +356,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(global, log_sym_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),		// if daemonize == true
 	OPTION(global, log_to_stdout, 0, BOOL, true),
 	OPTION(global, pid_file, 'p', STR, 0),
-	OPTION(global, conf_file, 'c', STR, INSTALL_PREFIX "etc/ceph/ceph.conf"),
+	OPTION(global, conf_file, 'c', STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
+	OPTION(global, cluster_conf_file, 'C', STR, INSTALL_PREFIX "/etc/ceph/cluster.conf"),
 	OPTION(global, dump_conf, 0, BOOL, false),
 	OPTION(global, chdir_root, 0, BOOL, true),	// chdir("/") after daemonizing. if true, we generate absolute paths as needed.
 	OPTION(global, fake_clock, 0, BOOL, false),
@@ -754,6 +757,10 @@ void parse_startup_config_options(std::vector<const char*>& args)
 
     if (CMD_EQ("conf_file", 'c')) {
 	SAFE_SET_ARG_VAL(&g_conf.conf_file, STR);
+    } else if (CMD_EQ("cluster_conf_file", 'C')) {
+	SAFE_SET_ARG_VAL(&g_conf.cluster_conf_file, STR);
+    } else if (CMD_EQ("monmap_file", 'M')) {
+	SAFE_SET_ARG_VAL(&g_conf.monmap_file, STR);
     } else if (CMD_EQ("dump_conf", 0)) {
 	SET_BOOL_ARG_VAL(&g_conf.dump_conf);
     } else if (CMD_EQ("bind", 0)) {

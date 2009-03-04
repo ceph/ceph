@@ -87,6 +87,7 @@ public:
 	~ConfFile();
 
 	const SectionList& get_section_list() { return sections_list; }
+	const char *get_filename() { return filename; }
 
 	int parse();
 	int read(const char *section, const char *var, int *val, int def_val);

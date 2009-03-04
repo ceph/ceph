@@ -65,6 +65,7 @@ struct md_config_t {
   const char *pid_file;
 
   const char *conf_file;
+  const char *cluster_conf_file;
   bool dump_conf;
 
   bool chdir_root;
@@ -354,7 +355,7 @@ void parse_startup_config_options(std::vector<const char*>& args);
 void parse_config_options(std::vector<const char*>& args);
 void parse_config_option_string(string& s);
 
-extern bool parse_ip_port(const char *s, entity_addr_t& addr);
+extern bool parse_ip_port(const char *s, entity_addr_t& addr, const char **end=0);
 
 class ConfFile;
 
