@@ -871,7 +871,7 @@ out:
 }
 
 /*
- * read a single page.
+ * Read a single page.  Return number of bytes read (or zeroed).
  */
 int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 		       struct ceph_file_layout *layout,
@@ -904,7 +904,11 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	}
 	if (read < PAGE_CACHE_SIZE) {
 		dout(10, "readpage zeroing %p from %d\n", page, read);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 		zero_user_segment(page, read, PAGE_CACHE_SIZE);
+#else
+		zero_user_page(page, read, PAGE_CACHE_SIZE-read, KM_USER0);
+#endif
 	}
 
 	ceph_osdc_put_request(req);
@@ -987,13 +991,24 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			page = req->r_pages[i];
 			dout(20, "readpages zeroing %d %p from %d\n", i, page,
 			     (int)(read & ~PAGE_CACHE_MASK));
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 			zero_user_segment(page, read & ~PAGE_CACHE_MASK,
 					  PAGE_CACHE_SIZE);
+#else
+			zero_user_page(page, read & ~PAGE_CACHE_MASK,
+				       PAGE_CACHE_SIZE - (read & ~PAGE_CACHE_MASK),
+				       KM_USER0);
+#endif
+
 		}
 		for (i = read << PAGE_CACHE_SHIFT; i < contig_pages; i++) {
 			page = req->r_pages[i];
 			dout(20, "readpages zeroing %d %p\n", i, page);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 			zero_user_segment(page, 0, PAGE_CACHE_SIZE);
+#else
+			zero_user_page(page, 0, PAGE_CACHE_SIZE, KM_USER0);
+#endif
 		}
 	}
 
