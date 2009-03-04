@@ -7,7 +7,7 @@
 
 #include "ceph_debug.h"
 
-int ceph_debug_osdc = -1;
+int ceph_debug_osdc = -1 __read_mostly;
 #define DOUT_MASK DOUT_MASK_OSDC
 #define DOUT_VAR ceph_debug_osdc
 #include "super.h"

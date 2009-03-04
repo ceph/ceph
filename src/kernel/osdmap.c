@@ -8,7 +8,7 @@
 
 #include "ceph_debug.h"
 
-int ceph_debug_osdmap = -1;
+int ceph_debug_osdmap = -1 __read_mostly;
 #define DOUT_MASK DOUT_MASK_OSDMAP
 #define DOUT_VAR ceph_debug_osdmap
 

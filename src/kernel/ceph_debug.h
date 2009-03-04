@@ -5,32 +5,32 @@
 
 #include "ceph_tools.h"
 
-extern int ceph_debug;               /* debug level. */
-extern int ceph_debug_console;       /* send debug output to console? */
-extern int ceph_debug_mask;
+extern int ceph_debug __read_mostly;         /* debug level. */
+extern int ceph_debug_console __read_mostly; /* send debug output to console? */
+extern int ceph_debug_mask __read_mostly;
 
 /*
  * different debug levels for different modules.  These default to -1.
  * If they are >= 0, then they override the global ceph_debug value.
  */
-extern int ceph_debug_addr;
-extern int ceph_debug_caps;
-extern int ceph_debug_dir;
-extern int ceph_debug_export;
-extern int ceph_debug_file;
-extern int ceph_debug_inode;
-extern int ceph_debug_ioctl;
-extern int ceph_debug_mdsc;
-extern int ceph_debug_mdsmap;
-extern int ceph_debug_msgr;
-extern int ceph_debug_mon;
-extern int ceph_debug_osdc;
-extern int ceph_debug_osdmap;
-extern int ceph_debug_snap;
-extern int ceph_debug_super;
-extern int ceph_debug_protocol;
-extern int ceph_debug_proc;
-extern int ceph_debug_tools;
+extern int ceph_debug_addr __read_mostly;
+extern int ceph_debug_caps __read_mostly;
+extern int ceph_debug_dir __read_mostly;
+extern int ceph_debug_export __read_mostly;
+extern int ceph_debug_file __read_mostly;
+extern int ceph_debug_inode __read_mostly;
+extern int ceph_debug_ioctl __read_mostly;
+extern int ceph_debug_mdsc __read_mostly;
+extern int ceph_debug_mdsmap __read_mostly;
+extern int ceph_debug_msgr __read_mostly;
+extern int ceph_debug_mon __read_mostly;
+extern int ceph_debug_osdc __read_mostly;
+extern int ceph_debug_osdmap __read_mostly;
+extern int ceph_debug_snap __read_mostly;
+extern int ceph_debug_super __read_mostly;
+extern int ceph_debug_protocol __read_mostly;
+extern int ceph_debug_proc __read_mostly;
+extern int ceph_debug_tools __read_mostly;
 
 #define DOUT_MASK_ADDR		0x00000001
 #define DOUT_MASK_CAPS		0x00000002

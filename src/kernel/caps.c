@@ -5,7 +5,7 @@
 
 #include "ceph_debug.h"
 
-int ceph_debug_caps = -1;
+int ceph_debug_caps = -1 __read_mostly;
 #define DOUT_MASK DOUT_MASK_CAPS
 #define DOUT_VAR ceph_debug_caps
 #include "super.h"
