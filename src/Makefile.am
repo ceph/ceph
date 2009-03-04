@@ -381,6 +381,7 @@ noinst_HEADERS = \
 	kernel/ceph_fs.h\
 	kernel/ceph_tools.c\
 	kernel/ceph_tools.h\
+	kernel/ceph_ver.h\
         kernel/crush/crush.c\
         kernel/crush/crush.h\
         kernel/crush/hash.h\
