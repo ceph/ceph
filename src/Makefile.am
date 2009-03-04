@@ -291,6 +291,7 @@ libclient_a_SOURCES = \
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
+	ceph_ver.h \
         client/Client.h\
         client/SyntheticClient.h\
         client/Trace.h\
