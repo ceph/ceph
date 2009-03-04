@@ -369,5 +369,6 @@ out:
 void ceph_sysfs_cleanup()
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	kobject_del(&ceph_kobj);
 #endif
 }
