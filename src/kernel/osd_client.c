@@ -894,14 +894,13 @@ int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	req->r_pages[0] = page;
 	rc = do_sync_request(osdc, req);
 
-	if (rc == 0) {
-		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
-		struct ceph_osd_op *rop = (void *)(head + 1);
-		read = le64_to_cpu(rop->length);
+	if (rc >= 0) {
+		read = rc;
 		rc = len;
 	} else if (rc == -ENOENT) {
 		rc = len;
 	}
+
 	if (read < PAGE_CACHE_SIZE) {
 		dout(10, "readpage zeroing %p from %d\n", page, read);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
@@ -975,10 +974,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	     off, len, req->r_num_pages);
 	rc = do_sync_request(osdc, req);
 
-	if (rc == 0) {
-		struct ceph_osd_reply_head *head = req->r_reply->front.iov_base;
-		struct ceph_osd_op *rop = (void *)(head + 1);
-		read = le64_to_cpu(rop->length);
+	if (rc >= 0) {
+		read = rc;
 		rc = len;
 	} else if (rc == -ENOENT) {
 		rc = len;
