@@ -166,6 +166,40 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
+ * Remove or place the given cap on the session 'rdcaps' list (or
+ * read-only, expireable caps).  A cap belongs on the rdcaps list IFF
+ * it does not include any non-expireable caps.
+ *
+ * The rdcaps list is protected by a separate spinlock because
+ * ceph_put_fmode may need to add caps to it when wanted goes to 0.
+ */
+static void __adjust_cap_rdcaps_listing(struct ceph_inode_info *ci,
+					struct ceph_cap *cap,
+					int wanted)
+{
+	int caps = cap->issued | cap->flushing | ci->i_dirty_caps;
+	
+	spin_lock(&cap->session->s_rdcaps_lock);
+	if ((caps & ~CEPH_CAP_EXPIREABLE) == 0 &&
+	    wanted == 0) {
+		/* move to tail of session rdcaps lru? */
+		if (!list_empty(&cap->session_rdcaps))
+			list_del_init(&cap->session_rdcaps);
+		else
+			dout(20, "adjust_cap_rdcaps_listing %p added %p\n",
+			     &ci->vfs_inode, cap);
+		list_add_tail(&cap->session_rdcaps, &cap->session->s_rdcaps);
+	} else {
+		if (!list_empty(&cap->session_rdcaps)) {
+			dout(20, "adjust_cap_rdcaps_listing %p removed %p\n",
+			     &ci->vfs_inode, cap);
+			list_del_init(&cap->session_rdcaps);
+		}
+	}
+	spin_unlock(&cap->session->s_rdcaps_lock);
+}
+
+/*
  * Add a capability under the given MDS session, after processing
  * the snapblob (to update the snap realm hierarchy).
  *
@@ -190,6 +224,14 @@ int ceph_add_cap(struct inode *inode,
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
+
+	/*
+	 * If we are opening the file, include file mode wanted bits
+	 * in wanted.  Needed by adjust_cap_rdcaps_listing.
+	 */
+	if (fmode >= 0)
+		wanted |= ceph_caps_for_mode(fmode);
+
 retry:
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(inode, mds);
@@ -228,11 +270,15 @@ retry:
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
 
+<<<<<<< HEAD:src/kernel/caps.c
 	/* move to tail of session rdcaps lru? */
 	if (!list_empty(&cap->session_rdcaps))
 		list_del_init(&cap->session_rdcaps);
 	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0)
 		list_add_tail(&cap->session_rdcaps, &session->s_rdcaps);
+=======
+	__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci) | wanted);
+>>>>>>> d2f189a24d6e06b4ea9aa31c4ea874a1d13703f0:src/kernel/caps.c
 
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
@@ -258,8 +304,8 @@ retry:
 		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
 	}
 
-	dout(10, "add_cap inode %p (%llx.%llx) cap %s now %s seq %d mds%d\n",
-	     inode, ceph_vinop(inode), ceph_cap_string(issued),
+	dout(10, "add_cap inode %p (%llx.%llx) cap %p %s now %s seq %d mds%d\n",
+	     inode, ceph_vinop(inode), cap, ceph_cap_string(issued),
 	     ceph_cap_string(issued|cap->issued), seq, mds);
 	cap->cap_id = cap_id;
 	cap->issued = issued;
@@ -300,9 +346,9 @@ static int __cap_is_valid(struct ceph_cap *cap)
 	}
 
 	if (time_after_eq(jiffies, cap->expires) &&
-	    (cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
+	    !list_empty(&cap->session_rdcaps)) {
 		dout(30, "__cap_is_valid %p cap %p issued %s "
-		     "but readonly and expired\n", &cap->ci->vfs_inode,
+		     "but rdcap and expired\n", &cap->ci->vfs_inode,
 		     cap, ceph_cap_string(cap->issued));
 		return 0;
 	}
@@ -618,7 +664,8 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	/* close out cap? */
 	if (flushing == 0 && keep == 0)
 		last_cap = __ceph_remove_cap(cap);
-	
+	else
+		__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci));
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
@@ -1418,6 +1465,8 @@ static void handle_cap_flush_ack(struct inode *inode,
 		if (removed_last)
 			__cap_delay_cancel(&ceph_inode_to_client(inode)->mdsc,
 					   ci);
+	} else {
+		__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci));
 	}
 	spin_unlock(&inode->i_lock);
 	if (removed_last)
@@ -1779,20 +1828,25 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 
 
 /*
- * caller must hold session s_mutex
+ * Caller must hold session s_mutex.
+ *
+ * Note that _removals_ to s_rdcaps are protected by s_mutex and
+ * s_rdcaps_lock spinlock, but additions are protected only by
+ * s_rdcaps_lock (see ceph_put_fmode).
  */
 void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 {
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct list_head *p, *n;
-	int wanted;
 
 	dout(10, "trim_rdcaps for mds%d\n", session->s_mds);
+	spin_lock(&session->s_rdcaps_lock);
 	list_for_each_safe(p, n, &session->s_rdcaps) {
 		int last_cap = 0;
 
 		cap = list_entry(p, struct ceph_cap, session_rdcaps);
+		spin_unlock(&session->s_rdcaps_lock);
 
 		inode = &cap->ci->vfs_inode;
 		spin_lock(&inode->i_lock);
@@ -1801,24 +1855,53 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 			dout(20, " stopping at %p cap %p expires %lu > %lu\n",
 			     inode, cap, cap->expires, jiffies);
 			spin_unlock(&inode->i_lock);
-			break;
+		} else {
+			WARN_ON(__ceph_caps_wanted(cap->ci));
+			dout(20, " dropping %p cap %p %s\n", inode, cap,
+			     ceph_cap_string(cap->issued));
+			last_cap = __ceph_remove_cap(cap);
+			spin_unlock(&inode->i_lock);
+			if (last_cap)
+				iput(inode);
 		}
 
-		/* wanted? */
-		wanted = __ceph_caps_wanted(cap->ci);
-		if ((ceph_inode(inode)->i_dirty_caps & cap->issued) == 0 &&
-		    wanted == 0 && cap->flushing == 0) {
-			dout(20, " dropping %p cap %p\n", inode, cap);
-			last_cap = __ceph_remove_cap(cap);
-		} else {
-			dout(20, " keeping %p cap %p (wanted %s flushing %s)\n",
-			     inode, cap, ceph_cap_string(wanted),
-			     ceph_cap_string(cap->flushing));
-		}
-		spin_unlock(&inode->i_lock);
-		if (last_cap)
-			iput(inode);
+		spin_lock(&session->s_rdcaps_lock);
 	}
+	spin_unlock(&session->s_rdcaps_lock);
+}
+
+/*
+ * Drop open file reference.  If we were the last open file,
+ * we may need to release capabilities to the MDS (or schedule
+ * their delayed release).
+ */
+void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
+{
+	struct inode *inode = &ci->vfs_inode;
+	int last = 0;
+
+	spin_lock(&inode->i_lock);
+	dout(20, "put_fmode %p fmode %d %d -> %d\n", inode, fmode,
+	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
+	BUG_ON(ci->i_nr_by_mode[fmode] == 0);
+	if (--ci->i_nr_by_mode[fmode] == 0) {
+		last++;
+
+		/* maybe turn caps into rdcaps? */
+		if (__ceph_caps_wanted(ci) == 0) {
+			struct rb_node *p;
+			struct ceph_cap *cap;
+
+			for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+				cap = rb_entry(p, struct ceph_cap, ci_node);
+				__adjust_cap_rdcaps_listing(ci, cap, 0);
+			}
+		}
+	}
+	spin_unlock(&inode->i_lock);
+
+	if (last && ci->i_vino.snap == CEPH_NOSNAP)
+		ceph_check_caps(ci, 0, 0, NULL);
 }
 
 int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,

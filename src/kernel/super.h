@@ -489,13 +489,6 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 	return w;
 }
 
-/* for counting open files by mode */
-static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode)
-{
-	ci->i_nr_by_mode[mode]++;
-}
-extern void ceph_put_fmode(struct ceph_inode_info *ci, int mode);
-
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 {
 	return (struct ceph_client *)inode->i_sb->s_fs_info;
@@ -744,6 +737,13 @@ static inline void ceph_release_caps(struct inode *inode, int mask)
 
 extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff);
+
+/* for counting open files by mode */
+static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode)
+{
+	ci->i_nr_by_mode[mode]++;
+}
+extern void ceph_put_fmode(struct ceph_inode_info *ci, int mode);
 
 /* addr.c */
 extern const struct address_space_operations ceph_aops;

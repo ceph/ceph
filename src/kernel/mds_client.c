@@ -335,6 +335,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_renew_requested = 0;
 	INIT_LIST_HEAD(&s->s_caps);
 	INIT_LIST_HEAD(&s->s_rdcaps);
+	spin_lock_init(&s->s_rdcaps_lock);
 	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	INIT_LIST_HEAD(&s->s_waiting);

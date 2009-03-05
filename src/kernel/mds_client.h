@@ -118,6 +118,7 @@ struct ceph_mds_session {
 	unsigned long     s_renew_requested; /* last time we sent a renew req */
 	struct list_head  s_caps;     /* all caps issued by this session */
 	struct list_head  s_rdcaps;   /* just the readonly caps */
+	spinlock_t        s_rdcaps_lock;
 	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct list_head  s_waiting;  /* waiting requests */

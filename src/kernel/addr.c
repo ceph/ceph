@@ -490,8 +490,8 @@ static void writepages_finish(struct ceph_osd_request *req)
 		wrote = 0;
 		mapping_set_error(mapping, rc);
 	}
-	dout(10, "writepages_finish rc %d bytes %llu wrote %d (pages)\n", rc,
-	     bytes, wrote);
+	dout(10, "writepages_finish %p rc %d bytes %llu wrote %d (pages)\n",
+	     inode, rc, bytes, wrote);
 
 	/* clean all pages */
 	for (i = 0; i < req->r_num_pages; i++) {
