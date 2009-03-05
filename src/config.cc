@@ -528,7 +528,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd, osd_recovery_max_active, 0, INT, 5),
 	OPTION(osd, osd_auto_weight, 0, BOOL, false),
 	OPTION(filestore, filestore, 0, BOOL, false),
-	OPTION(filestore, filestore_sync_interval, 0, DOUBLE, .2),    // seconds
+	OPTION(filestore, filestore_max_sync_interval, 0, DOUBLE, .2),    // seconds
+	OPTION(filestore, filestore_min_sync_interval, 0, DOUBLE, .02),    // seconds
 	OPTION(filestore, filestore_fake_attrs, 0, BOOL, false),
 	OPTION(filestore, filestore_fake_collections, 0, BOOL, false),
 	OPTION(filestore, filestore_dev, 0, STR, 0),

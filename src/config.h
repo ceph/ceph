@@ -289,7 +289,8 @@ struct md_config_t {
 
   // filestore
   bool filestore;
-  double   filestore_sync_interval;
+  double   filestore_max_sync_interval;
+  double   filestore_min_sync_interval;
   bool  filestore_fake_attrs;
   bool  filestore_fake_collections;
   const char  *filestore_dev;

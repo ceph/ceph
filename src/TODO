@@ -1,3 +1,8 @@
+v0.6
+/- fold observer into cmonctl/ceph?
+/- osd scrub
+/- async metadata
+
 v0.7
 /- smart osd sync
 /- osd bug fixes
@@ -70,6 +75,7 @@ vfs issues
 - a getattr mask would be really nice
 
 filestore
+- make min sync interval self-tuning (ala xfs, ext3?)
 - get file csum?
 
 btrfs

@@ -2204,6 +2204,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
   bufferlist bl;
   bl.push_back(bp);
 
+  bool do_sync = false;
+
   // start with odd number > nobj
   rjhash<uint32_t> h;
   unsigned prime = nobj + 1;             // this is the minimum!
@@ -2254,9 +2256,22 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     utime_t start = g_clock.now();
     if (write) {
       dout(10) << "write to " << oid << dendl;
-      client->objecter->write(oid, layout, 0, osize, snapc, bl, 0,
+
+      ObjectMutation m;
+      m.ops.push_back(ceph_osd_op());
+      m.ops[0].op = CEPH_OSD_OP_WRITE;
+      m.ops[0].offset = 0;
+      m.ops[0].length = osize;
+      if (do_sync) {
+	m.ops.push_back(ceph_osd_op());
+	m.ops[1].op = CEPH_OSD_OP_STARTSYNC;
+      }
+      m.data = bl;
+      client->objecter->mutate(oid, layout, m, snapc, 0,
+			       NULL, new C_Ref(lock, cond, &unack));
+      /*client->objecter->write(oid, layout, 0, osize, snapc, bl, 0,
 			      new C_Ref(lock, cond, &unack),
-			      new C_Ref(lock, cond, &unsafe));
+			      new C_Ref(lock, cond, &unsafe));*/
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
