@@ -49,7 +49,7 @@ struct ceph_osd_request {
 
 	int               r_last_osd;   /* pg osds */
 	struct ceph_entity_addr r_last_osd_addr;
-	unsigned long     r_last_stamp;
+	unsigned long     r_timeout_stamp;
 
 	union ceph_pg     r_pgid;             /* placement group */
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */

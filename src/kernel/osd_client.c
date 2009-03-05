@@ -198,6 +198,22 @@ out:
 }
 
 
+/*
+ * register the request for timeout
+ */
+static void __register_request_timeout(struct ceph_osd_client *osdc,
+				       struct ceph_osd_request *req)
+{
+	dout(10, "replacing timeout_tid: %lld-> %lld\n",
+	     osdc->timeout_tid, req->r_tid);
+	osdc->timeout_tid = req->r_tid;
+	reschedule_timeout(osdc, req->r_timeout_stamp);
+}
+
+/*
+ * register the next request as the base request for timeout, after current
+ * request has been served
+ */
 static void __register_next_request_timeout(struct ceph_osd_client *osdc,
 				 struct ceph_osd_request *req)
 {
@@ -210,12 +226,9 @@ static void __register_next_request_timeout(struct ceph_osd_client *osdc,
 			ret = radix_tree_gang_lookup(&osdc->request_tree,
 						     (void **)&next_req, 0, 1);
 
-	if (ret == 1) {
-		dout(10, "replacing timeout_tid: %lld-> %lld\n",
-		     osdc->timeout_tid, next_req->r_tid);
-		osdc->timeout_tid = next_req->r_tid;
-		reschedule_timeout(osdc, req->r_last_stamp);
-	}
+	/* is there a next request? */
+	if (ret == 1)
+		__register_request_timeout(osdc, next_req);
 }
 
 /*
@@ -313,7 +326,7 @@ static int send_request(struct ceph_osd_client *osdc,
 	req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osd];
 
 	req->r_last_osd_addr = req->r_request->hdr.dst.addr;
-	req->r_last_stamp = jiffies;
+	req->r_timeout_stamp = jiffies + osdc->client->mount_args.osd_timeout * HZ;
 
 	ceph_msg_get(req->r_request); /* send consumes a ref */
 	return ceph_msg_send(osdc->client->msgr, req->r_request,
@@ -675,8 +688,18 @@ static int do_sync_request(struct ceph_osd_client *osdc,
 	return bytes;
 }
 
+static long jiffies_to_timeout(struct ceph_osd_client *osdc,
+					unsigned long timeout_time)
+{
+	unsigned long jifs;
 
+	if (timeout_time)
+		jifs = timeout_time - jiffies;
+	else
+		jifs = osdc->client->mount_args.osd_timeout * HZ;
 
+	return round_jiffies_relative(jifs);
+}
 
 /*
  * if one or more requests takes too long, a timeout expires.
@@ -684,25 +707,13 @@ static int do_sync_request(struct ceph_osd_client *osdc,
  * FIXME.
  */
 static void reschedule_timeout(struct ceph_osd_client *osdc,
-			       unsigned long base_time)
+			       unsigned long timeout_time)
 {
-	int timeout = osdc->client->mount_args.osd_timeout;
-	long jifs = 0;
-
-	if (base_time)
-		jifs = jiffies-base_time;
-
-	jifs = timeout * HZ - jifs;
-
-	if (jifs <= 0) {
-		jifs %= timeout * HZ;
-		jifs += timeout * HZ;
-	}
-
+	long jifs = jiffies_to_timeout(osdc, timeout_time);
 	dout(10, "reschedule timeout (%ld jiffies)\n", jifs);
 
 	schedule_delayed_work(&osdc->timeout_work,
-			      round_jiffies_relative(jifs));
+			      jifs);
 }
 
 static void handle_timeout(struct work_struct *work)
@@ -710,7 +721,8 @@ static void handle_timeout(struct work_struct *work)
 	u64 next_tid = 0;
 	struct ceph_osd_client *osdc =
 		container_of(work, struct ceph_osd_client, timeout_work.work);
-	struct ceph_osd_request *req;
+	unsigned long next_timeout_stamp;
+	struct ceph_osd_request *req, *next_timeout_req;
 	int got;
 	int timeout = osdc->client->mount_args.osd_timeout * HZ;
 	RADIX_TREE(pings, GFP_NOFS);  /* only send 1 ping per osd */
@@ -718,42 +730,74 @@ static void handle_timeout(struct work_struct *work)
 
 	dout(10, "timeout\n");
 	down_read(&osdc->map_sem);
+
 	ceph_monc_request_osdmap(&osdc->client->monc, osdc->osdmap->epoch+1);
 
 	/*
-	 * ping any osds with pending requests to ensure the communications
+	 * ping any osds with pending requests that have timeout to ensure the communications
 	 * channel hasn't reset
 	 */
 	mutex_lock(&osdc->request_mutex);
+
+	/* this is the request that we're serving */
 	got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
 				     osdc->timeout_tid, 1);
 
-	__register_next_request_timeout(osdc, req);
+	if (got == 0)
+		goto done;
+
+	req->r_timeout_stamp += timeout;
+	next_timeout_req = req;
+	next_timeout_stamp = req->r_timeout_stamp;
 
 	while (1) {
-		if (got == 0)
-			break;
 		next_tid = req->r_tid + 1;
-		if (time_after(jiffies, req->r_last_stamp + timeout) &&
-		    req->r_last_osd >= 0 &&
-		    radix_tree_lookup(&pings, req->r_last_osd) == NULL) {
-			struct ceph_entity_name n = {
-				.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD),
-				.num = cpu_to_le32(req->r_last_osd)
-			};
-			radix_tree_insert(&pings, req->r_last_osd, req);
-			ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
+		if (time_after(jiffies, req->r_timeout_stamp)) {
+			/* is this osd already in the list */
+			if (req->r_last_osd >= 0 &&
+			    radix_tree_lookup(&pings, req->r_last_osd) == NULL) {
+				struct ceph_entity_name n = {
+					.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD),
+					.num = cpu_to_le32(req->r_last_osd)
+				};
+				radix_tree_insert(&pings, req->r_last_osd, req);
+				ceph_ping(osdc->client->msgr, n, &req->r_last_osd_addr);
+			}
+			req->r_timeout_stamp = req->r_timeout_stamp + timeout;
+		} else {
+			if (time_before(req->r_timeout_stamp, next_timeout_stamp)) {
+				next_timeout_req = req;
+			}
 		}
 
+		/* now get the next request */
 		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
 					     next_tid, 1);
+
+		/* no next request? let's search from the start */
+		if (got == 0) {
+			got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+					     0, 1);
+		}
+
+		/* no next request, or we're back where we started */
+		if (got == 0 || next_tid == osdc->timeout_tid)
+			break;
 	}
+
+	/*
+	 * register the next request for timeout, one that hasn't
+	 * timeout in this cycle
+	 */
+	__register_request_timeout(osdc, next_timeout_req);
 
 	t = 0;
 	while (radix_tree_gang_lookup(&pings, (void **)&req, t, 1)) {
 		radix_tree_delete(&pings, req->r_last_osd);
 		t = req->r_last_osd + 1;
 	}
+
+done:
 	mutex_unlock(&osdc->request_mutex);
 
 	up_read(&osdc->map_sem);
