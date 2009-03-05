@@ -240,7 +240,7 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	SetPageUptodate(page);
 
 out:
-	return err;
+	return err < 0 ? err : 0;
 }
 
 static int ceph_readpage(struct file *filp, struct page *page)
