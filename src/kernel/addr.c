@@ -168,7 +168,8 @@ static int ceph_set_page_dirty_vfs(struct page *page)
 
 /*
  * If we are truncating the full page (i.e. offset == 0), adjust the
- * dirty page counters appropriately.
+ * dirty page counters appropriately.  Only called if there is private
+ * data on the page.
  */
 static void ceph_invalidatepage(struct page *page, unsigned long offset)
 {
@@ -176,33 +177,27 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	struct ceph_inode_info *ci;
 	struct ceph_snap_context *snapc = (void *)page->private;
 
+	BUG_ON(!page->private);
+	BUG_ON(!PagePrivate(page));
 	BUG_ON(!PageLocked(page));
+	BUG_ON(!page->mapping);
+	BUG_ON(!PageDirty(page));
+
 	if (offset == 0)
 		ClearPageChecked(page);
-	if (!PageDirty(page)) {
-		BUG_ON(snapc);
-		dout(20, "invalidatepage %p idx %lu clean\n", page,
-		     page->index);
-		return;
-	}
-	if (!page->mapping) {
-		BUG_ON(snapc);
-		dout(20, "invalidatepage %p idx %lu unmapped\n", page,
-		     page->index);
-		return;
-	}
+
 	inode = page->mapping->host;
 	ci = ceph_inode(inode);
 	if (offset == 0) {
 		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n",
-		     &ci->vfs_inode, page, page->index, offset);
+		     inode, page, page->index, offset);
 		ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
 		ceph_put_snap_context(snapc);
 		page->private = 0;
 		ClearPagePrivate(page);
 	} else {
 		dout(20, "%p invalidatepage %p idx %lu partial dirty page\n",
-		     &ci->vfs_inode, page, page->index);
+		     inode, page, page->index);
 	}
 }
 
