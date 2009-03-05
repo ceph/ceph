@@ -273,9 +273,10 @@ retry:
 	__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci) | wanted);
 
 	if (!ci->i_snap_realm) {
-		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
-								    realmino);
+		struct ceph_snap_realm *realm = ceph_lookup_snap_realm(mdsc,
+							       realmino);
 		if (realm) {
+			ceph_get_snap_realm(mdsc, realm);
 			ci->i_snap_realm = realm;
 			list_add(&ci->i_snap_realm_item, &realm->inodes_with_caps);
 		} else {
