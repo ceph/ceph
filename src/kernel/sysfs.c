@@ -3,7 +3,7 @@
 
 #include "super.h"
 
-struct kobject ceph_kobj;
+static struct kobject ceph_kobj;
 
 /*
  * default kobject attribute operations.  duplicated here from
@@ -42,7 +42,7 @@ static struct sysfs_ops generic_sysfs_ops = {
 /*
  * per-client attributes
  */
-struct kobj_type client_type = {
+static struct kobj_type client_type = {
 	.sysfs_ops = &generic_sysfs_ops,
 };
 
@@ -200,12 +200,12 @@ static ssize_t ceph_attr_store(struct kobject *ko, struct attribute *a,
 	return ca->store(ca, buf, len);
 }
 
-struct sysfs_ops ceph_sysfs_ops = {
+static struct sysfs_ops ceph_sysfs_ops = {
 	.show = ceph_attr_show,
 	.store = ceph_attr_store,
 };
 
-struct kobj_type ceph_type = {
+static struct kobj_type ceph_type = {
 	.sysfs_ops = &ceph_sysfs_ops,
 };
 
@@ -225,7 +225,7 @@ static ssize_t int_attr_store(struct ceph_attr *a, const char *buf, size_t len)
 }
 
 #define DECLARE_DEBUG_ATTR(_name)					\
-	struct ceph_attr ceph_attr_##_name = {				\
+	static struct ceph_attr ceph_attr_##_name = {			\
 		.attr = { .name = __stringify(_name), .mode = 0600 },	\
 		.show = int_attr_show,					\
 		.store = int_attr_store,				\
@@ -329,13 +329,13 @@ static ssize_t debug_mask_store(struct ceph_attr *a, const char *buf,
 	return len;
 }
 
-struct ceph_attr ceph_attr_debug_mask = {
+static struct ceph_attr ceph_attr_debug_mask = {
 	.attr = { .name = "debug_mask", .mode = 0600 },
 	.show = debug_mask_show,
 	.store = debug_mask_store,
 };
 
-int ceph_sysfs_init()
+int ceph_sysfs_init(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	int ret;
@@ -366,7 +366,7 @@ out:
 #endif
 }
 
-void ceph_sysfs_cleanup()
+void ceph_sysfs_cleanup(void)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	kobject_del(&ceph_kobj);

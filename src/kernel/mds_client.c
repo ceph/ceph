@@ -976,7 +976,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 
 	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
 		fhlen = *(int *)req->r_path2;
-		path2 = 0;
+		path2 = NULL;
 		pathlen = sizeof(u32) + fhlen*sizeof(struct ceph_inopath_item);
 	} else {
 		if (path1)
