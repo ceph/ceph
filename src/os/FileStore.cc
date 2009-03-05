@@ -1407,16 +1407,34 @@ int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u6
 
 void FileStore::sync_entry()
 {
+  Cond othercond;
+
   lock.Lock();
-  utime_t interval;
-  interval.set_from_double(g_conf.filestore_sync_interval);
+  utime_t max_interval;
+  max_interval.set_from_double(g_conf.filestore_max_sync_interval);
+  utime_t min_interval;
+  min_interval.set_from_double(g_conf.filestore_min_sync_interval);
   while (!stop) {
-    dout(20) << "sync_entry waiting for " << interval << dendl;
-    sync_cond.WaitInterval(lock, interval);
+    dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
+    utime_t startwait = g_clock.now();
+
+    sync_cond.WaitInterval(lock, max_interval);
+
+    // wait for at least the min interval
+    utime_t woke = g_clock.now();
+    woke -= startwait;
+    dout(20) << "sync_entry woke after " << woke << dendl;
+    if (woke < min_interval) {
+      utime_t t = min_interval;
+      t -= woke;
+      dout(20) << "sync_entry waiting for another " << t << " to reach min interval " << min_interval << dendl;
+      othercond.WaitInterval(lock, t);
+    }
+
     lock.Unlock();
 
     if (commit_start()) {
-      dout(15) << "sync_entry committing " << op_seq << " " << interval << dendl;
+      dout(15) << "sync_entry committing " << op_seq << dendl;
 
       __u64 cp = op_seq;
       
@@ -1443,9 +1461,12 @@ void FileStore::sync_entry()
 
 void FileStore::_start_sync()
 {
-  dout(10) << "start_sync" << dendl;
-  if (!journal)   // don't do a big sync if the journal is on
+  if (!journal) {  // don't do a big sync if the journal is on
+    dout(10) << "start_sync" << dendl;
     sync_cond.Signal();
+  } else {
+    dout(10) << "start_sync - NOOP (journal is on)" << dendl;
+  }
 }
 
 void FileStore::sync()
