@@ -69,8 +69,8 @@ static int ceph_set_page_dirty(struct page *page,
 		return !TestSetPageDirty(page);
 
 	if (TestSetPageDirty(page)) {
-		dout(20, "%p set_page_dirty %p -- already dirty\n",
-		     mapping->host, page);
+		dout(20, "%p set_page_dirty %p idx %lu -- already dirty\n",
+		     mapping->host, page, page->index);
 		return 0;
 	}
 
@@ -89,9 +89,9 @@ static int ceph_set_page_dirty(struct page *page,
 		if (ci->i_wrbuffer_ref_head == 0)
 			ci->i_head_snapc = ceph_get_snap_context(snapc);
 		++ci->i_wrbuffer_ref_head;
-		dout(20, "%p set_page_dirty %p head %d/%d -> %d/%d "
+		dout(20, "%p set_page_dirty %p idx %lu head %d/%d -> %d/%d "
 		     "snapc %p seq %lld (%d snaps)\n",
-		     mapping->host, page,
+		     mapping->host, page, page->index,
 		     ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref_head-1,
 		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
 		     snapc, snapc->seq, snapc->num_snaps);
@@ -108,9 +108,9 @@ static int ceph_set_page_dirty(struct page *page,
 		BUG_ON(!capsnap);
 		BUG_ON(capsnap->context != snapc);
 		capsnap->dirty_pages++;
-		dout(20, "%p set_page_dirty %p snap %lld %d/%d -> %d/%d"
+		dout(20, "%p set_page_dirty %p idx %lu snap %lld %d/%d -> %d/%d"
 		     " snapc %p seq %lld (%d snaps)\n",
-		     mapping->host, page, capsnap->follows,
+		     mapping->host, page, page->index, capsnap->follows,
 		     ci->i_wrbuffer_ref-1, capsnap->dirty_pages-1,
 		     ci->i_wrbuffer_ref, capsnap->dirty_pages,
 		     snapc, snapc->seq, snapc->num_snaps);
@@ -264,7 +264,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	struct pagevec pvec;
 	loff_t offset;
 
-	dout(10, "readpages inode %p file %p nr_pages %d\n",
+	dout(10, "readpages %p file %p nr_pages %d\n",
 	     inode, file, nr_pages);
 
 	/* guess read extent */
@@ -287,11 +287,12 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 
 		if (add_to_page_cache(page, mapping, page->index, GFP_NOFS)) {
 			page_cache_release(page);
-			dout(20, "readpages add_to_page_cache failed on %p\n",
-			     page);
+			dout(20, "readpages %p add_to_page_cache failed %p\n",
+			     inode, page);
 			continue;
 		}
-		dout(10, "readpages adding page %p\n", page);
+		dout(10, "readpages %p adding %p idx %lu\n", inode, page,
+		     page->index);
 		flush_dcache_page(page);
 		SetPageUptodate(page);
 		unlock_page(page);
@@ -821,8 +822,8 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct page *page;
 	pgoff_t index = pos >> PAGE_CACHE_SHIFT;
-	loff_t page_off = pos & PAGE_MASK;
-	int pos_in_page = pos & ~PAGE_MASK;
+	loff_t page_off = pos & PAGE_CACHE_MASK;
+	int pos_in_page = pos & ~PAGE_CACHE_MASK;
 	int end_in_page = pos_in_page + len;
 	loff_t i_size;
 	struct ceph_snap_context *snapc;
@@ -887,11 +888,13 @@ retry_locked:
 		goto retry_locked;
 	}
 
-	if (PageUptodate(page))
+	if (PageUptodate(page)) {
+		dout(20, " page %p already uptodate\n", page);
 		return 0;
+	}
 
 	/* full page? */
-	if (pos_in_page == 0 && len == PAGE_SIZE)
+	if (pos_in_page == 0 && len == PAGE_CACHE_SIZE)
 		return 0;
 
 	/* past end of file? */
@@ -899,6 +902,8 @@ retry_locked:
 	if (page_off >= i_size ||
 	    (pos_in_page == 0 && (pos+len) >= i_size &&
 	     end_in_page - pos_in_page != PAGE_CACHE_SIZE)) {
+		dout(20, " zeroing %p 0 - %d and %d - %d\n",
+		     page, pos_in_page, end_in_page, (int)PAGE_CACHE_SIZE);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 		zero_user_segments(page,
 				   0, pos_in_page,
@@ -1001,7 +1006,7 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 	else
 		len = size & ~PAGE_CACHE_MASK;
 
-	dout(10, "page_mkwrite %p %llu~%llu (page %p offset %lu)\n", inode,
+	dout(10, "page_mkwrite %p %llu~%llu page %p idx %lu\n", inode,
 	     off, len, page, page->index);
 	ret = ceph_write_begin(vma->vm_file, inode->i_mapping, off, len, 0,
 			       &locked_page, &fsdata);
