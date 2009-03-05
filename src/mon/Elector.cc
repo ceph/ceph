@@ -252,7 +252,16 @@ void Elector::handle_victory(MMonElection *m)
 
   assert(from < whoami);
   assert(m->epoch % 2 == 0);  
-  assert(m->epoch == epoch + 1);  // i should have seen this election if i'm getting the victory.
+
+  // i should have seen this election if i'm getting the victory.
+  if (m->epoch != epoch + 1) { 
+    dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
+    bump_epoch(m->epoch);
+    mon->call_election();//start();
+    delete m;
+    return;
+  }
+
   bump_epoch(m->epoch);
   
   // they win
@@ -260,6 +269,7 @@ void Elector::handle_victory(MMonElection *m)
   
   // cancel my timer
   cancel_timer();	
+  delete m;
 }
 
 
