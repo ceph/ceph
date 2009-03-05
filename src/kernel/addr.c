@@ -539,7 +539,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
 	struct ceph_osd_request *req = NULL;
-	int do_sync = !current_is_pdflush();
+	int do_sync = !current_is_pdflush() && wbc->sync_mode == WB_SYNC_ALL;
 
 	if (ceph_caps_revoking(ci) & CEPH_CAP_FILE_WRBUFFER)
 		do_sync = 1;
@@ -554,7 +554,11 @@ static int ceph_writepages_start(struct address_space *mapping,
 	if (wsize < PAGE_CACHE_SIZE)
 		wsize = PAGE_CACHE_SIZE;
 	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
-	dout(10, "writepages on %p, wsize %u\n", inode, wsize);
+	dout(10, "writepages_start %p dosync=%d (pdflush%d mode=%s) wsize %u\n",
+	     inode, do_sync, current_is_pdflush(),
+	     wbc->sync_mode == WB_SYNC_NONE ? "NONE":
+	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL":"HOLD"),
+	     wsize);
 
 	pvec = (struct pagevec *)kmalloc(sizeof(struct pagevec), GFP_KERNEL);
 	pagevec_init(pvec, 0);
