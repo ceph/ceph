@@ -55,8 +55,9 @@ int ceph_debug_addr __read_mostly = -1;
  * i_snap_realm.  Otherwise, redirty a page within the context of
  * the given *snapc.
  *
- * Note that the caller (e.g., write_begin) _should_ be holding
- * a read lock on mdsc->snap_rwsem.
+ * Caller may or may not have locked *page.  That means we can race
+ * with truncate_complete_page and end up with a non-dirty page with
+ * private data.
  */
 static int ceph_set_page_dirty(struct page *page,
 			       struct ceph_snap_context *snapc)
@@ -74,9 +75,6 @@ static int ceph_set_page_dirty(struct page *page,
 		     mapping->host, page, page->index);
 		return 0;
 	}
-
-	BUG_ON(page->private);
-	BUG_ON(PagePrivate(page));
 
 	/*
 	 * optimistically adjust accounting, on the assumption that
@@ -143,8 +141,6 @@ static int ceph_set_page_dirty(struct page *page,
 		 * Reference snap context in page->private.  Also set
 		 * PagePrivate so that we get invalidatepage callback.
 		 */
-		BUG_ON(page->private);
-		BUG_ON(PagePrivate(page));
 		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
 	} else {
@@ -179,7 +175,7 @@ static int ceph_set_page_dirty_vfs(struct page *page)
  */
 static void ceph_invalidatepage(struct page *page, unsigned long offset)
 {
-	struct inode *inode;
+	struct inode *inode = page->mapping->host;
 	struct ceph_inode_info *ci;
 	struct ceph_snap_context *snapc = (void *)page->private;
 
@@ -187,12 +183,18 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	BUG_ON(!page->private);
 	BUG_ON(!PagePrivate(page));
 	BUG_ON(!page->mapping);
-	BUG_ON(!PageDirty(page));
+
+	/*
+	 * We can get non-dirty pages here due to races between
+	 * set_page_dirty and truncate_complete_page; just spit out a
+	 * warning, in case we end up with accounting problems later.
+	 */
+	if (!PageDirty(page))
+		dout(0, "%p invalidatepage %p page not dirty\n", inode, page);
 
 	if (offset == 0)
 		ClearPageChecked(page);
 
-	inode = page->mapping->host;
 	ci = ceph_inode(inode);
 	if (offset == 0) {
 		dout(20, "%p invalidatepage %p idx %lu full dirty page %lu\n",
