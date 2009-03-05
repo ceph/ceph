@@ -998,7 +998,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 				       PAGE_CACHE_SIZE - (read & ~PAGE_CACHE_MASK),
 				       KM_USER0);
 #endif
-
+			read += PAGE_CACHE_SIZE;
 		}
 		for (i = read >> PAGE_CACHE_SHIFT; i < contig_pages; i++) {
 			page = req->r_pages[i];
