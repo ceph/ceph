@@ -1000,7 +1000,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 #endif
 
 		}
-		for (i = read << PAGE_CACHE_SHIFT; i < contig_pages; i++) {
+		for (i = read >> PAGE_CACHE_SHIFT; i < contig_pages; i++) {
 			page = req->r_pages[i];
 			dout(20, "readpages zeroing %d %p\n", i, page);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
