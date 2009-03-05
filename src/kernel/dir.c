@@ -470,12 +470,13 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		dout(5, "mkdir dir %p dn %p mode 0%o\n", dir, dentry, mode);
 	}
 	req = ceph_mdsc_create_request(mdsc, op, pathdentry, NULL, 
-				       NULL, NULL, USE_AUTH_MDS);
+				       NULL, snap, USE_AUTH_MDS);
 	if (pathdentry != dentry)
 		dput(pathdentry);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
-		return PTR_ERR(req);
+		err = PTR_ERR(req);
+		goto out;
 	}
 
 	req->r_locked_dir = dir;
@@ -487,6 +488,8 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	ceph_mdsc_put_request(req);
 	if (err < 0)
 		d_drop(dentry);
+out:
+	kfree(snap);
 	return err;
 }
 
@@ -560,12 +563,14 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		dout(5, "unlink/rmdir dir %p dn %p inode %p\n",
 		     dir, dentry, inode);
 	}
-	req = ceph_mdsc_create_request(mdsc, op, pathdentry, NULL, NULL, NULL,
+	req = ceph_mdsc_create_request(mdsc, op, pathdentry, NULL, NULL, snap,
 				       USE_AUTH_MDS);
 	if (pathdentry != dentry)
 		dput(pathdentry);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
+	if (IS_ERR(req)) {
+		err = PTR_ERR(req);
+		goto out;
+	}
 
 	req->r_locked_dir = dir;  /* by VFS */
 
@@ -575,6 +580,8 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	ceph_release_caps(inode, CEPH_CAP_LINK_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	ceph_mdsc_put_request(req);
+out:
+	kfree(snap);
 	return err;
 }
 
