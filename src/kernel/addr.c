@@ -539,14 +539,24 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
 	struct ceph_osd_request *req = NULL;
-	int do_sync = !current_is_pdflush() && wbc->sync_mode == WB_SYNC_ALL;
+	int do_sync;
 
+	/*
+	 * Include a 'sync' in the OSD request if this is a data
+	 * integrity write (e.g., O_SYNC write or fsync()), or if our
+	 * cap is being revoked.
+	 */
+	do_sync = wbc->sync_mode == WB_SYNC_ALL && !current_is_pdflush();
 	if (ceph_caps_revoking(ci) & CEPH_CAP_FILE_WRBUFFER)
 		do_sync = 1;
+	dout(10, "writepages_start %p dosync=%d (pdflush=%d mode=%s)\n",
+	     inode, do_sync, current_is_pdflush(),
+	     wbc->sync_mode == WB_SYNC_NONE ? "NONE":
+	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL":"HOLD"));
 
 	client = ceph_inode_to_client(inode);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
-		dout(1, "writepage on forced umount\n");
+		dout(1, "writepage_start %p on forced umount\n", inode);
 		return -EIO; /* we're in a forced umount, don't write! */
 	}
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
@@ -554,18 +564,13 @@ static int ceph_writepages_start(struct address_space *mapping,
 	if (wsize < PAGE_CACHE_SIZE)
 		wsize = PAGE_CACHE_SIZE;
 	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
-	dout(10, "writepages_start %p dosync=%d (pdflush%d mode=%s) wsize %u\n",
-	     inode, do_sync, current_is_pdflush(),
-	     wbc->sync_mode == WB_SYNC_NONE ? "NONE":
-	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL":"HOLD"),
-	     wsize);
 
-	pvec = (struct pagevec *)kmalloc(sizeof(struct pagevec), GFP_KERNEL);
+	pvec = (struct pagevec *)kmalloc(sizeof(*pvec), GFP_KERNEL);
 	pagevec_init(pvec, 0);
 
 	/* ?? */
 	if (wbc->nonblocking && bdi_write_congested(bdi)) {
-		dout(10, "writepages congested\n");
+		dout(20, " writepages congested\n");
 		wbc->encountered_congestion = 1;
 		goto out_free;
 	}
@@ -574,14 +579,14 @@ static int ceph_writepages_start(struct address_space *mapping,
 	if (wbc->range_cyclic) {
 		start = mapping->writeback_index; /* Start from prev offset */
 		end = -1;
-		dout(10, "cyclic, start at %lu\n", start);
+		dout(20, " cyclic, start at %lu\n", start);
 	} else {
 		start = wbc->range_start >> PAGE_CACHE_SHIFT;
 		end = wbc->range_end >> PAGE_CACHE_SHIFT;
 		if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
 			range_whole = 1;
 		should_loop = 0;
-		dout(10, "not cyclic, %lu to %lu\n", start, end);
+		dout(20, " not cyclic, %lu to %lu\n", start, end);
 	}
 	index = start;
 
