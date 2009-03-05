@@ -270,15 +270,7 @@ retry:
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
 
-<<<<<<< HEAD:src/kernel/caps.c
-	/* move to tail of session rdcaps lru? */
-	if (!list_empty(&cap->session_rdcaps))
-		list_del_init(&cap->session_rdcaps);
-	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0)
-		list_add_tail(&cap->session_rdcaps, &session->s_rdcaps);
-=======
 	__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci) | wanted);
->>>>>>> d2f189a24d6e06b4ea9aa31c4ea874a1d13703f0:src/kernel/caps.c
 
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_get_snap_realm(mdsc,
