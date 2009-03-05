@@ -443,6 +443,11 @@ static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 	return issued;
 }
 
+static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
+{
+	return (ceph_caps_issued(ci) & mask);
+}
+
 extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
 extern int ceph_caps_revoking(struct ceph_inode_info *ci);
 
@@ -722,8 +727,6 @@ extern int ceph_add_cap(struct inode *inode,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);
-extern int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
-			     int *got, loff_t offset);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);
@@ -739,7 +742,7 @@ static inline void ceph_release_caps(struct inode *inode, int mask)
 	ceph_check_caps(ceph_inode(inode), 1, mask, NULL);
 }
 
-extern int ceph_wait_for_caps(struct ceph_inode_info *ci, int need, int want, int *got,
+extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff);
 
 /* addr.c */

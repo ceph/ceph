@@ -121,7 +121,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	dentry = d_find_alias(inode);
 	if (!dentry)
 		return -ESTALE;  /* yuck */
-	if ((ceph_caps_issued(ceph_inode(inode)) & CEPH_CAP_FILE_EXCL) == 0)
+	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
 	if (IS_ERR(req)) {
@@ -171,7 +171,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	if ((flags & O_CREAT) &&
-	    (ceph_caps_issued(ceph_inode(dir)) & CEPH_CAP_FILE_EXCL) == 0)
+	    (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL)))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
@@ -277,7 +277,7 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 
 	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
 	     ceph_vinop(inode), pos, (unsigned)len, inode);
-	ret = ceph_wait_for_caps(ci,
+	ret = ceph_get_caps(ci,
 				 CEPH_CAP_FILE_RD,
 				 CEPH_CAP_FILE_RDCACHE,
 				 &got, -1);
@@ -357,7 +357,7 @@ retry_snap:
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
-	ret = ceph_wait_for_caps(ci,
+	ret = ceph_get_caps(ci,
 				 CEPH_CAP_FILE_WR,
 				 CEPH_CAP_FILE_WRBUFFER,
 				 &got, endoff);

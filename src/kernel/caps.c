@@ -230,7 +230,7 @@ retry:
 
 	/* move to tail of session rdcaps lru? */
 	if (!list_empty(&cap->session_rdcaps))
-		list_del(&cap->session_rdcaps);
+		list_del_init(&cap->session_rdcaps);
 	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0)
 		list_add_tail(&cap->session_rdcaps, &session->s_rdcaps);
 
@@ -980,7 +980,7 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
  * Note that caller is responsible for ensuring max_size increases are
  * requested from the MDS.
  */
-int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
+static int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff)
 {
 	struct inode *inode = &ci->vfs_inode;
@@ -1821,7 +1821,7 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 	}
 }
 
-int ceph_wait_for_caps(struct ceph_inode_info *ci, int need, int want, int *got,
+int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff)
 {
 	return wait_event_interruptible(ci->i_cap_wq,

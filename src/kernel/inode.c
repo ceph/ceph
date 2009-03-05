@@ -1556,7 +1556,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	int err;
 
 	/* if i hold CAP_EXCL, i can change [am]time any way i like */
-	if (ceph_caps_issued(ci) & CEPH_CAP_FILE_EXCL) {
+	if (ceph_caps_issued_mask(ci, CEPH_CAP_FILE_EXCL)) {
 		dout(10, "utime holding EXCL, doing locally\n");
 		ci->i_time_warp_seq++;
 		if (ia_valid & ATTR_ATIME)
@@ -1569,7 +1569,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* if i hold CAP_WR, i can _increase_ [am]time safely */
-	if ((ceph_caps_issued(ci) & CEPH_CAP_FILE_WR) &&
+	if (ceph_caps_issued_mask(ci, CEPH_CAP_FILE_WR) &&
 	    ((ia_valid & ATTR_MTIME) == 0 ||
 	     timespec_compare(&inode->i_mtime, &attr->ia_mtime) < 0) &&
 	    ((ia_valid & ATTR_ATIME) == 0 ||
