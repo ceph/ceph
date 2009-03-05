@@ -694,7 +694,7 @@ static void reschedule_timeout(struct ceph_osd_client *osdc,
 
 	jifs = timeout * HZ - jifs;
 
-	if (jifs < 0) {
+	if (jifs <= 0) {
 		jifs %= timeout * HZ;
 		jifs += timeout * HZ;
 	}
