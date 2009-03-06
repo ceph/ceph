@@ -32,7 +32,7 @@ re-replicated in a distributed fashion by the storage nodes themselves
 system extremely efficient and scalable.
 
 Metadata servers effectively form a large, consistent, distributed
-in-memory cache above the storage cluster that is extremely scalable,
+in-memory cache above the file namespace that is extremely scalable,
 dynamically redistributes metadata in response to workload changes,
 and can tolerate arbitrary (well, non-Byzantine) node failures.  The
 metadata server takes a somewhat unconventional approach to metadata
@@ -78,7 +78,9 @@ off if the monitor is using the default.  So if the monitor is at
 
  # mount -t ceph 1.2.3.4:/ /mnt/ceph
 
-is sufficient.
+is sufficient.  If mount.ceph is installed, a hostname can be used
+instead of an IP address.
+
 
 
 Mount Options
