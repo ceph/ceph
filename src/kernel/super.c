@@ -14,6 +14,7 @@
 
 #include "ceph_debug.h"
 #include "ceph_ver.h"
+#include "bookkeeper.h"
 
 /*
  * global debug value.

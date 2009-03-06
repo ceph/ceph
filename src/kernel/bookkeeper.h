@@ -1,5 +1,5 @@
-#ifndef _FS_CEPH_DEBUG_H
-#define _FS_CEPH_DEBUG_H
+#ifndef _FS_CEPH_BOOKKEEPER_H
+#define _FS_CEPH_BOOKKEEPER_H
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 extern void ceph_bookkeeper_init(void);
