@@ -599,7 +599,7 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	    ceph_snap(new_dir) != CEPH_NOSNAP)
 		return -EROFS;
 
-	dout(5, "dir_rename in dir %p dentry %p to dir %p dentry %p\n",
+	dout(5, "rename dir %p dentry %p to dir %p dentry %p\n",
 	     old_dir, old_dentry, new_dir, new_dentry);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME,
 				       new_dentry, old_dentry, NULL, NULL,
