@@ -654,6 +654,10 @@ static void update_dentry_lease(struct dentry *dentry,
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
 	long unsigned ttl = from_time + (duration * HZ) / 1000;
 
+	/* only track leases on regular dentries */
+	if (dentry->d_op != &ceph_dentry_ops)
+		return;	
+	
 	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
 	     dentry, le16_to_cpu(lease->mask), duration, ttl);
 	if (lease->mask == 0) {

@@ -49,6 +49,7 @@ int ceph_debug_addr __read_mostly = -1;
  * accounting is preserved.
  */
 
+
 /*
  * Dirty a page.  If @snapc is NULL, use the current snap context for
  * i_snap_realm.  Otherwise, redirty a page within the context of
@@ -73,6 +74,9 @@ static int ceph_set_page_dirty(struct page *page,
 		     mapping->host, page, page->index);
 		return 0;
 	}
+
+	BUG_ON(page->private);
+	BUG_ON(PagePrivate(page));
 
 	/*
 	 * optimistically adjust accounting, on the assumption that
@@ -139,7 +143,8 @@ static int ceph_set_page_dirty(struct page *page,
 		 * Reference snap context in page->private.  Also set
 		 * PagePrivate so that we get invalidatepage callback.
 		 */
-		ceph_put_snap_context((void *)page->private);
+		BUG_ON(page->private);
+		BUG_ON(PagePrivate(page));
 		page->private = (unsigned long)snapc;
 		SetPagePrivate(page);
 	} else {
@@ -158,6 +163,7 @@ static int ceph_set_page_dirty(struct page *page,
 
 	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
 
+	BUG_ON(!PageDirty(page));
 	return 1;
 }
 
@@ -177,9 +183,9 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	struct ceph_inode_info *ci;
 	struct ceph_snap_context *snapc = (void *)page->private;
 
+	BUG_ON(!PageLocked(page));
 	BUG_ON(!page->private);
 	BUG_ON(!PagePrivate(page));
-	BUG_ON(!PageLocked(page));
 	BUG_ON(!page->mapping);
 	BUG_ON(!PageDirty(page));
 
@@ -1014,6 +1020,7 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 	     off, len, page, page->index);
 	ret = ceph_write_begin(vma->vm_file, inode->i_mapping, off, len, 0,
 			       &locked_page, &fsdata);
+	WARN_ON(page != locked_page);
 	if (!ret)
 		ceph_write_end(vma->vm_file, inode->i_mapping, off, len, len,
 			       locked_page, fsdata);
