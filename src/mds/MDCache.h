@@ -851,7 +851,7 @@ public:
                     int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
-    filepath path(p);
+    filepath path(p, 1);
     return path_is_mine(path);
   }
   CDir *path_traverse_to_dir(filepath& path);

@@ -2896,7 +2896,7 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
 
     // traverse
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
-    filepath path(p->second);
+    filepath path(p->second, 1);
     CDir *dir = path_traverse_to_dir(path);
     assert(dir);
     fetch_queue.insert(dir);
@@ -5384,8 +5384,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (in->is_symlink() &&
           (follow_trailing_symlink || depth < path.depth()-1)) {
         // symlink, resolve!
-        filepath sym = in->symlink;
-        dout(10) << "traverse: hit symlink " << *in << " to " << sym << dendl;
+        dout(10) << "traverse: hit symlink " << *in << " to " << in->symlink << dendl;
 
         // break up path components
         // /head/symlink/tail
@@ -5405,11 +5404,12 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
           // absolute
           trace.clear();
           depth = 0;
-	  path = in->symlink;
+	  path = filepath(in->symlink.c_str() + 1, 1);
 	  path.append(tail);
           dout(10) << "traverse: absolute symlink, path now " << path << " depth " << depth << dendl;
         } else {
           // relative
+	  filepath sym(in->symlink, 0);
           path = head;
           path.append(sym);
           path.append(tail);
@@ -5532,7 +5532,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
 bool MDCache::path_is_mine(filepath& path)
 {
-  dout(15) << "path_is_mine " << path << dendl;
+  dout(15) << "path_is_mine " << path.get_ino() << " " << path << dendl;
   
   CInode *cur = get_inode(path.get_ino());
   if (!cur)
@@ -7285,17 +7285,18 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       // wanted a dentry
       frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
       CDir *dir = cur->get_dirfrag(fg);
+      filepath relpath(m->get_error_dentry(), 0);
       if (dir) {
 	// don't actaully need the hint, now
 	if (dir->lookup(m->get_error_dentry()) == 0 &&
 	    dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) 
-	  discover_path(dir, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
+	  discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked()); 
 	else 
 	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
 		  << m->get_error_dentry() << dendl;
       } else {
 	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
-	  discover_path(cur, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
+	  discover_path(cur, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked(), who);
 	else
 	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
       }

@@ -2744,7 +2744,7 @@ int Client::_symlink(const filepath &path, const char *target, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SYMLINK);
   req->set_filepath(path);
-  req->set_path2(target);
+  req->set_string2(target);
  
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4203,7 +4203,7 @@ int Client::_mksnap(const filepath& path, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
   req->set_filepath(path);
-  req->set_path2(name);
+  req->set_string2(name);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4218,7 +4218,7 @@ int Client::_rmsnap(const filepath& path, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
   req->set_filepath(path);
-  req->set_path2(name);
+  req->set_string2(name);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4596,7 +4596,7 @@ int Client::_setxattr(const filepath &path, const char *name, const void *value,
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LSETXATTR);
   req->set_filepath(path);
-  req->set_path2(name);
+  req->set_string2(name);
   req->head.args.setxattr.flags = flags;
 
   bufferlist bl;
@@ -4716,7 +4716,7 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
   if (diri->snapid == CEPH_SNAPDIR) {
     MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
     req->set_filepath(path);
-    req->set_path2(name);
+    req->set_string2(name);
 
     Inode *in;
     MClientReply *reply = make_request(req, uid, gid, &in);
@@ -4803,7 +4803,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
   if (diri->snapid == CEPH_SNAPDIR) {
     MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
     req->set_filepath(path);
-    req->set_path2(name);
+    req->set_string2(name);
     MClientReply *reply = make_request(req, uid, gid);
     int r = reply->get_result();
     delete reply;

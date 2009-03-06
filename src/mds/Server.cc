@@ -447,7 +447,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	continue;
       }
       
-      filepath path = p->second.path;
+      filepath path(p->second.path, 1);
       if ((in && !in->is_auth()) ||
 	  !mds->mdcache->path_is_mine(path)) {
 	// not mine.
