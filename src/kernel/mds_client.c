@@ -1326,8 +1326,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			dout(10, "got safe reply %llu, mds%d\n", tid, mds);
 			BUG_ON(req->r_session == NULL);
 			list_del_init(&req->r_unsafe_item);
-			mutex_unlock(&mdsc->mutex);
 			ceph_mdsc_put_request(req);
+
+			/* last unsafe request during umount? */
+			if (mdsc->stopping && !__get_oldest_tid(mdsc))
+				complete(&mdsc->safe_umount_waiters);
+			mutex_unlock(&mdsc->mutex);
 			return;
 		}
 	}
@@ -2105,6 +2109,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	mdsc->client = client;
 	mutex_init(&mdsc->mutex);
 	mdsc->mdsmap = NULL;            /* none yet */
+	init_completion(&mdsc->safe_umount_waiters);
 	init_completion(&mdsc->session_close_waiters);
 	INIT_LIST_HEAD(&mdsc->waiting_for_map);
 	mdsc->sessions = NULL;
@@ -2147,27 +2152,41 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 }
 
 /*
+ * Wait for safe replies on open mds requests.  If we time out, drop
+ * all requests from the tree to avoid dangling dentry refs.
+ */
+static void wait_requests(struct ceph_mds_client *mdsc)
+{
+	struct ceph_mds_request *req;
+
+	mutex_lock(&mdsc->mutex);
+	if (__get_oldest_tid(mdsc)) {
+		mutex_unlock(&mdsc->mutex);
+		dout(10, "wait_requests waiting for requests\n");
+		wait_for_completion_timeout(&mdsc->safe_umount_waiters,
+					    CEPH_MOUNT_TIMEOUT);
+		mutex_lock(&mdsc->mutex);
+
+		/* tear down remaining requests */
+		while (radix_tree_gang_lookup(&mdsc->request_tree,
+					      (void **)&req, 0, 1)) {
+			dout(10, "wait_requests timed out on tid %llu\n",
+			     req->r_tid);
+			radix_tree_delete(&mdsc->request_tree, req->r_tid);
+			ceph_mdsc_put_request(req);
+		}
+	}
+	mutex_unlock(&mdsc->mutex);
+	dout(10, "wait_requests done\n");
+}
+
+/*
  * called before mount is ro, and before dentries are torn down.
  * (hmm, does this still race with new lookups?)
  */
 void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 {
-	drop_leases(mdsc);
-	ceph_check_delayed_caps(mdsc);
-}
-
-/*
- * called after sb is ro.
- */
-void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
-{
-	struct ceph_mds_session *session;
-	int i;
-	int n;
-	unsigned long started, timeout = CEPH_MOUNT_TIMEOUT;
-	struct ceph_client *client = mdsc->client;
-
-	dout(10, "close_sessions\n");
+	dout(10, "pre_umount\n");
 	mdsc->stopping = 1;
 
 	/*
@@ -2186,6 +2205,24 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 		spin_lock(&mdsc->cap_delay_lock);
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
+
+	drop_leases(mdsc);
+	ceph_check_delayed_caps(mdsc);
+	wait_requests(mdsc);
+}
+
+/*
+ * called after sb is ro.
+ */
+void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
+{
+	struct ceph_mds_session *session;
+	int i;
+	int n;
+	unsigned long started, timeout = CEPH_MOUNT_TIMEOUT;
+	struct ceph_client *client = mdsc->client;
+
+	dout(10, "close_sessions\n");
 
 	mutex_lock(&mdsc->mutex);
 

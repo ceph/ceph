@@ -202,7 +202,7 @@ struct ceph_mds_client {
 	struct mutex            mutex;         /* all nested structures */
 
 	struct ceph_mdsmap      *mdsmap;
-	struct completion       session_close_waiters;
+	struct completion       safe_umount_waiters, session_close_waiters;
 	struct list_head        waiting_for_map;
 
 	struct ceph_mds_session **sessions;    /* NULL for mds if no session */
