@@ -244,8 +244,8 @@ parameters.
 EOF
 
 git add fs/ceph/ceph_debug.h
-git add fs/ceph/ceph_tools.h
-git add fs/ceph/ceph_tools.c
+git add fs/ceph/bookkeeper.h
+git add fs/ceph/bookkeeper.c
 git add fs/ceph/sysfs.c
 git commit -F - <<EOF
 ceph: debugging
@@ -253,6 +253,16 @@ ceph: debugging
 Some debugging infrastructure, including the ability to adjust the
 level of debug output on a per-file basis.  A memory leak check tool
 can also be enabled via .config.
+
+EOF
+
+git add fs/ceph/sysfs.c
+git commit -F - <<EOF
+ceph: sysfs
+
+Basic state information is available via /sys/fs/ceph, including
+instances of the client, fsids, current monitor, mds and osd maps,
+and hooks to adjust debug levels.
 
 EOF
 

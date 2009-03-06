@@ -20,7 +20,6 @@ static DEFINE_SPINLOCK(_bk_lock);
 static size_t _total_alloc;
 static size_t _total_free;
 
-
 struct alloc_data {
 	u32 prefix_magic;
 	struct list_head node;
@@ -51,7 +50,6 @@ void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 
 	return ((void *)p)+sizeof(struct alloc_data);
 }
-
 
 void ceph_kfree(void *ptr)
 {

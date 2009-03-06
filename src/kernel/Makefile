@@ -12,7 +12,7 @@ ceph-objs := super.o inode.o dir.o file.o addr.o ioctl.o \
 	mds_client.o mdsmap.o \
 	mon_client.o \
 	osd_client.o osdmap.o crush/crush.o crush/mapper.o \
-	sysfs.o ceph_tools.o
+	sysfs.o bookkeeper.o
 
 else
 #Otherwise we were called directly from the command
