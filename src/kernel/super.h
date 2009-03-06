@@ -142,9 +142,9 @@ struct ceph_cap {
 	struct list_head session_caps;   /* per-session caplist */
 	struct list_head session_rdcaps; /* per-session rdonly caps */
 	int mds;
-	u64 cap_id;
+	u64 cap_id;       /* unique cap id (mds provided) */
 	int issued;       /* latest, from the mds */
-	int implemented;  /* what we've implemented (for tracking revocation) */
+	int implemented;  /* implemented superset of issued (for revocation) */
 	int flushing;     /* dirty fields being written back to mds */
 	int mds_wanted;
 	u32 seq, mseq, gen;
@@ -449,7 +449,7 @@ static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
 }
 
 extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
-extern int ceph_caps_revoking(struct ceph_inode_info *ci);
+extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
 
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {

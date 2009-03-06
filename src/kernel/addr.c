@@ -550,7 +550,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	 * cap is being revoked.
 	 */
 	do_sync = wbc->sync_mode == WB_SYNC_ALL && !current_is_pdflush();
-	if (ceph_caps_revoking(ci) & CEPH_CAP_FILE_WRBUFFER)
+	if (ceph_caps_revoking(ci, CEPH_CAP_FILE_WRBUFFER))
 		do_sync = 1;
 	dout(10, "writepages_start %p dosync=%d (pdflush=%d mode=%s)\n",
 	     inode, do_sync, current_is_pdflush(),
