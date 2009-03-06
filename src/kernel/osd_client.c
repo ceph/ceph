@@ -716,6 +716,14 @@ static void reschedule_timeout(struct ceph_osd_client *osdc,
 			      jifs);
 }
 
+/*
+ * timeout callback, being called after osdc pending message has
+ * been waiting for reply for a pre set time. When this happens
+ * we iterate over all the pending osd requests, and ping all the
+ * osds that their timeout has expired. We retrigger the timer,
+ * based on the next pending message that its time has not
+ * expired yet.
+ */
 static void handle_timeout(struct work_struct *work)
 {
 	u64 next_tid = 0;
