@@ -719,6 +719,7 @@ static void reschedule_timeout(struct ceph_osd_client *osdc,
 static void handle_timeout(struct work_struct *work)
 {
 	u64 next_tid = 0;
+	u64 timeout_tid = 0;
 	struct ceph_osd_client *osdc =
 		container_of(work, struct ceph_osd_client, timeout_work.work);
 	unsigned long next_timeout_stamp;
@@ -749,6 +750,8 @@ static void handle_timeout(struct work_struct *work)
 	req->r_timeout_stamp += timeout;
 	next_timeout_req = req;
 	next_timeout_stamp = req->r_timeout_stamp;
+	timeout_tid = req->r_tid;
+	dout(10, "tid=%lld  timeout_tid=%lld\n", next_tid, osdc->timeout_tid);
 
 	while (1) {
 		next_tid = req->r_tid + 1;
@@ -780,8 +783,9 @@ static void handle_timeout(struct work_struct *work)
 					     0, 1);
 		}
 
+		dout(30, "next_tid=%lld  timeout_tid=%lld\n", next_tid, timeout_tid);
 		/* no next request, or we're back where we started */
-		if (got == 0 || next_tid == osdc->timeout_tid)
+		if (got == 0 || req->r_tid == timeout_tid)
 			break;
 	}
 
