@@ -133,9 +133,19 @@ The MDS client is responsible for submitting requests to the MDS
 cluster and parsing the response.  We decide which MDS to submit each
 request to based on cached information about the current partition of
 the directory hierarchy across the cluster.  A stateful session is
-opened with each MDS before we submit requests to it.  If a MDS fails
-and/or recovers, we resubmit (potentially) affected requests as
-needed.
+opened with each MDS before we submit requests to it, and a mutex is
+used to control the ordering of messages within each session.
+
+An MDS request may generate two responses.  The first indicates the
+operation was a success and returns any result.  A second reply is
+sent when the operation commits to the journal.  Note that locking
+on the MDS ensures that the results of updates are visible only to
+the updating client until the operation commits.
+
+Requests are linked to the containing directory so that an fsync will
+wait for them to commit.
+
+If an MDS fails and/or recovers, we resubmit requests as needed.
 
 EOF
 
@@ -150,6 +160,12 @@ The OSD client is responsible for reading and writing data from/to the
 object storage pool.  This includes determining where objects are
 stored in the cluster, and ensuring that requests are retried or
 redirected in the event of a node failure or data migration.
+
+If an OSD does not respond before a timeout expires, 'ping' messages
+are sent across the lossless, ordered communications channel to
+ensure that any break in the TCP is discovered.  If the session does
+reset, a reconnection is attempted and affected requests are resent
+(by the message transport layer).
 
 EOF
 
@@ -194,7 +210,6 @@ The Ceph metadata servers control client access to data by issuing
 capabilities granting clients permission to read and/or write to OSDs
 (storage nodes).  Each capability consists of a set of bits indicating
 which operations are allowed.
-
 EOF
 
 git add fs/ceph/snap.c
@@ -208,6 +223,10 @@ Because snapshots apply to subtrees of the file hierarchy and can be
 created at any time, there is a fair bit of bookkeeping required to
 make this work.
 
+Portions of the hierarchy that belong to the same set of snapshots
+are described by a single 'snap realm.'  A 'snap context' describes
+the set of snapshots that exist for a given piece of metadata.
+
 EOF
 
 git add fs/ceph/decode.h
@@ -220,6 +239,8 @@ A generic message passing library is used to communicate with all
 other components in the Ceph file system.  The messenger library
 provides ordered, reliable delivery of messages between two nodes in
 the system, or notifies the higher layer when it is unable to do so.
+
+This implementation is based on TCP.
 
 EOF
 
