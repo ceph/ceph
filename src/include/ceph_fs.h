@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     5 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    5 /* public/client */
-#define CEPH_MDSC_PROTOCOL    6 /* public/client */
+#define CEPH_MDSC_PROTOCOL    7 /* public/client */
 #define CEPH_MONC_PROTOCOL    6 /* public/client */
 
 
@@ -1084,6 +1084,7 @@ struct ceph_mds_cap_reconnect {
 	__le64 size;
 	struct ceph_timespec mtime, atime;
 	__le64 snaprealm;
+	__le64 pathbase;
 } __attribute__ ((packed));
 /* followed by encoded string */
 

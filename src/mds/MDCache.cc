@@ -2747,7 +2747,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	 ++p) {
       CInode *in = get_inode(p->first);
       if (in && !in->is_auth()) continue;
-      string& path = weak->cap_export_paths[p->first];
+      filepath& path = weak->cap_export_paths[p->first];
       if (!in) {
 	if (!path_is_mine(path))
 	  continue;
@@ -2879,13 +2879,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
  * returns a C_Gather* is there is work to do.  caller is responsible for setting
  * the C_Gather completer.
  */
-C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
+C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
   // scan list
   set<CDir*> fetch_queue;
-  map<inodeno_t,string>::iterator p = pathmap.begin();
+  map<inodeno_t,filepath>::iterator p = pathmap.begin();
   while (p != pathmap.end()) {
     CInode *in = get_inode(p->first);
     if (in) {
@@ -2896,8 +2896,7 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
 
     // traverse
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
-    filepath path(p->second, 1);
-    CDir *dir = path_traverse_to_dir(path);
+    CDir *dir = path_traverse_to_dir(p->second);
     assert(dir);
     fetch_queue.insert(dir);
     p++;

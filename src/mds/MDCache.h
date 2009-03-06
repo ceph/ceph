@@ -639,7 +639,7 @@ protected:
   map<inodeno_t,string> cap_export_paths;
 
   map<inodeno_t,map<int,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<inodeno_t,string> cap_import_paths;
+  map<inodeno_t,filepath> cap_import_paths;
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
@@ -666,7 +666,7 @@ public:
   void rejoin_recovered_caps(inodeno_t ino, int client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
     cap_imports[ino][client][frommds] = icr.capinfo;
-    cap_import_paths[ino] = icr.path;
+    cap_import_paths[ino] = filepath(icr.path, (__u64)icr.capinfo.pathbase);
   }
 
   // [reconnect/rejoin caps]
@@ -868,7 +868,7 @@ public:
   void open_remote_dentry(CDentry *dn, bool projected, Context *fin);
   void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
-  C_Gather *parallel_fetch(map<inodeno_t,string>& pathmap);
+  C_Gather *parallel_fetch(map<inodeno_t,filepath>& pathmap);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   

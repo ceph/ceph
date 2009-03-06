@@ -1717,6 +1717,7 @@ retry:
 		BUG_ON(p > end);
 		spin_lock(&inode->i_lock);
 		cap->seq = 0;  /* reset cap seq */
+		rec->pathbase = cpu_to_le64(pathbase);
 		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(cap->issued);
 		rec->size = cpu_to_le64(inode->i_size);

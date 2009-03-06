@@ -1215,7 +1215,7 @@ void Client::send_reconnect(int mds)
 	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
-	m->add_cap(p->first.ino, path.get_path(),   // ino
+	m->add_cap(p->first.ino, path.get_ino(), path.get_path(),   // ino
 		   in->caps_wanted(), // wanted
 		   in->caps[mds]->issued,     // issued
 		   in->inode.size, in->inode.mtime, in->inode.atime, in->snaprealm->ino);
