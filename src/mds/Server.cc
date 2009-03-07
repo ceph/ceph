@@ -570,7 +570,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   snapid_t snapid = CEPH_NOSNAP;
   CInode *snapdiri = 0;
   if (tracei || tracedn)
-    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, mdr);
+    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, mdr,
+		   mdr->client_request->is_replay());
 
   messenger->send_message(reply, client_inst);
 
@@ -636,6 +637,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);
 
+  bool is_replay = mdr->client_request->is_replay();
+
   // clean up request, drop locks, etc.
   // do this before replying, so that we can issue leases
   Session *session = mdr->session;
@@ -652,7 +655,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr, is_replay);
     messenger->send_message(reply, client_inst);
   }
   
@@ -698,7 +701,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    MDRequest *mdr)
+			    MDRequest *mdr, bool is_replay)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -731,7 +734,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
   }
 
-  in->encode_inodestat(bl, session, snapid);
+  in->encode_inodestat(bl, session, snapid, is_replay);
   dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {

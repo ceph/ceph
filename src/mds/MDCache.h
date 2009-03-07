@@ -640,6 +640,7 @@ protected:
 
   map<inodeno_t,map<int,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
+  set<inodeno_t> cap_imports_missing;
   
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
@@ -668,6 +669,19 @@ public:
     cap_imports[ino][client][frommds] = icr.capinfo;
     cap_import_paths[ino] = filepath(icr.path, (__u64)icr.capinfo.pathbase);
   }
+  ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, int client) {
+    if (cap_imports.count(ino) &&
+	cap_imports[ino].count(client) &&
+	cap_imports[ino][client].count(-1)) {
+      return &cap_imports[ino][client][-1];
+    }
+    return NULL;
+  }
+  void remove_replay_cap_reconnect(inodeno_t ino, int client) {
+    assert(cap_imports[ino].size() == 1);
+    assert(cap_imports[ino][client].size() == 1);
+    cap_imports.erase(ino);
+  }
 
   // [reconnect/rejoin caps]
   map<CInode*,map<int, inodeno_t> >  reconnected_caps;   // inode -> client -> realmino
@@ -679,6 +693,7 @@ public:
   void add_reconnected_snaprealm(int client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
   }
+  void process_imported_caps();
   void process_reconnected_caps();
   void prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
 			   map<int,MClientSnap*>& splits);
@@ -868,7 +883,7 @@ public:
   void open_remote_dentry(CDentry *dn, bool projected, Context *fin);
   void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
-  C_Gather *parallel_fetch(map<inodeno_t,filepath>& pathmap);
+  C_Gather *parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   

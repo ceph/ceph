@@ -780,11 +780,13 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) setlayout;
 } __attribute__ ((packed));
 
+#define CEPH_MDS_REQUEST_REPLAY 0xffff
+
 struct ceph_mds_request_head {
 	ceph_tid_t tid, oldest_client_tid;
 	ceph_epoch_t mdsmap_epoch; /* on client */
 	__le32 num_fwd;
-	__le32 retry_attempt;
+	__le32 retry_attempt;  /* REQUEST_REPLAY if replay */
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;

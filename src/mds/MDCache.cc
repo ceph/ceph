@@ -2879,7 +2879,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
  * returns a C_Gather* is there is work to do.  caller is responsible for setting
  * the C_Gather completer.
  */
-C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap)
+C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
@@ -2898,8 +2898,16 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap)
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
     CDir *dir = path_traverse_to_dir(p->second);
     assert(dir);
-    fetch_queue.insert(dir);
-    p++;
+    if (!dir->is_complete()) {
+      fetch_queue.insert(dir);
+      p++;
+    } else {
+      // probably because the client created it and held a cap but it never committed
+      // to the journal, and the op hasn't replayed yet.
+      dout(5) << " dne (not created yet?) " << p->first << " at " << p->second << dendl;
+      missing.insert(p->first);
+      pathmap.erase(p++);
+    }
   }
 
   if (pathmap.empty()) {
@@ -3441,32 +3449,14 @@ void MDCache::rejoin_gather_finish()
   //  do this before ack, since some inodes we may have already gotten
   //  from surviving MDSs.
   if (!cap_import_paths.empty()) {
-    C_Gather *gather = parallel_fetch(cap_import_paths);
+    C_Gather *gather = parallel_fetch(cap_import_paths, cap_imports_missing);
     if (gather) {
       gather->set_finisher(new C_MDC_RejoinGatherFinish(this));
       return;
     }
   }
   
-  // process cap imports
-  //  ino -> client -> frommds -> capex
-  for (map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
-       p != cap_imports.end();
-       ++p) {
-    CInode *in = get_inode(p->first);
-    assert(in);
-    for (map<int, map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) 
-      for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
-	   r != q->second.end();
-	   ++r) {
-	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
-	if (r->first >= 0)
-	  rejoin_import_cap(in, q->first, r->second, r->first);
-      }
-  }
-  
+  process_imported_caps();
   process_reconnected_caps();
   identify_files_to_recover();
 
@@ -3479,6 +3469,34 @@ void MDCache::rejoin_gather_finish()
 
     // finally, kickstart past snap parent opens
     open_snap_parents();
+  }
+}
+
+void MDCache::process_imported_caps()
+{
+  // process cap imports
+  //  ino -> client -> frommds -> capex
+  map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
+  while (p != cap_imports.end()) {
+    CInode *in = get_inode(p->first);
+    if (!in) {
+      dout(10) << "process_imported_caps still missing " << p->first
+	       << ", will try again after replayed client requests"
+	       << dendl;
+      p++;
+      continue;
+    }
+    for (map<int, map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) 
+      for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
+	   r != q->second.end();
+	   ++r) {
+	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
+	if (r->first >= 0)
+	  rejoin_import_cap(in, q->first, r->second, r->first);
+      }
+    cap_imports.erase(p++);  // remove and move on
   }
 }
 
