@@ -188,7 +188,7 @@ static char *normalize_name(const char *name)
 	return newname;
 }
 
-#define MAX_LINE 256
+#define MAX_LINE 2560
 
 static char *get_next_delim(char *str, const char *delim, int alloc, char **p)
 {

@@ -25,9 +25,13 @@ clobber=""
 mkbtrfs=0
 numosd=
 usecrushmap=
+verbose=0
 
 while [ $# -ge 1 ]; do
 case $1 in
+    -v )
+	    verbose=1;
+	    ;;
     --allhosts | -a)
 	    allhosts=1
 	    ;;
