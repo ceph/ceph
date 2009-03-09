@@ -267,7 +267,6 @@ EOF
 git add fs/ceph/ceph_debug.h
 git add fs/ceph/bookkeeper.h
 git add fs/ceph/bookkeeper.c
-git add fs/ceph/sysfs.c
 git commit -F - <<EOF
 ceph: debugging
 
