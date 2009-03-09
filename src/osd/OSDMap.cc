@@ -133,20 +133,20 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     
     int o = 0;
     for (int i=0; i<ndom; i++) {
-      int items[nper];
-      //int w[nper];
+      int items[nper], weights[nper];      
       int j;
       rweights[i] = 0;
       for (j=0; j<nper; j++, o++) {
 	if (o == num_osd) break;
 	dout(20) << "added osd" << o << dendl;
 	items[j] = o;
+	weights[j] = 0x10000;
 	//w[j] = weights[o] ? (0x10000 - (int)(weights[o] * 0x10000)):0x10000;
 	//rweights[i] += w[j];
 	rweights[i] += 0x10000;
       }
 
-      crush_bucket *domain = (crush_bucket *)crush_make_uniform_bucket(1, j, items, 0x10000);
+      crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_UNIFORM, 1, j, items, weights);
       ritems[i] = crush_add_bucket(crush.crush, 0, domain);
       dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
 
@@ -156,7 +156,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     }
     
     // root
-    crush_bucket *root = (crush_bucket *)crush_make_straw_bucket(2, ndom, ritems, rweights);
+    crush_bucket *root = crush_make_bucket(CRUSH_BUCKET_STRAW, 2, ndom, ritems, rweights);
     int rootid = crush_add_bucket(crush.crush, 0, root);
     crush.set_item_name(rootid, "root");
 
@@ -192,7 +192,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
       weights[i] = 0x10000;
     }
 
-    crush_bucket *b = (crush_bucket *)crush_make_straw_bucket(1, num_osd, items, weights);
+    crush_bucket *b = crush_make_bucket(CRUSH_BUCKET_STRAW, 1, num_osd, items, weights);
     int rootid = crush_add_bucket(crush.crush, 0, b);
     crush.set_item_name(rootid, "root");
 
