@@ -889,7 +889,7 @@ static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
  * encode hidden .snap dirs as a double /, i.e.
  *   foo/.snap/bar -> foo//bar
  */
-static char *build_path(struct dentry *dentry, int *plen, u64 *base, int mds)
+char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base, int mds)
 {
 	struct dentry *temp;
 	char *path;
@@ -987,12 +987,12 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		if (path1)
 			pathlen1 = strlen(path1);
 		else if (req->r_dentry)
-			path1 = build_path(req->r_dentry, &pathlen1, &ino1,
+			path1 = ceph_mdsc_build_path(req->r_dentry, &pathlen1, &ino1,
 					   mds);
 		if (path2)
 			pathlen2 = strlen(path2);
 		else if (req->r_old_dentry)
-			path2 = build_path(req->r_old_dentry, &pathlen2, &ino2,
+			path2 = ceph_mdsc_build_path(req->r_old_dentry, &pathlen2, &ino2,
 					   mds);
 		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
 	}
@@ -1708,7 +1708,7 @@ retry:
 
 		dentry = d_find_alias(inode);
 		if (dentry) {
-			path = build_path(dentry, &pathlen, &pathbase, -1);
+			path = ceph_mdsc_build_path(dentry, &pathlen, &pathbase, -1);
 			if (IS_ERR(path)) {
 				err = PTR_ERR(path);
 				BUG_ON(err);

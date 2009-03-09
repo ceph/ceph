@@ -141,11 +141,22 @@ struct ceph_mds_client;
 typedef void (*ceph_mds_request_callback_t) (struct ceph_mds_client *mdsc,
 					     struct ceph_mds_request *req);
 
+struct ceph_mds_request_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct ceph_mds_request *, struct ceph_mds_request_attr *,
+			char *);
+	ssize_t (*store)(struct ceph_mds_request *, struct ceph_mds_request_attr *,
+			 const char *, size_t);
+};
+
 /*
  * an in-flight mds request
  */
 struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
+
+	struct kobject	  kobj;
+	struct ceph_mds_request_attr k_mds, k_op;
 
 	int r_op;
 	struct dentry *r_dentry;
@@ -192,8 +203,6 @@ struct ceph_mds_request {
 	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
 	bool		  r_got_unsafe, r_got_safe;
-
-	struct kobject	  kobj;
 };
 
 /*
@@ -300,5 +309,6 @@ extern void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
 				       struct ceph_mds_session *session);
 extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
 						    u64 tid);
+extern char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base, int mds);
 
 #endif

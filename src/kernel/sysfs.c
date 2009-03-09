@@ -7,45 +7,51 @@ static struct kobject ceph_kobj;
 
 /*
  * default kobject attribute operations.  duplicated here from
- * kobject.c because kobj_sysfs_ops is not exported to modules.
+ * kobject.c
  */
-static ssize_t client_attr_show(struct kobject *kobj, struct attribute *attr,
-				char *buf)
-{
-	struct ceph_client_attr *a =
-		container_of(attr, struct ceph_client_attr, attr);
-	struct ceph_client *c = container_of(kobj, struct ceph_client, kobj);
-	ssize_t ret = -EIO;
 
-	if (a->show)
-		ret = a->show(c, a, buf);
-	return ret;
-}
-
-static ssize_t client_attr_store(struct kobject *kobj, struct attribute *attr,
-				 const char *buf, size_t count)
-{
-	struct ceph_client_attr *a = container_of(attr, struct ceph_client_attr, attr);
-	struct ceph_client *c = container_of(kobj, struct ceph_client, kobj);
-	ssize_t ret = -EIO;
-
-	if (a->store)
-		ret = a->store(c, a, buf, count);
-	return ret;
-}
-
-static struct sysfs_ops generic_sysfs_ops = {
-	.show	= client_attr_show,
-	.store	= client_attr_store,
+#define DEF_ATTR_OP(name) \
+static ssize_t name##_attr_show(struct kobject *kobj, struct attribute *attr,	\
+				char *buf)					\
+{										\
+	struct name##_attr *a =							\
+		container_of(attr, struct name##_attr, attr);			\
+	struct name *c = container_of(kobj, struct name, kobj);			\
+	ssize_t ret = -EIO;							\
+										\
+	if (a->show)								\
+		ret = a->show(c, a, buf);					\
+	return ret;								\
+}										\
+										\
+static ssize_t name##_attr_store(struct kobject *kobj, struct attribute *attr,	\
+				 const char *buf, size_t count)			\
+{										\
+	struct name##_attr *a = container_of(attr, struct name##_attr, attr);	\
+	struct name *c = container_of(kobj, struct name, kobj);			\
+	ssize_t ret = -EIO;							\
+										\
+	if (a->store)								\
+		ret = a->store(c, a, buf, count);				\
+	return ret;								\
+}										\
+										\
+static struct sysfs_ops name##_sysfs_ops = {					\
+	.show	= name##_attr_show,						\
+	.store	= name##_attr_store,						\
+};										\
+										\
+static struct kobj_type name##_ops = {						\
+	.sysfs_ops = &name##_sysfs_ops,						\
 };
+
+
+DEF_ATTR_OP(ceph_client)
+
 
 /*
  * per-client attributes
  */
-static struct kobj_type client_type = {
-	.sysfs_ops = &generic_sysfs_ops,
-};
-
 #define to_client(c) container_of(c, struct ceph_client, kobj)
 
 static ssize_t fsid_show(struct ceph_client *client,
@@ -141,8 +147,8 @@ static ssize_t osdmap_show(struct ceph_client *client,
 	return pos;
 }
 
-static struct kobj_type entity_type = {
-	.sysfs_ops = &generic_sysfs_ops,
+static struct kobj_type entity_ops = {
+	.sysfs_ops = &ceph_client_sysfs_ops,
 };
 
 
@@ -158,12 +164,12 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	int ret = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-	ret = kobject_init_and_add(&client->kobj, &client_type,
+	ret = kobject_init_and_add(&client->kobj, &ceph_client_ops,
 				   &ceph_kobj, "client%d", client->whoami);
 	if (ret)
 		goto out;
 
-	ret = kobject_init_and_add(&client->mdsc.kobj, &entity_type,
+	ret = kobject_init_and_add(&client->mdsc.kobj, &entity_ops,
 				   &client->kobj, "mdsc");
 	if (ret)
 		goto out;
@@ -187,15 +193,67 @@ void ceph_sysfs_client_cleanup(struct ceph_client *client)
 #endif	
 }
 
+DEF_ATTR_OP(ceph_mds_request)
+
+#define ADD_MDS_REQ_ATTR(a, n, m, sh, st) \
+	req->a.attr.name = n; \
+	req->a.attr.mode = m; \
+	req->a.show = sh; \
+	req->a.store = st; \
+	ret = sysfs_create_file(&req->kobj, &req->a.attr);
+
+static ssize_t req_mds_show(struct ceph_mds_request *req,
+			   struct ceph_mds_request_attr *attr, char *buf)
+{
+	return sprintf(buf, "%u.%u.%u.%u:%u (%s%d)\n",
+			IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
+			ENTITY_NAME(req->r_request->hdr.dst.name));
+}
+
+static ssize_t req_op_show(struct ceph_mds_request *req,
+			   struct ceph_mds_request_attr *attr, char *buf)
+{
+	int pos = 0, pathlen;
+	u64 pathbase;
+
+	char *path;
+
+	pos += sprintf(buf, "%s", ceph_mds_op_name(req->r_op));
+
+	if (req->r_dentry) {
+		path = ceph_mdsc_build_path(req->r_dentry, &pathlen, &pathbase, -1);
+		if (path)
+			pos += sprintf(buf+pos, " %s", path);
+	} else if (req->r_path1) {
+		pos += sprintf(buf+pos, " %s", req->r_path1);
+	}
+
+	if (req->r_old_dentry) {
+		path = ceph_mdsc_build_path(req->r_old_dentry, &pathlen, &pathbase, -1);
+		if (path)
+			pos += sprintf(buf+pos, " %s", path);
+	} else if (req->r_path2 &&
+		   req->r_op != CEPH_MDS_OP_FINDINODE) {
+			pos += sprintf(buf+pos, " %s", req->r_path2);
+	}
+
+	pos += sprintf(buf+pos, "\n");
+
+	return pos;
+}
+
 int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_request *req)
 {
 	int ret = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-	ret = kobject_init_and_add(&req->kobj, &client_type,
+	ret = kobject_init_and_add(&req->kobj, &ceph_mds_request_ops,
 				   &mdsc->kobj, "%d", req->r_tid);
 	if (ret)
 		goto out;
+
+	ADD_MDS_REQ_ATTR(k_mds, "mds", 0400, req_mds_show, NULL);
+	ADD_MDS_REQ_ATTR(k_op, "op", 0400, req_op_show, NULL);
 
 	return 0;
 
