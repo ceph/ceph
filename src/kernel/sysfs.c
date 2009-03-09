@@ -178,7 +178,7 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	ADD_ENTITY_ATTR(client, k_fsid, "fsid", 0400, fsid_show, NULL);
 	ADD_ENTITY_ATTR(client, k_monmap, "monmap", 0400, monmap_show, NULL);
 	ADD_ENTITY_ATTR(client, k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
-	ADD_ENTITY_ATTR(client, k_mdsmap, "osdmap", 0400, osdmap_show, NULL);
+	ADD_ENTITY_ATTR(client, k_osdmap, "osdmap", 0400, osdmap_show, NULL);
 	return 0;
 
 out:
