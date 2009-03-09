@@ -35,7 +35,7 @@ using namespace std;
 
 class filepath {
   inodeno_t ino;   // base inode.  ino=0 implies pure relative path.
-  string path;     // relative path.  leading / IFF ino=1.
+  string path;     // relative path.
 
   /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
@@ -45,10 +45,7 @@ class filepath {
   mutable vector<string> bits;
 
   void rebuild_path() {
-    if (absolute()) 
-      path = "/";
-    else
-      path.clear();
+    path.clear();
     for (unsigned i=0; i<bits.size(); i++) {
       if (i) path += "/";
       path += bits[i];
@@ -73,48 +70,33 @@ class filepath {
   }
 
  public:
-  filepath() : ino(0) {}
-  filepath(const char *s) : path(s) {
-    if (s[0] == '/') 
-      ino = 1;
-    else 
-      ino = 0;
-  }
-  filepath(const string &s) : path(s) {
-    if (s[0] == '/') 
-      ino = 1;
-    else 
-      ino = 0;
-  }
-  filepath(const string& s, inodeno_t i) : ino(i), path(s) { 
-    assert((ino == 1) == (s[0] == '/'));
-  }
-  filepath(const char* s, inodeno_t i) : ino(i), path(s) {
-    assert((ino == 1) == (s[0] == '/'));
-  }
+  filepath() : ino(0) { }
+  filepath(const string& s, inodeno_t i) : ino(i), path(s) { }
+  filepath(const char* s, inodeno_t i) : ino(i), path(s) { }
   filepath(const filepath& o) {
     ino = o.ino;
     path = o.path;
     bits = o.bits;
   }
-  filepath(inodeno_t i) : ino(i) {
-    if (i == 1)
-      path = "/";
-  }
+  filepath(inodeno_t i) : ino(i) { }
   
-  void set_path(const string& s) {
+  void set_path(const char *s, inodeno_t b) {
     path = s;
-    if (s[0] == '/')
-      ino = 1;
-    else
-      ino = 0;
-    bits.clear();
+    ino = b;
+  }
+
+  /*
+   * if we are fed a relative path as a string, either set ino=0 (strictly
+   * relative) or 1 (absolute).  throw out any leading '/'.
+   */
+  filepath(const char *s) {
+    set_path(s);
   }
   void set_path(const char *s) {
-    path = s;
-    if (s[0] == '/')
+    if (s[0] == '/') {
+      path = s + 1;    
       ino = 1;
-    else
+    } else
       ino = 0;
     bits.clear();
   }
@@ -213,7 +195,7 @@ WRITE_CLASS_ENCODER(filepath)
 
 inline ostream& operator<<(ostream& out, const filepath& path)
 {
-  if (path.get_ino() > 1)
+  if (path.get_ino())
     out << '#' << hex << path.get_ino() << dec << '/';
   return out << path.get_path();
 }

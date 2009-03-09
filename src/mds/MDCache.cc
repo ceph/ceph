@@ -2747,7 +2747,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 	 ++p) {
       CInode *in = get_inode(p->first);
       if (in && !in->is_auth()) continue;
-      string& path = weak->cap_export_paths[p->first];
+      filepath& path = weak->cap_export_paths[p->first];
       if (!in) {
 	if (!path_is_mine(path))
 	  continue;
@@ -2879,13 +2879,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
  * returns a C_Gather* is there is work to do.  caller is responsible for setting
  * the C_Gather completer.
  */
-C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
+C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
 
   // scan list
   set<CDir*> fetch_queue;
-  map<inodeno_t,string>::iterator p = pathmap.begin();
+  map<inodeno_t,filepath>::iterator p = pathmap.begin();
   while (p != pathmap.end()) {
     CInode *in = get_inode(p->first);
     if (in) {
@@ -2896,11 +2896,18 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,string>& pathmap)
 
     // traverse
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
-    filepath path(p->second);
-    CDir *dir = path_traverse_to_dir(path);
+    CDir *dir = path_traverse_to_dir(p->second);
     assert(dir);
-    fetch_queue.insert(dir);
-    p++;
+    if (!dir->is_complete()) {
+      fetch_queue.insert(dir);
+      p++;
+    } else {
+      // probably because the client created it and held a cap but it never committed
+      // to the journal, and the op hasn't replayed yet.
+      dout(5) << " dne (not created yet?) " << p->first << " at " << p->second << dendl;
+      missing.insert(p->first);
+      pathmap.erase(p++);
+    }
   }
 
   if (pathmap.empty()) {
@@ -3442,32 +3449,14 @@ void MDCache::rejoin_gather_finish()
   //  do this before ack, since some inodes we may have already gotten
   //  from surviving MDSs.
   if (!cap_import_paths.empty()) {
-    C_Gather *gather = parallel_fetch(cap_import_paths);
+    C_Gather *gather = parallel_fetch(cap_import_paths, cap_imports_missing);
     if (gather) {
       gather->set_finisher(new C_MDC_RejoinGatherFinish(this));
       return;
     }
   }
   
-  // process cap imports
-  //  ino -> client -> frommds -> capex
-  for (map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
-       p != cap_imports.end();
-       ++p) {
-    CInode *in = get_inode(p->first);
-    assert(in);
-    for (map<int, map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) 
-      for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
-	   r != q->second.end();
-	   ++r) {
-	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
-	if (r->first >= 0)
-	  rejoin_import_cap(in, q->first, r->second, r->first);
-      }
-  }
-  
+  process_imported_caps();
   process_reconnected_caps();
   identify_files_to_recover();
 
@@ -3480,6 +3469,34 @@ void MDCache::rejoin_gather_finish()
 
     // finally, kickstart past snap parent opens
     open_snap_parents();
+  }
+}
+
+void MDCache::process_imported_caps()
+{
+  // process cap imports
+  //  ino -> client -> frommds -> capex
+  map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
+  while (p != cap_imports.end()) {
+    CInode *in = get_inode(p->first);
+    if (!in) {
+      dout(10) << "process_imported_caps still missing " << p->first
+	       << ", will try again after replayed client requests"
+	       << dendl;
+      p++;
+      continue;
+    }
+    for (map<int, map<int,ceph_mds_cap_reconnect> >::iterator q = p->second.begin();
+	 q != p->second.end();
+	 ++q) 
+      for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
+	   r != q->second.end();
+	   ++r) {
+	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
+	if (r->first >= 0)
+	  rejoin_import_cap(in, q->first, r->second, r->first);
+      }
+    cap_imports.erase(p++);  // remove and move on
   }
 }
 
@@ -5384,8 +5401,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (in->is_symlink() &&
           (follow_trailing_symlink || depth < path.depth()-1)) {
         // symlink, resolve!
-        filepath sym = in->symlink;
-        dout(10) << "traverse: hit symlink " << *in << " to " << sym << dendl;
+        dout(10) << "traverse: hit symlink " << *in << " to " << in->symlink << dendl;
 
         // break up path components
         // /head/symlink/tail
@@ -5405,11 +5421,12 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
           // absolute
           trace.clear();
           depth = 0;
-	  path = in->symlink;
+	  path = filepath(in->symlink.c_str() + 1, 1);
 	  path.append(tail);
           dout(10) << "traverse: absolute symlink, path now " << path << " depth " << depth << dendl;
         } else {
           // relative
+	  filepath sym(in->symlink, 0);
           path = head;
           path.append(sym);
           path.append(tail);
@@ -5532,7 +5549,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
 bool MDCache::path_is_mine(filepath& path)
 {
-  dout(15) << "path_is_mine " << path << dendl;
+  dout(15) << "path_is_mine " << path.get_ino() << " " << path << dendl;
   
   CInode *cur = get_inode(path.get_ino());
   if (!cur)
@@ -7285,17 +7302,18 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       // wanted a dentry
       frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
       CDir *dir = cur->get_dirfrag(fg);
+      filepath relpath(m->get_error_dentry(), 0);
       if (dir) {
 	// don't actaully need the hint, now
 	if (dir->lookup(m->get_error_dentry()) == 0 &&
 	    dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) 
-	  discover_path(dir, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked()); 
+	  discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked()); 
 	else 
 	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry " 
 		  << m->get_error_dentry() << dendl;
       } else {
 	if (cur->is_waiter_for(CInode::WAIT_DIR)) 
-	  discover_path(cur, m->get_wanted_snapid(), m->get_error_dentry(), 0, m->get_wanted_xlocked(), who);
+	  discover_path(cur, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked(), who);
 	else
 	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
       }

@@ -1215,7 +1215,7 @@ void Client::send_reconnect(int mds)
 	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
-	m->add_cap(p->first.ino, path.get_path(),   // ino
+	m->add_cap(p->first.ino, path.get_ino(), path.get_path(),   // ino
 		   in->caps_wanted(), // wanted
 		   in->caps[mds]->issued,     // issued
 		   in->inode.size, in->inode.mtime, in->inode.atime, in->snaprealm->ino);
@@ -2744,7 +2744,7 @@ int Client::_symlink(const filepath &path, const char *target, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SYMLINK);
   req->set_filepath(path);
-  req->set_path2(target);
+  req->set_string2(target);
  
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4203,7 +4203,7 @@ int Client::_mksnap(const filepath& path, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
   req->set_filepath(path);
-  req->set_path2(name);
+  req->set_string2(name);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4218,7 +4218,7 @@ int Client::_rmsnap(const filepath& path, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
   req->set_filepath(path);
-  req->set_path2(name);
+  req->set_string2(name);
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4464,19 +4464,19 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
 
   int r = 0;
   if ((mask & FUSE_SET_ATTR_MODE) &&
-      ((r = _chmod(path.c_str(), attr->st_mode, false, uid, gid)) < 0)) return r;
+      ((r = _chmod(path, attr->st_mode, false, uid, gid)) < 0)) return r;
 
   if ((mask & (FUSE_SET_ATTR_UID|FUSE_SET_ATTR_GID)) &&
-      ((r = _chown(path.c_str(), attr->st_uid, attr->st_gid,
+      ((r = _chown(path, attr->st_uid, attr->st_gid,
 		   ((mask & FUSE_SET_ATTR_UID) ? CEPH_CHOWN_UID:0) |
 		   ((mask & FUSE_SET_ATTR_GID) ? CEPH_CHOWN_GID:0),
 		   false, uid, gid)) < 0)) return r;
 
   if ((mask & FUSE_SET_ATTR_SIZE) &&
-      ((r = _truncate(path.c_str(), attr->st_size, false, uid, gid)) < 0)) return r;
+      ((r = _truncate(path, attr->st_size, false, uid, gid)) < 0)) return r;
   
   if ((mask & (FUSE_SET_ATTR_MTIME|FUSE_SET_ATTR_ATIME)))
-    if ((r = _utimes(path.c_str(), utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0),
+    if ((r = _utimes(path, utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0),
 		     ((mask & FUSE_SET_ATTR_MTIME) ? CEPH_UTIME_MTIME:0) |
 		     ((mask & FUSE_SET_ATTR_ATIME) ? CEPH_UTIME_ATIME:0),
 		     false, uid, gid)) < 0) return r;
@@ -4596,7 +4596,7 @@ int Client::_setxattr(const filepath &path, const char *name, const void *value,
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LSETXATTR);
   req->set_filepath(path);
-  req->set_path2(name);
+  req->set_string2(name);
   req->head.args.setxattr.flags = flags;
 
   bufferlist bl;
@@ -4685,7 +4685,7 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
   filepath path;
   diri->make_path(path);
   path.push_dentry(name);
-  int r = _mknod(path.c_str(), mode, rdev, uid, gid);
+  int r = _mknod(path, mode, rdev, uid, gid);
   if (r == 0) {
     string dname(name);
     Inode *in = diri->dir->dentries[dname]->inode;
@@ -4716,7 +4716,7 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
   if (diri->snapid == CEPH_SNAPDIR) {
     MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
     req->set_filepath(path);
-    req->set_path2(name);
+    req->set_string2(name);
 
     Inode *in;
     MClientReply *reply = make_request(req, uid, gid, &in);
@@ -4730,7 +4730,7 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
     }
   } else {
     path.push_dentry(name);
-    r = _mkdir(path.c_str(), mode, uid, gid);
+    r = _mkdir(path, mode, uid, gid);
     if (r == 0) {
       string dname(name);
       Inode *in = diri->dir->dentries[dname]->inode;
@@ -4784,7 +4784,7 @@ int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
   filepath path;
   diri->make_path(path);
   path.push_dentry(name);
-  return _unlink(path.c_str(), uid, gid);
+  return _unlink(path, uid, gid);
 }
 
 int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
@@ -4803,7 +4803,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
   if (diri->snapid == CEPH_SNAPDIR) {
     MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
     req->set_filepath(path);
-    req->set_path2(name);
+    req->set_string2(name);
     MClientReply *reply = make_request(req, uid, gid);
     int r = reply->get_result();
     delete reply;
@@ -4811,7 +4811,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
   }
 
   path.push_dentry(name);
-  return _rmdir(path.c_str(), uid, gid);
+  return _rmdir(path, uid, gid);
 }
 
 int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid, int gid)
@@ -4835,7 +4835,7 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
   newdiri->make_path(newpath);
   newpath.push_dentry(newname);
 
-  return _rename(path.c_str(), newpath.c_str(), uid, gid);
+  return _rename(path, newpath, uid, gid);
 }
 
 int Client::ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid, int gid)
@@ -4857,7 +4857,7 @@ int Client::ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, 
   diri->make_path(newpath);
   newpath.push_dentry(newname);
 
-  int r = _link(path.c_str(), newpath.c_str(), uid, gid);
+  int r = _link(path, newpath, uid, gid);
   if (r == 0) {
     Inode *in = _ll_get_inode(vino);
     fill_stat(in, attr);
@@ -4889,7 +4889,7 @@ int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
   if (vino.snapid == CEPH_SNAPDIR) {
     *dirpp = new DirResult(path, diri);
   } else {
-    r = _opendir(path.c_str(), (DirResult**)dirpp);
+    r = _opendir(path, (DirResult**)dirpp);
   }
 
   tout << (unsigned long)*dirpp << std::endl;
@@ -4919,7 +4919,7 @@ int Client::ll_open(vinodeno_t vino, int flags, Fh **fhp, int uid, int gid)
   filepath path;
   in->make_path(path);
 
-  int r = _open(path.c_str(), flags, 0, fhp, uid, gid);
+  int r = _open(path, flags, 0, fhp, uid, gid);
 
   tout << (unsigned long)*fhp << std::endl;
   dout(3) << "ll_open " << vino << " " << flags << " = " << r << " (" << *fhp << ")" << dendl;
@@ -4942,7 +4942,7 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   pin->make_path(path);
   path.push_dentry(name);
 
-  int r = _open(path.c_str(), flags|O_CREAT, mode, fhp, uid, gid);
+  int r = _open(path, flags|O_CREAT, mode, fhp, uid, gid);
   if (r >= 0) {
     Inode *in = (*fhp)->inode;
     fill_stat(in, attr);

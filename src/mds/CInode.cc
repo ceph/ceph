@@ -1343,7 +1343,7 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 
 
 bool CInode::encode_inodestat(bufferlist& bl, Session *session,
-			      snapid_t snapid)
+			      snapid_t snapid, bool is_replay)
 {
   int client = session->inst.name.num();
 
@@ -1440,6 +1440,19 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (valid && !cap && is_auth()) {
       // add a new cap
       cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
+    }
+
+    if (is_replay) {
+      // if this is a replayed request, check for a cap reconnect
+      ceph_mds_cap_reconnect *rc = mdcache->get_replay_cap_reconnect(pi->ino, client);
+      if (rc) {
+	// we should only have the cap reconnect for ONE client, and from ourselves.
+	dout(10) << " incorporating cap reconnect wanted " << ccap_string(rc->wanted)
+		 << " issue " << ccap_string(rc->issued) << " on " << *this << dendl;
+	cap->set_wanted(rc->wanted);
+	cap->issue(rc->issued);
+	mdcache->remove_replay_cap_reconnect(pi->ino, client);
+      }
     }
 
     // if we're a directory, maybe bump filelock to loner?

@@ -100,19 +100,18 @@ public:
     return head.op & CEPH_MDS_OP_FOLLOW_LINK;
   }
 
-
+  bool is_replay() {
+    return head.retry_attempt == CEPH_MDS_REQUEST_REPLAY;
+  }
 
   // normal fields
   void set_tid(tid_t t) { head.tid = t; }
   void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
   void set_retry_attempt(int a) { head.retry_attempt = a; }
-  void set_path(string& p) { path.set_path(p); }
-  void set_path(const char *p) { path.set_path(p); }
   void set_filepath(const filepath& fp) { path = fp; }
-  void set_path2(string& p) { path2.set_path(p); }
-  void set_path2(const char *p) { path2.set_path(p); }
   void set_filepath2(const filepath& fp) { path2 = fp; }
+  void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 

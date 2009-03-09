@@ -688,7 +688,7 @@ protected:
       return filepath(rel, 1);
     
     filepath t = cwd;
-    filepath r(rel);
+    filepath r(rel, 0);
     t.append(r);
     return t;
   }

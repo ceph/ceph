@@ -1085,7 +1085,10 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 
 	rhead = msg->front.iov_base;
 	rhead->tid = cpu_to_le64(req->r_tid);
-	rhead->retry_attempt = cpu_to_le32(req->r_attempts - 1);
+	if (req->r_got_safe)
+		rhead->retry_attempt = cpu_to_le32(CEPH_MDS_REQUEST_REPLAY);
+	else
+		rhead->retry_attempt = cpu_to_le32(req->r_attempts - 1);
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
 	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
 
@@ -1198,6 +1201,8 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 			break;
 		nexttid = reqs[got-1]->r_tid + 1;
 		for (i = 0; i < got; i++) {
+			if (reqs[i]->r_got_unsafe)
+				continue;
 			if (((reqs[i]->r_session &&
 			      reqs[i]->r_session->s_mds == mds) ||
 			     (all && reqs[i]->r_fwd_session &&
@@ -1721,6 +1726,7 @@ retry:
 		BUG_ON(p > end);
 		spin_lock(&inode->i_lock);
 		cap->seq = 0;  /* reset cap seq */
+		rec->pathbase = cpu_to_le64(pathbase);
 		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
 		rec->issued = cpu_to_le32(cap->issued);
 		rec->size = cpu_to_le64(inode->i_size);
