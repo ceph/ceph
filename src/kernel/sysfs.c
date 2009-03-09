@@ -45,6 +45,14 @@ static struct kobj_type name##_ops = {						\
 	.sysfs_ops = &name##_sysfs_ops,						\
 };
 
+#define ADD_ENTITY_ATTR(ent, a, n, m, sh, st) \
+	ent->a.attr.name = n; \
+	ent->a.attr.mode = m; \
+	ent->a.show = sh; \
+	ent->a.store = st; \
+	ret = sysfs_create_file(&ent->kobj, &ent->a.attr);
+
+
 
 DEF_ATTR_OP(ceph_client)
 
@@ -152,13 +160,6 @@ static struct kobj_type entity_ops = {
 };
 
 
-#define ADD_CLIENT_ATTR(a, n, m, sh, st) \
-	client->a.attr.name = n; \
-	client->a.attr.mode = m; \
-	client->a.show = sh; \
-	client->a.store = st; \
-	ret = sysfs_create_file(&client->kobj, &client->a.attr);
-
 int ceph_sysfs_client_init(struct ceph_client *client)
 {
 	int ret = 0;
@@ -174,10 +175,10 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	if (ret)
 		goto out;
 
-	ADD_CLIENT_ATTR(k_fsid, "fsid", 0400, fsid_show, NULL);
-	ADD_CLIENT_ATTR(k_monmap, "monmap", 0400, monmap_show, NULL);
-	ADD_CLIENT_ATTR(k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
-	ADD_CLIENT_ATTR(k_mdsmap, "osdmap", 0400, osdmap_show, NULL);
+	ADD_ENTITY_ATTR(client, k_fsid, "fsid", 0400, fsid_show, NULL);
+	ADD_ENTITY_ATTR(client, k_monmap, "monmap", 0400, monmap_show, NULL);
+	ADD_ENTITY_ATTR(client, k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
+	ADD_ENTITY_ATTR(client, k_mdsmap, "osdmap", 0400, osdmap_show, NULL);
 	return 0;
 
 out:
@@ -194,13 +195,6 @@ void ceph_sysfs_client_cleanup(struct ceph_client *client)
 }
 
 DEF_ATTR_OP(ceph_mds_request)
-
-#define ADD_MDS_REQ_ATTR(a, n, m, sh, st) \
-	req->a.attr.name = n; \
-	req->a.attr.mode = m; \
-	req->a.show = sh; \
-	req->a.store = st; \
-	ret = sysfs_create_file(&req->kobj, &req->a.attr);
 
 static ssize_t req_mds_show(struct ceph_mds_request *req,
 			   struct ceph_mds_request_attr *attr, char *buf)
@@ -252,8 +246,8 @@ int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_reques
 	if (ret)
 		goto out;
 
-	ADD_MDS_REQ_ATTR(k_mds, "mds", 0400, req_mds_show, NULL);
-	ADD_MDS_REQ_ATTR(k_op, "op", 0400, req_op_show, NULL);
+	ADD_ENTITY_ATTR(req, k_mds, "mds", 0400, req_mds_show, NULL);
+	ADD_ENTITY_ATTR(req, k_op, "op", 0400, req_op_show, NULL);
 
 	return 0;
 
