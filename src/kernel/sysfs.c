@@ -141,6 +141,11 @@ static ssize_t osdmap_show(struct ceph_client *client,
 	return pos;
 }
 
+static struct kobj_type entity_type = {
+	.sysfs_ops = &generic_sysfs_ops,
+};
+
+
 #define ADD_CLIENT_ATTR(a, n, m, sh, st) \
 	client->a.attr.name = n; \
 	client->a.attr.mode = m; \
@@ -158,6 +163,11 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	if (ret)
 		goto out;
 
+	ret = kobject_init_and_add(&client->mdsc.kobj, &entity_type,
+				   &client->kobj, "mdsc");
+	if (ret)
+		goto out;
+
 	ADD_CLIENT_ATTR(k_fsid, "fsid", 0400, fsid_show, NULL);
 	ADD_CLIENT_ATTR(k_monmap, "monmap", 0400, monmap_show, NULL);
 	ADD_CLIENT_ATTR(k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
@@ -172,8 +182,33 @@ out:
 void ceph_sysfs_client_cleanup(struct ceph_client *client)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	kobject_del(&client->mdsc.kobj);
 	kobject_del(&client->kobj);
 #endif	
+}
+
+int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_request *req)
+{
+	int ret = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	ret = kobject_init_and_add(&req->kobj, &client_type,
+				   &mdsc->kobj, "%d", req->r_tid);
+	if (ret)
+		goto out;
+
+	return 0;
+
+out:
+#endif
+	return ret;
+}
+
+void ceph_sysfs_mds_req_cleanup(struct ceph_mds_request *req)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	kobject_del(&req->kobj);
+#endif
 }
 
 /*

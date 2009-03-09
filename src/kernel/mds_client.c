@@ -446,6 +446,8 @@ static void __register_request(struct ceph_mds_client *mdsc,
 		list_add_tail(&req->r_listener_item, &ci->i_listener_list);
 		spin_unlock(&ci->i_listener_lock);
 	}
+
+	ceph_sysfs_mds_req_init(mdsc, req);
 }
 
 static void __unregister_request(struct ceph_mds_client *mdsc,
@@ -462,6 +464,8 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 		list_del_init(&req->r_listener_item);
 		spin_unlock(&ci->i_listener_lock);
 	}
+
+	ceph_sysfs_mds_req_cleanup(req);
 }
 
 static bool __have_session(struct ceph_mds_client *mdsc, int mds)

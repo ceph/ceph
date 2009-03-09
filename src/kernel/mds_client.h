@@ -192,6 +192,8 @@ struct ceph_mds_request {
 	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
 	bool		  r_got_unsafe, r_got_safe;
+
+	struct kobject	  kobj;
 };
 
 /*
@@ -229,6 +231,8 @@ struct ceph_mds_client {
 	spinlock_t       cap_delay_lock;   /* protects cap_delay_list */
 	struct list_head snap_flush_list;  /* cap_snaps ready to flush */
 	spinlock_t       snap_flush_lock;
+
+	struct kobject		kobj;
 };
 
 extern const char *ceph_mds_op_name(int op);
