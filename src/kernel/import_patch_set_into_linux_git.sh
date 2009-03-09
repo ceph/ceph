@@ -73,7 +73,15 @@ ceph: inode operations
 Inode cache and inode operations.  We also include routines to
 incorporate metadata structures returned by the MDS into the client
 cache, and some helpers to deal with file capabilities and metadata
-leases.
+leases.  The bulk of that work is done by fill_inode() and
+fill_trace().
+
+Most MDS responses include a "trace" of dentry and inode information
+from the inode in question back to the root.  fill_trace() takes pains
+to ensure that the dcache is updated safely.  If the directory i_mutex
+is not already held and cannot be taken (via trylock), that segment of
+the trace is skipped.  If an inode is linked incorrectly, we attempt
+to reattach it in the correct position in the hierarchy.
 
 EOF
 
@@ -117,8 +125,8 @@ and ensure that dirty data is written out to the OSDs in snapshort
 order.
 
 A writepage() on a page that is not currently writeable due to
-snapshot writeback ordering (presumably called from kswapd) is
-ignored.
+snapshot writeback ordering constraints is ignored (it was presumably
+called from kswapd).
 
 EOF
 
@@ -198,7 +206,8 @@ ceph: monitor client
 
 The monitor cluster is responsible for managing cluster membership
 and state.  The monitor client handles what minimal interaction
-the Ceph client has with it.
+the Ceph client has with it: checking for updated versions of the
+MDS and OSD maps, and getting statfs() information.
 
 EOF
 
@@ -210,6 +219,20 @@ The Ceph metadata servers control client access to data by issuing
 capabilities granting clients permission to read and/or write to OSDs
 (storage nodes).  Each capability consists of a set of bits indicating
 which operations are allowed.
+
+In the case of an EXCL (exclusive) or WR capabilities, the client is
+allowed to change inode attributes (e.g., file size, mtime), noting
+it's dirty state in the ceph_cap, and asynchronously flush that
+metadata change to the MDS.
+
+In the event of a conflicting operation (perhaps by another client),
+the MDS will revoke the conflicting client capabilities.
+
+A subset of capabilities (termed 'rdcaps') are opportunistically
+issued by the MDS to grant the a client read lease on metadata, and
+time out automatically.  Other capabilities (write capabilities, and
+those that are "wanted" due to an open file) are explicitly released.
+
 EOF
 
 git add fs/ceph/snap.c
@@ -271,8 +294,8 @@ git commit -F - <<EOF
 ceph: debugging
 
 Some debugging infrastructure, including the ability to adjust the
-level of debug output on a per-file basis.  A memory leak check tool
-can also be enabled via .config.
+level of debug output on a per-file basis.  A memory leak detection
+tool can also be enabled via .config.
 
 EOF
 
