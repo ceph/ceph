@@ -105,7 +105,7 @@ get_conf() {
 		tmp=$tmp" -s $1"
 		shift
 	done
-	eval $var=`$CCONF -c $conf $tmp "$key" "$def"`
+	eval "$var=\"`$CCONF -c $conf $tmp \"$key\" \"$def\"`\""
 }
 
 get_conf_bool() {
