@@ -216,16 +216,20 @@ static ssize_t req_op_show(struct ceph_mds_request *req,
 
 	if (req->r_dentry) {
 		path = ceph_mdsc_build_path(req->r_dentry, &pathlen, &pathbase, -1);
-		if (path)
+		if (path) {
 			pos += sprintf(buf+pos, " %s", path);
+			kfree(path);
+		}
 	} else if (req->r_path1) {
 		pos += sprintf(buf+pos, " %s", req->r_path1);
 	}
 
 	if (req->r_old_dentry) {
 		path = ceph_mdsc_build_path(req->r_old_dentry, &pathlen, &pathbase, -1);
-		if (path)
+		if (path) {
 			pos += sprintf(buf+pos, " %s", path);
+			kfree(path);
+		}
 	} else if (req->r_path2 &&
 		   req->r_op != CEPH_MDS_OP_FINDINODE) {
 			pos += sprintf(buf+pos, " %s", req->r_path2);
