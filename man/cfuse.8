@@ -1,0 +1,43 @@
+.TH CFUSE 8
+.SH NAME
+cfuse \- FUSE-based client for ceph
+.SH SYNOPSIS
+.B cfuse
+[ \fB\-m monaddr:port\fP ]
+\fImountpoint\fP
+[ \fIfuse options\fP ]
+.SH DESCRIPTION
+.B cfuse
+is a FUSE (File system in USErspace) client for Ceph distributed
+file system.  It will mount a ceph file system (specified via the
+\fB\-m\fP option for described by \fIcluster.conf\fP (see below) at
+the specific mount point.
+.PP
+The file system can be unmounted with:
+.IP
+fusermount -u \fImountpoint\fP
+.PP
+or by sending SIGINT to the \fBcfuse\fP process.
+.SH OPTIONS
+Any options not recognized by \fBcfuse\fP will be passed on to libfuse.
+.TP
+\fB\-d\fP
+Detach from console and daemonize after startup.
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+for runtime configuration options.
+.TP
+\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
+Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
+.SH AVAILABILITY
+.B cfuse
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR fusermount (8),
+.BR ceph (8)
