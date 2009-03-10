@@ -127,7 +127,7 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	
 	if [ $mkbtrfs -eq 1 ]; then
-	    do_cmd "modprobe btrfs ; umount $btrfs_path ; mkfs.btrfs $btrfs_devs ; mount -t btrfs $first_dev $btrfs_path"
+	    do_cmd "modprobe btrfs ; umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; mkfs.btrfs $btrfs_devs ; btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
 	fi
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap

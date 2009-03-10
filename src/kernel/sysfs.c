@@ -11,38 +11,38 @@ static struct kobject ceph_kobj;
  */
 
 #define DEF_ATTR_OP(name) \
-static ssize_t name##_attr_show(struct kobject *kobj, struct attribute *attr,	\
-				char *buf)					\
-{										\
-	struct name##_attr *a =							\
-		container_of(attr, struct name##_attr, attr);			\
-	struct name *c = container_of(kobj, struct name, kobj);			\
-	ssize_t ret = -EIO;							\
-										\
-	if (a->show)								\
-		ret = a->show(c, a, buf);					\
-	return ret;								\
-}										\
-										\
-static ssize_t name##_attr_store(struct kobject *kobj, struct attribute *attr,	\
-				 const char *buf, size_t count)			\
-{										\
-	struct name##_attr *a = container_of(attr, struct name##_attr, attr);	\
-	struct name *c = container_of(kobj, struct name, kobj);			\
-	ssize_t ret = -EIO;							\
-										\
-	if (a->store)								\
-		ret = a->store(c, a, buf, count);				\
-	return ret;								\
-}										\
-										\
-static struct sysfs_ops name##_sysfs_ops = {					\
-	.show	= name##_attr_show,						\
-	.store	= name##_attr_store,						\
-};										\
-										\
-static struct kobj_type name##_ops = {						\
-	.sysfs_ops = &name##_sysfs_ops,						\
+static ssize_t name##_attr_show(struct kobject *kobj, struct attribute *attr,\
+				char *buf)				\
+{									\
+	struct name##_attr *a =						\
+		container_of(attr, struct name##_attr, attr);		\
+	struct name *c = container_of(kobj, struct name, kobj);		\
+	ssize_t ret = -EIO;						\
+									\
+	if (a->show)							\
+		ret = a->show(c, a, buf);				\
+	return ret;							\
+}									\
+									\
+static ssize_t name##_attr_store(struct kobject *kobj, struct attribute *attr, \
+				 const char *buf, size_t count)		\
+{									\
+	struct name##_attr *a = container_of(attr, struct name##_attr, attr); \
+	struct name *c = container_of(kobj, struct name, kobj);		\
+	ssize_t ret = -EIO;						\
+									\
+	if (a->store)							\
+		ret = a->store(c, a, buf, count);			\
+	return ret;							\
+}									\
+									\
+static struct sysfs_ops name##_sysfs_ops = {				\
+	.show	= name##_attr_show,					\
+	.store	= name##_attr_store,					\
+};									\
+									\
+static struct kobj_type name##_ops = {					\
+	.sysfs_ops = &name##_sysfs_ops,					\
 };
 
 #define ADD_ENTITY_ATTR(ent, a, n, m, sh, st) \
@@ -184,7 +184,7 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	ADD_ENTITY_ATTR(client, k_fsid, "fsid", 0400, fsid_show, NULL);
 	ADD_ENTITY_ATTR(client, k_monmap, "monmap", 0400, monmap_show, NULL);
 	ADD_ENTITY_ATTR(client, k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
-	ADD_ENTITY_ATTR(client, k_mdsmap, "osdmap", 0400, osdmap_show, NULL);
+	ADD_ENTITY_ATTR(client, k_osdmap, "osdmap", 0400, osdmap_show, NULL);
 	return 0;
 
 out:

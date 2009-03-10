@@ -97,6 +97,9 @@ static int crush_decode_straw_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_straw_bucket %p to %p\n", *p, end);
+	b->item_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
+	if (b->item_weights == NULL)
+		return -ENOMEM;
 	b->straws = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
 	if (b->straws == NULL)
 		return -ENOMEM;
@@ -153,19 +156,18 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	/* buckets */
 	for (i = 0; i < c->max_buckets; i++) {
 		int size = 0;
-		u32 type;
+		u32 alg;
 		struct crush_bucket *b;
 
-		dout(30, "crush_decode bucket %d off %x %p to %p\n",
-		     i, (int)(*p-start), *p, end);
-
-		ceph_decode_32_safe(p, end, type, bad);
-		if (type == 0) {
+		ceph_decode_32_safe(p, end, alg, bad);
+		if (alg == 0) {
 			c->buckets[i] = NULL;
 			continue;
 		}
+		dout(30, "crush_decode bucket %d off %x %p to %p\n",
+		     i, (int)(*p-start), *p, end);
 
-		switch (type) {
+		switch (alg) {
 		case CRUSH_BUCKET_UNIFORM:
 			size = sizeof(struct crush_bucket_uniform);
 			break;
@@ -204,7 +206,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 		for (j = 0; j < b->size; j++)
 			ceph_decode_32(p, b->items[j]);
 
-		switch (b->type) {
+		switch (b->alg) {
 		case CRUSH_BUCKET_UNIFORM:
 			err = crush_decode_uniform_bucket(p, end,
 				  (struct crush_bucket_uniform *)b);
