@@ -620,9 +620,27 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
 
 int usage(const char *me)
 {
-  cout << me << ": usage: crushtool [-d map] [-c map.txt] [-o outfile [--clobber]]" << std::endl;
+  cout << me << ": usage: crushtool [-d map] [-c map.txt] [-o outfile [--clobber]] [--build --num_osd N layer1 ...]" << std::endl;
+  cout << me << "  (where each 'layer' is 'name (uniform|straw|list|tree) size')" << std::endl;
   exit(1);
 }
+
+struct bucket_types_t {
+  const char *name;
+  int type;
+} bucket_types[] = {
+  { "uniform", CRUSH_BUCKET_UNIFORM },
+  { "list", CRUSH_BUCKET_LIST },
+  { "straw", CRUSH_BUCKET_STRAW },
+  { "tree", CRUSH_BUCKET_TREE },
+  { 0, 0 },
+};
+
+struct layer_t {
+  const char *name;
+  const char *buckettype;
+  int size;
+};
 
 int main(int argc, const char **argv)
 {
@@ -636,6 +654,10 @@ int main(int argc, const char **argv)
   const char *outfn = 0;
   bool clobber = false;
 
+  int build = 0;
+  int num_osds =0;
+  vector<layer_t> layers;
+
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--clobber") == 0) 
       clobber = true;
@@ -647,12 +669,23 @@ int main(int argc, const char **argv)
       cinfn = args[++i];
     else if (strcmp(args[i], "-v") == 0)
       verbose++;
-    else 
+    else if (strcmp(args[i], "--build") == 0)
+      build = 1;
+    else if (strcmp(args[i], "--num_osds") == 0)
+      num_osds = atoi(args[++i]);
+    else if (!build)
       usage(me);
+    else if (i + 3 <= args.size()) {
+      layer_t l;
+      l.name = args[i++];
+      l.buckettype = args[i++];
+      l.size = atoi(args[i]);
+      layers.push_back(l);
+    }      
   }
-  if (cinfn && dinfn)
+  if ((cinfn?1:0) + (dinfn?1:0) + build > 1)
     usage(me);
-  if (!cinfn && !dinfn)
+  if (!cinfn && !dinfn && !build)
     usage(me);
 
   /*
@@ -685,14 +718,124 @@ int main(int argc, const char **argv)
     } else 
       decompile_crush(crush, cout);
   }
-
   if (cinfn) {
     crush.create();
     int r = compile_crush_file(cinfn, crush);
     crush.finalize();
     if (r < 0) 
       exit(1);
+    if (!outfn)
+      cout << me << " successfully compiled '" << cinfn << "'.  Use -o file to write it out." << std::endl;
+  }
+  if (build) {
+    if (layers.empty()) {
+      cerr << me << ": must specify at least one layer" << std::endl;
+      exit(1);
+    }
 
+    crush.create();
+
+    vector<int> lower_items;
+    vector<int> lower_weights;
+
+    for (int i=0; i<num_osds; i++) {
+      lower_items.push_back(i);
+      lower_weights.push_back(0x10000);
+    }
+
+    int type = 1;
+    int rootid = 0;
+    for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); p++, type++) {
+      layer_t &l = *p;
+
+      dout(0) << "layer " << type
+	      << "  " << l.name
+	      << "  bucket type " << l.buckettype
+	      << "  " << l.size 
+	      << dendl;
+
+      crush.set_type_name(type, l.name);
+
+      int buckettype = -1;
+      for (int i = 0; i < (int)sizeof(bucket_types); i++)
+	if (strcmp(l.buckettype, bucket_types[i].name) == 0) {
+	  buckettype = bucket_types[i].type;
+	  break;
+	}
+      if (buckettype < 0) {
+	cerr << "unknown bucket type '" << l.buckettype << "'" << std::endl;
+	exit(1);
+      }
+
+      // build items
+      vector<int> cur_items;
+      vector<int> cur_weights;
+      unsigned lower_pos = 0;  // lower pos
+
+      dout(0) << "lower_items " << lower_items << dendl;
+      dout(0) << "lower_weights " << lower_weights << dendl;
+
+      int i = 0;
+      while (1) {
+	if (lower_pos == lower_items.size())
+	  break;
+
+	int items[num_osds];
+	int weights[num_osds];
+
+	int weight = 0;
+	int j;
+	for (j=0; j<l.size || l.size==0; j++) {
+	  if (lower_pos == lower_items.size())
+	    break;
+	  items[j] = lower_items[lower_pos];
+	  weights[j] = lower_weights[lower_pos];
+	  weight += weights[j];
+	  lower_pos++;
+	  dout(0) << "  item " << items[j] << " weight " << weights[j] << dendl;
+	}
+
+	crush_bucket *b = crush_make_bucket(buckettype, type, j, items, weights);
+	int id = crush_add_bucket(crush.crush, 0, b);
+	rootid = id;
+
+	char format[20];
+	if (l.size)
+	  sprintf(format, "%s%%d", l.name);
+	else
+	  sprintf(format, l.name);
+	char name[20];
+	sprintf(name, format, i);
+	crush.set_item_name(id, name);
+
+	dout(0) << " in bucket " << id << " '" << name << "' size " << j << " weight " << weight << dendl;
+
+	cur_items.push_back(id);
+	cur_weights.push_back(weight);
+	i++;
+      }
+
+      lower_items.swap(cur_items);
+      lower_weights.swap(cur_weights);
+    }
+    
+    // make some generic rules
+    for (int pool=0; pool<3; pool++) {
+      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, 2, 2);
+      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+      int rno = crush_add_rule(crush.crush, rule, -1);
+      crush.set_rule_name(rno, get_pool_name(pool));
+    }
+
+    crush.finalize();
+    dout(0) << "crush max_devices " << crush.crush->max_devices << dendl;
+
+    if (!outfn)
+      cout << me << " successfully built map.  Use -o file to write it out." << std::endl;
+  }
+  if (cinfn || build) {
     if (outfn) {
       bufferlist bl;
       crush.encode(bl);
@@ -703,8 +846,6 @@ int main(int argc, const char **argv)
       }
       if (verbose)
 	cout << "wrote crush map to " << outfn << std::endl;
-    } else {
-      cout << me << " successfully compiled '" << cinfn << "'.  Use -o file to write it out." << std::endl;
     }
   }
 
