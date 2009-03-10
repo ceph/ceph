@@ -148,7 +148,7 @@ for name in $what; do
 	module_opt="$mon_addr_arg $osd_data $osd_journal_cmd"
 	module_bin="$BINDIR/cosd"
 
-	get_conf btrfs_path "$osd_path" "btrfs path" $sections  # mount point defaults so osd path
+	get_conf btrfs_path "$osd_data" "btrfs path" $sections  # mount point defaults so osd path
 	get_conf btrfs_devs "" "btrfs devs" $sections
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
@@ -173,7 +173,7 @@ for name in $what; do
 	    cmd="$wrap $module_bin $runflags $module_opt $runmode"
 	    
 	    echo Starting ceph $name on $host...
-	    [ $dobtrfs -eq 1 ] && do_cmd "mount -t btrfs $first_dev $btrfs_path"
+	    [ $dobtrfs -eq 1 ] && do_cmd "btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
             do_cmd "$cmd"
 	    ;;
 	

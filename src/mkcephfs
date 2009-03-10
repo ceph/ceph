@@ -121,8 +121,8 @@ for name in $what; do
     fi
 
     if [[ $type = "osd" ]]; then
-	get_conf osd_path "" "osd data" $sections
-	get_conf btrfs_path "$osd_path" "btrfs path" $sections  # mount point defaults so osd path
+	get_conf osd_data "" "osd data" $sections
+	get_conf btrfs_path "$osd_data" "btrfs path" $sections  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs" $sections
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	
@@ -131,7 +131,7 @@ for name in $what; do
 	fi
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_path"
+	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_data"
     fi
 
     if [[ $type = "mds" ]]; then
