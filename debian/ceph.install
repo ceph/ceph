@@ -15,3 +15,7 @@ usr/sbin/mkcephfs
 usr/lib/ceph/ceph_common.sh
 etc/ceph/sample.ceph.conf
 etc/ceph/sample.cluster.conf
+usr/share/man/man8/cmon.8
+usr/share/man/man8/cmds.8
+usr/share/man/man8/cosd.8
+usr/share/man/man8/mkcephfs.8
