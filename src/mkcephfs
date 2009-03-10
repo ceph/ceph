@@ -1,4 +1,4 @@
--c#!/bin/sh
+#!/bin/sh
 
 # if we start up with "./", assume everything else is in the current
 # directory too.
