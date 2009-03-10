@@ -359,7 +359,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(global, conf_file, 'c', STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
 	OPTION(global, cluster_conf_file, 'C', STR, INSTALL_PREFIX "/etc/ceph/cluster.conf"),
 	OPTION(global, dump_conf, 0, BOOL, false),
-	OPTION(global, chdir_root, 0, BOOL, true),	// chdir("/") after daemonizing. if true, we generate absolute paths as needed.
+	OPTION(global, chdir, 0, STR, "/"),
 	OPTION(global, fake_clock, 0, BOOL, false),
 	OPTION(global, fakemessenger_serialize, 0, BOOL, true),
 	OPTION(global, kill_after, 0, INT, 0),

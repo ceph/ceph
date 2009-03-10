@@ -68,7 +68,7 @@ struct md_config_t {
   const char *cluster_conf_file;
   bool dump_conf;
 
-  bool chdir_root;
+  const char *chdir;
 
   bool fake_clock;
   bool fakemessenger_serialize;
