@@ -1,0 +1,75 @@
+.TH CSYN 8
+.SH NAME
+csyn \- ceph synthetic workload generator
+.SH SYNOPSIS
+.B csyn
+[ \fB\-m monaddr:port\fP ]
+\fB--syn\fI command ...\fP
+.SH DESCRIPTION
+.B csyn
+is a simple synthetic workload generator for the Ceph distributed file system.
+It uses the userspace client library to generate simple workloads against
+a currently running file system.  The file system need not be mounted via
+.BR cfuse (8)
+or the kernel client.
+.PP
+One or more \fB--syn\fI command\fR arguments specify the particular workload,
+as documented below.
+.SH OPTIONS
+.TP
+\fB\-d\fP
+Detach from console and daemonize after startup.
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+for runtime configuration options.
+.TP
+\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
+Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
+.TP
+\fB\-\-num_client\fI num\fR
+Run \fInum\fR different clients, each in a separate thread.
+.TP
+\fB\-\-syn\fI workloadspec\fR
+Run the given workload.  May be specified as many times as needed.  Workloads will
+normally run sequentially.
+.SH WORKLOADS
+Each workload should be preceeded by \fB--syn\fP on the command line.  This is not a
+complete list.
+.TP
+\fBmknap\fI path snapname\fP
+Create a snapshot called \fIsnapname\fP on \fIpath\fP.
+.TP
+\fBrmsnap\fI path snapname\fP
+Delete snapshot called \fIsnapname\fP on \fIpath\fP.
+.TP
+\fBrmfile\fI path\fP
+Delete/unlink \fIpath\fP.
+.TP
+\fBwritefile\fI sizeinmb blocksize\fP
+Create a file, named after our client id, that is \fIsizeinmb\fP MB by writing \fIblocksize\fP chunks.
+.TP
+\fBreadfile\fI sizeinmb blocksize\fP
+Read file, named after our client id, that is \fIsizeinmb\fP MB by writing \fIblocksize\fP chunks.
+.TP
+\fBrw\fI sizeinmb blocksize\fP
+Write file, then read it back, as above.
+.TP
+\fBmakedirs\fI numsubdirs numfiles depth\fP
+Create a hierarchy of directories that is \fIdepth\fP levels deep.  Give each
+directory \fInumsubdirs\fP subdirectories and \fInumfiles\fP files.
+.TP
+\fBwalk\fP
+Recursively walk the file system (like \fBfind\fP).
+
+.SH AVAILABILITY
+.B csyn
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR cfuse (8)

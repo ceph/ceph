@@ -19,3 +19,5 @@ usr/share/man/man8/cmon.8
 usr/share/man/man8/cmds.8
 usr/share/man/man8/cosd.8
 usr/share/man/man8/mkcephfs.8
+usr/share/man/man8/crun.8
+usr/share/man/man8/csyn.8
