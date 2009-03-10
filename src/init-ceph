@@ -49,7 +49,7 @@ options=
 
 version=0
 dovalgrind=0
-docrun=1
+docrun=0
 allhosts=0
 debug=0
 monaddr=
@@ -173,16 +173,32 @@ for name in $what; do
 	    cmd="$wrap $module_bin $runflags $module_opt $runmode"
 	    
 	    echo Starting ceph $name on $host...
-	    [ $dobtrfs -eq 1 ] && do_cmd "mount -t btrfs $first_dev $btrfs_path"
-            do_cmd "$cmd"
+	    if [ $dobtrfs -eq 1 ]; then
+		get_conf pre_mount "true" "pre mount command" $sections
+		[[ $pre_mount != "" ]] && do_cmd $pre_mount
+		do_cmd "mount -t btrfs $first_dev $btrfs_path"
+	    fi
+	    get_conf pre_start "" "pre start command" $sections
+	    get_conf post_start "" "post start command" $sections
+            [[ $pre_start != "" ]] && do_cmd $pre_start
+	    do_cmd "$cmd"
+            [[ $post_start != "" ]] && do_cmd $post_start
 	    ;;
 	
 	stop)
+	    get_conf pre_stop "" "pre stop command" $sections
+	    get_conf post_stop "" "post stop command" $sections
+	    [[ $pre_stop != "" ]] && do_cmd $pre_stop
 	    stop_daemon $name c$type $pid_file
+	    [[ $post_stop != "" ]] && do_cmd $post_stop
 	    ;;
 
 	forcestop)
+	    get_conf pre_forcestop "" "pre forcestop command" $sections
+	    get_conf post_forcestop "" "post forcestop command" $sections
+	    [[ $pre_forcestop != "" ]] && do_cmd $pre_forcestop
 	    stop_daemon $name c$type $pid_file -9
+	    [[ $post_forcestop != "" ]] && do_cmd $post_forcestop
 	    ;;
 	    
 	killall)
