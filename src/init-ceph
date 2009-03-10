@@ -1,7 +1,17 @@
 #!/bin/sh
 # Start/stop ceph daemons
 
-# if we start up as ./ceph-daemons, assume everything else is in the
+### BEGIN INIT INFO
+# Provides:          ceph
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Required-Start:    $local_fs $named $network $time
+# Required-Stop:     $local_fs $named $network $time
+# Short-Description: Start Ceph distributed file system daemons at boot time
+# Description:       Enable Ceph distributed file system services.
+### END INIT INFO
+
+# if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
@@ -28,7 +38,9 @@ stop_daemon() {
     daemon=$2
     pidfile=$3
     signal=$4
-    echo -n "Stopping ceph $name on $host..."
+    action=$5
+    [[ $action == "" ]] && action="Stopping"
+    echo -n "$action ceph $name on $host..."
     do_cmd "while [ 1 ]; do 
 	[ -e $pidfile ] || break
 	pid=\`cat $pidfile\`
@@ -85,7 +97,7 @@ case $1 in
 	    dobtrfs=1
 	    ;;
     --nobtrfs)
-	    dobtrfs=1
+	    dobtrfs=0
 	    ;;
     --conf_file | -c)
 	    [ "$2" == "" ] && usage_exit
@@ -206,6 +218,10 @@ for name in $what; do
 	    do_cmd "killall -9 c$type"
 	    ;;
 	
+	force-reload | reload)
+	    stop_daemon $name c$type $pid_file -1 "Reloading"
+	    ;;
+
 	restart)
 	    $0 $options stop $name
 	    $0 $options start $name

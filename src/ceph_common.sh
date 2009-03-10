@@ -1,3 +1,4 @@
+#!/bin/sh
 
 CCONF="$BINDIR/cconf"
 
