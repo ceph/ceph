@@ -33,6 +33,14 @@ using namespace std;
 
 #include "mon/MonClient.h"
 
+void usage()
+{
+  cerr << "usage: cmds [flags] [--mds rank] [--shadow rank]" << std::endl;
+  cerr << "  --debug_mds n  debug MDS level (e.g. 10)" << std::endl;
+  cerr << "  --debug_ms n   debug messaging level (e.g. 1)" << std::endl;
+  exit(1);
+}
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
@@ -44,19 +52,17 @@ int main(int argc, const char **argv)
   // mds specific args
   const char *monhost = 0;
   int whoami = -1;
-  bool standby = false;  // by default, i'll start active.
-  int standby_replay_for = -1;
+  int shadow = -1;
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--standby") == 0) 
-      standby = true;
-    else if (strcmp(args[i], "--mds") == 0) 
+    if (strcmp(args[i], "--mds") == 0) 
       whoami = atoi(args[++i]);
-    else if (strcmp(args[i], "--standby_replay_for") == 0)
-      whoami = standby_replay_for = atoi(args[++i]);
+    else if (strcmp(args[i], "--shadow") == 0)
+      whoami = shadow = atoi(args[++i]);
     else if (monhost == 0) 
       monhost = args[i];
     else {
       cerr << "unrecognized arg " << args[i] << std::endl;
+      usage();
       return -1;
     }
   }
@@ -86,8 +92,8 @@ int main(int argc, const char **argv)
   
   // start mds
   MDS *mds = new MDS(whoami, m, &monmap);
-  mds->standby_replay_for = standby_replay_for;
-  mds->init(standby);
+  mds->standby_replay_for = shadow;
+  mds->init();
   
   rank.wait();
 

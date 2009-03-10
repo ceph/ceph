@@ -338,7 +338,7 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 
 
-int MDS::init(bool standby)
+int MDS::init()
 {
   mds_lock.Lock();
 
