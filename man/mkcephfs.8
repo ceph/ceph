@@ -1,0 +1,43 @@
+.TH COSD 8
+.SH NAME
+cosd \- ceph object storage daemon
+.SH SYNOPSIS
+.B cosd
+[ \fB\-a\fP ]
+[ \fB\-c\fP\fI cluster.conf\fP ]
+[ \fB\-\-clobber_old_data\fP ]
+[ \fB\-\-mkbtrfs\fP ]
+.SH DESCRIPTION
+.B mkcephfs
+is used to create an empty Ceph file system, possibly spanning multiple
+hosts.  The \fIcluster.conf\fP file describes the composition of the 
+Ceph cluster, including which hosts are participating, which daemons
+run where, and which paths are used to store file system data or
+metadata.
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-allhosts\fR
+Performs the necessary initialization steps on all hosts in the cluster,
+executing commands via SSH.
+.TP
+\fB\-c\fR, \fB\-\-conf_file \fIcluster.conf\fR
+Use the given cluster conf file instead of the default \fI/etc/ceph/cluster.conf\fP.
+.TP
+\fB\-\-clobber_old_data\fR
+Overwrite any existing data found in monitor or osd paths.
+.TP
+\fB\-\-mkbtrfs\fR
+Create and mount the any btrfs file systems specified in the
+\fBcluster.conf\fP for OSD data storage using \fBmkfs.btrfs\fP.  The
+"btrfs devs" and (if it differs from 
+"osd data") "btrfs path" options must be defined.
+.SH AVAILABILITY
+.B mkcephfs
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR mkmonfs (8),
+.BR monmaptool (8),
+.BR osdmaptool (8),
+.BR crushmaptool (8)
