@@ -1,4 +1,4 @@
-#!/bin/sh
+-c#!/bin/sh
 
 # if we start up with "./", assume everything else is in the current
 # directory too.
@@ -42,7 +42,7 @@ case $1 in
     --mkbtrfs)
 	    mkbtrfs=1
 	    ;;
-    --conf_file | -c)
+    --conf | -c)
 	    [ "$2" == "" ] && usage_exit
 	    shift
 	    conf=$1
@@ -117,7 +117,7 @@ for name in $what; do
 
     check_host || continue
 
-    get_conf conf_file "$runtime_conf" "conf file" $sections
+    get_conf conf "$runtime_conf" "conf" $sections
 
     if [[ $ssh = 1 ]] && [[ ! $pushed_to =~ " $host " ]]; then
 	scp $osdmap $host:$osdmap
@@ -141,7 +141,7 @@ for name in $what; do
 	fi
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_path"
+	do_cmd "$BINDIR/cosd -c $conf --monmap_file $monmap --mkfs_for_osd $num $osd_path"
     fi
 
     if [[ $type = "mds" ]]; then

@@ -5,7 +5,6 @@ cmds \- ceph metadata server daemon
 .B cmds
 [ \fB\-\-mds\fI rank\fP ]
 [ \fB\-\-shadow\fI rank\fP ]
-[ \fB\-c\fI ceph.conf\fP ]
 .SH DESCRIPTION
 .B cmds
 is the metadata server daemon for the Ceph distributed file system.
@@ -32,9 +31,13 @@ do not daemonize after startup (run in foreground), but log to the usual locatio
 Useful when run via 
 .BR crun (8).
 .TP
-\fB\-c\fI ceph.conf\fR or \fB\-\-conf_file\fI ceph.conf\fP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
 Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
 for runtime configuration options.
+.TP
+\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
+Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+to determine monitor addresses during startup.
 .SH AVAILABILITY
 .B cmon
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at

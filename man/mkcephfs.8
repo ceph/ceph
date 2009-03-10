@@ -4,7 +4,7 @@ cosd \- ceph object storage daemon
 .SH SYNOPSIS
 .B cosd
 [ \fB\-a\fP ]
-[ \fB\-c\fP\fI cluster.conf\fP ]
+[ \fB\-C\fP\fI cluster.conf\fP ]
 [ \fB\-\-clobber_old_data\fP ]
 [ \fB\-\-mkbtrfs\fP ]
 .SH DESCRIPTION
@@ -20,7 +20,7 @@ metadata.
 Performs the necessary initialization steps on all hosts in the cluster,
 executing commands via SSH.
 .TP
-\fB\-c\fR, \fB\-\-conf_file \fIcluster.conf\fR
+\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
 Use the given cluster conf file instead of the default \fI/etc/ceph/cluster.conf\fP.
 .TP
 \fB\-\-clobber_old_data\fR

@@ -99,7 +99,7 @@ case $1 in
     --nobtrfs)
 	    dobtrfs=0
 	    ;;
-    --conf_file | -c)
+    --conf | -c)
 	    [ "$2" == "" ] && usage_exit
 	    options="$options $1"
 	    shift
@@ -139,7 +139,7 @@ for name in $what; do
     check_host || continue
 
     get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
-    get_conf conf_file "$runtime_conf" "conf file" $sections
+    get_conf conf "$runtime_conf" "conf" $sections
 
     # extract name-specific options from $conf
     if [[ $name =~ "mon" ]]; then
@@ -165,7 +165,7 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
 
-    module_opt="-p $pid_file -c $conf_file $module_opt"
+    module_opt="-p $pid_file -c $conf $module_opt"
 
     case "$command" in
 	start)

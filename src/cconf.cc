@@ -20,7 +20,7 @@ void usage()
 
 int main(int argc, const char **argv) 
 {
-  const char *fname = g_conf.conf_file;
+  const char *fname = g_conf.conf;
   const char *key = NULL, *defval = NULL;
   const char *list_sections = 0;
   char *val;

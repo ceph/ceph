@@ -356,8 +356,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(global, log_sym_dir, 0, STR, INSTALL_PREFIX "/var/log/ceph"),		// if daemonize == true
 	OPTION(global, log_to_stdout, 0, BOOL, true),
 	OPTION(global, pid_file, 'p', STR, 0),
-	OPTION(global, conf_file, 'c', STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
-	OPTION(global, cluster_conf_file, 'C', STR, INSTALL_PREFIX "/etc/ceph/cluster.conf"),
+	OPTION(global, conf, 'c', STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
+	OPTION(global, cluster_conf, 'C', STR, INSTALL_PREFIX "/etc/ceph/cluster.conf"),
 	OPTION(global, dump_conf, 0, BOOL, false),
 	OPTION(global, chdir, 0, STR, "/"),
 	OPTION(global, fake_clock, 0, BOOL, false),
@@ -757,9 +757,9 @@ void parse_startup_config_options(std::vector<const char*>& args)
 	cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
     if (CMD_EQ("conf_file", 'c')) {
-	SAFE_SET_ARG_VAL(&g_conf.conf_file, STR);
+	SAFE_SET_ARG_VAL(&g_conf.conf, STR);
     } else if (CMD_EQ("cluster_conf_file", 'C')) {
-	SAFE_SET_ARG_VAL(&g_conf.cluster_conf_file, STR);
+	SAFE_SET_ARG_VAL(&g_conf.cluster_conf, STR);
     } else if (CMD_EQ("monmap_file", 'M')) {
 	SAFE_SET_ARG_VAL(&g_conf.monmap_file, STR);
     } else if (CMD_EQ("dump_conf", 0)) {
@@ -782,7 +782,7 @@ void parse_startup_config_options(std::vector<const char*>& args)
   args.swap(nargs);
   nargs.clear();
 
-  ConfFile cf(g_conf.conf_file);
+  ConfFile cf(g_conf.conf);
 
   parse_config_file(&cf, true);
   if (g_conf.dump_conf)
@@ -802,9 +802,9 @@ void configure_client_mode()
 
 void generic_usage()
 {
-  cerr << "   -C cluster.conf\n";
+  cerr << "   -C cluster.conf or --cluster-conf=cluster.conf\n";
   cerr << "        get monitor IP(s) from given conf (instead of /etc/ceph/cluster.conf)\n";
-  cerr << "   -c ceph.conf\n";
+  cerr << "   -c ceph.conf or --conf=ceph.conf\n";
   cerr << "        get runtime options from given conf file" << std::endl;
 }
 

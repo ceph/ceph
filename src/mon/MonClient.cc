@@ -86,7 +86,7 @@ int MonClient::get_monmap(MonMap *pmonmap)
 
   if (!g_conf.mon_host) {
     // cluster conf?
-    ConfFile a(g_conf.cluster_conf_file);
+    ConfFile a(g_conf.cluster_conf);
     ConfFile b("cluster.conf");
     ConfFile *c = 0;
 

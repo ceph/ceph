@@ -64,8 +64,8 @@ struct md_config_t {
 
   const char *pid_file;
 
-  const char *conf_file;
-  const char *cluster_conf_file;
+  const char *conf;
+  const char *cluster_conf;
   bool dump_conf;
 
   const char *chdir;
