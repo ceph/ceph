@@ -24,6 +24,7 @@ allhosts=0
 clobber=""
 mkbtrfs=0
 numosd=
+usecrushmapsrc=
 usecrushmap=
 verbose=0
 
@@ -50,6 +51,11 @@ case $1 in
 	    [ "$2" == "" ] && usage_exit
 	    shift
 	    numosd=$1
+	    ;;
+    --crushmapsrc)
+	    [ "$2" == "" ] && usage_exit
+	    shift
+	    usecrushmapsrc=$1
 	    ;;
     --crushmap)
 	    [ "$2" == "" ] && usage_exit
@@ -90,11 +96,15 @@ if [[ $what =~ "mon0" ]]; then
     $BINDIR/osdmaptool --clobber --createsimple $numosd $osdmap || exit 1
 
     # import crush map?
-    get_conf crushmapsrc "$usecrushmap" "crush map" mon0 mon global
+    get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon0 mon global
     if [[ $crushmapsrc != "" ]]; then
-	echo Building crush map from $crushmapsrc
+	echo Compiling crush map from $crushmapsrc to $crushmap
 	crushmap="/tmp/crushmap.$$"
 	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
+    fi
+    get_conf crushmap "$usecrushmap" "crush map" mon0 mon global
+    if [[ $crushmap != "" ]]; then
+	echo Importing crush map from $crushmap
 	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
     fi
 fi
