@@ -3,7 +3,6 @@
 cosd \- ceph object storage daemon
 .SH SYNOPSIS
 .B cosd
-[ \fB\-d\fP ]
 \fIdatapath\fP
 [ \fB\-j\fI journal\fP ]
 [ \fB\-c\fI ceph.conf\fP ]
@@ -18,16 +17,15 @@ The \fIdatapath\fP argument should be a directory on a btrfs file
 system where the object data resides.  The \fIjournal\fP is optional,
 and is only useful performance-wise when it resides on a different
 disk than \fIdatapath\fP with low latency (ideally, an NVRAM device).
-.PP
-If neither \fB-d\fP nor \fB-f\fP is specified, the daemon will run
-in the foreground and log to stdout.
 .SH OPTIONS
 .TP
-\fB\-d\fP
-daemonize after startup.
+\fB\-D\fP
+Debug mode: do not daemonize after startup (run in foreground) and send log output
+to stdout.
 .TP
 \fB\-f\fP
-do not daemonize after startup (run in foreground).  Useful when run via 
+do not daemonize after startup (run in foreground), but log to the usual location.
+Useful when run via 
 .BR crun (8).
 .TP
 \fB\-j\fI journal\fP

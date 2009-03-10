@@ -72,7 +72,7 @@ if [ $start_all -eq 1 ]; then
 	start_osd=1
 fi
 
-ARGS="-d -c $conf"
+ARGS="-c $conf"
 
 if [ $debug -eq 0 ]; then
 	CMON_ARGS="--debug_mon 10 --debug_ms 1"

@@ -40,8 +40,6 @@ void usage()
   cerr << "   -d              daemonize" << std::endl;
   cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
   cerr << "   --debug_ms N    set message debug level (e.g. 1)" << std::endl;
-  cerr << "   --ebofs         use EBOFS for object storage (default)" << std::endl;
-  cerr << "   --fakestore     store objects as files in directory <device>" << std::endl;
   exit(1);
 }
 
@@ -51,6 +49,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+  configure_daemon_mode();
   common_init(args);
 
   if (g_conf.clock_tare) g_clock.tare();

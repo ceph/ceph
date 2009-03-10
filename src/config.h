@@ -358,6 +358,9 @@ void parse_config_option_string(string& s);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr, const char **end=0);
 
+void configure_daemon_mode();
+void configure_client_mode();
+
 class ConfFile;
 
 void parse_config_file(ConfFile *cf, bool update);

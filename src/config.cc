@@ -766,6 +766,9 @@ void parse_startup_config_options(std::vector<const char*>& args)
 	SET_BOOL_ARG_VAL(&g_conf.dump_conf);
     } else if (CMD_EQ("bind", 0)) {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
+    } else if (CMD_EQ("nodaemon", 'D')) {
+      g_conf.daemonize = false;
+      g_conf.log_to_stdout = true;
     } else if (CMD_EQ("daemonize", 'd')) {
       g_conf.daemonize = true;
       g_conf.log_to_stdout = false;
@@ -784,6 +787,17 @@ void parse_startup_config_options(std::vector<const char*>& args)
   parse_config_file(&cf, true);
   if (g_conf.dump_conf)
     cf.dump();
+}
+
+void configure_daemon_mode()
+{
+  g_conf.daemonize = true;
+  g_conf.log_to_stdout = false;
+}
+void configure_client_mode()
+{
+  g_conf.daemonize = false;
+  g_conf.log_to_stdout = true;
 }
 
 void parse_config_options(std::vector<const char*>& args)
