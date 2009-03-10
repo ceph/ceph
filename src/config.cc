@@ -800,6 +800,31 @@ void configure_client_mode()
   g_conf.log_to_stdout = true;
 }
 
+void generic_usage()
+{
+  cerr << "   -C cluster.conf\n";
+  cerr << "        get monitor IP(s) from given conf (instead of /etc/ceph/cluster.conf)\n";
+  cerr << "   -c ceph.conf\n";
+  cerr << "        get runtime options from given conf file" << std::endl;
+}
+
+void generic_server_usage()
+{
+  cerr << "   --debug_ms N\n";
+  cerr << "        set message debug level (e.g. 1)\n";
+  cerr << "   -D   debug (no fork, log to stdout)\n";
+  cerr << "   -f   foreground (no fork, log to file)\n";
+  generic_usage();
+  exit(1);
+}
+void generic_client_usage()
+{
+  generic_usage();
+  cerr << "   -d   daemonize (detach, fork, log to file)\n";
+  cerr << "   -f   foreground (no fork, log to file)" << std::endl;
+  exit(1);
+}
+
 void parse_config_options(std::vector<const char*>& args)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);

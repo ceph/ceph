@@ -36,12 +36,10 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: ./cmon [flags] <monfsdir>" << std::endl;
-  cerr << "  -d             daemonize" << std::endl;
-  cerr << "  -o <dir>       log output to dir/mon#" << std::endl;
-  cerr << "  --debug_mon n  debug monitor level (e.g. 10)" << std::endl;
-  cerr << "  --debug_ms n   debug messaging level (e.g. 1)" << std::endl;
-  exit(1);
+  cerr << "usage: cmon [flags] <monfsdir>" << std::endl;
+  cerr << "  --debug_mon n\n";
+  cerr << "        debug monitor level (e.g. 10)\n";
+  generic_server_usage();
 }
 
 int main(int argc, const char **argv) 

@@ -35,10 +35,12 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cmds [flags] [--mds rank] [--shadow rank]" << std::endl;
-  cerr << "  --debug_mds n  debug MDS level (e.g. 10)" << std::endl;
-  cerr << "  --debug_ms n   debug messaging level (e.g. 1)" << std::endl;
-  exit(1);
+  cerr << "usage: cmds [flags] [--mds rank] [--shadow rank]\n";
+  cerr << "  -m monitorip:port\n";
+  cerr << "        connect to monitor at given address\n";
+  cerr << "  --debug_mds n\n";
+  cerr << "        debug MDS level (e.g. 10)\n";
+  generic_server_usage();
 }
 
 int main(int argc, const char **argv) 

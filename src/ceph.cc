@@ -377,18 +377,21 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 
 void usage() 
 {
-  cerr << "usage: ceph [options] monhost] command" << std::endl;
-  cerr << "Options:" << std::endl;
-  cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
-  cerr << "   -i infile         -- specify input file" << std::endl;
-  cerr << "   -o outfile        -- specify output file" << std::endl;
-  cerr << "   -w or --watch     -- watch mds, osd, pg status (push)" << std::endl;
-  cerr << "   -p or --poll      -- watch mds, osd, pg status (poll)" << std::endl;
+  cerr << "usage: ceph [options] [commands]" << std::endl;
+  cerr << "If no commands are specified, enter interactive mode.\n";
   cerr << "Commands:" << std::endl;
   cerr << "   stop              -- cleanly shut down file system" << std::endl
        << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
        << "   ..." << std::endl;
-  exit(1);
+  cerr << "Options:" << std::endl;
+  cerr << "   -i infile\n";
+  cerr << "   -o outfile\n";
+  cerr << "        specify input or output file (for certain commands)\n";
+  cerr << "   -w or --watch\n";
+  cerr << "        watch mds, osd, pg status changes in real time (push)\n";
+  cerr << "   -p or --poll\n";
+  cerr << "        watch mds, osd, pg status changes in real time (poll)\n";
+  generic_client_usage();
 }
 
 
@@ -549,6 +552,10 @@ int main(int argc, const char **argv, const char *envp[]) {
     } else if (strcmp(args[i], "-p") == 0 ||
 	       strcmp(args[i], "--poll") == 0) {
       watch = 1;
+    } else if (args[i][0] == '-') {
+      if (strcmp(args[i], "-h"))
+	cerr << "unrecognized option " << args[i] << std::endl;
+      usage();
     } else
       nargs.push_back(args[i]);
   }

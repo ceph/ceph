@@ -37,10 +37,8 @@ using namespace std;
 void usage() 
 {
   cerr << "usage: cosd <device> [-j journalfileordev] [-m monitor] [--mkfs_for_osd <nodeid>]" << std::endl;
-  cerr << "   -d              daemonize" << std::endl;
   cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
-  cerr << "   --debug_ms N    set message debug level (e.g. 1)" << std::endl;
-  exit(1);
+  generic_server_usage();
 }
 
 
