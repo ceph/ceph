@@ -2,7 +2,7 @@ ceph (0.7.1-1) unstable; urgency=low
 
   * ??
 
- -- sage <sage@newdream.net>  Thu, 5 Mar 2009 13:57:22 -0800
+ -- sage <sage@newdream.net>  Tue, 10 Mar 2009 13:57:22 -0800
 
 ceph (0.7-1) unstable; urgency=low
 
@@ -40,6 +40,6 @@ ceph (0.4-1) unstable; urgency=low
 
 ceph (0.3-1) unstable; urgency=low
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial release (Closes: #506040)
 
  -- sage <sage@newdream.net>  Mon, 28 Jan 2008 15:09:44 -0800

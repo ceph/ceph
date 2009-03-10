@@ -20,6 +20,8 @@ common-install-arch::
 	touch $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/README
 	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
 	-cp debian/* $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
+	rm $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/init.*
+	rm $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/ceph.init
 	mv $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules.modules.in $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
 	chmod +x $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
 	( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src ; tar -cjf ceph.tar.bz2 modules )

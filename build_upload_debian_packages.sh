@@ -6,6 +6,7 @@ echo vers $vers
 repo=$1
 arch=$2
 
+rm *.deb
 rm -r ceph-$vers
 make dist
 tar zxvf ceph-$vers.tar.gz
