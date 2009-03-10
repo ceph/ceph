@@ -32,9 +32,21 @@ struct ceph_osd_request;
  */
 typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 
+struct ceph_osd_request_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct ceph_osd_request *, struct ceph_osd_request_attr *,
+			char *);
+	ssize_t (*store)(struct ceph_osd_request *, struct ceph_osd_request_attr *,
+			const char *, size_t);
+};
+
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
+
+	struct kobject    kobj;
+	struct ceph_osd_request_attr k_osd, k_op;
+
 	struct ceph_msg  *r_request;
 	struct ceph_msg  *r_reply;
 	int               r_result;
@@ -71,6 +83,7 @@ struct ceph_osd_client {
 	struct radix_tree_root request_tree;  /* pending requests, by tid */
 	int                    num_requests;
 	struct delayed_work    timeout_work;
+	struct kobject	       kobj;
 };
 
 extern void ceph_osdc_init(struct ceph_osd_client *osdc,

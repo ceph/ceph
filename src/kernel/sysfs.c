@@ -55,7 +55,8 @@ static struct kobj_type name##_ops = {						\
 
 
 DEF_ATTR_OP(ceph_client)
-
+DEF_ATTR_OP(ceph_mds_request)
+DEF_ATTR_OP(ceph_osd_request)
 
 /*
  * per-client attributes
@@ -175,6 +176,11 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	if (ret)
 		goto out;
 
+	ret = kobject_init_and_add(&client->osdc.kobj, &entity_ops,
+				   &client->kobj, "osdc");
+	if (ret)
+		goto out;
+
 	ADD_ENTITY_ATTR(client, k_fsid, "fsid", 0400, fsid_show, NULL);
 	ADD_ENTITY_ATTR(client, k_monmap, "monmap", 0400, monmap_show, NULL);
 	ADD_ENTITY_ATTR(client, k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
@@ -189,12 +195,11 @@ out:
 void ceph_sysfs_client_cleanup(struct ceph_client *client)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	kobject_del(&client->osdc.kobj);
 	kobject_del(&client->mdsc.kobj);
 	kobject_del(&client->kobj);
 #endif	
 }
-
-DEF_ATTR_OP(ceph_mds_request)
 
 static ssize_t req_mds_show(struct ceph_mds_request *req,
 			   struct ceph_mds_request_attr *attr, char *buf)
@@ -204,7 +209,7 @@ static ssize_t req_mds_show(struct ceph_mds_request *req,
 			ENTITY_NAME(req->r_request->hdr.dst.name));
 }
 
-static ssize_t req_op_show(struct ceph_mds_request *req,
+static ssize_t req_mds_op_show(struct ceph_mds_request *req,
 			   struct ceph_mds_request_attr *attr, char *buf)
 {
 	int pos = 0, pathlen;
@@ -251,16 +256,78 @@ int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_reques
 		goto out;
 
 	ADD_ENTITY_ATTR(req, k_mds, "mds", 0400, req_mds_show, NULL);
-	ADD_ENTITY_ATTR(req, k_op, "op", 0400, req_op_show, NULL);
+	ADD_ENTITY_ATTR(req, k_op, "op", 0400, req_mds_op_show, NULL);
 
 	return 0;
-
 out:
 #endif
 	return ret;
 }
 
 void ceph_sysfs_mds_req_cleanup(struct ceph_mds_request *req)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	kobject_del(&req->kobj);
+#endif
+}
+
+static ssize_t req_osd_show(struct ceph_osd_request *req,
+			   struct ceph_osd_request_attr *attr, char *buf)
+{
+	return sprintf(buf, "%u.%u.%u.%u:%u (%s%d)\n",
+			IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
+			ENTITY_NAME(req->r_request->hdr.dst.name));
+}
+
+static ssize_t req_osd_op_show(struct ceph_osd_request *req,
+			   struct ceph_osd_request_attr *attr, char *buf)
+{
+	struct ceph_osd_request_head *head = req->r_request->front.iov_base;
+	struct ceph_osd_op *op;
+	int num_ops;
+	int pos = 0;
+	int opcode;
+	int i;
+
+	op = (void *)(head + 1);
+
+	pos += sprintf(buf, "oid=%llx.%08x (snap=%lld)\n",
+	     le64_to_cpu(head->oid.ino),
+	     le32_to_cpu(head->oid.bno),
+	     le64_to_cpu(head->oid.snap));
+
+	num_ops = le16_to_cpu(head->num_ops);
+
+	for (i=0; i<num_ops; i++) {
+		opcode = le16_to_cpu(op->op);
+
+		pos += sprintf(buf + pos, "%s\n", ceph_osd_op_name(opcode));
+		op++;
+	}
+
+	return pos;
+}
+
+int ceph_sysfs_osd_req_init(struct ceph_osd_client *osdc, struct ceph_osd_request *req)
+{
+	int ret = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	ret = kobject_init_and_add(&req->kobj, &ceph_osd_request_ops,
+				   &osdc->kobj, "%d", req->r_tid);
+	if (ret)
+		goto out;
+
+	ADD_ENTITY_ATTR(req, k_osd, "osd", 0400, req_osd_show, NULL);
+	ADD_ENTITY_ATTR(req, k_op, "op", 0400, req_osd_op_show, NULL);
+
+	return 0;
+out:
+#endif
+	return ret;
+}
+
+void ceph_sysfs_osd_req_cleanup(struct ceph_osd_request *req)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	kobject_del(&req->kobj);

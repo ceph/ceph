@@ -801,6 +801,8 @@ extern int ceph_sysfs_init(void);
 extern void ceph_sysfs_cleanup(void);
 extern int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_request *req);
 extern void ceph_sysfs_mds_req_cleanup(struct ceph_mds_request *req);
+extern int ceph_sysfs_osd_req_init(struct ceph_osd_client *osdc, struct ceph_osd_request *req);
+extern void ceph_sysfs_osd_req_cleanup(struct ceph_osd_request *req);
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {

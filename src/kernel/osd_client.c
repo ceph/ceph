@@ -194,6 +194,7 @@ static int register_request(struct ceph_osd_client *osdc,
 		      round_jiffies_relative(req->r_timeout_stamp - jiffies));
 	}
 
+	ceph_sysfs_osd_req_init(osdc, req);
 out:
 	mutex_unlock(&osdc->request_mutex);
 	return rc;
@@ -296,6 +297,8 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 						     jiffies));
 		}
 	}
+
+	ceph_sysfs_osd_req_cleanup(req);
 }
 
 /*
