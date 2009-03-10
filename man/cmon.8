@@ -1,0 +1,40 @@
+.TH CMON 8
+.SH NAME
+cmon \- ceph monitor daemon
+.SH SYNOPSIS
+.B cmon
+\fImondatapath\fP
+[ \fB\-c\fI ceph.conf\fP ]
+.SH DESCRIPTION
+.B cmon
+is the cluster monitor daemon for the Ceph distributed file system.
+One or more instances
+of \fBcmon\fP form a Paxos part-time parliament cluster that provides
+extremely reliable and durable storage of cluster membership, configuration,
+and state.
+.PP
+The \fImondatapath\fP refers to a directory on a local file system
+storing monitor data.  
+.SH OPTIONS
+.TP
+\fB\-D\fP
+Debug mode: do not daemonize after startup (run in foreground) and send log output
+to stdout.
+.TP
+\fB\-f\fP
+do not daemonize after startup (run in foreground), but log to the usual location.
+Useful when run via 
+.BR crun (8).
+.TP
+\fB\-c\fI ceph.conf\fR or \fB\-\-conf_file\fI ceph.conf\fP
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+for runtime configuration options.
+.SH AVAILABILITY
+.B cmon
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR mkmonfs (8),
+.BR cmds (8),
+.BR cosd (8)

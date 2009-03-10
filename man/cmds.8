@@ -1,0 +1,45 @@
+.TH CMDS 8
+.SH NAME
+cmds \- ceph metadata server daemon
+.SH SYNOPSIS
+.B cmds
+[ \fB\-\-mds\fI rank\fP ]
+[ \fB\-\-shadow\fI rank\fP ]
+[ \fB\-c\fI ceph.conf\fP ]
+.SH DESCRIPTION
+.B cmds
+is the metadata server daemon for the Ceph distributed file system.
+One or more instances of \fBcmds\fP collectively manage the file system
+namespace, coordinating access to the shared OSD cluster.
+.PP
+If a numerical MDS rank is not specified, \fBcmds\fP will allow the monitor
+cluster to assign its rank.
+.SH OPTIONS
+.TP
+\fB\-\-mds\fI rank\fP
+Start up as (or standby for) the given MDS rank.  If not specified, a rank will
+be assigned by the monitor cluster.
+\fB\-\-shadow\fI rank\fP
+Shadow a the given MDS rank.  The given MDS log will be replayed, checking for
+recovery errors.
+.TP
+\fB\-D\fP
+Debug mode: do not daemonize after startup (run in foreground) and send log output
+to stdout.
+.TP
+\fB\-f\fP
+do not daemonize after startup (run in foreground), but log to the usual location.
+Useful when run via 
+.BR crun (8).
+.TP
+\fB\-c\fI ceph.conf\fR or \fB\-\-conf_file\fI ceph.conf\fP
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+for runtime configuration options.
+.SH AVAILABILITY
+.B cmon
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR cmon (8),
+.BR cosd (8)
