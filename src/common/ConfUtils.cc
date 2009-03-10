@@ -481,9 +481,7 @@ void ConfFile::dump()
 
 	sec_end=sections_list.end();
 
-	printf("------ config starts here ------\n");
 	_dump(STDOUT_FILENO);
-	printf("------  config ends here  ------\n");
 }
 
 ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)

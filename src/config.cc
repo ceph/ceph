@@ -38,6 +38,8 @@ atomic_t buffer_total_alloc;
 
 #include "common/ConfUtils.h"
 
+static bool show_config = false;
+
 /*
 struct foobar {
   foobar() { cerr << "config.cc init" << std::endl; }
@@ -358,7 +360,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(global, pid_file, 'p', STR, 0),
 	OPTION(global, conf, 'c', STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
 	OPTION(global, cluster_conf, 'C', STR, INSTALL_PREFIX "/etc/ceph/cluster.conf"),
-	OPTION(global, dump_conf, 0, BOOL, false),
 	OPTION(global, chdir, 0, STR, "/"),
 	OPTION(global, fake_clock, 0, BOOL, false),
 	OPTION(global, fakemessenger_serialize, 0, BOOL, true),
@@ -762,8 +763,6 @@ void parse_startup_config_options(std::vector<const char*>& args)
 	SAFE_SET_ARG_VAL(&g_conf.cluster_conf, STR);
     } else if (CMD_EQ("monmap_file", 'M')) {
 	SAFE_SET_ARG_VAL(&g_conf.monmap_file, STR);
-    } else if (CMD_EQ("dump_conf", 0)) {
-	SET_BOOL_ARG_VAL(&g_conf.dump_conf);
     } else if (CMD_EQ("bind", 0)) {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
     } else if (CMD_EQ("nodaemon", 'D')) {
@@ -775,6 +774,8 @@ void parse_startup_config_options(std::vector<const char*>& args)
     } else if (CMD_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = false;
+    } else if (CMD_EQ("show_conf", 'S')) {
+      show_config = true;
     } else {
       nargs.push_back(args[i]);
     }
@@ -785,8 +786,11 @@ void parse_startup_config_options(std::vector<const char*>& args)
   ConfFile cf(g_conf.conf);
 
   parse_config_file(&cf, true);
-  if (g_conf.dump_conf)
+
+  if (show_config) {
     cf.dump();
+    exit(0);
+  }
 }
 
 void configure_daemon_mode()
