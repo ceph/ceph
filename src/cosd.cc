@@ -63,9 +63,7 @@ int main(int argc, const char **argv)
     if (strcmp(args[i],"--mkfs_for_osd") == 0) {
       mkfs = 1; 
       whoami = atoi(args[++i]);
-    } else if (strcmp(args[i],"--dev") == 0) 
-      dev = args[++i];
-    else if (strcmp(args[i],"-j") == 0)
+    } else if (strcmp(args[i],"-j") == 0)
       journaldev = args[++i];
     else if (!dev)
       dev = args[i];
