@@ -146,7 +146,10 @@ int main(int argc, const char **argv)
 	 << " (" << monmap.size() << " monitors)" 
 	 << std::endl;
     int r = monmap.write(fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "monmaptool: error writing to '" << fn << "': " << strerror(-r) << std::endl;
+      return 1;
+    }
   }
   
 

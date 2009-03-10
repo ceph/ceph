@@ -189,7 +189,10 @@ int main(int argc, const char **argv)
 	 << " to " << fn
 	 << std::endl;
     int r = bl.write_file(fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "osdmaptool: error writing to '" << fn << "': " << strerror(-r) << std::endl;
+      return 1;
+    }
   }
   
 
