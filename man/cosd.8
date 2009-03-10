@@ -42,6 +42,9 @@ for runtime configuration options.
 \fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
 Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
 to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
 .SH AVAILABILITY
 .B cosd
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
