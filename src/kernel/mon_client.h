@@ -36,13 +36,32 @@ struct ceph_monmap {
 };
 
 struct ceph_mon_client;
+struct ceph_mon_statfs_request;
+
+struct ceph_mon_client_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct ceph_mon_client *, struct ceph_mon_client_attr *,
+			char *);
+	ssize_t (*store)(struct ceph_mon_client *, struct ceph_mon_client_attr *,
+			const char *, size_t);
+};
+
+struct ceph_mon_statfs_request_attr {
+	struct attribute attr;
+	ssize_t (*show)(struct ceph_mon_statfs_request *, struct ceph_mon_statfs_request_attr *,
+			char *);
+	ssize_t (*store)(struct ceph_mon_statfs_request *, struct ceph_mon_statfs_request_attr *,
+			const char *, size_t);
+	struct ceph_entity_inst dst;
+};
 
 /*
  * Generic mechanism for resending monitor requests.
  */
 typedef void (*ceph_monc_request_func_t)(struct ceph_mon_client *monc,
 					 int newmon);
-struct ceph_mon_request_type {
+struct ceph_mon_request {
+        struct kobject kobj;
 	struct ceph_mon_client *monc;
 	struct delayed_work delayed_work;
 	unsigned long delay;
@@ -52,6 +71,8 @@ struct ceph_mon_request_type {
 /* statfs() is done a bit differently */
 struct ceph_mon_statfs_request {
 	u64 tid;
+        struct kobject kobj;
+        struct ceph_mon_statfs_request_attr k_op, k_mon;
 	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;
@@ -72,9 +93,12 @@ struct ceph_mon_client {
 
 	/* mds/osd map or umount requests */
 	struct mutex req_mutex;
-	struct ceph_mon_request_type mdsreq, osdreq, umountreq;
+	struct ceph_mon_request mdsreq, osdreq, umountreq;
 	u32 want_mdsmap;
 	u32 want_osdmap;
+
+	struct kobject kobj;
+        struct ceph_mon_client_attr k_want_osdmap, k_want_mdsmap;
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);

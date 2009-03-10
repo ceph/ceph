@@ -84,7 +84,7 @@ static int pick_mon(struct ceph_mon_client *monc, int newmon)
 /*
  * Generic timeout mechanism for monitor requests
  */
-static void reschedule_timeout(struct ceph_mon_request_type *req)
+static void reschedule_timeout(struct ceph_mon_request *req)
 {
 	schedule_delayed_work(&req->delayed_work, req->delay);
 	if (req->delay < MAX_DELAY_INTERVAL)
@@ -95,8 +95,8 @@ static void reschedule_timeout(struct ceph_mon_request_type *req)
 
 static void retry_request(struct work_struct *work)
 {
-	struct ceph_mon_request_type *req =
-		container_of(work, struct ceph_mon_request_type,
+	struct ceph_mon_request *req =
+		container_of(work, struct ceph_mon_request,
 			     delayed_work.work);
 
 	/*
@@ -111,14 +111,14 @@ static void retry_request(struct work_struct *work)
 		schedule_delayed_work(&req->delayed_work, BASE_DELAY_INTERVAL);
 }
 
-static void cancel_timeout(struct ceph_mon_request_type *req)
+static void cancel_timeout(struct ceph_mon_request *req)
 {
 	cancel_delayed_work_sync(&req->delayed_work);
 	req->delay = BASE_DELAY_INTERVAL;
 }
 
 static void init_request_type(struct ceph_mon_client *monc,
-			      struct ceph_mon_request_type *req,
+			      struct ceph_mon_request *req,
 			      ceph_monc_request_func_t func)
 {
 	req->monc = monc;
@@ -313,20 +313,23 @@ bad:
 /*
  * (re)send a statfs request
  */
-static int send_statfs(struct ceph_mon_client *monc, u64 tid, int newmon)
+static int send_statfs(struct ceph_mon_client *monc,
+		       struct ceph_mon_statfs_request *req,
+		       int newmon)
 {
 	struct ceph_msg *msg;
 	struct ceph_mon_statfs *h;
 	int mon = pick_mon(monc, newmon ? 1:-1);
 
-	dout(10, "send_statfs to mon%d tid %llu\n", mon, tid);
+	dout(10, "send_statfs to mon%d tid %llu\n", mon, req->tid);
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 	h = msg->front.iov_base;
 	h->fsid = monc->monmap->fsid;
-	h->tid = cpu_to_le64(tid);
+	h->tid = cpu_to_le64(req->tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
+	ceph_sysfs_mon_statfs_req_init(monc, req, msg);
 	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;
 }
@@ -347,6 +350,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	req.tid = ++monc->last_tid;
 	req.last_attempt = jiffies;
 	req.delay = BASE_DELAY_INTERVAL;
+	memset(&req.kobj, 0, sizeof(req.kobj));
 	if (radix_tree_insert(&monc->statfs_request_tree, req.tid, &req) < 0) {
 		mutex_unlock(&monc->statfs_mutex);
 		derr(10, "ENOMEM in do_statfs\n");
@@ -359,11 +363,12 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	mutex_unlock(&monc->statfs_mutex);
 
 	/* send request and wait */
-	err = send_statfs(monc, req.tid, 0);
+	err = send_statfs(monc, &req, 0);
 	if (!err)
 		err = wait_for_completion_interruptible(&req.completion);
 
 	mutex_lock(&monc->statfs_mutex);
+	ceph_sysfs_mon_statfs_req_cleanup(&req);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
 	if (monc->num_statfs_requests == 0)
@@ -403,7 +408,7 @@ static void do_statfs_check(struct work_struct *work)
 			req->last_attempt = jiffies;
 			if (req->delay < MAX_DELAY_INTERVAL)
 				req->delay *= 2;
-			send_statfs(monc, req->tid, newmon);
+			send_statfs(monc, req, newmon);
 			newmon = 0;
 		}
 	}

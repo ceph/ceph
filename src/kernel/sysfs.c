@@ -57,6 +57,7 @@ static struct kobj_type name##_ops = {					\
 DEF_ATTR_OP(ceph_client)
 DEF_ATTR_OP(ceph_mds_request)
 DEF_ATTR_OP(ceph_osd_request)
+DEF_ATTR_OP(ceph_mon_statfs_request)
 
 /*
  * per-client attributes
@@ -156,6 +157,18 @@ static ssize_t osdmap_show(struct ceph_client *client,
 	return pos;
 }
 
+static ssize_t req_mon_want_osdmap_show(struct ceph_mon_client *monc,
+			   struct ceph_mon_client_attr *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", monc->want_osdmap);
+}
+
+static ssize_t req_mon_want_mdsmap_show(struct ceph_mon_client *monc,
+			   struct ceph_mon_client_attr *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", monc->want_mdsmap);
+}
+
 static struct kobj_type entity_ops = {
 	.sysfs_ops = &ceph_client_sysfs_ops,
 };
@@ -181,10 +194,17 @@ int ceph_sysfs_client_init(struct ceph_client *client)
 	if (ret)
 		goto out;
 
+	ret = kobject_init_and_add(&client->monc.kobj, &entity_ops,
+				   &client->kobj, "monc");
+	if (ret)
+		goto out;
+
 	ADD_ENTITY_ATTR(client, k_fsid, "fsid", 0400, fsid_show, NULL);
 	ADD_ENTITY_ATTR(client, k_monmap, "monmap", 0400, monmap_show, NULL);
 	ADD_ENTITY_ATTR(client, k_mdsmap, "mdsmap", 0400, mdsmap_show, NULL);
 	ADD_ENTITY_ATTR(client, k_osdmap, "osdmap", 0400, osdmap_show, NULL);
+	ADD_ENTITY_ATTR((&client->monc), k_want_osdmap, "want_osdmap", 0400, req_mon_want_osdmap_show, NULL);
+	ADD_ENTITY_ATTR((&client->monc), k_want_mdsmap, "want_mdsmap", 0400, req_mon_want_mdsmap_show, NULL);
 	return 0;
 
 out:
@@ -328,6 +348,48 @@ out:
 }
 
 void ceph_sysfs_osd_req_cleanup(struct ceph_osd_request *req)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	kobject_del(&req->kobj);
+#endif
+}
+
+static ssize_t req_mon_show(struct ceph_mon_statfs_request *req,
+			   struct ceph_mon_statfs_request_attr *attr, char *buf)
+{
+	return sprintf(buf, "%u.%u.%u.%u:%u (%s%d)\n",
+			IPQUADPORT(attr->dst.addr.ipaddr),
+			ENTITY_NAME(attr->dst.name));
+}
+
+static ssize_t req_mon_op_show(struct ceph_mon_statfs_request *req,
+			   struct ceph_mon_statfs_request_attr *attr, char *buf)
+{
+	return sprintf(buf, "statfs\n");
+}
+
+int ceph_sysfs_mon_statfs_req_init(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req,
+				   struct ceph_msg *msg)
+{
+	int ret = 0;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	ret = kobject_init_and_add(&req->kobj, &ceph_mon_statfs_request_ops,
+				   &monc->kobj, "%d", req->tid);
+	if (ret)
+		goto out;
+
+	req->k_mon.dst = msg->hdr.dst;
+	ADD_ENTITY_ATTR(req, k_mon, "mon", 0400, req_mon_show, NULL);
+	ADD_ENTITY_ATTR(req, k_op, "op", 0400, req_mon_op_show, NULL);
+
+	return 0;
+out:
+#endif
+	return ret;
+}
+
+void ceph_sysfs_mon_statfs_req_cleanup(struct ceph_mon_statfs_request *req)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	kobject_del(&req->kobj);
