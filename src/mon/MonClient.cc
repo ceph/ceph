@@ -83,9 +83,9 @@ int MonClient::get_monmap(MonMap *pmonmap)
 {
   static string monstr;
 
-  if (g_conf.monmap_file) {
+  if (g_conf.monmap) {
     // file?
-    const char *monmap_fn = g_conf.monmap_file;
+    const char *monmap_fn = g_conf.monmap;
     int r = pmonmap->read(monmap_fn);
     if (r >= 0) {
       cout << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << std::endl;

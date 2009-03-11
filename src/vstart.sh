@@ -183,33 +183,42 @@ fi
 
 #osd
 if [ $start_osd -eq 1 ]; then
-	for osd in `seq 0 $((CEPH_NUM_OSD-1))`
-	do
-		if [ $new -eq 1 ]; then
-		    cat <<EOF >> $conf
+    for osd in `seq 0 $((CEPH_NUM_OSD-1))`
+    do
+	if [ $new -eq 1 ]; then
+	    cat <<EOF >> $conf
 [osd$osd]
         osd data = dev/osd$osd
 EOF
-			echo mkfs osd$osd
-			$SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-		fi
-		echo start osd$osd
-		$valgrind $SUDO $CEPH_BIN/cosd -p out/osd$f.pid -m $IP:$CEPH_PORT -i $osd $ARGS $COSD_ARGS
-	done
+	    echo mkfs osd$osd
+	    echo $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+	    $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+	fi
+	echo start osd$osd
+	echo $valgrind $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
+	$valgrind $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
+    done
 fi
 
 # mds
 if [ $start_mds -eq 1 ]; then
-	for mds in `seq 0 $((CEPH_NUM_MDS-1))`
-	do
-		$valgrind $CEPH_BIN/cmds -i $mds $ARGS $CMDS_ARGS
-
+    for mds in `seq 0 $((CEPH_NUM_MDS-1))`
+    do
+	if [ $new -eq 1 ]; then
+	    cat <<EOF >> $conf
+[mds$mds]
+EOF
+	fi
+	
+	echo $valgrind $CEPH_BIN/cmds -i $mds $ARGS $CMDS_ARGS
+	$valgrind $CEPH_BIN/cmds -i $mds $ARGS $CMDS_ARGS
+	
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_BIN/ceph mds set_max_mds 2
-	done
-	echo $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
-	$CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
+    done
+    echo $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
+    $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."

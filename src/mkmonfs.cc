@@ -23,7 +23,7 @@
 
 void usage() 
 {
-  cerr << "usage: ./mkmonfs [--clobber] <monfs dir> --mon <monid> --monmap <file> --osdmap <file>" << std::endl;
+  cerr << "usage: ./mkmonfs [--clobber] --mon-data <monfsdir> -i <monid> --monmap <file> --osdmap <file>" << std::endl;
   exit(1);
 }
 
@@ -41,13 +41,15 @@ int main(int argc, const char **argv)
   for (unsigned i = 0; i < args.size(); i++) {
     if (strcmp(args[i], "--clobber") == 0)
       clobber = true;
-    else if (strcmp(args[i], "--mon") == 0)
+    else if (strcmp(args[i], "--mon") == 0 ||
+	     strcmp(args[i], "-i") == 0)
       whoami = atoi(args[++i]);
     else if (strcmp(args[i], "--monmap") == 0) 
       monmapfn = args[++i];
     else if (strcmp(args[i], "--osdmap") == 0) 
       osdmapfn = args[++i];
-    else if (!fsdir)
+    else if (strcmp(args[i], "--mon_data") == 0 ||
+	     strcmp(args[i], "--mon-data") == 0)
       fsdir = args[i];
     else 
       usage();

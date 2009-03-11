@@ -13,7 +13,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 [--allhosts] [-C cluster.conf] [--clobber_old_data] [--mkbtrfs]"
+    echo "usage: $0 [--allhosts] [-c cluster.conf] [--clobber_old_data] [--mkbtrfs]"
     exit
 }
 
@@ -42,7 +42,7 @@ case $1 in
     --mkbtrfs)
 	    mkbtrfs=1
 	    ;;
-    --cluster-conf | -C)
+    --conf | -c)
 	    [ "$2" == "" ] && usage_exit
 	    shift
 	    conf=$1
@@ -117,8 +117,6 @@ for name in $what; do
 
     check_host || continue
 
-    get_conf runtimeconf "$runtime_conf" "conf"
-
     if [[ $ssh != "" ]] && [[ ! $pushed_to =~ " $host " ]]; then
 	scp $osdmap $host:$osdmap
 	scp $monmap $host:$monmap
@@ -127,12 +125,12 @@ for name in $what; do
 
     if [[ $type = "mon" ]]; then
 	get_conf mon_data "" "mon data"
-	do_cmd "$BINDIR/mkmonfs $clobber $mon_data --mon $num --monmap $monmap --osdmap $osdmap"
+	do_cmd "$BINDIR/mkmonfs $clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap"
     fi
 
     if [[ $type = "osd" ]]; then
-	get_conf osd_path "" "osd data"
-	get_conf btrfs_path "$osd_path" "btrfs path"  # mount point defaults so osd path
+	get_conf osd_data "" "osd data"
+	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	
@@ -141,7 +139,7 @@ for name in $what; do
 	fi
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -c $runtimeconf --monmap_file $monmap --mkfs_for_osd $num $osd_path"
+	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
     fi
 
     if [[ $type = "mds" ]]; then

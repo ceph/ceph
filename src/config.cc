@@ -373,7 +373,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(num_mds, 0, INT, 1),
 	OPTION(num_osd, 0, INT, 4),
 	OPTION(num_client, 0, INT, 1),
-	OPTION(monmap_file, 'M', STR, 0),
+	OPTION(monmap, 'M', STR, 0),
 	OPTION(mon_host, 'm', STR, 0),
 	OPTION(daemonize, 'd', BOOL, false),
 	OPTION(logger, 0, BOOL, true),
@@ -841,8 +841,8 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 	SAFE_SET_ARG_VAL(&g_conf.conf, STR);
     } else if (CMD_EQ("cluster_conf", 'C')) {
 	SAFE_SET_ARG_VAL(&g_conf.cluster_conf, STR);
-    } else if (CMD_EQ("monmap_file", 'M')) {
-	SAFE_SET_ARG_VAL(&g_conf.monmap_file, STR);
+    } else if (CMD_EQ("monmap", 'M')) {
+	SAFE_SET_ARG_VAL(&g_conf.monmap, STR);
     } else if (CMD_EQ("bind", 0)) {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
     } else if (CMD_EQ("nodaemon", 'D')) {
