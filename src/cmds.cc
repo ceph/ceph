@@ -35,7 +35,7 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cmds name [flags] [--mds rank] [--shadow rank]\n";
+  cerr << "usage: cmds -i name [flags] [--mds rank] [--shadow rank]\n";
   cerr << "  -m monitorip:port\n";
   cerr << "        connect to monitor at given address\n";
   cerr << "  --debug_mds n\n";
@@ -52,18 +52,14 @@ int main(int argc, const char **argv)
   common_init(args, "mds");
 
   // mds specific args
-  const char *name = 0;
   for (unsigned i=0; i<args.size(); i++) {
-    if (!name)
-      name = args[i];
-    else {
-      cerr << "unrecognized arg " << args[i] << std::endl;
-      usage();
-      return -1;
-    }
-  }
-  if (!name)
+    cerr << "unrecognized arg " << args[i] << std::endl;
     usage();
+  }
+  if (!g_conf.id) {
+    cerr << "must specify '-i name' with the cmds instance name" << std::endl;
+    usage();
+  }
 
   if (g_conf.clock_tare) g_clock.tare();
 
@@ -89,7 +85,7 @@ int main(int argc, const char **argv)
   rank.start();
   
   // start mds
-  MDS *mds = new MDS(name, m, &monmap);
+  MDS *mds = new MDS(g_conf.id, m, &monmap);
   mds->init();
   
   rank.wait();

@@ -36,7 +36,7 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cmon [flags] <monfsdir>" << std::endl;
+  cerr << "usage: cmon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
   cerr << "  --debug_mon n\n";
   cerr << "        debug monitor level (e.g. 10)\n";
   generic_server_usage();
@@ -52,26 +52,25 @@ int main(int argc, const char **argv)
   configure_daemon_mode();
   common_init(args, "mon");
 
-  // args
-  const char *fsdir = 0;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (args[i][0] != '-') {
-      if (!fsdir)
-        fsdir = args[i];
-      else if (fsdir)
-        usage();
-    }
+  // whoami
+  char *end;
+  int whoami = strtol(g_conf.id, &end, 10);
+  if (*end || end == g_conf.id || whoami < 0) {
+    cerr << "must specify '-i #' where # is the osd number" << std::endl;
+    usage();
   }
 
-  if (!fsdir)
+  if (!g_conf.mon_data) {
+    cerr << "must specify '--mon-data=foo' data path" << std::endl;
     usage();
+  }
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  MonitorStore store(fsdir);
+  MonitorStore store(g_conf.mon_data);
   err = store.mount();
   if (err < 0) {
-    cerr << "problem opening monitor store in " << fsdir << ": " << strerror(-err) << std::endl;
+    cerr << "problem opening monitor store in " << g_conf.mon_data << ": " << strerror(-err) << std::endl;
     exit(1);
   }
 
@@ -80,7 +79,11 @@ int main(int argc, const char **argv)
     cerr << "mon fs missing 'whoami'" << std::endl;
     exit(1);
   }
-  int whoami = store.get_int("whoami");
+  int w = store.get_int("whoami");
+  if (w != whoami) {
+    cerr << "monitor data is for mon" << w << ", but you said i was mon" << whoami << std::endl;
+    exit(1);
+  }
 
   bufferlist magicbl;
   store.get_bl_ss(magicbl, "magic", 0);
@@ -108,7 +111,7 @@ int main(int argc, const char **argv)
   // bind
   cout << "starting mon" << whoami 
        << " at " << monmap.get_inst(whoami).addr
-       << " from " << fsdir << std::endl;
+       << " from " << g_conf.mon_data << std::endl;
   g_my_addr = monmap.get_inst(whoami).addr;
   err = rank.bind();
   if (err < 0)

@@ -125,6 +125,7 @@ struct md_config_t {
   bool ms_nocrc;
 
   // mon
+  const char *mon_data;
   int mon_tick_interval;
   int mon_osd_down_out_interval;
   float mon_lease;
@@ -249,6 +250,8 @@ struct md_config_t {
   bool mds_hack_log_expire_for_better_stats;
 
   // osd
+  const char *osd_data;
+  const char *osd_journal;
   bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;

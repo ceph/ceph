@@ -422,6 +422,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_fail_interval, 0, DOUBLE, 15.0),  // fail after this long
 	OPTION(ms_die_on_failure, 0, BOOL, false),
 	OPTION(ms_nocrc, 0, BOOL, false),
+	OPTION(mon_data, 0, STR, ""),
 	OPTION(mon_tick_interval, 0, INT, 5),
 	OPTION(mon_osd_down_out_interval, 0, INT, 5),  // seconds
 	OPTION(mon_lease, 0, FLOAT, 5),  		    // lease interval
@@ -521,6 +522,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_dump_cache_on_map, 0, BOOL, false),
 	OPTION(mds_dump_cache_after_rejoin, 0, BOOL, true),
 	OPTION(mds_hack_log_expire_for_better_stats, 0, BOOL, false),
+	OPTION(osd_data, 0, STR, ""),
+	OPTION(osd_journal, 0, STR, ""),
 	OPTION(osd_balance_reads, 0, BOOL, false),
 	OPTION(osd_flash_crowd_iat_threshold, 0, INT, 0),
 	OPTION(osd_flash_crowd_iat_alpha, 0, DOUBLE, 0.125),
@@ -792,6 +795,11 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   unsigned int val_pos;
 
   std::vector<const char*> nargs;
+  
+  if (!g_conf.id)
+    g_conf.id = (char *)"";
+  if (!g_conf.type)
+    g_conf.type = (char *)"";
 
   for (unsigned i=0; i<args.size(); i++) {
     bool isarg = i+1 < args.size();  // is more?
