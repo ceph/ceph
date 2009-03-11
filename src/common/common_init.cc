@@ -10,7 +10,7 @@ void common_init(std::vector<const char*>& args, bool open)
   parse_config_options(args);
 
   // open log file?
- if (open)
+  if (open)
     _dout_open_log();
 }
 

@@ -176,7 +176,7 @@ if [ $start_osd -eq 1 ]; then
 	do
 		if [ $new -eq 1 ]; then
 			echo mkfs osd$osd
-			$SUDO $CEPH_BIN/cosd --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+			$SUDO $CEPH_BIN/cosd $ARGS --mkfs_for_osd $osd dev/osd$osd # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 		fi
 		echo start osd$osd
 		echo $valgrind $SUDO $CEPH_BIN/cosd -m $IP:$CEPH_PORT dev/osd$osd $ARGS $COSD_ARGS

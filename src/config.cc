@@ -757,9 +757,9 @@ void parse_startup_config_options(std::vector<const char*>& args)
 #define CMD_EQ(str_cmd, char_cmd) \
 	cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
-    if (CMD_EQ("conf_file", 'c')) {
+    if (CMD_EQ("conf", 'c')) {
 	SAFE_SET_ARG_VAL(&g_conf.conf, STR);
-    } else if (CMD_EQ("cluster_conf_file", 'C')) {
+    } else if (CMD_EQ("cluster_conf", 'C')) {
 	SAFE_SET_ARG_VAL(&g_conf.cluster_conf, STR);
     } else if (CMD_EQ("monmap_file", 'M')) {
 	SAFE_SET_ARG_VAL(&g_conf.monmap_file, STR);
@@ -795,6 +795,9 @@ void parse_startup_config_options(std::vector<const char*>& args)
 
 void configure_daemon_mode()
 {
+  cout << "** WARNING: Ceph is still under heavy development, and is only suitable for **\n";
+  cout << "**          testing and review.  Do not trust it with important data.       **" << std::endl;
+
   g_conf.daemonize = true;
   g_conf.log_to_stdout = false;
 }
