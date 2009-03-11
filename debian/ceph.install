@@ -8,7 +8,6 @@ usr/bin/crun
 usr/bin/cmon
 usr/bin/cmds
 usr/bin/cosd
-usr/bin/dupstore
 usr/bin/mkmonfs
 usr/sbin/mount.ceph
 usr/sbin/mkcephfs
