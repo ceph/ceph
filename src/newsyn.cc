@@ -202,7 +202,7 @@ int main(int argc, const char **argv)
 
   env_to_vec(args);
 
-  common_init(args);
+  common_init(args, "newsyn");
   parse_syn_options(args);
 
 

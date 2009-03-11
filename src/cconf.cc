@@ -14,17 +14,18 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cconf [-c filename] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
+  cerr << "usage: cconf -c filename [-t type] [-i id] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
   exit(1);
 }
 
 int main(int argc, const char **argv) 
 {
-  const char *fname = g_conf.conf;
+  const char *fname = NULL;
   const char *key = NULL, *defval = NULL;
   const char *list_sections = 0;
   char *val;
   int param = 0;
+  const char *id = NULL, *type = NULL;
   vector<const char*> args;
   vector<const char *> sections;
   argv_to_vec(argc, argv, args);
@@ -37,6 +38,16 @@ int main(int argc, const char **argv)
     if (strcmp(args[i], "-c") == 0) {
       if (i < args.size() - 1)
         fname = args[++i];
+      else
+	usage();
+    } else if (strcmp(args[i], "-t") == 0) {
+      if (i < args.size() - 1)
+        type = args[++i];
+      else
+	usage();
+    } else if (strcmp(args[i], "-i") == 0) {
+      if (i < args.size() - 1)
+        id = args[++i];
       else
 	usage();
     } else if (strcmp(args[i], "-l") == 0 ||
@@ -71,8 +82,11 @@ int main(int argc, const char **argv)
   if (!list_sections && (param < 1 || param > 3))
     usage();
 
+  if (!fname)
+    usage();
+
   ConfFile cf(fname);
-  parse_config_file(&cf, true);
+  parse_config_file(&cf, true, type, id);
 
   if (list_sections) {
     for (std::list<ConfSection*>::const_iterator p = cf.get_section_list().begin();

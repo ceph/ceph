@@ -40,6 +40,10 @@ extern const char *get_pool_name(int pool);
 extern entity_addr_t g_my_addr;
 
 struct md_config_t {
+  char *type;
+  char *id;
+  char *name;
+
   int num_mon;
   int num_mds;
   int num_osd;
@@ -351,7 +355,7 @@ void argv_to_vec(int argc, const char **argv,
 void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
 
-void parse_startup_config_options(std::vector<const char*>& args);
+void parse_startup_config_options(std::vector<const char*>& args, const char *module_type);
 void parse_config_options(std::vector<const char*>& args);
 void parse_config_option_string(string& s);
 
@@ -365,7 +369,7 @@ void generic_client_usage();
 
 class ConfFile;
 
-void parse_config_file(ConfFile *cf, bool update);
+void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, const char *module_name);
 
 
 #include "common/debug.h"

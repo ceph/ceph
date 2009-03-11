@@ -48,7 +48,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   configure_daemon_mode();
-  common_init(args);
+  common_init(args, "osd");
 
   if (g_conf.clock_tare) g_clock.tare();
 

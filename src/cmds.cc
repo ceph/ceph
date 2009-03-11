@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   configure_daemon_mode();
-  common_init(args);
+  common_init(args, "mds");
 
   // mds specific args
   const char *monhost = 0;

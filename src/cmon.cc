@@ -50,7 +50,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   configure_daemon_mode();
-  common_init(args);
+  common_init(args, "mon");
 
   // args
   const char *fsdir = 0;

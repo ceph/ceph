@@ -66,7 +66,7 @@ int main(int argc, const char **argv)
   g_conf.mon_stop_on_last_unmount = true;
   g_conf.mon_stop_with_last_mds = true;
 
-  common_init(args);
+  common_init(args, "fakesyn");
 
   int start = 0;
 
