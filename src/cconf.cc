@@ -12,6 +12,14 @@ using namespace std;
 #include "config.h"
 #include "common/ConfUtils.h"
 
+
+const char *id = NULL, *type = NULL;
+char *name, *alt_name;
+
+char *post_process_val(char *val)
+{
+}
+
 void usage() 
 {
   cerr << "usage: cconf <-c filename> [-t type] [-i id] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
@@ -25,8 +33,6 @@ int main(int argc, const char **argv)
   const char *list_sections = 0;
   char *val;
   int param = 0;
-  const char *id = NULL, *type = NULL;
-  char *name, *alt_name;
   deque<const char*> args;
   deque<const char *> sections;
   argv_to_deq(argc, argv, args);

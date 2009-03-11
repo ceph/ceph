@@ -743,7 +743,7 @@ void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, 
   cf->parse();
 
   for (int i=0; i<opt_len; i++) {
-    for (s=0; s<3; s++) {
+    for (s=0; s<4; s++) {
       config_option *opt = &config_optionsp[i];
       const char *section;
 
@@ -757,9 +757,14 @@ void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, 
             section = module_type;
             if (section)
               break;
-	default:
+	case 2:
 	    s = 2;
             section = opt->section;
+	    if (section)
+	      break;
+	default:
+	    s = 3;
+	    section = "global";
       }
 
       switch (opt->type) {
