@@ -14,6 +14,6 @@ man_MANS = \
 	cconf.8 \
 	crun.8 \
 	ceph.8 \
-	mount.ceph.8 \
+	mount.ceph.8
 
 dist_man_MANS = $(man_MANS)
