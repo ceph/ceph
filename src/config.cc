@@ -733,17 +733,29 @@ static bool cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned
 #define OPT_READ_TYPE(section, var, type, inout) \
   cf->read(section, var, (type *)inout, *(type *)inout)
 
-void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, const char *module_name)
+void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, const char *module_id)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
   int s = 0;
   int ret;
+  char *module_name = NULL, *module_alt_name = NULL;
 
   cf->set_auto_update(false);
   cf->parse();
 
+  if (module_id) {
+	module_name = (char *)malloc(strlen(module_type) + strlen(module_id) + 2);
+	sprintf(module_name, "%s.%s", module_type, module_id);
+	module_alt_name = (char *)malloc(strlen(module_type) + strlen(module_id) + 1);
+	sprintf(module_alt_name, "%s%s", module_type, module_id);
+  } else {
+	if (module_type) {
+		module_name = strdup(module_type);
+	}
+  }
+
   for (int i=0; i<opt_len; i++) {
-    for (s=0; s<4; s++) {
+    for (s=0; s<5; s++) {
       config_option *opt = &config_optionsp[i];
       const char *section;
 
@@ -753,17 +765,21 @@ void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, 
             if (section)
               break;
         case 1:
-	    s = 1;
+            section = module_alt_name;
+            if (section)
+              break;
+        case 2:
+	    s = 2;
             section = module_type;
             if (section)
               break;
-	case 2:
-	    s = 2;
+	case 3:
+	    s = 3;
             section = opt->section;
 	    if (section)
 	      break;
 	default:
-	    s = 3;
+	    s = 4;
 	    section = "global";
       }
 
@@ -852,8 +868,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   g_conf.type = strdup(module_type);
 
   if (g_conf.id) {
-	g_conf.name = (char *)malloc(strlen(module_type) + strlen(g_conf.id) + 1);
-
+	g_conf.name = (char *)malloc(strlen(module_type) + strlen(g_conf.id) + 2);
 	sprintf(g_conf.name, "%s.%s", g_conf.type, g_conf.id);
   } else {
 	g_conf.name = g_conf.type;
@@ -861,7 +876,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
   ConfFile cf(g_conf.conf);
 
-  parse_config_file(&cf, true, g_conf.type, g_conf.name);
+  parse_config_file(&cf, true, g_conf.type, g_conf.id);
 
   if (show_config) {
     cf.dump();

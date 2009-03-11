@@ -18,6 +18,7 @@ char *name, *alt_name;
 
 char *post_process_val(char *val)
 {
+  return val;
 }
 
 void usage() 
@@ -94,15 +95,6 @@ int main(int argc, const char **argv)
   if (!fname)
     usage();
 
-  if (id) {
-	name = (char *)malloc(strlen(type) + strlen(id) + 2);
-	sprintf(name, "%s.%s", type, id);
-	alt_name = (char *)malloc(strlen(type) + strlen(id) + 1);
-	sprintf(alt_name, "%s%s", type, id);
-  } else {
-	name = (char *)type;
-  }
-
   ConfFile cf(fname);
   parse_config_file(&cf, true, type, id);
 
@@ -116,13 +108,22 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  if (id) {
+       name = (char *)malloc(strlen(type) + strlen(id) + 2);
+       sprintf(name, "%s.%s", type, id);
+       alt_name = (char *)malloc(strlen(type) + strlen(id) + 1);
+       sprintf(alt_name, "%s%s", type, id);
+  } else {
+       name = (char *)type;
+  }
+
   if (type)
     sections.push_front(type);
 
-  if (name)
-    sections.push_front(name);
   if (alt_name)
     sections.push_front(alt_name);
+  if (name)
+    sections.push_front(name);
 
   sections.push_back("global");
 
