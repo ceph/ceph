@@ -83,6 +83,18 @@ int MonClient::get_monmap(MonMap *pmonmap)
 {
   static string monstr;
 
+  if (g_conf.monmap_file) {
+    // file?
+    const char *monmap_fn = g_conf.monmap_file;
+    int r = pmonmap->read(monmap_fn);
+    if (r >= 0) {
+      cout << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << std::endl;
+      return 0;
+    }
+
+    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
+  }
+
   if (!g_conf.mon_host) {
     // cluster conf?
     ConfFile a(g_conf.cluster_conf);
@@ -114,18 +126,6 @@ int MonClient::get_monmap(MonMap *pmonmap)
   if (g_conf.mon_host &&
       probe_mon(pmonmap) == 0)  
     return 0;
-
-  if (g_conf.monmap_file) {
-    // file?
-    const char *monmap_fn = g_conf.monmap_file;
-    int r = pmonmap->read(monmap_fn);
-    if (r >= 0) {
-      cout << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << std::endl;
-      return 0;
-    }
-
-    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
-  }
 
   cerr << "must specify monitor address (-m monaddr) or cluster conf (-C cluster.conf) or monmap file (-M monmap)" << std::endl;
   return -1;
