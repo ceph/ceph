@@ -118,6 +118,8 @@ int main(int argc, const char **argv)
   if (alt_name)
     sections.push_front(alt_name);
 
+  sections.push_back("global");
+
   for (unsigned i=0; i<sections.size(); i++) {
     cf.read(sections[i], key, (char **)&val, NULL);
 
