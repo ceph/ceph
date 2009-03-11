@@ -1,0 +1,61 @@
+.TH CEPH 8
+.SH NAME
+ceph \- ceph file system control utility
+.SH SYNOPSIS
+.B ceph
+[ \fB\-m\fI monaddr\fR ]
+[ \fB\-w\fP | \fIcommand ...\fR ]
+.SH DESCRIPTION
+.B ceph
+is a control utility for communicating with the monitor cluster of a running
+Ceph distributed file system.
+.PP
+There are three basic modes of operation.
+.SH INTERACTIVE MODE
+To start in interactive
+mode, no arguments are necessary.  Control-d or 'quit' will exit.
+.SH WATCH MODE
+To watch cluster state changes in real time,
+starting in \fB\-w\fP (watch) mode will print updates to stdout as they occur.  For example,
+to keep an eye on cluster state,
+.IP
+ceph -C cluster.conf -w
+.SH COMMAND LINE MODE
+Finally, to send a single instruction to the monitor cluster (and wait for a 
+response), the command can be specified on the command line.
+.SH OPTIONS
+.TP
+\fB\-i \fIinfile\fP
+will specify an input file to be passed along as a payload with the \fIcommand\fP to the
+monitor cluster.  This is only used for specific monitor commands.
+.TP
+\fB\-o \fIoutfile\fP
+will write any payload returned by the monitor cluster with its reply to \fIoutfile\fP.
+Only specific monitor commands (e.g. \fIosd getmap\fP) return a payload.
+.TP
+\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
+Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
+.SH EXAMPLES
+To grab a copy of the current OSD map:
+.IP
+ceph -m 1.2.3.4:6789 osd getmap -o osdmap
+.PP
+To get a dump of placement group (PG) state:
+.IP
+ceph pg dump -o pg.txt
+.SH MONITOR COMMANDS
+A more complete summary of commands understood by the monitor cluster can be found
+in the wiki, at
+.IP
+http://ceph.newdream.net/wiki/Monitor_commands
+.SH AVAILABILITY
+.B ceph
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR mkcephfs (8)

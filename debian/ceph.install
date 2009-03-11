@@ -19,8 +19,11 @@ usr/share/man/man8/cmon.8
 usr/share/man/man8/cmds.8
 usr/share/man/man8/cosd.8
 usr/share/man/man8/mkcephfs.8
+usr/share/man/man8/mkmonfs.8
 usr/share/man/man8/crun.8
 usr/share/man/man8/csyn.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/osdmaptool.8
+usr/share/man/man8/monmaptool.8
 usr/share/man/man8/cconf.8
+usr/share/man/man8/ceph.8

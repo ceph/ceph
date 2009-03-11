@@ -26,15 +26,6 @@ using namespace std;
 
 #include "mon/MonMap.h"
 
-/*
-
-./monmaptool -f .ceph_monmap
-./monmaptool -f .ceph_monmap --create --clobber --add 1.2.3.4:12345
-./monmaptool -f .ceph_monmap --add 1.2.3.4:12345
-./monmaptool -f .ceph_monmap --rm 1.2.3.4:12345
-
- */
-
 void usage(const char *me)
 {
   cout << me << " usage: [--print] [--create [--clobber]] [--add 1.2.3.4:567] [--rm 1.2.3.4:567] <mapfilename>" << std::endl;
