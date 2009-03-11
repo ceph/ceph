@@ -26,7 +26,7 @@ int main(int argc, const char **argv)
   char *val;
   int param = 0;
   const char *id = NULL, *type = NULL;
-  char *name;
+  char *name, *alt_name;
   deque<const char*> args;
   deque<const char *> sections;
   argv_to_deq(argc, argv, args);
@@ -89,9 +89,10 @@ int main(int argc, const char **argv)
     usage();
 
   if (id) {
-	name = (char *)malloc(strlen(type) + strlen(id) + 1);
-
+	name = (char *)malloc(strlen(type) + strlen(id) + 2);
 	sprintf(name, "%s.%s", type, id);
+	alt_name = (char *)malloc(strlen(type) + strlen(id) + 1);
+	sprintf(name, "%s%s", type, id);
   } else {
 	name = (char *)type;
   }
@@ -114,6 +115,8 @@ int main(int argc, const char **argv)
 
   if (name)
     sections.push_front(name);
+  if (alt_name)
+    sections.push_front(alt_name);
 
   for (unsigned i=0; i<sections.size(); i++) {
     cf.read(sections[i], key, (char **)&val, NULL);
