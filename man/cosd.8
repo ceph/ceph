@@ -3,9 +3,10 @@
 cosd \- ceph object storage daemon
 .SH SYNOPSIS
 .B cosd
-\fIdatapath\fP
-[ \fB\-j\fI journal\fP ]
-[ \fB\-\-mkfs_for_osd\fI nodeid\fP ]
+\fB\-i \fIosdnum\fR
+[ \fB\-\-osd\-data \fIdatapath\fR ]
+[ \fB\-\-osd\-journal \fIjournal\fR ]
+[ \fB\-\-mkfs\fR ]
 .SH DESCRIPTION
 .B cosd
 is the object storage daemon for the Ceph distributed file system.
@@ -27,21 +28,19 @@ do not daemonize after startup (run in foreground), but log to the usual locatio
 Useful when run via 
 .BR crun (8).
 .TP
-\fB\-j\fI journal\fP
+\fB\-\-osd\-data \fIosddata\fP
+Use object store at \fIosddata\fP.
+.TP
+\fB\-\-osd\-journal \fIjournal\fP
 Journal updates to \fIjournal\fP.
 .TP
-\fB\-\-mkfs_for_osd\fI nodeid\fP
-Create an empty object repository for OSD number \fInodeid\fP.  Normally
-invoked by
+\fB\-\-mkfs\fP
+Create an empty object repository.  Normally invoked by
 .BR mkcephfs (8).
 .TP
-\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
-Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+\fB\-c\fI cluster.conf\fR, \fB\-\-conf=\fIcluster.conf\fR
+Use \fIcluster.conf\fP configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
 for runtime configuration options.
-.TP
-\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
-Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
-to determine monitor addresses during startup.
 .TP
 \fB\-m\fI monaddress[:port]\fR
 Connect to specified monitor (instead of looking through \fIcluster.conf\fR).

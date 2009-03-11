@@ -3,7 +3,8 @@
 cmon \- ceph monitor daemon
 .SH SYNOPSIS
 .B cmon
-\fImondatapath\fP
+\fB\-i \fImonid\fR
+[ \fB\-\-mon\-data mondatapath\fR ]
 .SH DESCRIPTION
 .B cmon
 is the cluster monitor daemon for the Ceph distributed file system.
@@ -25,11 +26,7 @@ do not daemonize after startup (run in foreground), but log to the usual locatio
 Useful when run via 
 .BR crun (8).
 .TP
-\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
-Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
-for runtime configuration options.
-.TP
-\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
+\fB\-c\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
 Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
 to determine monitor addresses during startup.
 .SH AVAILABILITY
