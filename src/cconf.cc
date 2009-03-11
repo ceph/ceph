@@ -55,6 +55,8 @@ static const char *var_val(char *var_name)
 		return type;
 	if (strcmp(var_name, "id")==0)
 		return id;
+	if (strcmp(var_name, "num")==0)
+		return id;
 	if (strcmp(var_name, "name")==0)
 		return name;
 
