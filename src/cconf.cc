@@ -14,7 +14,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cconf -c filename [-t type] [-i id] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
+  cerr << "usage: cconf <-c filename> [-t type] [-i id] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
   exit(1);
 }
 
@@ -26,10 +26,11 @@ int main(int argc, const char **argv)
   char *val;
   int param = 0;
   const char *id = NULL, *type = NULL;
-  vector<const char*> args;
-  vector<const char *> sections;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  char *name;
+  deque<const char*> args;
+  deque<const char *> sections;
+  argv_to_deq(argc, argv, args);
+  env_to_deq(args);
 
   if (args.size() < 2)
     usage();
@@ -41,6 +42,8 @@ int main(int argc, const char **argv)
       else
 	usage();
     } else if (strcmp(args[i], "-t") == 0) {
+      if (param == 0)
+          param++;
       if (i < args.size() - 1)
         type = args[++i];
       else
@@ -85,6 +88,14 @@ int main(int argc, const char **argv)
   if (!fname)
     usage();
 
+  if (id) {
+	name = (char *)malloc(strlen(type) + strlen(id) + 1);
+
+	sprintf(name, "%s.%s", type, id);
+  } else {
+	name = (char *)type;
+  }
+
   ConfFile cf(fname);
   parse_config_file(&cf, true, type, id);
 
@@ -97,6 +108,12 @@ int main(int argc, const char **argv)
     }
     return 0;
   }
+
+  if (type)
+    sections.push_front(type);
+
+  if (name)
+    sections.push_front(name);
 
   for (unsigned i=0; i<sections.size(); i++) {
     cf.read(sections[i], key, (char **)&val, NULL);

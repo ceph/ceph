@@ -354,6 +354,9 @@ void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
 void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
+void env_to_deq(std::deque<const char*>& args);
+void argv_to_deq(int argc, const char **argv,
+                 std::deque<const char*>& args);
 
 void parse_startup_config_options(std::vector<const char*>& args, const char *module_type);
 void parse_config_options(std::vector<const char*>& args);
