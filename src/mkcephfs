@@ -141,7 +141,7 @@ for name in $what; do
 	fi
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -C $conf -c $runtimeconf --monmap_file $monmap --mkfs_for_osd $num $osd_path"
+	do_cmd "$BINDIR/cosd -c $runtimeconf --monmap_file $monmap --mkfs_for_osd $num $osd_path"
     fi
 
     if [[ $type = "mds" ]]; then
