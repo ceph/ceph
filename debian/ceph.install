@@ -21,3 +21,5 @@ usr/share/man/man8/cosd.8
 usr/share/man/man8/mkcephfs.8
 usr/share/man/man8/crun.8
 usr/share/man/man8/csyn.8
+usr/share/man/man8/crushtool.8
+usr/share/man/man8/osdmaptool.8

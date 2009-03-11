@@ -1,0 +1,50 @@
+.TH OSDMAPTOOL 8
+.SH NAME
+osdmaptool \- ceph osd cluster map manipulation tool
+.SH SYNOPSIS
+.B osdmaptool
+\fImapfilename\fP
+[\fB\-\-print\fR]
+[\fB\-\-createsimple \fInumosd\fR [\fB\-\-pgbits \fIbitsperosd\fR]]
+[\fB\-\-clobber\fR]
+.SH DESCRIPTION
+.B osdmaptool
+is a utility that lets you create, view, and manipulate OSD cluster maps from the
+Ceph distributed file system.  Notably, it lets you extract the embedded CRUSH map
+or import a new CRUSH map.
+.SH OPTIONS
+.TP
+\fB\-\-print\fP
+will simply make the tool print a plaintext dump of the map, after any modifications are made.
+.TP
+\fB\-\-clobber\fP
+will allow
+.B osdmaptool
+to overwrite \fImapfilename\fP if changes are made.
+.TP
+\fB\-\-import-crush\fI mapfile\fP
+will load the CRUSH map from \fImapfile\fP and embed it in the OSD map.
+.TP
+\fB\-\-export-crush\fI mapfile\fP
+will extract the CRUSH map from the OSD map and write it to \fImapfile\fP.
+.TP
+\fB\-\-createsimple\fI numosd\fP [\fB\-\-pgbits \fIbitsperosd\fR]
+will create a relatively generic OSD map with the \fInumosd\fP devices.  If \fB\-\-pgbits\fP 
+is specified, the initial placement group counts will be set with \fIbitsperosd\fP bits per OSD.
+That is, the \fIpg_num\fP map attribute will be set to \fInumosd\fP shifted by \fIbitsperosd\fP.
+.SH EXAMPLE
+To create a simple map with 16 devices:
+.IP
+osdmaptool --createsimple 16 osdmap --clobber
+.PP
+To view the result:
+.IP
+osdmaptool --print osdmap
+.SH AVAILABILITY
+.B osdmaptool
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR crushtool (8),
+.BR mkcephfs (8)
