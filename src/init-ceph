@@ -25,7 +25,7 @@ fi
 
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
-    printf "\t-c conffile.conf\n"
+    printf "\t-C cluster.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
     exit
 }
@@ -99,7 +99,7 @@ case $1 in
     --nobtrfs)
 	    dobtrfs=0
 	    ;;
-    --conf | -c)
+    --cluster-conf | -C)
 	    [ "$2" == "" ] && usage_exit
 	    options="$options $1"
 	    shift
@@ -139,7 +139,7 @@ for name in $what; do
     check_host || continue
 
     get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
-    get_conf conf "$runtime_conf" "conf" $sections
+    get_conf runtimeconf "$runtime_conf" "conf" $sections
 
     # extract name-specific options from $conf
     if [[ $name =~ "mon" ]]; then
@@ -160,12 +160,12 @@ for name in $what; do
 	module_opt="$mon_addr_arg $osd_data $osd_journal_cmd"
 	module_bin="$BINDIR/cosd"
 
-	get_conf btrfs_path "$osd_path" "btrfs path" $sections  # mount point defaults so osd path
+	get_conf btrfs_path "$osd_data" "btrfs path" $sections  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs" $sections
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
 
-    module_opt="-p $pid_file -c $conf $module_opt"
+    module_opt="-p $pid_file -c $runtimeconf $module_opt"
 
     case "$command" in
 	start)
