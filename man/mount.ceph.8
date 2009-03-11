@@ -1,0 +1,64 @@
+.TH MOUNT.CEPH 8
+.SH NAME
+mount.ceph \- mount a ceph file system
+.SH SYNOPSIS
+.B mount.ceph
+\fImonaddr1\fR[,\fImonaddr2\fR,...]:/[\fIsubdir\fR]
+\fIdir\fR
+[ \fB\-o \fIoptions\fR ]
+.SH DESCRIPTION
+.B mount.ceph
+is a simple helper for mounting the Ceph file system on a Linux host.
+The only real purpose it serves is to resolve monitor hostname(s) into
+IP addresses; the Linux kernel client component does most of the real
+work.  In fact, it is possible to mount a Ceph file system without
+.B mount.ceph
+by specifying monitor address(es) by IP:
+.IP
+mount -t ceph 1.2.3.4:/ mountpoint
+.PP
+Each monitor address \fImonaddr\fR takes the form
+\fIhost\fR[:\fIport\fP].  If the port is not specified, the Ceph
+default of \fI6789\fP is assumed.  
+.PP
+Multiple monitor addresses can be separated by commas.  Only one
+responsible monitor is needed to successfully mount; the client will
+learn about all monitors from any responsive monitor.  However, it is
+a good idea to specify more than one in case one happens to be down at
+the time of mount.
+.PP
+A subdirectory \fIsubdir\fP may be specified if a subset of the file system is to be
+mounted.
+.SH EXAMPLES
+Mount the full file system:
+.IP
+mount.ceph monhost:/ /mnt/foo
+.PP
+If there are multiple monitors:
+.IP
+mount.ceph monhost1,monhost2,monhost3:/ /mnt/foo
+.PP
+If 
+.BR cmon (8)
+is running on a non-standard port:
+.IP
+mount.ceph monhost1:7000,monhost2:7000,monhost3:7000:/ /mnt/foo
+.PP
+To mount only part of the namespace:
+.IP
+mount.ceph monhost1:/some/small/thing /mnt/thing
+.PP
+Assuming
+.BR mount.ceph (8)
+is installed properly, it should be automatically invoked by
+.BR mount (8)
+like so:
+.IP
+mount -t ceph monhost:/ /mnt/foo
+.SH AVAILABILITY
+.B mount.ceph
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR cfuse (8),
+.BR ceph (8)

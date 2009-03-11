@@ -27,3 +27,4 @@ usr/share/man/man8/osdmaptool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/cconf.8
 usr/share/man/man8/ceph.8
+usr/share/man/man8/mount.ceph.8

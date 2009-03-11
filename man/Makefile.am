@@ -13,6 +13,7 @@ man_MANS = \
 	monmaptool.8 \
 	cconf.8 \
 	crun.8 \
-	ceph.8
+	ceph.8 \
+	mount.ceph.8 \
 
 dist_man_MANS = $(man_MANS)
