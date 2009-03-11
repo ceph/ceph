@@ -25,7 +25,7 @@ fi
 
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
-    printf "\t-c cluster.conf\n"
+    printf "\t-c ceph.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
     exit
 }

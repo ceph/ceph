@@ -69,7 +69,6 @@ struct md_config_t {
   const char *pid_file;
 
   const char *conf;
-  const char *cluster_conf;
 
   const char *chdir;
 

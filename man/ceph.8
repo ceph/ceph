@@ -19,7 +19,7 @@ To watch cluster state changes in real time,
 starting in \fB\-w\fP (watch) mode will print updates to stdout as they occur.  For example,
 to keep an eye on cluster state,
 .IP
-ceph -C cluster.conf -w
+ceph -C ceph.conf -w
 .SH COMMAND LINE MODE
 Finally, to send a single instruction to the monitor cluster (and wait for a 
 response), the command can be specified on the command line.
@@ -33,12 +33,12 @@ monitor cluster.  This is only used for specific monitor commands.
 will write any payload returned by the monitor cluster with its reply to \fIoutfile\fP.
 Only specific monitor commands (e.g. \fIosd getmap\fP) return a payload.
 .TP
-\fB\-C\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
-Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
 to determine monitor addresses during startup.
 .TP
 \fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
 .SH EXAMPLES
 To grab a copy of the current OSD map:
 .IP

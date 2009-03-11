@@ -14,7 +14,7 @@ let localhost=0
 valgrind=""
 MON_ADDR=""
 
-conf="cluster.conf"
+conf="ceph.conf"
 
 usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"

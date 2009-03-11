@@ -15,7 +15,7 @@ namespace, coordinating access to the shared OSD cluster.
 Each 
 .B cmds
 daemon instance should have a unique \fIname\fP.  The name is used
-to identify daemon instances in the \fIcluster.conf\fP.
+to identify daemon instances in the \fIceph.conf\fP.
 .PP
 Once the daemon has started, the monitor cluster will normally assign it
 a logical rank, or put it in a standby pool to take over for another daemon
@@ -40,12 +40,12 @@ do not daemonize after startup (run in foreground), but log to the usual locatio
 Useful when run via 
 .BR crun (8).
 .TP
-\fB\-c\fI cluster.conf\fR, \fB\-\-cluster-conf=\fIcluster.conf\fR
-Use \fIcluster.conf\fP cluster configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
 to determine monitor addresses during startup.
 .TP
 \fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
 .SH AVAILABILITY
 .B cmon
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at

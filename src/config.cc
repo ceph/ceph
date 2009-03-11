@@ -386,7 +386,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_to_stdout, 0, BOOL, true),
 	OPTION(pid_file, 'p', STR, 0),
 	OPTION(conf, 'c', STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
-	OPTION(cluster_conf, 'C', STR, INSTALL_PREFIX "/etc/ceph/cluster.conf"),
 	OPTION(chdir, 0, STR, "/"),
 	OPTION(fake_clock, 0, BOOL, false),
 	OPTION(fakemessenger_serialize, 0, BOOL, true),
@@ -839,8 +838,6 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
     if (CMD_EQ("conf", 'c')) {
 	SAFE_SET_ARG_VAL(&g_conf.conf, STR);
-    } else if (CMD_EQ("cluster_conf", 'C')) {
-	SAFE_SET_ARG_VAL(&g_conf.cluster_conf, STR);
     } else if (CMD_EQ("monmap", 'M')) {
 	SAFE_SET_ARG_VAL(&g_conf.monmap, STR);
     } else if (CMD_EQ("bind", 0)) {
@@ -900,10 +897,8 @@ void configure_client_mode()
 
 void generic_usage()
 {
-  cerr << "   -C cluster.conf or --cluster-conf=cluster.conf\n";
-  cerr << "        get monitor IP(s) from given conf (instead of /etc/ceph/cluster.conf)\n";
   cerr << "   -c ceph.conf or --conf=ceph.conf\n";
-  cerr << "        get runtime options from given conf file" << std::endl;
+  cerr << "        get options from given conf file" << std::endl;
 }
 
 void generic_server_usage()

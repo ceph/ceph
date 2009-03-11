@@ -38,12 +38,12 @@ Journal updates to \fIjournal\fP.
 Create an empty object repository.  Normally invoked by
 .BR mkcephfs (8).
 .TP
-\fB\-c\fI cluster.conf\fR, \fB\-\-conf=\fIcluster.conf\fR
-Use \fIcluster.conf\fP configuration file instead of the default \fI/etc/ceph/cluster.conf\fP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
 for runtime configuration options.
 .TP
 \fB\-m\fI monaddress[:port]\fR
-Connect to specified monitor (instead of looking through \fIcluster.conf\fR).
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
 .SH AVAILABILITY
 .B cosd
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at

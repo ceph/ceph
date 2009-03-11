@@ -13,7 +13,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 [--allhosts] [-c cluster.conf] [--clobber_old_data] [--mkbtrfs]"
+    echo "usage: $0 [--allhosts] [-c ceph.conf] [--clobber_old_data] [--mkbtrfs]"
     exit
 }
 
