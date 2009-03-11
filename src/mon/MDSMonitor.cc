@@ -219,8 +219,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
       if (info.state == MDSMap::STATE_STANDBY &&
 	  state == MDSMap::STATE_STANDBY_REPLAY &&
 	  (pending_mdsmap.is_degraded() ||
-	   pending_mdsmap.get_state(info.mds) < MDSMap::STATE_ACTIVE)) {
-	dout(10) << "mds_beacon can't standby-replay mds" << info.mds << " at this time (cluster degraded, or mds not active)" << dendl;
+	   pending_mdsmap.get_state(info.rank) < MDSMap::STATE_ACTIVE)) {
+	dout(10) << "mds_beacon can't standby-replay mds" << info.rank << " at this time (cluster degraded, or mds not active)" << dendl;
 	goto ignore;
       }
       
@@ -232,7 +232,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   // note time and reply
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr] = g_clock.now();  
-  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid,
+  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_name(),
 					      mdsmap.get_epoch(), state, seq, 0), 
 			       m->get_orig_source_inst());
 
@@ -288,7 +288,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
     // add
     MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
-    info.mds = standby_for;
+    info.name = m->get_name();
+    info.rank = standby_for;
     info.addr = addr;
     info.state = MDSMap::STATE_STANDBY;
 
@@ -304,15 +305,15 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
       info.clear_laggy();
     }
   
-    dout(10) << "prepare_beacon mds" << info.mds
+    dout(10) << "prepare_beacon mds" << info.rank
 	     << " " << MDSMap::get_state_name(info.state)
 	     << " -> " << MDSMap::get_state_name(state)
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
-      pending_mdsmap.up.erase(info.mds);
+      pending_mdsmap.up.erase(info.rank);
       pending_mdsmap.mds_info.erase(addr);
-      pending_mdsmap.stopped.insert(info.mds);
-      pending_mdsmap.in.erase(info.mds);
+      pending_mdsmap.stopped.insert(info.rank);
+      pending_mdsmap.in.erase(info.rank);
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -514,7 +515,7 @@ void MDSMonitor::tick()
     dout(1) << "adding standby " << addr << " as mds" << mds << dendl;
     
     MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
-    info.mds = mds;
+    info.rank = mds;
     if (pending_mdsmap.stopped.count(mds))
       info.state = MDSMap::STATE_STARTING;
     else
@@ -552,17 +553,17 @@ void MDSMonitor::tick()
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
 
-      dout(10) << "no beacon from " << addr << " mds" << info.mds << "." << info.inc
+      dout(10) << "no beacon from " << addr << " mds" << info.rank << "." << info.inc
 	       << " " << MDSMap::get_state_name(info.state)
 	       << " since " << since << dendl;
       
       // are we in?
       // and is there a non-laggy standby that can take over for us?
       entity_addr_t sa;
-      if (info.mds >= 0 &&
+      if (info.rank >= 0 &&
 	  info.state > 0 && //|| info.state == MDSMap::STATE_STANDBY_REPLAY) &&
-	  pending_mdsmap.find_standby_for(info.mds, sa)) {
-	dout(10) << " replacing " << addr << " mds" << info.mds << "." << info.inc
+	  pending_mdsmap.find_standby_for(info.rank, sa)) {
+	dout(10) << " replacing " << addr << " mds" << info.rank << "." << info.inc
 		 << " " << MDSMap::get_state_name(info.state)
 		 << " with " << sa << dendl;
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
@@ -583,10 +584,10 @@ void MDSMonitor::tick()
 	default:
 	  assert(0);
 	}
-	si.mds = info.mds;
+	si.rank = info.rank;
 	if (si.state > 0) {
-	  si.inc = ++pending_mdsmap.inc[info.mds];
-	  pending_mdsmap.up[info.mds] = sa;
+	  si.inc = ++pending_mdsmap.inc[info.rank];
+	  pending_mdsmap.up[info.rank] = sa;
 	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	}
 	pending_mdsmap.mds_info.erase(addr);
@@ -601,14 +602,14 @@ void MDSMonitor::tick()
 	
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-	dout(10) << " failing " << addr << " mds" << info.mds << "." << info.inc
+	dout(10) << " failing " << addr << " mds" << info.rank << "." << info.inc
 		 << " " << MDSMap::get_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(addr);
 	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
-	dout(10) << " marking " << addr << " mds" << info.mds << "." << info.inc
+	dout(10) << " marking " << addr << " mds" << info.rank << "." << info.inc
 		 << " " << MDSMap::get_state_name(info.state)
 		 << " laggy" << dendl;
 	info.laggy_since = now;
@@ -636,7 +637,7 @@ void MDSMonitor::tick()
 	dout(0) << " taking over failed mds" << f << " with " << sa << dendl;
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
 	si.state = MDSMap::STATE_REPLAY;
-	si.mds = f;
+	si.rank = f;
 	si.inc = ++pending_mdsmap.inc[f];
 	pending_mdsmap.in.insert(f);
 	pending_mdsmap.up[f] = sa;
@@ -656,10 +657,10 @@ void MDSMonitor::tick()
 	 p != pending_mdsmap.mds_info.end();
 	 p++) {
       if (p->second.state == MDSMap::STATE_STANDBY_REPLAY) 
-	shadowed.insert(p->second.mds);
+	shadowed.insert(p->second.rank);
       if (p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy())
-	avail[p->second.mds].insert(p->first);
+	avail[p->second.rank].insert(p->first);
     }
 
     // find an mds that needs a standby
@@ -682,7 +683,7 @@ void MDSMonitor::tick()
       dout(10) << "mds" << *p << " will be shadowed by " << s << dendl;
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[s];
-      info.mds = *p;
+      info.rank = *p;
       info.state = MDSMap::STATE_STANDBY_REPLAY;
       do_propose = true;
     }
@@ -715,21 +716,21 @@ void MDSMonitor::do_stop()
       info.state = MDSMap::STATE_STOPPING;
       break;
     case MDSMap::STATE_STARTING:
-      pending_mdsmap.stopped.insert(info.mds);
+      pending_mdsmap.stopped.insert(info.rank);
     case MDSMap::STATE_CREATING:
-      pending_mdsmap.up.erase(info.mds);
+      pending_mdsmap.up.erase(info.rank);
       pending_mdsmap.mds_info.erase(info.addr);
-      pending_mdsmap.in.erase(info.mds);
+      pending_mdsmap.in.erase(info.rank);
       break;
     case MDSMap::STATE_REPLAY:
     case MDSMap::STATE_RESOLVE:
     case MDSMap::STATE_RECONNECT:
     case MDSMap::STATE_REJOIN:
       // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
-      pending_mdsmap.failed.insert(info.mds);
-      pending_mdsmap.up.erase(info.mds);
+      pending_mdsmap.failed.insert(info.rank);
+      pending_mdsmap.up.erase(info.rank);
       pending_mdsmap.mds_info.erase(info.addr);
-      pending_mdsmap.in.erase(info.mds);
+      pending_mdsmap.in.erase(info.rank);
       break;
     }
   }

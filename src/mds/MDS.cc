@@ -71,9 +71,10 @@
 
 
 // cons/des
-MDS::MDS(int whoami_, Messenger *m, MonMap *mm) : 
+MDS::MDS(const char *n, int whoami_, Messenger *m, MonMap *mm) : 
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
+  name(n),
   whoami(whoami_), incarnation(0),
   standby_replay_for(-1),
   messenger(m),
@@ -450,7 +451,7 @@ void MDS::beacon_send()
 
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
-  messenger->send_message(new MMDSBeacon(monmap->fsid, mdsmap->get_epoch(), 
+  messenger->send_message(new MMDSBeacon(monmap->fsid, name, mdsmap->get_epoch(), 
 					 want_state, beacon_last_seq, want_rank),
 			  monmap->get_inst(mon));
 

@@ -104,22 +104,24 @@ class MDSMap {
   }
 
   struct mds_info_t {
-    int32_t mds;
+    string name;
+    int32_t rank;
     int32_t inc;
     int32_t state;
     version_t state_seq;
     entity_addr_t addr;
     utime_t laggy_since;
 
-    mds_info_t() : mds(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
+    mds_info_t() : rank(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
 
-    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(mds), addr); }
+    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
     void encode(bufferlist& bl) const {
-      ::encode(mds, bl);
+      ::encode(name, bl);
+      ::encode(rank, bl);
       ::encode(inc, bl);
       ::encode(state, bl);
       ::encode(state_seq, bl);
@@ -127,7 +129,8 @@ class MDSMap {
       ::encode(laggy_since, bl);
     }
     void decode(bufferlist::iterator& bl) {
-      ::decode(mds, bl);
+      ::decode(name, bl);
+      ::decode(rank, bl);
       ::decode(inc, bl);
       ::decode(state, bl);
       ::decode(state_seq, bl);
@@ -240,14 +243,14 @@ class MDSMap {
 	 p != mds_info.end();
 	 p++)
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
-	s.insert(p->second.mds);
+	s.insert(p->second.rank);
   }
   void get_mds_set(set<int>& s, int state) {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++)
       if (p->second.state == state)
-	s.insert(p->second.mds);
+	s.insert(p->second.rank);
   } 
 
   int get_random_up_mds() {
@@ -262,7 +265,7 @@ class MDSMap {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++) {
-      if (p->second.mds == mds &&
+      if (p->second.rank == mds &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	a = p->second.addr;
@@ -272,7 +275,7 @@ class MDSMap {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++) {
-      if (p->second.mds == -1 &&
+      if (p->second.rank == -1 &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	a = p->second.addr;
@@ -355,7 +358,7 @@ class MDSMap {
   
   int get_rank(const entity_addr_t& addr) {
     if (mds_info.count(addr))
-      return mds_info[addr].mds;
+      return mds_info[addr].rank;
     return -1;
   }
 

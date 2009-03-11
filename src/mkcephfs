@@ -112,7 +112,8 @@ fi
 # create monitors, osds
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-    num=`echo $name | cut -c 4-`
+    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    num=$id
     sections="$name $type global"
 
     check_host || continue

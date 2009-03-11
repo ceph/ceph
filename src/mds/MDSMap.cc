@@ -39,7 +39,7 @@ void MDSMap::print(ostream& out)
   for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
        p++)
-    foo.insert(pair<pair<unsigned,unsigned>,entity_addr_t>(pair<unsigned,unsigned>(p->second.mds, p->second.inc-1), p->first));
+    foo.insert(pair<pair<unsigned,unsigned>,entity_addr_t>(pair<unsigned,unsigned>(p->second.rank, p->second.inc-1), p->first));
 
   for (multimap< pair<unsigned,unsigned>, entity_addr_t >::iterator p = foo.begin();
        p != foo.end();
@@ -47,7 +47,8 @@ void MDSMap::print(ostream& out)
     mds_info_t& info = mds_info[p->second];
     
     out << info.addr
-	<< " mds" << info.mds
+	<< " '" << info.name << "'"
+	<< " mds" << info.rank
 	<< "." << info.inc
 	<< " " << get_state_name(info.state)
 	<< " seq " << info.state_seq;

@@ -133,7 +133,8 @@ get_name_list "$@"
 
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
-    num=`echo $name | cut -c 4-`
+    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    num=$id
     sections="$name $type global"
 
     check_host || continue
@@ -149,8 +150,12 @@ for name in $what; do
     fi
 
     if [[ $name =~ "mds" ]]; then
+	get_conf mds "" "mds" $sections
+	get_conf shadow "" "shadow" $sections
 	module_opt="$mon_addr_arg"
-	module_bin="$BINDIR/cmds"
+	module_bin="$BINDIR/cmds $id"
+	[[ $mds != "" ]] && $module_bin="$module_bin --mds $mds"
+	[[ $shadow != "" ]] && $module_bin="$module_bin --shadow $shadow"
     fi
 
     if [[ $name =~ "osd" ]]; then

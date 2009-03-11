@@ -35,7 +35,7 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: cmds [flags] [--mds rank] [--shadow rank]\n";
+  cerr << "usage: cmds name [flags] [--mds rank] [--shadow rank]\n";
   cerr << "  -m monitorip:port\n";
   cerr << "        connect to monitor at given address\n";
   cerr << "  --debug_mds n\n";
@@ -52,22 +52,24 @@ int main(int argc, const char **argv)
   common_init(args, "mds");
 
   // mds specific args
-  const char *monhost = 0;
   int whoami = -1;
   int shadow = -1;
+  const char *name = 0;
   for (unsigned i=0; i<args.size(); i++) {
     if (strcmp(args[i], "--mds") == 0) 
       whoami = atoi(args[++i]);
     else if (strcmp(args[i], "--shadow") == 0)
       whoami = shadow = atoi(args[++i]);
-    else if (monhost == 0) 
-      monhost = args[i];
+    else if (!name)
+      name = args[i];
     else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       usage();
       return -1;
     }
   }
+  if (!name)
+    usage();
 
   if (g_conf.clock_tare) g_clock.tare();
 
@@ -93,7 +95,7 @@ int main(int argc, const char **argv)
   rank.start();
   
   // start mds
-  MDS *mds = new MDS(whoami, m, &monmap);
+  MDS *mds = new MDS(name, whoami, m, &monmap);
   mds->standby_replay_for = shadow;
   mds->init();
   

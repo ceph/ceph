@@ -117,6 +117,7 @@ class MDS : public Dispatcher {
   Mutex        mds_lock;
   SafeTimer    timer;
 
+  string name;
   int whoami;
   int incarnation;
   
@@ -263,7 +264,7 @@ class MDS : public Dispatcher {
  private:
   virtual bool dispatch_impl(Message *m);
  public:
-  MDS(int whoami, Messenger *m, MonMap *mm);
+  MDS(const char *n, int whoami, Messenger *m, MonMap *mm);
   ~MDS();
 
   // who am i etc
