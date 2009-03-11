@@ -50,12 +50,11 @@ int main(int argc, const char **argv)
       osdmapfn = args[++i];
     else if (strcmp(args[i], "--mon_data") == 0 ||
 	     strcmp(args[i], "--mon-data") == 0)
-      fsdir = args[i];
+      fsdir = args[++i];
     else 
       usage();
   }
-  if (!fsdir || !monmapfn ||
-      whoami < 0)
+  if (!fsdir || !monmapfn || whoami < 0)
     usage();
 
   if (!clobber) {
