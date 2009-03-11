@@ -75,8 +75,7 @@ int MonClient::probe_mon(MonMap *pmonmap)
   if (monmap_bl.length())
     return 0;
 
-  cerr << "unable to fetch monmap from " << monaddrs
-       << ": " << strerror(errno) << std::endl;
+  cerr << "unable to fetch monmap from " << monaddrs << std::endl;
   return -1; // failed
 }
 
