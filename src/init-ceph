@@ -150,11 +150,11 @@ for name in $what; do
     fi
 
     if [[ $name =~ "mds" ]]; then
-	get_conf mds "" "mds" $sections
+	get_conf rank "" "rank" $sections
 	get_conf shadow "" "shadow" $sections
 	module_opt="$mon_addr_arg"
 	module_bin="$BINDIR/cmds $id"
-	[[ $mds != "" ]] && $module_bin="$module_bin --mds $mds"
+	[[ $rank != "" ]] && $module_bin="$module_bin --rank $mds"
 	[[ $shadow != "" ]] && $module_bin="$module_bin --shadow $shadow"
     fi
 

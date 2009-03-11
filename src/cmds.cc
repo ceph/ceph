@@ -56,7 +56,7 @@ int main(int argc, const char **argv)
   int shadow = -1;
   const char *name = 0;
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--mds") == 0) 
+    if (strcmp(args[i], "--rank") == 0) 
       whoami = atoi(args[++i]);
     else if (strcmp(args[i], "--shadow") == 0)
       whoami = shadow = atoi(args[++i]);

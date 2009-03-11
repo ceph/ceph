@@ -3,16 +3,25 @@
 cmds \- ceph metadata server daemon
 .SH SYNOPSIS
 .B cmds
-[ \fB\-\-mds\fI rank\fP ]
-[ \fB\-\-shadow\fI rank\fP ]
+\fIname\fR
+[ \fB\-\-rank\fI rank\fR ]
+[ \fB\-\-shadow\fI rank\fR ]
 .SH DESCRIPTION
 .B cmds
 is the metadata server daemon for the Ceph distributed file system.
 One or more instances of \fBcmds\fP collectively manage the file system
 namespace, coordinating access to the shared OSD cluster.
 .PP
-If a numerical MDS rank is not specified, \fBcmds\fP will allow the monitor
-cluster to assign its rank.
+Each 
+.B cmds
+daemon instance should have a unique \fIname\fP.  The name is used
+to identify daemon instances in the \fIcluster.conf\fP.
+.PP
+Once the daemon has started, the monitor cluster will normally assign it
+a logical rank, or put it in a standby pool to take over for another daemon
+that crashes.  If a specific rank may be optionally specified on the
+command line, the daemon will be assigned that rank, or will be put in a
+separate standby queue specifically for that rank.
 .SH OPTIONS
 .TP
 \fB\-\-mds\fI rank\fP
