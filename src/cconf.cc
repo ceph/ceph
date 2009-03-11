@@ -16,12 +16,80 @@ using namespace std;
 const char *id = NULL, *type = NULL;
 char *name, *alt_name;
 
-char *post_process_val(char *val)
+#define MAX_VAR_LEN 32
+
+
+static bool get_var(const char *str, int pos, char *var_name, int len, int *new_pos)
 {
-  return val;
+  int bracket = (str[pos] == '{');
+  int out_pos = 0;
+
+  if (bracket) {
+    pos++;
+  }
+
+  while (str[pos] &&
+	((bracket && str[pos] != '}') ||
+	 isalnum(str[pos]))) {
+	var_name[out_pos] = str[pos];
+	
+	out_pos	++;
+	if (out_pos == len)
+		return false;
+	pos++;
+  }
+
+  var_name[out_pos] = '\0';
+
+  if (bracket && (str[pos] == '}'))
+	pos++;
+
+  *new_pos = pos;
+
+  return true;
 }
 
-void usage() 
+static const char *var_val(char *var_name)
+{
+	if (strcmp(var_name, "type")==0)
+		return type;
+	if (strcmp(var_name, "id")==0)
+		return id;
+	if (strcmp(var_name, "name")==0)
+		return name;
+
+	return "";
+}
+
+#define MAX_LINE 256
+
+static char *post_process_val(const char *val)
+{
+  char var_name[MAX_VAR_LEN];
+  char buf[MAX_LINE];
+  int i=0;
+  int out_pos = 0;
+
+  while (val[i] && (out_pos < MAX_LINE - 1)) {
+    if (val[i] == '$') {
+	if (get_var(val, i+1, var_name, MAX_VAR_LEN, &i)) {
+		out_pos += snprintf(buf+out_pos, MAX_LINE-out_pos, "%s", var_val(var_name));
+	} else {
+	  ++i;
+	}
+    } else {
+	buf[out_pos] = val[i];
+    	++out_pos;
+    	++i;
+    }
+  }
+
+  buf[out_pos] = '\0';
+
+  return strdup(buf);
+}
+
+static void usage() 
 {
   cerr << "usage: cconf <-c filename> [-t type] [-i id] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
   exit(1);
@@ -131,13 +199,13 @@ int main(int argc, const char **argv)
     cf.read(sections[i], key, (char **)&val, NULL);
 
     if (val) {
-      cout << val << std::endl;
+      cout << post_process_val(val) << std::endl;
       exit(0);
     }
   }
 
   if (defval) {
-    cout << defval << std::endl;
+    cout << post_process_val(defval) << std::endl;
     exit(0);
   }
 
