@@ -25,7 +25,7 @@ fi
 
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
-    printf "\t-C cluster.conf\n"
+    printf "\t-c cluster.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
     exit
 }
@@ -99,7 +99,7 @@ case $1 in
     --nobtrfs)
 	    dobtrfs=0
 	    ;;
-    --cluster-conf | -C)
+    --conf | -c)
 	    [ "$2" == "" ] && usage_exit
 	    options="$options $1"
 	    shift
@@ -135,86 +135,71 @@ for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     id=`echo $name | cut -c 4- | sed 's/\\.//'`
     num=$id
-    sections="$name $type global"
 
     check_host || continue
 
-    get_conf pid_file "/var/run/ceph/$name.pid" "pid file" $sections
-    get_conf runtimeconf "$runtime_conf" "conf" $sections
+    cmd="$BINDIR/c$type -i $id"
 
-    # extract name-specific options from $conf
-    if [[ $name =~ "mon" ]]; then
-	get_conf mon_data "" "mon data" $sections
-	module_opt="$mon_data"
-	module_bin="$BINDIR/cmon"
-    fi
-
-    if [[ $name =~ "mds" ]]; then
-	get_conf rank "" "rank" $sections
-	get_conf shadow "" "shadow" $sections
-	module_opt="$mon_addr_arg"
-	module_bin="$BINDIR/cmds $id"
-	[[ $rank != "" ]] && $module_bin="$module_bin --rank $mds"
-	[[ $shadow != "" ]] && $module_bin="$module_bin --shadow $shadow"
+    # conf file
+    if [[ $host == $hostname ]]; then
+	cmd="$cmd -c $conf"
+    else
+	if [[ ! $pushed_to =~ " $host " ]]; then
+	    scp $conf $host:/tmp/ceph.conf.$$
+	    pushed_to="$pushed_to $host "
+	fi
+	cmd="$cmd -c /tmp/ceph.conf.$$"
     fi
 
     if [[ $name =~ "osd" ]]; then
-	get_conf osd_data "" "osd data" $sections
-	get_conf osd_journal "" "osd journal" $sections
-	[ "$osd_journal" != "" ] && osd_journal_cmd="-j $osd_journal" || osd_journal_cmd=""
-	module_opt="$mon_addr_arg $osd_data $osd_journal_cmd"
-	module_bin="$BINDIR/cosd"
-
-	get_conf btrfs_path "$osd_data" "btrfs path" $sections  # mount point defaults so osd data
-	get_conf btrfs_devs "" "btrfs devs" $sections
+	get_conf osd_data "" "osd data"
+	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
+	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
-
-    module_opt="-p $pid_file -c $runtimeconf $module_opt"
 
     case "$command" in
 	start)
             # build final command
 	    wrap=""
-	    runflags=""
 	    runmode=""
 	    
-	    get_conf_bool crun "$docrun" "restart on core dump" $sections
+	    get_conf_bool crun "$docrun" "restart on core dump"
 	    [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
 	    
-	    get_conf_bool valgrind "$dovalgrind" "valgrind" $sections
+	    get_conf_bool valgrind "$dovalgrind" "valgrind"
 	    [[ $valgrind -eq 1 ]] && wrap="$wrap valgrind"
 	    
-	    [[ $wrap != "" ]] && runflags="-f" && runmode="&"
+	    [[ $wrap != "" ]] && runmode="-f &"
 	    
-	    cmd="$wrap $module_bin $runflags $module_opt $runmode"
+	    cmd="$wrap $cmd $runmode"
 	    
 	    echo Starting ceph $name on $host...
 	    if [ $dobtrfs -eq 1 ]; then
-		get_conf pre_mount "true" "pre mount command" $sections
+		get_conf pre_mount "true" "pre mount command"
 		[[ $pre_mount != "" ]] && do_cmd $pre_mount
 		do_cmd "mount -t btrfs $first_dev $btrfs_path"
 	    fi
-	    get_conf pre_start_eval "" "pre start eval" $sections
+	    get_conf pre_start_eval "" "pre start eval"
 	    [[ $pre_start_eval != "" ]] && $pre_start_eval
-	    get_conf pre_start "" "pre start command" $sections
-	    get_conf post_start "" "post start command" $sections
+	    get_conf pre_start "" "pre start command"
+	    get_conf post_start "" "post start command"
             [[ $pre_start != "" ]] && do_cmd $pre_start
 	    do_cmd "$cmd"
             [[ $post_start != "" ]] && do_cmd $post_start
 	    ;;
 	
 	stop)
-	    get_conf pre_stop "" "pre stop command" $sections
-	    get_conf post_stop "" "post stop command" $sections
+	    get_conf pre_stop "" "pre stop command"
+	    get_conf post_stop "" "post stop command"
 	    [[ $pre_stop != "" ]] && do_cmd $pre_stop
 	    stop_daemon $name c$type $pid_file
 	    [[ $post_stop != "" ]] && do_cmd $post_stop
 	    ;;
 
 	forcestop)
-	    get_conf pre_forcestop "" "pre forcestop command" $sections
-	    get_conf post_forcestop "" "post forcestop command" $sections
+	    get_conf pre_forcestop "" "pre forcestop command"
+	    get_conf post_forcestop "" "post forcestop command"
 	    [[ $pre_forcestop != "" ]] && do_cmd $pre_forcestop
 	    stop_daemon $name c$type $pid_file -9
 	    [[ $post_forcestop != "" ]] && do_cmd $post_forcestop
@@ -235,14 +220,14 @@ for name in $what; do
 	    ;;
 
 	cleanlogs)
-	    get_conf log_dir "/var/log/ceph" "log dir" $sections
-	    get_conf log_sym_dir "/var/log/ceph" "log sym dir" $sections
+	    get_conf log_dir "/var/log/ceph" "log dir"
+	    get_conf log_sym_dir "/var/log/ceph" "log sym dir"
 	    do_cmd "for f in $log_sym_dir/$name*; do rm -f \`readlink \$f\` ; rm -f \$f ; done"
 	    ;;
 
 	cleanalllogs)
-	    get_conf log_dir "/var/log/ceph" "log dir" $sections
-	    get_conf log_sym_dir "/var/log/ceph" "log sym dir" $sections
+	    get_conf log_dir "/var/log/ceph" "log dir"
+	    get_conf log_sym_dir "/var/log/ceph" "log sym dir"
 	    do_cmd "rm -f $log_dir/* $log_sym_dir/*"
 	    ;;
 

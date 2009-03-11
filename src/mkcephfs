@@ -114,27 +114,26 @@ for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
     id=`echo $name | cut -c 4- | sed 's/\\.//'`
     num=$id
-    sections="$name $type global"
 
     check_host || continue
 
-    get_conf runtimeconf "$runtime_conf" "conf" $sections
+    get_conf runtimeconf "$runtime_conf" "conf"
 
-    if [[ $ssh = 1 ]] && [[ ! $pushed_to =~ " $host " ]]; then
+    if [[ $ssh != "" ]] && [[ ! $pushed_to =~ " $host " ]]; then
 	scp $osdmap $host:$osdmap
 	scp $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
     fi
 
     if [[ $type = "mon" ]]; then
-	get_conf mon_data "" "mon data" $sections
+	get_conf mon_data "" "mon data"
 	do_cmd "$BINDIR/mkmonfs $clobber $mon_data --mon $num --monmap $monmap --osdmap $osdmap"
     fi
 
     if [[ $type = "osd" ]]; then
-	get_conf osd_path "" "osd data" $sections
-	get_conf btrfs_path "$osd_path" "btrfs path" $sections  # mount point defaults so osd path
-	get_conf btrfs_devs "" "btrfs devs" $sections
+	get_conf osd_path "" "osd data"
+	get_conf btrfs_path "$osd_path" "btrfs path"  # mount point defaults so osd path
+	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	
 	if [ $mkbtrfs -eq 1 ]; then

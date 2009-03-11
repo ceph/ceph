@@ -101,12 +101,7 @@ get_conf() {
 	key=$3
 	shift; shift; shift
 
-	tmp=""
-	while [ $# -ge 1 ]; do
-		tmp=$tmp" -s $1"
-		shift
-	done
-	eval "$var=\"`$CCONF -c $conf $tmp \"$key\" \"$def\"`\""
+	eval "$var=\"`$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\"`\""
 }
 
 get_conf_bool() {
