@@ -388,16 +388,21 @@ int Rank::start(bool nodaemon)
     }
     dout(1) << "rank.start daemonizing" << dendl;
 
-    pid_t pid = fork();
-    if (pid) {
-      // i am parent
-      write_pid_file(pid);
-      ::close(0);
-      ::close(1);
-      ::close(2);
-      _exit(0);
+    if (1) {
+      daemon(1, 0);
+      write_pid_file(getpid());
+    } else {
+      pid_t pid = fork();
+      if (pid) {
+	// i am parent
+	write_pid_file(pid);
+	::close(0);
+	::close(1);
+	::close(2);
+	_exit(0);
+      }
     }
-
+ 
     if (g_conf.chdir && g_conf.chdir[0]) {
       ::mkdir(g_conf.chdir, 0700);
       ::chdir(g_conf.chdir);
