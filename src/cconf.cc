@@ -14,7 +14,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cconf [--conf_file filename] [-l|--list_sections prefix] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
+  cerr << "usage: cconf [-c filename] [-l|--list_sections <prefix>] [-s <section>] [[-s section] ... ] <key> [default]" << std::endl;
   exit(1);
 }
 
@@ -34,8 +34,7 @@ int main(int argc, const char **argv)
     usage();
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--conf_file") == 0 ||
-	strcmp(args[i], "-c") == 0) {
+    if (strcmp(args[i], "-c") == 0) {
       if (i < args.size() - 1)
         fname = args[++i];
       else
