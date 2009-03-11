@@ -92,7 +92,7 @@ int main(int argc, const char **argv)
 	name = (char *)malloc(strlen(type) + strlen(id) + 2);
 	sprintf(name, "%s.%s", type, id);
 	alt_name = (char *)malloc(strlen(type) + strlen(id) + 1);
-	sprintf(name, "%s%s", type, id);
+	sprintf(alt_name, "%s%s", type, id);
   } else {
 	name = (char *)type;
   }
