@@ -122,6 +122,8 @@ class MDS : public Dispatcher {
   int incarnation;
   
   int standby_replay_for;
+  int standby_for_rank;
+  string standby_for_name;
 
   Messenger    *messenger;
   MonMap       *monmap;
@@ -156,7 +158,6 @@ class MDS : public Dispatcher {
   // -- MDS state --
   int state;         // my confirmed state
   int want_state;    // the state i want
-  int want_rank;     // the mds rank i want
 
   list<Context*> waiting_for_active;
   map<int, list<Context*> > waiting_for_active_peer;
@@ -264,7 +265,7 @@ class MDS : public Dispatcher {
  private:
   virtual bool dispatch_impl(Message *m);
  public:
-  MDS(const char *n, int whoami, Messenger *m, MonMap *mm);
+  MDS(const char *n, Messenger *m, MonMap *mm);
   ~MDS();
 
   // who am i etc

@@ -52,15 +52,9 @@ int main(int argc, const char **argv)
   common_init(args, "mds");
 
   // mds specific args
-  int whoami = -1;
-  int shadow = -1;
   const char *name = 0;
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--rank") == 0) 
-      whoami = atoi(args[++i]);
-    else if (strcmp(args[i], "--shadow") == 0)
-      whoami = shadow = atoi(args[++i]);
-    else if (!name)
+    if (!name)
       name = args[i];
     else {
       cerr << "unrecognized arg " << args[i] << std::endl;
@@ -82,7 +76,7 @@ int main(int argc, const char **argv)
   rank.bind();
   cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
 
-  Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
+  Messenger *m = rank.register_entity(entity_name_t::MDS(-1));
   assert_warn(m);
   if (!m)
     return 1;
@@ -95,8 +89,7 @@ int main(int argc, const char **argv)
   rank.start();
   
   // start mds
-  MDS *mds = new MDS(name, whoami, m, &monmap);
-  mds->standby_replay_for = shadow;
+  MDS *mds = new MDS(name, m, &monmap);
   mds->init();
   
   rank.wait();

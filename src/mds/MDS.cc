@@ -71,11 +71,12 @@
 
 
 // cons/des
-MDS::MDS(const char *n, int whoami_, Messenger *m, MonMap *mm) : 
+MDS::MDS(const char *n, Messenger *m, MonMap *mm) : 
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
   name(n),
-  whoami(whoami_), incarnation(0),
+  whoami(-1), incarnation(0),
+  standby_for_rank(-1),
   standby_replay_for(-1),
   messenger(m),
   monmap(mm),
@@ -345,7 +346,6 @@ int MDS::init()
 
   // starting beacon.  this will induce an MDSMap from the monitor
   want_state = MDSMap::STATE_BOOT;
-  want_rank = whoami;
   beacon_start();
   whoami = -1;
   messenger->reset_myname(entity_name_t::MDS(whoami));
@@ -451,9 +451,11 @@ void MDS::beacon_send()
 
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
-  messenger->send_message(new MMDSBeacon(monmap->fsid, name, mdsmap->get_epoch(), 
-					 want_state, beacon_last_seq, want_rank),
-			  monmap->get_inst(mon));
+  MMDSBeacon *beacon = new MMDSBeacon(monmap->fsid, name, mdsmap->get_epoch(), 
+				      want_state, beacon_last_seq);
+  beacon->set_standby_for_rank(standby_for_rank);
+  beacon->set_standby_for_name(standby_for_name);
+  messenger->send_message(beacon, monmap->get_inst(mon));
 
   // schedule next sender
   if (beacon_sender) timer.cancel_event(beacon_sender);

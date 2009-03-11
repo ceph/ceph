@@ -111,6 +111,8 @@ class MDSMap {
     version_t state_seq;
     entity_addr_t addr;
     utime_t laggy_since;
+    int standby_for_rank;
+    string standby_for_name;
 
     mds_info_t() : rank(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
 
@@ -127,6 +129,8 @@ class MDSMap {
       ::encode(state_seq, bl);
       ::encode(addr, bl);
       ::encode(laggy_since, bl);
+      ::encode(standby_for_rank, bl);
+      ::encode(standby_for_name, bl);
     }
     void decode(bufferlist::iterator& bl) {
       ::decode(name, bl);
@@ -136,6 +140,8 @@ class MDSMap {
       ::decode(state_seq, bl);
       ::decode(addr, bl);
       ::decode(laggy_since, bl);
+      ::decode(standby_for_rank, bl);
+      ::decode(standby_for_name, bl);
     }
   };
   WRITE_CLASS_ENCODER(mds_info_t)
@@ -261,11 +267,12 @@ class MDSMap {
     return p->first;
   }
 
-  bool find_standby_for(int mds, entity_addr_t &a) {
+  bool find_standby_for(int mds, string& name, entity_addr_t &a) {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++) {
-      if (p->second.rank == mds &&
+      if ((p->second.standby_for_rank == mds ||
+	   p->second.standby_for_name == name) &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	a = p->second.addr;
@@ -276,6 +283,8 @@ class MDSMap {
 	 p != mds_info.end();
 	 p++) {
       if (p->second.rank == -1 &&
+	  p->second.standby_for_rank < 0 &&
+	  p->second.standby_for_name.length() == 0 &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	a = p->second.addr;

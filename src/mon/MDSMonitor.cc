@@ -233,7 +233,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr] = g_clock.now();  
   mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_name(),
-					      mdsmap.get_epoch(), state, seq, 0), 
+					      mdsmap.get_epoch(), state, seq), 
 			       m->get_orig_source_inst());
 
   // done
@@ -275,23 +275,14 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
   // boot?
   if (state == MDSMap::STATE_BOOT) {
-    int from = m->get_orig_source_inst().name.num();
-
-    // standby for a given rank?
-    int standby_for = m->get_want_rank();
-    if (standby_for >= (int)pending_mdsmap.max_mds) {
-      dout(10) << "prepare_beacon boot: wanted standby for mds" << from 
-	       << " >= max_mds " << pending_mdsmap.max_mds
-	       << ", will be shared standby" << dendl;
-      standby_for = -1;
-    }
-
     // add
     MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
     info.name = m->get_name();
-    info.rank = standby_for;
+    info.rank = -1;
     info.addr = addr;
     info.state = MDSMap::STATE_STANDBY;
+    info.standby_for_rank = m->get_standby_for_rank();
+    info.standby_for_name = m->get_standby_for_name();
 
     // initialize the beacon timer
     last_beacon[addr] = g_clock.now();
@@ -506,10 +497,11 @@ void MDSMonitor::tick()
   while (pending_mdsmap.get_num_mds() < pending_mdsmap.get_max_mds() &&
 	 !pending_mdsmap.is_degraded()) {
     int mds = 0;
+    string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
     entity_addr_t addr;
-    if (!pending_mdsmap.find_standby_for(mds, addr))
+    if (!pending_mdsmap.find_standby_for(mds, name, addr))
       break;
 
     dout(1) << "adding standby " << addr << " as mds" << mds << dendl;
@@ -562,11 +554,11 @@ void MDSMonitor::tick()
       entity_addr_t sa;
       if (info.rank >= 0 &&
 	  info.state > 0 && //|| info.state == MDSMap::STATE_STANDBY_REPLAY) &&
-	  pending_mdsmap.find_standby_for(info.rank, sa)) {
+	  pending_mdsmap.find_standby_for(info.rank, info.name, sa)) {
+	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
 	dout(10) << " replacing " << addr << " mds" << info.rank << "." << info.inc
 		 << " " << MDSMap::get_state_name(info.state)
-		 << " with " << sa << dendl;
-	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
+		 << " with " << si.name << " " << sa << dendl;
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
@@ -633,7 +625,8 @@ void MDSMonitor::tick()
     while (p != failed.end()) {
       int f = *p++;
       entity_addr_t sa;
-      if (pending_mdsmap.find_standby_for(f, sa)) {
+      string name;  // FIXME
+      if (pending_mdsmap.find_standby_for(f, name, sa)) {
 	dout(0) << " taking over failed mds" << f << " with " << sa << dendl;
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
 	si.state = MDSMap::STATE_REPLAY;

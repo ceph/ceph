@@ -54,6 +54,15 @@ void MDSMap::print(ostream& out)
 	<< " seq " << info.state_seq;
     if (info.laggy())
       out << " laggy since " << info.laggy_since;
+    if (info.standby_for_rank >= 0 ||
+	info.standby_for_rank >= 0) {
+      out << " (standby for";
+      if (info.standby_for_rank >= 0) 
+	out << " rank " << info.standby_for_rank;
+      if (info.standby_for_name.length())
+	out << " '" << info.standby_for_name << "'";
+      out << ")";
+    }
     out << "\n";    
   }
 
