@@ -175,7 +175,6 @@ install-data-local:
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
 	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)$(sysconfdir)/init.d/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
-	$(install_sh_SCRIPT) -m 0600 sample.cluster.conf $(DESTDIR)$(sysconfdir)/ceph/sample.cluster.conf
 
 .make_last_ver:
 	./make_version --check
@@ -581,8 +580,7 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
-	sample.ceph.conf\
-	sample.cluster.conf
+	sample.ceph.conf
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
