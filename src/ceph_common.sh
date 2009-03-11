@@ -2,17 +2,17 @@
 
 CCONF="$BINDIR/cconf"
 
-conf=$ETCDIR"/cluster.conf"
-runtime_conf=$ETCDIR"/ceph.conf"
-
+conf=$ETCDIR"/ceph.conf"
 hostname=`hostname | cut -d . -f 1`
 
 
-# make sure cluster.conf exists
-if [ ! -e $conf ]; then
-    echo "$0: Cluster conf $conf not found"
-    usage_exit
-fi
+verify_conf() {
+    # make sure ceph.conf exists
+    if [ ! -e $conf ]; then
+	echo "$0: ceph conf $conf not found"
+	usage_exit
+    fi
+}
 
 
 check_host() {

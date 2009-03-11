@@ -70,6 +70,8 @@ esac
 shift
 done
 
+verify_conf
+
 get_name_list "$@"
 
 # create the monmap if we're doing mon0
@@ -77,13 +79,17 @@ if [[ $what =~ "mon0" ]]; then
     # first, make a list of monitors
     mons=`$CCONF -c $conf -l mon | egrep -v '^mon$' | sort`
     args=""
-    for mon in $mons; do
-	get_conf addr "" "mon addr" mon0 mon global
+
+    type="mon"
+    for name in $mons; do
+	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	get_conf addr "" "mon addr"
 	args=$args" --add $addr"
     done
 
     # build monmap
     monmap="/tmp/monmap.$$"
+    echo $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
     $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
 
     # build osdmap
@@ -118,8 +124,8 @@ for name in $what; do
     check_host || continue
 
     if [[ $ssh != "" ]] && [[ ! $pushed_to =~ " $host " ]]; then
-	scp $osdmap $host:$osdmap
-	scp $monmap $host:$monmap
+	scp -q $osdmap $host:$osdmap
+	scp -q $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
     fi
 

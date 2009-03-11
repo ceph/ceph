@@ -114,6 +114,8 @@ options="$options $1"
 shift
 done
 
+verify_conf
+
 # build mon_addr_arg with all mon addrs
 n=0
 mon_addr_arg=""
@@ -145,7 +147,7 @@ for name in $what; do
 	cmd="$cmd -c $conf"
     else
 	if [[ ! $pushed_to =~ " $host " ]]; then
-	    scp $conf $host:/tmp/ceph.conf.$$
+	    scp -q $conf $host:/tmp/ceph.conf.$$
 	    pushed_to="$pushed_to $host "
 	fi
 	cmd="$cmd -c /tmp/ceph.conf.$$"
