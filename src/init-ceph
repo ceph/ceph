@@ -190,6 +190,8 @@ for name in $what; do
 		[[ $pre_mount != "" ]] && do_cmd $pre_mount
 		do_cmd "mount -t btrfs $first_dev $btrfs_path"
 	    fi
+	    get_conf pre_start_eval "" "pre start eval" $sections
+	    [[ $pre_start_eval != "" ]] && $pre_start_eval
 	    get_conf pre_start "" "pre start command" $sections
 	    get_conf post_start "" "post start command" $sections
             [[ $pre_start != "" ]] && do_cmd $pre_start
