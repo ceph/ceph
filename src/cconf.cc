@@ -30,6 +30,8 @@ int main(int argc, const char **argv)
   int param = 0;
   vector<const char*> args, nargs;
   deque<const char *> sections;
+  unsigned i;
+
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
@@ -66,13 +68,10 @@ int main(int argc, const char **argv)
 	usage();
     } else {
       switch (param) {
-      	case 0:
-	    sections.push_back(args[i]);
-	    break;
-	case 1:
+	case 0:
 	    key = args[i];
 	    break;
-	case 2:
+	case 1:
 	    defval = args[i];
 	    break;
       }
@@ -97,19 +96,27 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  for (unsigned i=0; i<sections.size(); i++) {
+  conf_read_key(NULL, key, OPT_STR, (char **)&val);
+
+  if (val)
+    goto done_ok;
+
+  for (i=0; i<sections.size(); i++) {
     cf->read(sections[i], key, (char **)&val, NULL);
 
-    if (val) {
-      cout << val << std::endl;
-      exit(0);
-    }
+    if (val)
+	goto done_ok;
   }
 
   if (defval) {
-    cout << conf_post_process_val(defval) << std::endl;
-    exit(0);
+    val = conf_post_process_val(defval);
+    goto done_ok;
   }
 
   exit(1);
+
+done_ok:
+      cout << val << std::endl;
+      exit(0);
+
 }

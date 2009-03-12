@@ -43,6 +43,7 @@ struct md_config_t {
   char *type;
   char *id;
   char *name;
+  char *alt_name;
 
   int num_mon;
   int num_mds;
@@ -345,8 +346,9 @@ struct md_config_t {
 
 extern md_config_t g_conf;     
 
-
-
+typedef enum {
+	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL
+} opt_type_t;
 
 /**
  * command line / environment argument parsing
@@ -375,9 +377,8 @@ void generic_client_usage();
 class ConfFile;
 ConfFile *conf_get_conf_file();
 
-void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, const char *module_name);
 char *conf_post_process_val(const char *val);
-
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out);
 
 #include "common/debug.h"
 
