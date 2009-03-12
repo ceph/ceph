@@ -798,10 +798,16 @@ char *conf_post_process_val(const char *val)
   return strdup(buf);
 }
 
-#define OPT_READ_TYPE(section, var, type, inout, def) \
-  cf->read(section, var, (type *)inout, def)
+#define OPT_READ_TYPE(ret, section, var, type, out, def) \
+do { \
+  if (def) \
+    ret = cf->read(section, var, (type *)out, *(type *)def); \
+  else \
+    ret = cf->read(section, var, (type *)out, NULL); \
+} while (0)
+    
 
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *inout)
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def)
 {
   int s;
   int ret;
@@ -834,19 +840,19 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
 
     switch (type) {
     case OPT_STR:
-      ret = OPT_READ_TYPE(section, key, char *, inout, *(char **)inout);
+      OPT_READ_TYPE(ret, section, key, char *, out, def);
       break;
     case OPT_BOOL:
-      ret = OPT_READ_TYPE(section, key, bool, inout, *(bool *)inout);
+      OPT_READ_TYPE(ret, section, key, bool, out, def);
       break;
     case OPT_INT:
-      ret = OPT_READ_TYPE(section, key, int, inout, *(int *)inout);
+      OPT_READ_TYPE(ret, section, key, int, out, def);
       break;
     case OPT_FLOAT:
-      ret = OPT_READ_TYPE(section, key, float, inout, *(float *)inout);
+      OPT_READ_TYPE(ret, section, key, float, out, def);
       break;
     case OPT_DOUBLE:
-      ret = OPT_READ_TYPE(section, key, double, inout, *(double *)inout);
+      OPT_READ_TYPE(ret, section, key, double, out, def);
       break;
     default:
 	ret = 0;
@@ -870,7 +876,7 @@ void parse_config_file(ConfFile *cf, bool auto_update)
 
   for (int i=0; i<opt_len; i++) {
       config_option *opt = &config_optionsp[i];
-      conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr);
+      conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr);
   }
 }
 

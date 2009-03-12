@@ -96,7 +96,7 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  conf_read_key(NULL, key, OPT_STR, (char **)&val);
+  conf_read_key(NULL, key, OPT_STR, (char **)&val, NULL);
 
   if (val)
     goto done_ok;
