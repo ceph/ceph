@@ -65,8 +65,7 @@ int MonClient::probe_mon(MonMap *pmonmap)
 
   if (monmap_bl.length()) {
     pmonmap->decode(monmap_bl);
-    dout(2) << "get_monmap got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << dendl;
-    cout << "[got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << "]" << std::endl;
+    dout(1) << "[got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << "]" << dendl;
   }
   msgr->shutdown();
   msgr->destroy();
@@ -88,7 +87,7 @@ int MonClient::get_monmap(MonMap *pmonmap)
     const char *monmap_fn = g_conf.monmap;
     int r = pmonmap->read(monmap_fn);
     if (r >= 0) {
-      cout << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << std::endl;
+      dout(1) << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << dendl;
       return 0;
     }
 
