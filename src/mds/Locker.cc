@@ -446,7 +446,7 @@ void Locker::eval_gather(SimpleLock *lock)
 	  
 	case LOCK_SYNC_MIX:
 	  { 
-	    MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
+	    MLock *reply = new MLock(lock, LOCK_AC_MIXACK, mds->get_nodeid());
 	    mds->send_message_mds(reply, auth);
 	  }
 	  break;
@@ -479,7 +479,7 @@ void Locker::eval_gather(SimpleLock *lock)
 	if (in->is_replicated()) {
 	  bufferlist softdata;
 	  lock->encode_locked_state(softdata);
-	  send_lock_message(lock, LOCK_AC_MIXED, softdata);
+	  send_lock_message(lock, LOCK_AC_MIX, softdata);
 	}
 	break;
 	
@@ -2621,7 +2621,7 @@ bool Locker::scatter_scatter_fastpath(ScatterLock *lock)
       // encode and bcast
       bufferlist data;
       lock->encode_locked_state(data);
-      send_lock_message(lock, LOCK_AC_SCATTER, data);
+      send_lock_message(lock, LOCK_AC_MIX, data);
     } 
     
     ((CInode *)lock->get_parent())->try_drop_loner();
@@ -2768,7 +2768,7 @@ void Locker::handle_scatter_lock(ScatterLock *lock, MLock *m)
     }
     break;
 
-  case LOCK_AC_SCATTER:
+  case LOCK_AC_MIX:
     assert(lock->get_state() == LOCK_LOCK);
     lock->decode_locked_state(m->get_data());
     lock->clear_updated();
@@ -3074,7 +3074,7 @@ void Locker::file_mixed(ScatterLock *lock)
       lock->encode_locked_state(softdata);
       
       // bcast to replicas
-      send_lock_message(lock, LOCK_AC_MIXED, softdata);
+      send_lock_message(lock, LOCK_AC_MIX, softdata);
     }
 
     // change lock
@@ -3090,7 +3090,7 @@ void Locker::file_mixed(ScatterLock *lock)
 
     int gather = 0;
     if (in->is_replicated()) {
-      send_lock_message(lock, LOCK_AC_MIXED);
+      send_lock_message(lock, LOCK_AC_MIX);
       if (lock->get_state() != LOCK_EXCL_MIX) {  // EXCL replica is LOCK
 	lock->init_gather();
 	gather++;
@@ -3261,7 +3261,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     }
     break;
     
-  case LOCK_AC_MIXED:
+  case LOCK_AC_MIX:
     assert(lock->get_state() == LOCK_SYNC ||
            lock->get_state() == LOCK_LOCK ||
 	   lock->get_state() == LOCK_SYNC_MIX2);
@@ -3281,7 +3281,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
       lock->set_state(LOCK_SYNC_MIX2);
       
       // ack
-      MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
+      MLock *reply = new MLock(lock, LOCK_AC_MIXACK, mds->get_nodeid());
       mds->send_message_mds(reply, from);
     } else {
       // LOCK
@@ -3340,7 +3340,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     }
     break;
 
-  case LOCK_AC_MIXEDACK:
+  case LOCK_AC_MIXACK:
     assert(lock->get_state() == LOCK_SYNC_MIX);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
