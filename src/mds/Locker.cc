@@ -441,10 +441,13 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
 	    lock->encode_locked_state(reply->get_data());
 	    mds->send_message_mds(reply, auth);
 	    next = LOCK_MIX_SYNC2;
+	    ((ScatterLock *)lock)->start_flush();
 	  }
 	  break;
 
 	case LOCK_MIX_SYNC2:
+	  ((ScatterLock *)lock)->finish_flush();
+
 	case LOCK_SYNC_MIX2:
 	  // do nothing, we already acked
 	  break;
@@ -2410,7 +2413,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   // hack:
   if (in->is_base()) {
     dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
-    lock->clear_updated();
+    lock->clear_dirty();
     if (!lock->is_stable())
       eval_gather(lock);
     return;
@@ -2431,7 +2434,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   pi->version = in->pre_dirty();
 
   lock->get_parent()->finish_scatter_gather_update(lock->get_type());
-  lock->clear_updated();
+  lock->start_flush();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
@@ -2447,6 +2450,8 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   CInode *in = (CInode*)lock->get_parent();
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
+
+  lock->finish_flush();
 
   mut->apply();
   drop_locks(mut);
@@ -2491,7 +2496,7 @@ void Locker::scatter_eval(ScatterLock *lock)
  */
 void Locker::mark_updated_scatterlock(ScatterLock *lock)
 {
-  lock->set_updated();
+  lock->mark_dirty();
   if (lock->xlistitem_updated.is_on_xlist()) {
     dout(10) << "mark_updated_scatterlock " << *lock
 	     << " -- already on list since " << lock->update_stamp << dendl;

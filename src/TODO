@@ -93,6 +93,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
 - take some care with replayed client requests vs new requests
 - linkage vs cdentry replicas and remote rename....
 - move root inode into stray dir

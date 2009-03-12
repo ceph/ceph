@@ -19,7 +19,7 @@
 #include "SimpleLock.h"
 
 class ScatterLock : public SimpleLock {
-  bool updated;
+  bool dirty, flushing;
   utime_t last_scatter;
 
 public:
@@ -28,26 +28,34 @@ public:
 
   ScatterLock(MDSCacheObject *o, int t, int ws) : 
     SimpleLock(o, t, ws),
-    updated(false),
+    dirty(false), flushing(false),
     xlistitem_updated(this) {}
   ~ScatterLock() {
     xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
   }
 
-  void set_updated() { 
-    if (!updated) {
-      parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
-      updated = true;
+  void mark_dirty() { 
+    if (!dirty) {
+      if (!flushing) 
+	parent->get(MDSCacheObject::PIN_DIRTYSCATTERED);
+      dirty = true;
     }
   }
-  void clear_updated() { 
-    if (updated) {
+  void start_flush() {
+    flushing |= dirty;
+    dirty = false;
+  }
+  void finish_flush() {
+    flushing = false;
+    if (!dirty) {
       parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
-      updated = false; 
       parent->clear_dirty_scattered(type);
     }
   }
-  bool is_updated() { return updated; }
+  void clear_dirty() {
+    start_flush();
+    finish_flush();
+  }
   
   void set_last_scatter(utime_t t) { last_scatter = t; }
   utime_t get_last_scatter() { return last_scatter; }
@@ -55,8 +63,10 @@ public:
   void print(ostream& out) {
     out << "(";
     _print(out);
-    if (updated)
-      out << " updated";
+    if (dirty)
+      out << " dirty";
+    if (flushing)
+      out << " flushing";
     out << ")";
   }
 };

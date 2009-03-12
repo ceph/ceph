@@ -2367,9 +2367,9 @@ void MDCache::recalc_auth_bits()
 	      dnl->get_inode()->mark_clean();
 	    // avoid touching scatterlocks for our subtree roots!
 	    if (subtree_inodes.count(dnl->get_inode()) == 0) {
-	      dnl->get_inode()->filelock.clear_updated();
-	      dnl->get_inode()->nestlock.clear_updated();
-	      dnl->get_inode()->dirfragtreelock.clear_updated();
+	      dnl->get_inode()->filelock.clear_dirty();
+	      dnl->get_inode()->nestlock.clear_dirty();
+	      dnl->get_inode()->dirfragtreelock.clear_dirty();
 	    }
 	  }
 
