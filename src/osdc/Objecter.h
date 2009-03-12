@@ -83,10 +83,13 @@ class Objecter {
     int attempts;
     int inc_lock;
 
+    bool paused;
+
     ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, int f, Context *of) :
       oid(o), layout(ol), 
       pbl(0), psize(0), flags(f), onfinish(of), 
-      tid(0), attempts(0), inc_lock(-1) {
+      tid(0), attempts(0), inc_lock(-1),
+      paused(false) {
       ops.swap(op);
     }
   };
@@ -106,10 +109,13 @@ class Objecter {
     int inc_lock;
     eversion_t version;
 
+    bool paused;
+
     ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op,
 	     const SnapContext& sc, int f, Context *ac, Context *co) :
       oid(o), layout(l), snapc(sc), flags(f), onack(ac), oncommit(co), 
-      tid(0), attempts(0), inc_lock(-1) {
+      tid(0), attempts(0), inc_lock(-1),
+      paused(false) {
       ops.swap(op);
     }
   };
