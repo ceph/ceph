@@ -167,7 +167,7 @@ EOF
 
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
-			$CEPH_BIN/mkmonfs --clobber dev/mon$f --mon $f --monmap .ceph_monmap --osdmap .ceph_osdmap
+			$CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
 		done
 	fi
 
