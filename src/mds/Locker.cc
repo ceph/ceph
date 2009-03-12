@@ -3224,7 +3224,6 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
       lock->get_rdlock();
       lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
       lock->put_rdlock();
-      eval_gather(lock);
     }
     break;
     
@@ -3291,7 +3290,6 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     
     // waiters
     lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
-    eval_gather(lock);
     break;
 
  
