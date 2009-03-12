@@ -50,7 +50,7 @@ int main(int argc, const char **argv)
   }
   args.swap(nargs);
 
-  common_init(args, type);
+  common_init(args, type, false);
 
   for (unsigned i=0; i<args.size(); i++) {
       if (strcmp(args[i], "-l") == 0 ||
