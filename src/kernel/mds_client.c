@@ -620,7 +620,8 @@ static int __open_session(struct ceph_mds_client *mdsc,
 
 	/* wait for mds to go active? */
 	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
-	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
+	dout(10, "open_session to mds%d (%s)\n", mds,
+	     ceph_mds_state_name(mstate));
 	session->s_state = CEPH_MDS_SESSION_OPENING;
 	session->s_renew_requested = jiffies;
 
@@ -700,6 +701,7 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 			   struct ceph_mds_session *session)
 {
 	struct ceph_msg *msg;
+	int state;
 
 	if (time_after_eq(jiffies, session->s_cap_ttl) &&
 	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
@@ -707,13 +709,15 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 
 	/* do not try to renew caps until a recovering mds has reconnected
 	 * with its clients. */
-	if (ceph_mdsmap_get_state(mdsc->mdsmap, session->s_mds) <
-	    CEPH_MDS_STATE_RECONNECT) {
-		dout(10, "send_renew_caps ignoring mds%d\n", session->s_mds);
+	state = ceph_mdsmap_get_state(mdsc->mdsmap, session->s_mds);
+	if (state < CEPH_MDS_STATE_RECONNECT) {
+		dout(10, "send_renew_caps ignoring mds%d (%s)\n",
+		     session->s_mds, ceph_mds_state_name(state));
 		return 0;
 	}
 
-	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
+	dout(10, "send_renew_caps to mds%d (%s)\n", session->s_mds,
+		ceph_mds_state_name(state));
 	session->s_renew_requested = jiffies;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
 	if (IS_ERR(msg))
@@ -1844,8 +1848,10 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		oldstate = ceph_mdsmap_get_state(oldmap, i);
 		newstate = ceph_mdsmap_get_state(newmap, i);
 
-		dout(20, "check_new_map mds%d state %d -> %d (session %s)\n",
-		     i, oldstate, newstate, session_state_name(s->s_state));
+		dout(20, "check_new_map mds%d state %s -> %s (session %s)\n",
+		     i, ceph_mds_state_name(oldstate),
+		     ceph_mds_state_name(newstate),
+		     session_state_name(s->s_state));
 		if (newstate < oldstate) {
 			/* if the state moved backwards, that means
 			 * the old mds failed and/or a new mds is

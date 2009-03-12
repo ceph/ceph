@@ -116,7 +116,7 @@ static ssize_t mdsmap_show(struct ceph_client *client,
 		pos += sprintf(buf+pos, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
 			       i,
 			       IPQUADPORT(addr->ipaddr),
-			       ceph_mdsmap_state_str(state));
+			       ceph_mds_state_name(state));
 	}
 	return pos;
 }

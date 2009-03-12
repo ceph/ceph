@@ -582,12 +582,9 @@ struct ceph_mds_getmap {
  *   > 0 -> in
  *  <= 0 -> out
  */
-//#define CEPH_MDS_STATE_DNE         0  /* down, does not exist. */
+#define CEPH_MDS_STATE_DNE         0  /* down, does not exist. */
 #define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees.
 					 empty log. */
-  //#define CEPH_MDS_STATE_DESTROYING -2  /* down, existing, semi-destroyed. */
-  //#define CEPH_MDS_STATE_FAILED      3  /* down, needs to be recovered. */
-
 #define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement. */
 #define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
 #define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
@@ -605,13 +602,9 @@ struct ceph_mds_getmap {
 static inline const char *ceph_mds_state_name(int s)
 {
 	switch (s) {
-		// down and out
+		/* down and out */
+	case CEPH_MDS_STATE_DNE:        return "down:dne";
 	case CEPH_MDS_STATE_STOPPED:    return "down:stopped";
-		/*
-		  case STATE_DNE:        return "dne";
-		  case STATE_DESTROYING: return "down:destroying";
-		  case STATE_FAILED:     return "down:failed";
-		*/
 		/* up and out */
 	case CEPH_MDS_STATE_BOOT:       return "up:boot";
 	case CEPH_MDS_STATE_STANDBY:    return "up:standby";
