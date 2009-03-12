@@ -4777,8 +4777,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   dn->remove_replica(from);
 
   // fix lock
-  if (dn->lock.remove_replica(from) ||
-      !dn->is_replicated())
+  if (dn->lock.remove_replica(from))
     mds->locker->eval_gather(&dn->lock);
 }
 

@@ -2406,7 +2406,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   if (in->is_base()) {
     dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
     lock->clear_updated();
-    eval_gather(lock);
+    if (!lock->is_stable())
+      eval_gather(lock);
     return;
   }
 
