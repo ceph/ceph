@@ -527,6 +527,7 @@ int main(int argc, const char **argv, const char *envp[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   common_init(args, "ceph");
+  char *fname;
 
   vec_to_argv(args, argc, argv);
 
@@ -538,7 +539,8 @@ int main(int argc, const char **argv, const char *envp[])
     if (CONF_ARG_EQ("out_file", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
     } else if (CONF_ARG_EQ("in_data", 'i')) {
-      int fd = ::open(args[++i], O_RDONLY);
+      CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
+      int fd = ::open(fname, O_RDONLY);
       struct stat st;
       if (::fstat(fd, &st) == 0) {
 	indata.push_back(buffer::create(st.st_size));
@@ -548,9 +550,9 @@ int main(int argc, const char **argv, const char *envp[])
 	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
       }
     } else if (CONF_ARG_EQ("watch", 'w')) {
-      observe = 1;
+      CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
     } else if (CONF_ARG_EQ("poll", 'p')) {
-      watch = 1;
+      CONF_SAFE_SET_ARG_VAL(&watch, OPT_BOOL);
     } else if (args[i][0] == '-') {
       if (!CONF_ARG_EQ("help", 'h'))
 	cerr << "unrecognized option " << args[i] << std::endl;
