@@ -375,7 +375,7 @@ void Locker::drop_rdlocks(Mutation *mut)
 
 // generics
 
-void Locker::eval_gather(SimpleLock *lock)
+void Locker::eval_gather(SimpleLock *lock, bool first)
 {
   dout(10) << "eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
   assert(!lock->is_stable());
@@ -396,6 +396,10 @@ void Locker::eval_gather(SimpleLock *lock)
 	     << " other " << gcap_string(other_issued)
 	     << "/" << gcap_string(lock->gcaps_allowed(false, next))
 	     << dendl;
+
+    if (first && ((~lock->gcaps_allowed(false, next) & other_issued) ||
+		  (~lock->gcaps_allowed(true, next) & loner_issued)))
+      issue_caps(in);
   }
 
   if (!lock->is_gathering() &&
@@ -403,8 +407,8 @@ void Locker::eval_gather(SimpleLock *lock)
       (lock->sm->states[next].can_wrlock || !lock->is_wrlocked()) &&
       (lock->sm->states[next].can_xlock || !lock->is_xlocked()) &&
       (lock->sm->states[next].can_lease || !lock->is_leased()) &&
-      (~lock->gcaps_allowed(false, next) & other_issued) == 0 &&
-      (~lock->gcaps_allowed(true, next) & loner_issued) == 0) {
+      (!caps || ((~lock->gcaps_allowed(false, next) & other_issued) == 0 &&
+		 (~lock->gcaps_allowed(true, next) & loner_issued) == 0))) {
     dout(7) << "eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
@@ -3003,62 +3007,30 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     assert(lock->get_state() == LOCK_LOCK ||
 	   lock->get_state() == LOCK_MIX ||
 	   lock->get_state() == LOCK_MIX_SYNC2);
-
-    if (lock->get_state() == LOCK_MIX) {
-      // primary needs to gather up our changes
-      if (!lock->is_wrlocked()) {
-	// reply now
-	MLock *reply = new MLock(lock, LOCK_AC_SYNCACK, mds->get_nodeid());
-	lock->encode_locked_state(reply->get_data());
-	mds->send_message_mds(reply, from);
-	lock->set_state(LOCK_MIX_SYNC2);
-      } else {
-	lock->set_state(LOCK_MIX_SYNC);
-      }
-    } else {
-      // ok!
-      lock->decode_locked_state(m->get_data());
-      lock->set_state(LOCK_SYNC);
     
-      // no need to reply.
-      
-      // waiters
-      lock->get_rdlock();
-      lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
-      lock->put_rdlock();
+    if (lock->get_state() == LOCK_MIX) {
+      lock->set_state(LOCK_MIX_SYNC);
+      eval_gather(lock, true);
+      break;
     }
+
+    // ok
+    lock->decode_locked_state(m->get_data());
+    lock->set_state(LOCK_SYNC);
+
+    lock->get_rdlock();
+    lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+    lock->put_rdlock();
     break;
     
   case LOCK_AC_LOCK:
-    assert(lock->get_state() == LOCK_SYNC ||
-           lock->get_state() == LOCK_MIX);
-    
-    lock->set_state(LOCK_SYNC_LOCK);
-    
-    // call back caps?
-    int loner_issued, other_issued;
-    if (caps)
-      in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
-    if (caps && ((loner_issued & ~lock->gcaps_allowed(true)) ||
-		 (other_issued & ~lock->gcaps_allowed(false)))) {
-      dout(7) << "handle_file_lock client readers, gathering caps on " << *in << dendl;
-      issue_caps(in);
-      break;
+    switch (lock->get_state()) {
+    case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
+    case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
+    default: assert(0);
     }
-    else if (lock->is_rdlocked()) {
-      dout(7) << "handle_file_lock rdlocked, waiting before ack on " << *in << dendl;
-      break;
-    } 
-    
-    // nothing to wait for, lock and ack.
-    {
-      lock->set_state(LOCK_LOCK);
-      
-      MLock *reply = new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid());
-      if (lock->get_state() == LOCK_MIX)
-	lock->encode_locked_state(reply->get_data());
-      mds->send_message_mds(reply, from);
-    }
+
+    eval_gather(lock, true);
     break;
     
   case LOCK_AC_MIX:
@@ -3069,36 +3041,20 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     if (lock->get_state() == LOCK_SYNC) {
       // MIXED
       lock->set_state(LOCK_SYNC_MIX);
-      int loner_issued, other_issued;
-      in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
-      if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-	  (other_issued & ~lock->gcaps_allowed(false))) {
-        // call back client caps
-        issue_caps(in);
-        break;
-      }
-      
-      lock->set_state(LOCK_SYNC_MIX2);
-      
-      // ack
-      MLock *reply = new MLock(lock, LOCK_AC_MIXACK, mds->get_nodeid());
-      mds->send_message_mds(reply, from);
-    } else {
-      // LOCK
-      lock->set_state(LOCK_MIX);
-      
-      // no ack needed.
-    }
+      eval_gather(lock, true);
+      break;
+    } 
+    
+    // ok
+    lock->decode_locked_state(m->get_data());
+    lock->set_state(LOCK_MIX);
 
     if (caps)
       issue_caps(in);
     
-    // waiters
     lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
     break;
 
- 
-    
 
     // -- auth --
   case LOCK_AC_LOCKACK:
