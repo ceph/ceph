@@ -60,8 +60,6 @@ int main(int argc, const char **argv)
       else
 	usage();
     } else if (strcmp(args[i], "-s") == 0) {
-      if (param == 0)
-          param++;
       if (i < args.size() - 1)
         sections.push_back(args[++i]);
       else
@@ -79,7 +77,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!list_sections && (param < 1 || param > 3))
+  if (!list_sections && (param < 1 || param > 2))
     usage();
 
   ConfFile *cf = conf_get_conf_file();

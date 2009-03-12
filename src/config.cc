@@ -586,7 +586,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(bdev_fake_max_mb, 0, OPT_INT, 0),
 };
 
-static bool set_conf_val(void *field, opt_type_t type, const char *val)
+bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
 {
 	switch (type) {
 	case OPT_BOOL:
@@ -665,7 +665,7 @@ static bool init_g_conf()
 
   for (i = 0; i<len; i++) {
     opt = &config_optionsp[i];
-    if (!set_conf_val(opt->val_ptr,
+    if (!conf_set_conf_val(opt->val_ptr,
 		      opt->type,
 		      opt->def_val)) {
       cerr << "error initializing g_conf value num " << i << std::endl;
@@ -686,7 +686,7 @@ static bool cmd_is_char(const char *cmd)
 		cmd[1] && !cmd[2]);
 }
 
-static bool cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos)
+static bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos)
 {
 	unsigned int i;
 	unsigned int len = strlen(opt);
@@ -881,53 +881,59 @@ void parse_config_file(ConfFile *cf, bool auto_update)
 }
 
 
+#define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
+#define CONF_SET_ARG_VAL(dest, type) \
+	conf_set_conf_val(dest, type, CONF_NEXT_VAL)
+#define CONF_SAFE_SET_ARG_VAL(dest, type) \
+	do { \
+          if (__isarg || val_pos) \
+		CONF_SET_ARG_VAL(dest, type); \
+	} while (0)
+#define CONF_SET_BOOL_ARG_VAL(dest) \
+	conf_set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))
+#define CONF_ARG_EQ(str_cmd, char_cmd) \
+	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
+
+#define DEFINE_CONF_VARS \
+unsigned int val_pos; \
+bool __isarg
+
+#define FOR_EACH_ARG(args) \
+__isarg = 1 < args.size(); \
+for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size()) 
+
 
 
 void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
 {
-  unsigned int val_pos;
+  DEFINE_CONF_VARS;
+  std::vector<const char *> nargs;
 
-  std::vector<const char*> nargs;
-  
   if (!g_conf.id)
     g_conf.id = (char *)"";
   if (!g_conf.type)
     g_conf.type = (char *)"";
 
-  for (unsigned i=0; i<args.size(); i++) {
-    bool isarg = i+1 < args.size();  // is more?
-#define NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
-#define SET_ARG_VAL(dest, type) \
-	set_conf_val(dest, type, NEXT_VAL)
-#define SAFE_SET_ARG_VAL(dest, type) \
-	do { \
-          if (isarg || val_pos) \
-		SET_ARG_VAL(dest, type); \
-	} while (0)
-#define SET_BOOL_ARG_VAL(dest) \
-	set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))
-#define CMD_EQ(str_cmd, char_cmd) \
-	cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
-
-    if (CMD_EQ("conf", 'c')) {
-	SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
-    } else if (CMD_EQ("monmap", 'M')) {
-	SAFE_SET_ARG_VAL(&g_conf.monmap, OPT_STR);
-    } else if (CMD_EQ("bind", 0)) {
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("conf", 'c')) {
+	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
+    } else if (CONF_ARG_EQ("monmap", 'M')) {
+	CONF_SAFE_SET_ARG_VAL(&g_conf.monmap, OPT_STR);
+    } else if (CONF_ARG_EQ("bind", 0)) {
       assert_warn(parse_ip_port(args[++i], g_my_addr));
-    } else if (CMD_EQ("nodaemon", 'D')) {
+    } else if (CONF_ARG_EQ("nodaemon", 'D')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = true;
-    } else if (CMD_EQ("daemonize", 'd')) {
+    } else if (CONF_ARG_EQ("daemonize", 'd')) {
       g_conf.daemonize = true;
       g_conf.log_to_stdout = false;
-    } else if (CMD_EQ("foreground", 'f')) {
+    } else if (CONF_ARG_EQ("foreground", 'f')) {
       g_conf.daemonize = false;
       g_conf.log_to_stdout = false;
-    } else if (CMD_EQ("show_conf", 'S')) {
+    } else if (CONF_ARG_EQ("show_conf", 'S')) {
       show_config = true;
-    } else if (CMD_EQ("id", 'i')) {
-      SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
+    } else if (CONF_ARG_EQ("id", 'i')) {
+      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else {
       nargs.push_back(args[i]);
     }
@@ -1006,22 +1012,19 @@ ConfFile *conf_get_conf_file()
 void parse_config_options(std::vector<const char*>& args)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
-  unsigned int val_pos;
+  DEFINE_CONF_VARS;
 
   std::vector<const char*> nargs;
-  for (unsigned i=0; i<args.size(); i++) {
-    bool isarg = i+1 < args.size();  // is more?
+  FOR_EACH_ARG(args) {
     int optn;
 
     for (optn = 0; optn < opt_len; optn++) {
-      if (CMD_EQ("lockdep", '\0')) {
-	SAFE_SET_ARG_VAL(&g_lockdep, OPT_INT);
-      } else if (cmd_equals(args[i],
-	    config_optionsp[optn].name,
-	    config_optionsp[optn].char_option,
-	    &val_pos)) {
-        if (isarg || val_pos || config_optionsp[optn].type == OPT_BOOL)
-	    SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+      if (CONF_ARG_EQ("lockdep", '\0')) {
+	CONF_SAFE_SET_ARG_VAL(&g_lockdep, OPT_INT);
+      } else if (CONF_ARG_EQ(config_optionsp[optn].name,
+	    config_optionsp[optn].char_option)) {
+        if (__isarg || val_pos || config_optionsp[optn].type == OPT_BOOL)
+	    CONF_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
         else
           continue;
       } else {
