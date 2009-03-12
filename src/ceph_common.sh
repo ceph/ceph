@@ -101,6 +101,7 @@ get_conf() {
 	key=$3
 	shift; shift; shift
 
+	[[ $verbose == 1 ]] && echo "$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\""
 	eval "$var=\"`$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\"`\""
 }
 
