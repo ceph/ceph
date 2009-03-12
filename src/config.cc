@@ -769,7 +769,7 @@ static const char *var_val(char *var_name)
 	return "";
 }
 
-#define MAX_LINE 256
+#define MAX_LINE 2560
 #define MAX_VAR_LEN 32
 
 char *conf_post_process_val(const char *val)
