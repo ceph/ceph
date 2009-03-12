@@ -137,8 +137,9 @@ if [ $start_mon -eq 1 ]; then
 	log sym dir = out
 	logger dir = log
 	chdir = ""
+	pid file = out/\$type\$id.pid
+[mds]
 	pid file = out/\$name.pid
-
 EOF
 		if [ `echo $IP | grep '^127\\.'` ]
 		then
@@ -167,7 +168,8 @@ EOF
 
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
-			$CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
+		    echo $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
+		    $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
 		done
 	fi
 
