@@ -116,18 +116,6 @@ done
 
 verify_conf
 
-# build mon_addr_arg with all mon addrs
-n=0
-mon_addr_arg=""
-while [ 1 ]; do
-    name="mon$n"
-    get_conf mon_addr "" "mon addr" $name "mon" "global"
-    [ "$mon_addr" == "" ] && break
-    mon_addr_arg="$mon_addr_arg -m $mon_addr"
-    n=$(($n + 1))
-done
-
-
 command=$1
 shift
 
