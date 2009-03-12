@@ -11,7 +11,7 @@ using namespace std;
 
 #include "config.h"
 #include "common/ConfUtils.h"
-
+#include "common/common_init.h"
 
 const char *id = NULL, *type = NULL;
 char *name, *alt_name;
@@ -24,38 +24,34 @@ static void usage()
 
 int main(int argc, const char **argv) 
 {
-  const char *fname = NULL;
   const char *key = NULL, *defval = NULL;
   const char *list_sections = 0;
   char *val;
   int param = 0;
-  deque<const char*> args;
+  vector<const char*> args, nargs;
   deque<const char *> sections;
-  argv_to_deq(argc, argv, args);
-  env_to_deq(args);
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
 
   if (args.size() < 2)
     usage();
 
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "-c") == 0) {
-      if (i < args.size() - 1)
-        fname = args[++i];
-      else
-	usage();
-    } else if (strcmp(args[i], "-t") == 0) {
-      if (param == 0)
-          param++;
+    if (strcmp(args[i], "-t") == 0) {
       if (i < args.size() - 1)
         type = args[++i];
       else
 	usage();
-    } else if (strcmp(args[i], "-i") == 0) {
-      if (i < args.size() - 1)
-        id = args[++i];
-      else
-	usage();
-    } else if (strcmp(args[i], "-l") == 0 ||
+    } else {
+	nargs.push_back(args[i]);
+    }
+  }
+  args.swap(nargs);
+
+  common_init(args, type);
+
+  for (unsigned i=0; i<args.size(); i++) {
+      if (strcmp(args[i], "-l") == 0 ||
 	       strcmp(args[i], "--list_sections") == 0) {
       if (i < args.size() - 1)
 	list_sections = args[++i];
@@ -87,16 +83,13 @@ int main(int argc, const char **argv)
   if (!list_sections && (param < 1 || param > 3))
     usage();
 
-  if (!fname)
-    usage();
+  ConfFile *cf = conf_get_conf_file();
 
-  ConfFile cf(fname);
-  cf.set_post_process_func(conf_post_process_val);
-  parse_config_file(&cf, true, type, id);
+  assert(cf);
 
   if (list_sections) {
-    for (std::list<ConfSection*>::const_iterator p = cf.get_section_list().begin();
-	 p != cf.get_section_list().end();
+    for (std::list<ConfSection*>::const_iterator p = cf->get_section_list().begin();
+	 p != cf->get_section_list().end();
 	 p++) {
       if (strncmp(list_sections, (*p)->get_name().c_str(), strlen(list_sections)) == 0)
 	cout << (*p)->get_name() << std::endl;
@@ -104,31 +97,8 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  if (id) {
-       name = (char *)malloc(strlen(type) + strlen(id) + 2);
-       sprintf(name, "%s.%s", type, id);
-       alt_name = (char *)malloc(strlen(type) + strlen(id) + 1);
-       sprintf(alt_name, "%s%s", type, id);
-  } else {
-       name = (char *)type;
-  }
-
-  g_conf.name = name;
-  g_conf.id = (char *)id;
-  g_conf.type = (char *)type;
-
-  if (type)
-    sections.push_front(type);
-
-  if (alt_name)
-    sections.push_front(alt_name);
-  if (name)
-    sections.push_front(name);
-
-  sections.push_back("global");
-
   for (unsigned i=0; i<sections.size(); i++) {
-    cf.read(sections[i], key, (char **)&val, NULL);
+    cf->read(sections[i], key, (char **)&val, NULL);
 
     if (val) {
       cout << val << std::endl;

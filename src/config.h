@@ -373,6 +373,7 @@ void generic_server_usage();
 void generic_client_usage();
 
 class ConfFile;
+ConfFile *conf_get_conf_file();
 
 void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, const char *module_name);
 char *conf_post_process_val(const char *val);

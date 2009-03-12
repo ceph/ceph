@@ -40,6 +40,8 @@ atomic_t buffer_total_alloc;
 
 static bool show_config = false;
 
+static ConfFile *cf = NULL;
+
 /*
 struct foobar {
   foobar() { cerr << "config.cc init" << std::endl; }
@@ -937,21 +939,26 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   args.swap(nargs);
   nargs.clear();
 
-  g_conf.type = strdup(module_type);
+  if (module_type) {
+    g_conf.type = strdup(module_type);
 
-  if (g_conf.id) {
-	g_conf.name = (char *)malloc(strlen(module_type) + strlen(g_conf.id) + 2);
+    if (g_conf.id) {
+  	g_conf.name = (char *)malloc(strlen(module_type) + strlen(g_conf.id) + 2);
 	sprintf(g_conf.name, "%s.%s", g_conf.type, g_conf.id);
-  } else {
+    } else {
 	g_conf.name = g_conf.type;
+    }
   }
 
-  ConfFile cf(g_conf.conf);
+  if (cf)
+	delete cf;
 
-  parse_config_file(&cf, true, g_conf.type, g_conf.id);
+  cf = new ConfFile(g_conf.conf);
+
+  parse_config_file(cf, true, g_conf.type, g_conf.id);
 
   if (show_config) {
-    cf.dump();
+    cf->dump();
     exit(0);
   }
 }
@@ -991,6 +998,11 @@ void generic_client_usage()
   cerr << "   -d   daemonize (detach, fork, log to file)\n";
   cerr << "   -f   foreground (no fork, log to file)" << std::endl;
   exit(1);
+}
+
+ConfFile *conf_get_conf_file()
+{
+  return cf;
 }
 
 void parse_config_options(std::vector<const char*>& args)
