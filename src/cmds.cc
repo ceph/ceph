@@ -70,7 +70,10 @@ int main(int argc, const char **argv)
     return -1;
 
   rank.bind();
-  cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
+  cout << "starting mds." << g_conf.id
+       << " at " << rank.get_rank_addr() 
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
 
   Messenger *m = rank.register_entity(entity_name_t::MDS(-1));
   assert_warn(m);
