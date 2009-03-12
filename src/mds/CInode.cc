@@ -1169,6 +1169,7 @@ void CInode::auth_unpin(void *by)
 
 void CInode::adjust_nested_auth_pins(int a)
 {
+  assert(a);
   nested_auth_pins += a;
   dout(35) << "adjust_nested_auth_pins by " << a
 	   << " now " << auth_pins << "+" << nested_auth_pins
@@ -1181,6 +1182,7 @@ void CInode::adjust_nested_auth_pins(int a)
 
 void CInode::adjust_nested_anchors(int by)
 {
+  assert(by);
   nested_anchors += by;
   dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
   assert(nested_anchors >= 0);
