@@ -5233,7 +5233,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   if (psnapdiri)
     *psnapdiri = 0;
 
-  int client = mdr->reqid.name.is_client() ? mdr->reqid.name.num() : -1;
+  int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
   // root
   CInode *cur = get_inode(origpath.get_ino());
