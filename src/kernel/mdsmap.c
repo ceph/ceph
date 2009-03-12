@@ -73,29 +73,30 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 
 	/* pick out active nodes from mds_info (state > 0) */
 	ceph_decode_32(p, n);
-	ceph_decode_need(p, end,
-			 n * (3*sizeof(u32) + sizeof(u64) +
-			      2*sizeof(*m->m_addr) +
-			      sizeof(struct ceph_timespec)),
-			 bad);
 	for (i = 0; i < n; i++) {
+		u32 namelen;
 		s32 mds, inc, state;
 		u64 state_seq;
 		struct ceph_entity_addr addr;
 
+		ceph_decode_need(p, end, sizeof(addr) + sizeof(u32), bad);
 		*p += sizeof(addr);  /* skip addr key */
+		ceph_decode_32(p, namelen);
+		*p += namelen;
+		ceph_decode_need(p, end, 6*sizeof(u32) + sizeof(addr) +
+				 sizeof(struct ceph_timespec), bad);
 		ceph_decode_32(p, mds);
 		ceph_decode_32(p, inc);
 		ceph_decode_32(p, state);
 		ceph_decode_64(p, state_seq);
 		ceph_decode_copy(p, &addr, sizeof(addr));
+		*p += sizeof(struct ceph_timespec) + 2*sizeof(u32);
 		dout(10, "mdsmap_decode %d/%d mds%d.%d %u.%u.%u.%u:%u state %d\n",
 		     i+1, n, mds, inc, IPQUADPORT(addr.ipaddr), state);
 		if (mds >= 0 && mds < m->m_max_mds && state > 0) {
 			m->m_state[mds] = state;
 			m->m_addr[mds] = addr;
 		}
-		*p += sizeof(struct ceph_timespec);
 	}
 
 	/* ok, we don't care about the rest. */
