@@ -27,10 +27,12 @@ int main(int argc, const char **argv)
   const char *key = NULL, *defval = NULL;
   const char *list_sections = 0;
   char *val;
+  char *section;
   int param = 0;
   vector<const char*> args, nargs;
   deque<const char *> sections;
   unsigned i;
+  DEFINE_CONF_VARS(usage);
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -38,12 +40,9 @@ int main(int argc, const char **argv)
   if (args.size() < 2)
     usage();
 
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "-t") == 0) {
-      if (i < args.size() - 1)
-        type = args[++i];
-      else
-	usage();
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("type", 't')) {
+    	CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
     } else {
 	nargs.push_back(args[i]);
     }
@@ -52,19 +51,13 @@ int main(int argc, const char **argv)
 
   common_init(args, type, false);
 
-  for (unsigned i=0; i<args.size(); i++) {
-      if (strcmp(args[i], "-l") == 0 ||
-	       strcmp(args[i], "--list_sections") == 0) {
-      if (i < args.size() - 1)
-	list_sections = args[++i];
-      else
-	usage();
-    } else if (strcmp(args[i], "-s") == 0) {
-      if (i < args.size() - 1)
-        sections.push_back(args[++i]);
-      else
-	usage();
-    } else {
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("list_sections", 'l')) {
+    	CONF_SAFE_SET_ARG_VAL(&list_sections, OPT_STR);
+    } else if (CONF_ARG_EQ("section", 's')) {
+    	CONF_SAFE_SET_ARG_VAL(&section, OPT_STR);
+        sections.push_back(section);
+    } else if (*args[i] != '-') {
       switch (param) {
 	case 0:
 	    key = args[i];
@@ -74,6 +67,9 @@ int main(int argc, const char **argv)
 	    break;
       }
       param++;
+    } else {
+      cerr << "unrecognized argument: " << args[i] << std::endl;
+      usage();
     }
   }
 

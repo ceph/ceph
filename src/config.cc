@@ -686,7 +686,7 @@ static bool cmd_is_char(const char *cmd)
 		cmd[1] && !cmd[2]);
 }
 
-static bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos)
+bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos)
 {
 	unsigned int i;
 	unsigned int len = strlen(opt);
@@ -880,33 +880,14 @@ void parse_config_file(ConfFile *cf, bool auto_update)
   }
 }
 
-
-#define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
-#define CONF_SET_ARG_VAL(dest, type) \
-	conf_set_conf_val(dest, type, CONF_NEXT_VAL)
-#define CONF_SAFE_SET_ARG_VAL(dest, type) \
-	do { \
-          if (__isarg || val_pos) \
-		CONF_SET_ARG_VAL(dest, type); \
-	} while (0)
-#define CONF_SET_BOOL_ARG_VAL(dest) \
-	conf_set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))
-#define CONF_ARG_EQ(str_cmd, char_cmd) \
-	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
-
-#define DEFINE_CONF_VARS \
-unsigned int val_pos; \
-bool __isarg
-
-#define FOR_EACH_ARG(args) \
-__isarg = 1 < args.size(); \
-for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size()) 
-
-
+bool is_bool_param(const char *param)
+{
+	return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
+}
 
 void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
 {
-  DEFINE_CONF_VARS;
+  DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
 
   if (!g_conf.id)
@@ -1012,7 +993,7 @@ ConfFile *conf_get_conf_file()
 void parse_config_options(std::vector<const char*>& args)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
-  DEFINE_CONF_VARS;
+  DEFINE_CONF_VARS(NULL);
 
   std::vector<const char*> nargs;
   FOR_EACH_ARG(args) {
@@ -1024,7 +1005,7 @@ void parse_config_options(std::vector<const char*>& args)
       } else if (CONF_ARG_EQ(config_optionsp[optn].name,
 	    config_optionsp[optn].char_option)) {
         if (__isarg || val_pos || config_optionsp[optn].type == OPT_BOOL)
-	    CONF_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
+	    CONF_SAFE_SET_ARG_VAL(config_optionsp[optn].val_ptr, config_optionsp[optn].type);
         else
           continue;
       } else {

@@ -379,28 +379,43 @@ ConfFile *conf_get_conf_file();
 
 char *conf_post_process_val(const char *val);
 int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def);
+bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
+bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos);
+
 
 #define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
+
 #define CONF_SET_ARG_VAL(dest, type) \
 	conf_set_conf_val(dest, type, CONF_NEXT_VAL)
+
 #define CONF_SAFE_SET_ARG_VAL(dest, type) \
 	do { \
-          if (__isarg || val_pos) \
+          if (type == OPT_BOOL) { \
+		if (__isarg || val_pos) { \
+			CONF_SET_ARG_VAL(dest, type); \
+		} else \
+			conf_set_conf_val(dest, type, "true"); \
+          } else if (__isarg || val_pos) { \
 		CONF_SET_ARG_VAL(dest, type); \
+	  } else if (args_usage) \
+		args_usage(); \
 	} while (0)
+
 #define CONF_SET_BOOL_ARG_VAL(dest) \
 	conf_set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))
+
 #define CONF_ARG_EQ(str_cmd, char_cmd) \
 	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
 
-#define DEFINE_CONF_VARS \
-unsigned int val_pos; \
-bool __isarg
+#define DEFINE_CONF_VARS(usage_func) \
+	unsigned int val_pos; \
+	void (*args_usage)() = usage_func; \
+	bool __isarg
+
 
 #define FOR_EACH_ARG(args) \
-__isarg = 1 < args.size(); \
-for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size())
-
+	__isarg = 1 < args.size(); \
+	for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size()) 
 
 #include "common/debug.h"
 
