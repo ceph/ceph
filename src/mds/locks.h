@@ -64,18 +64,19 @@ extern struct sm_t sm_scatterlock;
 
 #define LOCK_MIX      14
 #define LOCK_SYNC_MIX 15
-#define LOCK_LOCK_MIX 16
-#define LOCK_EXCL_MIX 17
-#define LOCK_MIX_SYNC 18
-#define LOCK_MIX_SYNC2 19
-#define LOCK_MIX_LOCK 20
-#define LOCK_MIX_EXCL 21
+#define LOCK_SYNC_MIX2 16
+#define LOCK_LOCK_MIX 17
+#define LOCK_EXCL_MIX 18
+#define LOCK_MIX_SYNC 19
+#define LOCK_MIX_SYNC2 20
+#define LOCK_MIX_LOCK 21
+#define LOCK_MIX_EXCL 22
 
-#define LOCK_TSYN      22
-#define LOCK_TSYN_LOCK 23
-#define LOCK_TSYN_MIX  24
-#define LOCK_LOCK_TSYN 25
-#define LOCK_MIX_TSYN  26
+#define LOCK_TSYN      23
+#define LOCK_TSYN_LOCK 24
+#define LOCK_TSYN_MIX  25
+#define LOCK_LOCK_TSYN 26
+#define LOCK_MIX_TSYN  27
 
 
 #endif

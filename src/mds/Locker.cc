@@ -3192,8 +3192,10 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
   }
 
 
-  dout(7) << "handle_file_lock a=" << m->get_action() << " from " << from << " " 
-	  << *in << " filelock=" << *lock << dendl;  
+  dout(7) << "handle_file_lock a=" << get_lock_action_name(m->get_action())
+	  << " on " << *lock
+	  << " from mds" << from << " " 
+	  << *in << dendl;
   
   switch (m->get_action()) {
     // -- replica --
@@ -3260,7 +3262,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     
   case LOCK_AC_MIXED:
     assert(lock->get_state() == LOCK_SYNC ||
-           lock->get_state() == LOCK_LOCK);
+           lock->get_state() == LOCK_LOCK ||
+	   lock->get_state() == LOCK_SYNC_MIX2);
     
     if (lock->get_state() == LOCK_SYNC) {
       // MIXED
@@ -3274,7 +3277,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
         break;
       }
       
-      lock->set_state(LOCK_MIX);
+      lock->set_state(LOCK_SYNC_MIX2);
       
       // ack
       MLock *reply = new MLock(lock, LOCK_AC_MIXEDACK, mds->get_nodeid());
