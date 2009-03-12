@@ -378,7 +378,7 @@ class ConfFile;
 ConfFile *conf_get_conf_file();
 
 char *conf_post_process_val(const char *val);
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out);
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *inout);
 
 #include "common/debug.h"
 

@@ -798,10 +798,10 @@ char *conf_post_process_val(const char *val)
   return strdup(buf);
 }
 
-#define OPT_READ_TYPE(section, var, type, inout) \
-  cf->read(section, var, (type *)inout, NULL)
+#define OPT_READ_TYPE(section, var, type, inout, def) \
+  cf->read(section, var, (type *)inout, def)
 
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out)
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *inout)
 {
   int s;
   int ret;
@@ -834,19 +834,19 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
 
     switch (type) {
     case OPT_STR:
-      ret = OPT_READ_TYPE(section, key, char *, out);
+      ret = OPT_READ_TYPE(section, key, char *, inout, *(char **)inout);
       break;
     case OPT_BOOL:
-      ret = OPT_READ_TYPE(section, key, bool, out);
+      ret = OPT_READ_TYPE(section, key, bool, inout, *(bool *)inout);
       break;
     case OPT_INT:
-      ret = OPT_READ_TYPE(section, key, int, out);
+      ret = OPT_READ_TYPE(section, key, int, inout, *(int *)inout);
       break;
     case OPT_FLOAT:
-      ret = OPT_READ_TYPE(section, key, float, out);
+      ret = OPT_READ_TYPE(section, key, float, inout, *(float *)inout);
       break;
     case OPT_DOUBLE:
-      ret = OPT_READ_TYPE(section, key, double, out);
+      ret = OPT_READ_TYPE(section, key, double, inout, *(double *)inout);
       break;
     default:
 	ret = 0;
