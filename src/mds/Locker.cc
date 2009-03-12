@@ -440,11 +440,12 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
 	    MLock *reply = new MLock(lock, LOCK_AC_SYNCACK, mds->get_nodeid());
 	    lock->encode_locked_state(reply->get_data());
 	    mds->send_message_mds(reply, auth);
-	    lock->set_state(LOCK_MIX_SYNC2);
+	    next = LOCK_MIX_SYNC2;
 	  }
 	  break;
 
 	case LOCK_MIX_SYNC2:
+	case LOCK_SYNC_MIX2:
 	  // do nothing, we already acked
 	  break;
 	  
@@ -452,6 +453,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
 	  { 
 	    MLock *reply = new MLock(lock, LOCK_AC_MIXACK, mds->get_nodeid());
 	    mds->send_message_mds(reply, auth);
+	    next = LOCK_SYNC_MIX2;
 	  }
 	  break;
 
@@ -2889,8 +2891,8 @@ void Locker::file_mixed(ScatterLock *lock)
 
     int gather = 0;
     if (in->is_replicated()) {
-      send_lock_message(lock, LOCK_AC_MIX);
-      if (lock->get_state() != LOCK_EXCL_MIX) {  // EXCL replica is LOCK
+      if (lock->get_state() != LOCK_EXCL_MIX) {  // EXCL replica is already LOCK
+	send_lock_message(lock, LOCK_AC_MIX);
 	lock->init_gather();
 	gather++;
       }
