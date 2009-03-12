@@ -48,6 +48,8 @@ repair
 
 
 kernel client
+- O_DIRECT
+- inotify for updates from other clients?
 - optional or no fill_trace?
 - flock, fnctl locks
 - async xattrs
