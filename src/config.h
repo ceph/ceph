@@ -391,7 +391,7 @@ bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned i
 #define CONF_SAFE_SET_ARG_VAL(dest, type) \
 	do { \
           if (type == OPT_BOOL) { \
-		if (__isarg || val_pos) { \
+		if (val_pos) { \
 			CONF_SET_ARG_VAL(dest, type); \
 		} else \
 			conf_set_conf_val(dest, type, "true"); \
