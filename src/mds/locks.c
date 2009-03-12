@@ -65,6 +65,7 @@ struct sm_state_t scatterlock[30] = {
     [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   FW,  ANY, 0,   0,   0,0,0 },
     [LOCK_TSYN_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0 },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0 },
+    [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,0,0 },
 };
 
 struct sm_t sm_scatterlock = {
