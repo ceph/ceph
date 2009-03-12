@@ -383,11 +383,12 @@ void Locker::eval_gather(SimpleLock *lock)
   int next = lock->get_next_state();
 
   CInode *in = 0;
-  if (lock->get_cap_shift())
+  bool caps = lock->get_cap_shift();
+  if (lock->get_type() != CEPH_LOCK_DN)
     in = (CInode *)lock->get_parent();
 
   int loner_issued = 0, other_issued = 0;
-  if (in) {
+  if (caps) {
     in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
     dout(10) << " next state is " << lock->get_state_name(next) 
 	     << " issued/allows loner " << gcap_string(loner_issued)
@@ -495,13 +496,13 @@ void Locker::eval_gather(SimpleLock *lock)
       lock->get_parent()->auth_unpin(lock);
     }
 
-    if (in)
+    if (caps)
       in->try_drop_loner();
 
     lock->set_state(next);
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
-    if (in)
+    if (caps)
       issue_caps(in);
 
     if (lock->get_parent()->is_auth() &&
