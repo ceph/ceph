@@ -56,7 +56,7 @@ int main(int argc, const char **argv)
   char *end;
   int whoami = strtol(g_conf.id, &end, 10);
   if (*end || end == g_conf.id || whoami < 0) {
-    cerr << "must specify '-i #' where # is the osd number" << std::endl;
+    cerr << "must specify '-i #' where # is the mon number" << std::endl;
     usage();
   }
 
