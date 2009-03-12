@@ -2,7 +2,7 @@
 
 [ "$CEPH_NUM_MON" == "" ] && CEPH_NUM_MON=3
 [ "$CEPH_NUM_OSD" == "" ] && CEPH_NUM_OSD=1
-[ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=1
+[ "$CEPH_NUM_MDS" == "" ] && CEPH_NUM_MDS=3
 
 let new=0
 let debug=0
@@ -204,17 +204,21 @@ fi
 
 # mds
 if [ $start_mds -eq 1 ]; then
-    for mds in `seq 0 $((CEPH_NUM_MDS-1))`
+    mds=0
+    for name in a b c d e f g h i j k l m n o p
     do
 	if [ $new -eq 1 ]; then
 	    cat <<EOF >> $conf
-[mds$mds]
+[mds.$name]
 EOF
 	fi
 	
-	echo $valgrind $CEPH_BIN/cmds -i $mds $ARGS $CMDS_ARGS
-	$valgrind $CEPH_BIN/cmds -i $mds $ARGS $CMDS_ARGS
+	echo $valgrind $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
+	$valgrind $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
 	
+	mds=$(($mds + 1))
+	[ $mds -eq $CEPH_NUM_MDS ] && break
+
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_BIN/ceph mds set_max_mds 2
