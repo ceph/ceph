@@ -66,6 +66,8 @@ class ConfFile {
 	char *filename;
 	bool auto_update;
 
+	char *(*post_process_func)(const char *);
+
 	SectionMap sections;
 	SectionList sections_list;
 	ConfList global_list;
@@ -111,6 +113,7 @@ public:
 	void dump();
 	int flush();
 	void set_auto_update(bool update) { auto_update = update; }
+	void set_post_process_func(char *(*func)(const char *)) {post_process_func = func; };
 };
 
 #endif

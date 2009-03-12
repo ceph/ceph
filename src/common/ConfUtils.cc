@@ -803,12 +803,19 @@ template<typename T>
 int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 {
 	ConfLine *cl;
+	char *str_val;
 
 	cl = _find_var(section, var);
 	if (!cl || !cl->get_val())
 		goto notfound;
 
-	_conf_decode(val, cl->get_val());
+	str_val = cl->get_val();
+
+	if (post_process_func) {
+		str_val = post_process_func(str_val);
+	}
+
+	_conf_decode(val, str_val);
 
 	return 1;
 notfound:

@@ -729,6 +729,79 @@ static bool cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned
 	return true;
 }
 
+static bool get_var(const char *str, int pos, char *var_name, int len, int *new_pos)
+{
+  int bracket = (str[pos] == '{');
+  int out_pos = 0;
+
+  if (bracket) {
+    pos++;
+  }
+
+  while (str[pos] &&
+	((bracket && str[pos] != '}') ||
+	 isalnum(str[pos]))) {
+	var_name[out_pos] = str[pos];
+	
+	out_pos	++;
+	if (out_pos == len)
+		return false;
+	pos++;
+  }
+
+  var_name[out_pos] = '\0';
+
+  if (bracket && (str[pos] == '}'))
+	pos++;
+
+  *new_pos = pos;
+
+  return true;
+}
+
+static const char *var_val(char *var_name)
+{
+	if (strcmp(var_name, "type")==0)
+		return g_conf.type;
+	if (strcmp(var_name, "id")==0)
+		return g_conf.id;
+	if (strcmp(var_name, "num")==0)
+		return g_conf.id;
+	if (strcmp(var_name, "name")==0)
+		return g_conf.name;
+
+	return "";
+}
+
+#define MAX_LINE 256
+#define MAX_VAR_LEN 32
+
+char *conf_post_process_val(const char *val)
+{
+  char var_name[MAX_VAR_LEN];
+  char buf[MAX_LINE];
+  int i=0;
+  int out_pos = 0;
+
+  while (val[i] && (out_pos < MAX_LINE - 1)) {
+    if (val[i] == '$') {
+	if (get_var(val, i+1, var_name, MAX_VAR_LEN, &i)) {
+		out_pos += snprintf(buf+out_pos, MAX_LINE-out_pos, "%s", var_val(var_name));
+	} else {
+	  ++i;
+	}
+    } else {
+	buf[out_pos] = val[i];
+    	++out_pos;
+    	++i;
+    }
+  }
+
+  buf[out_pos] = '\0';
+
+  return strdup(buf);
+}
+
 #define OPT_READ_TYPE(section, var, type, inout) \
   cf->read(section, var, (type *)inout, *(type *)inout)
 
@@ -740,6 +813,7 @@ void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, 
   char *module_name = NULL, *module_alt_name = NULL;
 
   cf->set_auto_update(false);
+  cf->set_post_process_func(conf_post_process_val);
   cf->parse();
 
   if (module_id) {
@@ -778,6 +852,7 @@ void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, 
 	    if (section)
 	      break;
 	default:
+  	    cf->set_auto_update(true);
 	    s = 4;
 	    section = "global";
       }

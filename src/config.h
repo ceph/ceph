@@ -375,6 +375,7 @@ void generic_client_usage();
 class ConfFile;
 
 void parse_config_file(ConfFile *cf, bool auto_update, const char *module_type, const char *module_name);
+char *conf_post_process_val(const char *val);
 
 
 #include "common/debug.h"
