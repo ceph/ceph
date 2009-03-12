@@ -417,6 +417,8 @@ bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned i
 	__isarg = 1 < args.size(); \
 	for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size()) 
 
+#define ARGS_USAGE() args_usage();
+
 #include "common/debug.h"
 
 #endif

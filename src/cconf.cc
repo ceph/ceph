@@ -42,9 +42,9 @@ int main(int argc, const char **argv)
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("type", 't')) {
-    	CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
+      CONF_SAFE_SET_ARG_VAL(&type, OPT_STR);
     } else {
-	nargs.push_back(args[i]);
+      nargs.push_back(args[i]);
     }
   }
   args.swap(nargs);

@@ -520,8 +520,9 @@ int do_cli()
 
 
 
-int main(int argc, const char **argv, const char *envp[]) {
-
+int main(int argc, const char **argv, const char *envp[])
+{
+  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -533,10 +534,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   bufferlist indata;
   vector<const char*> nargs;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"-o") == 0) 
-      outfile = args[++i];
-    else if (strcmp(args[i], "-i") == 0) {
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("out_file", 'o')) {
+      CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
+    } else if (CONF_ARG_EQ("in_data", 'i')) {
       int fd = ::open(args[++i], O_RDONLY);
       struct stat st;
       if (::fstat(fd, &st) == 0) {
@@ -546,14 +547,12 @@ int main(int argc, const char **argv, const char *envp[]) {
 	::close(fd);
 	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
       }
-    } else if (strcmp(args[i], "-w") == 0 ||
-	       strcmp(args[i], "--watch") == 0) {
+    } else if (CONF_ARG_EQ("watch", 'w')) {
       observe = 1;
-    } else if (strcmp(args[i], "-p") == 0 ||
-	       strcmp(args[i], "--poll") == 0) {
+    } else if (CONF_ARG_EQ("poll", 'p')) {
       watch = 1;
     } else if (args[i][0] == '-') {
-      if (strcmp(args[i], "-h"))
+      if (!CONF_ARG_EQ("help", 'h'))
 	cerr << "unrecognized option " << args[i] << std::endl;
       usage();
     } else

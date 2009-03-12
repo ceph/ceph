@@ -618,10 +618,10 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
 }
 
 
-int usage(const char *me)
+void usage()
 {
-  cout << me << ": usage: crushtool [-d map] [-c map.txt] [-o outfile [--clobber]] [--build --num_osd N layer1 ...]" << std::endl;
-  cout << me << "  (where each 'layer' is 'name (uniform|straw|list|tree) size')" << std::endl;
+  cout << "usage: crushtool [-d map] [-c map.txt] [-o outfile [--clobber]] [--build --num_osd N layer1 ...]" << std::endl;
+  cout << "  (where each 'layer' is 'name (uniform|straw|list|tree) size')" << std::endl;
   exit(1);
 }
 
@@ -657,24 +657,25 @@ int main(int argc, const char **argv)
   int build = 0;
   int num_osds =0;
   vector<layer_t> layers;
+  DEFINE_CONF_VARS(usage);
 
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--clobber") == 0) 
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("clobber", '\0')) {
       clobber = true;
-    else if (strcmp(args[i], "-d") == 0)
-      dinfn = args[++i];
-    else if (strcmp(args[i], "-o") == 0)
-      outfn = args[++i];
-    else if (strcmp(args[i], "-c") == 0)
-      cinfn = args[++i];
-    else if (strcmp(args[i], "-v") == 0)
-      verbose++;
-    else if (strcmp(args[i], "--build") == 0)
-      build = 1;
-    else if (strcmp(args[i], "--num_osds") == 0)
-      num_osds = atoi(args[++i]);
-    else if (!build)
-      usage(me);
+    } else if (CONF_ARG_EQ("dinfn", 'd')) {
+      CONF_SAFE_SET_ARG_VAL(&dinfn, OPT_STR);
+    } else if (CONF_ARG_EQ("outfn", 'o')) {
+      CONF_SAFE_SET_ARG_VAL(&outfn, OPT_STR);
+    } else if (CONF_ARG_EQ("cinfn", 'c')) {
+      CONF_SAFE_SET_ARG_VAL(&cinfn, OPT_STR);
+    } else if (CONF_ARG_EQ("verbose", 'v')) {
+      CONF_SAFE_SET_ARG_VAL(&verbose, OPT_BOOL);
+    } else if (CONF_ARG_EQ("build", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&build, OPT_BOOL);
+    } else if (CONF_ARG_EQ("num_osds", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&num_osds, OPT_INT);
+    } else if (!build)
+      usage();
     else if (i + 3 <= args.size()) {
       layer_t l;
       l.name = args[i++];
@@ -684,9 +685,9 @@ int main(int argc, const char **argv)
     }      
   }
   if ((cinfn?1:0) + (dinfn?1:0) + build > 1)
-    usage(me);
+    usage();
   if (!cinfn && !dinfn && !build)
-    usage(me);
+    usage();
 
   /*
   if (outfn) cout << "outfn " << outfn << std::endl;

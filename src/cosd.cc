@@ -44,6 +44,7 @@ void usage()
 
 int main(int argc, const char **argv) 
 {
+  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -54,12 +55,12 @@ int main(int argc, const char **argv)
 
   // osd specific args
   bool mkfs = 0;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--mkfs") == 0)
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("mkfs", '\0')) {
       mkfs = 1; 
-    else {
+    } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
-      usage();
+      ARGS_USAGE();
     }
   }
 

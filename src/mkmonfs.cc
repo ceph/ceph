@@ -32,26 +32,26 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  DEFINE_CONF_VARS(usage);
 
   bool clobber = false;
   const char *fsdir = 0;
   int whoami = -1;
   const char *monmapfn = 0;
   const char *osdmapfn = 0;
-  for (unsigned i = 0; i < args.size(); i++) {
-    if (strcmp(args[i], "--clobber") == 0)
-      clobber = true;
-    else if (strcmp(args[i], "--mon") == 0 ||
-	     strcmp(args[i], "-i") == 0)
-      whoami = atoi(args[++i]);
-    else if (strcmp(args[i], "--monmap") == 0) 
-      monmapfn = args[++i];
-    else if (strcmp(args[i], "--osdmap") == 0) 
-      osdmapfn = args[++i];
-    else if (strcmp(args[i], "--mon_data") == 0 ||
-	     strcmp(args[i], "--mon-data") == 0)
-      fsdir = args[++i];
-    else 
+
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("clobber", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
+    } else if (CONF_ARG_EQ("mon", 'i')) {
+      CONF_SAFE_SET_ARG_VAL(&whoami, OPT_INT);
+    } else if (CONF_ARG_EQ("monmap", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&monmapfn, OPT_STR);
+    } else if (CONF_ARG_EQ("osdmap", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
+    } else if (CONF_ARG_EQ("mon_data", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&fsdir, OPT_STR);
+    } else 
       usage();
   }
   if (!fsdir || !monmapfn || whoami < 0)
