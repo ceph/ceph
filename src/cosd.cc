@@ -121,7 +121,8 @@ int main(int argc, const char **argv)
 
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
-       << " dev " << g_conf.osd_data << " " << (g_conf.osd_journal ? g_conf.osd_journal:"")
+       << " osd_data " << g_conf.osd_data
+       << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
        << " fsid " << monmap.fsid
        << std::endl;
 

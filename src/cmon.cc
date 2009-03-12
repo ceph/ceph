@@ -111,7 +111,9 @@ int main(int argc, const char **argv)
   // bind
   cout << "starting mon" << whoami 
        << " at " << monmap.get_inst(whoami).addr
-       << " from " << g_conf.mon_data << std::endl;
+       << " mon_data " << g_conf.mon_data
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
   g_my_addr = monmap.get_inst(whoami).addr;
   err = rank.bind();
   if (err < 0)
