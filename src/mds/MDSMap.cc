@@ -50,7 +50,7 @@ void MDSMap::print(ostream& out)
 	<< " '" << info.name << "'"
 	<< " mds" << info.rank
 	<< "." << info.inc
-	<< " " << get_state_name(info.state)
+	<< " " << ceph_mds_state_name(info.state)
 	<< " seq " << info.state_seq;
     if (info.laggy())
       out << " laggy since " << info.laggy_since;
@@ -85,7 +85,7 @@ void MDSMap::print_summary(ostream& out)
   out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << "/" << max_mds << " up";
 
   for (map<int,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
-    out << ", " << p->second << " " << get_state_name(p->first);
+    out << ", " << p->second << " " << ceph_mds_state_name(p->first);
   
   if (failed.size())
     out << ", " << failed.size() << " failed";

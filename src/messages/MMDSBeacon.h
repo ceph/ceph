@@ -50,7 +50,7 @@ class MMDSBeacon : public Message {
   void set_standby_for_name(string& n) { standby_for_name = n; }
 
   void print(ostream& out) {
-    out << "mdsbeacon(" << name << " " << MDSMap::get_state_name(state) 
+    out << "mdsbeacon(" << name << " " << ceph_mds_state_name(state) 
 	<< " seq " << seq << ")";
   }
   

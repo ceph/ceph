@@ -211,8 +211,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
       // legal state change?
       if ((info.state == MDSMap::STATE_STANDBY ||
 	   info.state == MDSMap::STATE_STANDBY_REPLAY) && state > 0) {
-	dout(10) << "mds_beacon mds can't activate itself (" << MDSMap::get_state_name(info.state)
-		 << " -> " << MDSMap::get_state_name(state) << ")" << dendl;
+	dout(10) << "mds_beacon mds can't activate itself (" << ceph_mds_state_name(info.state)
+		 << " -> " << ceph_mds_state_name(state) << ")" << dendl;
 	goto ignore;
       }
 
@@ -297,8 +297,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     }
   
     dout(10) << "prepare_beacon mds" << info.rank
-	     << " " << MDSMap::get_state_name(info.state)
-	     << " -> " << MDSMap::get_state_name(state)
+	     << " " << ceph_mds_state_name(info.state)
+	     << " -> " << ceph_mds_state_name(state)
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
       pending_mdsmap.up.erase(info.rank);
@@ -419,7 +419,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       } else {
 	r = -EEXIST;
 	ss << "mds" << who << " not active (" 
-	   << mdsmap.get_state_name(mdsmap.get_state(who)) << ")";
+	   << ceph_mds_state_name(mdsmap.get_state(who)) << ")";
       }
     }
     else if (m->cmd[1] == "set_max_mds" && m->cmd.size() > 2) {
@@ -546,7 +546,7 @@ void MDSMonitor::tick()
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
 
       dout(10) << "no beacon from " << addr << " mds" << info.rank << "." << info.inc
-	       << " " << MDSMap::get_state_name(info.state)
+	       << " " << ceph_mds_state_name(info.state)
 	       << " since " << since << dendl;
       
       // are we in?
@@ -557,7 +557,7 @@ void MDSMonitor::tick()
 	  pending_mdsmap.find_standby_for(info.rank, info.name, sa)) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
 	dout(10) << " replacing " << addr << " mds" << info.rank << "." << info.inc
-		 << " " << MDSMap::get_state_name(info.state)
+		 << " " << ceph_mds_state_name(info.state)
 		 << " with " << si.name << " " << sa << dendl;
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
@@ -595,14 +595,14 @@ void MDSMonitor::tick()
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
 	dout(10) << " failing " << addr << " mds" << info.rank << "." << info.inc
-		 << " " << MDSMap::get_state_name(info.state)
+		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
 	pending_mdsmap.mds_info.erase(addr);
 	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
 	dout(10) << " marking " << addr << " mds" << info.rank << "." << info.inc
-		 << " " << MDSMap::get_state_name(info.state)
+		 << " " << ceph_mds_state_name(info.state)
 		 << " laggy" << dendl;
 	info.laggy_since = now;
 	do_propose = true;

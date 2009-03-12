@@ -441,9 +441,9 @@ void MDS::beacon_start()
 void MDS::beacon_send()
 {
   ++beacon_last_seq;
-  dout(10) << "beacon_send " << MDSMap::get_state_name(want_state)
+  dout(10) << "beacon_send " << ceph_mds_state_name(want_state)
 	   << " seq " << beacon_last_seq
-	   << " (currently " << MDSMap::get_state_name(state) << ")"
+	   << " (currently " << ceph_mds_state_name(state) << ")"
 	   << dendl;
 
   // pick new random mon if we have any outstanding beacons...
@@ -465,7 +465,7 @@ void MDS::beacon_send()
 
 void MDS::handle_mds_beacon(MMDSBeacon *m)
 {
-  dout(10) << "handle_mds_beacon " << MDSMap::get_state_name(m->get_state())
+  dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	   << " seq " << m->get_seq() << dendl;
   version_t seq = m->get_seq();
 
@@ -571,7 +571,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   addr = messenger->get_myaddr();
   whoami = mdsmap->get_rank(addr);
   state = mdsmap->get_state(addr);
-  dout(10) << "map says i am " << addr << " mds" << whoami << " state " << MDSMap::get_state_name(state) << dendl;
+  dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
   if (state == MDSMap::STATE_STANDBY) {
     want_state = state = MDSMap::STATE_STANDBY;
@@ -620,8 +620,8 @@ void MDS::handle_mds_map(MMDSMap *m)
   // did it change?
   if (oldstate != state) {
     dout(1) << "handle_mds_map state change "
-	    << mdsmap->get_state_name(oldstate) << " --> "
-	    << mdsmap->get_state_name(state) << dendl;
+	    << ceph_mds_state_name(oldstate) << " --> "
+	    << ceph_mds_state_name(state) << dendl;
     want_state = state;
 
     // now active?
@@ -740,7 +740,7 @@ void MDS::bcast_mds_map()
 
 void MDS::request_state(int s)
 {
-  dout(3) << "request_state " << MDSMap::get_state_name(s) << dendl;
+  dout(3) << "request_state " << ceph_mds_state_name(s) << dendl;
   want_state = s;
   beacon_send();
 }

@@ -75,34 +75,6 @@ class MDSMap {
   static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
   static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
   
-  static const char *get_state_name(int s) {
-    switch (s) {
-      // down and out
-    case STATE_STOPPED:    return "down:stopped";
-      /*
-    case STATE_DNE:        return "dne";
-    case STATE_DESTROYING: return "down:destroying";
-      // down and in
-    case STATE_FAILED:     return "down:failed";
-      */
-      // up and out
-    case STATE_BOOT:       return "up:boot";
-    case STATE_STANDBY:    return "up:standby";
-    case STATE_STANDBY_REPLAY:    return "up:standby-replay";
-    case STATE_CREATING:   return "up:creating";
-    case STATE_STARTING:   return "up:starting";
-      // up and in
-    case STATE_REPLAY:     return "up:replay";
-    case STATE_RESOLVE:    return "up:resolve";
-    case STATE_RECONNECT:  return "up:reconnect";
-    case STATE_REJOIN:     return "up:rejoin";
-    case STATE_ACTIVE:     return "up:active";
-    case STATE_STOPPING:   return "up:stopping";
-    default: assert(0);
-    }
-    return 0;
-  }
-
   struct mds_info_t {
     string name;
     int32_t rank;
