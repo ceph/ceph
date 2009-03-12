@@ -17,7 +17,7 @@ verify_conf() {
 
 check_host() {
     # what host is this daemon assigned to?
-    host=`$CCONF -c $conf -s $name -s $type host`
+    host=`$CCONF -c $conf -i $id -t $type host`
     ssh=""
     dir=$PWD
     if [[ $host != "" ]]; then
