@@ -55,7 +55,6 @@ kernel client
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
 - make osd retry writes if failure after ack..
 - ACLs
-- reconnect path should include pathbase, not just a string?
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
