@@ -362,11 +362,28 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     } 
     else if (m->cmd[1] == "dump") {
-      stringstream ds;
-      mdsmap.print(ds);
-      rdata.append(ds);
-      ss << "dumped mdsmap epoch " << mdsmap.get_epoch();
-      r = 0;
+      MDSMap *p = &mdsmap;
+      if (m->cmd.size() > 2) {
+	epoch_t e = atoi(m->cmd[2].c_str());
+	bufferlist b;
+	mon->store->get_bl_sn(b,"mdsmap",e);
+	if (!b.length()) {
+	  p = 0;
+	  r = -ENOENT;
+	} else {
+	  p = new MDSMap;
+	  p->decode(b);
+	}
+      }
+      if (p) {
+	stringstream ds;
+	p->print(ds);
+	rdata.append(ds);
+	ss << "dumped mdsmap epoch " << p->get_epoch();
+	if (p != &mdsmap)
+	  delete p;
+	r = 0;
+      }
     }
     else if (m->cmd[1] == "getmap") {
       mdsmap.encode(rdata);
