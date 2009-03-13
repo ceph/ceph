@@ -1975,7 +1975,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			di->lease_seq = le32_to_cpu(h->seq);
 			dentry->d_time = le64_to_cpu(h->renew_start) +
 				duration;
-			di->renew_after = le64_to_cpu(h->renew_start) +
+			di->lease_renew_after = le64_to_cpu(h->renew_start) +
 				(duration >> 1);
 		}
 		break;
@@ -2011,7 +2011,7 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds, struct inod
 	int dnamelen = 0;
 	struct ceph_dentry_info *di;
 
-	dout(0, "lease_release inode %p dentry %p %d mask %d to mds%d\n",
+	dout(0, "lease_release_send_msg inode %p dentry %p %d mask %d to mds%d\n",
 	     inode, dentry, dnamelen, mask, mds);
 
 	BUG_ON(!dentry);

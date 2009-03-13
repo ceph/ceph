@@ -663,6 +663,7 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 				should_renew = 1;
 				dir = dentry->d_parent->d_inode;
 				mds = s->s_mds;
+				di->lease_renew_after = 0;
 			} else {
 				dout(0, "should_renew = 0, %ld < %ld\n", jiffies, di->lease_renew_after);
 			}
