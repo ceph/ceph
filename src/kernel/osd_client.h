@@ -107,25 +107,18 @@ extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_file_layout *layout,
 				      struct ceph_vino vino,
-				      u64 offset, u64 *len, int op,
+				      u64 offset, u64 *len, int op, int flags,
 				      struct ceph_snap_context *snapc,
 				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size);
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
-extern int ceph_osdc_readpage(struct ceph_osd_client *osdc,
-			      struct ceph_vino vino,
-			      struct ceph_file_layout *layout,
-			      u64 off, u64 len,
-			      u32 truncate_seq, u64 truncate_size,
-			      struct page *page);
 extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,
-			       struct address_space *mapping,
 			       struct ceph_vino vino,
 			       struct ceph_file_layout *layout,
 			       u64 off, u64 len,
 			       u32 truncate_seq, u64 truncate_size,
-			       struct list_head *page_list, int nr_pages);
+			       struct page **pages, int nr_pages);
 
 extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_vino vino,
@@ -133,19 +126,12 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_snap_context *sc,
 				u64 off, u64 len,
 				u32 truncate_seq, u64 truncate_size,
-				struct page **pagevec, int nr_pages,
+				struct page **pages, int nr_pages,
 				int flags);
 extern int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 				      struct ceph_osd_request *req,
 				      u64 len,
 				      int nr_pages);
-
-extern int ceph_osdc_sync_read(struct ceph_osd_client *osdc,
-			       struct ceph_vino vino,
-			       struct ceph_file_layout *layout,
-			       u64 off, u64 len,
-			       u32 truncate_seq, u64 truncate_size,
-			       char __user *data);
 
 #endif
 

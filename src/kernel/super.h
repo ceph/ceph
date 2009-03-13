@@ -485,7 +485,7 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
 	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
 	if (w & CEPH_CAP_FILE_WRBUFFER)
-		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if we have dirty data */
+		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if dirty data */
 	return w;
 }
 
