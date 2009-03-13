@@ -705,42 +705,6 @@ out_unlock:
 }
 
 /*
- * check if dentry lease is valid.  if not, delete it.
- */
-int ceph_dentry_lease_valid(struct dentry *dentry)
-{
-	struct ceph_dentry_info *di;
-	struct ceph_mds_session *s;
-	int valid = 0;
-	u32 gen;
-	unsigned long ttl;
-
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	if (di) {
-		s = di->lease_session;
-		spin_lock(&s->s_cap_lock);
-		gen = s->s_cap_gen;
-		ttl = s->s_cap_ttl;
-		spin_unlock(&s->s_cap_lock);
-
-		if (di->lease_gen == gen &&
-		    time_before(jiffies, dentry->d_time) &&
-		    time_before(jiffies, ttl)) {
-			valid = 1;
-		} else {
-			ceph_put_mds_session(di->lease_session);
-			kfree(di);
-			dentry->d_fsdata = NULL;
-		}
-	}
-	spin_unlock(&dentry->d_lock);
-	dout(20, "dentry_lease_valid - dentry %p = %d\n", dentry, valid);
-	return valid;
-}
-
-
-/*
  * splice a dentry to an inode.
  * caller must hold directory i_mutex for this to be safe.
  *

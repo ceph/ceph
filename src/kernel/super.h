@@ -693,7 +693,6 @@ extern int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 				    struct ceph_mds_session *session);
 
 extern int ceph_inode_holds_cap(struct inode *inode, int mask);
-extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);

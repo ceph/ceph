@@ -631,10 +631,43 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 }
 
 
+/*
+ * Check if dentry lease is valid.  If not, delete the lease.
+ */
+static int dentry_lease_is_valid(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+	struct ceph_mds_session *s;
+	int valid = 0;
+	u32 gen;
+	unsigned long ttl;
+
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (di) {
+		s = di->lease_session;
+		spin_lock(&s->s_cap_lock);
+		gen = s->s_cap_gen;
+		ttl = s->s_cap_ttl;
+		spin_unlock(&s->s_cap_lock);
+
+		if (di->lease_gen == gen &&
+		    time_before(jiffies, dentry->d_time) &&
+		    time_before(jiffies, ttl)) {
+			valid = 1;
+		} else {
+			ceph_put_mds_session(di->lease_session);
+			kfree(di);
+			dentry->d_fsdata = NULL;
+		}
+	}
+	spin_unlock(&dentry->d_lock);
+	dout(20, "dentry_lease_is_valid - dentry %p = %d\n", dentry, valid);
+	return valid;
+}
 
 /*
- * check if dentry lease, or parent directory inode lease/cap says
- * this dentry is still valid
+ * Check if cached dentry can be trusted.
  */
 static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
@@ -664,13 +697,12 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	spin_unlock(&dir->i_lock);
 
 	/* dentry lease? */
-	if (ceph_dentry_lease_valid(dentry)) {
+	if (dentry_lease_is_valid(dentry)) {
 		dout(20, "dentry_revalidate %p lease valid\n", dentry);
 		return 1;
 	}
 
-	dout(20, "dentry_revalidate %p no lease\n", dentry);
-	dout(10, " clearing %p complete (d_revalidate)\n", dir);
+	dout(20, "dentry_revalidate %p invalid, clearing %p complete\n", dir);
 	ceph_i_clear(dir, CEPH_I_COMPLETE|CEPH_I_READDIR);
 	d_drop(dentry);
 	return 0;
