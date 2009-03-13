@@ -124,7 +124,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	snaps = (void *)(op + num_op);
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
-	head->flags = flags;
+	head->flags = cpu_to_le32(flags);
 	head->num_ops = cpu_to_le16(num_op);
 	op->op = cpu_to_le16(opcode);
 
@@ -277,13 +277,14 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 	osdc->num_requests--;
 	ceph_osdc_put_request(req);
 
+	ceph_sysfs_osd_req_cleanup(req);
+
 	if (req->r_tid == osdc->timeout_tid) {
 		if (osdc->num_requests == 0) {
 			dout(30, "no requests, canceling timeout\n");
 			osdc->timeout_tid = 0;
 			cancel_delayed_work(&osdc->timeout_work);
 		} else {
-			struct ceph_osd_request *req;
 			int ret;
 
 			ret = radix_tree_gang_lookup(&osdc->request_tree,
@@ -297,8 +298,6 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 						     jiffies));
 		}
 	}
-
-	ceph_sysfs_osd_req_cleanup(req);
 }
 
 /*

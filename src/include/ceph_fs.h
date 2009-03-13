@@ -620,7 +620,7 @@ static inline const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
 	default: return "";
 	}
-	return 0;
+	return NULL;
 }
 
 

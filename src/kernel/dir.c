@@ -666,9 +666,6 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 				mds = s->s_mds;
 				seq = di->lease_seq;
 				di->lease_renew_after = 0;
-			} else {
-				dout(0, "should_renew = 0, %ld < %ld\n",
-				     jiffies, di->lease_renew_after);
 			}
 		} else {
 			ceph_put_mds_session(di->lease_session);
