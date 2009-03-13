@@ -12,8 +12,13 @@ v0.7
 /- proc/sysfs cleanup
 
 v0.8
-- fully async file creation
+- kill fill_trace
+
 - ENOSPC
+- O_DIRECT
+- flock
+
+- fully async file creation
 - cas?
 
 big items
