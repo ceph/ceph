@@ -1851,9 +1851,12 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 			     inode, cap, cap->expires, jiffies);
 			spin_unlock(&inode->i_lock);
 		} else {
-			dout(20, " dropping %p cap %p %s\n", inode, cap,
-			     ceph_cap_string(cap->issued));
-			BUG_ON(__ceph_caps_wanted(cap->ci));
+			int wanted = __ceph_caps_wanted(cap->ci);
+
+			dout(20, " dropping %p cap %p %s wanted %s\n", inode,
+			     cap, ceph_cap_string(cap->issued),
+			     ceph_cap_string(wanted));
+			BUG_ON(wanted);
 			last_cap = __ceph_remove_cap(cap);
 			spin_unlock(&inode->i_lock);
 			if (last_cap)
