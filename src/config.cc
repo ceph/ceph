@@ -37,6 +37,7 @@ atomic_t buffer_total_alloc;
 #include "osd/osd_types.h"
 
 #include "common/ConfUtils.h"
+#include "common/dyn_snprintf.h"
 
 static bool show_config = false;
 
@@ -769,25 +770,33 @@ static const char *var_val(char *var_name)
 	return "";
 }
 
-#define MAX_LINE 2560
+#define MAX_LINE 256
 #define MAX_VAR_LEN 32
 
 char *conf_post_process_val(const char *val)
 {
   char var_name[MAX_VAR_LEN];
-  char buf[MAX_LINE];
+  char *buf;
   int i=0;
-  int out_pos = 0;
+  size_t out_pos = 0;
+  size_t max_line = MAX_LINE;
 
-  while (val[i] && (out_pos < MAX_LINE - 1)) {
+  buf = (char *)malloc(max_line);
+
+  while (val[i]) {
     if (val[i] == '$') {
 	if (get_var(val, i+1, var_name, MAX_VAR_LEN, &i)) {
-		out_pos += snprintf(buf+out_pos, MAX_LINE-out_pos, "%s", var_val(var_name));
+		out_pos = dyn_snprintf(&buf, &max_line, 2, "%s%s", buf, var_val(var_name));
 	} else {
 	  ++i;
 	}
     } else {
+	if (out_pos == max_line - 1) {
+		max_line *= 2;
+		buf = (char *)realloc(buf, max_line);
+	}
 	buf[out_pos] = val[i];
+	buf[out_pos + 1] = '\0';
     	++out_pos;
     	++i;
     }
@@ -795,7 +804,7 @@ char *conf_post_process_val(const char *val)
 
   buf[out_pos] = '\0';
 
-  return strdup(buf);
+  return buf;
 }
 
 #define OPT_READ_TYPE(ret, section, var, type, out, def) \

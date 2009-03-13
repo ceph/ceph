@@ -206,6 +206,7 @@ libcommon_files = \
 	common/sctp_crc32.c\
 	common/assert.cc \
 	common/debug.cc \
+	common/dyn_snprintf.c \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
 	mon/MonMap.cc \
@@ -304,6 +305,7 @@ noinst_HEADERS = \
         common/Clock.h\
         common/common_init.h\
         common/Cond.h\
+        common/dyn_snprintf.h\
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
