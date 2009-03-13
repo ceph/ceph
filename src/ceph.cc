@@ -553,9 +553,10 @@ int main(int argc, const char **argv, const char *envp[])
       CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
     } else if (CONF_ARG_EQ("poll", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&watch, OPT_BOOL);
-    } else if (args[i][0] == '-') {
-      if (!CONF_ARG_EQ("help", 'h'))
-	cerr << "unrecognized option " << args[i] << std::endl;
+    } else if (CONF_ARG_EQ("help", 'h')) {
+      usage();
+    } else if (args[i][0] == '-' && nargs.empty()) {
+      cerr << "unrecognized option " << args[i] << std::endl;
       usage();
     } else
       nargs.push_back(args[i]);
