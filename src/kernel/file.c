@@ -105,9 +105,13 @@ int ceph_open(struct inode *inode, struct file *file)
 	fmode = ceph_flags_to_mode(flags);
 	wantcaps = ceph_caps_for_mode(fmode);
 
-	/* can we re-use existing caps? */
+	/*
+	 * We re-use existing caps only if already have an open file
+	 * that also wants them.  That is, our want for the caps is
+	 * registered with the MDS.
+	 */
 	spin_lock(&inode->i_lock);
-	if ((__ceph_caps_issued(ci, NULL) & wantcaps) == wantcaps) {
+	if ((__ceph_caps_file_wanted(ci) & wantcaps) == wantcaps) {
 		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, wantcaps, inode);
 		__ceph_get_fmode(ci, fmode);
