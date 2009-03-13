@@ -658,18 +658,6 @@ static void remove_session_caps(struct ceph_mds_session *session)
 }
 
 /*
- * caller must hold session s_mutex, dentry->d_lock
- */
-static void __drop_dentry_lease(struct dentry *dentry)
-{
-	struct ceph_dentry_info *di;
-	di = ceph_dentry(dentry);
-	ceph_put_mds_session(di->lease_session);
-	kfree(di);
-	dentry->d_fsdata = NULL;
-}
-
-/*
  * wake up any threads waiting on this session's caps
  *
  * caller must hold s_mutex.
@@ -1889,6 +1877,18 @@ static void check_new_map(struct ceph_mds_client *mdsc,
  * leases
  */
 
+/*
+ * caller must hold session s_mutex, dentry->d_lock
+ */
+void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di = ceph_dentry(dentry);
+
+	ceph_put_mds_session(di->lease_session);
+	kfree(di);
+	dentry->d_fsdata = NULL;
+}
+
 void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
@@ -1961,7 +1961,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	case CEPH_MDS_LEASE_REVOKE:
 		if (di && di->lease_session == session) {
 			h->seq = cpu_to_le32(di->lease_seq);
-			__drop_dentry_lease(dentry);
+			__ceph_mdsc_drop_dentry_lease(dentry);
 		}
 		release = 1;
 		break;
@@ -2065,7 +2065,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	/* we do have a lease on this dentry; note mds and seq */
 	mds = di->lease_session->s_mds;
 	seq = di->lease_seq;
-	__drop_dentry_lease(dentry);
+	__ceph_mdsc_drop_dentry_lease(dentry);
 	spin_unlock(&dentry->d_lock);
 
 	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n",

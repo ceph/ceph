@@ -312,6 +312,7 @@ extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
 extern char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base,
 				  int mds);
 
+extern void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry);
 extern void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 				     struct inode *inode,
 				     struct dentry *dentry, char action,
