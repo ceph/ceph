@@ -243,7 +243,8 @@ class MDSMap {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++) {
-      if ((p->second.standby_for_rank == mds ||
+      if (p->second.rank == -1 &&
+	  (p->second.standby_for_rank == mds ||
 	   p->second.standby_for_name == name) &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
