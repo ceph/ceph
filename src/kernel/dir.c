@@ -639,24 +639,31 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
+	struct ceph_inode_info *dirci = ceph_inode(dir);
 
-	/* always trust cached snapped metadata... for now */
+	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
+	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
+
+	/* always trust cached snapped dentries */
 	if (ceph_snap(dir) != CEPH_NOSNAP) {
 		dout(10, "d_revalidate %p '%.*s' inode %p is SNAPPED\n", dentry,
 		     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 		return 1;
 	}
 
-	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
-	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
-
+	/* RDCACHE cap on directory? */
+	spin_lock(&dir->i_lock);
 	if (ceph_ino(dir) != CEPH_INO_ROOT &&
-	    ceph_inode(dir)->i_version == dentry->d_time &&
-	    ceph_inode_holds_cap(dir, CEPH_CAP_FILE_RDCACHE)) {
+	    dirci->i_version == dentry->d_time &&
+	    (__ceph_caps_issued(dirci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
 		dout(20, "dentry_revalidate %p %lu file RDCACHE dir %p %llu\n",
 		     dentry, dentry->d_time, dir, ceph_inode(dir)->i_version);
+		spin_unlock(&dir->i_lock);
 		return 1;
 	}
+	spin_unlock(&dir->i_lock);
+
+	/* dentry lease? */
 	if (ceph_dentry_lease_valid(dentry)) {
 		dout(20, "dentry_revalidate %p lease valid\n", dentry);
 		return 1;
