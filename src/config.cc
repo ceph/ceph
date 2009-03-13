@@ -950,8 +950,8 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
 void configure_daemon_mode()
 {
-  cout << "** WARNING: Ceph is still under heavy development, and is only suitable for **\n";
-  cout << "**          testing and review.  Do not trust it with important data.       **" << std::endl;
+  cout << " ** WARNING: Ceph is still under heavy development, and is only suitable for **\n";
+  cout << " **          testing and review.  Do not trust it with important data.       **" << std::endl;
 
   g_conf.daemonize = true;
   g_conf.log_to_stdout = false;
