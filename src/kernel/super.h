@@ -367,7 +367,7 @@ struct ceph_dentry_info {
 	struct ceph_mds_session *lease_session;
 	u32 lease_gen;
 	u32 lease_seq;
-	unsigned long lease_renew_ttl;
+	unsigned long lease_renew_after;
 };
 
 static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)

@@ -642,6 +642,8 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 	int should_renew = 0;
 	u32 gen;
 	unsigned long ttl;
+	struct inode *dir;
+	int mds;
 
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
@@ -656,8 +658,14 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 		    time_before(jiffies, dentry->d_time) &&
 		    time_before(jiffies, ttl)) {
 			valid = 1;
-			if (time_after(jiffies, di->lease_renew_ttl))
+			if (di->lease_renew_after &&
+			    time_after(jiffies, di->lease_renew_after)) {
 				should_renew = 1;
+				dir = dentry->d_parent->d_inode;
+				mds = s->s_mds;
+			} else {
+				dout(0, "should_renew = 0, %ld < %ld\n", jiffies, di->lease_renew_after);
+			}
 		} else {
 			ceph_put_mds_session(di->lease_session);
 			kfree(di);
@@ -668,6 +676,7 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 
 	if (should_renew) {
 		dout(0, "dentry_lease should_renew! - dentry %p = %d\n", dentry, valid);
+		ceph_mdsc_lease_send_msg(&ceph_client(dentry->d_sb)->mdsc, mds, dir, dentry, CEPH_MDS_LEASE_RENEW, CEPH_LOCK_DN);
 	}
 	dout(20, "dentry_lease_is_valid - dentry %p = %d\n", dentry, valid);
 	return valid;
