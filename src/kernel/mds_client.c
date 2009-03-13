@@ -1907,6 +1907,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_vino vino;
 	int mask;
 	struct qstr dname;
+	int release = 0;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		return;
@@ -1938,45 +1939,66 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* lookup inode */
 	inode = ceph_find_inode(sb, vino);
-	dout(20, "handle_lease action is %d, mask %d, ino %llx %p\n", h->action,
-	     mask, vino.ino, inode);
+	dout(20, "handle_lease '%s', mask %d, ino %llx %p\n",
+	     ceph_lease_op_name(h->action), mask, vino.ino, inode);
 	if (inode == NULL) {
 		dout(10, "handle_lease no inode %llx\n", vino.ino);
 		goto release;
 	}
-
-	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
-
-	/* inode */
 	ci = ceph_inode(inode);
 
 	/* dentry */
-	if (mask & CEPH_LOCK_DN) {
-		parent = d_find_alias(inode);
-		if (!parent) {
-			dout(10, "no parent dentry on inode %p\n", inode);
-			WARN_ON(1);
-			goto release;  /* hrm... */
-		}
-		dname.hash = full_name_hash(dname.name, dname.len);
-		dentry = d_lookup(parent, &dname);
-		dput(parent);
-		if (!dentry)
-			goto release;
-		di = ceph_dentry(dentry);
+	parent = d_find_alias(inode);
+	if (!parent) {
+		dout(10, "no parent dentry on inode %p\n", inode);
+		WARN_ON(1);
+		goto release;  /* hrm... */
+	}
+	dname.hash = full_name_hash(dname.name, dname.len);
+	dentry = d_lookup(parent, &dname);
+	dput(parent);
+	if (!dentry)
+		goto release;
+
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	switch (h->action) {
+	case CEPH_MDS_LEASE_REVOKE:
 		if (di && di->lease_session == session) {
 			h->seq = cpu_to_le32(di->lease_seq);
-			revoke_dentry_lease(dentry);
+			__drop_dentry_lease(dentry);
 		}
-		dput(dentry);
+		release = 1;
+		break;
+
+	case CEPH_MDS_LEASE_RENEW:
+		if (di && di->lease_session == session &&
+		    di->lease_gen == session->s_cap_gen) {
+			unsigned long duration =
+				le32_to_cpu(h->duration_ms) * HZ / 1000;
+
+			di->lease_seq = le32_to_cpu(h->seq);
+			dentry->d_time = le64_to_cpu(h->renew_start) +
+				duration;
+			di->renew_after = le64_to_cpu(h->renew_start) +
+				(duration >> 1);
+		}
+		break;
 	}
+	spin_unlock(&dentry->d_lock);
+	dput(dentry);
+
+	if (!release)
+		goto out;
 
 release:
-	iput(inode);
 	/* let's just reuse the same message */
 	h->action = CEPH_MDS_LEASE_REVOKE_ACK;
 	ceph_msg_get(msg);
 	ceph_send_msg_mds(mdsc, msg, mds);
+
+out:
+	iput(inode);
 	mutex_unlock(&session->s_mutex);
 	ceph_put_mds_session(session);
 	return;

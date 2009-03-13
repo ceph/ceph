@@ -1033,6 +1033,7 @@ enum {
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
 	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
 	CEPH_CAP_OP_RELEASE,   /* client->mds release (clean) cap */
+	CEPH_CAP_OP_RENEW,     /* client->mds renewal request */
 };
 
 static inline const char *ceph_cap_op_name(int op)
@@ -1047,6 +1048,7 @@ static inline const char *ceph_cap_op_name(int op)
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
 	case CEPH_CAP_OP_FLUSHSNAP_ACK: return "flushsnap_ack";
 	case CEPH_CAP_OP_RELEASE: return "release";
+	case CEPH_CAP_OP_RENEW: return "renew";
 	default: return "???";
 	}
 }
@@ -1088,6 +1090,17 @@ struct ceph_mds_caps {
 #define CEPH_MDS_LEASE_RELEASE          2  /* client  -> mds    */
 #define CEPH_MDS_LEASE_RENEW            3  /* client <-> mds    */
 #define CEPH_MDS_LEASE_REVOKE_ACK       4  /* client  -> mds    */
+
+static inline const char *ceph_lease_op_name(int o)
+{
+	switch (o) {
+	case CEPH_MDS_LEASE_REVOKE: return "revoke";
+	case CEPH_MDS_LEASE_RELEASE: return "release";
+	case CEPH_MDS_LEASE_RENEW: return "renew";
+	case CEPH_MDS_LEASE_REVOKE_ACK: return "revoke_ack";
+	default: return "???";
+	}
+}
 
 struct ceph_mds_lease {
 	__u8 action;
