@@ -2014,7 +2014,6 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 
 	dout(0, "lease_send_msg inode %p dentry %p %s to mds%d\n",
 	     inode, dentry, ceph_lease_op_name(action), mds);
-
 	dnamelen = dentry->d_name.len;
 	len += dnamelen;
 
@@ -2029,10 +2028,8 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 	lease->seq = cpu_to_le32(seq);
 	lease->renew_start = cpu_to_le64(jiffies);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
-	if (dentry) {
-		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
-		       dnamelen);
-	}
+	memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
+	       dnamelen);
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
 
@@ -2054,24 +2051,22 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	/* is dentry lease valid? */
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (di &&
-	    di->lease_session->s_mds >= 0 &&
-	    di->lease_gen == di->lease_session->s_cap_gen &&
-	    time_before(jiffies, dentry->d_time)) {
-		/* we do have a lease on this dentry; note mds */
-		mds = di->lease_session->s_mds;
-		seq = di->lease_seq;
-	} else {
+	if (!di ||
+	    di->lease_session->s_mds < 0 ||
+	    di->lease_gen != di->lease_session->s_cap_gen ||
+	    !time_before(jiffies, dentry->d_time)) {
 		dout(10, "lease_release inode %p dentry %p -- "
 		     "no lease on %d\n",
 		     inode, dentry, mask);
 		spin_unlock(&dentry->d_lock);
 		return;
 	}
+
+	/* we do have a lease on this dentry; note mds and seq */
+	mds = di->lease_session->s_mds;
+	seq = di->lease_seq;
 	__drop_dentry_lease(dentry);
 	spin_unlock(&dentry->d_lock);
-
-	BUG_ON(mds < 0);
 
 	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n",
 	     inode, dentry, mask, mds);
