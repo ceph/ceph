@@ -658,20 +658,15 @@ static void remove_session_caps(struct ceph_mds_session *session)
 }
 
 /*
- * caller must hold session s_mutex
+ * caller must hold session s_mutex, dentry->d_lock
  */
-static void revoke_dentry_lease(struct dentry *dentry)
+static void __drop_dentry_lease(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
-
-	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (di) {
-		ceph_put_mds_session(di->lease_session);
-		kfree(di);
-		dentry->d_fsdata = NULL;
-	}
-	spin_unlock(&dentry->d_lock);
+	ceph_put_mds_session(di->lease_session);
+	kfree(di);
+	dentry->d_fsdata = NULL;
 }
 
 /*
@@ -2007,55 +2002,26 @@ bad:
 	dout(0, "corrupt lease message\n");
 }
 
-
-/*
- * Preemptively release a lease we expect to invalidate anyway.
- * Pass @inode always, @dentry is optional.
- */
-void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
-			     struct dentry *dentry, int mask)
+void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds, struct inode *inode,
+			struct dentry *dentry, char action, int mask)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
-	struct ceph_dentry_info *di;
-	int origmask = mask;
-	int mds = -1;
 	int len = sizeof(*lease) + sizeof(u32);
 	int dnamelen = 0;
+	struct ceph_dentry_info *di;
 
-	BUG_ON(inode == NULL);
-	BUG_ON(dentry == NULL);
-
-	/* is dentry lease valid? */
-	if (mask & CEPH_LOCK_DN) {
-		spin_lock(&dentry->d_lock);
-		di = ceph_dentry(dentry);
-		if (di &&
-		    di->lease_session->s_mds >= 0 &&
-		    di->lease_gen == di->lease_session->s_cap_gen &&
-		    time_before(jiffies, dentry->d_time)) {
-			/* we do have a lease on this dentry; note mds */
-			mds = di->lease_session->s_mds;
-			dnamelen = dentry->d_name.len;
-			len += dentry->d_name.len;
-		} else {
-			mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
-		}
-		spin_unlock(&dentry->d_lock);
-	} else {
-		mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
-	}
-
-	if (mask == 0) {
-		dout(10, "lease_release inode %p dentry %p -- "
-		     "no lease on %d\n",
-		     inode, dentry, origmask);
-		return;  /* nothing to drop */
-	}
-	BUG_ON(mds < 0);
-
-	dout(10, "lease_release inode %p dentry %p %d mask %d to mds%d\n",
+	dout(0, "lease_release inode %p dentry %p %d mask %d to mds%d\n",
 	     inode, dentry, dnamelen, mask, mds);
+
+	BUG_ON(!dentry);
+
+	dnamelen = dentry->d_name.len;
+	len += dnamelen;
+
+	di = ceph_dentry(dentry);
+	BUG_ON(!di);
+
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
@@ -2064,11 +2030,53 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	lease->mask = cpu_to_le16(mask);
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
 	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
+	lease->seq = di->lease_seq;
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
-	if (dentry)
+	if (dentry) {
 		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
 		       dnamelen);
+	}
 	ceph_send_msg_mds(mdsc, msg, mds);
+}
+
+/*
+ * Preemptively release a lease we expect to invalidate anyway.
+ * Pass @inode always, @dentry is optional.
+ */
+void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
+			     struct dentry *dentry, int mask)
+{
+	struct ceph_dentry_info *di;
+	int mds = -1;
+
+	BUG_ON(inode == NULL);
+	BUG_ON(dentry == NULL);
+	BUG_ON(mask != CEPH_LOCK_DN);
+
+	/* is dentry lease valid? */
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (di &&
+	    di->lease_session->s_mds >= 0 &&
+	    di->lease_gen == di->lease_session->s_cap_gen &&
+	    time_before(jiffies, dentry->d_time)) {
+		/* we do have a lease on this dentry; note mds */
+		mds = di->lease_session->s_mds;
+	} else {
+		dout(10, "lease_release inode %p dentry %p -- "
+		     "no lease on %d\n",
+		     inode, dentry, mask);
+		return;
+	}
+	__drop_dentry_lease(dentry);
+	spin_unlock(&dentry->d_lock);
+
+	BUG_ON(mds < 0);
+
+	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n",
+	     inode, dentry, mask, mds);
+
+	ceph_mdsc_lease_send_msg(mdsc, mds, inode, dentry, CEPH_MDS_LEASE_RELEASE, mask);
 }
 
 

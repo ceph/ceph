@@ -638,6 +638,7 @@ static void update_dentry_lease(struct dentry *dentry,
 	int is_new = 0;
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
 	long unsigned ttl = from_time + (duration * HZ) / 1000;
+	long unsigned half_ttl = from_time + (duration * HZ / 2) / 1000;
 
 	/* only track leases on regular dentries */
 	if (dentry->d_op != &ceph_dentry_ops)
@@ -683,6 +684,7 @@ static void update_dentry_lease(struct dentry *dentry,
 		is_new = 1;
 	} else if (di->lease_session != session)
 		goto out_unlock;
+	di->lease_renew_ttl = half_ttl;
 	dentry->d_time = ttl;
 out_unlock:
 	spin_unlock(&dentry->d_lock);
