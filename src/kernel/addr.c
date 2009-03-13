@@ -428,7 +428,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   &ci->i_layout, snapc,
 				   page_off, len,
 				   ci->i_truncate_seq, ci->i_truncate_size,
-				   &page, 1, 0);
+				   &page, 1, 0, 0);
 	if (err < 0) {
 		dout(20, "writepage setting page error %p\n", page);
 		SetPageError(page);

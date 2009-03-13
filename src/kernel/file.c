@@ -402,6 +402,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	long long unsigned pos;
 	int written = 0;
 	int flags;
+	int do_sync = 0;
 	int ret;
 
 	if (ceph_snap(file->f_dentry->d_inode) != CEPH_NOSNAP)
@@ -432,6 +433,8 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	flags = CEPH_OSD_OP_ORDERSNAP;
 	if ((file->f_flags & (O_SYNC|O_DIRECT)) == 0)
 		flags |= CEPH_OSD_OP_ACK;
+	else
+		do_sync = 1;
 
 	/*
 	 * we may need to do multiple writes here if we span an object
@@ -447,7 +450,7 @@ more:
 				   pos, left, ci->i_truncate_seq,
 				   ci->i_truncate_size,
 				   page_pos, pages_left,
-				   flags);
+				   flags, do_sync);
 	if (ret > 0) {
 		int didpages =
 			((pos & ~PAGE_CACHE_MASK) + ret) >> PAGE_CACHE_SHIFT;

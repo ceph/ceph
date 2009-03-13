@@ -848,7 +848,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 u64 off, u64 len,
 			 u32 truncate_seq, u64 truncate_size,
 			 struct page **pages, int num_pages,
-			 int flags)
+			 int flags, int do_sync)
 {
 	struct ceph_msg *reqm;
 	struct ceph_osd_request *req;
@@ -859,7 +859,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 				    CEPH_OSD_OP_WRITE,
 				    flags | CEPH_OSD_OP_ONDISK |
 				    CEPH_OSD_OP_MODIFY,
-				    snapc, 0,
+				    snapc, do_sync,
 				    truncate_seq, truncate_size);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
