@@ -2002,35 +2002,32 @@ bad:
 	dout(0, "corrupt lease message\n");
 }
 
-void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds, struct inode *inode,
-			struct dentry *dentry, char action, int mask)
+void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
+			      struct inode *inode,
+			      struct dentry *dentry, char action,
+			      u32 seq)
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_lease *lease;
 	int len = sizeof(*lease) + sizeof(u32);
 	int dnamelen = 0;
-	struct ceph_dentry_info *di;
 
-	dout(0, "lease_release_send_msg inode %p dentry %p %d mask %d to mds%d\n",
-	     inode, dentry, dnamelen, mask, mds);
-
-	BUG_ON(!dentry);
+	dout(0, "lease_send_msg inode %p dentry %p %s to mds%d\n",
+	     inode, dentry, ceph_lease_op_name(action), mds);
 
 	dnamelen = dentry->d_name.len;
 	len += dnamelen;
-
-	di = ceph_dentry(dentry);
-	BUG_ON(!di);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 	lease = msg->front.iov_base;
-	lease->action = CEPH_MDS_LEASE_RELEASE;
-	lease->mask = cpu_to_le16(mask);
+	lease->action = action;
+	lease->mask = cpu_to_le16(CEPH_LOCK_DN);
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
 	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
-	lease->seq = di->lease_seq;
+	lease->seq = cpu_to_le32(seq);
+	lease->renew_start = cpu_to_le64(jiffies);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
 	if (dentry) {
 		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
@@ -2048,6 +2045,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 {
 	struct ceph_dentry_info *di;
 	int mds = -1;
+	u32 seq;
 
 	BUG_ON(inode == NULL);
 	BUG_ON(dentry == NULL);
@@ -2062,10 +2060,12 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	    time_before(jiffies, dentry->d_time)) {
 		/* we do have a lease on this dentry; note mds */
 		mds = di->lease_session->s_mds;
+		seq = di->lease_seq;
 	} else {
 		dout(10, "lease_release inode %p dentry %p -- "
 		     "no lease on %d\n",
 		     inode, dentry, mask);
+		spin_unlock(&dentry->d_lock);
 		return;
 	}
 	__drop_dentry_lease(dentry);
@@ -2075,8 +2075,8 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 
 	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n",
 	     inode, dentry, mask, mds);
-
-	ceph_mdsc_lease_send_msg(mdsc, mds, inode, dentry, CEPH_MDS_LEASE_RELEASE, mask);
+	ceph_mdsc_lease_send_msg(mdsc, mds, inode, dentry,
+				 CEPH_MDS_LEASE_RELEASE, seq);
 }
 
 
