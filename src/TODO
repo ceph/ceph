@@ -12,10 +12,10 @@ v0.7
 /- proc/sysfs cleanup
 
 v0.8
+/- O_DIRECT
 - kill fill_trace
 
 - ENOSPC
-- O_DIRECT
 - flock
 
 - fully async file creation
@@ -53,7 +53,7 @@ repair
 
 
 kernel client
-- O_DIRECT
+- should O_DIRECT invalidate the page cache?
 - inotify for updates from other clients?
 - optional or no fill_trace?
 - flock, fnctl locks

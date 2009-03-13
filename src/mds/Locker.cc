@@ -1764,32 +1764,44 @@ void Locker::handle_client_lease(MClientLease *m)
     delete m;
     return;
   } 
-  if ((m->get_action() == CEPH_MDS_LEASE_REVOKE_ACK) &&
-      (l->seq != m->get_seq())) {
-    dout(7) << "handle_client_lease lease seq " << l->seq << " != provided " << m->get_seq() << dendl;
-    delete m;
-    return;
-  }
 
   switch (m->get_action()) {
   case CEPH_MDS_LEASE_REVOKE_ACK:
   case CEPH_MDS_LEASE_RELEASE:
-    {
+    if (l->seq != m->get_seq()) {
+      dout(7) << "handle_client_lease release - seq " << l->seq << " != provided " << m->get_seq() << dendl;
+    } else {
       dout(7) << "handle_client_lease client" << client
 	      << " release mask " << m->get_mask()
 	      << " on " << *p << dendl;
       int left = p->remove_client_lease(l, l->mask, this);
       dout(10) << " remaining mask is " << left << " on " << *p << dendl;
     }
+    delete m;
     break;
 
   case CEPH_MDS_LEASE_RENEW:
+    {
+      dout(7) << "handle_client_lease client" << client
+	      << " renew mask " << m->get_mask()
+	      << " on " << *p << dendl;
+      int pool = 1;   // fixme.. do something smart!
+      m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
+      m->h.seq = ++l->seq;
+      m->clear_payload();
+      
+      utime_t now = g_clock.now();
+      now += mdcache->client_lease_durations[pool];
+      mdcache->touch_client_lease(l, pool, now);
+      
+      mds->send_message_client(m, client);
+    }
+    break;
+
   default:
     assert(0); // implement me
     break;
   }
-
-  delete m;
 }
 
 
