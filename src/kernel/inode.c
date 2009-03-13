@@ -627,21 +627,6 @@ out:
 }
 
 /*
- * check if inode holds specific cap
- */
-int ceph_inode_holds_cap(struct inode *inode, int mask)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int issued = ceph_caps_issued(ci);
-	int ret = ((issued & mask) == mask);
-
-	dout(10, "ceph_inode_holds_cap inode %p have %s want %s = %d\n", inode,
-	     ceph_cap_string(issued), ceph_cap_string(mask), ret);
-	return ret;
-}
-
-
-/*
  * caller should hold session s_mutex.
  */
 static void update_dentry_lease(struct dentry *dentry,
@@ -1530,7 +1515,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		return 0;
 	}
 	/* if i have valid values, this may be a no-op */
-	if (ceph_inode_holds_cap(inode, CEPH_CAP_FILE_RDCACHE) &&
+	if (ceph_caps_issued_mask(ci, CEPH_CAP_FILE_RDCACHE) &&
 	    !(((ia_valid & ATTR_ATIME) &&
 	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
 	      ((ia_valid & ATTR_MTIME) &&
@@ -1584,7 +1569,7 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 		spin_unlock(&inode->i_lock);
 		return 0;
 	}
-	if (ceph_inode_holds_cap(inode, CEPH_CAP_FILE_RDCACHE) &&
+	if (ceph_caps_issued_mask(ci, CEPH_CAP_FILE_RDCACHE) &&
 	    attr->ia_size == inode->i_size) {
 		dout(10, "lease indicates truncate is a no-op\n");
 		return 0;
@@ -1674,7 +1659,7 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 
 	dout(30, "getattr dentry %p inode %p mask %d\n", dentry,
 	     dentry->d_inode, mask);
-	if (ceph_inode_holds_cap(dentry->d_inode, mask))
+	if (ceph_caps_issued_mask(ceph_inode(dentry->d_inode), mask))
 		return 0;
 
 	/*
