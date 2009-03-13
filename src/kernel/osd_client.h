@@ -34,10 +34,12 @@ typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 
 struct ceph_osd_request_attr {
 	struct attribute attr;
-	ssize_t (*show)(struct ceph_osd_request *, struct ceph_osd_request_attr *,
+	ssize_t (*show)(struct ceph_osd_request *,
+			struct ceph_osd_request_attr *,
 			char *);
-	ssize_t (*store)(struct ceph_osd_request *, struct ceph_osd_request_attr *,
-			const char *, size_t);
+	ssize_t (*store)(struct ceph_osd_request *,
+			 struct ceph_osd_request_attr *,
+			 const char *, size_t);
 };
 
 /* an in-flight request */
@@ -66,7 +68,7 @@ struct ceph_osd_request {
 	union ceph_pg     r_pgid;             /* placement group */
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */
 	unsigned          r_num_pages;        /* size of page array (follows) */
-	struct page      *r_pages[0];         /* pages for data payload */
+	struct page     **r_pages;            /* pages for data payload */
 };
 
 struct ceph_osd_client {
@@ -131,7 +133,8 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_snap_context *sc,
 				u64 off, u64 len,
 				u32 truncate_seq, u64 truncate_size,
-				struct page **pagevec, int nr_pages);
+				struct page **pagevec, int nr_pages,
+				int flags);
 extern int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 				      struct ceph_osd_request *req,
 				      u64 len,
@@ -143,13 +146,6 @@ extern int ceph_osdc_sync_read(struct ceph_osd_client *osdc,
 			       u64 off, u64 len,
 			       u32 truncate_seq, u64 truncate_size,
 			       char __user *data);
-extern int ceph_osdc_sync_write(struct ceph_osd_client *osdc,
-				struct ceph_vino vino,
-				struct ceph_file_layout *layout,
-				struct ceph_snap_context *sc,
-				u64 off, u64 len,
-				u32 truncate_seq, u64 truncate_size,
-				const char __user *data);
 
 #endif
 

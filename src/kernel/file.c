@@ -226,6 +226,98 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	return ret;
 }
 
+/*
+ * build a vector of user pages
+ */
+static struct page **get_direct_page_vector(const char __user *data,
+					    int num_pages,
+					    loff_t off, size_t len)
+{
+	struct page **pages;
+	int rc;
+
+	if ((off & ~PAGE_CACHE_MASK) ||
+	    (len & ~PAGE_CACHE_MASK))
+		return ERR_PTR(-EINVAL);
+
+	pages = kmalloc(sizeof(*pages) * num_pages, GFP_NOFS);
+	if (!pages)
+		return ERR_PTR(-ENOMEM);
+
+	down_read(&current->mm->mmap_sem);
+	rc = get_user_pages(current, current->mm, (unsigned long)data,
+			    num_pages, 0, 0, pages, NULL);
+	up_read(&current->mm->mmap_sem);
+	if (rc < 0)
+		goto fail;
+	return pages;
+
+fail:
+	kfree(pages);
+	return ERR_PTR(rc);
+}
+
+static void release_page_vector(struct page **pages, int num_pages)
+{
+	int i;
+
+	for (i = 0; i < num_pages; i++)
+		__free_pages(pages[i], 0);
+	kfree(pages);
+}
+
+/*
+ * copy user data into a page vector
+ */
+static struct page **copy_into_page_vector(const char __user *data,
+					   int num_pages,
+					   loff_t off, size_t len)
+{
+	struct page **pages;
+	int i, po, l, left;
+	int rc;
+
+	pages = kmalloc(sizeof(*pages) * num_pages, GFP_NOFS);
+	if (!pages)
+		return ERR_PTR(-ENOMEM);
+
+	left = len;
+	po = off & ~PAGE_MASK;
+	for (i = 0; i < num_pages; i++) {
+		int bad;
+		pages[i] = alloc_page(GFP_NOFS);
+		if (pages[i] == NULL) {
+			rc = -ENOMEM;
+			goto fail;
+		}
+		l = min_t(int, PAGE_SIZE-po, left);
+		bad = copy_from_user(page_address(pages[i]) + po, data, l);
+		if (bad == l) {
+			rc = -EFAULT;
+			goto fail;
+		}
+		data += l - bad;
+		left -= l - bad;
+		if (po) {
+			po += l - bad;
+			if (po == PAGE_CACHE_SIZE)
+				po = 0;
+		}
+	}
+	return pages;
+
+fail:
+	release_page_vector(pages, i);
+	return ERR_PTR(rc);
+}
+
+/*
+ * synchronous write.  from userspace.
+ *
+ * FIXME: if write spans object boundary, just do two separate write.
+ * for a correct atomic write, we should take write locks on all
+ * objects, rollback on failure, etc.
+ */
 static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 			       size_t count, loff_t *offset)
 {
@@ -234,28 +326,67 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	struct ceph_client *client = ceph_inode_to_client(inode);
 	int ret = 0;
 	off_t pos = *offset;
+	int num_pages = calc_pages_for(pos, count);
+	struct page **pages;
+	struct page **page_pos;
+	int pages_left;
+	int flags;
+	int written = 0;
 
 	if (ceph_snap(file->f_dentry->d_inode) != CEPH_NOSNAP)
 		return -EROFS;
 
-	dout(10, "sync_write on file %p %lld~%u\n", file, *offset,
-	     (unsigned)count);
+	dout(10, "sync_write on file %p %lld~%u %s\n", file, *offset,
+	     (unsigned)count, (file->f_flags & O_DIRECT) ? "O_DIRECT":"");
 
 	if (file->f_flags & O_APPEND)
 		pos = i_size_read(inode);
 
-	ret = ceph_osdc_sync_write(&client->osdc, ceph_vino(inode),
+	if (file->f_flags & O_DIRECT)
+		pages = get_direct_page_vector(data, num_pages, pos, count);
+	else
+		pages = copy_into_page_vector(data, num_pages, pos, count);
+	if (IS_ERR(pages))
+		return PTR_ERR(pages);
+
+	flags = CEPH_OSD_OP_ORDERSNAP;
+	if ((file->f_flags & (O_SYNC|O_DIRECT)) == 0)
+		flags |= CEPH_OSD_OP_ACK;
+
+	/*
+	 * we may need to do multiple writes here if we span an object
+	 * boundary.  this isn't atomic, unfortunately.  :(
+	 */
+	page_pos = pages;
+	pages_left = num_pages;
+
+more:
+	ret = ceph_osdc_writepages(&client->osdc, ceph_vino(inode),
 				   &ci->i_layout,
 				   ci->i_snap_realm->cached_context,
 				   pos, count, ci->i_truncate_seq,
-				   ci->i_truncate_size, data);
+				   ci->i_truncate_size,
+				   page_pos, pages_left,
+				   flags);
 	if (ret > 0) {
 		pos += ret;
+		written += ret;
+		count -= ret;
+		page_pos += (ret >> PAGE_CACHE_SHIFT);
+		pages_left -= (ret >> PAGE_CACHE_SHIFT);
+		if (pages_left)
+			goto more;
+
+		ret = written;
 		*offset = pos;
 		if (pos > i_size_read(inode))
 			ceph_inode_set_size(inode, pos);
 	}
 
+	if (file->f_flags & O_DIRECT)
+		kfree(pages);
+	else
+		release_page_vector(pages, num_pages);
 	return ret;
 }
 
@@ -267,7 +398,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
  * Hmm, the sync reach case isn't actually async... should it be?
  */
 static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
-		      unsigned long nr_segs, loff_t pos)
+			     unsigned long nr_segs, loff_t pos)
 {
 	struct file *filp = iocb->ki_filp;
 	loff_t *ppos = &iocb->ki_pos;
@@ -277,20 +408,18 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	ssize_t ret;
 	int got = 0;
 
-	__ceph_do_pending_vmtruncate(inode);
-
 	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
 	     ceph_vinop(inode), pos, (unsigned)len, inode);
-	ret = ceph_get_caps(ci,
-				 CEPH_CAP_FILE_RD,
-				 CEPH_CAP_FILE_RDCACHE,
-				 &got, -1);
+	__ceph_do_pending_vmtruncate(inode);
+	ret = ceph_get_caps(ci, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_RDCACHE,
+			    &got, -1);
 	if (ret < 0)
 		goto out;
 	dout(10, "aio_read %llx.%llx %llu~%u got cap refs %d\n",
 	     ceph_vinop(inode), pos, (unsigned)len, got);
 
 	if ((got & CEPH_CAP_FILE_RDCACHE) == 0 ||
+	    (iocb->ki_filp->f_flags & O_DIRECT) ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		/* hmm, this isn't really async... */
 		ret = ceph_sync_read(filp, iov->iov_base, len, ppos);
@@ -361,17 +490,16 @@ retry_snap:
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
-	ret = ceph_get_caps(ci,
-				 CEPH_CAP_FILE_WR,
-				 CEPH_CAP_FILE_WRBUFFER,
-				 &got, endoff);
+	ret = ceph_get_caps(ci, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_WRBUFFER,
+			    &got, endoff);
 	if (ret < 0)
 		goto out;
 
-	dout(10, "aio_write %p %llu~%u  got cap refs on %d\n",
-	     inode, pos, (unsigned)iov->iov_len, got);
+	dout(10, "aio_write %p %llu~%u  got %s\n",
+	     inode, pos, (unsigned)iov->iov_len, ceph_cap_string(got));
 
-	if ((got & CEPH_CAP_FILE_WRBUFFER) == 0) {
+	if ((got & CEPH_CAP_FILE_WRBUFFER) == 0 ||
+	    (iocb->ki_filp->f_flags & O_DIRECT)) {
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,
 			&iocb->ki_pos);
 	} else {

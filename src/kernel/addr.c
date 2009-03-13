@@ -388,7 +388,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   &ci->i_layout, snapc,
 				   page_off, len,
 				   ci->i_truncate_seq, ci->i_truncate_size,
-				   &page, 1);
+				   &page, 1, 0);
 	if (err < 0) {
 		dout(20, "writepage setting page error %p\n", page);
 		SetPageError(page);
@@ -497,6 +497,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	ceph_put_wrbuffer_cap_refs(ci, req->r_num_pages, snapc);
 
 	ceph_release_pages(req->r_pages, req->r_num_pages);
+	kfree(req->r_pages);
 	ceph_osdc_put_request(req);
 }
 
@@ -513,7 +514,6 @@ static int ceph_writepages_start(struct address_space *mapping,
 	pgoff_t index, start, end;
 	int range_whole = 0;
 	int should_loop = 1;
-	struct page **pages = NULL;
 	pgoff_t max_pages = 0, max_pages_ever = 0;
 	struct ceph_snap_context *snapc = NULL, *last_snapc = NULL;
 	struct pagevec *pvec;
@@ -695,7 +695,12 @@ get_more_pages:
 						    ci->i_truncate_seq,
 						    ci->i_truncate_size);
 				max_pages = req->r_num_pages;
-				pages = req->r_pages;
+
+				rc = -ENOMEM;
+				req->r_pages = kmalloc(sizeof(*req->r_pages) *
+						       max_pages, GFP_NOFS);
+				if (req->r_pages == NULL)
+					goto out;
 				req->r_callback = writepages_finish;
 				req->r_inode = inode;
 				req->r_wbc = wbc;
@@ -707,7 +712,7 @@ get_more_pages:
 			dout(20, "%p will write page %p idx %lu\n",
 			     inode, page, page->index);
 			set_page_writeback(page);
-			pages[locked_pages] = page;
+			req->r_pages[locked_pages] = page;
 			locked_pages++;
 			next = page->index + 1;
 		}
@@ -737,7 +742,7 @@ get_more_pages:
 		}
 
 		/* submit the write */
-		offset = pages[0]->index << PAGE_CACHE_SHIFT;
+		offset = req->r_pages[0]->index << PAGE_CACHE_SHIFT;
 		len = min(i_size_read(inode) - offset,
 			  (u64)locked_pages << PAGE_CACHE_SHIFT);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
