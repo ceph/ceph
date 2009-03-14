@@ -338,12 +338,22 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	int read = 0;
 	int ret;
 
-	dout(10, "sync_read on file %p %llu~%u\n", file, start_off, left);
+	dout(10, "sync_read on file %p %llu~%u %s\n", file, start_off, left,
+	     (file->f_flags & O_DIRECT) ? "O_DIRECT":"");
 
-	if (file->f_flags & O_DIRECT)
+	if (file->f_flags & O_DIRECT) {
 		pages = get_direct_page_vector(data, num_pages, pos, left);
-	else
+
+		/*
+		 * flush any page cache pages in this range.  this
+		 * will make concurrent normal and O_DIRECT io slow,
+		 * but it will at least behave sensibly when they are
+		 * in sequence.
+		 */
+		filemap_write_and_wait_range(inode->i_mapping, pos, pos+left);
+	} else {
 		pages = alloc_page_vector(num_pages);
+	}
 	if (IS_ERR(pages))
 		return PTR_ERR(pages);
 
@@ -421,6 +431,12 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 		pages = get_direct_page_vector(data, num_pages, pos, left);
 		if (IS_ERR(pages))
 			return PTR_ERR(pages);
+
+		/*
+		 * throw out any page cache pages in this range. this
+		 * may block.
+		 */
+		truncate_inode_pages_range(inode->i_mapping, pos, pos+left);
 	} else {
 		pages = alloc_page_vector(num_pages);
 		if (IS_ERR(pages))
