@@ -232,6 +232,15 @@ fail:
 	return ERR_PTR(rc);
 }
 
+static void put_page_vector(struct page **pages, int num_pages)
+{
+	int i;
+
+	for (i = 0; i < num_pages; i++)
+		put_page(pages[i]);
+	kfree(pages);
+}
+
 static void release_page_vector(struct page **pages, int num_pages)
 {
 	int i;
@@ -388,7 +397,7 @@ more:
 	}
 
 	if (file->f_flags & O_DIRECT)
-		kfree(pages);
+		put_page_vector(pages, num_pages);
 	else
 		release_page_vector(pages, num_pages);
 	return ret;
@@ -489,7 +498,7 @@ more:
 
 out:
 	if (file->f_flags & O_DIRECT)
-		kfree(pages);
+		put_page_vector(pages, num_pages);
 	else
 		release_page_vector(pages, num_pages);
 	return ret;

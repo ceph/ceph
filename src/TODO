@@ -53,7 +53,6 @@ repair
 
 
 kernel client
-- should O_DIRECT invalidate the page cache?
 - inotify for updates from other clients?
 - optional or no fill_trace?
 - flock, fnctl locks
