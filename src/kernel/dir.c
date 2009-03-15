@@ -641,9 +641,9 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 	int valid = 0;
 	u32 gen;
 	unsigned long ttl;
-	struct inode *dir;
 	int mds = -1;
-	u32 seq;
+	struct inode *dir = NULL;
+	u32 seq = 0;
 
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
