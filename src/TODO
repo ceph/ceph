@@ -15,8 +15,8 @@ v0.7.1
 /- O_DIRECT
 
 v0.8
-- kill fill_trace
-- make kclient handle osd ack + sync properly
+/- make kclient handle osd ack + sync properly
+/- make fill_trace handle short traces; return short traces from mds
 
 - ENOSPC
 - flock
@@ -62,7 +62,6 @@ kernel client
 - async xattrs
 - avoid pinning inodes with expireable caps?
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
-- make osd retry writes if failure after ack..
 - ACLs
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
