@@ -705,6 +705,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	} else {
 		/* no, queue up footer too and be done */
 		prepare_write_message_footer(con, v);
+		con->out_more = con->out_msg->more_to_follow;
 	}
 
 	set_bit(WRITE_PENDING, &con->state);
@@ -2314,6 +2315,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->footer.front_crc = 0;
 	m->footer.data_crc = 0;
 	m->front_is_vmalloc = false;
+	m->more_to_follow = false;
 
 	/* front */
 	if (front_len) {

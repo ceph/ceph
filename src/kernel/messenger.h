@@ -117,6 +117,7 @@ struct ceph_msg {
 	struct list_head list_head;
 	atomic_t nref;
 	bool front_is_vmalloc;
+	bool more_to_follow;
 };
 
 struct ceph_msg_pos {
