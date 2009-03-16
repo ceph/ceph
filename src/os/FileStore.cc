@@ -398,7 +398,7 @@ int FileStore::mount()
 
   // get fsid
   sprintf(fn, "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(fn, O_RDWR|O_CREAT);
+  fsid_fd = ::open(fn, O_RDWR|O_CREAT, 0644);
   ::read(fsid_fd, &fsid, sizeof(fsid));
 
   if (lock_fsid() < 0)
