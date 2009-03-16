@@ -60,11 +60,6 @@ static void calc_layout(struct ceph_osd_client *osdc,
 /*
  * requests
  */
-static void get_request(struct ceph_osd_request *req)
-{
-	atomic_inc(&req->r_ref);
-}
-
 void ceph_osdc_put_request(struct ceph_osd_request *req)
 {
 	dout(10, "put_request %p %d -> %d\n", req, atomic_read(&req->r_ref),
@@ -75,6 +70,9 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
 			ceph_msg_put(req->r_request);
 		if (req->r_reply)
 			ceph_msg_put(req->r_reply);
+		if (req->r_own_pages)
+			ceph_release_page_vector(req->r_pages,
+						 req->r_num_pages);
 		ceph_put_snap_context(req->r_snapc);
 		kfree(req);
 	}
@@ -110,6 +108,11 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
 
+	atomic_set(&req->r_ref, 1);
+	init_completion(&req->r_completion);
+	init_completion(&req->r_safe_completion);
+	INIT_LIST_HEAD(&req->r_unsafe_item);
+
 	/* create message */
 	if (snapc)
 		msg_size += sizeof(u64) * snapc->num_snaps;
@@ -135,10 +138,15 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	calc_layout(osdc, vino, layout, off, plen, req);
 	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 
+	if (flags & CEPH_OSD_OP_MODIFY) {
+		req->r_request->hdr.data_off = cpu_to_le16(off);
+		req->r_request->hdr.data_len = cpu_to_le32(*plen);
+	}
+
 	/* additional ops */
 	if (do_trunc) {
 		op++;
-		op->op = cpu_to_le16(opcode == CEPH_OSD_OP_READ ? 
+		op->op = cpu_to_le16(opcode == CEPH_OSD_OP_READ ?
 			     CEPH_OSD_OP_MASKTRUNC : CEPH_OSD_OP_SETTRUNC);
 		op->truncate_seq = cpu_to_le32(truncate_seq);
 		prevofs =  le64_to_cpu((op-1)->offset);
@@ -154,12 +162,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		for (i = 0; i < snapc->num_snaps; i++)
 			snaps[i] = cpu_to_le64(snapc->snaps[i]);
 	}
-
-	atomic_set(&req->r_ref, 1);
-	init_completion(&req->r_completion);
 	return req;
 }
-
 
 /*
  * Register request, assign tid.  If this is the first request, set up
@@ -180,7 +184,7 @@ static int register_request(struct ceph_osd_client *osdc,
 	if (rc < 0)
 		goto out;
 
-	get_request(req);
+	ceph_osdc_get_request(req);
 	osdc->num_requests++;
 
 	req->r_timeout_stamp =
@@ -215,7 +219,7 @@ static void handle_timeout(struct work_struct *work)
 		container_of(work, struct ceph_osd_client, timeout_work.work);
 	struct ceph_osd_request *req;
 	unsigned long timeout = osdc->client->mount_args.osd_timeout * HZ;
-	unsigned long next_timeout = timeout + jiffies; 
+	unsigned long next_timeout = timeout + jiffies;
 	RADIX_TREE(pings, GFP_NOFS);  /* only send 1 ping per osd */
 	u64 next_tid = 0;
 	int got;
@@ -369,6 +373,7 @@ static int send_request(struct ceph_osd_client *osdc,
 	reqhead = req->r_request->front.iov_base;
 	reqhead->osdmap_epoch = cpu_to_le32(osdc->osdmap->epoch);
 	reqhead->flags |= cpu_to_le32(req->r_flags);  /* e.g., RETRY */
+	reqhead->reassert_version = req->r_reassert_version;
 
 	req->r_request->hdr.dst.name.type =
 		cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
@@ -392,7 +397,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
 	struct ceph_osd_request *req;
 	u64 tid;
-	int numops;
+	int numops, flags;
 
 	if (msg->front.iov_len < sizeof(*rhead))
 		goto bad;
@@ -411,27 +416,50 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		mutex_unlock(&osdc->request_mutex);
 		return;
 	}
-	get_request(req);
-	if (req->r_reply == NULL) {
-		/* no data payload, or r_reply would have been set by
-		   prepare_pages. */
-		ceph_msg_get(msg);
-		req->r_reply = msg;
-	} else if (req->r_reply == msg) {
-		/* r_reply was set by prepare_pages; now it's fully read. */
-	} else {
-		dout(10, "handle_reply tid %llu already had reply?\n", tid);
+	ceph_osdc_get_request(req);
+	flags = le32_to_cpu(rhead->flags);
+
+	if (req->r_aborted) {
+		dout(10, "handle_reply tid %llu aborted\n", tid);
 		goto done;
 	}
-	dout(10, "handle_reply tid %llu flags %d\n", tid,
-	     le32_to_cpu(rhead->flags));
-	__unregister_request(osdc, req);
+
+	if (req->r_reassert_version.epoch == 0) {
+		/* first ack */
+		if (req->r_reply == NULL) {
+			/* no data payload, or r_reply would have been set by
+			   prepare_pages. */
+			ceph_msg_get(msg);
+			req->r_reply = msg;
+		} else {
+			/* r_reply was set by prepare_pages */
+			BUG_ON(req->r_reply != msg);
+		}
+
+		/* in case we need to replay this op, */
+		req->r_reassert_version = rhead->reassert_version;
+	} else if ((flags & CEPH_OSD_OP_ONDISK) == 0) {
+		dout(10, "handle_reply tid %llu dup ack\n", tid);
+		goto done;
+	}
+
+	dout(10, "handle_reply tid %llu flags %d\n", tid, flags);
+
+	if (flags & CEPH_OSD_OP_ONDISK)
+		__unregister_request(osdc, req);
+
 	mutex_unlock(&osdc->request_mutex);
 
 	if (req->r_callback)
 		req->r_callback(req);
 	else
-		complete(&req->r_completion);  /* see do_sync_request */
+		complete(&req->r_completion);
+
+	if ((flags & CEPH_OSD_OP_ONDISK) && req->r_safe_callback) {
+		req->r_safe_callback(req);
+		complete(&req->r_safe_completion);  /* fsync waiter */
+	}
+
 done:
 	ceph_osdc_put_request(req);
 	return;
@@ -481,7 +509,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 
 		dout(20, "kicking tid %llu osd%d\n", req->r_tid,
 		     req->r_last_osd);
-		get_request(req);
+		ceph_osdc_get_request(req);
 		mutex_unlock(&osdc->request_mutex);
 		req->r_request = ceph_msg_maybe_dup(req->r_request);
 		if (!req->r_aborted) {
@@ -670,61 +698,34 @@ out:
 /*
  * Register request, send initial attempt.
  */
-static int start_request(struct ceph_osd_client *osdc,
-			 struct ceph_osd_request *req)
+int ceph_osdc_start_request(struct ceph_osd_client *osdc,
+			    struct ceph_osd_request *req)
 {
 	int rc;
+
+	req->r_request->pages = req->r_pages;
+	req->r_request->nr_pages = req->r_num_pages;
 
 	rc = register_request(osdc, req);
 	if (rc < 0)
 		return rc;
+
 	down_read(&osdc->map_sem);
 	rc = send_request(osdc, req);
 	up_read(&osdc->map_sem);
 	return rc;
 }
 
-/*
- * synchronously do an osd request.
- *
- * If we are interrupted, take our pages away from any previous sent
- * request message that may still be being written to the socket.
- */
-static int do_sync_request(struct ceph_osd_client *osdc,
+int ceph_osdc_wait_request(struct ceph_osd_client *osdc,
 			   struct ceph_osd_request *req)
 {
 	struct ceph_osd_reply_head *replyhead;
 	__s32 rc;
 	int bytes;
 
-	rc = start_request(osdc, req);	/* register+send request */
-	if (rc)
-		return rc;
-
 	rc = wait_for_completion_interruptible(&req->r_completion);
 	if (rc < 0) {
-		struct ceph_msg *msg;
-
-		dout(0, "tid %llu err %d, revoking %p pages\n", req->r_tid,
-		     rc, req->r_request);
-		/*
-		 * we were interrupted.
-		 *
-		 * mark req aborted _before_ revoking pages, so that
-		 * if a racing kick_request _does_ dup the page vec
-		 * pointer, it will definitely then see the aborted
-		 * flag and not send the request.
-		 */
-		req->r_aborted = 1;
-		msg = req->r_request;
-		mutex_lock(&msg->page_mutex);
-		msg->pages = NULL;
-		mutex_unlock(&msg->page_mutex);
-		if (req->r_reply) {
-			mutex_lock(&req->r_reply->page_mutex);
-			req->r_reply->pages = NULL;
-			mutex_unlock(&req->r_reply->page_mutex);
-		}
+		ceph_osdc_abort_request(osdc, req);
 		return rc;
 	}
 
@@ -732,12 +733,42 @@ static int do_sync_request(struct ceph_osd_client *osdc,
 	replyhead = req->r_reply->front.iov_base;
 	rc = le32_to_cpu(replyhead->result);
 	bytes = le32_to_cpu(req->r_reply->hdr.data_len);
-	dout(10, "do_sync_request tid %llu result %d, %d bytes\n",
+	dout(10, "wait_request tid %llu result %d, %d bytes\n",
 	     req->r_tid, rc, bytes);
 	if (rc < 0)
 		return rc;
 	return bytes;
 }
+
+/*
+ * To abort an in-progress request, take pages away from outgoing or
+ * incoming message.
+ */
+void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
+			     struct ceph_osd_request *req)
+{
+	struct ceph_msg *msg;
+
+	dout(0, "abort_request tid %llu, revoking %p pages\n", req->r_tid,
+	     req->r_request);
+	/*
+	 * mark req aborted _before_ revoking pages, so that
+	 * if a racing kick_request _does_ dup the page vec
+	 * pointer, it will definitely then see the aborted
+	 * flag and not send the request.
+	 */
+	req->r_aborted = 1;
+	msg = req->r_request;
+	mutex_lock(&msg->page_mutex);
+	msg->pages = NULL;
+	mutex_unlock(&msg->page_mutex);
+	if (req->r_reply) {
+		mutex_lock(&req->r_reply->page_mutex);
+		req->r_reply->pages = NULL;
+		mutex_unlock(&req->r_reply->page_mutex);
+	}
+}
+
 /*
  * init, shutdown
  */
@@ -796,7 +827,10 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 
 	dout(10, "readpages final extent is %llu~%llu (%d pages)\n",
 	     off, len, req->r_num_pages);
-	rc = do_sync_request(osdc, req);
+
+	rc = ceph_osdc_start_request(osdc, req);
+	if (!rc)
+		rc = ceph_osdc_wait_request(osdc, req);
 
 	if (rc >= 0) {
 		read = rc;
@@ -849,7 +883,6 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct page **pages, int num_pages,
 			 int flags, int do_sync)
 {
-	struct ceph_msg *reqm;
 	struct ceph_osd_request *req;
 	int rc = 0;
 
@@ -869,52 +902,14 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	dout(10, "writepages %llu~%llu (%d pages)\n", off, len,
 	     req->r_num_pages);
 
-	/* set up data payload */
-	reqm = req->r_request;
-	reqm->pages = pages;
-	reqm->nr_pages = req->r_num_pages;
-	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le16(off);
+	rc = ceph_osdc_start_request(osdc, req);
+	if (!rc)
+		rc = ceph_osdc_wait_request(osdc, req);
 
-	rc = do_sync_request(osdc, req);
 	ceph_osdc_put_request(req);
 	if (rc == 0)
 		rc = len;
 	dout(10, "writepages result %d\n", rc);
-	return rc;
-}
-
-/*
- * start an async write
- */
-int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
-			       struct ceph_osd_request *req,
-			       u64 len, int num_pages)
-{
-	struct ceph_msg *reqm = req->r_request;
-	struct ceph_osd_request_head *reqhead = reqm->front.iov_base;
-	struct ceph_osd_op *op = (void *)(reqhead + 1);
-	u64 off = le64_to_cpu(op->offset);
-	int rc;
-	int flags;
-
-	dout(10, "writepages_start %llu~%llu, %d pages\n", off, len, num_pages);
-
-	flags = CEPH_OSD_OP_MODIFY;
-	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
-		flags |= CEPH_OSD_OP_ACK;
-	else
-		flags |= CEPH_OSD_OP_ONDISK;
-	reqhead->flags = cpu_to_le32(flags);
-	op->length = cpu_to_le64(len);
-
-	/* reference pages in message */
-	reqm->pages = req->r_pages;
-	reqm->nr_pages = req->r_num_pages = num_pages;
-	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le16(off);
-
-	rc = start_request(osdc, req);
 	return rc;
 }
 

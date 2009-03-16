@@ -641,6 +641,8 @@ retry:
 		struct page *page;
 		int want;
 		u64 offset, len;
+		struct ceph_osd_request_head *reqhead;
+		struct ceph_osd_op *op;
 
 		next = 0;
 		locked_pages = 0;
@@ -730,7 +732,9 @@ get_more_pages:
 					    &ci->i_layout,
 					    ceph_vino(inode),
 					    offset, &len,
-					    CEPH_OSD_OP_WRITE, 0,
+					    CEPH_OSD_OP_WRITE,
+					    CEPH_OSD_OP_MODIFY |
+						    CEPH_OSD_OP_ONDISK,
 					    snapc, do_sync,
 					    ci->i_truncate_seq,
 					    ci->i_truncate_size);
@@ -787,8 +791,15 @@ get_more_pages:
 			  (u64)locked_pages << PAGE_CACHE_SHIFT);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
 		     locked_pages, offset, len);
-		rc = ceph_osdc_writepages_start(&client->osdc, req,
-						len, locked_pages);
+
+		/* revise final length, page count */
+		req->r_num_pages = locked_pages;
+		reqhead = req->r_request->front.iov_base;
+		op = (void *)(reqhead + 1);
+		op->length = cpu_to_le64(len);
+		req->r_request->hdr.data_len = cpu_to_le32(len);
+
+		rc = ceph_osdc_start_request(&client->osdc, req);
 		req = NULL;
 		/*
 		 * FIXME: if writepages_start fails (ENOMEM?) we should

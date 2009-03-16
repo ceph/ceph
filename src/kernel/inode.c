@@ -288,6 +288,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_wrbuffer_ref_head = 0;
 	ci->i_rdcache_gen = 0;
 	ci->i_rdcache_revoking = 0;
+	INIT_LIST_HEAD(&ci->i_unsafe_writes);
 
 	ci->i_snap_realm = NULL;
 	INIT_LIST_HEAD(&ci->i_snap_realm_item);

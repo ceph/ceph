@@ -56,12 +56,15 @@ struct ceph_osd_request {
 	int               r_aborted;   /* set if we cancel this request */
 
 	atomic_t          r_ref;
-	struct completion r_completion;       /* on completion, or... */
-	ceph_osdc_callback_t r_callback;      /* ...async callback. */
-	struct inode *r_inode;                /* needed for async write */
-	struct writeback_control *r_wbc;
+	struct completion r_completion, r_safe_completion;
+	ceph_osdc_callback_t r_callback, r_safe_callback;
+	struct ceph_eversion r_reassert_version;
+	struct list_head  r_unsafe_item;
 
-	int               r_last_osd;   /* pg osds */
+	struct inode *r_inode;         	      /* for use by callbacks */
+	struct writeback_control *r_wbc;      /* ditto */
+
+	int               r_last_osd;         /* pg osds */
 	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;
 
@@ -69,6 +72,7 @@ struct ceph_osd_request {
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */
 	unsigned          r_num_pages;        /* size of page array (follows) */
 	struct page     **r_pages;            /* pages for data payload */
+	int               r_own_pages;        /* if true, i own page list */
 };
 
 struct ceph_osd_client {
@@ -111,7 +115,20 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_snap_context *snapc,
 				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size);
+
+static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
+{
+	atomic_inc(&req->r_ref);
+}
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
+
+extern int ceph_osdc_start_request(struct ceph_osd_client *osdc,
+				   struct ceph_osd_request *req);
+extern int ceph_osdc_wait_request(struct ceph_osd_client *osdc,
+				  struct ceph_osd_request *req);
+extern void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
+				    struct ceph_osd_request *req);
+
 
 extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			       struct ceph_vino vino,
@@ -128,10 +145,6 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				u32 truncate_seq, u64 truncate_size,
 				struct page **pages, int nr_pages,
 				int flags, int do_sync);
-extern int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
-				      struct ceph_osd_request *req,
-				      u64 len,
-				      int nr_pages);
 
 #endif
 

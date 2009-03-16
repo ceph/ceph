@@ -281,6 +281,7 @@ struct ceph_inode_info {
 				   If it's non-zero, we _may_ have cached
 				   pages. */
 	u32 i_rdcache_revoking; /* RDCACHE gen to async invalidate, if any */
+	struct list_head i_unsafe_writes; /* uncommitted sync writes */
 
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
@@ -722,6 +723,7 @@ extern int ceph_add_cap(struct inode *inode,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);
+extern void ceph_get_more_cap_refs(struct ceph_inode_info *ci, int caps);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);
@@ -759,7 +761,7 @@ extern struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 				       struct nameidata *nd, int mode,
 				       int locked_dir);
 extern int ceph_release(struct inode *inode, struct file *filp);
-
+extern void ceph_release_page_vector(struct page **pages, int num_pages);
 
 /* dir.c */
 extern const struct file_operations ceph_dir_fops;

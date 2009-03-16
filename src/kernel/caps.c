@@ -1097,6 +1097,17 @@ int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 }
 
 /*
+ * Take cap refs.  Caller must already now we hold at least on ref on
+ * the caps in question or we don't know this is safe.
+ */
+void ceph_get_more_cap_refs(struct ceph_inode_info *ci, int caps)
+{
+	spin_lock(&ci->vfs_inode.i_lock);
+	__take_cap_refs(ci, caps);
+	spin_unlock(&ci->vfs_inode.i_lock);
+}
+
+/*
  * Release cap refs.
  *
  * If we released the last ref on any given cap, call ceph_check_caps

@@ -241,7 +241,7 @@ static void put_page_vector(struct page **pages, int num_pages)
 	kfree(pages);
 }
 
-static void release_page_vector(struct page **pages, int num_pages)
+void ceph_release_page_vector(struct page **pages, int num_pages)
 {
 	int i;
 
@@ -261,7 +261,7 @@ static struct page **alloc_page_vector(int num_pages)
 	for (i = 0; i < num_pages; i++) {
 		pages[i] = alloc_page(GFP_NOFS);
 		if (pages[i] == NULL) {
-			release_page_vector(pages, i);
+			ceph_release_page_vector(pages, i);
 			return ERR_PTR(-ENOMEM);
 		}
 	}
@@ -399,8 +399,65 @@ more:
 	if (file->f_flags & O_DIRECT)
 		put_page_vector(pages, num_pages);
 	else
-		release_page_vector(pages, num_pages);
+		ceph_release_page_vector(pages, num_pages);
 	return ret;
+}
+
+/*
+ * Write commit callback, called if we requested both an ACK and
+ * ONDISK commit reply from the OSD.
+ */
+static void sync_write_commit(struct ceph_osd_request *req)
+{
+	struct ceph_inode_info *ci = ceph_inode(req->r_inode);
+
+	dout(10, "sync_write_commit %p tid %llu\n", req, req->r_tid);
+	spin_lock(&ci->i_listener_lock);
+	list_del_init(&req->r_unsafe_item);
+	spin_unlock(&ci->i_listener_lock);
+	ceph_put_cap_refs(ci, CEPH_CAP_FILE_WR);
+}
+
+/*
+ * Wait on any unsafe replies for the given inode.  First wait on the
+ * newest request, and make that the upper bound.  Then, if there are
+ * more requests, keep waiting on the oldest as long as it is still older
+ * than the original request.
+ */
+static void sync_write_wait(struct inode *inode)
+{
+       struct ceph_inode_info *ci = ceph_inode(inode);
+       struct list_head *head = &ci->i_unsafe_writes;
+       struct ceph_osd_request *req;
+       u64 last_tid;
+
+       spin_lock(&ci->i_listener_lock);
+       if (list_empty(head))
+	       goto out;
+
+       /* set upper bound as _last_ entry in chain */
+       req = list_entry(head->prev, struct ceph_osd_request,
+	                r_unsafe_item);
+       last_tid = req->r_tid;
+
+       do {
+	       ceph_osdc_get_request(req);
+	       spin_unlock(&ci->i_listener_lock);
+	       dout(10, "sync_write_wait on tid %llu (until %llu)\n",
+		    req->r_tid, last_tid);
+	       wait_for_completion(&req->r_safe_completion);
+	       spin_lock(&ci->i_listener_lock);
+	       ceph_osdc_put_request(req);
+
+	       /*
+		* from here on look at first entry in chain, since we
+		* only want to wait for anything older than last_tid
+		*/
+	       req = list_entry(head->next, struct ceph_osd_request,
+	                        r_unsafe_item);
+       } while (req->r_tid <= last_tid);
+out:
+       spin_unlock(&ci->i_listener_lock);
 }
 
 /*
@@ -416,9 +473,11 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_inode_to_client(inode);
-	struct page **pages, **page_pos;
-	int num_pages, pages_left;
+	struct ceph_osd_request *req;
+	struct page **pages;
+	int num_pages;
 	long long unsigned pos;
+	u64 len;
 	int written = 0;
 	int flags;
 	int do_sync = 0;
@@ -434,28 +493,10 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 		pos = i_size_read(inode);
 	else
 		pos = *offset;
-	num_pages = calc_pages_for(pos, left);
 
-	if (file->f_flags & O_DIRECT) {
-		pages = get_direct_page_vector(data, num_pages, pos, left);
-		if (IS_ERR(pages))
-			return PTR_ERR(pages);
-
-		/*
-		 * throw out any page cache pages in this range. this
-		 * may block.
-		 */
-		truncate_inode_pages_range(inode->i_mapping, pos, pos+left);
-	} else {
-		pages = alloc_page_vector(num_pages);
-		if (IS_ERR(pages))
-			return PTR_ERR(pages);
-		ret = copy_user_to_page_vector(pages, data, pos, left);
-		if (ret < 0)
-			goto out;
-	}
-
-	flags = CEPH_OSD_OP_ORDERSNAP;
+	flags = CEPH_OSD_OP_ORDERSNAP |
+		CEPH_OSD_OP_ONDISK |
+		CEPH_OSD_OP_MODIFY;
 	if ((file->f_flags & (O_SYNC|O_DIRECT)) == 0)
 		flags |= CEPH_OSD_OP_ACK;
 	else
@@ -465,42 +506,87 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	 * we may need to do multiple writes here if we span an object
 	 * boundary.  this isn't atomic, unfortunately.  :(
 	 */
-	page_pos = pages;
-	pages_left = num_pages;
-
 more:
-	ret = ceph_osdc_writepages(&client->osdc, ceph_vino(inode),
-				   &ci->i_layout,
-				   ci->i_snap_realm->cached_context,
-				   pos, left, ci->i_truncate_seq,
-				   ci->i_truncate_size,
-				   page_pos, pages_left,
-				   flags, do_sync);
-	if (ret > 0) {
-		int didpages =
-			((pos & ~PAGE_CACHE_MASK) + ret) >> PAGE_CACHE_SHIFT;
+	len = left;
+	req = ceph_osdc_new_request(&client->osdc, &ci->i_layout,
+				    ceph_vino(inode), pos, &len,
+				    CEPH_OSD_OP_WRITE, flags,
+				    ci->i_snap_realm->cached_context,
+				    do_sync,
+				    ci->i_truncate_seq, ci->i_truncate_size);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
 
-		pos += ret;
-		written += ret;
-		left -= ret;
-		if (left) {
-			page_pos += didpages;
-			pages_left -= didpages;
-			BUG_ON(!pages_left);
-			goto more;
+	num_pages = calc_pages_for(pos, len);
+
+	if (file->f_flags & O_DIRECT) {
+		pages = get_direct_page_vector(data, num_pages, pos, len);
+		if (IS_ERR(pages)) {
+			ret = PTR_ERR(pages);
+			goto out;
 		}
+
+		/*
+		 * throw out any page cache pages in this range. this
+		 * may block.
+		 */
+		truncate_inode_pages_range(inode->i_mapping, pos, pos+len);
+	} else {
+		pages = alloc_page_vector(num_pages);
+		if (IS_ERR(pages)) {
+			ret = PTR_ERR(pages);
+			goto out;
+		}
+		ret = copy_user_to_page_vector(pages, data, pos, len);
+		if (ret < 0) {
+			ceph_release_page_vector(pages, num_pages);
+			goto out;
+		}
+
+		if ((file->f_flags & O_SYNC) == 0) {
+			/* get a second commit callback */
+			req->r_safe_callback = sync_write_commit;
+			req->r_own_pages = 1;
+		}
+	}
+	req->r_pages = pages;
+	req->r_num_pages = num_pages;
+	req->r_inode = inode;
+
+	ret = ceph_osdc_start_request(&client->osdc, req);
+	if (!ret) {
+		if (req->r_safe_callback) {
+			/*
+			 * Add to inode unsafe list only after we
+			 * start_request so that a tid has been assigned.
+			 */
+			spin_lock(&ci->i_listener_lock);
+			list_add(&ci->i_unsafe_writes, &req->r_unsafe_item);
+			spin_unlock(&ci->i_listener_lock);
+			ceph_get_more_cap_refs(ci, CEPH_CAP_FILE_WR);
+		}
+		ret = ceph_osdc_wait_request(&client->osdc, req);
+	}
+
+	if (file->f_flags & O_DIRECT)
+		put_page_vector(pages, num_pages);
+	else if (file->f_flags & O_SYNC)
+		ceph_release_page_vector(pages, num_pages);
+
+out:
+	ceph_osdc_put_request(req);
+	if (ret == 0) {
+		pos += len;
+		written += len;
+		left -= len;
+		if (left)
+			goto more;
 
 		ret = written;
 		*offset = pos;
 		if (pos > i_size_read(inode))
 			ceph_inode_set_size(inode, pos);
 	}
-
-out:
-	if (file->f_flags & O_DIRECT)
-		put_page_vector(pages, num_pages);
-	else
-		release_page_vector(pages, num_pages);
 	return ret;
 }
 
@@ -509,7 +595,7 @@ out:
  * Atomically grab references, so that those bits are not released
  * back to the MDS mid-read.
  *
- * Hmm, the sync reach case isn't actually async... should it be?
+ * Hmm, the sync read case isn't actually async... should it be?
  */
 static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 			     unsigned long nr_segs, loff_t pos)
@@ -648,6 +734,8 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	int ret;
 
 	dout(10, "fsync on inode %p\n", inode);
+	sync_write_wait(inode);
+
 	ret = filemap_write_and_wait(inode->i_mapping);
 	if (ret < 0)
 		return ret;
