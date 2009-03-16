@@ -1,8 +1,9 @@
 ceph (0.7.1-1) unstable; urgency=low
 
-  * ??
+  * O_DIRECT
+  * single configuration file
 
- -- sage <sage@newdream.net>  Tue, 10 Mar 2009 13:57:22 -0800
+ -- sage <sage@newdream.net>  Mon, 16 Mar 2009 13:57:22 -0800
 
 ceph (0.7-1) unstable; urgency=low
 
