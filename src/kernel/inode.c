@@ -756,7 +756,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	struct ceph_mds_reply_info_parsed *rinfo = &req->r_reply_info;
 	int err = 0;
 	struct qstr dname;
-	struct dentry *dn = sb->s_root;
+	struct dentry *dn;
 	struct dentry *parent = NULL;
 	struct dentry *existing;
 	struct inode *in;
@@ -797,39 +797,33 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 	vino.ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
 	vino.snap = le64_to_cpu(rinfo->trace_in[0].in->snapid);
-	if (likely(dn)) {
-		in = dn->d_inode;
-		/* trace should start at root, or have only 1 dentry
-		 * (if it is in an mds stray dir) */
-		WARN_ON(vino.ino != CEPH_INO_ROOT && rinfo->trace_numd != 1);
+	in = ceph_get_inode(sb, vino);
+	if (IS_ERR(in))
+		return PTR_ERR(in);
+
+	err = fill_inode(in, &rinfo->trace_in[0],
+			 rinfo->trace_numd ?
+			 rinfo->trace_dir[0] : NULL,
+			 session, req->r_request_started,
+			 (rinfo->trace_numd == 0 &&
+			  le32_to_cpu(rinfo->head->result) == 0) ?
+			 req->r_fmode : -1);
+	if (err < 0)
+		return err;
+
+	if (likely(sb->s_root)) {
+		dn = d_find_alias(in);
 	} else {
 		/* first reply (i.e. we just mounted) */
-		in = ceph_get_inode(sb, vino);
-		if (IS_ERR(in))
-			return PTR_ERR(in);
 		dn = d_alloc_root(in);
 		if (dn == NULL) {
 			derr(0, "d_alloc_root ENOMEM badness on root dentry\n");
 			return -ENOMEM;
 		}
-	}
-
-	if (vino.ino == CEPH_INO_ROOT) {
-		err = fill_inode(in, &rinfo->trace_in[0],
-				 rinfo->trace_numd ?
-				 rinfo->trace_dir[0] : NULL,
-				 session, req->r_request_started,
-				 (rinfo->trace_numd == 0 &&
-				  le32_to_cpu(rinfo->head->result) == 0) ?
-				 req->r_fmode : -1);
-		if (err < 0)
-			return err;
-		if (unlikely(sb->s_root == NULL))
-			sb->s_root = dn;
+		sb->s_root = dget(dn);
 	}
 
 	have_lease = 0;
-	dget(dn);
 	for (d = 0; d < rinfo->trace_numd; d++) {
 		dname.name = rinfo->trace_dname[d];
 		dname.len = rinfo->trace_dname_len[d];
