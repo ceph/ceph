@@ -359,7 +359,7 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 		 * but it will at least behave sensibly when they are
 		 * in sequence.
 		 */
-		filemap_write_and_wait_range(inode->i_mapping, pos, pos+left);
+		filemap_write_and_wait(inode->i_mapping);
 	} else {
 		pages = alloc_page_vector(num_pages);
 	}
