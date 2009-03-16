@@ -16,6 +16,7 @@ v0.7.1
 
 v0.8
 - kill fill_trace
+- make kclient handle osd ack + sync properly
 
 - ENOSPC
 - flock
