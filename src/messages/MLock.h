@@ -17,43 +17,7 @@
 #define __MLOCK_H
 
 #include "msg/Message.h"
-
-// for replicas
-#define LOCK_AC_SYNC        -1
-#define LOCK_AC_MIXED       -2
-#define LOCK_AC_LOCK        -3
-
-#define LOCK_AC_SCATTER     -6
-
-// for auth
-#define LOCK_AC_SYNCACK      1
-#define LOCK_AC_MIXEDACK     2
-#define LOCK_AC_LOCKACK      3
-
-#define LOCK_AC_REQSCATTER   7
-#define LOCK_AC_REQUNSCATTER 8
-#define LOCK_AC_NUDGE        9
-
-#define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
-#define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
-
-
-static const char *get_lock_action_name(int a) {
-  switch (a) {
-  case LOCK_AC_SYNC: return "sync";
-  case LOCK_AC_MIXED: return "mixed";
-  case LOCK_AC_LOCK: return "lock";
-  case LOCK_AC_SCATTER: return "scatter";
-  case LOCK_AC_SYNCACK: return "syncack";
-  case LOCK_AC_MIXEDACK: return "mixedack";
-  case LOCK_AC_LOCKACK: return "lockack";
-  case LOCK_AC_REQSCATTER: return "reqscatter";
-  case LOCK_AC_REQUNSCATTER: return "requnscatter";
-  case LOCK_AC_NUDGE: return "nudge";
-  default: assert(0); return 0;
-  }
-}
-
+#include "mds/locks.h"
 
 class MLock : public Message {
   int32_t     action;  // action type

@@ -1,22 +1,23 @@
+#!/bin/sh
 
 CCONF="$BINDIR/cconf"
 
-conf=$ETCDIR"/cluster.conf"
-runtime_conf=$ETCDIR"/ceph.conf"
-
+conf=$ETCDIR"/ceph.conf"
 hostname=`hostname | cut -d . -f 1`
 
 
-# make sure cluster.conf exists
-if [ ! -e $conf ]; then
-    echo "$0: Cluster conf $conf not found"
-    usage_exit
-fi
+verify_conf() {
+    # make sure ceph.conf exists
+    if [ ! -e $conf ]; then
+	echo "$0: ceph conf $conf not found"
+	usage_exit
+    fi
+}
 
 
 check_host() {
     # what host is this daemon assigned to?
-    host=`$CCONF -c $conf -s $name -s $type host`
+    host=`$CCONF -c $conf -i $id -t $type host`
     ssh=""
     dir=$PWD
     if [[ $host != "" ]]; then
@@ -100,12 +101,8 @@ get_conf() {
 	key=$3
 	shift; shift; shift
 
-	tmp=""
-	while [ $# -ge 1 ]; do
-		tmp=$tmp" -s $1"
-		shift
-	done
-	eval "$var=\"`$CCONF -c $conf $tmp \"$key\" \"$def\"`\""
+	[[ $verbose == 1 ]] && echo "$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\""
+	eval "$var=\"`$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\"`\""
 }
 
 get_conf_bool() {

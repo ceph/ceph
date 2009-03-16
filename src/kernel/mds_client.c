@@ -620,7 +620,8 @@ static int __open_session(struct ceph_mds_client *mdsc,
 
 	/* wait for mds to go active? */
 	mstate = ceph_mdsmap_get_state(mdsc->mdsmap, mds);
-	dout(10, "open_session to mds%d, state %d\n", mds, mstate);
+	dout(10, "open_session to mds%d (%s)\n", mds,
+	     ceph_mds_state_name(mstate));
 	session->s_state = CEPH_MDS_SESSION_OPENING;
 	session->s_renew_requested = jiffies;
 
@@ -657,23 +658,6 @@ static void remove_session_caps(struct ceph_mds_session *session)
 }
 
 /*
- * caller must hold session s_mutex
- */
-static void revoke_dentry_lease(struct dentry *dentry)
-{
-	struct ceph_dentry_info *di;
-
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	if (di) {
-		ceph_put_mds_session(di->lease_session);
-		kfree(di);
-		dentry->d_fsdata = NULL;
-	}
-	spin_unlock(&dentry->d_lock);
-}
-
-/*
  * wake up any threads waiting on this session's caps
  *
  * caller must hold s_mutex.
@@ -700,6 +684,7 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 			   struct ceph_mds_session *session)
 {
 	struct ceph_msg *msg;
+	int state;
 
 	if (time_after_eq(jiffies, session->s_cap_ttl) &&
 	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
@@ -707,13 +692,15 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 
 	/* do not try to renew caps until a recovering mds has reconnected
 	 * with its clients. */
-	if (ceph_mdsmap_get_state(mdsc->mdsmap, session->s_mds) <
-	    CEPH_MDS_STATE_RECONNECT) {
-		dout(10, "send_renew_caps ignoring mds%d\n", session->s_mds);
+	state = ceph_mdsmap_get_state(mdsc->mdsmap, session->s_mds);
+	if (state < CEPH_MDS_STATE_RECONNECT) {
+		dout(10, "send_renew_caps ignoring mds%d (%s)\n",
+		     session->s_mds, ceph_mds_state_name(state));
 		return 0;
 	}
 
-	dout(10, "send_renew_caps to mds%d\n", session->s_mds);
+	dout(10, "send_renew_caps to mds%d (%s)\n", session->s_mds,
+		ceph_mds_state_name(state));
 	session->s_renew_requested = jiffies;
 	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
 	if (IS_ERR(msg))
@@ -1844,8 +1831,10 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		oldstate = ceph_mdsmap_get_state(oldmap, i);
 		newstate = ceph_mdsmap_get_state(newmap, i);
 
-		dout(20, "check_new_map mds%d state %d -> %d (session %s)\n",
-		     i, oldstate, newstate, session_state_name(s->s_state));
+		dout(20, "check_new_map mds%d state %s -> %s (session %s)\n",
+		     i, ceph_mds_state_name(oldstate),
+		     ceph_mds_state_name(newstate),
+		     session_state_name(s->s_state));
 		if (newstate < oldstate) {
 			/* if the state moved backwards, that means
 			 * the old mds failed and/or a new mds is
@@ -1888,6 +1877,18 @@ static void check_new_map(struct ceph_mds_client *mdsc,
  * leases
  */
 
+/*
+ * caller must hold session s_mutex, dentry->d_lock
+ */
+void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di = ceph_dentry(dentry);
+
+	ceph_put_mds_session(di->lease_session);
+	kfree(di);
+	dentry->d_fsdata = NULL;
+}
+
 void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
@@ -1901,6 +1902,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_vino vino;
 	int mask;
 	struct qstr dname;
+	int release = 0;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		return;
@@ -1932,45 +1934,66 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* lookup inode */
 	inode = ceph_find_inode(sb, vino);
-	dout(20, "handle_lease action is %d, mask %d, ino %llx %p\n", h->action,
-	     mask, vino.ino, inode);
+	dout(20, "handle_lease '%s', mask %d, ino %llx %p\n",
+	     ceph_lease_op_name(h->action), mask, vino.ino, inode);
 	if (inode == NULL) {
 		dout(10, "handle_lease no inode %llx\n", vino.ino);
 		goto release;
 	}
-
-	BUG_ON(h->action != CEPH_MDS_LEASE_REVOKE);  /* for now */
-
-	/* inode */
 	ci = ceph_inode(inode);
 
 	/* dentry */
-	if (mask & CEPH_LOCK_DN) {
-		parent = d_find_alias(inode);
-		if (!parent) {
-			dout(10, "no parent dentry on inode %p\n", inode);
-			WARN_ON(1);
-			goto release;  /* hrm... */
-		}
-		dname.hash = full_name_hash(dname.name, dname.len);
-		dentry = d_lookup(parent, &dname);
-		dput(parent);
-		if (!dentry)
-			goto release;
-		di = ceph_dentry(dentry);
+	parent = d_find_alias(inode);
+	if (!parent) {
+		dout(10, "no parent dentry on inode %p\n", inode);
+		WARN_ON(1);
+		goto release;  /* hrm... */
+	}
+	dname.hash = full_name_hash(dname.name, dname.len);
+	dentry = d_lookup(parent, &dname);
+	dput(parent);
+	if (!dentry)
+		goto release;
+
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	switch (h->action) {
+	case CEPH_MDS_LEASE_REVOKE:
 		if (di && di->lease_session == session) {
 			h->seq = cpu_to_le32(di->lease_seq);
-			revoke_dentry_lease(dentry);
+			__ceph_mdsc_drop_dentry_lease(dentry);
 		}
-		dput(dentry);
+		release = 1;
+		break;
+
+	case CEPH_MDS_LEASE_RENEW:
+		if (di && di->lease_session == session &&
+		    di->lease_gen == session->s_cap_gen) {
+			unsigned long duration =
+				le32_to_cpu(h->duration_ms) * HZ / 1000;
+
+			di->lease_seq = le32_to_cpu(h->seq);
+			dentry->d_time = le64_to_cpu(h->renew_start) +
+				duration;
+			di->lease_renew_after = le64_to_cpu(h->renew_start) +
+				(duration >> 1);
+		}
+		break;
 	}
+	spin_unlock(&dentry->d_lock);
+	dput(dentry);
+
+	if (!release)
+		goto out;
 
 release:
-	iput(inode);
 	/* let's just reuse the same message */
 	h->action = CEPH_MDS_LEASE_REVOKE_ACK;
 	ceph_msg_get(msg);
 	ceph_send_msg_mds(mdsc, msg, mds);
+
+out:
+	iput(inode);
 	mutex_unlock(&session->s_mutex);
 	ceph_put_mds_session(session);
 	return;
@@ -1979,6 +2002,36 @@ bad:
 	dout(0, "corrupt lease message\n");
 }
 
+void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
+			      struct inode *inode,
+			      struct dentry *dentry, char action,
+			      u32 seq)
+{
+	struct ceph_msg *msg;
+	struct ceph_mds_lease *lease;
+	int len = sizeof(*lease) + sizeof(u32);
+	int dnamelen = 0;
+
+	dout(0, "lease_send_msg inode %p dentry %p %s to mds%d\n",
+	     inode, dentry, ceph_lease_op_name(action), mds);
+	dnamelen = dentry->d_name.len;
+	len += dnamelen;
+
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, NULL);
+	if (IS_ERR(msg))
+		return;
+	lease = msg->front.iov_base;
+	lease->action = action;
+	lease->mask = cpu_to_le16(CEPH_LOCK_DN);
+	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
+	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
+	lease->seq = cpu_to_le32(seq);
+	lease->renew_start = cpu_to_le64(jiffies);
+	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
+	memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
+	       dnamelen);
+	ceph_send_msg_mds(mdsc, msg, mds);
+}
 
 /*
  * Preemptively release a lease we expect to invalidate anyway.
@@ -1987,60 +2040,38 @@ bad:
 void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 			     struct dentry *dentry, int mask)
 {
-	struct ceph_msg *msg;
-	struct ceph_mds_lease *lease;
 	struct ceph_dentry_info *di;
-	int origmask = mask;
 	int mds = -1;
-	int len = sizeof(*lease) + sizeof(u32);
-	int dnamelen = 0;
+	u32 seq;
 
 	BUG_ON(inode == NULL);
 	BUG_ON(dentry == NULL);
+	BUG_ON(mask != CEPH_LOCK_DN);
 
 	/* is dentry lease valid? */
-	if (mask & CEPH_LOCK_DN) {
-		spin_lock(&dentry->d_lock);
-		di = ceph_dentry(dentry);
-		if (di &&
-		    di->lease_session->s_mds >= 0 &&
-		    di->lease_gen == di->lease_session->s_cap_gen &&
-		    time_before(jiffies, dentry->d_time)) {
-			/* we do have a lease on this dentry; note mds */
-			mds = di->lease_session->s_mds;
-			dnamelen = dentry->d_name.len;
-			len += dentry->d_name.len;
-		} else {
-			mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
-		}
-		spin_unlock(&dentry->d_lock);
-	} else {
-		mask &= ~CEPH_LOCK_DN;  /* no lease; clear DN bit */
-	}
-
-	if (mask == 0) {
+	spin_lock(&dentry->d_lock);
+	di = ceph_dentry(dentry);
+	if (!di ||
+	    di->lease_session->s_mds < 0 ||
+	    di->lease_gen != di->lease_session->s_cap_gen ||
+	    !time_before(jiffies, dentry->d_time)) {
 		dout(10, "lease_release inode %p dentry %p -- "
 		     "no lease on %d\n",
-		     inode, dentry, origmask);
-		return;  /* nothing to drop */
-	}
-	BUG_ON(mds < 0);
-
-	dout(10, "lease_release inode %p dentry %p %d mask %d to mds%d\n",
-	     inode, dentry, dnamelen, mask, mds);
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_LEASE, len, 0, 0, NULL);
-	if (IS_ERR(msg))
+		     inode, dentry, mask);
+		spin_unlock(&dentry->d_lock);
 		return;
-	lease = msg->front.iov_base;
-	lease->action = CEPH_MDS_LEASE_RELEASE;
-	lease->mask = cpu_to_le16(mask);
-	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
-	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
-	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
-	if (dentry)
-		memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
-		       dnamelen);
-	ceph_send_msg_mds(mdsc, msg, mds);
+	}
+
+	/* we do have a lease on this dentry; note mds and seq */
+	mds = di->lease_session->s_mds;
+	seq = di->lease_seq;
+	__ceph_mdsc_drop_dentry_lease(dentry);
+	spin_unlock(&dentry->d_lock);
+
+	dout(10, "lease_release inode %p dentry %p mask %d to mds%d\n",
+	     inode, dentry, mask, mds);
+	ceph_mdsc_lease_send_msg(mdsc, mds, inode, dentry,
+				 CEPH_MDS_LEASE_RELEASE, seq);
 }
 
 

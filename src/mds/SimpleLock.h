@@ -61,7 +61,8 @@ public:
     case LOCK_SYNC_EXCL: return "sync->excl";
     case LOCK_LOCK_EXCL: return "lock->excl";      
 
-    case LOCK_SYNC_MIX: return "sync->scatter";
+    case LOCK_SYNC_MIX: return "sync->mix";
+    case LOCK_SYNC_MIX2: return "sync->mix(2)";
     case LOCK_LOCK_TSYN: return "lock->tsyn";
       
     case LOCK_MIX_LOCK: return "mix->lock";
@@ -73,7 +74,7 @@ public:
     case LOCK_TSYN: return "tsyn";
 
     case LOCK_MIX_SYNC: return "mix->sync";
-    case LOCK_MIX_SYNC2: return "mix->sync2";
+    case LOCK_MIX_SYNC2: return "mix->sync(2)";
     case LOCK_EXCL_MIX: return "excl->mix";
     case LOCK_MIX_EXCL: return "mix->excl";
 

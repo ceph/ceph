@@ -26,18 +26,9 @@ using namespace std;
 
 #include "mon/MonMap.h"
 
-/*
-
-./monmaptool -f .ceph_monmap
-./monmaptool -f .ceph_monmap --create --clobber --add 1.2.3.4:12345
-./monmaptool -f .ceph_monmap --add 1.2.3.4:12345
-./monmaptool -f .ceph_monmap --rm 1.2.3.4:12345
-
- */
-
-void usage(const char *me)
+void usage()
 {
-  cout << me << " usage: [--print] [--create [--clobber]] [--add 1.2.3.4:567] [--rm 1.2.3.4:567] <mapfilename>" << std::endl;
+  cout << " usage: [--print] [--create [--clobber]] [--add 1.2.3.4:567] [--rm 1.2.3.4:567] <mapfilename>" << std::endl;
   exit(1);
 }
 
@@ -54,6 +45,7 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  DEFINE_CONF_VARS(usage);
 
   const char *me = argv[0];
 
@@ -64,24 +56,25 @@ int main(int argc, const char **argv)
   bool modified = false;
   list<entity_addr_t> add, rm;
 
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--print") == 0)
-      print = true;
-    else if (strcmp(args[i], "--create") == 0) 
-      create = true;
-    else if (strcmp(args[i], "--clobber") == 0) 
-      clobber = true;
-    else if (strcmp(args[i], "--add") == 0 ||
-	     strcmp(args[i], "--rm") == 0) {
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("print", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&print, OPT_BOOL);
+    } else if (CONF_ARG_EQ("create", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&create, OPT_BOOL);
+    } else if (CONF_ARG_EQ("clobber", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
+    } else if (CONF_ARG_EQ("add", '\0') ||
+               CONF_ARG_EQ("rm", '\0')) {
+      bool is_add=CONF_ARG_EQ("add", '\0');
       if (++i >= args.size())
-	usage(me);
+	usage();
       entity_addr_t addr;
       if (!parse_ip_port(args[i], addr)) {
 	cerr << me << ": invalid ip:port '" << args[i] << "'" << std::endl;
 	return -1;
       }
       //inst.name = entity_name_t::MON(monmap.size());
-      if (strcmp(args[i-1], "--add") == 0)
+      if (is_add)
 	add.push_back(addr);
       else 
 	rm.push_back(addr);
@@ -89,12 +82,12 @@ int main(int argc, const char **argv)
     } else if (!fn)
       fn = args[i];
     else {
-      cout << "what is '" << args[i] << "'" << std::endl;
-      usage(me);
+      cout << "invalid argument: '" << args[i] << "'" << std::endl;
+      usage();
     }
   }
   if (!fn)
-    usage(me);
+    usage();
   
   MonMap monmap;
 
@@ -126,12 +119,12 @@ int main(int argc, const char **argv)
     cout << me << ": removing " << *p << std::endl;
     if (!monmap.remove(*p)) {
       cerr << me << ": map does not contain " << *p << std::endl;
-      usage(me);
+      usage();
     }
   }
 
   if (!print && !modified)
-    usage(me);
+    usage();
 
   if (modified)
     monmap.epoch++;
@@ -146,7 +139,10 @@ int main(int argc, const char **argv)
 	 << " (" << monmap.size() << " monitors)" 
 	 << std::endl;
     int r = monmap.write(fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "monmaptool: error writing to '" << fn << "': " << strerror(-r) << std::endl;
+      return 1;
+    }
   }
   
 

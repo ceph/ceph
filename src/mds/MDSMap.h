@@ -75,64 +75,45 @@ class MDSMap {
   static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
   static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
   
-  static const char *get_state_name(int s) {
-    switch (s) {
-      // down and out
-    case STATE_STOPPED:    return "down:stopped";
-      /*
-    case STATE_DNE:        return "dne";
-    case STATE_DESTROYING: return "down:destroying";
-      // down and in
-    case STATE_FAILED:     return "down:failed";
-      */
-      // up and out
-    case STATE_BOOT:       return "up:boot";
-    case STATE_STANDBY:    return "up:standby";
-    case STATE_STANDBY_REPLAY:    return "up:standby-replay";
-    case STATE_CREATING:   return "up:creating";
-    case STATE_STARTING:   return "up:starting";
-      // up and in
-    case STATE_REPLAY:     return "up:replay";
-    case STATE_RESOLVE:    return "up:resolve";
-    case STATE_RECONNECT:  return "up:reconnect";
-    case STATE_REJOIN:     return "up:rejoin";
-    case STATE_ACTIVE:     return "up:active";
-    case STATE_STOPPING:   return "up:stopping";
-    default: assert(0);
-    }
-    return 0;
-  }
-
   struct mds_info_t {
-    int32_t mds;
+    string name;
+    int32_t rank;
     int32_t inc;
     int32_t state;
     version_t state_seq;
     entity_addr_t addr;
     utime_t laggy_since;
+    int standby_for_rank;
+    string standby_for_name;
 
-    mds_info_t() : mds(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
+    mds_info_t() : rank(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
 
-    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(mds), addr); }
+    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
     void encode(bufferlist& bl) const {
-      ::encode(mds, bl);
+      ::encode(name, bl);
+      ::encode(rank, bl);
       ::encode(inc, bl);
       ::encode(state, bl);
       ::encode(state_seq, bl);
       ::encode(addr, bl);
       ::encode(laggy_since, bl);
+      ::encode(standby_for_rank, bl);
+      ::encode(standby_for_name, bl);
     }
     void decode(bufferlist::iterator& bl) {
-      ::decode(mds, bl);
+      ::decode(name, bl);
+      ::decode(rank, bl);
       ::decode(inc, bl);
       ::decode(state, bl);
       ::decode(state_seq, bl);
       ::decode(addr, bl);
       ::decode(laggy_since, bl);
+      ::decode(standby_for_rank, bl);
+      ::decode(standby_for_name, bl);
     }
   };
   WRITE_CLASS_ENCODER(mds_info_t)
@@ -240,14 +221,14 @@ class MDSMap {
 	 p != mds_info.end();
 	 p++)
       if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_STOPPING)
-	s.insert(p->second.mds);
+	s.insert(p->second.rank);
   }
   void get_mds_set(set<int>& s, int state) {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++)
       if (p->second.state == state)
-	s.insert(p->second.mds);
+	s.insert(p->second.rank);
   } 
 
   int get_random_up_mds() {
@@ -258,11 +239,13 @@ class MDSMap {
     return p->first;
   }
 
-  bool find_standby_for(int mds, entity_addr_t &a) {
+  bool find_standby_for(int mds, string& name, entity_addr_t &a) {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++) {
-      if (p->second.mds == mds &&
+      if (p->second.rank == -1 &&
+	  (p->second.standby_for_rank == mds ||
+	   p->second.standby_for_name == name) &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	a = p->second.addr;
@@ -272,7 +255,9 @@ class MDSMap {
     for (map<entity_addr_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 p++) {
-      if (p->second.mds == -1 &&
+      if (p->second.rank == -1 &&
+	  p->second.standby_for_rank < 0 &&
+	  p->second.standby_for_name.length() == 0 &&
 	  p->second.state == MDSMap::STATE_STANDBY &&
 	  !p->second.laggy()) {
 	a = p->second.addr;
@@ -355,7 +340,7 @@ class MDSMap {
   
   int get_rank(const entity_addr_t& addr) {
     if (mds_info.count(addr))
-      return mds_info[addr].mds;
+      return mds_info[addr].rank;
     return -1;
   }
 

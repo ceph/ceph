@@ -13,7 +13,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 [--allhosts] [-c conffile.conf] [--clobber_old_data] [--mkbtrfs]"
+    echo "usage: $0 [--allhosts] [-c ceph.conf] [--clobber_old_data] [--mkbtrfs]"
     exit
 }
 
@@ -24,6 +24,7 @@ allhosts=0
 clobber=""
 mkbtrfs=0
 numosd=
+usecrushmapsrc=
 usecrushmap=
 verbose=0
 
@@ -41,7 +42,7 @@ case $1 in
     --mkbtrfs)
 	    mkbtrfs=1
 	    ;;
-    --conf_file | -c)
+    --conf | -c)
 	    [ "$2" == "" ] && usage_exit
 	    shift
 	    conf=$1
@@ -50,6 +51,11 @@ case $1 in
 	    [ "$2" == "" ] && usage_exit
 	    shift
 	    numosd=$1
+	    ;;
+    --crushmapsrc)
+	    [ "$2" == "" ] && usage_exit
+	    shift
+	    usecrushmapsrc=$1
 	    ;;
     --crushmap)
 	    [ "$2" == "" ] && usage_exit
@@ -64,6 +70,8 @@ esac
 shift
 done
 
+verify_conf
+
 get_name_list "$@"
 
 # create the monmap if we're doing mon0
@@ -71,13 +79,17 @@ if [[ $what =~ "mon0" ]]; then
     # first, make a list of monitors
     mons=`$CCONF -c $conf -l mon | egrep -v '^mon$' | sort`
     args=""
-    for mon in $mons; do
-	get_conf addr "" "mon addr" mon0 mon global
+
+    type="mon"
+    for name in $mons; do
+	id=`echo $name | cut -c 4- | sed 's/\\.//'`
+	get_conf addr "" "mon addr"
 	args=$args" --add $addr"
     done
 
     # build monmap
     monmap="/tmp/monmap.$$"
+    echo $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
     $BINDIR/monmaptool --create --clobber $args --print $monmap || exit 1
 
     # build osdmap
@@ -90,11 +102,15 @@ if [[ $what =~ "mon0" ]]; then
     $BINDIR/osdmaptool --clobber --createsimple $numosd $osdmap || exit 1
 
     # import crush map?
-    get_conf crushmapsrc "$usecrushmap" "crush map" mon0 mon global
+    get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon0 mon global
     if [[ $crushmapsrc != "" ]]; then
-	echo Building crush map from $crushmapsrc
+	echo Compiling crush map from $crushmapsrc to $crushmap
 	crushmap="/tmp/crushmap.$$"
 	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
+    fi
+    get_conf crushmap "$usecrushmap" "crush map" mon0 mon global
+    if [[ $crushmap != "" ]]; then
+	echo Importing crush map from $crushmap
 	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
     fi
 fi
@@ -102,36 +118,34 @@ fi
 # create monitors, osds
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $name is 'mon1'
-    num=`echo $name | cut -c 4-`
-    sections="$name $type global"
+    id=`echo $name | cut -c 4- | sed 's/\\.//'`
+    num=$id
 
     check_host || continue
 
-    get_conf conf_file "$runtime_conf" "conf file" $sections
-
-    if [[ $ssh = 1 ]] && [[ ! $pushed_to =~ " $host " ]]; then
-	scp $osdmap $host:$osdmap
-	scp $monmap $host:$monmap
+    if [[ $ssh != "" ]] && [[ ! $pushed_to =~ " $host " ]]; then
+	scp -q $osdmap $host:$osdmap
+	scp -q $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
     fi
 
     if [[ $type = "mon" ]]; then
-	get_conf mon_data "" "mon data" $sections
-	do_cmd "$BINDIR/mkmonfs $clobber $mon_data --mon $num --monmap $monmap --osdmap $osdmap"
+	get_conf mon_data "" "mon data"
+	do_cmd "$BINDIR/mkmonfs $clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap"
     fi
 
     if [[ $type = "osd" ]]; then
-	get_conf osd_data "" "osd data" $sections
-	get_conf btrfs_path "$osd_data" "btrfs path" $sections  # mount point defaults so osd data
-	get_conf btrfs_devs "" "btrfs devs" $sections
+	get_conf osd_data "" "osd data"
+	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
+	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	
 	if [ $mkbtrfs -eq 1 ]; then
-	    do_cmd "modprobe btrfs ; umount $btrfs_path ; mkfs.btrfs $btrfs_devs ; mount -t btrfs $first_dev $btrfs_path"
+	    do_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
 	fi
 
 	[[ $ssh != "" ]] && scp $monmap $host:$monmap
-	do_cmd "$BINDIR/cosd -c $conf_file --monmap_file $monmap --mkfs_for_osd $num $osd_data"
+	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
     fi
 
     if [[ $type = "mds" ]]; then

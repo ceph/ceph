@@ -9,24 +9,24 @@ Package: ceph
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2
 Recommends: fuse-utils, ceph-fuse, ceph-kclient-source
-Description: Ceph distributed file system
+Description: distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
 
 Package: ceph-fuse
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse2
-Description: Ceph distributed file system
+Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
  .
- This is the ceph fuse package and contains the ceph fuse for mounting ceph
+ This is the ceph fuse package and contains the Ceph fuse for mounting ceph
  with fuse.
 
 Package: ceph-kclient-source
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Ceph distributed file system
+Depends: ${shlibs:Depends}, ${misc:Depends}, make
+Description: source for client kernel module for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
  .

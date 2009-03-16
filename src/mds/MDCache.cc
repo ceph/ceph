@@ -2367,9 +2367,9 @@ void MDCache::recalc_auth_bits()
 	      dnl->get_inode()->mark_clean();
 	    // avoid touching scatterlocks for our subtree roots!
 	    if (subtree_inodes.count(dnl->get_inode()) == 0) {
-	      dnl->get_inode()->filelock.clear_updated();
-	      dnl->get_inode()->nestlock.clear_updated();
-	      dnl->get_inode()->dirfragtreelock.clear_updated();
+	      dnl->get_inode()->filelock.clear_dirty();
+	      dnl->get_inode()->nestlock.clear_dirty();
+	      dnl->get_inode()->dirfragtreelock.clear_dirty();
 	    }
 	  }
 
@@ -4777,8 +4777,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from)
   dn->remove_replica(from);
 
   // fix lock
-  if (dn->lock.remove_replica(from) ||
-      !dn->is_replicated())
+  if (dn->lock.remove_replica(from))
     mds->locker->eval_gather(&dn->lock);
 }
 
@@ -5233,7 +5232,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   if (psnapdiri)
     *psnapdiri = 0;
 
-  int client = mdr->reqid.name.is_client() ? mdr->reqid.name.num() : -1;
+  int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
   // root
   CInode *cur = get_inode(origpath.get_ino());

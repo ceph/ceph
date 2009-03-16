@@ -12,8 +12,13 @@ v0.7
 /- proc/sysfs cleanup
 
 v0.8
-- fully async file creation
+/- O_DIRECT
+- kill fill_trace
+
 - ENOSPC
+- flock
+
+- fully async file creation
 - cas?
 
 big items
@@ -48,6 +53,7 @@ repair
 
 
 kernel client
+- inotify for updates from other clients?
 - optional or no fill_trace?
 - flock, fnctl locks
 - async xattrs
@@ -55,7 +61,6 @@ kernel client
 - avoid flushing tcp socket when sending client_lease release messages (when the request is about to follow)
 - make osd retry writes if failure after ack..
 - ACLs
-- reconnect path should include pathbase, not just a string?
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
@@ -94,6 +99,7 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
 - take some care with replayed client requests vs new requests
 - linkage vs cdentry replicas and remote rename....
 - move root inode into stray dir

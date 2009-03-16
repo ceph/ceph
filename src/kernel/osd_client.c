@@ -87,7 +87,8 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
 struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 					       struct ceph_file_layout *layout,
 					       struct ceph_vino vino,
-					       u64 off, u64 *plen, int opcode,
+					       u64 off, u64 *plen,
+					       int opcode, int flags,
 					       struct ceph_snap_context *snapc,
 					       int do_sync,
 					       u32 truncate_seq,
@@ -95,7 +96,6 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 {
 	struct ceph_osd_request *req;
 	struct ceph_msg *msg;
-	int num_pages = calc_pages_for(off, *plen);
 	struct ceph_osd_request_head *head;
 	struct ceph_osd_op *op;
 	__le64 *snaps;
@@ -106,7 +106,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	u64 prevofs;
 
 	/* we may overallocate here, if our write extent is shortened below */
-	req = kzalloc(sizeof(*req) + num_pages*sizeof(void *), GFP_NOFS);
+	req = kzalloc(sizeof(*req), GFP_NOFS);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -124,7 +124,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	snaps = (void *)(op + num_op);
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
-	head->flags = 0;
+	head->flags = cpu_to_le32(flags);
 	head->num_ops = cpu_to_le16(num_op);
 	op->op = cpu_to_le16(opcode);
 
@@ -194,6 +194,7 @@ static int register_request(struct ceph_osd_client *osdc,
 		      round_jiffies_relative(req->r_timeout_stamp - jiffies));
 	}
 
+	ceph_sysfs_osd_req_init(osdc, req);
 out:
 	mutex_unlock(&osdc->request_mutex);
 	return rc;
@@ -276,13 +277,14 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 	osdc->num_requests--;
 	ceph_osdc_put_request(req);
 
+	ceph_sysfs_osd_req_cleanup(req);
+
 	if (req->r_tid == osdc->timeout_tid) {
 		if (osdc->num_requests == 0) {
 			dout(30, "no requests, canceling timeout\n");
 			osdc->timeout_tid = 0;
 			cancel_delayed_work(&osdc->timeout_work);
 		} else {
-			struct ceph_osd_request *req;
 			int ret;
 
 			ret = radix_tree_gang_lookup(&osdc->request_tree,
@@ -652,7 +654,8 @@ int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
 	}
 	dout(10, "prepare_pages tid %llu has %d pages, want %d\n",
 	     tid, req->r_num_pages, want);
-	if (likely(req->r_num_pages >= want && req->r_reply == NULL)) {
+	if (likely(req->r_num_pages >= want && req->r_reply == NULL &&
+		    !req->r_aborted)) {
 		m->pages = req->r_pages;
 		m->nr_pages = req->r_num_pages;
 		ceph_msg_get(m);
@@ -763,192 +766,35 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 	}
 }
 
-
-
 /*
- * synchronous read direct to user buffer.
- *
- * if read spans object boundary, just do two separate reads.
- *
- * FIXME: for a correct atomic read, we should take read locks on all
- * objects.
- */
-int ceph_osdc_sync_read(struct ceph_osd_client *osdc, struct ceph_vino vino,
-			struct ceph_file_layout *layout,
-			u64 off, u64 len,
-			u32 truncate_seq, u64 truncate_size,
-			char __user *data)
-{
-	struct ceph_osd_request *req;
-	int i, po, left, l;
-	int rc;
-	int finalrc = 0;
-
-	dout(10, "sync_read on vino %llx.%llx at %llu~%llu\n", vino.ino,
-	     vino.snap, off, len);
-
-more:
-	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, NULL, 0,
-				    truncate_seq, truncate_size);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-
-	dout(10, "sync_read %llu~%llu -> %d pages\n", off, len,
-	     req->r_num_pages);
-
-	/* allocate temp pages to hold data */
-	for (i = 0; i < req->r_num_pages; i++) {
-		req->r_pages[i] = alloc_page(GFP_NOFS);
-		if (req->r_pages[i] == NULL) {
-			req->r_num_pages = i+1;
-			ceph_osdc_put_request(req);
-			return -ENOMEM;
-		}
-	}
-
-	rc = do_sync_request(osdc, req);
-	if (rc > 0) {
-		/* copy into user buffer */
-		po = off & ~PAGE_CACHE_MASK;
-		left = rc;
-		i = 0;
-		while (left > 0) {
-			int bad;
-			l = min_t(int, left, PAGE_CACHE_SIZE-po);
-			bad = copy_to_user(data,
-					   page_address(req->r_pages[i]) + po,
-					   l);
-			if (bad == l) {
-				rc = -EFAULT;
-				goto out;
-			}
-			data += l - bad;
-			left -= l - bad;
-			if (po) {
-				po += l - bad;
-				if (po == PAGE_CACHE_SIZE)
-					po = 0;
-			}
-			i++;
-		}
-	}
-out:
-	ceph_osdc_put_request(req);
-	if (rc > 0) {
-		finalrc += rc;
-		off += rc;
-		len -= rc;
-		if (len > 0)
-			goto more;
-	} else {
-		finalrc = rc;
-	}
-	dout(10, "sync_read result %d\n", finalrc);
-	return finalrc;
-}
-
-/*
- * Read a single page.  Return number of bytes read (or zeroed).
- */
-int ceph_osdc_readpage(struct ceph_osd_client *osdc, struct ceph_vino vino,
-		       struct ceph_file_layout *layout,
-		       u64 off, u64 len,
-		       u32 truncate_seq, u64 truncate_size,
-		       struct page *page)
-{
-	struct ceph_osd_request *req;
-	int rc, read = 0;
-
-	dout(10, "readpage on ino %llx.%llx at %lld~%lld\n", vino.ino,
-	     vino.snap, off, len);
-	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, NULL, 0,
-				    truncate_seq, truncate_size);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	BUG_ON(len != PAGE_CACHE_SIZE);
-
-	req->r_pages[0] = page;
-	rc = do_sync_request(osdc, req);
-
-	if (rc >= 0) {
-		read = rc;
-		rc = len;
-	} else if (rc == -ENOENT) {
-		rc = len;
-	}
-
-	if (read < PAGE_CACHE_SIZE) {
-		dout(10, "readpage zeroing %p from %d\n", page, read);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-		zero_user_segment(page, read, PAGE_CACHE_SIZE);
-#else
-		zero_user_page(page, read, PAGE_CACHE_SIZE-read, KM_USER0);
-#endif
-	}
-
-	ceph_osdc_put_request(req);
-	dout(10, "readpage result %d\n", rc);
-	return rc;
-}
-
-/*
- * Read some contiguous pages from page_list.  Return number of bytes
- * read (or zeroed).
+ * Read some contiguous pages.  Return number of bytes read (or
+ * zeroed).
  */
 int ceph_osdc_readpages(struct ceph_osd_client *osdc,
-			struct address_space *mapping,
 			struct ceph_vino vino, struct ceph_file_layout *layout,
 			u64 off, u64 len,
 			u32 truncate_seq, u64 truncate_size,
-			struct list_head *page_list, int num_pages)
+			struct page **pages, int num_pages)
 {
 	struct ceph_osd_request *req;
-	struct ceph_osd_request_head *reqhead;
-	struct ceph_osd_op *op;
+	int i;
 	struct page *page;
-	pgoff_t next_index;
-	int contig_pages = 0;
-	int i = 0;
 	int rc = 0, read = 0;
 
-	/*
-	 * for now, our strategy is simple: start with the
-	 * initial page, and fetch as much of that object as
-	 * we can that falls within the range specified by
-	 * num_pages.
-	 */
 	dout(10, "readpages on ino %llx.%llx on %llu~%llu\n", vino.ino,
 	     vino.snap, off, len);
-
-	/* alloc request, w/ optimistically-sized page vector */
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, NULL, 0,
+				    CEPH_OSD_OP_READ, 0, NULL, 0,
 				    truncate_seq, truncate_size);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
-	/* build vector from page_list */
-	next_index = list_entry(page_list->prev, struct page, lru)->index;
-	list_for_each_entry_reverse(page, page_list, lru) {
-		if (page->index == next_index) {
-			dout(20, "readpages page %d %p\n", contig_pages, page);
-			req->r_pages[contig_pages] = page;
-			contig_pages++;
-			next_index++;
-		} else {
-			break;
-		}
-	}
-	BUG_ON(!contig_pages);
-	len = min((contig_pages << PAGE_CACHE_SHIFT) - (off & ~PAGE_CACHE_MASK),
-		  len);
-	req->r_num_pages = contig_pages;
-	reqhead = req->r_request->front.iov_base;
-	op = (void *)(reqhead + 1);
-	op->length = cpu_to_le64(len);
-	dout(10, "readpages final extent is %llu~%llu -> %d pages\n",
+	/* it may be a short read due to an object boundary */
+	req->r_pages = pages;
+	num_pages = calc_pages_for(off, len);
+	req->r_num_pages = num_pages;
+
+	dout(10, "readpages final extent is %llu~%llu (%d pages)\n",
 	     off, len, req->r_num_pages);
 	rc = do_sync_request(osdc, req);
 
@@ -960,10 +806,10 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	}
 
 	/* zero trailing pages on success */
-	if (read < (contig_pages << PAGE_CACHE_SHIFT)) {
+	if (read < (num_pages << PAGE_CACHE_SHIFT)) {
 		if (read & ~PAGE_CACHE_MASK) {
 			i = read >> PAGE_CACHE_SHIFT;
-			page = req->r_pages[i];
+			page = pages[i];
 			dout(20, "readpages zeroing %d %p from %d\n", i, page,
 			     (int)(read & ~PAGE_CACHE_MASK));
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
@@ -976,7 +822,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 #endif
 			read += PAGE_CACHE_SIZE;
 		}
-		for (i = read >> PAGE_CACHE_SHIFT; i < contig_pages; i++) {
+		for (i = read >> PAGE_CACHE_SHIFT; i < num_pages; i++) {
 			page = req->r_pages[i];
 			dout(20, "readpages zeroing %d %p\n", i, page);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
@@ -992,139 +838,40 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	return rc;
 }
 
-
 /*
- * synchronous write.  from userspace.
- *
- * FIXME: if write spans object boundary, just do two separate write.
- * for a correct atomic write, we should take write locks on all
- * objects, rollback on failure, etc.
- */
-int ceph_osdc_sync_write(struct ceph_osd_client *osdc, struct ceph_vino vino,
-			 struct ceph_file_layout *layout,
-			 struct ceph_snap_context *snapc,
-			 u64 off, u64 len,
-			 u32 truncate_seq, u64 truncate_size,
-			 const char __user *data)
-{
-	struct ceph_msg *reqm;
-	struct ceph_osd_request_head *reqhead;
-	struct ceph_osd_request *req;
-	int i, po, l, left;
-	int rc;
-	int finalrc = 0;
-
-	dout(10, "sync_write on ino %llx.%llx at %llu~%llu\n", vino.ino,
-	     vino.snap, off, len);
-
-more:
-	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_WRITE, snapc, 0,
-				    truncate_seq, truncate_size);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	reqm = req->r_request;
-	reqhead = reqm->front.iov_base;
-	reqhead->flags =
-		cpu_to_le32(CEPH_OSD_OP_ACK |           /* ack for now, FIXME */
-			    CEPH_OSD_OP_ORDERSNAP |     /* EOLDSNAPC if ooo */
-			    CEPH_OSD_OP_MODIFY);
-
-	dout(10, "sync_write %llu~%llu -> %d pages\n", off, len,
-	     req->r_num_pages);
-
-	/* copy data into a set of pages */
-	left = len;
-	po = off & ~PAGE_MASK;
-	for (i = 0; i < req->r_num_pages; i++) {
-		int bad;
-		req->r_pages[i] = alloc_page(GFP_NOFS);
-		if (req->r_pages[i] == NULL) {
-			req->r_num_pages = i+1;
-			rc = -ENOMEM;
-			goto out;
-		}
-		l = min_t(int, PAGE_SIZE-po, left);
-		bad = copy_from_user(page_address(req->r_pages[i]) + po, data,
-				     l);
-		if (bad == l) {
-			req->r_num_pages = i+1;
-			rc = -EFAULT;
-			goto out;
-		}
-		data += l - bad;
-		left -= l - bad;
-		if (po) {
-			po += l - bad;
-			if (po == PAGE_CACHE_SIZE)
-				po = 0;
-		}
-	}
-	reqm->pages = req->r_pages;
-	reqm->nr_pages = req->r_num_pages;
-	reqm->hdr.data_len = cpu_to_le32(len);
-	reqm->hdr.data_off = cpu_to_le16(off);
-
-	rc = do_sync_request(osdc, req);
-out:
-	for (i = 0; i < req->r_num_pages; i++)
-		__free_pages(req->r_pages[i], 0);
-	ceph_osdc_put_request(req);
-	if (rc == 0) {
-		finalrc += len;
-		off += len;
-		len -= len;
-		if (len > 0)
-			goto more;
-	} else {
-		finalrc = rc;
-	}
-	dout(10, "sync_write result %d\n", finalrc);
-	return finalrc;
-}
-
-/*
- * do a sync write for N pages
+ * do a sync write on N pages
  */
 int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct ceph_file_layout *layout,
 			 struct ceph_snap_context *snapc,
 			 u64 off, u64 len,
 			 u32 truncate_seq, u64 truncate_size,
-			 struct page **pages, int num_pages)
+			 struct page **pages, int num_pages,
+			 int flags, int do_sync)
 {
 	struct ceph_msg *reqm;
-	struct ceph_osd_request_head *reqhead;
-	struct ceph_osd_op *op;
 	struct ceph_osd_request *req;
 	int rc = 0;
-	int flags;
 
 	BUG_ON(vino.snap != CEPH_NOSNAP);
-
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_WRITE, snapc, 0,
+				    CEPH_OSD_OP_WRITE,
+				    flags | CEPH_OSD_OP_ONDISK |
+				    CEPH_OSD_OP_MODIFY,
+				    snapc, do_sync,
 				    truncate_seq, truncate_size);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	reqm = req->r_request;
-	reqhead = reqm->front.iov_base;
-	op = (void *)(reqhead + 1);
 
-	flags = CEPH_OSD_OP_MODIFY;
-	if (osdc->client->mount_args.flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
-		flags |= CEPH_OSD_OP_ACK;
-	else
-		flags |= CEPH_OSD_OP_ONDISK;
-	reqhead->flags = cpu_to_le32(flags);
-
-	len = le64_to_cpu(op->length);
-	dout(10, "writepages %llu~%llu -> %d pages\n", off, len,
+	/* it may be a short write due to an object boundary */
+	req->r_pages = pages;
+	req->r_num_pages = calc_pages_for(off, len);
+	dout(10, "writepages %llu~%llu (%d pages)\n", off, len,
 	     req->r_num_pages);
 
-	/* copy page vector */
-	memcpy(req->r_pages, pages, req->r_num_pages * sizeof(struct page *));
-	reqm->pages = req->r_pages;
+	/* set up data payload */
+	reqm = req->r_request;
+	reqm->pages = pages;
 	reqm->nr_pages = req->r_num_pages;
 	reqm->hdr.data_len = cpu_to_le32(len);
 	reqm->hdr.data_off = cpu_to_le16(off);
@@ -1138,7 +885,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 }
 
 /*
- * start an async multipage write
+ * start an async write
  */
 int ceph_osdc_writepages_start(struct ceph_osd_client *osdc,
 			       struct ceph_osd_request *req,

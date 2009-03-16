@@ -64,18 +64,59 @@ extern struct sm_t sm_scatterlock;
 
 #define LOCK_MIX      14
 #define LOCK_SYNC_MIX 15
-#define LOCK_LOCK_MIX 16
-#define LOCK_EXCL_MIX 17
-#define LOCK_MIX_SYNC 18
-#define LOCK_MIX_SYNC2 19
-#define LOCK_MIX_LOCK 20
-#define LOCK_MIX_EXCL 21
+#define LOCK_SYNC_MIX2 16
+#define LOCK_LOCK_MIX 17
+#define LOCK_EXCL_MIX 18
+#define LOCK_MIX_SYNC 19
+#define LOCK_MIX_SYNC2 20
+#define LOCK_MIX_LOCK 21
+#define LOCK_MIX_EXCL 22
 
-#define LOCK_TSYN      22
-#define LOCK_TSYN_LOCK 23
-#define LOCK_TSYN_MIX  24
-#define LOCK_LOCK_TSYN 25
-#define LOCK_MIX_TSYN  26
+#define LOCK_TSYN      23
+#define LOCK_TSYN_LOCK 24
+#define LOCK_TSYN_MIX  25
+#define LOCK_LOCK_TSYN 26
+#define LOCK_MIX_TSYN  27
+
+
+// -------------------------
+// lock actions
+
+// for replicas
+#define LOCK_AC_SYNC        -1
+#define LOCK_AC_MIX         -2
+#define LOCK_AC_LOCK        -3
+
+// for auth
+#define LOCK_AC_SYNCACK      1
+#define LOCK_AC_MIXACK     2
+#define LOCK_AC_LOCKACK      3
+
+#define LOCK_AC_REQSCATTER   7
+#define LOCK_AC_REQUNSCATTER 8
+#define LOCK_AC_NUDGE        9
+
+#define LOCK_AC_FOR_REPLICA(a)  ((a) < 0)
+#define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
+
+
+static inline const char *get_lock_action_name(int a) {
+  switch (a) {
+  case LOCK_AC_SYNC: return "sync";
+  case LOCK_AC_MIX: return "mix";
+  case LOCK_AC_LOCK: return "lock";
+
+  case LOCK_AC_SYNCACK: return "syncack";
+  case LOCK_AC_MIXACK: return "mixack";
+  case LOCK_AC_LOCKACK: return "lockack";
+
+  case LOCK_AC_REQSCATTER: return "reqscatter";
+  case LOCK_AC_REQUNSCATTER: return "requnscatter";
+  case LOCK_AC_NUDGE: return "nudge";
+  default: return "???";
+  }
+}
+
 
 
 #endif

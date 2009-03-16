@@ -1,0 +1,61 @@
+.TH MONMAPTOOL 8
+.SH NAME
+monmaptool \- ceph monutir cluster map manipulation tool
+.SH SYNOPSIS
+.B monmaptool
+\fImapfilename\fP
+[ \fB\-\-clobber\fR ]
+[ \fB\-\-print\fR ]
+[ \fB\-\-create\fR ]
+[ \fB\-\-add \fIip:port\fP ... ]
+[ \fB\-\-rm \fIip:port\fP ... ]
+.SH DESCRIPTION
+.B monmaptool
+is a utility to create, view, and modify a monitor cluster map for the
+Ceph distributed file system.  The monitor map specifies the only fixed
+addresses in the Ceph distributed system.  All other daemons bind to
+arbitrary addresses and register themselves with the monitors.
+.PP
+When creating a map with \fB\-\-create\fP, a new monitor map with a
+new, random UUID will be created.  It should be followed by one or
+more monitor addresses.
+.PP
+The default Ceph monitor port is \fB6789\fP.
+.SH OPTIONS
+.TP
+\fB\-\-print\fP
+will print a plaintext dump of the map, after any modifications are made.
+.TP
+\fB\-\-clobber\fP
+will allow
+.B monmaptool
+to overwrite \fImapfilename\fP if changes are made.
+.TP
+\fB\-\-create\fP
+will create a new monitor map with a new UUID (and with it, a new, empty Ceph file system).
+.TP
+\fB\-\-add\fI ip:port\fP
+will add a monitor with the specified \fIip:port\fP to the map.
+.TP
+\fB\-\-rm\fI ip:port\fP
+will remove the monitor with the specified \fIip:port\fP from the map.
+.SH EXAMPLE
+To create a new map with three monitors (for a fresh Ceph file system):
+.IP
+monmaptool --create --add 192.168.0.10:6789 --add 192.168.0.11:6789 --add 192.168.0.12:6789 --clobber monmap
+.PP
+To display the contents of the map:
+.IP
+monmaptool --print onmap
+.PP
+To replace one monitor:
+.IP
+monmaptool --rm 192.168.0.10:6789 --add 192.168.0.9:6789 --clobber monmap
+.SH AVAILABILITY
+.B monmaptool
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR crushtool (8),
+.BR mkcephfs (8)

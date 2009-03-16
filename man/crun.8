@@ -1,0 +1,25 @@
+.TH CRUN 8
+.SH NAME
+crun \- restart daemon on core dump
+.SH SYNOPSIS
+.B crun
+\fIcommand ...\fP
+.SH DESCRIPTION
+.B crun
+is a simple wrapper that will restart a daemon if it exits with
+a signal indicating it crashed and possibly core dumped (that is,
+signals 3, 4, 5, 6, 8, or 11).
+.PP
+The \fIcommand\fP should run the daemon in the foreground.  For 
+Ceph daemons, that means the \fB-f\fP option.
+.SH OPTIONS
+None
+.SH AVAILABILITY
+.B crun
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR cmon (8),
+.BR cmds (8),
+.BR cosd (8)

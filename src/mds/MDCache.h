@@ -215,7 +215,7 @@ struct Mutation {
     for (list<ScatterLock*>::iterator p = updated_locks.begin();
 	 p != updated_locks.end();
 	 p++)
-      (*p)->set_updated();
+      (*p)->mark_dirty();
   }
 
   void cleanup() {

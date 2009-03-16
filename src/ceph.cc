@@ -377,18 +377,21 @@ int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 
 void usage() 
 {
-  cerr << "usage: ceph [options] monhost] command" << std::endl;
-  cerr << "Options:" << std::endl;
-  cerr << "   -m monhost        -- specify monitor hostname or ip" << std::endl;
-  cerr << "   -i infile         -- specify input file" << std::endl;
-  cerr << "   -o outfile        -- specify output file" << std::endl;
-  cerr << "   -w or --watch     -- watch mds, osd, pg status (push)" << std::endl;
-  cerr << "   -p or --poll      -- watch mds, osd, pg status (poll)" << std::endl;
+  cerr << "usage: ceph [options] [commands]" << std::endl;
+  cerr << "If no commands are specified, enter interactive mode.\n";
   cerr << "Commands:" << std::endl;
   cerr << "   stop              -- cleanly shut down file system" << std::endl
        << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
        << "   ..." << std::endl;
-  exit(1);
+  cerr << "Options:" << std::endl;
+  cerr << "   -i infile\n";
+  cerr << "   -o outfile\n";
+  cerr << "        specify input or output file (for certain commands)\n";
+  cerr << "   -w or --watch\n";
+  cerr << "        watch mds, osd, pg status changes in real time (push)\n";
+  cerr << "   -p or --poll\n";
+  cerr << "        watch mds, osd, pg status changes in real time (poll)\n";
+  generic_client_usage();
 }
 
 
@@ -517,12 +520,14 @@ int do_cli()
 
 
 
-int main(int argc, const char **argv, const char *envp[]) {
-
+int main(int argc, const char **argv, const char *envp[])
+{
+  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args);
+  common_init(args, "ceph");
+  char *fname;
 
   vec_to_argv(args, argc, argv);
 
@@ -530,11 +535,12 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   bufferlist indata;
   vector<const char*> nargs;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"-o") == 0) 
-      outfile = args[++i];
-    else if (strcmp(args[i], "-i") == 0) {
-      int fd = ::open(args[++i], O_RDONLY);
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("out_file", 'o')) {
+      CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
+    } else if (CONF_ARG_EQ("in_data", 'i')) {
+      CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
+      int fd = ::open(fname, O_RDONLY);
       struct stat st;
       if (::fstat(fd, &st) == 0) {
 	indata.push_back(buffer::create(st.st_size));
@@ -543,12 +549,15 @@ int main(int argc, const char **argv, const char *envp[]) {
 	::close(fd);
 	cout << "read " << st.st_size << " bytes from " << args[i] << std::endl;
       }
-    } else if (strcmp(args[i], "-w") == 0 ||
-	       strcmp(args[i], "--watch") == 0) {
-      observe = 1;
-    } else if (strcmp(args[i], "-p") == 0 ||
-	       strcmp(args[i], "--poll") == 0) {
-      watch = 1;
+    } else if (CONF_ARG_EQ("watch", 'w')) {
+      CONF_SAFE_SET_ARG_VAL(&observe, OPT_BOOL);
+    } else if (CONF_ARG_EQ("poll", 'p')) {
+      CONF_SAFE_SET_ARG_VAL(&watch, OPT_BOOL);
+    } else if (CONF_ARG_EQ("help", 'h')) {
+      usage();
+    } else if (args[i][0] == '-' && nargs.empty()) {
+      cerr << "unrecognized option " << args[i] << std::endl;
+      usage();
     } else
       nargs.push_back(args[i]);
   }

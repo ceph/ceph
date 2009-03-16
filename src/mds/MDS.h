@@ -117,9 +117,12 @@ class MDS : public Dispatcher {
   Mutex        mds_lock;
   SafeTimer    timer;
 
+  string name;
   int whoami;
   int incarnation;
   
+  int standby_for_rank;
+  string standby_for_name;
   int standby_replay_for;
 
   Messenger    *messenger;
@@ -155,7 +158,6 @@ class MDS : public Dispatcher {
   // -- MDS state --
   int state;         // my confirmed state
   int want_state;    // the state i want
-  int want_rank;     // the mds rank i want
 
   list<Context*> waiting_for_active;
   map<int, list<Context*> > waiting_for_active_peer;
@@ -263,7 +265,7 @@ class MDS : public Dispatcher {
  private:
   virtual bool dispatch_impl(Message *m);
  public:
-  MDS(int whoami, Messenger *m, MonMap *mm);
+  MDS(const char *n, Messenger *m, MonMap *mm);
   ~MDS();
 
   // who am i etc
@@ -279,7 +281,7 @@ class MDS : public Dispatcher {
 
 
   // start up, shutdown
-  int init(bool standby=false);
+  int init();
   void reopen_logger(utime_t start);
 
   void bcast_mds_map();  // to mounted clients

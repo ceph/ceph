@@ -360,7 +360,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 
     if (lump.is_dirty()) {
       dir->_mark_dirty(logseg);
-      dir->get_inode()->filelock.set_updated();
+      dir->get_inode()->filelock.mark_dirty();
+      dir->get_inode()->nestlock.mark_dirty();
     }
     if (lump.is_new())
       dir->mark_new(logseg);

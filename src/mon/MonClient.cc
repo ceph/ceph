@@ -65,8 +65,7 @@ int MonClient::probe_mon(MonMap *pmonmap)
 
   if (monmap_bl.length()) {
     pmonmap->decode(monmap_bl);
-    dout(2) << "get_monmap got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << dendl;
-    cout << "[got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << "]" << std::endl;
+    dout(1) << "[got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << "]" << dendl;
   }
   msgr->shutdown();
   msgr->destroy();
@@ -75,8 +74,7 @@ int MonClient::probe_mon(MonMap *pmonmap)
   if (monmap_bl.length())
     return 0;
 
-  cerr << "unable to fetch monmap from " << monaddrs
-       << ": " << strerror(errno) << std::endl;
+  cerr << "unable to fetch monmap from " << monaddrs << std::endl;
   return -1; // failed
 }
 
@@ -84,10 +82,22 @@ int MonClient::get_monmap(MonMap *pmonmap)
 {
   static string monstr;
 
+  if (g_conf.monmap) {
+    // file?
+    const char *monmap_fn = g_conf.monmap;
+    int r = pmonmap->read(monmap_fn);
+    if (r >= 0) {
+      dout(1) << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << dendl;
+      return 0;
+    }
+
+    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
+  }
+
   if (!g_conf.mon_host) {
     // cluster conf?
-    ConfFile a(g_conf.cluster_conf_file);
-    ConfFile b("cluster.conf");
+    ConfFile a(g_conf.conf);
+    ConfFile b("ceph.conf");
     ConfFile *c = 0;
 
     if (a.parse())
@@ -115,18 +125,6 @@ int MonClient::get_monmap(MonMap *pmonmap)
   if (g_conf.mon_host &&
       probe_mon(pmonmap) == 0)  
     return 0;
-
-  if (g_conf.monmap_file) {
-    // file?
-    const char *monmap_fn = g_conf.monmap_file;
-    int r = pmonmap->read(monmap_fn);
-    if (r >= 0) {
-      cout << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << std::endl;
-      return 0;
-    }
-
-    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
-  }
 
   cerr << "must specify monitor address (-m monaddr) or cluster conf (-C cluster.conf) or monmap file (-M monmap)" << std::endl;
   return -1;

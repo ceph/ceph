@@ -28,11 +28,11 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "common/common_init.h"
 
-void usage(const char *me)
+void usage()
 {
-  cout << me << " usage: [--print] [--createsimple <numosd> [--clobber] [--pgbits <bitsperosd>]] <mapfilename>" << std::endl;
-  cout << me << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
-  cout << me << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
+  cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pgbits <bitsperosd>]] <mapfilename>" << std::endl;
+  cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
+  cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
   exit(1);
 }
 
@@ -44,7 +44,8 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args);
+  DEFINE_CONF_VARS(usage);
+  common_init(args, "osdmaptool");
 
   const char *me = argv[0];
 
@@ -61,35 +62,34 @@ int main(int argc, const char **argv)
   list<entity_addr_t> add, rm;
   const char *test_map_pg = 0;
 
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--print") == 0 ||
-	strcmp(args[i], "-p") == 0)
-      print = true;
-    else if (strcmp(args[i], "--createsimple") == 0) {
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("print", 'p')) {
+      CONF_SAFE_SET_ARG_VAL(&print, OPT_BOOL);
+    } else if (CONF_ARG_EQ("createsimple", '\0')) {
       createsimple = true;
-      num_osd = atoi(args[++i]);
-    } else if (strcmp(args[i], "--clobber") == 0) 
-      clobber = true;
-    else if (strcmp(args[i], "--pg_bits") == 0)
-      pg_bits = atoi(args[++i]);
-    else if (strcmp(args[i], "--lpg_bits") == 0)
-      lpg_bits = atoi(args[++i]);
-    else if (strcmp(args[i], "--num_dom") == 0)
-      num_dom = atoi(args[++i]);
-    else if (strcmp(args[i], "--export-crush") == 0)
-      export_crush = args[++i];
-    else if (strcmp(args[i], "--import-crush") == 0)
-      import_crush = args[++i];
-    else if (strcmp(args[i], "--test-map-pg") == 0)
-      test_map_pg = args[++i];
-    else if (!fn)
+      CONF_SAFE_SET_ARG_VAL(&num_osd, OPT_INT);
+    } else if (CONF_ARG_EQ("clobber", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
+    } else if (CONF_ARG_EQ("pg_bits", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&pg_bits, OPT_INT);
+    } else if (CONF_ARG_EQ("lpg_bits", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&lpg_bits, OPT_INT);
+    } else if (CONF_ARG_EQ("num_dom", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&num_dom, OPT_INT);
+    } else if (CONF_ARG_EQ("export_crush", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&export_crush, OPT_STR);
+    } else if (CONF_ARG_EQ("import_crush", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&import_crush, OPT_STR);
+    } else if (CONF_ARG_EQ("test_map_pg", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&test_map_pg, OPT_STR);
+    } else if (!fn)
       fn = args[i];
     else 
-      usage(me);
+      usage();
   }
   if (!fn) {
     cerr << me << ": must specify osdmap filename" << std::endl;
-    usage(me);
+    usage();
   }
   
   OSDMap osdmap;
@@ -160,7 +160,7 @@ int main(int argc, const char **argv)
     if (pgid.parse(test_map_pg) < 0) {
       cerr << me << ": failed to parse pg '" << test_map_pg
 	   << "', r = " << r << std::endl;
-      usage(me);
+      usage();
     }
     cout << " parsed '" << test_map_pg << "' -> " << pgid << std::endl;
 
@@ -171,7 +171,7 @@ int main(int argc, const char **argv)
 
   if (!print && !modified && !export_crush && !import_crush && !test_map_pg) {
     cerr << me << ": no action specified?" << std::endl;
-    usage(me);
+    usage();
   }
 
   if (modified)
@@ -189,7 +189,10 @@ int main(int argc, const char **argv)
 	 << " to " << fn
 	 << std::endl;
     int r = bl.write_file(fn);
-    assert(r >= 0);
+    if (r < 0) {
+      cerr << "osdmaptool: error writing to '" << fn << "': " << strerror(-r) << std::endl;
+      return 1;
+    }
   }
   
 

@@ -33,31 +33,32 @@ using namespace std;
 
 #include "mon/MonClient.h"
 
+void usage()
+{
+  cerr << "usage: cmds -i name [flags] [--mds rank] [--shadow rank]\n";
+  cerr << "  -m monitorip:port\n";
+  cerr << "        connect to monitor at given address\n";
+  cerr << "  --debug_mds n\n";
+  cerr << "        debug MDS level (e.g. 10)\n";
+  generic_server_usage();
+}
+
 int main(int argc, const char **argv) 
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args);
+  configure_daemon_mode();
+  common_init(args, "mds");
 
   // mds specific args
-  const char *monhost = 0;
-  int whoami = -1;
-  bool standby = false;  // by default, i'll start active.
-  int standby_replay_for = -1;
   for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i], "--standby") == 0) 
-      standby = true;
-    else if (strcmp(args[i], "--mds") == 0) 
-      whoami = atoi(args[++i]);
-    else if (strcmp(args[i], "--standby_replay_for") == 0)
-      whoami = standby_replay_for = atoi(args[++i]);
-    else if (monhost == 0) 
-      monhost = args[i];
-    else {
-      cerr << "unrecognized arg " << args[i] << std::endl;
-      return -1;
-    }
+    cerr << "unrecognized arg " << args[i] << std::endl;
+    usage();
+  }
+  if (!g_conf.id) {
+    cerr << "must specify '-i name' with the cmds instance name" << std::endl;
+    usage();
   }
 
   if (g_conf.clock_tare) g_clock.tare();
@@ -69,9 +70,12 @@ int main(int argc, const char **argv)
     return -1;
 
   rank.bind();
-  cout << "starting mds? at " << rank.get_rank_addr() << std::endl;
+  cout << "starting mds." << g_conf.id
+       << " at " << rank.get_rank_addr() 
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
 
-  Messenger *m = rank.register_entity(entity_name_t::MDS(whoami));
+  Messenger *m = rank.register_entity(entity_name_t::MDS(-1));
   assert_warn(m);
   if (!m)
     return 1;
@@ -84,9 +88,8 @@ int main(int argc, const char **argv)
   rank.start();
   
   // start mds
-  MDS *mds = new MDS(whoami, m, &monmap);
-  mds->standby_replay_for = standby_replay_for;
-  mds->init(standby);
+  MDS *mds = new MDS(g_conf.id, m, &monmap);
+  mds->init();
   
   rank.wait();
 

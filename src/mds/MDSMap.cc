@@ -39,7 +39,7 @@ void MDSMap::print(ostream& out)
   for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
        p++)
-    foo.insert(pair<pair<unsigned,unsigned>,entity_addr_t>(pair<unsigned,unsigned>(p->second.mds, p->second.inc-1), p->first));
+    foo.insert(pair<pair<unsigned,unsigned>,entity_addr_t>(pair<unsigned,unsigned>(p->second.rank, p->second.inc-1), p->first));
 
   for (multimap< pair<unsigned,unsigned>, entity_addr_t >::iterator p = foo.begin();
        p != foo.end();
@@ -47,12 +47,22 @@ void MDSMap::print(ostream& out)
     mds_info_t& info = mds_info[p->second];
     
     out << info.addr
-	<< " mds" << info.mds
+	<< " '" << info.name << "'"
+	<< " mds" << info.rank
 	<< "." << info.inc
-	<< " " << get_state_name(info.state)
+	<< " " << ceph_mds_state_name(info.state)
 	<< " seq " << info.state_seq;
     if (info.laggy())
       out << " laggy since " << info.laggy_since;
+    if (info.standby_for_rank >= 0 ||
+	info.standby_for_rank >= 0) {
+      out << " (standby for";
+      if (info.standby_for_rank >= 0) 
+	out << " rank " << info.standby_for_rank;
+      if (info.standby_for_name.length())
+	out << " '" << info.standby_for_name << "'";
+      out << ")";
+    }
     out << "\n";    
   }
 
@@ -75,7 +85,7 @@ void MDSMap::print_summary(ostream& out)
   out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << "/" << max_mds << " up";
 
   for (map<int,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
-    out << ", " << p->second << " " << get_state_name(p->first);
+    out << ", " << p->second << " " << ceph_mds_state_name(p->first);
   
   if (failed.size())
     out << ", " << failed.size() << " failed";

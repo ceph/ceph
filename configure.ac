@@ -12,7 +12,7 @@ AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
 # Automake
-AM_INIT_AUTOMAKE(ceph, 0.7)
+AM_INIT_AUTOMAKE(ceph, 0.7.1)
 AM_PROG_CC_C_O
 
 # Platform
@@ -150,6 +150,7 @@ AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/io
 AC_CONFIG_HEADERS([src/acconfig.h])
 AC_CONFIG_FILES([Makefile
 	src/Makefile
+	man/Makefile
 	ceph.spec])
 AC_OUTPUT
 

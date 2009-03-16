@@ -1,0 +1,54 @@
+.TH COSD 8
+.SH NAME
+cosd \- ceph object storage daemon
+.SH SYNOPSIS
+.B cosd
+\fB\-i \fIosdnum\fR
+[ \fB\-\-osd\-data \fIdatapath\fR ]
+[ \fB\-\-osd\-journal \fIjournal\fR ]
+[ \fB\-\-mkfs\fR ]
+.SH DESCRIPTION
+.B cosd
+is the object storage daemon for the Ceph distributed file system.
+It is responsible for storing objects on a local file system and 
+providing access to them over the network.
+.PP
+The \fIdatapath\fP argument should be a directory on a btrfs file
+system where the object data resides.  The \fIjournal\fP is optional,
+and is only useful performance-wise when it resides on a different
+disk than \fIdatapath\fP with low latency (ideally, an NVRAM device).
+.SH OPTIONS
+.TP
+\fB\-D\fP
+Debug mode: do not daemonize after startup (run in foreground) and send log output
+to stdout.
+.TP
+\fB\-f\fP
+do not daemonize after startup (run in foreground), but log to the usual location.
+Useful when run via 
+.BR crun (8).
+.TP
+\fB\-\-osd\-data \fIosddata\fP
+Use object store at \fIosddata\fP.
+.TP
+\fB\-\-osd\-journal \fIjournal\fP
+Journal updates to \fIjournal\fP.
+.TP
+\fB\-\-mkfs\fP
+Create an empty object repository.  Normally invoked by
+.BR mkcephfs (8).
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+for runtime configuration options.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.SH AVAILABILITY
+.B cosd
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR cmds (8),
+.BR cmon (8)

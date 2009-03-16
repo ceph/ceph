@@ -44,8 +44,8 @@
 #define CEPH_MDS_PROTOCOL     5 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    5 /* public/client */
-#define CEPH_MDSC_PROTOCOL    7 /* public/client */
-#define CEPH_MONC_PROTOCOL    6 /* public/client */
+#define CEPH_MDSC_PROTOCOL    9 /* public/client */
+#define CEPH_MONC_PROTOCOL    7 /* public/client */
 
 
 /*
@@ -585,9 +585,6 @@ struct ceph_mds_getmap {
 #define CEPH_MDS_STATE_DNE         0  /* down, does not exist. */
 #define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees.
 					 empty log. */
-#define CEPH_MDS_STATE_DESTROYING -2  /* down, existing, semi-destroyed. */
-#define CEPH_MDS_STATE_FAILED      3  /* down, needs to be recovered. */
-
 #define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement. */
 #define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
 #define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
@@ -601,6 +598,30 @@ struct ceph_mds_getmap {
 #define CEPH_MDS_STATE_REJOIN      11 /* up, rejoining distributed cache */
 #define CEPH_MDS_STATE_ACTIVE      12 /* up, active */
 #define CEPH_MDS_STATE_STOPPING    13 /* up, but exporting metadata */
+
+static inline const char *ceph_mds_state_name(int s)
+{
+	switch (s) {
+		/* down and out */
+	case CEPH_MDS_STATE_DNE:        return "down:dne";
+	case CEPH_MDS_STATE_STOPPED:    return "down:stopped";
+		/* up and out */
+	case CEPH_MDS_STATE_BOOT:       return "up:boot";
+	case CEPH_MDS_STATE_STANDBY:    return "up:standby";
+	case CEPH_MDS_STATE_STANDBY_REPLAY:    return "up:standby-replay";
+	case CEPH_MDS_STATE_CREATING:   return "up:creating";
+	case CEPH_MDS_STATE_STARTING:   return "up:starting";
+		/* up and in */
+	case CEPH_MDS_STATE_REPLAY:     return "up:replay";
+	case CEPH_MDS_STATE_RESOLVE:    return "up:resolve";
+	case CEPH_MDS_STATE_RECONNECT:  return "up:reconnect";
+	case CEPH_MDS_STATE_REJOIN:     return "up:rejoin";
+	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
+	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
+	default: return "";
+	}
+	return NULL;
+}
 
 
 /*
@@ -1012,6 +1033,7 @@ enum {
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
 	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
 	CEPH_CAP_OP_RELEASE,   /* client->mds release (clean) cap */
+	CEPH_CAP_OP_RENEW,     /* client->mds renewal request */
 };
 
 static inline const char *ceph_cap_op_name(int op)
@@ -1026,6 +1048,7 @@ static inline const char *ceph_cap_op_name(int op)
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
 	case CEPH_CAP_OP_FLUSHSNAP_ACK: return "flushsnap_ack";
 	case CEPH_CAP_OP_RELEASE: return "release";
+	case CEPH_CAP_OP_RENEW: return "renew";
 	default: return "???";
 	}
 }
@@ -1068,12 +1091,25 @@ struct ceph_mds_caps {
 #define CEPH_MDS_LEASE_RENEW            3  /* client <-> mds    */
 #define CEPH_MDS_LEASE_REVOKE_ACK       4  /* client  -> mds    */
 
+static inline const char *ceph_lease_op_name(int o)
+{
+	switch (o) {
+	case CEPH_MDS_LEASE_REVOKE: return "revoke";
+	case CEPH_MDS_LEASE_RELEASE: return "release";
+	case CEPH_MDS_LEASE_RENEW: return "renew";
+	case CEPH_MDS_LEASE_REVOKE_ACK: return "revoke_ack";
+	default: return "???";
+	}
+}
+
 struct ceph_mds_lease {
 	__u8 action;
 	__le16 mask;
 	__le64 ino;
 	__le64 first, last;
 	__le32 seq;
+	__le64 renew_start;  /* time renew was requested */
+	__le32 duration_ms;  /* duration of renewal */
 } __attribute__ ((packed));
 /* followed by a __le32+string for dname */
 
@@ -1145,6 +1181,9 @@ struct ceph_mds_snap_realm {
  */
 #define CEPH_OSDMAP_NEARFULL (1<<0)  /* sync writes (near ENOSPC) */
 #define CEPH_OSDMAP_FULL     (1<<1)  /* no data writes (ENOSPC) */
+#define CEPH_OSDMAP_PAUSERD  (1<<2)  /* pause all reads */
+#define CEPH_OSDMAP_PAUSEWR  (1<<3)  /* pause all writes */
+#define CEPH_OSDMAP_PAUSEREC (1<<4)  /* pause recovery */
 
 /*
  * osd ops

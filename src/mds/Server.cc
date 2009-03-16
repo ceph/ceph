@@ -3896,8 +3896,8 @@ version_t Server::_rename_prepare_import(MDRequest *mdr, CDentry *srcdn, bufferl
 					 srcdn->authority().first,
 					 mdr->ls,
 					 mdr->more()->cap_imports, updated_scatterlocks);
-  srcdnl->get_inode()->filelock.clear_updated();  
-  srcdnl->get_inode()->nestlock.clear_updated();  
+  srcdnl->get_inode()->filelock.clear_dirty();  
+  srcdnl->get_inode()->nestlock.clear_dirty();  
 
   // hack: force back to !auth and clean, temporarily
   srcdnl->get_inode()->state_clear(CInode::STATE_AUTH);

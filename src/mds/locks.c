@@ -65,6 +65,7 @@ struct sm_state_t scatterlock[30] = {
     [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   FW,  ANY, 0,   0,   0,0,0 },
     [LOCK_TSYN_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0 },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0 },
+    [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,0,0 },
 };
 
 struct sm_t sm_scatterlock = {
@@ -93,6 +94,7 @@ struct sm_state_t filelock[30] = {
 
     [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   FW,  ANY, 0,   0,   CEPH_CAP_GRD|CEPH_CAP_GWR,0,CEPH_CAP_GRD },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_MIX,  ANY,  0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,CEPH_CAP_GRD },
+    [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         ANY,  0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,CEPH_CAP_GRD },
     [LOCK_EXCL_MIX]  = { LOCK_MIX,  true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR,0 },
     
     [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   FW,  0,   0,   0,   0,CEPH_CAP_GRDCACHE|CEPH_CAP_GEXCL|CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER,0 },

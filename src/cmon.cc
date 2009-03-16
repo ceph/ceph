@@ -36,12 +36,10 @@ using namespace std;
 
 void usage()
 {
-  cerr << "usage: ./cmon [flags] <monfsdir>" << std::endl;
-  cerr << "  -d             daemonize" << std::endl;
-  cerr << "  -o <dir>       log output to dir/mon#" << std::endl;
-  cerr << "  --debug_mon n  debug monitor level (e.g. 10)" << std::endl;
-  cerr << "  --debug_ms n   debug messaging level (e.g. 1)" << std::endl;
-  exit(1);
+  cerr << "usage: cmon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
+  cerr << "  --debug_mon n\n";
+  cerr << "        debug monitor level (e.g. 10)\n";
+  generic_server_usage();
 }
 
 int main(int argc, const char **argv) 
@@ -51,28 +49,28 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args);
+  configure_daemon_mode();
+  common_init(args, "mon");
 
-  // args
-  const char *fsdir = 0;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (args[i][0] != '-') {
-      if (!fsdir)
-        fsdir = args[i];
-      else if (fsdir)
-        usage();
-    }
+  // whoami
+  char *end;
+  int whoami = strtol(g_conf.id, &end, 10);
+  if (*end || end == g_conf.id || whoami < 0) {
+    cerr << "must specify '-i #' where # is the mon number" << std::endl;
+    usage();
   }
 
-  if (!fsdir)
+  if (!g_conf.mon_data) {
+    cerr << "must specify '--mon-data=foo' data path" << std::endl;
     usage();
+  }
 
   if (g_conf.clock_tare) g_clock.tare();
 
-  MonitorStore store(fsdir);
+  MonitorStore store(g_conf.mon_data);
   err = store.mount();
   if (err < 0) {
-    cerr << "problem opening monitor store in " << fsdir << ": " << strerror(-err) << std::endl;
+    cerr << "problem opening monitor store in " << g_conf.mon_data << ": " << strerror(-err) << std::endl;
     exit(1);
   }
 
@@ -81,7 +79,11 @@ int main(int argc, const char **argv)
     cerr << "mon fs missing 'whoami'" << std::endl;
     exit(1);
   }
-  int whoami = store.get_int("whoami");
+  int w = store.get_int("whoami");
+  if (w != whoami) {
+    cerr << "monitor data is for mon" << w << ", but you said i was mon" << whoami << std::endl;
+    exit(1);
+  }
 
   bufferlist magicbl;
   store.get_bl_ss(magicbl, "magic", 0);
@@ -109,7 +111,9 @@ int main(int argc, const char **argv)
   // bind
   cout << "starting mon" << whoami 
        << " at " << monmap.get_inst(whoami).addr
-       << " from " << fsdir << std::endl;
+       << " mon_data " << g_conf.mon_data
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
   g_my_addr = monmap.get_inst(whoami).addr;
   err = rank.bind();
   if (err < 0)

@@ -211,10 +211,10 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 
 	dout(10, "readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
-	err = ceph_osdc_readpage(osdc, ceph_vino(inode), &ci->i_layout,
-				 page->index << PAGE_SHIFT, PAGE_SIZE,
-				 ci->i_truncate_seq, ci->i_truncate_size,
-				 page);
+	err = ceph_osdc_readpages(osdc, ceph_vino(inode), &ci->i_layout,
+				  page->index << PAGE_SHIFT, PAGE_SIZE,
+				  ci->i_truncate_seq, ci->i_truncate_size,
+				  &page, 1);
 	if (unlikely(err < 0)) {
 		SetPageError(page);
 		goto out;
@@ -233,7 +233,39 @@ static int ceph_readpage(struct file *filp, struct page *page)
 }
 
 /*
- * Read multiple pages.  Most of the work is done in the osd_client.
+ * Build a vector of contiguous pages from the provided page list.
+ */
+static struct page **page_vector_from_list(struct list_head *page_list,
+					   unsigned *nr_pages)
+{
+	struct page **pages;
+	struct page *page;
+	int next_index, contig_pages = 0;
+
+	/* build page vector */
+	pages = kmalloc(sizeof(*pages) * *nr_pages, GFP_NOFS);
+	if (!pages)
+		return ERR_PTR(-ENOMEM);
+
+	BUG_ON(list_empty(page_list));
+	next_index = list_entry(page_list->prev, struct page, lru)->index;
+	list_for_each_entry_reverse(page, page_list, lru) {
+		if (page->index == next_index) {
+			dout(20, "readpages page %d %p\n", contig_pages, page);
+			pages[contig_pages] = page;
+			contig_pages++;
+			next_index++;
+		} else {
+			break;
+		}
+	}
+	*nr_pages = contig_pages;
+	return pages;
+}
+
+/*
+ * Read multiple pages.  Leave pages we don't read + unlock in page_list;
+ * the caller (VM) cleans them up.
  */
 static int ceph_readpages(struct file *file, struct address_space *mapping,
 			  struct list_head *page_list, unsigned nr_pages)
@@ -242,27 +274,31 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	int rc = 0;
-	struct page *page;
+	struct page **pages;
 	struct pagevec pvec;
 	loff_t offset;
 
 	dout(10, "readpages %p file %p nr_pages %d\n",
 	     inode, file, nr_pages);
 
+	pages = page_vector_from_list(page_list, &nr_pages);
+	if (IS_ERR(pages))
+		return PTR_ERR(pages);
+
 	/* guess read extent */
-	BUG_ON(list_empty(page_list));
-	page = list_entry(page_list->prev, struct page, lru);
-	offset = page->index << PAGE_CACHE_SHIFT;
-	rc = ceph_osdc_readpages(osdc, mapping, ceph_vino(inode), &ci->i_layout,
+	offset = pages[0]->index << PAGE_CACHE_SHIFT;
+	rc = ceph_osdc_readpages(osdc, ceph_vino(inode), &ci->i_layout,
 				 offset, nr_pages << PAGE_CACHE_SHIFT,
 				 ci->i_truncate_seq, ci->i_truncate_size,
-				 page_list, nr_pages);
+				 pages, nr_pages);
 	if (rc < 0)
-		return rc;
+		goto out;
 
 	/* set uptodate and add to lru in pagevec-sized chunks */
 	pagevec_init(&pvec, 0);
 	for (; rc > 0; rc -= PAGE_CACHE_SIZE) {
+		struct page *page;
+
 		BUG_ON(list_empty(page_list));
 		page = list_entry(page_list->prev, struct page, lru);
 		list_del(&page->lru);
@@ -290,7 +326,11 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 #else
 	pagevec_lru_add(&pvec);
 #endif
-	return 0;
+	rc = 0;
+
+out:
+	kfree(pages);
+	return rc;
 }
 
 /*
@@ -388,7 +428,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   &ci->i_layout, snapc,
 				   page_off, len,
 				   ci->i_truncate_seq, ci->i_truncate_size,
-				   &page, 1);
+				   &page, 1, 0, 0);
 	if (err < 0) {
 		dout(20, "writepage setting page error %p\n", page);
 		SetPageError(page);
@@ -497,6 +537,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 	ceph_put_wrbuffer_cap_refs(ci, req->r_num_pages, snapc);
 
 	ceph_release_pages(req->r_pages, req->r_num_pages);
+	kfree(req->r_pages);
 	ceph_osdc_put_request(req);
 }
 
@@ -513,7 +554,6 @@ static int ceph_writepages_start(struct address_space *mapping,
 	pgoff_t index, start, end;
 	int range_whole = 0;
 	int should_loop = 1;
-	struct page **pages = NULL;
 	pgoff_t max_pages = 0, max_pages_ever = 0;
 	struct ceph_snap_context *snapc = NULL, *last_snapc = NULL;
 	struct pagevec *pvec;
@@ -687,15 +727,20 @@ get_more_pages:
 				offset = page->index << PAGE_CACHE_SHIFT;
 				len = wsize;
 				req = ceph_osdc_new_request(&client->osdc,
-						    &ci->i_layout,
-						    ceph_vino(inode),
-						    offset, &len,
-						    CEPH_OSD_OP_WRITE,
-						    snapc, do_sync,
-						    ci->i_truncate_seq,
-						    ci->i_truncate_size);
+					    &ci->i_layout,
+					    ceph_vino(inode),
+					    offset, &len,
+					    CEPH_OSD_OP_WRITE, 0,
+					    snapc, do_sync,
+					    ci->i_truncate_seq,
+					    ci->i_truncate_size);
 				max_pages = req->r_num_pages;
-				pages = req->r_pages;
+
+				rc = -ENOMEM;
+				req->r_pages = kmalloc(sizeof(*req->r_pages) *
+						       max_pages, GFP_NOFS);
+				if (req->r_pages == NULL)
+					goto out;
 				req->r_callback = writepages_finish;
 				req->r_inode = inode;
 				req->r_wbc = wbc;
@@ -707,7 +752,7 @@ get_more_pages:
 			dout(20, "%p will write page %p idx %lu\n",
 			     inode, page, page->index);
 			set_page_writeback(page);
-			pages[locked_pages] = page;
+			req->r_pages[locked_pages] = page;
 			locked_pages++;
 			next = page->index + 1;
 		}
@@ -737,7 +782,7 @@ get_more_pages:
 		}
 
 		/* submit the write */
-		offset = pages[0]->index << PAGE_CACHE_SHIFT;
+		offset = req->r_pages[0]->index << PAGE_CACHE_SHIFT;
 		len = min(i_size_read(inode) - offset,
 			  (u64)locked_pages << PAGE_CACHE_SHIFT);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
@@ -961,6 +1006,18 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	return copied;
 }
 
+/*
+ * we set .direct_IO to indicate direct io is supported, but since we
+ * intercept O_DIRECT reads and writes early, this function should
+ * never get called.
+ */
+static ssize_t ceph_direct_io(int rw, struct kiocb *iocb,
+			      const struct iovec *iov,
+			      loff_t pos, unsigned long nr_segs)
+{
+	WARN_ON(1);
+	return -EINVAL;
+}
 
 const struct address_space_operations ceph_aops = {
 	.readpage = ceph_readpage,
@@ -972,6 +1029,7 @@ const struct address_space_operations ceph_aops = {
 	.set_page_dirty = ceph_set_page_dirty,
 	.invalidatepage = ceph_invalidatepage,
 	.releasepage = ceph_releasepage,
+	.direct_IO = ceph_direct_io,
 };
 
 

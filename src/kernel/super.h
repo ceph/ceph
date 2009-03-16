@@ -367,6 +367,7 @@ struct ceph_dentry_info {
 	struct ceph_mds_session *lease_session;
 	u32 lease_gen;
 	u32 lease_seq;
+	unsigned long lease_renew_after;
 };
 
 static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
@@ -485,7 +486,7 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
 	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
 	if (w & CEPH_CAP_FILE_WRBUFFER)
-		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if we have dirty data */
+		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if dirty data */
 	return w;
 }
 
@@ -693,7 +694,6 @@ extern int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 				    struct ceph_mds_session *session);
 
 extern int ceph_inode_holds_cap(struct inode *inode, int mask);
-extern int ceph_dentry_lease_valid(struct dentry *dentry);
 
 extern void ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
@@ -801,6 +801,12 @@ extern int ceph_sysfs_init(void);
 extern void ceph_sysfs_cleanup(void);
 extern int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_request *req);
 extern void ceph_sysfs_mds_req_cleanup(struct ceph_mds_request *req);
+extern int ceph_sysfs_osd_req_init(struct ceph_osd_client *osdc, struct ceph_osd_request *req);
+extern void ceph_sysfs_osd_req_cleanup(struct ceph_osd_request *req);
+extern int ceph_sysfs_mon_statfs_req_init(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req,
+					  struct ceph_msg *msg);
+extern void ceph_sysfs_mon_statfs_req_cleanup(struct ceph_mon_statfs_request *req);
+
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {

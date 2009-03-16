@@ -299,15 +299,21 @@ int OSD::init()
   // mount.
   dout(2) << "mounting " << dev_path << " " << (journal_path ? journal_path : "(no journal)") << dendl;
   store = create_object_store(dev_path, journal_path);
-  if (!store)
+  if (!store) {
+    dout(0) << " unable to create object store" << dendl;
     return -ENODEV;
+  }
   int r = store->mount();
-  if (r < 0) return -1;
+  if (r < 0) {
+    dout(0) << " unable to mount object store" << dendl;
+    return -1;
+  }
   
   dout(2) << "boot" << dendl;
   
   // read superblock
   if (read_superblock() < 0) {
+    dout(0) << " unable to read osd superblock" << dendl;
     store->umount();
     delete store;
     return -1;
@@ -315,8 +321,10 @@ int OSD::init()
   
   // load up "current" osdmap
   assert_warn(!osdmap);
-  if (osdmap)
+  if (osdmap) {
+    dout(0) << " unable to read current osdmap" << dendl;
     return -1;
+  }
   osdmap = new OSDMap;
   if (superblock.current_epoch) {
     bufferlist bl;
@@ -329,8 +337,10 @@ int OSD::init()
   
   dout(2) << "superblock: i am osd" << superblock.whoami << dendl;
   assert_warn(whoami == superblock.whoami);
-  if (whoami != superblock.whoami)
+  if (whoami != superblock.whoami) {
+    dout(0) << "wtf, superblock says osd" << superblock.whoami << " but i am osd" << whoami << dendl;
     return -EINVAL;
+  }
     
   // log
   static LogType osd_logtype(l_osd_first, l_osd_last);

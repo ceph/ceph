@@ -766,7 +766,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  if (!dirfragtree.is_leaf(*p)) {
 	    dout(10) << " forcing frag " << *p << " to leaf (split|merge)" << dendl;
 	    dirfragtree.force_to_leaf(*p);
-	    dirfragtreelock.set_updated();
+	    dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
 	  }
       } else {
 	// replica.  take the new tree, BUT make sure any open
@@ -829,7 +829,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dir->first = fgfirst;
 	  if (!(fragstat == accounted_fragstat)) {
 	    dout(10) << fg << " setting filelock updated flag" << dendl;
-	    filelock.set_updated();
+	    filelock.mark_dirty();  // ok bc we're auth and caller will handle
 	  }
 	} else {
 	  if (dir && dir->is_auth()) {
@@ -886,7 +886,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  dir->dirty_old_rstat.swap(dirty_old_rstat);
 	  if (!(rstat == accounted_rstat) || dir->dirty_old_rstat.size()) {
 	    dout(10) << fg << " setting nestlock updated flag" << dendl;
-	    nestlock.set_updated();
+	    nestlock.mark_dirty();  // ok bc we're auth and caller will handle
 	  }
 	} else {
 	  if (dir && dir->is_auth()) {
@@ -1169,6 +1169,7 @@ void CInode::auth_unpin(void *by)
 
 void CInode::adjust_nested_auth_pins(int a)
 {
+  assert(a);
   nested_auth_pins += a;
   dout(35) << "adjust_nested_auth_pins by " << a
 	   << " now " << auth_pins << "+" << nested_auth_pins
@@ -1181,6 +1182,7 @@ void CInode::adjust_nested_auth_pins(int a)
 
 void CInode::adjust_nested_anchors(int by)
 {
+  assert(by);
   nested_anchors += by;
   dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
   assert(nested_anchors >= 0);

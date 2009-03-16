@@ -1,0 +1,46 @@
+.TH CCONF 8
+.SH NAME
+cconf \- ceph conf file tool
+.SH SYNOPSIS
+.B cconf
+\fB\-c \fIconffile\fR \fB\-l \fIprefix\fR
+.br
+.B cconf
+\fIkey\fR [ \fIdefault\fR ] \fB\-s \fIsection1\fR ...
+.br
+.B cconf
+\fIkey\fR [ \fIdefault\fR ] \fB\-i \fIid\fR \fB\-t \fItype\fR
+.SH DESCRIPTION
+.B cconf
+is a utility for extracting values from a "INI" style configuration files.  It has
+three basic modes of operation.
+.PP
+The first mode simply prints all section names that begin with \fIprefix\fP.
+.PP
+The second mode extracts an option value by searching through one or more \fIsection\fPs,
+in the order specified on the command line.  If the option does not exist in
+.PP
+The third mode will look in the standard section names for the given daemon \fIid\fR
+of type \fItype\fR.
+\fIconffile\fP, an optional \fIdefault\fP value may be output instead.
+.PP
+.SH EXAMPLES
+To extract the value of the "osd data" option for the \fIosd0\fP daemon,
+.IP
+cconf -c foo.conf "osd data" -i 0 -t osd
+.PP
+This is equivalent to doing specifying sections \fI[osd0]\fP, \fI[osd.0]\fP,
+\fI[osd]\fP, or \fI[global]\fP, in that order of preference:
+.IP
+cconf -c foo.conf "osd data" -s osd0 -s osd.0 -s osd -s global
+.PP
+To list all sections that begin with \fIosd\fP:
+.IP
+cconf -c foo.conf -l osd
+.SH AVAILABILITY
+.B cconf
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8),
+.BR mkcephfs (8)

@@ -44,13 +44,13 @@ int main(int argc, const char **argv, const char *envp[]) {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args);
+  common_init(args, "cfuse");
 
   // args for fuse
   vec_to_argv(args, argc, argv);
 
   // FUSE will chdir("/"); be ready.
-  g_conf.chdir_root = true;
+  g_conf.chdir = "/";
 
   if (g_conf.clock_tare) g_clock.tare();
 

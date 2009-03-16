@@ -12,6 +12,7 @@
 #include <string>
 
 #include "ConfUtils.h"
+#include "dyn_snprintf.h"
 
 using namespace std;
 
@@ -188,7 +189,7 @@ static char *normalize_name(const char *name)
 	return newname;
 }
 
-#define MAX_LINE 2560
+#define MAX_LINE 256
 
 static char *get_next_delim(char *str, const char *delim, int alloc, char **p)
 {
@@ -217,7 +218,8 @@ static int _parse_section(char *str, ConfLine *parsed)
 	char *name = NULL;
 	char *p;
 	int ret = 0;
-	char line[MAX_LINE];
+	char *line;
+	size_t max_line = MAX_LINE;
 
 	char *start, *end;
 
@@ -235,6 +237,7 @@ static int _parse_section(char *str, ConfLine *parsed)
 	
 
 	p = start;
+	line = (char *)malloc(max_line);
 	line[0] ='\0';
 
 	do {
@@ -244,14 +247,16 @@ static int _parse_section(char *str, ConfLine *parsed)
 
 		if (*name) {
 			if (*line)
-				snprintf(line, MAX_LINE, "%s %s", line, name);
+				dyn_snprintf(&line, &max_line, 2, "%s %s", line, name);
 			else
-				snprintf(line, MAX_LINE, "%s", name);
+				dyn_snprintf(&line, &max_line, 1, "%s", name);
 		}
 	} while (*name);
 	
 	if (*line)	
 		parsed->set_section(line);
+
+	free(line);
 
 	return ret;
 }
@@ -446,10 +451,12 @@ void ConfFile::_dump(int fd)
 {
 	SectionList::iterator sec_iter, sec_end;
 	 ConfLine *cl;
-	char line[MAX_LINE];
-	int len = 0;
+	char *line;
+	size_t max_line = MAX_LINE;
+	size_t len;
 	char *p;
-	
+
+	line = (char *)malloc(max_line);
 
 	sec_end=sections_list.end();
 
@@ -467,12 +474,22 @@ void ConfFile::_dump(int fd)
 
 			if (cl) {
 				line[0] = '\0';
-				cl->output(line, MAX_LINE);
+				do {
+					if (len >= max_line) {
+						max_line *= 2;
+						free(line);
+						line = (char *)malloc(max_line);
+					}
+
+					len = cl->output(line, max_line);
+				} while (len == max_line);
 				::write(fd, line, strlen(line));
 				::write(fd, "\n", 1);
 			}
 		}
 	}
+
+	free(line);
 }
 
 void ConfFile::dump()
@@ -481,9 +498,7 @@ void ConfFile::dump()
 
 	sec_end=sections_list.end();
 
-	printf("------ config starts here ------\n");
 	_dump(STDOUT_FILENO);
-	printf("------  config ends here  ------\n");
 }
 
 ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
@@ -515,10 +530,15 @@ int ConfFile::_parse(char *filename, ConfSection **psection)
 {
 	char *buf;
 	int len, i, l;
-	char line[MAX_LINE];
+	char *line;
 	ConfLine *cl;
 	ConfSection *section = *psection;
 	int fd;
+	int max_line = MAX_LINE;
+
+	line = (char *)malloc(max_line);
+
+	
 
 	fd = open(filename, O_RDWR);
 	if (fd < 0)
@@ -555,6 +575,11 @@ int ConfFile::_parse(char *filename, ConfSection **psection)
 				break;
 			default:
 				line[l++] = buf[i];
+
+				if (l == max_line-1) {
+					max_line *= 2;
+					line = (char *)realloc(line, max_line);
+				}
 			}
 		}
 	} while (len);
@@ -562,6 +587,8 @@ int ConfFile::_parse(char *filename, ConfSection **psection)
 	free(buf);
 
 	*psection = section;
+
+	free(line);
 
 	return 1;
 }
@@ -805,12 +832,19 @@ template<typename T>
 int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 {
 	ConfLine *cl;
+	char *str_val;
 
 	cl = _find_var(section, var);
 	if (!cl || !cl->get_val())
 		goto notfound;
 
-	_conf_decode(val, cl->get_val());
+	str_val = cl->get_val();
+
+	if (post_process_func) {
+		str_val = post_process_func(str_val);
+	}
+
+	_conf_decode(val, str_val);
 
 	return 1;
 notfound:

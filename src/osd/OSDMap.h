@@ -387,6 +387,11 @@ private:
     return n;
   }
 
+  int get_flags() const { return flags; }
+  int test_flag(int f) const { return flags & f; }
+  void set_flag(int f) { flags |= f; }
+  void clear_flag(int f) { flags &= ~f; }
+
   int get_state(int o) {
     assert(o < max_osd);
     return osd_state[o];

@@ -40,6 +40,11 @@ extern const char *get_pool_name(int pool);
 extern entity_addr_t g_my_addr;
 
 struct md_config_t {
+  char *type;
+  char *id;
+  char *name;
+  char *alt_name;
+
   int num_mon;
   int num_mds;
   int num_osd;
@@ -47,7 +52,7 @@ struct md_config_t {
 
   //bool mkfs;
   
-  const char *monmap_file;
+  const char *monmap;
   const char *mon_host;
   bool daemonize;
 
@@ -64,11 +69,9 @@ struct md_config_t {
 
   const char *pid_file;
 
-  const char *conf_file;
-  const char *cluster_conf_file;
-  bool dump_conf;
+  const char *conf;
 
-  bool chdir_root;
+  const char *chdir;
 
   bool fake_clock;
   bool fakemessenger_serialize;
@@ -122,6 +125,7 @@ struct md_config_t {
   bool ms_nocrc;
 
   // mon
+  const char *mon_data;
   int mon_tick_interval;
   int mon_osd_down_out_interval;
   float mon_lease;
@@ -246,6 +250,8 @@ struct md_config_t {
   bool mds_hack_log_expire_for_better_stats;
 
   // osd
+  const char *osd_data;
+  const char *osd_journal;
   bool osd_balance_reads;
   int osd_flash_crowd_iat_threshold;  // flash crowd interarrival time threshold in ms
   double osd_flash_crowd_iat_alpha;
@@ -340,8 +346,9 @@ struct md_config_t {
 
 extern md_config_t g_conf;     
 
-
-
+typedef enum {
+	OPT_NONE, OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL
+} opt_type_t;
 
 /**
  * command line / environment argument parsing
@@ -351,17 +358,66 @@ void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args);
 void vec_to_argv(std::vector<const char*>& args,
                  int& argc, const char **&argv);
+void env_to_deq(std::deque<const char*>& args);
+void argv_to_deq(int argc, const char **argv,
+                 std::deque<const char*>& args);
 
-void parse_startup_config_options(std::vector<const char*>& args);
+void parse_startup_config_options(std::vector<const char*>& args, const char *module_type);
 void parse_config_options(std::vector<const char*>& args);
 void parse_config_option_string(string& s);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr, const char **end=0);
 
+void configure_daemon_mode();
+void configure_client_mode();
+
+void generic_server_usage();
+void generic_client_usage();
+
 class ConfFile;
+ConfFile *conf_get_conf_file();
 
-void parse_config_file(ConfFile *cf, bool update);
+char *conf_post_process_val(const char *val);
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def);
+bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
+bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos);
 
+
+#define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
+
+#define CONF_SET_ARG_VAL(dest, type) \
+	conf_set_conf_val(dest, type, CONF_NEXT_VAL)
+
+#define CONF_SAFE_SET_ARG_VAL(dest, type) \
+	do { \
+          if (type == OPT_BOOL) { \
+		if (val_pos) { \
+			CONF_SET_ARG_VAL(dest, type); \
+		} else \
+			conf_set_conf_val(dest, type, "true"); \
+          } else if (__isarg || val_pos) { \
+		CONF_SET_ARG_VAL(dest, type); \
+	  } else if (args_usage) \
+		args_usage(); \
+	} while (0)
+
+#define CONF_SET_BOOL_ARG_VAL(dest) \
+	conf_set_conf_val(dest, OPT_BOOL, (val_pos ? &args[i][val_pos] : "true"))
+
+#define CONF_ARG_EQ(str_cmd, char_cmd) \
+	conf_cmd_equals(args[i], str_cmd, char_cmd, &val_pos)
+
+#define DEFINE_CONF_VARS(usage_func) \
+	unsigned int val_pos; \
+	void (*args_usage)() = usage_func; \
+	bool __isarg
+
+
+#define FOR_EACH_ARG(args) \
+	__isarg = 1 < args.size(); \
+	for (unsigned i=0; i<args.size(); i++, __isarg = i+1 < args.size()) 
+
+#define ARGS_USAGE() args_usage();
 
 #include "common/debug.h"
 

@@ -36,51 +36,44 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: cosd <device> [-j journalfileordev] [-m monitor] [--mkfs_for_osd <nodeid>]" << std::endl;
-  cerr << "   -d              daemonize" << std::endl;
+  cerr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] [--mkfs]" << std::endl;
   cerr << "   --debug_osd N   set debug level (e.g. 10)" << std::endl;
-  cerr << "   --debug_ms N    set message debug level (e.g. 1)" << std::endl;
-  cerr << "   --ebofs         use EBOFS for object storage (default)" << std::endl;
-  cerr << "   --fakestore     store objects as files in directory <device>" << std::endl;
-  exit(1);
+  generic_server_usage();
 }
 
 
 int main(int argc, const char **argv) 
 {
+  DEFINE_CONF_VARS(usage);
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args);
+  configure_daemon_mode();
+  common_init(args, "osd");
 
   if (g_conf.clock_tare) g_clock.tare();
 
   // osd specific args
-  const char *dev = 0, *journaldev = 0;
-  int whoami = -1;
   bool mkfs = 0;
-  for (unsigned i=0; i<args.size(); i++) {
-    if (strcmp(args[i],"--mkfs_for_osd") == 0) {
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("mkfs", '\0')) {
       mkfs = 1; 
-      whoami = atoi(args[++i]);
-    } else if (strcmp(args[i],"--dev") == 0) 
-      dev = args[++i];
-    else if (strcmp(args[i],"-j") == 0)
-      journaldev = args[++i];
-    else if (!dev)
-      dev = args[i];
-    else {
+    } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
-      usage();
+      ARGS_USAGE();
     }
   }
-  if (!dev) {
-    cerr << "must specify device file" << std::endl;
+
+  // whoami
+  char *end;
+  int whoami = strtol(g_conf.id, &end, 10);
+  if (*end || end == g_conf.id || whoami < 0) {
+    cerr << "must specify '-i #' where # is the osd number" << std::endl;
     usage();
   }
 
-  if (mkfs && whoami < 0) {
-    cerr << "must specify '--osd #' where # is the osd number" << std::endl;
+  if (!g_conf.osd_data) {
+    cerr << "must specify '--osd-data=foo' data path" << std::endl;
     usage();
   }
 
@@ -91,31 +84,34 @@ int main(int argc, const char **argv)
     return -1;
 
   if (mkfs) {
-    int err = OSD::mkfs(dev, journaldev, monmap.fsid, whoami);
+    int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, monmap.fsid, whoami);
     if (err < 0) {
-      cerr << "error creating empty object store in " << dev << ": " << strerror(-err) << std::endl;
+      cerr << "error creating empty object store in " << g_conf.osd_data << ": " << strerror(-err) << std::endl;
       exit(1);
     }
-    cout << "created object store for osd" << whoami << " fsid " << monmap.fsid << " on " << dev << std::endl;
+    cout << "created object store for osd" << whoami << " fsid " << monmap.fsid << " on " << g_conf.osd_data << std::endl;
     exit(0);
   }
 
-  if (whoami < 0) {
-    nstring magic;
-    ceph_fsid_t fsid;
-    int r = OSD::peek_super(dev, magic, fsid, whoami);
-    if (r < 0) {
-      cerr << "unable to determine OSD identity from superblock on " << dev << ": " << strerror(-r) << std::endl;
-      exit(1);
-    }
-    if (strcmp(magic.c_str(), CEPH_OSD_ONDISK_MAGIC)) {
-      cerr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC << std::endl;
-      exit(1);
-    }
-    if (ceph_fsid_compare(&fsid, &monmap.fsid)) {
-      cerr << "OSD fsid " << fsid << " != monmap fsid " << monmap.fsid << std::endl;
-      exit(1);
-    }
+  nstring magic;
+  ceph_fsid_t fsid;
+  int w;
+  int r = OSD::peek_super(g_conf.osd_data, magic, fsid, w);
+  if (r < 0) {
+    cerr << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << std::endl;
+    exit(1);
+  }
+  if (w != whoami) {
+    cerr << "OSD id " << w << " != my id " << whoami << std::endl;
+    exit(1);
+  }
+  if (strcmp(magic.c_str(), CEPH_OSD_ONDISK_MAGIC)) {
+    cerr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC << std::endl;
+    exit(1);
+  }
+  if (ceph_fsid_compare(&fsid, &monmap.fsid)) {
+    cerr << "OSD fsid " << fsid << " != monmap fsid " << monmap.fsid << std::endl;
+    exit(1);
   }
 
   _dout_create_courtesy_output_symlink("osd", whoami);
@@ -126,7 +122,8 @@ int main(int argc, const char **argv)
 
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
-       << " dev " << dev << " " << (journaldev ? journaldev:"")
+       << " osd_data " << g_conf.osd_data
+       << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
        << " fsid " << monmap.fsid
        << std::endl;
 
@@ -153,7 +150,7 @@ int main(int argc, const char **argv)
   rank.start();
 
   // start osd
-  OSD *osd = new OSD(whoami, m, hbm, &monmap, dev, journaldev);
+  OSD *osd = new OSD(whoami, m, hbm, &monmap, g_conf.osd_data, g_conf.osd_journal);
   if (osd->init() < 0) {
     cout << "error initializing osd" << std::endl;
     return 1;

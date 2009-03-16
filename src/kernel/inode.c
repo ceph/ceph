@@ -627,21 +627,6 @@ out:
 }
 
 /*
- * check if inode holds specific cap
- */
-int ceph_inode_holds_cap(struct inode *inode, int mask)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int issued = ceph_caps_issued(ci);
-	int ret = ((issued & mask) == mask);
-
-	dout(10, "ceph_inode_holds_cap inode %p have %s want %s = %d\n", inode,
-	     ceph_cap_string(issued), ceph_cap_string(mask), ret);
-	return ret;
-}
-
-
-/*
  * caller should hold session s_mutex.
  */
 static void update_dentry_lease(struct dentry *dentry,
@@ -653,6 +638,7 @@ static void update_dentry_lease(struct dentry *dentry,
 	int is_new = 0;
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
 	long unsigned ttl = from_time + (duration * HZ) / 1000;
+	long unsigned half_ttl = from_time + (duration * HZ / 2) / 1000;
 
 	/* only track leases on regular dentries */
 	if (dentry->d_op != &ceph_dentry_ops)
@@ -698,47 +684,12 @@ static void update_dentry_lease(struct dentry *dentry,
 		is_new = 1;
 	} else if (di->lease_session != session)
 		goto out_unlock;
+	di->lease_renew_after = half_ttl;
 	dentry->d_time = ttl;
 out_unlock:
 	spin_unlock(&dentry->d_lock);
 	return;
 }
-
-/*
- * check if dentry lease is valid.  if not, delete it.
- */
-int ceph_dentry_lease_valid(struct dentry *dentry)
-{
-	struct ceph_dentry_info *di;
-	struct ceph_mds_session *s;
-	int valid = 0;
-	u32 gen;
-	unsigned long ttl;
-
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	if (di) {
-		s = di->lease_session;
-		spin_lock(&s->s_cap_lock);
-		gen = s->s_cap_gen;
-		ttl = s->s_cap_ttl;
-		spin_unlock(&s->s_cap_lock);
-
-		if (di->lease_gen == gen &&
-		    time_before(jiffies, dentry->d_time) &&
-		    time_before(jiffies, ttl)) {
-			valid = 1;
-		} else {
-			ceph_put_mds_session(di->lease_session);
-			kfree(di);
-			dentry->d_fsdata = NULL;
-		}
-	}
-	spin_unlock(&dentry->d_lock);
-	dout(20, "dentry_lease_valid - dentry %p = %d\n", dentry, valid);
-	return valid;
-}
-
 
 /*
  * splice a dentry to an inode.
@@ -1426,29 +1377,9 @@ static const struct inode_operations ceph_symlink_iops = {
 	.follow_link = ceph_sym_follow_link,
 };
 
-
 /*
- * Prepare a setattr request.  If we know we have the file open (and
- * thus hold at lease a PIN capability), generate the request without
- * a path name.
+ * setattr
  */
-static struct ceph_mds_request *prepare_setattr(struct ceph_mds_client *mdsc,
-						struct dentry *dentry,
-						int ia_valid, int op)
-{
-	int issued = ceph_caps_issued(ceph_inode(dentry->d_inode));
-	int mode = USE_ANY_MDS;
-
-	if ((ia_valid & ATTR_FILE) ||
-	    (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)))
-		mode = USE_CAP_MDS;
-
-	dout(5, "prepare_setattr dentry %p (inode %llx.%llx)\n", dentry,
-	     ceph_vinop(dentry->d_inode));
-	return ceph_mdsc_create_request(mdsc, op, dentry, NULL,
-					NULL, NULL, mode);
-}
-
 static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
@@ -1475,7 +1406,8 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LCHOWN);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHOWN, dentry, NULL,
+				       NULL, NULL, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	if (ia_valid & ATTR_UID) {
@@ -1515,7 +1447,8 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = prepare_setattr(mdsc, dentry, attr->ia_valid, CEPH_MDS_OP_LCHMOD);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHMOD, dentry, NULL,
+				       NULL, NULL, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_args.chmod.mode = cpu_to_le32(attr->ia_mode);
@@ -1536,9 +1469,13 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	int err;
+	int issued;
+
+	spin_lock(&inode->i_lock);
+	issued = __ceph_caps_issued(ci, NULL);
 
 	/* if i hold CAP_EXCL, i can change [am]time any way i like */
-	if (ceph_caps_issued_mask(ci, CEPH_CAP_FILE_EXCL)) {
+	if (issued & CEPH_CAP_FILE_EXCL) {
 		dout(10, "utime holding EXCL, doing locally\n");
 		ci->i_time_warp_seq++;
 		if (ia_valid & ATTR_ATIME)
@@ -1547,11 +1484,12 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 			inode->i_mtime = attr->ia_mtime;
 		inode->i_ctime = CURRENT_TIME;
 		ci->i_dirty_caps |= CEPH_CAP_FILE_EXCL;
+		spin_unlock(&inode->i_lock);
 		return 0;
 	}
 
 	/* if i hold CAP_WR, i can _increase_ [am]time safely */
-	if (ceph_caps_issued_mask(ci, CEPH_CAP_FILE_WR) &&
+	if ((issued & CEPH_CAP_FILE_WR) &&
 	    ((ia_valid & ATTR_MTIME) == 0 ||
 	     timespec_compare(&inode->i_mtime, &attr->ia_mtime) < 0) &&
 	    ((ia_valid & ATTR_ATIME) == 0 ||
@@ -1563,19 +1501,25 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 			inode->i_mtime = attr->ia_mtime;
 		inode->i_ctime = CURRENT_TIME;
 		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
+		spin_unlock(&inode->i_lock);
 		return 0;
 	}
+
 	/* if i have valid values, this may be a no-op */
-	if (ceph_inode_holds_cap(inode, CEPH_CAP_FILE_RDCACHE) &&
+	if ((issued & CEPH_CAP_FILE_RDCACHE) &&
 	    !(((ia_valid & ATTR_ATIME) &&
 	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
 	      ((ia_valid & ATTR_MTIME) &&
 	       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
 		dout(10, "lease indicates utimes is a no-op\n");
+		spin_unlock(&inode->i_lock);
 		return 0;
 	}
 
-	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LUTIME);
+	spin_unlock(&inode->i_lock);
+
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LUTIME, dentry, NULL,
+				       NULL, NULL, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	ceph_encode_timespec(&req->r_args.utime.mtime, &attr->ia_mtime);
@@ -1601,31 +1545,39 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	int err;
+	int issued;
 
 	dout(10, "truncate: ia_size %d i_size %d\n",
 	     (int)attr->ia_size, (int)inode->i_size);
-	if (ceph_caps_issued(ci) & CEPH_CAP_FILE_EXCL &&
+
+	spin_lock(&inode->i_lock);
+	issued = __ceph_caps_issued(ci, NULL);
+
+	if ((issued & CEPH_CAP_FILE_EXCL) &&
 	    attr->ia_size > inode->i_size) {
 		dout(10, "holding EXCL, doing truncate (fwd) locally\n");
 		err = vmtruncate(inode, attr->ia_size);
-		if (err)
-			return err;
-		spin_lock(&inode->i_lock);
-		inode->i_size = attr->ia_size;
-		inode->i_ctime = attr->ia_ctime;
-		ci->i_reported_size = attr->ia_size;
+		if (!err) {
+			inode->i_size = attr->ia_size;
+			inode->i_blocks = (attr->ia_size + (1 << 9) - 1) >> 9;
+			inode->i_ctime = attr->ia_ctime;
+			ci->i_reported_size = attr->ia_size;
+		}
+		spin_unlock(&inode->i_lock);
+		return err;
+	}
+	if ((issued & CEPH_CAP_FILE_RDCACHE) &&
+	    attr->ia_size == inode->i_size) {
+		dout(10, "lease indicates truncate is a no-op\n");
 		spin_unlock(&inode->i_lock);
 		return 0;
 	}
-	if (ceph_inode_holds_cap(inode, CEPH_CAP_FILE_RDCACHE) &&
-	    attr->ia_size == inode->i_size) {
-		dout(10, "lease indicates truncate is a no-op\n");
-		return 0;
-	}
-	req = prepare_setattr(mdsc, dentry, ia_valid, CEPH_MDS_OP_LTRUNCATE);
+	spin_unlock(&inode->i_lock);
+
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LTRUNCATE, dentry,
+				       NULL, NULL, NULL, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_args.truncate.length = cpu_to_le64(attr->ia_size);
@@ -1710,7 +1662,7 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 
 	dout(30, "getattr dentry %p inode %p mask %d\n", dentry,
 	     dentry->d_inode, mask);
-	if (ceph_inode_holds_cap(dentry->d_inode, mask))
+	if (ceph_caps_issued_mask(ceph_inode(dentry->d_inode), mask))
 		return 0;
 
 	/*

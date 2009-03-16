@@ -18,17 +18,6 @@
 
 #include "msg/Message.h"
 
-static const char *get_lease_action_name(int a) {
-  switch (a) {
-  case CEPH_MDS_LEASE_REVOKE: return "revoke";
-  case CEPH_MDS_LEASE_RELEASE: return "release";
-  case CEPH_MDS_LEASE_RENEW: return "renew";
-  case CEPH_MDS_LEASE_REVOKE_ACK: return "revoke ack";
-  default: assert(0); return 0;
-  }
-}
-
-
 struct MClientLease : public Message {
   struct ceph_mds_lease h;
   nstring dname;
@@ -63,7 +52,7 @@ struct MClientLease : public Message {
 
   const char *get_type_name() { return "client_lease"; }
   void print(ostream& out) {
-    out << "client_lease(a=" << get_lease_action_name(get_action())
+    out << "client_lease(a=" << ceph_lease_op_name(get_action())
 	<< " seq " << get_seq()
 	<< " mask " << get_mask();
     out << " " << get_ino();
