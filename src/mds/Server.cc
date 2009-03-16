@@ -710,6 +710,8 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   __u16 numi = 0, numdn = 0;
   __s16 snapdirpos = -1;
 
+  bool single_segment = true;  // do a single segment: [inode, ] dentry, dir.
+
   // choose lease duration
   utime_t now = g_clock.now();
   int lmask = 0;
@@ -755,6 +757,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     snapdirpos = numi;
     dout(10) << "set_trace_dist snapdiri at pos " << snapdirpos << dendl;
   }
+
+  if (single_segment && numdn)
+    goto done;
 
   if (!dn) {
     dn = in->get_projected_parent_dn();
