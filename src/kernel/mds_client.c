@@ -2030,6 +2030,14 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
 	memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
 	       dnamelen);
+
+	/*
+	 * if this is a preemptive lease RELEASE, no need to
+	 * flush request stream, since the actual request will
+	 * soon follow.
+	 */
+	msg->more_to_follow = (action == CEPH_MDS_LEASE_RELEASE);
+
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
 
