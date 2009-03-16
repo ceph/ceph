@@ -412,9 +412,9 @@ static void sync_write_commit(struct ceph_osd_request *req)
 	struct ceph_inode_info *ci = ceph_inode(req->r_inode);
 
 	dout(10, "sync_write_commit %p tid %llu\n", req, req->r_tid);
-	spin_lock(&ci->i_listener_lock);
+	spin_lock(&ci->i_unsafe_lock);
 	list_del_init(&req->r_unsafe_item);
-	spin_unlock(&ci->i_listener_lock);
+	spin_unlock(&ci->i_unsafe_lock);
 	ceph_put_cap_refs(ci, CEPH_CAP_FILE_WR);
 }
 
@@ -431,7 +431,7 @@ static void sync_write_wait(struct inode *inode)
        struct ceph_osd_request *req;
        u64 last_tid;
 
-       spin_lock(&ci->i_listener_lock);
+       spin_lock(&ci->i_unsafe_lock);
        if (list_empty(head))
 	       goto out;
 
@@ -442,22 +442,24 @@ static void sync_write_wait(struct inode *inode)
 
        do {
 	       ceph_osdc_get_request(req);
-	       spin_unlock(&ci->i_listener_lock);
+	       spin_unlock(&ci->i_unsafe_lock);
 	       dout(10, "sync_write_wait on tid %llu (until %llu)\n",
 		    req->r_tid, last_tid);
 	       wait_for_completion(&req->r_safe_completion);
-	       spin_lock(&ci->i_listener_lock);
+	       spin_lock(&ci->i_unsafe_lock);
 	       ceph_osdc_put_request(req);
 
 	       /*
 		* from here on look at first entry in chain, since we
 		* only want to wait for anything older than last_tid
 		*/
+	       if (list_empty(head))
+		       break;
 	       req = list_entry(head->next, struct ceph_osd_request,
 	                        r_unsafe_item);
-       } while (req->r_tid <= last_tid);
+       } while (req->r_tid < last_tid);
 out:
-       spin_unlock(&ci->i_listener_lock);
+       spin_unlock(&ci->i_unsafe_lock);
 }
 
 /*
@@ -560,9 +562,9 @@ more:
 			 * Add to inode unsafe list only after we
 			 * start_request so that a tid has been assigned.
 			 */
-			spin_lock(&ci->i_listener_lock);
+			spin_lock(&ci->i_unsafe_lock);
 			list_add(&ci->i_unsafe_writes, &req->r_unsafe_item);
-			spin_unlock(&ci->i_listener_lock);
+			spin_unlock(&ci->i_unsafe_lock);
 			ceph_get_more_cap_refs(ci, CEPH_CAP_FILE_WR);
 		}
 		ret = ceph_osdc_wait_request(&client->osdc, req);
@@ -733,7 +735,7 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	struct inode *inode = dentry->d_inode;
 	int ret;
 
-	dout(10, "fsync on inode %p\n", inode);
+	dout(10, "fsync %p\n", inode);
 	sync_write_wait(inode);
 
 	ret = filemap_write_and_wait(inode->i_mapping);

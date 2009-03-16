@@ -281,7 +281,10 @@ struct ceph_inode_info {
 				   If it's non-zero, we _may_ have cached
 				   pages. */
 	u32 i_rdcache_revoking; /* RDCACHE gen to async invalidate, if any */
+
 	struct list_head i_unsafe_writes; /* uncommitted sync writes */
+	struct list_head i_unsafe_dirops; /* uncommitted mds dir ops */
+	spinlock_t i_unsafe_lock;
 
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
@@ -291,9 +294,6 @@ struct ceph_inode_info {
 	struct work_struct i_pg_inv_work;  /* page invalidation work */
 
 	struct work_struct i_vmtruncate_work;
-
-	struct list_head i_listener_list; /* requests we pend on */
-	spinlock_t i_listener_lock;
 
 	struct inode vfs_inode; /* at end */
 };

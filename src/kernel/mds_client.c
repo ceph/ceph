@@ -441,10 +441,10 @@ static void __register_request(struct ceph_mds_client *mdsc,
 	if (listener) {
 		struct ceph_inode_info *ci = ceph_inode(listener);
 		
-		spin_lock(&ci->i_listener_lock);
-		req->r_listener = listener;
-		list_add_tail(&req->r_listener_item, &ci->i_listener_list);
-		spin_unlock(&ci->i_listener_lock);
+		spin_lock(&ci->i_unsafe_lock);
+		req->r_unsafe_dir = listener;
+		list_add_tail(&req->r_unsafe_dir_item, &ci->i_unsafe_dirops);
+		spin_unlock(&ci->i_unsafe_lock);
 	}
 
 	ceph_sysfs_mds_req_init(mdsc, req);
@@ -457,12 +457,12 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 	radix_tree_delete(&mdsc->request_tree, req->r_tid);
 	ceph_mdsc_put_request(req);
 
-	if (req->r_listener) {
-		struct ceph_inode_info *ci = ceph_inode(req->r_listener);
+	if (req->r_unsafe_dir) {
+		struct ceph_inode_info *ci = ceph_inode(req->r_unsafe_dir);
 
-		spin_lock(&ci->i_listener_lock);
-		list_del_init(&req->r_listener_item);
-		spin_unlock(&ci->i_listener_lock);
+		spin_lock(&ci->i_unsafe_lock);
+		list_del_init(&req->r_unsafe_dir_item);
+		spin_unlock(&ci->i_unsafe_lock);
 	}
 
 	ceph_sysfs_mds_req_cleanup(req);
@@ -836,7 +836,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 		return ERR_PTR(-ENOMEM);
 	req->r_started = jiffies;
 	req->r_resend_mds = -1;
-	INIT_LIST_HEAD(&req->r_listener_item);
+	INIT_LIST_HEAD(&req->r_unsafe_dir_item);
 	req->r_fmode = -1;
 	atomic_set(&req->r_ref, 1);  /* one for request_tree, one for caller */
 	INIT_LIST_HEAD(&req->r_wait);

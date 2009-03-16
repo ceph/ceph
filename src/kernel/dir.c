@@ -800,52 +800,50 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	return size - left;
 }
 
-static int ceph_dir_fsync(struct file *file, struct dentry *dentry, int datasync)
+static int ceph_dir_fsync(struct file *file, struct dentry *dentry,
+			  int datasync)
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int ret, err;
-	struct list_head *p, *n, *head;
+	struct list_head *head = &ci->i_unsafe_dirops;
 	struct ceph_mds_request *req;
 	u64 last_tid;
+	int ret = 0;
 
-	ret = 0;
-	dout(10, "sync on directory\n");
-
-	head = &ci->i_listener_list;
-
-	spin_lock(&ci->i_listener_lock);
-
+	dout(10, "dir_fsync %p\n", inode);
+	spin_lock(&ci->i_unsafe_lock);
 	if (list_empty(head))
 		goto out;
 
 	req = list_entry(head->prev,
-			 struct ceph_mds_request, r_listener_item);
+			 struct ceph_mds_request, r_unsafe_dir_item);
 	last_tid = req->r_tid;
 
-	list_for_each_safe(p, n, head) {
-		req = list_entry(p, struct ceph_mds_request, r_listener_item);
-
-		/* avoid starvation */
-		if (req->r_tid > last_tid)
-			goto out;
-
+	do {
 		ceph_mdsc_get_request(req);
-		spin_unlock(&ci->i_listener_lock);
+		spin_unlock(&ci->i_unsafe_lock);
+		dout(10, "dir_fsync %p wait on tid %llu (until %llu)\n",
+		     inode, req->r_tid, last_tid);
 		if (req->r_timeout) {
-			err = wait_for_completion_timeout(&req->r_safe_completion,
-							req->r_timeout);
-			if (err == 0)
+			ret = wait_for_completion_timeout(&req->r_safe_completion,
+							  req->r_timeout);
+			if (ret > 0)
+				ret = 0;
+			else if (ret == 0)
 				ret = -EIO;  /* timed out */
 		} else {
 			wait_for_completion(&req->r_safe_completion);
 		}
-		spin_lock(&ci->i_listener_lock);
-
+		spin_lock(&ci->i_unsafe_lock);
 		ceph_mdsc_put_request(req);
-	}
+
+		if (ret || list_empty(head))
+			break;
+		req = list_entry(head->next,
+				 struct ceph_mds_request, r_unsafe_dir_item);
+	} while (req->r_tid < last_tid);
 out:
-	spin_unlock(&ci->i_listener_lock);
+	spin_unlock(&ci->i_unsafe_lock);
 	return ret;
 }
 

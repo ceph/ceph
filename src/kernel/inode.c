@@ -288,7 +288,10 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_wrbuffer_ref_head = 0;
 	ci->i_rdcache_gen = 0;
 	ci->i_rdcache_revoking = 0;
+
 	INIT_LIST_HEAD(&ci->i_unsafe_writes);
+	INIT_LIST_HEAD(&ci->i_unsafe_dirops);
+	spin_lock_init(&ci->i_unsafe_lock);
 
 	ci->i_snap_realm = NULL;
 	INIT_LIST_HEAD(&ci->i_snap_realm_item);
@@ -298,9 +301,6 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_WORK(&ci->i_pg_inv_work, ceph_inode_invalidate_pages);
 
 	INIT_WORK(&ci->i_vmtruncate_work, ceph_vmtruncate_work);
-
-	INIT_LIST_HEAD(&ci->i_listener_list);
-	spin_lock_init(&ci->i_listener_lock);
 
 	return &ci->vfs_inode;
 }

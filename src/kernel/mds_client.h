@@ -179,8 +179,8 @@ struct ceph_mds_request {
 	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
 	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
-	struct inode	*r_listener;
-	struct list_head r_listener_item;
+	struct inode	*r_unsafe_dir;
+	struct list_head r_unsafe_dir_item;
 
 	/* references to the trailing dentry and inode from parsing the
 	 * mds response.  also used to feed a VFS-provided dentry into
