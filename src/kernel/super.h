@@ -447,7 +447,7 @@ static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 
 static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
 {
-	return (ceph_caps_issued(ci) & mask);
+	return (ceph_caps_issued(ci) & mask) == mask;
 }
 
 extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
