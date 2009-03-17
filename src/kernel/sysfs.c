@@ -368,25 +368,28 @@ static ssize_t req_mon_op_show(struct ceph_mon_statfs_request *req,
 	return sprintf(buf, "statfs\n");
 }
 
-int ceph_sysfs_mon_statfs_req_init(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req,
-				   struct ceph_msg *msg)
+int ceph_sysfs_mon_statfs_req_init(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req)
 {
 	int ret = 0;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
 	ret = kobject_init_and_add(&req->kobj, &ceph_mon_statfs_request_ops,
 				   &monc->kobj, "%d", req->tid);
-	if (ret)
-		goto out;
-
-	req->k_mon.dst = msg->hdr.dst;
+#endif
+	memset(&req->k_mon.dst, 0, sizeof(req->k_mon.dst));
 	ADD_ENTITY_ATTR(req, k_mon, "mon", 0400, req_mon_show, NULL);
 	ADD_ENTITY_ATTR(req, k_op, "op", 0400, req_mon_op_show, NULL);
 
-	return 0;
-out:
-#endif
 	return ret;
+}
+
+int ceph_sysfs_mon_statfs_req_set(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req,
+				   struct ceph_msg *msg)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	req->k_mon.dst = msg->hdr.dst;
+#endif
+	return 0;
 }
 
 void ceph_sysfs_mon_statfs_req_cleanup(struct ceph_mon_statfs_request *req)
