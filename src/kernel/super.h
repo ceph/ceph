@@ -809,6 +809,9 @@ extern int ceph_sysfs_mon_statfs_req_init(struct ceph_mon_client *monc, struct c
 					  struct ceph_msg *msg);
 extern void ceph_sysfs_mon_statfs_req_cleanup(struct ceph_mon_statfs_request *req);
 
+/* debugfs.c */
+extern int ceph_debugfs_init(void);
+extern void ceph_debugfs_cleanup(void);
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {

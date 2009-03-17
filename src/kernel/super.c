@@ -1071,9 +1071,13 @@ static int __init init_ceph(void)
 	ceph_bookkeeper_init();
 #endif
 
-	ret = ceph_sysfs_init();
+	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
+
+	ret = ceph_sysfs_init();
+	if (ret < 0)
+		goto out_debugfs;
 
 	ret = ceph_msgr_init();
 	if (ret < 0)
@@ -1094,6 +1098,8 @@ out_msgr:
 	ceph_msgr_exit();
 out_sysfs:
 	ceph_sysfs_cleanup();
+out_debugfs:
+	ceph_debugfs_cleanup();
 out:
 	return ret;
 }
@@ -1105,6 +1111,7 @@ static void __exit exit_ceph(void)
 	destroy_inodecache();
 	ceph_msgr_exit();
 	ceph_sysfs_cleanup();
+	ceph_debugfs_cleanup();
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_finalize();
 #endif

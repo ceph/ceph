@@ -815,7 +815,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		dn = d_find_alias(in);
 		if (IS_ERR(dn))
 			return PTR_ERR(dn);
-		iput(in);
+		iput(in); /* dn still references in */
 	} else {
 		/* first reply (i.e. we just mounted) */
 		dn = d_alloc_root(in);
