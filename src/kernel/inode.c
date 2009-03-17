@@ -1708,7 +1708,6 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	int err;
 
 	err = ceph_do_getattr(dentry, CEPH_STAT_CAP_INODE_ALL);
-	dout(30, "getattr returned %d\n", err);
 	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
 		stat->ino = ceph_ino(dentry->d_inode);
