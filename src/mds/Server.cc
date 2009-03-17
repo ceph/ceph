@@ -710,7 +710,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   __u16 numi = 0, numdn = 0;
   __s16 snapdirpos = -1;
 
-  bool single_segment = true;  // do a single segment: [inode, ] dentry, dir.
+  bool single_segment = g_conf.mds_short_reply_trace;  // do a single segment: [inode, ] dentry, dir.
 
   // choose lease duration
   utime_t now = g_clock.now();

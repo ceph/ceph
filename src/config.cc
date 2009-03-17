@@ -479,6 +479,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_scatter_nudge_interval, 0, OPT_FLOAT, 5),  // how quickly dirstat changes propagate up the hierarchy
 	OPTION(mds_client_prealloc_inos, 0, OPT_INT, 1000),
 	OPTION(mds_early_reply, 0, OPT_BOOL, true),
+	OPTION(mds_short_reply_trace, 0, OPT_BOOL, true),
 	OPTION(mds_rdcap_ttl_ms, 0, OPT_INT, 60*1000),
 	OPTION(mds_log, 0, OPT_BOOL, true),
 	OPTION(mds_log_unsafe, 0, OPT_BOOL, false),      // only wait for log sync, when it's mostly safe to do so

@@ -200,6 +200,7 @@ struct md_config_t {
 
   int mds_client_prealloc_inos;
   bool mds_early_reply;
+  bool mds_short_reply_trace;
 
   int mds_rdcap_ttl_ms;
 
