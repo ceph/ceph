@@ -112,6 +112,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	init_completion(&req->r_completion);
 	init_completion(&req->r_safe_completion);
 	INIT_LIST_HEAD(&req->r_unsafe_item);
+	req->r_flags = flags & CEPH_OSD_OP_MODIFY;
+	req->r_last_osd = -1;
 
 	/* create message */
 	if (snapc)
@@ -305,8 +307,12 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 }
 
 /*
- * pick an osd.  the first up osd in the pg.  or -1.
- * caller should hold map_sem for read.
+ * Pick an osd, and put result in req->r_last_osd[_addr].  The first
+ * up osd in the pg.  or -1.
+ *
+ * Caller should hold map_sem for read.
+ *
+ * return 0 if unchanged, 1 if changed.
  */
 static int map_osds(struct ceph_osd_client *osdc,
 		    struct ceph_osd_request *req)
@@ -343,9 +349,15 @@ static int map_osds(struct ceph_osd_client *osdc,
 			osd = osds[i];
 			break;
 		}
-	if (req->r_last_osd == osd)
+	dout(20, "map_osds tid %llu osd%d (was osd%d)\n", req->r_tid, osd,
+	     req->r_last_osd);
+	if (req->r_last_osd == osd &&
+	    (osd < 0 || ceph_entity_addr_equal(&osdc->osdmap->osd_addr[osd],
+					       &req->r_last_osd_addr)))
 		return 0;
 	req->r_last_osd = osd;
+	if (osd >= 0)
+		req->r_last_osd_addr = osdc->osdmap->osd_addr[osd];
 	return 1;
 }
 
@@ -378,9 +390,8 @@ static int send_request(struct ceph_osd_client *osdc,
 	req->r_request->hdr.dst.name.type =
 		cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 	req->r_request->hdr.dst.name.num = cpu_to_le32(osd);
-	req->r_request->hdr.dst.addr = osdc->osdmap->osd_addr[osd];
+	req->r_request->hdr.dst.addr = req->r_last_osd_addr;
 
-	req->r_last_osd_addr = req->r_request->hdr.dst.addr;
 	req->r_timeout_stamp = jiffies+osdc->client->mount_args.osd_timeout*HZ;
 
 	ceph_msg_get(req->r_request); /* send consumes a ref */
@@ -496,6 +507,9 @@ static void kick_requests(struct ceph_osd_client *osdc,
 			break;
 		next_tid = req->r_tid + 1;
 
+		if (who && ceph_entity_addr_equal(who, &req->r_last_osd_addr))
+			goto kick;
+
 		if (map_osds(osdc, req) == 0)
 			continue;  /* no change */
 
@@ -507,6 +521,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 			continue;
 		}
 
+	kick:
 		dout(20, "kicking tid %llu osd%d\n", req->r_tid,
 		     req->r_last_osd);
 		ceph_osdc_get_request(req);
