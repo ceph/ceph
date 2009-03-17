@@ -103,6 +103,11 @@ AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_MSG_ERROR([Sorry, you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
 AC_LANG([C])
+
+AC_CHECK_HEADER([histedit.h],
+	[],
+	[AC_MSG_ERROR([Sorry, you need histedit.h (libedit-dev on debian)])])
+
 AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
