@@ -310,7 +310,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		spin_unlock(&dir->i_lock);
 	}
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUP,
 				       dentry, NULL, NULL, NULL,
 				       USE_ANY_MDS);
 	if (IS_ERR(req))
