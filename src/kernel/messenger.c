@@ -635,8 +635,8 @@ static void prepare_write_message_footer(struct ceph_connection *con, int v)
 	con->out_kvec[v].iov_len = sizeof(m->footer);
 	con->out_kvec_bytes += sizeof(m->footer);
 	con->out_kvec_left++;
+	con->out_more = m->more_to_follow;
 	con->out_msg = NULL;   /* we're done with this one */
-	con->out_more = 0;     /* end of message */
 }
 
 /*
@@ -705,7 +705,6 @@ static void prepare_write_message(struct ceph_connection *con)
 	} else {
 		/* no, queue up footer too and be done */
 		prepare_write_message_footer(con, v);
-		con->out_more = con->out_msg->more_to_follow;
 	}
 
 	set_bit(WRITE_PENDING, &con->state);
