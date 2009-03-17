@@ -373,19 +373,39 @@ void ceph_fill_file_time(struct inode *inode, int issued,
 	if (issued & (CEPH_CAP_FILE_EXCL|
 		      CEPH_CAP_FILE_WR|
 		      CEPH_CAP_FILE_WRBUFFER)) {
-		if (timespec_compare(ctime, &inode->i_ctime) > 0)
+		if (timespec_compare(ctime, &inode->i_ctime) > 0) {
+			dout(20, "ctime %ld.%09ld -> %ld.%09ld inc w/ cap\n",
+			     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec,
+			     ctime->tv_sec, ctime->tv_nsec);
 			inode->i_ctime = *ctime;
+		}
 		if (ceph_seq_cmp(time_warp_seq, ci->i_time_warp_seq) > 0) {
 			/* the MDS did a utimes() */
+			dout(20, "mtime %ld.%09ld -> %ld.%09ld "
+			     "tw %d -> %d\n",
+			     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec,
+			     mtime->tv_sec, mtime->tv_nsec,
+			     ci->i_time_warp_seq, (int)time_warp_seq);
+
 			inode->i_mtime = *mtime;
 			inode->i_atime = *atime;
 			ci->i_time_warp_seq = time_warp_seq;
 		} else if (time_warp_seq == ci->i_time_warp_seq) {
 			/* nobody did utimes(); take the max */
-			if (timespec_compare(mtime, &inode->i_mtime) > 0)
+			if (timespec_compare(mtime, &inode->i_mtime) > 0) {
+				dout(20, "mtime %ld.%09ld -> %ld.%09ld inc\n",
+				     inode->i_mtime.tv_sec,
+				     inode->i_mtime.tv_nsec,
+				     mtime->tv_sec, mtime->tv_nsec);
 				inode->i_mtime = *mtime;
-			if (timespec_compare(atime, &inode->i_atime) > 0)
+			}
+			if (timespec_compare(atime, &inode->i_atime) > 0) {
+				dout(20, "atime %ld.%09ld -> %ld.%09ld inc\n",
+				     inode->i_atime.tv_sec,
+				     inode->i_atime.tv_nsec,
+				     atime->tv_sec, atime->tv_nsec);
 				inode->i_atime = *atime;
+			}
 		} else if (issued & CEPH_CAP_FILE_EXCL) {
 			/* we did a utimes(); ignore mds values */
 		} else {
@@ -1660,8 +1680,8 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 		return 0;
 	}
 
-	dout(30, "do_getattr dentry %p inode %p mask %d\n", dentry,
-	     dentry->d_inode, mask);
+	dout(30, "do_getattr dentry %p inode %p mask %s\n", dentry,
+	     dentry->d_inode, ceph_cap_string(mask));
 	if (ceph_caps_issued_mask(ceph_inode(dentry->d_inode), mask))
 		return 0;
 
