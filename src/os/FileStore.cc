@@ -1410,11 +1410,12 @@ void FileStore::sync_entry()
   Cond othercond;
 
   lock.Lock();
-  utime_t max_interval;
-  max_interval.set_from_double(g_conf.filestore_max_sync_interval);
-  utime_t min_interval;
-  min_interval.set_from_double(g_conf.filestore_min_sync_interval);
   while (!stop) {
+    utime_t max_interval;
+    max_interval.set_from_double(g_conf.filestore_max_sync_interval);
+    utime_t min_interval;
+    min_interval.set_from_double(g_conf.filestore_min_sync_interval);
+
     dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
     utime_t startwait = g_clock.now();
 
