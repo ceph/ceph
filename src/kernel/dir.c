@@ -601,7 +601,8 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 
 /*
- * Check if dentry lease is valid.  If not, delete the lease.
+ * Check if dentry lease is valid.  If not, delete the lease.  Try to
+ * renew if appropriate.
  */
 static int dentry_lease_is_valid(struct dentry *dentry)
 {
@@ -649,12 +650,31 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 }
 
 /*
+ * Check if directory-wide content lease/cap is valid.
+ */
+static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
+{
+	struct ceph_inode_info *ci = ceph_inode(dir);
+	int valid = 0;
+
+	spin_lock(&dir->i_lock);
+	if (ceph_ino(dir) != CEPH_INO_ROOT &&
+	    ci->i_version == dentry->d_time &&
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+		valid = 1;
+	}
+	spin_unlock(&dir->i_lock);
+	dout(20, "dir_lease_is_valid dir %p v%llu dentry %p v%lu = %d\n",
+	     dir, ci->i_version, dentry, dentry->d_time, valid);
+	return valid;
+}
+
+/*
  * Check if cached dentry can be trusted.
  */
 static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
-	struct ceph_inode_info *dirci = ceph_inode(dir);
 
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
@@ -666,23 +686,11 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 		return 1;
 	}
 
-	/* RDCACHE cap on directory? */
-	spin_lock(&dir->i_lock);
-	if (ceph_ino(dir) != CEPH_INO_ROOT &&
-	    dirci->i_version == dentry->d_time &&
-	    (__ceph_caps_issued(dirci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
-		dout(20, "dentry_revalidate %p %lu file RDCACHE dir %p %llu\n",
-		     dentry, dentry->d_time, dir, ceph_inode(dir)->i_version);
-		spin_unlock(&dir->i_lock);
+	if (dentry_lease_is_valid(dentry))
 		return 1;
-	}
-	spin_unlock(&dir->i_lock);
 
-	/* dentry lease? */
-	if (dentry_lease_is_valid(dentry)) {
-		dout(20, "dentry_revalidate %p lease valid\n", dentry);
+	if (dir_lease_is_valid(dir, dentry))
 		return 1;
-	}
 
 	dout(20, "dentry_revalidate %p invalid, clearing %p complete\n",
 	     dentry, dir);
