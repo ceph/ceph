@@ -769,9 +769,6 @@ extern const struct inode_operations ceph_dir_iops;
 extern struct dentry_operations ceph_dentry_ops, ceph_snap_dentry_ops,
 	ceph_snapdir_dentry_ops;
 
-extern struct dentry *ceph_do_lookup(struct super_block *sb,
-				     struct dentry *dentry,
-				     int mask, int on_inode, int locked_dir);
 extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);
 

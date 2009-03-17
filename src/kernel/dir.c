@@ -266,67 +266,23 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 }
 
 /*
- * Do a lookup / lstat (same thing, modulo the metadata @mask).
- * @on_inode indicates that we should stat the ino directly, and not a
- * path built from @dentry.
- */
-struct dentry *ceph_do_lookup(struct super_block *sb, struct dentry *dentry,
-			      int mask, int on_inode, int locked_dir)
-{
-	struct ceph_client *client = ceph_sb_to_client(sb);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_mds_request *req;
-	struct inode *dir = dentry->d_parent->d_inode;
-	int err;
-
-	if (dentry->d_name.len > NAME_MAX)
-		return ERR_PTR(-ENAMETOOLONG);
-
-	/* can we conclude ENOENT locally? */
-	if (dentry->d_inode == NULL) {
-		struct ceph_inode_info *ci = ceph_inode(dir);
-
-		spin_lock(&dir->i_lock);
-		dout(10, "%p flags are %d\n", dir, ci->i_ceph_flags);
-		if (ceph_ino(dir) != CEPH_INO_ROOT &&
-		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
-		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
-			spin_unlock(&dir->i_lock);
-			dout(10, "do_lookup %p dir %p complete, -ENOENT\n",
-			     dentry, dir);
-			ceph_init_dentry(dentry);
-			d_add(dentry, NULL);
-			dentry->d_time = ci->i_version;
-			return NULL;
-		}
-		spin_unlock(&dir->i_lock);
-	}
-
-	dout(10, "do_lookup %p mask %d\n", dentry, mask);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
-				       dentry, NULL, NULL, NULL,
-				       on_inode ? USE_CAP_MDS:USE_ANY_MDS);
-	if (IS_ERR(req))
-		return ERR_PTR(PTR_ERR(req));
-	req->r_args.stat.mask = cpu_to_le32(mask);
-	req->r_locked_dir = dentry->d_parent->d_inode;  /* by the VFS */
-	err = ceph_mdsc_do_request(mdsc, NULL, req);
-	dentry = ceph_finish_lookup(req, dentry, err);
-	ceph_mdsc_put_request(req);  /* will dput(dentry) */
-	dout(20, "do_lookup result=%p\n", dentry);
-	return dentry;
-}
-
-/*
  * Try to do a lookup+open, if possible.
  */
 static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 				  struct nameidata *nd)
 {
-	dout(5, "lookup in dir %p dentry %p '%.*s'\n",
+	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_mds_request *req;
+	int err;
+
+	dout(5, "lookup %p dentry %p '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
-	/* open (but not create!) intent?  (not on special files, tho)  */
+	if (dentry->d_name.len > NAME_MAX)
+		return ERR_PTR(-ENAMETOOLONG);
+
+	/* open (but not create!) intent? */
 	if (nd &&
 	    (nd->flags & LOOKUP_OPEN) &&
 	    (nd->flags & LOOKUP_CONTINUE) == 0 && /* only open last component */
@@ -335,7 +291,38 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		return ceph_lookup_open(dir, dentry, nd, mode, 1);
 	}
 
-	return ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE, 0, 1);
+	/* can we conclude ENOENT locally? */
+	if (dentry->d_inode == NULL) {
+		struct ceph_inode_info *ci = ceph_inode(dir);
+
+		spin_lock(&dir->i_lock);
+		dout(40, " dir %p flags are %d\n", dir, ci->i_ceph_flags);
+		if (ceph_ino(dir) != CEPH_INO_ROOT &&
+		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
+		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+			spin_unlock(&dir->i_lock);
+			dout(10, " dir %p complete, -ENOENT\n", dir);
+			ceph_init_dentry(dentry);
+			d_add(dentry, NULL);
+			dentry->d_time = ci->i_version;
+			return NULL;
+		}
+		spin_unlock(&dir->i_lock);
+	}
+
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
+				       dentry, NULL, NULL, NULL,
+				       USE_ANY_MDS);
+	if (IS_ERR(req))
+		return ERR_PTR(PTR_ERR(req));
+	/* we only need inode linkage */
+	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
+	req->r_locked_dir = dentry->d_parent->d_inode;  /* by the VFS */
+	err = ceph_mdsc_do_request(mdsc, NULL, req);
+	dentry = ceph_finish_lookup(req, dentry, err);
+	ceph_mdsc_put_request(req);  /* will dput(dentry) */
+	dout(20, "lookup result=%p\n", dentry);
+	return dentry;
 }
 
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
