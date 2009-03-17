@@ -1687,7 +1687,7 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
 				       dentry, NULL, NULL, NULL,
-				       USE_CAP_MDS);
+				       USE_ANY_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_args.stat.mask = cpu_to_le32(mask);

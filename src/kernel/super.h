@@ -149,6 +149,7 @@ struct ceph_cap {
 	int mds_wanted;
 	u32 seq, mseq, gen;
 	unsigned long expires;  /* if readonly and unwanted (jiffies) */
+	unsigned long renew_after;  /* if readonly and unwanted (jiffies) */
 };
 
 /*
@@ -732,6 +733,8 @@ extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int drop,
 			    struct ceph_mds_session *session);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
+extern int __ceph_check_cap_maybe_renew(struct ceph_inode_info *ci, int mask);
+
 void ceph_trim_session_rdcaps(struct ceph_mds_session *session);
 
 static inline void ceph_release_caps(struct inode *inode, int mask)

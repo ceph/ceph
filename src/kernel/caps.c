@@ -186,13 +186,13 @@ static void __adjust_cap_rdcaps_listing(struct ceph_inode_info *ci,
 		if (!list_empty(&cap->session_rdcaps))
 			list_del_init(&cap->session_rdcaps);
 		else
-			dout(20, "adjust_cap_rdcaps_listing %p added %p\n",
-			     &ci->vfs_inode, cap);
+			dout(20, "adjust_cap_rdcaps_listing %p added %p %s\n",
+			     &ci->vfs_inode, cap, ceph_cap_string(caps));
 		list_add_tail(&cap->session_rdcaps, &cap->session->s_rdcaps);
 	} else {
 		if (!list_empty(&cap->session_rdcaps)) {
-			dout(20, "adjust_cap_rdcaps_listing %p removed %p\n",
-			     &ci->vfs_inode, cap);
+			dout(20, "adjust_cap_rdcaps_listing %p removed %p %s\n",
+			     &ci->vfs_inode, cap, ceph_cap_string(caps));
 			list_del_init(&cap->session_rdcaps);
 		}
 	}
@@ -221,6 +221,7 @@ int ceph_add_cap(struct inode *inode,
 	struct ceph_cap *cap;
 	int mds = session->s_mds;
 	int is_first = 0;
+	unsigned long duration;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -308,7 +309,13 @@ retry:
 	cap->seq = seq;
 	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
-	cap->expires = ttl_from + (ttl_ms * HZ / 1000);
+
+	duration = ttl_ms * HZ / 1000;
+	cap->expires = ttl_from + duration;
+	cap->renew_after = ttl_from + (duration >> 1);
+	dout(30, " expires %lu, renew_after %lu (duration %lu, %u ms)\n",
+	     cap->expires, cap->renew_after, duration, ttl_ms);
+
 	if (fmode >= 0)
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
@@ -993,6 +1000,54 @@ ack:
 		mutex_unlock(&session->s_mutex);
 	if (took_snap_rwsem)
 		up_read(&mdsc->snap_rwsem);
+}
+
+/*
+ * Check for cap mask.  If held via rdcaps, consider renewing.
+ *
+ * Called under i_lock.
+ */
+int __ceph_check_cap_maybe_renew(struct ceph_inode_info *ci, int mask)
+	__releases(ci->vfs_inode->i_lock)
+{
+	struct inode *inode = &ci->vfs_inode;
+	struct ceph_cap *cap;
+	struct rb_node *p;
+	int valid = 0;
+
+	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+		cap = rb_entry(p, struct ceph_cap, ci_node);
+
+		if (!__cap_is_valid(cap) || (cap->issued & mask) == 0)
+			continue;
+		valid = 1;
+
+		if (list_empty(&cap->session_rdcaps)) {
+			dout(30, "check_cap_maybe_renew %p %p %s has %s\n",
+			     inode, cap, ceph_cap_string(cap->issued),
+			     ceph_cap_string(mask));
+			break;  /* not an rdcap, it doesn't expire */
+		}
+
+		/* should we renew the rdcap? */
+		if (cap->renew_after &&
+		    time_after(jiffies, cap->renew_after)) {
+			dout(30, "check_cap_maybe_renew %p %p renewing"
+			     " (%lu <= %lu)\n", inode, cap,
+			     cap->renew_after, jiffies);
+			cap->renew_after = 0;
+			__send_cap(&ceph_client(inode->i_sb)->mdsc, cap,
+				   CEPH_CAP_OP_RENEW, 0, 0, cap->issued);
+			goto out;
+		}
+		dout(30, "check_cap_maybe_renew %p %p renew at %lu > %lu\n",
+		     inode, cap, cap->renew_after, jiffies);
+		break;
+	}	
+
+	spin_unlock(&inode->i_lock);
+out:
+	return valid;
 }
 
 /*
