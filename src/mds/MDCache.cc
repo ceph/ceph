@@ -2233,6 +2233,7 @@ void MDCache::disambiguate_imports()
     }
   }
   assert(my_ambiguous_imports.empty());
+  mds->mdlog->flush();
 
   if (mds->is_resolve()) {
     // verify all my subtrees are unambiguous!
@@ -3958,6 +3959,7 @@ void MDCache::queue_file_recover(CInode *in)
     in->parent->first = in->first;
     le->metablob.add_primary_dentry(in->parent, true, in, in->get_projected_inode());
     mds->mdlog->submit_entry(le, new C_MDC_QueuedCow(this, in, mut));
+    mds->mdlog->flush();
   }
 
   _queue_file_recover(in);
@@ -6370,6 +6372,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
 
   mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
+  mds->mdlog->flush();
 }
 
 
@@ -8007,6 +8010,7 @@ void MDCache::fragment_stored(MDRequest *mdr)
   
   mds->mdlog->submit_entry(le,
 			   new C_MDC_FragmentLogged(this, mdr));
+  mds->mdlog->flush();
 }
 
 void MDCache::fragment_logged(MDRequest *mdr)
