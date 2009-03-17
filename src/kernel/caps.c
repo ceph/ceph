@@ -592,9 +592,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
  * called with i_lock, then drops it.
  * caller should hold snap_rwsem (read), s_mutex.
  */
-static void __send_cap(struct ceph_mds_client *mdsc,
-		       struct ceph_mds_session *session,
-		       struct ceph_cap *cap,
+static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		       int used, int want, int retain)
 	__releases(cap->ci->vfs_inode->i_lock)
 {
@@ -613,23 +611,14 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 	mode_t mode;
 	uid_t uid;
 	gid_t gid;
-	int dirty;
 	int flushing;
 	int last_cap = 0;
+	int mds = cap->session->s_mds;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
 	     cap, cap->session,
 	     ceph_cap_string(held), ceph_cap_string(held & retain),
 	     ceph_cap_string(revoking));
-
-	dirty = __ceph_caps_dirty(ci);
-	cap->flushing |= dirty & held;
-	if (cap->flushing) {
-		ci->i_dirty_caps &= ~cap->flushing;
-		dout(10, "__send_cap flushing %s, dirty_caps now %s\n",
-		     ceph_cap_string(cap->flushing),
-		     ceph_cap_string(ci->i_dirty_caps));
-	}
 
 	cap->issued &= retain;  /* drop bits we don't want */
 
@@ -679,7 +668,7 @@ static void __send_cap(struct ceph_mds_client *mdsc,
 		     op, keep, want, flushing, seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
-		     follows, session->s_mds);
+		     follows, mds);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -815,7 +804,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 	struct ceph_cap *cap;
 	int file_wanted, used;
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
-	int want, retain, revoking;
+	int want, retain, revoking, dirty;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
@@ -983,8 +972,18 @@ ack:
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
+		/* update dirty, flushing bits */
+		dirty = __ceph_caps_dirty(ci);
+		cap->flushing |= dirty & cap->implemented;
+		if (cap->flushing) {
+			ci->i_dirty_caps &= ~cap->flushing;
+			dout(10, "__send_cap flushing %s, dirty_caps now %s\n",
+			     ceph_cap_string(cap->flushing),
+			     ceph_cap_string(ci->i_dirty_caps));
+		}
+		
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, session, cap, used, want, retain);
+		__send_cap(mdsc, cap, used, want, retain);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
