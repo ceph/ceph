@@ -335,29 +335,33 @@ void sighup_handler(int signum)
 #define STRINGIFY(x) #x
 
 struct config_option {
-	const char *section;
-	const char *conf_name;
-	const char *name;
-	void *val_ptr;
-       
-	const char *def_val;
-	opt_type_t type;
-	char char_option;  // if any
-};
+  const char *section;
+  const char *conf_name;
+  const char *name;
+  void *val_ptr;
+  
+  const char *def_str;
+  long long def_longlong;
+  double def_double;
 
-#define OPTION_DEF(section, name, schar, type, def_val) \
-       { STRINGIFY(section), NULL, STRINGIFY(name), \
-         &g_conf.name, STRINGIFY(def_val), type, schar }
+  opt_type_t type;
+  char char_option;  // if any
+};
 
 #define OPTION_OPT_STR(section, name, schar, type, def_val) \
        { STRINGIFY(section), NULL, STRINGIFY(name), \
-         &g_conf.name, def_val, type, schar }
+	   &g_conf.name, def_val, 0, 0, type, schar }
 
-#define OPTION_OPT_BOOL OPTION_DEF
-#define OPTION_OPT_INT OPTION_DEF
-#define OPTION_OPT_LONGLONG OPTION_DEF
-#define OPTION_OPT_FLOAT OPTION_DEF
-#define OPTION_OPT_DOUBLE OPTION_DEF
+#define OPTION_OPT_LONGLONG(section, name, schar, type, def_val) \
+       { STRINGIFY(section), NULL, STRINGIFY(name), \
+	   &g_conf.name, 0, def_val, 0, type, schar }
+#define OPTION_OPT_INT OPTION_OPT_LONGLONG
+#define OPTION_OPT_BOOL OPTION_OPT_INT
+
+#define OPTION_OPT_DOUBLE(section, name, schar, type, def_val) \
+       { STRINGIFY(section), NULL, STRINGIFY(name), \
+	   &g_conf.name, 0, 0, def_val, type, schar }
+#define OPTION_OPT_FLOAT OPTION_OPT_DOUBLE
 
 #define OPTION(name, schar, type, def_val) OPTION_##type("global", name, schar, type, def_val)
 
@@ -590,38 +594,69 @@ static struct config_option config_optionsp[] = {
 
 bool conf_set_conf_val(void *field, opt_type_t type, const char *val)
 {
-	switch (type) {
-	case OPT_BOOL:
-		if (strcasecmp(val, "false") == 0)
-			*(bool *)field = false;
-		else if (strcasecmp(val, "true") == 0)
-			*(bool *)field = true;
-		else
-			*(bool *)field = (bool)atoi(val);
-		break;
-	case OPT_INT:
-		*(int *)field = atoi(val);
-		break;
-	case OPT_LONGLONG:
-		*(long long *)field = atoll(val);
-		break;
-	case OPT_STR:
-		if (val)
-		  *(char **)field = strdup(val);
-	        else
-		  *(char **)field = NULL;
-		break;
-	case OPT_FLOAT:
-		*(float *)field = atof(val);
-		break;
-	case OPT_DOUBLE:
-		*(double *)field = strtod(val, NULL);
-		break;
-	default:
-		return false;
-	}
+  switch (type) {
+  case OPT_BOOL:
+    if (strcasecmp(val, "false") == 0)
+      *(bool *)field = false;
+    else if (strcasecmp(val, "true") == 0)
+      *(bool *)field = true;
+    else
+      *(bool *)field = (bool)atoi(val);
+    break;
+  case OPT_INT:
+    *(int *)field = atoi(val);
+    break;
+  case OPT_LONGLONG:
+    *(long long *)field = atoll(val);
+    break;
+  case OPT_STR:
+    if (val)
+      *(char **)field = strdup(val);
+    else
+      *(char **)field = NULL;
+    break;
+  case OPT_FLOAT:
+    *(float *)field = atof(val);
+    break;
+  case OPT_DOUBLE:
+    *(double *)field = strtod(val, NULL);
+    break;
+  default:
+    return false;
+  }
+  
+  return true;
+}
 
-	return true;
+bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long intval, double doubleval)
+{
+  switch (type) {
+  case OPT_BOOL:
+    *(bool *)field = intval;
+    break;
+  case OPT_INT:
+    *(int *)field = intval;
+    break;
+  case OPT_LONGLONG:
+    *(long long *)field = intval;
+    break;
+  case OPT_STR:
+    if (val)
+      *(char **)field = strdup(val);
+    else
+      *(char **)field = NULL;
+    break;
+  case OPT_FLOAT:
+    *(float *)field = doubleval;
+    break;
+  case OPT_DOUBLE:
+    *(double *)field = doubleval;
+    break;
+  default:
+    return false;
+  }
+  
+  return true;
 }
 
 static void set_conf_name(config_option *opt)
@@ -668,8 +703,10 @@ static bool init_g_conf()
   for (i = 0; i<len; i++) {
     opt = &config_optionsp[i];
     if (!conf_set_conf_val(opt->val_ptr,
-		      opt->type,
-		      opt->def_val)) {
+			   opt->type,
+			   opt->def_str,
+			   opt->def_longlong,
+			   opt->def_double)) {
       cerr << "error initializing g_conf value num " << i << std::endl;
       return false;
     }
