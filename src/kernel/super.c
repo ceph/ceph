@@ -117,6 +117,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 static int ceph_syncfs(struct super_block *sb, int wait)
 {
 	dout(10, "sync_fs %d\n", wait);
+	ceph_osdc_sync(&ceph_client(sb)->osdc);
 	return 0;
 }
 

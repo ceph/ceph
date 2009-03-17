@@ -784,6 +784,38 @@ void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
 	}
 }
 
+void ceph_osdc_sync(struct ceph_osd_client *osdc)
+{
+       struct ceph_osd_request *req;
+       u64 last_tid, next_tid = 0;
+       int got;
+
+       mutex_lock(&osdc->request_mutex);
+       last_tid = osdc->last_tid;
+       while (1) {
+	       got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+					    next_tid, 1);
+	       if (!got)
+		       break;
+	       if (req->r_tid > last_tid)
+		       break;
+
+	       next_tid = req->r_tid + 1;
+	       if ((req->r_flags & CEPH_OSD_OP_MODIFY) == 0)
+		       continue;
+
+	       ceph_osdc_get_request(req);
+	       mutex_unlock(&osdc->request_mutex);
+	       dout(10, "sync waiting on tid %llu (last is %llu)\n",
+		    req->r_tid, last_tid);
+	       wait_for_completion(&req->r_safe_completion);
+	       mutex_lock(&osdc->request_mutex);
+	       ceph_osdc_put_request(req);
+       }
+       mutex_unlock(&osdc->request_mutex);
+       dout(10, "sync done (thru tid %llu)\n", last_tid);
+}
+
 /*
  * init, shutdown
  */
