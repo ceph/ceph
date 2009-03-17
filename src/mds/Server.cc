@@ -4942,7 +4942,7 @@ void Server::handle_client_open(MDRequest *mdr)
   // regular file?
   if (!cur->inode.is_file() && !cur->inode.is_dir()) {
     dout(7) << "not a file or dir " << *cur << dendl;
-    reply_request(mdr, -EINVAL);                 // FIXME what error do we want?
+    reply_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
   }
   if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
