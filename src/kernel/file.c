@@ -56,15 +56,35 @@ out:
 static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 {
 	struct ceph_file_info *cf;
+	int ret = 0;
 
-	cf = kzalloc(sizeof(*cf), GFP_NOFS);
-	if (cf == NULL) {
+	switch (inode->i_mode & S_IFMT) {
+	case S_IFREG:
+	case S_IFDIR:
+		dout(20, "init_file %p 0%o (regular)\n", inode, inode->i_mode);
+		cf = kzalloc(sizeof(*cf), GFP_NOFS);
+		if (cf == NULL) {
+			ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
+			return -ENOMEM;
+		}
+		cf->fmode = fmode;
+		file->private_data = cf;
+		BUG_ON(inode->i_fop->release != ceph_release);
+		break;
+
+	default:
+		dout(20, "init_file %p 0%o (special)\n", inode, inode->i_mode);
+		/*
+		 * we need to drop the open ref now, since we don't
+		 * have .release set to ceph_release.
+		 */
 		ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
-		return -ENOMEM;
+		BUG_ON(inode->i_fop->release == ceph_release);
+
+		/* call the proper open fop */
+		ret = inode->i_fop->open(inode, file);		
 	}
-	cf->fmode = fmode;
-	file->private_data = cf;
-	return 0;
+	return ret;
 }
 
 /*
@@ -765,5 +785,4 @@ const struct file_operations ceph_file_fops = {
 	.splice_write = generic_file_splice_write,
 	.unlocked_ioctl = ceph_ioctl,
 };
-
 
