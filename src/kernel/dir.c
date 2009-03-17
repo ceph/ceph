@@ -368,17 +368,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 		 * no trace.  do lookup, in case we are called from create
 		 * and the VFS needs a valid dentry.
 		 */
-		struct dentry *d;
-		d = ceph_do_lookup(dir->i_sb, dentry, CEPH_STAT_CAP_INODE_ALL,
-				   0, 0);
-		if (d) {
-			/* ick.  this is untested, and inherently racey... i
-			   suppose we _did_ create the file, but it has since
-			   been deleted?  hrm. */
-			dput(d);
-			err = -ESTALE;
-			dentry = NULL;
-		}
+		err = ceph_do_getattr(dentry, CEPH_STAT_CAP_INODE_ALL);
 	}
 	ceph_mdsc_put_request(req);
 	if (err)

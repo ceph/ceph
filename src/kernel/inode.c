@@ -1649,45 +1649,33 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
  */
 int ceph_do_getattr(struct dentry *dentry, int mask)
 {
-	int on_inode = 0;
-	struct dentry *ret;
+	struct ceph_client *client = ceph_sb_to_client(dentry->d_sb);
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct ceph_mds_request *req;
+	int err;
 
 	if (ceph_snap(dentry->d_inode) == CEPH_SNAPDIR) {
-		dout(30, "getattr dentry %p inode %p SNAPDIR\n", dentry,
+		dout(30, "do_getattr dentry %p inode %p SNAPDIR\n", dentry,
 		     dentry->d_inode);
 		return 0;
 	}
 
-	dout(30, "getattr dentry %p inode %p mask %d\n", dentry,
+	dout(30, "do_getattr dentry %p inode %p mask %d\n", dentry,
 	     dentry->d_inode, mask);
 	if (ceph_caps_issued_mask(ceph_inode(dentry->d_inode), mask))
 		return 0;
 
-	/*
-	 * if the dentry is unhashed AND we have a cap, stat
-	 * the ino directly.  (if its unhashed and we don't have a
-	 * cap, we may be screwed anyway.)
-	 */
-	if (d_unhashed(dentry)) {
-		if (ceph_get_cap_mds(dentry->d_inode) >= 0)
-			on_inode = 1;
-		else if (dentry != dentry->d_inode->i_sb->s_root) {
-			derr(0, "WARNING: getattr on unhashed cap-less"
-			     " dentry %p %.*s\n", dentry,
-			     dentry->d_name.len, dentry->d_name.name);
-		}
-	}
-	ret = ceph_do_lookup(dentry->d_inode->i_sb, dentry, mask,
-			     on_inode, 0);
-	if (IS_ERR(ret))
-		return PTR_ERR(ret);
-	if (ret)
-		dentry = ret;
-	if (!dentry->d_inode)
-		return -ENOENT;
-	if (ret)
-		dput(dentry); /* do_lookup spliced.. drop new dentry */
-	return 0;
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
+				       dentry, NULL, NULL, NULL,
+				       USE_CAP_MDS);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+	req->r_args.stat.mask = cpu_to_le32(mask);
+	req->r_locked_dir = dentry->d_parent->d_inode;  /* by the VFS */
+	err = ceph_mdsc_do_request(mdsc, NULL, req);
+	ceph_mdsc_put_request(req);  /* will dput(dentry) */
+	dout(20, "do_getattr result=%d\n", err);
+	return err;
 }
 
 /*
