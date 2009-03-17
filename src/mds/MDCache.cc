@@ -6280,6 +6280,7 @@ void MDCache::_anchor_prepared(CInode *in, version_t atid, bool add)
   journal_dirty_inode(mut, &le->metablob, in);
   le->metablob.add_table_transaction(TABLE_ANCHOR, atid);
   mds->mdlog->submit_entry(le, new C_MDC_AnchorLogged(this, in, atid, mut));
+  mds->mdlog->flush();
 }
 
 

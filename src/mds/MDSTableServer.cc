@@ -53,6 +53,7 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
   le->mutation = bl;  // original request, NOT modified return value coming out of _prepare!
   mds->mdlog->submit_entry(le, new C_Prepare(this, req, version));
+  mds->mdlog->flush();
 }
 
 void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
@@ -78,7 +79,6 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
     pending_for_mds.erase(tid);
     mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, tid, version));
     mds->mdlog->wait_for_sync(new C_Commit(this, req));
-    mds->mdlog->flush();
   }
   else if (tid <= version) {
     dout(0) << "got commit for tid " << tid << " <= " << version 
