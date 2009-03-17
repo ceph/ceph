@@ -233,9 +233,12 @@ public:
 
   ceph_seq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
-  void touch() {
-    if (rdcaps_item.is_on_xlist())
+  bool touch() {
+    if (rdcaps_item.is_on_xlist()) {
       rdcaps_item.move_to_back();
+      return true;
+    }
+    return false;
   }
 
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }

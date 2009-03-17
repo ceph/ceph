@@ -1429,6 +1429,19 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   int op = m->get_op();
 
+  if (op == CEPH_CAP_OP_RENEW) {
+    if (cap->touch()) {
+      dout(7) << " renewed client" << client << " on " << *in << dendl;
+      cap->set_last_issue_stamp(g_clock.now());
+      m->clear_payload();
+      m->head.ttl_ms = g_conf.mds_rdcap_ttl_ms;
+      mds->send_message_client(m, client);
+      return;
+    }
+    dout(7) << " non-rdcap, didn't renew client" << client << " on " << *in << dendl;
+    goto out;
+  }
+
   // flushsnap?
   if (op == CEPH_CAP_OP_FLUSHSNAP) {
     if (in->is_auth()) {
