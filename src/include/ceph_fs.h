@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     5 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    5 /* public/client */
-#define CEPH_MDSC_PROTOCOL    9 /* public/client */
+#define CEPH_MDSC_PROTOCOL   10 /* public/client */
 #define CEPH_MONC_PROTOCOL    7 /* public/client */
 
 
@@ -685,13 +685,14 @@ struct ceph_mds_session_head {
 enum {
 	CEPH_MDS_OP_FINDINODE  = 0x100100,
 
-	CEPH_MDS_OP_LSTAT      = 0x00100,
-	CEPH_MDS_OP_LUTIME     = 0x01101,
-	CEPH_MDS_OP_LCHMOD     = 0x01102,
-	CEPH_MDS_OP_LCHOWN     = 0x01103,
-	CEPH_MDS_OP_LSETXATTR  = 0x01104,
-	CEPH_MDS_OP_LRMXATTR   = 0x01105,
-	CEPH_MDS_OP_LSETLAYOUT = 0x01106,
+	CEPH_MDS_OP_LOOKUP     = 0x00100,
+	CEPH_MDS_OP_LSTAT      = 0x00101,
+	CEPH_MDS_OP_LUTIME     = 0x01102,
+	CEPH_MDS_OP_LCHMOD     = 0x01103,
+	CEPH_MDS_OP_LCHOWN     = 0x01104,
+	CEPH_MDS_OP_LSETXATTR  = 0x01105,
+	CEPH_MDS_OP_LRMXATTR   = 0x01106,
+	CEPH_MDS_OP_LSETLAYOUT = 0x01107,
 
 	CEPH_MDS_OP_STAT       = 0x10100,
 	CEPH_MDS_OP_UTIME      = 0x11101,

@@ -895,6 +895,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     break;
 
     // inodes ops.
+  case CEPH_MDS_OP_LOOKUP:
   case CEPH_MDS_OP_STAT:
   case CEPH_MDS_OP_LSTAT:
     handle_client_stat(mdr);
