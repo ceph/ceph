@@ -593,7 +593,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
  * caller should hold snap_rwsem (read), s_mutex.
  */
 static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
-		       int used, int want, int retain)
+		       int op, int used, int want, int retain)
 	__releases(cap->ci->vfs_inode->i_lock)
 {
 	struct ceph_inode_info *ci = cap->ci;
@@ -602,7 +602,6 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	int held = cap->issued | cap->implemented;
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~retain;
-	int op = (retain == 0) ? CEPH_CAP_OP_RELEASE : CEPH_CAP_OP_UPDATE;
 	int keep;
 	u64 seq, mseq, time_warp_seq, follows;
 	u64 size, max_size;
@@ -804,7 +803,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 	struct ceph_cap *cap;
 	int file_wanted, used;
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
-	int want, retain, revoking, dirty;
+	int want, retain, revoking, dirty, op;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
@@ -983,7 +982,8 @@ ack:
 		}
 		
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, used, want, retain);
+		op = (retain == 0) ? CEPH_CAP_OP_RELEASE : CEPH_CAP_OP_UPDATE;
+		__send_cap(mdsc, cap, op, used, want, retain);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
