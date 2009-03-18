@@ -23,6 +23,7 @@ void MDSMap::print(ostream& out)
   out << "epoch " << epoch << std::endl;
   out << "\nclient_epoch " << client_epoch << std::endl;
   out << "created " << created << std::endl;
+  out << "modified " << modified << std::endl;
   out << "tableserver " << tableserver << std::endl;
   out << "root " << root << std::endl;
   out << "session_timeout " << session_timeout << "\n"

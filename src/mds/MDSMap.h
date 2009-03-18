@@ -124,7 +124,7 @@ class MDSMap {
   epoch_t epoch;
   epoch_t client_epoch;  // incremented only when change is significant to client.
   epoch_t last_failure;  // epoch of last failure.  for inclocks
-  utime_t created;
+  utime_t created, modified;
 
   int32_t tableserver;   // which MDS has anchortable, snaptable
   int32_t root;          // which MDS has root directory
@@ -166,7 +166,9 @@ class MDSMap {
   void inc_epoch() { epoch++; }
 
   const utime_t& get_created() const { return created; }
-  void set_created(utime_t ct) { created = ct; }
+  void set_created(utime_t ct) { modified = created = ct; }
+  const utime_t& get_modified() const { return modified; }
+  void set_modified(utime_t mt) { modified = mt; }
 
   epoch_t get_last_failure() const { return last_failure; }
 
@@ -362,7 +364,9 @@ class MDSMap {
     ::encode(max_mds, bl);
     ::encode(mds_info, bl);
 
+    // kclient ignores everything from here
     ::encode(created, bl);
+    ::encode(modified, bl);
     ::encode(tableserver, bl);
     ::encode(in, bl);
     ::encode(inc, bl);
@@ -380,7 +384,9 @@ class MDSMap {
     ::decode(max_mds, p);
     ::decode(mds_info, p);
 
+    // kclient ignores everything from here
     ::decode(created, p);
+    ::decode(modified, p);
     ::decode(tableserver, p);
     ::decode(in, p);
     ::decode(inc, p);
