@@ -724,6 +724,7 @@ static inline const char *ceph_mds_op_name(int op)
 {
 	switch (op) {
 	case CEPH_MDS_OP_FINDINODE: return "findinode";
+	case CEPH_MDS_OP_LOOKUP:  return "lookup";
 	case CEPH_MDS_OP_STAT:  return "stat";
 	case CEPH_MDS_OP_LSTAT:  return "lstat";
 	case CEPH_MDS_OP_UTIME: return "utime";
