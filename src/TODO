@@ -13,10 +13,12 @@ v0.7
 
 v0.7.1
 /- O_DIRECT
+/- dentry lease renewal
 
 v0.8
 /- make kclient handle osd ack + sync properly
 /- make fill_trace handle short traces; return short traces from mds
+/- rdcap renewal
 
 - ENOSPC
 - flock
