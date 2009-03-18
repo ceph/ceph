@@ -490,6 +490,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
 	  lock->encode_locked_state(softdata);
 	  send_lock_message(lock, LOCK_AC_MIX, softdata);
 	}
+	((ScatterLock*)lock)->clear_scatter_wanted();
 	break;
 
 	// to sync
@@ -2861,8 +2862,8 @@ void Locker::file_eval(ScatterLock *lock)
   else if (lock->get_state() != LOCK_MIX &&
 	   //!lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   (wanted & CEPH_CAP_GRD) &&
-	   (wanted & CEPH_CAP_GWR)) {
+	   (lock->get_scatter_wanted() ||
+	    (wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)))) {
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
@@ -2910,6 +2911,7 @@ void Locker::file_mixed(ScatterLock *lock)
 
     // change lock
     lock->set_state(LOCK_MIX);
+    lock->clear_scatter_wanted();
     issue_caps(in);
   } else {
     // gather?
@@ -2952,6 +2954,7 @@ void Locker::file_mixed(ScatterLock *lock)
     else {
       in->try_drop_loner();
       lock->set_state(LOCK_MIX);
+      lock->clear_scatter_wanted();
       if (in->is_replicated()) {
 	bufferlist softdata;
 	lock->encode_locked_state(softdata);
@@ -3167,6 +3170,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     } else {
       dout(7) << "handle_file_lock ignoring scatter request on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
+      lock->set_scatter_wanted();
     }
     break;
 

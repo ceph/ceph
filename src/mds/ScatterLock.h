@@ -20,6 +20,7 @@
 
 class ScatterLock : public SimpleLock {
   bool dirty, flushing;
+  bool scatter_wanted;
   utime_t last_scatter;
 
 public:
@@ -28,11 +29,15 @@ public:
 
   ScatterLock(MDSCacheObject *o, int t, int ws) : 
     SimpleLock(o, t, ws),
-    dirty(false), flushing(false),
+    dirty(false), flushing(false), scatter_wanted(false),
     xlistitem_updated(this) {}
   ~ScatterLock() {
     xlistitem_updated.remove_myself();   // FIXME this should happen sooner, i think...
   }
+
+  void set_scatter_wanted() { scatter_wanted = true; }
+  void clear_scatter_wanted() { scatter_wanted = false; }
+  bool get_scatter_wanted() { return scatter_wanted; }
 
   void mark_dirty() { 
     if (!dirty) {
