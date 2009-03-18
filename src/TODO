@@ -19,6 +19,7 @@ v0.8
 /- make kclient handle osd ack + sync properly
 /- make fill_trace handle short traces; return short traces from mds
 /- rdcap renewal
+- some mds clustering fixes
 
 - ENOSPC
 - flock
