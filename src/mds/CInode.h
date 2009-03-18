@@ -627,8 +627,10 @@ public:
 
   // caps allowed
   int get_caps_liked() {
-    return CEPH_CAP_PIN |
-      (is_dir() ? CEPH_CAP_ANY_RDCACHE : CEPH_CAP_ANY_RD);
+    if (is_dir())
+      return CEPH_CAP_EXPIREABLE & ~CEPH_CAP_ANY_RD;
+    else
+      return CEPH_CAP_EXPIREABLE;
   }
   int get_caps_allowed_ever() {
     return 

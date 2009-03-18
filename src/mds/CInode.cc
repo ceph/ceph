@@ -1467,14 +1467,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       mdcache->mds->locker->file_eval(&filelock);
 
     if (cap && valid) {
-      bool loner = (get_loner() == client);
       int likes = get_caps_liked();
-      if (loner) {
-	if (inode.is_dir())
-	  likes |= CEPH_CAP_FILE_EXCL;
-	if (inode.is_file() && (cap->wanted() & CEPH_CAP_FILE_EXCL))
-	  likes |= CEPH_CAP_AUTH_EXCL; // | CEPH_CAP_XATTR_EXCL; 
-      }
+      bool loner = (get_loner() == client);
       int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
       cap->issue(issue);
       cap->set_last_issue_stamp(g_clock.recent_now());
