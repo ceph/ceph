@@ -2575,18 +2575,20 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
       case CEPH_LOCK_IFILE:
 	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
 	  file_mixed((ScatterLock*)lock);
-	else
+	else if (lock->get_state() != LOCK_LOCK)
 	  simple_lock((ScatterLock*)lock);
+	else
+	  simple_sync((ScatterLock*)lock);
 	break;
 
       case CEPH_LOCK_IDFT:
       case CEPH_LOCK_INEST:
 	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
 	  file_mixed(lock);
-	else // if (lock->get_state() != LOCK_LOCK)
+	else if (lock->get_state() != LOCK_LOCK)
 	  simple_lock(lock);
-	//else
-	//scatter_sync(lock);
+	else
+	  simple_sync(lock);
 	break;
       default:
 	assert(0);
