@@ -165,6 +165,12 @@ public:
     ++last_sent;
     return last_sent;
   }
+  ceph_seq_t issue_norevoke(int c) {
+    _pending |= c;
+    check_rdcaps_list();
+    ++last_sent;
+    return last_sent;
+  }
   void confirm_receipt(ceph_seq_t seq, int caps) {
     _issued = caps;
     if (seq == last_sent) {

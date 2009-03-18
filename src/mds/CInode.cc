@@ -1454,7 +1454,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	dout(10) << " incorporating cap reconnect wanted " << ccap_string(rc->wanted)
 		 << " issue " << ccap_string(rc->issued) << " on " << *this << dendl;
 	cap->set_wanted(rc->wanted);
-	cap->issue(rc->issued);
+	cap->issue_norevoke(rc->issued);
 	mdcache->remove_replay_cap_reconnect(pi->ino, client);
       }
     }
@@ -1470,7 +1470,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       int likes = get_caps_liked();
       bool loner = (get_loner() == client);
       int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
-      cap->issue(issue);
+      cap->issue_norevoke(issue);
       cap->set_last_issue_stamp(g_clock.recent_now());
       cap->touch();   // move to back of session cap LRU
       e.cap.caps = issue;
