@@ -852,9 +852,6 @@ int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 notfound:
 	_conf_copy<T>(val, def_val);
 
-	char *a, *b="";
-	_conf_copy<char *>(&a, b);
-
 	if (auto_update)
 		_write<T>(section, var, def_val);
 
