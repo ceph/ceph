@@ -76,16 +76,20 @@ void MDSMap::print(ostream& out)
 
 void MDSMap::print_summary(ostream& out) 
 {
-  map<int,int> by_state;
+  map<string,int> by_state;
   for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
-       p++)
-    by_state[p->second.state]++;
+       p++) {
+    string s = ceph_mds_state_name(p->second.state);
+    if (p->second.laggy())
+      s += "(laggy or crashed)";
+    by_state[s]++;
+  }
 
   out << "e" << get_epoch() << ": " << up.size() << "/" << in.size() << "/" << max_mds << " up";
 
-  for (map<int,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
-    out << ", " << p->second << " " << ceph_mds_state_name(p->first);
+  for (map<string,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); p++)
+    out << ", " << p->second << " " << p->first;
   
   if (failed.size())
     out << ", " << failed.size() << " failed";
