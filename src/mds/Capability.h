@@ -149,7 +149,6 @@ public:
     return c;
   }
   ceph_seq_t issue(int c) {
-    int before = issued();
     if (_pending & ~c) {
       // note _revoked_ caps prior to this revocation
       if (_num_revoke < _max_revoke) {
@@ -161,14 +160,12 @@ public:
     }
 
     _pending = c;
-    int after = issued();
-    check_rdcaps_list(before, after, _wanted, _wanted);
+    check_rdcaps_list();
     //last_issue = 
     ++last_sent;
     return last_sent;
   }
   void confirm_receipt(ceph_seq_t seq, int caps) {
-    int before = issued();
     _issued = caps;
     if (seq == last_sent) {
       _pending = caps;
@@ -189,8 +186,7 @@ public:
       }
       _num_revoke = o;
     }
-    int after = issued();
-    check_rdcaps_list(before, after, _wanted, _wanted);
+    check_rdcaps_list();
   }
   bool is_null() {
     return !_pending && !_issued && !_num_revoke;
@@ -260,9 +256,8 @@ public:
   // caps this client wants to hold
   int wanted() { return _wanted; }
   void set_wanted(int w) {
-    int i = issued();
-    check_rdcaps_list(i, i, _wanted, w);
     _wanted = w;
+    check_rdcaps_list();
   }
 
   bool can_expire() {
@@ -271,15 +266,18 @@ public:
 
   ceph_seq_t get_last_seq() { return last_sent; }
 
+  bool is_rdcap() {
+    return rdcaps_item.is_on_xlist();
+  }
 
-  void check_rdcaps_list(int o, int n, int ow, int nw)
+  void check_rdcaps_list()
   {
-    bool wastrimmable = rdcaps_item.is_on_xlist();//(o & ~CEPH_CAP_EXPIREABLE) == 0 && ow == 0;
-    bool istrimmable =  (n & ~CEPH_CAP_EXPIREABLE) == 0 && nw == 0;
+    bool was = is_rdcap();
+    bool is =  (issued() & ~CEPH_CAP_EXPIREABLE) == 0 && _wanted == 0;
     
-    if (!wastrimmable && istrimmable) 
+    if (!was && is) 
       rdcaps_list->push_back(&rdcaps_item);
-    else if (wastrimmable && !istrimmable)
+    else if (was && !is)
       rdcaps_item.remove_myself();
   }
 

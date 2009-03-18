@@ -141,6 +141,8 @@ ostream& operator<<(ostream& out, CInode& in)
       if (it != in.get_client_caps().begin()) out << ",";
       out << it->first << "=" << ccap_string(it->second->issued())
 	  << "/" << ccap_string(it->second->wanted());
+      if (it->second->is_rdcap())
+	out << "(rdcap)";
     }
     out << "}";
     if (in.get_loner() >= 0)
