@@ -163,7 +163,9 @@ void ExportControl::load(ConfFile *conf)
   char *allow_def = NULL;
   int ret;
 
-  ret = conf->read("mount", "allow client", &allow_def, "0.0.0.0/0");
+#define EVERYONE "0.0.0.0/0"
+
+  ret = conf->read("mount", "allow client", &allow_def, EVERYONE);
 
   for (std::list<ConfSection*>::const_iterator p = conf->get_section_list().begin();
 	p != conf->get_section_list().end();
@@ -188,7 +190,6 @@ void ExportControl::load(ConfFile *conf)
 		exports[strdup(mnt)] = exp;
 	}
 
-
 	free(orig_tmp_sec);
     }
   }
@@ -206,12 +207,18 @@ bool ExportControl::is_authorized(entity_addr_t *addr, const char *path)
 	if (*path != '/')
 		return false;
 
+	if (exports.size() == 0) /* empty mounts list, default with truen for now */
+		return true;
+
 	exp_end = exports.end();
 	iter = exports.find(p);
 
 	while (iter == exp_end) {
 
 		do {
+			if (len == 0) /* didn't match anything, we'll default with true for now */
+				return true;
+
 			p[len] = '\0';
 			len--;
 		} while (len && p[len] != '/');
