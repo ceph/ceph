@@ -84,6 +84,7 @@ private:
 
   void committed();
 
+  bool check_mount(MClientMount *m);
   void _mounted(int c, MClientMount *m);
   void _unmounted(MClientUnmount *m);
  

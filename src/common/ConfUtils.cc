@@ -683,12 +683,14 @@ static void _conf_copy(T *dst_val, T def_val)
 	*dst_val = def_val;
 }
 
-template<char *>
-static void _conf_copy(char **dst_val, char *def_val)
+template<>
+void _conf_copy<char *>(char **dst_val, char *def_val)
 {
-	*dst_val = strdup(def_val);
+	if (def_val)
+		*dst_val = strdup(def_val);
+	else
+		*dst_val = NULL;
 }
-
 
 static void _conf_decode(int *dst_val, char *str_val)
 {
@@ -850,6 +852,9 @@ int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 notfound:
 	_conf_copy<T>(val, def_val);
 
+	char *a, *b="";
+	_conf_copy<char *>(&a, b);
+
 	if (auto_update)
 		_write<T>(section, var, def_val);
 
@@ -876,7 +881,7 @@ int ConfFile::_write(const char *section, const char *var, T val)
 
 int ConfFile::read(const char *section, const char *var, int *val, int def_val)
 {
-	return _read<int>(section, var, val, def_val);
+	return _read(section, var, val, def_val);
 }
 
 int ConfFile::read(const char *section, const char *var, unsigned int *val, unsigned int def_val)

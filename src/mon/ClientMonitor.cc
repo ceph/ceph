@@ -26,6 +26,8 @@
 
 #include "common/Timer.h"
 
+#include "auth/ExportControl.h"
+
 #include <sstream>
 
 #include "config.h"
@@ -125,6 +127,24 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 
 // -------
 
+bool ClientMonitor::check_mount(MClientMount *m)
+{
+    // already mounted?
+    entity_addr_t addr = m->get_orig_source_addr();
+    ExportControl *ec = conf_get_export_control();
+    if (ec && (!ec->is_authorized(&addr, "/"))) {
+      dout(0) << "client is not authorized to mount" << dendl;
+      return true;
+    }
+    if (client_map.addr_client.count(addr)) {
+	int client = client_map.addr_client[addr];
+	dout(7) << " client" << client << " already mounted" << dendl;
+	_mounted(client, m);
+	return true;
+    }
+
+    return false;
+}
 
 bool ClientMonitor::preprocess_query(Message *m)
 {
@@ -132,17 +152,7 @@ bool ClientMonitor::preprocess_query(Message *m)
 
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_MOUNT:
-    {
-      // already mounted?
-      entity_addr_t addr = m->get_orig_source_addr();
-      if (client_map.addr_client.count(addr)) {
-	int client = client_map.addr_client[addr];
-	dout(7) << " client" << client << " already mounted" << dendl;
-	_mounted(client, (MClientMount*)m);
-	return true;
-      }
-    }
-    return false;
+	return check_mount((MClientMount *)m);
     
   case CEPH_MSG_CLIENT_UNMOUNT:
     {
@@ -175,6 +185,7 @@ bool ClientMonitor::prepare_update(Message *m)
     {
       entity_addr_t addr = m->get_orig_source_addr();
       int client = -1;
+
       if (m->get_orig_source().is_client())
 	client = m->get_orig_source().num();
 

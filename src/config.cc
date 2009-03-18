@@ -39,9 +39,12 @@ atomic_t buffer_total_alloc;
 #include "common/ConfUtils.h"
 #include "common/dyn_snprintf.h"
 
+#include "auth/ExportControl.h"
+
 static bool show_config = false;
 
 static ConfFile *cf = NULL;
+static ExportControl *ec = NULL;
 
 /*
 struct foobar {
@@ -993,6 +996,12 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     cf->dump();
     exit(0);
   }
+
+  if (!ec) {
+    ec = new ExportControl();
+  }
+
+  ec->load(cf);
 }
 
 void configure_daemon_mode()
@@ -1035,6 +1044,11 @@ void generic_client_usage()
 ConfFile *conf_get_conf_file()
 {
   return cf;
+}
+
+ExportControl *conf_get_export_control()
+{
+  return ec;
 }
 
 void parse_config_options(std::vector<const char*>& args)

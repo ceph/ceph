@@ -383,6 +383,9 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
 bool conf_set_conf_val(void *field, opt_type_t type, const char *val);
 bool conf_cmd_equals(const char *cmd, const char *opt, char char_opt, unsigned int *val_pos);
 
+class ExportControl;
+ExportControl *conf_get_export_control();
+
 
 #define CONF_NEXT_VAL (val_pos ? &args[i][val_pos] : args[++i])
 
