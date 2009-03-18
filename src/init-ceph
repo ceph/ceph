@@ -39,7 +39,7 @@ stop_daemon() {
     pidfile=$3
     signal=$4
     action=$5
-    [[ $action == "" ]] && action="Stopping"
+    [ -z "$action" ] && action="Stopping"
     echo -n "$action ceph $name on $host..."
     do_cmd "while [ 1 ]; do 
 	[ -e $pidfile ] || break
@@ -66,8 +66,9 @@ allhosts=0
 debug=0
 monaddr=
 dobtrfs=1
+verbose=0
 
-while [[ $1 =~ '-' ]]; do     # FIXME: why not '^-'?
+while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
 case $1 in
     -v | --verbose)
 	    verbose=1
@@ -131,17 +132,17 @@ for name in $what; do
     cmd="$BINDIR/c$type -i $id"
 
     # conf file
-    if [[ $host == $hostname ]]; then
+    if [ "$host" = "$hostname" ]; then
 	cmd="$cmd -c $conf"
     else
-	if [[ ! $pushed_to =~ " $host " ]]; then
+	if echo $pushed_to | grep -q " $host "; then
 	    scp -q $conf $host:/tmp/ceph.conf.$$
 	    pushed_to="$pushed_to $host "
 	fi
 	cmd="$cmd -c /tmp/ceph.conf.$$"
     fi
 
-    if [[ $name =~ "osd" ]]; then
+    if echo $name | grep -q ^osd; then
 	get_conf osd_data "" "osd data"
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
@@ -157,44 +158,44 @@ for name in $what; do
 	    runmode=""
 	    
 	    get_conf_bool crun "$docrun" "restart on core dump"
-	    [[ $crun -eq 1 ]] && wrap="$BINDIR/crun"
+	    [ "$crun" -eq 1 ] && wrap="$BINDIR/crun"
 	    
 	    get_conf_bool valgrind "$dovalgrind" "valgrind"
-	    [[ $valgrind -eq 1 ]] && wrap="$wrap valgrind"
+	    [ "$valgrind" -eq 1 ] && wrap="$wrap valgrind"
 	    
-	    [[ $wrap != "" ]] && runmode="-f &"
+	    [ -n "$wrap" ] && runmode="-f &"
 	    
 	    cmd="$wrap $cmd $runmode"
 	    
 	    echo Starting ceph $name on $host...
-	    if [ $dobtrfs -eq 1 ]; then
+	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
-		[[ $pre_mount != "" ]] && do_cmd $pre_mount
+		[ -n "$pre_mount" ] && do_cmd $pre_mount
 		do_cmd "mount -t btrfs $first_dev $btrfs_path"
 	    fi
 	    get_conf pre_start_eval "" "pre start eval"
-	    [[ $pre_start_eval != "" ]] && $pre_start_eval
+	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"
 	    get_conf post_start "" "post start command"
-            [[ $pre_start != "" ]] && do_cmd $pre_start
+            [ -n "$pre_start" ] && do_cmd $pre_start
 	    do_cmd "$cmd"
-            [[ $post_start != "" ]] && do_cmd $post_start
+            [ -n "$post_start" ] && do_cmd $post_start
 	    ;;
 	
 	stop)
 	    get_conf pre_stop "" "pre stop command"
 	    get_conf post_stop "" "post stop command"
-	    [[ $pre_stop != "" ]] && do_cmd $pre_stop
+	    [ -n "$pre_stop" ] && do_cmd $pre_stop
 	    stop_daemon $name c$type $pid_file
-	    [[ $post_stop != "" ]] && do_cmd $post_stop
+	    [ -n "$post_stop" ] && do_cmd $post_stop
 	    ;;
 
 	forcestop)
 	    get_conf pre_forcestop "" "pre forcestop command"
 	    get_conf post_forcestop "" "post forcestop command"
-	    [[ $pre_forcestop != "" ]] && do_cmd $pre_forcestop
+	    [ -n "$pre_forcestop" ] && do_cmd $pre_forcestop
 	    stop_daemon $name c$type $pid_file -9
-	    [[ $post_forcestop != "" ]] && do_cmd $post_forcestop
+	    [ -n "$post_forcestop" ] && do_cmd $post_forcestop
 	    ;;
 	    
 	killall)

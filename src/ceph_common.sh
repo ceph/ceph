@@ -20,11 +20,11 @@ check_host() {
     host=`$CCONF -c $conf -i $id -t $type host`
     ssh=""
     dir=$PWD
-    if [[ $host != "" ]]; then
+    if [ -n "$host" ]; then
 	#echo host for $name is $host, i am $hostname
-	if [[ $host != $hostname ]]; then
+	if [ "$host" != "$hostname" ]; then
 	    # skip, unless we're starting remote daemons too
-	    if [[ $allhosts -eq 0 ]]; then
+	    if [ $allhosts -eq 0 ]; then
 		return 1
 	    fi
 
@@ -42,8 +42,8 @@ check_host() {
 }
 
 do_cmd() {
-    [[ $verbose = 1 ]] && echo "--- $host:$dir# $1"
-    if [[ $ssh = "" ]]; then
+    [ $verbose -eq 1 ] && echo "--- $host:$dir# $1"
+    if [ -z "$ssh" ]; then
 	ulimit -c unlimited
 	bash -c "$1" || (echo failed. ; exit 1)
     else
@@ -54,7 +54,7 @@ do_cmd() {
 get_name_list() {
     orig=$1
 
-    if [[ $orig = "" ]]; then
+    if [ -z "$orig" ]; then
         # extract list of monitors, mdss, osds defined in startup.conf
 	what=`$CCONF -c $conf -l mon | egrep -v '^mon$' ; \
 	    $CCONF -c $conf -l mds | egrep -v '^mds$' ; \
@@ -88,10 +88,10 @@ get_val_bool() {
 	tmp=`$CCONF "$3" "$4" "$5"`
 	export $1=$5
 
-	[ "$tmp" == "0" ] && export $1=0
-	[ "$tmp" == "false" ] && export $1=0
-	[ "$tmp" == "1" ] && export $1=1
-	[ "$tmp" == "true" ] && export $1=1
+	[ "$tmp" = "0" ] && export $1=0
+	[ "$tmp" = "false" ] && export $1=0
+	[ "$tmp" = "1" ] && export $1=1
+	[ "$tmp" = "true" ] && export $1=1
   fi
 }
 
@@ -101,7 +101,7 @@ get_conf() {
 	key=$3
 	shift; shift; shift
 
-	[[ $verbose == 1 ]] && echo "$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\""
+	[ $verbose -eq 1 ] && echo "$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\""
 	eval "$var=\"`$CCONF -c $conf -i $id -t $type $tmp \"$key\" \"$def\"`\""
 }
 
@@ -109,9 +109,9 @@ get_conf_bool() {
 	get_conf "$@"
 
 	eval "val=$"$1
-	[ "$val" == "0" ] && export $1=0
-	[ "$val" == "false" ] && export $1=0
-	[ "$val" == "1" ] && export $1=1
-	[ "$val" == "true" ] && export $1=1
+	[ "$val" = "0" ] && export $1=0
+	[ "$val" = "false" ] && export $1=0
+	[ "$val" = "1" ] && export $1=1
+	[ "$val" = "true" ] && export $1=1
 }
 

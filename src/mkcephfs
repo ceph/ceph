@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh 
 
 # if we start up with "./", assume everything else is in the current
 # directory too.
@@ -43,22 +43,22 @@ case $1 in
 	    mkbtrfs=1
 	    ;;
     --conf | -c)
-	    [ "$2" == "" ] && usage_exit
+	    [ "$2" = "" ] && usage_exit
 	    shift
 	    conf=$1
 	    ;;
     --numosd)
-	    [ "$2" == "" ] && usage_exit
+	    [ "$2" = "" ] && usage_exit
 	    shift
 	    numosd=$1
 	    ;;
     --crushmapsrc)
-	    [ "$2" == "" ] && usage_exit
+	    [ "$2" = "" ] && usage_exit
 	    shift
 	    usecrushmapsrc=$1
 	    ;;
     --crushmap)
-	    [ "$2" == "" ] && usage_exit
+	    [ "$2" = "" ] && usage_exit
 	    shift
 	    usecrushmap=$1
 	    ;;
@@ -75,7 +75,7 @@ verify_conf
 get_name_list "$@"
 
 # create the monmap if we're doing mon0
-if [[ $what =~ "mon0" ]]; then
+if echo $what | grep -q mon0 ; then
     # first, make a list of monitors
     mons=`$CCONF -c $conf -l mon | egrep -v '^mon$' | sort`
     args=""
@@ -94,7 +94,7 @@ if [[ $what =~ "mon0" ]]; then
 
     # build osdmap
     osdmap="/tmp/osdmap.$$"
-    if [[ $numosd = "" ]]; then
+    if [ -z "$numosd" ]; then
 	maxosd=`$CCONF -c $conf -l osd | egrep -v '^osd$' | tail -1 | cut -c 4-`
 	numosd=$(($maxosd + 1))
 	echo max osd in $conf is $maxosd, num osd is $numosd
@@ -103,13 +103,13 @@ if [[ $what =~ "mon0" ]]; then
 
     # import crush map?
     get_conf crushmapsrc "$usecrushmapsrc" "crush map src" mon0 mon global
-    if [[ $crushmapsrc != "" ]]; then
+    if [ -n "$crushmapsrc" ]; then
 	echo Compiling crush map from $crushmapsrc to $crushmap
 	crushmap="/tmp/crushmap.$$"
 	$BINDIR/crushtool -c $crushmapsrc -o $crushmap
     fi
     get_conf crushmap "$usecrushmap" "crush map" mon0 mon global
-    if [[ $crushmap != "" ]]; then
+    if [ -n "$crushmap" ]; then
 	echo Importing crush map from $crushmap
 	$BINDIR/osdmaptool --clobber --import-crush $crushmap $osdmap
     fi
@@ -123,18 +123,18 @@ for name in $what; do
 
     check_host || continue
 
-    if [[ $ssh != "" ]] && [[ ! $pushed_to =~ " $host " ]]; then
+    if [ -n "$ssh" ] && ( echo $pushed_to | grep -q " $host " ); then
 	scp -q $osdmap $host:$osdmap
 	scp -q $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
     fi
 
-    if [[ $type = "mon" ]]; then
+    if [ "$type" = "mon" ]; then
 	get_conf mon_data "" "mon data"
 	do_cmd "$BINDIR/mkmonfs $clobber --mon-data $mon_data -i $num --monmap $monmap --osdmap $osdmap"
     fi
 
-    if [[ $type = "osd" ]]; then
+    if [ "$type" = "osd" ]; then
 	get_conf osd_data "" "osd data"
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
@@ -144,11 +144,11 @@ for name in $what; do
 	    do_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
 	fi
 
-	[[ $ssh != "" ]] && scp $monmap $host:$monmap
+	[ -n "$ssh" ] && scp $monmap $host:$monmap
 	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
     fi
 
-    if [[ $type = "mds" ]]; then
+    if [ "$type" = "mds" ]; then
 	# do nothing
 	echo
     fi
