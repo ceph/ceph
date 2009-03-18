@@ -850,7 +850,7 @@ do { \
   if (def) \
     ret = cf->read(section, var, (type *)out, *(type *)def); \
   else \
-    ret = cf->read(section, var, (type *)out, NULL); \
+    ret = cf->read(section, var, (type *)out, 0); \
 } while (0)
     
 
