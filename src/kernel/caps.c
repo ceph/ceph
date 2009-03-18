@@ -1423,6 +1423,8 @@ start:
 		wake = 1;
 	}
 
+	__adjust_cap_rdcaps_listing(ci, cap, wanted);
+
 	spin_unlock(&inode->i_lock);
 	if (writeback) {
 		/*
