@@ -22,8 +22,8 @@ void OSDMap::print(ostream& out)
 {
   out << "epoch " << get_epoch() << "\n"
       << "fsid " << get_fsid() << "\n"
-      << "ctime " << get_ctime() << "\n"
-      << "mtime " << get_mtime() << "\n"
+      << "created " << get_created() << "\n"
+      << "modifed " << get_modified() << "\n"
       << std::endl;
   out << "pg_num " << get_pg_num() << "\n"
       << "pgp_num " << get_pgp_num() << "\n"
@@ -83,7 +83,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
 	   << lpg_bits << " lpg bits" << dendl;
   epoch = e;
   set_fsid(fsid);
-  mtime = ctime = g_clock.now();
+  created = modified = g_clock.now();
 
   set_max_osd(num_osd);
   pg_num = pgp_num = num_osd << pg_bits;

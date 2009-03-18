@@ -112,7 +112,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending e" << pending_mdsmap.epoch << dendl;
 
-  pending_mdsmap.modified = g_conf.now();
+  pending_mdsmap.modified = g_clock.now();
 
   //print_map(pending_mdsmap);
 

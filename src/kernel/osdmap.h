@@ -21,7 +21,7 @@ struct ceph_osdmap {
 	ceph_fsid_t fsid;
 	u32 epoch;
 	u32 mkfs_epoch;
-	struct ceph_timespec ctime, mtime;
+	struct ceph_timespec created, modified;
 
 	/* these parameters describe the number of placement groups
 	 * in the system.  foo_mask is the smallest value (2**n-1) >= foo. */

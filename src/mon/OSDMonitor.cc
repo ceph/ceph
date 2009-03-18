@@ -115,7 +115,7 @@ void OSDMonitor::create_initial(bufferlist& bl)
   newmap.decode(bl);
   newmap.epoch = 1;
   newmap.set_fsid(mon->monmap->fsid);
-  newmap.ctime = g_clock.now();
+  newmap.created = newmap.modified = g_clock.now();
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap);
@@ -192,7 +192,7 @@ void OSDMonitor::encode_pending(bufferlist &bl)
 	   << dendl;
   
   // finalize up pending_inc
-  pending_inc.ctime = g_clock.now();
+  pending_inc.modified = g_clock.now();
 
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_down.begin();

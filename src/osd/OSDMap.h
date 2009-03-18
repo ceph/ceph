@@ -134,7 +134,7 @@ public:
   public:
     ceph_fsid_t fsid;
     epoch_t epoch;   // new epoch; we are a diff from epoch-1 to epoch
-    utime_t ctime;
+    utime_t modified;
     int32_t new_flags;
 
     bool is_pg_change() {
@@ -170,7 +170,7 @@ public:
       // base
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
-      ::encode(ctime, bl);
+      ::encode(modified, bl);
       ::encode(new_flags, bl);
       ::encode(fullmap, bl);
       ::encode(crush, bl);
@@ -199,7 +199,7 @@ public:
       // base
       ::decode(fsid, p);
       ::decode(epoch, p);
-      ::decode(ctime, p);
+      ::decode(modified, p);
       ::decode(new_flags, p);
       ::decode(fullmap, p);
       ::decode(crush, p);
@@ -241,7 +241,7 @@ public:
 private:
   ceph_fsid_t fsid;
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
-  utime_t ctime, mtime; // epoch start time
+  utime_t created, modified; // epoch start time
 
   /*
    * placement groups 
@@ -325,8 +325,8 @@ private:
   int get_lpgp_num_mask() const { return lpgp_num_mask; }
 
   /* stamps etc */
-  const utime_t& get_ctime() const { return ctime; }
-  const utime_t& get_mtime() const { return mtime; }
+  const utime_t& get_created() const { return created; }
+  const utime_t& get_modified() const { return modified; }
 
   epoch_t get_last_pg_change() const {
     return last_pg_change;
@@ -492,7 +492,7 @@ private:
       assert(ceph_fsid_compare(&inc.fsid, &fsid) == 0);
     assert(inc.epoch == epoch+1);
     epoch++;
-    ctime = inc.ctime;
+    modified = inc.modified;
 
     // full map?
     if (inc.fullmap.length()) 
@@ -602,8 +602,8 @@ private:
     // base
     ::encode(fsid, blist);
     ::encode(epoch, blist);
-    ::encode(ctime, blist);
-    ::encode(mtime, blist);
+    ::encode(created, blist);
+    ::encode(modified, blist);
     ::encode(pg_num, blist);
     ::encode(pgp_num, blist);
     ::encode(lpg_num, blist);
@@ -635,8 +635,8 @@ private:
     // base
     ::decode(fsid, p);
     ::decode(epoch, p);
-    ::decode(ctime, p);
-    ::decode(mtime, p);
+    ::decode(created, p);
+    ::decode(modified, p);
     ::decode(pg_num, p);
     ::decode(pgp_num, p);
     ::decode(lpg_num, p);
