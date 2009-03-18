@@ -2849,7 +2849,8 @@ void Locker::file_eval(ScatterLock *lock)
   else if (lock->get_state() != LOCK_EXCL &&
 	   //!lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) || in->inode.is_dir()) &&
+	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) ||
+	    (in->inode.is_dir() && !in->has_subtree_root_dirfrag())) &&
 	   in->try_choose_loner()) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
