@@ -1036,6 +1036,7 @@ int __ceph_check_cap_maybe_renew(struct ceph_inode_info *ci, int mask)
 			     " (%lu <= %lu)\n", inode, cap,
 			     cap->renew_after, jiffies);
 			cap->renew_after = 0;
+			cap->renew_from = jiffies;
 			__send_cap(&ceph_client(inode->i_sb)->mdsc, cap,
 				   CEPH_CAP_OP_RENEW, 0, 0, cap->issued);
 			goto out;
@@ -1502,6 +1503,33 @@ start:
 }
 
 /*
+ * Handle a cap renewal from the MDS.  This is only useful on
+ * rdcap (readonly, expireable) caps.
+ */
+static void handle_cap_renew(struct inode *inode,
+			     struct ceph_mds_caps *m,
+			     struct ceph_mds_session *session,
+			     struct ceph_cap *cap)
+	__releases(inode->i_lock)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	if (cap->renew_from && cap->renew_after == 0) {
+		unsigned duration = le32_to_cpu(m->ttl_ms) * HZ / 1000;
+
+		cap->expires = cap->renew_from + duration;
+		cap->renew_after = cap->renew_from + (duration >> 1);
+		cap->renew_from = 0;
+		dout(20, "cap_renew %p %p duration %u\n", inode, cap, duration);
+		__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci));
+	} else {
+		dout(20, "cap_renew %p %p not renewing (after=%lu from=%lu)\n",
+		     inode, cap, cap->renew_after, cap->renew_from);
+	}
+	spin_unlock(&inode->i_lock);
+}
+
+/*
  * Handle FLUSH_ACK from MDS, indicating that metadata we sent to the
  * MDS has been safely recorded.
  */
@@ -1820,6 +1848,10 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			ceph_check_caps(ceph_inode(inode), 1, 0, session);
 			goto done_unlocked;
 		}
+		break;
+
+	case CEPH_CAP_OP_RENEW:
+		handle_cap_renew(inode, h, session, cap);
 		break;
 
 	case CEPH_CAP_OP_FLUSH_ACK:

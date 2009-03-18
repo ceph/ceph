@@ -149,7 +149,7 @@ struct ceph_cap {
 	int mds_wanted;
 	u32 seq, mseq, gen;
 	unsigned long expires;  /* if readonly and unwanted (jiffies) */
-	unsigned long renew_after;  /* if readonly and unwanted (jiffies) */
+	unsigned long renew_after, renew_from;  /* for _rdcap_ renewal */
 };
 
 /*
