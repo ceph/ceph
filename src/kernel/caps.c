@@ -1849,7 +1849,7 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 	dout(10, "trim_rdcaps for mds%d\n", session->s_mds);
 	spin_lock(&session->s_rdcaps_lock);
 	list_for_each_safe(p, n, &session->s_rdcaps) {
-		int last_cap = 0;
+		int wanted, last_cap;
 
 		cap = list_entry(p, struct ceph_cap, session_rdcaps);
 		spin_unlock(&session->s_rdcaps_lock);
@@ -1861,18 +1861,18 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 			dout(20, " stopping at %p cap %p expires %lu > %lu\n",
 			     inode, cap, cap->expires, jiffies);
 			spin_unlock(&inode->i_lock);
-		} else {
-			int wanted = __ceph_caps_wanted(cap->ci);
-
-			dout(20, " dropping %p cap %p %s wanted %s\n", inode,
-			     cap, ceph_cap_string(cap->issued),
-			     ceph_cap_string(wanted));
-			BUG_ON(wanted);
-			last_cap = __ceph_remove_cap(cap);
-			spin_unlock(&inode->i_lock);
-			if (last_cap)
-				iput(inode);
+			return;
 		}
+
+		wanted = __ceph_caps_wanted(cap->ci);
+		dout(20, " dropping %p cap %p %s wanted %s\n", inode,
+		     cap, ceph_cap_string(cap->issued),
+		     ceph_cap_string(wanted));
+		BUG_ON(wanted);
+		last_cap = __ceph_remove_cap(cap);
+		spin_unlock(&inode->i_lock);
+		if (last_cap)
+			iput(inode);
 
 		spin_lock(&session->s_rdcaps_lock);
 	}
