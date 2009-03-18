@@ -466,8 +466,9 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	else
 		complete(&req->r_completion);
 
-	if ((flags & CEPH_OSD_OP_ONDISK) && req->r_safe_callback) {
-		req->r_safe_callback(req);
+	if (flags & CEPH_OSD_OP_ONDISK) {
+		if (req->r_safe_callback)
+			req->r_safe_callback(req);
 		complete(&req->r_safe_completion);  /* fsync waiter */
 	}
 
