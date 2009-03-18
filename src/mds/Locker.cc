@@ -2951,6 +2951,11 @@ void Locker::file_mixed(ScatterLock *lock)
     else {
       in->try_drop_loner();
       lock->set_state(LOCK_MIX);
+      if (in->is_replicated()) {
+	bufferlist softdata;
+	lock->encode_locked_state(softdata);
+	send_lock_message(lock, LOCK_AC_MIX, softdata);
+      }
       if (lock->get_cap_shift())
 	issue_caps(in);
     }
