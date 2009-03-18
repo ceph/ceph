@@ -12,6 +12,9 @@ Recommends: fuse-utils, ceph-fuse, ceph-kclient-source
 Description: distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
+ .
+ This package contains all server daemons and tools for creating,
+ running, and administering a Ceph file system.
 
 Package: ceph-fuse
 Architecture: any
@@ -20,8 +23,8 @@ Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.
  .
- This is the ceph fuse package and contains the Ceph fuse for mounting ceph
- with fuse.
+ This is a FUSE-based client that allows you to mount a Ceph file
+ system without root privileges.
 
 Package: ceph-kclient-source
 Architecture: any
