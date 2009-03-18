@@ -37,11 +37,6 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 				       NULL, NULL, want_auth);
 	if (IS_ERR(req))
 		goto out;
-	req->r_expected_cap = kmalloc(sizeof(struct ceph_cap), GFP_NOFS);
-	if (!req->r_expected_cap) {
-		ceph_mdsc_put_request(req);
-		return ERR_PTR(-ENOMEM);
-	}
 	req->r_fmode = ceph_flags_to_mode(flags);
 	req->r_args.open.flags = cpu_to_le32(flags);
 	req->r_args.open.mode = cpu_to_le32(create_mode);

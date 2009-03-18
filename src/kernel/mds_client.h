@@ -186,7 +186,6 @@ struct ceph_mds_request {
 	 * mds response.  also used to feed a VFS-provided dentry into
 	 * the reply handler */
 	struct inode     *r_last_inode;
-	struct ceph_cap  *r_expected_cap; /* preallocate cap if we expect one */
 	int               r_fmode;        /* file mode, if expecting cap */
 	struct ceph_mds_session *r_session;
 	struct ceph_mds_session *r_fwd_session;  /* forwarded from */

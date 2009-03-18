@@ -403,7 +403,6 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			dput(req->r_dentry);
 		if (req->r_old_dentry)
 			dput(req->r_old_dentry);
-		kfree(req->r_expected_cap);
 		put_request_sessions(req);
 		kfree(req);
 	}
@@ -1293,7 +1292,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		mutex_unlock(&mdsc->mutex);
 		return;
 	}
-	dout(10, "handle_reply %p expected_cap=%p\n", req, req->r_expected_cap);
+	dout(10, "handle_reply %p\n", req);
 	mds = le32_to_cpu(msg->hdr.src.name.num);
 
 	/* dup? */
