@@ -19,18 +19,28 @@ Description: distributed file system
 Package: ceph-fuse
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libfuse2
+Recommends: ceph
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
+ excellent performance, reliability, and scalability.  This is a
+ FUSE-based client that allows you to mount a Ceph file system without
+ root privileges.
  .
- This is a FUSE-based client that allows you to mount a Ceph file
- system without root privileges.
+ Because the FUSE-based client has certain inherent performance
+ limitations, it is recommended that the native Linux kernel client
+ be used if possible (see ceph-kclient-source).  If it is not
+ practical to load a kernel module (insufficient privileges, older
+ kernel, etc.), then the FUSE client will do.
 
 Package: ceph-kclient-source
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, make
 Description: source for client kernel module for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
- excellent performance, reliability, and scalability.
+ excellent performance, reliability, and scalability.  This is the
+ Ceph client source package for building the client kernel module.
  .
- This is the ceph kernel source package for use with module-assistant.
+ This native kernel client is faster and is more robust than the 
+ FUSE-based client (ceph-fuse).  However, you need to compile the
+ module against your running kernel and will need root privileges
+ to load it.
