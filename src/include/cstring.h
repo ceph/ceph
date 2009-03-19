@@ -22,10 +22,15 @@ class cstring {
     _data[l] = 0;
   }
   cstring(const char *s) { 
-    _len = strlen(s);
-    _data = new char[_len + 1];
-    memcpy(_data, s, _len);
-    _data[_len] = 0;
+    if (s) {
+      _len = strlen(s);
+      _data = new char[_len + 1];
+      memcpy(_data, s, _len);
+      _data[_len] = 0;
+    } else {
+      _len = 0;
+      _data = 0;
+    }
   }
   cstring(const string &s) {
     _len = s.length();
