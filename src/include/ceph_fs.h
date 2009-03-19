@@ -1003,7 +1003,7 @@ static inline int ceph_flags_to_mode(int flags)
  * these cap bits time out, if no others are held and nothing is
  * registered as 'wanted' by the client.
  */
-#define CEPH_CAP_EXPIREABLE (CEPH_CAP_PIN|CEPH_CAP_ANY_RDCACHE|CEPH_CAP_FILE_RD)
+#define CEPH_CAP_EXPIREABLE (CEPH_CAP_PIN|CEPH_CAP_ANY_RDCACHE)
 
 static inline int ceph_caps_for_mode(int mode)
 {
