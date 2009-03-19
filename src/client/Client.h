@@ -63,6 +63,7 @@ using namespace __gnu_cxx;
 class MStatfsReply;
 class MClientSession;
 class MClientRequest;
+class MClientMountAck;
 class MClientRequestForward;
 class MClientLease;
 class MMonMap;
@@ -554,6 +555,9 @@ public:
   Messenger *messenger;  
   int whoami;
   MonMap *monmap;
+
+  ceph_client_ticket ticket;
+  bufferlist signed_ticket;
   
   // mds sessions
   struct MDSSession {
@@ -831,6 +835,7 @@ protected:
 
   // messaging
   void handle_mon_map(MMonMap *m);
+  void handle_mount_ack(MClientMountAck *m);
   void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 

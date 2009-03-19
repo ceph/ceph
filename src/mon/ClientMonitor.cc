@@ -21,6 +21,7 @@
 
 #include "messages/MMonMap.h"
 #include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
 #include "messages/MClientUnmount.h"
 #include "messages/MMonCommand.h"
 
@@ -196,15 +197,18 @@ bool ClientMonitor::prepare_update(Message *m)
       } else {
 	dout(10) << "mount: client" << client << " requested by " << addr << dendl;
 	if (client_map.client_info.count(client)) {
-	  assert(client_map.client_info[client].addr != addr);
+	  assert(client_map.client_info[client].addr() != addr);
 	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
-		  << ", which used to be "  << client_map.client_info[client].addr << dendl;
+		  << ", which used to be "  << client_map.client_info[client].addr() << dendl;
 	}
       }
       
       client_info_t info;
-      info.addr = addr;
-      info.mount_time = g_clock.now();
+      info.ticket.client = client;
+      info.ticket.addr = addr;
+      info.ticket.created = g_clock.now();
+      info.ticket.expires = utime_t();
+      ::encode(info.ticket, info.signed_ticket);
       pending_inc.add_mount(client, info);
       paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
     }
@@ -260,8 +264,8 @@ bool ClientMonitor::preprocess_command(MMonCommand *m)
 	   p != client_map.client_info.end();
 	   p++) {
 	ss << "client" << p->first
-	   << "\t" << p->second.addr
-	   << "\t" << p->second.mount_time
+	   << "\t" << p->second.addr()
+	   << "\t" << p->second.created()
 	   << std::endl;
       }
       while (!ss.eof()) {
@@ -311,11 +315,14 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
   
-  // reply with latest mon, mds, osd maps
-  bufferlist bl;
-  mon->monmap->encode(bl);
-  mon->messenger->send_message(new MMonMap(bl), to);
+  // reply with client ticket
+  MClientMountAck *ack = new MClientMountAck;
+  mon->monmap->encode(ack->monmap_bl);
+  ack->signed_ticket = client_map.client_info[client].signed_ticket;
 
+  mon->messenger->send_message(ack, to);
+
+  // also send latest mds and osd maps
   mon->mdsmon()->send_latest(to);
   mon->osdmon()->send_latest(to);
 

@@ -39,6 +39,7 @@ using namespace std;
 #include "messages/MMonMap.h"
 
 #include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
 #include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
@@ -1074,6 +1075,9 @@ bool Client::dispatch_impl(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_mon_map((MMonMap*)m);
+    break;
+  case CEPH_MSG_CLIENT_MOUNT_ACK:
+    handle_mount_ack((MClientMountAck*)m);
     break;
 
     // osd
@@ -2309,7 +2313,8 @@ int Client::mount()
   }
   mounters++;
   
-  while (!mdsmap ||
+  while (signed_ticket.length() == 0 ||
+	 !mdsmap ||
 	 !osdmap || 
 	 osdmap->get_epoch() == 0 ||
 	 (!itsme && !mounted))       // non-doers wait a little longer
@@ -2367,6 +2372,17 @@ void Client::handle_mon_map(MMonMap *m)
   dout(10) << "handle_mon_map " << *m << dendl;
   // just ignore it for now.
   delete m;
+}
+
+void Client::handle_mount_ack(MClientMountAck* m)
+{
+  dout(10) << "handle_mount_ack " << *m << dendl;
+
+  signed_ticket = m->signed_ticket;
+  bufferlist::iterator p = signed_ticket.begin();
+  ::decode(ticket, p);
+
+  mount_cond.Signal();
 }
 
 

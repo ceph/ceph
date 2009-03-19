@@ -32,16 +32,19 @@ using namespace std;
 #include "PaxosService.h"
 #endif
 struct client_info_t {
-  entity_addr_t addr;
-  utime_t mount_time;
+  ceph_client_ticket ticket;
+  bufferlist signed_ticket;
+
+  entity_addr_t addr() { return entity_addr_t(ticket.addr); }
+  utime_t created() { return utime_t(ticket.created); }
 
   void encode(bufferlist& bl) const {
-    ::encode(addr, bl);
-    ::encode(mount_time, bl);
+    ::encode(ticket, bl);
+    ::encode(signed_ticket, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(addr, bl);
-    ::decode(mount_time, bl);
+    ::decode(ticket, bl);
+    ::decode(signed_ticket, bl);
   }
 };
 
@@ -96,12 +99,12 @@ public:
 
   void reverse() {
     addr_client.clear();
-      for (map<uint32_t,client_info_t>::iterator p = client_info.begin();
-	   p != client_info.end();
-	   ++p) {
-	addr_client[p->second.addr] = p->first;
-      }
+    for (map<uint32_t,client_info_t>::iterator p = client_info.begin();
+	 p != client_info.end();
+	 ++p) {
+      addr_client[p->second.addr()] = p->first;
     }
+  }
   void apply_incremental(Incremental &inc) {
     assert(inc.version == version+1);
     version = inc.version;
@@ -110,14 +113,14 @@ public:
 	   p != inc.mount.end();
 	   ++p) {
 	client_info[p->first] = p->second;
-	addr_client[p->second.addr] = p->first;
+	addr_client[p->second.addr()] = p->first;
     }
 
     for (set<int32_t>::iterator p = inc.unmount.begin();
 	   p != inc.unmount.end();
 	   ++p) {
 	assert(client_info.count(*p));
-	addr_client.erase(client_info[*p].addr);
+	addr_client.erase(client_info[*p].addr());
 	client_info.erase(*p);
     }
   }

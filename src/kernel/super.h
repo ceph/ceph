@@ -107,6 +107,10 @@ struct ceph_client {
 	unsigned long mount_state;
 	wait_queue_head_t mount_wq;
 
+	int mount_err;
+	void *signed_ticket;           /* our keys to the kingdom */
+	int signed_ticket_len;
+
 	struct ceph_messenger *msgr;   /* messenger instance */
 	struct ceph_mon_client monc;
 	struct ceph_mds_client mdsc;

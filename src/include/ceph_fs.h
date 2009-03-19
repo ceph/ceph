@@ -45,7 +45,7 @@
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    5 /* public/client */
 #define CEPH_MDSC_PROTOCOL   11 /* public/client */
-#define CEPH_MONC_PROTOCOL    8 /* public/client */
+#define CEPH_MONC_PROTOCOL    9 /* public/client */
 
 
 /*
@@ -523,9 +523,10 @@ struct ceph_msg_footer {
 #define CEPH_MSG_MON_MAP                4
 #define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_CLIENT_MOUNT           10
-#define CEPH_MSG_CLIENT_UNMOUNT         11
-#define CEPH_MSG_STATFS                 12
-#define CEPH_MSG_STATFS_REPLY           13
+#define CEPH_MSG_CLIENT_MOUNT_ACK       11
+#define CEPH_MSG_CLIENT_UNMOUNT         12
+#define CEPH_MSG_STATFS                 13
+#define CEPH_MSG_STATFS_REPLY           14
 
 /* client <-> mds */
 #define CEPH_MSG_MDS_GETMAP             20

@@ -54,6 +54,7 @@ using namespace std;
 #include "messages/MMonGetMap.h"
 
 #include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
 #include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
@@ -259,6 +260,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     // clients
   case CEPH_MSG_CLIENT_MOUNT:
     m = new MClientMount;
+    break;
+  case CEPH_MSG_CLIENT_MOUNT_ACK:
+    m = new MClientMountAck;
     break;
   case CEPH_MSG_CLIENT_UNMOUNT:
     m = new MClientUnmount;
