@@ -635,6 +635,7 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 				mds = s->s_mds;
 				seq = di->lease_seq;
 				di->lease_renew_after = 0;
+				di->lease_renew_from = jiffies;
 			}
 		} else {
 			__ceph_mdsc_drop_dentry_lease(dentry);

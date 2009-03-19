@@ -1967,15 +1967,17 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	case CEPH_MDS_LEASE_RENEW:
 		if (di && di->lease_session == session &&
-		    di->lease_gen == session->s_cap_gen) {
+		    di->lease_gen == session->s_cap_gen &&
+		    di->lease_renew_from &&
+		    di->lease_renew_after == 0) {
 			unsigned long duration =
 				le32_to_cpu(h->duration_ms) * HZ / 1000;
 
 			di->lease_seq = le32_to_cpu(h->seq);
-			dentry->d_time = le64_to_cpu(h->renew_start) +
-				duration;
-			di->lease_renew_after = le64_to_cpu(h->renew_start) +
+			dentry->d_time = di->lease_renew_from + duration;
+			di->lease_renew_after = di->lease_renew_from +
 				(duration >> 1);
+			di->lease_renew_from = 0;
 		}
 		break;
 	}
@@ -2025,7 +2027,6 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
 	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
 	lease->seq = cpu_to_le32(seq);
-	lease->renew_start = cpu_to_le64(jiffies);
 	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
 	memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
 	       dnamelen);

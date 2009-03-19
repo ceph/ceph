@@ -706,6 +706,7 @@ static void update_dentry_lease(struct dentry *dentry,
 	} else if (di->lease_session != session)
 		goto out_unlock;
 	di->lease_renew_after = half_ttl;
+	di->lease_renew_from = 0;
 	dentry->d_time = ttl;
 out_unlock:
 	spin_unlock(&dentry->d_lock);
