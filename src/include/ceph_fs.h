@@ -578,6 +578,16 @@ struct ceph_mds_getmap {
 
 
 /*
+ * client authentication ticket
+ */
+struct ceph_client_ticket {
+	__u32 client;
+	struct ceph_entity_addr addr;
+	struct ceph_timespec created, expires;
+	__u32 flags;
+} __attribute__ ((packed));
+
+/*
  * mds states
  *   > 0 -> in
  *  <= 0 -> out
