@@ -277,7 +277,7 @@ GroupEntry *GroupEntry::get_properties(entity_addr_t *addr)
 GroupEntry *GroupsManager::get_group(const char *name)
 {
 	map<const char *, GroupEntry *, ltstr>::iterator iter;
-	GroupEntry *group, *orig_group;
+	GroupEntry *group = NULL, *orig_group;
 	char *tmp = strdup(name);
 	char *orig_tmp = tmp;
 	char *group_name;
