@@ -140,6 +140,12 @@ if [ $start_mon -eq 1 ]; then
 	pid file = out/\$type\$id.pid
 [mds]
 	pid file = out/\$name.pid
+
+[group everyone]
+	addr = 0.0.0.0/0
+
+[mount /]
+	allow = %everyone
 EOF
 		if [ `echo $IP | grep '^127\\.'` ]
 		then
