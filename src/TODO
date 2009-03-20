@@ -109,7 +109,6 @@ mds
 - on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
 - take some care with replayed client requests vs new requests
 - linkage vs cdentry replicas and remote rename....
-- move root inode into stray dir
 - make recovery work with early replies
   - purge each session's unused preallocated inodes
 - dftlock is missing from rejoin phase

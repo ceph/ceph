@@ -30,19 +30,24 @@ using namespace std;
 #define MAX_MDS                   0x100
 
 #define MDS_INO_ROOT              1
-#define MDS_INO_PGTABLE           2
-#define MDS_INO_ANCHORTABLE       3
-#define MDS_INO_SNAPTABLE         4
+#define MDS_INO_CEPH              2
+#define MDS_INO_PGTABLE           3
+#define MDS_INO_ANCHORTABLE       4
+#define MDS_INO_SNAPTABLE         5
 
-#define MDS_INO_LOG_OFFSET        (1*MAX_MDS)
-#define MDS_INO_IDS_OFFSET        (2*MAX_MDS)
-#define MDS_INO_CLIENTMAP_OFFSET  (3*MAX_MDS)
-#define MDS_INO_SESSIONMAP_OFFSET (4*MAX_MDS)
-#define MDS_INO_STRAY_OFFSET      (5*MAX_MDS)
-#define MDS_INO_BASE              (6*MAX_MDS)
+#define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
+#define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
+#define MDS_INO_IDS_OFFSET        (3*MAX_MDS)
+#define MDS_INO_CLIENTMAP_OFFSET  (4*MAX_MDS)
+#define MDS_INO_SESSIONMAP_OFFSET (5*MAX_MDS)
+#define MDS_INO_STRAY_OFFSET      (6*MAX_MDS)
+
+#define MDS_INO_SYSTEM_BASE       (10*MAX_MDS)
 
 #define MDS_INO_STRAY(x) (MDS_INO_STRAY_OFFSET+((unsigned)x))
 #define MDS_INO_IS_STRAY(i) ((i) >= MDS_INO_STRAY_OFFSET && (i) < MDS_INO_STRAY_OFFSET+MAX_MDS)
+#define MDS_INO_MDSDIR(x) (MDS_INO_MDSDIR_OFFSET+((unsigned)x))
+#define MDS_INO_IS_MDSDIR(i) ((i) >= MDS_INO_MDSDIR_OFFSET && (i) < MDS_INO_MDSDIR_OFFSET+MAX_MDS)
 
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.

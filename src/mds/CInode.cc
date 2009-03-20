@@ -448,12 +448,6 @@ void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
   else if (is_root()) {
     s = "";  // root
   } 
-  else if (is_stray()) {
-    s = "~stray";
-    char n[10];
-    sprintf(n, "%d", (int)(ino()-MDS_INO_STRAY_OFFSET));
-    s += n;
-  }
   else {
     char n[20];
     sprintf(n, "#%llx", (unsigned long long)(ino()));

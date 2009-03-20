@@ -824,9 +824,9 @@ void Server::handle_client_request(MClientRequest *req)
     return;
   }
   
-  if (!mdcache->get_root()) {
-    dout(5) << "need to open root" << dendl;
-    mdcache->open_root(new C_MDS_RetryMessage(mds, req));
+  if (!mdcache->is_open()) {
+    dout(5) << "waiting for root" << dendl;
+    mdcache->wait_for_open(new C_MDS_RetryMessage(mds, req));
     return;
   }
 
@@ -5335,7 +5335,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  if (diri->is_base()) {  // no snaps on root dir, until we can store it
+  if (diri->is_system()) {  // no snaps on root dir, until we can store it
     reply_request(mdr, -EPERM);
     return;
   }

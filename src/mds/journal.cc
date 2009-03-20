@@ -336,6 +336,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
       if (!diri) {
+	/*
 	if ((*lp).ino == MDS_INO_ROOT) {
 	  diri = mds->mdcache->create_root_inode();
 	  dout(10) << "EMetaBlob.replay created root " << *diri << dendl;
@@ -343,7 +344,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	  int whose = (*lp).ino - MDS_INO_STRAY_OFFSET;
 	  diri = mds->mdcache->create_stray_inode(whose);
 	  dout(10) << "EMetaBlob.replay created stray " << *diri << dendl;
-	} else {
+	  } else */ {
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
 	  assert(0);
 	}
@@ -351,7 +352,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       // create the dirfrag
       dir = diri->get_or_open_dirfrag(mds->mdcache, (*lp).frag);
 
-      if ((*lp).ino < MDS_INO_BASE) 
+      if ((*lp).ino == MDS_INO_ROOT) 
 	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNKNOWN);
 
       dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  

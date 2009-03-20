@@ -759,30 +759,6 @@ void MDS::boot_create()
 
   C_Gather *fin = new C_Gather(new C_MDS_CreateFinish(this));
 
-  CDir *rootdir = 0;
-  if (whoami == 0) {
-    dout(3) << "boot_create since i am also mds0, creating root inode and dir" << dendl;
-
-    // create root inode.
-    mdcache->open_root(0);
-    CInode *root = mdcache->get_root();
-    assert(root);
-    
-    // force empty root dir
-    rootdir = root->get_dirfrag(frag_t());
-    rootdir->mark_complete();
-  }
-
-  // create my stray dir
-  CDir *straydir;
-  {
-    dout(10) << "boot_create creating local stray dir" << dendl;
-    mdcache->open_local_stray();
-    CInode *stray = mdcache->get_stray();
-    straydir = stray->get_dirfrag(frag_t());
-    straydir->mark_complete();
-  }
-
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin->new_sub());
@@ -790,14 +766,11 @@ void MDS::boot_create()
   // write our first subtreemap
   mdlog->start_new_segment(fin->new_sub());
 
-  // dirty, commit (root and) stray dir(s)
-  if (whoami == 0) {
-    rootdir->mark_dirty(rootdir->pre_dirty(), mdlog->get_current_segment());
-    rootdir->commit(0, fin->new_sub());
+  if (whoami == mdsmap->get_root()) {
+    dout(3) << "boot_create creating fresh hierarchy" << dendl;
+    mdcache->create_empty_hierarchy(fin);
   }
-  straydir->mark_dirty(straydir->pre_dirty(), mdlog->get_current_segment());
-  straydir->commit(0, fin->new_sub());
- 
+
   // fixme: fake out inotable (reset, pretend loaded)
   dout(10) << "boot_create creating fresh inotable table" << dendl;
   inotable->reset();
@@ -822,6 +795,7 @@ void MDS::creating_done()
 {
   dout(1)<< "creating_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
+  mdcache->open_root();
 }
 
 
@@ -883,20 +857,8 @@ void MDS::boot_start(int step, int r)
       replay_done();
       break;
     }
-
-    // starting only
-    assert(is_starting());
-    if (mdsmap->get_root() == whoami) {
-      dout(2) << "boot_start " << step << ": opening root directory" << dendl;
-      mdcache->open_root(new C_MDS_BootStart(this, 4));
-      break;
-    }
     step++;
     
-  case 4:
-    dout(2) << "boot_start " << step << ": opening local stray directory" << dendl;
-    mdcache->open_local_stray();
-
     starting_done();
     break;
   }
@@ -910,6 +872,8 @@ void MDS::starting_done()
 
   // start new segment
   mdlog->start_new_segment(0);
+
+  mdcache->open_root();
 }
 
 

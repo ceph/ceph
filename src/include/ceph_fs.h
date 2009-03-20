@@ -41,7 +41,7 @@
  * client-facing protocol.
  */
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
-#define CEPH_MDS_PROTOCOL     6 /* cluster internal */
+#define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    5 /* public/client */
 #define CEPH_MDSC_PROTOCOL   12 /* public/client */
@@ -76,7 +76,7 @@ static inline int ceph_fsid_compare(const ceph_fsid_t *a,
 /*
  * ino, object, etc.
  */
-#define CEPH_INO_ROOT 1
+#define CEPH_INO_ROOT  1
 
 typedef __le64 ceph_snapid_t;
 #define CEPH_MAXSNAP ((__u64)(-3))

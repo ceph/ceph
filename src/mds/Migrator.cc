@@ -560,7 +560,9 @@ void Migrator::export_dir(CDir *dir, int dest)
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
   }
-  if (dir->inode->is_base()) {
+  if (dir->inode->is_system() &&
+      !(MDS_INO_IS_MDSDIR(dir->ino()) && (int)dir->ino() - MDS_INO_MDSDIR_OFFSET == dest) &&
+      !(dir->ino() == MDS_INO_MDSDIR(mds->whoami) && mds->is_stopping())) {
     dout(7) << "i won't export root|stray" << dendl;
     //assert(0);
     return;
@@ -1956,6 +1958,10 @@ void Migrator::import_finish(CDir *dir)
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
+
+  // did i just import mydir?
+  if (dir->ino() == MDS_INO_MDSDIR(mds->whoami))
+    cache->populate_mydir();
 
   // is it empty?
   if (dir->get_num_head_items() == 0 &&

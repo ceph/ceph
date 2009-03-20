@@ -169,9 +169,9 @@ mds_load_t MDBalancer::get_load()
 void MDBalancer::send_heartbeat()
 {
   utime_t now = g_clock.now();
-  if (!mds->mdcache->get_root()) {
-    dout(5) << "no root on send_heartbeat" << dendl;
-    mds->mdcache->open_root(new C_Bal_SendHeartbeat(mds));
+  if (!mds->mdcache->is_open()) {
+    dout(5) << "not open" << dendl;
+    mds->mdcache->wait_for_open(new C_Bal_SendHeartbeat(mds));
     return;
   }
 
@@ -225,9 +225,9 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   if (!mds->is_active()) 
     return;
 
-  if (!mds->mdcache->get_root()) {
+  if (!mds->mdcache->is_open()) {
     dout(10) << "opening root on handle_heartbeat" << dendl;
-    mds->mdcache->open_root(new C_MDS_RetryMessage(mds, m));
+    mds->mdcache->wait_for_open(new C_MDS_RetryMessage(mds, m));
     return;
   }
 

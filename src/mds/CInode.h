@@ -73,6 +73,7 @@ class CInode : public MDSCacheObject {
   static const int PIN_PASTSNAPPARENT =  -16;
   static const int PIN_OPENINGSNAPPARENTS = 17;
   static const int PIN_TRUNCATING =       18;
+  static const int PIN_STRAY =            19;  // we pin our stray inode while active
 
   const char *pin_name(int p) {
     switch (p) {
@@ -93,6 +94,7 @@ class CInode : public MDSCacheObject {
     case PIN_PASTSNAPPARENT: return "pastsnapparent";
     case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
     case PIN_TRUNCATING: return "truncating";
+    case PIN_STRAY: return "stray";
     default: return generic_pin_name(p);
     }
   }
@@ -344,7 +346,7 @@ private:
   
   bool is_root() { return inode.ino == MDS_INO_ROOT; }
   bool is_stray() { return MDS_INO_IS_STRAY(inode.ino); }
-  bool is_base() { return inode.ino < MDS_INO_BASE; }
+  bool is_system() { return inode.ino < MDS_INO_SYSTEM_BASE; }
 
   // note: this overloads MDSCacheObject
   bool is_ambiguous_auth() {

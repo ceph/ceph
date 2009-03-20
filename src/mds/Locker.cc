@@ -1587,7 +1587,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   int client = m->get_source().num();
   inode_t *latest = in->get_projected_inode();
 
-  if (in->is_base())
+  if (in->is_root())
     return false;   // FIXME?
 
   // increase or zero max_size?
@@ -1873,7 +1873,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
 
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
-      (diri->is_base() ||   // base inode's don't get version updated, so ICONTENT is useless.
+      (diri->is_root() ||   // base inode's don't get version updated, so ICONTENT is useless.
        (!diri->filelock.can_lease(client) &&
 	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0)) &&
       dn->lock.can_lease(client))
@@ -2438,7 +2438,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   dout(10) << "scatter_writebehind " << in->inode.mtime << " on " << *lock << " on " << *in << dendl;
 
   // hack:
-  if (in->is_base()) {
+  if (in->is_root()) {
     dout(10) << "scatter_writebehind just clearing updated flag for base inode " << *in << dendl;
     lock->clear_dirty();
     if (!lock->is_stable())
@@ -2506,7 +2506,7 @@ void Locker::scatter_eval(ScatterLock *lock)
   }
 
   CInode *in = (CInode*)lock->get_parent();
-  if (!in->has_subtree_root_dirfrag() || in->is_base()) {
+  if (!in->has_subtree_root_dirfrag() || in->is_root()) {
     // i _should_ be sync.
     if (!lock->is_wrlocked() &&
 	!lock->is_xlocked() &&

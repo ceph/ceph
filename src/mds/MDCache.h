@@ -39,6 +39,8 @@ class MMDSResolve;
 class MMDSResolveAck;
 class MMDSCacheRejoin;
 class MMDSCacheRejoinAck;
+class MJoin;
+class MJoinAck;
 class MDiscover;
 class MDiscoverReply;
 class MCacheExpire;
@@ -397,9 +399,8 @@ class MDCache {
  protected:
   hash_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
   CInode *root;                            // root inode
+  CInode *myin;                            // .ceph/mds%d dir
   CInode *stray;                           // my stray dir
-
-  set<CInode*> base_inodes;  // inodes < MDS_INO_BASE (root, stray, etc.)
 
   // -- client leases --
 public:
@@ -748,7 +749,6 @@ public:
 
   // root inode
   CInode *get_root() { return root; }
-  void set_root(CInode *r);
   CInode *get_stray() { return stray; }
 
   // cache
@@ -851,11 +851,32 @@ public:
   void find_nested_exports(CDir *dir, set<CDir*>& s);
   void find_nested_exports_under(CDir *import, CDir *dir, set<CDir*>& s);
 
- public:
-  CInode *create_root_inode();
-  void open_root(Context *c);
-  CInode *create_stray_inode(int whose=-1);
-  void open_local_stray();
+
+private:
+  bool opening_root, open;
+  list<Context*> waiting_for_open;
+
+public:
+  CInode *create_system_inode(inodeno_t ino, int mode);
+  void create_empty_hierarchy(C_Gather *gather);
+
+  bool is_open() { return open; }
+  void wait_for_open(Context *c) {
+    waiting_for_open.push_back(c);
+  }
+
+  void open_root();
+  void populate_mydir();
+
+  void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);
+  void _create_system_file_finish(Mutation *mut, CDentry *dn, Context *fin);
+
+  /*
+  void handle_join(MJoin *join);
+  void _join(MJoin *join, CDentry *straydn);
+  void handle_join_ack(MJoinAck *ack);
+  */
+
   void open_foreign_stray(int who, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
@@ -924,6 +945,7 @@ protected:
   // -- replicas --
   void handle_discover(MDiscover *dis);
   void handle_discover_reply(MDiscoverReply *m);
+  friend class C_MDC_Join;
 
 public:
   void replicate_dir(CDir *dir, int to, bufferlist& bl) {
