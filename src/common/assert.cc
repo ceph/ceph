@@ -31,5 +31,5 @@ void __ceph_assert_fail(const char *assertion, const char *file, int line, const
 
 void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *func)
 {
-	*_dout << "WARNING: assert(" << assertion << ") at: " << file << ":" << line << ": " << func << "()" << std::endl;
+  *_dout << "WARNING: assert(" << assertion << ") at: " << file << ":" << line << ": " << func << "()" << std::endl;
 }

@@ -3,6 +3,8 @@
 
 #include <vector>
 
-void common_init(std::vector<const char*>& args, const char *module_type, bool open=true);
+void common_init(std::vector<const char*>& args,
+		 const char *module_type,
+		 bool daemon);
 
 #endif

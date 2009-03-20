@@ -49,8 +49,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  configure_daemon_mode();
-  common_init(args, "mon");
+  common_init(args, "mon", true);
 
   // whoami
   char *end;
