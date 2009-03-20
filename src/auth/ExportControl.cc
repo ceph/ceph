@@ -31,32 +31,60 @@ using namespace std;
 #include "common/ConfUtils.h"
 #include "common/common_init.h"
 
+typedef struct subnet_addr {
+	entity_addr_t addr;
+	entity_addr_t mask;
+} subnet_addr_t;
 
-/*
- * a host addr entry: ip[/{maskbits}
- * examples:
- *    1.2.3.4
- *    1.2.3.4/16
- */
-class ExportAddrEntry {
-	entity_addr_t ent_addr;
-	entity_addr_t ent_mask;
+class Subnet
+{
+	subnet_addr_t subnet;
 	bool valid;
-public:
-	ExportAddrEntry(const char *str);
+	char *orig_str;
 
-	bool is_authorized(entity_addr_t *addr);
+	void parse(const char *str);
+public:
+	Subnet(const char *str) {
+		valid = false;
+		parse(str);
+	}
+
 	bool is_valid() { return valid; }
+	bool contains(entity_addr_t *addr);
+	subnet_addr_t& get_subnet() { return subnet; }
 };
 
-ExportAddrEntry::ExportAddrEntry(const char *str)
+#define GET_IP(addr) (addr)->ipaddr.sin_addr.s_addr
+
+bool Subnet::contains(entity_addr_t *addr)
+{
+	bool ret;
+	if (!valid)
+		return false;
+
+	dout(30) << "subnet: " << orig_str << dendl;
+
+	dout(30) << hex << GET_IP(addr) << " --- " << GET_IP(&subnet.addr) << dec << dendl;
+	dout(30) << hex <<  (GET_IP(addr) & GET_IP(&subnet.mask)) << " -- " << (GET_IP(&subnet.addr) & GET_IP(&subnet.mask)) << dec << dendl;
+
+	ret = (GET_IP(addr) & GET_IP(&subnet.mask)) == (GET_IP(&subnet.addr) & GET_IP(&subnet.mask));
+
+	dout(30) << "ret=" << ret << dendl;
+
+	return ret;
+}
+
+
+void Subnet::parse(const char *str)
 {
 	unsigned char ip[4], mask[4];
 
 	char *mask_str = strdup(str);
 	int ret;
 
-	valid = false;
+	dout(30) << "Subnet::parse str=" << str << dendl;
+
+	orig_str = strdup(str);
 
 	ret = sscanf(str, "%hhd.%hhd.%hhd.%hhd/%s", &ip[0], &ip[1], &ip[2], &ip[3], mask_str);
 
@@ -86,36 +114,345 @@ ExportAddrEntry::ExportAddrEntry(const char *str)
 		}
 		
 	}
-	memcpy(&ent_addr.ipaddr.sin_addr, ip, 4);
-	memcpy(&ent_mask.ipaddr.sin_addr, mask, 4);
+
+	dout(30) << "parsed str=" << str << dendl;
+	memcpy(&GET_IP(&subnet.addr), ip, 4);
+	memcpy(&GET_IP(&subnet.mask), mask, 4);
+
+	dout(30) << "--> " << (int)ip[0] << "." << (int)ip[1] << "." << (int)ip[2] << "." << (int)ip[3] << "/"
+		<< (int)mask[0] << "." << (int)mask[1] << "." << (int)mask[2] << "." << (int)mask[3] << dendl;
+	dout(30) << hex << GET_IP(&subnet.addr) << dec << dendl;
 
 	valid = true;
 }
 
-#define GET_IP(addr) (addr)->ipaddr.sin_addr.s_addr
+class GroupEntry;
 
-bool ExportAddrEntry::is_authorized(entity_addr_t *addr)
-{
-	if (!valid)
-		return true;
+class GroupsManager {
+	map<const char *, GroupEntry *, ltstr> groups_map;
 
-	return (GET_IP(addr) & GET_IP(&ent_mask)) == (GET_IP(&ent_addr) & GET_IP(&ent_mask));
-}
-
-class ExportEntry {
-	char *name;
-	ExportAddrEntry *addr;
-	vector<ExportAddrEntry *> addr_vec;
 public:
-	ExportEntry(const char *str);
-	bool is_authorized(entity_addr_t *addr);
+	GroupEntry *get_group(const char  *name);
 };
 
-ExportEntry::ExportEntry(const char *str)
+static GroupsManager groups_mgr;
+
+#define GROUP_DEFINED_RDONLY 0x1
+
+class GroupEntry {
+	vector<Subnet *> subnets;
+	vector<GroupEntry *> groups;
+	int flags;
+	bool readonly;
+
+	void parse_single_addr(const char *str);
+	void initialize();
+public:
+	GroupEntry() { initialize(); }
+	GroupEntry(Subnet *subnet);
+	GroupEntry(GroupEntry *);
+	void parse_addr_line(const char *str);
+	bool get_readonly() { return readonly; }
+	void set_readonly(bool ro) { flags |= GROUP_DEFINED_RDONLY; readonly = ro; }
+	void init(ConfFile *cf, const char *section, const char *options);
+	bool contains(entity_addr_t *addr);
+	GroupEntry *get_properties(entity_addr_t *addr);
+	bool is_valid();
+};
+
+void GroupEntry::initialize()
+{
+	readonly = false;
+	flags = 0;
+}
+
+GroupEntry::GroupEntry(Subnet *subnet)
+{
+	initialize();
+
+	if (subnet) {
+		subnets.push_back(subnet);
+	}
+}
+
+GroupEntry::GroupEntry(GroupEntry *group)
+{
+	initialize();
+
+	groups.push_back(group);
+}
+
+void GroupEntry::parse_addr_line(const char *str)
 {
 	char *s = strdup(str);
 	char *orig_s = s;
 	char *val;
+
+	dout(30) << "parse_addr_line str=" << str << dendl;
+
+	do {
+		val = strsep(&s, ", \t");
+		if (*val) {
+			GroupEntry *group = groups_mgr.get_group(val);
+			if (group)
+				groups.push_back(group);
+		}
+	} while (s);
+
+	free(orig_s);
+}
+
+void GroupEntry::parse_single_addr(const char *str)
+{
+	Subnet *subnet = new Subnet(str);
+
+	if (subnet->is_valid() )
+		subnets.push_back(subnet);
+	else
+		delete subnet;
+}
+
+bool GroupEntry::is_valid()
+{
+	vector<Subnet *>::iterator sub_iter;
+	vector<GroupEntry *>::iterator ent_iter;
+
+	for (sub_iter = subnets.begin(); sub_iter != subnets.end(); ++sub_iter) {
+		if ((*sub_iter)->is_valid())
+			return true;
+	}
+
+	for (ent_iter = groups.begin(); ent_iter != groups.end(); ++ent_iter) {
+		if ((*ent_iter)->is_valid())
+			return true;
+	}
+
+	return false;
+}
+
+bool GroupEntry::contains(entity_addr_t *addr)
+{
+	vector<Subnet *>::iterator sub_iter;
+	vector<GroupEntry *>::iterator ent_iter;
+
+	for (sub_iter = subnets.begin(); sub_iter != subnets.end(); ++sub_iter) {
+		if ((*sub_iter)->contains(addr))
+			return true;
+	}
+
+	for (ent_iter = groups.begin(); ent_iter != groups.end(); ++ent_iter) {
+		if ((*ent_iter)->contains(addr))
+			return true;
+	}
+
+	return false;
+}
+
+GroupEntry *GroupEntry::get_properties(entity_addr_t *addr)
+{
+	GroupEntry *group = NULL;
+	vector<Subnet *>::iterator sub_iter;
+	vector<GroupEntry *>::iterator ent_iter;
+
+	for (sub_iter = subnets.begin(); sub_iter != subnets.end(); ++sub_iter) {
+		if ((*sub_iter)->contains(addr)) {
+			return new GroupEntry(*this);
+		}
+	}
+
+	for (ent_iter = groups.begin(); ent_iter != groups.end(); ++ent_iter) {
+		group = (*ent_iter)->get_properties(addr);
+
+		if (group) {
+			/* override properties */
+			if (flags & GROUP_DEFINED_RDONLY) {
+				group->set_readonly(readonly);
+			}
+		}
+	}
+
+	return group;
+}
+
+GroupEntry *GroupsManager::get_group(const char *name)
+{
+	map<const char *, GroupEntry *, ltstr>::iterator iter;
+	GroupEntry *group, *orig_group;
+	char *tmp = strdup(name);
+	char *orig_tmp = tmp;
+	char *group_name;
+	char *options = NULL;
+	Subnet *subnet = NULL;
+
+	if (isdigit(*name)) {
+		subnet = new Subnet(name);
+	} else {
+		if (*name == '%') {
+			++name;
+			++tmp;
+		}
+
+		if (*name == '\0')
+			goto done;
+	}
+
+	/* first try to look the raw name.. if we have it,
+	   just return what we've got */
+	iter = groups_map.find(name);
+
+	if (iter != groups_map.end()) {
+		group = iter->second;
+		goto done;
+	}
+
+	group_name = strsep(&tmp, "(");
+
+	if (tmp) {
+		options = strsep(&tmp, ")");
+	}
+
+	if (!options) {
+		dout(30) << "** creating new group with no options (" << group_name << ")" << dendl;
+		/* no options --> group_name = name, create a new
+		   one and exit */
+		group = new GroupEntry(subnet);
+		groups_map[strdup(group_name)] = group;
+		goto done;
+	}
+
+	iter = groups_map.find(group_name);
+	if (iter == groups_map.end() ) {
+		orig_group = new GroupEntry(subnet);
+		groups_map[strdup(group_name)] = orig_group;
+	} else {
+		orig_group = iter->second;
+	}
+
+	dout(30) << "** creating new group with options (" << group_name <<  " options=" << options << ")" << dendl;
+	group = new GroupEntry(orig_group);
+	group->init(NULL, NULL, options);
+	groups_map[strdup(name)] = group;
+
+done:
+	free(orig_tmp);
+
+	return group;
+}
+
+void GroupEntry::init(ConfFile *cf, const char *section, const char *options)
+{
+	char *group_str;
+	int ret;
+	bool rdonly;
+
+	if (cf) {
+		ret = cf->read(section, "copy", &group_str, NULL);
+		if (ret) {
+			GroupEntry *group = groups_mgr.get_group(group_str);
+
+			groups.push_back(group);
+		} else {
+			ret = cf->read(section, "addr", &group_str, NULL);
+
+			if (group_str) {
+				parse_addr_line(group_str);
+				free(group_str);
+			}
+
+			ret = cf->read(section, "read only", &rdonly, 0);
+
+			if (ret)
+				set_readonly(rdonly);
+		}
+	}
+
+	if (options) {
+		char *tmp = strdup(options);
+		char *orig_tmp = tmp;
+		char  *op;
+
+		op = strsep(&tmp, ", ");
+
+		while (op) {
+			if (strcmp(op, "rw") == 0) {
+				set_readonly(false);
+			} else if (strcmp(op, "ro") == 0) {
+				set_readonly(true);
+			} else {
+				derr(0) << "Error: unknown option '" << op << "'" << dendl;
+			}
+			op = strsep(&tmp, ", ");
+		}
+
+		free(orig_tmp);
+	}
+}
+
+class ExportAddrEntry {
+	GroupEntry *group;
+	bool valid;
+public:
+	ExportAddrEntry(const char *str);
+
+	bool is_valid() { return (group && group->is_valid()); }
+	bool is_authorized(entity_addr_t *addr);
+	GroupEntry *properties(entity_addr_t *addr);
+};
+
+ExportAddrEntry::ExportAddrEntry(const char *str)
+{
+	group = new GroupEntry();
+
+	group->parse_addr_line(str);
+}
+
+bool ExportAddrEntry::is_authorized(entity_addr_t *addr)
+{
+	GroupEntry *props;
+	bool ret;
+
+	if (!group)
+		return false;
+
+	if (group)
+		props = group->get_properties(addr);
+
+	ret = (props != NULL);
+	delete props;
+
+	return ret;
+}
+
+GroupEntry *ExportAddrEntry::properties(entity_addr_t *addr)
+{
+	GroupEntry *props = NULL;
+
+	if (group)
+		props = group->get_properties(addr);
+
+	return props;
+}
+
+class ExportEntry {
+	vector<ExportAddrEntry *> addr_vec;
+public:
+	ExportEntry() {}
+	ExportEntry(const char *str);
+	void init(const char *str);
+	bool is_authorized(entity_addr_t *addr);
+	GroupEntry *properties(entity_addr_t *addr);
+};
+
+ExportEntry::ExportEntry(const char *str)
+{
+	init(str);
+}
+
+void ExportEntry::init(const char *str)
+{
+	char *val;
+	char *s = strdup(str);
+	char *orig_s = s;
 
 	do {
 		val = strsep(&s, ", \t");
@@ -148,6 +485,60 @@ bool ExportEntry::is_authorized(entity_addr_t *addr)
 	return false;
 }
 
+GroupEntry *ExportEntry::properties(entity_addr_t *addr)
+{
+	vector<ExportAddrEntry *>::iterator iter, last_iter;
+
+	last_iter = addr_vec.end();
+
+	for (iter = addr_vec.begin(); iter != last_iter; ++iter) {
+		ExportAddrEntry *ent = *iter;
+		GroupEntry *props = ent->properties(addr);
+
+		if (props)
+			return props;
+	}
+
+	return NULL;
+}
+
+class ExportsManager {
+	map<const char *, ExportEntry *, ltstr> exports_map;
+
+public:
+	ExportEntry *get_export(const char  *name);
+	~ExportsManager();
+};
+
+ExportEntry *ExportsManager::get_export(const char *name)
+{
+	map<const char *, ExportEntry *, ltstr> ::iterator iter;
+	ExportEntry *exp;
+
+	iter = exports_map.find(name);
+
+	if (iter == exports_map.end()) {
+		exp = new ExportEntry();
+		exports_map[strdup(name)] = exp;
+	} else {
+		exp = iter->second;
+	}
+
+	return exp;
+}
+
+ExportsManager::~ExportsManager()
+{
+	map<const char *, ExportEntry *, ltstr> ::iterator iter;
+
+	for (iter = exports_map.begin(); iter != exports_map.end(); ++iter) {
+		free((void *)iter->first);
+		delete iter->second;
+	}
+}
+
+static ExportsManager exports_mgr;
+
 ExportControl::~ExportControl()
 {
 	Mutex::Locker locker(lock);
@@ -158,36 +549,67 @@ ExportControl::~ExportControl()
 void ExportControl::load(ConfFile *conf)
 {
   Mutex::Locker locker(lock);
-  int len = strlen(MNT_SEC_NAME);
+  int mnt_len = strlen(MOUNT_SEC_NAME);
+  int grp_len = strlen(GROUP_SEC_NAME);
+  int client_len = strlen(CLIENT_SEC_NAME);
   char *allow_str = NULL;
   char *allow_def = NULL;
   int ret;
 
 #define EVERYONE "0.0.0.0/0"
 
-  ret = conf->read("mount", "allow client", &allow_def, EVERYONE);
+  ret = conf->read("mount", "allow", &allow_def, EVERYONE);
 
   for (std::list<ConfSection*>::const_iterator p = conf->get_section_list().begin();
 	p != conf->get_section_list().end();
 	p++) {
-    if (strncmp(MNT_SEC_NAME, (*p)->get_name().c_str(), len) == 0) {
+
+    /* is it a 'mount' sections */
+    if (strncmp(MOUNT_SEC_NAME, (*p)->get_name().c_str(), mnt_len) == 0) {
 	const char *section = (*p)->get_name().c_str();
 	char *tmp_sec = strdup(section);
 	char *mnt;
 	char *orig_tmp_sec = tmp_sec;
+	char *copy_str = NULL;
 
-	allow_str = NULL;
-	ret = conf->read(section, "allow client", &allow_str, allow_def);
+	strsep(&tmp_sec, " ");
+	mnt = tmp_sec;
+	if (mnt) {
+		ret = conf->read(section, "copy", &copy_str, NULL);
+
+		if (ret) {
+			ExportEntry *exp = exports_mgr.get_export(copy_str);
+
+			exports[strdup(mnt)] = exp;
+		} else {
+			allow_str = NULL;
+			ret = conf->read(section, "allow", &allow_str, allow_def);
+
+			/* it is guaranteed that there's only one space character */
+			ExportEntry *exp = exports_mgr.get_export(mnt);
+			exp->init(allow_str);
+			exports[strdup(mnt)] = exp;
+			free(allow_str);
+		}
+	}
+
+	free(orig_tmp_sec);
+    } else if ((strncmp(GROUP_SEC_NAME, (*p)->get_name().c_str(), grp_len) == 0) ||
+        (strncmp(CLIENT_SEC_NAME, (*p)->get_name().c_str(), client_len) == 0)) {
+	/* it's either a 'client' or a 'group' section */
+	const char *section = (*p)->get_name().c_str();
+	char *tmp_sec = strdup(section);
+	char *name;
+	char *orig_tmp_sec = tmp_sec;
 
 	/* it is guaranteed that there's only one space character */
 	strsep(&tmp_sec, " ");
-	mnt = tmp_sec;
+	name = tmp_sec;
 
-	if (mnt) {
-		ExportEntry *exp = new ExportEntry(allow_str);
-		free(allow_str);
-
-		exports[strdup(mnt)] = exp;
+	if (name) {
+		GroupEntry *exp = groups_mgr.get_group(name);
+		if (exp)
+			exp->init(conf, section, NULL);
 	}
 
 	free(orig_tmp_sec);
@@ -197,18 +619,44 @@ void ExportControl::load(ConfFile *conf)
 
 bool ExportControl::is_authorized(entity_addr_t *addr, const char *path)
 {
+	ExportEntry *ent = _find(addr, path);
+
+	if (ent)
+		return ent->is_authorized(addr);
+
+	return false;
+}
+
+GroupEntry *ExportControl::get_properties(entity_addr_t *addr, const char *path)
+{
+	ExportEntry *ent = _find(addr, path);
+
+	if (ent)
+		return ent->properties(addr);
+
+	return false;
+}
+
+void ExportControl::put_properties(GroupEntry *props)
+{
+	delete props;
+}
+
+ExportEntry *ExportControl::_find(entity_addr_t *addr, const char *path)
+{
 	Mutex::Locker locker(lock);
 	char *p = strdup(path);
 	int len = strlen(p);
+	ExportEntry *ent = NULL;
 	
 	map<const char *, ExportEntry *, ltstr>::iterator iter, exp_end;
 
 	/* only absolute paths! */
 	if (*path != '/')
-		return false;
+		goto out;
 
-	if (exports.size() == 0) /* empty mounts list, default with truen for now */
-		return true;
+	if (exports.size() == 0)
+		goto out;
 
 	exp_end = exports.end();
 	iter = exports.find(p);
@@ -216,8 +664,8 @@ bool ExportControl::is_authorized(entity_addr_t *addr, const char *path)
 	while (iter == exp_end) {
 
 		do {
-			if (len == 0) /* didn't match anything, we'll default with true for now */
-				return true;
+			if (len == 0)
+				goto out;
 
 			p[len] = '\0';
 			len--;
@@ -229,11 +677,12 @@ bool ExportControl::is_authorized(entity_addr_t *addr, const char *path)
 		iter = exports.find(p);
 	}
 
+
+	ent = iter->second;
+
+out:
 	free(p);
-
-	ExportEntry *ent = iter->second;
-
-	return ent->is_authorized(addr);
+	return ent;
 }
 
 void ExportControl::_cleanup()
@@ -244,10 +693,46 @@ void ExportControl::_cleanup()
 
 	for (iter = exports.begin(); iter != exp_end; ++iter) {
 		const char *mnt = iter->first;
-		ExportEntry *ent = iter->second;
-
 		free((void *)mnt);
-		delete ent;
 	}
 }
 
+#if 0
+
+int test(ExportControl *ec, const char *ip, const char *path)
+{
+	Subnet sub(ip);
+	GroupEntry *group;
+
+	subnet_addr& addr = sub.get_subnet();
+
+	cout << "addr " << ip << ": result=" << ec->is_authorized(&addr.addr, path) << std::endl;
+
+	group = ec->get_properties(&addr.addr, path);
+
+	if (group) {
+		cout << "readonly=" << group->get_readonly() << std::endl;
+	}
+
+	return 0;
+}
+
+
+int main(int argc, char *argv[])
+{
+	ConfFile cf("ceph.conf");
+
+	cf.parse();
+	ExportControl ec;
+
+	ec.load(&cf);
+	test(&ec, "10.0.0.1", "/home");
+	test(&ec, "10.0.1.1", "/home");
+	test(&ec, "10.0.1.1", "/");
+	test(&ec, "10.1.1.1", "/");
+	test(&ec, "10.2.1.1", "/");
+	test(&ec, "10.9.1.1", "/");
+	test(&ec, "10.0.1.1", "/home");
+}
+
+#endif
