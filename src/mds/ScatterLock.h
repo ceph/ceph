@@ -51,10 +51,12 @@ public:
     dirty = false;
   }
   void finish_flush() {
-    flushing = false;
-    if (!dirty) {
-      parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
-      parent->clear_dirty_scattered(type);
+    if (flushing) {
+      flushing = false;
+      if (!dirty) {
+	parent->put(MDSCacheObject::PIN_DIRTYSCATTERED);
+	parent->clear_dirty_scattered(type);
+      }
     }
   }
   void clear_dirty() {

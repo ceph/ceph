@@ -465,6 +465,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
 	    bufferlist data;
 	    lock->encode_locked_state(data);
 	    mds->send_message_mds(new MLock(lock, LOCK_AC_LOCKACK, mds->get_nodeid(), data), auth);
+	    ((ScatterLock *)lock)->start_flush();
 	  }
 	  break;
 
@@ -3061,6 +3062,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_SYNC);
 
+    ((ScatterLock *)lock)->finish_flush();
+
     lock->get_rdlock();
     lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     lock->put_rdlock();
@@ -3091,6 +3094,8 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
     // ok
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_MIX);
+
+    ((ScatterLock *)lock)->finish_flush();
 
     if (caps)
       issue_caps(in);
