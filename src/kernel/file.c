@@ -100,7 +100,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
-	int flags, fmode, wantcaps;
+	int flags, fmode, wanted, new_want;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
 		return -EROFS;
@@ -118,7 +118,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	dout(5, "open inode %p ino %llx.%llx file %p flags %d (%d)\n", inode,
 	     ceph_vinop(inode), file, flags, file->f_flags);
 	fmode = ceph_flags_to_mode(flags);
-	wantcaps = ceph_caps_for_mode(fmode);
+	new_want = ceph_caps_for_mode(fmode);
 
 	/*
 	 * We re-use existing caps only if already have an open file
@@ -126,16 +126,17 @@ int ceph_open(struct inode *inode, struct file *file)
 	 * registered with the MDS.
 	 */
 	spin_lock(&inode->i_lock);
-	if ((__ceph_caps_file_wanted(ci) & wantcaps) == wantcaps) {
+	wanted = __ceph_caps_file_wanted(ci);
+	if ((wanted & new_want) == new_want) {
 		dout(10, "open fmode %d caps %d using existing on %p\n",
-		     fmode, wantcaps, inode);
+		     fmode, new_want, inode);
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
-	dout(10, "open fmode %d, don't have caps %s\n", fmode,
-	     ceph_cap_string(wantcaps));
+	dout(10, "open fmode %d wants %s, we only already want %s\n",
+	     fmode, ceph_cap_string(new_want), ceph_cap_string(wanted));
 
 	dentry = d_find_alias(inode);
 	if (!dentry)
