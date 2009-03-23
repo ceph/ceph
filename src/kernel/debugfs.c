@@ -3,6 +3,7 @@
 #include <linux/seq_file.h>
 
 #include "super.h"
+#include "mds_client.h"
 
 static struct dentry *ceph_debugfs_dir = NULL;
 static struct dentry *ceph_debugfs_debug = NULL;
@@ -130,7 +131,263 @@ static const struct file_operations ceph_debug_mask_fops = {
 	.release	= single_release,
 };
 
-int ceph_debugfs_init(void)
+
+
+static int fsid_show(struct seq_file *s, void *p)
+{
+	struct ceph_client *client = s->private;
+	seq_printf(s, "%llx.%llx\n",
+	       le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
+	       le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+
+	return 0;
+}
+
+static int monmap_show(struct seq_file *s, void *p)
+{
+	int i;
+	struct ceph_client *client = s->private;
+
+	if (client->monc.monmap == NULL)
+		return 0;
+
+	seq_printf(s, "epoch %d\n", client->monc.monmap->epoch);
+	for (i = 0; i < client->monc.monmap->num_mon; i++) {
+		struct ceph_entity_inst *inst =
+			&client->monc.monmap->mon_inst[i];
+
+		seq_printf(s, "\t%s%d\t%u.%u.%u.%u:%u\n",
+			       ENTITY_NAME(inst->name),
+			       IPQUADPORT(inst->addr.ipaddr));
+	}
+	return 0;
+}
+
+static int mdsmap_show(struct seq_file *s, void *p)
+{
+	int i;
+	struct ceph_client *client = s->private;
+
+	if (client->mdsc.mdsmap == NULL)
+		return 0;
+	seq_printf(s, "epoch %d\n", client->mdsc.mdsmap->m_epoch);
+	seq_printf(s, "root %d\n", client->mdsc.mdsmap->m_root);
+	seq_printf(s, "session_timeout %d\n",
+		       client->mdsc.mdsmap->m_session_timeout);
+	seq_printf(s, "session_autoclose %d\n",
+		       client->mdsc.mdsmap->m_session_autoclose);
+	for (i = 0; i < client->mdsc.mdsmap->m_max_mds; i++) {
+		struct ceph_entity_addr *addr = &client->mdsc.mdsmap->m_addr[i];
+		int state = client->mdsc.mdsmap->m_state[i];
+
+		seq_printf(s, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
+			       i,
+			       IPQUADPORT(addr->ipaddr),
+			       ceph_mds_state_name(state));
+	}
+	return 0;
+}
+
+static int osdmap_show(struct seq_file *s, void *p)
+{
+	int i;
+	struct ceph_client *client = s->private;
+
+	if (client->osdc.osdmap == NULL)
+		return 0;
+	seq_printf(s, "epoch %d\n", client->osdc.osdmap->epoch);
+	seq_printf(s, "pg_num %d / %d\n",
+		       client->osdc.osdmap->pg_num,
+		       client->osdc.osdmap->pg_num_mask);
+	seq_printf(s, "lpg_num %d / %d\n",
+		       client->osdc.osdmap->lpg_num,
+		       client->osdc.osdmap->lpg_num_mask);
+	seq_printf(s, "flags%s%s\n",
+		       (client->osdc.osdmap->flags & CEPH_OSDMAP_NEARFULL) ?
+		       " NEARFULL":"",
+		       (client->osdc.osdmap->flags & CEPH_OSDMAP_FULL) ?
+		       " FULL":"");
+	for (i = 0; i < client->osdc.osdmap->max_osd; i++) {
+		struct ceph_entity_addr *addr =
+			&client->osdc.osdmap->osd_addr[i];
+		int state = client->osdc.osdmap->osd_state[i];
+		char sb[64];
+
+		seq_printf(s,
+		       "\tosd%d\t%u.%u.%u.%u:%u\t%3d%%\t(%s)\n",
+		       i, IPQUADPORT(addr->ipaddr),
+		       ((client->osdc.osdmap->osd_weight[i]*100) >> 16),
+		       ceph_osdmap_state_str(sb, sizeof(sb), state));
+	}
+	return 0;
+}
+
+static int monc_show(struct seq_file *s, void *p)
+{
+	struct ceph_client *client = s->private;
+	struct ceph_mon_statfs_request *req;
+	u64 nexttid = 0;
+	int got;
+	struct ceph_mon_client *monc = &client->monc;
+
+	mutex_lock(&monc->statfs_mutex);
+
+	if (monc->want_osdmap)
+		seq_printf(s, "want osdmap\n");
+	if (monc->want_mdsmap)
+		seq_printf(s, "want mdsmap\n");
+
+	while (nexttid < monc->last_tid) {
+		got = radix_tree_gang_lookup(&monc->statfs_request_tree,
+					     (void **)&req, nexttid, 1);
+		if (got == 0)
+			break;
+		nexttid = req->tid + 1;
+
+		seq_printf(s, "%u.%u.%u.%u:%u (%s%d)\tstatfs\n",
+			IPQUADPORT(req->request->hdr.dst.addr.ipaddr),
+			ENTITY_NAME(req->request->hdr.dst.name));
+	}
+	mutex_unlock(&monc->statfs_mutex);
+
+	return 0;
+}
+
+static int mdsc_show(struct seq_file *s, void *p)
+{
+	struct ceph_client *client = s->private;
+	int pathlen;
+	u64 pathbase;
+	char *path;
+	struct ceph_mds_request *req;
+	u64 nexttid = 0;
+	int got;
+	struct ceph_mds_client *mdsc = &client->mdsc;
+
+	mutex_lock(&mdsc->mutex);
+	while (nexttid < mdsc->last_tid) {
+		got = radix_tree_gang_lookup(&mdsc->request_tree,
+					     (void **)&req, nexttid, 1);
+		if (got == 0)
+			break;
+		nexttid = req->r_tid + 1;
+
+		seq_printf(s, "%u.%u.%u.%u:%u (%s%d)\t",
+			IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
+			ENTITY_NAME(req->r_request->hdr.dst.name));
+
+		seq_printf(s, "%s", ceph_mds_op_name(req->r_op));
+
+		if (req->r_dentry) {
+			path = ceph_mdsc_build_path(req->r_dentry, &pathlen, &pathbase, -1);
+			if (path) {
+				seq_printf(s, " %s", path);
+				kfree(path);
+			}
+		} else if (req->r_path1) {
+			seq_printf(s, " %s", req->r_path1);
+		}
+
+		if (req->r_old_dentry) {
+			path = ceph_mdsc_build_path(req->r_old_dentry, &pathlen, &pathbase, -1);
+			if (path) {
+				seq_printf(s, " %s", path);
+				kfree(path);
+			}
+		} else if (req->r_path2 &&
+			req->r_op != CEPH_MDS_OP_FINDINODE) {
+				seq_printf(s, " %s", req->r_path2);
+		}
+
+		seq_printf(s, "\n");
+	}
+	mutex_unlock(&mdsc->mutex);
+
+	return 0;
+}
+
+static int osdc_show(struct seq_file *s, void *p)
+{
+	struct ceph_client *client = s->private;
+	struct ceph_osd_request *req;
+	u64 nexttid = 0;
+	int got;
+	struct ceph_osd_client *osdc = &client->osdc;
+
+	mutex_lock(&osdc->request_mutex);
+	while (nexttid < osdc->last_tid) {
+		struct ceph_osd_request_head *head;
+		struct ceph_osd_op *op;
+		int num_ops;
+		int opcode;
+		int i;
+
+		got = radix_tree_gang_lookup(&osdc->request_tree,
+					     (void **)&req, nexttid, 1);
+		if (got == 0)
+			break;
+
+		nexttid = req->r_tid + 1;
+
+		seq_printf(s, "%u.%u.%u.%u:%u (%s%d)\t",
+			IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
+			ENTITY_NAME(req->r_request->hdr.dst.name));
+
+		head = req->r_request->front.iov_base;
+
+		op = (void *)(head + 1);
+
+		seq_printf(s, "oid=%llx.%08x (snap=%lld)\t",
+			le64_to_cpu(head->oid.ino),
+			le32_to_cpu(head->oid.bno),
+			le64_to_cpu(head->oid.snap));
+
+		num_ops = le16_to_cpu(head->num_ops);
+
+		for (i=0; i<num_ops; i++) {
+			opcode = le16_to_cpu(op->op);
+
+			seq_printf(s, "%s\t", ceph_osd_op_name(opcode));
+			op++;
+		}
+
+		seq_printf(s, "\n");
+	}
+
+	mutex_unlock(&osdc->request_mutex);
+
+	return 0;
+}
+
+#define DEFINE_SHOW_FUNC(name) 						\
+static int name##_open(struct inode *inode, struct file *file)		\
+{									\
+	struct seq_file *sf;						\
+	int ret;							\
+									\
+	ret = single_open(file, name, NULL);				\
+									\
+	sf = file->private_data;					\
+	sf->private = inode->i_private;					\
+	return ret;							\
+}									\
+									\
+static const struct file_operations name##_fops = {			\
+	.open		= name##_open,					\
+	.read		= seq_read,					\
+	.llseek		= seq_lseek,					\
+	.release	= single_release,				\
+};
+
+DEFINE_SHOW_FUNC(fsid_show)
+DEFINE_SHOW_FUNC(monmap_show)
+DEFINE_SHOW_FUNC(mdsmap_show)
+DEFINE_SHOW_FUNC(osdmap_show)
+DEFINE_SHOW_FUNC(monc_show)
+DEFINE_SHOW_FUNC(mdsc_show)
+DEFINE_SHOW_FUNC(osdc_show)
+
+int ceph_debugfs_init()
 {
 	int ret = 0;
 
@@ -174,7 +431,7 @@ out:
 	if (ceph_debugfs_debug_mask)
 		debugfs_remove(ceph_debugfs_debug_console);
 	if (ceph_debugfs_debug_console)
-		debugfs_remove(ceph_debugfs_debug_console);
+		debugfs_remove(ceph_debugfs_debug_mask);
 	if (ceph_debugfs_debug_msgr)
 		debugfs_remove(ceph_debugfs_debug_msgr);
 	if (ceph_debugfs_debug)
@@ -193,3 +450,91 @@ void ceph_debugfs_cleanup(void)
 	debugfs_remove(ceph_debugfs_debug);
 	debugfs_remove(ceph_debugfs_dir);
 }
+
+int ceph_debugfs_client_init(struct ceph_client *client)
+{
+	int ret = 0;
+#define TMP_NAME_SIZE 16
+	char name[TMP_NAME_SIZE];
+
+	snprintf(name, TMP_NAME_SIZE, "client%d", client->whoami);
+
+	client->debugfs_dir = debugfs_create_dir(name, ceph_debugfs_dir);
+	if (!client->debugfs_dir)
+		goto out;
+
+	client->monc.debugfs_file = debugfs_create_file("monc",
+						      0600,
+						      client->debugfs_dir,
+						      client,
+						      &monc_show_fops);
+	if (ret)
+		goto out;
+
+	client->mdsc.debugfs_file = debugfs_create_file("mdsc",
+						      0600,
+						      client->debugfs_dir,
+						      client,
+						      &mdsc_show_fops);
+	if (ret)
+		goto out;
+
+	client->osdc.debugfs_file = debugfs_create_file("osdc",
+						      0600,
+						      client->debugfs_dir,
+						      client,
+						      &osdc_show_fops);
+	if (ret)
+		goto out;
+
+	client->debugfs_fsid = debugfs_create_file("fsid",
+					0600,
+					client->debugfs_dir,
+					client,
+					&fsid_show_fops);
+	if (!client->debugfs_fsid)
+		goto out;
+
+	client->debugfs_monmap = debugfs_create_file("monmap",
+					0600,
+					client->debugfs_dir,
+					client,
+					&monmap_show_fops);
+	if (!client->debugfs_monmap)
+		goto out;
+
+	client->debugfs_mdsmap = debugfs_create_file("mdsmap",
+					0600,
+					client->debugfs_dir,
+					client,
+					&mdsmap_show_fops);
+	if (!client->debugfs_mdsmap)
+		goto out;
+
+	client->debugfs_osdmap = debugfs_create_file("osdmap",
+					0600,
+					client->debugfs_dir,
+					client,
+					&osdmap_show_fops);
+	if (!client->debugfs_osdmap)
+		goto out;
+
+	return 0;
+
+out:
+	ceph_debugfs_client_cleanup(client);
+	return ret;
+}
+
+void ceph_debugfs_client_cleanup(struct ceph_client *client)
+{
+	debugfs_remove(client->monc.debugfs_file);
+	debugfs_remove(client->mdsc.debugfs_file);
+	debugfs_remove(client->osdc.debugfs_file);
+	debugfs_remove(client->debugfs_monmap);
+	debugfs_remove(client->debugfs_mdsmap);
+	debugfs_remove(client->debugfs_osdmap);
+	debugfs_remove(client->debugfs_fsid);
+	debugfs_remove(client->debugfs_dir);
+}
+

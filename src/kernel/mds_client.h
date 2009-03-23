@@ -241,6 +241,7 @@ struct ceph_mds_client {
 	spinlock_t       snap_flush_lock;
 
 	struct kobject		kobj;
+	struct dentry 		*debugfs_file;
 };
 
 extern const char *ceph_mds_op_name(int op);

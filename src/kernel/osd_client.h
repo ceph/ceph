@@ -90,6 +90,7 @@ struct ceph_osd_client {
 	int                    num_requests;
 	struct delayed_work    timeout_work;
 	struct kobject	       kobj;
+	struct dentry 	       *debugfs_file;
 };
 
 extern void ceph_osdc_init(struct ceph_osd_client *osdc,

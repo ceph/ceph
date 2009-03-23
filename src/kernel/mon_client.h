@@ -77,6 +77,7 @@ struct ceph_mon_statfs_request {
 	struct ceph_statfs *buf;
 	struct completion completion;
 	unsigned long last_attempt, delay; /* jiffies */
+	struct ceph_msg  *request;  /* original request */
 };
 
 struct ceph_mon_client {
@@ -98,6 +99,7 @@ struct ceph_mon_client {
 	u32 want_osdmap;
 
 	struct kobject kobj;
+	struct dentry *debugfs_file;
         struct ceph_mon_client_attr k_want_osdmap, k_want_mdsmap;
 };
 

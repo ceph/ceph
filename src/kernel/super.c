@@ -290,6 +290,7 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 	     le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
 	     le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
 	ceph_sysfs_client_init(client);
+	ceph_debugfs_client_init(client);
 	return 0;
 
 bad:
@@ -717,6 +718,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 	kfree(client->signed_ticket);
 
 	ceph_sysfs_client_cleanup(client);
+	ceph_debugfs_client_cleanup(client);
 	if (client->wb_wq)
 		destroy_workqueue(client->wb_wq);
 	if (client->pg_inv_wq)

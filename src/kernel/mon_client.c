@@ -325,6 +325,7 @@ static int send_statfs(struct ceph_mon_client *monc,
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
+	req->request = msg;
 	h = msg->front.iov_base;
 	h->fsid = monc->monmap->fsid;
 	h->tid = cpu_to_le64(req->tid);

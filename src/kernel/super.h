@@ -97,6 +97,9 @@ struct ceph_client {
 	u32 whoami;                   /* my client number */
 	struct kobject kobj;
 	struct ceph_client_attr k_fsid, k_monmap, k_mdsmap, k_osdmap;
+	struct dentry *debugfs_fsid, *debugfs_monmap;
+	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
+	struct dentry *debugfs_dir;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
@@ -817,6 +820,8 @@ extern void ceph_sysfs_mon_statfs_req_cleanup(struct ceph_mon_statfs_request *re
 /* debugfs.c */
 extern int ceph_debugfs_init(void);
 extern void ceph_debugfs_cleanup(void);
+extern int ceph_debugfs_client_init(struct ceph_client *client);
+extern void ceph_debugfs_client_cleanup(struct ceph_client *client);
 
 static inline struct inode *get_dentry_parent_inode(struct dentry *dentry)
 {
