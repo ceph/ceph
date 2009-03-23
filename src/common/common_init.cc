@@ -7,8 +7,6 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
   tls_init();
   tls_get_val()->disable_assert = 0;
 
-  parse_startup_config_options(args, module_type);
-
   if (daemon) {
     cout << " ** WARNING: Ceph is still under heavy development, and is only suitable for **\n";
     cout << " **          testing and review.  Do not trust it with important data.       **" << std::endl;
@@ -21,6 +19,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
     g_conf.logger = false;
   }
 
+  parse_startup_config_options(args, module_type);
   parse_config_options(args);
 
   // open log file?
