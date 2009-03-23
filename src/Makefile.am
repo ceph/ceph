@@ -292,6 +292,7 @@ libclient_a_SOURCES = \
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
+	auth/ExportControl.h\
 	ceph_ver.h \
         client/Client.h\
         client/SyntheticClient.h\
@@ -465,6 +466,7 @@ noinst_HEADERS = \
         messages/MClientCaps.h\
         messages/MClientLease.h\
         messages/MClientMount.h\
+        messages/MClientMountAck.h\
         messages/MClientReconnect.h\
         messages/MClientReply.h\
         messages/MClientRequest.h\
