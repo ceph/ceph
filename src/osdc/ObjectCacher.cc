@@ -497,7 +497,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   // go
   tid_t tid = objecter->write(bh->ob->get_oid(), bh->ob->get_layout(),
 			      bh->start(), bh->length(), 
-			      bh->snapc, bh->bl, 0,
+			      bh->snapc, bh->bl, bh->last_write, 0,
 			      onack, oncommit);
 
   // set bh last_write_tid
@@ -1114,7 +1114,7 @@ int ObjectCacher::atomic_sync_writex(OSDWrite *wr, inodeno_t ino, Mutex& lock)
       Mutex flock("ObjectCacher::atomic_sync_writex flock");
       Cond cond;
       bool done = false;
-      objecter->sg_write(wr->extents, wr->snapc, wr->bl, 0, 
+      objecter->sg_write(wr->extents, wr->snapc, wr->bl, wr->mtime, 0, 
 			 new C_SafeCond(&flock, &cond, &done), 0);
       
       // block

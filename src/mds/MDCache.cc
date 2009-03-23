@@ -4345,7 +4345,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   }
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
-		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, 0,
+		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, utime_t(), 0,
 		       0, new C_MDC_TruncateFinish(this, in, ls));
 }
 
@@ -6807,7 +6807,7 @@ void MDCache::purge_stray(CDentry *dn)
   dout(10) << "purge_stray 0~" << to << " snapc " << snapc << " on " << *in << dendl;
   if (to)
     mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,
-		       0, to, 0,
+		       0, to, g_clock.now(), 0,
 		       0, new C_MDC_PurgeStrayPurged(this, dn));
   else
     _purge_stray_purged(dn);

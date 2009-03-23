@@ -112,9 +112,9 @@ class Objecter {
 
     bool paused;
 
-    ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op,
+    ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op, utime_t mt,
 	     const SnapContext& sc, int f, Context *ac, Context *co) :
-      oid(o), layout(l), snapc(sc), flags(f), onack(ac), oncommit(co), 
+      oid(o), layout(l), snapc(sc), mtime(mt), flags(f), onack(ac), oncommit(co), 
       tid(0), attempts(0), inc_lock(-1),
       paused(false) {
       ops.swap(op);
@@ -215,9 +215,9 @@ class Objecter {
   }
 
   tid_t modify(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
-	       const SnapContext& snapc, bufferlist &bl, int flags,
+	       const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
-    ModifyOp *wr = new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit);
+    ModifyOp *wr = new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit);
     wr->bl = bl;
     return modify_submit(wr);
   }
@@ -247,45 +247,45 @@ class Objecter {
 	       ObjectMutation& mutation,
 	       const SnapContext& snapc, int flags,
 	       Context *onack, Context *oncommit) {
-    return modify(oid, ol, mutation.ops, snapc, mutation.data, flags, onack, oncommit);
+    return modify(oid, ol, mutation.ops, snapc, mutation.data, mutation.mtime, flags, onack, oncommit);
   }
   tid_t write(object_t oid, ceph_object_layout ol,
-	      __u64 off, size_t len, const SnapContext& snapc, bufferlist &bl, int flags,
+	      __u64 off, size_t len, const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
               Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_WRITE;
     ops[0].offset = off;
     ops[0].length = len;
-    return modify(oid, ol, ops, snapc, bl, flags, onack, oncommit);
+    return modify(oid, ol, ops, snapc, bl, mtime, flags, onack, oncommit);
   }
   tid_t write_full(object_t oid, ceph_object_layout ol,
-		   const SnapContext& snapc, bufferlist &bl, int flags,
+		   const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
 		   Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_WRITEFULL;
     ops[0].offset = 0;
     ops[0].length = bl.length();
-    return modify(oid, ol, ops, snapc, bl, flags, onack, oncommit);
+    return modify(oid, ol, ops, snapc, bl, mtime, flags, onack, oncommit);
   }
   tid_t zero(object_t oid, ceph_object_layout ol, 
-	     __u64 off, size_t len, const SnapContext& snapc, int flags,
+	     __u64 off, size_t len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_ZERO;
     ops[0].offset = off;
     ops[0].length = len;
-    return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
+    return modify_submit(new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit));
   }
   tid_t remove(object_t oid, ceph_object_layout ol, 
-	       const SnapContext& snapc, int flags,
+	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_DELETE;
-    return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
+    return modify_submit(new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit));
   }
 
   tid_t lock(object_t oid, ceph_object_layout ol, int op, int flags, Context *onack, Context *oncommit) {
@@ -293,7 +293,7 @@ class Objecter {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = op;
-    return modify_submit(new ModifyOp(oid, ol, ops, snapc, flags, onack, oncommit));
+    return modify_submit(new ModifyOp(oid, ol, ops, utime_t(), snapc, flags, onack, oncommit));
   }
 
 
@@ -338,11 +338,11 @@ class Objecter {
   }
 
 
-  void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, bufferlist bl,
+  void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, bufferlist bl, utime_t mtime,
 		int flags, Context *onack, Context *oncommit) {
     if (extents.size() == 1) {
       write(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
-	    snapc, bl, flags, onack, oncommit);
+	    snapc, bl, mtime, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -357,7 +357,7 @@ class Objecter {
 	  bl.copy(bit->first, bit->second, cur);
 	assert(cur.length() == p->length);
 	write(p->oid, p->layout, p->offset, p->length, 
-	      snapc, cur, flags,
+	      snapc, cur, mtime, flags,
 	      gack ? gack->new_sub():0,
 	      gcom ? gcom->new_sub():0);
       }

@@ -118,12 +118,13 @@ class Filer {
 	    __u64 offset, 
             size_t len, 
             bufferlist& bl,
+	    utime_t mtime,
             int flags, 
             Context *onack,
             Context *oncommit) {
     vector<ObjectExtent> extents;
     file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
-    objecter->sg_write(extents, snapc, bl, flags, onack, oncommit);
+    objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit);
     return 0;
   }
 
@@ -133,6 +134,7 @@ class Filer {
 	       __u64 offset,
 	       size_t len,
 	       __u32 truncate_seq,
+	       utime_t mtime,
 	       int flags,
 	       Context *onack,
 	       Context *oncommit) {
@@ -145,7 +147,7 @@ class Filer {
       ops[0].op = CEPH_OSD_OP_TRIMTRUNC;
       ops[0].truncate_seq = truncate_seq;
       ops[0].truncate_size = extents[0].offset;
-      objecter->modify(extents[0].oid, extents[0].layout, ops, snapc, bl, flags, onack, oncommit);
+      objecter->modify(extents[0].oid, extents[0].layout, ops, snapc, bl, mtime, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -158,7 +160,7 @@ class Filer {
 	ops[0].op = CEPH_OSD_OP_TRIMTRUNC;
 	ops[0].truncate_size = p->offset;
 	ops[0].truncate_seq = truncate_seq;
-	objecter->modify(extents[0].oid, p->layout, ops, snapc, bl, flags,
+	objecter->modify(extents[0].oid, p->layout, ops, snapc, bl, mtime, flags,
 			 gack ? gack->new_sub():0,
 			 gcom ? gcom->new_sub():0);
       }
@@ -171,6 +173,7 @@ class Filer {
 	   const SnapContext& snapc,
 	   __u64 offset,
            size_t len,
+	   utime_t mtime,
 	   int flags,
            Context *onack,
            Context *oncommit) {
@@ -178,7 +181,7 @@ class Filer {
     file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
     if (extents.size() == 1) {
       objecter->zero(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length, 
-		     snapc, flags, onack, oncommit);
+		     snapc, mtime, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -187,7 +190,7 @@ class Filer {
 	gcom = new C_Gather(oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	objecter->zero(p->oid, p->layout, p->offset, p->length, 
-		       snapc, flags,
+		       snapc, mtime, flags,
 		       gack ? gack->new_sub():0,
 		       gcom ? gcom->new_sub():0);
       }
@@ -200,6 +203,7 @@ class Filer {
 	     const SnapContext& snapc,
 	     __u64 offset,
 	     size_t len,
+	     utime_t mtime,
 	     int flags,
 	     Context *onack,
 	     Context *oncommit) {
@@ -207,7 +211,7 @@ class Filer {
     file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, extents);
     if (extents.size() == 1) {
       objecter->remove(extents[0].oid, extents[0].layout,
-		       snapc, flags, onack, oncommit);
+		       snapc, mtime, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -216,7 +220,7 @@ class Filer {
 	gcom = new C_Gather(oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++)
 	objecter->remove(p->oid, p->layout,
-			 snapc, flags,
+			 snapc, mtime, flags,
 			 gack ? gack->new_sub():0,
 			 gcom ? gcom->new_sub():0);
     }

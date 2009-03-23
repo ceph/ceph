@@ -174,7 +174,7 @@ void Journaler::write_head(Context *oncommit)
   ::encode(last_written, bl);
   SnapContext snapc;
   filer.write(ino, &layout, snapc,
-	      0, bl.length(), bl, CEPH_OSD_OP_INCLOCK_FAIL, 
+	      0, bl.length(), bl, g_clock.now(), CEPH_OSD_OP_INCLOCK_FAIL,
 	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
 }
@@ -353,7 +353,7 @@ void Journaler::_do_flush()
   pending_safe.insert(flush_pos);
 
   filer.write(ino, &layout, snapc,
-	      flush_pos, len, write_buf, 
+	      flush_pos, len, write_buf, g_clock.now(),
 	      CEPH_OSD_OP_INCLOCK_FAIL,
 	      onack, onsafe);
   
@@ -739,7 +739,7 @@ void Journaler::trim()
   
   SnapContext snapc;
   filer.remove(ino, &layout, snapc,
-	       trimming_pos, trim_to-trimming_pos, CEPH_OSD_OP_INCLOCK_FAIL, 
+	       trimming_pos, trim_to-trimming_pos, g_clock.now(), CEPH_OSD_OP_INCLOCK_FAIL, 
 	       NULL, new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }

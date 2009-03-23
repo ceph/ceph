@@ -1374,7 +1374,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       bufferlist bl;
       bl.push_back(bp);
       SnapContext snapc;
-      client->objecter->write(oid, layout, off, len, snapc, bl, 0,
+      client->objecter->write(oid, layout, off, len, snapc, bl, g_clock.now(), 0,
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg->new_sub());
       while (!ack) cond.Wait(lock);
@@ -1389,7 +1389,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
       SnapContext snapc;
-      client->objecter->zero(oid, layout, off, len, snapc, 0,
+      client->objecter->zero(oid, layout, off, len, snapc, g_clock.now(), 0,
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg->new_sub());
       while (!ack) cond.Wait(lock);
@@ -2155,7 +2155,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     
     starts.push_back(g_clock.now());
     client->client_lock.Lock();
-    client->objecter->write(oid, layout, 0, osize, snapc, bl, 0,
+    client->objecter->write(oid, layout, 0, osize, snapc, bl, g_clock.now(), 0,
 			    new C_Ref(lock, cond, &unack),
 			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();

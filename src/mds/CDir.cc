@@ -1471,6 +1471,7 @@ void CDir::_commit(version_t want)
   // write it.
   SnapContext snapc;
   ObjectMutation m;
+  m.mtime = g_clock.now();
   m.write_full(finalbl);
 
   string path;

@@ -41,12 +41,13 @@ class ObjectCacher {
     vector<ObjectExtent> extents;
     SnapContext snapc;
     bufferlist bl;
+    utime_t mtime;
     int flags;
-    OSDWrite(const SnapContext& sc, bufferlist& b, int f) : snapc(sc), bl(b), flags(f) {}
+    OSDWrite(const SnapContext& sc, bufferlist& b, utime_t mt, int f) : snapc(sc), bl(b), mtime(mt), flags(f) {}
   };
 
-  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, int f) { 
-    return new OSDWrite(sc, b, f); 
+  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, utime_t mt, int f) { 
+    return new OSDWrite(sc, b, mt, f); 
   }
 
 
@@ -552,8 +553,8 @@ class ObjectCacher {
 
   int file_write(inodeno_t ino, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, size_t len, 
-                 bufferlist& bl, int flags) {
-    OSDWrite *wr = prepare_write(snapc, bl, flags);
+                 bufferlist& bl, utime_t mtime, int flags) {
+    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     filer.file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
     return writex(wr, ino);
   }
@@ -575,9 +576,9 @@ class ObjectCacher {
   int file_atomic_sync_write(inodeno_t ino, ceph_file_layout *layout, 
 			     const SnapContext& snapc,
                              loff_t offset, size_t len, 
-                             bufferlist& bl, int flags,
+                             bufferlist& bl, utime_t mtime, int flags,
                              Mutex &lock) {
-    OSDWrite *wr = prepare_write(snapc, bl, flags);
+    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     filer.file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
     return atomic_sync_writex(wr, ino, lock);
   }

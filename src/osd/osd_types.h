@@ -538,6 +538,7 @@ inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 struct ObjectMutation {
   vector<ceph_osd_op> ops;
   bufferlist data;
+  utime_t mtime;
   
   // object data
   void add_data(int op, __u64 off, __u64 len) {

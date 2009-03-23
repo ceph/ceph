@@ -93,6 +93,7 @@ public:
   void set_inc_lock(__u32 l) { head.inc_lock = l; }
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
   void set_version(eversion_t v) { head.reassert_version = v; }
+  void set_mtime(utime_t mt) { head.mtime = mt; }
 
   // ops
   void add_simple_op(int o, __u64 off, __u64 len) {

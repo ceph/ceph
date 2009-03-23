@@ -125,7 +125,7 @@ void SessionMap::save(Context *onsave, version_t needv)
 			    mds->objecter->osdmap->file_to_object_layout(oid,
 									 g_default_mds_dir_layout),
 			    snapc,
-			    bl, 0,
+			    bl, g_clock.now(), 0,
 			    NULL, new C_SM_Save(this, version));
 }
 

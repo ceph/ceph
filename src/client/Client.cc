@@ -3924,11 +3924,11 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       
       // async, caching, non-blocking.
       objectcacher->file_write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
-			       offset, size, bl, 0);
+			       offset, size, bl, g_clock.now(), 0);
     } else {
       // atomic, synchronous, blocking.
       objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
-					   offset, size, bl, 0, client_lock);
+					   offset, size, bl, g_clock.now(), 0, client_lock);
     }   
   } else {
     // simple, non-atomic sync write
@@ -3942,7 +3942,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     in->get_cap_ref(CEPH_CAP_FILE_WRBUFFER);
     
     filer->write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
-		 offset, size, bl, 0, onfinish, onsafe);
+		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);
     
     while (!done)
       cond.Wait(client_lock);
