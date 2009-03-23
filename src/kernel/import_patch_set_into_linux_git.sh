@@ -299,11 +299,11 @@ tool can also be enabled via .config.
 
 EOF
 
-git add fs/ceph/sysfs.c
+git add fs/ceph/debugfs.c
 git commit -F - <<EOF
-ceph: sysfs
+ceph: debugfs
 
-Basic state information is available via /sys/fs/ceph, including
+Basic state information is available via /debug/ceph, including
 instances of the client, fsids, current monitor, mds and osd maps,
 and hooks to adjust debug levels.
 

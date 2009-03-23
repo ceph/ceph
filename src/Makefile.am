@@ -390,6 +390,7 @@ noinst_HEADERS = \
         kernel/crush/hash.h\
         kernel/crush/mapper.c\
         kernel/crush/mapper.h\
+	kernel/debugfs.c\
 	kernel/decode.h\
 	kernel/dir.c\
 	kernel/export.c\
@@ -413,7 +414,6 @@ noinst_HEADERS = \
 	kernel/snap.c\
 	kernel/super.c\
 	kernel/super.h\
-	kernel/sysfs.c\
 	kernel/types.h\
 	mds/locks.c\
 	mds/locks.h\
