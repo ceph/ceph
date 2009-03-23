@@ -563,6 +563,9 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->set_unsafe();
 
+  // mark xlocks "done", indicating that we are exposing uncommitted changes
+  mds->locker->set_xlocks_done(mdr);
+
   dout(10) << "early_reply " << reply->get_result() 
 	   << " (" << strerror(-reply->get_result())
 	   << ") " << *req << dendl;
@@ -574,9 +577,6 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 		   mdr->client_request->is_replay());
 
   messenger->send_message(reply, client_inst);
-
-  // mark xlocks "done", indicating that we are exposing uncommitted changes
-  mds->locker->set_xlocks_done(mdr);
 
   mdr->did_early_reply = true;
 }
