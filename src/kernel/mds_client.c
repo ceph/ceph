@@ -2009,7 +2009,7 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 	int len = sizeof(*lease) + sizeof(u32);
 	int dnamelen = 0;
 
-	dout(0, "lease_send_msg inode %p dentry %p %s to mds%d\n",
+	dout(30, "lease_send_msg inode %p dentry %p %s to mds%d\n",
 	     inode, dentry, ceph_lease_op_name(action), mds);
 	dnamelen = dentry->d_name.len;
 	len += dnamelen;
