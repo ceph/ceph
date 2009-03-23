@@ -1295,7 +1295,12 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     oi.version = at_version;
     oi.prior_version = old_version;
     oi.last_reqid = reqid;
-    oi.mtime = mtime;
+    if (mtime != utime_t()) {
+      oi.mtime = mtime;
+      dout(10) << " set mtime to " << oi.mtime << dendl;
+    } else {
+      dout(10) << " mtime unchanged at " << oi.mtime << dendl;
+    }
 
     bufferlist bv(sizeof(oi));
     ::encode(oi, bv);
@@ -1530,10 +1535,6 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, bool noop,
 				   nv, info.last_complete,
 				   snapc);
 
-  // assign mtime, if not specified
-  if (repop->mtime == utime_t())
-    repop->mtime = g_clock.now();
-  
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
     int osd = acting[i];
