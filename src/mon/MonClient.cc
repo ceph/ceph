@@ -126,7 +126,7 @@ int MonClient::get_monmap(MonMap *pmonmap)
       probe_mon(pmonmap) == 0)  
     return 0;
 
-  cerr << "must specify monitor address (-m monaddr) or cluster conf (-C cluster.conf) or monmap file (-M monmap)" << std::endl;
+  cerr << "must specify monitor address (-m monaddr) or cluster conf (-c ceph.conf) or monmap file (-M monmap)" << std::endl;
   return -1;
 }
 
