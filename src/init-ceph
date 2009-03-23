@@ -60,8 +60,8 @@ stop_daemon() {
 options=
 
 version=0
-dovalgrind=0
-docrun=0
+dovalgrind=
+docrun=
 allhosts=0
 debug=0
 monaddr=
@@ -157,10 +157,10 @@ for name in $what; do
 	    wrap=""
 	    runmode=""
 	    
-	    get_conf_bool crun "$docrun" "restart on core dump"
+	    [ -z "$crun" ] && get_conf_bool crun "0" "restart on core dump"
 	    [ "$crun" -eq 1 ] && wrap="$BINDIR/crun"
 	    
-	    get_conf_bool valgrind "$dovalgrind" "valgrind"
+	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "0" "valgrind"
 	    [ "$valgrind" -eq 1 ] && wrap="$wrap valgrind"
 	    
 	    [ -n "$wrap" ] && runmode="-f &"
