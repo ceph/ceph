@@ -100,6 +100,7 @@ class Objecter {
     ceph_object_layout layout;
     SnapContext snapc;
     vector<ceph_osd_op> ops;
+    utime_t mtime;
     bufferlist bl;
     int flags;
     Context *onack, *oncommit;

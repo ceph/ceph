@@ -53,6 +53,7 @@ public:
 
     class MOSDOp *op;
     tid_t rep_tid;
+    utime_t mtime;
     bool noop;
 
     ObjectStore::Transaction t;
@@ -79,13 +80,15 @@ public:
 	      SnapContext& sc) :
       queue_item(this),
       nref(1), op(o), rep_tid(rt), 
-      noop(noop_),
+      mtime(op->get_mtime()), noop(noop_),
       applied(false), aborted(false),
       sent_ack(false), sent_nvram(false), sent_disk(false),
       pinfo(i),
       at_version(av), 
       snapc(sc),
-      pg_local_last_complete(lc) { }
+      pg_local_last_complete(lc) {
+      mtime = op->get_mtime();
+    }
 
     bool can_send_ack() { 
       return
@@ -178,7 +181,7 @@ protected:
 
   void _make_clone(ObjectStore::Transaction& t,
 		   pobject_t head, pobject_t coid,
-		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, vector<snapid_t>& snaps);
+		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, utime_t mtime, vector<snapid_t>& snaps);
   void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& st,
 		     pobject_t poid, loff_t old_size, object_info_t& oi,
 		     eversion_t& at_version, SnapContext& snapc);
@@ -188,7 +191,7 @@ protected:
 			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 			   pobject_t poid, 
-			   vector<ceph_osd_op>& ops, bufferlist& bl,
+			   vector<ceph_osd_op>& ops, bufferlist& bl, utime_t mtime,
 			   bool& exists, __u64& size, object_info_t& oi,
 			   eversion_t at_version, SnapContext& snapc,
 			   eversion_t trim_to);

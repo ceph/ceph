@@ -43,7 +43,7 @@
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL    5 /* public/client */
+#define CEPH_OSDC_PROTOCOL    6 /* public/client */
 #define CEPH_MDSC_PROTOCOL   12 /* public/client */
 #define CEPH_MONC_PROTOCOL    9 /* public/client */
 
@@ -1376,6 +1376,7 @@ struct ceph_osd_request_head {
 	__le32                    flags;
 	__le32                    inc_lock;
 
+	struct ceph_timespec      mtime;
 	struct ceph_eversion      reassert_version;
 
 	/* writer's snap context */

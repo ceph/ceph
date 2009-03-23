@@ -489,6 +489,10 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
     wr->tid = ++last_tid;
   assert(client_inc >= 0);
 
+  // set mtime?
+  if (wr->mtime == utime_t())
+    wr->mtime = g_clock.now();
+
   // add to gather set(s)
   int flags = wr->flags;
   if (wr->onack) {

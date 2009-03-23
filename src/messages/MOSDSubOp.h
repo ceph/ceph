@@ -36,6 +36,7 @@ public:
   
   __u8 acks_wanted;
   vector<ceph_osd_op> ops;
+  utime_t mtime;
   bool noop;
 
   // subop metadata
@@ -65,6 +66,7 @@ public:
     ::decode(pgid, p);
     ::decode(poid, p);
     ::decode(ops, p);
+    ::decode(mtime, p);
     ::decode(noop, p);
     ::decode(acks_wanted, p);
     ::decode(rep_tid, p);
@@ -87,6 +89,7 @@ public:
     ::encode(pgid, payload);
     ::encode(poid, payload);
     ::encode(ops, payload);
+    ::encode(mtime, payload);
     ::encode(noop, payload);
     ::encode(acks_wanted, payload);
     ::encode(rep_tid, payload);

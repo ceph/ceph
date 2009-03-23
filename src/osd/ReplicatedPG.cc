@@ -866,13 +866,13 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       pobject_t head, pobject_t coid,
-			       eversion_t ov, eversion_t v, osd_reqid_t& reqid, vector<snapid_t>& snaps)
+			       eversion_t ov, eversion_t v, osd_reqid_t& reqid, utime_t mtime, vector<snapid_t>& snaps)
 {
   object_info_t pi(coid);
   pi.version = v;
   pi.prior_version = ov;
   pi.last_reqid = reqid;
-  pi.mtime = g_clock.now();
+  pi.mtime = mtime;
   pi.snaps.swap(snaps);
   bufferlist bv;
   ::encode(pi, bv);
@@ -911,7 +911,7 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
       snaps[i] = snapc.snaps[i];
     
     // prepare clone
-    _make_clone(t, poid, coid, oi.version, at_version, reqid, snaps);
+    _make_clone(t, poid, coid, oi.version, at_version, reqid, oi.mtime, snaps);
     
     // add to snap bound collections
     coll_t fc = make_snap_collection(t, snaps[0]);
@@ -931,7 +931,7 @@ void ReplicatedPG::prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl,
     dout(10) << "cloning v " << oi.version
 	     << " to " << coid << " v " << at_version
 	     << " snaps=" << snaps << dendl;
-    Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, oi.version, reqid);
+    Log::Entry cloneentry(PG::Log::Entry::CLONE, coid.oid, at_version, oi.version, reqid, oi.mtime);
     ::encode(snaps, cloneentry.snaps);
     add_log_entry(cloneentry, logbl);
 
@@ -1263,7 +1263,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 
 void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
 				       pobject_t poid,
-				       vector<ceph_osd_op>& ops, bufferlist& bl,
+				       vector<ceph_osd_op>& ops, bufferlist& bl, utime_t mtime,
 				       bool& exists, __u64& size, object_info_t& oi,
 				       eversion_t at_version, SnapContext& snapc,
 				       eversion_t trim_to)
@@ -1295,7 +1295,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
     oi.version = at_version;
     oi.prior_version = old_version;
     oi.last_reqid = reqid;
-    oi.mtime = g_clock.now();
+    oi.mtime = mtime;
 
     bufferlist bv(sizeof(oi));
     ::encode(oi, bv);
@@ -1306,7 +1306,7 @@ void ReplicatedPG::prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t 
   int logopcode = Log::Entry::MODIFY;
   if (!exists)
     logopcode = Log::Entry::DELETE;
-  Log::Entry logentry(logopcode, poid.oid, at_version, old_version, reqid);
+  Log::Entry logentry(logopcode, poid.oid, at_version, old_version, reqid, mtime);
   add_log_entry(logentry, log_bl);
 
   // write pg info, log to disk
@@ -1504,6 +1504,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				repop->op->ops, repop->noop, acks_wanted,
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->at_version);
+  wr->mtime = repop->mtime;
   wr->old_exists = repop->pinfo->exists;
   wr->old_size = repop->pinfo->size;
   wr->old_version = repop->pinfo->oi.version;
@@ -1528,6 +1529,10 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(MOSDOp *op, bool noop,
 				   pinfo,
 				   nv, info.last_complete,
 				   snapc);
+
+  // assign mtime, if not specified
+  if (repop->mtime == utime_t())
+    repop->mtime = g_clock.now();
   
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
@@ -1767,7 +1772,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // we are acker.
   if (!noop) {
     // log and update later.
-    prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(),
+    prepare_transaction(repop->t, op->get_reqid(), poid, op->ops, op->get_data(), repop->mtime,
 			pinfo->exists, pinfo->size, pinfo->oi,
 			at_version, snapc,
 			trim_to);
@@ -1885,7 +1890,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     oi.version = op->old_version;
     oi.snapset = op->snapset;
     prepare_transaction(t, op->reqid,
-			op->poid, op->ops, op->get_data(),
+			op->poid, op->ops, op->get_data(), op->mtime,
 			op->old_exists, op->old_size, oi, op->version,
 			op->snapc, op->pg_trim_to);
   }
@@ -2711,7 +2716,7 @@ int ReplicatedPG::recover_primary(int max)
 	    vector<snapid_t> snaps;
 	    ::decode(snaps, latest->snaps);
 	    ObjectStore::Transaction t;
-	    _make_clone(t, head, poid, latest->prior_version, latest->version, latest->reqid, snaps);
+	    _make_clone(t, head, poid, latest->prior_version, latest->version, latest->reqid, latest->mtime, snaps);
 	    osd->store->apply_transaction(t);
 	    missing.got(latest->oid, latest->version);
 	    missing_loc.erase(latest->oid);

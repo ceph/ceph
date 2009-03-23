@@ -56,6 +56,8 @@ public:
 
   eversion_t get_version() { return head.reassert_version; }
   
+  utime_t get_mtime() { return head.mtime; }
+  
   bool is_modify() { return head.flags & CEPH_OSD_OP_MODIFY; }
 
   unsigned get_inc_lock() const { return head.inc_lock; }
