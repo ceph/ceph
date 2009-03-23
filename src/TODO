@@ -9,17 +9,20 @@ v0.7
 /- fast truncate
 /- updated debian package
 /- improved start/stop scripts
-/- proc/sysfs cleanup
+/- proc -> sysfs cleanup
 
 v0.7.1
 /- O_DIRECT
 /- dentry lease renewal
 
-v0.8
+v0.7.2
 /- make kclient handle osd ack + sync properly
 /- make fill_trace handle short traces; return short traces from mds
 /- rdcap renewal
-- some mds clustering fixes
+/- some mds clustering fixes
+- sysfs -> debufs
+
+v0.8
 
 - ENOSPC
 - flock
@@ -111,7 +114,6 @@ mds
 - linkage vs cdentry replicas and remote rename....
 - make recovery work with early replies
   - purge each session's unused preallocated inodes
-- dftlock is missing from rejoin phase
 - file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
   - anchor source dir
