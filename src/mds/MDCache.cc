@@ -2715,14 +2715,16 @@ void MDCache::rejoin_send_rejoins()
 	p->second->add_strong_inode(root->vino(),
 				    root->get_caps_wanted(),
 				    root->filelock.get_state(),
-				    root->nestlock.get_state());
+				    root->nestlock.get_state(),
+				    root->dirfragtreelock.get_state());
       }
       if (CInode *in = get_inode(MDS_INO_STRAY(p->first))) {
     	p->second->add_weak_inode(in->vino());
   	p->second->add_strong_inode(in->vino(),
 				    in->get_caps_wanted(),
 				    in->filelock.get_state(),
-				    in->nestlock.get_state());
+				    in->nestlock.get_state(),
+				    in->dirfragtreelock.get_state());
       }
     }
   }  
@@ -2851,7 +2853,8 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	rejoin->add_strong_inode(in->vino(),
 				 in->get_caps_wanted(),
 				 in->filelock.get_state(),
-				 in->nestlock.get_state());
+				 in->nestlock.get_state(),
+				 in->dirfragtreelock.get_state());
 	in->get_nested_dirfrags(nested);
       }
     }
@@ -2971,13 +2974,14 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   }
 
   // assimilate any potentially dirty scatterlock state
-  for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
+  for (map<inodeno_t,MMDSCacheRejoin::lock_bls>::iterator p = weak->inode_scatterlocks.begin();
        p != weak->inode_scatterlocks.end();
        p++) {
     CInode *in = get_inode(p->first);
     assert(in);
-    in->decode_lock_state(CEPH_LOCK_IFILE, p->second.first);
-    in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
+    in->decode_lock_state(CEPH_LOCK_IFILE, p->second.file);
+    in->decode_lock_state(CEPH_LOCK_INEST, p->second.nest);
+    in->decode_lock_state(CEPH_LOCK_IDFT, p->second.dft);
     if (!survivor)
       rejoin_potential_updated_scatterlocks.insert(in);
   }
@@ -3052,7 +3056,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
   if (survivor) {
     // survivor.  do everything now.
-    for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = weak->inode_scatterlocks.begin();
+    for (map<inodeno_t,MMDSCacheRejoin::lock_bls>::iterator p = weak->inode_scatterlocks.begin();
 	 p != weak->inode_scatterlocks.end();
 	 p++) {
       CInode *in = get_inode(p->first);
@@ -3216,13 +3220,14 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   MMDSCacheRejoin *missing = 0;  // if i'm missing something..
   
   // assimilate any potentially dirty scatterlock state
-  for (map<inodeno_t,pair<bufferlist,bufferlist> >::iterator p = strong->inode_scatterlocks.begin();
+  for (map<inodeno_t,MMDSCacheRejoin::lock_bls>::iterator p = strong->inode_scatterlocks.begin();
        p != strong->inode_scatterlocks.end();
        p++) {
     CInode *in = get_inode(p->first);
     assert(in);
-    in->decode_lock_state(CEPH_LOCK_IFILE, p->second.first);
-    in->decode_lock_state(CEPH_LOCK_INEST, p->second.second);
+    in->decode_lock_state(CEPH_LOCK_IFILE, p->second.file);
+    in->decode_lock_state(CEPH_LOCK_INEST, p->second.nest);
+    in->decode_lock_state(CEPH_LOCK_IDFT, p->second.dft);
     rejoin_potential_updated_scatterlocks.insert(in);
   }
 

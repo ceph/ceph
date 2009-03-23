@@ -44,20 +44,22 @@ class MMDSCacheRejoin : public Message {
   // -- types --
   struct inode_strong { 
     int32_t caps_wanted;
-    int32_t filelock, nestlock;
+    int32_t filelock, nestlock, dftlock;
     inode_strong() {}
-    inode_strong(int cw, int dl, int nl) : 
+    inode_strong(int cw, int dl, int nl, int dftl) : 
       caps_wanted(cw),
-      filelock(dl), nestlock(nl) { }
+      filelock(dl), nestlock(nl), dftlock(dftl) { }
     void encode(bufferlist &bl) const {
       ::encode(caps_wanted, bl);
       ::encode(filelock, bl);
       ::encode(nestlock, bl);
+      ::encode(dftlock, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(caps_wanted, bl);
       ::decode(filelock, bl);
       ::decode(nestlock, bl);
+      ::decode(dftlock, bl);
     }
   };
   WRITE_CLASS_ENCODER(inode_strong)
@@ -130,10 +132,25 @@ class MMDSCacheRejoin : public Message {
   // -- data --
   int32_t op;
 
+  struct lock_bls {
+    bufferlist file, nest, dft;
+    void encode(bufferlist& bl) const {
+      ::encode(file, bl);
+      ::encode(nest, bl);
+      ::encode(dft, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(file, bl);
+      ::decode(nest, bl);
+      ::decode(dft, bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(lock_bls)
+
   // weak
   map<dirfrag_t, map<string_snap_t, dn_weak> > weak;
   set<vinodeno_t> weak_inodes;
-  map<inodeno_t, pair<bufferlist,bufferlist> > inode_scatterlocks;
+  map<inodeno_t, lock_bls> inode_scatterlocks;
 
   // strong
   map<dirfrag_t, dirfrag_strong> strong_dirfrags;
@@ -170,8 +187,8 @@ class MMDSCacheRejoin : public Message {
   void add_weak_inode(vinodeno_t i) {
     weak_inodes.insert(i);
   }
-  void add_strong_inode(vinodeno_t i, int cw, int dl, int nl) {
-    strong_inodes[i] = inode_strong(cw, dl, nl);
+  void add_strong_inode(vinodeno_t i, int cw, int dl, int nl, int dftl) {
+    strong_inodes[i] = inode_strong(cw, dl, nl, dftl);
   }
   void add_inode_locks(CInode *in, __u32 nonce) {
     ::encode(in->inode.ino, inode_locks);
@@ -198,8 +215,9 @@ class MMDSCacheRejoin : public Message {
   void add_scatterlock_state(CInode *in) {
     if (inode_scatterlocks.count(in->ino()))
       return;  // already added this one
-    in->encode_lock_state(CEPH_LOCK_IFILE, inode_scatterlocks[in->ino()].first);
-    in->encode_lock_state(CEPH_LOCK_INEST, inode_scatterlocks[in->ino()].second);
+    in->encode_lock_state(CEPH_LOCK_IFILE, inode_scatterlocks[in->ino()].file);
+    in->encode_lock_state(CEPH_LOCK_INEST, inode_scatterlocks[in->ino()].nest);
+    in->encode_lock_state(CEPH_LOCK_IDFT, inode_scatterlocks[in->ino()].dft);
   }
 
   void copy_cap_exports(bufferlist &bl) {
@@ -280,5 +298,6 @@ WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dirfrag_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_strong)
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::dn_weak)
+WRITE_CLASS_ENCODER(MMDSCacheRejoin::lock_bls)
 
 #endif
