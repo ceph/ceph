@@ -2,8 +2,8 @@
 
 export DH_VERBOSE=1
 
-CC=gcc-4.1
-CXX=g++-4.1
+CC=`which gcc`
+CXX=`which g++`
 
 DEB_PYTHON_SYSTEM=pycentral
 DEB_DH_INSTALL_SOURCEDIR = debian/tmp
