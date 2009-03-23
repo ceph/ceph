@@ -46,38 +46,39 @@ extern struct sm_t sm_scatterlock;
 #define LOCK_SYNC        1    // AR   R . RD L . / C .   R RD L . / C . 
 #define LOCK_LOCK        2    // AR   R . .. . X / . .   . .. . . / . .
 
-#define LOCK_XLOCK       3    // A    . . .. . . / . .   (lock)
-#define LOCK_XLOCKDONE   4    // A    r p rd l x / . .   (lock)  <-- by same client only!!
-#define LOCK_LOCK_XLOCK  5
+#define LOCK_PREXLOCK    3    // A    . . .. . . / . .   (lock)
+#define LOCK_XLOCK       4    // A    . . .. . . / . .   (lock)
+#define LOCK_XLOCKDONE   5    // A    r p rd l x / . .   (lock)  <-- by same client only!!
+#define LOCK_LOCK_XLOCK  6
 
-#define LOCK_SYNC_LOCK   6    // AR   R . .. . . / . .   R .. . . / . .
-#define LOCK_LOCK_SYNC   7    // A    R p rd l . / . .   (lock)  <-- lc by same client only
+#define LOCK_SYNC_LOCK   7    // AR   R . .. . . / . .   R .. . . / . .
+#define LOCK_LOCK_SYNC   8    // A    R p rd l . / . .   (lock)  <-- lc by same client only
 
-#define LOCK_EXCL        8    // A    . . .. . . / c x * (lock)
-#define LOCK_EXCL_SYNC   9    // A    . . .. . . / c . * (lock)
-#define LOCK_EXCL_LOCK  10    // A    . . .. . . / . .   (lock)
-#define LOCK_SYNC_EXCL  11    // Ar   R . .. . . / c . * (sync->lock)
-#define LOCK_LOCK_EXCL  12    // A    R . .. . . / . .   (lock)
+#define LOCK_EXCL        9    // A    . . .. . . / c x * (lock)
+#define LOCK_EXCL_SYNC  10    // A    . . .. . . / c . * (lock)
+#define LOCK_EXCL_LOCK  11    // A    . . .. . . / . .   (lock)
+#define LOCK_SYNC_EXCL  12    // Ar   R . .. . . / c . * (sync->lock)
+#define LOCK_LOCK_EXCL  13    // A    R . .. . . / . .   (lock)
 
-#define LOCK_REMOTEXLOCK  13  // on NON-auth
+#define LOCK_REMOTEXLOCK  14  // on NON-auth
 
 // * = loner mode
 
-#define LOCK_MIX      14
-#define LOCK_SYNC_MIX 15
-#define LOCK_SYNC_MIX2 16
-#define LOCK_LOCK_MIX 17
-#define LOCK_EXCL_MIX 18
-#define LOCK_MIX_SYNC 19
-#define LOCK_MIX_SYNC2 20
-#define LOCK_MIX_LOCK 21
-#define LOCK_MIX_EXCL 22
+#define LOCK_MIX      15
+#define LOCK_SYNC_MIX 16
+#define LOCK_SYNC_MIX2 17
+#define LOCK_LOCK_MIX 18
+#define LOCK_EXCL_MIX 19
+#define LOCK_MIX_SYNC 20
+#define LOCK_MIX_SYNC2 21
+#define LOCK_MIX_LOCK 22
+#define LOCK_MIX_EXCL 23
 
-#define LOCK_TSYN      23
-#define LOCK_TSYN_LOCK 24
-#define LOCK_TSYN_MIX  25
-#define LOCK_LOCK_TSYN 26
-#define LOCK_MIX_TSYN  27
+#define LOCK_TSYN      24
+#define LOCK_TSYN_LOCK 25
+#define LOCK_TSYN_MIX  26
+#define LOCK_LOCK_TSYN 27
+#define LOCK_MIX_TSYN  28
 
 
 // -------------------------

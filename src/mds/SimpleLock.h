@@ -55,8 +55,12 @@ public:
     case LOCK_UNDEF: return "UNDEF";
     case LOCK_SYNC: return "sync";
     case LOCK_LOCK: return "lock";
+
+    case LOCK_PREXLOCK: return "prexlock";
     case LOCK_XLOCK: return "xlock";
     case LOCK_XLOCKDONE: return "xlockdone";
+    case LOCK_LOCK_XLOCK: return "lock->prexlock";
+
     case LOCK_SYNC_LOCK: return "sync->lock";
     case LOCK_LOCK_SYNC: return "lock->sync";
     case LOCK_REMOTEXLOCK: return "remote_xlock";

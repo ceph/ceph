@@ -758,9 +758,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     // auth
     while (1) {
       if (lock->can_xlock(client)) {
-	
-	if (lock->is_stable())
-	  lock->get_parent()->auth_pin(lock);
+	lock->get_parent()->auth_pin(lock);
 	lock->set_state(LOCK_XLOCK);
 	lock->get_xlock(mut, client);
 	mut->xlocks.insert(lock);
@@ -768,10 +766,10 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
 	return true;
       }
       
-      if (!lock->is_stable())
+      if (!lock->is_stable() && lock->get_state() != LOCK_XLOCKDONE)
 	break;
 
-      if (lock->get_state() == LOCK_LOCK)
+      if (lock->get_state() == LOCK_LOCK || lock->get_state() == LOCK_XLOCKDONE)
 	simple_xlock(lock);
       else {
 	simple_lock(lock);
@@ -2305,7 +2303,7 @@ void Locker::simple_xlock(SimpleLock *lock)
 {
   dout(7) << "simple_xlock on " << *lock << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
-  assert(lock->is_stable());
+  //assert(lock->is_stable());
   assert(lock->get_state() != LOCK_XLOCK);
   
   CInode *in = 0;
@@ -2313,7 +2311,10 @@ void Locker::simple_xlock(SimpleLock *lock)
     in = (CInode *)lock->get_parent();
 
   switch (lock->get_state()) {
-  case LOCK_LOCK: lock->set_state(LOCK_LOCK_XLOCK); break;
+  case LOCK_LOCK: 
+    lock->get_parent()->auth_pin(lock);
+  case LOCK_XLOCKDONE:
+    lock->set_state(LOCK_LOCK_XLOCK); break;
   default: assert(0);
   }
 
@@ -2330,10 +2331,8 @@ void Locker::simple_xlock(SimpleLock *lock)
     }
   }
 
-  if (gather) {
-    lock->get_parent()->auth_pin(lock);
-  } else {
-    lock->set_state(LOCK_XLOCK);
+  if (!gather) {
+    lock->set_state(LOCK_PREXLOCK);
   }
 }
 

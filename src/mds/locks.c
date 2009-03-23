@@ -18,13 +18,14 @@ struct sm_state_t simplelock[20] = {
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_SYNC, ANY,  XCL, XCL, 0,   XCL, 0,   0,0,0,0 },
     [LOCK_EXCL_SYNC] = { LOCK_SYNC, true,  LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,CEPH_CAP_GRDCACHE,0,0 },
 
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   ANY, 0,0,0,0 },
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,0,0,0 }, 
     [LOCK_EXCL_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
 
+    [LOCK_PREXLOCK]  = { LOCK_SYNC, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   ANY, 0,0,0 },
     [LOCK_XLOCK]     = { LOCK_SYNC, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   0,   0,0,0 },
-    [LOCK_XLOCKDONE] = { LOCK_SYNC, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   XCL, XCL, 0,0,CEPH_CAP_GRDCACHE,0 },
-    [LOCK_LOCK_XLOCK]= { LOCK_XLOCK,false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_XLOCKDONE] = { LOCK_SYNC, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   XCL, 0,   0,0,CEPH_CAP_GRDCACHE,0 },
+    [LOCK_LOCK_XLOCK]= { LOCK_PREXLOCK,false,LOCK_LOCK,0,   XCL, 0,   0,   0,   XCL, 0,0,0,0 },
 
     [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE,0,0 },
     [LOCK_SYNC_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,CEPH_CAP_GRDCACHE,0,0 },
@@ -84,13 +85,15 @@ struct sm_state_t filelock[30] = {
     [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_MIX,  0,    0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     [LOCK_MIX_SYNC2] = { LOCK_SYNC, false, 0,         0,    0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   AUTH,AUTH,0,   ANY, CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   AUTH,AUTH,0,   0,   CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
     [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   CEPH_CAP_GRDCACHE,0,0,CEPH_CAP_GRDCACHE },
     [LOCK_EXCL_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,CEPH_CAP_GRDCACHE },
     [LOCK_MIX_LOCK]  = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0,0 },
 
+    [LOCK_PREXLOCK]  = { LOCK_SYNC, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   ANY, CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
     [LOCK_XLOCK]     = { LOCK_SYNC, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   0,   CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
-    [LOCK_XLOCKDONE] = { LOCK_SYNC, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   XCL, XCL, CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
+    [LOCK_XLOCKDONE] = { LOCK_SYNC, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   XCL, 0,   CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
+    [LOCK_LOCK_XLOCK]= { LOCK_PREXLOCK,false,LOCK_LOCK,0,   XCL, 0,   0,   0,   XCL, CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER,0,0,0 },
 
     [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   FW,  ANY, 0,   0,   CEPH_CAP_GRD|CEPH_CAP_GWR,0,0,CEPH_CAP_GRD },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_MIX,  ANY,  0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
