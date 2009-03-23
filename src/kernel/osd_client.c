@@ -202,8 +202,6 @@ static int register_request(struct ceph_osd_client *osdc,
 		schedule_delayed_work(&osdc->timeout_work,
 		      round_jiffies_relative(req->r_timeout_stamp - jiffies));
 	}
-
-	ceph_sysfs_osd_req_init(osdc, req);
 out:
 	mutex_unlock(&osdc->request_mutex);
 	return rc;
@@ -285,8 +283,6 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 
 	osdc->num_requests--;
 	ceph_osdc_put_request(req);
-
-	ceph_sysfs_osd_req_cleanup(req);
 
 	if (req->r_tid == osdc->timeout_tid) {
 		if (osdc->num_requests == 0) {

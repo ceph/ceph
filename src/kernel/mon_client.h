@@ -61,7 +61,6 @@ struct ceph_mon_statfs_request_attr {
 typedef void (*ceph_monc_request_func_t)(struct ceph_mon_client *monc,
 					 int newmon);
 struct ceph_mon_request {
-        struct kobject kobj;
 	struct ceph_mon_client *monc;
 	struct delayed_work delayed_work;
 	unsigned long delay;
@@ -98,9 +97,7 @@ struct ceph_mon_client {
 	u32 want_mdsmap;
 	u32 want_osdmap;
 
-	struct kobject kobj;
 	struct dentry *debugfs_file;
-        struct ceph_mon_client_attr k_want_osdmap, k_want_mdsmap;
 };
 
 extern struct ceph_monmap *ceph_monmap_decode(void *p, void *end);

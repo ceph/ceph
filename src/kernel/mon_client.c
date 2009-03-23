@@ -330,7 +330,6 @@ static int send_statfs(struct ceph_mon_client *monc,
 	h->fsid = monc->monmap->fsid;
 	h->tid = cpu_to_le64(req->tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_sysfs_mon_statfs_req_set(monc, req, msg);
 	ceph_msg_send(monc->client->msgr, msg, 0);
 	return 0;
 }
@@ -361,7 +360,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		schedule_delayed_work(&monc->statfs_delayed_work,
 				      round_jiffies_relative(1*HZ));
 	monc->num_statfs_requests++;
-	ceph_sysfs_mon_statfs_req_init(monc, &req);
 	mutex_unlock(&monc->statfs_mutex);
 
 	/* send request and wait */
@@ -370,7 +368,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		err = wait_for_completion_interruptible(&req.completion);
 
 	mutex_lock(&monc->statfs_mutex);
-	ceph_sysfs_mon_statfs_req_cleanup(&req);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
 	if (monc->num_statfs_requests == 0)

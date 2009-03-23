@@ -289,7 +289,6 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 	dout(1, "i am client%d, fsid is %llx.%llx\n", client->whoami,
 	     le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
 	     le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
-	ceph_sysfs_client_init(client);
 	ceph_debugfs_client_init(client);
 	return 0;
 
@@ -717,7 +716,6 @@ static void ceph_destroy_client(struct ceph_client *client)
 
 	kfree(client->signed_ticket);
 
-	ceph_sysfs_client_cleanup(client);
 	ceph_debugfs_client_cleanup(client);
 	if (client->wb_wq)
 		destroy_workqueue(client->wb_wq);
@@ -1131,13 +1129,9 @@ static int __init init_ceph(void)
 	if (ret < 0)
 		goto out;
 
-	ret = ceph_sysfs_init();
-	if (ret < 0)
-		goto out_debugfs;
-
 	ret = ceph_msgr_init();
 	if (ret < 0)
-		goto out_sysfs;
+		goto out_debugfs;
 
 	ret = init_inodecache();
 	if (ret)
@@ -1152,8 +1146,6 @@ out_icache:
 	destroy_inodecache();
 out_msgr:
 	ceph_msgr_exit();
-out_sysfs:
-	ceph_sysfs_cleanup();
 out_debugfs:
 	ceph_debugfs_cleanup();
 out:
@@ -1166,7 +1158,6 @@ static void __exit exit_ceph(void)
 	unregister_filesystem(&ceph_fs_type);
 	destroy_inodecache();
 	ceph_msgr_exit();
-	ceph_sysfs_cleanup();
 	ceph_debugfs_cleanup();
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_finalize();

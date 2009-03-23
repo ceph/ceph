@@ -6,8 +6,6 @@
 #include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
-#include <linux/sysfs.h>
-#include <linux/sysfs.h>
 #include <linux/backing-dev.h>
 
 #include "types.h"
@@ -802,20 +800,6 @@ extern long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
 /* export.c */
 extern const struct export_operations ceph_export_ops;
-
-/* sysfs.c */
-extern int ceph_sysfs_client_init(struct ceph_client *client);
-extern void ceph_sysfs_client_cleanup(struct ceph_client *client);
-extern int ceph_sysfs_init(void);
-extern void ceph_sysfs_cleanup(void);
-extern int ceph_sysfs_mds_req_init(struct ceph_mds_client *mdsc, struct ceph_mds_request *req);
-extern void ceph_sysfs_mds_req_cleanup(struct ceph_mds_request *req);
-extern int ceph_sysfs_osd_req_init(struct ceph_osd_client *osdc, struct ceph_osd_request *req);
-extern void ceph_sysfs_osd_req_cleanup(struct ceph_osd_request *req);
-extern int ceph_sysfs_mon_statfs_req_init(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req);
-extern int ceph_sysfs_mon_statfs_req_set(struct ceph_mon_client *monc, struct ceph_mon_statfs_request *req,
-					  struct ceph_msg *msg);
-extern void ceph_sysfs_mon_statfs_req_cleanup(struct ceph_mon_statfs_request *req);
 
 /* debugfs.c */
 extern int ceph_debugfs_init(void);

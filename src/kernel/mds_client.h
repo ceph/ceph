@@ -155,9 +155,6 @@ struct ceph_mds_request_attr {
 struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
 
-	struct kobject	  kobj;
-	struct ceph_mds_request_attr k_mds, k_op;
-
 	int r_op;
 	struct dentry *r_dentry;
 	struct dentry *r_old_dentry; /* rename from or link from */
@@ -240,7 +237,6 @@ struct ceph_mds_client {
 	struct list_head snap_flush_list;  /* cap_snaps ready to flush */
 	spinlock_t       snap_flush_lock;
 
-	struct kobject		kobj;
 	struct dentry 		*debugfs_file;
 };
 
