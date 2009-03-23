@@ -758,7 +758,6 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     // auth
     while (1) {
       if (lock->can_xlock(client)) {
-	lock->get_parent()->auth_pin(lock);
 	lock->set_state(LOCK_XLOCK);
 	lock->get_xlock(mut, client);
 	mut->xlocks.insert(lock);
@@ -837,8 +836,8 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 	lock->get_num_rdlocks() == 0 &&
 	lock->get_num_wrlocks() == 0 &&
 	lock->get_num_client_lease() == 0) {
-      if (!lock->is_stable())
-	lock->get_parent()->auth_unpin(lock);
+      assert(!lock->is_stable());
+      lock->get_parent()->auth_unpin(lock);
       lock->set_state(LOCK_LOCK);
     }
 
