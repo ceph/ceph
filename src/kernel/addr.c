@@ -428,6 +428,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   &ci->i_layout, snapc,
 				   page_off, len,
 				   ci->i_truncate_seq, ci->i_truncate_size,
+				   &inode->i_mtime,
 				   &page, 1, 0, 0);
 	if (err < 0) {
 		dout(20, "writepage setting page error %p\n", page);
@@ -737,7 +738,8 @@ get_more_pages:
 						    CEPH_OSD_OP_ONDISK,
 					    snapc, do_sync,
 					    ci->i_truncate_seq,
-					    ci->i_truncate_size);
+					    ci->i_truncate_size,
+					    &inode->i_mtime);
 				max_pages = req->r_num_pages;
 
 				rc = -ENOMEM;

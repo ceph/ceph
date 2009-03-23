@@ -114,7 +114,8 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      u64 offset, u64 *len, int op, int flags,
 				      struct ceph_snap_context *snapc,
 				      int do_sync, u32 truncate_seq,
-				      u64 truncate_size);
+				      u64 truncate_size,
+				      struct timespec *mtime);
 
 static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 {
@@ -143,6 +144,7 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_snap_context *sc,
 				u64 off, u64 len,
 				u32 truncate_seq, u64 truncate_size,
+				struct timespec *mtime,
 				struct page **pages, int nr_pages,
 				int flags, int do_sync);
 

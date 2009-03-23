@@ -500,6 +500,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	int flags;
 	int do_sync = 0;
 	int ret;
+	struct timespec mtime = CURRENT_TIME;
 
 	if (ceph_snap(file->f_dentry->d_inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -531,7 +532,8 @@ more:
 				    CEPH_OSD_OP_WRITE, flags,
 				    ci->i_snap_realm->cached_context,
 				    do_sync,
-				    ci->i_truncate_seq, ci->i_truncate_size);
+				    ci->i_truncate_seq, ci->i_truncate_size,
+				    &mtime);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 

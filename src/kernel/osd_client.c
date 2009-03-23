@@ -90,7 +90,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 					       struct ceph_snap_context *snapc,
 					       int do_sync,
 					       u32 truncate_seq,
-					       u64 truncate_size)
+					       u64 truncate_size,
+					       struct timespec *mtime)
 {
 	struct ceph_osd_request *req;
 	struct ceph_msg *msg;
@@ -130,6 +131,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = cpu_to_le32(flags);
+	if (flags & CEPH_OSD_OP_MODIFY)
+		ceph_encode_timespec(&head->mtime, mtime);
 	head->num_ops = cpu_to_le16(num_op);
 	op->op = cpu_to_le16(opcode);
 
@@ -864,7 +867,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	     vino.snap, off, len);
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
 				    CEPH_OSD_OP_READ, 0, NULL, 0,
-				    truncate_seq, truncate_size);
+				    truncate_seq, truncate_size, NULL);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -928,6 +931,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct ceph_snap_context *snapc,
 			 u64 off, u64 len,
 			 u32 truncate_seq, u64 truncate_size,
+			 struct timespec *mtime,
 			 struct page **pages, int num_pages,
 			 int flags, int do_sync)
 {
@@ -940,7 +944,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 				    flags | CEPH_OSD_OP_ONDISK |
 				    CEPH_OSD_OP_MODIFY,
 				    snapc, do_sync,
-				    truncate_seq, truncate_size);
+				    truncate_seq, truncate_size, mtime);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
