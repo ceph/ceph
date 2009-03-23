@@ -1430,7 +1430,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   
   // include capability?
   if (snapid != CEPH_NOSNAP && !cap) {
-    e.cap.caps = valid ? get_caps_allowed(false) : CEPH_STAT_CAP_INODE;
+    e.cap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
     e.cap.seq = 0;
     e.cap.mseq = 0;
     e.cap.realm = 0;
@@ -1462,8 +1462,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 
     if (cap && valid) {
       int likes = get_caps_liked();
-      bool loner = (get_loner() == client);
-      int issue = (cap->wanted() | likes) & get_caps_allowed(loner);
+      int allowed = get_caps_allowed_for_client(client);
+      int issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
       cap->set_last_issue_stamp(g_clock.recent_now());
       cap->touch();   // move to back of session cap LRU

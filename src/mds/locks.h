@@ -14,6 +14,7 @@ struct sm_state_t {
   char can_xlock;
   int caps;
   int loner_caps;
+  int xlocker_caps;
   int replica_caps;
 };
 

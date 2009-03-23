@@ -965,18 +965,21 @@ Capability* Locker::issue_new_caps(CInode *in,
 bool Locker::issue_caps(CInode *in)
 {
   // allowed caps are determined by the lock mode.
-  int all_allowed = in->get_caps_allowed(false);
-  int loner_allowed = in->get_caps_allowed(true);
+  int all_allowed = in->get_caps_allowed_by_type(CAP_ANY);
+  int loner_allowed = in->get_caps_allowed_by_type(CAP_LONER);
+  int xlocker_allowed = in->get_caps_allowed_by_type(CAP_XLOCKER);
   int careful = in->get_caps_careful();
 
   int loner = in->get_loner();
   if (loner >= 0) {
     dout(7) << "issue_caps loner client" << loner
 	    << " allowed=" << ccap_string(loner_allowed) 
+	    << ", xlocker allowed=" << ccap_string(xlocker_allowed)
 	    << ", others allowed=" << ccap_string(all_allowed)
 	    << " on " << *in << dendl;
   } else {
     dout(7) << "issue_caps allowed=" << ccap_string(all_allowed) 
+	    << ", xlocker allowed=" << ccap_string(xlocker_allowed)
 	    << " on " << *in << dendl;
   }
 
@@ -1008,6 +1011,9 @@ bool Locker::issue_caps(CInode *in)
       allowed = loner_allowed;
     else
       allowed = all_allowed;
+
+    // add in any xlocker-only caps (for locks this client is the xlocker for)
+    allowed |= xlocker_allowed & in->get_xlocker_mask(it->first);
 
     int pending = cap->pending();
     allowed &= ~careful | pending;   // only allow "careful" bits if already issued

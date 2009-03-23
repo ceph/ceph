@@ -42,6 +42,11 @@ extern "C" {
 }
 
 
+#define CAP_ANY     0
+#define CAP_LONER   1
+#define CAP_XLOCKER 2
+
+
 class SimpleLock {
 public:
   
@@ -390,12 +395,14 @@ public:
   int gcaps_allowed_ever() {
     return parent->is_auth() ? sm->allowed_ever_auth : sm->allowed_ever_replica;
   }
-  int gcaps_allowed(bool loner, int s=-1) {
+  int gcaps_allowed(int who, int s=-1) {
     if (s < 0) s = state;
     if (parent->is_auth()) {
-      if (is_loner_mode() && !loner)
+      if (xlock_by_client >= 0 && who == CAP_XLOCKER)
+	return sm->states[s].xlocker_caps;
+      else if (is_loner_mode() && who == CAP_ANY)
 	return sm->states[s].caps;
-      else
+      else 
 	return sm->states[s].loner_caps | sm->states[s].caps;  // loner always gets more
     } else 
       return sm->states[s].replica_caps;
@@ -406,6 +413,12 @@ public:
     return 0;
   }
 
+
+  int gcaps_xlocker_mask(int client) {
+    if (client == xlock_by_client)
+      return CEPH_CAP_GRDCACHE | CEPH_CAP_GWRBUFFER;
+    return 0;
+  }
 
   // simplelock specifics
   int get_replica_state() const {

@@ -528,7 +528,7 @@ public:
     if (loner_cap < 0)
       return true;
 
-    int other_allowed = get_caps_allowed(false);
+    int other_allowed = get_caps_allowed_by_type(CAP_ANY);
     Capability *cap = get_client_cap(loner_cap);
     if (!cap ||
 	(cap->issued() & ~other_allowed) == 0) {
@@ -642,13 +642,13 @@ public:
       (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
       (linklock.gcaps_allowed_ever() << linklock.get_cap_shift());
   }
-  int get_caps_allowed(bool loner) {
+  int get_caps_allowed_by_type(int type) {
     return 
       CEPH_CAP_PIN |
-      (filelock.gcaps_allowed(loner) << filelock.get_cap_shift()) |
-      (authlock.gcaps_allowed(loner) << authlock.get_cap_shift()) |
-      (xattrlock.gcaps_allowed(loner) << xattrlock.get_cap_shift()) |
-      (linklock.gcaps_allowed(loner) << linklock.get_cap_shift());
+      (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
+      (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
   }
   int get_caps_careful() {
     return 
@@ -656,6 +656,18 @@ public:
       (authlock.gcaps_careful() << authlock.get_cap_shift()) |
       (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
       (linklock.gcaps_careful() << linklock.get_cap_shift());
+  }
+  int get_xlocker_mask(int client) {
+    return 
+      (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
+      (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
+      (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
+      (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
+  }
+  int get_caps_allowed_for_client(int client) {
+    int allowed = get_caps_allowed_by_type(client == get_loner() ? CAP_LONER : CAP_ANY);
+    allowed |= get_caps_allowed_by_type(CAP_XLOCKER) & get_xlocker_mask(client);
+    return allowed;
   }
 
   // caps issued, wanted
