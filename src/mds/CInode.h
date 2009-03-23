@@ -671,10 +671,10 @@ public:
   }
 
   // caps issued, wanted
-  int get_caps_issued(int *ploner = 0, int *pother = 0,
+  int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
 		      int shift = 0, int mask = 0xffff) {
     int c = 0;
-    int loner = 0, other = 0;
+    int loner = 0, other = 0, xlocker = 0;
     if (!is_auth())
       loner_cap = -1;
     for (map<int,Capability*>::iterator it = client_caps.begin();
@@ -686,9 +686,11 @@ public:
 	loner |= i;
       else
 	other |= i;
+      xlocker |= get_xlocker_mask(it->first) & i;
     }
     if (ploner) *ploner = (loner >> shift) & mask;
     if (pother) *pother = (other >> shift) & mask;
+    if (pxlocker) *pxlocker = (xlocker >> shift) & mask;
     return c;
   }
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
@@ -718,6 +720,17 @@ public:
     if (ploner) *ploner = (loner >> shift) & mask;
     if (pother) *pother = (other >> shift) & mask;
     return w;
+  }
+
+  bool issued_caps_need_gather(SimpleLock *lock) {
+    int loner_issued, other_issued, xlocker_issued;
+    get_caps_issued(&loner_issued, &other_issued, &xlocker_issued,
+		    lock->get_cap_shift(), lock->get_cap_mask());
+    if ((loner_issued & ~lock->gcaps_allowed(CAP_LONER)) ||
+	(other_issued & ~lock->gcaps_allowed(CAP_ANY)) ||
+	(xlocker_issued & ~lock->gcaps_allowed(CAP_XLOCKER)))
+      return true;
+    return false;
   }
 
   void replicate_relax_locks() {

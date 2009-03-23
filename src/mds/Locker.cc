@@ -387,18 +387,21 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
   if (lock->get_type() != CEPH_LOCK_DN)
     in = (CInode *)lock->get_parent();
 
-  int loner_issued = 0, other_issued = 0;
+  int loner_issued = 0, other_issued = 0, xlocker_issued = 0;
   if (caps) {
-    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
+    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, lock->get_cap_shift(), 3);
     dout(10) << " next state is " << lock->get_state_name(next) 
 	     << " issued/allows loner " << gcap_string(loner_issued)
-	     << "/" << gcap_string(lock->gcaps_allowed(true, next))
+	     << "/" << gcap_string(lock->gcaps_allowed(CAP_LONER, next))
+	     << " xlocker " << gcap_string(xlocker_issued)
+	     << "/" << gcap_string(lock->gcaps_allowed(CAP_XLOCKER, next))
 	     << " other " << gcap_string(other_issued)
-	     << "/" << gcap_string(lock->gcaps_allowed(false, next))
+	     << "/" << gcap_string(lock->gcaps_allowed(CAP_ANY, next))
 	     << dendl;
 
-    if (first && ((~lock->gcaps_allowed(false, next) & other_issued) ||
-		  (~lock->gcaps_allowed(true, next) & loner_issued)))
+    if (first && ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) ||
+		  (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) ||
+		  (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued)))
       issue_caps(in);
   }
 
@@ -407,8 +410,9 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
       (lock->sm->states[next].can_wrlock || !lock->is_wrlocked()) &&
       (lock->sm->states[next].can_xlock || !lock->is_xlocked()) &&
       (lock->sm->states[next].can_lease || !lock->is_leased()) &&
-      (!caps || ((~lock->gcaps_allowed(false, next) & other_issued) == 0 &&
-		 (~lock->gcaps_allowed(true, next) & loner_issued) == 0))) {
+      (!caps || ((~lock->gcaps_allowed(CAP_ANY, next) & other_issued) == 0 &&
+		 (~lock->gcaps_allowed(CAP_LONER, next) & loner_issued) == 0 &&
+		 (~lock->gcaps_allowed(CAP_XLOCKER, next) & xlocker_issued) == 0))) {
     dout(7) << "eval_gather finished gather on " << *lock
 	    << " on " << *lock->get_parent() << dendl;
 
@@ -2201,10 +2205,7 @@ bool Locker::simple_sync(SimpleLock *lock)
     }
     
     if (in) {
-      int loner_issued, other_issued;
-      in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), lock->get_cap_mask());
-      if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-	  (other_issued & ~lock->gcaps_allowed(false))) {
+      if (in->issued_caps_need_gather(lock)) {
 	issue_caps(in);
 	gather++;
       }
@@ -2271,10 +2272,7 @@ void Locker::simple_lock(SimpleLock *lock)
   if (lock->is_rdlocked())
     gather++;
   if (in) {
-    int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), lock->get_cap_mask());
-    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-	(other_issued & ~lock->gcaps_allowed(false))) {
+    if (in->issued_caps_need_gather(lock)) {
       issue_caps(in);
       gather++;
     }
@@ -2326,10 +2324,7 @@ void Locker::simple_xlock(SimpleLock *lock)
     gather++;
   
   if (in) {
-    int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift(), 3);
-    if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-	(other_issued & ~lock->gcaps_allowed(false))) {
+    if (in->issued_caps_need_gather(lock)) {
       issue_caps(in);
       gather++;
     }
@@ -2837,8 +2832,8 @@ void Locker::file_eval(ScatterLock *lock)
 
   if (lock->get_state() == LOCK_EXCL) {
     // lose loner?
-    int loner_issued, other_issued;
-    in->get_caps_issued(&loner_issued, &other_issued);
+    int loner_issued, other_issued, xlocker_issued;
+    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued);
 
     if (in->get_loner() >= 0) {
       if (((loner_wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) == 0 &&
@@ -2944,10 +2939,7 @@ void Locker::file_mixed(ScatterLock *lock)
       gather++;
     }
     if (lock->get_cap_shift()) {
-      int loner_issued, other_issued;
-      in->get_caps_issued(&loner_issued, &other_issued, lock->get_cap_shift());
-      if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-	  (other_issued & ~lock->gcaps_allowed(false))) {
+      if (in->issued_caps_need_gather(lock)) {
 	issue_caps(in);
 	gather++;
       }
@@ -3004,11 +2996,7 @@ void Locker::file_excl(ScatterLock *lock)
     revoke_client_leases(lock);
     gather++;
   }
-  int loner_issued, other_issued;
-  in->get_caps_issued(&loner_issued, &other_issued, CEPH_CAP_SFILE);
-  dout(10) << " issued loner " << gcap_string(loner_issued) << " other " << gcap_string(other_issued) << dendl;
-  if ((loner_issued & ~lock->gcaps_allowed(true)) ||
-      (other_issued & ~lock->gcaps_allowed(false))) {
+  if (in->issued_caps_need_gather(lock)) {
     issue_caps(in);
     gather++;
   }
