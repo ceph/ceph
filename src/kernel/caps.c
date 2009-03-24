@@ -200,6 +200,46 @@ static void __adjust_cap_rdcaps_listing(struct ceph_inode_info *ci,
 }
 
 /*
+ * (Re)queue cap at the end of the delayed cap release list.
+ *
+ * Caller holds i_lock
+ *    -> we take mdsc->cap_delay_lock
+ */
+static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
+				struct ceph_inode_info *ci)
+{
+	ci->i_hold_caps_until = round_jiffies(jiffies + CEPH_CAP_DELAY);
+	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
+	     ci->i_hold_caps_until);
+	if (!mdsc->stopping) {
+		spin_lock(&mdsc->cap_delay_lock);
+		if (list_empty(&ci->i_cap_delay_list))
+			igrab(&ci->vfs_inode);
+		else
+			list_del_init(&ci->i_cap_delay_list);
+		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
+		spin_unlock(&mdsc->cap_delay_lock);
+	}
+}
+
+/*
+ * Cancel delayed work on cap.
+ *
+ * Caller hold i_lock.
+ */
+static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
+			       struct ceph_inode_info *ci)
+{
+	dout(10, "__cap_delay_cancel %p\n", &ci->vfs_inode);
+	if (list_empty(&ci->i_cap_delay_list))
+		return;
+	spin_lock(&mdsc->cap_delay_lock);
+	list_del_init(&ci->i_cap_delay_list);
+	spin_unlock(&mdsc->cap_delay_lock);
+	iput(&ci->vfs_inode);
+}
+
+/*
  * Add a capability under the given MDS session.
  *
  * Bump i_count when adding the first cap.
@@ -272,7 +312,8 @@ retry:
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
 
-	__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci) | wanted);
+	wanted |= __ceph_caps_wanted(ci);  /* newly and previously wanted... */
+	__adjust_cap_rdcaps_listing(ci, cap, wanted);
 
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_lookup_snap_realm(mdsc,
@@ -299,6 +340,15 @@ retry:
 		dout(10, " marking %p NOT complete\n", inode);
 		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
 	}
+
+	/*
+	 * if we were just issued un-wanted, un-EXPIREABLE caps,
+	 * schedule a delayed cap check, so that they can be released
+	 * if necessary.
+	 */
+	if ((issued & ~CEPH_CAP_EXPIREABLE & ~wanted) &&
+	    (cap->issued & ~CEPH_CAP_EXPIREABLE & ~wanted) == 0)
+		__cap_delay_requeue(mdsc, ci);
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %p %s now %s seq %d mds%d\n",
 	     inode, ceph_vinop(inode), cap, ceph_cap_string(issued),
@@ -487,47 +537,6 @@ void ceph_remove_cap(struct ceph_cap *cap)
 	spin_unlock(&inode->i_lock);
 	if (was_last)
 		iput(inode);
-}
-
-/*
- *
- * (Re)queue cap at the end of the delayed cap release list.
- *
- * Caller holds i_lock
- *    -> we take mdsc->cap_delay_lock
- */
-static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
-				struct ceph_inode_info *ci)
-{
-	ci->i_hold_caps_until = round_jiffies(jiffies + CEPH_CAP_DELAY);
-	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
-	     ci->i_hold_caps_until);
-	if (!mdsc->stopping) {
-		spin_lock(&mdsc->cap_delay_lock);
-		if (list_empty(&ci->i_cap_delay_list))
-			igrab(&ci->vfs_inode);
-		else
-			list_del_init(&ci->i_cap_delay_list);
-		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
-		spin_unlock(&mdsc->cap_delay_lock);
-	}
-}
-
-/*
- * Cancel delayed work on cap.
- *
- * Caller hold i_lock.
- */
-static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
-			       struct ceph_inode_info *ci)
-{
-	dout(10, "__cap_delay_cancel %p\n", &ci->vfs_inode);
-	if (list_empty(&ci->i_cap_delay_list))
-		return;
-	spin_lock(&mdsc->cap_delay_lock);
-	list_del_init(&ci->i_cap_delay_list);
-	spin_unlock(&mdsc->cap_delay_lock);
-	iput(&ci->vfs_inode);
 }
 
 /*
