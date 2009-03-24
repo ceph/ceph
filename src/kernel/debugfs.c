@@ -309,18 +309,17 @@ static int mdsc_show(struct seq_file *s, void *p)
 static int osdc_show(struct seq_file *s, void *p)
 {
 	struct ceph_client *client = s->private;
-	struct ceph_osd_request *req;
-	u64 nexttid = 0;
-	int got;
 	struct ceph_osd_client *osdc = &client->osdc;
+	u64 nexttid = 0;
 
 	mutex_lock(&osdc->request_mutex);
 	while (nexttid < osdc->last_tid) {
+		struct ceph_osd_request *req;
 		struct ceph_osd_request_head *head;
 		struct ceph_osd_op *op;
 		int num_ops;
 		int opcode;
-		int i;
+		int got, i;
 
 		got = radix_tree_gang_lookup(&osdc->request_tree,
 					     (void **)&req, nexttid, 1);
@@ -334,19 +333,23 @@ static int osdc_show(struct seq_file *s, void *p)
 			ENTITY_NAME(req->r_request->hdr.dst.name));
 
 		head = req->r_request->front.iov_base;
-
 		op = (void *)(head + 1);
 
-		seq_printf(s, "oid=%llx.%08x (snap=%lld)\t",
+		seq_printf(s, "%llx.%08x\t%lld\t",
 			le64_to_cpu(head->oid.ino),
 			le32_to_cpu(head->oid.bno),
 			le64_to_cpu(head->oid.snap));
 
-		num_ops = le16_to_cpu(head->num_ops);
+		if (req->r_reassert_version.epoch)
+			seq_printf(s, "%u'%llu\t",
+			   (unsigned)le32_to_cpu(req->r_reassert_version.epoch),
+			   le64_to_cpu(req->r_reassert_version.version));
+		else
+			seq_printf(s, "\t");
 
+		num_ops = le16_to_cpu(head->num_ops);
 		for (i=0; i<num_ops; i++) {
 			opcode = le16_to_cpu(op->op);
-
 			seq_printf(s, "%s\t", ceph_osd_op_name(opcode));
 			op++;
 		}
