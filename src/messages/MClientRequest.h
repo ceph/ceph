@@ -116,7 +116,8 @@ public:
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     head.mds_wants_replica_in_dirino = dirino; }
-  
+  void set_num_dentries_wanted(int n) { head.num_dentries_wanted = n; }
+    
   tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
   int get_num_fwd() { return head.num_fwd; }
@@ -131,7 +132,9 @@ public:
   filepath& get_filepath2() { return path2; }
 
   inodeno_t get_mds_wants_replica_in_dirino() { 
-    return inodeno_t(head.mds_wants_replica_in_dirino); }
+    return inodeno_t(head.mds_wants_replica_in_dirino);
+  }
+  int get_num_dentries_wanted() { return head.num_dentries_wanted; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

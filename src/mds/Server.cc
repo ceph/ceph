@@ -574,7 +574,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   CInode *snapdiri = 0;
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, mdr,
-		   mdr->client_request->is_replay());
+		   mdr->client_request->is_replay(),
+		   mdr->client_request->get_num_dentries_wanted());
 
   messenger->send_message(reply, client_inst);
 
@@ -644,6 +645,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   Session *session = mdr->session;
   bool did_early_reply = mdr->did_early_reply;
   entity_inst_t client_inst = req->get_orig_source_inst();
+  int num_dentries_wanted = req->get_num_dentries_wanted();
   mdcache->request_finish(mdr);
   mdr = 0;
 
@@ -655,7 +657,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr, is_replay);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr, is_replay, num_dentries_wanted);
     messenger->send_message(reply, client_inst);
   }
   
@@ -701,7 +703,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    MDRequest *mdr, bool is_replay)
+			    MDRequest *mdr, bool is_replay, int num_dentries_wanted)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -710,7 +712,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   __u16 numi = 0, numdn = 0;
   __s16 snapdirpos = -1;
 
-  bool single_segment = g_conf.mds_short_reply_trace;  // do a single segment: [inode, ] dentry, dir.
+  //bool single_segment = g_conf.mds_short_reply_trace;  // do a single segment: [inode, ] dentry, dir.
 
   // choose lease duration
   utime_t now = g_clock.now();
@@ -758,9 +760,6 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     dout(10) << "set_trace_dist snapdiri at pos " << snapdirpos << dendl;
   }
 
-  if (single_segment && numdn)
-    goto done;
-
   if (!dn) {
     dn = in->get_projected_parent_dn();
     if (dn && !dn->use_projected(client, mdr))
@@ -772,6 +771,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     goto done;
 
  dentry:
+  if (numdn >= num_dentries_wanted)
+    goto done;
+
   dout(15) << "set_trace_dist " << *dn << dendl;
 
   ::encode(dn->get_name(), bl);

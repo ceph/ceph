@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
-#define CEPH_MDSC_PROTOCOL   12 /* public/client */
+#define CEPH_MDSC_PROTOCOL   13 /* public/client */
 #define CEPH_MONC_PROTOCOL    9 /* public/client */
 
 
@@ -819,8 +819,9 @@ union ceph_mds_request_args {
 struct ceph_mds_request_head {
 	ceph_tid_t tid, oldest_client_tid;
 	ceph_epoch_t mdsmap_epoch; /* on client */
-	__le32 num_fwd;
 	__le32 retry_attempt;  /* REQUEST_REPLAY if replay */
+	__le16 num_fwd;
+	__le16 num_dentries_wanted;
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;

@@ -964,6 +964,7 @@ void Client::send_request(MetaRequest *request, int mds)
     r->copy_payload(request->request_payload);
     r->decode_payload();
     r->set_retry_attempt(request->retry_attempt);
+    r->set_num_dentries_wanted(1);
   }
   request->request = 0;
 

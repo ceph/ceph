@@ -1074,6 +1074,8 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
 	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
 
+	rhead->num_dentries_wanted = req->r_locked_dir ? 1:0;
+
 	if (req->r_last_inode)
 		rhead->ino = cpu_to_le64(ceph_ino(req->r_last_inode));
 	else
