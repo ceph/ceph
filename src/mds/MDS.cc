@@ -792,6 +792,10 @@ void MDS::creating_done()
 {
   dout(1)<< "creating_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
+
+  // start new segment
+  mdlog->start_new_segment(0);
+
   mdcache->open_root();
 }
 

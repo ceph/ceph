@@ -1879,8 +1879,11 @@ ESubtreeMap *MDCache::create_subtree_map()
   
   ESubtreeMap *le = new ESubtreeMap();
   
-  CDir *mydir = myin->get_dirfrag(frag_t());
-  assert(mydir);
+  CDir *mydir = 0;
+  if (myin) {
+    mydir = myin->get_dirfrag(frag_t());
+    assert(mydir);
+  }
 
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
