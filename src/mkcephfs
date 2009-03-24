@@ -123,7 +123,7 @@ for name in $what; do
 
     check_host || continue
 
-    if [ -n "$ssh" ] && ( echo $pushed_to | grep -q " $host " ); then
+    if [ -n "$ssh" ] && ( echo $pushed_to | grep -v -q " $host " ); then
 	scp -q $osdmap $host:$osdmap
 	scp -q $monmap $host:$monmap
 	pushed_to="$pushed_to $host "
