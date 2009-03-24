@@ -787,19 +787,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	bool have_dir_cap, have_lease;
 	int update_parent;
 
-	if (rinfo->trace_numi == 0) {
-		dout(10, "fill_trace reply has empty trace!\n");
-		if (!rinfo->head->result &&
-		    req->r_locked_dir) {
-			struct ceph_inode_info *ci = ceph_inode(req->r_locked_dir);
-			dout(10, " clearing %p complete (empty trace)\n",
-			     req->r_locked_dir);
-			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
-		}
-
-		return 0;
-	}
-
 #if 0
 	/*
 	 * if we resend completed ops to a recovering mds, we get no
@@ -815,6 +802,18 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		return 0;
 	}
 #endif
+
+	if (rinfo->trace_numi == 0) {
+		dout(10, "fill_trace reply has empty trace!\n");
+		if (!rinfo->head->result && req->r_locked_dir) {
+			struct ceph_inode_info *ci =
+				ceph_inode(req->r_locked_dir);
+			dout(10, " clearing %p complete (empty trace)\n",
+			     req->r_locked_dir);
+			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
+		}
+		return 0;
+	}
 
 	vino.ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
 	vino.snap = le64_to_cpu(rinfo->trace_in[0].in->snapid);
@@ -847,27 +846,22 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		sb->s_root = dget(dn);
 	}
 
-	have_lease = 0;
-	for (d = 0; d < rinfo->trace_numd; d++) {
-		dname.name = rinfo->trace_dname[d];
-		dname.len = rinfo->trace_dname_len[d];
+	if (rinfo->trace_numd) {
+		/*
+		  lookup
+		  mknod symlink mkdir link rename
+		  unlink
+		*/
+		int d = 0;
+
+		BUG_ON(req->r_locked_dir != in);
+		BUG_ON(!req->r_dentry);
 		parent = dn;
-		dn = NULL;
+		dn = req->r_dentry;
+		BUG_ON(dn->d_parent != parent);
+		in = NULL;
+
 		update_parent = 0;
-
-		dout(10, "fill_trace %d/%d parent %p inode %p: '%.*s'"
-		     " dmask %d\n",
-		     (d+1), rinfo->trace_numd, parent, parent->d_inode,
-		     (int)dname.len, dname.name,
-		     rinfo->trace_dlease[d]->mask);
-
-		/* try to take dir i_mutex */
-		if (req->r_locked_dir != parent->d_inode &&
-		    mutex_trylock(&parent->d_inode->i_mutex) == 0) {
-			dout(10, "fill_trace  FAILED to take %p i_mutex\n",
-			     parent->d_inode);
-			goto no_dir_mutex;
-		}
 
 		/* do we have a lease on the whole dir? */
 		have_dir_cap =
@@ -882,71 +876,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (!have_lease)
 			dout(10, "fill_trace  no dentry lease or dir cap\n");
 
-		dout(10, "fill_trace  took %p i_mutex\n", parent->d_inode);
-
-		dname.hash = full_name_hash(dname.name, dname.len);
-	retry_lookup:
-		/* existing dentry? */
-		dn = d_lookup(parent, &dname);
-		dout(10, "fill_trace d_lookup of '%.*s' got %p\n",
-		     (int)dname.len, dname.name, dn);
-
-		/* use caller provided dentry?  for simplicity,
-		 *  - only if there is no existing dn, and
-		 *  - only if parent is correct
-		 */
-		if (d == rinfo->trace_numd-1 && req->r_dentry) {
-			if (!dn && req->r_dentry->d_parent == parent) {
-				dn = req->r_dentry;
-				dout(10, "fill_trace provided dn %p '%.*s'\n",
-				     dn, dn->d_name.len, dn->d_name.name);
-				ceph_init_dentry(dn);  /* just in case */
-			} else if (dn == req->r_dentry) {
-				dout(10, "fill_trace matches provided dn %p\n",
-				     dn);
-				dput(req->r_dentry);
-			} else {
-				dout(10, "fill_trace NOT using provided dn %p "
-				     "(parent %p)\n", req->r_dentry,
-				     req->r_dentry->d_parent);
-				dput(req->r_dentry);
-			}
-			req->r_dentry = NULL;
-		}
-
-		if (!dn) {
-			dn = d_alloc(parent, &dname);
-			if (!dn) {
-				derr(0, "d_alloc ENOMEM\n");
-				err = -ENOMEM;
-				goto out_dir_no_inode;
-			}
-			dout(10, "fill_trace d_alloc %p '%.*s'\n", dn,
-			     dn->d_name.len, dn->d_name.name);
-			ceph_init_dentry(dn);
-		}
-		BUG_ON(!dn);
-
-		/* null dentry? */
-		if (d+1 == rinfo->trace_numi) {
-			dout(10, "fill_trace null dentry\n");
-			if (dn->d_inode) {
-				dout(20, "d_delete %p\n", dn);
-				d_delete(dn);
-				dput(dn);
-				goto retry_lookup;
-			}
-			dout(20, "d_instantiate %p NULL\n", dn);
-			d_instantiate(dn, NULL);
-			if (have_lease && d_unhashed(dn))
-				d_rehash(dn);
-			update_dentry_lease(dn, rinfo->trace_dlease[d],
-					    session, req->r_request_started);
-			goto out_dir_no_inode;
-		}
-
 		/* rename? */
-		if (d == rinfo->trace_numd-1 && req->r_old_dentry) {
+		if (req->r_old_dentry) {
 			dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 			     req->r_old_dentry,
 			     req->r_old_dentry->d_name.len,
@@ -965,40 +896,43 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			req->r_old_dentry = NULL;
 		}
 
+		/* null dentry? */
+		if (1 == rinfo->trace_numi) {
+			dout(10, "fill_trace null dentry\n");
+			if (dn->d_inode) {
+				dout(20, "d_delete %p\n", dn);
+				d_delete(dn);
+			} else {
+				dout(20, "d_instantiate %p NULL\n", dn);
+				d_instantiate(dn, NULL);
+				if (have_lease && d_unhashed(dn))
+					d_rehash(dn);
+				update_dentry_lease(dn, rinfo->trace_dlease[d],
+						    session,
+						    req->r_request_started);
+			}
+			goto done;
+		}
+
 		/* attach proper inode */
 		ininfo = rinfo->trace_in[d+1].in;
 		vino.ino = le64_to_cpu(ininfo->ino);
 		vino.snap = le64_to_cpu(ininfo->snapid);
-		if (dn->d_inode) {
-			if (ceph_ino(dn->d_inode) != vino.ino ||
-			    ceph_snap(dn->d_inode) != vino.snap) {
-				dout(10, "dn %p wrong inode %p ino %llx.%llx\n",
-				     dn, dn->d_inode, ceph_vinop(dn->d_inode));
-				d_delete(dn);
-				dput(dn);
-				update_parent = 1;
-				goto retry_lookup;
-			}
-			dout(10, "dn %p correct %p ino %llx.%llx\n",
-			     dn, dn->d_inode, ceph_vinop(dn->d_inode));
-			in = dn->d_inode;
-		} else {
-			struct dentry *newdn;
-			in = ceph_get_inode(dn->d_sb, vino);
-			if (IS_ERR(in)) {
-				derr(30, "get_inode badness\n");
-				err = PTR_ERR(in);
-				d_delete(dn);
-				dn = NULL;
-				goto out_dir_no_inode;
-			}
-			newdn = splice_dentry(dn, in, &have_lease);
+		BUG_ON(dn->d_inode);
 
-			if (IS_ERR(newdn)) {
-				goto no_mutex_find_alias;
-			}
-			dn = newdn;
+		struct dentry *newdn;
+		in = ceph_get_inode(dn->d_sb, vino);
+		if (IS_ERR(in)) {
+			derr(30, "get_inode badness\n");
+			err = PTR_ERR(in);
+			d_delete(dn);
+			dn = NULL;
+			goto done;
 		}
+		newdn = splice_dentry(dn, in, &have_lease);
+
+		if (IS_ERR(newdn))
+			goto update_inode;
 
 		if (have_lease)
 			update_dentry_lease(dn, rinfo->trace_dlease[d],
@@ -1011,11 +945,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 
 		/* done with dn update */
-		if (req->r_locked_dir != parent->d_inode)
-			mutex_unlock(&parent->d_inode->i_mutex);
-
-	update_inode:
 		BUG_ON(dn->d_inode != in);
+	update_inode:
 		err = fill_inode(in,
 				 &rinfo->trace_in[d+1],
 				 rinfo->trace_numd <= d ?
@@ -1063,81 +994,15 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 
 	out_dir_no_inode:
-		/* drop i_mutex */
-		if (req->r_locked_dir != parent->d_inode)
-			mutex_unlock(&parent->d_inode->i_mutex);
 		in = NULL;
 		break;
-
-
-	no_dir_mutex:
-		/*
-		 * we couldn't take i_mutex for this dir, so do not
-		 * lookup or relink any existing dentry.
-		 */
-		if (d == rinfo->trace_numd-1 && req->r_dentry) {
-			dn = req->r_dentry;
-			dout(10, "fill_trace using provided dn %p\n", dn);
-			ceph_init_dentry(dn);
-			req->r_dentry = NULL;
-		}
-
-		/* null dentry? */
-		if (d+1 == rinfo->trace_numi) {
-			if (dn && dn->d_inode)
-				d_delete(dn);
-			in = NULL;
-			break;
-		}
-
-		/* find existing inode */
-		ininfo = rinfo->trace_in[d+1].in;
-		vino.ino = le64_to_cpu(ininfo->ino);
-		vino.snap = le64_to_cpu(ininfo->snapid);
-		in = ceph_get_inode(parent->d_sb, vino);
-		if (IS_ERR(in)) {
-			derr(30, "ceph_get_inode badness\n");
-			err = PTR_ERR(in);
-			in = NULL;
-			break;
-		}
-	no_mutex_find_alias:
-		existing = d_find_alias(in);
-		if (existing) {
-			if (dn)
-				dput(dn);
-			iput(in);
-			dn = existing;
-			dout(10, " using existing %p alias %p\n", in, dn);
-		} else {
-			update_parent = 1;
-			if (dn && dn->d_inode == NULL) {
-				dout(10, " instantiating provided %p\n", dn);
-				d_instantiate(dn, in);
-			} else {
-				if (dn) {
-					dout(10, " ignoring provided dn %p\n",
-					     dn);
-					dput(dn);
-				}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
-				dn = d_obtain_alias(in);
-#else
-				dn = d_alloc_anon(in);
-#endif
-				iput(in);
-				dout(10, " d_alloc_anon new dn %p\n", dn);
-			}
-		}
-		goto update_inode;
 	}
+
+done:
 	if (parent)
 		dput(parent);
 
 	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
-	if (req->r_dentry)
-		dput(req->r_dentry);
-	req->r_dentry = dn;
 	if (req->r_last_inode)
 		iput(req->r_last_inode);
 	req->r_last_inode = in;

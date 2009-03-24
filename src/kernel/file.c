@@ -197,7 +197,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	if (!err)
-		err = ceph_init_file(req->r_last_inode, file, req->r_fmode);
+		err = ceph_init_file(dentry->d_inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
 	dout(5, "ceph_lookup_open result=%p\n", dentry);
 	return dentry;

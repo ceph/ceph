@@ -463,7 +463,7 @@ out:
 }
 
 static int ceph_link(struct dentry *old_dentry, struct inode *dir,
-			 struct dentry *dentry)
+		     struct dentry *dentry)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
