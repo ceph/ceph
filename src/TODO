@@ -68,7 +68,6 @@ repair
 
 
 kernel client
-- check whether non-expireable caps are properly released.  i saw some non-expirable caps on a directory even tho there was no open file handle.  :/
 - unwind writeback start error in addr.c (see fixme)... by redirtying pages?
 - inotify for updates from other clients?
 - optional or no fill_trace?
@@ -80,8 +79,6 @@ kernel client
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
 - set mapping bits for ENOSPC, EIO?
-- flush caps on sync, fsync, etc.
-  - do we need to block?  how do we track that?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
 
