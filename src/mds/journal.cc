@@ -336,15 +336,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
       if (!diri) {
-	/*
 	if ((*lp).ino == MDS_INO_ROOT) {
 	  diri = mds->mdcache->create_root_inode();
 	  dout(10) << "EMetaBlob.replay created root " << *diri << dendl;
-	} else if (MDS_INO_IS_STRAY((*lp).ino)) {
+	}/* else if (MDS_INO_IS_STRAY((*lp).ino)) {
 	  int whose = (*lp).ino - MDS_INO_STRAY_OFFSET;
 	  diri = mds->mdcache->create_stray_inode(whose);
 	  dout(10) << "EMetaBlob.replay created stray " << *diri << dendl;
-	  } else */ {
+	  } */ else {
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
 	  assert(0);
 	}

@@ -858,6 +858,8 @@ private:
 
 public:
   CInode *create_system_inode(inodeno_t ino, int mode);
+  CInode *create_root_inode();
+
   void create_empty_hierarchy(C_Gather *gather);
 
   bool is_open() { return open; }

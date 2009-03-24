@@ -215,13 +215,19 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   return in;
 }
 
-void MDCache::create_empty_hierarchy(C_Gather *gather)
+CInode *MDCache::create_root_inode()
 {
-  // create root dir
-  CInode *root = create_system_inode(MDS_INO_ROOT, S_IFDIR);
+  CInode *root = mds->mdcache->create_system_inode(MDS_INO_ROOT, S_IFDIR);
   root->inode_auth = pair<int,int>(mds->whoami, CDIR_AUTH_UNKNOWN);
   root->open_snaprealm();  // empty snaprealm
   root->snaprealm->seq = 1;
+  return root;
+}
+
+void MDCache::create_empty_hierarchy(C_Gather *gather)
+{
+  // create root dir
+  CInode *root = create_root_inode();
 
   // force empty root dir
   CDir *rootdir = root->get_or_open_dirfrag(this, frag_t());
@@ -286,6 +292,9 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   root->inode.dirstat = rootdir->fnode.fragstat;
   root->inode.rstat = rootdir->fnode.rstat;
   root->inode.accounted_rstat = root->inode.rstat;
+
+  // write our first subtreemap
+  mds->mdlog->start_new_segment(gather->new_sub());
 
   // save them
   straydir->mark_complete();
@@ -1870,6 +1879,9 @@ ESubtreeMap *MDCache::create_subtree_map()
   
   ESubtreeMap *le = new ESubtreeMap();
   
+  CDir *mydir = myin->get_dirfrag(frag_t());
+  assert(mydir);
+
   // include all auth subtrees, and their bounds.
   // and a spanning tree to tie it to the root.
   for (map<CDir*, set<CDir*> >::iterator p = subtrees.begin();
@@ -1883,6 +1895,9 @@ ESubtreeMap *MDCache::create_subtree_map()
     le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
     le->metablob.add_dir(dir, false);
 
+    if (mydir == dir)
+      mydir = NULL;
+
     // bounds
     for (set<CDir*>::iterator q = p->second.begin();
 	 q != p->second.end();
@@ -1893,6 +1908,12 @@ ESubtreeMap *MDCache::create_subtree_map()
       le->metablob.add_dir_context(bound, EMetaBlob::TO_ROOT);
       le->metablob.add_dir(bound, false);
     }
+  }
+
+  if (mydir) {
+    // include my dir
+    le->metablob.add_dir_context(mydir, EMetaBlob::TO_ROOT);
+    le->metablob.add_dir(mydir, false);
   }
 
   //le->metablob.print(cout);

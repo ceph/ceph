@@ -763,9 +763,6 @@ void MDS::boot_create()
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin->new_sub());
   
-  // write our first subtreemap
-  mdlog->start_new_segment(fin->new_sub());
-
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
     mdcache->create_empty_hierarchy(fin);
@@ -1000,6 +997,8 @@ void MDS::recovery_done()
   
   // tell connected clients
   bcast_mds_map();  
+
+  mdcache->populate_mydir();
 
   queue_waiters(waiting_for_active);
 }
