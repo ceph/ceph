@@ -916,18 +916,21 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
   return ret;
 }
 
-void parse_config_file(ConfFile *cf, bool auto_update)
+bool parse_config_file(ConfFile *cf, bool auto_update)
 {
   int opt_len = sizeof(config_optionsp)/sizeof(config_option);
 
   cf->set_auto_update(false);
   cf->set_post_process_func(conf_post_process_val);
-  cf->parse();
+  if (!cf->parse())
+	return false;
 
   for (int i=0; i<opt_len; i++) {
       config_option *opt = &config_optionsp[i];
       conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr);
   }
+
+  return true;
 }
 
 bool is_bool_param(const char *param)
@@ -939,6 +942,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 {
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
+  bool conf_specified = false;
 
   if (!g_conf.id)
     g_conf.id = (char *)"";
@@ -948,6 +952,7 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("conf", 'c')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
+	conf_specified = true;
     } else if (CONF_ARG_EQ("monmap", 'M')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.monmap, OPT_STR);
     } else if (CONF_ARG_EQ("bind", 0)) {
@@ -990,7 +995,12 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 
   cf = new ConfFile(g_conf.conf);
 
-  parse_config_file(cf, true);
+  int ret = parse_config_file(cf, true);
+
+  if (conf_specified && !ret) {
+    cerr << "error reading config file " << g_conf.conf << std::endl;
+    exit(1);
+  }
 
   if (show_config) {
     cf->dump();

@@ -83,7 +83,7 @@ class ConfFile {
 
 	ConfSection *_add_section(const char *section, ConfLine *cl);
 	void _dump(int fd);
-	int _parse(char *filename, ConfSection **psection);
+	bool _parse(char *filename, ConfSection **psection);
 public:
         ConfFile(const char *fname) : filename(strdup(fname)), auto_update(false),
 				      post_process_func(NULL) {}
@@ -92,7 +92,7 @@ public:
 	const SectionList& get_section_list() { return sections_list; }
 	const char *get_filename() { return filename; }
 
-	int parse();
+	bool parse();
 	int read(const char *section, const char *var, int *val, int def_val);
 	int read(const char *section, const char *var, unsigned int *val, unsigned int def_val);
 	int read(const char *section, const char *var, long long *val, long long def_val);

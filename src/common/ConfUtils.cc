@@ -526,7 +526,7 @@ ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
 }
 
 
-int ConfFile::_parse(char *filename, ConfSection **psection)
+bool ConfFile::_parse(char *filename, ConfSection **psection)
 {
 	char *buf;
 	int len, i, l;
@@ -593,7 +593,7 @@ int ConfFile::_parse(char *filename, ConfSection **psection)
 	return 1;
 }
 
-int ConfFile::parse()
+bool ConfFile::parse()
 {
 	ConfSection *section;
 
