@@ -81,13 +81,44 @@ int MonClient::probe_mon(MonMap *pmonmap)
 int MonClient::get_monmap(MonMap *pmonmap)
 {
   static string monstr;
+  char *val = 0;
+  char monname[10];
 
   if (g_conf.monmap) {
     // file?
     const char *monmap_fn = g_conf.monmap;
     int r = pmonmap->read(monmap_fn);
     if (r >= 0) {
+      vector<entity_inst_t>::iterator iter = pmonmap->mon_inst.begin();
+      unsigned int i;
+      const sockaddr_in *ipaddr;
+      entity_addr_t conf_addr;
+      ConfFile a(g_conf.conf);
+      ConfFile b("ceph.conf");
+      ConfFile *c = 0;
+
       dout(1) << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << dendl;
+
+      if (a.parse())
+        c = &a;
+      else if (b.parse())
+        c = &b;
+      if (c) {
+        for (i=0; i<pmonmap->mon_inst.size(); i++) {
+          ipaddr = &pmonmap->mon_inst[i].addr.ipaddr;
+          sprintf(monname, "mon%d", i);
+          if (c->read(monname, "mon addr", &val, 0)) {
+            if (parse_ip_port(val, conf_addr, NULL)) {
+              if ((ipaddr->sin_addr.s_addr != conf_addr.ipaddr.sin_addr.s_addr) ||
+                (ipaddr->sin_port != conf_addr.ipaddr.sin_port)) {
+                   cerr << "WARNING: 'mon addr' config option (" << monname << ") does not match monmap file" << std::endl
+                        << "         continuing with monmap configuration" << std::endl;
+              }
+	    }
+          }
+        }
+      }
+
       return 0;
     }
 
@@ -106,8 +137,6 @@ int MonClient::get_monmap(MonMap *pmonmap)
       c = &b;
     if (c) {
       for (int i=0; i<15; i++) {
-	char *val = 0;
-	char monname[10];
 	sprintf(monname, "mon%d", i);
 	c->read(monname, "mon addr", &val, 0);
 	if (!val || !val[0])

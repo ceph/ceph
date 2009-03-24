@@ -857,7 +857,8 @@ do { \
 } while (0)
     
 
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def)
+int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const char *conf_type,
+		      const char *alt_section, const char *key, opt_type_t type, void *out, void *def)
 {
   int s;
   int ret;
@@ -866,16 +867,16 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
 
     switch (s) {
       case 0:
-          section = g_conf.name;
+          section = conf_name;
           if (section)
             break;
       case 1:
-          section = g_conf.alt_name;
+          section = conf_alt_name;
           if (section)
             break;
       case 2:
 	    s = 2;
-            section = g_conf.type;
+            section = conf_type;
             if (section)
               break;
       case 3:
@@ -914,6 +915,12 @@ int conf_read_key(const char *alt_section, const char *key, opt_type_t type, voi
   }
 
   return ret;
+}
+
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def)
+{
+	return conf_read_key_ext(g_conf.name, g_conf.alt_name, g_conf.type,
+				 alt_section, key, type, out, def);
 }
 
 bool parse_config_file(ConfFile *cf, bool auto_update)
