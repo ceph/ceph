@@ -262,6 +262,7 @@ int ceph_add_cap(struct inode *inode,
 	int mds = session->s_mds;
 	int is_first = 0;
 	unsigned long duration;
+	int all_wanted;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -291,8 +292,8 @@ retry:
 		cap->issued = 0;
 		cap->implemented = 0;
 		cap->flushing = 0;
-		cap->mds_wanted = wanted;
 		cap->mds = mds;
+		cap->mds_wanted = 0;
 
 		is_first = RB_EMPTY_ROOT(&ci->i_caps);  /* grab inode later */
 		cap->ci = ci;
@@ -311,9 +312,6 @@ retry:
 		session->s_nr_caps++;
 		INIT_LIST_HEAD(&cap->session_rdcaps);
 	}
-
-	wanted |= __ceph_caps_wanted(ci);  /* newly and previously wanted... */
-	__adjust_cap_rdcaps_listing(ci, cap, wanted);
 
 	if (!ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ceph_lookup_snap_realm(mdsc,
@@ -342,12 +340,18 @@ retry:
 	}
 
 	/*
-	 * if we were just issued un-wanted, un-EXPIREABLE caps,
+	 * Ensure our rdcaps status is correct
+	 */
+	all_wanted = wanted | __ceph_caps_wanted(ci);
+	__adjust_cap_rdcaps_listing(ci, cap, all_wanted);
+
+	/*
+	 * If we were just issued un-wanted, un-EXPIREABLE caps,
 	 * schedule a delayed cap check, so that they can be released
 	 * if necessary.
 	 */
-	if ((issued & ~CEPH_CAP_EXPIREABLE & ~wanted) &&
-	    (cap->issued & ~CEPH_CAP_EXPIREABLE & ~wanted) == 0)
+	if ((issued & ~CEPH_CAP_EXPIREABLE & ~all_wanted) &&
+	    (cap->issued & ~CEPH_CAP_EXPIREABLE & ~all_wanted) == 0)
 		__cap_delay_requeue(mdsc, ci);
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %p %s now %s seq %d mds%d\n",
@@ -356,6 +360,7 @@ retry:
 	cap->cap_id = cap_id;
 	cap->issued = issued;
 	cap->implemented |= issued;
+	cap->mds_wanted |= wanted;
 	cap->seq = seq;
 	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
