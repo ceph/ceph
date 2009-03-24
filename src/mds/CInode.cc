@@ -1465,6 +1465,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       int allowed = get_caps_allowed_for_client(client);
       int issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
+      issue = cap->pending();
       cap->set_last_issue_stamp(g_clock.recent_now());
       cap->touch();   // move to back of session cap LRU
       e.cap.caps = issue;
