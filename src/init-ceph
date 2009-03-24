@@ -171,7 +171,7 @@ for name in $what; do
 	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
 		[ -n "$pre_mount" ] && do_cmd $pre_mount
-		do_cmd "mount -t btrfs $first_dev $btrfs_path"
+		do_cmd "egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $first_dev $btrfs_path"
 	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
