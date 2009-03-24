@@ -5,11 +5,11 @@
 #include "super.h"
 #include "mds_client.h"
 
-static struct dentry *ceph_debugfs_dir = NULL;
-static struct dentry *ceph_debugfs_debug = NULL;
-static struct dentry *ceph_debugfs_debug_msgr = NULL;
-static struct dentry *ceph_debugfs_debug_console = NULL;
-static struct dentry *ceph_debugfs_debug_mask = NULL;
+static struct dentry *ceph_debugfs_dir;
+static struct dentry *ceph_debugfs_debug;
+static struct dentry *ceph_debugfs_debug_msgr;
+static struct dentry *ceph_debugfs_debug_console;
+static struct dentry *ceph_debugfs_debug_mask;
 
 /*
  * ceph_debug_mask
@@ -131,15 +131,13 @@ static const struct file_operations ceph_debug_mask_fops = {
 	.release	= single_release,
 };
 
-
-
 static int fsid_show(struct seq_file *s, void *p)
 {
 	struct ceph_client *client = s->private;
+
 	seq_printf(s, "%llx.%llx\n",
 	       le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
 	       le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
-
 	return 0;
 }
 
@@ -233,9 +231,9 @@ static int monc_show(struct seq_file *s, void *p)
 	mutex_lock(&monc->statfs_mutex);
 
 	if (monc->want_osdmap)
-		seq_printf(s, "want osdmap\n");
+		seq_printf(s, "want osdmap %u\n", (unsigned)monc->want_osdmap);
 	if (monc->want_mdsmap)
-		seq_printf(s, "want mdsmap\n");
+		seq_printf(s, "want mdsmap %u\n", (unsigned)monc->want_mdsmap);
 
 	while (nexttid < monc->last_tid) {
 		got = radix_tree_gang_lookup(&monc->statfs_request_tree,
@@ -279,7 +277,8 @@ static int mdsc_show(struct seq_file *s, void *p)
 		seq_printf(s, "%s", ceph_mds_op_name(req->r_op));
 
 		if (req->r_dentry) {
-			path = ceph_mdsc_build_path(req->r_dentry, &pathlen, &pathbase, -1);
+			path = ceph_mdsc_build_path(req->r_dentry, &pathlen,
+						    &pathbase, -1);
 			if (path) {
 				seq_printf(s, " %s", path);
 				kfree(path);
@@ -289,14 +288,15 @@ static int mdsc_show(struct seq_file *s, void *p)
 		}
 
 		if (req->r_old_dentry) {
-			path = ceph_mdsc_build_path(req->r_old_dentry, &pathlen, &pathbase, -1);
+			path = ceph_mdsc_build_path(req->r_old_dentry,
+						    &pathlen, &pathbase, -1);
 			if (path) {
 				seq_printf(s, " %s", path);
 				kfree(path);
 			}
 		} else if (req->r_path2 &&
-			req->r_op != CEPH_MDS_OP_FINDINODE) {
-				seq_printf(s, " %s", req->r_path2);
+			   req->r_op != CEPH_MDS_OP_FINDINODE) {
+			seq_printf(s, " %s", req->r_path2);
 		}
 
 		seq_printf(s, "\n");
@@ -366,7 +366,6 @@ static int name##_open(struct inode *inode, struct file *file)		\
 	int ret;							\
 									\
 	ret = single_open(file, name, NULL);				\
-									\
 	sf = file->private_data;					\
 	sf->private = inode->i_private;					\
 	return ret;							\
@@ -389,7 +388,7 @@ DEFINE_SHOW_FUNC(osdc_show)
 
 int ceph_debugfs_init()
 {
-	int ret = 0;
+	int ret = -ENOMEM;
 
 	ceph_debugfs_dir = debugfs_create_dir("ceph", NULL);
 
@@ -428,24 +427,14 @@ int ceph_debugfs_init()
 	return 0;
 
 out:
-	if (ceph_debugfs_debug_mask)
-		debugfs_remove(ceph_debugfs_debug_console);
-	if (ceph_debugfs_debug_console)
-		debugfs_remove(ceph_debugfs_debug_mask);
-	if (ceph_debugfs_debug_msgr)
-		debugfs_remove(ceph_debugfs_debug_msgr);
-	if (ceph_debugfs_debug)
-		debugfs_remove(ceph_debugfs_debug);
-	if (ceph_debugfs_dir)
-		debugfs_remove(ceph_debugfs_dir);
-
+	ceph_debugfs_cleanup();
 	return ret;
 }
 
 void ceph_debugfs_cleanup(void)
 {
-	debugfs_remove(ceph_debugfs_debug_mask);
 	debugfs_remove(ceph_debugfs_debug_console);
+	debugfs_remove(ceph_debugfs_debug_mask);
 	debugfs_remove(ceph_debugfs_debug_msgr);
 	debugfs_remove(ceph_debugfs_debug);
 	debugfs_remove(ceph_debugfs_dir);
