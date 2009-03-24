@@ -253,7 +253,6 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   CDir *straydir = stray->get_or_open_dirfrag(this, frag_t());
   nstring name("stray");
   mydir->add_primary_dentry(name, stray);
-  stray->open_snaprealm();
   stray->inode.dirstat = straydir->fnode.fragstat;
   stray->inode.accounted_rstat = stray->inode.rstat;
 
