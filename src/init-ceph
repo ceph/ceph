@@ -135,7 +135,7 @@ for name in $what; do
     if [ "$host" = "$hostname" ]; then
 	cmd="$cmd -c $conf"
     else
-	if echo $pushed_to | grep -q " $host "; then
+	if echo $pushed_to | grep -v -q " $host "; then
 	    scp -q $conf $host:/tmp/ceph.conf.$$
 	    pushed_to="$pushed_to $host "
 	fi
