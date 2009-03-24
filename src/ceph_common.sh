@@ -45,9 +45,9 @@ do_cmd() {
     [ $verbose -eq 1 ] && echo "--- $host:$dir# $1"
     if [ -z "$ssh" ]; then
 	ulimit -c unlimited
-	bash -c "$1" || (echo failed. ; exit 1)
+	bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
     else
-	$ssh "cd $dir ; ulimit -c unlimited ; $1" || (echo failed. ; exit 1)
+	$ssh "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
     fi
 }
 
