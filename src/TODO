@@ -21,11 +21,12 @@ v0.7.2
 /- rdcap renewal
 /- some mds clustering fixes
 /- sysfs -> debugfs
+/- queue delayed check upon receipt of unwanted, un-EXPIREABLE caps
+/- init/mkfs fixes
 
 v0.8
 - kill fill_trace
 - return extra inode(s) in reply (namely, unlink)?
-- queue delayed check upon receipt of unwanted, un-EXPIREABLE caps
 - warn on cmon startup if monmap doesn't match .conf
 
 
