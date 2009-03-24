@@ -86,8 +86,8 @@ public:
   pobject_t get_poid() { return poid; }
 
   int get_ack_type() { return ack_type; }
-  bool is_ondisk() { return ack_type & CEPH_OSD_OP_ONDISK; }
-  bool is_onnvram() { return ack_type & CEPH_OSD_OP_ONNVRAM; }
+  bool is_ondisk() { return ack_type & CEPH_OSD_FLAG_ONDISK; }
+  bool is_onnvram() { return ack_type & CEPH_OSD_FLAG_ONNVRAM; }
 
   int get_result() { return result; }
 
@@ -121,11 +121,11 @@ public:
     out << "osd_sub_op_reply(" << reqid
 	<< " " << pgid 
 	<< " " << poid << " " << ops;
-    if (ack_type & CEPH_OSD_OP_ONDISK)
+    if (ack_type & CEPH_OSD_FLAG_ONDISK)
       out << " ondisk";
-    if (ack_type & CEPH_OSD_OP_ONNVRAM)
+    if (ack_type & CEPH_OSD_FLAG_ONNVRAM)
       out << " onnvram";
-    if (ack_type & CEPH_OSD_OP_ACK)
+    if (ack_type & CEPH_OSD_FLAG_ACK)
       out << " ack";
     out << " = " << result;
     out << ")";

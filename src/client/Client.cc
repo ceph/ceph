@@ -3764,7 +3764,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     // do sync read
     int flags = 0;
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
-      flags |= CEPH_OSD_OP_BALANCE_READS;
+      flags |= CEPH_OSD_FLAG_BALANCE_READS;
     filer->read(in->inode.ino, &in->inode.layout, in->snapid,
 		offset, size, bl, flags, onfinish);
 

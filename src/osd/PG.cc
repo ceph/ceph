@@ -1889,7 +1889,7 @@ void PG::sub_op_scrub(MOSDSubOp *op)
   ScrubMap map;
   build_scrub_map(map);
 
-  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK); 
+  MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   ::encode(map, reply->get_data());
   osd->messenger->send_message(reply, op->get_source_inst());
 

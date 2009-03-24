@@ -174,7 +174,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
-				 CEPH_OSD_OP_MODIFY);
+				 CEPH_OSD_FLAG_MODIFY);
 	pop->add_simple_op(CEPH_OSD_OP_BALANCEREADS, 0, 0);
 	do_op(pop);
       }
@@ -189,7 +189,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 				 oid,
 				 layout,
 				 osd->osdmap->get_epoch(),
-				 CEPH_OSD_OP_MODIFY);
+				 CEPH_OSD_FLAG_MODIFY);
 	pop->add_simple_op(CEPH_OSD_OP_UNBALANCEREADS, 0, 0);
 	do_op(pop);
       }
@@ -664,7 +664,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	op->get_source().num() == get_primary()) {
       // read was shed to me by the primary
       int from = op->get_source().num();
-      assert(op->get_flags() & CEPH_OSD_OP_PEERSTAT);
+      assert(op->get_flags() & CEPH_OSD_FLAG_PEERSTAT);
       osd->take_peer_stat(from, op->get_peer_stat());
       dout(10) << "read shed IN from " << op->get_source() 
 		<< " " << op->get_reqid()
@@ -830,7 +830,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   
  done:
   // reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK); 
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   reply->set_data(data);
   reply->get_header().data_off = data_off;
   reply->set_result(result);
@@ -1429,7 +1429,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->can_send_disk()) {
     if (repop->op->wants_ondisk()) {
       // send commit.
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ONDISK);
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
       dout(10) << " sending commit on " << *repop << " " << reply << dendl;
       osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
       repop->sent_disk = true;
@@ -1440,7 +1440,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   else if (repop->can_send_nvram()) {
     if (repop->op->wants_onnvram()) {
       // send commit.
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ONNVRAM);
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONNVRAM);
       dout(10) << " sending onnvram on " << *repop << " " << reply << dendl;
       osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
       repop->sent_nvram = true;
@@ -1455,7 +1455,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
     if (repop->op->wants_ack()) {
       // send ack
-      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK);
+      MOSDOpReply *reply = new MOSDOpReply(repop->op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
       dout(10) << " sending ack on " << *repop << " " << reply << dendl;
       osd->messenger->send_message(reply, repop->op->get_orig_source_inst());
       repop->sent_ack = true;
@@ -1504,7 +1504,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
           << dendl;
   
   // forward the write/update/whatever
-  int acks_wanted = CEPH_OSD_OP_ACK | CEPH_OSD_OP_ONDISK;
+  int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
   MOSDSubOp *wr = new MOSDSubOp(repop->op->get_reqid(), info.pgid, poid,
 				repop->op->ops, repop->noop, acks_wanted,
 				osd->osdmap->get_epoch(), 
@@ -1563,7 +1563,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 	  << " from osd" << fromosd
           << dendl;
   
-  if (ack_type & CEPH_OSD_OP_ONDISK) {
+  if (ack_type & CEPH_OSD_FLAG_ONDISK) {
     // disk
     if (repop->waitfor_disk.count(fromosd)) {
       repop->waitfor_disk.erase(fromosd);
@@ -1571,7 +1571,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
       repop->waitfor_ack.erase(fromosd);
       repop->pg_complete_thru[fromosd] = pg_complete_thru;
     }
-  } else if (ack_type & CEPH_OSD_OP_ONNVRAM) {
+  } else if (ack_type & CEPH_OSD_FLAG_ONNVRAM) {
     // nvram
     repop->waitfor_nvram.erase(fromosd);
     repop->waitfor_ack.erase(fromosd);
@@ -1730,7 +1730,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
            << dendl;  
 
   // verify snap ordering
-  if ((op->get_flags() & CEPH_OSD_OP_ORDERSNAP) &&
+  if ((op->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
       snapc.seq < pinfo->oi.snapset.seq) {
     dout(10) << " ORDERSNAP flag set and snapc seq " << snapc.seq << " < snapset seq " << pinfo->oi.snapset.seq
 	     << " on " << poid << dendl;
@@ -1907,7 +1907,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   }
   
   // send ack to acker
-  MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK);
+  MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
   ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
   osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
   
@@ -1922,7 +1922,7 @@ void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t 
            << ", sending commit to osd" << ackerosd
            << dendl;
   if (osd->osdmap->is_up(ackerosd)) {
-    MOSDSubOpReply *commit = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ONDISK);
+    MOSDSubOpReply *commit = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     commit->set_pg_complete_thru(last_complete);
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
     osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
@@ -2133,7 +2133,7 @@ bool ReplicatedPG::pull(pobject_t poid)
   tid_t tid = osd->get_tid();
   vector<ceph_osd_op> pull(1);
   pull[0].op = CEPH_OSD_OP_PULL;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, false, CEPH_OSD_OP_ACK,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, poid, pull, false, CEPH_OSD_FLAG_ACK,
 				   osd->osdmap->get_epoch(), tid, v);
   subop->data_subset.swap(data_subset);
   // do not include clone_subsets in pull request; we will recalculate this
@@ -2532,7 +2532,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   } else {
     // ack if i'm a replica and being pushed to.
-    MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_OP_ACK); 
+    MOSDSubOpReply *reply = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
     osd->messenger->send_message(reply, op->get_source_inst());
   }
 

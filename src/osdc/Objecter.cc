@@ -381,7 +381,7 @@ tid_t Objecter::read_submit(ReadOp *rd)
   } else if (pg.acker() >= 0) {
     int flags = rd->flags;
     if (rd->onfinish)
-      flags |= CEPH_OSD_OP_ACK;
+      flags |= CEPH_OSD_FLAG_ACK;
     MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   rd->oid, rd->layout, osdmap->get_epoch(), 
 			   flags);
@@ -393,7 +393,7 @@ tid_t Objecter::read_submit(ReadOp *rd)
     m->set_retry_attempt(rd->attempts++);
     
     int who = pg.acker();
-    if (rd->flags & CEPH_OSD_OP_BALANCE_READS) {
+    if (rd->flags & CEPH_OSD_FLAG_BALANCE_READS) {
       int replica = messenger->get_myname().num() % pg.acting.size();
       who = pg.acting[replica];
       dout(-10) << "read_submit reading from random replica " << replica
@@ -430,7 +430,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   
   // fail?
   if (m->get_result() == -EINCLOCKED &&
-      rd->flags & CEPH_OSD_OP_INCLOCK_FAIL) {
+      rd->flags & CEPH_OSD_FLAG_INCLOCK_FAIL) {
     dout(7) << " got -EINCLOCKED, failing" << dendl;
     if (rd->onfinish) {
       rd->onfinish->finish(-EINCLOCKED);
@@ -492,13 +492,13 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
   // add to gather set(s)
   int flags = wr->flags;
   if (wr->onack) {
-    flags |= CEPH_OSD_OP_ACK;
+    flags |= CEPH_OSD_FLAG_ACK;
     ++num_unacked;
   } else {
     dout(20) << " note: not requesting ack" << dendl;
   }
   if (wr->oncommit) {
-    flags |= CEPH_OSD_OP_ONDISK;
+    flags |= CEPH_OSD_FLAG_ONDISK;
     ++num_uncommitted;
   } else {
     dout(20) << " note: not requesting commit" << dendl;
@@ -521,7 +521,7 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
   } else if (pg.primary() >= 0) {
     MOSDOp *m = new MOSDOp(client_inc, wr->tid,
 			   wr->oid, wr->layout, osdmap->get_epoch(),
-			   flags | CEPH_OSD_OP_MODIFY);
+			   flags | CEPH_OSD_FLAG_MODIFY);
     m->ops = wr->ops;
     m->set_mtime(wr->mtime);
     m->set_snap_seq(wr->snapc.seq);
@@ -580,7 +580,7 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   }
   
   int rc = 0;
-  if (m->get_result() == -EINCLOCKED && wr->flags & CEPH_OSD_OP_INCLOCK_FAIL) {
+  if (m->get_result() == -EINCLOCKED && wr->flags & CEPH_OSD_FLAG_INCLOCK_FAIL) {
     dout(7) << " got -EINCLOCKED, failing" << dendl;
     rc = -EINCLOCKED;
     if (wr->onack) {

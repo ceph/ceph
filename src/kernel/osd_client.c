@@ -113,7 +113,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	init_completion(&req->r_completion);
 	init_completion(&req->r_safe_completion);
 	INIT_LIST_HEAD(&req->r_unsafe_item);
-	req->r_flags = flags & CEPH_OSD_OP_MODIFY;
+	req->r_flags = flags & CEPH_OSD_FLAG_MODIFY;
 	req->r_last_osd = -1;
 
 	/* create message */
@@ -131,7 +131,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = cpu_to_le32(flags);
-	if (flags & CEPH_OSD_OP_MODIFY)
+	if (flags & CEPH_OSD_FLAG_MODIFY)
 		ceph_encode_timespec(&head->mtime, mtime);
 	head->num_ops = cpu_to_le16(num_op);
 	op->op = cpu_to_le16(opcode);
@@ -143,7 +143,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	calc_layout(osdc, vino, layout, off, plen, req);
 	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 
-	if (flags & CEPH_OSD_OP_MODIFY) {
+	if (flags & CEPH_OSD_FLAG_MODIFY) {
 		req->r_request->hdr.data_off = cpu_to_le16(off);
 		req->r_request->hdr.data_len = cpu_to_le32(*plen);
 	}
@@ -448,7 +448,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 
 		/* in case we need to replay this op, */
 		req->r_reassert_version = rhead->reassert_version;
-	} else if ((flags & CEPH_OSD_OP_ONDISK) == 0) {
+	} else if ((flags & CEPH_OSD_FLAG_ONDISK) == 0) {
 		dout(10, "handle_reply tid %llu dup ack\n", tid);
 		goto done;
 	}
@@ -456,8 +456,8 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %llu flags %d\n", tid, flags);
 
 	/* either this is a read, or we got the safe response */
-	if ((flags & CEPH_OSD_OP_ONDISK) ||
-	    ((flags & CEPH_OSD_OP_MODIFY) == 0))
+	if ((flags & CEPH_OSD_FLAG_ONDISK) ||
+	    ((flags & CEPH_OSD_FLAG_MODIFY) == 0))
 		__unregister_request(osdc, req);
 
 	mutex_unlock(&osdc->request_mutex);
@@ -467,7 +467,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	else
 		complete(&req->r_completion);
 
-	if (flags & CEPH_OSD_OP_ONDISK) {
+	if (flags & CEPH_OSD_FLAG_ONDISK) {
 		if (req->r_safe_callback)
 			req->r_safe_callback(req);
 		complete(&req->r_safe_completion);  /* fsync waiter */
@@ -530,7 +530,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 		mutex_unlock(&osdc->request_mutex);
 		req->r_request = ceph_msg_maybe_dup(req->r_request);
 		if (!req->r_aborted) {
-			req->r_flags |= CEPH_OSD_OP_RETRY;
+			req->r_flags |= CEPH_OSD_FLAG_RETRY;
 			send_request(osdc, req);
 		}
 		ceph_osdc_put_request(req);
@@ -803,7 +803,7 @@ void ceph_osdc_sync(struct ceph_osd_client *osdc)
 		       break;
 
 	       next_tid = req->r_tid + 1;
-	       if ((req->r_flags & CEPH_OSD_OP_MODIFY) == 0)
+	       if ((req->r_flags & CEPH_OSD_FLAG_MODIFY) == 0)
 		       continue;
 
 	       ceph_osdc_get_request(req);
@@ -939,8 +939,8 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	BUG_ON(vino.snap != CEPH_NOSNAP);
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
 				    CEPH_OSD_OP_WRITE,
-				    flags | CEPH_OSD_OP_ONDISK |
-				    CEPH_OSD_OP_MODIFY,
+				    flags | CEPH_OSD_FLAG_ONDISK |
+				    CEPH_OSD_FLAG_MODIFY,
 				    snapc, do_sync,
 				    truncate_seq, truncate_size, mtime);
 	if (IS_ERR(req))

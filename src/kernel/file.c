@@ -513,11 +513,11 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	else
 		pos = *offset;
 
-	flags = CEPH_OSD_OP_ORDERSNAP |
-		CEPH_OSD_OP_ONDISK |
-		CEPH_OSD_OP_MODIFY;
+	flags = CEPH_OSD_FLAG_ORDERSNAP |
+		CEPH_OSD_FLAG_ONDISK |
+		CEPH_OSD_FLAG_MODIFY;
 	if ((file->f_flags & (O_SYNC|O_DIRECT)) == 0)
-		flags |= CEPH_OSD_OP_ACK;
+		flags |= CEPH_OSD_FLAG_ACK;
 	else
 		do_sync = 1;
 

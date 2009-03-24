@@ -58,16 +58,16 @@ public:
   
   utime_t get_mtime() { return head.mtime; }
   
-  bool is_modify() { return head.flags & CEPH_OSD_OP_MODIFY; }
+  bool is_modify() { return head.flags & CEPH_OSD_FLAG_MODIFY; }
 
   unsigned get_inc_lock() const { return head.inc_lock; }
 
   void set_peer_stat(const osd_peer_stat_t& stat) {
     peer_stat = stat;
-    head.flags = (head.flags | CEPH_OSD_OP_PEERSTAT);
+    head.flags = (head.flags | CEPH_OSD_FLAG_PEERSTAT);
   }
   const osd_peer_stat_t& get_peer_stat() {
-    assert(head.flags & CEPH_OSD_OP_PEERSTAT);
+    assert(head.flags & CEPH_OSD_FLAG_PEERSTAT);
     return peer_stat; 
   }
 
@@ -133,20 +133,20 @@ public:
   // flags
   int get_flags() const { return head.flags; }
 
-  bool wants_ack() const { return get_flags() & CEPH_OSD_OP_ACK; }
-  bool wants_ondisk() const { return get_flags() & CEPH_OSD_OP_ONDISK; }
-  bool wants_onnvram() const { return get_flags() & CEPH_OSD_OP_ONNVRAM; }
+  bool wants_ack() const { return get_flags() & CEPH_OSD_FLAG_ACK; }
+  bool wants_ondisk() const { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
+  bool wants_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
 
-  void set_want_ack(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ACK; }
-  void set_want_onnvram(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ONNVRAM; }
-  void set_want_ondisk(bool b) { head.flags = get_flags() | CEPH_OSD_OP_ONDISK; }
+  void set_want_ack(bool b) { head.flags = get_flags() | CEPH_OSD_FLAG_ACK; }
+  void set_want_onnvram(bool b) { head.flags = get_flags() | CEPH_OSD_FLAG_ONNVRAM; }
+  void set_want_ondisk(bool b) { head.flags = get_flags() | CEPH_OSD_FLAG_ONDISK; }
 
-  bool is_retry_attempt() const { return get_flags() & CEPH_OSD_OP_RETRY; }
+  bool is_retry_attempt() const { return get_flags() & CEPH_OSD_FLAG_RETRY; }
   void set_retry_attempt(bool a) { 
     if (a)
-      head.flags = head.flags | CEPH_OSD_OP_RETRY;
+      head.flags = head.flags | CEPH_OSD_FLAG_RETRY;
     else
-      head.flags = head.flags & ~CEPH_OSD_OP_RETRY;
+      head.flags = head.flags & ~CEPH_OSD_FLAG_RETRY;
   }
 
   // marshalling
@@ -156,7 +156,7 @@ public:
     ::encode(head, payload);
     ::encode_nohead(ops, payload);
     ::encode_nohead(snaps, payload);
-    if (head.flags & CEPH_OSD_OP_PEERSTAT)
+    if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::encode(peer_stat, payload);
   }
 
@@ -165,7 +165,7 @@ public:
     ::decode(head, p);
     decode_nohead(head.num_ops, ops, p);
     decode_nohead(head.num_snaps, snaps, p);
-    if (head.flags & CEPH_OSD_OP_PEERSTAT)
+    if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::decode(peer_stat, p);
   }
 

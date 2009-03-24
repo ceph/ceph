@@ -39,13 +39,13 @@ class MOSDOpReply : public Message {
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   int      get_flags() { return head.flags; }
 
-  bool     is_ondisk() { return get_flags() & CEPH_OSD_OP_ONDISK; }
-  bool     is_onnvram() { return get_flags() & CEPH_OSD_OP_ONNVRAM; }
+  bool     is_ondisk() { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
+  bool     is_onnvram() { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   __s32 get_result() { return head.result; }
   eversion_t get_version() { return head.reassert_version; }
 
-  bool is_modify() { return head.flags & CEPH_OSD_OP_MODIFY; }
+  bool is_modify() { return head.flags & CEPH_OSD_FLAG_MODIFY; }
 
   void set_result(int r) { head.result = r; }
   void set_version(eversion_t v) { head.reassert_version = v; }
@@ -66,7 +66,7 @@ public:
     ops = req->ops;
     head.result = result;
     head.flags =
-      (req->head.flags & ~(CEPH_OSD_OP_ONDISK|CEPH_OSD_OP_ONNVRAM|CEPH_OSD_OP_ACK)) | acktype;
+      (req->head.flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
     head.oid = req->head.oid;
     head.layout = req->head.layout;
     head.osdmap_epoch = e;

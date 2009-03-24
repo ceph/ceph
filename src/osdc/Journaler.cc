@@ -84,7 +84,7 @@ void Journaler::recover(Context *onread)
   C_ReadHead *fin = new C_ReadHead(this);
   vector<snapid_t> snaps;
   filer.read(ino, &layout, CEPH_NOSNAP,
-	     0, sizeof(Header), &fin->bl, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+	     0, sizeof(Header), &fin->bl, CEPH_OSD_FLAG_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -116,7 +116,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   state = STATE_PROBING;
   C_ProbeEnd *fin = new C_ProbeEnd(this);
   filer.probe(ino, &layout, CEPH_NOSNAP,
-	      h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_OP_INCLOCK_FAIL, fin);
+	      h.write_pos, (__u64 *)&fin->end, true, CEPH_OSD_FLAG_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_probe_end(int r, __s64 end)
@@ -174,7 +174,7 @@ void Journaler::write_head(Context *oncommit)
   ::encode(last_written, bl);
   SnapContext snapc;
   filer.write(ino, &layout, snapc,
-	      0, bl.length(), bl, g_clock.now(), CEPH_OSD_OP_INCLOCK_FAIL,
+	      0, bl.length(), bl, g_clock.now(), CEPH_OSD_FLAG_INCLOCK_FAIL,
 	      NULL, 
 	      new C_WriteHead(this, last_written, oncommit));
 }
@@ -354,7 +354,7 @@ void Journaler::_do_flush()
 
   filer.write(ino, &layout, snapc,
 	      flush_pos, len, write_buf, g_clock.now(),
-	      CEPH_OSD_OP_INCLOCK_FAIL,
+	      CEPH_OSD_FLAG_INCLOCK_FAIL,
 	      onack, onsafe);
   
  
@@ -553,7 +553,7 @@ void Journaler::_issue_read(__s64 len)
 	   << dendl;
   
   filer.read(ino, &layout, CEPH_NOSNAP,
-	     requested_pos, len, &reading_buf, CEPH_OSD_OP_INCLOCK_FAIL,
+	     requested_pos, len, &reading_buf, CEPH_OSD_FLAG_INCLOCK_FAIL,
 	     new C_Read(this));
   requested_pos += len;
 }
@@ -739,7 +739,7 @@ void Journaler::trim()
   
   SnapContext snapc;
   filer.remove(ino, &layout, snapc,
-	       trimming_pos, trim_to-trimming_pos, g_clock.now(), CEPH_OSD_OP_INCLOCK_FAIL, 
+	       trimming_pos, trim_to-trimming_pos, g_clock.now(), CEPH_OSD_FLAG_INCLOCK_FAIL, 
 	       NULL, new C_Trim(this, trim_to));
   trimming_pos = trim_to;  
 }
