@@ -846,15 +846,15 @@ retry_locked:
 	retain = want;
 	if (!mdsc->stopping && inode->i_nlink > 0) {
 		/*
-		 * we cannot retain anything outside of
-		 * (wanted|EXPIREABLE), or else we run the risk of the
-		 * MDS' wanted value getting out of sync, and we have
-		 * no mechanism to adjust that (besides open()).
+		 * If caps are wanted, we can retain whatever we want.
+		 * Otherwise, we can't retain anything beyond
+		 * EXPIREABLE because we currently lack a mechanism to
+		 * time them out and release them back to the MDS.
+		 * So: always try to retain EXPIREABLE.  If caps are
+		 * wanted, retain even more.
 		 */
 		retain |= CEPH_CAP_EXPIREABLE;
-
-		/* keep any EXCL bits too, while we are holding caps anyway */
-		if (want || S_ISDIR(inode->i_mode))
+		if (want)
 			retain |= CEPH_CAP_ANY_EXCL;
 	}
 	retain &= ~drop;
