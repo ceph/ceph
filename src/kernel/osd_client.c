@@ -455,7 +455,9 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 
 	dout(10, "handle_reply tid %llu flags %d\n", tid, flags);
 
-	if (flags & CEPH_OSD_OP_ONDISK)
+	/* either this is a read, or we got the safe response */
+	if ((flags & CEPH_OSD_OP_ONDISK) ||
+	    ((flags & CEPH_OSD_OP_MODIFY) == 0))
 		__unregister_request(osdc, req);
 
 	mutex_unlock(&osdc->request_mutex);
