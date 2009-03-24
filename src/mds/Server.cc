@@ -733,10 +733,10 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
     // snapbl
     realm = in->find_snaprealm();
     reply->snapbl = realm->get_snap_trace();
-    dout(10) << "set_trace_dist snaprealm " << *realm << dendl;
+    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
   }
 
-  in->encode_inodestat(bl, session, snapid, is_replay);
+  in->encode_inodestat(bl, session, NULL, snapid, is_replay);
   dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
   if (snapid != CEPH_NOSNAP && in == snapdiri) {
@@ -750,7 +750,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
 
     // back to the live tree
     snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, session, snapid);
+    in->encode_inodestat(bl, session, NULL, snapid);
     numi++;
     dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
 
@@ -2282,7 +2282,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // inode
     dout(12) << "including inode " << *in << dendl;
-    bool valid = in->encode_inodestat(dnbl, mdr->session, snapid);
+    bool valid = in->encode_inodestat(dnbl, mdr->session, realm, snapid);
     assert(valid);
     numfiles++;
 
@@ -5275,7 +5275,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
     else
       ::encode(p->second->get_long_name(), dnbl);
     encode_infinite_lease(dnbl);
-    diri->encode_inodestat(dnbl, mdr->session, p->first);
+    diri->encode_inodestat(dnbl, mdr->session, realm, p->first);
     num++;
   }
 

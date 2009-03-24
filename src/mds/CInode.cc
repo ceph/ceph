@@ -1341,11 +1341,18 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 
 
 bool CInode::encode_inodestat(bufferlist& bl, Session *session,
+			      SnapRealm *realm,
 			      snapid_t snapid, bool is_replay)
 {
   int client = session->inst.name.num();
 
   bool valid = true;
+
+  // do not issue caps if inode differs from readdir snaprealm
+  bool no_caps = (realm && snaprealm && realm != snaprealm);
+  if (no_caps)
+    dout(20) << "encode_inodestat realm=" << realm << " snaprealm " << snaprealm
+	     << " no_caps=" << no_caps << dendl;
 
   // pick a version!
   inode_t *oi = &inode;
@@ -1435,12 +1442,13 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     e.cap.mseq = 0;
     e.cap.realm = 0;
   } else {
-    if (valid && !cap && is_auth()) {
+    if (!no_caps && valid && !cap && is_auth()) {
       // add a new cap
       cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
     }
 
     if (is_replay) {
+      assert(cap);
       // if this is a replayed request, check for a cap reconnect
       ceph_mds_cap_reconnect *rc = mdcache->get_replay_cap_reconnect(pi->ino, client);
       if (rc) {

@@ -441,7 +441,8 @@ private:
   
 
   // for giving to clients
-  bool encode_inodestat(bufferlist& bl, Session *session, snapid_t snapid=CEPH_NOSNAP, bool is_replay=false);
+  bool encode_inodestat(bufferlist& bl, Session *session, SnapRealm *realm,
+			snapid_t snapid=CEPH_NOSNAP, bool is_replay=false);
   void encode_cap_message(MClientCaps *m, Capability *cap);
 
 
