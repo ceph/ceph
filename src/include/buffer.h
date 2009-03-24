@@ -161,7 +161,8 @@ private:
       data = (char *) valloc (len);
 #else
       data = 0;
-      ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
+      int r = ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
+      assert(r == 0);
 #endif /* DARWIN */
       assert(data);
       inc_total_alloc(len);
