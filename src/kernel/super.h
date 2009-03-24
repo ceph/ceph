@@ -24,8 +24,8 @@
 #define CEPH_BLOCK_SHIFT   20  /* 1 MB */
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
-#define CEPH_MOUNT_TIMEOUT_DEFAULT  (60*HZ)
-#define CEPH_CAP_DELAY_DEFAULT      (60*HZ)  /* cap release delay */
+#define CEPH_MOUNT_TIMEOUT_DEFAULT  60
+#define CEPH_CAP_DELAY_DEFAULT      60  /* cap release delay */
 
 /*
  * subtract jiffies
