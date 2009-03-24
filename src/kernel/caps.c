@@ -489,6 +489,24 @@ int ceph_caps_revoking(struct ceph_inode_info *ci, int mask)
 }
 
 /*
+ * Return caps we have registered with the MDS(s) as wanted.
+ */
+int __ceph_caps_mds_wanted(struct ceph_inode_info *ci)
+{
+	struct ceph_cap *cap;
+	struct rb_node *p;
+	int mds_wanted = 0;
+
+	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+		cap = rb_entry(p, struct ceph_cap, ci_node);
+		if (!__cap_is_valid(cap))
+			continue;
+		mds_wanted |= cap->mds_wanted;
+	}
+	return mds_wanted;	
+}
+
+/*
  * called under i_lock
  */
 static int __ceph_is_any_caps(struct ceph_inode_info *ci)

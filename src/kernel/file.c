@@ -100,7 +100,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
-	int flags, fmode, wanted, new_want;
+	int flags, fmode, mds_wanted, new_want;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
 		return -EROFS;
@@ -126,8 +126,8 @@ int ceph_open(struct inode *inode, struct file *file)
 	 * registered with the MDS.
 	 */
 	spin_lock(&inode->i_lock);
-	wanted = __ceph_caps_file_wanted(ci);
-	if ((wanted & new_want) == new_want) {
+	mds_wanted = __ceph_caps_mds_wanted(ci);
+	if ((mds_wanted & new_want) == new_want) {
 		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, new_want, inode);
 		__ceph_get_fmode(ci, fmode);
@@ -136,7 +136,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	}
 	spin_unlock(&inode->i_lock);
 	dout(10, "open fmode %d wants %s, we only already want %s\n",
-	     fmode, ceph_cap_string(new_want), ceph_cap_string(wanted));
+	     fmode, ceph_cap_string(new_want), ceph_cap_string(mds_wanted));
 
 	dentry = d_find_alias(inode);
 	if (!dentry)

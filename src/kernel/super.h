@@ -497,6 +497,9 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 	return w;
 }
 
+/* what the mds thinks we want */
+extern int __ceph_caps_mds_wanted(struct ceph_inode_info *ci);
+
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 {
 	return (struct ceph_client *)inode->i_sb->s_fs_info;
