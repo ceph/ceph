@@ -208,7 +208,8 @@ static void __adjust_cap_rdcaps_listing(struct ceph_inode_info *ci,
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 				struct ceph_inode_info *ci)
 {
-	ci->i_hold_caps_until = round_jiffies(jiffies + CEPH_CAP_DELAY);
+	struct ceph_client *client = mdsc->client;
+	ci->i_hold_caps_until = round_jiffies(jiffies + client->mount_args.caps_delay * HZ);
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
 	     ci->i_hold_caps_until);
 	if (!mdsc->stopping) {

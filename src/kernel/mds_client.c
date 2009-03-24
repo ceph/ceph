@@ -2203,13 +2203,14 @@ static void drop_leases(struct ceph_mds_client *mdsc)
 static void wait_requests(struct ceph_mds_client *mdsc)
 {
 	struct ceph_mds_request *req;
+	struct ceph_client *client = mdsc->client;
 
 	mutex_lock(&mdsc->mutex);
 	if (__get_oldest_tid(mdsc)) {
 		mutex_unlock(&mdsc->mutex);
 		dout(10, "wait_requests waiting for requests\n");
 		wait_for_completion_timeout(&mdsc->safe_umount_waiters,
-					    CEPH_MOUNT_TIMEOUT);
+					    client->mount_args.mount_timeout * HZ);
 		mutex_lock(&mdsc->mutex);
 
 		/* tear down remaining requests */
@@ -2264,8 +2265,8 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 	struct ceph_mds_session *session;
 	int i;
 	int n;
-	unsigned long started, timeout = CEPH_MOUNT_TIMEOUT;
 	struct ceph_client *client = mdsc->client;
+	unsigned long started, timeout = client->mount_args.mount_timeout * HZ;
 
 	dout(10, "close_sessions\n");
 

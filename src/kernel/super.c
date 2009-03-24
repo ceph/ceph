@@ -372,6 +372,7 @@ enum {
 	Opt_rsize,
 	Opt_osdtimeout,
 	Opt_mount_timeout,
+	Opt_caps_delay,
 	/* int args above */
 	Opt_ip,
 	Opt_noshare,
@@ -402,6 +403,7 @@ static match_table_t arg_tokens = {
 	{Opt_rsize, "rsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
 	{Opt_mount_timeout, "mount_timeout=%d"},
+	{Opt_caps_delay, "caps_delay=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
@@ -505,7 +507,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->sb_flags = flags;
 	args->flags = CEPH_MOUNT_DEFAULT;
 	args->osd_timeout = 5;    /* seconds */
-	args->mount_timeout = 30; /* seconds */
+	args->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
+	args->caps_delay = CEPH_CAP_DELAY_DEFAULT; /* seconds */
 	args->snapdir_name = ".snap";
 
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
@@ -620,6 +623,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_mount_timeout:
 			args->mount_timeout = intval;
+			break;
+		case Opt_caps_delay:
+			args->caps_delay = intval;
 			break;
 
 		case Opt_noshare:

@@ -24,8 +24,8 @@
 #define CEPH_BLOCK_SHIFT   20  /* 1 MB */
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
-#define CEPH_MOUNT_TIMEOUT  (60*HZ)
-#define CEPH_CAP_DELAY      (5*HZ)  /* cap release delay */
+#define CEPH_MOUNT_TIMEOUT_DEFAULT  (60*HZ)
+#define CEPH_CAP_DELAY_DEFAULT      (60*HZ)  /* cap release delay */
 
 /*
  * subtract jiffies
@@ -59,6 +59,7 @@ struct ceph_mount_args {
 	int sb_flags;
 	int flags;
 	int mount_timeout;
+	int caps_delay;
 	ceph_fsid_t fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
