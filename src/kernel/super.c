@@ -771,11 +771,11 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
-		root = req->r_dentry;
-		dget(root);
+		root = d_obtain_alias(req->r_target_inode);
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
-	} else
+	} else {
 		root = ERR_PTR(err);
+	}
 	ceph_mdsc_put_request(req);
 	return root;
 }
@@ -788,12 +788,12 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 {
 	struct ceph_entity_addr *myaddr = NULL;
 	struct ceph_msg *mount_msg;
-	struct dentry *root;
 	int err;
 	int request_interval = 5 * HZ;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
 	unsigned long started = jiffies;  /* note the start time */
 	int which;
+	struct dentry *root;
 	unsigned char r;
 
 	dout(10, "mount start\n");
@@ -1081,6 +1081,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
+	dout(22, "hi mnt_root %p\n", mnt->mnt_root);
 	dout(22, "root ino %llx.%llx\n", ceph_vinop(mnt->mnt_root->d_inode));
 	return 0;
 

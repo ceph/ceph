@@ -775,17 +775,14 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		    struct ceph_mds_session *session)
 {
 	struct ceph_mds_reply_info_parsed *rinfo = &req->r_reply_info;
-	int err = 0;
-	struct qstr dname;
-	struct dentry *dn;
-	struct dentry *parent = NULL;
-	struct dentry *existing;
-	struct inode *in;
+	struct inode *in = NULL;
 	struct ceph_mds_reply_inode *ininfo;
-	int d = 0;
 	struct ceph_vino vino;
-	bool have_dir_cap, have_lease;
-	int update_parent;
+	int i = 0;
+	int err = 0;
+
+	dout(10, "fill_trace %p numi %d numd %d\n", req, rinfo->trace_numi,
+	     rinfo->trace_numd);
 
 #if 0
 	/*
@@ -815,62 +812,42 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		return 0;
 	}
 
-	vino.ino = le64_to_cpu(rinfo->trace_in[0].in->ino);
-	vino.snap = le64_to_cpu(rinfo->trace_in[0].in->snapid);
-	in = ceph_get_inode(sb, vino);
-	if (IS_ERR(in))
-		return PTR_ERR(in);
-
-	err = fill_inode(in, &rinfo->trace_in[0],
-			 rinfo->trace_numd ?
-			 rinfo->trace_dir[0] : NULL,
-			 session, req->r_request_started,
-			 (rinfo->trace_numd == 0 &&
-			  le32_to_cpu(rinfo->head->result) == 0) ?
-			 req->r_fmode : -1);
-	if (err < 0)
-		return err;
-
-	if (likely(sb->s_root)) {
-		dn = d_find_alias(in);
-		if (IS_ERR(dn))
-			return PTR_ERR(dn);
-		iput(in); /* dn still references in */
-	} else {
-		/* first reply (i.e. we just mounted) */
-		dn = d_alloc_root(in);
-		if (dn == NULL) {
-			derr(0, "d_alloc_root ENOMEM badness on root dentry\n");
-			return -ENOMEM;
-		}
-		sb->s_root = dget(dn);
-	}
-
-	if (rinfo->trace_numd) {
+	/*
+	 * update a dentry?
+	 */
+	if (req->r_locked_dir) {
 		/*
-		  lookup
-		  mknod symlink mkdir link rename
-		  unlink
-		*/
-		int d = 0;
+		 * lookup link rename   : null -> possibly existing inode
+		 * mknod symlink mkdir  : null -> new inode
+		 * unlink               : linked -> null
+		 */
+		struct inode *dir = req->r_locked_dir;
+		struct dentry *dn = req->r_dentry;
+		bool have_dir_cap, have_lease;
 
-		BUG_ON(req->r_locked_dir != in);
-		BUG_ON(!req->r_dentry);
-		parent = dn;
-		dn = req->r_dentry;
-		BUG_ON(dn->d_parent != parent);
-		in = NULL;
+		BUG_ON(!dn);
+		BUG_ON(!rinfo->trace_numd);
+		BUG_ON(dn->d_parent->d_inode != dir);
+		BUG_ON(ceph_ino(dir) !=
+		       le64_to_cpu(rinfo->trace_in[0].in->ino));
+		BUG_ON(ceph_snap(dir) !=
+		       le64_to_cpu(rinfo->trace_in[0].in->snapid));
 
-		update_parent = 0;
+		err = fill_inode(dir, &rinfo->trace_in[0],
+				 rinfo->trace_dir[0],
+				 session, req->r_request_started,
+				 -1);
+		if (err < 0)
+			return err;
 
 		/* do we have a lease on the whole dir? */
 		have_dir_cap =
-			(le32_to_cpu(rinfo->trace_in[d].in->cap.caps) &
+			(le32_to_cpu(rinfo->trace_in[0].in->cap.caps) &
 			 CEPH_CAP_FILE_RDCACHE);
 
 		/* do we have a dn lease? */
 		have_lease = have_dir_cap ||
-			(le16_to_cpu(rinfo->trace_dlease[d]->mask) &
+			(le16_to_cpu(rinfo->trace_dlease[0]->mask) &
 			 CEPH_LOCK_DN);
 
 		if (!have_lease)
@@ -897,7 +874,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 
 		/* null dentry? */
-		if (1 == rinfo->trace_numi) {
+		if (rinfo->trace_numi == 1) {
 			dout(10, "fill_trace null dentry\n");
 			if (dn->d_inode) {
 				dout(20, "d_delete %p\n", dn);
@@ -907,7 +884,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				d_instantiate(dn, NULL);
 				if (have_lease && d_unhashed(dn))
 					d_rehash(dn);
-				update_dentry_lease(dn, rinfo->trace_dlease[d],
+				update_dentry_lease(dn, rinfo->trace_dlease[0],
 						    session,
 						    req->r_request_started);
 			}
@@ -915,99 +892,69 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 
 		/* attach proper inode */
-		ininfo = rinfo->trace_in[d+1].in;
-		vino.ino = le64_to_cpu(ininfo->ino);
-		vino.snap = le64_to_cpu(ininfo->snapid);
 		BUG_ON(dn->d_inode);
 
-		struct dentry *newdn;
+		ininfo = rinfo->trace_in[1].in;
+		vino.ino = le64_to_cpu(ininfo->ino);
+		vino.snap = le64_to_cpu(ininfo->snapid);
 		in = ceph_get_inode(dn->d_sb, vino);
 		if (IS_ERR(in)) {
 			derr(30, "get_inode badness\n");
 			err = PTR_ERR(in);
 			d_delete(dn);
-			dn = NULL;
 			goto done;
 		}
-		newdn = splice_dentry(dn, in, &have_lease);
-
-		if (IS_ERR(newdn))
-			goto update_inode;
+		dn = splice_dentry(dn, in, &have_lease);
+		if (IS_ERR(dn)) {
+			err = PTR_ERR(dn);
+			goto done;
+		}
+		req->r_dentry = dn;  /* may have changed from the splice */
 
 		if (have_lease)
-			update_dentry_lease(dn, rinfo->trace_dlease[d],
-					    session, req->r_request_started);
+			update_dentry_lease(dn, rinfo->trace_dlease[0],
+					    session,
+					    req->r_request_started);
+		dout(10, " final dn %p\n", dn);
+		i++;
+	}
 
-		if (update_parent) {
-			struct ceph_inode_info *ci = ceph_inode(parent->d_inode);
-			dout(10, " updated parent, clearing %p complete\n", parent->d_inode);
-			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
+	/* update any additional inodes */
+	for (; i < rinfo->trace_numi; i++) {
+		int is_target = i == rinfo->trace_numd;
+
+		vino.ino = le64_to_cpu(rinfo->trace_in[i].in->ino);
+		vino.snap = le64_to_cpu(rinfo->trace_in[i].in->snapid);
+
+		if (in != NULL &&
+		    ceph_ino(in) == vino.ino && ceph_snap(in) == vino.snap) {
+			igrab(in);
+		} else {
+			in = ceph_get_inode(sb, vino);
+			if (IS_ERR(in)) {
+				err = PTR_ERR(in);
+				break;
+			}
 		}
 
-		/* done with dn update */
-		BUG_ON(dn->d_inode != in);
-	update_inode:
 		err = fill_inode(in,
-				 &rinfo->trace_in[d+1],
-				 rinfo->trace_numd <= d ?
-				 rinfo->trace_dir[d+1] : NULL,
+				 &rinfo->trace_in[i], NULL,
 				 session, req->r_request_started,
-				 (d == rinfo->trace_numd-1 &&
+				 (is_target &&
 				  le32_to_cpu(rinfo->head->result) == 0) ?
 				 req->r_fmode : -1);
 		if (err < 0) {
 			derr(30, "fill_inode badness\n");
-			d_delete(dn);
-			dn = NULL;
-			in = NULL;
 			break;
 		}
-
-		dput(parent);
-		parent = NULL;
-
-		/* do we diverge into a snap dir at this point in the trace? */
-		if (d == rinfo->trace_numi - rinfo->trace_snapdirpos - 1) {
-			struct inode *snapdir = ceph_get_snapdir(in);
-			dput(dn);
-			dn = d_find_alias(snapdir);
-			if (!dn) {
-				struct ceph_client *client =
-					ceph_sb_to_client(parent->d_sb);
-
-				dname.name = client->mount_args.snapdir_name,
-				dname.len = strlen(dname.name);
-				dname.hash = full_name_hash(dname.name,
-							    dname.len);
-				dn = d_alloc(parent, &dname);
-				if (!dn) {
-					err = -ENOMEM;
-					iput(snapdir);
-					break;
-				}
-				d_add(dn, snapdir);
-			}
-			iput(snapdir);
-			dout(10, " snapdir dentry is %p\n", dn);
-		}
-		continue;
-
-
-	out_dir_no_inode:
-		in = NULL;
-		break;
+		if (is_target)
+			req->r_target_inode = in;
+		else
+			iput(in);
 	}
 
 done:
-	if (parent)
-		dput(parent);
-
-	dout(10, "fill_trace done err=%d, last dn %p in %p\n", err, dn, in);
-	if (req->r_last_inode)
-		iput(req->r_last_inode);
-	req->r_last_inode = in;
-	if (in)
-		igrab(in);
+	dout(10, "fill_trace done err=%d\n", err);
 	return err;
 }
 
