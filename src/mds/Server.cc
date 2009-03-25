@@ -3271,10 +3271,10 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
     bufferlist snapbl;
     if (!dnl->get_inode()->snaprealm) {
       dnl->get_inode()->open_snaprealm(true);   // don't do a split
-      dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->snaprealm, snapbl);
+      dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
       dnl->get_inode()->close_snaprealm(true);  // or a matching join
     } else
-      dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->snaprealm, snapbl);
+      dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
 
     straydn->first = dnl->get_inode()->first;
     le->metablob.add_primary_dentry(straydn, true, dnl->get_inode(), pi, 0, &snapbl);
@@ -4030,10 +4030,10 @@ void Server::_rename_prepare(MDRequest *mdr,
       bufferlist snapbl;
       if (!destdnl->get_inode()->snaprealm) {
 	destdnl->get_inode()->open_snaprealm(true);   // don't do a split
-	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->snaprealm, snapbl);
+	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
 	destdnl->get_inode()->close_snaprealm(true);  // or a matching join
       } else
-	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->snaprealm, snapbl);
+	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
       straydn->first = destdnl->get_inode()->first;
       tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), tpi, 0, &snapbl);
     } else if (destdnl->is_remote()) {
