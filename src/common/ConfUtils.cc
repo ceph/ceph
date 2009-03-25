@@ -540,7 +540,7 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 
 	
 
-	fd = open(filename, O_RDWR);
+	fd = open(filename, O_RDONLY);
 	if (fd < 0)
 		return 0;
 
