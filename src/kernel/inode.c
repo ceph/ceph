@@ -1692,7 +1692,6 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_args.stat.mask = cpu_to_le32(mask);
-	req->r_locked_dir = dentry->d_parent->d_inode;  /* by the VFS */
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
 	dout(20, "do_getattr result=%d\n", err);
