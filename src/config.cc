@@ -64,10 +64,18 @@ int buffer::list::read_file(const char *fn)
   ::fstat(fd, &st);
   int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
-  bp.set_length(st.st_size);
-  append(bp);
-  ::read(fd, (void*)c_str(), length());
+  int left = st.st_size;
+  int got = 0;
+  while (left > 0) {
+    int r = ::read(fd, (void *)(c_str() + got), left);
+    if (r <= 0)
+      break;
+    got += r;
+    left -= r;
+  }
   ::close(fd);
+  bp.set_length(got);
+  append(bp);
   return 0;
 }
 
