@@ -386,7 +386,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(logger_subdir, 0, OPT_STR, 0),
 	OPTION(logger_dir, 0, OPT_STR, INSTALL_PREFIX "/var/log/ceph/stat"),
 	OPTION(log_dir, 0, OPT_STR, INSTALL_PREFIX "/var/log/ceph"),		// if daemonize == true
-	OPTION(log_sym_dir, 0, OPT_STR, INSTALL_PREFIX "/var/log/ceph"),		// if daemonize == true
+	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
 	OPTION(pid_file, 'p', OPT_STR, 0),
 	OPTION(conf, 'c', OPT_STR, INSTALL_PREFIX "/etc/ceph/ceph.conf"),
