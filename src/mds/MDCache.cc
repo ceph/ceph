@@ -217,7 +217,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 
 CInode *MDCache::create_root_inode()
 {
-  CInode *root = mds->mdcache->create_system_inode(MDS_INO_ROOT, S_IFDIR);
+  CInode *root = mds->mdcache->create_system_inode(MDS_INO_ROOT, S_IFDIR|0755);
   root->inode_auth = pair<int,int>(mds->whoami, CDIR_AUTH_UNKNOWN);
   root->open_snaprealm();  // empty snaprealm
   root->snaprealm->seq = 1;
