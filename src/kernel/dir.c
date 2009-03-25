@@ -317,7 +317,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(PTR_ERR(req));
 	/* we only need inode linkage */
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
-	req->r_locked_dir = dentry->d_parent->d_inode;  /* by the VFS */
+	req->r_locked_dir = dir;
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
@@ -482,7 +482,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		return PTR_ERR(req);
 	}
 
-	req->r_locked_dir = old_dentry->d_inode;
+	req->r_locked_dir = dir;
 
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
@@ -541,7 +541,7 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		goto out;
 	}
 
-	req->r_locked_dir = dir;  /* by VFS */
+	req->r_locked_dir = dir;
 
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
