@@ -705,31 +705,6 @@ static void set_conf_name(config_option *opt)
     opt->conf_name = (const char *)newconf;
 }
 
-static bool init_g_conf()
-{
-  int len = sizeof(config_optionsp)/sizeof(config_option);
-  int i;
-  config_option *opt;
-
-  for (i = 0; i<len; i++) {
-    opt = &config_optionsp[i];
-    if (!conf_set_conf_val(opt->val_ptr,
-			   opt->type,
-			   opt->def_str,
-			   opt->def_longlong,
-			   opt->def_double)) {
-      cerr << "error initializing g_conf value num " << i << std::endl;
-      return false;
-    }
-
-    set_conf_name(opt);
-  }
-
-  return true;
-}
-
-static bool g_conf_initialized = init_g_conf();
-
 static bool cmd_is_char(const char *cmd)
 {
 	return ((cmd[0] == '-') &&
