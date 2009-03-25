@@ -510,13 +510,17 @@ void Locker::eval_gather(SimpleLock *lock, bool first)
 	break;
       }
 
-      lock->get_parent()->auth_unpin(lock);
     }
+
+    lock->set_state(next);
+    
+    if (lock->get_parent()->is_auth() &&
+	lock->is_stable())
+      lock->get_parent()->auth_unpin(lock);
 
     if (caps)
       in->try_drop_loner();
 
-    lock->set_state(next);
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
     if (caps)
@@ -2309,11 +2313,12 @@ void Locker::simple_xlock(SimpleLock *lock)
   if (lock->get_cap_shift())
     in = (CInode *)lock->get_parent();
 
+  if (lock->is_stable())
+    lock->get_parent()->auth_pin(lock);
+
   switch (lock->get_state()) {
   case LOCK_LOCK: 
-    lock->get_parent()->auth_pin(lock);
-  case LOCK_XLOCKDONE:
-    lock->set_state(LOCK_LOCK_XLOCK); break;
+  case LOCK_XLOCKDONE: lock->set_state(LOCK_LOCK_XLOCK); break;
   default: assert(0);
   }
 
