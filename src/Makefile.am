@@ -200,6 +200,7 @@ libcommon_files = \
 	auth/ExportControl.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
+	common/buffer.cc \
 	common/Logger.cc \
 	common/Clock.cc \
 	common/Timer.cc \
