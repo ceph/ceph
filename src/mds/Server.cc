@@ -2265,7 +2265,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
   
   // reply
-  reply_request(mdr, reply);
+  reply_request(mdr, reply, diri);
 }
 
 
