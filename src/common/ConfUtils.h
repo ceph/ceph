@@ -85,8 +85,8 @@ class ConfFile {
 	void _dump(int fd);
 	bool _parse(char *filename, ConfSection **psection);
 public:
-        ConfFile(const char *fname) : filename(strdup(fname)), auto_update(false),
-				      post_process_func(NULL) {}
+        ConfFile(const char *fname) : auto_update(false),
+				      post_process_func(NULL) { if (fname) filename = strdup(fname); }
 	~ConfFile();
 
 	const SectionList& get_section_list() { return sections_list; }
