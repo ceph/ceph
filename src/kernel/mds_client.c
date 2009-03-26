@@ -358,6 +358,8 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			ceph_msg_put(req->r_reply);
 			destroy_reply_info(&req->r_reply_info);
 		}
+		if (req->r_inode)
+			iput(req->r_inode);
 		if (req->r_target_inode)
 			iput(req->r_target_inode);
 		if (req->r_dentry)
@@ -782,9 +784,7 @@ void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
  * Create an mds request.
  */
 struct ceph_mds_request *
-ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
-			 struct dentry *dentry, struct dentry *old_dentry,
-			 const char *path1, const char *path2, int mode)
+ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode)
 {
 	struct ceph_mds_request *req = kzalloc(sizeof(*req), GFP_NOFS);
 
@@ -801,12 +801,6 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
 	INIT_LIST_HEAD(&req->r_unsafe_item);
 
 	req->r_op = op;
-	if (dentry)
-		req->r_dentry = dget(dentry);
-	if (old_dentry)
-		req->r_old_dentry = dget(old_dentry);
-	req->r_path1 = path1;
-	req->r_path2 = path2;
 	req->r_direct_mode = mode;
 	return req;
 }
@@ -914,8 +908,8 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_request_head *head;
-	char *path1 = (char *)req->r_path1;
-	char *path2 = (char *)req->r_path2;
+	const char *path1 = req->r_path1;
+	const char *path2 = req->r_path2;
 	u64 ino1 = 1, ino2 = 0;
 	int pathlen1 = 0, pathlen2 = 0;
 	int pathlen;
@@ -929,14 +923,21 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	} else {
 		if (path1)
 			pathlen1 = strlen(path1);
-		else if (req->r_dentry)
-			path1 = ceph_mdsc_build_path(req->r_dentry, &pathlen1, &ino1,
-					   mds);
+		else if (req->r_inode) {
+			ino1 = ceph_ino(req->r_inode);
+		} else {
+			path1 = req->r_dentry->d_name.name;
+			pathlen1 = req->r_dentry->d_name.len;
+			ino1 = ceph_ino(req->r_dentry->d_parent->d_inode);
+		}
+
 		if (path2)
 			pathlen2 = strlen(path2);
-		else if (req->r_old_dentry)
-			path2 = ceph_mdsc_build_path(req->r_old_dentry, &pathlen2, &ino2,
-					   mds);
+		else if (req->r_old_dentry) {
+			path2 = req->r_old_dentry->d_name.name;
+			pathlen2 = req->r_old_dentry->d_name.len;
+			ino2 = ceph_ino(req->r_old_dentry->d_parent->d_inode);
+		}
 		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
 	}
 
@@ -975,10 +976,6 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		if (path2)
 			dout(10, "create_request_message path2 %llx/%s\n",
 			     ino2, path2);
-		if (req->r_dentry)
-			kfree(path1);
-		if (req->r_old_dentry)
-			kfree(path2);
 	}
 
  	BUG_ON(p != end);
@@ -1038,7 +1035,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 	dout(20, " r_locked_dir = %p\n", req->r_locked_dir);
 	rhead->num_dentries_wanted = req->r_locked_dir ? 1:0;
 
-	if (req->r_target_inode)
+	if (req->r_target_inode && req->r_got_unsafe)
 		rhead->ino = cpu_to_le64(ceph_ino(req->r_target_inode));
 	else
 		rhead->ino = 0;

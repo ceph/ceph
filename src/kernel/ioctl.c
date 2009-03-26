@@ -39,8 +39,10 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 		return -EFAULT;
 
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETLAYOUT,
-				       file->f_dentry, NULL, NULL, NULL,
 				       USE_AUTH_MDS);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
 	req->r_args.setlayout.layout = layout;
 	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);

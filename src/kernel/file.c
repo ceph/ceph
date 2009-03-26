@@ -20,8 +20,7 @@ int ceph_debug_file __read_mostly = -1;
  * inopportune ENOMEM later.
  */
 static struct ceph_mds_request *
-prepare_open_request(struct super_block *sb, struct dentry *dentry,
-		     int flags, int create_mode)
+prepare_open_request(struct super_block *sb, int flags, int create_mode)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -31,10 +30,8 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	if (flags & (O_WRONLY|O_RDWR|O_CREAT|O_TRUNC))
 		want_auth = USE_AUTH_MDS;
 
-	dout(5, "prepare_open_request dentry %p name '%s' flags %d\n", dentry,
-	     dentry->d_name.name, flags);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, dentry, NULL,
-				       NULL, NULL, want_auth);
+	dout(5, "prepare_open_request flags %d\n", flags);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, want_auth);
 	if (IS_ERR(req))
 		goto out;
 	req->r_fmode = ceph_flags_to_mode(flags);
@@ -143,11 +140,12 @@ int ceph_open(struct inode *inode, struct file *file)
 		return -ESTALE;  /* yuck */
 	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
-	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
+	req = prepare_open_request(inode->i_sb, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
 		goto out;
 	}
+	req->r_inode = igrab(inode);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	if (!err)
 		err = ceph_init_file(inode, file, req->r_fmode);
@@ -187,9 +185,10 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 
 	/* do the open */
-	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
+	req = prepare_open_request(dir->i_sb, flags, mode);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
+	req->r_dentry = dget(dentry);
 	if ((flags & O_CREAT) &&
 	    (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL)))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);

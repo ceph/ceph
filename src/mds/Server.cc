@@ -5000,7 +5000,7 @@ void Server::handle_client_open(MDRequest *mdr)
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
 			     mdr->client_request->get_orig_source().num());
   
-  reply_request(mdr, 0);
+  reply_request(mdr, 0, cur);
 }
 
 

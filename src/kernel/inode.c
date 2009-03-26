@@ -866,9 +866,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			     req->r_old_dentry->d_name.len,
 			     req->r_old_dentry->d_name.name,
 			     dn, dn->d_name.len, dn->d_name.name);
-			dput(dn);  /* dn is dropped */
+			//dput(dn);  /* dn is dropped */
 			dn = req->r_old_dentry;  /* use old_dentry */
-			req->r_old_dentry = NULL;
+			in = dn->d_inode;
 		}
 
 		/* null dentry? */
@@ -890,24 +890,31 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 
 		/* attach proper inode */
-		BUG_ON(dn->d_inode);
-
 		ininfo = rinfo->targeti.in;
 		vino.ino = le64_to_cpu(ininfo->ino);
 		vino.snap = le64_to_cpu(ininfo->snapid);
-		in = ceph_get_inode(dn->d_sb, vino);
-		if (IS_ERR(in)) {
-			derr(30, "get_inode badness\n");
-			err = PTR_ERR(in);
-			d_delete(dn);
-			goto done;
+		if (!dn->d_inode) {
+			in = ceph_get_inode(dn->d_sb, vino);
+			if (IS_ERR(in)) {
+				derr(30, "get_inode badness\n");
+				err = PTR_ERR(in);
+				d_delete(dn);
+				goto done;
+			}
+			dn = splice_dentry(dn, in, &have_lease);
+			if (IS_ERR(dn)) {
+				err = PTR_ERR(dn);
+				goto done;
+			}
+			req->r_dentry = dn;  /* may have spliced */
+		} else if (ceph_ino(in) != vino.ino ||
+			   ceph_snap(in) != vino.snap) {
+			dout(10, " %p links to %p %llx.%llx, not %llx.%llx\n",
+			     dn, in, ceph_ino(in), ceph_snap(in),
+			     vino.ino, vino.snap);
+			have_lease = false;
+			in = NULL;
 		}
-		dn = splice_dentry(dn, in, &have_lease);
-		if (IS_ERR(dn)) {
-			err = PTR_ERR(dn);
-			goto done;
-		}
-		req->r_dentry = dn;  /* may have changed from the splice */
 
 		if (have_lease)
 			update_dentry_lease(dn, rinfo->dlease, session,
@@ -1228,10 +1235,10 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHOWN, dentry, NULL,
-				       NULL, NULL, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHOWN, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
 	if (ia_valid & ATTR_UID) {
 		req->r_args.chown.uid = cpu_to_le32(attr->ia_uid);
 		mask |= CEPH_CHOWN_UID;
@@ -1269,10 +1276,10 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHMOD, dentry, NULL,
-				       NULL, NULL, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHMOD, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
 	req->r_args.chmod.mode = cpu_to_le32(attr->ia_mode);
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
@@ -1340,10 +1347,10 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LUTIME, dentry, NULL,
-				       NULL, NULL, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LUTIME, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
 	ceph_encode_timespec(&req->r_args.utime.mtime, &attr->ia_mtime);
 	ceph_encode_timespec(&req->r_args.utime.atime, &attr->ia_atime);
 
@@ -1398,10 +1405,11 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LTRUNCATE, dentry,
-				       NULL, NULL, NULL, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LTRUNCATE,
+				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
 	req->r_args.truncate.length = cpu_to_le64(attr->ia_size);
 	req->r_args.truncate.old_length = cpu_to_le64(inode->i_size);
 	//ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
@@ -1475,25 +1483,25 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 {
 	struct ceph_client *client = ceph_sb_to_client(dentry->d_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct inode *inode = dentry->d_inode;
 	struct ceph_mds_request *req;
 	int err;
 
-	if (ceph_snap(dentry->d_inode) == CEPH_SNAPDIR) {
+	if (ceph_snap(inode) == CEPH_SNAPDIR) {
 		dout(30, "do_getattr dentry %p inode %p SNAPDIR\n", dentry,
-		     dentry->d_inode);
+		     inode);
 		return 0;
 	}
 
 	dout(30, "do_getattr dentry %p inode %p mask %s\n", dentry,
-	     dentry->d_inode, ceph_cap_string(mask));
-	if (ceph_caps_issued_mask(ceph_inode(dentry->d_inode), mask))
+	     inode, ceph_cap_string(mask));
+	if (ceph_caps_issued_mask(ceph_inode(inode), mask))
 		return 0;
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
-				       dentry, NULL, NULL, NULL,
-				       USE_ANY_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
 	req->r_args.stat.mask = cpu_to_le32(mask);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
@@ -1794,10 +1802,10 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 
 	/* do request */
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
-				       dentry, NULL, NULL, NULL, USE_AUTH_MDS);
+				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-
+	req->r_inode = igrab(inode);
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
 
 	req->r_request->pages = pages;
@@ -1838,10 +1846,10 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 		return -EOPNOTSUPP;
 
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
-				       dentry, NULL, NULL, NULL, USE_AUTH_MDS);
+				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-
+	req->r_inode = igrab(inode);
 	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);

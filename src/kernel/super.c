@@ -761,11 +761,10 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
-				       NULL, NULL, path, NULL,
-				       USE_ANY_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
+	req->r_path1 = path;
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);

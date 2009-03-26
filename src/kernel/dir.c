@@ -81,10 +81,11 @@ nextfrag:
 
 		dout(10, "readdir querying mds for ino %llx.%llx frag %x\n",
 		     ceph_vinop(inode), frag);
-		req = ceph_mdsc_create_request(mdsc, op, filp->f_dentry, NULL,
-					       NULL, NULL, USE_AUTH_MDS);
+		req = ceph_mdsc_create_request(mdsc, op, USE_AUTH_MDS);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
+		req->r_inode = igrab(inode);
+		req->r_dentry = dget(filp->f_dentry);
 		/* hints to request -> mds selection code */
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_direct_hash = frag_value(frag);
@@ -310,11 +311,10 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		spin_unlock(&dir->i_lock);
 	}
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUP,
-				       dentry, NULL, NULL, NULL,
-				       USE_ANY_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUP, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
+	req->r_dentry = dget(dentry);
 	/* we only need inode linkage */
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	req->r_locked_dir = dir;
@@ -338,12 +338,12 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 
 	dout(5, "mknod in dir %p dentry %p mode 0%o rdev %d\n",
 	     dir, dentry, mode, rdev);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD, dentry, NULL,
-				       NULL, NULL, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD, USE_AUTH_MDS);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	req->r_dentry = dget(dentry);
 	req->r_locked_dir = dir;
 	req->r_args.mknod.mode = cpu_to_le32(mode);
 	req->r_args.mknod.rdev = cpu_to_le32(rdev);
@@ -397,12 +397,13 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 		return -EROFS;
 
 	dout(5, "symlink in dir %p dentry %p to '%s'\n", dir, dentry, dest);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SYMLINK,
-				       dentry, NULL, NULL, dest, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SYMLINK, USE_AUTH_MDS);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
+	req->r_dentry = dget(dentry);
+	req->r_path2 = dest;
 	req->r_locked_dir = dir;
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
@@ -438,8 +439,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	} else {
 		dout(5, "mkdir dir %p dn %p mode 0%o\n", dir, dentry, mode);
 	}
-	req = ceph_mdsc_create_request(mdsc, op, pathdentry, NULL, 
-				       NULL, snap, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, op, USE_AUTH_MDS);
 	if (pathdentry != dentry)
 		dput(pathdentry);
 	if (IS_ERR(req)) {
@@ -447,7 +447,8 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		err = PTR_ERR(req);
 		goto out;
 	}
-
+	req->r_dentry = dget(dentry);
+	req->r_path2 = snap;
 	req->r_locked_dir = dir;
 	req->r_args.mkdir.mode = cpu_to_le32(mode);
 
@@ -475,13 +476,13 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 
 	dout(5, "link in dir %p old_dentry %p dentry %p\n", dir,
 	     old_dentry, dentry);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LINK, dentry,
-				       old_dentry, NULL, NULL, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LINK, USE_AUTH_MDS);
 	if (IS_ERR(req)) {
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-
+	req->r_dentry = dget(dentry);
+	req->r_old_dentry = dget(old_dentry); /* or inode? hrm. */
 	req->r_locked_dir = dir;
 
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
@@ -532,15 +533,15 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		dout(5, "unlink/rmdir dir %p dn %p inode %p\n",
 		     dir, dentry, inode);
 	}
-	req = ceph_mdsc_create_request(mdsc, op, pathdentry, NULL, NULL, snap,
-				       USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, op, USE_AUTH_MDS);
 	if (pathdentry != dentry)
 		dput(pathdentry);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
 		goto out;
 	}
-
+	req->r_dentry = dget(pathdentry);
+	req->r_path2 = snap;
 	req->r_locked_dir = dir;
 
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
@@ -570,11 +571,11 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	dout(5, "rename dir %p dentry %p to dir %p dentry %p\n",
 	     old_dir, old_dentry, new_dir, new_dentry);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME,
-				       new_dentry, old_dentry, NULL, NULL,
-				       USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	req->r_dentry = dget(new_dentry);
+	req->r_old_dentry = dget(old_dentry);
 	req->r_locked_dir = new_dir;
 	if (!ceph_caps_issued_mask(ceph_inode(old_dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(old_dir, CEPH_CAP_FILE_RDCACHE);
