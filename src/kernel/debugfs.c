@@ -389,7 +389,7 @@ DEFINE_SHOW_FUNC(monc_show)
 DEFINE_SHOW_FUNC(mdsc_show)
 DEFINE_SHOW_FUNC(osdc_show)
 
-int ceph_debugfs_init()
+int ceph_debugfs_init(void)
 {
 	int ret = -ENOMEM;
 
@@ -401,21 +401,21 @@ int ceph_debugfs_init()
 	ceph_debugfs_debug = debugfs_create_u32("debug",
 					0600,
 					ceph_debugfs_dir,
-					&ceph_debug);
+					(u32 *)&ceph_debug);
 	if (!ceph_debugfs_debug)
 		goto out;
 
 	ceph_debugfs_debug_msgr = debugfs_create_u32("msgr",
 					0600,
 					ceph_debugfs_dir,
-					&ceph_debug_msgr);
+					(u32 *)&ceph_debug_msgr);
 	if (!ceph_debugfs_debug_msgr)
 		goto out;
 
 	ceph_debugfs_debug_console = debugfs_create_u32("console",
 					0600,
 					ceph_debugfs_dir,
-					&ceph_debug_console);
+					(u32 *)&ceph_debug_console);
 	if (!ceph_debugfs_debug_console)
 		goto out;
 
