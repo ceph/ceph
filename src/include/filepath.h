@@ -195,8 +195,11 @@ WRITE_CLASS_ENCODER(filepath)
 
 inline ostream& operator<<(ostream& out, const filepath& path)
 {
-  if (path.get_ino())
-    out << '#' << hex << path.get_ino() << dec << '/';
+  if (path.get_ino()) {
+    out << '#' << hex << path.get_ino() << dec;
+    if (path.depth())
+      out << '/';
+  }
   return out << path.get_path();
 }
 
