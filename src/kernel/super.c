@@ -770,7 +770,13 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
-		root = d_obtain_alias(req->r_target_inode);
+		dout(30, "open_root_inode success\n");
+		if (ceph_ino(req->r_target_inode) == CEPH_INO_ROOT &&
+		    client->sb->s_root == NULL)
+			root = d_alloc_root(req->r_target_inode);
+		else
+			root = d_obtain_alias(req->r_target_inode);
+		req->r_target_inode = NULL;
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
 	} else {
 		root = ERR_PTR(err);
@@ -847,15 +853,31 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		}
 	}
 
-	dout(30, "mount opening base mountpoint\n");
-	root = open_root_dentry(client, path, started);
+	
+	dout(30, "mount opening root\n");
+	root = open_root_dentry(client, NULL, started);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
 		goto out;
 	}
+	client->sb->s_root = root;
 
+	if (path[0] == 0) {
+		dget(root);
+	} else {
+		dout(30, "mount opening base mountpoint\n");
+		root = open_root_dentry(client, path, started);
+		if (IS_ERR(root)) {
+			err = PTR_ERR(root);
+			dput(client->sb->s_root);
+			client->sb->s_root = NULL;
+			goto out;
+		}
+	}
+		
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
+
 	client->mount_state = CEPH_MOUNT_MOUNTED;
 	dout(10, "mount success\n");
 	err = 0;

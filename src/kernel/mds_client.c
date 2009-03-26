@@ -921,23 +921,24 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		path2 = NULL;
 		pathlen = sizeof(u32) + fhlen*sizeof(struct ceph_inopath_item);
 	} else {
-		if (path1)
-			pathlen1 = strlen(path1);
-		else if (req->r_inode) {
+		if (req->r_inode) {
 			ino1 = ceph_ino(req->r_inode);
-		} else {
+		} else if (req->r_dentry) {
 			path1 = req->r_dentry->d_name.name;
 			pathlen1 = req->r_dentry->d_name.len;
 			ino1 = ceph_ino(req->r_dentry->d_parent->d_inode);
+		} else if (path1) {
+			pathlen1 = strlen(path1);
 		}
 
-		if (path2)
-			pathlen2 = strlen(path2);
-		else if (req->r_old_dentry) {
+		if (req->r_old_dentry) {
 			path2 = req->r_old_dentry->d_name.name;
 			pathlen2 = req->r_old_dentry->d_name.len;
 			ino2 = ceph_ino(req->r_old_dentry->d_parent->d_inode);
+		} else if (path2) {
+			pathlen2 = strlen(path2);
 		}
+
 		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
 	}
 

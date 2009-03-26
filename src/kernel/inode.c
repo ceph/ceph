@@ -907,8 +907,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				goto done;
 			}
 			req->r_dentry = dn;  /* may have spliced */
-		} else if (ceph_ino(in) != vino.ino ||
-			   ceph_snap(in) != vino.snap) {
+			igrab(in);
+		} else if (ceph_ino(in) == vino.ino &&
+			   ceph_snap(in) == vino.snap) {
+			igrab(in);
+		} else {
 			dout(10, " %p links to %p %llx.%llx, not %llx.%llx\n",
 			     dn, in, ceph_ino(in), ceph_snap(in),
 			     vino.ino, vino.snap);
@@ -928,16 +931,15 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		vino.ino = le64_to_cpu(rinfo->targeti.in->ino);
 		vino.snap = le64_to_cpu(rinfo->targeti.in->snapid);
 
-		if (in != NULL &&
-		    ceph_ino(in) == vino.ino && ceph_snap(in) == vino.snap) {
-			igrab(in);
-		} else {
+		if (in == NULL || ceph_ino(in) != vino.ino ||
+		    ceph_snap(in) != vino.snap) {
 			in = ceph_get_inode(sb, vino);
 			if (IS_ERR(in)) {
 				err = PTR_ERR(in);
 				goto done;
 			}
 		}
+		req->r_target_inode = in;
 
 		err = fill_inode(in,
 				 &rinfo->targeti, NULL,
@@ -948,7 +950,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			derr(30, "fill_inode badness\n");
 			goto done;
 		}
-		req->r_target_inode = in;
 	}
 
 done:
