@@ -525,6 +525,8 @@ void Server::reconnect_tick()
 
 void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
 {
+  dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
+
   // note trace items for eventual reply.
   mdr->tracei = in;
   if (in && in != mdr->ref)
@@ -5007,8 +5009,11 @@ void Server::handle_client_open(MDRequest *mdr)
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
 			     mdr->client_request->get_orig_source().num());
-  
-  reply_request(mdr, 0, cur);
+
+  CDentry *dn = 0;
+  if (mdr->trace.size())
+    dn = mdr->trace.back();
+  reply_request(mdr, 0, cur, dn);
 }
 
 
