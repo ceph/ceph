@@ -244,7 +244,7 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 	if (err == -ENOENT) {
 		/* no trace? */
 		err = 0;
-		if (req->r_reply_info.trace_numd == 0) {
+		if (!req->r_reply_info.head->is_dentry) {
 			dout(20, "ENOENT and no trace, dentry %p inode %p\n",
 			     dentry, dentry->d_inode);
 			ceph_init_dentry(dentry);
@@ -350,7 +350,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
-	if (!err && req->r_reply_info.trace_numd == 0) {
+	if (!err && !req->r_reply_info.head->is_dentry) {
 		/*
 		 * no trace.  do lookup, in case we are called from create
 		 * and the VFS needs a valid dentry.
@@ -489,7 +489,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (err) {
 		d_drop(dentry);
-	} else if (req->r_reply_info.trace_numd == 0) {
+	} else if (!req->r_reply_info.head->is_dentry) {
 		/* no trace */
 		struct inode *inode = old_dentry->d_inode;
 		inc_nlink(inode);
@@ -583,7 +583,7 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 		ceph_release_caps(new_dir, CEPH_CAP_FILE_RDCACHE);
 	ceph_mdsc_lease_release(mdsc, new_dir, new_dentry, CEPH_LOCK_DN);
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
-	if (!err && req->r_reply_info.trace_numd == 0) {
+	if (!err && !req->r_reply_info.head->is_dentry) {
 		/*
 		 * no trace
 		 *

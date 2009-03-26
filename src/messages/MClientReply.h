@@ -171,41 +171,41 @@ struct InodeStat {
 
 class MClientReply : public Message {
   // reply data
-  struct ceph_mds_reply_head st;
+public:
+  struct ceph_mds_reply_head head;
   bufferlist trace_bl;
   bufferlist dir_bl;
-public:
   bufferlist snapbl;
 
  public:
-  long get_tid() { return st.tid; }
-  int get_op() { return st.op; }
+  long get_tid() { return head.tid; }
+  int get_op() { return head.op; }
 
-  void set_mdsmap_epoch(epoch_t e) { st.mdsmap_epoch = e; }
-  epoch_t get_mdsmap_epoch() { return st.mdsmap_epoch; }
+  void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
+  epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
 
-  int get_result() { return (__s32)(__u32)st.result; }
+  int get_result() { return (__s32)(__u32)head.result; }
 
-  void set_result(int r) { st.result = r; }
+  void set_result(int r) { head.result = r; }
 
-  void set_unsafe() { st.safe = 0; }
+  void set_unsafe() { head.safe = 0; }
 
   MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
-    memset(&st, 0, sizeof(st));
-    st.tid = req->get_tid();
-    st.op = req->get_op();
-    st.result = result;
-    st.safe = 1;
+    memset(&head, 0, sizeof(head));
+    head.tid = req->get_tid();
+    head.op = req->get_op();
+    head.result = result;
+    head.safe = 1;
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "client_reply(" << header.dst.name << "." << st.tid;
+    o << "client_reply(" << header.dst.name << "." << head.tid;
     o << " = " << get_result();
     if (get_result() <= 0)
       o << " " << strerror(-get_result());
-    if (st.safe)
+    if (head.safe)
       o << " safe";
     else
       o << " unsafe";
@@ -215,14 +215,14 @@ public:
   // serialization
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(st, p);
+    ::decode(head, p);
     ::decode(trace_bl, p);
     ::decode(dir_bl, p);
     ::decode(snapbl, p);
     assert(p.end());
   }
   virtual void encode_payload() {
-    ::encode(st, payload);
+    ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(dir_bl, payload);
     ::encode(snapbl, payload);

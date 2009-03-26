@@ -781,8 +781,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	int i = 0;
 	int err = 0;
 
-	dout(10, "fill_trace %p numi %d numd %d\n", req, rinfo->trace_numi,
-	     rinfo->trace_numd);
+	dout(10, "fill_trace %p is_dentry %d is_target %d\n", req,
+	     rinfo->head->is_dentry, rinfo->head->is_target);
 
 #if 0
 	/*
@@ -800,9 +800,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	}
 #endif
 
-	if (rinfo->trace_numi == 0) {
+	if (!rinfo->head->is_target && !rinfo->head->is_dentry) {
 		dout(10, "fill_trace reply has empty trace!\n");
-		if (!rinfo->head->result && req->r_locked_dir) {
+		if (rinfo->head->result == 0 && req->r_locked_dir) {
 			struct ceph_inode_info *ci =
 				ceph_inode(req->r_locked_dir);
 			dout(10, " clearing %p complete (empty trace)\n",
@@ -826,28 +826,26 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		bool have_dir_cap, have_lease;
 
 		BUG_ON(!dn);
-		BUG_ON(!rinfo->trace_numd);
+		BUG_ON(!rinfo->head->is_dentry);
 		BUG_ON(dn->d_parent->d_inode != dir);
 		BUG_ON(ceph_ino(dir) !=
-		       le64_to_cpu(rinfo->trace_in[0].in->ino));
+		       le64_to_cpu(rinfo->diri.in->ino));
 		BUG_ON(ceph_snap(dir) !=
-		       le64_to_cpu(rinfo->trace_in[0].in->snapid));
+		       le64_to_cpu(rinfo->diri.in->snapid));
 
-		err = fill_inode(dir, &rinfo->trace_in[0],
-				 rinfo->trace_dir[0],
-				 session, req->r_request_started,
-				 -1);
+		err = fill_inode(dir, &rinfo->diri, rinfo->dirfrag,
+				 session, req->r_request_started, -1);
 		if (err < 0)
 			return err;
 
 		/* do we have a lease on the whole dir? */
 		have_dir_cap =
-			(le32_to_cpu(rinfo->trace_in[0].in->cap.caps) &
+			(le32_to_cpu(rinfo->diri.in->cap.caps) &
 			 CEPH_CAP_FILE_RDCACHE);
 
 		/* do we have a dn lease? */
 		have_lease = have_dir_cap ||
-			(le16_to_cpu(rinfo->trace_dlease[0]->mask) &
+			(le16_to_cpu(rinfo->dlease->mask) &
 			 CEPH_LOCK_DN);
 
 		if (!have_lease)
@@ -874,7 +872,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 
 		/* null dentry? */
-		if (rinfo->trace_numi == 1) {
+		if (!rinfo->head->is_target) {
 			dout(10, "fill_trace null dentry\n");
 			if (dn->d_inode) {
 				dout(20, "d_delete %p\n", dn);
@@ -884,7 +882,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				d_instantiate(dn, NULL);
 				if (have_lease && d_unhashed(dn))
 					d_rehash(dn);
-				update_dentry_lease(dn, rinfo->trace_dlease[0],
+				update_dentry_lease(dn, rinfo->dlease,
 						    session,
 						    req->r_request_started);
 			}
@@ -894,7 +892,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		/* attach proper inode */
 		BUG_ON(dn->d_inode);
 
-		ininfo = rinfo->trace_in[1].in;
+		ininfo = rinfo->targeti.in;
 		vino.ino = le64_to_cpu(ininfo->ino);
 		vino.snap = le64_to_cpu(ininfo->snapid);
 		in = ceph_get_inode(dn->d_sb, vino);
@@ -912,19 +910,16 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		req->r_dentry = dn;  /* may have changed from the splice */
 
 		if (have_lease)
-			update_dentry_lease(dn, rinfo->trace_dlease[0],
-					    session,
+			update_dentry_lease(dn, rinfo->dlease, session,
 					    req->r_request_started);
 		dout(10, " final dn %p\n", dn);
 		i++;
 	}
 
 	/* update any additional inodes */
-	for (; i < rinfo->trace_numi; i++) {
-		int is_target = i == rinfo->trace_numd;
-
-		vino.ino = le64_to_cpu(rinfo->trace_in[i].in->ino);
-		vino.snap = le64_to_cpu(rinfo->trace_in[i].in->snapid);
+	if (rinfo->head->is_target) {
+		vino.ino = le64_to_cpu(rinfo->targeti.in->ino);
+		vino.snap = le64_to_cpu(rinfo->targeti.in->snapid);
 
 		if (in != NULL &&
 		    ceph_ino(in) == vino.ino && ceph_snap(in) == vino.snap) {
@@ -933,24 +928,20 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			in = ceph_get_inode(sb, vino);
 			if (IS_ERR(in)) {
 				err = PTR_ERR(in);
-				break;
+				goto done;
 			}
 		}
 
 		err = fill_inode(in,
-				 &rinfo->trace_in[i], NULL,
+				 &rinfo->targeti, NULL,
 				 session, req->r_request_started,
-				 (is_target &&
-				  le32_to_cpu(rinfo->head->result) == 0) ?
+				 (le32_to_cpu(rinfo->head->result) == 0) ?
 				 req->r_fmode : -1);
 		if (err < 0) {
 			derr(30, "fill_inode badness\n");
-			break;
+			goto done;
 		}
-		if (is_target)
-			req->r_target_inode = in;
-		else
-			iput(in);
+		req->r_target_inode = in;
 	}
 
 done:

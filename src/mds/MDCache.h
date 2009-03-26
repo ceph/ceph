@@ -257,6 +257,9 @@ struct MDRequest : public Mutation {
   CInode *ref_snapdiri;
   snapid_t ref_snapid;
 
+  CInode *tracei;
+  CDentry *tracedn;
+
   inodeno_t alloc_ino, used_prealloc_ino;  
   deque<inodeno_t> prealloc_inos;
 
@@ -318,21 +321,21 @@ struct MDRequest : public Mutation {
 
   // ---------------------------------------------------
   MDRequest() : 
-    session(0), client_request(0), ref(0), ref_snapdiri(0), ref_snapid(CEPH_NOSNAP),
+    session(0), client_request(0), ref(0), ref_snapdiri(0), ref_snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
-    session(0), client_request(req), ref(0), ref_snapdiri(0),
+    session(0), client_request(req), ref(0), ref_snapdiri(0), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
     _more(0) {}
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
-    session(0), client_request(0), ref(0), ref_snapdiri(0),
+    session(0), client_request(0), ref(0), ref_snapdiri(0), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),

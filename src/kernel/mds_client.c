@@ -67,73 +67,35 @@ bad:
 static int parse_reply_info_trace(void **p, void *end,
 				  struct ceph_mds_reply_info_parsed *info)
 {
-	u16 numi, numd, snapdirpos;
 	int err;
 
-	ceph_decode_need(p, end, 3*sizeof(u16), bad);
-	ceph_decode_16(p, numi);
-	ceph_decode_16(p, numd);
-	ceph_decode_16(p, snapdirpos);
-	info->trace_numi = numi;
-	info->trace_numd = numd;
-	info->trace_snapdirpos = snapdirpos;
-	if (numi == 0) {
-		info->trace_in = NULL;
-		goto done;   /* hrm, this shouldn't actually happen, but.. */
+	if (info->head->is_dentry) {
+		err = parse_reply_info_in(p, end, &info->diri);
+		if (err < 0)
+			goto out_bad;
+
+		if (unlikely(*p + sizeof(*info->dirfrag) > end))
+			goto bad;
+		info->dirfrag = *p;
+		*p += sizeof(*info->dirfrag) +
+			sizeof(u32)*le32_to_cpu(info->dirfrag->ndist);
+		if (unlikely(*p > end))
+			goto bad;
+
+		ceph_decode_32_safe(p, end, info->dname_len, bad);
+		ceph_decode_need(p, end, info->dname_len, bad);
+		info->dname = *p;
+		*p += info->dname_len;
+		info->dlease = *p;
+		*p += sizeof(*info->dlease);
 	}
 
-	/* alloc one big block of memory for all of these arrays */
-	info->trace_in = kmalloc(numi * (sizeof(*info->trace_in) +
-					 sizeof(*info->trace_dir) +
-					 sizeof(*info->trace_dname) +
-					 sizeof(*info->trace_dname_len) +
-					 sizeof(*info->trace_dlease)),
-				 GFP_NOFS);
-	if (info->trace_in == NULL) {
-		err = -ENOMEM;
-		goto out_bad;
+	if (info->head->is_target) {
+		err = parse_reply_info_in(p, end, &info->targeti);
+		if (err < 0)
+			goto out_bad;
 	}
-	info->trace_dir = (void *)(info->trace_in + numi);
-	info->trace_dname = (void *)(info->trace_dir + numd);
-	info->trace_dname_len = (void *)(info->trace_dname + numd);
-	info->trace_dlease = (void *)(info->trace_dname_len + numd);
 
-	/*
-	 * the trace starts at the deepest point, and works up toward
-	 * the root inode.
-	 */
-	if (numi == numd)
-		goto dentry;
-inode:
-	if (!numi)
-		goto done;
-	numi--;
-	err = parse_reply_info_in(p, end, &info->trace_in[numi]);
-	if (err < 0)
-		goto out_bad;
-
-dentry:
-	if (!numd)
-		goto done;
-	numd--;
-	ceph_decode_32_safe(p, end, info->trace_dname_len[numd], bad);
-	ceph_decode_need(p, end, info->trace_dname_len[numd], bad);
-	info->trace_dname[numd] = *p;
-	*p += info->trace_dname_len[numd];
-	info->trace_dlease[numd] = *p;
-	*p += sizeof(struct ceph_mds_reply_lease);
-
-	/* dir frag info */
-	if (unlikely(*p + sizeof(struct ceph_mds_reply_dirfrag) > end))
-		goto bad;
-	info->trace_dir[numd] = *p;
-	*p += sizeof(struct ceph_mds_reply_dirfrag) +
-		sizeof(u32)*le32_to_cpu(info->trace_dir[numd]->ndist);
-	if (unlikely(*p > end))
-		goto bad;
-	goto inode;
-
-done:
 	if (unlikely(*p != end))
 		goto bad;
 	return 0;
@@ -259,7 +221,6 @@ out_bad:
 
 static void destroy_reply_info(struct ceph_mds_reply_info_parsed *info)
 {
-	kfree(info->trace_in);
 	kfree(info->dir_in);
 }
 

@@ -74,12 +74,11 @@ struct ceph_mds_reply_info_in {
 struct ceph_mds_reply_info_parsed {
 	struct ceph_mds_reply_head    *head;
 
-	int trace_numi, trace_numd, trace_snapdirpos;
-	struct ceph_mds_reply_info_in *trace_in;
-	struct ceph_mds_reply_dirfrag **trace_dir;
-	char                          **trace_dname;
-	u32                           *trace_dname_len;
-	struct ceph_mds_reply_lease   **trace_dlease;
+	struct ceph_mds_reply_info_in diri, targeti;
+	struct ceph_mds_reply_dirfrag *dirfrag;
+	char                          *dname;
+	u32                           dname_len;
+	struct ceph_mds_reply_lease   *dlease;
 
 	struct ceph_mds_reply_dirfrag *dir_dir;
 	int                           dir_nr;

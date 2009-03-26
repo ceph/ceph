@@ -28,7 +28,10 @@ v0.7.2
 
 v0.8
 - kill fill_trace
-- return extra inode(s) in reply (namely, unlink)?
+  - mds ops all relative to inos, not paths
+  - figure out how to deal with s_root
+  - make snaps work again
+  - return extra inode(s) in reply (namely, unlink)?
 - allow mon to log messages
   - log client mount successes, failures
   - mon elections

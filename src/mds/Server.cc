@@ -525,6 +525,16 @@ void Server::reconnect_tick()
 
 void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
 {
+  // note trace items for eventual reply.
+  mdr->tracei = in;
+  if (in && in != mdr->ref)
+    mdr->pin(in);
+
+  mdr->tracedn = dn;
+  if (dn && (mdr->trace.empty() ||
+	     mdr->trace.back() != dn))
+    mdr->pin(dn);
+
   early_reply(mdr, in, dn);
 
   mdr->committing = true;
@@ -621,19 +631,13 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
 
-  // infer tracei/tracedn from mdr?
+  // get tracei/tracedn from mdr?
   snapid_t snapid = CEPH_NOSNAP;
   CInode *snapdiri = 0;
-  if (!tracei && !tracedn && mdr->ref) {
-    tracei = mdr->ref;
-    snapdiri = mdr->ref_snapdiri;
-    snapid = mdr->ref_snapid;
-    dout(20) << "inferring tracei to be " << *tracei << dendl;
-    if (!mdr->trace.empty()) {
-      tracedn = mdr->trace.back();
-      dout(20) << "inferring tracedn to be " << *tracedn << dendl;
-    }
-  }
+  if (!tracei)
+    tracei = mdr->tracei;
+  if (!tracedn)
+    tracedn = mdr->tracedn;
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);
@@ -701,7 +705,8 @@ void Server::encode_null_lease(bufferlist& bl)
  *
  * trace is in reverse order (i.e. root inode comes last)
  */
-void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
+void Server::set_trace_dist(Session *session, MClientReply *reply,
+			    CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
 			    MDRequest *mdr, bool is_replay, int num_dentries_wanted)
 {
@@ -709,102 +714,55 @@ void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, C
   bufferlist bl;
   int whoami = mds->get_nodeid();
   int client = session->get_client();
-  __u16 numi = 0, numdn = 0;
-  __s16 snapdirpos = -1;
-
-  //bool single_segment = g_conf.mds_short_reply_trace;  // do a single segment: [inode, ] dentry, dir.
-
-  // choose lease duration
   utime_t now = g_clock.now();
-  int lmask = 0;
+
+  dout(20) << "set_trace_dist snapid " << snapid << dendl;
+
+  assert((bool)dn == (bool)num_dentries_wanted);
+
+  // realm
   SnapRealm *realm = 0;
-
-  // start with dentry or inode?
-  if (!in) {
-    assert(dn);
-    in = dn->get_linkage(client, mdr)->get_inode();
-    goto dentry;
-  }
-
- inode:
-  numi++;
-
-  dout(15) << "set_trace_dist " << *in << dendl;
-
-  if (!realm) {
-    // snapbl
+  if (in)
     realm = in->find_snaprealm();
-    reply->snapbl = realm->get_snap_trace();
-    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
-  }
-
-  in->encode_inodestat(bl, session, NULL, snapid, is_replay);
-  dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
-
-  if (snapid != CEPH_NOSNAP && in == snapdiri) {
-    // do the snap name dentry
-    const string& snapname = in->find_snaprealm()->get_snapname(snapid, in->ino());
-    dout(10) << "set_trace_dist snapname " << snapname << dendl;
-    ::encode(snapname, bl);
-    encode_infinite_lease(bl);
-    numdn++;
-    encode_empty_dirstat(bl);
-
-    // back to the live tree
-    snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, session, NULL, snapid);
-    numi++;
-    dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
-
-    snapdirpos = numi;
-    dout(10) << "set_trace_dist snapdiri at pos " << snapdirpos << dendl;
-  }
-
-  if (!dn) {
-    dn = in->get_projected_parent_dn();
-    if (dn && !dn->use_projected(client, mdr))
-      dn = NULL;
-    if (!dn)
-      dn = in->get_parent_dn();
-  }
-  if (!dn) 
-    goto done;
-
- dentry:
-  if (numdn >= num_dentries_wanted)
-    goto done;
-
-  dout(15) << "set_trace_dist " << *dn << dendl;
-
-  ::encode(dn->get_name(), bl);
-  if (snapid == CEPH_NOSNAP)
-    lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   else
-    encode_null_lease(bl);
-  numdn++;
-  dout(20) << "set_trace_dist added " << lmask << " snapid " << snapid << " " << *dn << dendl;
-  
-  // dir
+    realm = dn->get_dir()->get_inode()->find_snaprealm();
+  reply->snapbl = realm->get_snap_trace();
+  dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+
+  // dir + dentry?
+  if (dn) {
+    reply->head.is_dentry = 1;
+    CDir *dir = dn->get_dir();
+    CInode *diri = dir->get_inode();
+
+    diri->encode_inodestat(bl, session, NULL, snapid, is_replay);
+    dout(20) << "set_trace_dist added diri " << *diri << dendl;
+
 #ifdef MDS_VERIFY_FRAGSTAT
-  if (dn->get_dir()->is_complete())
-    dn->get_dir()->verify_fragstat();
+    if (dir->is_complete())
+      dir->verify_fragstat();
 #endif
+    dir->encode_dirstat(bl, whoami);
+    dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
-  dn->get_dir()->encode_dirstat(bl, whoami);
-  dout(20) << "set_trace_dist added " << *dn->get_dir() << dendl;
+    ::encode(dn->get_name(), bl);
+    if (snapid == CEPH_NOSNAP)
+      mds->locker->issue_client_lease(dn, client, bl, now, session);
+    else
+      encode_null_lease(bl);
+    dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
+  } else
+    reply->head.is_dentry = 0;
 
-  in = dn->get_dir()->get_inode();
-  dn = 0;
-  goto inode;
+  // inode
+  if (in) {
+    in->encode_inodestat(bl, session, NULL, snapid, is_replay);
+    dout(20) << "set_trace_dist added in   " << *in << dendl;
+    reply->head.is_target = 1;
+  } else
+    reply->head.is_target = 0;
 
-done:
-  // put numi, numd in front
-  bufferlist fbl;
-  ::encode(numi, fbl);
-  ::encode(numdn, fbl);
-  ::encode(snapdirpos, fbl);
-  fbl.claim_append(bl);
-  reply->set_trace(fbl);
+  reply->set_trace(bl);
 }
 
 
@@ -1805,7 +1763,8 @@ void Server::handle_client_stat(MDRequest *mdr)
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
-  reply_request(mdr, 0);
+  reply_request(mdr, 0, ref,
+		req->get_op() == CEPH_MDS_OP_LOOKUP ? mdr->trace.back() : 0);
 }
 
 
@@ -2353,7 +2312,7 @@ public:
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
-    mds->server->reply_request(mdr, reply, newi, dn);
+    mds->server->reply_request(mdr, reply);
   }
 };
 
@@ -2394,7 +2353,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2458,7 +2417,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&newi->xlist_open_file);
 
-  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2499,7 +2458,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2675,7 +2634,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, targeti, dn);
+  reply_request(mdr, reply);
 }
 
 
@@ -2797,7 +2756,7 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, targeti, dn);  // FIXME: imprecise ref
+  reply_request(mdr, reply);
 
   if (!inc)
     // removing a new dn?
@@ -3352,7 +3311,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, 0, dn);
+  reply_request(mdr, reply);
   
   // clean up?
   if (straydn)
@@ -3851,7 +3810,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, destdnl->get_inode(), destdn);
+  reply_request(mdr, reply);
   
   // clean up?
   if (straydn) 
@@ -5199,7 +5158,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   ls->open_files.push_back(&in->xlist_open_file);
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
-  journal_and_reply(mdr, in, 0, le, fin);
+  journal_and_reply(mdr, in, dn, le, fin);
 }
 
 
