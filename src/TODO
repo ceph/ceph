@@ -30,6 +30,8 @@ v0.8
 - kill fill_trace
   - make snaps work again
   - return extra inode(s) in reply (namely, unlink)?
+- make caps release explicitly.. no timeout
+- revamp client<->mds interaction wrt snapshots...
 - allow mon to log messages
   - log client mount successes, failures
   - mon elections

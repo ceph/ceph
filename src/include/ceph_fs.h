@@ -825,6 +825,7 @@ struct ceph_mds_request_head {
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
+	__le64 snapid;
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 	union ceph_mds_request_args args;
 } __attribute__ ((packed));

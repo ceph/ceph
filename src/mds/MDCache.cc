@@ -5466,16 +5466,15 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   // keep a list of symlinks we touch to avoid loops
   set< pair<CInode*, string> > symlinks_resolved; 
 
-  snapid_t snapid = CEPH_NOSNAP;
+  snapid_t snapid = (psnapid ? *psnapid : snapid_t(CEPH_NOSNAP));
   if (psnapdiri)
     *psnapdiri = 0;
 
   int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
-  // root
+  dout(7) << "traverse: opening base ino " << origpath.get_ino() << " snap " << snapid << dendl;
   CInode *cur = get_inode(origpath.get_ino());
   if (cur == NULL) {
-    dout(7) << "traverse: opening base ino " << origpath.get_ino() << dendl;
     if (MDS_INO_IS_STRAY(origpath.get_ino())) 
       open_foreign_stray(origpath.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
     else {
@@ -5494,6 +5493,19 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   filepath path = origpath;  
 
   unsigned depth = 0;
+
+  if (snapid == CEPH_SNAPDIR) {
+    if (!psnapdiri)
+      return -EINVAL;
+    *psnapdiri = cur;
+    SnapRealm *realm = cur->find_snaprealm();
+    snapid = realm->resolve_snapname(path[depth], cur->ino());
+    dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
+    if (!snapid)
+      return -ENOENT;
+    depth++;
+  }
+
   while (depth < path.depth()) {
     dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
 	     << "' snapid " << snapid << dendl;

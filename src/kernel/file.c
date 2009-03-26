@@ -124,7 +124,8 @@ int ceph_open(struct inode *inode, struct file *file)
 	 */
 	spin_lock(&inode->i_lock);
 	mds_wanted = __ceph_caps_mds_wanted(ci);
-	if ((mds_wanted & new_want) == new_want) {
+	if ((mds_wanted & new_want) == new_want ||
+	    ceph_snap(inode) == CEPH_SNAPDIR) {
 		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, new_want, inode);
 		__ceph_get_fmode(ci, fmode);

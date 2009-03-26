@@ -913,6 +913,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	u64 ino1 = 1, ino2 = 0;
 	int pathlen1 = 0, pathlen2 = 0;
 	int pathlen;
+	u64 snapid = CEPH_NOSNAP;
 	void *p, *end;
 	u32 fhlen = 0;
 
@@ -923,10 +924,12 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	} else {
 		if (req->r_inode) {
 			ino1 = ceph_ino(req->r_inode);
+			snapid = ceph_snap(req->r_inode);
 		} else if (req->r_dentry) {
 			path1 = req->r_dentry->d_name.name;
 			pathlen1 = req->r_dentry->d_name.len;
 			ino1 = ceph_ino(req->r_dentry->d_parent->d_inode);
+			snapid = ceph_snap(req->r_dentry->d_parent->d_inode);
 		} else if (path1) {
 			pathlen1 = strlen(path1);
 		}
@@ -962,6 +965,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	head->caller_uid = cpu_to_le32(current->fsuid);
 	head->caller_gid = cpu_to_le32(current->fsgid);
 #endif
+	head->snapid = cpu_to_le64(snapid);
 	head->args = req->r_args;
 
 	if (req->r_op == CEPH_MDS_OP_FINDINODE) {

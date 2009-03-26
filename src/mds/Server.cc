@@ -1445,7 +1445,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
 
   // traverse to parent dir
-  snapid_t snapid;
+  snapid_t snapid = mdr->client_request->get_snapid();
   int r = mdcache->path_traverse(mdr, mdr->client_request,
 				 refpath, trace, &snapid, &mdr->ref_snapdiri,
 				 false, MDS_TRAVERSE_FORWARD);
@@ -1496,6 +1496,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   // traverse
   filepath refpath = req->get_filepath();
   vector<CDentry*> trace;
+  mdr->ref_snapid = req->get_snapid();
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
 				 trace, &mdr->ref_snapid, &mdr->ref_snapdiri,
@@ -1508,9 +1509,16 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
 
   // open ref inode
   CInode *ref = 0;
-  if (trace.empty())
-    ref = mdcache->get_inode(refpath.get_ino());
-  else {
+  if (trace.empty()) {
+    ref = mdcache->get_inode(refpath.get_ino(), req->get_snapid());
+    if (!ref) {
+      ref = mdcache->get_inode(refpath.get_ino());
+      if (!ref->is_multiversion()) {
+	reply_request(mdr, -ESTALE);
+	return 0;
+      }
+    }
+  } else {
     CDentry *dn = trace[trace.size()-1];
     bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
@@ -5171,44 +5179,26 @@ void Server::handle_client_openc(MDRequest *mdr)
 void Server::handle_client_lssnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
 
   // traverse to path
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
-				 false, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't snap root
-  if (r < 0) {
-    reply_request(mdr, r);
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri) {
+     reply_request(mdr, -ESTALE);
+     return;
+  }
+  if (!diri->is_auth()) {
+    mdcache->request_forward(mdr, diri->authority().first);
     return;
   }
-  CDentry *dn = trace[trace.size()-1];
-  assert(dn);
-  if (!dn->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, dn->authority().first);
-    return;
-  }
-  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
-
-  // dir only
-  CInode *diri = dnl->get_inode();
-  if (!dnl->is_primary() || !diri->is_dir()) {
+  if (!diri->is_dir()) {
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  dout(10) << "lssnap " << req->get_path2() << " on " << *diri << dendl;
+  dout(10) << "lssnap on " << *diri << dendl;
 
   // lock snap
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-
-  // rdlock path
-  for (int i=0; i<(int)trace.size()-1; i++)
-    rdlocks.insert(&trace[i]->lock);
-
   mds->locker->include_snap_rdlocks(rdlocks, diri);
-
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -5271,43 +5261,33 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  // traverse to path
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
-				 false, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't snap root
-  if (r < 0) {
-    reply_request(mdr, r);
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri) {
+    reply_request(mdr, -ESTALE);
     return;
   }
-  CDentry *dn = trace[trace.size()-1];
-  assert(dn);
-  if (!dn->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, dn->authority().first);
+
+  if (!diri->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, diri->authority().first);
     return;
   }
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
   // dir only
-  CInode *diri = dnl->get_inode();
-  if (!dnl->is_primary() || !diri->is_dir()) {
+  if (!diri->is_dir()) {
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  if (diri->is_system()) {  // no snaps on root dir, until we can store it
+  if (diri->is_system()) {  // no snaps on root dir, at least not until we can store it
     reply_request(mdr, -EPERM);
     return;
   }
-  dout(10) << "mksnap " << req->get_path2() << " on " << *diri << dendl;
+
+  const string &snapname = req->get_filepath().last_dentry();
+  dout(10) << "mksnap " << snapname << " on " << *diri << dendl;
 
   // lock snap
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
-  // rdlock path
-  for (int i=0; i<(int)trace.size()-1; i++)
-    rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);
@@ -5325,7 +5305,6 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     return;
 
   // make sure name is unique
-  const string &snapname = req->get_path2();
   if (diri->snaprealm &&
       diri->snaprealm->exists(snapname)) {
     reply_request(mdr, -EEXIST);
@@ -5359,7 +5338,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   SnapInfo info;
   info.ino = diri->ino();
   info.snapid = snapid;
-  info.name = req->get_path2();
+  info.name = snapname;
   info.stamp = mdr->now;
 
   inode_t *pi = diri->project_inode();
@@ -5451,35 +5430,28 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  // traverse to path
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
-				 false, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't snap root
-  if (r < 0) {
-    reply_request(mdr, r);
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri) {
+    reply_request(mdr, -ESTALE);
     return;
   }
-  CDentry *dn = trace[trace.size()-1];
-  assert(dn);
-  if (!dn->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, dn->authority().first);
+  if (!diri->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, diri->authority().first);
     return;
   }
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-
-  // dir only
-  CInode *diri = dnl->get_inode();
-  if (!dnl->is_primary() || !diri->is_dir()) {
+  if (!diri->is_dir()) {
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  dout(10) << "rmsnap " << req->get_path2() << " on " << *diri << dendl;
+  if (diri->is_system()) {  // no snaps on root dir, at least not until we can store it
+    reply_request(mdr, -EPERM);
+    return;
+  }
+
+  const string &snapname = req->get_filepath().last_dentry();
+  dout(10) << "rmsnap " << snapname << " on " << *diri << dendl;
 
   // does snap exist?
-  const string &snapname = req->get_path2();
   if (snapname.length() == 0 || snapname[0] == '_') {
     reply_request(mdr, -EINVAL);   // can't prune a parent snap, currently.
     return;
@@ -5493,8 +5465,6 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   dout(10) << " snapname " << snapname << " is " << snapid << dendl;
 
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  for (int i=0; i<(int)trace.size()-1; i++)
-    rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);
