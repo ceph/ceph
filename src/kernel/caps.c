@@ -1092,6 +1092,8 @@ out:
  */
 static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 {
+	if (got & CEPH_CAP_PIN)
+		ci->i_pin_ref++;
 	if (got & CEPH_CAP_FILE_RD)
 		ci->i_rd_ref++;
 	if (got & CEPH_CAP_FILE_RDCACHE)
@@ -1211,6 +1213,9 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	struct ceph_cap_snap *capsnap;
 
 	spin_lock(&inode->i_lock);
+	if (had & CEPH_CAP_PIN)
+		if (--ci->i_pin_ref == 0)
+			last++;
 	if (had & CEPH_CAP_FILE_RD)
 		if (--ci->i_rd_ref == 0)
 			last++;

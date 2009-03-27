@@ -282,6 +282,7 @@ struct ceph_inode_info {
 	struct timespec i_old_atime;
 
 	/* held references to caps */
+	int i_pin_ref;
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	int i_wrbuffer_ref, i_wrbuffer_ref_head;
 	u32 i_rdcache_gen;      /* we increment this each time we get RDCACHE.
@@ -463,15 +464,17 @@ extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 {
 	int used = 0;
+	if (ci->i_pin_ref)
+		used |= CEPH_CAP_PIN;
 	if (ci->i_rd_ref)
-		used |= CEPH_CAP_GRD;
+		used |= CEPH_CAP_FILE_RD;
 	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
-		used |= CEPH_CAP_GRDCACHE;
+		used |= CEPH_CAP_FILE_RDCACHE;
 	if (ci->i_wr_ref)
-		used |= CEPH_CAP_GWR;
+		used |= CEPH_CAP_FILE_WR;
 	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_GWRBUFFER;
-	return CEPH_CAP_FILE(used);
+		used |= CEPH_CAP_FILE_WRBUFFER;
+	return used;
 }
 
 /*
