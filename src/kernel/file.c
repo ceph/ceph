@@ -586,7 +586,7 @@ more:
 			spin_lock(&ci->i_unsafe_lock);
 			list_add(&ci->i_unsafe_writes, &req->r_unsafe_item);
 			spin_unlock(&ci->i_unsafe_lock);
-			ceph_get_more_cap_refs(ci, CEPH_CAP_FILE_WR);
+			ceph_get_cap_refs(ci, CEPH_CAP_FILE_WR);
 		}
 		ret = ceph_osdc_wait_request(&client->osdc, req);
 	}

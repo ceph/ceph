@@ -736,7 +736,7 @@ extern int ceph_add_cap(struct inode *inode,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);
-extern void ceph_get_more_cap_refs(struct ceph_inode_info *ci, int caps);
+extern void ceph_get_cap_refs(struct ceph_inode_info *ci, int caps);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
 extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);

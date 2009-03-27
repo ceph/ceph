@@ -1114,9 +1114,8 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
  * Note that caller is responsible for ensuring max_size increases are
  * requested from the MDS.
  */
-static int ceph_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
-			     int *got,
-		      loff_t endoff)
+static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
+			    int *got, loff_t endoff)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int ret = 0;
@@ -1183,14 +1182,14 @@ int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		  loff_t endoff)
 {
 	return wait_event_interruptible(ci->i_cap_wq,
-				ceph_get_cap_refs(ci, need, want, got, endoff));
+			try_get_cap_refs(ci, need, want, got, endoff));
 }
 
 /*
  * Take cap refs.  Caller must already now we hold at least on ref on
  * the caps in question or we don't know this is safe.
  */
-void ceph_get_more_cap_refs(struct ceph_inode_info *ci, int caps)
+void ceph_get_cap_refs(struct ceph_inode_info *ci, int caps)
 {
 	spin_lock(&ci->vfs_inode.i_lock);
 	__take_cap_refs(ci, caps);
@@ -1214,8 +1213,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 
 	spin_lock(&inode->i_lock);
 	if (had & CEPH_CAP_PIN)
-		if (--ci->i_pin_ref == 0)
-			last++;
+		--ci->i_pin_ref;
 	if (had & CEPH_CAP_FILE_RD)
 		if (--ci->i_rd_ref == 0)
 			last++;

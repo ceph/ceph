@@ -358,14 +358,23 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			ceph_msg_put(req->r_reply);
 			destroy_reply_info(&req->r_reply_info);
 		}
-		if (req->r_inode)
+		if (req->r_inode) {
+			ceph_put_cap_refs(ceph_inode(req->r_inode),
+					  CEPH_CAP_PIN);
 			iput(req->r_inode);
+		}
+		if (req->r_locked_dir)
+			ceph_put_cap_refs(ceph_inode(req->r_locked_dir),
+					  CEPH_CAP_PIN);
 		if (req->r_target_inode)
 			iput(req->r_target_inode);
 		if (req->r_dentry)
 			dput(req->r_dentry);
-		if (req->r_old_dentry)
+		if (req->r_old_dentry) {
+			ceph_put_cap_refs(ceph_inode(req->r_old_dentry->d_parent->d_inode),
+					  CEPH_CAP_PIN);
 			dput(req->r_old_dentry);
+		}
 		put_request_sessions(req);
 		kfree(req);
 	}
@@ -1189,6 +1198,15 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	int err;
 
 	dout(30, "do_request on %p\n", req);
+
+	/* take CAP_PIN refs for r_inode, r_locked_dir, r_old_dentry */
+	if (req->r_inode)
+		ceph_get_cap_refs(ceph_inode(req->r_inode), CEPH_CAP_PIN);
+	if (req->r_locked_dir)
+		ceph_get_cap_refs(ceph_inode(req->r_locked_dir), CEPH_CAP_PIN);
+	if (req->r_old_dentry)
+		ceph_get_cap_refs(ceph_inode(req->r_old_dentry->d_parent->d_inode),
+				  CEPH_CAP_PIN);
 
 	mutex_lock(&mdsc->mutex);
 	__register_request(mdsc, req, listener);
