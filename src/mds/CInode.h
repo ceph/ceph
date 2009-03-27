@@ -376,7 +376,7 @@ private:
   }
 
   // -- misc -- 
-  bool is_ancestor_of(CInode *other);
+  bool is_projected_ancestor_of(CInode *other);
   void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
   void make_path_string_projected(string& s);  
   void make_path(filepath& s);
