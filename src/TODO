@@ -32,13 +32,40 @@ v0.8
   - return extra inode(s) in reply (namely, unlink)?
 - make caps release explicitly.. no timeout
 - revamp client<->mds interaction wrt snapshots...
+- clean up path_traverse interface, esp the usages in Server.cc
+- fix up mds selection, and ESTALE handling.  hold a pin_ref for request r_inode or r_locked_dir.
 - allow mon to log messages
   - log client mount successes, failures
   - mon elections
   - ?
-- test deep mounts on kclient
 - store root inode on mds
 - allow chmod/whatever of root inode
+
+kclient caps
+- explicit release
+- pin inode only if dirty caps
+  - release on destroy_inode
+- two session lists: dirty_caps, clean_caps
+
+
+alternative #1:
+- keep CAP_PIN on _all_ inodes
+- release on destroy_inode
+- we only need to worry about flushing dirty caps on a timely basis
+- getattr guaranteed safe
+- on client reconnect we have TONS of caps to reassert... :/ what then?
+  - the mds can't keep them all in the journal, so it'll need to reload some, and that's not reliable.  so we'll still end up with inodes without valid caps.
+    - but we'll still get all _open file_ caps.  and everything else (except CWD) will need to be rediscovered via lookup
+  - so.. we could only try to reconnect open files, and not worry about the rest?
+
+alternative #2:
+- make clean_caps an lru
+- touch caps on revalidate
+  - that should avoid releasing caps just prior to getattr
+- maybe still pin cap inodes
+- periodic trimmer to efficiently release caps in big batches
+
+
 
 
 - ENOSPC
@@ -92,6 +119,7 @@ kernel client
 - set mapping bits for ENOSPC, EIO?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
+- should we try to ref CAP_PIN on special inodes that are open?  
 
 vfs issues
 - real_lookup() race:
