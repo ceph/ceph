@@ -136,7 +136,7 @@ bool ClientMonitor::check_mount(MClientMount *m)
     ExportControl *ec = conf_get_export_control();
     if (ec && (!ec->is_authorized(&addr, "/"))) {
       dout(0) << "client is not authorized to mount" << dendl;
-      ss << "addr " << addr << "is not authorized to mount";
+      ss << "client addr " << addr << " is not authorized to mount";
       mon->get_logclient()->log(LOG_SEC, ss);
       mon->get_logclient()->send_log();
       return true;
@@ -144,7 +144,7 @@ bool ClientMonitor::check_mount(MClientMount *m)
     if (client_map.addr_client.count(addr)) {
 	int client = client_map.addr_client[addr];
 	dout(7) << " client" << client << " already mounted" << dendl;
-        ss << "client " << client << "is already mounted";
+        ss << "client" << client << " " << addr << " is already mounted";
         mon->get_logclient()->log(LOG_INFO, ss);
         mon->get_logclient()->send_log();
 	_mounted(client, m);
@@ -219,7 +219,7 @@ bool ClientMonitor::prepare_update(Message *m)
       ::encode(info.ticket, info.signed_ticket);
       pending_inc.add_mount(client, info);
       paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
-      ss << "client " << client << " mounted";
+      ss << "client" << client << " " << addr << " mounted";
       mon->get_logclient()->log(LOG_INFO, ss);
       mon->get_logclient()->send_log();
     }
@@ -234,7 +234,7 @@ bool ClientMonitor::prepare_update(Message *m)
       
       pending_inc.add_unmount(client);
       paxos->wait_for_commit(new C_Unmounted(this, (MClientUnmount*)m));
-      ss << "client " << client << " unmounted";
+      ss << "client" << client << " " << client_map.client_info[client].addr() << " unmounted";
       mon->get_logclient()->log(LOG_INFO, ss);
       mon->get_logclient()->send_log();
     }
