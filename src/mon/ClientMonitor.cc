@@ -171,6 +171,12 @@ bool ClientMonitor::preprocess_query(Message *m)
 	_unmounted((MClientUnmount*)m);
 	return true;
       }
+      if (client_map.client_info[client].addr() == m->get_orig_source_addr() &&
+	  pending_inc.unmount.count(client)) {
+	dout(7) << " client" << client << " already unmounting" << dendl;
+	delete m;
+	return true;
+      }
     }
     return false;
     
