@@ -92,7 +92,6 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct dentry *dentry;
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
@@ -133,12 +132,9 @@ int ceph_open(struct inode *inode, struct file *file)
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
+
 	dout(10, "open fmode %d wants %s, we only already want %s\n",
 	     fmode, ceph_cap_string(new_want), ceph_cap_string(mds_wanted));
-
-	dentry = d_find_alias(inode);
-	if (!dentry)
-		return -ESTALE;  /* yuck */
 	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, flags, 0);
@@ -153,7 +149,6 @@ int ceph_open(struct inode *inode, struct file *file)
 	ceph_mdsc_put_request(req);
 	dout(5, "open result=%d on %llx.%llx\n", err, ceph_vinop(inode));
 out:
-	dput(dentry);
 	return err;
 }
 
