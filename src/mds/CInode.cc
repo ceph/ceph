@@ -1392,8 +1392,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 
 
   Capability *cap = get_client_cap(client);
-  bool pfile = filelock.is_xlocked_by_client(client) ||
-    (cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
+  bool pfile = filelock.is_xlocked_by_client(client) || get_loner() == client;
+  //(cap && (cap->issued() & CEPH_CAP_FILE_EXCL));
   bool pauth = authlock.is_xlocked_by_client(client);
   bool plink = linklock.is_xlocked_by_client(client);
   bool pxattr = xattrlock.is_xlocked_by_client(client);
