@@ -925,22 +925,33 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		if (req->r_inode) {
 			ino1 = ceph_ino(req->r_inode);
 			snapid = ceph_snap(req->r_inode);
+			dout(10, "create_request_message inode %p %llx.%llx\n",
+			     req->r_inode, ceph_ino(req->r_inode),
+			     ceph_snap(req->r_inode));
 		} else if (req->r_dentry) {
 			path1 = req->r_dentry->d_name.name;
 			pathlen1 = req->r_dentry->d_name.len;
 			ino1 = ceph_ino(req->r_dentry->d_parent->d_inode);
 			snapid = ceph_snap(req->r_dentry->d_parent->d_inode);
+			dout(10, "create_request_message dentry %p %llx/%.*s\n",
+			     req->r_dentry, ino1, pathlen1, path1);
 		} else if (path1) {
 			pathlen1 = strlen(path1);
+			dout(10, "create_request_message path1 %.*s\n",
+			     pathlen1, path1);
 		}
 
 		if (req->r_old_dentry) {
 			path2 = req->r_old_dentry->d_name.name;
 			pathlen2 = req->r_old_dentry->d_name.len;
 			ino2 = ceph_ino(req->r_old_dentry->d_parent->d_inode);
+			dout(10, "create_request_message dentry %p %llx/%.*s\n",
+			     req->r_old_dentry, ino2, pathlen2, path2);
 		} else if (path2) {
 			pathlen2 = strlen(path2);
-		}
+			dout(10, "create_request_message path2 %.*s\n",
+			     pathlen2, path2);
+	}
 
 		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
 	}
@@ -975,12 +986,6 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	} else {
 		ceph_encode_filepath(&p, end, ino1, path1);
 		ceph_encode_filepath(&p, end, ino2, path2);
-		if (path1)
-			dout(10, "create_request_message path1 %llx/%s\n",
-			     ino1, path1);
-		if (path2)
-			dout(10, "create_request_message path2 %llx/%s\n",
-			     ino2, path2);
 	}
 
  	BUG_ON(p != end);
