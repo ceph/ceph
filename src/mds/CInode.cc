@@ -424,15 +424,14 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-
-bool CInode::is_ancestor_of(CInode *other)
+bool CInode::is_projected_ancestor_of(CInode *other)
 {
   while (other) {
     if (other == this)
       return true;
-    if (!other->get_parent_dn())
+    if (!other->get_projected_parent_dn())
       break;
-    other = other->get_parent_dn()->get_dir()->get_inode();
+    other = other->get_projected_parent_dn()->get_dir()->get_inode();
   }
   return false;
 }

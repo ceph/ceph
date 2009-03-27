@@ -366,7 +366,7 @@ void SnapRealm::split_at(SnapRealm *child)
        p != open_children.end(); ) {
     SnapRealm *realm = *p;
     if (realm != child &&
-	child->inode->is_ancestor_of(realm->inode)) {
+	child->inode->is_projected_ancestor_of(realm->inode)) {
       dout(20) << " child gets child realm " << *realm << " on " << *realm->inode << dendl;
       realm->parent = child;
       child->open_children.insert(realm);
