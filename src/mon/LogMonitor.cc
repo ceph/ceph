@@ -19,6 +19,7 @@
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
+#include "messages/MLogAck.h"
 
 #include "common/Timer.h"
 
@@ -238,7 +239,7 @@ bool LogMonitor::prepare_log(MLog *m)
 void LogMonitor::_updated_log(MLog *m, entity_inst_t who)
 {
   dout(7) << "_updated_log for " << who << dendl;
-  mon->messenger->send_message(new MLog(m->fsid, m->entries.rbegin()->seq), who);
+  mon->messenger->send_message(new MLogAck(m->fsid, m->entries.rbegin()->seq), who);
   delete m;
 }
 

@@ -24,6 +24,7 @@ using namespace std;
 
 #include "messages/MMonElection.h"
 #include "messages/MLog.h"
+#include "messages/MLogAck.h"
 
 #include "messages/MPing.h"
 
@@ -178,6 +179,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_LOG:
     m = new MLog;
+    break;
+  case MSG_LOGACK:
+    m = new MLogAck;
     break;
 
   case CEPH_MSG_PING:

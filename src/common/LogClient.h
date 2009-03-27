@@ -24,6 +24,7 @@
 
 class Messenger;
 class MLog;
+class MLogAck;
 class MonMap;
 
 
@@ -43,7 +44,7 @@ class LogClient : public Dispatcher {
   void log(log_type type, string& s);
   void log(log_type type, stringstream& s);
   void send_log();
-  void handle_log(MLog *m);
+  void handle_log_ack(MLogAck *m);
 
   LogClient(Messenger *m, MonMap *mm) : 
     messenger(m), monmap(mm), 

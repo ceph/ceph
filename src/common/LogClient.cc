@@ -20,6 +20,7 @@
 #include "msg/Message.h"
 
 #include "messages/MLog.h"
+#include "messages/MLogAck.h"
 #include "mon/MonMap.h"
 
 #include <iostream>
@@ -69,15 +70,21 @@ void LogClient::send_log()
   if (log_queue.empty())
     return;
   MLog *log = new MLog(monmap->get_fsid(), log_queue);
-  int mon = monmap->pick_mon();
+
+  int mon;
+  if (messenger->get_myname().is_mon())
+    mon = messenger->get_myname().num();  // if we are a monitor, queue for ourselves
+  else
+    mon = monmap->pick_mon();
+
   dout(10) << "send_log to mon" << mon << dendl;
   messenger->send_message(log, monmap->get_inst(mon));
 }
 
-void LogClient::handle_log(MLog *m)
+void LogClient::handle_log_ack(MLogAck *m)
 {
   Mutex::Locker l(log_lock);
-  dout(10) << "handle_log " << *m << dendl;
+  dout(10) << "handle_log_ack " << *m << dendl;
 
   version_t last = m->last;
   while (log_queue.size() && log_queue.begin()->seq <= last) {
@@ -92,8 +99,8 @@ bool LogClient::dispatch_impl(Message *m)
   dout(20) << "dispatch " << m << dendl;
 
   switch (m->get_type()) {
-  case MSG_LOG:
-    handle_log((MLog*)m);
+  case MSG_LOGACK:
+    handle_log_ack((MLogAck*)m);
     return true;
   }
   return false;

@@ -498,6 +498,7 @@ noinst_HEADERS = \
         messages/MInodeFileCaps.h\
         messages/MLock.h\
 	messages/MLog.h\
+	messages/MLogAck.h\
         messages/MMDSBeacon.h\
         messages/MMDSBoot.h\
         messages/MMDSCacheRejoin.h\
