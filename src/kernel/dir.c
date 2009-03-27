@@ -328,6 +328,29 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	return dentry;
 }
 
+/*
+ * If we do a create but get no trace back from the MDS, follow up with
+ * a lookup (the VFS expects us to link up the provided dentry).
+ */
+int ceph_handle_notrace_create(struct inode *dir, struct dentry *dentry)
+{
+	struct dentry *result = ceph_lookup(dir, dentry, NULL);
+
+	if (result && !IS_ERR(result)) {
+		/*
+		 * We created the item, then did a lookup, and found
+		 * it was already linked to another inode we already
+		 * had in our cache (and thus got spliced).  Link our
+		 * dentry to that inode, but don't hash it, just in
+		 * case the VFS wants to dereference it.
+		 */
+		BUG_ON(!result->d_inode);
+		d_instantiate(dentry, result->d_inode);
+		return 0;
+	}
+	return PTR_ERR(result);
+}
+
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 			  int mode, dev_t rdev)
 {
@@ -353,13 +376,8 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
-	if (!err && !req->r_reply_info.head->is_dentry) {
-		/*
-		 * no trace.  do lookup, in case we are called from create
-		 * and the VFS needs a valid dentry.
-		 */
-		err = ceph_do_getattr(dentry, CEPH_STAT_CAP_INODE_ALL);
-	}
+	if (!err && !req->r_reply_info.head->is_dentry)
+		err = ceph_handle_notrace_create(dir, dentry);
 	ceph_mdsc_put_request(req);
 	if (err)
 		d_drop(dentry);
@@ -411,6 +429,8 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
+	if (!err && !req->r_reply_info.head->is_dentry)
+		err = ceph_handle_notrace_create(dir, dentry);
 	ceph_mdsc_put_request(req);
 	if (err)
 		d_drop(dentry);
@@ -448,6 +468,8 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
+	if (!err && !req->r_reply_info.head->is_dentry)
+		err = ceph_handle_notrace_create(dir, dentry);
 	ceph_mdsc_put_request(req);
 out:
 	if (err < 0)
@@ -482,14 +504,8 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (err) {
 		d_drop(dentry);
-	} else if (!req->r_reply_info.head->is_dentry) {
-		/* no trace */
-		struct inode *inode = old_dentry->d_inode;
-		inc_nlink(inode);
-		atomic_inc(&inode->i_count);
-		dget(dentry);
-		d_instantiate(dentry, inode);
-	}
+	} else if (!req->r_reply_info.head->is_dentry)
+		d_instantiate(dentry, igrab(old_dentry->d_inode));
 	ceph_mdsc_put_request(req);
 	return err;
 }
@@ -531,6 +547,8 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	ceph_mdsc_lease_release(mdsc, dir, dentry, CEPH_LOCK_DN);
 	ceph_release_caps(inode, CEPH_CAP_LINK_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
+	if (!err && !req->r_reply_info.head->is_dentry)
+		d_delete(dentry);
 	ceph_mdsc_put_request(req);
 out:
 	return err;
@@ -567,14 +585,10 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry) {
 		/*
-		 * no trace
-		 *
 		 * Normally d_move() is done by fill_trace (called by
 		 * do_request, above).  If there is no trace, we need
 		 * to do it here.
 		 */
-		if (new_dentry->d_inode)
-			dput(new_dentry);
 		d_move(old_dentry, new_dentry);
 	}
 	ceph_mdsc_put_request(req);

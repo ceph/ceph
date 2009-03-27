@@ -786,17 +786,35 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 #if 0
 	/*
-	 * if we resend completed ops to a recovering mds, we get no
-	 * trace.  pretend this is the case to ensure the 'no trace'
-	 * handlers in the callers behave.
+	 * Debugging hook:
+	 *
+	 * If we resend completed ops to a recovering mds, we get no
+	 * trace.  Since that is very rare, pretend this is the case
+	 * to ensure the 'no trace' handlers in the callers behave.
+	 *
+	 * Fill in inodes unconditionally to avoid breaking cap
+	 * invariants.
 	 */
 	if (rinfo->head->op & CEPH_MDS_OP_WRITE) {
-		dout(0, "fill_trace faking empty trace on %d %s\n",
-		     rinfo->head->op,
-		     ceph_mds_op_name(rinfo->head->op));
-		rinfo->trace_numi = 0;
-		rinfo->trace_numd = 0;
-		return 0;
+		dout(0, "fill_trace faking empty trace on %lld %s\n",
+		     req->r_tid, ceph_mds_op_name(rinfo->head->op));
+		if (rinfo->head->is_dentry) {
+			rinfo->head->is_dentry = 0;
+			err = fill_inode(req->r_locked_dir,
+					 &rinfo->diri, rinfo->dirfrag,
+					 session, req->r_request_started, -1);
+		}
+		if (rinfo->head->is_target) {
+			rinfo->head->is_target = 0;
+			ininfo = rinfo->targeti.in;
+			vino.ino = le64_to_cpu(ininfo->ino);
+			vino.snap = le64_to_cpu(ininfo->snapid);
+			in = ceph_get_inode(sb, vino);
+			err = fill_inode(in, &rinfo->targeti, NULL,
+					 session, req->r_request_started,
+					 req->r_fmode);
+			iput(in);
+		}
 	}
 #endif
 
@@ -815,7 +833,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	/*
 	 * update a dentry?
 	 */
-	if (req->r_locked_dir) {
+	if (rinfo->head->is_dentry) {
 		/*
 		 * lookup link rename   : null -> possibly existing inode
 		 * mknod symlink mkdir  : null -> new inode
@@ -826,7 +844,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		bool have_dir_cap, have_lease;
 
 		BUG_ON(!dn);
-		BUG_ON(!rinfo->head->is_dentry);
+		BUG_ON(!dir);
 		BUG_ON(dn->d_parent->d_inode != dir);
 		BUG_ON(ceph_ino(dir) !=
 		       le64_to_cpu(rinfo->diri.in->ino));
@@ -894,7 +912,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		vino.ino = le64_to_cpu(ininfo->ino);
 		vino.snap = le64_to_cpu(ininfo->snapid);
 		if (!dn->d_inode) {
-			in = ceph_get_inode(dn->d_sb, vino);
+			in = ceph_get_inode(sb, vino);
 			if (IS_ERR(in)) {
 				derr(30, "get_inode badness\n");
 				err = PTR_ERR(in);

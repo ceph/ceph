@@ -196,6 +196,8 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
+	if (!err && (flags & O_CREAT) && !req->r_reply_info.head->is_dentry)
+		err = ceph_handle_notrace_create(dir, dentry);	
 	if (!err)
 		err = ceph_init_file(req->r_dentry->d_inode, file,
 				     req->r_fmode);
