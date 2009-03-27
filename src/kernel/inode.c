@@ -852,7 +852,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			dout(10, "fill_trace  no dentry lease or dir cap\n");
 
 		/* rename? */
-		if (req->r_old_dentry) {
+		if (req->r_old_dentry && req->r_op == CEPH_MDS_OP_RENAME) {
 			dout(10, " src %p '%.*s' dst %p '%.*s'\n",
 			     req->r_old_dentry,
 			     req->r_old_dentry->d_name.len,
