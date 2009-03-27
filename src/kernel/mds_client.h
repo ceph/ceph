@@ -130,7 +130,6 @@ struct ceph_mds_session {
 enum {
 	USE_ANY_MDS,
 	USE_RANDOM_MDS,
-	USE_CAP_MDS,    /* prefer mds we hold caps from */
 	USE_AUTH_MDS,   /* prefer authoritative mds for this metadata item */
 };
 

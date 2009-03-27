@@ -471,19 +471,6 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 		return req->r_resend_mds;
 	}
 
-	if (mode == USE_CAP_MDS) {
-		mds = ceph_get_cap_mds(dentry->d_inode);
-		if (mds >= 0) {
-			dout(20, "choose_mds %p %llx.%llx mds%d (cap)\n",
-			     dentry->d_inode, ceph_vinop(dentry->d_inode), mds);
-			return mds;
-		}
-		derr(0, "choose_mds %p %llx.%llx has NO CAPS, using auth\n",
-		     dentry->d_inode, ceph_vinop(dentry->d_inode));
-		WARN_ON(1);
-		mode = USE_AUTH_MDS;
-	}
-
 	if (mode == USE_RANDOM_MDS)
 		goto random;
 
