@@ -860,7 +860,10 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		err = PTR_ERR(root);
 		goto out;
 	}
-	client->sb->s_root = root;
+	if (client->sb->s_root)
+		dput(root);
+	else
+		client->sb->s_root = root;
 
 	if (path[0] == 0) {
 		dget(root);
