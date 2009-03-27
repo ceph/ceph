@@ -67,6 +67,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   messenger(m),
   lock("Monitor::lock"),
   monmap(map),
+  logclient(messenger, monmap),
   timer(lock), tick_timer(0),
   store(s),
   
@@ -114,6 +115,7 @@ void Monitor::init()
   
   // i'm ready!
   messenger->set_dispatcher(this);
+  link_dispatcher(&logclient);
   
   // start ticker
   reset_tick();
@@ -146,6 +148,8 @@ void Monitor::shutdown()
   cancel_tick();
   timer.cancel_all();
   timer.join();  
+
+  unlink_dispatcher(&logclient);
   
   // die.
   messenger->shutdown();
