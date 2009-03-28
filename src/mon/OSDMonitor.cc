@@ -423,7 +423,11 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
 
 bool OSDMonitor::prepare_failure(MOSDFailure *m)
 {
+  stringstream ss;
   dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_orig_source_inst() << dendl;
+
+  ss << "osd " << m->get_failed() << " failure (" << m->get_orig_source_inst() << ")";
+  mon->get_logclient()->log(LOG_DEBUG, ss);
   
   // FIXME
   // take their word for it
@@ -478,7 +482,11 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
+  stringstream ss;
   dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb << dendl;
+  ss << "osd boot (" << m->get_orig_source_inst() << ")";
+  mon->get_logclient()->log(LOG_DEBUG, ss);
+
   assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
   
@@ -568,7 +576,11 @@ bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 bool OSDMonitor::prepare_alive(MOSDAlive *m)
 {
   int from = m->get_orig_source().num();
+  stringstream ss;
+  ss << "osd alive (" << m->get_orig_source_inst() << ")";
+  mon->get_logclient()->log(LOG_DEBUG, ss);
 
+  mon->get_logclient()->log(LOG_DEBUG, ss);
   dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
   pending_inc.new_up_thru[from] = m->map_epoch;
   paxos->wait_for_commit(new C_Alive(this,m ));

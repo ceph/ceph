@@ -112,6 +112,8 @@ void Monitor::init()
   // init paxos
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->init();
+
+  logclient.set_synchronous(true);
   
   // i'm ready!
   messenger->set_dispatcher(this);

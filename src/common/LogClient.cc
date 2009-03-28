@@ -62,11 +62,19 @@ void LogClient::log(log_type type, string& s)
   e.type = type;
   e.msg = s;
   log_queue.push_back(e);
+  
+  if (is_synchronous)
+    _send_log();
 }
 
 void LogClient::send_log()
 {
   Mutex::Locker l(log_lock);
+  _send_log();
+}
+
+void LogClient::_send_log()
+{
   if (log_queue.empty())
     return;
   MLog *log = new MLog(monmap->get_fsid(), log_queue);
