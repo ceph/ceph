@@ -44,8 +44,9 @@ v0.8
 kclient caps
 /- two session lists: dirty_caps, clean_caps
 /- time out and release clean caps explicitly
-
-- pin dirty caps only
+/- pin dirty caps
+- don't pin clean caps
+- release on destroy_inode
 
 alternative #1:
 - keep CAP_PIN on _all_ inodes, and don't pin inodes with caps.

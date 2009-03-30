@@ -463,6 +463,12 @@ static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
 }
 
 extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
+static inline int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
+{
+	int was = __ceph_caps_dirty(ci);
+	ci->i_dirty_caps |= mask;
+	return was;
+}
 extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
 
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)

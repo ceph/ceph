@@ -737,8 +737,15 @@ retry_snap:
 			ret = sync_page_range(inode, mapping, pos, ret);
 		}
 	}
-	if (ret >= 0)
-		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
+	if (ret >= 0) {
+		int was_dirty;
+
+		spin_lock(&inode->i_lock);
+		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_WR);
+		spin_unlock(&inode->i_lock);
+		if (!was_dirty)
+			igrab(inode);		
+	}
 
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %s\n",

@@ -1242,6 +1242,7 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_request *req;
 	int err;
 	int mask = 0;
+	int was_dirty;
 
 	spin_lock(&inode->i_lock);
 	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
@@ -1251,8 +1252,10 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_GID)
 			inode->i_gid = attr->ia_gid;
 		inode->i_ctime = CURRENT_TIME;
-		ci->i_dirty_caps |= CEPH_CAP_AUTH_EXCL;
+		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_AUTH_EXCL);
 		spin_unlock(&inode->i_lock);
+		if (!was_dirty)
+			igrab(inode);
 		return 0;
 	}
 	spin_unlock(&inode->i_lock);
@@ -1285,15 +1288,17 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
-	int err;
+	int err, was_dirty;
 
 	spin_lock(&inode->i_lock);
 	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
 		dout(10, "chmod holding auth EXCL, doing locally\n");
 		inode->i_mode = attr->ia_mode;
 		inode->i_ctime = CURRENT_TIME;
-		ci->i_dirty_caps |= CEPH_CAP_AUTH_EXCL;
+		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_AUTH_EXCL);
 		spin_unlock(&inode->i_lock);
+		if (!was_dirty)
+			igrab(inode);
 		return 0;
 	}
 	spin_unlock(&inode->i_lock);
@@ -1320,7 +1325,7 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 	const unsigned int ia_valid = attr->ia_valid;
 	struct ceph_mds_request *req;
 	int err;
-	int issued;
+	int issued, was_dirty;
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
@@ -1334,8 +1339,10 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_MTIME)
 			inode->i_mtime = attr->ia_mtime;
 		inode->i_ctime = CURRENT_TIME;
-		ci->i_dirty_caps |= CEPH_CAP_FILE_EXCL;
+		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_EXCL);
 		spin_unlock(&inode->i_lock);
+		if (!was_dirty)
+			igrab(inode);
 		return 0;
 	}
 
@@ -1351,8 +1358,10 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 		if (ia_valid & ATTR_MTIME)
 			inode->i_mtime = attr->ia_mtime;
 		inode->i_ctime = CURRENT_TIME;
-		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
+		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_WR);
 		spin_unlock(&inode->i_lock);
+		if (!was_dirty)
+			igrab(inode);
 		return 0;
 	}
 

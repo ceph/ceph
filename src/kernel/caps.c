@@ -1446,6 +1446,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 	int dirty = le32_to_cpu(m->dirty);
 	int cleaned = dirty & ~caps;
 	int removed_last = 0;
+	int new_dirty = 0;
 
 	dout(10, "handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
 	     " flushing %s -> %s\n",
@@ -1453,6 +1454,8 @@ static void handle_cap_flush_ack(struct inode *inode,
 	     ceph_cap_string(cap->flushing),
 	     ceph_cap_string(cap->flushing & ~cleaned));
 	cap->flushing &= ~cleaned;
+
+	new_dirty = __ceph_caps_dirty(ci);
 
 	/* did we release this cap, too? */
 	if (caps == 0 && seq == cap->seq) {
@@ -1463,6 +1466,8 @@ static void handle_cap_flush_ack(struct inode *inode,
 					   ci);
 	}
 	spin_unlock(&inode->i_lock);
+	if (!new_dirty)
+		iput(inode);
 	if (removed_last)
 		iput(inode);
 }
