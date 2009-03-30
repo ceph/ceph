@@ -126,8 +126,9 @@ int ceph_open(struct inode *inode, struct file *file)
 		int mds_wanted = __ceph_caps_mds_wanted(ci);
 		int issued = __ceph_caps_issued(ci, NULL);
 
-		dout(10, "open fmode %d caps %d using existing on %p\n",
-		     fmode, new_want, inode);
+		dout(10, "open %p fmode %d want %s issued %s using existing\n",
+		     inode, fmode, ceph_cap_string(new_want),
+		     ceph_cap_string(issued));
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
 		

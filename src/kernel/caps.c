@@ -966,7 +966,7 @@ retry_locked:
 			goto ack;
 
 		/* want more caps from mds? */
-		if (want & ~cap->mds_wanted)
+		if (want & ~(cap->mds_wanted | cap->issued))
 			goto ack;
 
 		if ((cap->issued & ~retain) == 0 &&
