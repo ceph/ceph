@@ -260,7 +260,6 @@ int ceph_add_cap(struct inode *inode,
 	struct ceph_cap *cap;
 	int mds = session->s_mds;
 	int is_first = 0;
-	unsigned long duration;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -356,12 +355,6 @@ retry:
 	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
 
-	duration = ttl_ms * HZ / 1000;
-	cap->expires = ttl_from + duration;
-	cap->renew_after = ttl_from + (duration >> 1);
-	dout(30, " expires %lu, renew_after %lu (duration %lu, %u ms)\n",
-	     cap->expires, cap->renew_after, duration, ttl_ms);
-
 	if (fmode >= 0)
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
@@ -397,6 +390,20 @@ static int __cap_is_valid(struct ceph_cap *cap)
 }
 
 /*
+ * Touch cap timestamp and, if clean, move to end of lru.
+ */
+void __touch_cap(struct ceph_cap *cap)
+{
+	cap->last_used = jiffies;
+	if (!list_empty(&cap->session_clean_caps)) {
+		spin_lock(&cap->session->s_clean_caps_lock);
+		list_del_init(&cap->session_clean_caps);
+		list_add(&cap->session_clean_caps, &cap->session->s_clean_caps);
+		spin_unlock(&cap->session->s_clean_caps_lock);
+	}
+}
+
+/*
  * Return set of valid cap bits issued to us.  Note that caps time
  * out, and may be invalidated in bulk if the client session times out
  * and session->s_cap_gen is bumped.
@@ -418,6 +425,8 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 		have |= cap->issued;
 		if (implemented)
 			*implemented |= cap->implemented;
+
+		__touch_cap(cap);
 	}
 	return have;
 }
@@ -825,6 +834,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 	struct ceph_cap *cap;
 	int file_wanted, used;
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
+	int drop_session_lock = session ? 0:1;
 	int want, retain, revoking, dirty, op;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
@@ -1011,7 +1021,7 @@ ack:
 	}
 	spin_unlock(&inode->i_lock);
 
-	if (session)
+	if (session && drop_session_lock)
 		mutex_unlock(&session->s_mutex);
 	if (took_snap_rwsem)
 		up_read(&mdsc->snap_rwsem);
@@ -1788,7 +1798,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			ceph_send_msg_mds(mdsc, msg, mds);
 		} else if (r == 2) {
 			ceph_check_caps(ceph_inode(inode), 1, 0, session);
-			goto done_unlocked;
 		}
 		break;
 
@@ -1809,7 +1818,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 done:
 	mutex_unlock(&session->s_mutex);
-done_unlocked:
 	ceph_put_mds_session(session);
 
 	kfree(xattr_data);
@@ -1867,40 +1875,30 @@ void ceph_trim_session_clean_caps(struct ceph_mds_session *session)
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct list_head *p, *n;
+	unsigned long cutoff = jiffies - HZ * 30;  /* fixme */
 
 	dout(10, "trim_clean_caps for mds%d\n", session->s_mds);
-	/*
-	spin_lock(&session->s_rdcaps_lock);
-	list_for_each_safe(p, n, &session->s_rdcaps) {
-		int wanted, last_cap;
-
-		cap = list_entry(p, struct ceph_cap, session_rdcaps);
-		spin_unlock(&session->s_rdcaps_lock);
-
+	spin_lock(&session->s_clean_caps_lock);
+	list_for_each_safe(p, n, &session->s_clean_caps) {
+		cap = list_entry(p, struct ceph_cap, session_clean_caps);
 		inode = &cap->ci->vfs_inode;
-		spin_lock(&inode->i_lock);
+		igrab(inode);
+		spin_unlock(&session->s_clean_caps_lock);
 
-		if (time_before(jiffies, cap->expires)) {
-			dout(20, " stopping at %p cap %p expires %lu > %lu\n",
-			     inode, cap, cap->expires, jiffies);
+		spin_lock(&inode->i_lock);
+		if (time_before(cutoff, cap->last_used)) {
+			dout(20, " stopping at %p cap %p last_used %lu > %lu\n",
+			     inode, cap, cap->last_used, cutoff);
 			spin_unlock(&inode->i_lock);
+			iput(inode);
 			return;
 		}
-
-		wanted = __ceph_caps_wanted(cap->ci);
-		dout(20, " dropping %p cap %p %s wanted %s\n", inode,
-		     cap, ceph_cap_string(cap->issued),
-		     ceph_cap_string(wanted));
-		BUG_ON(wanted);
-		last_cap = __ceph_remove_cap(cap);
 		spin_unlock(&inode->i_lock);
-		if (last_cap)
-			iput(inode);
-
-		spin_lock(&session->s_rdcaps_lock);
+		ceph_check_caps(cap->ci, 1, CEPH_CAP_ANY, session);
+		iput(inode);
+		spin_lock(&session->s_clean_caps_lock);
 	}
-	spin_unlock(&session->s_rdcaps_lock);
-	*/
+	spin_unlock(&session->s_clean_caps_lock);
 }
 
 /*

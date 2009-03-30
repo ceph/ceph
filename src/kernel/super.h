@@ -154,8 +154,7 @@ struct ceph_cap {
 	int flushing;     /* dirty fields being written back to mds */
 	int mds_wanted;
 	u32 seq, mseq, gen;
-	unsigned long expires;  /* if readonly and unwanted (jiffies) */
-	unsigned long renew_after, renew_from;  /* for _rdcap_ renewal */
+	unsigned long last_used;
 };
 
 /*

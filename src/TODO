@@ -42,11 +42,11 @@ v0.8
 - allow chmod/whatever of root inode
 
 kclient caps
-- explicit release
+/- two session lists: dirty_caps, clean_caps
+/- time out and release clean caps explicitly
   - this makes open on client work better, since we care less about the mds 'wanted' value.
     (we only need to update it if/when we release the caps we still want, or async on open
      if we don't have them yet)
-- two session lists: dirty_caps, clean_caps
 
 alternative #1:
 - keep CAP_PIN on _all_ inodes, and don't pin inodes with caps.
