@@ -330,6 +330,9 @@ bool MDSMonitor::should_propose(double& delay)
 void MDSMonitor::_updated(MMDSBeacon *m)
 {
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
+  stringstream ss;
+  ss << "mds " << m->get_orig_source_inst() << " " << ceph_mds_state_name(m->get_state());
+  mon->get_logclient()->log(LOG_DEBUG, ss);
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
