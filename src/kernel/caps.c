@@ -254,7 +254,7 @@ int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session, u64 cap_id,
 		 int fmode, unsigned issued, unsigned wanted,
 		 unsigned seq, unsigned mseq, u64 realmino,
-		 unsigned ttl_ms, unsigned long ttl_from,
+		 unsigned ttl_ms, unsigned long ttl_from, int flags,
 		 struct ceph_cap *new_cap)
 {
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -339,6 +339,11 @@ retry:
 		dout(10, " marking %p NOT complete\n", inode);
 		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
 	}
+
+	if (flags & CEPH_CAP_FLAG_AUTH)
+		ci->i_auth_cap = cap;
+	else if (ci->i_auth_cap == cap)
+		ci->i_auth_cap = NULL;
 
 	/*
 	 * Ensure our rdcaps status is correct
@@ -536,6 +541,8 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 	/* remove from inode list */
 	rb_erase(&cap->ci_node, &ci->i_caps);
 	cap->session = NULL;
+	if (ci->i_auth_cap == cap)
+		ci->i_auth_cap = NULL;
 
 	kfree(cap);
 
@@ -1774,7 +1781,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	downgrade_write(&mdsc->snap_rwsem);
 	ceph_add_cap(inode, session, cap_id, -1,
 		     issued, wanted, seq, mseq, realmino,
-		     ttl_ms, jiffies - ttl_ms/2, NULL);
+		     ttl_ms, jiffies - ttl_ms/2, CEPH_CAP_FLAG_AUTH, NULL);
 	up_read(&mdsc->snap_rwsem);
 }
 

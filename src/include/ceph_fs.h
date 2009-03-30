@@ -871,7 +871,10 @@ struct ceph_mds_reply_cap {
 	__le32 seq, mseq;
 	__le64 realm;
 	__le32 ttl_ms;  /* ttl, in ms.  if readonly and unwanted. */
+	__u8 flags;
 } __attribute__ ((packed));
+
+#define CEPH_CAP_FLAG_AUTH  1
 
 struct ceph_mds_reply_inode {
 	__le64 ino;

@@ -258,6 +258,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattr_data = NULL;
 
 	ci->i_caps = RB_ROOT;
+	ci->i_auth_cap = NULL;
 	ci->i_dirty_caps = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 	ci->i_hold_caps_until = 0;
@@ -571,6 +572,7 @@ no_change:
 				     le64_to_cpu(info->cap.realm),
 				     le32_to_cpu(info->cap.ttl_ms),
 				     ttl_from,
+				     info->cap.flags,
 				     NULL);
 		} else {
 			spin_lock(&inode->i_lock);

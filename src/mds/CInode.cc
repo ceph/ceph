@@ -1492,6 +1492,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.ttl_ms = 0;
     }
   }
+  e.cap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH:0;
   dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
 	   << " seq " << e.cap.seq
 	   << " mseq " << e.cap.mseq << dendl;

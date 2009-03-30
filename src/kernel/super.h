@@ -257,6 +257,7 @@ struct ceph_inode_info {
 	/* capabilities.  protected _both_ by i_lock and cap->session's
 	 * s_mutex. */
 	struct rb_root i_caps;           /* cap list */
+	struct ceph_cap *i_auth_cap;     /* authoritative cap, if any */
 	unsigned i_dirty_caps;           /* mask of dirtied fields */
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */
@@ -732,7 +733,7 @@ extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session, u64 cap_id,
 			int fmode, unsigned issued, unsigned wanted,
 			unsigned cap, unsigned seq, u64 realmino,
-			unsigned ttl_ms, unsigned long ttl_from,
+			unsigned ttl_ms, unsigned long ttl_from, int flags,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern int ceph_get_cap_mds(struct inode *inode);
