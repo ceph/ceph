@@ -1444,6 +1444,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (!no_caps && valid && !cap && is_auth()) {
       // add a new cap
       cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
+      if (is_auth())
+	try_choose_loner();
     }
 
     if (is_replay) {
