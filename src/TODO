@@ -64,7 +64,7 @@ alternative #1:
 
 alternative #2:
 - make clean_caps an lru
-- touch caps on revalidate
+- touch caps on revalidate, getattr, etc.
   - that should avoid releasing caps just prior to getattr
 - maybe still pin cap inodes for now.
   - eventually avoid it, using the release on destroy_inode strategy above
