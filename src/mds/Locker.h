@@ -186,6 +186,7 @@ public:
   bool _do_cap_update(CInode *in, Capability *cap, int had, int wanted, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0, ceph_seq_t releasecap=0);
   void _finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClientCaps *ack);
+  void handle_client_cap_release(class MClientCapRelease *m);
 
 public:
   void request_inode_file_caps(CInode *in);

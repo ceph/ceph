@@ -464,6 +464,7 @@ noinst_HEADERS = \
         mds/snap.h\
         messages/MCacheExpire.h\
         messages/MClientCaps.h\
+        messages/MClientCapRelease.h\
         messages/MClientLease.h\
         messages/MClientMount.h\
         messages/MClientMountAck.h\

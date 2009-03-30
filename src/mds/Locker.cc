@@ -46,6 +46,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientCaps.h"
+#include "messages/MClientCapRelease.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -79,6 +80,9 @@ void Locker::dispatch(Message *m)
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
     handle_client_caps((MClientCaps*)m);
+    break;
+  case CEPH_MSG_CLIENT_CAPRELEASE:
+    handle_client_cap_release((MClientCapRelease*)m);
     break;
   case CEPH_MSG_CLIENT_LEASE:
     handle_client_lease((MClientLease*)m);
@@ -1754,6 +1758,43 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   return true;
 }
 
+void Locker::handle_client_cap_release(MClientCapRelease *m)
+{
+  int client = m->get_source().num();
+  dout(10) << "handle_client_cap_release " << *m << dendl;
+
+  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); p++) {
+    inodeno_t ino((__u64)p->ino);
+    CInode *in = mdcache->get_inode(ino);
+    if (!in) {
+      dout(10) << " missing ino " << ino << dendl;
+      continue;
+    }
+    Capability *cap = in->get_client_cap(client);
+    if (!cap) {
+      dout(10) << " no cap on " << *in << dendl;
+      continue;
+    }
+    if (cap->get_cap_id() != p->cap_id) {
+      dout(7) << " ignoring client capid " << p->cap_id << " != my " << cap->get_cap_id() << " on " << *in << dendl;
+      continue;
+    }
+    if (ceph_seq_cmp(p->migrate_seq, cap->get_mseq()) < 0) {
+      dout(7) << " mseq " << p->migrate_seq << " < " << cap->get_mseq()
+	      << " on " << *in << dendl;
+      continue;
+    }
+    if (p->seq != cap->get_last_sent()) {
+      dout(10) << " seq " << p->seq << " != " << cap->get_last_seq() << " on " << *in << dendl;
+      continue;
+    }
+
+    dout(7) << "removing cap on " << *in << dendl;
+    mdcache->remove_client_cap(in, client, false);
+  }
+
+  delete m;
+}
 
 void Locker::handle_client_lease(MClientLease *m)
 {

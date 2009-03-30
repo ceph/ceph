@@ -541,6 +541,7 @@ struct ceph_msg_footer {
 #define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
+#define CEPH_MSG_CLIENT_CAPRELEASE      0x313
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -1105,6 +1106,15 @@ struct ceph_mds_caps {
 	__le32 time_warp_seq;
 } __attribute__ ((packed));
 
+struct ceph_mds_cap_release {
+	__le32 num;
+} __attribute__ ((packed));
+
+struct ceph_mds_cap_item {
+	__le64 ino;
+	__le64 cap_id;
+	__le32 migrate_seq, seq;
+} __attribute__ ((packed));
 
 #define CEPH_MDS_LEASE_REVOKE           1  /*    mds  -> client */
 #define CEPH_MDS_LEASE_RELEASE          2  /* client  -> mds    */
