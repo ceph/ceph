@@ -549,6 +549,19 @@ public:
 	n++;
     return n;
   }
+  bool multiple_nonstale_caps() {
+    int n = 0;
+    for (map<int,Capability*>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++) 
+      if (!it->second->is_stale()) {
+	if (n)
+	  return true;
+	n++;
+      }
+    return false;
+
+  }
   int get_loner() {
     return loner_cap;
   }

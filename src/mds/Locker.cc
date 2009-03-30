@@ -1539,6 +1539,8 @@ void Locker::handle_client_caps(MClientCaps *m)
       eval_cap_gather(in);
       if (in->filelock.is_stable())
 	file_eval(&in->filelock);
+      if (in->authlock.is_stable())
+	eval(&in->authlock);
     }
 
     // done?
@@ -2870,7 +2872,7 @@ void Locker::file_eval(ScatterLock *lock)
 	   //!lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   (lock->get_scatter_wanted() ||
-	    (wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)))) {
+	    (in->multiple_nonstale_caps() && (wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR))))) {
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
