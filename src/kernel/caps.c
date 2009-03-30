@@ -965,6 +965,10 @@ retry_locked:
 		if (!revoking && mdsc->stopping && (used == 0))
 			goto ack;
 
+		/* want more caps from mds? */
+		if (want & ~cap->mds_wanted)
+			goto ack;
+
 		if ((cap->issued & ~retain) == 0 &&
 		    cap->mds_wanted == want)
 			continue;     /* nothing extra, wanted is correct */

@@ -96,7 +96,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
-	int flags, fmode, mds_wanted, new_want;
+	int flags, fmode, new_want;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
 		return -EROFS;
@@ -122,19 +122,26 @@ int ceph_open(struct inode *inode, struct file *file)
 	 * registered with the MDS.
 	 */
 	spin_lock(&inode->i_lock);
-	mds_wanted = __ceph_caps_mds_wanted(ci);
-	if ((mds_wanted & new_want) == new_want ||
-	    ceph_snap(inode) == CEPH_SNAPDIR) {
+	if (__ceph_is_any_real_caps(ci)) {
+		int mds_wanted = __ceph_caps_mds_wanted(ci);
+		int issued = __ceph_caps_issued(ci, NULL);
+
 		dout(10, "open fmode %d caps %d using existing on %p\n",
 		     fmode, new_want, inode);
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
+		
+		/* adjust wanted? */
+		if ((issued & new_want) != new_want &&
+		    (mds_wanted & new_want) != new_want &&
+		    ceph_snap(inode) != CEPH_SNAPDIR)
+			ceph_check_caps(ci, 0, 0, NULL);
+
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
 
-	dout(10, "open fmode %d wants %s, we only already want %s\n",
-	     fmode, ceph_cap_string(new_want), ceph_cap_string(mds_wanted));
+	dout(10, "open fmode %d wants %s\n", fmode, ceph_cap_string(new_want));
 	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, flags, 0);

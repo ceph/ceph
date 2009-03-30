@@ -442,6 +442,11 @@ static inline struct inode *ceph_find_inode(struct super_block *sb,
 /*
  * caps helpers
  */
+static inline bool __ceph_is_any_real_caps(struct ceph_inode_info *ci)
+{
+	return !RB_EMPTY_ROOT(&ci->i_caps);
+}
+
 extern int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented);
 
 static inline int ceph_caps_issued(struct ceph_inode_info *ci)
@@ -745,7 +750,6 @@ extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int drop,
 			    struct ceph_mds_session *session);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
-extern int __ceph_check_cap_maybe_renew(struct ceph_inode_info *ci, int mask);
 
 void ceph_trim_session_clean_caps(struct ceph_mds_session *session);
 
