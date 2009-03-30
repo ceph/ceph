@@ -146,7 +146,6 @@ struct ceph_cap {
 	struct rb_node ci_node;         /* per-ci cap tree */
 	struct ceph_mds_session *session;
 	struct list_head session_caps;   /* per-session caplist */
-	struct list_head session_clean_caps; /* per-session clean caps */
 	int mds;
 	u64 cap_id;       /* unique cap id (mds provided) */
 	int issued;       /* latest, from the mds */
@@ -750,8 +749,6 @@ extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int drop,
 			    struct ceph_mds_session *session);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
-
-void ceph_trim_session_clean_caps(struct ceph_mds_session *session);
 
 static inline void ceph_release_caps(struct inode *inode, int mask)
 {

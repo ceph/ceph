@@ -44,9 +44,8 @@ v0.8
 kclient caps
 /- two session lists: dirty_caps, clean_caps
 /- time out and release clean caps explicitly
-  - this makes open on client work better, since we care less about the mds 'wanted' value.
-    (we only need to update it if/when we release the caps we still want, or async on open
-     if we don't have them yet)
+
+- pin dirty caps only
 
 alternative #1:
 - keep CAP_PIN on _all_ inodes, and don't pin inodes with caps.
@@ -64,13 +63,12 @@ alternative #1:
 
 alternative #2:
 /- make clean_caps an lru
-- make open do an async wanted update
+/- make open do an async wanted update (if we want something that isn't mds_wanted or issued)
 - efficient cap release
 - touch caps on revalidate, getattr, etc.
   - that should avoid releasing caps just prior to getattr
 - maybe still pin cap inodes for now.
   - eventually avoid it, using the release on destroy_inode strategy above
-- periodic trimmer to efficiently release the oldest clean_caps in big batches
 
 
 
