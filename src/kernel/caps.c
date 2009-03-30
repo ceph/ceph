@@ -228,7 +228,6 @@ int ceph_add_cap(struct inode *inode,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_cap *cap;
 	int mds = session->s_mds;
-	int is_first = 0;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -261,7 +260,6 @@ retry:
 		cap->mds = mds;
 		cap->mds_wanted = 0;
 
-		is_first = RB_EMPTY_ROOT(&ci->i_caps);  /* grab inode later */
 		cap->ci = ci;
 		__insert_cap_node(ci, cap);
 
@@ -323,8 +321,6 @@ retry:
 	if (fmode >= 0)
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
-	if (is_first)
-		igrab(inode);
 	wake_up(&ci->i_cap_wq);
 	kfree(new_cap);
 	return 0;
@@ -459,7 +455,7 @@ static int __ceph_is_any_caps(struct ceph_inode_info *ci)
  * caller should hold i_lock, and session s_mutex.
  * returns true if this is the last cap.  if so, caller should iput.
  */
-static int __ceph_remove_cap(struct ceph_cap *cap)
+static void __ceph_remove_cap(struct ceph_cap *cap)
 {
 	struct ceph_mds_session *session = cap->session;
 	struct ceph_inode_info *ci = cap->ci;
@@ -483,9 +479,9 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 		list_del_init(&ci->i_snap_realm_item);
 		ceph_put_snap_realm(mdsc, ci->i_snap_realm);
 		ci->i_snap_realm = NULL;
-		return 1;
+
+		__cap_delay_cancel(mdsc, ci);
 	}
-	return 0;
 }
 
 /*
@@ -494,13 +490,10 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 void ceph_remove_cap(struct ceph_cap *cap)
 {
 	struct inode *inode = &cap->ci->vfs_inode;
-	int was_last;
 
 	spin_lock(&inode->i_lock);
-	was_last = __ceph_remove_cap(cap);
+	__ceph_remove_cap(cap);
 	spin_unlock(&inode->i_lock);
-	if (was_last)
-		iput(inode);
 }
 
 /*
@@ -591,7 +584,6 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	uid_t uid;
 	gid_t gid;
 	int flushing;
-	int last_cap = 0;
 	int mds = cap->session->s_mds;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
@@ -632,7 +624,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	/* close out cap? */
 	if (flushing == 0 && keep == 0)
-		last_cap = __ceph_remove_cap(cap);
+		__ceph_remove_cap(cap);
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
@@ -649,8 +641,6 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
-	if (last_cap)
-		iput(inode);
 }
 
 /*
@@ -1445,7 +1435,6 @@ static void handle_cap_flush_ack(struct inode *inode,
 	int caps = le32_to_cpu(m->caps);
 	int dirty = le32_to_cpu(m->dirty);
 	int cleaned = dirty & ~caps;
-	int removed_last = 0;
 	int new_dirty = 0;
 
 	dout(10, "handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
@@ -1460,15 +1449,10 @@ static void handle_cap_flush_ack(struct inode *inode,
 	/* did we release this cap, too? */
 	if (caps == 0 && seq == cap->seq) {
 		BUG_ON(cap->flushing);
-		removed_last = __ceph_remove_cap(cap);
-		if (removed_last)
-			__cap_delay_cancel(&ceph_inode_to_client(inode)->mdsc,
-					   ci);
+		__ceph_remove_cap(cap);
 	}
 	spin_unlock(&inode->i_lock);
 	if (!new_dirty)
-		iput(inode);
-	if (removed_last)
 		iput(inode);
 }
 
@@ -1564,7 +1548,6 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 	unsigned mseq = le32_to_cpu(ex->migrate_seq);
 	struct ceph_cap *cap = NULL, *t;
 	struct rb_node *p;
-	int was_last = 0;
 	int remember = 1;
 
 	dout(10, "handle_cap_export inode %p ci %p mds%d mseq %d\n",
@@ -1591,14 +1574,12 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
 			ci->i_cap_exporting_mseq = mseq;
 			ci->i_cap_exporting_issued = cap->issued;
 		}
-		was_last = __ceph_remove_cap(cap);
+		__ceph_remove_cap(cap);
 	} else {
 		WARN_ON(!cap);
 	}
 
 	spin_unlock(&inode->i_lock);
-	if (was_last)
-		iput(inode);
 }
 
 /*
