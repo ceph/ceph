@@ -167,36 +167,34 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
- * Remove or place the given cap on the session 'rdcaps' list (or
- * read-only, expireable caps).  A cap belongs on the rdcaps list IFF
- * it does not include any non-expireable caps and wanted == 0.
+ * Remove or place the given cap on the session clean_caps list
+ * (non-dirty or non-auth caps).  A cap belongs on the clean caps list
+ * IFF it is non-auth or the inode has no dirty caps.
  *
- * The rdcaps list is protected by a separate spinlock because
- * ceph_put_fmode may need to add caps to it when wanted goes to 0.
+ * Caller must hold s_mutex.
  */
-static void __adjust_cap_rdcaps_listing(struct ceph_inode_info *ci,
-					struct ceph_cap *cap,
-					int wanted)
+static void __adjust_cap_listing(struct ceph_mds_session *session,
+				 struct ceph_inode_info *ci,
+				 struct ceph_cap *cap)
 {
-	int caps = cap->issued | cap->flushing | ci->i_dirty_caps;
+	int dirty = cap->flushing | ci->i_dirty_caps;
 	
-	spin_lock(&cap->session->s_rdcaps_lock);
-	if ((caps & ~CEPH_CAP_EXPIREABLE) == 0 && wanted == 0) {
-		/* move to tail of session rdcaps lru? */
-		if (!list_empty(&cap->session_rdcaps))
-			list_del_init(&cap->session_rdcaps);
-		else
-			dout(20, "adjust_cap_rdcaps_listing %p added %p %s\n",
-			     &ci->vfs_inode, cap, ceph_cap_string(caps));
-		list_add_tail(&cap->session_rdcaps, &cap->session->s_rdcaps);
-	} else {
-		if (!list_empty(&cap->session_rdcaps)) {
-			dout(20, "adjust_cap_rdcaps_listing %p removed %p %s\n",
-			     &ci->vfs_inode, cap, ceph_cap_string(caps));
-			list_del_init(&cap->session_rdcaps);
+	if (dirty && ci->i_auth_cap == cap) {
+		/* remove from clean_caps */
+		if (!list_empty(&cap->session_clean_caps)) {
+			dout(20, "adjust_cap_listing %p %p dirty (%s)\n",
+			     &ci->vfs_inode, cap, ceph_cap_string(dirty));
+			list_del_init(&cap->session_clean_caps);
 		}
+	} else {
+		/* move to tail of clean_caps lru */
+		if (!list_empty(&cap->session_clean_caps))
+			list_del_init(&cap->session_clean_caps);
+		else
+			dout(20, "adjust_cap_listing %p %p clean\n",
+			     &ci->vfs_inode, cap);
+		list_add_tail(&cap->session_clean_caps, &session->s_clean_caps);
 	}
-	spin_unlock(&cap->session->s_rdcaps_lock);
 }
 
 /*
@@ -263,7 +261,6 @@ int ceph_add_cap(struct inode *inode,
 	int mds = session->s_mds;
 	int is_first = 0;
 	unsigned long duration;
-	int all_wanted;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -311,7 +308,7 @@ retry:
 		cap->session = session;
 		list_add(&cap->session_caps, &session->s_caps);
 		session->s_nr_caps++;
-		INIT_LIST_HEAD(&cap->session_rdcaps);
+		INIT_LIST_HEAD(&cap->session_clean_caps);
 	}
 
 	if (!ci->i_snap_realm) {
@@ -345,20 +342,8 @@ retry:
 	else if (ci->i_auth_cap == cap)
 		ci->i_auth_cap = NULL;
 
-	/*
-	 * Ensure our rdcaps status is correct
-	 */
-	all_wanted = wanted | __ceph_caps_wanted(ci);
-	__adjust_cap_rdcaps_listing(ci, cap, all_wanted);
-
-	/*
-	 * If we were just issued un-wanted, un-EXPIREABLE caps,
-	 * schedule a delayed cap check, so that they can be released
-	 * if necessary.
-	 */
-	if ((issued & ~CEPH_CAP_EXPIREABLE & ~all_wanted) &&
-	    (cap->issued & ~CEPH_CAP_EXPIREABLE & ~all_wanted) == 0)
-		__cap_delay_requeue(mdsc, ci);
+	/* Put cap on proper session list */
+	__adjust_cap_listing(session, ci, cap);
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %p %s now %s seq %d mds%d\n",
 	     inode, ceph_vinop(inode), cap, ceph_cap_string(issued),
@@ -405,14 +390,6 @@ static int __cap_is_valid(struct ceph_cap *cap)
 		dout(30, "__cap_is_valid %p cap %p issued %s "
 		     "but STALE (gen %u vs %u)\n", &cap->ci->vfs_inode,
 		     cap, ceph_cap_string(cap->issued), cap->gen, gen);
-		return 0;
-	}
-
-	if (time_after_eq(jiffies, cap->expires) &&
-	    !list_empty(&cap->session_rdcaps)) {
-		dout(30, "__cap_is_valid %p cap %p issued %s "
-		     "but rdcap and expired\n", &cap->ci->vfs_inode,
-		     cap, ceph_cap_string(cap->issued));
 		return 0;
 	}
 
@@ -534,8 +511,8 @@ static int __ceph_remove_cap(struct ceph_cap *cap)
 
 	/* remove from session list */
 	list_del_init(&cap->session_caps);
-	if (!list_empty(&cap->session_rdcaps))
-		list_del_init(&cap->session_rdcaps);
+	if (!list_empty(&cap->session_clean_caps))
+		list_del_init(&cap->session_clean_caps);
 	session->s_nr_caps--;
 
 	/* remove from inode list */
@@ -700,8 +677,6 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	/* close out cap? */
 	if (flushing == 0 && keep == 0)
 		last_cap = __ceph_remove_cap(cap);
-	else
-		__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci));
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
@@ -1040,55 +1015,6 @@ ack:
 		mutex_unlock(&session->s_mutex);
 	if (took_snap_rwsem)
 		up_read(&mdsc->snap_rwsem);
-}
-
-/*
- * Check for cap mask.  If held via rdcaps, consider renewing.
- *
- * Called under i_lock.
- */
-int __ceph_check_cap_maybe_renew(struct ceph_inode_info *ci, int mask)
-	__releases(ci->vfs_inode->i_lock)
-{
-	struct inode *inode = &ci->vfs_inode;
-	struct ceph_cap *cap;
-	struct rb_node *p;
-	int valid = 0;
-
-	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
-		cap = rb_entry(p, struct ceph_cap, ci_node);
-
-		if (!__cap_is_valid(cap) || (cap->issued & mask) == 0)
-			continue;
-		valid = 1;
-
-		if (list_empty(&cap->session_rdcaps)) {
-			dout(30, "check_cap_maybe_renew %p %p %s has %s\n",
-			     inode, cap, ceph_cap_string(cap->issued),
-			     ceph_cap_string(mask));
-			break;  /* not an rdcap, it doesn't expire */
-		}
-
-		/* should we renew the rdcap? */
-		if (cap->renew_after &&
-		    time_after(jiffies, cap->renew_after)) {
-			dout(30, "check_cap_maybe_renew %p %p renewing"
-			     " (%lu <= %lu)\n", inode, cap,
-			     cap->renew_after, jiffies);
-			cap->renew_after = 0;
-			cap->renew_from = jiffies;
-			__send_cap(&ceph_client(inode->i_sb)->mdsc, cap,
-				   CEPH_CAP_OP_RENEW, 0, 0, cap->issued);
-			goto out;
-		}
-		dout(30, "check_cap_maybe_renew %p %p renew at %lu > %lu\n",
-		     inode, cap, cap->renew_after, jiffies);
-		break;
-	}	
-
-	spin_unlock(&inode->i_lock);
-out:
-	return valid;
 }
 
 /*
@@ -1522,7 +1448,7 @@ start:
 		wake = 1;
 	}
 
-	__adjust_cap_rdcaps_listing(ci, cap, wanted);
+	__adjust_cap_listing(session, ci, cap);
 
 	spin_unlock(&inode->i_lock);
 	if (writeback) {
@@ -1577,7 +1503,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 			__cap_delay_cancel(&ceph_inode_to_client(inode)->mdsc,
 					   ci);
 	} else {
-		__adjust_cap_rdcaps_listing(ci, cap, __ceph_caps_wanted(ci));
+		__adjust_cap_listing(session, ci, cap);
 	}
 	spin_unlock(&inode->i_lock);
 	if (removed_last)
@@ -1935,18 +1861,15 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 
 /*
  * Caller must hold session s_mutex.
- *
- * Note that _removals_ to s_rdcaps are protected by s_mutex and
- * s_rdcaps_lock spinlock, but additions are protected only by
- * s_rdcaps_lock (see ceph_put_fmode).
  */
-void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
+void ceph_trim_session_clean_caps(struct ceph_mds_session *session)
 {
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct list_head *p, *n;
 
-	dout(10, "trim_rdcaps for mds%d\n", session->s_mds);
+	dout(10, "trim_clean_caps for mds%d\n", session->s_mds);
+	/*
 	spin_lock(&session->s_rdcaps_lock);
 	list_for_each_safe(p, n, &session->s_rdcaps) {
 		int wanted, last_cap;
@@ -1977,6 +1900,7 @@ void ceph_trim_session_rdcaps(struct ceph_mds_session *session)
 		spin_lock(&session->s_rdcaps_lock);
 	}
 	spin_unlock(&session->s_rdcaps_lock);
+	*/
 }
 
 /*
@@ -1993,20 +1917,8 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	dout(20, "put_fmode %p fmode %d %d -> %d\n", inode, fmode,
 	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
 	BUG_ON(ci->i_nr_by_mode[fmode] == 0);
-	if (--ci->i_nr_by_mode[fmode] == 0) {
+	if (--ci->i_nr_by_mode[fmode] == 0)
 		last++;
-
-		/* maybe turn caps into rdcaps? */
-		if (__ceph_caps_wanted(ci) == 0) {
-			struct rb_node *p;
-			struct ceph_cap *cap;
-
-			for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
-				cap = rb_entry(p, struct ceph_cap, ci_node);
-				__adjust_cap_rdcaps_listing(ci, cap, 0);
-			}
-		}
-	}
 	spin_unlock(&inode->i_lock);
 
 	if (last && ci->i_vino.snap == CEPH_NOSNAP)
