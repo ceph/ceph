@@ -112,7 +112,6 @@ int main(int argc, const char **argv)
   char *mon_addr_str;
 
   if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str, NULL)) {
-	cout << "mon addr=" << mon_addr_str << std::endl;
 	if (parse_ip_port(mon_addr_str, conf_addr, NULL)) {
 		if ((ipaddr->sin_addr.s_addr != conf_addr.ipaddr.sin_addr.s_addr) ||
 		    (ipaddr->sin_port != conf_addr.ipaddr.sin_port)) {
