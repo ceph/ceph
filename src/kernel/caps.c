@@ -167,26 +167,37 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
- * Remove or place the given cap on the session clean_caps list
- * (non-dirty or non-auth caps).  A cap belongs on the clean caps list
- * IFF it is non-auth or the inode has no dirty caps.
- *
- * Caller must hold s_mutex.
+ * Touch cap timestamp and, if clean, move to end of lru.
  */
-static void __adjust_cap_listing(struct ceph_mds_session *session,
-				 struct ceph_inode_info *ci,
-				 struct ceph_cap *cap)
+void __touch_cap(struct ceph_cap *cap)
 {
+	cap->last_used = jiffies;
+	if (!list_empty(&cap->session_clean_caps)) {
+		spin_lock(&cap->session->s_clean_caps_lock);
+		list_del_init(&cap->session_clean_caps);
+		list_add(&cap->session_clean_caps, &cap->session->s_clean_caps);
+		spin_unlock(&cap->session->s_clean_caps_lock);
+	}
+}
+
+/*
+ * Remove or place the given cap on the session clean_caps list A cap
+ * belongs on the clean caps list IFF wanted == 0 AND dirty == 0.
+ *
+ * Also touch the cap last_used (i.e., either call __touch_cap or
+ * __adjust_cap_listing, but not both).
+ *
+ * Ignore auth/non-auth status for now.
+ */
+static void __adjust_cap_listing(struct ceph_inode_info *ci,
+				 struct ceph_cap *cap,
+				 int wanted)
+{
+	struct ceph_mds_session *session = cap->session;
 	int dirty = cap->flushing | ci->i_dirty_caps;
 	
-	if (dirty && ci->i_auth_cap == cap) {
-		/* remove from clean_caps */
-		if (!list_empty(&cap->session_clean_caps)) {
-			dout(20, "adjust_cap_listing %p %p dirty (%s)\n",
-			     &ci->vfs_inode, cap, ceph_cap_string(dirty));
-			list_del_init(&cap->session_clean_caps);
-		}
-	} else {
+	spin_lock(&session->s_clean_caps_lock);
+	if (wanted == 0 && dirty == 0) {
 		/* move to tail of clean_caps lru */
 		if (!list_empty(&cap->session_clean_caps))
 			list_del_init(&cap->session_clean_caps);
@@ -194,7 +205,16 @@ static void __adjust_cap_listing(struct ceph_mds_session *session,
 			dout(20, "adjust_cap_listing %p %p clean\n",
 			     &ci->vfs_inode, cap);
 		list_add_tail(&cap->session_clean_caps, &session->s_clean_caps);
+		cap->last_used = jiffies;
+	} else {
+		/* remove from clean_caps */
+		if (!list_empty(&cap->session_clean_caps)) {
+			dout(20, "adjust_cap_listing %p %p dirty (%s)\n",
+			     &ci->vfs_inode, cap, ceph_cap_string(dirty));
+			list_del_init(&cap->session_clean_caps);
+		}
 	}
+	spin_unlock(&session->s_clean_caps_lock);
 }
 
 /*
@@ -260,6 +280,7 @@ int ceph_add_cap(struct inode *inode,
 	struct ceph_cap *cap;
 	int mds = session->s_mds;
 	int is_first = 0;
+	int all_wanted;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -342,7 +363,8 @@ retry:
 		ci->i_auth_cap = NULL;
 
 	/* Put cap on proper session list */
-	__adjust_cap_listing(session, ci, cap);
+	all_wanted = wanted | __ceph_caps_wanted(ci);
+	__adjust_cap_listing(ci, cap, all_wanted);
 
 	dout(10, "add_cap inode %p (%llx.%llx) cap %p %s now %s seq %d mds%d\n",
 	     inode, ceph_vinop(inode), cap, ceph_cap_string(issued),
@@ -387,20 +409,6 @@ static int __cap_is_valid(struct ceph_cap *cap)
 	}
 
 	return 1;
-}
-
-/*
- * Touch cap timestamp and, if clean, move to end of lru.
- */
-void __touch_cap(struct ceph_cap *cap)
-{
-	cap->last_used = jiffies;
-	if (!list_empty(&cap->session_clean_caps)) {
-		spin_lock(&cap->session->s_clean_caps_lock);
-		list_del_init(&cap->session_clean_caps);
-		list_add(&cap->session_clean_caps, &cap->session->s_clean_caps);
-		spin_unlock(&cap->session->s_clean_caps_lock);
-	}
 }
 
 /*
@@ -1458,7 +1466,7 @@ start:
 		wake = 1;
 	}
 
-	__adjust_cap_listing(session, ci, cap);
+	__adjust_cap_listing(ci, cap, wanted);
 
 	spin_unlock(&inode->i_lock);
 	if (writeback) {
@@ -1513,7 +1521,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 			__cap_delay_cancel(&ceph_inode_to_client(inode)->mdsc,
 					   ci);
 	} else {
-		__adjust_cap_listing(session, ci, cap);
+		__adjust_cap_listing(ci, cap, __ceph_caps_wanted(ci));
 	}
 	spin_unlock(&inode->i_lock);
 	if (removed_last)
@@ -1915,8 +1923,20 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 	dout(20, "put_fmode %p fmode %d %d -> %d\n", inode, fmode,
 	     ci->i_nr_by_mode[fmode], ci->i_nr_by_mode[fmode]-1);
 	BUG_ON(ci->i_nr_by_mode[fmode] == 0);
-	if (--ci->i_nr_by_mode[fmode] == 0)
+	if (--ci->i_nr_by_mode[fmode] == 0) {
 		last++;
+
+		/* maybe turn caps into rdcaps? */
+		if (__ceph_caps_wanted(ci) == 0) {
+			struct rb_node *p;
+			struct ceph_cap *cap;
+
+			for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+				cap = rb_entry(p, struct ceph_cap, ci_node);
+				__adjust_cap_listing(ci, cap, 0);
+			}
+		}
+	}
 	spin_unlock(&inode->i_lock);
 
 	if (last && ci->i_vino.snap == CEPH_NOSNAP)

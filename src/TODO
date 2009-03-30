@@ -63,7 +63,9 @@ alternative #1:
   - so.. we could only try to reconnect open files, and not worry about the rest?
 
 alternative #2:
-- make clean_caps an lru
+/- make clean_caps an lru
+- make open do an async wanted update
+- efficient cap release
 - touch caps on revalidate, getattr, etc.
   - that should avoid releasing caps just prior to getattr
 - maybe still pin cap inodes for now.
