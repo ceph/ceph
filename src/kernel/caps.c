@@ -392,8 +392,8 @@ int __ceph_caps_dirty(struct ceph_inode_info *ci)
 		     inode, cap, ceph_cap_string(cap->flushing));
 		dirty |= cap->flushing;
 	}
-	dout(30, "__ceph_caps_dirty %p dirty %s\n", inode,
-	     ceph_cap_string(dirty));
+	dout(30, "__ceph_caps_dirty %p dirty %s = %s\n", inode,
+	     ceph_cap_string(ci->i_dirty_caps), ceph_cap_string(dirty));
 	return dirty;
 }
 
@@ -987,7 +987,7 @@ ack:
 		cap->flushing |= dirty & cap->implemented;
 		if (cap->flushing) {
 			ci->i_dirty_caps &= ~cap->flushing;
-			dout(10, "__send_cap flushing %s, dirty_caps now %s\n",
+			dout(10, " flushing %s, dirty_caps now %s\n",
 			     ceph_cap_string(cap->flushing),
 			     ceph_cap_string(ci->i_dirty_caps));
 		}
@@ -1469,9 +1469,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	unsigned seq = le32_to_cpu(m->seq);
-	int caps = le32_to_cpu(m->caps);
-	int dirty = le32_to_cpu(m->dirty);
-	int cleaned = dirty & ~caps;
+	int cleaned = le32_to_cpu(m->dirty);
 	int old_dirty, new_dirty;
 
 	dout(10, "handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
