@@ -2056,7 +2056,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	/* is dentry lease valid? */
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (!di ||
+	if (!di || !di->lease_session ||
 	    di->lease_session->s_mds < 0 ||
 	    di->lease_gen != di->lease_session->s_cap_gen ||
 	    !time_before(jiffies, dentry->d_time)) {
