@@ -45,32 +45,9 @@ kclient caps
 /- two session lists: dirty_caps, clean_caps
 /- time out and release clean caps explicitly
 /- pin dirty caps
-- don't pin clean caps
-- release on destroy_inode
-
-alternative #1:
-- keep CAP_PIN on _all_ inodes, and don't pin inodes with caps.
-- release on destroy_inode
-  - this will require some message preallocation trickery to avoid allocating on iput where possible.
-  - maybe maintain a pool of N release messages, each able to release M caps.. and add to the pool whenever we reach
-    N * M inodes with caps?  and periodically send the release messages early IFF we can allocate a new message in its place...
-- we only need to worry about flushing dirty caps on a timely basis
-- getattr guaranteed safe
-- higher memory utilization on the mds
-- on client reconnect we have TONS of caps to reassert... :/ what then?
-  - the mds can't keep them all in the journal, so it'll need to reload some, and that's not reliable.  so we'll still end up with inodes without valid caps.
-    - but we'll still get all _open file_ caps.  and everything else (except CWD) will need to be rediscovered via lookup
-  - so.. we could only try to reconnect open files, and not worry about the rest?
-
-alternative #2:
-/- make clean_caps an lru
-/- make open do an async wanted update (if we want something that isn't mds_wanted or issued)
-- efficient cap release
-- touch caps on revalidate, getattr, etc.
-  - that should avoid releasing caps just prior to getattr
-- maybe still pin cap inodes for now.
-  - eventually avoid it, using the release on destroy_inode strategy above
-
+/- don't pin clean caps
+/- release on destroy_inode
+- implement write_inode?
 
 
 
