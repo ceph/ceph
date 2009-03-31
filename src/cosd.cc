@@ -76,6 +76,8 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  _dout_create_courtesy_output_symlink("osd", whoami);
+
   // get monmap
   MonMap monmap;
   MonClient mc;
@@ -97,7 +99,10 @@ int main(int argc, const char **argv)
   int w;
   int r = OSD::peek_super(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
-    cerr << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << std::endl;
+    cerr << " ** ERROR: unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << std::endl;
+    if (r == -ENOTSUP)
+      cerr << " **        please verify that underlying storage supports xattrs" << std::endl;
+    derr(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << dendl;
     exit(1);
   }
   if (w != whoami) {
@@ -112,9 +117,6 @@ int main(int argc, const char **argv)
     cerr << "OSD fsid " << fsid << " != monmap fsid " << monmap.fsid << std::endl;
     exit(1);
   }
-
-  _dout_create_courtesy_output_symlink("osd", whoami);
-
 
   // start up network
   rank.bind();

@@ -3,6 +3,7 @@
 use strict;
 
 my %r;      # reqid -> start
+my %what;
 my %lat_req;  # latency -> request
 
 sub tosec($) {
@@ -15,14 +16,15 @@ sub tosec($) {
 
 while (<>) {
     chomp;
-    my ($stamp) = /^\S+ (\S+) /;
+    my ($stamp) = /^\S+ (\S+)/;
 
-    my ($what,$req) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \S+ client_(request|reply)\((\S+)/;
+    my ($what,$req,$desc) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \S+ client_(request|reply)\((\S+) ([^\)]+)/;
     
     if (defined $req) {
-	#print "$what $req at $stamp\n";
+	#print "$what $req at $stamp $desc\n";
 	if ($what eq 'request') {
 	    $r{$req} = $stamp;
+	    $what{$req} = $desc;
 	} elsif ($what eq 'reply') {
 	    if (exists $r{$req}) {
 		my $len = tosec($stamp) - tosec($r{$req});
@@ -42,5 +44,6 @@ while (<>) {
 
 
 for my $len (sort {$b <=> $a} keys %lat_req) {
-    print "$len\t$lat_req{$len}\n";    
+    my $req = $lat_req{$len};
+    print "$len\t$req\t$what{$req}\n";    
 }

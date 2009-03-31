@@ -200,6 +200,7 @@ libcommon_files = \
 	auth/ExportControl.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
+	common/buffer.cc \
 	common/Logger.cc \
 	common/Clock.cc \
 	common/Timer.cc \
@@ -498,6 +499,7 @@ noinst_HEADERS = \
         messages/MInodeFileCaps.h\
         messages/MLock.h\
 	messages/MLog.h\
+	messages/MLogAck.h\
         messages/MMDSBeacon.h\
         messages/MMDSBoot.h\
         messages/MMDSCacheRejoin.h\

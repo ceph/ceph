@@ -1969,6 +1969,13 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     reply_request(mdr, -EISDIR);
     return;
   }
+  
+  if (cur->get_projected_inode()->size ||
+      cur->get_projected_inode()->truncate_seq) {
+    reply_request(mdr, -ENOTEMPTY);
+    return;
+  }
+
 
   // write
   set<SimpleLock*> rdlocks = mdr->rdlocks;

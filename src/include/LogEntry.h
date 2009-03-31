@@ -21,8 +21,9 @@
 typedef enum {
   LOG_DEBUG = 0,
   LOG_INFO = 1,
-  LOG_WARN = 2,
-  LOG_ERROR = 3,
+  LOG_SEC = 2,
+  LOG_WARN = 3,
+  LOG_ERROR = 4,
 } log_type;
 
 struct LogEntry {
@@ -63,6 +64,8 @@ inline ostream& operator<<(ostream& out, const log_type& t)
     return out << "[WRN]";
   case LOG_ERROR:
     return out << "[ERR]";
+  case LOG_SEC:
+    return out << "[SEC]";
   default:
     return out << "[???]";
   }

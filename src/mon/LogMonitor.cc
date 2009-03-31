@@ -19,6 +19,7 @@
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
+#include "messages/MLogAck.h"
 
 #include "common/Timer.h"
 
@@ -104,6 +105,7 @@ bool LogMonitor::update_from_paxos()
   bufferlist bloginfo;
   bufferlist blogwarn;
   bufferlist blogerr;
+  bufferlist blogsec;
 
   // walk through incrementals
   while (paxosv > log_version) {
@@ -128,8 +130,12 @@ bool LogMonitor::update_from_paxos()
 	blogdebug.append(s);
       if (le.type >= LOG_INFO)
 	bloginfo.append(s);
+      if (le.type == LOG_SEC)
+        blogsec.append(s);
       if (le.type >= LOG_WARN)
 	blogwarn.append(s);
+      if (le.type >= LOG_ERROR)
+	blogerr.append(s);
       if (le.type >= LOG_ERROR)
 	blogerr.append(s);
     }
@@ -143,6 +149,8 @@ bool LogMonitor::update_from_paxos()
     mon->store->append_bl_ss(blogdebug, "log.debug", NULL);
   if (bloginfo.length())
     mon->store->append_bl_ss(bloginfo, "log.info", NULL);
+  if (blogsec.length())
+    mon->store->append_bl_ss(bloginfo, "log.security", NULL);
   if (blogwarn.length())
     mon->store->append_bl_ss(blogwarn, "log.warn", NULL);
   if (blogerr.length())
@@ -231,7 +239,7 @@ bool LogMonitor::prepare_log(MLog *m)
 void LogMonitor::_updated_log(MLog *m, entity_inst_t who)
 {
   dout(7) << "_updated_log for " << who << dendl;
-  mon->messenger->send_message(new MLog(m->fsid, m->entries.rbegin()->seq), who);
+  mon->messenger->send_message(new MLogAck(m->fsid, m->entries.rbegin()->seq), who);
   delete m;
 }
 

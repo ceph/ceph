@@ -12,40 +12,31 @@
  * 
  */
 
-#ifndef __MLOG_H
-#define __MLOG_H
+#ifndef __MLOGACK_H
+#define __MLOGACK_H
 
 #include "include/LogEntry.h"
 
-class MLog : public Message {
+class MLogAck : public Message {
 public:
   ceph_fsid_t fsid;
-  deque<LogEntry> entries;
   version_t last;
   
-  MLog() : Message(MSG_LOG) {}
-  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : Message(MSG_LOG), fsid(f), entries(e), last(0) { }
-  MLog(ceph_fsid_t& f, version_t l) : Message(MSG_LOG), fsid(f), last(l) {}
+  MLogAck() : Message(MSG_LOGACK) {}
+  MLogAck(ceph_fsid_t& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
 
-  const char *get_type_name() { return "log"; }
+  const char *get_type_name() { return "log_ack"; }
   void print(ostream& out) {
-    out << "log(";
-    if (entries.size())
-      out << entries.size() << " entries";
-    if (last)
-      out << "last " << last;
-    out << ")";
+    out << "log(last " << last << ")";
   }
 
   void encode_payload() {
     ::encode(fsid, payload);
-    ::encode(entries, payload);
     ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
-    ::decode(entries, p);
     ::decode(last, p);
   }
 };

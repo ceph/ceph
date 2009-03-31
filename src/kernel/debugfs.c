@@ -1,15 +1,20 @@
+#include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
 #include "super.h"
 #include "mds_client.h"
+#include "bookkeeper.h"
 
 static struct dentry *ceph_debugfs_dir;
 static struct dentry *ceph_debugfs_debug;
 static struct dentry *ceph_debugfs_debug_msgr;
 static struct dentry *ceph_debugfs_debug_console;
 static struct dentry *ceph_debugfs_debug_mask;
+#ifdef CONFIG_CEPH_BOOKKEEPER
+static struct dentry *ceph_debugfs_bookkeeper;
+#endif
 
 /*
  * ceph_debug_mask
@@ -389,7 +394,24 @@ DEFINE_SHOW_FUNC(monc_show)
 DEFINE_SHOW_FUNC(mdsc_show)
 DEFINE_SHOW_FUNC(osdc_show)
 
-int ceph_debugfs_init()
+#ifdef CONFIG_CEPH_BOOKKEEPER
+static int debugfs_bookkeeper_set(void *data, u64 val)
+{
+	if (val)
+		ceph_bookkeeper_dump();
+        return 0;
+}
+
+static int debugfs_bookkeeper_get(void *data, u64 *val)
+{
+	*val = 0;
+        return 0;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(bookkeeper_fops, debugfs_bookkeeper_get, debugfs_bookkeeper_set, "%llu\n");
+#endif
+
+int ceph_debugfs_init(void)
 {
 	int ret = -ENOMEM;
 
@@ -401,21 +423,21 @@ int ceph_debugfs_init()
 	ceph_debugfs_debug = debugfs_create_u32("debug",
 					0600,
 					ceph_debugfs_dir,
-					&ceph_debug);
+					(u32 *)&ceph_debug);
 	if (!ceph_debugfs_debug)
 		goto out;
 
 	ceph_debugfs_debug_msgr = debugfs_create_u32("msgr",
 					0600,
 					ceph_debugfs_dir,
-					&ceph_debug_msgr);
+					(u32 *)&ceph_debug_msgr);
 	if (!ceph_debugfs_debug_msgr)
 		goto out;
 
 	ceph_debugfs_debug_console = debugfs_create_u32("console",
 					0600,
 					ceph_debugfs_dir,
-					&ceph_debug_console);
+					(u32 *)&ceph_debug_console);
 	if (!ceph_debugfs_debug_console)
 		goto out;
 
@@ -427,6 +449,15 @@ int ceph_debugfs_init()
 	if (!ceph_debugfs_debug_mask)
 		goto out;
 
+#ifdef CONFIG_CEPH_BOOKKEEPER
+	ceph_debugfs_bookkeeper = debugfs_create_file("show_bookkeeper",
+					0600,
+					ceph_debugfs_dir,
+					NULL,
+					&bookkeeper_fops);
+	if (!ceph_debugfs_bookkeeper)
+		goto out;
+#endif
 	return 0;
 
 out:
@@ -440,6 +471,9 @@ void ceph_debugfs_cleanup(void)
 	debugfs_remove(ceph_debugfs_debug_mask);
 	debugfs_remove(ceph_debugfs_debug_msgr);
 	debugfs_remove(ceph_debugfs_debug);
+#ifdef CONFIG_CEPH_BOOKKEEPER
+	debugfs_remove(ceph_debugfs_bookkeeper);
+#endif
 	debugfs_remove(ceph_debugfs_dir);
 }
 

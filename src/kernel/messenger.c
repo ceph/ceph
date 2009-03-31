@@ -686,11 +686,11 @@ static void prepare_write_message(struct ceph_connection *con)
 
 	/* fill in crc (except data pages), footer */
 	con->out_msg->hdr.crc =
-		cpu_to_le32(crc32c_le(0, (void *)&m->hdr,
+		cpu_to_le32(crc32c(0, (void *)&m->hdr,
 				      sizeof(m->hdr) - sizeof(m->hdr.crc)));
 	con->out_msg->footer.flags = 0;
 	con->out_msg->footer.front_crc =
-		cpu_to_le32(crc32c_le(0, m->front.iov_base, m->front.iov_len));
+		cpu_to_le32(crc32c(0, m->front.iov_base, m->front.iov_len));
 	con->out_msg->footer.data_crc = 0;
 
 	/* is there a data payload? */
@@ -917,7 +917,7 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 			u32 tmpcrc = le32_to_cpu(con->out_msg->footer.data_crc);
 
 			con->out_msg->footer.data_crc =
-				cpu_to_le32(crc32c_le(tmpcrc, base, len));
+				cpu_to_le32(crc32c(tmpcrc, base, len));
 			con->out_msg_pos.did_page_crc = 1;
 		}
 
@@ -1433,7 +1433,7 @@ static int read_partial_message(struct ceph_connection *con)
 			return ret;
 		con->in_base_pos += ret;
 		if (con->in_base_pos == sizeof(m->hdr)) {
-			u32 crc = crc32c_le(0, (void *)&m->hdr,
+			u32 crc = crc32c(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
 			if (crc != le32_to_cpu(m->hdr.crc)) {
 				print_section("hdr", (u8 *)&m->hdr, sizeof(m->hdr));
@@ -1463,7 +1463,7 @@ static int read_partial_message(struct ceph_connection *con)
 			return ret;
 		m->front.iov_len += ret;
 		if (m->front.iov_len == front_len)
-			con->in_front_crc = crc32c_le(0, m->front.iov_base,
+			con->in_front_crc = crc32c(0, m->front.iov_base,
 						      m->front.iov_len);
 	}
 
@@ -1514,7 +1514,7 @@ static int read_partial_message(struct ceph_connection *con)
 				       left);
 		if (ret > 0 && datacrc)
 			con->in_data_crc =
-				crc32c_le(con->in_data_crc,
+				crc32c(con->in_data_crc,
 					  p + con->in_msg_pos.page_pos, ret);
 		kunmap(m->pages[con->in_msg_pos.page]);
 		mutex_unlock(&m->page_mutex);

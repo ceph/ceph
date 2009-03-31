@@ -46,59 +46,6 @@ static bool show_config = false;
 static ConfFile *cf = NULL;
 static ExportControl *ec = NULL;
 
-/*
-struct foobar {
-  foobar() { cerr << "config.cc init" << std::endl; }
-  ~foobar() { cerr << "config.cc shutdown" << std::endl; }
-} asdf;
-*/
-
-int buffer::list::read_file(const char *fn)
-{
-  struct stat st;
-  int fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
-    return -errno;
-  }
-  ::fstat(fd, &st);
-  int s = ROUND_UP_TO(st.st_size, PAGE_SIZE);
-  bufferptr bp = buffer::create_page_aligned(s);
-  bp.set_length(st.st_size);
-  append(bp);
-  ::read(fd, (void*)c_str(), length());
-  ::close(fd);
-  return 0;
-}
-
-int buffer::list::write_file(const char *fn)
-{
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd < 0) {
-    cerr << "can't write " << fn << ": " << strerror(errno) << std::endl;
-    return -errno;
-  }
-  for (std::list<ptr>::const_iterator it = _buffers.begin(); 
-       it != _buffers.end(); 
-       it++) {
-    const char *c = it->c_str();
-    int left = it->length();
-    while (left > 0) {
-      int r = ::write(fd, c, left);
-      if (r < 0) {
-	::close(fd);
-	return -errno;
-      }
-      c += r;
-      left -= r;
-    }
-  }
-  ::close(fd);
-  return 0;
-}
-
-
-
 // page size crap, see page.h
 int _get_bits_of(int v) {
   int n = 0;

@@ -130,16 +130,21 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 
 bool ClientMonitor::check_mount(MClientMount *m)
 {
+    stringstream ss;
     // already mounted?
     entity_addr_t addr = m->get_orig_source_addr();
     ExportControl *ec = conf_get_export_control();
     if (ec && (!ec->is_authorized(&addr, "/"))) {
       dout(0) << "client is not authorized to mount" << dendl;
+      ss << "client addr " << addr << " is not authorized to mount";
+      mon->get_logclient()->log(LOG_SEC, ss);
       return true;
     }
     if (client_map.addr_client.count(addr)) {
 	int client = client_map.addr_client[addr];
 	dout(7) << " client" << client << " already mounted" << dendl;
+        ss << "client" << client << " " << addr << " is already mounted";
+        mon->get_logclient()->log(LOG_INFO, ss);
 	_mounted(client, m);
 	return true;
     }
@@ -164,6 +169,12 @@ bool ClientMonitor::preprocess_query(Message *m)
 	_unmounted((MClientUnmount*)m);
 	return true;
       }
+      if (client_map.client_info[client].addr() == m->get_orig_source_addr() &&
+	  pending_inc.unmount.count(client)) {
+	dout(7) << " client" << client << " already unmounting" << dendl;
+	delete m;
+	return true;
+      }
     }
     return false;
     
@@ -179,6 +190,7 @@ bool ClientMonitor::preprocess_query(Message *m)
 
 bool ClientMonitor::prepare_update(Message *m)
 {
+  stringstream ss;
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   
   switch (m->get_type()) {
@@ -211,6 +223,8 @@ bool ClientMonitor::prepare_update(Message *m)
       ::encode(info.ticket, info.signed_ticket);
       pending_inc.add_mount(client, info);
       paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
+      ss << "client" << client << " " << addr << " mounted";
+      mon->get_logclient()->log(LOG_INFO, ss);
     }
     return true;
 
@@ -223,6 +237,8 @@ bool ClientMonitor::prepare_update(Message *m)
       
       pending_inc.add_unmount(client);
       paxos->wait_for_commit(new C_Unmounted(this, (MClientUnmount*)m));
+      ss << "client" << client << " " << client_map.client_info[client].addr() << " unmounted";
+      mon->get_logclient()->log(LOG_INFO, ss);
     }
     return true;
   

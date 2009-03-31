@@ -34,6 +34,8 @@
 
 #include "osd/OSDMap.h"
 
+#include "common/LogClient.h"
+
 
 class MonitorStore;
 
@@ -50,6 +52,8 @@ public:
   Mutex lock;
 
   MonMap *monmap;
+
+  LogClient logclient;
 
   // timer.
   SafeTimer timer;
@@ -163,6 +167,7 @@ public:
 
   int mkfs(bufferlist& osdmapbl);
 
+  LogClient *get_logclient() { return &logclient; }
 };
 
 #endif

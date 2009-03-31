@@ -89,13 +89,8 @@ void ceph_kfree(void *ptr)
 	return;
 }
 
-void ceph_bookkeeper_init(void)
-{
-	dout(10, "bookkeeper: start\n");
-	INIT_LIST_HEAD(&_bk_allocs);
-}
 
-void ceph_bookkeeper_finalize(void)
+void ceph_bookkeeper_dump(void)
 {
 	struct list_head *p;
 	struct alloc_data *entry;
@@ -114,4 +109,15 @@ void ceph_bookkeeper_finalize(void)
 	} else {
 		dout(1, "No leaks found! Yay!\n");
 	}
+}
+
+void ceph_bookkeeper_init(void)
+{
+	dout(10, "bookkeeper: start\n");
+	INIT_LIST_HEAD(&_bk_allocs);
+}
+
+void ceph_bookkeeper_finalize(void)
+{
+	ceph_bookkeeper_dump();
 }
