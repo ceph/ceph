@@ -1880,6 +1880,7 @@ void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry)
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
 
 	ceph_put_mds_session(di->lease_session);
+	ceph_dentry_lru_del(dentry);
 	kfree(di);
 	dentry->d_fsdata = NULL;
 }
@@ -2172,6 +2173,8 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	spin_lock_init(&mdsc->cap_delay_lock);
 	INIT_LIST_HEAD(&mdsc->snap_flush_list);
 	spin_lock_init(&mdsc->snap_flush_lock);
+	spin_lock_init(&mdsc->dentry_lru_lock);
+	INIT_LIST_HEAD(&mdsc->dentry_lru);
 }
 
 /*

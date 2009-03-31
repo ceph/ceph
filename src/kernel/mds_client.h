@@ -238,6 +238,10 @@ struct ceph_mds_client {
 	spinlock_t       snap_flush_lock;
 
 	struct dentry 		*debugfs_file;
+
+	spinlock_t		dentry_lru_lock;
+	struct list_head	dentry_lru;
+	int			num_dentry;
 };
 
 extern const char *ceph_mds_op_name(int op);
