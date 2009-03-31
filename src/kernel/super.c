@@ -43,13 +43,6 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 /*
  * super ops
  */
-static int ceph_write_inode(struct inode *inode, int unused)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-
-	return 0;
-}
-
 static void ceph_put_super(struct super_block *s)
 {
 	struct ceph_client *cl = ceph_client(s);

@@ -1006,6 +1006,49 @@ ack:
 }
 
 /*
+ * Flush any dirty caps back to the mds
+ */
+int ceph_write_inode(struct inode *inode, int unused)
+{
+	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct rb_node *p;
+	struct ceph_cap *cap;
+	int dirty;
+	int mds = -1;
+
+	dout(10, "write_inode %p\n", inode);
+more:
+	spin_lock(&inode->i_lock);
+	dirty = __ceph_caps_dirty(ci);
+	if (dirty) {
+		int used = __ceph_caps_used(ci);
+		int want = __ceph_caps_mds_wanted(ci);
+
+		for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+			cap = rb_entry(p, struct ceph_cap, ci_node);
+			if (mds >= cap->mds)
+				continue;
+			mds = cap->mds;
+
+			cap->flushing |= dirty & cap->implemented;
+			if (cap->flushing) {
+				ci->i_dirty_caps &= ~cap->flushing;
+				dout(10, " flushing %s, dirty_caps now %s\n",
+				     ceph_cap_string(cap->flushing),
+				     ceph_cap_string(ci->i_dirty_caps));
+			}
+			__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want,
+				   cap->issued | cap->implemented);
+			goto more;
+		}
+	}
+	spin_unlock(&inode->i_lock);
+	return 0;
+}
+
+
+/*
  * Take references to capabilities we hold, so that we don't release
  * them to the MDS prematurely.
  *
