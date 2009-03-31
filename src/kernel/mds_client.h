@@ -105,6 +105,10 @@ enum {
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
 
+#define CAPS_PER_RELEASE ((PAGE_CACHE_SIZE - \
+			   sizeof(struct ceph_mds_cap_release)) /	\
+			  sizeof(struct ceph_mds_cap_item))
+
 struct ceph_mds_session {
 	int               s_mds;
 	int               s_state;
@@ -120,6 +124,10 @@ struct ceph_mds_session {
 	atomic_t          s_ref;
 	struct list_head  s_waiting;  /* waiting requests */
 	struct list_head  s_unsafe;   /* unsafe requests */
+
+	int               s_num_cap_releases;
+	struct list_head  s_cap_releases; /* waiting cap_release messages */
+	struct list_head  s_cap_releases_done; /* ready to send */
 };
 
 /*

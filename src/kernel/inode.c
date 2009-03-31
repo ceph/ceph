@@ -314,6 +314,9 @@ void ceph_destroy_inode(struct inode *inode)
 	struct rb_node *n;
 
 	dout(30, "destroy_inode %p ino %llx.%llx\n", inode, ceph_vinop(inode));
+
+	ceph_queue_caps_release(inode);
+
 	kfree(ci->i_symlink);
 	while ((n = rb_first(&ci->i_fragtree)) != NULL) {
 		frag = rb_entry(n, struct ceph_inode_frag, node);

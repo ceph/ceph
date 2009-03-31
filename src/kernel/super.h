@@ -68,6 +68,7 @@ struct ceph_mount_args {
 	int rsize;            /* max readahead */
 	int osd_timeout;
 	char *snapdir_name;   /* default ".snap" */
+	int cap_release_safety;
 };
 
 enum {
@@ -745,6 +746,7 @@ extern int ceph_add_cap(struct inode *inode,
 			unsigned ttl_ms, unsigned long ttl_from, int flags,
 			struct ceph_cap *new_cap);
 extern void ceph_remove_cap(struct ceph_cap *cap);
+extern void ceph_queue_caps_release(struct inode *inode);
 extern int ceph_get_cap_mds(struct inode *inode);
 extern void ceph_get_cap_refs(struct ceph_inode_info *ci, int caps);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);

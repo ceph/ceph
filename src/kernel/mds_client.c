@@ -299,6 +299,9 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	atomic_set(&s->s_ref, 1);
 	INIT_LIST_HEAD(&s->s_waiting);
 	INIT_LIST_HEAD(&s->s_unsafe);
+	s->s_num_cap_releases = 0;
+	INIT_LIST_HEAD(&s->s_cap_releases);
+	INIT_LIST_HEAD(&s->s_cap_releases_done);
 
 	dout(10, "register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
@@ -778,6 +781,91 @@ void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
 	}
 }
 
+/*
+ * Allocate cap_release messages.  If there is a partially full message
+ * in the queue, try to allocate enough to cover it's remainder, so that
+ * we can send it immediately.
+ *
+ * Called under s_mutex.
+ */
+static int add_cap_releases(struct ceph_mds_client *mdsc,
+			    struct ceph_mds_session *session,
+			    int extra)
+{
+	struct ceph_msg *msg;
+	struct ceph_mds_cap_release *head;
+	int err = -ENOMEM;
+
+	if (extra < 0)
+		extra = mdsc->client->mount_args.cap_release_safety;
+
+	spin_lock(&session->s_cap_lock);
+
+	if (!list_empty(&session->s_cap_releases)) {
+		msg = list_entry(session->s_cap_releases.next, struct ceph_msg,
+				 list_head);
+		head = msg->front.iov_base;
+		extra += CAPS_PER_RELEASE - le32_to_cpu(head->num);
+	}
+
+	while (session->s_num_cap_releases * CAPS_PER_RELEASE <
+	       session->s_nr_caps + extra) {
+		msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPRELEASE, PAGE_CACHE_SIZE,
+				   0, 0, NULL);
+		if (!msg)
+			goto out;
+		dout(10, "add_cap_releases %p msg %p now %d\n", session, msg,
+		     (int)msg->front.iov_len);
+		head = msg->front.iov_base;
+		head->num = cpu_to_le32(0);
+		msg->front.iov_len = sizeof(*head);
+		list_add(&msg->list_head, &session->s_cap_releases);
+		session->s_num_cap_releases++;
+	}
+
+	if (!list_empty(&session->s_cap_releases)) {
+		msg = list_entry(session->s_cap_releases.next, struct ceph_msg,
+				 list_head);
+		head = msg->front.iov_base;
+		if (head->num) {
+			dout(10, " queueing non-full %p (%d)\n", msg,
+			     le32_to_cpu(head->num));
+			list_del_init(&msg->list_head);
+			list_add_tail(&msg->list_head,
+				      &session->s_cap_releases_done);
+			session->s_num_cap_releases -=
+				CAPS_PER_RELEASE - le32_to_cpu(head->num);
+		}
+	}
+	err = 0;
+out:
+	spin_unlock(&session->s_cap_lock);
+	return err;
+}
+
+/*
+ * called under s_mutex
+ */
+void send_cap_releases(struct ceph_mds_client *mdsc,
+		       struct ceph_mds_session *session)
+{
+	struct ceph_msg *msg;
+
+	dout(10, "send_cap_releases mds%d\n", session->s_mds);
+	while (1) {
+		spin_lock(&session->s_cap_lock);
+		if (list_empty(&session->s_cap_releases_done))
+			break;
+		msg = list_entry(session->s_cap_releases_done.next,
+				 struct ceph_msg, list_head);
+		list_del_init(&msg->list_head);
+		spin_unlock(&session->s_cap_lock);
+		msg->hdr.front_len = cpu_to_le32(msg->front.iov_len);
+		dout(10, "send_cap_releases mds%d %p\n", session->s_mds, msg);
+		ceph_send_msg_mds(mdsc, msg, session->s_mds);
+	}
+	spin_unlock(&session->s_cap_lock);
+}
 
 /*
  * Create an mds request.
@@ -1358,6 +1446,8 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		if (rinfo->dir_nr)
 			ceph_readdir_prepopulate(req, req->r_session);
 	}
+
+	add_cap_releases(mdsc, req->r_session, -1);
 
 done:
 	up_read(&mdsc->snap_rwsem);
@@ -2113,6 +2203,8 @@ static void delayed_work(struct work_struct *work)
 		mutex_lock(&s->s_mutex);
 		if (renew_caps)
 			send_renew_caps(mdsc, s);
+		add_cap_releases(mdsc, s, -1);
+		send_cap_releases(mdsc, s);
 		mutex_unlock(&s->s_mutex);
 		ceph_put_mds_session(s);
 

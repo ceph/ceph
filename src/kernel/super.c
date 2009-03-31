@@ -319,6 +319,7 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD: return "client_request_forward";
 	case CEPH_MSG_CLIENT_REPLY: return "client_reply";
 	case CEPH_MSG_CLIENT_CAPS: return "client_caps";
+	case CEPH_MSG_CLIENT_CAPRELEASE: return "client_cap_release";
 	case CEPH_MSG_CLIENT_SNAP: return "client_snap";
 	case CEPH_MSG_CLIENT_LEASE: return "client_lease";
 	case CEPH_MSG_OSD_GETMAP: return "osd_getmap";
@@ -510,6 +511,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
 	args->caps_delay = CEPH_CAP_DELAY_DEFAULT; /* seconds */
 	args->snapdir_name = ".snap";
+	args->cap_release_safety = CAPS_PER_RELEASE * 4;
 
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
 	c = strstr(dev_name, ":/");
