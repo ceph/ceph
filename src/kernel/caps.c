@@ -641,6 +641,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	     cap, cap->session,
 	     ceph_cap_string(held), ceph_cap_string(held & retain),
 	     ceph_cap_string(revoking));
+	BUG_ON((retain & CEPH_CAP_PIN) == 0);
 
 	cap->issued &= retain;  /* drop bits we don't want */
 
@@ -672,10 +673,6 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	uid = inode->i_uid;
 	gid = inode->i_gid;
 	mode = inode->i_mode;
-
-	/* close out cap? */
-	if (flushing == 0 && keep == 0)
-		__ceph_remove_cap(cap);
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
@@ -823,7 +820,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 	int file_wanted, used;
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
 	int drop_session_lock = session ? 0:1;
-	int want, retain, revoking, dirty, op;
+	int want, retain, revoking, dirty;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
@@ -847,17 +844,9 @@ retry_locked:
 
 	want = file_wanted | used;
 	
-	retain = want;
+	retain = want | CEPH_CAP_PIN;
 	if (!mdsc->stopping && inode->i_nlink > 0) {
-		/*
-		 * If caps are wanted, we can retain whatever we want.
-		 * Otherwise, we can't retain anything beyond
-		 * EXPIREABLE because we currently lack a mechanism to
-		 * time them out and release them back to the MDS.
-		 * So: always try to retain EXPIREABLE.  If caps are
-		 * wanted, retain even more.
-		 */
-		retain |= CEPH_CAP_PIN | CEPH_CAP_EXPIREABLE | CEPH_CAP_ANY_RD;
+		retain |= CEPH_CAP_EXPIREABLE | CEPH_CAP_ANY_RD;
 		if (want)
 			retain |= CEPH_CAP_ANY_EXCL;
 	}
@@ -1006,8 +995,7 @@ ack:
 		}
 		
 		/* __send_cap drops i_lock */
-		op = (retain == 0) ? CEPH_CAP_OP_RELEASE : CEPH_CAP_OP_UPDATE;
-		__send_cap(mdsc, cap, op, used, want, retain);
+		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want, retain);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
@@ -1496,12 +1484,6 @@ static void handle_cap_flush_ack(struct inode *inode,
 	old_dirty = __ceph_caps_dirty(ci);
 	cap->flushing &= ~cleaned;
 	new_dirty = __ceph_caps_dirty(ci);
-
-	/* did we release this cap, too? */
-	if (caps == 0 && seq == cap->seq) {
-		BUG_ON(cap->flushing);
-		__ceph_remove_cap(cap);
-	}
 	spin_unlock(&inode->i_lock);
 	if (old_dirty && !new_dirty)
 		iput(inode);
