@@ -153,7 +153,7 @@ struct ceph_cap {
 	int implemented;  /* implemented superset of issued (for revocation) */
 	int flushing;     /* dirty fields being written back to mds */
 	int mds_wanted;
-	u32 seq, mseq, gen;
+	u32 seq, issue_seq, mseq, gen;
 	unsigned long last_used;
 };
 

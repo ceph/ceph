@@ -1739,8 +1739,8 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
 	      << " on " << *in << dendl;
       continue;
     }
-    if (p->seq != cap->get_last_sent()) {
-      dout(10) << " seq " << p->seq << " != " << cap->get_last_seq() << " on " << *in << dendl;
+    if (p->seq != cap->get_last_issue()) {
+      dout(10) << " seq " << p->seq << " != " << cap->get_last_issue() << " on " << *in << dendl;
       continue;
     }
 

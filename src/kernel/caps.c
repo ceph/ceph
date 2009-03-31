@@ -312,6 +312,7 @@ retry:
 	cap->implemented |= issued;
 	cap->mds_wanted |= wanted;
 	cap->seq = seq;
+	cap->issue_seq = seq;
 	cap->mseq = mseq;
 	cap->gen = session->s_cap_gen;
 
@@ -577,7 +578,7 @@ void ceph_queue_caps_release(struct inode *inode)
 		item->ino = cpu_to_le64(ceph_ino(inode));
 		item->cap_id = cpu_to_le64(cap->cap_id);
 		item->migrate_seq = cpu_to_le32(cap->mseq);
-		item->seq = cpu_to_le32(cap->seq);
+		item->seq = cpu_to_le32(cap->issue_seq);
 
 		session->s_num_cap_releases--;
 
@@ -1756,7 +1757,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	     inode);
 	if (!inode) {
 		dout(10, " i don't have ino %llx, sending release\n", vino.ino);
-		goto release;
+		goto done;
 	}
 
 	/* these will work even if we don't have a cap yet */
@@ -1790,7 +1791,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 		dout(10, "no cap on %p ino %llx.%llx from mds%d, releasing\n",
 		     inode, ceph_ino(inode), ceph_snap(inode), mds);
 		spin_unlock(&inode->i_lock);
-		goto release;
+		goto done;
 	}
 	
 	/* note that each of these drops i_lock for us */
@@ -1835,15 +1836,6 @@ done:
 bad:
 	derr(10, "corrupt caps message\n");
 	return;
-
-release:
-	send_cap_msg(mdsc, vino.ino, cap_id, CEPH_CAP_OP_RELEASE,
-		     0, 0, 0,
-		     seq, 0,
-		     size, 0, NULL, NULL, 0,
-		     0, 0, 0,
-		     0, mds);
-	goto done;
 }
 
 /*
