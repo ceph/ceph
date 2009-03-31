@@ -555,7 +555,6 @@ void ceph_queue_caps_release(struct inode *inode)
 
 	spin_lock(&inode->i_lock);
 	p = rb_first(&ci->i_caps);
-
 	while (p) {
 		struct ceph_cap *cap = rb_entry(p, struct ceph_cap, ci_node);
 		struct ceph_mds_session *session = cap->session;
@@ -563,15 +562,13 @@ void ceph_queue_caps_release(struct inode *inode)
 		struct ceph_mds_cap_release *head;
 		struct ceph_mds_cap_item *item;
 
-		p = rb_next(p);
-
 		spin_lock(&session->s_cap_lock);
 		BUG_ON(!session->s_num_cap_releases);
 		msg = list_entry(session->s_cap_releases.next, struct ceph_msg,
 				 list_head);
 
-		dout(10, " adding %p release to mds%d msg %p\n", inode,
-		     session->s_mds, msg);
+		dout(10, " adding %p release to mds%d msg %p (%d left)\n",
+		     inode, session->s_mds, msg, session->s_num_cap_releases);
 
 		BUG_ON(msg->front.iov_len + sizeof(*item) > PAGE_CACHE_SIZE);
 		head = msg->front.iov_base;
@@ -597,6 +594,7 @@ void ceph_queue_caps_release(struct inode *inode)
 		}
 		spin_unlock(&session->s_cap_lock);
 
+		p = rb_next(p);
 		__ceph_remove_cap(cap);
 	}
 	spin_unlock(&inode->i_lock);

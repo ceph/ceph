@@ -808,8 +808,7 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 		extra += CAPS_PER_RELEASE - le32_to_cpu(head->num);
 	}
 
-	while (session->s_num_cap_releases * CAPS_PER_RELEASE <
-	       session->s_nr_caps + extra) {
+	while (session->s_num_cap_releases < session->s_nr_caps + extra) {
 		msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPRELEASE, PAGE_CACHE_SIZE,
 				   0, 0, NULL);
 		if (!msg)
@@ -820,7 +819,7 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 		head->num = cpu_to_le32(0);
 		msg->front.iov_len = sizeof(*head);
 		list_add(&msg->list_head, &session->s_cap_releases);
-		session->s_num_cap_releases++;
+		session->s_num_cap_releases += CAPS_PER_RELEASE;
 	}
 
 	if (!list_empty(&session->s_cap_releases)) {
