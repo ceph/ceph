@@ -27,13 +27,9 @@ v0.7.2
 /- make kclient timeouts tunable
 
 v0.8
-- kill fill_trace
-  - make snaps work again
-  - return extra inode(s) in reply (namely, unlink)?
-- make caps release explicitly.. no timeout
 - revamp client<->mds interaction wrt snapshots...
 - clean up path_traverse interface, esp the usages in Server.cc
-- fix up mds selection, and ESTALE handling.  hold a pin_ref for request r_inode or r_locked_dir.
+- fix up mds selection, and ESTALE handling.  
 - allow mon to log messages
   - log client mount successes, failures
   - mon elections
@@ -47,7 +43,17 @@ kclient caps
 /- pin dirty caps
 /- don't pin clean caps
 /- release on destroy_inode
-- implement write_inode?
+/- implement write_inode?
+/- hold a pin_ref for request r_inode or r_locked_dir.
+- cap (release) reservations
+- size limit on readdir result, partial dirfrag readdir
+- revisit unmount
+- dirty caps 
+  - how to flush caps only to auth mds
+  - redirty inode caps if mds session shuts down?
+  - what if all mds's are down when write_inode is called?  redirty inode then too?
+  - what does an mds do with a cap flush if it is not auth?
+- fix up fill_trace and other comments
 
 
 
