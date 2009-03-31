@@ -1232,233 +1232,18 @@ static const struct inode_operations ceph_symlink_iops = {
 /*
  * setattr
  */
-static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
-{
-	struct inode *inode = dentry->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct inode *parent_inode = dentry->d_parent->d_inode;
-	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	const unsigned int ia_valid = attr->ia_valid;
-	struct ceph_mds_request *req;
-	int err;
-	int mask = 0;
-	int was_dirty;
-
-	spin_lock(&inode->i_lock);
-	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
-		dout(10, "chown holding auth EXCL, doing locally\n");
-		if (ia_valid & ATTR_UID)
-			inode->i_uid = attr->ia_uid;
-		if (ia_valid & ATTR_GID)
-			inode->i_gid = attr->ia_gid;
-		inode->i_ctime = CURRENT_TIME;
-		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_AUTH_EXCL);
-		spin_unlock(&inode->i_lock);
-		if (!was_dirty)
-			igrab(inode);
-		return 0;
-	}
-	spin_unlock(&inode->i_lock);
-
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR, USE_AUTH_MDS);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	req->r_inode = igrab(inode);
-	if (ia_valid & ATTR_UID) {
-		req->r_args.setattr.uid = cpu_to_le32(attr->ia_uid);
-		mask |= CEPH_SETATTR_UID;
-	}
-	if (ia_valid & ATTR_GID) {
-		req->r_args.setattr.gid = cpu_to_le32(attr->ia_gid);
-		mask |= CEPH_SETATTR_GID;
-	}
-	req->r_args.setattr.mask = cpu_to_le32(mask);
-	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
-	ceph_mdsc_put_request(req);
-	dout(10, "chown result %d\n", err);
-	return err;
-}
-
-static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
-{
-	struct inode *inode = dentry->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct inode *parent_inode = dentry->d_parent->d_inode;
-	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_mds_request *req;
-	int err, was_dirty;
-
-	spin_lock(&inode->i_lock);
-	if (__ceph_caps_issued(ci, NULL) & CEPH_CAP_AUTH_EXCL) {
-		dout(10, "chmod holding auth EXCL, doing locally\n");
-		inode->i_mode = attr->ia_mode;
-		inode->i_ctime = CURRENT_TIME;
-		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_AUTH_EXCL);
-		spin_unlock(&inode->i_lock);
-		if (!was_dirty)
-			igrab(inode);
-		return 0;
-	}
-	spin_unlock(&inode->i_lock);
-
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR, USE_AUTH_MDS);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	req->r_inode = igrab(inode);
-	req->r_args.setattr.mode = cpu_to_le32(attr->ia_mode);
-	req->r_args.setattr.mask = CEPH_SETATTR_MODE;
-	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
-	ceph_mdsc_put_request(req);
-	dout(10, "chmod result %d\n", err);
-	return err;
-}
-
-static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
-{
-	struct inode *inode = dentry->d_inode;
-	struct inode *parent_inode = dentry->d_parent->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	const unsigned int ia_valid = attr->ia_valid;
-	struct ceph_mds_request *req;
-	int err;
-	int issued, was_dirty;
-
-	spin_lock(&inode->i_lock);
-	issued = __ceph_caps_issued(ci, NULL);
-
-	/* if i hold CAP_EXCL, i can change [am]time any way i like */
-	if (issued & CEPH_CAP_FILE_EXCL) {
-		dout(10, "utime holding EXCL, doing locally\n");
-		ci->i_time_warp_seq++;
-		if (ia_valid & ATTR_ATIME)
-			inode->i_atime = attr->ia_atime;
-		if (ia_valid & ATTR_MTIME)
-			inode->i_mtime = attr->ia_mtime;
-		inode->i_ctime = CURRENT_TIME;
-		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_EXCL);
-		spin_unlock(&inode->i_lock);
-		if (!was_dirty)
-			igrab(inode);
-		return 0;
-	}
-
-	/* if i hold CAP_WR, i can _increase_ [am]time safely */
-	if ((issued & CEPH_CAP_FILE_WR) &&
-	    ((ia_valid & ATTR_MTIME) == 0 ||
-	     timespec_compare(&inode->i_mtime, &attr->ia_mtime) < 0) &&
-	    ((ia_valid & ATTR_ATIME) == 0 ||
-	     timespec_compare(&inode->i_atime, &attr->ia_atime) < 0)) {
-		dout(10, "utime holding WR, doing [am]time increase locally\n");
-		if (ia_valid & ATTR_ATIME)
-			inode->i_atime = attr->ia_atime;
-		if (ia_valid & ATTR_MTIME)
-			inode->i_mtime = attr->ia_mtime;
-		inode->i_ctime = CURRENT_TIME;
-		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_WR);
-		spin_unlock(&inode->i_lock);
-		if (!was_dirty)
-			igrab(inode);
-		return 0;
-	}
-
-	/* if i have valid values, this may be a no-op */
-	if ((issued & CEPH_CAP_FILE_RDCACHE) &&
-	    !(((ia_valid & ATTR_ATIME) &&
-	       !timespec_equal(&inode->i_atime, &attr->ia_atime)) ||
-	      ((ia_valid & ATTR_MTIME) &&
-	       !timespec_equal(&inode->i_mtime, &attr->ia_mtime)))) {
-		dout(10, "lease indicates utimes is a no-op\n");
-		spin_unlock(&inode->i_lock);
-		return 0;
-	}
-
-	spin_unlock(&inode->i_lock);
-
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR, USE_AUTH_MDS);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	req->r_inode = igrab(inode);
-
-	ceph_encode_timespec(&req->r_args.setattr.mtime, &attr->ia_mtime);
-	ceph_encode_timespec(&req->r_args.setattr.atime, &attr->ia_atime);
-	req->r_args.setattr.mask = 0;
-	if (ia_valid & ATTR_ATIME)
-		req->r_args.setattr.mask |= cpu_to_le32(CEPH_SETATTR_ATIME);
-	if (ia_valid & ATTR_MTIME)
-		req->r_args.setattr.mask |= cpu_to_le32(CEPH_SETATTR_MTIME);
-
-	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
-	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
-	ceph_mdsc_put_request(req);
-	dout(10, "utime result %d\n", err);
-	return err;
-}
-
-static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
-{
-	struct inode *inode = dentry->d_inode;
-	struct inode *parent_inode = dentry->d_parent->d_inode;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
-	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct ceph_mds_request *req;
-	int err;
-	int issued;
-
-	dout(10, "truncate: ia_size %d i_size %d\n",
-	     (int)attr->ia_size, (int)inode->i_size);
-
-	spin_lock(&inode->i_lock);
-	issued = __ceph_caps_issued(ci, NULL);
-
-	if ((issued & CEPH_CAP_FILE_EXCL) &&
-	    attr->ia_size > inode->i_size) {
-		dout(10, "holding EXCL, doing truncate (fwd) locally\n");
-		err = vmtruncate(inode, attr->ia_size);
-		if (!err) {
-			inode->i_size = attr->ia_size;
-			inode->i_blocks = (attr->ia_size + (1 << 9) - 1) >> 9;
-			inode->i_ctime = attr->ia_ctime;
-			ci->i_reported_size = attr->ia_size;
-		}
-		spin_unlock(&inode->i_lock);
-		return err;
-	}
-	if ((issued & CEPH_CAP_FILE_RDCACHE) &&
-	    attr->ia_size == inode->i_size) {
-		dout(10, "lease indicates truncate is a no-op\n");
-		spin_unlock(&inode->i_lock);
-		return 0;
-	}
-	spin_unlock(&inode->i_lock);
-
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR,
-				       USE_AUTH_MDS);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	req->r_inode = igrab(inode);
-	req->r_args.setattr.size = cpu_to_le64(attr->ia_size);
-	req->r_args.setattr.old_size = cpu_to_le64(inode->i_size);
-	req->r_args.setattr.mask = CEPH_SETATTR_SIZE;
-	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
-	ceph_mdsc_put_request(req);
-	dout(10, "truncate result %d\n", err);
-	__ceph_do_pending_vmtruncate(inode);
-	return err;
-}
-
-
 int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct inode *parent_inode = dentry->d_parent->d_inode;
 	const unsigned int ia_valid = attr->ia_valid;
-	int err;
+	struct ceph_mds_request *req;
+	struct ceph_mds_client *mdsc = &ceph_client(dentry->d_sb)->mdsc;
+	int issued;
+	int dirtied = 0;
+	int mask = 0;
+	int err = 0;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -1469,42 +1254,139 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	if (err != 0)
 		return err;
 
-	/* gratuitous debug output */
-	if (ia_valid & ATTR_UID)
-		dout(10, "setattr: %p uid %d -> %d\n", inode,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR,
+				       USE_AUTH_MDS);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	spin_lock(&inode->i_lock);
+	issued = __ceph_caps_issued(ci, NULL);
+	dout(10, "setattr %p issued %s\n", inode, ceph_cap_string(issued));
+
+	if (ia_valid & ATTR_UID) {
+		dout(10, "setattr %p uid %d -> %d\n", inode,
 		     inode->i_uid, attr->ia_uid);
-	if (ia_valid & ATTR_GID)
-		dout(10, "setattr: %p gid %d -> %d\n", inode,
+		if (issued & CEPH_CAP_AUTH_EXCL) {
+			inode->i_uid = attr->ia_uid;
+			dirtied |= CEPH_CAP_AUTH_EXCL;
+		} else if ((issued & CEPH_CAP_AUTH_RDCACHE) == 0 ||
+			   attr->ia_uid != inode->i_uid) {
+			req->r_args.setattr.uid = cpu_to_le32(attr->ia_uid);
+			mask |= CEPH_SETATTR_UID;
+		}
+	}
+	if (ia_valid & ATTR_GID) {
+		dout(10, "setattr %p gid %d -> %d\n", inode,
 		     inode->i_gid, attr->ia_gid);
-	if (ia_valid & ATTR_MODE)
-		dout(10, "setattr: %p mode 0%o -> 0%o\n", inode, inode->i_mode,
+		if (issued & CEPH_CAP_AUTH_EXCL) {
+			inode->i_gid = attr->ia_gid;
+			dirtied |= CEPH_CAP_AUTH_EXCL;
+		} else if ((issued & CEPH_CAP_AUTH_RDCACHE) == 0 ||
+			   attr->ia_gid != inode->i_gid) {
+			req->r_args.setattr.gid = cpu_to_le32(attr->ia_gid);
+			mask |= CEPH_SETATTR_GID;
+		}
+	}
+	if (ia_valid & ATTR_MODE) {
+		dout(10, "setattr %p mode 0%o -> 0%o\n", inode, inode->i_mode,
 		     attr->ia_mode);
-	if (ia_valid & ATTR_SIZE)
-		dout(10, "setattr: %p size %lld -> %lld\n", inode,
-		     inode->i_size, attr->ia_size);
-	if (ia_valid & ATTR_ATIME)
-		dout(10, "setattr: %p atime %ld.%ld -> %ld.%ld\n", inode,
+		if (issued & CEPH_CAP_AUTH_EXCL) {
+			inode->i_mode = attr->ia_mode;
+			dirtied |= CEPH_CAP_AUTH_EXCL;
+		} else if ((issued & CEPH_CAP_AUTH_RDCACHE) == 0 ||
+			   attr->ia_mode != inode->i_mode) {
+			req->r_args.setattr.mode = cpu_to_le32(attr->ia_mode);
+			mask |= CEPH_SETATTR_MODE;
+		}
+	}
+
+	if (ia_valid & ATTR_ATIME) {
+		dout(10, "setattr %p atime %ld.%ld -> %ld.%ld\n", inode,
 		     inode->i_atime.tv_sec, inode->i_atime.tv_nsec,
 		     attr->ia_atime.tv_sec, attr->ia_atime.tv_nsec);
-	if (ia_valid & ATTR_MTIME)
-		dout(10, "setattr: %p mtime %ld.%ld -> %ld.%ld\n", inode,
+		if (issued & CEPH_CAP_FILE_EXCL) {
+			ci->i_time_warp_seq++;
+			inode->i_atime = attr->ia_atime;
+			dirtied |= CEPH_CAP_FILE_EXCL;
+		} else if ((issued & CEPH_CAP_FILE_WR) &&
+			   timespec_compare(&inode->i_atime,
+					    &attr->ia_atime) < 0) {
+			inode->i_atime = attr->ia_atime;
+			dirtied |= CEPH_CAP_FILE_WR;
+		} else if ((issued & CEPH_CAP_FILE_RDCACHE) == 0 ||
+			   !timespec_equal(&inode->i_atime, &attr->ia_atime)) {
+			ceph_encode_timespec(&req->r_args.setattr.atime,
+					     &attr->ia_atime);
+			mask |= CEPH_SETATTR_ATIME;
+		}
+	}
+	if (ia_valid & ATTR_MTIME) {
+		dout(10, "setattr %p mtime %ld.%ld -> %ld.%ld\n", inode,
 		     inode->i_mtime.tv_sec, inode->i_mtime.tv_nsec,
 		     attr->ia_mtime.tv_sec, attr->ia_mtime.tv_nsec);
-	if (ia_valid & ATTR_MTIME)
-		dout(10, "setattr: %p ctime %ld.%ld -> %ld.%ld\n", inode,
+		if (issued & CEPH_CAP_FILE_EXCL) {
+			ci->i_time_warp_seq++;
+			inode->i_mtime = attr->ia_mtime;
+			dirtied |= CEPH_CAP_FILE_EXCL;
+		} else if ((issued & CEPH_CAP_FILE_WR) &&
+			   timespec_compare(&inode->i_mtime,
+					    &attr->ia_mtime) < 0) {
+			inode->i_mtime = attr->ia_mtime;
+			dirtied |= CEPH_CAP_FILE_WR;
+		} else if ((issued & CEPH_CAP_FILE_RDCACHE) == 0 ||
+			   !timespec_equal(&inode->i_mtime, &attr->ia_mtime)) {
+			ceph_encode_timespec(&req->r_args.setattr.mtime,
+					     &attr->ia_mtime);
+			mask |= CEPH_SETATTR_MTIME;
+		}
+	}
+	if (ia_valid & ATTR_SIZE) {
+		dout(10, "setattr %p size %lld -> %lld\n", inode,
+		     inode->i_size, attr->ia_size);
+		if ((issued & CEPH_CAP_FILE_EXCL) &&
+		    attr->ia_size > inode->i_size) {
+			vmtruncate(inode, attr->ia_size);
+			inode->i_size = attr->ia_size;
+			inode->i_blocks =
+				(attr->ia_size + (1 << 9) - 1) >> 9;
+			inode->i_ctime = attr->ia_ctime;
+			ci->i_reported_size = attr->ia_size;
+			dirtied |= CEPH_CAP_FILE_EXCL;
+		} else if ((issued & CEPH_CAP_FILE_RDCACHE) == 0 ||
+			   attr->ia_size != inode->i_size) {
+			req->r_args.setattr.size = cpu_to_le64(attr->ia_size);
+			req->r_args.setattr.old_size =
+				cpu_to_le64(inode->i_size);
+			mask |= CEPH_SETATTR_SIZE;
+		}
+	}
+
+	/* these do nothing */
+	if (ia_valid & ATTR_CTIME)
+		dout(10, "setattr %p ctime %ld.%ld -> %ld.%ld\n", inode,
 		     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec,
 		     attr->ia_ctime.tv_sec, attr->ia_ctime.tv_nsec);
 	if (ia_valid & ATTR_FILE)
-		dout(10, "setattr: %p ATTR_FILE ... hrm!\n", inode);
+		dout(10, "setattr %p ATTR_FILE ... hrm!\n", inode);
 
-	if (ia_valid & (ATTR_UID|ATTR_GID))
-		err = ceph_setattr_chown(dentry, attr);
-	if (ia_valid & ATTR_MODE)
-		err = ceph_setattr_chmod(dentry, attr);
-	if (ia_valid & (ATTR_ATIME|ATTR_MTIME))
-		err = ceph_setattr_time(dentry, attr);
-	if (ia_valid & ATTR_SIZE)
-		err = ceph_setattr_size(dentry, attr);
+	if (dirtied) {
+		int was_dirty = __ceph_mark_dirty_caps(ci, dirtied);
+		if (!was_dirty)
+			igrab(inode);
+		inode->i_ctime = CURRENT_TIME;
+	}
+	spin_unlock(&inode->i_lock);
+
+	if (mask) {
+		req->r_inode = igrab(inode);
+		req->r_args.setattr.mask = mask;
+		err = ceph_mdsc_do_request(mdsc, parent_inode, req);
+	}
+	dout(10, "setattr %p result=%d (%s locally, %d remote)\n", inode, err,
+	     ceph_cap_string(dirtied), mask);
+
+	ceph_mdsc_put_request(req);
+	__ceph_do_pending_vmtruncate(inode);
 	return err;
 }
 
