@@ -2305,23 +2305,6 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 	dout(10, "pre_umount\n");
 	mdsc->stopping = 1;
 
-	/*
-	 * clean out the delayed cap list; we will flush everything
-	 * explicitly below.
-	 */
-	spin_lock(&mdsc->cap_delay_lock);
-	while (!list_empty(&mdsc->cap_delay_list)) {
-		struct ceph_inode_info *ci;
-		ci = list_first_entry(&mdsc->cap_delay_list,
-				      struct ceph_inode_info,
-				      i_cap_delay_list);
-		list_del_init(&ci->i_cap_delay_list);
-		spin_unlock(&mdsc->cap_delay_lock);
-		iput(&ci->vfs_inode);
-		spin_lock(&mdsc->cap_delay_lock);
-	}
-	spin_unlock(&mdsc->cap_delay_lock);
-
 	drop_leases(mdsc);
 	ceph_check_delayed_caps(mdsc);
 	wait_requests(mdsc);
