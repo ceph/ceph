@@ -1261,19 +1261,19 @@ static int ceph_setattr_chown(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHOWN, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
 	if (ia_valid & ATTR_UID) {
-		req->r_args.chown.uid = cpu_to_le32(attr->ia_uid);
-		mask |= CEPH_CHOWN_UID;
+		req->r_args.setattr.uid = cpu_to_le32(attr->ia_uid);
+		mask |= CEPH_SETATTR_UID;
 	}
 	if (ia_valid & ATTR_GID) {
-		req->r_args.chown.gid = cpu_to_le32(attr->ia_gid);
-		mask |= CEPH_CHOWN_GID;
+		req->r_args.setattr.gid = cpu_to_le32(attr->ia_gid);
+		mask |= CEPH_SETATTR_GID;
 	}
-	req->r_args.chown.mask = cpu_to_le32(mask);
+	req->r_args.setattr.mask = cpu_to_le32(mask);
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
@@ -1304,11 +1304,12 @@ static int ceph_setattr_chmod(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LCHMOD, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
-	req->r_args.chmod.mode = cpu_to_le32(attr->ia_mode);
+	req->r_args.setattr.mode = cpu_to_le32(attr->ia_mode);
+	req->r_args.setattr.mask = CEPH_SETATTR_MODE;
 	ceph_release_caps(inode, CEPH_CAP_AUTH_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
@@ -1379,18 +1380,18 @@ static int ceph_setattr_time(struct dentry *dentry, struct iattr *attr)
 
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LUTIME, USE_AUTH_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR, USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
-	ceph_encode_timespec(&req->r_args.utime.mtime, &attr->ia_mtime);
-	ceph_encode_timespec(&req->r_args.utime.atime, &attr->ia_atime);
 
-	req->r_args.utime.mask = 0;
+	ceph_encode_timespec(&req->r_args.setattr.mtime, &attr->ia_mtime);
+	ceph_encode_timespec(&req->r_args.setattr.atime, &attr->ia_atime);
+	req->r_args.setattr.mask = 0;
 	if (ia_valid & ATTR_ATIME)
-		req->r_args.utime.mask |= cpu_to_le32(CEPH_UTIME_ATIME);
+		req->r_args.setattr.mask |= cpu_to_le32(CEPH_SETATTR_ATIME);
 	if (ia_valid & ATTR_MTIME)
-		req->r_args.utime.mask |= cpu_to_le32(CEPH_UTIME_MTIME);
+		req->r_args.setattr.mask |= cpu_to_le32(CEPH_SETATTR_MTIME);
 
 	ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
@@ -1437,14 +1438,14 @@ static int ceph_setattr_size(struct dentry *dentry, struct iattr *attr)
 	}
 	spin_unlock(&inode->i_lock);
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LTRUNCATE,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETATTR,
 				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
-	req->r_args.truncate.length = cpu_to_le64(attr->ia_size);
-	req->r_args.truncate.old_length = cpu_to_le64(inode->i_size);
-	//ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
+	req->r_args.setattr.size = cpu_to_le64(attr->ia_size);
+	req->r_args.setattr.old_size = cpu_to_le64(inode->i_size);
+	req->r_args.setattr.mask = CEPH_SETATTR_SIZE;
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	dout(10, "truncate result %d\n", err);

@@ -862,24 +862,12 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_LSTAT:
     handle_client_stat(mdr);
     break;
-  case CEPH_MDS_OP_UTIME:
-  case CEPH_MDS_OP_LUTIME:
-    handle_client_utime(mdr);
-    break;
-  case CEPH_MDS_OP_CHMOD:
-  case CEPH_MDS_OP_LCHMOD:
-    handle_client_chmod(mdr);
-    break;
-  case CEPH_MDS_OP_CHOWN:
-  case CEPH_MDS_OP_LCHOWN:
-    handle_client_chown(mdr);
+
+  case CEPH_MDS_OP_SETATTR:
+    handle_client_setattr(mdr);
     break;
   case CEPH_MDS_OP_LSETLAYOUT:
     handle_client_setlayout(mdr);
-    break;
-  case CEPH_MDS_OP_TRUNCATE:
-  case CEPH_MDS_OP_LTRUNCATE:
-    handle_client_truncate(mdr);
     break;
   case CEPH_MDS_OP_SETXATTR:
   case CEPH_MDS_OP_LSETXATTR:
@@ -1803,15 +1791,22 @@ class C_MDS_inode_update_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
+  bool smaller;
 public:
-  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i) :
-    mds(m), mdr(r), in(i) { }
+  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false) :
+    mds(m), mdr(r), in(i), smaller(sm) { }
   void finish(int r) {
     assert(r == 0);
 
     // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
     mdr->apply();
+
+    // notify any clients
+    if (smaller && in->inode.is_truncating()) {
+      mds->locker->issue_truncate(in);
+      mds->mdcache->truncate_inode(in, mdr->ls);
+    }
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
@@ -1820,13 +1815,10 @@ public:
 };
 
 
-// utime
-
-void Server::handle_client_utime(MDRequest *mdr)
+void Server::handle_client_setattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
-  __u32 mask;
   if (!cur) return;
 
   if (mdr->ref_snapid != CEPH_NOSNAP ||
@@ -1834,126 +1826,83 @@ void Server::handle_client_utime(MDRequest *mdr)
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
+
+  __u32 mask = req->head.args.setattr.mask;
 
   // xlock inode
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->filelock);
+
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
+    xlocks.insert(&cur->authlock);
+  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
+    xlocks.insert(&cur->filelock);
+
   mds->locker->include_snap_rdlocks(rdlocks, cur);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  // project update
-  inode_t *pi = cur->project_inode();
-  
-  mask = req->head.args.utime.mask;
-
-  if (mask & CEPH_UTIME_MTIME)
-    pi->mtime = req->head.args.utime.mtime;
-  if (mask & CEPH_UTIME_ATIME)
-    pi->atime = req->head.args.utime.atime;
-
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
-
-  // log + wait
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "utime");
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
-  
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
-}
-
-
-// chmod
-
-void Server::handle_client_chmod(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
-  if (!cur) return;
-
-  if (mdr->ref_snapid != CEPH_NOSNAP ||
-      cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
+  // trunc from bigger -> smaller?
+  inode_t *pi = cur->get_projected_inode();
+  __u64 old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  bool smaller = req->head.args.setattr.size < old_size;
+  if ((mask & CEPH_SETATTR_SIZE) && smaller && pi->is_truncating()) {
+    dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+    mds->mdlog->flush();
     return;
   }
 
-  // write
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->authlock);
-  mds->locker->include_snap_rdlocks(rdlocks, cur);
-
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
   // project update
-  inode_t *pi = cur->project_inode();
-  pi->mode = 
-    (pi->mode & ~07777) | 
-    (req->head.args.chmod.mode & 07777);
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  dout(10) << "chmod " << oct << pi->mode << " (" << req->head.args.chmod.mode << ")" << dec << *cur << dendl;
-
-  // log + wait
   mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "chmod");
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  EUpdate *le = new EUpdate(mdlog, "setattr");
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
-}
+  pi = cur->project_inode();
 
+  if (mask & CEPH_SETATTR_MODE)
+    pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
+  if (mask & CEPH_SETATTR_UID)
+    pi->uid = req->head.args.setattr.uid;
+  if (mask & CEPH_SETATTR_GID)
+    pi->gid = req->head.args.setattr.gid;
 
-// chown
-
-void Server::handle_client_chown(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
-  if (!cur) return;
-
-  if (mdr->ref_snapid != CEPH_NOSNAP || cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
-    return;
+  if (mask & CEPH_SETATTR_MTIME)
+    pi->mtime = req->head.args.setattr.mtime;
+  if (mask & CEPH_SETATTR_ATIME)
+    pi->atime = req->head.args.setattr.atime;
+  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
+    pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
+  if (mask & CEPH_SETATTR_SIZE) {
+    if (smaller) {
+      pi->truncate_from = old_size;
+      pi->size = req->head.args.setattr.size;
+      pi->truncate_size = pi->size;
+      pi->truncate_seq++;
+      le->metablob.add_truncate_start(cur->ino());
+    } else {
+      pi->size = req->head.args.setattr.size;
+    }
+    pi->rstat.rbytes = pi->size;
   }
 
-  // write
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->authlock);
-  mds->locker->include_snap_rdlocks(rdlocks, cur);
-
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-  // project update
-  inode_t *pi = cur->project_inode();
-  if (req->head.args.chown.mask & CEPH_CHOWN_UID)
-    pi->uid = req->head.args.chown.uid;
-  if (req->head.args.chown.mask & CEPH_CHOWN_GID)
-    pi->gid = req->head.args.chown.gid;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
-  
+
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller));
+
+  // flush immediately if there are readers/writers waiting
+  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
+    mds->mdlog->flush();
 }
+
+
 
 void Server::handle_client_setlayout(MDRequest *mdr)
 {
@@ -4783,122 +4732,6 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
 
 
-
-
-// ===================================
-// TRUNCATE, FSYNC
-
-class C_MDS_truncate_logged : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CInode *in;
-  bool smaller;
-public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, bool sm) :
-    mds(m), mdr(r), in(i), smaller(sm) {}
-  void finish(int r) {
-    assert(r == 0);
-
-    // apply
-    in->pop_and_dirty_projected_inode(mdr->ls);
-    mdr->apply();
-
-    // notify any clients
-    if (smaller && in->inode.is_truncating()) {
-      mds->locker->issue_truncate(in);
-      mds->mdcache->truncate_inode(in, mdr->ls);
-    }
-
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
-
-    mds->server->reply_request(mdr, 0);
-  }
-};
-
-void Server::handle_client_truncate(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-
-  if (req->head.args.truncate.length > (__u64)CEPH_FILE_MAX_SIZE) {
-    reply_request(mdr, -EFBIG);
-    return;
-  }
-
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
-  if (!cur) return;
-
-  dout(10) << "handle_client_truncate " << cur->get_projected_inode()->size << " -> " << req->head.args.truncate.length
-	   << " on " << *cur << dendl;
-
-  if (mdr->ref_snapid != CEPH_NOSNAP) {
-    reply_request(mdr, -EINVAL);
-    return;
-  }
-
-  // xlock inode
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->filelock);
-  mds->locker->include_snap_rdlocks(rdlocks, cur);
-
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-  
-  // already the correct size?
-  inode_t *pi = cur->get_projected_inode();
-  __u64 old_size = MAX(pi->size, req->head.args.truncate.old_length);
-  if (old_size == req->head.args.truncate.length) {
-    reply_request(mdr, 0);
-    return;
-  }
-
-  // trunc from bigger -> smaller
-  bool smaller = req->head.args.truncate.length < old_size;
-
-  if (smaller && pi->is_truncating()) {
-    dout(10) << " waiting for pending truncate from " << pi->truncate_from
-	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-    mds->mdlog->flush();
-    return;
-  }
-
-  // prepare
-  version_t pdv = cur->pre_dirty();
-  utime_t ctime = g_clock.real_now();
-
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "truncate");
-  le->metablob.add_client_req(mdr->reqid);
-  pi = cur->project_inode();
-  pi->mtime = ctime;
-  pi->ctime = ctime;
-  pi->version = pdv;
-  if (smaller) {
-    // truncate to smaller size
-    pi->truncate_from = old_size;
-    pi->size = req->head.args.truncate.length;
-    pi->rstat.rbytes = pi->size;
-    pi->truncate_size = pi->size;
-    pi->truncate_seq++;
-    le->metablob.add_truncate_start(cur->ino());
-  } else {
-    // truncate to larger size
-    pi->size = req->head.args.truncate.length;
-    pi->rstat.rbytes = pi->size;
-  }
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
-  
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_truncate_logged(mds, mdr, cur, smaller));
-
-  // flush immediately if there are readers/writers waiting
-  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
-    mds->mdlog->flush();
-}
-
-
 // ===========================
 // open, openc, close
 
@@ -5072,7 +4905,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->xlist_open_file);
   
-  journal_and_reply(mdr, in, 0, le, new C_MDS_truncate_logged(mds, mdr, in, true));
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
 }
 
 

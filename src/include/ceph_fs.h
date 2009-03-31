@@ -699,17 +699,12 @@ enum {
 
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
 	CEPH_MDS_OP_LSTAT      = 0x00101,
-	CEPH_MDS_OP_LUTIME     = 0x01102,
-	CEPH_MDS_OP_LCHMOD     = 0x01103,
-	CEPH_MDS_OP_LCHOWN     = 0x01104,
 	CEPH_MDS_OP_LSETXATTR  = 0x01105,
 	CEPH_MDS_OP_LRMXATTR   = 0x01106,
 	CEPH_MDS_OP_LSETLAYOUT = 0x01107,
+	CEPH_MDS_OP_SETATTR    = 0x01108,
 
 	CEPH_MDS_OP_STAT       = 0x10100,
-	CEPH_MDS_OP_UTIME      = 0x11101,
-	CEPH_MDS_OP_CHMOD      = 0x11102,
-	CEPH_MDS_OP_CHOWN      = 0x11103,
 	CEPH_MDS_OP_SETXATTR   = 0x11104,
 	CEPH_MDS_OP_RMXATTR    = 0x11105,
 
@@ -722,8 +717,6 @@ enum {
 	CEPH_MDS_OP_SYMLINK    = 0x01222,
 
 	CEPH_MDS_OP_OPEN       = 0x10302,
-	CEPH_MDS_OP_TRUNCATE   = 0x11303,
-	CEPH_MDS_OP_LTRUNCATE  = 0x01303,
 	CEPH_MDS_OP_FSYNC      = 0x00304,
 	CEPH_MDS_OP_READDIR    = 0x00305,
 
@@ -739,15 +732,10 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LOOKUP:  return "lookup";
 	case CEPH_MDS_OP_STAT:  return "stat";
 	case CEPH_MDS_OP_LSTAT:  return "lstat";
-	case CEPH_MDS_OP_UTIME: return "utime";
-	case CEPH_MDS_OP_LUTIME: return "lutime";
-	case CEPH_MDS_OP_CHMOD: return "chmod";
-	case CEPH_MDS_OP_LCHMOD: return "lchmod";
-	case CEPH_MDS_OP_CHOWN: return "chown";
-	case CEPH_MDS_OP_LCHOWN: return "lchown";
 	case CEPH_MDS_OP_LSETLAYOUT: return "lsetlayout";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
+	case CEPH_MDS_OP_SETATTR: return "setattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
 	case CEPH_MDS_OP_LRMXATTR: return "lrmxattr";
 	case CEPH_MDS_OP_READDIR: return "readdir";
@@ -759,8 +747,6 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_RMDIR: return "rmdir";
 	case CEPH_MDS_OP_SYMLINK: return "symlink";
 	case CEPH_MDS_OP_OPEN: return "open";
-	case CEPH_MDS_OP_TRUNCATE: return "truncate";
-	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
 	case CEPH_MDS_OP_FSYNC: return "fsync";
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
@@ -768,6 +754,13 @@ static inline const char *ceph_mds_op_name(int op)
 	default: return "???";
 	}
 }
+
+#define CEPH_SETATTR_MODE   1
+#define CEPH_SETATTR_UID    2
+#define CEPH_SETATTR_GID    4
+#define CEPH_SETATTR_MTIME  8
+#define CEPH_SETATTR_ATIME 16
+#define CEPH_SETATTR_SIZE  32
 
 union ceph_mds_request_args {
 	struct {
@@ -780,19 +773,14 @@ union ceph_mds_request_args {
 		__le32 frag;
 	} __attribute__ ((packed)) readdir;
 	struct {
-		struct ceph_timespec mtime;
-		struct ceph_timespec atime;
-		struct ceph_timespec ctime;
-		__le32 mask;
-	} __attribute__ ((packed)) utime;
-	struct {
 		__le32 mode;
-	} __attribute__ ((packed)) chmod;
-	struct {
 		__le32 uid;
 		__le32 gid;
-		__le32 mask;
-	} __attribute__ ((packed)) chown;
+		struct ceph_timespec mtime;
+		struct ceph_timespec atime;
+		__le64 size, old_size;
+		__le32 mask;		
+	} __attribute__ ((packed)) setattr;
 	struct {
 		__le32 mode;
 		__le32 rdev;
@@ -804,9 +792,6 @@ union ceph_mds_request_args {
 		__le32 flags;
 		__le32 mode;
 	} __attribute__ ((packed)) open;
-	struct {
-		__le64 length, old_length;
-	} __attribute__ ((packed)) truncate;
 	struct {
 		__le32 flags;
 	} __attribute__ ((packed)) setxattr;
@@ -830,15 +815,6 @@ struct ceph_mds_request_head {
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 	union ceph_mds_request_args args;
 } __attribute__ ((packed));
-
-/* masks for utimes() */
-#define CEPH_UTIME_ATIME		1
-#define CEPH_UTIME_MTIME		2
-#define CEPH_UTIME_CTIME		4
-
-/* masks for chown */
-#define CEPH_CHOWN_UID   1
-#define CEPH_CHOWN_GID   2
 
 struct ceph_inopath_item {
 	__le64 ino;

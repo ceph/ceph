@@ -2962,9 +2962,10 @@ static int symop(int op, bool follow)
 int Client::_chmod(const filepath &path, mode_t mode, bool followsym, int uid, int gid) 
 {
   dout(3) << "_chmod(" << path << ", 0" << oct << mode << dec << ")" << dendl;
-  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHMOD, followsym));
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_SETATTR, followsym));
   req->set_filepath(path); 
-  req->head.args.chmod.mode = mode;
+  req->head.args.setattr.mode = mode;
+  req->head.args.setattr.mask = CEPH_SETATTR_MODE;
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -2983,17 +2984,17 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   tout << uid << std::endl;
   tout << gid << std::endl;
   filepath path = mkpath(relpath);
-  return _chown(path, uid, gid, CEPH_CHOWN_UID|CEPH_CHOWN_GID, true);
+  return _chown(path, uid, gid, CEPH_SETATTR_UID|CEPH_SETATTR_GID, true);
 }
 
 int Client::_chown(const filepath &path, uid_t uid, gid_t gid, int mask, bool followsym, int cuid, int cgid)
 {
   dout(3) << "_chown(" << path << ", " << uid << ", " << gid << ")" << dendl;
-  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_CHOWN, followsym));
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_SETATTR, followsym));
   req->set_filepath(path); 
-  req->head.args.chown.uid = uid;
-  req->head.args.chown.gid = gid;
-  req->head.args.chown.mask = mask;
+  req->head.args.setattr.uid = uid;
+  req->head.args.setattr.gid = gid;
+  req->head.args.setattr.mask = mask;
 
   MClientReply *reply = make_request(req, cuid, cgid);
   int res = reply->get_result();
@@ -3014,7 +3015,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   tout << buf->actime << std::endl;
   filepath path = mkpath(relpath);
   return _utimes(path, utime_t(buf->modtime,0), utime_t(buf->actime,0),
-		 CEPH_UTIME_MTIME|CEPH_UTIME_ATIME, true);
+		 CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME, true);
 }
 
 int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, int mask, bool followsym,
@@ -3028,19 +3029,19 @@ int Client::_utimes(const filepath &path, utime_t mtime, utime_t atime, int mask
       (dn->inode->caps_issued() & want) == want) {
     dout(5) << " have WR and EXCL caps, just updating our m/atime" << dendl;
     dn->inode->inode.time_warp_seq++;
-    if (mask & CEPH_UTIME_MTIME)
+    if (mask & CEPH_SETATTR_MTIME)
       dn->inode->inode.mtime = mtime;
-    if (mask & CEPH_UTIME_ATIME)
+    if (mask & CEPH_SETATTR_ATIME)
       dn->inode->inode.atime = atime;
     dn->inode->dirty_caps |= CEPH_CAP_FILE_EXCL;
     return 0;
   }
 
-  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_UTIME, followsym));
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_SETATTR, followsym));
   req->set_filepath(path); 
-  mtime.encode_timeval(&req->head.args.utime.mtime);
-  atime.encode_timeval(&req->head.args.utime.atime);
-  req->head.args.utime.mask = mask;
+  mtime.encode_timeval(&req->head.args.setattr.mtime);
+  atime.encode_timeval(&req->head.args.setattr.atime);
+  req->head.args.setattr.mask = mask;
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4001,9 +4002,10 @@ int Client::truncate(const char *relpath, loff_t length)
 
 int Client::_truncate(const filepath &path, loff_t length, bool followsym, int uid, int gid) 
 {
-  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_TRUNCATE, followsym));
+  MClientRequest *req = new MClientRequest(symop(CEPH_MDS_OP_SETATTR, followsym));
   req->set_filepath(path); 
-  req->head.args.truncate.length = length;
+  req->head.args.setattr.size = length;
+  req->head.args.setattr.mask = CEPH_SETATTR_SIZE;
 
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4485,8 +4487,8 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
 
   if ((mask & (FUSE_SET_ATTR_UID|FUSE_SET_ATTR_GID)) &&
       ((r = _chown(path, attr->st_uid, attr->st_gid,
-		   ((mask & FUSE_SET_ATTR_UID) ? CEPH_CHOWN_UID:0) |
-		   ((mask & FUSE_SET_ATTR_GID) ? CEPH_CHOWN_GID:0),
+		   ((mask & FUSE_SET_ATTR_UID) ? CEPH_SETATTR_UID:0) |
+		   ((mask & FUSE_SET_ATTR_GID) ? CEPH_SETATTR_GID:0),
 		   false, uid, gid)) < 0)) return r;
 
   if ((mask & FUSE_SET_ATTR_SIZE) &&
@@ -4494,8 +4496,8 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
   
   if ((mask & (FUSE_SET_ATTR_MTIME|FUSE_SET_ATTR_ATIME)))
     if ((r = _utimes(path, utime_t(attr->st_mtime,0), utime_t(attr->st_atime,0),
-		     ((mask & FUSE_SET_ATTR_MTIME) ? CEPH_UTIME_MTIME:0) |
-		     ((mask & FUSE_SET_ATTR_ATIME) ? CEPH_UTIME_ATIME:0),
+		     ((mask & FUSE_SET_ATTR_MTIME) ? CEPH_SETATTR_MTIME:0) |
+		     ((mask & FUSE_SET_ATTR_ATIME) ? CEPH_SETATTR_ATIME:0),
 		     false, uid, gid)) < 0) return r;
   
   assert(r == 0);

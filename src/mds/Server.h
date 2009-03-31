@@ -118,14 +118,13 @@ public:
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
   void handle_client_findinode(MDRequest *mdr);
-  void handle_client_utime(MDRequest *mdr);
-  void handle_client_chmod(MDRequest *mdr);
-  void handle_client_chown(MDRequest *mdr);
-  void handle_client_setlayout(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
-  void handle_client_truncate(MDRequest *mdr);
+
+  void handle_client_setattr(MDRequest *mdr);
+  void handle_client_setlayout(MDRequest *mdr);
   void handle_client_setxattr(MDRequest *mdr);
   void handle_client_removexattr(MDRequest *mdr);
+
   void handle_client_fsync(MDRequest *mdr);
 
   // open
