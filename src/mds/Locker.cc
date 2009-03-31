@@ -880,22 +880,20 @@ struct C_Locker_FileUpdate_finish : public Context {
   int client;
   Capability *cap;
   MClientCaps *ack;
-  ceph_seq_t releasecap;
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, int c=-1,
 			     Capability *cp = 0,
-			     MClientCaps *ac = 0, ceph_seq_t rc=0) : 
+			     MClientCaps *ac = 0) : 
     locker(l), in(i), mut(m), share(e), client(c), cap(cp),
-    ack(ac), releasecap(rc) {
+    ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
-    locker->file_update_finish(in, mut, share, client, cap, ack, releasecap);
+    locker->file_update_finish(in, mut, share, client, cap, ack);
   }
 };
 
 void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int client, 
-				Capability *cap,
-				MClientCaps *ack, ceph_seq_t releasecap)
+				Capability *cap, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
@@ -906,10 +904,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   if (cap)
     cap->updating--;
 
-  if (releasecap) {
-    assert(ack);
-    _finish_release_cap(in, client, releasecap, ack);
-  } else if (ack)
+  if (ack)
     mds->send_message_client(ack, client);
 
   drop_locks(mut);
@@ -1507,23 +1502,12 @@ void Locker::handle_client_caps(MClientCaps *m)
 	       << " on " << *in << dendl;
       
       MClientCaps *ack = 0;
-      ceph_seq_t releasecap = 0;
       
       if (m->get_dirty() && in->is_auth()) {
 	dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
 		<< " seq " << m->get_seq() << " on " << *in << dendl;
 	ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
 			      m->get_caps(), 0, m->get_dirty(), 0);
-      }
-      if (m->get_caps() == 0) {
-	assert(ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) <= 0);
-	if (m->get_seq() == cap->get_last_sent()) {
-	  dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
-	  releasecap = m->get_seq();
-	} else {
-	  dout(7) << " NOT releasing request client" << client << " seq " << m->get_seq()
-		  << " < last_sent " << cap->get_last_sent() << " on " << *in << dendl;
-	}
       }
       if (ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) == 0 &&
 	  wanted != cap->wanted()) {
@@ -1532,11 +1516,9 @@ void Locker::handle_client_caps(MClientCaps *m)
 	cap->set_wanted(wanted);
       }
       
-      if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack, releasecap)) {
+      if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
 	// no update, ack now.
-	if (releasecap)
-	  _finish_release_cap(in, client, releasecap, ack);
-	else if (ack)
+	if (ack)
 	  mds->send_message_client(ack, client);
       }
 	
@@ -1561,33 +1543,6 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::_finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClientCaps *ack)
-{
-  dout(10) << "_finish_release_cap client" << client << " seq " << seq << " on " << *in << dendl;
-  
-  Capability *cap = in->get_client_cap(client);
-  assert(cap);
-
-  // before we remove the cap, make sure the release request is
-  // _still_ the most recent (and not racing with open() or
-  // something)
-
-  if (cap->updating) {
-    dout(10) << " another update attempt in flight, not releasing yet" << dendl;
-    delete ack;
-  } else if (ceph_seq_cmp(seq, cap->get_last_sent()) < 0) {
-    dout(10) << " NOT releasing cap client" << client << ", last_sent " << cap->get_last_sent()
-	     << " > " << seq << dendl;
-    delete ack;
-  } else {
-    
-    mdcache->remove_client_cap(in, client, false);
-    
-    if (ack)
-      mds->send_message_client(ack, client);
-  }
-}
-
 /*
  * update inode based on cap flush|flushsnap|wanted.
  *  adjust max_size, if needed.
@@ -1595,7 +1550,7 @@ void Locker::_finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClient
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
 			    int dirty, int wanted, snapid_t follows, MClientCaps *m,
-			    MClientCaps *ack, ceph_seq_t releasecap)
+			    MClientCaps *ack)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " wanted " << ccap_string(wanted)
@@ -1747,7 +1702,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
-							   client, cap, ack, releasecap));
+							   client, cap, ack));
   // only flush immediately if the lock is unstable
   if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
       ((dirty & CEPH_CAP_AUTH_EXCL) && !in->authlock.is_stable()) ||
