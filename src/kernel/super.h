@@ -279,8 +279,6 @@ struct ceph_inode_info {
 	u64 i_wanted_max_size;     /* offset we'd like to write too */
 	u64 i_requested_max_size;  /* max_size we've requested */
 
-	struct timespec i_old_atime;
-
 	/* held references to caps */
 	int i_pin_ref;
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;

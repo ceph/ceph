@@ -47,11 +47,6 @@ static int ceph_write_inode(struct inode *inode, int unused)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 
-	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
-		dout(30, "ceph_write_inode %llx.%llx .. atime updated\n",
-		     ceph_vinop(inode));
-		/* maybe someday we will push this async to mds? */
-	}
 	return 0;
 }
 

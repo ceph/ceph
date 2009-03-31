@@ -532,8 +532,6 @@ static int fill_inode(struct inode *inode,
 			       ci->i_xattr_len);
 	}
 
-	ci->i_old_atime = inode->i_atime;
-
 	inode->i_mapping->a_ops = &ceph_aops;
 	inode->i_mapping->backing_dev_info =
 		&ceph_client(inode->i_sb)->backing_dev_info;
