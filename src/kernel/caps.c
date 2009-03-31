@@ -1066,6 +1066,8 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 	if (got & CEPH_CAP_FILE_WR)
 		ci->i_wr_ref++;
 	if (got & CEPH_CAP_FILE_WRBUFFER) {
+		if (ci->i_wrbuffer_ref == 0)
+			igrab(&ci->vfs_inode);
 		ci->i_wrbuffer_ref++;
 		dout(30, "__take_cap_refs %p wrbuffer %d -> %d (?)\n",
 		     &ci->vfs_inode, ci->i_wrbuffer_ref-1, ci->i_wrbuffer_ref);
@@ -1276,6 +1278,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 
 	if (last) {
 		ceph_check_caps(ci, 0, 0, NULL);
+		iput(inode);
 	} else if (last_snap) {
 		ceph_flush_snaps(ci);
 		wake_up(&ci->i_cap_wq);
