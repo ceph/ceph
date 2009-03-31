@@ -2155,10 +2155,16 @@ void Locker::simple_eval(SimpleLock *lock)
 
   if (lock->get_parent()->is_frozen()) return;
 
+  bool loner = false;
+  if (lock->get_type() != CEPH_LOCK_DN &&
+      ((CInode*)lock->get_parent())->get_loner() >= 0)
+    loner = true;
+
   // stable -> sync?
   if (!lock->is_xlocked() &&
       !lock->is_wrlocked() &&
       lock->get_state() != LOCK_SYNC &&
+      !(lock->get_state() == LOCK_EXCL && loner) &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
