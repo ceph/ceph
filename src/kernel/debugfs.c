@@ -374,8 +374,8 @@ static int caps_reservation_show(struct seq_file *s, void *p)
 
 	ceph_reservation_status(&total, &used, &reserved);
 
-	seq_printf(s, "total\t%d\n"
-		      "used\t%d\n"
+	seq_printf(s, "total\t\t%d\n"
+		      "used\t\t%d\n"
 		      "reserved\t%d\n",
 		      total, used, reserved);
 	return 0;

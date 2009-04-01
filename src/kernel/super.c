@@ -183,7 +183,7 @@ static int init_caches(void)
 	return 0;
 }
 
-static void destroy_inodecache(void)
+static void destroy_caches(void)
 {
 	kmem_cache_destroy(ceph_inode_cachep);
 	kmem_cache_destroy(ceph_cap_cachep);
@@ -1159,7 +1159,6 @@ static int __init init_ceph(void)
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_init();
 #endif
-
 	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
@@ -1172,13 +1171,15 @@ static int __init init_ceph(void)
 	if (ret)
 		goto out_msgr;
 
+	ceph_caps_init();
+
 	ret = register_filesystem(&ceph_fs_type);
 	if (ret)
 		goto out_icache;
 	return 0;
 
 out_icache:
-	destroy_inodecache();
+	destroy_caches();
 out_msgr:
 	ceph_msgr_exit();
 out_debugfs:
@@ -1191,7 +1192,7 @@ static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
 	unregister_filesystem(&ceph_fs_type);
-	destroy_inodecache();
+	destroy_caches();
 	ceph_msgr_exit();
 	ceph_debugfs_cleanup();
 #ifdef CONFIG_CEPH_BOOKKEEPER

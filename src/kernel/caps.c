@@ -1974,7 +1974,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 		ceph_check_caps(ci, 0, 0, NULL);
 }
 
-void caps_init(void)
+void ceph_caps_init(void)
 {
 	INIT_LIST_HEAD(&caps_list);
 	spin_lock_init(&caps_list_lock);
@@ -1992,6 +1992,8 @@ int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need)
 
 	alloc_count = need;
 
+	dout(30, "reserve caps, ctx=%p, need=%d\n", ctx, need);
+
 	spin_lock(&caps_list_lock);
 	/* how much can we actually use? */
 	have = caps_count - caps_use_count - caps_reserve_count;
@@ -2007,7 +2009,7 @@ int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need)
 
 	/* no need to allocate anything, exit */
 	if (alloc_count == 0)
-		return 0;
+		goto out_success;
 
 	for (i=0; i<alloc_count; i++) {
 		cap = kmem_cache_alloc(ceph_cap_cachep, GFP_NOFS);
@@ -2024,7 +2026,10 @@ int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need)
 		reserved++;
 	}
 
+out_success:
 	ctx->count = need;
+	dout(30, "reserve caps, ctx=%p, total=%d reserved=%d used=%d\n",
+		ctx, caps_count, caps_reserve_count, caps_use_count);
 
 	return 0;
 out_alloc_count:
@@ -2038,10 +2043,16 @@ out_alloc_count:
 
 int ceph_unreserve_caps(struct ceph_caps_reservation *ctx)
 {
-	spin_lock(&caps_list_lock);
-	caps_reserve_count -= min(caps_reserve_count, ctx->count);
-	ctx->count = 0;
-	spin_unlock(&caps_list_lock);
+	if (ctx->count) {
+		spin_lock(&caps_list_lock);
+		caps_reserve_count -= min(caps_reserve_count, ctx->count);
+		dout(30, "unreserve caps ctx=%p, ctx->count=%d\n", ctx, ctx->count);
+		ctx->count = 0;
+		spin_unlock(&caps_list_lock);
+
+		dout(30, "unreserve caps, total=%d reserved=%d used=%d\n",
+			caps_count, caps_reserve_count, caps_use_count);
+	}
 
 	return 0;
 }
@@ -2049,6 +2060,9 @@ int ceph_unreserve_caps(struct ceph_caps_reservation *ctx)
 struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx, int mode)
 {
 	struct ceph_cap *cap = NULL;
+
+	dout(30, "get_cap ctx=%p, total=%d reserved=%d used=%d\n",
+		ctx, caps_count, caps_reserve_count, caps_use_count);
 
 	spin_lock(&caps_list_lock);
 
@@ -2072,6 +2086,8 @@ out_unlock:
 	if (!ctx) {
 		cap = kmem_cache_alloc(ceph_cap_cachep, mode);
 	}
+	dout(30, "get_cap caps (exit) ctx=%p, total=%d reserved=%d used=%d\n",
+		ctx, caps_count, caps_reserve_count, caps_use_count);
 	return cap;
 }
 
@@ -2082,11 +2098,15 @@ struct ceph_cap *ceph_get_reserved_cap(struct ceph_caps_reservation *ctx)
 
 void ceph_put_cap(struct ceph_cap *cap)
 {
+	dout(30, "put_cap caps, total=%d reserved=%d used=%d\n",
+		caps_count, caps_reserve_count, caps_use_count);
 	spin_lock(&caps_list_lock);
 	caps_count++;
 	caps_use_count--;
 	list_add(&cap->caps_item, &caps_list);
 	spin_unlock(&caps_list_lock);
+	dout(30, "put_cap(exit) caps, total=%d reserved=%d used=%d\n",
+		caps_count, caps_reserve_count, caps_use_count);
 }
 
 void ceph_reservation_status(int *total, int *used, int *reserved)

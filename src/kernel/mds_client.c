@@ -381,6 +381,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 			dput(req->r_old_dentry);
 		}
 		put_request_sessions(req);
+		ceph_unreserve_caps(&req->r_caps_reservation);
 		kfree(req);
 	}
 }
@@ -440,8 +441,6 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 		list_del_init(&req->r_unsafe_dir_item);
 		spin_unlock(&ci->i_unsafe_lock);
 	}
-
-	ceph_unreserve_caps(&req->r_caps_reservation);
 }
 
 static bool __have_session(struct ceph_mds_client *mdsc, int mds)
@@ -1464,6 +1463,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			ceph_readdir_prepopulate(req, req->r_session);
 	}
 
+	ceph_unreserve_caps(&req->r_caps_reservation);
 	add_cap_releases(mdsc, req->r_session, -1);
 
 done:

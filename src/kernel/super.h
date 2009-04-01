@@ -512,6 +512,7 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 /* what the mds thinks we want */
 extern int __ceph_caps_mds_wanted(struct ceph_inode_info *ci);
 
+extern void ceph_caps_init(void);
 extern int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need);
 extern int ceph_unreserve_caps(struct ceph_caps_reservation *ctx);
 extern struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx, int mode);
