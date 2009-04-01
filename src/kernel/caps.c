@@ -1924,7 +1924,6 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		spin_unlock(&mdsc->cap_delay_lock);
 		dout(10, "check_delayed_caps on %p\n", &ci->vfs_inode);
 		ceph_check_caps(ci, 1, 0, NULL);
-		iput(&ci->vfs_inode);
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
 }
