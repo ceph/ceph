@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
-#define CEPH_MDSC_PROTOCOL   15 /* public/client */
+#define CEPH_MDSC_PROTOCOL   16 /* public/client */
 #define CEPH_MONC_PROTOCOL   11 /* public/client */
 
 
@@ -769,6 +769,7 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) fstat;
 	struct {
 		__le32 frag;
+		__le32 max_entries;
 	} __attribute__ ((packed)) readdir;
 	struct {
 		__le32 mode;

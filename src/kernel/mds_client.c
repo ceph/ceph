@@ -124,7 +124,10 @@ static int parse_reply_info_dir(void **p, void *end,
 	if (*p > end)
 		goto bad;
 
-	ceph_decode_32_safe(p, end, num, bad);
+	ceph_decode_need(p, end, sizeof(num) + 2, bad);
+	ceph_decode_32(p, num);
+	ceph_decode_8(p, info->dir_end);
+	ceph_decode_8(p, info->dir_complete);
 	if (num == 0)
 		goto done;
 

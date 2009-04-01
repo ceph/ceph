@@ -2152,11 +2152,22 @@ void Server::handle_client_readdir(MDRequest *mdr)
   bufferlist dirbl, dnbl;
   dir->encode_dirstat(dirbl, mds->get_nodeid());
 
-  __u32 numfiles = 0;
   CDir::map_t::iterator it = dir->begin(); 
-  while (it != dir->end()) {
+
+  unsigned max = req->head.args.readdir.max_entries;
+  if (!max)
+    max = dir->get_num_any();  // whatever, something big.
+
+  nstring offset_str = req->get_path2();
+  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
+
+  __u32 numfiles = 0;
+  while (it != dir->end() && numfiles < max) {
     CDentry *dn = it->second;
     it++;
+
+    if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
+      continue;
 
     bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
@@ -2212,7 +2223,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
     // touch dn
     mdcache->lru.lru_touch(dn);
   }
+  
+  __u8 end = (it == dir->end());
+  __u8 complete = (end && !offset);
+
+  // final blob
   ::encode(numfiles, dirbl);
+  ::encode(end, dirbl);
+  ::encode(complete, dirbl);
   dirbl.claim_append(dnbl);
   
   if (snaps)
@@ -2221,7 +2239,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // yay, reply
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_dir_bl(dirbl);
-  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
+  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
+	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);

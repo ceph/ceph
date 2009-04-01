@@ -58,6 +58,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	int err;
 	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
+	int complete = 0;
 
 	/* set I_READDIR at start of readdir */
 	if (filp->f_pos == 0)
@@ -97,7 +98,11 @@ nextfrag:
 			return err;
 		}
 		dout(10, "readdir got and parsed readdir result=%d"
-		     " on frag %x\n", err, frag);
+		     " on frag %x, end=%d, complete=%d\n", err, frag,
+		     (int)req->r_reply_info.dir_complete,
+		     (int)req->r_reply_info.dir_end);
+		if (req->r_reply_info.dir_complete)
+			complete = 1;
 		fi->last_readdir = req;
 	}
 
@@ -163,7 +168,7 @@ nextfrag:
 	 * dir contents in our cache.
 	 */
 	spin_lock(&inode->i_lock);
-	if (ci->i_ceph_flags & CEPH_I_READDIR) {
+	if (complete && (ci->i_ceph_flags & CEPH_I_READDIR)) {
 		dout(10, " marking %p complete\n", inode);
 		ci->i_ceph_flags |= CEPH_I_COMPLETE;
 		ci->i_ceph_flags &= ~CEPH_I_READDIR;
