@@ -39,7 +39,7 @@ void ceph_send_msg_mds(struct ceph_mds_client *mdsc, struct ceph_msg *msg,
 static int parse_reply_info_in(void **p, void *end,
 			       struct ceph_mds_reply_info_in *info)
 {
-	int err = -EINVAL;
+	int err = -EIO;
 
 	info->in = *p;
 	*p += sizeof(struct ceph_mds_reply_inode) +
@@ -101,7 +101,7 @@ static int parse_reply_info_trace(void **p, void *end,
 	return 0;
 
 bad:
-	err = -EINVAL;
+	err = -EIO;
 out_bad:
 	derr(1, "problem parsing trace %d\n", err);
 	return err;
@@ -166,10 +166,12 @@ static int parse_reply_info_dir(void **p, void *end,
 	}
 
 done:
+	if (*p != end)
+		goto bad;
 	return 0;
 
 bad:
-	err = -EINVAL;
+	err = -EIO;
 out_bad:
 	derr(1, "problem parsing dir contents %d\n", err);
 	return err;
@@ -216,7 +218,7 @@ static int parse_reply_info(struct ceph_msg *msg,
 	return 0;
 
 bad:
-	err = -EINVAL;
+	err = -EIO;
 out_bad:
 	derr(1, "parse_reply err %d\n", err);
 	return err;
@@ -1372,6 +1374,8 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 		if (!list_empty(&req->r_unsafe_item))
 		    list_del_init(&req->r_unsafe_item);
 		complete(&req->r_safe_completion);
+	} else if (req->r_err) {
+		err = req->r_err;
 	} else {
 		err = le32_to_cpu(req->r_reply_info.head->result);
 	}
