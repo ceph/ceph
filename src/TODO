@@ -47,10 +47,10 @@ kclient caps
 /- implement write_inode?
 /- hold a pin_ref for request r_inode or r_locked_dir.
 /- flush dirty caps to auth mds only.  resend on cap import.
-- reflush caps on mds recovery
+- reflush caps on mds recovery, cap migration.
 - cap (release) reservations
 /- size limit on readdir result, partial dirfrag readdir
-- revisit unmount
+/- revisit unmount
 /- make request paths relative to a non-snapshotted inode.
 
 

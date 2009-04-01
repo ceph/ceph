@@ -259,7 +259,6 @@ retry:
 
 		cap->issued = 0;
 		cap->implemented = 0;
-		cap->flushing = 0;
 		cap->mds = mds;
 		cap->mds_wanted = 0;
 
@@ -377,30 +376,6 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 			*implemented |= cap->implemented;
 	}
 	return have;
-}
-
-/*
- * Return mask of fields dirtied while holding *_EXCL or FILE_WR caps.
- * Include both per-inode 'dirty' fields and 'flushing' caps.
- */
-int __ceph_caps_dirty(struct ceph_inode_info *ci)
-{
-	struct inode *inode = &ci->vfs_inode;
-	int dirty = ci->i_dirty_caps;
-	struct ceph_cap *cap;
-	struct rb_node *p;
-
-	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
-		cap = rb_entry(p, struct ceph_cap, ci_node);
-		if (!__cap_is_valid(cap))
-			continue;
-		dout(30, "__ceph_caps_dirty %p cap %p flushing %s\n",
-		     inode, cap, ceph_cap_string(cap->flushing));
-		dirty |= cap->flushing;
-	}
-	dout(30, "__ceph_caps_dirty %p dirty %s = %s\n", inode,
-	     ceph_cap_string(ci->i_dirty_caps), ceph_cap_string(dirty));
-	return dirty;
 }
 
 /*
@@ -621,7 +596,7 @@ void ceph_queue_caps_release(struct inode *inode)
  * caller should hold snap_rwsem (read), s_mutex.
  */
 static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
-		       int op, int used, int want, int retain)
+		       int op, int used, int want, int retain, int flushing)
 	__releases(cap->ci->vfs_inode->i_lock)
 {
 	struct ceph_inode_info *ci = cap->ci;
@@ -630,7 +605,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	int held = cap->issued | cap->implemented;
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~retain;
-	int keep, flushing;
+	int keep;
 	u64 seq, mseq, time_warp_seq, follows;
 	u64 size, max_size;
 	struct timespec mtime, atime;
@@ -662,7 +637,6 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	cap->mds_wanted = want;
 
 	keep = cap->issued;
-	flushing = cap->flushing;
 	seq = cap->seq;
 	mseq = cap->mseq;
 	size = inode->i_size;
@@ -823,7 +797,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 	int file_wanted, used;
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
 	int drop_session_lock = session ? 0:1;
-	int want, retain, revoking, dirty;
+	int want, retain, revoking, flushing = 0;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
@@ -985,22 +959,22 @@ ack:
 			took_snap_rwsem = 1;
 		}
 
-		if (cap == ci->i_auth_cap) {
+		if (cap == ci->i_auth_cap && ci->i_dirty_caps) {
 			/* update dirty, flushing bits */
-			dirty = __ceph_caps_dirty(ci);
-			cap->flushing |= dirty & cap->implemented;
-			if (cap->flushing) {
-				ci->i_dirty_caps &= ~cap->flushing;
-				dout(10, " flushing %s, dirty_caps now %s\n",
-				     ceph_cap_string(cap->flushing),
-				     ceph_cap_string(ci->i_dirty_caps));
-			}
+			flushing = ci->i_dirty_caps;
+			dout(10, " flushing %s, flushing_caps %s -> %s\n",
+			     ceph_cap_string(flushing),
+			     ceph_cap_string(ci->i_flushing_caps),
+			     ceph_cap_string(ci->i_flushing_caps | flushing));
+			ci->i_flushing_caps |= flushing;
+			ci->i_dirty_caps = 0;
 		}
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want, retain);
+		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want, retain,
+			   flushing);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
@@ -1021,6 +995,9 @@ int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 	struct ceph_mds_client *mdsc = &ceph_client(ci->vfs_inode.i_sb)->mdsc;
 	int was = __ceph_caps_dirty(ci);
 
+	dout(20, "__mark_dirty_caps %p %s dirty %s -> %s\n", &ci->vfs_inode,
+	     ceph_cap_string(mask), ceph_cap_string(ci->i_dirty_caps),
+	     ceph_cap_string(ci->i_dirty_caps | mask));
 	ci->i_dirty_caps |= mask;
 	if (!was) {
 		dout(20, " inode %p now dirty\n", &ci->vfs_inode);
@@ -1053,12 +1030,11 @@ static int try_flush_caps(struct inode *inode, struct ceph_mds_session *session)
 	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int unlock_session = session ? 0:1;
-	int dirty;
+	int flushing = 0;
 
 retry:
 	spin_lock(&inode->i_lock);
-	dirty = __ceph_caps_dirty(ci);
-	if (dirty && ci->i_auth_cap) {
+	if (ci->i_dirty_caps && ci->i_auth_cap) {
 		struct ceph_cap *cap = ci->i_auth_cap;
 		int used = __ceph_caps_used(ci);
 
@@ -1074,16 +1050,17 @@ retry:
 
 		__mark_caps_sync(inode);
 
-		cap->flushing |= dirty & cap->implemented;
-		if (cap->flushing) {
-			ci->i_dirty_caps &= ~cap->flushing;
-			dout(10, " flushing %s, dirty_caps now %s\n",
-			     ceph_cap_string(cap->flushing),
-			     ceph_cap_string(ci->i_dirty_caps));
-		}
+		flushing = ci->i_dirty_caps;
+		dout(10, " flushing %s, flushing_caps %s -> %s\n",
+		     ceph_cap_string(flushing),
+		     ceph_cap_string(ci->i_flushing_caps),
+		     ceph_cap_string(ci->i_flushing_caps | flushing));
+		ci->i_flushing_caps |= flushing;
+		ci->i_dirty_caps = 0;
+
 		/* __send_cap drops i_lock */
 		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, cap->mds_wanted,
-			   cap->issued | cap->implemented);
+			   cap->issued | cap->implemented, flushing);
 		goto out_unlocked;
 	}
 out:
@@ -1091,7 +1068,7 @@ out:
 out_unlocked:
 	if (session && unlock_session)
 		mutex_unlock(&session->s_mutex);
-	return dirty;
+	return flushing;
 }
 
 static int caps_are_clean(struct inode *inode)
@@ -1595,11 +1572,11 @@ static void handle_cap_flush_ack(struct inode *inode,
 	dout(10, "handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
 	     " flushing %s -> %s\n",
 	     inode, session->s_mds, seq, ceph_cap_string(cleaned),
-	     ceph_cap_string(cap->flushing),
-	     ceph_cap_string(cap->flushing & ~cleaned));
-	old_dirty = __ceph_caps_dirty(ci);
-	cap->flushing &= ~cleaned;
-	new_dirty = __ceph_caps_dirty(ci);
+	     ceph_cap_string(ci->i_flushing_caps),
+	     ceph_cap_string(ci->i_flushing_caps & ~cleaned));
+	old_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
+	ci->i_flushing_caps &= ~cleaned;
+	new_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
 	if (old_dirty) {
 		spin_lock(&mdsc->cap_dirty_lock);
 		list_del_init(&ci->i_sync_item);

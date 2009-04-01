@@ -152,7 +152,6 @@ struct ceph_cap {
 	u64 cap_id;       /* unique cap id (mds provided) */
 	int issued;       /* latest, from the mds */
 	int implemented;  /* implemented superset of issued (for revocation) */
-	int flushing;     /* dirty fields being written back to mds */
 	int mds_wanted;
 	u32 seq, issue_seq, mseq, gen;
 	unsigned long last_used;
@@ -259,7 +258,7 @@ struct ceph_inode_info {
 	 * s_mutex. */
 	struct rb_root i_caps;           /* cap list */
 	struct ceph_cap *i_auth_cap;     /* authoritative cap, if any */
-	unsigned i_dirty_caps;           /* mask of dirtied fields */
+	unsigned i_dirty_caps, i_flushing_caps;     /* mask of dirtied fields */
 	struct list_head i_dirty_item, i_sync_item;
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */
@@ -464,7 +463,10 @@ static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
 	return (ceph_caps_issued(ci) & mask) == mask;
 }
 
-extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
+static inline int __ceph_caps_dirty(struct ceph_inode_info *ci)
+{
+	return ci->i_dirty_caps | ci->i_flushing_caps;
+}
 extern int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask);
 
 extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
