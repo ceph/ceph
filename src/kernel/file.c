@@ -218,6 +218,7 @@ int ceph_release(struct inode *inode, struct file *file)
 	ceph_put_fmode(ci, cf->fmode);
 	if (cf->last_readdir)
 		ceph_mdsc_put_request(cf->last_readdir);
+	kfree(cf->last_name);
 	kfree(cf->dir_info);
 	kfree(cf);
 	return 0;

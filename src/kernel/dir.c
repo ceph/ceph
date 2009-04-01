@@ -53,22 +53,23 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	unsigned frag = fpos_frag(filp->f_pos);
-	unsigned off = fpos_off(filp->f_pos);
-	unsigned skew;
+	int off = fpos_off(filp->f_pos);
+	int skew;
 	int err;
 	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
-	int complete = 0;
+	int complete = 0, len;
+	int max_entries = 1024;
 
 	/* set I_READDIR at start of readdir */
 	if (filp->f_pos == 0)
 		ceph_i_set(inode, CEPH_I_READDIR);
 
-nextfrag:
+more:
 	dout(5, "readdir filp %p at frag %u off %u\n", filp, frag, off);
 
 	/* do we have the correct frag content buffered? */
-	if (fi->frag != frag || fi->last_readdir == NULL) {
+	if (fi->frag != frag || fi->off < off || fi->last_readdir == NULL) {
 		struct ceph_mds_request *req;
 		int op = ceph_snap(inode) == CEPH_SNAPDIR ?
 			CEPH_MDS_OP_LSSNAP : CEPH_MDS_OP_READDIR;
@@ -80,8 +81,8 @@ nextfrag:
 		/* requery frag tree, as the frag topology may have changed */
 		frag = ceph_choose_frag(ceph_inode(inode), frag, NULL, NULL);
 
-		dout(10, "readdir querying mds for ino %llx.%llx frag %x\n",
-		     ceph_vinop(inode), frag);
+		dout(10, "readdir fetching %llx.%llx frag %x offset '%s'\n",
+		     ceph_vinop(inode), frag, fi->last_name);
 		req = ceph_mdsc_create_request(mdsc, op, USE_AUTH_MDS);
 		if (IS_ERR(req))
 			return PTR_ERR(req);
@@ -91,7 +92,9 @@ nextfrag:
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_direct_hash = frag_value(frag);
 		req->r_direct_is_hash = true;
+		req->r_path2 = fi->last_name;
 		req->r_args.readdir.frag = cpu_to_le32(frag);
+		req->r_args.readdir.max_entries = max_entries;
 		err = ceph_mdsc_do_request(mdsc, NULL, req);
 		if (err < 0) {
 			ceph_mdsc_put_request(req);
@@ -99,14 +102,36 @@ nextfrag:
 		}
 		dout(10, "readdir got and parsed readdir result=%d"
 		     " on frag %x, end=%d, complete=%d\n", err, frag,
-		     (int)req->r_reply_info.dir_complete,
-		     (int)req->r_reply_info.dir_end);
+		     (int)req->r_reply_info.dir_end,
+		     (int)req->r_reply_info.dir_complete);
+
 		if (req->r_reply_info.dir_complete)
 			complete = 1;
+
+		fi->off = fi->next_off;
+		kfree(fi->last_name);
+		fi->last_name = 0;
+
+		if (req->r_reply_info.dir_end) {
+			fi->next_off = 0;
+		} else {
+			rinfo = &req->r_reply_info;
+			len = rinfo->dir_dname_len[rinfo->dir_nr-1];
+			fi->last_name = kmalloc(len+1, GFP_NOFS);
+			if (!fi->last_name) {
+				ceph_mdsc_put_request(req);
+				return -ENOMEM;
+			}
+			memcpy(fi->last_name, rinfo->dir_dname[rinfo->dir_nr-1],
+			       len);
+			fi->last_name[len] = 0;
+			fi->next_off = fi->off + rinfo->dir_nr;
+			dout(10, "readdir  last item is '%s'\n", fi->last_name);
+		}
 		fi->last_readdir = req;
 	}
 
-	/* include . and .. with first fragment */
+	/* include . and .. with first piece of fragment */
 	if (frag_is_leftmost(frag)) {
 		switch (off) {
 		case 0:
@@ -126,15 +151,15 @@ nextfrag:
 			off++;
 			filp->f_pos++;
 		}
-		skew = -2;  /* compensate for . and .. */
+		skew = -2 - fi->off;  /* compensate for . and .. */
 	} else {
-		skew = 0;
+		skew = 0 - fi->off;
 	}
 
 	rinfo = &fi->last_readdir->r_reply_info;
-	dout(10, "readdir frag %x num %d off %d skew %d\n", frag,
-	     rinfo->dir_nr, off, skew);
-	while (off+skew < rinfo->dir_nr) {
+	dout(10, "readdir frag %x num %d off %d fragoff %d skew %d\n", frag,
+	     rinfo->dir_nr, off, fi->off, skew);
+	while (off >= skew && off+skew < rinfo->dir_nr) {
 		dout(10, "readdir off %d -> %d / %d name '%.*s'\n",
 		     off, off+skew,
 		     rinfo->dir_nr, rinfo->dir_dname_len[off+skew],
@@ -153,13 +178,19 @@ nextfrag:
 		filp->f_pos++;
 	}
 
+	if (fi->last_name) {
+		ceph_mdsc_put_request(fi->last_readdir);
+		fi->last_readdir = NULL;
+		goto more;
+	}
+
 	/* more frags? */
 	if (!frag_is_rightmost(frag)) {
 		frag = frag_next(frag);
 		off = 0;
 		filp->f_pos = make_fpos(frag, off);
 		dout(10, "readdir next frag is %x\n", frag);
-		goto nextfrag;
+		goto more;
 	}
 
 	/*
@@ -208,6 +239,8 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 			dout(10, "dir_llseek dropping %p content\n", file);
 			ceph_mdsc_put_request(fi->last_readdir);
 			fi->last_readdir = NULL;
+			kfree(fi->last_name);
+			fi->next_off = 0;
 		}
 
 		/* clear I_READDIR if we did a forward seek */
