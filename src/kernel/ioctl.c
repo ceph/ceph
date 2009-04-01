@@ -38,7 +38,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	if (copy_from_user(&layout, arg, sizeof(layout)))
 		return -EFAULT;
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETLAYOUT,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETLAYOUT,
 				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);

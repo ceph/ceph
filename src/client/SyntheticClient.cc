@@ -2739,7 +2739,7 @@ int SyntheticClient::random_walk(int num_req)
     }
     */
     
-    if (op == CEPH_MDS_OP_STAT) {
+    if (op == CEPH_MDS_OP_GETATTR) {
       struct stat st;
       if (contents.empty()) {
         if (did_readdir) {

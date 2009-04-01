@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
-#define CEPH_MDSC_PROTOCOL   16 /* public/client */
+#define CEPH_MDSC_PROTOCOL   17 /* public/client */
 #define CEPH_MONC_PROTOCOL   11 /* public/client */
 
 
@@ -698,15 +698,11 @@ enum {
 	CEPH_MDS_OP_FINDINODE  = 0x100100,
 
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
-	CEPH_MDS_OP_LSTAT      = 0x00101,
-	CEPH_MDS_OP_LSETXATTR  = 0x01105,
-	CEPH_MDS_OP_LRMXATTR   = 0x01106,
-	CEPH_MDS_OP_LSETLAYOUT = 0x01107,
+	CEPH_MDS_OP_GETATTR    = 0x00101,
+	CEPH_MDS_OP_SETXATTR   = 0x01105,
+	CEPH_MDS_OP_RMXATTR    = 0x01106,
+	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
 	CEPH_MDS_OP_SETATTR    = 0x01108,
-
-	CEPH_MDS_OP_STAT       = 0x10100,
-	CEPH_MDS_OP_SETXATTR   = 0x11104,
-	CEPH_MDS_OP_RMXATTR    = 0x11105,
 
 	CEPH_MDS_OP_MKNOD      = 0x01201,
 	CEPH_MDS_OP_LINK       = 0x01202,
@@ -729,14 +725,10 @@ static inline const char *ceph_mds_op_name(int op)
 	switch (op) {
 	case CEPH_MDS_OP_FINDINODE: return "findinode";
 	case CEPH_MDS_OP_LOOKUP:  return "lookup";
-	case CEPH_MDS_OP_STAT:  return "stat";
-	case CEPH_MDS_OP_LSTAT:  return "lstat";
-	case CEPH_MDS_OP_LSETLAYOUT: return "lsetlayout";
+	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
-	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
-	case CEPH_MDS_OP_LRMXATTR: return "lrmxattr";
 	case CEPH_MDS_OP_READDIR: return "readdir";
 	case CEPH_MDS_OP_MKNOD: return "mknod";
 	case CEPH_MDS_OP_LINK: return "link";

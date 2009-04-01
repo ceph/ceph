@@ -777,8 +777,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   
   bool nojournal = false;
   int op = req->get_op();
-  if (op == CEPH_MDS_OP_STAT ||
-      op == CEPH_MDS_OP_LSTAT ||
+  if (op == CEPH_MDS_OP_GETATTR ||
       op == CEPH_MDS_OP_READDIR ||
       op == CEPH_MDS_OP_OPEN)
     nojournal = true;
@@ -2827,7 +2826,7 @@ int Client::_do_lstat(const filepath &path, int mask, Inode **in, int uid, int g
     dout(10) << "lstat cache hit w/ sufficient mask" << dendl;
     *in = dn->inode;
   } else {  
-    req = new MClientRequest(CEPH_MDS_OP_LSTAT);
+    req = new MClientRequest(CEPH_MDS_OP_GETATTR);
     req->head.args.stat.mask = mask;
     req->set_filepath(path);
 
@@ -4337,7 +4336,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
       path.push_dentry(name);
       dout(10) << "ll_lookup on " << path << dendl;
       //_do_lstat(path, 0, &in, uid, gid);
-      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LSTAT);
+      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
       req->head.args.stat.mask = 0;
       req->set_filepath(path);
 
@@ -4613,7 +4612,7 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
 int Client::_setxattr(const filepath &path, const char *name, const void *value, size_t size, int flags,
 		      bool followsym, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LSETXATTR);
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETXATTR);
   req->set_filepath(path);
   req->set_string2(name);
   req->head.args.setxattr.flags = flags;
@@ -4654,7 +4653,7 @@ int Client::ll_removexattr(vinodeno_t vino, const char *name, int uid, int gid)
 int Client::_removexattr(const filepath &path, const char *name, 
 			 bool followsym, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LRMXATTR);
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMXATTR);
   req->set_filepath(path);
  
   MClientReply *reply = make_request(req, uid, gid);

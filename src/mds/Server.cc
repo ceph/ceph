@@ -858,23 +858,20 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // inodes ops.
   case CEPH_MDS_OP_LOOKUP:
-  case CEPH_MDS_OP_STAT:
-  case CEPH_MDS_OP_LSTAT:
+  case CEPH_MDS_OP_GETATTR:
     handle_client_stat(mdr);
     break;
 
   case CEPH_MDS_OP_SETATTR:
     handle_client_setattr(mdr);
     break;
-  case CEPH_MDS_OP_LSETLAYOUT:
+  case CEPH_MDS_OP_SETLAYOUT:
     handle_client_setlayout(mdr);
     break;
   case CEPH_MDS_OP_SETXATTR:
-  case CEPH_MDS_OP_LSETXATTR:
     handle_client_setxattr(mdr);
     break;
   case CEPH_MDS_OP_RMXATTR:
-  case CEPH_MDS_OP_LRMXATTR:
     handle_client_removexattr(mdr);
     break;
 

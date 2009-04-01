@@ -1411,7 +1411,7 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 	if (ceph_caps_issued_mask(ceph_inode(inode), mask))
 		return 0;
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT, USE_ANY_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_GETATTR, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
@@ -1715,7 +1715,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 
 	/* do request */
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSETXATTR,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETXATTR,
 				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
@@ -1760,7 +1760,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (_ceph_match_vir_xattr(name) != NULL)
 		return -EOPNOTSUPP;
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LRMXATTR,
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RMXATTR,
 				       USE_AUTH_MDS);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
