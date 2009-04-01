@@ -852,8 +852,8 @@ void Server::dispatch_client_request(MDRequest *mdr)
   assert(mdr->more()->waiting_on_slave.empty());
   
   switch (req->get_op()) {
-  case CEPH_MDS_OP_FINDINODE:
-    handle_client_findinode(mdr);
+  case CEPH_MDS_OP_LOOKUPHASH:
+    handle_client_lookup_hash(mdr);
     break;
 
     // inodes ops.
@@ -1759,15 +1759,43 @@ void Server::handle_client_stat(MDRequest *mdr)
 }
 
 
-void Server::handle_client_findinode(MDRequest *mdr)
+void Server::handle_client_lookup_hash(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int r = mdcache->inopath_traverse(mdr, req->inopath);
-  if (r > 0)
-    return; // delayed
-  dout(10) << "reply to findinode on " << *mdr->ref << dendl;
-  MClientReply *reply = new MClientReply(req, r);
-  reply_request(mdr, reply);
+
+  CInode *in = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!in) {
+    // try the directory
+    CInode *diri = mdcache->get_inode(req->get_filepath2().get_ino());
+    if (!diri) {
+      reply_request(mdr, -ESTALE);
+      return;
+    }
+    unsigned hash = atoi(req->get_filepath2()[0].c_str());
+    frag_t fg = diri->dirfragtree[hash];
+    CDir *dir = diri->get_or_open_dirfrag(mdcache, fg);
+    assert(dir);
+    if (!dir->is_auth()) {
+      if (dir->is_ambiguous_auth()) {
+	// wait
+	dout(7) << " waiting for single auth in " << *dir << dendl;
+	dir->add_waiter(CDir::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      } 
+      mdcache->request_forward(mdr, dir->authority().first);
+      return;
+    }
+    if (!dir->is_complete()) {
+      dir->fetch(0, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    reply_request(mdr, -ESTALE);
+    return;
+  }
+
+  dout(10) << "reply to lookup_hash on " << *in << dendl;
+  MClientReply *reply = new MClientReply(req, 0);
+  reply_request(mdr, reply, in, in->get_parent_dn());
 }
 
 

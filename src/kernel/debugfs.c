@@ -300,8 +300,7 @@ static int mdsc_show(struct seq_file *s, void *p)
 				seq_printf(s, " %s", path);
 				kfree(path);
 			}
-		} else if (req->r_path2 &&
-			   req->r_op != CEPH_MDS_OP_FINDINODE) {
+		} else if (req->r_path2) {
 			seq_printf(s, " %s", req->r_path2);
 		}
 

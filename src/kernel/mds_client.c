@@ -1006,51 +1006,44 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	int pathlen;
 	int freepath1 = 0, freepath2 = 0;
 	void *p, *end;
-	u32 fhlen = 0;
 
-	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
-		fhlen = *(int *)req->r_path2;
-		path2 = NULL;
-		pathlen = sizeof(u32) + fhlen*sizeof(struct ceph_inopath_item);
-	} else {
-		if (req->r_inode) {
-			freepath1 = build_inode_path(req->r_inode, &path1,
-						     &pathlen1, &ino1);
-			dout(10, "create_request_message inode %p %llx.%llx\n",
-			     req->r_inode, ceph_ino(req->r_inode),
-			     ceph_snap(req->r_inode));
-		} else if (req->r_dentry) {
-			freepath1 = build_dentry_path(req->r_dentry, &path1,
-						      &pathlen1, &ino1);
-			dout(10, "create_request_message dentry %p %llx/%.*s\n",
-			     req->r_dentry, ino1, pathlen1, path1);
-		} else if (path1) {
-			pathlen1 = strlen(path1);
-			dout(10, "create_request_message path1 %.*s\n",
-			     pathlen1, path1);
-		}
-		if (freepath1 < 0) {
-			msg = ERR_PTR(freepath1);
-			goto out;
-		}
-
-		if (req->r_old_dentry) {
-			freepath2 = build_dentry_path(req->r_old_dentry, &path2,
-						      &pathlen2, &ino2);
-			dout(10, "create_request_message dentry %p %llx/%.*s\n",
-			     req->r_old_dentry, ino2, pathlen2, path2);
-			if (freepath2 < 0) {
-				msg = ERR_PTR(freepath2);
-				goto out_free1;
-			}
-		} else if (path2) {
-			pathlen2 = strlen(path2);
-			dout(10, "create_request_message path2 %.*s\n",
-			     pathlen2, path2);
-		}
-
-		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
+	if (req->r_inode) {
+		freepath1 = build_inode_path(req->r_inode, &path1,
+					     &pathlen1, &ino1);
+		dout(10, "create_request_message inode %p %llx.%llx\n",
+		     req->r_inode, ceph_ino(req->r_inode),
+		     ceph_snap(req->r_inode));
+	} else if (req->r_dentry) {
+		freepath1 = build_dentry_path(req->r_dentry, &path1,
+					      &pathlen1, &ino1);
+		dout(10, "create_request_message dentry %p %llx/%.*s\n",
+		     req->r_dentry, ino1, pathlen1, path1);
+	} else if (path1) {
+		pathlen1 = strlen(path1);
+		dout(10, "create_request_message path1 %.*s\n",
+		     pathlen1, path1);
 	}
+	if (freepath1 < 0) {
+		msg = ERR_PTR(freepath1);
+		goto out;
+	}
+
+	if (req->r_old_dentry) {
+		freepath2 = build_dentry_path(req->r_old_dentry, &path2,
+					      &pathlen2, &ino2);
+		dout(10, "create_request_message dentry %p %llx/%.*s\n",
+		     req->r_old_dentry, ino2, pathlen2, path2);
+		if (freepath2 < 0) {
+			msg = ERR_PTR(freepath2);
+			goto out_free1;
+		}
+	} else if (path2) {
+		pathlen2 = strlen(path2);
+		dout(10, "create_request_message path2 %.*s\n",
+		     pathlen2, path2);
+	}
+
+	pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, sizeof(*head) + pathlen,
 			   0, 0, NULL);
@@ -1074,14 +1067,8 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 #endif
 	head->args = req->r_args;
 
-	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
-		ceph_encode_32(&p, fhlen);
-		memcpy(p, path1, fhlen * sizeof(struct ceph_inopath_item));
-		p += fhlen * sizeof(struct ceph_inopath_item);
-	} else {
-		ceph_encode_filepath(&p, end, ino1, path1);
-		ceph_encode_filepath(&p, end, ino2, path2);
-	}
+	ceph_encode_filepath(&p, end, ino1, path1);
+	ceph_encode_filepath(&p, end, ino2, path2);
 
  	BUG_ON(p != end);
 

@@ -117,7 +117,7 @@ public:
 
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
-  void handle_client_findinode(MDRequest *mdr);
+  void handle_client_lookup_hash(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
 
   void handle_client_setattr(MDRequest *mdr);

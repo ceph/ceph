@@ -693,12 +693,10 @@ struct ceph_mds_session_head {
  */
 #define CEPH_MDS_OP_WRITE        0x001000
 #define CEPH_MDS_OP_FOLLOW_LINK  0x010000
-#define CEPH_MDS_OP_INO_PATH     0x100000
 enum {
-	CEPH_MDS_OP_FINDINODE  = 0x100100,
-
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
 	CEPH_MDS_OP_GETATTR    = 0x00101,
+	CEPH_MDS_OP_LOOKUPHASH = 0x00102,
 	CEPH_MDS_OP_SETXATTR   = 0x01105,
 	CEPH_MDS_OP_RMXATTR    = 0x01106,
 	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
@@ -723,8 +721,8 @@ enum {
 static inline const char *ceph_mds_op_name(int op)
 {
 	switch (op) {
-	case CEPH_MDS_OP_FINDINODE: return "findinode";
 	case CEPH_MDS_OP_LOOKUP:  return "lookup";
+	case CEPH_MDS_OP_LOOKUPHASH:  return "lookuphash";
 	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";

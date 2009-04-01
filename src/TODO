@@ -52,7 +52,7 @@ kclient caps
 /- size limit on readdir result, partial dirfrag readdir
 /- revisit unmount
 /- make request paths relative to a non-snapshotted inode.
-
+- fix nfs exportin
 
 - ENOSPC
 - flock

@@ -897,8 +897,6 @@ public:
   }
   CDir *path_traverse_to_dir(filepath& path);
 
-  int inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item>& inopath);
-  
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected=false);
   void open_remote_ino(inodeno_t ino, Context *fin, inodeno_t hadino=0, version_t hadv=0);
