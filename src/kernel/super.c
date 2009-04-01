@@ -1192,6 +1192,7 @@ static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
 	unregister_filesystem(&ceph_fs_type);
+	ceph_caps_finalize();
 	destroy_caches();
 	ceph_msgr_exit();
 	ceph_debugfs_cleanup();

@@ -1982,6 +1982,21 @@ void ceph_caps_init(void)
 	caps_use_count = 0;
 }
 
+void ceph_caps_finalize(void)
+{
+	struct ceph_cap *cap;
+	spin_lock(&caps_list_lock);
+        while (!list_empty(&caps_list)) {
+		cap = list_first_entry(&caps_list, struct ceph_cap, caps_item);
+		list_del(&cap->caps_item);
+		kmem_cache_free(ceph_cap_cachep, cap);
+	}
+	caps_count = 0;
+	caps_use_count = 0;
+	caps_reserve_count = 0;
+	spin_unlock(&caps_list_lock);
+}
+
 int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need)
 {
 	int i;
