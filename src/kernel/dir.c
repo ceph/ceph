@@ -88,6 +88,7 @@ more:
 			return PTR_ERR(req);
 		req->r_inode = igrab(inode);
 		req->r_dentry = dget(filp->f_dentry);
+		req->r_num_caps = 1000;
 		/* hints to request -> mds selection code */
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_direct_hash = frag_value(frag);
@@ -356,6 +357,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	/* we only need inode linkage */
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	req->r_locked_dir = dir;
@@ -408,6 +410,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(req);
 	}
 	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
 	req->r_args.mknod.mode = cpu_to_le32(mode);
 	req->r_args.mknod.rdev = cpu_to_le32(rdev);
@@ -462,6 +465,7 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(req);
 	}
 	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	req->r_path2 = dest;
 	req->r_locked_dir = dir;
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
@@ -500,6 +504,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		goto out;
 	}
 	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
 	req->r_args.mkdir.mode = cpu_to_le32(mode);
 
@@ -534,6 +539,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		return PTR_ERR(req);
 	}
 	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry); /* or inode? hrm. */
 	req->r_locked_dir = dir;
 
@@ -578,6 +584,7 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 		goto out;
 	}
 	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
 
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
@@ -612,6 +619,7 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_dentry = dget(new_dentry);
+	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry);
 	req->r_locked_dir = new_dir;
 	if (!ceph_caps_issued_mask(ceph_inode(old_dir), CEPH_CAP_FILE_EXCL))

@@ -87,6 +87,7 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 			return ERR_PTR(PTR_ERR(req));
 		req->r_path1 = (char *)fh;
 		req->r_path2 = (void *)&len;
+		req->r_num_caps = 1;
 		err = ceph_mdsc_do_request(mdsc, NULL, req);
 		ceph_mdsc_put_request(req);
 		inode = ceph_find_inode(sb, vino);

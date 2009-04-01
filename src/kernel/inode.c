@@ -442,7 +442,8 @@ static int fill_inode(struct inode *inode,
 		      struct ceph_mds_reply_info_in *iinfo,
 		      struct ceph_mds_reply_dirfrag *dirinfo,
 		      struct ceph_mds_session *session,
-		      unsigned long ttl_from, int cap_fmode)
+		      unsigned long ttl_from, int cap_fmode,
+		      struct ceph_caps_reservation *caps_reservation)
 {
 	struct ceph_mds_reply_inode *info = iinfo->in;
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -576,7 +577,7 @@ no_change:
 				     le32_to_cpu(info->cap.ttl_ms),
 				     ttl_from,
 				     info->cap.flags,
-				     NULL);
+				     caps_reservation);
 		} else {
 			spin_lock(&inode->i_lock);
 			ci->i_snap_caps |= le32_to_cpu(info->cap.caps);
@@ -847,7 +848,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		       le64_to_cpu(rinfo->diri.in->snapid));
 
 		err = fill_inode(dir, &rinfo->diri, rinfo->dirfrag,
-				 session, req->r_request_started, -1);
+				 session, req->r_request_started, -1,
+				 &req->caps_reservation);
 		if (err < 0)
 			return err;
 
@@ -957,7 +959,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				 &rinfo->targeti, NULL,
 				 session, req->r_request_started,
 				 (le32_to_cpu(rinfo->head->result) == 0) ?
-				 req->r_fmode : -1);
+				 req->r_fmode : -1,
+				 &req->caps_reservation);
 		if (err < 0) {
 			derr(30, "fill_inode badness\n");
 			goto done;
@@ -1046,7 +1049,8 @@ retry_lookup:
 		}
 
 		if (fill_inode(in, &rinfo->dir_in[i], NULL, session,
-			       req->r_request_started, -1) < 0) {
+			       req->r_request_started, -1,
+			       &req->caps_reservation) < 0) {
 			dout(0, "fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;
@@ -1372,6 +1376,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	if (mask) {
 		req->r_inode = igrab(inode);
 		req->r_args.setattr.mask = mask;
+		req->r_num_caps = 1;
 		err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	}
 	dout(10, "setattr %p result=%d (%s locally, %d remote)\n", inode, err,
@@ -1409,6 +1414,7 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
+	req->r_num_caps = 1;
 	req->r_args.stat.mask = cpu_to_le32(mask);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	ceph_mdsc_put_request(req);  /* will dput(dentry) */
@@ -1713,6 +1719,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
+	req->r_num_caps = 1;
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
 
 	req->r_request->pages = pages;
@@ -1757,6 +1764,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
+	req->r_num_caps = 1;
 	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);

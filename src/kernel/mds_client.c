@@ -410,6 +410,7 @@ static void __register_request(struct ceph_mds_client *mdsc,
 			       struct inode *listener)
 {
 	req->r_tid = ++mdsc->last_tid;
+	ceph_reserve_caps(&req->caps_reservation, req->r_num_caps);
 	dout(30, "__register_request %p tid %lld\n", req, req->r_tid);
 	ceph_mdsc_get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
@@ -438,6 +439,8 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 		list_del_init(&req->r_unsafe_dir_item);
 		spin_unlock(&ci->i_unsafe_lock);
 	}
+
+	ceph_unreserve_caps(&req->caps_reservation);
 }
 
 static bool __have_session(struct ceph_mds_client *mdsc, int mds)

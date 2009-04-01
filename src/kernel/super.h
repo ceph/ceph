@@ -132,6 +132,7 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
 	return sb->s_fs_info;
 }
 
+
 /*
  * File i/o capability.  This tracks shared state with the metadata
  * server that allows us to read and write data to this file.  For any
@@ -155,6 +156,7 @@ struct ceph_cap {
 	int mds_wanted;
 	u32 seq, issue_seq, mseq, gen;
 	unsigned long last_used;
+	struct list_head caps_item;
 };
 
 /*
@@ -510,6 +512,12 @@ static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 /* what the mds thinks we want */
 extern int __ceph_caps_mds_wanted(struct ceph_inode_info *ci);
 
+extern int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need);
+extern int ceph_unreserve_caps(struct ceph_caps_reservation *ctx);
+extern struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx, int mode);
+extern struct ceph_cap *ceph_get_reserved_cap(struct ceph_caps_reservation *ctx);
+extern void ceph_put_cap(struct ceph_cap *cap);
+
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 {
 	return (struct ceph_client *)inode->i_sb->s_fs_info;
@@ -744,7 +752,7 @@ extern int ceph_add_cap(struct inode *inode,
 			int fmode, unsigned issued, unsigned wanted,
 			unsigned cap, unsigned seq, u64 realmino,
 			unsigned ttl_ms, unsigned long ttl_from, int flags,
-			struct ceph_cap *new_cap);
+			struct ceph_caps_reservation *caps_reservation);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_queue_caps_release(struct inode *inode);
 extern int ceph_write_inode(struct inode *inode, int unused);

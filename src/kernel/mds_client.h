@@ -205,6 +205,9 @@ struct ceph_mds_request {
 	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
 	bool		  r_got_unsafe, r_got_safe;
+
+	struct ceph_caps_reservation r_caps_reservation;
+	int r_num_caps;
 };
 
 /*
