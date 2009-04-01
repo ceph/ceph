@@ -45,14 +45,11 @@ kclient caps
 /- release on destroy_inode
 /- implement write_inode?
 /- hold a pin_ref for request r_inode or r_locked_dir.
+/- flush dirty caps to auth mds only.  resend on cap import.
+- reflush caps on mds recovery
 - cap (release) reservations
 - size limit on readdir result, partial dirfrag readdir
 - revisit unmount
-- dirty caps 
-  - how to flush caps only to auth mds
-  - redirty inode caps if mds session shuts down?
-  - what if all mds's are down when write_inode is called?  redirty inode then too?
-  - what does an mds do with a cap flush if it is not auth?
 - fix up fill_trace and other comments
 
 
