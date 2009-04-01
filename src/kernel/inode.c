@@ -768,6 +768,8 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		ceph_init_dentry(dn);
 		__init_ceph_dentry(dn, 0);
 	} else {
+		if (!ceph_dentry(dn))
+			__init_ceph_dentry(dn, 0);
 		dout(10, "dn %p attached to %p ino %llx.%llx\n",
 		     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 	}
