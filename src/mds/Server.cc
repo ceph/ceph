@@ -1435,7 +1435,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
 
   // traverse to parent dir
-  snapid_t snapid = mdr->client_request->get_snapid();
+  snapid_t snapid;
   int r = mdcache->path_traverse(mdr, mdr->client_request,
 				 refpath, trace, &snapid, &mdr->ref_snapdiri,
 				 false, MDS_TRAVERSE_FORWARD);
@@ -1486,7 +1486,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   // traverse
   filepath refpath = req->get_filepath();
   vector<CDentry*> trace;
-  mdr->ref_snapid = req->get_snapid();
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
 				 trace, &mdr->ref_snapid, &mdr->ref_snapdiri,
@@ -1500,7 +1499,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   // open ref inode
   CInode *ref = 0;
   if (trace.empty()) {
-    ref = mdcache->get_inode(refpath.get_ino(), req->get_snapid());
+    ref = mdcache->get_inode(refpath.get_ino());
     if (!ref) {
       ref = mdcache->get_inode(refpath.get_ino());
       if (!ref->is_multiversion()) {

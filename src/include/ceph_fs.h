@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
-#define CEPH_MDSC_PROTOCOL   14 /* public/client */
+#define CEPH_MDSC_PROTOCOL   15 /* public/client */
 #define CEPH_MONC_PROTOCOL   11 /* public/client */
 
 
@@ -811,7 +811,6 @@ struct ceph_mds_request_head {
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
-	__le64 snapid;
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 	union ceph_mds_request_args args;
 } __attribute__ ((packed));

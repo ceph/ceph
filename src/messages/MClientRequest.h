@@ -125,7 +125,6 @@ public:
   int get_op() { return head.op; }
   unsigned get_caller_uid() { return head.caller_uid; }
   unsigned get_caller_gid() { return head.caller_gid; }
-  snapid_t get_snapid() { return snapid_t((__u64)head.snapid); }
 
   const string& get_path() { return path.get_path(); }
   filepath& get_filepath() { return path; }

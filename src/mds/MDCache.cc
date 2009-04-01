@@ -5467,7 +5467,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   // keep a list of symlinks we touch to avoid loops
   set< pair<CInode*, string> > symlinks_resolved; 
 
-  snapid_t snapid = (psnapid ? *psnapid : snapid_t(CEPH_NOSNAP));
+  snapid_t snapid = CEPH_NOSNAP;
   if (psnapdiri)
     *psnapdiri = 0;
 
