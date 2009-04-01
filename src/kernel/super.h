@@ -698,6 +698,7 @@ static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
 extern struct kmem_cache *ceph_inode_cachep;
+extern struct kmem_cache *ceph_cap_cachep;
 
 extern struct inode *ceph_alloc_inode(struct super_block *sb);
 extern void ceph_destroy_inode(struct inode *inode);

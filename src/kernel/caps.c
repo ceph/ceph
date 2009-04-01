@@ -245,7 +245,7 @@ retry:
 			new_cap = NULL;
 		} else {
 			spin_unlock(&inode->i_lock);
-			new_cap = kmalloc(sizeof(*cap), GFP_NOFS);
+			new_cap = kmem_cache_alloc(ceph_cap_cachep, GFP_NOFS);
 			if (new_cap == NULL)
 				return -ENOMEM;
 			goto retry;
@@ -320,7 +320,8 @@ retry:
 		__ceph_get_fmode(ci, fmode);
 	spin_unlock(&inode->i_lock);
 	wake_up(&ci->i_cap_wq);
-	kfree(new_cap);
+	if (new_cap)
+		kmem_cache_free(ceph_cap_cachep, new_cap);
 	return 0;
 }
 
@@ -471,7 +472,7 @@ static void __ceph_remove_cap(struct ceph_cap *cap)
 	if (ci->i_auth_cap == cap)
 		ci->i_auth_cap = NULL;
 
-	kfree(cap);
+	kmem_cache_free(ceph_cap_cachep, cap);
 
 	if (!__ceph_is_any_caps(ci)) {
 		list_del_init(&ci->i_snap_realm_item);

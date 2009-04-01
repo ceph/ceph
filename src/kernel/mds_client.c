@@ -1128,10 +1128,10 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 
 out_free2:
 	if (freepath2)
-		kfree(path2);
+		kfree((char *)path2);
 out_free1:
 	if (freepath1)
-		kfree(path1);
+		kfree((char *)path1);
 out:
 	return msg;
 }

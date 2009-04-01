@@ -143,37 +143,49 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 	return 0;
 }
 
-
 /*
- * inode cache
+ * caches
  */
 struct kmem_cache *ceph_inode_cachep;
+struct kmem_cache *ceph_cap_cachep;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
-static void init_once(void *foo)
+static void ceph_inode_init_once(void *foo)
 #else
-static void init_once(struct kmem_cache *cachep, void *foo)
+static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
 #endif
 {
 	struct ceph_inode_info *ci = foo;
 	inode_init_once(&ci->vfs_inode);
 }
 
-static int init_inodecache(void)
+static int init_caches(void)
 {
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
-					      init_once);
+					      ceph_inode_init_once);
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
+
+	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
+					      sizeof(struct ceph_cap),
+					      0, (SLAB_RECLAIM_ACCOUNT|
+						  SLAB_MEM_SPREAD),
+					      NULL);
+	if (ceph_cap_cachep == NULL) {
+		kmem_cache_destroy(ceph_inode_cachep);
+		return -ENOMEM;
+	}
+
 	return 0;
 }
 
 static void destroy_inodecache(void)
 {
 	kmem_cache_destroy(ceph_inode_cachep);
+	kmem_cache_destroy(ceph_cap_cachep);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
@@ -1154,7 +1166,7 @@ static int __init init_ceph(void)
 	if (ret < 0)
 		goto out_debugfs;
 
-	ret = init_inodecache();
+	ret = init_caches();
 	if (ret)
 		goto out_msgr;
 
