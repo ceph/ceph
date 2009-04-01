@@ -88,7 +88,6 @@ more:
 			return PTR_ERR(req);
 		req->r_inode = igrab(inode);
 		req->r_dentry = dget(filp->f_dentry);
-		req->r_num_caps = 1000;
 		/* hints to request -> mds selection code */
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_direct_hash = frag_value(frag);
@@ -96,6 +95,7 @@ more:
 		req->r_path2 = fi->last_name;
 		req->r_args.readdir.frag = cpu_to_le32(frag);
 		req->r_args.readdir.max_entries = max_entries;
+		req->r_num_caps = max_entries;
 		err = ceph_mdsc_do_request(mdsc, NULL, req);
 		if (err < 0) {
 			ceph_mdsc_put_request(req);

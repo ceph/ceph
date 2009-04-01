@@ -849,7 +849,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 
 		err = fill_inode(dir, &rinfo->diri, rinfo->dirfrag,
 				 session, req->r_request_started, -1,
-				 &req->caps_reservation);
+				 &req->r_caps_reservation);
 		if (err < 0)
 			return err;
 
@@ -960,7 +960,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				 session, req->r_request_started,
 				 (le32_to_cpu(rinfo->head->result) == 0) ?
 				 req->r_fmode : -1,
-				 &req->caps_reservation);
+				 &req->r_caps_reservation);
 		if (err < 0) {
 			derr(30, "fill_inode badness\n");
 			goto done;
@@ -1050,7 +1050,7 @@ retry_lookup:
 
 		if (fill_inode(in, &rinfo->dir_in[i], NULL, session,
 			       req->r_request_started, -1,
-			       &req->caps_reservation) < 0) {
+			       &req->r_caps_reservation) < 0) {
 			dout(0, "fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;
