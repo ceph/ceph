@@ -51,7 +51,6 @@ kclient caps
 - cap (release) reservations
 - size limit on readdir result, partial dirfrag readdir
 - revisit unmount
-- fix up fill_trace and other comments
 /- make request paths relative to a non-snapshotted inode.
 
 

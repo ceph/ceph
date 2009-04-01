@@ -761,17 +761,9 @@ out:
 }
 
 /*
- * Assimilate a full trace of inodes and dentries, from the root to
- * the item relevant for this reply, into our cache.  Make any dcache
- * changes needed to properly reflect the completed operation (e.g.,
- * call d_move).  Make note of the distribution of metadata across the
- * mds cluster.
- *
- * Care is taken to (attempt to) take i_mutex before adjusting dentry
- * linkages or leases.
- *
- * FIXME: we should check inode.version to avoid races between traces
- * from multiple MDSs after, say, a ancestor directory is renamed.
+ * Incorporate results into the local cache.  This is either just
+ * one inode, or a directory, dentry, and possibly linked-to inode (e.g.,
+ * after a lookup).
  *
  * Called with snap_rwsem (read).
  */
@@ -823,7 +815,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 #endif
 
 	if (!rinfo->head->is_target && !rinfo->head->is_dentry) {
-		dout(10, "fill_trace reply has empty trace!\n");
+		dout(10, "fill_trace reply is empty!\n");
 		if (rinfo->head->result == 0 && req->r_locked_dir) {
 			struct ceph_inode_info *ci =
 				ceph_inode(req->r_locked_dir);
@@ -834,9 +826,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		return 0;
 	}
 
-	/*
-	 * update a dentry?
-	 */
 	if (rinfo->head->is_dentry) {
 		/*
 		 * lookup link rename   : null -> possibly existing inode
@@ -948,7 +937,6 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		i++;
 	}
 
-	/* update any additional inodes */
 	if (rinfo->head->is_target) {
 		vino.ino = le64_to_cpu(rinfo->targeti.in->ino);
 		vino.snap = le64_to_cpu(rinfo->targeti.in->snapid);
