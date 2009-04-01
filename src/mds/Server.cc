@@ -4798,11 +4798,11 @@ void Server::handle_client_open(MDRequest *mdr)
 	   << dendl;
   
   // regular file?
-  if (!cur->inode.is_file() && !cur->inode.is_dir()) {
+  /*if (!cur->inode.is_file() && !cur->inode.is_dir()) {
     dout(7) << "not a file or dir " << *cur << dendl;
     reply_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
-  }
+    }*/
   if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     reply_request(mdr, -EINVAL);
@@ -4858,24 +4858,26 @@ void Server::handle_client_open(MDRequest *mdr)
   }
 
 
-  if (mdr->ref_snapid == CEPH_NOSNAP) {
-    // register new cap
-    bool is_new = false;
-    Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
-    if (is_new)
-      cap->dec_suppress();  // stop suppressing messages on new cap
-    
-    dout(12) << "open issued caps " << ccap_string(cap->pending())
-	     << " for " << req->get_orig_source()
-	     << " on " << *cur << dendl;
-    mdr->cap = cap;
-  } else {
-    int caps = ceph_caps_for_mode(cmode);
-    dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
-	     << " for " << req->get_orig_source()
-	     << " snapid " << mdr->ref_snapid
-	     << " on " << *cur << dendl;
-    mdr->snap_caps = caps;
+  if (cur->is_file() || cur->is_dir()) {
+    if (mdr->ref_snapid == CEPH_NOSNAP) {
+      // register new cap
+      bool is_new = false;
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
+      if (is_new)
+	cap->dec_suppress();  // stop suppressing messages on new cap
+      
+      dout(12) << "open issued caps " << ccap_string(cap->pending())
+	       << " for " << req->get_orig_source()
+	       << " on " << *cur << dendl;
+      mdr->cap = cap;
+    } else {
+      int caps = ceph_caps_for_mode(cmode);
+      dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
+	       << " for " << req->get_orig_source()
+	       << " snapid " << mdr->ref_snapid
+	       << " on " << *cur << dendl;
+      mdr->snap_caps = caps;
+    }
   }
 
   // make sure this inode gets into the journal
