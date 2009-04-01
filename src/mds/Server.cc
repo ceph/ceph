@@ -881,9 +881,6 @@ void Server::dispatch_client_request(MDRequest *mdr)
   case CEPH_MDS_OP_READDIR:
     handle_client_readdir(mdr);
     break;
-  case CEPH_MDS_OP_FSYNC:
-    //handle_client_fsync(req);
-    break;
 
     // funky.
   case CEPH_MDS_OP_OPEN:

@@ -932,7 +932,7 @@ void SyntheticClient::init_op_dist()
   //op_dist.add( CEPH_MDS_OP_READ, 0 );
   //op_dist.add( CEPH_MDS_OP_WRITE, 0 );
   //op_dist.add( CEPH_MDS_OP_TRUNCATE, 0 );
-  op_dist.add( CEPH_MDS_OP_FSYNC, 0 );
+  //op_dist.add( CEPH_MDS_OP_FSYNC, 0 );
   //op_dist.add( CEPH_MDS_OP_RELEASE, 200 );
   op_dist.normalize();
 }
