@@ -101,7 +101,6 @@ enum {
 	CEPH_MDS_SESSION_NEW = 1,
 	CEPH_MDS_SESSION_OPENING = 2,
 	CEPH_MDS_SESSION_OPEN = 3,
-	CEPH_MDS_SESSION_FLUSHING = 4,
 	CEPH_MDS_SESSION_CLOSING = 5,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
@@ -243,6 +242,9 @@ struct ceph_mds_client {
 	spinlock_t       cap_delay_lock;   /* protects cap_delay_list */
 	struct list_head snap_flush_list;  /* cap_snaps ready to flush */
 	spinlock_t       snap_flush_lock;
+	struct list_head cap_dirty, cap_sync; /* inodes with dirty cap data */
+	spinlock_t       cap_dirty_lock;
+	wait_queue_head_t cap_sync_wq;
 
 	struct dentry 		*debugfs_file;
 };
@@ -276,6 +278,8 @@ extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 extern void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc);
 extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
+extern void ceph_mdsc_sync(struct ceph_mds_client *mdsc);
+
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
 				 struct ceph_msg *msg);
 extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
@@ -305,8 +309,6 @@ extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 
-extern void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
-				       struct ceph_mds_session *session);
 extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
 							   u64 tid);
 extern char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base,

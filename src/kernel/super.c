@@ -107,6 +107,7 @@ static int ceph_syncfs(struct super_block *sb, int wait)
 {
 	dout(10, "sync_fs %d\n", wait);
 	ceph_osdc_sync(&ceph_client(sb)->osdc);
+	ceph_mdsc_sync(&ceph_client(sb)->mdsc);
 	return 0;
 }
 

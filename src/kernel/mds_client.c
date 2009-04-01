@@ -239,7 +239,6 @@ static const char *session_state_name(int s)
 	case CEPH_MDS_SESSION_NEW: return "new";
 	case CEPH_MDS_SESSION_OPENING: return "opening";
 	case CEPH_MDS_SESSION_OPEN: return "open";
-	case CEPH_MDS_SESSION_FLUSHING: return "flushing";
 	case CEPH_MDS_SESSION_CLOSING: return "closing";
 	case CEPH_MDS_SESSION_RECONNECTING: return "reconnecting";
 	default: return "???";
@@ -725,65 +724,17 @@ static int request_close_session(struct ceph_mds_client *mdsc,
 }
 
 /*
- * check all caps on a session, without allowing release to
- * be delayed.
- */
-static void check_all_caps(struct ceph_mds_client *mdsc,
-			 struct ceph_mds_session *session)
-{
-	struct list_head *p, *n;
-
-	list_for_each_safe(p, n, &session->s_caps) {
-		struct ceph_cap *cap =
-			list_entry(p, struct ceph_cap, session_caps);
-		struct inode *inode = &cap->ci->vfs_inode;
-
-		igrab(inode);
-		mutex_unlock(&session->s_mutex);
-		ceph_check_caps(ceph_inode(inode), 1, 0, NULL);
-		mutex_lock(&session->s_mutex);
-		iput(inode);
-	}
-}
-
-/*
  * Called with s_mutex held.
  */
 static int __close_session(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session)
 {
-	int mds = session->s_mds;
-	int err = 0;
-
-	dout(10, "close_session mds%d state=%s\n", mds,
+	dout(10, "close_session mds%d state=%s\n", session->s_mds,
 	     session_state_name(session->s_state));
 	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
 		return 0;
-
-	check_all_caps(mdsc, session);
-
-	if (list_empty(&session->s_caps)) {
-		session->s_state = CEPH_MDS_SESSION_CLOSING;
-		err = request_close_session(mdsc, session);
-	} else {
-		session->s_state = CEPH_MDS_SESSION_FLUSHING;
-	}
-	return err;
-}
-
-/*
- * Called when the last cap for a session has been flushed or
- * exported.
- */
-void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
-				struct ceph_mds_session *session)
-{
-	dout(10, "flushed_all_caps for mds%d state %s\n", session->s_mds,
-	     session_state_name(session->s_state));
-	if (session->s_state == CEPH_MDS_SESSION_FLUSHING) {
-		session->s_state = CEPH_MDS_SESSION_CLOSING;
-		request_close_session(mdsc, session);
-	}
+	session->s_state = CEPH_MDS_SESSION_CLOSING;
+	return request_close_session(mdsc, session);
 }
 
 /*
@@ -2304,6 +2255,10 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	spin_lock_init(&mdsc->cap_delay_lock);
 	INIT_LIST_HEAD(&mdsc->snap_flush_list);
 	spin_lock_init(&mdsc->snap_flush_lock);
+	INIT_LIST_HEAD(&mdsc->cap_dirty);
+	INIT_LIST_HEAD(&mdsc->cap_sync);
+	spin_lock_init(&mdsc->cap_dirty_lock);
+	init_waitqueue_head(&mdsc->cap_sync_wq);
 }
 
 /*
@@ -2373,6 +2328,26 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 }
 
 /*
+ * sync - flush all dirty inode data to disk
+ */
+static int are_no_sync_caps(struct ceph_mds_client *mdsc)
+{
+	int empty;
+	spin_lock(&mdsc->cap_dirty_lock);
+	empty = list_empty(&mdsc->cap_sync);
+	spin_unlock(&mdsc->cap_dirty_lock);
+	dout(20, "are_no_sync_caps = %d\n", empty);
+	return empty;
+}
+
+void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
+{
+	dout(10, "sync\n");
+	wait_event(mdsc->cap_sync_wq, are_no_sync_caps(mdsc));
+}
+
+
+/*
  * called after sb is ro.
  */
 void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
@@ -2387,12 +2362,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 
 	mutex_lock(&mdsc->mutex);
 
-	/* close sessions, caps.
-	 *
-	 * WARNING the session close timeout (and forced unmount in
-	 * general) is somewhat broken.. we'll leaved inodes pinned
-	 * and other nastyness.
-	 */
+	/* close sessions */
 	started = jiffies;
 	while (time_before(jiffies, started + timeout)) {
 		dout(10, "closing sessions\n");
@@ -2435,7 +2405,6 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 			mutex_lock(&mdsc->mutex);
 		}
 	}
-
 
 	WARN_ON(!list_empty(&mdsc->cap_delay_list));
 

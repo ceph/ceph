@@ -258,6 +258,7 @@ struct ceph_inode_info {
 	struct rb_root i_caps;           /* cap list */
 	struct ceph_cap *i_auth_cap;     /* authoritative cap, if any */
 	unsigned i_dirty_caps;           /* mask of dirtied fields */
+	struct list_head i_dirty_item, i_sync_item;
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_until; /* jiffies */
 	struct list_head i_cap_delay_list;  /* for delayed cap release to mds */
@@ -462,12 +463,8 @@ static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
 }
 
 extern int __ceph_caps_dirty(struct ceph_inode_info *ci);
-static inline int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
-{
-	int was = __ceph_caps_dirty(ci);
-	ci->i_dirty_caps |= mask;
-	return was;
-}
+extern int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask);
+
 extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
 
 static inline int __ceph_caps_used(struct ceph_inode_info *ci)
