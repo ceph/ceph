@@ -12,6 +12,7 @@ static struct dentry *ceph_debugfs_debug;
 static struct dentry *ceph_debugfs_debug_msgr;
 static struct dentry *ceph_debugfs_debug_console;
 static struct dentry *ceph_debugfs_debug_mask;
+static struct dentry *ceph_debugfs_caps_reservation;
 #ifdef CONFIG_CEPH_BOOKKEEPER
 static struct dentry *ceph_debugfs_bookkeeper;
 #endif
@@ -367,6 +368,19 @@ static int osdc_show(struct seq_file *s, void *p)
 	return 0;
 }
 
+static int caps_reservation_show(struct seq_file *s, void *p)
+{
+	int total, used, reserved;
+
+	ceph_reservation_status(&total, &used, &reserved);
+
+	seq_printf(s, "total\t%d\n"
+		      "used\t%d\n"
+		      "reserved\t%d\n",
+		      total, used, reserved);
+	return 0;
+}
+
 #define DEFINE_SHOW_FUNC(name) 						\
 static int name##_open(struct inode *inode, struct file *file)		\
 {									\
@@ -393,6 +407,7 @@ DEFINE_SHOW_FUNC(osdmap_show)
 DEFINE_SHOW_FUNC(monc_show)
 DEFINE_SHOW_FUNC(mdsc_show)
 DEFINE_SHOW_FUNC(osdc_show)
+DEFINE_SHOW_FUNC(caps_reservation_show)
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 static int debugfs_bookkeeper_set(void *data, u64 val)
@@ -449,6 +464,14 @@ int ceph_debugfs_init(void)
 	if (!ceph_debugfs_debug_mask)
 		goto out;
 
+	ceph_debugfs_caps_reservation = debugfs_create_file("caps_reservation",
+					0400,
+					ceph_debugfs_dir,
+					NULL,
+					&caps_reservation_show_fops);
+	if (!ceph_debugfs_caps_reservation)
+		goto out;
+
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_debugfs_bookkeeper = debugfs_create_file("show_bookkeeper",
 					0600,
@@ -467,6 +490,7 @@ out:
 
 void ceph_debugfs_cleanup(void)
 {
+	debugfs_remove(ceph_debugfs_caps_reservation);
 	debugfs_remove(ceph_debugfs_debug_console);
 	debugfs_remove(ceph_debugfs_debug_mask);
 	debugfs_remove(ceph_debugfs_debug_msgr);

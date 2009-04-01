@@ -2088,3 +2088,16 @@ void ceph_put_cap(struct ceph_cap *cap)
 	list_add(&cap->caps_item, &caps_list);
 	spin_unlock(&caps_list_lock);
 }
+
+void ceph_reservation_status(int *total, int *used, int *reserved)
+{
+	if (total)
+		*total = caps_count;
+
+	if (used)
+		*used = caps_use_count;
+
+	if (reserved)
+		*reserved = caps_reserve_count;
+}
+

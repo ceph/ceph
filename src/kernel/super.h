@@ -517,6 +517,7 @@ extern int ceph_unreserve_caps(struct ceph_caps_reservation *ctx);
 extern struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx, int mode);
 extern struct ceph_cap *ceph_get_reserved_cap(struct ceph_caps_reservation *ctx);
 extern void ceph_put_cap(struct ceph_cap *cap);
+extern void ceph_reservation_status(int *total, int *used, int *reserved);
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
 {
