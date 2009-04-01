@@ -64,6 +64,11 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 		BUG_ON(inode->i_fop->release != ceph_release);
 		break;
 
+	case S_IFLNK:
+		dout(20, "init_file %p 0%o (symlink)\n", inode, inode->i_mode);
+		ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
+		break;
+
 	default:
 		dout(20, "init_file %p 0%o (special)\n", inode, inode->i_mode);
 		/*

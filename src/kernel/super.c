@@ -1109,8 +1109,8 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
-	dout(22, "hi mnt_root %p\n", mnt->mnt_root);
-	dout(22, "root ino %llx.%llx\n", ceph_vinop(mnt->mnt_root->d_inode));
+	dout(22, "root %p inode %p ino %llx.%llx\n", mnt->mnt_root,
+	     mnt->mnt_root->d_inode, ceph_vinop(mnt->mnt_root->d_inode));
 	return 0;
 
 out_splat:
