@@ -412,7 +412,7 @@ static void __register_request(struct ceph_mds_client *mdsc,
 
 	if (listener) {
 		struct ceph_inode_info *ci = ceph_inode(listener);
-		
+
 		spin_lock(&ci->i_unsafe_lock);
 		req->r_unsafe_dir = listener;
 		list_add_tail(&req->r_unsafe_dir_item, &ci->i_unsafe_dirops);
@@ -477,7 +477,7 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 		goto random;
 
 	if (inode) {
-		
+
 	}
 
 	/*
@@ -906,13 +906,17 @@ static u64 __get_oldest_tid(struct ceph_mds_client *mdsc)
 }
 
 /*
- * build a dentry's path.  allocate on heap; caller must kfree.  based
+ * Build a dentry's path.  Allocate on heap; caller must kfree.  Based
  * on build_path_from_dentry in fs/cifs/dir.c.
  *
- * encode hidden .snap dirs as a double /, i.e.
+ * If @stop_on_nosnap, generate path relative to the first non-snapped
+ * inode.
+ *
+ * Encode hidden .snap dirs as a double /, i.e.
  *   foo/.snap/bar -> foo//bar
  */
-char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base, int mds)
+char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base,
+			   int stop_on_nosnap)
 {
 	struct dentry *temp;
 	char *path;
@@ -927,6 +931,8 @@ retry:
 		struct inode *inode = temp->d_inode;
 		if (inode && ceph_snap(inode) == CEPH_SNAPDIR)
 			len++;  /* slash only */
+		else if (inode && ceph_snap(inode) == CEPH_NOSNAP)
+			break;
 		else
 			len += 1 + temp->d_name.len;
 		temp = temp->d_parent;
@@ -944,10 +950,13 @@ retry:
 	pos = len;
 	path[pos] = 0;	/* trailing null */
 	for (temp = dentry; !IS_ROOT(temp) && pos != 0; ) {
-		if (temp->d_inode &&
-		    ceph_snap(temp->d_inode) == CEPH_SNAPDIR) {
+		struct inode *inode = temp->d_inode;
+
+		if (inode && ceph_snap(inode) == CEPH_SNAPDIR) {
 			dout(50, "build_path_dentry path+%d: %p SNAPDIR\n",
 			     pos, temp);
+		} else if (inode && ceph_snap(inode) == CEPH_NOSNAP) {
+			break;
 		} else {
 			pos -= temp->d_name.len;
 			if (pos < 0)
@@ -984,6 +993,43 @@ retry:
 	return path;
 }
 
+static int build_dentry_path(struct dentry *dentry,
+			     const char **ppath, int *ppathlen, u64 *pino)
+{
+	char *path;
+
+	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP) {
+		*pino = ceph_ino(dentry->d_parent->d_inode);
+		*ppath = dentry->d_name.name;
+		*ppathlen = dentry->d_name.len;
+		return 0;
+	}
+	path = ceph_mdsc_build_path(dentry, ppathlen, pino, 1);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	*ppath = path;
+	return 1;
+}
+
+static int build_inode_path(struct inode *inode,
+			    const char **ppath, int *ppathlen, u64 *pino)
+{
+	struct dentry *dentry;
+	char *path;
+
+	if (ceph_snap(inode) == CEPH_NOSNAP) {
+		*pino = ceph_ino(inode);
+		*ppathlen = 0;
+		return 0;
+	}
+	dentry = d_find_alias(inode);
+	path = ceph_mdsc_build_path(dentry, ppathlen, pino, 1);
+	dput(dentry);
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	*ppath = path;
+	return 1;
+}
 
 /*
  * called under mdsc->mutex
@@ -999,7 +1045,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	u64 ino1 = 1, ino2 = 0;
 	int pathlen1 = 0, pathlen2 = 0;
 	int pathlen;
-	u64 snapid = CEPH_NOSNAP;
+	int freepath1 = 0, freepath2 = 0;
 	void *p, *end;
 	u32 fhlen = 0;
 
@@ -1009,16 +1055,14 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		pathlen = sizeof(u32) + fhlen*sizeof(struct ceph_inopath_item);
 	} else {
 		if (req->r_inode) {
-			ino1 = ceph_ino(req->r_inode);
-			snapid = ceph_snap(req->r_inode);
+			freepath1 = build_inode_path(req->r_inode, &path1,
+						     &pathlen1, &ino1);
 			dout(10, "create_request_message inode %p %llx.%llx\n",
 			     req->r_inode, ceph_ino(req->r_inode),
 			     ceph_snap(req->r_inode));
 		} else if (req->r_dentry) {
-			path1 = req->r_dentry->d_name.name;
-			pathlen1 = req->r_dentry->d_name.len;
-			ino1 = ceph_ino(req->r_dentry->d_parent->d_inode);
-			snapid = ceph_snap(req->r_dentry->d_parent->d_inode);
+			freepath1 = build_dentry_path(req->r_dentry, &path1,
+						      &pathlen1, &ino1);
 			dout(10, "create_request_message dentry %p %llx/%.*s\n",
 			     req->r_dentry, ino1, pathlen1, path1);
 		} else if (path1) {
@@ -1026,18 +1070,25 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 			dout(10, "create_request_message path1 %.*s\n",
 			     pathlen1, path1);
 		}
+		if (freepath1 < 0) {
+			msg = ERR_PTR(freepath1);
+			goto out;
+		}
 
 		if (req->r_old_dentry) {
-			path2 = req->r_old_dentry->d_name.name;
-			pathlen2 = req->r_old_dentry->d_name.len;
-			ino2 = ceph_ino(req->r_old_dentry->d_parent->d_inode);
+			freepath2 = build_dentry_path(req->r_old_dentry, &path2,
+						      &pathlen2, &ino2);
 			dout(10, "create_request_message dentry %p %llx/%.*s\n",
 			     req->r_old_dentry, ino2, pathlen2, path2);
+			if (freepath2 < 0) {
+				msg = ERR_PTR(freepath2);
+				goto out_free1;
+			}
 		} else if (path2) {
 			pathlen2 = strlen(path2);
 			dout(10, "create_request_message path2 %.*s\n",
 			     pathlen2, path2);
-	}
+		}
 
 		pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
 	}
@@ -1045,7 +1096,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, sizeof(*head) + pathlen,
 			   0, 0, NULL);
 	if (IS_ERR(msg))
-		goto out;
+		goto out_free2;
 
 	head = msg->front.iov_base;
 	p = msg->front.iov_base + sizeof(*head);
@@ -1062,7 +1113,6 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	head->caller_uid = cpu_to_le32(current->fsuid);
 	head->caller_gid = cpu_to_le32(current->fsgid);
 #endif
-	head->snapid = cpu_to_le64(snapid);
 	head->args = req->r_args;
 
 	if (req->r_op == CEPH_MDS_OP_FINDINODE) {
@@ -1076,6 +1126,12 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 
  	BUG_ON(p != end);
 
+out_free2:
+	if (freepath2)
+		kfree(path2);
+out_free1:
+	if (freepath1)
+		kfree(path1);
 out:
 	return msg;
 }
@@ -2232,7 +2288,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	init_rwsem(&mdsc->snap_rwsem);
 	INIT_RADIX_TREE(&mdsc->snap_realms, GFP_NOFS);
 	INIT_LIST_HEAD(&mdsc->snap_empty);
-	spin_lock_init(&mdsc->snap_empty_lock);	
+	spin_lock_init(&mdsc->snap_empty_lock);
 	mdsc->last_tid = 0;
 	INIT_RADIX_TREE(&mdsc->request_tree, GFP_NOFS);
 	INIT_DELAYED_WORK(&mdsc->delayed_work, delayed_work);
@@ -2369,7 +2425,7 @@ void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc)
 			remove_session_caps(session);
 			mutex_unlock(&session->s_mutex);
 			ceph_put_mds_session(session);
-			mutex_lock(&mdsc->mutex);			
+			mutex_lock(&mdsc->mutex);
 		}
 	}
 
