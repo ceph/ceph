@@ -444,7 +444,7 @@ static int fill_inode(struct inode *inode,
 		      struct ceph_mds_reply_dirfrag *dirinfo,
 		      struct ceph_mds_session *session,
 		      unsigned long ttl_from, int cap_fmode,
-		      struct ceph_caps_reservation *caps_reservation)
+		      struct ceph_cap_reservation *caps_reservation)
 {
 	struct ceph_mds_reply_inode *info = iinfo->in;
 	struct ceph_inode_info *ci = ceph_inode(inode);

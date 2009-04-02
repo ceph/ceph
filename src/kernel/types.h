@@ -19,7 +19,7 @@ struct ceph_vino {
 
 
 /* context for the caps reservation mechanism */
-struct ceph_caps_reservation {
+struct ceph_cap_reservation {
 	int count;
 };
 

@@ -266,6 +266,7 @@ struct ceph_inode_info {
 	int i_cap_exporting_mds;         /* to handle cap migration between */
 	unsigned i_cap_exporting_mseq;   /*  mds's. */
 	unsigned i_cap_exporting_issued;
+	struct ceph_cap_reservation i_cap_migration_resv;
 	struct list_head i_cap_snaps;   /* snapped state pending flush to mds */
 	struct ceph_snap_context *i_head_snapc;  /* set if wr_buffer_head > 0 */
 	unsigned i_snap_caps;           /* cap bits for snapped files */
@@ -516,10 +517,8 @@ extern int __ceph_caps_mds_wanted(struct ceph_inode_info *ci);
 
 extern void ceph_caps_init(void);
 extern void ceph_caps_finalize(void);
-extern int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need);
-extern int ceph_unreserve_caps(struct ceph_caps_reservation *ctx);
-extern struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx);
-extern void ceph_put_cap(struct ceph_cap *cap);
+extern int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need);
+extern int ceph_unreserve_caps(struct ceph_cap_reservation *ctx);
 extern void ceph_reservation_status(int *total, int *used, int *reserved);
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -756,7 +755,7 @@ extern int ceph_add_cap(struct inode *inode,
 			int fmode, unsigned issued, unsigned wanted,
 			unsigned cap, unsigned seq, u64 realmino,
 			unsigned ttl_ms, unsigned long ttl_from, int flags,
-			struct ceph_caps_reservation *caps_reservation);
+			struct ceph_cap_reservation *caps_reservation);
 extern void ceph_remove_cap(struct ceph_cap *cap);
 extern void ceph_queue_caps_release(struct inode *inode);
 extern int ceph_write_inode(struct inode *inode, int unused);
