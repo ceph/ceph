@@ -164,6 +164,7 @@ struct ceph_mds_request {
 	struct dentry *r_dentry;
 	struct dentry *r_old_dentry; /* rename from or link from */
 	const char *r_path1, *r_path2;
+	struct ceph_vino r_ino1, r_ino2;
 	union ceph_mds_request_args r_args;
 
 	struct inode *r_target_inode;

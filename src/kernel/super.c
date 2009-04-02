@@ -768,6 +768,8 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	req->r_path1 = path;
+	req->r_ino1.ino = CEPH_INO_ROOT;
+	req->r_ino1.snap = CEPH_NOSNAP;
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
@@ -859,7 +861,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 
 	
 	dout(30, "mount opening root\n");
-	root = open_root_dentry(client, NULL, started);
+	root = open_root_dentry(client, "", started);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
 		goto out;

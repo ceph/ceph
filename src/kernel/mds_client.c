@@ -990,6 +990,40 @@ static int build_inode_path(struct inode *inode,
 	return 1;
 }
 
+static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
+				  const char *rpath, u64 rino,
+				  const char **ppath, int *pathlen,
+				  u64 *ino, int *freepath)
+{
+	*freepath = 0;
+	*pathlen = 0;
+	*ino = 0;
+
+	if (rinode) {
+		*freepath = build_inode_path(rinode, ppath,
+					     pathlen, ino);
+		dout(10, "create_request_message inode %p %llx.%llx\n",
+		     rinode, ceph_ino(rinode),
+		     ceph_snap(rinode));
+	} else if (rdentry) {
+		*freepath = build_dentry_path(rdentry, ppath,
+					      pathlen, ino);
+		dout(10, "create_request_message dentry %p %llx/%.*s\n",
+		     rdentry, rino, *pathlen, *ppath);
+	} else if (rpath) {
+		*ino = rino;
+		*ppath = rpath;
+		*pathlen = strlen(rpath);
+		dout(10, "create_request_message path %.*s\n",
+		     *pathlen, rpath);
+	}
+
+	if (*freepath < 0)
+		return *freepath;
+
+	return 0;
+}
+
 /*
  * called under mdsc->mutex
  */
@@ -1001,46 +1035,28 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	struct ceph_mds_request_head *head;
 	const char *path1 = req->r_path1;
 	const char *path2 = req->r_path2;
-	u64 ino1 = 1, ino2 = 0;
-	int pathlen1 = 0, pathlen2 = 0;
+	u64 ino1, ino2;
+	int pathlen1, pathlen2;
 	int pathlen;
-	int freepath1 = 0, freepath2 = 0;
+	int freepath1, freepath2;
 	void *p, *end;
+	int ret;
 
-	if (req->r_inode) {
-		freepath1 = build_inode_path(req->r_inode, &path1,
-					     &pathlen1, &ino1);
-		dout(10, "create_request_message inode %p %llx.%llx\n",
-		     req->r_inode, ceph_ino(req->r_inode),
-		     ceph_snap(req->r_inode));
-	} else if (req->r_dentry) {
-		freepath1 = build_dentry_path(req->r_dentry, &path1,
-					      &pathlen1, &ino1);
-		dout(10, "create_request_message dentry %p %llx/%.*s\n",
-		     req->r_dentry, ino1, pathlen1, path1);
-	} else if (path1) {
-		pathlen1 = strlen(path1);
-		dout(10, "create_request_message path1 %.*s\n",
-		     pathlen1, path1);
-	}
-	if (freepath1 < 0) {
-		msg = ERR_PTR(freepath1);
+	ret = set_request_path_attr(req->r_inode, req->r_dentry,
+			      req->r_path1, req->r_ino1.ino,
+			      &path1, &pathlen1, &ino1, &freepath1);
+	if (ret < 0) {
+		msg = ERR_PTR(ret);
 		goto out;
 	}
 
-	if (req->r_old_dentry) {
-		freepath2 = build_dentry_path(req->r_old_dentry, &path2,
-					      &pathlen2, &ino2);
-		dout(10, "create_request_message dentry %p %llx/%.*s\n",
-		     req->r_old_dentry, ino2, pathlen2, path2);
-		if (freepath2 < 0) {
-			msg = ERR_PTR(freepath2);
-			goto out_free1;
-		}
-	} else if (path2) {
-		pathlen2 = strlen(path2);
-		dout(10, "create_request_message path2 %.*s\n",
-		     pathlen2, path2);
+	ret = set_request_path_attr(NULL, req->r_old_dentry,
+			      req->r_path2, req->r_ino2.ino,
+			      &path2, &pathlen2, &ino2, &freepath2);
+
+	if (ret < 0) {
+		msg = ERR_PTR(ret);
+		goto out_free1;
 	}
 
 	pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
