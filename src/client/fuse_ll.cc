@@ -109,7 +109,16 @@ static void ceph_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 			    int to_set, struct fuse_file_info *fi)
 {
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
-  int r = client->ll_setattr(fino_vino(ino), attr, to_set, ctx->uid, ctx->gid);
+
+  int mask = 0;
+  if (to_set & FUSE_SET_ATTR_MODE) mask |= CEPH_SETATTR_MODE;
+  if (to_set & FUSE_SET_ATTR_UID) mask |= CEPH_SETATTR_UID;
+  if (to_set & FUSE_SET_ATTR_GID) mask |= CEPH_SETATTR_GID;
+  if (to_set & FUSE_SET_ATTR_MTIME) mask |= CEPH_SETATTR_MTIME;
+  if (to_set & FUSE_SET_ATTR_ATIME) mask |= CEPH_SETATTR_ATIME;
+  if (to_set & FUSE_SET_ATTR_SIZE) mask |= CEPH_SETATTR_SIZE;
+
+  int r = client->ll_setattr(fino_vino(ino), attr, mask, ctx->uid, ctx->gid);
   if (r == 0)
     fuse_reply_attr(req, attr, 0);
   else

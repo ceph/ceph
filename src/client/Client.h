@@ -228,7 +228,7 @@ class Inode {
   int       ll_ref;   // separate ref count for ll client
   Dir       *dir;     // if i'm a dir.
   Dentry    *dn;      // if i'm linked to a dentry.
-  string    *symlink; // symlink content, if it's a symlink
+  string    symlink;  // symlink content, if it's a symlink
   fragtree_t dirfragtree;
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
@@ -281,7 +281,7 @@ class Inode {
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
-    dir(0), dn(0), symlink(0),
+    dir(0), dn(0),
     hack_balance_reads(false)
   {
     memset(&inode, 0, sizeof(inode));
@@ -289,7 +289,6 @@ class Inode {
     inode.ino = vino.ino;
   }
   ~Inode() {
-    if (symlink) { delete symlink; symlink = 0; }
   }
 
   inodeno_t ino() { return inode.ino; }
@@ -511,13 +510,12 @@ class Client : public Dispatcher {
     static const int64_t MASK = (1 << SHIFT) - 1;
     static const loff_t END = 1ULL << (SHIFT + 32);
 
-    filepath path;
     Inode *inode;
     int64_t offset;   // high bits: frag_t, low bits: an offset
     map<frag_t, vector<DirEntry> > buffer;
 
-    DirResult(const filepath &fp, Inode *in=0) : path(fp), inode(in), offset(0) { 
-      if (inode) inode->get();
+    DirResult(Inode *in) : inode(in), offset(0) { 
+      inode->get();
     }
 
     frag_t frag() { return frag_t(offset >> SHIFT); }
@@ -612,7 +610,7 @@ public:
   map<tid_t,StatfsRequest*> statfs_requests;
   
   MClientReply *make_request(MClientRequest *req, int uid, int gid,
-			     Inode **ppin=0, utime_t *pfrom=0, 
+			     utime_t *pfrom=0, Inode **ptarget = 0,
 			     int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
@@ -673,8 +671,12 @@ protected:
   Inode *open_snapdir(Inode *diri);
 
 
+  // path traversal for high-level interface
+  Inode *cwd;
+  int path_walk(const filepath& fp, Inode **end, bool followsym=true);
+  
+
   // file handles, etc.
-  filepath cwd;
   interval_set<int> free_fd_set;  // unused fds
   hash_map<int, Fh*> fd_map;
   
@@ -686,17 +688,6 @@ protected:
   void put_fd(int fd) {
     free_fd_set.insert(fd, 1);
   }
-
-  filepath mkpath(const char *rel) {
-    if (rel[0] == '/') 
-      return filepath(rel, 1);
-    
-    filepath t = cwd;
-    filepath r(rel, 0);
-    t.append(r);
-    return t;
-  }
-
 
   // global client lock
   //  - protects Client and buffer cache both!
@@ -911,8 +902,7 @@ private:
   };
 
   // some helpers
-  int _do_lstat(const filepath &path, int mask, Inode **in, int uid=-1, int gid=-1);
-  int _opendir(const filepath &path, DirResult **dirpp, int uid=-1, int gid=-1);
+  int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);
   void _readdir_add_dirent(DirResult *dirp, const string& name, Inode *in);
   void _readdir_fill_dirent(struct dirent *de, DirEntry *entry, loff_t);
   bool _readdir_have_frag(DirResult *dirp);
@@ -926,34 +916,32 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _link(const filepath &existing, const filepath &newname, int uid=-1, int gid=-1);
-  int _unlink(const filepath &path, int uid=-1, int gid=-1);
-  int _rename(const filepath &from, const filepath &to, int uid=-1, int gid=-1);
-  int _mkdir(const filepath &path, mode_t mode, int uid=-1, int gid=-1);
-  int _rmdir(const filepath &path, int uid=-1, int gid=-1);
-  int _readlink(const filepath &path, char *buf, loff_t size, int uid=-1, int gid=-1);
-  int _symlink(const filepath &path, const char *target, int uid=-1, int gid=-1);
-  int _lstat(const filepath &path, struct stat *stbuf, int uid=-1, int gid=-1, frag_info_t *dirstat=0);
-  int _chmod(const filepath &path, mode_t mode, bool followsym, int uid=-1, int gid=-1);
-  int _chown(const filepath &path, uid_t uid, gid_t gid, int mask, bool followsym, int cuid=-1, int cgid=-1);
-  int _getxattr(const filepath &path, const char *name, void *value, size_t len, bool followsym, int uid=-1, int gid=-1);
-  int _listxattr(const filepath &path, char *names, size_t len, bool followsym, int uid=-1, int gid=-1);
-  int _setxattr(const filepath &path, const char *name, const void *value, size_t len, int flags, bool followsym, int uid=-1, int gid=-1);
-  int _removexattr(const filepath &path, const char *nm, bool followsym, int uid=-1, int gid=-1);
-  int _utimes(const filepath &path, utime_t mtime, utime_t atime, int mask, bool followsym, int uid=-1, int gid=-1);
-  int _mknod(const filepath &path, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
-  int _open(const filepath &path, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
+  int _do_lookup(Inode *dir, const char *name, Inode **target);
+  int _lookup(Inode *dir, const string& dname, Inode **target);
+
+  int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, int uid=-1, int gid=-1);
+  int _mkdir(Inode *dir, const char *name, mode_t mode, int uid=-1, int gid=-1);
+  int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1);
+  int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
+  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1);
+  int _getattr(Inode *in, int mask, int uid=-1, int gid=-1);
+  int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
+  int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
+  int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
+  int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
+  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
   int _read(Fh *fh, __s64 offset, __u64 size, bufferlist *bl);
   int _write(Fh *fh, __s64 offset, __u64 size, const char *buf);
   int _flush(Fh *fh);
-  int _truncate(const filepath &path, loff_t length, bool followsym, int uid=-1, int gid=-1);
-  int _ftruncate(Fh *fh, loff_t length);
   int _fsync(Fh *fh, bool syncdataonly);
   int _statfs(struct statvfs *stbuf);
 
-  int _mksnap(const filepath &path, const char *name, int uid=-1, int gid=-1);
-  int _rmsnap(const filepath &path, const char *name, int uid=-1, int gid=-1);
+  int _mksnap(Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int _rmsnap(Inode *dir, const char *name, int uid=-1, int gid=-1);
 
 
 public:
@@ -965,7 +953,7 @@ public:
 
   // crap
   int chdir(const char *s);
-  const char *getcwd() { return cwd.c_str(); }
+  const char *getcwd();
 
   // namespace ops
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
@@ -999,9 +987,11 @@ public:
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0);
   int lstatlite(const char *path, struct statlite *buf);
 
+  int setattr(const char *relpath, struct stat *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);
+  int truncate(const char *path, loff_t size);
 
   // file ops
   int mknod(const char *path, mode_t mode, dev_t rdev=0);
@@ -1011,7 +1001,6 @@ public:
   int read(int fd, char *buf, loff_t size, loff_t offset=-1);
   int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
   int fake_write_size(int fd, loff_t size);
-  int truncate(const char *file, loff_t size);
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf);
