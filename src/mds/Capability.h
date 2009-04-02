@@ -105,35 +105,7 @@ private:
   utime_t last_issue_stamp;
 
 
-  // simplest --------------------------
-#if 0
-  __u32 _pending;
-  __u32 _issued;
-
-public:
-  int pending() {
-    return _pending;
-  }
-  int issued() {
-    return _pending | _issued;
-  }
-  ceph_seq_t issue(int c) {
-    _pending = c;
-    _issued |= c;
-    //last_issue = 
-    ++last_sent;
-    return last_sent;
-  }
-  void confirm_receipt(ceph_seq_t seq, int caps) {
-    if (seq == last_sent)
-      _pending = _issued = caps;
-  }    
-  bool is_null() { rinclude/eturn !_issued && !_pending; }
-#endif
-
-
   // track up to N revocations ---------
-#if 1
   static const int _max_revoke = 3;
   __u32 _pending, _issued;
   __u32 _revoke_before[_max_revoke];  // caps before this issue
@@ -197,12 +169,10 @@ public:
   bool is_null() {
     return !_pending && !_issued && !_num_revoke;
   }
-#endif
-
 
 private:
   ceph_seq_t last_sent;
-  //ceph_seq_t last_issue;
+  ceph_seq_t last_issue;
   ceph_seq_t mseq;
 
   int suppress;
@@ -243,6 +213,7 @@ public:
     return false;
   }
 
+  void set_last_issue() { last_issue = last_sent; }
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
 
   __u64 get_cap_id() { return cap_id; }
@@ -271,6 +242,7 @@ public:
   }
 
   ceph_seq_t get_last_seq() { return last_sent; }
+  ceph_seq_t get_last_issue() { return last_issue; }
 
   bool is_rdcap() {
     return rdcaps_item.is_on_xlist();

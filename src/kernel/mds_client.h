@@ -74,12 +74,11 @@ struct ceph_mds_reply_info_in {
 struct ceph_mds_reply_info_parsed {
 	struct ceph_mds_reply_head    *head;
 
-	int trace_numi, trace_numd, trace_snapdirpos;
-	struct ceph_mds_reply_info_in *trace_in;
-	struct ceph_mds_reply_dirfrag **trace_dir;
-	char                          **trace_dname;
-	u32                           *trace_dname_len;
-	struct ceph_mds_reply_lease   **trace_dlease;
+	struct ceph_mds_reply_info_in diri, targeti;
+	struct ceph_mds_reply_dirfrag *dirfrag;
+	char                          *dname;
+	u32                           dname_len;
+	struct ceph_mds_reply_lease   *dlease;
 
 	struct ceph_mds_reply_dirfrag *dir_dir;
 	int                           dir_nr;
@@ -87,6 +86,7 @@ struct ceph_mds_reply_info_parsed {
 	u32                           *dir_dname_len;
 	struct ceph_mds_reply_lease   **dir_dlease;
 	struct ceph_mds_reply_info_in *dir_in;
+	u8                            dir_complete, dir_end;
 
 	/* encoded blob describing snapshot contexts for certain
 	   operations (e.g., open) */
@@ -101,10 +101,13 @@ enum {
 	CEPH_MDS_SESSION_NEW = 1,
 	CEPH_MDS_SESSION_OPENING = 2,
 	CEPH_MDS_SESSION_OPEN = 3,
-	CEPH_MDS_SESSION_FLUSHING = 4,
 	CEPH_MDS_SESSION_CLOSING = 5,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
+
+#define CAPS_PER_RELEASE ((PAGE_CACHE_SIZE - \
+			   sizeof(struct ceph_mds_cap_release)) /	\
+			  sizeof(struct ceph_mds_cap_item))
 
 struct ceph_mds_session {
 	int               s_mds;
@@ -117,12 +120,14 @@ struct ceph_mds_session {
 	unsigned long     s_cap_ttl;  /* when session caps expire */
 	unsigned long     s_renew_requested; /* last time we sent a renew req */
 	struct list_head  s_caps;     /* all caps issued by this session */
-	struct list_head  s_rdcaps;   /* just the readonly caps */
-	spinlock_t        s_rdcaps_lock;
 	int               s_nr_caps;
 	atomic_t          s_ref;
 	struct list_head  s_waiting;  /* waiting requests */
 	struct list_head  s_unsafe;   /* unsafe requests */
+
+	int               s_num_cap_releases;
+	struct list_head  s_cap_releases; /* waiting cap_release messages */
+	struct list_head  s_cap_releases_done; /* ready to send */
 };
 
 /*
@@ -131,7 +136,6 @@ struct ceph_mds_session {
 enum {
 	USE_ANY_MDS,
 	USE_RANDOM_MDS,
-	USE_CAP_MDS,    /* prefer mds we hold caps from */
 	USE_AUTH_MDS,   /* prefer authoritative mds for this metadata item */
 };
 
@@ -156,10 +160,14 @@ struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
 
 	int r_op;
+	struct inode *r_inode;
 	struct dentry *r_dentry;
 	struct dentry *r_old_dentry; /* rename from or link from */
 	const char *r_path1, *r_path2;
+	struct ceph_vino r_ino1, r_ino2;
 	union ceph_mds_request_args r_args;
+
+	struct inode *r_target_inode;
 
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
@@ -182,7 +190,6 @@ struct ceph_mds_request {
 	/* references to the trailing dentry and inode from parsing the
 	 * mds response.  also used to feed a VFS-provided dentry into
 	 * the reply handler */
-	struct inode     *r_last_inode;
 	int               r_fmode;        /* file mode, if expecting cap */
 	struct ceph_mds_session *r_session;
 	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
@@ -199,6 +206,9 @@ struct ceph_mds_request {
 	ceph_mds_request_callback_t r_callback;
 	struct list_head  r_unsafe_item;  /* per-session unsafe list item */
 	bool		  r_got_unsafe, r_got_safe;
+
+	struct ceph_cap_reservation r_caps_reservation;
+	int r_num_caps;
 };
 
 /*
@@ -236,6 +246,9 @@ struct ceph_mds_client {
 	spinlock_t       cap_delay_lock;   /* protects cap_delay_list */
 	struct list_head snap_flush_list;  /* cap_snaps ready to flush */
 	spinlock_t       snap_flush_lock;
+	struct list_head cap_dirty, cap_sync; /* inodes with dirty cap data */
+	spinlock_t       cap_dirty_lock;
+	wait_queue_head_t cap_sync_wq;
 
 	struct dentry 		*debugfs_file;
 
@@ -273,6 +286,8 @@ extern void ceph_mdsc_init(struct ceph_mds_client *mdsc,
 extern void ceph_mdsc_close_sessions(struct ceph_mds_client *mdsc);
 extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
+extern void ceph_mdsc_sync(struct ceph_mds_client *mdsc);
+
 extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
 				 struct ceph_msg *msg);
 extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
@@ -290,10 +305,7 @@ extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc,
 				    struct dentry *dn, int mask);
 
 extern struct ceph_mds_request *
-ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op,
-			 struct dentry *dentry, struct dentry *old_dentry,
-			 const char *path1, const char *path2,
-			 int mode);
+ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode);
 extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
 				     struct ceph_mds_request *req);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
@@ -305,12 +317,10 @@ extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 
-extern void ceph_mdsc_flushed_all_caps(struct ceph_mds_client *mdsc,
-				       struct ceph_mds_session *session);
 extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
 							   u64 tid);
 extern char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base,
-				  int mds);
+				  int stop_on_nosnap);
 
 extern void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry);
 extern void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,

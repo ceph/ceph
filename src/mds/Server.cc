@@ -525,6 +525,18 @@ void Server::reconnect_tick()
 
 void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent *le, Context *fin)
 {
+  dout(10) << "journal_and_reply tracei " << in << " tracedn " << dn << dendl;
+
+  // note trace items for eventual reply.
+  mdr->tracei = in;
+  if (in && in != mdr->ref)
+    mdr->pin(in);
+
+  mdr->tracedn = dn;
+  if (dn && (mdr->trace.empty() ||
+	     mdr->trace.back() != dn))
+    mdr->pin(dn);
+
   early_reply(mdr, in, dn);
 
   mdr->committing = true;
@@ -574,7 +586,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   CInode *snapdiri = 0;
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, mdr,
-		   mdr->client_request->is_replay());
+		   mdr->client_request->is_replay(),
+		   mdr->client_request->get_num_dentries_wanted());
 
   messenger->send_message(reply, client_inst);
 
@@ -620,19 +633,13 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
 
-  // infer tracei/tracedn from mdr?
+  // get tracei/tracedn from mdr?
   snapid_t snapid = CEPH_NOSNAP;
   CInode *snapdiri = 0;
-  if (!tracei && !tracedn && mdr->ref) {
-    tracei = mdr->ref;
-    snapdiri = mdr->ref_snapdiri;
-    snapid = mdr->ref_snapid;
-    dout(20) << "inferring tracei to be " << *tracei << dendl;
-    if (!mdr->trace.empty()) {
-      tracedn = mdr->trace.back();
-      dout(20) << "inferring tracedn to be " << *tracedn << dendl;
-    }
-  }
+  if (!tracei)
+    tracei = mdr->tracei;
+  if (!tracedn)
+    tracedn = mdr->tracedn;
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);
@@ -644,6 +651,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   Session *session = mdr->session;
   bool did_early_reply = mdr->did_early_reply;
   entity_inst_t client_inst = req->get_orig_source_inst();
+  int num_dentries_wanted = req->get_num_dentries_wanted();
   mdcache->request_finish(mdr);
   mdr = 0;
 
@@ -655,7 +663,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr, is_replay);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr, is_replay, num_dentries_wanted);
     messenger->send_message(reply, client_inst);
   }
   
@@ -699,110 +707,64 @@ void Server::encode_null_lease(bufferlist& bl)
  *
  * trace is in reverse order (i.e. root inode comes last)
  */
-void Server::set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
+void Server::set_trace_dist(Session *session, MClientReply *reply,
+			    CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    MDRequest *mdr, bool is_replay)
+			    MDRequest *mdr, bool is_replay, int num_dentries_wanted)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
   int whoami = mds->get_nodeid();
   int client = session->get_client();
-  __u16 numi = 0, numdn = 0;
-  __s16 snapdirpos = -1;
-
-  bool single_segment = g_conf.mds_short_reply_trace;  // do a single segment: [inode, ] dentry, dir.
-
-  // choose lease duration
   utime_t now = g_clock.now();
-  int lmask = 0;
+
+  dout(20) << "set_trace_dist snapid " << snapid << dendl;
+
+  assert((bool)dn == (bool)num_dentries_wanted);
+
+  // realm
   SnapRealm *realm = 0;
-
-  // start with dentry or inode?
-  if (!in) {
-    assert(dn);
-    in = dn->get_linkage(client, mdr)->get_inode();
-    goto dentry;
-  }
-
- inode:
-  numi++;
-
-  dout(15) << "set_trace_dist " << *in << dendl;
-
-  if (!realm) {
-    // snapbl
+  if (in)
     realm = in->find_snaprealm();
-    reply->snapbl = realm->get_snap_trace();
-    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
-  }
-
-  in->encode_inodestat(bl, session, NULL, snapid, is_replay);
-  dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
-
-  if (snapid != CEPH_NOSNAP && in == snapdiri) {
-    // do the snap name dentry
-    const string& snapname = in->find_snaprealm()->get_snapname(snapid, in->ino());
-    dout(10) << "set_trace_dist snapname " << snapname << dendl;
-    ::encode(snapname, bl);
-    encode_infinite_lease(bl);
-    numdn++;
-    encode_empty_dirstat(bl);
-
-    // back to the live tree
-    snapid = CEPH_NOSNAP;
-    in->encode_inodestat(bl, session, NULL, snapid);
-    numi++;
-    dout(20) << "set_trace_dist added snapid " << snapid << " " << *in << dendl;
-
-    snapdirpos = numi;
-    dout(10) << "set_trace_dist snapdiri at pos " << snapdirpos << dendl;
-  }
-
-  if (single_segment && numdn)
-    goto done;
-
-  if (!dn) {
-    dn = in->get_projected_parent_dn();
-    if (dn && !dn->use_projected(client, mdr))
-      dn = NULL;
-    if (!dn)
-      dn = in->get_parent_dn();
-  }
-  if (!dn) 
-    goto done;
-
- dentry:
-  dout(15) << "set_trace_dist " << *dn << dendl;
-
-  ::encode(dn->get_name(), bl);
-  if (snapid == CEPH_NOSNAP)
-    lmask = mds->locker->issue_client_lease(dn, client, bl, now, session);
   else
-    encode_null_lease(bl);
-  numdn++;
-  dout(20) << "set_trace_dist added " << lmask << " snapid " << snapid << " " << *dn << dendl;
-  
-  // dir
+    realm = dn->get_dir()->get_inode()->find_snaprealm();
+  reply->snapbl = realm->get_snap_trace();
+  dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+
+  // dir + dentry?
+  if (dn) {
+    reply->head.is_dentry = 1;
+    CDir *dir = dn->get_dir();
+    CInode *diri = dir->get_inode();
+
+    diri->encode_inodestat(bl, session, NULL, snapid, is_replay);
+    dout(20) << "set_trace_dist added diri " << *diri << dendl;
+
 #ifdef MDS_VERIFY_FRAGSTAT
-  if (dn->get_dir()->is_complete())
-    dn->get_dir()->verify_fragstat();
+    if (dir->is_complete())
+      dir->verify_fragstat();
 #endif
+    dir->encode_dirstat(bl, whoami);
+    dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
-  dn->get_dir()->encode_dirstat(bl, whoami);
-  dout(20) << "set_trace_dist added " << *dn->get_dir() << dendl;
+    ::encode(dn->get_name(), bl);
+    if (snapid == CEPH_NOSNAP)
+      mds->locker->issue_client_lease(dn, client, bl, now, session);
+    else
+      encode_null_lease(bl);
+    dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
+  } else
+    reply->head.is_dentry = 0;
 
-  in = dn->get_dir()->get_inode();
-  dn = 0;
-  goto inode;
+  // inode
+  if (in) {
+    in->encode_inodestat(bl, session, NULL, snapid, is_replay);
+    dout(20) << "set_trace_dist added in   " << *in << dendl;
+    reply->head.is_target = 1;
+  } else
+    reply->head.is_target = 0;
 
-done:
-  // put numi, numd in front
-  bufferlist fbl;
-  ::encode(numi, fbl);
-  ::encode(numdn, fbl);
-  ::encode(snapdirpos, fbl);
-  fbl.claim_append(bl);
-  reply->set_trace(fbl);
+  reply->set_trace(bl);
 }
 
 
@@ -890,49 +852,31 @@ void Server::dispatch_client_request(MDRequest *mdr)
   assert(mdr->more()->waiting_on_slave.empty());
   
   switch (req->get_op()) {
-  case CEPH_MDS_OP_FINDINODE:
-    handle_client_findinode(mdr);
+  case CEPH_MDS_OP_LOOKUPHASH:
+    handle_client_lookup_hash(mdr);
     break;
 
     // inodes ops.
   case CEPH_MDS_OP_LOOKUP:
-  case CEPH_MDS_OP_STAT:
-  case CEPH_MDS_OP_LSTAT:
+  case CEPH_MDS_OP_GETATTR:
     handle_client_stat(mdr);
     break;
-  case CEPH_MDS_OP_UTIME:
-  case CEPH_MDS_OP_LUTIME:
-    handle_client_utime(mdr);
+
+  case CEPH_MDS_OP_SETATTR:
+    handle_client_setattr(mdr);
     break;
-  case CEPH_MDS_OP_CHMOD:
-  case CEPH_MDS_OP_LCHMOD:
-    handle_client_chmod(mdr);
-    break;
-  case CEPH_MDS_OP_CHOWN:
-  case CEPH_MDS_OP_LCHOWN:
-    handle_client_chown(mdr);
-    break;
-  case CEPH_MDS_OP_LSETLAYOUT:
+  case CEPH_MDS_OP_SETLAYOUT:
     handle_client_setlayout(mdr);
     break;
-  case CEPH_MDS_OP_TRUNCATE:
-  case CEPH_MDS_OP_LTRUNCATE:
-    handle_client_truncate(mdr);
-    break;
   case CEPH_MDS_OP_SETXATTR:
-  case CEPH_MDS_OP_LSETXATTR:
     handle_client_setxattr(mdr);
     break;
   case CEPH_MDS_OP_RMXATTR:
-  case CEPH_MDS_OP_LRMXATTR:
     handle_client_removexattr(mdr);
     break;
 
   case CEPH_MDS_OP_READDIR:
     handle_client_readdir(mdr);
-    break;
-  case CEPH_MDS_OP_FSYNC:
-    //handle_client_fsync(req);
     break;
 
     // funky.
@@ -1548,9 +1492,16 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
 
   // open ref inode
   CInode *ref = 0;
-  if (trace.empty())
+  if (trace.empty()) {
     ref = mdcache->get_inode(refpath.get_ino());
-  else {
+    if (!ref) {
+      ref = mdcache->get_inode(refpath.get_ino());
+      if (!ref->is_multiversion()) {
+	reply_request(mdr, -ESTALE);
+	return 0;
+      }
+    }
+  } else {
     CDentry *dn = trace[trace.size()-1];
     bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
@@ -1803,19 +1754,48 @@ void Server::handle_client_stat(MDRequest *mdr)
 
   // reply
   dout(10) << "reply to stat on " << *req << dendl;
-  reply_request(mdr, 0);
+  reply_request(mdr, 0, ref,
+		req->get_op() == CEPH_MDS_OP_LOOKUP ? mdr->trace.back() : 0);
 }
 
 
-void Server::handle_client_findinode(MDRequest *mdr)
+void Server::handle_client_lookup_hash(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int r = mdcache->inopath_traverse(mdr, req->inopath);
-  if (r > 0)
-    return; // delayed
-  dout(10) << "reply to findinode on " << *mdr->ref << dendl;
-  MClientReply *reply = new MClientReply(req, r);
-  reply_request(mdr, reply);
+
+  CInode *in = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!in) {
+    // try the directory
+    CInode *diri = mdcache->get_inode(req->get_filepath2().get_ino());
+    if (!diri) {
+      reply_request(mdr, -ESTALE);
+      return;
+    }
+    unsigned hash = atoi(req->get_filepath2()[0].c_str());
+    frag_t fg = diri->dirfragtree[hash];
+    CDir *dir = diri->get_or_open_dirfrag(mdcache, fg);
+    assert(dir);
+    if (!dir->is_auth()) {
+      if (dir->is_ambiguous_auth()) {
+	// wait
+	dout(7) << " waiting for single auth in " << *dir << dendl;
+	dir->add_waiter(CDir::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      } 
+      mdcache->request_forward(mdr, dir->authority().first);
+      return;
+    }
+    if (!dir->is_complete()) {
+      dir->fetch(0, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+    reply_request(mdr, -ESTALE);
+    return;
+  }
+
+  dout(10) << "reply to lookup_hash on " << *in << dendl;
+  MClientReply *reply = new MClientReply(req, 0);
+  reply_request(mdr, reply, in, in->get_parent_dn());
 }
 
 
@@ -1832,15 +1812,22 @@ class C_MDS_inode_update_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
+  bool smaller;
 public:
-  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i) :
-    mds(m), mdr(r), in(i) { }
+  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false) :
+    mds(m), mdr(r), in(i), smaller(sm) { }
   void finish(int r) {
     assert(r == 0);
 
     // apply
     in->pop_and_dirty_projected_inode(mdr->ls);
     mdr->apply();
+
+    // notify any clients
+    if (smaller && in->inode.is_truncating()) {
+      mds->locker->issue_truncate(in);
+      mds->mdcache->truncate_inode(in, mdr->ls);
+    }
 
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
@@ -1849,13 +1836,10 @@ public:
 };
 
 
-// utime
-
-void Server::handle_client_utime(MDRequest *mdr)
+void Server::handle_client_setattr(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   CInode *cur = rdlock_path_pin_ref(mdr, true);
-  __u32 mask;
   if (!cur) return;
 
   if (mdr->ref_snapid != CEPH_NOSNAP ||
@@ -1863,126 +1847,83 @@ void Server::handle_client_utime(MDRequest *mdr)
     reply_request(mdr, -EINVAL);   // for now
     return;
   }
+
+  __u32 mask = req->head.args.setattr.mask;
 
   // xlock inode
   set<SimpleLock*> rdlocks = mdr->rdlocks;
   set<SimpleLock*> wrlocks = mdr->wrlocks;
   set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->filelock);
+
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
+    xlocks.insert(&cur->authlock);
+  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
+    xlocks.insert(&cur->filelock);
+
   mds->locker->include_snap_rdlocks(rdlocks, cur);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  // project update
-  inode_t *pi = cur->project_inode();
-  
-  mask = req->head.args.utime.mask;
-
-  if (mask & CEPH_UTIME_MTIME)
-    pi->mtime = req->head.args.utime.mtime;
-  if (mask & CEPH_UTIME_ATIME)
-    pi->atime = req->head.args.utime.atime;
-
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
-
-  // log + wait
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "utime");
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
-  
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
-}
-
-
-// chmod
-
-void Server::handle_client_chmod(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
-  if (!cur) return;
-
-  if (mdr->ref_snapid != CEPH_NOSNAP ||
-      cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
+  // trunc from bigger -> smaller?
+  inode_t *pi = cur->get_projected_inode();
+  __u64 old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  bool smaller = req->head.args.setattr.size < old_size;
+  if ((mask & CEPH_SETATTR_SIZE) && smaller && pi->is_truncating()) {
+    dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+    mds->mdlog->flush();
     return;
   }
 
-  // write
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->authlock);
-  mds->locker->include_snap_rdlocks(rdlocks, cur);
-
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
   // project update
-  inode_t *pi = cur->project_inode();
-  pi->mode = 
-    (pi->mode & ~07777) | 
-    (req->head.args.chmod.mode & 07777);
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  dout(10) << "chmod " << oct << pi->mode << " (" << req->head.args.chmod.mode << ")" << dec << *cur << dendl;
-
-  // log + wait
   mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "chmod");
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  EUpdate *le = new EUpdate(mdlog, "setattr");
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
-}
+  pi = cur->project_inode();
 
+  if (mask & CEPH_SETATTR_MODE)
+    pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
+  if (mask & CEPH_SETATTR_UID)
+    pi->uid = req->head.args.setattr.uid;
+  if (mask & CEPH_SETATTR_GID)
+    pi->gid = req->head.args.setattr.gid;
 
-// chown
-
-void Server::handle_client_chown(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
-  if (!cur) return;
-
-  if (mdr->ref_snapid != CEPH_NOSNAP || cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
-    return;
+  if (mask & CEPH_SETATTR_MTIME)
+    pi->mtime = req->head.args.setattr.mtime;
+  if (mask & CEPH_SETATTR_ATIME)
+    pi->atime = req->head.args.setattr.atime;
+  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
+    pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
+  if (mask & CEPH_SETATTR_SIZE) {
+    if (smaller) {
+      pi->truncate_from = old_size;
+      pi->size = req->head.args.setattr.size;
+      pi->truncate_size = pi->size;
+      pi->truncate_seq++;
+      le->metablob.add_truncate_start(cur->ino());
+    } else {
+      pi->size = req->head.args.setattr.size;
+    }
+    pi->rstat.rbytes = pi->size;
   }
 
-  // write
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->authlock);
-  mds->locker->include_snap_rdlocks(rdlocks, cur);
-
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-  // project update
-  inode_t *pi = cur->project_inode();
-  if (req->head.args.chown.mask & CEPH_CHOWN_UID)
-    pi->uid = req->head.args.chown.uid;
-  if (req->head.args.chown.mask & CEPH_CHOWN_GID)
-    pi->gid = req->head.args.chown.gid;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
-  
+
   // log + wait
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "chown");
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller));
+
+  // flush immediately if there are readers/writers waiting
+  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
+    mds->mdlog->flush();
 }
+
+
 
 void Server::handle_client_setlayout(MDRequest *mdr)
 {
@@ -2236,11 +2177,22 @@ void Server::handle_client_readdir(MDRequest *mdr)
   bufferlist dirbl, dnbl;
   dir->encode_dirstat(dirbl, mds->get_nodeid());
 
-  __u32 numfiles = 0;
   CDir::map_t::iterator it = dir->begin(); 
-  while (it != dir->end()) {
+
+  unsigned max = req->head.args.readdir.max_entries;
+  if (!max)
+    max = dir->get_num_any();  // whatever, something big.
+
+  nstring offset_str = req->get_path2();
+  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
+
+  __u32 numfiles = 0;
+  while (it != dir->end() && numfiles < max) {
     CDentry *dn = it->second;
     it++;
+
+    if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
+      continue;
 
     bool dnp = dn->use_projected(client, mdr);
     CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
@@ -2296,7 +2248,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
     // touch dn
     mdcache->lru.lru_touch(dn);
   }
+  
+  __u8 end = (it == dir->end());
+  __u8 complete = (end && !offset);
+
+  // final blob
   ::encode(numfiles, dirbl);
+  ::encode(end, dirbl);
+  ::encode(complete, dirbl);
   dirbl.claim_append(dnbl);
   
   if (snaps)
@@ -2305,13 +2264,14 @@ void Server::handle_client_readdir(MDRequest *mdr)
   // yay, reply
   MClientReply *reply = new MClientReply(req, 0);
   reply->set_dir_bl(dirbl);
-  dout(10) << "reply to " << *req << " readdir " << numfiles << " files" << dendl;
+  dout(10) << "reply to " << *req << " readdir num=" << numfiles << " end=" << (int)end
+	   << " complete=" << (int)complete << dendl;
 
   // bump popularity.  NOTE: this doesn't quite capture it.
   mds->balancer->hit_dir(g_clock.now(), dir, META_POP_IRD, -1, numfiles);
   
   // reply
-  reply_request(mdr, reply);
+  reply_request(mdr, reply, diri);
 }
 
 
@@ -2358,7 +2318,7 @@ public:
     // reply
     MClientReply *reply = new MClientReply(mdr->client_request, 0);
     reply->set_result(0);
-    mds->server->reply_request(mdr, reply, newi, dn);
+    mds->server->reply_request(mdr, reply);
   }
 };
 
@@ -2399,7 +2359,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2463,7 +2423,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&newi->xlist_open_file);
 
-  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2504,7 +2464,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, true, newi);
 
-  journal_and_reply(mdr, newi, 0, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
+  journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
 
 
@@ -2680,7 +2640,7 @@ void Server::_link_local_finish(MDRequest *mdr, CDentry *dn, CInode *targeti,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, targeti, dn);
+  reply_request(mdr, reply);
 }
 
 
@@ -2802,7 +2762,7 @@ void Server::_link_remote_finish(MDRequest *mdr, bool inc,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, targeti, dn);  // FIXME: imprecise ref
+  reply_request(mdr, reply);
 
   if (!inc)
     // removing a new dn?
@@ -3357,7 +3317,7 @@ void Server::_unlink_local_finish(MDRequest *mdr,
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, 0, dn);
+  reply_request(mdr, reply);
   
   // clean up?
   if (straydn)
@@ -3862,7 +3822,7 @@ void Server::_rename_finish(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDe
 
   // reply
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
-  reply_request(mdr, reply, destdnl->get_inode(), destdn);
+  reply_request(mdr, reply);
   
   // clean up?
   if (straydn) 
@@ -4812,122 +4772,6 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
 
 
-
-
-// ===================================
-// TRUNCATE, FSYNC
-
-class C_MDS_truncate_logged : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CInode *in;
-  bool smaller;
-public:
-  C_MDS_truncate_logged(MDS *m, MDRequest *r, CInode *i, bool sm) :
-    mds(m), mdr(r), in(i), smaller(sm) {}
-  void finish(int r) {
-    assert(r == 0);
-
-    // apply
-    in->pop_and_dirty_projected_inode(mdr->ls);
-    mdr->apply();
-
-    // notify any clients
-    if (smaller && in->inode.is_truncating()) {
-      mds->locker->issue_truncate(in);
-      mds->mdcache->truncate_inode(in, mdr->ls);
-    }
-
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
-
-    mds->server->reply_request(mdr, 0);
-  }
-};
-
-void Server::handle_client_truncate(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-
-  if (req->head.args.truncate.length > (__u64)CEPH_FILE_MAX_SIZE) {
-    reply_request(mdr, -EFBIG);
-    return;
-  }
-
-  CInode *cur = rdlock_path_pin_ref(mdr, true);
-  if (!cur) return;
-
-  dout(10) << "handle_client_truncate " << cur->get_projected_inode()->size << " -> " << req->head.args.truncate.length
-	   << " on " << *cur << dendl;
-
-  if (mdr->ref_snapid != CEPH_NOSNAP) {
-    reply_request(mdr, -EINVAL);
-    return;
-  }
-
-  // xlock inode
-  set<SimpleLock*> rdlocks = mdr->rdlocks;
-  set<SimpleLock*> wrlocks = mdr->wrlocks;
-  set<SimpleLock*> xlocks = mdr->xlocks;
-  xlocks.insert(&cur->filelock);
-  mds->locker->include_snap_rdlocks(rdlocks, cur);
-
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-  
-  // already the correct size?
-  inode_t *pi = cur->get_projected_inode();
-  __u64 old_size = MAX(pi->size, req->head.args.truncate.old_length);
-  if (old_size == req->head.args.truncate.length) {
-    reply_request(mdr, 0);
-    return;
-  }
-
-  // trunc from bigger -> smaller
-  bool smaller = req->head.args.truncate.length < old_size;
-
-  if (smaller && pi->is_truncating()) {
-    dout(10) << " waiting for pending truncate from " << pi->truncate_from
-	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-    mds->mdlog->flush();
-    return;
-  }
-
-  // prepare
-  version_t pdv = cur->pre_dirty();
-  utime_t ctime = g_clock.real_now();
-
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "truncate");
-  le->metablob.add_client_req(mdr->reqid);
-  pi = cur->project_inode();
-  pi->mtime = ctime;
-  pi->ctime = ctime;
-  pi->version = pdv;
-  if (smaller) {
-    // truncate to smaller size
-    pi->truncate_from = old_size;
-    pi->size = req->head.args.truncate.length;
-    pi->rstat.rbytes = pi->size;
-    pi->truncate_size = pi->size;
-    pi->truncate_seq++;
-    le->metablob.add_truncate_start(cur->ino());
-  } else {
-    // truncate to larger size
-    pi->size = req->head.args.truncate.length;
-    pi->rstat.rbytes = pi->size;
-  }
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
-  
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_truncate_logged(mds, mdr, cur, smaller));
-
-  // flush immediately if there are readers/writers waiting
-  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
-    mds->mdlog->flush();
-}
-
-
 // ===========================
 // open, openc, close
 
@@ -4954,11 +4798,11 @@ void Server::handle_client_open(MDRequest *mdr)
 	   << dendl;
   
   // regular file?
-  if (!cur->inode.is_file() && !cur->inode.is_dir()) {
+  /*if (!cur->inode.is_file() && !cur->inode.is_dir()) {
     dout(7) << "not a file or dir " << *cur << dendl;
     reply_request(mdr, -ENXIO);                 // FIXME what error do we want?
     return;
-  }
+    }*/
   if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     reply_request(mdr, -EINVAL);
@@ -5014,24 +4858,26 @@ void Server::handle_client_open(MDRequest *mdr)
   }
 
 
-  if (mdr->ref_snapid == CEPH_NOSNAP) {
-    // register new cap
-    bool is_new = false;
-    Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
-    if (is_new)
-      cap->dec_suppress();  // stop suppressing messages on new cap
-    
-    dout(12) << "open issued caps " << ccap_string(cap->pending())
-	     << " for " << req->get_orig_source()
-	     << " on " << *cur << dendl;
-    mdr->cap = cap;
-  } else {
-    int caps = ceph_caps_for_mode(cmode);
-    dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
-	     << " for " << req->get_orig_source()
-	     << " snapid " << mdr->ref_snapid
-	     << " on " << *cur << dendl;
-    mdr->snap_caps = caps;
+  if (cur->is_file() || cur->is_dir()) {
+    if (mdr->ref_snapid == CEPH_NOSNAP) {
+      // register new cap
+      bool is_new = false;
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
+      if (is_new)
+	cap->dec_suppress();  // stop suppressing messages on new cap
+      
+      dout(12) << "open issued caps " << ccap_string(cap->pending())
+	       << " for " << req->get_orig_source()
+	       << " on " << *cur << dendl;
+      mdr->cap = cap;
+    } else {
+      int caps = ceph_caps_for_mode(cmode);
+      dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
+	       << " for " << req->get_orig_source()
+	       << " snapid " << mdr->ref_snapid
+	       << " on " << *cur << dendl;
+      mdr->snap_caps = caps;
+    }
   }
 
   // make sure this inode gets into the journal
@@ -5051,8 +4897,11 @@ void Server::handle_client_open(MDRequest *mdr)
   else
     mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
 			     mdr->client_request->get_orig_source().num());
-  
-  reply_request(mdr, 0);
+
+  CDentry *dn = 0;
+  if (mdr->trace.size())
+    dn = mdr->trace.back();
+  reply_request(mdr, 0, cur, dn);
 }
 
 
@@ -5098,7 +4947,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->xlist_open_file);
   
-  journal_and_reply(mdr, in, 0, le, new C_MDS_truncate_logged(mds, mdr, in, true));
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
 }
 
 
@@ -5210,7 +5059,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   ls->open_files.push_back(&in->xlist_open_file);
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
-  journal_and_reply(mdr, in, 0, le, fin);
+  journal_and_reply(mdr, in, dn, le, fin);
 }
 
 
@@ -5223,44 +5072,26 @@ void Server::handle_client_openc(MDRequest *mdr)
 void Server::handle_client_lssnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
 
   // traverse to path
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
-				 false, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't snap root
-  if (r < 0) {
-    reply_request(mdr, r);
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri) {
+     reply_request(mdr, -ESTALE);
+     return;
+  }
+  if (!diri->is_auth()) {
+    mdcache->request_forward(mdr, diri->authority().first);
     return;
   }
-  CDentry *dn = trace[trace.size()-1];
-  assert(dn);
-  if (!dn->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, dn->authority().first);
-    return;
-  }
-  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
-
-  // dir only
-  CInode *diri = dnl->get_inode();
-  if (!dnl->is_primary() || !diri->is_dir()) {
+  if (!diri->is_dir()) {
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  dout(10) << "lssnap " << req->get_path2() << " on " << *diri << dendl;
+  dout(10) << "lssnap on " << *diri << dendl;
 
   // lock snap
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-
-  // rdlock path
-  for (int i=0; i<(int)trace.size()-1; i++)
-    rdlocks.insert(&trace[i]->lock);
-
   mds->locker->include_snap_rdlocks(rdlocks, diri);
-
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -5323,43 +5154,33 @@ void Server::handle_client_mksnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  // traverse to path
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
-				 false, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't snap root
-  if (r < 0) {
-    reply_request(mdr, r);
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri) {
+    reply_request(mdr, -ESTALE);
     return;
   }
-  CDentry *dn = trace[trace.size()-1];
-  assert(dn);
-  if (!dn->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, dn->authority().first);
+
+  if (!diri->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, diri->authority().first);
     return;
   }
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
   // dir only
-  CInode *diri = dnl->get_inode();
-  if (!dnl->is_primary() || !diri->is_dir()) {
+  if (!diri->is_dir()) {
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  if (diri->is_system()) {  // no snaps on root dir, until we can store it
+  if (diri->is_system()) {  // no snaps on root dir, at least not until we can store it
     reply_request(mdr, -EPERM);
     return;
   }
-  dout(10) << "mksnap " << req->get_path2() << " on " << *diri << dendl;
+
+  const string &snapname = req->get_filepath().last_dentry();
+  dout(10) << "mksnap " << snapname << " on " << *diri << dendl;
 
   // lock snap
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
-  // rdlock path
-  for (int i=0; i<(int)trace.size()-1; i++)
-    rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);
@@ -5377,7 +5198,6 @@ void Server::handle_client_mksnap(MDRequest *mdr)
     return;
 
   // make sure name is unique
-  const string &snapname = req->get_path2();
   if (diri->snaprealm &&
       diri->snaprealm->exists(snapname)) {
     reply_request(mdr, -EEXIST);
@@ -5411,7 +5231,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   SnapInfo info;
   info.ino = diri->ino();
   info.snapid = snapid;
-  info.name = req->get_path2();
+  info.name = snapname;
   info.stamp = mdr->now;
 
   inode_t *pi = diri->project_inode();
@@ -5503,35 +5323,28 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
 
-  // traverse to path
-  vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
-				 false, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
-  if (trace.empty()) r = -EINVAL;   // can't snap root
-  if (r < 0) {
-    reply_request(mdr, r);
+  CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!diri) {
+    reply_request(mdr, -ESTALE);
     return;
   }
-  CDentry *dn = trace[trace.size()-1];
-  assert(dn);
-  if (!dn->is_auth()) {    // fw to auth?
-    mdcache->request_forward(mdr, dn->authority().first);
+  if (!diri->is_auth()) {    // fw to auth?
+    mdcache->request_forward(mdr, diri->authority().first);
     return;
   }
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-
-  // dir only
-  CInode *diri = dnl->get_inode();
-  if (!dnl->is_primary() || !diri->is_dir()) {
+  if (!diri->is_dir()) {
     reply_request(mdr, -ENOTDIR);
     return;
   }
-  dout(10) << "rmsnap " << req->get_path2() << " on " << *diri << dendl;
+  if (diri->is_system()) {  // no snaps on root dir, at least not until we can store it
+    reply_request(mdr, -EPERM);
+    return;
+  }
+
+  const string &snapname = req->get_filepath().last_dentry();
+  dout(10) << "rmsnap " << snapname << " on " << *diri << dendl;
 
   // does snap exist?
-  const string &snapname = req->get_path2();
   if (snapname.length() == 0 || snapname[0] == '_') {
     reply_request(mdr, -EINVAL);   // can't prune a parent snap, currently.
     return;
@@ -5545,8 +5358,6 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   dout(10) << " snapname " << snapname << " is " << snapid << dendl;
 
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  for (int i=0; i<(int)trace.size()-1; i++)
-    rdlocks.insert(&trace[i]->lock);
   mds->locker->include_snap_rdlocks(rdlocks, diri);
   rdlocks.erase(&diri->snaplock);
   xlocks.insert(&diri->snaplock);

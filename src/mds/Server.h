@@ -90,7 +90,7 @@ public:
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid, CInode *snapdiri,
-		      MDRequest *mdr, bool is_replay);
+		      MDRequest *mdr, bool is_replay, int num_dentries_wanted);
 
   void encode_empty_dirstat(bufferlist& bl);
   void encode_infinite_lease(bufferlist& bl);
@@ -117,15 +117,14 @@ public:
 
   // requests on existing inodes.
   void handle_client_stat(MDRequest *mdr);
-  void handle_client_findinode(MDRequest *mdr);
-  void handle_client_utime(MDRequest *mdr);
-  void handle_client_chmod(MDRequest *mdr);
-  void handle_client_chown(MDRequest *mdr);
-  void handle_client_setlayout(MDRequest *mdr);
+  void handle_client_lookup_hash(MDRequest *mdr);
   void handle_client_readdir(MDRequest *mdr);
-  void handle_client_truncate(MDRequest *mdr);
+
+  void handle_client_setattr(MDRequest *mdr);
+  void handle_client_setlayout(MDRequest *mdr);
   void handle_client_setxattr(MDRequest *mdr);
   void handle_client_removexattr(MDRequest *mdr);
+
   void handle_client_fsync(MDRequest *mdr);
 
   // open

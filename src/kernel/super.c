@@ -43,18 +43,6 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 /*
  * super ops
  */
-static int ceph_write_inode(struct inode *inode, int unused)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-
-	if (memcmp(&ci->i_old_atime, &inode->i_atime, sizeof(struct timeval))) {
-		dout(30, "ceph_write_inode %llx.%llx .. atime updated\n",
-		     ceph_vinop(inode));
-		/* maybe someday we will push this async to mds? */
-	}
-	return 0;
-}
-
 static void ceph_put_super(struct super_block *s)
 {
 	struct ceph_client *cl = ceph_client(s);
@@ -119,6 +107,7 @@ static int ceph_syncfs(struct super_block *sb, int wait)
 {
 	dout(10, "sync_fs %d\n", wait);
 	ceph_osdc_sync(&ceph_client(sb)->osdc);
+	ceph_mdsc_sync(&ceph_client(sb)->mdsc);
 	return 0;
 }
 
@@ -155,37 +144,49 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 	return 0;
 }
 
-
 /*
- * inode cache
+ * caches
  */
 struct kmem_cache *ceph_inode_cachep;
+struct kmem_cache *ceph_cap_cachep;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
-static void init_once(void *foo)
+static void ceph_inode_init_once(void *foo)
 #else
-static void init_once(struct kmem_cache *cachep, void *foo)
+static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
 #endif
 {
 	struct ceph_inode_info *ci = foo;
 	inode_init_once(&ci->vfs_inode);
 }
 
-static int init_inodecache(void)
+static int init_caches(void)
 {
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
-					      init_once);
+					      ceph_inode_init_once);
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
+
+	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
+					      sizeof(struct ceph_cap),
+					      0, (SLAB_RECLAIM_ACCOUNT|
+						  SLAB_MEM_SPREAD),
+					      NULL);
+	if (ceph_cap_cachep == NULL) {
+		kmem_cache_destroy(ceph_inode_cachep);
+		return -ENOMEM;
+	}
+
 	return 0;
 }
 
-static void destroy_inodecache(void)
+static void destroy_caches(void)
 {
 	kmem_cache_destroy(ceph_inode_cachep);
+	kmem_cache_destroy(ceph_cap_cachep);
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
@@ -319,6 +320,7 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD: return "client_request_forward";
 	case CEPH_MSG_CLIENT_REPLY: return "client_reply";
 	case CEPH_MSG_CLIENT_CAPS: return "client_caps";
+	case CEPH_MSG_CLIENT_CAPRELEASE: return "client_cap_release";
 	case CEPH_MSG_CLIENT_SNAP: return "client_snap";
 	case CEPH_MSG_CLIENT_LEASE: return "client_lease";
 	case CEPH_MSG_OSD_GETMAP: return "osd_getmap";
@@ -510,6 +512,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
 	args->caps_delay = CEPH_CAP_DELAY_DEFAULT; /* seconds */
 	args->snapdir_name = ".snap";
+	args->cap_release_safety = CAPS_PER_RELEASE * 4;
 
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
 	c = strstr(dev_name, ":/");
@@ -761,21 +764,29 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 
 	/* open dir */
 	dout(30, "open_root_inode opening '%s'\n", path);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LSTAT,
-				       NULL, NULL, path, NULL,
-				       USE_ANY_MDS);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_GETATTR, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
+	req->r_path1 = path;
+	req->r_ino1.ino = CEPH_INO_ROOT;
+	req->r_ino1.snap = CEPH_NOSNAP;
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
 	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
+	req->r_num_caps = 2;
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
-		root = req->r_dentry;
-		dget(root);
+		dout(30, "open_root_inode success\n");
+		if (ceph_ino(req->r_target_inode) == CEPH_INO_ROOT &&
+		    client->sb->s_root == NULL)
+			root = d_alloc_root(req->r_target_inode);
+		else
+			root = d_obtain_alias(req->r_target_inode);
+		req->r_target_inode = NULL;
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
-	} else
+	} else {
 		root = ERR_PTR(err);
+	}
 	ceph_mdsc_put_request(req);
 	return root;
 }
@@ -788,12 +799,12 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 {
 	struct ceph_entity_addr *myaddr = NULL;
 	struct ceph_msg *mount_msg;
-	struct dentry *root;
 	int err;
 	int request_interval = 5 * HZ;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
 	unsigned long started = jiffies;  /* note the start time */
 	int which;
+	struct dentry *root;
 	unsigned char r;
 
 	dout(10, "mount start\n");
@@ -848,15 +859,34 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		}
 	}
 
-	dout(30, "mount opening base mountpoint\n");
-	root = open_root_dentry(client, path, started);
+	
+	dout(30, "mount opening root\n");
+	root = open_root_dentry(client, "", started);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
 		goto out;
 	}
+	if (client->sb->s_root)
+		dput(root);
+	else
+		client->sb->s_root = root;
 
+	if (path[0] == 0) {
+		dget(root);
+	} else {
+		dout(30, "mount opening base mountpoint\n");
+		root = open_root_dentry(client, path, started);
+		if (IS_ERR(root)) {
+			err = PTR_ERR(root);
+			dput(client->sb->s_root);
+			client->sb->s_root = NULL;
+			goto out;
+		}
+	}
+		
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
+
 	client->mount_state = CEPH_MOUNT_MOUNTED;
 	dout(10, "mount success\n");
 	err = 0;
@@ -1081,7 +1111,8 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	err = ceph_mount(client, mnt, path);
 	if (err < 0)
 		goto out_splat;
-	dout(22, "root ino %llx.%llx\n", ceph_vinop(mnt->mnt_root->d_inode));
+	dout(22, "root %p inode %p ino %llx.%llx\n", mnt->mnt_root,
+	     mnt->mnt_root->d_inode, ceph_vinop(mnt->mnt_root->d_inode));
 	return 0;
 
 out_splat:
@@ -1130,7 +1161,6 @@ static int __init init_ceph(void)
 #ifdef CONFIG_CEPH_BOOKKEEPER
 	ceph_bookkeeper_init();
 #endif
-
 	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
@@ -1139,9 +1169,11 @@ static int __init init_ceph(void)
 	if (ret < 0)
 		goto out_debugfs;
 
-	ret = init_inodecache();
+	ret = init_caches();
 	if (ret)
 		goto out_msgr;
+
+	ceph_caps_init();
 
 	ret = register_filesystem(&ceph_fs_type);
 	if (ret)
@@ -1149,7 +1181,7 @@ static int __init init_ceph(void)
 	return 0;
 
 out_icache:
-	destroy_inodecache();
+	destroy_caches();
 out_msgr:
 	ceph_msgr_exit();
 out_debugfs:
@@ -1162,7 +1194,8 @@ static void __exit exit_ceph(void)
 {
 	dout(1, "exit_ceph\n");
 	unregister_filesystem(&ceph_fs_type);
-	destroy_inodecache();
+	ceph_caps_finalize();
+	destroy_caches();
 	ceph_msgr_exit();
 	ceph_debugfs_cleanup();
 #ifdef CONFIG_CEPH_BOOKKEEPER

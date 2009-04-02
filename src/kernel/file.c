@@ -20,8 +20,7 @@ int ceph_debug_file __read_mostly = -1;
  * inopportune ENOMEM later.
  */
 static struct ceph_mds_request *
-prepare_open_request(struct super_block *sb, struct dentry *dentry,
-		     int flags, int create_mode)
+prepare_open_request(struct super_block *sb, int flags, int create_mode)
 {
 	struct ceph_client *client = ceph_sb_to_client(sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -31,10 +30,8 @@ prepare_open_request(struct super_block *sb, struct dentry *dentry,
 	if (flags & (O_WRONLY|O_RDWR|O_CREAT|O_TRUNC))
 		want_auth = USE_AUTH_MDS;
 
-	dout(5, "prepare_open_request dentry %p name '%s' flags %d\n", dentry,
-	     dentry->d_name.name, flags);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, dentry, NULL,
-				       NULL, NULL, want_auth);
+	dout(5, "prepare_open_request flags %d\n", flags);
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, want_auth);
 	if (IS_ERR(req))
 		goto out;
 	req->r_fmode = ceph_flags_to_mode(flags);
@@ -67,6 +64,11 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 		BUG_ON(inode->i_fop->release != ceph_release);
 		break;
 
+	case S_IFLNK:
+		dout(20, "init_file %p 0%o (symlink)\n", inode, inode->i_mode);
+		ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
+		break;
+
 	default:
 		dout(20, "init_file %p 0%o (special)\n", inode, inode->i_mode);
 		/*
@@ -95,12 +97,11 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct dentry *dentry;
 	struct ceph_mds_request *req;
 	struct ceph_file_info *cf = file->private_data;
 	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
-	int flags, fmode, mds_wanted, new_want;
+	int flags, fmode, new_want;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
 		return -EROFS;
@@ -126,35 +127,42 @@ int ceph_open(struct inode *inode, struct file *file)
 	 * registered with the MDS.
 	 */
 	spin_lock(&inode->i_lock);
-	mds_wanted = __ceph_caps_mds_wanted(ci);
-	if ((mds_wanted & new_want) == new_want) {
-		dout(10, "open fmode %d caps %d using existing on %p\n",
-		     fmode, new_want, inode);
+	if (__ceph_is_any_real_caps(ci)) {
+		int mds_wanted = __ceph_caps_mds_wanted(ci);
+		int issued = __ceph_caps_issued(ci, NULL);
+
+		dout(10, "open %p fmode %d want %s issued %s using existing\n",
+		     inode, fmode, ceph_cap_string(new_want),
+		     ceph_cap_string(issued));
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
+		
+		/* adjust wanted? */
+		if ((issued & new_want) != new_want &&
+		    (mds_wanted & new_want) != new_want &&
+		    ceph_snap(inode) != CEPH_SNAPDIR)
+			ceph_check_caps(ci, 0, 0, NULL);
+
 		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
-	dout(10, "open fmode %d wants %s, we only already want %s\n",
-	     fmode, ceph_cap_string(new_want), ceph_cap_string(mds_wanted));
 
-	dentry = d_find_alias(inode);
-	if (!dentry)
-		return -ESTALE;  /* yuck */
+	dout(10, "open fmode %d wants %s\n", fmode, ceph_cap_string(new_want));
 	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
-	req = prepare_open_request(inode->i_sb, dentry, flags, 0);
+	req = prepare_open_request(inode->i_sb, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
 		goto out;
 	}
+	req->r_inode = igrab(inode);
+	req->r_num_caps = 1;
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	if (!err)
 		err = ceph_init_file(inode, file, req->r_fmode);
 	ceph_mdsc_put_request(req);
 	dout(5, "open result=%d on %llx.%llx\n", err, ceph_vinop(inode));
 out:
-	dput(dentry);
 	return err;
 }
 
@@ -187,17 +195,22 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	     dentry, dentry->d_name.len, dentry->d_name.name, flags, mode);
 
 	/* do the open */
-	req = prepare_open_request(dir->i_sb, dentry, flags, mode);
+	req = prepare_open_request(dir->i_sb, flags, mode);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
+	req->r_dentry = dget(dentry);
+	req->r_num_caps = 2;
 	if ((flags & O_CREAT) &&
 	    (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL)))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
+	if (!err && (flags & O_CREAT) && !req->r_reply_info.head->is_dentry)
+		err = ceph_handle_notrace_create(dir, dentry);	
 	if (!err)
-		err = ceph_init_file(req->r_last_inode, file, req->r_fmode);
+		err = ceph_init_file(req->r_dentry->d_inode, file,
+				     req->r_fmode);
 	ceph_mdsc_put_request(req);
 	dout(5, "ceph_lookup_open result=%p\n", dentry);
 	return dentry;
@@ -212,6 +225,7 @@ int ceph_release(struct inode *inode, struct file *file)
 	ceph_put_fmode(ci, cf->fmode);
 	if (cf->last_readdir)
 		ceph_mdsc_put_request(cf->last_readdir);
+	kfree(cf->last_name);
 	kfree(cf->dir_info);
 	kfree(cf);
 	return 0;
@@ -583,7 +597,7 @@ more:
 			spin_lock(&ci->i_unsafe_lock);
 			list_add(&ci->i_unsafe_writes, &req->r_unsafe_item);
 			spin_unlock(&ci->i_unsafe_lock);
-			ceph_get_more_cap_refs(ci, CEPH_CAP_FILE_WR);
+			ceph_get_cap_refs(ci, CEPH_CAP_FILE_WR);
 		}
 		ret = ceph_osdc_wait_request(&client->osdc, req);
 	}
@@ -731,8 +745,17 @@ retry_snap:
 			ret = sync_page_range(inode, mapping, pos, ret);
 		}
 	}
-	if (ret >= 0)
-		ci->i_dirty_caps |= CEPH_CAP_FILE_WR;
+	if (ret >= 0) {
+		int was_dirty;
+
+		spin_lock(&inode->i_lock);
+		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_WR);
+		spin_unlock(&inode->i_lock);
+		if (!was_dirty) {
+			__mark_inode_dirty(inode,I_DIRTY_SYNC|I_DIRTY_DATASYNC);
+			igrab(inode);
+		}
+	}
 
 out:
 	dout(10, "aio_write %p %llu~%u  dropping cap refs on %s\n",

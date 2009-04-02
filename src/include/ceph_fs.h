@@ -44,8 +44,8 @@
 #define CEPH_MDS_PROTOCOL     7 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
-#define CEPH_MDSC_PROTOCOL   12 /* public/client */
-#define CEPH_MONC_PROTOCOL   10 /* public/client */
+#define CEPH_MDSC_PROTOCOL   17 /* public/client */
+#define CEPH_MONC_PROTOCOL   11 /* public/client */
 
 
 /*
@@ -541,6 +541,7 @@ struct ceph_msg_footer {
 #define CEPH_MSG_CLIENT_CAPS            0x310
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
+#define CEPH_MSG_CLIENT_CAPRELEASE      0x313
 
 /* osd */
 #define CEPH_MSG_OSD_GETMAP       40
@@ -692,25 +693,14 @@ struct ceph_mds_session_head {
  */
 #define CEPH_MDS_OP_WRITE        0x001000
 #define CEPH_MDS_OP_FOLLOW_LINK  0x010000
-#define CEPH_MDS_OP_INO_PATH     0x100000
 enum {
-	CEPH_MDS_OP_FINDINODE  = 0x100100,
-
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
-	CEPH_MDS_OP_LSTAT      = 0x00101,
-	CEPH_MDS_OP_LUTIME     = 0x01102,
-	CEPH_MDS_OP_LCHMOD     = 0x01103,
-	CEPH_MDS_OP_LCHOWN     = 0x01104,
-	CEPH_MDS_OP_LSETXATTR  = 0x01105,
-	CEPH_MDS_OP_LRMXATTR   = 0x01106,
-	CEPH_MDS_OP_LSETLAYOUT = 0x01107,
-
-	CEPH_MDS_OP_STAT       = 0x10100,
-	CEPH_MDS_OP_UTIME      = 0x11101,
-	CEPH_MDS_OP_CHMOD      = 0x11102,
-	CEPH_MDS_OP_CHOWN      = 0x11103,
-	CEPH_MDS_OP_SETXATTR   = 0x11104,
-	CEPH_MDS_OP_RMXATTR    = 0x11105,
+	CEPH_MDS_OP_GETATTR    = 0x00101,
+	CEPH_MDS_OP_LOOKUPHASH = 0x00102,
+	CEPH_MDS_OP_SETXATTR   = 0x01105,
+	CEPH_MDS_OP_RMXATTR    = 0x01106,
+	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
+	CEPH_MDS_OP_SETATTR    = 0x01108,
 
 	CEPH_MDS_OP_MKNOD      = 0x01201,
 	CEPH_MDS_OP_LINK       = 0x01202,
@@ -720,10 +710,7 @@ enum {
 	CEPH_MDS_OP_RMDIR      = 0x01221,
 	CEPH_MDS_OP_SYMLINK    = 0x01222,
 
-	CEPH_MDS_OP_OPEN       = 0x10302,
-	CEPH_MDS_OP_TRUNCATE   = 0x11303,
-	CEPH_MDS_OP_LTRUNCATE  = 0x01303,
-	CEPH_MDS_OP_FSYNC      = 0x00304,
+	CEPH_MDS_OP_OPEN       = 0x00302,
 	CEPH_MDS_OP_READDIR    = 0x00305,
 
 	CEPH_MDS_OP_MKSNAP     = 0x01400,
@@ -734,21 +721,12 @@ enum {
 static inline const char *ceph_mds_op_name(int op)
 {
 	switch (op) {
-	case CEPH_MDS_OP_FINDINODE: return "findinode";
 	case CEPH_MDS_OP_LOOKUP:  return "lookup";
-	case CEPH_MDS_OP_STAT:  return "stat";
-	case CEPH_MDS_OP_LSTAT:  return "lstat";
-	case CEPH_MDS_OP_UTIME: return "utime";
-	case CEPH_MDS_OP_LUTIME: return "lutime";
-	case CEPH_MDS_OP_CHMOD: return "chmod";
-	case CEPH_MDS_OP_LCHMOD: return "lchmod";
-	case CEPH_MDS_OP_CHOWN: return "chown";
-	case CEPH_MDS_OP_LCHOWN: return "lchown";
-	case CEPH_MDS_OP_LSETLAYOUT: return "lsetlayout";
+	case CEPH_MDS_OP_LOOKUPHASH:  return "lookuphash";
+	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
-	case CEPH_MDS_OP_LSETXATTR: return "lsetxattr";
+	case CEPH_MDS_OP_SETATTR: return "setattr";
 	case CEPH_MDS_OP_RMXATTR: return "rmxattr";
-	case CEPH_MDS_OP_LRMXATTR: return "lrmxattr";
 	case CEPH_MDS_OP_READDIR: return "readdir";
 	case CEPH_MDS_OP_MKNOD: return "mknod";
 	case CEPH_MDS_OP_LINK: return "link";
@@ -758,15 +736,19 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_RMDIR: return "rmdir";
 	case CEPH_MDS_OP_SYMLINK: return "symlink";
 	case CEPH_MDS_OP_OPEN: return "open";
-	case CEPH_MDS_OP_TRUNCATE: return "truncate";
-	case CEPH_MDS_OP_LTRUNCATE: return "ltruncate";
-	case CEPH_MDS_OP_FSYNC: return "fsync";
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
 	default: return "???";
 	}
 }
+
+#define CEPH_SETATTR_MODE   1
+#define CEPH_SETATTR_UID    2
+#define CEPH_SETATTR_GID    4
+#define CEPH_SETATTR_MTIME  8
+#define CEPH_SETATTR_ATIME 16
+#define CEPH_SETATTR_SIZE  32
 
 union ceph_mds_request_args {
 	struct {
@@ -777,21 +759,17 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) fstat;
 	struct {
 		__le32 frag;
+		__le32 max_entries;
 	} __attribute__ ((packed)) readdir;
 	struct {
-		struct ceph_timespec mtime;
-		struct ceph_timespec atime;
-		struct ceph_timespec ctime;
-		__le32 mask;
-	} __attribute__ ((packed)) utime;
-	struct {
 		__le32 mode;
-	} __attribute__ ((packed)) chmod;
-	struct {
 		__le32 uid;
 		__le32 gid;
-		__le32 mask;
-	} __attribute__ ((packed)) chown;
+		struct ceph_timespec mtime;
+		struct ceph_timespec atime;
+		__le64 size, old_size;
+		__le32 mask;		
+	} __attribute__ ((packed)) setattr;
 	struct {
 		__le32 mode;
 		__le32 rdev;
@@ -803,9 +781,6 @@ union ceph_mds_request_args {
 		__le32 flags;
 		__le32 mode;
 	} __attribute__ ((packed)) open;
-	struct {
-		__le64 length, old_length;
-	} __attribute__ ((packed)) truncate;
 	struct {
 		__le32 flags;
 	} __attribute__ ((packed)) setxattr;
@@ -819,23 +794,15 @@ union ceph_mds_request_args {
 struct ceph_mds_request_head {
 	ceph_tid_t tid, oldest_client_tid;
 	ceph_epoch_t mdsmap_epoch; /* on client */
-	__le32 num_fwd;
 	__le32 retry_attempt;  /* REQUEST_REPLAY if replay */
+	__le16 num_fwd;
+	__le16 num_dentries_wanted;
 	__le64 mds_wants_replica_in_dirino;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 	union ceph_mds_request_args args;
 } __attribute__ ((packed));
-
-/* masks for utimes() */
-#define CEPH_UTIME_ATIME		1
-#define CEPH_UTIME_MTIME		2
-#define CEPH_UTIME_CTIME		4
-
-/* masks for chown */
-#define CEPH_CHOWN_UID   1
-#define CEPH_CHOWN_GID   2
 
 struct ceph_inopath_item {
 	__le64 ino;
@@ -849,6 +816,7 @@ struct ceph_mds_reply_head {
 	__le32 result;
 	__le32 mdsmap_epoch;
 	__u8 safe;
+	__u8 is_dentry, is_target;
 } __attribute__ ((packed));
 
 /* one for each node split */
@@ -868,7 +836,10 @@ struct ceph_mds_reply_cap {
 	__le32 seq, mseq;
 	__le64 realm;
 	__le32 ttl_ms;  /* ttl, in ms.  if readonly and unwanted. */
+	__u8 flags;
 } __attribute__ ((packed));
+
+#define CEPH_CAP_FLAG_AUTH  1
 
 struct ceph_mds_reply_inode {
 	__le64 ino;
@@ -999,6 +970,7 @@ static inline int ceph_flags_to_mode(int flags)
 			   CEPH_CAP_FILE_EXCL)
 #define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
+#define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD|CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_FILE_WR|CEPH_CAP_PIN)
 
 /*
  * these cap bits time out, if no others are held and nothing is
@@ -1013,10 +985,10 @@ static inline int ceph_caps_for_mode(int mode)
 		return CEPH_CAP_PIN;
 	case CEPH_FILE_MODE_RD:
 		return CEPH_CAP_PIN |
-			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE) |
-			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
-			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR) |
-			((CEPH_CAP_GRDCACHE) << CEPH_CAP_SLINK);
+			CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD |
+			CEPH_CAP_AUTH_RDCACHE |
+			CEPH_CAP_XATTR_RDCACHE |
+			CEPH_CAP_LINK_RDCACHE;
 	case CEPH_FILE_MODE_RDWR:
 		return CEPH_CAP_PIN |
 			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE |
@@ -1098,6 +1070,15 @@ struct ceph_mds_caps {
 	__le32 time_warp_seq;
 } __attribute__ ((packed));
 
+struct ceph_mds_cap_release {
+	__le32 num;
+} __attribute__ ((packed));
+
+struct ceph_mds_cap_item {
+	__le64 ino;
+	__le64 cap_id;
+	__le32 migrate_seq, seq;
+} __attribute__ ((packed));
 
 #define CEPH_MDS_LEASE_REVOKE           1  /*    mds  -> client */
 #define CEPH_MDS_LEASE_RELEASE          2  /* client  -> mds    */

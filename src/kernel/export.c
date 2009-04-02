@@ -24,73 +24,82 @@ int ceph_debug_export __read_mostly = -1;
  * In the meantime, this works reasonably well for basic usage.
  */
 
-#define IPSZ (sizeof(struct ceph_inopath_item) / sizeof(u32))
+
+struct ceph_export_item {
+	struct ceph_vino ino;
+	struct ceph_vino parent_ino;
+	u32 parent_name_hash;
+};
+
+#define IPSZ ((sizeof(struct ceph_export_item) + sizeof(u32) + 1) / sizeof(u32))
 
 static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 		   int connectable)
 {
 	int type = 1;
-	struct ceph_inopath_item *fh =
-		(struct ceph_inopath_item *)rawfh;
+	struct ceph_export_item *fh =
+		(struct ceph_export_item *)rawfh;
 	int max = *max_len / IPSZ;
 	int len;
+	struct dentry *d_parent;
 
-	dout(10, "encode_fh %p max_len %d u32s (%d inopath items)%s\n", dentry,
+	dout(10, "encode_fh %p max_len %d u32s (%d export items)%s\n", dentry,
 	     *max_len, max, connectable ? " connectable" : "");
 
 	if (max < 1 || (connectable && max < 2))
 		return -ENOSPC;
 
-	/*
-	 * pretty sure this is racy.  caller holds dentry->d_lock, but
-	 * not parents'.
-	 */
-	fh[0].ino = cpu_to_le64(ceph_vino(dentry->d_inode).ino);
-	fh[0].dname_hash = cpu_to_le32(dentry->d_name.hash);
-	len = 1;
-	while (len < max) {
-		dentry = dentry->d_parent;
-		if (!dentry)
-			break;
-		fh[len].ino = cpu_to_le64(ceph_vino(dentry->d_inode).ino);
-		fh[len].dname_hash = cpu_to_le32(dentry->d_name.hash);
-		len++;
-		type = 2;
+	for (len = 0; len < max; len++) {
+		d_parent = dentry->d_parent;
+		fh[len].ino = ceph_vino(dentry->d_inode);
+		fh[len].parent_ino = ceph_vino(d_parent->d_inode);
+		fh[len].parent_name_hash = cpu_to_le32(dentry->d_parent->d_name.hash);
+
 		if (IS_ROOT(dentry))
 			break;
+
+		dentry = dentry->d_parent;
+
+		if (!dentry)
+			break;
 	}
+
+	if (len > 1)
+		type = 2;
 
 	*max_len = len * IPSZ;
 	return type;
 }
 
 static struct dentry *__fh_to_dentry(struct super_block *sb,
-			      struct ceph_inopath_item *fh, int len)
+			      struct ceph_export_item *fh, int len)
 {
 	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
 	struct inode *inode;
 	struct dentry *dentry;
 	int err;
-	struct ceph_vino vino = {
-		.ino = le64_to_cpu(fh[0].ino),
-		.snap = CEPH_NOSNAP,   /* FIXME */
-	};
-	u32 hash = le32_to_cpu(fh[0].dname_hash);
+#define BUF_SIZE 16
+	char path2[BUF_SIZE];
+	u32 hash = fh->parent_name_hash;
 
-	inode = ceph_find_inode(sb, vino);
+	inode = ceph_find_inode(sb, fh->ino);
 	if (!inode) {
 		struct ceph_mds_request *req;
-		derr(10, "fh_to_dentry %llx.%x -- no inode\n", vino.ino, hash);
-		req = ceph_mdsc_create_request(mdsc,
-					       CEPH_MDS_OP_FINDINODE,
-					       NULL, NULL,
-					       (char *)fh, (void *)&len,
+		derr(10, "fh_to_dentry %llx.%x -- no inode\n", fh->ino.ino, hash);
+		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUPHASH,
 					       USE_ANY_MDS);
 		if (IS_ERR(req))
 			return ERR_PTR(PTR_ERR(req));
+
+		req->r_path1 = "";
+		req->r_ino1 = fh->ino;
+		snprintf(path2, BUF_SIZE, "%d", hash);
+		req->r_path2 = "";
+		req->r_ino2 = fh->parent_ino;
+		req->r_num_caps = 1;
 		err = ceph_mdsc_do_request(mdsc, NULL, req);
 		ceph_mdsc_put_request(req);
-		inode = ceph_find_inode(sb, vino);
+		inode = ceph_find_inode(sb, fh->ino);
 		if (!inode)
 			return ERR_PTR(err ? err : -ESTALE);
 	}
@@ -102,12 +111,12 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 #endif
 	if (!dentry) {
 		derr(10, "fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
-		     vino.ino,
+		     fh->ino.ino,
 		     hash, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
 	}
-	dout(10, "fh_to_dentry %llx.%x -- inode %p dentry %p\n", vino.ino,
+	dout(10, "fh_to_dentry %llx.%x -- inode %p dentry %p\n", fh->ino.ino,
 	     hash, inode, dentry);
 	return dentry;
 
@@ -117,7 +126,7 @@ static struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
-	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh, fh_len/IPSZ);
+	return __fh_to_dentry(sb, (struct ceph_export_item *)fh, fh_len/IPSZ);
 }
 
 static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
@@ -132,7 +141,7 @@ static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 	if (fh_len < 6)
 		return ERR_PTR(-ESTALE);
 
-	return __fh_to_dentry(sb, (struct ceph_inopath_item *)fh + 1,
+	return __fh_to_dentry(sb, (struct ceph_export_item *)fh + 1,
 			      fh_len/IPSZ - 1);
 }
 

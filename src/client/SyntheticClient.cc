@@ -911,10 +911,12 @@ bool roll_die(float p)
 void SyntheticClient::init_op_dist()
 {
   op_dist.clear();
+#if 0
   op_dist.add( CEPH_MDS_OP_STAT, 610 );
   op_dist.add( CEPH_MDS_OP_UTIME, 0 );
   op_dist.add( CEPH_MDS_OP_CHMOD, 1 );
   op_dist.add( CEPH_MDS_OP_CHOWN, 1 );
+#endif
 
   op_dist.add( CEPH_MDS_OP_READDIR, 2 );
   op_dist.add( CEPH_MDS_OP_MKNOD, 30 );
@@ -929,8 +931,8 @@ void SyntheticClient::init_op_dist()
   op_dist.add( CEPH_MDS_OP_OPEN, 200 );
   //op_dist.add( CEPH_MDS_OP_READ, 0 );
   //op_dist.add( CEPH_MDS_OP_WRITE, 0 );
-  op_dist.add( CEPH_MDS_OP_TRUNCATE, 0 );
-  op_dist.add( CEPH_MDS_OP_FSYNC, 0 );
+  //op_dist.add( CEPH_MDS_OP_TRUNCATE, 0 );
+  //op_dist.add( CEPH_MDS_OP_FSYNC, 0 );
   //op_dist.add( CEPH_MDS_OP_RELEASE, 200 );
   op_dist.normalize();
 }
@@ -2684,7 +2686,7 @@ int SyntheticClient::random_walk(int num_req)
     
     if (op == CEPH_MDS_OP_SYMLINK) {
     }
-    
+    /*
     if (op == CEPH_MDS_OP_CHMOD) {
       if (contents.empty())
         op = CEPH_MDS_OP_READDIR;
@@ -2698,9 +2700,6 @@ int SyntheticClient::random_walk(int num_req)
         r = client->chown( get_random_sub(), rand(), rand() );
     }
      
-    if (op == CEPH_MDS_OP_LINK) {
-    }
-     
     if (op == CEPH_MDS_OP_UTIME) {
       struct utimbuf b;
       memset(&b, 1, sizeof(b));
@@ -2708,6 +2707,9 @@ int SyntheticClient::random_walk(int num_req)
         r = client->utime( cwd.c_str(), &b );
       else
         r = client->utime( get_random_sub(), &b );
+    }
+    */
+    if (op == CEPH_MDS_OP_LINK) {
     }
     
     if (op == CEPH_MDS_OP_MKNOD) {
@@ -2737,7 +2739,7 @@ int SyntheticClient::random_walk(int num_req)
     }
     */
     
-    if (op == CEPH_MDS_OP_STAT) {
+    if (op == CEPH_MDS_OP_GETATTR) {
       struct stat st;
       if (contents.empty()) {
         if (did_readdir) {

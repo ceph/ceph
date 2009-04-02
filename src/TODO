@@ -27,11 +27,29 @@ v0.7.2
 /- make kclient timeouts tunable
 
 v0.8
-- kill fill_trace
+- revamp client<->mds interaction wrt snapshots...
+- clean up path_traverse interface, esp the usages in Server.cc
+- fix up mds selection, and ESTALE handling.  
 - return extra inode(s) in reply (namely, unlink)?
 - store root inode on mds
 - allow chmod/whatever of root inode
+- piggyback lease/cap release on client_request
 
+kclient caps
+/- two session lists: dirty_caps, clean_caps
+/- time out and release clean caps explicitly
+/- pin dirty caps
+/- don't pin clean caps
+/- release on destroy_inode
+/- implement write_inode?
+/- hold a pin_ref for request r_inode or r_locked_dir.
+/- flush dirty caps to auth mds only.  resend on cap import.
+- reflush caps on mds recovery, cap migration.
+/- cap (release) reservations
+/- size limit on readdir result, partial dirfrag readdir
+/- revisit unmount
+/- make request paths relative to a non-snapshotted inode.
+- fix nfs exportin
 
 - ENOSPC
 - flock
@@ -84,6 +102,7 @@ kernel client
 - set mapping bits for ENOSPC, EIO?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
+- should we try to ref CAP_PIN on special inodes that are open?  
 
 vfs issues
 - real_lookup() race:

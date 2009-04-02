@@ -1444,6 +1444,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (!no_caps && valid && !cap && is_auth()) {
       // add a new cap
       cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
+      if (is_auth())
+	try_choose_loner();
     }
 
     if (is_replay) {
@@ -1473,6 +1475,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       int issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
       issue = cap->pending();
+      cap->set_last_issue();
       cap->set_last_issue_stamp(g_clock.recent_now());
       cap->touch();   // move to back of session cap LRU
       e.cap.caps = issue;
@@ -1492,6 +1495,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       e.cap.ttl_ms = 0;
     }
   }
+  e.cap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH:0;
   dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
 	   << " seq " << e.cap.seq
 	   << " mseq " << e.cap.mseq << dendl;

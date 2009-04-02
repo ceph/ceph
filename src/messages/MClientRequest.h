@@ -46,17 +46,12 @@
 
 // metadata ops.
 
-static inline ostream& operator<<(ostream &out, const ceph_inopath_item &i) {
-  return out << i.ino << "." << i.dname_hash;
-}
-
 class MClientRequest : public Message {
 public:
   struct ceph_mds_request_head head;
 
   // path arguments
   filepath path, path2;
-  vector<ceph_inopath_item> inopath;
 
  public:
   // cons
@@ -116,7 +111,8 @@ public:
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
     head.mds_wants_replica_in_dirino = dirino; }
-  
+  void set_num_dentries_wanted(int n) { head.num_dentries_wanted = n; }
+    
   tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
   int get_num_fwd() { return head.num_fwd; }
@@ -131,27 +127,21 @@ public:
   filepath& get_filepath2() { return path2; }
 
   inodeno_t get_mds_wants_replica_in_dirino() { 
-    return inodeno_t(head.mds_wants_replica_in_dirino); }
+    return inodeno_t(head.mds_wants_replica_in_dirino);
+  }
+  int get_num_dentries_wanted() { return head.num_dentries_wanted; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    if (head.op == CEPH_MDS_OP_FINDINODE) {
-      ::decode(inopath, p);
-    } else {
-      ::decode(path, p);
-      ::decode(path2, p);
-    }
+    ::decode(path, p);
+    ::decode(path2, p);
   }
 
   void encode_payload() {
     ::encode(head, payload);
-    if (head.op == CEPH_MDS_OP_FINDINODE) {
-      ::encode(inopath, payload);
-    } else {
-      ::encode(path, payload);
-      ::encode(path2, payload);
-    }
+    ::encode(path, payload);
+    ::encode(path2, payload);
   }
 
   const char *get_type_name() { return "creq"; }
@@ -163,8 +153,6 @@ public:
     out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
-    if (!inopath.empty())
-      out << " " << inopath;
     if (head.retry_attempt)
       out << " RETRY=" << head.retry_attempt;
     out << ")";

@@ -3907,6 +3907,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
   SnapRealm *realm = in->find_snaprealm();
   if (realm->have_past_parents_open()) {
     dout(10) << "do_cap_import " << session->inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
+    cap->set_last_issue();
     MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
 					in->ino(),
 					realm->inode->ino(),
@@ -5472,10 +5473,9 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
-  // root
+  dout(7) << "traverse: opening base ino " << origpath.get_ino() << " snap " << snapid << dendl;
   CInode *cur = get_inode(origpath.get_ino());
   if (cur == NULL) {
-    dout(7) << "traverse: opening base ino " << origpath.get_ino() << dendl;
     if (MDS_INO_IS_STRAY(origpath.get_ino())) 
       open_foreign_stray(origpath.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
     else {
@@ -5494,6 +5494,19 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   filepath path = origpath;  
 
   unsigned depth = 0;
+
+  if (snapid == CEPH_SNAPDIR) {
+    if (!psnapdiri)
+      return -EINVAL;
+    *psnapdiri = cur;
+    SnapRealm *realm = cur->find_snaprealm();
+    snapid = realm->resolve_snapname(path[depth], cur->ino());
+    dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
+    if (!snapid)
+      return -ENOENT;
+    depth++;
+  }
+
   while (depth < path.depth()) {
     dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
 	     << "' snapid " << snapid << dendl;
@@ -5803,76 +5816,6 @@ bool MDCache::path_is_mine(filepath& path)
   }
 
   return cur->is_auth();
-}
-
-
-
-int MDCache::inopath_traverse(MDRequest *mdr, vector<ceph_inopath_item> &inopath)
-{
-  dout(10) << "inopath_traverse mdr " << *mdr << " inopath " << inopath << dendl;
-  
-  // find first...
-  int i;
-  CInode *cur = 0;
-  for (i=0; i<(int)inopath.size(); i++) {
-    cur = get_inode(inodeno_t(inopath[i].ino));
-    if (cur) break;
-    dout(10) << " don't have " << inopath[i].ino << dendl;
-  }
-  if (!cur)
-    return -ESTALE;
-
-  if (i == 0) {
-    dout(10) << " found " << *cur << dendl;
-    mdr->pin(cur);
-    mdr->ref = cur;
-    return 0;  // yay
-  }
-
-  dout(10) << " have ancestor " << *cur << dendl;
-
-  // load up subdir
-  if (!cur->is_dir())
-    return -ENOTDIR;
-  
-  frag_t fg = cur->dirfragtree[inopath[i].dname_hash];
-  dout(10) << " hash " << inopath[i].dname_hash << " is frag " << fg << dendl;
-
-  CDir *curdir = cur->get_dirfrag(fg);
-  if (!curdir) {
-    if (cur->is_auth()) {
-      // parent dir frozen_dir?
-      if (cur->is_frozen_dir()) {
-	dout(7) << "inopath_traverse: " << *cur->get_parent_dir() << " is frozen_dir, waiting" << dendl;
-	cur->get_parent_dn()->get_dir()->add_waiter(CDir::WAIT_UNFREEZE, _get_waiter(mdr, 0));
-	return 1;
-      }
-      curdir = cur->get_or_open_dirfrag(this, fg);
-    } else {
-      open_remote_dirfrag(cur, fg, _get_waiter(mdr, 0));
-      return 1;
-    }
-  }
-  assert(curdir);
-
-  // forward to dir auth?
-  if (!curdir->is_auth()) {
-    if (curdir->is_ambiguous_auth()) {
-      // wait
-      dout(7) << "traverse: waiting for single auth in " << *curdir << dendl;
-      curdir->add_waiter(CDir::WAIT_SINGLEAUTH, _get_waiter(mdr, 0));
-      return 1;
-    } 
-    request_forward(mdr, curdir->authority().first);
-    return 2;
-  }
-
-  if (curdir->is_complete())
-    return -ESTALE;  // give up? :(  we _could_ try other frags...
-
-  touch_inode(cur);
-  curdir->fetch(_get_waiter(mdr, 0));
-  return 1;
 }
 
 

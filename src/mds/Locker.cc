@@ -46,6 +46,7 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientCaps.h"
+#include "messages/MClientCapRelease.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -79,6 +80,9 @@ void Locker::dispatch(Message *m)
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
     handle_client_caps((MClientCaps*)m);
+    break;
+  case CEPH_MSG_CLIENT_CAPRELEASE:
+    handle_client_cap_release((MClientCapRelease*)m);
     break;
   case CEPH_MSG_CLIENT_LEASE:
     handle_client_lease((MClientLease*)m);
@@ -780,6 +784,11 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     }
     
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+
+    if (lock->get_parent()->is_auth() && (lock->is_wrlocked() ||  // as with cap flush
+					  !lock->is_stable()))    // as with xlockdone
+      mds->mdlog->flush();
+
     return false;
   } else {
     // replica
@@ -876,22 +885,20 @@ struct C_Locker_FileUpdate_finish : public Context {
   int client;
   Capability *cap;
   MClientCaps *ack;
-  ceph_seq_t releasecap;
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, int c=-1,
 			     Capability *cp = 0,
-			     MClientCaps *ac = 0, ceph_seq_t rc=0) : 
+			     MClientCaps *ac = 0) : 
     locker(l), in(i), mut(m), share(e), client(c), cap(cp),
-    ack(ac), releasecap(rc) {
+    ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
-    locker->file_update_finish(in, mut, share, client, cap, ack, releasecap);
+    locker->file_update_finish(in, mut, share, client, cap, ack);
   }
 };
 
 void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int client, 
-				Capability *cap,
-				MClientCaps *ack, ceph_seq_t releasecap)
+				Capability *cap, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
@@ -902,10 +909,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   if (cap)
     cap->updating--;
 
-  if (releasecap) {
-    assert(ack);
-    _finish_release_cap(in, client, releasecap, ack);
-  } else if (ack)
+  if (ack)
     mds->send_message_client(ack, client);
 
   drop_locks(mut);
@@ -1503,23 +1507,12 @@ void Locker::handle_client_caps(MClientCaps *m)
 	       << " on " << *in << dendl;
       
       MClientCaps *ack = 0;
-      ceph_seq_t releasecap = 0;
       
       if (m->get_dirty() && in->is_auth()) {
 	dout(7) << " flush client" << client << " dirty " << ccap_string(m->get_dirty()) 
 		<< " seq " << m->get_seq() << " on " << *in << dendl;
 	ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
 			      m->get_caps(), 0, m->get_dirty(), 0);
-      }
-      if (m->get_caps() == 0) {
-	assert(ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) <= 0);
-	if (m->get_seq() == cap->get_last_sent()) {
-	  dout(7) << " releasing request client" << client << " seq " << m->get_seq() << " on " << *in << dendl;
-	  releasecap = m->get_seq();
-	} else {
-	  dout(7) << " NOT releasing request client" << client << " seq " << m->get_seq()
-		  << " < last_sent " << cap->get_last_sent() << " on " << *in << dendl;
-	}
       }
       if (ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) == 0 &&
 	  wanted != cap->wanted()) {
@@ -1528,17 +1521,17 @@ void Locker::handle_client_caps(MClientCaps *m)
 	cap->set_wanted(wanted);
       }
       
-      if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack, releasecap)) {
+      if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
 	// no update, ack now.
-	if (releasecap)
-	  _finish_release_cap(in, client, releasecap, ack);
-	else if (ack)
+	if (ack)
 	  mds->send_message_client(ack, client);
       }
 	
       eval_cap_gather(in);
       if (in->filelock.is_stable())
 	file_eval(&in->filelock);
+      if (in->authlock.is_stable())
+	eval(&in->authlock);
     }
 
     // done?
@@ -1555,33 +1548,6 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::_finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClientCaps *ack)
-{
-  dout(10) << "_finish_release_cap client" << client << " seq " << seq << " on " << *in << dendl;
-  
-  Capability *cap = in->get_client_cap(client);
-  assert(cap);
-
-  // before we remove the cap, make sure the release request is
-  // _still_ the most recent (and not racing with open() or
-  // something)
-
-  if (cap->updating) {
-    dout(10) << " another update attempt in flight, not releasing yet" << dendl;
-    delete ack;
-  } else if (ceph_seq_cmp(seq, cap->get_last_sent()) < 0) {
-    dout(10) << " NOT releasing cap client" << client << ", last_sent " << cap->get_last_sent()
-	     << " > " << seq << dendl;
-    delete ack;
-  } else {
-    
-    mdcache->remove_client_cap(in, client, false);
-    
-    if (ack)
-      mds->send_message_client(ack, client);
-  }
-}
-
 /*
  * update inode based on cap flush|flushsnap|wanted.
  *  adjust max_size, if needed.
@@ -1589,7 +1555,7 @@ void Locker::_finish_release_cap(CInode *in, int client, ceph_seq_t seq, MClient
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
 			    int dirty, int wanted, snapid_t follows, MClientCaps *m,
-			    MClientCaps *ack, ceph_seq_t releasecap)
+			    MClientCaps *ack)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " wanted " << ccap_string(wanted)
@@ -1741,7 +1707,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
-							   client, cap, ack, releasecap));
+							   client, cap, ack));
   // only flush immediately if the lock is unstable
   if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
       ((dirty & CEPH_CAP_AUTH_EXCL) && !in->authlock.is_stable()) ||
@@ -1752,6 +1718,43 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   return true;
 }
 
+void Locker::handle_client_cap_release(MClientCapRelease *m)
+{
+  int client = m->get_source().num();
+  dout(10) << "handle_client_cap_release " << *m << dendl;
+
+  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); p++) {
+    inodeno_t ino((__u64)p->ino);
+    CInode *in = mdcache->get_inode(ino);
+    if (!in) {
+      dout(10) << " missing ino " << ino << dendl;
+      continue;
+    }
+    Capability *cap = in->get_client_cap(client);
+    if (!cap) {
+      dout(10) << " no cap on " << *in << dendl;
+      continue;
+    }
+    if (cap->get_cap_id() != p->cap_id) {
+      dout(7) << " ignoring client capid " << p->cap_id << " != my " << cap->get_cap_id() << " on " << *in << dendl;
+      continue;
+    }
+    if (ceph_seq_cmp(p->migrate_seq, cap->get_mseq()) < 0) {
+      dout(7) << " mseq " << p->migrate_seq << " < " << cap->get_mseq()
+	      << " on " << *in << dendl;
+      continue;
+    }
+    if (p->seq != cap->get_last_issue()) {
+      dout(10) << " seq " << p->seq << " != " << cap->get_last_issue() << " on " << *in << dendl;
+      continue;
+    }
+
+    dout(7) << "removing cap on " << *in << dendl;
+    mdcache->remove_client_cap(in, client, false);
+  }
+
+  delete m;
+}
 
 void Locker::handle_client_lease(MClientLease *m)
 {
@@ -2157,10 +2160,16 @@ void Locker::simple_eval(SimpleLock *lock)
 
   if (lock->get_parent()->is_frozen()) return;
 
+  bool loner = false;
+  if (lock->get_type() != CEPH_LOCK_DN &&
+      ((CInode*)lock->get_parent())->get_loner() >= 0)
+    loner = true;
+
   // stable -> sync?
   if (!lock->is_xlocked() &&
       !lock->is_wrlocked() &&
       lock->get_state() != LOCK_SYNC &&
+      !(lock->get_state() == LOCK_EXCL && loner) &&
       !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
@@ -2870,7 +2879,7 @@ void Locker::file_eval(ScatterLock *lock)
 	   //!lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   (lock->get_scatter_wanted() ||
-	    (wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)))) {
+	    (in->multiple_nonstale_caps() && (wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR))))) {
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
