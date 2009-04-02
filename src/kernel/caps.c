@@ -251,7 +251,7 @@ retry:
 			new_cap = NULL;
 		} else {
 			spin_unlock(&inode->i_lock);
-			new_cap = ceph_get_reserved_cap(caps_reservation);
+			new_cap = ceph_get_cap(caps_reservation);
 			if (new_cap == NULL)
 				return -ENOMEM;
 			goto retry;
@@ -1950,6 +1950,12 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 		ceph_check_caps(ci, 0, 0, NULL);
 }
 
+/*
+ * cap reservations
+ *
+ * maintain a global pool of preallocated struct ceph_caps, referenced
+ * by struct ceph_caps_reservations.
+ */
 void ceph_caps_init(void)
 {
 	INIT_LIST_HEAD(&caps_list);
@@ -1977,32 +1983,24 @@ int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need)
 {
 	int i;
 	struct ceph_cap *cap;
-	int have, alloc_count;
+	int have;
+	int alloc_count = need;
 	int ret = 0;
 	int reserved = 0;
 
-	alloc_count = need;
-
 	dout(30, "reserve caps, ctx=%p, need=%d\n", ctx, need);
-
 	spin_lock(&caps_list_lock);
+
 	/* how much can we actually use? */
 	have = caps_count - caps_use_count - caps_reserve_count;
-
 	if (have > need)
 		have = need;
-
 	if (have > 0)
 		alloc_count -= have;
-
 	caps_reserve_count += need;
 	spin_unlock(&caps_list_lock);
 
-	/* no need to allocate anything, exit */
-	if (alloc_count == 0)
-		goto out_success;
-
-	for (i=0; i<alloc_count; i++) {
+	for (i = 0; i < alloc_count; i++) {
 		cap = kmem_cache_alloc(ceph_cap_cachep, GFP_NOFS);
 		if (!cap) {
 			ret = -ENOMEM;
@@ -2016,16 +2014,14 @@ int ceph_reserve_caps(struct ceph_caps_reservation *ctx, int need)
 
 		reserved++;
 	}
-
-out_success:
 	ctx->count = need;
 	dout(30, "reserve caps, ctx=%p, total=%d reserved=%d used=%d\n",
 		ctx, caps_count, caps_reserve_count, caps_use_count);
-
 	return 0;
+
 out_alloc_count:
-	spin_lock(&caps_list_lock);
 	/* we didn't manage to reserve as much as we needed */
+	spin_lock(&caps_list_lock);
 	caps_reserve_count -= (need - reserved);
 	ctx->count = reserved;
 	spin_unlock(&caps_list_lock);
@@ -2036,78 +2032,65 @@ int ceph_unreserve_caps(struct ceph_caps_reservation *ctx)
 {
 	if (ctx->count) {
 		spin_lock(&caps_list_lock);
-		caps_reserve_count -= min(caps_reserve_count, ctx->count);
-		dout(30, "unreserve caps ctx=%p, ctx->count=%d\n", ctx, ctx->count);
+		BUG_ON(caps_reserve_count < ctx->count);
+		caps_reserve_count -= ctx->count;
+		dout(30, "unreserve caps ctx=%p, ctx->count=%d\n", ctx,
+		     ctx->count);
 		ctx->count = 0;
-		spin_unlock(&caps_list_lock);
-
 		dout(30, "unreserve caps, total=%d reserved=%d used=%d\n",
 			caps_count, caps_reserve_count, caps_use_count);
+		spin_unlock(&caps_list_lock);
 	}
-
 	return 0;
 }
 
-struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx, int mode)
+struct ceph_cap *ceph_get_cap(struct ceph_caps_reservation *ctx)
 {
 	struct ceph_cap *cap = NULL;
 
-	dout(30, "get_cap ctx=%p, total=%d reserved=%d used=%d\n",
-		ctx, caps_count, caps_reserve_count, caps_use_count);
+	/* temporary */
+	if (!ctx)
+		return kmem_cache_alloc(ceph_cap_cachep, GFP_NOFS);
 
 	spin_lock(&caps_list_lock);
+	dout(30, "get_reserved_cap ctx=%p, total=%d resv=%d used=%d\n",
+	     ctx, caps_count, caps_reserve_count, caps_use_count);
 
-	if (ctx) {
-		BUG_ON(!caps_reserve_count);
-		BUG_ON(!ctx->count);
-		caps_reserve_count--;
-		ctx->count--;
-	}
+	BUG_ON(!caps_reserve_count);
+	BUG_ON(!ctx->count);
+	caps_reserve_count--;
+	ctx->count--;
 
-	if (list_empty(&caps_list))
-		goto out_unlock;
-
+	BUG_ON(list_empty(&caps_list));
 	caps_use_count++;
-
 	cap = list_first_entry(&caps_list, struct ceph_cap, caps_item);
 	list_del(&cap->caps_item);
-out_unlock:
+
+	dout(30, "get_reserved_cap (exit) ctx=%p, total=%d resv=%d used=%d\n",
+	     ctx, caps_count, caps_reserve_count, caps_use_count);
 	spin_unlock(&caps_list_lock);
-
-	if (!ctx) {
-		cap = kmem_cache_alloc(ceph_cap_cachep, mode);
-	}
-	dout(30, "get_cap caps (exit) ctx=%p, total=%d reserved=%d used=%d\n",
-		ctx, caps_count, caps_reserve_count, caps_use_count);
 	return cap;
-}
-
-struct ceph_cap *ceph_get_reserved_cap(struct ceph_caps_reservation *ctx)
-{
-	return ceph_get_cap(ctx, 0);
 }
 
 void ceph_put_cap(struct ceph_cap *cap)
 {
+	spin_lock(&caps_list_lock);
 	dout(30, "put_cap caps, total=%d reserved=%d used=%d\n",
 		caps_count, caps_reserve_count, caps_use_count);
-	spin_lock(&caps_list_lock);
 	caps_count++;
 	caps_use_count--;
 	list_add(&cap->caps_item, &caps_list);
-	spin_unlock(&caps_list_lock);
 	dout(30, "put_cap(exit) caps, total=%d reserved=%d used=%d\n",
 		caps_count, caps_reserve_count, caps_use_count);
+	spin_unlock(&caps_list_lock);
 }
 
 void ceph_reservation_status(int *total, int *used, int *reserved)
 {
 	if (total)
 		*total = caps_count;
-
 	if (used)
 		*used = caps_use_count;
-
 	if (reserved)
 		*reserved = caps_reserve_count;
 }
