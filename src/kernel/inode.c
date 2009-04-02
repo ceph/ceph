@@ -717,7 +717,7 @@ static void update_dentry_lease(struct dentry *dentry,
 		di = ceph_dentry(dentry);
 		if (!di)
 			goto out_unlock;
-	} else if (di->lease_session != session) {
+	} else if (di->lease_session && di->lease_session != session) {
 		goto out_unlock;
 	} else {
 		ceph_dentry_lru_touch(dentry);
