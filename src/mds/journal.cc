@@ -98,7 +98,11 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
   for (xlist<CInode*>::iterator p = dirty_inodes.begin(); !p.end(); ++p) {
     dout(20) << " dirty_inode " << **p << dendl;
     assert((*p)->is_auth());
-    commit.insert((*p)->get_parent_dn()->get_dir());
+    if ((*p)->is_root()) {
+      if (!gather) gather = new C_Gather;
+      (*p)->store(gather->new_sub());
+    } else
+      commit.insert((*p)->get_parent_dn()->get_dir());
   }
 
   if (!commit.empty()) {
@@ -284,7 +288,8 @@ void EString::replay(MDS *mds)
 // -----------------------
 // EMetaBlob
 
-EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0),
+EMetaBlob::EMetaBlob(MDLog *mdlog) : root(NULL),
+				     opened_ino(0),
 				     inotablev(0), sessionmapv(0),
 				     allocated_ino(0),
 				     last_subtree_map(mdlog ? mdlog->get_last_segment_offset() : 0),

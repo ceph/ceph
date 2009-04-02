@@ -320,6 +320,7 @@ private:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
+  fullbit *root;
 
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
@@ -345,6 +346,10 @@ private:
   void encode(bufferlist& bl) const {
     ::encode(lump_order, bl);
     ::encode(lump_map, bl);
+    bufferlist rootbl;
+    if (root)
+      root->encode(rootbl);
+    ::encode(rootbl, bl);
     ::encode(table_tids, bl);
     ::encode(opened_ino, bl);
     ::encode(allocated_ino, bl);
@@ -361,6 +366,12 @@ private:
   void decode(bufferlist::iterator &bl) {
     ::decode(lump_order, bl);
     ::decode(lump_map, bl);
+    bufferlist rootbl;
+    ::decode(rootbl, bl);
+    if (rootbl.length()) {
+      bufferlist::iterator p = rootbl.begin();
+      root = new fullbit(p);
+    }
     ::decode(table_tids, bl);
     ::decode(opened_ino, bl);
     ::decode(allocated_ino, bl);
@@ -384,6 +395,9 @@ private:
   //LogSegment *_segment;
 
   EMetaBlob(MDLog *mdl = 0);  // defined in journal.cc
+  ~EMetaBlob() {
+    delete root;
+  }
 
   void print(ostream& out) {
     for (list<dirfrag_t>::iterator p = lump_order.begin();
@@ -540,6 +554,27 @@ private:
     return add_primary_dentry(dn, dirty);
   }
 
+  inode_t *add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+		    map<string,bufferptr> *px=0) {
+    in->last_journaled = my_offset;
+    //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
+
+    bufferlist snapbl;
+    if (psnapbl)
+      snapbl = *psnapbl;
+    else
+      in->encode_snap_blob(snapbl);
+
+    nstring empty;
+    root = new fullbit(empty,
+	      in->first, in->last,
+	      0,
+	      in->inode, in->dirfragtree,
+	      px ? *px : in->xattrs,
+	      in->symlink, snapbl,
+	      dirty);
+    return &root->inode;
+  }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false, bool isnew=false) {
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),

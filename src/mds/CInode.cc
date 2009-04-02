@@ -532,10 +532,15 @@ Capability *CInode::add_client_cap(int client, Session *session,
 
 
 version_t CInode::pre_dirty()
-{    
-  assert(parent || projected_parent.size());
-  version_t pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
-  dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
+{
+  version_t pv; 
+  if (parent || projected_parent.size()) {
+    pv = get_projected_parent_dn()->pre_dirty(get_projected_version());
+    dout(10) << "pre_dirty " << pv << " (current v " << inode.version << ")" << dendl;
+  } else {
+    assert(is_root());
+    pv = get_projected_version() + 1;
+  }
   return pv;
 }
 
@@ -556,8 +561,6 @@ void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   
   dout(10) << "mark_dirty " << *this << dendl;
 
-  assert(parent || projected_parent.size());
-
   /*
     NOTE: I may already be dirty, but this fn _still_ needs to be called so that
     the directory is (perhaps newly) dirtied, and so that parent_dir_version is 
@@ -574,7 +577,8 @@ void CInode::mark_dirty(version_t pv, LogSegment *ls) {
   _mark_dirty(ls);
 
   // mark dentry too
-  parent->mark_dirty(pv, ls);
+  if (parent)
+    parent->mark_dirty(pv, ls);
 }
 
 

@@ -1341,10 +1341,14 @@ void MDCache::journal_cow_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, 
 
 inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
-  CDentry *dn = in->get_projected_parent_dn();
-  if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
-    journal_cow_dentry(mut, metablob, dn, follows);
-  return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
+  if (in->is_root()) {
+    return metablob->add_root(true, in, in->get_projected_inode());
+  } else {
+    CDentry *dn = in->get_projected_parent_dn();
+    if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
+      journal_cow_dentry(mut, metablob, dn, follows);
+    return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
+  }
 }
 
 
@@ -1578,6 +1582,9 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   if (mut->now == utime_t())
     mut->now = g_clock.real_now();
 
+  if (in->is_root())
+    return;
+
   dout(10) << "predirty_journal_parents"
 	   << (do_parent_mtime ? " do_parent_mtime":"")
 	   << " linkunlink=" <<  linkunlink
@@ -1680,10 +1687,6 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       cur->dirty_old_rstats.clear();
     }
 
-    // stop?
-    if (pin->is_root())
-      break;
-
     bool stop = false;
     if (!pin->is_auth() || pin->is_ambiguous_auth()) {
       dout(10) << "predirty_journal_parents !auth or ambig on " << *pin << dendl;
@@ -1742,7 +1745,12 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
      * actually, no.  for now, silently drop rstats for old parents.  we need 
      * hard link backpointers to do the above properly.
      */
+
+    // stop?
+    if (pin->is_root())
+      break;
     parentdn = pin->get_projected_parent_dn();
+    assert(parentdn);
 
     // rstat
     if (primary_dn) {
