@@ -99,7 +99,7 @@ public:
     return quorum.size() == monmap->size();
   }
 
-  void call_election();  // initiate election
+  void call_election(bool is_new=true);  // initiate election
   void win_election(epoch_t epoch, set<int>& q);         // end election (called by Elector)
   void lose_election(epoch_t epoch, set<int>& q, int l); // end election (called by Elector)
 

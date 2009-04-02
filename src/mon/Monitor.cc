@@ -158,10 +158,16 @@ void Monitor::shutdown()
 }
 
 
-void Monitor::call_election()
+void Monitor::call_election(bool is_new)
 {
   if (monmap->size() == 1) return;
   
+  if (is_new) {
+    stringstream ss;
+    ss << "mon" << whoami << " calling new monitor election";
+    logclient.log(LOG_INFO, ss);
+  }
+
   dout(10) << "call_election" << dendl;
   state = STATE_STARTING;
   
@@ -182,6 +188,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   mon_epoch = epoch;
   quorum = active;
   dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
+
+  stringstream ss;
+  ss << "mon" << whoami << " won leader election";
+  logclient.log(LOG_INFO, ss);
   
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->leader_init();
