@@ -426,11 +426,8 @@ DEFINE_SHOW_FUNC(osdmap_show)
 DEFINE_SHOW_FUNC(monc_show)
 DEFINE_SHOW_FUNC(mdsc_show)
 DEFINE_SHOW_FUNC(osdc_show)
-<<<<<<< HEAD:src/kernel/debugfs.c
 DEFINE_SHOW_FUNC(caps_reservation_show)
-=======
 DEFINE_SHOW_FUNC(dentry_lru_show)
->>>>>>> unstable:src/kernel/debugfs.c
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 static int debugfs_bookkeeper_set(void *data, u64 val)
