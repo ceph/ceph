@@ -784,6 +784,11 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     }
     
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+
+    if (lock->get_parent()->is_auth() && (lock->is_wrlocked() ||  // as with cap flush
+					  !lock->is_stable()))    // as with xlockdone
+      mds->mdlog->flush();
+
     return false;
   } else {
     // replica
