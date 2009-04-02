@@ -380,6 +380,26 @@ static int caps_reservation_show(struct seq_file *s, void *p)
 	return 0;
 }
 
+static int dentry_lru_show(struct seq_file *s, void *ptr)
+{
+	struct ceph_client *client = s->private;
+	struct ceph_mds_client *mdsc = &client->mdsc;
+	struct list_head *p;
+	struct ceph_dentry_info *di;
+
+	spin_lock(&mdsc->dentry_lru_lock);
+	list_for_each(p, &mdsc->dentry_lru) {
+		struct dentry *dentry;
+		di = list_entry(p, struct ceph_dentry_info, lru);
+		dentry = di->dentry;
+		seq_printf(s, "%p %p\t%.*s\n",
+			di, dentry, dentry->d_name.len, dentry->d_name.name);
+	}
+	spin_unlock(&mdsc->dentry_lru_lock);
+
+	return 0;
+}
+
 #define DEFINE_SHOW_FUNC(name) 						\
 static int name##_open(struct inode *inode, struct file *file)		\
 {									\
@@ -406,7 +426,11 @@ DEFINE_SHOW_FUNC(osdmap_show)
 DEFINE_SHOW_FUNC(monc_show)
 DEFINE_SHOW_FUNC(mdsc_show)
 DEFINE_SHOW_FUNC(osdc_show)
+<<<<<<< HEAD:src/kernel/debugfs.c
 DEFINE_SHOW_FUNC(caps_reservation_show)
+=======
+DEFINE_SHOW_FUNC(dentry_lru_show)
+>>>>>>> unstable:src/kernel/debugfs.c
 
 #ifdef CONFIG_CEPH_BOOKKEEPER
 static int debugfs_bookkeeper_set(void *data, u64 val)
@@ -568,6 +592,14 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 	if (!client->debugfs_osdmap)
 		goto out;
 
+	client->debugfs_dentry_lru = debugfs_create_file("dentry_lru",
+					0600,
+					client->debugfs_dir,
+					client,
+					&dentry_lru_show_fops);
+	if (!client->debugfs_osdmap)
+		goto out;
+
 	return 0;
 
 out:
@@ -580,6 +612,7 @@ void ceph_debugfs_client_cleanup(struct ceph_client *client)
 	debugfs_remove(client->monc.debugfs_file);
 	debugfs_remove(client->mdsc.debugfs_file);
 	debugfs_remove(client->osdc.debugfs_file);
+	debugfs_remove(client->debugfs_dentry_lru);
 	debugfs_remove(client->debugfs_monmap);
 	debugfs_remove(client->debugfs_mdsmap);
 	debugfs_remove(client->debugfs_osdmap);

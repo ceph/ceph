@@ -1953,6 +1953,7 @@ void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry)
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
 
 	ceph_put_mds_session(di->lease_session);
+	ceph_dentry_lru_del(dentry);
 	kfree(di);
 	dentry->d_fsdata = NULL;
 }
@@ -2128,7 +2129,7 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 	/* is dentry lease valid? */
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (!di ||
+	if (!di || !di->lease_session ||
 	    di->lease_session->s_mds < 0 ||
 	    di->lease_gen != di->lease_session->s_cap_gen ||
 	    !time_before(jiffies, dentry->d_time)) {
@@ -2250,6 +2251,8 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	INIT_LIST_HEAD(&mdsc->cap_sync);
 	spin_lock_init(&mdsc->cap_dirty_lock);
 	init_waitqueue_head(&mdsc->cap_sync_wq);
+	spin_lock_init(&mdsc->dentry_lru_lock);
+	INIT_LIST_HEAD(&mdsc->dentry_lru);
 }
 
 /*

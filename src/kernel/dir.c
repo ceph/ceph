@@ -659,7 +659,7 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
-	if (di) {
+	if (di && di->lease_session) {
 		s = di->lease_session;
 		spin_lock(&s->s_cap_lock);
 		gen = s->s_cap_gen;
@@ -723,20 +723,23 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	if (ceph_snap(dir) != CEPH_NOSNAP) {
 		dout(10, "d_revalidate %p '%.*s' inode %p is SNAPPED\n", dentry,
 		     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
-		return 1;
+		goto out_touch;
 	}
 
 	if (dentry_lease_is_valid(dentry))
-		return 1;
+		goto out_touch;
 
 	if (dir_lease_is_valid(dir, dentry))
-		return 1;
+		goto out_touch;
 
 	dout(20, "dentry_revalidate %p invalid, clearing %p complete\n",
 	     dentry, dir);
 	ceph_i_clear(dir, CEPH_I_COMPLETE|CEPH_I_READDIR);
 	d_drop(dentry);
 	return 0;
+out_touch:
+	ceph_dentry_lru_touch(dentry);
+	return 1;
 }
 
 static void ceph_dentry_release(struct dentry *dentry)
@@ -745,7 +748,9 @@ static void ceph_dentry_release(struct dentry *dentry)
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 
 	if (di) {
-		ceph_put_mds_session(di->lease_session);
+		ceph_dentry_lru_del(dentry);
+		if (di->lease_session)
+			ceph_put_mds_session(di->lease_session);
 		kfree(di);
 		dentry->d_fsdata = NULL;
 	}
@@ -862,6 +867,53 @@ static int ceph_dir_fsync(struct file *file, struct dentry *dentry,
 out:
 	spin_unlock(&ci->i_unsafe_lock);
 	return ret;
+}
+
+void ceph_dentry_lru_add(struct dentry *dn)
+{
+	struct ceph_dentry_info *di = ceph_dentry(dn);
+	struct ceph_mds_client *mdsc;
+	dout(30, "dentry_lru_add %p %p\t%.*s\n",
+			di, dn, dn->d_name.len, dn->d_name.name);
+
+	if (di) {
+		mdsc = &ceph_client(dn->d_sb)->mdsc;
+		spin_lock(&mdsc->dentry_lru_lock);
+		list_add_tail(&di->lru, &mdsc->dentry_lru);
+		mdsc->num_dentry++;
+		spin_unlock(&mdsc->dentry_lru_lock);
+	}
+}
+
+void ceph_dentry_lru_touch(struct dentry *dn)
+{
+	struct ceph_dentry_info *di = ceph_dentry(dn);
+	struct ceph_mds_client *mdsc;
+	dout(30, "dentry_lru_touch %p %p\t%.*s\n",
+			di, dn, dn->d_name.len, dn->d_name.name);
+
+	if (di) {
+		mdsc = &ceph_client(dn->d_sb)->mdsc;
+		spin_lock(&mdsc->dentry_lru_lock);
+		list_move_tail(&di->lru, &mdsc->dentry_lru);
+		spin_unlock(&mdsc->dentry_lru_lock);
+	}
+}
+
+void ceph_dentry_lru_del(struct dentry *dn)
+{
+	struct ceph_dentry_info *di = ceph_dentry(dn);
+	struct ceph_mds_client *mdsc;
+
+	dout(30, "dentry_lru_del %p %p\t%.*s\n",
+			di, dn, dn->d_name.len, dn->d_name.name);
+	if (di) {
+		mdsc = &ceph_client(dn->d_sb)->mdsc;
+		spin_lock(&mdsc->dentry_lru_lock);
+		list_del_init(&di->lru);
+		mdsc->num_dentry--;
+		spin_unlock(&mdsc->dentry_lru_lock);
+	}
 }
 
 const struct file_operations ceph_dir_fops = {

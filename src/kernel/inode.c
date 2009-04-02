@@ -655,6 +655,32 @@ out:
 	return err;
 }
 
+static int __init_ceph_dentry(struct dentry *dentry, int locked)
+{
+	struct ceph_dentry_info *di;
+
+	if (locked)
+		spin_unlock(&dentry->d_lock);
+	di = kmalloc(sizeof(struct ceph_dentry_info),
+		     GFP_NOFS);
+
+	if (locked)
+		spin_lock(&dentry->d_lock);
+	if (!di)
+		return -ENOMEM;          /* oh well */
+
+	if (dentry->d_fsdata) {
+		kfree(di);   /* lost a race! */
+		return 0;
+	}
+	dentry->d_fsdata = di;
+	di->dentry = dentry;
+	di->lease_session = NULL;
+	ceph_dentry_lru_add(dentry);
+
+	return 0;
+}
+
 /*
  * caller should hold session s_mutex.
  */
@@ -664,7 +690,6 @@ static void update_dentry_lease(struct dentry *dentry,
 				unsigned long from_time)
 {
 	struct ceph_dentry_info *di;
-	int is_new = 0;
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
 	long unsigned ttl = from_time + (duration * HZ) / 1000;
 	long unsigned half_ttl = from_time + (duration * HZ / 2) / 1000;
@@ -696,23 +721,18 @@ static void update_dentry_lease(struct dentry *dentry,
 		goto out_unlock;  /* we already have a newer lease. */
 
 	if (!di) {
-		spin_unlock(&dentry->d_lock);
-		di = kmalloc(sizeof(struct ceph_dentry_info),
-			     GFP_NOFS);
+		__init_ceph_dentry(dentry, 1);
+		di = ceph_dentry(dentry);
 		if (!di)
-			return;          /* oh well */
-		spin_lock(&dentry->d_lock);
-		if (dentry->d_fsdata) {
-			kfree(di);   /* lost a race! */
 			goto out_unlock;
-		}
-		dentry->d_fsdata = di;
-		di->lease_session = ceph_get_mds_session(session);
-		di->lease_gen = session->s_cap_gen;
-		di->lease_seq = le32_to_cpu(lease->seq);
-		is_new = 1;
-	} else if (di->lease_session != session)
+	} else if (di->lease_session != session) {
 		goto out_unlock;
+	} else {
+		ceph_dentry_lru_touch(dentry);
+	}
+	di->lease_session = ceph_get_mds_session(session);
+	di->lease_gen = session->s_cap_gen;
+	di->lease_seq = le32_to_cpu(lease->seq);
 	di->lease_renew_after = half_ttl;
 	di->lease_renew_from = 0;
 	dentry->d_time = ttl;
@@ -754,7 +774,10 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		dput(dn);
 		dn = realdn;
 		ceph_init_dentry(dn);
+		__init_ceph_dentry(dn, 0);
 	} else {
+		if (!ceph_dentry(dn))
+			__init_ceph_dentry(dn, 0);
 		dout(10, "dn %p attached to %p ino %llx.%llx\n",
 		     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 	}

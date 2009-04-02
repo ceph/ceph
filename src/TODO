@@ -30,10 +30,7 @@ v0.8
 - revamp client<->mds interaction wrt snapshots...
 - clean up path_traverse interface, esp the usages in Server.cc
 - fix up mds selection, and ESTALE handling.  
-- allow mon to log messages
-  - log client mount successes, failures
-  - mon elections
-  - ?
+- return extra inode(s) in reply (namely, unlink)?
 - store root inode on mds
 - allow chmod/whatever of root inode
 - piggyback lease/cap release on client_request

@@ -99,7 +99,7 @@ struct ceph_client {
 	struct ceph_client_attr k_fsid, k_monmap, k_mdsmap, k_osdmap;
 	struct dentry *debugfs_fsid, *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
-	struct dentry *debugfs_dir;
+	struct dentry *debugfs_dir, *debugfs_dentry_lru;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
@@ -378,6 +378,8 @@ struct ceph_dentry_info {
 	u32 lease_gen;
 	u32 lease_seq;
 	unsigned long lease_renew_after, lease_renew_from;
+	struct list_head lru;
+	struct dentry *dentry;
 };
 
 static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
@@ -808,6 +810,10 @@ extern struct dentry_operations ceph_dentry_ops, ceph_snap_dentry_ops,
 extern int ceph_handle_notrace_create(struct inode *dir, struct dentry *dentry);
 extern struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 					 struct dentry *dentry, int err);
+
+extern void ceph_dentry_lru_add(struct dentry *dn);
+extern void ceph_dentry_lru_touch(struct dentry *dn);
+extern void ceph_dentry_lru_del(struct dentry *dn);
 
 /*
  * our d_ops vary depending on whether the inode is live,

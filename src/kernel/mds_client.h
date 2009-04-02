@@ -250,6 +250,10 @@ struct ceph_mds_client {
 	wait_queue_head_t cap_sync_wq;
 
 	struct dentry 		*debugfs_file;
+
+	spinlock_t		dentry_lru_lock;
+	struct list_head	dentry_lru;
+	int			num_dentry;
 };
 
 extern const char *ceph_mds_op_name(int op);
