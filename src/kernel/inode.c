@@ -1259,7 +1259,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	struct ceph_mds_request *req;
 	struct ceph_mds_client *mdsc = &ceph_client(dentry->d_sb)->mdsc;
 	int issued;
-	int dirtied = 0;
+	int release = 0, dirtied = 0;
 	int mask = 0;
 	int err = 0;
 
@@ -1291,6 +1291,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			   attr->ia_uid != inode->i_uid) {
 			req->r_args.setattr.uid = cpu_to_le32(attr->ia_uid);
 			mask |= CEPH_SETATTR_UID;
+			release |= CEPH_CAP_AUTH_RDCACHE;
 		}
 	}
 	if (ia_valid & ATTR_GID) {
@@ -1303,6 +1304,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			   attr->ia_gid != inode->i_gid) {
 			req->r_args.setattr.gid = cpu_to_le32(attr->ia_gid);
 			mask |= CEPH_SETATTR_GID;
+			release |= CEPH_CAP_AUTH_RDCACHE;
 		}
 	}
 	if (ia_valid & ATTR_MODE) {
@@ -1315,6 +1317,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			   attr->ia_mode != inode->i_mode) {
 			req->r_args.setattr.mode = cpu_to_le32(attr->ia_mode);
 			mask |= CEPH_SETATTR_MODE;
+			release |= CEPH_CAP_AUTH_RDCACHE;
 		}
 	}
 
@@ -1336,6 +1339,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			ceph_encode_timespec(&req->r_args.setattr.atime,
 					     &attr->ia_atime);
 			mask |= CEPH_SETATTR_ATIME;
+			release |= CEPH_CAP_FILE_RDCACHE;
 		}
 	}
 	if (ia_valid & ATTR_MTIME) {
@@ -1356,6 +1360,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			ceph_encode_timespec(&req->r_args.setattr.mtime,
 					     &attr->ia_mtime);
 			mask |= CEPH_SETATTR_MTIME;
+			release |= CEPH_CAP_FILE_RDCACHE;
 		}
 	}
 	if (ia_valid & ATTR_SIZE) {
@@ -1376,6 +1381,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			req->r_args.setattr.old_size =
 				cpu_to_le64(inode->i_size);
 			mask |= CEPH_SETATTR_SIZE;
+			release |= CEPH_CAP_FILE_RDCACHE;
 		}
 	}
 
@@ -1395,9 +1401,13 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		}
 		inode->i_ctime = CURRENT_TIME;
 	}
+
+	release &= issued;
 	spin_unlock(&inode->i_lock);
 
 	if (mask) {
+		if (release)
+			ceph_release_caps(inode, release);
 		req->r_inode = igrab(inode);
 		req->r_args.setattr.mask = mask;
 		req->r_num_caps = 1;
