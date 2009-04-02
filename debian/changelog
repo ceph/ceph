@@ -1,9 +1,19 @@
+ceph (0.7.3-1) unstable; urgency=low
+
+  * new caps strategy
+  * simplier mds<->client protocol
+
+ -- sage <sage@newdream.net>  Mon, 1 May 2009 13:57:22 -0800
+
 ceph (0.7.2-1) unstable; urgency=low
 
   * osd ack+sync handling in kclient
   * rdcap renewal
+  * better mon logging
+  * mds clustering fixes
+  * better tunables on kclient
 
- -- sage <sage@newdream.net>  Mon, 26 Mar 2009 13:57:22 -0800
+ -- sage <sage@newdream.net>  Tue, 2 Apr 2009 13:57:22 -0800
 
 ceph (0.7.1-1) unstable; urgency=low
 
