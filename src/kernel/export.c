@@ -117,11 +117,11 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
 	}
-	ret = ceph_init_dentry(dentry);
+	err = ceph_init_dentry(dentry);
 
-	if (ret < 0) {
+	if (err < 0) {
 		iput(inode);
-		return ERR_PTR(ret);
+		return ERR_PTR(err);
 	}
 	dout(10, "fh_to_dentry %llx.%x -- inode %p dentry %p\n", fh->ino.ino,
 	     hash, inode, dentry);
