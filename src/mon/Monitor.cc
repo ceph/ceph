@@ -190,7 +190,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
   dout(10) << "win_election, epoch " << mon_epoch << " quorum is " << quorum << dendl;
 
   stringstream ss;
-  ss << "mon" << whoami << " won leader election";
+  ss << "mon" << whoami << " won leader election with quorum " << quorum;
   logclient.log(LOG_INFO, ss);
   
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
