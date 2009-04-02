@@ -380,6 +380,7 @@ struct ceph_dentry_info {
 	unsigned long lease_renew_after, lease_renew_from;
 	struct list_head lru;
 	struct dentry *dentry;
+	u64 time;
 };
 
 static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
@@ -819,15 +820,22 @@ extern void ceph_dentry_lru_del(struct dentry *dn);
  * our d_ops vary depending on whether the inode is live,
  * snapshotted (read-only), or a virtual ".snap" directory.
  */
-static inline void ceph_init_dentry(struct dentry *dentry)
+int ceph_init_dentry_private(struct dentry *dentry);
+
+static inline int ceph_init_dentry(struct dentry *dentry)
 {
+	int ret;
+
 	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
 		dentry->d_op = &ceph_dentry_ops;
 	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)
 		dentry->d_op = &ceph_snapdir_dentry_ops;
 	else
 		dentry->d_op = &ceph_snap_dentry_ops;
-	dentry->d_time = 0;
+
+	ret = ceph_init_dentry_private(dentry);
+
+	return ret;
 }
 
 /* ioctl.c */

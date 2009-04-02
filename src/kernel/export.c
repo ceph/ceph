@@ -109,12 +109,19 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 #else
 	dentry = d_alloc_anon(inode);
 #endif
+
 	if (!dentry) {
 		derr(10, "fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
 		     fh->ino.ino,
 		     hash, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
+	}
+	ret = ceph_init_dentry(dentry);
+
+	if (ret < 0) {
+		iput(inode);
+		return ERR_PTR(ret);
 	}
 	dout(10, "fh_to_dentry %llx.%x -- inode %p dentry %p\n", fh->ino.ino,
 	     hash, inode, dentry);

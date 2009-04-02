@@ -655,28 +655,31 @@ out:
 	return err;
 }
 
-static int __init_ceph_dentry(struct dentry *dentry, int locked)
+int ceph_init_dentry_private(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
 
-	if (locked)
-		spin_unlock(&dentry->d_lock);
+	if (dentry->d_fsdata)
+		return 0;
+
 	di = kmalloc(sizeof(struct ceph_dentry_info),
 		     GFP_NOFS);
 
-	if (locked)
-		spin_lock(&dentry->d_lock);
 	if (!di)
 		return -ENOMEM;          /* oh well */
 
-	if (dentry->d_fsdata) {
-		kfree(di);   /* lost a race! */
-		return 0;
-	}
-	dentry->d_fsdata = di;
+	spin_lock(&dentry->d_lock);
+
+	if (dentry->d_fsdata) /* lost a race */
+		goto out_unlock;
+
 	di->dentry = dentry;
 	di->lease_session = NULL;
+	dentry->d_fsdata = di;
+	dentry->d_time = 0;
 	ceph_dentry_lru_add(dentry);
+out_unlock:
+	spin_unlock(&dentry->d_lock);
 
 	return 0;
 }
@@ -715,17 +718,13 @@ static void update_dentry_lease(struct dentry *dentry,
 
 	spin_lock(&dentry->d_lock);
 	di = ceph_dentry(dentry);
+	BUG_ON(!di);
 	if (dentry->d_time != 0 &&
-	    di && di->lease_gen == session->s_cap_gen &&
+	    di->lease_gen == session->s_cap_gen &&
 	    time_before(ttl, dentry->d_time))
 		goto out_unlock;  /* we already have a newer lease. */
 
-	if (!di) {
-		__init_ceph_dentry(dentry, 1);
-		di = ceph_dentry(dentry);
-		if (!di)
-			goto out_unlock;
-	} else if (di->lease_session && di->lease_session != session) {
+	if (di->lease_session && di->lease_session != session) {
 		goto out_unlock;
 	} else {
 		ceph_dentry_lru_touch(dentry);
@@ -773,11 +772,9 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		     realdn->d_inode, ceph_vinop(realdn->d_inode));
 		dput(dn);
 		dn = realdn;
-		ceph_init_dentry(dn);
-		__init_ceph_dentry(dn, 0);
 	} else {
-		if (!ceph_dentry(dn))
-			__init_ceph_dentry(dn, 0);
+		BUG_ON(!ceph_dentry(dn));
+
 		dout(10, "dn %p attached to %p ino %llx.%llx\n",
 		     dn, dn->d_inode, ceph_vinop(dn->d_inode));
 	}
@@ -1046,7 +1043,9 @@ retry_lookup:
 				err = -ENOMEM;
 				goto out;
 			}
-			ceph_init_dentry(dn);
+			err = ceph_init_dentry(dn);
+			if (err < 0)
+				goto out;
 		} else if (dn->d_inode &&
 			   (ceph_ino(dn->d_inode) != vino.ino ||
 			    ceph_snap(dn->d_inode) != vino.snap)) {
