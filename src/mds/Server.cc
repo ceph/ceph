@@ -1609,6 +1609,12 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mus
     return 0;
   }
 
+  CInode *diri = dir->get_inode();
+  if (diri->ino() < MDS_INO_SYSTEM_BASE && !diri->is_root()) {
+    reply_request(mdr, -EROFS);
+    return 0;
+  }
+
   // make a null dentry?
   const string &dname = req->get_filepath().last_dentry();
   CDentry *dn;
@@ -1844,9 +1850,12 @@ void Server::handle_client_setattr(MDRequest *mdr)
   CInode *cur = rdlock_path_pin_ref(mdr, true);
   if (!cur) return;
 
-  if (mdr->ref_snapid != CEPH_NOSNAP ||
-      cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
+  if (mdr->ref_snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+  if (cur->ino() < MDS_INO_SYSTEM_BASE && !cur->is_root()) {
+    reply_request(mdr, -EPERM);
     return;
   }
 
