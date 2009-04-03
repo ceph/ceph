@@ -408,10 +408,6 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	     dir, dentry, mode, rdev);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD, USE_AUTH_MDS);
 
-	err = ceph_init_dentry(dentry);
-	if (err < 0)
-		return err;
-
 	if (IS_ERR(req)) {
 		d_drop(dentry);
 		return PTR_ERR(req);
@@ -435,7 +431,6 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 			   struct nameidata *nd)
 {
-	int err;
 	dout(5, "create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
 
@@ -450,10 +445,6 @@ static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
 			return PTR_ERR(dentry);
 		return 0;
 	}
-
-	err = ceph_init_dentry(dentry);
-	if (err < 0)
-		return err;
 
 	/* fall back to mknod */
 	return ceph_mknod(dir, dentry, (mode & ~S_IFMT) | S_IFREG, 0);
@@ -476,10 +467,6 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-
-	err = ceph_init_dentry(dentry);
-	if (err < 0)
-		return err;
 
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
@@ -521,10 +508,6 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		goto out;
 	}
 
-	err = ceph_init_dentry(dentry);
-	if (err < 0)
-		goto out;
-
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
@@ -560,13 +543,6 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-
-	err = ceph_init_dentry(dentry);
-	if (err < 0) {
-		d_drop(dentry);
-		return err;
-	}
-
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry); /* or inode? hrm. */
@@ -641,14 +617,6 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (ceph_snap(old_dir) != CEPH_NOSNAP ||
 	    ceph_snap(new_dir) != CEPH_NOSNAP)
 		return -EROFS;
-
-	err = ceph_init_dentry(old_dentry);
-	if (err < 0)
-		return err;
-	err = ceph_init_dentry(new_dentry);
-	if (err < 0)
-		return err;
-
 	dout(5, "rename dir %p dentry %p to dir %p dentry %p\n",
 	     old_dir, old_dentry, new_dir, new_dentry);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RENAME, USE_AUTH_MDS);
