@@ -639,6 +639,7 @@ no_change:
 		/* set dir completion flag? */
 		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
 		    ceph_ino(inode) != CEPH_INO_ROOT &&
+		    ceph_snap(inode) == CEPH_NOSNAP &&
 		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_RDCACHE)) {
 			dout(10, " marking %p complete (empty)\n", inode);
 			ci->i_ceph_flags |= CEPH_I_COMPLETE;
@@ -962,7 +963,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 					    req->r_request_started);
 		dout(10, " final dn %p\n", dn);
 		i++;
-	} else if (req->r_op == CEPH_MDS_OP_LOOKUPSNAP) {
+	} else if (req->r_op == CEPH_MDS_OP_LOOKUPSNAP ||
+		   req->r_op == CEPH_MDS_OP_MKSNAP) {
 		struct dentry *dn = req->r_dentry;
 
 		/* fill out a snapdir LOOKUPSNAP dentry */
@@ -979,6 +981,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			d_delete(dn);
 			goto done;
 		}
+		dout(10, " linking snapped dir %p to dn %p\n", in, dn);
 		dn = splice_dentry(dn, in, NULL);
 		if (IS_ERR(dn)) {
 			err = PTR_ERR(dn);
@@ -986,6 +989,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		}
 		req->r_dentry = dn;  /* may have spliced */
 		igrab(in);
+		rinfo->head->is_dentry = 1;  /* fool notrace handlers */
 	}
 
 	if (rinfo->head->is_target) {
