@@ -605,6 +605,27 @@ out:
 }
 
 /*
+ * Free preallocated cap messages assigned to this session
+ */
+static void cleanup_cap_releases(struct ceph_mds_session *session)
+{
+	struct ceph_msg *msg;
+
+	spin_lock(&session->s_cap_lock);
+	while (!list_empty(&session->s_cap_releases)) {
+		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
+				 list_head);
+		ceph_msg_remove(msg);
+	}
+	while (!list_empty(&session->s_cap_releases_done)) {
+		msg = list_first_entry(&session->s_cap_releases_done, struct ceph_msg,
+				 list_head);
+		ceph_msg_remove(msg);
+	}
+	spin_unlock(&session->s_cap_lock);
+}
+
+/*
  * caller must hold session s_mutex
  */
 static void remove_session_caps(struct ceph_mds_session *session)
@@ -622,6 +643,8 @@ static void remove_session_caps(struct ceph_mds_session *session)
 		ceph_remove_cap(cap);
 	}
 	BUG_ON(session->s_nr_caps > 0);
+
+	cleanup_cap_releases(session);
 }
 
 /*

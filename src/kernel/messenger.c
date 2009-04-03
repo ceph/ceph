@@ -1396,8 +1396,7 @@ static void process_ack(struct ceph_connection *con)
 			break;
 		dout(5, "got ack for seq %llu type %d at %p\n", seq,
 		     le16_to_cpu(m->hdr.type), m);
-		list_del_init(&m->list_head);
-		ceph_msg_put(m);
+		ceph_msg_remove(m);
 	}
 	spin_unlock(&con->out_queue_lock);
 	prepare_read_tag(con);

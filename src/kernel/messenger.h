@@ -247,13 +247,18 @@ static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
 
 extern void ceph_msg_put(struct ceph_msg *msg);
 
+static inline void ceph_msg_remove(struct ceph_msg *msg)
+{
+	list_del_init(&msg->list_head);
+	ceph_msg_put(msg);
+}
+
 static inline void ceph_msg_put_list(struct list_head *head)
 {
 	while (!list_empty(head)) {
 		struct ceph_msg *msg = list_first_entry(head, struct ceph_msg,
 							list_head);
-		list_del_init(&msg->list_head);
-		ceph_msg_put(msg);
+		ceph_msg_remove(msg);
 	}
 }
 
