@@ -2290,9 +2290,17 @@ int Client::mount()
   
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
-  Inode *root;
-  filepath fpath(1);
-  _getattr(NULL, CEPH_STAT_CAP_INODE_ALL);
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
+  filepath fp(CEPH_INO_ROOT);
+  req->set_filepath(fp);
+  req->head.args.stat.mask = CEPH_STAT_CAP_INODE_ALL;
+  MClientReply *reply = make_request(req, -1, -1);
+  int res = reply->get_result();
+  dout(10) << "root getattr result=" << res << dendl;
+  if (res < 0)
+    return res;
+
+  assert(root);
   _ll_get(root);
 
   // trace?
@@ -3119,31 +3127,18 @@ int Client::_readdir_get_frag(DirResult *dirp)
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
     op = CEPH_MDS_OP_LSSNAP;
 
+  Inode *diri = dirp->inode;
+
   MClientRequest *req = new MClientRequest(op);
-  filepath path(dirp->inode->ino());
+  filepath path(diri->ino());
   req->set_filepath(path); 
   req->head.args.readdir.frag = fg;
   
-  Inode *diri;
   utime_t from;
   MClientReply *reply = make_request(req, -1, -1, &from);
   int res = reply->get_result();
   int mds = reply->get_source().num();
   
-  // did i get directory inode?
-  if ((res == -EAGAIN || res == 0) && diri) {
-    dout(10) << "_readdir_get_frag got diri " << diri << " " << diri->inode.ino << dendl;
-    assert(diri->inode.is_dir());
-  }
-  
-  if (!dirp->inode && diri) {
-    dout(10) << "_readdir_get_frag attaching inode" << dendl;
-    dirp->inode = diri;
-    diri->get();
-  }
-  if (!diri)
-    diri = dirp->inode;
-
   if (res == -EAGAIN) {
     dout(10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
     _readdir_rechoose_frag(dirp);
