@@ -369,14 +369,15 @@ static int osdc_show(struct seq_file *s, void *p)
 
 static int caps_reservation_show(struct seq_file *s, void *p)
 {
-	int total, used, reserved;
+	int total, avail, used, reserved;
 
-	ceph_reservation_status(&total, &used, &reserved);
+	ceph_reservation_status(&total, &avail, &used, &reserved);
 
 	seq_printf(s, "total\t\t%d\n"
+		      "avail\t\t%d\n"
 		      "used\t\t%d\n"
 		      "reserved\t%d\n",
-		      total, used, reserved);
+		   total, avail, used, reserved);
 	return 0;
 }
 
