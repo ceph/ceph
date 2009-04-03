@@ -566,13 +566,18 @@ more:
 		 */
 		if (!deletion) {
 			struct list_head *pi;
+			struct inode *inode;
 			spin_lock(&realm->inodes_with_caps_lock);
 			list_for_each(pi, &realm->inodes_with_caps) {
 				struct ceph_inode_info *ci =
 					list_entry(pi, struct ceph_inode_info,
 						   i_snap_realm_item);
+				inode = igrab(&ci->vfs_inode);
 				spin_unlock(&realm->inodes_with_caps_lock);
-				ceph_queue_cap_snap(ci, realm->cached_context);
+				if (inode) {
+					ceph_queue_cap_snap(ci, realm->cached_context);
+					iput(inode);
+				}
 				spin_lock(&realm->inodes_with_caps_lock);
 			}
 			spin_unlock(&realm->inodes_with_caps_lock);
