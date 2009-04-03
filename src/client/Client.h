@@ -687,11 +687,6 @@ protected:
   Inode *open_snapdir(Inode *diri);
 
 
-  // path traversal for high-level interface
-  Inode *cwd;
-  int path_walk(const filepath& fp, Inode **end, bool followsym=true);
-  
-
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   hash_map<int, Fh*> fd_map;
@@ -808,19 +803,16 @@ protected:
     return newdn;
   }
 
-  // move dentry to top of lru
+  // path traversal for high-level interface
+  Inode *cwd;
+  int path_walk(const filepath& fp, Inode **end, bool followsym=true);
+  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 
   // trim cache.
   void trim_cache();
   void dump_inode(Inode *in, set<Inode*>& did);
   void dump_cache();  // debug
-  
-  // find dentry based on filepath
-  Dentry *lookup(const filepath& path, snapid_t snap=CEPH_NOSNAP);
-
-  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
-
   
   // trace generation
   ofstream traceout;

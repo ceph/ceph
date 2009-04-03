@@ -622,54 +622,6 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 }
 
 
-
-/*
- * bleh, dentry vs inode semantics here are sloppy
- */
-Dentry *Client::lookup(const filepath& path, snapid_t snapid)
-{
-  dout(14) << "lookup " << path << dendl;
-
-  Inode *cur;
-  if (path.get_ino()) {
-    vinodeno_t vino(path.get_ino(), snapid);
-    if (inode_map.count(vino)) 
-      cur = inode_map[vino];
-    else
-      return NULL;
-  } else
-    cur = root;
-  if (!cur) return NULL;
-
-  Dentry *dn = 0;
-  for (unsigned i=0; i<path.depth(); i++) {
-    dout(14) << " seg " << i << " = " << path[i] << dendl;
-    if (cur->inode.is_dir() && cur->dir) {
-      // dir, we can descend
-      Dir *dir = cur->dir;
-      if (dir->dentries.count(path[i])) {
-        dn = dir->dentries[path[i]];
-        dout(14) << " hit dentry " << path[i] << " inode is " << dn->inode << dendl;
-      } else {
-        dout(14) << " dentry " << path[i] << " dne" << dendl;
-        return NULL;
-      }
-      cur = dn->inode;
-      assert(cur);
-    } else {
-      return NULL;  // not a dir
-    }
-  }
-
-  if (!dn) 
-    dn = cur->dn;
-  if (dn) {
-    dout(11) << "lookup '" << path << "' found " << dn->name << " inode " << dn->inode->inode.ino << dendl;
-  }
-
-  return dn;
-}
-
 // -------
 
 int Client::choose_target_mds(MClientRequest *req) 
