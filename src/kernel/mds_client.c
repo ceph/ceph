@@ -635,7 +635,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
 
 	dout(10, "remove_session_caps on %p\n", session);
 	while (session->s_nr_caps > 0) {
-		cap = list_entry(session->s_caps.next, struct ceph_cap,
+		cap = list_first_entry(&session->s_caps, struct ceph_cap,
 				 session_caps);
 		ci = cap->ci;
 		dout(10, "removing cap %p, ci is %p, inode is %p\n",
@@ -784,7 +784,7 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 	spin_lock(&session->s_cap_lock);
 
 	if (!list_empty(&session->s_cap_releases)) {
-		msg = list_entry(session->s_cap_releases.next, struct ceph_msg,
+		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
 				 list_head);
 		head = msg->front.iov_base;
 		extra += CAPS_PER_RELEASE - le32_to_cpu(head->num);
@@ -805,14 +805,13 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 	}
 
 	if (!list_empty(&session->s_cap_releases)) {
-		msg = list_entry(session->s_cap_releases.next, struct ceph_msg,
+		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
 				 list_head);
 		head = msg->front.iov_base;
 		if (head->num) {
 			dout(10, " queueing non-full %p (%d)\n", msg,
 			     le32_to_cpu(head->num));
-			list_del_init(&msg->list_head);
-			list_add_tail(&msg->list_head,
+			list_move_tail(&msg->list_head,
 				      &session->s_cap_releases_done);
 			session->s_num_cap_releases -=
 				CAPS_PER_RELEASE - le32_to_cpu(head->num);
@@ -837,7 +836,7 @@ void send_cap_releases(struct ceph_mds_client *mdsc,
 		spin_lock(&session->s_cap_lock);
 		if (list_empty(&session->s_cap_releases_done))
 			break;
-		msg = list_entry(session->s_cap_releases_done.next,
+		msg = list_first_entry(&session->s_cap_releases_done,
 				 struct ceph_msg, list_head);
 		list_del_init(&msg->list_head);
 		spin_unlock(&session->s_cap_lock);

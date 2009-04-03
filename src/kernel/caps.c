@@ -696,7 +696,7 @@ void ceph_queue_caps_release(struct inode *inode)
 
 		spin_lock(&session->s_cap_lock);
 		BUG_ON(!session->s_num_cap_releases);
-		msg = list_entry(session->s_cap_releases.next, struct ceph_msg,
+		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
 				 list_head);
 
 		dout(10, " adding %p release to mds%d msg %p (%d left)\n",
@@ -716,8 +716,7 @@ void ceph_queue_caps_release(struct inode *inode)
 		msg->front.iov_len += sizeof(*item);
 		if (le32_to_cpu(head->num) == CAPS_PER_RELEASE) {
 			dout(10, " release msg %p full\n", msg);
-			list_del_init(&msg->list_head);
-			list_add_tail(&msg->list_head,
+			list_move_tail(&msg->list_head,
 				      &session->s_cap_releases_done);
 		} else {
 			dout(10, " release msg %p at %d/%d (%d)\n", msg,
@@ -1397,7 +1396,7 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		if (--ci->i_wr_ref == 0) {
 			last++;
 			if (!list_empty(&ci->i_cap_snaps)) {
-				capsnap = list_entry(ci->i_cap_snaps.next,
+				capsnap = list_first_entry(&ci->i_cap_snaps,
 						     struct ceph_cap_snap,
 						     ci_item);
 				if (capsnap->writing) {

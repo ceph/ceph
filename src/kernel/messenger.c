@@ -662,10 +662,9 @@ static void prepare_write_message(struct ceph_connection *con)
 	}
 
 	/* move message to sending/sent list */
-	m = list_entry(con->out_queue.next,
+	m = list_first_entry(&con->out_queue,
 		       struct ceph_msg, list_head);
-	list_del_init(&m->list_head);
-	list_add_tail(&m->list_head, &con->out_sent);
+	list_move_tail(&m->list_head, &con->out_sent);
 	con->out_msg = m;   /* we don't bother taking a reference here. */
 
 	dout(20, "prepare_write_message %p seq %lld type %d len %d+%d %d pgs\n",
@@ -1390,7 +1389,8 @@ static void process_ack(struct ceph_connection *con)
 
 	spin_lock(&con->out_queue_lock);
 	while (!list_empty(&con->out_sent)) {
-		m = list_entry(con->out_sent.next, struct ceph_msg, list_head);
+		m = list_first_entry(&con->out_sent, struct ceph_msg,
+				     list_head);
 		seq = le64_to_cpu(m->hdr.seq);
 		if (seq > ack)
 			break;
@@ -2091,7 +2091,7 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	/* kill off connections */
 	spin_lock(&msgr->con_lock);
 	while (!list_empty(&msgr->con_all)) {
-		con = list_entry(msgr->con_all.next, struct ceph_connection,
+		con = list_first_entry(&msgr->con_all, struct ceph_connection,
 				 list_all);
 		dout(10, "destroy removing connection %p\n", con);
 		set_bit(CLOSED, &con->state);

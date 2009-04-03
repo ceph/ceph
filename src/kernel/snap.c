@@ -194,8 +194,8 @@ static void __cleanup_empty_realms(struct ceph_mds_client *mdsc)
 
 	spin_lock(&mdsc->snap_empty_lock);
 	while (!list_empty(&mdsc->snap_empty)) {
-		realm = list_entry(mdsc->snap_empty.next, struct ceph_snap_realm,
-				   empty_item);
+		realm = list_first_entry(&mdsc->snap_empty,
+				   struct ceph_snap_realm, empty_item);
 		list_del(&realm->empty_item);
 		spin_unlock(&mdsc->snap_empty_lock);
 		__destroy_snap_realm(mdsc, realm);
@@ -645,7 +645,7 @@ static void flush_snaps(struct ceph_mds_client *mdsc)
 	dout(10, "flush_snaps\n");
 	spin_lock(&mdsc->snap_flush_lock);
 	while (!list_empty(&mdsc->snap_flush_list)) {
-		ci = list_entry(mdsc->snap_flush_list.next,
+		ci = list_first_entry(&mdsc->snap_flush_list,
 				struct ceph_inode_info, i_snap_flush_item);
 		inode = &ci->vfs_inode;
 		igrab(inode);
