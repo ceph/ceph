@@ -581,6 +581,8 @@ no_change:
 				     caps_reservation);
 		} else {
 			spin_lock(&inode->i_lock);
+			dout(20, " %p got snap_caps %s\n", inode,
+			     ceph_cap_string(le32_to_cpu(info->cap.caps)));
 			ci->i_snap_caps |= le32_to_cpu(info->cap.caps);
 			if (cap_fmode >= 0)
 				__ceph_get_fmode(ci, cap_fmode);

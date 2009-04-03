@@ -101,7 +101,7 @@ int ceph_open(struct inode *inode, struct file *file)
 	struct ceph_file_info *cf = file->private_data;
 	struct inode *parent_inode = file->f_dentry->d_parent->d_inode;
 	int err;
-	int flags, fmode, new_want;
+	int flags, fmode, wanted;
 
 	if (cf) {
 		dout(5, "open file %p is already opened\n", file);
@@ -116,12 +116,14 @@ int ceph_open(struct inode *inode, struct file *file)
 	dout(5, "open inode %p ino %llx.%llx file %p flags %d (%d)\n", inode,
 	     ceph_vinop(inode), file, flags, file->f_flags);
 	fmode = ceph_flags_to_mode(flags);
-	new_want = ceph_caps_for_mode(fmode);
+	wanted = ceph_caps_for_mode(fmode);
 
-	/* trivially open snapped metadata */
-	if (ceph_snap(inode) != CEPH_NOSNAP) {
-		if (file->f_mode & FMODE_WRITE)
-			return -EROFS;
+	/* snapped files are read-only */
+	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
+		return -EROFS;
+
+	/* trivially open snapdir */
+	if (ceph_snap(inode) == CEPH_SNAPDIR) {
 		spin_lock(&inode->i_lock);
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
@@ -139,22 +141,27 @@ int ceph_open(struct inode *inode, struct file *file)
 		int issued = __ceph_caps_issued(ci, NULL);
 
 		dout(10, "open %p fmode %d want %s issued %s using existing\n",
-		     inode, fmode, ceph_cap_string(new_want),
+		     inode, fmode, ceph_cap_string(wanted),
 		     ceph_cap_string(issued));
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
 		
 		/* adjust wanted? */
-		if ((issued & new_want) != new_want &&
-		    (mds_wanted & new_want) != new_want &&
+		if ((issued & wanted) != wanted &&
+		    (mds_wanted & wanted) != wanted &&
 		    ceph_snap(inode) != CEPH_SNAPDIR)
 			ceph_check_caps(ci, 0, 0, NULL);
 
 		return ceph_init_file(inode, file, fmode);
+	} else if (ceph_snap(inode) != CEPH_NOSNAP &&
+		   (ci->i_snap_caps & wanted) == wanted) {
+		__ceph_get_fmode(ci, fmode);
+		spin_unlock(&inode->i_lock);
+		return ceph_init_file(inode, file, fmode);
 	}
 	spin_unlock(&inode->i_lock);
 
-	dout(10, "open fmode %d wants %s\n", fmode, ceph_cap_string(new_want));
+	dout(10, "open fmode %d wants %s\n", fmode, ceph_cap_string(wanted));
 	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, flags, 0);
