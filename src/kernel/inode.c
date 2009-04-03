@@ -960,6 +960,30 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 					    req->r_request_started);
 		dout(10, " final dn %p\n", dn);
 		i++;
+	} else if (req->r_op == CEPH_MDS_OP_LOOKUPSNAP) {
+		struct dentry *dn = req->r_dentry;
+
+		/* fill out a snapdir LOOKUPSNAP dentry */
+		BUG_ON(!dn);
+		BUG_ON(!req->r_locked_dir);
+		BUG_ON(ceph_snap(req->r_locked_dir) != CEPH_SNAPDIR);
+		ininfo = rinfo->targeti.in;
+		vino.ino = le64_to_cpu(ininfo->ino);
+		vino.snap = le64_to_cpu(ininfo->snapid);
+		in = ceph_get_inode(sb, vino);
+		if (IS_ERR(in)) {
+			derr(30, "get_inode badness\n");
+			err = PTR_ERR(in);
+			d_delete(dn);
+			goto done;
+		}
+		dn = splice_dentry(dn, in, NULL);
+		if (IS_ERR(dn)) {
+			err = PTR_ERR(dn);
+			goto done;
+		}
+		req->r_dentry = dn;  /* may have spliced */
+		igrab(in);
 	}
 
 	if (rinfo->head->is_target) {
