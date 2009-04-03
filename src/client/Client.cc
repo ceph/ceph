@@ -4087,7 +4087,8 @@ int Client::mksnap(const char *relpath, const char *name)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  return _mksnap(in, name);
+  Inode *snapdir = open_snapdir(in);
+  return _mkdir(snapdir, name, 0);
 }
 int Client::rmsnap(const char *relpath, const char *name)
 {
@@ -4097,42 +4098,8 @@ int Client::rmsnap(const char *relpath, const char *name)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  return _rmsnap(in, name);
-}
-
-
-int Client::_mksnap(Inode *dir, const char *name, int uid, int gid)
-{
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
-  filepath path;
-  dir->make_path(path);
-  req->set_filepath(path);
-  req->set_string2(name);
-
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
-
-  trim_cache();
-  dout(3) << "mksnap(" << path << ", '" << name << "'\") = " << res << dendl;
-  return res;
-}
-
-int Client::_rmsnap(Inode *dir, const char *name, int uid, int gid)
-{
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
-  filepath path;
-  dir->make_path(path);
-  req->set_filepath(path);
-  req->set_string2(name);
-
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
-
-  trim_cache();
-  dout(3) << "rmsnap(" << path << ", '" << name << "'\") = " << res << dendl;
-  return res;
+  Inode *snapdir = open_snapdir(in);
+  return _rmdir(snapdir, name);
 }
 
 

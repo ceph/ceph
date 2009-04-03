@@ -947,9 +947,6 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _statfs(struct statvfs *stbuf);
 
-  int _mksnap(Inode *dir, const char *name, int uid=-1, int gid=-1);
-  int _rmsnap(Inode *dir, const char *name, int uid=-1, int gid=-1);
-
 
 public:
   int mount();
