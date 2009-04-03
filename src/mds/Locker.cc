@@ -1048,7 +1048,11 @@ bool Locker::issue_caps(CInode *in)
       // include caps that clients generally like, while we're at it.
       int likes = in->get_caps_liked();      
       int before = pending;
-      long seq = cap->issue((wanted|likes) & allowed);
+      long seq;
+      if (pending & ~allowed)
+	seq = cap->issue((wanted|likes) & allowed & pending);  // if revoking, don't issue anything new.
+      else
+	seq = cap->issue((wanted|likes) & allowed);
       int after = cap->pending();
 
       if (seq > 0 && 
