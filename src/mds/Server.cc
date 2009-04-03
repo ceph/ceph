@@ -5310,7 +5310,7 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   mdr->ref_snapdiri = diri;
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->snapbl = diri->snaprealm->get_snap_trace();
-  reply_request(mdr, reply);
+  reply_request(mdr, reply, diri);
 }
 
 
