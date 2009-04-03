@@ -923,11 +923,11 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
 				   Session *session,
-				   bool& is_new,
 				   SnapRealm *realm)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
-  
+  bool is_new;
+
   // my needs
   assert(session->inst.name.is_client());
   int my_client = session->inst.name.num();
@@ -964,6 +964,9 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   // re-issue whatever we can
   //cap->issue(cap->pending());
+
+  if (is_new)
+    cap->dec_suppress();
 
   return cap;
 }

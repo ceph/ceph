@@ -2411,11 +2411,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
   // issue a cap on the directory
-  bool is_new = false;
   int cmode = CEPH_FILE_MODE_RDWR;
-  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, is_new, realm);
-  if (is_new)
-    cap->dec_suppress();
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm);
   cap->set_wanted(0);
 
   // put locks in excl mode
@@ -4867,11 +4864,7 @@ void Server::handle_client_open(MDRequest *mdr)
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->ref_snapid == CEPH_NOSNAP) {
       // register new cap
-      bool is_new = false;
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, is_new);
-      if (is_new)
-	cap->dec_suppress();  // stop suppressing messages on new cap
-      
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
       dout(12) << "open issued caps " << ccap_string(cap->pending())
 	       << " for " << req->get_orig_source()
 	       << " on " << *cur << dendl;
@@ -4941,11 +4934,8 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   mdcache->journal_dirty_inode(mdr, &le->metablob, in);
   
   // do the open
-  bool is_new = false;
   SnapRealm *realm = in->find_snaprealm();
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
-  if (is_new)
-    cap->dec_suppress();
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
 
   in->authlock.set_state(LOCK_EXCL);
   mdr->cap = cap;
@@ -5051,11 +5041,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, in);
 
   // do the open
-  bool is_new = false;
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, is_new, realm);
-  if (is_new)
-    cap->dec_suppress();
-
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
   in->authlock.set_state(LOCK_EXCL);
 
   // stick cap, snapbl info in mdr
