@@ -707,6 +707,7 @@ void Rank::EntityMessenger::dispatch_entry()
 	  } else {
 	    dout(1) << m->get_dest() 
 		    << " <== " << m->get_source_inst()
+		    << " " << m->get_seq()
 		    << " ==== " << *m
 		    << " ==== " << m->get_payload().length() << "+" << m->get_data().length()
 		    << " (" << m->get_footer().front_crc << " " << m->get_footer().data_crc << ")"
