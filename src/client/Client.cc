@@ -366,13 +366,27 @@ void Client::update_inode_file_bits(Inode *in,
   }
 }
 
-void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
+Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
 {
+  Inode *in;
+  if (inode_map.count(st->vino))
+    in = inode_map[st->vino];
+  else {
+    in = new Inode(st->vino, &st->layout);
+    inode_map[st->vino] = in;
+    if (in->ino() == 1) {
+      root = in;
+      root->dir_auth = 0;
+      cwd = root;
+      cwd->get();
+    }
+  }
+
   //utime_t ttl = from;
   //ttl += (float)lease->duration_ms * 1000.0;
 
   //dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
-  dout(12) << "update_inode caps " << ccap_string(st->cap.caps) << dendl;
+  dout(12) << "add_update_inode " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
 
   int issued = in->caps_issued();
 
@@ -424,34 +438,30 @@ void Client::update_inode(Inode *in, InodeStat *st, utime_t from, int mds)
   // symlink?
   if (in->inode.is_symlink())
     in->symlink = st->symlink;
-}
 
+  return in;
+}
 
 
 /*
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
-Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-				   InodeStat *ist,
-				   utime_t from, int mds)
+void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+				 Inode *in, utime_t from, int mds)
 {
-  int dmask = dlease->mask;
   utime_t dttl = from;
   dttl += (float)dlease->duration_ms * 1000.0;
-
+  
   Dentry *dn = NULL;
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
-
-  dout(12) << "insert_dentry_inode " << dname << " vino " << ist->vino
-           << "  size " << ist->size
-           << "  mtime " << ist->mtime
-	   << " dmask " << dmask
+  
+  dout(12) << "insert_dentry_inode " << dname << " vino " << in->vino()
 	   << " in dir " << dir->parent_inode->inode.ino
            << dendl;
   
   if (dn) {
-    if (dn->inode->vino() == ist->vino) {
+    if (dn->inode->vino() == in->vino()) {
       touch_dn(dn);
       dout(12) << " had dentry " << dname
                << " with correct vino " << dn->inode->vino()
@@ -467,30 +477,18 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
   
   if (!dn) {
     // have inode linked elsewhere?  -> unlink and relink!
-    if (inode_map.count(ist->vino)) {
-      Inode *in = inode_map[ist->vino];
-      assert(in);
-
-      if (in->dn) {
-        dout(12) << " had vino " << in->vino()
-                 << " not linked or linked at the right position, relinking"
-                 << dendl;
-        dn = relink_inode(dir, dname, in);
-      } else {
-        // link
-        dout(12) << " had vino " << in->vino()
-                 << " unlinked, linking" << dendl;
-        dn = link(dir, dname, in);
-      }
+    if (in->dn) {
+      dout(12) << " had vino " << in->vino()
+	       << " not linked or linked at the right position, relinking"
+	       << dendl;
+      dn = relink_inode(dir, dname, in);
+    } else {
+      // link
+      dout(12) << " had vino " << in->vino()
+	       << " unlinked, linking" << dendl;
+      dn = link(dir, dname, in);
     }
   }
-
-  if (!dn) {
-    Inode *in = new Inode(ist->vino, &ist->layout);
-    inode_map[ist->vino] = in;
-    dn = link(dir, dname, in);
-    dout(12) << " new dentry+node with vino " << ist->vino << dendl;
-  } 
 
   assert(dn && dn->inode);
 
@@ -504,14 +502,10 @@ Inode* Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dle
       dn->lease_seq = dlease->seq;
     }
   }
-
-  update_inode(dn->inode, ist, from, mds);
-
-  return dn->inode;
 }
 
-/** update_inode_dist
- *
+
+/*
  * update MDS location cache for a single inode
  */
 void Client::update_dir_dist(Inode *in, DirStat *dst)
@@ -561,85 +555,43 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from, int mds)
   if (reply->snapbl.length())
     update_snap_trace(reply->snapbl);
 
-  __u16 numi, numd;
-  __s16 snapdirpos;
-  ::decode(numi, p);
-  ::decode(numd, p);
-  ::decode(snapdirpos, p);
-  dout(10) << "insert_trace got " << numi << " inodes, " << numd << " dentries, snapdir at " << snapdirpos << dendl;
-
-  // decode
-  InodeStat ist[numi];
-  DirStat dst[numd];
-  string dname[numd];
-  LeaseStat dlease[numd];
-
-  if (numi == 0)
-    return NULL;
-
-  int ileft = numi;
-  int dleft = numd;
-  if (numi == numd)
-    goto dentry;
-
- inode:
-  if (!ileft) goto done;
-  ileft--;
-  ist[ileft].decode(p);
-  dout(20) << " got vino " << ist[ileft].vino << dendl;
-
- dentry:
-  if (!dleft) goto done;
-  dleft--;
-  ::decode(dname[dleft], p);
-  dout(20) << " got dname " << dname[dleft] << dendl;
-  ::decode(dlease[dleft], p);
-  dst[dleft].decode(p);
-  goto inode;
-
- done:
-  
-  // insert into cache --
-  // first inode
-  Inode *curi = 0;
-  vinodeno_t vino = ist[0].vino;
-  if (!root && vino.ino == 1) {
-    curi = root = new Inode(vino, &ist[0].layout);
-    dout(10) << "insert_trace new root is " << root << dendl;
-    inode_map[vino] = root;
-    root->dir_auth = 0;
+  Inode *in = 0;
+  if (reply->head.is_target) {
+    InodeStat ist;
+    ist.decode(p);
+    in = add_update_inode(&ist, from, mds);
   }
-  if (!curi) {
+
+  if (reply->head.is_dentry) {
+    InodeStat dirst;
+    DirStat dst;
+    string dname;
+    LeaseStat dlease;
+
+    dirst.decode(p);
+    dst.decode(p);
+    ::decode(dname, p);
+    ::decode(dlease, p);
+
+    vinodeno_t vino = dirst.vino;
     assert(inode_map.count(vino));
-    curi = inode_map[vino];
-  }
-  update_inode(curi, &ist[0], from, mds);
-  dout(10) << " (base) curi " << *curi << dendl;
-
-  for (unsigned i=0; i<numd; i++) {
-    Dir *dir = curi->open_dir();
-
-    // in?
-    if (i+1 == numi) {
-      dout(10) << "insert_trace " << dname[i] << " mask " << dlease[i].mask
-	       << " -- NULL dentry caching not supported yet, IMPLEMENT ME" << dendl;
-      //insert_null_dentry(dir, *pdn, *pdnmask, ttl);  // fixme
-      break;
-    }
+    Inode *diri = inode_map[vino];
     
-    curi = insert_dentry_inode(dir, dname[i], &dlease[i], &ist[i+1], from, mds);
-    dout(10) << " curi " << *curi << dendl;
+    update_dir_dist(diri, &dst);  // dir stat info is attached to inode...
 
-    if ((int)i == numi-snapdirpos-1) {
-      curi = open_snapdir(curi);
-      dout(10) << " snapdir " << *curi << dendl;
+    if (in) {
+      Dir *dir = diri->open_dir();
+      insert_dentry_inode(dir, dname, &dlease, in, from, mds);
+    } else {
+      Dentry *dn = NULL;
+      if (diri->dir && diri->dir->dentries.count(dname)) {
+	dn = diri->dir->dentries[dname];
+	unlink(dn, false);
+      }
     }
-
-    update_dir_dist(curi, &dst[i]);  // dir stat info is attached to inode...
   }
-  assert(p.end());
 
-  return curi;
+  return in;
 }
 
 
@@ -2407,6 +2359,10 @@ int Client::unmount()
     timer.cancel_event(tick_event);
   tick_event = 0;
 
+  if (cwd)
+    put_inode(cwd);
+  cwd = 0;
+
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
   assert(fd_map.empty());
 
@@ -2973,7 +2929,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  r = _getattr(in, -1);
+  r = _getattr(in, CEPH_STAT_CAP_INODE_ALL);
   if (r < 0)
     return r;
   fill_stat(in, stbuf, dirstat);
@@ -3222,7 +3178,10 @@ int Client::_readdir_get_frag(DirResult *dirp)
       // dirstat
       DirStat dst(p);
       __u32 numdn;
+      __u8 complete, end;
       ::decode(numdn, p);
+      ::decode(end, p);
+      ::decode(complete, p);
 
       string dname;
       LeaseStat dlease;
@@ -3231,8 +3190,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
 	::decode(dlease, p);
 	InodeStat ist(p);
 
-	// cache
-	Inode *in = this->insert_dentry_inode(dir, dname, &dlease, &ist, from, mds);
+	Inode *in = add_update_inode(&ist, from, mds);
+	insert_dentry_inode(dir, dname, &dlease, in, from, mds);
 
 	// caller
 	dout(15) << "_readdir_get_frag got " << dname << " to " << in->inode.ino << dendl;

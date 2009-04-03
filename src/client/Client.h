@@ -879,10 +879,9 @@ protected:
 			      __u64 truncate_seq, __u64 truncate_size, __u64 size,
 			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
 			      int issued);
-  void update_inode(Inode *in, InodeStat *st, utime_t ttl, int mds);
-  Inode* insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			     InodeStat *ist,
-			     utime_t from, int mds);
+  Inode *add_update_inode(InodeStat *st, utime_t ttl, int mds);
+  void insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
+			   Inode *in, utime_t from, int mds);
 
 
   // ----------------------
