@@ -386,6 +386,7 @@ tid_t Objecter::read_submit(ReadOp *rd)
 			   rd->oid, rd->layout, osdmap->get_epoch(), 
 			   flags);
     m->ops = rd->ops;
+    m->set_data(rd->bl);
     if (inc_lock > 0) {
       rd->inc_lock = inc_lock;
       m->set_inc_lock(inc_lock);

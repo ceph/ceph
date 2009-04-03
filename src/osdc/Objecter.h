@@ -37,6 +37,101 @@ class Message;
 
 
 
+// -----------------------------------------
+
+struct ObjectOperation {
+  vector<ceph_osd_op> ops;
+  bufferlist data;
+
+  void add_data(int op, __u64 off, __u64 len) {
+    int s = ops.size();
+    ops.resize(s+1);
+    memset(&ops[s], 0, sizeof(ops[s]));
+    ops[s].op = op;
+    ops[s].offset = off;
+    ops[s].length = len;
+  }
+  void add_xattr(int op, int namelen, int valuelen) {
+    int s = ops.size();
+    ops.resize(s+1);
+    memset(&ops[s], 0, sizeof(ops[s]));
+    ops[s].op = op;
+    ops[s].name_len = namelen;
+    ops[s].value_len = valuelen;
+  }
+};
+
+struct ObjectRead : public ObjectOperation {
+  void read(__u64 off, __u64 len) {
+    add_data(CEPH_OSD_OP_READ, off, len);
+  }
+  void getxattr(const char *name) {
+    int l = strlen(name);
+    add_xattr(CEPH_OSD_OP_GETXATTR, l, 0);
+    data.append(name, l);
+  }
+  void getxattrs() {
+    add_xattr(CEPH_OSD_OP_GETXATTRS, 0, 0);
+  }
+};
+
+struct ObjectMutation : public ObjectOperation {
+  utime_t mtime;
+  
+  // object data
+  void write(__u64 off, __u64 len, bufferlist& bl) {
+    add_data(CEPH_OSD_OP_WRITE, off, len);
+    data.claim_append(bl);
+  }
+  void write_full(bufferlist& bl) {
+    add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length());
+    data.claim_append(bl);
+  }
+  void zero(__u64 off, __u64 len) {
+    add_data(CEPH_OSD_OP_ZERO, off, len);
+  }
+  void remove() {
+    add_data(CEPH_OSD_OP_DELETE, 0, 0);
+  }
+
+  // object attrs
+  void setxattr(const char *name, const bufferlist& bl) {
+    int l = strlen(name);
+    add_xattr(CEPH_OSD_OP_SETXATTR, l, bl.length());
+    data.append(name, l);
+    data.append(bl);
+  }
+  void setxattr(const char *name, const string& s) {
+    int l = strlen(name);
+    add_xattr(CEPH_OSD_OP_SETXATTR, l, s.length());
+    data.append(name, l);
+    data.append(s);
+  }
+  void rmxattr(const char *name) {
+    int l = strlen(name);
+    add_xattr(CEPH_OSD_OP_RMXATTR, l, 0);
+    data.append(name, l);
+  }
+  void setxattrs(map<string, bufferlist>& attrs) {
+    bufferlist bl;
+    ::encode(attrs, bl);
+    add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl.length());
+    data.claim_append(bl);
+  }
+  void resetxattrs(const char *prefix, map<string, bufferlist>& attrs) {
+    int l = strlen(prefix);
+    bufferlist bl;
+    ::encode(attrs, bl);
+    add_xattr(CEPH_OSD_OP_RESETXATTRS, l, bl.length());
+    data.append(prefix, l);
+    data.claim_append(bl);
+  }
+};
+
+
+// ----------------
+
+
 class Objecter {
  public:  
   Messenger *messenger;
@@ -74,6 +169,7 @@ class Objecter {
     object_t oid;
     ceph_object_layout layout;
     vector<ceph_osd_op> ops;
+    bufferlist bl;
     bufferlist *pbl;
     __u64 *psize;
     int flags;
@@ -213,6 +309,13 @@ class Objecter {
     rd->psize = psize;
     return read_submit(rd);
   }
+  tid_t read(object_t oid, ceph_object_layout ol, 
+	     ObjectRead& read, bufferlist *pbl, int flags, Context *onfinish) {
+    ReadOp *rd = new ReadOp(oid, ol, read.ops, flags, onfinish);
+    rd->bl = read.data;
+    rd->pbl = pbl;
+    return read_submit(rd);
+  }
 
   tid_t modify(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
 	       const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
@@ -243,6 +346,7 @@ class Objecter {
     return read(oid, ol, ops, pbl, 0, flags, onfinish);
   }
 
+     
   tid_t mutate(object_t oid, ceph_object_layout ol, 
 	       ObjectMutation& mutation,
 	       const SnapContext& snapc, int flags,
