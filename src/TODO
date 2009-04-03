@@ -50,6 +50,11 @@ kclient caps
 /- revisit unmount
 /- make request paths relative to a non-snapshotted inode.
 /- fix nfs exporting
+- fix mds_wanted tracking
+  - racing lookup + open           - do not reduce wanted on mds
+  - wanted expansion on ceph_open  - do no lose it on mds, even if racing with lookup + open
+  - racing wanted release + getattr --- we need to keep the client's notion of mds_wanted accurate!  ****
+
 
 - ENOSPC
 - flock

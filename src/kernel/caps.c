@@ -391,9 +391,10 @@ int ceph_add_cap(struct inode *inode,
 {
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_cap *new_cap = NULL;
 	struct ceph_cap *cap;
 	int mds = session->s_mds;
-	struct ceph_cap *new_cap = NULL;
+	int actual_wanted;
 
 	dout(10, "add_cap %p mds%d cap %llx %s seq %d\n", inode,
 	     session->s_mds, cap_id, ceph_cap_string(issued), seq);
@@ -469,6 +470,17 @@ retry:
 	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0) {
 		dout(10, " marking %p NOT complete\n", inode);
 		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+	}
+
+	/*
+	 * If we are issued caps we don't want, queue a check so we'll
+	 * update the mds wanted value.
+	 */
+	actual_wanted = __ceph_caps_wanted(ci);
+	if (wanted & ~actual_wanted) {
+		dout(10, " mds wanted %s, actual wanted %s, queueing\n",
+		     ceph_cap_string(wanted), ceph_cap_string(actual_wanted));
+		__cap_delay_requeue(mdsc, ci);
 	}
 
 	if (flags & CEPH_CAP_FLAG_AUTH)
