@@ -313,6 +313,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
+	int op;
 	int err;
 
 	dout(5, "lookup %p dentry %p '%.*s'\n",
@@ -355,7 +356,9 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 		spin_unlock(&dir->i_lock);
 	}
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUP, USE_ANY_MDS);
+	op = ceph_snap(dir) == CEPH_SNAPDIR ?
+		CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
+	req = ceph_mdsc_create_request(mdsc, op, USE_ANY_MDS);
 	if (IS_ERR(req))
 		return ERR_PTR(PTR_ERR(req));
 	req->r_dentry = dget(dentry);
