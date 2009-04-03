@@ -2174,8 +2174,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   // build dir contents
-  bufferlist dirbl, dnbl;
-  dir->encode_dirstat(dirbl, mds->get_nodeid());
+  bufferlist dnbl;
 
   CDir::map_t::iterator it = dir->begin(); 
 
@@ -2253,6 +2252,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
   __u8 complete = (end && !offset);
 
   // final blob
+  bufferlist dirbl;
+  dir->encode_dirstat(dirbl, mds->get_nodeid());
   ::encode(numfiles, dirbl);
   ::encode(end, dirbl);
   ::encode(complete, dirbl);
@@ -5124,10 +5125,11 @@ void Server::handle_client_lssnap(MDRequest *mdr)
   }
 
   bufferlist dirbl;
-
   encode_empty_dirstat(dirbl);
-
   ::encode(num, dirbl);
+  __u8 t = 1;
+  ::encode(t, dirbl);  // end
+  ::encode(t, dirbl);  // complete
   dirbl.claim_append(dnbl);
   
   MClientReply *reply = new MClientReply(req);
