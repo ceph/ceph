@@ -22,6 +22,8 @@
 #include "MDCache.h"
 #include "Locker.h"
 
+#include "osdc/Objecter.h"
+
 #include "snap.h"
 
 #include "LogSegment.h"
@@ -588,6 +590,87 @@ void CInode::mark_clean()
   }
 }    
 
+
+// --------------
+// per-inode storage
+// (currently for root inode only)
+
+struct C_Inode_Stored : public Context {
+  CInode *in;
+  version_t version;
+  Context *fin;
+  C_Inode_Stored(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  void finish(int r) {
+    in->_stored(version, fin);
+  }
+};
+
+void CInode::store(Context *fin)
+{
+  dout(10) << "store " << get_version() << dendl;
+  assert(is_root());
+
+  bufferlist bl;
+  encode_store(bl);
+
+  // write it.
+  SnapContext snapc;
+  ObjectMutation m;
+  m.mtime = g_clock.now();
+  m.setxattr("inode", bl);
+
+  object_t oid(ino(), frag_t());
+  mdcache->mds->objecter->mutate( oid,
+				  mdcache->mds->objecter->osdmap->file_to_object_layout( oid,
+										     g_default_mds_dir_layout ),
+				m, snapc, 0,
+				NULL, new C_Inode_Stored(this, get_version(), fin) );
+}
+
+void CInode::_stored(version_t v, Context *fin)
+{
+  dout(10) << "_stored " << v << " " << *this << dendl;
+  if (v == get_projected_version())
+    mark_clean();
+
+  fin->finish(0);
+  delete fin;
+}
+
+struct C_Inode_Fetched : public Context {
+  CInode *in;
+  bufferlist bl;
+  Context *fin;
+  C_Inode_Fetched(CInode *i, Context *f) : in(i), fin(f) {}
+  void finish(int r) {
+    in->_fetched(bl, fin);
+  }
+};
+
+void CInode::fetch(Context *fin)
+{
+  dout(10) << "fetch" << dendl;
+
+  C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
+  object_t oid(ino(), frag_t());
+
+  ObjectRead rd;
+  rd.getxattr("inode");
+
+  mdcache->mds->objecter->read( oid,
+	      mdcache->mds->objecter->osdmap->file_to_object_layout( oid,
+						   g_default_mds_dir_layout ),
+			      rd, &c->bl, 0, c );
+}
+
+void CInode::_fetched(bufferlist& bl, Context *fin)
+{
+  dout(10) << "_fetched" << dendl;
+  bufferlist::iterator p = bl.begin();
+  decode_store(p);
+  fin->finish(0);
+  delete fin;
+}
 
 
 // ------------------

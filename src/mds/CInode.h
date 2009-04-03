@@ -393,6 +393,33 @@ private:
   void mark_dirty(version_t projected_dirv, LogSegment *ls);
   void mark_clean();
 
+  void store(Context *fin);
+  void _stored(version_t cv, Context *fin);
+  void fetch(Context *fin);
+  void _fetched(bufferlist& bl, Context *fin);  
+
+  void encode_store(bufferlist& bl) {
+    ::encode(inode, bl);
+    if (is_symlink())
+      ::encode(symlink, bl);
+    ::encode(dirfragtree, bl);
+    ::encode(xattrs, bl);
+    bufferlist snapbl;
+    encode_snap_blob(snapbl);
+    ::encode(snapbl, bl);
+    ::encode(old_inodes, bl);
+  }
+  void decode_store(bufferlist::iterator& bl) {
+    ::decode(inode, bl);
+    if (is_symlink())
+      ::decode(symlink, bl);
+    ::decode(dirfragtree, bl);
+    ::decode(xattrs, bl);
+    bufferlist snapbl;
+    ::decode(snapbl, bl);
+    decode_snap_blob(snapbl);
+    ::decode(old_inodes, bl);
+  }
 
   void encode_replica(int rep, bufferlist& bl) {
     assert(is_auth());
