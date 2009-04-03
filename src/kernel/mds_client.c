@@ -637,10 +637,9 @@ static int iterate_session_caps(struct ceph_mds_session *session,
 	struct inode *inode;
 	struct list_head *n;
 
-	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
+	dout(10, "iterate_session_caps %p mds%d\n", session, session->s_mds);
 	spin_lock(&session->s_cap_lock);
 	list_for_each_safe(p, n, &session->s_caps) {
-		dout(10, "remove_session_caps on %p\n", session);
 		cap = list_entry(p, struct ceph_cap, session_caps);
 		inode = igrab(&cap->ci->vfs_inode);
 		spin_unlock(&session->s_cap_lock);
@@ -664,6 +663,9 @@ static int iterate_session_caps(struct ceph_mds_session *session,
 static int remove_session_caps_cb(struct inode *inode, struct ceph_cap *cap,
 				   void *arg)
 {
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	dout(10, "removing cap %p, ci is %p, inode is %p\n",
+	     cap, ci, &ci->vfs_inode);
 	ceph_remove_cap(cap);
 	return 0;
 }
@@ -673,6 +675,7 @@ static int remove_session_caps_cb(struct inode *inode, struct ceph_cap *cap,
  */
 static void remove_session_caps(struct ceph_mds_session *session)
 {
+	dout(10, "remove_session_caps on %p\n", session);
 	iterate_session_caps(session, remove_session_caps_cb, NULL);
 
 	BUG_ON(session->s_nr_caps > 0);
@@ -695,6 +698,7 @@ static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
  */
 static void wake_up_session_caps(struct ceph_mds_session *session)
 {
+	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
 	iterate_session_caps(session, wake_up_session_cb, NULL);
 }
 
