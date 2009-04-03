@@ -301,6 +301,8 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_snap_realm = NULL;
 	INIT_LIST_HEAD(&ci->i_snap_realm_item);
 	INIT_LIST_HEAD(&ci->i_snap_flush_item);
+#warning remove me
+	ci->i_snap_realm_counter = 0;
 
 	INIT_WORK(&ci->i_wb_work, ceph_inode_writeback);
 	INIT_WORK(&ci->i_pg_inv_work, ceph_inode_invalidate_pages);

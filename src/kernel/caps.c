@@ -448,9 +448,11 @@ retry:
 							       realmino);
 		if (realm) {
 			ceph_get_snap_realm(mdsc, realm);
+			spin_lock(&realm->inodes_with_caps_lock);
 			ci->i_snap_realm = realm;
 			list_add(&ci->i_snap_realm_item,
 				 &realm->inodes_with_caps);
+			spin_unlock(&realm->inodes_with_caps_lock);
 		} else {
 			derr(0, "couldn't find snap realm realmino=%llu\n",
 				realmino);
@@ -611,6 +613,7 @@ static void __ceph_remove_cap(struct ceph_cap *cap,
 	spin_lock(&session->s_cap_lock);
 	list_del_init(&cap->session_caps);
 	session->s_nr_caps--;
+	spin_unlock(&session->s_cap_lock);
 
 	/* remove from inode list */
 	rb_erase(&cap->ci_node, &ci->i_caps);
@@ -621,13 +624,16 @@ static void __ceph_remove_cap(struct ceph_cap *cap,
 	put_cap(cap, ctx);
 
 	if (!__ceph_is_any_caps(ci)) {
+		struct ceph_snap_realm *realm = ci->i_snap_realm;
+		spin_lock(&realm->inodes_with_caps_lock);
 		list_del_init(&ci->i_snap_realm_item);
-		ceph_put_snap_realm(mdsc, ci->i_snap_realm);
+		ci->i_snap_realm_counter++;
 		ci->i_snap_realm = NULL;
+		spin_unlock(&realm->inodes_with_caps_lock);
+		ceph_put_snap_realm(mdsc, realm);
 	}
 	if (!__ceph_is_any_real_caps(ci))
 		__cap_delay_cancel(mdsc, ci);
-	spin_unlock(&session->s_cap_lock);
 }
 
 /*

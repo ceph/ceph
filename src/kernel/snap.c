@@ -104,6 +104,7 @@ static struct ceph_snap_realm *ceph_create_snap_realm(struct ceph_mds_client *md
 	INIT_LIST_HEAD(&realm->child_item);
 	INIT_LIST_HEAD(&realm->empty_item);
 	INIT_LIST_HEAD(&realm->inodes_with_caps);
+	spin_lock_init(&realm->inodes_with_caps_lock);
 	dout(20, "create_snap_realm %llx %p\n", realm->ino, realm);
 	return realm;
 }
@@ -565,13 +566,16 @@ more:
 		 */
 		if (!deletion) {
 			struct list_head *pi;
-
+			spin_lock(&realm->inodes_with_caps_lock);
 			list_for_each(pi, &realm->inodes_with_caps) {
 				struct ceph_inode_info *ci =
 					list_entry(pi, struct ceph_inode_info,
 						   i_snap_realm_item);
+				spin_unlock(&realm->inodes_with_caps_lock);
 				ceph_queue_cap_snap(ci, realm->cached_context);
+				spin_lock(&realm->inodes_with_caps_lock);
 			}
+			spin_unlock(&realm->inodes_with_caps_lock);
 			dout(20, "update_snap_trace cap_snaps queued\n");
 		}
 
@@ -851,9 +855,11 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			if (!ci->i_snap_realm)
 				goto split_skip_inode;
 			ceph_put_snap_realm(mdsc, ci->i_snap_realm);
+			spin_lock(&realm->inodes_with_caps_lock);
 			list_add(&ci->i_snap_realm_item,
 				 &realm->inodes_with_caps);
 			ci->i_snap_realm = realm;
+			spin_unlock(&realm->inodes_with_caps_lock);
 			ceph_get_snap_realm(mdsc, realm);
 		split_skip_inode:
 			spin_unlock(&inode->i_lock);

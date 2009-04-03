@@ -296,6 +296,7 @@ struct ceph_inode_info {
 	spinlock_t i_unsafe_lock;
 
 	struct ceph_snap_realm *i_snap_realm; /* snap realm (if caps) */
+	int i_snap_realm_counter; /* snap realm (if caps) */
 	struct list_head i_snap_realm_item;
 	struct list_head i_snap_flush_item;
 
@@ -643,6 +644,7 @@ struct ceph_snap_realm {
 	struct ceph_snap_context *cached_context;
 
 	struct list_head inodes_with_caps;
+	spinlock_t inodes_with_caps_lock;
 };
 
 
