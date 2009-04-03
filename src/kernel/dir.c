@@ -723,12 +723,14 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	dout(10, "d_revalidate %p '%.*s' inode %p\n", dentry,
 	     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 
-	/* always trust cached snapped dentries */
+	/* always trust cached snapped dentries, snapdir dentry */
 	if (ceph_snap(dir) != CEPH_NOSNAP) {
 		dout(10, "d_revalidate %p '%.*s' inode %p is SNAPPED\n", dentry,
 		     dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 		goto out_touch;
 	}
+	if (dentry->d_inode && ceph_snap(dentry->d_inode) == CEPH_SNAPDIR)
+		goto out_touch;
 
 	if (dentry_lease_is_valid(dentry))
 		goto out_touch;

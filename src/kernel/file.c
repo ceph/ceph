@@ -103,9 +103,6 @@ int ceph_open(struct inode *inode, struct file *file)
 	int err;
 	int flags, fmode, new_want;
 
-	if (ceph_snap(inode) != CEPH_NOSNAP && (file->f_mode & FMODE_WRITE))
-		return -EROFS;
-
 	if (cf) {
 		dout(5, "open file %p is already opened\n", file);
 		return 0;
@@ -120,6 +117,16 @@ int ceph_open(struct inode *inode, struct file *file)
 	     ceph_vinop(inode), file, flags, file->f_flags);
 	fmode = ceph_flags_to_mode(flags);
 	new_want = ceph_caps_for_mode(fmode);
+
+	/* trivially open snapped metadata */
+	if (ceph_snap(inode) != CEPH_NOSNAP) {
+		if (file->f_mode & FMODE_WRITE)
+			return -EROFS;
+		spin_lock(&inode->i_lock);
+		__ceph_get_fmode(ci, fmode);
+		spin_unlock(&inode->i_lock);
+		return ceph_init_file(inode, file, fmode);
+	}
 
 	/*
 	 * We re-use existing caps only if already have an open file
