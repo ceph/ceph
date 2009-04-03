@@ -582,9 +582,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 	   << " (" << strerror(-reply->get_result())
 	   << ") " << *req << dendl;
 
-  snapid_t snapid = CEPH_NOSNAP;
   if (tracei || tracedn)
-    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, mdr->ref_snapdiri, mdr->ref_snapname,
+    set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->ref_snapid, mdr->ref_snapdiri,
 		   mdr->client_request->is_replay(),
 		   mdr->client_request->get_num_dentries_wanted());
 
@@ -633,9 +632,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
 
   // get tracei/tracedn from mdr?
-  snapid_t snapid = CEPH_NOSNAP;
+  snapid_t snapid = mdr->ref_snapid;
   CInode *snapdiri = mdr->ref_snapdiri;
-  string snapname = mdr->ref_snapname;
   if (!tracei)
     tracei = mdr->tracei;
   if (!tracedn)
@@ -663,7 +661,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, snapname, is_replay, num_dentries_wanted);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, is_replay, num_dentries_wanted);
     messenger->send_message(reply, client_inst);
   }
   
@@ -709,7 +707,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
-			    snapid_t snapid, CInode *snapdiri, const string& snapname,
+			    snapid_t snapid, CInode *snapdiri,
 			    bool is_replay, int num_dentries_wanted)
 {
   // inode, dentry, dir, ..., inode
@@ -753,7 +751,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     else
       encode_null_lease(bl);
     dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
-  } else if (snapdiri && snapdiri->ino() == in->ino() && snapname.length()) {
+    /*} else if (snapdiri && snapdiri->ino() == in->ino() && snapname.length()) {
     // fake a snapname dentry
     dout(20) << "set_trace_dist added fake snap dir+dn   " << snapname << " under " << *snapdiri << dendl;
     reply->head.is_dentry = 1;
@@ -761,6 +759,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     encode_empty_dirstat(bl);
     ::encode(snapname, bl);
     encode_infinite_lease(bl);
+    */
   } else
     reply->head.is_dentry = 0;
 
@@ -1438,9 +1437,8 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
 
   // traverse to parent dir
-  snapid_t snapid;
   int r = mdcache->path_traverse(mdr, mdr->client_request,
-				 refpath, trace, &snapid, &mdr->ref_snapdiri,
+				 refpath, trace,
 				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
@@ -1491,7 +1489,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req,
 				 refpath, 
-				 trace, &mdr->ref_snapid, &mdr->ref_snapdiri,
+				 trace,
 				 req->follow_trailing_symlink(), MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
@@ -2504,7 +2502,7 @@ void Server::handle_client_link(MDRequest *mdr)
   dout(7) << "handle_client_link discovering target " << targetpath << dendl;
   vector<CDentry*> targettrace;
   int r = mdcache->path_traverse(mdr, req,
-				 targetpath, targettrace, NULL, NULL,
+				 targetpath, targettrace,
 				 false, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
@@ -3062,7 +3060,7 @@ void Server::handle_client_unlink(MDRequest *mdr)
   // traverse to path
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, req, 
-				 req->get_filepath(), trace, NULL, NULL,
+				 req->get_filepath(), trace,
 				 false, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
   if (r == 0 && trace.empty()) r = -EINVAL;   // can't unlink root
@@ -3442,7 +3440,7 @@ void Server::handle_client_rename(MDRequest *mdr)
   // traverse to src
   vector<CDentry*> srctrace;
   int r = mdcache->path_traverse(mdr, req,
-				 srcpath, srctrace, NULL, NULL,
+				 srcpath, srctrace,
 				 false, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
   if (r < 0) {
@@ -4253,7 +4251,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   int r = mdcache->path_traverse(mdr, mdr->slave_request, 
-				 destpath, trace, NULL, NULL,
+				 destpath, trace,
 				 false, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
@@ -4267,7 +4265,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   r = mdcache->path_traverse(mdr, mdr->slave_request,
-			     srcpath, trace, NULL, NULL,
+			     srcpath, trace,
 			     false, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);

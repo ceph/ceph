@@ -5455,7 +5455,6 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   filepath& origpath,               // what
                            vector<CDentry*>& trace,          // result
-			   snapid_t *psnapid, CInode **psnapdiri,
                            bool follow_trailing_symlink,     // how
                            int onfail)
 {
@@ -5468,8 +5467,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   set< pair<CInode*, string> > symlinks_resolved; 
 
   snapid_t snapid = CEPH_NOSNAP;
-  if (psnapdiri)
-    *psnapdiri = 0;
+  if (mdr)
+    mdr->ref_snapid = snapid;
 
   int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
@@ -5495,22 +5494,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   unsigned depth = 0;
 
-  if (snapid == CEPH_SNAPDIR) {
-    if (!psnapdiri)
-      return -EINVAL;
-    *psnapdiri = cur;
-    if (mdr) {
-      mdr->ref_snapdiri = cur;
-      mdr->ref_snapname = path[depth];
-    }
-    SnapRealm *realm = cur->find_snaprealm();
-    snapid = realm->resolve_snapname(path[depth], cur->ino());
-    dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
-    if (!snapid)
-      return -ENOENT;
-    depth++;
-  }
-
   while (depth < path.depth()) {
     dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
 	     << "' snapid " << snapid << dendl;
@@ -5523,19 +5506,24 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     // snapdir?
     if (path[depth].length() == 0) {
       dout(10) << "traverse: snapdir" << dendl;
-      snapid = CEPH_SNAPDIR;
-      depth++;
-      if (!psnapdiri)
+      if (!mdr)
 	return -EINVAL;
-      *psnapdiri = cur;
+      snapid = CEPH_SNAPDIR;
+      mdr->ref_snapdiri = cur;
+      mdr->ref_snapid = snapid;
+      depth++;
       continue;
     }
     if (snapid == CEPH_SNAPDIR) {
+      if (!mdr)
+	return -EINVAL;
       SnapRealm *realm = cur->find_snaprealm();
       snapid = realm->resolve_snapname(path[depth], cur->ino());
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
       if (!snapid)
 	return -ENOENT;
+      mdr->ref_snapid = snapid;
+      mdr->ref_snapdiri = cur;
       depth++;
       continue;
     }
@@ -5793,9 +5781,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   }
   
   // success.
-  if (psnapid)
-    *psnapid = snapid;
   if (mds->logger) mds->logger->inc(l_mds_thit);
+  dout(10) << "path_traverse finish on snapid " << snapid << dendl;
+  if (mdr) 
+    assert(mdr->ref_snapid == snapid);
   return 0;
 }
 
@@ -7774,7 +7763,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       dout(5) << "trying discover on dir_update for " << path << dendl;
 
       int r = path_traverse(0, m,
-			    path, trace, NULL, NULL,
+			    path, trace,
                             true, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
