@@ -542,8 +542,10 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  *
  * insert a trace from a MDS reply into the cache.
  */
-Inode* Client::insert_trace(MClientReply *reply, utime_t from, int mds)
+Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 {
+  MClientRequest *req = request->request;
+  MClientReply *reply = request->reply;
 
   bufferlist::iterator p = reply->get_trace_bl().begin();
   if (p.end()) {
@@ -570,7 +572,6 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from, int mds)
 
   Inode *in = 0;
   if (reply->head.is_target) {
-    InodeStat ist;
     ist.decode(p);
     in = add_update_inode(&ist, from, mds);
   }
@@ -581,6 +582,29 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from, int mds)
     Inode *diri = inode_map[vino];
     
     update_dir_dist(diri, &dst);  // dir stat info is attached to inode...
+
+    if (in) {
+      Dir *dir = diri->open_dir();
+      insert_dentry_inode(dir, dname, &dlease, in, from, mds);
+    } else {
+      Dentry *dn = NULL;
+      if (diri->dir && diri->dir->dentries.count(dname)) {
+	dn = diri->dir->dentries[dname];
+	unlink(dn, false);
+      }
+    }
+  } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
+	     reply->head.op == CEPH_MDS_OP_MKSNAP) {
+    // fake it for snap lookup
+    vinodeno_t vino = ist.vino;
+    vino.snapid = CEPH_SNAPDIR;
+    assert(inode_map.count(vino));
+    Inode *diri = inode_map[vino];
+    
+    string dname = req->get_filepath().last_dentry();
+    
+    LeaseStat dlease;
+    dlease.duration_ms = 0;
 
     if (in) {
       Dir *dir = diri->open_dir();
@@ -853,7 +877,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   utime_t from = request.sent_stamp;
   if (pfrom) 
     *pfrom = from;
-  Inode *target = insert_trace(reply, from, mds);
+  Inode *target = insert_trace(&request, from, mds);
   if (ptarget)
     *ptarget = target;
 
@@ -1169,7 +1193,7 @@ void Client::send_reconnect(int mds)
 		 << " wants " << ccap_string(in->caps_wanted())
 		 << dendl;
 	filepath path;
-	in->make_path(path);
+	in->make_long_path(path);
 	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
@@ -2546,8 +2570,11 @@ void Client::renew_caps()
 
 int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LOOKUP);
-  filepath path(name, dir->ino());
+  int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
+  MClientRequest *req = new MClientRequest(op);
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
   req->set_filepath(path);
   req->head.args.stat.mask = 0;
   dout(10) << "_lookup on " << path << dendl;
@@ -2561,30 +2588,42 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
 
 int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 {
+  int r = 0;
+
+  if (!dir->inode.is_dir()) {
+    r = -ENOTDIR;
+    goto done;
+  }
+
   if (dname == "..") {
     if (!dir->dn)
-      return -ENOENT;
-    *target = dir->dn->dir->parent_inode;
-    return 0;
+      r = -ENOENT;
+    else
+      *target = dir->dn->dir->parent_inode;
+    goto done;
   }
     
-  if (!dir->inode.is_dir())
-    return -ENOTDIR;
-
   if (dname == g_conf.client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
     *target = open_snapdir(dir);
-    return 0;
+    goto done;
   }
 
   if (dir->dir &&
       dir->dir->dentries.count(dname)) {
     Dentry *dn = dir->dir->dentries[dname];
     *target = dn->inode;
-    return 0;
+    goto done;
   }
 
-  return _lookup(dir, dname.c_str(), target);
+  r = _do_lookup(dir, dname.c_str(), target);
+
+ done:
+  if (r < 0)
+    dout(10) << "_lookup " << *dir << " " << dname << " = " << r << dendl;
+  else
+    dout(10) << "_lookup " << *dir << " " << dname << " = " << **target << dendl;
+  return r;
 }
 
 int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
@@ -2800,7 +2839,7 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
 int Client::_getattr(Inode *in, int mask, int uid, int gid)
 {
-  int issued = in ? in->caps_issued():0;
+  int issued = in->caps_issued();
 
   dout(10) << "_getattr mask " << ccap_string(mask) << " issued " << ccap_string(issued) << dendl;
   if ((issued & mask) == mask) {
@@ -2808,8 +2847,9 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   }
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
-  filepath fp(in ? in->ino() : inodeno_t(CEPH_INO_ROOT));
-  req->set_filepath(fp);
+  filepath path;
+  in->make_path(path);
+  req->set_filepath(path);
   req->head.args.stat.mask = mask;
   
   MClientReply *reply = make_request(req, uid, gid);
@@ -2858,8 +2898,11 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
     return 0;
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETATTR);
-  filepath fp(in->ino());
-  req->set_filepath(fp);
+
+  filepath path;
+  in->make_path(path);
+  req->set_filepath(path);
+
   if (mask & CEPH_SETATTR_MODE)
     req->head.args.setattr.mode = attr->st_mode;
   if (mask & CEPH_SETATTR_UID)
@@ -3133,7 +3176,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
   Inode *diri = dirp->inode;
 
   MClientRequest *req = new MClientRequest(op);
-  filepath path(diri->ino());
+  filepath path;
+  diri->make_path(path);
   req->set_filepath(path); 
   req->head.args.readdir.frag = fg;
   
@@ -3344,7 +3388,8 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 {
   // go
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN);
-  filepath path(in->ino());
+  filepath path;
+  in->make_path(path);
   req->set_filepath(path); 
   req->head.args.open.flags = flags;
   req->head.args.open.mode = mode;
@@ -4107,7 +4152,8 @@ int Client::rmsnap(const char *relpath, const char *name)
 int Client::_mksnap(Inode *dir, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
-  filepath path(dir->ino());
+  filepath path;
+  dir->make_path(path);
   req->set_filepath(path);
   req->set_string2(name);
 
@@ -4123,7 +4169,8 @@ int Client::_mksnap(Inode *dir, const char *name, int uid, int gid)
 int Client::_rmsnap(Inode *dir, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
-  filepath path(dir->ino());
+  filepath path;
+  dir->make_path(path);
   req->set_filepath(path);
   req->set_string2(name);
 
@@ -4400,8 +4447,9 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
 		      int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETXATTR);
-  filepath fp(in->ino());
-  req->set_filepath(fp);
+  filepath path;
+  in->make_path(path);
+  req->set_filepath(path);
   req->set_string2(name);
   req->head.args.setxattr.flags = flags;
 
@@ -4438,8 +4486,9 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
 int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMXATTR);
-  filepath fp(in->ino());
-  req->set_filepath(fp);
+  filepath path;
+  in->make_path(path);
+  req->set_filepath(path);
  
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();
@@ -4494,7 +4543,9 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   dout(3) << "_mknod(" << dir->ino() << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKNOD);
-  filepath path(name, dir->ino());
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
   req->set_filepath(path); 
   req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
@@ -4537,8 +4588,10 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
 
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKDIR);
-  filepath path(name, dir->ino());
+  MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
   req->set_filepath(path);
   req->head.args.mkdir.mode = mode;
  
@@ -4564,31 +4617,12 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 
   Inode *diri = _ll_get_inode(parent);
 
-  int r;
-  if (diri->snapid == CEPH_SNAPDIR) {
-    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKSNAP);
-    filepath path(name, diri->ino());
-    req->set_filepath(path);
-    req->set_string2(name);
-
-    Inode *in;
-    MClientReply *reply = make_request(req, uid, gid);
-    r = reply->get_result();
-    update_snap_trace(reply->snapbl);
-    delete reply;
-    dout(10) << "mksnap result is " << r << " vino " << in->vino() << dendl;
-    if (r == 0) {
-      fill_stat(in, attr);
-      _ll_get(in);
-    }
-  } else {
-    r = _mkdir(diri, name, mode, uid, gid);
-    if (r == 0) {
-      string dname(name);
-      Inode *in = diri->dir->dentries[dname]->inode;
-      fill_stat(in, attr);
-      _ll_get(in);
-    }
+  int r = _mkdir(diri, name, mode, uid, gid);
+  if (r == 0) {
+    string dname(name);
+    Inode *in = diri->dir->dentries[dname]->inode;
+    fill_stat(in, attr);
+    _ll_get(in);
   }
   tout << attr->st_ino << std::endl;
   dout(3) << "ll_mkdir " << parent << " " << name
@@ -4599,7 +4633,9 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SYMLINK);
-  filepath path(name, dir->ino());
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
   req->set_filepath(path);
   req->set_string2(target);
  
@@ -4638,7 +4674,9 @@ int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, s
 int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UNLINK);
-  filepath path(name, dir->ino());
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
   req->set_filepath(path);
  
   MClientReply *reply = make_request(req, uid, gid);
@@ -4670,8 +4708,10 @@ int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMDIR);
-  filepath path(name, dir->ino());
+  MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
   req->set_filepath(path);
  
   MClientReply *reply = make_request(req, uid, gid);
@@ -4700,26 +4740,18 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
   tout << name << std::endl;
 
   Inode *diri = _ll_get_inode(vino);
-
-  if (diri->snapid == CEPH_SNAPDIR) {
-    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMSNAP);
-    filepath path;
-    diri->make_path(path);
-    req->set_filepath(path);
-    req->set_string2(name);
-    MClientReply *reply = make_request(req, uid, gid);
-    int r = reply->get_result();
-    delete reply;
-    return r;
-  }
   return _rmdir(diri, name, uid, gid);
 }
 
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
-  filepath from(fromname, fromdir->ino());
-  filepath to(toname, todir->ino());
+  filepath from;
+  fromdir->make_path(from);
+  from.push_dentry(fromname);
+  filepath to;
+  todir->make_path(to);
+  to.push_dentry(toname);
   req->set_filepath(to);
   req->set_filepath2(from);
  
@@ -4805,15 +4837,6 @@ int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
   
   Inode *diri = inode_map[vino];
   assert(diri);
-
-  filepath path;
-  if (vino.snapid == CEPH_SNAPDIR) {
-    Inode *livediri = inode_map[vinodeno_t(vino.ino, CEPH_NOSNAP)];
-    assert(livediri);
-    livediri->make_path(path);
-  } else
-    diri->make_path(path);
-  dout(10) << " ino path is " << path << dendl;
 
   int r = 0;
   if (vino.snapid == CEPH_SNAPDIR) {

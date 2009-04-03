@@ -240,7 +240,7 @@ class Inode {
   bool hack_balance_reads;
   // </hack>
 
-  void make_path(filepath& p) {
+  void make_long_path(filepath& p) {
     if (dn) {
       assert(dn->dir && dn->dir->parent_inode);
       dn->dir->parent_inode->make_path(p);
@@ -251,6 +251,22 @@ class Inode {
       p.push_dentry(empty);
     } else
       p = filepath(inode.ino);
+  }
+
+  void make_path(filepath& p) {
+    if (snapid == CEPH_NOSNAP) {
+      p = filepath(inode.ino);
+    } else if (snapdir_parent) {
+      snapdir_parent->make_path(p);
+      string empty;
+      p.push_dentry(empty);
+    } else if (dn) {
+      assert(dn->dir && dn->dir->parent_inode);
+      dn->dir->parent_inode->make_path(p);
+      p.push_dentry(dn->name);
+    } else {
+      p = filepath(inode.ino);
+    }
   }
 
   void get() { 
@@ -874,7 +890,7 @@ protected:
   // metadata cache
   void update_dir_dist(Inode *in, DirStat *st);
 
-  Inode* insert_trace(MClientReply *reply, utime_t ttl, int mds);
+  Inode* insert_trace(MetaRequest *request, utime_t ttl, int mds);
   void update_inode_file_bits(Inode *in,
 			      __u64 truncate_seq, __u64 truncate_size, __u64 size,
 			      __u64 time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
