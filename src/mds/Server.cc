@@ -4854,15 +4854,28 @@ void Server::handle_client_open(MDRequest *mdr)
     }
   } 
 
-  // rdlock filelock if snapped.
-  //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata.
+  // sync filelock if snapped.
+  //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata,
+  //  and that data itself is flushed so that we can read the snapped data off disk.
   if (mdr->ref_snapid != CEPH_NOSNAP && !cur->is_dir()) {
+    // first rdlock.
     set<SimpleLock*> rdlocks = mdr->rdlocks;
     set<SimpleLock*> wrlocks = mdr->wrlocks;
     set<SimpleLock*> xlocks = mdr->xlocks;
     rdlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
+
+    // sure sure we ended up in the SYNC state
+    if (cur->filelock.is_stable() && cur->filelock.get_state() != LOCK_SYNC) {
+      assert(cur->is_auth());
+      mds->locker->simple_sync(&cur->filelock);
+    }
+    if (!cur->filelock.is_stable()) {
+      dout(10) << " waiting for filelock to stabilize on " << *cur << dendl;
+      cur->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
   }
 
 

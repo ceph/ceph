@@ -108,7 +108,9 @@ protected:
   void simple_eval(SimpleLock *lock);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
 
+public:
   bool simple_sync(SimpleLock *lock);
+protected:
   void simple_lock(SimpleLock *lock);
   void simple_xlock(SimpleLock *lock);
 
