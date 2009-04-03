@@ -437,8 +437,10 @@ retry:
 
 		/* add to session cap list */
 		cap->session = session;
+		spin_lock(&session->s_cap_lock);
 		list_add(&cap->session_caps, &session->s_caps);
 		session->s_nr_caps++;
+		spin_unlock(&session->s_cap_lock);
 	}
 
 	if (!ci->i_snap_realm) {
@@ -606,6 +608,7 @@ static void __ceph_remove_cap(struct ceph_cap *cap,
 	dout(20, "__ceph_remove_cap %p from %p\n", cap, &ci->vfs_inode);
 
 	/* remove from session list */
+	spin_lock(&session->s_cap_lock);
 	list_del_init(&cap->session_caps);
 	session->s_nr_caps--;
 
@@ -624,6 +627,7 @@ static void __ceph_remove_cap(struct ceph_cap *cap,
 	}
 	if (!__ceph_is_any_real_caps(ci))
 		__cap_delay_cancel(mdsc, ci);
+	spin_unlock(&session->s_cap_lock);
 }
 
 /*
@@ -737,9 +741,9 @@ void ceph_queue_caps_release(struct inode *inode)
 			     (int)msg->front.iov_len);
 		}
 		spin_unlock(&session->s_cap_lock);
-
 		p = rb_next(p);
 		__ceph_remove_cap(cap, NULL);
+
 	}
 	spin_unlock(&inode->i_lock);
 }

@@ -628,25 +628,66 @@ static void cleanup_cap_releases(struct ceph_mds_session *session)
 /*
  * caller must hold session s_mutex
  */
+static int iterate_session_caps(struct ceph_mds_session *session,
+				 int (*cb)(struct inode *, struct ceph_cap *,
+					    void *), void *arg)
+{
+	struct list_head *p;
+	struct ceph_cap *cap;
+	struct inode *inode;
+	struct list_head *n;
+
+	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
+	spin_lock(&session->s_cap_lock);
+	list_for_each_safe(p, n, &session->s_caps) {
+		dout(10, "remove_session_caps on %p\n", session);
+		cap = list_entry(p, struct ceph_cap, session_caps);
+		inode = igrab(&cap->ci->vfs_inode);
+		spin_unlock(&session->s_cap_lock);
+
+		if (inode) {
+			int ret;
+
+			ret = cb(inode, cap, arg);
+			iput(inode);
+			if (ret < 0)
+				return ret;
+		}
+
+		spin_lock(&session->s_cap_lock);
+	}
+	spin_unlock(&session->s_cap_lock);
+
+	return 0;
+}
+
+static int remove_session_caps_cb(struct inode *inode, struct ceph_cap *cap,
+				   void *arg)
+{
+	ceph_remove_cap(cap);
+	return 0;
+}
+
+/*
+ * caller must hold session s_mutex
+ */
 static void remove_session_caps(struct ceph_mds_session *session)
 {
-	struct ceph_cap *cap;
-	struct ceph_inode_info *ci;
+	iterate_session_caps(session, remove_session_caps_cb, NULL);
 
-	dout(10, "remove_session_caps on %p\n", session);
-	while (session->s_nr_caps > 0) {
-		cap = list_first_entry(&session->s_caps, struct ceph_cap,
-				 session_caps);
-		ci = cap->ci;
-		dout(10, "removing cap %p, ci is %p, inode is %p\n",
-		     cap, ci, &ci->vfs_inode);
-		ceph_remove_cap(cap);
-	}
 	BUG_ON(session->s_nr_caps > 0);
 
 	cleanup_cap_releases(session);
 }
 
+static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
+			       void *arg)
+{
+	spin_lock(&inode->i_lock);
+	wake_up(&cap->ci->i_cap_wq);
+	spin_unlock(&inode->i_lock);
+	return 0;
+}
 /*
  * wake up any threads waiting on this session's caps
  *
@@ -654,14 +695,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
  */
 static void wake_up_session_caps(struct ceph_mds_session *session)
 {
-	struct list_head *p;
-	struct ceph_cap *cap;
-
-	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
-	list_for_each(p, &session->s_caps) {
-		cap = list_entry(p, struct ceph_cap, session_caps);
-		wake_up(&cap->ci->i_cap_wq);
-	}
+	iterate_session_caps(session, wake_up_session_cb, NULL);
 }
 
 /*
@@ -1696,6 +1730,80 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 	mutex_unlock(&mdsc->mutex);
 }
 
+struct encode_caps_data {
+	void **pp;
+	void *end;
+	int *num_caps;
+};
+
+static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
+				    void *arg)
+{
+	struct ceph_mds_cap_reconnect *rec;
+	struct ceph_inode_info *ci;
+	struct encode_caps_data *data = (struct encode_caps_data *)arg;
+	void *p = *(data->pp);
+	void *end = data->end;
+	char *path;
+	int pathlen, err;
+	u64 pathbase;
+	struct dentry *dentry;
+
+	ci = cap->ci;
+
+	/* skip+drop expireable caps.  this is racy, but harmless. */
+	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
+			dout(10, " skipping %p ino %llx.%llx cap %p %s\n",
+			     inode, ceph_vinop(inode), cap,
+			     ceph_cap_string(cap->issued));
+			return 0;
+	}
+
+	dout(10, " adding %p ino %llx.%llx cap %p %s\n",
+		     inode, ceph_vinop(inode), cap,
+		     ceph_cap_string(cap->issued));
+	ceph_decode_need(&p, end, sizeof(u64), needmore);
+	ceph_encode_64(&p, ceph_ino(inode));
+
+	dentry = d_find_alias(inode);
+	if (dentry) {
+		path = ceph_mdsc_build_path(dentry, &pathlen, &pathbase, -1);
+		if (IS_ERR(path)) {
+			err = PTR_ERR(path);
+			BUG_ON(err);
+		}
+	} else {
+		path = NULL;
+		pathlen = 0;
+	}
+	ceph_decode_need(&p, end, pathlen+4, needmore);
+	ceph_encode_string(&p, end, path, pathlen);
+
+	ceph_decode_need(&p, end, sizeof(*rec), needmore);
+	rec = p;
+	p += sizeof(*rec);
+	BUG_ON(p > end);
+	spin_lock(&inode->i_lock);
+	cap->seq = 0;  /* reset cap seq */
+	rec->pathbase = cpu_to_le64(pathbase);
+	rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
+	rec->issued = cpu_to_le32(cap->issued);
+	rec->size = cpu_to_le64(inode->i_size);
+	ceph_encode_timespec(&rec->mtime, &inode->i_mtime);
+	ceph_encode_timespec(&rec->atime, &inode->i_atime);
+	rec->snaprealm = cpu_to_le64(ci->i_snap_realm->ino);
+	spin_unlock(&inode->i_lock);
+
+	kfree(path);
+	dput(dentry);
+	(*data->num_caps)++;
+	*(data->pp) = p;
+	return 0;
+needmore:
+	return -ENOSPC;
+}
+
+
 /*
  * If an MDS fails and recovers, it needs to reconnect with clients in order
  * to reestablish shared state.  This includes all caps issued through this
@@ -1713,17 +1821,12 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	struct ceph_msg *reply;
 	int newlen, len = 4 + 1;
 	void *p, *end;
-	struct list_head *cp;
-	struct ceph_cap *cap;
-	char *path;
-	int pathlen, err;
-	u64 pathbase;
-	struct dentry *dentry;
-	struct ceph_inode_info *ci;
+	int err;
 	int num_caps, num_realms = 0;
 	int got;
 	u64 next_snap_ino = 0;
 	__le32 *pnum_caps, *pnum_realms;
+	struct encode_caps_data iter_args;
 
 	dout(1, "reconnect to recovering mds%d\n", mds);
 
@@ -1777,61 +1880,15 @@ retry:
 	pnum_caps = p;
 	ceph_encode_32(&p, session->s_nr_caps);
 	num_caps = 0;
-	list_for_each(cp, &session->s_caps) {
-		struct inode *inode;
-		struct ceph_mds_cap_reconnect *rec;
 
-		cap = list_entry(cp, struct ceph_cap, session_caps);
-		ci = cap->ci;
-		inode = &ci->vfs_inode;
-
-		/* skip+drop expireable caps.  this is racy, but harmless. */
-		if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
-			dout(10, " skipping %p ino %llx.%llx cap %p %s\n",
-			     inode, ceph_vinop(inode), cap,
-			     ceph_cap_string(cap->issued));
-			continue;
-		}
-
-		dout(10, " adding %p ino %llx.%llx cap %p %s\n",
-		     inode, ceph_vinop(inode), cap,
-		     ceph_cap_string(cap->issued));
-		ceph_decode_need(&p, end, sizeof(u64), needmore);
-		ceph_encode_64(&p, ceph_ino(inode));
-
-		dentry = d_find_alias(inode);
-		if (dentry) {
-			path = ceph_mdsc_build_path(dentry, &pathlen, &pathbase, -1);
-			if (IS_ERR(path)) {
-				err = PTR_ERR(path);
-				BUG_ON(err);
-			}
-		} else {
-			path = NULL;
-			pathlen = 0;
-		}
-		ceph_decode_need(&p, end, pathlen+4, needmore);
-		ceph_encode_string(&p, end, path, pathlen);
-
-		ceph_decode_need(&p, end, sizeof(*rec), needmore);
-		rec = p;
-		p += sizeof(*rec);
-		BUG_ON(p > end);
-		spin_lock(&inode->i_lock);
-		cap->seq = 0;  /* reset cap seq */
-		rec->pathbase = cpu_to_le64(pathbase);
-		rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
-		rec->issued = cpu_to_le32(cap->issued);
-		rec->size = cpu_to_le64(inode->i_size);
-		ceph_encode_timespec(&rec->mtime, &inode->i_mtime);
-		ceph_encode_timespec(&rec->atime, &inode->i_atime);
-		rec->snaprealm = cpu_to_le64(ci->i_snap_realm->ino);
-		spin_unlock(&inode->i_lock);
-
-		kfree(path);
-		dput(dentry);
-		num_caps++;
-	}
+	iter_args.pp = &p;
+	iter_args.end = end;
+	iter_args.num_caps = &num_caps;
+	err = iterate_session_caps(session, encode_caps_cb, &iter_args);
+	if (err == -ENOSPC)
+		goto needmore;
+	if (err < 0)
+		goto out;
 	*pnum_caps = cpu_to_le32(num_caps);
 
 	/*

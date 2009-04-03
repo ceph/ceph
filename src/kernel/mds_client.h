@@ -115,7 +115,7 @@ struct ceph_mds_session {
 	unsigned long     s_ttl;      /* time until mds kills us */
 	u64               s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;    /* serialize session messages */
-	spinlock_t        s_cap_lock; /* protects s_cap_gen, s_cap_ttl */
+	spinlock_t        s_cap_lock; /* protects s_caps, s_cap_gen, s_cap_ttl */
 	u32               s_cap_gen;  /* inc each time we get mds stale msg */
 	unsigned long     s_cap_ttl;  /* when session caps expire */
 	unsigned long     s_renew_requested; /* last time we sent a renew req */
