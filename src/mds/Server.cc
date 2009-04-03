@@ -4907,8 +4907,10 @@ void Server::handle_client_open(MDRequest *mdr)
 			     mdr->client_request->get_orig_source().num());
 
   CDentry *dn = 0;
-  if (mdr->trace.size())
+  if (req->get_num_dentries_wanted()) {
+    assert(mdr->trace.size());
     dn = mdr->trace.back();
+  }
   reply_request(mdr, 0, cur, dn);
 }
 
