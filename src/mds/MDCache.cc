@@ -5499,6 +5499,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     if (!psnapdiri)
       return -EINVAL;
     *psnapdiri = cur;
+    if (mdr) {
+      mdr->ref_snapdiri = cur;
+      mdr->ref_snapname = path[depth];
+    }
     SnapRealm *realm = cur->find_snaprealm();
     snapid = realm->resolve_snapname(path[depth], cur->ino());
     dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;

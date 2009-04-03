@@ -255,6 +255,7 @@ struct MDRequest : public Mutation {
   vector<CDentry*> trace;  // original path traversal.
   CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
   CInode *ref_snapdiri;
+  string ref_snapname;
   snapid_t ref_snapid;
 
   CInode *tracei;

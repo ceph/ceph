@@ -713,6 +713,7 @@ enum {
 	CEPH_MDS_OP_OPEN       = 0x00302,
 	CEPH_MDS_OP_READDIR    = 0x00305,
 
+	CEPH_MDS_OP_LOOKUPSNAP = 0x00400,
 	CEPH_MDS_OP_MKSNAP     = 0x01400,
 	CEPH_MDS_OP_RMSNAP     = 0x01401,
 	CEPH_MDS_OP_LSSNAP     = 0x00402,
@@ -736,6 +737,7 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_RMDIR: return "rmdir";
 	case CEPH_MDS_OP_SYMLINK: return "symlink";
 	case CEPH_MDS_OP_OPEN: return "open";
+	case CEPH_MDS_OP_LOOKUPSNAP: return "lookupsnap";
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";

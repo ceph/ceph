@@ -583,9 +583,8 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 	   << ") " << *req << dendl;
 
   snapid_t snapid = CEPH_NOSNAP;
-  CInode *snapdiri = 0;
   if (tracei || tracedn)
-    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, snapdiri, mdr,
+    set_trace_dist(mdr->session, reply, tracei, tracedn, snapid, mdr->ref_snapdiri, mdr->ref_snapname,
 		   mdr->client_request->is_replay(),
 		   mdr->client_request->get_num_dentries_wanted());
 
@@ -635,7 +634,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   // get tracei/tracedn from mdr?
   snapid_t snapid = CEPH_NOSNAP;
-  CInode *snapdiri = 0;
+  CInode *snapdiri = mdr->ref_snapdiri;
+  string snapname = mdr->ref_snapname;
   if (!tracei)
     tracei = mdr->tracei;
   if (!tracedn)
@@ -663,7 +663,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, mdr, is_replay, num_dentries_wanted);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, snapname, is_replay, num_dentries_wanted);
     messenger->send_message(reply, client_inst);
   }
   
@@ -709,8 +709,8 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
-			    snapid_t snapid, CInode *snapdiri,
-			    MDRequest *mdr, bool is_replay, int num_dentries_wanted)
+			    snapid_t snapid, CInode *snapdiri, const string& snapname,
+			    bool is_replay, int num_dentries_wanted)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -720,7 +720,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
 
-  assert((bool)dn == (bool)num_dentries_wanted);
+  //assert((bool)dn == (bool)num_dentries_wanted);  // not true for snapshot lookups
 
   // realm
   SnapRealm *realm = 0;
@@ -753,6 +753,14 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     else
       encode_null_lease(bl);
     dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
+  } else if (snapdiri && snapdiri->ino() == in->ino() && snapname.length()) {
+    // fake a snapname dentry
+    dout(20) << "set_trace_dist added fake snap dir+dn   " << snapname << " under " << *snapdiri << dendl;
+    reply->head.is_dentry = 1;
+    snapdiri->encode_inodestat(bl, session, NULL, CEPH_SNAPDIR, is_replay);
+    encode_empty_dirstat(bl);
+    ::encode(snapname, bl);
+    encode_infinite_lease(bl);
   } else
     reply->head.is_dentry = 0;
 
@@ -858,6 +866,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // inodes ops.
   case CEPH_MDS_OP_LOOKUP:
+  case CEPH_MDS_OP_LOOKUPSNAP:
   case CEPH_MDS_OP_GETATTR:
     handle_client_stat(mdr);
     break;
