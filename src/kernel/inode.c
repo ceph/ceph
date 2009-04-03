@@ -727,12 +727,13 @@ static void update_dentry_lease(struct dentry *dentry,
 	    time_before(ttl, dentry->d_time))
 		goto out_unlock;  /* we already have a newer lease. */
 
-	if (di->lease_session && di->lease_session != session) {
+	if (di->lease_session && di->lease_session != session)
 		goto out_unlock;
-	} else {
-		ceph_dentry_lru_touch(dentry);
-	}
-	di->lease_session = ceph_get_mds_session(session);
+
+	ceph_dentry_lru_touch(dentry);
+
+	if (!di->lease_session)
+		di->lease_session = ceph_get_mds_session(session);
 	di->lease_gen = session->s_cap_gen;
 	di->lease_seq = le32_to_cpu(lease->seq);
 	di->lease_renew_after = half_ttl;
