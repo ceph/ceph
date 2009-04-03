@@ -876,12 +876,6 @@ public:
   void _create_system_file(CDir *dir, const char *name, CInode *in, Context *fin);
   void _create_system_file_finish(Mutation *mut, CDentry *dn, Context *fin);
 
-  /*
-  void handle_join(MJoin *join);
-  void _join(MJoin *join, CDentry *straydn);
-  void handle_join_ack(MJoinAck *ack);
-  */
-
   void open_foreign_stray(int who, Context *c);
   CDentry *get_or_create_stray_dentry(CInode *in);
 
