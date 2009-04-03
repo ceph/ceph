@@ -91,9 +91,6 @@ public:
       return true;
     return false;    
   }
-  bool follow_trailing_symlink() {
-    return head.op & CEPH_MDS_OP_FOLLOW_LINK;
-  }
 
   bool is_replay() {
     return head.retry_attempt == CEPH_MDS_REQUEST_REPLAY;

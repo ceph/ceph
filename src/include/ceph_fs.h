@@ -692,7 +692,6 @@ struct ceph_mds_session_head {
  &  & 0x100000 -> use weird ino/path trace
  */
 #define CEPH_MDS_OP_WRITE        0x001000
-#define CEPH_MDS_OP_FOLLOW_LINK  0x010000
 enum {
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
 	CEPH_MDS_OP_GETATTR    = 0x00101,

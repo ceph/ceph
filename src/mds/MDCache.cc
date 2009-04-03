@@ -5455,16 +5455,12 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 			   filepath& origpath,               // what
                            vector<CDentry*>& trace,          // result
-                           bool follow_trailing_symlink,     // how
                            int onfail)
 {
   assert(mdr || req);
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
   bool noperm = (onfail == MDS_TRAVERSE_DISCOVER ||
 		 onfail == MDS_TRAVERSE_DISCOVERXLOCK);
-
-  // keep a list of symlinks we touch to avoid loops
-  set< pair<CInode*, string> > symlinks_resolved; 
 
   snapid_t snapid = CEPH_NOSNAP;
   if (mdr)
@@ -5635,44 +5631,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  if (mds->logger) mds->logger->inc(l_mds_trino);
           return 1;
         }        
-      }
-
-      // symlink?
-      if (in->is_symlink() &&
-          (follow_trailing_symlink || depth < path.depth()-1)) {
-        // symlink, resolve!
-        dout(10) << "traverse: hit symlink " << *in << " to " << in->symlink << dendl;
-
-        // break up path components
-        // /head/symlink/tail
-        filepath head = path.prefixpath(depth);
-        filepath tail = path.postfixpath(depth+1);
-        dout(10) << "traverse: path head = " << head << dendl;
-        dout(10) << "traverse: path tail = " << tail << dendl;
-        
-        if (symlinks_resolved.count(pair<CInode*,string>(in, tail.get_path()))) {
-          dout(10) << "already hit this symlink, bailing to avoid the loop" << dendl;
-          return -ELOOP;
-        }
-        symlinks_resolved.insert(pair<CInode*,string>(in, tail.get_path()));
-
-        // start at root?
-        if (in->symlink[0] == '/') {
-          // absolute
-          trace.clear();
-          depth = 0;
-	  path = filepath(in->symlink.c_str() + 1, 1);
-	  path.append(tail);
-          dout(10) << "traverse: absolute symlink, path now " << path << " depth " << depth << dendl;
-        } else {
-          // relative
-	  filepath sym(in->symlink, 0);
-          path = head;
-          path.append(sym);
-          path.append(tail);
-          dout(10) << "traverse: relative symlink, path now " << path << " depth " << depth << dendl;
-        }
-        continue;        
       }
 
       // forwarder wants replicas?
@@ -7762,9 +7720,7 @@ void MDCache::handle_dir_update(MDirUpdate *m)
 
       dout(5) << "trying discover on dir_update for " << path << dendl;
 
-      int r = path_traverse(0, m,
-			    path, trace,
-                            true, MDS_TRAVERSE_DISCOVER);
+      int r = path_traverse(0, m, path, trace, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
       assert(r == 0);
