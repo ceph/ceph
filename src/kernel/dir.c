@@ -69,7 +69,7 @@ more:
 	dout(5, "readdir filp %p at frag %u off %u\n", filp, frag, off);
 
 	/* do we have the correct frag content buffered? */
-	if (fi->frag != frag || fi->off < off || fi->last_readdir == NULL) {
+	if (fi->frag != frag || off < fi->off || fi->last_readdir == NULL) {
 		struct ceph_mds_request *req;
 		int op = ceph_snap(inode) == CEPH_SNAPDIR ?
 			CEPH_MDS_OP_LSSNAP : CEPH_MDS_OP_READDIR;
