@@ -1517,11 +1517,17 @@ void Locker::handle_client_caps(MClientCaps *m)
 	ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
 			      m->get_caps(), 0, m->get_dirty(), 0);
       }
-      if (ceph_seq_cmp(m->get_seq(), cap->get_last_sent()) == 0 &&
-	  wanted != cap->wanted()) {
-	dout(10) << " wanted " << ccap_string(cap->wanted())
-		 << " -> " << ccap_string(wanted) << dendl;
-	cap->set_wanted(wanted);
+      if (wanted != cap->wanted()) {
+	if (ceph_seq_cmp(m->get_seq(), cap->get_last_issue()) == 0) {
+	  dout(10) << " wanted " << ccap_string(cap->wanted())
+		   << " -> " << ccap_string(wanted) << dendl;
+	  cap->set_wanted(wanted);
+	} else if (wanted & ~cap->wanted()) {
+	  dout(10) << " wanted " << ccap_string(cap->wanted())
+		   << " -> " << ccap_string(wanted)
+		   << " (added caps even though we had seq mismatch!)" << dendl;
+	  cap->set_wanted(wanted | cap->wanted());
+	}
       }
       
       if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
