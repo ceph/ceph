@@ -205,10 +205,12 @@ public:
     o << " = " << get_result();
     if (get_result() <= 0)
       o << " " << strerror(-get_result());
-    if (head.safe)
-      o << " safe";
-    else
-      o << " unsafe";
+    if (head.op & CEPH_MDS_OP_WRITE) {
+      if (head.safe)
+	o << " safe";
+      else
+	o << " unsafe";
+    }
     o << ")";
   }
 

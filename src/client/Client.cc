@@ -555,6 +555,19 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from, int mds)
   if (reply->snapbl.length())
     update_snap_trace(reply->snapbl);
 
+  InodeStat dirst;
+  DirStat dst;
+  string dname;
+  LeaseStat dlease;
+  InodeStat ist;
+
+  if (reply->head.is_dentry) {
+    dirst.decode(p);
+    dst.decode(p);
+    ::decode(dname, p);
+    ::decode(dlease, p);
+  }
+
   Inode *in = 0;
   if (reply->head.is_target) {
     InodeStat ist;
@@ -563,16 +576,6 @@ Inode* Client::insert_trace(MClientReply *reply, utime_t from, int mds)
   }
 
   if (reply->head.is_dentry) {
-    InodeStat dirst;
-    DirStat dst;
-    string dname;
-    LeaseStat dlease;
-
-    dirst.decode(p);
-    dst.decode(p);
-    ::decode(dname, p);
-    ::decode(dlease, p);
-
     vinodeno_t vino = dirst.vino;
     assert(inode_map.count(vino));
     Inode *diri = inode_map[vino];
