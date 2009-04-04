@@ -566,6 +566,25 @@ void Locker::eval(SimpleLock *lock)
 // ------------------
 // rdlock
 
+bool Locker::_rdlock_kick(SimpleLock *lock)
+{
+  // kick the lock
+  if (lock->is_stable() &&
+      lock->get_parent()->is_auth()) {
+    if (lock->sm == &sm_scatterlock) {
+      if (lock->get_parent()->is_replicated())
+	scatter_tempsync((ScatterLock*)lock);
+      else
+	simple_sync(lock);
+    } else if (lock->sm == &sm_filelock)
+      simple_lock(lock);
+    else
+      simple_sync(lock);
+    return true;
+  }
+  return false;
+}
+
 bool Locker::rdlock_try(SimpleLock *lock, int client, Context *con)
 {
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
@@ -574,6 +593,8 @@ bool Locker::rdlock_try(SimpleLock *lock, int client, Context *con)
   if (lock->can_rdlock(client)) 
     return true;
   
+  _rdlock_kick(lock);
+
   // wait!
   dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
@@ -602,19 +623,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
       return true;
     }
 
-    if (lock->is_stable() &&
-	lock->get_parent()->is_auth()) {
-      if (lock->sm == &sm_scatterlock) {
-	if (lock->get_parent()->is_replicated())
-	  scatter_tempsync((ScatterLock*)lock);
-	else
-	  simple_sync(lock);
-      } else if (lock->sm == &sm_filelock)
-	simple_lock(lock);
-      else
-	simple_sync(lock);
-    }
-    else
+    if (!_rdlock_kick(lock))
       break;
   }
 

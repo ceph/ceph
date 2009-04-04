@@ -89,6 +89,7 @@ public:
   void eval_cap_gather(CInode *in);
   void eval(SimpleLock *lock);
 
+  bool _rdlock_kick(SimpleLock *lock);
   bool rdlock_try(SimpleLock *lock, int client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut);
   void rdlock_finish(SimpleLock *lock, Mutation *mut);
