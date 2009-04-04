@@ -563,6 +563,23 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 }
 
 /*
+ * For a soon-to-be unlinked file, drop the AUTH_RDCACHE caps.  If it
+ * looks like the link count will hit 0, drop any other caps (other
+ * than PIN) we don't specifically want (due to the file still being
+ * open).
+ */
+static void drop_caps_for_unlink(struct inode *inode)
+{
+	int drop = CEPH_CAP_LINK_RDCACHE | CEPH_CAP_LINK_EXCL;
+
+	spin_lock(&inode->i_lock);
+	if (inode->i_nlink == 1) 
+		drop |= ~(__ceph_caps_wanted(ceph_inode(inode)) | CEPH_CAP_PIN);
+	spin_unlock(&inode->i_lock);
+	ceph_release_caps(inode, drop);
+}
+
+/*
  * rmdir and unlink are differ only by the metadata op code
  */
 static int ceph_unlink(struct inode *dir, struct dentry *dentry)
@@ -598,7 +615,7 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
 	ceph_mdsc_lease_release(mdsc, dir, dentry, CEPH_LOCK_DN);
-	ceph_release_caps(inode, CEPH_CAP_LINK_RDCACHE);
+	drop_caps_for_unlink(inode);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
 		d_delete(dentry);
@@ -635,6 +652,8 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (!ceph_caps_issued_mask(ceph_inode(new_dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(new_dir, CEPH_CAP_FILE_RDCACHE);
 	ceph_mdsc_lease_release(mdsc, new_dir, new_dentry, CEPH_LOCK_DN);
+	if (new_dentry->d_inode)
+		drop_caps_for_unlink(new_dentry->d_inode);
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry) {
 		/*
