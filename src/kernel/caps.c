@@ -1692,6 +1692,7 @@ start:
 			 * re-use incoming message.
 			 */
 			cap->implemented = newcaps;
+			cap->mds_wanted = wanted;
 
 			grant->size = cpu_to_le64(inode->i_size);
 			grant->max_size = 0;  /* don't re-request */
