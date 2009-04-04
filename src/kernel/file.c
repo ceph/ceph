@@ -53,7 +53,8 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFREG:
 	case S_IFDIR:
-		dout(20, "init_file %p 0%o (regular)\n", inode, inode->i_mode);
+		dout(20, "init_file %p %p 0%o (regular)\n", inode, file,
+		     inode->i_mode);
 		cf = kzalloc(sizeof(*cf), GFP_NOFS);
 		if (cf == NULL) {
 			ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
@@ -65,12 +66,14 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 		break;
 
 	case S_IFLNK:
-		dout(20, "init_file %p 0%o (symlink)\n", inode, inode->i_mode);
+		dout(20, "init_file %p %p 0%o (symlink)\n", inode, file,
+		     inode->i_mode);
 		ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
 		break;
 
 	default:
-		dout(20, "init_file %p 0%o (special)\n", inode, inode->i_mode);
+		dout(20, "init_file %p %p 0%o (special)\n", inode, file,
+		     inode->i_mode);
 		/*
 		 * we need to drop the open ref now, since we don't
 		 * have .release set to ceph_release.

@@ -66,7 +66,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		ceph_i_set(inode, CEPH_I_READDIR);
 
 more:
-	dout(5, "readdir filp %p at frag %u off %u\n", filp, frag, off);
+	dout(5, "readdir %p filp %p frag %u off %u\n", inode, filp, frag, off);
 
 	/* do we have the correct frag content buffered? */
 	if (fi->frag != frag || off < fi->off || fi->last_readdir == NULL) {
@@ -207,7 +207,7 @@ more:
 	}
 	spin_unlock(&inode->i_lock);
 
-	dout(20, "readdir done.\n");
+	dout(20, "readdir %p filp %p done.\n", inode, filp);
 	return 0;
 }
 
