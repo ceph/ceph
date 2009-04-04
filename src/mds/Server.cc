@@ -2417,6 +2417,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 
   // put locks in excl mode
   newi->filelock.set_state(LOCK_EXCL);
+  newi->authlock.set_state(LOCK_EXCL);
+  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_RDCACHE);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
