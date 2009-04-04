@@ -33,8 +33,10 @@ void MDSMap::print(ostream& out)
 
   set<int> upset;
   get_up_mds_set(upset);
-  out << "in " << in << "\n"
-      << "up " << upset << "\n";
+  out << "in <" << in << ">\n"
+      << "up <" << upset << ">\n"
+      << "failed <" << failed << ">\n"
+      << "stopped <" << stopped << ">\n";
 
   multimap< pair<unsigned,unsigned>, entity_addr_t > foo;
   for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
@@ -67,10 +69,6 @@ void MDSMap::print(ostream& out)
     out << "\n";    
   }
 
-  if (failed.size())
-    out << "failed " << failed << "\n";
-  if (stopped.size())
-    out << "stopped " << failed << "\n";
 }
 
 
@@ -94,4 +92,6 @@ void MDSMap::print_summary(ostream& out)
   
   if (failed.size())
     out << ", " << failed.size() << " failed";
+  if (stopped.size())
+    out << ", " << stopped.size() << " stopped";
 }

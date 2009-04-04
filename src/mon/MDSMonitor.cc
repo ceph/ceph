@@ -304,9 +304,10 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 	     << dendl;
     if (state == MDSMap::STATE_STOPPED) {
       pending_mdsmap.up.erase(info.rank);
-      pending_mdsmap.mds_info.erase(addr);
-      pending_mdsmap.stopped.insert(info.rank);
       pending_mdsmap.in.erase(info.rank);
+      pending_mdsmap.stopped.insert(info.rank);
+      pending_mdsmap.mds_info.erase(addr);  // last! info is a ref into this map
+      last_beacon.erase(addr);
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -544,9 +545,10 @@ void MDSMonitor::tick()
     
     MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
     info.rank = mds;
-    if (pending_mdsmap.stopped.count(mds))
+    if (pending_mdsmap.stopped.count(mds)) {
       info.state = MDSMap::STATE_STARTING;
-    else
+      pending_mdsmap.stopped.erase(mds);
+    } else
       info.state = MDSMap::STATE_CREATING;
     info.inc = ++pending_mdsmap.inc[mds];
     pending_mdsmap.in.insert(mds);
