@@ -870,6 +870,7 @@ public:
     waiting_for_open.push_back(c);
   }
 
+  void open_root_inode(Context *c);
   void open_root();
   void populate_mydir();
 

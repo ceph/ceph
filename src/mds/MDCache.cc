@@ -405,16 +405,27 @@ struct C_MDS_RetryOpenRoot : public Context {
   }
 };
 
+void MDCache::open_root_inode(Context *c)
+{
+  assert(!root);
+  if (mds->whoami == mds->mdsmap->get_root()) {
+    create_root_inode();  // initially inaccurate!
+    root->fetch(c);
+  } else {
+    discover_base_ino(MDS_INO_ROOT, c, mds->mdsmap->get_root());
+  }
+}
+
 void MDCache::open_root()
 {
-  dout(10) << "open_root root=" << root << dendl;
+  dout(10) << "open_root" << dendl;
+
+  if (!root) {
+    open_root_inode(new C_MDS_RetryOpenRoot(this));
+    return;
+  }
 
   if (mds->whoami == mds->mdsmap->get_root()) {
-    if (!root) {
-      create_root_inode();  // initially inaccurate!
-      root->fetch(new C_MDS_RetryOpenRoot(this));
-      return;
-    }
     assert(root->is_auth());  
 
     CDir *rootdir = root->get_or_open_dirfrag(this, frag_t());
@@ -447,10 +458,6 @@ void MDCache::open_root()
     assert(mydir);
 
   } else {
-    if (!root) {
-      discover_base_ino(MDS_INO_ROOT, new C_MDS_RetryOpenRoot(this), mds->mdsmap->get_root());
-      return; 
-    }
     assert(!root->is_auth());
 
     CDir *rootdir = root->get_dirfrag(frag_t());

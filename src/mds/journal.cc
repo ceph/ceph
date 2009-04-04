@@ -325,8 +325,30 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps" << dendl;
 
-  //if (!logseg) logseg = _segment;
   assert(logseg);
+
+  if (root) {
+    CInode *in = mds->mdcache->get_inode(root->inode.ino);
+    bool isnew = in ? false:true;
+    if (!in)
+      in = new CInode(mds->mdcache, true);
+    in->inode = root->inode;
+    in->xattrs = root->xattrs;
+    if (in->inode.is_dir()) {
+      in->dirfragtree = root->dirfragtree;
+      /*
+       * we can do this before linking hte inode bc the split_at would
+       * be a no-op.. we have no children (namely open snaprealms) to
+       * divy up 
+       */
+      in->decode_snap_blob(root->snapbl);  
+    }
+    if (in->inode.is_symlink()) in->symlink = root->symlink;
+    if (isnew)
+      mds->mdcache->add_inode(in);
+    if (root->dirty) in->_mark_dirty(logseg);
+    dout(10) << "EMetaBlob.replay " << (isnew ? " added root ":" updated root ") << *in << dendl;    
+  }
 
   // walk through my dirs (in order!)
   for (list<dirfrag_t>::iterator lp = lump_order.begin();
@@ -341,14 +363,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       // hmm.  do i have the inode?
       CInode *diri = mds->mdcache->get_inode((*lp).ino);
       if (!diri) {
-	if ((*lp).ino == MDS_INO_ROOT) {
+	/*if ((*lp).ino == MDS_INO_ROOT) {
 	  diri = mds->mdcache->create_root_inode();
 	  dout(10) << "EMetaBlob.replay created root " << *diri << dendl;
-	}/* else if (MDS_INO_IS_STRAY((*lp).ino)) {
+	} else if (MDS_INO_IS_STRAY((*lp).ino)) {
 	  int whose = (*lp).ino - MDS_INO_STRAY_OFFSET;
 	  diri = mds->mdcache->create_stray_inode(whose);
 	  dout(10) << "EMetaBlob.replay created stray " << *diri << dendl;
-	  } */ else {
+	  } else */
+	{
 	  dout(0) << "EMetaBlob.replay missing dir ino  " << (*lp).ino << dendl;
 	  assert(0);
 	}

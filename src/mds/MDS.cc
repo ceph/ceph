@@ -843,9 +843,14 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
+    dout(2) << "boot_start " << step << ": loading root inode" << dendl;
+    mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
+    break;
+
+  case 3:
     if (is_replay() || is_standby_replay()) {
       dout(2) << "boot_start " << step << ": replaying mds log" << dendl;
-      mdlog->replay(new C_MDS_BootStart(this, 3));
+      mdlog->replay(new C_MDS_BootStart(this, 4));
       break;
     } else {
       dout(2) << "boot_start " << step << ": positioning at end of old mds log" << dendl;
@@ -853,7 +858,7 @@ void MDS::boot_start(int step, int r)
       step++;
     }
 
-  case 3:
+  case 4:
     if (is_replay() || is_standby_replay()) {
       replay_done();
       break;

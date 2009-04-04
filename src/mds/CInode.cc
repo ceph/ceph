@@ -672,6 +672,7 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
   dout(10) << "_fetched" << dendl;
   bufferlist::iterator p = bl.begin();
   decode_store(p);
+  dout(10) << "_fetched " << *this << dendl;
   fin->finish(0);
   delete fin;
 }
