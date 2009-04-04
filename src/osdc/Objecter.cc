@@ -315,6 +315,8 @@ void Objecter::tick()
 {
   dout(10) << "tick" << dendl;
 
+  set<int> ping;
+
   // look for laggy pgs
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.objecter_timeout;  // timeout
@@ -330,9 +332,12 @@ void Objecter::tick()
       // send a ping to this osd, to ensure we detect any session resets
       // (osd reply message policy is lossy)
       if (i->second.acting.size())
-	messenger->send_message(new MPing, osdmap->get_inst(i->second.acting[0]));
+	ping.insert(i->second.acting[0]);
     }
   }
+
+  for (set<int>::iterator p = ping.begin(); p != ping.end(); p++)
+    messenger->send_message(new MPing, osdmap->get_inst(*p));
 
   // reschedule
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
