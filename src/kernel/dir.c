@@ -652,6 +652,8 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	if (!ceph_caps_issued_mask(ceph_inode(new_dir), CEPH_CAP_FILE_EXCL))
 		ceph_release_caps(new_dir, CEPH_CAP_FILE_RDCACHE);
 	ceph_mdsc_lease_release(mdsc, new_dir, new_dentry, CEPH_LOCK_DN);
+	/* release LINK_RDCACHE on source inode (mds will lock it) */
+	ceph_release_caps(old_dentry->d_inode, CEPH_CAP_LINK_RDCACHE);
 	if (new_dentry->d_inode)
 		drop_caps_for_unlink(new_dentry->d_inode);
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
