@@ -653,6 +653,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     return;
 
 
+  bufferlist::iterator bp = op->get_data().begin();
   bufferlist data;
   int data_off = 0;
   int result = 0;
@@ -744,6 +745,20 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	if (r >= 0)
 	  p->length = st.st_size;
 	else
+	  result = r;
+      }
+      break;
+
+    case CEPH_OSD_OP_GETXATTR:
+      {
+	nstring name(p->name_len + 1);
+	name[0] = '_';
+	bp.copy(p->name_len, name.data()+1);
+	int r = osd->store->getattr(info.pgid.to_coll(), poid, name.c_str(), data);
+	if (r >= 0) {
+	  p->value_len = r;
+	  result = 0;
+	} else
 	  result = r;
       }
       break;
