@@ -311,6 +311,8 @@ void MDCache::create_empty_hierarchy(C_Gather *gather)
   rootdir->mark_complete();
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
   rootdir->commit(0, gather->new_sub());
+
+  root->store(gather->new_sub());
 }
 
 struct C_MDC_CreateSystemFile : public Context {
@@ -405,50 +407,90 @@ struct C_MDS_RetryOpenRoot : public Context {
 
 void MDCache::open_root()
 {
-  dout(10) << "open_root" << dendl;
+  dout(10) << "open_root root=" << root << dendl;
 
-  if (!root) {
-    discover_base_ino(MDS_INO_ROOT, new C_MDS_RetryOpenRoot(this), mds->mdsmap->get_root());
-    return; 
-  }
+  if (mds->whoami == mds->mdsmap->get_root()) {
+    if (!root) {
+      create_root_inode();  // initially inaccurate!
+      root->fetch(new C_MDS_RetryOpenRoot(this));
+      return;
+    }
+    assert(root->is_auth());  
 
-  CDir *rootdir = root->get_dirfrag(frag_t());
-  if (!rootdir) {
-    discover_dir_frag(root, frag_t(), new C_MDS_RetryOpenRoot(this));
-    return;
-  }    
+    CDir *rootdir = root->get_or_open_dirfrag(this, frag_t());
+    assert(rootdir);
+    if (!rootdir->is_subtree_root())
+      adjust_subtree_auth(rootdir, mds->whoami);   
+    if (!rootdir->is_complete()) {
+      rootdir->fetch(new C_MDS_RetryOpenRoot(this));
+      return;
+    }
 
-  nstring name(".ceph");
-  CDentry *cephdn = rootdir->lookup(name);
-  if (!cephdn) {
-    filepath fp;
-    fp.push_dentry(name);
-    discover_path(rootdir, CEPH_NOSNAP, fp, new C_MDS_RetryOpenRoot(this));
-    return;
-  }
+    nstring name(".ceph");
+    CDentry *cephdn = rootdir->lookup(name);
+    assert(cephdn);
+    CInode *ceph = cephdn->get_linkage()->get_inode();
+    CDir *cephdir = ceph->get_or_open_dirfrag(this, frag_t());
+    assert(cephdir);
+    if (!cephdir->is_complete()) {
+      cephdir->fetch(new C_MDS_RetryOpenRoot(this));
+      return;
+    }
 
-  CInode *ceph = cephdn->get_linkage()->get_inode();
-  CDir *cephdir = ceph->get_dirfrag(frag_t());
-  if (!cephdir) {
-    discover_dir_frag(ceph, frag_t(), new C_MDS_RetryOpenRoot(this));
-    return;
-  }
+    char n[10];
+    sprintf(n, "mds%d", mds->whoami);
+    CDentry *mydn = cephdir->lookup(n);
+    assert(mydn);
+    
+    assert(myin);
+    CDir *mydir = myin->get_or_open_dirfrag(this, frag_t());
+    assert(mydir);
 
-  char n[10];
-  sprintf(n, "mds%d", mds->whoami);
-  CDentry *mydn = cephdir->lookup(n);
-  if (!mydn) {
-    filepath fp;
-    fp.push_dentry(n);
-    discover_path(cephdir, CEPH_NOSNAP, fp, new C_MDS_RetryOpenRoot(this));
-    return;
-  }
+  } else {
+    if (!root) {
+      discover_base_ino(MDS_INO_ROOT, new C_MDS_RetryOpenRoot(this), mds->mdsmap->get_root());
+      return; 
+    }
+    assert(!root->is_auth());
 
-  assert(myin);
-  CDir *mydir = myin->get_dirfrag(frag_t());
-  if (!mydir || !mydir->is_auth()) {
-    // wait for it to import
-    return;
+    CDir *rootdir = root->get_dirfrag(frag_t());
+    if (!rootdir) {
+      discover_dir_frag(root, frag_t(), new C_MDS_RetryOpenRoot(this));
+      return;
+    }    
+    
+    nstring name(".ceph");
+    CDentry *cephdn = rootdir->lookup(name);
+    if (!cephdn) {
+      filepath fp;
+      fp.push_dentry(name);
+      discover_path(rootdir, CEPH_NOSNAP, fp, new C_MDS_RetryOpenRoot(this));
+      return;
+    }
+    
+    CInode *ceph = cephdn->get_linkage()->get_inode();
+    CDir *cephdir = ceph->get_dirfrag(frag_t());
+    if (!cephdir) {
+      discover_dir_frag(ceph, frag_t(), new C_MDS_RetryOpenRoot(this));
+      return;
+    }
+    
+    char n[10];
+    sprintf(n, "mds%d", mds->whoami);
+    CDentry *mydn = cephdir->lookup(n);
+    if (!mydn) {
+      filepath fp;
+      fp.push_dentry(n);
+      discover_path(cephdir, CEPH_NOSNAP, fp, new C_MDS_RetryOpenRoot(this));
+      return;
+    }
+    
+    assert(myin);
+    CDir *mydir = myin->get_dirfrag(frag_t());
+    if (!mydir || !mydir->is_auth()) {
+      // wait for it to import
+      return;
+    }
   }
 
   populate_mydir();
