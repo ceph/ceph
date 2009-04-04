@@ -506,6 +506,10 @@ private:
     in->last_journaled = my_offset;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
+    if (!pi) pi = in->get_projected_inode();
+    if (!pdft) pdft = &in->dirfragtree;
+    if (!px) px = &in->xattrs;
+
     bufferlist snapbl;
     if (psnapbl)
       snapbl = *psnapbl;
@@ -517,8 +521,7 @@ private:
       lump.get_dfull().push_front(fullbit(dn->get_name(), 
 					  dn->first, dn->last,
 					  dn->get_projected_version(), 
-					  in->inode, in->dirfragtree,
-					  px ? *px : in->xattrs,
+					  *pi, *pdft, *px,
 					  in->symlink, snapbl,
 					  dirty));
       if (pi) lump.get_dfull().front().inode = *pi;
@@ -527,8 +530,7 @@ private:
       lump.get_dfull().push_back(fullbit(dn->get_name(), 
 					 dn->first, dn->last,
 					 dn->get_projected_version(),
-					 in->inode, in->dirfragtree,
-					 px ? *px : in->xattrs,
+					  *pi, *pdft, *px,
 					 in->symlink, snapbl,
 					 dirty));
       if (pi) lump.get_dfull().back().inode = *pi;
@@ -559,6 +561,10 @@ private:
     in->last_journaled = my_offset;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
+    if (!pi) pi = in->get_projected_inode();
+    if (!pdft) pdft = &in->dirfragtree;
+    if (!px) px = &in->xattrs;
+
     bufferlist snapbl;
     if (psnapbl)
       snapbl = *psnapbl;
@@ -567,12 +573,11 @@ private:
 
     nstring empty;
     root = new fullbit(empty,
-	      in->first, in->last,
-	      0,
-	      in->inode, in->dirfragtree,
-	      px ? *px : in->xattrs,
-	      in->symlink, snapbl,
-	      dirty);
+		       in->first, in->last,
+		       0,
+		       *pi, *pdft, *px,
+		       in->symlink, snapbl,
+		       dirty);
     return &root->inode;
   }
   
