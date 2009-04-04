@@ -27,13 +27,8 @@ v0.7.2
 /- make kclient timeouts tunable
 
 v0.8
-- revamp client<->mds interaction wrt snapshots...
 - clean up path_traverse interface, esp the usages in Server.cc
-- fix up mds selection, and ESTALE handling.  
-- return extra inode(s) in reply (namely, unlink)?
-- store root inode on mds
-- allow chmod/whatever of root inode
-- piggyback lease/cap release on client_request
+- piggyback lease/cap release on client_request?
 
 kclient caps
 /- two session lists: dirty_caps, clean_caps
@@ -54,6 +49,7 @@ kclient caps
   - racing lookup + open           - do not reduce wanted on mds
   - wanted expansion on ceph_open  - do no lose it on mds, even if racing with lookup + open
   - racing wanted release + getattr --- we need to keep the client's notion of mds_wanted accurate!  ****
+- fix up mds selection, and ESTALE handling
 
 
 - ENOSPC
@@ -94,6 +90,7 @@ repair
 
 
 kernel client
+- make cap import/export efficient
 - unwind writeback start error in addr.c (see fixme)... by redirtying pages?
 - inotify for updates from other clients?
 - optional or no fill_trace?
@@ -169,6 +166,7 @@ mds
   - in particular, i care about dirfragtree.. get it on rejoin?
   - and dir sizes, if i add that... also on rejoin?
 - add FILE_CAP_EXTEND capability bit
+- return extra inode(s) in reply (namely, unlink)?
 
 
 journaler
