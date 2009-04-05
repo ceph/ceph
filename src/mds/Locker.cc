@@ -595,6 +595,9 @@ bool Locker::rdlock_try(SimpleLock *lock, int client, Context *con)
   
   _rdlock_kick(lock);
 
+  if (lock->can_rdlock(client)) 
+    return true;
+
   // wait!
   dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   if (con) lock->add_waiter(SimpleLock::WAIT_RD, con);
