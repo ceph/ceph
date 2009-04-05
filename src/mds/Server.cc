@@ -2064,7 +2064,7 @@ void Server::handle_client_setxattr(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi, 0, 0, px);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -2113,7 +2113,7 @@ void Server::handle_client_removexattr(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_cow_inode(mdr, &le->metablob, cur);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, pi, 0, 0, px);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
 
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
 }
@@ -2416,7 +2416,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, newi, &newi->inode);
+  le->metablob.add_primary_dentry(dn, true, newi);
   le->metablob.add_dir(newdir, true, true, true); // dirty AND complete AND new
   
   // issue a cap on the directory
@@ -3005,7 +3005,7 @@ void Server::do_link_rollback(bufferlist &rbl, int master, MDRequest *mdr)
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::LINK);
   le->commit.add_dir_context(parent);
   le->commit.add_dir(parent, true);
-  le->commit.add_primary_dentry(in->get_parent_dn(), true, 0, pi);
+  le->commit.add_primary_dentry(in->get_parent_dn(), true, 0);
   
   mdlog->submit_entry(le, new C_MDS_LoggedLinkRollback(this, mut, mdr));
   mdlog->flush();
@@ -3251,7 +3251,7 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
       dnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
 
     straydn->first = dnl->get_inode()->first;
-    le->metablob.add_primary_dentry(straydn, true, dnl->get_inode(), pi, 0, &snapbl);
+    le->metablob.add_primary_dentry(straydn, true, dnl->get_inode(), 0, &snapbl);
   } else {
     // remote link.  update remote inode.
     mdcache->predirty_journal_parents(mdr, &le->metablob, dnl->get_inode(), dn->get_dir(), PREDIRTY_DIR, -1);
@@ -4013,11 +4013,11 @@ void Server::_rename_prepare(MDRequest *mdr,
       } else
 	destdnl->get_inode()->snaprealm->project_past_parent(straydn->get_dir()->inode->find_snaprealm(), snapbl);
       straydn->first = destdnl->get_inode()->first;
-      tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), tpi, 0, &snapbl);
+      tji = metablob->add_primary_dentry(straydn, true, destdnl->get_inode(), 0, &snapbl);
     } else if (destdnl->is_remote()) {
       metablob->add_dir_context(destdnl->get_inode()->get_parent_dir());
       mdcache->journal_cow_dentry(mdr, metablob, destdnl->get_inode()->parent, CEPH_NOSNAP, 0, destdnl);
-      tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode(), tpi);
+      tji = metablob->add_primary_dentry(destdnl->get_inode()->parent, true, destdnl->get_inode());
     }
   }
 
@@ -4030,13 +4030,13 @@ void Server::_rename_prepare(MDRequest *mdr,
 	destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
       mdcache->journal_cow_dentry(mdr, metablob, srcdnl->get_inode()->get_parent_dn(), CEPH_NOSNAP, 0, srcdnl);
-      ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode(), pi);
+      ji = metablob->add_primary_dentry(srcdnl->get_inode()->get_parent_dn(), true, srcdnl->get_inode());
     } else {
       if (!destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
-      metablob->add_primary_dentry(destdn, true, destdnl->get_inode(), pi); 
+      metablob->add_primary_dentry(destdn, true, destdnl->get_inode()); 
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
@@ -4048,7 +4048,7 @@ void Server::_rename_prepare(MDRequest *mdr,
       mdcache->journal_cow_dentry(mdr, metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
       destdn->first = destdn->get_dir()->inode->find_snaprealm()->get_newest_seq()+1;
-    ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), pi, 0, &snapbl); 
+    ji = metablob->add_primary_dentry(destdn, true, srcdnl->get_inode(), 0, &snapbl); 
   }
     
   // src
@@ -4696,12 +4696,12 @@ void Server::do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr)
   ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_rename_rollback", rollback.reqid, master,
 				      ESlaveUpdate::OP_ROLLBACK, ESlaveUpdate::RENAME);
   le->commit.add_dir_context(srcdir);
-  le->commit.add_primary_dentry(srcdn, true, 0, pi);
+  le->commit.add_primary_dentry(srcdn, true, 0);
   le->commit.add_dir_context(destdir);
   if (destdnl->is_null())
     le->commit.add_null_dentry(destdn, true);
   else if (destdnl->is_primary())
-    le->commit.add_primary_dentry(destdn, true, 0, ti);
+    le->commit.add_primary_dentry(destdn, true, 0);
   else if (destdnl->is_remote())
     le->commit.add_remote_dentry(destdn, true);
   if (straydn) {
@@ -5271,7 +5271,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   if (newrealm)
     diri->close_snaprealm(true);
   
-  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
+  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_mksnap_finish(mds, mdr, diri, info));
   mdlog->flush();
@@ -5408,7 +5408,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   diri->snaprealm->snaps[snapid] = old_info;
   diri->snaprealm->seq = old_seq;
   diri->snaprealm->last_destroyed = old_ld;
-  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
+  le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), true, 0, 0, &snapbl);
 
   mdlog->submit_entry(le, new C_MDS_rmsnap_finish(mds, mdr, diri, snapid));
   mdlog->flush();

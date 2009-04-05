@@ -491,13 +491,13 @@ private:
 
   // return remote pointer to to-be-journaled inode
   inode_t *add_primary_dentry(CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+			      CInode *in=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 			      map<string,bufferptr> *px=0) {
     return add_primary_dentry(add_dir(dn->get_dir(), false),
-			      dn, dirty, in, pi, pdft, psnapbl, px);
+			      dn, dirty, in, pdft, psnapbl, px);
   }
   inode_t *add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			      CInode *in=0, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+			      CInode *in=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 			      map<string,bufferptr> *px=0) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
@@ -506,7 +506,7 @@ private:
     in->last_journaled = my_offset;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    if (!pi) pi = in->get_projected_inode();
+    inode_t *pi = in->get_projected_inode();
     if (!pdft) pdft = &in->dirfragtree;
     if (!px) px = &in->xattrs;
 

@@ -357,7 +357,7 @@ void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, Conte
   EUpdate *le = new EUpdate(mds->mdlog, "create system file");
   
   predirty_journal_parents(mut, &le->metablob, in, dir, PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, in, &in->inode);
+  le->metablob.add_primary_dentry(dn, true, in);
   if (mdir)
     le->metablob.add_dir(mdir, true, true, true); // dirty AND complete AND new
 
@@ -1396,7 +1396,7 @@ inode_t *MDCache::journal_dirty_inode(Mutation *mut, EMetaBlob *metablob, CInode
     CDentry *dn = in->get_projected_parent_dn();
     if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
       journal_cow_dentry(mut, metablob, dn, follows);
-    return metablob->add_primary_dentry(dn, true, in, in->get_projected_inode());
+    return metablob->add_primary_dentry(dn, true, in);
   }
 }
 
@@ -4247,7 +4247,7 @@ void MDCache::queue_file_recover(CInode *in)
     }
     
     in->parent->first = in->first;
-    le->metablob.add_primary_dentry(in->parent, true, in, in->get_projected_inode());
+    le->metablob.add_primary_dentry(in->parent, true, in);
     mds->mdlog->submit_entry(le, new C_MDC_QueuedCow(this, in, mut));
     mds->mdlog->flush();
   }
@@ -4458,7 +4458,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
   le->metablob.add_dir_context(in->get_parent_dir());
-  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in, pi);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in);
   le->metablob.add_truncate_finish(in->ino(), ls->offset);
 
   journal_dirty_inode(mut, &le->metablob, in);
@@ -6550,7 +6550,7 @@ void MDCache::snaprealm_create(MDRequest *mdr, CInode *in)
   
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_cow_inode(mut, &le->metablob, in);
-  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, 0, pi, 0, &snapbl);
+  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), true, in, 0, &snapbl);
 
   mds->mdlog->submit_entry(le, new C_MDC_snaprealm_create_finish(this, mdr, mut, in));
   mds->mdlog->flush();

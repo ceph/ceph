@@ -1359,7 +1359,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
     mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
     // no cow, here!
     CDentry *parent = in->get_projected_parent_dn();
-    metablob->add_primary_dentry(parent, true, in, in->get_projected_inode());
+    metablob->add_primary_dentry(parent, true, in);
   } else {
     metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
     mdcache->journal_dirty_inode(mut, metablob, in);
