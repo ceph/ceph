@@ -66,6 +66,7 @@ struct inode *ceph_get_snapdir(struct inode *parent)
 
 
 const struct inode_operations ceph_file_iops = {
+	.permission = ceph_permission,
 	.setattr = ceph_setattr,
 	.getattr = ceph_getattr,
 	.setxattr = ceph_setxattr,
@@ -1480,6 +1481,20 @@ int ceph_do_getattr(struct inode *inode, int mask)
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	ceph_mdsc_put_request(req);
 	dout(20, "do_getattr result=%d\n", err);
+	return err;
+}
+
+
+/*
+ * Check inode permissions.  We verify we have a valid value for
+ * the AUTH cap, then call the generic handler.
+ */
+int ceph_permission(struct inode *inode, int mask)
+{
+	int err = ceph_do_getattr(inode, CEPH_CAP_AUTH_RDCACHE);
+
+	if (!err)
+		err = generic_permission(inode, mask, NULL);
 	return err;
 }
 

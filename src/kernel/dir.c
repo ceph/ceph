@@ -958,6 +958,7 @@ const struct file_operations ceph_dir_fops = {
 
 const struct inode_operations ceph_dir_iops = {
 	.lookup = ceph_lookup,
+	.permission = ceph_permission,
 	.getattr = ceph_getattr,
 	.setattr = ceph_setattr,
 	.setxattr = ceph_setxattr,
