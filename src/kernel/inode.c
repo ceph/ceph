@@ -1455,22 +1455,19 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
  * Verify that we have a lease on the given mask.  If not,
  * do a getattr against an mds.
  */
-int ceph_do_getattr(struct dentry *dentry, int mask)
+int ceph_do_getattr(struct inode *inode, int mask)
 {
-	struct ceph_client *client = ceph_sb_to_client(dentry->d_sb);
+	struct ceph_client *client = ceph_sb_to_client(inode->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct inode *inode = dentry->d_inode;
 	struct ceph_mds_request *req;
 	int err;
 
 	if (ceph_snap(inode) == CEPH_SNAPDIR) {
-		dout(30, "do_getattr dentry %p inode %p SNAPDIR\n", dentry,
-		     inode);
+		dout(30, "do_getattr inode %p SNAPDIR\n", inode);
 		return 0;
 	}
 
-	dout(30, "do_getattr dentry %p inode %p mask %s\n", dentry,
-	     inode, ceph_cap_string(mask));
+	dout(30, "do_getattr inode %p mask %s\n", inode, ceph_cap_string(mask));
 	if (ceph_caps_issued_mask(ceph_inode(inode), mask))
 		return 0;
 
@@ -1481,7 +1478,7 @@ int ceph_do_getattr(struct dentry *dentry, int mask)
 	req->r_num_caps = 1;
 	req->r_args.stat.mask = cpu_to_le32(mask);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
-	ceph_mdsc_put_request(req);  /* will dput(dentry) */
+	ceph_mdsc_put_request(req);
 	dout(20, "do_getattr result=%d\n", err);
 	return err;
 }
@@ -1495,7 +1492,7 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 {
 	int err;
 
-	err = ceph_do_getattr(dentry, CEPH_STAT_CAP_INODE_ALL);
+	err = ceph_do_getattr(dentry->d_inode, CEPH_STAT_CAP_INODE_ALL);
 	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
 		stat->ino = ceph_ino(dentry->d_inode);
@@ -1609,7 +1606,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 		return (vir_xattr->getxattr_cb)(ci, value, size);
 
 	/* get xattrs from mds (if we don't already have them) */
-	err = ceph_do_getattr(dentry, CEPH_STAT_CAP_XATTR);
+	err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR);
 	if (err)
 		return err;
 
@@ -1665,7 +1662,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	u32 len;
 	int i;
 
-	err = ceph_do_getattr(dentry, CEPH_STAT_CAP_XATTR);
+	err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR);
 	if (err)
 		return err;
 

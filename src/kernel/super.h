@@ -742,7 +742,7 @@ extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
 extern void __ceph_do_pending_vmtruncate(struct inode *inode);
 
-extern int ceph_do_getattr(struct dentry *dentry, int mask);
+extern int ceph_do_getattr(struct inode *inode, int mask);
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			struct kstat *stat);
