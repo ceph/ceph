@@ -964,7 +964,9 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   if (in->is_auth()) {
     // [auth] twiddle mode?
-    if (in->filelock.is_stable()) 
+    if (!in->filelock.is_stable())
+      mds->mdlog->flush();
+    else
       file_eval(&in->filelock);
   } else {
     // [replica] tell auth about any new caps wanted
@@ -1534,6 +1536,11 @@ void Locker::handle_client_caps(MClientCaps *m)
 			      m->get_caps(), 0, m->get_dirty(), 0);
       }
       if (wanted != cap->wanted()) {
+        if (wanted & ~cap->wanted()) {
+          // exapnding caps.  make sure we aren't waiting for a log flush
+          if (!in->filelock.is_stable())
+            mds->mdlog->flush();
+        }
 	if (ceph_seq_cmp(m->get_seq(), cap->get_last_issue()) == 0) {
 	  dout(10) << " wanted " << ccap_string(cap->wanted())
 		   << " -> " << ccap_string(wanted) << dendl;
