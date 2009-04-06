@@ -781,7 +781,11 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 		    client->sb->s_root == NULL)
 			root = d_alloc_root(req->r_target_inode);
 		else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 			root = d_obtain_alias(req->r_target_inode);
+#else
+			root = d_alloc_anon(req->r_target_inode);
+#endif
 		req->r_target_inode = NULL;
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
 	} else {
