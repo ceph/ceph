@@ -41,7 +41,7 @@
  * client-facing protocol.
  */
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
-#define CEPH_MDS_PROTOCOL     7 /* cluster internal */
+#define CEPH_MDS_PROTOCOL     8 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
 #define CEPH_MDSC_PROTOCOL   17 /* public/client */
@@ -709,6 +709,7 @@ enum {
 	CEPH_MDS_OP_RMDIR      = 0x01221,
 	CEPH_MDS_OP_SYMLINK    = 0x01222,
 
+	CEPH_MDS_OP_CREATE     = 0x00301,
 	CEPH_MDS_OP_OPEN       = 0x00302,
 	CEPH_MDS_OP_READDIR    = 0x00305,
 
@@ -735,6 +736,7 @@ static inline const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_MKDIR: return "mkdir";
 	case CEPH_MDS_OP_RMDIR: return "rmdir";
 	case CEPH_MDS_OP_SYMLINK: return "symlink";
+	case CEPH_MDS_OP_CREATE: return "create";
 	case CEPH_MDS_OP_OPEN: return "open";
 	case CEPH_MDS_OP_LOOKUPSNAP: return "lookupsnap";
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";

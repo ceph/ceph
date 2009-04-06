@@ -31,7 +31,10 @@ prepare_open_request(struct super_block *sb, int flags, int create_mode)
 		want_auth = USE_AUTH_MDS;
 
 	dout(5, "prepare_open_request flags %d\n", flags);
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, want_auth);
+	if (flags & O_CREAT)
+		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_OPEN, want_auth);
+	else
+		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_CREATE, want_auth);
 	if (IS_ERR(req))
 		goto out;
 	req->r_fmode = ceph_flags_to_mode(flags);

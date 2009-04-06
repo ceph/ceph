@@ -75,11 +75,13 @@ public:
   bool is_write() {
     return
       (head.op & CEPH_MDS_OP_WRITE) || 
-      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
+      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC))) ||
+      (head.op == CEPH_MDS_OP_CREATE && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
   }
   bool can_forward() {
     if (is_write() ||
-	head.op == CEPH_MDS_OP_OPEN)   // do not forward _any_ open request.
+	head.op == CEPH_MDS_OP_OPEN ||   // do not forward _any_ open request.
+	head.op == CEPH_MDS_OP_CREATE)   // do not forward _any_ open request.
       return false;
     return true;
   }
@@ -87,6 +89,7 @@ public:
     if (is_write()) 
       return true;
     if (head.op == CEPH_MDS_OP_OPEN ||
+	head.op == CEPH_MDS_OP_CREATE ||
 	head.op == CEPH_MDS_OP_READDIR) 
       return true;
     return false;    

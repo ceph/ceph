@@ -818,7 +818,8 @@ void Server::handle_client_request(MClientRequest *req)
 
   // retry?
   if (req->get_retry_attempt() &&
-      req->get_op() != CEPH_MDS_OP_OPEN) {
+      ((req->get_op() != CEPH_MDS_OP_OPEN) && 
+       (req->get_op() != CEPH_MDS_OP_CREATE))) {
     assert(session);
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
@@ -888,6 +889,7 @@ void Server::dispatch_client_request(MDRequest *mdr)
     break;
 
     // funky.
+  case CEPH_MDS_OP_CREATE:
   case CEPH_MDS_OP_OPEN:
     if ((req->head.args.open.flags & O_CREAT) &&
 	!(req->get_retry_attempt() &&
