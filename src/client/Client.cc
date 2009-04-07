@@ -4001,7 +4001,7 @@ int Client::_statfs(struct statvfs *stbuf)
   statfs_requests[tid] = req;
 
   int mon = monmap->pick_mon();
-  messenger->send_message(new MStatfs(req->tid), monmap->get_inst(mon));
+  messenger->send_message(new MStatfs(monmap->fsid, req->tid), monmap->get_inst(mon));
 
   while (req->reply == 0)
     cond.Wait(client_lock);

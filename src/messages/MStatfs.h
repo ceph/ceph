@@ -24,7 +24,7 @@ public:
   tid_t tid;
 
   MStatfs() : Message(CEPH_MSG_STATFS) {}
-  MStatfs(tid_t t) : Message(CEPH_MSG_STATFS), tid(t) {}
+  MStatfs(ceph_fsid_t& f, tid_t t) : Message(CEPH_MSG_STATFS), fsid(f), tid(t) {}
 
   const char *get_type_name() { return "statfs"; }
   void print(ostream& out) {
