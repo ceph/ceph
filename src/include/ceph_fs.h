@@ -41,7 +41,7 @@
  * client-facing protocol.
  */
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
-#define CEPH_MDS_PROTOCOL     8 /* cluster internal */
+#define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
 #define CEPH_MDSC_PROTOCOL   17 /* public/client */
