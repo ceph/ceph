@@ -171,7 +171,6 @@ mds
 
 journaler
 - fix up for large events (e.g. imports)
-- use set_floor_and_read for safe takeover from possibly-not-quite-dead otherguy.
 - should we pad with zeros to avoid splitting individual entries?
   - make it a g_conf flag?
   - have to fix reader to skip over zeros (either <4 bytes for size, or zeroed sizes)
