@@ -1005,7 +1005,7 @@ retry_locked:
 	used = __ceph_caps_used(ci);
 
 	want = file_wanted | used;
-	
+
 	retain = want | CEPH_CAP_PIN;
 	if (!mdsc->stopping && inode->i_nlink > 0) {
 		retain |= CEPH_CAP_EXPIREABLE | CEPH_CAP_ANY_RD;
@@ -1103,6 +1103,9 @@ retry_locked:
 		if ((cap->issued & ~retain) == 0 &&
 		    cap->mds_wanted == want)
 			continue;     /* nothing extra, wanted is correct */
+
+		if (drop)
+			want = cap->mds_wanted; /* don't update mds wanted on drop */
 
 		/* delay cap release for a bit? */
 		if (!is_delayed &&
