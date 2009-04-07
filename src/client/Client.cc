@@ -1990,6 +1990,7 @@ void Client::handle_caps(MClientCaps *m)
 
   switch (m->get_op()) {
   case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(in, m);
+  case CEPH_CAP_OP_REVOKE:
   case CEPH_CAP_OP_GRANT: return handle_cap_grant(in, mds, cap, m);
   case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(in, mds, cap, m);
   default:

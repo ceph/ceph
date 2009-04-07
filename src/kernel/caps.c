@@ -2049,6 +2049,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	
 	/* note that each of these drops i_lock for us */
 	switch (op) {
+	case CEPH_CAP_OP_REVOKE:
 	case CEPH_CAP_OP_GRANT:
 		r = handle_cap_grant(inode, h, session, cap,&xattr_data);
 		if (r == 1) {

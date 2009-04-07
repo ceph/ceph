@@ -1008,6 +1008,7 @@ static inline int ceph_caps_for_mode(int mode)
 
 enum {
 	CEPH_CAP_OP_GRANT,     /* mds->client grant */
+	CEPH_CAP_OP_REVOKE,     /* mds->client revoke */
 	CEPH_CAP_OP_TRUNC,     /* mds->client trunc notify */
 	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
@@ -1023,6 +1024,7 @@ static inline const char *ceph_cap_op_name(int op)
 {
 	switch (op) {
 	case CEPH_CAP_OP_GRANT: return "grant";
+	case CEPH_CAP_OP_REVOKE: return "revoke";
 	case CEPH_CAP_OP_TRUNC: return "trunc";
 	case CEPH_CAP_OP_EXPORT: return "export";
 	case CEPH_CAP_OP_IMPORT: return "import";
