@@ -1076,7 +1076,7 @@ bool Locker::issue_caps(CInode *in)
 		<< " new pending " << ccap_string(after) << " was " << ccap_string(before) 
 		<< dendl;
 
-	MClientCaps *m = new MClientCaps((before & ~after) ? CEPH_CAP_OP_REVOKE:CEPH_CAP_OP_GRANT
+	MClientCaps *m = new MClientCaps((before & ~after) ? CEPH_CAP_OP_REVOKE:CEPH_CAP_OP_GRANT,
 					 in->ino(),
 					 in->find_snaprealm()->inode->ino(),
 					 cap->get_cap_id(), cap->get_last_seq(),
