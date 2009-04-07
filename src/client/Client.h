@@ -66,6 +66,8 @@ class MClientRequest;
 class MClientMountAck;
 class MClientRequestForward;
 class MClientLease;
+class MClientCaps;
+class MClientCapRelease;
 class MMonMap;
 
 class Filer;
@@ -174,11 +176,10 @@ struct InodeCap {
   unsigned issued;
   unsigned implemented;
   unsigned wanted;   // as known to mds.
-  unsigned flushing;
   __u64 seq;
   __u32 mseq;  // migration seq
 
-  InodeCap() : issued(0), implemented(0), wanted(0), flushing(0), seq(0), mseq(0) {}
+  InodeCap() : issued(0), implemented(0), wanted(0), seq(0), mseq(0) {}
 };
 
 struct CapSnap {
@@ -205,7 +206,8 @@ class Inode {
 
   // per-mds caps
   map<int,InodeCap*> caps;            // mds -> InodeCap
-  unsigned dirty_caps;
+  InodeCap *auth_cap;
+  unsigned dirty_caps, flushing_caps;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
@@ -290,7 +292,7 @@ class Inode {
     //inode(_inode),
     snapid(vino.snapid),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    dirty_caps(0),
+    dirty_caps(0), flushing_caps(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this),
@@ -365,12 +367,7 @@ class Inode {
     return want;
   }
   int caps_dirty() {
-    int flushing = dirty_caps;
-    for (map<int,InodeCap*>::iterator it = caps.begin();
-         it != caps.end();
-         it++)
-      flushing |= it->second->flushing;
-    return flushing;
+    return dirty_caps | flushing_caps;
   }
 
   bool have_valid_size() {
@@ -579,7 +576,10 @@ public:
     __u64 cap_gen;
     utime_t cap_ttl, last_cap_renew_request;
     int num_caps;
-    MDSSession() : seq(0), cap_gen(0), num_caps(0) {}
+
+    MClientCapRelease *release;
+
+    MDSSession() : seq(0), cap_gen(0), num_caps(0), release(NULL) {}
   };
   map<int, MDSSession> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
@@ -626,7 +626,7 @@ public:
   map<tid_t,StatfsRequest*> statfs_requests;
   
   MClientReply *make_request(MClientRequest *req, int uid, int gid,
-			     utime_t *pfrom=0, Inode **ptarget = 0,
+			     Inode **ptarget = 0,
 			     int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
@@ -844,9 +844,11 @@ protected:
 
   // file caps
   void add_update_cap(Inode *in, int mds, __u64 cap_id,
-		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm);
+		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
+		      int flags);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
+  void mark_caps_dirty(Inode *in, int caps);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
@@ -860,7 +862,7 @@ protected:
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain);
+  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush);
   void check_caps(Inode *in, bool is_delayed);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
@@ -945,6 +947,7 @@ private:
   int _write(Fh *fh, __s64 offset, __u64 size, const char *buf);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
+  int _sync_fs();
   int _statfs(struct statvfs *stbuf);
 
 
@@ -1008,6 +1011,8 @@ public:
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf);
+
+  int sync_fs();
 
   // hpc lazyio
   int lazyio_propogate(int fd, loff_t offset, size_t count);
