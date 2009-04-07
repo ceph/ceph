@@ -1510,7 +1510,7 @@ int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 	err = ceph_do_getattr(dentry->d_inode, CEPH_STAT_CAP_INODE_ALL);
 	if (!err) {
 		generic_fillattr(dentry->d_inode, stat);
-		stat->ino = ceph_ino(dentry->d_inode);
+		stat->ino = dentry->d_inode->i_ino;
 		if (ceph_snap(dentry->d_inode) != CEPH_NOSNAP)
 			stat->dev = ceph_snap(dentry->d_inode);
 		else
