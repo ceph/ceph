@@ -2052,6 +2052,7 @@ void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry)
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
 
 	ceph_put_mds_session(di->lease_session);
+	di->lease_session = NULL;
 }
 
 void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
