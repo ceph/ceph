@@ -261,10 +261,6 @@ static struct page **get_direct_page_vector(const char __user *data,
 	struct page **pages;
 	int rc;
 
-	if ((off & ~PAGE_CACHE_MASK) ||
-	    (len & ~PAGE_CACHE_MASK))
-		return ERR_PTR(-EINVAL);
-
 	pages = kmalloc(sizeof(*pages) * num_pages, GFP_NOFS);
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
