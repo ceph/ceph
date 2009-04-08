@@ -1919,8 +1919,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
 
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
-      (diri->is_root() ||   // base inode's don't get version updated, so ICONTENT is useless.
-       (!diri->filelock.can_lease(client) &&
+      ((!diri->filelock.can_lease(client) &&
 	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0)) &&
       dn->lock.can_lease(client))
     mask |= CEPH_LOCK_DN;
