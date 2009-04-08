@@ -350,7 +350,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			spin_unlock(&dir->i_lock);
 			dout(10, " dir %p complete, -ENOENT\n", dir);
 			d_add(dentry, NULL);
-			dentry->d_time = ci->i_version;
+			dentry->d_time = ci->i_rdcache_gen;
 			return NULL;
 		}
 		spin_unlock(&dir->i_lock);
@@ -729,11 +729,12 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 	int valid = 0;
 
 	spin_lock(&dir->i_lock);
-	if (ceph_ino(dir) != CEPH_INO_ROOT && ci->i_version == dentry->d_time)
+	if (ceph_ino(dir) != CEPH_INO_ROOT &&
+	    ci->i_rdcache_gen == dentry->d_time)
 		valid = __ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE;
 	spin_unlock(&dir->i_lock);
-	dout(20, "dir_lease_is_valid dir %p v%llu dentry %p v%lu = %d\n",
-	     dir, ci->i_version, dentry, dentry->d_time, valid);
+	dout(20, "dir_lease_is_valid dir %p v%u dentry %p v%lu = %d\n",
+	     dir, (unsigned)ci->i_rdcache_gen, dentry, dentry->d_time, valid);
 	return valid;
 }
 
@@ -770,21 +771,32 @@ out_touch:
 	return 1;
 }
 
+/*
+ * When a dentry is released, only clear the dir I_COMPLETE if it was
+ * part of the current dir version.
+ */
 static void ceph_dentry_release(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 
+	if (parent_inode) {
+		struct ceph_inode_info *ci = ceph_inode(parent_inode);
+
+		spin_lock(&parent_inode->i_lock);
+		if (ci->i_rdcache_gen == dentry->d_time) {
+			dout(10, " clearing %p complete (d_release)\n",
+			     parent_inode);
+			ci->i_ceph_flags &= ~(CEPH_I_COMPLETE|CEPH_I_READDIR);
+		}
+		spin_unlock(&parent_inode->i_lock);
+	}
 	if (di) {
 		ceph_dentry_lru_del(dentry);
 		if (di->lease_session)
 			ceph_put_mds_session(di->lease_session);
 		kfree(di);
 		dentry->d_fsdata = NULL;
-	}
-	if (parent_inode) {
-		dout(10, " clearing %p complete (d_release)\n", parent_inode);
-		ceph_i_clear(parent_inode, CEPH_I_COMPLETE|CEPH_I_READDIR);
 	}
 }
 

@@ -715,7 +715,7 @@ static void update_dentry_lease(struct dentry *dentry,
 		 * know whether it covers this dentry.
 		 */
 		struct inode *dir = dentry->d_parent->d_inode;
-		dentry->d_time = ceph_inode(dir)->i_version;
+		dentry->d_time = ceph_inode(dir)->i_rdcache_gen;
 		dout(20, " no lease, setting d_time to %lu\n", dentry->d_time);
 		return;
 	}
