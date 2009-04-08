@@ -1069,7 +1069,7 @@ static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
 		*freepath = build_dentry_path(rdentry, ppath,
 					      pathlen, ino);
 		dout(10, "create_request_message dentry %p %llx/%.*s\n",
-		     rdentry, rino, *pathlen, *ppath);
+		     rdentry, *ino, *pathlen, *ppath);
 	} else if (rpath) {
 		*ino = rino;
 		*ppath = rpath;
