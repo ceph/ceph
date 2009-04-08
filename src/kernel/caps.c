@@ -335,7 +335,9 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
- * (Re)queue cap at the end of the delayed cap release list.
+ * (Re)queue cap at the end of the delayed cap release list.  If
+ * an inode was queued but with i_hold_caps_max=0, meaning it was
+ * queued for immediate flush, don't reset the timeouts.
  *
  * Caller holds i_lock
  *    -> we take mdsc->cap_delay_lock
@@ -345,19 +347,38 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 {
 	struct ceph_mount_args *ma = &mdsc->client->mount_args;
 
-	ci->i_hold_caps_min = round_jiffies(jiffies +
-					    ma->caps_wanted_delay_min * HZ);
-	ci->i_hold_caps_max = round_jiffies(jiffies +
-					    ma->caps_wanted_delay_max * HZ);
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
 	     ci->i_hold_caps_max);
 	if (!mdsc->stopping) {
 		spin_lock(&mdsc->cap_delay_lock);
-		if (!list_empty(&ci->i_cap_delay_list))
+		if (!list_empty(&ci->i_cap_delay_list)) {
+			if (!ci->i_hold_caps_max)
+				goto no_change;
 			list_del_init(&ci->i_cap_delay_list);
+		}
+		ci->i_hold_caps_min = round_jiffies(jiffies +
+					    ma->caps_wanted_delay_min * HZ);
+		ci->i_hold_caps_max = round_jiffies(jiffies +
+					    ma->caps_wanted_delay_max * HZ);
 		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
+	no_change:
 		spin_unlock(&mdsc->cap_delay_lock);
 	}
+}
+
+/*
+ * Queue an inode for immediate writeback.
+ */
+static void __cap_delay_requeue_front(struct ceph_mds_client *mdsc,
+				      struct ceph_inode_info *ci)
+{
+	dout(10, "__cap_delay_requeue_front %p\n", &ci->vfs_inode);
+	spin_lock(&mdsc->cap_delay_lock);
+	ci->i_hold_caps_max = 0;
+	if (!list_empty(&ci->i_cap_delay_list))
+		list_del_init(&ci->i_cap_delay_list);
+	list_add(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
+	spin_unlock(&mdsc->cap_delay_lock);
 }
 
 /*
@@ -812,8 +833,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	cap->issued &= retain;  /* drop bits we don't want */
 
-	if (revoking && (revoking & used) == 0) {
-		cap->implemented = cap->issued;
+	if (cap->implemented & ~retain) {
 		/*
 		 * Wake up any waiters on wanted -> needed transition.
 		 * This is due to the weird transition from buffered
@@ -822,6 +842,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		 */
 		wake = 1;
 	}
+	cap->implemented &= retain | used;
 
 	cap->mds_wanted = want;
 
@@ -1099,20 +1120,18 @@ retry_locked:
 			goto ack;
 		}
 
-		/* shutting down? */
-		if (!revoking && mdsc->stopping && (used == 0))
-			goto ack;
-
 		/* want more caps from mds? */
 		if (want & ~(cap->mds_wanted | cap->issued))
 			goto ack;
 
+		dout(0, " issued %s retain %s mds_wanted %s want %s\n",
+			ceph_cap_string(cap->issued), 
+			ceph_cap_string(retain), 
+			ceph_cap_string(cap->mds_wanted), 
+			ceph_cap_string(want));
 		if ((cap->issued & ~retain) == 0 &&
 		    cap->mds_wanted == want)
 			continue;     /* nothing extra, wanted is correct */
-
-		if (drop)
-			want = cap->mds_wanted; /* don't update mds wanted on drop */
 
 		/* delay cap release for a bit? */
 		if (!is_delayed &&
@@ -1164,6 +1183,10 @@ ack:
 			ci->i_flushing_caps |= flushing;
 			ci->i_dirty_caps = 0;
 		}
+
+		/* don't update mds wanted on drop */
+		if (drop)
+			want = cap->mds_wanted; 
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
@@ -1291,11 +1314,20 @@ int ceph_write_inode(struct inode *inode, int wait)
 	int err = 0;
 	int dirty;
 
-	dout(10, "write_inode %p\n", inode);
-	dirty = try_flush_caps(inode, NULL);
-	if (dirty && wait)
-		err = wait_event_interruptible(ci->i_cap_wq,
-					       caps_are_clean(inode));
+	dout(10, "write_inode %p wait=%d\n", inode, wait);
+	if (wait) {
+		dirty = try_flush_caps(inode, NULL);
+		if (dirty)
+			err = wait_event_interruptible(ci->i_cap_wq,
+						       caps_are_clean(inode));
+	} else {
+		struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
+
+		spin_lock(&inode->i_lock);
+		if (__ceph_caps_dirty(ci))
+			__cap_delay_requeue_front(mdsc, ci);
+		spin_unlock(&inode->i_lock);
+	}
 	return err;
 }
 
@@ -2122,7 +2154,8 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		ci = list_first_entry(&mdsc->cap_delay_list,
 				      struct ceph_inode_info,
 				      i_cap_delay_list);
-		if (time_before(jiffies, ci->i_hold_caps_max))
+		if (ci->i_hold_caps_max &&
+		    time_before(jiffies, ci->i_hold_caps_max))
 			break;
 		list_del_init(&ci->i_cap_delay_list);
 		spin_unlock(&mdsc->cap_delay_lock);

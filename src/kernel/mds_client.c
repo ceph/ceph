@@ -2428,6 +2428,7 @@ static int are_no_sync_caps(struct ceph_mds_client *mdsc)
 void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
 	dout(10, "sync\n");
+	ceph_check_delayed_caps(mdsc);
 	wait_event(mdsc->cap_sync_wq, are_no_sync_caps(mdsc));
 }
 

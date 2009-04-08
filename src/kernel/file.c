@@ -795,12 +795,12 @@ static int ceph_fsync(struct file *file, struct dentry *dentry, int datasync)
 	ret = filemap_write_and_wait(inode->i_mapping);
 	if (ret < 0)
 		return ret;
+
 	/*
-	 * HMM: should we also ensure that caps are flushed to mds?
-	 * It's not strictly necessary, since with the data on the
-	 * osds the mds can/will always reconstruct the file size.
-	 * Not mtime, though.
+	 * Queue up the cap flush, but don't wait on it: the MDS can
+	 * recover from the object size/mtimes.
 	 */
+	ceph_write_inode(inode, 0);
 
 	return ret;
 }
