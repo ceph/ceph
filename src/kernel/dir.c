@@ -762,9 +762,7 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	if (dir_lease_is_valid(dir, dentry))
 		goto out_touch;
 
-	dout(20, "dentry_revalidate %p invalid, clearing %p complete\n",
-	     dentry, dir);
-	ceph_i_clear(dir, CEPH_I_COMPLETE|CEPH_I_READDIR);
+	dout(20, "dentry_revalidate %p invalid\n", dentry);
 	d_drop(dentry);
 	return 0;
 out_touch:
