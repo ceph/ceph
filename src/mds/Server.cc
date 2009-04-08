@@ -890,13 +890,15 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // funky.
   case CEPH_MDS_OP_CREATE:
-  case CEPH_MDS_OP_OPEN:
-    if ((req->head.args.open.flags & O_CREAT) &&
-	!(req->get_retry_attempt() &&
-	  mdr->session->have_completed_request(req->get_reqid().tid)))
+    if (req->get_retry_attempt() &&
+	mdr->session->have_completed_request(req->get_reqid().tid))
+      handle_client_open(mdr);  // already created.. just open
+    else
       handle_client_openc(mdr);
-    else 
-      handle_client_open(mdr);
+    break;
+
+  case CEPH_MDS_OP_OPEN:
+    handle_client_open(mdr);
     break;
 
     // namespace.
