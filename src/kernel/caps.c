@@ -1008,9 +1008,12 @@ retry_locked:
 
 	retain = want | CEPH_CAP_PIN;
 	if (!mdsc->stopping && inode->i_nlink > 0) {
-		retain |= CEPH_CAP_EXPIREABLE | CEPH_CAP_ANY_RD;
+		retain |= CEPH_CAP_EXPIREABLE;
 		if (want)
 			retain |= CEPH_CAP_ANY_EXCL;
+		else if (ci->i_max_size == 0)
+			retain |= CEPH_CAP_ANY_RD; /* mds will need RD to
+						      journal max_size=0 */
 	}
 	retain &= ~drop;
 
