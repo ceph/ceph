@@ -341,8 +341,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 
 		spin_lock(&dir->i_lock);
 		dout(40, " dir %p flags are %d\n", dir, ci->i_ceph_flags);
-		if (ceph_ino(dir) != CEPH_INO_ROOT &&
-		    strncmp(dentry->d_name.name,
+		if (strncmp(dentry->d_name.name,
 			    client->mount_args.snapdir_name,
 			    dentry->d_name.len) &&
 		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
@@ -729,8 +728,7 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 	int valid = 0;
 
 	spin_lock(&dir->i_lock);
-	if (ceph_ino(dir) != CEPH_INO_ROOT &&
-	    ci->i_rdcache_gen == dentry->d_time)
+	if (ci->i_rdcache_gen == dentry->d_time)
 		valid = __ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE;
 	spin_unlock(&dir->i_lock);
 	dout(20, "dir_lease_is_valid dir %p v%u dentry %p v%lu = %d\n",

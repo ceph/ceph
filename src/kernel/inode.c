@@ -639,7 +639,6 @@ no_change:
 
 		/* set dir completion flag? */
 		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
-		    ceph_ino(inode) != CEPH_INO_ROOT &&
 		    ceph_snap(inode) == CEPH_NOSNAP &&
 		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_RDCACHE)) {
 			dout(10, " marking %p complete (empty)\n", inode);
