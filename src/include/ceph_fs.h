@@ -44,7 +44,7 @@
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL    6 /* public/client */
-#define CEPH_MDSC_PROTOCOL   17 /* public/client */
+#define CEPH_MDSC_PROTOCOL   18 /* public/client */
 #define CEPH_MONC_PROTOCOL   11 /* public/client */
 
 
@@ -792,24 +792,26 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) setlayout;
 } __attribute__ ((packed));
 
-#define CEPH_MDS_REQUEST_REPLAY 0xffff
+#define CEPH_MDS_FLAG_REPLAY        1  /* this is a replayed op */
+#define CEPH_MDS_FLAG_WANT_DENTRY   2  /* want dentry in reply */
 
 struct ceph_mds_request_head {
 	ceph_tid_t tid, oldest_client_tid;
 	ceph_epoch_t mdsmap_epoch; /* on client */
-	__le32 retry_attempt;  /* REQUEST_REPLAY if replay */
-	__le16 num_fwd;
-	__le16 num_dentries_wanted;
-	__le64 mds_wants_replica_in_dirino;
+	__le32 flags;
+	__u8 num_retry, num_fwd;
+	__u16 num_releases;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */
 	union ceph_mds_request_args args;
 } __attribute__ ((packed));
 
-struct ceph_inopath_item {
+struct ceph_mds_request_release {
 	__le64 ino;
-	__le32 dname_hash;
+	__le32 caps;
+	__le32 seq;
+	__le32 dname_len;   /* if releasing a dentry lease, too.  string follows. */
 } __attribute__ ((packed));
 
 /* client reply */

@@ -50,8 +50,26 @@ class MClientRequest : public Message {
 public:
   struct ceph_mds_request_head head;
 
+  struct Release {
+    mutable ceph_mds_request_release item;
+    nstring dname;
+
+    void encode(bufferlist& bl) const {
+      item.dname_len = dname.length();
+      ::encode(item, bl);
+      ::encode_nohead(dname, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(item, bl);
+      ::decode_nohead(item.dname_len, dname, bl);
+    }
+  };
+  vector<Release> releases;
+
   // path arguments
   filepath path, path2;
+
+
 
  public:
   // cons
@@ -95,28 +113,31 @@ public:
     return false;    
   }
 
+  int get_flags() {
+    return head.flags;
+  }
   bool is_replay() {
-    return head.retry_attempt == CEPH_MDS_REQUEST_REPLAY;
+    return get_flags() & CEPH_MDS_FLAG_REPLAY;
   }
 
   // normal fields
   void set_tid(tid_t t) { head.tid = t; }
   void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
   void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
-  void set_retry_attempt(int a) { head.retry_attempt = a; }
+  void set_retry_attempt(int a) { head.num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
-  void set_mds_wants_replica_in_dirino(inodeno_t dirino) { 
-    head.mds_wants_replica_in_dirino = dirino; }
-  void set_num_dentries_wanted(int n) { head.num_dentries_wanted = n; }
+  void set_dentry_wanted() {
+    head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
+  }
     
   tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }
   int get_num_fwd() { return head.num_fwd; }
-  int get_retry_attempt() { return head.retry_attempt; }
+  int get_retry_attempt() { return head.num_retry; }
   int get_op() { return head.op; }
   unsigned get_caller_uid() { return head.caller_uid; }
   unsigned get_caller_gid() { return head.caller_gid; }
@@ -126,22 +147,22 @@ public:
   const string& get_path2() { return path2.get_path(); }
   filepath& get_filepath2() { return path2; }
 
-  inodeno_t get_mds_wants_replica_in_dirino() { 
-    return inodeno_t(head.mds_wants_replica_in_dirino);
-  }
-  int get_num_dentries_wanted() { return head.num_dentries_wanted; }
+  int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(path, p);
     ::decode(path2, p);
+    ::decode_nohead(head.num_releases, releases, p);
   }
 
   void encode_payload() {
+    head.num_releases = releases.size();
     ::encode(head, payload);
     ::encode(path, payload);
     ::encode(path2, payload);
+    ::encode_nohead(releases, payload);
   }
 
   const char *get_type_name() { return "creq"; }
@@ -153,11 +174,13 @@ public:
     out << " " << get_filepath();
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
-    if (head.retry_attempt)
-      out << " RETRY=" << head.retry_attempt;
+    if (head.num_retry)
+      out << " RETRY=" << head.num_retry;
     out << ")";
   }
 
 };
+
+WRITE_CLASS_ENCODER(MClientRequest::Release)
 
 #endif

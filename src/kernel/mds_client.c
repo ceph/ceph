@@ -1060,27 +1060,22 @@ static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
 	*ino = 0;
 
 	if (rinode) {
-		*freepath = build_inode_path(rinode, ppath,
-					     pathlen, ino);
-		dout(10, "create_request_message inode %p %llx.%llx\n",
-		     rinode, ceph_ino(rinode),
+		*freepath = build_inode_path(rinode, ppath, pathlen, ino);
+		dout(10, " inode %p %llx.%llx\n", rinode, ceph_ino(rinode),
 		     ceph_snap(rinode));
 	} else if (rdentry) {
-		*freepath = build_dentry_path(rdentry, ppath,
-					      pathlen, ino);
-		dout(10, "create_request_message dentry %p %llx/%.*s\n",
-		     rdentry, *ino, *pathlen, *ppath);
+		*freepath = build_dentry_path(rdentry, ppath, pathlen, ino);
+		dout(10, " dentry %p %llx/%.*s\n", rdentry, *ino, *pathlen,
+		     *ppath);
 	} else if (rpath) {
 		*ino = rino;
 		*ppath = rpath;
 		*pathlen = strlen(rpath);
-		dout(10, "create_request_message path %.*s\n",
-		     *pathlen, rpath);
+		dout(10, " path %.*s\n", *pathlen, rpath);
 	}
 
 	if (*freepath < 0)
 		return *freepath;
-
 	return 0;
 }
 
@@ -1113,14 +1108,12 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	ret = set_request_path_attr(NULL, req->r_old_dentry,
 			      req->r_path2, req->r_ino2.ino,
 			      &path2, &pathlen2, &ino2, &freepath2);
-
 	if (ret < 0) {
 		msg = ERR_PTR(ret);
 		goto out_free1;
 	}
 
 	pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
-
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, sizeof(*head) + pathlen,
 			   0, 0, NULL);
 	if (IS_ERR(msg))
@@ -1131,8 +1124,6 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	end = msg->front.iov_base + msg->front.iov_len;
 
 	head->mdsmap_epoch = cpu_to_le32(mdsc->mdsmap->m_epoch);
-	head->num_fwd = 0;
-	head->mds_wants_replica_in_dirino = 0;
 	head->op = cpu_to_le32(req->r_op);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
 	head->caller_uid = cpu_to_le32(current_fsuid());
@@ -1143,6 +1134,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 #endif
 	head->args = req->r_args;
 
+	head->num_releases = 0;
 	ceph_encode_filepath(&p, end, ino1, path1);
 	ceph_encode_filepath(&p, end, ino2, path2);
 
@@ -1180,6 +1172,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 {
 	struct ceph_mds_request_head *rhead;
 	struct ceph_msg *msg;
+	int flags = 0;
 
 	req->r_attempts++;
 	dout(10, "prepare_send_request %p tid %lld %s (attempt %d)\n", req,
@@ -1199,15 +1192,16 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 
 	rhead = msg->front.iov_base;
 	rhead->tid = cpu_to_le64(req->r_tid);
-	if (req->r_got_safe)
-		rhead->retry_attempt = cpu_to_le32(CEPH_MDS_REQUEST_REPLAY);
-	else
-		rhead->retry_attempt = cpu_to_le32(req->r_attempts - 1);
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
+	if (req->r_got_safe)
+		flags |= CEPH_MDS_FLAG_REPLAY;
+	if (req->r_locked_dir)
+		flags |= CEPH_MDS_FLAG_WANT_DENTRY;
+	rhead->flags = cpu_to_le32(flags);
 	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
+	rhead->num_retry = cpu_to_le32(req->r_attempts - 1);
 
 	dout(20, " r_locked_dir = %p\n", req->r_locked_dir);
-	rhead->num_dentries_wanted = req->r_locked_dir ? 1:0;
 
 	if (req->r_target_inode && req->r_got_unsafe)
 		rhead->ino = cpu_to_le64(ceph_ino(req->r_target_inode));

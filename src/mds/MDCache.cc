@@ -5691,6 +5691,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       }
 
       // forwarder wants replicas?
+#if 0
       if (mdr && mdr->client_request && 
 	  mdr->client_request->get_mds_wants_replica_in_dirino()) {
 	dout(30) << "traverse: REP is here, " 
@@ -5721,6 +5722,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  }
 	}
       }
+#endif
       
       // add to trace, continue.
       trace.push_back(dn);
@@ -5772,6 +5774,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
 	dout(7) << "traverse: forwarding, not auth for " << *curdir << dendl;
 	
+#if 0
 	// request replication?
 	if (mdr && mdr->client_request && curdir->is_rep()) {
 	  dout(15) << "traverse: REP fw to mds" << dauth << ", requesting rep under "
@@ -5779,6 +5782,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	  mdr->client_request->set_mds_wants_replica_in_dirino(curdir->ino());
 	  req->clear_payload();  // reencode!
 	}
+#endif
 	
 	if (mdr) 
 	  request_forward(mdr, dauth.first);

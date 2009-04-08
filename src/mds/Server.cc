@@ -585,7 +585,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->ref_snapid, mdr->ref_snapdiri,
 		   mdr->client_request->is_replay(),
-		   mdr->client_request->get_num_dentries_wanted());
+		   mdr->client_request->get_dentry_wanted());
 
   messenger->send_message(reply, client_inst);
 
@@ -649,7 +649,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   Session *session = mdr->session;
   bool did_early_reply = mdr->did_early_reply;
   entity_inst_t client_inst = req->get_orig_source_inst();
-  int num_dentries_wanted = req->get_num_dentries_wanted();
+  int dentry_wanted = req->get_dentry_wanted();
   mdcache->request_finish(mdr);
   mdr = 0;
 
@@ -661,7 +661,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, is_replay, num_dentries_wanted);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, is_replay, dentry_wanted);
     messenger->send_message(reply, client_inst);
   }
   
@@ -708,7 +708,7 @@ void Server::encode_null_lease(bufferlist& bl)
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
 			    snapid_t snapid, CInode *snapdiri,
-			    bool is_replay, int num_dentries_wanted)
+			    bool is_replay, int dentry_wanted)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -718,7 +718,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
 
-  //assert((bool)dn == (bool)num_dentries_wanted);  // not true for snapshot lookups
+  //assert((bool)dn == (bool)dentry_wanted);  // not true for snapshot lookups
 
   // realm
   SnapRealm *realm = 0;
@@ -4913,7 +4913,7 @@ void Server::handle_client_open(MDRequest *mdr)
 			     mdr->client_request->get_orig_source().num());
 
   CDentry *dn = 0;
-  if (req->get_num_dentries_wanted()) {
+  if (req->get_dentry_wanted()) {
     assert(mdr->trace.size());
     dn = mdr->trace.back();
   }

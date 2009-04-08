@@ -106,9 +106,12 @@ class cstring {
     bl.append(_data, _len);
   }
   void decode(bufferlist::iterator &bl) {
-    if (_data) delete[] _data;
     __u32 l;
     ::decode(l, bl);
+    decode_nohead(l, bl);
+  }
+  void decode_nohead(int l, bufferlist::iterator& bl) {
+    if (_data) delete[] _data;
     _len = l;
     _data = new char[_len + 1];
     bl.copy(_len, _data);
@@ -116,5 +119,15 @@ class cstring {
   }
 };
 WRITE_CLASS_ENCODER(cstring)
+
+inline void encode_nohead(const cstring& s, bufferlist& bl)
+{
+  bl.append(s.data(), s.length());
+}
+inline void decode_nohead(int len, cstring& s, bufferlist::iterator& p)
+{
+  s.decode_nohead(len, p);
+}
+
 
 #endif
