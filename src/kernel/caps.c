@@ -343,10 +343,14 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 				struct ceph_inode_info *ci)
 {
-	struct ceph_client *client = mdsc->client;
-	ci->i_hold_caps_until = round_jiffies(jiffies + client->mount_args.caps_delay * HZ);
+	struct ceph_mount_args *ma = &mdsc->client->mount_args;
+
+	ci->i_hold_caps_min = round_jiffies(jiffies +
+					    ma->caps_wanted_delay_min * HZ);
+	ci->i_hold_caps_max = round_jiffies(jiffies +
+					    ma->caps_wanted_delay_max * HZ);
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
-	     ci->i_hold_caps_until);
+	     ci->i_hold_caps_max);
 	if (!mdsc->stopping) {
 		spin_lock(&mdsc->cap_delay_lock);
 		if (!list_empty(&ci->i_cap_delay_list))
@@ -1034,7 +1038,7 @@ retry_locked:
 	 * have cached pages, but don't want them, then try to invalidate.
 	 * If we fail, it's because pages are locked.... try again later.
 	 */
-	if ((!time_before(jiffies, ci->i_hold_caps_until) || mdsc->stopping) &&
+	if ((!time_before(jiffies, ci->i_hold_caps_max) || mdsc->stopping) &&
 	    ci->i_wrbuffer_ref == 0 &&               /* no dirty pages... */
 	    ci->i_rdcache_gen &&                     /* may have cached pages */
 	    file_wanted == 0 &&                      /* no open files */
@@ -1112,7 +1116,7 @@ retry_locked:
 
 		/* delay cap release for a bit? */
 		if (!is_delayed &&
-		    time_before(jiffies, ci->i_hold_caps_until)) {
+		    time_before(jiffies, ci->i_hold_caps_max)) {
 			dout(30, "delaying cap release\n");
 			continue;
 		}
@@ -1228,6 +1232,7 @@ retry:
 	if (ci->i_dirty_caps && ci->i_auth_cap) {
 		struct ceph_cap *cap = ci->i_auth_cap;
 		int used = __ceph_caps_used(ci);
+		int want = __ceph_caps_wanted(ci);
 
 		if (!session) {
 			spin_unlock(&inode->i_lock);
@@ -1249,8 +1254,14 @@ retry:
 		ci->i_flushing_caps |= flushing;
 		ci->i_dirty_caps = 0;
 
+		/* don't release wanted unless we've waited a bit. */
+		if (time_before(jiffies, ci->i_hold_caps_min))
+			want = cap->mds_wanted;
+		else if (!want)
+			__cap_delay_cancel(mdsc, ci);
+
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, cap->mds_wanted,
+		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want,
 			   cap->issued | cap->implemented, flushing);
 		goto out_unlocked;
 	}
@@ -2111,7 +2122,7 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		ci = list_first_entry(&mdsc->cap_delay_list,
 				      struct ceph_inode_info,
 				      i_cap_delay_list);
-		if (time_before(jiffies, ci->i_hold_caps_until))
+		if (time_before(jiffies, ci->i_hold_caps_max))
 			break;
 		list_del_init(&ci->i_cap_delay_list);
 		spin_unlock(&mdsc->cap_delay_lock);

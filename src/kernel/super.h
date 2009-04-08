@@ -25,7 +25,15 @@
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
 #define CEPH_MOUNT_TIMEOUT_DEFAULT  60
-#define CEPH_CAP_DELAY_DEFAULT      60  /* cap release delay */
+
+/*
+ * Delay telling the MDS we no longer wnat caps, in case we reopen
+ * the file.  Delay a minimum amount of time, even if we send a cap
+ * message for some other reason.  Otherwise, take the oppotunity to
+ * update the mds to avoid sending another message later.
+ */
+#define CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT      5  /* cap release delay */
+#define CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT     60  /* cap release delay */
 
 /*
  * subtract jiffies
@@ -59,7 +67,7 @@ struct ceph_mount_args {
 	int sb_flags;
 	int flags;
 	int mount_timeout;
-	int caps_delay;
+	int caps_wanted_delay_min, caps_wanted_delay_max;
 	ceph_fsid_t fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
@@ -261,7 +269,8 @@ struct ceph_inode_info {
 	unsigned i_dirty_caps, i_flushing_caps;     /* mask of dirtied fields */
 	struct list_head i_dirty_item, i_sync_item;
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
-	unsigned long i_hold_caps_until; /* jiffies */
+	unsigned long i_hold_caps_min; /* jiffies */
+	unsigned long i_hold_caps_max; /* jiffies */
 	struct list_head i_cap_delay_list;  /* for delayed cap release to mds */
 	int i_cap_exporting_mds;         /* to handle cap migration between */
 	unsigned i_cap_exporting_mseq;   /*  mds's. */

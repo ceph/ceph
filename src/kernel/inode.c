@@ -265,7 +265,8 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ci->i_dirty_item);
 	INIT_LIST_HEAD(&ci->i_sync_item);
 	init_waitqueue_head(&ci->i_cap_wq);
-	ci->i_hold_caps_until = 0;
+	ci->i_hold_caps_min = 0;
+	ci->i_hold_caps_max = 0;
 	INIT_LIST_HEAD(&ci->i_cap_delay_list);
 	ci->i_cap_exporting_mds = 0;
 	ci->i_cap_exporting_mseq = 0;

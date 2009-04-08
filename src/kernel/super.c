@@ -374,7 +374,8 @@ enum {
 	Opt_rsize,
 	Opt_osdtimeout,
 	Opt_mount_timeout,
-	Opt_caps_delay,
+	Opt_caps_wanted_delay_min,
+	Opt_caps_wanted_delay_max,
 	/* int args above */
 	Opt_ip,
 	Opt_noshare,
@@ -405,7 +406,8 @@ static match_table_t arg_tokens = {
 	{Opt_rsize, "rsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
 	{Opt_mount_timeout, "mount_timeout=%d"},
-	{Opt_caps_delay, "caps_delay=%d"},
+	{Opt_caps_wanted_delay_min, "caps_wanted_delay_min=%d"},
+	{Opt_caps_wanted_delay_max, "caps_wanted_delay_max=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
@@ -510,7 +512,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->flags = CEPH_MOUNT_DEFAULT;
 	args->osd_timeout = 5;    /* seconds */
 	args->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
-	args->caps_delay = CEPH_CAP_DELAY_DEFAULT; /* seconds */
+	args->caps_wanted_delay_min = CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT;
+	args->caps_wanted_delay_max = CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT;
 	args->snapdir_name = ".snap";
 	args->cap_release_safety = CAPS_PER_RELEASE * 4;
 
@@ -627,8 +630,11 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		case Opt_mount_timeout:
 			args->mount_timeout = intval;
 			break;
-		case Opt_caps_delay:
-			args->caps_delay = intval;
+		case Opt_caps_wanted_delay_min:
+			args->caps_wanted_delay_min = intval;
+			break;
+		case Opt_caps_wanted_delay_max:
+			args->caps_wanted_delay_max = intval;
 			break;
 
 		case Opt_noshare:
