@@ -547,6 +547,10 @@ public:
       }
     if (n == 1) {
       loner_cap = loner;
+      authlock.excl_client = loner;
+      filelock.excl_client = loner;
+      linklock.excl_client = loner;
+      xattrlock.excl_client = loner;
       return true;
     }
     return false;
@@ -561,6 +565,10 @@ public:
     if (!cap ||
 	(cap->issued() & ~other_allowed) == 0) {
       loner_cap = -1;
+      authlock.excl_client = -1;
+      filelock.excl_client = -1;
+      linklock.excl_client = -1;
+      xattrlock.excl_client = -1;
       return true;
     }
     return false;

@@ -119,6 +119,8 @@ protected:
   int num_rdlock, num_wrlock, num_xlock;
   Mutation *xlock_by;
   int xlock_by_client;
+public:
+  int excl_client;
 
 
 public:
@@ -126,7 +128,7 @@ public:
     parent(o), type(t), wait_shift(ws),
     state(LOCK_SYNC), num_client_lease(0),
     num_rdlock(0), num_wrlock(0), num_xlock(0),
-    xlock_by(0), xlock_by_client(-1) {
+    xlock_by(0), xlock_by_client(-1), excl_client(-1) {
     switch (type) {
     case CEPH_LOCK_DN:
     case CEPH_LOCK_IAUTH:
@@ -281,7 +283,8 @@ public:
   bool can_wrlock(int client) {
     return sm->states[state].can_wrlock == ANY ||
       (sm->states[state].can_wrlock == AUTH && parent->is_auth()) ||
-      (sm->states[state].can_wrlock == XCL && client >= 0 && xlock_by_client == client);
+      (sm->states[state].can_wrlock == XCL && client >= 0 && (xlock_by_client == client ||
+							      excl_client == client));
   }
   bool can_xlock(int client) {
     return sm->states[state].can_xlock == ANY ||

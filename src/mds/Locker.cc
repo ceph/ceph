@@ -697,8 +697,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
   
   while (1) {
     // wrlock?
-    if (lock->can_wrlock(client) ||
-	(cap && in->get_loner() == client && (cap->pending() & CEPH_CAP_FILE_EXCL))) {
+    if (lock->can_wrlock(client)) {
       lock->get_wrlock();
       mut->wrlocks.insert(lock);
       mut->locks.insert(lock);
