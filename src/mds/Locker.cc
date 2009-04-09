@@ -1321,8 +1321,12 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
 
   if (!force_wrlock && !in->filelock.can_wrlock(-1)) {
     // lock?
-    if (in->filelock.is_stable())
-      simple_lock(&in->filelock);
+    if (in->filelock.is_stable()) {
+      if (in->get_loner() >= 0)
+	file_excl(&in->filelock);
+      else
+	simple_lock(&in->filelock);
+    }
     if (!in->filelock.can_wrlock(-1)) {
       // try again later
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
