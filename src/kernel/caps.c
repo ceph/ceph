@@ -1012,6 +1012,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
 	int tried_invalidate = 0;
+	int op;
 
 	/* if we are unmounting, flush any unused caps immediately. */
 	if (mdsc->stopping)
@@ -1188,11 +1189,15 @@ ack:
 		if (drop)
 			want = cap->mds_wanted; 
 
+		if (want & ~cap->mds_wanted)
+			op = CEPH_CAP_OP_WANT;
+		else
+			op = CEPH_CAP_OP_UPDATE;
+
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want, retain,
-			   flushing);
+		__send_cap(mdsc, cap, op, used, want, retain, flushing);
 
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}

@@ -1466,6 +1466,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
 
   int op = m->get_op();
+  bool do_issue = false;
 
   if (op == CEPH_CAP_OP_RENEW) {
     if (cap->touch()) {
@@ -1556,6 +1557,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 		   << " (seq " << m->get_seq() << " != last_issue " << cap->get_last_issue() << ")" << dendl;
 	}
       }
+      if (m->get_op() == CEPH_CAP_OP_WANT && (wanted & ~cap->pending()))
+	do_issue = true;
       
       if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
 	// no update, ack now.
@@ -1565,7 +1568,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	
       eval_cap_gather(in);
       if (in->filelock.is_stable())
-	file_eval(&in->filelock);
+	file_eval(&in->filelock, do_issue);
       if (in->authlock.is_stable())
 	eval(&in->authlock);
     }
@@ -2861,7 +2864,7 @@ void Locker::try_file_eval(ScatterLock *lock)
 
 
 
-void Locker::file_eval(ScatterLock *lock)
+void Locker::file_eval(ScatterLock *lock, bool do_issue)
 {
   CInode *in = (CInode*)lock->get_parent();
   int loner_wanted, other_wanted;
@@ -2893,7 +2896,6 @@ void Locker::file_eval(ScatterLock *lock)
 	  file_mixed(lock);
 	else
 	  simple_sync(lock);
-	return;
       }
     }    
   }
@@ -2908,7 +2910,6 @@ void Locker::file_eval(ScatterLock *lock)
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock);
-    return;
   }
 
   // * -> mixed?
@@ -2920,7 +2921,6 @@ void Locker::file_eval(ScatterLock *lock)
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
-    return;
   }
   
   // * -> sync?
@@ -2939,7 +2939,10 @@ void Locker::file_eval(ScatterLock *lock)
     simple_sync(lock);
   }
   
-  if (in->is_any_caps())
+  else
+    do_issue = true;
+
+  if (in->is_any_caps() && do_issue)
     issue_caps(in);
 }
 
