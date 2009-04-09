@@ -996,7 +996,6 @@ bool Locker::issue_caps(CInode *in)
   int all_allowed = in->get_caps_allowed_by_type(CAP_ANY);
   int loner_allowed = in->get_caps_allowed_by_type(CAP_LONER);
   int xlocker_allowed = in->get_caps_allowed_by_type(CAP_XLOCKER);
-  int careful = in->get_caps_careful();
 
   int loner = in->get_loner();
   if (loner >= 0) {
@@ -1011,9 +1010,6 @@ bool Locker::issue_caps(CInode *in)
 	    << " on " << *in << dendl;
   }
 
-  if (careful)
-    dout(7) << "issue_caps careful " << ccap_string(careful) << dendl;
-  
   // count conflicts with
   int nissued = 0;        
 
@@ -1044,8 +1040,6 @@ bool Locker::issue_caps(CInode *in)
     allowed |= xlocker_allowed & in->get_xlocker_mask(it->first);
 
     int pending = cap->pending();
-    allowed &= ~careful | pending;   // only allow "careful" bits if already issued
-
     int wanted = cap->wanted();
 
     dout(20) << " client" << it->first
