@@ -1124,11 +1124,6 @@ retry_locked:
 		if (want & ~(cap->mds_wanted | cap->issued))
 			goto ack;
 
-		dout(0, " issued %s retain %s mds_wanted %s want %s\n",
-			ceph_cap_string(cap->issued), 
-			ceph_cap_string(retain), 
-			ceph_cap_string(cap->mds_wanted), 
-			ceph_cap_string(want));
 		if ((cap->issued & ~retain) == 0 &&
 		    cap->mds_wanted == want)
 			continue;     /* nothing extra, wanted is correct */
