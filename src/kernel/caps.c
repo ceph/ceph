@@ -1191,6 +1191,7 @@ ack:
 			op = CEPH_CAP_OP_DROP;
 		} else {
 			op = CEPH_CAP_OP_UPDATE;
+			__cap_delay_cancel(mdsc, ci);
 		}
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
