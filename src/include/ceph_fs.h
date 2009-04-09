@@ -1015,7 +1015,7 @@ enum {
 	CEPH_CAP_OP_EXPORT,    /* mds has exported the cap */
 	CEPH_CAP_OP_IMPORT,    /* mds has imported the cap from specified mds */
 	CEPH_CAP_OP_UPDATE,    /* client->mds update */
-	CEPH_CAP_OP_WANT,      /* client->mds wanted update */
+	CEPH_CAP_OP_DROP,      /* client->mds drop cap bits */
 	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed.  if caps=0, cap also released. */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
 	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
@@ -1032,7 +1032,7 @@ static inline const char *ceph_cap_op_name(int op)
 	case CEPH_CAP_OP_EXPORT: return "export";
 	case CEPH_CAP_OP_IMPORT: return "import";
 	case CEPH_CAP_OP_UPDATE: return "update";
-	case CEPH_CAP_OP_WANT: return "want";
+	case CEPH_CAP_OP_DROP: return "drop";
 	case CEPH_CAP_OP_FLUSH_ACK: return "flush_ack";
 	case CEPH_CAP_OP_FLUSHSNAP: return "flushsnap";
 	case CEPH_CAP_OP_FLUSHSNAP_ACK: return "flushsnap_ack";

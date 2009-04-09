@@ -1186,13 +1186,12 @@ ack:
 		}
 
 		/* don't update mds wanted on drop */
-		if (drop)
+		if (drop) {
 			want = cap->mds_wanted; 
-
-		if (want & ~cap->mds_wanted)
-			op = CEPH_CAP_OP_WANT;
-		else
+			op = CEPH_CAP_OP_DROP;
+		} else {
 			op = CEPH_CAP_OP_UPDATE;
+		}
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
 

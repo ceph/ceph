@@ -1561,7 +1561,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 		   << " (seq " << m->get_seq() << " != last_issue " << cap->get_last_issue() << ")" << dendl;
 	}
       }
-      if (m->get_op() == CEPH_CAP_OP_WANT && (wanted & ~cap->pending()))
+      if (m->get_op() != CEPH_CAP_OP_DROP && (wanted & ~cap->pending()))
 	do_issue = true;
       
       if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
