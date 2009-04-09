@@ -790,6 +790,10 @@ static inline void ceph_release_caps(struct inode *inode, int mask)
 {
 	ceph_check_caps(ceph_inode(inode), 1, mask, NULL);
 }
+extern int ceph_encode_inode_release(void **p, struct inode *inode,
+				     int mds, int drop, int unless);
+extern int ceph_encode_dentry_release(void **p, struct dentry *dn,
+				      int mds, int drop, int unless);
 
 extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		      loff_t endoff);

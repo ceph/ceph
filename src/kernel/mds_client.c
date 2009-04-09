@@ -895,6 +895,7 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode)
 
 	if (!req)
 		return ERR_PTR(-ENOMEM);
+
 	req->r_started = jiffies;
 	req->r_resend_mds = -1;
 	INIT_LIST_HEAD(&req->r_unsafe_dir_item);
@@ -1092,8 +1093,9 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	const char *path2 = req->r_path2;
 	u64 ino1, ino2;
 	int pathlen1, pathlen2;
-	int pathlen;
+	int len;
 	int freepath1, freepath2;
+	u32 releases;
 	void *p, *end;
 	int ret;
 
@@ -1113,9 +1115,19 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		goto out_free1;
 	}
 
-	pathlen = pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, sizeof(*head) + pathlen,
-			   0, 0, NULL);
+	len = sizeof(*head) +
+		pathlen1 + pathlen2 + 2*(sizeof(u32) + sizeof(u64));
+
+	/* calculate (max) length for cap releases */
+	len += sizeof(struct ceph_mds_request_release) *
+		(!!req->r_inode_drop + !!req->r_dentry_drop +
+		 !!req->r_old_inode_drop + !!req->r_old_dentry_drop);
+	if (req->r_dentry_drop)
+		len += req->r_dentry->d_name.len;
+	if (req->r_old_dentry_drop)
+		len += req->r_old_dentry->d_name.len;
+
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_REQUEST, len, 0, 0, NULL);
 	if (IS_ERR(msg))
 		goto out_free2;
 
@@ -1134,11 +1146,30 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 #endif
 	head->args = req->r_args;
 
-	head->num_releases = 0;
 	ceph_encode_filepath(&p, end, ino1, path1);
 	ceph_encode_filepath(&p, end, ino2, path2);
 
- 	BUG_ON(p != end);
+	/* cap releases */
+	releases = 0;
+	if (req->r_inode_drop)
+		releases += ceph_encode_inode_release(&p, 
+		      req->r_inode ? req->r_inode : req->r_dentry->d_inode,
+		      mds, req->r_inode_drop, req->r_inode_unless);
+	if (req->r_dentry_drop)
+		releases += ceph_encode_dentry_release(&p, req->r_dentry,
+		       mds, req->r_dentry_drop, req->r_dentry_unless);
+	if (req->r_old_dentry_drop)
+		releases += ceph_encode_dentry_release(&p, req->r_old_dentry,
+		       mds, req->r_old_dentry_drop, req->r_old_dentry_unless);
+	if (req->r_old_inode_drop)
+		releases += ceph_encode_inode_release(&p,
+		      req->r_old_dentry->d_inode,
+		      mds, req->r_old_inode_drop, req->r_old_inode_unless);
+	head->num_releases = cpu_to_le32(releases);
+
+	BUG_ON(p > end);
+	msg->front.iov_len = p - msg->front.iov_base;
+	msg->hdr.front_len = cpu_to_le32(msg->front.iov_len);
 
 out_free2:
 	if (freepath2)

@@ -808,9 +808,10 @@ struct ceph_mds_request_head {
 } __attribute__ ((packed));
 
 struct ceph_mds_request_release {
-	__le64 ino;
+	__le64 ino, cap_id;
 	__le32 caps;
-	__le32 seq;
+	__le32 seq, mseq;
+	__le32 dname_seq;
 	__le32 dname_len;   /* if releasing a dentry lease, too.  string follows. */
 } __attribute__ ((packed));
 

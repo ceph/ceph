@@ -1588,6 +1588,44 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
+void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int seq, int mseq,
+				const nstring& dname)
+{
+  CInode *in = mdcache->get_inode(ino);
+  if (!in)
+    return;
+  Capability *cap = in->get_client_cap(client);
+  if (cap) {
+    dout(10) << "process_cap_update client" << client << " " << ccap_string(caps) << " on " << *in << dendl;
+    
+    if (ceph_seq_cmp(mseq, cap->get_mseq()) < 0) {
+      dout(7) << " mseq " << mseq << " < " << cap->get_mseq() << ", dropping" << dendl;
+      return;
+    }
+    
+    cap->confirm_receipt(seq, caps);
+    
+    eval_cap_gather(in);
+    if (in->filelock.is_stable())
+      file_eval(&in->filelock);
+    if (in->authlock.is_stable())
+      eval(&in->authlock);
+  }
+  
+  if (dname.length()) {
+    frag_t fg = in->pick_dirfrag(dname);
+    CDir *dir = in->get_dirfrag(fg);
+    if (dir) {
+      CDentry *dn = dir->lookup(dname);
+      MDSCacheObject *p = dn;
+      ClientLease *l = p->get_client_lease(client);
+      if (l)
+	p->remove_client_lease(l, l->mask, this);
+    }
+  }
+
+}
+
 /*
  * update inode based on cap flush|flushsnap|wanted.
  *  adjust max_size, if needed.

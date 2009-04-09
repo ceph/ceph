@@ -1437,9 +1437,8 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	spin_unlock(&inode->i_lock);
 
 	if (mask) {
-		if (release)
-			ceph_release_caps(inode, release);
 		req->r_inode = igrab(inode);
+		req->r_inode_drop = release;
 		req->r_args.setattr.mask = mask;
 		req->r_num_caps = 1;
 		err = ceph_mdsc_do_request(mdsc, parent_inode, req);
@@ -1795,6 +1794,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
+	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
 	req->r_num_caps = 1;
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
 
@@ -1803,7 +1803,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_request->hdr.data_len = cpu_to_le32(size);
 	req->r_request->hdr.data_off = cpu_to_le16(0);
 
-	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 
@@ -1840,8 +1839,9 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
+	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
 	req->r_num_caps = 1;
-	ceph_release_caps(inode, CEPH_CAP_XATTR_RDCACHE);
+
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
 	return err;

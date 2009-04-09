@@ -152,7 +152,20 @@ protected:
 public:
   void mark_updated_scatterlock(ScatterLock *lock);
 
+
+  // caps
+  void process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int seq, int mseq,
+			  const nstring& dname);
+
+ protected:
+  void handle_client_caps(class MClientCaps *m);
+  bool _do_cap_update(CInode *in, Capability *cap, int had, int wanted, snapid_t follows, MClientCaps *m,
+		      MClientCaps *ack=0);
+  void handle_client_cap_release(class MClientCapRelease *m);
+
+
   // local
+public:
   void local_wrlock_grab(LocalLock *lock, Mutation *mut);
 protected:
   bool local_wrlock_start(LocalLock *lock, MDRequest *mut);
@@ -183,12 +196,6 @@ public:
   void revoke_stale_caps(Session *session);
   void resume_stale_caps(Session *session);
   void remove_stale_leases(Session *session);
-
- protected:
-  void handle_client_caps(class MClientCaps *m);
-  bool _do_cap_update(CInode *in, Capability *cap, int had, int wanted, snapid_t follows, MClientCaps *m,
-		      MClientCaps *ack=0);
-  void handle_client_cap_release(class MClientCapRelease *m);
 
 public:
   void request_inode_file_caps(CInode *in);

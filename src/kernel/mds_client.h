@@ -167,6 +167,12 @@ struct ceph_mds_request {
 	struct ceph_vino r_ino1, r_ino2;
 	union ceph_mds_request_args r_args;
 
+	int r_inode_drop, r_inode_unless;
+	int r_dentry_drop, r_dentry_unless;
+	int r_old_dentry_drop, r_old_dentry_unless;
+	struct inode *r_old_inode;
+	int r_old_inode_drop, r_old_inode_unless;
+	
 	struct inode *r_target_inode;
 
 	struct ceph_msg  *r_request;  /* original request */

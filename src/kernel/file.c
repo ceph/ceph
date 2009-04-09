@@ -165,8 +165,6 @@ int ceph_open(struct inode *inode, struct file *file)
 	spin_unlock(&inode->i_lock);
 
 	dout(10, "open fmode %d wants %s\n", fmode, ceph_cap_string(wanted));
-	if (!ceph_caps_issued_mask(ceph_inode(inode), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(inode, CEPH_CAP_FILE_RDCACHE);
 	req = prepare_open_request(inode->i_sb, flags, 0);
 	if (IS_ERR(req)) {
 		err = PTR_ERR(req);
@@ -217,9 +215,10 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(PTR_ERR(req));
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
-	if ((flags & O_CREAT) &&
-	    (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL)))
-		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
+	if (flags & O_CREAT) {
+		req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+		req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
+	}
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);

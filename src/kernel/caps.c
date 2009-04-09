@@ -258,9 +258,8 @@ void ceph_reservation_status(int *total, int *avail, int *used, int *reserved)
  *
  * Called with i_lock held.
  */
-static struct ceph_cap *__get_cap_for_mds(struct inode *inode, int mds)
+static struct ceph_cap *__get_cap_for_mds(struct ceph_inode_info *ci, int mds)
 {
-	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_cap *cap;
 	struct rb_node *n = ci->i_caps.rb_node;
 
@@ -433,7 +432,7 @@ int ceph_add_cap(struct inode *inode,
 
 retry:
 	spin_lock(&inode->i_lock);
-	cap = __get_cap_for_mds(inode, mds);
+	cap = __get_cap_for_mds(ci, mds);
 	if (!cap) {
 		if (new_cap) {
 			cap = new_cap;
@@ -2093,7 +2092,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	/* the rest require a cap */
 	spin_lock(&inode->i_lock);
-	cap = __get_cap_for_mds(inode, mds);
+	cap = __get_cap_for_mds(ceph_inode(inode), mds);
 	if (!cap) {
 		dout(10, "no cap on %p ino %llx.%llx from mds%d, releasing\n",
 		     inode, ceph_ino(inode), ceph_snap(inode), mds);
@@ -2192,3 +2191,71 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 		ceph_check_caps(ci, 0, 0, NULL);
 }
 
+/*
+ * Helpers for embedding cap and dentry lease releases into mds
+ * requests.
+ */
+int ceph_encode_inode_release(void **p, struct inode *inode,
+			      int mds, int drop, int unless)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_cap *cap;
+	struct ceph_mds_request_release *rel = *p;
+	int ret = 0;
+
+	dout(10, "encode_inode_release %p mds%d drop %s unless %s\n", inode,
+	     mds, ceph_cap_string(drop), ceph_cap_string(unless));
+
+	spin_lock(&inode->i_lock);
+	cap = __get_cap_for_mds(ci, mds);
+	if (cap && __cap_is_valid(cap)) {
+		if ((cap->issued & drop) &&
+		    (cap->issued & unless) == 0) {
+			dout(10, "encode_inode_release %p cap %p %s -> %s\n",
+			     inode, cap, ceph_cap_string(cap->issued),
+			     ceph_cap_string(cap->issued & ~drop));
+			cap->issued &= ~drop;
+			cap->implemented &= ~drop;
+
+			rel->ino = cpu_to_le64(ceph_ino(inode));
+			rel->cap_id = cpu_to_le64(cap->cap_id);
+			rel->seq = cpu_to_le32(cap->seq);
+			rel->mseq = cpu_to_le32(cap->mseq);
+			rel->caps = cpu_to_le32(cap->issued);
+			rel->dname_len = 0;
+			rel->dname_seq = 0;
+			*p += sizeof(*rel);
+			ret = 1;
+		} else {
+			dout(10, "encode_inode_release %p cap %p %s\n",
+			     inode, cap, ceph_cap_string(cap->issued));
+		}
+	}
+	spin_unlock(&inode->i_lock);
+	return ret;
+}
+
+int ceph_encode_dentry_release(void **p, struct dentry *dentry,
+			       int mds, int drop, int unless)
+{
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct ceph_mds_request_release *rel = *p;
+	struct ceph_dentry_info *di = ceph_dentry(dentry);
+	int ret;
+
+	ret = ceph_encode_inode_release(p, dir, mds, drop, unless);
+
+	/* drop dentry lease too? */
+	spin_lock(&dentry->d_lock);
+	if (ret && di->lease_session && di->lease_session->s_mds == mds) {
+		dout(10, "encode_dentry_release %p mds%d seq %d\n",
+		     dentry, mds, (int)di->lease_seq);
+		rel->dname_len = cpu_to_le32(dentry->d_name.len);
+		memcpy(*p, dentry->d_name.name, dentry->d_name.len);
+		*p += dentry->d_name.len;
+		rel->dname_seq = cpu_to_le32(di->lease_seq);
+	}
+	spin_unlock(&dentry->d_lock);
+
+	return ret;
+}

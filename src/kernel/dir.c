@@ -396,7 +396,7 @@ int ceph_handle_notrace_create(struct inode *dir, struct dentry *dentry)
 }
 
 static int ceph_mknod(struct inode *dir, struct dentry *dentry,
-			  int mode, dev_t rdev)
+		      int mode, dev_t rdev)
 {
 	struct ceph_client *client = ceph_sb_to_client(dir->i_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -409,7 +409,6 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	dout(5, "mknod in dir %p dentry %p mode 0%o rdev %d\n",
 	     dir, dentry, mode, rdev);
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_MKNOD, USE_AUTH_MDS);
-
 	if (IS_ERR(req)) {
 		d_drop(dentry);
 		return PTR_ERR(req);
@@ -419,8 +418,8 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	req->r_locked_dir = dir;
 	req->r_args.mknod.mode = cpu_to_le32(mode);
 	req->r_args.mknod.rdev = cpu_to_le32(rdev);
-	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
+	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_unless = CEPH_CAP_FILE_EXCL; 
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
 		err = ceph_handle_notrace_create(dir, dentry);
@@ -469,13 +468,12 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 		d_drop(dentry);
 		return PTR_ERR(req);
 	}
-
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	req->r_path2 = dest;
 	req->r_locked_dir = dir;
-	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
+	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
 		err = ceph_handle_notrace_create(dir, dentry);
@@ -514,9 +512,8 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
 	req->r_args.mkdir.mode = cpu_to_le32(mode);
-
-	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
+	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
 		err = ceph_handle_notrace_create(dir, dentry);
@@ -549,9 +546,8 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry); /* or inode? hrm. */
 	req->r_locked_dir = dir;
-
-	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
+	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (err) {
 		d_drop(dentry);
@@ -567,15 +563,15 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
  * than PIN) we don't specifically want (due to the file still being
  * open).
  */
-static void drop_caps_for_unlink(struct inode *inode)
+static int drop_caps_for_unlink(struct inode *inode)
 {
 	int drop = CEPH_CAP_LINK_RDCACHE | CEPH_CAP_LINK_EXCL;
 
 	spin_lock(&inode->i_lock);
-	if (inode->i_nlink == 1) 
+	if (inode->i_nlink == 1)
 		drop |= ~(__ceph_caps_wanted(ceph_inode(inode)) | CEPH_CAP_PIN);
 	spin_unlock(&inode->i_lock);
-	ceph_release_caps(inode, drop);
+	return drop;
 }
 
 /*
@@ -610,11 +606,9 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
-
-	if (!ceph_caps_issued_mask(ceph_inode(dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(dir, CEPH_CAP_FILE_RDCACHE);
-	ceph_mdsc_lease_release(mdsc, dir, dentry, CEPH_LOCK_DN);
-	drop_caps_for_unlink(inode);
+	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
+	req->r_inode_drop = drop_caps_for_unlink(inode);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
 		d_delete(dentry);
@@ -645,16 +639,14 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry);
 	req->r_locked_dir = new_dir;
-	if (!ceph_caps_issued_mask(ceph_inode(old_dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(old_dir, CEPH_CAP_FILE_RDCACHE);
-	ceph_mdsc_lease_release(mdsc, old_dir, old_dentry, CEPH_LOCK_DN);
-	if (!ceph_caps_issued_mask(ceph_inode(new_dir), CEPH_CAP_FILE_EXCL))
-		ceph_release_caps(new_dir, CEPH_CAP_FILE_RDCACHE);
-	ceph_mdsc_lease_release(mdsc, new_dir, new_dentry, CEPH_LOCK_DN);
+	req->r_old_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_old_dentry_unless = CEPH_CAP_FILE_EXCL;
+	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	/* release LINK_RDCACHE on source inode (mds will lock it) */
-	ceph_release_caps(old_dentry->d_inode, CEPH_CAP_LINK_RDCACHE);
+	req->r_old_inode_drop = CEPH_CAP_LINK_RDCACHE;
 	if (new_dentry->d_inode)
-		drop_caps_for_unlink(new_dentry->d_inode);
+		req->r_inode_drop = drop_caps_for_unlink(new_dentry->d_inode);
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry) {
 		/*

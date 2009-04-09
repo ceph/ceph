@@ -834,6 +834,17 @@ void Server::handle_client_request(MClientRequest *req)
     session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
+  // process embedded cap releases?
+  if (req->get_source().is_client()) {
+    int client = req->get_source().num();
+    for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
+	 p != req->releases.end();
+	 p++) {
+      mds->locker->process_cap_update(client, inodeno_t((__u64)p->item.ino), p->item.cap_id, p->item.caps,
+				      p->item.seq, p->item.mseq, p->dname);
+    }
+  }
+
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) return;
