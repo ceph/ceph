@@ -862,7 +862,10 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 	lock->get_num_client_lease() == 0) {
       assert(!lock->is_stable());
       lock->get_parent()->auth_unpin(lock);
-      lock->set_state(LOCK_LOCK);
+      if (lock->get_type() != CEPH_LOCK_DN && ((CInode*)lock->get_parent())->get_loner() >= 0)
+	lock->set_state(LOCK_EXCL);
+      else
+	lock->set_state(LOCK_LOCK);
     }
 
     // others waiting?
