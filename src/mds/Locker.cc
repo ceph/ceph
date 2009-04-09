@@ -1634,11 +1634,18 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
     }
     if (change_max &&
-	!in->filelock.can_wrlock(client) &&
-	(cap->issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_EXCL)) == 0) {  // not already issued WR access
-      dout(10) << " i want to change file_max, but lock won't allow it; will retry" << dendl;
-      check_inode_max_size(in);  // this will fail, and schedule a waiter.
-      change_max = false;
+	!in->filelock.can_wrlock(client)) {
+      dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
+      if (in->filelock.is_stable()) {
+	if (in->get_loner() >= 0)
+	  file_excl(&in->filelock);
+	else
+	  simple_lock(&in->filelock);
+      }
+      if (!in->filelock.can_wrlock(client)) {
+	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
+	change_max = false;
+      }
     }
   }
 
