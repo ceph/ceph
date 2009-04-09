@@ -2894,10 +2894,9 @@ void Locker::file_eval(ScatterLock *lock, bool do_issue)
 	  (other_wanted & (CEPH_CAP_GWR|CEPH_CAP_GRD))) {
 	// we should lose it.
 	if ((other_wanted & CEPH_CAP_GWR) ||
-	    lock->is_waiter_for(SimpleLock::WAIT_WR) ||
-	    lock->is_wrlocked())
+	    lock->is_waiter_for(SimpleLock::WAIT_WR))
 	  file_mixed(lock);
-	else
+	else if (!lock->is_wrlocked())   // let excl wrlocks drain first
 	  simple_sync(lock);
       }
     }    
