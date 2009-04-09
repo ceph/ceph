@@ -1550,6 +1550,10 @@ void Locker::handle_client_caps(MClientCaps *m)
 		   << " -> " << ccap_string(wanted)
 		   << " (added caps even though we had seq mismatch!)" << dendl;
 	  cap->set_wanted(wanted | cap->wanted());
+	} else {
+	  dout(10) << " NOT changing wanted " << ccap_string(cap->wanted())
+		   << " -> " << ccap_string(wanted)
+		   << " (seq " << m->get_seq() << " != last_issue " << cap->get_last_issue() << ")" << dendl;
 	}
       }
       
@@ -2889,6 +2893,7 @@ void Locker::file_eval(ScatterLock *lock)
 	  file_mixed(lock);
 	else
 	  simple_sync(lock);
+	return;
       }
     }    
   }
@@ -2903,6 +2908,7 @@ void Locker::file_eval(ScatterLock *lock)
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock);
+    return;
   }
 
   // * -> mixed?
@@ -2914,6 +2920,7 @@ void Locker::file_eval(ScatterLock *lock)
     dout(7) << "file_eval stable, bump to mixed " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_mixed(lock);
+    return;
   }
   
   // * -> sync?
@@ -2932,7 +2939,7 @@ void Locker::file_eval(ScatterLock *lock)
     simple_sync(lock);
   }
   
-  else if (in->is_any_caps())
+  if (in->is_any_caps())
     issue_caps(in);
 }
 
