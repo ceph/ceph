@@ -1016,7 +1016,8 @@ bool Locker::issue_caps(CInode *in)
   // should we increase max_size?
   if (in->is_file() &&
       ((all_allowed|loner_allowed) & CEPH_CAP_FILE_WR) &&
-      in->is_auth())
+      in->is_auth() &&
+      !in->state_test(CInode::STATE_NO_SIZE_CHECK))
     // we force an update here, which among other things avoids twiddling
     // the lock state.
     check_inode_max_size(in, true);
@@ -1633,12 +1634,14 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     if (change_max &&
 	!in->filelock.can_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
+      in->state_set(CInode::STATE_NO_SIZE_CHECK);
       if (in->filelock.is_stable()) {
 	if (in->get_loner() >= 0)
 	  file_excl(&in->filelock);
 	else
 	  simple_lock(&in->filelock);
       }
+      in->state_clear(CInode::STATE_NO_SIZE_CHECK);
       if (!in->filelock.can_wrlock(client)) {
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
 	change_max = false;
