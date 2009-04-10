@@ -153,7 +153,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		if ((issued & wanted) != wanted &&
 		    (mds_wanted & wanted) != wanted &&
 		    ceph_snap(inode) != CEPH_SNAPDIR)
-			ceph_check_caps(ci, 0, 0, NULL);
+			ceph_check_caps(ci, 0, NULL);
 
 		return ceph_init_file(inode, file, fmode);
 	} else if (ceph_snap(inode) != CEPH_NOSNAP &&
@@ -701,7 +701,7 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 	}
 	spin_unlock(&inode->i_lock);
 	if (check)
-		ceph_check_caps(ci, 0, 0, NULL);
+		ceph_check_caps(ci, 0, NULL);
 }
 
 /*

@@ -1138,7 +1138,7 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 	if ((size << 1) >= ci->i_max_size &&
 	    (ci->i_reported_size << 1) < ci->i_max_size) {
 		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, 0, 0, NULL);
+		ceph_check_caps(ci, 0, NULL);
 	} else {
 		spin_unlock(&inode->i_lock);
 	}
@@ -1201,7 +1201,7 @@ static void ceph_inode_invalidate_pages(struct work_struct *work)
 	spin_unlock(&inode->i_lock);
 
 	if (check)
-		ceph_check_caps(ci, 0, 0, NULL);
+		ceph_check_caps(ci, 0, NULL);
 out:
 	iput(inode);
 }
@@ -1258,7 +1258,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 	spin_unlock(&inode->i_lock);
 
 	if (wrbuffer_refs == 0)
-		ceph_check_caps(ci, 0, 0, NULL);
+		ceph_check_caps(ci, 0, NULL);
 	if (wake)
 		wake_up(&ci->i_cap_wq);
 }

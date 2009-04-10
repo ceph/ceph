@@ -782,14 +782,10 @@ extern void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 				       struct ceph_snap_context *snapc);
 extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 			       struct ceph_mds_session **psession);
-extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed, int drop,
+extern void ceph_check_caps(struct ceph_inode_info *ci, int delayed,
 			    struct ceph_mds_session *session);
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
 
-static inline void ceph_release_caps(struct inode *inode, int mask)
-{
-	ceph_check_caps(ceph_inode(inode), 1, mask, NULL);
-}
 extern int ceph_encode_inode_release(void **p, struct inode *inode,
 				     int mds, int drop, int unless);
 extern int ceph_encode_dentry_release(void **p, struct dentry *dn,
