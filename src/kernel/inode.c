@@ -1633,6 +1633,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	struct rb_node *parent = NULL;
 	struct ceph_inode_xattr *xattr = NULL;
 	int c;
+	int new = 0;
 
 	p = &ci->i_xattrs.rb_node;
 	while (*p) {
@@ -1648,6 +1649,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	}
 
 	if (!xattr) {
+		new = 1;
 		xattr = kmalloc(sizeof(*xattr), GFP_NOFS);
 		xattr->name = name;
 		xattr->name_len = name_len;
@@ -1657,7 +1659,8 @@ static int __set_xattr(struct ceph_inode_info *ci,
 			kfree((void *)xattr->val);
 
 		if (should_free_name) {
-			kfree((void *)xattr->name);
+			kfree((void *)name);
+			name = xattr->name;
 		}
 		ci->i_xattr_names_size -= (xattr->name_len + 1);
 	}
@@ -1676,11 +1679,13 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	xattr->dirty = dirty;
 	xattr->should_free_val = (val && should_free_val);
 
-	rb_link_node(&xattr->node, parent, p);
-	rb_insert_color(&xattr->node, &ci->i_xattrs);
+	if (new) {
+		rb_link_node(&xattr->node, parent, p);
+		rb_insert_color(&xattr->node, &ci->i_xattrs);
+	}
 
-	dout(20, "__set_xattr_val added %llx.%llx xattr %s=%s\n",
-	     ceph_vinop(&ci->vfs_inode), name, val);
+	dout(0, "__set_xattr_val added %llx.%llx xattr %p %s=%s\n",
+	     ceph_vinop(&ci->vfs_inode), xattr, name, val);
 
 	return 0;
 }
@@ -1764,6 +1769,8 @@ static char * __copy_xattr_names(struct ceph_inode_info *ci,
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
 
 		memcpy(dest, xattr->name, xattr->name_len + 1);
+
+		dout(0, "dest=%s %p (%s) (%d/%d)\n", dest, xattr, xattr->name, xattr->name_len, ci->i_xattr_names_size);
 
 		dest += xattr->name_len + 1;
 
@@ -1879,7 +1886,6 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	u32 vir_namelen = 0;
 	u32 namelen;
-	void *p;
 	int err;
 	u32 len;
 	int i;
@@ -1908,7 +1914,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	if (size == 0)
 		goto out;
 
-	p = __copy_xattr_names(ci, names);
+	names = __copy_xattr_names(ci, names);
 
 	/* virtual xattr names, too */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
@@ -2006,7 +2012,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	newname = kmalloc(name_len + 1, GFP_NOFS);
 	if (IS_ERR(newname)) {
 		err = PTR_ERR(newname);
-		goto done;
+		goto out;
 	}
 	memcpy(newname, name, name_len + 1);
 
@@ -2014,9 +2020,10 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		newval = kmalloc(val_len + 1, GFP_NOFS);
 		if (IS_ERR(newval)) {
 			err = PTR_ERR(newval);
-			goto done;
+			goto out;
 		}
-		memcpy(newval, value, val_len + 1);
+		memcpy(newval, value, val_len);
+		newval[val_len] = '\0';
 	}
 
 	dout(0, "setxattr newname=%s\n", newname);
@@ -2025,7 +2032,9 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	spin_unlock(&inode->i_lock);
 
 	err = ceph_send_setxattr(dentry, value, size, flags);
-done:
+
+	return err;
+out:
 	kfree(newname);
 	return err;
 }
