@@ -1308,7 +1308,7 @@ retry:
 		ci->i_dirty_caps = 0;
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want,
+		__send_cap(mdsc, cap, CEPH_CAP_OP_FLUSH, used, want,
 			   cap->issued | cap->implemented, flushing);
 		goto out_unlocked;
 	}
