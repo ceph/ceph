@@ -1798,10 +1798,9 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_num_caps = 1;
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
 
-	req->r_request->pages = pages;
-	req->r_request->nr_pages = nr_pages;
-	req->r_request->hdr.data_len = cpu_to_le32(size);
-	req->r_request->hdr.data_off = cpu_to_le16(0);
+	req->r_pages = pages;
+	req->r_num_pages = nr_pages;
+	req->r_data_len = size;
 
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);

@@ -165,7 +165,11 @@ struct ceph_mds_request {
 	struct dentry *r_old_dentry; /* rename from or link from */
 	const char *r_path1, *r_path2;
 	struct ceph_vino r_ino1, r_ino2;
+
 	union ceph_mds_request_args r_args;
+	struct page **r_pages;
+	int r_num_pages;
+	int r_data_len;
 
 	int r_inode_drop, r_inode_unless;
 	int r_dentry_drop, r_dentry_unless;
