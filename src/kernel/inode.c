@@ -20,6 +20,7 @@ static const struct inode_operations ceph_symlink_iops;
 
 static void ceph_inode_invalidate_pages(struct work_struct *work);
 
+static void __destroy_xattrs(struct ceph_inode_info *ci);
 
 /*
  * find or create an inode, given the ceph ino number
@@ -537,6 +538,8 @@ static int fill_inode(struct inode *inode,
 		if (ci->i_xattr_len > 4)
 			memcpy(ci->i_xattr_data, iinfo->xattr_data,
 			       ci->i_xattr_len);
+
+		__destroy_xattrs(ci);
 	}
 
 	inode->i_mapping->a_ops = &ceph_aops;
@@ -1618,16 +1621,213 @@ static struct _ceph_vir_xattr_cb *_ceph_match_vir_xattr(const char *name)
 	return NULL;
 }
 
+static int __set_xattr(struct ceph_inode_info *ci,
+			   const char *name, int name_len,
+			   const char *val, int val_len,
+			   int dirty,
+			   int should_free_name, int should_free_val)
+{
+	struct rb_node **p;
+	struct rb_node *parent = NULL;
+	struct ceph_inode_xattr *xattr = NULL;
+	int c;
+
+	p = &ci->i_xattrs.rb_node;
+	while (*p) {
+		parent = *p;
+		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
+		c = strcmp(name, xattr->name);
+		if (c < 0)
+			p = &(*p)->rb_left;
+		else if (c > 0)
+			p = &(*p)->rb_right;
+		else
+			break;
+	}
+
+	if (!xattr) {
+		xattr = kmalloc(sizeof(*xattr), GFP_NOFS);
+		xattr->name = name;
+		xattr->name_len = name_len;
+		xattr->should_free_name = should_free_name;
+	} else {
+		if (xattr->should_free_val)
+			kfree((void *)xattr->val);
+
+		if (should_free_name) {
+			kfree((void *)name);
+		}
+		ci->i_xattr_names_size -= (xattr->name_len + 1);
+	}
+	if (!xattr) {
+		derr(0, "ENOMEM on %p %llx.%llx xattr %s=%s\n", &ci->vfs_inode,
+		     ceph_vinop(&ci->vfs_inode), name, val);
+		return -ENOMEM;
+	}
+	ci->i_xattr_names_size += name_len + 1;
+	xattr->val = val;
+	xattr->val_len = val_len;
+	xattr->dirty = dirty;
+	xattr->should_free_val = should_free_val;
+
+	rb_link_node(&xattr->node, parent, p);
+	rb_insert_color(&xattr->node, &ci->i_xattrs);
+
+	dout(20, "__set_xattr_val added %llx.%llx xattr %s=%s\n",
+	     ceph_vinop(&ci->vfs_inode), name, val);
+
+	return 0;
+}
+
+static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
+			   const char *name)
+{
+	struct rb_node **p;
+	struct rb_node *parent = NULL;
+	struct ceph_inode_xattr *xattr = NULL;
+	int c;
+
+	p = &ci->i_xattrs.rb_node;
+	while (*p) {
+		parent = *p;
+		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
+		c = strcmp(name, xattr->name);
+		if (c < 0)
+			p = &(*p)->rb_left;
+		else if (c > 0)
+			p = &(*p)->rb_right;
+		else
+			return xattr;
+	}
+
+	return NULL;
+}
+
+static void __free_xattr(struct ceph_inode_xattr *xattr)
+{
+	BUG_ON (!xattr);
+
+	if (xattr->should_free_name)
+		kfree((void *)xattr->name);
+	if (xattr->should_free_val)
+		kfree((void *)xattr->val);
+
+	kfree(xattr);
+}
+
+static void __remove_xattr(struct ceph_inode_info *ci,
+			  struct ceph_inode_xattr *xattr)
+{
+	rb_erase(&xattr->node, &ci->i_xattrs);
+
+	if (!xattr)
+		return;
+
+	if (xattr->should_free_name)
+		kfree((void *)xattr->name);
+	if (xattr->should_free_val)
+		kfree((void *)xattr->val);
+
+	ci->i_xattr_names_size -= (xattr->name_len + 1);
+	kfree(xattr);
+}
+
+static int __remove_xattr_by_name(struct ceph_inode_info *ci,
+			   const char *name)
+{
+	struct rb_node **p;
+	struct ceph_inode_xattr *xattr;
+
+	p = &ci->i_xattrs.rb_node;
+
+	xattr = __get_xattr(ci, name);
+	__remove_xattr(ci, xattr);
+
+	return 0;
+}
+
+static char * __copy_xattr_names(struct ceph_inode_info *ci,
+				 char *dest)
+{
+	struct rb_node *p;
+	struct ceph_inode_xattr *xattr = NULL;
+
+	p = rb_first(&ci->i_xattrs);
+
+	while (p) {
+		xattr = rb_entry(p, struct ceph_inode_xattr, node);
+
+		memcpy(dest, xattr->name, xattr->name_len + 1);
+
+		dest += xattr->name_len + 1;
+
+		p = rb_next(p);
+	}
+
+	return dest;
+}
+
+static void __destroy_xattrs(struct ceph_inode_info *ci)
+{
+	struct rb_node *p;
+	struct ceph_inode_xattr *xattr = NULL;
+
+	p = rb_first(&ci->i_xattrs);
+
+	while (p) {
+		xattr = rb_entry(p, struct ceph_inode_xattr, node);
+
+		p = rb_next(p);
+
+		__free_xattr(xattr);
+	}
+
+	ci->i_xattr_names_size = 0;
+}
+
+static int __build_xattrs(struct ceph_inode_info *ci)
+{
+	u32 namelen;
+	u32 numattr = 0;
+	void *p, *end;
+	u32 len;
+	const char *name, *val;
+
+	if (ci->i_xattr_names_size)
+		return 0; /* already built */
+
+	/* updated internal xattr rb tree */
+	if (ci->i_xattr_len > 4) {
+		p = ci->i_xattr_data;
+		end = p + ci->i_xattr_len;
+		ceph_decode_32_safe(&p, end, numattr, bad);
+		while (numattr--) {
+			ceph_decode_32_safe(&p, end, len, bad);
+			namelen = len + 1;
+			name = p;
+			p += len;
+			ceph_decode_32_safe(&p, end, len, bad);
+			val = p;
+			p += len;
+
+			__set_xattr(ci, name, namelen, val, len,
+				    0, 0, 0);
+		}
+	}
+
+	return 0;
+bad:
+	return -EIO;
+}
+
 ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 		      size_t size)
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int namelen = strlen(name);
-	u32 numattr;
 	int err;
-	void *p, *end;
 	struct _ceph_vir_xattr_cb *vir_xattr;
+	struct ceph_inode_xattr *xattr;
 
 	/* let's see if a virtual xattr was requested */
 	vir_xattr = _ceph_match_vir_xattr(name);
@@ -1642,51 +1842,38 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	spin_lock(&inode->i_lock);
 
 	err = -ENODATA;  /* == ENOATTR */
-	if (ci->i_xattr_len <= 4)
+
+	err = __build_xattrs(ci);
+	if (err < 0)
 		goto out;
 
-	/* find attr name */
-	p = ci->i_xattr_data;
-	end = p + ci->i_xattr_len;
-	ceph_decode_32_safe(&p, end, numattr, bad);
-	while (numattr--) {
-		u32 len;
-		int match;
-		ceph_decode_32_safe(&p, end, len, bad);
-		match = (len == namelen && strncmp(name, p, len) == 0);
-		p += len;
-		ceph_decode_32_safe(&p, end, len, bad);
-		if (match) {
-			err = -ERANGE;
-			if (size && size < len)
-				goto out;
-			err = len;
-			if (size == 0)
-				goto out;
-			memcpy(value, p, len);
-			goto out;
-		}
-		p += len;
-	}
+	err = -ENODATA;
+	xattr = __get_xattr(ci, name);
+	if (!xattr)
+		goto out;
+
+	err = -ERANGE;
+	if (size && size < xattr->val_len)
+		goto out;
+
+	err = xattr->val_len;
+	if (size == 0)
+		goto out;
+
+	memcpy(value, xattr->val, xattr->val_len);
 
 out:
 	spin_unlock(&inode->i_lock);
 	return err;
-
-bad:
-	derr(10, "corrupt xattr info on %p %llx.%llx\n", dentry->d_inode,
-	     ceph_vinop(dentry->d_inode));
-	err = -EIO;
-	goto out;
 }
 
 ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int namelen = 0;
-	u32 numattr = 0;
-	void *p, *end;
+	u32 vir_namelen = 0;
+	u32 namelen;
+	void *p;
 	int err;
 	u32 len;
 	int i;
@@ -1697,50 +1884,25 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	spin_lock(&inode->i_lock);
 
-	/* measure len of names */
-	if (ci->i_xattr_len > 4) {
-		p = ci->i_xattr_data;
-		end = p + ci->i_xattr_len;
-		ceph_decode_32_safe(&p, end, numattr, bad);
-		while (numattr--) {
-			ceph_decode_32_safe(&p, end, len, bad);
-			namelen += len + 1;
-			p += len;
-			ceph_decode_32_safe(&p, end, len, bad);
-			p += len;
-		}
-	} else {
-		namelen = 0;
-	}
+	err = __build_xattrs(ci);
+	if (err < 0)
+		goto out;
 
+	vir_namelen = 0;
 	/* include virtual dir xattrs */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
 		for (i = 0; _ceph_vir_xattr_recs[i].name; i++)
-			namelen += strlen(_ceph_vir_xattr_recs[i].name) + 1;
-
+			vir_namelen += strlen(_ceph_vir_xattr_recs[i].name) + 1;
+	namelen = vir_namelen + ci->i_xattr_names_size;
 	err = -ERANGE;
 	if (size && namelen > size)
 		goto out;
+
 	err = namelen;
 	if (size == 0)
 		goto out;
 
-	/* copy names */
-	if (ci->i_xattr_len> 4) {
-		p = ci->i_xattr_data;
-		ceph_decode_32(&p, numattr);
-		while (numattr--) {
-			ceph_decode_32(&p, len);
-			memcpy(names, p, len);
-			names[len] = '\0';
-			names += len + 1;
-			p += len;
-			ceph_decode_32(&p, len);
-			p += len;
-		}
-	} else {
-		names[0] = 0;
-	}
+	p = __copy_xattr_names(ci, names);
 
 	/* virtual xattr names, too */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
@@ -1753,36 +1915,20 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 out:
 	spin_unlock(&inode->i_lock);
 	return err;
-
-bad:
-	derr(10, "corrupt xattr info on %p %llx.%llx\n", dentry->d_inode,
-	     ceph_vinop(dentry->d_inode));
-	err = -EIO;
-	goto out;
 }
 
-int ceph_setxattr(struct dentry *dentry, const char *name,
-		  const void *value, size_t size, int flags)
+static int ceph_send_setxattr(struct dentry *dentry,
+			      const char *value, size_t size, int flags)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
 	struct inode *inode = dentry->d_inode;
 	struct inode *parent_inode = dentry->d_parent->d_inode;
-	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct ceph_mds_request *req;
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	int err;
 	int i, nr_pages;
 	struct page **pages = NULL;
 	void *kaddr;
-
-	if (ceph_snap(inode) != CEPH_NOSNAP)
-		return -EROFS;
-
-	/* only support user.* xattrs, for now */
-	if (strncmp(name, "user.", 5) != 0)
-		return -EOPNOTSUPP;
-
-	if (_ceph_match_vir_xattr(name) != NULL)
-		return -EOPNOTSUPP;
 
 	/* copy value into some pages */
 	nr_pages = calc_pages_for(0, size);
@@ -1830,13 +1976,80 @@ out:
 	return err;
 }
 
-int ceph_removexattr(struct dentry *dentry, const char *name)
+int ceph_setxattr(struct dentry *dentry, const char *name,
+		  const void *value, size_t size, int flags)
+{
+	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int err;
+	int name_len = strlen(name);
+	int val_len = strlen(value);
+	char *newname = NULL;
+	char *newval = NULL;
+
+	if (ceph_snap(inode) != CEPH_NOSNAP)
+		return -EROFS;
+
+	/* only support user.* xattrs, for now */
+	if (strncmp(name, "user.", 5) != 0)
+		return -EOPNOTSUPP;
+
+	if (_ceph_match_vir_xattr(name) != NULL)
+		return -EOPNOTSUPP;
+
+	newname = kmalloc(name_len + 1, GFP_NOFS);
+	if (IS_ERR(newname)) {
+		err = PTR_ERR(newname);
+		goto done;
+	}
+	memcpy(newname, name, name_len + 1);
+
+	newval = kmalloc(val_len + 1, GFP_NOFS);
+	if (IS_ERR(newval)) {
+		err = PTR_ERR(newval);
+		goto done;
+	}
+	memcpy(newval, value, val_len + 1);
+
+	spin_lock(&inode->i_lock);
+	__set_xattr(ci, newname, name_len, newval, val_len, 1, 1, 1);
+	spin_unlock(&inode->i_lock);
+
+	err = ceph_send_setxattr(dentry, value, size, flags);
+done:
+	kfree(newname);
+	return err;
+}
+
+static int ceph_send_removexattr(struct dentry *dentry, const char *name)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
 	struct ceph_mds_client *mdsc = &client->mdsc;
 	struct inode *inode = dentry->d_inode;
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_mds_request *req;
+	int err;
+
+	spin_lock(&inode->i_lock);
+	__remove_xattr_by_name(ceph_inode(inode), name);
+	spin_unlock(&inode->i_lock);
+
+	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RMXATTR,
+				       USE_AUTH_MDS);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+	req->r_inode = igrab(inode);
+	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
+	req->r_num_caps = 1;
+
+	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
+	ceph_mdsc_put_request(req);
+	return err;
+}
+
+int ceph_removexattr(struct dentry *dentry, const char *name)
+{
+	struct inode *inode = dentry->d_inode;
 	int err;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
@@ -1849,16 +2062,8 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (_ceph_match_vir_xattr(name) != NULL)
 		return -EOPNOTSUPP;
 
-	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RMXATTR,
-				       USE_AUTH_MDS);
-	if (IS_ERR(req))
-		return PTR_ERR(req);
-	req->r_inode = igrab(inode);
-	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
-	req->r_num_caps = 1;
+	err = ceph_send_removexattr(dentry, name);
 
-	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
-	ceph_mdsc_put_request(req);
 	return err;
 }
 

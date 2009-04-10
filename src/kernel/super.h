@@ -226,6 +226,18 @@ struct ceph_inode_frag {
 	int dist[MAX_DIRFRAG_REP];
 };
 
+struct ceph_inode_xattr {
+	struct rb_node node;
+
+	const char *name;
+	int name_len;
+	const char *val;
+	int val_len;
+	int dirty;
+
+	int should_free_name;
+	int should_free_val;
+};
 
 /*
  * Ceph inode.
@@ -261,8 +273,10 @@ struct ceph_inode_info {
 	 * i_xattr_len == 4 implies there are no xattrs; 0 means we
 	 * don't know.
 	 */
+	struct rb_root i_xattrs;
 	int i_xattr_len;
 	char *i_xattr_data;
+	int i_xattr_names_size;
 	u64 i_xattr_version;
 
 	/* capabilities.  protected _both_ by i_lock and cap->session's
