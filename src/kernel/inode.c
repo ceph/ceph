@@ -1805,10 +1805,10 @@ static int __build_xattrs(struct ceph_inode_info *ci)
 	void *p, *end;
 	u32 len;
 	const char *name, *val;
-#if 0
+
 	if (ci->i_xattr_names_size)
 		return 0; /* already built */
-#endif
+
 	/* updated internal xattr rb tree */
 	if (ci->i_xattr_len > 4) {
 		p = ci->i_xattr_data;
