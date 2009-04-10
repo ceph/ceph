@@ -1061,10 +1061,11 @@ retry_locked:
 		}
 	}
 
-	dout(10, "check_caps %p file_wanted %s used %s retain %s issued %s\n",
+	dout(10, "check_caps %p file_want %s used %s retain %s issued %s %s\n",
 	     inode, ceph_cap_string(file_wanted), ceph_cap_string(used),
 	     ceph_cap_string(retain),
-	     ceph_cap_string(__ceph_caps_issued(ci, NULL)));
+	     ceph_cap_string(__ceph_caps_issued(ci, NULL)),
+	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY":"");
 	dout(20, " now %lu hold until min %lu max %lu\n", 
 	     jiffies, ci->i_hold_caps_min, ci->i_hold_caps_max);
 
@@ -1105,7 +1106,8 @@ retry_locked:
 		num++;
 
 		/* avoid looping forever */
-		if (mds >= cap->mds)
+		if (mds >= cap->mds ||
+		    ((flags & CHECK_CAPS_AUTHONLY) && cap != ci->i_auth_cap))
 			continue;
 
 		/* NOTE: no side-effects allowed, until we take s_mutex */
@@ -1582,7 +1584,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	spin_unlock(&inode->i_lock);
 
 	if (last) {
-		ceph_check_caps(ci, 0, NULL);
+		ceph_check_caps(ci, CHECK_CAPS_AUTHONLY, NULL);
 		iput(inode);
 	} else if (last_snap) {
 		ceph_flush_snaps(ci);
@@ -2128,7 +2130,8 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			ceph_msg_get(msg);
 			ceph_send_msg_mds(mdsc, msg, mds);
 		} else if (r == 2) {
-			ceph_check_caps(ceph_inode(inode), CHECK_CAPS_NODELAY,
+			ceph_check_caps(ceph_inode(inode),
+					CHECK_CAPS_NODELAY|CHECK_CAPS_AUTHONLY,
 					session);
 		}
 		break;

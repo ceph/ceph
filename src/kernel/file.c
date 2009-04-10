@@ -701,7 +701,7 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 	}
 	spin_unlock(&inode->i_lock);
 	if (check)
-		ceph_check_caps(ci, 0, NULL);
+		ceph_check_caps(ci, CHECK_CAPS_AUTHONLY, NULL);
 }
 
 /*
