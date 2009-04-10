@@ -177,7 +177,7 @@ protected:
   // file
 public:
   void try_file_eval(ScatterLock *lock);
-  void file_eval(ScatterLock *lock, bool do_issue=false);
+  void file_eval(ScatterLock *lock, bool do_issue=true);
 protected:
   void handle_file_lock(ScatterLock *lock, MLock *m);
   void file_mixed(ScatterLock *lock);

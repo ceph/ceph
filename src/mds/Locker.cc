@@ -832,6 +832,8 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   if (lock->get_type() == CEPH_LOCK_IVERSION)
     return local_xlock_finish((LocalLock*)lock, mut);
 
+  dout(10) << "xlock_finish on " << *lock << " " << *lock->get_parent() << dendl;
+
   // drop ref
   lock->put_xlock();
   assert(mut);
@@ -1467,7 +1469,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
 
   int op = m->get_op();
-  bool do_issue = false;
+  bool do_issue = true;
 
   if (op == CEPH_CAP_OP_RENEW) {
     if (cap->touch()) {
@@ -1558,8 +1560,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 		   << " (seq " << m->get_seq() << " != last_issue " << cap->get_last_issue() << ")" << dendl;
 	}
       }
-      if (m->get_op() != CEPH_CAP_OP_DROP && (wanted & ~cap->pending()))
-	do_issue = true;
+      if (m->get_op() == CEPH_CAP_OP_DROP)
+	do_issue = false;
       
       if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
 	// no update, ack now.
