@@ -332,7 +332,7 @@ void MDSMonitor::_updated(MMDSBeacon *m)
 {
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
   stringstream ss;
-  ss << "mds " << m->get_orig_source_inst() << " " << ceph_mds_state_name(m->get_state());
+  ss << m->get_orig_source_inst() << " " << ceph_mds_state_name(m->get_state());
   mon->get_logclient()->log(LOG_DEBUG, ss);
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {

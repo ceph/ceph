@@ -484,7 +484,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
   stringstream ss;
   dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb << dendl;
-  ss << "osd boot (" << m->get_orig_source_inst() << ")";
+  ss << m->get_orig_source_inst() << " boot";
   mon->get_logclient()->log(LOG_DEBUG, ss);
 
   assert(m->get_orig_source().is_osd());
