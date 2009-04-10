@@ -357,8 +357,12 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 		}
 		ci->i_hold_caps_min = round_jiffies(jiffies +
 					    ma->caps_wanted_delay_min * HZ);
+		if (!ci->i_hold_caps_min)
+			ci->i_hold_caps_min = 1;
 		ci->i_hold_caps_max = round_jiffies(jiffies +
 					    ma->caps_wanted_delay_max * HZ);
+		if (!ci->i_hold_caps_max)
+			ci->i_hold_caps_max = 1;
 		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
 	no_change:
 		spin_unlock(&mdsc->cap_delay_lock);
@@ -830,9 +834,20 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	     ceph_cap_string(revoking));
 	BUG_ON((retain & CEPH_CAP_PIN) == 0);
 
-	cap->issued &= retain;  /* drop bits we don't want */
+	/* don't release wanted unless we've waited a bit. */
+	if (ci->i_hold_caps_min &&
+	    time_before(jiffies, ci->i_hold_caps_min)) {
+		dout(20, " delaying issued %s -> %s, wanted %s -> %s on send\n",
+		     ceph_cap_string(cap->issued),
+		     ceph_cap_string(cap->issued & retain),
+		     ceph_cap_string(cap->mds_wanted),
+		     ceph_cap_string(want));
+		want |= cap->mds_wanted;
+		retain |= cap->issued;
+	}
 
-	if (cap->implemented & ~retain) {
+	cap->issued &= retain;  /* drop bits we don't want */
+	if (cap->implemented & ~cap->issued) {
 		/*
 		 * Wake up any waiters on wanted -> needed transition.
 		 * This is due to the weird transition from buffered
@@ -841,11 +856,10 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		 */
 		wake = 1;
 	}
-	cap->implemented &= retain | used;
-
+	cap->implemented &= cap->issued | used;
 	cap->mds_wanted = want;
 
-	keep = cap->issued;
+	keep = cap->implemented;
 	seq = cap->seq;
 	mseq = cap->mseq;
 	size = inode->i_size;
@@ -1011,6 +1025,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed, int drop,
 			   to avoid an infinite loop on retry */
 	struct rb_node *p;
 	int tried_invalidate = 0;
+	int delayed = 0, sent = 0, force_requeue = 0, num;
 	int op;
 
 	/* if we are unmounting, flush any unused caps immediately. */
@@ -1028,17 +1043,22 @@ retry:
 retry_locked:
 	file_wanted = __ceph_caps_file_wanted(ci);
 	used = __ceph_caps_used(ci);
-
 	want = file_wanted | used;
 
 	retain = want | CEPH_CAP_PIN;
 	if (!mdsc->stopping && inode->i_nlink > 0) {
-		retain |= CEPH_CAP_EXPIREABLE;
-		if (want)
-			retain |= CEPH_CAP_ANY_EXCL;
-		else if (ci->i_max_size == 0)
-			retain |= CEPH_CAP_ANY_RD; /* mds will need RD to
-						      journal max_size=0 */
+		if (want) {
+			retain |= CEPH_CAP_ANY;       /* be greedy */
+		} else {
+			retain |= CEPH_CAP_ANY_RDCACHE;
+			/*
+			 * keep RD only if we didn't have the file open RW,
+			 * because then the mds would revoke it anyway to
+			 * journal max_size=0.
+			 */
+			if (ci->i_max_size == 0)
+				retain |= CEPH_CAP_ANY_RD;
+		}
 	}
 	retain &= ~drop;
 
@@ -1046,20 +1066,15 @@ retry_locked:
 	     inode, ceph_cap_string(file_wanted), ceph_cap_string(used),
 	     ceph_cap_string(retain),
 	     ceph_cap_string(__ceph_caps_issued(ci, NULL)));
-
-	/*
-	 * Reschedule delayed caps release, unless we are called from
-	 * the delayed work handler (i.e. this _is_ the delayed release)
-	 */
-	if (!is_delayed)
-		__cap_delay_requeue(mdsc, ci);
+	dout(20, " now %lu hold until min %lu max %lu\n", 
+	     jiffies, ci->i_hold_caps_min, ci->i_hold_caps_max);
 
 	/*
 	 * If we no longer need to hold onto old our caps, and we may
 	 * have cached pages, but don't want them, then try to invalidate.
 	 * If we fail, it's because pages are locked.... try again later.
 	 */
-	if ((!time_before(jiffies, ci->i_hold_caps_max) || mdsc->stopping) &&
+	if ((!is_delayed || mdsc->stopping) &&
 	    ci->i_wrbuffer_ref == 0 &&               /* no dirty pages... */
 	    ci->i_rdcache_gen &&                     /* may have cached pages */
 	    file_wanted == 0 &&                      /* no open files */
@@ -1079,15 +1094,16 @@ retry_locked:
 			dout(10, "check_caps failed to invalidate pages\n");
 			/* we failed to invalidate pages.  check these
 			   caps again later. */
-			if (is_delayed)
-				__cap_delay_requeue(mdsc, ci);
+			force_requeue = 1;
 		}
 		tried_invalidate = 1;
 		goto retry_locked;
 	}
 
+	num = 0;
 	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
 		cap = rb_entry(p, struct ceph_cap, ci_node);
+		num++;
 
 		/* avoid looping forever */
 		if (mds >= cap->mds)
@@ -1100,17 +1116,19 @@ retry_locked:
 			dout(10, "mds%d revoking %s\n", cap->mds,
 			     ceph_cap_string(revoking));
 
-		/* request larger max_size from MDS& ~drop;? */
-		if (ci->i_wanted_max_size > ci->i_max_size &&
-		    ci->i_wanted_max_size > ci->i_requested_max_size)
-			goto ack;
+		if (cap == ci->i_auth_cap &&
+		    (cap->issued & CEPH_CAP_FILE_WR)) {
+			/* request larger max_size from MDS? */
+			if (ci->i_wanted_max_size > ci->i_max_size &&
+			    ci->i_wanted_max_size > ci->i_requested_max_size)
+				goto ack;
 
-		/* approaching file_max? */
-		if ((cap->issued & CEPH_CAP_FILE_WR) &&
-		    (inode->i_size << 1) >= ci->i_max_size &&
-		    (ci->i_reported_size << 1) < ci->i_max_size) {
-			dout(10, "i_size approaching max_size\n");
-			goto ack;
+			/* approaching file_max? */
+			if ((inode->i_size << 1) >= ci->i_max_size &&
+			    (ci->i_reported_size << 1) < ci->i_max_size) {
+				dout(10, "i_size approaching max_size\n");
+				goto ack;
+			}
 		}
 
 		/* completed revocation? going down and there are no caps? */
@@ -1124,16 +1142,25 @@ retry_locked:
 		if (want & ~(cap->mds_wanted | cap->issued))
 			goto ack;
 
+		/* things we might delay */
 		if ((cap->issued & ~retain) == 0 &&
 		    cap->mds_wanted == want)
-			continue;     /* nothing extra, wanted is correct */
+			continue;     /* nope, all good */
 
-		/* delay cap release for a bit? */
-		if (!is_delayed &&
+		if (is_delayed)
+			goto ack;
+
+		/* delay? */
+		if (ci->i_hold_caps_max &&
 		    time_before(jiffies, ci->i_hold_caps_max)) {
-			dout(30, "delaying cap release\n");
+			dout(30, " delaying issued %s -> %s, wanted %s -> %s\n",
+			     ceph_cap_string(cap->issued),
+			     ceph_cap_string(cap->issued & retain),
+			     ceph_cap_string(cap->mds_wanted),
+			     ceph_cap_string(want));
 			continue;
 		}
+		delayed++;
 
 ack:
 		if (session && session != cap->session) {
@@ -1185,16 +1212,26 @@ ack:
 			op = CEPH_CAP_OP_DROP;
 		} else {
 			op = CEPH_CAP_OP_UPDATE;
-			__cap_delay_cancel(mdsc, ci);
 		}
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
+		sent++;
 
 		/* __send_cap drops i_lock */
 		__send_cap(mdsc, cap, op, used, want, retain, flushing);
-
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
+
+	/*
+	 * Reschedule delayed caps release if we delayed anything,
+	 * otherwise cancel.
+	 */
+	BUG_ON(delayed && is_delayed);
+	if (!delayed)
+		__cap_delay_cancel(mdsc, ci);
+	else if (!is_delayed || force_requeue)
+		__cap_delay_requeue(mdsc, ci);
+
 	spin_unlock(&inode->i_lock);
 
 	if (session && drop_session_lock)
@@ -1275,12 +1312,6 @@ retry:
 		     ceph_cap_string(ci->i_flushing_caps | flushing));
 		ci->i_flushing_caps |= flushing;
 		ci->i_dirty_caps = 0;
-
-		/* don't release wanted unless we've waited a bit. */
-		if (time_before(jiffies, ci->i_hold_caps_min))
-			want = cap->mds_wanted;
-		else if (!want)
-			__cap_delay_cancel(mdsc, ci);
 
 		/* __send_cap drops i_lock */
 		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want,

@@ -565,11 +565,14 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
  */
 static int drop_caps_for_unlink(struct inode *inode)
 {
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	int drop = CEPH_CAP_LINK_RDCACHE | CEPH_CAP_LINK_EXCL;
 
 	spin_lock(&inode->i_lock);
-	if (inode->i_nlink == 1)
-		drop |= ~(__ceph_caps_wanted(ceph_inode(inode)) | CEPH_CAP_PIN);
+	if (inode->i_nlink == 1) {
+		drop |= ~(__ceph_caps_wanted(ci) | CEPH_CAP_PIN);
+		ci->i_hold_caps_min = 0;
+	}
 	spin_unlock(&inode->i_lock);
 	return drop;
 }

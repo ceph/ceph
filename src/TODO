@@ -53,6 +53,18 @@ kclient caps
   - racing wanted release + getattr --- we need to keep the client's notion of mds_wanted accurate!  ****
 - fix up mds selection, and ESTALE handling
 
+- check_caps cleanup
+  - callers
+    - dropped the last ref to a cap bit (used change)
+    - dropped last fmode ref            (wanted shrinkage)
+    - file open                         (wanted expansion)
+    - check max size
+      - flag to only check the auth cap?
+    - after a cap import
+    - on cap revocation, to initiate writeback
+    - after a delay
+    - after async page invalidation
+    - after async truncation
 
 - ENOSPC
 - flock
