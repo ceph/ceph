@@ -1609,7 +1609,7 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
     
     eval_cap_gather(in);
     if (in->filelock.is_stable())
-      file_eval(&in->filelock);
+      file_eval(&in->filelock, false);
     if (in->authlock.is_stable())
       eval(&in->authlock);
   }
