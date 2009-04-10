@@ -1657,13 +1657,13 @@ static int __set_xattr(struct ceph_inode_info *ci,
 			kfree((void *)xattr->val);
 
 		if (should_free_name) {
-			kfree((void *)name);
+			kfree((void *)xattr->name);
 		}
 		ci->i_xattr_names_size -= (xattr->name_len + 1);
 	}
 	if (!xattr) {
 		derr(0, "ENOMEM on %p %llx.%llx xattr %s=%s\n", &ci->vfs_inode,
-		     ceph_vinop(&ci->vfs_inode), name, val);
+		     ceph_vinop(&ci->vfs_inode), name, xattr->val);
 		return -ENOMEM;
 	}
 	ci->i_xattr_names_size += name_len + 1;
@@ -1798,10 +1798,10 @@ static int __build_xattrs(struct ceph_inode_info *ci)
 	void *p, *end;
 	u32 len;
 	const char *name, *val;
-
+#if 0
 	if (ci->i_xattr_names_size)
 		return 0; /* already built */
-
+#endif
 	/* updated internal xattr rb tree */
 	if (ci->i_xattr_len > 4) {
 		p = ci->i_xattr_data;
@@ -2019,6 +2019,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		memcpy(newval, value, val_len + 1);
 	}
 
+	dout(0, "setxattr newname=%s\n", newname);
 	spin_lock(&inode->i_lock);
 	__set_xattr(ci, newname, name_len, newval, val_len, 1, 1, 1);
 	spin_unlock(&inode->i_lock);
