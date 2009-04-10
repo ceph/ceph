@@ -1010,7 +1010,7 @@ static void ceph_flush_snaps(struct ceph_inode_info *ci)
  * @is_delayed indicates caller is delayed work and we should not
  * delay further.
  */
-void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed,
+void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 		     struct ceph_mds_session *session)
 {
 	struct ceph_client *client = ceph_inode_to_client(&ci->vfs_inode);
@@ -1026,6 +1026,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int is_delayed,
 	struct rb_node *p;
 	int tried_invalidate = 0;
 	int delayed = 0, sent = 0, force_requeue = 0, num;
+	int is_delayed = flags & CHECK_CAPS_NODELAY;
 
 	/* if we are unmounting, flush any unused caps immediately. */
 	if (mdsc->stopping)
@@ -2127,7 +2128,8 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 			ceph_msg_get(msg);
 			ceph_send_msg_mds(mdsc, msg, mds);
 		} else if (r == 2) {
-			ceph_check_caps(ceph_inode(inode), 1, session);
+			ceph_check_caps(ceph_inode(inode), CHECK_CAPS_NODELAY,
+					session);
 		}
 		break;
 
@@ -2150,7 +2152,7 @@ done:
 
 	kfree(xattr_data);
 	if (check_caps)
-		ceph_check_caps(ceph_inode(inode), 1, NULL);
+		ceph_check_caps(ceph_inode(inode), CHECK_CAPS_NODELAY, NULL);
 	if (inode)
 		iput(inode);
 	return;
@@ -2181,7 +2183,7 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		list_del_init(&ci->i_cap_delay_list);
 		spin_unlock(&mdsc->cap_delay_lock);
 		dout(10, "check_delayed_caps on %p\n", &ci->vfs_inode);
-		ceph_check_caps(ci, 1, NULL);
+		ceph_check_caps(ci, CHECK_CAPS_NODELAY, NULL);
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
 }
