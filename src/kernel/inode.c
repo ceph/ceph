@@ -256,9 +256,11 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_fragtree = RB_ROOT;
 	mutex_init(&ci->i_fragtree_mutex);
 
+	ci->i_xattrs = RB_ROOT;
 	ci->i_xattr_len = 0;
 	ci->i_xattr_data = NULL;
 	ci->i_xattr_version = 0;
+	ci->i_xattr_names_size = 0;
 
 	ci->i_caps = RB_ROOT;
 	ci->i_auth_cap = NULL;
@@ -1665,10 +1667,14 @@ static int __set_xattr(struct ceph_inode_info *ci,
 		return -ENOMEM;
 	}
 	ci->i_xattr_names_size += name_len + 1;
-	xattr->val = val;
+	if (val)
+		xattr->val = val;
+	else
+		xattr->val = "";
+
 	xattr->val_len = val_len;
 	xattr->dirty = dirty;
-	xattr->should_free_val = should_free_val;
+	xattr->should_free_val = (val && should_free_val);
 
 	rb_link_node(&xattr->node, parent, p);
 	rb_insert_color(&xattr->node, &ci->i_xattrs);
@@ -1718,10 +1724,10 @@ static void __free_xattr(struct ceph_inode_xattr *xattr)
 static void __remove_xattr(struct ceph_inode_info *ci,
 			  struct ceph_inode_xattr *xattr)
 {
-	rb_erase(&xattr->node, &ci->i_xattrs);
-
 	if (!xattr)
 		return;
+
+	rb_erase(&xattr->node, &ci->i_xattrs);
 
 	if (xattr->should_free_name)
 		kfree((void *)xattr->name);
@@ -1983,7 +1989,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int err;
 	int name_len = strlen(name);
-	int val_len = strlen(value);
+	int val_len = size;
 	char *newname = NULL;
 	char *newval = NULL;
 
@@ -2004,12 +2010,14 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	}
 	memcpy(newname, name, name_len + 1);
 
-	newval = kmalloc(val_len + 1, GFP_NOFS);
-	if (IS_ERR(newval)) {
-		err = PTR_ERR(newval);
-		goto done;
+	if (val_len) {
+		newval = kmalloc(val_len + 1, GFP_NOFS);
+		if (IS_ERR(newval)) {
+			err = PTR_ERR(newval);
+			goto done;
+		}
+		memcpy(newval, value, val_len + 1);
 	}
-	memcpy(newval, value, val_len + 1);
 
 	spin_lock(&inode->i_lock);
 	__set_xattr(ci, newname, name_len, newval, val_len, 1, 1, 1);
