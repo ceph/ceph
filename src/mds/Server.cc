@@ -1452,21 +1452,13 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
   dout(10) << "traverse_to_auth_dir dirpath " << refpath << " dname " << dname << dendl;
 
   // traverse to parent dir
-  int r = mdcache->path_traverse(mdr, mdr->client_request, refpath, trace, MDS_TRAVERSE_FORWARD);
+  CInode *diri;
+  int r = mdcache->path_traverse(mdr, 0, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     reply_request(mdr, r);
     return 0;
   }
-
-  // open inode
-  CInode *diri;
-  if (trace.empty())
-    diri = mdcache->get_inode(refpath.get_ino());
-  else
-    diri = mdcache->get_dentry_inode(trace[trace.size()-1], mdr, true);
-  if (!diri) 
-    return 0; // opening inode.
 
   // is it an auth dir?
   CDir *dir = validate_dentry_dir(mdr, diri, dname);
@@ -1495,51 +1487,16 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   }
 
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
 
   // traverse
   filepath refpath = req->get_filepath();
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, refpath, trace, MDS_TRAVERSE_FORWARD);
+  CInode *ref;
+  int r = mdcache->path_traverse(mdr, 0, refpath, &trace, &ref, MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
     reply_request(mdr, r);
     return 0;
-  }
-
-  // open ref inode
-  CInode *ref = 0;
-  if (trace.empty()) {
-    ref = mdcache->get_inode(refpath.get_ino());
-    if (!ref) {
-      ref = mdcache->get_inode(refpath.get_ino());
-      if (!ref->is_multiversion()) {
-	reply_request(mdr, -ESTALE);
-	return 0;
-      }
-    }
-  } else {
-    CDentry *dn = trace[trace.size()-1];
-    bool dnp = dn->use_projected(client, mdr);
-    CDentry::linkage_t *dnl = dnp ? dn->get_projected_linkage() : dn->get_linkage();
-
-    // if no inode (null or unattached remote), fw to dentry auth?
-    if (want_auth && !dn->is_auth() &&
-	(dnl->is_null() ||
-	 (dnl->is_remote() && dnl->get_inode()))) {
-      if (dn->is_ambiguous_auth()) {
-	dout(10) << "waiting for single auth on " << *dn << dendl;
-	dn->get_dir()->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-      } else {
-	dout(10) << "fw to auth for " << *dn << dendl;
-	mdcache->request_forward(mdr, dn->authority().first);
-	return 0;
-      }
-    }
-
-    // open ref inode
-    ref = mdcache->get_dentry_inode(dn, mdr, dnp);
-    if (!ref) return 0;
   }
   dout(10) << "ref is " << *ref << dendl;
 
@@ -1547,24 +1504,25 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   if (mdr->ref_snapid != CEPH_NOSNAP)
     want_auth = true;
 
-  if (want_auth && !ref->is_auth()) {
-    if (ref->is_ambiguous_auth()) {
-      dout(10) << "waiting for single auth on " << *ref << dendl;
-      ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-    } else {
-      dout(10) << "fw to auth for " << *ref << dendl;
-      mdcache->request_forward(mdr, ref->authority().first);
-    }
-    return 0;
-  }
-
-  // auth_pin?
   if (want_auth) {
+    if (!ref->is_auth()) {
+      if (ref->is_ambiguous_auth()) {
+	dout(10) << "waiting for single auth on " << *ref << dendl;
+	ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+      } else {
+	dout(10) << "fw to auth for " << *ref << dendl;
+	mdcache->request_forward(mdr, ref->authority().first);
+      }
+      return 0;
+    }
+
+    // auth_pin?
     if (ref->is_frozen()) {
       dout(7) << "waiting for !frozen/authpinnable on " << *ref << dendl;
       ref->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return 0;
     }
+
     mdr->auth_pin(ref);
   }
 
@@ -1583,8 +1541,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr,
   // set and pin ref
   mdr->pin(ref);
   mdr->ref = ref;
-
-  // save the locked trace.
   mdr->trace.swap(trace);
   
   return ref;
@@ -2519,21 +2475,14 @@ void Server::handle_client_link(MDRequest *mdr)
   filepath targetpath = req->get_filepath2();
   dout(7) << "handle_client_link discovering target " << targetpath << dendl;
   vector<CDentry*> targettrace;
-  int r = mdcache->path_traverse(mdr, req, targetpath, targettrace, MDS_TRAVERSE_DISCOVER);
+  CInode *targeti;
+  int r = mdcache->path_traverse(mdr, 0, targetpath, &targettrace, &targeti, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return; // wait
   if (targettrace.empty()) r = -EINVAL; 
   if (r < 0) {
     reply_request(mdr, r);
     return;
   }
-  
-  // identify target inode.
-  //  use projected target; we'll rdlock the dentry to ensure it's correct.
-  CInode *targeti = mdcache->get_dentry_inode(targettrace[targettrace.size()-1], mdr, true);
-  if (!targeti)
-    return;
-
-  // dir?
   dout(7) << "target is " << *targeti << dendl;
   if (targeti->is_dir()) {
     dout(7) << "target is a dir, failing..." << dendl;
@@ -3073,55 +3022,39 @@ void Server::handle_client_unlink(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   int client = mdr->get_client();
 
+  // rmdir or unlink?
+  bool rmdir = false;
+  if (req->get_op() == CEPH_MDS_OP_RMDIR) rmdir = true;
+
+  if (req->get_filepath().depth() == 0) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }    
+
   // traverse to path
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, req, req->get_filepath(), trace, MDS_TRAVERSE_FORWARD);
+  CInode *in;
+  int r = mdcache->path_traverse(mdr, 0, req->get_filepath(), &trace, &in, MDS_TRAVERSE_FORWARD);
   if (r > 0) return;
-  if (r == 0 && trace.empty()) r = -EINVAL;   // can't unlink root
   if (r < 0) {
     reply_request(mdr, r);
     return;
   }
-
   CDentry *dn = trace[trace.size()-1];
   assert(dn);
-  
-  // is it my dentry?
   if (!dn->is_auth()) {
-    // fw to auth
     mdcache->request_forward(mdr, dn->authority().first);
     return;
   }
 
-  // rmdir or unlink?
-  bool rmdir = false;
-  if (req->get_op() == CEPH_MDS_OP_RMDIR) rmdir = true;
-  
+  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
+  assert(!dnl->is_null());
+
   if (rmdir) {
     dout(7) << "handle_client_rmdir on " << *dn << dendl;
   } else {
     dout(7) << "handle_client_unlink on " << *dn << dendl;
   }
-
-  // readable?
-  if (!dn->lock.can_read(client) && dn->lock.get_xlocked_by() != mdr) {
-    dout(10) << "waiting on xlocked dentry " << *dn << dendl;
-    dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-
-  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
-  if (dnl->is_null()) {
-    reply_request(mdr, -ENOENT);
-    return;
-  }
-
-  // dn looks ok.
-
-  // get/open inode.
-  mdr->trace.swap(trace);
-  CInode *in = mdcache->get_dentry_inode(dn, mdr, true);
-  if (!in) return;
   dout(7) << "dn links to " << *in << dendl;
 
   // rmdir vs is_dir 
@@ -3453,7 +3386,8 @@ void Server::handle_client_rename(MDRequest *mdr)
 
   // traverse to src
   vector<CDentry*> srctrace;
-  int r = mdcache->path_traverse(mdr, req, srcpath, srctrace, MDS_TRAVERSE_DISCOVER);
+  CInode *srci;
+  int r = mdcache->path_traverse(mdr, 0, srcpath, &srctrace, &srci, MDS_TRAVERSE_DISCOVER);
   if (r > 0) return;
   if (r < 0) {
     reply_request(mdr, r);
@@ -3462,7 +3396,6 @@ void Server::handle_client_rename(MDRequest *mdr)
   assert(!srctrace.empty());
   CDentry *srcdn = srctrace[srctrace.size()-1];
   dout(10) << " srcdn " << *srcdn << dendl;
-  CInode *srci = mdcache->get_dentry_inode(srcdn, mdr, true);
   dout(10) << " srci " << *srci << dendl;
   mdr->pin(srci);
 
@@ -4262,7 +4195,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   filepath destpath(mdr->slave_request->destdnpath);
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
-  int r = mdcache->path_traverse(mdr, mdr->slave_request, destpath, trace, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, 0, destpath, &trace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);  // we shouldn't get an error here!
       
@@ -4274,7 +4207,8 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   // discover srcdn
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
-  r = mdcache->path_traverse(mdr, mdr->slave_request, srcpath, trace, MDS_TRAVERSE_DISCOVERXLOCK);
+  CInode *srci;
+  r = mdcache->path_traverse(mdr, 0, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
   if (r > 0) return;
   assert(r == 0);
       
@@ -4282,8 +4216,7 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   dout(10) << " srcdn " << *srcdn << dendl;
   mdr->pin(srcdn);
-  assert(srcdnl->get_inode());
-  mdr->pin(srcdnl->get_inode());
+  mdr->pin(srci);
 
   // stray?
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&

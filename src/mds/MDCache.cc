@@ -5510,14 +5510,14 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 }
 
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
-			   filepath& origpath,               // what
-                           vector<CDentry*>& trace,          // result
+			   filepath& path,                   // what
+                           vector<CDentry*> *pdnvec,         // result
+			   CInode **pin,
                            int onfail)
 {
   assert(mdr || req);
   bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
-  bool noperm = (onfail == MDS_TRAVERSE_DISCOVER ||
-		 onfail == MDS_TRAVERSE_DISCOVERXLOCK);
+  bool forward = (onfail == MDS_TRAVERSE_FORWARD);
 
   snapid_t snapid = CEPH_NOSNAP;
   if (mdr)
@@ -5525,11 +5525,13 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
-  dout(7) << "traverse: opening base ino " << origpath.get_ino() << " snap " << snapid << dendl;
-  CInode *cur = get_inode(origpath.get_ino());
+  if (mds->logger) mds->logger->inc(l_mds_t);
+
+  dout(7) << "traverse: opening base ino " << path.get_ino() << " snap " << snapid << dendl;
+  CInode *cur = get_inode(path.get_ino());
   if (cur == NULL) {
-    if (MDS_INO_IS_STRAY(origpath.get_ino())) 
-      open_foreign_stray(origpath.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
+    if (MDS_INO_IS_STRAY(path.get_ino())) 
+      open_foreign_stray(path.get_ino() - MDS_INO_STRAY_OFFSET, _get_waiter(mdr, req));
     else {
       //assert(0);  // hrm.. broken
       return -ESTALE;
@@ -5537,16 +5539,13 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     return 1;
   }
 
-  if (mds->logger) mds->logger->inc(l_mds_t);
-
   // start trace
-  trace.clear();
-
-  // make our own copy, since we'll modify when we hit symlinks
-  filepath path = origpath;  
+  if (pdnvec)
+    pdnvec->clear();
+  if (pin)
+    *pin = cur;
 
   unsigned depth = 0;
-
   while (depth < path.depth()) {
     dout(12) << "traverse: path seg depth " << depth << " '" << path[depth]
 	     << "' snapid " << snapid << dendl;
@@ -5556,7 +5555,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       return -ENOTDIR;
     }
 
-    // snapdir?
+    // walk into snapdir?
     if (path[depth].length() == 0) {
       dout(10) << "traverse: snapdir" << dendl;
       if (!mdr)
@@ -5567,6 +5566,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       depth++;
       continue;
     }
+    // walk thru snapdir?
     if (snapid == CEPH_SNAPDIR) {
       if (!mdr)
 	return -EINVAL;
@@ -5631,18 +5631,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     }
 #endif
     
-    // check permissions?
-    // XXX
-    
-    // ..?
-    if (path[depth] == "..") {
-      trace.pop_back();
-      depth++;
-      cur = cur->get_parent_inode();
-      dout(10) << "traverse: following .. back to " << *cur << dendl;
-      continue;
-    }
-
 
     // make sure snaprealm parents are open...
     if (cur->snaprealm && !cur->snaprealm->open && mdr &&
@@ -5657,7 +5645,10 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     // null and last_bit and xlocked by me?
     if (dnl && dnl->is_null() && null_okay) {
       dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
-      trace.push_back(dn);
+      if (pdnvec)
+	pdnvec->push_back(dn);
+      if (pin)
+	*pin = 0;
       break; // done!
     }
 
@@ -5665,7 +5656,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 	dn->lock.is_xlocked() &&
 	dn->lock.get_xlocked_by() != mdr &&
 	!dn->lock.can_read(client) &&
-	(dnl->is_null() || !noperm)) {
+	(dnl->is_null() || forward)) {
       dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
       dn->lock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req));
       if (mds->logger) mds->logger->inc(l_mds_tlock);
@@ -5683,7 +5674,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
         if (in) {
 	  dout(7) << "linking in remote in " << *in << dendl;
 	  dn->link_remote(dnl, in);
-        } else {
+	} else {
           dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
 	  assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
           open_remote_ino(dnl->get_remote_ino(), _get_waiter(mdr, req));
@@ -5727,9 +5718,12 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 #endif
       
       // add to trace, continue.
-      trace.push_back(dn);
       cur = in;
       touch_inode(cur);
+      if (pdnvec)
+	pdnvec->push_back(dn);
+      if (pin)
+	*pin = cur;
       depth++;
       continue;
     }
@@ -7779,17 +7773,13 @@ void MDCache::handle_dir_update(MDirUpdate *m)
       // this is key to avoid a fragtree update race, among other things.
       m->tried_discover();        
       vector<CDentry*> trace;
+      CInode *in;
       filepath path = m->get_path();
-
       dout(5) << "trying discover on dir_update for " << path << dendl;
-
-      int r = path_traverse(0, m, path, trace, MDS_TRAVERSE_DISCOVER);
+      int r = path_traverse(0, m, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
       if (r > 0)
         return;
       assert(r == 0);
-
-      CInode *in = get_inode(m->get_dirfrag().ino);
-      assert(in);
       open_remote_dirfrag(in, m->get_dirfrag().frag, 
 			  new C_MDS_RetryMessage(mds, m));
       return;
