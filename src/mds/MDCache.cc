@@ -5510,7 +5510,7 @@ Context *MDCache::_get_waiter(MDRequest *mdr, Message *req)
 }
 
 int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
-			   filepath& path,                   // what
+			   const filepath& path,                   // what
                            vector<CDentry*> *pdnvec,         // result
 			   CInode **pin,
                            int onfail)
@@ -5521,7 +5521,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
 
   snapid_t snapid = CEPH_NOSNAP;
   if (mdr)
-    mdr->ref_snapid = snapid;
+    mdr->snapid = snapid;
 
   int client = (mdr && mdr->reqid.name.is_client()) ? mdr->reqid.name.num() : -1;
 
@@ -5561,7 +5561,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (!mdr)
 	return -EINVAL;
       snapid = CEPH_SNAPDIR;
-      mdr->ref_snapid = snapid;
+      mdr->snapid = snapid;
       depth++;
       continue;
     }
@@ -5574,7 +5574,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
       if (!snapid)
 	return -ENOENT;
-      mdr->ref_snapid = snapid;
+      mdr->snapid = snapid;
       depth++;
       continue;
     }
@@ -5797,7 +5797,7 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
   if (mds->logger) mds->logger->inc(l_mds_thit);
   dout(10) << "path_traverse finish on snapid " << snapid << dendl;
   if (mdr) 
-    assert(mdr->ref_snapid == snapid);
+    assert(mdr->snapid == snapid);
   return 0;
 }
 
@@ -6259,10 +6259,6 @@ void MDCache::request_cleanup(MDRequest *mdr)
   metareqid_t ri = mdr->reqid;
 
   request_drop_locks(mdr);
-
-  // clear ref, trace
-  mdr->ref = 0;
-  mdr->trace.clear();
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();

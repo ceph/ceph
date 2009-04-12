@@ -252,9 +252,10 @@ struct MDRequest : public Mutation {
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
 
-  vector<CDentry*> trace;  // original path traversal.
-  CInode *ref;             // reference inode.  if there is only one, and its path is pinned.
-  snapid_t ref_snapid;
+  // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
+  vector<CDentry*> dn[2];
+  CInode *in[2];
+  snapid_t snapid;
 
   CInode *tracei;
   CDentry *tracedn;
@@ -320,25 +321,31 @@ struct MDRequest : public Mutation {
 
   // ---------------------------------------------------
   MDRequest() : 
-    session(0), client_request(0), ref(0), ref_snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    session(0), client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
-    _more(0) {}
+    _more(0) {
+    in[0] = in[1] = 0; 
+  }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
-    session(0), client_request(req), ref(0), ref_snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    session(0), client_request(req), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
-    _more(0) {}
+    _more(0) {
+    in[0] = in[1] = 0; 
+  }
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
-    session(0), client_request(0), ref(0), ref_snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    session(0), client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), cap(NULL), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
-    _more(0) {}
+    _more(0) {
+    in[0] = in[1] = 0; 
+  }
   ~MDRequest() {
     delete _more;
   }
@@ -880,7 +887,7 @@ public:
   CDentry *get_or_create_stray_dentry(CInode *in);
 
   Context *_get_waiter(MDRequest *mdr, Message *req);
-  int path_traverse(MDRequest *mdr, Message *req, filepath& path,
+  int path_traverse(MDRequest *mdr, Message *req, const filepath& path,
 		    vector<CDentry*> *pdnvec, CInode **pin, int onfail);
   bool path_is_mine(filepath& path);
   bool path_is_mine(string& p) {
