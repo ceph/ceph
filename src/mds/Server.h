@@ -109,8 +109,9 @@ public:
   void journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequest *mdr);
 
-  CInode* rdlock_path_pin_ref(MDRequest *mdr, bool want_auth, bool rdlock_dft=false);
-  CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, bool okexist, bool mustexist);
+  CInode* rdlock_path_pin_ref(MDRequest *mdr, set<SimpleLock*>& rdlocks, bool want_auth, bool rdlock_dft=false);
+  CDentry* rdlock_path_xlock_dentry(MDRequest *mdr, set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, 
+				    set<SimpleLock*>& xlocks, bool okexist, bool mustexist);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr);
 
