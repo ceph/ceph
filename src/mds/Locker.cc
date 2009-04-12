@@ -345,6 +345,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
       rdlock_finish(stray, mdr);
   }
 
+  mdr->done_locking = true;
   return true;
 }
 

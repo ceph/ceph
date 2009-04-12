@@ -2472,8 +2472,6 @@ void Server::handle_client_link(MDRequest *mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  mdr->done_locking = true;  // avoid wrlock moving target issues.
-  
   // pick mtime
   if (mdr->now == utime_t())
     mdr->now = g_clock.real_now();
@@ -3074,7 +3072,6 @@ void Server::handle_client_unlink(MDRequest *mdr)
   }
 
   // yay!
-  mdr->done_locking = true;  // avoid wrlock racing
   if (mdr->now == utime_t())
     mdr->now = g_clock.real_now();
 
@@ -3557,9 +3554,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     mds->mdcache->snaprealm_create(mdr, srci);
     return;
   }
-
-  // set done_locking flag, to avoid problems with wrlock moving auth target
-  mdr->done_locking = true;
 
   // -- open all srcdn inode frags, if any --
   // we need these open so that auth can properly delegate from inode to dirfrags
