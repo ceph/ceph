@@ -583,7 +583,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 	   << ") " << *req << dendl;
 
   if (tracei || tracedn)
-    set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->ref_snapid, mdr->ref_snapdiri,
+    set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->ref_snapid,
 		   mdr->client_request->is_replay(),
 		   mdr->client_request->get_dentry_wanted());
 
@@ -633,7 +633,6 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 
   // get tracei/tracedn from mdr?
   snapid_t snapid = mdr->ref_snapid;
-  CInode *snapdiri = mdr->ref_snapdiri;
   if (!tracei)
     tracei = mdr->tracei;
   if (!tracedn)
@@ -661,7 +660,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     // send reply, with trace, and possible leases
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, snapdiri, is_replay, dentry_wanted);
+      set_trace_dist(session, reply, tracei, tracedn, snapid, is_replay, dentry_wanted);
     messenger->send_message(reply, client_inst);
   }
   
@@ -707,7 +706,7 @@ void Server::encode_null_lease(bufferlist& bl)
  */
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
-			    snapid_t snapid, CInode *snapdiri,
+			    snapid_t snapid,
 			    bool is_replay, int dentry_wanted)
 {
   // inode, dentry, dir, ..., inode
@@ -751,15 +750,6 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     else
       encode_null_lease(bl);
     dout(20) << "set_trace_dist added dn   " << snapid << " " << *dn << dendl;
-    /*} else if (snapdiri && snapdiri->ino() == in->ino() && snapname.length()) {
-    // fake a snapname dentry
-    dout(20) << "set_trace_dist added fake snap dir+dn   " << snapname << " under " << *snapdiri << dendl;
-    reply->head.is_dentry = 1;
-    snapdiri->encode_inodestat(bl, session, NULL, CEPH_SNAPDIR, is_replay);
-    encode_empty_dirstat(bl);
-    ::encode(snapname, bl);
-    encode_infinite_lease(bl);
-    */
   } else
     reply->head.is_dentry = 0;
 
@@ -5215,7 +5205,6 @@ void Server::_mksnap_finish(MDRequest *mdr, CInode *diri, SnapInfo &info)
   // yay
   mdr->ref = diri;
   mdr->ref_snapid = snapid;
-  mdr->ref_snapdiri = diri;
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->snapbl = diri->snaprealm->get_snap_trace();
   reply_request(mdr, reply, diri);

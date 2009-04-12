@@ -5561,7 +5561,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (!mdr)
 	return -EINVAL;
       snapid = CEPH_SNAPDIR;
-      mdr->ref_snapdiri = cur;
       mdr->ref_snapid = snapid;
       depth++;
       continue;
@@ -5576,7 +5575,6 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
       if (!snapid)
 	return -ENOENT;
       mdr->ref_snapid = snapid;
-      mdr->ref_snapdiri = cur;
       depth++;
       continue;
     }
