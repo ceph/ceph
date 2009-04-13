@@ -239,6 +239,27 @@ struct ceph_inode_xattr {
 	int should_free_val;
 };
 
+struct ceph_inode_xattrs_info {
+	struct rb_root xattrs;
+
+	/*
+	 * (still encoded) xattr blob. we avoid the overhead of parsing
+	 * this until someone actually calls getxattr, etc.
+	 *
+	 * if i_xattrs.len == 0 or 4, i_xattrs.data == NULL.
+	 * i_xattrs.len == 4 implies there are no xattrs; 0 means we
+	 * don't know.
+	*/
+	int len;
+	char *data;
+	int names_size;
+	int vals_size;
+	u64 version;
+
+	void *prealloc_blob;
+	int prealloc_size;
+};
+
 /*
  * Ceph inode.
  */
@@ -265,19 +286,7 @@ struct ceph_inode_info {
 	struct rb_root i_fragtree;
 	struct mutex i_fragtree_mutex;
 
-	/*
-	 * (still encoded) xattr blob. we avoid the overhead of parsing
-	 * this until someone actually calls getxattr, etc.
-	 *
-	 * if i_xattr_len == 0 or 4, i_xattr_data == NULL.
-	 * i_xattr_len == 4 implies there are no xattrs; 0 means we
-	 * don't know.
-	 */
-	struct rb_root i_xattrs;
-	int i_xattr_len;
-	char *i_xattr_data;
-	int i_xattr_names_size;
-	u64 i_xattr_version;
+	struct ceph_inode_xattrs_info i_xattrs;
 
 	/* capabilities.  protected _both_ by i_lock and cap->session's
 	 * s_mutex. */

@@ -1697,13 +1697,13 @@ start:
 		u64 version = le64_to_cpu(grant->xattr_version);
 
 		if (!(len > 4 && *xattr_data == NULL) &&  /* ENOMEM in caller */
-		    version > ci->i_xattr_version) {
+		    version > ci->i_xattrs.version) {
 			dout(20, " got new xattrs v%llu on %p len %d\n",
 			     version, inode, len);
-			kfree(ci->i_xattr_data);
-			ci->i_xattr_len = len;
-			ci->i_xattr_version = version;
-			ci->i_xattr_data = *xattr_data;
+			kfree(ci->i_xattrs.data);
+			ci->i_xattrs.len = len;
+			ci->i_xattrs.version = version;
+			ci->i_xattrs.data = *xattr_data;
 			*xattr_data = NULL;
 		}
 	}
