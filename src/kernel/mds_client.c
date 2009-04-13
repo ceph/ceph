@@ -822,29 +822,33 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 	spin_lock(&session->s_cap_lock);
 
 	if (!list_empty(&session->s_cap_releases)) {
-		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
+		msg = list_first_entry(&session->s_cap_releases,
+				       struct ceph_msg,
 				 list_head);
 		head = msg->front.iov_base;
 		extra += CAPS_PER_RELEASE - le32_to_cpu(head->num);
 	}
 
 	while (session->s_num_cap_releases < session->s_nr_caps + extra) {
+		spin_unlock(&session->s_cap_lock);
 		msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPRELEASE, PAGE_CACHE_SIZE,
 				   0, 0, NULL);
 		if (!msg)
-			goto out;
+			goto out_unlocked;
 		dout(10, "add_cap_releases %p msg %p now %d\n", session, msg,
 		     (int)msg->front.iov_len);
 		head = msg->front.iov_base;
 		head->num = cpu_to_le32(0);
 		msg->front.iov_len = sizeof(*head);
+		spin_lock(&session->s_cap_lock);
 		list_add(&msg->list_head, &session->s_cap_releases);
 		session->s_num_cap_releases += CAPS_PER_RELEASE;
 	}
 
 	if (!list_empty(&session->s_cap_releases)) {
-		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
-				 list_head);
+		msg = list_first_entry(&session->s_cap_releases,
+				       struct ceph_msg,
+				       list_head);
 		head = msg->front.iov_base;
 		if (head->num) {
 			dout(10, " queueing non-full %p (%d)\n", msg,
@@ -856,8 +860,8 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 		}
 	}
 	err = 0;
-out:
 	spin_unlock(&session->s_cap_lock);
+out_unlocked:
 	return err;
 }
 
@@ -1557,7 +1561,6 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	}
 
 	ceph_unreserve_caps(&req->r_caps_reservation);
-	add_cap_releases(mdsc, req->r_session, -1);
 
 done:
 	up_read(&mdsc->snap_rwsem);
@@ -1569,12 +1572,12 @@ done:
 		ceph_msg_get(msg);
 	}
 
+	add_cap_releases(mdsc, req->r_session, -1);
 	mutex_unlock(&req->r_session->s_mutex);
 
 	/* kick calling process */
 	complete_request(mdsc, req);
 	ceph_mdsc_put_request(req);
-
 	return;
 }
 
