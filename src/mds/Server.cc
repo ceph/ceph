@@ -1733,301 +1733,254 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
 
 
 
-
-// ===============================================================================
-// INODE UPDATES
-
-
-/* 
- * finisher for basic inode updates
- */
-class C_MDS_inode_update_finish : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CInode *in;
-  bool smaller;
-public:
-  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false) :
-    mds(m), mdr(r), in(i), smaller(sm) { }
-  void finish(int r) {
-    assert(r == 0);
-
-    // apply
-    in->pop_and_dirty_projected_inode(mdr->ls);
-    mdr->apply();
-
-    // notify any clients
-    if (smaller && in->inode.is_truncating()) {
-      mds->locker->issue_truncate(in);
-      mds->mdcache->truncate_inode(in, mdr->ls);
-    }
-
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
-
-    mds->server->reply_request(mdr, 0);
-  }
-};
-
-
-void Server::handle_client_setattr(MDRequest *mdr)
+void Server::handle_client_open(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
 
-  if (mdr->snapid != CEPH_NOSNAP) {
+  int flags = req->head.args.open.flags;
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+
+  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
+
+  dout(7) << "open on " << req->get_filepath() << dendl;
+  
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, need_auth);
+  if (!cur) return;
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+
+  // can only open a dir with mode FILE_MODE_PIN, at least for now.
+  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
+
+  dout(10) << "open flags = " << flags
+	   << ", filemode = " << cmode
+	   << ", need_auth = " << need_auth
+	   << dendl;
+  
+  // regular file?
+  /*if (!cur->inode.is_file() && !cur->inode.is_dir()) {
+    dout(7) << "not a file or dir " << *cur << dendl;
+    reply_request(mdr, -ENXIO);                 // FIXME what error do we want?
+    return;
+    }*/
+  if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
+    dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     reply_request(mdr, -EINVAL);
     return;
   }
-  if (cur->ino() < MDS_INO_SYSTEM_BASE && !cur->is_root()) {
+  
+  // snapped data is read only
+  if (mdr->snapid != CEPH_NOSNAP &&
+      (cmode & CEPH_FILE_MODE_WR)) {
+    dout(7) << "snap " << mdr->snapid << " is read-only " << *cur << dendl;
     reply_request(mdr, -EPERM);
     return;
   }
 
-  __u32 mask = req->head.args.setattr.mask;
+  // O_TRUNC
+  if ((flags & O_TRUNC) &&
+      !(req->get_retry_attempt() &&
+	mdr->session->have_completed_request(req->get_reqid().tid))) {
+    assert(cur->is_auth());
 
-  // xlock inode
-  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
-    xlocks.insert(&cur->authlock);
-  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
-    xlocks.insert(&cur->filelock);
+    wrlocks.insert(&cur->filelock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
 
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
+    inode_t *pi = cur->get_projected_inode();
+    if (pi->size > 0) {
+      // wait for pending truncate?
+      if (pi->is_truncating()) {
+	dout(10) << " waiting for pending truncate from " << pi->truncate_from
+		 << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+	cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
 
-  // trunc from bigger -> smaller?
-  inode_t *pi = cur->get_projected_inode();
-  __u64 old_size = MAX(pi->size, req->head.args.setattr.old_size);
-  bool smaller = req->head.args.setattr.size < old_size;
-  if ((mask & CEPH_SETATTR_SIZE) && smaller && pi->is_truncating()) {
-    dout(10) << " waiting for pending truncate from " << pi->truncate_from
-	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-    mds->mdlog->flush();
-    return;
-  }
-
-  // project update
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "setattr");
-
-  pi = cur->project_inode();
-
-  if (mask & CEPH_SETATTR_MODE)
-    pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
-  if (mask & CEPH_SETATTR_UID)
-    pi->uid = req->head.args.setattr.uid;
-  if (mask & CEPH_SETATTR_GID)
-    pi->gid = req->head.args.setattr.gid;
-
-  if (mask & CEPH_SETATTR_MTIME)
-    pi->mtime = req->head.args.setattr.mtime;
-  if (mask & CEPH_SETATTR_ATIME)
-    pi->atime = req->head.args.setattr.atime;
-  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
-    pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
-  if (mask & CEPH_SETATTR_SIZE) {
-    if (smaller) {
-      pi->truncate_from = old_size;
-      pi->size = req->head.args.setattr.size;
-      pi->truncate_size = pi->size;
-      pi->truncate_seq++;
-      le->metablob.add_truncate_start(cur->ino());
-    } else {
-      pi->size = req->head.args.setattr.size;
+      handle_client_opent(mdr, cmode);
+      return;
     }
-    pi->rstat.rbytes = pi->size;
+  } else {
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
   }
 
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
 
-  // log + wait
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  // sync filelock if snapped.
+  //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata,
+  //  and that data itself is flushed so that we can read the snapped data off disk.
+  if (mdr->snapid != CEPH_NOSNAP && !cur->is_dir()) {
+    // first rdlock.
+    set<SimpleLock*> rdlocks = mdr->rdlocks;
+    set<SimpleLock*> wrlocks = mdr->wrlocks;
+    set<SimpleLock*> xlocks = mdr->xlocks;
+    rdlocks.insert(&cur->filelock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    // sure sure we ended up in the SYNC state
+    if (cur->filelock.is_stable() && cur->filelock.get_state() != LOCK_SYNC) {
+      assert(cur->is_auth());
+      mds->locker->simple_sync(&cur->filelock);
+    }
+    if (!cur->filelock.is_stable()) {
+      dout(10) << " waiting for filelock to stabilize on " << *cur << dendl;
+      cur->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
+      return;
+    }
+  }
+
+
+  if (cur->is_file() || cur->is_dir()) {
+    if (mdr->snapid == CEPH_NOSNAP) {
+      // register new cap
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
+      dout(12) << "open issued caps " << ccap_string(cap->pending())
+	       << " for " << req->get_orig_source()
+	       << " on " << *cur << dendl;
+      mdr->cap = cap;
+    } else {
+      int caps = ceph_caps_for_mode(cmode);
+      dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
+	       << " for " << req->get_orig_source()
+	       << " snapid " << mdr->snapid
+	       << " on " << *cur << dendl;
+      mdr->snap_caps = caps;
+    }
+  }
+
+  // make sure this inode gets into the journal
+  if (!cur->xlist_open_file.is_on_xlist()) {
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    EOpen *le = new EOpen(mds->mdlog);
+    le->add_clean_inode(cur);
+    ls->open_files.push_back(&cur->xlist_open_file);
+    mds->mdlog->submit_entry(le);
+  }
   
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller));
+  // hit pop
+  mdr->now = g_clock.now();
+  if (cmode == CEPH_FILE_MODE_RDWR ||
+      cmode == CEPH_FILE_MODE_WR) 
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
+  else
+    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
+			     mdr->client_request->get_orig_source().num());
 
-  // flush immediately if there are readers/writers waiting
-  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
-    mds->mdlog->flush();
+  CDentry *dn = 0;
+  if (req->get_dentry_wanted()) {
+    assert(mdr->dn[0].size());
+    dn = mdr->dn[0].back();
+  }
+  reply_request(mdr, 0, cur, dn);
 }
 
 
 
-void Server::handle_client_setlayout(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
-
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
-    return;
-  }
-  if (cur->is_dir()) {
-    reply_request(mdr, -EISDIR);
-    return;
-  }
-  
-  if (cur->get_projected_inode()->size ||
-      cur->get_projected_inode()->truncate_seq) {
-    reply_request(mdr, -ENOTEMPTY);
-    return;
-  }
-
-  xlocks.insert(&cur->filelock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-  // project update
-  inode_t *pi = cur->project_inode();
-  pi->layout = req->head.args.setlayout.layout;
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  
-  // log + wait
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "setlayout");
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
-  
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
-}
-
-
-// XATTRS
-
-class C_MDS_inode_xattr_update_finish : public Context {
+class C_MDS_openc_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
-  CInode *in;
+  CDentry *dn;
+  CInode *newi;
+  snapid_t follows;
 public:
-
-  C_MDS_inode_xattr_update_finish(MDS *m, MDRequest *r, CInode *i) :
-    mds(m), mdr(r), in(i) { }
+  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, snapid_t f) :
+    mds(m), mdr(r), dn(d), newi(ni), follows(f) {}
   void finish(int r) {
     assert(r == 0);
 
-    // apply
-    in->pop_and_dirty_projected_inode(mdr->ls);
-    
-    mdr->apply();
+    dn->pop_projected_linkage();
 
-    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+    // dirty inode, dn, dir
+    newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
+    newi->mark_dirty(newi->inode.version+1, mdr->ls);
+
+    mdr->apply();
 
     mds->server->reply_request(mdr, 0);
   }
 };
 
-void Server::handle_client_setxattr(MDRequest *mdr)
+
+void Server::handle_client_openc(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+
+  dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
+  
+  bool excl = (req->head.args.open.flags & O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
-
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
-    return;
-  }
-
-  xlocks.insert(&cur->xattrlock);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
+  if (!dn) return;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  string name(req->get_path2());
-  int flags = req->head.args.setxattr.flags;
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
-  if ((flags & XATTR_CREATE) && cur->xattrs.count(name)) {
-    dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
-    reply_request(mdr, -EEXIST);
+  if (!dnl->is_null()) {
+    // it existed.  
+    if (req->head.args.open.flags & O_EXCL) {
+      dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
+      reply_request(mdr, -EEXIST, dnl->get_inode(), dn);
+      return;
+    } 
+    
+    handle_client_open(mdr);
     return;
   }
-  if ((flags & XATTR_REPLACE) && !cur->xattrs.count(name)) {
-    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
-    reply_request(mdr, -ENODATA);
-    return;
-  }
 
-  int len = req->get_data().length();
-  dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;
+  // created null dn.
 
-  // project update
-  map<string,bufferptr> *px = new map<string,bufferptr>;
-  inode_t *pi = cur->project_inode(px);
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  pi->xattr_version++;
-  px->erase(name);
-  (*px)[name] = buffer::create(len);
-  if (len)
-    req->get_data().copy(0, len, (*px)[name].c_str());
+  CInode *diri = dn->get_dir()->get_inode();
+    
+  // create inode.
+  mdr->now = g_clock.real_now();
 
-  // log + wait
+  SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
+  snapid_t follows = realm->get_newest_seq();
+
+  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
+
+  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
+  assert(in);
+  
+  // it's a file.
+  dn->push_projected_linkage(in);
+
+  in->inode.mode = req->head.args.open.mode | S_IFREG;
+  in->inode.version = dn->pre_dirty();
+  in->inode.max_size = (cmode & CEPH_FILE_MODE_WR) ? in->get_layout_size_increment() : 0;
+  in->inode.rstat.rfiles = 1;
+
+  dn->first = in->first = follows+1;
+  
+  // prepare finisher
   mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "setxattr");
+  EUpdate *le = new EUpdate(mdlog, "openc");
   le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, cur);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
+  journal_allocated_inos(mdr, &le->metablob);
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
+  le->metablob.add_primary_dentry(dn, true, in);
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
-}
+  // do the open
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
+  in->authlock.set_state(LOCK_EXCL);
 
-void Server::handle_client_removexattr(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (!cur) return;
+  // stick cap, snapbl info in mdr
+  mdr->cap = cap;
 
-  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
-    reply_request(mdr, -EINVAL);   // for now
-    return;
-  }
+  // make sure this inode gets into the journal
+  le->metablob.add_opened_ino(in->ino());
+  LogSegment *ls = mds->mdlog->get_current_segment();
+  ls->open_files.push_back(&in->xlist_open_file);
 
-  xlocks.insert(&cur->xattrlock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-  string name(req->get_path2());
-  if (cur->xattrs.count(name) == 0) {
-    dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
-    reply_request(mdr, -ENODATA);
-    return;
-  }
-
-  dout(10) << "removexattr '" << name << "' on " << *cur << dendl;
-
-  // project update
-  map<string,bufferptr> *px = new map<string,bufferptr>;
-  inode_t *pi = cur->project_inode(px);
-  pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
-  pi->xattr_version++;
-  px->erase(name);
-
-  // log + wait
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "removexattr");
-  le->metablob.add_client_req(req->get_reqid());
-  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_cow_inode(mdr, &le->metablob, cur);
-  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
-
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
+  journal_and_reply(mdr, in, dn, le, fin);
 }
 
 
-// =================================================================
-// DIRECTORY and NAMESPACE OPS
-
-// READDIR
 
 void Server::handle_client_readdir(MDRequest *mdr)
 {
@@ -2195,6 +2148,345 @@ void Server::handle_client_readdir(MDRequest *mdr)
   reply_request(mdr, reply, diri);
 }
 
+
+
+// ===============================================================================
+// INODE UPDATES
+
+
+/* 
+ * finisher for basic inode updates
+ */
+class C_MDS_inode_update_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+  bool smaller;
+public:
+  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false) :
+    mds(m), mdr(r), in(i), smaller(sm) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // apply
+    in->pop_and_dirty_projected_inode(mdr->ls);
+    mdr->apply();
+
+    // notify any clients
+    if (smaller && in->inode.is_truncating()) {
+      mds->locker->issue_truncate(in);
+      mds->mdcache->truncate_inode(in, mdr->ls);
+    }
+
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+
+    mds->server->reply_request(mdr, 0);
+  }
+};
+
+
+void Server::handle_client_setattr(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+
+  if (mdr->snapid != CEPH_NOSNAP) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+  if (cur->ino() < MDS_INO_SYSTEM_BASE && !cur->is_root()) {
+    reply_request(mdr, -EPERM);
+    return;
+  }
+
+  __u32 mask = req->head.args.setattr.mask;
+
+  // xlock inode
+  if (mask & (CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID))
+    xlocks.insert(&cur->authlock);
+  if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME|CEPH_SETATTR_SIZE))
+    xlocks.insert(&cur->filelock);
+
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // trunc from bigger -> smaller?
+  inode_t *pi = cur->get_projected_inode();
+  __u64 old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  bool smaller = req->head.args.setattr.size < old_size;
+  if ((mask & CEPH_SETATTR_SIZE) && smaller && pi->is_truncating()) {
+    dout(10) << " waiting for pending truncate from " << pi->truncate_from
+	     << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
+    cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
+    mds->mdlog->flush();
+    return;
+  }
+
+  // project update
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "setattr");
+
+  pi = cur->project_inode();
+
+  if (mask & CEPH_SETATTR_MODE)
+    pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
+  if (mask & CEPH_SETATTR_UID)
+    pi->uid = req->head.args.setattr.uid;
+  if (mask & CEPH_SETATTR_GID)
+    pi->gid = req->head.args.setattr.gid;
+
+  if (mask & CEPH_SETATTR_MTIME)
+    pi->mtime = req->head.args.setattr.mtime;
+  if (mask & CEPH_SETATTR_ATIME)
+    pi->atime = req->head.args.setattr.atime;
+  if (mask & (CEPH_SETATTR_ATIME | CEPH_SETATTR_MTIME))
+    pi->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
+  if (mask & CEPH_SETATTR_SIZE) {
+    if (smaller) {
+      pi->truncate_from = old_size;
+      pi->size = req->head.args.setattr.size;
+      pi->truncate_size = pi->size;
+      pi->truncate_seq++;
+      le->metablob.add_truncate_start(cur->ino());
+    } else {
+      pi->size = req->head.args.setattr.size;
+    }
+    pi->rstat.rbytes = pi->size;
+  }
+
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+
+  // log + wait
+  le->metablob.add_client_req(req->get_reqid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller));
+
+  // flush immediately if there are readers/writers waiting
+  if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))
+    mds->mdlog->flush();
+}
+
+
+void Server::handle_client_opent(MDRequest *mdr, int cmode)
+{
+  CInode *in = mdr->in[0];
+  assert(in);
+
+  dout(10) << "handle_client_opent " << *in << dendl;
+
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "open_truncate");
+
+  // prepare
+  inode_t *pi = in->project_inode();
+  pi->mtime = pi->ctime = g_clock.real_now();
+  pi->version = in->pre_dirty();
+
+  pi->truncate_from = pi->size;
+  pi->size = 0;
+  pi->rstat.rbytes = 0;
+  pi->truncate_size = 0;
+  pi->truncate_seq++;
+
+  le->metablob.add_truncate_start(in->ino());
+  le->metablob.add_client_req(mdr->reqid);
+
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, in);
+  
+  // do the open
+  SnapRealm *realm = in->find_snaprealm();
+  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
+
+  in->authlock.set_state(LOCK_EXCL);
+  mdr->cap = cap;
+
+  // make sure ino gets into the journal
+  le->metablob.add_opened_ino(in->ino());
+  LogSegment *ls = mds->mdlog->get_current_segment();
+  ls->open_files.push_back(&in->xlist_open_file);
+  
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
+}
+
+
+
+void Server::handle_client_setlayout(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+
+  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+  if (cur->is_dir()) {
+    reply_request(mdr, -EISDIR);
+    return;
+  }
+  
+  if (cur->get_projected_inode()->size ||
+      cur->get_projected_inode()->truncate_seq) {
+    reply_request(mdr, -ENOTEMPTY);
+    return;
+  }
+
+  xlocks.insert(&cur->filelock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // project update
+  inode_t *pi = cur->project_inode();
+  pi->layout = req->head.args.setlayout.layout;
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+  
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "setlayout");
+  le->metablob.add_client_req(req->get_reqid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
+  
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
+
+
+
+// XATTRS
+
+class C_MDS_inode_xattr_update_finish : public Context {
+  MDS *mds;
+  MDRequest *mdr;
+  CInode *in;
+public:
+
+  C_MDS_inode_xattr_update_finish(MDS *m, MDRequest *r, CInode *i) :
+    mds(m), mdr(r), in(i) { }
+  void finish(int r) {
+    assert(r == 0);
+
+    // apply
+    in->pop_and_dirty_projected_inode(mdr->ls);
+    
+    mdr->apply();
+
+    mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
+
+    mds->server->reply_request(mdr, 0);
+  }
+};
+
+void Server::handle_client_setxattr(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+
+  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  xlocks.insert(&cur->xattrlock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  string name(req->get_path2());
+  int flags = req->head.args.setxattr.flags;
+
+  if ((flags & XATTR_CREATE) && cur->xattrs.count(name)) {
+    dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
+    reply_request(mdr, -EEXIST);
+    return;
+  }
+  if ((flags & XATTR_REPLACE) && !cur->xattrs.count(name)) {
+    dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
+    reply_request(mdr, -ENODATA);
+    return;
+  }
+
+  int len = req->get_data().length();
+  dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;
+
+  // project update
+  map<string,bufferptr> *px = new map<string,bufferptr>;
+  inode_t *pi = cur->project_inode(px);
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+  pi->xattr_version++;
+  px->erase(name);
+  (*px)[name] = buffer::create(len);
+  if (len)
+    req->get_data().copy(0, len, (*px)[name].c_str());
+
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "setxattr");
+  le->metablob.add_client_req(req->get_reqid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_cow_inode(mdr, &le->metablob, cur);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
+
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
+void Server::handle_client_removexattr(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (!cur) return;
+
+  if (mdr->snapid != CEPH_NOSNAP || cur->is_root()) {
+    reply_request(mdr, -EINVAL);   // for now
+    return;
+  }
+
+  xlocks.insert(&cur->xattrlock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  string name(req->get_path2());
+  if (cur->xattrs.count(name) == 0) {
+    dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
+    reply_request(mdr, -ENODATA);
+    return;
+  }
+
+  dout(10) << "removexattr '" << name << "' on " << *cur << dendl;
+
+  // project update
+  map<string,bufferptr> *px = new map<string,bufferptr>;
+  inode_t *pi = cur->project_inode(px);
+  pi->version = cur->pre_dirty();
+  pi->ctime = g_clock.real_now();
+  pi->xattr_version++;
+  px->erase(name);
+
+  // log + wait
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "removexattr");
+  le->metablob.add_client_req(req->get_reqid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
+  mdcache->journal_cow_inode(mdr, &le->metablob, cur);
+  le->metablob.add_primary_dentry(cur->get_projected_parent_dn(), true, cur, 0, 0, px);
+
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur));
+}
+
+
+// =================================================================
+// DIRECTORY and NAMESPACE OPS
 
 
 // ------------------------------------------------
@@ -4580,303 +4872,6 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
   else 
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
-
-
-
-// ===========================
-// open, openc, close
-
-void Server::handle_client_open(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-
-  int flags = req->head.args.open.flags;
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
-
-  bool need_auth = !file_mode_is_readonly(cmode) || (flags & O_TRUNC);
-
-  dout(7) << "open on " << req->get_filepath() << dendl;
-  
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, rdlocks, need_auth);
-  if (!cur) return;
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-
-  // can only open a dir with mode FILE_MODE_PIN, at least for now.
-  if (cur->inode.is_dir()) cmode = CEPH_FILE_MODE_PIN;
-
-  dout(10) << "open flags = " << flags
-	   << ", filemode = " << cmode
-	   << ", need_auth = " << need_auth
-	   << dendl;
-  
-  // regular file?
-  /*if (!cur->inode.is_file() && !cur->inode.is_dir()) {
-    dout(7) << "not a file or dir " << *cur << dendl;
-    reply_request(mdr, -ENXIO);                 // FIXME what error do we want?
-    return;
-    }*/
-  if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
-    dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
-    reply_request(mdr, -EINVAL);
-    return;
-  }
-  
-  // snapped data is read only
-  if (mdr->snapid != CEPH_NOSNAP &&
-      (cmode & CEPH_FILE_MODE_WR)) {
-    dout(7) << "snap " << mdr->snapid << " is read-only " << *cur << dendl;
-    reply_request(mdr, -EPERM);
-    return;
-  }
-
-  // O_TRUNC
-  if ((flags & O_TRUNC) &&
-      !(req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid))) {
-    assert(cur->is_auth());
-
-    wrlocks.insert(&cur->filelock);
-    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-      return;
-
-    inode_t *pi = cur->get_projected_inode();
-    if (pi->size > 0) {
-      // wait for pending truncate?
-      if (pi->is_truncating()) {
-	dout(10) << " waiting for pending truncate from " << pi->truncate_from
-		 << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
-	cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
-
-      handle_client_opent(mdr, cmode);
-      return;
-    }
-  } else {
-    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-      return;
-  }
-
-
-  // sync filelock if snapped.
-  //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata,
-  //  and that data itself is flushed so that we can read the snapped data off disk.
-  if (mdr->snapid != CEPH_NOSNAP && !cur->is_dir()) {
-    // first rdlock.
-    set<SimpleLock*> rdlocks = mdr->rdlocks;
-    set<SimpleLock*> wrlocks = mdr->wrlocks;
-    set<SimpleLock*> xlocks = mdr->xlocks;
-    rdlocks.insert(&cur->filelock);
-    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-      return;
-
-    // sure sure we ended up in the SYNC state
-    if (cur->filelock.is_stable() && cur->filelock.get_state() != LOCK_SYNC) {
-      assert(cur->is_auth());
-      mds->locker->simple_sync(&cur->filelock);
-    }
-    if (!cur->filelock.is_stable()) {
-      dout(10) << " waiting for filelock to stabilize on " << *cur << dendl;
-      cur->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-  }
-
-
-  if (cur->is_file() || cur->is_dir()) {
-    if (mdr->snapid == CEPH_NOSNAP) {
-      // register new cap
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
-      dout(12) << "open issued caps " << ccap_string(cap->pending())
-	       << " for " << req->get_orig_source()
-	       << " on " << *cur << dendl;
-      mdr->cap = cap;
-    } else {
-      int caps = ceph_caps_for_mode(cmode);
-      dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
-	       << " for " << req->get_orig_source()
-	       << " snapid " << mdr->snapid
-	       << " on " << *cur << dendl;
-      mdr->snap_caps = caps;
-    }
-  }
-
-  // make sure this inode gets into the journal
-  if (!cur->xlist_open_file.is_on_xlist()) {
-    LogSegment *ls = mds->mdlog->get_current_segment();
-    EOpen *le = new EOpen(mds->mdlog);
-    le->add_clean_inode(cur);
-    ls->open_files.push_back(&cur->xlist_open_file);
-    mds->mdlog->submit_entry(le);
-  }
-  
-  // hit pop
-  mdr->now = g_clock.now();
-  if (cmode == CEPH_FILE_MODE_RDWR ||
-      cmode == CEPH_FILE_MODE_WR) 
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IWR);
-  else
-    mds->balancer->hit_inode(mdr->now, cur, META_POP_IRD, 
-			     mdr->client_request->get_orig_source().num());
-
-  CDentry *dn = 0;
-  if (req->get_dentry_wanted()) {
-    assert(mdr->dn[0].size());
-    dn = mdr->dn[0].back();
-  }
-  reply_request(mdr, 0, cur, dn);
-}
-
-
-void Server::handle_client_opent(MDRequest *mdr, int cmode)
-{
-  CInode *in = mdr->in[0];
-  assert(in);
-
-  dout(10) << "handle_client_opent " << *in << dendl;
-
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "open_truncate");
-
-  // prepare
-  inode_t *pi = in->project_inode();
-  pi->mtime = pi->ctime = g_clock.real_now();
-  pi->version = in->pre_dirty();
-
-  pi->truncate_from = pi->size;
-  pi->size = 0;
-  pi->rstat.rbytes = 0;
-  pi->truncate_size = 0;
-  pi->truncate_seq++;
-
-  le->metablob.add_truncate_start(in->ino());
-  le->metablob.add_client_req(mdr->reqid);
-
-  mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY, false);
-  mdcache->journal_dirty_inode(mdr, &le->metablob, in);
-  
-  // do the open
-  SnapRealm *realm = in->find_snaprealm();
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
-
-  in->authlock.set_state(LOCK_EXCL);
-  mdr->cap = cap;
-
-  // make sure ino gets into the journal
-  le->metablob.add_opened_ino(in->ino());
-  LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&in->xlist_open_file);
-  
-  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(mds, mdr, in, true));
-}
-
-
-
-class C_MDS_openc_finish : public Context {
-  MDS *mds;
-  MDRequest *mdr;
-  CDentry *dn;
-  CInode *newi;
-  snapid_t follows;
-public:
-  C_MDS_openc_finish(MDS *m, MDRequest *r, CDentry *d, CInode *ni, snapid_t f) :
-    mds(m), mdr(r), dn(d), newi(ni), follows(f) {}
-  void finish(int r) {
-    assert(r == 0);
-
-    dn->pop_projected_linkage();
-
-    // dirty inode, dn, dir
-    newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
-    newi->mark_dirty(newi->inode.version+1, mdr->ls);
-
-    mdr->apply();
-
-    mds->server->reply_request(mdr, 0);
-  }
-};
-
-
-void Server::handle_client_openc(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-
-  dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
-  
-  bool excl = (req->head.args.open.flags & O_EXCL);
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
-  if (!dn) return;
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
-    return;
-
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-
-  if (!dnl->is_null()) {
-    // it existed.  
-    if (req->head.args.open.flags & O_EXCL) {
-      dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
-      reply_request(mdr, -EEXIST, dnl->get_inode(), dn);
-      return;
-    } 
-    
-    handle_client_open(mdr);
-    return;
-  }
-
-  // created null dn.
-
-  CInode *diri = dn->get_dir()->get_inode();
-    
-  // create inode.
-  mdr->now = g_clock.real_now();
-
-  SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
-  snapid_t follows = realm->get_newest_seq();
-
-  int cmode = ceph_flags_to_mode(req->head.args.open.flags);
-
-  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
-  assert(in);
-  
-  // it's a file.
-  dn->push_projected_linkage(in);
-
-  in->inode.mode = req->head.args.open.mode | S_IFREG;
-  in->inode.version = dn->pre_dirty();
-  in->inode.max_size = (cmode & CEPH_FILE_MODE_WR) ? in->get_layout_size_increment() : 0;
-  in->inode.rstat.rfiles = 1;
-
-  dn->first = in->first = follows+1;
-  
-  // prepare finisher
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "openc");
-  le->metablob.add_client_req(req->get_reqid());
-  journal_allocated_inos(mdr, &le->metablob);
-  mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, true, in);
-
-  // do the open
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
-  in->authlock.set_state(LOCK_EXCL);
-
-  // stick cap, snapbl info in mdr
-  mdr->cap = cap;
-
-  // make sure this inode gets into the journal
-  le->metablob.add_opened_ino(in->ino());
-  LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&in->xlist_open_file);
-
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(mds, mdr, dn, in, follows);
-  journal_and_reply(mdr, in, dn, le, fin);
-}
-
-
 
 
 
