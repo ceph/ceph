@@ -1460,15 +1460,15 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
 				    bool want_auth, bool rdlock_dft)
 {
-  dout(10) << "rdlock_path_pin_ref " << *mdr << dendl;
+  MClientRequest *req = mdr->client_request;
+  const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
+  dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
 
   if (mdr->done_locking)
     return mdr->in[n];
 
-  MClientRequest *req = mdr->client_request;
 
   // traverse
-  const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
   int r = mdcache->path_traverse(mdr, 0, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
   if (r > 0) return false; // delayed
   if (r < 0) {  // error
@@ -1524,18 +1524,19 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
  */
 CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
 					  set<SimpleLock*>& rdlocks, set<SimpleLock*>& wrlocks, set<SimpleLock*>& xlocks,
-					  bool okexist, bool mustexist)
+					  bool okexist, bool mustexist, bool alwaysxlock)
 {
   MClientRequest *req = mdr->client_request;
+  const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
 
-  dout(10) << "rdlock_path_xlock_dentry " << *mdr << dendl;
+  dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
 
   int client = mdr->get_client();
 
   if (mdr->done_locking)
     return mdr->dn[n].back();
 
-  CDir *dir = traverse_to_auth_dir(mdr, mdr->dn[n], req->get_filepath());
+  CDir *dir = traverse_to_auth_dir(mdr, mdr->dn[n], refpath);
   if (!dir) return 0;
   dout(10) << "rdlock_path_xlock_dentry dir " << *dir << dendl;
 
@@ -1553,7 +1554,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   }
 
   // make a null dentry?
-  const string &dname = req->get_filepath().last_dentry();
+  const string &dname = refpath.last_dentry();
   CDentry *dn;
   if (mustexist) {
     dn = dir->lookup(dname);
@@ -1589,7 +1590,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
   // -- lock --
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
-  if (dn->get_linkage(client, mdr)->is_null())
+  if (alwaysxlock || dn->get_linkage(client, mdr)->is_null())
     xlocks.insert(&dn->lock);                 // new dn, xlock
   else
     rdlocks.insert(&dn->lock);  // existing dn, rdlock
@@ -2247,7 +2248,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2292,7 +2293,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2356,7 +2357,7 @@ void Server::handle_client_symlink(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2407,23 +2408,14 @@ void Server::handle_client_link(MDRequest *mdr)
 	  << dendl;
 
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false);
+
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
+  CInode *targeti = rdlock_path_pin_ref(mdr, 1, rdlocks, false, false);
+  if (!targeti) return;
+
   CDir *dir = dn->get_dir();
   dout(7) << "handle_client_link link " << dn->get_name() << " in " << *dir << dendl;
-  
-  // traverse to link target
-  filepath targetpath = req->get_filepath2();
-  dout(7) << "handle_client_link discovering target " << targetpath << dendl;
-  vector<CDentry*> targettrace;
-  CInode *targeti;
-  int r = mdcache->path_traverse(mdr, 0, targetpath, &targettrace, &targeti, MDS_TRAVERSE_DISCOVER);
-  if (r > 0) return; // wait
-  if (targettrace.empty()) r = -EINVAL; 
-  if (r < 0) {
-    reply_request(mdr, r);
-    return;
-  }
   dout(7) << "target is " << *targeti << dendl;
   if (targeti->is_dir()) {
     dout(7) << "target is a dir, failing..." << dendl;
@@ -2431,12 +2423,7 @@ void Server::handle_client_link(MDRequest *mdr)
     return;
   }
   
-  // add locks for source inode
-  for (int i=0; i<(int)targettrace.size(); i++)
-    rdlocks.insert(&targettrace[i]->lock);
   xlocks.insert(&targeti->linklock);
-  mds->locker->include_snap_rdlocks(rdlocks, targeti);
-
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -3290,7 +3277,6 @@ public:
 void Server::handle_client_rename(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
   dout(7) << "handle_client_rename " << *req << dendl;
 
   filepath destpath = req->get_filepath();
@@ -3299,33 +3285,45 @@ void Server::handle_client_rename(MDRequest *mdr)
     reply_request(mdr, -EINVAL);
     return;
   }
-
-  // traverse to dest dir (not dest)
-  //  we do this FIRST, because the rename should occur on the 
-  //  destdn's auth.
   const string &destname = destpath.last_dentry();
-  vector<CDentry*> desttrace;
-  CDir *destdir = traverse_to_auth_dir(mdr, desttrace, destpath);
-  if (!destdir) return;  // fw or error out
-  dout(10) << "dest will be " << destname << " in " << *destdir << dendl;
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+
+  CDentry *destdn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, true, false, true);
+  if (!destdn) return;
+  dout(10) << " destdn " << *destdn << dendl;
+  CDentry::linkage_t *destdnl = destdn->get_projected_linkage();
+  CDir *destdir = destdn->get_dir();
   assert(destdir->is_auth());
 
-  // traverse to src
-  vector<CDentry*> srctrace;
-  CInode *srci;
-  int r = mdcache->path_traverse(mdr, 0, srcpath, &srctrace, &srci, MDS_TRAVERSE_DISCOVER);
-  if (r > 0) return;
-  if (r < 0) {
-    reply_request(mdr, r);
-    return;
-  }
-  assert(!srctrace.empty());
-  CDentry *srcdn = srctrace[srctrace.size()-1];
+  CDentry *srcdn = rdlock_path_xlock_dentry(mdr, 1, rdlocks, wrlocks, xlocks, true, true, true);
+  if (!srcdn) return;
   dout(10) << " srcdn " << *srcdn << dendl;
-  dout(10) << " srci " << *srci << dendl;
-  mdr->pin(srci);
-
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
+  CInode *srci = srcdnl->get_inode();
+  dout(10) << " srci " << *srci << dendl;
+
+  CInode *oldin = 0;
+  if (!destdnl->is_null()) {
+    //dout(10) << "dest dn exists " << *destdn << dendl;
+    oldin = mdcache->get_dentry_inode(destdn, mdr, true);
+    if (!oldin) return;
+    dout(10) << " oldin " << *oldin << dendl;
+    
+    // mv /some/thing /to/some/existing_other_thing
+    if (oldin->is_dir() && !srci->is_dir()) {
+      reply_request(mdr, -EISDIR);
+      return;
+    }
+    if (!oldin->is_dir() && srci->is_dir()) {
+      reply_request(mdr, -ENOTDIR);
+      return;
+    }
+
+    // non-empty dir?
+    if (oldin->is_dir() && _dir_is_nonempty(mdr, oldin))      
+      return;
+  }
 
   // -- some sanity checks --
 
@@ -3333,6 +3331,8 @@ void Server::handle_client_rename(MDRequest *mdr)
   if (destpath.get_ino() != srcpath.get_ino() &&
       !MDS_INO_IS_STRAY(srcpath.get_ino())) {  // <-- mds 'rename' out of stray dir is ok!
     // do traces share a dentry?
+    vector<CDentry*>& srctrace = mdr->dn[1];
+    vector<CDentry*>& desttrace = mdr->dn[0];
     CDentry *common = 0;
     for (unsigned i=0; i < srctrace.size(); i++) {
       for (unsigned j=0; j < desttrace.size(); j++) {
@@ -3392,19 +3392,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     pdn = pdn->get_dir()->inode->parent;
   }
 
-
-  // identify/create dest dentry
-  CDentry *destdn = destdir->lookup(destname);
-  if (destdn && !destdn->lock.can_read(client) && destdn->lock.get_xlocked_by() != mdr) {
-    destdn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-
-  CDentry::linkage_t *destdnl = 0;
-  if (destdn)
-    destdnl = destdn->get_projected_linkage();
-
-
   // is this a stray reintegration or merge? (sanity checks!)
   if (mdr->reqid.name.is_mds() &&
       (!destdnl->is_remote() ||
@@ -3412,37 +3399,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     reply_request(mdr, -EINVAL);  // actually, this won't reply, but whatev.
     return;
   }
-
-  CInode *oldin = 0;
-  if (destdn && !destdnl->is_null()) {
-    //dout(10) << "dest dn exists " << *destdn << dendl;
-    oldin = mdcache->get_dentry_inode(destdn, mdr, true);
-    if (!oldin) return;
-    dout(10) << " oldin " << *oldin << dendl;
-    
-    // mv /some/thing /to/some/existing_other_thing
-    if (oldin->is_dir() && !srci->is_dir()) {
-      reply_request(mdr, -EISDIR);
-      return;
-    }
-    if (!oldin->is_dir() && srci->is_dir()) {
-      reply_request(mdr, -ENOTDIR);
-      return;
-    }
-
-    // non-empty dir?
-    if (oldin->is_dir() && _dir_is_nonempty(mdr, oldin))      
-      return;
-  }
-  if (!destdn) {
-    // mv /some/thing /to/some/non_existent_name
-    destdn = prepare_null_dentry(mdr, destdir, destname);
-    if (!destdn)
-      return;
-    destdnl = destdn->get_projected_linkage();
-  }
-
-  dout(10) << " destdn " << *destdn << dendl;
 
   bool linkmerge = (srcdnl->get_inode() == destdnl->get_inode() &&
 		    (srcdnl->is_primary() || destdnl->is_primary()));
@@ -3458,27 +3414,12 @@ void Server::handle_client_rename(MDRequest *mdr)
   }
 
   // -- locks --
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
 
   // straydn?
   if (straydn) {
     wrlocks.insert(&straydn->get_dir()->inode->filelock);
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
   }
-
-  // rdlock sourcedir path, xlock src dentry
-  for (int i=0; i<(int)srctrace.size()-1; i++) 
-    rdlocks.insert(&srctrace[i]->lock);
-  xlocks.insert(&srcdn->lock);
-  wrlocks.insert(&srcdn->get_dir()->inode->filelock);
-  wrlocks.insert(&srcdn->get_dir()->inode->nestlock);
-
-  // rdlock destdir path, xlock dest dentry
-  for (int i=0; i<(int)desttrace.size(); i++)
-    rdlocks.insert(&desttrace[i]->lock);
-  xlocks.insert(&destdn->lock);
-  wrlocks.insert(&destdn->get_dir()->inode->filelock);
-  wrlocks.insert(&destdn->get_dir()->inode->nestlock);
 
   // xlock versionlock on srci if remote?
   //  this ensures it gets safely remotely auth_pinned, avoiding deadlock;
@@ -3496,8 +3437,6 @@ void Server::handle_client_rename(MDRequest *mdr)
     if (oldin->is_dir())
       rdlocks.insert(&oldin->filelock);
   }
-  mds->locker->include_snap_rdlocks(rdlocks, srcdn->get_dir()->inode);
-  mds->locker->include_snap_rdlocks(rdlocks, destdn->get_dir()->inode);
   if (srcdnl->is_primary() && srci->is_dir())
     xlocks.insert(&srci->snaplock);  // FIXME: an auth bcast could be sufficient?
   else
@@ -4869,7 +4808,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   
   bool excl = (req->head.args.open.flags & O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, !excl, false, false);
   if (!dn) return;
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
