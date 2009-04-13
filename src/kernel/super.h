@@ -252,6 +252,7 @@ struct ceph_inode_xattrs_info {
 	*/
 	int len;
 	char *data;
+	int count;
 	int names_size;
 	int vals_size;
 	u64 version;
