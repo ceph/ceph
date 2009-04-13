@@ -1,9 +1,11 @@
 #!/bin/bash
 
+test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
+
 do_killall() {
 	pg=`pgrep -f crun.*$1`
 	[ "$pg" != "" ] && kill $pg
-	killall $1
+	$SUDO killall $1
 }
 
 usage="usage: $0 [all] [mon] [mds] [osd]\n"
@@ -40,7 +42,7 @@ done
 if [ $stop_all -eq 1 ]; then
 	killall cmon cmds cosd
 	pkill -f valgrind.bin.\*cmon
-	pkill -f valgrind.bin.\*cosd
+	$SUDO pkill -f valgrind.bin.\*cosd
 	pkill -f valgrind.bin.\*cmds
 else
 	[ $stop_mon -eq 1 ] && do_killall cmon

@@ -116,7 +116,7 @@ $SUDO rm -f core*
 
 test -d out || mkdir out
 $SUDO rm -f out/*
-test -d log && rm log/*
+test -d log && rm -f log/*
 test -d gmon && $SUDO rm -rf gmon/*
 
 
