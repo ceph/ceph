@@ -1584,6 +1584,8 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
       return 0;
   }
 
+  mdr->dn[n].push_back(dn);
+
   // -- lock --
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
