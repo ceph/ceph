@@ -27,15 +27,14 @@
 
 - two types of cap events from mds -> client:
   - cap "issue" in a MClientReply, or an MClientCaps IMPORT op.
-  - cap "update" (revocation, etc.) .. an MClientCaps message.
+  - cap "update" (revocation or grant) .. an MClientCaps message.
 - if client has cap, the mds should have it too.
 
 - if client has no dirty data, it can release it without waiting for an mds ack.
   - client may thus get a cap _update_ and not have the cap.  ignore it.
 
-- mds should track seq of last issue OR update.  any release
+- mds should track seq of last issue.  any release
   attempt will only succeed if the client has seen the latest.
-- if the client gets a cap message and doesn't have the inode or cap, reply with a release.
 
 - a UPDATE updates the clients issued caps, wanted, etc.  it may also flush dirty metadata.
   - 'caps' are which caps the client retains.
@@ -47,18 +46,12 @@
 - a FLUSH_ACK acks a FLUSH.
   - 'dirty' is the _original_ FLUSH's dirty (i.e., which metadata was written back)
   - 'seq' is the _original_ FLUSH's seq.
-  - 'caps' is the _original_ FLUSH's caps.
+  - 'caps' is the _original_ FLUSH's caps (not actually important)
   - client can conclude that (dirty & ~caps) bits were successfully cleaned.
 
 - a FLUSHSNAP flushes snapshot metadata.
   - 'dirty' indicates which caps, were dirty, if any.
   - mds writes metadata.  if dirty!=0, replies with FLUSHSNAP_ACK.
-
-- a RELEASE releases one or more (clean) caps.
-  - 'caps' is which caps are retained by the client.
-  - 'wanted' is which caps the client wants.
-  - dirty==0
-  - if caps==0, mds can close out the cap (provided there are no racing cap issues)
 
  */
 

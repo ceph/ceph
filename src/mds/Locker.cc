@@ -841,6 +841,8 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   mut->xlocks.erase(lock);
   mut->locks.erase(lock);
   
+  bool do_issue = true;
+
   // remote xlock?
   if (!lock->get_parent()->is_auth()) {
     assert(lock->sm->can_remote_xlock);
@@ -869,6 +871,7 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
 	lock->set_state(LOCK_EXCL);
       else
 	lock->set_state(LOCK_LOCK);
+      do_issue = true;
     }
 
     // others waiting?
@@ -880,8 +883,12 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut)
   // eval?
   if (!lock->is_stable())
     eval_gather(lock);
-  else if (lock->get_parent()->is_auth())
-    eval(lock);
+  else {
+    if (lock->get_parent()->is_auth())
+      eval(lock);
+    if (do_issue && lock->get_type() != CEPH_LOCK_DN)
+      issue_caps((CInode*)lock->get_parent());
+  }
 }
 
 
