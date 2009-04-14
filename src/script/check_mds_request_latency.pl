@@ -18,28 +18,26 @@ while (<>) {
     chomp;
     my ($stamp) = /^\S+ (\S+)/;
 
-    my ($what,$req,$desc) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \S+ client_(request|reply)\((\S+) ([^\)]+)/;
+    my ($req,$desc) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \d+ \S+ client_request\((\S+) ([^\)]+)/;
     
     if (defined $req) {
-	#print "$what $req at $stamp $desc\n";
-	if ($what eq 'request') {
-	    $r{$req} = $stamp;
-	    $what{$req} = $desc;
-	} elsif ($what eq 'reply') {
-	    if (exists $r{$req}) {
-		my $len = tosec($stamp) - tosec($r{$req});
-
-		#print "$req $len ($r{$req} - $stamp)\n";
-		$lat_req{$len} = $req;
-
-		delete $r{$req};
-	    }
-	} else {
-	    die;
-	}
+	#print "$req $len ($r{$req} - $stamp)\n";
+	$r{$req} = $stamp;
+	$what{$req} = $desc;
+	next;
     }
 
-    
+    ($req,$desc) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \S+ client_reply\((\S+) ([^\)]+)/;
+    if (defined $req) {
+	if (exists $r{$req}) {
+	    my $len = tosec($stamp) - tosec($r{$req});
+	    
+	    #print "$req $len ($r{$req} - $stamp)\n";
+	    $lat_req{$len} = $req;
+	    
+	    delete $r{$req};
+	}
+    }
 }
 
 

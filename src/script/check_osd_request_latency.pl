@@ -4,6 +4,7 @@ use strict;
 
 my %r;      # reqid -> start
 my %lat_req;  # latency -> request
+my %desc;
 
 sub tosec($) {
     my $v = shift;
@@ -17,10 +18,11 @@ while (<>) {
     chomp;
     my ($stamp) = /^\S+ (\S+) /;
 
-    my ($who,$tid) = /osd\d+ <.. (\D+\d+) \S+ \S+ osd_op\((\S+)/;
+    my ($who,$tid,$desc) = /osd\d+ <.. (\D+\d+) \S+ \d+ \S+ osd_op\((\S+) ([^\)]+)/;
     if (defined $tid) {
 	my $req = "$who:$tid";
 	$r{$req} = $stamp unless exists $r{$req};
+	$desc{$req} = $desc;
 	next;
     }
 
@@ -42,5 +44,5 @@ while (<>) {
 
 
 for my $len (sort {$b <=> $a} keys %lat_req) {
-    print "$len\t$lat_req{$len}\n";    
+    print "$len\t$lat_req{$len}\t$desc{$lat_req{$len}}\n";    
 }
