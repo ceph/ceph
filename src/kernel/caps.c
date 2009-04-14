@@ -742,7 +742,8 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->mode = cpu_to_le32(mode);
 
 	fc->xattrs_blob_size = xattrs_blob_size;
-	memcpy(&fc->xattrs_blob[0],  xattrs_blob, xattrs_blob_size);
+	if (xattrs_blob)
+		memcpy(&fc->xattrs_blob[0],  xattrs_blob, xattrs_blob_size);
 
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
