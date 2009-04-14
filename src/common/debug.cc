@@ -20,8 +20,10 @@ ostream *_dout = &std::cout;
 ostream *_derr = &std::cerr;
 char _dout_dir[1000] = {0};
 char _dout_symlink_dir[1000] = {0};
+char _dout_file[1000] = {0};
 char _dout_path[1000] = {0};
 char _dout_symlink_path[1000] = {0};
+char *_dout_symlink_target = 0;   // _dout_path or _dout_file
 bool _dout_is_open = false;
 bool _dout_need_open = true;
 
@@ -54,9 +56,16 @@ void _dout_open_log()
       strcat(_dout_symlink_dir, g_conf.log_sym_dir);
     }
 
+    // make symlink target absolute or relative?
+    if (strcmp(_dout_symlink_dir, _dout_dir) == 0)
+      _dout_symlink_target = _dout_file;
+    else
+      _dout_symlink_target = _dout_path;
+
     char hostname[80];
     gethostname(hostname, 79);
     sprintf(_dout_path, "%s/%s.%d", _dout_dir, hostname, getpid());
+    sprintf(_dout_file, "%s.%d", hostname, getpid());
   }
 
   if (_dout && _dout_is_open)
@@ -85,13 +94,14 @@ int _dout_rename_output_file()  // after calling daemon()
 
     strcpy(oldpath, _dout_path);
     sprintf(_dout_path, "%s/%s.%d", _dout_dir, hostname, getpid());
+    sprintf(_dout_file, "%s.%d", hostname, getpid());
     dout(0) << "---- renamed log " << oldpath << " -> " << _dout_path << " ----" << dendl;
     ::rename(oldpath, _dout_path);
 
     if (_dout_symlink_path[0]) {
       // fix symlink
       ::unlink(_dout_symlink_path);
-      ::symlink(_dout_path, _dout_symlink_path);
+      ::symlink(_dout_symlink_target, _dout_symlink_path);
     }
   }
   return 0;
@@ -127,9 +137,9 @@ int _dout_create_courtesy_output_symlink(const char *type, int n)
       n--;
     }
 
-    ::symlink(_dout_path, _dout_symlink_path);
+    ::symlink(_dout_symlink_target, _dout_symlink_path);
     dout(0) << "---- created symlink " << _dout_symlink_path
-	    << " -> " << _dout_path << " ----" << dendl;
+	    << " -> " << _dout_symlink_target << " ----" << dendl;
   }
   return 0;
 }
