@@ -572,6 +572,8 @@ struct ceph_file_info {
 	struct ceph_mds_request *last_readdir;
 	char *last_name;       /* only set if we haven't reached end of frag */
 	unsigned next_off;
+	struct dentry *dentry;
+	int at_end;
 
 	/* used for -o dirstat read() on directory thing */
 	char *dir_info;

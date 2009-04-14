@@ -1086,6 +1086,13 @@ retry_lookup:
 			d_delete(dn);
 			dput(dn);
 			goto retry_lookup;
+		} else {
+			/* reorder parent's d_subdirs */
+			spin_lock(&dn->d_lock);
+			spin_lock(&dcache_lock);
+			list_move_tail(&dn->d_u.d_child, &parent->d_subdirs);
+			spin_unlock(&dcache_lock);
+			spin_unlock(&dn->d_lock);
 		}
 
 		/* inode */

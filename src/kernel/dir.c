@@ -46,6 +46,95 @@ static unsigned fpos_off(loff_t p)
 	return p & 0xffffffff;
 }
 
+static int ceph_dcache_readdir(struct inode *dir, struct file *filp,
+			       void *dirent, filldir_t filldir)
+{
+	struct ceph_file_info *fi = filp->private_data;
+	struct dentry *parent = filp->f_dentry;
+	struct inode *inode = parent->d_inode;
+	struct list_head *p;
+	struct dentry *dentry, *last = 0;
+
+	if (filp->f_pos == 0) {
+		dout(10, "readdir off 0 -> '.'\n");
+		if (filldir(dirent, ".", 1, make_fpos(0, 0),
+			    inode->i_ino, inode->i_mode >> 12) < 0)
+			return 0;
+		filp->f_pos++;
+	}
+
+	if (filp->f_pos == 1) {
+		dout(10, "readdir off 1 -> '..'\n");
+		if (filldir(dirent, "..", 2, make_fpos(0, 1),
+			    parent->d_parent->d_inode->i_ino,
+			    inode->i_mode >> 12) < 0)
+			return 0;
+		filp->f_pos++;
+	}
+
+	spin_lock(&dcache_lock);
+	if (filp->f_pos == 2) {
+		dentry = list_entry(parent->d_subdirs.next,
+				    struct dentry,
+				    d_u.d_child);
+		p = &dentry->d_u.d_child;
+		dout(10, " initial dentry %p\n", dentry);
+		goto skip_unhashed;
+	}
+
+	last = fi->dentry;
+	fi->dentry = NULL;
+	p = &last->d_u.d_child;
+
+next_entry:
+	p = p->next;
+	dentry = list_entry(p, struct dentry, d_u.d_child);
+	filp->f_pos++;
+
+skip_unhashed:
+	while (1) {
+		dout(10, " p %p/%p d_subdirs %p/%p\n", p->prev, p->next,
+		     parent->d_subdirs.prev, parent->d_subdirs.next);
+		if (p == &parent->d_subdirs) {
+			fi->at_end = 1;
+			goto out_unlock;
+		}
+		if (!d_unhashed(dentry) && dentry->d_inode)
+			break;
+		dout(10, " %p is unhashed, skipping\n", dentry);
+		p = p->next;
+		dentry = list_entry(p, struct dentry, d_u.d_child);
+	}
+	atomic_inc(&dentry->d_count);
+	spin_unlock(&dcache_lock);
+	
+	if (last) {
+		dput(last);
+		last = NULL;
+	}
+
+	dout(10, " dentry %p %.*s %p\n", dentry, dentry->d_name.len,
+	     dentry->d_name.name, dentry->d_inode);
+	if (filldir(dirent, dentry->d_name.name,
+		    dentry->d_name.len, filp->f_pos,
+		    dentry->d_inode->i_ino,
+		    dentry->d_inode->i_mode >> 12) < 0) {
+		fi->dentry = dentry;
+		goto out;
+	}
+
+	last = dentry;
+	spin_lock(&dcache_lock);
+	goto next_entry;
+
+out_unlock:
+	spin_unlock(&dcache_lock);
+out:
+	if (last)
+		dput(last);
+	return 0;
+}
+
 static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
@@ -60,6 +149,20 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct ceph_mds_reply_info_parsed *rinfo;
 	int complete = 0, len;
 	int max_entries = 1024;
+
+	if (fi->at_end)
+		return 0;
+
+	/* can we use the dcache? */
+	spin_lock(&inode->i_lock);
+	if ((filp->f_pos == 0 || fi->dentry) &&
+	    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+		spin_unlock(&inode->i_lock);
+		return ceph_dcache_readdir(inode, filp, dirent, filldir);
+	}
+	spin_unlock(&inode->i_lock);
+
 
 	/* set I_READDIR at start of readdir */
 	if (filp->f_pos == 0)
@@ -193,6 +296,7 @@ more:
 		dout(10, "readdir next frag is %x\n", frag);
 		goto more;
 	}
+	fi->at_end = 1;
 
 	/*
 	 * if I_READDIR is still set, no dentries were released
@@ -231,6 +335,7 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 		if (offset != file->f_pos) {
 			file->f_pos = offset;
 			file->f_version = 0;
+			fi->at_end = 0;
 		}
 		retval = offset;
 		/*
@@ -242,6 +347,7 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 			fi->last_readdir = NULL;
 			kfree(fi->last_name);
 			fi->next_off = 0;
+			fi->at_end = 0;
 		}
 
 		/* clear I_READDIR if we did a forward seek */
