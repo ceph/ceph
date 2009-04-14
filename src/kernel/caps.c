@@ -699,6 +699,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq,
 			 uid_t uid, gid_t gid, mode_t mode,
+			 void *xattrs_blob, int xattrs_blob_size,
 			 u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
@@ -710,7 +711,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	     ceph_cap_string(dirty),
 	     seq, mseq, follows, size);
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, NULL);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc) + xattrs_blob_size, 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 
@@ -739,6 +740,9 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->uid = cpu_to_le32(uid);
 	fc->gid = cpu_to_le32(gid);
 	fc->mode = cpu_to_le32(mode);
+
+	fc->xattrs_blob_size = xattrs_blob_size;
+	memcpy(&fc->xattrs_blob[0],  xattrs_blob, xattrs_blob_size);
 
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
@@ -827,6 +831,8 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	uid_t uid;
 	gid_t gid;
 	int mds = cap->session->s_mds;
+	void *xattrs_blob;
+	int xattrs_blob_size;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
 	     cap, cap->session,
@@ -873,6 +879,14 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	uid = inode->i_uid;
 	gid = inode->i_gid;
 	mode = inode->i_mode;
+
+	if (dropping & CEPH_CAP_XATTR_RDCACHE) {
+		__ceph_build_xattrs_blob(ci, &xattrs_blob, &xattrs_blob_size);
+		ci->i_xattrs.prealloc_blob = 0;
+		ci->i_xattrs.prealloc_size = 0;
+	} else {
+		xattrs_blob = NULL;
+	}
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
@@ -885,7 +899,11 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		     op, keep, want, flushing, seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
+		     xattrs_blob, xattrs_blob_size,
 		     follows, mds);
+
+	if (xattrs_blob)
+		kfree(xattrs_blob);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -972,6 +990,7 @@ retry:
 			     &capsnap->mtime, &capsnap->atime,
 			     capsnap->time_warp_seq,
 			     capsnap->uid, capsnap->gid, capsnap->mode,
+			     NULL, 0,
 			     capsnap->follows, mds);
 
 		next_follows = capsnap->follows + 1;

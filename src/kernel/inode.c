@@ -1894,14 +1894,25 @@ bad:
 	return err;
 }
 
-void *__ceph_build_xattrs_blob(struct ceph_inode_info *ci)
+int __get_required_blob_size(struct ceph_inode_info *ci)
+{
+	return  4 + ci->i_xattrs.count*(4 + 4) +
+			     ci->i_xattrs.names_size +
+			     ci->i_xattrs.vals_size;
+}
+
+void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
+			      void **xattrs_blob,
+			      int *blob_size)
 {
 	struct rb_node *p;
 	struct ceph_inode_xattr *xattr = NULL;
 	void *dest;
 
 	if (ci->i_xattrs.names_size) {
-		BUG_ON(!ci->i_xattrs.prealloc_blob);
+		int required_blob_size = __get_required_blob_size(ci);
+
+		BUG_ON(required_blob_size > ci->i_xattrs.prealloc_size);
 
 		p = rb_first(&ci->i_xattrs.xattrs);
 
@@ -1921,10 +1932,13 @@ void *__ceph_build_xattrs_blob(struct ceph_inode_info *ci)
 			p = rb_next(p);
 		}
 	
-		return ci->i_xattrs.prealloc_blob;
+		*xattrs_blob =  ci->i_xattrs.prealloc_blob;
+		*blob_size = ci->i_xattrs.prealloc_size;
 	} else {
-		/*just use the blob that we hold */
-		return ci->i_xattrs.data;
+		/* actually, we're using the same data that we got from the
+		   mds, don't build anything */
+		*xattrs_blob = NULL;
+		*blob_size = 0;
 	}
 }
 
@@ -2081,13 +2095,6 @@ out:
 		kfree(pages);
 	}
 	return err;
-}
-
-int __get_required_blob_size(struct ceph_inode_info *ci)
-{
-	return  4 + ci->i_xattrs.count*(4 + 4) +
-			     ci->i_xattrs.names_size +
-			     ci->i_xattrs.vals_size;
 }
 
 int ceph_setxattr(struct dentry *dentry, const char *name,
