@@ -1816,11 +1816,13 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
 							   client, cap, ack));
-  // only flush immediately if the lock is unstable
+  // only flush immediately if the lock is unstable, or unissued caps are wanted, or max_size is 
+  // changing
   if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
       ((dirty & CEPH_CAP_AUTH_EXCL) && !in->authlock.is_stable()) ||
       ((dirty & CEPH_CAP_XATTR_EXCL) && !in->xattrlock.is_stable()) ||
-      change_max)
+      change_max ||
+      (cap->wanted() & ~cap->pending()))
     mds->mdlog->flush();
 
   return true;
