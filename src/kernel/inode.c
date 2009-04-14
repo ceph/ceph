@@ -268,6 +268,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattrs.data = NULL;
 	ci->i_xattrs.count = 0;
 	ci->i_xattrs.names_size = 0;
+	ci->i_xattrs.vals_size = 0;
 	ci->i_xattrs.prealloc_blob = 0;
 	ci->i_xattrs.prealloc_size = 0;
 >>>>>>> kclient: xattrs cleanup, preallocate xattr structure:src/kernel/inode.c
@@ -1894,11 +1895,21 @@ bad:
 	return err;
 }
 
-int __get_required_blob_size(struct ceph_inode_info *ci)
+int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, int val_size)
 {
-	return  4 + ci->i_xattrs.count*(4 + 4) +
+	int size = 4 + ci->i_xattrs.count*(4 + 4) +
 			     ci->i_xattrs.names_size +
 			     ci->i_xattrs.vals_size;
+	dout(0, "__get_required_blob_size count=%d names.size=%d vals.size=%d\n", ci->i_xattrs.count, ci->i_xattrs.names_size,
+                             ci->i_xattrs.vals_size);
+
+	if (name_size)
+		size += 4 + name_size;
+
+	if (val_size)
+		size += 4  + val_size;
+
+	return size;
 }
 
 void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
@@ -1910,7 +1921,7 @@ void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
 	void *dest;
 
 	if (ci->i_xattrs.names_size) {
-		int required_blob_size = __get_required_blob_size(ci);
+		int required_blob_size = __get_required_blob_size(ci, 0, 0);
 
 		BUG_ON(required_blob_size > ci->i_xattrs.prealloc_size);
 
@@ -1950,16 +1961,26 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	int err;
 	struct _ceph_vir_xattr_cb *vir_xattr;
 	struct ceph_inode_xattr *xattr;
+	int issued;
 
 	/* let's see if a virtual xattr was requested */
 	vir_xattr = _ceph_match_vir_xattr(name);
 	if (vir_xattr)
 		return (vir_xattr->getxattr_cb)(ci, value, size);
 
-	/* get xattrs from mds (if we don't already have them) */
-	err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR);
-	if (err)
-		return err;
+	spin_lock(&inode->i_lock);
+	issued = __ceph_caps_issued(ci, NULL);
+	dout(10, "getxattr %p issued %s\n", inode, ceph_cap_string(issued));
+
+        if (issued & CEPH_CAP_XATTR_RDCACHE) {
+		goto get_xattr;
+	} else {
+		spin_unlock(&inode->i_lock);
+		/* get xattrs from mds (if we don't already have them) */
+		err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR);
+		if (err)
+			return err;
+	}
 
 	spin_lock(&inode->i_lock);
 
@@ -1969,6 +1990,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	if (err < 0)
 		goto out;
 
+get_xattr:
 	err = -ENODATA;
 	xattr = __get_xattr(ci, name);
 	if (!xattr)
@@ -1998,10 +2020,21 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	int err;
 	u32 len;
 	int i;
+	int issued;
 
-	err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR);
-	if (err)
-		return err;
+	spin_lock(&inode->i_lock);
+	issued = __ceph_caps_issued(ci, NULL);
+	dout(10, "listxattr %p issued %s\n", inode, ceph_cap_string(issued));
+
+        if (issued & CEPH_CAP_XATTR_RDCACHE) {
+		dout(10, "listxattr %p using cached xattrs\n", inode);
+		goto list_xattr;
+	} else {
+		spin_unlock(&inode->i_lock);
+		err = ceph_do_getattr(inode, CEPH_STAT_CAP_XATTR);
+		if (err)
+			return err;
+	}
 
 	spin_lock(&inode->i_lock);
 
@@ -2009,6 +2042,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	if (err < 0)
 		goto out;
 
+list_xattr:
 	vir_namelen = 0;
 	/* include virtual dir xattrs */
 	if ((inode->i_mode & S_IFMT) == S_IFDIR)
@@ -2125,6 +2159,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		return -EOPNOTSUPP;
 
 	err = -ENOMEM;
+	dout(0, "setxattr 1\n");
 	newname = kmalloc(name_len + 1, GFP_NOFS);
 	if (!newname)
 		goto out;
@@ -2143,9 +2178,10 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	xattr = kmalloc(sizeof(struct ceph_inode_xattr), GFP_NOFS);
 	if (!xattr)
 		goto out;
+	dout(0, "setxattr 2\n");
 
 	spin_lock(&inode->i_lock);
-	required_blob_size = __get_required_blob_size(ci);
+	required_blob_size = __get_required_blob_size(ci, name_len, val_len);
 alloc_buf:
 
 	if (required_blob_size > ci->i_xattrs.prealloc_size)
@@ -2153,6 +2189,7 @@ alloc_buf:
 
 	spin_unlock(&inode->i_lock);
 
+	dout(0, "setxattr required_blob_size=%d\n", required_blob_size);
 	if (need_alloc) {
 		prealloc_blob = kmalloc(required_blob_size, GFP_NOFS);
 
@@ -2162,7 +2199,7 @@ alloc_buf:
 
 	dout(0, "setxattr newname=%s\n", newname);
 	spin_lock(&inode->i_lock);
-	cur_blob_size = __get_required_blob_size(ci);
+	cur_blob_size = __get_required_blob_size(ci, name_len, val_len);
 
 	if (need_alloc &&
 	    required_blob_size < cur_blob_size) {
