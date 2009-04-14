@@ -413,6 +413,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	 p != m->realms.end();
 	 p++) {
       CInode *in = mdcache->get_inode(inodeno_t(p->ino));
+      if (in && in->state_test(CInode::STATE_PURGING))
+	continue;
       if (in) {
 	assert(in->snaprealm);
 	if (in->snaprealm->have_past_parents_open()) {
@@ -438,6 +440,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	mdcache->last_cap_id = p->second.capinfo.cap_id;
 
       CInode *in = mdcache->get_inode(p->first);
+      if (in && in->state_test(CInode::STATE_PURGING))
+	continue;
       if (in && in->is_auth()) {
 	// we recovered it, and it's ours.  take note.
 	dout(15) << "open cap realm " << inodeno_t(p->second.capinfo.snaprealm)
@@ -1697,10 +1701,14 @@ void Server::handle_client_lookup_hash(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   CInode *in = mdcache->get_inode(req->get_filepath().get_ino());
+  if (in && in->state_test(CInode::STATE_PURGING)) {
+    reply_request(mdr, -ESTALE);
+    return;
+  }
   if (!in) {
     // try the directory
     CInode *diri = mdcache->get_inode(req->get_filepath2().get_ino());
-    if (!diri) {
+    if (!diri || diri->state_test(CInode::STATE_PURGING)) {
       reply_request(mdr, -ESTALE);
       return;
     }
@@ -2064,6 +2072,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
     it++;
 
     if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
+      continue;
+
+    if (dn->state_test(CDentry::STATE_PURGING))
       continue;
 
     bool dnp = dn->use_projected(client, mdr);
@@ -4884,7 +4895,7 @@ void Server::handle_client_lssnap(MDRequest *mdr)
 
   // traverse to path
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri) {
+  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
      reply_request(mdr, -ESTALE);
      return;
   }
@@ -4965,7 +4976,7 @@ void Server::handle_client_mksnap(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri) {
+  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
     reply_request(mdr, -ESTALE);
     return;
   }
@@ -5133,7 +5144,7 @@ void Server::handle_client_rmsnap(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
 
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
-  if (!diri) {
+  if (!diri || diri->state_test(CInode::STATE_PURGING)) {
     reply_request(mdr, -ESTALE);
     return;
   }

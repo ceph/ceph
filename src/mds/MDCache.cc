@@ -5538,6 +5538,8 @@ int MDCache::path_traverse(MDRequest *mdr, Message *req,     // who
     }
     return 1;
   }
+  if (cur->state_test(CInode::STATE_PURGING))
+    return -ESTALE;
 
   // start trace
   if (pdnvec)
@@ -6753,6 +6755,7 @@ void MDCache::purge_stray(CDentry *dn)
 
   dn->state_set(CDentry::STATE_PURGING);
   dn->get(CDentry::PIN_PURGING);
+  in->state_set(CInode::STATE_PURGING);
 
   
   // CHEAT.  there's no real need to journal our intent to purge, since
