@@ -177,7 +177,7 @@ protected:
   // file
 public:
   void try_file_eval(ScatterLock *lock);
-  void file_eval(ScatterLock *lock, bool do_issue=true);
+  void file_eval(ScatterLock *lock, bool can_issue=true);
 protected:
   void handle_file_lock(ScatterLock *lock, MLock *m);
   void file_mixed(ScatterLock *lock);
@@ -191,7 +191,7 @@ public:
  public:
   version_t issue_file_data_version(CInode *in);
   Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm=0);
-  bool issue_caps(CInode *in);
+  bool issue_caps(CInode *in, Capability *only_cap=0);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
   void resume_stale_caps(Session *session);

@@ -1066,8 +1066,8 @@ retry_locked:
 	     ceph_cap_string(retain),
 	     ceph_cap_string(__ceph_caps_issued(ci, NULL)),
 	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY":"");
-	dout(20, " now %lu hold until min %lu max %lu\n", 
-	     jiffies, ci->i_hold_caps_min, ci->i_hold_caps_max);
+	dout(20, " hold for min %ld max %ld\n", 
+	     ci->i_hold_caps_min - jiffies, ci->i_hold_caps_max - jiffies);
 
 	/*
 	 * If we no longer need to hold onto old our caps, and we may

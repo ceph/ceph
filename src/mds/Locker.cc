@@ -933,6 +933,9 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   mut->cleanup();
   delete mut;
 
+  if (cap && cap->wanted() & ~cap->pending())
+    issue_caps(in, cap);
+
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
 }
@@ -993,7 +996,7 @@ Capability* Locker::issue_new_caps(CInode *in,
 
 
 
-bool Locker::issue_caps(CInode *in)
+bool Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   // allowed caps are determined by the lock mode.
   int all_allowed = in->get_caps_allowed_by_type(CAP_ANY);
@@ -1026,9 +1029,12 @@ bool Locker::issue_caps(CInode *in)
     check_inode_max_size(in, true);
 
   // client caps
-  for (map<int, Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       it++) {
+  map<int, Capability*>::iterator it;
+  if (only_cap)
+    it = in->client_caps.find(only_cap->get_client());
+  else
+    it = in->client_caps.begin();
+  for (; it != in->client_caps.end(); it++) {
     Capability *cap = it->second;
     if (cap->is_stale())
       continue;
@@ -1087,6 +1093,9 @@ bool Locker::issue_caps(CInode *in)
 	mds->send_message_client(m, it->first);
       }
     }
+
+    if (only_cap)
+      break;
   }
 
   return (nissued == 0);  // true if no re-issued, no callbacks
@@ -1470,7 +1479,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   }
 
   int op = m->get_op();
-  bool do_issue = true;
+  bool can_issue = true;
 
   if (op == CEPH_CAP_OP_RENEW) {
     if (cap->touch()) {
@@ -1562,7 +1571,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	}
       }
       if (m->get_op() == CEPH_CAP_OP_DROP)
-	do_issue = false;
+	can_issue = false;
       
       if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
 	// no update, ack now.
@@ -1572,9 +1581,11 @@ void Locker::handle_client_caps(MClientCaps *m)
 	
       eval_cap_gather(in);
       if (in->filelock.is_stable())
-	file_eval(&in->filelock, do_issue);
+	file_eval(&in->filelock, can_issue);
       if (in->authlock.is_stable())
 	eval(&in->authlock);
+      if (cap->wanted() & ~cap->pending())
+	issue_caps(in, cap);
     }
 
     // done?
@@ -2915,7 +2926,7 @@ void Locker::try_file_eval(ScatterLock *lock)
 
 
 
-void Locker::file_eval(ScatterLock *lock, bool do_issue)
+void Locker::file_eval(ScatterLock *lock, bool can_issue)
 {
   CInode *in = (CInode*)lock->get_parent();
   int loner_wanted, other_wanted;
@@ -2988,12 +2999,6 @@ void Locker::file_eval(ScatterLock *lock, bool do_issue)
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock);
   }
-  
-  else
-    do_issue = true;
-
-  if (in->is_any_caps() && do_issue)
-    issue_caps(in);
 }
 
 
