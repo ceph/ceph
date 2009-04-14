@@ -1851,7 +1851,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     }
 
     dout(7) << "removing cap on " << *in << dendl;
-    mdcache->remove_client_cap(in, client, false);
+    mdcache->remove_client_cap(in, client, true);
   }
 
   delete m;
