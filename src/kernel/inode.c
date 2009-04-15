@@ -1039,6 +1039,9 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 	struct inode *in;
 	int err = 0, i;
 	struct inode *snapdir = NULL;
+	struct ceph_mds_request_head *rhead = req->r_request->front.iov_base;
+	u64 frag = le32_to_cpu(rhead->args.readdir.frag);
+	struct ceph_dentry_info *di;
 
 	if (le32_to_cpu(rinfo->head->op) == CEPH_MDS_OP_LSSNAP) {
 		snapdir = ceph_get_snapdir(parent->d_inode);
@@ -1091,10 +1094,14 @@ retry_lookup:
 			/* reorder parent's d_subdirs */
 			spin_lock(&dn->d_lock);
 			spin_lock(&dcache_lock);
-			list_move_tail(&dn->d_u.d_child, &parent->d_subdirs);
+			list_move(&dn->d_u.d_child, &parent->d_subdirs);
 			spin_unlock(&dcache_lock);
 			spin_unlock(&dn->d_lock);
 		}
+
+		di = dn->d_fsdata;
+		di->offset = ceph_make_fpos(frag,
+				       i + (frag_is_leftmost(frag) ? 2 : 0));
 
 		/* inode */
 		if (dn->d_inode) {
@@ -1131,7 +1138,6 @@ out:
 	dout(10, "readdir_prepopulate done\n");
 	return err;
 }
-
 
 void ceph_inode_set_size(struct inode *inode, loff_t size)
 {

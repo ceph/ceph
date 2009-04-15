@@ -394,6 +394,7 @@ struct ceph_dentry_info {
 	struct list_head lru;
 	struct dentry *dentry;
 	u64 time;
+	u64 offset;
 };
 
 static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
@@ -401,6 +402,10 @@ static inline struct ceph_dentry_info *ceph_dentry(struct dentry *dentry)
 	return (struct ceph_dentry_info *)dentry->d_fsdata;
 }
 
+static inline loff_t ceph_make_fpos(unsigned frag, unsigned off)
+{
+	return ((loff_t)frag << 32) | (loff_t)off;
+}
 
 /*
  * ino_t is <64 bits on many architectures, blech.

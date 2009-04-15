@@ -243,6 +243,7 @@ int ceph_release(struct inode *inode, struct file *file)
 		ceph_mdsc_put_request(cf->last_readdir);
 	kfree(cf->last_name);
 	kfree(cf->dir_info);
+	dput(cf->dentry);
 	kfree(cf);
 	return 0;
 }
