@@ -266,6 +266,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattrs.xattrs = RB_ROOT;
 	ci->i_xattrs.len = 0;
 	ci->i_xattrs.version = 0;
+	ci->i_xattrs.index_version = 0;
 	ci->i_xattrs.data = NULL;
 	ci->i_xattrs.count = 0;
 	ci->i_xattrs.names_size = 0;
@@ -1652,13 +1653,20 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	while (*p) {
 		parent = *p;
 		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
-		c = strncmp(name, xattr->name, name_len);
+		c = strncmp(name, xattr->name, min(name_len, xattr->name_len));
 		if (c < 0)
 			p = &(*p)->rb_left;
 		else if (c > 0)
 			p = &(*p)->rb_right;
-		else
-			break;
+		else {
+			if (name_len == xattr->name_len)
+				break;
+			else if (name_len < xattr->name_len)
+				p = &(*p)->rb_left;
+			else
+				p = &(*p)->rb_right;
+		}
+		xattr = NULL;
 	}
 
 	if (!xattr) {
@@ -1669,6 +1677,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 		xattr->should_free_name = should_free_name;
 
 		ci->i_xattrs.count++;
+		dout(0, "__set_xattr count=%d\n", ci->i_xattrs.count);
 	} else {
 		kfree(*newxattr);
 		*newxattr = NULL;
@@ -1790,6 +1799,7 @@ static char * __copy_xattr_names(struct ceph_inode_info *ci,
 	struct ceph_inode_xattr *xattr = NULL;
 
 	p = rb_first(&ci->i_xattrs.xattrs);
+	dout(0, "__copy_xattr_names count=%d\n", ci->i_xattrs.count);
 
 	while (p) {
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
@@ -1812,6 +1822,8 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 
 	p = rb_first(&ci->i_xattrs.xattrs);
 
+	dout(0, "__destroy_xattrs p=%p\n", p);
+
 	while (p) {
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
 
@@ -1822,6 +1834,8 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 
 	ci->i_xattrs.names_size = 0;
 	ci->i_xattrs.vals_size = 0;
+	ci->i_xattrs.index_version = 0;
+	ci->i_xattrs.xattrs = RB_ROOT;
 }
 
 static int __build_xattrs(struct inode *inode)
@@ -1839,8 +1853,10 @@ static int __build_xattrs(struct inode *inode)
 
 	dout(0, "ci->i_xattrs.len=%d\n", ci->i_xattrs.len);
 
-	if (ci->i_xattrs.names_size)
+	if (ci->i_xattrs.index_version >= ci->i_xattrs.version)
 		return 0; /* already built */
+
+	__destroy_xattrs(ci);
 
 start:
 	/* updated internal xattr rb tree */
@@ -1888,6 +1904,7 @@ start:
 				goto bad;
 		}
 	}
+	ci->i_xattrs.index_version = ci->i_xattrs.version;
 
 	return 0;
 bad_lock:

@@ -256,6 +256,7 @@ struct ceph_inode_xattrs_info {
 	int names_size;
 	int vals_size;
 	u64 version;
+	u64 index_version;
 
 	void *prealloc_blob;
 	int prealloc_size;
