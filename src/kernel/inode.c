@@ -1804,6 +1804,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
 	req->r_num_caps = 1;
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
+	req->r_path2 = name;
 
 	req->r_pages = pages;
 	req->r_num_pages = nr_pages;
