@@ -3376,6 +3376,23 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   filepath path(relpath);
   Inode *in;
   int r = path_walk(path, &in);
+  if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
+    return -EEXIST;
+  if (r == -ENOENT && (flags & O_CREAT)) {
+    filepath dirpath = path;
+    string dname = dirpath.last_dentry();
+    dirpath.pop_dentry();
+    Inode *dir;
+    r = path_walk(dirpath, &dir);
+    if (r < 0)
+      return r;
+    r = _mknod(dir, dname.c_str(), mode, 0);
+    if (r == 0) {
+      Dentry *dn = dir->dir->dentries[dname];
+      in = dn->inode;
+      assert(in);
+    }
+  }
   if (r < 0)
     return r;
 
@@ -3396,24 +3413,22 @@ int Client::open(const char *relpath, int flags, mode_t mode)
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) 
 {
-  // go
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN);
-  filepath path;
-  in->make_path(path);
-  req->set_filepath(path); 
-  req->head.args.open.flags = flags & ~O_CREAT;
-  req->head.args.open.mode = mode;
-
   int cmode = ceph_flags_to_mode(flags);
+  int want = ceph_caps_for_mode(cmode);
+  int result = 0;
+
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
-  int want = ceph_caps_for_mode(cmode);
-
-  int result = 0;
   if ((in->caps_issued() & want) == want) {
     // update wanted?
     check_caps(in, true);
   } else {
+    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN);
+    filepath path;
+    in->make_path(path);
+    req->set_filepath(path); 
+    req->head.args.open.flags = flags & ~O_CREAT;
+    req->head.args.open.mode = mode;
     MClientReply *reply = make_request(req, uid, gid);
     result = reply->get_result();
     delete reply;
