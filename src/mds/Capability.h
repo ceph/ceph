@@ -125,14 +125,14 @@ public:
     }
 
     _pending = c;
-    check_rdcaps_list();
+    //check_rdcaps_list();
     //last_issue = 
     ++last_sent;
     return last_sent;
   }
   ceph_seq_t issue_norevoke(int c) {
     _pending |= c;
-    check_rdcaps_list();
+    //check_rdcaps_list();
     ++last_sent;
     return last_sent;
   }
@@ -157,7 +157,7 @@ public:
       }
       _num_revoke = o;
     }
-    check_rdcaps_list();
+    //check_rdcaps_list();
   }
   bool is_null() {
     return !_pending && !_issued && !_num_revoke;
@@ -178,12 +178,10 @@ public:
   version_t client_xattr_version;
   
   xlist<Capability*>::item session_caps_item;
-  xlist<Capability*> *rdcaps_list;
-  xlist<Capability*>::item rdcaps_item;
 
   xlist<Capability*>::item snaprealm_caps_item;
 
-  Capability(CInode *i, __u64 id, int c, xlist<Capability*> *rl) : 
+  Capability(CInode *i, __u64 id, int c) : 
     inode(i), client(c),
     cap_id(id),
     _wanted(0),
@@ -192,19 +190,12 @@ public:
     mseq(0),
     suppress(0), stale(false), updating(0),
     client_follows(0), client_xattr_version(0),
-    session_caps_item(this), rdcaps_list(rl), rdcaps_item(this), snaprealm_caps_item(this) { }
+    session_caps_item(this), snaprealm_caps_item(this) { }
   
   ceph_seq_t get_mseq() { return mseq; }
 
   ceph_seq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
-  bool touch() {
-    if (rdcaps_item.is_on_xlist()) {
-      rdcaps_item.move_to_back();
-      return true;
-    }
-    return false;
-  }
 
   void set_last_issue() { last_issue = last_sent; }
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
@@ -227,7 +218,7 @@ public:
   int wanted() { return _wanted; }
   void set_wanted(int w) {
     _wanted = w;
-    check_rdcaps_list();
+    //check_rdcaps_list();
   }
 
   bool can_expire() {
@@ -237,22 +228,7 @@ public:
   ceph_seq_t get_last_seq() { return last_sent; }
   ceph_seq_t get_last_issue() { return last_issue; }
 
-  bool is_rdcap() {
-    return rdcaps_item.is_on_xlist();
-  }
-
-  void check_rdcaps_list()
-  {
-    bool was = is_rdcap();
-    bool is =  (issued() & ~CEPH_CAP_EXPIREABLE) == 0 && _wanted == 0;
-    
-    if (!was && is) 
-      rdcaps_list->push_back(&rdcaps_item);
-    else if (was && !is)
-      rdcaps_item.remove_myself();
-  }
-
-
+  
   // -- exports --
   Export make_export() {
     return Export(_wanted, issued(), pending(), client_follows, mseq+1, last_issue_stamp);

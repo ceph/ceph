@@ -143,8 +143,6 @@ ostream& operator<<(ostream& out, CInode& in)
       if (it != in.get_client_caps().begin()) out << ",";
       out << it->first << "=" << ccap_string(it->second->issued())
 	  << "/" << ccap_string(it->second->wanted());
-      if (it->second->is_rdcap())
-	out << "(rdcap)";
     }
     out << "}";
     if (in.get_loner() >= 0)
@@ -503,8 +501,7 @@ void CInode::name_stray_dentry(string& dname)
 }
 
 
-Capability *CInode::add_client_cap(int client, Session *session, 
-				   xlist<Capability*> *rdcaps_list, SnapRealm *conrealm)
+Capability *CInode::add_client_cap(int client, Session *session, SnapRealm *conrealm)
 {
   if (client_caps.empty()) {
     get(PIN_CAPS);
@@ -520,7 +517,7 @@ Capability *CInode::add_client_cap(int client, Session *session,
     mdcache->num_inodes_with_caps++;
   
   assert(client_caps.count(client) == 0);
-  Capability *cap = client_caps[client] = new Capability(this, ++mdcache->last_cap_id, client, rdcaps_list);
+  Capability *cap = client_caps[client] = new Capability(this, ++mdcache->last_cap_id, client);
   if (session)
     session->add_cap(cap);
   
@@ -537,7 +534,6 @@ void CInode::remove_client_cap(int client)
   Capability *cap = client_caps[client];
   
   cap->session_caps_item.remove_myself();
-  cap->rdcaps_item.remove_myself();
   containing_realm->remove_cap(client, cap);
   
   if (client == loner_cap)
@@ -1558,7 +1554,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   } else {
     if (!no_caps && valid && !cap && is_auth()) {
       // add a new cap
-      cap = add_client_cap(client, session, &mdcache->client_rdcaps, find_snaprealm());
+      cap = add_client_cap(client, session, find_snaprealm());
       if (is_auth())
 	try_choose_loner();
     }
@@ -1592,7 +1588,6 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       issue = cap->pending();
       cap->set_last_issue();
       cap->set_last_issue_stamp(g_clock.recent_now());
-      cap->touch();   // move to back of session cap LRU
       e.cap.caps = issue;
       e.cap.wanted = cap->wanted();
       e.cap.cap_id = cap->get_cap_id();

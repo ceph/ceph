@@ -618,8 +618,7 @@ public:
     return 0;
   }
 
-  Capability *add_client_cap(int client, Session *session,
-			     xlist<Capability*> *rdcaps_list, SnapRealm *conrealm=0);
+  Capability *add_client_cap(int client, Session *session, SnapRealm *conrealm=0);
   void remove_client_cap(int client);
 
   void move_to_containing_realm(SnapRealm *realm) {
@@ -634,12 +633,12 @@ public:
     containing_realm = realm;
   }
 
-  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session, xlist<Capability*> *rdcaps_list) {
+  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       cap->merge(icr.wanted, icr.issued);
     } else {
-      cap = add_client_cap(client, session, rdcaps_list);
+      cap = add_client_cap(client, session);
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }

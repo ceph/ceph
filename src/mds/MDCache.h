@@ -431,10 +431,7 @@ public:
 
   // -- client caps --
   __u64              last_cap_id;
-  xlist<Capability*> client_rdcaps;
   
-  void trim_client_rdcaps();
-
   void remove_client_cap(CInode *in, int client, bool eval=true);
 
 
