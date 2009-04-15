@@ -638,6 +638,8 @@ void CInode::store(Context *fin)
   assert(is_root());
 
   bufferlist bl;
+  nstring magic = CEPH_FS_ONDISK_MAGIC;
+  ::encode(magic, bl);
   encode_store(bl);
 
   // write it.
@@ -694,9 +696,18 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
 {
   dout(10) << "_fetched" << dendl;
   bufferlist::iterator p = bl.begin();
-  decode_store(p);
-  dout(10) << "_fetched " << *this << dendl;
-  fin->finish(0);
+  nstring magic;
+  ::decode(magic, p);
+  dout(10) << " magic is '" << magic << "' (expecting '" << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
+  if (magic != CEPH_FS_ONDISK_MAGIC) {
+    dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
+	    << "'" << dendl;
+    fin->finish(-EINVAL);
+  } else {
+    decode_store(p);
+    dout(10) << "_fetched " << *this << dendl;
+    fin->finish(0);
+  }
   delete fin;
 }
 

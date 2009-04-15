@@ -405,7 +405,10 @@ struct C_MDS_RetryOpenRoot : public Context {
   MDCache *cache;
   C_MDS_RetryOpenRoot(MDCache *c) : cache(c) {}
   void finish(int r) {
-    cache->open_root();
+    if (r < 0)
+      cache->mds->suicide();
+    else
+      cache->open_root();
   }
 };
 

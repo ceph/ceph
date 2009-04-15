@@ -90,7 +90,7 @@ void MDLog::init_journaler()
   
   // log streamer
   if (journaler) delete journaler;
-  journaler = new Journaler(log_inode.ino, &log_inode.layout, mds->objecter, 
+  journaler = new Journaler(log_inode.ino, &log_inode.layout, CEPH_FS_ONDISK_MAGIC, mds->objecter, 
 			    logger, l_mdl_jlat,
 			    &mds->mds_lock);
 }

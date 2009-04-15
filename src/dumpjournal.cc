@@ -100,7 +100,7 @@ int main(int argc, const char **argv, const char *envp[])
   log_inode.layout = g_default_mds_log_layout;
 
   objecter = new Objecter(messenger, &monmap, &osdmap, lock);
-  journaler = new Journaler(log_inode.ino, &log_inode.layout, objecter, 0, 0,  &lock);
+  journaler = new Journaler(log_inode.ino, &log_inode.layout, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  &lock);
 
   objecter->set_client_incarnation(0);
 

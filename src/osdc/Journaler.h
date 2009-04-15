@@ -68,16 +68,19 @@ public:
     __s64 expire_pos;
     __s64 read_pos;
     __s64 write_pos;
+    nstring magic;
 
     Header() : trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0) {}
 
     void encode(bufferlist &bl) const {
+      ::encode(magic, bl);
       ::encode(trimmed_pos, bl);
       ::encode(expire_pos, bl);
       ::encode(read_pos, bl);
       ::encode(write_pos, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      ::decode(magic, bl);
       ::decode(trimmed_pos, bl);
       ::decode(expire_pos, bl);
       ::decode(read_pos, bl);
@@ -90,6 +93,7 @@ public:
   // me
   inodeno_t ino;
   ceph_file_layout layout;
+  const char *magic;
   Objecter *objecter;
   Filer filer;
 
@@ -190,8 +194,8 @@ public:
   friend class C_Trim;
 
 public:
-  Journaler(inodeno_t ino_, ceph_file_layout *layout_, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
-    ino(ino_), layout(*layout_), 
+  Journaler(inodeno_t ino_, ceph_file_layout *layout_, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
+    ino(ino_), layout(*layout_), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     lock(lk), timer(*lk), delay_flush_event(0),
     state(STATE_UNDEF), error(0),

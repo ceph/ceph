@@ -84,7 +84,7 @@ void Journaler::recover(Context *onread)
   C_ReadHead *fin = new C_ReadHead(this);
   vector<snapid_t> snaps;
   filer.read(ino, &layout, CEPH_NOSNAP,
-	     0, sizeof(Header), &fin->bl, CEPH_OSD_FLAG_INCLOCK_FAIL, fin);
+	     0, 4096, &fin->bl, CEPH_OSD_FLAG_INCLOCK_FAIL, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -102,8 +102,17 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
 
   // unpack header
   Header h;
-  assert(bl.length() == sizeof(h));
-  bl.copy(0, sizeof(h), (char*)&h);
+  bufferlist::iterator p = bl.begin();
+  ::decode(h, p);
+
+  if (h.magic != magic) {
+    dout(0) << "on disk magic '" << h.magic << "' != my magic '"
+	    << magic << "'" << dendl;
+    list<Context*> ls;
+    ls.swap(waitfor_recover);
+    finish_contexts(ls, -EINVAL);
+    return;
+  }
 
   write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
   read_pos = requested_pos = received_pos = h.read_pos;

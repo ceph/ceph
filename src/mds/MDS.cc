@@ -843,7 +843,7 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
-    dout(2) << "boot_start " << step << ": loading root inode" << dendl;
+    dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
     mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
     break;
 
@@ -1053,6 +1053,7 @@ void MDS::stopping_done()
 void MDS::suicide()
 {
   dout(1) << "suicide" << dendl;
+  state = MDSMap::STATE_STOPPED;  // well, maybe failed, but close enough.
 
   // stop timers
   if (beacon_killer) {

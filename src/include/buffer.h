@@ -245,7 +245,7 @@ public:
       _raw = create(l);
       _raw->nref.inc();
     }
-    ptr(char *d, unsigned l) : _off(0), _len(l) {    // ditto.
+    ptr(const char *d, unsigned l) : _off(0), _len(l) {    // ditto.
       _raw = copy(d, l);
       _raw->nref.inc();
     }

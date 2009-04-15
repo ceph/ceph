@@ -29,10 +29,10 @@ v0.7.2
 v0.8
 /- clean up path_traverse interface, esp the usages in Server.cc
 /- piggyback lease/cap release on client_request?
-- store metadata format version on disk...
+/- store metadata format version on disk...
 - async xattr
 /- dcache readdir
-
+- make mds exhert memory pressure on client caps, leases
 
 kclient caps
 - fix up mds selection, and ESTALE handling
