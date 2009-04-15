@@ -115,14 +115,23 @@ public:
  * BUG: does not report errors.
  */
 class C_Gather : public Context {
-public:
-  bool sub_finish(int r) {
+private:
+  int result;
+  Context *onfinish;
+  std::set<int> waitfor;
+  int num;
+  bool any;  /* if true, OR, otherwise, AND */
+
+  bool sub_finish(int num, int r) {
     //cout << "C_Gather sub_finish " << this << " got " << r << " of " << waitfor << endl;
-    assert(waitfor.count(r));
-    waitfor.erase(r);
+    assert(waitfor.count(num));
+    waitfor.erase(num);
+
+    if (r < 0 && result == 0)
+      result = r;
 
     if (any && onfinish) {
-      onfinish->finish(0);
+      onfinish->finish(result);
       delete onfinish;
       onfinish = 0;
     }
@@ -132,7 +141,7 @@ public:
 
     // last one
     if (!any && onfinish) {
-      onfinish->finish(0);
+      onfinish->finish(result);
       delete onfinish;
       onfinish = 0;
     }
@@ -145,7 +154,7 @@ public:
   public:
     C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
     void finish(int r) {
-      if (gather->sub_finish(num)) {
+      if (gather->sub_finish(num, r)) {
 	delete gather;   // last one!
 	gather = 0;
       }
@@ -156,14 +165,8 @@ public:
     }
   };
 
-private:
-  Context *onfinish;
-  std::set<int> waitfor;
-  int num;
-  bool any;  /* if true, OR, otherwise, AND */
-
 public:
-  C_Gather(Context *f=0, bool an=false) : onfinish(f), num(0), any(an) {
+  C_Gather(Context *f=0, bool an=false) : result(0), onfinish(f), num(0), any(an) {
     //cout << "C_Gather new " << this << endl;
   }
   ~C_Gather() {
