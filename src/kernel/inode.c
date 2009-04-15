@@ -1726,9 +1726,13 @@ static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
 			p = &(*p)->rb_left;
 		else if (c > 0)
 			p = &(*p)->rb_right;
-		else
+		else {
+			dout(0, "__get_xattr %s: found %s\n", name, xattr->val);
 			return xattr;
+		}
 	}
+
+	dout(0, "__get_xattr %s: not found\n", name);
 
 	return NULL;
 }
@@ -1973,6 +1977,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	dout(10, "getxattr %p issued %s\n", inode, ceph_cap_string(issued));
 
         if (issued & CEPH_CAP_XATTR_RDCACHE) {
+		dout(10, "getxattr %p using cached xattrs\n", inode);
 		goto get_xattr;
 	} else {
 		spin_unlock(&inode->i_lock);
@@ -2104,6 +2109,8 @@ static int ceph_send_setxattr(struct dentry *dentry,
 		}
 	}
 
+	dout(0, "setxattr value=%s\n", value);
+
 	/* do request */
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETXATTR,
 				       USE_AUTH_MDS);
@@ -2217,10 +2224,11 @@ alloc_buf:
 	}
 
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(10, "setxattr %p issued %s\n", inode, ceph_cap_string(issued));
+	dout(0, "setxattr %p issued %s\n", inode, ceph_cap_string(issued));
 
 	err = 0;
 	if (issued & CEPH_CAP_XATTR_EXCL) {
+		dout(0, "setxattr %p exclusive\n", inode);
 		err = __set_xattr(ci, newname, name_len, newval,
 			    val_len, 1, 1, 1, &xattr);
 		dirtied |= CEPH_CAP_XATTR_EXCL;
