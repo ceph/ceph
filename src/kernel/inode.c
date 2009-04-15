@@ -1652,7 +1652,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	while (*p) {
 		parent = *p;
 		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
-		c = strcmp(name, xattr->name);
+		c = strncmp(name, xattr->name, name_len);
 		if (c < 0)
 			p = &(*p)->rb_left;
 		else if (c > 0)
@@ -1704,8 +1704,8 @@ static int __set_xattr(struct ceph_inode_info *ci,
 		rb_insert_color(&xattr->node, &ci->i_xattrs.xattrs);
 	}
 
-	dout(0, "__set_xattr_val added %llx.%llx xattr %p %s=%s\n",
-	     ceph_vinop(&ci->vfs_inode), xattr, name, val);
+	dout(0, "__set_xattr_val added %llx.%llx xattr %p %s=%.*s\n",
+	     ceph_vinop(&ci->vfs_inode), xattr, name, val_len, val);
 
 	return 0;
 }
@@ -1722,13 +1722,13 @@ static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
 	while (*p) {
 		parent = *p;
 		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
-		c = strcmp(name, xattr->name);
+		c = strncmp(name, xattr->name, xattr->name_len);
 		if (c < 0)
 			p = &(*p)->rb_left;
 		else if (c > 0)
 			p = &(*p)->rb_right;
 		else {
-			dout(0, "__get_xattr %s: found %s\n", name, xattr->val);
+			dout(0, "__get_xattr %s: found %.*s\n", name, xattr->val_len, xattr->val);
 			return xattr;
 		}
 	}
@@ -1793,7 +1793,8 @@ static char * __copy_xattr_names(struct ceph_inode_info *ci,
 
 	while (p) {
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
-		memcpy(dest, xattr->name, xattr->name_len + 1);
+		memcpy(dest, xattr->name, xattr->name_len);
+		dest[xattr->name_len] = '\0';
 
 		dout(0, "dest=%s %p (%s) (%d/%d)\n", dest, xattr, xattr->name, xattr->name_len, ci->i_xattrs.names_size);
 
@@ -1873,7 +1874,7 @@ start:
 		err = -EIO;
 		while (numattr--) {
 			ceph_decode_32_safe(&p, end, len, bad);
-			namelen = len + 1;
+			namelen = len;
 			name = p;
 			p += len;
 			ceph_decode_32_safe(&p, end, len, bad);
