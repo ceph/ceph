@@ -393,6 +393,7 @@ void MDS::tick()
   if (is_active() || is_stopping()) {
     mdcache->trim();
     mdcache->trim_client_leases();
+    mdcache->check_memory_usage();
     mdlog->trim();  // NOT during recovery!
   }
 

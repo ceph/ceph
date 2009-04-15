@@ -5095,6 +5095,41 @@ void MDCache::trim_client_leases()
 }
 
 
+void MDCache::check_memory_usage()
+{
+  ifstream f("/proc/self/status");
+  if (!f.is_open()) {
+    dout(0) << "check_memory_usage unable to open /proc/self/status" << dendl;
+    return;
+  }
+
+  int vmsize;
+  int vmrss;
+
+  while (!f.eof()) {
+    string line;
+    getline(f, line);
+    
+    if (strncmp(line.c_str(), "VmSize:", 7) == 0)
+      vmsize = atoi(line.c_str() + 10);
+    else if (strncmp(line.c_str(), "VmRSS:", 6) == 0)
+      vmrss = atoi(line.c_str() + 10);
+  }
+  
+  dout(10) << "check_memory_usage size " << vmsize << ", rss " << vmrss
+	   << ", max " << g_conf.mds_mem_max
+	   << dendl;
+
+
+  // check client caps
+  float caps_per_inode = (float)num_caps / (float)inode_map.size();
+  //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
+
+  dout(10) << " " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps" << dendl;
+  dout(10) << " " << num_caps << " caps, " << caps_per_inode << " caps per inode" << dendl;
+
+}
+
 
 void MDCache::remove_client_cap(CInode *in, int client, bool eval)
 {

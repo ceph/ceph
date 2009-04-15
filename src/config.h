@@ -183,6 +183,7 @@ struct md_config_t {
   // mds
   int   mds_cache_size;
   float mds_cache_mid;
+  int   mds_mem_max;
   
   float mds_decay_halflife;
 

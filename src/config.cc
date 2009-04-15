@@ -420,6 +420,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
 	OPTION(mds_cache_size, 0, OPT_INT, 300000),
 	OPTION(mds_cache_mid, 0, OPT_FLOAT, .7),
+	OPTION(mds_mem_max, 0, OPT_INT, 1048576),        // KB
 	OPTION(mds_decay_halflife, 0, OPT_FLOAT, 5),
 	OPTION(mds_beacon_interval, 0, OPT_FLOAT, 4),
 	OPTION(mds_beacon_grace, 0, OPT_FLOAT, 15),

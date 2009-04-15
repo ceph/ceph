@@ -427,8 +427,6 @@ public:
     r->ttl = ttl;
   }
 
-  void trim_client_leases();
-
   // -- client caps --
   __u64              last_cap_id;
   
@@ -774,6 +772,9 @@ public:
 		  map<int,class MCacheExpire*>& expiremap);
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
+
+  void trim_client_leases();
+  void check_memory_usage();
 
   // shutdown
   void shutdown_start();
