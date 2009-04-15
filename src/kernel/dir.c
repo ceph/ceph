@@ -301,6 +301,7 @@ more:
 		dout(10, " marking %p complete\n", inode);
 		ci->i_ceph_flags |= CEPH_I_COMPLETE;
 		ci->i_ceph_flags &= ~CEPH_I_READDIR;
+		ci->i_max_offset = filp->f_pos;
 	}
 	spin_unlock(&inode->i_lock);
 
@@ -444,6 +445,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			    dentry->d_name.len) &&
 		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
 		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+			ceph_dentry(dentry)->offset = ci->i_max_offset++;
 			spin_unlock(&dir->i_lock);
 			dout(10, " dir %p complete, -ENOENT\n", dir);
 			d_add(dentry, NULL);

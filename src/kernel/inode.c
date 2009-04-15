@@ -645,6 +645,7 @@ no_change:
 		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_RDCACHE)) {
 			dout(10, " marking %p complete (empty)\n", inode);
 			ci->i_ceph_flags |= CEPH_I_COMPLETE;
+			ci->i_max_offset = 2;
 		}
 		break;
 	default:
