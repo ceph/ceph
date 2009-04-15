@@ -346,6 +346,7 @@ void ceph_destroy_inode(struct inode *inode)
 		kfree(frag);
 	}
 	kfree(ci->i_xattrs.data);
+	__destroy_xattrs(ci);
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
@@ -1886,6 +1887,7 @@ start:
 			for (i=0; i<numattr; i++) {
 				kfree(xattrs[i]);
 			}
+			kfree(xattrs);
 			goto start;
 		}
 		err = -EIO;
@@ -1904,6 +1906,7 @@ start:
 			if (err < 0)
 				goto bad;
 		}
+		kfree(xattrs);
 	}
 	ci->i_xattrs.index_version = ci->i_xattrs.version;
 
@@ -1916,6 +1919,7 @@ bad:
 			if (xattrs[i])
 				kfree(xattrs[i]);
 		}
+		kfree(xattrs);
 	}
 	ci->i_xattrs.names_size = 0;
 	return err;
@@ -1996,9 +2000,12 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(10, "getxattr %p issued %s\n", inode, ceph_cap_string(issued));
+	dout(0, "getxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
+			ceph_cap_string(issued),
+			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-        if (0 && issued & CEPH_CAP_XATTR_RDCACHE) {
+        if ((issued & CEPH_CAP_XATTR_RDCACHE) &&
+	    (ci->i_xattrs.index_version >= ci->i_xattrs.version)) {
 		dout(10, "getxattr %p using cached xattrs\n", inode);
 		goto get_xattr;
 	} else {
@@ -2051,9 +2058,12 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(0, "listxattr %p issued %s\n", inode, ceph_cap_string(issued));
+	dout(0, "listxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
+			ceph_cap_string(issued),
+			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-        if (0 && issued & CEPH_CAP_XATTR_RDCACHE) {
+        if ((issued & CEPH_CAP_XATTR_RDCACHE) &&
+	    (ci->i_xattrs.index_version > ci->i_xattrs.version)) {
 		dout(0, "listxattr %p using cached xattrs\n", inode);
 		goto list_xattr;
 	} else {
@@ -2131,7 +2141,7 @@ static int ceph_send_setxattr(struct dentry *dentry, const char *name,
 		}
 	}
 
-	dout(0, "setxattr value=%s\n", value);
+	dout(0, "setxattr value=%.*s\n", (int)size, value);
 
 	/* do request */
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETXATTR,
@@ -2190,7 +2200,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		return -EOPNOTSUPP;
 
 	err = -ENOMEM;
-	dout(0, "setxattr 1\n");
 	newname = kmalloc(name_len + 1, GFP_NOFS);
 	if (!newname)
 		goto out;
@@ -2209,7 +2218,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	xattr = kmalloc(sizeof(struct ceph_inode_xattr), GFP_NOFS);
 	if (!xattr)
 		goto out;
-	dout(0, "setxattr 2\n");
 
 	spin_lock(&inode->i_lock);
 	required_blob_size = __get_required_blob_size(ci, name_len, val_len);
