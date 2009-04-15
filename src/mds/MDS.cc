@@ -390,8 +390,11 @@ void MDS::tick()
   // make sure mds log flushes, trims periodically
   mdlog->flush();
 
-  if (is_active() || is_stopping())
+  if (is_active() || is_stopping()) {
+    mdcache->trim();
+    mdcache->trim_client_leases();
     mdlog->trim();  // NOT during recovery!
+  }
 
   // log
   mds_load_t load = balancer->get_load();
@@ -1249,17 +1252,6 @@ bool MDS::_dispatch(Message *m)
   }
 
 
-  // HACK FOR NOW
-  if (is_active() || is_stopping()) {
-    if (is_stopping())
-      mdlog->trim();
-
-    // trim cache
-    mdcache->trim();
-    mdcache->trim_client_leases();
-  }
-
-  
   // hack: thrash exports
   static utime_t start;
   utime_t now = g_clock.now();
@@ -1329,6 +1321,7 @@ bool MDS::_dispatch(Message *m)
 
   // shut down?
   if (is_stopping()) {
+    mdlog->trim();
     if (mdcache->shutdown_pass()) {
       dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to down:stopped" << dendl;
       stopping_done();
