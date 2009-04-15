@@ -553,8 +553,6 @@ static int fill_inode(struct inode *inode,
 		if (ci->i_xattrs.len > 4)
 			memcpy(ci->i_xattrs.data, iinfo->xattr_data,
 			       ci->i_xattrs.len);
-
-		__destroy_xattrs(ci);
 	}
 
 	inode->i_mapping->a_ops = &ceph_aops;
@@ -1711,6 +1709,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	if (new) {
 		rb_link_node(&xattr->node, parent, p);
 		rb_insert_color(&xattr->node, &ci->i_xattrs.xattrs);
+		dout(0, "__set_xattr_val p=%p\n", p);
 	}
 
 	dout(0, "__set_xattr_val added %llx.%llx xattr %p %s=%.*s\n",
@@ -1817,7 +1816,7 @@ static char * __copy_xattr_names(struct ceph_inode_info *ci,
 
 static void __destroy_xattrs(struct ceph_inode_info *ci)
 {
-	struct rb_node *p;
+	struct rb_node *p, *tmp;
 	struct ceph_inode_xattr *xattr = NULL;
 
 	p = rb_first(&ci->i_xattrs.xattrs);
@@ -1826,8 +1825,10 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 
 	while (p) {
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
-
-		p = rb_next(p);
+		tmp = p;
+		p = rb_next(tmp);
+		dout(0, "__destroy_xattrs next p=%p (%.*s)\n", p, xattr->name_len, xattr->name);
+		rb_erase(tmp, &ci->i_xattrs.xattrs);
 
 		__free_xattr(xattr);
 	}
