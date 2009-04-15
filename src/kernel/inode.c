@@ -265,6 +265,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 =======
 	ci->i_xattrs.xattrs = RB_ROOT;
 	ci->i_xattrs.len = 0;
+	ci->i_xattrs.version = 0;
 	ci->i_xattrs.data = NULL;
 	ci->i_xattrs.count = 0;
 	ci->i_xattrs.names_size = 0;
@@ -1835,6 +1836,8 @@ static int __build_xattrs(struct inode *inode)
 	int err;
 	int i;
 
+	dout(0, "ci->i_xattrs.len=%d\n", ci->i_xattrs.len);
+
 	if (ci->i_xattrs.names_size)
 		return 0; /* already built */
 
@@ -1976,7 +1979,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	issued = __ceph_caps_issued(ci, NULL);
 	dout(10, "getxattr %p issued %s\n", inode, ceph_cap_string(issued));
 
-        if (issued & CEPH_CAP_XATTR_RDCACHE) {
+        if (0 && issued & CEPH_CAP_XATTR_RDCACHE) {
 		dout(10, "getxattr %p using cached xattrs\n", inode);
 		goto get_xattr;
 	} else {
@@ -2029,10 +2032,10 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(10, "listxattr %p issued %s\n", inode, ceph_cap_string(issued));
+	dout(0, "listxattr %p issued %s\n", inode, ceph_cap_string(issued));
 
-        if (issued & CEPH_CAP_XATTR_RDCACHE) {
-		dout(10, "listxattr %p using cached xattrs\n", inode);
+        if (0 && issued & CEPH_CAP_XATTR_RDCACHE) {
+		dout(0, "listxattr %p using cached xattrs\n", inode);
 		goto list_xattr;
 	} else {
 		spin_unlock(&inode->i_lock);
@@ -2126,8 +2129,10 @@ static int ceph_send_setxattr(struct dentry *dentry, const char *name,
 	req->r_num_pages = nr_pages;
 	req->r_data_len = size;
 
+	dout(0, "xattr.ver (before): %lld\n", ceph_inode(inode)->i_xattrs.version);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
+	dout(0, "xattr.ver (after): %lld\n", ceph_inode(inode)->i_xattrs.version);
 
 out:
 	if (pages) {
