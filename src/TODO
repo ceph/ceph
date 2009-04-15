@@ -27,9 +27,11 @@ v0.7.2
 /- make kclient timeouts tunable
 
 v0.8
-- clean up path_traverse interface, esp the usages in Server.cc
+/- clean up path_traverse interface, esp the usages in Server.cc
 /- piggyback lease/cap release on client_request?
 - store metadata format version on disk...
+- async xattr
+/- dcache readdir
 
 
 kclient caps
