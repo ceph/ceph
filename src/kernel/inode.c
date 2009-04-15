@@ -257,6 +257,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 
 	ci->i_xattr_len = 0;
 	ci->i_xattr_data = NULL;
+	ci->i_xattr_version = 0;
 
 	ci->i_caps = RB_ROOT;
 	ci->i_auth_cap = NULL;
