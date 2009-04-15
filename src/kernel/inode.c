@@ -2077,7 +2077,7 @@ out:
 	return err;
 }
 
-static int ceph_send_setxattr(struct dentry *dentry,
+static int ceph_send_setxattr(struct dentry *dentry, const char *name,
 			      const char *value, size_t size, int flags)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
@@ -2243,7 +2243,7 @@ alloc_buf:
 		}
 		inode->i_ctime = CURRENT_TIME;
 	} else {
-		err = ceph_send_setxattr(dentry, value, size, flags);
+		err = ceph_send_setxattr(dentry, name, value, size, flags);
 	}
 
 	return err;
