@@ -617,28 +617,11 @@ public:
     if (c) return c->pending();
     return 0;
   }
+
   Capability *add_client_cap(int client, Session *session,
 			     xlist<Capability*> *rdcaps_list, SnapRealm *conrealm=0);
-  void remove_client_cap(int client) {
-    assert(client_caps.count(client) == 1);
-    Capability *cap = client_caps[client];
+  void remove_client_cap(int client);
 
-    cap->session_caps_item.remove_myself();
-    cap->rdcaps_item.remove_myself();
-    containing_realm->remove_cap(client, cap);
-
-    if (client == loner_cap)
-      loner_cap = -1;
-
-    delete cap;
-    client_caps.erase(client);
-    if (client_caps.empty()) {
-      put(PIN_CAPS);
-      xlist_caps.remove_myself();
-      containing_realm = NULL;
-      xlist_open_file.remove_myself();  // unpin logsegment
-    }
-  }
   void move_to_containing_realm(SnapRealm *realm) {
     for (map<int,Capability*>::iterator q = client_caps.begin();
 	 q != client_caps.end();

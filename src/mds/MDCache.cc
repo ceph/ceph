@@ -101,17 +101,21 @@ MDCache::MDCache(MDS *m)
   root = NULL;
   myin = NULL;
   stray = NULL;
-  opening_root = open = false;
-  lru.lru_set_max(g_conf.mds_cache_size);
-  lru.lru_set_midpoint(g_conf.mds_cache_mid);
 
-  did_shutdown_log_cap = false;
+  num_inodes_with_caps = 0;
+  num_caps = 0;
 
   last_cap_id = 0;
 
   client_lease_durations[0] = 5.0;
   client_lease_durations[1] = 30.0;
   client_lease_durations[2] = 300.0;
+
+  opening_root = open = false;
+  lru.lru_set_max(g_conf.mds_cache_size);
+  lru.lru_set_midpoint(g_conf.mds_cache_mid);
+
+  did_shutdown_log_cap = false;
 }
 
 MDCache::~MDCache() 

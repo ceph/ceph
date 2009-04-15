@@ -411,6 +411,10 @@ class MDCache {
   CInode *myin;                            // .ceph/mds%d dir
   CInode *stray;                           // my stray dir
 
+public:
+  int num_inodes_with_caps;
+  int num_caps;
+
   // -- client leases --
 public:
   static const int client_lease_pools = 3;

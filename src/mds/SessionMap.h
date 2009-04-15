@@ -93,7 +93,7 @@ public:
 private:
   version_t cap_push_seq;        // cap push seq #
 public:
-  xlist<Capability*> caps;  // inodes with caps; front=most recently used
+  xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
   utime_t last_cap_renew;
 

@@ -514,6 +514,10 @@ Capability *CInode::add_client_cap(int client, Session *session,
       containing_realm = find_snaprealm();
     containing_realm->inodes_with_caps.push_back(&xlist_caps);
   }
+
+  mdcache->num_caps++;
+  if (client_caps.empty())
+    mdcache->num_inodes_with_caps++;
   
   assert(client_caps.count(client) == 0);
   Capability *cap = client_caps[client] = new Capability(this, ++mdcache->last_cap_id, client, rdcaps_list);
@@ -527,6 +531,29 @@ Capability *CInode::add_client_cap(int client, Session *session,
   return cap;
 }
 
+void CInode::remove_client_cap(int client)
+{
+  assert(client_caps.count(client) == 1);
+  Capability *cap = client_caps[client];
+  
+  cap->session_caps_item.remove_myself();
+  cap->rdcaps_item.remove_myself();
+  containing_realm->remove_cap(client, cap);
+  
+  if (client == loner_cap)
+    loner_cap = -1;
+
+  delete cap;
+  client_caps.erase(client);
+  if (client_caps.empty()) {
+    put(PIN_CAPS);
+    xlist_caps.remove_myself();
+    containing_realm = NULL;
+    xlist_open_file.remove_myself();  // unpin logsegment
+    mdcache->num_inodes_with_caps--;
+  }
+  mdcache->num_caps--;
+}
 
 
 
