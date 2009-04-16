@@ -706,11 +706,13 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
-	dout(0, "send_cap_msg %s %llx %llx caps %s wanted %s dirty %s"
-	     " seq %llu/%llu follows %lld size %llu\n", ceph_cap_op_name(op),
+	dout(10, "send_cap_msg %s %llx %llx caps %s wanted %s dirty %s"
+	     " seq %llu/%llu follows %lld size %llu"
+	     " xattr_ver %llu xattr_len %d\n", ceph_cap_op_name(op),
 	     cid, ino, ceph_cap_string(caps), ceph_cap_string(wanted),
 	     ceph_cap_string(dirty),
-	     seq, mseq, follows, size);
+	     seq, mseq, follows, size,
+	     xattr_version, xattrs_blob_size);
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc) + xattrs_blob_size, 0, 0, NULL);
 	if (IS_ERR(msg))

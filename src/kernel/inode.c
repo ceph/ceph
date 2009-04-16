@@ -1669,7 +1669,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 		xattr->should_free_name = should_free_name;
 
 		ci->i_xattrs.count++;
-		dout(0, "__set_xattr count=%d\n", ci->i_xattrs.count);
+		dout(30, "__set_xattr count=%d\n", ci->i_xattrs.count);
 	} else {
 		kfree(*newxattr);
 		*newxattr = NULL;
@@ -1703,10 +1703,10 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	if (new) {
 		rb_link_node(&xattr->node, parent, p);
 		rb_insert_color(&xattr->node, &ci->i_xattrs.xattrs);
-		dout(0, "__set_xattr_val p=%p\n", p);
+		dout(30, "__set_xattr_val p=%p\n", p);
 	}
 
-	dout(0, "__set_xattr_val added %llx.%llx xattr %p %s=%.*s\n",
+	dout(20, "__set_xattr_val added %llx.%llx xattr %p %s=%.*s\n",
 	     ceph_vinop(&ci->vfs_inode), xattr, name, val_len, val);
 
 	return 0;
@@ -1730,12 +1730,12 @@ static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
 		else if (c > 0)
 			p = &(*p)->rb_right;
 		else {
-			dout(0, "__get_xattr %s: found %.*s\n", name, xattr->val_len, xattr->val);
+			dout(20, "__get_xattr %s: found %.*s\n", name, xattr->val_len, xattr->val);
 			return xattr;
 		}
 	}
 
-	dout(0, "__get_xattr %s: not found\n", name);
+	dout(20, "__get_xattr %s: not found\n", name);
 
 	return NULL;
 }
@@ -1796,14 +1796,14 @@ static char * __copy_xattr_names(struct ceph_inode_info *ci,
 	struct ceph_inode_xattr *xattr = NULL;
 
 	p = rb_first(&ci->i_xattrs.xattrs);
-	dout(0, "__copy_xattr_names count=%d\n", ci->i_xattrs.count);
+	dout(30, "__copy_xattr_names count=%d\n", ci->i_xattrs.count);
 
 	while (p) {
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
 		memcpy(dest, xattr->name, xattr->name_len);
 		dest[xattr->name_len] = '\0';
 
-		dout(0, "dest=%s %p (%s) (%d/%d)\n", dest, xattr, xattr->name, xattr->name_len, ci->i_xattrs.names_size);
+		dout(30, "dest=%s %p (%s) (%d/%d)\n", dest, xattr, xattr->name, xattr->name_len, ci->i_xattrs.names_size);
 
 		dest += xattr->name_len + 1;
 		p = rb_next(p);
@@ -1819,13 +1819,13 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 
 	p = rb_first(&ci->i_xattrs.xattrs);
 
-	dout(0, "__destroy_xattrs p=%p\n", p);
+	dout(20, "__destroy_xattrs p=%p\n", p);
 
 	while (p) {
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
 		tmp = p;
 		p = rb_next(tmp);
-		dout(0, "__destroy_xattrs next p=%p (%.*s)\n", p, xattr->name_len, xattr->name);
+		dout(30, "__destroy_xattrs next p=%p (%.*s)\n", p, xattr->name_len, xattr->name);
 		rb_erase(tmp, &ci->i_xattrs.xattrs);
 
 		__free_xattr(xattr);
@@ -1851,7 +1851,7 @@ static int __build_xattrs(struct inode *inode)
 	int err;
 	int i;
 
-	dout(0, "__build_xattrs(): ci->i_xattrs.len=%d\n", ci->i_xattrs.len);
+	dout(20, "__build_xattrs(): ci->i_xattrs.len=%d\n", ci->i_xattrs.len);
 
 	if (ci->i_xattrs.index_version >= ci->i_xattrs.version)
 		return 0; /* already built */
@@ -1933,7 +1933,7 @@ int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, int val_
 	int size = 4 + ci->i_xattrs.count*(4 + 4) +
 			     ci->i_xattrs.names_size +
 			     ci->i_xattrs.vals_size;
-	dout(0, "__get_required_blob_size count=%d names.size=%d vals.size=%d\n", ci->i_xattrs.count, ci->i_xattrs.names_size,
+	dout(30, "__get_required_blob_size count=%d names.size=%d vals.size=%d\n", ci->i_xattrs.count, ci->i_xattrs.names_size,
                              ci->i_xattrs.vals_size);
 
 	if (name_size)
@@ -2000,13 +2000,12 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(0, "getxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
+	dout(10, "getxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
 			ceph_cap_string(issued),
 			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
         if ((issued & CEPH_CAP_XATTR_RDCACHE) &&
 	    (ci->i_xattrs.index_version >= ci->i_xattrs.version)) {
-		dout(10, "getxattr %p using cached xattrs\n", inode);
 		goto get_xattr;
 	} else {
 		spin_unlock(&inode->i_lock);
@@ -2058,13 +2057,12 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(0, "listxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
+	dout(10, "listxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
 			ceph_cap_string(issued),
 			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
         if ((issued & CEPH_CAP_XATTR_RDCACHE) &&
 	    (ci->i_xattrs.index_version > ci->i_xattrs.version)) {
-		dout(0, "listxattr %p using cached xattrs\n", inode);
 		goto list_xattr;
 	} else {
 		spin_unlock(&inode->i_lock);
@@ -2142,7 +2140,7 @@ static int ceph_send_setxattr(struct dentry *dentry, const char *name,
 		}
 	}
 
-	dout(0, "setxattr value=%.*s\n", (int)size, value);
+	dout(10, "setxattr value=%.*s\n", (int)size, value);
 
 	/* do request */
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_SETXATTR,
@@ -2159,10 +2157,10 @@ static int ceph_send_setxattr(struct dentry *dentry, const char *name,
 	req->r_num_pages = nr_pages;
 	req->r_data_len = size;
 
-	dout(0, "xattr.ver (before): %lld\n", ceph_inode(inode)->i_xattrs.version);
+	dout(30, "xattr.ver (before): %lld\n", ceph_inode(inode)->i_xattrs.version);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
-	dout(0, "xattr.ver (after): %lld\n", ceph_inode(inode)->i_xattrs.version);
+	dout(30, "xattr.ver (after): %lld\n", ceph_inode(inode)->i_xattrs.version);
 
 out:
 	if (pages) {
@@ -2236,13 +2234,13 @@ alloc_buf:
 
 		spin_unlock(&inode->i_lock);
 
-		dout(0, "setxattr required_blob_size=%d\n", required_blob_size);
+		dout(30, "setxattr required_blob_size=%d\n", required_blob_size);
 		prealloc_blob = kmalloc(required_blob_size, GFP_NOFS);
 		if (!prealloc_blob)
 			goto out;
 
 		spin_lock(&inode->i_lock);
-		dout(0, "setxattr newname=%s\n", newname);
+		dout(30, "setxattr newname=%s\n", newname);
 		cur_blob_size = __get_required_blob_size(ci, name_len, val_len);
 
 		old_buf = ci->i_xattrs.prealloc_blob;
@@ -2265,7 +2263,7 @@ alloc_buf:
 		__build_xattrs(inode);
 	}
 
-	dout(0, "setxattr %p issued %s\n", inode, ceph_cap_string(issued));
+	dout(20, "setxattr %p issued %s\n", inode, ceph_cap_string(issued));
 
 	err = __set_xattr(ci, newname, name_len, newval,
 			    val_len, 1, 1, 1, &xattr);
@@ -2339,13 +2337,12 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 
 	spin_lock(&inode->i_lock);
 	issued = __ceph_caps_issued(ci, NULL);
-	dout(0, "removexattr %p issued %s\n", inode, ceph_cap_string(issued));
+	dout(10, "removexattr %p issued %s\n", inode, ceph_cap_string(issued));
 
 	err = 0;
 
 	if (issued & CEPH_CAP_XATTR_EXCL) {
 		__build_xattrs(inode);
-		dout(0, "setxattr %p exclusive\n", inode);
 		err = __remove_xattr_by_name(ceph_inode(inode), name);
 		dirtied |= CEPH_CAP_XATTR_EXCL;
 		ci->i_xattrs.dirty = 1;
