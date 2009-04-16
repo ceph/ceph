@@ -1975,6 +1975,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   // do the open
   Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
   in->authlock.set_state(LOCK_EXCL);
+  in->xattrlock.set_state(LOCK_EXCL);
 
   // stick cap, snapbl info in mdr
   mdr->cap = cap;
@@ -2314,7 +2315,6 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   SnapRealm *realm = in->find_snaprealm();
   Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
 
-  in->authlock.set_state(LOCK_EXCL);
   mdr->cap = cap;
 
   // make sure ino gets into the journal
@@ -2643,7 +2643,9 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // put locks in excl mode
   newi->filelock.set_state(LOCK_EXCL);
   newi->authlock.set_state(LOCK_EXCL);
-  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_RDCACHE);
+  newi->xattrlock.set_state(LOCK_EXCL);
+  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_RDCACHE|
+		      CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_RDCACHE);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());

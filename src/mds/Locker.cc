@@ -981,8 +981,11 @@ Capability* Locker::issue_new_caps(CInode *in,
     // [auth] twiddle mode?
     if (!in->filelock.is_stable())
       mds->mdlog->flush();
-    else
+    else {
       file_eval(&in->filelock);
+      eval(&in->authlock);
+      eval(&in->xattrlock);
+    }
   } else {
     // [replica] tell auth about any new caps wanted
     request_inode_file_caps(in);
@@ -1578,6 +1581,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	file_eval(&in->filelock, can_issue);
       if (in->authlock.is_stable())
 	eval(&in->authlock);
+      if (in->xattrlock.is_stable())
+	eval(&in->xattrlock);
       if (cap->wanted() & ~cap->pending())
 	issue_caps(in, cap);
     }
@@ -2260,9 +2265,25 @@ void Locker::simple_eval(SimpleLock *lock)
   if (lock->get_type() != CEPH_LOCK_DN &&
       ((CInode*)lock->get_parent())->get_loner() >= 0)
     loner = true;
+  
+  CInode *in = 0;
+  int wanted = 0;
+  if (lock->get_type() != CEPH_LOCK_DN) {
+    in = (CInode*)lock->get_parent();
+    wanted = in->get_caps_wanted(NULL, NULL, lock->get_cap_shift());
+  }
+  
+  // -> excl?
+  if (lock->get_state() != LOCK_EXCL &&
+      in && in->get_loner() >= 0 &&
+      (wanted & CEPH_CAP_GEXCL)) {
+    dout(7) << "simple_eval stable, going to excl " << *lock 
+	    << " on " << *lock->get_parent() << dendl;
+    simple_excl(lock);
+  }
 
   // stable -> sync?
-  if (!lock->is_xlocked() &&
+  else if (!lock->is_xlocked() &&
       !lock->is_wrlocked() &&
       lock->get_state() != LOCK_SYNC &&
       !(lock->get_state() == LOCK_EXCL && loner) &&
@@ -2340,6 +2361,50 @@ bool Locker::simple_sync(SimpleLock *lock)
   lock->set_state(LOCK_SYNC);
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
   return true;
+}
+
+void Locker::simple_excl(SimpleLock *lock)
+{
+  dout(7) << "simple_excl on " << *lock << " on " << *lock->get_parent() << dendl;
+  assert(lock->get_parent()->is_auth());
+  assert(lock->is_stable());
+
+  CInode *in = 0;
+  if (lock->get_cap_shift())
+    in = (CInode *)lock->get_parent();
+
+  switch (lock->get_state()) {
+  case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
+  case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
+  default: assert(0);
+  }
+  
+  int gather = 0;
+  if (lock->is_wrlocked())
+    gather++;
+  if (lock->is_xlocked())
+    gather++;
+  
+  if (lock->get_parent()->is_replicated() && 
+      lock->get_state() == LOCK_LOCK_EXCL) {
+    send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    gather++;
+  }
+  
+  if (in) {
+    if (in->issued_caps_need_gather(lock)) {
+      issue_caps(in);
+      gather++;
+    }
+  }
+  
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+  } else {
+    lock->set_state(LOCK_EXCL);
+    lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
+  }
 }
 
 

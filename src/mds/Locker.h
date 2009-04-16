@@ -113,6 +113,7 @@ public:
   bool simple_sync(SimpleLock *lock);
 protected:
   void simple_lock(SimpleLock *lock);
+  void simple_excl(SimpleLock *lock);
   void simple_xlock(SimpleLock *lock);
 
 public:

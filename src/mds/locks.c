@@ -27,7 +27,7 @@ struct sm_state_t simplelock[20] = {
     [LOCK_XLOCKDONE] = { LOCK_SYNC, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   XCL, 0,   0,0,CEPH_CAP_GRDCACHE,0 },
     [LOCK_LOCK_XLOCK]= { LOCK_PREXLOCK,false,LOCK_LOCK,0,   XCL, 0,   0,   0,   XCL, 0,0,0,0 },
 
-    [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE,0,0 },
+    [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   FW,  XCL, 0,   0,   0,CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE,0,0 },
     [LOCK_SYNC_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,CEPH_CAP_GRDCACHE,0,0 },
     [LOCK_LOCK_EXCL] = { LOCK_EXCL, false, LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   CEPH_CAP_GRDCACHE,0,0,0 },
 
