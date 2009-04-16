@@ -1075,10 +1075,6 @@ struct ceph_mds_caps {
 	struct ceph_timespec mtime, atime, ctime;
 	struct ceph_file_layout layout;
 	__le32 time_warp_seq;
-
-	/* xattrs */
-	__le32 xattrs_blob_size;
-	char xattrs_blob[0];
 } __attribute__ ((packed));
 
 struct ceph_mds_cap_release {

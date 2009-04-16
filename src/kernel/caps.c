@@ -699,13 +699,14 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq,
 			 uid_t uid, gid_t gid, mode_t mode,
+			 u64 xattr_version,
 			 void *xattrs_blob, int xattrs_blob_size,
 			 u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
 
-	dout(10, "send_cap_msg %s %llx %llx caps %s wanted %s dirty %s"
+	dout(0, "send_cap_msg %s %llx %llx caps %s wanted %s dirty %s"
 	     " seq %llu/%llu follows %lld size %llu\n", ceph_cap_op_name(op),
 	     cid, ino, ceph_cap_string(caps), ceph_cap_string(wanted),
 	     ceph_cap_string(dirty),
@@ -741,10 +742,13 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->gid = cpu_to_le32(gid);
 	fc->mode = cpu_to_le32(mode);
 
-	fc->xattrs_blob_size = xattrs_blob_size;
+	fc->xattr_version = xattr_version;
 	if (xattrs_blob) {
-		dout(0, "sending xattrs blob size=%d\n", xattrs_blob_size);
-		memcpy(&fc->xattrs_blob[0],  xattrs_blob, xattrs_blob_size);
+		char *dst = (char *)fc;
+		dst += sizeof(*fc);
+
+		fc->xattr_len = xattrs_blob_size;
+		memcpy(dst,  xattrs_blob, xattrs_blob_size);
 	}
 
 	ceph_send_msg_mds(mdsc, msg, mds);
@@ -836,6 +840,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	int mds = cap->session->s_mds;
 	void *xattrs_blob = NULL;
 	int xattrs_blob_size;
+	u64 xattr_version = 0;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
 	     cap, cap->session,
@@ -887,6 +892,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		__ceph_build_xattrs_blob(ci, &xattrs_blob, &xattrs_blob_size);
 		ci->i_xattrs.prealloc_blob = 0;
 		ci->i_xattrs.prealloc_size = 0;
+		xattr_version = ci->i_xattrs.version + 1;
 	}
 
 	spin_unlock(&inode->i_lock);
@@ -901,6 +907,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		     op, keep, want, flushing, seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
+		     xattr_version,
 		     xattrs_blob, xattrs_blob_size,
 		     follows, mds);
 
@@ -992,7 +999,7 @@ retry:
 			     &capsnap->mtime, &capsnap->atime,
 			     capsnap->time_warp_seq,
 			     capsnap->uid, capsnap->gid, capsnap->mode,
-			     NULL, 0,
+			     0, NULL, 0,
 			     capsnap->follows, mds);
 
 		next_follows = capsnap->follows + 1;
