@@ -1759,11 +1759,11 @@ static void __free_xattr(struct ceph_inode_xattr *xattr)
 	kfree(xattr);
 }
 
-static void __remove_xattr(struct ceph_inode_info *ci,
+static int __remove_xattr(struct ceph_inode_info *ci,
 			  struct ceph_inode_xattr *xattr)
 {
 	if (!xattr)
-		return;
+		return -EOPNOTSUPP;
 
 	rb_erase(&xattr->node, &ci->i_xattrs.xattrs);
 
@@ -1776,6 +1776,8 @@ static void __remove_xattr(struct ceph_inode_info *ci,
 	ci->i_xattrs.vals_size -= (xattr->val_len + 1);
 	ci->i_xattrs.count--;
 	kfree(xattr);
+
+	return 0;
 }
 
 static int __remove_xattr_by_name(struct ceph_inode_info *ci,
@@ -1783,13 +1785,15 @@ static int __remove_xattr_by_name(struct ceph_inode_info *ci,
 {
 	struct rb_node **p;
 	struct ceph_inode_xattr *xattr;
+	int err;
 
 	p = &ci->i_xattrs.xattrs.rb_node;
 
 	xattr = __get_xattr(ci, name);
-	__remove_xattr(ci, xattr);
 
-	return 0;
+	err = __remove_xattr(ci, xattr);
+
+	return err;
 }
 
 static char * __copy_xattr_names(struct ceph_inode_info *ci,
@@ -2298,10 +2302,6 @@ static int ceph_send_removexattr(struct dentry *dentry, const char *name)
 	struct ceph_mds_request *req;
 	int err;
 
-	spin_lock(&inode->i_lock);
-	__remove_xattr_by_name(ceph_inode(inode), name);
-	spin_unlock(&inode->i_lock);
-
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_RMXATTR,
 				       USE_AUTH_MDS);
 	if (IS_ERR(req))
@@ -2309,6 +2309,7 @@ static int ceph_send_removexattr(struct dentry *dentry, const char *name)
 	req->r_inode = igrab(inode);
 	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
 	req->r_num_caps = 1;
+	req->r_path2 = name;
 
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
@@ -2318,6 +2319,9 @@ static int ceph_send_removexattr(struct dentry *dentry, const char *name)
 int ceph_removexattr(struct dentry *dentry, const char *name)
 {
 	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int issued;
+	int dirtied = 0;
 	int err;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
@@ -2330,7 +2334,22 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (_ceph_match_vir_xattr(name) != NULL)
 		return -EOPNOTSUPP;
 
-	err = ceph_send_removexattr(dentry, name);
+	spin_lock(&inode->i_lock);
+	issued = __ceph_caps_issued(ci, NULL);
+	dout(0, "removexattr %p issued %s\n", inode, ceph_cap_string(issued));
+
+	err = 0;
+	if (issued & CEPH_CAP_XATTR_EXCL) {
+		dout(0, "setxattr %p exclusive\n", inode);
+		err = __remove_xattr_by_name(ceph_inode(inode), name);
+		dirtied |= CEPH_CAP_XATTR_EXCL;
+	}
+
+	spin_unlock(&inode->i_lock);
+
+	if (!dirtied) {
+		err = ceph_send_removexattr(dentry, name);
+	}
 
 	return err;
 }
