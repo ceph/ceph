@@ -126,18 +126,16 @@ MDCache::~MDCache()
 
 
 
-void MDCache::log_stat(Logger *logger)
+void MDCache::log_stat()
 {
-  if (get_root()) {
-    utime_t now = g_clock.now();
-    //logger->set("pop", (int)get_root()->pop_nested.meta_load(now));
-    //logger->set("popauth", (int)get_root()->pop_auth_subtree_nested.meta_load(now));
-  }
-  logger->set(l_mds_c, lru.lru_get_size());
-  logger->set(l_mds_cpin, lru.lru_get_num_pinned());
-  logger->set(l_mds_ctop, lru.lru_get_top());
-  logger->set(l_mds_cbot, lru.lru_get_bot());
-  logger->set(l_mds_cptail, lru.lru_get_pintail());
+  mds->logger->set(l_mds_imax, g_conf.mds_cache_size);
+  mds->logger->set(l_mds_i, lru.lru_get_size());
+  mds->logger->set(l_mds_ipin, lru.lru_get_num_pinned());
+  mds->logger->set(l_mds_itop, lru.lru_get_top());
+  mds->logger->set(l_mds_ibot, lru.lru_get_bot());
+  mds->logger->set(l_mds_iptail, lru.lru_get_pintail());
+  mds->logger->set(l_mds_icap, num_inodes_with_caps);
+  mds->logger->set(l_mds_cap, num_caps);
 }
 
 
@@ -4518,7 +4516,7 @@ bool MDCache::trim(int max)
 {
   // trim LRU
   if (max < 0) {
-    max = lru.lru_get_max();
+    max = g_conf.mds_cache_size;
     if (!max) return false;
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
@@ -4626,7 +4624,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
   if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
     migrator->export_empty_import(dir);
   
-  if (mds->logger) mds->logger->inc(l_mds_cex);
+  if (mds->logger) mds->logger->inc(l_mds_iex);
 }
 
 
@@ -5106,17 +5104,22 @@ void MDCache::check_memory_usage()
       vmrss = atoi(line.c_str() + 10);
   }
   
-  dout(10) << "check_memory_usage size " << vmsize << ", rss " << vmrss
-	   << ", max " << g_conf.mds_mem_max
-	   << dendl;
-
 
   // check client caps
   float caps_per_inode = (float)num_caps / (float)inode_map.size();
   //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
 
-  dout(10) << " " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps" << dendl;
-  dout(10) << " " << num_caps << " caps, " << caps_per_inode << " caps per inode" << dendl;
+  dout(10) << "check_memory_usage size " << vmsize << ", rss " << vmrss
+	   << ", max " << g_conf.mds_mem_max
+	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
+	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
+	   << dendl;
+
+  if (vmsize > g_conf.mds_mem_max * .9) {
+    float ratio = (float)g_conf.mds_mem_max * .9 / (float)vmsize;
+    if (ratio < 1.0)
+      mds->server->recall_client_state(ratio);
+  }
 
 }
 
@@ -6269,39 +6272,8 @@ void MDCache::request_cleanup(MDRequest *mdr)
   delete mdr;
 
 
-
-
-  // log some stats *****
-  if (mds->logger) {
-    mds->logger->set(l_mds_c, lru.lru_get_size());
-    mds->logger->set(l_mds_cpin, lru.lru_get_num_pinned());
-    mds->logger->set(l_mds_ctop, lru.lru_get_top());
-    mds->logger->set(l_mds_cbot, lru.lru_get_bot());
-    mds->logger->set(l_mds_cptail, lru.lru_get_pintail());
-    //mds->logger->set("buf",buffer_total_alloc);
-  }
-
-  //if (g_conf.log_pins) {
-    // pin
-    /*
-for (int i=0; i<CInode::NUM_PINS; i++) {
-      if (mds->logger2) mds->logger2->set(cinode_pin_names[i],
-					  cinode_pins[i]);
-    }
-    */
-    /*
-      for (map<int,int>::iterator it = cdir_pins.begin();
-      it != cdir_pins.end();
-      it++) {
-      //string s = "D";
-      //s += cdir_pin_names[it->first];
-      if (mds->logger2) mds->logger2->set(//s, 
-      cdir_pin_names[it->first],
-      it->second);
-      }
-    */
-  //}
-
+  if (mds->logger)
+    log_stat();
 }
 
 

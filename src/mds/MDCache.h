@@ -758,7 +758,7 @@ public:
   ~MDCache();
   
   // debug
-  void log_stat(Logger *logger);
+  void log_stat();
 
   // root inode
   CInode *get_root() { return root; }

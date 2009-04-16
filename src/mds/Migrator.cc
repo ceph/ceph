@@ -849,7 +849,7 @@ void Migrator::export_go_synced(CDir *dir)
 
   // stats
   if (mds->logger) mds->logger->inc(l_mds_ex);
-  if (mds->logger) mds->logger->inc(l_mds_iex, num_exported_inodes);
+  if (mds->logger) mds->logger->inc(l_mds_iexp, num_exported_inodes);
 
   cache->show_subtrees();
 }

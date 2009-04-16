@@ -183,12 +183,16 @@ void MDS::reopen_logger(utime_t start)
     mds_logtype.add_inc("dirt5");
     */
 
-    mds_logtype.add_set(l_mds_c, "c");
-    mds_logtype.add_set(l_mds_ctop, "ctop");
-    mds_logtype.add_set(l_mds_cbot, "cbot");
-    mds_logtype.add_set(l_mds_cptail, "cptail");  
-    mds_logtype.add_set(l_mds_cpin, "cpin");
-    mds_logtype.add_inc(l_mds_cex, "cex");
+    mds_logtype.add_set(l_mds_imax, "imax");
+    mds_logtype.add_set(l_mds_i, "i");
+    mds_logtype.add_set(l_mds_itop, "itop");
+    mds_logtype.add_set(l_mds_ibot, "ibot");
+    mds_logtype.add_set(l_mds_iptail, "iptail");  
+    mds_logtype.add_set(l_mds_ipin, "ipin");
+    mds_logtype.add_inc(l_mds_iex, "iex");
+    mds_logtype.add_inc(l_mds_icap, "icap");
+    mds_logtype.add_inc(l_mds_cap, "cap");
+    
     mds_logtype.add_inc(l_mds_dis, "dis");
 
     mds_logtype.add_inc(l_mds_t, "t"); 
@@ -208,7 +212,7 @@ void MDS::reopen_logger(utime_t start)
     
     mds_logtype.add_set(l_mds_sm, "sm");
     mds_logtype.add_inc(l_mds_ex, "ex");
-    mds_logtype.add_inc(l_mds_iex, "iex");
+    mds_logtype.add_inc(l_mds_iexp, "iexp");
     mds_logtype.add_inc(l_mds_im, "im");
     mds_logtype.add_inc(l_mds_iim, "iim");
     /*
@@ -408,7 +412,7 @@ void MDS::tick()
     logger->set(l_mds_buf, buffer_total_alloc.test());
     logger->set(l_mds_sm, mdcache->num_subtrees());
 
-    mdcache->log_stat(logger);
+    mdcache->log_stat();
   }
 
   // ...

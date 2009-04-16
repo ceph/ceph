@@ -1771,7 +1771,7 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		send_renew_caps(mdsc, session);
 		break;
 
-	case CEPH_SESSION_TRIMCAPS:
+	case CEPH_SESSION_RECALL_STATE:
 		trim_caps(mdsc, session, le32_to_cpu(h->max_caps));
 		break;
 

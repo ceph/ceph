@@ -79,6 +79,8 @@ public:
   void reconnect_gather_finish();
   void reconnect_tick();
   
+  void recall_client_state(float ratio);
+
   // -- requests --
   void handle_client_request(MClientRequest *m);
 

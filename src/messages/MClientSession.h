@@ -19,41 +19,43 @@
 
 class MClientSession : public Message {
 public:
+  ceph_mds_session_head head;
 
-  int32_t op;
-  version_t seq;  // used when requesting close, declaring stale
-  utime_t stamp;
-  int32_t max_caps;
+  int get_op() { return head.op; }
+  version_t get_seq() { return head.seq; }
+  utime_t get_stamp() { return utime_t(head.stamp); }
 
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
   MClientSession(int o, version_t s=0) : 
-    Message(CEPH_MSG_CLIENT_SESSION),
-    op(o), seq(s), max_caps(0) { }
+    Message(CEPH_MSG_CLIENT_SESSION) {
+    memset(&head, 0, sizeof(head));
+    head.op = o;
+    head.seq = s;
+  }
   MClientSession(int o, utime_t st) : 
-    Message(CEPH_MSG_CLIENT_SESSION),
-    op(o), seq(0), stamp(st), max_caps(0) { }
+    Message(CEPH_MSG_CLIENT_SESSION) {
+    memset(&head, 0, sizeof(head));
+    head.op = o;
+    head.seq = 0;
+    st.encode_timeval(&head.stamp);
+  }
 
   const char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
-    out << "client_session(" << ceph_session_op_name(op);
-    if (seq) out << " seq " << seq;
-    if (op == CEPH_SESSION_TRIMCAPS)
-      out << " max_caps " << max_caps;
+    out << "client_session(" << ceph_session_op_name(get_op());
+    if (get_seq())
+      out << " seq " << get_seq();
+    if (get_op() == CEPH_SESSION_RECALL_STATE)
+      out << " max_caps " << head.max_caps << " max_leases" << head.max_leases;
     out << ")";
   }
 
   void decode_payload() { 
     bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(seq, p);
-    ::decode(stamp, p);
-    ::decode(max_caps, p);
+    ::decode(head, p);
   }
   void encode_payload() { 
-    ::encode(op, payload);
-    ::encode(seq, payload);
-    ::encode(stamp, payload);
-    ::encode(max_caps, payload);
+    ::encode(head, payload);
   }
 };
 

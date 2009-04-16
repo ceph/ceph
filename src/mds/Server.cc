@@ -156,7 +156,7 @@ void Server::handle_client_session(MClientSession *m)
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   assert(m->get_source().is_client()); // should _not_ come from an mds!
 
-  switch (m->op) {
+  switch (m->get_op()) {
   case CEPH_SESSION_REQUEST_OPEN:
     if (session && (session->is_opening() || session->is_open())) {
       dout(10) << "already open|opening, dropping this req" << dendl;
@@ -182,7 +182,7 @@ void Server::handle_client_session(MClientSession *m)
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
       mds->locker->resume_stale_caps(session);
     }
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->stamp), 
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_stamp()), 
 				 session->inst);
     break;
     
@@ -192,13 +192,13 @@ void Server::handle_client_session(MClientSession *m)
 	dout(10) << "already closing|dne, dropping this req" << dendl;
 	return;
       }
-      if (m->seq < session->get_push_seq()) {
-	dout(10) << "old push seq " << m->seq << " < " << session->get_push_seq() 
+      if (m->get_seq() < session->get_push_seq()) {
+	dout(10) << "old push seq " << m->get_seq() << " < " << session->get_push_seq() 
 		 << ", dropping" << dendl;
 	return;
       }
-      if (m->seq != session->get_push_seq()) {
-	dout(10) << "old push seq " << m->seq << " != " << session->get_push_seq() 
+      if (m->get_seq() != session->get_push_seq()) {
+	dout(10) << "old push seq " << m->get_seq() << " != " << session->get_push_seq() 
 		 << ", BUGGY!" << dendl;
 	assert(0);
       }
@@ -519,6 +519,43 @@ void Server::reconnect_tick()
     client_reconnect_gather.clear();
     reconnect_gather_finish();
   }
+}
+
+
+void Server::recall_client_state(float ratio)
+{
+  int max_caps_per_client = g_conf.mds_cache_size / 2;
+  int min_caps_per_client = 100;
+
+  dout(10) << "recall_client_state " << ratio
+	   << ", caps per client " << min_caps_per_client << "-" << max_caps_per_client
+	   << dendl;
+
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (set<Session*>::const_iterator p = sessions.begin();
+       p != sessions.end();
+       ++p) {
+    Session *session = *p;
+    if (!session->is_open() ||
+	!session->inst.name.is_client())
+      continue;
+
+    dout(10) << " session " << session->inst
+	     << " caps " << session->caps.size()
+	     << ", leases " << session->leases.size()
+	     << dendl;
+
+    if (session->caps.size() > min_caps_per_client) {	
+      int newlim = session->caps.size() * ratio;
+      if (newlim > max_caps_per_client)
+	newlim = max_caps_per_client;
+      MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
+      m->head.max_caps = newlim;
+      mds->send_message_client(m, session->inst);
+    }
+  }
+ 
 }
 
 
