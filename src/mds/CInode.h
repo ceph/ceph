@@ -752,7 +752,7 @@ public:
       }
     if (ploner) *ploner = (loner >> shift) & mask;
     if (pother) *pother = (other >> shift) & mask;
-    return w;
+    return (w >> shift) & mask;
   }
 
   bool issued_caps_need_gather(SimpleLock *lock) {

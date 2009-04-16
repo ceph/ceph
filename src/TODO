@@ -34,6 +34,8 @@ v0.8
 /- dcache readdir
 - make mds exhert memory pressure on client caps, leases
 
+- make mds caps behave on fresh mount + echo foo >> mnt/existing
+
 kclient caps
 - fix up mds selection, and ESTALE handling
 
