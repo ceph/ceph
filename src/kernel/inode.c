@@ -256,13 +256,6 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_fragtree = RB_ROOT;
 	mutex_init(&ci->i_fragtree_mutex);
 
-<<<<<<< HEAD:src/kernel/inode.c
-	ci->i_xattrs = RB_ROOT;
-	ci->i_xattr_len = 0;
-	ci->i_xattr_data = NULL;
-	ci->i_xattr_version = 0;
-	ci->i_xattr_names_size = 0;
-=======
 	ci->i_xattrs.xattrs = RB_ROOT;
 	ci->i_xattrs.len = 0;
 	ci->i_xattrs.version = 0;
@@ -273,7 +266,6 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattrs.vals_size = 0;
 	ci->i_xattrs.prealloc_blob = 0;
 	ci->i_xattrs.prealloc_size = 0;
->>>>>>> kclient: xattrs cleanup, preallocate xattr structure:src/kernel/inode.c
 
 	ci->i_caps = RB_ROOT;
 	ci->i_auth_cap = NULL;
@@ -1914,6 +1906,7 @@ start:
 		kfree(xattrs);
 	}
 	ci->i_xattrs.index_version = ci->i_xattrs.version;
+	ci->i_xattrs.dirty = 0;
 
 	return err;
 bad_lock:
@@ -1956,7 +1949,7 @@ void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
 	struct ceph_inode_xattr *xattr = NULL;
 	void *dest;
 
-	if (ci->i_xattrs.names_size) {
+	if (ci->i_xattrs.dirty) {
 		int required_blob_size = __get_required_blob_size(ci, 0, 0);
 
 		BUG_ON(required_blob_size > ci->i_xattrs.prealloc_size);
@@ -2284,6 +2277,7 @@ alloc_buf:
 		__mark_inode_dirty(inode, I_DIRTY_SYNC);
 		igrab(inode);
 	}
+	ci->i_xattrs.dirty = 1;
 	inode->i_ctime = CURRENT_TIME;
 
 	return err;
@@ -2353,6 +2347,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 		dout(0, "setxattr %p exclusive\n", inode);
 		err = __remove_xattr_by_name(ceph_inode(inode), name);
 		dirtied |= CEPH_CAP_XATTR_EXCL;
+		ci->i_xattrs.dirty = 1;
 	}
 
 	spin_unlock(&inode->i_lock);
