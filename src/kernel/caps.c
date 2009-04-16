@@ -742,8 +742,10 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->mode = cpu_to_le32(mode);
 
 	fc->xattrs_blob_size = xattrs_blob_size;
-	if (xattrs_blob)
+	if (xattrs_blob) {
+		dout(0, "sending xattrs blob size=%d\n", xattrs_blob_size);
 		memcpy(&fc->xattrs_blob[0],  xattrs_blob, xattrs_blob_size);
+	}
 
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
@@ -832,7 +834,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	uid_t uid;
 	gid_t gid;
 	int mds = cap->session->s_mds;
-	void *xattrs_blob;
+	void *xattrs_blob = NULL;
 	int xattrs_blob_size;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
@@ -881,13 +883,12 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	gid = inode->i_gid;
 	mode = inode->i_mode;
 
-	if (dropping & CEPH_CAP_XATTR_RDCACHE) {
+	if (dropping & CEPH_CAP_XATTR_EXCL) {
 		__ceph_build_xattrs_blob(ci, &xattrs_blob, &xattrs_blob_size);
 		ci->i_xattrs.prealloc_blob = 0;
 		ci->i_xattrs.prealloc_size = 0;
-	} else {
-		xattrs_blob = NULL;
 	}
+
 	spin_unlock(&inode->i_lock);
 
 	if (dropping & CEPH_CAP_FILE_RDCACHE) {
