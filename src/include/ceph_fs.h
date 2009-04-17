@@ -1052,7 +1052,7 @@ struct ceph_mds_caps {
 	__le32 op;
 	__le64 ino, realm;
 	__le64 cap_id;
-	__le32 seq;
+	__le32 seq, issue_seq;
 	__le32 caps, wanted, dirty;
 	__le32 migrate_seq;
 	__le64 snap_follows;

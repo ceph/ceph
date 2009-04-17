@@ -545,6 +545,8 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
 bool Locker::eval_caps(CInode *in)
 {
   bool need_issue = false;
+  
+  dout(10) << "eval_caps " << *in << dendl;
 
   if (!in->filelock.is_stable())
     eval_gather(&in->filelock, false, &need_issue);
@@ -565,6 +567,8 @@ bool Locker::eval_caps(CInode *in)
 
   if (need_issue)
     issue_caps(in);
+
+  dout(10) << "eval_caps done" << dendl;
   return need_issue;
 }
 
@@ -975,11 +979,16 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   mut->cleanup();
   delete mut;
 
-  if (cap && cap->wanted() & ~cap->pending())
+  bool sup = false;  // avoid sending two caps msgs, one for cap expansion, one for file_max change.
+  if (cap && (cap->wanted() & ~cap->pending())) {
     issue_caps(in, cap);
-
+    cap->inc_suppress();
+    sup = true;
+  }
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
+  if (sup)
+    cap->dec_suppress();
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -1452,6 +1461,8 @@ void Locker::share_inode_max_size(CInode *in)
        it++) {
     const int client = it->first;
     Capability *cap = it->second;
+    if (cap->is_suppress())
+      continue;
     if (cap->pending() & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
@@ -1587,7 +1598,7 @@ void Locker::handle_client_caps(MClientCaps *m)
           if (!in->filelock.is_stable())
             mds->mdlog->flush();
         }
-	if (ceph_seq_cmp(m->get_seq(), cap->get_last_issue()) == 0) {
+	if (ceph_seq_cmp(m->get_issue_seq(), cap->get_last_issue()) == 0) {
 	  dout(10) << " wanted " << ccap_string(cap->wanted())
 		   << " -> " << ccap_string(wanted) << dendl;
 	  cap->set_wanted(wanted);
@@ -1599,22 +1610,30 @@ void Locker::handle_client_caps(MClientCaps *m)
 	} else {
 	  dout(10) << " NOT changing wanted " << ccap_string(cap->wanted())
 		   << " -> " << ccap_string(wanted)
-		   << " (seq " << m->get_seq() << " != last_issue " << cap->get_last_issue() << ")" << dendl;
+		   << " (issue_seq " << m->get_issue_seq() << " != last_issue "
+		   << cap->get_last_issue() << ")" << dendl;
 	}
       }
       if (m->get_op() == CEPH_CAP_OP_DROP)
 	can_issue = false;
       
-      if (!_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
+      if (_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
+	// updated, cap msg is delayed
+	cap->inc_suppress();
+	eval_caps(in);
+	cap->dec_suppress();
+
+	if (cap->wanted() & ~cap->pending())
+	  mds->mdlog->flush();
+      } else {
 	// no update, ack now.
 	if (ack)
 	  mds->send_message_client(ack, client);
-      }
       
-      bool did_issue = eval_caps(in);
-      if (!did_issue &&
-	  cap->wanted() & ~cap->pending())
-	issue_caps(in, cap);
+	bool did_issue = eval_caps(in);
+	if (!did_issue && (cap->wanted() & ~cap->pending()))
+	  issue_caps(in, cap);
+      }
     }
 
     // done?
@@ -1715,10 +1734,16 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
       in->state_set(CInode::STATE_NO_SIZE_CHECK);
       if (in->filelock.is_stable()) {
-	if (in->get_loner() >= 0)
-	  file_excl(&in->filelock);
-	else
-	  simple_lock(&in->filelock);
+	bool need_issue = false;
+	cap->inc_suppress();
+	if (in->get_loner() >= 0 || in->try_choose_loner()) {
+	  file_excl(&in->filelock, &need_issue);
+	  need_issue = false;  // loner!
+	} else
+	  simple_lock(&in->filelock, &need_issue);
+	if (need_issue)
+	  issue_caps(in);
+	cap->dec_suppress();
       }
       in->state_clear(CInode::STATE_NO_SIZE_CHECK);
       if (!in->filelock.can_wrlock(client)) {

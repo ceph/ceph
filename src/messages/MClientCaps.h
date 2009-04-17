@@ -28,6 +28,7 @@ class MClientCaps : public Message {
   int      get_wanted() { return head.wanted; }
   int      get_dirty() { return head.dirty; }
   ceph_seq_t get_seq() { return head.seq; }
+  ceph_seq_t get_issue_seq() { return head.issue_seq; }
   ceph_seq_t get_mseq() { return head.migrate_seq; }
 
   inodeno_t get_ino() { return inodeno_t(head.ino); }

@@ -694,7 +694,8 @@ void ceph_remove_cap(struct ceph_cap *cap)
  * Caller should be holding s_mutex.
  */
 static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
-			 int caps, int wanted, int dirty, u64 seq, u64 mseq,
+			 int caps, int wanted, int dirty,
+			 u32 seq, u32 issue_seq, u32 mseq,
 			 u64 size, u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq,
@@ -707,14 +708,15 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	struct ceph_msg *msg;
 
 	dout(10, "send_cap_msg %s %llx %llx caps %s wanted %s dirty %s"
-	     " seq %llu/%llu follows %lld size %llu"
+	     " seq %u/%u mseq %u follows %lld size %llu"
 	     " xattr_ver %llu xattr_len %d\n", ceph_cap_op_name(op),
 	     cid, ino, ceph_cap_string(caps), ceph_cap_string(wanted),
 	     ceph_cap_string(dirty),
-	     seq, mseq, follows, size,
+	     seq, issue_seq, mseq, follows, size,
 	     xattr_version, xattrs_blob_size);
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc) + xattrs_blob_size, 0, 0, NULL);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc) + xattrs_blob_size,
+			   0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 
@@ -725,6 +727,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->cap_id = cpu_to_le64(cid);
 	fc->op = cpu_to_le32(op);
 	fc->seq = cpu_to_le32(seq);
+	fc->issue_seq = cpu_to_le32(issue_seq);
 	fc->migrate_seq = cpu_to_le32(mseq);
 	fc->caps = cpu_to_le32(caps);
 	fc->wanted = cpu_to_le32(wanted);
@@ -832,7 +835,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	int revoking = cap->implemented & ~cap->issued;
 	int dropping = cap->issued & ~retain;
 	int keep;
-	u64 seq, mseq, time_warp_seq, follows;
+	u64 seq, issue_seq, mseq, time_warp_seq, follows;
 	u64 size, max_size;
 	struct timespec mtime, atime;
 	int wake = 0;
@@ -877,6 +880,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	keep = cap->implemented;
 	seq = cap->seq;
+	issue_seq = cap->issue_seq;
 	mseq = cap->mseq;
 	size = inode->i_size;
 	ci->i_reported_size = size;
@@ -906,7 +910,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	}
 
 	send_cap_msg(mdsc, ceph_vino(inode).ino, cap_id,
-		     op, keep, want, flushing, seq, mseq,
+		     op, keep, want, flushing, seq, issue_seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
 		     xattr_version,
@@ -996,7 +1000,7 @@ retry:
 		     inode, capsnap, next_follows, capsnap->size);
 		send_cap_msg(mdsc, ceph_vino(inode).ino, 0,
 			     CEPH_CAP_OP_FLUSHSNAP, capsnap->issued, 0,
-			     capsnap->dirty, 0, mseq,
+			     capsnap->dirty, 0, 0, mseq,
 			     capsnap->size, 0,
 			     &capsnap->mtime, &capsnap->atime,
 			     capsnap->time_warp_seq,
