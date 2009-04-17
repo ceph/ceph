@@ -2256,12 +2256,14 @@ retry:
 	was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
 	ci->i_xattrs.dirty = 1;
 	inode->i_ctime = CURRENT_TIME;
-	spin_unlock(&inode->i_lock);
 
 	if (!was_dirty) {
 		__mark_inode_dirty(inode, I_DIRTY_SYNC);
 		igrab(inode);
 	}
+
+	spin_unlock(&inode->i_lock);
+
 	return err;
 
 do_sync:
@@ -2302,7 +2304,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int issued;
-	int dirtied = 0;
+	int was_dirty;
 	int err;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
@@ -2319,21 +2321,27 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	issued = __ceph_caps_issued(ci, NULL);
 	dout(10, "removexattr %p issued %s\n", inode, ceph_cap_string(issued));
 
-	err = 0;
+	if (!(issued & CEPH_CAP_XATTR_EXCL))
+		goto do_sync;
 
-	if (issued & CEPH_CAP_XATTR_EXCL) {
-		__build_xattrs(inode);
-		err = __remove_xattr_by_name(ceph_inode(inode), name);
-		dirtied |= CEPH_CAP_XATTR_EXCL;
-		ci->i_xattrs.dirty = 1;
+	__build_xattrs(inode);
+	err = __remove_xattr_by_name(ceph_inode(inode), name);
+	was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
+	ci->i_xattrs.dirty = 1;
+
+	if (!was_dirty) {
+		__mark_inode_dirty(inode, I_DIRTY_SYNC);
+		igrab(inode);
 	}
+	inode->i_ctime = CURRENT_TIME;
 
 	spin_unlock(&inode->i_lock);
 
-	if (!dirtied) {
-		err = ceph_send_removexattr(dentry, name);
-	}
-
 	return err;
+do_sync:
+	spin_unlock(&inode->i_lock);
+	err = ceph_send_removexattr(dentry, name);
+	return err;
+
 }
 
