@@ -170,6 +170,14 @@ public:
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
+    if (head.op == CEPH_MDS_OP_SETATTR) {
+      if (head.args.setattr.mask & CEPH_SETATTR_MODE) out << " mode";
+      if (head.args.setattr.mask & CEPH_SETATTR_UID) out << " uid";
+      if (head.args.setattr.mask & CEPH_SETATTR_GID) out << " gid";
+      if (head.args.setattr.mask & CEPH_SETATTR_SIZE) out << " size";
+      if (head.args.setattr.mask & CEPH_SETATTR_MTIME) out << " mtime";
+      if (head.args.setattr.mask & CEPH_SETATTR_ATIME) out << " atime";
+    }
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
     if (!get_filepath2().empty())

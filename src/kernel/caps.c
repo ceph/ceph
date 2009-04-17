@@ -334,17 +334,12 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
- * Set cap hold timeouts, unless already I_NODELAY.
+ * (re)set cap hold timeouts.
  */
 static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
 			       struct ceph_inode_info *ci)
 {
 	struct ceph_mount_args *ma = &mdsc->client->mount_args;
-
-	if (ci->i_ceph_flags & CEPH_I_NODELAY) {
-		dout(10, "__cap_set_timeouts %p I_NODELAY\n", &ci->vfs_inode);
-		return;
-	}
 
 	ci->i_hold_caps_min = round_jiffies(jiffies +
 					    ma->caps_wanted_delay_min * HZ);
@@ -358,6 +353,8 @@ static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
  * an inode was queued but with i_hold_caps_max=0, meaning it was
  * queued for immediate flush, don't reset the timeouts.
  *
+ * If I_FLUSH is set, leave the inode at the front of the list.
+ *
  * Caller holds i_lock
  *    -> we take mdsc->cap_delay_lock
  */
@@ -369,7 +366,7 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 	if (!mdsc->stopping) {
 		spin_lock(&mdsc->cap_delay_lock);
 		if (!list_empty(&ci->i_cap_delay_list)) {
-			if (ci->i_ceph_flags & CEPH_I_NODELAY)
+			if (ci->i_ceph_flags & CEPH_I_FLUSH)
 				goto no_change;
 			list_del_init(&ci->i_cap_delay_list);
 		}
@@ -380,14 +377,16 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 }
 
 /*
- * Queue an inode for immediate writeback.
+ * Queue an inode for immediate writeback.  Mark inode with I_FLUSH,
+ * indicating we should send a cap message to flush dirty metadata
+ * asap.
  */
 static void __cap_delay_requeue_front(struct ceph_mds_client *mdsc,
 				      struct ceph_inode_info *ci)
 {
 	dout(10, "__cap_delay_requeue_front %p\n", &ci->vfs_inode);
 	spin_lock(&mdsc->cap_delay_lock);
-	ci->i_ceph_flags |= CEPH_I_NODELAY;
+	ci->i_ceph_flags |= CEPH_I_FLUSH;
 	if (!list_empty(&ci->i_cap_delay_list))
 		list_del_init(&ci->i_cap_delay_list);
 	list_add(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
@@ -875,7 +874,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		want |= cap->mds_wanted;
 		retain |= cap->issued;
 	}
-	ci->i_ceph_flags &= ~CEPH_I_NODELAY;
+	ci->i_ceph_flags &= ~(CEPH_I_NODELAY | CEPH_I_FLUSH);
 
 	cap->issued &= retain;  /* drop bits we don't want */
 	if (cap->implemented & ~cap->issued) {
@@ -2229,7 +2228,7 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		ci = list_first_entry(&mdsc->cap_delay_list,
 				      struct ceph_inode_info,
 				      i_cap_delay_list);
-		if ((ci->i_ceph_flags & CEPH_I_NODELAY) == 0 &&
+		if ((ci->i_ceph_flags & CEPH_I_FLUSH) == 0 &&
 		    time_before(jiffies, ci->i_hold_caps_max))
 			break;
 		list_del_init(&ci->i_cap_delay_list);
