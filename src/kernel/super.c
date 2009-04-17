@@ -124,23 +124,25 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 
 	if (ceph_debug != 0)
 		seq_printf(m, ",debug=%d", ceph_debug);
-	if (args->flags & CEPH_MOUNT_FSID)
+	if (args->flags & CEPH_OPT_FSID)
 		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu",
 			   __ceph_fsid_major(&args->fsid), __ceph_fsid_minor(&args->fsid));
-	if (args->flags & CEPH_MOUNT_NOSHARE)
+	if (args->flags & CEPH_OPT_NOSHARE)
 		seq_puts(m, ",noshare");
-	if (args->flags & CEPH_MOUNT_UNSAFE_WRITEBACK)
+	if (args->flags & CEPH_OPT_UNSAFE_WRITEBACK)
 		seq_puts(m, ",unsafewriteback");
-	if (args->flags & CEPH_MOUNT_DIRSTAT)
+	if (args->flags & CEPH_OPT_DIRSTAT)
 		seq_puts(m, ",dirstat");
 	else
 		seq_puts(m, ",nodirstat");
-	if (args->flags & CEPH_MOUNT_RBYTES)
+	if (args->flags & CEPH_OPT_RBYTES)
 		seq_puts(m, ",rbytes");
 	else
 		seq_puts(m, ",norbytes");
-	if (args->flags & CEPH_MOUNT_NOCRC)
+	if (args->flags & CEPH_OPT_NOCRC)
 		seq_puts(m, ",nocrc");
+	if (args->flags & CEPH_OPT_NOASYNCREADDIR)
+		seq_puts(m, ",noasyncreaddir");
 	return 0;
 }
 
@@ -511,7 +513,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	/* defaults */
 	args->sb_flags = flags;
-	args->flags = CEPH_MOUNT_DEFAULT;
+	args->flags = CEPH_OPT_DEFAULT;
 	args->osd_timeout = 5;    /* seconds */
 	args->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
 	args->caps_wanted_delay_min = CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT;
@@ -584,7 +586,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 					1, NULL);
 			if (err < 0)
 				return err;
-			args->flags |= CEPH_MOUNT_MYIP;
+			args->flags |= CEPH_OPT_MYIP;
 			break;
 
 			/* debug levels */
@@ -640,32 +642,32 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 
 		case Opt_noshare:
-			args->flags |= CEPH_MOUNT_NOSHARE;
+			args->flags |= CEPH_OPT_NOSHARE;
 			break;
 		case Opt_unsafewriteback:
-			args->flags |= CEPH_MOUNT_UNSAFE_WRITEBACK;
+			args->flags |= CEPH_OPT_UNSAFE_WRITEBACK;
 			break;
 		case Opt_safewriteback:
-			args->flags &= ~CEPH_MOUNT_UNSAFE_WRITEBACK;
+			args->flags &= ~CEPH_OPT_UNSAFE_WRITEBACK;
 			break;
 
 		case Opt_dirstat:
-			args->flags |= CEPH_MOUNT_DIRSTAT;
+			args->flags |= CEPH_OPT_DIRSTAT;
 			break;
 		case Opt_nodirstat:
-			args->flags &= ~CEPH_MOUNT_DIRSTAT;
+			args->flags &= ~CEPH_OPT_DIRSTAT;
 			break;
 		case Opt_rbytes:
-			args->flags |= CEPH_MOUNT_RBYTES;
+			args->flags |= CEPH_OPT_RBYTES;
 			break;
 		case Opt_norbytes:
-			args->flags &= ~CEPH_MOUNT_RBYTES;
+			args->flags &= ~CEPH_OPT_RBYTES;
 			break;
 		case Opt_nocrc:
-			args->flags |= CEPH_MOUNT_NOCRC;
+			args->flags |= CEPH_OPT_NOCRC;
 			break;
 		case Opt_noasyncreaddir:
-			args->flags |= CEPH_MOUNT_NOASYNCREADDIR;
+			args->flags |= CEPH_OPT_NOASYNCREADDIR;
 			break;
 
 		default:
@@ -827,7 +829,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 
 	/* initialize the messenger */
 	if (client->msgr == NULL) {
-		if (client->mount_args.flags & CEPH_MOUNT_MYIP)
+		if (ceph_test_opt(client, MYIP))
 			myaddr = &client->mount_args.my_addr;
 		client->msgr = ceph_messenger_create(myaddr);
 		if (IS_ERR(client->msgr)) {
@@ -1029,7 +1031,7 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	dout(10, "ceph_compare_super %p\n", sb);
 
 	/* either compare fsid, or specified mon_hostname */
-	if (args->flags & CEPH_MOUNT_FSID) {
+	if (args->flags & CEPH_OPT_FSID) {
 		if (ceph_fsid_compare(&args->fsid, &other->fsid)) {
 			dout(30, "fsid doesn't match\n");
 			return 0;
@@ -1103,7 +1105,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (err < 0)
 		goto out;
 
-	if (client->mount_args.flags & CEPH_MOUNT_NOSHARE)
+	if (client->mount_args.flags & CEPH_OPT_NOSHARE)
 		compare_super = NULL;
 
 	sb = sget(fs_type, compare_super, ceph_set_super, client);

@@ -883,7 +883,7 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 	struct ceph_msg *msg = con->out_msg;
 	unsigned data_len = le32_to_cpu(msg->hdr.data_len);
 	size_t len;
-	int crc = !(client->mount_args.flags & CEPH_MOUNT_NOCRC);
+	int crc = !ceph_test_opt(client, NOCRC);
 	int ret;
 
 	dout(30, "write_partial_msg_pages %p msg %p page %d/%d offset %d\n",
@@ -1418,7 +1418,7 @@ static int read_partial_message(struct ceph_connection *con)
 	int to, want, left;
 	unsigned front_len, data_len, data_off;
 	struct ceph_client *client = con->msgr->parent;
-	int datacrc = !(client->mount_args.flags & CEPH_MOUNT_NOCRC);
+	int datacrc = !ceph_test_opt(client, NOCRC);
 
 	dout(20, "read_partial_message con %p msg %p\n", con, m);	
 

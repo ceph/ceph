@@ -645,8 +645,7 @@ no_change:
 		ceph_decode_timespec(&ci->i_rctime, &info->rctime);
 
 		/* it may be better to set st_size in getattr instead? */
-		if (ceph_client(inode->i_sb)->mount_args.flags &
-		    CEPH_MOUNT_RBYTES)
+		if (ceph_test_opt(ceph_client(inode->i_sb), RBYTES))
 			inode->i_size = ci->i_rbytes;
 
 		/* set dir completion flag? */

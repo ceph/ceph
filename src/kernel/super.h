@@ -47,16 +47,21 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 /*
  * mount options
  */
-#define CEPH_MOUNT_FSID          (1<<0)
-#define CEPH_MOUNT_NOSHARE       (1<<1) /* don't share client with other sbs */
-#define CEPH_MOUNT_MYIP          (1<<2) /* specified my ip */
-#define CEPH_MOUNT_UNSAFE_WRITEBACK (1<<3)
-#define CEPH_MOUNT_DIRSTAT       (1<<4) /* funky `cat dirname` for stats */
-#define CEPH_MOUNT_RBYTES        (1<<5) /* dir st_bytes = rbytes */
-#define CEPH_MOUNT_NOCRC         (1<<6) /* no data crc on writes */
-#define CEPH_MOUNT_NOASYNCREADDIR (1<<7) /* no dcache readdir */
+#define CEPH_OPT_FSID             (1<<0)
+#define CEPH_OPT_NOSHARE          (1<<1) /* don't share client with other sbs */
+#define CEPH_OPT_MYIP             (1<<2) /* specified my ip */
+#define CEPH_OPT_UNSAFE_WRITEBACK (1<<3)
+#define CEPH_OPT_DIRSTAT          (1<<4) /* funky `cat dirname` for stats */
+#define CEPH_OPT_RBYTES           (1<<5) /* dir st_bytes = rbytes */
+#define CEPH_OPT_NOCRC            (1<<6) /* no data crc on writes */
+#define CEPH_OPT_NOASYNCREADDIR   (1<<7) /* no dcache readdir */
 
-#define CEPH_MOUNT_DEFAULT   (CEPH_MOUNT_RBYTES)
+#define CEPH_OPT_DEFAULT   (CEPH_OPT_RBYTES)
+
+#define ceph_set_opt(client, opt) \
+	(client)->mount_args.flags |= CEPH_OPT_##opt;
+#define ceph_test_opt(client, opt) \
+	!!((client)->mount_args.flags & CEPH_OPT_##opt)
 
 #define CEPH_DEFAULT_READ_SIZE	(128*1024) /* readahead */
 

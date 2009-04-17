@@ -173,7 +173,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	/* can we use the dcache? */
 	spin_lock(&inode->i_lock);
 	if ((filp->f_pos == 2 || fi->dentry) &&
-	    !(client->mount_args.flags & CEPH_MOUNT_NOASYNCREADDIR) &&
+	    !ceph_test_opt(client, NOASYNCREADDIR) &&
 	    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
 	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
 		err = __dcache_readdir(filp, dirent, filldir);
@@ -921,7 +921,7 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int left;
 
-	if (!(ceph_client(inode->i_sb)->mount_args.flags & CEPH_MOUNT_DIRSTAT))
+	if (!ceph_test_opt(ceph_client(inode->i_sb), DIRSTAT))
 		return -EISDIR;
 
 	if (!cf->dir_info) {
