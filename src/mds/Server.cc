@@ -1848,7 +1848,6 @@ void Server::handle_client_open(MDRequest *mdr)
       dout(12) << "open issued caps " << ccap_string(cap->pending())
 	       << " for " << req->get_orig_source()
 	       << " on " << *cur << dendl;
-      mdr->cap = cap;
     } else {
       int caps = ceph_caps_for_mode(cmode);
       dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
@@ -1973,12 +1972,9 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, in);
 
   // do the open
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
+  mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
   in->authlock.set_state(LOCK_EXCL);
   in->xattrlock.set_state(LOCK_EXCL);
-
-  // stick cap, snapbl info in mdr
-  mdr->cap = cap;
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(in->ino());
@@ -2313,9 +2309,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   
   // do the open
   SnapRealm *realm = in->find_snaprealm();
-  Capability *cap = mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
-
-  mdr->cap = cap;
+  mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
 
   // make sure ino gets into the journal
   le->metablob.add_opened_ino(in->ino());
