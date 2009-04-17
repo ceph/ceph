@@ -268,6 +268,7 @@ struct ceph_inode_xattrs_info {
  */
 #define CEPH_I_COMPLETE  1  /* we have complete directory cached */
 #define CEPH_I_READDIR   2  /* no dentries trimmed since readdir start */
+#define CEPH_I_NODELAY   4  /* do not delay flush caps */
 
 struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */

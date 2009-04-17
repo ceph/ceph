@@ -334,6 +334,26 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
+ * Set cap hold timeouts, unless already I_NODELAY.
+ */
+static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
+			       struct ceph_inode_info *ci)
+{
+	struct ceph_mount_args *ma = &mdsc->client->mount_args;
+
+	if (ci->i_ceph_flags & CEPH_I_NODELAY) {
+		dout(10, "__cap_set_timeouts %p I_NODELAY\n", &ci->vfs_inode);
+		return;
+	}
+
+	ci->i_hold_caps_min = round_jiffies(jiffies +
+					    ma->caps_wanted_delay_min * HZ);
+	ci->i_hold_caps_max = round_jiffies(jiffies +
+					    ma->caps_wanted_delay_max * HZ);
+	dout(10, "__cap_set_timeouts %p min %lu max %lu\n", &ci->vfs_inode,
+	     ci->i_hold_caps_min - jiffies, ci->i_hold_caps_max - jiffies);
+}
+/*
  * (Re)queue cap at the end of the delayed cap release list.  If
  * an inode was queued but with i_hold_caps_max=0, meaning it was
  * queued for immediate flush, don't reset the timeouts.
@@ -344,25 +364,15 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 				struct ceph_inode_info *ci)
 {
-	struct ceph_mount_args *ma = &mdsc->client->mount_args;
-
 	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
 	     ci->i_hold_caps_max);
 	if (!mdsc->stopping) {
 		spin_lock(&mdsc->cap_delay_lock);
 		if (!list_empty(&ci->i_cap_delay_list)) {
-			if (!ci->i_hold_caps_max)
+			if (ci->i_ceph_flags & CEPH_I_NODELAY)
 				goto no_change;
 			list_del_init(&ci->i_cap_delay_list);
 		}
-		ci->i_hold_caps_min = round_jiffies(jiffies +
-					    ma->caps_wanted_delay_min * HZ);
-		if (!ci->i_hold_caps_min)
-			ci->i_hold_caps_min = 1;
-		ci->i_hold_caps_max = round_jiffies(jiffies +
-					    ma->caps_wanted_delay_max * HZ);
-		if (!ci->i_hold_caps_max)
-			ci->i_hold_caps_max = 1;
 		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
 	no_change:
 		spin_unlock(&mdsc->cap_delay_lock);
@@ -377,7 +387,7 @@ static void __cap_delay_requeue_front(struct ceph_mds_client *mdsc,
 {
 	dout(10, "__cap_delay_requeue_front %p\n", &ci->vfs_inode);
 	spin_lock(&mdsc->cap_delay_lock);
-	ci->i_hold_caps_max = 0;
+	ci->i_ceph_flags |= CEPH_I_NODELAY;
 	if (!list_empty(&ci->i_cap_delay_list))
 		list_del_init(&ci->i_cap_delay_list);
 	list_add(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
@@ -508,6 +518,7 @@ retry:
 	if (wanted & ~actual_wanted) {
 		dout(10, " mds wanted %s, actual wanted %s, queueing\n",
 		     ceph_cap_string(wanted), ceph_cap_string(actual_wanted));
+		__cap_set_timeouts(mdsc, ci);
 		__cap_delay_requeue(mdsc, ci);
 	}
 
@@ -854,7 +865,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	BUG_ON((retain & CEPH_CAP_PIN) == 0);
 
 	/* don't release wanted unless we've waited a bit. */
-	if (ci->i_hold_caps_min &&
+	if ((ci->i_ceph_flags & CEPH_I_NODELAY) == 0 &&
 	    time_before(jiffies, ci->i_hold_caps_min)) {
 		dout(20, " delaying issued %s -> %s, wanted %s -> %s on send\n",
 		     ceph_cap_string(cap->issued),
@@ -864,6 +875,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		want |= cap->mds_wanted;
 		retain |= cap->issued;
 	}
+	ci->i_ceph_flags &= ~CEPH_I_NODELAY;
 
 	cap->issued &= retain;  /* drop bits we don't want */
 	if (cap->implemented & ~cap->issued) {
@@ -1068,6 +1080,10 @@ void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 
 	spin_lock(&inode->i_lock);
 
+	/* reset cap timeouts? */
+	if (!is_delayed)
+		__cap_set_timeouts(mdsc, ci);
+
 	/* flush snaps first time around only */
 	if (!list_empty(&ci->i_cap_snaps))
 		__ceph_flush_snaps(ci, &session);
@@ -1100,8 +1116,6 @@ retry_locked:
 	     ceph_cap_string(retain),
 	     ceph_cap_string(__ceph_caps_issued(ci, NULL)),
 	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY":"");
-	dout(20, " hold for min %ld max %ld\n", 
-	     ci->i_hold_caps_min - jiffies, ci->i_hold_caps_max - jiffies);
 
 	/*
 	 * If we no longer need to hold onto old our caps, and we may
@@ -1129,6 +1143,7 @@ retry_locked:
 			/* we failed to invalidate pages.  check these
 			   caps again later. */
 			force_requeue = 1;
+			__cap_set_timeouts(mdsc, ci);
 		}
 		tried_invalidate = 1;
 		goto retry_locked;
@@ -1186,7 +1201,7 @@ retry_locked:
 			goto ack;
 
 		/* delay? */
-		if (ci->i_hold_caps_max &&
+		if ((ci->i_ceph_flags & CEPH_I_NODELAY) == 0 &&
 		    time_before(jiffies, ci->i_hold_caps_max)) {
 			dout(30, " delaying issued %s -> %s, wanted %s -> %s\n",
 			     ceph_cap_string(cap->issued),
@@ -2214,7 +2229,7 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		ci = list_first_entry(&mdsc->cap_delay_list,
 				      struct ceph_inode_info,
 				      i_cap_delay_list);
-		if (ci->i_hold_caps_max &&
+		if ((ci->i_ceph_flags & CEPH_I_NODELAY) == 0 &&
 		    time_before(jiffies, ci->i_hold_caps_max))
 			break;
 		list_del_init(&ci->i_cap_delay_list);
