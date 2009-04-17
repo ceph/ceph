@@ -1493,8 +1493,29 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
 	     << " -> " << ccap_string(wanted)
 	     << " (issue_seq " << issue_seq << " != last_issue "
 	     << cap->get_last_issue() << ")" << dendl;
+    return;
   }
+
+  CInode *cur = cap->get_inode();
+  if (cap->wanted() == 0) {
+    if (cur->xlist_open_file.is_on_xlist() &&
+	cur->get_caps_wanted() == 0) {
+      dout(10) << " removing from open file list " << *cur << dendl;
+      cur->xlist_open_file.remove_myself();
+    }
+  } else {
+    if (!cur->xlist_open_file.is_on_xlist()) {
+      dout(10) << " adding to open file list " << *cur << dendl;
+      LogSegment *ls = mds->mdlog->get_current_segment();
+      EOpen *le = new EOpen(mds->mdlog);
+      le->add_clean_inode(cur);
+      ls->open_files.push_back(&cur->xlist_open_file);
+      mds->mdlog->submit_entry(le);
+    }
+  }
+
 }
+
 
 /*
  * note: we only get these from the client if
