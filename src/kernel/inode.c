@@ -2219,13 +2219,13 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		goto out;
 
 	spin_lock(&inode->i_lock);
-	required_blob_size = __get_required_blob_size(ci, name_len, val_len);
 retry:
+	__build_xattrs(inode);
 	issued = __ceph_caps_issued(ci, NULL);
 	if (!(issued & CEPH_CAP_XATTR_EXCL))
 		goto do_sync;
 
-	__build_xattrs(inode);
+	required_blob_size = __get_required_blob_size(ci, name_len, val_len);
 
 	if (required_blob_size > ci->i_xattrs.prealloc_size) {
 		int prealloc_len = required_blob_size;
@@ -2318,13 +2318,13 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 		return -EOPNOTSUPP;
 
 	spin_lock(&inode->i_lock);
+	__build_xattrs(inode);
 	issued = __ceph_caps_issued(ci, NULL);
 	dout(10, "removexattr %p issued %s\n", inode, ceph_cap_string(issued));
 
 	if (!(issued & CEPH_CAP_XATTR_EXCL))
 		goto do_sync;
 
-	__build_xattrs(inode);
 	err = __remove_xattr_by_name(ceph_inode(inode), name);
 	was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
 	ci->i_xattrs.dirty = 1;
