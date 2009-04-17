@@ -133,7 +133,8 @@ ostream& operator<<(ostream& out, CInode& in)
   }
   out << " " << in.filelock;
   out << " " << in.xattrlock;
-  
+  out << " " << in.versionlock;
+
   // hack: spit out crap on which clients have caps
   if (!in.get_client_caps().empty()) {
     out << " caps={";

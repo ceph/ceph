@@ -2941,6 +2941,7 @@ void Locker::local_wrlock_grab(LocalLock *lock, Mutation *mut)
 	  << " on " << *lock->get_parent() << dendl;  
   
   assert(lock->can_wrlock());
+  assert(!mut->wrlocks.count(lock));
   lock->get_wrlock();
   mut->wrlocks.insert(lock);
   mut->locks.insert(lock);
@@ -2952,6 +2953,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequest *mut)
 	  << " on " << *lock->get_parent() << dendl;  
   
   if (lock->can_wrlock()) {
+    assert(!mut->wrlocks.count(lock));
     lock->get_wrlock();
     mut->wrlocks.insert(lock);
     mut->locks.insert(lock);

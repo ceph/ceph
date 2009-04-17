@@ -100,15 +100,18 @@ struct Mutation {
   Mutation() : 
     ls(0),
     slave_to_mds(-1),
-    done_locking(false), committing(false), aborted(false) {}
+    done_locking(false), committing(false), aborted(false) { }
   Mutation(metareqid_t ri, int slave_to=-1) : 
     reqid(ri),
     ls(0),
     slave_to_mds(slave_to), 
-    done_locking(false), committing(false), aborted(false) {}
+    done_locking(false), committing(false), aborted(false) { }
   virtual ~Mutation() {
     assert(pins.empty());
     assert(auth_pins.empty());
+    assert(xlocks.empty());
+    assert(rdlocks.empty());
+    assert(wrlocks.empty());
   }
 
   bool is_master() { return slave_to_mds < 0; }

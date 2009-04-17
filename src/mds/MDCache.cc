@@ -1769,7 +1769,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       mut->add_updated_lock(&pin->nestlock);
       break;
     }
-    mds->locker->local_wrlock_grab(&pin->versionlock, mut);
+    if (!mut->wrlocks.count(&pin->versionlock))
+      mds->locker->local_wrlock_grab(&pin->versionlock, mut);
 
     assert(mut->wrlocks.count(&pin->nestlock) ||
 	   mut->is_slave());

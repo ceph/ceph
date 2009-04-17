@@ -1091,8 +1091,7 @@ protected:
       int c = 1;
       do {
 	it++;
-	if (it == ref_set.end()) break;
-      } while (*it == last);
+      } while (it != ref_set.end() && *it == last);
       if (c > 1)
 	out << "*" << c;
     }
