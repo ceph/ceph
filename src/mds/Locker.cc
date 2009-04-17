@@ -1595,7 +1595,6 @@ void Locker::handle_client_caps(MClientCaps *m)
       dout(7) << " ignoring client capid " << m->get_cap_id() << " != my " << cap->get_cap_id() << dendl;
     } else {
       // filter wanted based on what we could ever give out (given auth/replica status)
-      int wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
       cap->confirm_receipt(m->get_seq(), m->get_caps());
       dout(10) << " follows " << follows
 	       << " retains " << ccap_string(m->get_caps())
@@ -1610,19 +1609,20 @@ void Locker::handle_client_caps(MClientCaps *m)
 	ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
 			      m->get_caps(), 0, m->get_dirty(), 0);
       }
-      if (wanted != cap->wanted()) {
-        if (wanted & ~cap->wanted()) {
+      int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
+      if (new_wanted != cap->wanted()) {
+        if (new_wanted & ~cap->wanted()) {
           // exapnding caps.  make sure we aren't waiting for a log flush
           if (!in->filelock.is_stable())
             mds->mdlog->flush();
         }
 
-	adjust_cap_wanted(cap, wanted, m->get_issue_seq());
+	adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
       }
       if (m->get_op() == CEPH_CAP_OP_DROP)
 	can_issue = false;
       
-      if (_do_cap_update(in, cap, m->get_dirty(), m->get_wanted(), follows, m, ack)) {
+      if (_do_cap_update(in, cap, m->get_dirty(), cap->wanted(), follows, m, ack)) {
 	// updated, cap msg is delayed
 	cap->inc_suppress();
 	eval_caps(in);
