@@ -2111,11 +2111,12 @@ out:
 	return err;
 }
 
-static int ceph_send_setxattr(struct dentry *dentry, const char *name,
+static int ceph_sync_setxattr(struct dentry *dentry, const char *name,
 			      const char *value, size_t size, int flags)
 {
 	struct ceph_client *client = ceph_client(dentry->d_sb);
 	struct inode *inode = dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct inode *parent_inode = dentry->d_parent->d_inode;
 	struct ceph_mds_request *req;
 	struct ceph_mds_client *mdsc = &client->mdsc;
@@ -2160,10 +2161,10 @@ static int ceph_send_setxattr(struct dentry *dentry, const char *name,
 	req->r_num_pages = nr_pages;
 	req->r_data_len = size;
 
-	dout(30, "xattr.ver (before): %lld\n", ceph_inode(inode)->i_xattrs.version);
+	dout(30, "xattr.ver (before): %lld\n", ci->i_xattrs.version);
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);
-	dout(30, "xattr.ver (after): %lld\n", ceph_inode(inode)->i_xattrs.version);
+	dout(30, "xattr.ver (after): %lld\n", ci->i_xattrs.version);
 
 out:
 	if (pages) {
@@ -2179,15 +2180,14 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 {
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int err = 0;
+	int err;
 	int name_len = strlen(name);
 	int val_len = size;
 	char *newname = NULL;
 	char *newval = NULL;
+	struct ceph_inode_xattr *xattr = NULL;
 	int issued;
-	int dirtied = 0;
-	struct ceph_inode_xattr *xattr;
-	int required_blob_size, cur_blob_size;
+	int required_blob_size;
 	void *prealloc_blob = NULL;
 	int was_dirty;
 
@@ -2205,14 +2205,12 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	newname = kmalloc(name_len + 1, GFP_NOFS);
 	if (!newname)
 		goto out;
-
 	memcpy(newname, name, name_len + 1);
 
 	if (val_len) {
 		newval = kmalloc(val_len + 1, GFP_NOFS);
 		if (!newval)
 			goto out;
-
 		memcpy(newval, value, val_len);
 		newval[val_len] = '\0';
 	}
@@ -2223,77 +2221,57 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 
 	spin_lock(&inode->i_lock);
 	required_blob_size = __get_required_blob_size(ci, name_len, val_len);
-alloc_buf:
+retry:
 	issued = __ceph_caps_issued(ci, NULL);
-
-	if (!(issued & CEPH_CAP_XATTR_EXCL)) {
-		spin_unlock(&inode->i_lock);
+	if (!(issued & CEPH_CAP_XATTR_EXCL))
 		goto do_sync;
-	}
+
 	__build_xattrs(inode);
 
 	if (required_blob_size > ci->i_xattrs.prealloc_size) {
-		void *old_buf;
+		int prealloc_len = required_blob_size;
 
 		spin_unlock(&inode->i_lock);
-
-		dout(30, "setxattr required_blob_size=%d\n", required_blob_size);
-		prealloc_blob = kmalloc(required_blob_size, GFP_NOFS);
+		dout(30, " required_blob_size=%d\n", required_blob_size);
+		prealloc_blob = kmalloc(prealloc_len, GFP_NOFS);
 		if (!prealloc_blob)
 			goto out;
-
 		spin_lock(&inode->i_lock);
-		dout(30, "setxattr newname=%s\n", newname);
-		cur_blob_size = __get_required_blob_size(ci, name_len, val_len);
 
-		old_buf = ci->i_xattrs.prealloc_blob;
-
-		if (required_blob_size < cur_blob_size) {
+		required_blob_size = __get_required_blob_size(ci, name_len,
+							      val_len);
+		if (prealloc_len < required_blob_size) {
 			/* lost a race and preallocated buffer is too small */
 			kfree(prealloc_blob);
-			required_blob_size = cur_blob_size;
-			goto alloc_buf;
+		} else {
+			kfree(ci->i_xattrs.prealloc_blob);
+			ci->i_xattrs.prealloc_blob = prealloc_blob;
+			ci->i_xattrs.prealloc_size = prealloc_len;
 		}
-		ci->i_xattrs.prealloc_blob = prealloc_blob;
-		ci->i_xattrs.prealloc_size = required_blob_size;
-		if (old_buf)
-			kfree(old_buf);
-
-		/* we might have lost a race, lets reread it */
-		issued = __ceph_caps_issued(ci, NULL);
-
-		/* will do nothing if we're still on the same version */
-		__build_xattrs(inode);
+		goto retry;
 	}
 
 	dout(20, "setxattr %p issued %s\n", inode, ceph_cap_string(issued));
-
 	err = __set_xattr(ci, newname, name_len, newval,
-			    val_len, 1, 1, 1, &xattr);
-	dirtied |= CEPH_CAP_XATTR_EXCL;
-
+			  val_len, 1, 1, 1, &xattr);
+	was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
+	ci->i_xattrs.dirty = 1;
+	inode->i_ctime = CURRENT_TIME;
 	spin_unlock(&inode->i_lock);
 
-	was_dirty = __ceph_mark_dirty_caps(ci, dirtied);
 	if (!was_dirty) {
 		__mark_inode_dirty(inode, I_DIRTY_SYNC);
 		igrab(inode);
 	}
-	ci->i_xattrs.dirty = 1;
-	inode->i_ctime = CURRENT_TIME;
-
 	return err;
+
 do_sync:
-	err = ceph_send_setxattr(dentry, name, value, size, flags);
-
-	return err;
+	spin_unlock(&inode->i_lock);
+	err = ceph_sync_setxattr(dentry, name, value, size, flags);
 out:
-	if (newname)
-		kfree(newname);
-	if (newval)
-		kfree(newval);
-	if (xattr)
-		kfree(xattr);
+	kfree(newname);
+	kfree(newval);
+	kfree(xattr);
 	return err;
 }
 
