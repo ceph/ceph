@@ -1584,13 +1584,6 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       }
     }
 
-    // if we're a directory, maybe bump filelock to loner?
-    if (inode.is_dir() &&
-	is_auth() &&
-	client == loner_cap &&
-	filelock.is_stable())
-      mdcache->mds->locker->file_eval(&filelock);
-
     if (cap && valid) {
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(client);

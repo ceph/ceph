@@ -85,9 +85,11 @@ public:
   void set_xlocks_done(Mutation *mut);
   void drop_rdlocks(Mutation *mut);
 
-  void eval_gather(SimpleLock *lock, bool first=false);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0);
+  void eval(SimpleLock *lock, bool *need_issue=0);
+
   void eval_cap_gather(CInode *in);
-  void eval(SimpleLock *lock);
+  bool eval_caps(CInode *in);
 
   bool _rdlock_kick(SimpleLock *lock);
   bool rdlock_try(SimpleLock *lock, int client, Context *c);
@@ -106,14 +108,14 @@ public:
   void try_simple_eval(SimpleLock *lock);
   bool simple_rdlock_try(SimpleLock *lock, Context *con);
 protected:
-  void simple_eval(SimpleLock *lock);
+  void simple_eval(SimpleLock *lock, bool *need_issue);
   void handle_simple_lock(SimpleLock *lock, MLock *m);
 
 public:
-  bool simple_sync(SimpleLock *lock);
+  bool simple_sync(SimpleLock *lock, bool *need_issue=0);
 protected:
-  void simple_lock(SimpleLock *lock);
-  void simple_excl(SimpleLock *lock);
+  void simple_lock(SimpleLock *lock, bool *need_issue=0);
+  void simple_excl(SimpleLock *lock, bool *need_issue=0);
   void simple_xlock(SimpleLock *lock);
 
 public:
@@ -124,7 +126,7 @@ public:
   // scatter
 public:
   void try_scatter_eval(ScatterLock *lock);
-  void scatter_eval(ScatterLock *lock);        // public for MDCache::adjust_subtree_auth()
+  void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
 
   void scatter_tick();
   void scatter_nudge(ScatterLock *lock, Context *c);
@@ -134,7 +136,7 @@ protected:
   void _scatter_replica_lock(ScatterLock *lock, int auth);
   bool scatter_scatter_fastpath(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock, bool nowait=false);
-  void scatter_tempsync(ScatterLock *lock);
+  void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);
 
   void scatter_writebehind(ScatterLock *lock);
   class C_Locker_ScatterWB : public Context {
@@ -178,11 +180,11 @@ protected:
   // file
 public:
   void try_file_eval(ScatterLock *lock);
-  void file_eval(ScatterLock *lock, bool can_issue=true);
+  void file_eval(ScatterLock *lock, bool *need_issue);
 protected:
   void handle_file_lock(ScatterLock *lock, MLock *m);
-  void file_mixed(ScatterLock *lock);
-  void file_excl(ScatterLock *lock);
+  void file_mixed(ScatterLock *lock, bool *need_issue=0);
+  void file_excl(ScatterLock *lock, bool *need_issue=0);
 
   xlist<ScatterLock*> updated_filelocks;
 public:
