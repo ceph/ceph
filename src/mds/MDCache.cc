@@ -5106,8 +5106,8 @@ void MDCache::check_memory_usage()
     return;
   }
 
-  int vmsize;
-  int vmrss;
+  int vmsize = 0;
+  int vmrss = 0;
 
   while (!f.eof()) {
     string line;
