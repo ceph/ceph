@@ -854,7 +854,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	gid_t gid;
 	int mds = cap->session->s_mds;
 	void *xattrs_blob = NULL;
-	int xattrs_blob_size;
+	int xattrs_blob_size = 0;
 	u64 xattr_version = 0;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
