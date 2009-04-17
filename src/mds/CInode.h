@@ -663,9 +663,9 @@ public:
   // caps allowed
   int get_caps_liked() {
     if (is_dir())
-      return CEPH_CAP_PIN | (CEPH_CAP_ANY_RDCACHE & ~CEPH_CAP_FILE_RD);
+      return CEPH_CAP_ANY & ~(CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR);
     else
-      return CEPH_CAP_PIN | CEPH_CAP_ANY_RDCACHE | CEPH_CAP_ANY_RD;
+      return CEPH_CAP_ANY;
   }
   int get_caps_allowed_ever() {
     return 
