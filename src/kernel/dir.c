@@ -83,9 +83,11 @@ more:
 		if (!d_unhashed(dentry) && dentry->d_inode &&
 		    filp->f_pos <= di->offset)
 			break;
-		dout(10, " skipping %p at %llu (%llu)\n", dentry, di->offset,
-			filp->f_pos);
-		p = p->next;
+		dout(10, " skipping %p %.*s at %llu (%llu)%s%s\n", dentry,
+		     dentry->d_name.len, dentry->d_name.name, di->offset,
+		     filp->f_pos, d_unhashed(dentry) ? " unhashed" : "",
+		     !dentry->d_inode ? " null" : "");
+		p = p->prev;
 		dentry = list_entry(p, struct dentry, d_u.d_child);
 		di = ceph_dentry(dentry);
 	}
@@ -132,7 +134,8 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct ceph_file_info *fi = filp->private_data;
 	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
+	struct ceph_client *client = ceph_inode_to_client(inode);
+	struct ceph_mds_client *mdsc = &client->mdsc;
 	unsigned frag = fpos_frag(filp->f_pos);
 	int off = fpos_off(filp->f_pos);
 	int skew;
@@ -170,6 +173,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	/* can we use the dcache? */
 	spin_lock(&inode->i_lock);
 	if ((filp->f_pos == 2 || fi->dentry) &&
+	    !(client->mount_args.flags & CEPH_MOUNT_NOASYNCREADDIR) &&
 	    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
 	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
 		err = __dcache_readdir(filp, dirent, filldir);
