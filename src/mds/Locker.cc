@@ -2884,54 +2884,51 @@ void Locker::scatter_tick()
 
 void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
 {
-
-#warning rewrite scatter_tempsync
-
   dout(10) << "scatter_tempsync " << *lock
 	   << " on " << *lock->get_parent() << dendl;
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
+  CInode *in = (CInode *)lock->get_parent();
+
   switch (lock->get_state()) {
-  case LOCK_SYNC:
-    assert(0);   // this shouldn't happen
-
-  case LOCK_LOCK:
-    if (lock->is_wrlocked() ||
-	lock->is_xlocked()) {
-      lock->set_state(LOCK_LOCK_TSYN);
-      lock->get_parent()->auth_pin(lock);
-      return;
-    }
-    break; // do it.
-
-  case LOCK_MIX:
-    if (!lock->is_wrlocked() &&
-	!lock->get_parent()->is_replicated()) {
-      break; // do it.
-    }
-    
-    lock->set_state(LOCK_MIX_TSYN);
-    lock->get_parent()->auth_pin(lock);
-
-    if (lock->get_parent()->is_replicated()) {
-      lock->init_gather();
-      send_lock_message(lock, LOCK_AC_LOCK);
-    }
-
-    return;
-
-  case LOCK_TSYN:
-    return; // done
+  case LOCK_SYNC: assert(0);   // this shouldn't happen
+  case LOCK_LOCK: lock->set_state(LOCK_LOCK_TSYN); break;
+  case LOCK_MIX: lock->set_state(LOCK_MIX_TSYN); break;
+  default: assert(0);
   }
-  
-  // do tempsync
-  ((CInode *)lock->get_parent())->try_drop_loner();
 
-  lock->set_state(LOCK_TSYN);
-  lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+  int gather = 0;
+  if (lock->is_wrlocked())
+    gather++;
+  if (lock->is_xlocked())
+    gather++;
+
+  if (in->issued_caps_need_gather(lock)) {
+    if (need_issue)
+      *need_issue = true;
+    else
+      issue_caps(in);
+    gather++;
+  }
+
+  if (lock->get_state() == LOCK_MIX_TSYN &&
+      in->is_replicated()) {
+    lock->init_gather();
+    send_lock_message(lock, LOCK_AC_LOCK);
+    gather++;
+  }
+
+  if (gather) {
+    in->auth_pin(lock);
+  } else {
+    // do tempsync
+    in->try_drop_loner();
+    
+    lock->set_state(LOCK_TSYN);
+    lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+  }
 }
-
 
 
 
