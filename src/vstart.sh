@@ -12,6 +12,7 @@ start_mds=0
 start_osd=0
 localhost=0
 valgrind=0
+valgrind_mds=0
 MON_ADDR=""
 
 conf="ceph.conf"
@@ -41,6 +42,9 @@ case $1 in
 	    ;;
     --valgrind )
 	    valgrind=1
+	    ;;
+    --valgrind_mds )
+	    valgrind_mds=1
 	    ;;
     mon | cmon )
 	    start_mon=1
@@ -76,7 +80,7 @@ ARGS="-c $conf"
 run() {
     if [ "$valgrind" -eq 1 ]; then
 	echo "valgrind $* -f &"
-	valgrind $* -f &
+	valgrind --tool=massif $* -f &
 	sleep 1
     else
 	echo "$*"
@@ -226,6 +230,7 @@ if [ "$start_mds" -eq 1 ]; then
 EOF
 	fi
 	
+	valgrind="$valgrind_mds"
 	run $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
 	
 	mds=$(($mds + 1))
