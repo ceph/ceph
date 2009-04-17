@@ -128,7 +128,6 @@ class MClientCaps : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.snap_trace_len, snapbl, p);
-    cout << "decoding xattr size=" << head.xattr_len << std::endl;
     ::decode_nohead(head.xattr_len, xattrbl, p);
   }
   void encode_payload() {
