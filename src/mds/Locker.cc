@@ -1477,6 +1477,24 @@ void Locker::share_inode_max_size(CInode *in)
   }
 }
 
+void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
+{
+  if (ceph_seq_cmp(issue_seq, cap->get_last_issue()) == 0) {
+    dout(10) << " wanted " << ccap_string(cap->wanted())
+	     << " -> " << ccap_string(wanted) << dendl;
+    cap->set_wanted(wanted);
+  } else if (wanted & ~cap->wanted()) {
+    dout(10) << " wanted " << ccap_string(cap->wanted())
+	     << " -> " << ccap_string(wanted)
+	     << " (added caps even though we had seq mismatch!)" << dendl;
+    cap->set_wanted(wanted | cap->wanted());
+  } else {
+    dout(10) << " NOT changing wanted " << ccap_string(cap->wanted())
+	     << " -> " << ccap_string(wanted)
+	     << " (issue_seq " << issue_seq << " != last_issue "
+	     << cap->get_last_issue() << ")" << dendl;
+  }
+}
 
 /*
  * note: we only get these from the client if
@@ -1598,21 +1616,8 @@ void Locker::handle_client_caps(MClientCaps *m)
           if (!in->filelock.is_stable())
             mds->mdlog->flush();
         }
-	if (ceph_seq_cmp(m->get_issue_seq(), cap->get_last_issue()) == 0) {
-	  dout(10) << " wanted " << ccap_string(cap->wanted())
-		   << " -> " << ccap_string(wanted) << dendl;
-	  cap->set_wanted(wanted);
-	} else if (wanted & ~cap->wanted()) {
-	  dout(10) << " wanted " << ccap_string(cap->wanted())
-		   << " -> " << ccap_string(wanted)
-		   << " (added caps even though we had seq mismatch!)" << dendl;
-	  cap->set_wanted(wanted | cap->wanted());
-	} else {
-	  dout(10) << " NOT changing wanted " << ccap_string(cap->wanted())
-		   << " -> " << ccap_string(wanted)
-		   << " (issue_seq " << m->get_issue_seq() << " != last_issue "
-		   << cap->get_last_issue() << ")" << dendl;
-	}
+
+	adjust_cap_wanted(cap, wanted, m->get_issue_seq());
       }
       if (m->get_op() == CEPH_CAP_OP_DROP)
 	can_issue = false;
@@ -1650,7 +1655,8 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int seq, int mseq,
+void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int wanted,
+				int seq, int issue_seq, int mseq,
 				const nstring& dname)
 {
   CInode *in = mdcache->get_inode(ino);
@@ -1666,6 +1672,7 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
     }
     
     cap->confirm_receipt(seq, caps);
+    adjust_cap_wanted(cap, wanted, issue_seq);
 
     cap->inc_suppress();
     eval_caps(in);
@@ -1679,8 +1686,10 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
       CDentry *dn = dir->lookup(dname);
       MDSCacheObject *p = dn;
       ClientLease *l = p->get_client_lease(client);
-      if (l)
+      if (l) {
+	dout(10) << " removing lease on " << *dn << dendl;
 	p->remove_client_lease(l, l->mask, this);
+      }
     }
   }
 

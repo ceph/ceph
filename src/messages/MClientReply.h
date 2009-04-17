@@ -201,7 +201,7 @@ public:
   }
   const char *get_type_name() { return "creply"; }
   void print(ostream& o) {
-    o << "client_reply(" << header.dst.name << "." << head.tid;
+    o << "client_reply(" << header.dst.name << ":" << head.tid;
     o << " = " << get_result();
     if (get_result() <= 0)
       o << " " << strerror(-get_result());

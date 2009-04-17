@@ -832,10 +832,10 @@ void Server::handle_client_request(MClientRequest *req)
     int client = req->get_source().num();
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
-	 p++) {
-      mds->locker->process_cap_update(client, inodeno_t((__u64)p->item.ino), p->item.cap_id, p->item.caps,
-				      p->item.seq, p->item.mseq, p->dname);
-    }
+	 p++)
+      mds->locker->process_cap_update(client, inodeno_t((__u64)p->item.ino), p->item.cap_id,
+				      p->item.caps, p->item.wanted,
+				      p->item.seq, p->item.issue_seq, p->item.mseq, p->dname);
   }
 
   // register + dispatch

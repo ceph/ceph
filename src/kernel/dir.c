@@ -671,7 +671,7 @@ static int drop_caps_for_unlink(struct inode *inode)
 	spin_lock(&inode->i_lock);
 	if (inode->i_nlink == 1) {
 		drop |= ~(__ceph_caps_wanted(ci) | CEPH_CAP_PIN);
-		ci->i_hold_caps_min = 0;
+		ci->i_ceph_flags |= CEPH_I_NODELAY;
 	}
 	spin_unlock(&inode->i_lock);
 	return drop;

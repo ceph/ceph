@@ -2287,12 +2287,22 @@ int ceph_encode_inode_release(void **p, struct inode *inode,
 			     ceph_cap_string(cap->issued & ~drop));
 			cap->issued &= ~drop;
 			cap->implemented &= ~drop;
+			if (ci->i_ceph_flags & CEPH_I_NODELAY) {
+				int wanted = __ceph_caps_wanted(ci);
+				dout(10, "  wanted %s -> %s (actual %s)\n",
+				     ceph_cap_string(cap->mds_wanted),
+				     ceph_cap_string(cap->mds_wanted & ~wanted),
+				     ceph_cap_string(wanted));
+				cap->mds_wanted &= wanted;
+			}
 
 			rel->ino = cpu_to_le64(ceph_ino(inode));
 			rel->cap_id = cpu_to_le64(cap->cap_id);
 			rel->seq = cpu_to_le32(cap->seq);
+			rel->issue_seq = cpu_to_le32(cap->issue_seq),
 			rel->mseq = cpu_to_le32(cap->mseq);
 			rel->caps = cpu_to_le32(cap->issued);
+			rel->wanted = cpu_to_le32(cap->mds_wanted);
 			rel->dname_len = 0;
 			rel->dname_seq = 0;
 			*p += sizeof(*rel);

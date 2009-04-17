@@ -157,10 +157,11 @@ public:
 
 
   // caps
-  void process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int seq, int mseq,
+  void process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int wanted,
+			  int seq, int issue_seq, int mseq,
 			  const nstring& dname);
-
  protected:
+  void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
   bool _do_cap_update(CInode *in, Capability *cap, int had, int wanted, snapid_t follows, MClientCaps *m,
 		      MClientCaps *ack=0);

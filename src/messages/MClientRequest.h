@@ -168,7 +168,7 @@ public:
   const char *get_type_name() { return "creq"; }
   void print(ostream& out) {
     out << "client_request(" << get_orig_source() 
-	<< "." << get_tid() 
+	<< ":" << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
     //if (!get_filepath().empty()) 
     out << " " << get_filepath();
