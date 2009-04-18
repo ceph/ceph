@@ -72,3 +72,34 @@ int buffer::list::write_file(const char *fn)
   return 0;
 }
 
+void buffer::list::hexdump(std::ostream &out)
+{
+  out.setf(std::ios::right);
+  out.fill('0');
+  out << std::hex;
+
+  unsigned per = 16;
+
+  for (unsigned o=0; o<length(); o += per) {
+    out << std::setw(4) << o << " :";
+
+    unsigned i;
+    for (i=0; i<per && o+i<length(); i++) {
+      out << " " << std::setw(2) << ((unsigned)(*this)[o+i] & 0xff);
+    }
+    for (; i<per; i++)
+      out << "   ";
+    
+    out << " : ";
+    for (i=0; i<per && o+i<length(); i++) {
+      char c = (*this)[o+i];
+      if (isalnum(c))
+	out << c;
+      else
+	out << '.';
+    }
+    out << std::endl;
+  }
+  out << std::dec;
+  out.unsetf(std::ios::right);
+}

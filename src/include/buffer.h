@@ -978,21 +978,7 @@ public:
       last_p = begin();  // just in case we were in the removed region.
     };
 
-    void hexdump(std::ostream &out) {
-      out.setf(std::ios::right);
-      out.fill('0');
-      out << std::hex;
-      for (unsigned i=0; i<length(); i++) {
-	if (i % 16 == 0) {
-	  if (i) out << std::endl;
-	  out << std::setw(4) << i << " :";
-	}
-	out << " " << std::setw(2) << ((unsigned)(*this)[i] & 0xff);
-      }
-      out << std::dec << std::endl;
-      out.unsetf(std::ios::right);
-    }
-
+    void hexdump(std::ostream &out);
     int read_file(const char *fn);
     int write_file(const char *fn);
     __u32 crc32c(__u32 crc) {
