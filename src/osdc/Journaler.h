@@ -70,7 +70,8 @@ public:
     __s64 write_pos;
     nstring magic;
 
-    Header() : trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0) {}
+    Header(const char *m=0) : trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0),
+			      magic(m) {}
 
     void encode(bufferlist &bl) const {
       ::encode(magic, bl);
@@ -195,6 +196,7 @@ public:
 
 public:
   Journaler(inodeno_t ino_, ceph_file_layout *layout_, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
+    last_written(mag), last_committed(mag),
     ino(ino_), layout(*layout_), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     lock(lk), timer(*lk), delay_flush_event(0),
