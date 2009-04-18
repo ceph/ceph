@@ -572,6 +572,7 @@ private:
       in->encode_snap_blob(snapbl);
 
     nstring empty;
+    delete root;
     root = new fullbit(empty,
 		       in->first, in->last,
 		       0,
