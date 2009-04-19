@@ -969,9 +969,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
 
   mut->apply();
   
-  if (cap)
-    cap->updating--;
-
   if (ack)
     mds->send_message_client(ack, client);
 
@@ -1887,8 +1884,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut, &le->metablob, in, follows);
 
-  cap->updating++;
-  
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_FileUpdate_finish(this, in, mut, change_max, 
 							   client, cap, ack));

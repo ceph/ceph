@@ -172,8 +172,6 @@ private:
   bool stale;
 
 public:
-  int updating;   // do not release or expire until all updates commit
-
   snapid_t client_follows;
   version_t client_xattr_version;
   
@@ -188,7 +186,7 @@ public:
     _pending(0), _issued(0), _num_revoke(0),
     last_sent(0),
     mseq(0),
-    suppress(0), stale(false), updating(0),
+    suppress(0), stale(false),
     client_follows(0), client_xattr_version(0),
     session_caps_item(this), snaprealm_caps_item(this) { }
   
@@ -219,10 +217,6 @@ public:
   void set_wanted(int w) {
     _wanted = w;
     //check_rdcaps_list();
-  }
-
-  bool can_expire() {
-    return updating == 0;
   }
 
   ceph_seq_t get_last_seq() { return last_sent; }
