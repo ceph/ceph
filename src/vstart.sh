@@ -11,8 +11,6 @@ start_mon=0
 start_mds=0
 start_osd=0
 localhost=0
-valgrind=0
-valgrind_mds=0
 MON_ADDR=""
 
 conf="ceph.conf"
@@ -21,7 +19,7 @@ usage="usage: $0 [option]... [mon] [mds] [osd]\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-n, --new\n"
-usage=$usage"\t--valgrind\n"
+usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 
 usage_exit() {
@@ -41,10 +39,24 @@ case $1 in
 	    new=1
 	    ;;
     --valgrind )
-	    valgrind=1
+	    [ "$2" = "" ] && usage_exit
+	    valgrind=$2
+	    shift
 	    ;;
     --valgrind_mds )
-	    valgrind_mds=1
+	    [ "$2" = "" ] && usage_exit
+	    valgrind_mds=$2
+	    shift
+	    ;;
+    --valgrind_osd )
+	    [ "$2" = "" ] && usage_exit
+	    valgrind_osd=$2
+	    shift
+	    ;;
+    --valgrind_mon )
+	    [ "$2" = "" ] && usage_exit
+	    valgrind_mon=$2
+	    shift
 	    ;;
     mon | cmon )
 	    start_mon=1
@@ -78,9 +90,14 @@ fi
 ARGS="-c $conf"
 
 run() {
-    if [ "$valgrind" -eq 1 ]; then
-	echo "valgrind $* -f &"
-	valgrind --tool=massif $* -f &
+    type=$1
+    shift
+    eval "valg=\$valgrind_$type"
+    [ -z "$valg" ] && valg="$valgrind"
+
+    if [ -n "$valg" ]; then
+	echo "valgrind --tool=$valg $* -f &"
+	valgrind --tool=$valg $* -f &
 	sleep 1
     else
 	echo "$*"
@@ -96,7 +113,7 @@ else
 	echo "** going verbose **"
 	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
 	COSD_ARGS="--lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-	CMDS_ARGS="--lockdep 1 --mds_cache_size 500 --mds_log_max_segments 2 --debug_ms 1 --debug_mds 20" # --mds_thrash_fragments 0 --mds_thrash_exports 1"
+	CMDS_ARGS="--mds_log_max_segments 2 --debug_ms 1 --debug_mds 20" # --mds_thrash_fragments 0 --mds_thrash_exports 1"
 fi
 
 if [ "$MON_ADDR" != "" ]; then
@@ -195,7 +212,7 @@ EOF
 	# start monitors
 	if [ "$start_mon" -ne 0 ]; then
 		for f in `seq 0 $((CEPH_NUM_MON-1))`; do
-		    run $CEPH_BIN/cmon -i $f $ARGS $CMON_ARGS
+		    run 'mon' $CEPH_BIN/cmon -i $f $ARGS $CMON_ARGS
 		done
 		sleep 1
 	fi
@@ -215,7 +232,7 @@ EOF
 	    $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	fi
 	echo start osd$osd
-	run $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
+	run 'osd' $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
     done
 fi
 
@@ -230,8 +247,7 @@ if [ "$start_mds" -eq 1 ]; then
 EOF
 	fi
 	
-	valgrind="$valgrind_mds"
-	run $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
+	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
 	
 	mds=$(($mds + 1))
 	[ $mds -eq $CEPH_NUM_MDS ] && break
