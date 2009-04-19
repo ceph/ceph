@@ -98,7 +98,7 @@ int main(int argc, const char **argv)
   mds->mds_lock.Unlock();
 
   // done
-  //delete mds;
+  delete mds;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
