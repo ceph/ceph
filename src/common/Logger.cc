@@ -38,6 +38,13 @@ utime_t start;
 int last_flush; // in seconds since start
 
 static void flush_all_loggers();
+static void stop();
+
+static struct FlusherStopper {
+  ~FlusherStopper() {
+    stop();
+  }
+} stopper;
 
 class C_FlushLoggers : public Context {
 public:
@@ -102,6 +109,13 @@ static void flush_all_loggers()
   logger_timer.add_event_at(next, logger_event);
 }
 
+static void stop()
+{
+  logger_lock.Lock();
+  logger_timer.cancel_all();
+  logger_timer.join();
+  logger_lock.Unlock();
+}
 
 
 // ---------
