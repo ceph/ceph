@@ -272,7 +272,6 @@ public:
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
   xlist<CInode*>::item xlist_dirty_dirfrag_nest;
   xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
-  xlist<CInode*>::item xlist_purging_inode;
 
 private:
   // auth pin
@@ -314,7 +313,6 @@ private:
     xlist_dirty_dirfrag_dir(this), 
     xlist_dirty_dirfrag_nest(this), 
     xlist_dirty_dirfrag_dirfragtree(this), 
-    xlist_purging_inode(this),
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
     versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
