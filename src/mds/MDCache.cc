@@ -36,6 +36,7 @@
 #include "msg/Messenger.h"
 
 #include "common/Logger.h"
+#include "common/MemoryModel.h"
 
 #include "osdc/Filer.h"
 
@@ -5085,38 +5086,29 @@ void MDCache::trim_client_leases()
 
 void MDCache::check_memory_usage()
 {
-  ifstream f("/proc/self/status");
-  if (!f.is_open()) {
-    dout(0) << "check_memory_usage unable to open /proc/self/status" << dendl;
-    return;
-  }
-
-  int vmsize = 0;
-  int vmrss = 0;
-
-  while (!f.eof()) {
-    string line;
-    getline(f, line);
-    
-    if (strncmp(line.c_str(), "VmSize:", 7) == 0)
-      vmsize = atoi(line.c_str() + 10);
-    else if (strncmp(line.c_str(), "VmRSS:", 6) == 0)
-      vmrss = atoi(line.c_str() + 10);
-  }
-  
+  static MemoryModel mm;
+  static MemoryModel::snap last;
+  mm.sample(&last);
+  static MemoryModel::snap baseline = last;
 
   // check client caps
   float caps_per_inode = (float)num_caps / (float)inode_map.size();
   //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
 
-  dout(10) << "check_memory_usage size " << vmsize << ", rss " << vmrss
+  dout(10) << "check_memory_usage"
+	   << " total " << last.get_total()
+	   << ", rss " << last.get_rss()
+	   << ", heap " << last.get_heap()
+	   << ", baseline " << baseline.get_heap()
+	   << ", buffers " << (buffer_total_alloc.test() >> 10)
 	   << ", max " << g_conf.mds_mem_max
 	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
 	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
 
-  if (vmsize > g_conf.mds_mem_max * .9) {
-    float ratio = (float)g_conf.mds_mem_max * .9 / (float)vmsize;
+  int size = last.get_total();
+  if (size > g_conf.mds_mem_max * .9) {
+    float ratio = (float)g_conf.mds_mem_max * .9 / (float)size;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);
   }

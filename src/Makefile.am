@@ -233,6 +233,7 @@ libcommon_files = \
 	common/dyn_snprintf.c \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
+	common/MemoryModel.cc \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
