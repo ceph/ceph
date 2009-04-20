@@ -152,7 +152,7 @@ public:
   std::map<__s64, std::list<Context*> > waitfor_safe; // when safe through given offset
   std::set<__s64> ack_barrier;
 
-  void _do_flush();
+  void _do_flush(unsigned amount=0);
   void _finish_flush(int r, __s64 start, utime_t stamp, bool safe);
   class C_Flush;
   friend class C_Flush;
