@@ -45,6 +45,7 @@ static unsigned fpos_off(loff_t p)
 static int __dcache_readdir(struct file *filp,
 			    void *dirent, filldir_t filldir)
 {
+	struct inode *inode = filp->f_dentry->d_inode;
 	struct ceph_file_info *fi = filp->private_data;
 	struct dentry *parent = filp->f_dentry;
 	struct inode *dir = parent->d_inode;
@@ -94,6 +95,7 @@ more:
 
 	atomic_inc(&dentry->d_count);
 	spin_unlock(&dcache_lock);
+	spin_unlock(&inode->i_lock);
 
 	if (last) {
 		dput(last);
@@ -112,6 +114,7 @@ more:
 	}
 
 	last = dentry;
+	spin_lock(&inode->i_lock);
 	spin_lock(&dcache_lock);
 	p = p->prev;
 	filp->f_pos++;
@@ -124,8 +127,11 @@ more:
 
 out_unlock:
 	spin_unlock(&dcache_lock);
-	if (last)
+	if (last) {
+		spin_unlock(&inode->i_lock);
 		dput(last);
+		spin_lock(&inode->i_lock);
+	}
 	return err;
 }
 
