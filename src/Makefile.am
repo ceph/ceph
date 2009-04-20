@@ -206,7 +206,6 @@ libcommon_files = \
 	common/Finisher.cc \
 	common/sctp_crc32.c\
 	common/assert.cc \
-	common/debug.cc \
 	common/dyn_snprintf.c \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
@@ -217,6 +216,7 @@ libcommon_files = \
 	common/tls.cc \
 	common/common_init.cc \
 	common/buffer.cc \
+	common/debug.cc \
 	config.cc \
 	common/lockdep.cc
 

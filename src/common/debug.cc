@@ -26,6 +26,7 @@ char _dout_symlink_path[1000] = {0};
 char *_dout_symlink_target = 0;   // _dout_path or _dout_file
 bool _dout_is_open = false;
 bool _dout_need_open = true;
+std::ofstream _dout_out;
 
 void _dout_open_log()
 {
@@ -71,15 +72,15 @@ void _dout_open_log()
   if (_dout && _dout_is_open)
     delete _dout;
 
-  std::ofstream *out = new std::ofstream(_dout_path, ios::trunc|ios::out);
-  if (!out->is_open()) {
+  _dout_out.close();
+  _dout_out.open(_dout_path, ios::trunc|ios::out);
+  if (!_dout_out.is_open()) {
     std::cerr << "error opening output file " << _dout_path << std::endl;
-    delete out;
     _dout = &std::cout;
   } else {
     _dout_need_open = false;
     _dout_is_open = true;
-    _dout = out;
+    _dout = &_dout_out;
     *_dout << g_clock.now() << " --- opened log " << _dout_path << " ---" << std::endl;
   }
   *_dout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
