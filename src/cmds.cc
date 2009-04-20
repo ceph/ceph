@@ -97,8 +97,10 @@ int main(int argc, const char **argv)
   mds->mds_lock.Lock();
   mds->mds_lock.Unlock();
 
-  // done
-  delete mds;
+  // only delete if it was a clean shutdown (to aid memory leak
+  // detection, etc.).  don't bother if it was a suicide.
+  if (mds->is_stopped())
+    delete mds;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];

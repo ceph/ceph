@@ -1056,8 +1056,13 @@ void MDS::stopping_done()
 
 void MDS::suicide()
 {
-  dout(1) << "suicide" << dendl;
-  state = MDSMap::STATE_STOPPED;  // well, maybe failed, but close enough.
+  if (want_state == MDSMap::STATE_STOPPED)
+    state = want_state;
+  else
+    state = CEPH_MDS_STATE_DNE; // whatever.
+
+  dout(1) << "suicide.  wanted " << ceph_mds_state_name(want_state)
+	  << ", now " << ceph_mds_state_name(state) << dendl;
 
   // stop timers
   if (beacon_killer) {
