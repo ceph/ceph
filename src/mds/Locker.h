@@ -68,6 +68,8 @@ private:
   void handle_lock(MLock *m);
 
 
+  void nudge_log(SimpleLock *lock);
+
 protected:
   void send_lock_message(SimpleLock *lock, int msg);
   void send_lock_message(SimpleLock *lock, int msg, const bufferlist &data);

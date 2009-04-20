@@ -674,12 +674,15 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
   // wait!
   dout(7) << "rdlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mut));
-
-  // make sure we aren't waiting on a cap flush
-  if (lock->get_parent()->is_auth() && lock->is_wrlocked())
-    mds->mdlog->flush();
-
+  nudge_log(lock);
   return false;
+}
+
+void Locker::nudge_log(SimpleLock *lock)
+{
+  dout(10) << "nudge_log " << *lock << " on " << *lock->get_parent() << dendl;
+  if (lock->get_parent()->is_auth() && !lock->is_stable())    // as with xlockdone, or cap flush
+    mds->mdlog->flush();
 }
 
 void Locker::rdlock_finish(SimpleLock *lock, Mutation *mut)
@@ -771,11 +774,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
   if (!nowait) {
     dout(7) << "wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
     lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
-  
-    // make sure we aren't waiting on a cap flush
-    if (lock->get_parent()->is_auth() && (lock->is_wrlocked() ||  // as with cap flush
-					  !lock->is_stable()))    // as with xlockdone
-      mds->mdlog->flush();
+    nudge_log(lock);
   }
     
   return false;
@@ -835,11 +834,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     }
     
     lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
-
-    if (lock->get_parent()->is_auth() && (lock->is_wrlocked() ||  // as with cap flush
-					  !lock->is_stable()))    // as with xlockdone
-      mds->mdlog->flush();
-
+    nudge_log(lock);
     return false;
   } else {
     // replica
@@ -1437,7 +1432,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
 
-  // make max_size increase timely
+  // make max_size _increase_ timely
   if (new_max)
     mds->mdlog->flush();
 
@@ -1631,7 +1626,9 @@ void Locker::handle_client_caps(MClientCaps *m)
       if (new_wanted != cap->wanted()) {
         if (new_wanted & ~cap->wanted()) {
           // exapnding caps.  make sure we aren't waiting for a log flush
-          if (!in->filelock.is_stable())
+          if (!in->filelock.is_stable() ||
+	      !in->authlock.is_stable() ||
+	      !in->xattrlock.is_stable())
             mds->mdlog->flush();
         }
 
@@ -1891,7 +1888,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
       ((dirty & CEPH_CAP_AUTH_EXCL) && !in->authlock.is_stable()) ||
       ((dirty & CEPH_CAP_XATTR_EXCL) && !in->xattrlock.is_stable()) ||
-      change_max ||
+      (change_max && new_max) ||         // max INCREASE
       (cap->wanted() & ~cap->pending()))
     mds->mdlog->flush();
 
