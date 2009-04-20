@@ -140,12 +140,14 @@ for name in $what; do
 	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
 	
+	do_cmd "test -d $osd_data || mkdir -p $osd_data"
+
 	if [ $mkbtrfs -eq 1 ]; then
-	    do_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
+	    do_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
 	fi
 
 	[ -n "$ssh" ] && scp $monmap $host:$monmap
-	do_cmd "test ! -d $osd_data && mkdir -p $osd_data ; $BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
+	do_cmd "$BINDIR/cosd -c $conf --monmap $monmap -i $num --mkfs --osd-data $osd_data"
     fi
 
     if [ "$type" = "mds" ]; then
