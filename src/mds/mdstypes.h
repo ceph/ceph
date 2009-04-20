@@ -1159,31 +1159,6 @@ protected:
 
 
   // ---------------------------------------------
-  // replicas (on clients)
- public:
-  hash_map<int,ClientLease*> client_lease_map;
-
-  bool is_any_leases() {
-    return !client_lease_map.empty();
-  }
-  ClientLease *get_client_lease(int c) {
-    if (client_lease_map.count(c))
-      return client_lease_map[c];
-    return 0;
-  }
-  int get_client_lease_mask(int c) {
-    ClientLease *l = get_client_lease(c);
-    if (l) 
-      return l->mask;
-    else
-      return 0;
-  }
-
-  ClientLease *add_client_lease(int c, int mask);
-  int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
-  
-
-  // ---------------------------------------------
   // waiting
  protected:
   multimap<__u64, Context*>  waiting;

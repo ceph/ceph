@@ -245,9 +245,9 @@ void Server::_session_logged(Session *session, bool open, version_t pv, deque<in
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
-      MDSCacheObject *p = r->parent;
-      dout(20) << " killing client lease of " << *p << dendl;
-      p->remove_client_lease(r, r->mask, mds->locker);
+      CDentry *dn = (CDentry*)r->parent;
+      dout(20) << " killing client lease of " << *dn << dendl;
+      dn->remove_client_lease(r, r->mask, mds->locker);
     }
     
     if (piv) {

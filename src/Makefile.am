@@ -243,7 +243,6 @@ libmds_a_SOURCES = \
 	mds/journal.cc \
 	mds/Server.cc \
 	mds/MDCache.cc \
-	mds/CacheObject.cc \
 	mds/Locker.cc \
 	mds/Migrator.cc \
 	mds/MDBalancer.cc \

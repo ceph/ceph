@@ -1299,21 +1299,6 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     //oldin->inode.max_size = 0;
   }
 
-  // clone leases?
-  if (in->last != CEPH_NOSNAP) {
-    // only if we are not the head, and our lease may cover an
-    // instance in either the old or new inodes valid interval.
-    for (hash_map<int,ClientLease*>::iterator p = in->client_lease_map.begin();
-	 p != in->client_lease_map.end();
-	 p++) {
-      dout(10) << " cloning client" << p->first << " lease on " << p->second->mask << " to cloned inode" << dendl;
-      ClientLease *l = oldin->add_client_lease(p->first, p->second->mask);
-      l->ttl = p->second->ttl;
-      p->second->session_lease_item.get_xlist()->push_back(&l->session_lease_item);
-      p->second->lease_item.get_xlist()->push_back(&l->lease_item);
-    }
-  }
-
   return oldin;
 }
 
@@ -5088,9 +5073,9 @@ void MDCache::trim_client_leases()
     while (!client_leases[pool].empty()) {
       ClientLease *r = client_leases[pool].front();
       if (r->ttl > now) break;
-      MDSCacheObject *p = r->parent;
-      dout(10) << " expiring client" << r->client << " lease of " << *p << dendl;
-      p->remove_client_lease(r, r->mask, mds->locker);
+      CDentry *dn = (CDentry*)r->parent;
+      dout(10) << " expiring client" << r->client << " lease of " << *dn << dendl;
+      dn->remove_client_lease(r, r->mask, mds->locker);
     }
     int after = client_leases[pool].size();
     dout(10) << "trim_client_leases pool " << pool << " trimmed "
@@ -6689,7 +6674,7 @@ void MDCache::eval_stray(CDentry *dn)
 	}
       }
     }
-    if (dn->is_replicated() || in->is_any_caps() || in->is_any_leases()) return;  // wait
+    if (dn->is_replicated() || dn->is_any_leases() || in->is_any_caps()) return;  // wait
     if (!in->dirfrags.empty()) return;  // wait for dirs to close/trim
     if (dn->state_test(CDentry::STATE_PURGING)) return;  // already purging
     if (in->state_test(CInode::STATE_NEEDSRECOVER) ||

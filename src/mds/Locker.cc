@@ -1231,7 +1231,7 @@ void Locker::remove_stale_leases(Session *session)
   dout(10) << "remove_stale_leases for " << session->inst.name << dendl;
   for (xlist<ClientLease*>::iterator p = session->leases.begin(); !p.end(); ++p) {
     ClientLease *l = *p;
-    MDSCacheObject *parent = l->parent;
+    CDentry *parent = (CDentry*)l->parent;
     dout(15) << " removing lease for " << l->mask << " on " << *parent << dendl;
     parent->remove_client_lease(l, l->mask, this);
   }
@@ -1702,11 +1702,10 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
     CDir *dir = in->get_dirfrag(fg);
     if (dir) {
       CDentry *dn = dir->lookup(dname);
-      MDSCacheObject *p = dn;
-      ClientLease *l = p->get_client_lease(client);
+      ClientLease *l = dn->get_client_lease(client);
       if (l) {
 	dout(10) << " removing lease on " << *dn << dendl;
-	p->remove_client_lease(l, l->mask, this);
+	dn->remove_client_lease(l, l->mask, this);
       }
     }
   }
@@ -1951,26 +1950,23 @@ void Locker::handle_client_lease(MClientLease *m)
     return;
   }
   CDentry *dn = 0;
-  MDSCacheObject *p;
-  if (m->get_mask() & CEPH_LOCK_DN) {
-    frag_t fg = in->pick_dirfrag(m->dname);
-    CDir *dir = in->get_dirfrag(fg);
-    if (dir) 
-      p = dn = dir->lookup(m->dname);
-    if (!dn) {
-      dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
-      delete m;
-      return;
-    }
-  } else {
-    p = in;
+  assert(m->get_mask() & CEPH_LOCK_DN);
+
+  frag_t fg = in->pick_dirfrag(m->dname);
+  CDir *dir = in->get_dirfrag(fg);
+  if (dir) 
+    dn = dir->lookup(m->dname);
+  if (!dn) {
+    dout(7) << "handle_client_lease don't have dn " << m->get_ino() << " " << m->dname << dendl;
+    delete m;
+    return;
   }
-  dout(10) << " on " << *p << dendl;
+  dout(10) << " on " << *dn << dendl;
 
   // replica and lock
-  ClientLease *l = p->get_client_lease(client);
+  ClientLease *l = dn->get_client_lease(client);
   if (!l) {
-    dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *p << dendl;
+    dout(7) << "handle_client_lease didn't have lease for client" << client << " of " << *dn << dendl;
     delete m;
     return;
   } 
@@ -1983,9 +1979,9 @@ void Locker::handle_client_lease(MClientLease *m)
     } else {
       dout(7) << "handle_client_lease client" << client
 	      << " release mask " << m->get_mask()
-	      << " on " << *p << dendl;
-      int left = p->remove_client_lease(l, l->mask, this);
-      dout(10) << " remaining mask is " << left << " on " << *p << dendl;
+	      << " on " << *dn << dendl;
+      int left = dn->remove_client_lease(l, l->mask, this);
+      dout(10) << " remaining mask is " << left << " on " << *dn << dendl;
     }
     delete m;
     break;
@@ -1994,7 +1990,7 @@ void Locker::handle_client_lease(MClientLease *m)
     {
       dout(7) << "handle_client_lease client" << client
 	      << " renew mask " << m->get_mask()
-	      << " on " << *p << dendl;
+	      << " on " << *dn << dendl;
       int pool = 1;   // fixme.. do something smart!
       m->h.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
       m->h.seq = ++l->seq;
@@ -2016,14 +2012,14 @@ void Locker::handle_client_lease(MClientLease *m)
 
 
 
-void Locker::_issue_client_lease(MDSCacheObject *p, int mask, int pool, int client,
+void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, int client,
 				 bufferlist &bl, utime_t now, Session *session)
 {
   LeaseStat e;
   e.mask = mask;
 
   if (mask) {
-    ClientLease *l = p->add_client_lease(client, mask);
+    ClientLease *l = dn->add_client_lease(client, mask);
     session->touch_lease(l);
 
     e.seq = ++l->seq;
@@ -2081,8 +2077,9 @@ int Locker::issue_client_lease(CDentry *dn, int client,
 void Locker::revoke_client_leases(SimpleLock *lock)
 {
   int n = 0;
-  for (hash_map<int, ClientLease*>::iterator p = lock->get_parent()->client_lease_map.begin();
-       p != lock->get_parent()->client_lease_map.end();
+  CDentry *dn = (CDentry*)lock->get_parent();
+  for (map<int, ClientLease*>::iterator p = dn->client_lease_map.begin();
+       p != dn->client_lease_map.end();
        p++) {
     ClientLease *l = p->second;
     
