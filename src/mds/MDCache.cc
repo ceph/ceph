@@ -549,6 +549,8 @@ void MDCache::populate_mydir()
   open = true;
   stray->get(CInode::PIN_STRAY);
   dout(20) << " stray is " << *stray << dendl;
+
+  mds->queue_waiters(waiting_for_open);
 }
 
 void MDCache::open_foreign_stray(int who, Context *c)
