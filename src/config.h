@@ -39,6 +39,8 @@ extern const char *get_pool_name(int pool);
 
 extern entity_addr_t g_my_addr;
 
+extern bool g_daemon;
+
 struct md_config_t {
   char *type;
   char *id;

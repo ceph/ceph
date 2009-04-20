@@ -7,6 +7,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
   tls_init();
   tls_get_val()->disable_assert = 0;
 
+  g_daemon = daemon;
   if (daemon) {
     cout << " ** WARNING: Ceph is still under heavy development, and is only suitable for **\n";
     cout << " **          testing and review.  Do not trust it with important data.       **" << std::endl;

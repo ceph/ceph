@@ -138,10 +138,10 @@ std::map<entity_name_t,float> g_fake_kill_after;
 entity_addr_t g_my_addr;
 
 md_config_t g_conf;
+bool g_daemon = false;
 
 #include <stdlib.h>
 #include <string.h>
-
 
 void env_to_vec(std::vector<const char*>& args) 
 {

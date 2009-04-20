@@ -409,7 +409,7 @@ int Rank::start(bool nodaemon)
     }
 
     _dout_rename_output_file();
-  } else {
+  } else if (g_daemon) {
     write_pid_file(getpid());
   }
 
