@@ -1452,11 +1452,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		dout(10, "setattr %p ATTR_FILE ... hrm!\n", inode);
 
 	if (dirtied) {
-		int was_dirty = __ceph_mark_dirty_caps(ci, dirtied);
-		if (!was_dirty) {
-			__mark_inode_dirty(inode,I_DIRTY_SYNC);
-			igrab(inode);
-		}
+		__ceph_mark_dirty_caps(ci, dirtied);
 		inode->i_ctime = CURRENT_TIME;
 	}
 
@@ -2188,7 +2184,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	int issued;
 	int required_blob_size;
 	void *prealloc_blob = NULL;
-	int was_dirty;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -2253,15 +2248,9 @@ retry:
 	dout(20, "setxattr %p issued %s\n", inode, ceph_cap_string(issued));
 	err = __set_xattr(ci, newname, name_len, newval,
 			  val_len, 1, 1, 1, &xattr);
-	was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
+	__ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
 	ci->i_xattrs.dirty = 1;
 	inode->i_ctime = CURRENT_TIME;
-
-	if (!was_dirty) {
-		__mark_inode_dirty(inode, I_DIRTY_SYNC);
-		igrab(inode);
-	}
-
 	spin_unlock(&inode->i_lock);
 
 	return err;
@@ -2304,7 +2293,6 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	struct inode *inode = dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int issued;
-	int was_dirty;
 	int err;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
@@ -2326,13 +2314,8 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 		goto do_sync;
 
 	err = __remove_xattr_by_name(ceph_inode(inode), name);
-	was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
+	__ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
 	ci->i_xattrs.dirty = 1;
-
-	if (!was_dirty) {
-		__mark_inode_dirty(inode, I_DIRTY_SYNC);
-		igrab(inode);
-	}
 	inode->i_ctime = CURRENT_TIME;
 
 	spin_unlock(&inode->i_lock);

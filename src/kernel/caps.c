@@ -1289,7 +1289,9 @@ ack:
 int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 {
 	struct ceph_mds_client *mdsc = &ceph_client(ci->vfs_inode.i_sb)->mdsc;
+	struct inode *inode = &ci->vfs_inode;
 	int was = __ceph_caps_dirty(ci);
+	int dirty = 0;
 
 	dout(20, "__mark_dirty_caps %p %s dirty %s -> %s\n", &ci->vfs_inode,
 	     ceph_cap_string(mask), ceph_cap_string(ci->i_dirty_caps),
@@ -1300,7 +1302,14 @@ int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 		spin_lock(&mdsc->cap_dirty_lock);
 		list_add(&ci->i_dirty_item, &mdsc->cap_dirty);
 		spin_unlock(&mdsc->cap_dirty_lock);
+		igrab(inode);
+		dirty |= I_DIRTY_SYNC;
 	}
+	if ((was & CEPH_CAP_FILE_WRBUFFER) &&
+	    (mask & CEPH_CAP_FILE_WRBUFFER))
+		dirty |= I_DIRTY_DATASYNC;
+	if (dirty)
+		__mark_inode_dirty(inode, dirty);
 	return was;
 }
 

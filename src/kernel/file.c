@@ -759,15 +759,9 @@ retry_snap:
 		}
 	}
 	if (ret >= 0) {
-		int was_dirty;
-
 		spin_lock(&inode->i_lock);
-		was_dirty = __ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_WR);
+		__ceph_mark_dirty_caps(ci, CEPH_CAP_FILE_WR);
 		spin_unlock(&inode->i_lock);
-		if (!was_dirty) {
-			__mark_inode_dirty(inode,I_DIRTY_SYNC|I_DIRTY_DATASYNC);
-			igrab(inode);
-		}
 	}
 
 out:
