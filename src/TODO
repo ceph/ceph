@@ -53,7 +53,6 @@ kclient caps
 
 - ENOSPC
 - flock
-
 - fully async file creation
 - cas?
 
@@ -136,6 +135,8 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- fix up *_RDCACHE vs FILE_RDCACHE semantics
+  - ability to read attribute value is distinct from being able to hold cached pages?
 - file recovery maybe needs to scan entire file range for a truncation event?  (and object attr maybe needs file offset, not object offset, or original truncation?)
 - on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
 - take some care with replayed client requests vs new requests
