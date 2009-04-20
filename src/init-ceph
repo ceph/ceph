@@ -200,7 +200,7 @@ for name in $what; do
 	    
 	killall)
 	    echo "killall c$type on $host"
-	    do_cmd "killall -9 c$type"
+	    do_cmd "killall -9 c$type || true"
 	    ;;
 	
 	force-reload | reload)
