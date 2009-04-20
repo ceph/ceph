@@ -591,7 +591,6 @@ void MDSMonitor::tick()
       // and is there a non-laggy standby that can take over for us?
       entity_addr_t sa;
       if (info.rank >= 0 &&
-	  info.state > 0 && //|| info.state == MDSMap::STATE_STANDBY_REPLAY) &&
 	  pending_mdsmap.find_standby_for(info.rank, info.name, sa)) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
 	dout(10) << " replacing " << addr << " mds" << info.rank << "." << info.inc

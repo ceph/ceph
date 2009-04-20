@@ -51,7 +51,7 @@
 #define dout_prefix _prefix(this)
 static ostream& _prefix(Monitor *mon) {
   return *_dout << dbeginl
-		<< " mon" << mon->whoami
+		<< "mon" << mon->whoami
 		<< (mon->is_starting() ?
 		    (const char*)"(starting)" : 
 		    (mon->is_leader() ?
