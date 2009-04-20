@@ -40,35 +40,35 @@ public:
 /*
  * crappy slow implementation that uses a pthreads mutex.
  */
-# include "common/Mutex.h"
+#include "common/Spinlock.h"
 
 class atomic_t {
-  Mutex lock;
+  Spinlock lock;
   long nref;
 public:
-  atomic_t(int i=0) : lock("atomic_t::lock", false, false /* no lockdep */), nref(i) {}
+  atomic_t(int i=0) : lock("atomic_t::lock", false /* no lockdep */), nref(i) {}
   atomic_t(const atomic_t& other);
   int inc() { 
-    lock.Lock();
+    lock.lock();
     int r = ++nref;
-    lock.Unlock();
+    lock.unlock();
     return r;
   }
   int dec() {
-    lock.Lock();
+    lock.lock();
     int r = --nref; 
-    lock.Unlock();
+    lock.unlock();
     return r;
   }
   void add(int d) {
-    lock.Lock();
+    lock.lock();
     nref += d;
-    lock.Unlock();
+    lock.unlock();
   }
   void sub(int d) {
-    lock.Lock();
+    lock.lock();
     nref -= d;
-    lock.Unlock();
+    lock.unlock();
   }
   int test() const {
     return nref;
