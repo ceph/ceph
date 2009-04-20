@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <fstream>
 
+atomic_t buffer_total_alloc;
 
 int buffer::list::read_file(const char *fn)
 {

@@ -200,7 +200,6 @@ libcommon_files = \
 	auth/ExportControl.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
-	common/buffer.cc \
 	common/Logger.cc \
 	common/Clock.cc \
 	common/Timer.cc \
@@ -217,6 +216,7 @@ libcommon_files = \
 	mds/MDSMap.cc \
 	common/tls.cc \
 	common/common_init.cc \
+	common/buffer.cc \
 	config.cc \
 	common/lockdep.cc
 

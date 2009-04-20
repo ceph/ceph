@@ -30,9 +30,7 @@
 #include "include/tstring.h"
 stringtable g_stab;
 
-// hack hack hack ugly FIXME
 #include "include/atomic.h"
-atomic_t buffer_total_alloc;
 
 #include "osd/osd_types.h"
 

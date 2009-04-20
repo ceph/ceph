@@ -54,11 +54,7 @@ using std::string;
 #include "crc32c.h"
 #include "assert.h"
 
-// <hack>
-//  these are in config.o
 extern atomic_t buffer_total_alloc;
-// </hack>
-
 
 class buffer {
 private:
