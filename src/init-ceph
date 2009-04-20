@@ -213,15 +213,17 @@ for name in $what; do
 	    ;;
 
 	cleanlogs)
+	    echo removing logs
 	    get_conf log_dir "/var/log/ceph" "log dir"
 	    get_conf log_sym_dir "/var/log/ceph" "log sym dir"
 	    do_cmd "for f in $log_sym_dir/$name*; do rm -f \`readlink \$f\` ; rm -f \$f ; done"
 	    ;;
 
 	cleanalllogs)
+	    echo removing all logs
 	    get_conf log_dir "/var/log/ceph" "log dir"
 	    get_conf log_sym_dir "/var/log/ceph" "log sym dir"
-	    do_cmd "rm -f $log_dir/* $log_sym_dir/*"
+	    do_cmd "rm -f $log_dir/* $log_sym_dir/* || true"
 	    ;;
 
 	*)

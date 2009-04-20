@@ -183,7 +183,7 @@ public:
     if (!get_filepath2().empty())
       out << " " << get_filepath2();
     if (head.num_retry)
-      out << " RETRY=" << head.num_retry;
+      out << " RETRY=" << (int)head.num_retry;
     out << ")";
   }
 
