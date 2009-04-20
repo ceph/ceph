@@ -918,7 +918,9 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 			     req->r_old_dentry->d_name.len,
 			     req->r_old_dentry->d_name.name,
 			     dn, dn->d_name.len, dn->d_name.name);
-			//dput(dn);  /* dn is dropped */
+			/* take overwritten dentry's readdir offset */
+			ceph_dentry(req->r_old_dentry)->offset =
+				ceph_dentry(dn)->offset;
 			dn = req->r_old_dentry;  /* use old_dentry */
 			in = dn->d_inode;
 		}
