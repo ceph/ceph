@@ -1164,8 +1164,19 @@ protected:
   multimap<__u64, Context*>  waiting;
 
  public:
-  bool is_waiter_for(__u64 mask) {
-    return waiting.count(mask) > 0;    // FIXME: not quite right.
+  bool is_waiter_for(__u64 mask, __u64 min=0) {
+    if (!min) {
+      min = mask;
+      while (min & (min-1))  // if more than one bit is set
+	min &= min-1;        //  clear LSB
+    }
+    for (multimap<__u64,Context*>::iterator p = waiting.lower_bound(min);
+	 p != waiting.end();
+	 p++) {
+      if (p->first & mask) return true;
+      if (p->first > mask) return false;
+    }
+    return false;
   }
   virtual void add_waiter(__u64 mask, Context *c) {
     if (waiting.empty())
