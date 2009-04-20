@@ -5095,10 +5095,11 @@ void MDCache::check_memory_usage()
   float caps_per_inode = (float)num_caps / (float)inode_map.size();
   //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
 
-  dout(10) << "check_memory_usage"
+  dout(0) << "check_memory_usage"
 	   << " total " << last.get_total()
 	   << ", rss " << last.get_rss()
 	   << ", heap " << last.get_heap()
+	   << ", malloc " << last.malloc << " mmap " << last.mmap
 	   << ", baseline " << baseline.get_heap()
 	   << ", buffers " << (buffer_total_alloc.test() >> 10)
 	   << ", max " << g_conf.mds_mem_max

@@ -25,7 +25,7 @@ public:
     int data;
     int lib;
     
-    int heap;
+    int heap, malloc, mmap;
 
     int get_total() { return size; }
     int get_rss() { return rss; }
