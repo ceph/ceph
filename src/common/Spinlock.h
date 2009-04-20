@@ -58,7 +58,7 @@ private:
 public:
   Spinlock(const char *n, bool ld=true, bool bt=false) :
     name(n), id(-1), lockdep(ld), backtrace(bt), nlock(0) {
-    pthread_spin_init(&_s, NULL);
+    pthread_spin_init(&_s, 0);
     if (lockdep && g_lockdep) _register();
   }
   ~Spinlock() {
