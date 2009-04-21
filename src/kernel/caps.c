@@ -1320,6 +1320,10 @@ int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 		dirty |= I_DIRTY_DATASYNC;
 	if (dirty)
 		__mark_inode_dirty(inode, dirty);
+
+	__cap_set_timeouts(mdsc, ci);
+	__cap_delay_requeue(mdsc, ci);
+
 	return was;
 }
 
