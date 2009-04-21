@@ -831,11 +831,13 @@ void ceph_queue_caps_release(struct inode *inode)
  * dropping RDCACHE.  Note that this will leave behind locked pages
  * that we'll then need to deal with elsewhere.
  *
+ * Return non-zero if delayed release.
+ *
  * called with i_lock, then drops it.
  * caller should hold snap_rwsem (read), s_mutex.
  */
-static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
-		       int op, int used, int want, int retain, int flushing)
+static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
+		      int op, int used, int want, int retain, int flushing)
 	__releases(cap->ci->vfs_inode->i_lock)
 {
 	struct ceph_inode_info *ci = cap->ci;
@@ -856,6 +858,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	void *xattrs_blob = NULL;
 	int xattrs_blob_size = 0;
 	u64 xattr_version = 0;
+	int delayed = 0;
 
 	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
 	     cap, cap->session,
@@ -873,6 +876,7 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		     ceph_cap_string(want));
 		want |= cap->mds_wanted;
 		retain |= cap->issued;
+		delayed = 1;
 	}
 	ci->i_ceph_flags &= ~(CEPH_I_NODELAY | CEPH_I_FLUSH);
 
@@ -933,6 +937,8 @@ static void __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
+
+	return delayed;
 }
 
 /*
@@ -1207,9 +1213,9 @@ retry_locked:
 			     ceph_cap_string(cap->issued & retain),
 			     ceph_cap_string(cap->mds_wanted),
 			     ceph_cap_string(want));
+			delayed++;
 			continue;
 		}
-		delayed++;
 
 ack:
 		if (session && session != cap->session) {
@@ -1259,8 +1265,8 @@ ack:
 		sent++;
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want, retain,
-			   flushing);
+		delayed += __send_cap(mdsc, cap, CEPH_CAP_OP_UPDATE, used, want,
+				      retain, flushing);
 		goto retry; /* retake i_lock and restart our cap scan. */
 	}
 
@@ -1268,8 +1274,9 @@ ack:
 	 * Reschedule delayed caps release if we delayed anything,
 	 * otherwise cancel.
 	 */
-	BUG_ON(delayed && is_delayed);
-	if (!delayed)
+	if (delayed && is_delayed)
+		force_requeue = 1;   /* __send_cap delayed release; requeue */
+	if (!delayed && !is_delayed)
 		__cap_delay_cancel(mdsc, ci);
 	else if (!is_delayed || force_requeue)
 		__cap_delay_requeue(mdsc, ci);
