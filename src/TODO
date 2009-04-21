@@ -1,3 +1,6 @@
+must-fix bugs
+- osd: mtime blank in pg backlog?
+
 v0.6
 /- fold observer into cmonctl/ceph?
 /- osd scrub
