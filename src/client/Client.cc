@@ -499,6 +499,7 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
       dn->lease_seq = dlease->seq;
     }
   }
+  dn->cap_rdcache_gen = dir->parent_inode->rdcache_gen;
 }
 
 
@@ -1724,6 +1725,10 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
   if (flags & CEPH_CAP_FLAG_AUTH)
     in->auth_cap = cap;
 
+  if ((issued & CEPH_CAP_FILE_RDCACHE) &&
+      !(cap->issued & CEPH_CAP_FILE_RDCACHE))
+    in->rdcache_gen++;
+
   unsigned old_caps = cap->issued;
   cap->cap_id = cap_id;
   cap->issued |= issued;
@@ -2218,6 +2223,10 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     kick_writers = true;
   }
 
+  if ((issued & CEPH_CAP_FILE_RDCACHE) &&
+      !(cap->issued & CEPH_CAP_FILE_RDCACHE))
+    in->rdcache_gen++;
+
   // update caps
   if (old_caps & ~new_caps) { 
     dout(10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
@@ -2634,8 +2643,10 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	     << dendl;
 
     // is lease valid?
-    if (dn->lease_mds >= 0 && 
-	dn->lease_ttl > g_clock.now()) {
+    if ((dn->lease_mds >= 0 && 
+	 dn->lease_ttl > g_clock.now()) ||
+	((dir->caps_issued() & CEPH_CAP_FILE_RDCACHE) &&
+	 dn->cap_rdcache_gen == dir->rdcache_gen)) {
       *target = dn->inode;
       goto done;
     }

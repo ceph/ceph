@@ -103,6 +103,7 @@ class Dentry : public LRUObject {
   int lease_mds;
   utime_t lease_ttl;
   ceph_seq_t lease_seq;
+  int cap_rdcache_gen;
   
   void get() { 
     assert(ref == 0); ref++; lru_pin(); 
@@ -113,7 +114,7 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0), cap_rdcache_gen(0) { }
 };
 
 class Dir {
@@ -208,6 +209,7 @@ class Inode {
   map<int,InodeCap*> caps;            // mds -> InodeCap
   InodeCap *auth_cap;
   unsigned dirty_caps, flushing_caps;
+  int rdcache_gen;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
@@ -292,7 +294,7 @@ class Inode {
     //inode(_inode),
     snapid(vino.snapid),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    dirty_caps(0), flushing_caps(0),
+    dirty_caps(0), flushing_caps(0), rdcache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this),
