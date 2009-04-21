@@ -510,13 +510,16 @@ retry:
 	}
 
 	/*
-	 * If we are issued caps we don't want, queue a check so we'll
-	 * update the mds wanted value.
+	 * If we are issued caps we don't want, or the mds' wanted
+	 * value appears to be off, queue a check so we'll release
+	 * later and/or update the mds wanted value.
 	 */
 	actual_wanted = __ceph_caps_wanted(ci);
-	if (wanted & ~actual_wanted) {
-		dout(10, " mds wanted %s, actual wanted %s, queueing\n",
-		     ceph_cap_string(wanted), ceph_cap_string(actual_wanted));
+	if ((wanted & ~actual_wanted) ||
+	    (issued & ~actual_wanted & CEPH_CAP_ANY_WR)) {
+		dout(10, " issued %s, mds wanted %s, actual %s, queueing\n",
+		     ceph_cap_string(issued), ceph_cap_string(wanted),
+		     ceph_cap_string(actual_wanted));
 		__cap_set_timeouts(mdsc, ci);
 		__cap_delay_requeue(mdsc, ci);
 	}
