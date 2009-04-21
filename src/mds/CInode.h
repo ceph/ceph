@@ -722,7 +722,7 @@ public:
     if (ploner) *ploner = (loner >> shift) & mask;
     if (pother) *pother = (other >> shift) & mask;
     if (pxlocker) *pxlocker = (xlocker >> shift) & mask;
-    return c;
+    return (c >> shift) & mask;
   }
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
     int w = 0;
