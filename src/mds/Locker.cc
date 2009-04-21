@@ -541,12 +541,23 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
   }
 }
 
-
 bool Locker::eval_caps(CInode *in)
 {
   bool need_issue = false;
   
   dout(10) << "eval_caps " << *in << dendl;
+
+  // choose loner?
+  if (in->get_loner() < 0) {
+    int wanted = in->get_caps_wanted();
+    if (((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GEXCL)) ||
+	 (in->inode.is_dir() && !in->has_subtree_root_dirfrag() &&
+	  !in->multiple_nonstale_caps())) &&
+	in->try_choose_loner()) {
+      dout(10) << "  chose loner client" << in->get_loner() << dendl;
+      need_issue = true;
+    }
+  }
 
   if (!in->filelock.is_stable())
     eval_gather(&in->filelock, false, &need_issue);
@@ -564,6 +575,15 @@ bool Locker::eval_caps(CInode *in)
     eval_gather(&in->xattrlock, false, &need_issue);
   else
     eval(&in->xattrlock, &need_issue);
+
+  // drop loner?
+  if (in->get_loner() >= 0) {
+    if (in->multiple_nonstale_caps() &&
+	in->try_drop_loner()) {
+      dout(10) << "  dropped loner" << dendl;
+      need_issue = true;
+    }
+  }
 
   if (need_issue)
     issue_caps(in);
@@ -2335,10 +2355,11 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   if (lock->get_parent()->is_frozen()) return;
 
   CInode *in = 0;
-  int wanted = 0;
+  int wanted = 0, issued = 0;
   if (lock->get_type() != CEPH_LOCK_DN) {
     in = (CInode*)lock->get_parent();
     wanted = in->get_caps_wanted(NULL, NULL, lock->get_cap_shift());
+    issued = in->get_caps_issued(NULL, NULL, NULL, lock->get_cap_shift());
   }
   
   // -> excl?
@@ -2351,14 +2372,24 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   }
 
   // stable -> sync?
-  else if (!lock->is_xlocked() &&
+  else if (lock->get_state() != LOCK_SYNC &&
+	   !lock->is_xlocked() &&
 	   !lock->is_wrlocked() &&
-	   lock->get_state() != LOCK_SYNC &&
-	   !(lock->get_state() == LOCK_EXCL && in && in->get_loner() >= 0) &&
-      !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
+	   !(issued & CEPH_CAP_GEXCL) &&
+	   !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock, need_issue);
+
+    // drop loner?
+    if (in && in->get_loner() >= 0) {
+      if (in->multiple_nonstale_caps() &&
+	  in->try_drop_loner()) {
+	dout(10) << "  dropped loner" << dendl;
+	if (need_issue)
+	  *need_issue = true;
+      }
+    }
   }
 }
 
@@ -3080,8 +3111,9 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   int loner_wanted, other_wanted;
   int wanted = in->get_caps_wanted(&loner_wanted, &other_wanted, CEPH_CAP_SFILE);
   dout(7) << "file_eval wanted=" << gcap_string(wanted)
+	  << " loner_wanted=" << gcap_string(loner_wanted)
+	  << " other_wanted=" << gcap_string(other_wanted)
 	  << "  filelock=" << *lock << " on " << *lock->get_parent()
-	  << " loner " << in->get_loner()
 	  << dendl;
 
   assert(lock->get_parent()->is_auth());
@@ -3090,26 +3122,38 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   if (lock->is_xlocked() || 
       lock->get_parent()->is_frozen()) return;
 
+  // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {
-    // lose loner?
+    dout(20) << " is excl" << dendl;
     int loner_issued, other_issued, xlocker_issued;
-    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued);
+    in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
 
-    if (in->get_loner() >= 0) {
-      if (((loner_wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) == 0 &&
-	   in->inode.is_file()) ||
-	  (other_wanted & (CEPH_CAP_GWR|CEPH_CAP_GRD))) {
-	// we should lose it.
-	if ((other_wanted & CEPH_CAP_GWR) ||
-	    lock->is_waiter_for(SimpleLock::WAIT_WR))
-	  file_mixed(lock, need_issue);
-	else if (!lock->is_wrlocked())   // let excl wrlocks drain first
-	  simple_sync(lock, need_issue);
+    if (!(loner_issued & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) ||
+	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD|CEPH_CAP_GRDCACHE)) ||
+	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
+      dout(20) << " should lose it" << dendl;
+      // we should lose it.
+      if ((other_wanted & CEPH_CAP_GWR) ||
+	  lock->is_waiter_for(SimpleLock::WAIT_WR))
+	file_mixed(lock, need_issue);
+      else if (!lock->is_wrlocked())   // let excl wrlocks drain first
+	simple_sync(lock, need_issue);
+      else
+	dout(10) << " waiting for wrlock to drain" << dendl;
+
+      // drop loner?
+      if (in->get_loner() >= 0) {
+	if (in->multiple_nonstale_caps() &&
+	    in->try_drop_loner()) {
+	  dout(10) << "  dropped loner" << dendl;
+	  if (need_issue)
+	    *need_issue = true;
+	}
       }
     }    
   }
   
-  // * -> loner?
+  // * -> excl?
   else if (lock->get_state() != LOCK_EXCL &&
 	   //!lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
