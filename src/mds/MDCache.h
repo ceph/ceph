@@ -432,7 +432,7 @@ public:
   // -- client caps --
   __u64              last_cap_id;
   
-  void remove_client_cap(CInode *in, int client, bool eval=true);
+  void remove_client_cap(CInode *in, int client);
 
 
   // -- discover --

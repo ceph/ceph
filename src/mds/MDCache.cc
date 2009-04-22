@@ -5122,15 +5122,14 @@ void MDCache::check_memory_usage()
 }
 
 
-void MDCache::remove_client_cap(CInode *in, int client, bool eval)
+void MDCache::remove_client_cap(CInode *in, int client)
 {
   in->remove_client_cap(client);
 
   if (!in->is_auth())
     mds->locker->request_inode_file_caps(in);
   
-  if (eval)
-    mds->locker->eval_cap_gather(in);
+  mds->locker->eval_caps(in);
 
   // unlinked stray?  may need to purge (e.g., after all caps are released)
   if (in->inode.nlink == 0 &&
