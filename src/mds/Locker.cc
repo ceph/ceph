@@ -548,7 +548,7 @@ bool Locker::eval_caps(CInode *in)
   dout(10) << "eval_caps " << *in << dendl;
 
   // choose loner?
-  if (in->get_loner() < 0) {
+  if (in->is_auth() && in->get_loner() < 0) {
     int wanted = in->get_caps_wanted();
     if (((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GEXCL)) ||
 	 (in->inode.is_dir() && !in->has_subtree_root_dirfrag() &&
@@ -561,23 +561,23 @@ bool Locker::eval_caps(CInode *in)
 
   if (!in->filelock.is_stable())
     eval_gather(&in->filelock, false, &need_issue);
-  else
+  else if (in->is_auth())
     eval(&in->filelock, &need_issue);
   if (!in->authlock.is_stable())
     eval_gather(&in->authlock, false, &need_issue);
-  else
+  else if (in->is_auth())
     eval(&in->authlock, &need_issue);
   if (!in->linklock.is_stable())
     eval_gather(&in->linklock, false, &need_issue);
-  else
+  else if (in->is_auth())
     eval(&in->linklock, &need_issue);
   if (!in->xattrlock.is_stable())
     eval_gather(&in->xattrlock, false, &need_issue);
-  else
+  else if (in->is_auth())
     eval(&in->xattrlock, &need_issue);
 
   // drop loner?
-  if (in->get_loner() >= 0) {
+  if (in->is_auth() && in->get_loner() >= 0) {
     if (in->multiple_nonstale_caps() &&
 	in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
