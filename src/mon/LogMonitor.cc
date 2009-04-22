@@ -93,12 +93,8 @@ bool LogMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
 
-  if (paxosv == log_version) return true;
-  assert(paxosv >= log_version);
-
-  if (log_version == 0 && paxosv > 1) {
-    log_version = mon->store->get_int("logm", "last_consumed");
-  }
+  if (paxosv == summary.version) return true;
+  assert(paxosv >= summary.version);
 
   bufferlist blog;
   bufferlist blogdebug;
@@ -107,17 +103,28 @@ bool LogMonitor::update_from_paxos()
   bufferlist blogerr;
   bufferlist blogsec;
 
+  if (summary.version == 0 && paxosv > 1) {
+    // startup: just load latest full map
+    bufferlist latest;
+    version_t v = paxos->get_latest(latest);
+    if (v) {
+      dout(7) << "update_from_paxos startup: loading summary e" << v << dendl;
+      bufferlist::iterator p = latest.begin();
+      ::decode(summary, p);
+    }
+  } 
+
   // walk through incrementals
-  while (paxosv > log_version) {
+  while (paxosv > summary.version) {
     bufferlist bl;
-    bool success = paxos->read(log_version+1, bl);
+    bool success = paxos->read(summary.version+1, bl);
     assert(success);
 
     bufferlist::iterator p = bl.begin();
     while (!p.end()) {
       LogEntry le;
       le.decode(p);
-      dout(7) << "update_from_paxos applying incremental log " << log_version+1 <<  " " << le << dendl;
+      dout(7) << "update_from_paxos applying incremental log " << summary.version+1 <<  " " << le << dendl;
 
       stringstream ss;
       ss << le;
@@ -138,11 +145,17 @@ bool LogMonitor::update_from_paxos()
 	blogerr.append(s);
       if (le.type >= LOG_ERROR)
 	blogerr.append(s);
+
+      summary.add(le);
     }
 
-    log_version++;
+    summary.version++;
   }
-  
+
+  bufferlist bl;
+  ::encode(summary, bl);
+  paxos->stash_latest(paxosv, bl);
+ 
   if (blog.length())
     mon->store->append_bl_ss(blog, "log", NULL);
   if (blogdebug.length())
@@ -156,14 +169,13 @@ bool LogMonitor::update_from_paxos()
   if (blogerr.length())
     mon->store->append_bl_ss(blogerr, "log.err", NULL);
 
-  mon->store->put_int(paxosv, "logm", "last_consumed");
-
   return true;
 }
 
 void LogMonitor::create_pending()
 {
   pending_inc.clear();
+  pending_summary = summary;
   dout(10) << "create_pending v " << (paxos->get_version() + 1) << dendl;
 }
 
@@ -212,6 +224,19 @@ void LogMonitor::committed()
 
 bool LogMonitor::preprocess_log(MLog *m)
 {
+  dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
+  
+  int num_new = 0;
+  for (deque<LogEntry>::iterator p = m->entries.begin();
+       p != m->entries.end();
+       p++) {
+    if (!pending_summary.contains(p->key()))
+      num_new++;
+  }
+  if (!num_new) {
+    dout(10) << "  nothing new" << dendl;
+    return true;
+  }
   return false;
 }
 
@@ -229,7 +254,10 @@ bool LogMonitor::prepare_log(MLog *m)
        p != m->entries.end();
        p++) {
     dout(10) << " logging " << *p << dendl;
-    (*p).encode(pending_inc);
+    if (!pending_summary.contains(p->key())) {
+      pending_summary.add(*p);
+      (*p).encode(pending_inc);
+    }
   }
 
   paxos->wait_for_commit(new C_Log(this, m, m->get_orig_source_inst()));

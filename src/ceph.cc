@@ -160,11 +160,19 @@ void handle_notify(MMonObserveNotify *notify)
 
   case PAXOS_LOG:
     {
-      LogEntry le;
       bufferlist::iterator p = notify->bl.begin();
-      while (!p.end()) {
-	le.decode(p);
-	dout(0) << "   log " << le << dendl;
+      if (notify->is_latest) {
+	LogSummary summary;
+	::decode(summary, p);
+	// show last log message
+	if (!summary.tail.empty())
+	  dout(0) << "   log " << summary.tail.back() << dendl;
+      } else {
+	LogEntry le;
+	while (!p.end()) {
+	  le.decode(p);
+	  dout(0) << "   log " << le << dendl;
+	}
       }
       break;
     }

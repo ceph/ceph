@@ -31,7 +31,7 @@ class MLog;
 class LogMonitor : public PaxosService {
 private:
   bufferlist pending_inc;
-  version_t log_version;
+  LogSummary pending_summary, summary;
 
   void create_initial(bufferlist& bl);
   bool update_from_paxos();
@@ -61,7 +61,7 @@ private:
   bool prepare_command(MMonCommand *m);
 
  public:
-  LogMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), log_version(0) { }
+  LogMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   
   void tick();  // check state, take actions
 };
