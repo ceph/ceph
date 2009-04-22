@@ -755,15 +755,8 @@ static inline const char *ceph_mds_op_name(int op)
 
 union ceph_mds_request_args {
 	struct {
-		__le32 mask;
-	} __attribute__ ((packed)) stat;
-	struct {
-		__le32 mask;
-	} __attribute__ ((packed)) fstat;
-	struct {
-		__le32 frag;
-		__le32 max_entries;
-	} __attribute__ ((packed)) readdir;
+		__le32 mask;  /* CEPH_CAP_* */
+	} __attribute__ ((packed)) getattr;
 	struct {
 		__le32 mode;
 		__le32 uid;
@@ -771,8 +764,12 @@ union ceph_mds_request_args {
 		struct ceph_timespec mtime;
 		struct ceph_timespec atime;
 		__le64 size, old_size;
-		__le32 mask;		
+		__le32 mask;  /* CEPH_SETATTR_* */
 	} __attribute__ ((packed)) setattr;
+	struct {
+		__le32 frag;
+		__le32 max_entries;
+	} __attribute__ ((packed)) readdir;
 	struct {
 		__le32 mode;
 		__le32 rdev;

@@ -2330,7 +2330,7 @@ int Client::mount()
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
   req->set_filepath(fp);
-  req->head.args.stat.mask = CEPH_STAT_CAP_INODE_ALL;
+  req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
   MClientReply *reply = make_request(req, -1, -1);
   int res = reply->get_result();
   dout(10) << "root getattr result=" << res << dendl;
@@ -2601,7 +2601,7 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
   dir->make_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
-  req->head.args.stat.mask = 0;
+  req->head.args.getattr.mask = 0;
   dout(10) << "_lookup on " << path << dendl;
 
   MClientReply *reply = make_request(req, 0, 0, target);
@@ -2886,7 +2886,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
-  req->head.args.stat.mask = mask;
+  req->head.args.getattr.mask = mask;
   
   MClientReply *reply = make_request(req, uid, gid);
   int res = reply->get_result();

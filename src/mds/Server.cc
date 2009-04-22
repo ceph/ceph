@@ -1677,7 +1677,7 @@ void Server::handle_client_stat(MDRequest *mdr)
   if (cap)
     issued = cap->issued();
 
-  int mask = req->head.args.stat.mask;
+  int mask = req->head.args.getattr.mask;
   if ((mask & CEPH_CAP_LINK_RDCACHE) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
   if ((mask & CEPH_CAP_AUTH_RDCACHE) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
   if ((mask & CEPH_CAP_FILE_RDCACHE) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);

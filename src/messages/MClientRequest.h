@@ -170,6 +170,8 @@ public:
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 
 	<< " " << ceph_mds_op_name(get_op());
+    if (head.op == CEPH_MDS_OP_GETATTR)
+      out << " " << ccap_string(head.args.getattr.mask);
     if (head.op == CEPH_MDS_OP_SETATTR) {
       if (head.args.setattr.mask & CEPH_SETATTR_MODE) out << " mode";
       if (head.args.setattr.mask & CEPH_SETATTR_UID) out << " uid";

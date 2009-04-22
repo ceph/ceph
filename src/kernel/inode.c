@@ -1501,7 +1501,7 @@ int ceph_do_getattr(struct inode *inode, int mask)
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
 	req->r_num_caps = 1;
-	req->r_args.stat.mask = cpu_to_le32(mask);
+	req->r_args.getattr.mask = cpu_to_le32(mask);
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	ceph_mdsc_put_request(req);
 	dout(20, "do_getattr result=%d\n", err);
