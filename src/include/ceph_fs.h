@@ -797,7 +797,7 @@ struct ceph_mds_request_head {
 	ceph_epoch_t mdsmap_epoch; /* on client */
 	__le32 flags;
 	__u8 num_retry, num_fwd;
-	__u16 num_releases;
+	__le16 num_releases;
 	__le32 op;
 	__le32 caller_uid, caller_gid;
 	__le64 ino;    /* use this ino for openc, mkdir, mknod, etc. */

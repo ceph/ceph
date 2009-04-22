@@ -868,7 +868,7 @@ out_unlocked:
 /*
  * called under s_mutex
  */
-void send_cap_releases(struct ceph_mds_client *mdsc,
+static void send_cap_releases(struct ceph_mds_client *mdsc,
 		       struct ceph_mds_session *session)
 {
 	struct ceph_msg *msg;
@@ -1099,7 +1099,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	int pathlen1, pathlen2;
 	int len;
 	int freepath1, freepath2;
-	u32 releases;
+	u16 releases;
 	void *p, *end;
 	int ret;
 
@@ -1169,7 +1169,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 		releases += ceph_encode_inode_release(&p,
 		      req->r_old_dentry->d_inode,
 		      mds, req->r_old_inode_drop, req->r_old_inode_unless);
-	head->num_releases = cpu_to_le32(releases);
+	head->num_releases = cpu_to_le16(releases);
 
 	BUG_ON(p > end);
 	msg->front.iov_len = p - msg->front.iov_base;
@@ -1238,8 +1238,8 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 	if (req->r_locked_dir)
 		flags |= CEPH_MDS_FLAG_WANT_DENTRY;
 	rhead->flags = cpu_to_le32(flags);
-	rhead->num_fwd = cpu_to_le32(req->r_num_fwd);
-	rhead->num_retry = cpu_to_le32(req->r_attempts - 1);
+	rhead->num_fwd = req->r_num_fwd;
+	rhead->num_retry = req->r_attempts - 1;
 
 	dout(20, " r_locked_dir = %p\n", req->r_locked_dir);
 

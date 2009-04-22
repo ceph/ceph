@@ -760,12 +760,12 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->gid = cpu_to_le32(gid);
 	fc->mode = cpu_to_le32(mode);
 
-	fc->xattr_version = xattr_version;
+	fc->xattr_version = cpu_to_le64(xattr_version);
 	if (xattrs_blob) {
 		char *dst = (char *)fc;
 		dst += sizeof(*fc);
 
-		fc->xattr_len = xattrs_blob_size;
+		fc->xattr_len = cpu_to_le32(xattrs_blob_size);
 		memcpy(dst,  xattrs_blob, xattrs_blob_size);
 	}
 
@@ -914,7 +914,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	if (dropping & CEPH_CAP_XATTR_EXCL) {
 		__ceph_build_xattrs_blob(ci, &xattrs_blob, &xattrs_blob_size);
-		ci->i_xattrs.prealloc_blob = 0;
+		ci->i_xattrs.prealloc_blob = NULL;
 		ci->i_xattrs.prealloc_size = 0;
 		xattr_version = ci->i_xattrs.version + 1;
 	}

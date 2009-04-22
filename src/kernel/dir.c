@@ -60,6 +60,7 @@ static int __dcache_readdir(struct file *filp,
 	     last);
 
 	spin_lock(&dcache_lock);
+
 	if (filp->f_pos == 2 || (last &&
 				 filp->f_pos < ceph_dentry(last)->offset)) {
 		if (list_empty(&parent->d_subdirs))
@@ -105,17 +106,21 @@ more:
 	dout(10, " %llu (%llu) dentry %p %.*s %p\n", di->offset, filp->f_pos,
 	     dentry, dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 	filp->f_pos = di->offset;
-	if (filldir(dirent, dentry->d_name.name,
+	err = filldir(dirent, dentry->d_name.name,
 		    dentry->d_name.len, di->offset,
 		    dentry->d_inode->i_ino,
-		    dentry->d_inode->i_mode >> 12) < 0) {
+		    dentry->d_inode->i_mode >> 12);
+
+	spin_lock(&inode->i_lock);
+	spin_lock(&dcache_lock);
+
+	if (err < 0) {
 		fi->dentry = dentry;
 		goto out_unlock;
 	}
 
 	last = dentry;
-	spin_lock(&inode->i_lock);
-	spin_lock(&dcache_lock);
+
 	p = p->prev;
 	filp->f_pos++;
 
@@ -126,12 +131,13 @@ more:
 	err = -EAGAIN;
 
 out_unlock:
-	spin_unlock(&dcache_lock);
 	if (last) {
 		spin_unlock(&inode->i_lock);
 		dput(last);
 		spin_lock(&inode->i_lock);
 	}
+
+	spin_unlock(&dcache_lock);
 	return err;
 }
 
@@ -183,14 +189,15 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
 	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
 		err = __dcache_readdir(filp, dirent, filldir);
-		spin_unlock(&inode->i_lock);
-		if (err != -EAGAIN)
+		if (err != -EAGAIN) {
+			spin_unlock(&inode->i_lock);
 			return err;
+		}
 	}
 	spin_unlock(&inode->i_lock);
 	if (fi->dentry) {
 		dput(fi->dentry);
-		fi->dentry = 0;
+		fi->dentry = NULL;
 	}
 
 more:
@@ -220,7 +227,7 @@ more:
 		req->r_direct_is_hash = true;
 		req->r_path2 = fi->last_name;
 		req->r_args.readdir.frag = cpu_to_le32(frag);
-		req->r_args.readdir.max_entries = max_entries;
+		req->r_args.readdir.max_entries = cpu_to_le32(max_entries);
 		req->r_num_caps = max_entries;
 		err = ceph_mdsc_do_request(mdsc, NULL, req);
 		if (err < 0) {
@@ -237,7 +244,7 @@ more:
 
 		fi->off = fi->next_off;
 		kfree(fi->last_name);
-		fi->last_name = 0;
+		fi->last_name = NULL;
 
 		if (req->r_reply_info.dir_end) {
 			fi->next_off = 0;

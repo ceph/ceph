@@ -53,7 +53,7 @@ static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 		d_parent = dentry->d_parent;
 		fh[len].ino = ceph_vino(dentry->d_inode);
 		fh[len].parent_ino = ceph_vino(d_parent->d_inode);
-		fh[len].parent_name_hash = cpu_to_le32(dentry->d_parent->d_name.hash);
+		fh[len].parent_name_hash = dentry->d_parent->d_name.hash;
 
 		if (IS_ROOT(dentry))
 			break;

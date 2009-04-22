@@ -264,7 +264,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_xattrs.count = 0;
 	ci->i_xattrs.names_size = 0;
 	ci->i_xattrs.vals_size = 0;
-	ci->i_xattrs.prealloc_blob = 0;
+	ci->i_xattrs.prealloc_blob = NULL;
 	ci->i_xattrs.prealloc_size = 0;
 	ci->i_xattrs.dirty = 0;
 
@@ -1464,7 +1464,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	if (mask) {
 		req->r_inode = igrab(inode);
 		req->r_inode_drop = release;
-		req->r_args.setattr.mask = mask;
+		req->r_args.setattr.mask = cpu_to_le32(mask);
 		req->r_num_caps = 1;
 		err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	}
@@ -1924,7 +1924,7 @@ bad:
 	return err;
 }
 
-int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, int val_size)
+static int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, int val_size)
 {
 	/*
 	 * 4 bytes for the length, and additional 4 bytes per each xattr name,
