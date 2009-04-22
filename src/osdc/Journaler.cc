@@ -381,13 +381,14 @@ void Journaler::_do_flush(unsigned amount)
   } else {
     write_buf.splice(0, len, &write_bl);
   }
-  flush_pos += len;
-  assert(write_buf.length() == write_pos - flush_pos);
 
   filer.write(ino, &layout, snapc,
 	      flush_pos, len, write_bl, g_clock.now(),
 	      CEPH_OSD_FLAG_INCLOCK_FAIL,
 	      onack, onsafe);
+
+  flush_pos += len;
+  assert(write_buf.length() == write_pos - flush_pos);
     
   dout(10) << "_do_flush write pointers now at " << write_pos << "/" << flush_pos << "/" << ack_pos << "/" << safe_pos << dendl;
 }
@@ -644,8 +645,9 @@ bool Journaler::is_readable()
 
   // have enough for entry size?
   uint32_t s = 0;
-  if (read_buf.length() >= sizeof(s)) 
-    read_buf.copy(0, sizeof(s), (char*)&s);
+  bufferlist::iterator p = read_buf.begin();
+  if (read_buf.length() >= sizeof(s))
+    ::decode(s, p);
 
   // entry and payload?
   if (read_buf.length() >= sizeof(s) &&
@@ -689,8 +691,10 @@ bool Journaler::try_read_entry(bufferlist& bl)
   }
   
   uint32_t s;
-  assert(read_buf.length() >= sizeof(s));
-  read_buf.copy(0, sizeof(s), (char*)&s);
+  {
+    bufferlist::iterator p = read_buf.begin();
+    ::decode(s, p);
+  }
   assert(read_buf.length() >= sizeof(s) + s);
   
   dout(10) << "try_read_entry at " << read_pos << " reading " 
