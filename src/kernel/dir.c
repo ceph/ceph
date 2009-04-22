@@ -473,7 +473,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	/* we only need inode linkage */
-	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
+	req->r_args.getattr.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	req->r_locked_dir = dir;
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	dentry = ceph_finish_lookup(req, dentry, err);

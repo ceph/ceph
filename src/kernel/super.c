@@ -785,7 +785,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	req->r_ino1.snap = CEPH_NOSNAP;
 	req->r_started = started;
 	req->r_timeout = client->mount_args.mount_timeout * HZ;
-	req->r_args.stat.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
+	req->r_args.getattr.mask = cpu_to_le32(CEPH_STAT_CAP_INODE);
 	req->r_num_caps = 2;
 	err = ceph_mdsc_do_request(mdsc, NULL, req);
 	if (err == 0) {
