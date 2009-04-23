@@ -550,6 +550,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
     e.version = oi.version;
     e.prior_version = oi.prior_version;
     e.reqid = oi.last_reqid;
+    e.mtime = oi.mtime;
     if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
       e.op = Log::Entry::CLONE;
       ::encode(oi.snaps, e.snaps);
