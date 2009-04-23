@@ -316,6 +316,7 @@ noinst_HEADERS = \
         common/Mutex.h\
         common/RWLock.h\
         common/Semaphore.h\
+	common/Spinlock.h\
         common/Thread.h\
         common/ThreadPool.h\
         common/Timer.h\
