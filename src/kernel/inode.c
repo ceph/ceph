@@ -1104,11 +1104,11 @@ retry_lookup:
 			goto retry_lookup;
 		} else {
 			/* reorder parent's d_subdirs */
-			spin_lock(&dn->d_lock);
 			spin_lock(&dcache_lock);
+			spin_lock(&dn->d_lock);
 			list_move(&dn->d_u.d_child, &parent->d_subdirs);
-			spin_unlock(&dcache_lock);
 			spin_unlock(&dn->d_lock);
+			spin_unlock(&dcache_lock);
 		}
 
 		di = dn->d_fsdata;
