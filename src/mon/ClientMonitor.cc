@@ -136,7 +136,7 @@ bool ClientMonitor::check_mount(MClientMount *m)
     ExportControl *ec = conf_get_export_control();
     if (ec && (!ec->is_authorized(&addr, "/"))) {
       dout(0) << "client is not authorized to mount" << dendl;
-      ss << "client addr " << addr << " is not authorized to mount";
+      ss << "client " << addr << " is not authorized to mount";
       mon->get_logclient()->log(LOG_SEC, ss);
       return true;
     }

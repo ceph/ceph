@@ -426,7 +426,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   stringstream ss;
   dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_orig_source_inst() << dendl;
 
-  ss << "osd " << m->get_failed() << " failure (" << m->get_orig_source_inst() << ")";
+  ss << m->get_failed() << " failed (by " << m->get_orig_source_inst() << ")";
   mon->get_logclient()->log(LOG_DEBUG, ss);
   
   // FIXME
@@ -579,7 +579,7 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
 
   if (0) {  // we probably don't care much about these
     stringstream ss;
-    ss << "osd alive (" << m->get_orig_source_inst() << ")";
+    ss << m->get_orig_source_inst() << " alive";
     mon->get_logclient()->log(LOG_DEBUG, ss);
   }
 
@@ -792,34 +792,28 @@ void OSDMonitor::tick()
 
   if (!mon->is_leader()) return;
 
-
-
   bool do_propose = false;
 
   // mark down osds out?
   utime_t now = g_clock.now();
-  list<int> mark_out;
-  for (map<int,utime_t>::iterator i = down_pending_out.begin();
-       i != down_pending_out.end();
-       i++) {
+  map<int,utime_t>::iterator i = down_pending_out.begin();
+  while (i != down_pending_out.end()) {
     utime_t down = now;
     down -= i->second;
-    
+    i++;
+
     if (down.sec() >= g_conf.mon_osd_down_out_interval) {
       dout(10) << "tick marking osd" << i->first << " OUT after " << down
 	       << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
-      mark_out.push_back(i->first);
+      down_pending_out.erase(i->first);
+      pending_inc.new_weight[i->first] = CEPH_OSD_OUT;
+      do_propose = true;
+
+      stringstream ss;
+      ss << osdmap.get_inst(i->first) << " out (down for " << down << ")";
+      mon->get_logclient()->log(LOG_DEBUG, ss);
     }
   }
-  for (list<int>::iterator i = mark_out.begin();
-       i != mark_out.end();
-       i++) {
-    down_pending_out.erase(*i);
-    pending_inc.new_weight[*i] = CEPH_OSD_OUT;
-  }
-  if (!mark_out.empty())
-    do_propose = true;
-
 
   // expire blacklisted items?
   for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
