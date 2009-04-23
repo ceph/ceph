@@ -35,17 +35,17 @@ void OSDMap::print(ostream& out)
   for (int i=0; i<get_max_osd(); i++) {
     if (exists(i)) {
       out << "osd" << i;
-      out << (is_up(i) ? " up":" down");
-      if (is_up(i))
-	out << " " << get_addr(i);
+      out << (is_in(i) ? " in":" out");
+      if (is_in(i))
+	out << " weight " << get_weightf(i);
+      out << (is_up(i) ? " up  ":" down");
       osd_info_t& info = get_info(i);
       out << " (up_from " << info.up_from
 	  << " up_thru " << info.up_thru
 	  << " down_at " << info.down_at
 	  << " last_clean " << info.last_clean_first << "-" << info.last_clean_last << ")";
-      out << (is_in(i) ? " in":" out");
-      if (is_in(i))
-	out << " weight " << get_weightf(i);
+      if (is_up(i))
+	out << " " << get_addr(i);
       out << "\n";
     }
   }
