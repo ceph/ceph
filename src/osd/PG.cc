@@ -1715,7 +1715,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
 
   
   // trim?
-  if (trim_to > log.bottom) {
+  if (is_complete() && trim_to > log.bottom) {
     dout(10) << " trimming " << log << " to " << trim_to << dendl;
     log.trim(t, trim_to);
     info.log_bottom = log.bottom;
