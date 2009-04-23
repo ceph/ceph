@@ -42,12 +42,14 @@ check_host() {
 }
 
 do_cmd() {
-    [ $verbose -eq 1 ] && echo "--- $host:$dir# $1"
     if [ -z "$ssh" ]; then
+	[ $verbose -eq 1 ] && echo "--- $host# $1"
 	ulimit -c unlimited
 	bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
     else
-	$ssh "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
+	[ $verbose -eq 1 ] && echo "--- $host# cd $dir ; ulimit -c unlimited ; $1"
+	echo $ssh $2 "cd $dir ; ulimit -c unlimited ; $1"
+	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
     fi
 }
 

@@ -156,15 +156,16 @@ for name in $what; do
             # build final command
 	    wrap=""
 	    runmode=""
+	    runarg=""
 	    
 	    [ -z "$crun" ] && get_conf_bool crun "0" "restart on core dump"
 	    [ "$crun" -eq 1 ] && wrap="$BINDIR/crun"
 	    
-	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "0" "valgrind"
-	    [ "$valgrind" -eq 1 ] && wrap="$wrap valgrind"
+	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "" "valgrind"
+	    [ -n "$valgrind" ] && wrap="$wrap valgrind $valgrind"
 	    
-	    [ -n "$wrap" ] && runmode="-f &"
-	    
+	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
+
 	    cmd="$wrap $cmd $runmode"
 	    
 	    echo Starting ceph $name on $host...
@@ -178,7 +179,7 @@ for name in $what; do
 	    get_conf pre_start "" "pre start command"
 	    get_conf post_start "" "post start command"
             [ -n "$pre_start" ] && do_cmd $pre_start
-	    do_cmd "$cmd"
+	    do_cmd "$cmd" $runarg
             [ -n "$post_start" ] && do_cmd $post_start
 	    ;;
 	
