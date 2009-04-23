@@ -454,8 +454,10 @@ public:
       if (e.is_update()) {
 	if (e.prior_version == eversion_t()) {
 	  // new object.
-	  assert(missing.count(e.oid) == 0);
-	  missing[e.oid].need = e.version;  // .have = nil
+	  //assert(missing.count(e.oid) == 0);  // might already be missing divergent item.
+	  if (missing.count(e.oid))  // already missing divergent item
+	    rmissing.erase(missing[e.oid].need);
+	  missing[e.oid] = item(e.version, eversion_t());  // .have = nil
 	} else if (missing.count(e.oid)) {
 	  // already missing (prior).
 	  assert(missing[e.oid].need == e.prior_version);
