@@ -378,6 +378,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
     info.last_update = log.top = olog.top;
     info.log_bottom = log.bottom = olog.bottom;
     info.log_backlog = log.backlog = olog.backlog;
+    if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
+      oinfo.stats.reported = info.stats.reported;
     info.stats = oinfo.stats;
     changed = true;
   } 
@@ -466,6 +468,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
                      olog.log, from, to);
       
       info.last_update = log.top = olog.top;
+      if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
+	oinfo.stats.reported = info.stats.reported;
       info.stats = oinfo.stats;
 
       // process divergent items
