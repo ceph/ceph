@@ -48,7 +48,6 @@ do_cmd() {
 	bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
     else
 	[ $verbose -eq 1 ] && echo "--- $host# cd $dir ; ulimit -c unlimited ; $1"
-	echo $ssh $2 "cd $dir ; ulimit -c unlimited ; $1"
 	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
     fi
 }
