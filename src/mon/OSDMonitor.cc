@@ -576,6 +576,7 @@ bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 bool OSDMonitor::prepare_alive(MOSDAlive *m)
 {
   int from = m->get_orig_source().num();
+
   stringstream ss;
   ss << "osd alive (" << m->get_orig_source_inst() << ")";
   mon->get_logclient()->log(LOG_DEBUG, ss);
@@ -804,7 +805,8 @@ void OSDMonitor::tick()
     down -= i->second;
     
     if (down.sec() >= g_conf.mon_osd_down_out_interval) {
-      dout(10) << "tick marking osd" << i->first << " OUT after " << down << " sec" << dendl;
+      dout(10) << "tick marking osd" << i->first << " OUT after " << down
+	       << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
       mark_out.push_back(i->first);
     }
   }
