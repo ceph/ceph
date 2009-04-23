@@ -798,20 +798,22 @@ void OSDMonitor::tick()
   utime_t now = g_clock.now();
   map<int,utime_t>::iterator i = down_pending_out.begin();
   while (i != down_pending_out.end()) {
+    int o = i->first;
     utime_t down = now;
     down -= i->second;
     i++;
 
     if (down.sec() >= g_conf.mon_osd_down_out_interval) {
-      dout(10) << "tick marking osd" << i->first << " OUT after " << down
+      dout(10) << "tick marking osd" << o << " OUT after " << down
 	       << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
-      down_pending_out.erase(i->first);
-      pending_inc.new_weight[i->first] = CEPH_OSD_OUT;
+      pending_inc.new_weight[o] = CEPH_OSD_OUT;
       do_propose = true;
 
       stringstream ss;
-      ss << osdmap.get_inst(i->first) << " out (down for " << down << ")";
+      ss << "osd" << o << " out (down for " << down << ")";
       mon->get_logclient()->log(LOG_DEBUG, ss);
+
+      down_pending_out.erase(o);
     }
   }
 
