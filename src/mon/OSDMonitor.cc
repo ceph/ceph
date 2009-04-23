@@ -577,11 +577,12 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
 {
   int from = m->get_orig_source().num();
 
-  stringstream ss;
-  ss << "osd alive (" << m->get_orig_source_inst() << ")";
-  mon->get_logclient()->log(LOG_DEBUG, ss);
+  if (0) {  // we probably don't care much about these
+    stringstream ss;
+    ss << "osd alive (" << m->get_orig_source_inst() << ")";
+    mon->get_logclient()->log(LOG_DEBUG, ss);
+  }
 
-  mon->get_logclient()->log(LOG_DEBUG, ss);
   dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
   pending_inc.new_up_thru[from] = m->map_epoch;
   paxos->wait_for_commit(new C_Alive(this,m ));
