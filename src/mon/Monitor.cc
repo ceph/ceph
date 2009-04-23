@@ -124,7 +124,6 @@ void Monitor::init()
   
   // call election?
   if (monmap->size() > 1) {
-    assert(monmap->size() != 2); 
     call_election();
   } else {
     // we're standalone.
