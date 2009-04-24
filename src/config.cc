@@ -44,6 +44,20 @@ static bool show_config = false;
 static ConfFile *cf = NULL;
 static ExportControl *ec = NULL;
 
+class ConfFileDestructor
+{
+public:
+  ConfFileDestructor() {}
+  ~ConfFileDestructor() {
+    if (cf) {
+      delete cf;
+      cf = NULL;
+    }
+  }
+};
+
+static ConfFileDestructor cfd;
+
 // page size crap, see page.h
 int _get_bits_of(int v) {
   int n = 0;

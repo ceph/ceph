@@ -111,6 +111,7 @@ int main(int argc, const char **argv)
 
 done_ok:
       cout << val << std::endl;
+      free(val);
       exit(0);
 
 }

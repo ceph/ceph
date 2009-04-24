@@ -564,12 +564,16 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 							printf("error parsing %s\n", cl->get_val());
 						}
 					} else {
-						section->conf_map[cl->get_norm_var()] = cl;
+						char *norm_var = cl->get_norm_var();
+						section->conf_map[norm_var] = cl;
+						free(norm_var);
 						global_list.push_back(cl);
 						section->conf_list.push_back(cl);
 					}
 				} else if (cl->get_section()) {
 					section = _add_section(cl->get_section(), cl);
+				} else {
+					delete cl;
 				}
 				l = 0;
 				break;
