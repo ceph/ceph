@@ -552,6 +552,7 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 
 		for (i=0; i<len; i++) {
 			switch (buf[i]) {
+			case '\\' :
 			case '\r' :
 				continue;
 			case '\n' :
