@@ -13,6 +13,7 @@
  */
 
 
+#include "ceph_ver.h"
 #include "config.h"
 #include "include/types.h"
 
@@ -297,7 +298,8 @@ void sighup_handler(int signum)
   _dout_need_open = true;
 }
 
-#define STRINGIFY(x) #x
+#define _STR(x) #x
+#define STRINGIFY(x) _STR(x)
 
 struct config_option {
   const char *section;
@@ -945,7 +947,10 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
     g_conf.type = (char *)"";
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("conf", 'c')) {
+    if (CONF_ARG_EQ("version", 'v')) {
+      cout << "ceph version " << VERSION << " (" << STRINGIFY(CEPH_GIT_VER) << ")" << std::endl;
+      _exit(0);
+    } else if (CONF_ARG_EQ("conf", 'c')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.conf, OPT_STR);
 	conf_specified = true;
     } else if (CONF_ARG_EQ("monmap", 'M')) {
