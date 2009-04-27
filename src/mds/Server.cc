@@ -132,12 +132,12 @@ class C_MDS_session_finish : public Context {
   Session *session;
   bool open;
   version_t cmapv;
-  deque<inodeno_t> inos;
+  interval_set<inodeno_t> inos;
   version_t inotablev;
 public:
   C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv) :
     mds(m), session(se), open(s), cmapv(mv), inotablev(0) { }
-  C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv, deque<inodeno_t>& i, version_t iv) :
+  C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv) :
     mds(m), session(se), open(s), cmapv(mv), inotablev(iv) {
     inos.swap(i);
   }
@@ -205,9 +205,8 @@ void Server::handle_client_session(MClientSession *m)
       mds->sessionmap.set_state(session, Session::STATE_CLOSING);
       pv = ++mds->sessionmap.projected;
       
-      deque<inodeno_t> both = session->prealloc_inos;
-      both.insert(both.end(), session->pending_prealloc_inos.begin(), 
-		  session->pending_prealloc_inos.end());
+      interval_set<inodeno_t> both = session->prealloc_inos;
+      both.insert(session->pending_prealloc_inos);
       if (both.size()) {
 	mds->inotable->project_release_ids(both);
 	piv = mds->inotable->get_projected_version();
@@ -225,7 +224,7 @@ void Server::handle_client_session(MClientSession *m)
   }
 }
 
-void Server::_session_logged(Session *session, bool open, version_t pv, deque<inodeno_t>& inos, version_t piv)
+void Server::_session_logged(Session *session, bool open, version_t pv, interval_set<inodeno_t>& inos, version_t piv)
 {
   dout(10) << "_session_logged " << session->inst << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
@@ -1364,8 +1363,7 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
   if (got > 0) {
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
-    mdr->session->pending_prealloc_inos.insert(mdr->session->pending_prealloc_inos.end(),
-					       mdr->prealloc_inos.begin(), mdr->prealloc_inos.end());
+    mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.projected++;
     dout(10) << "prepare_new_inode prealloc " << mdr->prealloc_inos << dendl;
   }
@@ -1388,7 +1386,8 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
 void Server::journal_allocated_inos(MDRequest *mdr, EMetaBlob *blob)
 {
   dout(20) << "journal_allocated_inos sessionmapv " << mds->sessionmap.projected
-	   << " inotablev " << mds->inotable->get_projected_version() << dendl;
+	   << " inotablev " << mds->inotable->get_projected_version()
+	   << dendl;
   blob->set_ino_alloc(mdr->alloc_ino,
 		      mdr->used_prealloc_ino,
 		      mdr->prealloc_inos,
@@ -1408,19 +1407,13 @@ void Server::apply_allocated_inos(MDRequest *mdr)
     mds->inotable->apply_alloc_id(mdr->alloc_ino);
   }
   if (mdr->prealloc_inos.size()) {
-    for (deque<inodeno_t>::iterator p = mdr->prealloc_inos.begin();
-	 p != mdr->prealloc_inos.end();
-	 p++) {
-      assert(session->pending_prealloc_inos.front() == *p);
-      session->prealloc_inos.push_back(session->pending_prealloc_inos.front());
-      session->pending_prealloc_inos.pop_front();
-    }
+    session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
+    session->prealloc_inos.insert(mdr->prealloc_inos);
     mds->sessionmap.version++;
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
-    assert(session->used_inos.front() == mdr->used_prealloc_ino);
-    session->used_inos.pop_front();
+    session->used_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.version++;
   }
 }

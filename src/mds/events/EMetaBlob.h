@@ -329,7 +329,7 @@ private:
   // ino (pre)allocation.  may involve both inotable AND session state.
   version_t inotablev, sessionmapv;
   inodeno_t allocated_ino;            // inotable
-  deque<inodeno_t> preallocated_inos; // inotable + session
+  interval_set<inodeno_t> preallocated_inos; // inotable + session
   inodeno_t used_preallocated_ino;    //            session
   entity_name_t client_name;          //            session
 
@@ -422,7 +422,7 @@ private:
 
   void set_ino_alloc(inodeno_t alloc,
 		     inodeno_t used_prealloc,
-		     deque<inodeno_t>& prealloc,
+		     interval_set<inodeno_t>& prealloc,
 		     entity_name_t client,
 		     version_t sv, version_t iv) {
     allocated_ino = alloc;

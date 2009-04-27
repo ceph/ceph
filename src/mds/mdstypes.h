@@ -18,7 +18,7 @@ using namespace std;
 #include "include/xlist.h"
 #include "include/nstring.h"
 
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v001"
+#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v002"
 
 
 #define MDS_REF_SET      // define me for improved debug output, sanity checking

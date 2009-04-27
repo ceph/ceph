@@ -68,7 +68,7 @@ public:
   set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
 
   void handle_client_session(class MClientSession *m);
-  void _session_logged(Session *session, bool open, version_t pv, deque<inodeno_t>& inos,version_t piv);
+  void _session_logged(Session *session, bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<__u32,entity_inst_t> &cm);
   void finish_force_open_sessions(map<__u32,entity_inst_t> &cm);
   void terminate_sessions();

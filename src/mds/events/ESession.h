@@ -26,7 +26,7 @@ class ESession : public LogEvent {
   bool open;    // open or close
   version_t cmapv;  // client map version
 
-  deque<inodeno_t> inos;
+  interval_set<inodeno_t> inos;
   version_t inotablev;
 
  public:
@@ -38,7 +38,7 @@ class ESession : public LogEvent {
     cmapv(v),
     inotablev(0) {
   }
-  ESession(entity_inst_t inst, bool o, version_t v, deque<inodeno_t>& i, version_t iv) :
+  ESession(entity_inst_t inst, bool o, version_t v, interval_set<inodeno_t>& i, version_t iv) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),
     open(o),
@@ -49,14 +49,14 @@ class ESession : public LogEvent {
     ::encode(client_inst, bl);
     ::encode(open, bl);
     ::encode(cmapv, bl);
-    ::encode(inos, bl);
+    ::encode(inos.m, bl);
     ::encode(inotablev, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(client_inst, bl);
     ::decode(open, bl);
     ::decode(cmapv, bl);
-    ::decode(inos, bl);
+    ::decode(inos.m, bl);
     ::decode(inotablev, bl);
   }
 

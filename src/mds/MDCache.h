@@ -264,7 +264,7 @@ struct MDRequest : public Mutation {
   CDentry *tracedn;
 
   inodeno_t alloc_ino, used_prealloc_ino;  
-  deque<inodeno_t> prealloc_inos;
+  interval_set<inodeno_t> prealloc_inos;
 
   int snap_caps;
   bool did_early_reply;

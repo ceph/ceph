@@ -575,9 +575,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       if (preallocated_inos.size()) {
-	session->prealloc_inos.insert(session->prealloc_inos.end(),
-				      preallocated_inos.begin(),
-				      preallocated_inos.end());
+	session->prealloc_inos.insert(preallocated_inos);
 	mds->sessionmap.projected = ++mds->sessionmap.version;
       }
       assert(sessionmapv == mds->sessionmap.version);

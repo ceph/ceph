@@ -23,6 +23,7 @@ using __gnu_cxx::hash_map;
 
 #include "include/Context.h"
 #include "include/xlist.h"
+#include "include/interval_set.h"
 #include "mdstypes.h"
 
 class CInode;
@@ -52,28 +53,24 @@ public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
 
-  deque<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
-  deque<inodeno_t> prealloc_inos;   // preallocated, ready to use.
-  deque<inodeno_t> used_inos;       // journaling use
+  interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
+  interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
+  interval_set<inodeno_t> used_inos;       // journaling use
 
   inodeno_t take_ino(inodeno_t ino = 0) {
     assert(!prealloc_inos.empty());
 
     if (ino) {
-      deque<inodeno_t>::iterator p;
-      for (p = prealloc_inos.begin(); p != prealloc_inos.end(); p++) 
-	if (*p == ino)
-	  break;
-      if (p != prealloc_inos.end())
-	prealloc_inos.erase(p);
+      if (prealloc_inos.contains(ino))
+	prealloc_inos.erase(ino);
       else
 	ino = 0;
     }
     if (!ino) {
-      ino = prealloc_inos.front();
-      prealloc_inos.pop_front();
+      ino = prealloc_inos.start();
+      prealloc_inos.erase(ino);
     }
-    used_inos.push_back(ino);
+    used_inos.insert(ino, 1);
     return ino;
   }
   int get_num_projected_prealloc_inos() {
@@ -158,7 +155,7 @@ public:
     ::decode(completed_requests, p);
     ::decode(prealloc_inos, p);
     ::decode(used_inos, p);
-    prealloc_inos.insert(prealloc_inos.begin(), used_inos.begin(), used_inos.end());  // HACK
+    prealloc_inos.insert(used_inos);
     used_inos.clear();
   }
 };

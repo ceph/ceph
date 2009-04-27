@@ -20,6 +20,8 @@
 #include <ostream>
 using namespace std;
 
+#include "encoding.h"
+
 #ifndef MIN
 # define MIN(a,b)  ((a)<=(b) ? (a):(b))
 #endif
@@ -32,7 +34,7 @@ template<typename T>
 class interval_set {
  public:
   map<T,T> m;   // map start -> len  
-  int _size;
+  __u64 _size;
   
   interval_set() : _size(0) {}
 
@@ -320,7 +322,7 @@ class interval_set {
       if (!big.contains(i->first, i->second)) return false;
     return true;
   }  
-  
+
 };
 
 template<class T>
@@ -336,5 +338,15 @@ inline ostream& operator<<(ostream& out, const interval_set<T> &s) {
   return out;
 }
 
+template<class T>
+inline void encode(const interval_set<T>& s, bufferlist& bl)
+{
+  s.encode(bl);
+}
+template<class T>
+inline void decode(interval_set<T>& s, bufferlist::iterator& p)
+{
+  s.decode(p);
+}
 
 #endif
