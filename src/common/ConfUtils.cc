@@ -555,6 +555,8 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 			case '\r' :
 				continue;
 			case '\n' :
+				if (l > 0 && line[l-1] == '\\')
+					continue;
 				line[l] = '\0';
 				cl = new ConfLine();
 				parse_line(line, cl);
