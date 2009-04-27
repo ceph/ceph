@@ -252,6 +252,8 @@ static int _parse_section(char *str, ConfLine *parsed)
 				dyn_snprintf(&line, &max_line, 1, "%s", name);
 		}
 	} while (*name);
+	if (name)
+		free(name);
 	
 	if (*line)	
 		parsed->set_section(line);
@@ -270,7 +272,7 @@ int parse_line(char *line, ConfLine *parsed)
 
 	memset(parsed, 0, sizeof(ConfLine));
 
-	parsed->set_prefix(get_next_delim(dup, _def_delim, 1, &p));
+	parsed->set_prefix(get_next_delim(dup, _def_delim, 1, &p), false);
 
 	if (!*p)
 		goto out;
@@ -285,11 +287,11 @@ int parse_line(char *line, ConfLine *parsed)
 			return _parse_section(p, parsed);
 	}
 
-	parsed->set_var(get_next_name(p, 1, &p));
+	parsed->set_var(get_next_name(p, 1, &p), false);
 	if (!*p)
 		goto out;
 
-	parsed->set_mid(get_next_delim(p, _eq_delim, 1, &p));
+	parsed->set_mid(get_next_delim(p, _eq_delim, 1, &p), false);
 	if (!*p)
 		goto out;
 
@@ -298,7 +300,7 @@ int parse_line(char *line, ConfLine *parsed)
 		goto out;
 	}
 
-	parsed->set_val(get_next_tok(p, _def_delim, 1, &p));
+	parsed->set_val(get_next_tok(p, _def_delim, 1, &p), false);
 	if (!*p)
 		goto out;
 
@@ -337,25 +339,29 @@ ConfSection::~ConfSection()
 	}
 }
 
-void ConfLine::_set(char **dst, const char *val)
+void ConfLine::_set(char **dst, const char *val, bool alloc)
 {
 	if (*dst)
-		free(*dst);
+		free((void *)*dst);
 
-	if (!val)
+	if (!val) {
 		*dst = NULL;
-	else
-		*dst = strdup(val);
+	} else {
+		if (alloc)
+			*dst = strdup(val);
+		else
+			*dst = (char *)val;
+	}
 }
 
-void ConfLine::set_prefix(const char *val)
+void ConfLine::set_prefix(const char *val, bool alloc)
 {
-	_set(&prefix, val);
+	_set(&prefix, val, alloc);
 }
 
-void ConfLine::set_var(const char *val)
+void ConfLine::set_var(const char *val, bool alloc)
 {
-	_set(&var, val);
+	_set(&var, val, alloc);
 
 	if (norm_var) {
 		free(norm_var);
@@ -363,24 +369,24 @@ void ConfLine::set_var(const char *val)
 	}
 }
 
-void ConfLine::set_mid(const char *val)
+void ConfLine::set_mid(const char *val, bool alloc)
 {
-	_set(&mid, val);
+	_set(&mid, val, alloc);
 }
 
-void ConfLine::set_val(const char *val)
+void ConfLine::set_val(const char *val, bool alloc)
 {
-	_set(&this->val, val);
+	_set(&this->val, val, alloc);
 }
 
-void ConfLine::set_suffix(const char *val)
+void ConfLine::set_suffix(const char *val, bool alloc)
 {
-	_set(&suffix, val);
+	_set(&suffix, val, alloc);
 }
 
-void ConfLine::set_section(const char *val)
+void ConfLine::set_section(const char *val, bool alloc)
 {
-	_set(&section, val);
+	_set(&section, val, alloc);
 }
 
 char *ConfLine::get_norm_var()

@@ -16,18 +16,18 @@ class ConfLine {
 	char *section;
 	char *norm_var;
 
-	void _set(char **dst, const char *val);
+	void _set(char **dst, const char *val, bool alloc);
 public:
 	ConfLine() : prefix(NULL), var(NULL), mid(NULL), val(NULL),
 		   suffix(NULL), section(NULL), norm_var(NULL) {}
 	~ConfLine();
 
-	void set_prefix(const char *val);
-	void set_var(const char *val);
-	void set_mid(const char *val);
-	void set_val(const char *val);
-	void set_suffix(const char *val);
-	void set_section(const char *val);
+	void set_prefix(const char *val, bool alloc = true);
+	void set_var(const char *val, bool alloc = true);
+	void set_mid(const char *val, bool alloc = true);
+	void set_val(const char *val, bool alloc = true);
+	void set_suffix(const char *val, bool alloc = true);
+	void set_section(const char *val, bool alloc = true);
 
 	char *get_prefix() { return prefix; }
 	char *get_var() { return var; }
