@@ -164,6 +164,14 @@ bool OSDMonitor::update_from_paxos()
   // save latest
   paxos->stash_latest(paxosv, bl);
 
+  // populate down -> out map
+  for (int o = 0; o < osdmap.get_max_osd(); o++)
+    if (osdmap.is_down(o) && osdmap.is_in(o) &&
+	down_pending_out.count(o) == 0) {
+      dout(10) << " adding osd" << o << " to down_pending_out map" << dendl;
+      down_pending_out[o] = g_clock.now();
+    }
+
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
@@ -437,9 +445,6 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   
   pending_inc.new_down[badboy] = false;
   
-  if (osdmap.is_in(badboy))
-    down_pending_out[badboy] = g_clock.now();
-
   paxos->wait_for_commit(new C_Reported(this, m));
   
   return true;
@@ -805,18 +810,21 @@ void OSDMonitor::tick()
     down -= i->second;
     i++;
 
-    if (down.sec() >= g_conf.mon_osd_down_out_interval) {
-      dout(10) << "tick marking osd" << o << " OUT after " << down
-	       << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
-      pending_inc.new_weight[o] = CEPH_OSD_OUT;
-      do_propose = true;
-
-      stringstream ss;
-      ss << "osd" << o << " out (down for " << down << ")";
-      mon->get_logclient()->log(LOG_DEBUG, ss);
-
-      down_pending_out.erase(o);
+    if (osdmap.is_down(o) && osdmap.is_in(o)) {
+      if (down.sec() >= g_conf.mon_osd_down_out_interval) {
+	dout(10) << "tick marking osd" << o << " OUT after " << down
+		 << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
+	pending_inc.new_weight[o] = CEPH_OSD_OUT;
+	do_propose = true;
+	
+	stringstream ss;
+	ss << "osd" << o << " out (down for " << down << ")";
+	mon->get_logclient()->log(LOG_DEBUG, ss);
+      } else
+	continue;
     }
+
+    down_pending_out.erase(o);
   }
 
   // expire blacklisted items?
