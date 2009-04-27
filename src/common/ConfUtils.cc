@@ -552,12 +552,13 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 
 		for (i=0; i<len; i++) {
 			switch (buf[i]) {
-			case '\\' :
 			case '\r' :
 				continue;
 			case '\n' :
-				if (l > 0 && line[l-1] == '\\')
+				if (l > 0 && line[l-1] == '\\') {
+					l--;
 					continue;
+				}
 				line[l] = '\0';
 				cl = new ConfLine();
 				parse_line(line, cl);
