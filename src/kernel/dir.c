@@ -131,13 +131,14 @@ more:
 	err = -EAGAIN;
 
 out_unlock:
+	spin_unlock(&dcache_lock);
+
 	if (last) {
 		spin_unlock(&inode->i_lock);
 		dput(last);
 		spin_lock(&inode->i_lock);
 	}
 
-	spin_unlock(&dcache_lock);
 	return err;
 }
 
