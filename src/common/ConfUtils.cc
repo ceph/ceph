@@ -849,6 +849,7 @@ int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 {
 	ConfLine *cl;
 	char *str_val;
+	bool should_free = false;
 
 	cl = _find_var(section, var);
 	if (!cl || !cl->get_val())
@@ -858,9 +859,12 @@ int ConfFile::_read(const char *section, const char *var, T *val, T def_val)
 
 	if (post_process_func) {
 		str_val = post_process_func(str_val);
+		should_free = true;
 	}
 
 	_conf_decode(val, str_val);
+	if (should_free)
+		free(str_val);
 
 	return 1;
 notfound:

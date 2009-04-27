@@ -44,6 +44,8 @@ static bool show_config = false;
 static ConfFile *cf = NULL;
 static ExportControl *ec = NULL;
 
+static void fini_g_conf();
+
 class ConfFileDestructor
 {
 public:
@@ -52,6 +54,7 @@ public:
     if (cf) {
       delete cf;
       cf = NULL;
+      fini_g_conf();
     }
   }
 };
@@ -665,6 +668,9 @@ static bool init_g_conf()
 
   for (i = 0; i<len; i++) {
     opt = &config_optionsp[i];
+    if (opt->val_ptr) {
+      *(char **)opt->val_ptr = NULL;
+    }
     if (!conf_set_conf_val(opt->val_ptr,
 			   opt->type,
 			   opt->def_str,
@@ -678,6 +684,21 @@ static bool init_g_conf()
   }
 
   return true;
+}
+
+static void fini_g_conf()
+{
+  int len = sizeof(config_optionsp)/sizeof(config_option);
+  int i;
+  config_option *opt;
+
+  for (i = 0; i<len; i++) {
+    opt = &config_optionsp[i];
+    if (opt->type == OPT_STR) {
+      free(*(char **)opt->val_ptr);
+    }
+    free((void *)opt->conf_name);
+  }
 }
 
 static bool g_conf_initialized = init_g_conf();
@@ -818,10 +839,12 @@ do { \
     
 
 int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const char *conf_type,
-		      const char *alt_section, const char *key, opt_type_t type, void *out, void *def)
+		      const char *alt_section, const char *key, opt_type_t type, void *out, void *def,
+		      bool free_old_val)
 {
   int s;
   int ret;
+  char *tmp;
   for (s=0; s<5; s++) {
     const char *section;
 
@@ -851,7 +874,12 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
 
     switch (type) {
     case OPT_STR:
+      if (free_old_val)
+        tmp = *(char **)out;
       OPT_READ_TYPE(ret, section, key, char *, out, def);
+      if (free_old_val &&
+          *(char **)out != tmp)
+          free(tmp);
       break;
     case OPT_BOOL:
       OPT_READ_TYPE(ret, section, key, bool, out, def);
@@ -877,10 +905,10 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
   return ret;
 }
 
-int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def)
+int conf_read_key(const char *alt_section, const char *key, opt_type_t type, void *out, void *def, bool free_old_val)
 {
 	return conf_read_key_ext(g_conf.name, g_conf.alt_name, g_conf.type,
-				 alt_section, key, type, out, def);
+				 alt_section, key, type, out, def, free_old_val);
 }
 
 bool parse_config_file(ConfFile *cf, bool auto_update)
@@ -894,7 +922,7 @@ bool parse_config_file(ConfFile *cf, bool auto_update)
 
   for (int i=0; i<opt_len; i++) {
       config_option *opt = &config_optionsp[i];
-      conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr);
+      conf_read_key(NULL, opt->conf_name, opt->type, opt->val_ptr, opt->val_ptr, true);
   }
 
   return true;
