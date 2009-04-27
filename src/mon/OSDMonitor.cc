@@ -472,7 +472,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     // yup.
     dout(7) << "preprocess_boot dup from " << m->get_orig_source_inst()
 	    << " == " << osdmap.get_inst(from) << dendl;
-    _booted(m);
+    _booted(m, false);
     return true;
   }
 
@@ -482,10 +482,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 
 bool OSDMonitor::prepare_boot(MOSDBoot *m)
 {
-  stringstream ss;
   dout(7) << "prepare_boot from " << m->get_orig_source_inst() << " sb " << m->sb << dendl;
-  ss << m->get_orig_source_inst() << " boot";
-  mon->get_logclient()->log(LOG_DEBUG, ss);
 
   assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
@@ -544,11 +541,16 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   return true;
 }
 
-void OSDMonitor::_booted(MOSDBoot *m)
+void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 {
   dout(7) << "_booted " << m->get_orig_source_inst() 
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
   send_latest(m->get_orig_source_inst(), m->sb.current_epoch+1);
+
+  stringstream ss;
+  ss << m->get_orig_source_inst() << " boot";
+  mon->get_logclient()->log(LOG_DEBUG, ss);
+
   delete m;
 }
 

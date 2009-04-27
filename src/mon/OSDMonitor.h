@@ -77,7 +77,7 @@ private:
 
   bool preprocess_boot(class MOSDBoot *m);
   bool prepare_boot(class MOSDBoot *m);
-  void _booted(MOSDBoot *m);
+  void _booted(MOSDBoot *m, bool logit);
 
   bool preprocess_alive(class MOSDAlive *m);
   bool prepare_alive(class MOSDAlive *m);
@@ -90,7 +90,7 @@ private:
       cmon(cm), m(m_) {}
     void finish(int r) {
       if (r >= 0)
-	cmon->_booted(m);
+	cmon->_booted(m, true);
       else
 	cmon->dispatch((Message*)m);
     }
