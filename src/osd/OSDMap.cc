@@ -31,6 +31,14 @@ void OSDMap::print(ostream& out)
       << "lpgp_num " << get_lpgp_num() << "\n"
       << "last_pg_change " << get_last_pg_change() << "\n"
       << std::endl;
+  for (map<int,ceph_pg_pool>::iterator p = pools.begin(); p != pools.end(); p++)
+    out << "pg_pool " << p->first
+	<< " '" << pool_name[p->first]
+	<< "' size " << (int)p->second.size
+	<< " crush_ruleset " << (int)p->second.crush_ruleset
+	<< "\n";
+  out << std::endl;
+
   out << "max_osd " << get_max_osd() << "\n";
   for (int i=0; i<get_max_osd(); i++) {
     if (exists(i)) {
@@ -90,7 +98,21 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   lpg_num = lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
   
   // crush map
-  build_simple_crush_map(crush, num_osd, num_dom);
+  map<int, const char*> rulesets;
+  rulesets[CEPH_DATA_RULE] = "data";
+  rulesets[CEPH_METADATA_RULE] = "metadata";
+  rulesets[CEPH_CASDATA_RULE] = "casdata";
+  
+  int pool = 0;
+  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+    pools[pool].size = 2;
+    pools[pool].crush_ruleset = p->first;
+    pools[pool].type = CEPH_PG_TYPE_REP;
+    pool_name[pool] = p->second;
+    pool++;
+  }
+
+  build_simple_crush_map(crush, rulesets, num_osd, num_dom);
 
   for (int i=0; i<num_osd; i++) {
     set_state(i, CEPH_OSD_EXISTS);
@@ -108,7 +130,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   }
 }
 
-void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
+void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& rulesets, int num_osd,
 				    int num_dom)
 {
   // new
@@ -116,8 +138,6 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
 
   crush.set_type_name(1, "domain");
   crush.set_type_name(2, "pool");
-
-  int npools = 3;
 
   int minrep = g_conf.osd_min_rep;
   int ndom = num_dom;
@@ -161,26 +181,15 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     crush.set_item_name(rootid, "root");
 
     // rules
-    // replication
-    for (int pool=0; pool<npools; pool++) {
-      // size minrep..ndom
-      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, minrep, g_conf.osd_max_rep);
+    for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+      int ruleset = p->first;
+      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, minrep, g_conf.osd_max_rep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1); // choose N domains
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
       int rno = crush_add_rule(crush.crush, rule, -1);
-      crush.set_rule_name(rno, get_pool_name(pool));
+      crush.set_rule_name(rno, p->second);
     }
-
-    // raid
-    if (false && g_conf.osd_min_raid_width <= g_conf.osd_max_raid_width)
-      for (int pool=0; pool<npools; pool++) {
-	crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_RAID4, g_conf.osd_min_raid_width, g_conf.osd_max_raid_width);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_INDEP, CRUSH_CHOOSE_N, 1);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, rule, -1);
-      }
     
   } else {
     // one bucket
@@ -197,24 +206,16 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, int num_osd,
     crush.set_item_name(rootid, "root");
 
     // replication
-    for (int pool=0; pool<npools; pool++) {
-      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, g_conf.osd_min_rep, g_conf.osd_max_rep);
+    for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
+      int ruleset = p->first;
+      crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, g_conf.osd_min_rep, g_conf.osd_max_rep);
       crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
       crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
       int rno = crush_add_rule(crush.crush, rule, -1);
-      crush.set_rule_name(rno, get_pool_name(pool));
+      crush.set_rule_name(rno, p->second);
     }
 
-    // raid4
-    if (false && g_conf.osd_min_raid_width <= g_conf.osd_max_raid_width)
-      for (int pool=0; pool<npools; pool++) {
-	crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_RAID4, g_conf.osd_min_raid_width, g_conf.osd_max_raid_width);
-	crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-	crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_INDEP, CRUSH_CHOOSE_N, 0);
-	crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-	crush_add_rule(crush.crush, rule, -1);
-      }
   }
 
   crush.finalize();

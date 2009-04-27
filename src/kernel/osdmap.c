@@ -294,6 +294,7 @@ void osdmap_destroy(struct ceph_osdmap *map)
 		crush_destroy(map->crush);
 	kfree(map->osd_state);
 	kfree(map->osd_weight);
+	kfree(map->pg_pool);
 	kfree(map->osd_addr);
 	kfree(map);
 }
@@ -366,7 +367,24 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_32(p, map->lpg_num);
 	ceph_decode_32(p, map->lpgp_num);
 	ceph_decode_32(p, map->last_pg_change);
-	ceph_decode_32(p, map->flags);
+
+	ceph_decode_32(p, map->num_pools);
+	map->pg_pool = kmalloc(map->num_pools * sizeof(*map->pg_pool),
+			       GFP_NOFS);
+	if (!map->pg_pool) {
+		err = -ENOMEM;
+		goto bad;
+	}
+	ceph_decode_32_safe(p, end, max, bad);
+	while (max--) {
+		ceph_decode_need(p, end, 4+sizeof(*map->pg_pool), bad);
+		ceph_decode_32(p, i);
+		if (i >= map->num_pools)
+			goto bad;
+		ceph_decode_copy(p, &map->pg_pool[i], sizeof(*map->pg_pool));
+	}
+
+	ceph_decode_32_safe(p, end, map->flags, bad);
 
 	calc_pg_masks(map);
 
@@ -430,7 +448,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_fsid_t fsid;
 	u32 epoch = 0;
 	struct ceph_timespec modified;
-	u32 len, x;
+	u32 len, x, pool;
 	__s32 new_flags, max;
 	void *start = *p;
 	int err = -EINVAL;
@@ -501,6 +519,30 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		map->crush = newcrush;
 		newcrush = NULL;
 	}
+
+	/* new_pool */
+	ceph_decode_32_safe(p, end, len, bad);
+	while (len--) {
+		ceph_decode_32_safe(p, end, pool, bad);
+		if (pool >= map->num_pools) {
+			void *p = kzalloc((pool+1) * sizeof(*map->pg_pool),
+					  GFP_NOFS);
+			if (!p) {
+				err = -ENOMEM;
+				goto bad;
+			}
+			memcpy(p, map->pg_pool,
+			       map->num_pools * sizeof(*map->pg_pool));
+			kfree(map->pg_pool);
+			map->pg_pool = p;
+			map->num_pools = pool+1;
+		}
+		ceph_decode_copy(p, &map->pg_pool[pool], sizeof(*map->pg_pool));
+	}
+
+	/* old_pool (ignore) */
+	ceph_decode_32_safe(p, end, len, bad);
+	*p += len * (sizeof(u32) + sizeof(*map->pg_pool));
 
 	/* new_up */
 	err = -EINVAL;
@@ -633,7 +675,6 @@ void calc_object_layout(struct ceph_object_layout *ol,
 	pgid.pg.ps = bno + crush_hash32_2(ino, ino>>32);
 	pgid.pg.preferred = preferred;
 	pgid.pg.type = fl->fl_pg_type;
-	pgid.pg.size = fl->fl_pg_size;
 	pgid.pg.pool = fl->fl_pg_pool;
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);

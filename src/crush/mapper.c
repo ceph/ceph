@@ -23,19 +23,19 @@
 
 
 /**
- * crush_find_rule - find a crush_rule id for a given pool, type, and size.
+ * crush_find_rule - find a crush_rule id for a given ruleset, type, and size.
  * @map: the crush_map
- * @pool: the storage pool id (user defined)
- * @type: storage pool type (user defined)
+ * @ruleset: the storage ruleset id (user defined)
+ * @type: storage ruleset type (user defined)
  * @size: output set size
  */
-int crush_find_rule(struct crush_map *map, int pool, int type, int size)
+int crush_find_rule(struct crush_map *map, int ruleset, int type, int size)
 {
 	int i;
 
 	for (i = 0; i < map->max_rules; i++) {
 		if (map->rules[i] &&
-		    map->rules[i]->mask.pool == pool &&
+		    map->rules[i]->mask.ruleset == ruleset &&
 		    map->rules[i]->mask.type == type &&
 		    map->rules[i]->mask.min_size <= size &&
 		    map->rules[i]->mask.max_size >= size)

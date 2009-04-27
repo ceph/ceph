@@ -2037,7 +2037,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     pg->state_clear(PG_STATE_PEERING);  // we'll need to restart peering
 
     if (pg->is_primary() && 
-	pg->info.pgid.size() != pg->acting.size())
+	osdmap->get_pg_size(pg->info.pgid) != pg->acting.size())
       pg->state_set(PG_STATE_DEGRADED);
     else
       pg->state_clear(PG_STATE_DEGRADED);
@@ -2450,7 +2450,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
   for (vector<pobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     pobject_t poid = *p;
-    ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), parentid.size(),
+    ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), 
 						      parentid.pool(), parentid.preferred());
     if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {
       pg_t pgid(le64_to_cpu(l.ol_pgid));

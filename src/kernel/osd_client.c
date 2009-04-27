@@ -320,13 +320,16 @@ static int map_osds(struct ceph_osd_client *osdc,
 	unsigned pps; /* placement ps */
 	int osds[10], osd = -1;
 	int i, num;
+	struct ceph_pg_pool *pool;
 
-	ruleno = crush_find_rule(osdc->osdmap->crush, req->r_pgid.pg.pool,
-				 req->r_pgid.pg.type, req->r_pgid.pg.size);
+	if (req->r_pgid.pg.pool >= osdc->osdmap->num_pools)
+		return -1;
+	pool = &osdc->osdmap->pg_pool[req->r_pgid.pg.pool];
+	ruleno = crush_find_rule(osdc->osdmap->crush, pool->crush_ruleset,
+				 req->r_pgid.pg.type, pool->size);
 	if (ruleno < 0) {
 		derr(0, "map_osds no crush rule for pool %d type %d size %d\n",
-		     req->r_pgid.pg.pool, req->r_pgid.pg.type,
-		     req->r_pgid.pg.size);
+		     req->r_pgid.pg.pool, req->r_pgid.pg.type, pool->size);
 		return -1;
 	}
 
@@ -339,7 +342,7 @@ static int map_osds(struct ceph_osd_client *osdc,
 				     osdc->osdmap->pgp_num,
 				     osdc->osdmap->pgp_num_mask);
 	num = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
-			    min_t(int, req->r_pgid.pg.size, ARRAY_SIZE(osds)),
+			    min_t(int, pool->size, ARRAY_SIZE(osds)),
 			    req->r_pgid.pg.preferred, osdc->osdmap->osd_weight);
 
 	/* primary is first up osd */

@@ -38,6 +38,9 @@ struct ceph_osdmap {
 	u32 *osd_weight;   /* 0 = failed, 0x10000 = 100% normal */
 	struct ceph_entity_addr *osd_addr;
 
+	u32 num_pools;
+	struct ceph_pg_pool *pg_pool;
+
 	/* the CRUSH map specifies the mapping of placement groups to
 	 * the list of osds that store+replicate them. */
 	struct crush_map *crush;

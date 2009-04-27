@@ -234,7 +234,7 @@ void parse_rule(iter_t const& i, CrushWrapper &crush)
     start = 3;
   }
 
-  int pool = int_node(i->children[start]);
+  int ruleset = int_node(i->children[start]);
 
   string tname = string_node(i->children[start+2]);
   int type;
@@ -251,7 +251,7 @@ void parse_rule(iter_t const& i, CrushWrapper &crush)
   int steps = i->children.size() - start - 8;
   //cout << "num steps " << steps << std::endl;
   
-  int ruleno = crush.add_rule(steps, pool, type, minsize, maxsize, -1);
+  int ruleno = crush.add_rule(steps, ruleset, type, minsize, maxsize, -1);
   if (rname.length()) {
     crush.set_rule_name(ruleno, rname.c_str());
     rule_id[rname] = ruleno;
@@ -560,7 +560,7 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
     if (crush.get_rule_name(i))
       print_rule_name(out, i, crush);
     out << " {\n";
-    out << "\tpool " << crush.get_rule_mask_pool(i) << "\n";
+    out << "\truleset " << crush.get_rule_mask_ruleset(i) << "\n";
     switch (crush.get_rule_mask_type(i)) {
     case CEPH_PG_TYPE_REP: out << "\ttype replicated\n"; break;
     case CEPH_PG_TYPE_RAID4: out << "\ttype raid4\n"; break;
@@ -820,15 +820,14 @@ int main(int argc, const char **argv)
       lower_weights.swap(cur_weights);
     }
     
-    // make some generic rules
-    for (int pool=0; pool<3; pool++) {
-      crush_rule *rule = crush_make_rule(3, pool, CEPH_PG_TYPE_REP, 2, 2);
-      crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
-      crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-      int rno = crush_add_rule(crush.crush, rule, -1);
-      crush.set_rule_name(rno, get_pool_name(pool));
-    }
+    // make a generic rules
+    int ruleset=1;
+    crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, 2, 2);
+    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+    int rno = crush_add_rule(crush.crush, rule, -1);
+    crush.set_rule_name(rno, "data");
 
     crush.finalize();
     dout(0) << "crush max_devices " << crush.crush->max_devices << dendl;

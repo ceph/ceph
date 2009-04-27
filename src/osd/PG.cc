@@ -1269,7 +1269,7 @@ void PG::activate(ObjectStore::Transaction& t,
     state_clear(PG_STATE_REPLAY);
   }
   if (is_primary() && 
-      info.pgid.size() != acting.size())
+      osd->osdmap->get_pg_size(info.pgid) != acting.size())
     state_set(PG_STATE_DEGRADED);
   else
     state_clear(PG_STATE_DEGRADED);
@@ -1548,7 +1548,7 @@ void PG::update_stats()
     pg_stats_stable.state = state;
     pg_stats_stable.acting = acting;
 
-    pg_stats_stable.num_object_copies = pg_stats_stable.num_objects * info.pgid.size();
+    pg_stats_stable.num_object_copies = pg_stats_stable.num_objects * osd->osdmap->get_pg_size(info.pgid);
     if (!is_clean() && is_active()) {
       pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
       int degraded = missing.num_missing();

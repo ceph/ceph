@@ -151,6 +151,9 @@ public:
     // incremental
     int32_t new_max_osd;
     int32_t new_pg_num, new_pgp_num, new_lpg_num, new_lpgp_num;
+    map<int32_t,ceph_pg_pool> new_pools;
+    map<int32_t,nstring> new_pool_names;
+    set<int32_t> old_pools;
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_weight;
@@ -180,11 +183,14 @@ public:
       ::encode(new_pgp_num, bl);
       ::encode(new_lpg_num, bl);
       ::encode(new_lpgp_num, bl);
+      ::encode(new_pools, bl);
+      ::encode(old_pools, bl);
       ::encode(new_up, bl);
       ::encode(new_down, bl);
       ::encode(new_weight, bl);
 
       // extended
+      ::encode(new_pool_names, bl);
       ::encode(new_up_thru, bl);
       ::encode(new_last_clean_interval, bl);
       ::encode(new_lost, bl);
@@ -209,11 +215,14 @@ public:
       ::decode(new_pgp_num, p);
       ::decode(new_lpg_num, p);
       ::decode(new_lpgp_num, p);
+      ::decode(new_pools, p);
+      ::decode(old_pools, p);
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_weight, p);
       
       // extended
+      ::decode(new_pool_names, p);
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
       ::decode(new_lost, p);
@@ -276,6 +285,8 @@ private:
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
 
+  map<int,ceph_pg_pool> pools;
+  map<int,nstring> pool_name;
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   snapid_t max_snap;
   interval_set<snapid_t> removed_snaps;
@@ -286,6 +297,7 @@ private:
   CrushWrapper     crush;       // hierarchical map
 
   friend class OSDMonitor;
+  friend class PGMonitor;
   friend class MDS;
 
  public:
@@ -528,6 +540,21 @@ private:
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
 
+    for (set<int32_t>::iterator p = inc.old_pools.begin();
+	 p != inc.old_pools.end();
+	 p++) {
+      pools.erase(*p);
+      pool_name.erase(*p);
+    }
+    for (map<int32_t,ceph_pg_pool>::iterator p = inc.new_pools.begin();
+	 p != inc.new_pools.end();
+	 p++)
+      pools[p->first] = p->second;
+    for (map<int32_t,nstring>::iterator p = inc.new_pool_names.begin();
+	 p != inc.new_pool_names.end();
+	 p++)
+      pool_name[p->first] = p->second;
+
     for (map<int32_t,uint32_t>::iterator i = inc.new_weight.begin();
          i != inc.new_weight.end();
          i++)
@@ -609,6 +636,13 @@ private:
     ::encode(lpg_num, blist);
     ::encode(lpgp_num, blist);
     ::encode(last_pg_change, blist);
+
+    int32_t max_pools = 0;
+    if (pools.size())
+      max_pools = pools.rbegin()->first + 1;
+    ::encode(max_pools, blist);
+    ::encode(pools, blist);
+
     ::encode(flags, blist);
     
     ::encode(max_osd, blist);
@@ -623,6 +657,7 @@ private:
 
     // extended
     ::encode(osd_info, blist);
+    ::encode(pool_name, blist);
     ::encode(pg_swap_primary, blist);
 
     ::encode(max_snap, blist);
@@ -643,6 +678,11 @@ private:
     ::decode(lpgp_num, p);
     calc_pg_masks();
     ::decode(last_pg_change, p);
+
+    int32_t max_pools;
+    ::decode(max_pools, p);
+    ::decode(pools, p);
+
     ::decode(flags, p);
 
     ::decode(max_osd, p);
@@ -658,6 +698,7 @@ private:
 
     // extended
     ::decode(osd_info, p);
+    ::decode(pool_name, p);
     ::decode(pg_swap_primary, p);
     
     ::decode(max_snap, p);
@@ -672,13 +713,13 @@ private:
 
   // oid -> pg
   ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
-    return make_object_layout(oid, layout.fl_pg_type, layout.fl_pg_size, 
+    return make_object_layout(oid, layout.fl_pg_type,
 			      layout.fl_pg_pool,
 			      ceph_file_layout_pg_preferred(layout),
 			      ceph_file_layout_object_su(layout));
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_size, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
+  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     // calculate ps (placement seed)
     ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {
@@ -705,7 +746,7 @@ private:
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
-    pg_t pgid = pg_t(pg_type, pg_size, ps, pg_pool, preferred);
+    pg_t pgid = pg_t(pg_type, ps, pg_pool, preferred);
     ceph_object_layout layout;
     layout.ol_pgid = pgid.u.pg64;
     layout.ol_stripe_unit = object_stripe_unit;
@@ -737,35 +778,39 @@ private:
   // pg -> (osd list)
   int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
-
+    int p = pg.pool();
+    if (!pools.count(p)) {
+      return osds.size();
+    }
+    ceph_pg_pool &pool = pools[p];
     ps_t pps = raw_pg_to_pps(pg);  // placement ps
 
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
       {
 	// what crush rule?
-	int ruleno = crush.find_rule(pg.pool(), pg.type(), pg.size());
+	int ruleno = crush.find_rule(pool.crush_ruleset, pg.type(), pool.size);
 	if (ruleno >= 0)
-	  crush.do_rule(ruleno, pps, osds, pg.size(), pg.preferred(), osd_weight);
+	  crush.do_rule(ruleno, pps, osds, pool.size, pg.preferred(), osd_weight);
       }
       break;
       
     case CEPH_PG_LAYOUT_LINEAR:
-      for (unsigned i=0; i<pg.size(); i++) 
-	osds.push_back( (i + pps*pg.size()) % g_conf.num_osd );
+      for (unsigned i=0; i<pool.size; i++) 
+	osds.push_back( (i + pps*pool.size) % g_conf.num_osd );
       break;
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
 	int h = crush_hash32(pps);
-	for (unsigned i=0; i<pg.size(); i++) 
+	for (unsigned i=0; i<pool.size; i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
       break;
       
     case CEPH_PG_LAYOUT_HASH:
       {
-	for (unsigned i=0; i<pg.size(); i++) {
+	for (unsigned i=0; i<pool.size; i++) {
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
@@ -793,8 +838,8 @@ private:
       if (osds.empty()) {
         osds.push_back(osd);
       } else {
-        assert(pg.size() > 0);
-        for (unsigned i=1; i<pg.size(); i++)
+        assert(pool.size > 0);
+        for (unsigned i=1; i<pool.size; i++)
           if (osds[i] == osd) {
             // swap with position 0
             osds[i] = osds[0];
@@ -837,6 +882,11 @@ private:
   }
 
 
+
+  unsigned get_pg_size(pg_t pg) {
+    ceph_pg_pool &pool = pools[pg.pool()];
+    return pool.size;
+  }
 
   // pg -> primary osd
   int get_pg_primary(pg_t pg) {
@@ -908,7 +958,7 @@ private:
 		    int num_osd, int num_dom,
 		    int pg_bits, int lpg_bits,
 		    int mds_local_osd);
-  static void build_simple_crush_map(CrushWrapper& crush, int num_osd, int num_dom=0);
+  static void build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& poolsets, int num_osd, int num_dom=0);
 
 
   void print(ostream& out);

@@ -25,7 +25,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v010"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v011"
 
 
 
@@ -90,8 +90,22 @@ namespace __gnu_cxx {
 
 typedef uint16_t ps_t;
 
-#define OSD_METADATA_PG_POOL 0xff
-#define OSD_SUPERBLOCK_POBJECT pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0,0))
+// object namespaces
+#define CEPH_METADATA_NS       1
+#define CEPH_DATA_NS           2
+#define CEPH_CAS_NS            3
+#define CEPH_OSDMETADATA_NS 0xff
+
+// poolsets
+enum {
+  CEPH_DATA_RULE,
+  CEPH_METADATA_RULE,
+  CEPH_CASDATA_RULE,
+};
+
+//#define CEPH_POOL(poolset, size) (((poolset) << 8) + (size))
+
+#define OSD_SUPERBLOCK_POBJECT pobject_t(CEPH_OSDMETADATA_NS, 0, object_t(0,0))
 
 // placement group id
 struct pg_t {
@@ -105,10 +119,9 @@ public:
 public:
   pg_t() { u.pg64 = 0; }
   pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
-  pg_t(int type, int size, ps_t seed, int pool, int pref) {
+  pg_t(int type, ps_t seed, int pool, int pref) {
     u.pg64 = 0;
     u.pg.type = type;
-    u.pg.size = size;
     u.pg.ps = seed;
     u.pg.pool = pool;
     u.pg.preferred = pref;   // hack: avoid negative.
@@ -123,7 +136,6 @@ public:
   bool is_rep()   { return type() == TYPE_REP; }
   bool is_raid4() { return type() == TYPE_RAID4; }
 
-  unsigned size() { return u.pg.size; }
   ps_t ps() { return u.pg.ps; }
   int pool() { return u.pg.pool; }
   int preferred() { return u.pg.preferred; }   // hack: avoid negative.
@@ -131,7 +143,7 @@ public:
   operator uint64_t() const { return u.pg64; }
 
   pobject_t to_log_pobject() const { 
-    return pobject_t(OSD_METADATA_PG_POOL,   // osd metadata 
+    return pobject_t(CEPH_OSDMETADATA_NS,
 		     0,
 		     object_t(u.pg64, 0));
   }
@@ -144,15 +156,13 @@ public:
   }
 
   bool parse(const char *s) {
-    int numrep;
     int pool;
     int ps;
-    int r = sscanf(s, "%dx%d.%x", &numrep, &pool, &ps);
+    int r = sscanf(s, "%d.%x", &pool, &ps);
     if (r < 3)
       return false;
     u.pg.type = TYPE_REP;
     u.pg.pool = pool;
-    u.pg.size = numrep;
     u.pg.ps = ps;
     u.pg.preferred = -1;
     return true;
@@ -170,12 +180,6 @@ inline void decode(pg_t &pgid, bufferlist::iterator& p) {
 
 inline ostream& operator<<(ostream& out, pg_t pg) 
 {
-  if (pg.is_rep()) 
-    out << pg.size() << 'x';
-  else if (pg.is_raid4()) 
-    out << pg.size() << 'r';
-  else 
-    out << pg.size() << '?';
   out << pg.pool() << '.';
   out << hex << pg.ps() << dec;
 

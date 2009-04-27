@@ -56,11 +56,11 @@ enum {
 
 /*
  * The rule mask is used to describe what the rule is intended for.
- * Given a storage pool and size of output set, we search through the
+ * Given a ruleset and size of output set, we search through the
  * rule list for a matching rule_mask.
  */
 struct crush_rule_mask {
-	__u8 pool;
+	__u8 ruleset;
 	__u8 type;
 	__u8 min_size;
 	__u8 max_size;

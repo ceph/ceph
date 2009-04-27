@@ -2146,8 +2146,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (time_to_stop()) break;
 
     object_t oid(0x1000, i);
-    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 
-								   g_default_file_layout.fl_pg_size, 0);
+    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 0);
     SnapContext snapc;
     
     if (i % inflight == 0) {
@@ -2250,8 +2249,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     }
     object_t oid(0x1000, o);
 
-    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 
-								   g_default_file_layout.fl_pg_size, 0);
+    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 0);
     SnapContext snapc;
     
     client->client_lock.Lock();

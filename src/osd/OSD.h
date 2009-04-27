@@ -119,10 +119,10 @@ public:
   int get_nodeid() { return whoami; }
   
   static pobject_t get_osdmap_pobject_name(epoch_t epoch) { 
-    return pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0, epoch << 1)); 
+    return pobject_t(CEPH_OSDMETADATA_NS, 0, object_t(0, epoch << 1)); 
   }
   static pobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
-    return pobject_t(OSD_METADATA_PG_POOL, 0, object_t(0, (epoch << 1) + 1)); 
+    return pobject_t(CEPH_OSDMETADATA_NS, 0, object_t(0, (epoch << 1) + 1)); 
   }
   
 

@@ -805,7 +805,7 @@ public:
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
-  bool is_complete_pg() { return acting.size() == info.pgid.size(); }
+  //bool is_complete_pg() { return acting.size() == info.pgid.size(); }
 
   void add_log_entry(Log::Entry& e, bufferlist& log_bl);
 

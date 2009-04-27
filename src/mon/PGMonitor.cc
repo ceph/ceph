@@ -440,57 +440,56 @@ bool PGMonitor::register_new_pgs()
 
   bool first = pg_map.pg_stat.empty(); // first pg creation
   int created = 0;
-  for (int ruleno=0; ruleno<crush->get_max_rules(); ruleno++) {
+  for (map<int,ceph_pg_pool>::iterator p = mon->osdmon()->osdmap.pools.begin();
+       p != mon->osdmon()->osdmap.pools.end();
+       p++) {
+    int pool = p->first;
+    int type = p->second.type;
+    int ruleno = p->second.crush_ruleset;
     if (!crush->rule_exists(ruleno)) 
       continue;
-    int pool = crush->get_rule_mask_pool(ruleno);
-    int type = crush->get_rule_mask_type(ruleno);
-    int min_size = crush->get_rule_mask_min_size(ruleno);
-    int max_size = crush->get_rule_mask_max_size(ruleno);
-    for (int size = min_size; size <= max_size; size++) {
-      for (ps_t ps = 0; ps < pg_num; ps++) {
-	pg_t pgid(type, size, ps, pool, -1);
-	if (pg_map.pg_stat.count(pgid)) {
-	  dout(20) << "register_new_pgs have " << pgid << dendl;
-	  continue;
-	}
+    for (ps_t ps = 0; ps < pg_num; ps++) {
+      pg_t pgid(type, ps, pool, -1);
+      if (pg_map.pg_stat.count(pgid)) {
+	dout(20) << "register_new_pgs have " << pgid << dendl;
+	continue;
+      }
 
-	pg_t parent;
-	int split_bits = 0;
-	if (!first) {
-	  parent = pgid;
-	  while (1) {
-	    // remove most significant bit
-	    int msb = calc_bits_of(parent.u.pg.ps);
-	    if (!msb) break;
-	    parent.u.pg.ps &= ~(1<<(msb-1));
-	    split_bits++;
-	    dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
-	    //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
-	    if (pg_map.pg_stat.count(parent) &&
-		pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
-	      dout(10) << "  parent is " << parent << dendl;
-	      break;
-	    }
+      pg_t parent;
+      int split_bits = 0;
+      if (!first) {
+	parent = pgid;
+	while (1) {
+	  // remove most significant bit
+	  int msb = calc_bits_of(parent.u.pg.ps);
+	  if (!msb) break;
+	  parent.u.pg.ps &= ~(1<<(msb-1));
+	  split_bits++;
+	  dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
+	  //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
+	  if (pg_map.pg_stat.count(parent) &&
+	      pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
+	    dout(10) << "  parent is " << parent << dendl;
+	    break;
 	  }
 	}
-	
-	pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
-	pending_inc.pg_stat_updates[pgid].created = epoch;
-	pending_inc.pg_stat_updates[pgid].parent = parent;
-	pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
-	created++;	
-
-	if (split_bits == 0) {
-	  dout(10) << "register_new_pgs will create " << pgid << dendl;
-	} else {
-	  dout(10) << "register_new_pgs will create " << pgid
-		   << " parent " << parent
-		   << " by " << split_bits << " bits"
-		   << dendl;
-	}
-
       }
+      
+      pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
+      pending_inc.pg_stat_updates[pgid].created = epoch;
+      pending_inc.pg_stat_updates[pgid].parent = parent;
+      pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
+      created++;	
+      
+      if (split_bits == 0) {
+	dout(10) << "register_new_pgs will create " << pgid << dendl;
+      } else {
+	dout(10) << "register_new_pgs will create " << pgid
+		 << " parent " << parent
+		 << " by " << split_bits << " bits"
+		 << dendl;
+      }
+      
     }
   } 
   dout(10) << "register_new_pgs registered " << created << " new pgs" << dendl;

@@ -182,10 +182,10 @@ public:
     if (IS_ERR(r)) return PTR_ERR(r);
     return r->len;
   }
-  int get_rule_mask_pool(unsigned ruleno) {
+  int get_rule_mask_ruleset(unsigned ruleno) {
     crush_rule *r = get_rule(ruleno);
     if (IS_ERR(r)) return -1;
-    return r->mask.pool;
+    return r->mask.ruleset;
   }
   int get_rule_mask_type(unsigned ruleno) {
     crush_rule *r = get_rule(ruleno);

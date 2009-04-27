@@ -846,20 +846,16 @@ void OSDMonitor::tick()
     // For all PGs that have OSD 0 as the primary,
     // switch them to use the first replca
     ps_t numps = osdmap.get_pg_num();
-    int minrep = 1; 
-    int maxrep = MIN(g_conf.num_osd, g_conf.osd_max_rep);
     for (int pool=0; pool<1; pool++)
-      for (int nrep = minrep; nrep <= maxrep; nrep++) { 
-	for (ps_t ps = 0; ps < numps; ++ps) {
-	  pg_t pgid = pg_t(pg_t::TYPE_REP, nrep, ps, pool, -1);
-	  vector<int> osds;
-	  osdmap.pg_to_osds(pgid, osds); 
-	  if (osds[0] == 0) {
-	    pending_inc.new_pg_swap_primary[pgid] = osds[1];
-	    dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
-		    << osds[1] << dendl;
-	    do_propose = true;
-    	  }
+      for (ps_t ps = 0; ps < numps; ++ps) {
+	pg_t pgid = pg_t(pg_t::TYPE_REP, ps, pool, -1);
+	vector<int> osds;
+	osdmap.pg_to_osds(pgid, osds); 
+	if (osds[0] == 0) {
+	  pending_inc.new_pg_swap_primary[pgid] = osds[1];
+	  dout(3) << "Changing primary for PG " << pgid << " from " << osds[0] << " to "
+		  << osds[1] << dendl;
+	  do_propose = true;
 	}
       }
   }
@@ -1117,6 +1113,31 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
+      }
+    }
+    else if (m->cmd[1] == "pool" && m->cmd.size() >= 5) {
+      int pool = -1;
+      for (map<int,nstring>::iterator p = osdmap.pool_name.begin();
+	   p != osdmap.pool_name.end();
+	   p++) {
+	if (p->second == m->cmd[2])
+	  pool = p->first;
+      }
+      if (pool >= 0) {
+	if (m->cmd[3] == "size") {
+	  int s = atoi(m->cmd[4].c_str());
+	  if (s) {
+	    pending_inc.new_pools[pool] = osdmap.pools[pool];
+	    pending_inc.new_pools[pool].size = s;
+	    ss << "set pool " << pool << " size to " << s;
+	    getline(ss, rs);
+	    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	    return true;
+	  }
+	}
+      } else {
+	ss << "unrecognized pool '" << m->cmd[2] << "'";
+	err = -ENOENT;
       }
     }
     else {

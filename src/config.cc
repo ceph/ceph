@@ -86,8 +86,7 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_stripe_unit: init_le32(0),
  fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2,
- fl_pg_pool: 1
+ fl_pg_pool: {1},
 };
 
 struct ceph_file_layout g_default_casdata_layout = {
@@ -98,8 +97,7 @@ struct ceph_file_layout g_default_casdata_layout = {
  fl_object_stripe_unit: init_le32(0),
  fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2,
- fl_pg_pool: 2
+ fl_pg_pool: {3},
 };
 
 struct ceph_file_layout g_default_mds_dir_layout = {
@@ -110,8 +108,7 @@ struct ceph_file_layout g_default_mds_dir_layout = {
  fl_object_stripe_unit: init_le32(0),
  fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2,
- fl_pg_pool: 0
+ fl_pg_pool: {2},
 };
 
 struct ceph_file_layout g_default_mds_log_layout = {
@@ -122,8 +119,7 @@ struct ceph_file_layout g_default_mds_log_layout = {
  fl_object_stripe_unit: init_le32(0),
  fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2,
- fl_pg_pool: 0
+ fl_pg_pool: {2},
 };
 
 struct ceph_file_layout g_default_mds_anchortable_layout = {
@@ -134,19 +130,8 @@ struct ceph_file_layout g_default_mds_anchortable_layout = {
  fl_object_stripe_unit: init_le32(0),
  fl_pg_preferred: init_le32(-1),
  fl_pg_type: CEPH_PG_TYPE_REP,
- fl_pg_size: 2,
- fl_pg_pool: 0
+ fl_pg_pool: {2},
 };
-
-const char *get_pool_name(int pool) 
-{
-  switch (pool) {
-  case 0: return "metadata";
-  case 1: return "data";
-  case 2: return "casdata";
-  default: return "";
-  }
-}
 
 #include <msg/msg_types.h>
 

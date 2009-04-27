@@ -264,9 +264,9 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	__le32 fl_pg_preferred; /* preferred primary for pg (-1 for none) */
-	__u8  fl_pg_type;       /* pg type; see PG_TYPE_* */
-	__u8  fl_pg_size;       /* pg size (num replicas, etc.) */
-	__u8  fl_pg_pool;       /* implies crush ruleset AND object namespace */
+	__u8   fl_pg_type;
+	__le16 fl_pg_pool;      /* implies crush ruleset, rep level */
+	__le16 fl_pg_ns;        /* object namespace */
 } __attribute__ ((packed));
 
 #define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
@@ -297,15 +297,20 @@ union ceph_pg {
 	struct {
 		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
-		__u8 __pad;
-		__u8 size;
-		__u8 pool;       /* implies crush ruleset */
+		__u16 pool;      /* implies crush ruleset */
 		__u8 type;
+		__u8 __pad;
 	} pg;
 } __attribute__ ((packed));
 
 #define ceph_pg_is_rep(pg)   ((pg).pg.type == CEPH_PG_TYPE_REP)
 #define ceph_pg_is_raid4(pg) ((pg).pg.type == CEPH_PG_TYPE_RAID4)
+
+struct ceph_pg_pool {
+	__u8 crush_ruleset;
+	__u8 size;
+	__u8 type;
+} __attribute__ ((packed));
 
 /*
  * stable_mod func is used to control number of placement groups.
