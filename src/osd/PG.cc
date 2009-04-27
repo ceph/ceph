@@ -350,7 +350,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	  oldest_update = p->version;
 	}
 
-	if (p->version.version == log.top.version)
+	if (p->version == log.top)
 	  p++;       // move past the split point, if it also exists in our old log...
 	break;
       }
