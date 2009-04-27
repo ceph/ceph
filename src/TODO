@@ -36,6 +36,7 @@ v0.8
 - confutils memory leaks
 
 big items
+- osd re-up attempt when marked down
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 - restructure pg pools, object pools, whatever..
   - we want to be able to adjust replication level of pools of objects.
