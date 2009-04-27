@@ -34,32 +34,13 @@ v0.8
 /- dcache readdir
 - make mds exhert memory pressure on client caps, leases
 - confutils memory leaks
-- make replication configurable from the .conf
-- --version option to everything
-
-kclient caps
-- fix up mds selection, and ESTALE handling
-
-- check_caps cleanup
-  - callers
-    - dropped the last ref to a cap bit (used change)
-    - dropped last fmode ref            (wanted shrinkage)
-    - file open                         (wanted expansion)
-    - check max size
-      - flag to only check the auth cap?
-    - after a cap import
-    - on cap revocation, to initiate writeback
-    - after a delay
-    - after async page invalidation
-    - after async truncation
-
-- ENOSPC
-- flock
-- fully async file creation
-- cas?
 
 big items
-- finish client failure recovery (reconnect after long eviction; and slow delayed reconnect)
+- optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
+- restructure pg pools, object pools, whatever..
+  - we want to be able to adjust replication level of pools of objects.
+  - make replication configurable from the .conf?
+- client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
   - space reservation in ObjectStore, redeemed by Transactions?
   - reserved as PG goes active; reservation canceled when pg goes inactive
