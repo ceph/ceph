@@ -393,6 +393,7 @@ class ExportAddrEntry {
 	bool valid;
 public:
 	ExportAddrEntry(const char *str);
+	~ExportAddrEntry();
 
 	bool is_valid() { return (group && group->is_valid()); }
 	bool is_authorized(entity_addr_t *addr);
@@ -404,6 +405,11 @@ ExportAddrEntry::ExportAddrEntry(const char *str)
 	group = new GroupEntry();
 
 	group->parse_addr_line(str);
+}
+
+ExportAddrEntry::~ExportAddrEntry()
+{
+	delete group;
 }
 
 bool ExportAddrEntry::is_authorized(entity_addr_t *addr)
@@ -437,6 +443,7 @@ class ExportEntry {
 	vector<ExportAddrEntry *> addr_vec;
 public:
 	ExportEntry() {}
+	~ExportEntry();
 	ExportEntry(const char *str);
 	void init(const char *str);
 	bool is_authorized(entity_addr_t *addr);
@@ -446,6 +453,16 @@ public:
 ExportEntry::ExportEntry(const char *str)
 {
 	init(str);
+}
+
+ExportEntry::~ExportEntry()
+{
+	vector<ExportAddrEntry *>::iterator iter;
+
+	for (iter = addr_vec.begin(); iter != addr_vec.end(); ++iter)
+	{
+		delete *iter;
+	}
 }
 
 void ExportEntry::init(const char *str)
