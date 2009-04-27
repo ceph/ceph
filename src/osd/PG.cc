@@ -341,7 +341,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     list<Log::Entry>::iterator p = log.log.end();
     while (p != log.log.begin()) {
       p--;
-      if (p->version.version <= log.top.version) {
+      if (p->version <= log.top) {
 	dout(10) << "merge_log split point is " << *p << dendl;
 
 	if (p->version < log.top && p->version < oldest_update) {
