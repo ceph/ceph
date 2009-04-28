@@ -28,7 +28,7 @@
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
-#if 0
+#if 1
 #define assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
@@ -46,6 +46,7 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 	? __CEPH_ASSERT_VOID_CAST (0)					\
 	: __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION)); \
   } while (0)
+#endif
 
 #define assert_warn(expr)							\
   ((expr)								\
@@ -54,6 +55,7 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 
 #define assert_protocol(expr)	assert(expr)
 #define assert_disk(expr)	assert(expr)
-#endif
+
 
 #endif
+
