@@ -32,10 +32,10 @@ v0.8
 /- store metadata format version on disk...
 /- async xattr
 /- dcache readdir
-- make mds exhert memory pressure on client caps, leases
-- confutils memory leaks
+/- confutils memory leaks
 
 v0.9
+- make mds exhert memory pressure on client caps, leases
 - osd re-up attempt when marked down
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
