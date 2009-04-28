@@ -1782,7 +1782,7 @@ void Client::mark_caps_dirty(Inode *in, int caps)
 {
   dout(10) << "mark_caps_dirty " << *in << " " << ccap_string(in->dirty_caps) << " -> "
 	   << ccap_string(in->dirty_caps | caps) << dendl;
-  if (caps & !in->dirty_caps)
+  if (caps && !in->caps_dirty())
     in->get();
   in->dirty_caps |= caps;
 }
@@ -2905,17 +2905,17 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   if (issued & CEPH_CAP_AUTH_EXCL) {
     if (mask & CEPH_SETATTR_MODE) {
       in->inode.mode = attr->st_mode;
-      in->dirty_caps |= CEPH_CAP_AUTH_EXCL;
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
     }
     if (mask & CEPH_SETATTR_UID) {
       in->inode.uid = attr->st_uid;
-      in->dirty_caps |= CEPH_CAP_AUTH_EXCL;
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
     }
     if (mask & CEPH_SETATTR_GID) {
       in->inode.gid = attr->st_gid;
-      in->dirty_caps |= CEPH_CAP_AUTH_EXCL;
+      mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
     }
   }
@@ -2926,7 +2926,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
       if (mask & CEPH_SETATTR_ATIME)
 	in->inode.atime = utime_t(attr->st_atime, 0);
       in->inode.time_warp_seq++;
-      in->dirty_caps |= CEPH_CAP_FILE_EXCL;
+      mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
     }
   }
@@ -3941,7 +3941,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   // extend file?
   if (totalwritten + offset > in->inode.size) {
     in->inode.size = totalwritten + offset;
-    in->dirty_caps |= CEPH_CAP_FILE_WR;
+    mark_caps_dirty(in, CEPH_CAP_FILE_WR);
     
     if ((in->inode.size << 1) >= in->inode.max_size &&
 	(in->reported_size << 1) < in->inode.max_size)
@@ -3954,7 +3954,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 
   // mtime
   in->inode.mtime = g_clock.real_now();
-  in->dirty_caps |= CEPH_CAP_FILE_WR;
+  mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   
