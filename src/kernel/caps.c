@@ -361,8 +361,8 @@ static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 				struct ceph_inode_info *ci)
 {
-	dout(10, "__cap_delay_requeue %p at %lu\n", &ci->vfs_inode,
-	     ci->i_hold_caps_max);
+	dout(10, "__cap_delay_requeue %p flags %d at %lu\n", &ci->vfs_inode,
+	     ci->i_ceph_flags, ci->i_hold_caps_max);
 	if (!mdsc->stopping) {
 		spin_lock(&mdsc->cap_delay_lock);
 		if (!list_empty(&ci->i_cap_delay_list)) {
@@ -863,8 +863,8 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	u64 xattr_version = 0;
 	int delayed = 0;
 
-	dout(10, "__send_cap cap %p session %p %s -> %s (revoking %s)\n",
-	     cap, cap->session,
+	dout(10, "__send_cap %p cap %p session %p %s -> %s (revoking %s)\n",
+	     inode, cap, cap->session,
 	     ceph_cap_string(held), ceph_cap_string(held & retain),
 	     ceph_cap_string(revoking));
 	BUG_ON((retain & CEPH_CAP_PIN) == 0);
@@ -1055,6 +1055,23 @@ static void ceph_flush_snaps(struct ceph_inode_info *ci)
 	spin_lock(&inode->i_lock);
 	__ceph_flush_snaps(ci, NULL);
 	spin_unlock(&inode->i_lock);
+}
+
+/*
+ * Add dirty inode to the sync (currently flushing) list.
+ */
+static void __mark_caps_sync(struct inode *inode)
+{
+	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+
+	BUG_ON(list_empty(&ci->i_dirty_item));
+	spin_lock(&mdsc->cap_dirty_lock);
+	if (list_empty(&ci->i_sync_item)) {
+		dout(20, " inode %p now sync\n", &ci->vfs_inode);
+		list_add(&ci->i_sync_item, &mdsc->cap_sync);
+	}
+	spin_unlock(&mdsc->cap_dirty_lock);
 }
 
 /*
@@ -1262,6 +1279,7 @@ ack:
 			     ceph_cap_string(ci->i_flushing_caps | flushing));
 			ci->i_flushing_caps |= flushing;
 			ci->i_dirty_caps = 0;
+			__mark_caps_sync(inode);
 		}
 
 		mds = cap->mds;  /* remember mds, so we don't repeat */
@@ -1325,20 +1343,6 @@ int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 	__cap_delay_requeue(mdsc, ci);
 
 	return was;
-}
-
-static void __mark_caps_sync(struct inode *inode)
-{
-	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
-	struct ceph_inode_info *ci = ceph_inode(inode);
-
-	BUG_ON(list_empty(&ci->i_dirty_item));
-	spin_lock(&mdsc->cap_dirty_lock);
-	if (list_empty(&ci->i_sync_item)) {
-		dout(20, " inode %p now sync\n", &ci->vfs_inode);
-		list_add(&ci->i_sync_item, &mdsc->cap_sync);
-	}
-	spin_unlock(&mdsc->cap_dirty_lock);
 }
 
 /*
