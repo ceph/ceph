@@ -86,7 +86,7 @@ void LogMonitor::create_initial(bufferlist& bl)
   e.type = LOG_ERROR;
   e.msg = "mkfs";
   e.seq = 0;
-  e.encode(pending_inc);
+  pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
 }
 
 bool LogMonitor::update_from_paxos()
@@ -174,7 +174,7 @@ bool LogMonitor::update_from_paxos()
 
 void LogMonitor::create_pending()
 {
-  pending_inc.clear();
+  pending_log.clear();
   pending_summary = summary;
   dout(10) << "create_pending v " << (paxos->get_version() + 1) << dendl;
 }
@@ -182,7 +182,10 @@ void LogMonitor::create_pending()
 void LogMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
-  bl = pending_inc;
+  for (multimap<utime_t,LogEntry>::iterator p = pending_log.begin();
+       p != pending_log.end();
+       p++)
+    p->second.encode(bl);
 }
 
 bool LogMonitor::preprocess_query(Message *m)
@@ -256,7 +259,7 @@ bool LogMonitor::prepare_log(MLog *m)
     dout(10) << " logging " << *p << dendl;
     if (!pending_summary.contains(p->key())) {
       pending_summary.add(*p);
-      (*p).encode(pending_inc);
+      pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
 

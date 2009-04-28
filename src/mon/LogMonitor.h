@@ -30,7 +30,7 @@ class MLog;
 
 class LogMonitor : public PaxosService {
 private:
-  bufferlist pending_inc;
+  multimap<utime_t,LogEntry> pending_log;
   LogSummary pending_summary, summary;
 
   void create_initial(bufferlist& bl);
