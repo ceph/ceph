@@ -35,12 +35,11 @@ v0.8
 - make mds exhert memory pressure on client caps, leases
 - confutils memory leaks
 
-big items
+v0.9
 - osd re-up attempt when marked down
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
-- restructure pg pools, object pools, whatever..
-  - we want to be able to adjust replication level of pools of objects.
-  - make replication configurable from the .conf?
+
+later
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
   - space reservation in ObjectStore, redeemed by Transactions?
