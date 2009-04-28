@@ -435,7 +435,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   dout(1) << "prepare_failure " << m->get_failed() << " from " << m->get_orig_source_inst() << dendl;
 
   ss << m->get_failed() << " failed (by " << m->get_orig_source_inst() << ")";
-  mon->get_logclient()->log(LOG_DEBUG, ss);
+  mon->get_logclient()->log(LOG_INFO, ss);
   
   // FIXME
   // take their word for it
@@ -554,7 +554,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 
   stringstream ss;
   ss << m->get_orig_source_inst() << " boot";
-  mon->get_logclient()->log(LOG_DEBUG, ss);
+  mon->get_logclient()->log(LOG_INFO, ss);
 
   delete m;
 }
@@ -819,7 +819,7 @@ void OSDMonitor::tick()
 	
 	stringstream ss;
 	ss << "osd" << o << " out (down for " << down << ")";
-	mon->get_logclient()->log(LOG_DEBUG, ss);
+	mon->get_logclient()->log(LOG_INFO, ss);
       } else
 	continue;
     }
