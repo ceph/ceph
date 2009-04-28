@@ -34,6 +34,8 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/common_init.h"
 
+#include "include/color.h"
+
 void usage() 
 {
   cerr << "usage: cosd -i osdid [--osd-data=path] [--osd-journal=path] [--mkfs]" << std::endl;
@@ -99,9 +101,10 @@ int main(int argc, const char **argv)
   int w;
   int r = OSD::peek_super(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
-    cerr << " ** ERROR: unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << std::endl;
+    cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
+         << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << TEXT_NORMAL << std::endl;
     if (r == -ENOTSUP)
-      cerr << " **        please verify that underlying storage supports xattrs" << std::endl;
+      cerr << TEXT_RED << " **        please verify that underlying storage supports xattrs" << TEXT_NORMAL << std::endl;
     derr(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << dendl;
     exit(1);
   }

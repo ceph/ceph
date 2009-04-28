@@ -353,6 +353,7 @@ noinst_HEADERS = \
         include/buffer.h\
         include/byteorder.h\
         include/ceph_fs.h\
+	include/color.h\
 	include/crc32c.h\
         include/cstring.h\
         include/encoding.h\

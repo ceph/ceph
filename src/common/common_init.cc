@@ -2,6 +2,8 @@
 #include "config.h"
 #include "tls.h"
 
+#include "include/color.h"
+
 void common_init(std::vector<const char*>& args, const char *module_type, bool daemon)
 {
   tls_init();
@@ -9,8 +11,8 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
 
   g_daemon = daemon;
   if (daemon) {
-    cout << " ** WARNING: Ceph is still under heavy development, and is only suitable for **\n";
-    cout << " **          testing and review.  Do not trust it with important data.       **" << std::endl;
+    cout << TEXT_YELLOW << " ** WARNING: Ceph is still under heavy development, and is only suitable for **" << TEXT_NORMAL << std::endl;
+    cout << TEXT_YELLOW <<  " **          testing and review.  Do not trust it with important data.       **" << TEXT_NORMAL << std::endl;
     
     g_conf.daemonize = true;
     g_conf.log_to_stdout = false;
