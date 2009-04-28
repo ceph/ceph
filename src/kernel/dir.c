@@ -1,3 +1,5 @@
+#include <linux/spinlock.h>
+#include <linux/fs_struct.h>
 #include <linux/namei.h>
 #include <linux/sched.h>
 
