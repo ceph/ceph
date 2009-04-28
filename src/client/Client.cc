@@ -577,10 +577,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   }
 
   if (reply->head.is_dentry) {
-    vinodeno_t vino = dirst.vino;
-    assert(inode_map.count(vino));
-    Inode *diri = inode_map[vino];
-    
+    Inode *diri = add_update_inode(&dirst, from, mds);
     update_dir_dist(diri, &dst);  // dir stat info is attached to inode...
 
     if (in) {
