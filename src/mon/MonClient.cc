@@ -146,7 +146,7 @@ int MonClient::get_monmap(MonMap *pmonmap)
 	  monstr += ",";
 	monstr += val;
       }
-      g_conf.mon_host = monstr.c_str();
+      g_conf.mon_host = strdup(monstr.c_str());
     }
   }
 
