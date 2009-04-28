@@ -223,8 +223,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   logclient(messenger, monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  boot_epoch(0), last_active_epoch(0),
-  state(STATE_BOOTING),
+  state(STATE_BOOTING), boot_epoch(0),
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
   recovery_tp("OSD::recovery_tp", 1),
   disk_tp("OSD::disk_tp", 2),
@@ -1896,6 +1895,21 @@ void OSD::handle_osd_map(MOSDMap *m)
       pg->write_log(t);
   }
 
+  if (osdmap->get_epoch() > 0 &&
+      (!osdmap->exists(whoami) || 
+       (!osdmap->is_up(whoami) && osdmap->get_addr(whoami) == messenger->get_myaddr()))) {
+    dout(0) << "map says i am down.  switching to boot state." << dendl;
+    //shutdown();
+
+    // note in the superblock that we were clean up until this point.
+    superblock.epoch_mounted = boot_epoch;
+    superblock.epoch_unmounted = osdmap->get_epoch();
+
+    state = STATE_BOOTING;
+    boot_epoch = 0;
+  }
+
+
   // superblock and commit
   write_superblock(t);
   store->apply_transaction(t);
@@ -1911,12 +1925,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   delete m;
 
-  if (osdmap->get_epoch() > 0 &&
-      (!osdmap->exists(whoami) || 
-       (!osdmap->is_up(whoami) && osdmap->get_addr(whoami) == messenger->get_myaddr()))) {
-    dout(0) << "map says i am dead" << dendl;
-    shutdown();
-  }
 }
 
 
@@ -2157,8 +2165,6 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
     pg->unlock();
   }  
-
-  last_active_epoch = osdmap->get_epoch();
 
   do_notifies(notify_list);  // notify? (residual|replica)
   do_queries(query_map);
