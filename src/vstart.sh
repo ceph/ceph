@@ -11,6 +11,7 @@ start_mon=0
 start_mds=0
 start_osd=0
 localhost=0
+nodaemon=0
 MON_ADDR=""
 
 conf="ceph.conf"
@@ -58,6 +59,9 @@ case $1 in
 	    valgrind_mon=$2
 	    shift
 	    ;;
+    --nodaemon )
+	    nodaemon=1
+	    ;;
     mon | cmon )
 	    start_mon=1
 	    start_all=0
@@ -100,8 +104,13 @@ run() {
 	valgrind --tool=$valg $* -f &
 	sleep 1
     else
-	echo "$*"
-	$*
+	if [ "$nodaemon" -eq 0 ]; then
+	    echo "$*"
+	    $*
+	else
+	    echo "crun $* -f &"
+	    ./crun $* -f &
+	fi
     fi
 }
 
