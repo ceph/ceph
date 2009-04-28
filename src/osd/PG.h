@@ -886,7 +886,7 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
 
 inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 {
-  return out << " " << e.version << " (" << e.prior_version << ")"
+  return out << e.version << " (" << e.prior_version << ")"
              << (e.is_delete() ? " - ":
 		 (e.is_clone() ? " c ":
 		  (e.is_modify() ? " m ":

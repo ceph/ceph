@@ -612,17 +612,18 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       assert(!le->is_delete());  // if it's a deletion, we are corrupt..
 
       // note the prior version
-      be.version = le->prior_version;
-      if (be.version == eversion_t() ||  // either new object, or
-	  be.version >= log.bottom) {    // prior_version also already in log
+      if (le->prior_version == eversion_t() ||  // either new object, or
+	  le->prior_version >= log.bottom) {    // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
 	continue;   // already have it logged.
       }
 
-      dout(15) << "   adding" << be << " (have " << *le << ")" << dendl;
+      be.version = le->prior_version;
+      dout(15) << "   adding " << be << " (have " << *le << ")" << dendl;
       log.log.push_front(be);
+      // don't try to index: this is the prior_version backlog entry
     } else {
-      dout(15) << "   adding" << be << dendl;
+      dout(15) << "   adding " << be << dendl;
       log.log.push_front(be);
       log.index( *log.log.begin() );
     }
