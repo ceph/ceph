@@ -139,11 +139,13 @@ for name in $what; do
 	get_conf btrfs_path "$osd_data" "btrfs path"  # mount point defaults so osd data
 	get_conf btrfs_devs "" "btrfs devs"
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
+	get_conf btrfs_opt "notreelog,flushoncommit" "btrfs options"
+	[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 	
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"
 
 	if [ $mkbtrfs -eq 1 ]; then
-	    do_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $first_dev $btrfs_path"
+	    do_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	fi
 
 	[ -n "$ssh" ] && scp $monmap $host:$monmap

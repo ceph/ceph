@@ -171,8 +171,10 @@ for name in $what; do
 	    echo Starting ceph $name on $host...
 	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
+		get_conf btrfs_opt "notreelog,flushoncommit" "btrfs options"
+		[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 		[ -n "$pre_mount" ] && do_cmd $pre_mount
-		do_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $first_dev $btrfs_path"
+		do_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
