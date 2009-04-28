@@ -899,11 +899,28 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = 0;
     }
     else if (m->cmd[1] == "dump") {
-      ss << "ok";
-      r = 0;
-      stringstream ds;
-      osdmap.print(ds);
-      rdata.append(ds);
+      OSDMap *p = &osdmap;
+      if (m->cmd.size() > 2) {
+	epoch_t e = atoi(m->cmd[2].c_str());
+	bufferlist b;
+	mon->store->get_bl_sn(b,"osdmap_full", e);
+	if (!b.length()) {
+	  p = 0;
+	  r = -ENOENT;
+	} else {
+	  p = new OSDMap;
+	  p->decode(b);
+	}
+      }
+      if (p) {
+	stringstream ds;
+	p->print(ds);
+	rdata.append(ds);
+	ss << "dumped osdmap epoch " << p->get_epoch();
+	if (p != &osdmap)
+	  delete p;
+	r = 0;
+      }
     }
     else if (m->cmd[1] == "getmap") {
       osdmap.encode(rdata);
