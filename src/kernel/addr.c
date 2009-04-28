@@ -948,6 +948,13 @@ retry_locked:
 
 	/* past end of file? */
 	i_size = inode->i_size;   /* caller holds i_mutex */
+
+	if (i_size + len > CEPH_FILE_MAX_SIZE) {
+		/* file is too big */
+		r = -EINVAL;
+		goto fail;
+	}
+
 	if (page_off >= i_size ||
 	    (pos_in_page == 0 && (pos+len) >= i_size &&
 	     end_in_page - pos_in_page != PAGE_CACHE_SIZE)) {
