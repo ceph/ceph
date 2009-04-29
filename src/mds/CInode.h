@@ -661,17 +661,17 @@ public:
   // caps allowed
   int get_caps_liked() {
     if (is_dir())
-      return CEPH_CAP_ANY & ~(CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR);
+      return CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_RDCACHE;  // but not, say, FILE_RD|WR|WRBUFFER
     else
       return CEPH_CAP_ANY;
   }
   int get_caps_allowed_ever() {
-    return 
-      CEPH_CAP_PIN |
-      (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
-      (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
-      (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
-      (linklock.gcaps_allowed_ever() << linklock.get_cap_shift());
+    return get_caps_liked() & 
+      (CEPH_CAP_PIN |
+       (filelock.gcaps_allowed_ever() << filelock.get_cap_shift()) |
+       (authlock.gcaps_allowed_ever() << authlock.get_cap_shift()) |
+       (xattrlock.gcaps_allowed_ever() << xattrlock.get_cap_shift()) |
+       (linklock.gcaps_allowed_ever() << linklock.get_cap_shift()));
   }
   int get_caps_allowed_by_type(int type) {
     return 
