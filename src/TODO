@@ -76,19 +76,16 @@ kernel client
 - simplify mds auth tracking?
   - use caps instead?
 - unwind writeback start error in addr.c (see fixme)... by redirtying pages?
-- inotify for updates from other clients?
-- optional or no fill_trace?
 - flock, fnctl locks
-- async xattrs
-- avoid pinning inodes with expireable caps?
 - ACLs
 - make writepages maybe skip pages with errors?
   - EIO, or ENOSPC?
   - ... writeback vs ENOSPC vs flush vs close()... hrm...
 - set mapping bits for ENOSPC, EIO?
+- should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
-- should we try to ref CAP_PIN on special inodes that are open?  
+- inotify for updates from other clients?
 
 vfs issues
 - real_lookup() race:
