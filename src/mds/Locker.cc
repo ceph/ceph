@@ -541,11 +541,11 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
   }
 }
 
-bool Locker::eval_caps(CInode *in)
+bool Locker::eval(CInode *in, int mask)
 {
   bool need_issue = false;
   
-  dout(10) << "eval_caps " << *in << dendl;
+  dout(10) << "eval " << mask << " " << *in << dendl;
 
   // choose loner?
   if (in->is_auth() && in->get_loner() < 0) {
@@ -556,25 +556,20 @@ bool Locker::eval_caps(CInode *in)
 	in->try_choose_loner()) {
       dout(10) << "  chose loner client" << in->get_loner() << dendl;
       need_issue = true;
+      mask = -1;
     }
   }
 
-  if (!in->filelock.is_stable())
-    eval_gather(&in->filelock, false, &need_issue);
-  else if (in->is_auth())
-    eval(&in->filelock, &need_issue);
-  if (!in->authlock.is_stable())
-    eval_gather(&in->authlock, false, &need_issue);
-  else if (in->is_auth())
-    eval(&in->authlock, &need_issue);
-  if (!in->linklock.is_stable())
-    eval_gather(&in->linklock, false, &need_issue);
-  else if (in->is_auth())
-    eval(&in->linklock, &need_issue);
-  if (!in->xattrlock.is_stable())
-    eval_gather(&in->xattrlock, false, &need_issue);
-  else if (in->is_auth())
-    eval(&in->xattrlock, &need_issue);
+  if (mask & CEPH_LOCK_IFILE)
+    eval_any(&in->filelock, &need_issue);
+  if (mask & CEPH_LOCK_IAUTH)
+    eval_any(&in->authlock, &need_issue);
+  if (mask & CEPH_LOCK_ILINK)
+    eval_any(&in->linklock, &need_issue);
+  if (mask & CEPH_LOCK_IXATTR)
+    eval_any(&in->xattrlock, &need_issue);
+  if (mask & CEPH_LOCK_INEST)
+    eval_any(&in->nestlock, &need_issue);
 
   // drop loner?
   if (in->is_auth() && in->get_loner() >= 0) {
@@ -588,8 +583,45 @@ bool Locker::eval_caps(CInode *in)
   if (need_issue)
     issue_caps(in);
 
-  dout(10) << "eval_caps done" << dendl;
+  dout(10) << "eval done" << dendl;
   return need_issue;
+}
+
+class C_Locker_Eval : public Context {
+  Locker *locker;
+  CInode *in;
+  int mask;
+public:
+  C_Locker_Eval(Locker *l, CInode *i, int m) : locker(l), in(in), mask(m) {
+    in->get(CInode::PIN_PTRWAITER);    
+  }
+  void finish(int r) {
+    in->put(CInode::PIN_PTRWAITER);
+    locker->try_eval(in, mask);
+  }
+};
+
+void Locker::try_eval(CInode *in, int mask)
+{
+  // unstable and ambiguous auth?
+  if (in->is_ambiguous_auth()) {
+    dout(7) << "try_eval not ambiguous auth, waiting on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_Eval(this, in, mask));
+    return;
+  }
+
+  if (!in->is_auth()) {
+    dout(7) << "try_eval not auth for " << *in << dendl;
+    return;
+  }
+
+  if (!in->can_auth_pin()) {
+    dout(7) << "try_eval can't auth_pin, waiting on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_Eval(this, in, mask));
+    return;
+  }
+
+  eval(in, mask);
 }
 
 void Locker::eval_cap_gather(CInode *in)
@@ -1035,7 +1067,7 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   if (in->is_auth()) {
     // [auth] twiddle mode?
-    eval_caps(in);
+    eval(in, CEPH_CAP_LOCKS);
 
     if (!in->filelock.is_stable() ||
 	!in->authlock.is_stable() ||
@@ -1235,7 +1267,7 @@ void Locker::resume_stale_caps(Session *session)
     if (cap->is_stale()) {
       dout(10) << " clearing stale flag on " << *in << dendl;
       cap->set_stale(false);
-      if (!in->is_auth() || !eval_caps(in))
+      if (!in->is_auth() || !eval(in, CEPH_CAP_LOCKS))
 	issue_caps(in, cap);
     }
   }
@@ -1352,8 +1384,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
   else
     in->mds_caps_wanted.erase(m->get_from());
 
-  if (in->filelock.is_stable())
-    try_file_eval(&in->filelock);  // ** may or may not be auth_pinned **
+  try_eval(in, CEPH_CAP_LOCKS);
   delete m;
 }
 
@@ -1660,7 +1691,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       if (_do_cap_update(in, cap, m->get_dirty(), cap->wanted(), follows, m, ack)) {
 	// updated, cap msg is delayed
 	cap->inc_suppress();
-	eval_caps(in);
+	eval(in, CEPH_CAP_LOCKS);
 	cap->dec_suppress();
 
 	if (cap->wanted() & ~cap->pending())
@@ -1670,7 +1701,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	if (ack)
 	  mds->send_message_client(ack, client);
       
-	bool did_issue = eval_caps(in);
+	bool did_issue = eval(in, CEPH_CAP_LOCKS);
 	if (!did_issue && (cap->wanted() & ~cap->pending()))
 	  issue_caps(in, cap);
       }
@@ -1710,7 +1741,7 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
     adjust_cap_wanted(cap, wanted, issue_seq);
 
     cap->inc_suppress();
-    eval_caps(in);
+    eval(in, CEPH_CAP_LOCKS);
     cap->dec_suppress();
   }
   
@@ -2670,54 +2701,6 @@ void Locker::dentry_anon_rdlock_trace_finish(vector<CDentry*>& trace)
 // ==========================================================================
 // scatter lock
 
-
-class C_Locker_ScatterEval : public Context {
-  Locker *locker;
-  ScatterLock *lock;
-public:
-  C_Locker_ScatterEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {
-    lock->get_parent()->get(CInode::PIN_PTRWAITER);
-  }
-  void finish(int r) {
-    lock->get_parent()->put(CInode::PIN_PTRWAITER);
-    locker->try_scatter_eval(lock);
-  }
-};
-
-
-void Locker::try_scatter_eval(ScatterLock *lock)
-{
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      lock->get_parent()->is_ambiguous_auth()) {
-    dout(7) << "try_scatter_eval not stable and ambiguous auth, waiting on " << *lock->get_parent() << dendl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_Locker_ScatterEval(this, lock));
-    return;
-  }
-
-  if (!lock->get_parent()->is_auth()) {
-    dout(7) << "try_scatter_eval not auth for " << *lock->get_parent() << dendl;
-    return;
-  }
-
-  if (!lock->get_parent()->can_auth_pin()) {
-    dout(7) << "try_scatter_eval can't auth_pin, waiting on " << *lock->get_parent() << dendl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    lock->get_parent()->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_ScatterEval(this, lock));
-    return;
-  }
-
-  if (lock->is_stable()) {
-    bool need_issue = false;
-    scatter_eval(lock, &need_issue);
-    if (need_issue)
-      issue_caps((CInode*)lock->get_parent());
-  }
-}
-
-
-
 void Locker::scatter_writebehind(ScatterLock *lock)
 {
   CInode *in = (CInode*)lock->get_parent();
@@ -3048,61 +3031,6 @@ void Locker::local_xlock_finish(LocalLock *lock, Mutation *mut)
 
 // ==========================================================================
 // file lock
-
-/*
- * ...
- *
- * also called after client caps are acked to us
- * - checks if we're in unstable sfot state and can now move on to next state
- * - checks if soft state should change (eg bc last writer closed)
- */
-class C_Locker_FileEval : public Context {
-  Locker *locker;
-  ScatterLock *lock;
-public:
-  C_Locker_FileEval(Locker *l, ScatterLock *lk) : locker(l), lock(lk) {
-    lock->get_parent()->get(CInode::PIN_PTRWAITER);    
-  }
-  void finish(int r) {
-    lock->get_parent()->put(CInode::PIN_PTRWAITER);
-    locker->try_file_eval(lock);
-  }
-};
-
-void Locker::try_file_eval(ScatterLock *lock)
-{
-  CInode *in = (CInode*)lock->get_parent();
-
-  // unstable and ambiguous auth?
-  if (!lock->is_stable() &&
-      in->is_ambiguous_auth()) {
-    dout(7) << "try_file_eval not stable and ambiguous auth, waiting on " << *in << dendl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->add_waiter(CInode::WAIT_SINGLEAUTH, new C_Locker_FileEval(this, lock));
-    return;
-  }
-
-  if (!lock->get_parent()->is_auth()) {
-    dout(7) << "try_file_eval not auth for " << *lock->get_parent() << dendl;
-    return;
-  }
-
-  if (!lock->get_parent()->can_auth_pin()) {
-    dout(7) << "try_file_eval can't auth_pin, waiting on " << *in << dendl;
-    //if (!lock->get_parent()->is_waiter(MDSCacheObject::WAIT_SINGLEAUTH))
-    in->add_waiter(CInode::WAIT_UNFREEZE, new C_Locker_FileEval(this, lock));
-    return;
-  }
-
-  if (lock->is_stable()) {
-    bool need_issue = false;
-    file_eval(lock, &need_issue);
-    if (need_issue)
-      issue_caps((CInode*)lock->get_parent());
-  }
-}
-
-
 
 
 void Locker::file_eval(ScatterLock *lock, bool *need_issue)

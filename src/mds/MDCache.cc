@@ -821,27 +821,8 @@ void MDCache::eval_subtree_root(CDir *dir)
 {
   // evaluate subtree inode filelock?
   //  (we should scatter the filelock on subtree bounds)
-  if (dir->inode->is_auth()) {
-    bool need_issue = false;
-    if (dir->inode->filelock.is_stable()) {
-      // force the issue a bit
-      if (!dir->inode->is_frozen())
-	mds->locker->file_eval(&dir->inode->filelock, &need_issue);
-      else
-	mds->locker->try_file_eval(&dir->inode->filelock);  // ** may or may not be auth_pinned **
-    }
-    if (dir->inode->nestlock.is_stable()) {
-      // force the issue a bit
-      if (!dir->inode->is_frozen())
-	mds->locker->scatter_eval(&dir->inode->nestlock, &need_issue);
-      else
-	mds->locker->try_scatter_eval(&dir->inode->nestlock);  // ** may or may not be auth_pinned **
-    }
-    if (need_issue)
-      mds->locker->issue_caps(dir->inode);
-  }
-  
-  
+  if (dir->inode->is_auth())
+    mds->locker->try_eval(dir->inode, CEPH_LOCK_IFILE | CEPH_LOCK_INEST);
 }
 
 
@@ -5145,7 +5126,7 @@ void MDCache::remove_client_cap(CInode *in, int client)
   if (!in->is_auth())
     mds->locker->request_inode_file_caps(in);
   
-  mds->locker->eval_caps(in);
+  mds->locker->eval(in, CEPH_CAP_LOCKS);
 
   // unlinked stray?  may need to purge (e.g., after all caps are released)
   if (in->inode.nlink == 0 &&

@@ -54,6 +54,8 @@ class ScatterLock;
 class LocalLock;
 class MDCache;
 
+#include "SimpleLock.h"
+
 class Locker {
 private:
   MDS *mds;
@@ -89,9 +91,17 @@ public:
 
   void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0);
   void eval(SimpleLock *lock, bool *need_issue=0);
+  void eval_any(SimpleLock *lock, bool *need_issue=0) {
+    if (!lock->is_stable())
+      eval_gather(lock, false, need_issue);
+    else if (lock->get_parent()->is_auth())
+      eval(lock, need_issue);
+  }
 
   void eval_cap_gather(CInode *in);
-  bool eval_caps(CInode *in);
+
+  bool eval(CInode *in, int mask);
+  void try_eval(CInode *in, int mask);
 
   bool _rdlock_kick(SimpleLock *lock);
   bool rdlock_try(SimpleLock *lock, int client, Context *c);
@@ -127,7 +137,6 @@ public:
 
   // scatter
 public:
-  void try_scatter_eval(ScatterLock *lock);
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
 
   void scatter_tick();
@@ -182,7 +191,6 @@ protected:
 
   // file
 public:
-  void try_file_eval(ScatterLock *lock);
   void file_eval(ScatterLock *lock, bool *need_issue);
 protected:
   void handle_file_lock(ScatterLock *lock, MLock *m);

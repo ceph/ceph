@@ -963,7 +963,7 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_FILE_WREXTEND (CEPH_CAP_GWREXTEND << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_LAZYIO   (CEPH_CAP_GLAZYIO   << CEPH_CAP_SFILE)
 
-/* cap masks (for stat/getattr) */
+/* cap masks (for getattr) */
 #define CEPH_STAT_CAP_INODE    CEPH_CAP_PIN
 #define CEPH_STAT_CAP_TYPE     CEPH_CAP_PIN  /* mode >> 12 */
 #define CEPH_STAT_CAP_SYMLINK  CEPH_CAP_PIN
@@ -995,6 +995,8 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
 #define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD|CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_FILE_WR|CEPH_CAP_PIN)
+
+#define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_IXATTR)
 
 /*
  * these cap bits time out, if no others are held and nothing is
