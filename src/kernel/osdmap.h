@@ -89,18 +89,18 @@ extern struct ceph_osdmap *osdmap_decode(void **p, void *end);
 extern struct ceph_osdmap *apply_incremental(void **p, void *end,
 					     struct ceph_osdmap *map,
 					     struct ceph_messenger *msgr);
-extern void osdmap_destroy(struct ceph_osdmap *map);
+extern void ceph_osdmap_destroy(struct ceph_osdmap *map);
 
 /* calculate mapping of a file extent to an object */
-extern void calc_file_object_mapping(struct ceph_file_layout *layout,
-				     u64 off, u64 *plen,
-				     struct ceph_object *oid,
-				     u64 *oxoff, u64 *oxlen);
+extern void ceph_calc_file_object_mapping(struct ceph_file_layout *layout,
+					  u64 off, u64 *plen,
+					  struct ceph_object *oid,
+					  u64 *oxoff, u64 *oxlen);
 
 /* calculate mapping of object to a placement group */
-extern int calc_object_layout(struct ceph_object_layout *ol,
-			      struct ceph_object *oid,
-			      struct ceph_file_layout *fl,
-			      struct ceph_osdmap *osdmap);
+extern int ceph_calc_object_layout(struct ceph_object_layout *ol,
+				   struct ceph_object *oid,
+				   struct ceph_file_layout *fl,
+				   struct ceph_osdmap *osdmap);
 
 #endif

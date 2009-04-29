@@ -38,8 +38,8 @@ static int calc_layout(struct ceph_osd_client *osdc,
 	reqhead->oid.ino = cpu_to_le64(vino.ino);
 	reqhead->oid.snap = cpu_to_le64(vino.snap);
 
-	calc_file_object_mapping(layout, off, plen, &reqhead->oid,
-				 &objoff, &objlen);
+	ceph_calc_file_object_mapping(layout, off, plen, &reqhead->oid,
+				      &objoff, &objlen);
 	if (*plen < orig_len)
 		dout(10, " skipping last %llu, final file extent %llu~%llu\n",
 		     orig_len - *plen, off, *plen);
@@ -48,8 +48,8 @@ static int calc_layout(struct ceph_osd_client *osdc,
 	req->r_num_pages = calc_pages_for(off, *plen);
 
 	/* pgid? */
-	err = calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
-				 osdc->osdmap);
+	err = ceph_calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
+				      osdc->osdmap);
 
 	dout(10, "calc_layout %llx.%08x %llu~%llu pgid %llx (%d pages)\n",
 	     le64_to_cpu(reqhead->oid.ino), le32_to_cpu(reqhead->oid.bno),
@@ -604,7 +604,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 				goto bad;
 			}
 			if (newmap != osdc->osdmap) {
-				osdmap_destroy(osdc->osdmap);
+				ceph_osdmap_destroy(osdc->osdmap);
 				osdc->osdmap = newmap;
 			}
 		} else {
@@ -642,7 +642,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 			oldmap = osdc->osdmap;
 			osdc->osdmap = newmap;
 			if (oldmap)
-				osdmap_destroy(oldmap);
+				ceph_osdmap_destroy(oldmap);
 		}
 		p += maplen;
 		nr_maps--;
@@ -849,7 +849,7 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 {
 	cancel_delayed_work_sync(&osdc->timeout_work);
 	if (osdc->osdmap) {
-		osdmap_destroy(osdc->osdmap);
+		ceph_osdmap_destroy(osdc->osdmap);
 		osdc->osdmap = NULL;
 	}
 }

@@ -290,7 +290,7 @@ bad:
 /*
  * osd map
  */
-void osdmap_destroy(struct ceph_osdmap *map)
+void ceph_osdmap_destroy(struct ceph_osdmap *map)
 {
 	dout(10, "osdmap_destroy %p\n", map);
 	if (map->crush)
@@ -430,7 +430,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 
 bad:
 	dout(30, "osdmap_decode fail\n");
-	osdmap_destroy(map);
+	ceph_osdmap_destroy(map);
 	return ERR_PTR(err);
 }
 
@@ -596,10 +596,10 @@ bad:
  * for now, we write only a single su, until we can
  * pass a stride back to the caller.
  */
-void calc_file_object_mapping(struct ceph_file_layout *layout,
-			      u64 off, u64 *plen,
-			      struct ceph_object *oid,
-			      u64 *oxoff, u64 *oxlen)
+void ceph_calc_file_object_mapping(struct ceph_file_layout *layout,
+				   u64 off, u64 *plen,
+				   struct ceph_object *oid,
+				   u64 *oxoff, u64 *oxlen)
 {
 	u32 osize = le32_to_cpu(layout->fl_object_size);
 	u32 su = le32_to_cpu(layout->fl_stripe_unit);
@@ -640,10 +640,10 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
  * calculate an object layout (i.e. pgid) from an oid,
  * file_layout, and osdmap
  */
-int calc_object_layout(struct ceph_object_layout *ol,
-		       struct ceph_object *oid,
-		       struct ceph_file_layout *fl,
-		       struct ceph_osdmap *osdmap)
+int ceph_calc_object_layout(struct ceph_object_layout *ol,
+			    struct ceph_object *oid,
+			    struct ceph_file_layout *fl,
+			    struct ceph_osdmap *osdmap)
 {
 	unsigned num, num_mask;
 	union ceph_pg pgid;
