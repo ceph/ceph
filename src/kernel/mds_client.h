@@ -207,6 +207,7 @@ struct ceph_mds_request {
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */
+	int               r_num_stale;
 	int               r_resend_mds; /* mds to resend to next, if any*/
 
 	atomic_t          r_ref;

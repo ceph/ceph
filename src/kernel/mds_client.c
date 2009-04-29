@@ -1477,8 +1477,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		dout(0, "got a dup %s reply on %llu from mds%d\n",
 		     head->safe ? "safe":"unsafe", tid, mds);
 		mutex_unlock(&mdsc->mutex);
-		ceph_mdsc_put_request(req);
-		return;
+		goto out;
 	}
 
 	if (head->safe) {
@@ -1497,13 +1496,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 			dout(10, "got safe reply %llu, mds%d\n", tid, mds);
 			BUG_ON(req->r_session == NULL);
 			list_del_init(&req->r_unsafe_item);
-			ceph_mdsc_put_request(req);
 
 			/* last unsafe request during umount? */
 			if (mdsc->stopping && !__get_oldest_tid(mdsc))
 				complete(&mdsc->safe_umount_waiters);
 			mutex_unlock(&mdsc->mutex);
-			return;
+			goto out;
 		}
 	}
 
@@ -1515,8 +1513,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		derr(1, "got reply on %llu, but no session for mds%d\n",
 		     tid, mds);
 		mutex_unlock(&mdsc->mutex);
-		ceph_mdsc_put_request(req);
-		return;
+		goto out;
 	}
 	BUG_ON(req->r_reply);
 
@@ -1534,10 +1531,26 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	err = parse_reply_info(msg, rinfo);
 	if (err < 0) {
 		derr(0, "handle_reply got corrupt reply\n");
-		goto done;
+		goto out_err;
 	}
 	result = le32_to_cpu(rinfo->head->result);
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
+
+	/*
+	 * Tolerate 2 consecutive ESTALEs from the same mds. 
+	 * FIXME: we should be looking at the cap migrate_seq.
+	 */
+	if (result == -ESTALE) {
+		req->r_direct_mode = USE_AUTH_MDS;
+		req->r_num_stale++;
+		if (req->r_num_stale <= 2) {
+			put_request_sessions(req);
+			__do_request(mdsc, req);
+			goto out_session_unlock;
+		}
+	} else {
+		req->r_num_stale = 0;
+	}
 
 	/* snap trace */
 	if (rinfo->snapblob_len) {
@@ -1552,19 +1565,14 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 
 	/* insert trace into our cache */
 	err = ceph_fill_trace(mdsc->client->sb, req, req->r_session);
-	if (err)
-		goto done;
-	if (result == 0) {
-		/* readdir result? */
-		if (rinfo->dir_nr)
+	if (err == 0) {
+		if (result == 0 && rinfo->dir_nr)
 			ceph_readdir_prepopulate(req, req->r_session);
+		ceph_unreserve_caps(&req->r_caps_reservation);
 	}
 
-	ceph_unreserve_caps(&req->r_caps_reservation);
-
-done:
 	up_read(&mdsc->snap_rwsem);
-
+out_err:
 	if (err) {
 		req->r_err = err;
 	} else {
@@ -1573,10 +1581,12 @@ done:
 	}
 
 	add_cap_releases(mdsc, req->r_session, -1);
+out_session_unlock:
 	mutex_unlock(&req->r_session->s_mutex);
 
 	/* kick calling process */
 	complete_request(mdsc, req);
+out:
 	ceph_mdsc_put_request(req);
 	return;
 }
