@@ -209,6 +209,7 @@ static int osdmap_show(struct seq_file *s, void *p)
 		struct ceph_pg_pool_info *pool =
 			&client->osdc.osdmap->pg_pool[i];
 		seq_printf(s, "pg_pool %d pg_num %d / %d, lpg_num %d / %d",
+			   i,
 			   pool->v.pg_num, pool->pg_num_mask,
 			   pool->v.lpg_num, pool->lpg_num_mask);
 	}
