@@ -100,6 +100,7 @@ public:
   // aggregate stats (soft state)
   hash_map<int,int> num_pg_by_state;
   int64_t num_pg, num_osd;
+  hash_map<int,pg_stat_t> pg_pool_sum;
   pg_stat_t pg_sum;
   osd_stat_t osd_sum;
 
@@ -109,12 +110,14 @@ public:
     num_pg = 0;
     num_pg_by_state.clear();
     num_osd = 0;
+    pg_pool_sum.clear();
     pg_sum = pg_stat_t();
     osd_sum = osd_stat_t();
   }
   void stat_pg_add(pg_t pgid, pg_stat_t &s) {
     num_pg++;
     num_pg_by_state[s.state]++;
+    pg_pool_sum[pgid.pool()].add(s);
     pg_sum.add(s);
     if (s.state & PG_STATE_CREATING)
       creating_pgs.insert(pgid);
@@ -123,6 +126,7 @@ public:
     num_pg--;
     if (--num_pg_by_state[s.state] == 0)
       num_pg_by_state.erase(s.state);
+    pg_pool_sum[pgid.pool()].sub(s);
     pg_sum.sub(s);
     if (s.state & PG_STATE_CREATING)
       creating_pgs.erase(pgid);
@@ -191,6 +195,17 @@ public:
 	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	 << std::endl;
     }
+    for (hash_map<int,pg_stat_t>::iterator p = pg_pool_sum.begin();
+	 p != pg_pool_sum.end();
+	 p++)
+      ss << "pool " << p->first
+	 << "\t" << p->second.num_objects
+	//<< "\t" << p->second.num_object_copies
+	 << "\t" << p->second.num_objects_missing_on_primary
+	 << "\t" << p->second.num_objects_degraded
+	 << "\t" << p->second.num_kb
+	 << "\t" << p->second.num_bytes
+	 << std::endl;
     ss << " sum\t" << pg_sum.num_objects
       //<< "\t" << pg_sum.num_object_copies
        << "\t" << pg_sum.num_objects_missing_on_primary
@@ -198,6 +213,7 @@ public:
        << "\t" << pg_sum.num_kb
        << "\t" << pg_sum.num_bytes
        << std::endl;
+
     ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
     for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
 	 p != osd_stat.end();
