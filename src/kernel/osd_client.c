@@ -23,15 +23,16 @@ int ceph_debug_osdc __read_mostly = -1;
  * request accordingly.  shorten extent as necessary if it crosses an
  * object boundary.
  */
-static void calc_layout(struct ceph_osd_client *osdc,
-			struct ceph_vino vino, struct ceph_file_layout *layout,
-			u64 off, u64 *plen,
-			struct ceph_osd_request *req)
+static int calc_layout(struct ceph_osd_client *osdc,
+		       struct ceph_vino vino, struct ceph_file_layout *layout,
+		       u64 off, u64 *plen,
+		       struct ceph_osd_request *req)
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
 	struct ceph_osd_op *op = (void *)(reqhead + 1);
 	u64 orig_len = *plen;
 	u64 objoff, objlen;    /* extent in object */
+	int err;
 
 	/* object extent? */
 	reqhead->oid.ino = cpu_to_le64(vino.ino);
@@ -47,13 +48,14 @@ static void calc_layout(struct ceph_osd_client *osdc,
 	req->r_num_pages = calc_pages_for(off, *plen);
 
 	/* pgid? */
-	calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
-			   osdc->osdmap);
+	err = calc_object_layout(&reqhead->layout, &reqhead->oid, layout,
+				 osdc->osdmap);
 
 	dout(10, "calc_layout %llx.%08x %llu~%llu pgid %llx (%d pages)\n",
 	     le64_to_cpu(reqhead->oid.ino), le32_to_cpu(reqhead->oid.bno),
 	     objoff, objlen, le64_to_cpu(reqhead->layout.ol_pgid),
 	     req->r_num_pages);
+	return err;
 }
 
 
@@ -101,7 +103,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	int do_trunc = truncate_seq && (off + *plen > truncate_size);
 	int num_op = 1 + do_sync + do_trunc;
 	size_t msg_size = sizeof(*head) + num_op*sizeof(*op);
-	int i;
+	int i, err;
 	u64 prevofs;
 
 	/* we may overallocate here, if our write extent is shortened below */
@@ -140,7 +142,12 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	req->r_snapc = ceph_get_snap_context(snapc);
 
 	/* calculate max write size, pgid */
-	calc_layout(osdc, vino, layout, off, plen, req);
+	err = calc_layout(osdc, vino, layout, off, plen, req);
+	if (err < 0) {
+		ceph_msg_put(msg);
+		kfree(req);
+		return ERR_PTR(err);
+	}
 	req->r_pgid.pg64 = le64_to_cpu(head->layout.ol_pgid);
 
 	if (flags & CEPH_OSD_FLAG_MODIFY) {
@@ -320,29 +327,27 @@ static int map_osds(struct ceph_osd_client *osdc,
 	unsigned pps; /* placement ps */
 	int osds[10], osd = -1;
 	int i, num;
-	struct ceph_pg_pool *pool;
+	struct ceph_pg_pool_info *pool;
 
 	if (req->r_pgid.pg.pool >= osdc->osdmap->num_pools)
 		return -1;
 	pool = &osdc->osdmap->pg_pool[req->r_pgid.pg.pool];
-	ruleno = crush_find_rule(osdc->osdmap->crush, pool->crush_ruleset,
-				 req->r_pgid.pg.type, pool->size);
+	ruleno = crush_find_rule(osdc->osdmap->crush, pool->v.crush_ruleset,
+				 req->r_pgid.pg.type, pool->v.size);
 	if (ruleno < 0) {
 		derr(0, "map_osds no crush rule for pool %d type %d size %d\n",
-		     req->r_pgid.pg.pool, req->r_pgid.pg.type, pool->size);
+		     req->r_pgid.pg.pool, req->r_pgid.pg.type, pool->v.size);
 		return -1;
 	}
 
 	if (req->r_pgid.pg.preferred >= 0)
 		pps = ceph_stable_mod(req->r_pgid.pg.ps,
-				     osdc->osdmap->lpgp_num,
-				     osdc->osdmap->lpgp_num_mask);
+				      pool->v.lpgp_num, pool->lpgp_num_mask);
 	else
 		pps = ceph_stable_mod(req->r_pgid.pg.ps,
-				     osdc->osdmap->pgp_num,
-				     osdc->osdmap->pgp_num_mask);
+				      pool->v.pgp_num, pool->pgp_num_mask);
 	num = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
-			    min_t(int, pool->size, ARRAY_SIZE(osds)),
+			    min_t(int, pool->v.size, ARRAY_SIZE(osds)),
 			    req->r_pgid.pg.preferred, osdc->osdmap->osd_weight);
 
 	/* primary is first up osd */

@@ -27,12 +27,15 @@ static int calc_bits_of(unsigned t)
 /*
  * the foo_mask is the smallest value 2^n-1 that is >= foo.
  */
-static void calc_pg_masks(struct ceph_osdmap *map)
+static void calc_pg_masks(struct ceph_pg_pool_info *pi)
 {
-	map->pg_num_mask = (1 << calc_bits_of(map->pg_num-1)) - 1;
-	map->pgp_num_mask = (1 << calc_bits_of(map->pgp_num-1)) - 1;
-	map->lpg_num_mask = (1 << calc_bits_of(map->lpg_num-1)) - 1;
-	map->lpgp_num_mask = (1 << calc_bits_of(map->lpgp_num-1)) - 1;
+	pi->pg_num_mask = (1 << calc_bits_of(le32_to_cpu(pi->v.pg_num)-1)) - 1;
+	pi->pgp_num_mask =
+		(1 << calc_bits_of(le32_to_cpu(pi->v.pgp_num)-1)) - 1;
+	pi->lpg_num_mask =
+		(1 << calc_bits_of(le32_to_cpu(pi->v.lpg_num)-1)) - 1;
+	pi->lpgp_num_mask =
+		(1 << calc_bits_of(le32_to_cpu(pi->v.lpgp_num)-1)) - 1;
 }
 
 /*
@@ -352,7 +355,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 2*sizeof(u64)+11*sizeof(u32), bad);
+	ceph_decode_need(p, end, 2*sizeof(u64)+6*sizeof(u32), bad);
 	ceph_decode_64_le(p, major);
 	__ceph_fsid_set_major(&map->fsid, major);
 	ceph_decode_64_le(p, minor);
@@ -362,11 +365,6 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_32_le(p, map->created.tv_nsec);
 	ceph_decode_32_le(p, map->modified.tv_sec);
 	ceph_decode_32_le(p, map->modified.tv_nsec);
-	ceph_decode_32(p, map->pg_num);
-	ceph_decode_32(p, map->pgp_num);
-	ceph_decode_32(p, map->lpg_num);
-	ceph_decode_32(p, map->lpgp_num);
-	ceph_decode_32(p, map->last_pg_change);
 
 	ceph_decode_32(p, map->num_pools);
 	map->pg_pool = kmalloc(map->num_pools * sizeof(*map->pg_pool),
@@ -377,16 +375,16 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	}
 	ceph_decode_32_safe(p, end, max, bad);
 	while (max--) {
-		ceph_decode_need(p, end, 4+sizeof(*map->pg_pool), bad);
+		ceph_decode_need(p, end, 4+sizeof(map->pg_pool->v), bad);
 		ceph_decode_32(p, i);
 		if (i >= map->num_pools)
 			goto bad;
-		ceph_decode_copy(p, &map->pg_pool[i], sizeof(*map->pg_pool));
+		ceph_decode_copy(p, &map->pg_pool[i].v,
+				 sizeof(map->pg_pool->v));
+		calc_pg_masks(&map->pg_pool[i]);
 	}
 
 	ceph_decode_32_safe(p, end, map->flags, bad);
-
-	calc_pg_masks(map);
 
 	ceph_decode_32(p, max);
 
@@ -448,7 +446,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	ceph_fsid_t fsid;
 	u32 epoch = 0;
 	struct ceph_timespec modified;
-	u32 len, x, pool;
+	u32 len, pool;
 	__s32 new_flags, max;
 	void *start = *p;
 	int err = -EINVAL;
@@ -498,18 +496,6 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 		if (err < 0)
 			goto bad;
 	}
-	ceph_decode_32(p, x);
-	if (x)
-		map->pg_num = x;
-	ceph_decode_32(p, x);
-	if (x)
-		map->pgp_num = x;
-	ceph_decode_32(p, x);
-	if (x)
-		map->lpg_num = x;
-	ceph_decode_32(p, x);
-	if (x)
-		map->lpgp_num = x;
 
 	map->epoch++;
 	map->modified = map->modified;
@@ -537,12 +523,14 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 			map->pg_pool = p;
 			map->num_pools = pool+1;
 		}
-		ceph_decode_copy(p, &map->pg_pool[pool], sizeof(*map->pg_pool));
+		ceph_decode_copy(p, &map->pg_pool[pool].v,
+				 sizeof(map->pg_pool->v));
+		calc_pg_masks(&map->pg_pool[pool]);
 	}
 
 	/* old_pool (ignore) */
 	ceph_decode_32_safe(p, end, len, bad);
-	*p += len * (sizeof(u32) + sizeof(*map->pg_pool));
+	*p += len * sizeof(u32);
 
 	/* new_up */
 	err = -EINVAL;
@@ -652,23 +640,29 @@ void calc_file_object_mapping(struct ceph_file_layout *layout,
  * calculate an object layout (i.e. pgid) from an oid,
  * file_layout, and osdmap
  */
-void calc_object_layout(struct ceph_object_layout *ol,
-			struct ceph_object *oid,
-			struct ceph_file_layout *fl,
-			struct ceph_osdmap *osdmap)
+int calc_object_layout(struct ceph_object_layout *ol,
+		       struct ceph_object *oid,
+		       struct ceph_file_layout *fl,
+		       struct ceph_osdmap *osdmap)
 {
 	unsigned num, num_mask;
 	union ceph_pg pgid;
 	u64 ino = le64_to_cpu(oid->ino);
 	unsigned bno = le32_to_cpu(oid->bno);
 	s32 preferred = (s32)le32_to_cpu(fl->fl_pg_preferred);
+	int poolid = le16_to_cpu(fl->fl_pg_pool);
+	struct ceph_pg_pool_info *pool;
+
+	if (poolid >= osdmap->num_pools)
+		return -EIO;
+	pool = &osdmap->pg_pool[poolid];
 
 	if (preferred >= 0) {
-		num = osdmap->lpg_num;
-		num_mask = osdmap->lpg_num_mask;
+		num = le32_to_cpu(pool->v.lpg_num);
+		num_mask = pool->lpg_num_mask;
 	} else {
-		num = osdmap->pg_num;
-		num_mask = osdmap->pg_num_mask;
+		num = le32_to_cpu(pool->v.pg_num);
+		num_mask = pool->pg_num_mask;
 	}
 
 	pgid.pg64 = 0;   /* start with it zeroed out */
@@ -679,4 +673,6 @@ void calc_object_layout(struct ceph_object_layout *ol,
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);
 	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
+
+	return 0;
 }

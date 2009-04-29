@@ -55,16 +55,6 @@ using __gnu_cxx::hash_set;
 //#define PG_ROLE_TAIL     2
 
 
-inline int calc_bits_of(int t) {
-  int b = 0;
-  while (t > 0) {
-    t = t >> 1;
-    b++;
-  }
-  return b;
-}
-
-
 
 /*
  * we track up to two intervals during which the osd was alive and
@@ -137,12 +127,14 @@ public:
     utime_t modified;
     int32_t new_flags;
 
+    /*
     bool is_pg_change() {
       return (fullmap.length() ||
 	      crush.length() ||
 	      new_pg_num ||
 	      new_lpg_num);
     }
+    */
 
     // full (rare)
     bufferlist fullmap;  // in leiu of below.
@@ -150,8 +142,7 @@ public:
 
     // incremental
     int32_t new_max_osd;
-    int32_t new_pg_num, new_pgp_num, new_lpg_num, new_lpgp_num;
-    map<int32_t,ceph_pg_pool> new_pools;
+    map<int32_t,pg_pool_t> new_pools;
     map<int32_t,nstring> new_pool_names;
     set<int32_t> old_pools;
     map<int32_t,entity_addr_t> new_up;
@@ -179,10 +170,6 @@ public:
       ::encode(crush, bl);
 
       ::encode(new_max_osd, bl);
-      ::encode(new_pg_num, bl);
-      ::encode(new_pgp_num, bl);
-      ::encode(new_lpg_num, bl);
-      ::encode(new_lpgp_num, bl);
       ::encode(new_pools, bl);
       ::encode(old_pools, bl);
       ::encode(new_up, bl);
@@ -211,10 +198,6 @@ public:
       ::decode(crush, p);
 
       ::decode(new_max_osd, p);
-      ::decode(new_pg_num, p);
-      ::decode(new_pgp_num, p);
-      ::decode(new_lpg_num, p);
-      ::decode(new_lpgp_num, p);
       ::decode(new_pools, p);
       ::decode(old_pools, p);
       ::decode(new_up, p);
@@ -234,8 +217,7 @@ public:
       ::decode(old_blacklist, p);
     }
 
-    Incremental(epoch_t e=0) : epoch(e), new_flags(-1), new_max_osd(-1), 
-			       new_pg_num(0), new_pgp_num(0), new_lpg_num(0), new_lpgp_num(0) {
+    Incremental(epoch_t e=0) : epoch(e), new_flags(-1), new_max_osd(-1) {
       memset(&fsid, 0, sizeof(fsid));
     }
     Incremental(bufferlist &bl) {
@@ -252,31 +234,6 @@ private:
   epoch_t epoch;        // what epoch of the osd cluster descriptor is this
   utime_t created, modified; // epoch start time
 
-  /*
-   * placement groups 
-   *
-   *  pg_num -- base number of pseudorandomly placed pgs
-   *
-   *  pgp_num -- effective number when calculating pg placement.  this
-   * is used for pg_num increases.  new pgs result in data being
-   * "split" into new pgs.  for this to proceed smoothly, new pgs are
-   * intiially colocated with their parents; that is, pgp_num doesn't
-   * increase until the new pgs have successfully split.  only _then_
-   * are the new pgs placed independently.
-   *      
-   *  lpg_num -- localized pg count (per device).  replicas are
-   * randomly selected.
-   *
-   *  lpgp_num -- as above.
-   */
-  int32_t pg_num, pg_num_mask;     // placement group count and bitmask
-  int32_t pgp_num, pgp_num_mask;   // pg placement num (for placing pg's.. <= pg_num)
-  int32_t lpg_num, lpg_num_mask;   // localized placement group count
-  int32_t lpgp_num, lpgp_num_mask; // as above
-
-  // new pgs
-  epoch_t last_pg_change;  // most recent epoch initiating possible pg creation
-
   uint32_t flags;
 
   int32_t max_osd;
@@ -285,7 +242,7 @@ private:
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
 
-  map<int,ceph_pg_pool> pools;
+  map<int,pg_pool_t> pools;
   map<int,nstring> pool_name;
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   snapid_t max_snap;
@@ -302,12 +259,9 @@ private:
 
  public:
   OSDMap() : epoch(0), 
-	     pg_num(0), pgp_num(0), lpg_num(0), lpgp_num(0),
-	     last_pg_change(0),
 	     flags(0),
 	     max_osd(0), max_snap(0) { 
     memset(&fsid, 0, sizeof(fsid));
-    calc_pg_masks();
   }
 
   // map info
@@ -316,33 +270,18 @@ private:
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
-  void set_epoch(epoch_t e) { epoch = e; }
 
-  /* pg num / masks */
-  void calc_pg_masks() {
-    pg_num_mask = (1 << calc_bits_of(pg_num-1)) - 1;
-    pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
-    lpg_num_mask = (1 << calc_bits_of(lpg_num-1)) - 1;
-    lpgp_num_mask = (1 << calc_bits_of(lpgp_num-1)) - 1;
+  void set_epoch(epoch_t e) {
+    epoch = e;
+    for (map<int,pg_pool_t>::iterator p = pools.begin();
+	 p != pools.end();
+	 p++)
+      p->second.v.last_change = e;
   }
-
-  int get_pg_num() const { return pg_num; }
-  int get_pgp_num() const { return pgp_num; }
-  int get_lpg_num() const { return lpg_num; }
-  int get_lpgp_num() const { return lpgp_num; }
-
-  int get_pg_num_mask() const { return pg_num_mask; }
-  int get_pgp_num_mask() const { return pgp_num_mask; }
-  int get_lpg_num_mask() const { return lpg_num_mask; }
-  int get_lpgp_num_mask() const { return lpgp_num_mask; }
 
   /* stamps etc */
   const utime_t& get_created() const { return created; }
   const utime_t& get_modified() const { return modified; }
-
-  epoch_t get_last_pg_change() const {
-    return last_pg_change;
-  }
 
   snapid_t get_max_snap() { return max_snap; }
   bool is_removed_snap(snapid_t sn) { 
@@ -507,35 +446,14 @@ private:
     modified = inc.modified;
 
     // full map?
-    if (inc.fullmap.length()) 
+    if (inc.fullmap.length()) {
       decode(inc.fullmap);
-    
-    if (inc.is_pg_change())
-      last_pg_change = epoch;
-    
-    if (inc.fullmap.length())
       return;
+    }
 
     // nope, incremental.
     if (inc.new_flags >= 0)
       flags = inc.new_flags;
-
-    if (inc.new_pg_num) {
-      assert(inc.new_pg_num >= pg_num);
-      pg_num = inc.new_pg_num;
-    }
-    if (inc.new_lpg_num) {
-      assert(inc.new_lpg_num >= lpg_num);
-      lpg_num = inc.new_lpg_num;
-    }
-    if (inc.new_pgp_num) {
-      assert(inc.new_pgp_num >= pgp_num);
-      pgp_num = inc.new_pgp_num;
-    }
-    if (inc.new_lpgp_num) {
-      assert(inc.new_lpgp_num >= lpgp_num);
-      lpgp_num = inc.new_lpgp_num;
-    }
 
     if (inc.new_max_osd >= 0) 
       set_max_osd(inc.new_max_osd);
@@ -546,7 +464,7 @@ private:
       pools.erase(*p);
       pool_name.erase(*p);
     }
-    for (map<int32_t,ceph_pg_pool>::iterator p = inc.new_pools.begin();
+    for (map<int32_t,pg_pool_t>::iterator p = inc.new_pools.begin();
 	 p != inc.new_pools.end();
 	 p++)
       pools[p->first] = p->second;
@@ -631,11 +549,6 @@ private:
     ::encode(epoch, blist);
     ::encode(created, blist);
     ::encode(modified, blist);
-    ::encode(pg_num, blist);
-    ::encode(pgp_num, blist);
-    ::encode(lpg_num, blist);
-    ::encode(lpgp_num, blist);
-    ::encode(last_pg_change, blist);
 
     int32_t max_pools = 0;
     if (pools.size())
@@ -672,12 +585,6 @@ private:
     ::decode(epoch, p);
     ::decode(created, p);
     ::decode(modified, p);
-    ::decode(pg_num, p);
-    ::decode(pgp_num, p);
-    ::decode(lpg_num, p);
-    ::decode(lpgp_num, p);
-    calc_pg_masks();
-    ::decode(last_pg_change, p);
 
     int32_t max_pools;
     ::decode(max_pools, p);
@@ -753,28 +660,6 @@ private:
     return layout;
   }
 
-
-  /*
-   * map a raw pg (with full precision ps) into an actual pg, for storage
-   */
-  pg_t raw_pg_to_pg(pg_t pg) {
-    if (pg.preferred() >= 0)
-      pg.u.pg.ps = ceph_stable_mod(pg.ps(), lpg_num, lpg_num_mask);
-    else
-      pg.u.pg.ps = ceph_stable_mod(pg.ps(), pg_num, pg_num_mask);
-    return pg;
-  }
-  
-  /*
-   * map raw pg (full precision ps) into a placement ps
-   */
-  ps_t raw_pg_to_pps(pg_t pg) {
-    if (pg.preferred() >= 0)
-      return ceph_stable_mod(pg.ps(), lpgp_num, lpgp_num_mask);
-    else
-      return ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
-  }
-
   // pg -> (osd list)
   int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
@@ -782,35 +667,36 @@ private:
     if (!pools.count(p)) {
       return osds.size();
     }
-    ceph_pg_pool &pool = pools[p];
-    ps_t pps = raw_pg_to_pps(pg);  // placement ps
+    pg_pool_t &pool = pools[p];
+    ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
+    unsigned size = pool.get_size();
 
     switch (g_conf.osd_pg_layout) {
     case CEPH_PG_LAYOUT_CRUSH:
       {
 	// what crush rule?
-	int ruleno = crush.find_rule(pool.crush_ruleset, pg.type(), pool.size);
+	int ruleno = crush.find_rule(pool.get_crush_ruleset(), pg.type(), size);
 	if (ruleno >= 0)
-	  crush.do_rule(ruleno, pps, osds, pool.size, pg.preferred(), osd_weight);
+	  crush.do_rule(ruleno, pps, osds, size, pg.preferred(), osd_weight);
       }
       break;
       
     case CEPH_PG_LAYOUT_LINEAR:
-      for (unsigned i=0; i<pool.size; i++) 
-	osds.push_back( (i + pps*pool.size) % g_conf.num_osd );
+      for (unsigned i=0; i<size; i++) 
+	osds.push_back( (i + pps*size) % g_conf.num_osd );
       break;
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
 	int h = crush_hash32(pps);
-	for (unsigned i=0; i<pool.size; i++) 
+	for (unsigned i=0; i<size; i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
       break;
       
     case CEPH_PG_LAYOUT_HASH:
       {
-	for (unsigned i=0; i<pool.size; i++) {
+	for (unsigned i=0; i<size; i++) {
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
@@ -838,8 +724,8 @@ private:
       if (osds.empty()) {
         osds.push_back(osd);
       } else {
-        assert(pool.size > 0);
-        for (unsigned i=1; i<pool.size; i++)
+        assert(size > 0);
+        for (unsigned i=1; i<size; i++)
           if (osds[i] == osd) {
             // swap with position 0
             osds[i] = osds[0];
@@ -884,8 +770,15 @@ private:
 
 
   unsigned get_pg_size(pg_t pg) {
-    ceph_pg_pool &pool = pools[pg.pool()];
-    return pool.size;
+    assert(pools.count(pg.pool()));
+    pg_pool_t &pool = pools[pg.pool()];
+    return pool.get_size();
+  }
+
+  pg_t raw_pg_to_pg(pg_t pg) {
+    assert(pools.count(pg.pool()));
+    pg_pool_t &pool = pools[pg.pool()];
+    return pool.raw_pg_to_pg(pg);
   }
 
   // pg -> primary osd

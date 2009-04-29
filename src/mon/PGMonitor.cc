@@ -423,35 +423,35 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 
 bool PGMonitor::register_new_pgs()
 {
-  dout(10) << "osdmap last_pg_change " << mon->osdmon()->osdmap.get_last_pg_change()
-	   << ", pgmap last_pg_scan " << pg_map.last_pg_scan << dendl;
-  if (mon->osdmon()->osdmap.get_last_pg_change() <= pg_map.last_pg_scan ||
-      mon->osdmon()->osdmap.get_last_pg_change() <= pending_inc.pg_scan) {
-    dout(10) << "register_new_pgs -- i've already scanned pg space since last significant osdmap update" << dendl;
-    return false;
-  }
-
   // iterate over crush mapspace
-  dout(10) << "register_new_pgs scanning pgid space defined by crush rule masks" << dendl;
-
-  CrushWrapper *crush = &mon->osdmon()->osdmap.crush;
-  int pg_num = mon->osdmon()->osdmap.get_pg_num();
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
+  dout(10) << "register_new_pgs checking pg pools for osdmap epoch " << epoch
+	   << ", last_pg_scan " << pg_map.last_pg_scan << dendl;
 
   bool first = pg_map.pg_stat.empty(); // first pg creation
   int created = 0;
-  for (map<int,ceph_pg_pool>::iterator p = mon->osdmon()->osdmap.pools.begin();
+  for (map<int,pg_pool_t>::iterator p = mon->osdmon()->osdmap.pools.begin();
        p != mon->osdmon()->osdmap.pools.end();
        p++) {
-    int pool = p->first;
-    int type = p->second.type;
-    int ruleno = p->second.crush_ruleset;
-    if (!crush->rule_exists(ruleno)) 
+    int poolid = p->first;
+    pg_pool_t &pool = p->second;
+    int type = pool.get_type();
+    int ruleno = pool.get_crush_ruleset();
+    if (!mon->osdmon()->osdmap.crush.rule_exists(ruleno)) 
       continue;
-    for (ps_t ps = 0; ps < pg_num; ps++) {
-      pg_t pgid(type, ps, pool, -1);
+
+    if (pool.get_last_change() <= pg_map.last_pg_scan ||
+	pool.get_last_change() <= pending_inc.pg_scan) {
+      dout(10) << " no change in " << pool << dendl;
+      continue;
+    }
+
+    dout(10) << "register_new_pgs scanning " << pool << dendl;
+
+    for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
+      pg_t pgid(type, ps, poolid, -1);
       if (pg_map.pg_stat.count(pgid)) {
-	dout(20) << "register_new_pgs have " << pgid << dendl;
+	dout(20) << "register_new_pgs  have " << pgid << dendl;
 	continue;
       }
 
@@ -461,7 +461,7 @@ bool PGMonitor::register_new_pgs()
 	parent = pgid;
 	while (1) {
 	  // remove most significant bit
-	  int msb = calc_bits_of(parent.u.pg.ps);
+	  int msb = pool.calc_bits_of(parent.u.pg.ps);
 	  if (!msb) break;
 	  parent.u.pg.ps &= ~(1<<(msb-1));
 	  split_bits++;
@@ -482,9 +482,9 @@ bool PGMonitor::register_new_pgs()
       created++;	
       
       if (split_bits == 0) {
-	dout(10) << "register_new_pgs will create " << pgid << dendl;
+	dout(10) << "register_new_pgs  will create " << pgid << dendl;
       } else {
-	dout(10) << "register_new_pgs will create " << pgid
+	dout(10) << "register_new_pgs  will create " << pgid
 		 << " parent " << parent
 		 << " by " << split_bits << " bits"
 		 << dendl;

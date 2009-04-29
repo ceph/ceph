@@ -25,18 +25,10 @@ void OSDMap::print(ostream& out)
       << "created " << get_created() << "\n"
       << "modifed " << get_modified() << "\n"
       << std::endl;
-  out << "pg_num " << get_pg_num() << "\n"
-      << "pgp_num " << get_pgp_num() << "\n"
-      << "lpg_num " << get_lpg_num() << "\n"
-      << "lpgp_num " << get_lpgp_num() << "\n"
-      << "last_pg_change " << get_last_pg_change() << "\n"
-      << std::endl;
-  for (map<int,ceph_pg_pool>::iterator p = pools.begin(); p != pools.end(); p++)
+  for (map<int,pg_pool_t>::iterator p = pools.begin(); p != pools.end(); p++)
     out << "pg_pool " << p->first
 	<< " '" << pool_name[p->first]
-	<< "' size " << (int)p->second.size
-	<< " crush_ruleset " << (int)p->second.crush_ruleset
-	<< "\n";
+	<< "' " << p->second << "\n";
   out << std::endl;
 
   out << "max_osd " << get_max_osd() << "\n";
@@ -94,8 +86,6 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   created = modified = g_clock.now();
 
   set_max_osd(num_osd);
-  pg_num = pgp_num = num_osd << pg_bits;
-  lpg_num = lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
   
   // crush map
   map<int, const char*> rulesets;
@@ -105,9 +95,14 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
   
   int pool = 0;
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); p++) {
-    pools[pool].size = 2;
-    pools[pool].crush_ruleset = p->first;
-    pools[pool].type = CEPH_PG_TYPE_REP;
+    pools[pool].v.type = CEPH_PG_TYPE_REP;
+    pools[pool].v.size = 2;
+    pools[pool].v.crush_ruleset = p->first;
+    pools[pool].v.pg_num = num_osd << pg_bits;
+    pools[pool].v.pgp_num = num_osd << pg_bits;
+    pools[pool].v.lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+    pools[pool].v.lpgp_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
+    pools[pool].v.last_change = epoch;
     pool_name[pool] = p->second;
     pool++;
   }

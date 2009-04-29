@@ -43,7 +43,7 @@
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL    6 /* public/client */
+#define CEPH_OSDC_PROTOCOL    7 /* public/client */
 #define CEPH_MDSC_PROTOCOL   18 /* public/client */
 #define CEPH_MONC_PROTOCOL   11 /* public/client */
 
@@ -306,10 +306,30 @@ union ceph_pg {
 #define ceph_pg_is_rep(pg)   ((pg).pg.type == CEPH_PG_TYPE_REP)
 #define ceph_pg_is_raid4(pg) ((pg).pg.type == CEPH_PG_TYPE_RAID4)
 
+/*
+ * pg_pool is a set of pgs storing a pool of objects
+ *
+ *  pg_num -- base number of pseudorandomly placed pgs
+ *
+ *  pgp_num -- effective number when calculating pg placement.  this
+ * is used for pg_num increases.  new pgs result in data being "split"
+ * into new pgs.  for this to proceed smoothly, new pgs are intiially
+ * colocated with their parents; that is, pgp_num doesn't increase
+ * until the new pgs have successfully split.  only _then_ are the new
+ * pgs placed independently.
+ *      
+ *  lpg_num -- localized pg count (per device).  replicas are randomly
+ * selected.
+ *
+ *  lpgp_num -- as above.
+ */
 struct ceph_pg_pool {
-	__u8 crush_ruleset;
-	__u8 size;
 	__u8 type;
+	__u8 size;
+	__u8 crush_ruleset;
+	__u32 pg_num, pgp_num;
+	__u32 lpg_num, lpgp_num;
+	__u32 last_change;     /* most recent epoch changed */
 } __attribute__ ((packed));
 
 /*

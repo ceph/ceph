@@ -200,17 +200,18 @@ static int osdmap_show(struct seq_file *s, void *p)
 	if (client->osdc.osdmap == NULL)
 		return 0;
 	seq_printf(s, "epoch %d\n", client->osdc.osdmap->epoch);
-	seq_printf(s, "pg_num %d / %d\n",
-		       client->osdc.osdmap->pg_num,
-		       client->osdc.osdmap->pg_num_mask);
-	seq_printf(s, "lpg_num %d / %d\n",
-		       client->osdc.osdmap->lpg_num,
-		       client->osdc.osdmap->lpg_num_mask);
 	seq_printf(s, "flags%s%s\n",
-		       (client->osdc.osdmap->flags & CEPH_OSDMAP_NEARFULL) ?
-		       " NEARFULL":"",
-		       (client->osdc.osdmap->flags & CEPH_OSDMAP_FULL) ?
-		       " FULL":"");
+		   (client->osdc.osdmap->flags & CEPH_OSDMAP_NEARFULL) ?
+		   " NEARFULL":"",
+		   (client->osdc.osdmap->flags & CEPH_OSDMAP_FULL) ?
+		   " FULL":"");
+	for (i = 0; i < client->osdc.osdmap->num_pools; i++) {
+		struct ceph_pg_pool_info *pool =
+			&client->osdc.osdmap->pg_pool[i];
+		seq_printf(s, "pg_pool %d pg_num %d / %d, lpg_num %d / %d",
+			   pool->v.pg_num, pool->pg_num_mask,
+			   pool->v.lpg_num, pool->lpg_num_mask);
+	}
 	for (i = 0; i < client->osdc.osdmap->max_osd; i++) {
 		struct ceph_entity_addr *addr =
 			&client->osdc.osdmap->osd_addr[i];

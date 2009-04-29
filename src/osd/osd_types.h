@@ -25,7 +25,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v011"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v012"
 
 
 
@@ -395,6 +395,90 @@ static inline std::string pg_state_string(int state) {
   else 
     st.resize(st.length()-1);
   return st;
+}
+
+
+
+
+/*
+ * pg_pool
+ */
+struct pg_pool_t {
+  ceph_pg_pool v;
+  int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+
+  int get_pg_num() const { return v.pg_num; }
+  int get_pgp_num() const { return v.pgp_num; }
+  int get_lpg_num() const { return v.lpg_num; }
+  int get_lpgp_num() const { return v.lpgp_num; }
+
+  int get_pg_num_mask() const { return pg_num_mask; }
+  int get_pgp_num_mask() const { return pgp_num_mask; }
+  int get_lpg_num_mask() const { return lpg_num_mask; }
+  int get_lpgp_num_mask() const { return lpgp_num_mask; }
+
+  int calc_bits_of(int t) {
+    int b = 0;
+    while (t > 0) {
+      t = t >> 1;
+      b++;
+    }
+    return b;
+  }
+
+  unsigned get_type() const { return v.type; }
+  unsigned get_size() const { return v.size; }
+  int get_crush_ruleset() const { return v.crush_ruleset; }
+  epoch_t get_last_change() const { return v.last_change; }
+
+  void calc_pg_masks() {
+    pg_num_mask = (1 << calc_bits_of(v.pg_num-1)) - 1;
+    pgp_num_mask = (1 << calc_bits_of(v.pgp_num-1)) - 1;
+    lpg_num_mask = (1 << calc_bits_of(v.lpg_num-1)) - 1;
+    lpgp_num_mask = (1 << calc_bits_of(v.lpgp_num-1)) - 1;
+  }
+
+  /*
+   * map a raw pg (with full precision ps) into an actual pg, for storage
+   */
+  pg_t raw_pg_to_pg(pg_t pg) const {
+    if (pg.preferred() >= 0 && v.lpg_num)
+      pg.u.pg.ps = ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask);
+    else
+      pg.u.pg.ps = ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask);
+    return pg;
+  }
+  
+  /*
+   * map raw pg (full precision ps) into a placement ps
+   */
+  ps_t raw_pg_to_pps(pg_t pg) const {
+    if (pg.preferred() >= 0 && v.lpgp_num)
+      return ceph_stable_mod(pg.ps(), v.lpgp_num, lpgp_num_mask);
+    else
+      return ceph_stable_mod(pg.ps(), v.pgp_num, pgp_num_mask);
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(v, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(v, bl);
+    calc_pg_masks();
+  }
+};
+WRITE_CLASS_ENCODER(pg_pool_t)
+
+inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
+  return out << "pg_pool(type " << p.get_type()
+	     << " size " << p.get_size()
+	     << " ruleset " << p.get_crush_ruleset()
+	     << " pg_num " << p.get_pg_num()
+	     << " pgp_num " << p.get_pgp_num()
+	     << " lpg_num " << p.get_lpg_num()
+	     << " lpgp_num " << p.get_lpgp_num()
+	     << " last_change " << p.get_last_change()
+	     << ")";
 }
 
 /** pg_stat

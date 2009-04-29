@@ -113,7 +113,7 @@ void OSDMonitor::create_initial(bufferlist& bl)
 
   OSDMap newmap;
   newmap.decode(bl);
-  newmap.epoch = 1;
+  newmap.set_epoch(1);
   newmap.set_fsid(mon->monmap->fsid);
   newmap.created = newmap.modified = g_clock.now();
 
@@ -842,6 +842,7 @@ void OSDMonitor::tick()
   // ---------------
 #define SWAP_PRIMARIES_AT_START 0
 #define SWAP_TIME 1
+#if 0
   if (SWAP_PRIMARIES_AT_START) {
     // For all PGs that have OSD 0 as the primary,
     // switch them to use the first replca
@@ -859,6 +860,7 @@ void OSDMonitor::tick()
 	}
       }
   }
+#endif
   // ---------------
 
   if (do_propose)
@@ -1007,7 +1009,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       epoch_t e = atoi(m->cmd[2].c_str());
       if (ceph_fsid_compare(&map.fsid, &mon->monmap->fsid) == 0) {
 	if (pending_inc.epoch == e) {
-	  map.epoch = pending_inc.epoch;  // make sure epoch is correct
+	  map.set_epoch(pending_inc.epoch);  // make sure epoch is correct
 	  map.encode(pending_inc.fullmap);
 	  string rs = "set osd map";
 	  paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
@@ -1024,38 +1026,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
-    }
-    else if (m->cmd[1] == "setpgnum" && m->cmd.size() > 2) {
-      int n = atoi(m->cmd[2].c_str());
-      if (n <= osdmap.get_pg_num()) {
-	ss << "specified pg_num " << n << " <= current " << osdmap.get_pg_num();
-      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	ss << "currently creating pgs, wait";
-	err = -EAGAIN;
-      } else {
-	ss << "set new pg_num = " << n;
-	pending_inc.new_pg_num = n;
-	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
-	return true;
-      } 
-    }
-    else if (m->cmd[1] == "setpgpnum" && m->cmd.size() > 2) {
-      int n = atoi(m->cmd[2].c_str());
-      if (n <= osdmap.get_pgp_num()) {
-	ss << "specified pgp_num " << n << " <= current " << osdmap.get_pgp_num();
-      } else if (n > osdmap.get_pg_num()) {
-	ss << "specified pgp_num " << n << " > pg_num " << osdmap.get_pg_num();
-      } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	ss << "still creating pgs, wait";
-	err = -EAGAIN;
-      } else {
-	ss << "set new pgp_num = " << n;
-	pending_inc.new_pgp_num = n;
-	getline(ss, rs);
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
-	return true;
-      }
     }
     else if (m->cmd[1] == "down" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
@@ -1134,22 +1104,57 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 5) {
       int pool = -1;
-      for (map<int,nstring>::iterator p = osdmap.pool_name.begin();
-	   p != osdmap.pool_name.end();
-	   p++) {
-	if (p->second == m->cmd[2])
-	  pool = p->first;
+      pg_pool_t *p = 0;
+      for (map<int,nstring>::iterator i = osdmap.pool_name.begin();
+	   i != osdmap.pool_name.end();
+	   i++) {
+	if (i->second == m->cmd[2]) {
+	  pool = i->first;
+	  p = &osdmap.pools[pool];
+	}
       }
       if (pool >= 0) {
-	if (m->cmd[3] == "size") {
-	  int s = atoi(m->cmd[4].c_str());
-	  if (s) {
-	    pending_inc.new_pools[pool] = osdmap.pools[pool];
-	    pending_inc.new_pools[pool].size = s;
-	    ss << "set pool " << pool << " size to " << s;
+	int n = atoi(m->cmd[4].c_str());
+	if (n) {
+	  if (m->cmd[3] == "size") {
+	    pending_inc.new_pools[pool] = *p;
+	    pending_inc.new_pools[pool].v.size = n;
+	    ss << "set pool " << pool << " size to " << n;
 	    getline(ss, rs);
 	    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	    return true;
+	  } else if (m->cmd[3] == "pg_num") {
+	    if (n <= p->get_pg_num()) {
+	      ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
+	    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
+	      ss << "currently creating pgs, wait";
+	      err = -EAGAIN;
+	    } else {
+	      pending_inc.new_pools[pool] = osdmap.pools[pool];
+	      pending_inc.new_pools[pool].v.pg_num = n;
+	      ss << "set pool " << pool << " pg_num to " << n;
+	      getline(ss, rs);
+	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	      return true;
+	    }
+	  } else if (m->cmd[3] == "pgp_num") {
+	    if (n <= p->get_pgp_num()) {
+	      ss << "specified pgp_num " << n << " <= current " << p->get_pgp_num();
+	    } else if (n > p->get_pg_num()) {
+	      ss << "specified pgp_num " << n << " > pg_num " << p->get_pg_num();
+	    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
+	      ss << "still creating pgs, wait";
+	      err = -EAGAIN;
+	    } else {
+	      pending_inc.new_pools[pool] = osdmap.pools[pool];
+	      pending_inc.new_pools[pool].v.pgp_num = n;
+	      ss << "set pool " << pool << " pgp_num to " << n;
+	      getline(ss, rs);
+	      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	      return true;
+	    }
+	  } else {
+	    ss << "unrecognized pool field " << m->cmd[3];
 	  }
 	}
       } else {

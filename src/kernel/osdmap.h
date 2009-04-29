@@ -17,19 +17,16 @@
  * The map can be updated either via an incremental map (diff) describing
  * the change between two successive epochs, or as a fully encoded map.
  */
+struct ceph_pg_pool_info {
+	struct ceph_pg_pool v;
+	int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+};
+
 struct ceph_osdmap {
 	ceph_fsid_t fsid;
 	u32 epoch;
 	u32 mkfs_epoch;
 	struct ceph_timespec created, modified;
-
-	/* these parameters describe the number of placement groups
-	 * in the system.  foo_mask is the smallest value (2**n-1) >= foo. */
-	u32 pg_num, pg_num_mask;
-	u32 pgp_num, pgp_num_mask;
-	u32 lpg_num, lpg_num_mask;
-	u32 lpgp_num, lpgp_num_mask;
-	u32 last_pg_change;   /* epoch of last pg count change */
 
 	u32 flags;         /* CEPH_OSDMAP_* */
 
@@ -39,7 +36,7 @@ struct ceph_osdmap {
 	struct ceph_entity_addr *osd_addr;
 
 	u32 num_pools;
-	struct ceph_pg_pool *pg_pool;
+	struct ceph_pg_pool_info *pg_pool;
 
 	/* the CRUSH map specifies the mapping of placement groups to
 	 * the list of osds that store+replicate them. */
@@ -101,9 +98,9 @@ extern void calc_file_object_mapping(struct ceph_file_layout *layout,
 				     u64 *oxoff, u64 *oxlen);
 
 /* calculate mapping of object to a placement group */
-extern void calc_object_layout(struct ceph_object_layout *ol,
-			       struct ceph_object *oid,
-			       struct ceph_file_layout *fl,
-			       struct ceph_osdmap *osdmap);
+extern int calc_object_layout(struct ceph_object_layout *ol,
+			      struct ceph_object *oid,
+			      struct ceph_file_layout *fl,
+			      struct ceph_osdmap *osdmap);
 
 #endif

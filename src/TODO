@@ -33,10 +33,10 @@ v0.8
 /- async xattr
 /- dcache readdir
 /- confutils memory leaks
+/- osd re-up attempt when marked down
 
 v0.9
 - make mds exhert memory pressure on client caps, leases
-- osd re-up attempt when marked down
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
 later
@@ -70,6 +70,8 @@ repair
 
 
 kernel client
+- fix symbol names for osdmap.h (possibly others?)
+- osd client needs to recalculate layout if osdmap changes (pg_num etc may change)
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
 - simplify mds auth tracking?
