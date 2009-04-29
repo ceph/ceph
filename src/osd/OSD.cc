@@ -358,7 +358,7 @@ int OSD::init()
 
   osd_logtype.add_inc(l_osd_subop, "subop");
 
-  osd_logtype.add_inc(l_osd_r_push, "rop");
+  osd_logtype.add_inc(l_osd_rop, "rop");
   osd_logtype.add_inc(l_osd_r_push, "r_push");
   osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
   osd_logtype.add_inc(l_osd_r_pull, "r_pull");
