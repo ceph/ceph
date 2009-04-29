@@ -47,7 +47,7 @@ void _dout_open_log()
     }
 
     if (!g_conf.log_sym_dir)
-      g_conf.log_sym_dir = g_conf.log_dir;
+      g_conf.log_sym_dir = strdup(g_conf.log_dir);
 
     if (g_conf.log_sym_dir[0] == '/') 
       strcpy(_dout_symlink_dir, g_conf.log_sym_dir);
