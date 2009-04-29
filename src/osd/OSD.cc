@@ -358,6 +358,7 @@ int OSD::init()
 
   osd_logtype.add_inc(l_osd_subop, "subop");
 
+  osd_logtype.add_inc(l_osd_r_push, "rop");
   osd_logtype.add_inc(l_osd_r_push, "r_push");
   osd_logtype.add_inc(l_osd_r_pushb, "r_pushb");
   osd_logtype.add_inc(l_osd_r_pull, "r_pull");
@@ -2035,10 +2036,10 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     }
     if (oldprimary != pg->get_primary()) {
       pg->info.history.same_primary_since = osdmap->get_epoch();
-      pg->cancel_recovery();
       pg->dirty_info = true;
     }
-    
+    pg->cancel_recovery();
+
     // deactivate.
     pg->state_clear(PG_STATE_ACTIVE);
     pg->state_clear(PG_STATE_DOWN);
@@ -3246,8 +3247,7 @@ void OSD::do_recovery(PG *pg)
   int max = g_conf.osd_recovery_max_active - recovery_ops_active;
  
   dout(10) << "do_recovery starting " << max
-	   << " (" << recovery_ops_active
-	   << "/" << g_conf.osd_recovery_max_active << " active) on "
+	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	   << *pg << dendl;
 
   int started = pg->start_recovery_ops(max);
@@ -3260,18 +3260,30 @@ void OSD::do_recovery(PG *pg)
   pg->put();
 }
 
-
-
+void OSD::start_recovery_op(PG *pg, int count)
+{
+  recovery_wq.lock();
+  dout(10) << "start_recovery_op " << *pg << " count " << count
+	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
+	   << dendl;
+  assert(pg->recovery_ops_active >= 0);
+  pg->recovery_ops_active += count;
+  recovery_wq.unlock();
+}
 
 void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
 {
   dout(10) << "finish_recovery_op " << *pg << " count " << count
-	   << " dequeue=" << dequeue << dendl;
+	   << " dequeue=" << dequeue
+	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
+	   << dendl;
   recovery_wq.lock();
 
   // adjust count
   recovery_ops_active -= count;
+  assert(recovery_ops_active >= 0);
   pg->recovery_ops_active -= count;
+  assert(pg->recovery_ops_active >= 0);
 
   if (dequeue)
     pg->recovery_item.remove_myself();

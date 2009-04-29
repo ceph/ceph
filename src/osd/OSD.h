@@ -51,6 +51,7 @@ enum {
   l_osd_r_wr,
   l_osd_r_wrb,
   l_osd_subop,
+  l_osd_rop,
   l_osd_r_push,
   l_osd_r_pushb,
   l_osd_r_pull,
@@ -638,6 +639,7 @@ private:
   } recovery_wq;
 
   bool queue_for_recovery(PG *pg);
+  void start_recovery_op(PG *pg, int count);
   void finish_recovery_op(PG *pg, int count, bool more);
   void defer_recovery(PG *pg);
   void do_recovery(PG *pg);

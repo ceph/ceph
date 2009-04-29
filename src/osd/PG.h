@@ -931,6 +931,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 {
   out << "pg[" << pg.info 
       << " r=" << pg.get_role();
+  
+  if (pg.recovery_ops_active)
+    out << " rops=" << pg.recovery_ops_active;
 
   if (pg.log.bottom != pg.info.log_bottom ||
       pg.log.top != pg.info.last_update)

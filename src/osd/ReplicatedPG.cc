@@ -97,6 +97,7 @@ void ReplicatedPG::wait_for_missing_object(object_t oid, Message *m)
 	    << ", pulling"
 	    << dendl;
     pull(poid);
+    osd->start_recovery_op(this, 1);
   }
   waiting_for_missing_object[oid].push_back(m);
 }
@@ -1761,6 +1762,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
       // push it before this update. 
       // FIXME, this is probably extra much work (eg if we're about to overwrite)
       push_to_replica(poid, peer);
+      osd->start_recovery_op(this, 1);
     }
   }
 
@@ -2120,10 +2122,10 @@ bool ReplicatedPG::pull(pobject_t poid)
     if (missing.is_missing(head.oid)) {
       if (pulling.count(head.oid)) {
 	dout(10) << " missing but already pulling head " << head << dendl;
+	return false;
       } else {
-	pull(head);
+	return pull(head);
       }
-      return false;
     }
 
     // check snapset
@@ -2524,8 +2526,10 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     missing_loc.erase(poid.oid);
 
     // close out pull op?
-    if (pulling.count(poid.oid))
+    if (pulling.count(poid.oid)) {
       pulling.erase(poid.oid);
+      finish_recovery_op();
+    }
 
     update_stats();
 
@@ -2538,11 +2542,11 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       for (unsigned i=1; i<acting.size(); i++) {
 	int peer = acting[i];
 	assert(peer_missing.count(peer));
-	if (peer_missing[peer].is_missing(poid.oid)) 
+	if (peer_missing[peer].is_missing(poid.oid)) {
 	  push_to_replica(poid, peer);  // ok, push it, and they (will) have it now.
+	  osd->start_recovery_op(this, 1);
+	}
       }
-
-      finish_recovery_op();
     }
 
   } else {
@@ -2658,6 +2662,7 @@ int ReplicatedPG::start_recovery_ops(int max)
     else
       n = recover_primary(max);
     started += n;
+    osd->logger->inc(l_osd_rop, n);
     if (n < max)
       break;
     max -= n;
@@ -2780,7 +2785,6 @@ int ReplicatedPG::recover_primary(int max)
     finish_recovery();
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
-    finish_recovery_op();
   }
 
   return started;
