@@ -831,7 +831,7 @@ int conf_read_key_ext(const char *conf_name, const char *conf_alt_name, const ch
 {
   int s;
   int ret;
-  char *tmp;
+  char *tmp = 0;
   for (s=0; s<5; s++) {
     const char *section;
 
