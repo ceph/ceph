@@ -1060,8 +1060,15 @@ const struct address_space_operations ceph_aops = {
 /*
  * Reuse write_{begin,end} here for simplicity.
  */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
+static int ceph_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
+#else
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
+#endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
+	struct page *page = vmf->page;
+#endif
 	struct inode *inode = vma->vm_file->f_dentry->d_inode;
 	loff_t off = page->index << PAGE_CACHE_SHIFT;
 	loff_t size, len;
@@ -1084,6 +1091,15 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 		ceph_write_end(vma->vm_file, inode->i_mapping, off, len, len,
 			       locked_page, fsdata);
 	dout(10, "page_mkwrite %p %llu~%llu = %d\n", inode, off, len, ret);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
+	if (unlikely(ret)) {
+		if (ret == -ENOMEM)
+			ret = VM_FAULT_OOM;
+		else /* -ENOSPC, -EIO, etc */
+			ret = VM_FAULT_SIGBUS;
+	}
+#endif
 	return ret;
 }
 
