@@ -73,7 +73,7 @@ class MDLog {
 
   bool capped;
 
-  inode_t log_inode;
+  inodeno_t ino;
   Journaler *journaler;
 
   Logger *logger;

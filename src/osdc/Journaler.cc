@@ -26,10 +26,16 @@
 
 
 
-void Journaler::reset()
+void Journaler::create(ceph_file_layout *l)
 {
-  dout(1) << "reset to blank journal" << dendl;
+  dout(1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
+
+  layout = *l;
+  assert(layout.fl_pg_pool == pg_pool);
+  last_written.layout = layout;
+  last_committed.layout = layout;
+
   write_pos = flush_pos = ack_pos = safe_pos =
     read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos = ceph_file_layout_period(layout);
@@ -83,8 +89,10 @@ void Journaler::recover(Context *onread)
   state = STATE_READHEAD;
   C_ReadHead *fin = new C_ReadHead(this);
   vector<snapid_t> snaps;
-  filer.read(ino, &layout, CEPH_NOSNAP,
-	     0, 4096, &fin->bl, CEPH_OSD_FLAG_INCLOCK_FAIL, fin);
+
+  object_t oid(ino, 0);
+  ceph_object_layout ol = objecter->osdmap->make_object_layout(oid, pg_pool);
+  objecter->read_full(oid, ol, &fin->bl, 0, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -114,6 +122,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     return;
   }
 
+  layout = h.layout;
   write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
   read_pos = requested_pos = received_pos = h.read_pos;
   expire_pos = h.expire_pos;

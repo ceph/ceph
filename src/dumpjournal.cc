@@ -94,19 +94,11 @@ int main(int argc, const char **argv, const char *envp[])
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
 
-  inode_t log_inode;
-  memset(&log_inode, 0, sizeof(log_inode));
-  log_inode.ino = MDS_INO_LOG_OFFSET + mds;
-  log_inode.layout.fl_stripe_unit = 1<<20;
-  log_inode.layout.fl_stripe_count = 1;
-  log_inode.layout.fl_object_size = 1<<20;
-  log_inode.layout.fl_cas_hash = 0;
-  log_inode.layout.fl_object_stripe_unit = 0;
-  log_inode.layout.fl_pg_preferred = -1;
-  log_inode.layout.fl_pg_pool = CEPH_METADATA_RULE;
+  inodeno_t ino = MDS_INO_LOG_OFFSET + mds;
+  unsigned pg_pool = CEPH_METADATA_RULE;
 
   objecter = new Objecter(messenger, &monmap, &osdmap, lock);
-  journaler = new Journaler(log_inode.ino, &log_inode.layout, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  &lock);
+  journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  &lock);
 
   objecter->set_client_incarnation(0);
 
@@ -124,7 +116,7 @@ int main(int argc, const char **argv, const char *envp[])
 
   Filer filer(objecter);
   bufferlist bl;
-  filer.read(log_inode.ino, &log_inode.layout, 0,
+  filer.read(ino, &journaler->get_layout(), 0,
 	     start, len, &bl, 0, new C_SafeCond(&lock, &cond, &done));
     lock.Lock();
   while (!done)

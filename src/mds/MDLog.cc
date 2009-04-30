@@ -81,22 +81,14 @@ void MDLog::reopen_logger(utime_t start, bool append)
 void MDLog::init_journaler()
 {
   // inode
-  memset(&log_inode, 0, sizeof(log_inode));
-  log_inode.ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
-  log_inode.layout.fl_stripe_unit = 1<<20;
-  log_inode.layout.fl_stripe_count = 1;
-  log_inode.layout.fl_object_size = 1<<20;
-  log_inode.layout.fl_cas_hash = 0;
-  log_inode.layout.fl_object_stripe_unit = 0;
-  log_inode.layout.fl_pg_preferred = -1;
-  log_inode.layout.fl_pg_pool = mds->mdsmap->get_metadata_pg_pool();
+  ino = MDS_INO_LOG_OFFSET + mds->get_nodeid();
   
-  if (g_conf.mds_local_osd) 
-    log_inode.layout.fl_pg_preferred = mds->get_nodeid() + g_conf.num_osd;  // hack
+  //if (g_conf.mds_local_osd) 
+  //log_inode.layout.fl_pg_preferred = mds->get_nodeid() + g_conf.num_osd;  // hack
   
   // log streamer
   if (journaler) delete journaler;
-  journaler = new Journaler(log_inode.ino, &log_inode.layout, CEPH_FS_ONDISK_MAGIC, mds->objecter, 
+  journaler = new Journaler(ino, mds->mdsmap->get_metadata_pg_pool(), CEPH_FS_ONDISK_MAGIC, mds->objecter, 
 			    logger, l_mdl_jlat,
 			    &mds->mds_lock);
 }
@@ -127,7 +119,7 @@ void MDLog::create(Context *c)
 {
   dout(5) << "create empty log" << dendl;
   init_journaler();
-  journaler->reset();
+  journaler->create(&mds->mdcache->default_dir_layout);
   write_head(c);
 
   logger->set(l_mdl_expos, journaler->get_expire_pos());
@@ -219,10 +211,11 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
   // start a new segment?
   //  FIXME: should this go elsewhere?
   loff_t last_seg = get_last_segment_offset();
+  loff_t period = journaler->get_layout_period();
   if (!segments.empty() && 
       !writing_subtree_map &&
-      (journaler->get_write_pos() / ceph_file_layout_period(log_inode.layout) != (last_seg / ceph_file_layout_period(log_inode.layout)) &&
-       (journaler->get_write_pos() - last_seg > ceph_file_layout_period(log_inode.layout)/2))) {
+      (journaler->get_write_pos()/period != last_seg/period &&
+       journaler->get_write_pos() - last_seg > period/2)) {
     dout(10) << "submit_entry also starting new segment: last = " << last_seg
 	     << ", cur pos = " << journaler->get_write_pos() << dendl;
     start_new_segment();

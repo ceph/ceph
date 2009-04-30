@@ -69,9 +69,11 @@ public:
     __s64 read_pos;
     __s64 write_pos;
     nstring magic;
+    ceph_file_layout layout;
 
-    Header(const char *m=0) : trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0),
-			      magic(m) {}
+    Header(const char *m=0) :
+      trimmed_pos(0), expire_pos(0), read_pos(0), write_pos(0),
+      magic(m) { }
 
     void encode(bufferlist &bl) const {
       ::encode(magic, bl);
@@ -79,6 +81,7 @@ public:
       ::encode(expire_pos, bl);
       ::encode(read_pos, bl);
       ::encode(write_pos, bl);
+      ::encode(layout, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(magic, bl);
@@ -86,6 +89,7 @@ public:
       ::decode(expire_pos, bl);
       ::decode(read_pos, bl);
       ::decode(write_pos, bl);
+      ::decode(layout, bl);
     }
   } last_written, last_committed;
   WRITE_CLASS_ENCODER(Header)
@@ -93,7 +97,9 @@ public:
   private:
   // me
   inodeno_t ino;
+  unsigned pg_pool;
   ceph_file_layout layout;
+
   const char *magic;
   Objecter *objecter;
   Filer filer;
@@ -195,9 +201,9 @@ public:
   friend class C_Trim;
 
 public:
-  Journaler(inodeno_t ino_, ceph_file_layout *layout_, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
+  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
     last_written(mag), last_committed(mag),
-    ino(ino_), layout(*layout_), magic(mag),
+    ino(ino_), pg_pool(pool), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
     lock(lk), timer(*lk), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
@@ -224,7 +230,7 @@ public:
    * in our sequence do not exist.. e.g. after a MKFS.  this is _not_
    * an "erase" method.
    */
-  void reset();
+  void create(ceph_file_layout *layout);
   void recover(Context *onfinish);
   void write_head(Context *onsave=0);
 
@@ -237,6 +243,9 @@ public:
   __s64 get_read_pos() const { return read_pos; }
   __s64 get_expire_pos() const { return expire_pos; }
   __s64 get_trimmed_pos() const { return trimmed_pos; }
+
+  __s64 get_layout_period() const { return ceph_file_layout_period(layout); }
+  ceph_file_layout& get_layout() { return layout; }
 
   // write
   __s64 append_entry(bufferlist& bl);
