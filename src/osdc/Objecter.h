@@ -345,7 +345,11 @@ class Objecter {
     ops[0].length = len;
     return read(oid, ol, ops, pbl, 0, flags, onfinish);
   }
-
+  tid_t read_full(object_t oid, ceph_object_layout ol,
+		  bufferlist *pbl, int flags,
+		  Context *onfinish) {
+    return read(oid, ol, 0, 0, pbl, flags, onfinish);
+  }
      
   tid_t mutate(object_t oid, ceph_object_layout ol, 
 	       ObjectMutation& mutation,

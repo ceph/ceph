@@ -763,6 +763,8 @@ void MDS::boot_create()
 
   C_Gather *fin = new C_Gather(new C_MDS_CreateFinish(this));
 
+  mdcache->init_layouts();
+
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin->new_sub());
@@ -822,6 +824,7 @@ void MDS::boot_start(int step, int r)
 
   switch (step) {
   case 0:
+    mdcache->init_layouts();
     step = 1;  // fall-thru.
 
   case 1:

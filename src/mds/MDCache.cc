@@ -204,6 +204,19 @@ void MDCache::remove_inode(CInode *o)
   delete o; 
 }
 
+
+
+void MDCache::init_layouts()
+{
+  default_file_layout = g_default_file_layout;
+  default_file_layout.fl_pg_preferred = -1;
+  default_file_layout.fl_pg_pool = mds->mdsmap->get_data_pg_pool();
+
+  default_dir_layout = g_default_file_layout;
+  default_dir_layout.fl_pg_preferred = -1;
+  default_dir_layout.fl_pg_pool = mds->mdsmap->get_metadata_pg_pool();
+}
+
 CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
 {
   CInode *in = new CInode(this);
@@ -214,7 +227,10 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   in->inode.ctime = 
     in->inode.mtime = g_clock.now();
   in->inode.nlink = 1;
-  in->inode.layout = g_default_mds_dir_layout;
+  if (in->inode.is_dir())
+    in->inode.layout = default_dir_layout;
+  else
+    in->inode.layout = default_file_layout;
   add_inode(in);
   return in;
 }

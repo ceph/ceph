@@ -275,7 +275,7 @@ public:
   }
 
   // -- loading, saving --
-  inode_t inode;
+  inodeno_t ino;
   list<Context*> waiting_for_load;
 
   void encode(bufferlist& bl);

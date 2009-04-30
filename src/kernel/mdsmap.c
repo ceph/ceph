@@ -100,6 +100,17 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		}
 	}
 
+	/* pg_pools */
+	ceph_decode_32_safe(p, end, n, bad);
+	m->m_num_data_pg_pools = n;
+	m->m_data_pg_pools = kmalloc(sizeof(u32)*n, GFP_NOFS);
+	if (!m->m_data_pg_pools)
+		goto badmem;
+	ceph_decode_need(p, end, sizeof(u32)*(n+1), bad);
+	for (i = 0; i < n; i++)
+		ceph_decode_32(p, m->m_data_pg_pools[i]);
+	ceph_decode_32(p, m->m_cas_pg_pool);
+
 	/* ok, we don't care about the rest. */
 	dout(30, "mdsmap_decode success epoch %u\n", m->m_epoch);
 	return m;
@@ -116,5 +127,6 @@ void ceph_mdsmap_destroy(struct ceph_mdsmap *m)
 {
 	kfree(m->m_addr);
 	kfree(m->m_state);
+	kfree(m->m_data_pg_pools);
 	kfree(m);
 }

@@ -1038,12 +1038,11 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
 
   // start by reading the first hunk of it
   C_Dir_Fetch *fin = new C_Dir_Fetch(this);
-  cache->mds->objecter->read( get_ondisk_object(),
-			      cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
-										   g_default_mds_dir_layout ),
-			      0, 0,   // whole object
-			      &fin->bl, 0,
-			      fin );
+  object_t oid = get_ondisk_object();
+  OSDMap *osdmap = cache->mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     cache->mds->mdsmap->get_metadata_pg_pool());
+  cache->mds->objecter->read_full(oid, ol, &fin->bl, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl)
@@ -1478,11 +1477,14 @@ void CDir::_commit(version_t want)
   inode->make_path_string(path);
   m.setxattr("path", path);
 
-  cache->mds->objecter->mutate( get_ondisk_object(),
-				cache->mds->objecter->osdmap->file_to_object_layout( get_ondisk_object(),
-										     g_default_mds_dir_layout ),
-				m, snapc, 0,
-				NULL, new C_Dir_Committed(this, get_version()) );
+  object_t oid = get_ondisk_object();
+  OSDMap *osdmap = cache->mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     cache->mds->mdsmap->get_metadata_pg_pool());
+
+  cache->mds->objecter->mutate(oid, ol,
+			       m, snapc, 0,
+			       NULL, new C_Dir_Committed(this, get_version()) );
 }
 
 

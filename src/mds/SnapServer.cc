@@ -32,7 +32,6 @@
 void SnapServer::init_inode()
 {
   ino = MDS_INO_SNAPTABLE;
-  layout = g_default_file_layout;
 }
 
 void SnapServer::reset_state()

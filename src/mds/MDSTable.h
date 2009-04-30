@@ -28,7 +28,6 @@ class MDSTable {
 
   const char *table_name;
   inodeno_t ino;
-  ceph_file_layout layout;
   
   static const int STATE_UNDEF   = 0;
   static const int STATE_OPENING = 1;

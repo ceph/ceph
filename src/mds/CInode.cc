@@ -650,11 +650,13 @@ void CInode::store(Context *fin)
   m.setxattr("inode", bl);
 
   object_t oid(ino(), frag_t());
-  mdcache->mds->objecter->mutate( oid,
-				  mdcache->mds->objecter->osdmap->file_to_object_layout( oid,
-										     g_default_mds_dir_layout ),
-				m, snapc, 0,
-				NULL, new C_Inode_Stored(this, get_version(), fin) );
+  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+
+  mdcache->mds->objecter->mutate(oid, ol,
+				 m, snapc, 0,
+				 NULL, new C_Inode_Stored(this, get_version(), fin) );
 }
 
 void CInode::_stored(version_t v, Context *fin)
@@ -687,10 +689,12 @@ void CInode::fetch(Context *fin)
   ObjectRead rd;
   rd.getxattr("inode");
 
-  mdcache->mds->objecter->read( oid,
-	      mdcache->mds->objecter->osdmap->file_to_object_layout( oid,
-						   g_default_mds_dir_layout ),
-			      rd, &c->bl, 0, c );
+  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+
+  mdcache->mds->objecter->read(oid, ol,
+			       rd, &c->bl, 0, c );
 }
 
 void CInode::_fetched(bufferlist& bl, Context *fin)

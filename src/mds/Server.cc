@@ -1370,7 +1370,10 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
 
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
-  in->inode.layout = g_default_file_layout;
+  if (in->inode.is_dir())
+    in->inode.layout = mds->mdcache->default_dir_layout;
+  else
+    in->inode.layout = mds->mdcache->default_file_layout;
 
   in->inode.truncate_size = -1ull;  // not truncated, yet!
 
@@ -2602,7 +2605,6 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->inode.mode = req->head.args.mkdir.mode;
   newi->inode.mode &= ~S_IFMT;
   newi->inode.mode |= S_IFDIR;
-  newi->inode.layout = g_default_mds_dir_layout;
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rsubdirs = 1;
 

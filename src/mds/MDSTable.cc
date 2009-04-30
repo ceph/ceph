@@ -63,9 +63,11 @@ void MDSTable::save(Context *onfinish, version_t v)
   // write (async)
   SnapContext snapc;
   object_t oid(ino, 0);
-  mds->objecter->write_full(oid,
-			    mds->objecter->osdmap->file_to_object_layout(oid,
-									 g_default_mds_dir_layout),
+  OSDMap *osdmap = mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mds->mdsmap->get_metadata_pg_pool());
+
+  mds->objecter->write_full(oid, ol,
 			    snapc,
 			    bl, g_clock.now(), 0,
 			    NULL, new C_MT_Save(this, version));
@@ -120,11 +122,10 @@ void MDSTable::load(Context *onfinish)
 
   C_MT_Load *c = new C_MT_Load(this, onfinish);
   object_t oid(ino, 0);
-  mds->objecter->read(oid,
-		      mds->objecter->osdmap->file_to_object_layout(oid,
-								   g_default_mds_dir_layout),
-		      0, 0, // whole object
-		      &c->bl, 0, c);
+  OSDMap *osdmap = mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mds->mdsmap->get_metadata_pg_pool());
+  mds->objecter->read_full(oid, ol, &c->bl, 0, c);
 }
 
 void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)

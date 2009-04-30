@@ -97,7 +97,13 @@ int main(int argc, const char **argv, const char *envp[])
   inode_t log_inode;
   memset(&log_inode, 0, sizeof(log_inode));
   log_inode.ino = MDS_INO_LOG_OFFSET + mds;
-  log_inode.layout = g_default_mds_log_layout;
+  log_inode.layout.fl_stripe_unit = 1<<20;
+  log_inode.layout.fl_stripe_count = 1;
+  log_inode.layout.fl_object_size = 1<<20;
+  log_inode.layout.fl_cas_hash = 0;
+  log_inode.layout.fl_object_stripe_unit = 0;
+  log_inode.layout.fl_pg_preferred = -1;
+  log_inode.layout.fl_pg_pool = CEPH_METADATA_RULE;
 
   objecter = new Objecter(messenger, &monmap, &osdmap, lock);
   journaler = new Journaler(log_inode.ino, &log_inode.layout, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  &lock);

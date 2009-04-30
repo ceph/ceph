@@ -16,6 +16,10 @@ struct ceph_mdsmap {
 	u32 m_max_mds;                  /* size of m_addr, m_state arrays */
 	struct ceph_entity_addr *m_addr;  /* mds addrs */
 	s32 *m_state;                   /* states */
+
+	int m_num_data_pg_pools;
+	u32 *m_data_pg_pools;
+	u32 m_cas_pg_pool;
 };
 
 static inline struct ceph_entity_addr *

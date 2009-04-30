@@ -26,7 +26,6 @@
 void AnchorServer::init_inode()
 {
   ino = MDS_INO_ANCHORTABLE;
-  layout = g_default_file_layout;
 }
 
 void AnchorServer::reset_state()

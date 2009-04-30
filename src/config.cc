@@ -84,49 +84,9 @@ struct ceph_file_layout g_default_file_layout = {
  fl_object_size: init_le32(1<<22),
  fl_cas_hash: init_le32(0),
  fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred: init_le32(-1),
- fl_pg_pool: {CEPH_DATA_RULE},
 };
 
-struct ceph_file_layout g_default_casdata_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred: init_le32(-1),
- fl_pg_pool: {CEPH_CASDATA_RULE},
-};
 
-struct ceph_file_layout g_default_mds_dir_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred: init_le32(-1),
- fl_pg_pool: {CEPH_METADATA_RULE},
-};
-
-struct ceph_file_layout g_default_mds_log_layout = {
- fl_stripe_unit: init_le32(1<<20),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<20),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred: init_le32(-1),
- fl_pg_pool: {CEPH_METADATA_RULE},
-};
-
-struct ceph_file_layout g_default_mds_anchortable_layout = {
- fl_stripe_unit: init_le32(1<<20),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<20),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_pg_preferred: init_le32(-1),
- fl_pg_pool: {CEPH_METADATA_RULE},
-};
 
 #include <msg/msg_types.h>
 

@@ -52,7 +52,7 @@ using namespace std;
 
 
 class MDSMap {
- public:
+public:
   // mds states
   /*
   static const int STATE_DNE =        CEPH_MDS_STATE_DNE;  // down, never existed.
@@ -116,10 +116,9 @@ class MDSMap {
       ::decode(standby_for_name, bl);
     }
   };
-  WRITE_CLASS_ENCODER(mds_info_t)
 
 
- protected:
+protected:
   // base map
   epoch_t epoch;
   epoch_t client_epoch;  // incremented only when change is significant to client.
@@ -131,6 +130,10 @@ class MDSMap {
 
   __u32 session_timeout;
   __u32 session_autoclose;
+
+  vector<__u32> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
+  __u32 cas_pg_pool;            // where CAS objects go
+  __u32 metadata_pg_pool;       // where fs metadata objects go
   
   /*
    * in: the set of logical mds #'s that define the cluster.  this is the set
@@ -151,8 +154,9 @@ class MDSMap {
 
   friend class MDSMonitor;
 
- public:
-  MDSMap() : epoch(0), client_epoch(0), last_failure(0), tableserver(0), root(0) {
+public:
+  MDSMap() : epoch(0), client_epoch(0), last_failure(0), tableserver(0), root(0),
+	     cas_pg_pool(0), metadata_pg_pool(0) {
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
@@ -178,6 +182,10 @@ class MDSMap {
   int get_tableserver() const { return tableserver; }
   int get_root() const { return root; }
 
+  const vector<__u32> &get_data_pg_pools() const { return data_pg_pools; }
+  __u32 get_data_pg_pool() const { return data_pg_pools[0]; }
+  __u32 get_cas_pg_pool() const { return cas_pg_pool; }
+  __u32 get_metadata_pg_pool() const { return metadata_pg_pool; }
 
   // counts
   unsigned get_num_mds() {
@@ -363,8 +371,11 @@ class MDSMap {
     ::encode(session_autoclose, bl);
     ::encode(max_mds, bl);
     ::encode(mds_info, bl);
+    ::encode(data_pg_pools, bl);
+    ::encode(cas_pg_pool, bl);
 
     // kclient ignores everything from here
+    ::encode(metadata_pg_pool, bl);
     ::encode(created, bl);
     ::encode(modified, bl);
     ::encode(tableserver, bl);
@@ -383,8 +394,11 @@ class MDSMap {
     ::decode(session_autoclose, p);
     ::decode(max_mds, p);
     ::decode(mds_info, p);
+    ::decode(data_pg_pools, p);
+    ::decode(cas_pg_pool, p);
 
     // kclient ignores everything from here
+    ::decode(metadata_pg_pool, p);
     ::decode(created, p);
     ::decode(modified, p);
     ::decode(tableserver, p);

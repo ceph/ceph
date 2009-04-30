@@ -62,6 +62,9 @@ void MDSMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial" << dendl;
   pending_mdsmap.max_mds = 1;
   pending_mdsmap.created = g_clock.now();
+  pending_mdsmap.data_pg_pools.push_back(CEPH_DATA_RULE);
+  pending_mdsmap.metadata_pg_pool = CEPH_METADATA_RULE;
+  pending_mdsmap.cas_pg_pool = CEPH_CASDATA_RULE;
   print_map(pending_mdsmap);
 }
 

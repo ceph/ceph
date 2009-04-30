@@ -417,6 +417,9 @@ public:
   int num_inodes_with_caps;
   int num_caps;
 
+  ceph_file_layout default_file_layout;
+  ceph_file_layout default_dir_layout;
+
   // -- client leases --
 public:
   static const int client_lease_pools = 3;
@@ -870,6 +873,7 @@ private:
   list<Context*> waiting_for_open;
 
 public:
+  void init_layouts();
   CInode *create_system_inode(inodeno_t ino, int mode);
   CInode *create_root_inode();
 

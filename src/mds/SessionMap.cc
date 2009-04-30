@@ -13,6 +13,7 @@
  */
 
 #include "MDS.h"
+#include "MDCache.h"
 #include "SessionMap.h"
 #include "osdc/Filer.h"
 
@@ -25,11 +26,8 @@
 
 void SessionMap::init_inode()
 {
-  memset(&inode, 0, sizeof(inode));
-  inode.ino = MDS_INO_SESSIONMAP_OFFSET + mds->get_nodeid();
-  inode.layout = g_default_file_layout;
+  ino = MDS_INO_SESSIONMAP_OFFSET + mds->get_nodeid();
 }
-
 
 void SessionMap::dump()
 {
@@ -65,14 +63,11 @@ void SessionMap::load(Context *onload)
 	waiting_for_load.push_back(onload);
   
   C_SM_Load *c = new C_SM_Load(this);
-  object_t oid(inode.ino, 0);
-  mds->objecter->read(oid,
-		      mds->objecter->osdmap->file_to_object_layout(oid,
-								   g_default_mds_dir_layout),
-		      0, 0, // whole object
-		      &c->bl, 0,
-		      c);
-
+  object_t oid(ino, 0);
+  OSDMap *osdmap = mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mds->mdsmap->get_metadata_pg_pool());
+  mds->objecter->read_full(oid, ol, &c->bl, 0, c);
 }
 
 void SessionMap::_load_finish(bufferlist &bl)
@@ -120,10 +115,12 @@ void SessionMap::save(Context *onsave, version_t needv)
   encode(bl);
   committing = version;
   SnapContext snapc;
-  object_t oid(inode.ino, 0);
-  mds->objecter->write_full(oid, 
-			    mds->objecter->osdmap->file_to_object_layout(oid,
-									 g_default_mds_dir_layout),
+  object_t oid(ino, 0);
+  OSDMap *osdmap = mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mds->mdsmap->get_metadata_pg_pool());
+
+  mds->objecter->write_full(oid, ol,
 			    snapc,
 			    bl, g_clock.now(), 0,
 			    NULL, new C_SM_Save(this, version));
