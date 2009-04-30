@@ -668,7 +668,6 @@ int ceph_calc_object_layout(struct ceph_object_layout *ol,
 	pgid.pg64 = 0;   /* start with it zeroed out */
 	pgid.pg.ps = bno + crush_hash32_2(ino, ino>>32);
 	pgid.pg.preferred = preferred;
-	pgid.pg.type = fl->fl_pg_type;
 	pgid.pg.pool = fl->fl_pg_pool;
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);

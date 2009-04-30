@@ -43,7 +43,7 @@
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL    7 /* public/client */
+#define CEPH_OSDC_PROTOCOL    8 /* public/client */
 #define CEPH_MDSC_PROTOCOL   18 /* public/client */
 #define CEPH_MONC_PROTOCOL   11 /* public/client */
 
@@ -264,9 +264,7 @@ struct ceph_file_layout {
 
 	/* object -> pg layout */
 	__le32 fl_pg_preferred; /* preferred primary for pg (-1 for none) */
-	__u8   fl_pg_type;
-	__le16 fl_pg_pool;      /* implies crush ruleset, rep level */
-	__le16 fl_pg_ns;        /* object namespace */
+	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
 } __attribute__ ((packed));
 
 #define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
@@ -297,9 +295,7 @@ union ceph_pg {
 	struct {
 		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
-		__u16 pool;      /* implies crush ruleset */
-		__u8 type;
-		__u8 __pad;
+		__u32 pool;      /* implies crush ruleset */
 	} pg;
 } __attribute__ ((packed));
 

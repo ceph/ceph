@@ -1345,7 +1345,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       __u64 size;
       client->objecter->stat(oid, layout, &size, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
@@ -1358,7 +1358,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       bufferlist bl;
       client->objecter->read(oid, layout, off, len, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
@@ -1371,7 +1371,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       bufferptr bp(len);
       bufferlist bl;
       bl.push_back(bp);
@@ -1389,7 +1389,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t len = t.get_int();
       object_t oid(oh, ol);
       lock.Lock();
-      ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 2, 0);
+      ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       SnapContext snapc;
       client->objecter->zero(oid, layout, off, len, snapc, g_clock.now(), 0,
 			     new C_SafeCond(&lock, &cond, &ack),
@@ -2146,7 +2146,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (time_to_stop()) break;
 
     object_t oid(0x1000, i);
-    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 0);
+    ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
     SnapContext snapc;
     
     if (i % inflight == 0) {
@@ -2249,7 +2249,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     }
     object_t oid(0x1000, o);
 
-    ceph_object_layout layout = client->osdmap->make_object_layout(oid, pg_t::TYPE_REP, 0);
+    ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
     SnapContext snapc;
     
     client->client_lock.Lock();

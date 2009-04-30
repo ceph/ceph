@@ -25,7 +25,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v012"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v013"
 
 
 
@@ -109,19 +109,12 @@ enum {
 
 // placement group id
 struct pg_t {
-public:
-  static const int TYPE_REP   = CEPH_PG_TYPE_REP;
-  static const int TYPE_RAID4 = CEPH_PG_TYPE_RAID4;
-
-  //private:
   union ceph_pg u;
 
-public:
   pg_t() { u.pg64 = 0; }
   pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
-  pg_t(int type, ps_t seed, int pool, int pref) {
+  pg_t(ps_t seed, int pool, int pref) {
     u.pg64 = 0;
-    u.pg.type = type;
     u.pg.ps = seed;
     u.pg.pool = pool;
     u.pg.preferred = pref;   // hack: avoid negative.
@@ -131,10 +124,6 @@ public:
   pg_t(const ceph_pg& cpg) {
     u = cpg;
   }
-
-  int type()      { return u.pg.type; }
-  bool is_rep()   { return type() == TYPE_REP; }
-  bool is_raid4() { return type() == TYPE_RAID4; }
 
   ps_t ps() { return u.pg.ps; }
   int pool() { return u.pg.pool; }
@@ -161,7 +150,6 @@ public:
     int r = sscanf(s, "%d.%x", &pool, &ps);
     if (r < 3)
       return false;
-    u.pg.type = TYPE_REP;
     u.pg.pool = pool;
     u.pg.ps = ps;
     u.pg.preferred = -1;
@@ -431,6 +419,9 @@ struct pg_pool_t {
   int get_crush_ruleset() const { return v.crush_ruleset; }
   epoch_t get_last_change() const { return v.last_change; }
 
+  bool is_rep()   const { return get_type() == CEPH_PG_TYPE_REP; }
+  bool is_raid4() const { return get_type() == CEPH_PG_TYPE_RAID4; }
+
   void calc_pg_masks() {
     pg_num_mask = (1 << calc_bits_of(v.pg_num-1)) - 1;
     pgp_num_mask = (1 << calc_bits_of(v.pgp_num-1)) - 1;
@@ -470,15 +461,20 @@ struct pg_pool_t {
 WRITE_CLASS_ENCODER(pg_pool_t)
 
 inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
-  return out << "pg_pool(type " << p.get_type()
-	     << " size " << p.get_size()
-	     << " ruleset " << p.get_crush_ruleset()
-	     << " pg_num " << p.get_pg_num()
-	     << " pgp_num " << p.get_pgp_num()
-	     << " lpg_num " << p.get_lpg_num()
-	     << " lpgp_num " << p.get_lpgp_num()
-	     << " last_change " << p.get_last_change()
-	     << ")";
+  out << "pg_pool(";
+  switch (p.get_type()) {
+  case CEPH_PG_TYPE_REP: out << "rep"; break;
+  default: out << "type " << p.get_type();
+  }
+  out << " size " << p.get_size()
+      << " ruleset " << p.get_crush_ruleset()
+      << " pg_num " << p.get_pg_num()
+      << " pgp_num " << p.get_pgp_num()
+      << " lpg_num " << p.get_lpg_num()
+      << " lpgp_num " << p.get_lpgp_num()
+      << " last_change " << p.get_last_change()
+      << ")";
+  return out;
 }
 
 /** pg_stat

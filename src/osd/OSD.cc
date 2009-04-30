@@ -552,7 +552,7 @@ PG *OSD::_open_lock_pg(pg_t pgid)
 
   // create
   PG *pg;
-  if (pgid.is_rep())
+  if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
     pg = new ReplicatedPG(this, pgid);
   //else if (pgid.is_raid4())
   //pg = new RAID4PG(this, pgid);
@@ -2457,8 +2457,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 
   for (vector<pobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     pobject_t poid = *p;
-    ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.type(), 
-						      parentid.pool(), parentid.preferred());
+    ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
     if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {
       pg_t pgid(le64_to_cpu(l.ol_pgid));
       dout(20) << "  moving " << poid << " from " << parentid << " -> " << pgid << dendl;

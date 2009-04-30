@@ -333,10 +333,10 @@ static int map_osds(struct ceph_osd_client *osdc,
 		return -1;
 	pool = &osdc->osdmap->pg_pool[req->r_pgid.pg.pool];
 	ruleno = crush_find_rule(osdc->osdmap->crush, pool->v.crush_ruleset,
-				 req->r_pgid.pg.type, pool->v.size);
+				 pool->v.type, pool->v.size);
 	if (ruleno < 0) {
 		derr(0, "map_osds no crush rule for pool %d type %d size %d\n",
-		     req->r_pgid.pg.pool, req->r_pgid.pg.type, pool->v.size);
+		     req->r_pgid.pg.pool, pool->v.type, pool->v.size);
 		return -1;
 	}
 

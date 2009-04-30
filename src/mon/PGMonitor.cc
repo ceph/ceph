@@ -435,7 +435,6 @@ bool PGMonitor::register_new_pgs()
        p++) {
     int poolid = p->first;
     pg_pool_t &pool = p->second;
-    int type = pool.get_type();
     int ruleno = pool.get_crush_ruleset();
     if (!mon->osdmon()->osdmap.crush.rule_exists(ruleno)) 
       continue;
@@ -449,7 +448,7 @@ bool PGMonitor::register_new_pgs()
     dout(10) << "register_new_pgs scanning " << pool << dendl;
 
     for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
-      pg_t pgid(type, ps, poolid, -1);
+      pg_t pgid(ps, poolid, -1);
       if (pg_map.pg_stat.count(pgid)) {
 	dout(20) << "register_new_pgs  have " << pgid << dendl;
 	continue;

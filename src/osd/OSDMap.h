@@ -620,13 +620,12 @@ private:
 
   // oid -> pg
   ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
-    return make_object_layout(oid, layout.fl_pg_type,
-			      layout.fl_pg_pool,
+    return make_object_layout(oid, layout.fl_pg_pool,
 			      ceph_file_layout_pg_preferred(layout),
 			      ceph_file_layout_object_su(layout));
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_type, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     // calculate ps (placement seed)
     ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {
@@ -653,7 +652,7 @@ private:
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
-    pg_t pgid = pg_t(pg_type, ps, pg_pool, preferred);
+    pg_t pgid = pg_t(ps, pg_pool, preferred);
     ceph_object_layout layout;
     layout.ol_pgid = pgid.u.pg64;
     layout.ol_stripe_unit = object_stripe_unit;
@@ -675,7 +674,7 @@ private:
     case CEPH_PG_LAYOUT_CRUSH:
       {
 	// what crush rule?
-	int ruleno = crush.find_rule(pool.get_crush_ruleset(), pg.type(), size);
+	int ruleno = crush.find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
 	if (ruleno >= 0)
 	  crush.do_rule(ruleno, pps, osds, size, pg.preferred(), osd_weight);
       }
@@ -769,11 +768,21 @@ private:
 
 
 
+  const pg_pool_t& get_pg_pool(int p) {
+    assert(pools.count(p));
+    return pools[p];
+  }
   unsigned get_pg_size(pg_t pg) {
     assert(pools.count(pg.pool()));
     pg_pool_t &pool = pools[pg.pool()];
     return pool.get_size();
   }
+  int get_pg_type(pg_t pg) {
+    assert(pools.count(pg.pool()));
+    pg_pool_t &pool = pools[pg.pool()];
+    return pool.get_type();
+  }
+
 
   pg_t raw_pg_to_pg(pg_t pg) {
     assert(pools.count(pg.pool()));
