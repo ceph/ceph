@@ -87,6 +87,22 @@ class C3 : public Dispatcher
       cerr << "WriteCommit finish" << std::endl;
     }
   };
+  class C_ReadCommit : public Context {
+    object_t oid;
+    loff_t start;
+    size_t length;
+    bufferlist *bl;
+  public:
+    tid_t tid;
+    C_ReadCommit(object_t o, loff_t s, size_t l, bufferlist *b) : oid(o), start(s), length(l), bl(b) {}
+    void finish(int r) {
+	char *buf = bl->c_str();
+      cerr << "ReadCommit finish" << std::endl;
+      for (size_t i=0; i<bl->length(); i++)
+	cerr << (int)buf[i] << " ";
+      cerr << std::endl;
+    }
+  };
 
 public:
   C3() : messenger(NULL), lock("c3") {}
@@ -94,6 +110,7 @@ public:
 
 
   void write();
+  void read();
 };
 
 
@@ -201,12 +218,15 @@ bool C3::_dispatch(Message *m)
 void C3::write()
 {
   SnapContext snapc;
-  object_t oid(0x1010, 0);
+  object_t oid(0x1020, 0);
   loff_t off = 0;
   size_t len = 1024;
   bufferlist bl;
-  utime_t ut;
+  utime_t ut = g_clock.now();
   char buf[len];
+
+  for (size_t i=0; i<len; i++)
+    buf[i] = i%20;
 
   bl.append(buf, len);
 
@@ -222,6 +242,28 @@ void C3::write()
               onack, oncommit);
 
   dout(0) << "after write call" << dendl;
+
+}
+
+void C3::read()
+{
+  SnapContext snapc;
+  object_t oid(0x1020, 0);
+  loff_t off = 0;
+  size_t len = 1024;
+  bufferlist *bl = new bufferlist;
+
+  C_ReadCommit *oncommit = new C_ReadCommit(oid, off, len, bl);
+
+  ceph_object_layout layout = objecter->osdmap->file_to_object_layout(oid, g_default_mds_dir_layout);
+
+  dout(0) << "going to read" << dendl;
+
+  objecter->read(oid, layout,
+	      off, len, bl, 0,
+              oncommit);
+
+  dout(0) << "after read call" << dendl;
 
 }
 
@@ -249,6 +291,7 @@ int main(int argc, const char **argv)
   c3.init();
 
   c3.write();
+  c3.read();
 
   rank.wait();
 
