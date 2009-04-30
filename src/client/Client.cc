@@ -120,8 +120,6 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Clie
   last_tid = 0;
   unsafe_sync_write = 0;
 
-  mdsmap = 0;
-
   cwd = NULL;
 
   // 
@@ -136,7 +134,8 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Clie
   messenger = m;
 
   // osd interfaces
-  osdmap = new OSDMap();     // initially blank.. see mount()
+  osdmap = new OSDMap;     // initially blank.. see mount()
+  mdsmap = new MDSMap;
   objecter = new Objecter(messenger, monmap, osdmap, client_lock);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock, 
@@ -267,7 +266,6 @@ void Client::init()
     client_logger = new Logger(s, &client_logtype);
   }
   client_logger_lock.Unlock();
-
 }
 
 void Client::shutdown() 
@@ -1110,17 +1108,6 @@ void Client::handle_mds_map(MMDSMap* m)
   int frommds = -1;
   if (m->get_source().is_mds())
     frommds = m->get_source().num();
-
-  if (mdsmap == 0) {
-    mdsmap = new MDSMap;
-
-    assert(m->get_source().is_mon());
-    whoami = m->get_dest().num();
-    messenger->reset_myname(entity_name_t::CLIENT(whoami));
-    dout(1) << "handle_mds_map i am now " << m->get_dest() << dendl;
-    
-    mount_cond.Signal();  // mount might be waiting for this.
-  } 
 
   if (m->get_epoch() < mdsmap->get_epoch()) {
     dout(1) << "handle_mds_map epoch " << m->get_epoch() << " is older than our "
@@ -2299,9 +2286,6 @@ int Client::mount()
   mounters++;
   
   while (signed_ticket.length() == 0 ||
-	 !mdsmap ||
-	 !osdmap || 
-	 osdmap->get_epoch() == 0 ||
 	 (!itsme && !mounted))       // non-doers wait a little longer
     mount_cond.Wait(client_lock);
   
@@ -2370,6 +2354,13 @@ void Client::handle_mon_map(MMonMap *m)
 void Client::handle_mount_ack(MClientMountAck* m)
 {
   dout(10) << "handle_mount_ack " << *m << dendl;
+
+  assert(m->get_source().is_mon());
+  whoami = m->get_dest().num();
+  messenger->reset_myname(entity_name_t::CLIENT(whoami));
+  dout(1) << "handle_mount_ack i am now " << m->get_dest() << dendl;
+  
+  mount_cond.Signal();  // mount might be waiting for this.
 
   signed_ticket = m->signed_ticket;
   bufferlist::iterator p = signed_ticket.begin();
@@ -2513,10 +2504,6 @@ void Client::handle_unmount(Message* m)
   dout(1) << "handle_unmount got ack" << dendl;
 
   mounted = false;
-
-  delete mdsmap;
-  mdsmap = 0;
-
   mount_cond.Signal();
 
   delete m;
@@ -2540,7 +2527,7 @@ void Client::tick()
   
   utime_t now = g_clock.now();
 
-  if (mdsmap) {
+  if (mdsmap->get_epoch()) {
     // renew caps?
     utime_t el = now - last_cap_renew;
     if (el > mdsmap->get_session_timeout() / 3.0)
