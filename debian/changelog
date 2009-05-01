@@ -1,9 +1,21 @@
+ceph (0.8-1) unstable; urgency=low
+
+  * release
+
+ -- sage <sage@newdream.net>  Fri, 7 May 2009 13:57:22 -0800
+
 ceph (0.7.3-1) unstable; urgency=low
 
   * new caps strategy
   * simplier mds<->client protocol
+  * lots of mds cleanups (locking, caps, path_traverse)
+  * kclient: dcache readdir
+  * kclient: async xattrs
+  * fixed lots of memory leaks
+  * metadata format version on disk
+  * adjustable object replication
 
- -- sage <sage@newdream.net>  Mon, 1 May 2009 13:57:22 -0800
+ -- sage <sage@newdream.net>  Fri, 1 May 2009 13:57:22 -0800
 
 ceph (0.7.2-1) unstable; urgency=low
 

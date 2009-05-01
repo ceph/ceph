@@ -26,7 +26,7 @@ v0.7.2
 /- warn on cmon startup if monmap doesn't match .conf
 /- make kclient timeouts tunable
 
-v0.8
+v0.7.3
 /- clean up path_traverse interface, esp the usages in Server.cc
 /- piggyback lease/cap release on client_request?
 /- store metadata format version on disk...
@@ -34,6 +34,9 @@ v0.8
 /- dcache readdir
 /- confutils memory leaks
 /- osd re-up attempt when marked down
+
+v0.8
+- bug fixes?
 
 v0.9
 - make mds exhert memory pressure on client caps, leases
