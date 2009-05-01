@@ -69,39 +69,47 @@ class C3 : public Dispatcher
  class C_WriteAck : public Context {
     object_t oid;
     loff_t start;
-    size_t length;
+    size_t *length;
+    Cond *pcond;
   public:
     tid_t tid;
-    C_WriteAck(object_t o, loff_t s, size_t l) : oid(o), start(s), length(l) {}
+    C_WriteAck(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
     void finish(int r) {
-      cerr << "WriteAck finish r=" << r << std::endl;
+      if (pcond) {
+        *length = r;
+        pcond->Signal();
+      }
     }
   };
   class C_WriteCommit : public Context {
     object_t oid;
     loff_t start;
-    size_t length;
+    size_t *length;
+    Cond *pcond;
   public:
     tid_t tid;
-    C_WriteCommit(object_t o, loff_t s, size_t l) : oid(o), start(s), length(l) {}
+    C_WriteCommit(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
     void finish(int r) {
-      cerr << "WriteCommit finish r=" << r << std::endl;
+      if (pcond) {
+        *length = r;
+        pcond->Signal();
+      }
     }
   };
   class C_ReadCommit : public Context {
     object_t oid;
     loff_t start;
-    size_t length;
+    size_t *length;
     bufferlist *bl;
+    Cond *pcond;
   public:
     tid_t tid;
-    C_ReadCommit(object_t o, loff_t s, size_t l, bufferlist *b) : oid(o), start(s), length(l), bl(b) {}
+    C_ReadCommit(object_t o, loff_t s, size_t *l, bufferlist *b, Cond *cond) : oid(o), start(s), length(l), bl(b),
+        pcond(cond) {}
     void finish(int r) {
-	char *buf = bl->c_str();
-      cerr << "ReadCommit finish r=" << r << std::endl;
-      for (size_t i=0; i<bl->length(); i++)
-	cerr << (int)buf[i] << " ";
-      cerr << std::endl;
+      *length = r;
+      if (pcond)
+        pcond->Signal();
     }
   };
 
@@ -110,8 +118,8 @@ public:
   ~C3();
   bool init();
 
-  void write();
-  void read();
+  int write(object_t& oid, const char *buf, off_t off, size_t len);
+  int read(object_t& oid, char *buf, off_t off, size_t len);
 };
 
 bool C3::init()
@@ -163,10 +171,10 @@ bool C3::init()
 
 C3::~C3()
 {
-  if (messenger)
-    delete messenger;
   if (mc)
     delete mc;
+  if (messenger)
+    messenger->shutdown();
 }
 
 
@@ -212,7 +220,6 @@ bool C3::dispatch_impl(Message *m)
 }
 
 
-
 bool C3::_dispatch(Message *m)
 {
   switch (m->get_type()) {
@@ -231,27 +238,24 @@ bool C3::_dispatch(Message *m)
   return true;
 }
 
-void C3::write()
+int C3::write(object_t& oid, const char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
-  object_t oid(0x1030, 0);
-  loff_t off = 0;
-  size_t len = 1024;
   bufferlist bl;
   utime_t ut = g_clock.now();
-  char buf[len];
 
-  for (size_t i=0; i<len; i++)
-    buf[i] = i%30;
+  Mutex lock("C3::write");
+  Cond write_wait;
+  bl.append(&buf[off], len);
 
-  bl.append(buf, len);
-
-  C_WriteAck *onack = new C_WriteAck(oid, off, len);
-  C_WriteCommit *oncommit = new C_WriteCommit(oid, off, len);
+  C_WriteAck *onack = new C_WriteAck(oid, off, &len, &write_wait);
+  C_WriteCommit *oncommit = new C_WriteCommit(oid, off, &len, NULL);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
 
   dout(0) << "going to write" << dendl;
+
+  lock.Lock();
 
   objecter->write(oid, layout,
 	      off, len, snapc, bl, ut, 0,
@@ -259,66 +263,135 @@ void C3::write()
 
   dout(0) << "after write call" << dendl;
 
+  write_wait.Wait(lock);
+
+  lock.Unlock();
+
+  return len;
 }
 
-void C3::read()
+int C3::read(object_t& oid, char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
-  object_t oid(0x1030, 0);
-  loff_t off = 0;
-  size_t len = 1024;
   bufferlist *bl = new bufferlist;
+  Mutex lock("C3::read");
+  Cond read_wait;
 
-  C_ReadCommit *oncommit = new C_ReadCommit(oid, off, len, bl);
+  C_ReadCommit *oncommit = new C_ReadCommit(oid, off, &len, bl, &read_wait);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
 
   dout(0) << "going to read" << dendl;
+
+  lock.Lock();
 
   objecter->read(oid, layout,
 	      off, len, bl, 0,
               oncommit);
 
   dout(0) << "after read call" << dendl;
+  read_wait.Wait(lock);
 
+  lock.Unlock();
+
+  if (len)
+    memcpy(buf, bl->c_str(), len);
+
+  delete bl;
+
+  return len;
 }
+
+static void __c3_init(int argc, const char *argv[])
+{
+  vector<const char*> args;
+
+  if (argc && argv) {
+    argv_to_vec(argc, argv, args);
+    env_to_vec(args);
+  }
+  common_init(args, "ccc", true);
+
+  if (g_conf.clock_tare) g_clock.tare();
+}
+
+static Mutex c3_init_mutex("c3_init");
+static int c3_initialized = 0;
+
+static C3 *c3p;
+
+#include "c3.h"
+
+extern "C" int c3_initialize(int argc, const char **argv) 
+{
+  int ret = 0;
+  c3_init_mutex.Lock();
+
+  if (!c3_initialized) {
+    __c3_init(argc, argv);
+    c3p = new C3();
+
+    if (!c3p) {
+      ret = ENOMEM;
+      goto out;
+    }
+    c3p->init();
+  }
+  ++c3_initialized;
+
+out:
+  c3_init_mutex.Unlock();
+  return ret;
+}
+
+extern "C" void c3_deinitialize()
+{
+  c3_init_mutex.Lock();
+  --c3_initialized;
+
+  if (!c3_initialized)
+    delete c3p;
+
+  c3p = NULL;
+
+  c3_init_mutex.Unlock();
+}
+
+extern "C" int c3_write(object_t *oid, const char *buf, off_t off, size_t len)
+{
+    return c3p->write(*oid, buf, off, len);
+}
+
+extern "C" int c3_read(object_t *oid, char *buf, off_t off, size_t len)
+{
+    return c3p->read(*oid, buf, off, len);
+}
+
 
 int main(int argc, const char **argv) 
 {
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  common_init(args, "ccc", true);
-
-  // mds specific args
-  for (unsigned i=0; i<args.size(); i++) {
-    cerr << "unrecognized arg " << args[i] << std::endl;
-    usage();
-  }
-  if (!g_conf.id) {
-    cerr << "must specify '-i name' with the cmds instance name" << std::endl;
-    usage();
+  if (c3_initialize(argc, argv)) {
+    cerr << "error initializing" << std::endl;
+    exit(1);
   }
 
-  if (g_conf.clock_tare) g_clock.tare();
+  time_t tm;
+  char buf[128], buf2[128];
 
-  C3 c3;
+  time(&tm);
+  snprintf(buf, 128, "%s", ctime(&tm));
 
-  c3.init();
+  object_t oid(0x2010, 0);
 
-  c3.write();
-  sleep(1);
-  c3.read();
+  c3_write(&oid, buf, 0, strlen(buf) + 1);
+  size_t size = c3_read(&oid, buf2, 0, 128);
 
-  rank.wait();
+  cerr << "result=" << buf2 << "" << std::endl;
+  cerr << "size=" << size << std::endl;
 
-  // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
-  char s[20];
-  sprintf(s, "gmon/%d", getpid());
-  if (mkdir(s, 0755) == 0)
-    chdir(s);
 
-  generic_dout(0) << "stopped." << dendl;
+  c3_deinitialize();
+
   return 0;
 }
 
