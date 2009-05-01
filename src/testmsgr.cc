@@ -83,6 +83,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   
   // start up network
   g_my_addr = monmap.get_inst(whoami).addr;
+  SimpleMessenger rank;
   int err = rank.bind();
   if (err < 0)
     return 1;

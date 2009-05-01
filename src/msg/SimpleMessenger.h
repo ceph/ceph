@@ -36,7 +36,7 @@ using namespace __gnu_cxx;
 
 /* Rank - per-process
  */
-class Rank {
+class SimpleMessenger {
 public:
   struct Policy {
     bool lossy_tx;                // 
@@ -88,11 +88,11 @@ private:
   // incoming
   class Accepter : public Thread {
   public:
-    Rank *rank;
+    SimpleMessenger *rank;
     bool done;
     int listen_sd;
     
-    Accepter(Rank *r) : rank(r), done(false), listen_sd(-1) {}
+    Accepter(SimpleMessenger *r) : rank(r), done(false), listen_sd(-1) {}
     
     void *entry();
     void stop();
@@ -105,7 +105,7 @@ private:
   // pipe
   class Pipe {
   public:
-    Rank *rank;
+    SimpleMessenger *rank;
     ostream& _pipe_prefix();
 
     enum {
@@ -179,10 +179,10 @@ private:
     friend class Writer;
     
   public:
-    Pipe(Rank *r, int st) : 
+    Pipe(SimpleMessenger *r, int st) : 
       rank(r),
       sd(-1),
-      lock("Rank::Pipe::lock"),
+      lock("SimpleMessenger::Pipe::lock"),
       state(st), 
       reader_running(false), writer_running(false),
       connect_seq(0), peer_global_seq(0),
@@ -264,7 +264,7 @@ private:
 
   // messenger interface
   class Endpoint : public Messenger {
-    Rank *rank;
+    SimpleMessenger *rank;
     Mutex lock;
     Cond cond;
     map<int, list<Message*> > dispatch_queue;
@@ -286,7 +286,7 @@ private:
     } dispatch_thread;
     void dispatch_entry();
 
-    friend class Rank;
+    friend class SimpleMessenger;
 
   public:
     void queue_message(Message *m) {
@@ -331,10 +331,10 @@ private:
     }
 
   public:
-    Endpoint(Rank *r, entity_name_t name, int rn) : 
+    Endpoint(SimpleMessenger *r, entity_name_t name, int rn) : 
       Messenger(name),
       rank(r),
-      lock("Rank::Endpoint::lock"),
+      lock("SimpleMessenger::Endpoint::lock"),
       stop(false),
       qlen(0),
       my_rank(rn),
@@ -373,7 +373,7 @@ private:
   };
 
 
-  // Rank stuff
+  // SimpleMessenger stuff
  public:
   Mutex lock;
   Cond  wait_cond;  // for wait()
@@ -409,12 +409,12 @@ private:
   void reaper();
 
 public:
-  Rank() : accepter(this),
-	   lock("Rank::lock"), started(false), need_addr(true),
+  SimpleMessenger() : accepter(this),
+	   lock("SimpleMessenger::lock"), started(false), need_addr(true),
 	   max_local(0), num_local(0),
 	   my_type(-1),
-	   global_seq_lock("Rank::global_seq_lock"), global_seq(0) { }
-  ~Rank() { }
+	   global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
+  ~SimpleMessenger() { }
 
   //void set_listen_addr(tcpaddr_t& a);
 
@@ -443,9 +443,5 @@ public:
     policy_map[type] = p;
   }
 } ;
-
-
-
-extern Rank rank;
 
 #endif

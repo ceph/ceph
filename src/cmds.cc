@@ -68,6 +68,7 @@ int main(int argc, const char **argv)
   if (mc.get_monmap(&monmap) < 0)
     return -1;
 
+  SimpleMessenger rank;
   rank.bind();
   cout << "starting mds." << g_conf.id
        << " at " << rank.get_rank_addr() 
@@ -79,10 +80,10 @@ int main(int argc, const char **argv)
   if (!m)
     return 1;
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossless());  // mds does its own timeout/markdown
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
+  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossless());  // mds does its own timeout/markdown
 
   rank.start();
   

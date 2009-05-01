@@ -122,6 +122,7 @@ int main(int argc, const char **argv)
   }
 
   // start up network
+  SimpleMessenger rank;
   rank.bind();
 
   cout << "starting osd" << whoami
@@ -142,14 +143,14 @@ int main(int argc, const char **argv)
   if (!hbm)
     return 1;
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
   // make a _reasonable_ effort to send acks/replies to requests, but
   // don't get carried away, as the sender may go away and we won't
   // ever hear about it.
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossy_fast_fail());
 
   rank.start();
 

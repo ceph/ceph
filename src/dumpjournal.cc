@@ -88,6 +88,7 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   
   // start up network
+  SimpleMessenger rank;
   rank.bind();
   g_conf.daemonize = false; // not us!
   rank.start();

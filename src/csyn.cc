@@ -56,12 +56,13 @@ int main(int argc, const char **argv, char *envp[])
     return -1;
 
   // start up network
+  SimpleMessenger rank;
   rank.bind();
   cout << "starting csyn at " << rank.get_rank_addr() << std::endl;
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;

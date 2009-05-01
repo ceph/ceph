@@ -122,6 +122,8 @@ int main(int argc, const char **argv)
   }
 
   // bind
+  SimpleMessenger rank;
+
   cout << "starting mon" << whoami 
        << " at " << monmap.get_inst(whoami).addr
        << " mon_data " << g_conf.mon_data
@@ -141,12 +143,12 @@ int main(int argc, const char **argv)
 
   rank.start();  // may daemonize
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless());
 
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_ADMIN, Rank::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_ADMIN, SimpleMessenger::Policy::lossy_fast_fail());
 
 
   mon->init();

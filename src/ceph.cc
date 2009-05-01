@@ -587,12 +587,13 @@ int main(int argc, const char **argv, const char *envp[])
     return -1;
   
   // start up network
+  SimpleMessenger rank;
   rank.bind();
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->set_dispatcher(&dispatcher);
 
   rank.start();
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
 
   if (watch) {
     lock.Lock();

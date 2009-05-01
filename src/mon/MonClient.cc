@@ -34,7 +34,9 @@ int MonClient::probe_mon(MonMap *pmonmap)
     cerr << "couldn't parse ip:port(s) from '" << g_conf.mon_host << "'" << std::endl;
     return -1;
   }
-  
+
+  SimpleMessenger rank; 
+
   rank.bind();
   dout(1) << " connecting to monitor(s) at " << monaddrs << " ..." << dendl;
   
