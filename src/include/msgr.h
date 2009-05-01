@@ -1,0 +1,152 @@
+#ifndef __MSGR_H
+#define __MSGR_H
+
+
+#define CEPH_MON_PORT    6789  /* default monitor port */
+
+/*
+ * client-side processes will try to bind to ports in this
+ * range, simply for the benefit of tools like nmap or wireshark
+ * that would like to identify the protocol.
+ */
+#define CEPH_PORT_FIRST  6789
+#define CEPH_PORT_START  6800  /* non-monitors start here */
+#define CEPH_PORT_LAST   6900
+
+/*
+ * tcp connection banner.  include a protocol version. and adjust
+ * whenever the wire protocol changes.  try to keep this string length
+ * constant.
+ */
+#define CEPH_BANNER "ceph 013\n"
+#define CEPH_BANNER_MAX_LEN 30
+
+
+/*
+ * Rollover-safe type and comparator for 32-bit sequence numbers.
+ * Comparator returns -1, 0, or 1.
+ */
+typedef __u32 ceph_seq_t;
+
+static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
+{
+       return ((__s32)a - (__s32)b);
+}
+
+
+/*
+ * entity_name
+ */
+struct ceph_entity_name {
+	__le32 type;
+	__le32 num;
+} __attribute__ ((packed));
+
+#define CEPH_ENTITY_TYPE_MON    1
+#define CEPH_ENTITY_TYPE_MDS    2
+#define CEPH_ENTITY_TYPE_OSD    3
+#define CEPH_ENTITY_TYPE_CLIENT 4
+#define CEPH_ENTITY_TYPE_ADMIN  5
+
+/* used by message exchange protocol */
+#define CEPH_MSGR_TAG_READY         1  /* server->client: ready for messages */
+#define CEPH_MSGR_TAG_RESETSESSION  2  /* server->client: reset, try again */
+#define CEPH_MSGR_TAG_WAIT          3  /* server->client: wait for racing
+					  incoming connection */
+#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server->client + cseq: try again
+					  with higher cseq */
+#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again
+					  with higher gseq */
+#define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
+#define CEPH_MSGR_TAG_MSG          10  /* message */
+#define CEPH_MSGR_TAG_ACK          11  /* message ack */
+
+
+/*
+ * entity_addr -- network address
+ */
+struct ceph_entity_addr {
+	__le32 erank;  /* entity's rank in process */
+	__le32 nonce;  /* unique id for process (e.g. pid) */
+	struct sockaddr_in ipaddr;
+} __attribute__ ((packed));
+
+static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
+					     const struct ceph_entity_addr *b)
+{
+	return a->nonce == b->nonce &&
+		a->ipaddr.sin_addr.s_addr == b->ipaddr.sin_addr.s_addr;
+}
+
+static inline bool ceph_entity_addr_equal(const struct ceph_entity_addr *a,
+					  const struct ceph_entity_addr *b)
+{
+	return memcmp(a, b, sizeof(*a)) == 0;
+}
+
+struct ceph_entity_inst {
+	struct ceph_entity_name name;
+	struct ceph_entity_addr addr;
+} __attribute__ ((packed));
+
+
+/*
+ * connection negotiation
+ */
+struct ceph_msg_connect {
+	__le32 host_type;  /* CEPH_ENTITY_TYPE_* */
+	__le32 global_seq;
+	__le32 connect_seq;
+	__u8  flags;
+} __attribute__ ((packed));
+
+struct ceph_msg_connect_reply {
+	__u8 tag;
+	__le32 global_seq;
+	__le32 connect_seq;
+	__u8 flags;
+} __attribute__ ((packed));
+
+#define CEPH_MSG_CONNECT_LOSSY  1  /* messages i send may be safely dropped */
+
+
+/*
+ * message header
+ */
+struct ceph_msg_header {
+	__le64 seq;       /* message seq# for this session */
+	__le16 type;      /* message type */
+	__le16 priority;  /* priority.  higher value == higher priority */
+
+	__le32 front_len; /* bytes in main payload */
+	__le32 data_len;  /* bytes of data payload */
+	__le16 data_off;  /* sender: include full offset;
+			     receiver: mask against ~PAGE_MASK */
+
+	__u8 mon_protocol, monc_protocol;  /* protocol versions, */
+	__u8 osd_protocol, osdc_protocol;  /* internal and public */
+	__u8 mds_protocol, mdsc_protocol;
+
+	struct ceph_entity_inst src, orig_src, dst;
+	__le32 crc;       /* header crc32c */
+} __attribute__ ((packed));
+
+#define CEPH_MSG_PRIO_LOW     64
+#define CEPH_MSG_PRIO_DEFAULT 127
+#define CEPH_MSG_PRIO_HIGH    196
+#define CEPH_MSG_PRIO_HIGHEST 255
+
+/*
+ * follows data payload
+ */
+struct ceph_msg_footer {
+	__le32 flags;
+	__le32 front_crc;
+	__le32 data_crc;
+} __attribute__ ((packed));
+
+#define CEPH_MSG_FOOTER_ABORTED   (1<<0)   /* drop this message */
+#define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
+
+
+#endif

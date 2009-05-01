@@ -29,10 +29,12 @@ Mount options, syntax.
 EOF
 
 git add fs/ceph/ceph_fs.h
+git add fs/ceph/msgr.h
+git add fs/ceph/rados.h
 git commit -F - <<EOF
 ceph: on-wire types
 
-This header describes the types used to exchange messages between the
+These headers describe the types used to exchange messages between the
 Ceph client and various servers.  All types are little-endian and
 packed.
 

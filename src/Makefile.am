@@ -366,11 +366,13 @@ noinst_HEADERS = \
         include/interval_set.h\
         include/inttypes.h\
         include/lru.h\
+	include/msgr.h\
         include/nstring.h\
         include/object.h\
         include/page.h\
         include/pobject.h\
         include/rangeset.h\
+	include/rados.h\
         include/statlite.h\
         include/triple.h\
         include/tstring.h\
