@@ -116,23 +116,24 @@ public:
 
 bool C3::init()
 {
-  mc = new MonClient(&monmap, messenger);
+  mc = new MonClient(&monmap, NULL);
 
-  MonMap *mm = mc->get_monmap();
   // get monmap
-  if (!mm)
+  if (!mc->get_monmap())
     return false;
 
   rank.bind();
   cout << "starting c3." << g_conf.id
        << " at " << rank.get_rank_addr() 
-       << " fsid " << mm->get_fsid()
+       << " fsid " << monmap.get_fsid()
        << std::endl;
 
-  messenger = rank.register_entity(entity_name_t::MDS(-1));
+  messenger = rank.register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);
   if (!messenger)
     return false;
+
+  mc->set_messenger(messenger);
 
   rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
@@ -141,15 +142,19 @@ bool C3::init()
 
   rank.start(1);
 
-  objecter = new Objecter(messenger, mm, &osdmap, lock);
+  mc->mount(g_conf.client_mount_timeout);
+
+  objecter = new Objecter(messenger, &monmap, &osdmap, lock);
   if (!objecter)
     return false;
 
   lock.Lock();
-  messenger->set_dispatcher(this);
+  mc->link_dispatcher(this);
 
   objecter->set_client_incarnation(0);
   objecter->init();
+
+  objecter->set_client_incarnation(0);
 
   lock.Unlock();
 
@@ -237,7 +242,7 @@ void C3::write()
   char buf[len];
 
   for (size_t i=0; i<len; i++)
-    buf[i] = i%10;
+    buf[i] = i%30;
 
   bl.append(buf, len);
 
