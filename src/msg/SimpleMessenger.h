@@ -82,16 +82,17 @@ public:
   void sigint();
 
 private:
-  class EntityMessenger;
+  class Endpoint;
   class Pipe;
 
   // incoming
   class Accepter : public Thread {
   public:
+    Rank *rank;
     bool done;
     int listen_sd;
     
-    Accepter() : done(false), listen_sd(-1) {}
+    Accepter(Rank *r) : rank(r), done(false), listen_sd(-1) {}
     
     void *entry();
     void stop();
@@ -104,6 +105,7 @@ private:
   // pipe
   class Pipe {
   public:
+    Rank *rank;
     ostream& _pipe_prefix();
 
     enum {
@@ -177,7 +179,8 @@ private:
     friend class Writer;
     
   public:
-    Pipe(int st) : 
+    Pipe(Rank *r, int st) : 
+      rank(r),
       sd(-1),
       lock("Rank::Pipe::lock"),
       state(st), 
@@ -260,7 +263,8 @@ private:
 
 
   // messenger interface
-  class EntityMessenger : public Messenger {
+  class Endpoint : public Messenger {
+    Rank *rank;
     Mutex lock;
     Cond cond;
     map<int, list<Message*> > dispatch_queue;
@@ -272,9 +276,9 @@ private:
 
   private:
     class DispatchThread : public Thread {
-      EntityMessenger *m;
+      Endpoint *m;
     public:
-      DispatchThread(EntityMessenger *_m) : m(_m) {}
+      DispatchThread(Endpoint *_m) : m(_m) {}
       void *entry() {
         m->dispatch_entry();
         return 0;
@@ -327,15 +331,16 @@ private:
     }
 
   public:
-    EntityMessenger(entity_name_t name, int r) : 
+    Endpoint(Rank *r, entity_name_t name, int rn) : 
       Messenger(name),
-      lock("Rank::EntityMessenger::lock"),
+      rank(r),
+      lock("Rank::Endpoint::lock"),
       stop(false),
       qlen(0),
-      my_rank(r),
+      my_rank(rn),
       need_addr(false),
       dispatch_thread(this) { }
-    ~EntityMessenger() { }
+    ~Endpoint() { }
 
     void destroy() {
       // join dispatch thread
@@ -380,7 +385,7 @@ private:
   
   // local
   unsigned max_local, num_local;
-  vector<EntityMessenger*> local;
+  vector<Endpoint*> local;
   vector<bool>             stopped;
   
   // remote
@@ -404,7 +409,8 @@ private:
   void reaper();
 
 public:
-  Rank() : lock("Rank::lock"), started(false), need_addr(true),
+  Rank() : accepter(this),
+	   lock("Rank::lock"), started(false), need_addr(true),
 	   max_local(0), num_local(0),
 	   my_type(-1),
 	   global_seq_lock("Rank::global_seq_lock"), global_seq(0) { }
@@ -423,15 +429,15 @@ public:
     return ++global_seq;
   }
 
-  EntityMessenger *register_entity(entity_name_t addr);
-  void rename_entity(EntityMessenger *ms, entity_name_t newaddr);
-  void unregister_entity(EntityMessenger *ms);
+  Endpoint *register_entity(entity_name_t addr);
+  void rename_entity(Endpoint *ms, entity_name_t newaddr);
+  void unregister_entity(Endpoint *ms);
 
   void submit_message(Message *m, const entity_addr_t& addr, bool lazy=false);  
   void prepare_dest(const entity_inst_t& inst);
 
   // create a new messenger
-  EntityMessenger *new_entity(entity_name_t addr);
+  Endpoint *new_entity(entity_name_t addr);
 
   void set_policy(int type, Policy p) {
     policy_map[type] = p;
