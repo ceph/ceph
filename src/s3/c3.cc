@@ -161,6 +161,7 @@ bool C3::init()
   if (!mc->get_monmap())
     return false;
 
+  SimpleMessenger rank;
   rank.bind();
   cout << "starting c3." << g_conf.id
        << " at " << rank.get_rank_addr() 
@@ -174,10 +175,10 @@ bool C3::init()
 
   mc->set_messenger(messenger);
 
-  rank.set_policy(entity_name_t::TYPE_MON, Rank::Policy::lossy_fail_after(1.0));
-  rank.set_policy(entity_name_t::TYPE_MDS, Rank::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, Rank::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_CLIENT, Rank::Policy::lossless());  // mds does its own timeout/markdown
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
+  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossless());  // mds does its own timeout/markdown
 
   rank.start(1);
 
