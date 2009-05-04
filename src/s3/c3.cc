@@ -96,6 +96,36 @@ class C3 : public Dispatcher
       }
     }
   };
+ class C_ExecAck : public Context {
+    object_t oid;
+    loff_t start;
+    size_t *length;
+    Cond *pcond;
+  public:
+    tid_t tid;
+    C_ExecAck(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
+    void finish(int r) {
+      if (pcond) {
+        *length = r;
+        pcond->Signal();
+      }
+    }
+  };
+  class C_ExecCommit : public Context {
+    object_t oid;
+    loff_t start;
+    size_t *length;
+    Cond *pcond;
+  public:
+    tid_t tid;
+    C_ExecCommit(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
+    void finish(int r) {
+      if (pcond) {
+        *length = r;
+        pcond->Signal();
+      }
+    }
+  };
   class C_ReadCommit : public Context {
     object_t oid;
     loff_t start;
@@ -119,6 +149,7 @@ public:
   bool init();
 
   int write(object_t& oid, const char *buf, off_t off, size_t len);
+  int exec(object_t& oid, const char *buf, off_t off, size_t len);
   int read(object_t& oid, char *buf, off_t off, size_t len);
 };
 
@@ -270,6 +301,38 @@ int C3::write(object_t& oid, const char *buf, off_t off, size_t len)
   return len;
 }
 
+int C3::exec(object_t& oid, const char *buf, off_t off, size_t len)
+{
+  SnapContext snapc;
+  bufferlist bl;
+  utime_t ut = g_clock.now();
+
+  Mutex lock("C3::exec");
+  Cond exec_wait;
+  bl.append(&buf[off], len);
+
+  C_ExecAck *onack = new C_ExecAck(oid, off, &len, &exec_wait);
+  C_ExecCommit *oncommit = new C_ExecCommit(oid, off, &len, NULL);
+
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
+
+  dout(0) << "going to exec" << dendl;
+
+  lock.Lock();
+
+  objecter->exec(oid, layout,
+	      off, len, snapc, bl, ut, 0,
+              onack, oncommit);
+
+  dout(0) << "after write call" << dendl;
+
+  exec_wait.Wait(lock);
+
+  lock.Unlock();
+
+  return len;
+}
+
 int C3::read(object_t& oid, char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
@@ -365,6 +428,11 @@ extern "C" int c3_write(object_t *oid, const char *buf, off_t off, size_t len)
 extern "C" int c3_read(object_t *oid, char *buf, off_t off, size_t len)
 {
     return c3p->read(*oid, buf, off, len);
+}
+
+extern "C" int c3_exec(object_t *oid, char *buf, off_t off, size_t len)
+{
+    return c3p->exec(*oid, buf, off, len);
 }
 
 

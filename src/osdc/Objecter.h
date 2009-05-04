@@ -378,6 +378,16 @@ class Objecter {
     ops[0].length = bl.length();
     return modify(oid, ol, ops, snapc, bl, mtime, flags, onack, oncommit);
   }
+  tid_t exec(object_t oid, ceph_object_layout ol,
+	      __u64 off, size_t len, const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
+              Context *onack, Context *oncommit) {
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_EXEC;
+    ops[0].offset = off;
+    ops[0].length = len;
+    return modify(oid, ol, ops, snapc, bl, mtime, flags, onack, oncommit);
+  }
   tid_t zero(object_t oid, ceph_object_layout ol, 
 	     __u64 off, size_t len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit) {

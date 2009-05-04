@@ -1077,6 +1077,38 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       oi.snapset.head_exists = true;
     }
     break;
+
+  case CEPH_OSD_OP_EXEC:
+    { // write full object
+	// read into a buffer
+	bufferlist bl;
+	int r = osd->store->read(info.pgid.to_coll(), poid, op.offset, op.length, bl);
+#if 0
+	if (data.length() == 0)
+	  data_off = p->offset;
+	data.claim(bl);
+#endif
+	if (r >= 0)  {
+	  op.length = r;
+
+          cerr << bl.c_str() << std::endl;
+#if 0
+          bufferlist nbl, bl;
+
+          if (data.length() == 0)
+            data_off = p->offset;
+          data.claim(bl);
+#endif
+	} else {
+#if 0
+	  result = r;
+	  p->length = 0;
+#endif
+	}
+	dout(10) << " exec got " << r << " / " << op.length << " bytes from obj " /* << poid */ << dendl;
+      break;
+    }
+    break;
     
   case CEPH_OSD_OP_ZERO:
     { // zero
