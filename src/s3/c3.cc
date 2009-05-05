@@ -58,6 +58,7 @@ class C3 : public Dispatcher
   OSDMap osdmap;
   Messenger *messenger;
   MonClient *mc;
+  SimpleMessenger rank;
 
   bool _dispatch(Message *m);
   bool dispatch_impl(Message *m);
@@ -161,7 +162,6 @@ bool C3::init()
   if (!mc->get_monmap())
     return false;
 
-  SimpleMessenger rank;
   rank.bind();
   cout << "starting c3." << g_conf.id
        << " at " << rank.get_rank_addr() 
