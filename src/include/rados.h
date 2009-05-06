@@ -162,6 +162,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_MODE_RD    0x1000
 #define CEPH_OSD_OP_MODE_WR    0x2000
 #define CEPH_OSD_OP_MODE_SUB   0x4000
+#define CEPH_OSD_OP_MODE_EXEC  0x8000
 
 #define CEPH_OSD_OP_TYPE       0x0f00
 #define CEPH_OSD_OP_TYPE_LOCK  0x0100
@@ -216,6 +217,9 @@ enum {
 	CEPH_OSD_OP_RDUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
 	CEPH_OSD_OP_UPLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
+
+	/** exec **/
+	CEPH_OSD_OP_EXEC       = CEPH_OSD_OP_MODE_EXEC | 1,
 };
 
 static inline int ceph_osd_op_type_lock(int op)

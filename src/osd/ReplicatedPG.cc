@@ -738,7 +738,32 @@ void ReplicatedPG::op_read(MOSDOp *op)
       osd->logger->inc(l_osd_c_rd);
       osd->logger->inc(l_osd_c_rdb, p->length);
       break;
-      
+
+   case CEPH_OSD_OP_EXEC:
+    {
+	bufferlist bl;
+	int r = osd->store->read(info.pgid.to_coll(), poid, p->offset, p->length, bl);
+
+	if (data.length() == 0)
+	  data_off = p->offset;
+
+	if (r >= 0)  {
+	  p->length = r;
+	  char *buf = bl.c_str();
+          for (unsigned int i=0; i<bl.length(); i++)
+	     if (isdigit(buf[i]))
+		buf[i] = '?';
+
+	  data.claim(bl);
+	} else {
+	  result = r;
+	  p->length = 0;
+	}
+	dout(10) << " exec got " << r << " / " << p->length << " bytes from obj " << oid << dendl;
+	dout(10) << " exec reply=" << data.c_str() << dendl;
+    }
+    break;
+    
     case CEPH_OSD_OP_STAT:
       {
 	struct stat st;
@@ -1078,38 +1103,6 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
     }
     break;
 
-  case CEPH_OSD_OP_EXEC:
-    { // write full object
-	// read into a buffer
-	bufferlist bl;
-	int r = osd->store->read(info.pgid.to_coll(), poid, op.offset, op.length, bl);
-#if 0
-	if (data.length() == 0)
-	  data_off = p->offset;
-	data.claim(bl);
-#endif
-	if (r >= 0)  {
-	  op.length = r;
-
-          cerr << bl.c_str() << std::endl;
-#if 0
-          bufferlist nbl, bl;
-
-          if (data.length() == 0)
-            data_off = p->offset;
-          data.claim(bl);
-#endif
-	} else {
-#if 0
-	  result = r;
-	  p->length = 0;
-#endif
-	}
-	dout(10) << " exec got " << r << " / " << op.length << " bytes from obj " /* << poid */ << dendl;
-      break;
-    }
-    break;
-    
   case CEPH_OSD_OP_ZERO:
     { // zero
       assert(op.length);

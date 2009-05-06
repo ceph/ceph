@@ -97,21 +97,6 @@ class C3 : public Dispatcher
       }
     }
   };
- class C_ExecAck : public Context {
-    object_t oid;
-    loff_t start;
-    size_t *length;
-    Cond *pcond;
-  public:
-    tid_t tid;
-    C_ExecAck(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
-    void finish(int r) {
-      if (pcond) {
-        *length = r;
-        pcond->Signal();
-      }
-    }
-  };
   class C_ExecCommit : public Context {
     object_t oid;
     loff_t start;
@@ -150,7 +135,7 @@ public:
   bool init();
 
   int write(object_t& oid, const char *buf, off_t off, size_t len);
-  int exec(object_t& oid, const char *buf, off_t off, size_t len);
+  int exec(object_t& oid, const char *code, off_t data_off, size_t data_len, char *buf, size_t out_len);
   int read(object_t& oid, char *buf, off_t off, size_t len);
 };
 
@@ -302,18 +287,17 @@ int C3::write(object_t& oid, const char *buf, off_t off, size_t len)
   return len;
 }
 
-int C3::exec(object_t& oid, const char *buf, off_t off, size_t len)
+int C3::exec(object_t& oid, const char *code, off_t data_off, size_t data_len, char *buf, size_t out_len)
 {
   SnapContext snapc;
-  bufferlist bl;
+  bufferlist bl, obl;
   utime_t ut = g_clock.now();
 
   Mutex lock("C3::exec");
   Cond exec_wait;
-  bl.append(&buf[off], len);
+  bl.append(code, strlen(code) + 1);
 
-  C_ExecAck *onack = new C_ExecAck(oid, off, &len, &exec_wait);
-  C_ExecCommit *oncommit = new C_ExecCommit(oid, off, &len, NULL);
+  C_ExecCommit *oncommit = new C_ExecCommit(oid, data_off, &out_len, &exec_wait);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
 
@@ -322,8 +306,9 @@ int C3::exec(object_t& oid, const char *buf, off_t off, size_t len)
   lock.Lock();
 
   objecter->exec(oid, layout,
-	      off, len, snapc, bl, ut, 0,
-              onack, oncommit);
+	      data_off, data_len, bl, 0,
+	      &obl, out_len,
+              oncommit);
 
   dout(0) << "after write call" << dendl;
 
@@ -331,7 +316,10 @@ int C3::exec(object_t& oid, const char *buf, off_t off, size_t len)
 
   lock.Unlock();
 
-  return len;
+  if (out_len)
+    memcpy(buf, obl.c_str(), out_len);
+
+  return out_len;
 }
 
 int C3::read(object_t& oid, char *buf, off_t off, size_t len)
@@ -431,9 +419,9 @@ extern "C" int c3_read(object_t *oid, char *buf, off_t off, size_t len)
     return c3p->read(*oid, buf, off, len);
 }
 
-extern "C" int c3_exec(object_t *oid, char *buf, off_t off, size_t len)
+extern "C" int c3_exec(object_t *oid, const char *code, off_t off, size_t len, char *buf, size_t out_len)
 {
-    return c3p->exec(*oid, buf, off, len);
+    return c3p->exec(*oid, code, off, len, buf, out_len);
 }
 
 
@@ -453,9 +441,11 @@ int main(int argc, const char **argv)
   object_t oid(0x2010, 0);
 
   c3_write(&oid, buf, 0, strlen(buf) + 1);
+  c3_exec(&oid, "code", 0, 128, buf, 128);
+  cerr << "exec result=" << buf << std::endl;
   size_t size = c3_read(&oid, buf2, 0, 128);
 
-  cerr << "result=" << buf2 << "" << std::endl;
+  cerr << "read result=" << buf2 << "" << std::endl;
   cerr << "size=" << size << std::endl;
 
 
