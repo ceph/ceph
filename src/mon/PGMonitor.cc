@@ -110,6 +110,9 @@ bool PGMonitor::update_from_paxos()
     pg_map.apply_incremental(inc);
     
     dout(0) << pg_map << dendl;
+
+    if (inc.pg_scan)
+      last_sent_pg_create.clear();  // reset pg_create throttle timer
   }
 
   assert(paxosv == pg_map.version);
@@ -428,7 +431,6 @@ bool PGMonitor::register_new_pgs()
   dout(10) << "register_new_pgs checking pg pools for osdmap epoch " << epoch
 	   << ", last_pg_scan " << pg_map.last_pg_scan << dendl;
 
-  bool first = pg_map.pg_stat.empty(); // first pg creation
   int created = 0;
   for (map<int,pg_pool_t>::iterator p = mon->osdmon()->osdmap.pools.begin();
        p != mon->osdmon()->osdmap.pools.end();
@@ -447,6 +449,8 @@ bool PGMonitor::register_new_pgs()
 
     dout(10) << "register_new_pgs scanning " << pool << dendl;
 
+    bool new_pool = pg_map.pg_pool_sum.count(poolid) == 0;  // first pgs in this pool
+
     for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
       pg_t pgid(ps, poolid, -1);
       if (pg_map.pg_stat.count(pgid)) {
@@ -456,7 +460,7 @@ bool PGMonitor::register_new_pgs()
 
       pg_t parent;
       int split_bits = 0;
-      if (!first) {
+      if (!new_pool) {
 	parent = pgid;
 	while (1) {
 	  // remove most significant bit
@@ -493,7 +497,6 @@ bool PGMonitor::register_new_pgs()
   } 
   dout(10) << "register_new_pgs registered " << created << " new pgs" << dendl;
   if (created) {
-    last_sent_pg_create.clear();  // reset pg_create throttle timer
     pending_inc.pg_scan = epoch;
     return true;
   }

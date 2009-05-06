@@ -67,7 +67,8 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
-- create/destroy pool
+- destroy pool
+- shrink pool (pg merge)
 - pool auto resizing
 - c lib
 - pyexec
