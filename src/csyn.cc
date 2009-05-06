@@ -51,8 +51,8 @@ int main(int argc, const char **argv, char *envp[])
 
   // get monmap
   MonMap monmap;
-  MonClient mc;
-  if (mc.get_monmap(&monmap) < 0)
+  MonClient mc(&monmap, NULL);
+  if (!mc.get_monmap())
     return -1;
 
   // start up network
