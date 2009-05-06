@@ -20,7 +20,6 @@
 #include "OSDMap.h"
 
 #include "os/FileStore.h"
-#include "ebofs/Ebofs.h"
 
 #ifdef USE_OSBDB
 #include "osbdb/OSBDB.h"
@@ -101,15 +100,16 @@ ObjectStore *OSD::create_object_store(const char *dev, const char *jdev)
   if (::stat(dev, &st) != 0)
     return 0;
 
-  if (g_conf.ebofs) 
-    return new Ebofs(dev, jdev);
+  //if (g_conf.ebofs) 
+  //return new Ebofs(dev, jdev);
   if (g_conf.filestore)
     return new FileStore(dev, jdev);
 
   if (S_ISDIR(st.st_mode))
     return new FileStore(dev, jdev);
   else
-    return new Ebofs(dev, jdev);
+    return 0;
+  //return new Ebofs(dev, jdev);
 }
 
 

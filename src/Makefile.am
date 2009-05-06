@@ -33,11 +33,11 @@ dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
 
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
-cosd_LDADD = libosd.a libos.a libebofs.a libcrush.a libcommon.a
+cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libebofs.a libcommon.a
+dupstore_LDADD = libos.a libcommon.a
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libebofs.a libos.a libcommon.a
+streamtest_LDADD = libos.a libcommon.a
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
@@ -66,7 +66,7 @@ bin_PROGRAMS += cfuse
 
 if WITH_DEBUG
 fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
-fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a libebofs.a \
+fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a \
 	libclient.a libosdc.a libcrush.a 
 bin_PROGRAMS += fakefuse
 endif
@@ -78,16 +78,11 @@ if WITH_DEBUG
 psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a
 
-test_ebofs_SOURCES = ebofs/test.ebofs.cc
-test_ebofs_LDADD = libebofs.a libos.a libcommon.a
-mkfs_ebofs_SOURCES = ebofs/mkfs.ebofs.cc
-mkfs_ebofs_LDADD = libebofs.a libos.a libcommon.a
-
 fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
-fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a libebofs.a \
+fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a \
 	libclient.a libosdc.a libcrush.a libcommon.a
 
-bin_PROGRAMS += psim test.ebofs mkfs.ebofs fakesyn
+bin_PROGRAMS += psim fakesyn
 endif
 
 
@@ -160,7 +155,7 @@ AM_LDFLAGS =
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a libebofs.a
+	libos.a
 
 noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
 
@@ -261,11 +256,6 @@ libmds_a_SOURCES = \
 	mds/SessionMap.cc \
 	mds/MDLog.cc
 
-libebofs_a_SOURCES = \
-	ebofs/BlockDevice.cc \
-	ebofs/BufferCache.cc \
-	ebofs/Ebofs.cc \
-	ebofs/Allocator.cc
 libos_a_SOURCES = \
 	os/FileJournal.cc \
 	os/FileStore.cc \
@@ -333,16 +323,6 @@ noinst_HEADERS = \
         crush/mapper.h\
         crush/sample.txt\
         crush/types.h\
-        ebofs/Allocator.h\
-        ebofs/BlockDevice.h\
-        ebofs/BufferCache.h\
-        ebofs/Cnode.h\
-        ebofs/Ebofs.h\
-        ebofs/Onode.h\
-        ebofs/Table.h\
-        ebofs/csum.h\
-        ebofs/nodes.h\
-        ebofs/types.h\
         include/Context.h\
         include/Distribution.h\
 	include/LogEntry.h\
@@ -598,5 +578,5 @@ all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SO
 	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \
 	$(libcrush_so_a_SOURCES) $(libcommon_files) $(libcrush_a_SOURCES)  \
-	$(libmon_a_SOURCES) $(libmds_a_SOURCES) $(libebofs_a_SOURCES) $(libos_a_SOURCES) $(libosd_a_SOURCES) \
+	$(libmon_a_SOURCES) $(libmds_a_SOURCES) $(libos_a_SOURCES) $(libosd_a_SOURCES) \
 	$(libosdc_a_SOURCES) $(libclient_a_SOURCES)

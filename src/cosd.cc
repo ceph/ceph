@@ -27,7 +27,6 @@ using namespace std;
 #include "mon/MonClient.h"
 
 #include "osd/OSD.h"
-#include "ebofs/Ebofs.h"
 
 #include "msg/SimpleMessenger.h"
 

@@ -13,7 +13,7 @@
  */
 
 #include <iostream>
-#include "ebofs/Ebofs.h"
+//#include "ebofs/Ebofs.h"
 #include "os/FileStore.h"
 #include "common/common_init.h"
 
@@ -98,8 +98,8 @@ int main(int argc, const char **argv)
   cout << "#dev " << filename
        << ", " << seconds << " seconds, " << bytes << " bytes per write" << std::endl;
 
-  ObjectStore *fs = new Ebofs(filename, journal);
-  //ObjectStore *fs = new FileStore(filename);
+  //ObjectStore *fs = new Ebofs(filename, journal);
+  ObjectStore *fs = new FileStore(filename);
 
   if (fs->mount() < 0) {
     cout << "mount failed" << std::endl;

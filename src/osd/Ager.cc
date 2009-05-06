@@ -10,7 +10,7 @@
 #include "common/Clock.h"
 
 // ick
-#include "ebofs/Ebofs.h"
+//#include "ebofs/Ebofs.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -208,7 +208,7 @@ void Ager::age(int time,
   utime_t until = start;
   until.sec_ref() += time;
   
-  int elapsed = 0;
+  //int elapsed = 0;
   int freelist_inc = 60;
   utime_t nextfl = start;
   nextfl.sec_ref() += freelist_inc;
@@ -282,15 +282,17 @@ void Ager::age(int time,
           st);
 
     // dump freelist?
+    /*
     if (g_clock.now() > nextfl) {
       elapsed += freelist_inc;
       save_freelist(elapsed);
       nextfl.sec_ref() += freelist_inc;
     }
+    */
   }
 
   // dump the freelist
-  save_freelist(0);
+  //save_freelist(0);
   exit(0);   // hack
 
   // ok!
@@ -317,12 +319,13 @@ void Ager::load_freelist()
   ::read(fd, bl.c_str(), st.st_size);
   ::close(fd);
 
-  ((Ebofs*)store)->_import_freelist(bl);
+  //((Ebofs*)store)->_import_freelist(bl);
   store->sync();
   store->sync();
 }
 
-void Ager::save_freelist(int el)
+
+/*void Ager::save_freelist(int el)
 {
   generic_dout(1) << "save_freelist " << el << dendl;
   char s[100];
@@ -335,3 +338,4 @@ void Ager::save_freelist(int el)
   ::write(fd, bl.c_str(), bl.length());
   ::close(fd);
 }
+*/
