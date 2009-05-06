@@ -66,6 +66,12 @@ later
 - osd failure declarations
 - rename over old files should flush data, or revert back to old contents
 
+rados
+- create/destroy pool
+- pool auto resizing
+- c lib
+- pyexec
+
 repair
 - are we concerned about
   - scrubbing
