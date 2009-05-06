@@ -89,8 +89,8 @@ public:
     return r == 0;
   }
 
-  void Lock() {
-    if (lockdep && g_lockdep) _will_lock();
+  void Lock(bool no_lockdep=false) {
+    if (lockdep && g_lockdep && !no_lockdep) _will_lock();
     int r = pthread_mutex_lock(&_m);
     if (lockdep && g_lockdep) _locked();
     assert(r == 0);

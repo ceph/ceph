@@ -549,9 +549,9 @@ protected:
   bool deleted;
 
 public:
-  void lock() {
+  void lock(bool no_lockdep=false) {
     //generic_dout(0) << this << " " << info.pgid << " lock" << dendl;
-    _lock.Lock();
+    _lock.Lock(no_lockdep);
   }
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;

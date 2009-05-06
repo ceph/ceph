@@ -466,8 +466,10 @@ private:
     }
     for (map<int32_t,pg_pool_t>::iterator p = inc.new_pools.begin();
 	 p != inc.new_pools.end();
-	 p++)
+	 p++) {
       pools[p->first] = p->second;
+      pools[p->first].v.last_change = epoch;
+    }
     for (map<int32_t,nstring>::iterator p = inc.new_pool_names.begin();
 	 p != inc.new_pool_names.end();
 	 p++)

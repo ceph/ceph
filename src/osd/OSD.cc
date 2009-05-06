@@ -546,7 +546,7 @@ int OSD::read_superblock()
 // ======================================================
 // PG's
 
-PG *OSD::_open_lock_pg(pg_t pgid)
+PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 {
   assert(osd_lock.is_locked());
 
@@ -562,7 +562,7 @@ PG *OSD::_open_lock_pg(pg_t pgid)
   assert(pg_map.count(pgid) == 0);
   pg_map[pgid] = pg;
 
-  pg->lock(); // always lock.
+  pg->lock(no_lockdep_check); // always lock.
   pg->get();  // because it's in pg_map
   return pg;
 }
@@ -596,7 +596,7 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   assert(whoami == acting[0]);
   assert(pg_map.count(pgid) == 0);
 
-  PG *pg = _open_lock_pg(pgid);
+  PG *pg = _open_lock_pg(pgid, true);
 
   assert(!store->collection_exists(pgid.to_coll()));
   t.create_collection(pgid.to_coll());
