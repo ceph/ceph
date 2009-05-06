@@ -26,14 +26,15 @@ class ObjectCacher {
   // read scatter/gather  
   struct OSDRead {
     vector<ObjectExtent> extents;
+    snapid_t snap;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
     bufferlist *bl;
     int flags;
-    OSDRead(bufferlist *b, int f) : bl(b), flags(f) {}
+    OSDRead(snapid_t s, bufferlist *b, int f) : snap(s), bl(b), flags(f) {}
   };
 
-  OSDRead *prepare_read(bufferlist *b, int f) {
-    return new OSDRead(b, f);
+  OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) {
+    return new OSDRead(snap, b, f);
   }
   
   // write scatter/gather  
@@ -129,7 +130,7 @@ class ObjectCacher {
   private:
     // ObjectCacher::Object fields
     ObjectCacher *oc;
-    object_t  oid;   // this _always_ is oid.rev=0
+    sobject_t oid;
     inodeno_t ino;
     ceph_object_layout layout;
     
@@ -162,7 +163,7 @@ class ObjectCacher {
     int rdlock_ref;  // how many ppl want or are using a READ lock
 
   public:
-    Object(ObjectCacher *_oc, object_t o, inodeno_t i, ceph_object_layout& l) : 
+    Object(ObjectCacher *_oc, sobject_t o, inodeno_t i, ceph_object_layout& l) : 
       oc(_oc),
       oid(o), ino(i), layout(l),
       last_write_tid(0), last_ack_tid(0), last_commit_tid(0),
@@ -173,7 +174,9 @@ class ObjectCacher {
       assert(data.empty());
     }
 
-    object_t get_oid() { return oid; }
+    sobject_t get_soid() { return oid; }
+    object_t get_oid() { return oid.oid; }
+    snapid_t get_snap() { return oid.snap; }
     inodeno_t get_ino() { return ino; }
     
     ceph_object_layout& get_layout() { return layout; }
@@ -243,7 +246,7 @@ class ObjectCacher {
   flush_set_callback_t flush_set_callback, commit_set_callback;
   void *flush_set_callback_arg;
 
-  hash_map<object_t, Object*> objects;
+  hash_map<sobject_t, Object*> objects;
   hash_map<inodeno_t, set<Object*> > objects_by_ino;
   hash_map<inodeno_t, int> dirty_tx_by_ino;
   hash_map<inodeno_t, xlist<Object*> > uncommitted_by_ino;
@@ -266,7 +269,7 @@ class ObjectCacher {
   
 
   // objects
-  Object *get_object(object_t oid, inodeno_t ino, ceph_object_layout &l) {
+  Object *get_object(sobject_t oid, inodeno_t ino, ceph_object_layout &l) {
     // have it?
     if (objects.count(oid))
       return objects[oid];
@@ -404,19 +407,19 @@ class ObjectCacher {
   void wrunlock(Object *o);
 
  public:
-  void bh_read_finish(object_t oid, loff_t offset, size_t length, bufferlist &bl);
-  void bh_write_ack(object_t oid, loff_t offset, size_t length, tid_t t);
-  void bh_write_commit(object_t oid, loff_t offset, size_t length, tid_t t);
-  void lock_ack(list<object_t>& oids, tid_t tid);
+  void bh_read_finish(sobject_t oid, loff_t offset, size_t length, bufferlist &bl);
+  void bh_write_ack(sobject_t oid, loff_t offset, size_t length, tid_t t);
+  void bh_write_commit(sobject_t oid, loff_t offset, size_t length, tid_t t);
+  void lock_ack(list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
     ObjectCacher *oc;
-    object_t oid;
+    sobject_t oid;
     loff_t start;
     size_t length;
   public:
     bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, object_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_ReadFinish(ObjectCacher *c, sobject_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_read_finish(oid, start, length, bl);
     }
@@ -424,24 +427,24 @@ class ObjectCacher {
 
   class C_WriteAck : public Context {
     ObjectCacher *oc;
-    object_t oid;
+    sobject_t oid;
     loff_t start;
     size_t length;
   public:
     tid_t tid;
-    C_WriteAck(ObjectCacher *c, object_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_WriteAck(ObjectCacher *c, sobject_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_write_ack(oid, start, length, tid);
     }
   };
   class C_WriteCommit : public Context {
     ObjectCacher *oc;
-    object_t oid;
+    sobject_t oid;
     loff_t start;
     size_t length;
   public:
     tid_t tid;
-    C_WriteCommit(ObjectCacher *c, object_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_WriteCommit(ObjectCacher *c, sobject_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_write_commit(oid, start, length, tid);
     }
@@ -450,9 +453,9 @@ class ObjectCacher {
   class C_LockAck : public Context {
     ObjectCacher *oc;
   public:
-    list<object_t> oids;
+    list<sobject_t> oids;
     tid_t tid;
-    C_LockAck(ObjectCacher *c, object_t o) : oc(c) {
+    C_LockAck(ObjectCacher *c, sobject_t o) : oc(c) {
       oids.push_back(o);
     }
     void finish(int r) {
@@ -546,8 +549,8 @@ class ObjectCacher {
                 bufferlist *bl,
 		int flags,
                 Context *onfinish) {
-    OSDRead *rd = prepare_read(bl, flags);
-    filer.file_to_extents(ino, layout, snapid, offset, len, rd->extents);
+    OSDRead *rd = prepare_read(snapid, bl, flags);
+    filer.file_to_extents(ino, layout, offset, len, rd->extents);
     return readx(rd, ino, onfinish);
   }
 
@@ -555,7 +558,7 @@ class ObjectCacher {
                  loff_t offset, size_t len, 
                  bufferlist& bl, utime_t mtime, int flags) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
+    filer.file_to_extents(ino, layout, offset, len, wr->extents);
     return writex(wr, ino);
   }
 
@@ -568,8 +571,8 @@ class ObjectCacher {
                             loff_t offset, size_t len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
-    OSDRead *rd = prepare_read(bl, flags);
-    filer.file_to_extents(ino, layout, snapid, offset, len, rd->extents);
+    OSDRead *rd = prepare_read(snapid, bl, flags);
+    filer.file_to_extents(ino, layout, offset, len, rd->extents);
     return atomic_sync_readx(rd, ino, lock);
   }
 
@@ -579,7 +582,7 @@ class ObjectCacher {
                              bufferlist& bl, utime_t mtime, int flags,
                              Mutex &lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    filer.file_to_extents(ino, layout, CEPH_NOSNAP, offset, len, wr->extents);
+    filer.file_to_extents(ino, layout, offset, len, wr->extents);
     return atomic_sync_writex(wr, ino, lock);
   }
 
@@ -605,7 +608,7 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
 inline ostream& operator<<(ostream& out, ObjectCacher::Object &ob)
 {
   out << "object["
-      << hex << ob.get_oid() << " ino " << ob.get_ino() << dec
+      << ob.get_soid() << " ino " << hex << ob.get_ino() << dec
       << " wr " << ob.last_write_tid << "/" << ob.last_ack_tid << "/" << ob.last_commit_tid;
 
   switch (ob.lock_state) {

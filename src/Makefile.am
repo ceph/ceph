@@ -350,7 +350,6 @@ noinst_HEADERS = \
         include/nstring.h\
         include/object.h\
         include/page.h\
-        include/pobject.h\
         include/rangeset.h\
 	include/rados.h\
         include/statlite.h\

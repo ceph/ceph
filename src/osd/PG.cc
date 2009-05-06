@@ -196,13 +196,13 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     eversion_t lu = oinfo.last_update;
     while (pp != olog.log.rend()) {
       Log::Entry& oe = *pp;
-      if (!log.objects.count(oe.oid)) {
+      if (!log.objects.count(oe.soid)) {
         dout(10) << " had " << oe << " new dne : divergent, ignoring" << dendl;
         ++pp;
         continue;
       } 
       
-      Log::Entry& ne = *log.objects[oe.oid];
+      Log::Entry& ne = *log.objects[oe.soid];
       if (ne.version == oe.version) {
 	dout(10) << " had " << oe << " new " << ne << " : match, stopping" << dendl;
 	break;
@@ -217,17 +217,17 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
 	  } else {
 	    // old delete, new update.
 	    dout(20) << " had " << oe << " new " << ne << " : missing" << dendl;
-	    omissing.add(ne.oid, ne.version, eversion_t());
+	    omissing.add(ne.soid, ne.version, eversion_t());
 	  }
 	} else {
 	  if (ne.is_delete()) {
 	    // old update, new delete
 	    dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
-	    omissing.rm(oe.oid, oe.version);
+	    omissing.rm(oe.soid, oe.version);
 	  } else {
 	    // old update, new update
 	    dout(10) << " had " << oe << " new " << ne << " : new will supercede" << dendl;
-	    omissing.revise_need(ne.oid, ne.version);
+	    omissing.revise_need(ne.soid, ne.version);
 	  }
 	}
       }
@@ -266,12 +266,12 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
  */
 bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
 {
-  if (log.objects.count(oe.oid)) {
-    Log::Entry &ne = *log.objects[oe.oid];  // new(er?) entry
+  if (log.objects.count(oe.soid)) {
+    Log::Entry &ne = *log.objects[oe.soid];  // new(er?) entry
     
     if (ne.version > oe.version) {
       dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : older, missing" << dendl;
-      assert(ne.is_delete() || missing.is_missing(ne.oid));
+      assert(ne.is_delete() || missing.is_missing(ne.soid));
       return false;
     }
     if (ne.version == oe.version) {
@@ -286,17 +286,17 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       } else {
 	// old delete, new update.
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : missing" << dendl;
-	assert(missing.is_missing(oe.oid));
+	assert(missing.is_missing(oe.soid));
       }
     } else {
       if (ne.is_delete()) {
 	// old update, new delete
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : new delete supercedes" << dendl;
-	missing.rm(oe.oid, oe.version);
+	missing.rm(oe.soid, oe.version);
       } else {
 	// old update, new update
 	dout(20) << "merge_old_entry  had " << oe << " new " << ne << " : new item supercedes" << dendl;
-	missing.revise_need(ne.oid, ne.version);
+	missing.revise_need(ne.soid, ne.version);
       }
     }
   } else {
@@ -304,8 +304,8 @@ bool PG::merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe)
       dout(20) << "merge_old_entry  had " << oe << " new dne : ok" << dendl;      
     } else {
       dout(20) << "merge_old_entry  had " << oe << " new dne : deleting" << dendl;
-      t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, oe.oid));
-      missing.rm(oe.oid, oe.version);
+      t.remove(info.pgid.to_coll(), oe.soid);
+      missing.rm(oe.soid, oe.version);
     }
   }
   return false;
@@ -329,7 +329,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     }
     assert(log.backlog || log.top == eversion_t());
 
-    hash_map<object_t,Log::Entry*> old_objects;
+    hash_map<sobject_t, Log::Entry*> old_objects;
     old_objects.swap(log.objects);
 
     // swap in other log and index
@@ -362,7 +362,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       dout(10) << "merge_log merging " << ne << dendl;
       missing.add_next_event(ne);
       if (ne.is_delete())
-	t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, ne.oid));
+	t.remove(info.pgid.to_coll(), ne.soid);
     }
 
     // find any divergent or removed items in old log.
@@ -371,8 +371,8 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	 p != olog.log.end();
 	 p++) {
       Log::Entry &oe = *p;                      // old entry
-      if (old_objects.count(oe.oid) &&
-	  old_objects[oe.oid] == &oe)
+      if (old_objects.count(oe.soid) &&
+	  old_objects[oe.soid] == &oe)
 	merge_old_entry(t, oe);
     }
 
@@ -447,7 +447,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 	log.index(ne);
 	missing.add_next_event(ne);
 	if (ne.is_delete())
-	  t.remove(info.pgid.to_coll(), pobject_t(info.pgid.pool(), 0, ne.oid));
+	  t.remove(info.pgid.to_coll(), ne.soid);
       }
       
       // move aside divergent items
@@ -501,7 +501,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
 void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
 {
   // found items?
-  for (map<object_t,Missing::item>::iterator p = missing.missing.begin();
+  for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
        p != missing.missing.end();
        p++) {
     eversion_t need = p->second.need;
@@ -541,10 +541,10 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
   for (vector<pobject_t>::iterator it = olist.begin();
        it != olist.end();
        it++) {
-    pobject_t poid = pobject_t(info.pgid.pool(), 0, it->oid);
+    pobject_t poid = *it;
 
     Log::Entry e;
-    e.oid = it->oid;
+    e.soid = poid;
     bufferlist bv;
     osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
     object_info_t oi(bv);
@@ -552,7 +552,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
     e.prior_version = oi.prior_version;
     e.reqid = oi.last_reqid;
     e.mtime = oi.mtime;
-    if (poid.oid.snap && poid.oid.snap < CEPH_NOSNAP) {
+    if (e.soid.snap && e.soid.snap < CEPH_NOSNAP) {
       e.op = Log::Entry::CLONE;
       ::encode(oi.snaps, e.snaps);
     } else {
@@ -606,8 +606,8 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
      *    - the prior_version is also already in the log
      * otherwise, we need to include it.
      */
-    if (log.objects.count(be.oid)) {
-      Log::Entry *le = log.objects[be.oid];
+    if (log.objects.count(be.soid)) {
+      Log::Entry *le = log.objects[be.soid];
       
       assert(!le->is_delete());  // if it's a deletion, we are corrupt..
 
@@ -669,8 +669,8 @@ ostream& PG::IndexedLog::print(ostream& out) const
   for (list<Entry>::const_iterator p = log.begin();
        p != log.end();
        p++) {
-    out << *p << " " << (logged_object(p->oid) ? "indexed":"NOT INDEXED") << std::endl;
-    assert(logged_object(p->oid));
+    out << *p << " " << (logged_object(p->soid) ? "indexed":"NOT INDEXED") << std::endl;
+    assert(logged_object(p->soid));
     assert(logged_req(p->reqid));
   }
   return out;
@@ -1319,7 +1319,7 @@ void PG::activate(ObjectStore::Transaction& t,
     while (log.complete_to->version < info.last_complete)
       log.complete_to++;
     assert(log.complete_to != log.log.end());
-    log.last_requested = object_t();
+    log.last_requested = sobject_t();
     dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
     if (is_primary()) {
       dout(10) << "activate - starting recovery" << dendl;
@@ -1781,28 +1781,27 @@ void PG::read_log(ObjectStore *store)
     dout(10) << "read_log checking for missing items over interval (" << info.last_complete
 	     << "," << info.last_update << "]" << dendl;
 
-    set<object_t> did;
+    set<sobject_t> did;
     for (list<Log::Entry>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
 	 i++) {
       if (i->version <= info.last_complete) break;
-      if (did.count(i->oid)) continue;
-      did.insert(i->oid);
+      if (did.count(i->soid)) continue;
+      did.insert(i->soid);
       
       if (i->is_delete()) continue;
       
-      pobject_t poid(info.pgid.pool(), 0, i->oid);
       bufferlist bv;
-      int r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
+      int r = osd->store->getattr(info.pgid.to_coll(), i->soid, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
 	if (oi.version < i->version) {
 	  dout(15) << "read_log  missing " << *i << " (have " << oi.version << ")" << dendl;
-	  missing.add(i->oid, i->version, oi.version);
+	  missing.add(i->soid, i->version, oi.version);
 	}
       } else {
 	dout(15) << "read_log  missing " << *i << dendl;
-	missing.add(i->oid, i->version, eversion_t());
+	missing.add(i->soid, i->version, eversion_t());
       }
     }
   }
@@ -1864,13 +1863,13 @@ coll_t PG::make_snap_collection(ObjectStore::Transaction& t, snapid_t s)
 // 
 bool PG::block_if_wrlocked(MOSDOp* op, object_info_t& oi)
 {
-  pobject_t poid(info.pgid.pool(), 0, op->get_oid());
+  sobject_t soid(op->get_oid(), CEPH_NOSNAP);
 
   if (oi.wrlock_by.tid &&
       oi.wrlock_by.name != op->get_orig_source()) {
     //the object is locked for writing by someone else -- add the op to the waiting queue      
     dout(10) << "blocked on wrlock on " << oi << dendl;
-    waiting_for_wr_unlock[poid.oid].push_back(op);
+    waiting_for_wr_unlock[soid].push_back(op);
     return true;
   }
   
@@ -2000,11 +1999,11 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
   bv.push_back(po->attrs["oi"]);
   object_info_t oi(bv);
   if (bad_peer != acting[0]) {
-    peer_missing[bad_peer].add(po->poid.oid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
   } else {
-    missing.add(po->poid.oid, oi.version, eversion_t());
-    missing_loc[po->poid.oid].insert(ok_peer);
-    log.last_requested = object_t();
+    missing.add(po->poid, oi.version, eversion_t());
+    missing_loc[po->poid].insert(ok_peer);
+    log.last_requested = sobject_t();
   }
   uptodate_set.erase(bad_peer);
   osd->queue_for_recovery(this);

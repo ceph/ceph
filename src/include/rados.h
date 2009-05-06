@@ -29,7 +29,7 @@ struct ceph_object {
 		struct {
 			__le64 ino;  /* inode "file" identifier */
 			__le32 bno;  /* "block" (object) in that "file" */
-			__le64 snap; /* snapshot id.  usually NOSNAP. */
+			__le64 pad;
 		} __attribute__ ((packed));
 	};
 } __attribute__ ((packed));
@@ -338,7 +338,10 @@ struct ceph_osd_request_head {
 	struct ceph_eversion      reassert_version;
 
 	/* writer's snap context */
-	__le64 snap_seq;
+	union {
+		__le64 snap_seq;
+		__le64 snapid;
+	};
 	__le32 num_snaps;
 
 	/* read or mutation */

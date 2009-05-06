@@ -32,7 +32,7 @@ public:
    */
   struct ProjectedObjectInfo {
     int ref;
-    pobject_t poid;
+    sobject_t poid;
 
     bool exists;
     __u64 size;
@@ -142,9 +142,9 @@ protected:
 
 
   // projected object info
-  map<pobject_t, ProjectedObjectInfo> projected_objects;
+  map<sobject_t, ProjectedObjectInfo> projected_objects;
 
-  ProjectedObjectInfo *get_projected_object(pobject_t poid);
+  ProjectedObjectInfo *get_projected_object(sobject_t poid);
   void put_projected_object(ProjectedObjectInfo *pinfo);
 
   bool is_write_in_progress() {
@@ -152,27 +152,27 @@ protected:
   }
 
   // load balancing
-  set<object_t> balancing_reads;
-  set<object_t> unbalancing_reads;
-  hash_map<object_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
+  set<sobject_t> balancing_reads;
+  set<sobject_t> unbalancing_reads;
+  hash_map<sobject_t, list<Message*> > waiting_for_unbalanced_reads;  // i.e. primary-lock
 
   
   // push/pull
-  map<object_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
-  map<object_t, set<int> > pushing;
+  map<sobject_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
+  map<sobject_t, set<int> > pushing;
 
-  void calc_head_subsets(SnapSet& snapset, pobject_t head,
+  void calc_head_subsets(SnapSet& snapset, sobject_t head,
 			 Missing& missing,
 			 interval_set<__u64>& data_subset,
-			 map<pobject_t, interval_set<__u64> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, pobject_t poid, Missing& missing,
+			 map<sobject_t, interval_set<__u64> >& clone_subsets);
+  void calc_clone_subsets(SnapSet& snapset, sobject_t poid, Missing& missing,
 			  interval_set<__u64>& data_subset,
-			  map<pobject_t, interval_set<__u64> >& clone_subsets);
-  void push_to_replica(pobject_t oid, int dest);
-  void push(pobject_t oid, int dest);
-  void push(pobject_t oid, int dest, interval_set<__u64>& data_subset, 
-	    map<pobject_t, interval_set<__u64> >& clone_subsets);
-  bool pull(pobject_t oid);
+			  map<sobject_t, interval_set<__u64> >& clone_subsets);
+  void push_to_replica(sobject_t oid, int dest);
+  void push(sobject_t oid, int dest);
+  void push(sobject_t oid, int dest, interval_set<__u64>& data_subset, 
+	    map<sobject_t, interval_set<__u64> >& clone_subsets);
+  bool pull(sobject_t oid);
 
 
   // modify
@@ -180,17 +180,17 @@ protected:
   void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
 
   void _make_clone(ObjectStore::Transaction& t,
-		   pobject_t head, pobject_t coid,
+		   sobject_t head, sobject_t coid,
 		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, utime_t mtime, vector<snapid_t>& snaps);
   void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& st,
-		     pobject_t poid, loff_t old_size, object_info_t& oi,
+		     sobject_t poid, loff_t old_size, object_info_t& oi,
 		     eversion_t& at_version, SnapContext& snapc);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
-			pobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
+			sobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
 			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
   void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
-			   pobject_t poid, 
+			   sobject_t poid, 
 			   vector<ceph_osd_op>& ops, bufferlist& bl, utime_t mtime,
 			   bool& exists, __u64& size, object_info_t& oi,
 			   eversion_t at_version, SnapContext& snapc,
@@ -210,7 +210,7 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
-  int pick_read_snap(pobject_t& poid, object_info_t& coi);
+  int pick_read_snap(sobject_t& poid, object_info_t& coi);
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 
@@ -243,8 +243,8 @@ public:
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
-  bool is_missing_object(object_t oid);
-  void wait_for_missing_object(object_t oid, Message *op);
+  bool is_missing_object(sobject_t oid);
+  void wait_for_missing_object(sobject_t oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

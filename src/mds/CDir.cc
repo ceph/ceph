@@ -1042,7 +1042,7 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   OSDMap *osdmap = cache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     cache->mds->mdsmap->get_metadata_pg_pool());
-  cache->mds->objecter->read_full(oid, ol, &fin->bl, 0, fin);
+  cache->mds->objecter->read_full(oid, ol, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl)

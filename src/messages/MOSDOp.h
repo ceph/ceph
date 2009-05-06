@@ -39,6 +39,9 @@ public:
 
   friend class MOSDOpReply;
 
+  // read
+  snapid_t get_snapid() { return snapid_t(head.snapid); }
+  // writ
   snapid_t get_snap_seq() { return snapid_t(head.snap_seq); }
   vector<snapid_t> &get_snaps() { return snaps; }
   void set_snap_seq(snapid_t s) { head.snap_seq = s; }

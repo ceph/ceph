@@ -35,7 +35,7 @@ static void calc_layout(struct ceph_osd_client *osdc,
 
 	/* object extent? */
 	reqhead->oid.ino = cpu_to_le64(vino.ino);
-	reqhead->oid.snap = cpu_to_le64(vino.snap);
+	reqhead->snapid = cpu_to_le64(vino.snap);
 
 	ceph_calc_file_object_mapping(layout, off, plen, &reqhead->oid,
 				      &objoff, &objlen);

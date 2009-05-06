@@ -2110,7 +2110,7 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
       m->get_size() < in->inode.size) {
     // map range to objects
     vector<ObjectExtent> ls;
-    filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP,
+    filer->file_to_extents(in->inode.ino, &in->inode.layout, 
 			   m->get_size(), in->inode.size - m->get_size(),
 			   ls);
     objectcacher->truncate_set(in->inode.ino, ls);
@@ -5028,7 +5028,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  filer->file_to_extents(in->inode.ino, &in->inode.layout, CEPH_NOSNAP, offset, length, result);
+  filer->file_to_extents(in->inode.ino, &in->inode.layout, offset, length, result);
 
   dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;

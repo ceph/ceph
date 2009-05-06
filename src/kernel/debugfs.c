@@ -341,10 +341,10 @@ static int osdc_show(struct seq_file *s, void *p)
 		head = req->r_request->front.iov_base;
 		op = (void *)(head + 1);
 
-		seq_printf(s, "%llx.%08x\t%lld\t",
-			le64_to_cpu(head->oid.ino),
-			le32_to_cpu(head->oid.bno),
-			le64_to_cpu(head->oid.snap));
+		seq_printf(s, "%llx.%08x.%llx\t",
+			   le64_to_cpu(head->oid.ino),
+			   le32_to_cpu(head->oid.bno),
+			   le64_to_cpu(head->oid.pad));
 
 		if (req->r_reassert_version.epoch)
 			seq_printf(s, "%u'%llu\t",

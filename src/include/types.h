@@ -282,29 +282,6 @@ inline unsigned char MODE_TO_DT(int mode) {
 
 
 
-// snaps
-struct snapid_t {
-  __u64 val;
-  snapid_t(__u64 v=0) : val(v) {}
-  snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
-  snapid_t operator++() { ++val; return *this; }
-  operator __u64() const { return val; }  
-};
-
-inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
-inline void decode(snapid_t &i, bufferlist::iterator &p) { decode(i.val, p); }
-
-inline ostream& operator<<(ostream& out, snapid_t s) {
-  if (s == CEPH_NOSNAP)
-    return out << "head";
-  else if (s == CEPH_SNAPDIR)
-    return out << "snapdir";
-  else
-    return out << hex << s.val << dec;
-}
-
-
-
 struct SnapRealmInfo {
   mutable ceph_mds_snap_realm h;
   vector<snapid_t> my_snaps;

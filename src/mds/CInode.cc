@@ -694,7 +694,7 @@ void CInode::fetch(Context *fin)
 						     mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   mdcache->mds->objecter->read(oid, ol,
-			       rd, &c->bl, 0, c );
+			       rd, CEPH_NOSNAP, &c->bl, 0, c );
 }
 
 void CInode::_fetched(bufferlist& bl, Context *fin)

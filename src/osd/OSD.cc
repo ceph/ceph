@@ -152,7 +152,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     utime_t start = g_clock.now();
     for (int i=0; i<1000; i++) {
       ObjectStore::Transaction t;
-      t.write(0, pobject_t(0, 0, object_t(999,i)), 0, bl.length(), bl);
+      t.write(0, pobject_t(object_t(999,i), 0), 0, bl.length(), bl);
       store->apply_transaction(t);
     }
     store->sync();
@@ -161,7 +161,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
     ObjectStore::Transaction tr;
     for (int i=0; i<1000; i++) 
-      tr.remove(0, pobject_t(0, 0, object_t(999,i)));
+      tr.remove(0, pobject_t(object_t(999,i), 0));
     store->apply_transaction(tr);
     
     // set osd weight
@@ -703,9 +703,9 @@ void OSD::load_pgs()
        it++) {
     if (*it == 0)
       continue;
-    if (it->low != 0)
+    if (it->snap != 0)
       continue;
-    pg_t pgid = it->high;
+    pg_t pgid = it->pgid;
     PG *pg = _open_lock_pg(pgid);
 
     // read pg state, log
@@ -3386,16 +3386,15 @@ void OSD::handle_op(MOSDOp *op)
       return;
     }
     
-    if (op->get_oid().snap > 0) {
+    if (op->get_snapid() > 0) {
       // snap read.  hrm.
       // are we missing a revision that we might need?
       // let's get them all.
       for (unsigned i=0; i<op->get_snaps().size(); i++) {
-	object_t oid = op->get_oid();
-	oid.snap = op->get_snaps()[i];
-	if (pg->is_missing_object(oid)) {
-	  dout(10) << "handle_op _may_ need missing rev " << oid << ", pulling" << dendl;
-	  pg->wait_for_missing_object(op->get_oid(), op);
+	sobject_t soid(op->get_oid(), op->get_snaps()[i]);
+	if (pg->is_missing_object(soid)) {
+	  dout(10) << "handle_op _may_ need missing rev " << soid << ", pulling" << dendl;
+	  pg->wait_for_missing_object(soid, op);
 	  pg->unlock();
 	  return;
 	}
@@ -3448,8 +3447,9 @@ void OSD::handle_op(MOSDOp *op)
   }
   
   // missing object?
-  if (pg->is_missing_object(op->get_oid())) {
-    pg->wait_for_missing_object(op->get_oid(), op);
+  sobject_t head(op->get_oid(), CEPH_NOSNAP);
+  if (pg->is_missing_object(head)) {
+    pg->wait_for_missing_object(head, op);
     pg->unlock();
     return;
   }

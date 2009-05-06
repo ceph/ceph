@@ -191,17 +191,18 @@ public:
       const static int BACKLOG = 4;  // event invented by generate_backlog
 
       __s32      op;   // write, zero, trunc, remove
-      object_t   oid;
+      sobject_t  soid;
+      snapid_t   snap;
       eversion_t version, prior_version;
       osd_reqid_t reqid;  // caller+tid to uniquely identify request
       utime_t     mtime;  // this is the _user_ mtime, mind you
       bufferlist snaps;   // only for clone entries
       
       Entry() : op(0) {}
-      Entry(int _op, object_t _oid,
+      Entry(int _op, sobject_t _soid,
 	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid, const utime_t& mt) :
-        op(_op), oid(_oid), version(v),
+        op(_op), soid(_soid), version(v),
 	prior_version(pv), 
 	reqid(rid), mtime(mt) {}
       
@@ -213,7 +214,7 @@ public:
 
       void encode(bufferlist &bl) const {
 	::encode(op, bl);
-	::encode(oid, bl);
+	::encode(soid, bl);
 	::encode(version, bl);
 	::encode(prior_version, bl);
 	::encode(reqid, bl);
@@ -223,7 +224,7 @@ public:
       }
       void decode(bufferlist::iterator &bl) {
 	::decode(op, bl);
-	::decode(oid, bl);
+	::decode(soid, bl);
 	::decode(version, bl);
 	::decode(prior_version, bl);
 	::decode(reqid, bl);
@@ -289,12 +290,12 @@ public:
    * plus some methods to manipulate it all.
    */
   struct IndexedLog : public Log {
-    hash_map<object_t,Entry*> objects;  // ptrs into log.  be careful!
-    hash_set<osd_reqid_t>     caller_ops;
+    hash_map<sobject_t,Entry*> objects;  // ptrs into log.  be careful!
+    hash_set<osd_reqid_t>      caller_ops;
 
     // recovery pointers
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
-    object_t last_requested;            // last object requested by primary
+    sobject_t last_requested;           // last object requested by primary
 
     /****/
     IndexedLog() {}
@@ -307,10 +308,10 @@ public:
     }
     void reset_recovery_pointers() {
       complete_to = log.end();
-      last_requested = object_t();
+      last_requested = sobject_t();
     }
 
-    bool logged_object(object_t oid) const {
+    bool logged_object(sobject_t oid) const {
       return objects.count(oid);
     }
     bool logged_req(const osd_reqid_t &r) const {
@@ -323,15 +324,15 @@ public:
       for (list<Entry>::iterator i = log.begin();
            i != log.end();
            i++) {
-        objects[i->oid] = &(*i);
+        objects[i->soid] = &(*i);
         caller_ops.insert(i->reqid);
       }
     }
 
     void index(Entry& e) {
-      if (objects.count(e.oid) == 0 || 
-          objects[e.oid]->version < e.version)
-        objects[e.oid] = &e;
+      if (objects.count(e.soid) == 0 || 
+          objects[e.soid]->version < e.version)
+        objects[e.soid] = &e;
       caller_ops.insert(e.reqid);
     }
     void unindex() {
@@ -340,19 +341,19 @@ public:
     }
     void unindex(Entry& e) {
       // NOTE: this only works if we remove from the _bottom_ of the log!
-      assert(objects.count(e.oid));
-      if (objects[e.oid]->version == e.version)
-        objects.erase(e.oid);
+      assert(objects.count(e.soid));
+      if (objects[e.soid]->version == e.version)
+        objects.erase(e.soid);
       caller_ops.erase(e.reqid);
     }
 
 
     // accessors
-    Entry *is_updated(object_t oid) {
+    Entry *is_updated(sobject_t oid) {
       if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
       return 0;
     }
-    Entry *is_deleted(object_t oid) {
+    Entry *is_deleted(sobject_t oid) {
       if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
       return 0;
     }
@@ -366,7 +367,7 @@ public:
       top = e.version;
 
       // to our index
-      objects[e.oid] = &(log.back());
+      objects[e.soid] = &(log.back());
       caller_ops.insert(e.reqid);
     }
 
@@ -426,8 +427,8 @@ public:
     }; 
     WRITE_CLASS_ENCODER(item)
 
-    map<object_t, item> missing;         // oid -> (need v, have v)
-    map<eversion_t, object_t> rmissing;  // v -> oid
+    map<sobject_t, item> missing;         // oid -> (need v, have v)
+    map<eversion_t, sobject_t> rmissing;  // v -> oid
 
     unsigned num_missing() const { return missing.size(); }
 
@@ -436,13 +437,13 @@ public:
       rmissing.swap(o.rmissing);
     }
 
-    bool is_missing(object_t oid) {
+    bool is_missing(sobject_t oid) {
       return missing.count(oid);
     }
-    bool is_missing(object_t oid, eversion_t v) {
+    bool is_missing(sobject_t oid, eversion_t v) {
       return missing.count(oid) && missing[oid].need <= v;
     }
-    eversion_t have_old(object_t oid) {
+    eversion_t have_old(sobject_t oid) {
       return missing.count(oid) ? missing[oid].have : eversion_t();
     }
     
@@ -454,41 +455,41 @@ public:
       if (e.is_update()) {
 	if (e.prior_version == eversion_t()) {
 	  // new object.
-	  //assert(missing.count(e.oid) == 0);  // might already be missing divergent item.
-	  if (missing.count(e.oid))  // already missing divergent item
-	    rmissing.erase(missing[e.oid].need);
-	  missing[e.oid] = item(e.version, eversion_t());  // .have = nil
-	} else if (missing.count(e.oid)) {
+	  //assert(missing.count(e.soid) == 0);  // might already be missing divergent item.
+	  if (missing.count(e.soid))  // already missing divergent item
+	    rmissing.erase(missing[e.soid].need);
+	  missing[e.soid] = item(e.version, eversion_t());  // .have = nil
+	} else if (missing.count(e.soid)) {
 	  // already missing (prior).
-	  assert(missing[e.oid].need == e.prior_version);
+	  assert(missing[e.soid].need == e.prior_version);
 	  rmissing.erase(e.prior_version);
-	  missing[e.oid].need = e.version;  // .have unchanged.
+	  missing[e.soid].need = e.version;  // .have unchanged.
 	} else {
 	  // not missing, we must have prior_version (if any)
-	  missing[e.oid] = item(e.version, e.prior_version);
+	  missing[e.soid] = item(e.version, e.prior_version);
 	}
-	rmissing[e.version] = e.oid;
+	rmissing[e.version] = e.soid;
       } else
-	rm(e.oid, e.version);
+	rm(e.soid, e.version);
     }
 
     void add_event(Log::Entry& e) {
       if (e.is_update()) {
-	if (missing.count(e.oid)) {
-	  if (missing[e.oid].need >= e.version)
+	if (missing.count(e.soid)) {
+	  if (missing[e.soid].need >= e.version)
 	    return;   // already missing same or newer.
 	  // missing older, revise need
-	  rmissing.erase(missing[e.oid].need);
-	  missing[e.oid].need = e.version;
+	  rmissing.erase(missing[e.soid].need);
+	  missing[e.soid].need = e.version;
 	} else 
 	  // not missing => have prior_version (if any)
-	  missing[e.oid] = item(e.version, e.prior_version);
-	rmissing[e.version] = e.oid;
+	  missing[e.soid] = item(e.version, e.prior_version);
+	rmissing[e.version] = e.soid;
       } else
-	rm(e.oid, e.version);
+	rm(e.soid, e.version);
     }
 
-    void revise_need(object_t oid, eversion_t need) {
+    void revise_need(sobject_t oid, eversion_t need) {
       if (missing.count(oid)) {
 	rmissing.erase(missing[oid].need);
 	missing[oid].need = need;            // no not adjust .have
@@ -498,18 +499,18 @@ public:
       rmissing[need] = oid;
     }
 
-    void add(object_t oid, eversion_t need, eversion_t have) {
+    void add(sobject_t oid, eversion_t need, eversion_t have) {
       missing[oid] = item(need, have);
       rmissing[need] = oid;
     }
     
-    void rm(object_t oid, eversion_t when) {
+    void rm(sobject_t oid, eversion_t when) {
       if (missing.count(oid) && missing[oid].need < when) {
         rmissing.erase(missing[oid].need);
         missing.erase(oid);
       }
     }
-    void got(object_t oid, eversion_t v) {
+    void got(sobject_t oid, eversion_t v) {
       assert(missing.count(oid));
       assert(missing[oid].need <= v);
       rmissing.erase(missing[oid].need);
@@ -522,7 +523,7 @@ public:
     void decode(bufferlist::iterator &bl) {
       ::decode(missing, bl);
 
-      for (map<object_t,item>::iterator it = missing.begin();
+      for (map<sobject_t,item>::iterator it = missing.begin();
            it != missing.end();
            it++) 
         rmissing[it->second.need] = it->first;
@@ -611,7 +612,7 @@ public:
   IndexedLog  log;
   OndiskLog   ondisklog;
   Missing     missing;
-  map<object_t, set<int> > missing_loc;
+  map<sobject_t, set<int> > missing_loc;
   
   set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
@@ -653,17 +654,17 @@ protected:
 
   // pg waiters
   list<class Message*>            waiting_for_active;
-  hash_map<object_t, 
+  hash_map<sobject_t, 
            list<class Message*> > waiting_for_missing_object;   
   map<eversion_t,class MOSDOp*>   replay_queue;
   
-  hash_map<object_t, list<Message*> > waiting_for_wr_unlock; 
+  hash_map<sobject_t, list<Message*> > waiting_for_wr_unlock; 
 
   bool block_if_wrlocked(MOSDOp* op, object_info_t& oi);
 
 
   // stats
-  hash_map<object_t, DecayCounter> stat_object_temp_rd;
+  hash_map<sobject_t, DecayCounter> stat_object_temp_rd;
 
   Mutex pg_stats_lock;
   bool pg_stats_valid;
@@ -840,8 +841,8 @@ public:
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual bool is_write_in_progress() = 0;
-  virtual bool is_missing_object(object_t oid) = 0;
-  virtual void wait_for_missing_object(object_t oid, Message *op) = 0;
+  virtual bool is_missing_object(sobject_t oid) = 0;
+  virtual void wait_for_missing_object(sobject_t oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;
@@ -892,7 +893,7 @@ inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 		  (e.is_modify() ? " m ":
 		   (e.is_backlog() ? " b ":
 		    " ? "))))
-             << e.oid << " by " << e.reqid << " " << e.mtime;
+             << e.soid << " by " << e.reqid << " " << e.mtime;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 

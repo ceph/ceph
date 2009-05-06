@@ -88,14 +88,14 @@ void Filer::_probe(Probe *probe)
 	   << dendl;
   
   // map range onto objects
-  file_to_extents(probe->ino, &probe->layout, probe->snapid, probe->from, probe->probing_len, probe->probing);
+  file_to_extents(probe->ino, &probe->layout, probe->from, probe->probing_len, probe->probing);
   
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, p->layout, &c->size, probe->flags, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, p->layout, probe->snapid, &c->size, probe->flags, c);
   }
 }
 
@@ -192,7 +192,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
 }
 
 
-void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t snap,
+void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
                             __u64 offset, size_t len,
                             vector<ObjectExtent>& extents)
 {
@@ -226,7 +226,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout, snapid_t sn
     
     // find oid, extent
     ObjectExtent *ex = 0;
-    object_t oid( ino, objectno, snap );
+    object_t oid( ino, objectno );
     if (object_extents.count(oid)) 
       ex = &object_extents[oid];
     else {

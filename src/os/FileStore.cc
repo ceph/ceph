@@ -169,16 +169,21 @@ int FileStore::statfs(struct statfs *buf)
 /* 
  * sorry, these are sentitive to the pobject_t and coll_t typing.
  */ 
+
+  //           11111111112222222222333333333344444444445555555555
+  // 012345678901234567890123456789012345678901234567890123456789
+  // yyyyyyyyyyyyyyyy.zzzzzzzz.a_s
+
 void FileStore::append_oname(const pobject_t &oid, char *s)
 {
   //assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
 #ifdef __LP64__
-  sprintf(t, "/%04x.%04x.%016lx.%08x.%lx", 
-	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.snap);
+  sprintf(t, "/%016lx.%08x.%lx_%lx", 
+	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.snap);
 #else
-  sprintf(t, "/%04x.%04x.%016llx.%08x.%llx", 
-	  oid.volume, oid.rank, oid.oid.ino, oid.oid.bno, oid.oid.snap);
+  sprintf(t, "/%08x_%016llx.%08x.%llx_%llx", 
+	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.oid.snap);
 #endif
   //parse_object(t+1);
 }
@@ -186,30 +191,27 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
 bool FileStore::parse_object(char *s, pobject_t& o)
 {
   //assert(sizeof(o) == 28);
-  if (strlen(s) < 36 ||
-      s[4] != '.' ||
-      s[9] != '.' ||
-      s[26] != '.' ||
-      s[35] != '.')
+  if (strlen(s) < 29 ||
+      s[16] != '.' ||
+      s[25] != '.')
     return false;
-  o.volume = strtoull(s, 0, 16);
-  assert(s[4] == '.');
-  o.rank = strtoull(s+5, 0, 16);
-  assert(s[9] == '.');
-  o.oid.ino = strtoull(s+10, 0, 16);
-  assert(s[26] == '.');
-  o.oid.bno = strtoull(s+27, 0, 16);
-  assert(s[35] == '.');
-  o.oid.snap = strtoull(s+36, 0, 16);
+  o.oid.ino = strtoull(s, &s, 16);
+  o.oid.bno = strtoull(s+1, &s, 16);
+  o.oid.pad = strtoull(s+1, &s, 16);
+  o.snap = strtoull(s, &s, 16);
   return true;
 }
+
+  //           11111111112222222222333
+  // 012345678901234567890123456789012
+  // pppppppppppppppp.ssssssssssssssss
 
 bool FileStore::parse_coll(char *s, coll_t& c)
 {
   if (strlen(s) == 33 && s[16] == '.') {
     s[16] = 0;
-    c.high = strtoull(s, 0, 16);
-    c.low = strtoull(s+17, 0, 16);
+    c.pgid = strtoull(s, 0, 16);
+    c.snap = strtoull(s+17, 0, 16);
     return true;
   } else 
     return false;
@@ -219,9 +221,9 @@ void FileStore::get_cdir(coll_t cid, char *s)
 {
   assert(sizeof(cid) == 16);
 #ifdef __LP64__
-  sprintf(s, "%s/%016lx.%016lx", basedir.c_str(), cid.high, cid.low);
+  sprintf(s, "%s/%016lx.%016lx", basedir.c_str(), cid.pgid, (__u64)cid.snap);
 #else
-  sprintf(s, "%s/%016llx.%016llx", basedir.c_str(), cid.high, cid.low);
+  sprintf(s, "%s/%016llx.%016llx", basedir.c_str(), cid.pgid, (__u64)cid.snap);
 #endif
 }
 

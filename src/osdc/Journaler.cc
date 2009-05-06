@@ -92,7 +92,7 @@ void Journaler::recover(Context *onread)
 
   object_t oid(ino, 0);
   ceph_object_layout ol = objecter->osdmap->make_object_layout(oid, pg_pool);
-  objecter->read_full(oid, ol, &fin->bl, 0, fin);
+  objecter->read_full(oid, ol, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)

@@ -19,7 +19,6 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "include/buffer.h"
-#include "include/pobject.h"
 #include "include/nstring.h"
 
 #include "include/Distribution.h"

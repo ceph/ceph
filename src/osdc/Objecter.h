@@ -169,6 +169,7 @@ class Objecter {
     object_t oid;
     ceph_object_layout layout;
     vector<ceph_osd_op> ops;
+    snapid_t snap;
     bufferlist bl;
     bufferlist *pbl;
     __u64 *psize;
@@ -181,8 +182,8 @@ class Objecter {
 
     bool paused;
 
-    ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, int f, Context *of) :
-      oid(o), layout(ol), 
+    ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, snapid_t s, int f, Context *of) :
+      oid(o), layout(ol), snap(s),
       pbl(0), psize(0), flags(f), onfinish(of), 
       tid(0), attempts(0), inc_lock(-1),
       paused(false) {
@@ -301,17 +302,17 @@ class Objecter {
   tid_t read_submit(ReadOp *rd);
   tid_t modify_submit(ModifyOp *wr);
 
-  tid_t read(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
-	     bufferlist *pbl, __u64 *psize, int flags, 
+  tid_t read(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops, 
+	     snapid_t snap, bufferlist *pbl, __u64 *psize, int flags, 
 	     Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, ops, flags, onfinish);
+    ReadOp *rd = new ReadOp(oid, ol, ops, snap, flags, onfinish);
     rd->pbl = pbl;
     rd->psize = psize;
     return read_submit(rd);
   }
   tid_t read(object_t oid, ceph_object_layout ol, 
-	     ObjectRead& read, bufferlist *pbl, int flags, Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, read.ops, flags, onfinish);
+	     ObjectRead& read, snapid_t snap, bufferlist *pbl, int flags, Context *onfinish) {
+    ReadOp *rd = new ReadOp(oid, ol, read.ops, snap, flags, onfinish);
     rd->bl = read.data;
     rd->pbl = pbl;
     return read_submit(rd);
@@ -326,29 +327,29 @@ class Objecter {
   }
 
   // high-level helpers
-  tid_t stat(object_t oid, ceph_object_layout ol,
+  tid_t stat(object_t oid, ceph_object_layout ol, snapid_t snap,
 	     __u64 *psize, int flags, 
 	     Context *onfinish) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_STAT;
-    return read(oid, ol, ops, 0, psize, flags, onfinish);
+    return read(oid, ol, ops, snap, 0, psize, flags, onfinish);
   }
 
-  tid_t read(object_t oid, ceph_object_layout ol,
-	     __u64 off, size_t len, bufferlist *pbl, int flags,
+  tid_t read(object_t oid, ceph_object_layout ol, 
+	     __u64 off, size_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_READ;
     ops[0].offset = off;
     ops[0].length = len;
-    return read(oid, ol, ops, pbl, 0, flags, onfinish);
+    return read(oid, ol, ops, snap, pbl, 0, flags, onfinish);
   }
   tid_t read_full(object_t oid, ceph_object_layout ol,
-		  bufferlist *pbl, int flags,
+		  snapid_t snap, bufferlist *pbl, int flags,
 		  Context *onfinish) {
-    return read(oid, ol, 0, 0, pbl, flags, onfinish);
+    return read(oid, ol, 0, 0, snap, pbl, flags, onfinish);
   }
      
   tid_t mutate(object_t oid, ceph_object_layout ol, 
@@ -429,17 +430,17 @@ class Objecter {
     }      
   };
 
-  void sg_read(vector<ObjectExtent>& extents, bufferlist *bl, int flags, Context *onfinish) {
+  void sg_read(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags, Context *onfinish) {
     if (extents.size() == 1) {
       read(extents[0].oid, extents[0].layout, extents[0].offset, extents[0].length,
-	   bl, flags, onfinish);
+	   snap, bl, flags, onfinish);
     } else {
       C_Gather *g = new C_Gather;
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	read(p->oid, p->layout, p->offset, p->length,
-	     &resultbl[i++], flags, g->new_sub());
+	     snap, &resultbl[i++], flags, g->new_sub());
       }
       g->set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
     }

@@ -229,7 +229,7 @@ void Ager::age(int time,
   // init size distn (once)
   if (!did_distn) {
     did_distn = true;
-    age_cur_oid = pobject_t(0, 0, object_t(0,1));
+    age_cur_oid = pobject_t(object_t(0,1), 0);
     file_size_distn.add(1, 19.0758125+0.65434375);
     file_size_distn.add(512, 35.6566);
     file_size_distn.add(1024, 27.7271875);

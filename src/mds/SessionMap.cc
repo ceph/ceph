@@ -67,7 +67,7 @@ void SessionMap::load(Context *onload)
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());
-  mds->objecter->read_full(oid, ol, &c->bl, 0, c);
+  mds->objecter->read_full(oid, ol, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
 void SessionMap::_load_finish(bufferlist &bl)

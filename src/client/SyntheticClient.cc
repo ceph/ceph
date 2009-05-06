@@ -1347,7 +1347,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       __u64 size;
-      client->objecter->stat(oid, layout, &size, 0, new C_SafeCond(&lock, &cond, &ack));
+      client->objecter->stat(oid, layout, CEPH_NOSNAP, &size, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1360,7 +1360,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       bufferlist bl;
-      client->objecter->read(oid, layout, off, len, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
+      client->objecter->read(oid, layout, off, len, CEPH_NOSNAP, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -2275,7 +2275,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
-      client->objecter->read(oid, layout, 0, osize, &inbl, 0,
+      client->objecter->read(oid, layout, 0, osize, CEPH_NOSNAP, &inbl, 0,
 			     new C_Ref(lock, cond, &unack));
     }
     client->client_lock.Unlock();

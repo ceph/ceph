@@ -19,7 +19,6 @@
 
 #include "msg/msg_types.h"
 #include "include/types.h"
-#include "include/pobject.h"
 #include "include/interval_set.h"
 #include "include/nstring.h"
 
@@ -105,7 +104,7 @@ enum {
 
 //#define CEPH_POOL(poolset, size) (((poolset) << 8) + (size))
 
-#define OSD_SUPERBLOCK_POBJECT pobject_t(CEPH_OSDMETADATA_NS, 0, object_t(0,0))
+#define OSD_SUPERBLOCK_POBJECT sobject_t(object_t(0,0), 0)
 
 // placement group id
 struct pg_t {
@@ -132,9 +131,7 @@ struct pg_t {
   operator uint64_t() const { return u.pg64; }
 
   pobject_t to_log_pobject() const { 
-    return pobject_t(CEPH_OSDMETADATA_NS,
-		     0,
-		     object_t(u.pg64, 0));
+    return pobject_t(object_t(u.pg64, 0), CEPH_NOSNAP);
   }
 
   coll_t to_coll() const {
@@ -746,7 +743,7 @@ struct object_info_t {
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
     ::encode(mtime, bl);
-    if (poid.oid.snap == CEPH_NOSNAP) {
+    if (poid.snap == CEPH_NOSNAP) {
       ::encode(snapset, bl);
       ::encode(wrlock_by, bl);
     } else
@@ -759,7 +756,7 @@ struct object_info_t {
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);
     ::decode(mtime, bl);
-    if (poid.oid.snap == CEPH_NOSNAP) {
+    if (poid.snap == CEPH_NOSNAP) {
       ::decode(snapset, bl);
       ::decode(wrlock_by, bl);
     } else
@@ -784,7 +781,7 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
       << " " << oi.last_reqid;
   if (oi.wrlock_by.tid)
     out << " wrlock_by=" << oi.wrlock_by;
-  if (oi.poid.oid.snap == CEPH_NOSNAP)
+  if (oi.poid.snap == CEPH_NOSNAP)
     out << " " << oi.snapset << ")";
   else
     out << " " << oi.snaps << ")";

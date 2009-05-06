@@ -42,6 +42,16 @@ v0.9
 - make mds exhert memory pressure on client caps, leases
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
+rados
+- move snap out of object_t
+- create/destroy pg_pools
+- autosize pg_pools?
+- security
+- c library glue to c3
+- pyexec?
+- 
+
+
 later
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
