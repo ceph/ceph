@@ -288,6 +288,8 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_UPLOCK: return "uplock";
 	case CEPH_OSD_OP_DNLOCK: return "dnlock";
 
+	case CEPH_OSD_OP_EXEC: return "exec";
+
 	default: return "???";
 	}
 }
