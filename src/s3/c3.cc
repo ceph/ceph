@@ -247,6 +247,8 @@ bool C3::_dispatch(Message *m)
   case CEPH_MSG_OSD_MAP:
     objecter->handle_osd_map((MOSDMap*)m);
     break;
+  case CEPH_MSG_MDS_MAP:
+    break;
 
   default:
     return false;
