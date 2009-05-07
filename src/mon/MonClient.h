@@ -72,7 +72,12 @@ class MonClient : public Dispatcher {
 
   int mount(double mount_timeout);
   int unmount();
+
   void set_messenger(Messenger *m) { messenger = m; }
+
+  bufferlist& get_signed_ticket() { return signed_ticket; }
+  ceph_client_ticket get_ticket() { return ticket; }
+
 };
 
 #endif

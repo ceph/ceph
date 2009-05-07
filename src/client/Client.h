@@ -30,6 +30,8 @@ enum {
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
 
+#include "mon/MonClient.h"
+
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
@@ -63,12 +65,10 @@ using namespace __gnu_cxx;
 class MStatfsReply;
 class MClientSession;
 class MClientRequest;
-class MClientMountAck;
 class MClientRequestForward;
 class MClientLease;
 class MClientCaps;
 class MClientCapRelease;
-class MMonMap;
 
 class Filer;
 class Objecter;
@@ -565,6 +565,7 @@ public:
   void tick();
 
  protected:
+  MonClient *monclient;
   Messenger *messenger;  
   int whoami;
   MonMap *monmap;
@@ -638,9 +639,7 @@ public:
   void handle_statfs_reply(MStatfsReply *reply);
 
   bool   mounted;
-  int mounters;
   bool   unmounting;
-  Cond   mount_cond;  
 
   int    unsafe_sync_write;
 public:
@@ -820,6 +819,9 @@ protected:
   ofstream traceout;
 
 
+  Cond mount_cond;
+
+
   // friends
   friend class SyntheticClient;
   bool dispatch_impl(Message *m);
@@ -835,9 +837,6 @@ protected:
   void shutdown();
 
   // messaging
-  void handle_mon_map(MMonMap *m);
-  void handle_mount_ack(MClientMountAck *m);
-  void handle_unmount(Message*);
   void handle_mds_map(class MMDSMap *m);
 
   void handle_lease(MClientLease *m);
@@ -899,18 +898,6 @@ protected:
   // ----------------------
   // fs ops.
 private:
-  void _try_mount();
-  void _mount_timeout();
-  Context *mount_timeout_event;
-
-  class C_MountTimeout : public Context {
-    Client *client;
-  public:
-    C_MountTimeout(Client *c) : client(c) { }
-    void finish(int r) {
-      if (r >= 0) client->_mount_timeout();
-    }
-  };
 
   // some helpers
   int _opendir(Inode *in, DirResult **dirpp, int uid=-1, int gid=-1);

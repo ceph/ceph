@@ -174,6 +174,7 @@ void MonClient::handle_monmap(MMonMap *m)
   monmap_bl = m->monmapbl;
   monmap_cond.Signal();
   monmap_lock.Unlock();
+  delete m;
 }
 
 bool MonClient::dispatch_impl(Message *m)
@@ -183,21 +184,20 @@ bool MonClient::dispatch_impl(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_monmap((MMonMap*)m);
-    break;
-  case CEPH_MSG_OSD_MAP:
-  case CEPH_MSG_MDS_MAP:
-    break;
+    return true;
+
   case CEPH_MSG_CLIENT_MOUNT_ACK:
     handle_mount_ack((MClientMountAck*)m);
-    dout(0) << "got mount ack" << dendl;
-    break;
-  default:
-    return false;
+    return true;
+
+  case CEPH_MSG_CLIENT_UNMOUNT:
+    handle_unmount((MClientUnmount*)m);
+    return true;
   }
 
-  delete m;
-  return true;
+  return false;
 }
+
 
 
 // -------------------
@@ -274,6 +274,8 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   messenger->reset_myname(m->get_dest());
 
   mount_cond.Signal();
+
+  delete m;
 }
 
 

@@ -113,8 +113,6 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Clie
   tick_event = 0;
 
   mounted = false;
-  mounters = 0;
-  mount_timeout_event = 0;
   unmounting = false;
 
   last_tid = 0;
@@ -132,6 +130,8 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Clie
 
   // set up messengers
   messenger = m;
+
+  monclient = new MonClient(monmap, messenger);
 
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
@@ -159,6 +159,10 @@ Client::~Client()
   if (objecter) { delete objecter; objecter = 0; }
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
+
+  unlink_dispatcher(monclient);
+  delete monclient;
+
   if (messenger)
     messenger->destroy();
 }
@@ -241,6 +245,10 @@ void Client::dump_cache()
 void Client::init() 
 {
   Mutex::Locker lock(client_lock);
+
+  // ok!
+  messenger->set_dispatcher(this);
+  link_dispatcher(monclient);
 
   tick();
 
@@ -1028,13 +1036,6 @@ bool Client::dispatch_impl(Message *m)
   client_lock.Lock();
 
   switch (m->get_type()) {
-  case CEPH_MSG_MON_MAP:
-    handle_mon_map((MMonMap*)m);
-    break;
-  case CEPH_MSG_CLIENT_MOUNT_ACK:
-    handle_mount_ack((MClientMountAck*)m);
-    break;
-
     // osd
   case CEPH_MSG_OSD_OPREPLY:
     objecter->handle_osd_op_reply((MOSDOpReply*)m);
@@ -1042,15 +1043,11 @@ bool Client::dispatch_impl(Message *m)
 
   case CEPH_MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
-    if (!mounted) mount_cond.Signal();
     break;
     
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);
-    break;
-  case CEPH_MSG_CLIENT_UNMOUNT:
-    handle_unmount(m);
     break;
   case CEPH_MSG_CLIENT_SESSION:
     handle_client_session((MClientSession*)m);
@@ -2244,27 +2241,6 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 // -------------------
 // MOUNT
 
-void Client::_try_mount()
-{
-  dout(10) << "_try_mount" << dendl;
-  int mon = monmap->pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << dendl;
-  messenger->set_dispatcher(this);
-  messenger->send_message(new MClientMount, monmap->get_inst(mon));
-
-  // schedule timeout?
-  assert(mount_timeout_event == 0);
-  mount_timeout_event = new C_MountTimeout(this);
-  timer.add_event_after(g_conf.client_mount_timeout, mount_timeout_event);
-}
-
-void Client::_mount_timeout()
-{
-  dout(10) << "_mount_timeout" << dendl;
-  mount_timeout_event = 0;
-  _try_mount();
-}
-
 int Client::mount()
 {
   Mutex::Locker lock(client_lock);
@@ -2274,33 +2250,18 @@ int Client::mount()
     return 0;
   }
 
-  // only first mounter does the work
-  bool itsme = false;
-  if (!mounters) {
-    itsme = true;
-    objecter->init();
-    _try_mount();
-  } else {
-    dout(5) << "additional mounter" << dendl;
-  }
-  mounters++;
+  client_lock.Unlock();
+  int r = monclient->mount(30.0);
+  client_lock.Lock();
+  if (r < 0)
+    return r;
   
-  while (signed_ticket.length() == 0 ||
-	 (!itsme && !mounted))       // non-doers wait a little longer
-    mount_cond.Wait(client_lock);
-  
-  if (!itsme) {
-    dout(5) << "additional mounter returning" << dendl;
-    assert(mounted);
-    return 0; 
-  }
+  whoami = messenger->get_myname().num();
 
-  // finish.
-  timer.cancel_event(mount_timeout_event);
-  mount_timeout_event = 0;
-  
+  signed_ticket = monclient->get_signed_ticket();
+  ticket = monclient->get_ticket();
+
   mounted = true;
-  mount_cond.SignalAll(); // wake up non-doers
   
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
@@ -2344,46 +2305,13 @@ int Client::mount()
   return 0;
 }
 
-void Client::handle_mon_map(MMonMap *m)
-{
-  dout(10) << "handle_mon_map " << *m << dendl;
-  // just ignore it for now.
-  delete m;
-}
-
-void Client::handle_mount_ack(MClientMountAck* m)
-{
-  dout(10) << "handle_mount_ack " << *m << dendl;
-
-  assert(m->get_source().is_mon());
-  whoami = m->get_dest().num();
-  messenger->reset_myname(entity_name_t::CLIENT(whoami));
-  dout(1) << "handle_mount_ack i am now " << m->get_dest() << dendl;
-  
-  mount_cond.Signal();  // mount might be waiting for this.
-
-  signed_ticket = m->signed_ticket;
-  bufferlist::iterator p = signed_ticket.begin();
-  ::decode(ticket, p);
-
-  mount_cond.Signal();
-}
-
-
 // UNMOUNT
-
 
 int Client::unmount()
 {
   Mutex::Locker lock(client_lock);
 
   assert(mounted);  // caller is confused?
-  assert(mounters > 0);
-  if (--mounters > 0) {
-    dout(0) << "umount -- still " << mounters << " others, doing nothing" << dendl;
-    return -1;  // i'm not the last mounter.
-  }
-
 
   dout(2) << "unmounting" << dendl;
   unmounting = true;
@@ -2484,13 +2412,11 @@ int Client::unmount()
 			    mdsmap->get_inst(p->first));
   }
 
-  // send unmount!
-  int mon = monmap->pick_mon();
-  dout(2) << "sending client_unmount to mon" << mon << dendl;
-  messenger->send_message(new MClientUnmount, monmap->get_inst(mon));
-  
-  while (mounted)
-    mount_cond.Wait(client_lock);
+  // leave cluster
+  client_lock.Unlock();
+  monclient->unmount();
+  client_lock.Lock();
+  mounted = false;
 
   dout(2) << "unmounted." << dendl;
 
@@ -2499,15 +2425,6 @@ int Client::unmount()
   return 0;
 }
 
-void Client::handle_unmount(Message* m)
-{
-  dout(1) << "handle_unmount got ack" << dendl;
-
-  mounted = false;
-  mount_cond.Signal();
-
-  delete m;
-}
 
 
 class C_C_Tick : public Context {
