@@ -65,7 +65,7 @@ struct ceph_osd_request {
 	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;
 
-	union ceph_pg     r_pgid;             /* placement group */
+	struct ceph_file_layout r_file_layout;
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */
 	unsigned          r_num_pages;        /* size of page array (follows) */
 	struct page     **r_pages;            /* pages for data payload */

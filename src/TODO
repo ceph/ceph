@@ -73,7 +73,6 @@ repair
 
 
 kernel client
-- osd client needs to recalculate layout if osdmap changes (pg_num etc may change)
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
 - simplify mds auth tracking?
