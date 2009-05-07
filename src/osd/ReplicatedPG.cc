@@ -742,7 +742,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
    case CEPH_OSD_OP_EXEC:
     {
 	bufferlist bl;
-	int r = osd->store->read(info.pgid.to_coll(), poid, p->offset, p->length, bl);
+	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
 
 	if (data.length() == 0)
 	  data_off = p->offset;

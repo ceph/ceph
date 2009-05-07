@@ -319,7 +319,8 @@ class Objecter {
   }
 
   tid_t exec(object_t oid, ceph_object_layout ol,
-	      __u64 data_off, size_t data_len, bufferlist &bl, int flags,
+	      __u64 data_off, size_t data_len,
+	      snapid_t snap, bufferlist &bl, int flags,
               bufferlist *pbl, size_t out_len,
               Context *onfinish) {
     vector<ceph_osd_op> ops(1);
@@ -327,7 +328,7 @@ class Objecter {
     ops[0].op = CEPH_OSD_OP_EXEC;
     ops[0].offset = data_off;
     ops[0].length = data_len;
-    ReadOp *rd = new ReadOp(oid, ol, ops, flags, onfinish);
+    ReadOp *rd = new ReadOp(oid, ol, ops, snap, flags, onfinish);
     rd->bl = bl;
     rd->pbl = pbl;
     return read_submit(rd);

@@ -306,7 +306,7 @@ int C3::exec(object_t& oid, const char *code, off_t data_off, size_t data_len, c
   lock.Lock();
 
   objecter->exec(oid, layout,
-	      data_off, data_len, bl, 0,
+	      data_off, data_len, CEPH_NOSNAP, bl, 0,
 	      &obl, out_len,
               oncommit);
 
@@ -338,7 +338,7 @@ int C3::read(object_t& oid, char *buf, off_t off, size_t len)
   lock.Lock();
 
   objecter->read(oid, layout,
-	      off, len, bl, 0,
+	      off, len, CEPH_NOSNAP, bl, 0,
               oncommit);
 
   dout(0) << "after read call" << dendl;
