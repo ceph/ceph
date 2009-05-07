@@ -391,6 +391,7 @@ tid_t Objecter::read_submit(ReadOp *rd)
     MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   rd->oid, rd->layout, osdmap->get_epoch(), 
 			   flags);
+    m->set_snapid(rd->snap);
     m->ops = rd->ops;
     m->set_data(rd->bl);
     if (inc_lock > 0) {

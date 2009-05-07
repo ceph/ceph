@@ -41,6 +41,7 @@ public:
 
   // read
   snapid_t get_snapid() { return snapid_t(head.snapid); }
+  void set_snapid(snapid_t s) { head.snapid = s; }
   // writ
   snapid_t get_snap_seq() { return snapid_t(head.snap_seq); }
   vector<snapid_t> &get_snaps() { return snaps; }
@@ -176,7 +177,10 @@ public:
   const char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << get_reqid();
-    out << " " << head.oid << " " << ops;
+    out << " " << head.oid;
+    if (!is_modify())
+      out << " @" << snapid_t((__u64)head.snapid);
+    out << " " << ops;
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";
     if (!snaps.empty())
