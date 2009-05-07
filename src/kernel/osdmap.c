@@ -511,16 +511,16 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	while (len--) {
 		ceph_decode_32_safe(p, end, pool, bad);
 		if (pool >= map->num_pools) {
-			void *p = kzalloc((pool+1) * sizeof(*map->pg_pool),
+			void *pg_pool = kzalloc((pool+1) * sizeof(*map->pg_pool),
 					  GFP_NOFS);
-			if (!p) {
+			if (!pg_pool) {
 				err = -ENOMEM;
 				goto bad;
 			}
-			memcpy(p, map->pg_pool,
+			memcpy(pg_pool, map->pg_pool,
 			       map->num_pools * sizeof(*map->pg_pool));
 			kfree(map->pg_pool);
-			map->pg_pool = p;
+			map->pg_pool = pg_pool;
 			map->num_pools = pool+1;
 		}
 		ceph_decode_copy(p, &map->pg_pool[pool].v,
@@ -650,7 +650,7 @@ int ceph_calc_object_layout(struct ceph_object_layout *ol,
 	u64 ino = le64_to_cpu(oid->ino);
 	unsigned bno = le32_to_cpu(oid->bno);
 	s32 preferred = (s32)le32_to_cpu(fl->fl_pg_preferred);
-	int poolid = le16_to_cpu(fl->fl_pg_pool);
+	int poolid = le32_to_cpu(fl->fl_pg_pool);
 	struct ceph_pg_pool_info *pool;
 
 	if (poolid >= osdmap->num_pools)
@@ -668,7 +668,7 @@ int ceph_calc_object_layout(struct ceph_object_layout *ol,
 	pgid.pg64 = 0;   /* start with it zeroed out */
 	pgid.pg.ps = bno + crush_hash32_2(ino, ino>>32);
 	pgid.pg.preferred = preferred;
-	pgid.pg.pool = fl->fl_pg_pool;
+	pgid.pg.pool = le32_to_cpu(fl->fl_pg_pool);
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);
 	ol->ol_stripe_unit = fl->fl_object_stripe_unit;

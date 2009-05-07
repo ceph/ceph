@@ -323,9 +323,9 @@ struct ceph_pg_pool {
 	__u8 type;
 	__u8 size;
 	__u8 crush_ruleset;
-	__u32 pg_num, pgp_num;
-	__u32 lpg_num, lpgp_num;
-	__u32 last_change;     /* most recent epoch changed */
+	__le32 pg_num, pgp_num;
+	__le32 lpg_num, lpgp_num;
+	__le32 last_change;     /* most recent epoch changed */
 } __attribute__ ((packed));
 
 /*

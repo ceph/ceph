@@ -342,10 +342,12 @@ static int map_osds(struct ceph_osd_client *osdc,
 
 	if (req->r_pgid.pg.preferred >= 0)
 		pps = ceph_stable_mod(req->r_pgid.pg.ps,
-				      pool->v.lpgp_num, pool->lpgp_num_mask);
+				      le32_to_cpu(pool->v.lpgp_num),
+				      pool->lpgp_num_mask);
 	else
 		pps = ceph_stable_mod(req->r_pgid.pg.ps,
-				      pool->v.pgp_num, pool->pgp_num_mask);
+				      le32_to_cpu(pool->v.pgp_num),
+				      pool->pgp_num_mask);
 	num = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
 			    min_t(int, pool->v.size, ARRAY_SIZE(osds)),
 			    req->r_pgid.pg.preferred, osdc->osdmap->osd_weight);

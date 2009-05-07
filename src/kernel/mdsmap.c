@@ -118,7 +118,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 badmem:
 	err = -ENOMEM;
 bad:
-	derr(0, "corrupt mdsmap");
+	derr(0, "corrupt mdsmap\n");
 	ceph_mdsmap_destroy(m);
 	return ERR_PTR(-EINVAL);
 }
