@@ -3265,7 +3265,9 @@ void OSD::start_recovery_op(PG *pg, int count)
   dout(10) << "start_recovery_op " << *pg << " count " << count
 	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
 	   << dendl;
+  assert(recovery_ops_active >= 0);
   assert(pg->recovery_ops_active >= 0);
+  recovery_ops_active += count;
   pg->recovery_ops_active += count;
   recovery_wq.unlock();
 }
