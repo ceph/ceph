@@ -2634,23 +2634,14 @@ void ReplicatedPG::on_role_change()
 }
 
 
-
-
-
-
-
-void ReplicatedPG::cancel_recovery()
+// clear state.  called on recovery completion AND cancellation.
+void ReplicatedPG::_clear_recovery_state()
 {
-  dout(10) << "cancel_recovery" << dendl;
-
-  // forget about where missing items are, or anything we're pulling
   missing_loc.clear();
-  osd->num_pulling -= pulling.size();
   pulling.clear();
   pushing.clear();
-
-  _cancel_recovery();
 }
+
 
 int ReplicatedPG::start_recovery_ops(int max)
 {
@@ -2687,17 +2678,9 @@ int ReplicatedPG::recover_primary(int max)
 {
   assert(is_primary());
 
-  dout(-10) << "recover_primary pulling " << pulling.size() << " in pg, "
-           << osd->num_pulling << "/" << g_conf.osd_max_pull << " total"
-           << dendl;
+  dout(10) << "recover_primary pulling " << pulling.size() << " in pg" << dendl;
   dout(10) << "recover_primary " << missing << dendl;
   dout(15) << "recover_primary " << missing.missing << dendl;
-
-  // can we slow down on this PG?
-  if (osd->num_pulling >= g_conf.osd_max_pull && !pulling.empty()) {
-    dout(-10) << "recover_primary already pulling max, waiting" << dendl;
-    return 0;
-  }
 
   // look at log!
   Log::Entry *latest = 0;

@@ -246,7 +246,6 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   last_tid(0),
   tid_lock("OSD::tid_lock"),
-  num_pulling(0),
   backlog_wq(this, &disk_tp),
   recovery_ops_active(0),
   recovery_wq(this, &recovery_tp),

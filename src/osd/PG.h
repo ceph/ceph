@@ -724,17 +724,17 @@ public:
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
-  void _cancel_recovery();
-  virtual void cancel_recovery() = 0;
   virtual int start_recovery_ops(int max) = 0;
 
   void purge_strays();
-
 
   Context *finish_sync_event;
 
   void finish_recovery();
   void _finish_recovery(Context *c);
+  void cancel_recovery();
+  void clear_recovery_state();
+  virtual void _clear_recovery_state() = 0;
   void defer_recovery();
 
   loff_t get_log_write_pos() {

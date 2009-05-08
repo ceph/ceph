@@ -1467,9 +1467,7 @@ void PG::finish_recovery()
   state_set(PG_STATE_CLEAN);
   assert(info.last_complete == info.last_update);
 
-  log.reset_recovery_pointers();
-
-  osd->finish_recovery_op(this, recovery_ops_active, true);
+  clear_recovery_state();
 
   /*
    * sync all this before purging strays.  but don't block!
@@ -1509,12 +1507,22 @@ void PG::defer_recovery()
   osd->defer_recovery(this);
 }
 
-void PG::_cancel_recovery()
+void PG::clear_recovery_state() 
 {
+  dout(10) << "clear_recovery_state" << dendl;
+
   log.reset_recovery_pointers();
   finish_sync_event = 0;
 
   osd->finish_recovery_op(this, recovery_ops_active, true);
+
+  _clear_recovery_state();  // pg impl specific hook
+}
+
+void PG::cancel_recovery()
+{
+  dout(10) << "cancel_recovery" << dendl;
+  clear_recovery_state();
 }
 
 

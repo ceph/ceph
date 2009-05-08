@@ -202,7 +202,7 @@ protected:
   // pg on-disk content
   void clean_up_local(ObjectStore::Transaction& t);
 
-  void cancel_recovery();
+  void _clear_recovery_state();
 
   void queue_for_recovery();
   int start_recovery_ops(int max);
