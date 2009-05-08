@@ -339,7 +339,7 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
   mon->messenger->send_message(ack, to);
 
   // also send latest mds and osd maps
-  mon->mdsmon()->send_latest(to);
+  //mon->mdsmon()->send_latest(to);
   mon->osdmon()->send_latest(to);
 
   delete m;
