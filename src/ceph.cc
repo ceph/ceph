@@ -321,6 +321,9 @@ class Admin : public Dispatcher {
     case MSG_MON_OBSERVE:
       handle_observe((MMonObserve *)m);
       break;
+    case CEPH_MSG_MON_MAP:
+      delete m;
+      break;
     default:
       return false;
     }

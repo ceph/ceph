@@ -223,7 +223,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   logclient(messenger, monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  state(STATE_BOOTING), boot_epoch(0),
+  state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
   recovery_tp("OSD::recovery_tp", 1),
   disk_tp("OSD::disk_tp", 2),
@@ -466,8 +466,8 @@ int OSD::shutdown()
 
   // note unmount epoch
   dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
-  superblock.epoch_mounted = boot_epoch;
-  superblock.epoch_unmounted = osdmap->get_epoch();
+  superblock.mounted = boot_epoch;
+  superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
   store->apply_transaction(t);
@@ -932,6 +932,17 @@ void OSD::update_heartbeat_peers()
   dout(10) << "hb   to: " << heartbeat_to << dendl;
   dout(10) << "hb from: " << heartbeat_from << dendl;
 
+  heartbeat_lock.Unlock();
+}
+
+void OSD::reset_heartbeat_peers()
+{
+  dout(10) << "reset_heartbeat_peers" << dendl;
+  heartbeat_lock.Lock();
+  heartbeat_to.clear();
+  heartbeat_from.clear();
+  heartbeat_from_stamp.clear();
+  heartbeat_inst.clear();
   heartbeat_lock.Unlock();
 }
 
@@ -1652,6 +1663,7 @@ void OSD::wait_for_new_map(Message *m)
 void OSD::note_down_osd(int osd)
 {
   messenger->mark_down(osdmap->get_addr(osd));
+
   heartbeat_lock.Lock();
   if (heartbeat_inst.count(osd)) {
     if (heartbeat_inst[osd] == osdmap->get_hb_inst(osd)) {
@@ -1663,12 +1675,13 @@ void OSD::note_down_osd(int osd)
     }
   } else
     dout(10) << "note_down_osd no heartbeat_inst for osd" << osd << dendl;
-  heartbeat_lock.Unlock();
 
   peer_map_epoch.erase(entity_name_t::OSD(osd));
   failure_queue.erase(osd);
   failure_pending.erase(osd);
   heartbeat_from_stamp.erase(osd);
+
+  heartbeat_lock.Unlock();
 }
 void OSD::note_up_osd(int osd)
 {
@@ -1901,14 +1914,17 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(0) << "map says i am down.  switching to boot state." << dendl;
     //shutdown();
 
-    // note in the superblock that we were clean up until this point.
-    superblock.epoch_mounted = boot_epoch;
-    superblock.epoch_unmounted = osdmap->get_epoch();
-
     state = STATE_BOOTING;
-    boot_epoch = 0;
+    up_epoch = 0;
+
+    reset_heartbeat_peers();
   }
 
+  // note in the superblock that we were clean thru the prior epoch
+  if (boot_epoch && boot_epoch >= superblock.mounted) {
+    superblock.mounted = boot_epoch;
+    superblock.clean_thru = osdmap->get_epoch();
+  }
 
   // superblock and commit
   write_superblock(t);
@@ -1941,11 +1957,15 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
 	  << " removed_snaps " << removed_snaps
           << dendl;
 
-  if (!boot_epoch &&
+  if (!up_epoch &&
       osdmap->is_up(whoami) &&
       osdmap->get_inst(whoami) == messenger->get_myinst()) {
-    boot_epoch = osdmap->get_epoch();
-    dout(10) << "my boot_epoch is " << boot_epoch << dendl;
+    up_epoch = osdmap->get_epoch();
+    dout(10) << "up_epoch is " << up_epoch << dendl;
+    if (!boot_epoch) {
+      boot_epoch = osdmap->get_epoch();
+      dout(10) << "boot_epoch is " << boot_epoch << dendl;
+    }
   }
   
   // scan pg creations
@@ -2318,8 +2338,8 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     return false;
   }
 
-  if (epoch < boot_epoch) {
-    dout(7) << "from pre-boot epoch " << epoch << " < " << boot_epoch << dendl;
+  if (epoch < up_epoch) {
+    dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
     delete m;
     return false;
   }
@@ -2416,6 +2436,9 @@ void OSD::kick_pg_split_queue()
     // split
     split_pg(parent, children, t); 
 
+    parent->update_stats();
+    parent->write_info(t);
+
     // unlock parent, children
     parent->unlock();
     for (map<pg_t,PG*>::iterator q = children.begin(); q != children.end(); q++) {
@@ -2457,12 +2480,15 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   for (vector<pobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     pobject_t poid = *p;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
-    if (le64_to_cpu(l.ol_pgid) != parentid.u.pg64) {
-      pg_t pgid(le64_to_cpu(l.ol_pgid));
+    pg_t pgid = osdmap->raw_pg_to_pg(pg_t(le64_to_cpu(l.ol_pgid)));
+    if (pgid != parentid) {
       dout(20) << "  moving " << poid << " from " << parentid << " -> " << pgid << dendl;
       PG *child = children[pgid];
       assert(child);
       bufferlist bv;
+
+      struct stat st;
+      store->stat(parentid.to_coll(), poid, &st);
       store->getattr(parentid.to_coll(), poid, OI_ATTR, bv);
       object_info_t oi(bv);
 
@@ -2472,11 +2498,36 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       } else {
 	dout(25) << "    not tagging pg with v " << oi.version << " <= " << child->info.last_update << dendl;
       }
+
       t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
       t.collection_remove(parentid.to_coll(), poid);
+      if (oi.snaps.size()) {
+	snapid_t first = oi.snaps[0];
+	t.collection_add(pgid.to_snap_coll(first), parentid.to_coll(), poid);
+	t.collection_remove(parentid.to_snap_coll(first), poid);
+	if (oi.snaps.size() > 1) {
+	  snapid_t last = oi.snaps[oi.snaps.size()-1];
+	  t.collection_add(pgid.to_snap_coll(last), parentid.to_coll(), poid);
+	  t.collection_remove(parentid.to_snap_coll(last), poid);
+	}
+      }
+
+      // add to child stats
+      child->info.stats.num_bytes += st.st_size;
+      child->info.stats.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
+      child->info.stats.num_objects++;
+      if (poid.snap && poid.snap != CEPH_NOSNAP)
+	child->info.stats.num_object_clones++;
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
     }
+  }
+
+  // sub off child stats
+  for (map<pg_t,PG*>::iterator p = children.begin();
+       p != children.end();
+       p++) {
+    parent->info.stats.sub(p->second->info.stats);
   }
 }  
 
@@ -3488,8 +3539,8 @@ void OSD::handle_op(MOSDOp *op)
 void OSD::handle_sub_op(MOSDSubOp *op)
 {
   dout(10) << "handle_sub_op " << *op << " epoch " << op->map_epoch << dendl;
-  if (op->map_epoch < boot_epoch) {
-    dout(3) << "replica op from before boot" << dendl;
+  if (op->map_epoch < up_epoch) {
+    dout(3) << "replica op from before up" << dendl;
     delete op;
     return;
   }
@@ -3536,8 +3587,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 }
 void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
-  if (op->get_map_epoch() < boot_epoch) {
-    dout(3) << "replica op reply from before boot" << dendl;
+  if (op->get_map_epoch() < up_epoch) {
+    dout(3) << "replica op reply from before up" << dendl;
     delete op;
     return;
   }

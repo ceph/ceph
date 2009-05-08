@@ -144,7 +144,8 @@ public:
 
 private:
   int state;
-  epoch_t boot_epoch;      
+  epoch_t boot_epoch;  // _first_ epoch we were marked up (after this process started)
+  epoch_t up_epoch;    // _most_recent_ epoch we were marked up
 
 public:
   bool is_booting() { return state == STATE_BOOTING; }
@@ -171,6 +172,7 @@ private:
   Messenger *heartbeat_messenger;
   
   void update_heartbeat_peers();
+  void reset_heartbeat_peers();
   void heartbeat();
   void heartbeat_entry();
 
