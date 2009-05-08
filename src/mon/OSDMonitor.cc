@@ -522,11 +522,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
     dout(10) << " old osd_info: " << info << dendl;
-    if (m->sb.epoch_mounted > info.last_clean_first ||
-	(m->sb.epoch_mounted == info.last_clean_first &&
-	 m->sb.epoch_unmounted > info.last_clean_last)) {
-      epoch_t first = m->sb.epoch_mounted;
-      epoch_t last = m->sb.epoch_unmounted;
+    if (m->sb.mounted > info.last_clean_first ||
+	(m->sb.mounted == info.last_clean_first &&
+	 m->sb.clean_thru > info.last_clean_last)) {
+      epoch_t first = m->sb.mounted;
+      epoch_t last = m->sb.clean_thru;
 
       // adjust clean interval forward to the epoch the osd was actually marked down.
       if (info.up_from == first &&
@@ -1029,10 +1029,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "down" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_down(osd)) {
-	ss << "osd" << osd << " is already down";
-      } else if (!osdmap.exists(osd)) {
+      if (!osdmap.exists(osd)) {
 	ss << "osd" << osd << " does not exist";
+      } else if (osdmap.is_down(osd)) {
+	ss << "osd" << osd << " is already down";
       } else {
 	pending_inc.new_down[osd] = false;
 	ss << "marked down osd" << osd;
@@ -1047,10 +1047,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "out" && m->cmd.size() == 3) {
       long osd = strtol(m->cmd[2].c_str(), 0, 10);
-      if (osdmap.is_out(osd)) {
-	ss << "osd" << osd << " is already out";
-      } else if (!osdmap.exists(osd)) {
+      if (!osdmap.exists(osd)) {
 	ss << "osd" << osd << " does not exist";
+      } else if (osdmap.is_out(osd)) {
+	ss << "osd" << osd << " is already out";
       } else {
 	pending_inc.new_weight[osd] = CEPH_OSD_OUT;
 	ss << "marked out osd" << osd;
