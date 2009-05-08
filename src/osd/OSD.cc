@@ -2479,8 +2479,19 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       } else {
 	dout(25) << "    not tagging pg with v " << oi.version << " <= " << child->info.last_update << dendl;
       }
+
       t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
       t.collection_remove(parentid.to_coll(), poid);
+      if (oi.snaps.size()) {
+	snapid_t first = oi.snaps[0];
+	t.collection_add(pgid.to_snap_coll(first), parentid.to_coll(), poid);
+	t.collection_remove(parentid.to_snap_coll(first), poid);
+	if (oi.snaps.size() > 1) {
+	  snapid_t last = oi.snaps[oi.snaps.size()-1];
+	  t.collection_add(pgid.to_snap_coll(last), parentid.to_coll(), poid);
+	  t.collection_remove(parentid.to_snap_coll(last), poid);
+	}
+      }
 
       // add to child stats
       child->info.stats.num_bytes += st.st_size;
