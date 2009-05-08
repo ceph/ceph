@@ -174,7 +174,7 @@ inline bool operator<=(const sobject_t l, const sobject_t r) {
   return l.oid < r.oid || (l.oid == r.oid && l.snap <= r.snap);
 }
 inline ostream& operator<<(ostream& out, const sobject_t o) {
-  return out << o.oid << "." << o.snap;
+  return out << o.oid << "/" << o.snap;
 }
 
 namespace __gnu_cxx {
