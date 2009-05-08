@@ -124,6 +124,24 @@ private:
     }
   };
 
+  class raw_malloc : public raw {
+  public:
+    raw_malloc(unsigned l) : raw(l) {
+      if (len)
+	data = (char *)malloc(len);
+      else
+	data = 0;
+      inc_total_alloc(len);
+    }
+    ~raw_malloc() {
+      free(data);
+      dec_total_alloc(len);      
+    }
+    raw* clone_empty() {
+      return new raw_malloc(len);
+    }
+  };
+
   class raw_static : public raw {
   public:
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
@@ -213,6 +231,9 @@ public:
   }
   static raw* create(unsigned len) {
     return new raw_char(len);
+  }
+  static raw* create_malloc(unsigned len) {
+    return new raw_malloc(len);
   }
 
   static raw* create_page_aligned(unsigned len) {
