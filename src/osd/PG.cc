@@ -1469,6 +1469,8 @@ void PG::finish_recovery()
 
   log.reset_recovery_pointers();
 
+  osd->finish_recovery_op(this, recovery_ops_active, true);
+
   /*
    * sync all this before purging strays.  but don't block!
    */
@@ -1498,7 +1500,6 @@ void PG::_finish_recovery(Context *c)
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
   osd->map_lock.put_read();
-  osd->finish_recovery_op(this, recovery_ops_active, true);
   unlock();
   put();
 }
@@ -1506,6 +1507,14 @@ void PG::_finish_recovery(Context *c)
 void PG::defer_recovery()
 {
   osd->defer_recovery(this);
+}
+
+void PG::_cancel_recovery()
+{
+  log.reset_recovery_pointers();
+  finish_sync_event = 0;
+
+  osd->finish_recovery_op(this, recovery_ops_active, true);
 }
 
 

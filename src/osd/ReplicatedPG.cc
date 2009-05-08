@@ -2648,9 +2648,8 @@ void ReplicatedPG::cancel_recovery()
   osd->num_pulling -= pulling.size();
   pulling.clear();
   pushing.clear();
-  log.reset_recovery_pointers();
 
-  osd->finish_recovery_op(this, recovery_ops_active, true);
+  _cancel_recovery();
 }
 
 int ReplicatedPG::start_recovery_ops(int max)

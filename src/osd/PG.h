@@ -724,6 +724,7 @@ public:
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
 
+  void _cancel_recovery();
   virtual void cancel_recovery() = 0;
   virtual int start_recovery_ops(int max) = 0;
 
