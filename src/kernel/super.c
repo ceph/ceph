@@ -758,8 +758,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 static int have_all_maps(struct ceph_client *client)
 {
 	return client->osdc.osdmap && client->osdc.osdmap->epoch &&
-		client->monc.monmap && client->monc.monmap->epoch &&
-		client->mdsc.mdsmap && client->mdsc.mdsmap->m_epoch;
+		client->monc.monmap && client->monc.monmap->epoch;
 }
 
 /*
@@ -945,10 +944,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 
 		/* mds client */
 	case CEPH_MSG_MDS_MAP:
-		had = client->mdsc.mdsmap ? 1 : 0;
 		ceph_mdsc_handle_map(&client->mdsc, msg);
-		if (!had && client->mdsc.mdsmap && have_all_maps(client))
-			wake_up(&client->mount_wq);
 		break;
 	case CEPH_MSG_CLIENT_SESSION:
 		ceph_mdsc_handle_session(&client->mdsc, msg);
