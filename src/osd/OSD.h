@@ -171,6 +171,7 @@ private:
   Messenger *heartbeat_messenger;
   
   void update_heartbeat_peers();
+  void reset_heartbeat_peers();
   void heartbeat();
   void heartbeat_entry();
 

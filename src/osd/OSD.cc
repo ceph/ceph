@@ -936,6 +936,17 @@ void OSD::update_heartbeat_peers()
   heartbeat_lock.Unlock();
 }
 
+void OSD::reset_heartbeat_peers()
+{
+  dout(10) << "reset_heartbeat_peers" << dendl;
+  heartbeat_lock.Lock();
+  heartbeat_to.clear();
+  heartbeat_from.clear();
+  heartbeat_from_stamp.clear();
+  heartbeat_inst.clear();
+  heartbeat_lock.Unlock();
+}
+
 void OSD::handle_osd_ping(MOSDPing *m)
 {
   dout(20) << "handle_osd_ping from " << m->get_source() << " got stat " << m->peer_stat << dendl;
@@ -1908,6 +1919,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     state = STATE_BOOTING;
     boot_epoch = 0;
+
+    reset_heartbeat_peers();
   }
 
 
