@@ -1664,6 +1664,7 @@ void OSD::wait_for_new_map(Message *m)
 void OSD::note_down_osd(int osd)
 {
   messenger->mark_down(osdmap->get_addr(osd));
+
   heartbeat_lock.Lock();
   if (heartbeat_inst.count(osd)) {
     if (heartbeat_inst[osd] == osdmap->get_hb_inst(osd)) {
@@ -1675,12 +1676,13 @@ void OSD::note_down_osd(int osd)
     }
   } else
     dout(10) << "note_down_osd no heartbeat_inst for osd" << osd << dendl;
-  heartbeat_lock.Unlock();
 
   peer_map_epoch.erase(entity_name_t::OSD(osd));
   failure_queue.erase(osd);
   failure_pending.erase(osd);
   heartbeat_from_stamp.erase(osd);
+
+  heartbeat_lock.Unlock();
 }
 void OSD::note_up_osd(int osd)
 {
