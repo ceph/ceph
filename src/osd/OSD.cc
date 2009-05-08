@@ -2417,6 +2417,9 @@ void OSD::kick_pg_split_queue()
     // split
     split_pg(parent, children, t); 
 
+    parent->update_stats();
+    parent->write_info(t);
+
     // unlock parent, children
     parent->unlock();
     for (map<pg_t,PG*>::iterator q = children.begin(); q != children.end(); q++) {
@@ -2478,9 +2481,23 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       }
       t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
       t.collection_remove(parentid.to_coll(), poid);
+
+      // add to child stats
+      child->info.stats.num_bytes += st.st_size;
+      child->info.stats.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
+      child->info.stats.num_objects++;
+      if (poid.snap && poid.snap != CEPH_NOSNAP)
+	child->info.stats.num_object_clones++;
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
     }
+  }
+
+  // sub off child stats
+  for (map<pg_t,PG*>::iterator p = children.begin();
+       p != children.end();
+       p++) {
+    parent->info.stats.sub(p->second->info.stats);
   }
 }  
 
