@@ -198,7 +198,7 @@ bool FileStore::parse_object(char *s, pobject_t& o)
   o.oid.ino = strtoull(s, &s, 16);
   o.oid.bno = strtoull(s+1, &s, 16);
   o.oid.pad = strtoull(s+1, &s, 16);
-  o.snap = strtoull(s, &s, 16);
+  o.snap = strtoull(s+1, &s, 16);
   return true;
 }
 
