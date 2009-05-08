@@ -665,7 +665,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
   } 
 
   // wrlocked?
-  if (op->get_snapid() == CEPH_NOSNAP &&
+  if ((op->get_snapid() == 0 || op->get_snapid() == CEPH_NOSNAP) &&
       block_if_wrlocked(op, oi)) 
     return;
 
@@ -2117,7 +2117,7 @@ bool ReplicatedPG::pull(sobject_t soid)
   interval_set<__u64> data_subset;
 
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
-  if (soid.snap < CEPH_NOSNAP) {
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {
     pobject_t head = soid;
     head.snap = CEPH_NOSNAP;
     
@@ -2144,7 +2144,7 @@ bool ReplicatedPG::pull(sobject_t soid)
     dout(10) << " pulling " << data_subset << ", will clone " << clone_subsets
 	     << dendl;
   } else {
-    // pulling head.
+    // pulling head or unversioned object.
     // always pull the whole thing.
   }
 
@@ -2191,7 +2191,7 @@ void ReplicatedPG::push_to_replica(sobject_t soid, int peer)
   object_info_t oi(bv);
   
   // are we doing a clone on the replica?
-  if (soid.snap < CEPH_NOSNAP) {	
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {	
     pobject_t head = soid;
     head.snap = CEPH_NOSNAP;
     if (peer_missing[peer].is_missing(head) &&
@@ -2222,7 +2222,7 @@ void ReplicatedPG::push_to_replica(sobject_t soid, int peer)
     calc_clone_subsets(hoi.snapset, soid, peer_missing[peer],
 		       data_subset, clone_subsets);
   } else {
-    // pushing head.
+    // pushing head or unversioned object.
     // base this on partially on replica's clones?
     dout(15) << "push_to_replica head snapset is " << oi.snapset << dendl;
     calc_head_subsets(oi.snapset, soid, peer_missing[peer], data_subset, clone_subsets);
@@ -2399,7 +2399,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   clone_subsets = op->clone_subsets;
 
   if (is_primary()) {
-    if (soid.snap < CEPH_NOSNAP) {
+    if (soid.snap && soid.snap < CEPH_NOSNAP) {
       // clone.  make sure we have enough data.
       pobject_t head = soid;
       head.snap = CEPH_NOSNAP;
@@ -2452,7 +2452,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	dout(20) << " new data len is " << data.length() << dendl;
       }
     } else {
-      // head. for now, primary will _only_ pull full copies of the head.
+      // head|unversioned. for now, primary will _only_ pull full copies of the head.
       assert(op->clone_subsets.empty());
     }
   }
@@ -2488,7 +2488,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     t.touch(info.pgid.to_coll(), soid);
 
   t.setattrs(info.pgid.to_coll(), soid, op->attrset);
-  if (soid.snap != CEPH_NOSNAP &&
+  if (soid.snap && soid.snap < CEPH_NOSNAP &&
       op->attrset.count(OI_ATTR)) {
     bufferlist bl;
     bl.push_back(op->attrset[OI_ATTR]);
