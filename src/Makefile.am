@@ -232,6 +232,7 @@ libmon_a_SOURCES = \
 	mon/ClientMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
+	mon/ClassMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
 
@@ -329,6 +330,7 @@ noinst_HEADERS = \
         include/Context.h\
         include/Distribution.h\
 	include/LogEntry.h\
+	include/ClassEntry.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
@@ -449,6 +451,8 @@ noinst_HEADERS = \
         mds/mdstypes.h\
         mds/snap.h\
         messages/MCacheExpire.h\
+	messages/MClass.h\
+	messages/MClassAck.h\
         messages/MClientCaps.h\
         messages/MClientCapRelease.h\
         messages/MClientLease.h\
@@ -528,6 +532,7 @@ noinst_HEADERS = \
         messages/MRemoveSnaps.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
+        mon/ClassMonitor.h\
         mon/ClientMap.h\
         mon/ClientMonitor.h\
         mon/Elector.h\

@@ -219,7 +219,8 @@ enum {
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
 
 	/** exec **/
-	CEPH_OSD_OP_EXEC       = CEPH_OSD_OP_MODE_EXEC | 1,
+	CEPH_OSD_OP_LOAD_CLASS = CEPH_OSD_OP_MODE_EXEC | 1,
+	CEPH_OSD_OP_EXEC       = CEPH_OSD_OP_MODE_EXEC | 2,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
