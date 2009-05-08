@@ -223,7 +223,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   logclient(messenger, monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
-  state(STATE_BOOTING), boot_epoch(0),
+  state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
   recovery_tp("OSD::recovery_tp", 1),
   disk_tp("OSD::disk_tp", 2),
@@ -467,8 +467,8 @@ int OSD::shutdown()
 
   // note unmount epoch
   dout(10) << "noting clean unmount in epoch " << osdmap->get_epoch() << dendl;
-  superblock.epoch_mounted = boot_epoch;
-  superblock.epoch_unmounted = osdmap->get_epoch();
+  superblock.mounted = boot_epoch;
+  superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
   store->apply_transaction(t);
@@ -1915,16 +1915,17 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(0) << "map says i am down.  switching to boot state." << dendl;
     //shutdown();
 
-    // note in the superblock that we were clean up until this point.
-    superblock.epoch_mounted = boot_epoch;
-    superblock.epoch_unmounted = osdmap->get_epoch();
-
     state = STATE_BOOTING;
-    boot_epoch = 0;
+    up_epoch = 0;
 
     reset_heartbeat_peers();
   }
 
+  // note in the superblock that we were clean thru the prior epoch
+  if (boot_epoch && boot_epoch >= superblock.mounted) {
+    superblock.mounted = boot_epoch;
+    superblock.clean_thru = osdmap->get_epoch();
+  }
 
   // superblock and commit
   write_superblock(t);
@@ -1957,11 +1958,15 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
 	  << " removed_snaps " << removed_snaps
           << dendl;
 
-  if (!boot_epoch &&
+  if (!up_epoch &&
       osdmap->is_up(whoami) &&
       osdmap->get_inst(whoami) == messenger->get_myinst()) {
-    boot_epoch = osdmap->get_epoch();
-    dout(10) << "my boot_epoch is " << boot_epoch << dendl;
+    up_epoch = osdmap->get_epoch();
+    dout(10) << "up_epoch is " << up_epoch << dendl;
+    if (!boot_epoch) {
+      boot_epoch = osdmap->get_epoch();
+      dout(10) << "boot_epoch is " << boot_epoch << dendl;
+    }
   }
   
   // scan pg creations
@@ -2334,8 +2339,8 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     return false;
   }
 
-  if (epoch < boot_epoch) {
-    dout(7) << "from pre-boot epoch " << epoch << " < " << boot_epoch << dendl;
+  if (epoch < up_epoch) {
+    dout(7) << "from pre-up epoch " << epoch << " < " << up_epoch << dendl;
     delete m;
     return false;
   }
@@ -3535,8 +3540,8 @@ void OSD::handle_op(MOSDOp *op)
 void OSD::handle_sub_op(MOSDSubOp *op)
 {
   dout(10) << "handle_sub_op " << *op << " epoch " << op->map_epoch << dendl;
-  if (op->map_epoch < boot_epoch) {
-    dout(3) << "replica op from before boot" << dendl;
+  if (op->map_epoch < up_epoch) {
+    dout(3) << "replica op from before up" << dendl;
     delete op;
     return;
   }
@@ -3583,8 +3588,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 }
 void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
 {
-  if (op->get_map_epoch() < boot_epoch) {
-    dout(3) << "replica op reply from before boot" << dendl;
+  if (op->get_map_epoch() < up_epoch) {
+    dout(3) << "replica op reply from before up" << dendl;
     delete op;
     return;
   }

@@ -630,13 +630,14 @@ public:
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
   double weight;
 
-  epoch_t epoch_unmounted;           // last epoch i cleanly unmounted
-  epoch_t epoch_mounted;             // ...and the epoch i originally mounted it
+  // last interval over which i mounted and was then active
+  epoch_t mounted;     // last epoch i mounted
+  epoch_t clean_thru;  // epoch i was active and clean thru
 
   OSDSuperblock() : 
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    epoch_unmounted(0), epoch_mounted(0) {
+    mounted(0), clean_thru(0) {
     memset(&fsid, 0, sizeof(fsid));
   }
 
@@ -648,8 +649,8 @@ public:
     ::encode(oldest_map, bl);
     ::encode(newest_map, bl);
     ::encode(weight, bl);
-    ::encode(epoch_unmounted, bl);
-    ::encode(epoch_mounted, bl);
+    ::encode(clean_thru, bl);
+    ::encode(mounted, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(magic, bl);
@@ -659,8 +660,8 @@ public:
     ::decode(oldest_map, bl);
     ::decode(newest_map, bl);
     ::decode(weight, bl);
-    ::decode(epoch_unmounted, bl);
-    ::decode(epoch_mounted, bl);
+    ::decode(clean_thru, bl);
+    ::decode(mounted, bl);
   }
 };
 WRITE_CLASS_ENCODER(OSDSuperblock)
@@ -671,7 +672,7 @@ inline ostream& operator<<(ostream& out, OSDSuperblock& sb)
              << " osd" << sb.whoami
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map << "]"
-	     << " lci=[" << sb.epoch_mounted << "," << sb.epoch_unmounted << "]"
+	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"
              << ")";
 }
 
