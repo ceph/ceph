@@ -1572,7 +1572,7 @@ void PG::update_stats()
   pg_stats_lock.Lock();
   if (is_primary()) {
     // update our stat summary
-    info.stats.reported.inc(osd->osdmap->get_epoch());
+    info.stats.reported.inc(info.history.same_primary_since);
     info.stats.version = info.last_update;
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
