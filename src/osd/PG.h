@@ -716,6 +716,7 @@ public:
   
   void trim_write_ahead();
 
+  bool recover_master_log(map< int, map<pg_t,Query> >& query_map);
   void peer(ObjectStore::Transaction& t, 
 	    map< int, map<pg_t,Query> >& query_map,
 	    map<int, MOSDPGInfo*> *activator_map=0);

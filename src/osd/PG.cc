@@ -974,21 +974,10 @@ void PG::clear_primary_state()
   osd->recovery_wq.dequeue(this);
 }
 
-void PG::peer(ObjectStore::Transaction& t, 
-              map< int, map<pg_t,Query> >& query_map,
-	      map<int, MOSDPGInfo*> *activator_map)
+
+// if false, stop.
+bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 {
-  dout(10) << "peer acting is " << acting << dendl;
-
-  if (!is_active())
-    state_set(PG_STATE_PEERING);
-  
-  if (prior_set.empty())
-    build_prior();
-
-  dout(10) << "peer prior_set is " << prior_set << dendl;
-  
-
   /** GET ALL PG::Info *********/
 
   // -- query info from everyone in prior_set.
@@ -1017,7 +1006,8 @@ void PG::peer(ObjectStore::Transaction& t,
       dout(10) << " not querying down osd" << *it << dendl;
     }
   }
-  if (missing_info) return;
+  if (missing_info)
+    return false;
 
   
   // -- ok, we have all (prior_set) info.  (and maybe others.)
@@ -1087,7 +1077,7 @@ void PG::peer(ObjectStore::Transaction& t,
       // try.  until then, just get the full backlogs.
       if (!log.backlog) {
 	osd->queue_generate_backlog(this);
-	return;
+	return false;
       }
       
       if (peer_summary_requested.count(newest_update_osd)) {
@@ -1104,7 +1094,7 @@ void PG::peer(ObjectStore::Transaction& t,
 	peer_summary_requested.insert(newest_update_osd);
       }
     }
-    return;
+    return false;
   } else {
     dout(10) << " newest_update " << info.last_update << " (me)" << dendl;
   }
@@ -1113,7 +1103,7 @@ void PG::peer(ObjectStore::Transaction& t,
 
   if (is_down()) {
     dout(10) << " down.  we wait." << dendl;    
-    return;
+    return false;
   }
 
   have_master_log = true;
@@ -1125,8 +1115,31 @@ void PG::peer(ObjectStore::Transaction& t,
              << log.bottom << " > oldest_update " << oldest_update
              << dendl;
     osd->queue_generate_backlog(this);
-    return;
+    return false;
   }
+
+  return true;
+}
+
+
+void PG::peer(ObjectStore::Transaction& t, 
+              map< int, map<pg_t,Query> >& query_map,
+	      map<int, MOSDPGInfo*> *activator_map)
+{
+  dout(10) << "peer acting is " << acting << dendl;
+
+  if (!is_active())
+    state_set(PG_STATE_PEERING);
+  
+  if (prior_set.empty())
+    build_prior();
+
+  dout(10) << "peer prior_set is " << prior_set << dendl;
+  
+  
+  if (!have_master_log)
+    if (!recover_master_log(query_map))
+      return;
 
 
   /** COLLECT MISSING+LOG FROM PEERS **********/
@@ -1666,7 +1679,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 
   map<__u64,eversion_t>::iterator p = ondisklog.block_map.begin();
   while (p != ondisklog.block_map.end()) {
-    dout(15) << "    " << p->first << " -> " << p->second << dendl;
+    //dout(15) << "    " << p->first << " -> " << p->second << dendl;
     p++;
     if (p == ondisklog.block_map.end() ||
         p->second > v) {  // too far!
@@ -1674,7 +1687,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
       break;
     }
   }
-  dout(15) << "  * " << p->first << " -> " << p->second << dendl;
+  //dout(15) << "  * " << p->first << " -> " << p->second << dendl;
   if (p == ondisklog.block_map.begin()) 
     return;  // can't trim anything!
   
