@@ -118,6 +118,10 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- fix client op replay
+  - ordering
+  - should to set caps/lock states so that ops can proceed without revoking from client
+  - need to make sure replayed ops finish before new ops proceed.  globally across the cluster.  ick.
 - fix up *_RDCACHE vs FILE_RDCACHE semantics
   - ability to read attribute value is distinct from being able to hold cached pages?
 - file recovery maybe needs to scan entire file range for a truncation event?  (and object attr maybe needs file offset, not object offset, or original truncation?)
