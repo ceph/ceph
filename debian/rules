@@ -1,31 +1,91 @@
 #!/usr/bin/make -f
-
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+# Uncomment this to turn on verbose mode.
 export DH_VERBOSE=1
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+	touch configure-stamp
+build: build-stamp
+build-stamp: configure-stamp  
+	dh_testdir
 
-CC=`which gcc`
-CXX=`which g++`
+	./autogen.sh
+	./configure --prefix=/usr
+	$(MAKE)
 
-DEB_PYTHON_SYSTEM=pycentral
-DEB_DH_INSTALL_SOURCEDIR = debian/tmp
-DEB_DH_INSTALLINIT_ARGS = --no-restart-on-upgrade --no-start
+	touch $@
+clean: 
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
 
-include /usr/share/cdbs/1/rules/debhelper.mk
-include /usr/share/cdbs/1/class/autotools.mk
+	test ! -f Makefile || $(MAKE) clean
 
-common-install-arch::
-	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/share/doc/ceph
-	cp debian/README.ceph $(DEB_DH_INSTALL_SOURCEDIR)/usr/share/doc/ceph/
-	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph
-	(cd src/kernel ; tar -hvcf - * ) | ( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph ; tar -xf - )
-	touch $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/NEWS
-	touch $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/README
-	mkdir -p $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
-	-cp debian/* $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian
-	rm $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/init.*
-	rm $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/ceph.init
-	mv $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules.modules.in $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
-	chmod +x $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules/ceph/debian/rules
-	( cd $(DEB_DH_INSTALL_SOURCEDIR)/usr/src ; tar -cjf ceph.tar.bz2 modules )
-#	rm -rf $(DEB_DH_INSTALL_SOURCEDIR)/usr/src/modules
-	find $(DEB_DH_INSTALL_SOURCEDIR)
+	dh_clean 
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k 
+	dh_installdirs
 
+	$(MAKE) DESTDIR=$(CURDIR) install
+
+	mkdir -p etc/ceph
+	cp src/sample.ceph.conf etc/ceph
+
+	# kernel module source
+	mkdir -p usr/src/modules/ceph
+	(cd src/kernel ; tar -hvcf - * ) | ( cd usr/src/modules/ceph ; tar -xf - )
+	touch usr/src/modules/ceph/NEWS
+	touch usr/src/modules/ceph/README
+	mkdir -p usr/src/modules/ceph/debian
+	-cp debian/* usr/src/modules/ceph/debian
+	rm usr/src/modules/ceph/debian/init.*
+	rm usr/src/modules/ceph/debian/ceph.init
+	mv usr/src/modules/ceph/debian/rules.modules.in usr/src/modules/ceph/debian/rules
+	chmod +x usr/src/modules/ceph/debian/rules
+	( cd usr/src ; tar -cjf ceph.tar.bz2 modules )
+
+
+# Add here commands to install the package into debian/testpack.
+# Build architecture-independent files here.
+binary-indep: build install
+# We have nothing to do by default.
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs 
+	dh_installdocs
+	dh_installexamples
+	dh_install
+#	dh_installmenu
+#	dh_installdebconf	
+#	dh_installlogrotate
+#	dh_installemacsen
+#	dh_installpam
+#	dh_installmime
+#	dh_python
+	dh_installinit
+#	dh_installcron
+#	dh_installinfo
+	dh_installman
+	dh_link
+#	dh_strip
+	dh_compress
+	dh_fixperms
+#	dh_perl
+#	dh_makeshlibs
+	dh_installdeb
+	dh_shlibdeps
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure
