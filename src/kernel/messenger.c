@@ -1099,7 +1099,10 @@ static int process_connect(struct ceph_connection *con)
 	 */
 	if (!ceph_entity_addr_is_local(&con->peer_addr,
 				       &con->actual_peer_addr) &&
-	    con->actual_peer_addr.ipaddr.sin_addr.s_addr != 0) {
+	    !(con->actual_peer_addr.ipaddr.sin_addr.s_addr == 0 &&
+	      con->actual_peer_addr.ipaddr.sin_port ==
+	        con->peer_addr.ipaddr.sin_port &&
+	      con->actual_peer_addr.nonce == con->peer_addr.nonce)) {
 		derr(1, "process_connect wrong peer, want %u.%u.%u.%u:%u/%d, "
 		     "got %u.%u.%u.%u:%u/%d, wtf\n",
 		     IPQUADPORT(con->peer_addr.ipaddr),
