@@ -523,9 +523,6 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
 	lock->is_stable())
       lock->get_parent()->auth_unpin(lock);
 
-    if (caps)
-      in->try_drop_loner();
-
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
     if (caps) {
@@ -572,9 +569,10 @@ bool Locker::eval(CInode *in, int mask)
     eval_any(&in->nestlock, &need_issue);
 
   // drop loner?
-  if (in->is_auth() && in->get_loner() >= 0) {
-    if (in->multiple_nonstale_caps() &&
-	in->try_drop_loner()) {
+  if (in->is_auth() && in->get_loner() >= 0 &&
+      in->multiple_nonstale_caps()) {
+    dout(10) << "  trying to drop loner" << dendl;
+    if (in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
       need_issue = true;
     }
@@ -2411,16 +2409,6 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock, need_issue);
-
-    // drop loner?
-    if (in && in->get_loner() >= 0) {
-      if (in->multiple_nonstale_caps() &&
-	  in->try_drop_loner()) {
-	dout(10) << "  dropped loner" << dendl;
-	if (need_issue)
-	  *need_issue = true;
-      }
-    }
   }
 }
 
@@ -2489,8 +2477,6 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     lock->encode_locked_state(data);
     send_lock_message(lock, LOCK_AC_SYNC, data);
   }
-  if (in)
-    in->try_drop_loner();
   lock->set_state(LOCK_SYNC);
   lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
   return true;
@@ -2603,8 +2589,6 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   if (gather) {
     lock->get_parent()->auth_pin(lock);
   } else {
-    if (in)
-      in->try_drop_loner();
     lock->set_state(LOCK_LOCK);
     lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
   }
@@ -2948,8 +2932,6 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
     in->auth_pin(lock);
   } else {
     // do tempsync
-    in->try_drop_loner();
-    
     lock->set_state(LOCK_TSYN);
     lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
   }
@@ -3068,16 +3050,6 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	simple_sync(lock, need_issue);
       else
 	dout(10) << " waiting for wrlock to drain" << dendl;
-
-      // drop loner?
-      if (in->get_loner() >= 0) {
-	if (in->multiple_nonstale_caps() &&
-	    in->try_drop_loner()) {
-	  dout(10) << "  dropped loner" << dendl;
-	  if (need_issue)
-	    *need_issue = true;
-	}
-      }
     }    
   }
   
@@ -3187,7 +3159,6 @@ void Locker::file_mixed(ScatterLock *lock, bool *need_issue)
     if (gather)
       lock->get_parent()->auth_pin(lock);
     else {
-      in->try_drop_loner();
       lock->set_state(LOCK_MIX);
       lock->clear_scatter_wanted();
       if (in->is_replicated()) {

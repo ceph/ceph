@@ -595,7 +595,6 @@ public:
 	n++;
       }
     return false;
-
   }
   int get_loner() {
     return loner_cap;
