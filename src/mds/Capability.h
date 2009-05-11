@@ -198,6 +198,7 @@ public:
   void set_last_issue() { last_issue = last_sent; }
   void set_last_issue_stamp(utime_t t) { last_issue_stamp = t; }
 
+  void set_cap_id(__u64 i) { cap_id = i; }
   __u64 get_cap_id() { return cap_id; }
 
   //ceph_seq_t get_last_issue() { return last_issue; }
