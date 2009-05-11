@@ -372,7 +372,7 @@ static int c3_initialized = 0;
 
 static C3 *c3p;
 
-#include "c3.h"
+#include "librados.h"
 
 extern "C" int c3_initialize(int argc, const char **argv) 
 {

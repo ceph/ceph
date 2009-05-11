@@ -21,8 +21,8 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a
-c3_SOURCES = s3/c3.cc msg/SimpleMessenger.cc
-c3_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
+testrados_SOURCES = librados/testrados.cc msg/SimpleMessenger.cc
+testrados_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
 
 mount_ceph_SOURCES = mount.ceph.c
 
@@ -50,7 +50,7 @@ bin_PROGRAMS = \
 	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
-	c3
+	testrados
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -403,6 +403,7 @@ noinst_HEADERS = \
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
+	librados/librados.h\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
