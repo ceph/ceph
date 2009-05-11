@@ -40,8 +40,6 @@ using namespace std;
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 
-#include "libs3.h"
-
 void usage()
 {
   cerr << "usage: c3 -i name [flags] [--mds rank] [--shadow rank]\n";
