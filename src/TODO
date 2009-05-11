@@ -36,11 +36,19 @@ v0.7.3
 /- osd re-up attempt when marked down
 
 v0.8
+- osd recovery fixes
+- backup homiebackup5
+- backup backup.
 - bug fixes?
 
 v0.9
+- librados
+- object classes
 - make mds exhert memory pressure on client caps, leases
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
+
+
+
 
 later
 - client reconnect after long eviction; and slow delayed reconnect
