@@ -102,7 +102,7 @@ BUILT_SOURCES += libcrush.so
 
 # librados
 librados_so_a_SOURCES = \
-	librados/librados.cc \
+	librados.cc \
 	msg/SimpleMessenger.cc \
 	osdc/Objecter.cc \
 	mon/MonClient.cc \
@@ -126,7 +126,7 @@ librados.so: ${librados_so_a_SOURCES}
 	${CXX} -fPIC -shared -Wl,-soname,$@.1 -I. ${AM_CXXFLAGS} ${LIBS} $^ -o $@
 BUILT_SOURCES += librados.so
 
-testrados_SOURCES = librados/testrados.cc
+testrados_SOURCES = testrados.cc
 
 
 
@@ -424,7 +424,7 @@ noinst_HEADERS = \
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
-	librados/librados.h\
+	include/librados.h\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\

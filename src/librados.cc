@@ -366,7 +366,7 @@ static int rados_initialized = 0;
 
 static RadosClient *radosp;
 
-#include "librados.h"
+#include "include/librados.h"
 
 extern "C" int rados_initialize(int argc, const char **argv) 
 {
