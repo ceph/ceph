@@ -37,6 +37,8 @@ using namespace std;
 #include "osdc/Objecter.h"
 
 #include "messages/MOSDGetMap.h"
+#include "messages/MClientMount.h"
+#include "messages/MClientMountAck.h"
 
 #include "libs3.h"
 
@@ -54,8 +56,8 @@ class C3 : public Dispatcher
 {
   MonMap monmap;
   OSDMap osdmap;
-  MonClient mc;
   Messenger *messenger;
+  MonClient *mc;
 
   bool _dispatch(Message *m);
   bool dispatch_impl(Message *m);
@@ -63,7 +65,6 @@ class C3 : public Dispatcher
   Objecter *objecter;
 
   Mutex lock;
-
 
  class C_WriteAck : public Context {
     object_t oid;
@@ -73,7 +74,7 @@ class C3 : public Dispatcher
     tid_t tid;
     C_WriteAck(object_t o, loff_t s, size_t l) : oid(o), start(s), length(l) {}
     void finish(int r) {
-      cerr << "WriteAck finish" << std::endl;
+      cerr << "WriteAck finish r=" << r << std::endl;
     }
   };
   class C_WriteCommit : public Context {
@@ -84,7 +85,7 @@ class C3 : public Dispatcher
     tid_t tid;
     C_WriteCommit(object_t o, loff_t s, size_t l) : oid(o), start(s), length(l) {}
     void finish(int r) {
-      cerr << "WriteCommit finish" << std::endl;
+      cerr << "WriteCommit finish r=" << r << std::endl;
     }
   };
   class C_ReadCommit : public Context {
@@ -97,7 +98,7 @@ class C3 : public Dispatcher
     C_ReadCommit(object_t o, loff_t s, size_t l, bufferlist *b) : oid(o), start(s), length(l), bl(b) {}
     void finish(int r) {
 	char *buf = bl->c_str();
-      cerr << "ReadCommit finish" << std::endl;
+      cerr << "ReadCommit finish r=" << r << std::endl;
       for (size_t i=0; i<bl->length(); i++)
 	cerr << (int)buf[i] << " ";
       cerr << std::endl;
@@ -105,25 +106,27 @@ class C3 : public Dispatcher
   };
 
 public:
-  C3() : messenger(NULL), lock("c3") {}
+  C3() : messenger(NULL), mc(NULL), lock("c3") {}
+  ~C3();
   bool init();
-
 
   void write();
   void read();
 };
 
-
 bool C3::init()
 {
+  mc = new MonClient(&monmap, messenger);
+
+  MonMap *mm = mc->get_monmap();
   // get monmap
-  if (mc.get_monmap(&monmap) < 0)
+  if (!mm)
     return false;
 
   rank.bind();
   cout << "starting c3." << g_conf.id
        << " at " << rank.get_rank_addr() 
-       << " fsid " << monmap.get_fsid()
+       << " fsid " << mm->get_fsid()
        << std::endl;
 
   messenger = rank.register_entity(entity_name_t::MDS(-1));
@@ -138,19 +141,27 @@ bool C3::init()
 
   rank.start(1);
 
-  objecter = new Objecter(messenger, &monmap, &osdmap, lock);
+  objecter = new Objecter(messenger, mm, &osdmap, lock);
   if (!objecter)
     return false;
 
-  objecter->set_client_incarnation(0);
-
   lock.Lock();
-  objecter->init();
   messenger->set_dispatcher(this);
+
+  objecter->set_client_incarnation(0);
+  objecter->init();
 
   lock.Unlock();
 
   return true;
+}
+
+C3::~C3()
+{
+  if (messenger)
+    delete messenger;
+  if (mc)
+    delete mc;
 }
 
 
@@ -218,7 +229,7 @@ bool C3::_dispatch(Message *m)
 void C3::write()
 {
   SnapContext snapc;
-  object_t oid(0x1020, 0);
+  object_t oid(0x1030, 0);
   loff_t off = 0;
   size_t len = 1024;
   bufferlist bl;
@@ -226,14 +237,14 @@ void C3::write()
   char buf[len];
 
   for (size_t i=0; i<len; i++)
-    buf[i] = i%20;
+    buf[i] = i%10;
 
   bl.append(buf, len);
 
   C_WriteAck *onack = new C_WriteAck(oid, off, len);
   C_WriteCommit *oncommit = new C_WriteCommit(oid, off, len);
 
-  ceph_object_layout layout = objecter->osdmap->file_to_object_layout(oid, g_default_mds_dir_layout);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
 
   dout(0) << "going to write" << dendl;
 
@@ -248,14 +259,14 @@ void C3::write()
 void C3::read()
 {
   SnapContext snapc;
-  object_t oid(0x1020, 0);
+  object_t oid(0x1030, 0);
   loff_t off = 0;
   size_t len = 1024;
   bufferlist *bl = new bufferlist;
 
   C_ReadCommit *oncommit = new C_ReadCommit(oid, off, len, bl);
 
-  ceph_object_layout layout = objecter->osdmap->file_to_object_layout(oid, g_default_mds_dir_layout);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
 
   dout(0) << "going to read" << dendl;
 
@@ -291,6 +302,7 @@ int main(int argc, const char **argv)
   c3.init();
 
   c3.write();
+  sleep(1);
   c3.read();
 
   rank.wait();
