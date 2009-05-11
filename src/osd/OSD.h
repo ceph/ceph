@@ -762,6 +762,8 @@ private:
   void force_remount();
 
   LogClient *get_logclient() { return &logclient; }
+
+  void get_class(const char *name);
 };
 
 #endif

@@ -741,6 +741,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
    case CEPH_OSD_OP_EXEC:
     {
+        dout(0) << "CEPH_OSD_OP_EXEC" << dendl;
+	osd->get_class("test");
 	bufferlist bl;
 	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
 
@@ -750,6 +752,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	if (r >= 0)  {
 	  p->length = r;
 	  char *buf = bl.c_str();
+
           for (unsigned int i=0; i<bl.length(); i++)
 	     if (isdigit(buf[i]))
 		buf[i] = '?';

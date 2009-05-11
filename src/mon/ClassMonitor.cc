@@ -202,12 +202,10 @@ bool ClassMonitor::preprocess_class(MClass *m)
   dout(10) << "preprocess_class " << *m << " from " << m->get_orig_source() << dendl;
   
   int num_new = 0;
-  for (deque<ClassLibraryIncremental>::iterator p = m->entries.begin();
-       p != m->entries.end();
+  for (deque<ClassLibrary>::iterator p = m->info.begin();
+       p != m->info.end();
        p++) {
-    ClassLibrary info;
-    p->decode_info(info);
-    if (!pending_list.contains(info.name))
+    if (!pending_list.contains((*p).name))
       num_new++;
   }
   if (!num_new) {
@@ -226,18 +224,18 @@ bool ClassMonitor::prepare_class(MClass *m)
     delete m;
     return false;
   }
+  deque<ClassImpl>::iterator impl_iter = m->impl.begin();
 
-  for (deque<ClassLibraryIncremental>::iterator p = m->entries.begin();
-       p != m->entries.end();
-       p++) {
-    ClassLibrary info;
-    ClassImpl impl;
-    p->decode_info(info);
-    p->decode_impl(impl);
-    dout(10) << " writing class " << info << dendl;
-    if (!pending_list.contains(info.name)) {
-      pending_list.add(info);
-      pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, *p));
+  for (deque<ClassLibrary>::iterator p = m->info.begin();
+       p != m->info.end();
+       p++, impl_iter++) {
+    dout(10) << " writing class " << *p << dendl;
+    if (!pending_list.contains((*p).name)) {
+      ClassLibraryIncremental inc;
+      ::encode(*p, inc.info);
+      ::encode(*impl_iter, inc.impl);
+      pending_list.add(*p);
+      pending_class.insert(pair<utime_t,ClassLibraryIncremental>((*impl_iter).stamp, inc));
     }
   }
 
@@ -248,8 +246,7 @@ bool ClassMonitor::prepare_class(MClass *m)
 void ClassMonitor::_updated_class(MClass *m, entity_inst_t who)
 {
   dout(7) << "_updated_class for " << who << dendl;
-  ClassImpl impl;
-  m->entries.rbegin()->decode_impl(impl);
+  ClassImpl impl = *(m->impl.rbegin());
   mon->messenger->send_message(new MClassAck(m->fsid, impl.seq), who);
   delete m;
 }

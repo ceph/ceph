@@ -67,6 +67,8 @@
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
 
+#include "messages/MClass.h"
+
 #include "common/Logger.h"
 #include "common/LogType.h"
 #include "common/Timer.h"
@@ -3676,4 +3678,16 @@ void OSD::wait_for_no_ops()
 }
 
 
+void OSD::get_class(const char *name)
+{
+  MClass *m = new MClass(osdmap->get_fsid(), 0);
+  ClassLibrary info;
+  info.name = name;
+  m->info.push_back(info);
+  m->action = CLASS_GET;
+  int mon = monmap->pick_mon();
+  dout(0) << "sending class message " << *m << " to mon" << mon << dendl;
+  messenger->send_message(m,
+			    monmap->get_inst(mon));
+}
 

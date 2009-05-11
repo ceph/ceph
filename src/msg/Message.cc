@@ -111,6 +111,8 @@ using namespace std;
 
 #include "messages/MLock.h"
 
+#include "messages/MClass.h"
+
 #include "config.h"
 
 #define DEBUGLVL  10    // debug level of output
@@ -430,6 +432,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case CEPH_MSG_SHUTDOWN:
     m = new MGenericMessage(type);
+    break;
+
+  case MSG_CLASS:
+    m = new MClass();
     break;
 
   default:

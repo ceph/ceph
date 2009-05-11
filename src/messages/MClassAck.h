@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MLOGACK_H
-#define __MLOGACK_H
+#ifndef __MCLASSACK_H
+#define __MCLASSACK_H
 
 #include "include/ClassEntry.h"
 
@@ -22,8 +22,8 @@ public:
   ceph_fsid_t fsid;
   version_t last;
   
-  MClassAck() : Message(MSG_LOGACK) {}
-  MClassAck(ceph_fsid_t& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
+  MClassAck() : Message(MSG_CLASS_ACK) {}
+  MClassAck(ceph_fsid_t& f, version_t l) : Message(MSG_CLASS_ACK), fsid(f), last(l) {}
 
   const char *get_type_name() { return "class_ack"; }
   void print(ostream& out) {
