@@ -71,7 +71,8 @@ void ClassMonitor::create_initial(bufferlist& bl)
   i.stamp = g_clock.now();
   ClassLibraryIncremental inc;
   ::encode(i, inc.impl);
-  inc.add = false;
+  inc.add = true;
+
 #if 0
   pending_class.insert(pair<utime_t,ClassImpl>(e.stamp, e));
   e.name = "test2";
@@ -112,13 +113,17 @@ bool ClassMonitor::update_from_paxos()
     bufferlist::iterator p = bl.begin();
     ClassLibraryIncremental inc;
     inc.decode(p);
+    ClassImpl impl;
+    inc.decode_impl(impl);
     if (inc.add) {
-      ClassImpl impl;
-       bufferlist::iterator impl_iter = inc.impl.begin();
-      impl.decode(impl_iter);
       mon->store->put_bl_ss(inc.impl, "class_impl", impl.name.c_str());
+      dout(0) << "adding name=" << impl.name << " version=" << impl.version << dendl;
+      list.add(impl.name, impl.version);
+    map<string, ClassLibrary>::iterator iter = list.library_map.begin();
+    for (iter=list.library_map.begin(); iter != list.library_map.end(); ++iter)
+       dout(0) << "hooray: " << iter->first << dendl;
     } else {
-      /* this is a removal */
+      list.remove(impl.name, impl.version);
     }
 
     list.version++;

@@ -63,16 +63,19 @@ struct ClassLibraryIncremental {
    bufferlist impl;
 
   void encode(bufferlist& bl) const {
+    ::encode(add, bl);
     ::encode(info, bl);
     ::encode(impl, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(add, bl);
     ::decode(info, bl);
     ::decode(impl, bl);
   }
 
   void decode_impl(ClassImpl& i) {
-     ::decode(i, impl);
+     bufferlist::iterator iter = impl.begin();
+     ::decode(i, iter);
   }
 };
 
@@ -88,6 +91,10 @@ struct ClassList {
     ClassLibrary library;
     library.version = version;
     library_map[name] = library;
+  }
+
+  void remove(const string& name, const version_t version) {
+    /* fixme */
   }
 
   bool contains(string& name) {

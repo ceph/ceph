@@ -191,16 +191,11 @@ void handle_notify(MMonObserveNotify *notify)
 	}
       } else {
 	ClassImpl impl;
-        impl.decode(p);
 
-	dout(0) << "   class " << impl << dendl;
-#if 0
-	ClassEntry le;
 	while (!p.end()) {
-	  le.decode(p);
-	  dout(0) << "   class " << le << dendl;
+          impl.decode(p);
+	  dout(0) << "   class " << impl << dendl;
 	}
-#endif
       }
       break;
     }
