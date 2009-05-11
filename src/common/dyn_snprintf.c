@@ -43,7 +43,7 @@ int dyn_snprintf(char **pbuf, size_t *pmax_size, int nargs, const char *format, 
 	va_end(vl);
 	ret = CALL_SNPRINTF(*pbuf, *pmax_size, format, args);
 
-	if (ret >= *pmax_size) {
+	if (ret >= (int)*pmax_size) {
 		*pmax_size = ret * 2;
 		*pbuf = (char *)realloc(*pbuf, *pmax_size);
 		ret = CALL_SNPRINTF(*pbuf, *pmax_size, format, args);

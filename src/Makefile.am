@@ -21,8 +21,6 @@ osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a
-testrados_SOURCES = librados/testrados.cc msg/SimpleMessenger.cc
-testrados_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
 
 mount_ceph_SOURCES = mount.ceph.c
 
@@ -89,25 +87,48 @@ bin_PROGRAMS += psim fakesyn
 endif
 
 
-## libcrush.so
+##########
+BUILT_SOURCES =
+
+# libcrush.so
 libcrush_so_a_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
 	crush/crush.c
-libcrush_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
 
-#libcrush.so: libcrush_so.a
-#	${CC} -I. -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} ${LIBS} ${libcrush_so_a_SOURCES} -o $@
-#BUILT_SOURCES = libcrush.so
+libcrush.so: ${libcrush_so_a_SOURCES}
+	${CC} -I. -fPIC -shared -Wl,-soname,$@.1 ${AM_CFLAGS} ${LIBS} $^ -o $@
+BUILT_SOURCES += libcrush.so
 
-# crushwrapper
-#SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
-#crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
-#	${SWIG} -perl5 -c++ -shadow -outdir . $<
-#
-#libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
-#	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
-#BUILT_SOURCES = libCrushWrapper.so
+# librados
+librados_so_a_SOURCES = \
+	librados/librados.cc \
+	msg/SimpleMessenger.cc \
+	osdc/Objecter.cc \
+	mon/MonClient.cc \
+	msg/Message.cc \
+	common/Clock.cc \
+	common/Timer.cc \
+	common/Finisher.cc \
+	common/sctp_crc32.c\
+	common/assert.cc \
+	common/ConfUtils.cc \
+	mon/MonMap.cc \
+	mon/MonClient.cc \
+	osd/OSDMap.cc \
+	common/tls.cc \
+	common/common_init.cc \
+	common/buffer.cc \
+	common/debug.cc \
+	config.cc \
+	common/lockdep.cc
+librados.so: ${librados_so_a_SOURCES}
+	${CXX} -fPIC -shared -Wl,-soname,$@.1 -I. ${AM_CXXFLAGS} ${LIBS} $^ -o $@
+BUILT_SOURCES += librados.so
+
+testrados_SOURCES = librados/testrados.cc
+
+
 
 
 ## libcephclient.so
@@ -160,7 +181,7 @@ noinst_LIBRARIES = \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a
 
-noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
+noinst_LIBRARIES += libcrush_so.a librados_so.a #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh \
