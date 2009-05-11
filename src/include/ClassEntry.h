@@ -90,6 +90,7 @@ struct ClassList {
   void add(const string& name, const version_t version) {
     ClassLibrary library;
     library.version = version;
+    library.name = name;
     library_map[name] = library;
   }
 

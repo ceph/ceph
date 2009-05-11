@@ -187,7 +187,7 @@ void handle_notify(MMonObserveNotify *notify)
 	// show the first class info
         map<string, ClassLibrary>::iterator iter = list.library_map.begin();
 	if (iter != list.library_map.end()) {
-	  dout(0) << "   class " <<  iter->first << dendl;
+	  dout(0) << "   class " <<  iter->second << dendl;
 	}
       } else {
 	ClassImpl impl;

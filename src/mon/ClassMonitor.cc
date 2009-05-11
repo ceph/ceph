@@ -66,7 +66,7 @@ void ClassMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial -- creating initial map" << dendl;
   ClassImpl i;
   i.name = "test";
-  i.version = 0;
+  i.version = 12;
   i.seq = 0;
   i.stamp = g_clock.now();
   ClassLibraryIncremental inc;
@@ -112,16 +112,13 @@ bool ClassMonitor::update_from_paxos()
 
     bufferlist::iterator p = bl.begin();
     ClassLibraryIncremental inc;
-    inc.decode(p);
+    ::decode(inc, p);
     ClassImpl impl;
     inc.decode_impl(impl);
     if (inc.add) {
       mon->store->put_bl_ss(inc.impl, "class_impl", impl.name.c_str());
       dout(0) << "adding name=" << impl.name << " version=" << impl.version << dendl;
       list.add(impl.name, impl.version);
-    map<string, ClassLibrary>::iterator iter = list.library_map.begin();
-    for (iter=list.library_map.begin(); iter != list.library_map.end(); ++iter)
-       dout(0) << "hooray: " << iter->first << dendl;
     } else {
       list.remove(impl.name, impl.version);
     }
