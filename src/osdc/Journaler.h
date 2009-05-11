@@ -201,7 +201,7 @@ public:
   friend class C_Trim;
 
 public:
-  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk, __s64 fl=0, __s64 pff=0) : 
+  Journaler(inodeno_t ino_, int pool, const char *mag, Objecter *obj, Logger *l, int lkey, Mutex *lk) : 
     last_written(mag), last_committed(mag),
     ino(ino_), pg_pool(pool), magic(mag),
     objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
@@ -209,16 +209,10 @@ public:
     state(STATE_UNDEF), error(0),
     write_pos(0), flush_pos(0), ack_pos(0), safe_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
-    fetch_len(fl), prefetch_from(pff),
+    fetch_len(0), prefetch_from(0),
     read_bl(0), on_read_finish(0), on_readable(0),
     expire_pos(0), trimming_pos(0), trimmed_pos(0) 
   {
-    // prefetch intelligently.
-    // (watch out, this is big if you use big objects or weird striping)
-    if (!fetch_len)
-      fetch_len = ceph_file_layout_period(layout) * g_conf.journaler_prefetch_periods;
-    if (!prefetch_from)
-      prefetch_from = fetch_len / 2;
   }
 
   // me
@@ -233,6 +227,8 @@ public:
   void create(ceph_file_layout *layout);
   void recover(Context *onfinish);
   void write_head(Context *onsave=0);
+
+  void set_layout(ceph_file_layout *l);
 
   bool is_active() { return state == STATE_ACTIVE; }
   int get_error() { return error; }
