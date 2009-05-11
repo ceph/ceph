@@ -19,20 +19,16 @@
 #include "include/encoding.h"
 
 struct ClassImpl {
-  string name;
-  version_t version;
   bufferlist binary;
   utime_t stamp;
   version_t seq;
 
   void encode(bufferlist& bl) const {
-    ::encode(name, bl);
-    ::encode(version, bl);
+    ::encode(binary, bl);
     ::encode(seq, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-    ::decode(version, bl);
+    ::decode(binary, bl);
     ::decode(seq, bl);
   }
 };
@@ -77,6 +73,11 @@ struct ClassLibraryIncremental {
      bufferlist::iterator iter = impl.begin();
      ::decode(i, iter);
   }
+
+  void decode_info(ClassLibrary& l) {
+     bufferlist::iterator iter = info.begin();
+     ::decode(l, iter);
+  }
 };
 
 WRITE_CLASS_ENCODER(ClassLibraryIncremental)
@@ -91,7 +92,11 @@ struct ClassList {
     ClassLibrary library;
     library.version = version;
     library.name = name;
-    library_map[name] = library;
+    add(library);
+  }
+
+  void add(ClassLibrary& library) {
+    library_map[library.name] = library;
   }
 
   void remove(const string& name, const version_t version) {
@@ -114,11 +119,6 @@ struct ClassList {
 WRITE_CLASS_ENCODER(ClassList)
 
 inline ostream& operator<<(ostream& out, const ClassLibrary& e)
-{
-  return out << e.name << " (v" << e.version << ")";
-}
-
-inline ostream& operator<<(ostream& out, const ClassImpl& e)
 {
   return out << e.name << " (v" << e.version << ")";
 }

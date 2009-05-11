@@ -22,9 +22,17 @@ public:
   ceph_fsid_t fsid;
   deque<ClassLibraryIncremental> entries;
   version_t last;
+  __s32 action;
+
+  enum {
+     CLASS_NOOP = 0,
+     CLASS_ADD,
+     CLASS_REMOVE,
+     CLASS_GET,
+  };
   
   MClass() : Message(MSG_CLASS) {}
-  MClass(ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) : Message(MSG_CLASS), fsid(f), entries(e), last(0) { }
+  MClass(ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) : Message(MSG_CLASS), fsid(f), entries(e), last(0), action(0) { }
   MClass(ceph_fsid_t& f, version_t l) : Message(MSG_CLASS), fsid(f), last(l) {}
 
   const char *get_type_name() { return "class"; }
@@ -41,12 +49,14 @@ public:
     ::encode(fsid, payload);
     ::encode(entries, payload);
     ::encode(last, payload);
+    ::encode(action, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(entries, p);
     ::decode(last, p);
+    ::decode(action, payload);
   }
 };
 

@@ -190,11 +190,11 @@ void handle_notify(MMonObserveNotify *notify)
 	  dout(0) << "   class " <<  iter->second << dendl;
 	}
       } else {
-	ClassImpl impl;
+	ClassLibrary info;
 
 	while (!p.end()) {
-          impl.decode(p);
-	  dout(0) << "   class " << impl << dendl;
+          info.decode(p);
+	  dout(0) << "   class " << info << dendl;
 	}
       }
       break;

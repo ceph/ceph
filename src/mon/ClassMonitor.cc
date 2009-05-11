@@ -65,20 +65,23 @@ void ClassMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
   ClassImpl i;
-  i.name = "test";
-  i.version = 12;
+  ClassLibrary l;
+  l.name = "test";
+  l.version = 12;
   i.seq = 0;
   i.stamp = g_clock.now();
+  char buf[1024];
+  memset(buf, 0x12, sizeof(buf));
+  {
+  int n;
+  for (n=0; n<1024; n++)
+  ::encode(buf[n], i.binary);
+  }
   ClassLibraryIncremental inc;
   ::encode(i, inc.impl);
+  ::encode(l, inc.info);
   inc.add = true;
 
-#if 0
-  pending_class.insert(pair<utime_t,ClassImpl>(e.stamp, e));
-  e.name = "test2";
-  e.version = 12;
-  e.seq = 1;
-#endif
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
@@ -114,13 +117,21 @@ bool ClassMonitor::update_from_paxos()
     ClassLibraryIncremental inc;
     ::decode(inc, p);
     ClassImpl impl;
+    ClassLibrary info;
     inc.decode_impl(impl);
+    inc.decode_info(info);
     if (inc.add) {
-      mon->store->put_bl_ss(inc.impl, "class_impl", impl.name.c_str());
-      dout(0) << "adding name=" << impl.name << " version=" << impl.version << dendl;
-      list.add(impl.name, impl.version);
+      char *store_name;
+      int len = info.name.length() + 16;
+      store_name = (char *)malloc(len);
+      snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
+      mon->store->put_bl_ss(inc.impl, "class_impl", store_name);
+      mon->store->append_bl_ss(inc.info, "class_impl", store_name);
+      dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
+      free(store_name);
+      list.add(info.name, info.version);
     } else {
-      list.remove(impl.name, impl.version);
+      list.remove(info.name, info.version);
     }
 
     list.version++;
@@ -194,9 +205,9 @@ bool ClassMonitor::preprocess_class(MClass *m)
   for (deque<ClassLibraryIncremental>::iterator p = m->entries.begin();
        p != m->entries.end();
        p++) {
-    ClassImpl impl;
-    p->decode_impl(impl);
-    if (!pending_list.contains(impl.name))
+    ClassLibrary info;
+    p->decode_info(info);
+    if (!pending_list.contains(info.name))
       num_new++;
   }
   if (!num_new) {
@@ -219,11 +230,13 @@ bool ClassMonitor::prepare_class(MClass *m)
   for (deque<ClassLibraryIncremental>::iterator p = m->entries.begin();
        p != m->entries.end();
        p++) {
+    ClassLibrary info;
     ClassImpl impl;
+    p->decode_info(info);
     p->decode_impl(impl);
-    dout(10) << " writing class " << impl << dendl;
-    if (!pending_list.contains(impl.name)) {
-      pending_list.add(impl.name, impl.version);
+    dout(10) << " writing class " << info << dendl;
+    if (!pending_list.contains(info.name)) {
+      pending_list.add(info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, *p));
     }
   }
