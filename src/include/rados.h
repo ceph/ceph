@@ -162,6 +162,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_MODE_RD    0x1000
 #define CEPH_OSD_OP_MODE_WR    0x2000
 #define CEPH_OSD_OP_MODE_SUB   0x4000
+#define CEPH_OSD_OP_MODE_EXEC  0x8000
 
 #define CEPH_OSD_OP_TYPE       0x0f00
 #define CEPH_OSD_OP_TYPE_LOCK  0x0100
@@ -216,6 +217,10 @@ enum {
 	CEPH_OSD_OP_RDUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
 	CEPH_OSD_OP_UPLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
+
+	/** exec **/
+	CEPH_OSD_OP_LOAD_CLASS = CEPH_OSD_OP_MODE_EXEC | 1,
+	CEPH_OSD_OP_EXEC       = CEPH_OSD_OP_MODE_EXEC | 2,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -283,6 +288,8 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_RDUNLOCK: return "rdunlock";
 	case CEPH_OSD_OP_UPLOCK: return "uplock";
 	case CEPH_OSD_OP_DNLOCK: return "dnlock";
+
+	case CEPH_OSD_OP_EXEC: return "exec";
 
 	default: return "???";
 	}

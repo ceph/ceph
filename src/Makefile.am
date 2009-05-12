@@ -47,7 +47,8 @@ bin_PROGRAMS = \
 	cmon cmds cosd csyn \
 	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
-	streamtest dupstore dumpjournal testmsgr
+	streamtest dupstore dumpjournal testmsgr \
+	testrados
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -86,25 +87,31 @@ bin_PROGRAMS += psim fakesyn
 endif
 
 
-## libcrush.so
-libcrush_so_a_SOURCES = \
+##########
+BUILT_SOURCES =
+lib_LTLIBRARIES = 
+
+# libcrush.so
+libcrush_la_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
 	crush/crush.c
-libcrush_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
+libcrush_la_CFLAGS = ${AM_CFLAGS}
+lib_LTLIBRARIES += libcrush.la
 
-#libcrush.so: libcrush_so.a
-#	${CC} -I. -fPIC -shared -Wl,-soname,$@.1 ${CFLAGS} ${LIBS} ${libcrush_so_a_SOURCES} -o $@
-#BUILT_SOURCES = libcrush.so
+# librados
+librados_la_SOURCES = \
+	librados.cc \
+	msg/SimpleMessenger.cc \
+	osdc/Objecter.cc \
+	${libcommon_a_SOURCES}
+librados_la_CFLAGS = ${AM_CFLAGS}
+librados_la_CXXFLAGS = ${AM_CXXFLAGS}
+lib_LTLIBRARIES += librados.la
 
-# crushwrapper
-#SWIG_FILES = crush/CrushWrapper.i crush/CrushWrapper.h
-#crush/CrushWrapper_wrap.cxx: ${SWIG_FILES}
-#	${SWIG} -perl5 -c++ -shadow -outdir . $<
-#
-#libCrushWrapper.so: crush/CrushWrapper_wrap.cxx libcrush_so.a
-#	${CXX} ${CXXFLAGS} ${SWIG_PL_INCLUDES} -I. -shared -fPIC $^ config.cc -o $@
-#BUILT_SOURCES = libCrushWrapper.so
+testrados_SOURCES = testrados.c
+testrados_LDADD = librados.la libcrush.la
+
 
 
 ## libcephclient.so
@@ -157,7 +164,7 @@ noinst_LIBRARIES = \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a
 
-noinst_LIBRARIES += libcrush_so.a #libcephclient_so.a
+noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh \
@@ -229,6 +236,7 @@ libmon_a_SOURCES = \
 	mon/ClientMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
+	mon/ClassMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
 
@@ -326,6 +334,7 @@ noinst_HEADERS = \
         include/Context.h\
         include/Distribution.h\
 	include/LogEntry.h\
+	include/ClassEntry.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\
@@ -345,6 +354,7 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
+	include/librados.h\
         include/lru.h\
 	include/msgr.h\
         include/nstring.h\
@@ -446,6 +456,8 @@ noinst_HEADERS = \
         mds/mdstypes.h\
         mds/snap.h\
         messages/MCacheExpire.h\
+	messages/MClass.h\
+	messages/MClassAck.h\
         messages/MClientCaps.h\
         messages/MClientCapRelease.h\
         messages/MClientLease.h\
@@ -525,6 +537,7 @@ noinst_HEADERS = \
         messages/MRemoveSnaps.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
+        mon/ClassMonitor.h\
         mon/ClientMap.h\
         mon/ClientMonitor.h\
         mon/Elector.h\

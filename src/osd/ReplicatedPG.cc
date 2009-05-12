@@ -738,7 +738,35 @@ void ReplicatedPG::op_read(MOSDOp *op)
       osd->logger->inc(l_osd_c_rd);
       osd->logger->inc(l_osd_c_rdb, p->length);
       break;
-      
+
+   case CEPH_OSD_OP_EXEC:
+    {
+        dout(0) << "CEPH_OSD_OP_EXEC" << dendl;
+	osd->get_class("test");
+	bufferlist bl;
+	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
+
+	if (data.length() == 0)
+	  data_off = p->offset;
+
+	if (r >= 0)  {
+	  p->length = r;
+	  char *buf = bl.c_str();
+
+          for (unsigned int i=0; i<bl.length(); i++)
+	     if (isdigit(buf[i]))
+		buf[i] = '?';
+
+	  data.claim(bl);
+	} else {
+	  result = r;
+	  p->length = 0;
+	}
+	dout(10) << " exec got " << r << " / " << p->length << " bytes from obj " << oid << dendl;
+	dout(10) << " exec reply=" << data.c_str() << dendl;
+    }
+    break;
+    
     case CEPH_OSD_OP_STAT:
       {
 	struct stat st;
@@ -1077,7 +1105,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
       oi.snapset.head_exists = true;
     }
     break;
-    
+
   case CEPH_OSD_OP_ZERO:
     { // zero
       assert(op.length);

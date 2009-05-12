@@ -29,6 +29,8 @@
 #define MSG_LOGACK                 53
 #define MSG_MON_OBSERVE            54
 #define MSG_MON_OBSERVE_NOTIFY     55
+#define MSG_CLASS                  56
+#define MSG_CLASS_ACK              57
 
 // osd internal
 #define MSG_OSD_PING         70

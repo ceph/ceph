@@ -41,6 +41,7 @@
 #include "ClientMonitor.h"
 #include "PGMonitor.h"
 #include "LogMonitor.h"
+#include "ClassMonitor.h"
 
 #include "osd/OSDMap.h"
 
@@ -84,6 +85,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_service[PAXOS_CLIENTMAP] = new ClientMonitor(this, add_paxos(PAXOS_CLIENTMAP));
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
+  paxos_service[PAXOS_CLASS] = new ClassMonitor(this, add_paxos(PAXOS_CLASS));
 }
 
 Paxos *Monitor::add_paxos(int type)

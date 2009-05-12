@@ -32,6 +32,7 @@ using namespace std;
 class Monitor;
 class MOSDBoot;
 class MMonCommand;
+class MClass;
 
 class OSDMonitor : public PaxosService {
 public:
@@ -70,6 +71,8 @@ private:
   void bcast_full_osd();
  
   void handle_osd_getmap(class MOSDGetMap *m);
+
+  void handle_class(class MClass *m);
 
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);

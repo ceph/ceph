@@ -318,6 +318,22 @@ class Objecter {
     return read_submit(rd);
   }
 
+  tid_t exec(object_t oid, ceph_object_layout ol,
+	      __u64 data_off, size_t data_len,
+	      snapid_t snap, bufferlist &bl, int flags,
+              bufferlist *pbl, size_t out_len,
+              Context *onfinish) {
+    vector<ceph_osd_op> ops(1);
+    memset(&ops[0], 0, sizeof(ops[0]));
+    ops[0].op = CEPH_OSD_OP_EXEC;
+    ops[0].offset = data_off;
+    ops[0].length = data_len;
+    ReadOp *rd = new ReadOp(oid, ol, ops, snap, flags, onfinish);
+    rd->bl = bl;
+    rd->pbl = pbl;
+    return read_submit(rd);
+  }
+
   tid_t modify(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
 	       const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {

@@ -14,6 +14,7 @@ AC_CANONICAL_TARGET
 # Automake
 AM_INIT_AUTOMAKE(ceph, 0.8)
 AM_PROG_CC_C_O
+AM_PROG_LIBTOOL
 
 # Platform
 case "${target_os}" in
@@ -24,8 +25,9 @@ esac
 # Checks for programs.
 AC_PROG_CXX
 #AC_PROG_CC
-AC_PROG_RANLIB
+#AC_PROG_RANLIB
 AC_PROG_MAKE_SET
+AC_PROG_LIBTOOL
 
 # Checks for libraries.
 AC_CHECK_LIB([m], [pow])
