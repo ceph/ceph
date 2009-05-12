@@ -14,10 +14,14 @@
 
 #include "include/librados.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
 int main(int argc, const char **argv) 
 {
   if (rados_initialize(argc, argv)) {
-    cerr << "error initializing" << std::endl;
+    printf("error initializing\n");
     exit(1);
   }
 
@@ -27,18 +31,17 @@ int main(int argc, const char **argv)
   time(&tm);
   snprintf(buf, 128, "%s", ctime(&tm));
 
-  ceph_object oid;
+  struct ceph_object oid;
   memset(&oid, 0, sizeof(oid));
   oid.ino = 0x2010;
 
   rados_write(&oid, buf, 0, strlen(buf) + 1);
   //rados_exec(&oid, "code", 0, 128, buf, 128);
-  cerr << "exec result=" << buf << std::endl;
-  size_t size = rados_read(&oid, buf2, 0, 128);
+  printf("exec result=%s\n", buf);
+  int size = rados_read(&oid, buf2, 0, 128);
 
-  cerr << "read result=" << buf2 << "" << std::endl;
-  cerr << "size=" << size << std::endl;
-
+  printf("read result=%s\n", buf2);
+  printf("size=%d\n", size);
 
   rados_deinitialize();
 

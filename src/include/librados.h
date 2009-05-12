@@ -1,11 +1,16 @@
 #ifndef __LIBRADOS_H
 #define __LIBRADOS_H
 
-#include "include/types.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <netinet/in.h>
+#include <linux/types.h>
+#include <string.h>
+
+#include "include/msgr.h"
+#include "include/rados.h"
 
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
