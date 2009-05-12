@@ -109,7 +109,7 @@ librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 lib_LTLIBRARIES += librados.la
 
-testrados_SOURCES = testrados.cc
+testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la libcrush.la
 
 
