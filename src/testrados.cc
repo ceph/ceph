@@ -12,7 +12,7 @@
  * 
  */
 
-#include "librados.h"
+#include "include/librados.h"
 
 int main(int argc, const char **argv) 
 {

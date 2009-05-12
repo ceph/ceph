@@ -89,45 +89,28 @@ endif
 
 ##########
 BUILT_SOURCES =
+lib_LTLIBRARIES = 
 
 # libcrush.so
-libcrush_so_a_SOURCES = \
+libcrush_la_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
 	crush/crush.c
-
-libcrush.so: ${libcrush_so_a_SOURCES}
-	${CC} -I. -fPIC -shared -Wl,-soname,$@.1 ${AM_CFLAGS} ${LIBS} $^ -o $@
-BUILT_SOURCES += libcrush.so
+libcrush_la_CFLAGS = ${AM_CFLAGS}
+lib_LTLIBRARIES += libcrush.la
 
 # librados
-librados_so_a_SOURCES = \
+librados_la_SOURCES = \
 	librados.cc \
 	msg/SimpleMessenger.cc \
 	osdc/Objecter.cc \
-	mon/MonClient.cc \
-	msg/Message.cc \
-	common/Clock.cc \
-	common/Timer.cc \
-	common/Finisher.cc \
-	common/sctp_crc32.c\
-	common/assert.cc \
-	common/ConfUtils.cc \
-	mon/MonMap.cc \
-	mon/MonClient.cc \
-	osd/OSDMap.cc \
-	common/tls.cc \
-	common/common_init.cc \
-	common/buffer.cc \
-	common/debug.cc \
-	config.cc \
-	common/lockdep.cc
-librados.so: ${librados_so_a_SOURCES}
-	${CXX} -fPIC -shared -Wl,-soname,$@.1 -I. ${AM_CXXFLAGS} ${LIBS} $^ -o $@
-BUILT_SOURCES += librados.so
+	${libcommon_a_SOURCES}
+librados_la_CFLAGS = ${AM_CFLAGS}
+librados_la_CXXFLAGS = ${AM_CXXFLAGS}
+lib_LTLIBRARIES += librados.la
 
 testrados_SOURCES = testrados.cc
-
+testrados_LDADD = librados.la libcrush.la
 
 
 
@@ -181,7 +164,7 @@ noinst_LIBRARIES = \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
 	libos.a
 
-noinst_LIBRARIES += libcrush_so.a librados_so.a #libcephclient_so.a
+noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh \
@@ -371,6 +354,7 @@ noinst_HEADERS = \
         include/intarith.h\
         include/interval_set.h\
         include/inttypes.h\
+	include/librados.h\
         include/lru.h\
 	include/msgr.h\
         include/nstring.h\
@@ -424,7 +408,6 @@ noinst_HEADERS = \
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
-	include/librados.h\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
