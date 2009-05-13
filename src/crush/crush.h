@@ -114,15 +114,19 @@ struct crush_bucket {
 	__u32 weight;    /* 16-bit fixed point */
 	__u32 size;      /* num items */
 	__s32 *items;
+
+	/*
+	 * cached random permutation: used for uniform bucket and for
+	 * the linear search fallback for the other bucket types.
+	 */
+	__u32 perm_x;  /* @x for which *perm is defined */
+	__u32 perm_n;  /* how much of *perm has been calculated */
+	__u32 *perm;
 };
 
 struct crush_bucket_uniform {
 	struct crush_bucket h;
 	__u32 item_weight;  /* 16-bit fixed point; all items equally weighted */
-	
-	__u32 perm_x;
-	__u32 perm_n;
-	__u32 *perm;
 };
 
 struct crush_bucket_list {
@@ -135,6 +139,7 @@ struct crush_bucket_list {
 struct crush_bucket_tree {
 	struct crush_bucket h;  /* note: h.size is _tree_ size, not number of
 				   actual items */
+	__u8 num_nodes;
 	__u32 *node_weights;
 };
 

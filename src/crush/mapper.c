@@ -13,7 +13,7 @@
 # include <stdlib.h>
 # include <assert.h>
 # define BUG_ON(x) assert(!(x))
-# define dprintk(args...) /* printf(args) */
+# define dprintk(args...) /*printf(args)*/
 # define kmalloc(x, f) malloc(x)
 # define kfree(x) free(x)
 #endif
@@ -53,35 +53,48 @@ int crush_find_rule(struct crush_map *map, int ruleset, int type, int size)
  * will produce an item in the bucket.
  */
 
-/* uniform */
-static int bucket_uniform_choose(struct crush_bucket_uniform *bucket,
-				 int x, int r, int shift)
+/*
+ * Choose based on a random permutation of the bucket.
+ */
+static int bucket_perm_choose(struct crush_bucket *bucket,
+				int x, int r)
 {
-	/*
-	 * generate my permutation, up to r % size
-	 */
 	unsigned i, t;
-	unsigned pr = r % bucket->h.size;
+	unsigned pr = r % bucket->size;
+
+	/* start a new permutation if @x has changed */
 	if (x != bucket->perm_x) {
 		bucket->perm_x = x;
 		bucket->perm_n = 0;
-		for (i = 0; i < bucket->h.size; i++)
+		for (i = 0; i < bucket->size; i++)
 			bucket->perm[i] = i;
 	}
-	while (bucket->perm_n < (pr+1)) {
-		i = crush_hash32_3(x, bucket->h.id, i) % (bucket->h.size - bucket->perm_n);
+
+	/* calculate permutation up to pr */
+	while (bucket->perm_n <= pr) {
+		i = crush_hash32_3(x, bucket->id, bucket->perm_n) %
+			(bucket->size - bucket->perm_n);
 		t = bucket->perm[bucket->perm_n + i];
-		bucket->perm[bucket->perm_n + i] = bucket->perm[bucket->perm_n];
+		bucket->perm[bucket->perm_n + i] =
+			bucket->perm[bucket->perm_n];
 		bucket->perm[bucket->perm_n] = t;
 		bucket->perm_n++;		
 	}
+
 	unsigned s = bucket->perm[pr];
-	return bucket->h.items[s];
+	return bucket->items[s];
+}
+
+/* uniform */
+static int bucket_uniform_choose(struct crush_bucket_uniform *bucket,
+				 int x, int r)
+{
+	return bucket_perm_choose(&bucket->h, x, r);
 }
 
 /* list */
 static int bucket_list_choose(struct crush_bucket_list *bucket,
-			      int x, int r, int shift)
+			      int x, int r)
 {
 	int i;
 
@@ -95,8 +108,6 @@ static int bucket_list_choose(struct crush_bucket_list *bucket,
 		w = w >> 16;
 		/*dprintk(" scaled %llx\n", w);*/
 		if (w < bucket->item_weights[i]) {
-			if (shift)
-				i = (i + shift) % bucket->h.size;
 			return bucket->h.items[i];
 		}
 	}
@@ -131,14 +142,14 @@ static int terminal(int x) {
 }
 
 static int bucket_tree_choose(struct crush_bucket_tree *bucket,
-			      int x, int r, int shift)
+			      int x, int r)
 {
 	int n, l;
 	__u32 w;
 	__u64 t;
 
 	/* start at root */
-	n = bucket->h.size >> 1;
+	n = bucket->num_nodes >> 1;
 
 	while (!terminal(n)) {
 		/* pick point in [0, w) */
@@ -154,20 +165,14 @@ static int bucket_tree_choose(struct crush_bucket_tree *bucket,
 			n = right(n);
 	}
 
-	while (shift > 0) {
-		n = (n + 2) % bucket->h.size;
-		if (bucket->node_weights[n])
-			shift--;
-	}
-
-	return bucket->h.items[n];
+	return bucket->h.items[n >> 1];
 }
 
 
 /* straw */
 
 static int bucket_straw_choose(struct crush_bucket_straw *bucket,
-			       int x, int r, int shift)
+			       int x, int r)
 {
 	int i;
 	int high = 0;
@@ -183,32 +188,29 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 			high_draw = draw;
 		}
 	}
-	if (shift)
-		high = (high + shift) % bucket->h.size;
 	return bucket->h.items[high];
 }
 
-static int crush_bucket_choose(struct crush_bucket *in, int x, int r, int shift)
+static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 {
 	switch (in->alg) {
 	case CRUSH_BUCKET_UNIFORM:
 		return bucket_uniform_choose((struct crush_bucket_uniform *)in,
-					     x, r, shift);
+					  x, r);
 	case CRUSH_BUCKET_LIST:
 		return bucket_list_choose((struct crush_bucket_list *)in,
-					   x, r, shift);
+					  x, r);
 	case CRUSH_BUCKET_TREE:
 		return bucket_tree_choose((struct crush_bucket_tree *)in,
-					  x, r, shift);
+					  x, r);
 	case CRUSH_BUCKET_STRAW:
 		return bucket_straw_choose((struct crush_bucket_straw *)in,
-					   x, r, shift);
+					   x, r);
 	default:
 		BUG_ON(1);
-		return in->items[0];
+/* 		return in->items[0] */;
 	}
 }
-
 
 /*
  * true if device is marked "out" (failed, fully offloaded)
@@ -247,7 +249,7 @@ static int crush_choose(struct crush_map *map,
 			int *out2)
 {
 	int rep;
-	int ftotal, flocal, shift;
+	int ftotal, flocal;
 	int retry_descent, retry_bucket, skip_rep;
 	struct crush_bucket *in = bucket;
 	int r;
@@ -255,12 +257,12 @@ static int crush_choose(struct crush_map *map,
 	int item;
 	int itemtype;
 	int collide, reject;
+	const int orig_tries = 5; /* attempts before we fall back to search */
 	dprintk("choose bucket %d x %d outpos %d\n", bucket->id, x, outpos);
 
 	for (rep = outpos; rep < numrep; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
-		shift = 0;
 		skip_rep = 0;
 		do {
 			retry_descent = 0;
@@ -275,24 +277,27 @@ static int crush_choose(struct crush_map *map,
 					/* be careful */
 					if (firstn || numrep >= in->size)
 						/* r' = r + f_total */
-						r += ftotal - shift;
+						r += ftotal;
 					else if (in->size % numrep == 0)
 						/* r'=r+(n+1)*f_local */
-						r += (numrep+1) * (flocal+ftotal- shift);
+						r += (numrep+1) * (flocal+ftotal);
 					else
 						/* r' = r + n*f_local */
-						r += numrep * (flocal+ftotal-shift);
+						r += numrep * (flocal+ftotal);
 				} else {
 					if (firstn)
 						/* r' = r + f_total */
-						r += ftotal - shift;
+						r += ftotal;
 					else
 						/* r' = r + n*f_local */
-						r += numrep * (flocal+ftotal-shift);
+						r += numrep * (flocal+ftotal);
 				}
 
 				/* bucket choose */
-				item = crush_bucket_choose(in, x, r, shift);
+				if (flocal >= (in->size>>1) && flocal > orig_tries)
+					item = bucket_perm_choose(in, x, r);
+				else
+					item = crush_bucket_choose(in, x, r);
 				BUG_ON(item >= map->max_devices);
 
 				/* desired type? */
@@ -338,19 +343,20 @@ static int crush_choose(struct crush_map *map,
 					ftotal++;
 					flocal++;
 
-					if (ftotal > 4)
-						shift++;
-
 					if (collide && flocal < 3)
 						/* retry locally a few times */
 						retry_bucket = 1;
-					else if (ftotal < 10) {
+					else if (flocal < in->size + orig_tries)
+						/* exhaustive search of bucket */
+						retry_bucket = 1;
+					else if (ftotal < 20)
 						/* then retry descent */
 						retry_descent = 1;
-					} else
+					else
 						/* else give up */
 						skip_rep = 1;
-					dprintk("  reject %d  collide %d  ftotal %d  flocal %d shift %d\n", reject, collide, ftotal, flocal, shift);
+					dprintk("  reject %d  collide %d  ftotal %d  flocal %d\n", reject,
+						collide, ftotal, flocal);
 				}
 			} while (retry_bucket);
 		} while (retry_descent);
