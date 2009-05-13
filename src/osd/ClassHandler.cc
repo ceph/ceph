@@ -5,6 +5,7 @@
 #include "messages/MClass.h"
 #include "ClassHandler.h"
 
+#include <dlfcn.h>
 
 #include <map>
 
@@ -66,9 +67,12 @@ bool ClassHandler::load_class(string name)
 
   close(fd);
 
+  class_data.handle = dlopen(fname, RTLD_LAZY);
+
+  unlink(fname);
   free(fname);
 
-  return true; 
+  return (class_data.handle != NULL);
 }
 
 void ClassHandler::handle_response(MClass *m)

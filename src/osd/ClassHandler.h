@@ -19,11 +19,12 @@ class ClassHandler
     version_t version;
     Cond *queue;
     ClassImpl impl;
+    void *handle;
     bool init_queue() {
       queue = new Cond();
       return (queue != NULL);
     }
-    ClassData() : status(CLASS_UNKNOWN), version(-1), queue(NULL) {}
+    ClassData() : status(CLASS_UNKNOWN), version(-1), queue(NULL), handle(NULL) {}
     ~ClassData() { delete queue; }
   };
   map<string, ClassData> objects;

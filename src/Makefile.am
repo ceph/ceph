@@ -33,7 +33,7 @@ dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
 
 # osd 
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
-cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a
+cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a
 streamtest_SOURCES = streamtest.cc
