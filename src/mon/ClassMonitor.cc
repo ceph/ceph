@@ -81,6 +81,22 @@ void ClassMonitor::create_initial(bufferlist& bl)
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
+bool ClassMonitor::store_impl(ClassLibrary& info, ClassImpl& impl)
+{
+  char *store_name;
+  int len = info.name.length() + 16;
+  store_name = (char *)malloc(len);
+  snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
+  dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
+  mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
+  bufferlist bl;
+  ::encode(info, bl);
+  mon->store->append_bl_ss(bl, "class_impl", store_name);
+  dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
+  free(store_name);
+}
+
+
 bool ClassMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
@@ -117,15 +133,7 @@ bool ClassMonitor::update_from_paxos()
     inc.decode_impl(impl);
     inc.decode_info(info);
     if (inc.add) {
-      char *store_name;
-      int len = info.name.length() + 16;
-      store_name = (char *)malloc(len);
-      snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
-      dout(0) << "storing inc.impl length=" << inc.impl.length() << dendl;
-      mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
-      mon->store->append_bl_ss(inc.info, "class_impl", store_name);
-      dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
-      free(store_name);
+      store_impl(info, impl);
       list.add(info.name, info.version);
     } else {
       list.remove(info.name, info.version);
@@ -287,6 +295,8 @@ void ClassMonitor::handle_request(MClass *m)
 
   if (!reply)
     return;
+
+  deque<ClassImpl>::iterator impl_iter = m->impl.begin();
   
   for (deque<ClassLibrary>::iterator p = m->info.begin();
        p != m->info.end();
@@ -295,22 +305,34 @@ void ClassMonitor::handle_request(MClass *m)
     version_t ver;
 
     reply->info.push_back(*p);
-
-    if (list.get_ver((*p).name, &ver)) {
-      char *store_name;
-      int len = (*p).name.length() + 16;
-      int bin_len;
-      store_name = (char *)malloc(len);
-      snprintf(store_name, len, "%s.%d", (*p).name.c_str(), ver);
-      bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
-      assert(bin_len > 0);
-      dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
-      free(store_name);
-      list.add((*p).name, ver);
-      reply->add.push_back(true);
-      reply->impl.push_back(impl);
-    } else {
-      reply->add.push_back(false);
+    switch (m->action) {
+    case CLASS_GET:
+      if (list.get_ver((*p).name, &ver)) {
+        char *store_name;
+        int len = (*p).name.length() + 16;
+        int bin_len;
+        store_name = (char *)malloc(len);
+        snprintf(store_name, len, "%s.%d", (*p).name.c_str(), ver);
+        bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
+        assert(bin_len > 0);
+        dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
+        free(store_name);
+        list.add((*p).name, ver);
+        reply->add.push_back(true);
+        reply->impl.push_back(impl);
+      } else {
+        reply->add.push_back(false);
+      }
+      break;
+    case CLASS_SET:
+       {
+         /* FIXME should handle entries removal */
+         ClassLibrary& entry = list.library_map[(*p).name];
+         entry.name = (*p).name;
+         entry.version = (*p).version;
+         store_impl(entry, *impl_iter);
+         impl_iter++;
+       } 
     }
   }
   reply->action = CLASS_RESPONSE;

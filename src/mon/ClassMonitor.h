@@ -59,7 +59,7 @@ private:
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
-
+  bool store_impl(ClassLibrary& info, ClassImpl& impl);
  public:
   ClassMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   void handle_request(MClass *m);

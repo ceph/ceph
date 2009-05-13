@@ -72,6 +72,12 @@ bool ClassHandler::load_class(string name)
   unlink(fname);
   free(fname);
 
+  if (class_data.handle) {
+    dout(0) << "successfuly loaded class " << name << dendl;
+  } else {
+    dout(0) << "failed loading class " << name << dendl;
+  }
+
   return (class_data.handle != NULL);
 }
 

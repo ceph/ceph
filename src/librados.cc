@@ -415,3 +415,10 @@ extern "C" int rados_read(ceph_object *o, char *buf, off_t off, size_t len)
   return radosp->read(oid, buf, off, len);
 }
 
+extern "C" int rados_exec(ceph_object *o, const char *code,
+                          off_t data_off, size_t data_len, char *buf, size_t out_len)
+{
+  object_t oid(*o);
+  return radosp->exec(oid, code, data_off, data_len, buf, out_len);
+}
+

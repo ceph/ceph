@@ -36,7 +36,7 @@ int main(int argc, const char **argv)
   oid.ino = 0x2010;
 
   rados_write(&oid, buf, 0, strlen(buf) + 1);
-  //rados_exec(&oid, "code", 0, 128, buf, 128);
+  rados_exec(&oid, "code", 0, 128, buf, 128);
   printf("exec result=%s\n", buf);
   int size = rados_read(&oid, buf2, 0, 128);
 
