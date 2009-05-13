@@ -13,7 +13,7 @@
 # include <stdlib.h>
 # include <assert.h>
 # define BUG_ON(x) assert(!(x))
-# define dprintk(args...) /*printf(args)*/
+# define dprintk(args...) /* printf(args) */
 # define kmalloc(x, f) malloc(x)
 # define kfree(x) free(x)
 #endif
@@ -61,27 +61,54 @@ static int bucket_perm_choose(struct crush_bucket *bucket,
 {
 	unsigned i, t;
 	unsigned pr = r % bucket->size;
+	unsigned s;
 
 	/* start a new permutation if @x has changed */
-	if (x != bucket->perm_x) {
+	if (bucket->perm_x != x || bucket->perm_n == 0) {
+		dprintk("bucket %d new x=%d\n", bucket->id, x);
 		bucket->perm_x = x;
-		bucket->perm_n = 0;
-		for (i = 0; i < bucket->size; i++)
+		
+		/* optimize common r=0 case */
+		if (pr == 0) {
+			s = crush_hash32_3(x, bucket->id, 0) %
+				bucket->size;
+			bucket->perm[0] = s;
+			bucket->perm_n = 0xffff;
+			return bucket->items[s];
+		} else {
+			for (i = 0; i < bucket->size; i++)
+				bucket->perm[i] = i;
+			bucket->perm_n = 0;
+		}
+	}
+
+	if (bucket->perm_n == 0xffff) {
+		for (i = 1; i < bucket->size; i++)
 			bucket->perm[i] = i;
+		bucket->perm[bucket->perm[0]] = 0;
+		bucket->perm_n = 1;
 	}
 
 	/* calculate permutation up to pr */
-	while (bucket->perm_n <= pr) {
-		i = crush_hash32_3(x, bucket->id, bucket->perm_n) %
-			(bucket->size - bucket->perm_n);
-		t = bucket->perm[bucket->perm_n + i];
-		bucket->perm[bucket->perm_n + i] =
-			bucket->perm[bucket->perm_n];
-		bucket->perm[bucket->perm_n] = t;
+	for (i = 0; i < bucket->perm_n; i++) 
+		dprintk(" perm_choose have %d: %d\n", i, bucket->perm[i]);
+	while (bucket->perm_n < pr) {
 		bucket->perm_n++;		
+		if (bucket->perm_n < bucket->size -1) {
+			i = crush_hash32_3(x, bucket->id, bucket->perm_n) %
+				(bucket->size - bucket->perm_n);
+			t = bucket->perm[bucket->perm_n + i];
+			bucket->perm[bucket->perm_n + i] =
+				bucket->perm[bucket->perm_n - 1];
+			bucket->perm[bucket->perm_n - 1] = t;
+			dprintk(" perm_choose swap %d with %d\n", bucket->perm_n-1, i);
+		}
 	}
+	for (i = 0; i < bucket->size; i++) 
+		dprintk(" perm_choose  %d: %d\n", i, bucket->perm[i]);
 
-	unsigned s = bucket->perm[pr];
+	s = bucket->perm[pr];
+	dprintk(" perm_choose %d sz=%d x=%d r=%d (%d) s=%d\n", bucket->id, bucket->size, x, r, pr, s);
 	return bucket->items[s];
 }
 
@@ -193,6 +220,7 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 
 static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 {
+	dprintk("choose %d x=%d r=%d\n", in->id, x, r);
 	switch (in->alg) {
 	case CRUSH_BUCKET_UNIFORM:
 		return bucket_uniform_choose((struct crush_bucket_uniform *)in,

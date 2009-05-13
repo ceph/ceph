@@ -30,7 +30,7 @@ int main(int argc, char **argv)
   for (int i=0; i<4; i++)
     size[i] = 0;
 
-  for (int f = 1; f <= 10000; f++) {  // files
+  for (int f = 0; f < 10000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
       object_t oid(f, b);
       ceph_object_layout l = osdmap.make_object_layout(oid, 0);

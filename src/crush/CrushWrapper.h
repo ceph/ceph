@@ -472,6 +472,7 @@ public:
 	::decode(crush->buckets[i]->items[j], blp);
 
       crush->buckets[i]->perm = (__u32*)malloc(sizeof(__s32)*crush->buckets[i]->size);
+      crush->buckets[i]->perm_n = 0;
 
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
