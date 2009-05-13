@@ -58,10 +58,10 @@ static int bucket_uniform_choose(struct crush_bucket_uniform *bucket,
 				 int x, int r, int shift)
 {
 	unsigned o = crush_hash32_2(x, bucket->h.id) & 0xffff;
-	unsigned p = bucket->primes[crush_hash32_2(bucket->h.id, x) %
-				    bucket->h.size];
+	/* shift to a new prime/permutation every few r */
+	unsigned oo = crush_hash32_3(r>>2, bucket->h.id, x);
+	unsigned p = bucket->primes[oo % bucket->h.size];
 	unsigned s = (x + o + (r+1)*p) % bucket->h.size;
-	/*dprintk("%d %d %d %d\n", x, o, r, p);*/
 	if (shift)
 		s = (s + shift) % bucket->h.size;
 	return bucket->h.items[s];
