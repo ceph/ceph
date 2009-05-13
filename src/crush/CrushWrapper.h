@@ -377,8 +377,6 @@ public:
 
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
-	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::encode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], bl);
 	::encode(((crush_bucket_uniform*)crush->buckets[i])->item_weight, bl);
 	break;
 
@@ -474,10 +472,8 @@ public:
 
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
-	((crush_bucket_uniform*)crush->buckets[i])->primes =
+	((crush_bucket_uniform*)crush->buckets[i])->perm =
 	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::decode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], blp);
 	::decode(((crush_bucket_uniform*)crush->buckets[i])->item_weight, blp);
 	break;
 

@@ -57,13 +57,25 @@ int crush_find_rule(struct crush_map *map, int ruleset, int type, int size)
 static int bucket_uniform_choose(struct crush_bucket_uniform *bucket,
 				 int x, int r, int shift)
 {
-	unsigned o = crush_hash32_2(x, bucket->h.id) & 0xffff;
-	/* shift to a new prime/permutation every few r */
-	unsigned oo = crush_hash32_3(r>>2, bucket->h.id, x);
-	unsigned p = bucket->primes[oo % bucket->h.size];
-	unsigned s = (x + o + (r+1)*p) % bucket->h.size;
-	if (shift)
-		s = (s + shift) % bucket->h.size;
+	/*
+	 * generate my permutation, up to r % size
+	 */
+	unsigned i, t;
+	unsigned pr = r % bucket->h.size;
+	if (x != bucket->perm_x) {
+		bucket->perm_x = x;
+		bucket->perm_n = 0;
+		for (i = 0; i < bucket->h.size; i++)
+			bucket->perm[i] = i;
+	}
+	while (bucket->perm_n < (pr+1)) {
+		i = crush_hash32_3(x, bucket->h.id, i) % (bucket->h.size - bucket->perm_n);
+		t = bucket->perm[bucket->perm_n + i];
+		bucket->perm[bucket->perm_n + i] = bucket->perm[bucket->perm_n];
+		bucket->perm[bucket->perm_n] = t;
+		bucket->perm_n++;		
+	}
+	unsigned s = bucket->perm[pr];
 	return bucket->h.items[s];
 }
 

@@ -118,8 +118,11 @@ struct crush_bucket {
 
 struct crush_bucket_uniform {
 	struct crush_bucket h;
-	__u32 *primes;
 	__u32 item_weight;  /* 16-bit fixed point; all items equally weighted */
+	
+	__u32 perm_x;
+	__u32 perm_n;
+	__u32 *perm;
 };
 
 struct crush_bucket_list {

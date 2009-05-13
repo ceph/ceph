@@ -61,7 +61,7 @@ void crush_calc_parents(struct crush_map *map)
 
 void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b)
 {
-	kfree(b->primes);
+	kfree(b->perm);
 	kfree(b->h.items);
 	kfree(b);
 }
