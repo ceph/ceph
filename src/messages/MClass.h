@@ -78,11 +78,11 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
-    ::decode(info, payload);
-    ::decode(impl, payload);
-    ::decode(add, payload);
+    ::decode(info, p);
+    ::decode(impl, p);
+    ::decode(add, p);
     ::decode(last, p);
-    ::decode(action, payload);
+    ::decode(action, p);
   }
 };
 

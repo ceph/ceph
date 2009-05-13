@@ -29,7 +29,6 @@
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
-#include "messages/MClass.h"
 
 #include "common/Timer.h"
 
@@ -275,9 +274,6 @@ bool OSDMonitor::preprocess_query(Message *m)
   case MSG_REMOVE_SNAPS:
     return preprocess_remove_snaps((MRemoveSnaps*)m);
     
-  case MSG_CLASS:
-    handle_class((MClass*)m);
-    return true;
   default:
     assert(0);
     delete m;
@@ -363,11 +359,6 @@ void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
   
  out:
   delete m;
-}
-
-void OSDMonitor::handle_class(MClass *m)
-{
-  dout(0) << "OSDMonitor::handle_class" << dendl;
 }
 
 // ---------------------------

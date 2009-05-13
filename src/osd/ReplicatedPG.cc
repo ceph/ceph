@@ -742,7 +742,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
    case CEPH_OSD_OP_EXEC:
     {
         dout(0) << "CEPH_OSD_OP_EXEC" << dendl;
-	osd->get_class("test");
+	osd->load_class("test");
+#if 0
 	bufferlist bl;
 	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
 
@@ -764,6 +765,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	}
 	dout(10) << " exec got " << r << " / " << p->length << " bytes from obj " << oid << dendl;
 	dout(10) << " exec reply=" << data.c_str() << dendl;
+#endif
     }
     break;
     

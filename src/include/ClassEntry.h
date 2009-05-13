@@ -107,6 +107,14 @@ struct ClassList {
     return (library_map.find(name) != library_map.end());
   }
 
+  bool get_ver(string& name, version_t *ver) {
+    map<string, ClassLibrary>::iterator iter = library_map.find(name);
+    if (iter == library_map.end())
+      return false;
+    *ver = (iter->second).version;
+    return true;
+  }
+
   void encode(bufferlist& bl) const {
     ::encode(version, bl);
     ::encode(library_map, bl);

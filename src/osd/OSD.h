@@ -85,6 +85,8 @@ class Logger;
 class ObjectStore;
 class OSDMap;
 class MLog;
+class MClass;
+class ClassHandler;
 
 class OSD : public Dispatcher {
 
@@ -99,6 +101,7 @@ protected:
   MonMap      *monmap;
 
   LogClient   logclient;
+  ClassHandler  *class_handler;
 
   int whoami;
   const char *dev_path, *journal_path;
@@ -758,12 +761,13 @@ private:
   void handle_op(class MOSDOp *m);
   void handle_sub_op(class MOSDSubOp *m);
   void handle_sub_op_reply(class MOSDSubOpReply *m);
+  void handle_class(class MClass *m);
 
   void force_remount();
 
   LogClient *get_logclient() { return &logclient; }
-
-  void get_class(const char *name);
+  bool load_class(const char *name);
+  bool get_class(const char *name);
 };
 
 #endif

@@ -74,6 +74,8 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
+#include "osd/ClassHandler.h"
+
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
@@ -273,6 +275,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
 
 OSD::~OSD()
 {
+  delete class_handler;
   delete osdmap;
   delete logger;
   delete store;
@@ -318,7 +321,10 @@ int OSD::init()
     delete store;
     return -1;
   }
-  
+
+  class_handler = new ClassHandler(this);
+  assert(class_handler);
+
   // load up "current" osdmap
   assert_warn(!osdmap);
   if (osdmap) {
@@ -1524,6 +1530,10 @@ void OSD::_dispatch(Message *m)
   case MSG_OSD_SCRUB:
     handle_scrub((MOSDScrub*)m);
     break;    
+
+  case MSG_CLASS:
+    handle_class((MClass*)m);
+    break;
 
     // -- need OSDMap --
 
@@ -3728,7 +3738,7 @@ void OSD::wait_for_no_ops()
 }
 
 
-void OSD::get_class(const char *name)
+bool OSD::get_class(const char *name)
 {
   MClass *m = new MClass(osdmap->get_fsid(), 0);
   ClassLibrary info;
@@ -3737,7 +3747,28 @@ void OSD::get_class(const char *name)
   m->action = CLASS_GET;
   int mon = monmap->pick_mon();
   dout(0) << "sending class message " << *m << " to mon" << mon << dendl;
-  messenger->send_message(m,
-			    monmap->get_inst(mon));
+  messenger->send_message(m, monmap->get_inst(mon));
+
+  return true;
+}
+
+bool OSD::load_class(const char *name)
+{
+  return class_handler->load_class(name);
+}
+
+
+void OSD::handle_class(MClass *m)
+{
+  dout(0) << "handle_class action=" << m->action << dendl;
+
+  switch (m->action) {
+    case CLASS_RESPONSE:
+      class_handler->handle_response(m);
+      break;
+    default:
+      assert(1);
+  }
+  delete m;
 }
 

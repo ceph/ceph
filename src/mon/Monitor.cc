@@ -32,6 +32,7 @@
 #include "messages/MMonObserveNotify.h"
 
 #include "messages/MMonPaxos.h"
+#include "messages/MClass.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -438,6 +439,9 @@ bool Monitor::dispatch_impl(Message *m)
       elector.dispatch(m);
       break;
 
+    case MSG_CLASS:
+      handle_class((MClass *)m);
+      break;
       
     default:
         return false;
@@ -582,5 +586,26 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   return 0;
 }
 
-
+void Monitor::handle_class(MClass *m)
+{
+  switch (m->action) {
+    case CLASS_SET:
+    case CLASS_GET:
+      {
+        deque<ClassLibrary>::iterator iter;
+        for (iter = m->info.begin(); iter != m->info.end(); ++iter) {
+          dout(0) << "CLASS_GET " << *iter << dendl;
+          ((ClassMonitor *)paxos_service[PAXOS_CLASS])->handle_request(m);
+        }
+      }
+      break;
+    case CLASS_RESPONSE:
+      dout(0) << "got a class response (" << *m << ") ???" << dendl;
+      break;
+    default:
+      dout(0) << "got an unknown class message (" << *m << ") ???" << dendl;
+      assert(0);
+      break;
+  }
+}
 

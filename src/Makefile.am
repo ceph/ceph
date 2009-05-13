@@ -273,6 +273,7 @@ libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
+        osd/ClassHandler.cc \
 	osd/OSD.cc
 #	osd/RAID4PG.cc
 
@@ -571,6 +572,7 @@ noinst_HEADERS = \
         os/ObjectStore.h\
         osbdb/OSBDB.h\
         osd/Ager.h\
+        osd/ClassHandler.h\
         osd/OSD.h\
         osd/OSDMap.h\
         osd/ObjectVersioner.h\

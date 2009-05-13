@@ -157,13 +157,13 @@ bool RadosClient::init()
   rank.start(1);
 
   mc->mount(g_conf.client_mount_timeout);
+  mc->link_dispatcher(this);
 
   objecter = new Objecter(messenger, &monmap, &osdmap, lock);
   if (!objecter)
     return false;
 
   lock.Lock();
-  mc->link_dispatcher(this);
 
   objecter->set_client_incarnation(0);
   objecter->init();

@@ -70,13 +70,9 @@ void ClassMonitor::create_initial(bufferlist& bl)
   l.version = 12;
   i.seq = 0;
   i.stamp = g_clock.now();
-  char buf[1024];
-  memset(buf, 0x12, sizeof(buf));
-  {
-  int n;
-  for (n=0; n<1024; n++)
-  ::encode(buf[n], i.binary);
-  }
+  bufferptr ptr(1024);
+  memset(ptr.c_str(), 0x13, 1024);
+  i.binary.append(ptr);
   ClassLibraryIncremental inc;
   ::encode(i, inc.impl);
   ::encode(l, inc.info);
@@ -125,7 +121,8 @@ bool ClassMonitor::update_from_paxos()
       int len = info.name.length() + 16;
       store_name = (char *)malloc(len);
       snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
-      mon->store->put_bl_ss(inc.impl, "class_impl", store_name);
+      dout(0) << "storing inc.impl length=" << inc.impl.length() << dendl;
+      mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
       mon->store->append_bl_ss(inc.info, "class_impl", store_name);
       dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
       free(store_name);
@@ -282,3 +279,42 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
   mon->reply_command(m, err, rs);
   return false;
 }
+
+void ClassMonitor::handle_request(MClass *m)
+{
+  dout(10) << "handle_request " << *m << " from " << m->get_orig_source() << dendl;
+  MClass *reply = new MClass();
+
+  if (!reply)
+    return;
+  
+  for (deque<ClassLibrary>::iterator p = m->info.begin();
+       p != m->info.end();
+       p++) {
+    ClassImpl impl;
+    version_t ver;
+
+    reply->info.push_back(*p);
+
+    if (list.get_ver((*p).name, &ver)) {
+      char *store_name;
+      int len = (*p).name.length() + 16;
+      int bin_len;
+      store_name = (char *)malloc(len);
+      snprintf(store_name, len, "%s.%d", (*p).name.c_str(), ver);
+      bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
+      assert(bin_len > 0);
+      dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
+      free(store_name);
+      list.add((*p).name, ver);
+      reply->add.push_back(true);
+      reply->impl.push_back(impl);
+    } else {
+      reply->add.push_back(false);
+    }
+  }
+  reply->action = CLASS_RESPONSE;
+  mon->messenger->send_message(reply, m->get_orig_source_inst());
+  delete m;
+}
+

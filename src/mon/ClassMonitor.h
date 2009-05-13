@@ -62,6 +62,7 @@ private:
 
  public:
   ClassMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
+  void handle_request(MClass *m);
   
   void tick();  // check state, take actions
 };
