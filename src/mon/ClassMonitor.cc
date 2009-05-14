@@ -64,20 +64,6 @@ void ClassMonitor::tick()
 void ClassMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
-  ClassImpl i;
-  ClassInfo l;
-  l.name = "test";
-  l.version = 12;
-  i.seq = 0;
-  i.stamp = g_clock.now();
-  bufferptr ptr(1024);
-  memset(ptr.c_str(), 0x13, 1024);
-  i.binary.append(ptr);
-  ClassLibraryIncremental inc;
-  ::encode(i, inc.impl);
-  ::encode(l, inc.info);
-  inc.add = true;
-  pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
 bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
