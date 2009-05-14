@@ -32,7 +32,7 @@ class MClass;
 class ClassMonitor : public PaxosService {
 private:
   multimap<utime_t,ClassLibraryIncremental> pending_class;
-  ClassList pending_list, list;
+  ClassLibrary pending_list, list;
 
   void create_initial(bufferlist& bl);
   bool update_from_paxos();

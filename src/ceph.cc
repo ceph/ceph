@@ -182,7 +182,7 @@ void handle_notify(MMonObserveNotify *notify)
     {
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
-	ClassList list;
+	ClassLibrary list;
 	::decode(list, p);
 	// show the first class info
         map<string, ClassInfo>::iterator iter = list.library_map.begin();

@@ -82,11 +82,11 @@ struct ClassLibraryIncremental {
 
 WRITE_CLASS_ENCODER(ClassLibraryIncremental)
 
-struct ClassList {
+struct ClassLibrary {
   version_t version;
   map<string, ClassInfo> library_map;
 
-  ClassList() : version(0) {}
+  ClassLibrary() : version(0) {}
 
   void add(const string& name, const version_t version) {
     ClassInfo library;
@@ -124,7 +124,7 @@ struct ClassList {
     ::decode(library_map, bl);
   }
 };
-WRITE_CLASS_ENCODER(ClassList)
+WRITE_CLASS_ENCODER(ClassLibrary)
 
 inline ostream& operator<<(ostream& out, const ClassInfo& e)
 {
