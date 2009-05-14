@@ -107,6 +107,7 @@ librados_la_SOURCES = \
 	${libcommon_a_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
+librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
 
 testrados_SOURCES = testrados.c
