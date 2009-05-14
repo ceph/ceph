@@ -37,7 +37,7 @@ struct ClassImpl {
 WRITE_CLASS_ENCODER(ClassImpl)
 
 
-struct ClassLibrary {
+struct ClassInfo {
   string name;
   version_t version;
 
@@ -51,7 +51,7 @@ struct ClassLibrary {
   }
 };
 
-WRITE_CLASS_ENCODER(ClassLibrary)
+WRITE_CLASS_ENCODER(ClassInfo)
 
 struct ClassLibraryIncremental {
    bool add;
@@ -74,7 +74,7 @@ struct ClassLibraryIncremental {
      ::decode(i, iter);
   }
 
-  void decode_info(ClassLibrary& l) {
+  void decode_info(ClassInfo& l) {
      bufferlist::iterator iter = info.begin();
      ::decode(l, iter);
   }
@@ -84,18 +84,18 @@ WRITE_CLASS_ENCODER(ClassLibraryIncremental)
 
 struct ClassList {
   version_t version;
-  map<string, ClassLibrary> library_map;
+  map<string, ClassInfo> library_map;
 
   ClassList() : version(0) {}
 
   void add(const string& name, const version_t version) {
-    ClassLibrary library;
+    ClassInfo library;
     library.version = version;
     library.name = name;
     add(library);
   }
 
-  void add(ClassLibrary& library) {
+  void add(ClassInfo& library) {
     library_map[library.name] = library;
   }
 
@@ -108,7 +108,7 @@ struct ClassList {
   }
 
   bool get_ver(string& name, version_t *ver) {
-    map<string, ClassLibrary>::iterator iter = library_map.find(name);
+    map<string, ClassInfo>::iterator iter = library_map.find(name);
     if (iter == library_map.end())
       return false;
     *ver = (iter->second).version;
@@ -126,7 +126,7 @@ struct ClassList {
 };
 WRITE_CLASS_ENCODER(ClassList)
 
-inline ostream& operator<<(ostream& out, const ClassLibrary& e)
+inline ostream& operator<<(ostream& out, const ClassInfo& e)
 {
   return out << e.name << " (v" << e.version << ")";
 }

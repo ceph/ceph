@@ -85,7 +85,7 @@ void ClassHandler::handle_response(MClass *m)
 {
   Mutex::Locker locker(mutex);
 
-  deque<ClassLibrary>::iterator info_iter;
+  deque<ClassInfo>::iterator info_iter;
   deque<ClassImpl>::iterator impl_iter;
   deque<bool>::iterator add_iter;
   

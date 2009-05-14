@@ -185,12 +185,12 @@ void handle_notify(MMonObserveNotify *notify)
 	ClassList list;
 	::decode(list, p);
 	// show the first class info
-        map<string, ClassLibrary>::iterator iter = list.library_map.begin();
+        map<string, ClassInfo>::iterator iter = list.library_map.begin();
 	if (iter != list.library_map.end()) {
 	  dout(0) << "   class " <<  iter->second << dendl;
 	}
       } else {
-	ClassLibrary info;
+	ClassInfo info;
 
 	while (!p.end()) {
           info.decode(p);

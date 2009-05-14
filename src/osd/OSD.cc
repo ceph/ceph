@@ -3741,7 +3741,7 @@ void OSD::wait_for_no_ops()
 bool OSD::get_class(const char *name)
 {
   MClass *m = new MClass(osdmap->get_fsid(), 0);
-  ClassLibrary info;
+  ClassInfo info;
   info.name = name;
   m->info.push_back(info);
   m->action = CLASS_GET;

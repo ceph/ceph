@@ -65,7 +65,7 @@ void ClassMonitor::create_initial(bufferlist& bl)
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
   ClassImpl i;
-  ClassLibrary l;
+  ClassInfo l;
   l.name = "test";
   l.version = 12;
   i.seq = 0;
@@ -80,7 +80,7 @@ void ClassMonitor::create_initial(bufferlist& bl)
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
-bool ClassMonitor::store_impl(ClassLibrary& info, ClassImpl& impl)
+bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
 {
   char *store_name;
   int len = info.name.length() + 16;
@@ -133,7 +133,7 @@ bool ClassMonitor::update_from_paxos()
     ClassLibraryIncremental inc;
     ::decode(inc, p);
     ClassImpl impl;
-    ClassLibrary info;
+    ClassInfo info;
     inc.decode_impl(impl);
     inc.decode_info(info);
     if (inc.add) {
@@ -211,7 +211,7 @@ bool ClassMonitor::preprocess_class(MClass *m)
   dout(10) << "preprocess_class " << *m << " from " << m->get_orig_source() << dendl;
   
   int num_new = 0;
-  for (deque<ClassLibrary>::iterator p = m->info.begin();
+  for (deque<ClassInfo>::iterator p = m->info.begin();
        p != m->info.end();
        p++) {
     if (!pending_list.contains((*p).name))
@@ -235,7 +235,7 @@ bool ClassMonitor::prepare_class(MClass *m)
   }
   deque<ClassImpl>::iterator impl_iter = m->impl.begin();
 
-  for (deque<ClassLibrary>::iterator p = m->info.begin();
+  for (deque<ClassInfo>::iterator p = m->info.begin();
        p != m->info.end();
        p++, impl_iter++) {
     dout(10) << " writing class " << *p << dendl;
@@ -298,7 +298,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
         m->cmd.size() >= 4) {
       string name = m->cmd[2];
       version_t ver = atoi(m->cmd[3].c_str());
-      ClassLibrary& info = list.library_map[name];
+      ClassInfo& info = list.library_map[name];
       ClassImpl impl;
       impl.binary = m->get_data();
       dout(0) << "payload.length=" << m->get_data().length() << dendl;
@@ -337,7 +337,7 @@ void ClassMonitor::handle_request(MClass *m)
 
   deque<ClassImpl>::iterator impl_iter = m->impl.begin();
   
-  for (deque<ClassLibrary>::iterator p = m->info.begin();
+  for (deque<ClassInfo>::iterator p = m->info.begin();
        p != m->info.end();
        p++) {
     ClassImpl impl;
@@ -367,7 +367,7 @@ void ClassMonitor::handle_request(MClass *m)
        {
          dout(0) << "ClassMonitor::handle_request() CLASS_SET" << dendl;
          /* FIXME should handle entries removal */
-         ClassLibrary& entry = list.library_map[(*p).name];
+         ClassInfo& entry = list.library_map[(*p).name];
          entry.name = (*p).name;
          entry.version = (*p).version;
          store_impl(entry, *impl_iter);

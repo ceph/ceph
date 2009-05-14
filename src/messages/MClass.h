@@ -27,7 +27,7 @@ enum {
 class MClass : public Message {
 public:
   ceph_fsid_t fsid;
-  deque<ClassLibrary> info;
+  deque<ClassInfo> info;
   deque<ClassImpl> impl;
   deque<bool> add;
   version_t last;
