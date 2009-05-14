@@ -57,16 +57,6 @@ private:
       classmon->_updated_class(ack, who);
     }    
   };
-  struct C_ClassMonCmd : public Context {
-    Monitor *mon;
-    MMonCommand *m;
-    string rs;
-    C_ClassMonCmd(Monitor *monitor, MMonCommand *m_, string& s) : 
-      mon(monitor), m(m_), rs(s) {}
-    void finish(int r) {
-      mon->reply_command(m, 0, rs);
-    }
-  };
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
