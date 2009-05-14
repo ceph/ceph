@@ -1798,14 +1798,6 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 
 	ci = cap->ci;
 
-	/* skip+drop expireable caps.  this is racy, but harmless. */
-	if ((cap->issued & ~CEPH_CAP_EXPIREABLE) == 0) {
-			dout(10, " skipping %p ino %llx.%llx cap %p %s\n",
-			     inode, ceph_vinop(inode), cap,
-			     ceph_cap_string(cap->issued));
-			return 0;
-	}
-
 	dout(10, " adding %p ino %llx.%llx cap %p %s\n",
 		     inode, ceph_vinop(inode), cap,
 		     ceph_cap_string(cap->issued));
