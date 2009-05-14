@@ -31,6 +31,9 @@ void ClassHandler::load_class(const nstring& cname)
   close(fd);
 
   data.handle = dlopen(fname, RTLD_LAZY);
+  void (*cls_init)() = (void (*)())dlsym(data.handle, "class_init");
+  if (cls_init)
+    cls_init();
 
   unlink(fname);
   free(fname);

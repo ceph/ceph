@@ -221,7 +221,8 @@ libcommon_files = \
 	common/buffer.cc \
 	common/debug.cc \
 	config.cc \
-	common/lockdep.cc
+	common/lockdep.cc \
+        objclass/class_debug.cc
 
 libcrush_a_SOURCES = \
 	crush/builder.c \

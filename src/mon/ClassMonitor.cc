@@ -82,11 +82,8 @@ void ClassMonitor::create_initial(bufferlist& bl)
 
 bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
 {
-  char *store_name;
   int len = info.name.length() + 16;
-  store_name = (char *)malloc(len);
-  if (!store_name)
-    return false;
+  char store_name[len];
 
   snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
   dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
@@ -95,7 +92,6 @@ bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
   ::encode(info, bl);
   mon->store->append_bl_ss(bl, "class_impl", store_name);
   dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
-  free(store_name);
 
   return true;
 }
@@ -347,15 +343,13 @@ void ClassMonitor::handle_request(MClass *m)
     switch (m->action) {
     case CLASS_GET:
       if (list.get_ver((*p).name, &ver)) {
-        char *store_name;
         int len = (*p).name.length() + 16;
         int bin_len;
-        store_name = (char *)malloc(len);
+        char store_name[len];
         snprintf(store_name, len, "%s.%d", (*p).name.c_str(), ver);
         bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
         assert(bin_len > 0);
         dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
-        free(store_name);
         list.add((*p).name, ver);
         reply->add.push_back(true);
         reply->impl.push_back(impl);
