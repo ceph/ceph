@@ -1,7 +1,14 @@
 *.o
+*.lo
 *.a
 *~
 *.co
+*.deb
+*.tar.gz
+*.dsc
+*.changes
+./config.*
+*.gcno
 .deps
 web/*.html
 gmon.out
@@ -9,6 +16,7 @@ core.*
 vgcore.*
 src/Makefile
 Makefile.in
+Makefile
 aclocal.m4
 autom4te.cache
 config.log
@@ -18,3 +26,4 @@ stamp-h1
 depcomp
 install-sh
 missing
+src/ceph_ver.h
