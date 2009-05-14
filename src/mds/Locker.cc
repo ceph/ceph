@@ -3078,6 +3078,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   
   // * -> sync?
   else if (lock->get_state() != LOCK_SYNC &&
+	   !lock->is_wrlocked() &&   // drain wrlocks first!
 	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
 	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
 	   !(in->get_state() == LOCK_MIX &&
