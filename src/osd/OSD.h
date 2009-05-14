@@ -402,7 +402,18 @@ private:
   void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full, bool lazy=false);
 
 
+protected:
+  // -- classes --
+  Mutex class_lock;
+  map<nstring, map<pg_t, list<Message*> > > waiting_for_missing_class;
 
+  bool get_class(const nstring& cname, pg_t pgid, Message *m);
+  void handle_class(MClass *m);
+public:
+  void got_class(const nstring& cname);
+  void send_class_request(const char *n);
+
+protected:
   // -- placement groups --
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
@@ -761,13 +772,10 @@ private:
   void handle_op(class MOSDOp *m);
   void handle_sub_op(class MOSDSubOp *m);
   void handle_sub_op_reply(class MOSDSubOpReply *m);
-  void handle_class(class MClass *m);
 
   void force_remount();
 
   LogClient *get_logclient() { return &logclient; }
-  bool load_class(const char *name);
-  bool get_class(const char *name);
 };
 
 #endif

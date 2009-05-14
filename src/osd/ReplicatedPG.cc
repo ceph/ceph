@@ -742,7 +742,10 @@ void ReplicatedPG::op_read(MOSDOp *op)
    case CEPH_OSD_OP_EXEC:
     {
         dout(0) << "CEPH_OSD_OP_EXEC" << dendl;
-	osd->load_class("test");
+
+	if (!osd->get_class("test", info.pgid, op))
+	  return;
+
 #if 0
 	bufferlist bl;
 	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);

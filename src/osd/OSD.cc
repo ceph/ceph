@@ -246,6 +246,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   osdmap(NULL),
   map_lock("OSD::map_lock"),
   map_cache_lock("OSD::map_cache_lock"),
+  class_lock("OSD::class_lock"),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   last_tid(0),
@@ -1202,6 +1203,7 @@ void OSD::do_mon_report()
   send_alive();
   send_failures();
   send_pg_stats();
+  class_handler->resend_class_requests();
 }
 
 
@@ -3738,37 +3740,60 @@ void OSD::wait_for_no_ops()
 }
 
 
-bool OSD::get_class(const char *name)
-{
-  MClass *m = new MClass(osdmap->get_fsid(), 0);
-  ClassInfo info;
-  info.name = name;
-  m->info.push_back(info);
-  m->action = CLASS_GET;
-  int mon = monmap->pick_mon();
-  dout(0) << "sending class message " << *m << " to mon" << mon << dendl;
-  messenger->send_message(m, monmap->get_inst(mon));
+// --------------------------------
 
-  return true;
+bool OSD::get_class(const nstring& cname, pg_t pgid, Message *m)
+{
+  Mutex::Locker l(class_lock);
+  dout(10) << "wait_for_missing_class '" << cname << "' by " << pgid << dendl;
+
+  if (class_handler->get_class(cname))
+    return true;
+
+  waiting_for_missing_class[cname][pgid].push_back(m);
+  return false;
 }
 
-bool OSD::load_class(const char *name)
+void OSD::got_class(const nstring& cname)
 {
-  return class_handler->load_class(name);
-}
+  // no lock.. this is an upcall from handle_class
+  dout(10) << "got_class '" << cname << "'" << dendl;
 
+  if (waiting_for_missing_class.count(cname)) {
+    map<pg_t,list<Message*> >& w = waiting_for_missing_class[cname];
+    for (map<pg_t,list<Message*> >::iterator p = w.begin(); p != w.end(); p++)
+      take_waiters(p->second);
+    waiting_for_missing_class.erase(cname);
+  }
+}
 
 void OSD::handle_class(MClass *m)
 {
+  Mutex::Locker l(class_lock);
   dout(0) << "handle_class action=" << m->action << dendl;
 
   switch (m->action) {
-    case CLASS_RESPONSE:
-      class_handler->handle_response(m);
-      break;
-    default:
-      assert(1);
+  case CLASS_RESPONSE:
+    class_handler->handle_class(m);
+    break;
+
+  default:
+    assert(0);
   }
   delete m;
 }
+
+void OSD::send_class_request(const char *cname)
+{
+  dout(10) << "send_class_request '" << cname << "'" << dendl;
+  MClass *m = new MClass(monmap->get_fsid(), 0);
+  ClassInfo info;
+  info.name = cname;
+  m->info.push_back(info);
+  m->action = CLASS_GET;
+  int mon = monmap->pick_mon();
+  messenger->send_message(m, monmap->get_inst(mon));
+}
+
+
 

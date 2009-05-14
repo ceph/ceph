@@ -13,29 +13,33 @@ class OSD;
 class ClassHandler
 {
   OSD *osd;
-  typedef enum { CLASS_UNKNOWN, CLASS_UNLOADED, CLASS_LOADED, CLASS_REQUESTED, CLASS_ERROR } ClassStatus;
+
   struct ClassData {
-    ClassStatus status;
+    enum { 
+      CLASS_UNKNOWN, 
+      //CLASS_UNLOADED, 
+      CLASS_LOADED, 
+      CLASS_REQUESTED, 
+      //CLASS_ERROR
+    } status;
     version_t version;
-    Cond *queue;
     ClassImpl impl;
     void *handle;
-    bool init_queue() {
-      queue = new Cond();
-      return (queue != NULL);
-    }
-    ClassData() : status(CLASS_UNKNOWN), version(-1), queue(NULL), handle(NULL) {}
-    ~ClassData() { delete queue; }
+
+    ClassData() : status(CLASS_UNKNOWN), version(-1), handle(NULL) {}
+    ~ClassData() { }
   };
-  map<string, ClassData> objects;
+  map<nstring, ClassData> classes;
 
-  Mutex mutex;
+  void load_class(const nstring& cname);
+
 public:
+  ClassHandler(OSD *_osd) : osd(_osd) {}
 
-  ClassHandler(OSD *_osd) : osd(_osd), mutex("classhandler") {}
+  bool get_class(const nstring& cname);
+  void resend_class_requests();
 
-  bool load_class(string name);
-  void handle_response(MClass *m);
+  void handle_class(MClass *m);
 };
 
 
