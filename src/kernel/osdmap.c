@@ -44,14 +44,8 @@ static void calc_pg_masks(struct ceph_pg_pool_info *pi)
 static int crush_decode_uniform_bucket(void **p, void *end,
 				       struct crush_bucket_uniform *b)
 {
-	int j;
 	dout(30, "crush_decode_uniform_bucket %p to %p\n", *p, end);
-	b->primes = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
-	if (b->primes == NULL)
-		return -ENOMEM;
 	ceph_decode_need(p, end, (1+b->h.size) * sizeof(u32), bad);
-	for (j = 0; j < b->h.size; j++)
-		ceph_decode_32(p, b->primes[j]);
 	ceph_decode_32(p, b->item_weight);
 	return 0;
 bad:
@@ -84,11 +78,12 @@ static int crush_decode_tree_bucket(void **p, void *end,
 {
 	int j;
 	dout(30, "crush_decode_tree_bucket %p to %p\n", *p, end);
-	b->node_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
+	ceph_decode_32_safe(p, end, b->num_nodes, bad);
+	b->node_weights = kmalloc(b->num_nodes * sizeof(u32), GFP_NOFS);
 	if (b->node_weights == NULL)
 		return -ENOMEM;
-	ceph_decode_need(p, end, b->h.size * sizeof(u32), bad);
-	for (j = 0; j < b->h.size; j++)
+	ceph_decode_need(p, end, b->num_nodes * sizeof(u32), bad);
+	for (j = 0; j < b->num_nodes; j++)
 		ceph_decode_32(p, b->node_weights[j]);
 	return 0;
 bad:
@@ -204,6 +199,10 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 		b->items = kmalloc(b->size * sizeof(__s32), GFP_NOFS);
 		if (b->items == NULL)
 			goto badmem;
+		b->perm = kmalloc(b->size * sizeof(u32), GFP_NOFS);
+		if (b->perm == NULL)
+			goto badmem;
+		b->perm_n = 0;
 
 		ceph_decode_need(p, end, b->size*sizeof(u32), bad);
 		for (j = 0; j < b->size; j++)
