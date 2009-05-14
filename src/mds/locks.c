@@ -85,7 +85,7 @@ struct sm_state_t filelock[30] = {
     [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_MIX,  0,    0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     [LOCK_MIX_SYNC2] = { LOCK_SYNC, false, 0,         0,    0,   0,   0,   0,   0,   CEPH_CAP_GRD,0,0,CEPH_CAP_GRD },
     
-    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   AUTH,AUTH,0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
+    [LOCK_LOCK]      = { 0,         false, LOCK_LOCK, AUTH, 0,   0,   AUTH,0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
     [LOCK_SYNC_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   CEPH_CAP_GCACHE,0,0,CEPH_CAP_GCACHE },
     [LOCK_EXCL_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,CEPH_CAP_GCACHE },
     [LOCK_MIX_LOCK]  = { LOCK_LOCK, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0,0 },

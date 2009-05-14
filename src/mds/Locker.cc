@@ -667,9 +667,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
 	scatter_tempsync((ScatterLock*)lock);
       else
 	simple_sync(lock);
-    } else if (lock->sm == &sm_filelock)
-      simple_lock(lock);
-    else
+    } else 
       simple_sync(lock);
     return true;
   }
