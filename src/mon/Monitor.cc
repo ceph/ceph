@@ -228,6 +228,7 @@ void Monitor::handle_command(MMonCommand *m)
   string rs;
   int r = -EINVAL;
   if (!m->cmd.empty()) {
+      dout(0) << "m->cmd[0]=" << m->cmd[0] << dendl;
     if (m->cmd[0] == "mds") {
       mdsmon()->dispatch(m);
       return;
@@ -259,6 +260,10 @@ void Monitor::handle_command(MMonCommand *m)
       parse_config_option_string(m->cmd[1]);
       return;
     } 
+    if (m->cmd[0] == "class") {
+      classmon()->dispatch(m);
+      return;
+    }
     if (m->cmd[0] == "mon") {
       if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
 	vector<string> args(2);
@@ -591,7 +596,7 @@ void Monitor::handle_class(MClass *m)
   switch (m->action) {
     case CLASS_SET:
     case CLASS_GET:
-      ((ClassMonitor *)paxos_service[PAXOS_CLASS])->handle_request(m);
+      classmon()->handle_request(m);
       break;
     case CLASS_RESPONSE:
       dout(0) << "got a class response (" << *m << ") ???" << dendl;

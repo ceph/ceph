@@ -569,6 +569,7 @@ int main(int argc, const char **argv, const char *envp[])
 
   bufferlist indata;
   vector<const char*> nargs;
+
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("out_file", 'o')) {
       CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);

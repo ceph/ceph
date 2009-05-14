@@ -77,7 +77,6 @@ void ClassMonitor::create_initial(bufferlist& bl)
   ::encode(i, inc.impl);
   ::encode(l, inc.info);
   inc.add = true;
-
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
@@ -86,6 +85,9 @@ bool ClassMonitor::store_impl(ClassLibrary& info, ClassImpl& impl)
   char *store_name;
   int len = info.name.length() + 16;
   store_name = (char *)malloc(len);
+  if (!store_name)
+    return false;
+
   snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
   dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
   mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
@@ -94,6 +96,8 @@ bool ClassMonitor::store_impl(ClassLibrary& info, ClassImpl& impl)
   mon->store->append_bl_ss(bl, "class_impl", store_name);
   dout(0) << "adding name=" << info.name << " version=" << info.version <<  " store_name=" << store_name << dendl;
   free(store_name);
+
+  return true;
 }
 
 
@@ -264,6 +268,14 @@ bool ClassMonitor::preprocess_command(MMonCommand *m)
   bufferlist rdata;
   stringstream ss;
 
+  if (m->cmd.size() > 1) {
+    if ((m->cmd[1] == "add" || m->cmd[1] == "del")) {
+        if (m->cmd.size() != 4) {
+          ss << "error: usage: ceph <add | set> <name> <version> <-i filename>";
+        }
+    }
+  }
+
   if (r != -1) {
     string rs;
     getline(ss, rs);
@@ -281,8 +293,35 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
   int err = -EINVAL;
 
   // nothing here yet
-  ss << "unrecognized command";
+  if (m->cmd.size() > 1) {
+    if ((m->cmd[1] == "add" || m->cmd[1] == "del") &&
+        m->cmd.size() >= 4) {
+      string name = m->cmd[2];
+      version_t ver = atoi(m->cmd[3].c_str());
+      ClassLibrary& info = list.library_map[name];
+      ClassImpl impl;
+      impl.binary = m->get_data();
+      dout(0) << "payload.length=" << m->get_data().length() << dendl;
+      impl.stamp = g_clock.now();
+      info.name = name;
+      info.version = ver;
+      /* store_impl(info, impl); */
+      dout(0) << "stored class " << name << " v" << ver << dendl;
+      ClassLibraryIncremental inc;
+      ::encode(impl, inc.impl);
+      ::encode(info, inc.info);
+      inc.add = (m->cmd[1] == "add");
+      pending_list.add(info);
+      pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
 
+      ss << "updated";
+      getline(ss, rs);
+      paxos->wait_for_commit(new C_ClassMonCmd(mon, m, rs));
+      return true;
+    }
+  }
+
+  ss << "unrecognized command.";
   getline(ss, rs);
   mon->reply_command(m, err, rs);
   return false;
@@ -326,6 +365,7 @@ void ClassMonitor::handle_request(MClass *m)
       break;
     case CLASS_SET:
        {
+         dout(0) << "ClassMonitor::handle_request() CLASS_SET" << dendl;
          /* FIXME should handle entries removal */
          ClassLibrary& entry = list.library_map[(*p).name];
          entry.name = (*p).name;
