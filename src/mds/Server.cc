@@ -1458,7 +1458,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
-				    bool want_auth, bool rdlock_dft)
+				    bool want_auth)
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1506,8 +1506,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
-  if (rdlock_dft)
-    rdlocks.insert(&ref->dirfragtreelock);
   mds->locker->include_snap_rdlocks(rdlocks, ref);
 
   // set and pin ref
@@ -1988,7 +1986,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   int client = req->get_orig_source().num();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false, true);  // rdlock dirfragtreelock!
+  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (!diri) return;
 
   // it's a directory, right?
@@ -2000,6 +1998,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
 
   rdlocks.insert(&diri->filelock);
+  rdlocks.insert(&diri->dirfragtreelock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2709,7 +2708,7 @@ void Server::handle_client_link(MDRequest *mdr)
 
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
-  CInode *targeti = rdlock_path_pin_ref(mdr, 1, rdlocks, false, false);
+  CInode *targeti = rdlock_path_pin_ref(mdr, 1, rdlocks, false);
   if (!targeti) return;
 
   CDir *dir = dn->get_dir();
