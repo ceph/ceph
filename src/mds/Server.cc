@@ -1999,6 +1999,8 @@ void Server::handle_client_readdir(MDRequest *mdr)
     return;
   }
 
+  rdlocks.insert(&diri->filelock);
+
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
@@ -2033,7 +2035,11 @@ void Server::handle_client_readdir(MDRequest *mdr)
   mdr->now = g_clock.real_now();
 
   snapid_t snapid = mdr->snapid;
-  dout(10) << "snapid " << snapid << dendl;
+
+  nstring offset_str = req->get_path2();
+  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
+
+  dout(10) << "snapid " << snapid << " offset '" << offset_str << "'" << dendl;
 
 
   // purge stale snap data?
@@ -2056,8 +2062,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!max)
     max = dir->get_num_any();  // whatever, something big.
 
-  nstring offset_str = req->get_path2();
-  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
 
   __u32 numfiles = 0;
   while (it != dir->end() && numfiles < max) {
