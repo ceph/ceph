@@ -547,7 +547,7 @@ bool Locker::eval(CInode *in, int mask)
   // choose loner?
   if (in->is_auth() && in->get_loner() < 0) {
     int wanted = in->get_caps_wanted();
-    if (((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GEXCL)) ||
+    if (((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GEXCL)) ||
 	 (in->inode.is_dir() && !in->has_subtree_root_dirfrag() &&
 	  !in->multiple_nonstale_caps())) &&
 	in->try_choose_loner()) {
@@ -1412,7 +1412,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   if (update_size)
     size = new_size;
   
-  if ((in->get_caps_wanted() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) == 0)
+  if ((in->get_caps_wanted() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) == 0)
     new_max = 0;
   else if ((size << 1) >= latest->max_size)
     new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
@@ -2111,7 +2111,7 @@ int Locker::issue_client_lease(CDentry *dn, int client,
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!
       ((!diri->filelock.can_lease(client) &&
-	(diri->get_client_cap_pending(client) & ((CEPH_CAP_GEXCL|CEPH_CAP_GRDCACHE) << CEPH_CAP_SFILE)) == 0)) &&
+	(diri->get_client_cap_pending(client) & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL)) == 0)) &&
       dn->lock.can_lease(client))
     mask |= CEPH_LOCK_DN;
   
@@ -3038,8 +3038,8 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
     int loner_issued, other_issued, xlocker_issued;
     in->get_caps_issued(&loner_issued, &other_issued, &xlocker_issued, CEPH_CAP_SFILE);
 
-    if (!(loner_issued & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD)) ||
-	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER|CEPH_CAP_GRD|CEPH_CAP_GRDCACHE)) ||
+    if (!(loner_issued & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
+	 (other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GRD|CEPH_CAP_GCACHE)) ||
 	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
@@ -3057,7 +3057,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_EXCL &&
 	   //!lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) ||
+	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
 	    (in->inode.is_dir() && !in->has_subtree_root_dirfrag())) &&
 	   in->try_choose_loner()) {
     dout(7) << "file_eval stable, bump to loner " << *lock
@@ -3079,7 +3079,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   // * -> sync?
   else if (lock->get_state() != LOCK_SYNC &&
 	   !in->filelock.is_waiter_for(SimpleLock::WAIT_WR) &&
-	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GWRBUFFER)) &&
+	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
 	   !(in->get_state() == LOCK_MIX &&
 	     in->is_dir() && in->has_subtree_root_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 

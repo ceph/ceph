@@ -535,11 +535,11 @@ static inline int __ceph_caps_used(struct ceph_inode_info *ci)
 	if (ci->i_rd_ref)
 		used |= CEPH_CAP_FILE_RD;
 	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
-		used |= CEPH_CAP_FILE_RDCACHE;
+		used |= CEPH_CAP_FILE_CACHE;
 	if (ci->i_wr_ref)
 		used |= CEPH_CAP_FILE_WR;
 	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_FILE_WRBUFFER;
+		used |= CEPH_CAP_FILE_BUFFER;
 	return used;
 }
 
@@ -562,7 +562,7 @@ static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
 	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
-	if (w & CEPH_CAP_FILE_WRBUFFER)
+	if (w & CEPH_CAP_FILE_BUFFER)
 		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if dirty data */
 	return w;
 }

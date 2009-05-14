@@ -1674,10 +1674,10 @@ void Server::handle_client_stat(MDRequest *mdr)
     issued = cap->issued();
 
   int mask = req->head.args.getattr.mask;
-  if ((mask & CEPH_CAP_LINK_RDCACHE) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
-  if ((mask & CEPH_CAP_AUTH_RDCACHE) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
-  if ((mask & CEPH_CAP_FILE_RDCACHE) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
-  if ((mask & CEPH_CAP_XATTR_RDCACHE) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
+  if ((mask & CEPH_CAP_LINK_SHARED) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
+  if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
+  if ((mask & CEPH_CAP_FILE_SHARED) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
+  if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2633,8 +2633,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->filelock.set_state(LOCK_EXCL);
   newi->authlock.set_state(LOCK_EXCL);
   newi->xattrlock.set_state(LOCK_EXCL);
-  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_RDCACHE|
-		      CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_RDCACHE);
+  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+		      CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());

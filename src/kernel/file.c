@@ -216,7 +216,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	if (flags & O_CREAT) {
-		req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+		req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 		req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	}
 	req->r_locked_dir = dir;           /* caller holds dir->i_mutex */
@@ -658,14 +658,14 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	dout(10, "aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
 	     ceph_vinop(inode), pos, (unsigned)len, inode);
 	__ceph_do_pending_vmtruncate(inode);
-	ret = ceph_get_caps(ci, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_RDCACHE,
+	ret = ceph_get_caps(ci, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE,
 			    &got, -1);
 	if (ret < 0)
 		goto out;
 	dout(10, "aio_read %llx.%llx %llu~%u got cap refs on %s\n",
 	     ceph_vinop(inode), pos, (unsigned)len, ceph_cap_string(got));
 
-	if ((got & CEPH_CAP_FILE_RDCACHE) == 0 ||
+	if ((got & CEPH_CAP_FILE_CACHE) == 0 ||
 	    (iocb->ki_filp->f_flags & O_DIRECT) ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS))
 		/* hmm, this isn't really async... */
@@ -737,7 +737,7 @@ retry_snap:
 	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
-	ret = ceph_get_caps(ci, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_WRBUFFER,
+	ret = ceph_get_caps(ci, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER,
 			    &got, endoff);
 	if (ret < 0)
 		goto out;
@@ -745,7 +745,7 @@ retry_snap:
 	dout(10, "aio_write %p %llu~%u  got cap refs on %s\n",
 	     inode, pos, (unsigned)iov->iov_len, ceph_cap_string(got));
 
-	if ((got & CEPH_CAP_FILE_WRBUFFER) == 0 ||
+	if ((got & CEPH_CAP_FILE_BUFFER) == 0 ||
 	    (iocb->ki_filp->f_flags & O_DIRECT) ||
 	    (inode->i_sb->s_flags & MS_SYNCHRONOUS)) {
 		ret = ceph_sync_write(file, iov->iov_base, iov->iov_len,

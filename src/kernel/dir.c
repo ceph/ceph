@@ -190,7 +190,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if ((filp->f_pos == 2 || fi->dentry) &&
 	    !ceph_test_opt(client, NOASYNCREADDIR) &&
 	    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED)) {
 		err = __dcache_readdir(filp, dirent, filldir);
 		if (err != -EAGAIN) {
 			spin_unlock(&inode->i_lock);
@@ -464,7 +464,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			    client->mount_args.snapdir_name,
 			    dentry->d_name.len) &&
 		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
-		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE)) {
+		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED)) {
 			ceph_dentry(dentry)->offset = ci->i_max_offset++;
 			spin_unlock(&dir->i_lock);
 			dout(10, " dir %p complete, -ENOENT\n", dir);
@@ -538,7 +538,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 	req->r_locked_dir = dir;
 	req->r_args.mknod.mode = cpu_to_le32(mode);
 	req->r_args.mknod.rdev = cpu_to_le32(rdev);
-	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL; 
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
@@ -592,7 +592,7 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 	req->r_num_caps = 2;
 	req->r_path2 = dest;
 	req->r_locked_dir = dir;
-	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
@@ -632,7 +632,7 @@ static int ceph_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
 	req->r_args.mkdir.mode = cpu_to_le32(mode);
-	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (!err && !req->r_reply_info.head->is_dentry)
@@ -666,7 +666,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry); /* or inode? hrm. */
 	req->r_locked_dir = dir;
-	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
 	if (err) {
@@ -686,7 +686,7 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 static int drop_caps_for_unlink(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int drop = CEPH_CAP_LINK_RDCACHE | CEPH_CAP_LINK_EXCL;
+	int drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
 	spin_lock(&inode->i_lock);
 	if (inode->i_nlink == 1) {
@@ -729,7 +729,7 @@ static int ceph_unlink(struct inode *dir, struct dentry *dentry)
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
 	req->r_locked_dir = dir;
-	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	req->r_inode_drop = drop_caps_for_unlink(inode);
 	err = ceph_mdsc_do_request(mdsc, dir, req);
@@ -762,12 +762,12 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 	req->r_num_caps = 2;
 	req->r_old_dentry = dget(old_dentry);
 	req->r_locked_dir = new_dir;
-	req->r_old_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_old_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_old_dentry_unless = CEPH_CAP_FILE_EXCL;
-	req->r_dentry_drop = CEPH_CAP_FILE_RDCACHE;
+	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	/* release LINK_RDCACHE on source inode (mds will lock it) */
-	req->r_old_inode_drop = CEPH_CAP_LINK_RDCACHE;
+	req->r_old_inode_drop = CEPH_CAP_LINK_SHARED;
 	if (new_dentry->d_inode)
 		req->r_inode_drop = drop_caps_for_unlink(new_dentry->d_inode);
 	err = ceph_mdsc_do_request(mdsc, old_dir, req);
@@ -844,7 +844,7 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 
 	spin_lock(&dir->i_lock);
 	if (ci->i_rdcache_gen == dentry->d_time)
-		valid = __ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE;
+		valid = __ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED;
 	spin_unlock(&dir->i_lock);
 	dout(20, "dir_lease_is_valid dir %p v%u dentry %p v%lu = %d\n",
 	     dir, (unsigned)ci->i_rdcache_gen, dentry, dentry->d_time, valid);

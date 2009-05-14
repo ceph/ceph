@@ -43,7 +43,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
-	req->r_inode_drop = CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_EXCL;
+	req->r_inode_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL;
 	req->r_args.setlayout.layout = layout;
 
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);

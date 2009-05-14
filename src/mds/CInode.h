@@ -661,7 +661,7 @@ public:
   // caps allowed
   int get_caps_liked() {
     if (is_dir())
-      return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_RDCACHE;  // but not, say, FILE_RD|WR|WRBUFFER
+      return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
     else
       return CEPH_CAP_ANY;
   }
