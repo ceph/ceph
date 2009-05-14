@@ -281,7 +281,7 @@ int RadosClient::write(object_t& oid, const char *buf, off_t off, size_t len)
 int RadosClient::exec(object_t& oid, const char *code, off_t data_off, size_t data_len, char *buf, size_t out_len)
 {
   SnapContext snapc;
-  bufferlist bl, obl;
+  bufferlist bl;
   utime_t ut = g_clock.now();
 
   Mutex lock("RadosClient::exec");
@@ -296,19 +296,20 @@ int RadosClient::exec(object_t& oid, const char *code, off_t data_off, size_t da
 
   lock.Lock();
 
-  objecter->exec(oid, layout,
-	      data_off, data_len, CEPH_NOSNAP, bl, 0,
-	      &obl, out_len,
-              oncommit);
+  ObjectRead rd;
+  bufferlist inbl, outbl;
+  inbl.append("input data", 10);
+  rd.rdcall("test", "foo", inbl);
+  objecter->read(oid, layout, rd, CEPH_NOSNAP, &outbl, 0, oncommit);
 
-  dout(0) << "after write call" << dendl;
+  dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
 
   exec_wait.Wait(lock);
 
   lock.Unlock();
 
   if (out_len)
-    memcpy(buf, obl.c_str(), out_len);
+    memcpy(buf, outbl.c_str(), out_len);
 
   return out_len;
 }

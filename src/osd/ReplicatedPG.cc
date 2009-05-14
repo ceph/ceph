@@ -739,11 +739,18 @@ void ReplicatedPG::op_read(MOSDOp *op)
       osd->logger->inc(l_osd_c_rdb, p->length);
       break;
 
-   case CEPH_OSD_OP_EXEC:
+   case CEPH_OSD_OP_RDCALL:
     {
-        dout(0) << "CEPH_OSD_OP_EXEC" << dendl;
+        dout(0) << "CEPH_OSD_OP_RDCALL" << dendl;
 
-	if (!osd->get_class("test", info.pgid, op))
+	string cname, method;
+	bp.copy(p->class_len, cname);
+	bp.copy(p->method_len, method);
+
+	bufferlist indata;
+	::decode_nohead(p->indata_len, indata, bp);
+
+	if (!osd->get_class(cname, info.pgid, op))
 	  return;
 
 #if 0

@@ -168,6 +168,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_TYPE_LOCK  0x0100
 #define CEPH_OSD_OP_TYPE_DATA  0x0200
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
+#define CEPH_OSD_OP_TYPE_EXEC  0x0400
 
 enum {
 	/** data **/
@@ -219,8 +220,9 @@ enum {
 	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
 
 	/** exec **/
-	CEPH_OSD_OP_LOAD_CLASS = CEPH_OSD_OP_MODE_EXEC | 1,
-	CEPH_OSD_OP_EXEC       = CEPH_OSD_OP_MODE_EXEC | 2,
+	CEPH_OSD_OP_RDCALL     = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_EXEC | 1,
+	CEPH_OSD_OP_LOAD_CLASS = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_EXEC | 2,
+	CEPH_OSD_OP_WRCALL     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_EXEC | 1,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -234,6 +236,10 @@ static inline int ceph_osd_op_type_data(int op)
 static inline int ceph_osd_op_type_attr(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_ATTR;
+}
+static inline int ceph_osd_op_type_exec(int op)
+{
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_EXEC;
 }
 
 static inline int ceph_osd_op_mode_subop(int op)
@@ -289,7 +295,8 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_UPLOCK: return "uplock";
 	case CEPH_OSD_OP_DNLOCK: return "dnlock";
 
-	case CEPH_OSD_OP_EXEC: return "exec";
+	case CEPH_OSD_OP_RDCALL: return "rdcall";
+	case CEPH_OSD_OP_WRCALL: return "wrcall";
 
 	default: return "???";
 	}
@@ -328,6 +335,11 @@ struct ceph_osd_op {
 			__le64 truncate_size;
 			__le32 truncate_seq;
 		};
+		struct {
+			__u8 class_len;
+			__u8 method_len;
+			__le32 indata_len;
+		} __attribute__ ((packed));
 	};
 } __attribute__ ((packed));
 

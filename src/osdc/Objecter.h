@@ -59,6 +59,17 @@ struct ObjectOperation {
     ops[s].name_len = namelen;
     ops[s].value_len = valuelen;
   }
+  void add_call(int op, const char *cname, const char *method, bufferlist &indata) {
+    int s = ops.size();
+    ops.resize(s+1);
+    memset(&ops[s], 0, sizeof(ops[s]));
+    ops[s].op = op;
+    ops[s].class_len = strlen(cname);
+    ops[s].method_len = strlen(method);
+    data.append(cname, ops[s].class_len);
+    data.append(method, ops[s].method_len);
+    data.append(indata);
+  }
 };
 
 struct ObjectRead : public ObjectOperation {
@@ -73,10 +84,19 @@ struct ObjectRead : public ObjectOperation {
   void getxattrs() {
     add_xattr(CEPH_OSD_OP_GETXATTRS, 0, 0);
   }
+
+  void rdcall(const char *cname, const char *method, bufferlist &indata) {
+    add_call(CEPH_OSD_OP_RDCALL, cname, method, indata);
+  }
 };
 
 struct ObjectMutation : public ObjectOperation {
   utime_t mtime;
+  
+  // exec
+  void wrcall(const char *cname, const char *method, bufferlist &indata) {
+    add_call(CEPH_OSD_OP_WRCALL, cname, method, indata);
+  }
   
   // object data
   void write(__u64 off, __u64 len, bufferlist& bl) {
@@ -314,22 +334,6 @@ class Objecter {
 	     ObjectRead& read, snapid_t snap, bufferlist *pbl, int flags, Context *onfinish) {
     ReadOp *rd = new ReadOp(oid, ol, read.ops, snap, flags, onfinish);
     rd->bl = read.data;
-    rd->pbl = pbl;
-    return read_submit(rd);
-  }
-
-  tid_t exec(object_t oid, ceph_object_layout ol,
-	      __u64 data_off, size_t data_len,
-	      snapid_t snap, bufferlist &bl, int flags,
-              bufferlist *pbl, size_t out_len,
-              Context *onfinish) {
-    vector<ceph_osd_op> ops(1);
-    memset(&ops[0], 0, sizeof(ops[0]));
-    ops[0].op = CEPH_OSD_OP_EXEC;
-    ops[0].offset = data_off;
-    ops[0].length = data_len;
-    ReadOp *rd = new ReadOp(oid, ol, ops, snap, flags, onfinish);
-    rd->bl = bl;
     rd->pbl = pbl;
     return read_submit(rd);
   }
