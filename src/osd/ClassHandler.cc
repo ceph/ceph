@@ -98,3 +98,40 @@ void ClassHandler::resend_class_requests()
   for (map<nstring,ClassData>::iterator p = classes.begin(); p != classes.end(); p++)
     osd->send_class_request(p->first.c_str());
 }
+
+ClassData *ClassHandler::register_class(const char *cname)
+{
+  ClassData& class_data = classes[cname];
+
+  if (class_data.status != CLASS_LOADED) {
+    dout(0) << "class " << cname << " can't be loaded" << dendl;
+    return NULL;
+  }
+
+  if (class_data.registered) {
+    dout(0) << "class " << cname << " already registered" << dendl;
+  }
+
+  class_data.registed = true;
+
+  return &class_data;
+}
+
+void *ClassHandler::register_method(ClassData *cls, const char *mname,
+                          int (*func)(struct ceph_osd_op *op, char **indata, int datalen, char **outdata, int *outdatalen))
+{
+  ClassMethod method;
+  method.func = func;
+  cls->methods_map[mname] = method;
+}
+
+void ClassHandler::unregister_method(ClassData *cls, const char *mname)
+{
+   map<string& name, ClassMethod>::iterator iter;
+
+   iter = cls->methods_map.find(mname);
+   if (iter == cls->methods_map.end())
+     return;
+
+   cls->methods_map.erase(iter);
+}

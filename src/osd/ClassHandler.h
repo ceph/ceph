@@ -14,6 +14,10 @@ class ClassHandler
 {
   OSD *osd;
 
+  struct ClassMethod {
+    int (*func)(struct ceph_osd_op *op, char **indata, int datalen, char **outdata, int *outdatalen);
+  };
+
   struct ClassData {
     enum { 
       CLASS_UNKNOWN, 
@@ -25,8 +29,10 @@ class ClassHandler
     version_t version;
     ClassImpl impl;
     void *handle;
+    bool registered;
+    map<string name, ClassMethod> methods_map;
 
-    ClassData() : status(CLASS_UNKNOWN), version(-1), handle(NULL) {}
+    ClassData() : status(CLASS_UNKNOWN), version(-1), handle(NULL), registered(false) {}
     ~ClassData() { }
   };
   map<nstring, ClassData> classes;
