@@ -24,7 +24,7 @@ using namespace std;
 #include "PaxosService.h"
 #include "mon/Monitor.h"
 
-#include "include/ClassEntry.h"
+#include "include/ClassLibrary.h"
 
 class MMonCommand;
 class MClass;

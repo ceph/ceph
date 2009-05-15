@@ -334,10 +334,10 @@ noinst_HEADERS = \
         crush/mapper.h\
         crush/sample.txt\
         crush/types.h\
+	include/ClassLibrary.h\
         include/Context.h\
         include/Distribution.h\
 	include/LogEntry.h\
-	include/ClassEntry.h\
 	include/assert.h\
         include/atomic.h\
         include/bitmapper.h\

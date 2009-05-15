@@ -15,7 +15,7 @@
 #ifndef __MCLASSACK_H
 #define __MCLASSACK_H
 
-#include "include/ClassEntry.h"
+#include "include/ClassLibrary.h"
 
 class MClassAck : public Message {
 public:

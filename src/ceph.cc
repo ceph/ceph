@@ -71,7 +71,7 @@ Context *resend_event = 0;
 #include "osd/OSDMap.h"
 #include "mds/MDSMap.h"
 #include "include/LogEntry.h"
-#include "include/ClassEntry.h"
+#include "include/ClassLibrary.h"
 
 #include "mon/mon_types.h"
 

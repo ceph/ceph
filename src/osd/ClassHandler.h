@@ -2,7 +2,7 @@
 #define __CLASHANDLER_H
 
 #include "include/types.h"
-#include "include/ClassEntry.h"
+#include "include/ClassLibrary.h"
 
 #include "common/Cond.h"
 

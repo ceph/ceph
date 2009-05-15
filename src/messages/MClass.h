@@ -15,7 +15,7 @@
 #ifndef __MCLASS_H
 #define __MCLASS_H
 
-#include "include/ClassEntry.h"
+#include "include/ClassLibrary.h"
 
 enum {
    CLASS_NOOP = 0,
