@@ -5,18 +5,25 @@
 extern "C" {
 #endif
 
+typedef void *cls_handle_t;
 typedef void *cls_method_handle_t;
-typedef int (*cls_method_call_t)(struct ceph_osd_op *op,
-				 char **indata, int datalen,
+typedef int (*cls_method_call_t)(char **indata, int datalen,
 				 char **outdata, int *outdatalen);
 
-/* class log */
+/* class utils */
 extern int cls_log(const char *format, ...);
+extern void *cls_alloc(size_t size);
+extern void cls_free(void *p);
 
 /* class registration api */
-extern int cls_register(const char *name, const char *method,
-                        cls_method_call_t class_call, cls_method_handle_t handle);
-extern int cls_unregister(cls_method_handle_t handle);
+extern int cls_register(const char *name, cls_handle_t *handle);
+extern int cls_unregister(cls_handle_t);
+
+extern int cls_register_method(const char *method,
+                        cls_method_call_t class_call, cls_method_handle_t *handle);
+extern int cls_unregister_method(cls_method_handle_t handle);
+
+
 
 /* triggers */
 #define OBJ_READ    0x1

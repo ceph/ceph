@@ -101,7 +101,6 @@ protected:
   MonMap      *monmap;
 
   LogClient   logclient;
-  ClassHandler  *class_handler;
 
   int whoami;
   const char *dev_path, *journal_path;
@@ -120,6 +119,7 @@ protected:
   void _dispatch(Message *m);
 
 public:
+  ClassHandler  *class_handler;
   int get_nodeid() { return whoami; }
   
   static pobject_t get_osdmap_pobject_name(epoch_t epoch) { 

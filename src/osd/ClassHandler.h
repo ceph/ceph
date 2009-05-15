@@ -4,6 +4,8 @@
 #include "include/types.h"
 #include "include/ClassLibrary.h"
 
+#include "objclass/objclass.h"
+
 #include "common/Cond.h"
 
 
@@ -14,8 +16,15 @@ class ClassHandler
 {
   OSD *osd;
 
+public:
+  class ClassData;
+
   struct ClassMethod {
-    int (*func)(struct ceph_osd_op *op, char **indata, int datalen, char **outdata, int *outdatalen);
+    struct ClassHandler::ClassData *cls;
+    string name;
+    cls_method_call_t func;
+
+    void unregister();
   };
 
   struct ClassData {
@@ -30,22 +39,29 @@ class ClassHandler
     ClassImpl impl;
     void *handle;
     bool registered;
-    map<string name, ClassMethod> methods_map;
+    map<string, ClassMethod> methods_map;
 
     ClassData() : status(CLASS_UNKNOWN), version(-1), handle(NULL), registered(false) {}
     ~ClassData() { }
+
+    ClassMethod *register_method(const char *mname,
+                          cls_method_call_t func);
+    void unregister_method(ClassMethod *method);
   };
   map<nstring, ClassData> classes;
 
   void load_class(const nstring& cname);
 
-public:
   ClassHandler(OSD *_osd) : osd(_osd) {}
 
   bool get_class(const nstring& cname);
   void resend_class_requests();
 
   void handle_class(MClass *m);
+
+  ClassData *register_class(const char *cname);
+  void unregister_class(ClassData *cls);
+
 };
 
 

@@ -114,7 +114,6 @@ testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la libcrush.la
 
 
-
 ## libcephclient.so
 #libcephclient_so_a_SOURCES = \
 #	client/Client.cc \
@@ -221,8 +220,7 @@ libcommon_files = \
 	common/buffer.cc \
 	common/debug.cc \
 	config.cc \
-	common/lockdep.cc \
-        objclass/class_debug.cc
+	common/lockdep.cc
 
 libcrush_a_SOURCES = \
 	crush/builder.c \
@@ -275,8 +273,10 @@ libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
-        osd/ClassHandler.cc \
-	osd/OSD.cc
+	osd/OSD.cc \
+        common/ClassHandler.cc \
+        objclass/class_debug.cc \
+        objclass/class_api.cc
 #	osd/RAID4PG.cc
 
 libosdc_a_SOURCES = \
@@ -309,6 +309,7 @@ noinst_HEADERS = \
         common/common_init.h\
         common/Cond.h\
         common/dyn_snprintf.h\
+        common/ClassHandler.h\
         common/ConfUtils.h\
         common/DecayCounter.h\
         common/Finisher.h\
@@ -574,7 +575,6 @@ noinst_HEADERS = \
         os/ObjectStore.h\
         osbdb/OSBDB.h\
         osd/Ager.h\
-        osd/ClassHandler.h\
         osd/OSD.h\
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
