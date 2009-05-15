@@ -377,8 +377,6 @@ public:
 
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
-	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::encode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], bl);
 	::encode(((crush_bucket_uniform*)crush->buckets[i])->item_weight, bl);
 	break;
 
@@ -390,7 +388,8 @@ public:
 	break;
 
       case CRUSH_BUCKET_TREE:
-	for (unsigned j=0; j<crush->buckets[i]->size; j++)
+	::encode(((crush_bucket_tree*)crush->buckets[i])->num_nodes, bl);
+	for (unsigned j=0; j<((crush_bucket_tree*)crush->buckets[i])->num_nodes; j++)
 	  ::encode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], bl);
 	break;
 
@@ -472,12 +471,11 @@ public:
       for (unsigned j=0; j<crush->buckets[i]->size; j++)
 	::decode(crush->buckets[i]->items[j], blp);
 
+      crush->buckets[i]->perm = (__u32*)malloc(sizeof(__s32)*crush->buckets[i]->size);
+      crush->buckets[i]->perm_n = 0;
+
       switch (crush->buckets[i]->alg) {
       case CRUSH_BUCKET_UNIFORM:
-	((crush_bucket_uniform*)crush->buckets[i])->primes =
-	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::decode(((crush_bucket_uniform*)crush->buckets[i])->primes[j], blp);
 	::decode(((crush_bucket_uniform*)crush->buckets[i])->item_weight, blp);
 	break;
 
@@ -494,10 +492,14 @@ public:
 	break;
 
       case CRUSH_BUCKET_TREE:
-	((crush_bucket_tree*)crush->buckets[i])->node_weights =
-	  (__u32*)malloc(crush->buckets[i]->size * sizeof(__u32));
-	for (unsigned j=0; j<crush->buckets[i]->size; j++)
-	  ::decode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], blp);
+	{
+	  ::decode(((crush_bucket_tree*)crush->buckets[i])->num_nodes, blp);
+	  unsigned num_nodes = ((crush_bucket_tree*)crush->buckets[i])->num_nodes;
+	  ((crush_bucket_tree*)crush->buckets[i])->node_weights =
+	    (__u32*)malloc(num_nodes * sizeof(__u32));
+	  for (unsigned j=0; j<num_nodes; j++)
+	    ::decode(((crush_bucket_tree*)crush->buckets[i])->node_weights[j], blp);
+	}
 	break;
 
       case CRUSH_BUCKET_STRAW:

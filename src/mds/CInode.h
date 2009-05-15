@@ -595,7 +595,6 @@ public:
 	n++;
       }
     return false;
-
   }
   int get_loner() {
     return loner_cap;
@@ -640,6 +639,7 @@ public:
       cap->set_wanted(icr.wanted);
       cap->issue(icr.issued);
     }
+    cap->set_cap_id(icr.cap_id);
     cap->set_last_issue_stamp(g_clock.recent_now());
     inode.size = MAX(inode.size, icr.size);
     inode.mtime = MAX(inode.mtime, utime_t(icr.mtime));
@@ -661,7 +661,7 @@ public:
   // caps allowed
   int get_caps_liked() {
     if (is_dir())
-      return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_RDCACHE;  // but not, say, FILE_RD|WR|WRBUFFER
+      return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
     else
       return CEPH_CAP_ANY;
   }

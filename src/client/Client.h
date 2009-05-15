@@ -103,7 +103,7 @@ class Dentry : public LRUObject {
   int lease_mds;
   utime_t lease_ttl;
   ceph_seq_t lease_seq;
-  int cap_rdcache_gen;
+  int cap_shared_gen;
   
   void get() { 
     assert(ref == 0); ref++; lru_pin(); 
@@ -114,7 +114,7 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0), cap_rdcache_gen(0) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0), cap_shared_gen(0) { }
 };
 
 class Dir {
@@ -209,7 +209,7 @@ class Inode {
   map<int,InodeCap*> caps;            // mds -> InodeCap
   InodeCap *auth_cap;
   unsigned dirty_caps, flushing_caps;
-  int rdcache_gen;
+  int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
   int exporting_mds;
@@ -294,7 +294,7 @@ class Inode {
     //inode(_inode),
     snapid(vino.snapid),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    dirty_caps(0), flushing_caps(0), rdcache_gen(0),
+    dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this),
@@ -364,7 +364,7 @@ class Inode {
   }
   int caps_wanted() {
     int want = caps_file_wanted() | caps_used();
-    if (want & (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE))
+    if (want & CEPH_CAP_FILE_BUFFER)
       want |= CEPH_CAP_FILE_EXCL;
     return want;
   }
@@ -374,9 +374,7 @@ class Inode {
 
   bool have_valid_size() {
     // RD+RDCACHE or WR+WRBUFFER => valid size
-    if ((caps_issued() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_RDCACHE)) == (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_RDCACHE))
-      return true;
-    if ((caps_issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) == (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER))
+    if (caps_issued() & (CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL))
       return true;
     return false;
   }

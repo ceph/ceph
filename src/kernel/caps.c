@@ -29,15 +29,17 @@ static int caps_reserve_count;
 
 static char *gcap_string(char *s, int c)
 {
-	if (c & CEPH_CAP_GRDCACHE)
-		*s++ = 'c';
+	if (c & CEPH_CAP_GSHARED)
+		*s++ = 's';
 	if (c & CEPH_CAP_GEXCL)
 		*s++ = 'x';
+	if (c & CEPH_CAP_GCACHE)
+		*s++ = 'c';
 	if (c & CEPH_CAP_GRD)
 		*s++ = 'r';
 	if (c & CEPH_CAP_GWR)
 		*s++ = 'w';
-	if (c & CEPH_CAP_GWRBUFFER)
+	if (c & CEPH_CAP_GBUFFER)
 		*s++ = 'b';
 	if (c & CEPH_CAP_GLAZYIO)
 		*s++ = 'l';
@@ -292,7 +294,7 @@ static int __ceph_get_cap_mds(struct ceph_inode_info *ci, u32 *mseq)
 		if (mseq)
 			*mseq = cap->mseq;
 		if (cap->issued & (CEPH_CAP_FILE_WR |
-				   CEPH_CAP_FILE_WRBUFFER |
+				   CEPH_CAP_FILE_BUFFER |
 				   CEPH_CAP_FILE_EXCL))
 			break;
 	}
@@ -498,13 +500,13 @@ retry:
 	}
 
 	/*
-	 * if we are newly issued FILE_RDCACHE, clear I_COMPLETE; we
+	 * if we are newly issued FILE_SHARED, clear I_COMPLETE; we
 	 * don't know what happened to this directory while we didn't
 	 * have the cap.
 	 */
 	if (S_ISDIR(inode->i_mode) &&
-	    (issued & CEPH_CAP_FILE_RDCACHE) &&
-	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0) {
+	    (issued & CEPH_CAP_FILE_SHARED) &&
+	    (cap->issued & CEPH_CAP_FILE_SHARED) == 0) {
 		dout(10, " marking %p NOT complete\n", inode);
 		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
 	}
@@ -921,7 +923,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 
 	spin_unlock(&inode->i_lock);
 
-	if (dropping & CEPH_CAP_FILE_RDCACHE) {
+	if (dropping & CEPH_CAP_FILE_CACHE) {
 		/* invalidate what we can */
 		dout(20, "invalidating pages on %p\n", inode);
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
@@ -1125,7 +1127,7 @@ retry_locked:
 		if (want) {
 			retain |= CEPH_CAP_ANY;       /* be greedy */
 		} else {
-			retain |= CEPH_CAP_ANY_RDCACHE;
+			retain |= CEPH_CAP_ANY_SHARED;
 			/*
 			 * keep RD only if we didn't have the file open RW,
 			 * because then the mds would revoke it anyway to
@@ -1333,8 +1335,8 @@ int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 		igrab(inode);
 		dirty |= I_DIRTY_SYNC;
 	}
-	if ((was & CEPH_CAP_FILE_WRBUFFER) &&
-	    (mask & CEPH_CAP_FILE_WRBUFFER))
+	if ((was & CEPH_CAP_FILE_BUFFER) &&
+	    (mask & CEPH_CAP_FILE_BUFFER))
 		dirty |= I_DIRTY_DATASYNC;
 	if (dirty)
 		__mark_inode_dirty(inode, dirty);
@@ -1443,11 +1445,11 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
 		ci->i_pin_ref++;
 	if (got & CEPH_CAP_FILE_RD)
 		ci->i_rd_ref++;
-	if (got & CEPH_CAP_FILE_RDCACHE)
+	if (got & CEPH_CAP_FILE_CACHE)
 		ci->i_rdcache_ref++;
 	if (got & CEPH_CAP_FILE_WR)
 		ci->i_wr_ref++;
-	if (got & CEPH_CAP_FILE_WRBUFFER) {
+	if (got & CEPH_CAP_FILE_BUFFER) {
 		if (ci->i_wrbuffer_ref == 0)
 			igrab(&ci->vfs_inode);
 		ci->i_wrbuffer_ref++;
@@ -1566,10 +1568,10 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 	if (had & CEPH_CAP_FILE_RD)
 		if (--ci->i_rd_ref == 0)
 			last++;
-	if (had & CEPH_CAP_FILE_RDCACHE)
+	if (had & CEPH_CAP_FILE_CACHE)
 		if (--ci->i_rdcache_ref == 0)
 			last++;
-	if (had & CEPH_CAP_FILE_WRBUFFER) {
+	if (had & CEPH_CAP_FILE_BUFFER) {
 		if (--ci->i_wrbuffer_ref == 0)
 			last++;
 		dout(30, "put_cap_refs %p wrbuffer %d -> %d (?)\n",
@@ -1709,12 +1711,12 @@ start:
 	cap->gen = session->s_cap_gen;
 
 	/*
-	 * Each time we receive RDCACHE anew, we increment i_rdcache_gen.
+	 * Each time we receive CACHE anew, we increment i_rdcache_gen.
 	 * Also clear I_COMPLETE: we don't know what happened to this directory
 	 */
-	if ((newcaps & CEPH_CAP_FILE_RDCACHE) &&          /* got RDCACHE */
-	    (cap->issued & CEPH_CAP_FILE_RDCACHE) == 0 && /* but not before */
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_RDCACHE) == 0) {
+	if ((newcaps & CEPH_CAP_FILE_CACHE) &&          /* got RDCACHE */
+	    (cap->issued & CEPH_CAP_FILE_CACHE) == 0 && /* but not before */
+	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_CACHE) == 0) {
 		ci->i_rdcache_gen++;
 
 		if (S_ISDIR(inode->i_mode)) {
@@ -1724,13 +1726,13 @@ start:
 	}
 
 	/*
-	 * If RDCACHE is being revoked, and we have no dirty buffers,
+	 * If CACHE is being revoked, and we have no dirty buffers,
 	 * try to invalidate (once).  (If there are dirty buffers, we
 	 * will invalidate _after_ writeback.)
 	 */
-	if (((cap->issued & ~newcaps) & CEPH_CAP_FILE_RDCACHE) &&
+	if (((cap->issued & ~newcaps) & CEPH_CAP_FILE_CACHE) &&
 	    !ci->i_wrbuffer_ref && !tried_invalidate) {
-		dout(10, "RDCACHE invalidation\n");
+		dout(10, "CACHE invalidation\n");
 		spin_unlock(&inode->i_lock);
 		tried_invalidate = 1;
 
@@ -1829,11 +1831,11 @@ start:
 	if (cap->issued & ~newcaps) {
 		dout(10, "revocation: %s -> %s\n", ceph_cap_string(cap->issued),
 		     ceph_cap_string(newcaps));
-		if ((used & ~newcaps) & CEPH_CAP_FILE_WRBUFFER) {
+		if ((used & ~newcaps) & CEPH_CAP_FILE_BUFFER) {
 			writeback = 1; /* will delay ack */
 		} else if (dirty & ~newcaps) {
 			reply = 2;     /* initiate writeback in check_caps */
-		} else if (((used & ~newcaps) & CEPH_CAP_FILE_RDCACHE) == 0 ||
+		} else if (((used & ~newcaps) & CEPH_CAP_FILE_CACHE) == 0 ||
 			   revoked_rdcache) {
 			/*
 			 * we're not using revoked caps.. ack now.

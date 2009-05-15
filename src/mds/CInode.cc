@@ -1558,7 +1558,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.fragtree.nsplits = dirfragtree._splits.size();
 
   i = pxattr ? pi:oi;
-  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_RDCACHE) &&
+  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
     cap->client_xattr_version == i->xattr_version;
   
   // include capability?
@@ -1624,7 +1624,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.xattr_version = i->xattr_version;
   if (!had_latest_xattrs &&
       cap &&
-      (cap->pending() & CEPH_CAP_XATTR_RDCACHE)) {
+      (cap->pending() & CEPH_CAP_XATTR_SHARED)) {
     
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
@@ -1688,7 +1688,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 
   i = pxattr ? pi:oi;
   map<string,bufferptr> *ix = pxattr ? get_projected_xattrs() : &xattrs;
-  if ((cap->pending() & CEPH_CAP_XATTR_RDCACHE) &&
+  if ((cap->pending() & CEPH_CAP_XATTR_SHARED) &&
       i->xattr_version > cap->client_xattr_version) {
     dout(10) << "    including xattrs v " << i->xattr_version << dendl;
     ::encode(*ix, m->xattrbl);

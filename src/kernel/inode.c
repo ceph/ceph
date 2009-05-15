@@ -369,8 +369,8 @@ int ceph_fill_file_size(struct inode *inode, int issued,
 			     ci->i_truncate_seq, truncate_seq);
 			ci->i_truncate_seq = truncate_seq;
 			ci->i_truncate_pending++;
-			if (issued & (CEPH_CAP_FILE_RDCACHE|CEPH_CAP_FILE_RD|
-				      CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER|
+			if (issued & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_RD|
+				      CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER|
 				      CEPH_CAP_FILE_EXCL))
 				queue_trunc = 1;
 		}
@@ -393,7 +393,7 @@ void ceph_fill_file_time(struct inode *inode, int issued,
 
 	if (issued & (CEPH_CAP_FILE_EXCL|
 		      CEPH_CAP_FILE_WR|
-		      CEPH_CAP_FILE_WRBUFFER)) {
+		      CEPH_CAP_FILE_BUFFER)) {
 		if (timespec_compare(ctime, &inode->i_ctime) > 0) {
 			dout(20, "ctime %ld.%09ld -> %ld.%09ld inc w/ cap\n",
 			     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec,
@@ -651,7 +651,7 @@ no_change:
 		/* set dir completion flag? */
 		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
 		    ceph_snap(inode) == CEPH_NOSNAP &&
-		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_RDCACHE)) {
+		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_SHARED)) {
 			dout(10, " marking %p complete (empty)\n", inode);
 			ci->i_ceph_flags |= CEPH_I_COMPLETE;
 			ci->i_max_offset = 2;
@@ -893,7 +893,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		/* do we have a lease on the whole dir? */
 		have_dir_cap =
 			(le32_to_cpu(rinfo->diri.in->cap.caps) &
-			 CEPH_CAP_FILE_RDCACHE);
+			 CEPH_CAP_FILE_SHARED);
 
 		/* do we have a dn lease? */
 		have_lease = have_dir_cap ||
@@ -1344,11 +1344,11 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		if (issued & CEPH_CAP_AUTH_EXCL) {
 			inode->i_uid = attr->ia_uid;
 			dirtied |= CEPH_CAP_AUTH_EXCL;
-		} else if ((issued & CEPH_CAP_AUTH_RDCACHE) == 0 ||
+		} else if ((issued & CEPH_CAP_AUTH_SHARED) == 0 ||
 			   attr->ia_uid != inode->i_uid) {
 			req->r_args.setattr.uid = cpu_to_le32(attr->ia_uid);
 			mask |= CEPH_SETATTR_UID;
-			release |= CEPH_CAP_AUTH_RDCACHE;
+			release |= CEPH_CAP_AUTH_SHARED;
 		}
 	}
 	if (ia_valid & ATTR_GID) {
@@ -1357,11 +1357,11 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		if (issued & CEPH_CAP_AUTH_EXCL) {
 			inode->i_gid = attr->ia_gid;
 			dirtied |= CEPH_CAP_AUTH_EXCL;
-		} else if ((issued & CEPH_CAP_AUTH_RDCACHE) == 0 ||
+		} else if ((issued & CEPH_CAP_AUTH_SHARED) == 0 ||
 			   attr->ia_gid != inode->i_gid) {
 			req->r_args.setattr.gid = cpu_to_le32(attr->ia_gid);
 			mask |= CEPH_SETATTR_GID;
-			release |= CEPH_CAP_AUTH_RDCACHE;
+			release |= CEPH_CAP_AUTH_SHARED;
 		}
 	}
 	if (ia_valid & ATTR_MODE) {
@@ -1370,11 +1370,11 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		if (issued & CEPH_CAP_AUTH_EXCL) {
 			inode->i_mode = attr->ia_mode;
 			dirtied |= CEPH_CAP_AUTH_EXCL;
-		} else if ((issued & CEPH_CAP_AUTH_RDCACHE) == 0 ||
+		} else if ((issued & CEPH_CAP_AUTH_SHARED) == 0 ||
 			   attr->ia_mode != inode->i_mode) {
 			req->r_args.setattr.mode = cpu_to_le32(attr->ia_mode);
 			mask |= CEPH_SETATTR_MODE;
-			release |= CEPH_CAP_AUTH_RDCACHE;
+			release |= CEPH_CAP_AUTH_SHARED;
 		}
 	}
 
@@ -1391,12 +1391,12 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 					    &attr->ia_atime) < 0) {
 			inode->i_atime = attr->ia_atime;
 			dirtied |= CEPH_CAP_FILE_WR;
-		} else if ((issued & CEPH_CAP_FILE_RDCACHE) == 0 ||
+		} else if ((issued & CEPH_CAP_FILE_SHARED) == 0 ||
 			   !timespec_equal(&inode->i_atime, &attr->ia_atime)) {
 			ceph_encode_timespec(&req->r_args.setattr.atime,
 					     &attr->ia_atime);
 			mask |= CEPH_SETATTR_ATIME;
-			release |= CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD |
+			release |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
 				CEPH_CAP_FILE_WR;
 		}
 	}
@@ -1413,12 +1413,12 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 					    &attr->ia_mtime) < 0) {
 			inode->i_mtime = attr->ia_mtime;
 			dirtied |= CEPH_CAP_FILE_WR;
-		} else if ((issued & CEPH_CAP_FILE_RDCACHE) == 0 ||
+		} else if ((issued & CEPH_CAP_FILE_SHARED) == 0 ||
 			   !timespec_equal(&inode->i_mtime, &attr->ia_mtime)) {
 			ceph_encode_timespec(&req->r_args.setattr.mtime,
 					     &attr->ia_mtime);
 			mask |= CEPH_SETATTR_MTIME;
-			release |= CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD |
+			release |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
 				CEPH_CAP_FILE_WR;
 		}
 	}
@@ -1438,13 +1438,13 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 			inode->i_ctime = attr->ia_ctime;
 			ci->i_reported_size = attr->ia_size;
 			dirtied |= CEPH_CAP_FILE_EXCL;
-		} else if ((issued & CEPH_CAP_FILE_RDCACHE) == 0 ||
+		} else if ((issued & CEPH_CAP_FILE_SHARED) == 0 ||
 			   attr->ia_size != inode->i_size) {
 			req->r_args.setattr.size = cpu_to_le64(attr->ia_size);
 			req->r_args.setattr.old_size =
 				cpu_to_le64(inode->i_size);
 			mask |= CEPH_SETATTR_SIZE;
-			release |= CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD |
+			release |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
 				CEPH_CAP_FILE_WR;
 		}
 	}
@@ -1523,7 +1523,7 @@ int ceph_do_getattr(struct inode *inode, int mask)
  */
 int ceph_permission(struct inode *inode, int mask)
 {
-	int err = ceph_do_getattr(inode, CEPH_CAP_AUTH_RDCACHE);
+	int err = ceph_do_getattr(inode, CEPH_CAP_AUTH_SHARED);
 
 	if (!err)
 		err = generic_permission(inode, mask, NULL);
@@ -2012,7 +2012,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 			ceph_cap_string(issued),
 			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-        if ((issued & CEPH_CAP_XATTR_RDCACHE) &&
+        if ((issued & CEPH_CAP_XATTR_SHARED) &&
 	    (ci->i_xattrs.index_version >= ci->i_xattrs.version)) {
 		goto get_xattr;
 	} else {
@@ -2069,7 +2069,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 			ceph_cap_string(issued),
 			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-        if ((issued & CEPH_CAP_XATTR_RDCACHE) &&
+        if ((issued & CEPH_CAP_XATTR_SHARED) &&
 	    (ci->i_xattrs.index_version > ci->i_xattrs.version)) {
 		goto list_xattr;
 	} else {
@@ -2157,7 +2157,7 @@ static int ceph_sync_setxattr(struct dentry *dentry, const char *name,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
-	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
+	req->r_inode_drop = CEPH_CAP_XATTR_SHARED;
 	req->r_num_caps = 1;
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
 	req->r_path2 = name;
@@ -2289,7 +2289,7 @@ static int ceph_send_removexattr(struct dentry *dentry, const char *name)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 	req->r_inode = igrab(inode);
-	req->r_inode_drop = CEPH_CAP_XATTR_RDCACHE;
+	req->r_inode_drop = CEPH_CAP_XATTR_SHARED;
 	req->r_num_caps = 1;
 	req->r_path2 = name;
 

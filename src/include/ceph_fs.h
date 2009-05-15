@@ -26,9 +26,9 @@
 #define CEPH_OSD_PROTOCOL     5 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL    8 /* public/client */
-#define CEPH_MDSC_PROTOCOL   18 /* public/client */
-#define CEPH_MONC_PROTOCOL   11 /* public/client */
+#define CEPH_OSDC_PROTOCOL   10 /* public/client */
+#define CEPH_MDSC_PROTOCOL   20 /* public/client */
+#define CEPH_MONC_PROTOCOL   12 /* public/client */
 
 
 /*
@@ -644,13 +644,14 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_PIN         1  /* no specific capabilities beyond the pin */
 
 /* generic cap bits */
-#define CEPH_CAP_GRDCACHE    1  /* client can cache reads */
-#define CEPH_CAP_GEXCL       2  /* client has exclusive access, can update */
-#define CEPH_CAP_GRD         4  /* (filelock) client can read */ 
-#define CEPH_CAP_GWR         8  /* (filelock) client can write */
-#define CEPH_CAP_GWRBUFFER  16  /* (filelock) client can buffer writes */
-#define CEPH_CAP_GWREXTEND  32  /* (filelock) client can extend EOF */
-#define CEPH_CAP_GLAZYIO    64  /* (filelock) client can perform lazy io */
+#define CEPH_CAP_GSHARED     1  /* client can reads */
+#define CEPH_CAP_GEXCL       2  /* client can read and update */
+#define CEPH_CAP_GCACHE      4  /* (file) client can cache reads */
+#define CEPH_CAP_GRD         8  /* (file) client can read */ 
+#define CEPH_CAP_GWR        16  /* (file) client can write */
+#define CEPH_CAP_GBUFFER    32  /* (file) client can buffer writes */
+#define CEPH_CAP_GWREXTEND  64  /* (file) client can extend EOF */
+#define CEPH_CAP_GLAZYIO   128  /* (file) client can perform lazy io */
 
 /* per-lock shift */
 #define CEPH_CAP_SAUTH      2
@@ -659,18 +660,19 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_SFILE      8   /* goes at the end (uses >2 cap bits) */
 
 /* composed values */
-#define CEPH_CAP_AUTH_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SAUTH)
+#define CEPH_CAP_AUTH_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SAUTH)
 #define CEPH_CAP_AUTH_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SAUTH)
-#define CEPH_CAP_LINK_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SLINK)
+#define CEPH_CAP_LINK_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SLINK)
 #define CEPH_CAP_LINK_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SLINK)
-#define CEPH_CAP_XATTR_RDCACHE (CEPH_CAP_GRDCACHE  << CEPH_CAP_SXATTR)
+#define CEPH_CAP_XATTR_SHARED (CEPH_CAP_GSHARED  << CEPH_CAP_SXATTR)
 #define CEPH_CAP_XATTR_EXCL    (CEPH_CAP_GEXCL     << CEPH_CAP_SXATTR)
 #define CEPH_CAP_FILE(x)    (x << CEPH_CAP_SFILE)
-#define CEPH_CAP_FILE_RDCACHE  (CEPH_CAP_GRDCACHE  << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_SHARED   (CEPH_CAP_GSHARED   << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_CACHE    (CEPH_CAP_GCACHE    << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_RD       (CEPH_CAP_GRD       << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_WR       (CEPH_CAP_GWR       << CEPH_CAP_SFILE)
-#define CEPH_CAP_FILE_WRBUFFER (CEPH_CAP_GWRBUFFER << CEPH_CAP_SFILE)
+#define CEPH_CAP_FILE_BUFFER   (CEPH_CAP_GBUFFER   << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_WREXTEND (CEPH_CAP_GWREXTEND << CEPH_CAP_SFILE)
 #define CEPH_CAP_FILE_LAZYIO   (CEPH_CAP_GLAZYIO   << CEPH_CAP_SFILE)
 
@@ -678,42 +680,36 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_STAT_CAP_INODE    CEPH_CAP_PIN
 #define CEPH_STAT_CAP_TYPE     CEPH_CAP_PIN  /* mode >> 12 */
 #define CEPH_STAT_CAP_SYMLINK  CEPH_CAP_PIN
-#define CEPH_STAT_CAP_UID      CEPH_CAP_AUTH_RDCACHE
-#define CEPH_STAT_CAP_GID      CEPH_CAP_AUTH_RDCACHE
-#define CEPH_STAT_CAP_MODE     CEPH_CAP_AUTH_RDCACHE
-#define CEPH_STAT_CAP_NLINK    CEPH_CAP_LINK_RDCACHE
-#define CEPH_STAT_CAP_LAYOUT   CEPH_CAP_FILE_RDCACHE
-#define CEPH_STAT_CAP_MTIME    CEPH_CAP_FILE_RDCACHE
-#define CEPH_STAT_CAP_SIZE     CEPH_CAP_FILE_RDCACHE
-#define CEPH_STAT_CAP_ATIME    CEPH_CAP_FILE_RDCACHE  /* fixme */
-#define CEPH_STAT_CAP_XATTR    CEPH_CAP_XATTR_RDCACHE
+#define CEPH_STAT_CAP_UID      CEPH_CAP_AUTH_SHARED
+#define CEPH_STAT_CAP_GID      CEPH_CAP_AUTH_SHARED
+#define CEPH_STAT_CAP_MODE     CEPH_CAP_AUTH_SHARED
+#define CEPH_STAT_CAP_NLINK    CEPH_CAP_LINK_SHARED
+#define CEPH_STAT_CAP_LAYOUT   CEPH_CAP_FILE_SHARED
+#define CEPH_STAT_CAP_MTIME    CEPH_CAP_FILE_SHARED
+#define CEPH_STAT_CAP_SIZE     CEPH_CAP_FILE_SHARED
+#define CEPH_STAT_CAP_ATIME    CEPH_CAP_FILE_SHARED  /* fixme */
+#define CEPH_STAT_CAP_XATTR    CEPH_CAP_XATTR_SHARED
 #define CEPH_STAT_CAP_INODE_ALL (CEPH_CAP_PIN |			\
-				 CEPH_CAP_AUTH_RDCACHE |	\
-				 CEPH_CAP_LINK_RDCACHE |	\
-				 CEPH_CAP_FILE_RDCACHE |	\
-				 CEPH_CAP_XATTR_RDCACHE)
+				 CEPH_CAP_AUTH_SHARED |	\
+				 CEPH_CAP_LINK_SHARED |	\
+				 CEPH_CAP_FILE_SHARED |	\
+				 CEPH_CAP_XATTR_SHARED)
 
-#define CEPH_CAP_ANY_RDCACHE (CEPH_CAP_AUTH_RDCACHE |			\
-			      CEPH_CAP_LINK_RDCACHE |			\
-			      CEPH_CAP_XATTR_RDCACHE |			\
-			      CEPH_CAP_FILE_RDCACHE)
-#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_RDCACHE | CEPH_CAP_FILE_RD)
+#define CEPH_CAP_ANY_SHARED (CEPH_CAP_AUTH_SHARED |			\
+			      CEPH_CAP_LINK_SHARED |			\
+			      CEPH_CAP_XATTR_SHARED |			\
+			      CEPH_CAP_FILE_SHARED)
+#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE)
 
 #define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
 			   CEPH_CAP_LINK_EXCL |		\
 			   CEPH_CAP_XATTR_EXCL |	\
 			   CEPH_CAP_FILE_EXCL)
-#define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)
+#define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
 #define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD|CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_FILE_WR|CEPH_CAP_PIN)
 
 #define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_IXATTR)
-
-/*
- * these cap bits time out, if no others are held and nothing is
- * registered as 'wanted' by the client.
- */
-#define CEPH_CAP_EXPIREABLE (CEPH_CAP_PIN|CEPH_CAP_ANY_RDCACHE)
 
 static inline int ceph_caps_for_mode(int mode)
 {
@@ -721,21 +717,19 @@ static inline int ceph_caps_for_mode(int mode)
 	case CEPH_FILE_MODE_PIN:
 		return CEPH_CAP_PIN;
 	case CEPH_FILE_MODE_RD:
-		return CEPH_CAP_PIN |
-			CEPH_CAP_FILE_RDCACHE | CEPH_CAP_FILE_RD;
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
+			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
 	case CEPH_FILE_MODE_RDWR:
-		return CEPH_CAP_PIN |
-			((CEPH_CAP_GRD | CEPH_CAP_GRDCACHE |
-			  CEPH_CAP_GWR | CEPH_CAP_GWRBUFFER |
-			  CEPH_CAP_GEXCL) << CEPH_CAP_SFILE) |
-			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
-			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR);
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
+			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE |
+			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
+			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
+			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
 	case CEPH_FILE_MODE_WR:
-		return CEPH_CAP_PIN |
-			((CEPH_CAP_GWR | CEPH_CAP_GWRBUFFER |
-			  CEPH_CAP_GEXCL) << CEPH_CAP_SFILE) |
-			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SAUTH) |
-			((CEPH_CAP_GRDCACHE | CEPH_CAP_GEXCL) << CEPH_CAP_SXATTR);
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
+			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
+			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
+			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
 	}
 	return 0;
 }

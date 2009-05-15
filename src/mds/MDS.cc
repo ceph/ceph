@@ -1166,6 +1166,11 @@ bool MDS::_dispatch(Message *m)
   }
 
   switch (m->get_type()) {
+
+  case CEPH_MSG_MON_MAP:
+    delete m;
+    break;
+
     // MDS
   case CEPH_MSG_MDS_MAP:
     handle_mds_map((MMDSMap*)m);

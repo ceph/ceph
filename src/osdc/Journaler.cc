@@ -31,14 +31,25 @@ void Journaler::create(ceph_file_layout *l)
   dout(1) << "create blank journal" << dendl;
   state = STATE_ACTIVE;
 
-  layout = *l;
-  assert(layout.fl_pg_pool == pg_pool);
-  last_written.layout = layout;
-  last_committed.layout = layout;
+  set_layout(l);
 
   write_pos = flush_pos = ack_pos = safe_pos =
     read_pos = requested_pos = received_pos =
     expire_pos = trimming_pos = trimmed_pos = ceph_file_layout_period(layout);
+}
+
+void Journaler::set_layout(ceph_file_layout *l)
+{
+  layout = *l;
+
+  assert(layout.fl_pg_pool == pg_pool);
+  last_written.layout = layout;
+  last_committed.layout = layout;
+
+  // prefetch intelligently.
+  // (watch out, this is big if you use big objects or weird striping)
+  fetch_len = ceph_file_layout_period(layout) * g_conf.journaler_prefetch_periods;
+  prefetch_from = fetch_len / 2;
 }
 
 
@@ -122,7 +133,8 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
     return;
   }
 
-  layout = h.layout;
+  set_layout(&h.layout);
+
   write_pos = flush_pos = ack_pos = safe_pos = h.write_pos;
   read_pos = requested_pos = received_pos = h.read_pos;
   expire_pos = h.expire_pos;
@@ -191,10 +203,12 @@ void Journaler::write_head(Context *oncommit)
   bufferlist bl;
   ::encode(last_written, bl);
   SnapContext snapc;
-  filer.write(ino, &layout, snapc,
-	      0, bl.length(), bl, g_clock.now(), CEPH_OSD_FLAG_INCLOCK_FAIL,
-	      NULL, 
-	      new C_WriteHead(this, last_written, oncommit));
+  
+  object_t oid(ino, 0);
+  ceph_object_layout ol = objecter->osdmap->make_object_layout(oid, pg_pool);
+  objecter->write_full(oid, ol, snapc, bl, g_clock.now(), 0, 
+		       NULL, 
+		       new C_WriteHead(this, last_written, oncommit));
 }
 
 void Journaler::_finish_write_head(Header &wrote, Context *oncommit)

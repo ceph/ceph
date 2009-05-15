@@ -3804,7 +3804,7 @@ void MDCache::process_reconnected_caps()
       // wr?
       if (issued & CEPH_CAP_ANY_WR) {
 	in->loner_cap = -1;
-	if (issued & ((CEPH_CAP_GRDCACHE|CEPH_CAP_GWRBUFFER) << CEPH_CAP_SFILE)) {
+	if (issued & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_BUFFER)) {
 	  in->filelock.set_state(LOCK_EXCL);
 	  in->try_choose_loner();
 	} else {

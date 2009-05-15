@@ -21,20 +21,24 @@ int main(int argc, char **argv)
   int count[n];
   for (int i=0; i<n; i++) {
     osdmap.set_state(i, osdmap.get_state(i) | CEPH_OSD_UP);
-    osdmap.set_offload(i, CEPH_OSD_IN);
+    //if (i<8)
+      osdmap.set_weight(i, CEPH_OSD_IN);
     count[i] = 0;
   }
 
-  ceph_file_layout layout = g_default_file_layout;
-  //layout.fl_pg_preferred = 2;
-  for (int f = 1; f < 10000; f++) {  // files
+  int size[4];
+  for (int i=0; i<4; i++)
+    size[i] = 0;
+
+  for (int f = 0; f < 10000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
       object_t oid(f, b);
-      ceph_object_layout l = osdmap.file_to_object_layout(oid, layout);
+      ceph_object_layout l = osdmap.make_object_layout(oid, 0);
       vector<int> osds;
       pg_t pgid = pg_t(l.ol_pgid);
-      //cout << "oid " << oid << " pgid " << pgid << std::endl;
       osdmap.pg_to_osds(pgid, osds);
+      size[osds.size()]++;
+      //cout << "oid " << oid << " pgid " << pgid << " on " << osds << std::endl;
       for (unsigned i=0; i<osds.size(); i++) {
 	//cout << " rep " << i << " on " << osds[i] << std::endl;
 	count[osds[i]]++;
@@ -44,6 +48,9 @@ int main(int argc, char **argv)
 
   for (int i=0; i<n; i++) {
     cout << "osd" << i << "\t" << count[i] << std::endl;
+  }
+  for (int i=0; i<4; i++) {
+    cout << "size" << i << "\t" << size[i] << std::endl;
   }
   
   return 0;

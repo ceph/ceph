@@ -1458,7 +1458,7 @@ CDir *Server::traverse_to_auth_dir(MDRequest *mdr, vector<CDentry*> &trace, file
 
 CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 				    set<SimpleLock*> &rdlocks,
-				    bool want_auth, bool rdlock_dft)
+				    bool want_auth)
 {
   MClientRequest *req = mdr->client_request;
   const filepath& refpath = n ? req->get_filepath2() : req->get_filepath();
@@ -1506,8 +1506,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequest *mdr, int n,
 
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     rdlocks.insert(&mdr->dn[n][i]->lock);
-  if (rdlock_dft)
-    rdlocks.insert(&ref->dirfragtreelock);
   mds->locker->include_snap_rdlocks(rdlocks, ref);
 
   // set and pin ref
@@ -1674,10 +1672,10 @@ void Server::handle_client_stat(MDRequest *mdr)
     issued = cap->issued();
 
   int mask = req->head.args.getattr.mask;
-  if ((mask & CEPH_CAP_LINK_RDCACHE) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
-  if ((mask & CEPH_CAP_AUTH_RDCACHE) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
-  if ((mask & CEPH_CAP_FILE_RDCACHE) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
-  if ((mask & CEPH_CAP_XATTR_RDCACHE) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
+  if ((mask & CEPH_CAP_LINK_SHARED) && (issued & CEPH_CAP_LINK_EXCL) == 0) rdlocks.insert(&ref->linklock);
+  if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0) rdlocks.insert(&ref->authlock);
+  if ((mask & CEPH_CAP_FILE_SHARED) && (issued & CEPH_CAP_FILE_EXCL) == 0) rdlocks.insert(&ref->filelock);
+  if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0) rdlocks.insert(&ref->xattrlock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -1988,7 +1986,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   MClientRequest *req = mdr->client_request;
   int client = req->get_orig_source().num();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false, true);  // rdlock dirfragtreelock!
+  CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (!diri) return;
 
   // it's a directory, right?
@@ -1998,6 +1996,9 @@ void Server::handle_client_readdir(MDRequest *mdr)
     reply_request(mdr, -ENOTDIR);
     return;
   }
+
+  rdlocks.insert(&diri->filelock);
+  rdlocks.insert(&diri->dirfragtreelock);
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
@@ -2033,7 +2034,11 @@ void Server::handle_client_readdir(MDRequest *mdr)
   mdr->now = g_clock.real_now();
 
   snapid_t snapid = mdr->snapid;
-  dout(10) << "snapid " << snapid << dendl;
+
+  nstring offset_str = req->get_path2();
+  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
+
+  dout(10) << "snapid " << snapid << " offset '" << offset_str << "'" << dendl;
 
 
   // purge stale snap data?
@@ -2056,8 +2061,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
   if (!max)
     max = dir->get_num_any();  // whatever, something big.
 
-  nstring offset_str = req->get_path2();
-  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
 
   __u32 numfiles = 0;
   while (it != dir->end() && numfiles < max) {
@@ -2633,8 +2636,8 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   newi->filelock.set_state(LOCK_EXCL);
   newi->authlock.set_state(LOCK_EXCL);
   newi->xattrlock.set_state(LOCK_EXCL);
-  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_RDCACHE|
-		      CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_RDCACHE);
+  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+		      CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED);
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
@@ -2705,7 +2708,7 @@ void Server::handle_client_link(MDRequest *mdr)
 
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, rdlocks, wrlocks, xlocks, false, false, false);
   if (!dn) return;
-  CInode *targeti = rdlock_path_pin_ref(mdr, 1, rdlocks, false, false);
+  CInode *targeti = rdlock_path_pin_ref(mdr, 1, rdlocks, false);
   if (!targeti) return;
 
   CDir *dir = dn->get_dir();

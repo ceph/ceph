@@ -61,7 +61,7 @@ void crush_calc_parents(struct crush_map *map)
 
 void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b)
 {
-	kfree(b->primes);
+	kfree(b->h.perm);
 	kfree(b->h.items);
 	kfree(b);
 }
@@ -70,6 +70,7 @@ void crush_destroy_bucket_list(struct crush_bucket_list *b)
 {
 	kfree(b->item_weights);
 	kfree(b->sum_weights);
+	kfree(b->h.perm);
 	kfree(b->h.items);
 	kfree(b);
 }
@@ -84,6 +85,7 @@ void crush_destroy_bucket_straw(struct crush_bucket_straw *b)
 {
 	kfree(b->straws);
 	kfree(b->item_weights);
+	kfree(b->h.perm);
 	kfree(b->h.items);
 	kfree(b);
 }

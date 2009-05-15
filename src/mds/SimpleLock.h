@@ -423,7 +423,7 @@ public:
 
   int gcaps_xlocker_mask(int client) {
     if (client == xlock_by_client)
-      return CEPH_CAP_GRDCACHE | CEPH_CAP_GWRBUFFER;
+      return type == CEPH_LOCK_IFILE ? 0xffff : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
     return 0;
   }
 

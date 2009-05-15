@@ -145,7 +145,7 @@ crush_make_uniform_bucket(int type, int size,
 			  int *items,
 			  int item_weight)
 {
-	int i, j, x;
+	int i;
 	struct crush_bucket_uniform *bucket;
 
 	bucket = malloc(sizeof(*bucket));
@@ -158,28 +158,9 @@ crush_make_uniform_bucket(int type, int size,
 	bucket->item_weight = item_weight;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
+	bucket->h.perm = malloc(sizeof(__u32)*size);
 	for (i=0; i<size; i++)
 		bucket->h.items[i] = items[i];
-
-	/* generate some primes */
-	bucket->primes = malloc(sizeof(__u32)*size);
-
-	if (size < 1) {
-		return bucket;
-	}
-
-	x = size + 1;
-	x += crush_hash32(size) % (3*size);  /* make it big */
-	x |= 1;                              /* and odd */
-
-	i=0;
-	while (i < size) {
-		for (j=2; j*j <= x; j++)
-			if (x % j == 0) break;
-		if (j*j > x)
-			bucket->primes[i++] = x;
-		x += 2;
-	}
 
 	return bucket;
 }
@@ -203,6 +184,7 @@ crush_make_list_bucket(int type, int size,
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
+	bucket->h.perm = malloc(sizeof(__u32)*size);
 	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->sum_weights = malloc(sizeof(__u32)*size);
 	w = 0;
@@ -257,6 +239,10 @@ crush_make_tree_bucket(int type, int size,
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_TREE;
 	bucket->h.type = type;
+	bucket->h.size = size;
+
+	bucket->h.items = malloc(sizeof(__u32)*size);
+	bucket->h.perm = malloc(sizeof(__u32)*size);
 
 	/* calc tree depth */
 	depth = 1;
@@ -265,25 +251,25 @@ crush_make_tree_bucket(int type, int size,
 		t = t >> 1;
 		depth++;
 	}
-	bucket->h.size = 1 << depth;
-
-	bucket->h.items = malloc(sizeof(__u32)*bucket->h.size);
-	bucket->node_weights = malloc(sizeof(__u32)*bucket->h.size);
+	bucket->num_nodes = 1 << depth;
+	bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
 
 	memset(bucket->h.items, 0, sizeof(__u32)*bucket->h.size);
-	memset(bucket->node_weights, 0, sizeof(__u32)*bucket->h.size);
+	memset(bucket->node_weights, 0, sizeof(__u32)*bucket->num_nodes);
 
 	for (i=0; i<size; i++) {
+		bucket->h.items[i] = items[i];
 		node = ((i+1) << 1)-1;
-		bucket->h.items[node] = items[i];
+		printf("item %d node %d weight %d\n", i, node, weights[i]);
 		bucket->node_weights[node] = weights[i];
 		bucket->h.weight += weights[i];
 		for (j=1; j<depth; j++) {
 			node = parent(node);
 			bucket->node_weights[node] += weights[i];
+			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
 	}
-	BUG_ON(bucket->node_weights[bucket->h.size/2] != bucket->h.weight);
+	BUG_ON(bucket->node_weights[bucket->num_nodes/2] != bucket->h.weight);
 
 	return bucket;
 }
@@ -312,6 +298,7 @@ crush_make_straw_bucket(int type,
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
+	bucket->h.perm = malloc(sizeof(__u32)*size);
 	bucket->item_weights = malloc(sizeof(__u32)*size);
 	bucket->straws = malloc(sizeof(__u32)*size);
 

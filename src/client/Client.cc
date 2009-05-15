@@ -341,7 +341,7 @@ void Client::update_inode_file_bits(Inode *in,
     if (time_warp_seq > in->inode.time_warp_seq)
       dout(0) << "WARNING: " << *in << " mds time_warp_seq "
 	      << time_warp_seq << " > " << in->inode.time_warp_seq << dendl;
-  } else if (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_WRBUFFER)) {
+  } else if (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
     if (time_warp_seq > in->inode.time_warp_seq) {
       in->inode.ctime = ctime;
       in->inode.mtime = mtime;
@@ -505,7 +505,7 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
       dn->lease_seq = dlease->seq;
     }
   }
-  dn->cap_rdcache_gen = dir->parent_inode->rdcache_gen;
+  dn->cap_shared_gen = dir->parent_inode->shared_gen;
 }
 
 
@@ -1336,7 +1336,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       finish_cap_snap(in, &in->cap_snaps.rbegin()->second, in->caps_used());
       signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
     }
-    if (cap & CEPH_CAP_FILE_WRBUFFER) {
+    if (cap & CEPH_CAP_FILE_BUFFER) {
       for (map<snapid_t,CapSnap>::iterator p = in->cap_snaps.begin();
 	   p != in->cap_snaps.end();
 	   p++)
@@ -1423,11 +1423,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   int retain = wanted;
   if (!unmounting) {
-    retain |= CEPH_CAP_PIN | CEPH_CAP_EXPIREABLE;
-    
-    /* keep any EXCL bits too, while we are holding caps anyway */
-    if (wanted || in->inode.is_dir())
-      retain |= CEPH_CAP_ANY_EXCL;
+    if (wanted)
+      retain |= CEPH_CAP_ANY;
+    else
+      retain |= CEPH_CAP_ANY_SHARED;
   }
   
   dout(10) << "check_caps on " << *in
@@ -1533,7 +1532,7 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
   capsnap->issued = in->caps_issued();
   capsnap->dirty = in->caps_dirty();  // a bit conservative?
   
-  capsnap->dirty_data = (used & CEPH_CAP_FILE_WRBUFFER);
+  capsnap->dirty_data = (used & CEPH_CAP_FILE_BUFFER);
 
   if (used & CEPH_CAP_FILE_WR) {
     dout(10) << "queue_cap_snap WR used on " << *in << dendl;
@@ -1551,7 +1550,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
   capsnap->atime = in->inode.atime;
   capsnap->ctime = in->inode.ctime;
   capsnap->time_warp_seq = in->inode.time_warp_seq;
-  if (used & CEPH_CAP_FILE_WRBUFFER) {
+  if (used & CEPH_CAP_FILE_BUFFER) {
     dout(10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
   } else {
@@ -1629,12 +1628,12 @@ void Client::signal_cond_list(list<Cond*>& ls)
 
 void Client::_release(Inode *in, bool checkafter)
 {
-  if (in->cap_refs[CEPH_CAP_FILE_RDCACHE]) {
+  if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
     objectcacher->release_set(in->inode.ino);
     if (checkafter)
-      put_cap_ref(in, CEPH_CAP_FILE_RDCACHE);
+      put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     else 
-      in->put_cap_ref(CEPH_CAP_FILE_RDCACHE);
+      in->put_cap_ref(CEPH_CAP_FILE_CACHE);
   }
 }
 
@@ -1663,13 +1662,13 @@ void Client::flush_set_callback(inodeno_t ino)
 void Client::_flushed(Inode *in)
 {
   dout(10) << "_flushed " << *in << dendl;
-  assert(in->cap_refs[CEPH_CAP_FILE_WRBUFFER] == 1);
+  assert(in->cap_refs[CEPH_CAP_FILE_BUFFER] == 1);
 
   // release clean pages too, if we dont hold RDCACHE reference
-  if (in->cap_refs[CEPH_CAP_FILE_RDCACHE] == 0)
+  if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
     objectcacher->release_set(in->inode.ino);
 
-  put_cap_ref(in, CEPH_CAP_FILE_WRBUFFER);
+  put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 }
 
 
@@ -1706,9 +1705,12 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
   if (flags & CEPH_CAP_FLAG_AUTH)
     in->auth_cap = cap;
 
-  if ((issued & CEPH_CAP_FILE_RDCACHE) &&
-      !(cap->issued & CEPH_CAP_FILE_RDCACHE))
-    in->rdcache_gen++;
+  if ((issued & CEPH_CAP_FILE_SHARED) &&
+      !(cap->issued & CEPH_CAP_FILE_SHARED))
+    in->shared_gen++;
+  if ((issued & CEPH_CAP_FILE_CACHE) &&
+      !(cap->issued & CEPH_CAP_FILE_CACHE))
+    in->cache_gen++;
 
   unsigned old_caps = cap->issued;
   cap->cap_id = cap_id;
@@ -2204,19 +2206,22 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     kick_writers = true;
   }
 
-  if ((issued & CEPH_CAP_FILE_RDCACHE) &&
-      !(cap->issued & CEPH_CAP_FILE_RDCACHE))
-    in->rdcache_gen++;
+  if ((issued & CEPH_CAP_FILE_CACHE) &&
+      !(cap->issued & CEPH_CAP_FILE_CACHE))
+    in->cache_gen++;
+  if ((issued & CEPH_CAP_FILE_SHARED) &&
+      !(cap->issued & CEPH_CAP_FILE_SHARED))
+    in->shared_gen++;
 
   // update caps
   if (old_caps & ~new_caps) { 
     dout(10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
     cap->issued = new_caps;
 
-    if ((cap->issued & ~new_caps) & CEPH_CAP_FILE_RDCACHE)
+    if ((cap->issued & ~new_caps) & CEPH_CAP_FILE_CACHE)
       _release(in, false);
 
-    if ((used & ~new_caps) & CEPH_CAP_FILE_WRBUFFER)
+    if ((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
       _flush(in);
     else {
       check_caps(in, false);
@@ -2546,8 +2551,8 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
     // is lease valid?
     if ((dn->lease_mds >= 0 && 
 	 dn->lease_ttl > g_clock.now()) ||
-	((dir->caps_issued() & CEPH_CAP_FILE_RDCACHE) &&
-	 dn->cap_rdcache_gen == dir->rdcache_gen)) {
+	((dir->caps_issued() & CEPH_CAP_FILE_SHARED) &&
+	 dn->cap_shared_gen == dir->shared_gen)) {
       *target = dn->inode;
       goto done;
     }
@@ -3402,7 +3407,7 @@ int Client::_release(Fh *f)
 
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
-      if (in->caps_used() & (CEPH_CAP_FILE_WRBUFFER|CEPH_CAP_FILE_WR))
+      if (in->caps_used() & (CEPH_CAP_FILE_BUFFER|CEPH_CAP_FILE_WR))
 	_flush(in);
       check_caps(in, false);
     }
@@ -3542,7 +3547,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     }
     
     // async i/o?
-    if ((issued & (CEPH_CAP_FILE_WRBUFFER|CEPH_CAP_FILE_RDCACHE))) {
+    if ((issued & (CEPH_CAP_FILE_BUFFER|CEPH_CAP_FILE_CACHE))) {
 
       // FIXME: this logic needs to move info FileCache!
 
@@ -3586,10 +3591,10 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   int r = 0;
   if (g_conf.client_oc) {
 
-    if (issued & CEPH_CAP_FILE_RDCACHE) {
+    if (issued & CEPH_CAP_FILE_CACHE) {
       // we will populate the cache here
-      if (in->cap_refs[CEPH_CAP_FILE_RDCACHE] == 0)
-	in->get_cap_ref(CEPH_CAP_FILE_RDCACHE);
+      if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
+	in->get_cap_ref(CEPH_CAP_FILE_CACHE);
 
       // readahead?
       if (f->nr_consec_read &&
@@ -3704,7 +3709,7 @@ void Client::sync_write_commit(Inode *in)
   assert(unsafe_sync_write > 0);
   unsafe_sync_write--;
 
-  put_cap_ref(in, CEPH_CAP_FILE_WRBUFFER);
+  put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   dout(15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
@@ -3796,10 +3801,10 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
   if (g_conf.client_oc) {
-    if (in->caps_issued() & CEPH_CAP_FILE_WRBUFFER) {
+    if (in->caps_issued() & CEPH_CAP_FILE_BUFFER) {
       // do buffered write
-      if (in->cap_refs[CEPH_CAP_FILE_WRBUFFER] == 0)
-	in->get_cap_ref(CEPH_CAP_FILE_WRBUFFER);
+      if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
+	in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
       
       // wait? (this may block!)
       objectcacher->wait_for_write(size, client_lock);
@@ -3821,7 +3826,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
-    in->get_cap_ref(CEPH_CAP_FILE_WRBUFFER);
+    in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
     
     filer->write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);
@@ -3921,8 +3926,8 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   if (g_conf.client_oc)
     _flush(in);
   
-  while (in->cap_refs[CEPH_CAP_FILE_WRBUFFER] > 0) {
-    dout(10) << "ino " << in->inode.ino << " has " << in->cap_refs[CEPH_CAP_FILE_WRBUFFER]
+  while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+    dout(10) << "ino " << in->inode.ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 	     << " uncommitted, waiting" << dendl;
     wait_on_list(in->waitfor_commit);
   }    
