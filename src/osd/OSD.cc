@@ -74,7 +74,7 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
-#include "common/ClassHandler.h"
+#include "osd/ClassHandler.h"
 
 #include <iostream>
 #include <errno.h>
@@ -85,6 +85,7 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
+#include "objclass/objclass.h"
 
 #include "config.h"
 
@@ -296,6 +297,8 @@ void handle_signal(int signal)
   }
 }
 
+void cls_initialize(OSD *_osd);
+
 int OSD::init()
 {
   Mutex::Locker lock(osd_lock);
@@ -325,6 +328,7 @@ int OSD::init()
 
   class_handler = new ClassHandler(this);
   assert(class_handler);
+  cls_initialize(this);
 
   // load up "current" osdmap
   assert_warn(!osdmap);

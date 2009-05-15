@@ -32,7 +32,8 @@ dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
 
 # osd 
-cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc
+cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
+	       objclass/class_api.cc
 cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a
@@ -274,9 +275,7 @@ libosd_a_SOURCES = \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
 	osd/OSD.cc \
-        common/ClassHandler.cc \
-        objclass/class_debug.cc \
-        objclass/class_api.cc
+        common/ClassHandler.cc
 #	osd/RAID4PG.cc
 
 libosdc_a_SOURCES = \

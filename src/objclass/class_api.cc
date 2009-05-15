@@ -6,7 +6,7 @@
 
 #include "common/ClassHandler.h"
 
-extern OSD *osd;
+static OSD *osd;
 
 void cls_initialize(OSD *_osd)
 {
@@ -19,15 +19,16 @@ void cls_finalize()
 }
 
 
-extern "C" void *cls_alloc(size_t size)
+void *cls_alloc(size_t size)
 {
   return malloc(size);
 }
 
-extern "C" void cls_free(void *p)
+void cls_free(void *p)
 {
   free(p);
 }
+
 int cls_register(const char *name, cls_handle_t *handle)
 {
   ClassHandler::ClassData *cd;
@@ -38,12 +39,14 @@ int cls_register(const char *name, cls_handle_t *handle)
 
   return (cd != NULL);
 }
+
 int cls_unregister(cls_handle_t handle)
 {
   ClassHandler::ClassData *cd;
   cd = (ClassHandler::ClassData *)handle;
 
   osd->class_handler->unregister_class(cd);
+  return 1;
 }
 
 int cls_register_method(cls_handle_t hclass, const char *method,
@@ -64,7 +67,7 @@ int cls_register_method(cls_handle_t hclass, const char *method,
 
 int cls_unregister_method(cls_method_handle_t handle)
 {
-  ClassHandler::ClassMethod *method;
+  ClassHandler::ClassMethod *method = (ClassHandler::ClassMethod *)handle;
   method->unregister();
 
   return 1;

@@ -19,7 +19,7 @@ extern void cls_free(void *p);
 extern int cls_register(const char *name, cls_handle_t *handle);
 extern int cls_unregister(cls_handle_t);
 
-extern int cls_register_method(const char *method,
+extern int cls_register_method(cls_handle_t hclass, const char *method,
                         cls_method_call_t class_call, cls_method_handle_t *handle);
 extern int cls_unregister_method(cls_method_handle_t handle);
 
@@ -33,6 +33,12 @@ typedef int cls_trigger_t;
 
 extern int cls_link(cls_method_handle_t handle, int priority, cls_trigger_t trigger);
 extern int cls_unlink(cls_method_handle_t handle);
+
+
+/* should be defined by the class implementation
+   defined here inorder to get it compiled without C++ mangling */
+extern void class_init(void);
+extern void class_fini(void);
 
 #ifdef __cplusplus
 }
