@@ -2530,7 +2530,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       child->info.stats.num_bytes += st.st_size;
       child->info.stats.num_kb += SHIFT_ROUND_UP(st.st_size, 10);
       child->info.stats.num_objects++;
-      if (poid.oid.snap && poid.oid.snap != CEPH_NOSNAP)
+      if (poid.snap && poid.snap != CEPH_NOSNAP)
 	child->info.stats.num_object_clones++;
     } else {
       dout(20) << " leaving " << poid << "   in " << parentid << dendl;
