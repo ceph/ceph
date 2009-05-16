@@ -31,7 +31,7 @@ kdist_configure: prep-deb-files
 # kdist* rules. It is responsible for cleaning up any changes that have
 # been made by the other kdist_commands (except for the .deb files created)
 kdist_clean:
-	@$(MAKE) $(MFLAGS) clean
+	@$(MAKE) $(MFLAGS) KERNELDIR=$(KSRC) clean
 
 ### end  KERNEL SETUP
 
