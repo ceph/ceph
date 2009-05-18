@@ -2724,7 +2724,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       project_pg_history(pgid, history, m->get_epoch(), acting);
 
       if (m->get_epoch() < history.same_primary_since) {
-        dout(10) << "handle_pg_notify pg " << pgid << " dne, and primary changed in "
+        dout(10) << "handle_pg_notify pg " << pgid << " primary changed in "
                  << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << dendl;
         continue;
       }
