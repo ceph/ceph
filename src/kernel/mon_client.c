@@ -319,7 +319,7 @@ static int send_statfs(struct ceph_mon_client *monc,
 {
 	struct ceph_msg *msg;
 	struct ceph_mon_statfs *h;
-	int mon = pick_mon(monc, newmon ? 1:-1);
+	int mon = pick_mon(monc, newmon ? 1 : -1);
 
 	dout(10, "send_statfs to mon%d tid %llu\n", mon, req->tid);
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);

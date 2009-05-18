@@ -137,12 +137,12 @@ static void __destroy_snap_realm(struct ceph_mds_client *mdsc,
 	dout(10, "__destroy_snap_realm %p %llx\n", realm, realm->ino);
 
 	radix_tree_delete(&mdsc->snap_realms, realm->ino);
-	
+
 	if (realm->parent) {
 		list_del_init(&realm->child_item);
 		__put_snap_realm(mdsc, realm->parent);
 	}
-	
+
 	kfree(realm->prior_parent_snaps);
 	kfree(realm->snaps);
 	ceph_put_snap_context(realm->cached_context);
@@ -575,7 +575,8 @@ more:
 				inode = igrab(&ci->vfs_inode);
 				spin_unlock(&realm->inodes_with_caps_lock);
 				if (inode) {
-					ceph_queue_cap_snap(ci, realm->cached_context);
+					ceph_queue_cap_snap(ci,
+						    realm->cached_context);
 					iput(inode);
 				}
 				spin_lock(&realm->inodes_with_caps_lock);

@@ -95,7 +95,8 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_frsize = PAGE_CACHE_SIZE;
 
 	/* leave in little-endian, regardless of host endianness */
-	fsid = __ceph_fsid_major(&monmap->fsid) ^ __ceph_fsid_minor(&monmap->fsid);
+	fsid = __ceph_fsid_major(&monmap->fsid) ^
+		__ceph_fsid_minor(&monmap->fsid);
 	buf->f_fsid.val[0] = le64_to_cpu(fsid) & 0xffffffff;
 	buf->f_fsid.val[1] = le64_to_cpu(fsid) >> 32;
 
@@ -126,7 +127,8 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 		seq_printf(m, ",debug=%d", ceph_debug);
 	if (args->flags & CEPH_OPT_FSID)
 		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu",
-			   __ceph_fsid_major(&args->fsid), __ceph_fsid_minor(&args->fsid));
+			   __ceph_fsid_major(&args->fsid),
+			   __ceph_fsid_minor(&args->fsid));
 	if (args->flags & CEPH_OPT_NOSHARE)
 		seq_puts(m, ",noshare");
 	if (args->flags & CEPH_OPT_UNSAFE_WRITEBACK)
@@ -875,7 +877,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		}
 	}
 
-	
+
 	dout(30, "mount opening root\n");
 	root = open_root_dentry(client, "", started);
 	if (IS_ERR(root)) {
@@ -899,7 +901,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			goto out;
 		}
 	}
-		
+
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
 

@@ -74,8 +74,8 @@ static int get_debug_mask(const char *name, int len)
 	return 0;
 }
 
-static ssize_t debug_mask_store(struct file *file,
-		const char __user *buffer, size_t count, loff_t *data)
+static ssize_t debug_mask_store(struct file *file, const char __user *buffer,
+				size_t count, loff_t *data)
 {
 	char *next, *tok;
 	char *buf;
@@ -202,9 +202,9 @@ static int osdmap_show(struct seq_file *s, void *p)
 	seq_printf(s, "epoch %d\n", client->osdc.osdmap->epoch);
 	seq_printf(s, "flags%s%s\n",
 		   (client->osdc.osdmap->flags & CEPH_OSDMAP_NEARFULL) ?
-		   " NEARFULL":"",
+		   " NEARFULL" : "",
 		   (client->osdc.osdmap->flags & CEPH_OSDMAP_FULL) ?
-		   " FULL":"");
+		   " FULL" : "");
 	for (i = 0; i < client->osdc.osdmap->num_pools; i++) {
 		struct ceph_pg_pool_info *pool =
 			&client->osdc.osdmap->pg_pool[i];
@@ -354,7 +354,7 @@ static int osdc_show(struct seq_file *s, void *p)
 			seq_printf(s, "\t");
 
 		num_ops = le16_to_cpu(head->num_ops);
-		for (i=0; i<num_ops; i++) {
+		for (i = 0; i < num_ops; i++) {
 			opcode = le16_to_cpu(op->op);
 			seq_printf(s, "%s\t", ceph_osd_op_name(opcode));
 			op++;
@@ -436,16 +436,17 @@ static int debugfs_bookkeeper_set(void *data, u64 val)
 {
 	if (val)
 		ceph_bookkeeper_dump();
-        return 0;
+	return 0;
 }
 
 static int debugfs_bookkeeper_get(void *data, u64 *val)
 {
 	*val = 0;
-        return 0;
+	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(bookkeeper_fops, debugfs_bookkeeper_get, debugfs_bookkeeper_set, "%llu\n");
+DEFINE_SIMPLE_ATTRIBUTE(bookkeeper_fops, debugfs_bookkeeper_get,
+			debugfs_bookkeeper_set, "%llu\n");
 #endif
 
 int ceph_debugfs_init(void)

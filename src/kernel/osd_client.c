@@ -150,7 +150,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 			     CEPH_OSD_OP_MASKTRUNC : CEPH_OSD_OP_SETTRUNC);
 		op->truncate_seq = cpu_to_le32(truncate_seq);
 		prevofs =  le64_to_cpu((op-1)->offset);
-		op->truncate_size = cpu_to_le64(truncate_size - (off - prevofs));
+		op->truncate_size = cpu_to_le64(truncate_size - (off-prevofs));
 	}
 	if (do_sync) {
 		op++;
@@ -794,34 +794,34 @@ void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
 
 void ceph_osdc_sync(struct ceph_osd_client *osdc)
 {
-       struct ceph_osd_request *req;
-       u64 last_tid, next_tid = 0;
-       int got;
+	struct ceph_osd_request *req;
+	u64 last_tid, next_tid = 0;
+	int got;
 
-       mutex_lock(&osdc->request_mutex);
-       last_tid = osdc->last_tid;
-       while (1) {
-	       got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
-					    next_tid, 1);
-	       if (!got)
-		       break;
-	       if (req->r_tid > last_tid)
-		       break;
+	mutex_lock(&osdc->request_mutex);
+	last_tid = osdc->last_tid;
+	while (1) {
+		got = radix_tree_gang_lookup(&osdc->request_tree, (void **)&req,
+					     next_tid, 1);
+		if (!got)
+			break;
+		if (req->r_tid > last_tid)
+			break;
 
-	       next_tid = req->r_tid + 1;
-	       if ((req->r_flags & CEPH_OSD_FLAG_MODIFY) == 0)
-		       continue;
+		next_tid = req->r_tid + 1;
+		if ((req->r_flags & CEPH_OSD_FLAG_MODIFY) == 0)
+			continue;
 
-	       ceph_osdc_get_request(req);
-	       mutex_unlock(&osdc->request_mutex);
-	       dout(10, "sync waiting on tid %llu (last is %llu)\n",
-		    req->r_tid, last_tid);
-	       wait_for_completion(&req->r_safe_completion);
-	       mutex_lock(&osdc->request_mutex);
-	       ceph_osdc_put_request(req);
-       }
-       mutex_unlock(&osdc->request_mutex);
-       dout(10, "sync done (thru tid %llu)\n", last_tid);
+		ceph_osdc_get_request(req);
+		mutex_unlock(&osdc->request_mutex);
+		dout(10, "sync waiting on tid %llu (last is %llu)\n",
+		     req->r_tid, last_tid);
+		wait_for_completion(&req->r_safe_completion);
+		mutex_lock(&osdc->request_mutex);
+		ceph_osdc_put_request(req);
+	}
+	mutex_unlock(&osdc->request_mutex);
+	dout(10, "sync done (thru tid %llu)\n", last_tid);
 }
 
 /*
@@ -906,8 +906,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 					  PAGE_CACHE_SIZE);
 #else
 			zero_user_page(page, read & ~PAGE_CACHE_MASK,
-				       PAGE_CACHE_SIZE - (read & ~PAGE_CACHE_MASK),
-				       KM_USER0);
+			       PAGE_CACHE_SIZE - (read & ~PAGE_CACHE_MASK),
+			       KM_USER0);
 #endif
 			read += PAGE_CACHE_SIZE;
 		}

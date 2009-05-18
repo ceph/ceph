@@ -312,7 +312,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
       ss << "updated";
       getline(ss, rs);
-      paxos->wait_for_commit(new C_ClassMonCmd(mon, m, rs));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
     }
   }
