@@ -171,7 +171,7 @@ class Objecter {
     vector<ceph_osd_op> ops;
     bufferlist bl;
     bufferlist *pbl;
-    __u64 *psize;
+
     int flags;
     Context *onfinish;
 
@@ -183,7 +183,7 @@ class Objecter {
 
     ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, int f, Context *of) :
       oid(o), layout(ol), 
-      pbl(0), psize(0), flags(f), onfinish(of), 
+      pbl(0), flags(f), onfinish(of), 
       tid(0), attempts(0), inc_lock(-1),
       paused(false) {
       ops.swap(op);
@@ -214,6 +214,30 @@ class Objecter {
       tid(0), attempts(0), inc_lock(-1),
       paused(false) {
       ops.swap(op);
+    }
+  };
+
+  struct C_Stat : public Context {
+    bufferlist bl;
+    __u64 *psize;
+    utime_t *pmtime;
+    Context *fin;
+    C_Stat(__u64 *ps, utime_t *pm, Context *c) :
+      psize(ps), pmtime(pm), fin(c) {}
+    void finish(int r) {
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	__u64 s;
+	utime_t m;
+	::decode(s, p);
+	::decode(m, p);
+	if (psize)
+	  *psize = s;
+	if (pmtime)
+	  *pmtime = m;
+      }
+      fin->finish(r);
+      delete fin;
     }
   };
 
@@ -302,11 +326,10 @@ class Objecter {
   tid_t modify_submit(ModifyOp *wr);
 
   tid_t read(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
-	     bufferlist *pbl, __u64 *psize, int flags, 
+	     bufferlist *pbl, int flags, 
 	     Context *onfinish) {
     ReadOp *rd = new ReadOp(oid, ol, ops, flags, onfinish);
     rd->pbl = pbl;
-    rd->psize = psize;
     return read_submit(rd);
   }
   tid_t read(object_t oid, ceph_object_layout ol, 
@@ -332,7 +355,8 @@ class Objecter {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));
     ops[0].op = CEPH_OSD_OP_STAT;
-    return read(oid, ol, ops, 0, psize, flags, onfinish);
+    C_Stat *fin = new C_Stat(psize, pmtime, onfinish);
+    return read(oid, ol, ops, &fin->bl, flags, fin);
   }
 
   tid_t read(object_t oid, ceph_object_layout ol,
@@ -343,7 +367,7 @@ class Objecter {
     ops[0].op = CEPH_OSD_OP_READ;
     ops[0].offset = off;
     ops[0].length = len;
-    return read(oid, ol, ops, pbl, 0, flags, onfinish);
+    return read(oid, ol, ops, pbl, flags, onfinish);
   }
   tid_t read_full(object_t oid, ceph_object_layout ol,
 		  bufferlist *pbl, int flags,

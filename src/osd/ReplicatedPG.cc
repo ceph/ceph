@@ -743,9 +743,11 @@ void ReplicatedPG::op_read(MOSDOp *op)
 	struct stat st;
 	memset(&st, sizeof(st), 0);
 	int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
-	if (r >= 0)
-	  p->length = st.st_size;
-	else
+	if (r >= 0) {
+	  __u64 size = st.st_size;
+	  ::encode(size, data);
+	  ::encode(oi.mtime, data);
+	} else
 	  result = r;
       }
       break;
