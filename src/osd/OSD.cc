@@ -74,7 +74,7 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
-#include "osd/ClassHandler.h"
+#include "common/ClassHandler.h"
 
 #include <iostream>
 #include <errno.h>
