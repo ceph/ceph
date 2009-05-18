@@ -1561,9 +1561,21 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
     cap->client_xattr_version == i->xattr_version;
   
-  // include capability?
-  if (snapid != CEPH_NOSNAP && !cap) {
+  // encode caps
+  if (snapid != CEPH_NOSNAP) {
+    /*
+     * snapped inodes (files or dirs) only get read-only caps.  if
+     * there is a Capability on the inode (either it's a dir, or it's
+     * a file with a flushing cap), then limit caps issued to what is
+     * already on teh cap.
+     *
+     * do NOT adjust cap issued state, because the client always
+     * tracks caps per-snap and the mds does either per-interval or
+     * multiversion.
+     */
     e.cap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
+    if (cap)
+      e.cap.caps = e.cap.caps & cap->issued();
     e.cap.seq = 0;
     e.cap.mseq = 0;
     e.cap.realm = 0;
