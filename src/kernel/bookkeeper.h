@@ -10,10 +10,6 @@ extern void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags);
 extern void ceph_kfree(const void *ptr);
 #endif
 
-#endif
-
-#endif
-
 
 #ifndef CEPH_OVERRIDE_BOOKKEEPER
 #define CEPH_BOOKKEEPER_DEFINED
