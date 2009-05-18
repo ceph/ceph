@@ -29,6 +29,7 @@
 #include "PG.h"
 
 #include "common/DecayCounter.h"
+#include "common/ClassHandler.h"
 
 #include "include/LogEntry.h"
 
@@ -86,7 +87,6 @@ class ObjectStore;
 class OSDMap;
 class MLog;
 class MClass;
-class ClassHandler;
 
 class OSD : public Dispatcher {
 
@@ -407,7 +407,7 @@ protected:
   Mutex class_lock;
   map<nstring, map<pg_t, list<Message*> > > waiting_for_missing_class;
 
-  bool get_class(const nstring& cname, pg_t pgid, Message *m);
+  ClassHandler::ClassData *get_class(const nstring& cname, pg_t pgid, Message *m);
   void handle_class(MClass *m);
 public:
   void got_class(const nstring& cname);

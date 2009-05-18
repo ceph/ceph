@@ -338,6 +338,7 @@ struct ceph_osd_op {
 		struct {
 			__u8 class_len;
 			__u8 method_len;
+			__u8 argc;
 			__le32 indata_len;
 		} __attribute__ ((packed));
 	};

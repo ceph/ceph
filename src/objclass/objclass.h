@@ -7,7 +7,7 @@ extern "C" {
 
 typedef void *cls_handle_t;
 typedef void *cls_method_handle_t;
-typedef int (*cls_method_call_t)(char **indata, int datalen,
+typedef int (*cls_method_call_t)(char *indata, int datalen,
 				 char **outdata, int *outdatalen);
 
 /* class utils */

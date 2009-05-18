@@ -3746,16 +3746,18 @@ void OSD::wait_for_no_ops()
 
 // --------------------------------
 
-bool OSD::get_class(const nstring& cname, pg_t pgid, Message *m)
+ClassHandler::ClassData *OSD::get_class(const nstring& cname, pg_t pgid, Message *m)
 {
+  ClassHandler::ClassData *cls;
   Mutex::Locker l(class_lock);
   dout(10) << "wait_for_missing_class '" << cname << "' by " << pgid << dendl;
 
-  if (class_handler->get_class(cname))
-    return true;
+  cls = class_handler->get_class(cname);
+  if (cls)
+    return cls;
 
   waiting_for_missing_class[cname][pgid].push_back(m);
-  return false;
+  return NULL;
 }
 
 void OSD::got_class(const nstring& cname)

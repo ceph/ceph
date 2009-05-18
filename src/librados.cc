@@ -124,7 +124,7 @@ public:
   bool init();
 
   int write(object_t& oid, const char *buf, off_t off, size_t len);
-  int exec(object_t& oid, const char *code, off_t data_off, size_t data_len, char *buf, size_t out_len);
+  int exec(object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len);
   int read(object_t& oid, char *buf, off_t off, size_t len);
 };
 
@@ -278,17 +278,15 @@ int RadosClient::write(object_t& oid, const char *buf, off_t off, size_t len)
   return len;
 }
 
-int RadosClient::exec(object_t& oid, const char *code, off_t data_off, size_t data_len, char *buf, size_t out_len)
+int RadosClient::exec(object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
   SnapContext snapc;
-  bufferlist bl;
   utime_t ut = g_clock.now();
 
   Mutex lock("RadosClient::exec");
   Cond exec_wait;
-  bl.append(code, strlen(code) + 1);
 
-  C_ExecCommit *oncommit = new C_ExecCommit(oid, data_off, &out_len, &exec_wait);
+  C_ExecCommit *oncommit = new C_ExecCommit(oid, 0, &out_len, &exec_wait);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
 
@@ -298,8 +296,9 @@ int RadosClient::exec(object_t& oid, const char *code, off_t data_off, size_t da
 
   ObjectRead rd;
   bufferlist inbl, outbl;
-  inbl.append("input data", 10);
-  rd.rdcall("test", "foo", inbl);
+
+  inbl.append(inbuf, in_len);
+  rd.rdcall(cls, method, inbl);
   objecter->read(oid, layout, rd, CEPH_NOSNAP, &outbl, 0, oncommit);
 
   dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
@@ -416,10 +415,10 @@ extern "C" int rados_read(ceph_object *o, char *buf, off_t off, size_t len)
   return radosp->read(oid, buf, off, len);
 }
 
-extern "C" int rados_exec(ceph_object *o, const char *code,
-                          off_t data_off, size_t data_len, char *buf, size_t out_len)
+extern "C" int rados_exec(ceph_object *o, const char *cls, const char *method,
+                         const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
   object_t oid(*o);
-  return radosp->exec(oid, code, data_off, data_len, buf, out_len);
+  return radosp->exec(oid, cls, method, inbuf, in_len, buf, out_len);
 }
 

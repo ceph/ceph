@@ -40,20 +40,20 @@ void ClassHandler::load_class(const nstring& cname)
 }
 
 
-bool ClassHandler::get_class(const nstring& cname)
+ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname)
 {
-  ClassData& class_data = classes[cname];
+  ClassData *class_data = &classes[cname];
 
-  switch (class_data.status) {
+  switch (class_data->status) {
   case ClassData::CLASS_LOADED:
-    return true;
+    return class_data;
     
   case ClassData::CLASS_REQUESTED:
-    return false;
+    return NULL;
     break;
 
   case ClassData::CLASS_UNKNOWN:
-    class_data.status = ClassData::CLASS_REQUESTED;
+    class_data->status = ClassData::CLASS_REQUESTED;
     break;
 
   default:
@@ -61,7 +61,7 @@ bool ClassHandler::get_class(const nstring& cname)
   }
 
   osd->send_class_request(cname.c_str());
-  return false;
+  return NULL;
 }
 
 void ClassHandler::handle_class(MClass *m)
@@ -132,6 +132,12 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
   return &method;
 }
 
+ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname)
+{
+  ClassHandler::ClassMethod *method = &methods_map[mname];
+  return method;
+}
+
 void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *method)
 {
    map<string, ClassMethod>::iterator iter;
@@ -145,5 +151,17 @@ void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *metho
 
 void ClassHandler::ClassMethod::unregister()
 {
-   cls->unregister_method(this);
+  cls->unregister_method(this);
+}
+
+int ClassHandler::ClassMethod::exec(bufferlist& indata, bufferlist& outdata)
+{
+  char *out = NULL;
+  int olen;
+  int ret;
+  ret = func(indata.c_str(), indata.length(), &out, &olen);
+  if (out)
+    outdata.append(out, olen);
+
+  return ret;
 }

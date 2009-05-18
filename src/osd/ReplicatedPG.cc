@@ -743,39 +743,29 @@ void ReplicatedPG::op_read(MOSDOp *op)
     {
         dout(0) << "CEPH_OSD_OP_RDCALL" << dendl;
 
-	string cname, method;
+	string cname, mname;
 	bp.copy(p->class_len, cname);
-	bp.copy(p->method_len, method);
+	bp.copy(p->method_len, mname);
 
-	bufferlist indata;
-	::decode_nohead(p->indata_len, indata, bp);
+        dout(0) << "indata_len=" << p->indata_len << dendl;
+        bufferlist indata;
+        bp.copy(p->indata_len, indata);
+        dout(0) << "param=" << indata.c_str() << dendl;
 
-	if (!osd->get_class(cname, info.pgid, op))
+        ClassHandler::ClassData *cls = osd->get_class(cname, info.pgid, op);
+        if (!cls)
 	  return;
+        dout(0) << "going to execute " << cname << "." << mname << dendl;
 
-#if 0
-	bufferlist bl;
-	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
-
-	if (data.length() == 0)
-	  data_off = p->offset;
-
-	if (r >= 0)  {
-	  p->length = r;
-	  char *buf = bl.c_str();
-
-          for (unsigned int i=0; i<bl.length(); i++)
-	     if (isdigit(buf[i]))
-		buf[i] = '?';
-
-	  data.claim(bl);
-	} else {
-	  result = r;
-	  p->length = 0;
-	}
-	dout(10) << " exec got " << r << " / " << p->length << " bytes from obj " << oid << dendl;
-	dout(10) << " exec reply=" << data.c_str() << dendl;
-#endif
+        bufferlist outdata;
+        ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+        if (!method) {
+          dout(0) << "method " << cname << "." << mname << " doesn not exist" << dendl;
+        }
+        int r = method->exec(indata, outdata);
+        data.claim(outdata);
+        p->length = r;
+        result = r;
     }
     break;
     

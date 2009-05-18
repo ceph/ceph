@@ -1,5 +1,5 @@
 #ifndef __CLASSHANDLER_H
-#define __CLASHANDLER_H
+#define __CLASSHANDLER_H
 
 #include "include/types.h"
 #include "include/ClassLibrary.h"
@@ -10,6 +10,7 @@
 
 
 class OSD;
+class MClass;
 
 
 class ClassHandler
@@ -23,6 +24,7 @@ public:
     struct ClassHandler::ClassData *cls;
     string name;
     cls_method_call_t func;
+    int exec(bufferlist& indata, bufferlist& outdata);
 
     void unregister();
   };
@@ -46,6 +48,7 @@ public:
 
     ClassMethod *register_method(const char *mname,
                           cls_method_call_t func);
+    ClassMethod *get_method(const char *mname);
     void unregister_method(ClassMethod *method);
   };
   map<nstring, ClassData> classes;
@@ -54,7 +57,7 @@ public:
 
   ClassHandler(OSD *_osd) : osd(_osd) {}
 
-  bool get_class(const nstring& cname);
+  ClassData *get_class(const nstring& cname);
   void resend_class_requests();
 
   void handle_class(MClass *m);

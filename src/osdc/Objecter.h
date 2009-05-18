@@ -66,6 +66,7 @@ struct ObjectOperation {
     ops[s].op = op;
     ops[s].class_len = strlen(cname);
     ops[s].method_len = strlen(method);
+    ops[s].indata_len = indata.length();
     data.append(cname, ops[s].class_len);
     data.append(method, ops[s].method_len);
     data.append(indata);

@@ -20,8 +20,8 @@ void rados_deinitialize();
 /* read/write objects */
 int rados_write(struct ceph_object *oid, const char *buf, off_t off, size_t len);
 int rados_read(struct ceph_object *oid, char *buf, off_t off, size_t len);
-int rados_exec(struct ceph_object *o, const char *code,
-                          off_t data_off, size_t data_len, char *buf, size_t out_len);
+int rados_exec(struct ceph_object *o, const char *cls, const char *method,
+                         const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
 #ifdef __cplusplus
 }

@@ -114,6 +114,15 @@ lib_LTLIBRARIES += librados.la
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la libcrush.la
 
+libtestclass_so_SOURCES = testclass.cc
+
+libtestclass.so: testclass.cc
+	${CXX} -fPIC -shared -g -o testclass.so testclass.cc
+
+BUILT_SOURCES += libtestclass.so
+
+
+
 
 ## libcephclient.so
 #libcephclient_so_a_SOURCES = \
