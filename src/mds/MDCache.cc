@@ -4254,6 +4254,7 @@ void MDCache::_queued_file_recover_cow(CInode *in, Mutation *mut)
 {
   in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
+  mds->locker->drop_locks(mut);
   mut->cleanup();
   delete mut;
 }
