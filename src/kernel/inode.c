@@ -509,7 +509,7 @@ static int fill_inode(struct inode *inode,
 		inode->i_mode = le32_to_cpu(info->mode);
 		inode->i_uid = le32_to_cpu(info->uid);
 		inode->i_gid = le32_to_cpu(info->gid);
-		dout(20, "%p mode 0%o uid.gid %d.%d\n", inode, inode->i_mode, 
+		dout(20, "%p mode 0%o uid.gid %d.%d\n", inode, inode->i_mode,
 		     inode->i_uid, inode->i_gid);
 	}
 
@@ -714,8 +714,8 @@ static void update_dentry_lease(struct dentry *dentry,
 
 	/* only track leases on regular dentries */
 	if (dentry->d_op != &ceph_dentry_ops)
-		return;	
-	
+		return;
+
 	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
 	     dentry, le16_to_cpu(lease->mask), duration, ttl);
 	if (lease->mask == 0) {
@@ -1936,13 +1936,13 @@ static int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, i
 {
 	/*
 	 * 4 bytes for the length, and additional 4 bytes per each xattr name,
-         * 4 bytes per each value
+	 * 4 bytes per each value
 	 */
 	int size = 4 + ci->i_xattrs.count*(4 + 4) +
 			     ci->i_xattrs.names_size +
 			     ci->i_xattrs.vals_size;
 	dout(30, "__get_required_blob_size count=%d names.size=%d vals.size=%d\n", ci->i_xattrs.count, ci->i_xattrs.names_size,
-                             ci->i_xattrs.vals_size);
+	                     ci->i_xattrs.vals_size);
 
 	if (name_size)
 		size += 4 + 4 + name_size + val_size;
@@ -1980,7 +1980,7 @@ void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
 
 			p = rb_next(p);
 		}
-	
+
 		*xattrs_blob =  ci->i_xattrs.prealloc_blob;
 		*blob_size = ci->i_xattrs.prealloc_size;
 	} else {
@@ -2012,7 +2012,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 			ceph_cap_string(issued),
 			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-        if ((issued & CEPH_CAP_XATTR_SHARED) &&
+	if ((issued & CEPH_CAP_XATTR_SHARED) &&
 	    (ci->i_xattrs.index_version >= ci->i_xattrs.version)) {
 		goto get_xattr;
 	} else {
@@ -2069,7 +2069,7 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 			ceph_cap_string(issued),
 			ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-        if ((issued & CEPH_CAP_XATTR_SHARED) &&
+	if ((issued & CEPH_CAP_XATTR_SHARED) &&
 	    (ci->i_xattrs.index_version > ci->i_xattrs.version)) {
 		goto list_xattr;
 	} else {

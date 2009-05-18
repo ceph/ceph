@@ -436,13 +436,13 @@ static int debugfs_bookkeeper_set(void *data, u64 val)
 {
 	if (val)
 		ceph_bookkeeper_dump();
-        return 0;
+	return 0;
 }
 
 static int debugfs_bookkeeper_get(void *data, u64 *val)
 {
 	*val = 0;
-        return 0;
+	return 0;
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(bookkeeper_fops, debugfs_bookkeeper_get, debugfs_bookkeeper_set, "%llu\n");

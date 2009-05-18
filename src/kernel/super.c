@@ -876,7 +876,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		}
 	}
 
-	
+
 	dout(30, "mount opening root\n");
 	root = open_root_dentry(client, "", started);
 	if (IS_ERR(root)) {
@@ -900,7 +900,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			goto out;
 		}
 	}
-		
+
 	mnt->mnt_root = root;
 	mnt->mnt_sb = client->sb;
 

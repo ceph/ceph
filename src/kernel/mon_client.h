@@ -70,8 +70,8 @@ struct ceph_mon_request {
 /* statfs() is done a bit differently */
 struct ceph_mon_statfs_request {
 	u64 tid;
-        struct kobject kobj;
-        struct ceph_mon_statfs_request_attr k_op, k_mon;
+	struct kobject kobj;
+	struct ceph_mon_statfs_request_attr k_op, k_mon;
 	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;

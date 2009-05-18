@@ -82,7 +82,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 		BUG_ON(inode->i_fop->release == ceph_release);
 
 		/* call the proper open fop */
-		ret = inode->i_fop->open(inode, file);		
+		ret = inode->i_fop->open(inode, file);
 	}
 	return ret;
 }
@@ -148,7 +148,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		     ceph_cap_string(issued));
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
-		
+
 		/* adjust wanted? */
 		if ((issued & wanted) != wanted &&
 		    (mds_wanted & wanted) != wanted &&
@@ -223,7 +223,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	if (!err && (flags & O_CREAT) && !req->r_reply_info.head->is_dentry)
-		err = ceph_handle_notrace_create(dir, dentry);	
+		err = ceph_handle_notrace_create(dir, dentry);
 	if (!err)
 		err = ceph_init_file(req->r_dentry->d_inode, file,
 				     req->r_fmode);

@@ -86,7 +86,7 @@ const char *ceph_cap_string(int caps)
 		*s++ = 'F';
 		s = gcap_string(s, c);
 	}
-	
+
 	if (s == cap_str[i])
 		*s++ = '-';
 	*s = 0;
@@ -109,7 +109,7 @@ void ceph_caps_finalize(void)
 {
 	struct ceph_cap *cap;
 	spin_lock(&caps_list_lock);
-        while (!list_empty(&caps_list)) {
+	while (!list_empty(&caps_list)) {
 		cap = list_first_entry(&caps_list, struct ceph_cap, caps_item);
 		list_del(&cap->caps_item);
 		kmem_cache_free(ceph_cap_cachep, cap);
@@ -640,7 +640,7 @@ int __ceph_caps_mds_wanted(struct ceph_inode_info *ci)
 			continue;
 		mds_wanted |= cap->mds_wanted;
 	}
-	return mds_wanted;	
+	return mds_wanted;
 }
 
 /*
@@ -1761,10 +1761,10 @@ start:
 		inode->i_mode = le32_to_cpu(grant->mode);
 		inode->i_uid = le32_to_cpu(grant->uid);
 		inode->i_gid = le32_to_cpu(grant->gid);
-		dout(20, "%p mode 0%o uid.gid %d.%d\n", inode, inode->i_mode, 
+		dout(20, "%p mode 0%o uid.gid %d.%d\n", inode, inode->i_mode,
 		     inode->i_uid, inode->i_gid);
 	}
-	
+
 	if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
 		inode->i_nlink = le32_to_cpu(grant->nlink);
 	}
@@ -1993,7 +1993,7 @@ static void handle_cap_trunc(struct inode *inode,
 	int dirty = __ceph_caps_dirty(ci);
 	int issued = __ceph_caps_issued(ceph_inode(inode), &implemented);
 	int queue_trunc = 0;
-	
+
 	issued |= implemented | dirty;
 
 	dout(10, "handle_cap_trunc inode %p mds%d seq %d to %lld seq %d\n",
@@ -2064,7 +2064,7 @@ static void handle_cap_export(struct inode *inode, struct ceph_mds_caps *ex,
  *
  * caller holds s_mutex.
  */
-static void handle_cap_import(struct ceph_mds_client *mdsc, 
+static void handle_cap_import(struct ceph_mds_client *mdsc,
 			      struct inode *inode, struct ceph_mds_caps *im,
 			      struct ceph_mds_session *session,
 			      void *snaptrace, int snaptrace_len)
@@ -2092,7 +2092,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 		dout(10, "handle_cap_import inode %p ci %p mds%d mseq %d\n",
 		     inode, ci, mds, mseq);
 	}
-	
+
 	down_write(&mdsc->snap_rwsem);
 	ceph_update_snap_trace(mdsc, snaptrace, snaptrace+snaptrace_len,
 			       false);
@@ -2196,7 +2196,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 		spin_unlock(&inode->i_lock);
 		goto done;
 	}
-	
+
 	/* note that each of these drops i_lock for us */
 	switch (op) {
 	case CEPH_CAP_OP_REVOKE:

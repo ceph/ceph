@@ -194,7 +194,7 @@ struct ceph_cap_snap {
 	u64 follows;
 	int issued, dirty;
 	struct ceph_snap_context *context;
-	
+
 	mode_t mode;
 	uid_t uid;
 	gid_t gid;

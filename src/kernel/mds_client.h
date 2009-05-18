@@ -176,7 +176,7 @@ struct ceph_mds_request {
 	int r_old_dentry_drop, r_old_dentry_unless;
 	struct inode *r_old_inode;
 	int r_old_inode_drop, r_old_inode_unless;
-	
+
 	struct inode *r_target_inode;
 
 	struct ceph_msg  *r_request;  /* original request */

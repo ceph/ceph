@@ -1156,7 +1156,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	/* cap releases */
 	releases = 0;
 	if (req->r_inode_drop)
-		releases += ceph_encode_inode_release(&p, 
+		releases += ceph_encode_inode_release(&p,
 		      req->r_inode ? req->r_inode : req->r_dentry->d_inode,
 		      mds, req->r_inode_drop, req->r_inode_unless);
 	if (req->r_dentry_drop)
@@ -1537,7 +1537,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
 	/*
-	 * Tolerate 2 consecutive ESTALEs from the same mds. 
+	 * Tolerate 2 consecutive ESTALEs from the same mds.
 	 * FIXME: we should be looking at the cap migrate_seq.
 	 */
 	if (result == -ESTALE) {

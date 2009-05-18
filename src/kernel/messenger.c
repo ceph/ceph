@@ -1423,7 +1423,7 @@ static int read_partial_message(struct ceph_connection *con)
 	struct ceph_client *client = con->msgr->parent;
 	int datacrc = !ceph_test_opt(client, NOCRC);
 
-	dout(20, "read_partial_message con %p msg %p\n", con, m);	
+	dout(20, "read_partial_message con %p msg %p\n", con, m);
 
 	/* header */
 	while (con->in_base_pos < sizeof(m->hdr)) {
@@ -1573,7 +1573,7 @@ no_data:
 			p = kmap(m->pages[cur_page]);
 			printk("data page %d len %d\n", cur_page, left);
 			print_section("data", p, left);
-					  
+
 			kunmap(m->pages[0]);
 			mutex_unlock(&m->page_mutex);
 		}
