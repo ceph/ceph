@@ -1364,7 +1364,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
   int dropping = cap->issued & ~retain;
-  int op = (retain == 0) ? CEPH_CAP_OP_RELEASE : CEPH_CAP_OP_UPDATE;
+  int op = CEPH_CAP_OP_UPDATE;
 
   dout(10) << "send_cap " << *in
 	   << " mds" << mds << " seq " << cap->seq
@@ -2001,12 +2001,7 @@ void Client::handle_caps(MClientCaps *m)
   if (inode_map.count(vino)) in = inode_map[vino];
   if (!in) {
     dout(5) << "handle_caps don't have vino " << vino << dendl;
-
-    // release.
-    m->set_op(CEPH_CAP_OP_RELEASE);
-    m->head.caps = 0;
-    m->head.dirty = 0;
-    messenger->send_message(m, m->get_source_inst());
+    delete m;
     return;
   }
 
@@ -2017,10 +2012,8 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   if (in->caps.count(mds) == 0) {
-    m->set_op(CEPH_CAP_OP_RELEASE);
-    m->head.caps = 0;
-    m->head.dirty = 0;
-    messenger->send_message(m, m->get_source_inst());
+    dout(5) << "handle_caps don't have " << *in << " cap on mds" << mds << dendl;
+    delete m;
     return;
   }
   InodeCap *cap = in->caps[mds];
