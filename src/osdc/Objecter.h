@@ -350,7 +350,7 @@ class Objecter {
 
   // high-level helpers
   tid_t stat(object_t oid, ceph_object_layout ol,
-	     __u64 *psize, int flags, 
+	     __u64 *psize, utime_t *pmtime, int flags, 
 	     Context *onfinish) {
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));

@@ -4331,7 +4331,7 @@ void MDCache::do_file_recover()
 	       << " " << *in << dendl;
       file_recovering.insert(in);
       mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			in->inode.max_size, &in->inode.size, false,
+			in->inode.max_size, &in->inode.size, &in->inode.mtime, false,
 			0, new C_MDC_Recover(this, in));    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
@@ -4345,7 +4345,8 @@ void MDCache::do_file_recover()
 
 void MDCache::_recovered(CInode *in, int r)
 {
-  dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " for " << *in << dendl;
+  dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " mtime=" << in->inode.mtime
+	   << " for " << *in << dendl;
 
   file_recovering.erase(in);
   in->state_clear(CInode::STATE_RECOVERING);

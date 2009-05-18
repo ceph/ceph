@@ -460,7 +460,6 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   dout(7) << " got reply on " << rd->ops << dendl;
 
   int bytes_read = m->get_data().length();
-
   if (rd->pbl)
     rd->pbl->claim(m->get_data());
 
@@ -471,7 +470,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   // done
   delete rd;
   if (onfinish) {
-    onfinish->finish(bytes_read);// > 0 ? bytes_read:m->get_result());
+    onfinish->finish(m->get_result());
     delete onfinish;
   }
   delete m;

@@ -37,9 +37,10 @@ public:
   Probe *probe;
   object_t oid;
   __u64 size;
+  utime_t mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o), size(0) {}
   void finish(int r) {
-    filer->_probed(probe, oid, size);    
+    filer->_probed(probe, oid, size, mtime);    
   }  
 };
 
@@ -48,6 +49,7 @@ int Filer::probe(inodeno_t ino,
 		 snapid_t snapid,
 		 __u64 start_from,
 		 __u64 *end,           // LB, when !fwd
+		 utime_t *pmtime,
 		 bool fwd,
 		 int flags,
 		 Context *onfinish) 
@@ -59,7 +61,7 @@ int Filer::probe(inodeno_t ino,
 
   assert(snapid);  // (until there is a non-NOSNAP write)
 
-  Probe *probe = new Probe(ino, *layout, snapid, start_from, end, flags, fwd, onfinish);
+  Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
   __u64 period = ceph_file_layout_period(*layout);
@@ -73,7 +75,7 @@ int Filer::probe(inodeno_t ino,
     assert(start_from > *end);
     if (start_from % period)
       probe->probing_len -= period - (start_from % period);
-    probe->from -= probe->probing_len;
+    probe->probing_off -= probe->probing_len;
   }
   
   _probe(probe);
@@ -84,26 +86,33 @@ int Filer::probe(inodeno_t ino,
 void Filer::_probe(Probe *probe)
 {
   dout(10) << "_probe " << hex << probe->ino << dec 
-	   << " " << probe->from << "~" << probe->probing_len 
+	   << " " << probe->probing_off << "~" << probe->probing_len 
 	   << dendl;
   
   // map range onto objects
-  file_to_extents(probe->ino, &probe->layout, probe->snapid, probe->from, probe->probing_len, probe->probing);
+  probe->known_size.clear();
+  probe->probing.clear();
+  file_to_extents(probe->ino, &probe->layout, probe->snapid,
+		  probe->probing_off, probe->probing_len, probe->probing);
   
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();
        p++) {
     dout(10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    probe->ops[p->oid] = objecter->stat(p->oid, p->layout, &c->size, probe->flags, c);
+    probe->ops[p->oid] = objecter->stat(p->oid, p->layout, &c->size, &c->mtime, probe->flags, c);
   }
 }
 
-void Filer::_probed(Probe *probe, object_t oid, __u64 size)
+void Filer::_probed(Probe *probe, object_t oid, __u64 size, utime_t mtime)
 {
-  dout(10) << "_probed " << probe->ino << " object " << hex << oid << dec << " has size " << size << dendl;
+  dout(10) << "_probed " << probe->ino << " object " << oid
+	   << " has size " << size << " mtime " << mtime << dendl;
 
-  probe->known[oid] = size;
+  probe->known_size[oid] = size;
+  if (mtime > probe->max_mtime)
+    probe->max_mtime = mtime;
+
   assert(probe->ops.count(oid));
   probe->ops.erase(oid);
 
@@ -111,7 +120,6 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
     return;  // waiting for more!
 
   // analyze!
-  bool found = false;
   __u64 end = 0;
 
   if (!probe->fwd) {
@@ -130,63 +138,73 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size)
     __u64 shouldbe = p->length + p->offset;
     dout(10) << "_probed  " << probe->ino << " object " << hex << p->oid << dec
 	     << " should be " << shouldbe
-	     << ", actual is " << probe->known[p->oid]
+	     << ", actual is " << probe->known_size[p->oid]
 	     << dendl;
 
-    if (probe->known[p->oid] < 0) { end = -1; break; } // error!
+    // error?
+    if (probe->known_size[p->oid] < 0) {
+      probe->err = probe->known_size[p->oid];
+      break;
+    }
 
-    assert(probe->known[p->oid] <= shouldbe);
-    if (shouldbe == probe->known[p->oid] && probe->fwd)
-      continue;  // keep going
-   
-    // aha, we found the end!
-    // calc offset into buffer_extent to get distance from probe->from.
-    __u64 oleft = probe->known[p->oid] - p->offset;
-    for (map<__u32,__u32>::iterator i = p->buffer_extents.begin();
-	 i != p->buffer_extents.end();
-	 i++) {
-      if (oleft <= (__u64)i->second) {
-	end = probe->from + i->first + oleft;
-	found = true;
-	dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
-		 << ", from was " << probe->from << ", end is " << end 
-		 << dendl;
-	break;
+    if (!probe->found_size) {
+      assert(probe->known_size[p->oid] <= shouldbe);
+
+      if ((probe->fwd && probe->known_size[p->oid] == shouldbe) ||
+	  (!probe->fwd && probe->known_size[p->oid] == 0))
+	continue;  // keep going
+      
+      // aha, we found the end!
+      // calc offset into buffer_extent to get distance from probe->from.
+      __u64 oleft = probe->known_size[p->oid] - p->offset;
+      for (map<__u32,__u32>::iterator i = p->buffer_extents.begin();
+	   i != p->buffer_extents.end();
+	   i++) {
+	if (oleft <= (__u64)i->second) {
+	  end = probe->probing_off + i->first + oleft;
+	  dout(10) << "_probed  end is in buffer_extent " << i->first << "~" << i->second << " off " << oleft 
+		   << ", from was " << probe->probing_off << ", end is " << end 
+		   << dendl;
+	  
+	  probe->found_size = true;
+	  dout(10) << "_probed found size at " << end << dendl;
+	  *probe->psize = end;
+	  
+	  if (!probe->pmtime)  // stop if we don't need mtime too
+	    break;
+	}
+	oleft -= i->second;
       }
-      oleft -= i->second;
     }
     break;
   }
 
-  if (!found) {
+  if (!probe->found_size || (probe->probing_off && probe->pmtime)) {
     // keep probing!
-    dout(10) << "_probed didn't find end, probing further" << dendl;
+    dout(10) << "_probed probing further" << dendl;
+
     __u64 period = ceph_file_layout_period(probe->layout);
     if (probe->fwd) {
-      probe->from += probe->probing_len;
-      assert(probe->from % period == 0);
+      probe->probing_off += probe->probing_len;
+      assert(probe->probing_off % period == 0);
       probe->probing_len = period;
     } else {
       // previous period.
-      assert(probe->from % period == 0);
-      probe->probing_len -= period;
-      probe->from -= period;
+      assert(probe->probing_off % period == 0);
+      probe->probing_len = period;
+      probe->probing_off -= period;
     }
     _probe(probe);
     return;
   }
 
-  if (end < 0) {
-    dout(10) << "_probed encountered an error while probing" << dendl;
-    *probe->end = -1;
-  } else {
-    // hooray!
-    dout(10) << "_probed found end at " << end << dendl;
-    *probe->end = end;
+  if (probe->pmtime) {
+    dout(10) << "_probed found mtime " << probe->max_mtime << dendl;
+    *probe->pmtime = probe->max_mtime;
   }
 
   // done!  finish and clean up.
-  probe->onfinish->finish(end >= 0 ? 0:-1);
+  probe->onfinish->finish(probe->err);
   delete probe->onfinish;
   delete probe;
 }
