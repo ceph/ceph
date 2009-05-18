@@ -669,9 +669,9 @@ static int ceph_link(struct dentry *old_dentry, struct inode *dir,
 	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
 	err = ceph_mdsc_do_request(mdsc, dir, req);
-	if (err) {
+	if (err)
 		d_drop(dentry);
-	} else if (!req->r_reply_info.head->is_dentry)
+	else if (!req->r_reply_info.head->is_dentry)
 		d_instantiate(dentry, igrab(old_dentry->d_inode));
 	ceph_mdsc_put_request(req);
 	return err;

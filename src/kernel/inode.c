@@ -513,9 +513,8 @@ static int fill_inode(struct inode *inode,
 		     inode->i_uid, inode->i_gid);
 	}
 
-	if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+	if ((issued & CEPH_CAP_LINK_EXCL) == 0)
 		inode->i_nlink = le32_to_cpu(info->nlink);
-	}
 
 	/* be careful with mtime, atime, size */
 	ceph_decode_timespec(&atime, &info->atime);
@@ -1681,9 +1680,8 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	} else {
 		kfree(*newxattr);
 		*newxattr = NULL;
-		if (xattr->should_free_val) {
+		if (xattr->should_free_val)
 			kfree((void *)xattr->val);
-		}
 
 		if (should_free_name) {
 			kfree((void *)name);
@@ -1738,7 +1736,8 @@ static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
 		else if (c > 0)
 			p = &(*p)->rb_right;
 		else {
-			dout(20, "__get_xattr %s: found %.*s\n", name, xattr->val_len, xattr->val);
+			dout(20, "__get_xattr %s: found %.*s\n", name,
+			     xattr->val_len, xattr->val);
 			return xattr;
 		}
 	}
@@ -1750,7 +1749,7 @@ static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
 
 static void __free_xattr(struct ceph_inode_xattr *xattr)
 {
-	BUG_ON (!xattr);
+	BUG_ON(!xattr);
 
 	if (xattr->should_free_name)
 		kfree((void *)xattr->name);
@@ -1797,8 +1796,8 @@ static int __remove_xattr_by_name(struct ceph_inode_info *ci,
 	return err;
 }
 
-static char * __copy_xattr_names(struct ceph_inode_info *ci,
-				 char *dest)
+static char *__copy_xattr_names(struct ceph_inode_info *ci,
+				char *dest)
 {
 	struct rb_node *p;
 	struct ceph_inode_xattr *xattr = NULL;
@@ -1811,7 +1810,8 @@ static char * __copy_xattr_names(struct ceph_inode_info *ci,
 		memcpy(dest, xattr->name, xattr->name_len);
 		dest[xattr->name_len] = '\0';
 
-		dout(30, "dest=%s %p (%s) (%d/%d)\n", dest, xattr, xattr->name, xattr->name_len, ci->i_xattrs.names_size);
+		dout(30, "dest=%s %p (%s) (%d/%d)\n", dest, xattr, xattr->name,
+		     xattr->name_len, ci->i_xattrs.names_size);
 
 		dest += xattr->name_len + 1;
 		p = rb_next(p);
@@ -1833,7 +1833,8 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 		xattr = rb_entry(p, struct ceph_inode_xattr, node);
 		tmp = p;
 		p = rb_next(tmp);
-		dout(30, "__destroy_xattrs next p=%p (%.*s)\n", p, xattr->name_len, xattr->name);
+		dout(30, "__destroy_xattrs next p=%p (%.*s)\n", p,
+		     xattr->name_len, xattr->name);
 		rb_erase(tmp, &ci->i_xattrs.xattrs);
 
 		__free_xattr(xattr);
@@ -1880,9 +1881,9 @@ start:
 		if (!xattrs)
 			goto bad_lock;
 		memset(xattrs, 0, numattr*sizeof(struct ceph_xattr *));
-		for (i=0; i<numattr; i++) {
+		for (i = 0; i < numattr; i++) {
 			xattrs[i] = kmalloc(sizeof(struct ceph_inode_xattr),
-					           GFP_NOFS);
+					    GFP_NOFS);
 			if (!xattrs[i])
 				goto bad_lock;
 		}
@@ -1890,9 +1891,8 @@ start:
 		spin_lock(&inode->i_lock);
 		if (ci->i_xattrs.version != xattr_version) {
 			/* lost a race, retry */
-			for (i=0; i<numattr; i++) {
+			for (i = 0; i < numattr; i++)
 				kfree(xattrs[i]);
-			}
 			kfree(xattrs);
 			goto start;
 		}
@@ -1907,7 +1907,7 @@ start:
 			p += len;
 
 			err = __set_xattr(ci, name, namelen, val, len,
-				    0, 0, 0, &xattrs[numattr]);
+					  0, 0, 0, &xattrs[numattr]);
 
 			if (err < 0)
 				goto bad;
@@ -1922,17 +1922,16 @@ bad_lock:
 	spin_lock(&inode->i_lock);
 bad:
 	if (xattrs) {
-		for (i=0; i<numattr; i++) {
-			if (xattrs[i])
-				kfree(xattrs[i]);
-		}
+		for (i = 0; i < numattr; i++)
+			kfree(xattrs[i]);
 		kfree(xattrs);
 	}
 	ci->i_xattrs.names_size = 0;
 	return err;
 }
 
-static int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, int val_size)
+static int __get_required_blob_size(struct ceph_inode_info *ci, int name_size,
+				    int val_size)
 {
 	/*
 	 * 4 bytes for the length, and additional 4 bytes per each xattr name,
@@ -1941,8 +1940,9 @@ static int __get_required_blob_size(struct ceph_inode_info *ci, int name_size, i
 	int size = 4 + ci->i_xattrs.count*(4 + 4) +
 			     ci->i_xattrs.names_size +
 			     ci->i_xattrs.vals_size;
-	dout(30, "__get_required_blob_size count=%d names.size=%d vals.size=%d\n", ci->i_xattrs.count, ci->i_xattrs.names_size,
-	                     ci->i_xattrs.vals_size);
+	dout(30, "__get_required_blob_size c=%d names.size=%d vals.size=%d\n",
+	     ci->i_xattrs.count, ci->i_xattrs.names_size,
+	     ci->i_xattrs.vals_size);
 
 	if (name_size)
 		size += 4 + 4 + name_size + val_size;

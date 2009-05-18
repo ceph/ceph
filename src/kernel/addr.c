@@ -574,8 +574,8 @@ static int ceph_writepages_start(struct address_space *mapping,
 		do_sync = 1;
 	dout(10, "writepages_start %p dosync=%d (pdflush=%d mode=%s)\n",
 	     inode, do_sync, current_is_pdflush(),
-	     wbc->sync_mode == WB_SYNC_NONE ? "NONE":
-	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL":"HOLD"));
+	     wbc->sync_mode == WB_SYNC_NONE ? "NONE" :
+	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL" : "HOLD"));
 
 	client = ceph_inode_to_client(inode);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
@@ -588,7 +588,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 		wsize = PAGE_CACHE_SIZE;
 	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 
-	pvec = (struct pagevec *)kmalloc(sizeof(*pvec), GFP_KERNEL);
+	pvec = kmalloc(sizeof(*pvec), GFP_KERNEL);
 	pagevec_init(pvec, 0);
 
 	/* ?? */

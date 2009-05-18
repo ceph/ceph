@@ -108,7 +108,7 @@ typedef __u32 ceph_seq_t;
 
 static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
 {
-	return ((__s32)a - (__s32)b);
+	return (__s32)a - (__s32)b;
 }
 
 
@@ -313,7 +313,7 @@ union ceph_pg {
  * colocated with their parents; that is, pgp_num doesn't increase
  * until the new pgs have successfully split.  only _then_ are the new
  * pgs placed independently.
- *      
+ *
  *  lpg_num -- localized pg count (per device).  replicas are randomly
  * selected.
  *
@@ -622,7 +622,7 @@ struct ceph_client_ticket {
 #define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
 #define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
 #define CEPH_MDS_STATE_STARTING   -7  /* up, starting previously stopped mds. */
-#define CEPH_MDS_STATE_STANDBY_REPLAY -8  /* up, tailing active node's journal. */
+#define CEPH_MDS_STATE_STANDBY_REPLAY -8 /* up, tailing active node's journal */
 
 #define CEPH_MDS_STATE_REPLAY      8  /* up, replaying journal. */
 #define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed
@@ -830,7 +830,7 @@ struct ceph_mds_request_release {
 	__le32 caps, wanted;
 	__le32 seq, issue_seq, mseq;
 	__le32 dname_seq;
-	__le32 dname_len;   /* if releasing a dentry lease, too.  string follows. */
+	__le32 dname_len;   /* if releasing a dentry lease; string follows. */
 } __attribute__ ((packed));
 
 /* client reply */
@@ -936,7 +936,7 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_GSHARED     1  /* client can reads */
 #define CEPH_CAP_GEXCL       2  /* client can read and update */
 #define CEPH_CAP_GCACHE      4  /* (file) client can cache reads */
-#define CEPH_CAP_GRD         8  /* (file) client can read */ 
+#define CEPH_CAP_GRD         8  /* (file) client can read */
 #define CEPH_CAP_GWR        16  /* (file) client can write */
 #define CEPH_CAP_GBUFFER    32  /* (file) client can buffer writes */
 #define CEPH_CAP_GWREXTEND  64  /* (file) client can extend EOF */
@@ -988,7 +988,8 @@ static inline int ceph_flags_to_mode(int flags)
 			      CEPH_CAP_LINK_SHARED |			\
 			      CEPH_CAP_XATTR_SHARED |			\
 			      CEPH_CAP_FILE_SHARED)
-#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE)
+#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_RD | \
+			   CEPH_CAP_FILE_CACHE)
 
 #define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
 			   CEPH_CAP_LINK_EXCL |		\
@@ -996,9 +997,11 @@ static inline int ceph_flags_to_mode(int flags)
 			   CEPH_CAP_FILE_EXCL)
 #define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
-#define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD|CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_FILE_WR|CEPH_CAP_PIN)
+#define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD | CEPH_CAP_ANY_EXCL | \
+			   CEPH_CAP_ANY_FILE_WR | CEPH_CAP_PIN)
 
-#define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_IXATTR)
+#define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE | CEPH_LOCK_IAUTH | CEPH_LOCK_ILINK | \
+			CEPH_LOCK_IXATTR)
 
 static inline int ceph_caps_for_mode(int mode)
 {
@@ -1009,13 +1012,15 @@ static inline int ceph_caps_for_mode(int mode)
 		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
 			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
 	case CEPH_FILE_MODE_RDWR:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
+			CEPH_CAP_FILE_EXCL |
 			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE |
 			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
 			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
 			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
 	case CEPH_FILE_MODE_WR:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
+			CEPH_CAP_FILE_EXCL |
 			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
 			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
 			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
@@ -1032,7 +1037,7 @@ enum {
 	CEPH_CAP_OP_UPDATE,    /* client->mds update */
 	CEPH_CAP_OP_DROP,      /* client->mds drop cap bits */
 	CEPH_CAP_OP_FLUSH,     /* client->mds cap writeback */
-	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed.  if caps=0, cap also released. */
+	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
 	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
 	CEPH_CAP_OP_RELEASE,   /* client->mds release (clean) cap */
@@ -1215,36 +1220,36 @@ struct ceph_mds_snap_realm {
 enum {
 	/** data **/
 	/* read */
-	CEPH_OSD_OP_READ       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 1,
-	CEPH_OSD_OP_STAT       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 2,
+	CEPH_OSD_OP_READ      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 1,
+	CEPH_OSD_OP_STAT      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 2,
 
 	/* fancy read */
-	CEPH_OSD_OP_GREP       = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 3,
-	CEPH_OSD_OP_MASKTRUNC  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 4,
+	CEPH_OSD_OP_GREP      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 3,
+	CEPH_OSD_OP_MASKTRUNC = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 4,
 
 	/* write */
-	CEPH_OSD_OP_WRITE      = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
-	CEPH_OSD_OP_WRITEFULL  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 2,
-	CEPH_OSD_OP_TRUNCATE   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 3,
-	CEPH_OSD_OP_ZERO       = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 4,
-	CEPH_OSD_OP_DELETE     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 5,
+	CEPH_OSD_OP_WRITE     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 1,
+	CEPH_OSD_OP_WRITEFULL = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 2,
+	CEPH_OSD_OP_TRUNCATE  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 3,
+	CEPH_OSD_OP_ZERO      = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 4,
+	CEPH_OSD_OP_DELETE    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 5,
 
 	/* fancy write */
-	CEPH_OSD_OP_APPEND     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 6,
-	CEPH_OSD_OP_STARTSYNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 7,
-	CEPH_OSD_OP_SETTRUNC   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 8,
-	CEPH_OSD_OP_TRIMTRUNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 9,
+	CEPH_OSD_OP_APPEND    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 6,
+	CEPH_OSD_OP_STARTSYNC = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 7,
+	CEPH_OSD_OP_SETTRUNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 8,
+	CEPH_OSD_OP_TRIMTRUNC = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 9,
 
 	/** attrs **/
 	/* read */
-	CEPH_OSD_OP_GETXATTR   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
-	CEPH_OSD_OP_GETXATTRS  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 2,
+	CEPH_OSD_OP_GETXATTR  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
+	CEPH_OSD_OP_GETXATTRS = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 2,
 
 	/* write */
-	CEPH_OSD_OP_SETXATTR   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 1,
-	CEPH_OSD_OP_SETXATTRS  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 2,
-	CEPH_OSD_OP_RESETXATTRS= CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 3,
-	CEPH_OSD_OP_RMXATTR    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 4,
+	CEPH_OSD_OP_SETXATTR  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 1,
+	CEPH_OSD_OP_SETXATTRS = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 2,
+	CEPH_OSD_OP_RESETXATTRS = CEPH_OSD_OP_MODE_WR|CEPH_OSD_OP_TYPE_ATTR | 3,
+	CEPH_OSD_OP_RMXATTR   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_ATTR | 4,
 
 	/** subop **/
 	CEPH_OSD_OP_PULL           = CEPH_OSD_OP_MODE_SUB | 1,
@@ -1254,12 +1259,12 @@ enum {
 	CEPH_OSD_OP_SCRUB          = CEPH_OSD_OP_MODE_SUB | 5,
 
 	/** lock **/
-	CEPH_OSD_OP_WRLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 1,
-	CEPH_OSD_OP_WRUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 2,
-	CEPH_OSD_OP_RDLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 3,
-	CEPH_OSD_OP_RDUNLOCK   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
-	CEPH_OSD_OP_UPLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
-	CEPH_OSD_OP_DNLOCK     = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
+	CEPH_OSD_OP_WRLOCK    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 1,
+	CEPH_OSD_OP_WRUNLOCK  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 2,
+	CEPH_OSD_OP_RDLOCK    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 3,
+	CEPH_OSD_OP_RDUNLOCK  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 4,
+	CEPH_OSD_OP_UPLOCK    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 5,
+	CEPH_OSD_OP_DNLOCK    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_LOCK | 6,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -1348,7 +1353,7 @@ enum {
 	CEPH_OSD_FLAG_BALANCE_READS = 256,
 };
 
-#define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set and writer has old snap context*/
+#define EOLDSNAPC    ERESTART  /* ORDERSNAP set and writer has old snapc*/
 #define EBLACKLISTED ESHUTDOWN /* blacklisted */
 
 struct ceph_osd_op {

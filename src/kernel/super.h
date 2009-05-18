@@ -68,7 +68,7 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define ceph_set_opt(client, opt) \
 	(client)->mount_args.flags |= CEPH_OPT_##opt;
 #define ceph_test_opt(client, opt) \
-	!!((client)->mount_args.flags & CEPH_OPT_##opt)
+	(!!((client)->mount_args.flags & CEPH_OPT_##opt))
 
 #define CEPH_DEFAULT_READ_SIZE	(128*1024) /* readahead */
 
@@ -845,8 +845,8 @@ extern int ceph_encode_inode_release(void **p, struct inode *inode,
 extern int ceph_encode_dentry_release(void **p, struct dentry *dn,
 				      int mds, int drop, int unless);
 
-extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
-		      loff_t endoff);
+extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want,
+			 int *got, loff_t endoff);
 
 /* for counting open files by mode */
 static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode)

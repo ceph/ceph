@@ -575,7 +575,8 @@ more:
 				inode = igrab(&ci->vfs_inode);
 				spin_unlock(&realm->inodes_with_caps_lock);
 				if (inode) {
-					ceph_queue_cap_snap(ci, realm->cached_context);
+					ceph_queue_cap_snap(ci,
+						    realm->cached_context);
 					iput(inode);
 				}
 				spin_lock(&realm->inodes_with_caps_lock);

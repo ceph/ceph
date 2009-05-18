@@ -1101,7 +1101,7 @@ static int process_connect(struct ceph_connection *con)
 				       &con->actual_peer_addr) &&
 	    !(con->actual_peer_addr.ipaddr.sin_addr.s_addr == 0 &&
 	      con->actual_peer_addr.ipaddr.sin_port ==
-	        con->peer_addr.ipaddr.sin_port &&
+	      con->peer_addr.ipaddr.sin_port &&
 	      con->actual_peer_addr.nonce == con->peer_addr.nonce)) {
 		derr(1, "process_connect wrong peer, want %u.%u.%u.%u:%u/%d, "
 		     "got %u.%u.%u.%u:%u/%d, wtf\n",
@@ -1438,7 +1438,8 @@ static int read_partial_message(struct ceph_connection *con)
 			u32 crc = crc32c(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
 			if (crc != le32_to_cpu(m->hdr.crc)) {
-				print_section("hdr", (u8 *)&m->hdr, sizeof(m->hdr));
+				print_section("hdr", (u8 *)&m->hdr,
+					      sizeof(m->hdr));
 				derr(0, "read_partial_message %p bad hdr crc"
 				     " %u != expected %u\n",
 				     m, crc, m->hdr.crc);
@@ -1549,7 +1550,8 @@ no_data:
 		derr(0, "read_partial_message %p front crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_front_crc, m->footer.front_crc);
-		print_section("front", (u8 *)&m->front.iov_base, sizeof(m->front.iov_len));
+		print_section("front", (u8 *)&m->front.iov_base,
+			      sizeof(m->front.iov_len));
 		return -EBADMSG;
 	}
 	if (datacrc &&
@@ -1559,7 +1561,8 @@ no_data:
 		derr(0, "read_partial_message %p data crc %u != expected %u\n",
 		     con->in_msg,
 		     con->in_data_crc, m->footer.data_crc);
-		for (data_pos = 0, cur_page = 0; data_pos < data_len; data_pos += PAGE_SIZE, cur_page++) {
+		for (data_pos = 0, cur_page = 0; data_pos < data_len;
+		     data_pos += PAGE_SIZE, cur_page++) {
 			left = min((int)(data_len - data_pos),
 			   (int)(PAGE_SIZE));
 			mutex_lock(&m->page_mutex);
@@ -1571,7 +1574,6 @@ no_data:
 			}
 
 			p = kmap(m->pages[cur_page]);
-			printk("data page %d len %d\n", cur_page, left);
 			print_section("data", p, left);
 
 			kunmap(m->pages[0]);

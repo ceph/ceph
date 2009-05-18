@@ -18,7 +18,7 @@ int ceph_debug_caps __read_mostly = -1;
  */
 #define MAX_CAP_STR 20
 static char cap_str[MAX_CAP_STR][40];
-static spinlock_t cap_str_lock = SPIN_LOCK_UNLOCKED;
+static DEFINE_SPINLOCK(cap_str_lock);
 static int last_cap_str;
 static struct list_head caps_list;
 static spinlock_t caps_list_lock;
@@ -790,8 +790,8 @@ void ceph_queue_caps_release(struct inode *inode)
 
 		spin_lock(&session->s_cap_lock);
 		BUG_ON(!session->s_num_cap_releases);
-		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
-				 list_head);
+		msg = list_first_entry(&session->s_cap_releases,
+				       struct ceph_msg, list_head);
 
 		dout(10, " adding %p release to mds%d msg %p (%d left)\n",
 		     inode, session->s_mds, msg, session->s_num_cap_releases);
@@ -937,8 +937,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		     xattrs_blob, xattrs_blob_size,
 		     follows, mds);
 
-	if (xattrs_blob)
-		kfree(xattrs_blob);
+	kfree(xattrs_blob);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -1092,7 +1091,7 @@ void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 	struct ceph_cap *cap;
 	int file_wanted, used;
 	int took_snap_rwsem = 0;             /* true if mdsc->snap_rwsem held */
-	int drop_session_lock = session ? 0:1;
+	int drop_session_lock = session ? 0 : 1;
 	int want, retain, revoking, flushing = 0;
 	int mds = -1;   /* keep track of how far we've gone through i_caps list
 			   to avoid an infinite loop on retry */
@@ -1142,7 +1141,7 @@ retry_locked:
 	     inode, ceph_cap_string(file_wanted), ceph_cap_string(used),
 	     ceph_cap_string(retain),
 	     ceph_cap_string(__ceph_caps_issued(ci, NULL)),
-	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY":"");
+	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY" : "");
 
 	/*
 	 * If we no longer need to hold onto old our caps, and we may
@@ -1354,7 +1353,7 @@ static int try_flush_caps(struct inode *inode, struct ceph_mds_session *session)
 {
 	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
 	struct ceph_inode_info *ci = ceph_inode(inode);
-	int unlock_session = session ? 0:1;
+	int unlock_session = session ? 0 : 1;
 	int flushing = 0;
 
 retry:
@@ -1765,9 +1764,8 @@ start:
 		     inode->i_uid, inode->i_gid);
 	}
 
-	if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+	if ((issued & CEPH_CAP_LINK_EXCL) == 0)
 		inode->i_nlink = le32_to_cpu(grant->nlink);
-	}
 
 	if ((issued & CEPH_CAP_XATTR_EXCL) == 0 && grant->xattr_len) {
 		int len = le32_to_cpu(grant->xattr_len);
@@ -2201,7 +2199,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	switch (op) {
 	case CEPH_CAP_OP_REVOKE:
 	case CEPH_CAP_OP_GRANT:
-		r = handle_cap_grant(inode, h, session, cap,&xattr_data);
+		r = handle_cap_grant(inode, h, session, cap, &xattr_data);
 		if (r == 1) {
 			dout(10, " sending reply back to mds%d\n", mds);
 			ceph_msg_get(msg);
