@@ -333,7 +333,7 @@ struct ceph_client_ticket {
 #define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
 #define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
 #define CEPH_MDS_STATE_STARTING   -7  /* up, starting previously stopped mds. */
-#define CEPH_MDS_STATE_STANDBY_REPLAY -8  /* up, tailing active node's journal. */
+#define CEPH_MDS_STATE_STANDBY_REPLAY -8 /* up, tailing active node's journal */
 
 #define CEPH_MDS_STATE_REPLAY      8  /* up, replaying journal. */
 #define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed
@@ -541,7 +541,7 @@ struct ceph_mds_request_release {
 	__le32 caps, wanted;
 	__le32 seq, issue_seq, mseq;
 	__le32 dname_seq;
-	__le32 dname_len;   /* if releasing a dentry lease, too.  string follows. */
+	__le32 dname_len;   /* if releasing a dentry lease; string follows. */
 } __attribute__ ((packed));
 
 /* client reply */
@@ -647,7 +647,7 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_GSHARED     1  /* client can reads */
 #define CEPH_CAP_GEXCL       2  /* client can read and update */
 #define CEPH_CAP_GCACHE      4  /* (file) client can cache reads */
-#define CEPH_CAP_GRD         8  /* (file) client can read */ 
+#define CEPH_CAP_GRD         8  /* (file) client can read */
 #define CEPH_CAP_GWR        16  /* (file) client can write */
 #define CEPH_CAP_GBUFFER    32  /* (file) client can buffer writes */
 #define CEPH_CAP_GWREXTEND  64  /* (file) client can extend EOF */
@@ -699,7 +699,8 @@ static inline int ceph_flags_to_mode(int flags)
 			      CEPH_CAP_LINK_SHARED |			\
 			      CEPH_CAP_XATTR_SHARED |			\
 			      CEPH_CAP_FILE_SHARED)
-#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE)
+#define CEPH_CAP_ANY_RD   (CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_RD | \
+			   CEPH_CAP_FILE_CACHE)
 
 #define CEPH_CAP_ANY_EXCL (CEPH_CAP_AUTH_EXCL |		\
 			   CEPH_CAP_LINK_EXCL |		\
@@ -707,9 +708,11 @@ static inline int ceph_flags_to_mode(int flags)
 			   CEPH_CAP_FILE_EXCL)
 #define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
-#define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD|CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_FILE_WR|CEPH_CAP_PIN)
+#define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD | CEPH_CAP_ANY_EXCL | \
+			   CEPH_CAP_ANY_FILE_WR | CEPH_CAP_PIN)
 
-#define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE|CEPH_LOCK_IAUTH|CEPH_LOCK_ILINK|CEPH_LOCK_IXATTR)
+#define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE | CEPH_LOCK_IAUTH | CEPH_LOCK_ILINK | \
+			CEPH_LOCK_IXATTR)
 
 static inline int ceph_caps_for_mode(int mode)
 {
@@ -720,13 +723,15 @@ static inline int ceph_caps_for_mode(int mode)
 		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
 			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
 	case CEPH_FILE_MODE_RDWR:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
+			CEPH_CAP_FILE_EXCL |
 			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE |
 			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
 			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
 			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
 	case CEPH_FILE_MODE_WR:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_EXCL |
+		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
+			CEPH_CAP_FILE_EXCL |
 			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
 			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
 			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
@@ -743,7 +748,7 @@ enum {
 	CEPH_CAP_OP_UPDATE,    /* client->mds update */
 	CEPH_CAP_OP_DROP,      /* client->mds drop cap bits */
 	CEPH_CAP_OP_FLUSH,     /* client->mds cap writeback */
-	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed.  if caps=0, cap also released. */
+	CEPH_CAP_OP_FLUSH_ACK, /* mds->client flushed */
 	CEPH_CAP_OP_FLUSHSNAP, /* client->mds flush snapped metadata */
 	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
 	CEPH_CAP_OP_RELEASE,   /* client->mds release (clean) cap */

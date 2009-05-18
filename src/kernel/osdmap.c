@@ -12,6 +12,32 @@ int ceph_debug_osdmap __read_mostly = -1;
 #define DOUT_MASK DOUT_MASK_OSDMAP
 #define DOUT_VAR ceph_debug_osdmap
 
+
+char *ceph_osdmap_state_str(char *str, int len, int state)
+{
+	int flag = 0;
+
+	if (!len)
+		goto done;
+
+	*str = '\0';
+	if (state) {
+		if (state & CEPH_OSD_EXISTS) {
+			snprintf(str, len, "exists");
+			flag = 1;
+		}
+		if (state & CEPH_OSD_UP) {
+			snprintf(str, len, "%s%s%s", str, (flag ? ", " : ""),
+				 "up");
+			flag = 1;
+		}
+	} else {
+		snprintf(str, len, "doesn't exist");
+	}
+done:
+	return str;
+}
+
 /* maps */
 
 static int calc_bits_of(unsigned t)
@@ -510,7 +536,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	while (len--) {
 		ceph_decode_32_safe(p, end, pool, bad);
 		if (pool >= map->num_pools) {
-			void *pg_pool = kzalloc((pool+1) * sizeof(*map->pg_pool),
+			void *pg_pool = kzalloc((pool+1)*sizeof(*map->pg_pool),
 					  GFP_NOFS);
 			if (!pg_pool) {
 				err = -ENOMEM;

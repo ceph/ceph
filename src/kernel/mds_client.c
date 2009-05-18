@@ -463,7 +463,6 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	int mds = -1;
 	u32 hash = req->r_direct_hash;
 	bool is_hash = req->r_direct_is_hash;
-	struct inode *inode = req->r_inode;
 	struct dentry *dentry = req->r_dentry;
 	struct ceph_inode_info *ci;
 	int mode = req->r_direct_mode;
@@ -482,10 +481,6 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 
 	if (mode == USE_RANDOM_MDS)
 		goto random;
-
-	if (inode) {
-
-	}
 
 	/*
 	 * try to find an appropriate mds to contact based on the
@@ -613,13 +608,13 @@ static void cleanup_cap_releases(struct ceph_mds_session *session)
 
 	spin_lock(&session->s_cap_lock);
 	while (!list_empty(&session->s_cap_releases)) {
-		msg = list_first_entry(&session->s_cap_releases, struct ceph_msg,
-				 list_head);
+		msg = list_first_entry(&session->s_cap_releases,
+				       struct ceph_msg, list_head);
 		ceph_msg_remove(msg);
 	}
 	while (!list_empty(&session->s_cap_releases_done)) {
-		msg = list_first_entry(&session->s_cap_releases_done, struct ceph_msg,
-				 list_head);
+		msg = list_first_entry(&session->s_cap_releases_done,
+				       struct ceph_msg, list_head);
 		ceph_msg_remove(msg);
 	}
 	spin_unlock(&session->s_cap_lock);
@@ -1156,7 +1151,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	/* cap releases */
 	releases = 0;
 	if (req->r_inode_drop)
-		releases += ceph_encode_inode_release(&p, 
+		releases += ceph_encode_inode_release(&p,
 		      req->r_inode ? req->r_inode : req->r_dentry->d_inode,
 		      mds, req->r_inode_drop, req->r_inode_unless);
 	if (req->r_dentry_drop)
@@ -1423,7 +1418,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 		/* clean up */
 		__unregister_request(mdsc, req);
 		if (!list_empty(&req->r_unsafe_item))
-		    list_del_init(&req->r_unsafe_item);
+			list_del_init(&req->r_unsafe_item);
 		complete(&req->r_safe_completion);
 	} else if (req->r_err) {
 		err = req->r_err;
@@ -1475,7 +1470,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	if ((req->r_got_unsafe && !head->safe) ||
 	    (req->r_got_safe && head->safe)) {
 		dout(0, "got a dup %s reply on %llu from mds%d\n",
-		     head->safe ? "safe":"unsafe", tid, mds);
+		     head->safe ? "safe" : "unsafe", tid, mds);
 		mutex_unlock(&mdsc->mutex);
 		goto out;
 	}
@@ -1537,7 +1532,7 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	dout(10, "handle_reply tid %lld result %d\n", tid, result);
 
 	/*
-	 * Tolerate 2 consecutive ESTALEs from the same mds. 
+	 * Tolerate 2 consecutive ESTALEs from the same mds.
 	 * FIXME: we should be looking at the cap migrate_seq.
 	 */
 	if (result == -ESTALE) {
@@ -2424,7 +2419,7 @@ static void wait_requests(struct ceph_mds_client *mdsc)
 		mutex_unlock(&mdsc->mutex);
 		dout(10, "wait_requests waiting for requests\n");
 		wait_for_completion_timeout(&mdsc->safe_umount_waiters,
-					    client->mount_args.mount_timeout * HZ);
+				    client->mount_args.mount_timeout * HZ);
 		mutex_lock(&mdsc->mutex);
 
 		/* tear down remaining requests */

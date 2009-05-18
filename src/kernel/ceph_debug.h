@@ -68,16 +68,18 @@ extern int ceph_debug_tools __read_mostly;
 		    ((DOUT_VAR >= 0 && x <= DOUT_VAR) ||		\
 		     (DOUT_VAR < 0 && x <= ceph_debug))) {		\
 			if (ceph_debug_console)				\
-				printk(KERN_ERR FMT_PREFIX fmt, LOG_ARGS, args);	\
+				printk(KERN_ERR FMT_PREFIX fmt, LOG_ARGS, \
+				       args);				\
 			else						\
-				printk(KERN_DEBUG FMT_PREFIX fmt, LOG_ARGS, args);	\
+				printk(KERN_DEBUG FMT_PREFIX fmt, LOG_ARGS, \
+				       args);				\
 		}							\
 	} while (0)
 
 #define _dout(x, fmt, args...) dout_flag(x, DOUT_MASK, fmt FMT_SUFFIX, args)
 
 #define _derr(x, fmt, args...) do {					\
-		printk(KERN_ERR FMT_PREFIX fmt FMT_SUFFIX, LOG_ARGS, args);	\
+		printk(KERN_ERR FMT_PREFIX fmt FMT_SUFFIX, LOG_ARGS, args); \
 	} while (0)
 
 #define dout(x, args...) _dout(x, args, TRAIL_PARAM)

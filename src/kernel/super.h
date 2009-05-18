@@ -1,12 +1,18 @@
 #ifndef _FS_CEPH_SUPER_H
 #define _FS_CEPH_SUPER_H
 
+#define CEPH_DISABLE_BOOKKEEPER
+#include "bookkeeper.h"
+
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
 #include <linux/backing-dev.h>
+
+#undef CEPH_DISABLE_BOOKKEEPER
+#include "bookkeeper.h"
 
 #include "types.h"
 #include "ceph_debug.h"
@@ -15,6 +21,7 @@
 #include "mds_client.h"
 #include "osd_client.h"
 #include "ceph_fs.h"
+#include "bookkeeper.h"
 
 /* f_type in struct statfs */
 #define CEPH_SUPER_MAGIC 0x00c36400
@@ -61,7 +68,7 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define ceph_set_opt(client, opt) \
 	(client)->mount_args.flags |= CEPH_OPT_##opt;
 #define ceph_test_opt(client, opt) \
-	!!((client)->mount_args.flags & CEPH_OPT_##opt)
+	(!!((client)->mount_args.flags & CEPH_OPT_##opt))
 
 #define CEPH_DEFAULT_READ_SIZE	(128*1024) /* readahead */
 
@@ -187,7 +194,7 @@ struct ceph_cap_snap {
 	u64 follows;
 	int issued, dirty;
 	struct ceph_snap_context *context;
-	
+
 	mode_t mode;
 	uid_t uid;
 	gid_t gid;
@@ -838,8 +845,8 @@ extern int ceph_encode_inode_release(void **p, struct inode *inode,
 extern int ceph_encode_dentry_release(void **p, struct dentry *dn,
 				      int mds, int drop, int unless);
 
-extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
-		      loff_t endoff);
+extern int ceph_get_caps(struct ceph_inode_info *ci, int need, int want,
+			 int *got, loff_t endoff);
 
 /* for counting open files by mode */
 static inline void __ceph_get_fmode(struct ceph_inode_info *ci, int mode)

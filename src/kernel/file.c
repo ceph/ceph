@@ -82,7 +82,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 		BUG_ON(inode->i_fop->release == ceph_release);
 
 		/* call the proper open fop */
-		ret = inode->i_fop->open(inode, file);		
+		ret = inode->i_fop->open(inode, file);
 	}
 	return ret;
 }
@@ -148,7 +148,7 @@ int ceph_open(struct inode *inode, struct file *file)
 		     ceph_cap_string(issued));
 		__ceph_get_fmode(ci, fmode);
 		spin_unlock(&inode->i_lock);
-		
+
 		/* adjust wanted? */
 		if ((issued & wanted) != wanted &&
 		    (mds_wanted & wanted) != wanted &&
@@ -223,7 +223,7 @@ struct dentry *ceph_lookup_open(struct inode *dir, struct dentry *dentry,
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	dentry = ceph_finish_lookup(req, dentry, err);
 	if (!err && (flags & O_CREAT) && !req->r_reply_info.head->is_dentry)
-		err = ceph_handle_notrace_create(dir, dentry);	
+		err = ceph_handle_notrace_create(dir, dentry);
 	if (!err)
 		err = ceph_init_file(req->r_dentry->d_inode, file,
 				     req->r_fmode);
@@ -391,7 +391,7 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	int ret;
 
 	dout(10, "sync_read on file %p %llu~%u %s\n", file, start_off, left,
-	     (file->f_flags & O_DIRECT) ? "O_DIRECT":"");
+	     (file->f_flags & O_DIRECT) ? "O_DIRECT" : "");
 
 	if (file->f_flags & O_DIRECT) {
 		pages = get_direct_page_vector(data, num_pages, pos, left);
@@ -469,40 +469,40 @@ static void sync_write_commit(struct ceph_osd_request *req)
  */
 static void sync_write_wait(struct inode *inode)
 {
-       struct ceph_inode_info *ci = ceph_inode(inode);
-       struct list_head *head = &ci->i_unsafe_writes;
-       struct ceph_osd_request *req;
-       u64 last_tid;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct list_head *head = &ci->i_unsafe_writes;
+	struct ceph_osd_request *req;
+	u64 last_tid;
 
-       spin_lock(&ci->i_unsafe_lock);
-       if (list_empty(head))
-	       goto out;
+	spin_lock(&ci->i_unsafe_lock);
+	if (list_empty(head))
+		goto out;
 
-       /* set upper bound as _last_ entry in chain */
-       req = list_entry(head->prev, struct ceph_osd_request,
-	                r_unsafe_item);
-       last_tid = req->r_tid;
+	/* set upper bound as _last_ entry in chain */
+	req = list_entry(head->prev, struct ceph_osd_request,
+			 r_unsafe_item);
+	last_tid = req->r_tid;
 
-       do {
-	       ceph_osdc_get_request(req);
-	       spin_unlock(&ci->i_unsafe_lock);
-	       dout(10, "sync_write_wait on tid %llu (until %llu)\n",
-		    req->r_tid, last_tid);
-	       wait_for_completion(&req->r_safe_completion);
-	       spin_lock(&ci->i_unsafe_lock);
-	       ceph_osdc_put_request(req);
+	do {
+		ceph_osdc_get_request(req);
+		spin_unlock(&ci->i_unsafe_lock);
+		dout(10, "sync_write_wait on tid %llu (until %llu)\n",
+		     req->r_tid, last_tid);
+		wait_for_completion(&req->r_safe_completion);
+		spin_lock(&ci->i_unsafe_lock);
+		ceph_osdc_put_request(req);
 
-	       /*
-		* from here on look at first entry in chain, since we
-		* only want to wait for anything older than last_tid
-		*/
-	       if (list_empty(head))
-		       break;
-	       req = list_entry(head->next, struct ceph_osd_request,
-	                        r_unsafe_item);
-       } while (req->r_tid < last_tid);
+		/*
+		 * from here on look at first entry in chain, since we
+		 * only want to wait for anything older than last_tid
+		 */
+		if (list_empty(head))
+			break;
+		req = list_entry(head->next, struct ceph_osd_request,
+				 r_unsafe_item);
+	} while (req->r_tid < last_tid);
 out:
-       spin_unlock(&ci->i_unsafe_lock);
+	spin_unlock(&ci->i_unsafe_lock);
 }
 
 /*
@@ -533,7 +533,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 		return -EROFS;
 
 	dout(10, "sync_write on file %p %lld~%u %s\n", file, *offset,
-	     (unsigned)left, (file->f_flags & O_DIRECT) ? "O_DIRECT":"");
+	     (unsigned)left, (file->f_flags & O_DIRECT) ? "O_DIRECT" : "");
 
 	if (file->f_flags & O_APPEND)
 		pos = i_size_read(inode);
@@ -754,9 +754,8 @@ retry_snap:
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 
 		if (ret >= 0 &&
-	    	    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)) {
+		    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL))
 			ret = sync_page_range(inode, mapping, pos, ret);
-		}
 	}
 	if (ret >= 0) {
 		spin_lock(&inode->i_lock);

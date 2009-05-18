@@ -51,7 +51,7 @@ void *ceph_kmalloc(char *fname, int line, size_t size, gfp_t flags)
 	return ((void *)p)+sizeof(struct alloc_data);
 }
 
-void ceph_kfree(void *ptr)
+void ceph_kfree(const void *ptr)
 {
 	struct alloc_data *p = (struct alloc_data *)(ptr -
 						     sizeof(struct alloc_data));
@@ -71,10 +71,9 @@ void ceph_kfree(void *ptr)
 	}
 
 	if (overrun) {
-		derr(0, "Memory allocated at %s(%d): p=%p (%zu bytes)\n", p->fname,
-			p->line,
-			((void *)p)+sizeof(struct alloc_data),
-			p->size);
+		derr(0, "Memory allocated at %s(%d): p=%p (%zu bytes)\n",
+		     p->fname, p->line, ((void *)p)+sizeof(struct alloc_data),
+		     p->size);
 	}
 
 	BUG_ON(overrun);
