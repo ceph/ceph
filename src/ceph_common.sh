@@ -65,12 +65,17 @@ get_name_list() {
 
     what=""
     for f in "$orig"; do
+	type=`echo $f | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
+	bit=`$CCONF -c $conf -l $type | egrep -v "^$type$"`
 	case $f in
 	    mon | osd | mds)
-		bit=`$CCONF -c $conf -l $f | egrep -v "^$f$"`
 		what="$what $bit"
 		;;
 	    *)
+		if echo " $bit " | grep -v -q " $f "; then
+		    echo "$0: $type '$f' not found ($conf defines $bit)"
+		    exit 1
+		fi
 		what="$what $f"
 		;;
 	esac
