@@ -1066,10 +1066,11 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 #endif
 {
+	struct inode *inode = vma->vm_file->f_dentry->d_inode;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 	struct page *page = vmf->page;
+	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 #endif
-	struct inode *inode = vma->vm_file->f_dentry->d_inode;
 	loff_t off = page->index << PAGE_CACHE_SHIFT;
 	loff_t size, len;
 	struct page *locked_page = NULL;
@@ -1087,19 +1088,26 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 	ret = ceph_write_begin(vma->vm_file, inode->i_mapping, off, len, 0,
 			       &locked_page, &fsdata);
 	WARN_ON(page != locked_page);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
+	if (!ret) {
+		/*
+		 * doing the following, instead of calling
+		 * ceph_write_end. Note that we keep the
+		 * page locked
+		 */
+		set_page_dirty(page);
+		up_read(&mdsc->snap_rwsem);
+		page_cache_release(page);
+		ret = VM_FAULT_LOCKED;
+	} else {
+		ret = VM_FAULT_SIGBUS;
+	}
+#else
 	if (!ret)
 		ceph_write_end(vma->vm_file, inode->i_mapping, off, len, len,
 			       locked_page, fsdata);
-	dout(10, "page_mkwrite %p %llu~%llu = %d\n", inode, off, len, ret);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
-	if (unlikely(ret)) {
-		if (ret == -ENOMEM)
-			ret = VM_FAULT_OOM;
-		else /* -ENOSPC, -EIO, etc */
-			ret = VM_FAULT_SIGBUS;
-	}
 #endif
+	dout(10, "page_mkwrite %p %llu~%llu = %d\n", inode, off, len, ret);
 	return ret;
 }
 
