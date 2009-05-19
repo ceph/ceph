@@ -1,8 +1,12 @@
 ceph (0.8-1) unstable; urgency=low
 
-  * release
+  * mount error reporting
+  * fix mds file size/mtime recovery
+  * crush fixes
+  * mds cap fixes
+  * support Linux 2.6.30
 
- -- sage <sage@newdream.net>  Fri, 7 May 2009 13:57:22 -0800
+ -- sage <sage@newdream.net>  Tue, 19 May 2009 13:57:22 -0800
 
 ceph (0.7.3-1) unstable; urgency=low
 
