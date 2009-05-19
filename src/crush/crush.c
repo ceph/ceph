@@ -1,7 +1,6 @@
 
 #ifdef __KERNEL__
 # include <linux/slab.h>
-# include "../bookkeeper.h"
 #else
 # include <stdlib.h>
 # include <assert.h>

@@ -40,6 +40,11 @@ v0.8
 - backup homiebackup5
 - backup backup.
 - bug fixes?
+- mount error reporting
+- fix mds file size/mtime recovery
+- changes for 2.6.30
+- mds cap fixes
+- crush fixes
 
 v0.9
 - librados

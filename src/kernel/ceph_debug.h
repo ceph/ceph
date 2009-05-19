@@ -3,8 +3,6 @@
 
 #include <linux/string.h>
 
-#include "bookkeeper.h"
-
 extern int ceph_debug __read_mostly;         /* debug level. */
 extern int ceph_debug_console __read_mostly; /* send debug output to console? */
 extern int ceph_debug_mask __read_mostly;
@@ -84,22 +82,5 @@ extern int ceph_debug_tools __read_mostly;
 
 #define dout(x, args...) _dout(x, args, TRAIL_PARAM)
 #define derr(x, args...) _derr(x, args, TRAIL_PARAM)
-
-/* dcache d_count debugging */
-#if 0
-# define dput(dentry)				       \
-	do {					       \
-		dout(20, "dput %p %d -> %d\n", dentry, \
-		     atomic_read(&dentry->d_count),    \
-		     atomic_read(&dentry->d_count)-1); \
-		dput(dentry);			       \
-	} while (0)
-# define d_drop(dentry)				       \
-	do {					       \
-		dout(20, "d_drop %p\n", dentry);       \
-		d_drop(dentry);			       \
-	} while (0)
-#endif
-
 
 #endif

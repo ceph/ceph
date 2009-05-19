@@ -46,8 +46,10 @@ class Filer {
     inodeno_t ino;
     ceph_file_layout layout;
     snapid_t snapid;
-    __u64 from;        // for !fwd, this is start of extent we are probing, thus possibly < our endpoint.
-    __u64 *end;
+
+    __u64 *psize;
+    utime_t *pmtime;
+
     int flags;
 
     bool fwd;
@@ -55,21 +57,28 @@ class Filer {
     Context *onfinish;
     
     vector<ObjectExtent> probing;
-    __u64 probing_len;
+    __u64 probing_off, probing_len;
     
-    map<object_t, __u64> known;
+    map<object_t, __u64> known_size;
+    utime_t max_mtime;
+
     map<object_t, tid_t> ops;
 
+    int err;
+    bool found_size;
+
     Probe(inodeno_t i, ceph_file_layout &l, snapid_t sn,
-	  __u64 f, __u64 *e, int fl, bool fw, Context *c) : 
+	  __u64 f, __u64 *e, utime_t *m, int fl, bool fw, Context *c) : 
       ino(i), layout(l), snapid(sn),
-      from(f), end(e), flags(fl), fwd(fw), onfinish(c), probing_len(0) {}
+      psize(e), pmtime(m), flags(fl), fwd(fw), onfinish(c),
+      probing_off(f), probing_len(0),
+      err(0), found_size(false) {}
   };
   
   class C_Probe;
 
   void _probe(Probe *p);
-  void _probed(Probe *p, object_t oid, __u64 size);
+  void _probed(Probe *p, object_t oid, __u64 size, utime_t mtime);
 
  public:
   Filer(Objecter *o) : objecter(o) {}
@@ -236,10 +245,10 @@ class Filer {
 	    snapid_t snapid,
 	    __u64 start_from,
 	    __u64 *end,
+	    utime_t *mtime,
 	    bool fwd,
 	    int flags,
 	    Context *onfinish);
-
 };
 
 

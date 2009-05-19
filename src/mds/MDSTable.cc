@@ -133,7 +133,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
   assert(is_opening());
   state = STATE_ACTIVE;
 
-  if (r > 0) {
+  if (r >= 0) {
     dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
     bufferlist::iterator p = bl.begin();
     ::decode(version, p);

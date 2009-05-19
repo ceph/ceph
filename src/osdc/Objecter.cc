@@ -462,14 +462,9 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   dout(7) << " got reply on " << rd->ops << dendl;
 
   int bytes_read = m->get_data().length();
-
   if (rd->pbl)
     rd->pbl->claim(m->get_data());
-  if (rd->psize)
-    for (vector<ceph_osd_op>::iterator p = m->ops.begin(); p != m->ops.end(); p++)
-      if (p->op == CEPH_OSD_OP_STAT)
-	*(rd->psize) = p->length;
-  
+
   // finish, clean up
   Context *onfinish = rd->onfinish;
   dout(7) << " " << bytes_read << " bytes " << dendl;
@@ -477,7 +472,7 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   // done
   delete rd;
   if (onfinish) {
-    onfinish->finish(bytes_read);// > 0 ? bytes_read:m->get_result());
+    onfinish->finish(m->get_result());
     delete onfinish;
   }
   delete m;

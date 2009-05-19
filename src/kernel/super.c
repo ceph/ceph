@@ -14,7 +14,6 @@
 
 #include "ceph_debug.h"
 #include "ceph_ver.h"
-#include "bookkeeper.h"
 #include "decode.h"
 
 /*
@@ -867,8 +866,8 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		/* wait */
 		dout(10, "mount sent to mon%d, waiting for maps\n", which);
 		err = wait_event_interruptible_timeout(client->mount_wq,
-						       have_all_maps(client),
-						       request_interval);
+			       client->mount_err || have_all_maps(client),
+			       request_interval);
 		if (err == -EINTR)
 			goto out;
 		if (client->mount_err) {
@@ -1173,9 +1172,6 @@ static int __init init_ceph(void)
 	dout(1, "init_ceph\n");
 	dout(0, "ceph (%s)\n", STRINGIFY(CEPH_GIT_VER));
 
-#ifdef CONFIG_CEPH_BOOKKEEPER
-	ceph_bookkeeper_init();
-#endif
 	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
@@ -1213,9 +1209,6 @@ static void __exit exit_ceph(void)
 	destroy_caches();
 	ceph_msgr_exit();
 	ceph_debugfs_cleanup();
-#ifdef CONFIG_CEPH_BOOKKEEPER
-	ceph_bookkeeper_finalize();
-#endif
 }
 
 module_init(init_ceph);

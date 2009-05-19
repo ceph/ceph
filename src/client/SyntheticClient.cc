@@ -1347,7 +1347,8 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       __u64 size;
-      client->objecter->stat(oid, layout, CEPH_NOSNAP, &size, 0, new C_SafeCond(&lock, &cond, &ack));
+      utime_t mtime;
+      client->objecter->stat(oid, layout, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
