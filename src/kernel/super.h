@@ -1,18 +1,12 @@
 #ifndef _FS_CEPH_SUPER_H
 #define _FS_CEPH_SUPER_H
 
-#define CEPH_DISABLE_BOOKKEEPER
-#include "bookkeeper.h"
-
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
 #include <linux/pagemap.h>
 #include <linux/exportfs.h>
 #include <linux/backing-dev.h>
-
-#undef CEPH_DISABLE_BOOKKEEPER
-#include "bookkeeper.h"
 
 #include "types.h"
 #include "ceph_debug.h"
@@ -21,7 +15,6 @@
 #include "mds_client.h"
 #include "osd_client.h"
 #include "ceph_fs.h"
-#include "bookkeeper.h"
 
 /* f_type in struct statfs */
 #define CEPH_SUPER_MAGIC 0x00c36400

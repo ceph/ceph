@@ -3,8 +3,6 @@
 
 #include <linux/string.h>
 
-#include "bookkeeper.h"
-
 extern int ceph_debug __read_mostly;         /* debug level. */
 extern int ceph_debug_console __read_mostly; /* send debug output to console? */
 extern int ceph_debug_mask __read_mostly;

@@ -14,7 +14,6 @@
 
 #include "ceph_debug.h"
 #include "ceph_ver.h"
-#include "bookkeeper.h"
 #include "decode.h"
 
 /*
@@ -1177,9 +1176,6 @@ static int __init init_ceph(void)
 	dout(1, "init_ceph\n");
 	dout(0, "ceph (%s)\n", STRINGIFY(CEPH_GIT_VER));
 
-#ifdef CONFIG_CEPH_BOOKKEEPER
-	ceph_bookkeeper_init();
-#endif
 	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
@@ -1217,9 +1213,6 @@ static void __exit exit_ceph(void)
 	destroy_caches();
 	ceph_msgr_exit();
 	ceph_debugfs_cleanup();
-#ifdef CONFIG_CEPH_BOOKKEEPER
-	ceph_bookkeeper_finalize();
-#endif
 }
 
 module_init(init_ceph);

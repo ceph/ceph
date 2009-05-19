@@ -288,14 +288,11 @@ parameters.
 EOF
 
 git add fs/ceph/ceph_debug.h
-git add fs/ceph/bookkeeper.h
-git add fs/ceph/bookkeeper.c
 git commit -F - <<EOF
 ceph: debugging
 
 Some debugging infrastructure, including the ability to adjust the
-level of debug output on a per-file basis.  A memory leak detection
-tool can also be enabled via .config.
+level of debug output on a per-file basis.
 
 EOF
 
