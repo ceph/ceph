@@ -35,10 +35,16 @@ int main(int argc, const char **argv)
   memset(&oid, 0, sizeof(oid));
   oid.ino = 0x2010;
 
-  rados_write(&oid, buf, 0, strlen(buf) + 1);
-  rados_exec(&oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
+  rados_pool_t pool;
+  int r = rados_open_pool("data", &pool);
+  printf("open pool result = %d, pool = %d\n", r, pool);
+
+  rados_write(pool, &oid, buf, 0, strlen(buf) + 1);
+  rados_exec(pool, &oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
   printf("exec result=%s\n", buf);
-  int size = rados_read(&oid, buf2, 0, 128);
+  int size = rados_read(pool, &oid, buf2, 0, 128);
+
+  rados_close_pool(pool);
 
   printf("read result=%s\n", buf2);
   printf("size=%d\n", size);

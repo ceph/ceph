@@ -451,7 +451,6 @@ class Objecter {
   }
 
 
-
   // ---------------------------
   // some scatter/gather hackery
 

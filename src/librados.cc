@@ -55,6 +55,7 @@ class RadosClient : public Dispatcher
   Objecter *objecter;
 
   Mutex lock;
+  Cond cond;
 
  class C_WriteAck : public Context {
     object_t oid;
@@ -123,9 +124,14 @@ public:
   ~RadosClient();
   bool init();
 
-  int write(object_t& oid, const char *buf, off_t off, size_t len);
-  int exec(object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len);
-  int read(object_t& oid, char *buf, off_t off, size_t len);
+  int lookup_pool(const char *name) {
+    return osdmap.lookup_pg_pool_name(name);
+  }
+
+  int write(int pool, object_t& oid, const char *buf, off_t off, size_t len);
+  int read(int pool, object_t& oid, char *buf, off_t off, size_t len);
+
+  int exec(int pool, object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len);
 };
 
 bool RadosClient::init()
@@ -156,21 +162,26 @@ bool RadosClient::init()
 
   rank.start(1);
 
-  mc->mount(g_conf.client_mount_timeout);
   mc->link_dispatcher(this);
 
   objecter = new Objecter(messenger, &monmap, &osdmap, lock);
   if (!objecter)
     return false;
 
+  mc->mount(g_conf.client_mount_timeout);
+
   lock.Lock();
 
   objecter->set_client_incarnation(0);
   objecter->init();
 
-  objecter->set_client_incarnation(0);
-
+  while (osdmap.get_epoch() == 0) {
+    dout(0) << "waiting for osdmap" << dendl;
+    cond.Wait(lock);
+  }
   lock.Unlock();
+
+  dout(0) << "init done" << dendl;
 
   return true;
 }
@@ -235,6 +246,7 @@ bool RadosClient::_dispatch(Message *m)
     break;
   case CEPH_MSG_OSD_MAP:
     objecter->handle_osd_map((MOSDMap*)m);
+    cond.Signal();
     break;
   case CEPH_MSG_MDS_MAP:
     break;
@@ -246,7 +258,7 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
-int RadosClient::write(object_t& oid, const char *buf, off_t off, size_t len)
+int RadosClient::write(int pool, object_t& oid, const char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
   bufferlist bl;
@@ -259,7 +271,7 @@ int RadosClient::write(object_t& oid, const char *buf, off_t off, size_t len)
   C_WriteAck *onack = new C_WriteAck(oid, off, &len, &write_wait);
   C_WriteCommit *oncommit = new C_WriteCommit(oid, off, &len, NULL);
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to write" << dendl;
 
@@ -278,7 +290,7 @@ int RadosClient::write(object_t& oid, const char *buf, off_t off, size_t len)
   return len;
 }
 
-int RadosClient::exec(object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len)
+int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -288,7 +300,7 @@ int RadosClient::exec(object_t& oid, const char *cls, const char *method, const 
 
   C_ExecCommit *oncommit = new C_ExecCommit(oid, 0, &out_len, &exec_wait);
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to exec" << dendl;
 
@@ -313,7 +325,7 @@ int RadosClient::exec(object_t& oid, const char *cls, const char *method, const 
   return out_len;
 }
 
-int RadosClient::read(object_t& oid, char *buf, off_t off, size_t len)
+int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
   bufferlist *bl = new bufferlist;
@@ -322,7 +334,7 @@ int RadosClient::read(object_t& oid, char *buf, off_t off, size_t len)
 
   C_ReadCommit *oncommit = new C_ReadCommit(oid, off, &len, bl, &read_wait);
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, 0);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to read" << dendl;
 
@@ -404,22 +416,37 @@ extern "C" void rados_deinitialize()
   rados_init_mutex.Unlock();
 }
 
-extern "C" int rados_write(ceph_object *o, const char *buf, off_t off, size_t len)
+extern "C" int rados_open_pool(const char *name, rados_pool_t *pool)
 {
-  object_t oid(*o);
-  return radosp->write(oid, buf, off, len);
+  int poolid = radosp->lookup_pool(name);
+  if (poolid >= 0) {
+    *pool = poolid;
+    return 0;
+  }
+  return poolid;
 }
 
-extern "C" int rados_read(ceph_object *o, char *buf, off_t off, size_t len)
+extern "C" int rados_close_pool(rados_pool_t pool)
 {
-  object_t oid(*o);
-  return radosp->read(oid, buf, off, len);
+  return 0;
 }
 
-extern "C" int rados_exec(ceph_object *o, const char *cls, const char *method,
+extern "C" int rados_write(rados_pool_t pool, ceph_object *o, const char *buf, off_t off, size_t len)
+{
+  object_t oid(*o);
+  return radosp->write(pool, oid, buf, off, len);
+}
+
+extern "C" int rados_read(rados_pool_t pool, ceph_object *o, char *buf, off_t off, size_t len)
+{
+  object_t oid(*o);
+  return radosp->read(pool, oid, buf, off, len);
+}
+
+extern "C" int rados_exec(rados_pool_t pool, ceph_object *o, const char *cls, const char *method,
                          const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
   object_t oid(*o);
-  return radosp->exec(oid, cls, method, inbuf, in_len, buf, out_len);
+  return radosp->exec(pool, oid, cls, method, inbuf, in_len, buf, out_len);
 }
 

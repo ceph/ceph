@@ -244,6 +244,7 @@ private:
 
   map<int,pg_pool_t> pools;
   map<int,nstring> pool_name;
+  map<nstring,int> name_pool;
   map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
   snapid_t max_snap;
   interval_set<snapid_t> removed_snaps;
@@ -462,6 +463,7 @@ private:
 	 p != inc.old_pools.end();
 	 p++) {
       pools.erase(*p);
+      name_pool.erase(pool_name[*p]);
       pool_name.erase(*p);
     }
     for (map<int32_t,pg_pool_t>::iterator p = inc.new_pools.begin();
@@ -472,8 +474,10 @@ private:
     }
     for (map<int32_t,nstring>::iterator p = inc.new_pool_names.begin();
 	 p != inc.new_pool_names.end();
-	 p++)
+	 p++) {
       pool_name[p->first] = p->second;
+      name_pool[p->second] = p->first;
+    }
 
     for (map<int32_t,uint32_t>::iterator i = inc.new_weight.begin();
          i != inc.new_weight.end();
@@ -607,12 +611,18 @@ private:
 
     // extended
     ::decode(osd_info, p);
+
     ::decode(pool_name, p);
+    name_pool.clear();
+    for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
+      name_pool[i->second] = i->first;
+
     ::decode(pg_swap_primary, p);
     
     ::decode(max_snap, p);
     ::decode(removed_snaps.m, p);
     ::decode(blacklist, p);
+
   }
  
 
@@ -768,6 +778,12 @@ private:
     return osds.size();
   }
 
+
+  int lookup_pg_pool_name(const char *name) {
+    if (name_pool.count(name))
+      return name_pool[name];
+    return -1;
+  }
 
 
   const pg_pool_t& get_pg_pool(int p) {
