@@ -686,6 +686,8 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
         result = osd->get_class(cname, info.pgid, op, &cls);
 	if (result) {
 	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
+          if (result == -EAGAIN)
+            return result;
 	} else {
 	  bufferlist outdata;
 	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
@@ -888,6 +890,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
     // do it.
     result = do_read_ops(op, ctx, bp, data, &data_off);
+    if (result == -EAGAIN)
+      return;
   }
    
  done:
@@ -912,10 +916,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
   }
 
   
-  if (result != -EAGAIN) {
-    osd->messenger->send_message(reply, op->get_orig_source_inst());
-    delete op;
-  }
+  osd->messenger->send_message(reply, op->get_orig_source_inst());
+  delete op;
 }
 
 
