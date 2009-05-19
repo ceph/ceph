@@ -738,37 +738,37 @@ void ReplicatedPG::op_read(MOSDOp *op)
       osd->logger->inc(l_osd_c_rd);
       osd->logger->inc(l_osd_c_rdb, p->length);
       break;
-
-   case CEPH_OSD_OP_RDCALL:
-    {
-        dout(0) << "CEPH_OSD_OP_RDCALL" << dendl;
-
+      
+    case CEPH_OSD_OP_RDCALL:
+      {
 	string cname, mname;
 	bp.copy(p->class_len, cname);
 	bp.copy(p->method_len, mname);
+	
+	bufferlist indata;
+	bp.copy(p->indata_len, indata);
+	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
+	
+	ClassHandler::ClassData *cls = osd->get_class(cname, info.pgid, op);
+	if (!cls) {
+	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
+	  result = -EINVAL;
+	} else {
+	  bufferlist outdata;
+	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+	  if (!method) {
+	    dout(10) << "rdcall method " << cname << "." << mname << " does not exist" << dendl;
+	    result = -EINVAL;
+	  } else {
+	    dout(10) << "rdcall method " << cname << "." << mname << dendl;
+	    result = method->exec(indata, outdata);
+	    p->length = outdata.length();
+	    data.claim_append(outdata);
+	  }
+	}
+      }
+      break;
 
-        dout(0) << "indata_len=" << p->indata_len << dendl;
-        bufferlist indata;
-        bp.copy(p->indata_len, indata);
-        dout(0) << "param=" << indata.c_str() << dendl;
-
-        ClassHandler::ClassData *cls = osd->get_class(cname, info.pgid, op);
-        if (!cls)
-	  return;
-        dout(0) << "going to execute " << cname << "." << mname << dendl;
-
-        bufferlist outdata;
-        ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
-        if (!method) {
-          dout(0) << "method " << cname << "." << mname << " doesn not exist" << dendl;
-        }
-        int r = method->exec(indata, outdata);
-        data.claim(outdata);
-        p->length = r;
-        result = r;
-    }
-    break;
-    
     case CEPH_OSD_OP_STAT:
       {
 	struct stat st;
