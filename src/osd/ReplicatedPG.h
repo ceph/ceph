@@ -214,6 +214,11 @@ protected:
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 
+  int do_read_ops(MOSDOp *op, sobject_t& soid, object_info_t& oi,
+		 vector<ceph_osd_op>& ops, bufferlist::iterator& bp,
+		 bufferlist& data,
+		 int *data_off);
+
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void sub_op_push(MOSDSubOp *op);

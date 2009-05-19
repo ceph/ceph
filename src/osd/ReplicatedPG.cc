@@ -640,6 +640,172 @@ int ReplicatedPG::pick_read_snap(sobject_t& soid, object_info_t& coi)
 } 
 
 
+int ReplicatedPG::do_read_ops(MOSDOp *op, sobject_t& soid, object_info_t& oi,
+			      vector<ceph_osd_op> &ops, bufferlist::iterator& bp,
+			      bufferlist& data,
+			      int *data_off)
+{
+  int result = 0;
+
+  for (vector<ceph_osd_op>::iterator p = ops.begin(); p != ops.end(); p++) {
+    switch (p->op) {
+    case CEPH_OSD_OP_READ:
+      {
+	// read into a buffer
+	bufferlist bl;
+	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
+	if (data.length() == 0 && data_off)
+	  *data_off = p->offset;
+	data.claim(bl);
+	if (r >= 0) 
+	  p->length = r;
+	else {
+	  result = r;
+	  p->length = 0;
+	}
+	dout(10) << " read got " << r << " / " << p->length << " bytes from obj " << soid << dendl;
+      }
+      osd->logger->inc(l_osd_c_rd);
+      osd->logger->inc(l_osd_c_rdb, p->length);
+      break;
+
+    case CEPH_OSD_OP_RDCALL:
+      {
+	string cname, mname;
+	bp.copy(p->class_len, cname);
+	bp.copy(p->method_len, mname);
+	
+	bufferlist indata;
+	bp.copy(p->indata_len, indata);
+	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
+	
+	ClassHandler::ClassData *cls = osd->get_class(cname, info.pgid, op);
+	if (!cls) {
+	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
+	  result = -EINVAL;
+	} else {
+	  bufferlist outdata;
+	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+	  if (!method) {
+	    dout(10) << "rdcall method " << cname << "." << mname << " does not exist" << dendl;
+	    result = -EINVAL;
+	  } else {
+	    dout(10) << "rdcall method " << cname << "." << mname << dendl;
+	    result = method->exec(indata, outdata);
+	    p->length = outdata.length();
+	    data.claim_append(outdata);
+	  }
+	}
+      }
+      break;
+
+    case CEPH_OSD_OP_STAT:
+      {
+	struct stat st;
+	memset(&st, sizeof(st), 0);
+	int r = osd->store->stat(info.pgid.to_coll(), soid, &st);
+	if (r >= 0)
+	  p->length = st.st_size;
+	else
+	  result = r;
+      }
+      break;
+
+    case CEPH_OSD_OP_GETXATTR:
+      {
+	nstring name(p->name_len + 1);
+	name[0] = '_';
+	bp.copy(p->name_len, name.data()+1);
+	int r = osd->store->getattr(info.pgid.to_coll(), soid, name.c_str(), data);
+	if (r >= 0) {
+	  p->value_len = r;
+	  result = 0;
+	} else
+	  result = r;
+      }
+      break;
+
+    case CEPH_OSD_OP_GREP:
+      break;
+
+    case CEPH_OSD_OP_MASKTRUNC:
+      if (p != op->ops.begin()) {
+	ceph_osd_op& rd = *(p - 1);
+	ceph_osd_op& m = *p;
+	
+	// are we beyond truncate_size?
+	if (rd.offset + rd.length > m.truncate_size) {	
+	  __u32 seq = 0;
+	  interval_set<__u64> tm;
+	  if (oi.truncate_info.length()) {
+	    bufferlist::iterator p = oi.truncate_info.begin();
+	    ::decode(seq, p);
+	    ::decode(tm, p);
+	  }
+	  
+	  // truncated portion of the read
+	  unsigned from = MAX(rd.offset, m.truncate_size);  // also end of data
+	  unsigned to = rd.offset + rd.length;
+	  unsigned trim = to-from;
+	  
+	  rd.length = rd.length - trim;
+	  
+	  dout(10) << " masktrunc " << m << ": overlap " << from << "~" << trim << dendl;
+	  
+	  bufferlist keep;
+	  keep.substr_of(data, 0, data.length() - trim);
+	  bufferlist truncated;  // everthing after 'from'
+	  truncated.substr_of(data, data.length() - trim, trim);
+	  keep.swap(data);
+	  
+	  if (seq == rd.truncate_seq) {
+	    // keep any valid extents beyond 'from'
+	    unsigned data_end = from;
+	    for (map<__u64,__u64>::iterator q = tm.m.begin();
+		 q != tm.m.end();
+		 q++) {
+	      unsigned s = MAX(q->first, from);
+	      unsigned e = MIN(q->first+q->second, to);
+	      if (e > s) {
+		unsigned l = e-s;
+		dout(10) << "   " << q->first << "~" << q->second << " overlap " << s << "~" << l << dendl;
+
+		// add in zeros?
+		if (s > data_end) {
+		  bufferptr bp(s-from);
+		  bp.zero();
+		  data.push_back(bp);
+		  dout(20) << "  adding " << bp.length() << " zeros" << dendl;
+		  rd.length = rd.length + bp.length();
+		  data_end += bp.length();
+		}
+
+		bufferlist b;
+		b.substr_of(truncated, s-from, l);
+		dout(20) << "  adding " << b.length() << " bytes from " << s << "~" << l << dendl;
+		data.claim_append(b);
+		rd.length = rd.length + l;
+		data_end += l;
+	      }
+	    } // for
+	  } // seq == rd.truncate_eq
+	}
+      }
+      break;
+
+    default:
+      dout(1) << "unrecognized osd op " << p->op
+	      << " " << ceph_osd_op_name(p->op)
+	      << dendl;
+      result = -EOPNOTSUPP;
+      assert(0);  // for now
+    }
+    if (result)
+      break;
+  }
+  return result;
+}
+
 void ReplicatedPG::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
@@ -717,164 +883,8 @@ void ReplicatedPG::op_read(MOSDOp *op)
   }
 
   // do it.
-  for (vector<ceph_osd_op>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
-    switch (p->op) {
-    case CEPH_OSD_OP_READ:
-      {
-	// read into a buffer
-	bufferlist bl;
-	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
-	if (data.length() == 0)
-	  data_off = p->offset;
-	data.claim(bl);
-	if (r >= 0) 
-	  p->length = r;
-	else {
-	  result = r;
-	  p->length = 0;
-	}
-	dout(10) << " read got " << r << " / " << p->length << " bytes from obj " << oid << dendl;
-      }
-      osd->logger->inc(l_osd_c_rd);
-      osd->logger->inc(l_osd_c_rdb, p->length);
-      break;
-      
-    case CEPH_OSD_OP_RDCALL:
-      {
-	string cname, mname;
-	bp.copy(p->class_len, cname);
-	bp.copy(p->method_len, mname);
-	
-	bufferlist indata;
-	bp.copy(p->indata_len, indata);
-	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
-	
-	ClassHandler::ClassData *cls = osd->get_class(cname, info.pgid, op);
-	if (!cls) {
-	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
-	  result = -EINVAL;
-	} else {
-	  bufferlist outdata;
-	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
-	  if (!method) {
-	    dout(10) << "rdcall method " << cname << "." << mname << " does not exist" << dendl;
-	    result = -EINVAL;
-	  } else {
-	    dout(10) << "rdcall method " << cname << "." << mname << dendl;
-	    result = method->exec(indata, outdata);
-	    p->length = outdata.length();
-	    data.claim_append(outdata);
-	  }
-	}
-      }
-      break;
-
-    case CEPH_OSD_OP_STAT:
-      {
-	struct stat st;
-	memset(&st, sizeof(st), 0);
-	int r = osd->store->stat(info.pgid.to_coll(), soid, &st);
-	if (r >= 0)
-	  p->length = st.st_size;
-	else
-	  result = r;
-      }
-      break;
-
-    case CEPH_OSD_OP_GETXATTR:
-      {
-	nstring name(p->name_len + 1);
-	name[0] = '_';
-	bp.copy(p->name_len, name.data()+1);
-	int r = osd->store->getattr(info.pgid.to_coll(), soid, name.c_str(), data);
-	if (r >= 0) {
-	  p->value_len = r;
-	  result = 0;
-	} else
-	  result = r;
-      }
-      break;
-      
-    case CEPH_OSD_OP_GREP:
-      {
-	
-      }
-      break;
-      
-    case CEPH_OSD_OP_MASKTRUNC:
-      if (p != op->ops.begin()) {
-	ceph_osd_op& rd = *(p - 1);
-	ceph_osd_op& m = *p;
-
-	// are we beyond truncate_size?
-	if (rd.offset + rd.length > m.truncate_size) {	
-	  __u32 seq = 0;
-	  interval_set<__u64> tm;
-	  if (oi.truncate_info.length()) {
-	    bufferlist::iterator p = oi.truncate_info.begin();
-	    ::decode(seq, p);
-	    ::decode(tm, p);
-	  }
-
-	  // truncated portion of the read
-	  unsigned from = MAX(rd.offset, m.truncate_size);  // also end of data
-	  unsigned to = rd.offset + rd.length;
-  	  unsigned trim = to-from;
-
-	  rd.length = rd.length - trim;
-
-	  dout(10) << " masktrunc " << m << ": overlap " << from << "~" << trim << dendl;
-
-	  bufferlist keep;
-	  keep.substr_of(data, 0, data.length() - trim);
-	  bufferlist truncated;  // everthing after 'from'
-	  truncated.substr_of(data, data.length() - trim, trim);
-	  keep.swap(data);
-
-	  if (seq == rd.truncate_seq) {
-	    // keep any valid extents beyond 'from'
-	    unsigned data_end = from;
-	    for (map<__u64,__u64>::iterator q = tm.m.begin();
-		 q != tm.m.end();
-		 q++) {
-	      unsigned s = MAX(q->first, from);
-	      unsigned e = MIN(q->first+q->second, to);
-	      if (e > s) {
-		unsigned l = e-s;
-		dout(10) << "   " << q->first << "~" << q->second << " overlap " << s << "~" << l << dendl;
-
-		// add in zeros?
-		if (s > data_end) {
-		  bufferptr bp(s-from);
-		  bp.zero();
-		  data.push_back(bp);
-		  dout(20) << "  adding " << bp.length() << " zeros" << dendl;
-		  rd.length = rd.length + bp.length();
-		  data_end += bp.length();
-		}
-		
-		bufferlist b;
-		b.substr_of(truncated, s-from, l);
-		dout(20) << "  adding " << b.length() << " bytes from " << s << "~" << l << dendl;
-		data.claim_append(b);
-		rd.length = rd.length + l;
-		data_end += l;
-	      }
-	    } // for
-	  } // seq == rd.truncate_eq
-	}
-      }
-      break;
-
-    default:
-      dout(1) << "unrecognized osd op " << p->op
-	      << " " << ceph_osd_op_name(p->op)
-	      << dendl;
-      result = -EOPNOTSUPP;
-      assert(0);  // for now
-    }
-  }
-  
+  do_read_ops(op, soid, oi, op->ops, bp, data, &data_off);
+   
  done:
   // reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
