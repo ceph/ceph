@@ -138,6 +138,11 @@ bool ClientMonitor::check_mount(MClientMount *m)
       dout(0) << "client is not authorized to mount" << dendl;
       ss << "client " << addr << " is not authorized to mount";
       mon->get_logclient()->log(LOG_SEC, ss);
+
+      string s;
+      getline(ss, s);
+      mon->messenger->send_message(new MClientMountAck(-EPERM, s.c_str()),
+				   m->get_orig_source_inst());
       return true;
     }
     if (client_map.addr_client.count(addr)) {

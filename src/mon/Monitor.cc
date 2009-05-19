@@ -33,6 +33,8 @@
 
 #include "messages/MMonPaxos.h"
 
+#include "messages/MClientMountAck.h"
+
 #include "common/Timer.h"
 #include "common/Clock.h"
 
@@ -344,6 +346,16 @@ bool Monitor::dispatch_impl(Message *m)
   if (m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
     dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
 	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
+
+    if (m->get_type() == CEPH_MSG_CLIENT_MOUNT) {
+      stringstream ss;
+      ss << "client protocol v " << (int)m->get_header().monc_protocol << " != server v " << CEPH_MONC_PROTOCOL;
+      string s;
+      getline(ss, s);
+      messenger->send_message(new MClientMountAck(-EINVAL, s.c_str()),
+			      m->get_orig_source_inst());
+    }
+
     delete m;
     return true;
   }
