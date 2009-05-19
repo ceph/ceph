@@ -1,6 +1,9 @@
 #ifndef __MSGR_H
 #define __MSGR_H
 
+/*
+ * Data types for message passing layer used by Ceph.
+ */
 
 #define CEPH_MON_PORT    6789  /* default monitor port */
 

@@ -1,8 +1,12 @@
 #ifndef __RADOS_H
 #define __RADOS_H
 
-#include "msgr.h"
+/*
+ * Data types for RADOS, the distributed object storage layer used by
+ * the Ceph file system.
+ */
 
+#include "msgr.h"
 
 /*
  * fs id
