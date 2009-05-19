@@ -37,6 +37,11 @@ v0.7.3
 
 v0.8
 - bug fixes?
+- mount error reporting
+- fix mds file size/mtime recovery
+- changes for 2.6.30
+- mds cap fixes
+- crush fixes
 
 v0.9
 - make mds exhert memory pressure on client caps, leases
