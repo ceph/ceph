@@ -328,11 +328,11 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
 int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
-  bufferlist *bl = new bufferlist;
+  bufferlist bl;
   Mutex lock("RadosClient::read");
   Cond read_wait;
 
-  C_ReadCommit *oncommit = new C_ReadCommit(oid, off, &len, bl, &read_wait);
+  C_ReadCommit *oncommit = new C_ReadCommit(oid, off, &len, &bl, &read_wait);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
@@ -341,7 +341,7 @@ int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
   lock.Lock();
 
   objecter->read(oid, layout,
-	      off, len, CEPH_NOSNAP, bl, 0,
+	      off, len, CEPH_NOSNAP, &bl, 0,
               oncommit);
 
   dout(0) << "after read call" << dendl;
@@ -350,9 +350,7 @@ int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
   lock.Unlock();
 
   if (len)
-    memcpy(buf, bl->c_str(), len);
-
-  delete bl;
+    memcpy(buf, bl.c_str(), len);
 
   return len;
 }
