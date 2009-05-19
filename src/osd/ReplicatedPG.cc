@@ -682,10 +682,10 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
 	bp.copy(p->indata_len, indata);
 	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
 	
-	ClassHandler::ClassData *cls = osd->get_class(cname, info.pgid, op);
-	if (!cls) {
+	ClassHandler::ClassData *cls;
+        result = osd->get_class(cname, info.pgid, op, &cls);
+	if (result) {
 	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
-	  result = -EINVAL;
 	} else {
 	  bufferlist outdata;
 	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
@@ -887,7 +887,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
     OpContext ctx(soid, oi, op->ops);
 
     // do it.
-    do_read_ops(op, ctx, bp, data, &data_off);
+    result = do_read_ops(op, ctx, bp, data, &data_off);
   }
    
  done:
@@ -911,9 +911,11 @@ void ReplicatedPG::op_read(MOSDOp *op)
       stat_object_temp_rd[soid].hit(now);  // hit temp.
   }
 
-  osd->messenger->send_message(reply, op->get_orig_source_inst());
   
-  delete op;
+  if (result != -EAGAIN) {
+    osd->messenger->send_message(reply, op->get_orig_source_inst());
+    delete op;
+  }
 }
 
 
