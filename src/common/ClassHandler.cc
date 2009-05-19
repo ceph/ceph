@@ -154,12 +154,11 @@ void ClassHandler::ClassMethod::unregister()
   cls->unregister_method(this);
 }
 
-int ClassHandler::ClassMethod::exec(bufferlist& indata, bufferlist& outdata)
+int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata)
 {
   char *out = NULL;
   int olen;
   int ret;
-  cls_method_context_t ctx = 0;
   ret = func(ctx, indata.c_str(), indata.length(), &out, &olen);
   if (out)
     outdata.append(out, olen);

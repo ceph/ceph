@@ -24,7 +24,7 @@ public:
     struct ClassHandler::ClassData *cls;
     string name;
     cls_method_call_t func;
-    int exec(bufferlist& indata, bufferlist& outdata);
+    int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
 
     void unregister();
   };

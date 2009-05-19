@@ -694,7 +694,7 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
 	    result = -EINVAL;
 	  } else {
 	    dout(10) << "rdcall method " << cname << "." << mname << dendl;
-	    result = method->exec(indata, outdata);
+	    result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 	    p->length = outdata.length();
 	    data.claim_append(outdata);
 	  }
