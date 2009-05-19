@@ -1,0 +1,22 @@
+diff --git a/fs/staging/Kconfig b/fs/staging/Kconfig
+index 605d8ae..bed45e4 100644
+--- a/fs/staging/Kconfig
++++ b/fs/staging/Kconfig
+@@ -42,5 +42,7 @@ config FSSTAGING_EXCLUDE_BUILD
+ 
+ if !FSSTAGING_EXCLUDE_BUILD
+ 
++source "fs/staging/ceph/Kconfig"
++
+ endif # !FSSTAGING_EXCLUDE_BUILD
+ endif # FSSTAGING
+diff --git a/fs/staging/Makefile b/fs/staging/Makefile
+index 0e2c0d6..5dabb66 100644
+--- a/fs/staging/Makefile
++++ b/fs/staging/Makefile
+@@ -3,3 +3,4 @@
+ # fix for build system bug...
+ obj-$(CONFIG_FSSTAGING)		+= fsstaging.o
+ 
++obj-$(CONFIG_CEPH_FS)		+= ceph/
+\ No newline at end of file

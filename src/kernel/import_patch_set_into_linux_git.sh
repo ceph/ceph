@@ -3,17 +3,19 @@
 # run me from the root of a _linux_ git tree, and pass ceph tree root.
 cephtree=$1
 echo ceph tree at $cephtree.
+target=$2
+echo target is $target
 test -d .git || exit 0
 test -e include/linux/mm.h || exit 0
 test -e $cephtree/src/kernel/super.h || exit 0
 
 # copy into the tree
-mkdir fs/ceph
-mkdir fs/ceph/crush
-cp $cephtree/src/kernel/Makefile fs/ceph
-cp $cephtree/src/kernel/Kconfig fs/ceph
-cp $cephtree/src/kernel/*.[ch] fs/ceph
-cp $cephtree/src/kernel/crush/*.[ch] fs/ceph/crush
+mkdir $target/ceph
+mkdir $target/ceph/crush
+cp $cephtree/src/kernel/Makefile $target/ceph
+cp $cephtree/src/kernel/Kconfig $target/ceph
+cp $cephtree/src/kernel/*.[ch] $target/ceph
+cp $cephtree/src/kernel/crush/*.[ch] $target/ceph/crush
 cp $cephtree/src/kernel/ceph.txt Documentation/filesystems
 
 # build the patch sequence
@@ -28,9 +30,9 @@ Mount options, syntax.
 
 EOF
 
-git add fs/ceph/ceph_fs.h
-git add fs/ceph/msgr.h
-git add fs/ceph/rados.h
+git add $target/ceph/ceph_fs.h
+git add $target/ceph/msgr.h
+git add $target/ceph/rados.h
 git commit -F - <<EOF
 ceph: on-wire types
 
@@ -44,9 +46,9 @@ detected on mount.
 
 EOF
 
-git add fs/ceph/types.h
-git add fs/ceph/super.h
-git add fs/ceph/ceph_ver.h
+git add $target/ceph/types.h
+git add $target/ceph/super.h
+git add $target/ceph/ceph_ver.h
 git commit -F - <<EOF
 ceph: client types
 
@@ -58,7 +60,7 @@ monitor clients, and the messaging layer.
 
 EOF
 
-git add fs/ceph/super.c
+git add $target/ceph/super.c
 git commit -F - <<EOF
 ceph: super.c
 
@@ -68,7 +70,7 @@ ends (e.g., statfs).
 EOF
 
 
-git add fs/ceph/inode.c
+git add $target/ceph/inode.c
 git commit -F - <<EOF
 ceph: inode operations
 
@@ -87,7 +89,7 @@ to reattach it in the correct position in the hierarchy.
 
 EOF
 
-git add fs/ceph/dir.c
+git add $target/ceph/dir.c
 git commit -F - <<EOF
 ceph: directory operations
 
@@ -104,7 +106,7 @@ may be needed.
 
 EOF
 
-git add fs/ceph/file.c
+git add $target/ceph/file.c
 git commit -F - <<EOF
 ceph: file operations
 
@@ -116,7 +118,7 @@ back to the MDS.
 
 EOF
 
-git add fs/ceph/addr.c
+git add $target/ceph/addr.c
 git commit -F - <<EOF
 ceph: address space operations
 
@@ -132,10 +134,10 @@ called from kswapd).
 
 EOF
 
-git add fs/ceph/mds_client.h
-git add fs/ceph/mds_client.c
-git add fs/ceph/mdsmap.h
-git add fs/ceph/mdsmap.c
+git add $target/ceph/mds_client.h
+git add $target/ceph/mds_client.c
+git add $target/ceph/mdsmap.h
+git add $target/ceph/mdsmap.c
 git commit -F - <<EOF
 ceph: MDS client
 
@@ -159,10 +161,10 @@ If an MDS fails and/or recovers, we resubmit requests as needed.
 
 EOF
 
-git add fs/ceph/osd_client.h
-git add fs/ceph/osd_client.c
-git add fs/ceph/osdmap.h
-git add fs/ceph/osdmap.c
+git add $target/ceph/osd_client.h
+git add $target/ceph/osd_client.c
+git add $target/ceph/osdmap.h
+git add $target/ceph/osdmap.c
 git commit -F - <<EOF
 ceph: OSD client
 
@@ -179,11 +181,11 @@ reset, a reconnection is attempted and affected requests are resent
 
 EOF
 
-git add fs/ceph/crush/crush.h
-git add fs/ceph/crush/crush.c
-git add fs/ceph/crush/mapper.h
-git add fs/ceph/crush/mapper.c
-git add fs/ceph/crush/hash.h
+git add $target/ceph/crush/crush.h
+git add $target/ceph/crush/crush.c
+git add $target/ceph/crush/mapper.h
+git add $target/ceph/crush/mapper.c
+git add $target/ceph/crush/hash.h
 git commit -F - <<EOF
 ceph: CRUSH mapping algorithm
 
@@ -201,8 +203,8 @@ More information about CRUSH can be found in this paper:
 
 EOF
 
-git add fs/ceph/mon_client.h
-git add fs/ceph/mon_client.c
+git add $target/ceph/mon_client.h
+git add $target/ceph/mon_client.c
 git commit -F - <<EOF
 ceph: monitor client
 
@@ -213,7 +215,7 @@ MDS and OSD maps, and getting statfs() information.
 
 EOF
 
-git add fs/ceph/caps.c
+git add $target/ceph/caps.c
 git commit -F - <<EOF
 ceph: capability management
 
@@ -237,7 +239,7 @@ those that are "wanted" due to an open file) are explicitly released.
 
 EOF
 
-git add fs/ceph/snap.c
+git add $target/ceph/snap.c
 git commit -F - <<EOF
 ceph: snapshot management
 
@@ -254,9 +256,9 @@ the set of snapshots that exist for a given piece of metadata.
 
 EOF
 
-git add fs/ceph/decode.h
-git add fs/ceph/messenger.h
-git add fs/ceph/messenger.c
+git add $target/ceph/decode.h
+git add $target/ceph/messenger.h
+git add $target/ceph/messenger.c
 git commit -F - <<EOF
 ceph: messenger library
 
@@ -269,7 +271,7 @@ This implementation is based on TCP.
 
 EOF
 
-git add fs/ceph/export.c
+git add $target/ceph/export.c
 git commit -F - <<EOF
 ceph: nfs re-export support
 
@@ -279,8 +281,8 @@ filehandle that will be valid forever, so this is of limited utility.
 
 EOF
 
-git add fs/ceph/ioctl.h
-git add fs/ceph/ioctl.c
+git add $target/ceph/ioctl.h
+git add $target/ceph/ioctl.c
 git commit -F - <<EOF
 ceph: ioctls
 
@@ -289,7 +291,7 @@ parameters.
 
 EOF
 
-git add fs/ceph/ceph_debug.h
+git add $target/ceph/ceph_debug.h
 git commit -F - <<EOF
 ceph: debugging
 
@@ -298,7 +300,7 @@ level of debug output on a per-file basis.
 
 EOF
 
-git add fs/ceph/debugfs.c
+git add $target/ceph/debugfs.c
 git commit -F - <<EOF
 ceph: debugfs
 
@@ -308,10 +310,10 @@ and hooks to adjust debug levels.
 
 EOF
 
-git apply $cephtree/src/kernel/kbuild.patch
-git add fs/ceph/Makefile
-git add fs/ceph/Kconfig
-git commit -F - <<EOF fs/Kconfig fs/ceph/Kconfig fs/Makefile fs/ceph/Makefile
+git apply $cephtree/src/kernel/kbuild.staging.patch
+git add $target/ceph/Makefile
+git add $target/ceph/Kconfig
+git commit -F - <<EOF $target/Kconfig $target/ceph/Kconfig $target/Makefile $target/ceph/Makefile
 ceph: Kconfig, Makefile
 
 Kconfig options and Makefile.
