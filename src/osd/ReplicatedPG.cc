@@ -640,12 +640,15 @@ int ReplicatedPG::pick_read_snap(sobject_t& soid, object_info_t& coi)
 } 
 
 
-int ReplicatedPG::do_read_ops(MOSDOp *op, sobject_t& soid, object_info_t& oi,
-			      vector<ceph_osd_op> &ops, bufferlist::iterator& bp,
+int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
+			      bufferlist::iterator& bp,
 			      bufferlist& data,
 			      int *data_off)
 {
   int result = 0;
+  sobject_t& soid = ctx.soid;
+  object_info_t& oi = ctx.oi;
+  vector<ceph_osd_op> &ops = ctx.ops;
 
   for (vector<ceph_osd_op>::iterator p = ops.begin(); p != ops.end(); p++) {
     switch (p->op) {
@@ -880,8 +883,12 @@ void ReplicatedPG::op_read(MOSDOp *op)
     }
   }
 
-  // do it.
-  do_read_ops(op, soid, oi, op->ops, bp, data, &data_off);
+  {
+    OpContext ctx(soid, oi, op->ops);
+
+    // do it.
+    do_read_ops(op, ctx, bp, data, &data_off);
+  }
    
  done:
   // reply

@@ -122,6 +122,14 @@ public:
     }
   };
 
+  struct OpContext {
+    sobject_t& soid;
+    object_info_t& oi;
+    vector<ceph_osd_op>& ops;
+    OpContext(sobject_t& _soid, object_info_t& _oi,
+		 vector<ceph_osd_op>& _ops) : soid(_soid), oi(_oi), ops(_ops) {}
+  };
+
 
 protected:
   // replica ops
@@ -214,8 +222,8 @@ protected:
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 
-  int do_read_ops(MOSDOp *op, sobject_t& soid, object_info_t& oi,
-		 vector<ceph_osd_op>& ops, bufferlist::iterator& bp,
+  int do_read_ops(MOSDOp *op, OpContext& ctx,
+		 bufferlist::iterator& bp,
 		 bufferlist& data,
 		 int *data_off);
 

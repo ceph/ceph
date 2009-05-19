@@ -11,8 +11,7 @@ cls_handle_t h_class;
 
 cls_method_handle_t h_foo;
 
-
-int foo_method(char *indata, int datalen,
+int foo_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
    int i;
