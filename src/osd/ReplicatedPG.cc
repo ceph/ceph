@@ -726,9 +726,6 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, sobject_t& soid, object_info_t& oi,
       }
       break;
 
-    case CEPH_OSD_OP_GREP:
-      break;
-
     case CEPH_OSD_OP_MASKTRUNC:
       if (p != op->ops.begin()) {
 	ceph_osd_op& rd = *(p - 1);

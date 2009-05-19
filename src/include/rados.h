@@ -177,7 +177,6 @@ enum {
 	CEPH_OSD_OP_STAT      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 2,
 
 	/* fancy read */
-	CEPH_OSD_OP_GREP      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 3,
 	CEPH_OSD_OP_MASKTRUNC = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 4,
 
 	/* write */
@@ -261,7 +260,6 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_READ: return "read";
 	case CEPH_OSD_OP_STAT: return "stat";
 
-	case CEPH_OSD_OP_GREP: return "grep";
 	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
 
 	case CEPH_OSD_OP_WRITE: return "write";
