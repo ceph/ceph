@@ -868,8 +868,8 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		/* wait */
 		dout(10, "mount sent to mon%d, waiting for maps\n", which);
 		err = wait_event_interruptible_timeout(client->mount_wq,
-						       have_all_maps(client),
-						       request_interval);
+			       client->mount_err || have_all_maps(client),
+			       request_interval);
 		if (err == -EINTR)
 			goto out;
 		if (client->mount_err) {
