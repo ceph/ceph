@@ -137,21 +137,6 @@ bool RadosClient::dispatch_impl(Message *m)
 {
   bool ret;
 
-  // verify protocol version
-  if (m->get_orig_source().is_mds() &&
-      m->get_header().mds_protocol != CEPH_MDS_PROTOCOL) {
-    dout(0) << "mds protocol v " << (int)m->get_header().mds_protocol << " != my " << CEPH_MDS_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-
-  if (m->get_header().mdsc_protocol != CEPH_MDSC_PROTOCOL) {
-    dout(0) << "mdsc protocol v " << (int)m->get_header().mdsc_protocol << " != my " << CEPH_MDSC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
   if (m->get_orig_source().is_mon() &&
       m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
     dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
