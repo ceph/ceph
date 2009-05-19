@@ -130,9 +130,9 @@ bool ClassMonitor::update_from_paxos()
     ::decode(inc, p);
     ClassImpl impl;
     ClassInfo info;
-    inc.decode_impl(impl);
     inc.decode_info(info);
     if (inc.add) {
+      inc.decode_impl(impl);
       store_impl(info, impl);
       list.add(info.name, info.version);
     } else {
@@ -265,20 +265,19 @@ bool ClassMonitor::preprocess_command(MMonCommand *m)
   stringstream ss;
 
   if (m->cmd.size() > 1) {
-    if ((m->cmd[1] == "add" || m->cmd[1] == "del")) {
-        if (m->cmd.size() != 4) {
-          ss << "error: usage: ceph <add | set> <name> <version> <-i filename>";
-        }
+    if (m->cmd[1] == "add" ||
+        m->cmd[1] == "del" ||
+        m->cmd[1] == "list") {
+      return false;
     }
   }
+  ss << "error: usage: ceph <add | del> <name> <version> <-i filename>";
+  r = -EINVAL;
 
-  if (r != -1) {
-    string rs;
-    getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata);
-    return true;
-  } else
-    return false;
+  string rs;
+  getline(ss, rs);
+  mon->reply_command(m, r, rs, rdata);
+  return true;
 }
 
 
@@ -290,8 +289,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
   // nothing here yet
   if (m->cmd.size() > 1) {
-    if ((m->cmd[1] == "add" || m->cmd[1] == "del") &&
-        m->cmd.size() >= 4) {
+    if (m->cmd[1] == "add" && m->cmd.size() >= 4) {
       string name = m->cmd[2];
       version_t ver = atoi(m->cmd[3].c_str());
       ClassInfo& info = list.library_map[name];
@@ -306,7 +304,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       ClassLibraryIncremental inc;
       ::encode(impl, inc.impl);
       ::encode(info, inc.info);
-      inc.add = (m->cmd[1] == "add");
+      inc.add = true;
       pending_list.add(info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
 
@@ -314,10 +312,51 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
+    } else if (m->cmd[1] == "del" && m->cmd.size() >= 2) {
+      string name = m->cmd[2];
+      map<string, ClassInfo>::iterator iter = list.library_map.find(name);
+      if (iter == list.library_map.end()) {
+        ss << "couldn't find class " << name;
+        rs = -ENOENT;
+        goto done;
+      }
+      ClassInfo& info = iter->second;
+      /* store_impl(info, impl); */
+      dout(0) << "removing class " << name << " v" << info.version << dendl;
+      ClassLibraryIncremental inc;
+      ClassImpl impl;
+      ::encode(info, inc.info);
+      inc.add = false;
+      pending_list.add(info);
+      pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
+
+      ss << "updated";
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+    } else if (m->cmd[1] == "list") {
+      map<string, ClassInfo>::iterator iter = list.library_map.begin();
+      if (iter != list.library_map.end()) {
+        ss << "installed classes: " << std::endl;      
+
+        while (iter != list.library_map.end()) {
+          ss << iter->second.name << " (v" << iter->second.version << ")" << std::endl;
+          ++iter;
+        }
+      } else {
+        ss << "no installed classes!";
+      }
+
+      getline(ss, rs, '\0');
+      mon->reply_command(m, 0, rs);
+      return false;
+    } else {
+      ss << "unrecognized command.";
     }
+  } else {
+    ss << "unrecognized command.";
   }
 
-  ss << "unrecognized command.";
+done:
   getline(ss, rs);
   mon->reply_command(m, err, rs);
   return false;
@@ -332,6 +371,7 @@ void ClassMonitor::handle_request(MClass *m)
     return;
 
   deque<ClassImpl>::iterator impl_iter = m->impl.begin();
+  deque<bool>::iterator add_iter = m->add.begin();
   
   for (deque<ClassInfo>::iterator p = m->info.begin();
        p != m->info.end();
@@ -360,12 +400,19 @@ void ClassMonitor::handle_request(MClass *m)
     case CLASS_SET:
        {
          dout(0) << "ClassMonitor::handle_request() CLASS_SET" << dendl;
-         /* FIXME should handle entries removal */
-         ClassInfo& entry = list.library_map[(*p).name];
-         entry.name = (*p).name;
-         entry.version = (*p).version;
-         store_impl(entry, *impl_iter);
+         bool add = *add_iter;
+         if (add) {
+           ClassInfo& entry = list.library_map[(*p).name];
+           entry.name = (*p).name;
+           entry.version = (*p).version;
+           store_impl(entry, *impl_iter);
+         } else {
+           map<string, ClassInfo>::iterator iter = list.library_map.find((*p).name);
+           if (iter != list.library_map.end())
+             list.library_map.erase(iter);
+         }
          impl_iter++;
+         add_iter++;
        } 
     }
   }
