@@ -57,68 +57,6 @@ class RadosClient : public Dispatcher
   Mutex lock;
   Cond cond;
 
- class C_WriteAck : public Context {
-    object_t oid;
-    loff_t start;
-    size_t *length;
-    Cond *pcond;
-  public:
-    tid_t tid;
-    C_WriteAck(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
-    void finish(int r) {
-      if (pcond) {
-        *length = r;
-        pcond->Signal();
-      }
-    }
-  };
-  class C_WriteCommit : public Context {
-    object_t oid;
-    loff_t start;
-    size_t *length;
-    Cond *pcond;
-  public:
-    tid_t tid;
-    C_WriteCommit(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
-    void finish(int r) {
-      if (pcond) {
-        *length = r;
-        pcond->Signal();
-      }
-    }
-  };
-  class C_ExecCommit : public Context {
-    object_t oid;
-    loff_t start;
-    size_t *length;
-    Cond *pcond;
-  public:
-    tid_t tid;
-    C_ExecCommit(object_t o, loff_t s, size_t *l, Cond *cond) : oid(o), start(s), length(l), pcond(cond) {}
-    void finish(int r) {
-      if (pcond) {
-        *length = r;
-        pcond->Signal();
-      }
-    }
-  };
-  class C_ReadCommit : public Context {
-    object_t oid;
-    loff_t start;
-    size_t *length;
-    bufferlist *bl;
-    Cond *pcond;
-  public:
-    tid_t tid;
-    C_ReadCommit(object_t o, loff_t s, size_t *l, bufferlist *b, Cond *cond) : oid(o), start(s), length(l), bl(b),
-        pcond(cond) {}
-    void finish(int r) {
-      *length = r;
-      if (pcond)
-        pcond->Signal();
-    }
-  };
-
 public:
   RadosClient() : messenger(NULL), mc(NULL), lock("c3") {}
   ~RadosClient();
@@ -265,26 +203,23 @@ int RadosClient::write(int pool, object_t& oid, const char *buf, off_t off, size
   utime_t ut = g_clock.now();
 
   Mutex lock("RadosClient::write");
-  Cond write_wait;
-  bl.append(&buf[off], len);
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
 
-  C_WriteAck *onack = new C_WriteAck(oid, off, &len, &write_wait);
-  C_WriteCommit *oncommit = new C_WriteCommit(oid, off, &len, NULL);
+  bl.append(&buf[off], len);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to write" << dendl;
 
   lock.Lock();
-
   objecter->write(oid, layout,
-	      off, len, snapc, bl, ut, 0,
-              onack, oncommit);
-
-  dout(0) << "after write call" << dendl;
-
-  write_wait.Wait(lock);
-
+		  off, len, snapc, bl, ut, 0,
+		  onack, NULL);
+  while (!done)
+    cond.Wait(lock);
   lock.Unlock();
 
   return len;
@@ -295,14 +230,13 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
   SnapContext snapc;
   utime_t ut = g_clock.now();
 
-  Mutex lock("RadosClient::exec");
-  Cond exec_wait;
-
-  C_ExecCommit *oncommit = new C_ExecCommit(oid, 0, &out_len, &exec_wait);
+  Mutex lock("RadosClient::rdcall");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
-
-  dout(0) << "going to exec" << dendl;
 
   lock.Lock();
 
@@ -311,11 +245,12 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
 
   inbl.append(inbuf, in_len);
   rd.rdcall(cls, method, inbl);
-  objecter->read(oid, layout, rd, CEPH_NOSNAP, &outbl, 0, oncommit);
+  objecter->read(oid, layout, rd, CEPH_NOSNAP, &outbl, 0, onack);
 
   dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
 
-  exec_wait.Wait(lock);
+  while (!done)
+    cond.Wait(lock);
 
   lock.Unlock();
 
@@ -329,23 +264,23 @@ int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
 {
   SnapContext snapc;
   bufferlist bl;
-  Mutex lock("RadosClient::read");
-  Cond read_wait;
 
-  C_ReadCommit *oncommit = new C_ReadCommit(oid, off, &len, &bl, &read_wait);
+  Mutex lock("RadosClient::rdcall");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
 
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to read" << dendl;
 
   lock.Lock();
-
   objecter->read(oid, layout,
 	      off, len, CEPH_NOSNAP, &bl, 0,
-              oncommit);
-
-  dout(0) << "after read call" << dendl;
-  read_wait.Wait(lock);
+              onack);
+  while (!done)
+    cond.Wait(lock);
 
   lock.Unlock();
 
