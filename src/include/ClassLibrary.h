@@ -18,6 +18,8 @@
 #include "include/types.h"
 #include "include/encoding.h"
 
+#include "common/ClassVersion.h"
+
 struct ClassImpl {
   bufferlist binary;
   utime_t stamp;
@@ -39,7 +41,7 @@ WRITE_CLASS_ENCODER(ClassImpl)
 
 struct ClassInfo {
   string name;
-  version_t version;
+  ClassVersion version;
 
   void encode(bufferlist& bl) const {
     ::encode(name, bl);
@@ -88,7 +90,7 @@ struct ClassLibrary {
 
   ClassLibrary() : version(0) {}
 
-  void add(const string& name, const version_t version) {
+  void add(const string& name, const ClassVersion& version) {
     ClassInfo library;
     library.version = version;
     library.name = name;
@@ -99,7 +101,7 @@ struct ClassLibrary {
     library_map[library.name] = library;
   }
 
-  void remove(const string& name, const version_t version) {
+  void remove(const string& name, const ClassVersion& version) {
     /* fixme */
   }
 
@@ -107,7 +109,7 @@ struct ClassLibrary {
     return (library_map.find(name) != library_map.end());
   }
 
-  bool get_ver(string& name, version_t *ver) {
+  bool get_ver(string& name, ClassVersion *ver) {
     map<string, ClassInfo>::iterator iter = library_map.find(name);
     if (iter == library_map.end())
       return false;

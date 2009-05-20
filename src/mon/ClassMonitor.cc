@@ -21,6 +21,7 @@
 #include "messages/MClass.h"
 #include "messages/MClassAck.h"
 
+#include "common/ClassVersion.h"
 #include "common/Timer.h"
 
 #include "osd/osd_types.h"
@@ -67,7 +68,7 @@ void ClassMonitor::create_initial(bufferlist& bl)
   ClassImpl i;
   ClassInfo l;
   l.name = "test";
-  l.version = 12;
+  l.version = "0.1";
   i.seq = 0;
   i.stamp = g_clock.now();
   bufferptr ptr(1024);
@@ -85,7 +86,7 @@ bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
   int len = info.name.length() + 16;
   char store_name[len];
 
-  snprintf(store_name, len, "%s.%d", info.name.c_str(), (int)info.version);
+  snprintf(store_name, len, "%s.%s", info.name.c_str(), info.version.str());
   dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
   mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
   bufferlist bl;
@@ -291,7 +292,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" && m->cmd.size() >= 4) {
       string name = m->cmd[2];
-      version_t ver = atoi(m->cmd[3].c_str());
+      string ver = m->cmd[3];
       ClassInfo& info = list.library_map[name];
       ClassImpl impl;
       impl.binary = m->get_data();
@@ -377,7 +378,7 @@ void ClassMonitor::handle_request(MClass *m)
        p != m->info.end();
        p++) {
     ClassImpl impl;
-    version_t ver;
+    ClassVersion ver;
 
     reply->info.push_back(*p);
     switch (m->action) {
@@ -386,7 +387,7 @@ void ClassMonitor::handle_request(MClass *m)
         int len = (*p).name.length() + 16;
         int bin_len;
         char store_name[len];
-        snprintf(store_name, len, "%s.%d", (*p).name.c_str(), (int)ver);
+        snprintf(store_name, len, "%s.%d", (*p).name.c_str(), ver.str());
         bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
         assert(bin_len > 0);
         dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;

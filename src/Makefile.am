@@ -315,6 +315,7 @@ noinst_HEADERS = \
 	common/debug.h\
 	common/lockdep.h\
 	common/BackTrace.h\
+        common/ClassVersion.h\
         common/Clock.h\
         common/common_init.h\
         common/Cond.h\
