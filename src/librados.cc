@@ -40,6 +40,8 @@ using namespace std;
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 
+#include "include/librados.h"
+
 
 class RadosClient : public Dispatcher
 {
@@ -58,7 +60,7 @@ class RadosClient : public Dispatcher
   Cond cond;
 
 public:
-  RadosClient() : messenger(NULL), mc(NULL), lock("c3") {}
+  RadosClient() : messenger(NULL), mc(NULL), lock("radosclient") {}
   ~RadosClient();
   bool init();
 
@@ -66,10 +68,10 @@ public:
     return osdmap.lookup_pg_pool_name(name);
   }
 
-  int write(int pool, object_t& oid, const char *buf, off_t off, size_t len);
-  int read(int pool, object_t& oid, char *buf, off_t off, size_t len);
+  int write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
 
-  int exec(int pool, object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len);
+  int exec(int pool, object_t& oid, const char *cls, const char *method, bufferlist& inbl, size_t in_len, bufferlist& outbl, size_t out_len);
 };
 
 bool RadosClient::init()
@@ -81,7 +83,7 @@ bool RadosClient::init()
     return false;
 
   rank.bind();
-  cout << "starting c3." << g_conf.id
+  cout << "starting radosclient." << g_conf.id
        << " at " << rank.get_rank_addr() 
        << " fsid " << monmap.get_fsid()
        << std::endl;
@@ -181,10 +183,9 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
-int RadosClient::write(int pool, object_t& oid, const char *buf, off_t off, size_t len)
+int RadosClient::write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   SnapContext snapc;
-  bufferlist bl;
   utime_t ut = g_clock.now();
 
   Mutex lock("RadosClient::write");
@@ -192,9 +193,9 @@ int RadosClient::write(int pool, object_t& oid, const char *buf, off_t off, size
   bool done;
   int r;
   Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
-
+#if 0
   bl.append(&buf[off], len);
-
+#endif
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to write" << dendl;
@@ -210,7 +211,7 @@ int RadosClient::write(int pool, object_t& oid, const char *buf, off_t off, size
   return len;
 }
 
-int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *method, const char *inbuf, size_t in_len, char *buf, size_t out_len)
+int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *method, bufferlist& inbl, size_t in_len, bufferlist& outbl, size_t out_len)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -226,9 +227,7 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
   lock.Lock();
 
   ObjectRead rd;
-  bufferlist inbl, outbl;
 
-  inbl.append(inbuf, in_len);
   rd.rdcall(cls, method, inbl);
   objecter->read(oid, layout, rd, CEPH_NOSNAP, &outbl, 0, onack);
 
@@ -242,16 +241,12 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
   if (outbl.length() < out_len)
     out_len = outbl.length();
 
-  if (out_len)
-    memcpy(buf, outbl.c_str(), out_len);
-
   return out_len;
 }
 
-int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
+int RadosClient::read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   SnapContext snapc;
-  bufferlist bl;
 
   Mutex lock("RadosClient::rdcall");
   Cond cond;
@@ -275,12 +270,75 @@ int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
   if (bl.length() < len)
     len = bl.length();
 
-  if (len)
-    memcpy(buf, bl.c_str(), len);
-
   return len;
 }
 
+Rados::Rados() : client(NULL)
+{
+}
+
+Rados::~Rados()
+{
+  if (client)
+    delete client;
+  client = NULL;
+}
+
+bool Rados::initialize(int argc, const char *argv[])
+{
+ vector<const char*> args;
+
+  if (argc && argv) {
+    argv_to_vec(argc, argv, args);
+    env_to_vec(args);
+  }
+  common_init(args, "librados", false);
+
+  if (g_conf.clock_tare) g_clock.tare();
+
+  client = new RadosClient();
+  return client->init();
+}
+
+int Rados::write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->write(pool, oid, off, bl, len);
+}
+
+int Rados::read(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->read(pool, oid, off, bl, len);
+}
+
+int Rados::exec(rados_pool_t pool, object_t& oid, const char *cls, const char *method,
+             bufferlist& inbl, size_t in_len, bufferlist& outbl, size_t out_len)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->exec(pool, oid, cls, method, inbl, in_len, outbl, out_len);
+}
+
+int Rados::open_pool(const char *name, rados_pool_t *pool)
+{
+  int poolid = client->lookup_pool(name);
+  if (poolid >= 0) {
+    *pool = poolid;
+    return 0;
+  }
+  return poolid;
+}
+
+int Rados::close_pool(rados_pool_t pool)
+{
+  return 0;
+}
 
 // ---------------------------------------------
 
@@ -355,22 +413,37 @@ extern "C" int rados_close_pool(rados_pool_t pool)
   return 0;
 }
 
-extern "C" int rados_write(rados_pool_t pool, ceph_object *o, const char *buf, off_t off, size_t len)
+extern "C" int rados_write(rados_pool_t pool, ceph_object *o, off_t off, const char *buf, size_t len)
 {
   object_t oid(*o);
-  return radosp->write(pool, oid, buf, off, len);
+  bufferlist bl;
+  bl.append(buf, len);
+  return radosp->write(pool, oid, off, bl, len);
 }
 
-extern "C" int rados_read(rados_pool_t pool, ceph_object *o, char *buf, off_t off, size_t len)
+extern "C" int rados_read(rados_pool_t pool, ceph_object *o, off_t off, char *buf, size_t len)
 {
+  int ret;
   object_t oid(*o);
-  return radosp->read(pool, oid, buf, off, len);
+  bufferlist bl;
+  ret = radosp->read(pool, oid, off, bl, len);
+  if (ret > 0)
+    memcpy(buf, bl.c_str(), ret);
+
+  return ret;
 }
 
 extern "C" int rados_exec(rados_pool_t pool, ceph_object *o, const char *cls, const char *method,
                          const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
   object_t oid(*o);
-  return radosp->exec(pool, oid, cls, method, inbuf, in_len, buf, out_len);
+  bufferlist inbl, outbl;
+  int ret;
+  inbl.append(inbuf, in_len);
+  ret = radosp->exec(pool, oid, cls, method, inbl, in_len, outbl, out_len);
+  if (ret > 0)
+    memcpy(buf, outbl.c_str(), ret);
+
+  return ret;
 }
 

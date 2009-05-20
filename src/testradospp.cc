@@ -14,42 +14,44 @@
 
 #include "include/librados.h"
 
-#include <stdio.h>
+#include <iostream>
+
 #include <stdlib.h>
 #include <time.h>
 
 int main(int argc, const char **argv) 
 {
-  if (rados_initialize(argc, argv)) {
-    printf("error initializing\n");
-    exit(1);
+  Rados rados;
+  if (!rados.initialize(0, NULL)) {
+     cerr << "couldn't initialize rados!" << std::endl;
+     exit(1);
   }
 
   time_t tm;
-  char buf[128], buf2[128];
+  bufferlist bl, bl2;
+  char buf[128];
 
   time(&tm);
   snprintf(buf, 128, "%s", ctime(&tm));
+  bl.append(buf, strlen(buf) + 1);
 
-  struct ceph_object oid;
+  object_t oid;
   memset(&oid, 0, sizeof(oid));
   oid.ino = 0x2010;
 
   rados_pool_t pool;
-  int r = rados_open_pool("data", &pool);
+  int r = rados.open_pool("data", &pool);
   printf("open pool result = %d, pool = %d\n", r, pool);
 
-  rados_write(pool, &oid, 0, buf, strlen(buf) + 1);
-  rados_exec(pool, &oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
-  printf("exec result=%s\n", buf);
-  int size = rados_read(pool, &oid, 0, buf2, 128);
+  rados.write(pool, oid, 0, bl, bl.length());
+  rados.exec(pool, oid, "test", "foo", bl, bl.length(), bl2, 1024);
+  printf("exec result=%s\n", bl2.c_str());
+  int size = rados.read(pool, oid, 0, bl2, 128);
 
-  rados_close_pool(pool);
+  rados.close_pool(pool);
 
-  printf("read result=%s\n", buf2);
-  printf("size=%d\n", size);
-
-  rados_deinitialize();
+  cout << "read result=" << bl2.c_str() << std::endl;
+  cout << "size=" << size << std::endl;
 
   return 0;
 }
