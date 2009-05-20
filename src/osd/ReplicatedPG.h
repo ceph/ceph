@@ -58,19 +58,45 @@ public:
   };
 
   /*
-   * gather state on the primary/head while replicating an osd op.
+   * Capture all state associated with a write operation being processed
+   * on the current OSD.
+   */
+  struct WriteOpContext {
+    Message *op;
+    vector<ceph_osd_op>& ops;
+    bufferlist& data;
+    sobject_t soid;
+    osd_reqid_t reqid;
+    utime_t mtime;
+
+    SnapContext snapc;           // writer snap context
+
+    //ProjectedObjectInfo *pinfo;  // projected object state
+    object_info_t *poi;
+
+    eversion_t at_version;       // pg's current version pointer
+    ObjectStore::Transaction t;
+
+    WriteOpContext(Message *_op, vector<ceph_osd_op>& _ops, bufferlist& _data,
+		   sobject_t _soid, osd_reqid_t _reqid, utime_t _mtime) :
+      op(_op), ops(_ops), data(_data), soid(_soid), reqid(_reqid), mtime(_mtime),
+      poi(0) {}
+  };
+
+  /*
+   * State on the PG primary associated with the replicated mutation
    */
   class RepGather {
   public:
     xlist<RepGather*>::item queue_item;
     int nref;
 
-    class MOSDOp *op;
+    WriteOpContext *ctx;
+    ProjectedObjectInfo *pinfo;
+
     tid_t rep_tid;
-    utime_t mtime;
     bool noop;
 
-    ObjectStore::Transaction t;
     bool applied, aborted;
 
     set<int>  waitfor_ack;
@@ -80,29 +106,19 @@ public:
     
     utime_t   start;
     
-    ProjectedObjectInfo *pinfo;
-
-    eversion_t at_version;
-    SnapContext snapc;
-
     eversion_t          pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(MOSDOp *o, bool noop_, tid_t rt, 
-	      ProjectedObjectInfo *i,
-	      eversion_t av, eversion_t lc,
-	      SnapContext& sc) :
+    RepGather(WriteOpContext *c, ProjectedObjectInfo *pi, bool noop_, tid_t rt, 
+	      eversion_t lc) :
       queue_item(this),
-      nref(1), op(o), rep_tid(rt), 
-      mtime(op->get_mtime()), noop(noop_),
+      nref(1),
+      ctx(c), pinfo(pi),
+      rep_tid(rt), 
+      noop(noop_),
       applied(false), aborted(false),
       sent_ack(false), sent_nvram(false), sent_disk(false),
-      pinfo(i),
-      at_version(av), 
-      snapc(sc),
-      pg_local_last_complete(lc) {
-      mtime = op->get_mtime();
-    }
+      pg_local_last_complete(lc) { }
 
     bool can_send_ack() { 
       return
@@ -129,7 +145,8 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	delete op;
+	assert(!pinfo);
+	delete ctx;
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
@@ -147,10 +164,7 @@ protected:
   void apply_repop(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_repop(MOSDOp *op, bool noop, tid_t rep_tid,
-		       ProjectedObjectInfo *pinfo,
-		       eversion_t nv,
-		       SnapContext& snapc);
+  RepGather *new_repop(WriteOpContext *ctx, ProjectedObjectInfo *pinfo, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
@@ -204,12 +218,7 @@ protected:
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			sobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
 			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
-  void prepare_transaction(ObjectStore::Transaction& t, osd_reqid_t reqid,
-			   sobject_t poid, 
-			   vector<ceph_osd_op>& ops, bufferlist& bl, utime_t mtime,
-			   bool& exists, __u64& size, object_info_t& oi,
-			   eversion_t at_version, SnapContext& snapc,
-			   eversion_t trim_to);
+  void prepare_transaction(WriteOpContext *ctx, bool& exists, __u64& size, eversion_t trim_to);
   
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
@@ -278,8 +287,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
   out << " pct=" << repop.pg_complete_thru;
-  if (repop.op)
-    out << " op=" << *(repop.op);
+  if (repop.ctx->op)
+    out << " op=" << *(repop.ctx->op);
   out << ")";
   return out;
 }
