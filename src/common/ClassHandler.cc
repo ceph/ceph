@@ -134,8 +134,12 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname)
 {
-  ClassHandler::ClassMethod *method = &methods_map[mname];
-  return method;
+   map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
+
+  if (iter == methods_map.end())
+    return NULL;
+
+  return &(iter->second);
 }
 
 void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *method)

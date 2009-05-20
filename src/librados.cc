@@ -239,6 +239,9 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
 
   lock.Unlock();
 
+  if (outbl.length() < out_len)
+    out_len = outbl.length();
+
   if (out_len)
     memcpy(buf, outbl.c_str(), out_len);
 
@@ -268,6 +271,9 @@ int RadosClient::read(int pool, object_t& oid, char *buf, off_t off, size_t len)
     cond.Wait(lock);
 
   lock.Unlock();
+
+  if (bl.length() < len)
+    len = bl.length();
 
   if (len)
     memcpy(buf, bl.c_str(), len);
