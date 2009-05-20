@@ -25,6 +25,21 @@ class ReplicatedPG : public PG {
 public:  
 
   /*
+   * Capture all object state associated with an in-progress read.
+   */
+  struct ReadOpContext {
+    MOSDOp *op;
+    vector<ceph_osd_op>& ops;
+
+    object_info_t oi;
+    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
+
+    ReadOpContext(MOSDOp *_op, vector<ceph_osd_op>& _ops, sobject_t _soid) :
+      op(_op), ops(_ops), oi(_soid), data_off(0) {}
+  };
+
+
+  /*
    * keep tabs on object modifications that are in flight.
    * we need to know the projected existence, size, snapset,
    * etc., because we don't send writes down to disk until after
@@ -41,7 +56,6 @@ public:
     
     ProjectedObjectInfo() : ref(0), exists(false), size(0), oi(poid) {}
   };
-
 
   /*
    * gather state on the primary/head while replicating an osd op.
@@ -122,13 +136,6 @@ public:
     }
   };
 
-  struct OpContext {
-    sobject_t& soid;
-    object_info_t& oi;
-    vector<ceph_osd_op>& ops;
-    OpContext(sobject_t& _soid, object_info_t& _oi,
-		 vector<ceph_osd_op>& _ops) : soid(_soid), oi(_oi), ops(_ops) {}
-  };
 
 
 protected:
@@ -222,10 +229,7 @@ protected:
   void op_read(MOSDOp *op);
   void op_modify(MOSDOp *op);
 
-  int do_read_ops(MOSDOp *op, OpContext& ctx,
-		 bufferlist::iterator& bp,
-		 bufferlist& data,
-		 int *data_off);
+  int do_read_ops(ReadOpContext *ctx, bufferlist::iterator& bp, bufferlist& data);
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_reply(MOSDSubOpReply *reply);

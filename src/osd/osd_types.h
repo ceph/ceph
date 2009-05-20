@@ -726,7 +726,7 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 #define OI_ATTR "_"
 
 struct object_info_t {
-  pobject_t poid;
+  sobject_t soid;
 
   eversion_t version, prior_version;
   osd_reqid_t last_reqid;
@@ -739,12 +739,12 @@ struct object_info_t {
   bufferlist truncate_info;  // bah.. messy layering.
 
   void encode(bufferlist& bl) const {
-    ::encode(poid, bl);
+    ::encode(soid, bl);
     ::encode(version, bl);
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
     ::encode(mtime, bl);
-    if (poid.snap == CEPH_NOSNAP) {
+    if (soid.snap == CEPH_NOSNAP) {
       ::encode(snapset, bl);
       ::encode(wrlock_by, bl);
     } else
@@ -752,12 +752,12 @@ struct object_info_t {
     ::encode(truncate_info, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(poid, bl);
+    ::decode(soid, bl);
     ::decode(version, bl);
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);
     ::decode(mtime, bl);
-    if (poid.snap == CEPH_NOSNAP) {
+    if (soid.snap == CEPH_NOSNAP) {
       ::decode(snapset, bl);
       ::decode(wrlock_by, bl);
     } else
@@ -769,7 +769,7 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(pobject_t p) : poid(p) {}
+  object_info_t(sobject_t s) : soid(s) {}
   object_info_t(bufferlist& bl) {
     decode(bl);
   }
@@ -778,11 +778,11 @@ WRITE_CLASS_ENCODER(object_info_t)
 
 
 inline ostream& operator<<(ostream& out, const object_info_t& oi) {
-  out << oi.poid << "(" << oi.version
+  out << oi.soid << "(" << oi.version
       << " " << oi.last_reqid;
   if (oi.wrlock_by.tid)
     out << " wrlock_by=" << oi.wrlock_by;
-  if (oi.poid.snap == CEPH_NOSNAP)
+  if (oi.soid.snap == CEPH_NOSNAP)
     out << " " << oi.snapset << ")";
   else
     out << " " << oi.snaps << ")";

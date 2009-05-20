@@ -640,15 +640,14 @@ int ReplicatedPG::pick_read_snap(sobject_t& soid, object_info_t& coi)
 } 
 
 
-int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
-			      bufferlist::iterator& bp,
-			      bufferlist& data,
-			      int *data_off)
+int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
+			      bufferlist::iterator& bp, bufferlist& data)
 {
   int result = 0;
-  sobject_t& soid = ctx.soid;
-  object_info_t& oi = ctx.oi;
-  vector<ceph_osd_op> &ops = ctx.ops;
+
+  vector<ceph_osd_op>& ops = ctx->ops;
+  object_info_t& oi = ctx->oi;
+  const sobject_t& soid = oi.soid;
 
   for (vector<ceph_osd_op>::iterator p = ops.begin(); p != ops.end(); p++) {
     switch (p->op) {
@@ -657,8 +656,8 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
 	// read into a buffer
 	bufferlist bl;
 	int r = osd->store->read(info.pgid.to_coll(), soid, p->offset, p->length, bl);
-	if (data.length() == 0 && data_off)
-	  *data_off = p->offset;
+	if (data.length() == 0)
+	  ctx->data_off = p->offset;
 	data.claim(bl);
 	if (r >= 0) 
 	  p->length = r;
@@ -683,7 +682,7 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
 	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
 	
 	ClassHandler::ClassData *cls;
-        result = osd->get_class(cname, info.pgid, op, &cls);
+        result = osd->get_class(cname, info.pgid, ctx->op, &cls);
 	if (result) {
 	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
           if (result == -EAGAIN)
@@ -732,7 +731,7 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
       break;
 
     case CEPH_OSD_OP_MASKTRUNC:
-      if (p != op->ops.begin()) {
+      if (p != ops.begin()) {
 	ceph_osd_op& rd = *(p - 1);
 	ceph_osd_op& m = *p;
 	
@@ -812,19 +811,18 @@ int ReplicatedPG::do_read_ops(MOSDOp *op, OpContext& ctx,
 void ReplicatedPG::op_read(MOSDOp *op)
 {
   object_t oid = op->get_oid();
-  sobject_t soid(oid, op->get_snapid());
+  ReadOpContext ctx(op, op->ops, sobject_t(op->get_oid(), op->get_snapid()));
+  sobject_t& soid = ctx.oi.soid;
 
-  dout(10) << "op_read " << soid << " " << op->ops << dendl;
+  dout(10) << "op_read " << soid << " " << ctx.ops << dendl;
 
   bufferlist::iterator bp = op->get_data().begin();
   bufferlist data;
-  int data_off = 0;
   int result = 0;
 
   // pick revision
-  object_info_t oi(soid);
   if (soid.snap) {
-    result = pick_read_snap(soid, oi);
+    result = pick_read_snap(soid, ctx.oi);
     if (result == -EAGAIN) {
       wait_for_missing_object(soid, op);
       return;
@@ -835,7 +833,7 @@ void ReplicatedPG::op_read(MOSDOp *op)
 
   // wrlocked?
   if ((op->get_snapid() == 0 || op->get_snapid() == CEPH_NOSNAP) &&
-      block_if_wrlocked(op, oi)) 
+      block_if_wrlocked(op, ctx.oi)) 
     return;
 
 
@@ -885,20 +883,16 @@ void ReplicatedPG::op_read(MOSDOp *op)
     }
   }
 
-  {
-    OpContext ctx(soid, oi, op->ops);
-
-    // do it.
-    result = do_read_ops(op, ctx, bp, data, &data_off);
-    if (result == -EAGAIN)
-      return;
-  }
+  // do it.
+  result = do_read_ops(&ctx, bp, data);
+  if (result == -EAGAIN)
+    return;
    
  done:
   // reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   reply->set_data(data);
-  reply->get_header().data_off = data_off;
+  reply->get_header().data_off = ctx.data_off;
   reply->set_result(result);
 
   if (result >= 0) {
@@ -915,7 +909,6 @@ void ReplicatedPG::op_read(MOSDOp *op)
       stat_object_temp_rd[soid].hit(now);  // hit temp.
   }
 
-  
   osd->messenger->send_message(reply, op->get_orig_source_inst());
   delete op;
 }
@@ -1685,7 +1678,7 @@ ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t 
     assert(r >= 0);
     pinfo->oi.decode(bv);
   } else {
-    pinfo->oi.poid = poid;
+    pinfo->oi.soid = poid;
     pinfo->exists = false;
     pinfo->size = 0;
   }
