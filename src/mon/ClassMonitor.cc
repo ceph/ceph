@@ -387,7 +387,7 @@ void ClassMonitor::handle_request(MClass *m)
         int len = (*p).name.length() + 16;
         int bin_len;
         char store_name[len];
-        snprintf(store_name, len, "%s.%d", (*p).name.c_str(), ver.str());
+        snprintf(store_name, len, "%s.%s", (*p).name.c_str(), ver.str());
         bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
         assert(bin_len > 0);
         dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
