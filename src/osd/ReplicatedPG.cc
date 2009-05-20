@@ -109,10 +109,10 @@ void ReplicatedPG::wait_for_missing_object(sobject_t soid, Message *m)
 bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 {
   // we only care about reads here on out..
-  if (op->is_modify() ||
-      op->ops.size() < 1 ||
-      op->is_modify())
+  if (op->may_write() ||
+      op->ops.size() < 1)
     return false;
+
   ceph_osd_op& readop = op->ops[0];
 
   object_t oid = op->get_oid();
@@ -375,7 +375,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   osd->logger->inc(l_osd_op);
 
-  if (op->is_modify())
+  if (op->may_write())
     op_modify(op);
   else
     op_read(op);

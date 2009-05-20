@@ -45,7 +45,8 @@ class MOSDOpReply : public Message {
   __s32 get_result() { return head.result; }
   eversion_t get_version() { return head.reassert_version; }
 
-  bool is_modify() { return head.flags & CEPH_OSD_FLAG_MODIFY; }
+  bool may_read() { return head.flags & CEPH_OSD_FLAG_READ; }
+  bool may_write() { return head.flags & CEPH_OSD_FLAG_WRITE; }
 
   void set_result(int r) { head.result = r; }
   void set_version(eversion_t v) { head.reassert_version = v; }
@@ -92,7 +93,7 @@ public:
   void print(ostream& out) {
     out << "osd_op_reply(" << get_reqid()
 	<< " " << head.oid << " " << ops;
-    if (is_modify()) {
+    if (may_write()) {
       if (is_ondisk())
 	out << " ondisk";
       else if (is_onnvram())

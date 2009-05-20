@@ -348,7 +348,7 @@ void Objecter::tick()
 
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
-  if (m->is_modify())
+  if (m->may_write())
     handle_osd_modify_reply(m);
   else
     handle_osd_read_reply(m);
@@ -390,7 +390,7 @@ tid_t Objecter::read_submit(ReadOp *rd)
       flags |= CEPH_OSD_FLAG_ACK;
     MOSDOp *m = new MOSDOp(client_inc, last_tid,
 			   rd->oid, rd->layout, osdmap->get_epoch(), 
-			   flags);
+			   flags | CEPH_OSD_FLAG_READ);
     m->set_snapid(rd->snap);
     m->ops = rd->ops;
     m->set_data(rd->bl);
@@ -506,7 +506,7 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
   } else if (pg.primary() >= 0) {
     MOSDOp *m = new MOSDOp(client_inc, wr->tid,
 			   wr->oid, wr->layout, osdmap->get_epoch(),
-			   flags | CEPH_OSD_FLAG_MODIFY);
+			   flags | CEPH_OSD_FLAG_WRITE);
     m->ops = wr->ops;
     m->set_mtime(wr->mtime);
     m->set_snap_seq(wr->snapc.seq);

@@ -734,7 +734,7 @@ get_more_pages:
 					    ceph_vino(inode),
 					    offset, &len,
 					    CEPH_OSD_OP_WRITE,
-					    CEPH_OSD_FLAG_MODIFY |
+					    CEPH_OSD_FLAG_WRITE |
 						    CEPH_OSD_FLAG_ONDISK,
 					    snapc, do_sync,
 					    ci->i_truncate_seq,

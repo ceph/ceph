@@ -60,7 +60,8 @@ public:
   
   utime_t get_mtime() { return head.mtime; }
   
-  bool is_modify() { return head.flags & CEPH_OSD_FLAG_MODIFY; }
+  bool may_read() { return head.flags & CEPH_OSD_FLAG_READ; }
+  bool may_write() { return head.flags & CEPH_OSD_FLAG_WRITE; }
 
   void set_peer_stat(const osd_peer_stat_t& stat) {
     peer_stat = stat;
@@ -173,8 +174,15 @@ public:
   void print(ostream& out) {
     out << "osd_op(" << get_reqid();
     out << " " << head.oid;
-    if (!is_modify())
-      out << " @" << snapid_t((__u64)head.snapid);
+
+    out << " ";
+    if (may_read())
+      out << "r";
+    if (may_write())
+      out << "w";
+    else
+      out << "@" << snapid_t((__u64)head.snapid);
+
     out << " " << ops;
     out << " " << pg_t(head.layout.ol_pgid);
     if (is_retry_attempt()) out << " RETRY";

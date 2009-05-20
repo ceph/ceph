@@ -307,13 +307,16 @@ static inline const char *ceph_osd_op_name(int op)
 
 /*
  * osd op flags
+ *
+ * An op may be READ, WRITE, or READ|WRITE.
  */
 enum {
 	CEPH_OSD_FLAG_ACK = 1,          /* want (or is) "ack" ack */
 	CEPH_OSD_FLAG_ONNVRAM = 2,      /* want (or is) "onnvram" ack */
 	CEPH_OSD_FLAG_ONDISK = 4,       /* want (or is) "ondisk" ack */
 	CEPH_OSD_FLAG_RETRY = 8,        /* resend attempt */
-	CEPH_OSD_FLAG_MODIFY = 32,      /* op is/was a mutation */
+	CEPH_OSD_FLAG_READ = 16,        /* op may read */
+	CEPH_OSD_FLAG_WRITE = 32,       /* op may write */
 	CEPH_OSD_FLAG_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 	CEPH_OSD_FLAG_PEERSTAT = 128,   /* msg includes osd_peer_stat */
 	CEPH_OSD_FLAG_BALANCE_READS = 256,

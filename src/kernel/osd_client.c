@@ -108,8 +108,10 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	init_completion(&req->r_completion);
 	init_completion(&req->r_safe_completion);
 	INIT_LIST_HEAD(&req->r_unsafe_item);
-	req->r_flags = flags & CEPH_OSD_FLAG_MODIFY;
+	req->r_flags = flags;
 	req->r_last_osd = -1;
+
+	WARN_ON((flags & (CEPH_OSD_OP_READ|CEPH_OSD_OP_WRITE)) == 0);
 
 	/* create message */
 	if (snapc)
@@ -126,7 +128,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = cpu_to_le32(flags);
-	if (flags & CEPH_OSD_FLAG_MODIFY)
+	if (flags & CEPH_OSD_FLAG_WRITE)
 		ceph_encode_timespec(&head->mtime, mtime);
 	head->num_ops = cpu_to_le16(num_op);
 	op->op = cpu_to_le16(opcode);
@@ -138,7 +140,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	calc_layout(osdc, vino, layout, off, plen, req);
 	req->r_file_layout = *layout;  /* keep a copy */
 
-	if (flags & CEPH_OSD_FLAG_MODIFY) {
+	if (flags & CEPH_OSD_FLAG_WRITE) {
 		req->r_request->hdr.data_off = cpu_to_le16(off);
 		req->r_request->hdr.data_len = cpu_to_le32(*plen);
 	}
@@ -463,7 +465,7 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 
 	/* either this is a read, or we got the safe response */
 	if ((flags & CEPH_OSD_FLAG_ONDISK) ||
-	    ((flags & CEPH_OSD_FLAG_MODIFY) == 0))
+	    ((flags & CEPH_OSD_FLAG_WRITE) == 0))
 		__unregister_request(osdc, req);
 
 	mutex_unlock(&osdc->request_mutex);
@@ -809,7 +811,7 @@ void ceph_osdc_sync(struct ceph_osd_client *osdc)
 			break;
 
 		next_tid = req->r_tid + 1;
-		if ((req->r_flags & CEPH_OSD_FLAG_MODIFY) == 0)
+		if ((req->r_flags & CEPH_OSD_FLAG_WRITE) == 0)
 			continue;
 
 		ceph_osdc_get_request(req);
@@ -870,8 +872,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	dout(10, "readpages on ino %llx.%llx on %llu~%llu\n", vino.ino,
 	     vino.snap, off, len);
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
-				    CEPH_OSD_OP_READ, 0, NULL, 0,
-				    truncate_seq, truncate_size, NULL);
+				    CEPH_OSD_OP_READ, CEPH_OSD_FLAG_READ,
+				    NULL, 0, truncate_seq, truncate_size, NULL);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -946,7 +948,7 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
 				    CEPH_OSD_OP_WRITE,
 				    flags | CEPH_OSD_FLAG_ONDISK |
-				    CEPH_OSD_FLAG_MODIFY,
+					    CEPH_OSD_FLAG_WRITE,
 				    snapc, do_sync,
 				    truncate_seq, truncate_size, mtime);
 	if (IS_ERR(req))
