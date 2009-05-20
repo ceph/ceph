@@ -122,7 +122,7 @@ protected:
   // base map
   epoch_t epoch;
   epoch_t client_epoch;  // incremented only when change is significant to client.
-  epoch_t last_failure;  // epoch of last failure.  for inclocks
+  epoch_t last_failure;  // epoch of last failure
   utime_t created, modified;
 
   int32_t tableserver;   // which MDS has anchortable, snaptable

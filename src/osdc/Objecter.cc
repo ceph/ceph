@@ -394,10 +394,6 @@ tid_t Objecter::read_submit(ReadOp *rd)
     m->set_snapid(rd->snap);
     m->ops = rd->ops;
     m->set_data(rd->bl);
-    if (inc_lock > 0) {
-      rd->inc_lock = inc_lock;
-      m->set_inc_lock(inc_lock);
-    }
     m->set_retry_attempt(rd->attempts++);
     
     int who = pg.acker();
@@ -436,23 +432,9 @@ void Objecter::handle_osd_read_reply(MOSDOpReply *m)
   pg.active_tids.erase(tid);
   if (pg.active_tids.empty()) close_pg( m->get_pg() );
   
-  // fail?
-  if (m->get_result() == -EINCLOCKED &&
-      rd->flags & CEPH_OSD_FLAG_INCLOCK_FAIL) {
-    dout(7) << " got -EINCLOCKED, failing" << dendl;
-    if (rd->onfinish) {
-      rd->onfinish->finish(-EINCLOCKED);
-      delete rd->onfinish;
-    }
-    delete rd;
-    delete m;
-    return;
-  }
-
   // success?
-  if (m->get_result() == -EAGAIN ||
-      m->get_result() == -EINCLOCKED) {
-    dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
+  if (m->get_result() == -EAGAIN) {
+    dout(7) << " got -EAGAIN resubmitting" << dendl;
     read_submit(rd);
     delete m;
     return;
@@ -529,10 +511,6 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
     m->set_mtime(wr->mtime);
     m->set_snap_seq(wr->snapc.seq);
     m->get_snaps() = wr->snapc.snaps;
-    if (inc_lock > 0) {
-      wr->inc_lock = inc_lock;
-      m->set_inc_lock(inc_lock);
-    }
     m->set_retry_attempt(wr->attempts++);
     
     if (wr->version != eversion_t())
@@ -583,25 +561,9 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
   }
   
   int rc = 0;
-  if (m->get_result() == -EINCLOCKED && wr->flags & CEPH_OSD_FLAG_INCLOCK_FAIL) {
-    dout(7) << " got -EINCLOCKED, failing" << dendl;
-    rc = -EINCLOCKED;
-    if (wr->onack) {
-      onack = wr->onack;
-      wr->onack = 0;
-      num_unacked--;
-    }
-    if (wr->oncommit) {
-      oncommit = wr->oncommit;
-      wr->oncommit = 0;
-      num_uncommitted--;
-    }
-    goto done;
-  }
 
-  if (m->get_result() == -EAGAIN ||
-      m->get_result() == -EINCLOCKED) {
-    dout(7) << " got -EAGAIN or -EINCLOCKED, resubmitting" << dendl;
+  if (m->get_result() == -EAGAIN) {
+    dout(7) << " got -EAGAIN, resubmitting" << dendl;
     if (wr->onack) num_unacked--;
     if (wr->oncommit) num_uncommitted--;
     modify_submit(wr);
@@ -625,9 +587,6 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     wr->oncommit = 0;
     num_uncommitted--;
   }
-
-  // done?
- done:
 
   // done with this tid?
   if (!wr->onack && !wr->oncommit) {

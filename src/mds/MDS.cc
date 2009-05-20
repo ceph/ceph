@@ -614,8 +614,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   // tell objecter my incarnation
   if (objecter->get_client_incarnation() != incarnation)
     objecter->set_client_incarnation(incarnation);
-  // and inc_lock
-  objecter->set_inc_lock(mdsmap->get_last_failure());
 
   // for debug
   if (g_conf.mds_dump_cache_on_map)

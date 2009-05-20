@@ -27,8 +27,6 @@
  *
  */
 
-#define EINCLOCKED 100
-
 class MOSDOp : public Message {
 private:
   ceph_osd_request_head head;
@@ -64,8 +62,6 @@ public:
   
   bool is_modify() { return head.flags & CEPH_OSD_FLAG_MODIFY; }
 
-  unsigned get_inc_lock() const { return head.inc_lock; }
-
   void set_peer_stat(const osd_peer_stat_t& stat) {
     peer_stat = stat;
     head.flags = (head.flags | CEPH_OSD_FLAG_PEERSTAT);
@@ -94,7 +90,6 @@ public:
   }
   MOSDOp() {}
 
-  void set_inc_lock(__u32 l) { head.inc_lock = l; }
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
   void set_version(eversion_t v) { head.reassert_version = v; }
   void set_mtime(utime_t mt) { head.mtime = mt; }

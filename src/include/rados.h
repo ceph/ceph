@@ -313,7 +313,6 @@ enum {
 	CEPH_OSD_FLAG_ONNVRAM = 2,      /* want (or is) "onnvram" ack */
 	CEPH_OSD_FLAG_ONDISK = 4,       /* want (or is) "ondisk" ack */
 	CEPH_OSD_FLAG_RETRY = 8,        /* resend attempt */
-	CEPH_OSD_FLAG_INCLOCK_FAIL = 16, /* fail on inclock collision */
 	CEPH_OSD_FLAG_MODIFY = 32,      /* op is/was a mutation */
 	CEPH_OSD_FLAG_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 	CEPH_OSD_FLAG_PEERSTAT = 128,   /* msg includes osd_peer_stat */
@@ -354,7 +353,6 @@ struct ceph_osd_request_head {
 	__le32                    osdmap_epoch;
 
 	__le32                    flags;
-	__le32                    inc_lock;
 
 	struct ceph_timespec      mtime;
 	struct ceph_eversion      reassert_version;

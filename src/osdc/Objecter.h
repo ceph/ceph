@@ -162,7 +162,6 @@ class Objecter {
  private:
   tid_t last_tid;
   int client_inc;
-  int inc_lock;       // optional
   int num_unacked;
   int num_uncommitted;
 
@@ -199,14 +198,13 @@ class Objecter {
 
     tid_t tid;
     int attempts;
-    int inc_lock;
 
     bool paused;
 
     ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, snapid_t s, int f, Context *of) :
       oid(o), layout(ol), snap(s),
       pbl(0), flags(f), onfinish(of), 
-      tid(0), attempts(0), inc_lock(-1),
+      tid(0), attempts(0),
       paused(false) {
       ops.swap(op);
     }
@@ -225,7 +223,6 @@ class Objecter {
 
     tid_t tid;
     int attempts;
-    int inc_lock;
     eversion_t version;
 
     bool paused;
@@ -233,7 +230,7 @@ class Objecter {
     ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op, utime_t mt,
 	     const SnapContext& sc, int f, Context *ac, Context *co) :
       oid(o), layout(l), snapc(sc), mtime(mt), flags(f), onack(ac), oncommit(co), 
-      tid(0), attempts(0), inc_lock(-1),
+      tid(0), attempts(0),
       paused(false) {
       ops.swap(op);
     }
@@ -310,7 +307,7 @@ class Objecter {
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
     messenger(m), monmap(mm), osdmap(om), 
-    last_tid(0), client_inc(-1), inc_lock(0),
+    last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
     last_epoch_requested(0),
     client_lock(l), timer(l)
@@ -340,9 +337,6 @@ class Objecter {
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
 
-  //int get_inc_lock() const { return inc_lock; }
-  void set_inc_lock(int l) { inc_lock = l; }
-    
   // low-level
   tid_t read_submit(ReadOp *rd);
   tid_t modify_submit(ModifyOp *wr);
