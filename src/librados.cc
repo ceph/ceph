@@ -70,6 +70,7 @@ public:
 
   int write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int remove(int pool, object_t& oid);
 
   int exec(int pool, object_t& oid, const char *cls, const char *method, bufferlist& inbl, size_t in_len, bufferlist& outbl, size_t out_len);
 };
@@ -193,9 +194,6 @@ int RadosClient::write(int pool, object_t& oid, off_t off, bufferlist& bl, size_
   bool done;
   int r;
   Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
-#if 0
-  bl.append(&buf[off], len);
-#endif
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
 
   dout(0) << "going to write" << dendl;
@@ -209,6 +207,31 @@ int RadosClient::write(int pool, object_t& oid, off_t off, bufferlist& bl, size_
   lock.Unlock();
 
   return len;
+}
+
+int RadosClient::remove(int pool, object_t& oid)
+{
+  SnapContext snapc;
+  utime_t ut = g_clock.now();
+
+  Mutex lock("RadosClient::remove");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool);
+
+  dout(0) << "going to write" << dendl;
+
+  lock.Lock();
+  objecter->remove(oid, layout,
+		  snapc, ut, 0,
+		  onack, NULL);
+  while (!done)
+    cond.Wait(lock);
+  lock.Unlock();
+
+  return r;
 }
 
 int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *method, bufferlist& inbl, size_t in_len, bufferlist& outbl, size_t out_len)
@@ -306,6 +329,14 @@ int Rados::write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, si
     return -EINVAL;
 
   return client->write(pool, oid, off, bl, len);
+}
+
+int Rados::remove(rados_pool_t pool, object_t& oid)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->remove(pool, oid);
 }
 
 int Rados::read(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
@@ -419,6 +450,12 @@ extern "C" int rados_write(rados_pool_t pool, ceph_object *o, off_t off, const c
   bufferlist bl;
   bl.append(buf, len);
   return radosp->write(pool, oid, off, bl, len);
+}
+
+extern "C" int rados_remove(rados_pool_t pool, ceph_object *o)
+{
+  object_t oid(*o);
+  return radosp->remove(pool, oid);
 }
 
 extern "C" int rados_read(rados_pool_t pool, ceph_object *o, off_t off, char *buf, size_t len)

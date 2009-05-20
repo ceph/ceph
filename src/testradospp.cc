@@ -41,17 +41,19 @@ int main(int argc, const char **argv)
 
   rados_pool_t pool;
   int r = rados.open_pool("data", &pool);
-  printf("open pool result = %d, pool = %d\n", r, pool);
+  cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   rados.write(pool, oid, 0, bl, bl.length());
   rados.exec(pool, oid, "test", "foo", bl, bl.length(), bl2, 1024);
-  printf("exec result=%s\n", bl2.c_str());
+  cout << "exec result=" << bl2.c_str() << std::endl;
   int size = rados.read(pool, oid, 0, bl2, 128);
-
-  rados.close_pool(pool);
 
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
+
+  r = rados.remove(pool, oid);
+  cout << "remove result=" << r << std::endl;
+  rados.close_pool(pool);
 
   return 0;
 }
