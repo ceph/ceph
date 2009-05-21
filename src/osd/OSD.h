@@ -407,11 +407,11 @@ protected:
   Mutex class_lock;
   map<nstring, map<pg_t, list<Message*> > > waiting_for_missing_class;
 
-  int get_class(const nstring& cname, pg_t pgid, Message *m, ClassHandler::ClassData **cls);
+  int get_class(const nstring& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls);
   void handle_class(MClass *m);
 public:
   void got_class(const nstring& cname);
-  void send_class_request(const char *n);
+  void send_class_request(const char *n, ClassVersion& version);
 
 protected:
   // -- placement groups --

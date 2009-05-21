@@ -683,7 +683,8 @@ int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
 	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
 	
 	ClassHandler::ClassData *cls;
-        result = osd->get_class(cname, info.pgid, ctx->op, &cls);
+        ClassVersion version;
+        result = osd->get_class(cname, version, info.pgid, ctx->op, &cls);
 	if (result) {
 	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
           if (result == -EAGAIN)

@@ -28,6 +28,7 @@ public:
   }
 
   const char *str() { return ver.c_str(); };
+  bool is_default() { return (ver.length() == 0); }
 };
 WRITE_CLASS_ENCODER(ClassVersion)
 

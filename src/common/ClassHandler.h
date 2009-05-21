@@ -37,13 +37,13 @@ public:
       CLASS_REQUESTED, 
       //CLASS_ERROR
     } status;
-    version_t version;
+    ClassVersion version;
     ClassImpl impl;
     void *handle;
     bool registered;
     map<string, ClassMethod> methods_map;
 
-    ClassData() : status(CLASS_UNKNOWN), version(-1), handle(NULL), registered(false) {}
+    ClassData() : status(CLASS_UNKNOWN), version(), handle(NULL), registered(false) {}
     ~ClassData() { }
 
     ClassMethod *register_method(const char *mname,
@@ -57,7 +57,7 @@ public:
 
   ClassHandler(OSD *_osd) : osd(_osd) {}
 
-  ClassData *get_class(const nstring& cname);
+  ClassData *get_class(const nstring& cname, ClassVersion& version);
   void resend_class_requests();
 
   void handle_class(MClass *m);

@@ -40,7 +40,7 @@ void ClassHandler::load_class(const nstring& cname)
 }
 
 
-ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname)
+ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVersion& version)
 {
   ClassData *class_data = &classes[cname];
 
@@ -60,7 +60,7 @@ ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname)
     assert(0);
   }
 
-  osd->send_class_request(cname.c_str());
+  osd->send_class_request(cname.c_str(), version);
   return NULL;
 }
 
@@ -96,7 +96,7 @@ void ClassHandler::handle_class(MClass *m)
 void ClassHandler::resend_class_requests()
 {
   for (map<nstring,ClassData>::iterator p = classes.begin(); p != classes.end(); p++)
-    osd->send_class_request(p->first.c_str());
+    osd->send_class_request(p->first.c_str(), p->second.version);
 }
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)

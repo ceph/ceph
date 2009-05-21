@@ -3753,12 +3753,13 @@ void OSD::wait_for_no_ops()
 
 // --------------------------------
 
-int OSD::get_class(const nstring& cname, pg_t pgid, Message *m, ClassHandler::ClassData **cls)
+int OSD::get_class(const nstring& cname, ClassVersion& version, pg_t pgid, Message *m, ClassHandler::ClassData **cls)
 {
   Mutex::Locker l(class_lock);
   dout(10) << "wait_for_missing_class '" << cname << "' by " << pgid << dendl;
 
-  *cls = class_handler->get_class(cname);
+
+  *cls = class_handler->get_class(cname, version);
   if (*cls)
     return 0;
 
@@ -3795,12 +3796,13 @@ void OSD::handle_class(MClass *m)
   delete m;
 }
 
-void OSD::send_class_request(const char *cname)
+void OSD::send_class_request(const char *cname, ClassVersion& version)
 {
-  dout(10) << "send_class_request '" << cname << "'" << dendl;
+  dout(10) << "send_class_request class=" << cname << " version=" << version << dendl;
   MClass *m = new MClass(monmap->get_fsid(), 0);
   ClassInfo info;
   info.name = cname;
+  info.version = version;
   m->info.push_back(info);
   m->action = CLASS_GET;
   int mon = monmap->pick_mon();
