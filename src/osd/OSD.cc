@@ -3468,6 +3468,7 @@ void OSD::handle_op(MOSDOp *op)
   if (op->may_write()) {
     if (op->get_snapid() != CEPH_NOSNAP) {
       reply_op_error(op, -EINVAL);
+      pg->unlock();
       return;
     }
 
