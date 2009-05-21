@@ -40,12 +40,50 @@ public:
 
 
   /*
+    object access states:
+
+    - idle
+      - no in-progress or waiting writes.
+      - read: ok
+      - write: move to 'delayed' or 'rmw'
+      - rmw: move to 'rmw'
+	  
+    - delayed
+      - delayed write in progress.  delay write application on primary.
+      - when done, move to 'idle'
+      - read: ok
+      - write: ok
+      - rmw: move to 'delayed-flushing'
+
+    - delayed-flushing
+      - waiting for delayed writes to flush, then move to 'rmw'
+      - read, write, rmw: wait
+
+    - rmw
+      - rmw cycles in flight.  applied immediately at primary.
+      - when done, move to 'idle'
+      - read: same client ok.  otherwise, move to 'rmw-flushing'
+      - write: ok
+      - rmw: same client ok.  otherwise, wait for rmw to flush
+      
+    - rmw-flushing
+      - waiting for rmw to flush, then move to 'idle'
+      - read, write, rmw: wait
+    
+   */
+
+
+  /*
    * keep tabs on object modifications that are in flight.
    * we need to know the projected existence, size, snapset,
    * etc., because we don't send writes down to disk until after
    * replicas ack.
    */
-  struct ProjectedObjectInfo {
+  struct ObjectContext {
+    enum {
+      IDLE, DELAYED, DELAYED_FLUSHING, RMW, RMW_FLUSHING
+    } state;
+
     int ref;
     sobject_t poid;
 
@@ -54,7 +92,7 @@ public:
 
     object_info_t oi;
     
-    ProjectedObjectInfo() : ref(0), exists(false), size(0), oi(poid) {}
+    ObjectContext() : state(IDLE), ref(0), exists(false), size(0), oi(poid) {}
   };
 
   /*
@@ -71,7 +109,6 @@ public:
 
     SnapContext snapc;           // writer snap context
 
-    //ProjectedObjectInfo *pinfo;  // projected object state
     object_info_t *poi;
 
     eversion_t at_version;       // pg's current version pointer
@@ -92,7 +129,7 @@ public:
     int nref;
 
     WriteOpContext *ctx;
-    ProjectedObjectInfo *pinfo;
+    ObjectContext *obc;
 
     tid_t rep_tid;
     bool noop;
@@ -109,11 +146,11 @@ public:
     eversion_t          pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(WriteOpContext *c, ProjectedObjectInfo *pi, bool noop_, tid_t rt, 
+    RepGather(WriteOpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
 	      eversion_t lc) :
       queue_item(this),
       nref(1),
-      ctx(c), pinfo(pi),
+      ctx(c), obc(pi),
       rep_tid(rt), 
       noop(noop_),
       applied(false), aborted(false),
@@ -145,7 +182,7 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(!pinfo);
+	assert(!obc);
 	delete ctx;
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
@@ -164,20 +201,20 @@ protected:
   void apply_repop(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_repop(WriteOpContext *ctx, ProjectedObjectInfo *pinfo, bool noop, tid_t rep_tid);
+  RepGather *new_repop(WriteOpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
 
 
   // projected object info
-  map<sobject_t, ProjectedObjectInfo> projected_objects;
+  map<sobject_t, ObjectContext> object_contexts;
 
-  ProjectedObjectInfo *get_projected_object(sobject_t poid);
-  void put_projected_object(ProjectedObjectInfo *pinfo);
+  ObjectContext *get_object_context(sobject_t poid);
+  void put_object_context(ObjectContext *obc);
 
   bool is_write_in_progress() {
-    return !projected_objects.empty();
+    return !object_contexts.empty();
   }
 
   // load balancing

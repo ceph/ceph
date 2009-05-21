@@ -1441,8 +1441,8 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   
   repop->applied = true;
   
-  put_projected_object(repop->pinfo);
-  repop->pinfo = 0;
+  put_object_context(repop->obc);
+  repop->obc = 0;
 
   update_stats();
 
@@ -1574,10 +1574,10 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->ctx->at_version);
   wr->mtime = repop->ctx->mtime;
-  wr->old_exists = repop->pinfo->exists;
-  wr->old_size = repop->pinfo->size;
-  wr->old_version = repop->pinfo->oi.version;
-  wr->snapset = repop->pinfo->oi.snapset;
+  wr->old_exists = repop->obc->exists;
+  wr->old_size = repop->obc->size;
+  wr->old_version = repop->obc->oi.version;
+  wr->snapset = repop->obc->oi.snapset;
   wr->snapc = repop->ctx->snapc;
   wr->get_data() = repop->ctx->op->get_data();   // _copy_ bufferlist
   if (osd->osdmap->get_pg_size(info.pgid) == acting.size())
@@ -1586,12 +1586,12 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_repop(WriteOpContext *ctx, ProjectedObjectInfo *pinfo,
+ReplicatedPG::RepGather *ReplicatedPG::new_repop(WriteOpContext *ctx, ObjectContext *obc,
 						 bool noop, tid_t rep_tid)
 {
   dout(10) << "new_repop rep_tid " << rep_tid << " on " << *ctx->op << dendl;
 
-  RepGather *repop = new RepGather(ctx, pinfo, noop, rep_tid, info.last_complete);
+  RepGather *repop = new RepGather(ctx, obc, noop, rep_tid, info.last_complete);
 
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
@@ -1650,50 +1650,50 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 // -------------------------------------------------------
 
 
-ReplicatedPG::ProjectedObjectInfo *ReplicatedPG::get_projected_object(pobject_t poid)
+ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(pobject_t poid)
 {
-  ProjectedObjectInfo *pinfo = &projected_objects[poid];
-  pinfo->ref++;
+  ObjectContext *obc = &object_contexts[poid];
+  obc->ref++;
 
-  if (pinfo->ref > 1) {
-    dout(10) << "get_projected_object " << poid << " "
-	     << (pinfo->ref-1) << " -> " << pinfo->ref << dendl;
-    return pinfo;    // already had it
+  if (obc->ref > 1) {
+    dout(10) << "get_object_context " << poid << " "
+	     << (obc->ref-1) << " -> " << obc->ref << dendl;
+    return obc;    // already had it
   }
 
   // pull info off disk
-  pinfo->poid = poid;
+  obc->poid = poid;
     
   struct stat st;
   int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
   if (r == 0) {
-    pinfo->exists = true;
-    pinfo->size = st.st_size;
+    obc->exists = true;
+    obc->size = st.st_size;
     
     bufferlist bv;
     r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
     assert(r >= 0);
-    pinfo->oi.decode(bv);
+    obc->oi.decode(bv);
   } else {
-    pinfo->oi.soid = poid;
-    pinfo->exists = false;
-    pinfo->size = 0;
+    obc->oi.soid = poid;
+    obc->exists = false;
+    obc->size = 0;
   }
 
-  dout(10) << "get_projected_object " << poid << " read " << pinfo->oi << dendl;
-  return pinfo;
+  dout(10) << "get_object_context " << poid << " read " << obc->oi << dendl;
+  return obc;
 }
 
-void ReplicatedPG::put_projected_object(ProjectedObjectInfo *pinfo)
+void ReplicatedPG::put_object_context(ObjectContext *obc)
 {
-  dout(10) << "put_projected_object " << pinfo->poid << " "
-	   << pinfo->ref << " -> " << (pinfo->ref-1) << dendl;
+  dout(10) << "put_object_context " << obc->poid << " "
+	   << obc->ref << " -> " << (obc->ref-1) << dendl;
 
-  --pinfo->ref;
-  if (pinfo->ref == 0) {
-    projected_objects.erase(pinfo->poid);
+  --obc->ref;
+  if (obc->ref == 0) {
+    object_contexts.erase(obc->poid);
 
-    if (projected_objects.empty())
+    if (object_contexts.empty())
       kick();
   }
 }
@@ -1742,15 +1742,15 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 #endif
 
   // get existing object info
-  ProjectedObjectInfo *pinfo = get_projected_object(soid);
-  ctx->poi = &pinfo->oi;
+  ObjectContext *obc = get_object_context(soid);
+  ctx->poi = &obc->oi;
 
   // --- locking ---
 
   // wrlock?
   if (!ctx->ops.empty() &&  // except noop; we just want to flush
-      block_if_wrlocked(op, pinfo->oi)) {
-    put_projected_object(pinfo);
+      block_if_wrlocked(op, obc->oi)) {
+    put_object_context(obc);
     delete ctx;
     return; // op will be handled later, after the object unlocks
   }
@@ -1788,18 +1788,18 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   dout(10) << "op_modify " << opname 
            << " " << soid
-           << " ov " << pinfo->oi.version << " av " << ctx->at_version 
+           << " ov " << obc->oi.version << " av " << ctx->at_version 
 	   << " snapc " << ctx->snapc
-	   << " snapset " << pinfo->oi.snapset
+	   << " snapset " << obc->oi.snapset
            << dendl;  
 
   // verify snap ordering
   if ((op->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
-      ctx->snapc.seq < pinfo->oi.snapset.seq) {
+      ctx->snapc.seq < obc->oi.snapset.seq) {
     dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
-	     << " < snapset seq " << pinfo->oi.snapset.seq
+	     << " < snapset seq " << obc->oi.snapset.seq
 	     << " on " << soid << dendl;
-    put_projected_object(pinfo);
+    put_object_context(obc);
     delete ctx;
     osd->reply_op_error(op, -EOLDSNAPC);
     return;
@@ -1827,7 +1827,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(ctx, pinfo, noop, rep_tid);
+  RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
   for (unsigned i=1; i<acting.size(); i++)
     issue_repop(repop, acting[i], now);
 								
@@ -1841,7 +1841,7 @@ void ReplicatedPG::op_modify(MOSDOp *op)
   // we are acker.
   if (!noop) {
     // log and update later.
-    prepare_transaction(ctx, pinfo->exists, pinfo->size, trim_to);
+    prepare_transaction(ctx, obc->exists, obc->size, trim_to);
   }
   
   // keep peer_info up to date
