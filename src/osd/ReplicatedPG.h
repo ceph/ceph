@@ -45,27 +45,27 @@ public:
     - idle
       - no in-progress or waiting writes.
       - read: ok
-      - write: move to 'delayed' or 'rmw'
-      - rmw: move to 'rmw'
+      - write: ok.  move to 'delayed' or 'rmw'
+      - rmw: ok.  move to 'rmw'
 	  
     - delayed
       - delayed write in progress.  delay write application on primary.
       - when done, move to 'idle'
       - read: ok
       - write: ok
-      - rmw: move to 'delayed-flushing'
-
-    - delayed-flushing
-      - waiting for delayed writes to flush, then move to 'rmw'
-      - read, write, rmw: wait
+      - rmw: no.  move to 'delayed-flushing'
 
     - rmw
       - rmw cycles in flight.  applied immediately at primary.
       - when done, move to 'idle'
       - read: same client ok.  otherwise, move to 'rmw-flushing'
-      - write: ok
-      - rmw: same client ok.  otherwise, wait for rmw to flush
+      - write: same client ok.  otherwise, start write, but also move to 'rmw-flushing'
+      - rmw: same client ok.  otherwise, move to 'rmw-flushing'
       
+    - delayed-flushing
+      - waiting for delayed writes to flush, then move to 'rmw'
+      - read, write, rmw: wait
+
     - rmw-flushing
       - waiting for rmw to flush, then move to 'idle'
       - read, write, rmw: wait
@@ -80,19 +80,144 @@ public:
    * replicas ack.
    */
   struct ObjectContext {
+    sobject_t soid;
+    int ref;
+
     enum {
-      IDLE, DELAYED, DELAYED_FLUSHING, RMW, RMW_FLUSHING
+      IDLE,
+      DELAYED,
+      RMW,
+      DELAYED_FLUSHING,
+      RMW_FLUSHING
     } state;
 
-    int ref;
-    sobject_t poid;
+    static const char *get_state_name(int s) {
+      switch (s) {
+      case IDLE: return "idle";
+      case DELAYED: return "delayed";
+      case RMW: return "rmw";
+      case DELAYED_FLUSHING: return "delayed-flushing";
+      case RMW_FLUSHING: return "rmw-flushing";
+      default: return "???";
+      }
+    }
+
+    int num_wr, num_rmw;
+    entity_inst_t client;
+    list<Message*> waiting;
+    bool wake;
 
     bool exists;
     __u64 size;
 
     object_info_t oi;
     
-    ObjectContext() : state(IDLE), ref(0), exists(false), size(0), oi(poid) {}
+    bool try_read(entity_inst_t& c) {
+      switch (state) {
+      case IDLE:
+      case DELAYED:
+	return true;
+      case RMW:
+	if (c == client)
+	  return true;
+	state = RMW_FLUSHING;
+	return false;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+    bool try_write(entity_inst_t& c) {
+      switch (state) {
+      case IDLE:
+	state = DELAYED;
+      case DELAYED:
+	return true;
+      case RMW:
+	if (c == client)
+	  return true;
+	state = RMW_FLUSHING;
+	return true;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+    bool try_rmw(entity_inst_t& c) {
+      switch (state) {
+      case IDLE:
+	state = RMW;
+	client = c;
+	return true;
+      case DELAYED:
+	state = DELAYED_FLUSHING;
+	return false;
+      case RMW:
+	if (c == client)
+	  return true;
+	state = RMW_FLUSHING;
+	return false;
+      case DELAYED_FLUSHING:
+      case RMW_FLUSHING:
+	return false;
+      default:
+	assert(0);
+      }
+    }
+
+    void start_write() {
+      num_wr++;
+    }
+    void finish_write() {
+      assert(num_wr > 0);
+      --num_wr;
+      if (num_wr == 0)
+	switch (state) {
+	case DELAYED:
+	  assert(!num_rmw);
+	  state = IDLE;
+	  wake = true;
+	  break;
+	case RMW:
+	case DELAYED_FLUSHING:
+	case RMW_FLUSHING:
+	  if (!num_rmw && !num_wr) {
+	    state = IDLE;
+	    wake = true;
+	  }
+	  break;
+	default:
+	  assert(0);
+	}
+    }
+
+    void start_rmw() {
+      ++num_rmw;
+    }
+    void finish_rmw() {
+      assert(num_rmw > 0);
+      --num_rmw;
+      if (num_rmw == 0) {
+	switch (state) {
+	case RMW:
+	case RMW_FLUSHING:
+	  if (!num_rmw && !num_wr) {
+	    state = IDLE;
+	    wake = true;
+	  }
+	  break;
+	default:
+	  assert(0);
+	}
+      }
+    }
+
+    ObjectContext() : ref(0), state(IDLE), num_wr(0), num_rmw(0), wake(false),
+		      exists(false), size(0), oi(soid) {}
   };
 
   /*
@@ -316,6 +441,15 @@ public:
   void on_shutdown();
 };
 
+
+inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
+{
+  out << "obc(" << obc.soid << " " << obc.get_state_name(obc.state);
+  if (!obc.waiting.empty())
+    out << " WAITING";
+  out << ")";
+  return out;
+}
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {

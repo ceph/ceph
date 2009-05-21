@@ -52,6 +52,10 @@ v0.9
 - make mds exhert memory pressure on client caps, leases
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
+- object access modes
+ - unify read/write paths
+ - add objectcontext for clones as they're created (esp if write is delayed)
+ - make snap selection behave
 
 
 

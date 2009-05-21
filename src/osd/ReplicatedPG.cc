@@ -1442,6 +1442,8 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   
   repop->applied = true;
   
+  repop->obc->finish_write();
+
   put_object_context(repop->obc);
   repop->obc = 0;
 
@@ -1651,49 +1653,55 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 // -------------------------------------------------------
 
 
-ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(pobject_t poid)
+ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(sobject_t soid)
 {
-  ObjectContext *obc = &object_contexts[poid];
+  ObjectContext *obc = &object_contexts[soid];
   obc->ref++;
 
   if (obc->ref > 1) {
-    dout(10) << "get_object_context " << poid << " "
+    dout(10) << "get_object_context " << soid << " "
 	     << (obc->ref-1) << " -> " << obc->ref << dendl;
     return obc;    // already had it
   }
 
   // pull info off disk
-  obc->poid = poid;
+  obc->soid = soid;
     
   struct stat st;
-  int r = osd->store->stat(info.pgid.to_coll(), poid, &st);
+  int r = osd->store->stat(info.pgid.to_coll(), soid, &st);
   if (r == 0) {
     obc->exists = true;
     obc->size = st.st_size;
     
     bufferlist bv;
-    r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
+    r = osd->store->getattr(info.pgid.to_coll(), soid, OI_ATTR, bv);
     assert(r >= 0);
     obc->oi.decode(bv);
   } else {
-    obc->oi.soid = poid;
+    obc->oi.soid = soid;
     obc->exists = false;
     obc->size = 0;
   }
 
-  dout(10) << "get_object_context " << poid << " read " << obc->oi << dendl;
+  dout(10) << "get_object_context " << soid << " read " << obc->oi << dendl;
   return obc;
 }
 
 void ReplicatedPG::put_object_context(ObjectContext *obc)
 {
-  dout(10) << "put_object_context " << obc->poid << " "
+  dout(10) << "put_object_context " << obc->soid << " "
 	   << obc->ref << " -> " << (obc->ref-1) << dendl;
+
+  if (obc->wake) {
+    osd->take_waiters(obc->waiting);
+    obc->wake = false;
+  }
 
   --obc->ref;
   if (obc->ref == 0) {
-    object_contexts.erase(obc->poid);
+    assert(obc->waiting.empty());
 
+    object_contexts.erase(obc->soid);
     if (object_contexts.empty())
       kick();
   }
@@ -1825,6 +1833,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 
   // note my stats
   utime_t now = g_clock.now();
+
+  obc->start_write();
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
