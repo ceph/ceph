@@ -67,13 +67,7 @@ void ClassMonitor::create_initial(bufferlist& bl)
   dout(10) << "create_initial -- creating initial map" << dendl;
   ClassImpl i;
   ClassInfo l;
-  l.name = "test";
-  l.version = "0.1";
-  i.seq = 0;
   i.stamp = g_clock.now();
-  bufferptr ptr(1024);
-  memset(ptr.c_str(), 0x13, 1024);
-  i.binary.append(ptr);
   ClassLibraryIncremental inc;
   ::encode(i, inc.impl);
   ::encode(l, inc.info);
@@ -134,8 +128,10 @@ bool ClassMonitor::update_from_paxos()
     inc.decode_info(info);
     if (inc.add) {
       inc.decode_impl(impl);
-      store_impl(info, impl);
-      list.add(info.name, info.version);
+      if (impl.binary.length() > 0) {
+        store_impl(info, impl);
+        list.add(info.name, info.version);
+      }
     } else {
       list.remove(info.name, info.version);
     }
