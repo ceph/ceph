@@ -298,9 +298,9 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       dout(0) << "payload.length=" << m->get_data().length() << dendl;
       impl.stamp = g_clock.now();
       info.name = name;
-      info.version = ver;
+      info.version = cv;
       /* store_impl(info, impl); */
-      dout(0) << "stored class " << name << " v" << ver << dendl;
+      dout(0) << "stored class " << name << " v" << info.version << dendl;
       ClassLibraryIncremental inc;
       ::encode(impl, inc.impl);
       ::encode(info, inc.info);
