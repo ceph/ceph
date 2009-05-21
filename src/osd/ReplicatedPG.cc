@@ -108,6 +108,7 @@ void ReplicatedPG::wait_for_missing_object(sobject_t soid, Message *m)
  */
 bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 {
+#if 0
   // we only care about reads here on out..
   if (op->may_write() ||
       op->ops.size() < 1)
@@ -360,7 +361,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
       return true;
     }
   }
-
+#endif
   return false;
 }
 
