@@ -80,7 +80,7 @@ bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
   int len = info.name.length() + 16;
   char store_name[len];
 
-  snprintf(store_name, len, "%s.%s", info.name.c_str(), info.version.str());
+  snprintf(store_name, len, "%s.%s.%s", info.name.c_str(), info.version.str(), info.version.arch());
   dout(0) << "storing inc.impl length=" << impl.binary.length() << dendl;
   mon->store->put_bl_ss(impl.binary, "class_impl", store_name);
   bufferlist bl;
@@ -268,7 +268,7 @@ bool ClassMonitor::preprocess_command(MMonCommand *m)
       return false;
     }
   }
-  ss << "error: usage: ceph <add | del> <name> <version> <-i filename>";
+  ss << "error: usage: class <add | del> <name> <version> <arch> <-i filename>";
   r = -EINVAL;
 
   string rs;
@@ -286,10 +286,13 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
   // nothing here yet
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "add" && m->cmd.size() >= 4) {
+    if (m->cmd[1] == "add" && m->cmd.size() >= 5) {
       string name = m->cmd[2];
       string ver = m->cmd[3];
-      ClassInfo& info = list.library_map[name];
+      string arch = m->cmd[4];
+      ClassVersionMap& map = list.library_map[name];
+      ClassVersion cv(ver, arch);
+      ClassInfo& info = map.m[cv];
       ClassImpl impl;
       impl.binary = m->get_data();
       dout(0) << "payload.length=" << m->get_data().length() << dendl;
@@ -309,35 +312,48 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
       return true;
-    } else if (m->cmd[1] == "del" && m->cmd.size() >= 2) {
+    } else if (m->cmd[1] == "del" && m->cmd.size() >= 5) {
       string name = m->cmd[2];
-      map<string, ClassInfo>::iterator iter = list.library_map.find(name);
+      string ver = m->cmd[3];
+      string arch = m->cmd[4];
+      map<string, ClassVersionMap>::iterator iter = list.library_map.find(name);
       if (iter == list.library_map.end()) {
         ss << "couldn't find class " << name;
         rs = -ENOENT;
         goto done;
       }
-      ClassInfo& info = iter->second;
-      /* store_impl(info, impl); */
-      dout(0) << "removing class " << name << " v" << info.version << dendl;
+      ClassVersionMap& map = iter->second;
+      ClassVersion v(ver, arch);
+      ClassInfo *info = map.get(v);
+      if (!info) {
+        ss << "couldn't find class " << name << " v" << v;
+        rs = -ENOENT;
+        goto done;
+      }
+      dout(0) << "removing class " << name << " v" << info->version << dendl;
       ClassLibraryIncremental inc;
       ClassImpl impl;
-      ::encode(info, inc.info);
+      ::encode(*info, inc.info);
       inc.add = false;
-      pending_list.add(info);
+      pending_list.add(*info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
 
       ss << "updated";
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
     } else if (m->cmd[1] == "list") {
-      map<string, ClassInfo>::iterator iter = list.library_map.begin();
-      if (iter != list.library_map.end()) {
+      map<string, ClassVersionMap>::iterator mapiter = list.library_map.begin();
+      if (mapiter != list.library_map.end()) {
         ss << "installed classes: " << std::endl;      
 
-        while (iter != list.library_map.end()) {
-          ss << iter->second.name << " (v" << iter->second.version << ")" << std::endl;
-          ++iter;
+       while (mapiter != list.library_map.end()) {
+          ClassVersionMap& map = mapiter->second;
+          tClassVersionMap::iterator iter = map.begin();
+          while (iter != map.end()) {
+            ss << iter->second.name << " (v" << iter->second.version << ")" << std::endl;
+            ++iter;
+          }
+          ++mapiter;
         }
       } else {
         ss << "no installed classes!";
@@ -379,11 +395,11 @@ void ClassMonitor::handle_request(MClass *m)
     reply->info.push_back(*p);
     switch (m->action) {
     case CLASS_GET:
-      if (list.get_ver((*p).name, &ver)) {
+      if (list.get_ver((*p).name, (*p).version, &ver)) {
         int len = (*p).name.length() + 16;
         int bin_len;
         char store_name[len];
-        snprintf(store_name, len, "%s.%s", (*p).name.c_str(), ver.str());
+        snprintf(store_name, len, "%s.%s.%s", (*p).name.c_str(), ver.str(), ver.arch());
         bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
         assert(bin_len > 0);
         dout(0) << "replying with name=" << (*p).name << " version=" << ver <<  " store_name=" << store_name << dendl;
@@ -398,15 +414,15 @@ void ClassMonitor::handle_request(MClass *m)
        {
          dout(0) << "ClassMonitor::handle_request() CLASS_SET" << dendl;
          bool add = *add_iter;
+         ClassVersionMap& cv = list.library_map[(*p).name];
+         ClassInfo entry;
+         entry.name = (*p).name;
+         entry.version = (*p).version;
          if (add) {
-           ClassInfo& entry = list.library_map[(*p).name];
-           entry.name = (*p).name;
-           entry.version = (*p).version;
+           cv.add(entry);
            store_impl(entry, *impl_iter);
          } else {
-           map<string, ClassInfo>::iterator iter = list.library_map.find((*p).name);
-           if (iter != list.library_map.end())
-             list.library_map.erase(iter);
+           cv.remove(entry);
          }
          impl_iter++;
          add_iter++;

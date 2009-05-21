@@ -15,6 +15,7 @@
 #include "ReplicatedPG.h"
 #include "OSD.h"
 
+#include "common/arch.h"
 #include "common/Logger.h"
 
 #include "messages/MOSDOp.h"
@@ -684,6 +685,7 @@ int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
 	
 	ClassHandler::ClassData *cls;
         ClassVersion version;
+        version.set_arch(get_arch());
         result = osd->get_class(cname, version, info.pgid, ctx->op, &cls);
 	if (result) {
 	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;

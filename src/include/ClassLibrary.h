@@ -84,9 +84,43 @@ struct ClassLibraryIncremental {
 
 WRITE_CLASS_ENCODER(ClassLibraryIncremental)
 
+typedef map<ClassVersion, ClassInfo> tClassVersionMap;
+class ClassVersionMap
+{
+public:
+  tClassVersionMap m;
+  string default_ver;
+
+  void encode(bufferlist& bl) const {
+    ::encode(m, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(m, bl);
+  }
+
+  tClassVersionMap::iterator begin() { return m.begin(); }
+  tClassVersionMap::iterator end() { return m.end(); }
+
+  void add(ClassInfo& library) {
+    m[library.version] = library;
+  }
+
+  void remove(ClassInfo& library) {
+    tClassVersionMap::iterator iter;
+    iter = m.find(library.version);
+    if (iter != m.end()) {
+      m.erase(iter);
+    }
+  }
+
+  ClassInfo *get(ClassVersion& ver);
+  void set_default(string ver) { default_ver = ver; }
+};
+WRITE_CLASS_ENCODER(ClassVersionMap)
+
 struct ClassLibrary {
   version_t version;
-  map<string, ClassInfo> library_map;
+  map<string, ClassVersionMap> library_map;
 
   ClassLibrary() : version(0) {}
 
@@ -98,7 +132,8 @@ struct ClassLibrary {
   }
 
   void add(ClassInfo& library) {
-    library_map[library.name] = library;
+    ClassVersionMap& vmap = library_map[library.name];
+    vmap.add(library);
   }
 
   void remove(const string& name, const ClassVersion& version) {
@@ -108,15 +143,18 @@ struct ClassLibrary {
   bool contains(string& name) {
     return (library_map.find(name) != library_map.end());
   }
-
-  bool get_ver(string& name, ClassVersion *ver) {
-    map<string, ClassInfo>::iterator iter = library_map.find(name);
-    if (iter == library_map.end())
+  bool get_ver(string& name, ClassVersion& reqver, ClassVersion *ver) {
+    map<string, ClassVersionMap>::iterator mapiter = library_map.find(name);
+    if (mapiter == library_map.end())
       return false;
-    *ver = (iter->second).version;
+    string ver_str;
+    ClassVersionMap& map = mapiter->second;
+    ClassInfo *info = map.get(reqver);
+    if (info)
+      *ver = info->version;
+    
     return true;
   }
-
   void encode(bufferlist& bl) const {
     ::encode(version, bl);
     ::encode(library_map, bl);

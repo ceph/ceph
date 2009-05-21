@@ -215,6 +215,7 @@ libcommon_files = \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
+	common/ClassLibrary.cc \
 	common/Clock.cc \
 	common/Timer.cc \
 	common/Finisher.cc \
@@ -312,6 +313,7 @@ noinst_HEADERS = \
         client/fuse_ll.h\
         client/hadoop/CephFSInterface.h\
 	cm.txt\
+        common/arch.h\
 	common/debug.h\
 	common/lockdep.h\
 	common/BackTrace.h\
