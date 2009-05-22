@@ -602,7 +602,7 @@ bool ReplicatedPG::snap_trimmer()
 // ========================================================================
 // READS
 
-int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
+int ReplicatedPG::do_read_ops(OpContext *ctx,
 			      bufferlist::iterator& bp, bufferlist& data)
 {
   int result = 0;
@@ -775,11 +775,11 @@ int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
 void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
 {
   const sobject_t& soid = obc->soid;
-  ReadOpContext ctx(op, op->ops, &obc->oi);
+  OpContext ctx(op, op->get_reqid(), op->ops, op->get_data(), &obc->oi);
 
   dout(10) << "op_read " << soid << " " << ctx.ops << dendl;
 
-  bufferlist::iterator bp = op->get_data().begin();
+  bufferlist::iterator bp = ctx.data.begin();
   bufferlist data;
   int result = 0;
 
@@ -1272,7 +1272,7 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
   return 0;
 }
 
-void ReplicatedPG::prepare_transaction(WriteOpContext *ctx, bool& exists, __u64& size, eversion_t trim_to)
+void ReplicatedPG::prepare_transaction(OpContext *ctx, bool& exists, __u64& size, eversion_t trim_to)
 {
   bufferlist log_bl;
   eversion_t log_version = ctx->at_version;
@@ -1280,7 +1280,7 @@ void ReplicatedPG::prepare_transaction(WriteOpContext *ctx, bool& exists, __u64&
   
   eversion_t old_version = ctx->poi->version;
 
-  sobject_t& soid = ctx->soid;
+  const sobject_t& soid = ctx->poi->soid;
   vector<ceph_osd_op>& ops = ctx->ops;
   object_info_t *poi = ctx->poi;
 
@@ -1400,7 +1400,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   update_stats();
 
   // any completion stuff to do here?
-  sobject_t& soid = repop->ctx->soid;
+  const sobject_t& soid = repop->ctx->poi->soid;
   ceph_osd_op& first = repop->ctx->ops[0];
 
   switch (first.op) { 
@@ -1514,7 +1514,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
 void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
 {
-  sobject_t& soid = repop->ctx->soid;
+  const sobject_t& soid = repop->ctx->poi->soid;
   dout(7) << " issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
           << " to osd" << dest
@@ -1539,12 +1539,15 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now)
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_repop(WriteOpContext *ctx, ObjectContext *obc,
+ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *obc,
 						 bool noop, tid_t rep_tid)
 {
   dout(10) << "new_repop rep_tid " << rep_tid << " on " << *ctx->op << dendl;
 
   RepGather *repop = new RepGather(ctx, obc, noop, rep_tid, info.last_complete);
+
+  obc->start_write();
+  obc->get();  // we take a ref
 
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
@@ -1733,10 +1736,9 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 {
   int whoami = osd->get_nodeid();
   
-  WriteOpContext *ctx = new WriteOpContext(op, op->ops, op->get_data(),
-					   sobject_t(op->get_oid(), CEPH_NOSNAP),
-					   op->get_reqid(), op->get_mtime());
-  sobject_t& soid = ctx->soid;
+  OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(), &obc->oi);
+
+  const sobject_t& soid = ctx->poi->soid;
 
   // balance-reads set?
 #if 0
@@ -1769,10 +1771,6 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
   }
 #endif
 
-  // get existing object info
-  obc->get();
-  ctx->poi = &obc->oi;
-
   // --- locking ---
 
   // wrlock?
@@ -1797,6 +1795,8 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
   } else
     opname = ceph_osd_op_name(ctx->ops[0].op);
 
+
+  ctx->mtime = op->get_mtime();
 
   // version
   ctx->at_version = log.top;
@@ -1852,8 +1852,6 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 
   // note my stats
   utime_t now = g_clock.now();
-
-  obc->start_write();
 
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
@@ -1986,8 +1984,8 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     oi.version = op->old_version;
     oi.snapset = op->snapset;
 
-    WriteOpContext ctx(op, op->ops, op->get_data(), op->poid, op->reqid, op->mtime);
-    ctx.poi = &oi;
+    OpContext ctx(op, op->reqid, op->ops, op->get_data(), &oi);
+    ctx.mtime = op->mtime;
     ctx.at_version = op->version;
     ctx.snapc = op->snapc;
     

@@ -211,42 +211,27 @@ public:
 
 
   /*
-   * Capture all object state associated with an in-progress read.
+   * Capture all object state associated with an in-progress read or write.
    */
-  struct ReadOpContext {
-    MOSDOp *op;
-    vector<ceph_osd_op>& ops;
-
-    object_info_t *poi;
-    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
-
-    ReadOpContext(MOSDOp *_op, vector<ceph_osd_op>& _ops, object_info_t *_poi) :
-      op(_op), ops(_ops), poi(_poi), data_off(0) {}
-  };
-
-  /*
-   * Capture all state associated with a write operation being processed
-   * on the current OSD.
-   */
-  struct WriteOpContext {
+  struct OpContext {
     Message *op;
+    osd_reqid_t reqid;
     vector<ceph_osd_op>& ops;
     bufferlist& data;
-    sobject_t soid;
-    osd_reqid_t reqid;
-    utime_t mtime;
-
-    SnapContext snapc;           // writer snap context
 
     object_info_t *poi;
 
+    utime_t mtime;
+    SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
     ObjectStore::Transaction t;
 
-    WriteOpContext(Message *_op, vector<ceph_osd_op>& _ops, bufferlist& _data,
-		   sobject_t _soid, osd_reqid_t _reqid, utime_t _mtime) :
-      op(_op), ops(_ops), data(_data), soid(_soid), reqid(_reqid), mtime(_mtime),
-      poi(0) {}
+    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
+
+    OpContext(Message *_op, osd_reqid_t _reqid, vector<ceph_osd_op>& _ops, bufferlist& _data,
+	      object_info_t *_poi) :
+      op(_op), reqid(_reqid), ops(_ops), data(_data), poi(_poi),
+      data_off(0) {}
   };
 
   /*
@@ -257,7 +242,7 @@ public:
     xlist<RepGather*>::item queue_item;
     int nref;
 
-    WriteOpContext *ctx;
+    OpContext *ctx;
     ObjectContext *obc;
 
     tid_t rep_tid;
@@ -275,7 +260,7 @@ public:
     eversion_t          pg_local_last_complete;
     map<int,eversion_t> pg_complete_thru;
     
-    RepGather(WriteOpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
+    RepGather(OpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
 	      eversion_t lc) :
       queue_item(this),
       nref(1),
@@ -330,7 +315,7 @@ protected:
   void apply_repop(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, int dest, utime_t now);
-  RepGather *new_repop(WriteOpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
+  RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
@@ -385,7 +370,7 @@ protected:
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			sobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
 			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
-  void prepare_transaction(WriteOpContext *ctx, bool& exists, __u64& size, eversion_t trim_to);
+  void prepare_transaction(OpContext *ctx, bool& exists, __u64& size, eversion_t trim_to);
   
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
@@ -405,7 +390,7 @@ protected:
   void op_read(MOSDOp *op, ObjectContext *obc);
   void op_modify(MOSDOp *op, ObjectContext *obc);
 
-  int do_read_ops(ReadOpContext *ctx, bufferlist::iterator& bp, bufferlist& data);
+  int do_read_ops(OpContext *ctx, bufferlist::iterator& bp, bufferlist& data);
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_reply(MOSDSubOpReply *reply);
