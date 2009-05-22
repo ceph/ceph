@@ -367,6 +367,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       ss << "updated";
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
     } else if (m->cmd[1] == "activate" && m->cmd.size() >= 4) {
       string name = m->cmd[2];
       string ver = m->cmd[3];

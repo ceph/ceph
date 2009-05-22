@@ -150,7 +150,10 @@ struct ClassLibrary {
   }
 
   void remove(const string& name, const ClassVersion& version) {
-    /* fixme */
+    map<string, ClassVersionMap>::iterator mapiter = library_map.find(name);
+    if (mapiter == library_map.end())
+      return;
+    library_map.erase(mapiter);
   }
 
   bool contains(string& name) {
