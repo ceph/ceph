@@ -348,9 +348,13 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
        while (mapiter != list.library_map.end()) {
           ClassVersionMap& map = mapiter->second;
+          dout(10) << "active class version=" << map.default_ver << dendl;
           tClassVersionMap::iterator iter = map.begin();
           while (iter != map.end()) {
-            ss << iter->second.name << " (v" << iter->second.version << ")" << std::endl;
+            string def_str = "";
+            if (iter->second.version.str() == map.default_ver)
+              def_str = " [active]";
+            ss << iter->second.name << " (v" << iter->second.version << ")" << def_str << std::endl;
             ++iter;
           }
           ++mapiter;
@@ -399,6 +403,7 @@ void ClassMonitor::handle_request(MClass *m)
         int len = (*p).name.length() + 16;
         int bin_len;
         char store_name[len];
+        dout(0) << "got CLASS_GET name=" << (*p).name << " ver=" << (*p).version << dendl;
         snprintf(store_name, len, "%s.%s.%s", (*p).name.c_str(), ver.str(), ver.arch());
         bin_len = mon->store->get_bl_ss(impl.binary, "class_impl", store_name);
         assert(bin_len > 0);

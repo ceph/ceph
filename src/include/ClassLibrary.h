@@ -103,6 +103,8 @@ public:
 
   void add(ClassInfo& library) {
     m[library.version] = library;
+   if (default_ver.length() == 0)
+    default_ver = library.version.ver;
   }
 
   void remove(ClassInfo& library) {

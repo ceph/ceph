@@ -60,6 +60,8 @@ ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVers
     assert(0);
   }
 
+  class_data->version = version;
+
   osd->send_class_request(cname.c_str(), version);
   return NULL;
 }
@@ -78,7 +80,7 @@ void ClassHandler::handle_class(MClass *m)
     if (*add_iter) {
       
       if (data.status == ClassData::CLASS_REQUESTED) {
-	dout(0) << "added class '" << info_iter->name << "'" << dendl;
+	dout(10) << "added class '" << info_iter->name << "'" << dendl;
 	data.impl = *impl_iter;
 	++impl_iter;
 	data.status = ClassData::CLASS_LOADED;
@@ -95,8 +97,10 @@ void ClassHandler::handle_class(MClass *m)
 
 void ClassHandler::resend_class_requests()
 {
-  for (map<nstring,ClassData>::iterator p = classes.begin(); p != classes.end(); p++)
+  for (map<nstring,ClassData>::iterator p = classes.begin(); p != classes.end(); p++) {
+    dout(20) << "resending class request "<< p->first.c_str() << " v" << p->second.version << dendl;
     osd->send_class_request(p->first.c_str(), p->second.version);
+  }
 }
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)

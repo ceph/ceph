@@ -13,7 +13,7 @@ ClassInfo *ClassVersionMap::get(ClassVersion& ver)
     v.ver = default_ver;
   }
 
-  iter = m.find(ver);
+  iter = m.find(v);
 
   if (iter != m.end())
     return &(iter->second);

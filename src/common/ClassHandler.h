@@ -7,6 +7,7 @@
 #include "objclass/objclass.h"
 
 #include "common/Cond.h"
+#include "common/ClassVersion.h"
 
 
 class OSD;
