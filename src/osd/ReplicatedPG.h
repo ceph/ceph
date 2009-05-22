@@ -83,6 +83,8 @@ public:
     sobject_t soid;
     int ref;
 
+    void get() { ++ref; }
+
     enum {
       IDLE,
       DELAYED,
@@ -171,6 +173,7 @@ public:
 
     void start_write() {
       num_wr++;
+      assert(state == DELAYED || state == RMW);
     }
     void finish_write() {
       assert(num_wr > 0);
@@ -197,6 +200,7 @@ public:
 
     void start_rmw() {
       ++num_rmw;
+      assert(state == RMW);
     }
     void finish_rmw() {
       assert(num_rmw > 0);
@@ -397,8 +401,8 @@ protected:
   int recover_replicas(int max);
 
   int pick_read_snap(sobject_t& poid, object_info_t& coi);
-  void op_read(MOSDOp *op);
-  void op_modify(MOSDOp *op);
+  void op_read(MOSDOp *op, ObjectContext *obc);
+  void op_modify(MOSDOp *op, ObjectContext *obc);
 
   int do_read_ops(ReadOpContext *ctx, bufferlist::iterator& bp, bufferlist& data);
 

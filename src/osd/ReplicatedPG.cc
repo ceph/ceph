@@ -373,14 +373,36 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
  */
 void ReplicatedPG::do_op(MOSDOp *op) 
 {
-  //dout(15) << "do_op " << *op << dendl;
-
   osd->logger->inc(l_osd_op);
 
-  if (op->may_write())
-    op_modify(op);
+  dout(15) << "do_op " << *op << dendl;
+
+  entity_inst_t client = op->get_source_inst();
+  sobject_t soid(op->get_oid(), op->get_snapid()); // FIXME
+
+  ObjectContext *obc = get_object_context(soid);
+  
+  bool ok;
+  if (op->may_read() && op->may_write()) 
+    ok = obc->try_rmw(client);
+  else if (op->may_write())
+    ok = obc->try_write(client);
+  else if (op->may_read())
+    ok = obc->try_read(client);
   else
-    op_read(op);
+    assert(0);
+  if (!ok) {
+    dout(10) << "do_op waiting on obc " << *obc << dendl;
+    obc->waiting.push_back(op);
+    return;
+  }
+
+  if (op->may_write())
+    op_modify(op, obc);
+  else
+    op_read(op, obc);
+
+  put_object_context(obc);
 }
 
 
@@ -812,7 +834,7 @@ int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
   return result;
 }
 
-void ReplicatedPG::op_read(MOSDOp *op)
+void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
 {
   object_t oid = op->get_oid();
   ReadOpContext ctx(op, op->ops, sobject_t(op->get_oid(), op->get_snapid()));
@@ -1712,7 +1734,7 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
 
 
-void ReplicatedPG::op_modify(MOSDOp *op)
+void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 {
   int whoami = osd->get_nodeid();
   
@@ -1753,7 +1775,8 @@ void ReplicatedPG::op_modify(MOSDOp *op)
 #endif
 
   // get existing object info
-  ObjectContext *obc = get_object_context(soid);
+  //ObjectContext *obc = get_object_context(soid);
+  obc->get();
   ctx->poi = &obc->oi;
 
   // --- locking ---
