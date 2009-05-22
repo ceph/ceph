@@ -783,10 +783,12 @@ void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
   bufferlist data;
   int result = 0;
 
+#if 0
   // wrlocked?
   if ((op->get_snapid() == 0 || op->get_snapid() == CEPH_NOSNAP) &&
       block_if_wrlocked(op, *ctx.poi)) 
     return;
+#endif
 
 #if 0
   // !primary and unbalanced?
@@ -1734,14 +1736,11 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 
 void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 {
-  int whoami = osd->get_nodeid();
-  
+  const sobject_t& soid = obc->soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(), &obc->oi);
 
-  const sobject_t& soid = ctx->poi->soid;
-
-  // balance-reads set?
 #if 0
+  // balance-reads set?
   char v;
   if ((op->get_op() != CEPH_OSD_OP_BALANCEREADS && op->get_op() != CEPH_OSD_OP_UNBALANCEREADS) &&
       (osd->store->getattr(info.pgid.to_coll(), soid, "balance-reads", &v, 1) >= 0 ||
@@ -1771,8 +1770,7 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
   }
 #endif
 
-  // --- locking ---
-
+#if 0
   // wrlock?
   if (!ctx->ops.empty() &&  // except noop; we just want to flush
       block_if_wrlocked(op, obc->oi)) {
@@ -1780,20 +1778,17 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
     delete ctx;
     return; // op will be handled later, after the object unlocks
   }
+#endif
 
   // dup op?
   bool noop = false;
-  const char *opname;
   if (ctx->ops.empty()) {
-    opname = "no-op";
     noop = true;
   } else if (is_dup(ctx->reqid)) {
     dout(3) << "op_modify " << ctx->ops << " dup op " << ctx->reqid
-             << ", doing WRNOOP" << dendl;
-    opname = "no-op";
+	    << ", doing WRNOOP" << dendl;
     noop = true;
-  } else
-    opname = ceph_osd_op_name(ctx->ops[0].op);
+  }
 
 
   ctx->mtime = op->get_mtime();
@@ -1814,8 +1809,7 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
   // set version in op, for benefit of client and our eventual reply
   op->set_version(ctx->at_version);
 
-  dout(10) << "op_modify " << opname 
-           << " " << soid
+  dout(10) << "op_modify " << soid << " " << ctx->ops
            << " ov " << obc->oi.version << " av " << ctx->at_version 
 	   << " snapc " << ctx->snapc
 	   << " snapset " << obc->oi.snapset
@@ -1856,8 +1850,6 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
   // issue replica writes
   tid_t rep_tid = osd->get_tid();
   RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
-  for (unsigned i=1; i<acting.size(); i++)
-    issue_repop(repop, acting[i], now);
 								
   eversion_t old_last_update = ctx->at_version;
 	
@@ -1871,6 +1863,9 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
     // log and update later.
     prepare_transaction(ctx, obc->exists, obc->size, trim_to);
   }
+
+  for (unsigned i=1; i<acting.size(); i++)
+    issue_repop(repop, acting[i], now);
   
   // keep peer_info up to date
   for (unsigned i=1; i<acting.size(); i++) {
@@ -1882,6 +1877,7 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 
   // (logical) local ack.
   // (if alone, this will apply the update.)
+  int whoami = osd->get_nodeid();
   assert(repop->waitfor_ack.count(whoami));
   repop->waitfor_ack.erase(whoami);
   eval_repop(repop);
