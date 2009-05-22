@@ -39,6 +39,9 @@ public:
     else
       return architecture.c_str(); 
   }
+  void set_ver(const char *v) {
+    ver = v;
+  }
   void set_arch(const char *arch) {
     architecture = arch;
   }

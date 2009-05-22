@@ -64,14 +64,14 @@ void ClassMonitor::tick()
 
 void ClassMonitor::create_initial(bufferlist& bl)
 {
-  dout(10) << "create_initial -- creating initial map" << dendl;
+  dout(0) << "create_initial -- creating initial map" << dendl;
   ClassImpl i;
   ClassInfo l;
   i.stamp = g_clock.now();
   ClassLibraryIncremental inc;
   ::encode(i, inc.impl);
   ::encode(l, inc.info);
-  inc.add = true;
+  inc.op = INC_NOP;
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
@@ -126,14 +126,31 @@ bool ClassMonitor::update_from_paxos()
     ClassImpl impl;
     ClassInfo info;
     inc.decode_info(info);
-    if (inc.add) {
+    switch (inc.op) {
+    case INC_ADD:
       inc.decode_impl(impl);
       if (impl.binary.length() > 0) {
         store_impl(info, impl);
         list.add(info.name, info.version);
       }
-    } else {
+      break;
+    case INC_DEL:
       list.remove(info.name, info.version);
+      break;
+    case INC_ACTIVATE:
+      {
+        map<string, ClassVersionMap>::iterator mapiter = list.library_map.find(info.name);
+        if (mapiter == list.library_map.end()) {
+        } else {
+          ClassVersionMap& map = mapiter->second;
+          map.set_default(info.version.str());
+        }
+      }
+      break;
+    case INC_NOP:
+      break;
+    default:
+      assert(0);
     }
 
     list.version++;
@@ -253,7 +270,13 @@ void ClassMonitor::_updated_class(MClass *m, entity_inst_t who)
   delete m;
 }
 
-
+void ClassMonitor::class_usage(stringstream& ss)
+{
+  ss << "error: usage:" << std::endl;
+  ss << "              class <add | del> <name> <version> <arch> <--in-file=filename>" << std::endl;
+  ss << "              class <activate> <name> <version>" << std::endl;
+  ss << "              class <list>" << std::endl;
+}
 
 bool ClassMonitor::preprocess_command(MMonCommand *m)
 {
@@ -264,15 +287,17 @@ bool ClassMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
+        m->cmd[1] == "activate" ||
         m->cmd[1] == "list") {
       return false;
     }
   }
-  ss << "error: usage: class <add | del> <name> <version> <arch> <-i filename>";
+
+  class_usage(ss);
   r = -EINVAL;
 
   string rs;
-  getline(ss, rs);
+  getline(ss, rs, '\0');
   mon->reply_command(m, r, rs, rdata);
   return true;
 }
@@ -304,7 +329,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       ClassLibraryIncremental inc;
       ::encode(impl, inc.impl);
       ::encode(info, inc.info);
-      inc.add = true;
+      inc.op = INC_ADD;
       pending_list.add(info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
 
@@ -333,14 +358,40 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       dout(0) << "removing class " << name << " v" << info->version << dendl;
       ClassLibraryIncremental inc;
       ClassImpl impl;
+      impl.stamp = g_clock.now();
       ::encode(*info, inc.info);
-      inc.add = false;
+      inc.op = INC_DEL;
       pending_list.add(*info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
 
       ss << "updated";
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+    } else if (m->cmd[1] == "activate" && m->cmd.size() >= 4) {
+      string name = m->cmd[2];
+      string ver = m->cmd[3];
+      map<string, ClassVersionMap>::iterator iter = list.library_map.find(name);
+      if (iter == list.library_map.end()) {
+        ss << "couldn't find class " << name;
+        rs = -ENOENT;
+        goto done;
+      }
+      ClassInfo info;
+      info.name = name;
+      info.version.set_ver(ver.c_str());
+      
+      dout(0) << "activating class " << name << " v" << info.version << dendl;
+      ClassLibraryIncremental inc;
+      ClassImpl impl;
+      impl.stamp = g_clock.now();
+      ::encode(info, inc.info);
+      inc.op = INC_ACTIVATE;
+      pending_list.add(info);
+      pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
+      ss << "updated";
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      return true;
     } else if (m->cmd[1] == "list") {
       map<string, ClassVersionMap>::iterator mapiter = list.library_map.begin();
       if (mapiter != list.library_map.end()) {
@@ -362,19 +413,17 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       } else {
         ss << "no installed classes!";
       }
-
-      getline(ss, rs, '\0');
-      mon->reply_command(m, 0, rs);
-      return false;
+      err = 0;
+      goto done;
     } else {
-      ss << "unrecognized command.";
+      class_usage(ss);
     }
   } else {
-    ss << "unrecognized command.";
+    class_usage(ss);
   }
 
 done:
-  getline(ss, rs);
+  getline(ss, rs, '\0');
   mon->reply_command(m, err, rs);
   return false;
 }

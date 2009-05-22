@@ -20,6 +20,8 @@
 
 #include "common/ClassVersion.h"
 
+#include "config.h"
+
 struct ClassImpl {
   bufferlist binary;
   utime_t stamp;
@@ -55,18 +57,31 @@ struct ClassInfo {
 
 WRITE_CLASS_ENCODER(ClassInfo)
 
+typedef enum {
+  INC_NOP,
+  INC_ADD,
+  INC_DEL,
+  INC_ACTIVATE,
+} ClassLibraryIncOp;
+
 struct ClassLibraryIncremental {
-   bool add;
+   ClassLibraryIncOp op;
    bufferlist info;
    bufferlist impl;
 
   void encode(bufferlist& bl) const {
-    ::encode(add, bl);
+    __u32 _op = (__u32)op;
+    ::encode(_op, bl);
+    generic_dout(0) << "encoding op " << op << dendl;
     ::encode(info, bl);
     ::encode(impl, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(add, bl);
+    __u32 _op;
+    ::decode(_op, bl);
+    op = (ClassLibraryIncOp)_op;
+    assert( op >= INC_NOP && op <= INC_ACTIVATE);
+    generic_dout(0) << "decoded op " << op << dendl;
     ::decode(info, bl);
     ::decode(impl, bl);
   }

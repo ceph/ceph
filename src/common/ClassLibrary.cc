@@ -12,6 +12,7 @@ ClassInfo *ClassVersionMap::get(ClassVersion& ver)
   if (ver.is_default()) {
     v.ver = default_ver;
   }
+  dout(0) << "ClassVersionMap getting version " << v << " (requested " << ver << ")" << dendl;
 
   iter = m.find(v);
 

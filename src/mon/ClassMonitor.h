@@ -30,6 +30,7 @@ class MMonCommand;
 class MClass;
 
 class ClassMonitor : public PaxosService {
+  void class_usage(stringstream& ss);
 private:
   multimap<utime_t,ClassLibraryIncremental> pending_class;
   ClassLibrary pending_list, list;
