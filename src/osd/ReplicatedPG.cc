@@ -976,22 +976,14 @@ int ReplicatedPG::prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t req
 
   dout(15) << "prepare_simple_op " << reqid << " " << opn << ": " << ops[opn] << " on " << oi << dendl;
 
-  // munge ZERO -> DELETE or TRUNCATE?
+  // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
   if (eop == CEPH_OSD_OP_ZERO &&
       oi.snapset.head_exists &&
       op.offset + op.length >= old_size) {
-    if (op.offset == 0) {
-      // FIXME: no, this will zap object attributes... do we really want
-      // to do this?  ...
-      //dout(10) << " munging ZERO " << op.offset << "~" << op.length
-      //<< " -> DELETE (size is " << old_size << ")" << dendl;
-      //eop = CEPH_OSD_OP_DELETE;
-    } else {
-      dout(10) << " munging ZERO " << op.offset << "~" << op.length
-	       << " -> TRUNCATE " << op.offset << " (old size is " << old_size << ")" << dendl;
-      eop = CEPH_OSD_OP_TRUNCATE;
-      oi.snapset.head_exists = true;
-    }
+    dout(10) << " munging ZERO " << op.offset << "~" << op.length
+	     << " -> TRUNCATE " << op.offset << " (old size is " << old_size << ")" << dendl;
+    eop = CEPH_OSD_OP_TRUNCATE;
+    oi.snapset.head_exists = true;
   }
   // munge DELETE -> TRUNCATE?
   if (eop == CEPH_OSD_OP_DELETE &&
