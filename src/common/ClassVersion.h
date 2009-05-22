@@ -73,7 +73,7 @@ inline std::ostream& operator<<(std::ostream& out, const ClassVersion& v)
 }
 inline bool operator==(const ClassVersion& v1, const ClassVersion& v2)
 {
-  return (v1.ver == v2.ver);
+  return (v1.ver == v2.ver) && (v1.architecture == v2.architecture);
 }
 
 inline bool operator<(const ClassVersion& v1, const ClassVersion& v2)
@@ -98,7 +98,7 @@ inline bool operator<(const ClassVersion& v1, const ClassVersion& v2)
     tok2 = strsep(&p2, ".");
     if (!tok1 || !tok2) {
       if (!tok1 && !tok2)
-        return false;
+        return (v1.architecture < v2.architecture);
       if (!tok1)
         return true;
       return false;
