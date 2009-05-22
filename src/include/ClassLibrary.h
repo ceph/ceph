@@ -166,7 +166,7 @@ struct ClassLibrary {
     if (info)
       *ver = info->version;
     
-    return true;
+    return (info != NULL);
   }
   void encode(bufferlist& bl) const {
     ::encode(version, bl);
