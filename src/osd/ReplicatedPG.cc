@@ -378,9 +378,14 @@ void ReplicatedPG::do_op(MOSDOp *op)
   dout(15) << "do_op " << *op << dendl;
 
   entity_inst_t client = op->get_source_inst();
-  sobject_t soid(op->get_oid(), op->get_snapid()); // FIXME
 
-  ObjectContext *obc = get_object_context(soid);
+  ObjectContext *obc;
+  bool can_create = op->may_write();
+  int r = find_object_context(op->get_oid(), op->get_snapid(), &obc, can_create);
+  if (r) {
+    osd->reply_op_error(op, r);
+    return;
+  }    
   
   bool ok;
   if (op->may_read() && op->may_write()) 
@@ -399,8 +404,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   if (op->may_write())
     op_modify(op, obc);
-  else
-    op_read(op, obc);
+  else {
+    if (!obc->exists)
+      osd->reply_op_error(op, -ENOENT);
+    else
+      op_read(op, obc);
+  }
 
   put_object_context(obc);
 }
@@ -593,84 +602,13 @@ bool ReplicatedPG::snap_trimmer()
 // ========================================================================
 // READS
 
-
-/*
- * return false if object doesn't (logically) exist
- */
-int ReplicatedPG::pick_read_snap(sobject_t& soid, object_info_t& coi)
-{
-  sobject_t head = soid;
-  head.snap = CEPH_NOSNAP;
-
-  bufferlist bl;
-  int r = osd->store->getattr(info.pgid.to_coll(), head, OI_ATTR, bl);
-  if (r < 0)
-    return -ENOENT;  // if head doesn't exist, no snapped version will either.
-  object_info_t hoi(bl);
-
-  dout(10) << "pick_read_snap " << soid << " snapset " << hoi.snapset << dendl;
-
-  snapid_t want = soid.snap;
-
-  // head?
-  if (soid.snap > hoi.snapset.seq) {
-    if (hoi.snapset.head_exists) {
-      dout(10) << "pick_read_snap  " << head
-	       << " want " << want << " > snapset seq " << hoi.snapset.seq
-	       << " -- HIT" << dendl;
-      soid = head;
-      coi = hoi;
-      return 0;
-    } else {
-      dout(10) << "pick_read_snap  " << head
-	       << " want " << want << " > snapset seq " << hoi.snapset.seq
-	       << " but head_exists = false -- DNE" << dendl;
-      return -ENOENT;
-    }
-  }
-
-  // which clone would it be?
-  unsigned k = 0;
-  while (k<hoi.snapset.clones.size() && hoi.snapset.clones[k] < want)
-    k++;
-  if (k == hoi.snapset.clones.size()) {
-    dout(10) << "pick_read_snap  no clones with last >= want " << want << " -- DNE" << dendl;
-    return -ENOENT;
-  }
-  
-  // check clone
-  soid.snap = hoi.snapset.clones[k];
-  if (missing.is_missing(soid)) {
-    dout(20) << "pick_read_snap  " << soid << " missing, try again later" << dendl;
-    return -EAGAIN;
-  }
-
-  // load clone info
-  bl.clear();
-  osd->store->getattr(info.pgid.to_coll(), soid, OI_ATTR, bl);
-  coi.decode(bl);
-
-  // clone
-  dout(20) << "pick_read_snap  " << soid << " snaps " << coi.snaps << dendl;
-  snapid_t first = coi.snaps[coi.snaps.size()-1];
-  snapid_t last = coi.snaps[0];
-  if (first <= want) {
-    dout(20) << "pick_read_snap  " << soid << " [" << first << "," << last << "] contains " << want << " -- HIT" << dendl;
-    return 0;
-  } else {
-    dout(20) << "pick_read_snap  " << soid << " [" << first << "," << last << "] does not contain " << want << " -- DNE" << dendl;
-    return -ENOENT;
-  }
-} 
-
-
 int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
 			      bufferlist::iterator& bp, bufferlist& data)
 {
   int result = 0;
 
   vector<ceph_osd_op>& ops = ctx->ops;
-  object_info_t& oi = ctx->oi;
+  object_info_t& oi = *ctx->poi;
   const sobject_t& soid = oi.soid;
 
   for (vector<ceph_osd_op>::iterator p = ops.begin(); p != ops.end(); p++) {
@@ -836,9 +774,8 @@ int ReplicatedPG::do_read_ops(ReadOpContext *ctx,
 
 void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
 {
-  object_t oid = op->get_oid();
-  ReadOpContext ctx(op, op->ops, sobject_t(op->get_oid(), op->get_snapid()));
-  sobject_t& soid = ctx.oi.soid;
+  const sobject_t& soid = obc->soid;
+  ReadOpContext ctx(op, op->ops, &obc->oi);
 
   dout(10) << "op_read " << soid << " " << ctx.ops << dendl;
 
@@ -846,23 +783,12 @@ void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
   bufferlist data;
   int result = 0;
 
-  // pick revision
-  if (soid.snap) {
-    result = pick_read_snap(soid, ctx.oi);
-    if (result == -EAGAIN) {
-      wait_for_missing_object(soid, op);
-      return;
-    }
-    if (result != 0)
-      goto done;    // we have no revision for this request.
-  } 
-
   // wrlocked?
   if ((op->get_snapid() == 0 || op->get_snapid() == CEPH_NOSNAP) &&
-      block_if_wrlocked(op, ctx.oi)) 
+      block_if_wrlocked(op, *ctx.poi)) 
     return;
 
-
+#if 0
   // !primary and unbalanced?
   //  (ignore ops forwarded from the primary)
   if (!is_primary()) {
@@ -908,13 +834,13 @@ void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
       }
     }
   }
+#endif
 
   // do it.
   result = do_read_ops(&ctx, bp, data);
   if (result == -EAGAIN)
     return;
    
- done:
   // reply
   MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
   reply->set_data(data);
@@ -1677,38 +1603,107 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 // -------------------------------------------------------
 
 
-ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(sobject_t soid)
+ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& soid, bool can_create)
 {
-  ObjectContext *obc = &object_contexts[soid];
-  obc->ref++;
-
-  if (obc->ref > 1) {
-    dout(10) << "get_object_context " << soid << " "
-	     << (obc->ref-1) << " -> " << obc->ref << dendl;
-    return obc;    // already had it
-  }
-
-  // pull info off disk
-  obc->soid = soid;
-    
-  struct stat st;
-  int r = osd->store->stat(info.pgid.to_coll(), soid, &st);
-  if (r == 0) {
-    obc->exists = true;
-    obc->size = st.st_size;
-    
-    bufferlist bv;
-    r = osd->store->getattr(info.pgid.to_coll(), soid, OI_ATTR, bv);
-    assert(r >= 0);
-    obc->oi.decode(bv);
+  map<sobject_t, ObjectContext>::iterator p = object_contexts.find(soid);
+  ObjectContext *obc;
+  if (p != object_contexts.end()) {
+    obc = &p->second;
+    dout(10) << "get_object_context " << soid << " " << obc->ref << " -> " << (obc->ref+1) << dendl;
   } else {
-    obc->oi.soid = soid;
-    obc->exists = false;
-    obc->size = 0;
+    // check disk
+    struct stat st;
+    int r = osd->store->stat(info.pgid.to_coll(), soid, &st);
+    if (r < 0 && !can_create)
+      return 0;   // -ENOENT!
+
+    obc = &object_contexts[soid];
+    obc->soid = soid;
+
+    if (r == 0) {
+      bufferlist bv;
+      r = osd->store->getattr(info.pgid.to_coll(), soid, OI_ATTR, bv);
+      assert(r >= 0);
+      obc->oi.decode(bv);
+
+      if (soid.snap == CEPH_NOSNAP && !obc->oi.snapset.head_exists) {
+	obc->exists = false;
+	obc->size = 0;
+      } else {
+	obc->exists = true;
+	obc->size = st.st_size;
+      }
+    } else {
+      obc->oi.soid = soid;
+      obc->exists = false;
+      obc->size = 0;
+    }
+    dout(10) << "get_object_context " << soid << " read " << obc->oi << dendl;
+  }
+  obc->ref++;
+  return obc;
+}
+
+
+int ReplicatedPG::find_object_context(object_t oid, snapid_t snapid,
+				      ObjectContext **pobc,
+				      bool can_create)
+{
+  // first look at the head
+  sobject_t head(oid, CEPH_NOSNAP);
+  ObjectContext *hobc = get_object_context(head, can_create);
+  if (!hobc)
+    return -ENOENT;
+
+  dout(10) << "find_object_context " << oid << " @" << snapid
+	   << " snapset " << hobc->oi.snapset << dendl;
+ 
+  // head?
+  if (snapid > hobc->oi.snapset.seq) {
+    dout(10) << "get_object_context  " << head
+	     << " want " << snapid << " > snapset seq " << hobc->oi.snapset.seq
+	     << " -- HIT" << dendl;
+    *pobc = hobc;
+    return 0;
   }
 
-  dout(10) << "get_object_context " << soid << " read " << obc->oi << dendl;
-  return obc;
+  // which clone would it be?
+  unsigned k = 0;
+  while (k < hobc->oi.snapset.clones.size() &&
+	 hobc->oi.snapset.clones[k] < snapid)
+    k++;
+  if (k == hobc->oi.snapset.clones.size()) {
+    dout(10) << "get_object_context  no clones with last >= snapid " << snapid << " -- DNE" << dendl;
+    put_object_context(hobc);
+    return -ENOENT;
+  }
+  sobject_t soid(oid, hobc->oi.snapset.clones[k]);
+
+  put_object_context(hobc); // we're done with head obc
+  hobc = 0;
+
+  if (missing.is_missing(soid)) {
+    dout(20) << "get_object_context  " << soid << " missing, try again later" << dendl;
+    return -EAGAIN;
+  }
+
+  ObjectContext *obc = get_object_context(soid);
+
+  // clone
+  dout(20) << "get_object_context  " << soid << " snaps " << obc->oi.snaps << dendl;
+  snapid_t first = obc->oi.snaps[obc->oi.snaps.size()-1];
+  snapid_t last = obc->oi.snaps[0];
+  if (first <= snapid) {
+    dout(20) << "get_object_context  " << soid << " [" << first << "," << last
+	     << "] contains " << snapid << " -- HIT" << dendl;
+    *pobc = obc;
+    return 0;
+  } else {
+    dout(20) << "get_object_context  " << soid << " [" << first << "," << last
+	     << "] does not contain " << snapid << " -- DNE" << dendl;
+    put_object_context(obc);
+    return -ENOENT;
+  }
 }
 
 void ReplicatedPG::put_object_context(ObjectContext *obc)
@@ -1775,7 +1770,6 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 #endif
 
   // get existing object info
-  //ObjectContext *obc = get_object_context(soid);
   obc->get();
   ctx->poi = &obc->oi;
 

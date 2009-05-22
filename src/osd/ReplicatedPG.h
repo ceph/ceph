@@ -25,21 +25,6 @@ class ReplicatedPG : public PG {
 public:  
 
   /*
-   * Capture all object state associated with an in-progress read.
-   */
-  struct ReadOpContext {
-    MOSDOp *op;
-    vector<ceph_osd_op>& ops;
-
-    object_info_t oi;
-    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
-
-    ReadOpContext(MOSDOp *_op, vector<ceph_osd_op>& _ops, sobject_t _soid) :
-      op(_op), ops(_ops), oi(_soid), data_off(0) {}
-  };
-
-
-  /*
     object access states:
 
     - idle
@@ -224,6 +209,21 @@ public:
 		      exists(false), size(0), oi(soid) {}
   };
 
+
+  /*
+   * Capture all object state associated with an in-progress read.
+   */
+  struct ReadOpContext {
+    MOSDOp *op;
+    vector<ceph_osd_op>& ops;
+
+    object_info_t *poi;
+    int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
+
+    ReadOpContext(MOSDOp *_op, vector<ceph_osd_op>& _ops, object_info_t *_poi) :
+      op(_op), ops(_ops), poi(_poi), data_off(0) {}
+  };
+
   /*
    * Capture all state associated with a write operation being processed
    * on the current OSD.
@@ -339,8 +339,9 @@ protected:
   // projected object info
   map<sobject_t, ObjectContext> object_contexts;
 
-  ObjectContext *get_object_context(sobject_t poid);
+  ObjectContext *get_object_context(const sobject_t& soid, bool can_create=true);
   void put_object_context(ObjectContext *obc);
+  int find_object_context(object_t oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
 
   bool is_write_in_progress() {
     return !object_contexts.empty();
