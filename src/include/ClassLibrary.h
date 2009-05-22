@@ -20,8 +20,6 @@
 
 #include "common/ClassVersion.h"
 
-#include "config.h"
-
 struct ClassImpl {
   bufferlist binary;
   utime_t stamp;
@@ -72,7 +70,6 @@ struct ClassLibraryIncremental {
   void encode(bufferlist& bl) const {
     __u32 _op = (__u32)op;
     ::encode(_op, bl);
-    generic_dout(0) << "encoding op " << op << dendl;
     ::encode(info, bl);
     ::encode(impl, bl);
   }
@@ -81,7 +78,6 @@ struct ClassLibraryIncremental {
     ::decode(_op, bl);
     op = (ClassLibraryIncOp)_op;
     assert( op >= INC_NOP && op <= INC_ACTIVATE);
-    generic_dout(0) << "decoded op " << op << dendl;
     ::decode(info, bl);
     ::decode(impl, bl);
   }
