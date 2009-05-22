@@ -56,6 +56,9 @@ ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVers
     class_data->status = ClassData::CLASS_REQUESTED;
     break;
 
+  case ClassData::CLASS_INVALID:
+    return class_data;
+
   default:
     assert(0);
   }
@@ -89,7 +92,8 @@ void ClassHandler::handle_class(MClass *m)
 	osd->got_class(info_iter->name);
       }
     } else {
-      /* fixme: handle case in which we didn't get the class */
+        data.status = ClassData::CLASS_INVALID;
+        osd->got_class(info_iter->name);
     }
   }
 }

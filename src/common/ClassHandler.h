@@ -33,6 +33,7 @@ public:
   struct ClassData {
     enum { 
       CLASS_UNKNOWN, 
+      CLASS_INVALID, 
       //CLASS_UNLOADED, 
       CLASS_LOADED, 
       CLASS_REQUESTED, 

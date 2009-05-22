@@ -3761,8 +3761,17 @@ int OSD::get_class(const nstring& cname, ClassVersion& version, pg_t pgid, Messa
 
 
   *cls = class_handler->get_class(cname, version);
-  if (*cls)
-    return 0;
+  if (*cls) {
+    switch ((*cls)->status) {
+    case ClassHandler::ClassData::CLASS_LOADED:
+      return 0;
+    case ClassHandler::ClassData::CLASS_INVALID:
+      dout(0) << "class not supported" << dendl;
+      return -EOPNOTSUPP;
+    default:
+      assert(0);
+    }
+  }
 
   waiting_for_missing_class[cname][pgid].push_back(m);
   return -EAGAIN;
