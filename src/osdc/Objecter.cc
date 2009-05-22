@@ -392,6 +392,8 @@ tid_t Objecter::read_submit(ReadOp *rd)
 			   rd->oid, rd->layout, osdmap->get_epoch(), 
 			   flags | CEPH_OSD_FLAG_READ);
     m->set_snapid(rd->snap);
+    m->set_snap_seq(0);
+
     m->ops = rd->ops;
     m->set_data(rd->bl);
     m->set_retry_attempt(rd->attempts++);
@@ -507,10 +509,12 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
     MOSDOp *m = new MOSDOp(client_inc, wr->tid,
 			   wr->oid, wr->layout, osdmap->get_epoch(),
 			   flags | CEPH_OSD_FLAG_WRITE);
-    m->ops = wr->ops;
-    m->set_mtime(wr->mtime);
+    m->set_snapid(CEPH_NOSNAP);
     m->set_snap_seq(wr->snapc.seq);
     m->get_snaps() = wr->snapc.snaps;
+
+    m->ops = wr->ops;
+    m->set_mtime(wr->mtime);
     m->set_retry_attempt(wr->attempts++);
     
     if (wr->version != eversion_t())

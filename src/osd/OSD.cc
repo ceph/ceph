@@ -3466,6 +3466,12 @@ void OSD::handle_op(MOSDOp *op)
 
   // pg must be same-ish...
   if (op->may_write()) {
+    if (op->get_snapid() != CEPH_NOSNAP) {
+      reply_op_error(op, -EINVAL);
+      pg->unlock();
+      return;
+    }
+
     // modify
     if ((!pg->is_primary() ||
 	 !pg->same_for_modify_since(op->get_map_epoch()))) {

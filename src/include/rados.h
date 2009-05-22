@@ -360,14 +360,10 @@ struct ceph_osd_request_head {
 	struct ceph_timespec      mtime;
 	struct ceph_eversion      reassert_version;
 
-	/* writer's snap context */
-	union {
-		__le64 snap_seq;
-		__le64 snapid;
-	};
+	__le64 snapid;
+	__le64 snap_seq;       /* writer's snap context */
 	__le32 num_snaps;
 
-	/* read or mutation */
 	__le16 num_ops;
 	__u16 object_type;
 	struct ceph_osd_op ops[];  /* followed by snaps */
