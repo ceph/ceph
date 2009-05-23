@@ -95,6 +95,7 @@ class FileStore : public JournalingObjectStore {
   int statfs(struct statfs *buf);
 
   unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0);
+  unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0);
   int _transaction_start(int len);
   void _transaction_finish(int id);
   unsigned _apply_transaction(Transaction& t);

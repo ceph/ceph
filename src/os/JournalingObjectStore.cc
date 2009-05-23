@@ -38,8 +38,17 @@ int JournalingObjectStore::journal_replay()
     assert(op_seq == seq-1);
     
     dout(3) << "journal_replay: applying op seq " << seq << " (op_seq " << op_seq << ")" << dendl;
-    Transaction t(bl);
-    int r = apply_transaction(t);
+    bufferlist::iterator p = bl.begin();
+    list<Transaction*> tls;
+    while (!p.end()) {
+      Transaction *t = new Transaction(p);
+      tls.push_back(t);
+    }
+    int r = apply_transactions(tls);
+    while (!tls.empty()) {
+      delete tls.front(); 
+      tls.pop_front();
+    }
 
     dout(3) << "journal_replay: r = " << r << ", op now seq " << op_seq << dendl;
     assert(op_seq == seq);

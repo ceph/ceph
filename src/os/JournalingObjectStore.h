@@ -103,6 +103,22 @@ protected:
     if (ondisk)
       commit_waiters[op_seq].push_back(ondisk);
   }
+  void journal_transactions(list<ObjectStore::Transaction*>& tls, Context *onjournal, Context *ondisk) {
+    Mutex::Locker l(lock);
+
+    ++op_seq;
+
+    if (journal && journal->is_writeable()) {
+      bufferlist tbl;
+      for (list<ObjectStore::Transaction*>::iterator p = tls.begin(); p != tls.end(); p++)
+	(*p)->encode(tbl);
+      journal->submit_entry(op_seq, tbl, onjournal);
+    } else if (onjournal)
+      commit_waiters[op_seq].push_back(onjournal);
+
+    if (ondisk)
+      commit_waiters[op_seq].push_back(ondisk);
+  }
 
 public:
   JournalingObjectStore() : op_seq(0), committing_op_seq(0), committed_op_seq(0), 

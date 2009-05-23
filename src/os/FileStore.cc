@@ -507,12 +507,63 @@ unsigned FileStore::apply_transaction(Transaction &t,
 				      Context *ondisk)
 {
   op_start();
+
+  // non-atomic implementation
+  int id = _transaction_start(0);// t.get_trans_len());
+  if (id < 0) {
+    op_journal_start();
+    op_finish();
+    return id;
+  }
+
   int r = _apply_transaction(t);
+
+  _transaction_finish(id);
 
   op_journal_start();
   dout(10) << "op_seq is " << op_seq << dendl;
   if (r >= 0) {
     journal_transaction(t, onjournal, ondisk);
+
+    ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
+
+  } else {
+    delete onjournal;
+    delete ondisk;
+  }
+
+  op_finish();
+  return r;
+}
+
+unsigned FileStore::apply_transactions(list<Transaction*> &tls,
+				       Context *onjournal,
+				       Context *ondisk)
+{
+  op_start();
+
+  int id = _transaction_start(0);// t.get_trans_len());
+  if (id < 0) {
+    op_journal_start();
+    op_finish();
+    return id;
+  }
+
+  int r = 0;
+  for (list<Transaction*>::iterator p = tls.begin();
+       p != tls.end();
+       p++) {
+    r = _apply_transaction(**p);
+    if (r < 0)
+      break;
+  }
+
+  _transaction_finish(id);
+
+  op_journal_start();
+  dout(10) << "op_seq is " << op_seq << dendl;
+  if (r >= 0) {
+    journal_transactions(tls, onjournal, ondisk);
 
     ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
 
@@ -597,10 +648,8 @@ void FileStore::_transaction_finish(int fd)
 
 unsigned FileStore::_apply_transaction(Transaction& t)
 {
-  // non-atomic implementation
-  int id = _transaction_start(0);// t.get_trans_len());
-  if (id < 0) return id;
-  
+  dout(10) << "_apply_transaction on " << &t << dendl;
+
   while (t.have_op()) {
     int op = t.get_op();
     switch (op) {
@@ -713,7 +762,6 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       assert(0);
     }
   }
-  _transaction_finish(id);
   
   return 0;  // FIXME count errors
 }

@@ -134,6 +134,13 @@ public:
       return s;      
     }
 
+    bool empty() {
+      return ops.empty();
+    }
+    void clear_data() {
+      bls.clear();
+    }
+
     bool have_op() {
       return opp < ops.size();
     }
@@ -388,6 +395,7 @@ public:
   };
 
   virtual unsigned apply_transaction(Transaction& t, Context *onjournal=0, Context *ondisk=0) = 0;
+  virtual unsigned apply_transactions(list<Transaction*>& tls, Context *onjournal=0, Context *ondisk=0) = 0;
 
 
 
