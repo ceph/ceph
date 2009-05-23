@@ -224,7 +224,9 @@ public:
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
-    ObjectStore::Transaction t;
+
+    ObjectStore::Transaction op_t, clone_t, local_t;
+    vector<PG::Log::Entry> log;
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
@@ -314,7 +316,8 @@ protected:
 
   void apply_repop(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, int dest, utime_t now);
+  void issue_repop(RepGather *repop, int dest, utime_t now,
+		   bool old_exists, __u64 old_size, eversion_t old_version);
   RepGather *new_repop(OpContext *ctx, ObjectContext *obc, bool noop, tid_t rep_tid);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
@@ -363,7 +366,7 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   sobject_t head, sobject_t coid,
 		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, utime_t mtime, vector<snapid_t>& snaps);
-  void prepare_clone(ObjectStore::Transaction& t, bufferlist& logbl, osd_reqid_t reqid, pg_stat_t& st,
+  void prepare_clone(ObjectStore::Transaction& t, vector<Log::Entry>& log, osd_reqid_t reqid, pg_stat_t& st,
 		     sobject_t poid, loff_t old_size, object_info_t& oi,
 		     eversion_t& at_version, SnapContext& snapc);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
