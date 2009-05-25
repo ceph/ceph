@@ -503,9 +503,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
   // continuing on to write path, make sure object context is registered
   register_object_context(obc);
 
-  // are any peers missing this?
+  // issue replica writes
+  tid_t rep_tid = osd->get_tid();
+  RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
+
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
+
     if (peer_missing.count(peer) &&
         peer_missing[peer].is_missing(soid)) {
       // push it before this update. 
@@ -513,24 +517,22 @@ void ReplicatedPG::do_op(MOSDOp *op)
       push_to_replica(soid, peer);
       osd->start_recovery_op(this, 1);
     }
-  }
+    
+    issue_repop(repop, peer, now, old_exists, old_size, old_version);
 
-  // issue replica writes
-  tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
-  for (unsigned i=1; i<acting.size(); i++)
-    issue_repop(repop, acting[i], now, old_exists, old_size, old_version);
-  
-  // keep peer_info up to date
-  for (unsigned i=1; i<acting.size(); i++) {
-    Info &in = peer_info[acting[i]];
+    // keep peer_info up to date
+    Info &in = peer_info[peer];
     in.last_update = ctx->at_version;
     if (in.last_complete == old_last_update)
       in.last_update = ctx->at_version;
   }
 
+  // apply immediately?
+  if (obc->is_rmw_mode())
+    apply_repop(repop);
+
   // (logical) local ack.
-  // (if alone, this will apply the update.)
+  //  (if alone and delayed, this will apply the update.)
   int whoami = osd->get_nodeid();
   assert(repop->waitfor_ack.count(whoami));
   repop->waitfor_ack.erase(whoami);
@@ -1780,6 +1782,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   
   MOSDOp *op = (MOSDOp *)repop->ctx->op;
 
+  ObjectContext *obc = repop->obc;
+
+  // apply?
+  if (!repop->applied &&
+      obc->is_delayed_mode() &&
+      repop->waitfor_ack.empty())  // all replicas have acked
+    apply_repop(repop);
+
   // disk?
   if (repop->can_send_disk()) {
     if (op->wants_ondisk()) {
@@ -1804,10 +1814,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
   // ack?
   else if (repop->can_send_ack()) {
-    // apply
-    if (!repop->applied)
-      apply_repop(repop);
-
     if (op->wants_ack()) {
       // send ack
       MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);

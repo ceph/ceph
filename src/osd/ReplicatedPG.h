@@ -100,6 +100,13 @@ public:
 
     object_info_t oi;
     
+    bool is_delayed_mode() {
+      return state == DELAYED || state == DELAYED_FLUSHING;
+    }
+    bool is_rmw_mode() {
+      return state == RMW || state == RMW_FLUSHING;
+    }
+
     bool try_read(entity_inst_t& c) {
       switch (state) {
       case IDLE:
