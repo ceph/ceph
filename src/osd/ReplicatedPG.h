@@ -327,9 +327,15 @@ protected:
 
 
   // projected object info
-  map<sobject_t, ObjectContext> object_contexts;
+  map<sobject_t, ObjectContext*> object_contexts;
 
   ObjectContext *get_object_context(const sobject_t& soid, bool can_create=true);
+  void register_object_context(ObjectContext *obc) {
+    if (!obc->registered) {
+      obc->registered = true;
+      object_contexts[obc->soid] = obc;
+    }
+  }
   void put_object_context(ObjectContext *obc);
   int find_object_context(object_t oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
 

@@ -1838,11 +1838,12 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& soid, bool can_create)
 {
-  map<sobject_t, ObjectContext>::iterator p = object_contexts.find(soid);
+  map<sobject_t, ObjectContext*>::iterator p = object_contexts.find(soid);
   ObjectContext *obc;
   if (p != object_contexts.end()) {
-    obc = &p->second;
-    dout(10) << "get_object_context " << soid << " " << obc->ref << " -> " << (obc->ref+1) << dendl;
+    obc = p->second;
+    dout(10) << "get_object_context " << soid << " " << obc->ref
+	     << " -> " << (obc->ref+1) << dendl;
   } else {
     // check disk
     struct stat st;
@@ -1850,7 +1851,7 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
     if (r < 0 && !can_create)
       return 0;   // -ENOENT!
 
-    obc = &object_contexts[soid];
+    obc = new ObjectContext;
     obc->soid = soid;
 
     if (r == 0) {
@@ -1953,7 +1954,10 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
   if (obc->ref == 0) {
     assert(obc->waiting.empty());
 
-    object_contexts.erase(obc->soid);
+    if (obc->registered)
+      object_contexts.erase(obc->soid);
+    delete obc;
+
     if (object_contexts.empty())
       kick();
   }
@@ -2078,8 +2082,6 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
     noop = true;
   }
 
-  ctx->mtime = op->get_mtime();
-
   // version
   ctx->at_version = log.top;
   if (!noop) {
@@ -2089,12 +2091,16 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
     assert(ctx->at_version > log.top);
   }
 
-  // snap
-  ctx->snapc.seq = op->get_snap_seq();
-  ctx->snapc.snaps = op->get_snaps();
+  if (op->may_write()) {
+    ctx->mtime = op->get_mtime();
+    
+    // snap
+    ctx->snapc.seq = op->get_snap_seq();
+    ctx->snapc.snaps = op->get_snaps();
 
-  // set version in op, for benefit of client and our eventual reply
-  op->set_version(ctx->at_version);
+    // set version in op, for benefit of client and our eventual reply
+    op->set_version(ctx->at_version);
+  }
 
   dout(10) << "op_modify " << soid << " " << ctx->ops
            << " ov " << obc->oi.version << " av " << ctx->at_version 
@@ -2144,6 +2150,9 @@ void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
 
     log_op(ctx);
   }
+  
+  // continuing on to write path, make sure object context is registered
+  register_object_context(obc);
 
   if (ctx->indata.length()) {
     osd->logger->inc(l_osd_c_wr);

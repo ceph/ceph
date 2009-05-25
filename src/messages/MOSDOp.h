@@ -180,7 +180,8 @@ public:
       out << "r";
     if (may_write())
       out << "w";
-    else
+
+    if (head.snapid != CEPH_NOSNAP)
       out << "@" << snapid_t((__u64)head.snapid);
 
     out << " " << ops;
