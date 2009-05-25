@@ -111,7 +111,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	req->r_flags = flags;
 	req->r_last_osd = -1;
 
-	WARN_ON((flags & (CEPH_OSD_OP_READ|CEPH_OSD_OP_WRITE)) == 0);
+	WARN_ON((flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == 0);
 
 	/* create message */
 	if (snapc)
