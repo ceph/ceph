@@ -398,13 +398,11 @@ protected:
   int recover_primary(int max);
   int recover_replicas(int max);
 
-  int pick_read_snap(sobject_t& poid, object_info_t& coi);
-  void op_read(MOSDOp *op, ObjectContext *obc);
-  void op_modify(MOSDOp *op, ObjectContext *obc);
-
   int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 		 bufferlist::iterator& bp, bufferlist& odata,
 		 bool& exists, __u64& size);
+
+  void log_op_stats(const sobject_t &soid, OpContext *ctx);
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_reply(MOSDSubOpReply *reply);

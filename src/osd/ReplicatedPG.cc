@@ -402,12 +402,166 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return;
   }
 
-  if (!op->may_write() && !obc->exists)
+  if (!op->may_write() && !obc->exists) {
     osd->reply_op_error(op, -ENOENT);
-  else
-    op_modify(op, obc);
+    put_object_context(obc);
+    return;
+  }
 
-  put_object_context(obc);
+  const sobject_t& soid = obc->soid;
+  OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(), &obc->oi);
+
+  bool noop = false;
+  if (ctx->ops.empty()) {
+    noop = true;
+  }
+
+  if (op->may_write()) {
+    // version
+    ctx->at_version = log.top;
+    if (!noop) {
+      ctx->at_version.epoch = osd->osdmap->get_epoch();
+      ctx->at_version.version++;
+      assert(ctx->at_version > info.last_update);
+      assert(ctx->at_version > log.top);
+    }
+
+    ctx->mtime = op->get_mtime();
+    
+    // snap
+    ctx->snapc.seq = op->get_snap_seq();
+    ctx->snapc.snaps = op->get_snaps();
+
+    // set version in op, for benefit of client and our eventual reply
+    op->set_version(ctx->at_version);
+
+    dout(10) << "do_op " << soid << " " << ctx->ops
+	     << " ov " << obc->oi.version << " av " << ctx->at_version 
+	     << " snapc " << ctx->snapc
+	     << " snapset " << obc->oi.snapset
+	     << dendl;  
+
+    if (is_dup(ctx->reqid)) {
+      dout(3) << "do_op dup " << ctx->reqid << ", doing WRNOOP" << dendl;
+      noop = true;
+    }
+  } else {
+    dout(10) << "do_op " << soid << " " << ctx->ops
+	     << " ov " << obc->oi.version
+	     << dendl;  
+  }
+
+  // verify snap ordering
+  if ((op->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
+      ctx->snapc.seq < obc->oi.snapset.seq) {
+    dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
+	     << " < snapset seq " << obc->oi.snapset.seq
+	     << " on " << soid << dendl;
+    delete ctx;
+    put_object_context(obc);
+    osd->reply_op_error(op, -EOLDSNAPC);
+    return;
+  }
+
+  // note my stats
+  utime_t now = g_clock.now();
+
+  // note some basic context for op replication that prepare_transaction may clobber
+  eversion_t old_last_update = ctx->at_version;
+  bool old_exists = obc->exists;
+  __u64 old_size = obc->size;
+  eversion_t old_version = obc->oi.version;
+
+  // we are acker.
+  if (!noop) {
+    int result = prepare_transaction(ctx, obc->exists, obc->size);
+
+    if (result >= 0)
+      log_op_stats(soid, ctx);
+
+    // read or error?
+    if (ctx->op_t.empty() || result < 0) {
+
+
+      MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(),
+					   CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
+      reply->set_data(ctx->outdata);
+      reply->get_header().data_off = ctx->data_off;
+      reply->set_result(result);
+      osd->messenger->send_message(reply, op->get_orig_source_inst());
+      delete op;
+      delete ctx;
+      put_object_context(obc);
+      return;
+    }
+
+    assert(op->may_write());
+
+    log_op(ctx);
+  }
+  
+  // continuing on to write path, make sure object context is registered
+  register_object_context(obc);
+
+  // are any peers missing this?
+  for (unsigned i=1; i<acting.size(); i++) {
+    int peer = acting[i];
+    if (peer_missing.count(peer) &&
+        peer_missing[peer].is_missing(soid)) {
+      // push it before this update. 
+      // FIXME, this is probably extra much work (eg if we're about to overwrite)
+      push_to_replica(soid, peer);
+      osd->start_recovery_op(this, 1);
+    }
+  }
+
+  // issue replica writes
+  tid_t rep_tid = osd->get_tid();
+  RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
+  for (unsigned i=1; i<acting.size(); i++)
+    issue_repop(repop, acting[i], now, old_exists, old_size, old_version);
+  
+  // keep peer_info up to date
+  for (unsigned i=1; i<acting.size(); i++) {
+    Info &in = peer_info[acting[i]];
+    in.last_update = ctx->at_version;
+    if (in.last_complete == old_last_update)
+      in.last_update = ctx->at_version;
+  }
+
+  // (logical) local ack.
+  // (if alone, this will apply the update.)
+  int whoami = osd->get_nodeid();
+  assert(repop->waitfor_ack.count(whoami));
+  repop->waitfor_ack.erase(whoami);
+  eval_repop(repop);
+  repop->put();
+}
+
+
+void ReplicatedPG::log_op_stats(const sobject_t& soid, OpContext *ctx)
+{
+  osd->logger->inc(l_osd_op);
+
+  if (ctx->op_t.empty()) {
+    osd->logger->inc(l_osd_c_rd);
+    osd->logger->inc(l_osd_c_rdb, ctx->outdata.length());
+
+    utime_t now = g_clock.now();
+    utime_t diff = now;
+    diff -= ctx->op->get_recv_stamp();
+    //dout(20) <<  "do_op " << ctx->reqid << " total op latency " << diff << dendl;
+    Mutex::Locker lock(osd->peer_stat_lock);
+    osd->stat_rd_ops_in_queue--;
+    osd->read_latency_calc.add(diff);
+	
+    if (is_primary() &&
+	g_conf.osd_balance_reads)
+      stat_object_temp_rd[soid].hit(now);  // hit temp.
+  } else {
+    osd->logger->inc(l_osd_c_wr);
+    osd->logger->inc(l_osd_c_wrb, ctx->indata.length());
+  }
 }
 
 
@@ -651,8 +805,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	}
 	dout(10) << " read got " << r << " / " << p->length << " bytes from obj " << soid << dendl;
       }
-      osd->logger->inc(l_osd_c_rd);
-      osd->logger->inc(l_osd_c_rdb, p->length);
       break;
 
     case CEPH_OSD_OP_RDCALL:
@@ -1043,49 +1195,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
   }
   return result;
 }
-
-void ReplicatedPG::op_read(MOSDOp *op, ObjectContext *obc)
-{
-  const sobject_t& soid = obc->soid;
-  OpContext ctx(op, op->get_reqid(), op->ops, op->get_data(), &obc->oi);
-
-  dout(10) << "op_read " << soid << " " << ctx.ops << dendl;
-
-  bufferlist::iterator bp = ctx.indata.begin();
-  int result = 0;
-
-
-  // do it.
-  result = do_osd_ops(&ctx, ctx.ops, bp, ctx.outdata, obc->exists, obc->size);
-  if (result == -EAGAIN)
-    return;
-   
-  // reply
-  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK); 
-  reply->set_data(ctx.outdata);
-  reply->get_header().data_off = ctx.data_off;
-  reply->set_result(result);
-
-  if (result >= 0) {
-    utime_t now = g_clock.now();
-    utime_t diff = now;
-    diff -= op->get_recv_stamp();
-    dout(10) <<  "op_read " << op->get_reqid() << " total op latency " << diff << dendl;
-    Mutex::Locker lock(osd->peer_stat_lock);
-    osd->stat_rd_ops_in_queue--;
-    osd->read_latency_calc.add(diff);
-
-    if (is_primary() &&
-	g_conf.osd_balance_reads)
-      stat_object_temp_rd[soid].hit(now);  // hit temp.
-  }
-
-  osd->messenger->send_message(reply, op->get_orig_source_inst());
-  delete op;
-}
-
-
-
 
 
 
@@ -2066,133 +2175,6 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
   }
 #endif
 
-
-
-void ReplicatedPG::op_modify(MOSDOp *op, ObjectContext *obc)
-{
-  const sobject_t& soid = obc->soid;
-  OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(), &obc->oi);
-
-  // dup op?
-  bool noop = false;
-  if (ctx->ops.empty()) {
-    noop = true;
-  } else if (op->may_write() && is_dup(ctx->reqid)) {
-    dout(3) << "op_modify " << ctx->ops << " dup op " << ctx->reqid << ", doing WRNOOP" << dendl;
-    noop = true;
-  }
-
-  // version
-  ctx->at_version = log.top;
-  if (!noop) {
-    ctx->at_version.epoch = osd->osdmap->get_epoch();
-    ctx->at_version.version++;
-    assert(ctx->at_version > info.last_update);
-    assert(ctx->at_version > log.top);
-  }
-
-  if (op->may_write()) {
-    ctx->mtime = op->get_mtime();
-    
-    // snap
-    ctx->snapc.seq = op->get_snap_seq();
-    ctx->snapc.snaps = op->get_snaps();
-
-    // set version in op, for benefit of client and our eventual reply
-    op->set_version(ctx->at_version);
-  }
-
-  dout(10) << "op_modify " << soid << " " << ctx->ops
-           << " ov " << obc->oi.version << " av " << ctx->at_version 
-	   << " snapc " << ctx->snapc
-	   << " snapset " << obc->oi.snapset
-           << dendl;  
-
-  // verify snap ordering
-  if ((op->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
-      ctx->snapc.seq < obc->oi.snapset.seq) {
-    dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
-	     << " < snapset seq " << obc->oi.snapset.seq
-	     << " on " << soid << dendl;
-    put_object_context(obc);
-    delete ctx;
-    osd->reply_op_error(op, -EOLDSNAPC);
-    return;
-  }
-
-  // note my stats
-  utime_t now = g_clock.now();
-
-  // note some basic context for op replication that prepare_transaction may clobber
-  eversion_t old_last_update = ctx->at_version;
-  bool old_exists = obc->exists;
-  __u64 old_size = obc->size;
-  eversion_t old_version = obc->oi.version;
-
-  // we are acker.
-  if (!noop) {
-    // log and update later.
-    int result = prepare_transaction(ctx, obc->exists, obc->size);
-
-    if (ctx->op_t.empty()) {
-      // reply early.
-      MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(),
-					   CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
-      reply->set_data(ctx->outdata);
-      reply->get_header().data_off = ctx->data_off;
-      reply->set_result(result);
-      osd->messenger->send_message(reply, op->get_orig_source_inst());
-      delete op;
-      return;
-    }
-
-    assert(op->may_write());
-
-    log_op(ctx);
-  }
-  
-  // continuing on to write path, make sure object context is registered
-  register_object_context(obc);
-
-  if (ctx->indata.length()) {
-    osd->logger->inc(l_osd_c_wr);
-    osd->logger->inc(l_osd_c_wrb, ctx->indata.length());
-  }
-
-  // are any peers missing this?
-  for (unsigned i=1; i<acting.size(); i++) {
-    int peer = acting[i];
-    if (peer_missing.count(peer) &&
-        peer_missing[peer].is_missing(soid)) {
-      // push it before this update. 
-      // FIXME, this is probably extra much work (eg if we're about to overwrite)
-      push_to_replica(soid, peer);
-      osd->start_recovery_op(this, 1);
-    }
-  }
-
-  // issue replica writes
-  tid_t rep_tid = osd->get_tid();
-  RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
-  for (unsigned i=1; i<acting.size(); i++)
-    issue_repop(repop, acting[i], now, old_exists, old_size, old_version);
-  
-  // keep peer_info up to date
-  for (unsigned i=1; i<acting.size(); i++) {
-    Info &in = peer_info[acting[i]];
-    in.last_update = ctx->at_version;
-    if (in.last_complete == old_last_update)
-      in.last_update = ctx->at_version;
-  }
-
-  // (logical) local ack.
-  // (if alone, this will apply the update.)
-  int whoami = osd->get_nodeid();
-  assert(repop->waitfor_ack.count(whoami));
-  repop->waitfor_ack.erase(whoami);
-  eval_repop(repop);
-  repop->put();
-}
 
 
 
