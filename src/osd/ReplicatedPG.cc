@@ -411,11 +411,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   const sobject_t& soid = obc->soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(),
 				 obc->state, &obc->oi);
-
   bool noop = false;
-  if (ctx->ops.empty()) {
-    noop = true;
-  }
 
   if (op->may_write()) {
     // version
@@ -482,8 +478,6 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
     // read or error?
     if (ctx->op_t.empty() || result < 0) {
-
-
       MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(),
 					   CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
       reply->set_data(ctx->outdata);
@@ -753,7 +747,7 @@ bool ReplicatedPG::snap_trimmer()
 
 
 // ========================================================================
-// READS
+// low level osd ops
 
 int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 			     bufferlist::iterator& bp, bufferlist& odata,
@@ -1205,11 +1199,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 
 
 
-// ========================================================================
-// MODIFY
-
-
-
 void ReplicatedPG::_make_clone(ObjectStore::Transaction& t,
 			       sobject_t head, pobject_t coid,
 			       object_info_t *poi)
@@ -1383,12 +1372,12 @@ void ReplicatedPG::log_op(OpContext *ctx)
 // ========================================================================
 // rep op gather
 
-class C_OSD_ModifyCommit : public Context {
+class C_OSD_OpCommit : public Context {
 public:
   ReplicatedPG *pg;
   ReplicatedPG::RepGather *repop;
 
-  C_OSD_ModifyCommit(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
+  C_OSD_OpCommit(ReplicatedPG *p, ReplicatedPG::RepGather *rg) :
     pg(p), repop(rg) {
     repop->get();
     pg->get();    // we're copying the pointer
@@ -1396,24 +1385,24 @@ public:
   void finish(int r) {
     pg->lock();
     if (!pg->is_deleted()) 
-      pg->op_modify_ondisk(repop);
+      pg->op_ondisk(repop);
     repop->put();
     pg->unlock();
     pg->put();
   }
 };
 
-/** op_modify_commit
+/** op_commit
  * transaction commit on the acker.
  */
-void ReplicatedPG::op_modify_ondisk(RepGather *repop)
+void ReplicatedPG::op_ondisk(RepGather *repop)
 {
   if (repop->aborted) {
-    dout(10) << "op_modify_ondisk " << *repop << " -- aborted" << dendl;
+    dout(10) << "op_ondisk " << *repop << " -- aborted" << dendl;
   } else if (repop->waitfor_disk.count(osd->get_nodeid()) == 0) {
-    dout(10) << "op_modify_ondisk " << *repop << " -- already marked ondisk" << dendl;
+    dout(10) << "op_ondisk " << *repop << " -- already marked ondisk" << dendl;
   } else {
-    dout(10) << "op_modify_ondisk " << *repop << dendl;
+    dout(10) << "op_ondisk " << *repop << dendl;
     repop->waitfor_disk.erase(osd->get_nodeid());
     repop->waitfor_nvram.erase(osd->get_nodeid());
     repop->pg_complete_thru[osd->get_nodeid()] = repop->pg_local_last_complete;
@@ -1427,7 +1416,7 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   dout(10) << "apply_repop  applying update on " << *repop << dendl;
   assert(!repop->applied);
 
-  Context *oncommit = new C_OSD_ModifyCommit(this, repop);
+  Context *oncommit = new C_OSD_OpCommit(this, repop);
 
   list<ObjectStore::Transaction*> tls;
   tls.push_back(&repop->ctx->op_t);

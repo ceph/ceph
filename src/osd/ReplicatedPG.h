@@ -385,9 +385,8 @@ protected:
   bool pull(sobject_t oid);
 
 
-  // modify
-  void op_modify_ondisk(RepGather *repop);
-  void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
+  // low level ops
+  void op_ondisk(RepGather *repop);
 
   void _make_clone(ObjectStore::Transaction& t,
 		   sobject_t head, sobject_t coid,
@@ -403,7 +402,7 @@ protected:
   int prepare_transaction(OpContext *ctx, bool& exists, __u64& size);
   void log_op(OpContext *ctx);
   
-  friend class C_OSD_ModifyCommit;
+  friend class C_OSD_OpCommit;
   friend class C_OSD_RepModifyCommit;
 
   // pg on-disk content
@@ -418,6 +417,8 @@ protected:
   int recover_replicas(int max);
 
   void sub_op_modify(MOSDSubOp *op);
+  void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);
+
   void sub_op_modify_reply(MOSDSubOpReply *reply);
   void sub_op_push(MOSDSubOp *op);
   void sub_op_push_reply(MOSDSubOpReply *reply);
