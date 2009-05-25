@@ -65,20 +65,13 @@ public:
    * replicas ack.
    */
   struct ObjectContext {
-    sobject_t soid;
-    int ref;
-    bool registered; 
-
-    void get() { ++ref; }
-
-    enum {
+    typedef enum {
       IDLE,
       DELAYED,
       RMW,
       DELAYED_FLUSHING,
       RMW_FLUSHING
-    } state;
-
+    } state_t;
     static const char *get_state_name(int s) {
       switch (s) {
       case IDLE: return "idle";
@@ -90,6 +83,12 @@ public:
       }
     }
 
+    sobject_t soid;
+    int ref;
+    bool registered; 
+
+    state_t state;
+
     int num_wr, num_rmw;
     entity_inst_t client;
     list<Message*> waiting;
@@ -99,6 +98,9 @@ public:
     __u64 size;
 
     object_info_t oi;
+
+
+    void get() { ++ref; }
     
     bool is_delayed_mode() {
       return state == DELAYED || state == DELAYED_FLUSHING;
@@ -168,6 +170,9 @@ public:
       num_wr++;
       assert(state == DELAYED || state == RMW);
     }
+    void force_start_write() {
+      num_wr++;
+    }
     void finish_write() {
       assert(num_wr > 0);
       --num_wr;
@@ -228,6 +233,7 @@ public:
     bufferlist& indata;
     bufferlist outdata;
 
+    ObjectContext::state_t mode;  // DELAYED or RMW (or _FLUSHING variant?)
     object_info_t *poi;
 
     utime_t mtime;
@@ -237,12 +243,17 @@ public:
     ObjectStore::Transaction op_t, clone_t, local_t;
     vector<PG::Log::Entry> log;
 
+    ObjectContext *clone_obc;    // if we created a clone
+
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<ceph_osd_op>& _ops, bufferlist& _data,
-	      object_info_t *_poi) :
-      op(_op), reqid(_reqid), ops(_ops), indata(_data), poi(_poi),
-      data_off(0) {}
+	      ObjectContext::state_t _mode, object_info_t *_poi) :
+      op(_op), reqid(_reqid), ops(_ops), indata(_data), mode(_mode), poi(_poi),
+      clone_obc(0), data_off(0) {}
+    ~OpContext() {
+      assert(!clone_obc);
+    }
   };
 
   /*
@@ -380,10 +391,9 @@ protected:
 
   void _make_clone(ObjectStore::Transaction& t,
 		   sobject_t head, sobject_t coid,
-		   eversion_t ov, eversion_t v, osd_reqid_t& reqid, utime_t mtime, vector<snapid_t>& snaps);
-  void prepare_clone(ObjectStore::Transaction& t, vector<Log::Entry>& log, osd_reqid_t reqid, pg_stat_t& st,
-		     sobject_t poid, loff_t old_size, object_info_t& oi,
-		     eversion_t& at_version, SnapContext& snapc);
+		   object_info_t *poi);
+  void prepare_clone(OpContext *ctx, loff_t old_size,
+		     eversion_t old_version, utime_t old_mtime, osd_reqid_t old_last_reqid);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			sobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
