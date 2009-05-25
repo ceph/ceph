@@ -1729,14 +1729,14 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 
 
 void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
-		    eversion_t logversion, eversion_t trim_to)
+		    eversion_t log_version, eversion_t trim_to)
 {
   dout(10) << "append_log " << ondisklog.bottom << "~" << ondisklog.length()
 	   << " adding " << bl.length() <<  dendl;
  
   // update block map?
   if (ondisklog.top % 4096 < (ondisklog.top + bl.length()) % 4096)
-    ondisklog.block_map[ondisklog.top] = logversion;
+    ondisklog.block_map[ondisklog.top] = log_version;
 
   t.write(0, info.pgid.to_log_pobject(), ondisklog.top, bl.length(), bl );
   

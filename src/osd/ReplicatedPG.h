@@ -67,6 +67,7 @@ public:
   struct ObjectContext {
     sobject_t soid;
     int ref;
+    bool registered; 
 
     void get() { ++ref; }
 
@@ -205,7 +206,7 @@ public:
       }
     }
 
-    ObjectContext() : ref(0), state(IDLE), num_wr(0), num_rmw(0), wake(false),
+    ObjectContext() : ref(0), registered(true), state(IDLE), num_wr(0), num_rmw(0), wake(false),
 		      exists(false), size(0), oi(soid) {}
   };
 
@@ -217,7 +218,8 @@ public:
     Message *op;
     osd_reqid_t reqid;
     vector<ceph_osd_op>& ops;
-    bufferlist& data;
+    bufferlist& indata;
+    bufferlist outdata;
 
     object_info_t *poi;
 
@@ -232,7 +234,7 @@ public:
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<ceph_osd_op>& _ops, bufferlist& _data,
 	      object_info_t *_poi) :
-      op(_op), reqid(_reqid), ops(_ops), data(_data), poi(_poi),
+      op(_op), reqid(_reqid), ops(_ops), indata(_data), poi(_poi),
       data_off(0) {}
   };
 
@@ -373,7 +375,8 @@ protected:
   int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
 			sobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
 			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
-  void prepare_transaction(OpContext *ctx, bool& exists, __u64& size, eversion_t trim_to);
+  int prepare_transaction(OpContext *ctx, bool& exists, __u64& size);
+  void log_op(OpContext *ctx);
   
   friend class C_OSD_ModifyCommit;
   friend class C_OSD_RepModifyCommit;
@@ -393,7 +396,9 @@ protected:
   void op_read(MOSDOp *op, ObjectContext *obc);
   void op_modify(MOSDOp *op, ObjectContext *obc);
 
-  int do_read_ops(OpContext *ctx, bufferlist::iterator& bp, bufferlist& data);
+  int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
+		 bufferlist::iterator& bp, bufferlist& odata,
+		 bool& exists, __u64& size);
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_reply(MOSDSubOpReply *reply);
