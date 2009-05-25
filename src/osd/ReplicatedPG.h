@@ -240,7 +240,7 @@ public:
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
 
-    ObjectStore::Transaction op_t, clone_t, local_t;
+    ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
 
     ObjectContext *clone_obc;    // if we created a clone
@@ -392,12 +392,14 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   sobject_t head, sobject_t coid,
 		   object_info_t *poi);
-  void prepare_clone(OpContext *ctx, loff_t old_size,
-		     eversion_t old_version, utime_t old_mtime, osd_reqid_t old_last_reqid);
+  void make_writeable(OpContext *ctx, __u64 size);
+  int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
+		 bufferlist::iterator& bp, bufferlist& odata,
+		 bool& exists, __u64& size);
+
+  void log_op_stats(const sobject_t &soid, OpContext *ctx);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
-  int prepare_simple_op(ObjectStore::Transaction& t, osd_reqid_t reqid, pg_stat_t& st,
-			sobject_t poid, __u64& old_size, bool& exists, object_info_t& oi,
-			vector<ceph_osd_op>& ops, int opn, bufferlist::iterator& bp, SnapContext& snapc); 
+
   int prepare_transaction(OpContext *ctx, bool& exists, __u64& size);
   void log_op(OpContext *ctx);
   
@@ -414,12 +416,6 @@ protected:
   void finish_recovery_op();
   int recover_primary(int max);
   int recover_replicas(int max);
-
-  int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
-		 bufferlist::iterator& bp, bufferlist& odata,
-		 bool& exists, __u64& size);
-
-  void log_op_stats(const sobject_t &soid, OpContext *ctx);
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_reply(MOSDSubOpReply *reply);
