@@ -115,20 +115,39 @@ run() {
 }
 
 if [ "$debug" -eq 0 ]; then
-	CMON_ARGS="--debug_mon 10 --debug_ms 1"
-	COSD_ARGS=""
-	CMDS_ARGS="--debug_ms 1"
+    CMONDEBUG='
+	debug mon = 10
+        debug ms = 1'
+    COSDDEBUG='
+        debug ms = 1'
+    CMDSDEBUG='
+        debug ms = 1'
 else
-	echo "** going verbose **"
-	CMON_ARGS="--lockdep 1 --debug_mon 20 --debug_ms 1 --debug_paxos 20"
-	COSD_ARGS="--lockdep 1 --debug_osd 25 --debug_journal 20 --debug_filestore 10 --debug_ms 1" # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-	CMDS_ARGS="--mds_log_max_segments 2 --debug_ms 1 --debug_mds 20" # --mds_thrash_fragments 0 --mds_thrash_exports 1"
+    echo "** going verbose **"
+    CMONDEBUG='
+        lockdep = 1
+	debug mon = 20
+        debug paxos = 20
+        debug ms = 1'
+    COSDDEBUG='
+        lockdep = 1
+        debug ms = 1
+        debug osd = 25
+        debug journal = 20
+        debug filestore = 10'
+    CMDSDEBUG='
+        lockdep = 1
+        debug ms = 1
+        debug mds = 20
+        mds log max segments = 2'
 fi
 
+echo debug is $CMONDEBUG
+
 if [ "$MON_ADDR" != "" ]; then
-	CMON_ARGS=$CMON_ARGS" -m "$MON_ADDR
-	COSD_ARGS=$COSD_ARGS" -m "$MON_ADDR
-	CMDS_ARGS=$CMDS_ARGS" -m "$MON_ADDR
+	CMON_ARGS=" -m "$MON_ADDR
+	COSD_ARGS=" -m "$MON_ADDR
+	CMDS_ARGS=" -m "$MON_ADDR
 fi
 
 
@@ -179,6 +198,11 @@ if [ "$start_mon" -eq 1 ]; then
 	pid file = out/\$type\$id.pid
 [mds]
 	pid file = out/\$name.pid
+$CMDSDEBUG
+[osd]
+$COSDDEBUG
+[mon]
+$CMONDEBUG
 
 [group everyone]
 	addr = 0.0.0.0/0
