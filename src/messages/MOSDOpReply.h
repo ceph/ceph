@@ -102,6 +102,8 @@ public:
 	out << " ack";
     }
     out << " = " << get_result();
+    if (get_result() < 0) 
+      out << " (" << strerror(-get_result()) << ")";
     out << ")";
   }
 
