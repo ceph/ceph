@@ -79,12 +79,13 @@ endif
 if WITH_DEBUG
 psim_SOURCES = psim.cc
 psim_LDADD = libcrush.a libcommon.a
+bin_PROGRAMS += psim
 
-fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
-fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a \
-	libclient.a libosdc.a libcrush.a libcommon.a
+#fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
+#fakesyn_LDADD = libmon.a libmds.a libosd.a libos.a \
+#	libclient.a libosdc.a libcrush.a libcommon.a
+#bin_PROGRAMS += fakesyn
 
-bin_PROGRAMS += psim fakesyn
 endif
 
 
