@@ -315,24 +315,29 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       string name = m->cmd[2];
       string ver = m->cmd[3];
       string arch = m->cmd[4];
+
+      ClassImpl impl;
+      impl.binary = m->get_data();
+      if (impl.binary.length() <= 0) {
+         ss << "invalid binary data";
+         rs = -ENOENT;
+         goto done;
+      }
+      impl.stamp = g_clock.now();
+
       ClassVersionMap& map = list.library_map[name];
       ClassVersion cv(ver, arch);
       ClassInfo& info = map.m[cv];
-      ClassImpl impl;
-      impl.binary = m->get_data();
       dout(0) << "payload.length=" << m->get_data().length() << dendl;
-      impl.stamp = g_clock.now();
       info.name = name;
       info.version = cv;
-      /* store_impl(info, impl); */
-      dout(0) << "stored class " << name << " v" << info.version << dendl;
       ClassLibraryIncremental inc;
+      dout(0) << "storing class " << name << " v" << info.version << dendl;
       ::encode(impl, inc.impl);
       ::encode(info, inc.info);
       inc.op = INC_ADD;
       pending_list.add(info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
-
       ss << "updated";
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
