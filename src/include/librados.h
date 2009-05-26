@@ -53,7 +53,7 @@ public:
   int remove(rados_pool_t pool, object_t& oid);
 
   int exec(rados_pool_t pool, object_t& oid, const char *cls, const char *method,
-             bufferlist& inbl, size_t in_len, bufferlist& outbl, size_t out_len);
+             bufferlist& inbl, bufferlist& outbl);
 };
 #endif
 

@@ -44,7 +44,7 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   rados.write(pool, oid, 0, bl, bl.length());
-  rados.exec(pool, oid, "test", "foo", bl, bl.length(), bl2, 1024);
+  rados.exec(pool, oid, "test", "foo", bl, bl2);
   cout << "exec result=" << bl2.c_str() << std::endl;
   int size = rados.read(pool, oid, 0, bl2, 128);
 
