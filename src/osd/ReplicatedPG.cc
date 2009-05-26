@@ -476,6 +476,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
     if (result >= 0)
       log_op_stats(soid, ctx);
 
+    if (result == -EAGAIN)
+      return;
+
     // read or error?
     if (ctx->op_t.empty() || result < 0) {
       MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(),
