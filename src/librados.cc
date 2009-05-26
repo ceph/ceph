@@ -254,12 +254,11 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
   rd.rdcall(cls, method, inbl);
   objecter->read(oid, layout, rd, CEPH_NOSNAP, &outbl, 0, onack);
 
-  dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
-
   while (!done)
     cond.Wait(lock);
 
   lock.Unlock();
+  dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
 
   return r;
 }
