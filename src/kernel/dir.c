@@ -457,6 +457,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 	/* can we conclude ENOENT locally? */
 	if (dentry->d_inode == NULL) {
 		struct ceph_inode_info *ci = ceph_inode(dir);
+		struct ceph_dentry_info *di = ceph_dentry(dentry);
 
 		spin_lock(&dir->i_lock);
 		dout(40, " dir %p flags are %d\n", dir, ci->i_ceph_flags);
@@ -465,11 +466,11 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			    dentry->d_name.len) &&
 		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
 		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED)) {
-			ceph_dentry(dentry)->offset = ci->i_max_offset++;
+			di->offset = ci->i_max_offset++;
 			spin_unlock(&dir->i_lock);
 			dout(10, " dir %p complete, -ENOENT\n", dir);
 			d_add(dentry, NULL);
-			dentry->d_time = ci->i_rdcache_gen;
+			di->lease_rdcache_gen = ci->i_rdcache_gen;
 			return NULL;
 		}
 		spin_unlock(&dir->i_lock);
@@ -840,14 +841,16 @@ static int dentry_lease_is_valid(struct dentry *dentry)
 static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 {
 	struct ceph_inode_info *ci = ceph_inode(dir);
+	struct ceph_dentry_info *di = ceph_dentry(dentry);
 	int valid = 0;
 
 	spin_lock(&dir->i_lock);
-	if (ci->i_rdcache_gen == dentry->d_time)
+	if (ci->i_rdcache_gen == di->lease_rdcache_gen)
 		valid = __ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED;
 	spin_unlock(&dir->i_lock);
-	dout(20, "dir_lease_is_valid dir %p v%u dentry %p v%lu = %d\n",
-	     dir, (unsigned)ci->i_rdcache_gen, dentry, dentry->d_time, valid);
+	dout(20, "dir_lease_is_valid dir %p v%u dentry %p v%u = %d\n",
+	     dir, (unsigned)ci->i_rdcache_gen, dentry,
+	     (unsigned)di->lease_rdcache_gen, valid);
 	return valid;
 }
 
@@ -897,7 +900,7 @@ static void ceph_dentry_release(struct dentry *dentry)
 		struct ceph_inode_info *ci = ceph_inode(parent_inode);
 
 		spin_lock(&parent_inode->i_lock);
-		if (ci->i_rdcache_gen == dentry->d_time) {
+		if (ci->i_rdcache_gen == di->lease_rdcache_gen) {
 			dout(10, " clearing %p complete (d_release)\n",
 			     parent_inode);
 			ci->i_ceph_flags &= ~(CEPH_I_COMPLETE|CEPH_I_READDIR);

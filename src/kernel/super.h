@@ -422,7 +422,7 @@ extern u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
  */
 struct ceph_dentry_info {
 	struct ceph_mds_session *lease_session;
-	u32 lease_gen;
+	u32 lease_gen, lease_rdcache_gen;
 	u32 lease_seq;
 	unsigned long lease_renew_after, lease_renew_from;
 	struct list_head lru;
@@ -834,7 +834,7 @@ extern void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
 
 extern int ceph_encode_inode_release(void **p, struct inode *inode,
-				     int mds, int drop, int unless);
+				     int mds, int drop, int unless, int force);
 extern int ceph_encode_dentry_release(void **p, struct dentry *dn,
 				      int mds, int drop, int unless);
 

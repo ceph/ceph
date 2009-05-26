@@ -1153,7 +1153,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	if (req->r_inode_drop)
 		releases += ceph_encode_inode_release(&p,
 		      req->r_inode ? req->r_inode : req->r_dentry->d_inode,
-		      mds, req->r_inode_drop, req->r_inode_unless);
+		      mds, req->r_inode_drop, req->r_inode_unless, 0);
 	if (req->r_dentry_drop)
 		releases += ceph_encode_dentry_release(&p, req->r_dentry,
 		       mds, req->r_dentry_drop, req->r_dentry_unless);
@@ -1163,7 +1163,7 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 	if (req->r_old_inode_drop)
 		releases += ceph_encode_inode_release(&p,
 		      req->r_old_dentry->d_inode,
-		      mds, req->r_old_inode_drop, req->r_old_inode_unless);
+		      mds, req->r_old_inode_drop, req->r_old_inode_unless, 0);
 	head->num_releases = cpu_to_le16(releases);
 
 	BUG_ON(p > end);

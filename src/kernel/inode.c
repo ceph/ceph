@@ -690,7 +690,7 @@ int ceph_init_dentry_private(struct dentry *dentry)
 	di->dentry = dentry;
 	di->lease_session = NULL;
 	dentry->d_fsdata = di;
-	dentry->d_time = 0;
+	dentry->d_time = jiffies;
 	ceph_dentry_lru_add(dentry);
 out_unlock:
 	spin_unlock(&dentry->d_lock);
@@ -706,35 +706,28 @@ static void update_dentry_lease(struct dentry *dentry,
 				struct ceph_mds_session *session,
 				unsigned long from_time)
 {
-	struct ceph_dentry_info *di;
+	struct ceph_dentry_info *di = ceph_dentry(dentry);
 	long unsigned duration = le32_to_cpu(lease->duration_ms);
 	long unsigned ttl = from_time + (duration * HZ) / 1000;
 	long unsigned half_ttl = from_time + (duration * HZ / 2) / 1000;
+	struct inode *dir;
 
 	/* only track leases on regular dentries */
 	if (dentry->d_op != &ceph_dentry_ops)
 		return;
 
+	spin_lock(&dentry->d_lock);
 	dout(10, "update_dentry_lease %p mask %d duration %lu ms ttl %lu\n",
 	     dentry, le16_to_cpu(lease->mask), duration, ttl);
-	if (lease->mask == 0) {
-		/*
-		 * no per-dentry lease.  so, set d_time to match
-		 * parent directory version.  if/when we get an
-		 * ICONTENT cap (implicit directory-wide lease), we'll
-		 * know whether it covers this dentry.
-		 */
-		struct inode *dir = dentry->d_parent->d_inode;
-		dentry->d_time = ceph_inode(dir)->i_rdcache_gen;
-		dout(20, " no lease, setting d_time to %lu\n", dentry->d_time);
-		return;
-	}
 
-	spin_lock(&dentry->d_lock);
-	di = ceph_dentry(dentry);
-	BUG_ON(!di);
-	if (dentry->d_time != 0 &&
-	    di->lease_gen == session->s_cap_gen &&
+	/* make lease_rdcache_gen match directory */
+	dir = dentry->d_parent->d_inode;
+	di->lease_rdcache_gen = ceph_inode(dir)->i_rdcache_gen;
+
+	if (lease->mask == 0)
+		goto out_unlock;
+
+	if (di->lease_gen == session->s_cap_gen &&
 	    time_before(ttl, dentry->d_time))
 		goto out_unlock;  /* we already have a newer lease. */
 

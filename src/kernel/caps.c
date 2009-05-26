@@ -2293,7 +2293,7 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
  * requests.
  */
 int ceph_encode_inode_release(void **p, struct inode *inode,
-			      int mds, int drop, int unless)
+			      int mds, int drop, int unless, int force)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_cap *cap;
@@ -2306,20 +2306,30 @@ int ceph_encode_inode_release(void **p, struct inode *inode,
 	spin_lock(&inode->i_lock);
 	cap = __get_cap_for_mds(ci, mds);
 	if (cap && __cap_is_valid(cap)) {
-		if ((cap->issued & drop) &&
-		    (cap->issued & unless) == 0) {
-			dout(10, "encode_inode_release %p cap %p %s -> %s\n",
-			     inode, cap, ceph_cap_string(cap->issued),
-			     ceph_cap_string(cap->issued & ~drop));
-			cap->issued &= ~drop;
-			cap->implemented &= ~drop;
-			if (ci->i_ceph_flags & CEPH_I_NODELAY) {
-				int wanted = __ceph_caps_wanted(ci);
-				dout(10, "  wanted %s -> %s (actual %s)\n",
-				     ceph_cap_string(cap->mds_wanted),
-				     ceph_cap_string(cap->mds_wanted & ~wanted),
-				     ceph_cap_string(wanted));
-				cap->mds_wanted &= wanted;
+		if (force ||
+		    ((cap->issued & drop) &&
+		     (cap->issued & unless) == 0)) {
+			if ((cap->issued & drop) &&
+			    (cap->issued & unless) == 0) {
+				dout(10, "encode_inode_release %p cap %p %s -> "
+				     "%s\n", inode, cap,
+				     ceph_cap_string(cap->issued),
+				     ceph_cap_string(cap->issued & ~drop));
+				cap->issued &= ~drop;
+				cap->implemented &= ~drop;
+				if (ci->i_ceph_flags & CEPH_I_NODELAY) {
+					int wanted = __ceph_caps_wanted(ci);
+					dout(10, "  wanted %s -> %s (act %s)\n",
+					     ceph_cap_string(cap->mds_wanted),
+					     ceph_cap_string(cap->mds_wanted &
+							     ~wanted),
+					     ceph_cap_string(wanted));
+					cap->mds_wanted &= wanted;
+				}
+			} else {
+				dout(10, "encode_inode_release %p cap %p %s"
+				     " (force)\n", inode, cap,
+				     ceph_cap_string(cap->issued));
 			}
 
 			rel->ino = cpu_to_le64(ceph_ino(inode));
@@ -2350,7 +2360,7 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
 	int ret;
 
-	ret = ceph_encode_inode_release(p, dir, mds, drop, unless);
+	ret = ceph_encode_inode_release(p, dir, mds, drop, unless, 1);
 
 	/* drop dentry lease too? */
 	spin_lock(&dentry->d_lock);
@@ -2363,6 +2373,5 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 		rel->dname_seq = cpu_to_le32(di->lease_seq);
 	}
 	spin_unlock(&dentry->d_lock);
-
 	return ret;
 }
