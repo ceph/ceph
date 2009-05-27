@@ -181,17 +181,16 @@ out_alloc_count:
 
 int ceph_unreserve_caps(struct ceph_cap_reservation *ctx)
 {
+	dout(30, "unreserve caps ctx=%p count=%d\n", ctx, ctx->count);
 	if (ctx->count) {
 		spin_lock(&caps_list_lock);
 		BUG_ON(caps_reserve_count < ctx->count);
 		caps_reserve_count -= ctx->count;
 		caps_avail_count += ctx->count;
-		dout(30, "unreserve caps ctx=%p count=%d\n", ctx, ctx->count);
 		ctx->count = 0;
 		dout(30, "unreserve caps %d = %d used + %d resv + %d avail\n",
 		     caps_total_count, caps_use_count, caps_reserve_count,
 		     caps_avail_count);
-
 		BUG_ON(caps_total_count != caps_use_count + caps_reserve_count +
 		       caps_avail_count);
 		spin_unlock(&caps_list_lock);
@@ -208,11 +207,11 @@ static struct ceph_cap *get_cap(struct ceph_cap_reservation *ctx)
 		return kmem_cache_alloc(ceph_cap_cachep, GFP_NOFS);
 
 	spin_lock(&caps_list_lock);
-	dout(30, "get_reserved_cap ctx=%p %d = %d used + %d resv + %d avail\n",
-	     ctx, caps_total_count, caps_use_count, caps_reserve_count,
-	     caps_avail_count);
+	dout(30, "get_cap ctx=%p (%d) %d = %d used + %d resv + %d avail\n",
+	     ctx, ctx->count, caps_total_count, caps_use_count,
+	     caps_reserve_count, caps_avail_count);
 	BUG_ON(!ctx->count);
-	BUG_ON(ctx->count < caps_reserve_count);
+	BUG_ON(ctx->count > caps_reserve_count);
 	BUG_ON(list_empty(&caps_list));
 
 	ctx->count--;
@@ -232,9 +231,9 @@ static void put_cap(struct ceph_cap *cap,
 		    struct ceph_cap_reservation *ctx)
 {
 	spin_lock(&caps_list_lock);
-	dout(30, "put_cap ctx=%p %d = %d used + %d resv + %d avail\n",
-	     ctx, caps_total_count, caps_use_count, caps_reserve_count,
-	     caps_avail_count);
+	dout(30, "put_cap ctx=%p (%d) %d = %d used + %d resv + %d avail\n",
+	     ctx, ctx->count, caps_total_count, caps_use_count,
+	     caps_reserve_count, caps_avail_count);
 	caps_use_count--;
 	if (ctx) {
 		ctx->count++;
