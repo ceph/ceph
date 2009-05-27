@@ -433,6 +433,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_hack_log_expire_for_better_stats, 0, OPT_BOOL, false),
 	OPTION(osd_data, 0, OPT_STR, ""),
 	OPTION(osd_journal, 0, OPT_STR, ""),
+	OPTION(osd_journal_size, 0, OPT_INT, 0),         // in mb
 	OPTION(osd_balance_reads, 0, OPT_BOOL, false),
 	OPTION(osd_flash_crowd_iat_threshold, 0, OPT_INT, 0),
 	OPTION(osd_flash_crowd_iat_alpha, 0, OPT_DOUBLE, 0.125),

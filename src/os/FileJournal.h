@@ -101,7 +101,7 @@ private:
   Cond write_cond;
   bool write_stop;
 
-  int _open(bool wr);
+  int _open(bool wr, bool create=false);
   void print_header();
   void read_header();
   bufferptr prepare_header();

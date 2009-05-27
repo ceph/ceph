@@ -27,7 +27,7 @@
 #define dout_prefix *_dout << dbeginl << "journal "
 
 
-int FileJournal::_open(bool forwrite)
+int FileJournal::_open(bool forwrite, bool create)
 {
   int flags;
 
@@ -37,10 +37,12 @@ int FileJournal::_open(bool forwrite)
   } else {
     flags = O_RDONLY;
   }
+  if (create)
+    flags |= O_CREAT;
   
   if (fd >= 0) 
     ::close(fd);
-  fd = ::open(fn.c_str(), flags);
+  fd = ::open(fn.c_str(), flags, 0644);
   if (fd < 0) {
     dout(2) << "_open failed " << errno << " " << strerror(errno) << dendl;
     return -errno;
@@ -52,6 +54,14 @@ int FileJournal::_open(bool forwrite)
   assert(r == 0);
   max_size = st.st_size;
   block_size = st.st_blksize;
+
+  if (create && max_size < (g_conf.osd_journal_size << 20)) {
+    __u64 newsize = g_conf.osd_journal_size << 20;
+    dout(10) << "_open extending to " << newsize << " bytes" << dendl;
+    r = ::ftruncate(fd, newsize);
+    if (r == 0)
+      max_size = newsize;
+  }
 
   if (max_size == 0) {
     // hmm, is this a raw block device?
@@ -82,7 +92,7 @@ int FileJournal::create()
 {
   dout(2) << "create " << fn << dendl;
 
-  int err = _open(true);
+  int err = _open(true, true);
   if (err < 0) return err;
 
   // write empty header
