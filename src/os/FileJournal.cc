@@ -499,14 +499,15 @@ void FileJournal::do_write(bufferlist& bl)
 	      << dendl;
     pos += (*it).length();
   }
+  if (!directio) {
+    dout(20) << "do_write fsync start" << dendl;
 #ifdef DARWIN
-  if (!directio)
     ::fsync(fd);
 #else
-  if (!directio)
     ::fdatasync(fd);
 #endif
-
+    dout(20) << "do_write fsync finish" << dendl;
+  }
 
   write_lock.Lock();    
 
@@ -521,7 +522,7 @@ void FileJournal::do_write(bufferlist& bl)
     dout(10) << "do_write NOT queueing finisher seq " << writing_seq.front()
 	     << ", full_commit_seq|full_restart_seq" << dendl;
   } else {
-    dout(20) << "do_write doing finisher queue " << writing_fin << dendl;
+    dout(20) << "do_write queueing finishers " << writing_fin << dendl;
     writing_seq.clear();
     finisher->queue(writing_fin);
   }
