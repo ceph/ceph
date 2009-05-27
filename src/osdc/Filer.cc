@@ -151,7 +151,7 @@ void Filer::_probed(Probe *probe, object_t oid, __u64 size, utime_t mtime)
       assert(probe->known_size[p->oid] <= shouldbe);
 
       if ((probe->fwd && probe->known_size[p->oid] == shouldbe) ||
-	  (!probe->fwd && probe->known_size[p->oid] == 0))
+	  (!probe->fwd && probe->known_size[p->oid] == 0 && probe->probing_off > 0))
 	continue;  // keep going
       
       // aha, we found the end!
