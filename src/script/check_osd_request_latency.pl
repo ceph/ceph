@@ -20,7 +20,7 @@ while (<>) {
 
     my ($who,$tid,$desc) = /osd\d+ <.. (\D+\d+) \S+ \d+ \S+ osd_op\((\S+) ([^\)]+)/;
     if (defined $tid) {
-	my $req = "$who:$tid";
+	my $req = "$tid";
 	$r{$req} = $stamp unless exists $r{$req};
 	$desc{$req} = $desc;
 	next;
@@ -28,7 +28,7 @@ while (<>) {
 
     my ($who,$tid) = /\d+ -- \S+ osd\d+ --> (\D+\d+) \S+ \S+ osd_op_reply\((\S+) /;
     if (defined $tid) {
-	my $req = "$who:$tid";
+	my $req = "$tid";
 	if (exists $r{$req}) {
 	    my $len = tosec($stamp) - tosec($r{$req});
 	    
