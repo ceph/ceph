@@ -379,6 +379,7 @@ enum {
 	Opt_mount_timeout,
 	Opt_caps_wanted_delay_min,
 	Opt_caps_wanted_delay_max,
+	Opt_readdir_max_entries,
 	/* int args above */
 	Opt_ip,
 	Opt_noshare,
@@ -412,6 +413,7 @@ static match_table_t arg_tokens = {
 	{Opt_mount_timeout, "mount_timeout=%d"},
 	{Opt_caps_wanted_delay_min, "caps_wanted_delay_min=%d"},
 	{Opt_caps_wanted_delay_max, "caps_wanted_delay_max=%d"},
+	{Opt_readdir_max_entries, "readdir_max_entries=%d"},
 	/* int args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_debug_console, "debug_console"},
@@ -521,6 +523,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->caps_wanted_delay_max = CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT;
 	args->snapdir_name = ".snap";
 	args->cap_release_safety = CAPS_PER_RELEASE * 4;
+	args->max_readdir = 1024;
 
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
 	c = strstr(dev_name, ":/");
@@ -640,6 +643,9 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_caps_wanted_delay_max:
 			args->caps_wanted_delay_max = intval;
+			break;
+		case Opt_readdir_max_entries:
+			args->max_readdir = intval;
 			break;
 
 		case Opt_noshare:

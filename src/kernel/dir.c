@@ -158,7 +158,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
 	int complete = 0, len;
-	int max_entries = 1024;
+	const int max_entries = client->mount_args.max_readdir;
 
 	dout(5, "readdir %p filp %p frag %u off %u\n", inode, filp, frag, off);
 	if (fi->at_end)
