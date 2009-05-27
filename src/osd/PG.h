@@ -341,8 +341,8 @@ public:
     }
     void unindex(Entry& e) {
       // NOTE: this only works if we remove from the _bottom_ of the log!
-      assert(objects.count(e.soid));
-      if (objects[e.soid]->version == e.version)
+      assert(caller_ops.count(e.reqid));
+      if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
       caller_ops.erase(e.reqid);
     }
