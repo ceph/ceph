@@ -477,13 +477,14 @@ int FileStore::umount()
   dout(5) << "umount " << basedir << dendl;
   
   sync();
-  journal_stop();
 
   lock.Lock();
   stop = true;
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
+
+  journal_stop();
 
   ::close(fsid_fd);
   ::close(op_fd);
