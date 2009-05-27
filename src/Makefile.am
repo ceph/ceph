@@ -122,7 +122,11 @@ testradospp_LDADD = librados.la libcrush.la
 
 libtestclass.so: testclass.cc
 	${CXX} -fPIC -shared -g -o libtestclass.so testclass.cc
-BUILT_SOURCES += libtestclass.so
+libbarclass.so: barclass.cc
+	${CXX} -fPIC -shared -g -o libbarclass.so barclass.cc
+libfooclass.so: fooclass.cc
+	${CXX} -fPIC -shared -g -o libfooclass.so fooclass.cc
+BUILT_SOURCES += libtestclass.so libfooclass.so libbarclass.so
 
 
 

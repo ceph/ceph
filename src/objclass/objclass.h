@@ -5,12 +5,23 @@
 extern "C" {
 #endif
 
+#define CLS_VER(maj,min) \
+int __cls_ver__## maj ## _ ##min = 0;
+
+#define CLS_NAME(name) \
+int __cls_name__## name = 0;
+
 typedef void *cls_handle_t;
 typedef void *cls_method_handle_t;
 typedef void *cls_method_context_t;
 typedef int (*cls_method_call_t)(cls_method_context_t ctx,
 				 char *indata, int datalen,
 				 char **outdata, int *outdatalen);
+
+typedef struct {
+	const char *name;
+	const char *ver;
+} cls_deps_t;
 
 /* class utils */
 extern int cls_log(const char *format, ...);

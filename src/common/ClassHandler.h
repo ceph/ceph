@@ -31,29 +31,46 @@ public:
   };
 
   struct ClassData {
+    bool add_dependency(cls_deps_t *dep);
+    void add_dependent(ClassData& dependent);
+
+    void satisfy_dependency(ClassData *cls);
+
     enum { 
       CLASS_UNKNOWN, 
       CLASS_INVALID, 
-      //CLASS_UNLOADED, 
       CLASS_LOADED, 
       CLASS_REQUESTED, 
-      //CLASS_ERROR
     } status;
     ClassVersion version;
     ClassImpl impl;
+    nstring name;
+    OSD *osd;
+    ClassHandler *handler;
     void *handle;
     bool registered;
-    map<string, ClassMethod> methods_map;
+    map<nstring, ClassMethod> methods_map;
 
-    ClassData() : status(CLASS_UNKNOWN), version(), handle(NULL), registered(false) {}
+    map<nstring, ClassData *> dependencies; /* our dependencies */
+    map<nstring, ClassData *> missing_dependencies; /* only missing dependencies */
+    list<ClassData *> dependents;          /* classes that depend on us */
+
+    bool has_missing_deps() { return (missing_dependencies.size() > 0); }
+
+    ClassData() : status(CLASS_UNKNOWN), version(), handle(NULL), registered(false)  {}
     ~ClassData() { }
 
     ClassMethod *register_method(const char *mname,
                           cls_method_call_t func);
     ClassMethod *get_method(const char *mname);
     void unregister_method(ClassMethod *method);
+
+    void load();
+    void init();
   };
   map<nstring, ClassData> classes;
+
+  ClassData& get_obj(const nstring& cname);
 
   void load_class(const nstring& cname);
 

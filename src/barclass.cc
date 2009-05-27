@@ -8,7 +8,7 @@
 #include "objclass/objclass.h"
 
 CLS_VER(1,0)
-CLS_NAME(test)
+CLS_NAME(bar)
 
 cls_handle_t h_class;
 
@@ -19,7 +19,7 @@ int foo_method(cls_method_context_t ctx, char *indata, int datalen,
 {
    int i;
 
-   cls_log("hello world");
+   cls_log("hello world, this is bar");
    cls_log("indata=%s", indata);
 
    *outdata = (char *)malloc(128);
@@ -36,19 +36,12 @@ int foo_method(cls_method_context_t ctx, char *indata, int datalen,
    return 0;
 }
 
-static cls_deps_t depend[] = {{"foo", "1.0"}, {"bar", "1.0"}, {NULL, NULL}};
-
-extern "C" cls_deps_t *class_deps()
-{
-   return depend;
-};
-
 void class_init()
 {
-   cls_log("Loaded class test!");
+   cls_log("Loaded bar class!");
 
-   cls_register("test", &h_class);
-   cls_register_method(h_class, "foo", foo_method, &h_foo);
+   cls_register("bar", &h_class);
+   cls_register_method(h_class, "bar", foo_method, &h_foo);
 
    return;
 }

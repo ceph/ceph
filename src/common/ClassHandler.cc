@@ -4,6 +4,7 @@
 #include "osd/OSD.h"
 #include "messages/MClass.h"
 #include "ClassHandler.h"
+#include "common/arch.h"
 
 #include <dlfcn.h>
 
@@ -20,29 +21,53 @@ void ClassHandler::load_class(const nstring& cname)
 {
   dout(10) << "load_class " << cname << dendl;
 
-  ClassData& data = classes[cname];
+  ClassData& cls = get_obj(cname);
   char *fname=strdup("/tmp/class-XXXXXX");
   int fd = mkstemp(fname);
 
-  for (list<bufferptr>::const_iterator it = data.impl.binary.buffers().begin();
-       it != data.impl.binary.buffers().end(); it++)
+  for (list<bufferptr>::const_iterator it = cls.impl.binary.buffers().begin();
+       it != cls.impl.binary.buffers().end(); it++)
     write(fd, it->c_str(), it->length());
 
   close(fd);
 
-  data.handle = dlopen(fname, RTLD_LAZY);
-  void (*cls_init)() = (void (*)())dlsym(data.handle, "class_init");
-  if (cls_init)
-    cls_init();
-
+  cls.handle = dlopen(fname, RTLD_LAZY);
+  cls_deps_t *(*cls_deps)() = ( cls_deps_t *(*)())dlsym(cls.handle, "class_deps");
+  if (cls_deps) {
+    cls_deps_t *deps = cls_deps();
+    while (deps) {
+      if (!deps->name)
+        break;
+      cls.add_dependency(deps);
+      deps++;
+    }
+  }
+  cls.load();
   unlink(fname);
   free(fname);
+
+  return;
 }
 
 
+ClassHandler::ClassData& ClassHandler::get_obj(const nstring& cname)
+{
+  map<nstring, ClassData>::iterator iter = classes.find(cname);
+  if (iter == classes.end()) {
+    ClassData& cls = classes[cname];
+    dout(0) << "get_obj: adding new class name=" << cname << " ptr=" << &cls << dendl;
+    cls.name = cname;
+    cls.osd = osd;
+    cls.handler = this;
+    return cls;
+  }
+
+  return iter->second;
+}
+
 ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVersion& version)
 {
-  ClassData *class_data = &classes[cname];
+  ClassData *class_data = &get_obj(cname);
 
   switch (class_data->status) {
   case ClassData::CLASS_LOADED:
@@ -78,7 +103,8 @@ void ClassHandler::handle_class(MClass *m)
   for (info_iter = m->info.begin(), add_iter = m->add.begin(), impl_iter = m->impl.begin();
        info_iter != m->info.end();
        ++info_iter, ++add_iter) {
-    ClassData& data = classes[info_iter->name];
+    ClassData& data = get_obj(info_iter->name);
+    dout(0) << "handle_class " << info_iter->name << dendl;
     
     if (*add_iter) {
       
@@ -86,12 +112,24 @@ void ClassHandler::handle_class(MClass *m)
 	dout(10) << "added class '" << info_iter->name << "'" << dendl;
 	data.impl = *impl_iter;
 	++impl_iter;
-	data.status = ClassData::CLASS_LOADED;
-	
 	load_class(info_iter->name);
-	osd->got_class(info_iter->name);
+#if 0
+        switch (data.status) {
+        case ClassData::CLASS:
+            osd->got_class(info_iter->name);
+            break;
+	 case ClassData::CLASS_LOADED:
+	    osd->got_class(info_iter->name);
+            break;
+         default:
+           /* we're still waiting on some other classees */
+        }
+#endif
+      } else {
+        dout(0) << "class status=" << data.status << dendl;
       }
     } else {
+	dout(10) << "response of an invalid class '" << info_iter->name << "'" << dendl;
         data.status = ClassData::CLASS_INVALID;
         osd->got_class(info_iter->name);
     }
@@ -109,7 +147,9 @@ void ClassHandler::resend_class_requests()
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
-  ClassData& class_data = classes[cname];
+  ClassData& class_data = get_obj(cname);
+
+  dout(0) << "&class_data=" << (void *)&class_data << " status=" << class_data.status << dendl;
 
   if (class_data.status != ClassData::CLASS_LOADED) {
     dout(0) << "class " << cname << " can't be loaded" << dendl;
@@ -130,6 +170,89 @@ void ClassHandler::unregister_class(ClassHandler::ClassData *cls)
   /* FIXME: do we really need this one? */
 }
 
+
+void ClassHandler::ClassData::load()
+{
+  if (status == CLASS_INVALID) {
+    /* if we're invalid, we should just notify osd */
+    osd->got_class(name);
+    return;
+  }
+
+  if (!has_missing_deps()) {
+    status = CLASS_LOADED;
+    dout(0) << "setting class " << name << " status to CLASS_LOADED" << dendl;
+    init();
+    osd->got_class(name);
+  }
+
+  list<ClassData *>::iterator iter;
+  for (iter = dependents.begin(); iter != dependents.end(); ++iter) {
+    ClassData *cls = *iter;
+    cls->satisfy_dependency(this);
+  }
+}
+
+void ClassHandler::ClassData::init()
+{
+  void (*cls_init)() = (void (*)())dlsym(handle, "class_init");
+  if (cls_init)
+    cls_init();
+}
+
+bool ClassHandler::ClassData::add_dependency(cls_deps_t *dep)
+{
+  if (!dep->name)
+    return false;
+
+  ClassData& cls_dep = handler->get_obj(dep->name);
+  map<nstring, ClassData *>::iterator iter = missing_dependencies.find(dep->name);
+  dependencies[dep->name] = &cls_dep;
+  dout(0) << "adding dependency " << dep->name << dendl;
+
+  if (cls_dep.status != CLASS_LOADED) {
+    missing_dependencies[dep->name] = &cls_dep;
+
+    if(cls_dep.status == CLASS_UNKNOWN) {
+      ClassVersion version;
+      version.set_arch(get_arch());
+      handler->get_class(dep->name, version);
+    }
+    dout(0) << "adding missing dependency " << dep->name << dendl;
+  }
+  cls_dep.add_dependent(*this);
+
+  if (cls_dep.status == CLASS_INVALID) {
+    dout(0) << "ouch! depending on invalid class" << dendl;
+    status = CLASS_INVALID; /* we have an invalid dependency, we're invalid */
+  }
+
+  return true;
+}
+
+void ClassHandler::ClassData::satisfy_dependency(ClassData *cls)
+{
+  map<nstring, ClassData *>::iterator iter = missing_dependencies.find(cls->name);
+
+  if (iter != missing_dependencies.end()) {
+    dout(0) << "satisfied dependency name=" << name << " dep=" << cls->name << dendl;
+    missing_dependencies.erase(iter);
+    if (missing_dependencies.size() == 0) {
+      dout(0) << "all dependencies are satisfied! initializing, notifying osd" << dendl;
+      status = CLASS_LOADED;
+  dout(0) << "this=" << (void *)this << " status=" << status << dendl;
+      init();
+      osd->got_class(name);
+    }
+  }
+}
+
+void ClassHandler::ClassData::add_dependent(ClassData& dependent)
+{
+  dout(0) << "class " << name << " has dependet: " << dependent.name << dendl;
+  dependents.push_back(&dependent);
+}
+
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *mname, cls_method_call_t func)
 {
   ClassMethod& method = methods_map[mname];
@@ -142,7 +265,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname)
 {
-   map<string, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
+   map<nstring, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
 
   if (iter == methods_map.end())
     return NULL;
@@ -152,7 +275,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname
 
 void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *method)
 {
-   map<string, ClassMethod>::iterator iter;
+   map<nstring, ClassMethod>::iterator iter;
 
    iter = methods_map.find(method->name);
    if (iter == methods_map.end())
