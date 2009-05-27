@@ -80,6 +80,7 @@ struct ceph_mount_args {
 	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
 	int wsize;
 	int rsize;            /* max readahead */
+	int max_readdir;      /* max readdir size */
 	int osd_timeout;
 	char *snapdir_name;   /* default ".snap" */
 	int cap_release_safety;
