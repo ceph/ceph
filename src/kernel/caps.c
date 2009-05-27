@@ -232,7 +232,7 @@ static void put_cap(struct ceph_cap *cap,
 {
 	spin_lock(&caps_list_lock);
 	dout(30, "put_cap ctx=%p (%d) %d = %d used + %d resv + %d avail\n",
-	     ctx, ctx->count, caps_total_count, caps_use_count,
+	     ctx, ctx ? ctx->count : 0, caps_total_count, caps_use_count,
 	     caps_reserve_count, caps_avail_count);
 	caps_use_count--;
 	if (ctx) {
