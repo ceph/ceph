@@ -185,7 +185,7 @@ echo "ip $IP"
 if [ "$start_mon" -eq 1 ]; then
 	if [ "$new" -eq 1 ]; then
 	# build and inject an initial osd map
-		$CEPH_BIN/osdmaptool --clobber --createsimple 4 .ceph_osdmap # --pgbits 2
+		$CEPH_BIN/osdmaptool --clobber --createsimple 4 .ceph_osdmap --pg_bits 2
 	fi
 
 	if [ "$new" -eq 1 ]; then
