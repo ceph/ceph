@@ -35,13 +35,11 @@ public:
   pobject_t poid;
   
   __u8 acks_wanted;
+
+  // op to exec
   vector<ceph_osd_op> ops;
   utime_t mtime;
   bool noop;
-
-  // subop metadata
-  tid_t rep_tid;
-  eversion_t version;
 
   bool old_exists;
   __u64 old_size;
@@ -49,7 +47,14 @@ public:
 
   SnapSet snapset;
   SnapContext snapc;
+
+  // transaction to exec
+  bufferlist logbl;
   
+  // subop metadata
+  tid_t rep_tid;
+  eversion_t version;
+
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
   osd_peer_stat_t peer_stat;
@@ -76,6 +81,7 @@ public:
     ::decode(old_version, p);
     ::decode(snapset, p);
     ::decode(snapc, p);
+    ::decode(logbl, p);
     ::decode(pg_trim_to, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
@@ -99,6 +105,7 @@ public:
     ::encode(old_version, payload);
     ::encode(snapset, payload);
     ::encode(snapc, payload);
+    ::encode(logbl, payload);
     ::encode(pg_trim_to, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
@@ -111,7 +118,7 @@ public:
   }
 
 
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, vector<ceph_osd_op>& o, bool noop_, int aw,
+  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, bool noop_, int aw,
 	    epoch_t mape, tid_t rtid, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
@@ -119,10 +126,10 @@ public:
     pgid(p),
     poid(po),
     acks_wanted(aw),
-    ops(o), noop(noop_),   
+    noop(noop_),   
+    old_exists(false), old_size(0),
     rep_tid(rtid),
-    version(v),
-    old_exists(false), old_size(0)
+    version(v)
   {
     memset(&peer_stat, 0, sizeof(peer_stat));
   }

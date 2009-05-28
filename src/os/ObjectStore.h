@@ -485,4 +485,6 @@ public:
 };
 
 
+WRITE_CLASS_ENCODER(ObjectStore::Transaction)
+
 #endif

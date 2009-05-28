@@ -253,7 +253,7 @@ inline void decode(std::set<T>& s, bufferlist::iterator& p)
 }
 
 // vector (pointers)
-template<class T>
+/*template<class T>
 inline void encode(const std::vector<T*>& v, bufferlist& bl)
 {
   __u32 n = v.size();
@@ -270,7 +270,7 @@ inline void decode(std::vector<T*>& v, bufferlist::iterator& p)
   for (__u32 i=0; i<n; i++) 
     v[i] = new T(p);
 }
-
+*/
 // vector
 template<class T>
 inline void encode(const std::vector<T>& v, bufferlist& bl)

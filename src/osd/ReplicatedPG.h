@@ -404,7 +404,7 @@ protected:
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
 
   int prepare_transaction(OpContext *ctx);
-  void log_op(OpContext *ctx);
+  void log_op(vector<Log::Entry>& log, ObjectStore::Transaction& t);
   
   friend class C_OSD_OpCommit;
   friend class C_OSD_RepModifyCommit;

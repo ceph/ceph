@@ -495,7 +495,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
     assert(op->may_write());
 
-    log_op(ctx);
+    log_op(ctx->log, ctx->local_t);
   }
   
   // continuing on to write path, make sure object context is registered
@@ -1349,12 +1349,12 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void ReplicatedPG::log_op(OpContext *ctx)
+void ReplicatedPG::log_op(vector<Log::Entry>& logv, ObjectStore::Transaction& t)
 {
-  dout(10) << "log_op " << ctx->reqid << " " << ctx->log << dendl;
+  dout(10) << "log_op " << log << dendl;
 
   // update the local pg, pg log
-  write_info(ctx->local_t);
+  write_info(t);
 
   // trim log?
   eversion_t trim_to = is_clean() ? peers_complete_thru : eversion_t();
@@ -1362,11 +1362,11 @@ void ReplicatedPG::log_op(OpContext *ctx)
     trim_to = peers_complete_thru;
 
   bufferlist log_bl;
-  for (vector<Log::Entry>::iterator p = ctx->log.begin();
-       p != ctx->log.end();
+  for (vector<Log::Entry>::iterator p = logv.begin();
+       p != logv.end();
        p++)
     add_log_entry(*p, log_bl);
-  append_log(ctx->local_t, log_bl, ctx->log[0].version, trim_to);
+  append_log(t, log_bl, logv[0].version, trim_to);
 }
 
 
@@ -1576,19 +1576,32 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now,
           << " to osd" << dest
           << dendl;
   
+  MOSDOp *op = (MOSDOp *)repop->ctx->op;
+
   // forward the write/update/whatever
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
   MOSDSubOp *wr = new MOSDSubOp(repop->ctx->reqid, info.pgid, soid,
-				repop->ctx->ops, repop->noop, acks_wanted,
+				repop->noop, acks_wanted,
 				osd->osdmap->get_epoch(), 
 				repop->rep_tid, repop->ctx->at_version);
-  wr->mtime = repop->ctx->mtime;
-  wr->old_exists = old_exists;
-  wr->old_size = old_size;
-  wr->old_version = old_version;
-  wr->snapset = repop->obc->obs.oi.snapset;
-  wr->snapc = repop->ctx->snapc;
-  wr->get_data() = repop->ctx->op->get_data();   // _copy_ bufferlist
+
+  if (op->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC) {
+    // replicate original op for parallel execution on replica
+    wr->ops = repop->ctx->ops;
+    wr->mtime = repop->ctx->mtime;
+    wr->old_exists = old_exists;
+    wr->old_size = old_size;
+    wr->old_version = old_version;
+    wr->snapset = repop->obc->obs.oi.snapset;
+    wr->snapc = repop->ctx->snapc;
+    wr->get_data() = repop->ctx->op->get_data();   // _copy_ bufferlist
+  } else {
+    // ship resulting transaction and log entries
+    wr->ops = repop->ctx->ops;   // just fyi
+    ::encode(repop->ctx->op_t, wr->get_data());
+    ::encode(repop->ctx->log, wr->logbl);
+  }
+
   if (osd->osdmap->get_pg_size(info.pgid) == acting.size())
     wr->pg_trim_to = peers_complete_thru;
   wr->peer_stat = osd->get_my_stat_for(now, dest);
@@ -1974,49 +1987,64 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   // we better not be missing this.
   assert(!missing.is_missing(soid));
 
-  // prepare our transaction
-  ObjectStore::Transaction t;
-
-  // do op
   int ackerosd = acting[0];
   osd->logger->inc(l_osd_r_wr);
   osd->logger->inc(l_osd_r_wrb, op->get_data().length());
   
-  ObjectState obs(op->poid);
-  obs.oi.version = op->old_version;
-  obs.oi.snapset = op->snapset;
-  obs.exists = op->old_exists;
-  obs.size = op->old_size;
-
-  OpContext ctx(op, op->reqid, op->ops, op->get_data(), ObjectContext::RMW, &obs);
+  list<ObjectStore::Transaction*> tls;
+  OpContext *ctx = 0;
 
   if (!op->noop) {
-    ctx.mtime = op->mtime;
-    ctx.at_version = op->version;
-    ctx.snapc = op->snapc;
+    if (op->logbl.length()) {
+      // shipped transaction and log entries
+      ObjectStore::Transaction opt, localt;
+      vector<Log::Entry> log;
+      
+      bufferlist::iterator p = op->get_data().begin();
+      ::decode(opt, p);
+      p = op->logbl.begin();
+      ::decode(log, p);
+      
+      log_op(log, localt);
+    } else {
+      // do op
+      ObjectState obs(op->poid);
+      obs.oi.version = op->old_version;
+      obs.oi.snapset = op->snapset;
+      obs.exists = op->old_exists;
+      obs.size = op->old_size;
+      
+      ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), ObjectContext::RMW, &obs);
+      
+      ctx->mtime = op->mtime;
+      ctx->at_version = op->version;
+      ctx->snapc = op->snapc;
+      
+      prepare_transaction(ctx);
+      log_op(ctx->log, ctx->local_t);
     
-    prepare_transaction(&ctx);
-    log_op(&ctx);
+      tls.push_back(&ctx->op_t);
+      tls.push_back(&ctx->local_t);
+    }
   }
-  
-  C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd, info.last_complete);
-  
-  // apply log update. and possibly update itself.
-  list<ObjectStore::Transaction*> tls;
-  tls.push_back(&ctx.op_t);
-  tls.push_back(&ctx.local_t);
+    
+  C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd,
+							      info.last_complete);
   unsigned r = osd->store->apply_transactions(tls, oncommit);
   if (r) {
     derr(0) << "error applying transaction: r = " << r << dendl;
   }
-  
+
+  // ack myself.
+  oncommit->ack(); 
+
+  delete ctx;
+
   // send ack to acker
   MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
   ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
   osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
   
-  // ack myself.
-  oncommit->ack(); 
 }
 
 void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete)
@@ -2235,10 +2263,10 @@ bool ReplicatedPG::pull(sobject_t soid)
   // send op
   osd_reqid_t rid;
   tid_t tid = osd->get_tid();
-  vector<ceph_osd_op> pull(1);
-  pull[0].op = CEPH_OSD_OP_PULL;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, pull, false, CEPH_OSD_FLAG_ACK,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, CEPH_OSD_FLAG_ACK,
 				   osd->osdmap->get_epoch(), tid, v);
+  subop->ops = vector<ceph_osd_op>(1);
+  subop->ops[0].op = CEPH_OSD_OP_PULL;
   subop->data_subset.swap(data_subset);
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
@@ -2373,12 +2401,12 @@ void ReplicatedPG::push(sobject_t soid, int peer,
   
   // send
   osd_reqid_t rid;  // useless?
-  vector<ceph_osd_op> push(1);
-  push[0].op = CEPH_OSD_OP_PUSH;
-  push[0].offset = 0;
-  push[0].length = size;
-  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, push, false, 0,
+  MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, 0,
 				   osd->osdmap->get_epoch(), osd->get_tid(), oi.version);
+  subop->ops = vector<ceph_osd_op>(1);
+  subop->ops[0].op = CEPH_OSD_OP_PUSH;
+  subop->ops[0].offset = 0;
+  subop->ops[0].length = size;
   subop->data_subset.swap(data_subset);
   subop->clone_subsets.swap(clone_subsets);
   subop->set_data(bl);   // note: claims bl, set length above here!

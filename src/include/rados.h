@@ -320,6 +320,7 @@ enum {
 	CEPH_OSD_FLAG_ORDERSNAP = 64,   /* EOLDSNAP if snapc is out of order */
 	CEPH_OSD_FLAG_PEERSTAT = 128,   /* msg includes osd_peer_stat */
 	CEPH_OSD_FLAG_BALANCE_READS = 256,
+	CEPH_OSD_FLAG_PARALLELEXEC = 512, /* execute op in parallel */
 };
 
 #define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/
