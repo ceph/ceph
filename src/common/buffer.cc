@@ -77,12 +77,11 @@ void buffer::list::hexdump(std::ostream &out)
 {
   out.setf(std::ios::right);
   out.fill('0');
-  out << std::hex;
 
   unsigned per = 16;
 
   for (unsigned o=0; o<length(); o += per) {
-    out << std::setw(4) << o << " :";
+    out << std::hex << std::setw(4) << o << " :";
 
     unsigned i;
     for (i=0; i<per && o+i<length(); i++) {
@@ -94,13 +93,12 @@ void buffer::list::hexdump(std::ostream &out)
     out << " : ";
     for (i=0; i<per && o+i<length(); i++) {
       char c = (*this)[o+i];
-      if (isalnum(c))
+      if (isupper(c) || islower(c) || isdigit(c) || c == ' ' || ispunct(c))
 	out << c;
       else
 	out << '.';
     }
-    out << std::endl;
+    out << std::dec << std::endl;
   }
-  out << std::dec;
   out.unsetf(std::ios::right);
 }
