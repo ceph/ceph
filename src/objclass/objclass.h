@@ -28,6 +28,10 @@ extern int cls_log(const char *format, ...);
 extern void *cls_alloc(size_t size);
 extern void cls_free(void *p);
 
+extern int cls_rdcall(cls_method_handle_t hctx, const char *cls, const char *method,
+                                 char *indata, int datalen,
+                                 char **outdata, int *outdatalen);
+
 /* class registration api */
 extern int cls_register(const char *name, cls_handle_t *handle);
 extern int cls_unregister(cls_handle_t);

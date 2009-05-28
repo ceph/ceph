@@ -252,10 +252,12 @@ public:
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
+    ReplicatedPG *pg;
+
     OpContext(Message *_op, osd_reqid_t _reqid, vector<ceph_osd_op>& _ops, bufferlist& _data,
-	      ObjectContext::state_t _mode, ObjectState *_obs) :
+	      ObjectContext::state_t _mode, ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), indata(_data), mode(_mode), obs(_obs),
-      clone_obc(0), data_off(0) {}
+      clone_obc(0), data_off(0), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
     }
@@ -397,9 +399,6 @@ protected:
 		   sobject_t head, sobject_t coid,
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
-  int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
-		 bufferlist::iterator& bp, bufferlist& odata);
-
   void log_op_stats(const sobject_t &soid, OpContext *ctx);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
 
@@ -446,6 +445,8 @@ public:
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
   bool snap_trimmer();
+  int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
+		 bufferlist::iterator& bp, bufferlist& odata);
 
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);

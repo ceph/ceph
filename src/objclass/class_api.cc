@@ -3,6 +3,7 @@
 
 #include "objclass/objclass.h"
 #include "osd/OSD.h"
+#include "osd/ReplicatedPG.h"
 
 #include "common/ClassHandler.h"
 
@@ -71,5 +72,32 @@ int cls_unregister_method(cls_method_handle_t handle)
   method->unregister();
 
   return 1;
+}
+
+int cls_rdcall(cls_method_handle_t hctx, const char *cls, const char *method,
+                                 char *indata, int datalen,
+                                 char **outdata, int *outdatalen)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  bufferlist odata;
+  bufferlist idata;
+  vector<ceph_osd_op> nops(1);
+  ceph_osd_op& op = nops[0];
+  int r;
+
+  op.op = CEPH_OSD_OP_RDCALL;
+  op.class_len = strlen(cls);
+  op.method_len = strlen(method);
+  op.indata_len = datalen;
+  idata.append(cls, op.class_len);
+  idata.append(method, op.method_len);
+  idata.append(indata, datalen);
+  bufferlist::iterator iter = idata.begin();
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops, iter, odata);
+
+  *outdata = odata.c_str();
+  *outdatalen = odata.length();
+
+  return r;
 }
 

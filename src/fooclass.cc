@@ -24,8 +24,8 @@ int foo_method(cls_method_context_t ctx, char *indata, int datalen,
 
    *outdata = (char *)malloc(128);
    for (i=0; i<strlen(indata) + 1; i++) {
-     if (indata[i] == '0') {
-       (*outdata)[i] = 'x';
+     if (indata[i] == '1') {
+       (*outdata)[i] = 'I';
      } else {
        (*outdata)[i] = indata[i];
      }

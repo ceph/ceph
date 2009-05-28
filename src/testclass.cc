@@ -17,12 +17,12 @@ cls_method_handle_t h_foo;
 int foo_method(cls_method_context_t ctx, char *indata, int datalen,
 				 char **outdata, int *outdatalen)
 {
-   int i;
+   int i, r;
 
    cls_log("hello world");
    cls_log("indata=%s", indata);
 
-   *outdata = (char *)malloc(128);
+   *outdata = (char *)cls_alloc(128);
    for (i=0; i<strlen(indata) + 1; i++) {
      if (indata[i] == '0') {
        (*outdata)[i] = '*';
@@ -33,7 +33,9 @@ int foo_method(cls_method_context_t ctx, char *indata, int datalen,
    *outdatalen = strlen(*outdata) + 1;
    cls_log("outdata=%s", *outdata);
 
-   return 0;
+   r = cls_rdcall(ctx, "foo", "foo", *outdata, *outdatalen, outdata, outdatalen);
+
+   return r;
 }
 
 static cls_deps_t depend[] = {{"foo", "1.0"}, {"bar", "1.0"}, {NULL, NULL}};

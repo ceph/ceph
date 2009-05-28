@@ -410,7 +410,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
   const sobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(),
-				 obc->state, &obc->obs);
+				 obc->state, &obc->obs, this);
   bool noop = false;
 
   if (op->may_write()) {
@@ -2014,7 +2014,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       obs.exists = op->old_exists;
       obs.size = op->old_size;
       
-      ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), ObjectContext::RMW, &obs);
+      ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), ObjectContext::RMW, &obs, this);
       
       ctx->mtime = op->mtime;
       ctx->at_version = op->version;
