@@ -24,6 +24,14 @@ class MOSDSubOpReply;
 class ReplicatedPG : public PG {
 public:  
 
+  struct ObjectState {
+    object_info_t oi;
+    bool exists;
+    __u64 size;
+
+    ObjectState(const sobject_t& s) : oi(s), exists(false), size(0) {}
+  };
+
   /*
     object access states:
 
@@ -83,7 +91,6 @@ public:
       }
     }
 
-    sobject_t soid;
     int ref;
     bool registered; 
 
@@ -94,11 +101,7 @@ public:
     list<Message*> waiting;
     bool wake;
 
-    bool exists;
-    __u64 size;
-
-    object_info_t oi;
-
+    ObjectState obs;
 
     void get() { ++ref; }
     
@@ -218,8 +221,9 @@ public:
       }
     }
 
-    ObjectContext() : ref(0), registered(true), state(IDLE), num_wr(0), num_rmw(0), wake(false),
-		      exists(false), size(0), oi(soid) {}
+    ObjectContext(const sobject_t& s) :
+      ref(0), registered(true), state(IDLE), num_wr(0), num_rmw(0), wake(false),
+      obs(s) {}
   };
 
 
@@ -234,7 +238,8 @@ public:
     bufferlist outdata;
 
     ObjectContext::state_t mode;  // DELAYED or RMW (or _FLUSHING variant?)
-    object_info_t *poi;
+
+    ObjectState *obs;
 
     utime_t mtime;
     SnapContext snapc;           // writer snap context
@@ -248,8 +253,8 @@ public:
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<ceph_osd_op>& _ops, bufferlist& _data,
-	      ObjectContext::state_t _mode, object_info_t *_poi) :
-      op(_op), reqid(_reqid), ops(_ops), indata(_data), mode(_mode), poi(_poi),
+	      ObjectContext::state_t _mode, ObjectState *_obs) :
+      op(_op), reqid(_reqid), ops(_ops), indata(_data), mode(_mode), obs(_obs),
       clone_obc(0), data_off(0) {}
     ~OpContext() {
       assert(!clone_obc);
@@ -351,7 +356,7 @@ protected:
   void register_object_context(ObjectContext *obc) {
     if (!obc->registered) {
       obc->registered = true;
-      object_contexts[obc->soid] = obc;
+      object_contexts[obc->obs.oi.soid] = obc;
     }
   }
   void put_object_context(ObjectContext *obc);
@@ -391,15 +396,14 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   sobject_t head, sobject_t coid,
 		   object_info_t *poi);
-  void make_writeable(OpContext *ctx, __u64 size);
+  void make_writeable(OpContext *ctx);
   int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
-		 bufferlist::iterator& bp, bufferlist& odata,
-		 bool& exists, __u64& size);
+		 bufferlist::iterator& bp, bufferlist& odata);
 
   void log_op_stats(const sobject_t &soid, OpContext *ctx);
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
 
-  int prepare_transaction(OpContext *ctx, bool& exists, __u64& size);
+  int prepare_transaction(OpContext *ctx);
   void log_op(OpContext *ctx);
   
   friend class C_OSD_OpCommit;
@@ -460,7 +464,7 @@ public:
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
 {
-  out << "obc(" << obc.soid << " " << obc.get_state_name(obc.state);
+  out << "obc(" << obc.obs.oi.soid << " " << obc.get_state_name(obc.state);
   if (!obc.waiting.empty())
     out << " WAITING";
   out << ")";
