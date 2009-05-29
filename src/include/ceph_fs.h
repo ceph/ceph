@@ -27,7 +27,7 @@
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL   13 /* public/client */
-#define CEPH_MDSC_PROTOCOL   20 /* public/client */
+#define CEPH_MDSC_PROTOCOL   21 /* public/client */
 #define CEPH_MONC_PROTOCOL   12 /* public/client */
 
 
@@ -394,6 +394,7 @@ enum {
 	CEPH_SESSION_REQUEST_RENEWCAPS,
 	CEPH_SESSION_RENEWCAPS,
 	CEPH_SESSION_STALE,
+	CEPH_SESSION_TRIMCAPS,
 };
 
 static inline const char *ceph_session_op_name(int op)
@@ -406,6 +407,7 @@ static inline const char *ceph_session_op_name(int op)
 	case CEPH_SESSION_REQUEST_RENEWCAPS: return "request_renewcaps";
 	case CEPH_SESSION_RENEWCAPS: return "renewcaps";
 	case CEPH_SESSION_STALE: return "stale";
+	case CEPH_SESSION_TRIMCAPS: return "trimcaps";
 	default: return "???";
 	}
 }
@@ -414,6 +416,7 @@ struct ceph_mds_session_head {
 	__le32 op;
 	__le64 seq;
 	struct ceph_timespec stamp;
+	__le32 max_caps;
 } __attribute__ ((packed));
 
 /* client_request */

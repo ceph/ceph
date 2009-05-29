@@ -605,6 +605,23 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 	return have;
 }
 
+int __ceph_caps_issued_other(struct ceph_inode_info *ci, struct ceph_cap *ocap)
+{
+	int have = ci->i_snap_caps;
+	struct ceph_cap *cap;
+	struct rb_node *p;
+
+	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+		cap = rb_entry(p, struct ceph_cap, ci_node);
+		if (cap == ocap)
+			continue;
+		if (!__cap_is_valid(cap))
+			continue;
+		have |= cap->issued;
+	}
+	return have;
+}
+
 static void __touch_cap(struct ceph_cap *cap)
 {
 	struct ceph_mds_session *s = cap->session;

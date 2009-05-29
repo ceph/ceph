@@ -23,19 +23,22 @@ public:
   int32_t op;
   version_t seq;  // used when requesting close, declaring stale
   utime_t stamp;
+  int32_t max_caps;
 
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
   MClientSession(int o, version_t s=0) : 
     Message(CEPH_MSG_CLIENT_SESSION),
-    op(o), seq(s) { }
+    op(o), seq(s), max_caps(0) { }
   MClientSession(int o, utime_t st) : 
     Message(CEPH_MSG_CLIENT_SESSION),
-    op(o), seq(0), stamp(st) { }
+    op(o), seq(0), stamp(st), max_caps(0) { }
 
   const char *get_type_name() { return "client_session"; }
   void print(ostream& out) {
     out << "client_session(" << ceph_session_op_name(op);
     if (seq) out << " seq " << seq;
+    if (op == CEPH_SESSION_TRIMCAPS)
+      out << " max_caps " << max_caps;
     out << ")";
   }
 
@@ -44,11 +47,13 @@ public:
     ::decode(op, p);
     ::decode(seq, p);
     ::decode(stamp, p);
+    ::decode(max_caps, p);
   }
   void encode_payload() { 
     ::encode(op, payload);
     ::encode(seq, payload);
     ::encode(stamp, payload);
+    ::encode(max_caps, payload);
   }
 };
 

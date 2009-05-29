@@ -300,6 +300,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_renew_requested = 0;
 	INIT_LIST_HEAD(&s->s_caps);
 	s->s_nr_caps = 0;
+	s->s_max_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	INIT_LIST_HEAD(&s->s_waiting);
 	INIT_LIST_HEAD(&s->s_unsafe);
@@ -791,6 +792,52 @@ static int __close_session(struct ceph_mds_client *mdsc,
 		return 0;
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
 	return request_close_session(mdsc, session);
+}
+
+/*
+ * Trim old(er) caps.
+ */
+static int trim_caps_cb(struct inode *inode, struct ceph_cap *cap, void *arg)
+{
+	struct ceph_mds_session *session = arg;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int used, oissued, mine;
+
+	if (session->s_nr_caps <= session->s_max_caps)
+		return -1;
+
+	spin_lock(&inode->i_lock);
+	mine = cap->issued | cap->implemented;
+	used = __ceph_caps_used(ci);
+	oissued = __ceph_caps_issued_other(ci, cap);
+
+	dout(20, "trim_caps_cb %p cap %p mine %s oissued %s used %s\n",
+	     inode, cap, ceph_cap_string(mine), ceph_cap_string(oissued),
+	     ceph_cap_string(used));
+	if ((used & ~oissued) & mine)
+		goto out;   /* we need these caps */
+
+	/* try to drop referring dentries */
+	d_prune_aliases(inode);
+	dout(20, "trim_caps_cb %p cap %p  pruned, count now %d\n",
+	     inode, cap, atomic_read(&inode->i_count));
+
+out:
+	spin_unlock(&inode->i_lock);
+	return 0;
+}
+
+static int trim_caps(struct ceph_mds_client *mdsc,
+		     struct ceph_mds_session *session,
+		     int max_caps)
+{
+	dout(10, "trim_caps mds%d start: %d / %d caps\n", session->s_mds,
+	     session->s_nr_caps, max_caps);
+	session->s_max_caps = max_caps;
+	iterate_session_caps(session, trim_caps_cb, session);
+	dout(10, "trim_caps mds%d done: %d / %d caps\n", session->s_mds,
+	     session->s_nr_caps, max_caps);
+	return 0;
 }
 
 /*
@@ -1722,6 +1769,10 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 		session->s_cap_ttl = 0;
 		spin_unlock(&session->s_cap_lock);
 		send_renew_caps(mdsc, session);
+		break;
+
+	case CEPH_SESSION_TRIMCAPS:
+		trim_caps(mdsc, session, le32_to_cpu(h->max_caps));
 		break;
 
 	default:
