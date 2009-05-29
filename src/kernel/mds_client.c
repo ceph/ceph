@@ -300,7 +300,6 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_renew_requested = 0;
 	INIT_LIST_HEAD(&s->s_caps);
 	s->s_nr_caps = 0;
-	s->s_max_caps = 0;
 	atomic_set(&s->s_ref, 1);
 	INIT_LIST_HEAD(&s->s_waiting);
 	INIT_LIST_HEAD(&s->s_unsafe);
@@ -803,7 +802,7 @@ static int trim_caps_cb(struct inode *inode, struct ceph_cap *cap, void *arg)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	int used, oissued, mine;
 
-	if (session->s_nr_caps <= session->s_max_caps)
+	if (session->s_trim_caps <= 0)
 		return -1;
 
 	spin_lock(&inode->i_lock);
@@ -814,13 +813,23 @@ static int trim_caps_cb(struct inode *inode, struct ceph_cap *cap, void *arg)
 	dout(20, "trim_caps_cb %p cap %p mine %s oissued %s used %s\n",
 	     inode, cap, ceph_cap_string(mine), ceph_cap_string(oissued),
 	     ceph_cap_string(used));
+	if (ci->i_dirty_caps)
+		goto out;   /* dirty caps */
 	if ((used & ~oissued) & mine)
 		goto out;   /* we need these caps */
 
-	/* try to drop referring dentries */
-	d_prune_aliases(inode);
-	dout(20, "trim_caps_cb %p cap %p  pruned, count now %d\n",
-	     inode, cap, atomic_read(&inode->i_count));
+	session->s_trim_caps--;
+	if (oissued) {
+		/* we aren't the only cap.. just remove us */
+		__ceph_remove_cap(cap, NULL);
+	} else {
+		/* try to drop referring dentries */
+		spin_unlock(&inode->i_lock);
+		d_prune_aliases(inode);
+		dout(20, "trim_caps_cb %p cap %p  pruned, count now %d\n",
+		     inode, cap, atomic_read(&inode->i_count));
+		return 0;
+	}
 
 out:
 	spin_unlock(&inode->i_lock);
@@ -831,12 +840,17 @@ static int trim_caps(struct ceph_mds_client *mdsc,
 		     struct ceph_mds_session *session,
 		     int max_caps)
 {
-	dout(10, "trim_caps mds%d start: %d / %d caps\n", session->s_mds,
-	     session->s_nr_caps, max_caps);
-	session->s_max_caps = max_caps;
-	iterate_session_caps(session, trim_caps_cb, session);
-	dout(10, "trim_caps mds%d done: %d / %d caps\n", session->s_mds,
-	     session->s_nr_caps, max_caps);
+	int trim_caps = session->s_nr_caps - max_caps;
+
+	dout(10, "trim_caps mds%d start: %d / %d, trim %d\n",
+	     session->s_mds, session->s_nr_caps, max_caps, trim_caps);
+	if (trim_caps > 0) {
+		session->s_trim_caps = trim_caps;
+		iterate_session_caps(session, trim_caps_cb, session);
+		dout(10, "trim_caps mds%d done: %d / %d, trimmed %d\n",
+		     session->s_mds, session->s_nr_caps, max_caps,
+			trim_caps - session->s_trim_caps);
+	}
 	return 0;
 }
 

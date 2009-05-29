@@ -747,8 +747,8 @@ static int __ceph_is_any_caps(struct ceph_inode_info *ci)
  * caller should hold i_lock, and session s_mutex.
  * returns true if this is the last cap.  if so, caller should iput.
  */
-static void __ceph_remove_cap(struct ceph_cap *cap,
-			      struct ceph_cap_reservation *ctx)
+void __ceph_remove_cap(struct ceph_cap *cap,
+		       struct ceph_cap_reservation *ctx)
 {
 	struct ceph_mds_session *session = cap->session;
 	struct ceph_inode_info *ci = cap->ci;
@@ -781,18 +781,6 @@ static void __ceph_remove_cap(struct ceph_cap *cap,
 	}
 	if (!__ceph_is_any_real_caps(ci))
 		__cap_delay_cancel(mdsc, ci);
-}
-
-/*
- * caller should hold session s_mutex.
- */
-void ceph_remove_cap(struct ceph_cap *cap)
-{
-	struct inode *inode = &cap->ci->vfs_inode;
-
-	spin_lock(&inode->i_lock);
-	__ceph_remove_cap(cap, NULL);
-	spin_unlock(&inode->i_lock);
 }
 
 /*
