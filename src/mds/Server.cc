@@ -524,7 +524,7 @@ void Server::reconnect_tick()
 
 void Server::recall_client_state(float ratio)
 {
-  int max_caps_per_client = g_conf.mds_cache_size / 2;
+  int max_caps_per_client = g_conf.mds_cache_size * .8;
   int min_caps_per_client = 100;
 
   dout(10) << "recall_client_state " << ratio

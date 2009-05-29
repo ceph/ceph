@@ -5092,7 +5092,8 @@ void MDCache::check_memory_usage()
   static MemoryModel::snap baseline = last;
 
   // check client caps
-  float caps_per_inode = (float)num_caps / (float)inode_map.size();
+  int num_inodes = inode_map.size();
+  float caps_per_inode = (float)num_caps / (float)num_inodes;
   //float cap_rate = (float)num_inodes_with_caps / (float)inode_map.size();
 
   dout(0) << "check_memory_usage"
@@ -5107,9 +5108,15 @@ void MDCache::check_memory_usage()
 	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
 
-  int size = last.get_total();
+  /*int size = last.get_total();
   if (size > g_conf.mds_mem_max * .9) {
     float ratio = (float)g_conf.mds_mem_max * .9 / (float)size;
+    if (ratio < 1.0)
+      mds->server->recall_client_state(ratio);
+  } else 
+    */
+  if (num_inodes_with_caps > g_conf.mds_cache_size) {
+    float ratio = (float)g_conf.mds_cache_size * .9 / (float)num_inodes_with_caps;
     if (ratio < 1.0)
       mds->server->recall_client_state(ratio);
   }

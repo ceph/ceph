@@ -46,7 +46,7 @@ public:
     if (get_seq())
       out << " seq " << get_seq();
     if (get_op() == CEPH_SESSION_RECALL_STATE)
-      out << " max_caps " << head.max_caps << " max_leases" << head.max_leases;
+      out << " max_caps " << head.max_caps << " max_leases " << head.max_leases;
     out << ")";
   }
 
