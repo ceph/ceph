@@ -631,23 +631,20 @@ static int iterate_session_caps(struct ceph_mds_session *session,
 	struct ceph_cap *cap;
 	struct inode *inode;
 	struct list_head *n;
+	int ret;
 
 	dout(10, "iterate_session_caps %p mds%d\n", session, session->s_mds);
 	spin_lock(&session->s_cap_lock);
 	list_for_each_safe(p, n, &session->s_caps) {
 		cap = list_entry(p, struct ceph_cap, session_caps);
 		inode = igrab(&cap->ci->vfs_inode);
+		if (!inode)
+			continue;
 		spin_unlock(&session->s_cap_lock);
-
-		if (inode) {
-			int ret;
-
-			ret = cb(inode, cap, arg);
-			iput(inode);
-			if (ret < 0)
-				return ret;
-		}
-
+		ret = cb(inode, cap, arg);
+		iput(inode);
+		if (ret < 0)
+			return ret;
 		spin_lock(&session->s_cap_lock);
 	}
 	spin_unlock(&session->s_cap_lock);
