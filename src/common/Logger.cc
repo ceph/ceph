@@ -212,7 +212,9 @@ void Logger::_flush()
 	  for (vector<double>::iterator p = vals_to_avg[i].begin(); n--; ++p) 
 	    var += (avg - *p) * (avg - *p);
 	}
-	out << "\t" << avg << "\t" << vals[i] << "\t" << var;
+	char s[30];
+	sprintf(s, "\t%.5lf\t%d\t%.5lf", avg, vals[i], var);
+	out << s;
       } else
 	out << "\t0\t0\t0";
     } else {
