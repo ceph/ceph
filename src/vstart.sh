@@ -142,8 +142,6 @@ else
         mds log max segments = 2'
 fi
 
-echo debug is $CMONDEBUG
-
 if [ "$MON_ADDR" != "" ]; then
 	CMON_ARGS=" -m "$MON_ADDR
 	COSD_ARGS=" -m "$MON_ADDR
