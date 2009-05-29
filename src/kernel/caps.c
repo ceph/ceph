@@ -605,6 +605,76 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 	return have;
 }
 
+static void __touch_cap(struct ceph_cap *cap)
+{
+	struct ceph_mds_session *s = cap->session;
+
+	dout(20, "__touch_cap %p cap %p mds%d\n", &cap->ci->vfs_inode, cap,
+	     s->s_mds);
+	spin_lock(&s->s_cap_lock);
+	list_move_tail(&cap->session_caps, &s->s_caps);
+	spin_unlock(&s->s_cap_lock);
+}
+
+/*
+ * Return true if we hold the given mask.  And move the cap(s) to the front
+ * of their respective LRUs.
+ */
+int __ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask, int touch)
+{
+	struct ceph_cap *cap;
+	struct rb_node *p;
+	int have = ci->i_snap_caps;
+
+	if ((have & mask) == mask) {
+		dout(30, "__ceph_caps_issued_mask %p snap issued %s"
+		     " (mask %s)\n", &ci->vfs_inode,
+		     ceph_cap_string(have),
+		     ceph_cap_string(mask));
+		return 1;
+	}
+
+	for (p = rb_first(&ci->i_caps); p; p = rb_next(p)) {
+		cap = rb_entry(p, struct ceph_cap, ci_node);
+		if (!__cap_is_valid(cap))
+			continue;
+		if ((cap->issued & mask) == mask) {
+			dout(30, "__ceph_caps_issued_mask %p cap %p issued %s"
+			     " (mask %s)\n", &ci->vfs_inode, cap,
+			     ceph_cap_string(cap->issued),
+			     ceph_cap_string(mask));
+			if (touch)
+				__touch_cap(cap);
+			return 1;
+		}
+
+		/* does a combination of caps satisfy mask? */
+		have |= cap->issued;
+		if ((have & mask) == mask) {
+			dout(30, "__ceph_caps_issued_mask %p combo issued %s"
+			     " (mask %s)\n", &ci->vfs_inode,
+			     ceph_cap_string(cap->issued),
+			     ceph_cap_string(mask));
+			if (touch) {
+				struct rb_node *q;
+
+				__touch_cap(cap);
+				for (q = rb_first(&ci->i_caps); q != p;
+				     q = rb_next(q)) {
+					cap = rb_entry(q, struct ceph_cap,
+						       ci_node);
+					if (!__cap_is_valid(cap))
+						continue;
+					__touch_cap(cap);
+				}				
+			}
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
 /*
  * Return mask of caps currently being revoked by an MDS.
  */

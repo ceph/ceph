@@ -505,6 +505,7 @@ static inline bool __ceph_is_any_real_caps(struct ceph_inode_info *ci)
 }
 
 extern int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented);
+extern int __ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask, int t);
 
 static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 {
@@ -515,9 +516,14 @@ static inline int ceph_caps_issued(struct ceph_inode_info *ci)
 	return issued;
 }
 
-static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask)
+static inline int ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask,
+					int touch)
 {
-	return (ceph_caps_issued(ci) & mask) == mask;
+	int r;
+	spin_lock(&ci->vfs_inode.i_lock);
+	r = __ceph_caps_issued_mask(ci, mask, touch);
+	spin_unlock(&ci->vfs_inode.i_lock);
+	return r;
 }
 
 static inline int __ceph_caps_dirty(struct ceph_inode_info *ci)

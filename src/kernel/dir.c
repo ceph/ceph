@@ -190,7 +190,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if ((filp->f_pos == 2 || fi->dentry) &&
 	    !ceph_test_opt(client, NOASYNCREADDIR) &&
 	    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED)) {
+	    __ceph_caps_issued_mask(ci, CEPH_CAP_FILE_SHARED, 1)) {
 		err = __dcache_readdir(filp, dirent, filldir);
 		if (err != -EAGAIN) {
 			spin_unlock(&inode->i_lock);
@@ -465,7 +465,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			    client->mount_args.snapdir_name,
 			    dentry->d_name.len) &&
 		    (ci->i_ceph_flags & CEPH_I_COMPLETE) &&
-		    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED)) {
+		    (__ceph_caps_issued_mask(ci, CEPH_CAP_FILE_SHARED, 1))) {
 			di->offset = ci->i_max_offset++;
 			spin_unlock(&dir->i_lock);
 			dout(10, " dir %p complete, -ENOENT\n", dir);
@@ -846,7 +846,7 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 
 	spin_lock(&dir->i_lock);
 	if (ci->i_rdcache_gen == di->lease_rdcache_gen)
-		valid = __ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_SHARED;
+		valid = __ceph_caps_issued_mask(ci, CEPH_CAP_FILE_SHARED, 1);
 	spin_unlock(&dir->i_lock);
 	dout(20, "dir_lease_is_valid dir %p v%u dentry %p v%u = %d\n",
 	     dir, (unsigned)ci->i_rdcache_gen, dentry,

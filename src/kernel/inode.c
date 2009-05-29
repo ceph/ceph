@@ -1493,7 +1493,7 @@ int ceph_do_getattr(struct inode *inode, int mask)
 	}
 
 	dout(30, "do_getattr inode %p mask %s\n", inode, ceph_cap_string(mask));
-	if (ceph_caps_issued_mask(ceph_inode(inode), mask))
+	if (ceph_caps_issued_mask(ceph_inode(inode), mask, 1))
 		return 0;
 
 	req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_GETATTR, USE_ANY_MDS);
@@ -1992,7 +1992,6 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	int err;
 	struct _ceph_vir_xattr_cb *vir_xattr;
 	struct ceph_inode_xattr *xattr;
-	int issued;
 
 	/* let's see if a virtual xattr was requested */
 	vir_xattr = _ceph_match_vir_xattr(name);
@@ -2000,12 +1999,10 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 		return (vir_xattr->getxattr_cb)(ci, value, size);
 
 	spin_lock(&inode->i_lock);
-	issued = __ceph_caps_issued(ci, NULL);
-	dout(10, "getxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
-			ceph_cap_string(issued),
-			ci->i_xattrs.version, ci->i_xattrs.index_version);
+	dout(10, "getxattr %p ver=%lld index_ver=%lld\n", inode,
+	     ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-	if ((issued & CEPH_CAP_XATTR_SHARED) &&
+	if (__ceph_caps_issued_mask(ci, CEPH_CAP_XATTR_SHARED, 1) &&
 	    (ci->i_xattrs.index_version >= ci->i_xattrs.version)) {
 		goto get_xattr;
 	} else {
@@ -2054,15 +2051,12 @@ ssize_t ceph_listxattr(struct dentry *dentry, char *names, size_t size)
 	int err;
 	u32 len;
 	int i;
-	int issued;
 
 	spin_lock(&inode->i_lock);
-	issued = __ceph_caps_issued(ci, NULL);
-	dout(10, "listxattr %p issued %s ver=%lld index_ver=%lld\n", inode,
-			ceph_cap_string(issued),
-			ci->i_xattrs.version, ci->i_xattrs.index_version);
+	dout(10, "listxattr %p ver=%lld index_ver=%lld\n", inode,
+	     ci->i_xattrs.version, ci->i_xattrs.index_version);
 
-	if ((issued & CEPH_CAP_XATTR_SHARED) &&
+	if (__ceph_caps_issued_mask(ci, CEPH_CAP_XATTR_SHARED, 1) &&
 	    (ci->i_xattrs.index_version > ci->i_xattrs.version)) {
 		goto list_xattr;
 	} else {
@@ -2328,6 +2322,5 @@ do_sync:
 	spin_unlock(&inode->i_lock);
 	err = ceph_send_removexattr(dentry, name);
 	return err;
-
 }
 
