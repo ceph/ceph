@@ -16,12 +16,12 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl
 
+static ClassHandler::ClassData null_cls_data;
 
-void ClassHandler::load_class(const nstring& cname)
+void ClassHandler::_load_class(ClassData &cls)
 {
-  dout(10) << "load_class " << cname << dendl;
+  dout(10) << "load_class " << cls.name << dendl;
 
-  ClassData& cls = get_obj(cname);
   char *fname=strdup("/tmp/class-XXXXXX");
   int fd = mkstemp(fname);
 
@@ -38,7 +38,7 @@ void ClassHandler::load_class(const nstring& cname)
     while (deps) {
       if (!deps->name)
         break;
-      cls.add_dependency(deps);
+      cls._add_dependency(deps);
       deps++;
     }
   }
@@ -49,12 +49,29 @@ void ClassHandler::load_class(const nstring& cname)
   return;
 }
 
+void ClassHandler::load_class(const nstring& cname)
+{
+  ClassData& cls = get_obj(cname);
+  if (&cls == &null_cls_data) {
+    dout(0) << "ERROR: can't load null class data" << dendl;
+    return;
+  }
+  cls.mutex->Lock();
+  _load_class(cls);
+  cls.mutex->Unlock();
+}
 
 ClassHandler::ClassData& ClassHandler::get_obj(const nstring& cname)
 {
+  Mutex::Locker locker(mutex);
   map<nstring, ClassData>::iterator iter = classes.find(cname);
   if (iter == classes.end()) {
     ClassData& cls = classes[cname];
+    cls.mutex = new Mutex("ClassData");
+    if (!cls.mutex) {
+      classes[cname] = null_cls_data;
+      return null_cls_data;
+    }
     dout(0) << "get_obj: adding new class name=" << cname << " ptr=" << &cls << dendl;
     cls.name = cname;
     cls.osd = osd;
@@ -68,6 +85,10 @@ ClassHandler::ClassData& ClassHandler::get_obj(const nstring& cname)
 ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVersion& version)
 {
   ClassData *class_data = &get_obj(cname);
+  if (class_data == &null_cls_data)
+    return NULL;
+
+  Mutex::Locker lock(*class_data->mutex);
 
   switch (class_data->status) {
   case ClassData::CLASS_LOADED:
@@ -104,7 +125,12 @@ void ClassHandler::handle_class(MClass *m)
        info_iter != m->info.end();
        ++info_iter, ++add_iter) {
     ClassData& data = get_obj(info_iter->name);
+    if (&data == &null_cls_data) {
+      dout(0) << "couldn't get class, out of memory? continuing" << dendl;
+      continue;
+    }
     dout(0) << "handle_class " << info_iter->name << dendl;
+    data.mutex->Lock();
     
     if (*add_iter) {
       
@@ -112,19 +138,7 @@ void ClassHandler::handle_class(MClass *m)
 	dout(10) << "added class '" << info_iter->name << "'" << dendl;
 	data.impl = *impl_iter;
 	++impl_iter;
-	load_class(info_iter->name);
-#if 0
-        switch (data.status) {
-        case ClassData::CLASS:
-            osd->got_class(info_iter->name);
-            break;
-	 case ClassData::CLASS_LOADED:
-	    osd->got_class(info_iter->name);
-            break;
-         default:
-           /* we're still waiting on some other classees */
-        }
-#endif
+	_load_class(data);
       } else {
         dout(0) << "class status=" << data.status << dendl;
       }
@@ -133,6 +147,7 @@ void ClassHandler::handle_class(MClass *m)
         data.status = ClassData::CLASS_INVALID;
         osd->got_class(info_iter->name);
     }
+    data.mutex->Unlock();
   }
 }
 
@@ -148,6 +163,11 @@ void ClassHandler::resend_class_requests()
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
   ClassData& class_data = get_obj(cname);
+
+  if (&class_data == &null_cls_data) {
+    dout(0) << "couldn't get class object, out of memory?" << dendl;
+    return NULL;
+  }
 
   dout(0) << "&class_data=" << (void *)&class_data << " status=" << class_data.status << dendl;
 
@@ -200,12 +220,16 @@ void ClassHandler::ClassData::init()
     cls_init();
 }
 
-bool ClassHandler::ClassData::add_dependency(cls_deps_t *dep)
+bool ClassHandler::ClassData::_add_dependency(cls_deps_t *dep)
 {
   if (!dep->name)
     return false;
 
   ClassData& cls_dep = handler->get_obj(dep->name);
+  if (&cls_dep == &null_cls_data) {
+    dout(0) << "couldn't get class dep object, out of memory?" << dendl;
+    return false;
+  }
   map<nstring, ClassData *>::iterator iter = missing_dependencies.find(dep->name);
   dependencies[dep->name] = &cls_dep;
   dout(0) << "adding dependency " << dep->name << dendl;
@@ -220,7 +244,7 @@ bool ClassHandler::ClassData::add_dependency(cls_deps_t *dep)
     }
     dout(0) << "adding missing dependency " << dep->name << dendl;
   }
-  cls_dep.add_dependent(*this);
+  cls_dep._add_dependent(*this);
 
   if (cls_dep.status == CLASS_INVALID) {
     dout(0) << "ouch! depending on invalid class" << dendl;
@@ -232,6 +256,7 @@ bool ClassHandler::ClassData::add_dependency(cls_deps_t *dep)
 
 void ClassHandler::ClassData::satisfy_dependency(ClassData *cls)
 {
+  Mutex::Locker lock(*mutex);
   map<nstring, ClassData *>::iterator iter = missing_dependencies.find(cls->name);
 
   if (iter != missing_dependencies.end()) {
@@ -247,14 +272,17 @@ void ClassHandler::ClassData::satisfy_dependency(ClassData *cls)
   }
 }
 
-void ClassHandler::ClassData::add_dependent(ClassData& dependent)
+void ClassHandler::ClassData::_add_dependent(ClassData& dependent)
 {
+  Mutex::Locker lock(*mutex);
   dout(0) << "class " << name << " has dependet: " << dependent.name << dendl;
   dependents.push_back(&dependent);
 }
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *mname, cls_method_call_t func)
 {
+  Mutex::Locker lock(*mutex);
+
   ClassMethod& method = methods_map[mname];
   method.func = func;
   method.name = mname;
@@ -265,7 +293,8 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname)
 {
-   map<nstring, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
+  Mutex::Locker lock(*mutex);
+  map<nstring, ClassHandler::ClassMethod>::iterator iter = methods_map.find(mname);
 
   if (iter == methods_map.end())
     return NULL;
@@ -275,6 +304,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname
 
 void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *method)
 {
+   Mutex::Locker lock(*mutex);
    map<nstring, ClassMethod>::iterator iter;
 
    iter = methods_map.find(method->name);

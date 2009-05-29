@@ -7,6 +7,7 @@
 #include "objclass/objclass.h"
 
 #include "common/Cond.h"
+#include "common/Mutex.h"
 #include "common/ClassVersion.h"
 
 
@@ -31,8 +32,9 @@ public:
   };
 
   struct ClassData {
-    bool add_dependency(cls_deps_t *dep);
-    void add_dependent(ClassData& dependent);
+    Mutex *mutex;
+    bool _add_dependency(cls_deps_t *dep);
+    void _add_dependent(ClassData& dependent);
 
     void satisfy_dependency(ClassData *cls);
 
@@ -57,8 +59,8 @@ public:
 
     bool has_missing_deps() { return (missing_dependencies.size() > 0); }
 
-    ClassData() : status(CLASS_UNKNOWN), version(), handle(NULL), registered(false)  {}
-    ~ClassData() { }
+    ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), handle(NULL), registered(false)  {}
+    ~ClassData() { if (mutex) delete mutex; }
 
     ClassMethod *register_method(const char *mname,
                           cls_method_call_t func);
@@ -68,13 +70,15 @@ public:
     void load();
     void init();
   };
+  Mutex mutex;
   map<nstring, ClassData> classes;
 
   ClassData& get_obj(const nstring& cname);
 
   void load_class(const nstring& cname);
+  void _load_class(ClassData &data);
 
-  ClassHandler(OSD *_osd) : osd(_osd) {}
+  ClassHandler(OSD *_osd) : osd(_osd), mutex("ClassHandler") {}
 
   ClassData *get_class(const nstring& cname, ClassVersion& version);
   void resend_class_requests();
