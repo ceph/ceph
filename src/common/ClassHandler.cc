@@ -31,7 +31,7 @@ void ClassHandler::load_class(const nstring& cname)
 
   close(fd);
 
-  cls.handle = dlopen(fname, RTLD_LAZY);
+  cls.handle = dlopen(fname, RTLD_NOW);
   cls_deps_t *(*cls_deps)() = ( cls_deps_t *(*)())dlsym(cls.handle, "class_deps");
   if (cls_deps) {
     cls_deps_t *deps = cls_deps();
