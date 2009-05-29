@@ -120,14 +120,18 @@ testradospp_LDADD = librados.la libcrush.la
 
 ## object classes
 
-libtestclass.so: testclass.cc
-	${CXX} -fPIC -shared -g -o libtestclass.so testclass.cc
-libbarclass.so: barclass.cc
-	${CXX} -fPIC -shared -g -o libbarclass.so barclass.cc
-libfooclass.so: fooclass.cc
-	${CXX} -fPIC -shared -g -o libfooclass.so fooclass.cc
-BUILT_SOURCES += libtestclass.so libfooclass.so libbarclass.so
+# libtestclass.so: testclass.cc
+# 	${CXX} -fPIC -shared -g -o libtestclass.so testclass.cc
+# libbarclass.so: barclass.cc
+# 	${CXX} -fPIC -shared -g -o libbarclass.so barclass.cc
+# libfooclass.so: fooclass.cc
+# 	${CXX} -fPIC -shared -g -o libfooclass.so fooclass.cc
+# 
+#BUILT_SOURCES += libtestclass.so libfooclass.so libbarclass.so
 
+libcls_crypto.so: cls_crypto.cc
+	${CXX} -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
+BUILT_SOURCES += libcls_crypto.so
 
 
 

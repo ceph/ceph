@@ -19,6 +19,13 @@
 #include <stdlib.h>
 #include <time.h>
 
+void buf_to_hex(const unsigned char *buf, int len, char *str)
+{
+  for (unsigned int i =0; i < len; i++) {
+    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  }
+}
+
 int main(int argc, const char **argv) 
 {
   Rados rados;
@@ -33,7 +40,7 @@ int main(int argc, const char **argv)
 
   time(&tm);
   snprintf(buf, 128, "%s", ctime(&tm));
-  bl.append(buf, strlen(buf) + 1);
+  bl.append(buf, strlen(buf));
 
   object_t oid;
   memset(&oid, 0, sizeof(oid));
@@ -44,10 +51,22 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   rados.write(pool, oid, 0, bl, bl.length());
-  rados.exec(pool, oid, "test", "foo", bl, bl2);
-  cout << "exec result=" << bl2.c_str() << std::endl;
-  int size = rados.read(pool, oid, 0, bl2, 128);
 
+  r = rados.exec(pool, oid, "crypto", "md5", bl, bl2);
+  cout << "exec returned " << r << std::endl;
+  const unsigned char *md5 = (const unsigned char *)bl2.c_str();
+  char md5_str[bl2.length()*2 + 1];
+  buf_to_hex(md5, bl2.length(), md5_str);
+  cout << "md5 result=" << md5_str << std::endl;
+
+  r = rados.exec(pool, oid, "crypto", "sha1", bl, bl2);
+  cout << "exec returned " << r << std::endl;
+  const unsigned char *sha1 = (const unsigned char *)bl2.c_str();
+  char sha1_str[bl2.length()*2 + 1];
+  buf_to_hex(sha1, bl2.length(), sha1_str);
+  cout << "sha1 result=" << sha1_str << std::endl;
+
+  int size = rados.read(pool, oid, 0, bl2, 128);
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
