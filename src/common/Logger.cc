@@ -213,7 +213,7 @@ void Logger::_flush()
 	    var += (avg - *p) * (avg - *p);
 	}
 	char s[30];
-	sprintf(s, "\t%.5lf\t%d\t%.5lf", avg, vals[i], var);
+	sprintf(s, "\t%.5lf\t%ld\t%.5lf", avg, vals[i], var);
 	out << s;
       } else
 	out << "\t0\t0\t0";
