@@ -32,6 +32,7 @@ private:
   ceph_osd_request_head head;
 public:
   vector<ceph_osd_op> ops;
+  bufferlist ticket;
   vector<snapid_t> snaps;
   osd_peer_stat_t peer_stat;
 
@@ -72,15 +73,18 @@ public:
     return peer_stat; 
   }
 
+  bufferlist& get_ticket() { return ticket; }
+
   //void inc_shed_count() { head.shed_count = get_shed_count() + 1; }
   //int get_shed_count() { return head.shed_count; }
  
 
 
-  MOSDOp(int inc, long tid,
+  MOSDOp(const bufferlist& tkt, int inc, long tid,
          object_t oid, ceph_object_layout ol, epoch_t mapepoch,
 	 int flags) :
-    Message(CEPH_MSG_OSD_OP) {
+    Message(CEPH_MSG_OSD_OP),
+    ticket(tkt) {
     memset(&head, 0, sizeof(head));
     head.tid = tid;
     head.client_inc = inc;
@@ -153,8 +157,10 @@ public:
   virtual void encode_payload() {
     head.num_snaps = snaps.size();
     head.num_ops = ops.size();
+    head.ticket_len = ticket.length();
     ::encode(head, payload);
     ::encode_nohead(ops, payload);
+    ::encode_nohead(ticket, payload);
     ::encode_nohead(snaps, payload);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::encode(peer_stat, payload);
@@ -164,6 +170,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     decode_nohead(head.num_ops, ops, p);
+    decode_nohead(head.ticket_len, ticket, p);
     decode_nohead(head.num_snaps, snaps, p);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::decode(peer_stat, p);

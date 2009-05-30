@@ -361,13 +361,15 @@ struct ceph_osd_request_head {
 	struct ceph_timespec      mtime;
 	struct ceph_eversion      reassert_version;
 
+	__le32 ticket_len;
+
 	__le64 snapid;
 	__le64 snap_seq;       /* writer's snap context */
 	__le32 num_snaps;
 
 	__le16 num_ops;
 	__u16 object_type;
-	struct ceph_osd_op ops[];  /* followed by snaps */
+	struct ceph_osd_op ops[];  /* followed by ticket, snaps */
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

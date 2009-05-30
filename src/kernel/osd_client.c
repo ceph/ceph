@@ -93,6 +93,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	struct ceph_osd_request_head *head;
 	struct ceph_osd_op *op;
 	__le64 *snaps;
+	void *ticketp;
 	int do_trunc = truncate_seq && (off + *plen > truncate_size);
 	int num_op = 1 + do_sync + do_trunc;
 	size_t msg_size = sizeof(*head) + num_op*sizeof(*op);
@@ -114,6 +115,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	WARN_ON((flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == 0);
 
 	/* create message */
+	msg_size += osdc->client->signed_ticket_len;
 	if (snapc)
 		msg_size += sizeof(u64) * snapc->num_snaps;
 	msg = ceph_msg_new(CEPH_MSG_OSD_OP, msg_size, 0, 0, NULL);
@@ -124,7 +126,12 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	memset(msg->front.iov_base, 0, msg->front.iov_len);
 	head = msg->front.iov_base;
 	op = (void *)(head + 1);
-	snaps = (void *)(op + num_op);
+	ticketp = (void *)(op + num_op);
+	snaps = ticketp + osdc->client->signed_ticket_len;
+
+	head->ticket_len = cpu_to_le32(osdc->client->signed_ticket_len);
+	memcpy(ticketp, osdc->client->signed_ticket,
+	       osdc->client->signed_ticket_len);
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = cpu_to_le32(flags);

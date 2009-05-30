@@ -2259,6 +2259,8 @@ int Client::mount()
   signed_ticket = monclient->get_signed_ticket();
   ticket = monclient->get_ticket();
 
+  objecter->signed_ticket = signed_ticket;
+
   mounted = true;
   
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 

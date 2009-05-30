@@ -113,6 +113,7 @@ bool RadosClient::init()
 
   lock.Lock();
 
+  objecter->signed_ticket = mc->get_signed_ticket();
   objecter->set_client_incarnation(0);
   objecter->init();
 

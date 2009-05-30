@@ -158,7 +158,10 @@ class Objecter {
   Messenger *messenger;
   MonMap    *monmap;
   OSDMap    *osdmap;
-  
+
+  bufferlist signed_ticket;
+
+ 
  private:
   tid_t last_tid;
   int client_inc;
@@ -306,7 +309,7 @@ class Objecter {
 
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
-    messenger(m), monmap(mm), osdmap(om), 
+    messenger(m), monmap(mm), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
     last_epoch_requested(0),
