@@ -72,8 +72,8 @@ get_name_list() {
 		what="$what $bit"
 		;;
 	    *)
-		if echo " $bit " | grep -v -q " $f "; then
-		    echo "$0: $type '$f' not found ($conf defines $bit)"
+		if echo " " $bit " " | grep -v -q " $f "; then
+		    echo "$0: $type '$f' not found ($conf defines "$bit")"
 		    exit 1
 		fi
 		what="$what $f"
