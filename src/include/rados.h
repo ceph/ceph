@@ -224,7 +224,6 @@ enum {
 
 	/** exec **/
 	CEPH_OSD_OP_RDCALL    = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_EXEC | 1,
-	CEPH_OSD_OP_LOAD_CLASS =  CEPH_OSD_OP_MODE_RD|CEPH_OSD_OP_TYPE_EXEC | 2,
 	CEPH_OSD_OP_WRCALL    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_EXEC | 1,
 };
 
@@ -368,7 +367,6 @@ struct ceph_osd_request_head {
 	__le32 num_snaps;
 
 	__le16 num_ops;
-	__u16 object_type;
 	struct ceph_osd_op ops[];  /* followed by ticket, snaps */
 } __attribute__ ((packed));
 
