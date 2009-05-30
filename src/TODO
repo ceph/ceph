@@ -140,15 +140,10 @@ mds
   - ordering
   - should to set caps/lock states so that ops can proceed without revoking from client
   - need to make sure replayed ops finish before new ops proceed.  globally across the cluster.  ick.
-- fix up *_RDCACHE vs FILE_RDCACHE semantics
-  - ability to read attribute value is distinct from being able to hold cached pages?
-- file recovery maybe needs to scan entire file range for a truncation event?  (and object attr maybe needs file offset, not object offset, or original truncation?)
 - on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
-- take some care with replayed client requests vs new requests
 - linkage vs cdentry replicas and remote rename....
 - make recovery work with early replies
   - purge each session's unused preallocated inodes
-- file size recovery gives (wrong) 4MB-increment results?
 - hard link backpointers
   - anchor source dir
   - build snaprealm for any hardlinked file
@@ -162,18 +157,10 @@ mds
   - tail the mds log as it is written
   - periodically check head so that we trim, too
 - rename: importing inode... also journal imported client map?
-- rerun destro trace against latest, with various journal lengths
-- cap/lease length heuristics
-  - mds lock last_change stamp?
 - handle slow client reconnect (i.e. after mds has gone active)
-- fix reconnect/rejoin open file weirdness
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
-- FIXME how to journal/store root and stray inode content? 
-  - in particular, i care about dirfragtree.. get it on rejoin?
-  - and dir sizes, if i add that... also on rejoin?
 - add FILE_CAP_EXTEND capability bit
-- return extra inode(s) in reply (namely, unlink)?
 
 
 journaler
