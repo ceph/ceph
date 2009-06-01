@@ -101,3 +101,25 @@ int cls_rdcall(cls_method_handle_t hctx, const char *cls, const char *method,
   return r;
 }
 
+int cls_read(cls_method_handle_t hctx, int ofs, int len,
+                                 char **outdata, int *outdatalen)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  bufferlist odata;
+  bufferlist idata;
+  vector<ceph_osd_op> nops(1);
+  ceph_osd_op& op = nops[0];
+  int r;
+
+  op.offset = ofs;
+  op.length = len;
+  op.op = CEPH_OSD_OP_READ;
+  bufferlist::iterator iter = idata.begin();
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops, iter, odata);
+
+  *outdata = odata.c_str();
+  *outdatalen = odata.length();
+
+  return r;
+}
+
