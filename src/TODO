@@ -1,55 +1,19 @@
-v0.6
-/- fold observer into cmonctl/ceph?
-/- osd scrub
-/- async metadata
-
-v0.7
-/- smart osd sync
-/- osd bug fixes
-/- fast truncate
-/- updated debian package
-/- improved start/stop scripts
-/- proc -> sysfs cleanup
-
-v0.7.1
-/- O_DIRECT
-/- dentry lease renewal
-
-v0.7.2
-/- make kclient handle osd ack + sync properly
-/- make fill_trace handle short traces; return short traces from mds
-/- rdcap renewal
-/- some mds clustering fixes
-/- sysfs -> debugfs
-/- queue delayed check upon receipt of unwanted, un-EXPIREABLE caps
-/- init/mkfs fixes
-/- warn on cmon startup if monmap doesn't match .conf
-/- make kclient timeouts tunable
-
-v0.7.3
-/- clean up path_traverse interface, esp the usages in Server.cc
-/- piggyback lease/cap release on client_request?
-/- store metadata format version on disk...
-/- async xattr
-/- dcache readdir
-/- confutils memory leaks
-/- osd re-up attempt when marked down
-
 v0.8
-- osd recovery fixes
-- backup homiebackup5
-- backup backup.
-- bug fixes?
-- mount error reporting
-- fix mds file size/mtime recovery
-- changes for 2.6.30
-- mds cap fixes
-- crush fixes
+/- osd recovery fixes
+/- backup homiebackup5
+/- backup backup.
+/- bug fixes?
+/- mount error reporting
+/- fix mds file size/mtime recovery
+/- changes for 2.6.30
+/- mds cap fixes
+/- crush fixes
 
 v0.9
-- librados
-- object classes
-- make mds exhert memory pressure on client caps, leases
+/- make mds exhert memory pressure on client caps, leases
+/- librados
+  - async io
+/- object classes
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
 
