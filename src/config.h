@@ -292,6 +292,8 @@ struct md_config_t {
 
   bool osd_auto_weight;
 
+  bool osd_class_timeout;
+
   // filestore
   bool filestore;
   double   filestore_max_sync_interval;

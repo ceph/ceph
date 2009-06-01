@@ -38,13 +38,14 @@ public:
 
     void satisfy_dependency(ClassData *cls);
 
-    enum { 
+    enum Status { 
       CLASS_UNKNOWN, 
       CLASS_INVALID, 
       CLASS_LOADED, 
       CLASS_REQUESTED, 
     } status;
     ClassVersion version;
+    time_t timeout;
     ClassImpl impl;
     nstring name;
     OSD *osd;
@@ -59,7 +60,7 @@ public:
 
     bool has_missing_deps() { return (missing_dependencies.size() > 0); }
 
-    ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), handle(NULL), registered(false)  {}
+    ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), timeout(0), handle(NULL), registered(false)  {}
     ~ClassData() { if (mutex) delete mutex; }
 
     ClassMethod *register_method(const char *mname,
@@ -69,6 +70,10 @@ public:
 
     void load();
     void init();
+
+    void set_status(Status _status);
+    void set_timeout();
+    bool cache_timed_out();
   };
   Mutex mutex;
   map<nstring, ClassData> classes;

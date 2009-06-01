@@ -24,6 +24,7 @@ void ClassHandler::_load_class(ClassData &cls)
 
   char *fname=strdup("/tmp/class-XXXXXX");
   int fd = mkstemp(fname);
+  cls_deps_t *(*cls_deps)();
 
   for (list<bufferptr>::const_iterator it = cls.impl.binary.buffers().begin();
        it != cls.impl.binary.buffers().end(); it++)
@@ -32,7 +33,12 @@ void ClassHandler::_load_class(ClassData &cls)
   close(fd);
 
   cls.handle = dlopen(fname, RTLD_NOW);
-  cls_deps_t *(*cls_deps)() = ( cls_deps_t *(*)())dlsym(cls.handle, "class_deps");
+
+  if (!cls.handle) {
+    dout(0) << "could not open class (dlopen failed)" << dendl;
+    goto done;
+  }
+  cls_deps = (cls_deps_t *(*)())dlsym(cls.handle, "class_deps");
   if (cls_deps) {
     cls_deps_t *deps = cls_deps();
     while (deps) {
@@ -43,6 +49,7 @@ void ClassHandler::_load_class(ClassData &cls)
     }
   }
   cls.load();
+done:
   unlink(fname);
   free(fname);
 
@@ -84,6 +91,7 @@ ClassHandler::ClassData& ClassHandler::get_obj(const nstring& cname)
 
 ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVersion& version)
 {
+  ClassHandler::ClassData *ret = NULL;
   ClassData *class_data = &get_obj(cname);
   if (class_data == &null_cls_data)
     return NULL;
@@ -91,28 +99,30 @@ ClassHandler::ClassData *ClassHandler::get_class(const nstring& cname, ClassVers
   Mutex::Locker lock(*class_data->mutex);
 
   switch (class_data->status) {
+  case ClassData::CLASS_INVALID:
   case ClassData::CLASS_LOADED:
+    if (class_data->cache_timed_out()) {
+      dout(0) << "class timed out going to send request for " << cname.c_str() << " v" << version << dendl;
+      ret = class_data;
+      goto send;
+    }
     return class_data;
-    
   case ClassData::CLASS_REQUESTED:
     return NULL;
     break;
 
   case ClassData::CLASS_UNKNOWN:
-    class_data->status = ClassData::CLASS_REQUESTED;
+    class_data->set_status(ClassData::CLASS_REQUESTED);
     break;
-
-  case ClassData::CLASS_INVALID:
-    return class_data;
 
   default:
     assert(0);
   }
 
   class_data->version = version;
-
+send:
   osd->send_class_request(cname.c_str(), version);
-  return NULL;
+  return ret;
 }
 
 void ClassHandler::handle_class(MClass *m)
@@ -133,18 +143,14 @@ void ClassHandler::handle_class(MClass *m)
     data.mutex->Lock();
     
     if (*add_iter) {
-      
-      if (data.status == ClassData::CLASS_REQUESTED) {
+        data.set_status(ClassData::CLASS_REQUESTED);
 	dout(10) << "added class '" << info_iter->name << "'" << dendl;
 	data.impl = *impl_iter;
 	++impl_iter;
 	_load_class(data);
-      } else {
-        dout(0) << "class status=" << data.status << dendl;
-      }
     } else {
 	dout(10) << "response of an invalid class '" << info_iter->name << "'" << dendl;
-        data.status = ClassData::CLASS_INVALID;
+        data.set_status(ClassData::CLASS_INVALID);
         osd->got_class(info_iter->name);
     }
     data.mutex->Unlock();
@@ -200,7 +206,7 @@ void ClassHandler::ClassData::load()
   }
 
   if (!has_missing_deps()) {
-    status = CLASS_LOADED;
+    set_status(CLASS_LOADED);
     dout(0) << "setting class " << name << " status to CLASS_LOADED" << dendl;
     init();
     osd->got_class(name);
@@ -216,6 +222,7 @@ void ClassHandler::ClassData::load()
 void ClassHandler::ClassData::init()
 {
   void (*cls_init)() = (void (*)())dlsym(handle, "class_init");
+
   if (cls_init)
     cls_init();
 }
@@ -248,7 +255,7 @@ bool ClassHandler::ClassData::_add_dependency(cls_deps_t *dep)
 
   if (cls_dep.status == CLASS_INVALID) {
     dout(0) << "ouch! depending on invalid class" << dendl;
-    status = CLASS_INVALID; /* we have an invalid dependency, we're invalid */
+    set_status(CLASS_INVALID); /* we have an invalid dependency, we're invalid */
   }
 
   return true;
@@ -264,7 +271,7 @@ void ClassHandler::ClassData::satisfy_dependency(ClassData *cls)
     missing_dependencies.erase(iter);
     if (missing_dependencies.size() == 0) {
       dout(0) << "all dependencies are satisfied! initializing, notifying osd" << dendl;
-      status = CLASS_LOADED;
+      set_status(CLASS_LOADED);
   dout(0) << "this=" << (void *)this << " status=" << status << dendl;
       init();
       osd->got_class(name);
@@ -281,8 +288,7 @@ void ClassHandler::ClassData::_add_dependent(ClassData& dependent)
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *mname, cls_method_call_t func)
 {
-  Mutex::Locker lock(*mutex);
-
+ /* no need for locking, called under the class_init mutex */
   ClassMethod& method = methods_map[mname];
   method.func = func;
   method.name = mname;
@@ -304,7 +310,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::get_method(const char *mname
 
 void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *method)
 {
-   Mutex::Locker lock(*mutex);
+ /* no need for locking, called under the class_init mutex */
    map<nstring, ClassMethod>::iterator iter;
 
    iter = methods_map.find(method->name);
@@ -312,6 +318,32 @@ void ClassHandler::ClassData::unregister_method(ClassHandler::ClassMethod *metho
      return;
 
    methods_map.erase(iter);
+}
+
+void ClassHandler::ClassData::set_status(ClassHandler::ClassData::Status _status)
+{
+  status = _status;
+
+  switch (status) {
+    case CLASS_INVALID:
+    case CLASS_LOADED:
+      set_timeout();
+      break;
+    default:
+      break;
+  }
+}
+
+void ClassHandler::ClassData::set_timeout()
+{
+  timeout = g_clock.now();
+  timeout += g_conf.osd_class_timeout;
+}
+
+bool ClassHandler::ClassData::cache_timed_out()
+{
+  dout(0) << "timeout=" << timeout << " g_clock.now()=" << g_clock.now() << dendl;
+  return (timeout && g_clock.now() >= timeout);
 }
 
 void ClassHandler::ClassMethod::unregister()
