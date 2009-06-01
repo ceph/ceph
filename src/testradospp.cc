@@ -21,7 +21,7 @@
 
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
-  for (unsigned int i =0; i < len; i++) {
+  for (int i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
 }
