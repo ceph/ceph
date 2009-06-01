@@ -1881,6 +1881,60 @@ bool FileStore::collection_empty(coll_t c)
   return empty;
 }
 
+int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_count, collection_list_handle_t *handle) 
+{  
+  if (fake_collections) return collections.collection_list(c, ls);
+
+  char fn[PATH_MAX];
+  get_cdir(c, fn);
+  dout(10) << "collection_list " << fn << dendl;
+
+  DIR *dir = ::opendir(fn);
+  if (!dir)
+    return -errno;
+  
+  // first, build (ino, object) list
+  vector< pair<ino_t,pobject_t> > inolist;
+
+  struct dirent *de;
+  if (handle)
+    de = *(struct dirent **)handle;
+  for (int i=0; i<max_count; i++) {
+    int ret = ::readdir_r(dir, de, &de);
+    if (ret) {
+      dout(0) << "error reading directory" << dendl;
+      return -errno;
+    }
+    if (!de) {
+      break;
+    }
+    // parse
+    if (de->d_name[0] == '.') continue;
+    //cout << "  got object " << de->d_name << std::endl;
+    pobject_t o;
+    if (parse_object(de->d_name, o)) {
+      inolist.push_back(pair<ino_t,pobject_t>(de->d_ino, o));
+      ls.push_back(o);
+    }
+  }
+
+  if (!handle || !de)
+    ::closedir(dir);
+
+  if (handle)
+    *handle = (collection_list_handle_t)de;
+
+  // build final list
+  ls.resize(inolist.size());
+  int i = 0;
+  for (vector< pair<ino_t,pobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
+    ls[i++] = p->second;
+  
+  dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
+  return 0;
+}
+
+
 int FileStore::collection_list(coll_t c, vector<pobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);

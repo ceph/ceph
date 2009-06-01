@@ -31,7 +31,6 @@ using namespace std;
 #include <ext/hash_map>
 using namespace __gnu_cxx;
 
-
 // fake attributes in memory, if we need to.
 
 class FileStore : public JournalingObjectStore {
@@ -148,6 +147,7 @@ class FileStore : public JournalingObjectStore {
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
+  int collection_list_partial(coll_t c, vector<pobject_t>& o, int count, collection_list_handle_t *handle);
   int collection_list(coll_t c, vector<pobject_t>& o);
 
   int _create_collection(coll_t c);
