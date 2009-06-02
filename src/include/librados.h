@@ -40,7 +40,7 @@ int rados_aio_wait_for_safe(rados_completion_t c);
 int rados_aio_is_complete(rados_completion_t c);
 int rados_aio_is_safe(rados_completion_t c);
 int rados_aio_get_return_value(rados_completion_t c);
-void rados_aio_free(rados_completion_t c);
+void rados_aio_release(rados_completion_t c);
 
 int rados_aio_write(rados_pool_t pool, struct ceph_object *oid, off_t off, const char *buf, size_t len, rados_completion_t *completion);
 int rados_aio_read(rados_pool_t pool, struct ceph_object *oid, off_t off, char *buf, size_t len, rados_completion_t *completion);

@@ -89,7 +89,7 @@ public:
     unsigned maxlen;
 
     AioCompletion() : lock("RadosClient::AioCompletion"),
-		      ref(1), rval(0), ack(false), safe(false), pbl(0), buf(0), maxlen(0) {}
+		      ref(1), rval(0), ack(false), safe(false), pbl(0), buf(0), maxlen(0) { }
 
     int wait_for_complete() {
       lock.Lock();
@@ -123,6 +123,12 @@ public:
       lock.Unlock();
       return r;
     }
+
+    void get() {
+      lock.Lock();
+      ref++;
+      lock.Unlock();
+    }
     void put() {
       lock.Lock();
       int n = --ref;
@@ -154,7 +160,9 @@ public:
       if (!n)
 	delete c;
     }
-    C_aio_Ack(AioCompletion *_c) : c(_c) {}
+    C_aio_Ack(AioCompletion *_c) : c(_c) {
+      c->get();
+    }
   };
   
   struct C_aio_Safe : public Context {
@@ -172,7 +180,9 @@ public:
       if (!n)
 	delete c;
     }
-    C_aio_Safe(AioCompletion *_c) : c(_c) {}
+    C_aio_Safe(AioCompletion *_c) : c(_c) {
+      c->get();
+    }
   };
 
   int aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
@@ -683,7 +693,7 @@ extern "C" int rados_aio_get_return_value(rados_completion_t c)
   return ((RadosClient::AioCompletion *)c)->get_return_value();
 }
 
-extern "C" void rados_aio_free(rados_completion_t c)
+extern "C" void rados_aio_release(rados_completion_t c)
 {
   ((RadosClient::AioCompletion *)c)->put();
 }
