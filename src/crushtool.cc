@@ -804,7 +804,7 @@ int main(int argc, const char **argv)
 	if (l.size)
 	  sprintf(format, "%s%%d", l.name);
 	else
-	  sprintf(format, l.name);
+	  strcpy(format, l.name);
 	char name[20];
 	sprintf(name, format, i);
 	crush.set_item_name(id, name);
