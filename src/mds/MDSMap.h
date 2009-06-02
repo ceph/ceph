@@ -72,6 +72,7 @@ public:
   static const int STATE_RESOLVE   =  CEPH_MDS_STATE_RESOLVE;  // up, disambiguating distributed operations (import, rename, etc.)
   static const int STATE_RECONNECT =  CEPH_MDS_STATE_RECONNECT;  // up, reconnect to clients
   static const int STATE_REJOIN    =  CEPH_MDS_STATE_REJOIN; // up, replayed journal, rejoining distributed cache
+  static const int STATE_CLIENTREPLAY = CEPH_MDS_STATE_CLIENTREPLAY; // up, active
   static const int STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE; // up, active
   static const int STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING; // up, exporting metadata (-> standby or out)
   
@@ -300,6 +301,7 @@ public:
   bool is_resolve(int m)   { return get_state(m) == STATE_RESOLVE; }
   bool is_reconnect(int m) { return get_state(m) == STATE_RECONNECT; }
   bool is_rejoin(int m)    { return get_state(m) == STATE_REJOIN; }
+  bool is_clientreplay(int m)   { return get_state(m) == STATE_CLIENTREPLAY; }
   bool is_active(int m)   { return get_state(m) == STATE_ACTIVE; }
   bool is_stopping(int m) { return get_state(m) == STATE_STOPPING; }
   bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }

@@ -99,10 +99,23 @@ void Server::dispatch(Message *m)
   }
 
   // active?
-  if (!mds->is_active() && !mds->is_stopping()) {
-    dout(3) << "not active yet, waiting" << dendl;
-    mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
-    return;
+  if (!mds->is_active() && 
+      !(mds->is_stopping() && m->get_orig_source().is_mds())) {
+    if (mds->is_reconnect() &&
+	m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+	((MClientRequest*)m)->is_replay()) {
+      dout(3) << "queuing replayed op" << dendl;
+      mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+      return;
+    } else if (mds->is_clientreplay() &&
+	       m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+	       ((MClientRequest*)m)->is_replay()) {
+      // replaying!
+    } else {
+      dout(3) << "not active yet, waiting" << dendl;
+      mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
+      return;
+    }
   }
 
   switch (m->get_type()) {
@@ -617,6 +630,11 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   if (client_inst.name.is_mds())
     return;
 
+  if (req->is_replay()) {
+    dout(10) << "early_reply - none for replay request" << dendl;
+    return;
+  }
+
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->set_unsafe();
 
@@ -821,13 +839,6 @@ void Server::handle_client_request(MClientRequest *req)
 
   if (logger) logger->inc(l_mdss_hcreq);
 
-  if (!mds->is_active() &&
-      !(mds->is_stopping() && req->get_orig_source().is_mds())) {
-    dout(5) << " not active (or stopping+mds), discarding request." << dendl;
-    delete req;
-    return;
-  }
-  
   if (!mdcache->is_open()) {
     dout(5) << "waiting for root" << dendl;
     mdcache->wait_for_open(new C_MDS_RetryMessage(mds, req));

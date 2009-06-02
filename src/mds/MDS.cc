@@ -630,12 +630,13 @@ void MDS::handle_mds_map(MMDSMap *m)
 	    << ceph_mds_state_name(state) << dendl;
     want_state = state;
 
-    // now active?
+    // did i just recover?
+    if ((is_active() || is_clientreplay()) &&
+	(oldstate == MDSMap::STATE_REJOIN ||
+	 oldstate == MDSMap::STATE_RECONNECT)) 
+      recovery_done();
+
     if (is_active()) {
-      // did i just recover?
-      if (oldstate == MDSMap::STATE_REJOIN ||
-	  oldstate == MDSMap::STATE_RECONNECT) 
-	recovery_done();
       finish_contexts(waiting_for_active);  // kick waiters
     } else if (is_replay() || is_standby_replay()) {
       replay_start();
@@ -643,6 +644,8 @@ void MDS::handle_mds_map(MMDSMap *m)
       resolve_start();
     } else if (is_reconnect()) {
       reconnect_start();
+    } else if (is_clientreplay()) {
+      clientreplay_start();
     } else if (is_creating()) {
       boot_create();
     } else if (is_starting()) {
@@ -966,19 +969,6 @@ void MDS::reconnect_done()
   request_state(MDSMap::STATE_REJOIN);    // move to rejoin state
 
   mdcache->reconnect_clean_open_file_lists();
-
-  /*
-  if (mdsmap->get_num_in_mds() == 1 &&
-      mdsmap->get_num_mds(MDSMap::STATE_FAILED) == 0) { // just me!
-
-    // finish processing caps (normally, this happens during rejoin, but we're skipping that...)
-    mdcache->rejoin_gather_finish();
-
-    request_state(MDSMap::STATE_ACTIVE);    // go active
-  } else {
-    request_state(MDSMap::STATE_REJOIN);    // move to rejoin state
-  }
-  */
 }
 
 void MDS::rejoin_joint_start()
@@ -991,6 +981,22 @@ void MDS::rejoin_done()
   dout(1) << "rejoin_done" << dendl;
   mdcache->show_subtrees();
   mdcache->show_cache();
+
+  if (waiting_for_replay.empty())
+    request_state(MDSMap::STATE_ACTIVE);
+  else
+    request_state(MDSMap::STATE_CLIENTREPLAY);
+}
+
+void MDS::clientreplay_start()
+{
+  dout(1) << "clientreplay_start" << dendl;
+  queue_waiters(waiting_for_replay); 
+}
+
+void MDS::clientreplay_done()
+{
+  dout(1) << "clientreplay_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
 }
 
@@ -998,7 +1004,7 @@ void MDS::rejoin_done()
 void MDS::recovery_done()
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
-  assert(is_active());
+  assert(is_active() || is_clientreplay());
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
@@ -1017,8 +1023,6 @@ void MDS::recovery_done()
   bcast_mds_map();  
 
   mdcache->populate_mydir();
-
-  queue_waiters(waiting_for_active);
 }
 
 void MDS::handle_mds_recovery(int who) 
@@ -1258,15 +1262,25 @@ bool MDS::_dispatch(Message *m)
 
 
   // finish any triggered contexts
-  if (finished_queue.size()) {
+  static bool finishing = false;
+  if (!finishing && finished_queue.size()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
     dout(10) << finished_queue << dendl;
     list<Context*> ls;
     ls.splice(ls.begin(), finished_queue);
     assert(finished_queue.empty());
+    finishing = true;
     finish_contexts(ls);
+    finishing = false;
+  } else {
+    // done with all client replayed requests?
+    if (!finishing &&
+	is_clientreplay() &&
+	mdcache->is_open() &&
+	mdcache->get_num_active_requests() == 0 &&
+	want_state == MDSMap::STATE_CLIENTREPLAY)
+      clientreplay_done();
   }
-
 
   // hack: thrash exports
   static utime_t start;

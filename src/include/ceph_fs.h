@@ -327,22 +327,23 @@ struct ceph_client_ticket {
  *   > 0 -> in
  *  <= 0 -> out
  */
-#define CEPH_MDS_STATE_DNE         0  /* down, does not exist. */
-#define CEPH_MDS_STATE_STOPPED    -1  /* down, once existed, but no subtrees.
-					 empty log. */
-#define CEPH_MDS_STATE_BOOT       -4  /* up, boot announcement. */
-#define CEPH_MDS_STATE_STANDBY    -5  /* up, idle.  waiting for assignment. */
-#define CEPH_MDS_STATE_CREATING   -6  /* up, creating MDS instance. */
-#define CEPH_MDS_STATE_STARTING   -7  /* up, starting previously stopped mds. */
+#define CEPH_MDS_STATE_DNE          0  /* down, does not exist. */
+#define CEPH_MDS_STATE_STOPPED     -1  /* down, once existed, but no subtrees.
+					  empty log. */
+#define CEPH_MDS_STATE_BOOT        -4  /* up, boot announcement. */
+#define CEPH_MDS_STATE_STANDBY     -5  /* up, idle.  waiting for assignment. */
+#define CEPH_MDS_STATE_CREATING    -6  /* up, creating MDS instance. */
+#define CEPH_MDS_STATE_STARTING    -7  /* up, starting previously stopped mds. */
 #define CEPH_MDS_STATE_STANDBY_REPLAY -8 /* up, tailing active node's journal */
 
-#define CEPH_MDS_STATE_REPLAY      8  /* up, replaying journal. */
-#define CEPH_MDS_STATE_RESOLVE     9  /* up, disambiguating distributed
-					 operations (import, rename, etc.) */
-#define CEPH_MDS_STATE_RECONNECT   10 /* up, reconnect to clients */
-#define CEPH_MDS_STATE_REJOIN      11 /* up, rejoining distributed cache */
-#define CEPH_MDS_STATE_ACTIVE      12 /* up, active */
-#define CEPH_MDS_STATE_STOPPING    13 /* up, but exporting metadata */
+#define CEPH_MDS_STATE_REPLAY       8  /* up, replaying journal. */
+#define CEPH_MDS_STATE_RESOLVE      9  /* up, disambiguating distributed
+					  operations (import, rename, etc.) */
+#define CEPH_MDS_STATE_RECONNECT    10 /* up, reconnect to clients */
+#define CEPH_MDS_STATE_REJOIN       11 /* up, rejoining distributed cache */
+#define CEPH_MDS_STATE_CLIENTREPLAY 12 /* up, replaying client operations */
+#define CEPH_MDS_STATE_ACTIVE       13 /* up, active */
+#define CEPH_MDS_STATE_STOPPING     14 /* up, but exporting metadata */
 
 static inline const char *ceph_mds_state_name(int s)
 {
@@ -361,6 +362,7 @@ static inline const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_RESOLVE:    return "up:resolve";
 	case CEPH_MDS_STATE_RECONNECT:  return "up:reconnect";
 	case CEPH_MDS_STATE_REJOIN:     return "up:rejoin";
+	case CEPH_MDS_STATE_CLIENTREPLAY: return "up:clientreplay";
 	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
 	default: return "";

@@ -529,6 +529,8 @@ protected:
   hash_map<metareqid_t, MDRequest*> active_requests; 
 
 public:
+  int get_num_active_requests() { return active_requests.size(); }
+
   MDRequest* request_start(MClientRequest *req);
   MDRequest* request_start_slave(metareqid_t rid, int by);
   MDRequest* request_start_internal(int op);

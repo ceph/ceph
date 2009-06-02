@@ -162,7 +162,7 @@ class MDS : public Dispatcher {
   int state;         // my confirmed state
   int want_state;    // the state i want
 
-  list<Context*> waiting_for_active;
+  list<Context*> waiting_for_active, waiting_for_replay;
   map<int, list<Context*> > waiting_for_active_peer;
   list<Context*> waiting_for_nolaggy;
 
@@ -177,6 +177,9 @@ class MDS : public Dispatcher {
   void wait_for_active_peer(int who, Context *c) { 
     waiting_for_active_peer[who].push_back(c);
   }
+  void wait_for_replay(Context *c) { 
+    waiting_for_replay.push_back(c); 
+  }
 
   int get_state() { return state; } 
   bool is_creating() { return state == MDSMap::STATE_CREATING; }
@@ -186,6 +189,7 @@ class MDS : public Dispatcher {
   bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
   bool is_reconnect() { return state == MDSMap::STATE_RECONNECT; }
   bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
+  bool is_clientreplay()   { return state == MDSMap::STATE_CLIENTREPLAY; }
   bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
   bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
 
@@ -305,6 +309,8 @@ class MDS : public Dispatcher {
   void rejoin_done();
   void recovery_done();
   void handle_mds_recovery(int who);
+  void clientreplay_start();
+  void clientreplay_done();
 
   void stopping_start();
   void stopping_done();

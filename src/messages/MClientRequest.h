@@ -186,6 +186,8 @@ public:
       out << " " << get_filepath2();
     if (head.num_retry)
       out << " RETRY=" << (int)head.num_retry;
+    if (get_flags() & CEPH_MDS_FLAG_REPLAY)
+      out << " REPLAY";
     out << ")";
   }
 
