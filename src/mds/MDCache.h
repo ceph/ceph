@@ -357,6 +357,10 @@ struct MDRequest : public Mutation {
     return _more;
   }
 
+  bool are_slaves() {
+    return _more && !_more->slaves.empty();
+  }
+
   bool slave_did_prepare() { return more()->slave_commit; }
 
   bool did_ino_allocation() {
