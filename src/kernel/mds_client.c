@@ -1286,7 +1286,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 	rhead = msg->front.iov_base;
 	rhead->tid = cpu_to_le64(req->r_tid);
 	rhead->oldest_client_tid = cpu_to_le64(__get_oldest_tid(mdsc));
-	if (req->r_got_safe)
+	if (req->r_got_unsafe)
 		flags |= CEPH_MDS_FLAG_REPLAY;
 	if (req->r_locked_dir)
 		flags |= CEPH_MDS_FLAG_WANT_DENTRY;
