@@ -43,11 +43,24 @@ int main(int argc, const char **argv)
   rados_exec(pool, &oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
   printf("exec result=%s\n", buf);
   int size = rados_read(pool, &oid, 0, buf2, 128);
-
-  rados_close_pool(pool);
-
   printf("read result=%s\n", buf2);
   printf("size=%d\n", size);
+
+
+  // test aio
+  rados_completion_t a, b;
+  oid.bno = 1;
+  rados_aio_write(pool, &oid, 0, buf, 100, &a);
+  oid.bno = 2;
+  rados_aio_write(pool, &oid, 0, buf, 100, &b);
+  rados_aio_wait_for_safe(a);
+  printf("a safe\n");
+  rados_aio_wait_for_safe(b);
+  printf("b safe\n");
+  rados_aio_release(a);
+  rados_aio_release(b);
+
+  rados_close_pool(pool);
 
   rados_deinitialize();
 
