@@ -337,6 +337,15 @@ void Server::terminate_sessions()
 }
 
 
+struct C_MDS_session_purged : public Context {
+  Server *server;
+  Session *session;
+  C_MDS_session_purged(Server *s, Session *ss) : server(s), session(ss) {}
+  void finish(int r) {
+    server->_finish_session_purge(session);
+  }
+};
+
 void Server::find_idle_sessions()
 {
   dout(10) << "find_idle_sessions" << dendl;
@@ -379,13 +388,31 @@ void Server::find_idle_sessions()
     }
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
-    mds->sessionmap.set_state(session, Session::STATE_STALE_CLOSING);
-    version_t pv = ++mds->sessionmap.projected;
-    mdlog->submit_entry(new ESession(session->inst, false, pv),
-			new C_MDS_session_finish(mds, session, false, pv));
-    mdlog->flush();
+    if (session->prealloc_inos.empty()) {
+      _finish_session_purge(session);
+    } else {
+      mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
+      C_Gather *fin = new C_Gather(new C_MDS_session_purged(this, session));
+      for (map<inodeno_t,inodeno_t>::iterator p = session->prealloc_inos.m.begin();
+	   p != session->prealloc_inos.m.end();
+	   p++) {
+	inodeno_t last = p->first + p->second;
+	for (inodeno_t i = p->first; i < last; i = i + 1)
+	  mds->mdcache->purge_prealloc_ino(i, fin->new_sub());
+      }
+    }
   }
+}
 
+void Server::_finish_session_purge(Session *session)
+{
+  dout(10) << "_finish_session_purge " << session->inst << dendl;
+  assert(session->is_stale_purging());
+  mds->sessionmap.set_state(session, Session::STATE_STALE_CLOSING);
+  version_t pv = ++mds->sessionmap.projected;
+  mdlog->submit_entry(new ESession(session->inst, false, pv),
+		      new C_MDS_session_finish(mds, session, false, pv));
+  mdlog->flush();
 }
 
 
@@ -533,7 +560,6 @@ void Server::reconnect_tick()
     reconnect_gather_finish();
   }
 }
-
 
 void Server::recall_client_state(float ratio)
 {

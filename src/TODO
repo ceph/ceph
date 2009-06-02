@@ -14,6 +14,7 @@ v0.9
 /- librados
   - async io
   - list_objects
+  - perl swig wrapper
 /- object classes
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
@@ -100,14 +101,8 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- fix client op replay
-  - ordering
-  - should to set caps/lock states so that ops can proceed without revoking from client
-  - need to make sure replayed ops finish before new ops proceed.  globally across the cluster.  ick.
 - on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
 - linkage vs cdentry replicas and remote rename....
-- make recovery work with early replies
-  - purge each session's unused preallocated inodes
 - hard link backpointers
   - anchor source dir
   - build snaprealm for any hardlinked file

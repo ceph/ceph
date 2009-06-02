@@ -752,6 +752,9 @@ public:
   void do_file_recover();
   void _recovered(CInode *in, int r);
 
+  void purge_prealloc_ino(inodeno_t ino, Context *fin);
+
+
 
  public:
 
