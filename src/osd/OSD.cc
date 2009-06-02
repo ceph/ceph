@@ -3520,11 +3520,13 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   // missing object?
-  sobject_t head(op->get_oid(), CEPH_NOSNAP);
-  if (pg->is_missing_object(head)) {
-    pg->wait_for_missing_object(head, op);
-    pg->unlock();
-    return;
+  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP) == 0) {
+    sobject_t head(op->get_oid(), CEPH_NOSNAP);
+    if (pg->is_missing_object(head)) {
+      pg->wait_for_missing_object(head, op);
+      pg->unlock();
+      return;
+    }
   }
 
   

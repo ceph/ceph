@@ -13,6 +13,7 @@ v0.9
 /- make mds exhert memory pressure on client caps, leases
 /- librados
   - async io
+  - list_objects
 /- object classes
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
@@ -37,7 +38,6 @@ rados
 - autosize pg_pools?
 - security
 - c library glue to c3
-- pyexec?
 
 repair
 - are we concerned about

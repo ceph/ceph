@@ -173,6 +173,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_TYPE_DATA  0x0200
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
+#define CEPH_OSD_OP_TYPE_PG    0x0500
 
 enum {
 	/** data **/
@@ -225,6 +226,9 @@ enum {
 	/** exec **/
 	CEPH_OSD_OP_RDCALL    = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_EXEC | 1,
 	CEPH_OSD_OP_WRCALL    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_EXEC | 1,
+
+	/** pg **/
+	CEPH_OSD_OP_PGLS      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 1,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -320,6 +324,7 @@ enum {
 	CEPH_OSD_FLAG_PEERSTAT = 128,   /* msg includes osd_peer_stat */
 	CEPH_OSD_FLAG_BALANCE_READS = 256,
 	CEPH_OSD_FLAG_PARALLELEXEC = 512, /* execute op in parallel */
+	CEPH_OSD_FLAG_PGOP = 1024,      /* pg op, no object */
 };
 
 #define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/

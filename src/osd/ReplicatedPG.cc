@@ -366,6 +366,42 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
   return false;
 }
 
+void ReplicatedPG::do_pg_op(MOSDOp *op)
+{
+  dout(15) << "do_pg_op " << *op << dendl;
+
+  //bufferlist& indata = op->get_data();
+  bufferlist outdata;
+  int result = 0;
+
+  for (vector<ceph_osd_op>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
+    switch (p->op) {
+
+    case CEPH_OSD_OP_PGLS:
+      {
+	vector<pobject_t> pobjects;
+	// ???
+	vector<object_t> objects;
+	// ???
+	::encode(objects, outdata);
+      }
+      break;
+
+    default:
+      result = -EINVAL;
+      break;
+    }
+  }
+
+  // reply
+  MOSDOpReply *reply = new MOSDOpReply(op, 0, osd->osdmap->get_epoch(),
+				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
+  reply->set_data(outdata);
+  reply->set_result(result);
+  osd->messenger->send_message(reply, op->get_orig_source_inst());
+  delete op;
+}
+
 
 /** do_op - do an op
  * pg lock will be held (if multithreaded)
@@ -374,6 +410,9 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 void ReplicatedPG::do_op(MOSDOp *op) 
 {
   osd->logger->inc(l_osd_op);
+
+  if (op->get_flags() & CEPH_OSD_FLAG_PGOP)
+    return do_pg_op(op);
 
   dout(15) << "do_op " << *op << dendl;
 

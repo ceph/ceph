@@ -442,6 +442,7 @@ public:
 
   bool preprocess_op(MOSDOp *op, utime_t now);
   void do_op(MOSDOp *op);
+  void do_pg_op(MOSDOp *op);
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
   bool snap_trimmer();
