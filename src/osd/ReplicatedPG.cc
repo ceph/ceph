@@ -857,6 +857,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
       }
       break;
 
+    case CEPH_OSD_OP_PGLS:
+      {
+	// read into a buffer
+        vector<pobject_t> vec;
+        collection_list_handle_t handle = NULL;
+	int r = osd->store->collection_list_partial(info.pgid.to_coll(), vec, op.length, &handle);
+	if (!r) {
+	  ctx->data_off = op.offset;
+	  ::encode(vec, odata);
+        } else {
+	  result = r;
+	}
+	dout(10) << " read got " << r << " / " << op.length << " bytes from obj " << soid << dendl;
+      }
+      break;
+
     case CEPH_OSD_OP_RDCALL:
       {
 	string cname, mname;
