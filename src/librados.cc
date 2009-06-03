@@ -190,7 +190,7 @@ public:
   int aio_read(int pool, object_t oid, off_t off, char *buf, size_t len,
 	       AioCompletion **pc);
 
-  int aio_write(int pool, object_t oid, off_t off, bufferlist& bl, size_t len,
+  int aio_write(int pool, object_t oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion **pc);
 
 };
@@ -364,7 +364,7 @@ int RadosClient::aio_read(int pool, object_t oid, off_t off, char *buf, size_t l
   return 0;
 }
 
-int RadosClient::aio_write(int pool, object_t oid, off_t off, bufferlist& bl, size_t len,
+int RadosClient::aio_write(int pool, object_t oid, off_t off, const bufferlist& bl, size_t len,
 			   AioCompletion **pc)
 {
   SnapContext snapc;
