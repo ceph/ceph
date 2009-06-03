@@ -333,7 +333,8 @@ public:
       if (objects.count(e.soid) == 0 || 
           objects[e.soid]->version < e.version)
         objects[e.soid] = &e;
-      caller_ops.insert(e.reqid);
+      if (e.op != Entry::BACKLOG)
+	caller_ops.insert(e.reqid);
     }
     void unindex() {
       objects.clear();
@@ -341,7 +342,7 @@ public:
     }
     void unindex(Entry& e) {
       // NOTE: this only works if we remove from the _bottom_ of the log!
-      assert(caller_ops.count(e.reqid));
+      assert(e.op == Entry::BACKLOG || caller_ops.count(e.reqid));
       if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
       caller_ops.erase(e.reqid);
