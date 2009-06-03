@@ -1355,6 +1355,12 @@ void CDir::_commit(version_t want)
     assert(state_test(STATE_COMMITTING));
     return;
   }
+
+  // alrady committed an older version?
+  if (committing_version > committed_version) {
+    dout(10) << "already committing older " << committing_version << ", waiting for that to complete" << dendl;
+    return;
+  }
   
   // complete?
   if (!is_complete()) {
