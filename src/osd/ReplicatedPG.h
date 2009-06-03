@@ -435,8 +435,8 @@ protected:
 
 
 public:
-  ReplicatedPG(OSD *o, pg_t p) : 
-    PG(o,p)
+  ReplicatedPG(OSD *o, pg_t p, const sobject_t& oid) : 
+    PG(o, p, oid)
   { }
   ~ReplicatedPG() {}
 

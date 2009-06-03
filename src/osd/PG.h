@@ -610,6 +610,7 @@ public:
   // pg state
   Info        info;
   IndexedLog  log;
+  sobject_t    log_oid;
   OndiskLog   ondisklog;
   Missing     missing;
   map<sobject_t, set<int> > missing_loc;
@@ -758,11 +759,11 @@ public:
 
 
  public:  
-  PG(OSD *o, pg_t p) : 
+  PG(OSD *o, pg_t p, const sobject_t& oid) : 
     osd(o), 
     _lock("PG::_lock"),
     ref(0), deleted(false), dirty_info(false), dirty_log(false),
-    info(p),
+    info(p), log_oid(oid),
     recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     generate_backlog_epoch(0),
@@ -773,7 +774,8 @@ public:
     pg_stats_lock("PG::pg_stats_lock"),
     pg_stats_valid(false),
     finish_sync_event(NULL)
-  { }
+  {
+  }
   virtual ~PG() { }
   
   pg_t       get_pgid() const { return info.pgid; }

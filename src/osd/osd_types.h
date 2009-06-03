@@ -130,12 +130,6 @@ struct pg_t {
   
   operator uint64_t() const { return u.pg64; }
 
-  sobject_t to_log_pobject() const { 
-    char foo[20];
-    sprintf(foo, "pg_log_%llx", (long long unsigned)u.pg64);
-    return sobject_t(object_t(foo), CEPH_NOSNAP);
-  }
-
   coll_t to_coll() const {
     return coll_t(u.pg64, 0); 
   }

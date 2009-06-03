@@ -564,8 +564,9 @@ PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 
   // create
   PG *pg;
+  sobject_t logoid = make_pg_log_oid(pgid);
   if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
-    pg = new ReplicatedPG(this, pgid);
+    pg = new ReplicatedPG(this, pgid, logoid);
   //else if (pgid.is_raid4())
   //pg = new RAID4PG(this, pgid);
   else 
@@ -675,7 +676,7 @@ void OSD::_remove_unlock_pg(PG *pg)
     }
 
     // log
-    t.remove(0, pgid.to_log_pobject());
+    t.remove(0, pg->log_oid);
 
     // main collection
     store->collection_list(pgid.to_coll(), olist);
