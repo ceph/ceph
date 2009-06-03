@@ -2012,6 +2012,9 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   dout(10) << "sub_op_modify " << opname 
            << " " << soid 
            << " v " << op->version
+	   << (op->noop ? " NOOP" : "")
+	   << (op->logbl.length() ? " (transaction)" : " (parallel exec")
+	   << " " << op->logbl.length()
 	   << dendl;  
 
   // sanity checks
@@ -2031,12 +2034,12 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   osd->logger->inc(l_osd_r_wrb, op->get_data().length());
   
   list<ObjectStore::Transaction*> tls;
+  ObjectStore::Transaction opt, localt;
   OpContext *ctx = 0;
 
   if (!op->noop) {
     if (op->logbl.length()) {
       // shipped transaction and log entries
-      ObjectStore::Transaction opt, localt;
       vector<Log::Entry> log;
       
       bufferlist::iterator p = op->get_data().begin();
@@ -2045,6 +2048,9 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       ::decode(log, p);
       
       log_op(log, localt);
+
+      tls.push_back(&opt);
+      tls.push_back(&localt);
     } else {
       // do op
       ObjectState obs(op->poid);
