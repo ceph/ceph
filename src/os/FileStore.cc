@@ -1889,7 +1889,7 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
   get_cdir(c, fn);
   dout(10) << "collection_list " << fn << dendl;
 
-  DIR *dir;
+  DIR *dir = NULL;
   struct dirent *de;
   
   // first, build (ino, object) list
