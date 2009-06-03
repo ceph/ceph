@@ -204,7 +204,7 @@ class Objecter {
 
     bool paused;
 
-    ReadOp(object_t o, ceph_object_layout& ol, vector<ceph_osd_op>& op, snapid_t s, int f, Context *of) :
+    ReadOp(const object_t& o, ceph_object_layout& ol, vector<ceph_osd_op>& op, snapid_t s, int f, Context *of) :
       oid(o), layout(ol), snap(s),
       pbl(0), flags(f), onfinish(of), 
       tid(0), attempts(0),
@@ -230,7 +230,7 @@ class Objecter {
 
     bool paused;
 
-    ModifyOp(object_t o, ceph_object_layout& l, vector<ceph_osd_op>& op, utime_t mt,
+    ModifyOp(const object_t& o, ceph_object_layout& l, vector<ceph_osd_op>& op, utime_t mt,
 	     const SnapContext& sc, int f, Context *ac, Context *co) :
       oid(o), layout(l), snapc(sc), mtime(mt), flags(f), onack(ac), oncommit(co), 
       tid(0), attempts(0),
@@ -344,14 +344,14 @@ class Objecter {
   tid_t read_submit(ReadOp *rd);
   tid_t modify_submit(ModifyOp *wr);
 
-  tid_t read(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
+  tid_t read(const object_t& oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
 	     snapid_t snap, bufferlist *pbl, int flags, 
 	     Context *onfinish) {
     ReadOp *rd = new ReadOp(oid, ol, ops, snap, flags, onfinish);
     rd->pbl = pbl;
     return read_submit(rd);
   }
-  tid_t read(object_t oid, ceph_object_layout ol, 
+  tid_t read(const object_t& oid, ceph_object_layout ol, 
 	     ObjectRead& read, snapid_t snap, bufferlist *pbl, int flags, Context *onfinish) {
     ReadOp *rd = new ReadOp(oid, ol, read.ops, snap, flags, onfinish);
     rd->bl = read.data;
@@ -359,7 +359,7 @@ class Objecter {
     return read_submit(rd);
   }
 
-  tid_t modify(object_t oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
+  tid_t modify(const object_t& oid, ceph_object_layout ol, vector<ceph_osd_op>& ops,
 	       const SnapContext& snapc, const bufferlist &bl, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
     ModifyOp *wr = new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit);
@@ -368,7 +368,7 @@ class Objecter {
   }
 
   // high-level helpers
-  tid_t stat(object_t oid, ceph_object_layout ol, snapid_t snap,
+  tid_t stat(const object_t& oid, ceph_object_layout ol, snapid_t snap,
 	     __u64 *psize, utime_t *pmtime, int flags, 
 	     Context *onfinish) {
     vector<ceph_osd_op> ops(1);
@@ -378,7 +378,7 @@ class Objecter {
     return read(oid, ol, ops, snap, &fin->bl, flags, fin);
   }
 
-  tid_t read(object_t oid, ceph_object_layout ol, 
+  tid_t read(const object_t& oid, ceph_object_layout ol, 
 	     __u64 off, size_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish) {
     vector<ceph_osd_op> ops(1);
@@ -388,19 +388,19 @@ class Objecter {
     ops[0].length = len;
     return read(oid, ol, ops, snap, pbl, flags, onfinish);
   }
-  tid_t read_full(object_t oid, ceph_object_layout ol,
+  tid_t read_full(const object_t& oid, ceph_object_layout ol,
 		  snapid_t snap, bufferlist *pbl, int flags,
 		  Context *onfinish) {
     return read(oid, ol, 0, 0, snap, pbl, flags, onfinish);
   }
      
-  tid_t mutate(object_t oid, ceph_object_layout ol, 
+  tid_t mutate(const object_t& oid, ceph_object_layout ol, 
 	       ObjectMutation& mutation,
 	       const SnapContext& snapc, int flags,
 	       Context *onack, Context *oncommit) {
     return modify(oid, ol, mutation.ops, snapc, mutation.data, mutation.mtime, flags, onack, oncommit);
   }
-  tid_t write(object_t oid, ceph_object_layout ol,
+  tid_t write(const object_t& oid, ceph_object_layout ol,
 	      __u64 off, size_t len, const SnapContext& snapc, const bufferlist &bl, utime_t mtime, int flags,
               Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
@@ -410,7 +410,7 @@ class Objecter {
     ops[0].length = len;
     return modify(oid, ol, ops, snapc, bl, mtime, flags, onack, oncommit);
   }
-  tid_t write_full(object_t oid, ceph_object_layout ol,
+  tid_t write_full(const object_t& oid, ceph_object_layout ol,
 		   const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
 		   Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
@@ -420,7 +420,7 @@ class Objecter {
     ops[0].length = bl.length();
     return modify(oid, ol, ops, snapc, bl, mtime, flags, onack, oncommit);
   }
-  tid_t zero(object_t oid, ceph_object_layout ol, 
+  tid_t zero(const object_t& oid, ceph_object_layout ol, 
 	     __u64 off, size_t len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
@@ -430,7 +430,7 @@ class Objecter {
     ops[0].length = len;
     return modify_submit(new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit));
   }
-  tid_t remove(object_t oid, ceph_object_layout ol, 
+  tid_t remove(const object_t& oid, ceph_object_layout ol, 
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
     vector<ceph_osd_op> ops(1);
@@ -439,7 +439,7 @@ class Objecter {
     return modify_submit(new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit));
   }
 
-  tid_t lock(object_t oid, ceph_object_layout ol, int op, int flags, Context *onack, Context *oncommit) {
+  tid_t lock(const object_t& oid, ceph_object_layout ol, int op, int flags, Context *onack, Context *oncommit) {
     SnapContext snapc;  // no snapc for lock ops
     vector<ceph_osd_op> ops(1);
     memset(&ops[0], 0, sizeof(ops[0]));

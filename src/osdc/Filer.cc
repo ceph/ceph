@@ -104,7 +104,7 @@ void Filer::_probe(Probe *probe)
   }
 }
 
-void Filer::_probed(Probe *probe, object_t oid, __u64 size, utime_t mtime)
+void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime)
 {
   dout(10) << "_probed " << probe->ino << " object " << oid
 	   << " has size " << size << " mtime " << mtime << dendl;

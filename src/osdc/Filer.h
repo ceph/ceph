@@ -79,7 +79,7 @@ class Filer {
   class C_Probe;
 
   void _probe(Probe *p);
-  void _probed(Probe *p, object_t oid, __u64 size, utime_t mtime);
+  void _probed(Probe *p, const object_t& oid, __u64 size, utime_t mtime);
 
  public:
   Filer(Objecter *o) : objecter(o) {}
