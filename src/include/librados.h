@@ -29,7 +29,7 @@ int rados_close_pool(rados_pool_t pool);
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
 int rados_remove(rados_pool_t pool, const char *oid);
-int rados_exec(rados_pool_t pool, const char *o, const char *cls, const char *method,
+int rados_exec(rados_pool_t pool, const char *oid, const char *cls, const char *method,
 	       const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
 /* async io */
@@ -61,11 +61,11 @@ public:
   int open_pool(const char *name, rados_pool_t *pool);
   int close_pool(rados_pool_t pool);
 
-  int write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
-  int read(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
-  int remove(rados_pool_t pool, object_t& oid);
+  int write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int remove(rados_pool_t pool, const object_t& oid);
 
-  int exec(rados_pool_t pool, object_t& oid, const char *cls, const char *method,
+  int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
              bufferlist& inbl, bufferlist& outbl);
 
   
@@ -81,9 +81,9 @@ public:
     void put();
   };
 
-  int aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
+  int aio_read(int pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
 	       AioCompletion **pc);
-  int aio_write(int pool, object_t oid, off_t off, bufferlist& bl, size_t len,
+  int aio_write(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len,
 		AioCompletion **pc);
 
 };

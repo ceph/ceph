@@ -69,11 +69,11 @@ public:
     return osdmap.lookup_pg_pool_name(name);
   }
 
-  int write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
-  int read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
-  int remove(int pool, object_t& oid);
+  int write(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int read(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int remove(int pool, const object_t& oid);
 
-  int exec(int pool, object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
+  int exec(int pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
 
   // --- aio ---
@@ -305,7 +305,7 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
-int RadosClient::write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
+int RadosClient::write(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -330,7 +330,7 @@ int RadosClient::write(int pool, object_t& oid, off_t off, bufferlist& bl, size_
   return len;
 }
 
-int RadosClient::aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
+int RadosClient::aio_read(int pool, const object_t oid, off_t off, bufferlist *pbl, size_t len,
 			  AioCompletion **pc)
 {
   AioCompletion *c = new AioCompletion;
@@ -346,7 +346,7 @@ int RadosClient::aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, si
   *pc = c;
   return 0;
 }
-int RadosClient::aio_read(int pool, object_t oid, off_t off, char *buf, size_t len,
+int RadosClient::aio_read(int pool, const object_t oid, off_t off, char *buf, size_t len,
 			  AioCompletion **pc)
 {
   AioCompletion *c = new AioCompletion;
@@ -364,7 +364,7 @@ int RadosClient::aio_read(int pool, object_t oid, off_t off, char *buf, size_t l
   return 0;
 }
 
-int RadosClient::aio_write(int pool, object_t oid, off_t off, const bufferlist& bl, size_t len,
+int RadosClient::aio_write(int pool, const object_t oid, off_t off, const bufferlist& bl, size_t len,
 			   AioCompletion **pc)
 {
   SnapContext snapc;
@@ -383,7 +383,7 @@ int RadosClient::aio_write(int pool, object_t oid, off_t off, const bufferlist& 
   return 0;
 }
 
-int RadosClient::remove(int pool, object_t& oid)
+int RadosClient::remove(int pool, const object_t& oid)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -408,7 +408,7 @@ int RadosClient::remove(int pool, object_t& oid)
   return r;
 }
 
-int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *method,
+int RadosClient::exec(int pool, const object_t& oid, const char *cls, const char *method,
 		      bufferlist& inbl, bufferlist& outbl)
 {
   SnapContext snapc;
@@ -437,7 +437,7 @@ int RadosClient::exec(int pool, object_t& oid, const char *cls, const char *meth
   return r;
 }
 
-int RadosClient::read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
+int RadosClient::read(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   SnapContext snapc;
 
@@ -495,7 +495,7 @@ bool Rados::initialize(int argc, const char *argv[])
   return client->init();
 }
 
-int Rados::write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
+int Rados::write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   if (!client)
     return -EINVAL;
@@ -503,7 +503,7 @@ int Rados::write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, si
   return client->write(pool, oid, off, bl, len);
 }
 
-int Rados::remove(rados_pool_t pool, object_t& oid)
+int Rados::remove(rados_pool_t pool, const object_t& oid)
 {
   if (!client)
     return -EINVAL;
@@ -511,7 +511,7 @@ int Rados::remove(rados_pool_t pool, object_t& oid)
   return client->remove(pool, oid);
 }
 
-int Rados::read(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
+int Rados::read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   if (!client)
     return -EINVAL;
@@ -519,7 +519,7 @@ int Rados::read(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, siz
   return client->read(pool, oid, off, bl, len);
 }
 
-int Rados::exec(rados_pool_t pool, object_t& oid, const char *cls, const char *method,
+int Rados::exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
 		bufferlist& inbl, bufferlist& outbl)
 {
   if (!client)
@@ -543,7 +543,7 @@ int Rados::close_pool(rados_pool_t pool)
   return 0;
 }
 
-int Rados::aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
+int Rados::aio_read(int pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
 		    Rados::AioCompletion **pc)
 {
   RadosClient::AioCompletion *c;
@@ -554,7 +554,7 @@ int Rados::aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t l
   return r;
 }
 
-int Rados::aio_write(int pool, object_t oid, off_t off, bufferlist& bl, size_t len,
+int Rados::aio_write(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len,
 		     AioCompletion **pc)
 {
   RadosClient::AioCompletion *c;
