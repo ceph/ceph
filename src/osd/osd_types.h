@@ -130,10 +130,10 @@ struct pg_t {
   
   operator uint64_t() const { return u.pg64; }
 
-  pobject_t to_log_pobject() const { 
+  sobject_t to_log_pobject() const { 
     char foo[20];
     sprintf(foo, "pg_log_%llx", (long long unsigned)u.pg64);
-    return pobject_t(object_t(foo), CEPH_NOSNAP);
+    return sobject_t(object_t(foo), CEPH_NOSNAP);
   }
 
   coll_t to_coll() const {
@@ -798,7 +798,7 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
  */
 struct ScrubMap {
   struct object {
-    pobject_t poid;
+    sobject_t poid;
     __u64 size;
     map<nstring,bufferptr> attrs;
 

@@ -167,14 +167,14 @@ int FileStore::statfs(struct statfs *buf)
 
 
 /* 
- * sorry, these are sentitive to the pobject_t and coll_t typing.
+ * sorry, these are sentitive to the sobject_t and coll_t typing.
  */ 
 
   //           11111111112222222222333333333344444444445555555555
   // 012345678901234567890123456789012345678901234567890123456789
   // yyyyyyyyyyyyyyyy.zzzzzzzz.a_s
 
-void FileStore::append_oname(const pobject_t &oid, char *s)
+void FileStore::append_oname(const sobject_t &oid, char *s)
 {
   //assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
@@ -182,7 +182,7 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
   //parse_object(t+1);
 }
 
-bool FileStore::parse_object(char *s, pobject_t& o)
+bool FileStore::parse_object(char *s, sobject_t& o)
 {
   char *bar = s + strlen(s) - 1;
   while (*bar != '_' &&
@@ -221,7 +221,7 @@ void FileStore::get_cdir(coll_t cid, char *s)
 #endif
 }
 
-void FileStore::get_coname(coll_t cid, const pobject_t& oid, char *s) 
+void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s) 
 {
   get_cdir(cid, s);
   append_oname(oid, s);
@@ -701,16 +701,16 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       
     case Transaction::OP_CLONE:
       {
-	const pobject_t& oid = t.get_oid();
-	const pobject_t& noid = t.get_oid();
+	const sobject_t& oid = t.get_oid();
+	const sobject_t& noid = t.get_oid();
 	_clone(t.get_cid(), oid, noid);
       }
       break;
 
     case Transaction::OP_CLONERANGE:
       {
-	const pobject_t& oid = t.get_oid();
-	const pobject_t& noid = t.get_oid();
+	const sobject_t& oid = t.get_oid();
+	const sobject_t& noid = t.get_oid();
  	__u64 off = t.get_length();
 	__u64 len = t.get_length();
 	_clone_range(t.get_cid(), oid, noid, off, len);
@@ -810,7 +810,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	__u64 offset, len;
 	t.get_length(offset);
@@ -858,7 +858,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	__u64 offset, len;
 	t.get_length(offset);
@@ -871,7 +871,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	__u64 len;
 	t.get_length(len);
@@ -892,7 +892,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	//remove(cid, oid, 0);
 	
@@ -910,7 +910,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
 	t.get_attrname(attrname);
@@ -945,7 +945,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	if (op == Transaction::OP_SETATTRS) {
 	  coll_t cid;
 	  t.get_cid(cid);
-	  pobject_t oid;
+	  sobject_t oid;
 	  t.get_oid(oid);
 	  getattrs(cid, oid, oldattrs);
 	  get_coname(cid, oid, fn);
@@ -990,7 +990,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	const char *attrname;
 	t.get_attrname(attrname);
@@ -1011,9 +1011,9 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
-	pobject_t noid;
+	sobject_t noid;
 	t.get_oid(noid);
 	clone(cid, oid, noid);
 	
@@ -1083,7 +1083,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 	coll_t cid, ocid;
 	t.get_cid(cid);
 	t.get_cid(ocid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	collection_add(cid, ocid, oid, 0);
 	assert(0);
@@ -1094,7 +1094,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
       {
 	coll_t cid;
 	t.get_cid(cid);
-	pobject_t oid;
+	sobject_t oid;
 	t.get_oid(oid);
 	collection_remove(cid, oid, 0);
 	assert(0);
@@ -1187,7 +1187,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 // --------------------
 // objects
 
-bool FileStore::exists(coll_t cid, const pobject_t& oid)
+bool FileStore::exists(coll_t cid, const sobject_t& oid)
 {
   struct stat st;
   if (stat(cid, oid, &st) == 0)
@@ -1196,7 +1196,7 @@ bool FileStore::exists(coll_t cid, const pobject_t& oid)
     return false;
 }
   
-int FileStore::stat(coll_t cid, const pobject_t& oid, struct stat *st)
+int FileStore::stat(coll_t cid, const sobject_t& oid, struct stat *st)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1205,7 +1205,7 @@ int FileStore::stat(coll_t cid, const pobject_t& oid, struct stat *st)
   return r < 0 ? -errno:r;
 }
 
-int FileStore::read(coll_t cid, const pobject_t& oid, 
+int FileStore::read(coll_t cid, const sobject_t& oid, 
                     __u64 offset, size_t len,
                     bufferlist& bl) {
   char fn[PATH_MAX];
@@ -1243,7 +1243,7 @@ int FileStore::read(coll_t cid, const pobject_t& oid,
 
 
 
-int FileStore::_remove(coll_t cid, const pobject_t& oid) 
+int FileStore::_remove(coll_t cid, const sobject_t& oid) 
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1254,7 +1254,7 @@ int FileStore::_remove(coll_t cid, const pobject_t& oid)
   return r;
 }
 
-int FileStore::_truncate(coll_t cid, const pobject_t& oid, __u64 size)
+int FileStore::_truncate(coll_t cid, const sobject_t& oid, __u64 size)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1266,7 +1266,7 @@ int FileStore::_truncate(coll_t cid, const pobject_t& oid, __u64 size)
 }
 
 
-int FileStore::_touch(coll_t cid, const pobject_t& oid)
+int FileStore::_touch(coll_t cid, const sobject_t& oid)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1285,7 +1285,7 @@ int FileStore::_touch(coll_t cid, const pobject_t& oid)
   return r;
 }
 
-int FileStore::_write(coll_t cid, const pobject_t& oid, 
+int FileStore::_write(coll_t cid, const sobject_t& oid, 
                      __u64 offset, size_t len,
                      const bufferlist& bl)
 {
@@ -1331,7 +1331,7 @@ int FileStore::_write(coll_t cid, const pobject_t& oid,
   return r;
 }
 
-int FileStore::_zero(coll_t cid, const pobject_t& oid, __u64 offset, size_t len)
+int FileStore::_zero(coll_t cid, const sobject_t& oid, __u64 offset, size_t len)
 {
   // write zeros.. yuck!
   bufferptr bp(len);
@@ -1340,7 +1340,7 @@ int FileStore::_zero(coll_t cid, const pobject_t& oid, __u64 offset, size_t len)
   return _write(cid, oid, offset, len, bl);
 }
 
-int FileStore::_clone(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid)
+int FileStore::_clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid)
 {
   char ofn[PATH_MAX], nfn[PATH_MAX];
   get_coname(cid, oldoid, ofn);
@@ -1422,7 +1422,7 @@ int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
   return r;
 }
 
-int FileStore::_clone_range(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid, __u64 off, __u64 len)
+int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, __u64 off, __u64 len)
 {
   char ofn[PATH_MAX], nfn[PATH_MAX];
   get_coname(cid, oldoid, ofn);
@@ -1593,7 +1593,7 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset)
 
 // objects
 
-int FileStore::getattr(coll_t cid, const pobject_t& oid, const char *name,
+int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name,
 		       void *value, size_t size) 
 {
   if (fake_attrs) return attrs.getattr(cid, oid, name, value, size);
@@ -1608,7 +1608,7 @@ int FileStore::getattr(coll_t cid, const pobject_t& oid, const char *name,
   return r;
 }
 
-int FileStore::getattr(coll_t cid, const pobject_t& oid, const char *name, bufferptr &bp)
+int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr &bp)
 {
   if (fake_attrs) return attrs.getattr(cid, oid, name, bp);
 
@@ -1622,7 +1622,7 @@ int FileStore::getattr(coll_t cid, const pobject_t& oid, const char *name, buffe
   return r;
 }
 
-int FileStore::getattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset) 
+int FileStore::getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.getattrs(cid, oid, aset);
 
@@ -1638,7 +1638,7 @@ int FileStore::getattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>
 
 
 
-int FileStore::_setattr(coll_t cid, const pobject_t& oid, const char *name,
+int FileStore::_setattr(coll_t cid, const sobject_t& oid, const char *name,
 			const void *value, size_t size) 
 {
   if (fake_attrs) return attrs.setattr(cid, oid, name, value, size);
@@ -1653,7 +1653,7 @@ int FileStore::_setattr(coll_t cid, const pobject_t& oid, const char *name,
   return r;
 }
 
-int FileStore::_setattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset) 
+int FileStore::_setattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.setattrs(cid, oid, aset);
 
@@ -1682,7 +1682,7 @@ int FileStore::_setattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr
 }
 
 
-int FileStore::_rmattr(coll_t cid, const pobject_t& oid, const char *name) 
+int FileStore::_rmattr(coll_t cid, const sobject_t& oid, const char *name) 
 {
   if (fake_attrs) return attrs.rmattr(cid, oid, name);
 
@@ -1863,7 +1863,7 @@ bool FileStore::collection_empty(coll_t c)
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
-    pobject_t o;
+    sobject_t o;
     if (parse_object(de->d_name, o)) {
       empty = false;
       break;
@@ -1875,7 +1875,7 @@ bool FileStore::collection_empty(coll_t c)
   return empty;
 }
 
-int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_count, collection_list_handle_t *handle) 
+int FileStore::collection_list_partial(coll_t c, vector<sobject_t>& ls, int max_count, collection_list_handle_t *handle) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
@@ -1888,7 +1888,7 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
     return -errno;
   
   // first, build (ino, object) list
-  vector< pair<ino_t,pobject_t> > inolist;
+  vector< pair<ino_t,sobject_t> > inolist;
 
   struct dirent *de;
   if (handle)
@@ -1905,9 +1905,9 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
-    pobject_t o;
+    sobject_t o;
     if (parse_object(de->d_name, o)) {
-      inolist.push_back(pair<ino_t,pobject_t>(de->d_ino, o));
+      inolist.push_back(pair<ino_t,sobject_t>(de->d_ino, o));
       ls.push_back(o);
     }
   }
@@ -1921,7 +1921,7 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
   // build final list
   ls.resize(inolist.size());
   int i = 0;
-  for (vector< pair<ino_t,pobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
+  for (vector< pair<ino_t,sobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
     ls[i++] = p->second;
   
   dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
@@ -1929,7 +1929,7 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
 }
 
 
-int FileStore::collection_list(coll_t c, vector<pobject_t>& ls) 
+int FileStore::collection_list(coll_t c, vector<sobject_t>& ls) 
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
@@ -1942,16 +1942,16 @@ int FileStore::collection_list(coll_t c, vector<pobject_t>& ls)
     return -errno;
   
   // first, build (ino, object) list
-  vector< pair<ino_t,pobject_t> > inolist;
+  vector< pair<ino_t,sobject_t> > inolist;
 
   struct dirent *de;
   while ((de = ::readdir(dir)) != 0) {
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
-    pobject_t o;
+    sobject_t o;
     if (parse_object(de->d_name, o)) {
-      inolist.push_back(pair<ino_t,pobject_t>(de->d_ino, o));
+      inolist.push_back(pair<ino_t,sobject_t>(de->d_ino, o));
       ls.push_back(o);
     }
   }
@@ -1963,7 +1963,7 @@ int FileStore::collection_list(coll_t c, vector<pobject_t>& ls)
   // build final list
   ls.resize(inolist.size());
   int i = 0;
-  for (vector< pair<ino_t,pobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
+  for (vector< pair<ino_t,sobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
     ls[i++] = p->second;
   
   dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
@@ -2002,7 +2002,7 @@ int FileStore::_destroy_collection(coll_t c)
 }
 
 
-int FileStore::_collection_add(coll_t c, coll_t cid, const pobject_t& o) 
+int FileStore::_collection_add(coll_t c, coll_t cid, const sobject_t& o) 
 {
   if (fake_collections) return collections.collection_add(c, o);
 
@@ -2017,7 +2017,7 @@ int FileStore::_collection_add(coll_t c, coll_t cid, const pobject_t& o)
   return r;
 }
 
-int FileStore::_collection_remove(coll_t c, const pobject_t& o) 
+int FileStore::_collection_remove(coll_t c, const sobject_t& o) 
 {
   if (fake_collections) return collections.collection_remove(c, o);
 

@@ -171,8 +171,6 @@ namespace __gnu_cxx {
 
 // ---------------------------
 
-typedef sobject_t pobject_t;
-
 struct coll_t {
   __u64 pgid;
   snapid_t snap;

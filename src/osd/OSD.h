@@ -122,15 +122,15 @@ public:
   ClassHandler  *class_handler;
   int get_nodeid() { return whoami; }
   
-  static pobject_t get_osdmap_pobject_name(epoch_t epoch) { 
+  static sobject_t get_osdmap_pobject_name(epoch_t epoch) { 
     char foo[20];
     sprintf(foo, "osdmap.%d", epoch);
-    return pobject_t(object_t(foo), 0); 
+    return sobject_t(object_t(foo), 0); 
   }
-  static pobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
+  static sobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
     char foo[20];
     sprintf(foo, "inc_osdmap.%d", epoch);
-    return pobject_t(object_t(foo), 0); 
+    return sobject_t(object_t(foo), 0); 
   }
   
 

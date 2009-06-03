@@ -109,7 +109,7 @@ public:
     */
     vector<int8_t> ops;
     vector<bufferlist> bls;
-    vector<pobject_t> oids;
+    vector<sobject_t> oids;
     vector<coll_t> cids;
     vector<int64_t> lengths;
 
@@ -153,7 +153,7 @@ public:
     bufferlist &get_bl() {
       return bls[blp++];
     }
-    pobject_t get_oid() {
+    sobject_t get_oid() {
       return oids[oidp++];
     }
     coll_t get_cid() {
@@ -173,7 +173,7 @@ public:
       int op = OP_STARTSYNC;
       ops.push_back(op);
     }
-    void touch(coll_t cid, const pobject_t& oid) {
+    void touch(coll_t cid, const sobject_t& oid) {
       int op = OP_TOUCH;
       ops.push_back(op);
       cids.push_back(cid);
@@ -181,7 +181,7 @@ public:
       //len++;
       //blen += 3;
     }
-    void write(coll_t cid, const pobject_t& oid, __u64 off, size_t len, const bufferlist& bl) {
+    void write(coll_t cid, const sobject_t& oid, __u64 off, size_t len, const bufferlist& bl) {
       int op = OP_WRITE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -192,7 +192,7 @@ public:
       //len++;
       //blen += 3 + bl.buffers().size();
     }
-    void zero(coll_t cid, const pobject_t& oid, __u64 off, size_t len) {
+    void zero(coll_t cid, const sobject_t& oid, __u64 off, size_t len) {
       int op = OP_ZERO;
       ops.push_back(op);
       cids.push_back(cid);
@@ -202,7 +202,7 @@ public:
       //len++;
       //blen += 3 + 1;
     }
-    void trim_from_cache(coll_t cid, const pobject_t& oid, __u64 off, size_t len) {
+    void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 off, size_t len) {
       int op = OP_TRIMCACHE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -211,7 +211,7 @@ public:
       lengths.push_back(len);
       //len++;
     }
-    void truncate(coll_t cid, const pobject_t& oid, __u64 off) {
+    void truncate(coll_t cid, const sobject_t& oid, __u64 off) {
       int op = OP_TRUNCATE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -220,7 +220,7 @@ public:
       //len++;
       //blen++;
     }
-    void remove(coll_t cid, const pobject_t& oid) {
+    void remove(coll_t cid, const sobject_t& oid) {
       int op = OP_REMOVE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -228,17 +228,17 @@ public:
       //len++;
       //blen++;
     }
-    void setattr(coll_t cid, const pobject_t& oid, const char* name, const void* val, int len) {
+    void setattr(coll_t cid, const sobject_t& oid, const char* name, const void* val, int len) {
       bufferlist bl;
       bl.append((char*)val, len);
       setattr(cid, oid, name, bl);
     }
-    void setattr(coll_t cid, const pobject_t& oid, nstring& s, bufferlist& val) {
+    void setattr(coll_t cid, const sobject_t& oid, nstring& s, bufferlist& val) {
       attrnames2.push_back(nstring());
       attrnames2.back().swap(s);
       setattr(cid, oid, attrnames2.back().c_str(), val);
     }
-    void setattr(coll_t cid, const pobject_t& oid, const char* name, bufferlist& val) {
+    void setattr(coll_t cid, const sobject_t& oid, const char* name, bufferlist& val) {
       int op = OP_SETATTR;
       ops.push_back(op);
       cids.push_back(cid);
@@ -248,7 +248,7 @@ public:
       //len++;
       //blen++;
     }
-    void setattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& attrset) {
+    void setattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& attrset) {
       map<nstring,bufferptr> empty;
       int op = OP_SETATTRS;
       ops.push_back(op);
@@ -259,12 +259,12 @@ public:
       //len++;
       //blen += 5 + attrset.size();     // HACK allowance for removing old attrs
     }
-    void rmattr(coll_t cid, const pobject_t& oid, nstring& s) {
+    void rmattr(coll_t cid, const sobject_t& oid, nstring& s) {
       attrnames2.push_back(nstring());
       attrnames2.back().swap(s);
       rmattr(cid, oid, attrnames2.back().c_str());
     }
-    void rmattr(coll_t cid, const pobject_t& oid, const char* name) {
+    void rmattr(coll_t cid, const sobject_t& oid, const char* name) {
       int op = OP_RMATTR;
       ops.push_back(op);
       cids.push_back(cid);
@@ -273,7 +273,7 @@ public:
       //len++;
       //blen++;
     }
-    void clone(coll_t cid, const pobject_t& oid, pobject_t noid) {
+    void clone(coll_t cid, const sobject_t& oid, sobject_t noid) {
       int op = OP_CLONE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -282,7 +282,7 @@ public:
       //len++;
       //blen += 5;
     }
-    void clone_range(coll_t cid, const pobject_t& oid, pobject_t noid, __u64 off, __u64 len) {
+    void clone_range(coll_t cid, const sobject_t& oid, sobject_t noid, __u64 off, __u64 len) {
       int op = OP_CLONERANGE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -307,7 +307,7 @@ public:
       //len++;
       //blen++;
     }
-    void collection_add(coll_t cid, coll_t ocid, const pobject_t& oid) {
+    void collection_add(coll_t cid, coll_t ocid, const sobject_t& oid) {
       int op = OP_COLL_ADD;
       ops.push_back(op);
       cids.push_back(cid);
@@ -316,7 +316,7 @@ public:
       //len++;
       //blen++;
     }
-    void collection_remove(coll_t cid, const pobject_t& oid) {
+    void collection_remove(coll_t cid, const sobject_t& oid) {
       int op = OP_COLL_REMOVE;
       ops.push_back(op);
       cids.push_back(cid);
@@ -413,15 +413,15 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   // objects
-  virtual bool exists(coll_t cid, const pobject_t& oid) = 0;                   // useful?
-  virtual int stat(coll_t cid, const pobject_t& oid, struct stat *st) = 0;     // struct stat?
-  virtual int read(coll_t cid, const pobject_t& oid, __u64 offset, size_t len, bufferlist& bl) = 0;
+  virtual bool exists(coll_t cid, const sobject_t& oid) = 0;                   // useful?
+  virtual int stat(coll_t cid, const sobject_t& oid, struct stat *st) = 0;     // struct stat?
+  virtual int read(coll_t cid, const sobject_t& oid, __u64 offset, size_t len, bufferlist& bl) = 0;
 
   /*
-  virtual int _remove(coll_t cid, pobject_t oid) = 0;
-  virtual int _truncate(coll_t cid, pobject_t oid, __u64 size) = 0;
-  virtual int _write(coll_t cid, pobject_t oid, __u64 offset, size_t len, const bufferlist& bl) = 0;
-  virtual int _zero(coll_t cid, pobject_t oid, __u64 offset, size_t len) {
+  virtual int _remove(coll_t cid, sobject_t oid) = 0;
+  virtual int _truncate(coll_t cid, sobject_t oid, __u64 size) = 0;
+  virtual int _write(coll_t cid, sobject_t oid, __u64 offset, size_t len, const bufferlist& bl) = 0;
+  virtual int _zero(coll_t cid, sobject_t oid, __u64 offset, size_t len) {
     // write zeros.. yuck!
     bufferptr bp(len);
     bufferlist bl;
@@ -430,28 +430,28 @@ public:
   }
   */
 
-  virtual void trim_from_cache(coll_t cid, const pobject_t& oid, __u64 offset, size_t len) = 0; //{ }
-  virtual int is_cached(coll_t cid, const pobject_t& oid, __u64 offset, size_t len) = 0;  //{ return -1; }
+  virtual void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) = 0; //{ }
+  virtual int is_cached(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) = 0;  //{ return -1; }
 
-  virtual int getattr(coll_t cid, const pobject_t& oid, const char *name, void *value, size_t size) = 0;
-  virtual int getattr(coll_t cid, const pobject_t& oid, const char *name, bufferptr& value) = 0;
-  int getattr(coll_t cid, const pobject_t& oid, const char *name, bufferlist& value) {
+  virtual int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size) = 0;
+  virtual int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr& value) = 0;
+  int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name, bp);
     if (bp.length())
       value.push_back(bp);
     return r;
   }
-  virtual int getattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset) {return 0;};
+  virtual int getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset) {return 0;};
 
   /*
-  virtual int _setattr(coll_t cid, pobject_t oid, const char *name, const void *value, size_t size) = 0;
-  virtual int _setattr(coll_t cid, pobject_t oid, const char *name, const bufferptr &bp) {
+  virtual int _setattr(coll_t cid, sobject_t oid, const char *name, const void *value, size_t size) = 0;
+  virtual int _setattr(coll_t cid, sobject_t oid, const char *name, const bufferptr &bp) {
     return _setattr(cid, oid, name, bp.c_str(), bp.length());
   }
-  virtual int _setattrs(coll_t cid, pobject_t oid, map<string,bufferptr>& aset) = 0;
-  virtual int _rmattr(coll_t cid, pobject_t oid, const char *name) {return 0;}
-  virtual int _clone(coll_t cid, pobject_t oid, pobject_t noid) {
+  virtual int _setattrs(coll_t cid, sobject_t oid, map<string,bufferptr>& aset) = 0;
+  virtual int _rmattr(coll_t cid, sobject_t oid, const char *name) {return 0;}
+  virtual int _clone(coll_t cid, sobject_t oid, sobject_t noid) {
     return -1;
   }
   */
@@ -464,14 +464,14 @@ public:
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
   virtual int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset) = 0;
   virtual bool collection_empty(coll_t c) = 0;
-  virtual int collection_list_partial(coll_t c, vector<pobject_t>& o, int count, collection_list_handle_t *handle) = 0;
-  virtual int collection_list(coll_t c, vector<pobject_t>& o) = 0;
+  virtual int collection_list_partial(coll_t c, vector<sobject_t>& o, int count, collection_list_handle_t *handle) = 0;
+  virtual int collection_list(coll_t c, vector<sobject_t>& o) = 0;
 
   /*
   virtual int _create_collection(coll_t c) = 0;
   virtual int _destroy_collection(coll_t c) = 0;
-  virtual int _collection_add(coll_t c, coll_t ocid, pobject_t o) = 0;
-  virtual int _collection_remove(coll_t c, pobject_t o) = 0;
+  virtual int _collection_add(coll_t c, coll_t ocid, sobject_t o) = 0;
+  virtual int _collection_remove(coll_t c, sobject_t o) = 0;
   virtual int _collection_setattr(coll_t cid, const char *name,
                                  const void *value, size_t size) = 0;
   virtual int _collection_rmattr(coll_t cid, const char *name) = 0;

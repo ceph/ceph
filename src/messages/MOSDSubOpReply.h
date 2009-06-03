@@ -37,7 +37,7 @@ public:
   osd_reqid_t reqid;
   pg_t pgid;
   tid_t rep_tid;
-  pobject_t poid;
+  sobject_t poid;
 
   vector<ceph_osd_op> ops;
 
@@ -83,7 +83,7 @@ public:
 
   pg_t get_pg() { return pgid; }
   tid_t get_rep_tid() { return rep_tid; }
-  pobject_t get_poid() { return poid; }
+  sobject_t get_poid() { return poid; }
 
   int get_ack_type() { return ack_type; }
   bool is_ondisk() { return ack_type & CEPH_OSD_FLAG_ONDISK; }

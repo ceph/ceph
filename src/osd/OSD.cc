@@ -158,7 +158,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     object_t oid("disk_bw_test");
     for (int i=0; i<1000; i++) {
       ObjectStore::Transaction t;
-      t.write(0, pobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+      t.write(0, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
       store->apply_transaction(t);
     }
     store->sync();
@@ -166,7 +166,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     end -= start;
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
     ObjectStore::Transaction tr;
-    tr.remove(0, pobject_t(oid, 0));
+    tr.remove(0, sobject_t(oid, 0));
     store->apply_transaction(tr);
     
     // set osd weight
@@ -657,7 +657,7 @@ void OSD::_remove_unlock_pg(PG *pg)
   backlog_wq.dequeue(pg);
 
   // remove from store
-  vector<pobject_t> olist;
+  vector<sobject_t> olist;
 
   ObjectStore::Transaction t;
   {
@@ -665,10 +665,10 @@ void OSD::_remove_unlock_pg(PG *pg)
     for (set<snapid_t>::iterator p = pg->snap_collections.begin();
 	 p != pg->snap_collections.end();
 	 p++) {
-      vector<pobject_t> olist;      
+      vector<sobject_t> olist;      
       store->collection_list(pgid.to_snap_coll(*p), olist);
       dout(10) << "_remove_unlock_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
-      for (vector<pobject_t>::iterator q = olist.begin();
+      for (vector<sobject_t>::iterator q = olist.begin();
 	   q != olist.end();
 	   q++)
 	t.remove(pgid.to_snap_coll(*p), *q);
@@ -680,7 +680,7 @@ void OSD::_remove_unlock_pg(PG *pg)
     // main collection
     store->collection_list(pgid.to_coll(), olist);
     dout(10) << "_remove_unlock_pg " << pgid << " " << olist.size() << " objects" << dendl;
-    for (vector<pobject_t>::iterator p = olist.begin();
+    for (vector<sobject_t>::iterator p = olist.begin();
 	 p != olist.end();
 	 p++)
       t.remove(pgid.to_coll(), *p);
@@ -1765,7 +1765,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   for (map<epoch_t,bufferlist>::iterator p = m->maps.begin();
        p != m->maps.end();
        p++) {
-    pobject_t poid = get_osdmap_pobject_name(p->first);
+    sobject_t poid = get_osdmap_pobject_name(p->first);
     if (store->exists(0, poid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << dendl;
       logger->inc(l_osd_mapfdup);
@@ -1791,7 +1791,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   for (map<epoch_t,bufferlist>::iterator p = m->incremental_maps.begin();
        p != m->incremental_maps.end();
        p++) {
-    pobject_t poid = get_inc_osdmap_pobject_name(p->first);
+    sobject_t poid = get_inc_osdmap_pobject_name(p->first);
     if (store->exists(0, poid)) {
       dout(10) << "handle_osd_map already had incremental map epoch " << p->first << dendl;
       logger->inc(l_osd_mapidup);
@@ -2492,11 +2492,11 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   dout(10) << "split_pg " << *parent << dendl;
   pg_t parentid = parent->info.pgid;
 
-  vector<pobject_t> olist;
+  vector<sobject_t> olist;
   store->collection_list(parent->info.pgid.to_coll(), olist);  
 
-  for (vector<pobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
-    pobject_t poid = *p;
+  for (vector<sobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
+    sobject_t poid = *p;
     ceph_object_layout l = osdmap->make_object_layout(poid.oid, parentid.pool(), parentid.preferred());
     pg_t pgid = osdmap->raw_pg_to_pg(pg_t(le64_to_cpu(l.ol_pgid)));
     if (pgid != parentid) {

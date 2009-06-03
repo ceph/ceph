@@ -535,13 +535,13 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
 
   unlock();
 
-  vector<pobject_t> olist;
+  vector<sobject_t> olist;
   osd->store->collection_list(info.pgid.to_coll(), olist);
 
-  for (vector<pobject_t>::iterator it = olist.begin();
+  for (vector<sobject_t>::iterator it = olist.begin();
        it != olist.end();
        it++) {
-    pobject_t poid = *it;
+    sobject_t poid = *it;
 
     Log::Entry e;
     e.soid = poid;
@@ -1967,15 +1967,15 @@ void PG::build_scrub_map(ScrubMap &map)
   coll_t c = info.pgid.to_coll();
 
   // objects
-  vector<pobject_t> ls;
+  vector<sobject_t> ls;
   osd->store->collection_list(c, ls);
 
   // sort
   dout(10) << "sorting " << ls.size() << " objects" << dendl;
-  vector< pair<pobject_t,int> > tab(ls.size());
-  vector< pair<pobject_t,int> >::iterator q = tab.begin();
+  vector< pair<sobject_t,int> > tab(ls.size());
+  vector< pair<sobject_t,int> >::iterator q = tab.begin();
   int i = 0;
-  for (vector<pobject_t>::iterator p = ls.begin(); 
+  for (vector<sobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
        p++, i++, q++) {
     q->first = *p;
@@ -1985,7 +1985,7 @@ void PG::build_scrub_map(ScrubMap &map)
   // tab is now sorted, with ->second indicating object's original position
   vector<int> pos(ls.size());
   i = 0;
-  for (vector< pair<pobject_t,int> >::iterator p = tab.begin(); 
+  for (vector< pair<sobject_t,int> >::iterator p = tab.begin(); 
        p != tab.end(); 
        p++, i++)
     pos[p->second] = i;
@@ -1994,10 +1994,10 @@ void PG::build_scrub_map(ScrubMap &map)
   dout(10) << " scanning " << ls.size() << " objects" << dendl;
   map.objects.resize(ls.size());
   i = 0;
-  for (vector<pobject_t>::iterator p = ls.begin(); 
+  for (vector<sobject_t>::iterator p = ls.begin(); 
        p != ls.end(); 
        p++, i++) {
-    pobject_t poid = *p;
+    sobject_t poid = *p;
 
     ScrubMap::object& o = map.objects[pos[i]];
     o.poid = *p;
@@ -2075,7 +2075,7 @@ void PG::scrub()
     dout(10) << "scrub  requesting scrubmap from osd" << acting[i] << dendl;
     vector<ceph_osd_op> scrub(1);
     scrub[0].op = CEPH_OSD_OP_SCRUB;
-    pobject_t poid;
+    sobject_t poid;
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(reqid, info.pgid, poid, false, 0,

@@ -50,11 +50,11 @@ class FileStore : public JournalingObjectStore {
   bool fake_collections;
   
   // helper fns
-  void append_oname(const pobject_t &oid, char *s);
-  //void get_oname(pobject_t oid, char *s);
+  void append_oname(const sobject_t &oid, char *s);
+  //void get_oname(sobject_t oid, char *s);
   void get_cdir(coll_t cid, char *s);
-  void get_coname(coll_t cid, const pobject_t& oid, char *s);
-  bool parse_object(char *s, pobject_t& o);
+  void get_coname(coll_t cid, const sobject_t& oid, char *s);
+  bool parse_object(char *s, sobject_t& o);
   bool parse_coll(char *s, coll_t& c);
   
   int lock_fsid();
@@ -101,21 +101,21 @@ class FileStore : public JournalingObjectStore {
 
   // ------------------
   // objects
-  int pick_object_revision_lt(pobject_t& oid) {
+  int pick_object_revision_lt(sobject_t& oid) {
     return 0;
   }
-  bool exists(coll_t cid, const pobject_t& oid);
-  int stat(coll_t cid, const pobject_t& oid, struct stat *st);
-  int read(coll_t cid, const pobject_t& oid, __u64 offset, size_t len, bufferlist& bl);
+  bool exists(coll_t cid, const sobject_t& oid);
+  int stat(coll_t cid, const sobject_t& oid, struct stat *st);
+  int read(coll_t cid, const sobject_t& oid, __u64 offset, size_t len, bufferlist& bl);
 
-  int _touch(coll_t cid, const pobject_t& oid);
-  int _write(coll_t cid, const pobject_t& oid, __u64 offset, size_t len, const bufferlist& bl);
-  int _zero(coll_t cid, const pobject_t& oid, __u64 offset, size_t len);
-  int _truncate(coll_t cid, const pobject_t& oid, __u64 size);
-  int _clone(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid);
-  int _clone_range(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid, __u64 off, __u64 len);
+  int _touch(coll_t cid, const sobject_t& oid);
+  int _write(coll_t cid, const sobject_t& oid, __u64 offset, size_t len, const bufferlist& bl);
+  int _zero(coll_t cid, const sobject_t& oid, __u64 offset, size_t len);
+  int _truncate(coll_t cid, const sobject_t& oid, __u64 size);
+  int _clone(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid);
+  int _clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t& newoid, __u64 off, __u64 len);
   int _do_clone_range(int from, int to, __u64 off, __u64 len);
-  int _remove(coll_t cid, const pobject_t& oid);
+  int _remove(coll_t cid, const sobject_t& oid);
 
   void _start_sync();
 
@@ -123,16 +123,16 @@ class FileStore : public JournalingObjectStore {
   void sync(Context *onsafe);
 
   // attrs
-  int getattr(coll_t cid, const pobject_t& oid, const char *name, void *value, size_t size);
-  int getattr(coll_t cid, const pobject_t& oid, const char *name, bufferptr &bp);
-  int getattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset);
+  int getattr(coll_t cid, const sobject_t& oid, const char *name, void *value, size_t size);
+  int getattr(coll_t cid, const sobject_t& oid, const char *name, bufferptr &bp);
+  int getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset);
 
   int _getattr(const char *fn, const char *name, bufferptr& bp);
   int _getattrs(const char *fn, map<nstring,bufferptr>& aset);
 
-  int _setattr(coll_t cid, const pobject_t& oid, const char *name, const void *value, size_t size);
-  int _setattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset);
-  int _rmattr(coll_t cid, const pobject_t& oid, const char *name);
+  int _setattr(coll_t cid, const sobject_t& oid, const char *name, const void *value, size_t size);
+  int _setattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset);
+  int _rmattr(coll_t cid, const sobject_t& oid, const char *name);
 
   int collection_getattr(coll_t c, const char *name, void *value, size_t size);
   int collection_getattr(coll_t c, const char *name, bufferlist& bl);
@@ -147,16 +147,16 @@ class FileStore : public JournalingObjectStore {
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
-  int collection_list_partial(coll_t c, vector<pobject_t>& o, int count, collection_list_handle_t *handle);
-  int collection_list(coll_t c, vector<pobject_t>& o);
+  int collection_list_partial(coll_t c, vector<sobject_t>& o, int count, collection_list_handle_t *handle);
+  int collection_list(coll_t c, vector<sobject_t>& o);
 
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
-  int _collection_add(coll_t c, coll_t ocid, const pobject_t& o);
-  int _collection_remove(coll_t c, const pobject_t& o);
+  int _collection_add(coll_t c, coll_t ocid, const sobject_t& o);
+  int _collection_remove(coll_t c, const sobject_t& o);
 
-  void trim_from_cache(coll_t cid, const pobject_t& oid, __u64 offset, size_t len) {}
-  int is_cached(coll_t cid, const pobject_t& oid, __u64 offset, size_t len) { return -1; }
+  void trim_from_cache(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) {}
+  int is_cached(coll_t cid, const sobject_t& oid, __u64 offset, size_t len) { return -1; }
 };
 
 #endif

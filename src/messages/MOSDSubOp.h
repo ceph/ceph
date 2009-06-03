@@ -32,7 +32,7 @@ public:
   
   // subop
   pg_t pgid;
-  pobject_t poid;
+  sobject_t poid;
   
   __u8 acks_wanted;
 
@@ -62,7 +62,7 @@ public:
   map<nstring,bufferptr> attrset;
 
   interval_set<__u64> data_subset;
-  map<pobject_t, interval_set<__u64> > clone_subsets;
+  map<sobject_t, interval_set<__u64> > clone_subsets;
 
  virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -118,7 +118,7 @@ public:
   }
 
 
-  MOSDSubOp(osd_reqid_t r, pg_t p, pobject_t po, bool noop_, int aw,
+  MOSDSubOp(osd_reqid_t r, pg_t p, sobject_t po, bool noop_, int aw,
 	    epoch_t mape, tid_t rtid, eversion_t v) :
     Message(MSG_OSD_SUBOP),
     map_epoch(mape),
