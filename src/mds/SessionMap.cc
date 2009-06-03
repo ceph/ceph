@@ -63,7 +63,7 @@ void SessionMap::load(Context *onload)
 	waiting_for_load.push_back(onload);
   
   C_SM_Load *c = new C_SM_Load(this);
-  object_t oid(ino, 0);
+  object_t oid("sessionmap");
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());
@@ -115,7 +115,7 @@ void SessionMap::save(Context *onsave, version_t needv)
   encode(bl);
   committing = version;
   SnapContext snapc;
-  object_t oid(ino, 0);
+  object_t oid("sessionmap");
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());

@@ -155,9 +155,10 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     bl.push_back(bp);
     cout << "testing disk bandwidth..." << std::endl;
     utime_t start = g_clock.now();
+    object_t oid("disk_bw_test");
     for (int i=0; i<1000; i++) {
       ObjectStore::Transaction t;
-      t.write(0, pobject_t(object_t(999,i), 0), 0, bl.length(), bl);
+      t.write(0, pobject_t(oid, 0), i*bl.length(), bl.length(), bl);
       store->apply_transaction(t);
     }
     store->sync();
@@ -165,8 +166,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     end -= start;
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
     ObjectStore::Transaction tr;
-    for (int i=0; i<1000; i++) 
-      tr.remove(0, pobject_t(object_t(999,i), 0));
+    tr.remove(0, pobject_t(oid, 0));
     store->apply_transaction(tr);
     
     // set osd weight

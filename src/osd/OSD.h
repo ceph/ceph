@@ -123,10 +123,14 @@ public:
   int get_nodeid() { return whoami; }
   
   static pobject_t get_osdmap_pobject_name(epoch_t epoch) { 
-    return pobject_t(object_t(0, epoch << 1), 0); 
+    char foo[20];
+    sprintf(foo, "osdmap.%d", epoch);
+    return pobject_t(object_t(foo), 0); 
   }
   static pobject_t get_inc_osdmap_pobject_name(epoch_t epoch) { 
-    return pobject_t(object_t(0, (epoch << 1) + 1), 0); 
+    char foo[20];
+    sprintf(foo, "inc_osdmap.%d", epoch);
+    return pobject_t(object_t(foo), 0); 
   }
   
 

@@ -4365,7 +4365,9 @@ void MDCache::_recovered(CInode *in, int r)
 
 void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
 {
-  object_t oid(ino, 0);
+  char n[30];
+  sprintf(n, "%llx.%08llx", (long long unsigned)ino, 0ull);
+  object_t oid(n);
   dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
   ceph_object_layout ol = mds->osdmap->make_object_layout(oid,
 							  mds->mdsmap->get_metadata_pg_pool());

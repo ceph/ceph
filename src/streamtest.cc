@@ -117,7 +117,7 @@ int main(int argc, const char **argv)
   //cout << "stop at " << end << std::endl;
   cout << "# offset\tack\tcommit" << std::endl;
   while (now < end) {
-    pobject_t poid(object_t(1, 1), 0);
+    pobject_t poid(object_t("streamtest"), 0);
     utime_t start = now;
     set_start(pos, now);
     ObjectStore::Transaction t;

@@ -649,7 +649,9 @@ void CInode::store(Context *fin)
   m.mtime = g_clock.now();
   m.setxattr("inode", bl);
 
-  object_t oid(ino(), frag_t());
+  char n[30];
+  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  object_t oid(n);
   OSDMap *osdmap = mdcache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mdcache->mds->mdsmap->get_metadata_pg_pool());
@@ -684,7 +686,9 @@ void CInode::fetch(Context *fin)
   dout(10) << "fetch" << dendl;
 
   C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
-  object_t oid(ino(), frag_t());
+  char n[30];
+  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  object_t oid(n);
 
   ObjectRead rd;
   rd.getxattr("inode");

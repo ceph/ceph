@@ -178,28 +178,22 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
 {
   //assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
-#ifdef __LP64__
-  sprintf(t, "/%016lx.%08x.%lx_%lx", 
-	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.snap);
-#else
-  sprintf(t, "/%08x_%016llx.%08x.%llx_%llx", 
-	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.snap);
-#endif
+  sprintf(t, "/%s_%llx", oid.oid.name.c_str(), (long long unsigned)oid.snap);
   //parse_object(t+1);
 }
 
 bool FileStore::parse_object(char *s, pobject_t& o)
 {
-  //assert(sizeof(o) == 28);
-  if (strlen(s) < 29 ||
-      s[16] != '.' ||
-      s[25] != '.')
-    return false;
-  o.oid.ino = strtoull(s, &s, 16);
-  o.oid.bno = strtoull(s+1, &s, 16);
-  o.oid.pad = strtoull(s+1, &s, 16);
-  o.snap = strtoull(s+1, &s, 16);
-  return true;
+  char *bar = s + strlen(s) - 1;
+  while (*bar != '_' &&
+	 bar > s)
+    bar--;
+  if (*bar == '_') {
+    o.oid.name = nstring(bar-s, s);
+    o.snap = strtoull(bar+1, &s, 16);
+    return true;
+  }
+  return false;
 }
 
   //           11111111112222222222333
@@ -227,7 +221,7 @@ void FileStore::get_cdir(coll_t cid, char *s)
 #endif
 }
 
-void FileStore::get_coname(coll_t cid, pobject_t oid, char *s) 
+void FileStore::get_coname(coll_t cid, const pobject_t& oid, char *s) 
 {
   get_cdir(cid, s);
   append_oname(oid, s);
@@ -1193,7 +1187,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
 // --------------------
 // objects
 
-bool FileStore::exists(coll_t cid, pobject_t oid)
+bool FileStore::exists(coll_t cid, const pobject_t& oid)
 {
   struct stat st;
   if (stat(cid, oid, &st) == 0)
@@ -1202,7 +1196,7 @@ bool FileStore::exists(coll_t cid, pobject_t oid)
     return false;
 }
   
-int FileStore::stat(coll_t cid, pobject_t oid, struct stat *st)
+int FileStore::stat(coll_t cid, const pobject_t& oid, struct stat *st)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1211,7 +1205,7 @@ int FileStore::stat(coll_t cid, pobject_t oid, struct stat *st)
   return r < 0 ? -errno:r;
 }
 
-int FileStore::read(coll_t cid, pobject_t oid, 
+int FileStore::read(coll_t cid, const pobject_t& oid, 
                     __u64 offset, size_t len,
                     bufferlist& bl) {
   char fn[PATH_MAX];
@@ -1249,7 +1243,7 @@ int FileStore::read(coll_t cid, pobject_t oid,
 
 
 
-int FileStore::_remove(coll_t cid, pobject_t oid) 
+int FileStore::_remove(coll_t cid, const pobject_t& oid) 
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1260,7 +1254,7 @@ int FileStore::_remove(coll_t cid, pobject_t oid)
   return r;
 }
 
-int FileStore::_truncate(coll_t cid, pobject_t oid, __u64 size)
+int FileStore::_truncate(coll_t cid, const pobject_t& oid, __u64 size)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1272,7 +1266,7 @@ int FileStore::_truncate(coll_t cid, pobject_t oid, __u64 size)
 }
 
 
-int FileStore::_touch(coll_t cid, pobject_t oid)
+int FileStore::_touch(coll_t cid, const pobject_t& oid)
 {
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
@@ -1291,7 +1285,7 @@ int FileStore::_touch(coll_t cid, pobject_t oid)
   return r;
 }
 
-int FileStore::_write(coll_t cid, pobject_t oid, 
+int FileStore::_write(coll_t cid, const pobject_t& oid, 
                      __u64 offset, size_t len,
                      const bufferlist& bl)
 {
@@ -1337,7 +1331,7 @@ int FileStore::_write(coll_t cid, pobject_t oid,
   return r;
 }
 
-int FileStore::_zero(coll_t cid, pobject_t oid, __u64 offset, size_t len)
+int FileStore::_zero(coll_t cid, const pobject_t& oid, __u64 offset, size_t len)
 {
   // write zeros.. yuck!
   bufferptr bp(len);
@@ -1599,7 +1593,7 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset)
 
 // objects
 
-int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
+int FileStore::getattr(coll_t cid, const pobject_t& oid, const char *name,
 		       void *value, size_t size) 
 {
   if (fake_attrs) return attrs.getattr(cid, oid, name, value, size);
@@ -1614,7 +1608,7 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name,
   return r;
 }
 
-int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &bp)
+int FileStore::getattr(coll_t cid, const pobject_t& oid, const char *name, bufferptr &bp)
 {
   if (fake_attrs) return attrs.getattr(cid, oid, name, bp);
 
@@ -1628,7 +1622,7 @@ int FileStore::getattr(coll_t cid, pobject_t oid, const char *name, bufferptr &b
   return r;
 }
 
-int FileStore::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) 
+int FileStore::getattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.getattrs(cid, oid, aset);
 
@@ -1644,7 +1638,7 @@ int FileStore::getattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset)
 
 
 
-int FileStore::_setattr(coll_t cid, pobject_t oid, const char *name,
+int FileStore::_setattr(coll_t cid, const pobject_t& oid, const char *name,
 			const void *value, size_t size) 
 {
   if (fake_attrs) return attrs.setattr(cid, oid, name, value, size);
@@ -1659,7 +1653,7 @@ int FileStore::_setattr(coll_t cid, pobject_t oid, const char *name,
   return r;
 }
 
-int FileStore::_setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset) 
+int FileStore::_setattrs(coll_t cid, const pobject_t& oid, map<nstring,bufferptr>& aset) 
 {
   if (fake_attrs) return attrs.setattrs(cid, oid, aset);
 
@@ -1688,7 +1682,7 @@ int FileStore::_setattrs(coll_t cid, pobject_t oid, map<nstring,bufferptr>& aset
 }
 
 
-int FileStore::_rmattr(coll_t cid, pobject_t oid, const char *name) 
+int FileStore::_rmattr(coll_t cid, const pobject_t& oid, const char *name) 
 {
   if (fake_attrs) return attrs.rmattr(cid, oid, name);
 

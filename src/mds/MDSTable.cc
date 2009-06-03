@@ -62,7 +62,9 @@ void MDSTable::save(Context *onfinish, version_t v)
 
   // write (async)
   SnapContext snapc;
-  object_t oid(ino, 0);
+  char n[30];
+  sprintf(n, "mdstable_%s", table_name);
+  object_t oid(n);
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());
@@ -121,7 +123,9 @@ void MDSTable::load(Context *onfinish)
   state = STATE_OPENING;
 
   C_MT_Load *c = new C_MT_Load(this, onfinish);
-  object_t oid(ino, 0);
+  char n[30];
+  sprintf(n, "mdstable_%s", table_name);
+  object_t oid(n);
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());

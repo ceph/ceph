@@ -31,28 +31,24 @@ int main(int argc, const char **argv)
   time(&tm);
   snprintf(buf, 128, "%s", ctime(&tm));
 
-  struct ceph_object oid;
-  memset(&oid, 0, sizeof(oid));
-  oid.ino = 0x2010;
+  const char *oid = "foo";
 
   rados_pool_t pool;
   int r = rados_open_pool("data", &pool);
   printf("open pool result = %d, pool = %d\n", r, pool);
 
-  rados_write(pool, &oid, 0, buf, strlen(buf) + 1);
-  rados_exec(pool, &oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
+  rados_write(pool, oid, 0, buf, strlen(buf) + 1);
+  rados_exec(pool, oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
   printf("exec result=%s\n", buf);
-  int size = rados_read(pool, &oid, 0, buf2, 128);
+  int size = rados_read(pool, oid, 0, buf2, 128);
   printf("read result=%s\n", buf2);
   printf("size=%d\n", size);
 
 
   // test aio
   rados_completion_t a, b;
-  oid.bno = 1;
-  rados_aio_write(pool, &oid, 0, buf, 100, &a);
-  oid.bno = 2;
-  rados_aio_write(pool, &oid, 0, buf, 100, &b);
+  rados_aio_write(pool, "a", 0, buf, 100, &a);
+  rados_aio_write(pool, "b", 0, buf, 100, &b);
   rados_aio_wait_for_safe(a);
   printf("a safe\n");
   rados_aio_wait_for_safe(b);

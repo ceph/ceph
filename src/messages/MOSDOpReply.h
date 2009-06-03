@@ -32,10 +32,11 @@
 class MOSDOpReply : public Message {
   ceph_osd_reply_head head;
  public:
+  object_t oid;
   vector<ceph_osd_op> ops;
 
   long     get_tid() { return head.tid; }
-  object_t get_oid() { return head.oid; }
+  object_t get_oid() { return oid; }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   int      get_flags() { return head.flags; }
 
@@ -68,7 +69,7 @@ public:
     head.result = result;
     head.flags =
       (req->head.flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
-    head.oid = req->head.oid;
+    oid = req->oid;
     head.layout = req->head.layout;
     head.osdmap_epoch = e;
     head.reassert_version = req->head.reassert_version;
@@ -81,18 +82,21 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.num_ops, ops, p);
+    ::decode_nohead(head.object_len, oid.name, p);
   }
   virtual void encode_payload() {
     head.num_ops = ops.size();
+    head.object_len = oid.name.length();
     ::encode(head, payload);
     ::encode_nohead(ops, payload);
+    ::encode_nohead(oid.name, payload);
   }
 
   const char *get_type_name() { return "osd_op_reply"; }
   
   void print(ostream& out) {
     out << "osd_op_reply(" << get_reqid()
-	<< " " << head.oid << " " << ops;
+	<< " " << oid << " " << ops;
     if (may_write()) {
       if (is_ondisk())
 	out << " ondisk";

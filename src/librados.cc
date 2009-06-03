@@ -669,24 +669,24 @@ extern "C" int rados_close_pool(rados_pool_t pool)
   return 0;
 }
 
-extern "C" int rados_write(rados_pool_t pool, ceph_object *o, off_t off, const char *buf, size_t len)
+extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)
 {
-  object_t oid(*o);
+  object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
   return radosp->write(pool, oid, off, bl, len);
 }
 
-extern "C" int rados_remove(rados_pool_t pool, ceph_object *o)
+extern "C" int rados_remove(rados_pool_t pool, const char *o)
 {
-  object_t oid(*o);
+  object_t oid(o);
   return radosp->remove(pool, oid);
 }
 
-extern "C" int rados_read(rados_pool_t pool, ceph_object *o, off_t off, char *buf, size_t len)
+extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf, size_t len)
 {
   int ret;
-  object_t oid(*o);
+  object_t oid(o);
   bufferlist bl;
   ret = radosp->read(pool, oid, off, bl, len);
   if (ret >= 0) {
@@ -699,10 +699,10 @@ extern "C" int rados_read(rados_pool_t pool, ceph_object *o, off_t off, char *bu
   return ret;
 }
 
-extern "C" int rados_exec(rados_pool_t pool, ceph_object *o, const char *cls, const char *method,
+extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, const char *method,
                          const char *inbuf, size_t in_len, char *buf, size_t out_len)
 {
-  object_t oid(*o);
+  object_t oid(o);
   bufferlist inbl, outbl;
   int ret;
   inbl.append(inbuf, in_len);
@@ -753,19 +753,19 @@ extern "C" void rados_aio_release(rados_completion_t c)
   ((RadosClient::AioCompletion *)c)->put();
 }
 
-extern "C" int rados_aio_read(rados_pool_t pool, struct ceph_object *o,
+extern "C" int rados_aio_read(rados_pool_t pool, const char *o,
 			       off_t off, char *buf, size_t len,
 			       rados_completion_t *completion)
 {
-  object_t oid(*o);
+  object_t oid(o);
   return radosp->aio_read(pool, oid, off, buf, len, (RadosClient::AioCompletion**)completion);
 }
 
-extern "C" int rados_aio_write(rados_pool_t pool, struct ceph_object *o,
+extern "C" int rados_aio_write(rados_pool_t pool, const char *o,
 			       off_t off, const char *buf, size_t len,
 			       rados_completion_t *completion)
 {
-  object_t oid(*o);
+  object_t oid(o);
   bufferlist bl;
   bl.append(buf, len);
   return radosp->aio_write(pool, oid, off, bl, len, (RadosClient::AioCompletion**)completion);

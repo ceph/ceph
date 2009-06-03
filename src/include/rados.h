@@ -27,17 +27,6 @@ typedef __le64 ceph_snapid_t;
 #define CEPH_SNAPDIR ((__u64)(-1))
 #define CEPH_NOSNAP  ((__u64)(-2))
 
-struct ceph_object {
-	union {
-		__u8 raw[20];        /* fits a sha1 hash */
-		struct {
-			__le64 ino;  /* inode "file" identifier */
-			__le32 bno;  /* "block" (object) in that "file" */
-			__le64 pad;
-		} __attribute__ ((packed));
-	};
-} __attribute__ ((packed));
-
 struct ceph_timespec {
 	__le32 tv_sec;
 	__le32 tv_nsec;
@@ -356,7 +345,6 @@ struct ceph_osd_op {
 struct ceph_osd_request_head {
 	__le64                    tid;
 	__le32                    client_inc;
-	struct ceph_object        oid;
 	struct ceph_object_layout layout;
 	__le32                    osdmap_epoch;
 
@@ -365,6 +353,7 @@ struct ceph_osd_request_head {
 	struct ceph_timespec      mtime;
 	struct ceph_eversion      reassert_version;
 
+	__le32 object_len;
 	__le32 ticket_len;
 
 	__le64 snapid;
@@ -372,22 +361,22 @@ struct ceph_osd_request_head {
 	__le32 num_snaps;
 
 	__le16 num_ops;
-	struct ceph_osd_op ops[];  /* followed by ticket, snaps */
+	struct ceph_osd_op ops[];  /* followed by ops[], object, ticket, snaps */
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {
 	__le64               tid;
 	__le32               client_inc;
 	__le32               flags;
-	struct ceph_object   oid;
 	struct ceph_object_layout layout;
 	__le32               osdmap_epoch;
 	struct ceph_eversion reassert_version;
 
 	__le32 result;
 
+	__le32 object_len;
 	__le32 num_ops;
-	struct ceph_osd_op ops[0];
+	struct ceph_osd_op ops[0];  /* ops[], object */
 } __attribute__ ((packed));
 
 

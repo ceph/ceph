@@ -244,7 +244,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
     
     // find oid, extent
     ObjectExtent *ex = 0;
-    object_t oid( ino, objectno );
+    object_t oid = file_object_t(ino, objectno);
     if (object_extents.count(oid)) 
       ex = &object_extents[oid];
     else {

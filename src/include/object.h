@@ -25,92 +25,74 @@ using namespace std;
 using namespace __gnu_cxx;
 
 #include "hash.h"
-
+#include "nstring.h"
 #include "encoding.h"
 
-
 struct object_t {
-  union {
-    __u8 raw[20];
-    struct {
-      uint64_t ino;    // "file" identifier
-      uint32_t bno;    // "block" in that "file"
-      uint64_t pad;
-    } __attribute__ ((packed));
-  } __attribute__ ((packed));
+  nstring name;
 
-  object_t() : ino(0), bno(0), pad(0) {}
-  object_t(uint64_t i, uint32_t b) : ino(i), bno(b), pad(0) {}
-
-  // IMPORTANT: make this match struct ceph_object ****
-  object_t(const ceph_object& co) {
-    ino = co.ino;
-    bno = co.bno;
-    pad = co.pad;
-  }  
-  operator ceph_object() {
-    ceph_object oid;
-    oid.ino = ino;
-    oid.bno = bno;
-    oid.pad = pad;
-    return oid;
-  }
+  object_t(const char *s = 0) : name(s) {}
+  
   void encode(bufferlist &bl) const {
-    ::encode(ino, bl);
-    ::encode(bno, bl);
-    ::encode(pad, bl);
+    ::encode(name, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    __u64 i, r;
-    __u32 b;
-    ::decode(i, bl);
-    ::decode(b, bl);
-    ::decode(r, bl);
-    ino = i;
-    bno = b;
-    pad = r;
+    ::decode(name, bl);
   }
-} __attribute__ ((packed));
+};
 WRITE_CLASS_ENCODER(object_t)
 
 inline bool operator==(const object_t l, const object_t r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
+  return l.name == r.name;
 }
 inline bool operator!=(const object_t l, const object_t r) {
-  return memcmp(&l, &r, sizeof(l)) != 0;
+  return l.name != r.name;
 }
 inline bool operator>(const object_t l, const object_t r) {
-  return memcmp(&l, &r, sizeof(l)) > 0;
+  return l.name > r.name;
 }
 inline bool operator<(const object_t l, const object_t r) {
-  return memcmp(&l, &r, sizeof(l)) < 0;
+  return l.name < r.name;
 }
 inline bool operator>=(const object_t l, const object_t r) { 
-  return memcmp(&l, &r, sizeof(l)) >= 0;
+  return l.name >= r.name;
 }
 inline bool operator<=(const object_t l, const object_t r) {
-  return memcmp(&l, &r, sizeof(l)) <= 0;
+  return l.name <= r.name;
 }
 inline ostream& operator<<(ostream& out, const object_t o) {
-  out << hex;
-  out << o.ino << '.';
-  out.setf(ios::right);
-  out.fill('0');
-  out << setw(8) << o.bno;
-  out.unsetf(ios::right);
-  out << dec;
-  return out;
+  return out << o.name;
 }
 
 namespace __gnu_cxx {
   template<> struct hash<object_t> {
     size_t operator()(const object_t &r) const { 
-      static rjhash<uint64_t> H;
-      static rjhash<uint32_t> I;
-      return H(r.ino) ^ I(r.bno) ^ H(r.pad);
+      static hash<nstring> H;
+      return H(r.name);
     }
   };
 }
+
+
+struct file_object_t {
+  __u64 ino, bno;
+  mutable char buf[33];
+
+  file_object_t(__u64 i=0, __u64 b=0) : ino(i), bno(b) {
+    buf[0] = 0;
+  }
+  
+  const char *c_str() const {
+    if (!buf[0])
+      sprintf(buf, "%llx.%08llx", (long long unsigned)ino, (long long unsigned)bno);
+    return buf;
+  }
+
+  operator object_t() {
+    return object_t(c_str());
+  }
+};
+
 
 
 // ---------------------------

@@ -639,6 +639,9 @@ private:
 
   ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     // calculate ps (placement seed)
+    static hash<object_t> H;
+    ps_t ps = H(oid);
+    /*
     ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {
     case CEPH_OBJECT_LAYOUT_LINEAR:
@@ -659,7 +662,8 @@ private:
 
     default:
       assert(0);
-    }
+      }*/
+    
 
     //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
 

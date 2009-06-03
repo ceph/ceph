@@ -33,14 +33,14 @@ int myrand()
 }
 
 
-pobject_t Ager::age_get_oid() {
+file_object_t Ager::age_get_oid() {
   if (!age_free_oids.empty()) {
-    pobject_t o = age_free_oids.front();
+    file_object_t o = age_free_oids.front();
     age_free_oids.pop_front();
     return o;
   }
-  pobject_t last = age_cur_oid;
-  ++age_cur_oid.oid.bno;
+  file_object_t last = age_cur_oid;
+  ++age_cur_oid.bno;
   return last;
 }
 
@@ -77,7 +77,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
         avail - free > .02) 
       store->sync();
 
-    pobject_t poid = age_get_oid();
+    file_object_t poid = age_get_oid();
     
     int b = myrand() % 10;
     age_objects[b].push_back(poid);
@@ -117,12 +117,13 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
       bufferlist sbl;
       sbl.substr_of(bl, 0, t);
       ObjectStore::Transaction tr;
-      tr.write(0, poid, off, t, sbl);
+      pobject_t oid(poid, 0);
+      tr.write(0, oid, off, t, sbl);
       store->apply_transaction(tr);
       off += t;
       s -= t;
     }
-    poid.oid.bno++;
+    poid.bno++;
   }
 
   return wrote*4; // KB
@@ -154,13 +155,14 @@ void Ager::age_empty(float pc) {
       n = nper;
       continue;
     }
-    pobject_t poid = age_objects[b].front();
+    file_object_t poid = age_objects[b].front();
     age_objects[b].pop_front();
     
     generic_dout(2) << "age_empty at " << free << " / " << avail << " / " << pc << " removing " << hex << poid << dec << dendl;
     
     ObjectStore::Transaction t;
-    t.remove(0, poid);
+    pobject_t oid(poid, 0);
+    t.remove(0, oid);
     store->apply_transaction(t);
     age_free_oids.push_back(poid);
   }
@@ -213,7 +215,7 @@ void Ager::age(int time,
   utime_t nextfl = start;
   nextfl.sec_ref() += freelist_inc;
 
-  while (age_objects.size() < 10) age_objects.push_back( list<pobject_t>() );
+  while (age_objects.size() < 10) age_objects.push_back( list<file_object_t>() );
   
   if (fake_size_mb) {
     int fake_bl = fake_size_mb * 256;
@@ -229,7 +231,7 @@ void Ager::age(int time,
   // init size distn (once)
   if (!did_distn) {
     did_distn = true;
-    age_cur_oid = pobject_t(object_t(0,1), 0);
+    age_cur_oid = file_object_t(888, 0);
     file_size_distn.add(1, 19.0758125+0.65434375);
     file_size_distn.add(512, 35.6566);
     file_size_distn.add(1024, 27.7271875);

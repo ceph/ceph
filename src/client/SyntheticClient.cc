@@ -1343,7 +1343,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     else if (strcmp(op, "o_stat") == 0) {
       int64_t oh = t.get_int();
       int64_t ol = t.get_int();
-      object_t oid(oh, ol);
+      object_t oid = file_object_t(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       __u64 size;
@@ -1357,7 +1357,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       int64_t off = t.get_int();
       int64_t len = t.get_int();
-      object_t oid(oh, ol);
+      object_t oid = file_object_t(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       bufferlist bl;
@@ -1370,7 +1370,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       int64_t off = t.get_int();
       int64_t len = t.get_int();
-      object_t oid(oh, ol);
+      object_t oid = file_object_t(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       bufferptr bp(len);
@@ -1388,7 +1388,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       int64_t off = t.get_int();
       int64_t len = t.get_int();
-      object_t oid(oh, ol);
+      object_t oid = file_object_t(oh, ol);
       lock.Lock();
       ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
       SnapContext snapc;
@@ -2146,7 +2146,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
   for (int i=start; i<end; i += inc) {
     if (time_to_stop()) break;
 
-    object_t oid(0x1000, i);
+    object_t oid = file_object_t(999, i);
     ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
     SnapContext snapc;
     
@@ -2248,7 +2248,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     } else {
       o = (long)trunc(pow(r, rskew) * (double)nobj);  // exponentially skew towards 0
     }
-    object_t oid(0x1000, o);
+    object_t oid = file_object_t(999, o);
 
     ceph_object_layout layout = client->osdmap->make_object_layout(oid, CEPH_CASDATA_RULE);
     SnapContext snapc;

@@ -104,7 +104,7 @@ enum {
 
 //#define CEPH_POOL(poolset, size) (((poolset) << 8) + (size))
 
-#define OSD_SUPERBLOCK_POBJECT sobject_t(object_t(0,0), 0)
+#define OSD_SUPERBLOCK_POBJECT sobject_t(object_t("osd_superblock"), 0)
 
 // placement group id
 struct pg_t {
@@ -131,7 +131,9 @@ struct pg_t {
   operator uint64_t() const { return u.pg64; }
 
   pobject_t to_log_pobject() const { 
-    return pobject_t(object_t(u.pg64, 0), CEPH_NOSNAP);
+    char foo[20];
+    sprintf(foo, "pg_log_%llx", (long long unsigned)u.pg64);
+    return pobject_t(object_t(foo), CEPH_NOSNAP);
   }
 
   coll_t to_coll() const {

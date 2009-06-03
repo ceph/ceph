@@ -417,7 +417,9 @@ private:
   }
  
   // -- fetch --
-  object_t get_ondisk_object() { return object_t(ino(), frag); }
+  object_t get_ondisk_object() { 
+    return file_object_t(ino(), frag);
+  }
   void fetch(Context *c, bool ignore_authpinnability=false);
   void _fetched(bufferlist &bl);
 

@@ -42,9 +42,7 @@ int main(int argc, const char **argv)
   snprintf(buf, 128, "%s", ctime(&tm));
   bl.append(buf, strlen(buf));
 
-  object_t oid;
-  memset(&oid, 0, sizeof(oid));
-  oid.ino = 0x2010;
+  object_t oid("foo");
 
   rados_pool_t pool;
   int r = rados.open_pool("data", &pool);

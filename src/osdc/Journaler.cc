@@ -101,7 +101,7 @@ void Journaler::recover(Context *onread)
   C_ReadHead *fin = new C_ReadHead(this);
   vector<snapid_t> snaps;
 
-  object_t oid(ino, 0);
+  object_t oid = file_object_t(ino, 0);
   ceph_object_layout ol = objecter->osdmap->make_object_layout(oid, pg_pool);
   objecter->read_full(oid, ol, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
@@ -204,7 +204,7 @@ void Journaler::write_head(Context *oncommit)
   ::encode(last_written, bl);
   SnapContext snapc;
   
-  object_t oid(ino, 0);
+  object_t oid = file_object_t(ino, 0);
   ceph_object_layout ol = objecter->osdmap->make_object_layout(oid, pg_pool);
   objecter->write_full(oid, ol, snapc, bl, g_clock.now(), 0, 
 		       NULL, 

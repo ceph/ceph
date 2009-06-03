@@ -31,6 +31,7 @@ class MOSDOp : public Message {
 private:
   ceph_osd_request_head head;
 public:
+  object_t oid;
   vector<ceph_osd_op> ops;
   bufferlist ticket;
   vector<snapid_t> snaps;
@@ -52,7 +53,7 @@ public:
   int get_client_inc() { return head.client_inc; }
   tid_t get_client_tid() { return head.tid; }
   
-  object_t get_oid() { return object_t(head.oid); }
+  object_t& get_oid() { return oid; }
   pg_t     get_pg() { return pg_t(head.layout.ol_pgid); }
   ceph_object_layout get_layout() { return head.layout; }
   epoch_t  get_map_epoch() { return head.osdmap_epoch; }
@@ -81,14 +82,14 @@ public:
 
 
   MOSDOp(const bufferlist& tkt, int inc, long tid,
-         object_t oid, ceph_object_layout ol, epoch_t mapepoch,
+         object_t& _oid, ceph_object_layout ol, epoch_t mapepoch,
 	 int flags) :
     Message(CEPH_MSG_OSD_OP),
+    oid(_oid),
     ticket(tkt) {
     memset(&head, 0, sizeof(head));
     head.tid = tid;
     head.client_inc = inc;
-    head.oid = oid;
     head.layout = ol;
     head.osdmap_epoch = mapepoch;
     head.flags = flags;
@@ -155,11 +156,13 @@ public:
 
   // marshalling
   virtual void encode_payload() {
+    head.object_len = oid.name.length();
     head.num_snaps = snaps.size();
     head.num_ops = ops.size();
     head.ticket_len = ticket.length();
     ::encode(head, payload);
     ::encode_nohead(ops, payload);
+    ::encode_nohead(oid.name, payload);
     ::encode_nohead(ticket, payload);
     ::encode_nohead(snaps, payload);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
@@ -170,6 +173,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     decode_nohead(head.num_ops, ops, p);
+    decode_nohead(head.object_len, oid.name, p);
     decode_nohead(head.ticket_len, ticket, p);
     decode_nohead(head.num_snaps, snaps, p);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
@@ -180,7 +184,7 @@ public:
   const char *get_type_name() { return "osd_op"; }
   void print(ostream& out) {
     out << "osd_op(" << get_reqid();
-    out << " " << head.oid;
+    out << " " << oid;
 
     out << " ";
     if (may_read())

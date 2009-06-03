@@ -26,10 +26,10 @@ int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
 
 /* read/write objects */
-int rados_write(rados_pool_t pool, struct ceph_object *oid, off_t off, const char *buf, size_t len);
-int rados_read(rados_pool_t pool, struct ceph_object *oid, off_t off, char *buf, size_t len);
-int rados_remove(rados_pool_t pool, struct ceph_object *oid);
-int rados_exec(rados_pool_t pool, struct ceph_object *o, const char *cls, const char *method,
+int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
+int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
+int rados_remove(rados_pool_t pool, const char *oid);
+int rados_exec(rados_pool_t pool, const char *o, const char *cls, const char *method,
 	       const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
 /* async io */
@@ -42,8 +42,8 @@ int rados_aio_is_safe(rados_completion_t c);
 int rados_aio_get_return_value(rados_completion_t c);
 void rados_aio_release(rados_completion_t c);
 
-int rados_aio_write(rados_pool_t pool, struct ceph_object *oid, off_t off, const char *buf, size_t len, rados_completion_t *completion);
-int rados_aio_read(rados_pool_t pool, struct ceph_object *oid, off_t off, char *buf, size_t len, rados_completion_t *completion);
+int rados_aio_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len, rados_completion_t *completion);
+int rados_aio_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len, rados_completion_t *completion);
 
 #ifdef __cplusplus
 }

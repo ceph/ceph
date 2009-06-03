@@ -8,6 +8,10 @@
  * is stored with a null terminator, providing an efficient c_str()
  * method.
  */
+
+#include "buffer.h"
+#include "encoding.h"
+
 class cstring {
  private:
   int _len;
