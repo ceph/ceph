@@ -362,7 +362,7 @@ protected:
     }
   }
   void put_object_context(ObjectContext *obc);
-  int find_object_context(object_t oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
+  int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
 
   bool is_write_in_progress() {
     return !object_contexts.empty();
@@ -378,25 +378,25 @@ protected:
   map<sobject_t, pair<eversion_t, int> > pulling;  // which objects are currently being pulled, and from where
   map<sobject_t, set<int> > pushing;
 
-  void calc_head_subsets(SnapSet& snapset, sobject_t head,
+  void calc_head_subsets(SnapSet& snapset, const sobject_t& head,
 			 Missing& missing,
 			 interval_set<__u64>& data_subset,
 			 map<sobject_t, interval_set<__u64> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, sobject_t poid, Missing& missing,
+  void calc_clone_subsets(SnapSet& snapset, const sobject_t& poid, Missing& missing,
 			  interval_set<__u64>& data_subset,
 			  map<sobject_t, interval_set<__u64> >& clone_subsets);
-  void push_to_replica(sobject_t oid, int dest);
-  void push(sobject_t oid, int dest);
-  void push(sobject_t oid, int dest, interval_set<__u64>& data_subset, 
+  void push_to_replica(const sobject_t& oid, int dest);
+  void push(const sobject_t& oid, int dest);
+  void push(const sobject_t& oid, int dest, interval_set<__u64>& data_subset, 
 	    map<sobject_t, interval_set<__u64> >& clone_subsets);
-  bool pull(sobject_t oid);
+  bool pull(const sobject_t& oid);
 
 
   // low level ops
   void op_ondisk(RepGather *repop);
 
   void _make_clone(ObjectStore::Transaction& t,
-		   sobject_t head, sobject_t coid,
+		   const sobject_t& head, const sobject_t& coid,
 		   object_info_t *poi);
   void make_writeable(OpContext *ctx);
   void log_op_stats(const sobject_t &soid, OpContext *ctx);
@@ -453,8 +453,8 @@ public:
   bool same_for_modify_since(epoch_t e);
   bool same_for_rep_modify_since(epoch_t e);
 
-  bool is_missing_object(sobject_t oid);
-  void wait_for_missing_object(sobject_t oid, Message *op);
+  bool is_missing_object(const sobject_t& oid);
+  void wait_for_missing_object(const sobject_t& oid, Message *op);
 
   void on_osd_failure(int o);
   void on_acker_change();

@@ -701,16 +701,16 @@ unsigned FileStore::_apply_transaction(Transaction& t)
       
     case Transaction::OP_CLONE:
       {
-	pobject_t oid = t.get_oid();
-	pobject_t noid = t.get_oid();
+	const pobject_t& oid = t.get_oid();
+	const pobject_t& noid = t.get_oid();
 	_clone(t.get_cid(), oid, noid);
       }
       break;
 
     case Transaction::OP_CLONERANGE:
       {
-	pobject_t oid = t.get_oid();
-	pobject_t noid = t.get_oid();
+	const pobject_t& oid = t.get_oid();
+	const pobject_t& noid = t.get_oid();
  	__u64 off = t.get_length();
 	__u64 len = t.get_length();
 	_clone_range(t.get_cid(), oid, noid, off, len);
@@ -1340,7 +1340,7 @@ int FileStore::_zero(coll_t cid, const pobject_t& oid, __u64 offset, size_t len)
   return _write(cid, oid, offset, len, bl);
 }
 
-int FileStore::_clone(coll_t cid, pobject_t oldoid, pobject_t newoid)
+int FileStore::_clone(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid)
 {
   char ofn[PATH_MAX], nfn[PATH_MAX];
   get_coname(cid, oldoid, ofn);
@@ -1422,7 +1422,7 @@ int FileStore::_do_clone_range(int from, int to, __u64 off, __u64 len)
   return r;
 }
 
-int FileStore::_clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len)
+int FileStore::_clone_range(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid, __u64 off, __u64 len)
 {
   char ofn[PATH_MAX], nfn[PATH_MAX];
   get_coname(cid, oldoid, ofn);
@@ -2002,7 +2002,7 @@ int FileStore::_destroy_collection(coll_t c)
 }
 
 
-int FileStore::_collection_add(coll_t c, coll_t cid, pobject_t o) 
+int FileStore::_collection_add(coll_t c, coll_t cid, const pobject_t& o) 
 {
   if (fake_collections) return collections.collection_add(c, o);
 
@@ -2017,7 +2017,7 @@ int FileStore::_collection_add(coll_t c, coll_t cid, pobject_t o)
   return r;
 }
 
-int FileStore::_collection_remove(coll_t c, pobject_t o) 
+int FileStore::_collection_remove(coll_t c, const pobject_t& o) 
 {
   if (fake_collections) return collections.collection_remove(c, o);
 

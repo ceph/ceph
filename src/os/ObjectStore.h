@@ -413,7 +413,6 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   // objects
-  virtual int pick_object_revision_lt(coll_t cid, pobject_t& oid) = 0;
   virtual bool exists(coll_t cid, const pobject_t& oid) = 0;                   // useful?
   virtual int stat(coll_t cid, const pobject_t& oid, struct stat *st) = 0;     // struct stat?
   virtual int read(coll_t cid, const pobject_t& oid, __u64 offset, size_t len, bufferlist& bl) = 0;

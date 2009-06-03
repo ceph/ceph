@@ -199,7 +199,7 @@ public:
       bufferlist snaps;   // only for clone entries
       
       Entry() : op(0) {}
-      Entry(int _op, sobject_t _soid,
+      Entry(int _op, const sobject_t& _soid,
 	    const eversion_t& v, const eversion_t& pv,
 	    const osd_reqid_t& rid, const utime_t& mt) :
         op(_op), soid(_soid), version(v),
@@ -311,7 +311,7 @@ public:
       last_requested = sobject_t();
     }
 
-    bool logged_object(sobject_t oid) const {
+    bool logged_object(const sobject_t& oid) const {
       return objects.count(oid);
     }
     bool logged_req(const osd_reqid_t &r) const {
@@ -349,11 +349,11 @@ public:
 
 
     // accessors
-    Entry *is_updated(sobject_t oid) {
+    Entry *is_updated(const sobject_t& oid) {
       if (objects.count(oid) && objects[oid]->is_update()) return objects[oid];
       return 0;
     }
-    Entry *is_deleted(sobject_t oid) {
+    Entry *is_deleted(const sobject_t& oid) {
       if (objects.count(oid) && objects[oid]->is_delete()) return objects[oid];
       return 0;
     }
@@ -437,13 +437,13 @@ public:
       rmissing.swap(o.rmissing);
     }
 
-    bool is_missing(sobject_t oid) {
+    bool is_missing(const sobject_t& oid) {
       return missing.count(oid);
     }
-    bool is_missing(sobject_t oid, eversion_t v) {
+    bool is_missing(const sobject_t& oid, eversion_t v) {
       return missing.count(oid) && missing[oid].need <= v;
     }
-    eversion_t have_old(sobject_t oid) {
+    eversion_t have_old(const sobject_t& oid) {
       return missing.count(oid) ? missing[oid].have : eversion_t();
     }
     
@@ -499,18 +499,18 @@ public:
       rmissing[need] = oid;
     }
 
-    void add(sobject_t oid, eversion_t need, eversion_t have) {
+    void add(const sobject_t& oid, eversion_t need, eversion_t have) {
       missing[oid] = item(need, have);
       rmissing[need] = oid;
     }
     
-    void rm(sobject_t oid, eversion_t when) {
+    void rm(const sobject_t& oid, eversion_t when) {
       if (missing.count(oid) && missing[oid].need < when) {
         rmissing.erase(missing[oid].need);
         missing.erase(oid);
       }
     }
-    void got(sobject_t oid, eversion_t v) {
+    void got(const sobject_t& oid, eversion_t v) {
       assert(missing.count(oid));
       assert(missing[oid].need <= v);
       rmissing.erase(missing[oid].need);
@@ -843,8 +843,8 @@ public:
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual bool is_write_in_progress() = 0;
-  virtual bool is_missing_object(sobject_t oid) = 0;
-  virtual void wait_for_missing_object(sobject_t oid, Message *op) = 0;
+  virtual bool is_missing_object(const sobject_t& oid) = 0;
+  virtual void wait_for_missing_object(const sobject_t& oid, Message *op) = 0;
 
   virtual void on_osd_failure(int osd) = 0;
   virtual void on_role_change() = 0;

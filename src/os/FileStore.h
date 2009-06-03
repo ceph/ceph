@@ -112,8 +112,8 @@ class FileStore : public JournalingObjectStore {
   int _write(coll_t cid, const pobject_t& oid, __u64 offset, size_t len, const bufferlist& bl);
   int _zero(coll_t cid, const pobject_t& oid, __u64 offset, size_t len);
   int _truncate(coll_t cid, const pobject_t& oid, __u64 size);
-  int _clone(coll_t cid, pobject_t oldoid, pobject_t newoid);
-  int _clone_range(coll_t cid, pobject_t oldoid, pobject_t newoid, __u64 off, __u64 len);
+  int _clone(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid);
+  int _clone_range(coll_t cid, const pobject_t& oldoid, const pobject_t& newoid, __u64 off, __u64 len);
   int _do_clone_range(int from, int to, __u64 off, __u64 len);
   int _remove(coll_t cid, const pobject_t& oid);
 
@@ -152,10 +152,9 @@ class FileStore : public JournalingObjectStore {
 
   int _create_collection(coll_t c);
   int _destroy_collection(coll_t c);
-  int _collection_add(coll_t c, coll_t ocid, pobject_t o);
-  int _collection_remove(coll_t c, pobject_t o);
+  int _collection_add(coll_t c, coll_t ocid, const pobject_t& o);
+  int _collection_remove(coll_t c, const pobject_t& o);
 
-  int pick_object_revision_lt(coll_t cid, pobject_t& oid) { return -1; }
   void trim_from_cache(coll_t cid, const pobject_t& oid, __u64 offset, size_t len) {}
   int is_cached(coll_t cid, const pobject_t& oid, __u64 offset, size_t len) { return -1; }
 };
