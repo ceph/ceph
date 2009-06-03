@@ -619,6 +619,7 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       }
 
       be.version = le->prior_version;
+      be.reqid = osd_reqid_t();
       dout(15) << "   adding " << be << " (have " << *le << ")" << dendl;
       log.log.push_front(be);
       // don't try to index: this is the prior_version backlog entry
