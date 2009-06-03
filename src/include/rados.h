@@ -306,6 +306,8 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_RDCALL: return "rdcall";
 	case CEPH_OSD_OP_WRCALL: return "wrcall";
 
+	case CEPH_OSD_OP_PGLS: return "pgls";
+
 	default: return "???";
 	}
 }

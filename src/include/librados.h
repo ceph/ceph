@@ -24,6 +24,7 @@ void rados_deinitialize();
 typedef int rados_pool_t;
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
+int rados_list(rados_pool_t pool);
 
 /* read/write objects */
 int rados_write(rados_pool_t pool, struct ceph_object *oid, off_t off, const char *buf, size_t len);
@@ -60,6 +61,7 @@ public:
 
   int open_pool(const char *name, rados_pool_t *pool);
   int close_pool(rados_pool_t pool);
+  int list(rados_pool_t pool, vector<string>& entries);
 
   int write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len);

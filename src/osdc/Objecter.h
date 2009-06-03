@@ -42,6 +42,7 @@ class Message;
 struct ObjectOperation {
   vector<ceph_osd_op> ops;
   bufferlist data;
+  int flags;
 
   void add_data(int op, __u64 off, __u64 len) {
     int s = ops.size();
@@ -71,6 +72,8 @@ struct ObjectOperation {
     data.append(method, ops[s].method_len);
     data.append(indata);
   }
+
+  ObjectOperation() : flags(0) {}
 };
 
 struct ObjectRead : public ObjectOperation {
@@ -88,6 +91,11 @@ struct ObjectRead : public ObjectOperation {
 
   void rdcall(const char *cname, const char *method, bufferlist &indata) {
     add_call(CEPH_OSD_OP_RDCALL, cname, method, indata);
+  }
+
+  void pg_ls(__u64 off, __u64 len) {
+    add_data(CEPH_OSD_OP_PGLS, off, len);
+    flags |= CEPH_OSD_FLAG_PGOP;
   }
 };
 
@@ -353,7 +361,7 @@ class Objecter {
   }
   tid_t read(object_t oid, ceph_object_layout ol, 
 	     ObjectRead& read, snapid_t snap, bufferlist *pbl, int flags, Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, read.ops, snap, flags, onfinish);
+    ReadOp *rd = new ReadOp(oid, ol, read.ops, snap, read.flags | flags, onfinish);
     rd->bl = read.data;
     rd->pbl = pbl;
     return read_submit(rd);

@@ -70,9 +70,14 @@ int main(int argc, const char **argv)
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
+  vector<string> vec;
+  r = rados.list(pool, vec);
+  cout << "read result=" << r << " pool=" << hex << pool << dec << std::endl;
+#if 0
   r = rados.remove(pool, oid);
   cout << "remove result=" << r << std::endl;
   rados.close_pool(pool);
+#endif
 
   return 0;
 }

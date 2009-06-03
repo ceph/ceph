@@ -69,6 +69,8 @@ public:
     return osdmap.lookup_pg_pool_name(name);
   }
 
+  int list(int pool, vector<string>& entries);
+
   int write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(int pool, object_t& oid);
@@ -305,6 +307,59 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
+int RadosClient::list(int pool, vector<string>& entries)
+{
+  SnapContext snapc;
+  utime_t ut = g_clock.now();
+
+  Mutex lock("RadosClient::list");
+  Cond cond;
+  bool done;
+  int r;
+  object_t oid;
+
+  memset(&oid, 0, sizeof(oid));
+
+  dout(0) << hex << "pool=" << dec << pool << dendl;
+
+  ceph_object_layout layout;
+retry:
+  int pg_num = objecter->osdmap->get_pg_num(pool);
+
+  for (int i=0; i<pg_num; i++) {
+   int num = objecter->osdmap->get_pg_layout(pool, i, layout);
+   if (num != pg_num)  /* ahh.. race! */
+      goto retry;
+
+    lock.Lock();
+
+    ObjectRead rd;
+    bufferlist bl;
+    rd.pg_ls(0, 1024);
+    Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+    objecter->read(oid, layout, rd, CEPH_NOSNAP, &bl, 0, onack);
+
+    while (!done)
+      cond.Wait(lock);
+
+    lock.Unlock();
+    dout(0) << "after pg_ls(" << i << ") r=" << r << " got " << bl.length() << " bytes ol_pgls=" << hex << layout.ol_pgid << dec << dendl;
+
+    vector<pobject_t> ls;
+    bufferlist::iterator iter = bl.begin();
+    ::decode(ls, iter);
+    if (ls.size() > 0) {
+      vector<pobject_t>::iterator ls_iter;
+
+      for (ls_iter = ls.begin(); ls_iter != ls.end(); ++ls_iter) {
+        dout(0) << "entry: " << *ls_iter << dendl;
+      }
+    }
+ }
+
+  return r;
+}
+
 int RadosClient::write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   SnapContext snapc;
@@ -441,7 +496,7 @@ int RadosClient::read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t
 {
   SnapContext snapc;
 
-  Mutex lock("RadosClient::rdcall");
+  Mutex lock("RadosClient::read");
   Cond cond;
   bool done;
   int r;
@@ -493,6 +548,14 @@ bool Rados::initialize(int argc, const char *argv[])
 
   client = new RadosClient();
   return client->init();
+}
+
+int Rados::list(rados_pool_t pool, vector<string>& entries)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->list(pool, entries);
 }
 
 int Rados::write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
@@ -715,6 +778,15 @@ extern "C" int rados_exec(rados_pool_t pool, ceph_object *o, const char *cls, co
       ret = outbl.length();   // hrm :/
     }
   }
+  return ret;
+}
+
+extern "C" int rados_list(rados_pool_t pool)
+{
+  int ret;
+  vector<string> entries;
+  ret = radosp->list(pool, entries);
+
   return ret;
 }
 

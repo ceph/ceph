@@ -1889,25 +1889,33 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
   get_cdir(c, fn);
   dout(10) << "collection_list " << fn << dendl;
 
-  DIR *dir = ::opendir(fn);
-  if (!dir)
-    return -errno;
+  DIR *dir;
+  struct dirent *de;
   
   // first, build (ino, object) list
   vector< pair<ino_t,pobject_t> > inolist;
 
-  struct dirent *de;
   if (handle)
-    de = *(struct dirent **)handle;
+    dir = *(DIR **)handle;
+
+  if (!dir)
+    dir = ::opendir(fn);
+
+  if (!dir) {
+    dout(0) << "error opening directory " << fn << dendl;
+    return -errno;
+  }
+
   for (int i=0; i<max_count; i++) {
-    int ret = ::readdir_r(dir, de, &de);
-    if (ret) {
-      dout(0) << "error reading directory" << dendl;
+    errno = 0;
+    de = ::readdir(dir);
+    if (!de && errno) {
+      dout(0) << "error reading directory " << fn << dendl;
       return -errno;
     }
-    if (!de) {
+    if (!de)
       break;
-    }
+
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
@@ -1922,7 +1930,7 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
     ::closedir(dir);
 
   if (handle)
-    *handle = (collection_list_handle_t)de;
+    *handle = (collection_list_handle_t)dir;
 
   // build final list
   ls.resize(inolist.size());

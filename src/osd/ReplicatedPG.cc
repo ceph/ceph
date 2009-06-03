@@ -368,7 +368,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 
 void ReplicatedPG::do_pg_op(MOSDOp *op)
 {
-  dout(15) << "do_pg_op " << *op << dendl;
+  dout(0) << "do_pg_op " << *op << dendl;
 
   //bufferlist& indata = op->get_data();
   bufferlist outdata;
@@ -376,14 +376,20 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
   for (vector<ceph_osd_op>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     switch (p->op) {
-
     case CEPH_OSD_OP_PGLS:
       {
-	vector<pobject_t> pobjects;
-	// ???
-	vector<object_t> objects;
-	// ???
-	::encode(objects, outdata);
+        dout(10) << " pgls pg=" << op->get_pg() << dendl;
+	// read into a buffer
+        vector<pobject_t> vec;
+        collection_list_handle_t handle = NULL;
+	result = osd->store->collection_list_partial(op->get_pg().to_coll(), vec, p->length, &handle);
+	if (!result) {
+#if 0
+	  ctx->data_off = op.offset;
+#endif
+	  ::encode(vec, outdata);
+        }
+	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;
       }
       break;
 
@@ -411,10 +417,11 @@ void ReplicatedPG::do_op(MOSDOp *op)
 {
   osd->logger->inc(l_osd_op);
 
-  if (op->get_flags() & CEPH_OSD_FLAG_PGOP)
+  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
-  dout(15) << "do_op " << *op << dendl;
+  dout(0) << "do_op " << *op << dendl;
+  dout(0) << "do_op flags=" << hex << op->get_flags() << dec << dendl;
 
   entity_inst_t client = op->get_source_inst();
 
