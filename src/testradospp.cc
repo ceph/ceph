@@ -44,7 +44,7 @@ int main(int argc, const char **argv)
 
   object_t oid;
   memset(&oid, 0, sizeof(oid));
-  oid.ino = 0x2010;
+  oid.ino = 0x2020;
 
   rados_pool_t pool;
   int r = rados.open_pool("data", &pool);
@@ -70,9 +70,18 @@ int main(int argc, const char **argv)
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
-  vector<string> vec;
-  r = rados.list(pool, vec);
-  cout << "read result=" << r << " pool=" << hex << pool << dec << std::endl;
+  Rados::ListCtx ctx;
+  int entries;
+  do {
+    vector<ceph_object> vec;
+    r = rados.list(pool, 1, vec, ctx);
+    entries = vec.size();
+    cout << "list result=" << r << " entries=" << entries << std::endl;
+    vector<ceph_object>::iterator iter;
+    for (iter = vec.begin(); iter != vec.end(); ++iter) {
+      cout << *iter << std::endl;
+    }
+  } while (entries);
 #if 0
   r = rados.remove(pool, oid);
   cout << "remove result=" << r << std::endl;

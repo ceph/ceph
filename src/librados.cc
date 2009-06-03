@@ -26,6 +26,7 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
 #include "osd/OSDMap.h"
+#include "osd/PGLS.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -69,14 +70,20 @@ public:
     return osdmap.lookup_pg_pool_name(name);
   }
 
-  int list(int pool, vector<string>& entries);
-
   int write(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(int pool, object_t& oid);
 
   int exec(int pool, object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
+  struct PGLSOp {
+    int seed;
+    __u64 cookie;
+
+   PGLSOp() : seed(0), cookie(0) {}
+  };
+
+  int list(int pool, int max_entries, vector<ceph_object>& entries, RadosClient::PGLSOp& op);
 
   // --- aio ---
   struct AioCompletion {
@@ -307,7 +314,7 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
-int RadosClient::list(int pool, vector<string>& entries)
+int RadosClient::list(int pool, int max_entries, vector<ceph_object>& entries, RadosClient::PGLSOp& op)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -320,41 +327,61 @@ int RadosClient::list(int pool, vector<string>& entries)
 
   memset(&oid, 0, sizeof(oid));
 
-  dout(0) << hex << "pool=" << dec << pool << dendl;
+  dout(0) << hex << "pool=" << dec << pool << " op.cookie=" << op.cookie << dendl;
 
   ceph_object_layout layout;
 retry:
   int pg_num = objecter->osdmap->get_pg_num(pool);
 
-  for (int i=0; i<pg_num; i++) {
-   int num = objecter->osdmap->get_pg_layout(pool, i, layout);
-   if (num != pg_num)  /* ahh.. race! */
-      goto retry;
+  for (;op.seed <pg_num; op.seed++) {
+   int response_size;
+   int req_size;
 
-    lock.Lock();
+   do {
+     int num = objecter->osdmap->get_pg_layout(pool, op.seed, layout);
+     if (num != pg_num)  /* ahh.. race! */
+        goto retry;
 
-    ObjectRead rd;
-    bufferlist bl;
-    rd.pg_ls(0, 1024);
-    Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
-    objecter->read(oid, layout, rd, CEPH_NOSNAP, &bl, 0, onack);
+      lock.Lock();
 
-    while (!done)
-      cond.Wait(lock);
+      ObjectRead rd;
+      bufferlist bl;
+#define MAX_REQ_SIZE 1024
+      req_size = min(MAX_REQ_SIZE, max_entries);
+      rd.pg_ls(req_size, op.cookie);
 
-    lock.Unlock();
-    dout(0) << "after pg_ls(" << i << ") r=" << r << " got " << bl.length() << " bytes ol_pgls=" << hex << layout.ol_pgid << dec << dendl;
+      Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+      objecter->read(oid, layout, rd, CEPH_NOSNAP, &bl, 0, onack);
 
-    vector<pobject_t> ls;
-    bufferlist::iterator iter = bl.begin();
-    ::decode(ls, iter);
-    if (ls.size() > 0) {
-      vector<pobject_t>::iterator ls_iter;
+      while (!done)
+        cond.Wait(lock);
 
-      for (ls_iter = ls.begin(); ls_iter != ls.end(); ++ls_iter) {
-        dout(0) << "entry: " << *ls_iter << dendl;
+      lock.Unlock();
+      dout(0) << "after pg_ls(" << op.seed << ") r=" << r << " got " << bl.length() << " bytes ol_pgls=" << hex << layout.ol_pgid << dec << dendl;
+      dout(0) << "max_entries=" << max_entries << dendl;
+
+      bufferlist::iterator iter = bl.begin();
+      PGLSResponse response;
+      ::decode(response, iter);
+      op.cookie = (__u64)response.handle;
+      response_size = response.entries.size();
+      if (response_size) {
+        vector<pobject_t>::iterator ls_iter;
+
+        for (ls_iter = response.entries.begin(); ls_iter != response.entries.end(); ++ls_iter) {
+          dout(0) << "entry: " << *ls_iter << dendl;
+          ceph_object obj = (ceph_object)ls_iter->oid;
+          entries.push_back(obj);
+        }
+        max_entries -= response_size;
+        dout(0) << "op.cookie=" << op.cookie << dendl;
+
+        if (!max_entries)
+          return r;
+      } else {
+        op.cookie = 0;
       }
-    }
+    } while ((response_size == req_size) && op.cookie);
  }
 
   return r;
@@ -550,12 +577,22 @@ bool Rados::initialize(int argc, const char *argv[])
   return client->init();
 }
 
-int Rados::list(rados_pool_t pool, vector<string>& entries)
+int Rados::list(rados_pool_t pool, int max, vector<ceph_object>& entries, Rados::ListCtx& ctx)
 {
   if (!client)
     return -EINVAL;
 
-  return client->list(pool, entries);
+  RadosClient::PGLSOp *op;
+  if (!ctx.ctx) {
+    ctx.ctx = new RadosClient::PGLSOp;
+    if (!ctx.ctx)
+      return -ENOMEM;
+  }
+
+  op = (RadosClient::PGLSOp *)ctx.ctx;
+
+
+  return client->list(pool, max, entries, *op);
 }
 
 int Rados::write(rados_pool_t pool, object_t& oid, off_t off, bufferlist& bl, size_t len)
@@ -781,11 +818,27 @@ extern "C" int rados_exec(rados_pool_t pool, ceph_object *o, const char *cls, co
   return ret;
 }
 
-extern "C" int rados_list(rados_pool_t pool)
+extern "C" int rados_list(rados_pool_t pool, int max, struct ceph_object *entries, rados_list_ctx_t *ctx)
 {
   int ret;
-  vector<string> entries;
-  ret = radosp->list(pool, entries);
+
+  if (!*ctx) {
+    *ctx = new RadosClient::PGLSOp;
+    if (!*ctx)
+      return -ENOMEM;
+  }
+  RadosClient::PGLSOp *op = (RadosClient::PGLSOp *)*ctx;
+
+  vector<ceph_object> vec;
+  ret = radosp->list(pool, max, vec, *op);
+  if (!vec.size()) {
+    delete op;
+    *ctx = NULL;
+  }
+
+  for (int i=0; i<vec.size(); i++) {
+    entries[i] = vec[i];
+  }
 
   return ret;
 }

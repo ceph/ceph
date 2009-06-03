@@ -72,6 +72,14 @@ struct ObjectOperation {
     data.append(method, ops[s].method_len);
     data.append(indata);
   }
+  void add_pgls(int op, __u64 count, __u64 cookie) {
+    int s = ops.size();
+    ops.resize(s+1);
+    memset(&ops[s], 0, sizeof(ops[s]));
+    ops[s].op = op;
+    ops[s].count = count;
+    ops[s].pgls_cookie = cookie;
+  }
 
   ObjectOperation() : flags(0) {}
 };
@@ -93,8 +101,8 @@ struct ObjectRead : public ObjectOperation {
     add_call(CEPH_OSD_OP_RDCALL, cname, method, indata);
   }
 
-  void pg_ls(__u64 off, __u64 len) {
-    add_data(CEPH_OSD_OP_PGLS, off, len);
+  void pg_ls(__u64 count, __u64 cookie) {
+    add_pgls(CEPH_OSD_OP_PGLS, count, cookie);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
 };

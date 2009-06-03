@@ -352,6 +352,9 @@ struct ceph_osd_op {
 			__u8 argc;
 			__le32 indata_len;
 		} __attribute__ ((packed));
+		struct {
+			__le64 pgls_cookie, count;
+		};
 	};
 } __attribute__ ((packed));
 

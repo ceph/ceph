@@ -1895,15 +1895,17 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
   // first, build (ino, object) list
   vector< pair<ino_t,pobject_t> > inolist;
 
-  if (handle)
-    dir = *(DIR **)handle;
 
-  if (!dir)
-    dir = ::opendir(fn);
+  dir = ::opendir(fn);
 
   if (!dir) {
     dout(0) << "error opening directory " << fn << dendl;
     return -errno;
+  }
+
+  if (handle) {
+    dout(0) << "seeking to position " << *(off_t *)handle << dendl;
+    seekdir(dir, *(off_t *)handle);
   }
 
   for (int i=0; i<max_count; i++) {
@@ -1917,8 +1919,13 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
       break;
 
     // parse
-    if (de->d_name[0] == '.') continue;
+    if (de->d_name[0] == '.') {
+      i--;
+      continue;
+    }
     //cout << "  got object " << de->d_name << std::endl;
+
+    dout(0) << "readdir: " << de->d_name << dendl;
     pobject_t o;
     if (parse_object(de->d_name, o)) {
       inolist.push_back(pair<ino_t,pobject_t>(de->d_ino, o));
@@ -1926,11 +1933,12 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
     }
   }
 
-  if (!handle || !de)
-    ::closedir(dir);
+  if (handle) {
+    *handle = (collection_list_handle_t)telldir(dir);
+    dout(0) << "returning handle=" << (__u64)*handle << dendl;
+  }
 
-  if (handle)
-    *handle = (collection_list_handle_t)dir;
+  ::closedir(dir);
 
   // build final list
   ls.resize(inolist.size());
