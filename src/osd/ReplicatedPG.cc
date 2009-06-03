@@ -575,6 +575,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
   repop->waitfor_ack.erase(whoami);
   eval_repop(repop);
   repop->put();
+
+  // drop my obc reference.
+  put_object_context(obc);
 }
 
 
