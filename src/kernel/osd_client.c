@@ -32,23 +32,27 @@ static void calc_layout(struct ceph_osd_client *osdc,
 	struct ceph_osd_op *op = (void *)(reqhead + 1);
 	u64 orig_len = *plen;
 	u64 objoff, objlen;    /* extent in object */
+	u64 bno;
 
-	/* object extent? */
-	reqhead->oid.ino = cpu_to_le64(vino.ino);
 	reqhead->snapid = cpu_to_le64(vino.snap);
 
-	ceph_calc_file_object_mapping(layout, off, plen, &reqhead->oid,
+	/* object extent? */
+	ceph_calc_file_object_mapping(layout, off, plen, &bno,
 				      &objoff, &objlen);
 	if (*plen < orig_len)
 		dout(10, " skipping last %llu, final file extent %llu~%llu\n",
 		     orig_len - *plen, off, *plen);
+
+	sprintf(req->r_oid, "%llx.%08llx", vino.ino, bno);
+	req->r_oid_len = strlen(req->r_oid);
+
+
 	op->offset = cpu_to_le64(objoff);
 	op->length = cpu_to_le64(objlen);
 	req->r_num_pages = calc_pages_for(off, *plen);
 
-	dout(10, "calc_layout %llx.%08x %llu~%llu (%d pages)\n",
-	     le64_to_cpu(reqhead->oid.ino), le32_to_cpu(reqhead->oid.bno),
-	     objoff, objlen, req->r_num_pages);
+	dout(10, "calc_layout %s (%d) %llu~%llu (%d pages)\n",
+	     req->r_oid, req->r_oid_len, objoff, objlen, req->r_num_pages);
 }
 
 
@@ -92,8 +96,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	struct ceph_msg *msg;
 	struct ceph_osd_request_head *head;
 	struct ceph_osd_op *op;
-	__le64 *snaps;
-	void *ticketp;
+	void *p;
 	int do_trunc = truncate_seq && (off + *plen > truncate_size);
 	int num_op = 1 + do_sync + do_trunc;
 	size_t msg_size = sizeof(*head) + num_op*sizeof(*op);
@@ -114,8 +117,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 
 	WARN_ON((flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == 0);
 
-	/* create message */
-	msg_size += osdc->client->signed_ticket_len;
+	/* create message; allow space for oid */
+	msg_size += 40 + osdc->client->signed_ticket_len;
 	if (snapc)
 		msg_size += sizeof(u64) * snapc->num_snaps;
 	msg = ceph_msg_new(CEPH_MSG_OSD_OP, msg_size, 0, 0, NULL);
@@ -126,12 +129,10 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	memset(msg->front.iov_base, 0, msg->front.iov_len);
 	head = msg->front.iov_base;
 	op = (void *)(head + 1);
-	ticketp = (void *)(op + num_op);
-	snaps = ticketp + osdc->client->signed_ticket_len;
+	p = (void *)(op + num_op);
 
-	head->ticket_len = cpu_to_le32(osdc->client->signed_ticket_len);
-	memcpy(ticketp, osdc->client->signed_ticket,
-	       osdc->client->signed_ticket_len);
+	req->r_request = msg;
+	req->r_snapc = ceph_get_snap_context(snapc);
 
 	head->client_inc = cpu_to_le32(1); /* always, for now. */
 	head->flags = cpu_to_le32(flags);
@@ -139,9 +140,6 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		ceph_encode_timespec(&head->mtime, mtime);
 	head->num_ops = cpu_to_le16(num_op);
 	op->op = cpu_to_le16(opcode);
-
-	req->r_request = msg;
-	req->r_snapc = ceph_get_snap_context(snapc);
 
 	/* calculate max write size */
 	calc_layout(osdc, vino, layout, off, plen, req);
@@ -151,6 +149,17 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		req->r_request->hdr.data_off = cpu_to_le16(off);
 		req->r_request->hdr.data_len = cpu_to_le32(*plen);
 	}
+
+	/* fill in oid, ticket */
+	head->object_len = cpu_to_le32(req->r_oid_len);
+	memcpy(p, req->r_oid, req->r_oid_len);
+	p += req->r_oid_len;
+
+	head->ticket_len = cpu_to_le32(osdc->client->signed_ticket_len);
+	memcpy(p, osdc->client->signed_ticket,
+	       osdc->client->signed_ticket_len);
+	p += osdc->client->signed_ticket_len;
+
 
 	/* additional ops */
 	if (do_trunc) {
@@ -168,9 +177,13 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	if (snapc) {
 		head->snap_seq = cpu_to_le64(snapc->seq);
 		head->num_snaps = cpu_to_le32(snapc->num_snaps);
-		for (i = 0; i < snapc->num_snaps; i++)
-			snaps[i] = cpu_to_le64(snapc->snaps[i]);
+		for (i = 0; i < snapc->num_snaps; i++) {
+			*(__le64 *)p = cpu_to_le64(snapc->snaps[i]);
+			p += sizeof(u64);
+		}
 	}
+
+	BUG_ON(p > msg->front.iov_base + msg->front.iov_len);
 	return req;
 }
 
@@ -329,7 +342,7 @@ static int map_osds(struct ceph_osd_client *osdc,
 	int i, num;
 	int err;
 
-	err = ceph_calc_object_layout(&reqhead->layout, &reqhead->oid,
+	err = ceph_calc_object_layout(&reqhead->layout, req->r_oid,
 				      &req->r_file_layout, osdc->osdmap);
 	if (err)
 		return err;
@@ -422,13 +435,14 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
 	struct ceph_osd_request *req;
 	u64 tid;
-	int numops, flags;
+	int numops, object_len, flags;
 
 	if (msg->front.iov_len < sizeof(*rhead))
 		goto bad;
 	tid = le64_to_cpu(rhead->tid);
 	numops = le32_to_cpu(rhead->num_ops);
-	if (msg->front.iov_len != sizeof(*rhead) +
+	object_len = le32_to_cpu(rhead->object_len);
+	if (msg->front.iov_len != sizeof(*rhead) + object_len +
 	    numops * sizeof(struct ceph_osd_op))
 		goto bad;
 	dout(10, "handle_reply %p tid %llu\n", msg, tid);

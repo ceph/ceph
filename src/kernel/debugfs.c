@@ -204,7 +204,7 @@ static int osdmap_show(struct seq_file *s, void *p)
 	for (i = 0; i < client->osdc.osdmap->num_pools; i++) {
 		struct ceph_pg_pool_info *pool =
 			&client->osdc.osdmap->pg_pool[i];
-		seq_printf(s, "pg_pool %d pg_num %d / %d, lpg_num %d / %d",
+		seq_printf(s, "pg_pool %d pg_num %d / %d, lpg_num %d / %d\n",
 			   i, pool->v.pg_num, pool->pg_num_mask,
 			   pool->v.lpg_num, pool->lpg_num_mask);
 	}
@@ -320,7 +320,7 @@ static int osdc_show(struct seq_file *s, void *p)
 		struct ceph_osd_request_head *head;
 		struct ceph_osd_op *op;
 		int num_ops;
-		int opcode;
+		int opcode, olen;
 		int got, i;
 
 		got = radix_tree_gang_lookup(&osdc->request_tree,
@@ -337,10 +337,10 @@ static int osdc_show(struct seq_file *s, void *p)
 		head = req->r_request->front.iov_base;
 		op = (void *)(head + 1);
 
-		seq_printf(s, "%llx.%08x.%llx\t",
-			   le64_to_cpu(head->oid.ino),
-			   le32_to_cpu(head->oid.bno),
-			   le64_to_cpu(head->oid.pad));
+		num_ops = le16_to_cpu(head->num_ops);
+		olen = le32_to_cpu(head->object_len);
+		seq_printf(s, "%.*s\t", olen,
+			   (const char *)(head->ops + num_ops));
 
 		if (req->r_reassert_version.epoch)
 			seq_printf(s, "%u'%llu\t",
@@ -349,7 +349,6 @@ static int osdc_show(struct seq_file *s, void *p)
 		else
 			seq_printf(s, "\t");
 
-		num_ops = le16_to_cpu(head->num_ops);
 		for (i = 0; i < num_ops; i++) {
 			opcode = le16_to_cpu(op->op);
 			seq_printf(s, "%s\t", ceph_osd_op_name(opcode));
@@ -358,9 +357,7 @@ static int osdc_show(struct seq_file *s, void *p)
 
 		seq_printf(s, "\n");
 	}
-
 	mutex_unlock(&osdc->request_mutex);
-
 	return 0;
 }
 

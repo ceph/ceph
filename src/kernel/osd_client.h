@@ -61,6 +61,8 @@ struct ceph_osd_request {
 	struct inode *r_inode;         	      /* for use by callbacks */
 	struct writeback_control *r_wbc;      /* ditto */
 
+	char              r_oid[40];          /* object name */
+	int               r_oid_len;
 	int               r_last_osd;         /* pg osds */
 	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;

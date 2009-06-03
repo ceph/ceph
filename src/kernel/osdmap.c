@@ -623,7 +623,7 @@ bad:
  */
 void ceph_calc_file_object_mapping(struct ceph_file_layout *layout,
 				   u64 off, u64 *plen,
-				   struct ceph_object *oid,
+				   u64 *bno,
 				   u64 *oxoff, u64 *oxlen)
 {
 	u32 osize = le32_to_cpu(layout->fl_object_size);
@@ -650,8 +650,8 @@ void ceph_calc_file_object_mapping(struct ceph_file_layout *layout,
 	stripepos = bl % sc;
 	objsetno = stripeno / su_per_object;
 
-	oid->bno = cpu_to_le32(objsetno * sc + stripepos);
-	dout(80, "objset %u * sc %u = bno %u\n", objsetno, sc, oid->bno);
+	*bno = cpu_to_le32(objsetno * sc + stripepos);
+	dout(80, "objset %u * sc %u = bno %u\n", objsetno, sc, (unsigned)*bno);
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = off;
 	*oxoff = do_div(t, su);
@@ -666,14 +666,12 @@ void ceph_calc_file_object_mapping(struct ceph_file_layout *layout,
  * file_layout, and osdmap
  */
 int ceph_calc_object_layout(struct ceph_object_layout *ol,
-			    struct ceph_object *oid,
+			    const char *oid,
 			    struct ceph_file_layout *fl,
 			    struct ceph_osdmap *osdmap)
 {
 	unsigned num, num_mask;
 	union ceph_pg pgid;
-	u64 ino = le64_to_cpu(oid->ino);
-	unsigned bno = le32_to_cpu(oid->bno);
 	s32 preferred = (s32)le32_to_cpu(fl->fl_pg_preferred);
 	int poolid = le32_to_cpu(fl->fl_pg_pool);
 	struct ceph_pg_pool_info *pool;
@@ -691,7 +689,7 @@ int ceph_calc_object_layout(struct ceph_object_layout *ol,
 	}
 
 	pgid.pg64 = 0;   /* start with it zeroed out */
-	pgid.pg.ps = bno + crush_hash32_2(ino, ino>>32);
+	pgid.pg.ps = ceph_full_name_hash(oid, strlen(oid));
 	pgid.pg.preferred = preferred;
 	pgid.pg.pool = le32_to_cpu(fl->fl_pg_pool);
 
