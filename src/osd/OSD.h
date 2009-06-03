@@ -277,7 +277,7 @@ private:
   public:
     IATAverager(double a) : lock("IATAverager::lock"),alpha(a) {}
     
-    void add_sample(object_t oid, double now) {
+    void add_sample(const object_t& oid, double now) {
       Mutex::Locker locker(lock);
       iat_data &r = iat_map[oid];
       double iat = now - r.last_req_stamp;
@@ -285,19 +285,19 @@ private:
       r.average_iat = r.average_iat*(1.0-alpha) + iat*alpha;
     }
     
-    bool have(object_t oid) const {
+    bool have(const object_t& oid) const {
       Mutex::Locker locker(lock);
       return iat_map.count(oid);
     }
 
-    double get_average_iat(object_t oid) const {
+    double get_average_iat(const object_t& oid) const {
       Mutex::Locker locker(lock);
       hash_map<object_t, iat_data>::const_iterator p = iat_map.find(oid);
       assert(p != iat_map.end());
       return p->second.average_iat;
     }
 
-    bool is_flash_crowd_candidate(object_t oid) const {
+    bool is_flash_crowd_candidate(const object_t& oid) const {
       Mutex::Locker locker(lock);
       return get_average_iat(oid) <= g_conf.osd_flash_crowd_iat_threshold;
     }
