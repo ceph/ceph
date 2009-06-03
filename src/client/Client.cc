@@ -1686,7 +1686,7 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
     cap = in->caps[mds];
   } else {
     mds_sessions[mds].num_caps++;
-    if (in->caps.empty()) {
+    if (!in->is_any_caps()) {
       assert(in->snaprealm == 0);
       in->snaprealm = get_snap_realm(realm);
       in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
