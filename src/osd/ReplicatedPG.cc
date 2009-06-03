@@ -797,7 +797,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
   int result = 0;
 
   object_info_t& oi = ctx->obs->oi;
-  bool& exists = ctx->obs->exists;
   __u64& old_size = ctx->obs->size;
 
   const sobject_t& soid = oi.soid;
@@ -1035,7 +1034,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
     case CEPH_OSD_OP_ZERO:
       { // zero
 	assert(op.length);
-	if (!exists)
+	if (!ctx->obs->exists)
 	  t.touch(info.pgid.to_coll(), soid);
 	t.zero(info.pgid.to_coll(), soid, op.offset, op.length);
 	if (oi.snapset.clones.size()) {
@@ -1052,7 +1051,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
       
     case CEPH_OSD_OP_TRUNCATE:
       { // truncate
-	if (!exists)
+	if (!ctx->obs->exists)
 	  t.touch(info.pgid.to_coll(), soid);
 	t.truncate(info.pgid.to_coll(), soid, op.offset);
 	if (oi.snapset.clones.size()) {
@@ -1087,12 +1086,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	  add_interval_usage(oi.snapset.clone_overlap[newest], info.stats);
 	  oi.snapset.clone_overlap.erase(newest);  // ok, redundant.
 	}
-	if (exists) {
+	if (ctx->obs->exists) {
 	  info.stats.num_objects--;
 	  info.stats.num_bytes -= old_size;
 	  info.stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
 	  old_size = 0;
-	  exists = false;
+	  ctx->obs->exists = false;
 	  oi.snapset.head_exists = false;
 	}      
       }
@@ -1103,7 +1102,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
       
     case CEPH_OSD_OP_SETXATTR:
       {
-	if (!exists)
+	if (!ctx->obs->exists)
 	  t.touch(info.pgid.to_coll(), soid);
 	nstring name(op.name_len + 1);
 	name[0] = '_';
@@ -1175,7 +1174,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
       break;
 
     case CEPH_OSD_OP_TRIMTRUNC:
-      if (exists) {
+      if (ctx->obs->exists) {
 	__u32 old_seq = 0;
 	bufferlist::iterator p;
 	if (oi.truncate_info.length()) {
@@ -1230,9 +1229,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
     }
 
     if ((op.op & CEPH_OSD_OP_MODE_WR) &&
-	!exists && oi.snapset.head_exists) {
+	!ctx->obs->exists && oi.snapset.head_exists) {
+      dout(20) << " num_objects " << info.stats.num_objects << " -> " << (info.stats.num_objects+1) << dendl;
       info.stats.num_objects++;
-      exists = true;
+      ctx->obs->exists = true;
     }
 
     if (result)
@@ -1347,7 +1347,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   assert(!ctx->ops.empty());
   
   object_info_t *poi = &ctx->obs->oi;
-  bool& exists = ctx->obs->exists;
 
   const sobject_t& soid = poi->soid;
 
@@ -1363,7 +1362,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // finish and log the op.
   poi->version = ctx->at_version;
-  if (exists) {
+  if (ctx->obs->exists) {
     poi->version = ctx->at_version;
     poi->prior_version = old_version;
     poi->last_reqid = ctx->reqid;
@@ -1381,7 +1380,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // append to log
   int logopcode = Log::Entry::MODIFY;
-  if (!exists)
+  if (!ctx->obs->exists)
     logopcode = Log::Entry::DELETE;
   ctx->log.push_back(Log::Entry(logopcode, soid, ctx->at_version, old_version,
 				ctx->reqid, ctx->mtime));
@@ -1772,7 +1771,8 @@ int ReplicatedPG::find_object_context(object_t oid, snapid_t snapid,
   if (snapid > hobc->obs.oi.snapset.seq) {
     dout(10) << "find_object_context  " << head
 	     << " want " << snapid << " > snapset seq " << hobc->obs.oi.snapset.seq
-	     << " -- HIT" << dendl;
+	     << " -- HIT " << hobc->obs
+	     << dendl;
     *pobc = hobc;
     return 0;
   }
@@ -1805,7 +1805,7 @@ int ReplicatedPG::find_object_context(object_t oid, snapid_t snapid,
   snapid_t last = obc->obs.oi.snaps[0];
   if (first <= snapid) {
     dout(20) << "get_object_context  " << soid << " [" << first << "," << last
-	     << "] contains " << snapid << " -- HIT" << dendl;
+	     << "] contains " << snapid << " -- HIT " << obc->obs << dendl;
     *pobc = obc;
     return 0;
   } else {

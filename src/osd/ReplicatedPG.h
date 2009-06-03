@@ -222,7 +222,7 @@ public:
     }
 
     ObjectContext(const sobject_t& s) :
-      ref(0), registered(true), state(IDLE), num_wr(0), num_rmw(0), wake(false),
+      ref(0), registered(false), state(IDLE), num_wr(0), num_rmw(0), wake(false),
       obs(s) {}
   };
 
@@ -464,9 +464,19 @@ public:
 };
 
 
+inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectState& obs)
+{
+  out << obs.oi.soid << "(";
+  if (obs.exists)
+    out << "s=" << obs.size << ")";
+  else
+    out << "dne)";
+  return out;
+}
+
 inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
 {
-  out << "obc(" << obc.obs.oi.soid << " " << obc.get_state_name(obc.state);
+  out << "obc(" << obc.obs << " " << obc.get_state_name(obc.state);
   if (!obc.waiting.empty())
     out << " WAITING";
   out << ")";
