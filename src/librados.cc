@@ -327,8 +327,6 @@ int RadosClient::list(int pool, int max_entries, vector<ceph_object>& entries, R
 
   memset(&oid, 0, sizeof(oid));
 
-  dout(0) << hex << "pool=" << dec << pool << " op.cookie=" << op.cookie << dendl;
-
   ceph_object_layout layout;
 retry:
   int pg_num = objecter->osdmap->get_pg_num(pool);
@@ -357,8 +355,6 @@ retry:
         cond.Wait(lock);
 
       lock.Unlock();
-      dout(0) << "after pg_ls(" << op.seed << ") r=" << r << " got " << bl.length() << " bytes ol_pgls=" << hex << layout.ol_pgid << dec << dendl;
-      dout(0) << "max_entries=" << max_entries << dendl;
 
       bufferlist::iterator iter = bl.begin();
       PGLSResponse response;
@@ -369,12 +365,10 @@ retry:
         vector<pobject_t>::iterator ls_iter;
 
         for (ls_iter = response.entries.begin(); ls_iter != response.entries.end(); ++ls_iter) {
-          dout(0) << "entry: " << *ls_iter << dendl;
           ceph_object obj = (ceph_object)ls_iter->oid;
           entries.push_back(obj);
         }
         max_entries -= response_size;
-        dout(0) << "op.cookie=" << op.cookie << dendl;
 
         if (!max_entries)
           return r;

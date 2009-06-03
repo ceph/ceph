@@ -1887,7 +1887,6 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
 
   char fn[PATH_MAX];
   get_cdir(c, fn);
-  dout(10) << "collection_list " << fn << dendl;
 
   DIR *dir = NULL;
   struct dirent *de;
@@ -1904,7 +1903,6 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
   }
 
   if (handle) {
-    dout(0) << "seeking to position " << *(off_t *)handle << dendl;
     seekdir(dir, *(off_t *)handle);
   }
 
@@ -1925,7 +1923,6 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
     }
     //cout << "  got object " << de->d_name << std::endl;
 
-    dout(0) << "readdir: " << de->d_name << dendl;
     pobject_t o;
     if (parse_object(de->d_name, o)) {
       inolist.push_back(pair<ino_t,pobject_t>(de->d_ino, o));
@@ -1933,10 +1930,8 @@ int FileStore::collection_list_partial(coll_t c, vector<pobject_t>& ls, int max_
     }
   }
 
-  if (handle) {
+  if (handle)
     *handle = (collection_list_handle_t)telldir(dir);
-    dout(0) << "returning handle=" << (__u64)*handle << dendl;
-  }
 
   ::closedir(dir);
 
