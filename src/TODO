@@ -101,25 +101,29 @@ userspace client
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
-- linkage vs cdentry replicas and remote rename....
-- hard link backpointers
-  - anchor source dir
-  - build snaprealm for any hardlinked file
-  - include snaps for all (primary+remote) parents
-- how do we properly clean up inodes when doing a snap purge?
-  - when they are mid-recover?  see 136470cf7ca876febf68a2b0610fa3bb77ad3532
-- what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
-- proper handling of cache expire messages during rejoin phase?
-  -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too
-- rename: importing inode... also journal imported client map?
 - handle slow client reconnect (i.e. after mds has gone active)
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 - add FILE_CAP_EXTEND capability bit
+- snap
+  - hard link backpointers
+    - anchor source dir
+    - build snaprealm for any hardlinked file
+    - include snaps for all (primary+remote) parents
+  - how do we properly clean up inodes when doing a snap purge?
+    - when they are mid-recover?  see 136470cf7ca876febf68a2b0610fa3bb77ad3532
+  - what if a recovery is queued, or in progress, and the inode is then cowed?  can that happen?  
+  - proper handling of cache expire messages during rejoin phase?
+    -> i think cache expires are fine; the rejoin_ack handler just has to behave if rejoining items go missing
+
+- clustered
+  - on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
+  - linkage vs cdentry replicas and remote rename....
+  - rename: importing inode... also journal imported client map?
+
 
 
 journaler
