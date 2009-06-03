@@ -183,7 +183,7 @@ void FileStore::append_oname(const pobject_t &oid, char *s)
 	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.snap);
 #else
   sprintf(t, "/%08x_%016llx.%08x.%llx_%llx", 
-	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.oid.snap);
+	  oid.oid.ino, oid.oid.bno, oid.oid.pad, (__u64)oid.snap);
 #endif
   //parse_object(t+1);
 }
