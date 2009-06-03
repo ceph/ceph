@@ -466,6 +466,8 @@ int RadosClient::read(int pool, object_t& oid, off_t off, bufferlist& bl, size_t
   return len;
 }
 
+// ---------------------------------------------
+
 Rados::Rados() : client(NULL)
 {
 }
@@ -539,6 +541,59 @@ int Rados::open_pool(const char *name, rados_pool_t *pool)
 int Rados::close_pool(rados_pool_t pool)
 {
   return 0;
+}
+
+int Rados::aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
+		    Rados::AioCompletion **pc)
+{
+  RadosClient::AioCompletion *c;
+  int r = client->aio_read(pool, oid, off, pbl, len, &c);
+  if (r >= 0) {
+    *pc = new AioCompletion((void *)c);
+  }
+  return r;
+}
+
+int Rados::aio_write(int pool, object_t oid, off_t off, bufferlist& bl, size_t len,
+		     AioCompletion **pc)
+{
+  RadosClient::AioCompletion *c;
+  int r = client->aio_write(pool, oid, off, bl, len, &c);
+  if (r >= 0) {
+    *pc = new AioCompletion((void *)c);
+  }
+  return r;
+}
+
+int Rados::AioCompletion::wait_for_complete()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->wait_for_complete();
+}
+int Rados::AioCompletion::wait_for_safe()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->wait_for_safe();
+}
+bool Rados::AioCompletion::is_complete()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->is_complete();
+}
+bool Rados::AioCompletion::is_safe()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->is_safe();
+}
+int Rados::AioCompletion::get_return_value()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->get_return_value();
+}
+void Rados::AioCompletion::put()
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  c->put();
 }
 
 // ---------------------------------------------

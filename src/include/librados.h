@@ -67,6 +67,25 @@ public:
 
   int exec(rados_pool_t pool, object_t& oid, const char *cls, const char *method,
              bufferlist& inbl, bufferlist& outbl);
+
+  
+  // -- aio --
+  struct AioCompletion {
+    void *pc;
+    AioCompletion(void *_pc) : pc(_pc) {}
+    int wait_for_complete();
+    int wait_for_safe();
+    bool is_complete();
+    bool is_safe();
+    int get_return_value();
+    void put();
+  };
+
+  int aio_read(int pool, object_t oid, off_t off, bufferlist *pbl, size_t len,
+	       AioCompletion **pc);
+  int aio_write(int pool, object_t oid, off_t off, bufferlist& bl, size_t len,
+		AioCompletion **pc);
+
 };
 #endif
 
