@@ -178,7 +178,10 @@ void FileStore::append_oname(const sobject_t &oid, char *s)
 {
   //assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
-  sprintf(t, "/%s_%llx", oid.oid.name.c_str(), (long long unsigned)oid.snap);
+  if (oid.snap == CEPH_NOSNAP)
+    sprintf(t, "/%s_head", oid.oid.name.c_str());
+  else
+    sprintf(t, "/%s_%llx", oid.oid.name.c_str(), (long long unsigned)oid.snap);
   //parse_object(t+1);
 }
 
@@ -190,7 +193,10 @@ bool FileStore::parse_object(char *s, sobject_t& o)
     bar--;
   if (*bar == '_') {
     o.oid.name = nstring(bar-s, s);
-    o.snap = strtoull(bar+1, &s, 16);
+    if (strcmp(bar+1, "head") == 0)
+      o.snap = CEPH_NOSNAP;
+    else
+      o.snap = strtoull(bar+1, &s, 16);
     return true;
   }
   return false;
