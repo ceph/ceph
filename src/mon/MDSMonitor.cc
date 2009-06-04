@@ -236,7 +236,8 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
  ignore:
   // note time and reply
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
-  last_beacon[addr] = g_clock.now();  
+  last_beacon[addr].stamp = g_clock.now();  
+  last_beacon[addr].seq = seq;
   mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_name(),
 					      mdsmap.get_epoch(), state, seq), 
 			       m->get_orig_source_inst());
@@ -286,11 +287,13 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.rank = -1;
     info.addr = addr;
     info.state = MDSMap::STATE_STANDBY;
+    info.state_seq = seq;
     info.standby_for_rank = m->get_standby_for_rank();
     info.standby_for_name = m->get_standby_for_name();
 
     // initialize the beacon timer
-    last_beacon[addr] = g_clock.now();
+    last_beacon[addr].stamp = g_clock.now();
+    last_beacon[addr].seq = seq;
 
   } else {
     // state change
@@ -568,20 +571,23 @@ void MDSMonitor::tick()
   for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = mdsmap.mds_info.begin();
        p != mdsmap.mds_info.end();
        ++p) 
-    if (last_beacon.count(p->second.addr) == 0)
-      last_beacon[p->second.addr] = g_clock.now();
+    if (last_beacon.count(p->second.addr) == 0) {
+      last_beacon[p->second.addr].stamp = g_clock.now();
+      last_beacon[p->second.addr].seq = 0;
+    }
 
   if (mon->osdmon()->paxos->is_writeable()) {
 
     bool propose_osdmap = false;
 
-    map<entity_addr_t, utime_t>::iterator p = last_beacon.begin();
+    map<entity_addr_t, beacon_info_t>::iterator p = last_beacon.begin();
     while (p != last_beacon.end()) {
       entity_addr_t addr = p->first;
-      utime_t since = p->second;
+      utime_t since = p->second.stamp;
+      __u64 seq = p->second.seq;
       p++;
       
-      if (last_beacon[addr] >= cutoff)
+      if (since >= cutoff)
 	continue;
 
       MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
@@ -618,6 +624,7 @@ void MDSMonitor::tick()
 	  assert(0);
 	}
 	si.rank = info.rank;
+	info.state_seq = seq;
 	if (si.state > 0) {
 	  si.inc = ++pending_mdsmap.inc[info.rank];
 	  pending_mdsmap.up[info.rank] = sa;
