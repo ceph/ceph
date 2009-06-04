@@ -685,31 +685,6 @@ out:
 }
 
 /*
- * Check the offset we are writing up to against our current
- * max_size.  If necessary, tell the MDS we want to write to
- * a larger offset.
- */
-static void check_max_size(struct inode *inode, loff_t endoff)
-{
-	struct ceph_inode_info *ci = ceph_inode(inode);
-	int check = 0;
-
-	/* do we need to explicitly request a larger max_size? */
-	spin_lock(&inode->i_lock);
-	if ((endoff >= ci->i_max_size ||
-	     endoff > (inode->i_size << 1)) &&
-	    endoff > ci->i_wanted_max_size) {
-		dout(10, "write %p at large endoff %llu, req max_size\n",
-		     inode, endoff);
-		ci->i_wanted_max_size = endoff;
-		check = 1;
-	}
-	spin_unlock(&inode->i_lock);
-	if (check)
-		ceph_check_caps(ci, CHECK_CAPS_AUTHONLY, NULL);
-}
-
-/*
  * Take cap references to avoid releasing caps to MDS mid-write.
  *
  * If we are synchronous, and write with an old snap context, the OSD
@@ -738,7 +713,6 @@ retry_snap:
 	if (ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_FULL))
 		return -ENOSPC;
 	__ceph_do_pending_vmtruncate(inode);
-	check_max_size(inode, endoff);
 	dout(10, "aio_write %p %llu~%u getting caps. i_size %llu\n",
 	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
 	ret = ceph_get_caps(ci, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER,

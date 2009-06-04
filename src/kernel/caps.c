@@ -1276,8 +1276,10 @@ retry_locked:
 		    (cap->issued & CEPH_CAP_FILE_WR)) {
 			/* request larger max_size from MDS? */
 			if (ci->i_wanted_max_size > ci->i_max_size &&
-			    ci->i_wanted_max_size > ci->i_requested_max_size)
+			    ci->i_wanted_max_size > ci->i_requested_max_size) {
+				dout(10, "requesting new max_size\n");
 				goto ack;
+			}
 
 			/* approaching file_max? */
 			if ((inode->i_size << 1) >= ci->i_max_size &&
@@ -1545,7 +1547,7 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
  * requested from the MDS.
  */
 static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
-			    int *got, loff_t endoff)
+			    int *got, loff_t endoff, int *check_max)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int ret = 0;
@@ -1558,7 +1560,11 @@ static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 		if (endoff >= 0 && endoff > (loff_t)ci->i_max_size) {
 			dout(20, "get_cap_refs %p endoff %llu > maxsize %llu\n",
 			     inode, endoff, ci->i_max_size);
-			goto sorry;
+			if (endoff > ci->i_wanted_max_size) {
+				*check_max = 1;
+				ret = 1;
+			}
+			goto out;
 		}
 		/*
 		 * If a sync write is in progress, we must wait, so that we
@@ -1566,7 +1572,7 @@ static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 		 */
 		if (__ceph_have_pending_cap_snap(ci)) {
 			dout(20, "get_cap_refs %p cap_snap_pending\n", inode);
-			goto sorry;
+			goto out;
 		}
 	}
 	have = __ceph_caps_issued(ci, &implemented);
@@ -1598,11 +1604,36 @@ static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 		dout(30, "get_cap_refs %p have %s needed %s\n", inode,
 		     ceph_cap_string(have), ceph_cap_string(need));
 	}
-sorry:
+out:
 	spin_unlock(&inode->i_lock);
 	dout(30, "get_cap_refs %p ret %d got %s\n", inode,
 	     ret, ceph_cap_string(*got));
 	return ret;
+}
+
+/*
+ * Check the offset we are writing up to against our current
+ * max_size.  If necessary, tell the MDS we want to write to
+ * a larger offset.
+ */
+static void check_max_size(struct inode *inode, loff_t endoff)
+{
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	int check = 0;
+
+	/* do we need to explicitly request a larger max_size? */
+	spin_lock(&inode->i_lock);
+	if ((endoff >= ci->i_max_size ||
+	     endoff > (inode->i_size << 1)) &&
+	    endoff > ci->i_wanted_max_size) {
+		dout(10, "write %p at large endoff %llu, req max_size\n",
+		     inode, endoff);
+		ci->i_wanted_max_size = endoff;
+		check = 1;
+	}
+	spin_unlock(&inode->i_lock);
+	if (check)
+		ceph_check_caps(ci, CHECK_CAPS_AUTHONLY, NULL);
 }
 
 /*
@@ -1611,8 +1642,19 @@ sorry:
 int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		  loff_t endoff)
 {
-	return wait_event_interruptible(ci->i_cap_wq,
-			try_get_cap_refs(ci, need, want, got, endoff));
+	int check_max, ret;
+	
+retry:
+	if (endoff > 0)
+		check_max_size(&ci->vfs_inode, endoff);
+	check_max = 0;
+	ret = wait_event_interruptible(ci->i_cap_wq,
+				       try_get_cap_refs(ci, need, want,
+							got, endoff,
+							&check_max));
+	if (check_max)
+		goto retry;
+	return ret;
 }
 
 /*
