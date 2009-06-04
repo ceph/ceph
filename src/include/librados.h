@@ -26,7 +26,9 @@ typedef void *rados_list_ctx_t;
 typedef int rados_pool_t;
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
-int rados_list(rados_pool_t pool, int max, char *entries, rados_list_ctx_t *ctx);
+void rados_pool_init_ctx(rados_list_ctx_t *ctx);
+void rados_pool_close_ctx(rados_list_ctx_t *ctx);
+int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
 
 /* read/write objects */
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
@@ -76,7 +78,7 @@ public:
    ListCtx() : ctx(NULL) {}
  };
 
-  int list(rados_pool_t pool, int max, vector<object_t>& entries, Rados::ListCtx& ctx);
+  int list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx);
 
   // -- aio --
   struct AioCompletion {

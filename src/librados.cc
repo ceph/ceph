@@ -79,11 +79,15 @@ public:
   struct PGLSOp {
     int seed;
     __u64 cookie;
+    std::list<object_t> list;
+    std::list<object_t>::iterator iter;
+    __u64 pos;
+    __u64 total;
 
-   PGLSOp() : seed(0), cookie(0) {}
+   PGLSOp() : seed(0), cookie(0), pos(0), total(0) {}
   };
 
-  int list(int pool, int max_entries, vector<object_t>& entries, RadosClient::PGLSOp& op);
+  int list(int pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op);
 
   // --- aio ---
   struct AioCompletion {
@@ -314,7 +318,7 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
-int RadosClient::list(int pool, int max_entries, vector<object_t>& entries, RadosClient::PGLSOp& op)
+int RadosClient::list(int pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op)
 {
   SnapContext snapc;
   utime_t ut = g_clock.now();
@@ -326,6 +330,7 @@ int RadosClient::list(int pool, int max_entries, vector<object_t>& entries, Rado
   object_t oid;
 
   memset(&oid, 0, sizeof(oid));
+  entries.clear();
 
   ceph_object_layout layout;
 retry:
@@ -362,7 +367,7 @@ retry:
       op.cookie = (__u64)response.handle;
       response_size = response.entries.size();
       if (response_size) {
-	entries.swap(response.entries);
+	entries.merge(response.entries);
         max_entries -= response_size;
         if (!max_entries)
           return r;
@@ -565,7 +570,7 @@ int Rados::initialize(int argc, const char *argv[])
   return client->init() ? 0 : -1;
 }
 
-int Rados::list(rados_pool_t pool, int max, vector<object_t>& entries, Rados::ListCtx& ctx)
+int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx)
 {
   if (!client)
     return -EINVAL;
@@ -804,8 +809,21 @@ extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, con
   }
   return ret;
 }
+extern "C" void rados_pool_init_ctx(rados_list_ctx_t *ctx)
+{
+  *ctx = NULL;
+}
 
-extern "C" int rados_list(rados_pool_t pool, int max, char *entries, rados_list_ctx_t *ctx)
+extern "C" void rados_pool_close_ctx(rados_list_ctx_t *ctx)
+{
+  if (*ctx) {
+    RadosClient::PGLSOp *op = (RadosClient::PGLSOp *)*ctx;
+    delete op;
+    *ctx = NULL;
+  }
+}
+
+extern "C" int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx)
 {
   int ret;
 
@@ -815,21 +833,25 @@ extern "C" int rados_list(rados_pool_t pool, int max, char *entries, rados_list_
       return -ENOMEM;
   }
   RadosClient::PGLSOp *op = (RadosClient::PGLSOp *)*ctx;
-
-  vector<object_t> vec;
-  ret = radosp->list(pool, max, vec, *op);
-  if (!vec.size()) {
-    delete op;
-    *ctx = NULL;
+  if (op->pos == op->total) {
+    op->list.clear();
+#define MAX_ENTRIES 1024
+    ret = radosp->list(pool, MAX_ENTRIES, op->list, *op);
+    if (!op->list.size()) {
+      delete op;
+      *ctx = NULL;
+      return -ENOENT;
+    }
+    op->pos = 0;
+    op->total = op->list.size();
+    op->iter = op->list.begin();
   }
 
-#warning fixme
-  /*for (int i=0; i<vec.size(); i++) {
-    entries[i] = vec[i];
-  }
-  */
+  *entry = op->iter->name.c_str();
+  op->pos++;
+  op->iter++;
 
-  return ret;
+  return 0;
 }
 
 

@@ -7,7 +7,7 @@
 
 struct PGLSResponse {
   collection_list_handle_t handle; 
-  vector<object_t> entries;
+  list<object_t> entries;
 
   void encode(bufferlist& bl) const {
     ::encode((__u64)handle, bl);

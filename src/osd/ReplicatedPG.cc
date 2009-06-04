@@ -383,10 +383,14 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 	// read into a buffer
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(__u64)(p->pgls_cookie);
-	//result = osd->store->collection_list_partial(op->get_pg().to_coll(), response.entries, p->length,
-	//&response.handle);
-#warning fixme
+        vector<sobject_t> sentries;
+	result = osd->store->collection_list_partial(op->get_pg().to_coll(), sentries, p->length,
+	                                             &response.handle);
 	if (!result) {
+          vector<sobject_t>::iterator iter;
+          for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
+            response.entries.push_back(iter->oid);
+          }
 	  ::encode(response, outdata);
         }
 	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;

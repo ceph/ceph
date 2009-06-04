@@ -42,7 +42,7 @@ int main(int argc, const char **argv)
   snprintf(buf, 128, "%s", ctime(&tm));
   bl.append(buf, strlen(buf));
 
-  object_t oid("foo");
+  object_t oid("bar");
 
   rados_pool_t pool;
   int r = rados.open_pool("data", &pool);
@@ -71,11 +71,11 @@ int main(int argc, const char **argv)
   Rados::ListCtx ctx;
   int entries;
   do {
-    vector<object_t> vec;
-    r = rados.list(pool, 1, vec, ctx);
+    list<object_t> vec;
+    r = rados.list(pool, 2, vec, ctx);
     entries = vec.size();
     cout << "list result=" << r << " entries=" << entries << std::endl;
-    vector<object_t>::iterator iter;
+    list<object_t>::iterator iter;
     for (iter = vec.begin(); iter != vec.end(); ++iter) {
       cout << *iter << std::endl;
     }

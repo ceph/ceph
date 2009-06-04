@@ -1890,6 +1890,7 @@ int FileStore::collection_list_partial(coll_t c, vector<sobject_t>& ls, int max_
 
   DIR *dir = NULL;
   struct dirent *de;
+  bool end;
   
   // first, build (ino, object) list
   vector< pair<ino_t,sobject_t> > inolist;
@@ -1902,19 +1903,23 @@ int FileStore::collection_list_partial(coll_t c, vector<sobject_t>& ls, int max_
     return -errno;
   }
 
-  if (handle) {
+  if (handle && *handle) {
     seekdir(dir, *(off_t *)handle);
+    *handle = 0;
   }
 
   for (int i=0; i<max_count; i++) {
     errno = 0;
+    end = false;
     de = ::readdir(dir);
     if (!de && errno) {
       dout(0) << "error reading directory " << fn << dendl;
       return -errno;
     }
-    if (!de)
+    if (!de) {
+      end = true;
       break;
+    }
 
     // parse
     if (de->d_name[0] == '.') {
@@ -1929,7 +1934,7 @@ int FileStore::collection_list_partial(coll_t c, vector<sobject_t>& ls, int max_
     }
   }
 
-  if (handle)
+  if (handle && !end)
     *handle = (collection_list_handle_t)telldir(dir);
 
   ::closedir(dir);

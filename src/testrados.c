@@ -56,7 +56,16 @@ int main(int argc, const char **argv)
   rados_aio_release(a);
   rados_aio_release(b);
 
+  const char *entry;
+  rados_list_ctx_t ctx;
+  rados_pool_init_ctx(&ctx);
+  while (rados_pool_list_next(pool, &entry, &ctx) >= 0) {
+    printf("list entry: %s\n", entry);
+  }
+  rados_pool_close_ctx(&ctx);
+
   rados_close_pool(pool);
+
 
   rados_deinitialize();
 
