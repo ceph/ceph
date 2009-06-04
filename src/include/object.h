@@ -42,31 +42,31 @@ struct object_t {
 };
 WRITE_CLASS_ENCODER(object_t)
 
-inline bool operator==(const object_t l, const object_t r) {
+inline bool operator==(const object_t& l, const object_t& r) {
   return l.name == r.name;
 }
-inline bool operator!=(const object_t l, const object_t r) {
+inline bool operator!=(const object_t& l, const object_t& r) {
   return l.name != r.name;
 }
-inline bool operator>(const object_t l, const object_t r) {
+inline bool operator>(const object_t& l, const object_t& r) {
   return l.name > r.name;
 }
-inline bool operator<(const object_t l, const object_t r) {
+inline bool operator<(const object_t& l, const object_t& r) {
   return l.name < r.name;
 }
-inline bool operator>=(const object_t l, const object_t r) { 
+inline bool operator>=(const object_t& l, const object_t& r) { 
   return l.name >= r.name;
 }
-inline bool operator<=(const object_t l, const object_t r) {
+inline bool operator<=(const object_t& l, const object_t& r) {
   return l.name <= r.name;
 }
-inline ostream& operator<<(ostream& out, const object_t o) {
+inline ostream& operator<<(ostream& out, const object_t& o) {
   return out << o.name;
 }
 
 namespace __gnu_cxx {
   template<> struct hash<object_t> {
-    size_t operator()(const object_t &r) const { 
+    size_t operator()(const object_t& r) const { 
       static hash<nstring> H;
       return H(r.name);
     }
