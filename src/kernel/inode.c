@@ -368,11 +368,12 @@ int ceph_fill_file_size(struct inode *inode, int issued,
 			dout(10, "truncate_seq %u -> %u\n",
 			     ci->i_truncate_seq, truncate_seq);
 			ci->i_truncate_seq = truncate_seq;
-			ci->i_truncate_pending++;
 			if (issued & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_RD|
 				      CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER|
-				      CEPH_CAP_FILE_EXCL))
+				      CEPH_CAP_FILE_EXCL)) {
+				ci->i_truncate_pending++;
 				queue_trunc = 1;
+			}
 		}
 	}
 	if (ceph_seq_cmp(truncate_seq, ci->i_truncate_seq) >= 0 &&
