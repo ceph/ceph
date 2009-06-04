@@ -799,7 +799,7 @@ extern int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 
 extern int ceph_inode_holds_cap(struct inode *inode, int mask);
 
-extern void ceph_inode_set_size(struct inode *inode, loff_t size);
+extern int ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
 extern void __ceph_do_pending_vmtruncate(struct inode *inode);

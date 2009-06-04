@@ -1143,9 +1143,10 @@ out:
 	return err;
 }
 
-void ceph_inode_set_size(struct inode *inode, loff_t size)
+int ceph_inode_set_size(struct inode *inode, loff_t size)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
+	int ret = 0;
 
 	spin_lock(&inode->i_lock);
 	dout(30, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
@@ -1154,12 +1155,11 @@ void ceph_inode_set_size(struct inode *inode, loff_t size)
 
 	/* tell the MDS if we are approaching max_size */
 	if ((size << 1) >= ci->i_max_size &&
-	    (ci->i_reported_size << 1) < ci->i_max_size) {
-		spin_unlock(&inode->i_lock);
-		ceph_check_caps(ci, CHECK_CAPS_AUTHONLY, NULL);
-	} else {
-		spin_unlock(&inode->i_lock);
-	}
+	    (ci->i_reported_size << 1) < ci->i_max_size)
+		ret = 1;
+
+	spin_unlock(&inode->i_lock);
+	return ret;
 }
 
 /*

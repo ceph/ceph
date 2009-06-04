@@ -996,6 +996,7 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
 	unsigned from = pos & (PAGE_CACHE_SIZE - 1);
+	int check_cap = 0;
 
 	dout(10, "write_end file %p inode %p page %p %d~%d (%d)\n", file,
 	     inode, page, (int)pos, (int)copied, (int)len);
@@ -1012,7 +1013,7 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	/* did file size increase? */
 	/* (no need for i_size_read(); we caller holds i_mutex */
 	if (pos+copied > inode->i_size)
-		ceph_inode_set_size(inode, pos+copied);
+		check_cap = ceph_inode_set_size(inode, pos+copied);
 
 	if (!PageUptodate(page))
 		SetPageUptodate(page);
@@ -1022,6 +1023,9 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	unlock_page(page);
 	up_read(&mdsc->snap_rwsem);
 	page_cache_release(page);
+
+	if (check_cap)
+		ceph_check_caps(ceph_inode(inode), CHECK_CAPS_AUTHONLY, NULL);
 
 	return copied;
 }

@@ -526,6 +526,7 @@ static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 	int written = 0;
 	int flags;
 	int do_sync = 0;
+	int check_caps = 0;
 	int ret;
 	struct timespec mtime = CURRENT_TIME;
 
@@ -632,7 +633,10 @@ out:
 		ret = written;
 		*offset = pos;
 		if (pos > i_size_read(inode))
-			ceph_inode_set_size(inode, pos);
+			check_caps = ceph_inode_set_size(inode, pos);
+		if (check_caps)
+			ceph_check_caps(ceph_inode(inode), CHECK_CAPS_AUTHONLY,
+					NULL);
 	}
 	return ret;
 }
