@@ -2725,13 +2725,21 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     osd->messenger->send_message(reply, op->get_source_inst());
   }
 
-  delete op;
-
   // kick waiters
   if (waiting_for_missing_object.count(soid)) {
+    dout(20) << " kicking waiters on " << soid << dendl;
     osd->take_waiters(waiting_for_missing_object[soid]);
     waiting_for_missing_object.erase(soid);
+  } else {
+    dout(20) << " no waiters on " << soid << dendl;
+    /*for (hash_map<sobject_t,list<class Message*> >::iterator p = waiting_for_missing_object.begin();
+	 p != waiting_for_missing_object.end();
+	 p++)
+      dout(20) << "   " << p->first << dendl;
+    */
   }
+
+  delete op;  // at the end... soid is a ref to op->soid!
 }
 
 
