@@ -26,6 +26,7 @@ using namespace std;
 #include "mon/MonMap.h"
 #include "mds/MDS.h"
 #include "osd/OSDMap.h"
+#include "osd/PGLS.h"
 
 #include "msg/SimpleMessenger.h"
 
@@ -75,6 +76,14 @@ public:
 
   int exec(int pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
+  struct PGLSOp {
+    int seed;
+    __u64 cookie;
+
+   PGLSOp() : seed(0), cookie(0) {}
+  };
+
+  int list(int pool, int max_entries, vector<object_t>& entries, RadosClient::PGLSOp& op);
 
   // --- aio ---
   struct AioCompletion {
@@ -305,6 +314,67 @@ bool RadosClient::_dispatch(Message *m)
   return true;
 }
 
+int RadosClient::list(int pool, int max_entries, vector<object_t>& entries, RadosClient::PGLSOp& op)
+{
+  SnapContext snapc;
+  utime_t ut = g_clock.now();
+
+  Mutex lock("RadosClient::list");
+  Cond cond;
+  bool done;
+  int r;
+  object_t oid;
+
+  memset(&oid, 0, sizeof(oid));
+
+  ceph_object_layout layout;
+retry:
+  int pg_num = objecter->osdmap->get_pg_num(pool);
+
+  for (;op.seed <pg_num; op.seed++) {
+   int response_size;
+   int req_size;
+
+   do {
+     int num = objecter->osdmap->get_pg_layout(pool, op.seed, layout);
+     if (num != pg_num)  /* ahh.. race! */
+        goto retry;
+
+      lock.Lock();
+
+      ObjectRead rd;
+      bufferlist bl;
+#define MAX_REQ_SIZE 1024
+      req_size = min(MAX_REQ_SIZE, max_entries);
+      rd.pg_ls(req_size, op.cookie);
+
+      Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+      objecter->read(oid, layout, rd, CEPH_NOSNAP, &bl, 0, onack);
+
+      while (!done)
+        cond.Wait(lock);
+
+      lock.Unlock();
+
+      bufferlist::iterator iter = bl.begin();
+      PGLSResponse response;
+      ::decode(response, iter);
+      op.cookie = (__u64)response.handle;
+      response_size = response.entries.size();
+      if (response_size) {
+	entries.swap(response.entries);
+        max_entries -= response_size;
+        if (!max_entries)
+          return r;
+      } else {
+        op.cookie = 0;
+      }
+    } while ((response_size == req_size) && op.cookie);
+ }
+
+  return r;
+}
+
 int RadosClient::write(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
   SnapContext snapc;
@@ -441,7 +511,7 @@ int RadosClient::read(int pool, const object_t& oid, off_t off, bufferlist& bl, 
 {
   SnapContext snapc;
 
-  Mutex lock("RadosClient::rdcall");
+  Mutex lock("RadosClient::read");
   Cond cond;
   bool done;
   int r;
@@ -493,6 +563,23 @@ bool Rados::initialize(int argc, const char *argv[])
 
   client = new RadosClient();
   return client->init();
+}
+
+int Rados::list(rados_pool_t pool, int max, vector<object_t>& entries, Rados::ListCtx& ctx)
+{
+  if (!client)
+    return -EINVAL;
+
+  RadosClient::PGLSOp *op;
+  if (!ctx.ctx) {
+    ctx.ctx = new RadosClient::PGLSOp;
+    if (!ctx.ctx)
+      return -ENOMEM;
+  }
+
+  op = (RadosClient::PGLSOp *)ctx.ctx;
+
+  return client->list(pool, max, entries, *op);
 }
 
 int Rados::write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
@@ -715,6 +802,33 @@ extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, con
       ret = outbl.length();   // hrm :/
     }
   }
+  return ret;
+}
+
+extern "C" int rados_list(rados_pool_t pool, int max, char *entries, rados_list_ctx_t *ctx)
+{
+  int ret;
+
+  if (!*ctx) {
+    *ctx = new RadosClient::PGLSOp;
+    if (!*ctx)
+      return -ENOMEM;
+  }
+  RadosClient::PGLSOp *op = (RadosClient::PGLSOp *)*ctx;
+
+  vector<object_t> vec;
+  ret = radosp->list(pool, max, vec, *op);
+  if (!vec.size()) {
+    delete op;
+    *ctx = NULL;
+  }
+
+#warning fixme
+  /*for (int i=0; i<vec.size(); i++) {
+    entries[i] = vec[i];
+  }
+  */
+
   return ret;
 }
 

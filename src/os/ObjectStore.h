@@ -38,7 +38,7 @@ using std::vector;
 # define MIN(a,b) ((a) < (b) ? (a):(b))
 #endif
 
-typedef void *collection_list_handle_t;
+typedef __u64 collection_list_handle_t;
 
 /*
  * low-level interface to the local OSD file system

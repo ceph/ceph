@@ -68,9 +68,23 @@ int main(int argc, const char **argv)
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
 
+  Rados::ListCtx ctx;
+  int entries;
+  do {
+    vector<object_t> vec;
+    r = rados.list(pool, 1, vec, ctx);
+    entries = vec.size();
+    cout << "list result=" << r << " entries=" << entries << std::endl;
+    vector<object_t>::iterator iter;
+    for (iter = vec.begin(); iter != vec.end(); ++iter) {
+      cout << *iter << std::endl;
+    }
+  } while (entries);
+#if 0
   r = rados.remove(pool, oid);
   cout << "remove result=" << r << std::endl;
   rados.close_pool(pool);
+#endif
 
   return 0;
 }

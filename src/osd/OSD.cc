@@ -3408,7 +3408,11 @@ void OSD::handle_op(MOSDOp *op)
   throttle_op_queue();
 
   // calc actual pgid
-  pg_t pgid = osdmap->raw_pg_to_pg(op->get_pg());
+  pg_t pgid;
+  if (op->get_flags() & CEPH_OSD_FLAG_PGOP)
+    pgid = op->get_pg();
+  else
+    pgid = osdmap->raw_pg_to_pg(op->get_pg());
 
   // get and lock *pg.
   PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;

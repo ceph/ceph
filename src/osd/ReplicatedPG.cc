@@ -14,6 +14,7 @@
 
 #include "ReplicatedPG.h"
 #include "OSD.h"
+#include "PGLS.h"
 
 #include "common/arch.h"
 #include "common/Logger.h"
@@ -368,7 +369,7 @@ bool ReplicatedPG::preprocess_op(MOSDOp *op, utime_t now)
 
 void ReplicatedPG::do_pg_op(MOSDOp *op)
 {
-  dout(15) << "do_pg_op " << *op << dendl;
+  dout(0) << "do_pg_op " << *op << dendl;
 
   //bufferlist& indata = op->get_data();
   bufferlist outdata;
@@ -376,14 +377,19 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
   for (vector<ceph_osd_op>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     switch (p->op) {
-
     case CEPH_OSD_OP_PGLS:
       {
-	vector<sobject_t> pobjects;
-	// ???
-	vector<object_t> objects;
-	// ???
-	::encode(objects, outdata);
+        dout(10) << " pgls pg=" << op->get_pg() << dendl;
+	// read into a buffer
+        PGLSResponse response;
+        response.handle = (collection_list_handle_t)(__u64)(p->pgls_cookie);
+	//result = osd->store->collection_list_partial(op->get_pg().to_coll(), response.entries, p->length,
+	//&response.handle);
+#warning fixme
+	if (!result) {
+	  ::encode(response, outdata);
+        }
+	dout(10) << " pgls result=" << result << " outdata.length()=" << outdata.length() << dendl;
       }
       break;
 
@@ -411,10 +417,11 @@ void ReplicatedPG::do_op(MOSDOp *op)
 {
   osd->logger->inc(l_osd_op);
 
-  if (op->get_flags() & CEPH_OSD_FLAG_PGOP)
+  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
-  dout(15) << "do_op " << *op << dendl;
+  dout(0) << "do_op " << *op << dendl;
+  dout(0) << "do_op flags=" << hex << op->get_flags() << dec << dendl;
 
   entity_inst_t client = op->get_source_inst();
 

@@ -292,6 +292,8 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_RDCALL: return "rdcall";
 	case CEPH_OSD_OP_WRCALL: return "wrcall";
 
+	case CEPH_OSD_OP_PGLS: return "pgls";
+
 	default: return "???";
 	}
 }
@@ -339,6 +341,9 @@ struct ceph_osd_op {
 			__u8 argc;
 			__le32 indata_len;
 		} __attribute__ ((packed));
+		struct {
+			__le64 pgls_cookie, count;
+		};
 	};
 } __attribute__ ((packed));
 

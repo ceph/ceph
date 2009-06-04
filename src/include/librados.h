@@ -20,10 +20,13 @@ extern "C" {
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
 void rados_deinitialize();
 
+typedef void *rados_list_ctx_t;
+
 /* pools */
 typedef int rados_pool_t;
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
+int rados_list(rados_pool_t pool, int max, char *entries, rados_list_ctx_t *ctx);
 
 /* read/write objects */
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
@@ -68,7 +71,13 @@ public:
   int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
              bufferlist& inbl, bufferlist& outbl);
 
-  
+ struct ListCtx {
+   void *ctx;
+   ListCtx() : ctx(NULL) {}
+ };
+
+  int list(rados_pool_t pool, int max, vector<object_t>& entries, Rados::ListCtx& ctx);
+
   // -- aio --
   struct AioCompletion {
     void *pc;

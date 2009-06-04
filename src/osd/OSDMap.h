@@ -675,6 +675,22 @@ private:
     return layout;
   }
 
+  int get_pg_num(int pg_pool)
+  {
+    pg_pool_t pool = get_pg_pool(pg_pool);
+    return pool.get_pg_num();
+  }
+
+  int get_pg_layout(int pg_pool, int seed, ceph_object_layout& layout) {
+    pg_pool_t pool = get_pg_pool(pg_pool);
+
+    pg_t pgid = pg_t(seed, pg_pool, -1);
+    layout.ol_pgid = pgid.u.pg64;
+    layout.ol_stripe_unit = 0;
+
+    return pool.get_pg_num();
+  }
+
   // pg -> (osd list)
   int pg_to_osds(pg_t pg, vector<int>& osds) {
     // map to osds[]
