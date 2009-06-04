@@ -288,6 +288,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
 
+	ci->i_as_size = 0;
 	ci->i_truncate_seq = 0;
 	ci->i_truncate_size = 0;
 	ci->i_truncate_pending = 0;
@@ -364,6 +365,8 @@ int ceph_fill_file_size(struct inode *inode, int issued,
 		inode->i_size = size;
 		inode->i_blocks = (size + (1<<9) - 1) >> 9;
 		ci->i_reported_size = size;
+		if (ci->i_as_size < size)
+			ci->i_as_size = size;
 		if (truncate_seq != ci->i_truncate_seq) {
 			dout(10, "truncate_seq %u -> %u\n",
 			     ci->i_truncate_seq, truncate_seq);
@@ -1153,6 +1156,8 @@ int ceph_inode_set_size(struct inode *inode, loff_t size)
 	dout(30, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
 	inode->i_size = size;
 	inode->i_blocks = (size + (1 << 9) - 1) >> 9;
+	if (ci->i_as_size < size)
+		ci->i_as_size = size;
 
 	/* tell the MDS if we are approaching max_size */
 	if ((size << 1) >= ci->i_max_size &&
@@ -1256,12 +1261,27 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 	u64 to;
 	int wrbuffer_refs, wake = 0;
 
+retry:
 	spin_lock(&inode->i_lock);
 	if (ci->i_truncate_pending == 0) {
 		dout(10, "__do_pending_vmtruncate %p none pending\n", inode);
 		spin_unlock(&inode->i_lock);
 		return;
 	}
+
+	/*
+	 * make sure any dirty snapped pages are flushed before we
+	 * possibly truncate them.. so write AND block!
+	 */
+	if (ci->i_wrbuffer_ref_head < ci->i_wrbuffer_ref) {
+		dout(10, "__do_pending_vmtruncate %p flushing snaps first\n",
+		     inode);
+		spin_unlock(&inode->i_lock);
+		filemap_write_and_wait_range(&inode->i_data, 0,
+					     CEPH_FILE_MAX_SIZE);
+		goto retry;
+	}
+
 	to = ci->i_truncate_size;
 	wrbuffer_refs = ci->i_wrbuffer_ref;
 	dout(10, "__do_pending_vmtruncate %p (%d) to %lld\n", inode,
@@ -1271,6 +1291,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 	truncate_inode_pages(inode->i_mapping, to);
 
 	spin_lock(&inode->i_lock);
+	ci->i_as_size = to;
 	ci->i_truncate_pending--;
 	if (ci->i_truncate_pending == 0)
 		wake = 1;
@@ -1281,6 +1302,7 @@ void __ceph_do_pending_vmtruncate(struct inode *inode)
 	if (wake)
 		wake_up(&ci->i_cap_wq);
 }
+
 
 /*
  * symlinks
@@ -1425,10 +1447,14 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		}
 		if ((issued & CEPH_CAP_FILE_EXCL) &&
 		    attr->ia_size > inode->i_size) {
-			ci->i_truncate_size = attr->ia_size;
-			ci->i_truncate_pending++;
-			queue_trunc = 1;
 			inode->i_size = attr->ia_size;
+			if (ci->i_as_size < attr->ia_size) {
+				ci->i_as_size = attr->ia_size;
+			} else {
+				ci->i_truncate_size = attr->ia_size;
+				ci->i_truncate_pending++;
+				queue_trunc = 1;
+			}
 			inode->i_blocks =
 				(attr->ia_size + (1 << 9) - 1) >> 9;
 			inode->i_ctime = attr->ia_ctime;

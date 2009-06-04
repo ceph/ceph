@@ -403,9 +403,11 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	osdc = &ceph_inode_to_client(inode)->osdc;
 
 	/* is this a partial page at end of file? */
-	i_size = i_size_read(inode);
+	spin_lock(&inode->i_lock);
+	i_size = ci->i_as_size;
 	if (i_size < page_off + len)
 		len = i_size - page_off;
+	spin_unlock(&inode->i_lock);
 	dout(10, "writepage %p page %p index %lu on %llu~%u\n",
 	     inode, page, page->index, page_off, len);
 
@@ -641,9 +643,9 @@ retry:
 		int pvec_pages, locked_pages;
 		struct page *page;
 		int want;
-		u64 offset, len;
+		u64 offset, len, as_size;
 		struct ceph_osd_request_head *reqhead;
-		struct ceph_osd_op *op;
+		struct ceph_osd_op *op;		
 
 		next = 0;
 		locked_pages = 0;
@@ -695,9 +697,11 @@ get_more_pages:
 				dout(20, "waiting on writeback %p\n", page);
 				wait_on_page_writeback(page);
 			}
-			if (page_offset(page) >= i_size_read(inode)) {
-				dout(20, "%p past eof %llu\n", page,
-				     i_size_read(inode));
+			spin_lock(&inode->i_lock);
+			as_size = ci->i_as_size;
+			spin_unlock(&inode->i_lock);
+			if (page_offset(page) >= as_size) {
+				dout(20, "%p > as_size %llu\n", page, as_size);
 				done = 1;
 				unlock_page(page);
 				break;
@@ -789,8 +793,10 @@ get_more_pages:
 
 		/* submit the write */
 		offset = req->r_pages[0]->index << PAGE_CACHE_SHIFT;
-		len = min(i_size_read(inode) - offset,
+		spin_lock(&inode->i_lock);
+		len = min(ci->i_as_size - offset,
 			  (u64)locked_pages << PAGE_CACHE_SHIFT);
+		spin_unlock(&inode->i_lock);
 		dout(10, "writepages got %d pages at %llu~%llu\n",
 		     locked_pages, offset, len);
 
