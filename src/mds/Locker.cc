@@ -1767,13 +1767,11 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " wanted " << ccap_string(wanted)
+	   << " max_size " << m->get_max_size()
 	   << " on " << *in << dendl;
   assert(in->is_auth());
   int client = m->get_source().num();
   inode_t *latest = in->get_projected_inode();
-
-  if (in->is_root())
-    return false;   // FIXME?
 
   // increase or zero max_size?
   __u64 size = m->get_size();
