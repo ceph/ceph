@@ -1311,6 +1311,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	int release = 0, dirtied = 0;
 	int mask = 0;
 	int err = 0;
+	int queue_trunc = 0;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -1423,7 +1424,9 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		}
 		if ((issued & CEPH_CAP_FILE_EXCL) &&
 		    attr->ia_size > inode->i_size) {
-			vmtruncate(inode, attr->ia_size);
+			ci->i_truncate_size = attr->ia_size;
+			ci->i_truncate_pending++;
+			queue_trunc = 1;
 			inode->i_size = attr->ia_size;
 			inode->i_blocks =
 				(attr->ia_size + (1 << 9) - 1) >> 9;
@@ -1456,6 +1459,9 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 
 	release &= issued;
 	spin_unlock(&inode->i_lock);
+
+	if (queue_trunc)
+		__ceph_do_pending_vmtruncate(inode);
 
 	if (mask) {
 		req->r_inode = igrab(inode);
