@@ -320,7 +320,6 @@ struct ceph_inode_info {
 
 	int i_nr_by_mode[CEPH_FILE_MODE_NUM];  /* open file counts */
 
-	loff_t i_as_size;          /* address space size (pre-truncation) */
 	u32 i_truncate_seq;        /* last truncate to smaller size */
 	u64 i_truncate_size;       /*  and the size we last truncated down to */
 	int i_truncate_pending;    /*  still need to call vmtruncate */
@@ -804,6 +803,7 @@ extern int ceph_inode_set_size(struct inode *inode, loff_t size);
 extern void ceph_inode_writeback(struct work_struct *work);
 extern void ceph_vmtruncate_work(struct work_struct *work);
 extern void __ceph_do_pending_vmtruncate(struct inode *inode);
+extern void __ceph_queue_vmtruncate(struct inode *inode);
 
 extern int ceph_do_getattr(struct inode *inode, int mask);
 extern int ceph_permission(struct inode *inode, int mask);

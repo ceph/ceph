@@ -288,7 +288,6 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	for (i = 0; i < CEPH_FILE_MODE_NUM; i++)
 		ci->i_nr_by_mode[i] = 0;
 
-	ci->i_as_size = 0;
 	ci->i_truncate_seq = 0;
 	ci->i_truncate_size = 0;
 	ci->i_truncate_pending = 0;
@@ -365,8 +364,6 @@ int ceph_fill_file_size(struct inode *inode, int issued,
 		inode->i_size = size;
 		inode->i_blocks = (size + (1<<9) - 1) >> 9;
 		ci->i_reported_size = size;
-		if (ci->i_as_size < size)
-			ci->i_as_size = size;
 		if (truncate_seq != ci->i_truncate_seq) {
 			dout(10, "truncate_seq %u -> %u\n",
 			     ci->i_truncate_seq, truncate_seq);
@@ -1156,8 +1153,6 @@ int ceph_inode_set_size(struct inode *inode, loff_t size)
 	dout(30, "set_size %p %llu -> %llu\n", inode, inode->i_size, size);
 	inode->i_size = size;
 	inode->i_blocks = (size + (1 << 9) - 1) >> 9;
-	if (ci->i_as_size < size)
-		ci->i_as_size = size;
 
 	/* tell the MDS if we are approaching max_size */
 	if ((size << 1) >= ci->i_max_size &&
@@ -1291,7 +1286,6 @@ retry:
 	truncate_inode_pages(inode->i_mapping, to);
 
 	spin_lock(&inode->i_lock);
-	ci->i_as_size = to;
 	ci->i_truncate_pending--;
 	if (ci->i_truncate_pending == 0)
 		wake = 1;
@@ -1448,9 +1442,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 		if ((issued & CEPH_CAP_FILE_EXCL) &&
 		    attr->ia_size > inode->i_size) {
 			inode->i_size = attr->ia_size;
-			if (ci->i_as_size < attr->ia_size) {
-				ci->i_as_size = attr->ia_size;
-			} else {
+			if (attr->ia_size < inode->i_size) {
 				ci->i_truncate_size = attr->ia_size;
 				ci->i_truncate_pending++;
 				queue_trunc = 1;
