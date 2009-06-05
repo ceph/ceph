@@ -407,6 +407,9 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		ceph_decode_copy(p, &map->pg_pool[i].v,
 				 sizeof(map->pg_pool->v));
 		calc_pg_masks(&map->pg_pool[i]);
+		p += le32_to_cpu(map->pg_pool[i].v.num_snaps) * sizeof(u64);
+		p += le32_to_cpu(map->pg_pool[i].v.num_removed_snap_intervals)
+			* sizeof(u64) * 2;
 	}
 
 	ceph_decode_32_safe(p, end, map->flags, bad);
