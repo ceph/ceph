@@ -13,8 +13,8 @@ extern "C" {
 #include <string.h>
 #include <stdbool.h>
 
-#include "include/msgr.h"
-#include "include/rados.h"
+#include "msgr.h"
+#include "rados.h"
 
 /* initialization */
 int rados_initialize(int argc, const char **argv); /* arguments are optional */
