@@ -472,8 +472,14 @@ void ReplicatedPG::do_op(MOSDOp *op)
     ctx->mtime = op->get_mtime();
     
     // snap
-    ctx->snapc.seq = op->get_snap_seq();
-    ctx->snapc.snaps = op->get_snaps();
+    if (op->get_snap_seq()) {
+      // client specified snapc
+      ctx->snapc.seq = op->get_snap_seq();
+      ctx->snapc.snaps = op->get_snaps();
+    } else {
+      // use pool's snapc
+      ctx->snapc = pool->snapc;
+    }
 
     // set version in op, for benefit of client and our eventual reply
     op->set_version(ctx->at_version);

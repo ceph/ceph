@@ -35,7 +35,6 @@ later
 
 rados
 - snaps
-  - use default pool contexts
 - merge pgs
 - destroy pg_pools
 - autosize pg_pools?
