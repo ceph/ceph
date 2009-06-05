@@ -49,9 +49,13 @@ void MemoryModel::_sample(snap *psnap)
 
     const char *start = line.c_str();
     const char *dash = start;
-    while (*dash != '-') dash++;
+    while (*dash && *dash != '-') dash++;
+    if (!*dash)
+      continue;
     const char *end = dash + 1;
-    while (*end != ' ') end++;
+    while (*end && *end != ' ') end++;
+    if (!*end)
+      continue;
     unsigned long long as = strtoll(start, 0, 16);
     unsigned long long ae = strtoll(dash+1, 0, 16);
 
