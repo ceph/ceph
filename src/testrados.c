@@ -20,7 +20,7 @@
 
 int main(int argc, const char **argv) 
 {
-  if (rados_initialize(argc, argv)) {
+  if (rados_initialize(argc, argv) < 0) {
     printf("error initializing\n");
     exit(1);
   }

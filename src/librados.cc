@@ -716,7 +716,7 @@ extern "C" int rados_initialize(int argc, const char **argv)
 
     if (!radosp) {
       dout(0) <<  "radosp is NULL" << dendl;
-      ret = ENOMEM;
+      ret = -ENOMEM;
       goto out;
     }
     radosp->init();
