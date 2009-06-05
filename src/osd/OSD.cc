@@ -558,15 +558,53 @@ int OSD::read_superblock()
 // ======================================================
 // PG's
 
+PGPool *OSD::_lookup_pool(int id)
+{
+  if (pool_map.count(id))
+    return pool_map[id];
+  return 0;
+}
+
+PGPool* OSD::_get_pool(int id)
+{
+  PGPool *p = _lookup_pool(id);
+  if (!p) {
+    p = new PGPool(id);
+    pool_map[id] = p;
+    p->get();
+    
+    const pg_pool_t& pi = osdmap->get_pg_pool(id);
+    p->info = pi;
+    p->snapc = pi.get_snap_context();
+  }
+  dout(10) << "_get_pool " << p->id << " " << p->num_pg << " -> " << (p->num_pg+1) << dendl;
+  p->num_pg++;
+  return p;
+}
+
+void OSD::_put_pool(int id)
+{
+  PGPool *p = _lookup_pool(id);
+  dout(10) << "_put_pool " << id << " " << p->num_pg << " -> " << (p->num_pg-1) << dendl;
+  p->num_pg--;
+  if (!p->num_pg) {
+    pool_map.erase(id);
+    p->put();
+  }
+}
+
+
 PG *OSD::_open_lock_pg(pg_t pgid, bool no_lockdep_check)
 {
   assert(osd_lock.is_locked());
+
+  PGPool *pool = _get_pool(pgid.pool());
 
   // create
   PG *pg;
   sobject_t logoid = make_pg_log_oid(pgid);
   if (osdmap->get_pg_type(pgid) == CEPH_PG_TYPE_REP)
-    pg = new ReplicatedPG(this, pgid, logoid);
+    pg = new ReplicatedPG(this, pool, pgid, logoid);
   //else if (pgid.is_raid4())
   //pg = new RAID4PG(this, pgid);
   else 
@@ -695,6 +733,8 @@ void OSD::_remove_unlock_pg(PG *pg)
 
   // remove from map
   pg_map.erase(pgid);
+
+  _put_pool(pgid.pool());
 
   // unlock, and probably delete
   pg->unlock();
@@ -1876,10 +1916,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap *newmap = new OSDMap;
       newmap->decode(bl);
 
-      // fake inc->removed_snaps
-      inc.removed_snaps = newmap->get_removed_snaps();
-      inc.removed_snaps.subtract(osdmap->get_removed_snaps());
-
       // kill connections to newly down osds
       set<int> old;
       osdmap->get_all_osds(old);
@@ -1897,9 +1933,29 @@ void OSD::handle_osd_map(MOSDMap *m)
       break;
     }
 
+    // update pools
+    for (map<int, PGPool*>::iterator p = pool_map.begin();
+	 p != pool_map.end();
+	 p++) {
+      const pg_pool_t& pi = osdmap->get_pg_pool(p->first);
+      if (pi.get_snap_epoch() == cur+1) {
+	PGPool *pool = p->second;
+	pool->new_removed_snaps = pi.removed_snaps;
+	pool->new_removed_snaps.subtract(pool->info.removed_snaps);
+	dout(10) << " pool " << p->first << " removed_snaps " << pool->info.removed_snaps
+		 << " -> " << pi.removed_snaps
+		 << ", new is " << pool->new_removed_snaps << ")"
+		 << dendl;
+	pool->info = pi;
+	pool->snapc = pi.get_snap_context();
+      } else {
+	dout(10) << " pool " << p->first << " unchanged (snap_epoch = " << pi.get_snap_epoch() << ")" << dendl;
+      }
+    }
+
     cur++;
     superblock.current_epoch = cur;
-    advance_map(t, inc.removed_snaps);
+    advance_map(t);
     advanced = true;
     had_map_since = g_clock.now();
   }
@@ -1967,13 +2023,12 @@ void OSD::handle_osd_map(MOSDMap *m)
  * scan placement groups, initiate any replication
  * activities.
  */
-void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps)
+void OSD::advance_map(ObjectStore::Transaction& t)
 {
   assert(osd_lock.is_locked());
 
   dout(7) << "advance_map epoch " << osdmap->get_epoch() 
           << "  " << pg_map.size() << " pgs"
-	  << " removed_snaps " << removed_snaps
           << dendl;
 
   if (!up_epoch &&
@@ -2026,15 +2081,15 @@ void OSD::advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& remov
     pg->lock();
 
     // adjust removed_snaps?
-    if (!removed_snaps.empty()) {
-      for (map<snapid_t,snapid_t>::iterator p = removed_snaps.m.begin();
-	   p != removed_snaps.m.end();
+    if (!pg->pool->new_removed_snaps.empty()) {
+      for (map<snapid_t,snapid_t>::iterator p = pg->pool->new_removed_snaps.m.begin();
+	   p != pg->pool->new_removed_snaps.m.end();
 	   p++)
 	for (snapid_t t = 0; t < p->second; ++t)
-	  pg->info.dead_snaps.insert(p->first + t);
-      dout(10) << *pg << " dead_snaps now " << pg->info.dead_snaps << dendl;
+	  pg->info.snap_trimq.insert(p->first + t);
+      dout(10) << *pg << " snap_trimq now " << pg->info.snap_trimq << dendl;
       pg->dirty_info = true;
-    }   
+    }
     
     // no change?
     if (tacting == pg->acting && (pg->is_active() || !pg->prior_set_affected(osdmap))) {
@@ -2184,7 +2239,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
     pg->lock();
     if (pg->is_active()) {
       // update started counter
-      if (!pg->info.dead_snaps.empty())
+      if (!pg->info.snap_trimq.empty())
 	pg->queue_snap_trim();
     }
     else if (pg->is_primary() &&

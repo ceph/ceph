@@ -42,6 +42,27 @@ class MOSDSubOp;
 class MOSDSubOpReply;
 class MOSDPGInfo;
 
+
+struct PGPool {
+  int id;
+  atomic_t nref;
+  int num_pg;
+
+  pg_pool_t info;      
+  SnapContext snapc;   // the default pool snapc, ready to go.
+
+  interval_set<snapid_t> new_removed_snaps;  // newly removed in the last epoch
+
+  PGPool(int i) : id(i), num_pg(0) {}
+
+  void get() { nref.inc(); }
+  void put() {
+    if (nref.dec() == 0)
+      delete this;
+  }
+};
+
+
 /** PG - Replica Placement Group
  *
  */
@@ -66,7 +87,7 @@ public:
     eversion_t log_bottom;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
-    set<snapid_t> dead_snaps; // snaps we need to trim
+    set<snapid_t> snap_trimq; // snaps we need to trim
 
     pg_stat_t stats;
 
@@ -117,7 +138,7 @@ public:
       ::encode(log_backlog, bl);
       ::encode(stats, bl);
       history.encode(bl);
-      ::encode(dead_snaps, bl);
+      ::encode(snap_trimq, bl);
     }
     void decode(bufferlist::iterator &bl) {
       ::decode(pgid, bl);
@@ -127,7 +148,7 @@ public:
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
       history.decode(bl);
-      ::decode(dead_snaps, bl);
+      ::decode(snap_trimq, bl);
     }
   };
   WRITE_CLASS_ENCODER(Info::History)
@@ -536,6 +557,7 @@ public:
   /*** PG ****/
 protected:
   OSD *osd;
+  PGPool *pool;
 
   /** locking and reference counting.
    * I destroy myself when the reference count hits zero.
@@ -760,8 +782,8 @@ public:
 
 
  public:  
-  PG(OSD *o, pg_t p, const sobject_t& oid) : 
-    osd(o), 
+  PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
+    osd(o), pool(_pool),
     _lock("PG::_lock"),
     ref(0), deleted(false), dirty_info(false), dirty_log(false),
     info(p), log_oid(oid),
@@ -776,8 +798,11 @@ public:
     pg_stats_valid(false),
     finish_sync_event(NULL)
   {
+    pool->get();
   }
-  virtual ~PG() { }
+  virtual ~PG() {
+    pool->put();
+  }
   
   pg_t       get_pgid() const { return info.pgid; }
   int        get_nrep() const { return acting.size(); }
@@ -975,8 +1000,8 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     if (lost)
       out << " l=" << lost;
   }
-  if (pg.info.dead_snaps.size())
-    out << " dead=" << pg.info.dead_snaps;
+  if (pg.info.snap_trimq.size())
+    out << " snaptrimq=" << pg.info.snap_trimq;
   out << "]";
 
 

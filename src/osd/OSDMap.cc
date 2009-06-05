@@ -25,10 +25,13 @@ void OSDMap::print(ostream& out)
       << "created " << get_created() << "\n"
       << "modifed " << get_modified() << "\n"
       << std::endl;
-  for (map<int,pg_pool_t>::iterator p = pools.begin(); p != pools.end(); p++)
+  for (map<int,pg_pool_t>::iterator p = pools.begin(); p != pools.end(); p++) {
     out << "pg_pool " << p->first
 	<< " '" << pool_name[p->first]
 	<< "' " << p->second << "\n";
+    if (!p->second.removed_snaps.empty())
+      out << "\tremoved_snaps " << p->second.removed_snaps << "\n";
+  }
   out << std::endl;
 
   out << "max_osd " << get_max_osd() << "\n";
@@ -57,10 +60,6 @@ void OSDMap::print(ostream& out)
     out << "blacklist " << p->first << " expires " << p->second << "\n";
   
   // ignore pg_swap_primary
-  
-  out << "max_snap " << get_max_snap() << "\n"
-      << "removed_snaps " << get_removed_snaps() << "\n"
-      << std::endl;
 }
 
 void OSDMap::print_summary(ostream& out)

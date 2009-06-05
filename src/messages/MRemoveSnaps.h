@@ -18,11 +18,11 @@
 #include "msg/Message.h"
 
 struct MRemoveSnaps : public Message {
-  vector<snapid_t> snaps;
+  map<int, vector<snapid_t> > snaps;
   
   MRemoveSnaps() : 
     Message(MSG_REMOVE_SNAPS) { }
-  MRemoveSnaps(vector<snapid_t>& s) : 
+  MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
     Message(MSG_REMOVE_SNAPS) {
     snaps.swap(s);
   }

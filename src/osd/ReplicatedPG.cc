@@ -663,9 +663,9 @@ bool ReplicatedPG::snap_trimmer()
   lock();
   dout(10) << "snap_trimmer start" << dendl;
 
-  while (info.dead_snaps.size() &&
+  while (info.snap_trimq.size() &&
 	 is_active()) {
-    snapid_t sn = *info.dead_snaps.begin();
+    snapid_t sn = *info.snap_trimq.begin();
     coll_t c = info.pgid.to_snap_coll(sn);
     vector<sobject_t> ls;
     osd->store->collection_list(c, ls);
@@ -699,7 +699,7 @@ bool ReplicatedPG::snap_trimmer()
       // remove snaps
       vector<snapid_t> newsnaps;
       for (unsigned i=0; i<snaps.size(); i++)
-	if (!osd->osdmap->is_removed_snap(snaps[i]))
+	if (!osd->_lookup_pool(info.pgid.pool())->info.is_removed_snap(snaps[i]))
 	  newsnaps.push_back(snaps[i]);
 	else {
 	  vector<snapid_t>::iterator q = snapset.snaps.begin();
@@ -784,7 +784,7 @@ bool ReplicatedPG::snap_trimmer()
     t.remove_collection(c);
     osd->store->apply_transaction(t);
  
-    info.dead_snaps.erase(sn);
+    info.snap_trimq.erase(sn);
   }  
 
   // done

@@ -610,12 +610,21 @@ bool OSDMonitor::preprocess_remove_snaps(MRemoveSnaps *m)
 {
   dout(7) << "preprocess_remove_snaps " << *m << dendl;
   
-  for (vector<snapid_t>::iterator p = m->snaps.begin(); 
-       p != m->snaps.end();
-       p++) {
-    if (*p > osdmap.max_snap ||
-	!osdmap.removed_snaps.contains(*p))
-      return false;
+  for (map<int, vector<snapid_t> >::iterator q = m->snaps.begin();
+       q != m->snaps.end();
+       q++) {
+    if (!osdmap.have_pg_pool(q->first)) {
+      dout(10) << " ignoring removed_snaps " << q->second << " on non-existant pool " << q->first << dendl;
+      continue;
+    }
+    const pg_pool_t& pi = osdmap.get_pg_pool(q->first);
+    for (vector<snapid_t>::iterator p = q->second.begin(); 
+	 p != q->second.end();
+	 p++) {
+      if (*p > pi.get_snap_seq() ||
+	  !pi.removed_snaps.contains(*p))
+	return false;
+    }
   }
   delete m;
   return true;
@@ -625,26 +634,29 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
 {
   dout(7) << "prepare_remove_snaps " << *m << dendl;
 
-  snapid_t max;
-  for (vector<snapid_t>::iterator p = m->snaps.begin(); 
+  for (map<int, vector<snapid_t> >::iterator p = m->snaps.begin(); 
        p != m->snaps.end();
        p++) {
-    if (*p > max)
-      max = *p;
-
-    if (!osdmap.removed_snaps.contains(*p) &&
-	!pending_inc.removed_snaps.contains(*p)) {
-      dout(10) << " adding " << *p << " to removed_snaps" << dendl;
-      pending_inc.removed_snaps.insert(*p);
+    pg_pool_t& pi = osdmap.pools[p->first];
+    for (vector<snapid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      if (!pi.removed_snaps.contains(*q) &&
+	  (!pending_inc.new_pools.count(p->first) ||
+	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
+	if (pending_inc.new_pools.count(p->first) == 0)
+	  pending_inc.new_pools[p->first] = pi;
+	pg_pool_t& newpi = pending_inc.new_pools[p->first];
+	newpi.removed_snaps.insert(*q);
+	dout(10) << " pool " << p->first << " removed_snaps added " << *q
+		 << " (now " << newpi.removed_snaps << ")" << dendl;
+	if (*q > newpi.get_snap_seq()) {
+	  dout(10) << " pool " << p->first << " snap_seq " << newpi.get_snap_seq() << " -> " << *q << dendl;
+	  newpi.set_snap_seq(*q);
+	}
+	newpi.set_snap_epoch(pending_inc.epoch);
+      }
     }
-  }
-
-  if (max > osdmap.max_snap && 
-      max > pending_inc.new_max_snap) {
-    dout(10) << " new_max_snap " << max << dendl;
-    pending_inc.new_max_snap = max;
-  } else {
-    dout(10) << " max_snap " << osdmap.max_snap << " still >= " << max << dendl;
   }
 
   delete m;

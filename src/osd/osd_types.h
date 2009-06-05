@@ -435,6 +435,9 @@ struct pg_pool_t {
   epoch_t get_snap_epoch() const { return v.snap_epoch; }
   snapid_t get_snap_seq() const { return snapid_t(v.snap_seq); }
 
+  void set_snap_seq(snapid_t s) { v.snap_seq = s; }
+  void set_snap_epoch(epoch_t e) { v.snap_epoch = e; }
+
   bool is_rep()   const { return get_type() == CEPH_PG_TYPE_REP; }
   bool is_raid4() const { return get_type() == CEPH_PG_TYPE_RAID4; }
 
@@ -463,7 +466,7 @@ struct pg_pool_t {
     lpgp_num_mask = (1 << calc_bits_of(v.lpgp_num-1)) - 1;
   }
 
-  bool is_removed_snap(snapid_t s) {
+  bool is_removed_snap(snapid_t s) const {
     if (snaps.size())
       return snaps.count(s) == 0;
     return s <= get_snap_seq() && removed_snaps.contains(s);

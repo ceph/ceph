@@ -26,7 +26,7 @@ public:
 protected:
   snapid_t last_snap;
   map<snapid_t, SnapInfo> snaps;
-  set<snapid_t> need_to_purge;
+  map<int, set<snapid_t> > need_to_purge;
   
   map<version_t, SnapInfo> pending_create;
   map<version_t, snapid_t> pending_destroy;

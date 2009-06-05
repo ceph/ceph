@@ -1313,7 +1313,7 @@ void PG::activate(ObjectStore::Transaction& t,
   // clean up stray objects, snaps
   clean_up_local(t); 
 
-  if (!info.dead_snaps.empty())
+  if (!info.snap_trimq.empty())
     queue_snap_trim();
 
   // init complete pointer

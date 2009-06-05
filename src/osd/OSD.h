@@ -397,7 +397,7 @@ private:
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   
-  void advance_map(ObjectStore::Transaction& t, interval_set<snapid_t>& removed_snaps);
+  void advance_map(ObjectStore::Transaction& t);
   void activate_map(ObjectStore::Transaction& t);
 
   // osd map cache (past osd maps)
@@ -427,8 +427,13 @@ public:
 
 protected:
   // -- placement groups --
+  map<int, PGPool*> pool_map;
   hash_map<pg_t, PG*> pg_map;
   hash_map<pg_t, list<Message*> > waiting_for_pg;
+
+  PGPool *_lookup_pool(int id);
+  PGPool *_get_pool(int id);
+  void _put_pool(int id);
 
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);

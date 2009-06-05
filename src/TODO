@@ -34,6 +34,9 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
+- snaps
+  - use default pool contexts
+  - make snap removal work with the default pools (fix new_removed_snaps logic in OSD.cc)
 - merge pgs
 - destroy pg_pools
 - autosize pg_pools?

@@ -114,7 +114,12 @@ void SnapServer::_commit(version_t tid)
     snapid_t sn = pending_destroy[tid];
     dout(7) << "commit " << tid << " destroy " << sn << dendl;
     snaps.erase(sn);
-    need_to_purge.insert(sn);
+
+    for (vector<__u32>::const_iterator p = mds->mdsmap->get_data_pg_pools().begin();
+	 p != mds->mdsmap->get_data_pg_pools().end();
+	 p++)
+      need_to_purge[*p].insert(sn);
+
     pending_destroy.erase(tid);
   }
   else if (pending_noop.count(tid)) {
@@ -157,14 +162,20 @@ void SnapServer::_rollback(version_t tid)
 void SnapServer::_server_update(bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
-  vector<snapid_t> purge;
+  map<int, vector<snapid_t> > purge;
   ::decode(purge, p);
 
   dout(7) << "_server_update purged " << purge << dendl;
-  for (vector<snapid_t>::iterator p = purge.begin();
+  for (map<int, vector<snapid_t> >::iterator p = purge.begin();
        p != purge.end();
-       p++)
-    need_to_purge.erase(*p);
+       p++) {
+    for (vector<snapid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++)
+      need_to_purge[p->first].erase(*q);
+    if (need_to_purge[p->first].empty())
+      need_to_purge.erase(p->first);
+  }
 
   version++;
 }
@@ -208,30 +219,36 @@ void SnapServer::check_osd_map(bool force)
   }
   dout(10) << "check_osd_map need_to_purge=" << need_to_purge << dendl;
 
-  vector<snapid_t> purge;
-  vector<snapid_t> purged;
+  map<int, vector<snapid_t> > all_purge;
+  map<int, vector<snapid_t> > all_purged;
 
-  for (set<snapid_t>::iterator p = need_to_purge.begin();
+  for (map<int, set<snapid_t> >::iterator p = need_to_purge.begin();
        p != need_to_purge.end();
        p++) {
-    if (mds->osdmap->is_removed_snap(*p)) {
-      dout(10) << " osdmap marks " << *p << " as removed" << dendl;
-      purged.push_back(*p);
-    } else {
-      purge.push_back(*p);
+    int id = p->first;
+    const pg_pool_t& pi = mds->osdmap->get_pg_pool(id);
+    for (set<snapid_t>::iterator q = p->second.begin();
+	 q != p->second.end();
+	 q++) {
+      if (pi.is_removed_snap(*q)) {
+	dout(10) << " osdmap marks " << *q << " as removed" << dendl;
+	all_purged[id].push_back(*q);
+      } else {
+	all_purge[id].push_back(*q);
+      }
     }
   }
 
-  if (purged.size()) {
+  if (all_purged.size()) {
     // prepare to remove from need_to_purge list
     bufferlist bl;
-    ::encode(purged, bl);
+    ::encode(all_purged, bl);
     do_server_update(bl);
   }
 
-  if (!purge.empty()) {
-    dout(10) << "requesting removal of " << purge << dendl;
-    MRemoveSnaps *m = new MRemoveSnaps(purge);
+  if (!all_purge.empty()) {
+    dout(10) << "requesting removal of " << all_purge << dendl;
+    MRemoveSnaps *m = new MRemoveSnaps(all_purge);
     int mon = mds->monmap->pick_mon();
     mds->messenger->send_message(m, mds->monmap->get_inst(mon));
   }
