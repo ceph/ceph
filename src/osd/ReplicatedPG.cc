@@ -384,7 +384,7 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(__u64)(p->pgls_cookie);
         vector<sobject_t> sentries;
-	result = osd->store->collection_list_partial(op->get_pg().to_coll(), sentries, p->length,
+	result = osd->store->collection_list_partial(op->get_pg().to_coll(), op->get_snapid(), sentries, p->length,
 	                                             &response.handle);
 	if (!result) {
           vector<sobject_t>::iterator iter;

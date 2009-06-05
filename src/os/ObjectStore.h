@@ -464,7 +464,7 @@ public:
   virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
   virtual int collection_getattrs(coll_t cid, map<nstring,bufferptr> &aset) = 0;
   virtual bool collection_empty(coll_t c) = 0;
-  virtual int collection_list_partial(coll_t c, vector<sobject_t>& o, int count, collection_list_handle_t *handle) = 0;
+  virtual int collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& o, int count, collection_list_handle_t *handle) = 0;
   virtual int collection_list(coll_t c, vector<sobject_t>& o) = 0;
 
   /*

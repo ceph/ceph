@@ -23,9 +23,10 @@ void rados_deinitialize();
 typedef void *rados_list_ctx_t;
 
 /* pools */
-typedef int rados_pool_t;
+typedef void *rados_pool_t;
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
+void rados_set_snap(rados_pool_t pool, int seq);
 void rados_pool_init_ctx(rados_list_ctx_t *ctx);
 void rados_pool_close_ctx(rados_list_ctx_t *ctx);
 int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
@@ -66,6 +67,8 @@ public:
   int open_pool(const char *name, rados_pool_t *pool);
   int close_pool(rados_pool_t pool);
 
+  void set_snap(rados_pool_t pool, snapid_t seq);
+
   int write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(rados_pool_t pool, const object_t& oid);
@@ -92,9 +95,9 @@ public:
     void put();
   };
 
-  int aio_read(int pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
+  int aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
 	       AioCompletion **pc);
-  int aio_write(int pool, const object_t& oid, off_t off, bufferlist& bl, size_t len,
+  int aio_write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len,
 		AioCompletion **pc);
 
 };

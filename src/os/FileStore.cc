@@ -1881,7 +1881,7 @@ bool FileStore::collection_empty(coll_t c)
   return empty;
 }
 
-int FileStore::collection_list_partial(coll_t c, vector<sobject_t>& ls, int max_count, collection_list_handle_t *handle) 
+int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& ls, int max_count, collection_list_handle_t *handle)
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
@@ -1929,6 +1929,10 @@ int FileStore::collection_list_partial(coll_t c, vector<sobject_t>& ls, int max_
     //cout << "  got object " << de->d_name << std::endl;
     sobject_t o;
     if (parse_object(de->d_name, o)) {
+      if (o.snap != seq) {
+        i--;
+        continue;
+      }
       inolist.push_back(pair<ino_t,sobject_t>(de->d_ino, o));
       ls.push_back(o);
     }

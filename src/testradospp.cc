@@ -21,6 +21,7 @@
 
 void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
+  str[0] = '\0';
   for (int i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
@@ -49,7 +50,10 @@ int main(int argc, const char **argv)
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
   rados.write(pool, oid, 0, bl, bl.length());
-
+  rados.write(pool, oid, 0, bl, bl.length() - 1);
+  rados.write(pool, oid, 0, bl, bl.length() - 2);
+  rados.write(pool, oid, 0, bl, bl.length() - 3);
+  rados.write(pool, oid, 0, bl, bl.length() - 4);
   r = rados.exec(pool, oid, "crypto", "md5", bl, bl2);
   cout << "exec returned " << r << std::endl;
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
