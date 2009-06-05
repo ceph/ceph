@@ -471,6 +471,20 @@ struct pg_pool_t {
       return snaps.count(s) == 0;
     return s <= get_snap_seq() && removed_snaps.contains(s);
   }
+  /*
+   * build set of known-removed sets from either pool snaps or
+   * explicit removed_snaps set.
+   */
+  void build_removed_snaps(interval_set<snapid_t>& rs) const {
+    if (snaps.size()) {
+      for (snapid_t s = 1; s <= get_snap_seq(); s = s + 1)
+	if (snaps.count(s) == 0)
+	  rs.insert(s);
+    } else {
+      rs = removed_snaps;
+    }
+  }
+
   SnapContext get_snap_context() const {
     vector<snapid_t> s(snaps.size());
     unsigned i = 0;

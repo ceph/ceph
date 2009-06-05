@@ -576,6 +576,8 @@ PGPool* OSD::_get_pool(int id)
     const pg_pool_t& pi = osdmap->get_pg_pool(id);
     p->info = pi;
     p->snapc = pi.get_snap_context();
+
+    pi.build_removed_snaps(p->removed_snaps);
   }
   dout(10) << "_get_pool " << p->id << " " << p->num_pg << " -> " << (p->num_pg+1) << dendl;
   p->num_pg++;
@@ -1940,11 +1942,10 @@ void OSD::handle_osd_map(MOSDMap *m)
       const pg_pool_t& pi = osdmap->get_pg_pool(p->first);
       if (pi.get_snap_epoch() == cur+1) {
 	PGPool *pool = p->second;
-	pool->new_removed_snaps = pi.removed_snaps;
-	pool->new_removed_snaps.subtract(pool->info.removed_snaps);
-	dout(10) << " pool " << p->first << " removed_snaps " << pool->info.removed_snaps
-		 << " -> " << pi.removed_snaps
-		 << ", new is " << pool->new_removed_snaps << ")"
+	pi.build_removed_snaps(pool->newly_removed_snaps);
+	pool->newly_removed_snaps.subtract(pool->removed_snaps);
+	dout(10) << " pool " << p->first << " removed_snaps " << pool->removed_snaps
+		 << ", newly so are " << pool->newly_removed_snaps << ")"
 		 << dendl;
 	pool->info = pi;
 	pool->snapc = pi.get_snap_context();
@@ -2081,9 +2082,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->lock();
 
     // adjust removed_snaps?
-    if (!pg->pool->new_removed_snaps.empty()) {
-      for (map<snapid_t,snapid_t>::iterator p = pg->pool->new_removed_snaps.m.begin();
-	   p != pg->pool->new_removed_snaps.m.end();
+    if (!pg->pool->newly_removed_snaps.empty()) {
+      for (map<snapid_t,snapid_t>::iterator p = pg->pool->newly_removed_snaps.m.begin();
+	   p != pg->pool->newly_removed_snaps.m.end();
 	   p++)
 	for (snapid_t t = 0; t < p->second; ++t)
 	  pg->info.snap_trimq.insert(p->first + t);

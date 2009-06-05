@@ -51,7 +51,8 @@ struct PGPool {
   pg_pool_t info;      
   SnapContext snapc;   // the default pool snapc, ready to go.
 
-  interval_set<snapid_t> new_removed_snaps;  // newly removed in the last epoch
+  interval_set<snapid_t> removed_snaps;      // current removed_snaps set
+  interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
   PGPool(int i) : id(i), num_pg(0) {}
 
