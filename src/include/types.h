@@ -325,6 +325,9 @@ struct SnapContext {
   snapid_t seq;            // 'time' stamp
   vector<snapid_t> snaps;  // existent snaps, in descending order
 
+  SnapContext() {}
+  SnapContext(snapid_t s, vector<snapid_t>& v) : seq(s), snaps(v) {}    
+
   void clear() {
     seq = 0;
     snaps.clear();

@@ -96,8 +96,19 @@ class interval_set {
   void encode(bufferlist& bl) const {
     ::encode(m, bl);
   }
+  void encode_nohead(bufferlist& bl) const {
+    ::encode_nohead(m, bl);
+  }
   void decode(bufferlist::iterator& bl) {
     ::decode(m, bl);
+    _size = 0;
+    for (typename map<T,T>::const_iterator p = m.begin();
+         p != m.end();
+         p++)
+      _size += p->second;
+  }
+  void decode_nohead(int n, bufferlist::iterator& bl) {
+    ::decode_nohead(n, m, bl);
     _size = 0;
     for (typename map<T,T>::const_iterator p = m.begin();
          p != m.end();

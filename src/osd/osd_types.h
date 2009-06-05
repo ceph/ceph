@@ -379,14 +379,64 @@ static inline std::string pg_state_string(int state) {
 }
 
 
+/*
+ * pool_snap_info_t
+ *
+ * attributes for a single pool snapshot.  
+ */
+struct pool_snap_info_t {
+  snapid_t snapid;
+  utime_t stamp;
+  nstring name;
+
+  void encode(bufferlist& bl) const {
+    ::encode(snapid, bl);
+    ::encode(stamp, bl);
+    ::encode(name, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(snapid, bl);
+    ::decode(stamp, bl);
+    ::decode(name, bl);
+  }
+};
+WRITE_CLASS_ENCODER(pool_snap_info_t)
+
+inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
+  return out << si.snapid << '(' << si.name << ' ' << si.stamp << ')';
+}
 
 
 /*
  * pg_pool
  */
 struct pg_pool_t {
-  ceph_pg_pool v;
+  mutable ceph_pg_pool v;
   int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
+
+  /*
+   * Pool snaps (global to this pool).  These define a SnapContext for
+   * the pool, unless the client manually specifies an alternate
+   * context.
+   */
+  map<snapid_t, pool_snap_info_t> snaps;
+  /*
+   * Alternatively, if we are definining non-pool snaps (e.g. via the
+   * Ceph MDS), we must track @removed_snaps (since @snaps is not
+   * used).  Snaps and removed_snaps are to be used exclusive of each
+   * other!
+   */
+  interval_set<snapid_t> removed_snaps;
+
+  unsigned get_type() const { return v.type; }
+  unsigned get_size() const { return v.size; }
+  int get_crush_ruleset() const { return v.crush_ruleset; }
+  epoch_t get_last_change() const { return v.last_change; }
+  epoch_t get_snap_epoch() const { return v.snap_epoch; }
+  snapid_t get_snap_seq() const { return snapid_t(v.snap_seq); }
+
+  bool is_rep()   const { return get_type() == CEPH_PG_TYPE_REP; }
+  bool is_raid4() const { return get_type() == CEPH_PG_TYPE_RAID4; }
 
   int get_pg_num() const { return v.pg_num; }
   int get_pgp_num() const { return v.pgp_num; }
@@ -406,20 +456,26 @@ struct pg_pool_t {
     }
     return b;
   }
-
-  unsigned get_type() const { return v.type; }
-  unsigned get_size() const { return v.size; }
-  int get_crush_ruleset() const { return v.crush_ruleset; }
-  epoch_t get_last_change() const { return v.last_change; }
-
-  bool is_rep()   const { return get_type() == CEPH_PG_TYPE_REP; }
-  bool is_raid4() const { return get_type() == CEPH_PG_TYPE_RAID4; }
-
   void calc_pg_masks() {
     pg_num_mask = (1 << calc_bits_of(v.pg_num-1)) - 1;
     pgp_num_mask = (1 << calc_bits_of(v.pgp_num-1)) - 1;
     lpg_num_mask = (1 << calc_bits_of(v.lpg_num-1)) - 1;
     lpgp_num_mask = (1 << calc_bits_of(v.lpgp_num-1)) - 1;
+  }
+
+  bool is_removed_snap(snapid_t s) {
+    if (snaps.size())
+      return snaps.count(s) == 0;
+    return s <= get_snap_seq() && removed_snaps.contains(s);
+  }
+  SnapContext get_snap_context() const {
+    vector<snapid_t> s(snaps.size());
+    unsigned i = 0;
+    for (map<snapid_t, pool_snap_info_t>::const_reverse_iterator p = snaps.rbegin();
+	 p != snaps.rend();
+	 p++)
+      s[i++] = p->first;
+    return SnapContext(get_snap_seq(), s);
   }
 
   /*
@@ -444,10 +500,16 @@ struct pg_pool_t {
   }
 
   void encode(bufferlist& bl) const {
+    v.num_snaps = snaps.size();
+    v.num_removed_snap_intervals = removed_snaps.m.size();
     ::encode(v, bl);
+    ::encode_nohead(snaps, bl);
+    removed_snaps.encode_nohead(bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(v, bl);
+    ::decode_nohead(v.num_snaps, snaps, bl);
+    removed_snaps.decode_nohead(v.num_removed_snap_intervals, bl);
     calc_pg_masks();
   }
 };

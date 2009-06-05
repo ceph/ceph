@@ -351,6 +351,24 @@ inline void decode(std::map<T,U>& m, bufferlist::iterator& p)
     decode(m[k], p);
   }
 }
+template<class T, class U>
+inline void encode_nohead(const std::map<T,U>& m, bufferlist& bl)
+{
+  for (typename std::map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl);
+    encode(p->second, bl);
+  }
+}
+template<class T, class U>
+inline void decode_nohead(int n, std::map<T,U>& m, bufferlist::iterator& p)
+{
+  m.clear();
+  while (n--) {
+    T k;
+    decode(k, p);
+    decode(m[k], p);
+  }
+}
 
 // multimap
 template<class T, class U>

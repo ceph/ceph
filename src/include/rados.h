@@ -1,3 +1,6 @@
+// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=8 smarttab
+
 #ifndef __RADOS_H
 #define __RADOS_H
 
@@ -91,6 +94,10 @@ struct ceph_pg_pool {
 	__le32 pg_num, pgp_num;
 	__le32 lpg_num, lpgp_num;
 	__le32 last_change;     /* most recent epoch changed */
+	__le64 snap_seq;
+	__le32 snap_epoch;
+	__le32 num_snaps;
+	__le32 num_removed_snap_intervals;
 } __attribute__ ((packed));
 
 /*
