@@ -322,8 +322,8 @@ WRITE_CLASS_ENCODER(SnapRealmInfo)
 
 
 struct SnapContext {
-  snapid_t seq;
-  vector<snapid_t> snaps;
+  snapid_t seq;            // 'time' stamp
+  vector<snapid_t> snaps;  // existent snaps, in descending order
 
   void clear() {
     seq = 0;
