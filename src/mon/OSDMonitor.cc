@@ -1113,7 +1113,36 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
     }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 3) {
-      if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
+      if (m->cmd.size() >= 5 && m->cmd[2] == "mksnap") {
+	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	if (pool < 0) {
+	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  err = -ENOENT;
+	} else {
+	  const pg_pool_t *p = &osdmap.get_pg_pool(pool);
+	  pg_pool_t *pp = 0;
+	  if (pending_inc.new_pools.count(pool))
+	    pp = &pending_inc.new_pools[pool];
+	  const string& snapname = m->cmd[4];
+	  if (p->snap_exists(snapname.c_str()) ||
+	      (pp && pp->snap_exists(snapname.c_str()))) {
+	    ss << "pool " << m->cmd[3] << " snap " << snapname << " already exists";
+	    err = -EEXIST;
+	  } else {
+	    if (!pp) {
+	      pp = &pending_inc.new_pools[pool];
+	      *pp = *p;
+	    }
+	    pp->add_snap(snapname.c_str(), g_clock.now());
+	    pp->set_snap_epoch(pending_inc.epoch);
+	    ss << "created pool " << m->cmd[3] << " snap " << snapname;
+	    getline(ss, rs);
+	    paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	    return true;
+	  }
+	}
+      }
+      else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
 	int pool = 1;
 	for (map<int,nstring>::iterator i = osdmap.pool_name.begin();
 	     i != osdmap.pool_name.end();
@@ -1140,17 +1169,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
 	return true;
       } else if (m->cmd[2] == "set") {
-	int pool = -1;
-	pg_pool_t *p = 0;
-	for (map<int,nstring>::iterator i = osdmap.pool_name.begin();
-	     i != osdmap.pool_name.end();
-	     i++) {
-	  if (i->second == m->cmd[3]) {
-	    pool = i->first;
-	    p = &osdmap.pools[pool];
-	  }
-	}
-	if (pool >= 0) {
+	int pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	if (pool < 0) {
+	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  err = -ENOENT;
+	} else {
+	  const pg_pool_t *p = &osdmap.get_pg_pool(pool);
 	  int n = atoi(m->cmd[5].c_str());
 	  if (n) {
 	    if (m->cmd[4] == "size") {
@@ -1194,9 +1218,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	      ss << "unrecognized pool field " << m->cmd[4];
 	    }
 	  }
-	} else {
-	  ss << "unrecognized pool '" << m->cmd[3] << "'";
-	  err = -ENOENT;
 	}
       }
     }

@@ -29,6 +29,10 @@ void OSDMap::print(ostream& out)
     out << "pg_pool " << p->first
 	<< " '" << pool_name[p->first]
 	<< "' " << p->second << "\n";
+    for (map<snapid_t,pool_snap_info_t>::iterator q = p->second.snaps.begin();
+	 q != p->second.snaps.end();
+	 q++)
+      out << "\tsnap " << q->second.snapid << " '" << q->second.name << "' " << q->second.stamp << "\n";
     if (!p->second.removed_snaps.empty())
       out << "\tremoved_snaps " << p->second.removed_snaps << "\n";
   }

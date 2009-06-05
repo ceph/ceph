@@ -484,6 +484,21 @@ struct pg_pool_t {
       rs = removed_snaps;
     }
   }
+  bool snap_exists(const char *s) const {
+    for (map<snapid_t,pool_snap_info_t>::const_iterator p = snaps.begin();
+	 p != snaps.end();
+	 p++)
+      if (p->second.name == s)
+	return true;
+    return false;
+  }
+  void add_snap(const char *n, utime_t stamp) {
+    snapid_t s = get_snap_seq() + 1;
+    v.snap_seq = s;
+    snaps[s].snapid = s;
+    snaps[s].name = n;
+    snaps[s].stamp = stamp;
+  }
 
   SnapContext get_snap_context() const {
     vector<snapid_t> s(snaps.size());
