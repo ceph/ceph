@@ -1025,10 +1025,10 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
     cap->inc_suppress();
     sup = true;
   }
-  if (share && in->is_auth() && in->filelock.is_stable())
-    share_inode_max_size(in);
   if (sup)
     cap->dec_suppress();
+  if (share && in->is_auth() && in->filelock.is_stable())
+    share_inode_max_size(in);
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
