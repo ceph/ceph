@@ -549,7 +549,7 @@ Rados::~Rados()
   client = NULL;
 }
 
-bool Rados::initialize(int argc, const char *argv[])
+int Rados::initialize(int argc, const char *argv[])
 {
  vector<const char*> args;
 
@@ -562,7 +562,7 @@ bool Rados::initialize(int argc, const char *argv[])
   if (g_conf.clock_tare) g_clock.tare();
 
   client = new RadosClient();
-  return client->init();
+  return client->init() ? 0 : -1;
 }
 
 int Rados::list(rados_pool_t pool, int max, vector<object_t>& entries, Rados::ListCtx& ctx)

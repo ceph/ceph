@@ -59,7 +59,7 @@ class Rados
 public:
   Rados();
   ~Rados();
-  bool initialize(int argc, const char *argv[]);
+  int initialize(int argc, const char *argv[]);
 
   int open_pool(const char *name, rados_pool_t *pool);
   int close_pool(rados_pool_t pool);

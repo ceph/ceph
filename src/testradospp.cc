@@ -29,7 +29,7 @@ void buf_to_hex(const unsigned char *buf, int len, char *str)
 int main(int argc, const char **argv) 
 {
   Rados rados;
-  if (!rados.initialize(0, NULL)) {
+  if (rados.initialize(0, NULL) < 0) {
      cerr << "couldn't initialize rados!" << std::endl;
      exit(1);
   }
