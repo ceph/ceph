@@ -143,7 +143,7 @@ inline void decode(triple<A,B,C> &t, bufferlist::iterator &p)
 
 
 // list (pointers)
-template<class T>
+/*template<class T>
 inline void encode(const std::list<T*>& ls, bufferlist& bl)
 {
   // should i pre- or post- count?
@@ -171,7 +171,7 @@ inline void decode(std::list<T*>& ls, bufferlist::iterator& p)
   ls.clear();
   while (n--)
     ls.push_back(new T(p));
-}
+    }*/
 
 
 // list
@@ -305,6 +305,7 @@ inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
 }
 
 // map (pointers)
+/*
 template<class T, class U>
 inline void encode(const std::map<T,U*>& m, bufferlist& bl)
 {
@@ -326,7 +327,7 @@ inline void decode(std::map<T,U*>& m, bufferlist::iterator& p)
     decode(k, p);
     m[k] = new U(p);
   }
-}
+  }*/
 
 // map
 template<class T, class U>
