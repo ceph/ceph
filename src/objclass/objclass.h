@@ -17,7 +17,6 @@ typedef void *cls_method_context_t;
 typedef int (*cls_method_call_t)(cls_method_context_t ctx,
 				 char *indata, int datalen,
 				 char **outdata, int *outdatalen);
-
 typedef struct {
 	const char *name;
 	const char *ver;
@@ -61,6 +60,18 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
+
+typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
+				     class buffer::list *inbl, class buffer::list *outbl);
+
+extern int cls_register_cxx_method(cls_handle_t hclass, const char *method,
+				   cls_method_cxx_call_t class_call, cls_method_handle_t *handle);
+
+extern int cls_cxx_read(cls_method_handle_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_write(cls_method_handle_t hctx, int ofs, int len, bufferlist *bl);
+extern int cls_cxx_replace(cls_method_handle_t hctx, int ofs, int len, bufferlist *bl);
+
+
 #endif
 
 #endif

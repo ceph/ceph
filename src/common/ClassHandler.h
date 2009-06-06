@@ -26,9 +26,12 @@ public:
     struct ClassHandler::ClassData *cls;
     string name;
     cls_method_call_t func;
-    int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
+    cls_method_cxx_call_t cxx_func;
 
+    int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
     void unregister();
+
+    ClassMethod() : cls(0), func(0), cxx_func(0) {}
   };
 
   struct ClassData {
@@ -63,8 +66,8 @@ public:
     ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), timeout(0), handle(NULL), registered(false)  {}
     ~ClassData() { if (mutex) delete mutex; }
 
-    ClassMethod *register_method(const char *mname,
-                          cls_method_call_t func);
+    ClassMethod *register_method(const char *mname, cls_method_call_t func);
+    ClassMethod *register_cxx_method(const char *mname, cls_method_cxx_call_t func);
     ClassMethod *get_method(const char *mname);
     void unregister_method(ClassMethod *method);
 

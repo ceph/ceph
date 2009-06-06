@@ -286,11 +286,24 @@ void ClassHandler::ClassData::_add_dependent(ClassData& dependent)
   dependents.push_back(&dependent);
 }
 
-ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *mname, cls_method_call_t func)
+ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *mname,
+								    cls_method_call_t func)
 {
- /* no need for locking, called under the class_init mutex */
+  /* no need for locking, called under the class_init mutex */
   ClassMethod& method = methods_map[mname];
   method.func = func;
+  method.name = mname;
+  method.cls = this;
+
+  return &method;
+}
+
+ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const char *mname,
+									cls_method_cxx_call_t func)
+{
+  /* no need for locking, called under the class_init mutex */
+  ClassMethod& method = methods_map[mname];
+  method.cxx_func = func;
   method.name = mname;
   method.cls = this;
 
@@ -353,12 +366,20 @@ void ClassHandler::ClassMethod::unregister()
 
 int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata)
 {
-  char *out = NULL;
-  int olen;
   int ret;
-  ret = func(ctx, indata.c_str(), indata.length(), &out, &olen);
-  if (out)
-    outdata.append(out, olen);
-
+  if (cxx_func) {
+    // C++ call version
+    ret = cxx_func(ctx, &indata, &outdata);
+  } else {
+    // C version
+    char *out = NULL;
+    int olen = 0;
+    ret = func(ctx, indata.c_str(), indata.length(), &out, &olen);
+    if (out) {
+      // assume *out was allocated via cls_alloc (which calls malloc!)
+      buffer::ptr bp = buffer::claim_malloc(olen, out);
+      outdata.push_back(bp);
+    }
+  }
   return ret;
 }
