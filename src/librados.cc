@@ -104,14 +104,26 @@ public:
     int ref, rval;
     bool ack, safe;
 
+    rados_callback_t callback;
+    void *callback_arg;
+
     // for read
     bufferlist bl, *pbl;
     char *buf;
     unsigned maxlen;
 
     AioCompletion() : lock("RadosClient::AioCompletion"),
-		      ref(1), rval(0), ack(false), safe(false), pbl(0), buf(0), maxlen(0) { }
+		      ref(1), rval(0), ack(false), safe(false), 
+		      callback(0), callback_arg(0),
+		      pbl(0), buf(0), maxlen(0) { }
 
+    int set_callback(rados_callback_t cb, void *cba) {
+      lock.Lock();
+      callback = cb;
+      callback_arg = cba;
+      lock.Unlock();
+      return 0;
+    }
     int wait_for_complete() {
       lock.Lock();
       while (!ack)
@@ -176,6 +188,14 @@ public:
 	*c->pbl = c->bl;
       }
 
+      if (c->callback) {
+	rados_callback_t cb = c->callback;
+	void *cba = c->callback_arg;
+	c->lock.Unlock();
+	cb(c, cba);
+	c->lock.Lock();
+      }
+
       int n = --c->ref;
       c->lock.Unlock();
       if (!n)
@@ -196,6 +216,15 @@ public:
       }
       c->safe = true;
       c->cond.Signal();
+
+      if (c->callback) {
+	rados_callback_t cb = c->callback;
+	void *cba = c->callback_arg;
+	c->lock.Unlock();
+	cb(c, cba);
+	c->lock.Lock();
+      }
+
       int n = --c->ref;
       c->lock.Unlock();
       if (!n)
@@ -716,6 +745,11 @@ int Rados::aio_write(rados_pool_t pool, const object_t& oid, off_t off, bufferli
   return r;
 }
 
+int Rados::AioCompletion::set_callback(rados_callback_t cb, void *cba)
+{
+  RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
+  return c->set_callback(cb, cba);
+}
 int Rados::AioCompletion::wait_for_complete()
 {
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
@@ -937,6 +971,11 @@ extern "C" int rados_pool_list_next(rados_pool_t pool, const char **entry, rados
 
 // -------------------------
 // aio
+
+extern "C" int rados_aio_set_callback(rados_completion_t c, rados_callback_t cb, void *cba)
+{
+  return ((RadosClient::AioCompletion *)c)->set_callback(cb, cba);
+}
 
 extern "C" int rados_aio_wait_for_complete(rados_completion_t c)
 {
