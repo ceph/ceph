@@ -12,9 +12,15 @@ v0.8
 v0.9
 /- make mds exhert memory pressure on client caps, leases
 /- librados
-  - async io
+/  - async io
   - list_objects
+    - move pg iteration into Objecter (RadosClietn should be a minimal wrapper)
   - perl swig wrapper
+  - radostool
+    - fetch/store/remove object
+    - call method
+    - list objects
+    - list pools
 /- object classes
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 

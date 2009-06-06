@@ -779,6 +779,12 @@ private:
     return -1;
   }
 
+  const map<int,pg_pool_t>& get_pools() { return pools; }
+  const char *get_pool_name(int p) {
+    if (pool_name.count(p))
+      return pool_name[p].c_str();
+    return 0;
+  }
   bool have_pg_pool(int p) const {
     return pools.count(p);
   }

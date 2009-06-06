@@ -101,6 +101,7 @@ public:
    PGLSOp() : seed(0), cookie(0), pos(0), total(0) {}
   };
 
+  int list_pools(std::vector<string>& ls);
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op);
 
   // --- aio ---
@@ -359,6 +360,16 @@ bool RadosClient::_dispatch(Message *m)
   }
 
   return true;
+}
+
+int RadosClient::list_pools(std::vector<string>& v)
+{
+  Mutex::Locker l(lock);
+  for (map<int,pg_pool_t>::const_iterator p = osdmap.get_pools().begin(); 
+       p != osdmap.get_pools().end();
+       p++)
+    v.push_back(osdmap.get_pool_name(p->first));
+  return 0;
 }
 
 int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op)
@@ -642,6 +653,13 @@ void Rados::set_snap(rados_pool_t pool, snapid_t seq)
 
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   ctx->set_snap(seq);
+}
+
+int Rados::list_pools(std::vector<string>& v)
+{
+  if (!client)
+    return -EINVAL;
+  return client->list_pools(v);
 }
 
 int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx)

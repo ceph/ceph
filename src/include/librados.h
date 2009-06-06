@@ -84,6 +84,7 @@ public:
  };
 
   int list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx);
+  int list_pools(std::vector<std::string>& v);
 
   // -- aio --
   struct AioCompletion {
