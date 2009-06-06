@@ -46,7 +46,7 @@ int main(int argc, const char **argv)
   common_init(args, "rados", false);
 
   vector<const char*> nargs;
-  bufferlist indata;
+  bufferlist indata, outdata;
   const char *outfile = 0;
   
   const char *pool = 0;
@@ -121,9 +121,49 @@ int main(int argc, const char **argv)
 	cout << *iter << std::endl;
     }
 
+
+  } else if (strcmp(nargs[0], "get") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    object_t oid(nargs[1]);
+    int r = rados.read(p, oid, 0, outdata, 0);
+    if (r < 0) {
+      cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
+      exit(0);
+    }
+
+  } else if (strcmp(nargs[0], "put") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    if (!indata.length()) {
+      cerr << "must specify input file" << std::endl;
+      usage();
+    }
+    object_t oid(nargs[1]);
+    int r = rados.write(p, oid, 0, indata, indata.length());
+    if (r < 0) {
+      cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
+      exit(0);
+    }
+
   } else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
     usage();
+  }
+
+  // write data?
+  int len = outdata.length();
+  if (len) {
+    if (outfile) {
+      if (strcmp(outfile, "-") == 0) {
+	::write(1, outdata.c_str(), len);
+      } else {
+	outdata.write_file(outfile);
+      }
+      generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
+    } else {
+      generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
+    }
   }
 
   if (pool)
