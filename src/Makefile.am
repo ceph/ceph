@@ -134,6 +134,9 @@ libcls_crypto.so: cls_crypto.cc
 	${CXX} -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
 BUILT_SOURCES += libcls_crypto.so
 
+libcls_trivialmap.so: cls_trivialmap.cc
+	${CXX} -I. -fPIC -shared -g -o libcls_trivialmap.so cls_trivialmap.cc
+BUILT_SOURCES += libcls_trivialmap.so
 
 
 ## libcephclient.so
