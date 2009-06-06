@@ -24,12 +24,19 @@ typedef void *rados_list_ctx_t;
 
 /* pools */
 typedef void *rados_pool_t;
+typedef long long unsigned rados_snap_t;
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
-void rados_set_snap(rados_pool_t pool, int seq);
+void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
 void rados_pool_init_ctx(rados_list_ctx_t *ctx);
 void rados_pool_close_ctx(rados_list_ctx_t *ctx);
 int rados_pool_list_next(rados_pool_t pool, const char **entry, rados_list_ctx_t *ctx);
+
+/* snapshots */
+int rados_snap_create(rados_pool_t pool, const char *snapname);
+int rados_snap_remove(rados_pool_t pool, const char *snapname);
+int rados_snap_list(rados_pool_t pool, rados_snap_t *snaps, int maxlen);
+int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxlen);
 
 /* read/write objects */
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
@@ -85,6 +92,11 @@ public:
 
   int list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx);
   int list_pools(std::vector<std::string>& v);
+
+  int snap_create(rados_pool_t pool, const char *snapname);
+  int snap_remove(rados_pool_t pool, const char *snapname);
+  int snap_list(rados_pool_t pool, vector<rados_snap_t>& snaps);
+  int snap_get_name(rados_pool_t pool, rados_snap_t snap, std::string *name);
 
   // -- aio --
   struct AioCompletion {

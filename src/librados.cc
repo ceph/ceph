@@ -871,7 +871,7 @@ extern "C" int rados_close_pool(rados_pool_t pool)
   return 0;
 }
 
-extern "C" void rados_set_snap(rados_pool_t pool, int seq)
+extern "C" void rados_set_snap(rados_pool_t pool, rados_snap_t seq)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   ctx->set_snap((snapid_t)seq);
