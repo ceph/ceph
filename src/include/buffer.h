@@ -115,6 +115,9 @@ private:
 	data = 0;
       inc_total_alloc(len);
     }
+    raw_char(unsigned l, char *b) : raw(b, l) {
+      inc_total_alloc(len);
+    }
     ~raw_char() {
       delete[] data;
       dec_total_alloc(len);      
@@ -131,6 +134,9 @@ private:
 	data = (char *)malloc(len);
       else
 	data = 0;
+      inc_total_alloc(len);
+    }
+    raw_malloc(unsigned l, char *b) : raw(b, l) {
       inc_total_alloc(len);
     }
     ~raw_malloc() {
@@ -232,8 +238,14 @@ public:
   static raw* create(unsigned len) {
     return new raw_char(len);
   }
+  static raw* claim_char(unsigned len, char *buf) {
+    return new raw_char(len, buf);
+  }
   static raw* create_malloc(unsigned len) {
     return new raw_malloc(len);
+  }
+  static raw* claim_malloc(unsigned len, char *buf) {
+    return new raw_malloc(len, buf);
   }
 
   static raw* create_page_aligned(unsigned len) {
