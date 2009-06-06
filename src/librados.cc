@@ -68,15 +68,21 @@ public:
 
   struct PoolCtx {
     int poolid;
-    SnapContext snapc;
     snapid_t snap_seq;
+    SnapContext snapc;
+
+    PoolCtx(int pid, snapid_t s) : poolid(pid), snap_seq(CEPH_NOSNAP) {}
+
+    void set_snap(snapid_t s) {
+      if (!s)
+	s = CEPH_NOSNAP;
+      snap_seq = s;
+    }
   };
 
   int lookup_pool(const char *name) {
     return osdmap.lookup_pg_pool_name(name);
   }
-
-  void set_snap(PoolCtx& pool, snapid_t seq);
 
   int write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
@@ -416,14 +422,6 @@ retry:
   return r;
 }
 
-void RadosClient::set_snap(PoolCtx& pool, snapid_t seq)
-{
-  if (!seq) {
-    seq = CEPH_NOSNAP;
-  }
-  pool.snap_seq = seq;
-}
-
 int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
 #if 0
@@ -643,8 +641,7 @@ void Rados::set_snap(rados_pool_t pool, snapid_t seq)
     return;
 
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-
-  client->set_snap(*ctx, seq);
+  ctx->set_snap(seq);
 }
 
 int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx)
@@ -701,12 +698,9 @@ int Rados::open_pool(const char *name, rados_pool_t *pool)
 {
   int poolid = client->lookup_pool(name);
   if (poolid >= 0) {
-    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx;
+    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, CEPH_NOSNAP);
     if (!ctx)
       return -ENOMEM;
-
-    ctx->poolid = poolid;
-    ctx->snap_seq = CEPH_NOSNAP;
 
     *pool = (rados_pool_t)ctx;
     return 0;
@@ -843,11 +837,9 @@ extern "C" int rados_open_pool(const char *name, rados_pool_t *pool)
 {
   int poolid = radosp->lookup_pool(name);
   if (poolid >= 0) {
-    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx;
+    RadosClient::PoolCtx *ctx = new RadosClient::PoolCtx(poolid, CEPH_NOSNAP);
     if (!ctx)
       return -ENOMEM;
-    ctx->poolid = poolid;
-    ctx->snap_seq = CEPH_NOSNAP;
     *pool = ctx;
     return 0;
   }
@@ -864,10 +856,8 @@ extern "C" int rados_close_pool(rados_pool_t pool)
 extern "C" void rados_set_snap(rados_pool_t pool, int seq)
 {
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-
-  radosp->set_snap(*ctx, (snapid_t)seq);
+  ctx->set_snap((snapid_t)seq);
 }
-
 
 extern "C" int rados_write(rados_pool_t pool, const char *o, off_t off, const char *buf, size_t len)
 {
