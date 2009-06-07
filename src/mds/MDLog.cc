@@ -299,8 +299,13 @@ void MDLog::_logged_subtree_map(loff_t off)
 
 
 
-void MDLog::trim()
+void MDLog::trim(int m)
 {
+  int max_segments = g_conf.mds_log_max_segments;
+  int max_events = g_conf.mds_log_max_events;
+  if (m >= 0)
+    max_events = m;
+
   // trim!
   dout(10) << "trim " 
 	   << segments.size() << " / " << max_segments << " segments, " 

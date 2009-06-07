@@ -66,8 +66,6 @@ class MDLog {
  protected:
   MDS *mds;
   int num_events; // in events
-  int max_events;
-  int max_segments;
 
   int unflushed;
 
@@ -148,8 +146,6 @@ public:
 public:
   MDLog(MDS *m) : mds(m),
 		  num_events(0), 
-		  max_events(g_conf.mds_log_max_events),
-		  max_segments(g_conf.mds_log_max_segments),
 		  unflushed(0),
 		  capped(false),
 		  journaler(0),
@@ -176,9 +172,7 @@ public:
   void flush_logger();
 
   size_t get_num_events() { return num_events; }
-  void set_max_events(int m) { max_events = m; }
   size_t get_num_segments() { return segments.size(); }  
-  void set_max_segments(int m) { max_segments = m; }
 
   loff_t get_read_pos();
   loff_t get_write_pos();
@@ -212,7 +206,7 @@ private:
   void _expired(LogSegment *ls);
 
 public:
-  void trim();
+  void trim(int max=-1);
 
 private:
   void write_head(Context *onfinish);

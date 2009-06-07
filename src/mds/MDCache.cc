@@ -5233,8 +5233,7 @@ bool MDCache::shutdown_pass()
   }
 
   // flush what we can from the log
-  mds->mdlog->set_max_events(0);
-  mds->mdlog->trim();
+  mds->mdlog->trim(0);
 
   if (mds->mdlog->get_num_segments() > 1) {
     dout(7) << "still >1 segments, waiting for log to trim" << dendl;
