@@ -671,8 +671,8 @@ ostream& PG::IndexedLog::print(ostream& out) const
        p != log.end();
        p++) {
     out << *p << " " << (logged_object(p->soid) ? "indexed":"NOT INDEXED") << std::endl;
-    assert(logged_object(p->soid));
-    assert(logged_req(p->reqid));
+    //assert(logged_object(p->soid));
+    assert(p->op == Entry::BACKLOG || logged_req(p->reqid));
   }
   return out;
 }
