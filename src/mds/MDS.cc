@@ -121,6 +121,7 @@ MDS::MDS(const char *n, Messenger *m, MonMap *mm) :
   want_state = state = MDSMap::STATE_BOOT;
 
   logger = 0;
+  mlogger = 0;
 }
 
 MDS::~MDS() {
@@ -144,6 +145,7 @@ MDS::~MDS() {
   if (objecter) { delete objecter; objecter = 0; }
 
   if (logger) { delete logger; logger = 0; }
+  delete mlogger;
   
   if (messenger)
     messenger->destroy();
@@ -153,6 +155,7 @@ MDS::~MDS() {
 void MDS::reopen_logger(utime_t start)
 {
   static LogType mds_logtype(l_mds_first, l_mds_last);
+  static LogType mdm_logtype(l_mdm_first, l_mdm_last);
 
   static bool didit = false;
   if (!didit) {
@@ -208,8 +211,6 @@ void MDS::reopen_logger(utime_t start)
     mds_logtype.add_set(l_mds_popanyd, "popanyd");
     mds_logtype.add_set(l_mds_popnest, "popnest");
     
-    mds_logtype.add_set(l_mds_buf, "buf");
-    
     mds_logtype.add_set(l_mds_sm, "sm");
     mds_logtype.add_inc(l_mds_ex, "ex");
     mds_logtype.add_inc(l_mds_iexp, "iexp");
@@ -222,12 +223,31 @@ void MDS::reopen_logger(utime_t start)
     */
 
     mds_logtype.validate();
+
+    mdm_logtype.add_set(l_mdm_ino, "ino");
+    mdm_logtype.add_inc(l_mdm_inoa, "ino+");
+    mdm_logtype.add_inc(l_mdm_inos, "ino-");
+    mdm_logtype.add_set(l_mdm_dir, "dir");
+    mdm_logtype.add_inc(l_mdm_dira, "dir+");
+    mdm_logtype.add_inc(l_mdm_dirs, "dir-");
+    mdm_logtype.add_set(l_mdm_dn, "dn");
+    mdm_logtype.add_inc(l_mdm_dna, "dn+");
+    mdm_logtype.add_inc(l_mdm_dns, "dn-");
+    mdm_logtype.add_set(l_mdm_cap, "cap");
+    mdm_logtype.add_inc(l_mdm_capa, "cap+");
+    mdm_logtype.add_inc(l_mdm_caps, "cap-");
+    mdm_logtype.add_set(l_mdm_buf, "buf");
+    mdm_logtype.add_set(l_mdm_rss, "rss");
+    mdm_logtype.add_set(l_mdm_heap, "heap");
+    mdm_logtype.add_set(l_mdm_malloc, "malloc");
+    mdm_logtype.validate();
   }
 
   if (whoami < 0) return;
 
   // flush+close old log
-  if (logger) delete logger;
+  delete logger;
+  delete mlogger;
 
   // log
   char name[80];
@@ -237,6 +257,9 @@ void MDS::reopen_logger(utime_t start)
 
   logger = new Logger(name, (LogType*)&mds_logtype, append);
   logger->set_start(start);
+
+  sprintf(name, "mds%d.mem", whoami);
+  mlogger = new Logger(name, (LogType*)&mdm_logtype, append);
 
   mdlog->reopen_logger(start, append);
   server->reopen_logger(start, append);
@@ -409,7 +432,6 @@ void MDS::tick()
     
     logger->fset(l_mds_l, (int)load.mds_load());
     logger->set(l_mds_q, messenger->get_dispatch_queue_len());
-    logger->set(l_mds_buf, buffer_total_alloc.test());
     logger->set(l_mds_sm, mdcache->num_subtrees());
 
     mdcache->log_stat();
@@ -1347,7 +1369,24 @@ bool MDS::_dispatch(Message *m)
   }
   */
 
+  if (mlogger) {
+    mlogger->set(l_mdm_ino, g_num_ino);
+    mlogger->set(l_mdm_dir, g_num_dir);
+    mlogger->set(l_mdm_dn, g_num_dn);
+    mlogger->set(l_mdm_cap, g_num_cap);
 
+    mlogger->inc(l_mdm_inoa, g_num_inoa);  g_num_inoa = 0;
+    mlogger->inc(l_mdm_inos, g_num_inos);  g_num_inos = 0;
+    mlogger->inc(l_mdm_dira, g_num_dira);  g_num_dira = 0;
+    mlogger->inc(l_mdm_dirs, g_num_dirs);  g_num_dirs = 0;
+    mlogger->inc(l_mdm_dna, g_num_dna);  g_num_dna = 0;
+    mlogger->inc(l_mdm_dns, g_num_dns);  g_num_dns = 0;
+    mlogger->inc(l_mdm_capa, g_num_capa);  g_num_capa = 0;
+    mlogger->inc(l_mdm_caps, g_num_caps);  g_num_caps = 0;
+
+    mlogger->set(l_mdm_buf, buffer_total_alloc.test());
+
+  }
 
   // shut down?
   if (is_stopping()) {

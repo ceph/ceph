@@ -141,6 +141,9 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   xlist_dirty(this), xlist_new(this)
 {
+  g_num_dir++;
+  g_num_dira++;
+
   inode = in;
   frag = fg;
   this->cache = mdcache;

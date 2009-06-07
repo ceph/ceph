@@ -94,6 +94,21 @@ static ostream& _prefix(MDS *mds) {
   return *_dout << dbeginl << "mds" << mds->get_nodeid() << ".cache ";
 }
 
+long g_num_ino = 0;
+long g_num_dir = 0;
+long g_num_dn = 0;
+long g_num_cap = 0;
+
+long g_num_inoa = 0;
+long g_num_dira = 0;
+long g_num_dna = 0;
+long g_num_capa = 0;
+
+long g_num_inos = 0;
+long g_num_dirs = 0;
+long g_num_dns = 0;
+long g_num_caps = 0;
+
 
 MDCache::MDCache(MDS *m)
 {
@@ -5117,6 +5132,10 @@ void MDCache::check_memory_usage()
 	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
 	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
+
+  mds->mlogger->set(l_mdm_rss, last.get_rss());
+  mds->mlogger->set(l_mdm_heap, last.get_heap());
+  mds->mlogger->set(l_mdm_malloc, last.malloc);
 
   /*int size = last.get_total();
   if (size > g_conf.mds_mem_max * .9) {

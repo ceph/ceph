@@ -255,6 +255,10 @@ protected:
 
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
+  ~CDir() {
+    g_num_dir--;
+    g_num_dirs++;
+  }
 
 
 

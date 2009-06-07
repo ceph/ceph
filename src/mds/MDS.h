@@ -66,7 +66,6 @@ enum {
   l_mds_q,
   l_mds_popanyd,
   l_mds_popnest,
-  l_mds_buf,
   l_mds_sm,
   l_mds_ex,
   l_mds_iexp,
@@ -78,6 +77,27 @@ enum {
 enum {
   l_mdc_first = 3000,
   l_mdc_last,
+};
+
+enum {
+  l_mdm_first = 2500,
+  l_mdm_ino,
+  l_mdm_inoa,
+  l_mdm_inos,
+  l_mdm_dir,
+  l_mdm_dira,
+  l_mdm_dirs,
+  l_mdm_dn,
+  l_mdm_dna,
+  l_mdm_dns,
+  l_mdm_cap,
+  l_mdm_capa,
+  l_mdm_caps,
+  l_mdm_buf,
+  l_mdm_rss,
+  l_mdm_heap,
+  l_mdm_malloc,
+  l_mdm_last,
 };
 
 
@@ -154,7 +174,7 @@ class MDS : public Dispatcher {
   MDSTableClient *get_table_client(int t);
   MDSTableServer *get_table_server(int t);
 
-  Logger       *logger;
+  Logger       *logger, *mlogger;
 
 
  protected:

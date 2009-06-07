@@ -58,6 +58,10 @@ using namespace std;
 #define MDS_TRAVERSE_FAIL          4
 
 
+extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
+extern long g_num_inoa, g_num_dira, g_num_dna, g_num_capa;
+extern long g_num_inos, g_num_dirs, g_num_dns, g_num_caps;
+
 
 // CAPS
 

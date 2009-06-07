@@ -188,7 +188,14 @@ public:
     mseq(0),
     suppress(0), stale(false),
     client_follows(0), client_xattr_version(0),
-    session_caps_item(this), snaprealm_caps_item(this) { }
+    session_caps_item(this), snaprealm_caps_item(this) {
+    g_num_cap++;
+    g_num_capa++;
+  }
+  ~Capability() {
+    g_num_cap--;
+    g_num_caps++;
+  }
   
   ceph_seq_t get_mseq() { return mseq; }
 
