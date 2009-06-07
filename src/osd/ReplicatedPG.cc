@@ -574,11 +574,13 @@ void ReplicatedPG::do_op(MOSDOp *op)
     
     issue_repop(repop, peer, now, old_exists, old_size, old_version);
 
-    // keep peer_info up to date
-    Info &in = peer_info[peer];
-    in.last_update = ctx->at_version;
-    if (in.last_complete == old_last_update)
+    if (!noop) {
+      // keep peer_info up to date
+      Info &in = peer_info[peer];
       in.last_update = ctx->at_version;
+      if (in.last_complete == old_last_update)
+	in.last_update = ctx->at_version;
+    }
   }
 
   // apply immediately?
