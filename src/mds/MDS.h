@@ -93,10 +93,10 @@ enum {
   l_mdm_cap,
   l_mdm_capa,
   l_mdm_caps,
-  l_mdm_buf,
   l_mdm_rss,
   l_mdm_heap,
   l_mdm_malloc,
+  l_mdm_buf,
   l_mdm_last,
 };
 

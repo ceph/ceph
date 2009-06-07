@@ -236,10 +236,10 @@ void MDS::reopen_logger(utime_t start)
     mdm_logtype.add_set(l_mdm_cap, "cap");
     mdm_logtype.add_inc(l_mdm_capa, "cap+");
     mdm_logtype.add_inc(l_mdm_caps, "cap-");
-    mdm_logtype.add_set(l_mdm_buf, "buf");
     mdm_logtype.add_set(l_mdm_rss, "rss");
     mdm_logtype.add_set(l_mdm_heap, "heap");
     mdm_logtype.add_set(l_mdm_malloc, "malloc");
+    mdm_logtype.add_set(l_mdm_buf, "buf");
     mdm_logtype.validate();
   }
 
