@@ -134,7 +134,7 @@ testradoscio_LDADD = librados.la libcrush.la
 #BUILT_SOURCES += libtestclass.so libfooclass.so libbarclass.so
 
 libcls_crypto.so: cls_crypto.cc
-	${CXX} -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
+	${CXX} -I. -fPIC -shared -g -o libcls_crypto.so -lcrypto cls_crypto.cc
 BUILT_SOURCES += libcls_crypto.so
 
 libcls_trivialmap.so: cls_trivialmap.cc

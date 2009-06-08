@@ -2,6 +2,9 @@
 #define __OBJCLASS_H
 
 #ifdef __cplusplus
+
+#include "../include/types.h"
+
 extern "C" {
 #endif
 
