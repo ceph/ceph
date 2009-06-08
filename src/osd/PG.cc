@@ -126,19 +126,17 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
 
   while (!log.empty()) {
     Entry &e = *log.begin();
-
-    if (e.version > s) break;
-
-    // remove from index,
-    unindex(e);
-
-    // from log
-    log.pop_front();
+    if (e.version > s)
+      break;
+    generic_dout(20) << "trim " << e << dendl;
+    unindex(e);         // remove from index,
+    log.pop_front();    // from log
   }
-  
   // raise bottom?
-  if (backlog) backlog = false;
-  if (bottom < s) bottom = s;
+  if (backlog)
+    backlog = false;
+  if (bottom < s)
+    bottom = s;
 }
 
 

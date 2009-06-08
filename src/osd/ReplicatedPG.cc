@@ -1413,9 +1413,6 @@ void ReplicatedPG::log_op(vector<Log::Entry>& logv, ObjectStore::Transaction& t)
 {
   dout(10) << "log_op " << log << dendl;
 
-  // update the local pg, pg log
-  write_info(t);
-
   // trim log?
   eversion_t trim_to = is_clean() ? peers_complete_thru : eversion_t();
   if (log.top.version - log.bottom.version > info.stats.num_objects)
@@ -1427,6 +1424,9 @@ void ReplicatedPG::log_op(vector<Log::Entry>& logv, ObjectStore::Transaction& t)
        p++)
     add_log_entry(*p, log_bl);
   append_log(t, log_bl, logv[0].version, trim_to);
+
+  // update the local pg, pg log
+  write_info(t);
 }
 
 
