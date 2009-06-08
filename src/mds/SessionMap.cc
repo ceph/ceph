@@ -146,7 +146,12 @@ void SessionMap::encode(bufferlist& bl)
   for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin(); 
        p != session_map.end(); 
        ++p) 
-    p->second->encode(bl);
+    if (p->second->is_open() ||
+	p->second->is_closing() ||
+	p->second->is_stale() ||
+	p->second->is_stale_purging() ||
+	p->second->is_stale_closing())
+      p->second->encode(bl);
 }
 
 void SessionMap::decode(bufferlist::iterator& p)
@@ -160,6 +165,7 @@ void SessionMap::decode(bufferlist::iterator& p)
     Session *s = new Session;
     s->decode(p);
     session_map[s->inst.name] = s;
+    set_state(s, Session::STATE_OPEN);
     s->last_cap_renew = now;
   }
 }
