@@ -48,13 +48,16 @@ int main(int argc, const char **argv)
   // test aio
   rados_completion_t a, b;
   rados_aio_write(pool, "a", 0, buf, 100, &a);
-  rados_aio_write(pool, "b", 0, buf, 100, &b);
+  rados_aio_write(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf, 100, &b);
   rados_aio_wait_for_safe(a);
   printf("a safe\n");
   rados_aio_wait_for_safe(b);
   printf("b safe\n");
   rados_aio_release(a);
   rados_aio_release(b);
+
+  rados_read(pool, "../b/bb_bb_bb\\foo\\bar", 0, buf2, 128);
+
 
   const char *entry;
   rados_list_ctx_t ctx;
@@ -63,7 +66,7 @@ int main(int argc, const char **argv)
     printf("list entry: %s\n", entry);
   }
   rados_pool_close_ctx(&ctx);
-
+  
   rados_close_pool(pool);
 
 

@@ -178,10 +178,28 @@ void FileStore::append_oname(const sobject_t &oid, char *s)
 {
   //assert(sizeof(oid) == 28);
   char *t = s + strlen(s);
+
+  *t++ = '/';
+  char *i = oid.oid.name.c_str();
+  while (*i) {
+    if (*i == '\\') {
+      *t++ = '\\';
+      *t++ = '\\';      
+    } else if (*i == '.' && i == oid.oid.name.c_str()) {  // only escape leading .
+      *t++ = '\\';
+      *t++ = '.';
+    } else if (*i == '/') {
+      *t++ = '\\';
+      *t++ = 's';
+    } else
+      *t++ = *i;
+    i++;
+  }
+
   if (oid.snap == CEPH_NOSNAP)
-    sprintf(t, "/%s_head", oid.oid.name.c_str());
+    sprintf(t, "_head");
   else
-    sprintf(t, "/%s_%llx", oid.oid.name.c_str(), (long long unsigned)oid.snap);
+    sprintf(t, "_%llx", (long long unsigned)oid.snap);
   //parse_object(t+1);
 }
 
@@ -192,7 +210,25 @@ bool FileStore::parse_object(char *s, sobject_t& o)
 	 bar > s)
     bar--;
   if (*bar == '_') {
-    o.oid.name = nstring(bar-s, s);
+    char buf[bar-s + 1];
+    char *t = buf;
+    char *i = s;
+    while (i < bar) {
+      if (*i == '\\') {
+	i++;
+	switch (*i) {
+	case '\\': *t++ = '\\'; break;
+	case '.': *t++ = '.'; break;
+	case 's': *t++ = '/'; break;
+	default: assert(0);
+	}
+      } else {
+	*t++ = *i;
+      }
+      i++;
+    }
+    *t = 0;
+    o.oid.name = nstring(t-buf, buf);
     if (strcmp(bar+1, "head") == 0)
       o.snap = CEPH_NOSNAP;
     else
