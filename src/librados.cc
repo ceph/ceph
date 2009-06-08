@@ -376,7 +376,6 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
 {
   utime_t ut = g_clock.now();
 
-  Mutex lock("RadosClient::list");
   Cond cond;
   bool done;
   int r;
@@ -464,7 +463,6 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   if (pool.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
-  Mutex lock("RadosClient::write");
   Cond cond;
   bool done;
   int r;
@@ -488,6 +486,8 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
 int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferlist *pbl, size_t len,
 			  AioCompletion **pc)
 {
+  Mutex::Locker l(lock);
+ 
   AioCompletion *c = new AioCompletion;
   Context *onack = new C_aio_Ack(c);
 
@@ -522,6 +522,9 @@ int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, char *bu
 int RadosClient::aio_write(PoolCtx& pool, const object_t oid, off_t off, const bufferlist& bl, size_t len,
 			   AioCompletion **pc)
 {
+  Mutex::Locker l(lock);
+
+  SnapContext snapc;
   utime_t ut = g_clock.now();
 
   AioCompletion *c = new AioCompletion;
@@ -542,7 +545,6 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   SnapContext snapc;
   utime_t ut = g_clock.now();
 
-  Mutex lock("RadosClient::remove");
   Cond cond;
   bool done;
   int r;
@@ -567,7 +569,6 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
 {
   utime_t ut = g_clock.now();
 
-  Mutex lock("RadosClient::rdcall");
   Cond cond;
   bool done;
   int r;
@@ -592,7 +593,8 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
 
 int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
-  Mutex lock("RadosClient::read");
+  SnapContext snapc;
+
   Cond cond;
   bool done;
   int r;
