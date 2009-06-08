@@ -1350,10 +1350,11 @@ void PG::activate(ObjectStore::Transaction& t,
     for (unsigned i=1; i<acting.size(); i++) {
       int peer = acting[i];
       assert(peer_info.count(peer));
-      
+      PG::Info& pi = peer_info[peer];
+
       MOSDPGLog *m = 0;
       
-      if (peer_info[peer].last_update == info.last_update) {
+      if (pi.last_update == info.last_update) {
         // empty log
 	if (activator_map) {
 	  dout(10) << "activate peer osd" << peer << " is up to date, queueing in pending_activators" << dendl;
@@ -1367,14 +1368,14 @@ void PG::activate(ObjectStore::Transaction& t,
       } 
       else {
 	m = new MOSDPGLog(osd->osdmap->get_epoch(), info);
-	if (peer_info[peer].last_update < log.bottom) {
+	if (pi.last_update < log.bottom) {
 	  // summary/backlog
 	  assert(log.backlog);
 	  m->log = log;
 	} else {
 	  // incremental log
-	  assert(peer_info[peer].last_update < info.last_update);
-	  m->log.copy_after(log, peer_info[peer].last_update);
+	  assert(pi.last_update < info.last_update);
+	  m->log.copy_after(log, pi.last_update);
 	}
       }
 
@@ -1382,7 +1383,7 @@ void PG::activate(ObjectStore::Transaction& t,
 
       // update local version of peer's missing list!
       if (m) {
-        eversion_t plu = peer_info[peer].last_update;
+        eversion_t plu = pi.last_update;
         for (list<Log::Entry>::iterator p = m->log.log.begin();
              p != m->log.log.end();
              p++) 
@@ -1398,12 +1399,12 @@ void PG::activate(ObjectStore::Transaction& t,
 
       // update our missing
       if (pm.num_missing() == 0) {
-	peer_info[peer].last_complete = peer_info[peer].last_update;
-        dout(10) << "activate peer osd" << peer << " already uptodate, " << peer_info[peer] << dendl;
-	assert(peer_info[peer].is_uptodate());
+	pi.last_complete = pi.last_update;
+        dout(10) << "activate peer osd" << peer << " already uptodate, " << pi << dendl;
+	assert(pi.is_uptodate());
         uptodate_set.insert(peer);
       } else {
-        dout(10) << "activate peer osd" << peer << " " << peer_info[peer]
+        dout(10) << "activate peer osd" << peer << " " << pi
                  << " missing " << pm << dendl;
       }
             
@@ -1798,7 +1799,7 @@ void PG::read_log(ObjectStore *store)
 	  ondisklog.block_map[opos] = e.version;
         log.log.push_back(e);
       } else {
-	dout(10) << "read_log ignoring entry at " << pos << dendl;
+	dout(10) << "read_log  ignoring entry at " << pos << dendl;
       }
     }
   }
