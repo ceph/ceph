@@ -616,6 +616,7 @@ void MDSMonitor::tick()
 	case MDSMap::STATE_RESOLVE:
 	case MDSMap::STATE_RECONNECT:
 	case MDSMap::STATE_REJOIN:
+	case MDSMap::STATE_CLIENTREPLAY:
 	case MDSMap::STATE_ACTIVE:
 	case MDSMap::STATE_STOPPING:
 	  si.state = MDSMap::STATE_REPLAY;
@@ -767,6 +768,7 @@ void MDSMonitor::do_stop()
     case MDSMap::STATE_RESOLVE:
     case MDSMap::STATE_RECONNECT:
     case MDSMap::STATE_REJOIN:
+    case MDSMap::STATE_CLIENTREPLAY:
       // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
       pending_mdsmap.failed.insert(info.rank);
       pending_mdsmap.up.erase(info.rank);
