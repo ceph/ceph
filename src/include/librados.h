@@ -128,7 +128,7 @@ public:
 
   int aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
 	       AioCompletion **pc);
-  int aio_write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len,
+  int aio_write(rados_pool_t pool, const object_t& oid, off_t off, const bufferlist& bl, size_t len,
 		AioCompletion **pc);
 
 };
