@@ -363,7 +363,7 @@ void env_to_deq(std::deque<const char*>& args);
 void argv_to_deq(int argc, const char **argv,
                  std::deque<const char*>& args);
 
-void parse_startup_config_options(std::vector<const char*>& args, const char *module_type);
+void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon, const char *module_type);
 void parse_config_options(std::vector<const char*>& args);
 void parse_config_option_string(string& s);
 

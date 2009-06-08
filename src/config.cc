@@ -877,7 +877,7 @@ bool is_bool_param(const char *param)
 	return ((strcasecmp(param, "true")==0) || (strcasecmp(param, "false")==0));
 }
 
-void parse_startup_config_options(std::vector<const char*>& args, const char *module_type)
+void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon, const char *module_type)
 {
   DEFINE_CONF_VARS(NULL);
   std::vector<const char *> nargs;
@@ -897,20 +897,20 @@ void parse_startup_config_options(std::vector<const char*>& args, const char *mo
 	conf_specified = true;
     } else if (CONF_ARG_EQ("monmap", 'M')) {
 	CONF_SAFE_SET_ARG_VAL(&g_conf.monmap, OPT_STR);
-    } else if (CONF_ARG_EQ("bind", 0)) {
-      assert_warn(parse_ip_port(args[++i], g_my_addr));
-    } else if (CONF_ARG_EQ("nodaemon", 'D')) {
-      g_conf.daemonize = false;
-      g_conf.log_to_stdout = true;
-    } else if (CONF_ARG_EQ("daemonize", 'd')) {
-      g_conf.daemonize = true;
-      g_conf.log_to_stdout = false;
-    } else if (CONF_ARG_EQ("foreground", 'f')) {
-      g_conf.daemonize = false;
-      g_conf.log_to_stdout = false;
     } else if (CONF_ARG_EQ("show_conf", 'S')) {
       show_config = true;
-    } else if (CONF_ARG_EQ("id", 'i')) {
+    } else if (isdaemon && CONF_ARG_EQ("bind", 0)) {
+      assert_warn(parse_ip_port(args[++i], g_my_addr));
+    } else if (isdaemon && CONF_ARG_EQ("nodaemon", 'D')) {
+      g_conf.daemonize = false;
+      g_conf.log_to_stdout = true;
+    } else if (isdaemon && CONF_ARG_EQ("daemonize", 'd')) {
+      g_conf.daemonize = true;
+      g_conf.log_to_stdout = false;
+    } else if (isdaemon && CONF_ARG_EQ("foreground", 'f')) {
+      g_conf.daemonize = false;
+      g_conf.log_to_stdout = false;
+    } else if (isdaemon && CONF_ARG_EQ("id", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else {
       nargs.push_back(args[i]);

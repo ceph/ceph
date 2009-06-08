@@ -22,7 +22,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
     g_conf.logger = false;
   }
 
-  parse_startup_config_options(args, module_type);
+  parse_startup_config_options(args, daemon, module_type);
   parse_config_options(args);
 
   // open log file?
