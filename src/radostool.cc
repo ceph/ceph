@@ -109,7 +109,7 @@ int main(int argc, const char **argv)
     Rados::ListCtx ctx;
     while (1) {
       list<object_t> vec;
-      int r = rados.list(p, 2, vec, ctx);
+      int r = rados.list(p, 1 << 10, vec, ctx);
       cout << "list result=" << r << " entries=" << vec.size() << std::endl;
       if (r < 0) {
 	cerr << "got error: " << strerror(-r) << std::endl;

@@ -378,7 +378,7 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
 
   Cond cond;
   bool done;
-  int r;
+  int r = 0;
   object_t oid;
 
   memset(&oid, 0, sizeof(oid));
@@ -387,18 +387,18 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
   ceph_object_layout layout;
 retry:
   int pg_num = objecter->osdmap->get_pg_num(pool.poolid);
-
+  
   for (;op.seed <pg_num; op.seed++) {
-   int response_size;
-   int req_size;
-
-   do {
-     lock.Lock();
-     int num = objecter->osdmap->get_pg_layout(pool.poolid, op.seed, layout);
-     lock.Unlock();
-     if (num != pg_num)  /* ahh.. race! */
+    int response_size;
+    int req_size;
+    
+    do {
+      lock.Lock();
+      int num = objecter->osdmap->get_pg_layout(pool.poolid, op.seed, layout);
+      lock.Unlock();
+      if (num != pg_num)  /* ahh.. race! */
         goto retry;
-
+      
       ObjectRead rd;
       bufferlist bl;
 #define MAX_REQ_SIZE 1024
@@ -431,8 +431,8 @@ retry:
         op.cookie = 0;
       }
     } while ((response_size == req_size) && op.cookie);
- }
-
+  }
+  
   return r;
 }
 
