@@ -787,7 +787,7 @@ int Rados::AioCompletion::get_return_value()
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
   return c->get_return_value();
 }
-void Rados::AioCompletion::put()
+void Rados::AioCompletion::release()
 {
   RadosClient::AioCompletion *c = (RadosClient::AioCompletion *)pc;
   c->put();

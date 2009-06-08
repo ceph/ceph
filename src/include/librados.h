@@ -108,7 +108,7 @@ public:
     bool is_complete();
     bool is_safe();
     int get_return_value();
-    void put();
+    void release();
   };
 
   int aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
