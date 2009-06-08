@@ -2994,7 +2994,7 @@ int ReplicatedPG::recover_replicas(int max)
       continue;
     
     // oldest first!
-    const sobject_t& soid = peer_missing[peer].rmissing.begin()->second;
+    sobject_t soid = peer_missing[peer].rmissing.begin()->second;
     eversion_t v = peer_missing[peer].rmissing.begin()->first;
 
     push_to_replica(soid, peer);
