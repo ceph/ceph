@@ -2481,8 +2481,8 @@ void ReplicatedPG::push(const sobject_t& soid, int peer,
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
   
   if (is_primary()) {
-    peer_missing[peer].got(soid, oi.version);
     pushing[soid].insert(peer);
+    peer_missing[peer].got(soid, oi.version);
   }
 }
 
@@ -2493,8 +2493,15 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
   int peer = reply->get_source().num();
   const sobject_t& soid = reply->get_poid();
   
-  if (pushing.count(soid) &&
-      pushing[soid].count(peer)) {
+  if (pushing.count(soid) == 0) {
+    dout(10) << "huh, i wasn't pushing " << soid << " to osd" << peer
+	     << ", or anybody else"
+	     << dendl;
+  } else if (pushing[soid].count(peer) == 0) {
+    dout(10) << "huh, i wasn't pushing " << soid << " to osd" << peer
+	     << ", only " << pushing[soid]
+	     << dendl;
+  } else {
     pushing[soid].erase(peer);
 
     if (peer_missing.count(peer) == 0 ||
@@ -2510,8 +2517,6 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
       dout(10) << "pushed " << soid << ", still waiting for push ack from " 
 	       << pushing[soid] << dendl;
     }
-  } else {
-    dout(10) << "huh, i wasn't pushing " << soid << dendl;
   }
   delete reply;
 }
