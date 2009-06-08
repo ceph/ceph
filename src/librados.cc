@@ -393,11 +393,11 @@ retry:
    int req_size;
 
    do {
+     lock.Lock();
      int num = objecter->osdmap->get_pg_layout(pool.poolid, op.seed, layout);
+     lock.Unlock();
      if (num != pg_num)  /* ahh.. race! */
         goto retry;
-
-      lock.Lock();
 
       ObjectRead rd;
       bufferlist bl;
@@ -405,13 +405,17 @@ retry:
       req_size = min(MAX_REQ_SIZE, max_entries);
       rd.pg_ls(req_size, op.cookie);
 
-      Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+      Mutex mylock("RadosClient::list::mylock");
+      Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+      lock.Lock();
       objecter->read(oid, layout, rd, pool.snap_seq, &bl, 0, onack);
-
-      while (!done)
-        cond.Wait(lock);
-
       lock.Unlock();
+
+      mylock.Lock();
+      while (!done)
+        cond.Wait(mylock);
+      mylock.Unlock();
 
       bufferlist::iterator iter = bl.begin();
       PGLSResponse response;
@@ -463,22 +467,28 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   if (pool.snap_seq != CEPH_NOSNAP)
     return -EINVAL;
 
+  Mutex mylock("RadosClient::write::mylock");
   Cond cond;
   bool done;
   int r;
 
-  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   dout(0) << "going to write" << dendl;
 
   lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->write(oid, layout,
 		  off, len, pool.snapc, bl, ut, 0,
 		  onack, NULL);
-  while (!done)
-    cond.Wait(lock);
   lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  dout(0) << "did write" << dendl;
 
   return len;
 }
@@ -545,21 +555,25 @@ int RadosClient::remove(PoolCtx& pool, const object_t& oid)
   SnapContext snapc;
   utime_t ut = g_clock.now();
 
+  Mutex mylock("RadosClient::remove::mylock");
   Cond cond;
   bool done;
   int r;
-  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   dout(0) << "going to write" << dendl;
 
   lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->remove(oid, layout,
 		  snapc, ut, 0,
 		  onack, NULL);
-  while (!done)
-    cond.Wait(lock);
   lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
 
   return r;
 }
@@ -569,23 +583,25 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
 {
   utime_t ut = g_clock.now();
 
+  Mutex mylock("RadosClient::exec::mylock");
   Cond cond;
   bool done;
   int r;
-  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
 
   lock.Lock();
-
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   ObjectRead rd;
   rd.rdcall(cls, method, inbl);
   objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack);
-
-  while (!done)
-    cond.Wait(lock);
-
   lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
   dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
 
   return r;
@@ -595,23 +611,26 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
 {
   SnapContext snapc;
 
+  Mutex mylock("RadosClient::read::mylock");
   Cond cond;
   bool done;
   int r;
-  Context *onack = new C_SafeCond(&lock, &cond, &done, &r);
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
-  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
 
   dout(0) << "going to read" << dendl;
 
   lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->read(oid, layout,
 	      off, len, pool.snap_seq, &bl, 0,
               onack);
-  while (!done)
-    cond.Wait(lock);
-
   lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
 
   if (bl.length() < len)
     len = bl.length();
