@@ -9,6 +9,7 @@
 #include <openssl/md5.h>
 #include <openssl/sha.h>
 
+#include "include/types.h"
 #include "objclass/objclass.h"
 
 
