@@ -34,7 +34,7 @@ private:
   ceph_osd_request_head head;
 public:
   object_t oid;
-  vector<ceph_osd_op> ops;
+  vector<OSDOp> ops;
   bufferlist ticket;
   vector<snapid_t> snaps;
   osd_peer_stat_t peer_stat;
@@ -109,11 +109,11 @@ public:
 
   // ops
   void add_simple_op(int o, __u64 off, __u64 len) {
-    ceph_osd_op op;
-    op.op = o;
-    op.offset = off;
-    op.length = len;
-    ops.push_back(op);
+    OSDOp osd_op;
+    osd_op.op.op = o;
+    osd_op.op.offset = off;
+    osd_op.op.length = len;
+    ops.push_back(osd_op);
   }
   void write(__u64 off, __u64 len, bufferlist& bl) {
     add_simple_op(CEPH_OSD_OP_WRITE, off, len);
@@ -168,7 +168,13 @@ public:
     head.num_ops = ops.size();
     head.ticket_len = ticket.length();
     ::encode(head, payload);
-    ::encode_nohead(ops, payload);
+
+    for (unsigned i = 0; i < head.num_ops; i++) {
+      ops[i].op.payload_len = ops[i].data.length();
+      ::encode(ops[i].op, payload);
+      data.append(ops[i].data);
+    }
+
     ::encode_nohead(oid.name, payload);
     ::encode_nohead(ticket, payload);
     ::encode_nohead(snaps, payload);
@@ -179,7 +185,13 @@ public:
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    decode_nohead(head.num_ops, ops, p);
+    ops.resize(head.num_ops);
+    unsigned off = 0;
+    for (unsigned i = 0; i < head.num_ops; i++) {
+      ::decode(ops[i].op, p);
+      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
+      off += ops[i].op.payload_len;
+    }
     decode_nohead(head.object_len, oid.name, p);
     decode_nohead(head.ticket_len, ticket, p);
     decode_nohead(head.num_snaps, snaps, p);

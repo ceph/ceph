@@ -395,7 +395,6 @@ tid_t Objecter::read_submit(ReadOp *rd)
     m->set_snap_seq(0);
 
     m->ops = rd->ops;
-    m->set_data(rd->bl);
     m->set_retry_attempt(rd->attempts++);
     
     int who = pg.acker();
@@ -519,8 +518,6 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
     
     if (wr->version != eversion_t())
       m->set_version(wr->version);  // we're replaying this op!
-
-    m->set_data(wr->bl);
 
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   } else 

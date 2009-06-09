@@ -37,7 +37,7 @@ public:
   __u8 acks_wanted;
 
   // op to exec
-  vector<ceph_osd_op> ops;
+  vector<OSDOp> ops;
   utime_t mtime;
   bool noop;
 
@@ -70,7 +70,16 @@ public:
     ::decode(reqid, p);
     ::decode(pgid, p);
     ::decode(poid, p);
-    ::decode(ops, p);
+
+    unsigned num_ops;
+    ::decode(num_ops, p);
+    ops.resize(num_ops);
+    unsigned off = 0;
+    for (unsigned i = 0; i < num_ops; i++) {
+      ::decode(ops[i].op, p);
+      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
+      off += ops[i].op.payload_len;
+    }
     ::decode(mtime, p);
     ::decode(noop, p);
     ::decode(acks_wanted, p);
@@ -94,7 +103,14 @@ public:
     ::encode(reqid, payload);
     ::encode(pgid, payload);
     ::encode(poid, payload);
-    ::encode(ops, payload);
+
+    __u32 num_ops = ops.size();
+    ::encode(num_ops, payload);
+    for (unsigned i = 0; i < ops.size(); i++) {
+      ops[i].op.payload_len = ops[i].data.length();
+      ::encode(ops[i].op, payload);
+      data.append(ops[i].data);
+    }
     ::encode(mtime, payload);
     ::encode(noop, payload);
     ::encode(acks_wanted, payload);
@@ -112,7 +128,7 @@ public:
     ::encode(data_subset, payload);
     ::encode(clone_subsets, payload);
     if (ops.size())
-      header.data_off = ops[0].offset;
+      header.data_off = ops[0].op.offset;
     else
       header.data_off = 0;
   }

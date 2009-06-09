@@ -926,4 +926,20 @@ struct ScrubMap {
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
 
+
+struct OSDOp {
+  ceph_osd_op op;
+  bufferlist data;
+
+  OSDOp() {
+    memset(&op, 0, sizeof(ceph_osd_op));
+  }
+};
+
+inline ostream& operator<<(ostream& out, const struct OSDOp& op) {
+  out << op.op << " (data length=" << op.data.length() << ")";
+  return out;
+}
+
+
 #endif

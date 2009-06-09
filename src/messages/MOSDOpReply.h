@@ -33,7 +33,7 @@ class MOSDOpReply : public Message {
   ceph_osd_reply_head head;
  public:
   object_t oid;
-  vector<ceph_osd_op> ops;
+  vector<OSDOp> ops;
 
   long     get_tid() { return head.tid; }
   object_t get_oid() { return oid; }
@@ -81,14 +81,24 @@ public:
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
-    ::decode_nohead(head.num_ops, ops, p);
+    ops.resize(head.num_ops);
+    unsigned off = 0;
+    for (unsigned i = 0; i < head.num_ops; i++) {
+      ::decode(ops[i].op, p);
+      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
+      off += ops[i].op.payload_len;
+    }
     ::decode_nohead(head.object_len, oid.name, p);
   }
   virtual void encode_payload() {
     head.num_ops = ops.size();
     head.object_len = oid.name.length();
     ::encode(head, payload);
-    ::encode_nohead(ops, payload);
+    for (unsigned i = 0; i < head.num_ops; i++) {
+      ops[i].op.payload_len = ops[i].data.length();
+      ::encode(ops[i].op, payload);
+      data.append(ops[i].data);
+    }
     ::encode_nohead(oid.name, payload);
   }
 

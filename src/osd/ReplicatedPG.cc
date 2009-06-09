@@ -375,16 +375,16 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   bufferlist outdata;
   int result = 0;
 
-  for (vector<ceph_osd_op>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
-    switch (p->op) {
+  for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
+    switch (p->op.op) {
     case CEPH_OSD_OP_PGLS:
       {
         dout(10) << " pgls pg=" << op->get_pg() << dendl;
 	// read into a buffer
         PGLSResponse response;
-        response.handle = (collection_list_handle_t)(__u64)(p->pgls_cookie);
+        response.handle = (collection_list_handle_t)(__u64)(p->op.pgls_cookie);
         vector<sobject_t> sentries;
-	result = osd->store->collection_list_partial(op->get_pg().to_coll(), op->get_snapid(), sentries, p->length,
+	result = osd->store->collection_list_partial(op->get_pg().to_coll(), op->get_snapid(), sentries, p->op.length,
 	                                             &response.handle);
 	if (!result) {
           vector<sobject_t>::iterator iter;
@@ -633,8 +633,8 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
   osd->logger->inc(l_osd_subop);
 
   if (op->ops.size() >= 1) {
-    ceph_osd_op& first = op->ops[0];
-    switch (first.op) {
+    OSDOp& first = op->ops[0];
+    switch (first.op.op) {
       // rep stuff
     case CEPH_OSD_OP_PULL:
       sub_op_pull(op);
@@ -654,13 +654,13 @@ void ReplicatedPG::do_sub_op(MOSDSubOp *op)
 void ReplicatedPG::do_sub_op_reply(MOSDSubOpReply *r)
 {
   if (r->ops.size() >= 1) {
-    ceph_osd_op& first = r->ops[0];
-    if (first.op == CEPH_OSD_OP_PUSH) {
+    OSDOp& first = r->ops[0];
+    if (first.op.op == CEPH_OSD_OP_PUSH) {
       // continue peer recovery
       sub_op_push_reply(r);
       return;
     }
-    if (first.op == CEPH_OSD_OP_SCRUB) {
+    if (first.op.op == CEPH_OSD_OP_SCRUB) {
       sub_op_scrub_reply(r);
       return;
     }
@@ -813,8 +813,8 @@ bool ReplicatedPG::snap_trimmer()
 // ========================================================================
 // low level osd ops
 
-int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
-			     bufferlist::iterator& bp, bufferlist& odata)
+int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
+			     bufferlist& odata)
 {
   int result = 0;
 
@@ -827,10 +827,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 
   dout(10) << "do_osd_op " << soid << " " << ops << dendl;
 
-  for (vector<ceph_osd_op>::iterator p = ops.begin(); p != ops.end(); p++) {
-    ceph_osd_op& op = *p;
+  for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); p++) {
+    OSDOp& osd_op = *p;
+    ceph_osd_op& op = osd_op.op; 
     bool is_modify;
     string cname, mname;
+    bufferlist::iterator bp = osd_op.data.begin();
 
     switch (op.op) {
     case CEPH_OSD_OP_RDCALL:
@@ -949,11 +951,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 
     case CEPH_OSD_OP_MASKTRUNC:
       if (p != ops.begin()) {
-	ceph_osd_op& rd = *(p - 1);
-	ceph_osd_op& m = *p;
+	OSDOp& rd = *(p - 1);
+	OSDOp& m = *p;
 	
 	// are we beyond truncate_size?
-	if (rd.offset + rd.length > m.truncate_size) {	
+	if (rd.op.offset + rd.op.length > m.op.truncate_size) {	
 	  __u32 seq = 0;
 	  interval_set<__u64> tm;
 	  if (oi.truncate_info.length()) {
@@ -963,11 +965,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	  }
 	  
 	  // truncated portion of the read
-	  unsigned from = MAX(rd.offset, m.truncate_size);  // also end of data
-	  unsigned to = rd.offset + rd.length;
+	  unsigned from = MAX(rd.op.offset, m.op.truncate_size);  // also end of data
+	  unsigned to = rd.op.offset + rd.op.length;
 	  unsigned trim = to-from;
 	  
-	  rd.length = rd.length - trim;
+	  rd.op.length = rd.op.length - trim;
 	  
 	  dout(10) << " masktrunc " << m << ": overlap " << from << "~" << trim << dendl;
 	  
@@ -977,7 +979,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	  truncated.substr_of(odata, odata.length() - trim, trim);
 	  keep.swap(odata);
 	  
-	  if (seq == rd.truncate_seq) {
+	  if (seq == rd.op.truncate_seq) {
 	    // keep any valid extents beyond 'from'
 	    unsigned data_end = from;
 	    for (map<__u64,__u64>::iterator q = tm.m.begin();
@@ -995,7 +997,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 		  bp.zero();
 		  odata.push_back(bp);
 		  dout(20) << "  adding " << bp.length() << " zeros" << dendl;
-		  rd.length = rd.length + bp.length();
+		  rd.op.length = rd.op.length + bp.length();
 		  data_end += bp.length();
 		}
 
@@ -1003,7 +1005,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 		b.substr_of(truncated, s-from, l);
 		dout(20) << "  adding " << b.length() << " bytes from " << s << "~" << l << dendl;
 		odata.claim_append(b);
-		rd.length = rd.length + l;
+		rd.op.length = rd.op.length + l;
 		data_end += l;
 	      }
 	    } // for
@@ -1163,12 +1165,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
       {
 	// just do it inline; this works because we are happy to execute
 	// fancy op on replicas as well.
-	vector<ceph_osd_op> nops(1);
-	ceph_osd_op& newop = nops[0];
-	newop.op = CEPH_OSD_OP_WRITE;
-	newop.offset = old_size;
-	newop.length = op.length;
-	do_osd_ops(ctx, nops, bp, odata);
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_WRITE;
+	newop.op.offset = old_size;
+	newop.op.length = op.length;
+        newop.data = osd_op.data;
+	do_osd_ops(ctx, nops, odata);
       }
       break;
 
@@ -1179,7 +1182,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
     case CEPH_OSD_OP_SETTRUNC:
       if (p != ops.begin()) {
 	// set truncate seq over preceeding write's range
-	ceph_osd_op& wr = *(p - 1);
+	OSDOp& wr = *(p - 1);
 	
 	__u32 seq = 0;
 	interval_set<__u64> tm;
@@ -1190,12 +1193,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	}
 	if (seq < op.truncate_seq) {
 	  seq = op.truncate_seq;
-	  tm.insert(wr.offset, wr.length);
+	  tm.insert(wr.op.offset, wr.op.length);
 	} else {
 	  if (oi.truncate_info.length())
 	    ::decode(tm, p);
 	  interval_set<__u64> n;
-	  n.insert(wr.offset, wr.length);
+	  n.insert(wr.op.offset, wr.op.length);
 	  tm.union_of(n);
 	}
 	dout(10) << " settrunc seq " << seq << " map " << tm << dendl;
@@ -1216,13 +1219,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	
 	if (op.truncate_seq > old_seq) {
 	  // just truncate/delete.
-	  vector<ceph_osd_op> nops(1);
-	  ceph_osd_op& newop = nops[0];
-	  newop.op = CEPH_OSD_OP_TRUNCATE;
-	  newop.offset = op.truncate_size;
+	  vector<OSDOp> nops(1);
+	  OSDOp& newop = nops[0];
+	  newop.op.op = CEPH_OSD_OP_TRUNCATE;
+	  newop.op.offset = op.truncate_size;
+          newop.data = osd_op.data;
 	  dout(10) << " seq " << op.truncate_seq << " > old_seq " << old_seq
 		   << ", truncating with " << newop << dendl;
-	  do_osd_ops(ctx, nops, bp, odata);
+	  do_osd_ops(ctx, nops, odata);
 	} else {
 	  // do smart truncate
 	  interval_set<__u64> tm;
@@ -1238,12 +1242,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 	  for (map<__u64,__u64>::iterator p = zero.m.begin();
 	       p != zero.m.end();
 	       p++) {
-	    vector<ceph_osd_op> nops(1);
-	    ceph_osd_op& newop = nops[0];
-	    newop.op = CEPH_OSD_OP_ZERO;
-	    newop.offset = p->first;
-	    newop.length = p->second;
-	    do_osd_ops(ctx, nops, bp, odata);
+	    vector<OSDOp> nops(1);
+	    OSDOp& newop = nops[0];
+	    newop.op.op = CEPH_OSD_OP_ZERO;
+	    newop.op.offset = p->first;
+	    newop.op.length = p->second;
+            newop.data = osd_op.data;
+	    do_osd_ops(ctx, nops, odata);
 	  }
 	  
 	  oi.truncate_info.clear();
@@ -1386,8 +1391,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   eversion_t old_version = poi->version;
 
   // prepare the actual mutation
-  bufferlist::iterator bp = ctx->indata.begin();
-  int result = do_osd_ops(ctx, ctx->ops, bp, ctx->outdata);
+  int result = do_osd_ops(ctx, ctx->ops, ctx->outdata);
 
   if (result < 0 || ctx->op_t.empty())
     return result;  // error, or read op.
@@ -1522,9 +1526,9 @@ void ReplicatedPG::apply_repop(RepGather *repop)
 
   // any completion stuff to do here?
   const sobject_t& soid = repop->ctx->obs->oi.soid;
-  ceph_osd_op& first = repop->ctx->ops[0];
+  OSDOp& first = repop->ctx->ops[0];
 
-  switch (first.op) { 
+  switch (first.op.op) { 
 #if 0
   case CEPH_OSD_OP_UNBALANCEREADS:
     dout(-10) << "apply_repop  completed unbalance-reads on " << oid << dendl;
@@ -2039,7 +2043,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   if (op->noop)
     opname = "no-op";
   else
-    opname = ceph_osd_op_name(op->ops[0].op);
+    opname = ceph_osd_op_name(op->ops[0].op.op);
 
   dout(10) << "sub_op_modify " << opname 
            << " " << soid 
@@ -2342,8 +2346,8 @@ bool ReplicatedPG::pull(const sobject_t& soid)
   tid_t tid = osd->get_tid();
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, CEPH_OSD_FLAG_ACK,
 				   osd->osdmap->get_epoch(), tid, v);
-  subop->ops = vector<ceph_osd_op>(1);
-  subop->ops[0].op = CEPH_OSD_OP_PULL;
+  subop->ops = vector<OSDOp>(1);
+  subop->ops[0].op.op = CEPH_OSD_OP_PULL;
   subop->data_subset.swap(data_subset);
   // do not include clone_subsets in pull request; we will recalculate this
   // when the object is pushed back.
@@ -2480,13 +2484,13 @@ void ReplicatedPG::push(const sobject_t& soid, int peer,
   osd_reqid_t rid;  // useless?
   MOSDSubOp *subop = new MOSDSubOp(rid, info.pgid, soid, false, 0,
 				   osd->osdmap->get_epoch(), osd->get_tid(), oi.version);
-  subop->ops = vector<ceph_osd_op>(1);
-  subop->ops[0].op = CEPH_OSD_OP_PUSH;
-  subop->ops[0].offset = 0;
-  subop->ops[0].length = size;
+  subop->ops = vector<OSDOp>(1);
+  subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
+  subop->ops[0].op.offset = 0;
+  subop->ops[0].op.length = size;
+  subop->ops[0].data = bl;
   subop->data_subset.swap(data_subset);
   subop->clone_subsets.swap(clone_subsets);
-  subop->set_data(bl);   // note: claims bl, set length above here!
   subop->attrset.swap(attrset);
   osd->messenger->send_message(subop, osd->osdmap->get_inst(peer));
   
@@ -2559,12 +2563,12 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 {
   const sobject_t& soid = op->poid;
   eversion_t v = op->version;
-  ceph_osd_op& push = op->ops[0];
+  OSDOp& push = op->ops[0];
 
   dout(7) << "op_push " 
           << soid 
           << " v " << v 
-	  << " len " << push.length
+	  << " len " << push.op.length
 	  << " data_subset " << op->data_subset
 	  << " clone_subsets " << op->clone_subsets
 	  << " data len " << op->get_data().length()
@@ -2578,8 +2582,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   // determine data/clone subsets
   data_subset = op->data_subset;
-  if (data_subset.empty() && push.length && push.length == data.length())
-    data_subset.insert(0, push.length);
+  if (data_subset.empty() && push.op.length && push.op.length == data.length())
+    data_subset.insert(0, push.op.length);
   clone_subsets = op->clone_subsets;
 
   if (is_primary()) {

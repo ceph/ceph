@@ -93,19 +93,18 @@ int cls_rdcall(cls_method_context_t hctx, const char *cls, const char *method,
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   bufferlist odata;
   bufferlist idata;
-  vector<ceph_osd_op> nops(1);
-  ceph_osd_op& op = nops[0];
+  vector<OSDOp> nops(1);
+  OSDOp& op = nops[0];
   int r;
 
-  op.op = CEPH_OSD_OP_RDCALL;
-  op.class_len = strlen(cls);
-  op.method_len = strlen(method);
-  op.indata_len = datalen;
-  idata.append(cls, op.class_len);
-  idata.append(method, op.method_len);
-  idata.append(indata, datalen);
-  bufferlist::iterator iter = idata.begin();
-  r = (*pctx)->pg->do_osd_ops(*pctx, nops, iter, odata);
+  op.op.op = CEPH_OSD_OP_RDCALL;
+  op.op.class_len = strlen(cls);
+  op.op.method_len = strlen(method);
+  op.op.indata_len = datalen;
+  op.data.append(cls, op.op.class_len);
+  op.data.append(method, op.op.method_len);
+  op.data.append(indata, datalen);
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops, odata);
 
   *outdata = (char *)malloc(odata.length());
   memcpy(*outdata, odata.c_str(), odata.length());
@@ -120,15 +119,14 @@ int cls_getxattr(cls_method_context_t hctx, const char *name,
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   bufferlist name_data;
   bufferlist odata;
-  vector<ceph_osd_op> nops(1);
-  ceph_osd_op& op = nops[0];
+  vector<OSDOp> nops(1);
+  OSDOp& op = nops[0];
   int r;
 
-  op.op = CEPH_OSD_OP_GETXATTR;
-  name_data.append(name);
-  op.name_len = strlen(name);
-  bufferlist::iterator iter = name_data.begin();
-  r = (*pctx)->pg->do_osd_ops(*pctx, nops, iter, odata);
+  op.op.op = CEPH_OSD_OP_GETXATTR;
+  op.data.append(name);
+  op.op.name_len = strlen(name);
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops, odata);
 
   *outdata = (char *)malloc(odata.length());
   memcpy(*outdata, odata.c_str(), odata.length());
@@ -141,13 +139,12 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
                                  char **outdata, int *outdatalen)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
-  vector<ceph_osd_op> ops(1);
-  ops[0].op = CEPH_OSD_OP_READ;
-  ops[0].offset = ofs;
-  ops[0].length = len;
-  bufferlist idata, odata;
-  bufferlist::iterator iter = idata.begin();
-  int r = (*pctx)->pg->do_osd_ops(*pctx, ops, iter, odata);
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_READ;
+  ops[0].op.offset = ofs;
+  ops[0].op.length = len;
+  bufferlist odata;
+  int r = (*pctx)->pg->do_osd_ops(*pctx, ops, odata);
 
   *outdata = (char *)malloc(odata.length());
   memcpy(*outdata, odata.c_str(), odata.length());
@@ -159,39 +156,37 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
-  vector<ceph_osd_op> ops(1);
-  ops[0].op = CEPH_OSD_OP_READ;
-  ops[0].offset = ofs;
-  ops[0].length = len;
-  bufferlist idata;
-  bufferlist::iterator iter = idata.begin();
-  return (*pctx)->pg->do_osd_ops(*pctx, ops, iter, *outbl);
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_READ;
+  ops[0].op.offset = ofs;
+  ops[0].op.length = len;
+  return (*pctx)->pg->do_osd_ops(*pctx, ops, *outbl);
 }
 
 int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
-  vector<ceph_osd_op> ops(1);
-  ops[0].op = CEPH_OSD_OP_WRITE;
-  ops[0].offset = ofs;
-  ops[0].length = len;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_WRITE;
+  ops[0].op.offset = ofs;
+  ops[0].op.length = len;
+  ops[0].data = *inbl;
   bufferlist outbl;
-  bufferlist::iterator iter = inbl->begin();
-  return (*pctx)->pg->do_osd_ops(*pctx, ops, iter, outbl);
+  return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
 }
 
 int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
-  vector<ceph_osd_op> ops(2);
-  ops[0].op = CEPH_OSD_OP_TRUNCATE;
-  ops[0].offset = 0;
-  ops[0].length = 0;
-  ops[1].op = CEPH_OSD_OP_WRITE;
-  ops[1].offset = ofs;
-  ops[1].length = len;
+  vector<OSDOp> ops(2);
+  ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+  ops[0].op.offset = 0;
+  ops[0].op.length = 0;
+  ops[1].op.op = CEPH_OSD_OP_WRITE;
+  ops[1].op.offset = ofs;
+  ops[1].op.length = len;
+  ops[1].data = *inbl;
   bufferlist outbl;
-  bufferlist::iterator iter = inbl->begin();
-  return (*pctx)->pg->do_osd_ops(*pctx, ops, iter, outbl);
+  return (*pctx)->pg->do_osd_ops(*pctx, ops, outbl);
 }
 

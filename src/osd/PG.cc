@@ -2119,8 +2119,8 @@ void PG::scrub()
   // request maps from replicas
   for (unsigned i=1; i<acting.size(); i++) {
     dout(10) << "scrub  requesting scrubmap from osd" << acting[i] << dendl;
-    vector<ceph_osd_op> scrub(1);
-    scrub[0].op = CEPH_OSD_OP_SCRUB;
+    vector<OSDOp> scrub(1);
+    scrub[0].op.op = CEPH_OSD_OP_SCRUB;
     sobject_t poid;
     eversion_t v;
     osd_reqid_t reqid;

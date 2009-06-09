@@ -352,6 +352,7 @@ struct ceph_osd_op {
 			__le64 pgls_cookie, count;
 		};
 	};
+        __le32 payload_len;
 } __attribute__ ((packed));
 
 struct ceph_osd_request_head {

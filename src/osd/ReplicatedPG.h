@@ -233,7 +233,7 @@ public:
   struct OpContext {
     Message *op;
     osd_reqid_t reqid;
-    vector<ceph_osd_op>& ops;
+    vector<OSDOp>& ops;
     bufferlist& indata;
     bufferlist outdata;
 
@@ -254,7 +254,7 @@ public:
 
     ReplicatedPG *pg;
 
-    OpContext(Message *_op, osd_reqid_t _reqid, vector<ceph_osd_op>& _ops, bufferlist& _data,
+    OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
 	      ObjectContext::state_t _mode, ObjectState *_obs, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), indata(_data), mode(_mode), obs(_obs),
       clone_obc(0), data_off(0), pg(_pg) {}
@@ -446,8 +446,8 @@ public:
   void do_sub_op(MOSDSubOp *op);
   void do_sub_op_reply(MOSDSubOpReply *op);
   bool snap_trimmer();
-  int do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
-		 bufferlist::iterator& bp, bufferlist& odata);
+  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
+		 bufferlist& odata);
 
   bool same_for_read_since(epoch_t e);
   bool same_for_modify_since(epoch_t e);

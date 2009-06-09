@@ -148,7 +148,9 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	if (flags & CEPH_OSD_FLAG_WRITE) {
 		req->r_request->hdr.data_off = cpu_to_le16(off);
 		req->r_request->hdr.data_len = cpu_to_le32(*plen);
+                op->payload_len = cpu_to_le32(*plen);
 	}
+
 
 	/* fill in oid, ticket */
 	head->object_len = cpu_to_le32(req->r_oid_len);
