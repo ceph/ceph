@@ -49,7 +49,8 @@ bin_PROGRAMS = \
 	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
-	testrados testradospp testradoscio radostool
+	testrados testradospp testradoscio testradosciopp \
+	radostool
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -119,8 +120,13 @@ testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la libcrush.la
 testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la libcrush.la
+
+#testradoscio_SOURCES = testradoscio.c librados.cc msg/SimpleMessenger.cc 
+#testradoscio_LDADD = libosdc.a libcrush.a libcommon.a 
 testradoscio_SOURCES = testradoscio.c
 testradoscio_LDADD = librados.la libcrush.la
+testradosciopp_SOURCES = testradosciopp.cc
+testradosciopp_LDADD = librados.la libcrush.la
 
 ## object classes
 
