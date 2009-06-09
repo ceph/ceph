@@ -2226,6 +2226,8 @@ void PG::scrub()
       for (unsigned i=1; i<acting.size(); i++) {
 	bool peerok = true;
 	if (po->size != p[i]->size) {
+	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+		  << " size " << p[i]->size << " != " << po->size << dendl;
 	  ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 	     << " size " << p[i]->size << " != " << po->size;
 	  osd->get_logclient()->log(LOG_ERROR, ss);
@@ -2233,6 +2235,8 @@ void PG::scrub()
 	  num_bad++;
 	}
 	if (po->attrs.size() != p[i]->attrs.size()) {
+	  dout(0) << "scrub osd" << acting[i] << " " << po->poid
+		  << " attr count " << p[i]->attrs.size() << " != " << po->attrs.size() << dendl;
 	  ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 	     << " attr count " << p[i]->attrs.size() << " != " << po->attrs.size();
 	  osd->get_logclient()->log(LOG_ERROR, ss);
@@ -2242,6 +2246,8 @@ void PG::scrub()
 	for (map<nstring,bufferptr>::iterator q = po->attrs.begin(); q != po->attrs.end(); q++) {
 	  if (p[i]->attrs.count(q->first)) {
 	    if (q->second.cmp(p[i]->attrs[q->first])) {
+	      dout(0) << "scrub osd" << acting[i] << " " << po->poid
+		      << " attr " << q->first << " value mismatch" << dendl;
 	      ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 		 << " attr " << q->first << " value mismatch";
 	      osd->get_logclient()->log(LOG_ERROR, ss);
@@ -2249,6 +2255,8 @@ void PG::scrub()
 	      num_bad++;
 	    }
 	  } else {
+	    dout(0) << "scrub osd" << acting[i] << " " << po->poid
+		    << " attr " << q->first << " missing" << dendl;
 	    ss << info.pgid << " scrub osd" << acting[i] << " " << po->poid
 	       << " attr " << q->first << " missing";
 	    osd->get_logclient()->log(LOG_ERROR, ss);
@@ -2270,6 +2278,7 @@ void PG::scrub()
     }
     
     if (num_missing || num_bad) {
+      dout(0) << "scrub " << num_missing << " missing, " << num_bad << " bad objects" << dendl;
       ss << info.pgid << " scrub " << num_missing << " missing, " << num_bad << " bad objects";
       osd->get_logclient()->log(LOG_ERROR, ss);
       state_set(PG_STATE_INCONSISTENT);
