@@ -2573,16 +2573,6 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
   interval_set<__u64> data_subset;
   map<sobject_t, interval_set<__u64> > clone_subsets;
 
-  // are we missing (this specific version)?
-  //  (if version is wrong, it is either old (we don't want it) or 
-  //   newer (peering is buggy))
-  if (!missing.is_missing(soid, v)) {
-    dout(7) << "sub_op_push not missing " << soid << " v" << v << dendl;
-    dout(15) << " but i AM missing " << missing.missing << dendl;
-    delete op;
-    return;
-  }
-
   bufferlist data;
   data.claim(op->get_data());
 
@@ -2697,18 +2687,20 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     }
   }
 
+  if (missing.is_missing(soid, v)) {
+    dout(10) << "got missing " << soid << " v " << v << dendl;
+    missing.got(soid, v);
 
-  missing.got(soid, v);
-
-  // raise last_complete?
-  while (log.complete_to != log.log.end()) {
-    if (missing.missing.count(log.complete_to->soid))
-      break;
-    if (info.last_complete < log.complete_to->version)
-      info.last_complete = log.complete_to->version;
-    log.complete_to++;
+    // raise last_complete?
+    while (log.complete_to != log.log.end()) {
+      if (missing.missing.count(log.complete_to->soid))
+	break;
+      if (info.last_complete < log.complete_to->version)
+	info.last_complete = log.complete_to->version;
+      log.complete_to++;
+    }
+    dout(10) << "last_complete now " << info.last_complete << dendl;
   }
-  dout(10) << "last_complete now " << info.last_complete << dendl;
 
   // apply to disk!
   write_info(t);
