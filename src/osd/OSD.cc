@@ -2120,6 +2120,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     int oldprimary = pg->get_primary();
     vector<int> oldacting = pg->acting;
     
+    pg->kick();
     pg->clear_prior();
 
     // update PG
