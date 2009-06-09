@@ -3495,6 +3495,9 @@ void OSD::handle_op(MOSDOp *op)
 
   utime_t now = g_clock.now();
 
+  // set up op flags
+  init_op_flags(op);
+
   // update qlen stats
   stat_oprate.hit(now);
   stat_ops++;
@@ -3900,14 +3903,11 @@ void OSD::send_class_request(const char *cname, ClassVersion& version)
 }
 
 
-int OSD::get_op_flags(MOSDOp *op)
+void OSD::init_op_flags(MOSDOp *op)
 {
   vector<ceph_osd_op>::iterator iter;
 
-  return op->get_flags();
-
   /* FIXME */
-
-  return 0;
+  op->rmw_flags = op->get_flags();
 }
 

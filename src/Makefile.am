@@ -303,7 +303,6 @@ libos_a_SOURCES = \
 	os/JournalingObjectStore.cc
 
 libosd_a_SOURCES = \
-        messages/MOSDOp.cc \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \

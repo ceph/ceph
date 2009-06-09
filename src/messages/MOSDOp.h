@@ -38,7 +38,7 @@ public:
   bufferlist ticket;
   vector<snapid_t> snaps;
   osd_peer_stat_t peer_stat;
-  int flags;
+  int rmw_flags;
 
   friend class MOSDOpReply;
 
@@ -68,9 +68,8 @@ public:
   bool may_read() { return head.flags & CEPH_OSD_FLAG_READ; }
   bool may_write() { return head.flags & CEPH_OSD_FLAG_WRITE; }
 #endif
-  bool may_read() { assert(flags); return flags & CEPH_OSD_FLAG_READ; }
-  bool may_write() { assert(flags); return flags & CEPH_OSD_FLAG_WRITE; }
-  void update_flags(OSD *osd);
+  bool may_read() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_READ; }
+  bool may_write() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_WRITE; }
 
   void set_peer_stat(const osd_peer_stat_t& stat) {
     peer_stat = stat;
@@ -93,7 +92,8 @@ public:
 	 int flags) :
     Message(CEPH_MSG_OSD_OP),
     oid(_oid),
-    ticket(tkt) {
+    ticket(tkt),
+    rmw_flags(flags) {
     memset(&head, 0, sizeof(head));
     head.tid = tid;
     head.client_inc = inc;
@@ -101,7 +101,7 @@ public:
     head.osdmap_epoch = mapepoch;
     head.flags = flags;
   }
-  MOSDOp() {}
+  MOSDOp() : rmw_flags(0) {}
 
   void set_layout(const ceph_object_layout& l) { head.layout = l; }
   void set_version(eversion_t v) { head.reassert_version = v; }

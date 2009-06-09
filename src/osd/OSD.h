@@ -794,7 +794,7 @@ protected:
 
   LogClient *get_logclient() { return &logclient; }
 
-  int get_op_flags(MOSDOp *op);
+  void init_op_flags(MOSDOp *op);
 };
 
 #endif
