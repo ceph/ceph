@@ -429,7 +429,7 @@ protected:
 
 
   // -- scrub --
-  int _scrub(ScrubMap& map);
+  int _scrub(ScrubMap& map, int& errors, int& fixed);
 
   void apply_and_flush_repops(bool requeue);
 

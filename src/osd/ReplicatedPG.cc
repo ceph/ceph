@@ -3108,13 +3108,13 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 // SCRUB
 
 
-int ReplicatedPG::_scrub(ScrubMap& scrubmap)
+int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 {
-  int errors = 0;
   dout(10) << "_scrub" << dendl;
 
   coll_t c = info.pgid.to_coll();
   bool repair = state_test(PG_STATE_REPAIR);
+  const char *mode = repair ? "repair":"scrub";
 
   // traverse in reverse order.
   sobject_t head;
@@ -3133,7 +3133,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
     // basic checks.
     if (p->attrs.count(OI_ATTR) == 0) {
-      dout(0) << "scrub no '" << OI_ATTR << "' attr on " << soid << dendl;
+      dout(0) << mode << " no '" << OI_ATTR << "' attr on " << soid << dendl;
       errors++;
       continue;
     }
@@ -3141,7 +3141,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
     bv.push_back(p->attrs[OI_ATTR]);
     object_info_t oi(bv);
 
-    dout(20) << "scrub  " << soid << " " << oi << dendl;
+    dout(20) << mode << "  " << soid << " " << oi << dendl;
 
     stat.num_bytes += p->size;
     stat.num_kb += SHIFT_ROUND_UP(p->size, 10);
@@ -3204,7 +3204,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
     }
   }  
   
-  dout(10) << "scrub got "
+  dout(10) << mode << " got "
 	   << stat.num_objects << "/" << info.stats.num_objects << " objects, "
 	   << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
 	   << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
@@ -3216,7 +3216,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
       stat.num_object_clones != info.stats.num_object_clones ||
       stat.num_bytes != info.stats.num_bytes ||
       stat.num_kb != info.stats.num_kb) {
-    ss << info.pgid << " scrub stat mismatch, got "
+    ss << info.pgid << " " << mode << " stat mismatch, got "
        << stat.num_objects << "/" << info.stats.num_objects << " objects, "
        << stat.num_object_clones << "/" << info.stats.num_object_clones << " clones, "
        << stat.num_bytes << "/" << info.stats.num_bytes << " bytes, "
@@ -3225,11 +3225,12 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
     errors++;
 
     if (repair) {
+      fixed++;
       info.stats = stat;
       update_stats();
     }
   }
 
-  dout(10) << "scrub finish" << dendl;
+  dout(10) << "_scrub (" << mode << ") finish" << dendl;
   return errors;
 }

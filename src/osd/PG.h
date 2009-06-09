@@ -776,7 +776,7 @@ public:
   void repair_object(ScrubMap::object *po, int bad_peer, int ok_peer);
   void scrub();
   void build_scrub_map(ScrubMap &map);
-  virtual int _scrub(ScrubMap &map) { return 0; }
+  virtual int _scrub(ScrubMap &map, int& errors, int& fixed) { return 0; }
 
   void sub_op_scrub(class MOSDSubOp *op);
   void sub_op_scrub_reply(class MOSDSubOpReply *op);
