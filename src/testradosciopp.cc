@@ -15,7 +15,10 @@
 
 #include <iostream>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include "common/Clock.h"
+#include "include/utime.h"
 
 int main (int argc, const char **argv) {
   Rados rados;
@@ -25,83 +28,136 @@ int main (int argc, const char **argv) {
       exit(1);
     }
 
-  //hacky arguments, fix this
+  //hacky arguments; fix this
   int concurrentios = atoi(argv[1]);
   int secondsToRun = double(atoi(argv[2]));
   int writeSize = atoi(argv[3]); //bytes
-  bool readOffResults = true;
+  int readOffResults = atoi(argv[4]);
 
   cout << "Maintaining " << concurrentios << " concurrent writes of " << writeSize
        << " bytes for at least " << secondsToRun << " seconds.\n";
 
   Rados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
-  bufferlist contents[concurrentios];
+  bufferlist* contents[concurrentios];
   char contentsChars[writeSize];
+  double totalLatency = 0;
+  utime_t maxLatency;
+  utime_t startTimes[concurrentios];
   int writesMade = 0;
   int writesCompleted = 0;
   time_t initialTime;
-  time_t startTime;
-  time_t currentTime;
-  double timePassed;
+  utime_t startTime;
+  utime_t stopTime;
 
   time(&initialTime);
+  maxLatency.set_from_double(0);
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
+    contents[i] = new bufferlist();
     snprintf(name[i], 128, "Object %d:%d", initialTime, i);
     snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
-    contents[i] = bufferlist();
-    contents[i].append(contentsChars, writeSize);
+    contents[i]->append(contentsChars, writeSize);
   }
 
+  //set up the pool, get start time, and go!
   cout << "open pool result = " << rados.open_pool("data",&pool) << " pool = " << pool << std::endl;
 
-  currentTime = time(&startTime);
+  startTime = g_clock.now();
 
   for (int i = 0; i<concurrentios; ++i) {
-    /*    cerr << "About to write object " << writesMade << " with name " << name[i] << endl
-	  << "         and contents " << contents[i].c_str() << endl; */
-    rados.aio_write(pool, name[i], 0, contents[i], writeSize, &completions[i]);
-    /*    cerr << "Writing object        " << writesMade << endl;
-    cerr << "Object write complete? " << boolalpha << completions[i]->is_complete() << endl;
-    cerr << "Completed object      " << writesMade << endl; */
+    startTimes[i] = g_clock.now();
+    rados.aio_write(pool, name[i], 0, *contents[i], writeSize, &completions[i]);
     ++writesMade;
   }
-
   cerr << "Finished writing first objects\n";
+
+  //keep on adding new writes as old ones complete until we've passed minimum time
   int slot;
-  while(difftime(currentTime, startTime) < secondsToRun ) {
+  bufferlist* newContents;
+  char* newName;
+  utime_t currentLatency;
+  utime_t runtime;
+  runtime.set_from_double(secondsToRun);
+  stopTime = startTime + runtime;
+  while( g_clock.now() < stopTime ) {
     slot = writesCompleted % concurrentios;
-    //    cerr << "Waiting for " << writesCompleted << "th write to finish.\n";
-    completions[slot]->wait_for_safe();
-    ++writesCompleted;
-    snprintf(name[slot], 128, "Object %d:%d", initialTime, writesMade);
+    //create new contents and name on the heap, and fill them
+    newContents = new bufferlist();
+    newName = new char[128];
+    snprintf(newName, 128, "Object %d:%d", initialTime, writesMade);
     snprintf(contentsChars, writeSize, "I'm the %dth object!", writesMade);
-    contents[slot].clear();
-    contents[slot].append(contentsChars, writeSize);
+    newContents->append(contentsChars, writeSize);
+    completions[slot]->wait_for_complete();
+    currentLatency = g_clock.now() - startTimes[slot];
+    totalLatency += currentLatency;
+    if( currentLatency > maxLatency) maxLatency = currentLatency;
+    ++writesCompleted;
     completions[slot]->release();
-    rados.aio_write(pool, name[slot], 0, contents[slot], writeSize, &completions[slot]);
+    //write new stuff to rados, then delete old stuff
+    //and save locations of new stuff for later deletion
+    startTimes[slot] = g_clock.now();
+    rados.aio_write(pool, newName, 0, *newContents, writeSize, &completions[slot]);
     ++writesMade;
-    time(&currentTime);
+    delete name[slot];
+    delete contents[slot];
+    name[slot] = newName;
+    contents[slot] = newContents;
   }
   
   cerr << "Waiting for last writes to finish\n";
   while (writesCompleted < writesMade) {
-    //    cerr << "Currently completed " << writesCompleted << "/" << writesMade << endl;
-    completions[writesCompleted % concurrentios]->wait_for_safe();
+    slot = writesCompleted % concurrentios;
+    completions[slot]->wait_for_complete();
+    currentLatency = g_clock.now() - startTimes[slot];
+    totalLatency += currentLatency;
+    if (currentLatency > maxLatency) maxLatency = currentLatency;
+    completions[slot]-> release();
     ++writesCompleted;
-    //    cerr << "Just completed write" << writesCompleted << "in slot " << writesCompleted%concurrentios << endl;
+    delete name[slot];
+    delete contents[slot];
   }
-  time(&currentTime);
 
-  //check objects for consistency
+  utime_t timePassed = g_clock.now() - startTime;
 
-  timePassed = difftime(currentTime, startTime);
+  //check objects for consistency if requested
+  int errors = 0;
+  if (readOffResults) {
+    char matchName[128];
+    object_t oid;
+    bufferlist actualContents;
+    for (int i = 0; i < writesCompleted; ++i ) {
+      snprintf(matchName, 128, "Object %d:%d", initialTime, i);
+      oid = object_t(matchName);
+      snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
+      rados.read(pool, oid, 0, actualContents, writeSize);
+      if (strcmp(contentsChars, actualContents.c_str()) != 0 ) {
+	cerr << "Object " << matchName << " is not correct!";
+	++errors;
+      }
+      actualContents.clear();
+    }
+  }
+
+  char bw[20];
+  double bandwidth = ((double)writesCompleted)*((double)writeSize)/(double)timePassed;
+  bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
+  sprintf(bw, "%.3lf \n", bandwidth);
+
+  double averageLatency = totalLatency / writesCompleted;
+
   cout << "Total time run:        " << timePassed << endl
        << "Total writes made:     " << writesCompleted << endl
        << "Write size:            " << writeSize << endl
-       << "Bandwidth (bytes/sec): " << ((double)writesCompleted)*writeSize/timePassed << endl;
+       << "Bandwidth (MB/sec):    " << bw << endl
+       << "Average Latency:       " << averageLatency << endl
+       << "Max latency:           " << maxLatency << endl
+       << "Time waiting for Rados:" << totalLatency/concurrentios << endl;
 
+  if (readOffResults) {
+    if (errors) cout << "WARNING: There were " << errors << " total errors in copying!\n";
+    else cout << "No errors in copying!\n";
+  }
   return 0;
 }
