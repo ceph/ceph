@@ -330,9 +330,10 @@ static int osdc_show(struct seq_file *s, void *p)
 
 		nexttid = req->r_tid + 1;
 
-		seq_printf(s, "%u.%u.%u.%u:%u (%s%d)\t",
-			IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
-			ENTITY_NAME(req->r_request->hdr.dst.name));
+		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
+			   req->r_tid,
+			   IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
+			   ENTITY_NAME(req->r_request->hdr.dst.name));
 
 		head = req->r_request->front.iov_base;
 		op = (void *)(head + 1);
