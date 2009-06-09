@@ -592,9 +592,13 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
    * end up as missing.
    */
 
-  for (map<eversion_t,Log::Entry>::reverse_iterator i = omap.rbegin();
-       i != omap.rend();
-       i++) {
+  /*
+   * first pass inserts any prior_version backlog entries into the
+   * ordered map.  second pass adds it to the log.
+   */
+
+  map<eversion_t,Log::Entry>::iterator i = omap.begin();
+  while (i != omap.end()) {
     Log::Entry& be = i->second;
 
     /*
@@ -602,7 +606,7 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
      *  - is already in the log AND
      *    - it is a totally new object OR
      *    - the prior_version is also already in the log
-     * otherwise, we need to include it.
+     * otherwise, if we have the object, include a prior_version backlog entry.
      */
     if (log.objects.count(be.soid)) {
       Log::Entry *le = log.objects[be.soid];
@@ -613,19 +617,27 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       if (le->prior_version == eversion_t() ||  // either new object, or
 	  le->prior_version >= log.bottom) {    // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
+	omap.erase(i++);
 	continue;   // already have it logged.
       }
 
       be.version = le->prior_version;
       be.reqid = osd_reqid_t();
-      dout(15) << "   adding " << be << " (have " << *le << ")" << dendl;
-      log.log.push_front(be);
+      dout(15) << "   adding new " << be << " (have " << *le << ")" << dendl;
+      omap[be.version] = be;
       // don't try to index: this is the prior_version backlog entry
-    } else {
-      dout(15) << "   adding " << be << dendl;
-      log.log.push_front(be);
-      log.index( *log.log.begin() );
     }
+    i++;
+  }
+
+  for (map<eversion_t,Log::Entry>::reverse_iterator i = omap.rbegin();
+       i != omap.rend();
+       i++) {
+    Log::Entry& be = i->second;
+    dout(15) << "   adding " << be << dendl;
+    log.log.push_front(be);
+    if (be.reqid != osd_reqid_t())   // don't index prior_version backlog entries
+      log.index( *log.log.begin() );
   }
 }
 
