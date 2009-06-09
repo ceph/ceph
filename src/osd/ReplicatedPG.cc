@@ -3114,6 +3114,7 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
   dout(10) << "_scrub" << dendl;
 
   coll_t c = info.pgid.to_coll();
+  bool repair = state_test(PG_STATE_REPAIR);
 
   // traverse in reverse order.
   sobject_t head;
@@ -3222,6 +3223,11 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap)
        << stat.num_kb << "/" << info.stats.num_kb << " kb.";
     osd->get_logclient()->log(LOG_ERROR, ss);
     errors++;
+
+    if (repair) {
+      info.stats = stat;
+      update_stats();
+    }
   }
 
   dout(10) << "scrub finish" << dendl;
