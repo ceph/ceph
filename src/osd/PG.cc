@@ -1800,11 +1800,23 @@ void PG::read_log(ObjectStore *store)
     PG::Log::Entry e;
     bufferlist::iterator p = bl.begin();
     assert(log.log.empty());
+    eversion_t last;
+    bool reorder = false;
     while (!p.end()) {
       loff_t opos = ondisklog.bottom + p.get_off();
       ::decode(e, p);
       loff_t pos = ondisklog.bottom + p.get_off();
       dout(10) << "read_log " << pos << " " << e << dendl;
+
+      // [repair] in order?
+      if (e.version < last) {
+	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
+  	stringstream ss;
+	ss << info.pgid << " log has out of order entry " << e << " following " << last;
+	osd->get_logclient()->log(LOG_ERROR, ss);
+	reorder = true;
+      }
+      last = e.version;
 
       if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
         if (opos % 4096 < pos % 4096)
@@ -1813,8 +1825,30 @@ void PG::read_log(ObjectStore *store)
       } else {
 	dout(10) << "read_log  ignoring entry at " << pos << dendl;
       }
+
+      // [repair] at end of log?
+      if (!p.end() && e.version == info.last_update) {
+	stringstream ss;
+	ss << info.pgid << " log has extra data at " << pos << "~" << (ondisklog.top-pos)
+	   << " after " << info.last_update;
+	osd->get_logclient()->log(LOG_ERROR, ss);
+	dout(0) << "read_log " << pos << " *** extra gunk at end of log, adjusting ondisklog.top" << dendl;
+	ondisklog.top = opos;
+	break;
+      }
+    }
+  
+    if (reorder) {
+      dout(0) << "read_log reordering log" << dendl;
+      map<eversion_t, Log::Entry> m;
+      for (list<Log::Entry>::iterator p = log.log.begin(); p != log.log.end(); p++)
+	m[p->version] = *p;
+      log.log.clear();
+      for (map<eversion_t, Log::Entry>::iterator p = m.begin(); p != m.end(); p++)
+	log.log.push_back(p->second);
     }
   }
+
   log.top = info.last_update;
   log.index();
 
