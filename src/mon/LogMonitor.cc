@@ -143,8 +143,6 @@ bool LogMonitor::update_from_paxos()
 	blogwarn.append(s);
       if (le.type >= LOG_ERROR)
 	blogerr.append(s);
-      if (le.type >= LOG_ERROR)
-	blogerr.append(s);
 
       summary.add(le);
     }
