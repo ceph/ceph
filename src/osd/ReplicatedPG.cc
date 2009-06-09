@@ -3226,7 +3226,10 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
 
     if (repair) {
       fixed++;
-      info.stats = stat;
+      info.stats.num_objects = stat.num_objects;
+      info.stats.num_object_clones = stat.num_object_clones;
+      info.stats.num_bytes = stat.num_bytes;
+      info.stats.num_kb = stat.num_kb;
       update_stats();
     }
   }
