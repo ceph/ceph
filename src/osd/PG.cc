@@ -617,17 +617,17 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
       if (le->prior_version == eversion_t() ||  // either new object, or
 	  le->prior_version >= log.bottom) {    // prior_version also already in log
 	dout(15) << " skipping " << be << " (have " << *le << ")" << dendl;
-	omap.erase(i++);
-	continue;   // already have it logged.
+      } else {
+	be.version = le->prior_version;
+	be.reqid = osd_reqid_t();
+	dout(15) << "   adding prior_version " << be << " (have " << *le << ")" << dendl;
+	omap[be.version] = be;
+	// don't try to index: this is the prior_version backlog entry
       }
-
-      be.version = le->prior_version;
-      be.reqid = osd_reqid_t();
-      dout(15) << "   adding new " << be << " (have " << *le << ")" << dendl;
-      omap[be.version] = be;
-      // don't try to index: this is the prior_version backlog entry
+      omap.erase(i++);
+    } else {
+      i++;
     }
-    i++;
   }
 
   for (map<eversion_t,Log::Entry>::reverse_iterator i = omap.rbegin();
