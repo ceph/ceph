@@ -370,17 +370,12 @@ int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
-  if (!g_conf.ms_nocrc)
-    m->calc_data_crc();
-  else
-    m->get_footer().flags = (unsigned)m->get_footer().flags | CEPH_MSG_FOOTER_NOCRC;
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
-	  << " (? " << m->get_footer().data_crc << ")"
 	  << " " << m 
 	  << dendl;
 
@@ -394,17 +389,12 @@ int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
   // set envelope
   m->set_source_inst(_myinst);
   m->set_dest_inst(dest);
-  if (!g_conf.ms_nocrc)
-    m->calc_data_crc();
-  else
-    m->get_footer().flags = (unsigned)m->get_footer().flags | CEPH_MSG_FOOTER_NOCRC;
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
           << " **> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
-	  << " (? " << m->get_footer().data_crc << ")"
 	  << " " << m 
           << dendl;
 
@@ -421,17 +411,12 @@ int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
   m->set_source_inst(_myinst);
   m->set_orig_source_inst(_myinst);
   m->set_dest_inst(dest);
-  if (!g_conf.ms_nocrc)
-    m->calc_data_crc();
-  else
-    m->get_footer().flags = (unsigned)m->get_footer().flags | CEPH_MSG_FOOTER_NOCRC;
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << "lazy " << m->get_source()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
-	  << " (? " << m->get_footer().data_crc << ")"
 	  << " " << m 
           << dendl;
 
@@ -1412,6 +1397,11 @@ void SimpleMessenger::Pipe::writer()
         if (m->empty_payload()) 
 	  m->encode_payload();
 	m->calc_front_crc();
+
+	if (!g_conf.ms_nocrc)
+	  m->calc_data_crc();
+	else
+	  m->get_footer().flags = (unsigned)m->get_footer().flags | CEPH_MSG_FOOTER_NOCRC;
 
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
