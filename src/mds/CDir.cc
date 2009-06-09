@@ -636,7 +636,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
 
   if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_sp);
 
-  assert(is_complete() || !is_auth());
+  assert(replay || is_complete() || !is_auth());
 
   list<frag_t> frags;
   frag.split(bits, frags);
