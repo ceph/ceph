@@ -2137,6 +2137,8 @@ void PG::scrub()
   while (is_write_in_progress()) {
     dout(10) << "scrub  write(s) in progress, waiting" << dendl;
     wait();
+    if (osd->is_stopping())
+      goto out;
   }
 
 
@@ -2158,7 +2160,8 @@ void PG::scrub()
 	     << " maps, waiting" << dendl;
     wait();
 
-    if (epoch != info.history.same_since) {
+    if (epoch != info.history.same_since ||
+	osd->is_stopping()) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
       goto out;
     }

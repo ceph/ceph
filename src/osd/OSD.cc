@@ -455,13 +455,29 @@ int OSD::shutdown()
   wait_for_no_ops();
   dout(10) << "no ops" << dendl;
 
-  // stop threads
   recovery_tp.stop();
   dout(10) << "recovery tp stopped" << dendl;
-  disk_tp.stop();
-  dout(10) << "disk tp stopped" << dendl;
   op_tp.stop();
   dout(10) << "op tp stopped" << dendl;
+
+  // pause _new_ disk work first (to avoid racing with thread pool),
+  disk_tp.pause_new();
+  dout(10) << "disk tp paused (new), kicking all pgs" << dendl;
+
+  // then kick all pgs,
+  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+       p != pg_map.end();
+       p++) {
+    dout(20) << " kicking pg " << p->first << dendl;
+    p->second->lock();
+    p->second->kick();
+    p->second->unlock();
+  }
+  dout(20) << " kicked all pgs" << dendl;
+
+  // then stop thread.
+  disk_tp.stop();
+  dout(10) << "disk tp stopped" << dendl;
 
   // tell pgs we're shutting down
   for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
