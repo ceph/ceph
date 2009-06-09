@@ -68,6 +68,12 @@ int main(int argc, const char **argv)
   buf_to_hex(sha1, bl2.length(), sha1_str);
   cout << "sha1 result=" << sha1_str << std::endl;
 
+  r = rados.exec(pool, oid, "acl", "test", bl, bl2);
+  cout << "exec returned " << r << std::endl;
+  if (bl2.length() > 0) {
+    cout << "attr=" << bl2.c_str() << std::endl;
+  }
+
   int size = rados.read(pool, oid, 0, bl2, 128);
   cout << "read result=" << bl2.c_str() << std::endl;
   cout << "size=" << size << std::endl;
