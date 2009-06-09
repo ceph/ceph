@@ -3883,4 +3883,14 @@ void OSD::send_class_request(const char *cname, ClassVersion& version)
 }
 
 
+int OSD::get_op_flags(MOSDOp *op)
+{
+  vector<ceph_osd_op>::iterator iter;
+
+  return op->get_flags();
+
+  /* FIXME */
+
+  return 0;
+}
 

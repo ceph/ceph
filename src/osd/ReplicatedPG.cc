@@ -829,6 +829,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 
   for (vector<ceph_osd_op>::iterator p = ops.begin(); p != ops.end(); p++) {
     ceph_osd_op& op = *p;
+    bool is_modify;
+    string cname, mname;
+
+    switch (op.op) {
+    case CEPH_OSD_OP_RDCALL:
+      bp.copy(op.class_len, cname);
+      bp.copy(op.method_len, mname);
+      is_modify = osd->class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
+      break;
+
+    default:
+      is_modify = (op.op & CEPH_OSD_OP_MODE_WR);
+      break;
+    }
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
@@ -851,7 +865,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
     dout(10) << "do_osd_op  " << op << dendl;
 
     // make writeable (i.e., clone if necessary)
-    if (op.op & CEPH_OSD_OP_MODE_WR)
+    if (is_modify)
       make_writeable(ctx);
 
     switch (op.op) {
@@ -878,10 +892,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
 
     case CEPH_OSD_OP_RDCALL:
       {
-	string cname, mname;
-	bp.copy(op.class_len, cname);
-	bp.copy(op.method_len, mname);
-	
 	bufferlist indata;
 	bp.copy(op.indata_len, indata);
 	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
@@ -1250,7 +1260,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<ceph_osd_op>& ops,
       assert(0);  // for now
     }
 
-    if ((op.op & CEPH_OSD_OP_MODE_WR) &&
+    if ((is_modify) &&
 	!ctx->obs->exists && oi.snapset.head_exists) {
       dout(20) << " num_objects " << info.stats.num_objects << " -> " << (info.stats.num_objects+1) << dendl;
       info.stats.num_objects++;

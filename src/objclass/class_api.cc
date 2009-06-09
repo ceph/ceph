@@ -51,26 +51,28 @@ int cls_unregister(cls_handle_t handle)
 }
 
 int cls_register_method(cls_handle_t hclass, const char *method,
+                        int flags,
                         cls_method_call_t class_call, cls_method_handle_t *handle)
 {
   ClassHandler::ClassData *cd;
   cls_method_handle_t hmethod;
 
   cd = (ClassHandler::ClassData *)hclass;
-  hmethod  = (cls_method_handle_t)cd->register_method(method, class_call);
+  hmethod  = (cls_method_handle_t)cd->register_method(method, flags, class_call);
   if (handle)
     *handle = hmethod;
   return (hmethod != NULL);
 }
 
 int cls_register_cxx_method(cls_handle_t hclass, const char *method,
+                            int flags,
 			    cls_method_cxx_call_t class_call, cls_method_handle_t *handle)
 {
   ClassHandler::ClassData *cd;
   cls_method_handle_t hmethod;
 
   cd = (ClassHandler::ClassData *)hclass;
-  hmethod  = (cls_method_handle_t)cd->register_cxx_method(method, class_call);
+  hmethod  = (cls_method_handle_t)cd->register_cxx_method(method, flags, class_call);
   if (handle)
     *handle = hmethod;
   return (hmethod != NULL);
@@ -84,7 +86,7 @@ int cls_unregister_method(cls_method_handle_t handle)
   return 1;
 }
 
-int cls_rdcall(cls_method_handle_t hctx, const char *cls, const char *method,
+int cls_rdcall(cls_method_context_t hctx, const char *cls, const char *method,
                                  char *indata, int datalen,
                                  char **outdata, int *outdatalen)
 {
@@ -105,14 +107,37 @@ int cls_rdcall(cls_method_handle_t hctx, const char *cls, const char *method,
   bufferlist::iterator iter = idata.begin();
   r = (*pctx)->pg->do_osd_ops(*pctx, nops, iter, odata);
 
-  *outdata = odata.c_str();
+  *outdata = (char *)malloc(odata.length());
+  memcpy(*outdata, odata.c_str(), odata.length());
   *outdatalen = odata.length();
-#warning use after free!
 
   return r;
 }
 
-int cls_read(cls_method_handle_t hctx, int ofs, int len,
+int cls_getxattr(cls_method_context_t hctx, const char *name,
+                                 char **outdata, int *outdatalen)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  bufferlist name_data;
+  bufferlist odata;
+  vector<ceph_osd_op> nops(1);
+  ceph_osd_op& op = nops[0];
+  int r;
+
+  op.op = CEPH_OSD_OP_GETXATTR;
+  name_data.append(name);
+  op.name_len = strlen(name);
+  bufferlist::iterator iter = name_data.begin();
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops, iter, odata);
+
+  *outdata = (char *)malloc(odata.length());
+  memcpy(*outdata, odata.c_str(), odata.length());
+  *outdatalen = odata.length();
+
+  return r;
+}
+
+int cls_read(cls_method_context_t hctx, int ofs, int len,
                                  char **outdata, int *outdatalen)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
@@ -124,14 +149,14 @@ int cls_read(cls_method_handle_t hctx, int ofs, int len,
   bufferlist::iterator iter = idata.begin();
   int r = (*pctx)->pg->do_osd_ops(*pctx, ops, iter, odata);
 
-  *outdata = odata.c_str();
+  *outdata = (char *)malloc(odata.length());
+  memcpy(*outdata, odata.c_str(), odata.length());
   *outdatalen = odata.length();
-#warning use after free!
 
   return r;
 }
 
-int cls_cxx_read(cls_method_handle_t hctx, int ofs, int len, bufferlist *outbl)
+int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<ceph_osd_op> ops(1);
@@ -143,7 +168,7 @@ int cls_cxx_read(cls_method_handle_t hctx, int ofs, int len, bufferlist *outbl)
   return (*pctx)->pg->do_osd_ops(*pctx, ops, iter, *outbl);
 }
 
-int cls_cxx_write(cls_method_handle_t hctx, int ofs, int len, bufferlist *inbl)
+int cls_cxx_write(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<ceph_osd_op> ops(1);
@@ -155,7 +180,7 @@ int cls_cxx_write(cls_method_handle_t hctx, int ofs, int len, bufferlist *inbl)
   return (*pctx)->pg->do_osd_ops(*pctx, ops, iter, outbl);
 }
 
-int cls_cxx_replace(cls_method_handle_t hctx, int ofs, int len, bufferlist *inbl)
+int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *inbl)
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<ceph_osd_op> ops(2);

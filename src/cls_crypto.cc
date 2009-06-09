@@ -74,8 +74,8 @@ void class_init()
    cls_log("Loaded crypto class!");
 
    cls_register("crypto", &h_class);
-   cls_register_method(h_class, "md5", md5_method, &h_md5);
-   cls_register_method(h_class, "sha1", sha1_method, &h_sha1);
+   cls_register_method(h_class, "md5", CLS_METHOD_RD, md5_method, &h_md5);
+   cls_register_method(h_class, "sha1", CLS_METHOD_RD, sha1_method, &h_sha1);
 
    return;
 }

@@ -15,6 +15,7 @@ class OSD;
 class MClass;
 
 
+
 class ClassHandler
 {
   OSD *osd;
@@ -25,6 +26,7 @@ public:
   struct ClassMethod {
     struct ClassHandler::ClassData *cls;
     string name;
+    int flags;
     cls_method_call_t func;
     cls_method_cxx_call_t cxx_func;
 
@@ -66,8 +68,8 @@ public:
     ClassData() : mutex(NULL), status(CLASS_UNKNOWN), version(), timeout(0), handle(NULL), registered(false)  {}
     ~ClassData() { if (mutex) delete mutex; }
 
-    ClassMethod *register_method(const char *mname, cls_method_call_t func);
-    ClassMethod *register_cxx_method(const char *mname, cls_method_cxx_call_t func);
+    ClassMethod *register_method(const char *mname, int flags, cls_method_call_t func);
+    ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func);
     ClassMethod *get_method(const char *mname);
     void unregister_method(ClassMethod *method);
 
@@ -96,6 +98,7 @@ public:
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
 
+  int get_method_flags(const nstring& cname, const nstring& mname);
 };
 
 

@@ -84,8 +84,8 @@ static int update(cls_method_context_t ctx, bufferlist *inbl, bufferlist *outbl)
 void class_init()
 {
    cls_register("trivialmap", &h_class);
-   cls_register_cxx_method(h_class, "read_all", read_all, &h_read_all);
-   cls_register_cxx_method(h_class, "update", update, &h_update);
+   cls_register_cxx_method(h_class, "read_all", CLS_METHOD_RD, read_all, &h_read_all);
+   cls_register_cxx_method(h_class, "update", CLS_METHOD_WR, update, &h_update);
    return;
 }
 

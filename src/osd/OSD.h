@@ -793,6 +793,8 @@ protected:
   void force_remount();
 
   LogClient *get_logclient() { return &logclient; }
+
+  int get_op_flags(MOSDOp *op);
 };
 
 #endif

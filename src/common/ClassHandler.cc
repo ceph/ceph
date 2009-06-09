@@ -287,6 +287,7 @@ void ClassHandler::ClassData::_add_dependent(ClassData& dependent)
 }
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *mname,
+                                                                    int flags,
 								    cls_method_call_t func)
 {
   /* no need for locking, called under the class_init mutex */
@@ -299,6 +300,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
 }
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const char *mname,
+                                                                        int flags,
 									cls_method_cxx_call_t func)
 {
   /* no need for locking, called under the class_init mutex */
@@ -382,4 +384,17 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
     }
   }
   return ret;
+}
+
+int ClassHandler::get_method_flags(const nstring& cname, const nstring& mname)
+{
+  ClassData& cls = get_obj(cname);
+  if (&cls == &null_cls_data)
+    return 0;
+
+  ClassMethod *method = cls.get_method(mname.c_str());
+  if (!method)
+    return 0;
+
+  return method->flags;
 }

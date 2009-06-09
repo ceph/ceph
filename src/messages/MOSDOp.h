@@ -27,6 +27,8 @@
  *
  */
 
+class OSD;
+
 class MOSDOp : public Message {
 private:
   ceph_osd_request_head head;
@@ -36,6 +38,7 @@ public:
   bufferlist ticket;
   vector<snapid_t> snaps;
   osd_peer_stat_t peer_stat;
+  int flags;
 
   friend class MOSDOpReply;
 
@@ -61,9 +64,13 @@ public:
   eversion_t get_version() { return head.reassert_version; }
   
   utime_t get_mtime() { return head.mtime; }
-  
+#if 0 
   bool may_read() { return head.flags & CEPH_OSD_FLAG_READ; }
   bool may_write() { return head.flags & CEPH_OSD_FLAG_WRITE; }
+#endif
+  bool may_read() { assert(flags); return flags & CEPH_OSD_FLAG_READ; }
+  bool may_write() { assert(flags); return flags & CEPH_OSD_FLAG_WRITE; }
+  void update_flags(OSD *osd);
 
   void set_peer_stat(const osd_peer_stat_t& stat) {
     peer_stat = stat;
@@ -187,11 +194,12 @@ public:
     out << " " << oid;
 
     out << " ";
+#if 0
     if (may_read())
       out << "r";
     if (may_write())
       out << "w";
-
+#endif
     if (head.snapid != CEPH_NOSNAP)
       out << "@" << snapid_t((__u64)head.snapid);
 
