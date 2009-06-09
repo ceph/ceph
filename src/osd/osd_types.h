@@ -141,7 +141,7 @@ struct pg_t {
     int pool;
     int ps;
     int r = sscanf(s, "%d.%x", &pool, &ps);
-    if (r < 3)
+    if (r < 2)
       return false;
     u.pg.pool = pool;
     u.pg.ps = ps;
