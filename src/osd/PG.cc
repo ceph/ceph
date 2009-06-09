@@ -2072,7 +2072,7 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
 {
   eversion_t v;
   bufferlist bv;
-  bv.push_back(po->attrs["oi"]);
+  bv.push_back(po->attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != acting[0]) {
     peer_missing[bad_peer].add(po->poid, oi.version, eversion_t());
