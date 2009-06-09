@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sstream>
 #include "common/Clock.h"
 #include "include/utime.h"
 
@@ -51,12 +52,15 @@ int main (int argc, const char **argv) {
   utime_t stopTime;
 
   time(&initialTime);
+  stringstream initialTimeS("");
+  initialTimeS << initialTime;
+  const char* iTime = initialTimeS.str().c_str();
   maxLatency.set_from_double(0);
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = new char[128];
     contents[i] = new bufferlist();
-    snprintf(name[i], 128, "Object %d:%d", initialTime, i);
+    snprintf(name[i], 128, "Object %s:%d", iTime, i);
     snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
     contents[i]->append(contentsChars, writeSize);
   }
@@ -86,7 +90,7 @@ int main (int argc, const char **argv) {
     //create new contents and name on the heap, and fill them
     newContents = new bufferlist();
     newName = new char[128];
-    snprintf(newName, 128, "Object %d:%d", initialTime, writesMade);
+    snprintf(newName, 128, "Object %s:%d", iTime, writesMade);
     snprintf(contentsChars, writeSize, "I'm the %dth object!", writesMade);
     newContents->append(contentsChars, writeSize);
     completions[slot]->wait_for_complete();
@@ -128,7 +132,7 @@ int main (int argc, const char **argv) {
     object_t oid;
     bufferlist actualContents;
     for (int i = 0; i < writesCompleted; ++i ) {
-      snprintf(matchName, 128, "Object %d:%d", initialTime, i);
+      snprintf(matchName, 128, "Object %s:%d", iTime, i);
       oid = object_t(matchName);
       snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
       rados.read(pool, oid, 0, actualContents, writeSize);
