@@ -135,6 +135,26 @@ int cls_getxattr(cls_method_context_t hctx, const char *name,
   return r;
 }
 
+int cls_setxattr(cls_method_context_t hctx, const char *name,
+                                 const char *value, int val_len)
+{
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
+  bufferlist name_data;
+  bufferlist odata;
+  vector<OSDOp> nops(1);
+  OSDOp& op = nops[0];
+  int r;
+
+  op.op.op = CEPH_OSD_OP_SETXATTR;
+  op.data.append(name);
+  op.data.append(value);
+  op.op.name_len = strlen(name);
+  op.op.value_len = val_len;
+  r = (*pctx)->pg->do_osd_ops(*pctx, nops, odata);
+
+  return r;
+}
+
 int cls_read(cls_method_context_t hctx, int ofs, int len,
                                  char **outdata, int *outdatalen)
 {

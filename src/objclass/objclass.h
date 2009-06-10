@@ -41,6 +41,8 @@ extern int cls_rdcall(cls_method_context_t hctx, const char *cls, const char *me
                                  char **outdata, int *outdatalen);
 extern int cls_getxattr(cls_method_context_t hctx, const char *name,
                                  char **outdata, int *outdatalen);
+extern int cls_setxattr(cls_method_context_t hctx, const char *name,
+                                 const char *value, int val_len);
 
 /* class registration api */
 extern int cls_register(const char *name, cls_handle_t *handle);
