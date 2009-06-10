@@ -24,7 +24,8 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v015"
+#define CEPH_OSD_ONDISK_VERSION 16
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v016"
 
 
 
@@ -602,6 +603,9 @@ struct pg_stat_t {
   { }
 
   void encode(bufferlist &bl) const {
+    __u8 v = CEPH_OSD_ONDISK_VERSION;
+    ::encode(v, bl);
+
     ::encode(version, bl);
     ::encode(reported, bl);
     ::encode(state, bl);
@@ -620,6 +624,9 @@ struct pg_stat_t {
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
+
     ::decode(version, bl);
     ::decode(reported, bl);
     ::decode(state, bl);
@@ -734,6 +741,9 @@ public:
   }
 
   void encode(bufferlist &bl) const {
+    __u8 v = CEPH_OSD_ONDISK_VERSION;
+    ::encode(v, bl);
+
     ::encode(magic, bl);
     ::encode(fsid, bl);
     ::encode(whoami, bl);
@@ -745,6 +755,9 @@ public:
     ::encode(mounted, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
+
     ::decode(magic, bl);
     ::decode(fsid, bl);
     ::decode(whoami, bl);
@@ -825,6 +838,8 @@ struct object_info_t {
 
   eversion_t version, prior_version;
   osd_reqid_t last_reqid;
+
+  __u64 size;
   utime_t mtime;
 
   osd_reqid_t wrlock_by;   // [head]
@@ -834,10 +849,14 @@ struct object_info_t {
   bufferlist truncate_info;  // bah.. messy layering.
 
   void encode(bufferlist& bl) const {
+    const __u8 v = CEPH_OSD_ONDISK_VERSION;
+    ::encode(v, bl);
+
     ::encode(soid, bl);
     ::encode(version, bl);
     ::encode(prior_version, bl);
     ::encode(last_reqid, bl);
+    ::encode(size, bl);
     ::encode(mtime, bl);
     if (soid.snap == CEPH_NOSNAP) {
       ::encode(snapset, bl);
@@ -847,10 +866,13 @@ struct object_info_t {
     ::encode(truncate_info, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(soid, bl);
     ::decode(version, bl);
     ::decode(prior_version, bl);
     ::decode(last_reqid, bl);
+    ::decode(size, bl);
     ::decode(mtime, bl);
     if (soid.snap == CEPH_NOSNAP) {
       ::decode(snapset, bl);
@@ -864,7 +886,7 @@ struct object_info_t {
     decode(p);
   }
 
-  object_info_t(sobject_t s) : soid(s) {}
+  object_info_t(sobject_t s) : soid(s), size(0) {}
   object_info_t(bufferlist& bl) {
     decode(bl);
   }

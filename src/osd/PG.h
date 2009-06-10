@@ -132,6 +132,9 @@ public:
     bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
+      __u8 v = CEPH_OSD_ONDISK_VERSION;
+      ::encode(v, bl);
+
       ::encode(pgid, bl);
       ::encode(last_update, bl);
       ::encode(last_complete, bl);
@@ -142,6 +145,9 @@ public:
       ::encode(snap_trimq, bl);
     }
     void decode(bufferlist::iterator &bl) {
+      __u8 v = CEPH_OSD_ONDISK_VERSION;
+      ::decode(v, bl);
+
       ::decode(pgid, bl);
       ::decode(last_update, bl);
       ::decode(last_complete, bl);
