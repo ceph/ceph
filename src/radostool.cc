@@ -37,12 +37,16 @@ void usage()
 
   cerr << "   get objname -- fetch object\n";
   cerr << "   put objname -- write object\n";
+  cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
 
   cerr << "   bench <seconds> [-c concurrentwrites] [-b writesize] [verify] [sync]\n";
   cerr << "              default is 16 concurrent IOs and 1 MB writes size\n\n";
 
   cerr << "Options:\n";
+  cerr << "   -s name\n";
+  cerr << "   --snap name\n";
+  cerr << "        select given snap name for (read) IO\n";
   cerr << "   -i infile\n";
   cerr << "   -o outfile\n";
   cerr << "        specify input or output file (for certain commands)\n";
@@ -206,6 +210,8 @@ int main(int argc, const char **argv)
   int concurrent_ios = 16;
   int write_size = 1 << 20;
 
+  const char *snapname = 0;
+  rados_snap_t snapid = CEPH_NOSNAP;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("out_file", 'o')) {
@@ -222,6 +228,10 @@ int main(int argc, const char **argv)
       }
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
+    } else if (CONF_ARG_EQ("snapid", 'S')) {
+      CONF_SAFE_SET_ARG_VAL(&snapid, OPT_LONGLONG);
+    } else if (CONF_ARG_EQ("snap", 's')) {
+      CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
     } else if (CONF_ARG_EQ("help", 'h')) {
       usage();
     } else if (CONF_ARG_EQ("concurrent-ios", 'c')) {
@@ -253,6 +263,25 @@ int main(int argc, const char **argv)
       cerr << "error opening pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
     }
+  }
+
+  // snapname?
+  if (snapname) {
+    int r = rados.snap_lookup(p, snapname, &snapid);
+    if (r < 0) {
+      cerr << "error looking up snap '" << snapname << "': " << strerror(-r) << std::endl;
+      exit(1);
+    }
+  }
+  if (snapid != CEPH_NOSNAP) {
+    string name;
+    int r = rados.snap_get_name(p, snapid, &name);
+    if (r < 0) {
+      cerr << "snapid " << snapid << " doesn't exist in pool " << pool << std::endl;
+      exit(1);
+    }
+    rados.set_snap(p, snapid);
+    cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
   }
 
   // list pools?
@@ -303,6 +332,16 @@ int main(int argc, const char **argv)
     int r = rados.write(p, oid, 0, indata, indata.length());
     if (r < 0) {
       cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
+      exit(0);
+    }
+
+  } else if (strcmp(nargs[0], "rm") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    object_t oid(nargs[1]);
+    int r = rados.remove(p, oid);
+    if (r < 0) {
+      cerr << "error removing " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
     }
 

@@ -17,10 +17,11 @@ v0.9
     - move pg iteration into Objecter (RadosClietn should be a minimal wrapper)
   - perl swig wrapper
   - radostool
-    - fetch/store/remove object
+/    - --snap N
+/    - fetch/store/remove object
     - call method
-    - list objects
-    - list pools
+/    - list objects
+/    - list pools
 /- object classes
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 

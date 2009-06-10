@@ -35,7 +35,7 @@ int main(int argc, const char **argv)
 
   rados_pool_t pool;
   int r = rados_open_pool("data", &pool);
-  printf("open pool result = %d, pool = %d\n", r, pool);
+  printf("open pool result = %d, pool = %p\n", r, pool);
 
   rados_write(pool, oid, 0, buf, strlen(buf) + 1);
   rados_exec(pool, oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);

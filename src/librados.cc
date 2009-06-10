@@ -84,6 +84,11 @@ public:
     return osdmap.lookup_pg_pool_name(name);
   }
 
+  // snaps
+  int snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snapid);
+  int snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *s);
+
+  // io
   int write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(PoolCtx& pool, const object_t& oid);
@@ -371,6 +376,37 @@ int RadosClient::list_pools(std::vector<string>& v)
     v.push_back(osdmap.get_pool_name(p->first));
   return 0;
 }
+
+// SNAPS
+
+int RadosClient::snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snapid)
+{
+  Mutex::Locker l(lock);
+  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.begin();
+       p != pi.snaps.end();
+       p++) {
+    if (p->second.name == name) {
+      *snapid = p->first;
+      return 0;
+    }
+  }
+  return -ENOENT;
+}
+
+int RadosClient::snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *s)
+{
+  Mutex::Locker l(lock);
+  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.find(snapid);
+  if (p == pi.snaps.end())
+    return -ENOENT;
+  *s = p->second.name.c_str();
+  return 0;
+}
+
+
+// IO
 
 int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op)
 {
@@ -667,15 +703,6 @@ int Rados::initialize(int argc, const char *argv[])
   return client->init() ? 0 : -1;
 }
 
-void Rados::set_snap(rados_pool_t pool, snapid_t seq)
-{
-  if (!client)
-    return;
-
-  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
-  ctx->set_snap(seq);
-}
-
 int Rados::list_pools(std::vector<string>& v)
 {
   if (!client)
@@ -754,6 +781,33 @@ int Rados::close_pool(rados_pool_t pool)
   return 0;
 }
 
+// SNAPS
+
+void Rados::set_snap(rados_pool_t pool, snapid_t seq)
+{
+  if (!client)
+    return;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  ctx->set_snap(seq);
+}
+
+int Rados::snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *snapid)
+{
+  if (!client)
+    return -EINVAL;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return client->snap_lookup(ctx, name, snapid);
+}
+
+int Rados::snap_get_name(rados_pool_t pool, rados_snap_t snapid, std::string *s)
+{
+  if (!client)
+    return -EINVAL;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return client->snap_get_name(ctx, snapid, s);
+}
+
+// AIO
 int Rados::aio_read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist *pbl, size_t len,
 		    Rados::AioCompletion **pc)
 {

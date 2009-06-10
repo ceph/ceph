@@ -97,6 +97,7 @@ public:
   int snap_remove(rados_pool_t pool, const char *snapname);
   int snap_list(rados_pool_t pool, vector<rados_snap_t>& snaps);
   int snap_get_name(rados_pool_t pool, rados_snap_t snap, std::string *name);
+  int snap_lookup(rados_pool_t, const char *snapname, rados_snap_t *snapid);
 
   // -- aio --
   struct AioCompletion {
