@@ -203,10 +203,12 @@ public:
 
     out << " ";
 
+#if 0
     if (may_read())
       out << "r";
     if (may_write())
       out << "w";
+#endif
     if (head.snapid != CEPH_NOSNAP)
       out << "@" << snapid_t((__u64)head.snapid);
 
