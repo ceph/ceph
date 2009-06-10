@@ -689,6 +689,39 @@ inline ostream& operator<<(ostream& out, const osd_peer_stat_t &stat) {
 	     << ")";
 }
 
+
+
+struct pool_stat_t {
+  __u64 num_bytes;    // in bytes
+  __u64 num_kb;       // in KB
+  __u64 num_objects;
+  __u64 num_object_clones;
+  __u64 num_object_copies;  // num_objects * num_replicas
+  __u64 num_objects_missing_on_primary;
+  __u64 num_objects_degraded;
+
+  void encode(bufferlist &bl) const {
+    ::encode(num_bytes, bl);
+    ::encode(num_kb, bl);
+    ::encode(num_objects, bl);
+    ::encode(num_object_clones, bl);
+    ::encode(num_object_copies, bl);
+    ::encode(num_objects_missing_on_primary, bl);
+    ::encode(num_objects_degraded, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(num_bytes, bl);
+    ::decode(num_kb, bl);
+    ::decode(num_objects, bl);
+    ::decode(num_object_clones, bl);
+    ::decode(num_object_copies, bl);
+    ::decode(num_objects_missing_on_primary, bl);
+    ::decode(num_objects_degraded, bl);
+  }
+};
+WRITE_CLASS_ENCODER(pool_stat_t)
+
+
 // -----------------------------------------
 
 class ObjectExtent {

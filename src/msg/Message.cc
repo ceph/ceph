@@ -16,6 +16,9 @@ using namespace std;
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
 
+#include "messages/MGetPoolStats.h"
+#include "messages/MGetPoolStatsReply.h"
+
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
@@ -158,6 +161,12 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case CEPH_MSG_STATFS_REPLY:
     m = new MStatfsReply;
+    break;
+  case MSG_GETPOOLSTATS:
+    m = new MGetPoolStats;
+    break;
+  case MSG_GETPOOLSTATSREPLY:
+    m = new MGetPoolStatsReply;
     break;
 
   case MSG_MON_COMMAND:

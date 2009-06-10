@@ -25,6 +25,9 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 
+#include "messages/MGetPoolStats.h"
+#include "messages/MGetPoolStatsReply.h"
+
 #include "messages/MOSDFailure.h"
 
 #include <errno.h>
@@ -61,6 +64,10 @@ void Objecter::dispatch(Message *m)
     
   case CEPH_MSG_OSD_MAP:
     handle_osd_map((MOSDMap*)m);
+    break;
+
+  case MSG_GETPOOLSTATSREPLY:
+    handle_get_pool_stats_reply((MGetPoolStatsReply*)m);
     break;
 
   default:
@@ -615,6 +622,55 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   delete m;
 }
+
+
+
+
+// pool stats
+
+void Objecter::get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *result,
+			      Context *onfinish)
+{
+  dout(10) << "get_pool_stats " << pools << dendl;
+
+  PoolStatOp *op = new PoolStatOp;
+  op->tid = ++last_tid;
+  op->pools = pools;
+  op->onfinish = onfinish;
+  op_poolstat[op->tid] = op;
+
+  poolstat_submit(op);
+}
+
+void Objecter::poolstat_submit(PoolStatOp *op)
+{
+  dout(10) << "poolstat_submit " << op->tid << dendl;
+  MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools);
+  int mon = monmap->pick_mon();
+  messenger->send_message(m, monmap->get_inst(mon));
+}
+
+void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
+{
+  dout(10) << "handle_get_pool_stats_reply " << *m << dendl;
+  tid_t tid = m->tid;
+
+  if (op_poolstat.count(tid)) {
+    PoolStatOp *op = op_poolstat[tid];
+    *op->pool_stats = m->pool_stats;
+    op->onfinish->finish(0);
+    delete op->onfinish;
+    op_poolstat.erase(tid);
+    delete op;
+  } else {
+    dout(10) << "unknown request " << tid << dendl;
+  } 
+  delete m;
+}
+
+
+
+
 
 
 

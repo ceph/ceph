@@ -33,7 +33,8 @@ void usage()
        << "   ..." << std::endl;
   */
   cerr << "Commands:\n";
-  cerr << "   lspools     -- list pools\n\n";
+  cerr << "   lspools     -- list pools\n";
+  cerr << "   dfpools     -- show pool size, usage\n\n";
 
   cerr << "Pool commands:\n";
   cerr << "   get objname -- fetch object\n";
@@ -316,8 +317,20 @@ int main(int argc, const char **argv)
     rados.list_pools(vec);
     for (vector<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
-
   }
+  else if (strcmp(nargs[0], "dfpools") == 0) {
+    vector<string> vec;
+    rados.list_pools(vec);
+    
+    map<string,rados_pool_stat_t> stats;
+    rados.get_pool_stats(vec, stats);
+
+    cout << "#pool\tnumobj\n";
+    for (map<string,rados_pool_stat_t>::iterator i = stats.begin(); i != stats.end(); ++i) {
+      cout << i->first << "\t" << i->second.num_objects << std::endl;
+    }
+  }
+
   else if (strcmp(nargs[0], "ls") == 0) {
     if (!pool)
       usage();

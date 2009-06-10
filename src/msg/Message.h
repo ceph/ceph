@@ -32,6 +32,9 @@
 #define MSG_CLASS                  56
 #define MSG_CLASS_ACK              57
 
+#define MSG_GETPOOLSTATS           58
+#define MSG_GETPOOLSTATSREPLY      59
+
 // osd internal
 #define MSG_OSD_PING         70
 #define MSG_OSD_BOOT         71

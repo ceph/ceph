@@ -25,6 +25,17 @@ typedef void *rados_list_ctx_t;
 /* pools */
 typedef void *rados_pool_t;
 typedef long long unsigned rados_snap_t;
+
+struct rados_pool_stat_t {
+  long long unsigned num_bytes;    // in bytes
+  long long unsigned num_kb;       // in KB
+  long long unsigned num_objects;
+  long long unsigned num_object_clones;
+  long long unsigned num_object_copies;  // num_objects * num_replicas
+  long long unsigned num_objects_missing_on_primary;
+  long long unsigned num_objects_degraded;
+};
+
 int rados_open_pool(const char *name, rados_pool_t *pool);
 int rados_close_pool(rados_pool_t pool);
 void rados_set_snap(rados_pool_t pool, rados_snap_t snap);
@@ -92,6 +103,8 @@ public:
 
   int list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx);
   int list_pools(std::vector<std::string>& v);
+  int get_pool_stats(std::vector<std::string>& v,
+		     std::map<std::string,rados_pool_stat_t>& stats);
 
   int snap_create(rados_pool_t pool, const char *snapname);
   int snap_remove(rados_pool_t pool, const char *snapname);

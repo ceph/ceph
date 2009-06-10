@@ -109,6 +109,8 @@ public:
   };
 
   int list_pools(std::vector<string>& ls);
+  int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
+
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op);
 
   // --- aio ---
@@ -378,6 +380,40 @@ int RadosClient::list_pools(std::vector<string>& v)
     v.push_back(osdmap.get_pool_name(p->first));
   return 0;
 }
+
+int RadosClient::get_pool_stats(std::vector<string>& v, map<string,rados_pool_stat_t>& result)
+{
+  map<string,pool_stat_t> r;
+  Mutex mylock("RadosClient::get_pool_stats::mylock");
+  Cond cond;
+  bool done;
+
+  lock.Lock();
+  objecter->get_pool_stats(v, &r, new C_SafeCond(&mylock, &cond, &done));
+  lock.Unlock();
+  
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  for (map<string,pool_stat_t>::iterator p = r.begin();
+       p != r.end();
+       p++) {
+    rados_pool_stat_t& v = result[p->first];
+    v.num_kb = p->second.num_kb;
+    v.num_bytes = p->second.num_bytes;
+    v.num_objects = p->second.num_objects;
+    v.num_object_clones = p->second.num_object_clones;
+    v.num_object_copies = p->second.num_object_copies;
+    v.num_objects_missing_on_primary = p->second.num_objects_missing_on_primary;
+    v.num_objects_degraded = p->second.num_objects_degraded;
+  }
+
+  return 0;
+}
+
+
 
 // SNAPS
 
@@ -732,6 +768,13 @@ int Rados::list_pools(std::vector<string>& v)
   if (!client)
     return -EINVAL;
   return client->list_pools(v);
+}
+
+int Rados::get_pool_stats(std::vector<string>& v, std::map<string,rados_pool_stat_t>& result)
+{
+  if (!client)
+    return -EINVAL;
+  return client->get_pool_stats(v, result);
 }
 
 int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx)

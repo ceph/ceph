@@ -35,7 +35,7 @@ class OSDMap;
 class MonMap;
 class Message;
 
-
+class MGetPoolStatsReply;
 
 // -----------------------------------------
 
@@ -264,11 +264,22 @@ class Objecter {
     }
   };
 
+  
+  // 
+  struct PoolStatOp {
+    tid_t tid;
+    vector<string> pools;
+
+    map<string,pool_stat_t> *pool_stats;
+    Context *onfinish;
+  };
+  
 
  private:
   // pending ops
-  hash_map<tid_t,ReadOp* >  op_read;
+  hash_map<tid_t,ReadOp*>   op_read;
   hash_map<tid_t,ModifyOp*> op_modify;
+  map<tid_t,PoolStatOp*>    op_poolstat;
 
   /**
    * track pending ops by pg
@@ -440,6 +451,16 @@ class Objecter {
     ops[0].op.op = op;
     return modify_submit(new ModifyOp(oid, ol, ops, utime_t(), snapc, flags, onack, oncommit));
   }
+
+
+  // --------------------------
+  // pool stats
+private:
+  void poolstat_submit(PoolStatOp *op);
+  void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
+public:
+  void get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *result,
+		      Context *onfinish);
 
 
   // ---------------------------
