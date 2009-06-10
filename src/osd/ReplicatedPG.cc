@@ -561,6 +561,8 @@ void ReplicatedPG::do_op(MOSDOp *op)
   tid_t rep_tid = osd->get_tid();
   RepGather *repop = new_repop(ctx, obc, noop, rep_tid);
 
+  // note: repop now owns ctx AND ctx->op
+
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
 
