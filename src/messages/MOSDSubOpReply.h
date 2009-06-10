@@ -62,11 +62,8 @@ public:
     unsigned num_ops;
     ::decode(num_ops, p);
     ops.resize(num_ops);
-    unsigned off = 0;
     for (unsigned i = 0; i < num_ops; i++) {
       ::decode(ops[i].op, p);
-      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
-      off += ops[i].op.payload_len;
     }
     ::decode(ack_type, p);
     ::decode(result, p);
@@ -83,9 +80,7 @@ public:
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);
     for (unsigned i = 0; i < ops.size(); i++) {
-      ops[i].op.payload_len = ops[i].data.length();
       ::encode(ops[i].op, payload);
-      data.append(ops[i].data);
     }
     ::encode(ack_type, payload);
     ::encode(result, payload);

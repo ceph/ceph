@@ -55,7 +55,7 @@ int main(int argc, const char **argv)
   rados.write(pool, oid, 0, bl, bl.length() - 3);
   rados.write(pool, oid, 0, bl, bl.length() - 4);
   r = rados.exec(pool, oid, "crypto", "md5", bl, bl2);
-  cout << "exec returned " << r << std::endl;
+  cout << "exec returned " << r <<  " buf size=" << bl2.length() << std::endl;
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
   char md5_str[bl2.length()*2 + 1];
   buf_to_hex(md5, bl2.length(), md5_str);

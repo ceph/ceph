@@ -38,7 +38,7 @@ int main(int argc, const char **argv)
   printf("open pool result = %d, pool = %p\n", r, pool);
 
   rados_write(pool, oid, 0, buf, strlen(buf) + 1);
-  rados_exec(pool, oid, "test", "foo", buf, strlen(buf) + 1, buf, 128);
+  rados_exec(pool, oid, "crypto", "md5", buf, strlen(buf) + 1, buf, 128);
   printf("exec result=%s\n", buf);
   int size = rados_read(pool, oid, 0, buf2, 128);
   printf("read result=%s\n", buf2);

@@ -82,11 +82,8 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ops.resize(head.num_ops);
-    unsigned off = 0;
     for (unsigned i = 0; i < head.num_ops; i++) {
       ::decode(ops[i].op, p);
-      ops[i].data.substr_of(data, off, ops[i].op.payload_len);
-      off += ops[i].op.payload_len;
     }
     ::decode_nohead(head.object_len, oid.name, p);
   }
@@ -95,9 +92,7 @@ public:
     head.object_len = oid.name.length();
     ::encode(head, payload);
     for (unsigned i = 0; i < head.num_ops; i++) {
-      ops[i].op.payload_len = ops[i].data.length();
       ::encode(ops[i].op, payload);
-      data.append(ops[i].data);
     }
     ::encode_nohead(oid.name, payload);
   }
