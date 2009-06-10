@@ -3905,9 +3905,32 @@ void OSD::send_class_request(const char *cname, ClassVersion& version)
 
 void OSD::init_op_flags(MOSDOp *op)
 {
-  vector<ceph_osd_op>::iterator iter;
+  vector<OSDOp>::iterator iter;
 
-  /* FIXME */
   op->rmw_flags = op->get_flags();
+
+  for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
+    switch (iter->op.op) {
+   case CEPH_OSD_OP_RDCALL:
+     {
+      bufferlist::iterator bp = iter->data.begin();
+      int is_write, is_read;
+      string cname, mname;
+      bp.copy(iter->op.class_len, cname);
+      bp.copy(iter->op.method_len, mname);
+      is_read = class_handler->get_method_flags(cname, mname) & CLS_METHOD_RD;
+      is_write = class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
+      dout(0) << "class " << cname << " method " << mname << " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
+      if (is_read)
+        op->rmw_flags |= CEPH_OSD_FLAG_READ;
+      if (is_write)
+        op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
+      break;
+     }
+    
+    default:
+      break;
+    }
+  }
 }
 
