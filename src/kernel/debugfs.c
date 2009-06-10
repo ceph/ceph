@@ -257,9 +257,6 @@ static int monc_show(struct seq_file *s, void *p)
 static int mdsc_show(struct seq_file *s, void *p)
 {
 	struct ceph_client *client = s->private;
-	int pathlen;
-	u64 pathbase;
-	char *path;
 	struct ceph_mds_request *req;
 	u64 nexttid = 0;
 	int got;
@@ -273,32 +270,45 @@ static int mdsc_show(struct seq_file *s, void *p)
 			break;
 		nexttid = req->r_tid + 1;
 
-		seq_printf(s, "%u.%u.%u.%u:%u (%s%d)\t",
-			IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
-			ENTITY_NAME(req->r_request->hdr.dst.name));
+		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
+			   req->r_tid,
+			   IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
+			   ENTITY_NAME(req->r_request->hdr.dst.name));
 
 		seq_printf(s, "%s", ceph_mds_op_name(req->r_op));
 
-		if (req->r_dentry) {
-			path = ceph_mdsc_build_path(req->r_dentry, &pathlen,
-						    &pathbase, -1);
-			if (path) {
-				seq_printf(s, " %s", path);
-				kfree(path);
-			}
+		if (rqe->r_got_unsafe)
+			seq_printf(s, "\t(unsafe)");
+		else
+			seq_printf(s, "\t");
+
+		if (req->r_inode) {
+			seq_printf(s, " #%llx", ceph_ino(req->r_inode));
+		} else if (req->r_dentry) {
+			spin_lock(&req->r_dentry->d_lock);
+			seq_printf(s, " #%llx/%.*s",
+				   ceph_ino(req->r_dentry->d_parent->d_inode),
+				   req->r_dentry->d_name.len,
+				   req->r_dentry->d_name.name);
+			spin_unlock(&req->r_dentry->d_lock);
 		} else if (req->r_path1) {
-			seq_printf(s, " %s", req->r_path1);
+			seq_printf(s, " #%llx/%s", req->r_ino1.ino,
+				   req->r_path1);
 		}
 
 		if (req->r_old_dentry) {
-			path = ceph_mdsc_build_path(req->r_old_dentry,
-						    &pathlen, &pathbase, -1);
-			if (path) {
-				seq_printf(s, " %s", path);
-				kfree(path);
-			}
+			spin_lock(&req->r_old_dentry->d_lock);
+			seq_printf(s, " #%llx/%.*s",
+			   ceph_ino(req->r_old_dentry->d_parent->d_inode),
+				   req->r_old_dentry->d_name.len,
+				   req->r_old_dentry->d_name.name);
+			spin_unlock(&req->r_old_dentry->d_lock);
 		} else if (req->r_path2) {
-			seq_printf(s, " %s", req->r_path2);
+			if (req->r_ino2.ino)
+				seq_printf(s, " #%llx/%s", req->r_ino2.ino,
+					   req->r_path2);
+			else
+				seq_printf(s, " %s", req->r_path2);
 		}
 
 		seq_printf(s, "\n");
@@ -340,11 +350,11 @@ static int osdc_show(struct seq_file *s, void *p)
 
 		num_ops = le16_to_cpu(head->num_ops);
 		olen = le32_to_cpu(head->object_len);
-		seq_printf(s, "%.*s\t", olen,
+		seq_printf(s, "%.*s", olen,
 			   (const char *)(head->ops + num_ops));
 
 		if (req->r_reassert_version.epoch)
-			seq_printf(s, "%u'%llu\t",
+			seq_printf(s, "\t%u'%llu",
 			   (unsigned)le32_to_cpu(req->r_reassert_version.epoch),
 			   le64_to_cpu(req->r_reassert_version.version));
 		else
@@ -352,7 +362,7 @@ static int osdc_show(struct seq_file *s, void *p)
 
 		for (i = 0; i < num_ops; i++) {
 			opcode = le16_to_cpu(op->op);
-			seq_printf(s, "%s\t", ceph_osd_op_name(opcode));
+			seq_printf(s, "\t%s", ceph_osd_op_name(opcode));
 			op++;
 		}
 
