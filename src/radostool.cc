@@ -35,15 +35,23 @@ void usage()
   cerr << "Commands:\n";
   cerr << "   lspools     -- list pools\n\n";
 
+  cerr << "Pool commands:\n";
   cerr << "   get objname -- fetch object\n";
   cerr << "   put objname -- write object\n";
   cerr << "   rm objname  -- remove object\n";
   cerr << "   ls          -- list objects in pool\n\n";
 
+  cerr << "   lssnap      -- list snaps\n";
+  cerr << "   mksnap foo  -- create snap 'foo'\n";
+  cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
+
   cerr << "   bench <seconds> [-c concurrentwrites] [-b writesize] [verify] [sync]\n";
   cerr << "              default is 16 concurrent IOs and 1 MB writes size\n\n";
 
   cerr << "Options:\n";
+  cerr << "   -P pool\n";
+  cerr << "   --pool=pool\n";
+  cerr << "        select given pool by name\n";
   cerr << "   -s name\n";
   cerr << "   --snap name\n";
   cerr << "        select given snap name for (read) IO\n";
@@ -309,7 +317,8 @@ int main(int argc, const char **argv)
     for (vector<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
 
-  } else if (strcmp(nargs[0], "ls") == 0) {
+  }
+  else if (strcmp(nargs[0], "ls") == 0) {
     if (!pool)
       usage();
 
@@ -327,9 +336,8 @@ int main(int argc, const char **argv)
       for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
 	cout << *iter << std::endl;
     }
-
-
-  } else if (strcmp(nargs[0], "get") == 0) {
+  } 
+  else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
     object_t oid(nargs[1]);
@@ -338,8 +346,8 @@ int main(int argc, const char **argv)
       cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
     }
-
-  } else if (strcmp(nargs[0], "put") == 0) {
+  }
+  else if (strcmp(nargs[0], "put") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
     if (!indata.length()) {
@@ -352,8 +360,8 @@ int main(int argc, const char **argv)
       cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
     }
-
-  } else if (strcmp(nargs[0], "rm") == 0) {
+  }
+  else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
     object_t oid(nargs[1]);
@@ -362,8 +370,43 @@ int main(int argc, const char **argv)
       cerr << "error removing " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
     }
+  }
 
-  } else if (strcmp(nargs[0], "bench") == 0) {
+  else if (strcmp(nargs[0], "lssnap") == 0) {
+    if (!pool || nargs.size() != 1)
+      usage();
+
+    vector<rados_snap_t> snaps;
+    rados.snap_list(p, &snaps);
+    for (vector<rados_snap_t>::iterator i = snaps.begin();
+	 i != snaps.end();
+	 i++) {
+      string s;
+      time_t t;
+      if (rados.snap_get_name(p, *i, &s) < 0)
+	continue;
+      if (rados.snap_get_stamp(p, *i, &t) < 0)
+	continue;
+      struct tm bdt;
+      localtime_r(&t, &bdt);
+      cout << *i << "\t" << s << "\t";
+
+      cout.setf(std::ios::right);
+      cout.fill('0');
+      cout << std::setw(4) << (bdt.tm_year+1900)
+	   << '.' << std::setw(2) << (bdt.tm_mon+1)
+	   << '.' << std::setw(2) << bdt.tm_mday
+	   << ' '
+	   << std::setw(2) << bdt.tm_hour
+	   << ':' << std::setw(2) << bdt.tm_min
+	   << ':' << std::setw(2) << bdt.tm_sec
+	   << std::endl;
+      cout.unsetf(std::ios::right);
+    }
+    cout << snaps.size() << " snaps" << std::endl;
+  }
+ 
+  else if (strcmp(nargs[0], "bench") == 0) {
     if (nargs.size() < 2)
       usage();
     int seconds = atoi(nargs[1]);

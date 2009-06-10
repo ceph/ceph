@@ -85,8 +85,10 @@ public:
   }
 
   // snaps
+  int snap_list(PoolCtx *pool, vector<rados_snap_t> *snaps);
   int snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snapid);
   int snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *s);
+  int snap_get_stamp(PoolCtx *pool, rados_snap_t snapid, time_t *t);
 
   // io
   int write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
@@ -379,6 +381,17 @@ int RadosClient::list_pools(std::vector<string>& v)
 
 // SNAPS
 
+int RadosClient::snap_list(PoolCtx *pool, vector<rados_snap_t> *snaps)
+{
+  Mutex::Locker l(lock);
+  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.begin();
+       p != pi.snaps.end();
+       p++)
+    snaps->push_back(p->first);
+  return 0;
+}
+
 int RadosClient::snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snapid)
 {
   Mutex::Locker l(lock);
@@ -402,6 +415,17 @@ int RadosClient::snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *
   if (p == pi.snaps.end())
     return -ENOENT;
   *s = p->second.name.c_str();
+  return 0;
+}
+
+int RadosClient::snap_get_stamp(PoolCtx *pool, rados_snap_t snapid, time_t *t)
+{
+  Mutex::Locker l(lock);
+  const pg_pool_t& pi = objecter->osdmap->get_pg_pool(pool->poolid);
+  map<snapid_t,pool_snap_info_t>::const_iterator p = pi.snaps.find(snapid);
+  if (p == pi.snaps.end())
+    return -ENOENT;
+  *t = p->second.stamp.sec();
   return 0;
 }
 
@@ -791,6 +815,14 @@ void Rados::set_snap(rados_pool_t pool, snapid_t seq)
   ctx->set_snap(seq);
 }
 
+int Rados::snap_list(rados_pool_t pool, vector<rados_snap_t> *snaps)
+{
+  if (!client)
+    return -EINVAL;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return client->snap_list(ctx, snaps);
+}
+
 int Rados::snap_lookup(rados_pool_t pool, const char *name, rados_snap_t *snapid)
 {
   if (!client)
@@ -805,6 +837,13 @@ int Rados::snap_get_name(rados_pool_t pool, rados_snap_t snapid, std::string *s)
     return -EINVAL;
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
   return client->snap_get_name(ctx, snapid, s);
+}
+int Rados::snap_get_stamp(rados_pool_t pool, rados_snap_t snapid, time_t *t)
+{
+  if (!client)
+    return -EINVAL;
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  return client->snap_get_stamp(ctx, snapid, t);
 }
 
 // AIO
