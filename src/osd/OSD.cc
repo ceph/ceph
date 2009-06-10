@@ -281,8 +281,10 @@ OSD::~OSD()
   delete osdmap;
   delete logger;
   delete store;
-  if (messenger) 
+  if (messenger)
     messenger->destroy();
+  if (heartbeat_messenger)
+    heartbeat_messenger->destroy();
 }
 
 bool got_sigterm = false;
@@ -526,7 +528,6 @@ int OSD::shutdown()
   messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
-
   return r;
 }
 
