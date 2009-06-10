@@ -522,7 +522,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   // note some basic context for op replication that prepare_transaction may clobber
   eversion_t old_last_update = ctx->at_version;
   bool old_exists = obc->obs.exists;
-  __u64 old_size = obc->obs.size;
+  __u64 old_size = obc->obs.oi.size;
   eversion_t old_version = obc->obs.oi.version;
 
   // we are acker.
@@ -819,7 +819,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   int result = 0;
 
   object_info_t& oi = ctx->obs->oi;
-  __u64& old_size = ctx->obs->size;
 
   const sobject_t& soid = oi.soid;
 
@@ -849,9 +848,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
 	oi.snapset.head_exists &&
-	op.offset + op.length >= old_size) {
+	op.offset + op.length >= oi.size) {
       dout(10) << " munging ZERO " << op.offset << "~" << op.length
-	       << " -> TRUNCATE " << op.offset << " (old size is " << old_size << ")" << dendl;
+	       << " -> TRUNCATE " << op.offset << " (old size is " << oi.size << ")" << dendl;
       op.op = CEPH_OSD_OP_TRUNCATE;
       oi.snapset.head_exists = true;
     }
@@ -1033,11 +1032,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  oi.snapset.clone_overlap[newest].subtract(ch);
 	  add_interval_usage(ch, info.stats);
 	}
-	if (op.offset + op.length > old_size) {
+	if (op.offset + op.length > oi.size) {
 	  __u64 new_size = op.offset + op.length;
-	  info.stats.num_bytes += new_size - old_size;
-	  info.stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(old_size, 10);
-	  old_size = new_size;
+	  info.stats.num_bytes += new_size - oi.size;
+	  info.stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
+	  oi.size = new_size;
 	}
 	oi.snapset.head_exists = true;
       }
@@ -1052,14 +1051,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (oi.snapset.clones.size()) {
 	  snapid_t newest = *oi.snapset.clones.rbegin();
 	  oi.snapset.clone_overlap.erase(newest);
-	  old_size = 0;
+	  oi.size = 0;
 	}
-	if (op.length != old_size) {
-	  info.stats.num_bytes -= old_size;
-	  info.stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
+	if (op.length != oi.size) {
+	  info.stats.num_bytes -= oi.size;
+	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 	  info.stats.num_bytes += op.length;
 	  info.stats.num_kb += SHIFT_ROUND_UP(op.length, 10);
-	  old_size = op.length;
+	  oi.size = op.length;
 	}
 	oi.snapset.head_exists = true;
       }
@@ -1091,8 +1090,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	if (oi.snapset.clones.size()) {
 	  snapid_t newest = *oi.snapset.clones.rbegin();
 	  interval_set<__u64> trim;
-	  if (old_size > op.offset) {
-	    trim.insert(op.offset, old_size-op.offset);
+	  if (oi.size > op.offset) {
+	    trim.insert(op.offset, oi.size-op.offset);
 	    trim.intersection_of(oi.snapset.clone_overlap[newest]);
 	    add_interval_usage(trim, info.stats);
 	  }
@@ -1101,12 +1100,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	    keep.insert(0, op.offset);
 	  oi.snapset.clone_overlap[newest].intersection_of(keep);
 	}
-	if (op.offset != old_size) {
-	  info.stats.num_bytes -= old_size;
-	  info.stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
+	if (op.offset != oi.size) {
+	  info.stats.num_bytes -= oi.size;
+	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 	  info.stats.num_bytes += op.offset;
 	  info.stats.num_kb += SHIFT_ROUND_UP(op.offset, 10);
-	  old_size = op.offset;
+	  oi.size = op.offset;
 	}
 	// do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
       }
@@ -1122,9 +1121,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 	if (ctx->obs->exists) {
 	  info.stats.num_objects--;
-	  info.stats.num_bytes -= old_size;
-	  info.stats.num_kb -= SHIFT_ROUND_UP(old_size, 10);
-	  old_size = 0;
+	  info.stats.num_bytes -= oi.size;
+	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
+	  oi.size = 0;
 	  ctx->obs->exists = false;
 	  oi.snapset.head_exists = false;
 	}      
@@ -1168,7 +1167,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
 	newop.op.op = CEPH_OSD_OP_WRITE;
-	newop.op.offset = old_size;
+	newop.op.offset = oi.size;
 	newop.op.length = op.length;
         newop.data = osd_op.data;
 	do_osd_ops(ctx, nops, odata);
@@ -1233,7 +1232,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  ::decode(tm, p);
 	  
 	  interval_set<__u64> zero;
-	  zero.insert(0, old_size);
+	  zero.insert(0, oi.size);
 	  tm.intersection_of(zero);
 	  zero.subtract(tm);
 	  
@@ -1350,8 +1349,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     info.stats.num_objects++;
     info.stats.num_object_clones++;
     oi.snapset.clones.push_back(coid.snap);
-    oi.snapset.clone_size[coid.snap] = ctx->obs->size;
-    oi.snapset.clone_overlap[coid.snap].insert(0, ctx->obs->size);
+    oi.snapset.clone_size[coid.snap] = ctx->obs->oi.size;
+    oi.snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
     
     // log clone
     dout(10) << " cloning v " << oi.version
@@ -1759,29 +1758,23 @@ ReplicatedPG::ObjectContext *ReplicatedPG::get_object_context(const sobject_t& s
 	     << " -> " << (obc->ref+1) << dendl;
   } else {
     // check disk
-    struct stat st;
-    int r = osd->store->stat(info.pgid.to_coll(), soid, &st);
+    bufferlist bv;
+    int r = osd->store->getattr(info.pgid.to_coll(), soid, OI_ATTR, bv);
     if (r < 0 && !can_create)
       return 0;   // -ENOENT!
 
     obc = new ObjectContext(soid);
 
-    if (r == 0) {
-      bufferlist bv;
-      r = osd->store->getattr(info.pgid.to_coll(), soid, OI_ATTR, bv);
-      assert(r >= 0);
+    if (r >= 0) {
       obc->obs.oi.decode(bv);
 
       if (soid.snap == CEPH_NOSNAP && !obc->obs.oi.snapset.head_exists) {
 	obc->obs.exists = false;
-	obc->obs.size = 0;
       } else {
 	obc->obs.exists = true;
-	obc->obs.size = st.st_size;
       }
     } else {
       obc->obs.exists = false;
-      obc->obs.size = 0;
     }
     dout(10) << "get_object_context " << soid << " read " << obc->obs.oi << dendl;
   }
@@ -2092,8 +2085,8 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       ObjectState obs(op->poid);
       obs.oi.version = op->old_version;
       obs.oi.snapset = op->snapset;
+      obs.oi.size = op->old_size;
       obs.exists = op->old_exists;
-      obs.size = op->old_size;
       
       ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), ObjectContext::RMW, &obs, this);
       

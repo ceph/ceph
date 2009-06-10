@@ -27,9 +27,8 @@ public:
   struct ObjectState {
     object_info_t oi;
     bool exists;
-    __u64 size;
 
-    ObjectState(const sobject_t& s) : oi(s), exists(false), size(0) {}
+    ObjectState(const sobject_t& s) : oi(s), exists(false) {}
   };
 
   /*
@@ -466,11 +465,9 @@ public:
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectState& obs)
 {
-  out << obs.oi.soid << "(";
-  if (obs.exists)
-    out << "s=" << obs.size << ")";
-  else
-    out << "dne)";
+  out << obs.oi.soid;
+  if (!obs.exists)
+    out << "(dne)";
   return out;
 }
 
