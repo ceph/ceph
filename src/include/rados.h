@@ -243,6 +243,10 @@ static inline int ceph_osd_op_type_exec(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_EXEC;
 }
+static inline int ceph_osd_op_type_pg(int op)
+{
+	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_PG;
+}
 
 static inline int ceph_osd_op_mode_subop(int op)
 {
