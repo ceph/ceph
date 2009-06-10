@@ -1007,6 +1007,24 @@ public:
       last_p = begin();  // just in case we were in the removed region.
     };
 
+    void write(int off, int len, std::ostream& out) const {
+      list s;
+      s.substr_of(*this, off, len);
+      for (std::list<ptr>::const_iterator it = s._buffers.begin(); 
+	   it != s._buffers.end(); 
+	   it++)
+	if (it->length())
+	  out.write(it->c_str(), it->length());
+      /*iterator p(this, off);
+      while (len > 0 && !p.end()) {
+	int l = p.left_in_this_buf();
+	if (l > len)
+	  l = len;
+	out.write(p.c_str(), l);
+	len -= l;
+	}*/
+    }
+
     void hexdump(std::ostream &out);
     int read_file(const char *fn);
     int write_file(const char *fn);

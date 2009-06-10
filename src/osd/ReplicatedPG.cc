@@ -864,7 +864,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       oi.snapset.head_exists = false;
     }
 
-    dout(10) << "do_osd_op  " << op << dendl;
+    dout(10) << "do_osd_op  " << osd_op << dendl;
 
     // make writeable (i.e., clone if necessary)
     if (is_modify)

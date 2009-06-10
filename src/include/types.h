@@ -363,31 +363,6 @@ inline ostream& operator<<(ostream& out, const ceph_fsid_t& f) {
   return out << b;
 }
 
-inline ostream& operator<<(ostream& out, const ceph_osd_op& op) {
-  out << ceph_osd_op_name(op.op);
-  if (ceph_osd_op_type_data(op.op)) {
-    switch (op.op) {
-    case CEPH_OSD_OP_DELETE:
-      break;
-    case CEPH_OSD_OP_TRUNCATE:
-      out << " " << op.offset;
-      break;
-    case CEPH_OSD_OP_SETTRUNC:
-    case CEPH_OSD_OP_MASKTRUNC:
-    case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.truncate_seq << "@" << op.truncate_size;      
-      break;
-    default:
-      out << " " << op.offset << "~" << op.length;
-    }
-  } else if (ceph_osd_op_type_attr(op.op))
-    out << " " << op.name_len << "+" << op.value_len;
-  return out;
-}
-
-
-
-
 
 struct kb_t {
   uint64_t v;

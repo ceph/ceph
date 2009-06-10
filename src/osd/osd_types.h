@@ -936,8 +936,41 @@ struct OSDOp {
   }
 };
 
-inline ostream& operator<<(ostream& out, const struct OSDOp& op) {
-  out << op.op << " (data length=" << op.data.length() << ")";
+inline ostream& operator<<(ostream& out, const OSDOp& op) {
+  out << ceph_osd_op_name(op.op.op);
+  if (ceph_osd_op_type_data(op.op.op)) {
+    // data extent
+    switch (op.op.op) {
+    case CEPH_OSD_OP_DELETE:
+      break;
+    case CEPH_OSD_OP_TRUNCATE:
+      out << " " << op.op.offset;
+      break;
+    case CEPH_OSD_OP_SETTRUNC:
+    case CEPH_OSD_OP_MASKTRUNC:
+    case CEPH_OSD_OP_TRIMTRUNC:
+      out << " " << op.op.truncate_seq << "@" << op.op.truncate_size;      
+      break;
+    default:
+      out << " " << op.op.offset << "~" << op.op.length;
+    }
+  } else if (ceph_osd_op_type_attr(op.op.op)) {
+    // xattr name
+    if (op.op.name_len) {
+      out << " ";
+      op.data.write(0, op.op.name_len, out);
+    }
+    if (op.op.value_len)
+      out << " (" << op.op.value_len << ")";
+  } else if (ceph_osd_op_type_exec(op.op.op)) {
+    // class.method
+    if (op.op.class_len) {
+      out << " ";
+      op.data.write(0, op.op.class_len, out);
+      out << ".";
+      op.data.write(op.op.class_len, op.op.method_len, out);
+    }
+  }
   return out;
 }
 
