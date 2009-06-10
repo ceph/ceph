@@ -294,6 +294,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
   ClassMethod& method = methods_map[mname];
   method.func = func;
   method.name = mname;
+  method.flags = flags;
   method.cls = this;
 
   return &method;
@@ -307,6 +308,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
   ClassMethod& method = methods_map[mname];
   method.cxx_func = func;
   method.name = mname;
+  method.flags = flags;
   method.cls = this;
 
   return &method;
