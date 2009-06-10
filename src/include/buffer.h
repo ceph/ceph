@@ -450,7 +450,6 @@ public:
 
   class list {
     // my private bits
-    list *bl;
     std::list<ptr> _buffers;
     unsigned _len;
 
