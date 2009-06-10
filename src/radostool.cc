@@ -71,11 +71,16 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrenti
   double totalLatency = 0;
   utime_t maxLatency;
   utime_t startTimes[concurrentios];
+  char bw[20];
+  double bandwidth = 0;
   int writesMade = 0;
   int writesCompleted = 0;
   time_t initialTime;
   utime_t startTime;
   utime_t stopTime;
+
+  utime_t ONE_SECOND;
+  ONE_SECOND.set_from_double(1.0);
 
   time(&initialTime);
   stringstream initialTimeS("");
@@ -109,6 +114,11 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrenti
   char* newName;
   utime_t currentLatency;
   utime_t runtime;
+
+  utime_t lastPrint = startTime;
+  utime_t timePassed = g_clock.now() - startTime;
+  int writesAtLastPrint = 0;
+
   runtime.set_from_double(secondsToRun);
   stopTime = startTime + runtime;
   while( g_clock.now() < stopTime ) {
@@ -125,6 +135,15 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrenti
     if( currentLatency > maxLatency) maxLatency = currentLatency;
     ++writesCompleted;
     completions[slot]->release();
+    //print out updating status message
+    if ( (g_clock.now() - lastPrint) > ONE_SECOND) {
+      timePassed = g_clock.now() - lastPrint;
+      bandwidth = ((double)(writesCompleted - writesAtLastPrint) * writeSize / timePassed) / (1024*1024);
+      lastPrint = g_clock.now();
+      writesAtLastPrint = writesCompleted;
+      sprintf(bw, "%3lf \n", bandwidth);
+      cout << "Current bandwidth:   " << bw;
+    }
     //write new stuff to rados, then delete old stuff
     //and save locations of new stuff for later deletion
     startTimes[slot] = g_clock.now();
@@ -149,7 +168,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrenti
     delete contents[slot];
   }
 
-  utime_t timePassed = g_clock.now() - startTime;
+  timePassed = g_clock.now() - startTime;
 
   //check objects for consistency if requested
   int errors = 0;
@@ -170,8 +189,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrenti
     }
   }
 
-  char bw[20];
-  double bandwidth = ((double)writesCompleted)*((double)writeSize)/(double)timePassed;
+  bandwidth = ((double)writesCompleted)*((double)writeSize)/(double)timePassed;
   bandwidth = bandwidth/(1024*1024); // we want it in MB/sec
   sprintf(bw, "%.3lf \n", bandwidth);
 
