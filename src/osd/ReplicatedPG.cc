@@ -834,7 +834,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     bufferlist::iterator bp = osd_op.data.begin();
 
     switch (op.op) {
-    case CEPH_OSD_OP_RDCALL:
+    case CEPH_OSD_OP_CALL:
       bp.copy(op.class_len, cname);
       bp.copy(op.method_len, mname);
       is_modify = osd->class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
@@ -891,28 +891,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
-    case CEPH_OSD_OP_RDCALL:
+    case CEPH_OSD_OP_CALL:
       {
 	bufferlist indata;
 	bp.copy(op.indata_len, indata);
-	//dout(20) << "rdcall param=" << indata.c_str() << dendl;
 	
 	ClassHandler::ClassData *cls;
         ClassVersion version;
         version.set_arch(get_arch());
         result = osd->get_class(cname, version, info.pgid, ctx->op, &cls);
 	if (result) {
-	  dout(10) << "rdcall class " << cname << " does not exist" << dendl;
+	  dout(10) << "call class " << cname << " does not exist" << dendl;
           if (result == -EAGAIN)
             return result;
 	} else {
 	  bufferlist outdata;
 	  ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
 	  if (!method) {
-	    dout(10) << "rdcall method " << cname << "." << mname << " does not exist" << dendl;
+	    dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
 	    result = -EINVAL;
 	  } else {
-	    dout(10) << "rdcall method " << cname << "." << mname << dendl;
+	    dout(10) << "call method " << cname << "." << mname << dendl;
 	    result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 	    op.length = outdata.length();
 	    odata.claim_append(outdata);

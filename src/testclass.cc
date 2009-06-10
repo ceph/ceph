@@ -33,7 +33,7 @@ int foo_method(cls_method_context_t ctx, char *indata, int datalen,
    *outdatalen = strlen(*outdata) + 1;
    cls_log("outdata=%s", *outdata);
 
-   r = cls_rdcall(ctx, "foo", "foo", *outdata, *outdatalen, outdata, outdatalen);
+   r = cls_call(ctx, "foo", "foo", *outdata, *outdatalen, outdata, outdatalen);
 
    return r;
 }

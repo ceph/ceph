@@ -86,7 +86,7 @@ int cls_unregister_method(cls_method_handle_t handle)
   return 1;
 }
 
-int cls_rdcall(cls_method_context_t hctx, const char *cls, const char *method,
+int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
                                  char *indata, int datalen,
                                  char **outdata, int *outdatalen)
 {
@@ -97,7 +97,7 @@ int cls_rdcall(cls_method_context_t hctx, const char *cls, const char *method,
   OSDOp& op = nops[0];
   int r;
 
-  op.op.op = CEPH_OSD_OP_RDCALL;
+  op.op.op = CEPH_OSD_OP_CALL;
   op.op.class_len = strlen(cls);
   op.op.method_len = strlen(method);
   op.op.indata_len = datalen;

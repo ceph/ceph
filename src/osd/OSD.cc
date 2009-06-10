@@ -3911,7 +3911,7 @@ void OSD::init_op_flags(MOSDOp *op)
 
   for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
     switch (iter->op.op) {
-   case CEPH_OSD_OP_RDCALL:
+   case CEPH_OSD_OP_CALL:
      {
       bufferlist::iterator bp = iter->data.begin();
       int is_write, is_read;

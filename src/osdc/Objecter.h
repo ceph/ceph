@@ -97,8 +97,8 @@ struct ObjectRead : public ObjectOperation {
     add_xattr(CEPH_OSD_OP_GETXATTRS, 0, bl);
   }
 
-  void rdcall(const char *cname, const char *method, bufferlist &indata) {
-    add_call(CEPH_OSD_OP_RDCALL, cname, method, indata);
+  void call(const char *cname, const char *method, bufferlist &indata) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata);
   }
 
   void pg_ls(__u64 count, __u64 cookie) {

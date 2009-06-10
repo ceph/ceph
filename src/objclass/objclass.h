@@ -36,7 +36,7 @@ extern void cls_free(void *p);
 
 extern int cls_read(cls_method_context_t hctx, int ofs, int len,
                                  char **outdata, int *outdatalen);
-extern int cls_rdcall(cls_method_context_t hctx, const char *cls, const char *method,
+extern int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
                                  char *indata, int datalen,
                                  char **outdata, int *outdatalen);
 extern int cls_getxattr(cls_method_context_t hctx, const char *name,

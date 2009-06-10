@@ -593,7 +593,7 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   ObjectRead rd;
-  rd.rdcall(cls, method, inbl);
+  rd.call(cls, method, inbl);
   objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack);
   lock.Unlock();
 
@@ -602,7 +602,7 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
     cond.Wait(mylock);
   mylock.Unlock();
 
-  dout(0) << "after rdcall got " << outbl.length() << " bytes" << dendl;
+  dout(0) << "after call got " << outbl.length() << " bytes" << dendl;
 
   return r;
 }
