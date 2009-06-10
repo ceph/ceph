@@ -76,8 +76,8 @@ int MonClient::probe_mon(MonMap *pmonmap)
     dout(1) << "[got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << "]" << dendl;
   }
   msgr->shutdown();
-  msgr->destroy();
   rank.wait();
+  msgr->destroy();
 
   if (monmap_bl.length())
     return 0;
