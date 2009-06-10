@@ -221,7 +221,6 @@ enum {
 
 	/** exec **/
 	CEPH_OSD_OP_CALL    = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_EXEC | 1,
-	CEPH_OSD_OP_WRCALL    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_EXEC | 1,
 
 	/** pg **/
 	CEPH_OSD_OP_PGLS      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 1,
@@ -301,7 +300,6 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_DNLOCK: return "dnlock";
 
 	case CEPH_OSD_OP_CALL: return "call";
-	case CEPH_OSD_OP_WRCALL: return "wrcall";
 
 	case CEPH_OSD_OP_PGLS: return "pgls";
 

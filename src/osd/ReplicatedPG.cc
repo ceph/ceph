@@ -913,6 +913,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  } else {
 	    dout(10) << "call method " << cname << "." << mname << dendl;
 	    result = method->exec((cls_method_context_t)&ctx, indata, outdata);
+	    dout(10) << "method called response length=" << outdata.length() << dendl;
 	    op.length = outdata.length();
 	    odata.claim_append(outdata);
 	  }

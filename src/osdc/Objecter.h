@@ -110,11 +110,6 @@ struct ObjectRead : public ObjectOperation {
 struct ObjectMutation : public ObjectOperation {
   utime_t mtime;
   
-  // exec
-  void wrcall(const char *cname, const char *method, bufferlist &indata) {
-    add_call(CEPH_OSD_OP_WRCALL, cname, method, indata);
-  }
-  
   // object data
   void write(__u64 off, __u64 len, bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITE, off, len, bl);
