@@ -23,9 +23,6 @@
 #include <sstream>
 
 
-int aio_bench(Rados& rados, rados_pool_t pool, int concurrentios, int secondsToRun,
-	       int writeSize, int readOffResults);
-
 void usage() 
 {
   cerr << "usage: radostool [options] [commands]" << std::endl;
@@ -35,168 +32,33 @@ void usage()
        << "   (osd|pg|mds) stat -- get monitor subsystem status" << std::endl
        << "   ..." << std::endl;
   */
-  cerr << "Options:" << std::endl;
+  cerr << "Commands:\n";
+  cerr << "   lspools     -- list pools\n\n";
+
+  cerr << "   get objname -- fetch object\n";
+  cerr << "   put objname -- write object\n";
+  cerr << "   ls          -- list objects in pool\n\n";
+
+  cerr << "   bench <seconds> [-c concurrentwrites] [-b writesize] [verify] [sync]\n";
+  cerr << "              default is 16 concurrent IOs and 1 MB writes size\n\n";
+
+  cerr << "Options:\n";
   cerr << "   -i infile\n";
   cerr << "   -o outfile\n";
   cerr << "        specify input or output file (for certain commands)\n";
-  generic_client_usage();
+  exit(1);
 }
 
-int main(int argc, const char **argv) 
-{
-  DEFINE_CONF_VARS(usage);
-  vector<const char*> args;
-  argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  common_init(args, "rados", false);
-
-  vector<const char*> nargs;
-  bufferlist indata, outdata;
-  const char *outfile = 0;
-  
-  const char *pool = 0;
-
-  FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("out_file", 'o')) {
-      CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
-    } else if (CONF_ARG_EQ("in_data", 'i')) {
-      const char *fname;
-      CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
-      int r = indata.read_file(fname);
-      if (r < 0) {
-	cerr << "error reading " << fname << ": " << strerror(-r) << std::endl;
-	exit(0);
-      } else {
-	cout << "read " << indata.length() << " bytes from " << fname << std::endl;
-      }
-    } else if (CONF_ARG_EQ("pool", 'p')) {
-      CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
-    } else if (CONF_ARG_EQ("help", 'h')) {
-      usage();
-    } else if (args[i][0] == '-' && nargs.empty()) {
-      cerr << "unrecognized option " << args[i] << std::endl;
-      usage();
-    } else
-      nargs.push_back(args[i]);
-  }
-
-  if (nargs.empty())
-    usage();
-
-  // open rados
-  Rados rados;
-  if (rados.initialize(0, NULL) < 0) {
-     cerr << "couldn't initialize rados!" << std::endl;
-     exit(1);
-  }
-
-  // open pool?
-  rados_pool_t p;
-  if (pool) {
-    int r = rados.open_pool(pool, &p);
-    if (r < 0) {
-      cerr << "error opening pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
-    }
-  }
-
-  // list pools?
-  if (strcmp(nargs[0], "lspools") == 0) {
-    vector<string> vec;
-    rados.list_pools(vec);
-    for (vector<string>::iterator i = vec.begin(); i != vec.end(); ++i)
-      cout << *i << std::endl;
-
-  } else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool)
-      usage();
-
-    Rados::ListCtx ctx;
-    while (1) {
-      list<object_t> vec;
-      int r = rados.list(p, 1 << 10, vec, ctx);
-      cout << "list result=" << r << " entries=" << vec.size() << std::endl;
-      if (r < 0) {
-	cerr << "got error: " << strerror(-r) << std::endl;
-	break;
-      }
-      if (vec.empty())
-	break;
-      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
-	cout << *iter << std::endl;
-    }
-
-
-  } else if (strcmp(nargs[0], "get") == 0) {
-    if (!pool || nargs.size() < 2)
-      usage();
-    object_t oid(nargs[1]);
-    int r = rados.read(p, oid, 0, outdata, 0);
-    if (r < 0) {
-      cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
-    }
-
-  } else if (strcmp(nargs[0], "put") == 0) {
-    if (!pool || nargs.size() < 2)
-      usage();
-    if (!indata.length()) {
-      cerr << "must specify input file" << std::endl;
-      usage();
-    }
-    object_t oid(nargs[1]);
-    int r = rados.write(p, oid, 0, indata, indata.length());
-    if (r < 0) {
-      cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
-    }
-
-  } else if (strcmp(nargs[0], "bench") == 0) {
-    if ( nargs.size() < 5) {
-      cerr << "bench requires 4 arguments: Concurrent writes," << std::endl
-	   << "minimum seconds to run, write size, and consistency checking" << std::endl
-	   << "(1 for yes, 0 for no)." << std::endl;
-    }
-    else {
-    aio_bench(rados, p, atoi(nargs[1]), atoi(nargs[2]), atoi(nargs[3]), atoi(nargs[4]));
-    }
-  }
-  else {
-    cerr << "unrecognized command " << nargs[0] << std::endl;
-    usage();
-  }
-
-  // write data?
-  int len = outdata.length();
-  if (len) {
-    if (outfile) {
-      if (strcmp(outfile, "-") == 0) {
-	::write(1, outdata.c_str(), len);
-      } else {
-	outdata.write_file(outfile);
-      }
-      generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
-    } else {
-      generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
-    }
-  }
-
-  if (pool)
-    rados.close_pool(p);
-
-  rados_deinitialize();
-  return 0;
-}
 
 /**********************************************
 
 **********************************************/
 
-int aio_bench (Rados& rados, rados_pool_t pool, int concurrentios, int secondsToRun,
-  int writeSize, int readOffResults) {
+int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrentios,
+	      int writeSize, int readOffResults, int sync) {
 
   cout << "Maintaining " << concurrentios << " concurrent writes of " << writeSize
-       << " bytes for at least " << secondsToRun << " seconds.\n";
+       << " bytes for at least " << secondsToRun << " seconds." << std::endl;
 
   Rados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
@@ -325,3 +187,165 @@ int aio_bench (Rados& rados, rados_pool_t pool, int concurrentios, int secondsTo
   }
   return 0;
 }
+
+
+int main(int argc, const char **argv) 
+{
+  DEFINE_CONF_VARS(usage);
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+  common_init(args, "rados", false);
+
+  vector<const char*> nargs;
+  bufferlist indata, outdata;
+  const char *outfile = 0;
+  
+  const char *pool = 0;
+ 
+  int concurrent_ios = 16;
+  int write_size = 1 << 20;
+
+
+  FOR_EACH_ARG(args) {
+    if (CONF_ARG_EQ("out_file", 'o')) {
+      CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
+    } else if (CONF_ARG_EQ("in_data", 'i')) {
+      const char *fname;
+      CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
+      int r = indata.read_file(fname);
+      if (r < 0) {
+	cerr << "error reading " << fname << ": " << strerror(-r) << std::endl;
+	exit(0);
+      } else {
+	cout << "read " << indata.length() << " bytes from " << fname << std::endl;
+      }
+    } else if (CONF_ARG_EQ("pool", 'p')) {
+      CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
+    } else if (CONF_ARG_EQ("help", 'h')) {
+      usage();
+    } else if (CONF_ARG_EQ("concurrent-ios", 'c')) {
+      CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
+    } else if (CONF_ARG_EQ("block-size", 'b')) {
+      CONF_SAFE_SET_ARG_VAL(&write_size, OPT_INT);
+    } else if (args[i][0] == '-' && nargs.empty()) {
+      cerr << "unrecognized option " << args[i] << std::endl;
+      usage();
+    } else
+      nargs.push_back(args[i]);
+  }
+
+  if (nargs.empty())
+    usage();
+
+  // open rados
+  Rados rados;
+  if (rados.initialize(0, NULL) < 0) {
+     cerr << "couldn't initialize rados!" << std::endl;
+     exit(1);
+  }
+
+  // open pool?
+  rados_pool_t p;
+  if (pool) {
+    int r = rados.open_pool(pool, &p);
+    if (r < 0) {
+      cerr << "error opening pool " << pool << ": " << strerror(-r) << std::endl;
+      exit(0);
+    }
+  }
+
+  // list pools?
+  if (strcmp(nargs[0], "lspools") == 0) {
+    vector<string> vec;
+    rados.list_pools(vec);
+    for (vector<string>::iterator i = vec.begin(); i != vec.end(); ++i)
+      cout << *i << std::endl;
+
+  } else if (strcmp(nargs[0], "ls") == 0) {
+    if (!pool)
+      usage();
+
+    Rados::ListCtx ctx;
+    while (1) {
+      list<object_t> vec;
+      int r = rados.list(p, 1 << 10, vec, ctx);
+      cout << "list result=" << r << " entries=" << vec.size() << std::endl;
+      if (r < 0) {
+	cerr << "got error: " << strerror(-r) << std::endl;
+	break;
+      }
+      if (vec.empty())
+	break;
+      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
+	cout << *iter << std::endl;
+    }
+
+
+  } else if (strcmp(nargs[0], "get") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    object_t oid(nargs[1]);
+    int r = rados.read(p, oid, 0, outdata, 0);
+    if (r < 0) {
+      cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
+      exit(0);
+    }
+
+  } else if (strcmp(nargs[0], "put") == 0) {
+    if (!pool || nargs.size() < 2)
+      usage();
+    if (!indata.length()) {
+      cerr << "must specify input file" << std::endl;
+      usage();
+    }
+    object_t oid(nargs[1]);
+    int r = rados.write(p, oid, 0, indata, indata.length());
+    if (r < 0) {
+      cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
+      exit(0);
+    }
+
+  } else if (strcmp(nargs[0], "bench") == 0) {
+    if (nargs.size() < 2)
+      usage();
+    int seconds = atoi(nargs[1]);
+    int sync = 0;
+    int verify = 0;
+    for (unsigned i=2; i<nargs.size(); i++) {
+      if (strcmp(nargs[i], "sync") == 0)
+	sync = 1;
+      else if (strcmp(nargs[i], "verify") == 0)
+	verify = 1;
+      else
+	usage();
+    }
+    aio_bench(rados, p, seconds, concurrent_ios, write_size, verify, sync);
+  }
+  else {
+    cerr << "unrecognized command " << nargs[0] << std::endl;
+    usage();
+  }
+
+  // write data?
+  int len = outdata.length();
+  if (len) {
+    if (outfile) {
+      if (strcmp(outfile, "-") == 0) {
+	::write(1, outdata.c_str(), len);
+      } else {
+	outdata.write_file(outfile);
+      }
+      generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
+    } else {
+      generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
+    }
+  }
+
+  if (pool)
+    rados.close_pool(p);
+
+  rados_deinitialize();
+  return 0;
+}
+
