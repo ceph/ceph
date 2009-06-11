@@ -172,7 +172,8 @@ public:
   snapid_t get_oldest_snap();
 
   loff_t last_journaled;       // log offset for the last time i was journaled
-  loff_t last_open_journaled;  // log offset for the last journaled EOpen
+  //loff_t last_open_journaled;  // log offset for the last journaled EOpen
+  utime_t last_dirstat_prop;
 
   //bool hack_accessed;
   //utime_t hack_load_stamp;
@@ -314,7 +315,7 @@ private:
     mdcache(c),
     snaprealm(0), containing_realm(0),
     first(f), last(l),
-    last_journaled(0), last_open_journaled(0), 
+    last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
     stickydir_ref(0),
     parent(0),
