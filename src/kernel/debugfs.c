@@ -277,7 +277,7 @@ static int mdsc_show(struct seq_file *s, void *p)
 
 		seq_printf(s, "%s", ceph_mds_op_name(req->r_op));
 
-		if (rqe->r_got_unsafe)
+		if (req->r_got_unsafe)
 			seq_printf(s, "\t(unsafe)");
 		else
 			seq_printf(s, "\t");
