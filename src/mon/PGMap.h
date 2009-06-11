@@ -100,8 +100,8 @@ public:
   // aggregate stats (soft state)
   hash_map<int,int> num_pg_by_state;
   int64_t num_pg, num_osd;
-  hash_map<int,pg_stat_t> pg_pool_sum;
-  pg_stat_t pg_sum;
+  hash_map<int,pool_stat_t> pg_pool_sum;
+  pool_stat_t pg_sum;
   osd_stat_t osd_sum;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
@@ -111,7 +111,7 @@ public:
     num_pg_by_state.clear();
     num_osd = 0;
     pg_pool_sum.clear();
-    pg_sum = pg_stat_t();
+    pg_sum = pool_stat_t();
     osd_sum = osd_stat_t();
   }
   void stat_pg_add(pg_t pgid, pg_stat_t &s) {
@@ -195,7 +195,7 @@ public:
 	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	 << std::endl;
     }
-    for (hash_map<int,pg_stat_t>::iterator p = pg_pool_sum.begin();
+    for (hash_map<int,pool_stat_t>::iterator p = pg_pool_sum.begin();
 	 p != pg_pool_sum.end();
 	 p++)
       ss << "pool " << p->first

@@ -251,15 +251,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
       continue;
     if (pg_map.pg_pool_sum.count(poolid) == 0)
       continue;
-    pg_stat_t& sum = pg_map.pg_pool_sum[poolid];
-    pool_stat_t& s = reply->pool_stats[*p];
-    s.num_bytes = sum.num_bytes;
-    s.num_kb = sum.num_kb;
-    s.num_objects = sum.num_objects;
-    s.num_object_clones = sum.num_object_clones;
-    s.num_object_copies = sum.num_object_copies;
-    s.num_objects_missing_on_primary = sum.num_objects_missing_on_primary;
-    s.num_objects_degraded = sum.num_objects_degraded;
+    reply->pool_stats[*p] = pg_map.pg_pool_sum[poolid];
   }
 
   mon->messenger->send_message(reply, m->get_orig_source_inst());
