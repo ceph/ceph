@@ -54,6 +54,17 @@ ostream& operator<<(ostream& out, CInode& in);
 
 // cached inode wrapper
 class CInode : public MDSCacheObject {
+private:
+  static boost::pool<> pool;
+public:
+  static void *operator new(size_t num_bytes) { 
+    return pool.malloc();
+  }
+  void operator delete(void *p) {
+    pool.free(p);
+  }
+
+
  public:
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 

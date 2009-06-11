@@ -18,6 +18,8 @@ using namespace std;
 #include "include/xlist.h"
 #include "include/nstring.h"
 
+#include <boost/pool/pool.hpp>
+
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v003"
 
 

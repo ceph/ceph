@@ -43,6 +43,9 @@
 #define dout_prefix *_dout << dbeginl << "mds" << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
+boost::pool<> CInode::pool(sizeof(CInode));
+boost::pool<> Capability::pool(sizeof(Capability));
+
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)

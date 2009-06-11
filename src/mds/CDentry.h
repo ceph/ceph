@@ -49,7 +49,17 @@ bool operator<(const CDentry& l, const CDentry& r);
 
 // dentry
 class CDentry : public MDSCacheObject, public LRUObject {
- public:
+private:
+  static boost::pool<> pool;
+public:
+  static void *operator new(size_t num_bytes) { 
+    return pool.malloc();
+  }
+  void operator delete(void *p) {
+    pool.free(p);
+  }
+
+public:
   // -- state --
   static const int STATE_NEW =          (1<<0);
   static const int STATE_FRAGMENTING =  (1<<1);

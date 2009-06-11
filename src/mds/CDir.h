@@ -43,7 +43,17 @@ ostream& operator<<(ostream& out, class CDir& dir);
 
 
 class CDir : public MDSCacheObject {
- public:
+private:
+  static boost::pool<> pool;
+public:
+  static void *operator new(size_t num_bytes) { 
+    return pool.malloc();
+  }
+  void operator delete(void *p) {
+    pool.free(p);
+  }
+
+public:
   // -- pins --
   static const int PIN_DNWAITER =     1;
   static const int PIN_INOWAITER =    2;

@@ -58,6 +58,15 @@
 class CInode;
 
 class Capability {
+private:
+  static boost::pool<> pool;
+public:
+  static void *operator new(size_t num_bytes) { 
+    return pool.malloc();
+  }
+  void operator delete(void *p) {
+    pool.free(p);
+  }
 public:
   struct Export {
     int32_t wanted;

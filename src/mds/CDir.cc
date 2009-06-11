@@ -42,6 +42,7 @@
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
+boost::pool<> CDir::pool(sizeof(CDir));
 
 
 ostream& operator<<(ostream& out, CDir& dir)
