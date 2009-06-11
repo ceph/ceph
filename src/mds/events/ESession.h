@@ -49,14 +49,14 @@ class ESession : public LogEvent {
     ::encode(client_inst, bl);
     ::encode(open, bl);
     ::encode(cmapv, bl);
-    ::encode(inos.m, bl);
+    ::encode(inos, bl);
     ::encode(inotablev, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(client_inst, bl);
     ::decode(open, bl);
     ::decode(cmapv, bl);
-    ::decode(inos.m, bl);
+    ::decode(inos, bl);
     ::decode(inotablev, bl);
   }
 

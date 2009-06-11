@@ -44,11 +44,11 @@ class InoTable : public MDSTable {
   void init_inode();
   void reset_state();
   void encode_state(bufferlist& bl) {
-    ::encode(free.m, bl);
+    ::encode(free, bl);
   }
   void decode_state(bufferlist::iterator& bl) {
-    ::decode(free.m, bl);
-    projected_free.m = free.m;
+    ::decode(free, bl);
+    projected_free = free;
   }
 };
 
