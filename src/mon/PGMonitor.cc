@@ -21,6 +21,8 @@
 
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
+#include "messages/MGetPoolStats.h"
+#include "messages/MGetPoolStatsReply.h"
 
 #include "messages/MStatfs.h"
 #include "messages/MStatfsReply.h"
@@ -164,12 +166,15 @@ bool PGMonitor::preprocess_query(Message *m)
   case CEPH_MSG_STATFS:
     handle_statfs((MStatfs*)m);
     return true;
+  case MSG_GETPOOLSTATS:
+    return preprocess_getpoolstats((MGetPoolStats*)m);
     
   case MSG_PGSTATS:
     return preprocess_pg_stats((MPGStats*)m);
 
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
+
 
   default:
     assert(0);
@@ -225,6 +230,46 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
  out:
   delete statfs;
 }
+
+bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
+{
+  dout(10) << "preprocess_getpoolstats " << *m << dendl;
+  MGetPoolStatsReply *reply;
+
+  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
+    dout(0) << "preprocess_getpoolstats on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
+    goto out;
+  }
+  
+  reply = new MGetPoolStatsReply(m->fsid, m->tid);
+
+  for (vector<string>::iterator p = m->pools.begin();
+       p != m->pools.end();
+       p++) {
+    int poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(p->c_str());
+    if (poolid < 0)
+      continue;
+    if (pg_map.pg_pool_sum.count(poolid) == 0)
+      continue;
+    pg_stat_t& sum = pg_map.pg_pool_sum[poolid];
+    pool_stat_t& s = reply->pool_stats[*p];
+    s.num_bytes = sum.num_bytes;
+    s.num_kb = sum.num_kb;
+    s.num_objects = sum.num_objects;
+    s.num_object_clones = sum.num_object_clones;
+    s.num_object_copies = sum.num_object_copies;
+    s.num_objects_missing_on_primary = sum.num_objects_missing_on_primary;
+    s.num_objects_degraded = sum.num_objects_degraded;
+  }
+
+  mon->messenger->send_message(reply, m->get_orig_source_inst());
+
+ out:
+  delete m;
+
+  return true;
+}
+
 
 bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {

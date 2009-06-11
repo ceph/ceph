@@ -415,6 +415,7 @@ bool Monitor::dispatch_impl(Message *m)
       // pg
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
+    case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_PGMAP]->dispatch(m);
       break;
 

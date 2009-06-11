@@ -34,6 +34,7 @@ class MPGStats;
 class MPGStatsAck;
 class MStatfs;
 class MMonCommand;
+class MGetPoolStats;
 
 class PGMonitor : public PaxosService {
 public:
@@ -67,6 +68,7 @@ private:
   };
 
   void handle_statfs(MStatfs *statfs);
+  bool preprocess_getpoolstats(MGetPoolStats *m);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);

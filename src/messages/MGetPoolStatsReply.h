@@ -24,7 +24,7 @@ public:
 
   MGetPoolStatsReply() : Message(MSG_GETPOOLSTATSREPLY) {}
   MGetPoolStatsReply(ceph_fsid_t& f, tid_t t) :
-    Message(MSG_GETPOOLSTATS),
+    Message(MSG_GETPOOLSTATSREPLY),
     fsid(f), tid(t) { }
 
   const char *get_type_name() { return "getpoolstats"; }
