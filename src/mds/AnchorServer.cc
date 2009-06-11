@@ -40,7 +40,7 @@ void AnchorServer::reset_state()
 void AnchorServer::dump()
 {
   dout(7) << "dump v " << version << dendl;
-  for (hash_map<inodeno_t, Anchor>::iterator it = anchor_map.begin();
+  for (map<inodeno_t, Anchor>::iterator it = anchor_map.begin();
        it != anchor_map.end();
        it++) 
     dout(15) << "dump " << it->second << dendl;

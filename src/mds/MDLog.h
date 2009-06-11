@@ -47,9 +47,6 @@ enum {
 
 #include <list>
 
-//#include <ext/hash_map>
-//using __gnu_cxx::hash_mapset;
-
 class Journaler;
 class LogEvent;
 class MDS;

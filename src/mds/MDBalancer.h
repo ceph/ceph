@@ -22,9 +22,6 @@
 using std::list;
 using std::map;
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
-
 #include "include/types.h"
 #include "common/Clock.h"
 #include "CInode.h"
@@ -54,8 +51,8 @@ class MDBalancer {
   set<dirfrag_t>   split_queue;
 
   // per-epoch scatter/gathered info
-  hash_map<int, mds_load_t>  mds_load;
-  hash_map<int, float>       mds_meta_load;
+  map<int, mds_load_t>  mds_load;
+  map<int, float>       mds_meta_load;
   map<int, map<int, float> > mds_import_map;
 
   // per-epoch state

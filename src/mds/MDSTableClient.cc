@@ -193,7 +193,7 @@ void MDSTableClient::handle_mds_recovery(int who)
   resend_queries();
   
   // prepares.
-  for (hash_map<__u64, _pending_prepare>::iterator p = pending_prepare.begin();
+  for (map<__u64, _pending_prepare>::iterator p = pending_prepare.begin();
        p != pending_prepare.end();
        p++) {
     dout(10) << "resending " << p->first << dendl;

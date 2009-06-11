@@ -445,13 +445,13 @@ public:
 
   // -- discover --
   // waiters
-  map<int, hash_map<inodeno_t, list<Context*> > > waiting_for_base_ino;
+  map<int, map<inodeno_t, list<Context*> > > waiting_for_base_ino;
 
   // in process discovers, by mds.
   //  this is just enough info to kick any waiters in the event of a failure.
   //  FIXME: use pointers here instead of identifiers?
-  map<int, hash_map<inodeno_t,int> > discover_dir;
-  map<int, hash_map<dirfrag_t,int> > discover_dir_sub;
+  map<int, map<inodeno_t,int> > discover_dir;
+  map<int, map<dirfrag_t,int> > discover_dir_sub;
 
   void discover_base_ino(inodeno_t want_ino, Context *onfinish, int from=-1);
   void discover_dir_frag(CInode *base, frag_t approx_fg, Context *onfinish,

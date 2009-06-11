@@ -24,7 +24,7 @@ class AnchorServer : public MDSTableServer {
     MDSTableServer(mds, TABLE_ANCHOR) {}
 
   // table bits
-  hash_map<inodeno_t, Anchor>  anchor_map;
+  map<inodeno_t, Anchor>  anchor_map;
 
   // uncommitted operations
   map<version_t, inodeno_t> pending_create;

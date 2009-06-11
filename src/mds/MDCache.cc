@@ -7036,7 +7036,7 @@ void MDCache::kick_discovers(int who)
 {
   list<Context*> waiters;
 
-  for (hash_map<inodeno_t, list<Context*> >::iterator p = waiting_for_base_ino[who].begin();
+  for (map<inodeno_t, list<Context*> >::iterator p = waiting_for_base_ino[who].begin();
        p != waiting_for_base_ino[who].end();
        ++p) {
     dout(10) << "kick_discovers on base ino " << p->first << dendl;
@@ -7044,7 +7044,7 @@ void MDCache::kick_discovers(int who)
   }
   waiting_for_base_ino.erase(who);
 
-  for (hash_map<inodeno_t,int>::iterator p = discover_dir[who].begin();
+  for (map<inodeno_t,int>::iterator p = discover_dir[who].begin();
        p != discover_dir[who].end();
        ++p) {
     CInode *in = get_inode(p->first);
@@ -7054,7 +7054,7 @@ void MDCache::kick_discovers(int who)
   }
   discover_dir.erase(who);
 
-  for (hash_map<dirfrag_t,int>::iterator p = discover_dir_sub[who].begin();
+  for (map<dirfrag_t,int>::iterator p = discover_dir_sub[who].begin();
        p != discover_dir_sub[who].end();
        ++p) {
     CDir *dir = get_dirfrag(p->first);

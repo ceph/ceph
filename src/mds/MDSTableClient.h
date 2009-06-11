@@ -40,7 +40,7 @@ protected:
     _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
   };
 
-  hash_map<__u64, _pending_prepare> pending_prepare;
+  map<__u64, _pending_prepare> pending_prepare;
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;

@@ -54,7 +54,7 @@ void AnchorClient::handle_query_result(class MMDSTableRequest *m)
 void AnchorClient::resend_queries()
 {
   // resend any pending lookups.
-  for (hash_map<inodeno_t, _pending_lookup>::iterator p = pending_lookup.begin();
+  for (map<inodeno_t, _pending_lookup>::iterator p = pending_lookup.begin();
        p != pending_lookup.end();
        p++) {
     dout(10) << "resending lookup on " << p->first << dendl;

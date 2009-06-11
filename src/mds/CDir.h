@@ -31,9 +31,6 @@
 #include <string>
 using namespace std;
 
-#include <ext/hash_map>
-using __gnu_cxx::hash_map;
-
 
 #include "CInode.h"
 
@@ -194,8 +191,6 @@ public:
   void mark_new(LogSegment *ls);
 
 public:
-  //typedef hash_map<string, CDentry*> map_t;   // there is a bug somewhere, valgrind me.
-  //typedef map<const char *, CDentry*, ltstr> map_t;
   typedef map<dentry_key_t, CDentry*> map_t;
 protected:
 
