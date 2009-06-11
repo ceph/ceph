@@ -1008,7 +1008,8 @@ retry:
 		struct inode *inode = temp->d_inode;
 		if (inode && ceph_snap(inode) == CEPH_SNAPDIR)
 			len++;  /* slash only */
-		else if (inode && ceph_snap(inode) == CEPH_NOSNAP)
+		else if (stop_on_nosnap && inode &&
+			 ceph_snap(inode) == CEPH_NOSNAP)
 			break;
 		else
 			len += 1 + temp->d_name.len;
@@ -1032,7 +1033,8 @@ retry:
 		if (inode && ceph_snap(inode) == CEPH_SNAPDIR) {
 			dout(50, "build_path_dentry path+%d: %p SNAPDIR\n",
 			     pos, temp);
-		} else if (inode && ceph_snap(inode) == CEPH_NOSNAP) {
+		} else if (stop_on_nosnap && inode &&
+			   ceph_snap(inode) == CEPH_NOSNAP) {
 			break;
 		} else {
 			pos -= temp->d_name.len;
@@ -1863,7 +1865,7 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 
 	dentry = d_find_alias(inode);
 	if (dentry) {
-		path = ceph_mdsc_build_path(dentry, &pathlen, &pathbase, -1);
+		path = ceph_mdsc_build_path(dentry, &pathlen, &pathbase, 0);
 		if (IS_ERR(path)) {
 			err = PTR_ERR(path);
 			BUG_ON(err);
