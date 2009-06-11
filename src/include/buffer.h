@@ -415,13 +415,19 @@ public:
     void set_offset(unsigned o) { _off = o; }
     void set_length(unsigned l) { _len = l; }
 
+    void append(char c) {
+      assert(_raw);
+      assert(1 <= unused_tail_length());
+      (c_str())[_len] = c;
+      _len++;
+    }
     void append(const char *p, unsigned l) {
       assert(_raw);
       assert(l <= unused_tail_length());
       memcpy(c_str() + _len, p, l);
       _len += l;
     }
-
+    
     void copy_in(unsigned o, unsigned l, const char *src) {
       assert(_raw);
       assert(o >= 0 && o <= _len);
@@ -814,6 +820,18 @@ public:
     }
 
 
+    void append(char c) {
+      // put what we can into the existing append_buffer.
+      unsigned gap = append_buffer.unused_tail_length();
+      if (!gap) {
+	// make a new append_buffer!
+	unsigned alen = PAGE_SIZE;
+	append_buffer = create_page_aligned(alen);
+	append_buffer.set_length(0);   // unused, so far.
+      }
+      append_buffer.append(c);
+      append(append_buffer, append_buffer.end() - 1, 1);	// add segment to the list
+    }
     void append(const char *data, unsigned len) {
       while (len > 0) {
 	// put what we can into the existing append_buffer.
