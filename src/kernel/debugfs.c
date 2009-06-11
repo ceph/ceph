@@ -261,6 +261,9 @@ static int mdsc_show(struct seq_file *s, void *p)
 	u64 nexttid = 0;
 	int got;
 	struct ceph_mds_client *mdsc = &client->mdsc;
+	int pathlen;
+	u64 pathbase;
+	char *path;
 
 	mutex_lock(&mdsc->mutex);
 	while (nexttid < mdsc->last_tid) {
@@ -285,24 +288,32 @@ static int mdsc_show(struct seq_file *s, void *p)
 		if (req->r_inode) {
 			seq_printf(s, " #%llx", ceph_ino(req->r_inode));
 		} else if (req->r_dentry) {
+			path = ceph_mdsc_build_path(req->r_dentry, &pathlen,
+						    &pathbase, 0);
 			spin_lock(&req->r_dentry->d_lock);
-			seq_printf(s, " #%llx/%.*s",
+			seq_printf(s, " #%llx/%.*s (%s)",
 				   ceph_ino(req->r_dentry->d_parent->d_inode),
 				   req->r_dentry->d_name.len,
-				   req->r_dentry->d_name.name);
+				   req->r_dentry->d_name.name,
+				   path ? path : "");
 			spin_unlock(&req->r_dentry->d_lock);
+			kfree(path);
 		} else if (req->r_path1) {
 			seq_printf(s, " #%llx/%s", req->r_ino1.ino,
 				   req->r_path1);
 		}
 
 		if (req->r_old_dentry) {
+			path = ceph_mdsc_build_path(req->r_old_dentry, &pathlen,
+						    &pathbase, 0);
 			spin_lock(&req->r_old_dentry->d_lock);
-			seq_printf(s, " #%llx/%.*s",
+			seq_printf(s, " #%llx/%.*s (%s)",
 			   ceph_ino(req->r_old_dentry->d_parent->d_inode),
 				   req->r_old_dentry->d_name.len,
-				   req->r_old_dentry->d_name.name);
+				   req->r_old_dentry->d_name.name,
+				   path ? path : "");
 			spin_unlock(&req->r_old_dentry->d_lock);
+			kfree(path);
 		} else if (req->r_path2) {
 			if (req->r_ino2.ino)
 				seq_printf(s, " #%llx/%s", req->r_ino2.ino,
