@@ -4008,7 +4008,6 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 
 int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
 {
-  Mutex::Locker lock(client_lock);
   tout << "ll_statfs" << std::endl;
   return statfs(0, stbuf);
 }

@@ -704,7 +704,11 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
   if (op_statfs.count(tid)) {
     StatfsOp *op = op_statfs[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
-    op->stats = &(m->h.st);
+    *(op->stats) = m->h.st;
+    /*op->stats->f_total = m->h.st.f_total;
+    op->stats->f_free = m->h.st.f_free;
+    op->stats->f_avail = m->h.st.f_avail;
+    op->stats->f_objects = m->h.st.f_objects;*/
     op->onfinish->finish(0);
     delete op->onfinish;
     op_statfs.erase(tid);
