@@ -33,9 +33,6 @@ using namespace std;
 // ceph stuff
 #include "Client.h"
 
-#include "messages/MStatfs.h"
-#include "messages/MStatfsReply.h"
-
 #include "messages/MMonMap.h"
 
 #include "messages/MClientMount.h"
@@ -1041,10 +1038,13 @@ bool Client::dispatch_impl(Message *m)
   case CEPH_MSG_OSD_OPREPLY:
     objecter->handle_osd_op_reply((MOSDOpReply*)m);
     break;
-
   case CEPH_MSG_OSD_MAP:
     objecter->handle_osd_map((class MOSDMap*)m);
     break;
+  case CEPH_MSG_STATFS_REPLY:
+    objecter->handle_fs_stats_reply((MStatfsReply*)m);
+    break;
+
     
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
@@ -1070,10 +1070,6 @@ bool Client::dispatch_impl(Message *m)
     break;
   case CEPH_MSG_CLIENT_LEASE:
     handle_lease((MClientLease*)m);
-    break;
-
-  case CEPH_MSG_STATFS_REPLY:
-    handle_statfs_reply((MStatfsReply*)m);
     break;
 
   default:
@@ -3979,67 +3975,42 @@ int Client::chdir(const char *relpath)
 
 int Client::statfs(const char *path, struct statvfs *stbuf)
 {
-  Mutex::Locker lock(client_lock);
+  Mutex::Locker l(client_lock);
   tout << "statfs" << std::endl;
-  return _statfs(stbuf);
-}
 
-int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
-{
-  Mutex::Locker lock(client_lock);
-  tout << "ll_statfs" << std::endl;
-  return _statfs(stbuf);
-}
-
-int Client::_statfs(struct statvfs *stbuf)
-{
-  dout(3) << "_statfs" << dendl;
+  ceph_statfs stats;
 
   Cond cond;
-  tid_t tid = ++last_tid;
-  StatfsRequest *req = new StatfsRequest(tid, &cond);
-  statfs_requests[tid] = req;
+  bool done;
 
-  int mon = monmap->pick_mon();
-  messenger->send_message(new MStatfs(monmap->fsid, req->tid), monmap->get_inst(mon));
+  objecter->get_fs_stats(stats, new C_Cond(&cond, &done));
 
-  while (req->reply == 0)
+  while(!done) 
     cond.Wait(client_lock);
 
-  // fill it in
   memset(stbuf, 0, sizeof(*stbuf));
+  //divide the results by 4 to give them as Posix expects
+  stbuf->f_blocks = stats.f_total/4;
+  stbuf->f_bfree = stats.f_free/4;
+  stbuf->f_bavail = stats.f_avail/4;
+  stbuf->f_files = stats.f_objects;
+  //fill in rest to make Posix happy
   stbuf->f_bsize = 4096;
   stbuf->f_frsize = 4096;
-  stbuf->f_blocks = req->reply->h.st.f_total / 4;
-  stbuf->f_bfree = req->reply->h.st.f_free / 4;
-  stbuf->f_bavail = req->reply->h.st.f_avail / 4;
-  stbuf->f_files = req->reply->h.st.f_objects;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = 1024;  // ??
 
-  statfs_requests.erase(req->tid);
-  delete req->reply;
-  delete req;
-
-  int r = 0;
-  dout(3) << "_statfs = " << r << dendl;
-  return r;
+  return 0;
 }
 
-void Client::handle_statfs_reply(MStatfsReply *reply)
+int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
 {
-  if (statfs_requests.count(reply->h.tid) &&
-      statfs_requests[reply->h.tid]->reply == 0) {
-    dout(10) << "handle_statfs_reply " << *reply << ", kicking waiter" << dendl;
-    statfs_requests[reply->h.tid]->reply = reply;
-    statfs_requests[reply->h.tid]->caller_cond->Signal();
-  } else {
-    dout(10) << "handle_statfs_reply " << *reply << ", dup or old, dropping" << dendl;
-    delete reply;
-  }
+  Mutex::Locker lock(client_lock);
+  tout << "ll_statfs" << std::endl;
+  return statfs(0, stbuf);
 }
 
 

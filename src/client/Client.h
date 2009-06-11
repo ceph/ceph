@@ -62,7 +62,6 @@ using namespace __gnu_cxx;
 
 
 
-class MStatfsReply;
 class MClientSession;
 class MClientRequest;
 class MClientRequestForward;
@@ -619,14 +618,6 @@ public:
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
-  struct StatfsRequest {
-    tid_t tid;
-    MStatfsReply *reply;
-    Cond *caller_cond;
-    StatfsRequest(tid_t t, Cond *cc) : tid(t), reply(0), caller_cond(cc) {}
-  };
-  map<tid_t,StatfsRequest*> statfs_requests;
-  
   MClientReply *make_request(MClientRequest *req, int uid, int gid,
 			     Inode **ptarget = 0,
 			     int use_mds=-1);
@@ -635,7 +626,6 @@ public:
   void kick_requests(int mds);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
-  void handle_statfs_reply(MStatfsReply *reply);
 
   bool   mounted;
   bool   unmounting;
@@ -936,7 +926,6 @@ private:
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
-  int _statfs(struct statvfs *stbuf);
 
 
 public:
