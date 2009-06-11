@@ -522,6 +522,8 @@ noinst_HEADERS = \
         messages/MExportDirWarning.h\
         messages/MExportDirWarningAck.h\
         messages/MGenericMessage.h\
+        messages/MGetPoolStats.h\
+        messages/MGetPoolStatsReply.h\
         messages/MHeartbeat.h\
         messages/MInodeFileCaps.h\
         messages/MLock.h\
