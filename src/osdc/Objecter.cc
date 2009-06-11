@@ -636,6 +636,7 @@ void Objecter::get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *re
   PoolStatOp *op = new PoolStatOp;
   op->tid = ++last_tid;
   op->pools = pools;
+  op->pool_stats = result;
   op->onfinish = onfinish;
   op_poolstat[op->tid] = op;
 
@@ -657,6 +658,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
 
   if (op_poolstat.count(tid)) {
     PoolStatOp *op = op_poolstat[tid];
+    dout(10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
     op->onfinish->finish(0);
     delete op->onfinish;
@@ -665,6 +667,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
   } else {
     dout(10) << "unknown request " << tid << dendl;
   } 
+  dout(10) << "done" << dendl;
   delete m;
 }
 

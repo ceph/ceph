@@ -361,6 +361,10 @@ bool RadosClient::_dispatch(Message *m)
     objecter->handle_osd_map((MOSDMap*)m);
     cond.Signal();
     break;
+  case MSG_GETPOOLSTATSREPLY:
+    objecter->handle_get_pool_stats_reply((MGetPoolStatsReply*)m);
+    break;
+
   case CEPH_MSG_MDS_MAP:
     break;
 
