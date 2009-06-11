@@ -110,7 +110,7 @@ public:
 
   int list_pools(std::vector<string>& ls);
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
-  int get_fs_stats( ceph_stat_fs_t& result );
+  int get_fs_stats( rados_statfs_t& result );
 
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op);
 
@@ -418,7 +418,7 @@ int RadosClient::get_pool_stats(std::vector<string>& pools, map<string,rados_poo
   return 0;
 }
 
-int RadosClient::get_fs_stats( ceph_stat_fs_t& result ) {
+int RadosClient::get_fs_stats( rados_statfs_t& result ) {
   ceph_statfs stats;
 
   Mutex mylock ("RadosClient::get_fs_stats::mylock");
@@ -432,17 +432,11 @@ int RadosClient::get_fs_stats( ceph_stat_fs_t& result ) {
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
 
-  result.f_bsize = 4096;
-  result.f_frsize = 4096;
-  result.f_blocks = stats.f_total / 4 ;
-  result.f_bfree = stats.f_free / 4;
-  result.f_bavail = stats.f_avail / 4;
-  result.f_files = stats.f_objects / 4;
-  result.f_ffree = -1;
-  result.f_favail = -1;
-  result.f_fsid = -1;
-  result.f_flag = 0;
-  result.f_namemax = 1024;
+  //divide by 4 to give it as Posix expects.
+  result.f_total = stats.f_total / 4 ;
+  result.f_free = stats.f_free / 4;
+  result.f_avail = stats.f_avail / 4;
+  result.f_objects = stats.f_objects / 4;
   return 0;
 }
 
@@ -809,7 +803,7 @@ int Rados::get_pool_stats(std::vector<string>& v, std::map<string,rados_pool_sta
   return client->get_pool_stats(v, result);
 }
 
-int Rados::get_fs_stats(ceph_stat_fs_t& result) {
+int Rados::get_fs_stats(rados_statfs_t& result) {
   if(!client) return -EINVAL;
   return client->get_fs_stats(result);
 }

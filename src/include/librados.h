@@ -36,18 +36,11 @@ struct rados_pool_stat_t {
   long long unsigned num_objects_degraded;
 };
 
-struct ceph_stat_fs_t {
-  int f_bsize;
-  int f_frsize;
-  int f_blocks;
-  int f_bfree;
-  int f_bavail;
-  int f_files;
-  int f_ffree;
-  int f_favail;
-  int f_fsid;
-  int f_flag;
-  int f_namemax;
+struct rados_statfs_t {
+  int f_total;
+  int f_free;
+  int f_avail;
+  int f_objects;
 };
 
 int rados_open_pool(const char *name, rados_pool_t *pool);
@@ -119,7 +112,7 @@ public:
   int list_pools(std::vector<std::string>& v);
   int get_pool_stats(std::vector<std::string>& v,
 		     std::map<std::string,rados_pool_stat_t>& stats);
-  int get_fs_stats(ceph_stat_fs_t& result);
+  int get_fs_stats(rados_statfs_t& result);
 
   int snap_create(rados_pool_t pool, const char *snapname);
   int snap_remove(rados_pool_t pool, const char *snapname);
