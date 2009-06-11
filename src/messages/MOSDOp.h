@@ -201,9 +201,8 @@ public:
     out << "osd_op(" << get_reqid();
     out << " " << oid;
 
-    out << " ";
-
 #if 0
+    out << " ";
     if (may_read())
       out << "r";
     if (may_write())
