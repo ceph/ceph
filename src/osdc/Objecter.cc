@@ -27,6 +27,8 @@
 
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
+#include "messages/MStatfs.h"
+#include "messages/MStatfsReply.h"
 
 #include "messages/MOSDFailure.h"
 
@@ -68,6 +70,10 @@ void Objecter::dispatch(Message *m)
 
   case MSG_GETPOOLSTATSREPLY:
     handle_get_pool_stats_reply((MGetPoolStatsReply*)m);
+    break;
+
+  case CEPH_MSG_STATFS_REPLY:
+    handle_fs_stats_reply((MStatfsReply*)m);
     break;
 
   default:
@@ -672,10 +678,43 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
 }
 
 
+void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
+  dout(10) << "get_fs_stats" << dendl;
 
+  StatfsOp *op = new StatfsOp;
+  op->tid = ++last_tid;
+  op->stats = &result;
+  op->onfinish = onfinish;
+  op_statfs[op->tid] = op;
 
+  fs_stats_submit(op);
+}
 
+void Objecter::fs_stats_submit(StatfsOp *op) {
+  dout(10) << "fs_stats_submit" << op->tid << dendl;
+  MStatfs *m = new MStatfs(monmap->fsid, op->tid);
+  int mon = monmap->pick_mon();
+  messenger->send_message(m, monmap->get_inst(mon));
+}
 
+void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
+  dout(10) << "handle_fs_stats_reply " << *m << dendl;
+  tid_t tid = m->h.tid;
+
+  if (op_statfs.count(tid)) {
+    StatfsOp *op = op_statfs[tid];
+    dout(10) << "have request " << tid << " at " << op << dendl;
+    op->stats = &(m->h.st);
+    op->onfinish->finish(0);
+    delete op->onfinish;
+    op_statfs.erase(tid);
+    delete op;
+  } else {
+    dout(10) << "unknown request " << tid << dendl;
+  }
+  dout(10) << "done" << dendl;
+  delete m;
+}
 
 
 // scatter/gather

@@ -110,6 +110,7 @@ public:
 
   int list_pools(std::vector<string>& ls);
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
+  int get_fs_stats( ceph_stat_fs_t& result );
 
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op);
 
@@ -385,7 +386,7 @@ int RadosClient::list_pools(std::vector<string>& v)
   return 0;
 }
 
-int RadosClient::get_pool_stats(std::vector<string>& v, map<string,rados_pool_stat_t>& result)
+int RadosClient::get_pool_stats(std::vector<string>& pools, map<string,rados_pool_stat_t>& result)
 {
   map<string,pool_stat_t> r;
   Mutex mylock("RadosClient::get_pool_stats::mylock");
@@ -393,7 +394,7 @@ int RadosClient::get_pool_stats(std::vector<string>& v, map<string,rados_pool_st
   bool done;
 
   lock.Lock();
-  objecter->get_pool_stats(v, &r, new C_SafeCond(&mylock, &cond, &done));
+  objecter->get_pool_stats(pools, &r, new C_SafeCond(&mylock, &cond, &done));
   lock.Unlock();
   
   mylock.Lock();
@@ -417,6 +418,33 @@ int RadosClient::get_pool_stats(std::vector<string>& v, map<string,rados_pool_st
   return 0;
 }
 
+int RadosClient::get_fs_stats( ceph_stat_fs_t& result ) {
+  ceph_statfs stats;
+
+  Mutex mylock ("RadosClient::get_fs_stats::mylock");
+  Cond cond;
+  bool done;
+  lock.Lock();
+  objecter->get_fs_stats(stats, new C_SafeCond(&mylock, &cond, &done));
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done) cond.Wait(mylock);
+  mylock.Unlock();
+
+  result.f_bsize = 4096;
+  result.f_frsize = 4096;
+  result.f_blocks = stats.f_total / 4 ;
+  result.f_bfree = stats.f_free / 4;
+  result.f_bavail = stats.f_avail / 4;
+  result.f_files = stats.f_objects / 4;
+  result.f_ffree = -1;
+  result.f_favail = -1;
+  result.f_fsid = -1;
+  result.f_flag = 0;
+  result.f_namemax = 1024;
+  return 0;
+}
 
 
 // SNAPS
@@ -779,6 +807,11 @@ int Rados::get_pool_stats(std::vector<string>& v, std::map<string,rados_pool_sta
   if (!client)
     return -EINVAL;
   return client->get_pool_stats(v, result);
+}
+
+int Rados::get_fs_stats(ceph_stat_fs_t& result) {
+  if(!client) return -EINVAL;
+  return client->get_fs_stats(result);
 }
 
 int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados::ListCtx& ctx)

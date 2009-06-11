@@ -36,6 +36,7 @@ class MonMap;
 class Message;
 
 class MGetPoolStatsReply;
+class MStatfsReply;
 
 // -----------------------------------------
 
@@ -273,13 +274,19 @@ class Objecter {
     map<string,pool_stat_t> *pool_stats;
     Context *onfinish;
   };
-  
+
+  struct StatfsOp {
+    tid_t tid;
+    ceph_statfs *stats;
+    Context *onfinish;
+  };
 
  private:
   // pending ops
   hash_map<tid_t,ReadOp*>   op_read;
   hash_map<tid_t,ModifyOp*> op_modify;
   map<tid_t,PoolStatOp*>    op_poolstat;
+  map<tid_t,StatfsOp*>      op_statfs;
 
   /**
    * track pending ops by pg
@@ -462,6 +469,13 @@ public:
   void get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
 
+  // ---------------------------
+  // df stats
+private:
+  void fs_stats_submit(StatfsOp *op);
+public:
+  void handle_fs_stats_reply(MStatfsReply *m);
+  void get_fs_stats(ceph_statfs& result, Context *onfinish);
 
   // ---------------------------
   // some scatter/gather hackery
