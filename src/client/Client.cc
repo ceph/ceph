@@ -887,6 +887,7 @@ void Client::handle_client_session(MClientSession *m)
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
     mds_sessions[from].seq = 0;
+    mds_sessions[from].inst = m->get_source_inst();
     break;
 
   case CEPH_SESSION_CLOSE:
@@ -1115,6 +1116,14 @@ void Client::handle_mds_map(MMDSMap* m)
 
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
   mdsmap->decode(m->get_encoded());
+
+  // reset session
+  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       p++)
+    if (!mdsmap->is_up(p->first) ||
+	mdsmap->get_inst(p->first) != p->second.inst)
+      messenger->mark_down(p->second.inst.addr);
   
   // send reconnect?
   if (frommds >= 0 && 

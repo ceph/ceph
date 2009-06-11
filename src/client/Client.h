@@ -577,6 +577,7 @@ public:
     __u64 cap_gen;
     utime_t cap_ttl, last_cap_renew_request;
     int num_caps;
+    entity_inst_t inst;
 
     MClientCapRelease *release;
 
