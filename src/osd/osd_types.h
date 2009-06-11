@@ -1043,7 +1043,7 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
-    if (op.op.name_len) {
+    if (op.op.name_len && op.data.length()) {
       out << " ";
       op.data.write(0, op.op.name_len, out);
     }
@@ -1051,7 +1051,7 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
       out << " (" << op.op.value_len << ")";
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
-    if (op.op.class_len) {
+    if (op.op.class_len && op.data.length()) {
       out << " ";
       op.data.write(0, op.op.class_len, out);
       out << ".";
