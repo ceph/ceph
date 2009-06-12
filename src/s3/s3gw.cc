@@ -65,7 +65,7 @@ class XMLArgs
 
 int XMLArgs::parse()
 {
-  int pos, fpos;
+  int pos = 0, fpos;
   bool end = false;
   if (str[pos] == '?') pos++;
 
@@ -184,17 +184,17 @@ static void dump_bucket(struct req_state *s, const char *name, const char *date)
 
 void do_list_buckets(struct req_state *s)
 {
-  unsigned long long id = 0x0123456789ABCDEF;
+  string id = "0123456789ABCDEF";
   S3AccessHandle handle;
   int r;
 #define BUF_SIZE 256
   char buf[BUF_SIZE];
   list_all_buckets_start(s);
-  dump_owner(s, (const char *)&id, sizeof(id), "foobi");
-  r = list_buckets_init((const char *)&id, &handle);
+  dump_owner(s, (const char *)id.c_str(), id.size(), "foobi");
+  r = list_buckets_init(id, &handle);
   open_section(s, "Buckets");
   while (r >= 0) {
-    r = list_buckets_next((const char *)&id, buf, BUF_SIZE, &handle);
+    r = list_buckets_next(id, buf, BUF_SIZE, &handle);
     if (r < 0)
       continue;
     dump_bucket(s, buf, "123123");
@@ -203,13 +203,15 @@ void do_list_buckets(struct req_state *s)
   list_all_buckets_end(s);
 }
 
+
 void do_list_objects(struct req_state *s)
 {
   int pos;
   string bucket, host_str;
   string prefix, marker, max_keys, delimiter;
+  int max;
   const char *p;
-  unsigned long long id = 0x0123456789ABCDEF;
+  string id = "0123456789ABCDEF";
 
   if (s->path_name[0] == '/') {
     string tmp = s->path_name;
@@ -244,18 +246,30 @@ void do_list_objects(struct req_state *s)
     dump_value(s, "Prefix", prefix.c_str());
   if (!marker.empty())
     dump_value(s, "Marker", marker.c_str());
-  if (!max_keys.empty())
+  if (!max_keys.empty()) {
     dump_value(s, "MaxKeys", max_keys.c_str());
+    max = atoi(max_keys.c_str());
+  } else {
+    max = -1;
+  }
   if (!delimiter.empty())
     dump_value(s, "Delimiter", delimiter.c_str());
-  open_section(s, "Contents");
-  dump_value(s, "Key", "Nelson");
-  dump_value(s, "LastModified", "2006-01-01T12:00:00.000Z");
-  dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;");
-  dump_value(s, "Size", "5");
-  dump_value(s, "StorageClass", "STANDARD");
-  dump_owner(s, (const char *)&id, sizeof(id), "foobi");
-  close_section(s, "Contents");
+
+  vector<string> objs;
+  int r = list_objects(id, bucket, max, prefix, marker, objs);
+  if (r >= 0) {
+    vector<string>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      open_section(s, "Contents");
+      dump_value(s, "Key", iter->c_str());
+      dump_value(s, "LastModified", "2006-01-01T12:00:00.000Z");
+      dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;");
+      dump_value(s, "Size", "5");
+      dump_value(s, "StorageClass", "STANDARD");
+      dump_owner(s, (const char *)&id, sizeof(id), "foobi");
+      close_section(s, "Contents");
+    }
+  }
   close_section(s, "ListBucketResult");
   //if (args.get("name"))
 }
