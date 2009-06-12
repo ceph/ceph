@@ -50,7 +50,7 @@ bin_PROGRAMS = \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
 	testrados testradospp \
-	radostool radosacl s3gw
+	rados radosacl s3gw
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -113,8 +113,8 @@ librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
 
-radostool_SOURCES = radostool.cc
-radostool_LDADD = librados.la libcrush.la
+rados_SOURCES = rados.cc
+rados_LDADD = librados.la libcrush.la
 
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la libcrush.la

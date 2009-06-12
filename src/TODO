@@ -41,8 +41,6 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
-- unify objecter read/write paths
-  - what about snapc vs snapid?
 - snaps
 - merge pgs
 - destroy pg_pools
