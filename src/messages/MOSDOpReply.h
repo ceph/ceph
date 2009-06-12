@@ -67,6 +67,7 @@ public:
     head.client_inc = req->head.client_inc;
     ops = req->ops;
     head.result = result;
+    acktype |= req->get_rmw_flags();
     head.flags =
       (req->head.flags & ~(CEPH_OSD_FLAG_ONDISK|CEPH_OSD_FLAG_ONNVRAM|CEPH_OSD_FLAG_ACK)) | acktype;
     oid = req->oid;

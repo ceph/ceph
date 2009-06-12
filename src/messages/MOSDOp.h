@@ -64,6 +64,8 @@ public:
   eversion_t get_version() { return head.reassert_version; }
   
   utime_t get_mtime() { return head.mtime; }
+
+  int get_rmw_flags() { assert(rmw_flags); return rmw_flags; }
   bool may_read() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_READ; }
   bool may_write() { assert(rmw_flags); return rmw_flags & CEPH_OSD_FLAG_WRITE; }
 
