@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "fcgiapp.h"
 
@@ -134,9 +135,18 @@ static void close_section(struct req_state *s, const char *name)
   FCGX_FPrintF(s->out, "%*s</%s>\n", s->indent, "", name);
 }
 
-static void dump_value(struct req_state *s, const char *name, const char *val)
+static void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
 {
-  FCGX_FPrintF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, val, name);
+#define LARGE_SIZE 8192
+  char buf[LARGE_SIZE];
+  va_list ap;
+
+  va_start(ap, fmt);
+  int n = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  va_end(ap);
+  if (n >= LARGE_SIZE)
+    return;
+  FCGX_FPrintF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
 }
 
 static void dump_entry(struct req_state *s, const char *val)
@@ -145,6 +155,19 @@ static void dump_entry(struct req_state *s, const char *val)
 }
 
 
+static void dump_time(struct req_state *s, const char *name, time_t *t)
+{
+#define TIME_BUF_SIZE 128
+  char buf[TIME_BUF_SIZE];
+  struct tm *tmp = localtime(t);
+  if (tmp == NULL)
+    return;
+
+  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", tmp) == 0)
+    return;
+
+  dump_value(s, name, buf); 
+}
 
 static void dump_owner(struct req_state *s, const char *id, int id_size, const char *name)
 {
@@ -174,11 +197,11 @@ static void list_all_buckets_end(struct req_state *s)
 }
 
 
-static void dump_bucket(struct req_state *s, const char *name, const char *date)
+static void dump_bucket(struct req_state *s, S3ObjEnt& obj)
 {
   open_section(s, "Bucket");
-  dump_value(s, "Name", name);
-  dump_value(s, "CreationDate", date);
+  dump_value(s, "Name", obj.name.c_str());
+  dump_time(s, "CreationDate", &obj.mtime);
   close_section(s, "Bucket");
 }
 
@@ -187,17 +210,16 @@ void do_list_buckets(struct req_state *s)
   string id = "0123456789ABCDEF";
   S3AccessHandle handle;
   int r;
-#define BUF_SIZE 256
-  char buf[BUF_SIZE];
+  S3ObjEnt obj;
   list_all_buckets_start(s);
   dump_owner(s, (const char *)id.c_str(), id.size(), "foobi");
   r = list_buckets_init(id, &handle);
   open_section(s, "Buckets");
   while (r >= 0) {
-    r = list_buckets_next(id, buf, BUF_SIZE, &handle);
+    r = list_buckets_next(id, obj, &handle);
     if (r < 0)
       continue;
-    dump_bucket(s, buf, "123123");
+    dump_bucket(s, obj);
   }
   close_section(s, "Buckets");
   list_all_buckets_end(s);
@@ -255,16 +277,16 @@ void do_list_objects(struct req_state *s)
   if (!delimiter.empty())
     dump_value(s, "Delimiter", delimiter.c_str());
 
-  vector<string> objs;
+  vector<S3ObjEnt> objs;
   int r = list_objects(id, bucket, max, prefix, marker, objs);
   if (r >= 0) {
-    vector<string>::iterator iter;
+    vector<S3ObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       open_section(s, "Contents");
-      dump_value(s, "Key", iter->c_str());
-      dump_value(s, "LastModified", "2006-01-01T12:00:00.000Z");
+      dump_value(s, "Key", iter->name.c_str());
+      dump_time(s, "LastModified", &iter->mtime);
       dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;");
-      dump_value(s, "Size", "5");
+      dump_value(s, "Size", "%lld", iter->size);
       dump_value(s, "StorageClass", "STANDARD");
       dump_owner(s, (const char *)&id, sizeof(id), "foobi");
       close_section(s, "Contents");

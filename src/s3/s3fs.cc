@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <limits.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "s3access.h"
 
@@ -16,9 +19,11 @@ struct s3fs_state {
   DIR *dir;
 };
 
+#define DIR_NAME "/tmp/s3"
+
 int list_buckets_init(string& id, S3AccessHandle *handle)
 {
-  DIR *dir = opendir("/tmp/s3");
+  DIR *dir = opendir(DIR_NAME);
   struct s3fs_state *state;
 
   if (!dir)
@@ -35,10 +40,11 @@ int list_buckets_init(string& id, S3AccessHandle *handle)
   return 0;
 }
 
-int list_buckets_next(string& id, char *buf, int size, S3AccessHandle *handle)
+int list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
 {
   struct s3fs_state *state;
   struct dirent *dirent;
+#define BUF_SIZE 512
 
   if (!handle)
     return -EINVAL;
@@ -58,18 +64,25 @@ int list_buckets_next(string& id, char *buf, int size, S3AccessHandle *handle)
     if (dirent->d_name[0] == '.')
       continue;
 
-    snprintf(buf, size, "%s", dirent->d_name);
+    obj.name = dirent->d_name;
+
+    char buf[BUF_SIZE];
+    struct stat statbuf;
+    snprintf(buf, BUF_SIZE, "%s/%s", DIR_NAME, obj.name.c_str());
+    if (stat(buf, &statbuf) < 0)
+      continue;
+    obj.mtime = statbuf.st_mtime;
+    obj.size = statbuf.st_size;
     return 0;
   }
 }
 
-int list_objects(string& id, string& bucket, int max, string& prefix, string& marker, vector<string>& result)
+int list_objects(string& id, string& bucket, int max, string& prefix, string& marker, vector<S3ObjEnt>& result)
 {
   map<string, bool> dir_map;
-#define BUF_SIZE 512
   char path[BUF_SIZE];
 
-  snprintf(path, BUF_SIZE, "/tmp/s3/%s", bucket.c_str());
+  snprintf(path, BUF_SIZE, "%s/%s", DIR_NAME, bucket.c_str());
 
   DIR *dir = opendir(path);
   if (!dir)
@@ -106,7 +119,16 @@ int list_objects(string& id, string& bucket, int max, string& prefix, string& ma
   result.clear();
   int i;
   for (i=0; i<max && iter != dir_map.end(); i++, ++iter) {
-    result.push_back(iter->first);
+    S3ObjEnt obj;
+    char buf[BUF_SIZE];
+    struct stat statbuf;
+    obj.name = iter->first;
+    snprintf(buf, BUF_SIZE, "%s/%s", path, obj.name.c_str());
+    if (stat(buf, &statbuf) < 0)
+      continue;
+    obj.mtime = statbuf.st_mtime;
+    obj.size = statbuf.st_size;
+    result.push_back(obj);
   }
 
   return i;
