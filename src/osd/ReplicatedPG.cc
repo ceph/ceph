@@ -1258,6 +1258,85 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
 
+      // -- trivial map --
+    case CEPH_OSD_OP_TMAPUP:
+      {
+	// read the whole object
+	bufferlist bl;
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_READ;
+	newop.op.offset = 0;
+	newop.op.length = 0;
+	do_osd_ops(ctx, nops, bl);
+
+	int r = cls_cxx_read(ctx, 0, 0, &bl);
+	if (r < 0)
+	  return r;
+
+	// parse
+	bufferlist header;
+	map<nstring, bufferlist> m;
+	if (bl.length()) {
+	  bufferlist::iterator p = bl.begin();
+	  ::decode(header, p);
+	  ::decode(m, p);
+	  assert(p.end());
+	}
+	
+	// do the update(s)
+	bool changed = false;
+	while (!bp.end()) {
+	  __u8 op;
+	  nstring key;
+	  ::decode(op, bp);
+	  
+	  switch (op) {
+	  case CEPH_OSD_TMAP_SET: // insert key
+	    {
+	      ::decode(key, bp);
+	      bufferlist data;
+	      ::decode(data, bp);
+	      m[key] = data;
+	      changed = true;
+	    }
+	    break;
+	    
+	  case CEPH_OSD_TMAP_RM: // remove key
+	    ::decode(key, bp);
+	    if (m.count(key)) {
+	      m.erase(key);
+	      changed = true;
+	    }
+	    break;
+	    
+	  case CEPH_OSD_TMAP_HDR: // update header
+	    {
+	      ::decode(header, bp);
+	      changed = true;
+	    }
+	    break;
+
+	  default:
+	    return -EINVAL;
+	  }
+	}
+	
+	// reencode
+	bufferlist obl;
+	::encode(header, obl);
+	::encode(m, obl);
+
+	// write it out
+	newop.op.op = CEPH_OSD_OP_WRITE;
+	newop.op.offset = 0;
+	newop.op.length = obl.length();
+        newop.data = obl;
+	do_osd_ops(ctx, nops, odata);
+      }
+      break;
+
+
     default:
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)

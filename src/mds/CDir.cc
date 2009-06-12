@@ -1400,7 +1400,7 @@ void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
   // header
   bufferlist header;
   ::encode(fnode, header);
-  finalbl.append(CLS_TRIVIALMAP_HDR);
+  finalbl.append(CEPH_OSD_TMAP_HDR);
   ::encode(header, finalbl);
 
   // updated dentries
@@ -1417,7 +1417,7 @@ void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
 	  dn->linkage.get_inode()->mark_clean();
 
 	dout(10) << " rm " << dn->name << " " << *dn << dendl;
-	finalbl.append(CLS_TRIVIALMAP_RM);
+	finalbl.append(CEPH_OSD_TMAP_RM);
 	dn->key().encode(finalbl);
 
 	remove_dentry(dn);
@@ -1430,17 +1430,17 @@ void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
 
     if (dn->get_linkage()->is_null()) {
       dout(10) << " rm " << dn->name << " " << *dn << dendl;
-      finalbl.append(CLS_TRIVIALMAP_RM);
+      finalbl.append(CEPH_OSD_TMAP_RM);
       dn->key().encode(finalbl);
     } else {
       dout(10) << " set " << dn->name << " " << *dn << dendl;
-      finalbl.append(CLS_TRIVIALMAP_SET);
+      finalbl.append(CEPH_OSD_TMAP_SET);
       _encode_dentry(dn, finalbl, snaps);
     }
   }
 
   // update the trivialmap at the osd
-  m.call("trivialmap", "update", finalbl);
+  m.add_data(CEPH_OSD_OP_TMAPUP, 0, 0, finalbl);
 }
 
 void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
