@@ -33,6 +33,8 @@
 
 #include "config.h"
 
+#include "cls_trivialmap.h"
+
 #define DOUT_SUBSYS mds
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
@@ -1058,19 +1060,23 @@ void CDir::_fetched(bufferlist &bl)
   assert(is_auth());
   assert(!is_frozen());
 
-  // decode.
+  // decode trivialmap.
   int len = bl.length();
   bufferlist::iterator p = bl.begin();
-
+  
+  bufferlist header;
+  ::decode(header, p);
+  bufferlist::iterator hp = header.begin();
   fnode_t got_fnode;
-  ::decode(got_fnode, p);
+  ::decode(got_fnode, hp);
+
+  __u32 n;
+  ::decode(n, p);
 
   dout(10) << "_fetched version " << got_fnode.version
-	   << ", " << len << " bytes"
+	   << ", " << len << " bytes, " << n << " keys"
 	   << dendl;
   
-  __s32 n;
-  ::decode(n, p);
 
   // take the loaded fnode?
   // only if we are a fresh CDir* with no prior state.
@@ -1099,7 +1105,7 @@ void CDir::_fetched(bufferlist &bl)
 
   //int num_new_inodes_loaded = 0;
   loff_t baseoff = p.get_off();
-  for (int i=0; i<n; i++) {
+  for (unsigned i=0; i<n; i++) {
     loff_t dn_offset = p.get_off() - baseoff;
 
     // marker
@@ -1107,11 +1113,15 @@ void CDir::_fetched(bufferlist &bl)
     ::decode(type, p);
 
     // dname
-    string dname;
-    ::decode(dname, p);
+    nstring dname;
     snapid_t first, last;
-    ::decode(first, p);
-    ::decode(last, p);
+    dentry_key_t::decode_helper(p, dname, last);
+    
+    bufferlist dndata;
+    ::decode(dndata, p);
+    bufferlist::iterator q = dndata.begin();
+    ::decode(first, q);
+
     dout(24) << "_fetched pos " << dn_offset << " marker '" << type << "' dname '" << dname
 	     << " [" << first << "," << last << "]"
 	     << dendl;
@@ -1140,8 +1150,8 @@ void CDir::_fetched(bufferlist &bl)
       // hard link
       inodeno_t ino;
       unsigned char d_type;
-      ::decode(ino, p);
-      ::decode(d_type, p);
+      ::decode(ino, q);
+      ::decode(d_type, q);
 
       if (stale)
 	continue;
@@ -1176,13 +1186,13 @@ void CDir::_fetched(bufferlist &bl)
       map<string, bufferptr> xattrs;
       bufferlist snapbl;
       map<snapid_t,old_inode_t> old_inodes;
-      ::decode(inode, p);
+      ::decode(inode, q);
       if (inode.is_symlink())
-        ::decode(symlink, p);
-      ::decode(fragtree, p);
-      ::decode(xattrs, p);
-      ::decode(snapbl, p);
-      ::decode(old_inodes, p);
+        ::decode(symlink, q);
+      ::decode(fragtree, q);
+      ::decode(xattrs, q);
+      ::decode(snapbl, q);
+      ::decode(old_inodes, q);
       
       if (stale)
 	continue;
@@ -1337,6 +1347,159 @@ public:
   }
 };
 
+
+void CDir::_commit_full(ObjectOperation& m, const set<snapid_t> *snaps)
+{
+  dout(10) << "_commit_full" << dendl;
+
+  // encode
+  bufferlist bl;
+  __u32 n = 0;
+  map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    p++;
+    
+    if (dn->linkage.is_null()) 
+      continue;  // skip negative entries
+
+    if (snaps && dn->last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
+      if (p == snaps->end() || *p > dn->last) {
+	dout(10) << " purging " << *dn << dendl;
+	if (dn->linkage.is_primary() && dn->linkage.get_inode()->is_dirty())
+	  dn->linkage.get_inode()->mark_clean();
+	remove_dentry(dn);
+	continue;
+      }
+    }
+    
+    n++;
+
+    _encode_dentry(dn, bl, snaps);
+  }
+
+  // encode final trivialmap
+  bufferlist header;
+  ::encode(fnode, header);
+  bufferlist finalbl;
+  ::encode(header, finalbl);
+  assert(n == (num_head_items + num_snap_items));
+  ::encode(n, finalbl);
+  finalbl.claim_append(bl);
+
+  // write out the full blob
+  m.write_full(finalbl);
+}
+
+void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
+{
+  dout(10) << "_commit_partial" << dendl;
+  bufferlist finalbl;
+
+  // header
+  bufferlist header;
+  ::encode(fnode, header);
+  finalbl.append(CLS_TRIVIALMAP_HDR);
+  ::encode(header, finalbl);
+
+  // updated dentries
+  map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    p++;
+    
+    if (snaps && dn->last != CEPH_NOSNAP) {
+      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
+      if (p == snaps->end() || *p > dn->last) {
+	dout(10) << " purging " << *dn << dendl;
+	if (dn->linkage.is_primary() && dn->linkage.get_inode()->is_dirty())
+	  dn->linkage.get_inode()->mark_clean();
+
+	dout(10) << " rm " << dn->name << " " << *dn << dendl;
+	finalbl.append(CLS_TRIVIALMAP_RM);
+	dn->key().encode(finalbl);
+
+	remove_dentry(dn);
+	continue;
+      }
+    }
+
+    if (!dn->is_dirty())
+      continue;  // skip clean dentries
+
+    if (dn->get_linkage()->is_null()) {
+      dout(10) << " rm " << dn->name << " " << *dn << dendl;
+      finalbl.append(CLS_TRIVIALMAP_RM);
+      dn->key().encode(finalbl);
+    } else {
+      dout(10) << " set " << dn->name << " " << *dn << dendl;
+      finalbl.append(CLS_TRIVIALMAP_SET);
+      _encode_dentry(dn, finalbl, snaps);
+    }
+  }
+
+  // update the trivialmap at the osd
+  m.call("trivialmap", "update", finalbl);
+}
+
+void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
+			  const set<snapid_t> *snaps)
+{
+  // clear dentry NEW flag, if any.  we can no longer silently drop it.
+  dn->clear_new();
+
+  dn->key().encode(bl);
+
+  __le32 plen = init_le32(0);
+  unsigned plen_off = bl.length();
+  ::encode(plen, bl);
+
+  ::encode(dn->first, bl);
+
+  // primary or remote?
+  if (dn->linkage.is_remote()) {
+    inodeno_t ino = dn->linkage.get_remote_ino();
+    unsigned char d_type = dn->linkage.get_remote_d_type();
+    dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' remote ino " << ino << dendl;
+    
+    // marker, name, ino
+    bl.append('L');         // remote link
+    ::encode(ino, bl);
+    ::encode(d_type, bl);
+  } else {
+    // primary link
+    CInode *in = dn->linkage.get_inode();
+    assert(in);
+    
+    dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' inode " << *in << dendl;
+    
+    // marker, name, inode, [symlink string]
+    bl.append('I');         // inode
+    ::encode(in->inode, bl);
+    
+    if (in->is_symlink()) {
+      // include symlink destination!
+      dout(18) << "    including symlink ptr " << in->symlink << dendl;
+      ::encode(in->symlink, bl);
+    }
+    
+    ::encode(in->dirfragtree, bl);
+    ::encode(in->xattrs, bl);
+    bufferlist snapbl;
+    in->encode_snap_blob(snapbl);
+    ::encode(snapbl, bl);
+    
+    if (in->is_multiversion() && snaps)
+      in->purge_stale_snap_data(*snaps);
+    ::encode(in->old_inodes, bl);
+  }
+  
+  plen = bl.length() - plen_off + sizeof(__u32);
+  bl.copy_in(plen_off, sizeof(__u32), (char*)&plen);
+}
+
+
 void CDir::_commit(version_t want)
 {
   dout(10) << "_commit want " << want << " on " << *this << dendl;
@@ -1362,7 +1525,7 @@ void CDir::_commit(version_t want)
 
   // alrady committed an older version?
   if (committing_version > committed_version) {
-    dout(10) << "already committing older " << committing_version << ", waiting for that to complete" << dendl;
+    dout(10) << "already committing older " << committing_version << ", waiting for that to finish" << dendl;
     return;
   }
   
@@ -1395,97 +1558,21 @@ void CDir::_commit(version_t want)
     dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    fnode.snap_purged_thru = realm->get_last_destroyed();
   }
 
-  // encode
-  bufferlist bl;
-  __u32 n = 0;
-  map_t::iterator p = items.begin();
-  while (p != items.end()) {
-    CDentry *dn = p->second;
-    p++;
-    
-    if (dn->linkage.is_null()) 
-      continue;  // skip negative entries
-
-    if (snaps && dn->last != CEPH_NOSNAP) {
-      set<snapid_t>::const_iterator p = snaps->lower_bound(dn->first);
-      if (p == snaps->end() || *p > dn->last) {
-	dout(10) << " purging " << *dn << dendl;
-	if (dn->linkage.is_primary() && dn->linkage.get_inode()->is_dirty())
-	  dn->linkage.get_inode()->mark_clean();
-	remove_dentry(dn);
-	continue;
-      }
-    }
-    
-    n++;
-
-    // clear dentry NEW flag, if any.  we can no longer silently drop it.
-    dn->clear_new();
-
-    // primary or remote?
-    if (dn->linkage.is_remote()) {
-      inodeno_t ino = dn->linkage.get_remote_ino();
-      unsigned char d_type = dn->linkage.get_remote_d_type();
-      dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' remote ino " << ino << dendl;
-      
-      // marker, name, ino
-      bl.append( "L", 1 );         // remote link
-      ::encode(dn->name, bl);
-      ::encode(dn->first, bl);
-      ::encode(dn->last, bl);
-      ::encode(ino, bl);
-      ::encode(d_type, bl);
-    } else {
-      // primary link
-      CInode *in = dn->linkage.get_inode();
-      assert(in);
-
-      dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' inode " << *in << dendl;
-  
-      // marker, name, inode, [symlink string]
-      bl.append( "I", 1 );         // inode
-      ::encode(dn->name, bl);
-      ::encode(dn->first, bl);
-      ::encode(dn->last, bl);
-      ::encode(in->inode, bl);
-      
-      if (in->is_symlink()) {
-        // include symlink destination!
-        dout(18) << "    including symlink ptr " << in->symlink << dendl;
-	::encode(in->symlink, bl);
-      }
-
-      ::encode(in->dirfragtree, bl);
-      ::encode(in->xattrs, bl);
-      bufferlist snapbl;
-      in->encode_snap_blob(snapbl);
-      ::encode(snapbl, bl);
-
-      if (in->is_multiversion() && snaps)
-	in->purge_stale_snap_data(*snaps);
-      ::encode(in->old_inodes, bl);
-    }
-  }
-
-  // header
-  assert(n == (num_head_items + num_snap_items));
-  bufferlist finalbl;
-  ::encode(fnode, finalbl);
-  ::encode(n, finalbl);
-  finalbl.claim_append(bl);
-
-  // write it.
-  SnapContext snapc;
   ObjectOperation m;
-  m.write_full(finalbl);
+  if (is_complete()) {
+    fnode.snap_purged_thru = realm->get_last_destroyed();
+    _commit_full(m, snaps);
+  } else {
+    _commit_partial(m, snaps);
+  }
 
   string path;
   inode->make_path_string(path);
   m.setxattr("path", path);
 
+  SnapContext snapc;
   object_t oid = get_ondisk_object();
   OSDMap *osdmap = cache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,

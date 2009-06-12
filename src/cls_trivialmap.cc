@@ -5,6 +5,7 @@
 #include "include/types.h"
 #include "objclass/objclass.h"
 
+#include "cls_trivialmap.h"
 
 CLS_VER(1,0)
 CLS_NAME(trivialmap)
@@ -46,7 +47,7 @@ static int update(cls_method_context_t ctx, bufferlist *inbl, bufferlist *outbl)
     ::decode(key, ip);
     
     switch (op) {
-    case 1: // insert key
+    case CLS_TRIVIALMAP_SET: // insert key
       {
 	bufferlist data;
 	::decode(data, ip);
@@ -54,11 +55,11 @@ static int update(cls_method_context_t ctx, bufferlist *inbl, bufferlist *outbl)
       }
       break;
 
-    case 2: // remove key
+    case CLS_TRIVIALMAP_RM: // remove key
       m.erase(key);
       break;
 
-    case 3: // update header
+    case CLS_TRIVIALMAP_HDR: // update header
       {
 	::decode(header, ip);
       }
