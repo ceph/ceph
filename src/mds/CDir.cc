@@ -1479,8 +1479,7 @@ void CDir::_commit(version_t want)
 
   // write it.
   SnapContext snapc;
-  ObjectMutation m;
-  m.mtime = g_clock.now();
+  ObjectOperation m;
   m.write_full(finalbl);
 
   string path;
@@ -1492,8 +1491,7 @@ void CDir::_commit(version_t want)
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     cache->mds->mdsmap->get_metadata_pg_pool());
 
-  cache->mds->objecter->mutate(oid, ol,
-			       m, snapc, 0,
+  cache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
 			       NULL, new C_Dir_Committed(this, get_version()) );
 }
 

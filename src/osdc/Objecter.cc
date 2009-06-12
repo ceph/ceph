@@ -142,23 +142,14 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	scan_pgs(changed_pgs);
 
 	// kick paused
-	if (was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-	  for (hash_map<tid_t,ReadOp*>::iterator p = op_read.begin();
-	       p != op_read.end();
+	if ((was_pauserd && !osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
+	    (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR))) {
+	  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin();
+	       p != op_osd.end();
 	       p++) {
 	    if (p->second->paused) {
 	      p->second->paused = false;
-	      read_submit(p->second);
-	    }
-	  }
-	}
-	if (was_pausewr && !osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-	  for (hash_map<tid_t,ModifyOp*>::iterator p = op_modify.begin();
-	       p != op_modify.end();
-	       p++) {
-	    if (p->second->paused) {
-	      p->second->paused = false;
-	      modify_submit(p->second);
+	      op_submit(p->second);
 	    }
 	  }
 	}
@@ -289,34 +280,25 @@ void Objecter::kick_requests(set<pg_t>& changed_pgs)
          p++) {
       tid_t tid = *p;
       
-      if (op_modify.count(tid)) {
-        ModifyOp *wr = op_modify[tid];
-        op_modify.erase(tid);
+      hash_map<tid_t, Op*>::iterator p = op_osd.find(tid);
+      if (p != op_osd.end()) {
+	Op *op = p->second;
+	op_osd.erase(p);
 
-	if (wr->onack)
+	if (op->onack)
 	  num_unacked--;
-	if (wr->oncommit)
+	if (op->oncommit)
 	  num_uncommitted--;
 	
         // WRITE
-	if (wr->onack) {
-          dout(3) << "kick_requests missing ack, resub write " << tid << dendl;
-          modify_submit(wr);
+	if (op->onack) {
+          dout(3) << "kick_requests missing ack, resub " << tid << dendl;
+          op_submit(op);
         } else {
-	  assert(wr->oncommit);
-	  dout(3) << "kick_requests missing commit, resub write " << tid << dendl;
-	  modify_submit(wr);
+	  assert(op->oncommit);
+	  dout(3) << "kick_requests missing commit, resub " << tid << dendl;
+	  op_submit(op);
         } 
-      }
-
-      else if (op_read.count(tid)) {
-        // READ
-        ReadOp *rd = op_read[tid];
-        op_read.erase(tid);
-        dout(3) << "kick_requests resub read " << tid << dendl;
-
-        // resubmit
-        read_submit(rd);
       }
       else 
         assert(0);
@@ -359,6 +341,7 @@ void Objecter::tick()
 
 
 
+/*
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
   if (m->may_write())
@@ -366,171 +349,78 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   else
     handle_osd_read_reply(m);
 }
+*/
 
 
 
-// read -----------------------------------
+// read | write ---------------------------
 
-tid_t Objecter::read_submit(ReadOp *rd)
-{
-  // find OSD
-  PG &pg = get_pg( pg_t(rd->layout.ol_pgid) );
-
-  // pick tid
-  rd->tid = ++last_tid;
-  op_read[last_tid] = rd;    
-
-  assert(client_inc >= 0);
-
-  pg.active_tids.insert(last_tid);
-  pg.last = g_clock.now();
-
-  // send?
-  dout(10) << "read_submit " << rd << " tid " << last_tid
-           << " oid " << rd->oid
-	   << " " << rd->ops
-           << " " << rd->layout
-           << " osd" << pg.acker() 
-           << dendl;
-
-  if (osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-    dout(10) << " paused read " << rd << " tid " << last_tid << dendl;
-    rd->paused = true;
-    maybe_request_map();
-  } else if (pg.acker() >= 0) {
-    int flags = rd->flags;
-    if (rd->onfinish)
-      flags |= CEPH_OSD_FLAG_ACK;
-    MOSDOp *m = new MOSDOp(signed_ticket, client_inc, last_tid,
-			   rd->oid, rd->layout, osdmap->get_epoch(), 
-			   flags | CEPH_OSD_FLAG_READ);
-    m->set_snapid(rd->snap);
-    m->set_snap_seq(0);
-
-    m->ops = rd->ops;
-    m->set_retry_attempt(rd->attempts++);
-    
-    int who = pg.acker();
-    if (rd->flags & CEPH_OSD_FLAG_BALANCE_READS) {
-      int replica = messenger->get_myname().num() % pg.acting.size();
-      who = pg.acting[replica];
-      dout(-10) << "read_submit reading from random replica " << replica
-		<< " = osd" << who <<  dendl;
-    }
-    messenger->send_message(m, osdmap->get_inst(who));
-  } else 
-    maybe_request_map();
-    
-  return last_tid;
-}
-
-
-void Objecter::handle_osd_read_reply(MOSDOpReply *m) 
-{
-  // get pio
-  tid_t tid = m->get_tid();
-
-  if (op_read.count(tid) == 0) {
-    dout(7) << "handle_osd_read_reply " << tid << " ... stray" << dendl;
-    delete m;
-    return;
-  }
-
-  dout(7) << "handle_osd_read_reply " << tid << dendl;
-  ReadOp *rd = op_read[ tid ];
-  op_read.erase( tid );
-  
-  // remove from osd/tid maps
-  PG& pg = get_pg( m->get_pg() );
-  assert(pg.active_tids.count(tid));
-  pg.active_tids.erase(tid);
-  if (pg.active_tids.empty()) close_pg( m->get_pg() );
-  
-  // success?
-  if (m->get_result() == -EAGAIN) {
-    dout(7) << " got -EAGAIN resubmitting" << dendl;
-    read_submit(rd);
-    delete m;
-    return;
-  }
-
-  // what buffer offset are we?
-  dout(7) << " got reply on " << rd->ops << dendl;
-
-  int bytes_read = m->get_data().length();
-  if (rd->pbl)
-    rd->pbl->claim(m->get_data());
-
-  // finish, clean up
-  Context *onfinish = rd->onfinish;
-  dout(7) << " " << bytes_read << " bytes " << dendl;
-  
-  // done
-  delete rd;
-  if (onfinish) {
-    onfinish->finish(m->get_result());
-    delete onfinish;
-  }
-  delete m;
-}
-
-
-
-// write ------------------------------------
-
-tid_t Objecter::modify_submit(ModifyOp *wr)
+tid_t Objecter::op_submit(Op *op)
 {
   // find
-  PG &pg = get_pg( pg_t(wr->layout.ol_pgid) );
+  PG &pg = get_pg( pg_t(op->layout.ol_pgid) );
     
   // pick tid
-  if (!wr->tid)
-    wr->tid = ++last_tid;
+  if (!op->tid)
+    op->tid = ++last_tid;
   assert(client_inc >= 0);
 
   // add to gather set(s)
-  int flags = wr->flags;
-  if (wr->onack) {
+  int flags = op->flags;
+  if (op->onack) {
     flags |= CEPH_OSD_FLAG_ACK;
     ++num_unacked;
   } else {
     dout(20) << " note: not requesting ack" << dendl;
   }
-  if (wr->oncommit) {
+  if (op->oncommit) {
     flags |= CEPH_OSD_FLAG_ONDISK;
     ++num_uncommitted;
   } else {
     dout(20) << " note: not requesting commit" << dendl;
   }
-  op_modify[wr->tid] = wr;
-  pg.active_tids.insert(wr->tid);
+  op_osd[op->tid] = op;
+  pg.active_tids.insert(op->tid);
   pg.last = g_clock.now();
 
   // send?
-  dout(10) << "modify_submit oid " << wr->oid
-	   << " " << wr->ops << " tid " << wr->tid
-           << " " << wr->layout 
+  dout(10) << "op_submit oid " << op->oid
+	   << " " << op->ops << " tid " << op->tid
+           << " " << op->layout 
            << " osd" << pg.primary()
            << dendl;
 
-  if (osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-    dout(10) << " paused modify " << wr << " tid " << last_tid << dendl;
-    wr->paused = true;
+  if ((op->flags & CEPH_OSD_FLAG_WRITE) &&
+      osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
+    dout(10) << " paused modify " << op << " tid " << last_tid << dendl;
+    op->paused = true;
+    maybe_request_map();
+  } else if ((op->flags & CEPH_OSD_FLAG_READ) &&
+	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
+    dout(10) << " paused read " << op << " tid " << last_tid << dendl;
+    op->paused = true;
     maybe_request_map();
   } else if (pg.primary() >= 0) {
-    MOSDOp *m = new MOSDOp(signed_ticket, client_inc, wr->tid,
-			   wr->oid, wr->layout, osdmap->get_epoch(),
-			   flags | CEPH_OSD_FLAG_WRITE);
-    m->set_snapid(CEPH_NOSNAP);
-    m->set_snap_seq(wr->snapc.seq);
-    m->get_snaps() = wr->snapc.snaps;
+    int flags = op->flags;
+    if (op->oncommit)
+      flags |= CEPH_OSD_FLAG_ONDISK;
+    if (op->onack)
+      flags |= CEPH_OSD_FLAG_ACK;
 
-    m->ops = wr->ops;
-    m->set_mtime(wr->mtime);
-    m->set_retry_attempt(wr->attempts++);
+    MOSDOp *m = new MOSDOp(signed_ticket, client_inc, op->tid,
+			   op->oid, op->layout, osdmap->get_epoch(),
+			   flags);
+
+    m->set_snapid(op->snapid);
+    m->set_snap_seq(op->snapc.seq);
+    m->get_snaps() = op->snapc.snaps;
+
+    m->ops = op->ops;
+    m->set_mtime(op->mtime);
+    m->set_retry_attempt(op->attempts++);
     
-    if (wr->version != eversion_t())
-      m->set_version(wr->version);  // we're replaying this op!
+    if (op->version != eversion_t())
+      m->set_version(op->version);  // we're replaying this op!
 
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   } else 
@@ -538,29 +428,27 @@ tid_t Objecter::modify_submit(ModifyOp *wr)
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
   
-  return wr->tid;
+  return op->tid;
 }
 
-
-
-void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
+void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
   // get pio
   tid_t tid = m->get_tid();
 
-  if (op_modify.count(tid) == 0) {
-    dout(7) << "handle_osd_modify_reply " << tid
+  if (op_osd.count(tid) == 0) {
+    dout(7) << "handle_osd_op_reply " << tid
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... stray" << dendl;
     delete m;
     return;
   }
 
-  dout(7) << "handle_osd_modify_reply " << tid
+  dout(7) << "handle_osd_op_reply " << tid
 	  << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	  << " v " << m->get_version() << " in " << m->get_pg()
 	  << dendl;
-  ModifyOp *wr = op_modify[ tid ];
+  Op *op = op_osd[ tid ];
 
   Context *onack = 0;
   Context *oncommit = 0;
@@ -574,44 +462,50 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
     return;
   }
   
-  int rc = 0;
+  int rc = m->get_result();
 
-  if (m->get_result() == -EAGAIN) {
+  if (rc == -EAGAIN) {
     dout(7) << " got -EAGAIN, resubmitting" << dendl;
-    if (wr->onack) num_unacked--;
-    if (wr->oncommit) num_uncommitted--;
-    modify_submit(wr);
+    if (op->onack)
+      num_unacked--;
+    if (op->oncommit)
+      num_uncommitted--;
+    op_submit(op);
     delete m;
     return;
   }
 
-  assert(m->get_result() >= 0); // FIXME
+  // got data?
+  if (op->outbl) {
+    op->outbl->claim(m->get_data());
+    op->outbl = 0;
+  }
 
   // ack|commit -> ack
-  if (wr->onack) {
-    dout(15) << "handle_osd_modify_reply ack" << dendl;
-    wr->version = m->get_version();
-    onack = wr->onack;
-    wr->onack = 0;  // only do callback once
+  if (op->onack) {
+    dout(15) << "handle_osd_op_reply ack" << dendl;
+    op->version = m->get_version();
+    onack = op->onack;
+    op->onack = 0;  // only do callback once
     num_unacked--;
   }
-  if (wr->oncommit && m->is_ondisk()) {
-    dout(15) << "handle_osd_modify_reply safe" << dendl;
-    oncommit = wr->oncommit;
-    wr->oncommit = 0;
+  if (op->oncommit && m->is_ondisk()) {
+    dout(15) << "handle_osd_op_reply safe" << dendl;
+    oncommit = op->oncommit;
+    op->oncommit = 0;
     num_uncommitted--;
   }
 
   // done with this tid?
-  if (!wr->onack && !wr->oncommit) {
+  if (!op->onack && !op->oncommit) {
     assert(pg.active_tids.count(tid));
     pg.active_tids.erase(tid);
-    dout(15) << "handle_osd_modify_reply completed tid " << tid << ", pg " << m->get_pg()
+    dout(15) << "handle_osd_op_reply completed tid " << tid << ", pg " << m->get_pg()
 	     << " still has " << pg.active_tids << dendl;
     if (pg.active_tids.empty()) 
       close_pg( m->get_pg() );
-    op_modify.erase( tid );
-    delete wr;
+    op_osd.erase( tid );
+    delete op;
   }
   
   dout(5) << num_unacked << " unacked, " << num_uncommitted << " uncommitted" << dendl;
@@ -628,7 +522,6 @@ void Objecter::handle_osd_modify_reply(MOSDOpReply *m)
 
   delete m;
 }
-
 
 
 
@@ -863,10 +756,6 @@ void Objecter::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t d
 void Objecter::dump_active()
 {
   dout(10) << "dump_active" << dendl;
-  
-  for (hash_map<tid_t,ReadOp*>::iterator p = op_read.begin(); p != op_read.end(); p++)
-    dout(10) << " read " << p->first << dendl;
-  for (hash_map<tid_t,ModifyOp*>::iterator p = op_modify.begin(); p != op_modify.end(); p++)
-    dout(10) << " modify " << p->first << dendl;
-
+  for (hash_map<tid_t,Op*>::iterator p = op_osd.begin(); p != op_osd.end(); p++)
+    dout(10) << " " << p->first << "\t" << p->second->oid << "\t" << p->second->ops << dendl;
 }

@@ -156,7 +156,7 @@ class Filer {
       ops[0].op.truncate_seq = truncate_seq;
       ops[0].op.truncate_size = extents[0].offset;
       ops[0].data = bl;
-      objecter->modify(extents[0].oid, extents[0].layout, ops, snapc, mtime, flags, onack, oncommit);
+      objecter->_modify(extents[0].oid, extents[0].layout, ops, mtime, snapc, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
       if (onack)
@@ -170,9 +170,9 @@ class Filer {
 	ops[0].op.truncate_size = p->offset;
 	ops[0].op.truncate_seq = truncate_seq;
         ops[0].data = bl;
-	objecter->modify(extents[0].oid, p->layout, ops, snapc, mtime, flags,
-			 gack ? gack->new_sub():0,
-			 gcom ? gcom->new_sub():0);
+	objecter->_modify(extents[0].oid, p->layout, ops, mtime, snapc, flags,
+			  gack ? gack->new_sub():0,
+			  gcom ? gcom->new_sub():0);
       }
     }
     return 0;

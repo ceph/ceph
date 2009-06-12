@@ -521,7 +521,7 @@ retry:
       if (num != pg_num)  /* ahh.. race! */
         goto retry;
       
-      ObjectRead rd;
+      ObjectOperation rd;
       bufferlist bl;
 #define MAX_REQ_SIZE 1024
       req_size = min(MAX_REQ_SIZE, max_entries);
@@ -714,7 +714,7 @@ int RadosClient::exec(PoolCtx& pool, const object_t& oid, const char *cls, const
 
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
-  ObjectRead rd;
+  ObjectOperation rd;
   rd.call(cls, method, inbl);
   objecter->read(oid, layout, rd, pool.snap_seq, &outbl, 0, onack);
   lock.Unlock();

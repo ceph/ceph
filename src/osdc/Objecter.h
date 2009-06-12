@@ -81,37 +81,19 @@ struct ObjectOperation {
     ops[s].op.pgls_cookie = cookie;
   }
 
-  ObjectOperation() : flags(0) {}
-};
+  // ------
 
-struct ObjectRead : public ObjectOperation {
-  void read(__u64 off, __u64 len) {
-    bufferlist bl;
-    add_data(CEPH_OSD_OP_READ, off, len, bl);
-  }
-  void getxattr(const char *name) {
-    bufferlist bl;
-    add_xattr(CEPH_OSD_OP_GETXATTR, name, bl);
-  }
-  void getxattrs() {
-    bufferlist bl;
-    add_xattr(CEPH_OSD_OP_GETXATTRS, 0, bl);
-  }
-
-  void call(const char *cname, const char *method, bufferlist &indata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata);
-  }
-
+  // pg
   void pg_ls(__u64 count, __u64 cookie) {
     add_pgls(CEPH_OSD_OP_PGLS, count, cookie);
     flags |= CEPH_OSD_FLAG_PGOP;
   }
-};
 
-struct ObjectMutation : public ObjectOperation {
-  utime_t mtime;
-  
   // object data
+  void read(__u64 off, __u64 len) {
+    bufferlist bl;
+    add_data(CEPH_OSD_OP_READ, off, len, bl);
+  }
   void write(__u64 off, __u64 len, bufferlist& bl) {
     add_data(CEPH_OSD_OP_WRITE, off, len, bl);
   }
@@ -128,6 +110,14 @@ struct ObjectMutation : public ObjectOperation {
   }
 
   // object attrs
+  void getxattr(const char *name) {
+    bufferlist bl;
+    add_xattr(CEPH_OSD_OP_GETXATTR, name, bl);
+  }
+  void getxattrs() {
+    bufferlist bl;
+    add_xattr(CEPH_OSD_OP_GETXATTRS, 0, bl);
+  }
   void setxattr(const char *name, const bufferlist& bl) {
     add_xattr(CEPH_OSD_OP_SETXATTR, name, bl);
   }
@@ -150,6 +140,13 @@ struct ObjectMutation : public ObjectOperation {
     ::encode(attrs, bl);
     add_xattr(CEPH_OSD_OP_RESETXATTRS, prefix, bl);
   }
+
+  // object classes
+  void call(const char *cname, const char *method, bufferlist &indata) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata);
+  }
+ 
+  ObjectOperation() : flags(0) {}
 };
 
 
@@ -191,50 +188,32 @@ class Objecter {
   /*** track pending operations ***/
   // read
  public:
-  struct ReadOp {
+
+  struct Op {
     object_t oid;
     ceph_object_layout layout;
     vector<OSDOp> ops;
-    snapid_t snap;
-    bufferlist *pbl;
 
-    int flags;
-    Context *onfinish;
-
-    tid_t tid;
-    int attempts;
-
-    bool paused;
-
-    ReadOp(const object_t& o, ceph_object_layout& ol, vector<OSDOp>& op, snapid_t s, int f, Context *of) :
-      oid(o), layout(ol), snap(s),
-      pbl(0), flags(f), onfinish(of), 
-      tid(0), attempts(0),
-      paused(false) {
-      ops.swap(op);
-    }
-  };
-
-
-  struct ModifyOp {
-    object_t oid;
-    ceph_object_layout layout;
+    snapid_t snapid;
     SnapContext snapc;
-    vector<OSDOp> ops;
     utime_t mtime;
-    bufferlist bl;
+
+    bufferlist inbl;
+    bufferlist *outbl;
+
     int flags;
     Context *onack, *oncommit;
 
     tid_t tid;
+    eversion_t version;        // for op replay
     int attempts;
-    eversion_t version;
 
     bool paused;
 
-    ModifyOp(const object_t& o, ceph_object_layout& l, vector<OSDOp>& op, utime_t mt,
-	     const SnapContext& sc, int f, Context *ac, Context *co) :
-      oid(o), layout(l), snapc(sc), mtime(mt), flags(f), onack(ac), oncommit(co), 
+    Op(const object_t& o, ceph_object_layout& l, vector<OSDOp>& op,
+       int f, Context *ac, Context *co) :
+      oid(o), layout(l), 
+      snapid(CEPH_NOSNAP), outbl(0), flags(f), onack(ac), oncommit(co), 
       tid(0), attempts(0),
       paused(false) {
       ops.swap(op);
@@ -264,7 +243,6 @@ class Objecter {
       delete fin;
     }
   };
-
   
   // 
   struct PoolStatOp {
@@ -283,8 +261,7 @@ class Objecter {
 
  private:
   // pending ops
-  hash_map<tid_t,ReadOp*>   op_read;
-  hash_map<tid_t,ModifyOp*> op_modify;
+  hash_map<tid_t,Op*>       op_osd;
   map<tid_t,PoolStatOp*>    op_poolstat;
   map<tid_t,StatfsOp*>      op_statfs;
 
@@ -343,45 +320,40 @@ class Objecter {
  public:
   void dispatch(Message *m);
   void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_read_reply(class MOSDOpReply *m);
-  void handle_osd_modify_reply(class MOSDOpReply *m);
-  void handle_osd_lock_reply(class MOSDOpReply *m);
   void handle_osd_map(class MOSDMap *m);
 
- private:
+private:
+  // low-level
+  tid_t op_submit(Op *op);
+
   // public interface
  public:
   bool is_active() {
-    return !(op_read.empty() && op_modify.empty());
+    return !(op_osd.empty() && op_poolstat.empty() && op_statfs.empty());
   }
   void dump_active();
 
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
 
-  // low-level
-  tid_t read_submit(ReadOp *rd);
-  tid_t modify_submit(ModifyOp *wr);
-
-  tid_t read(const object_t& oid, ceph_object_layout ol, vector<OSDOp>& ops,
-	     snapid_t snap, bufferlist *pbl, int flags, 
-	     Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, ops, snap, flags, onfinish);
-    rd->pbl = pbl;
-    return read_submit(rd);
-  }
-  tid_t read(const object_t& oid, ceph_object_layout ol, 
-	     ObjectRead& read, snapid_t snap, bufferlist *pbl, int flags, Context *onfinish) {
-    ReadOp *rd = new ReadOp(oid, ol, read.ops, snap, read.flags | flags, onfinish);
-    rd->pbl = pbl;
-    return read_submit(rd);
-  }
-
-  tid_t modify(const object_t& oid, ceph_object_layout ol, vector<OSDOp>& ops,
+  // mid-level helpers
+  tid_t mutate(const object_t& oid, ceph_object_layout ol, 
+	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
-    ModifyOp *wr = new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit);
-    return modify_submit(wr);
+    Op *o = new Op(oid, ol, op.ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
+  tid_t read(const object_t& oid, ceph_object_layout ol, 
+	     ObjectOperation& op,
+	     snapid_t snapid, bufferlist *pbl, int flags,
+	     Context *onack) {
+    Op *o = new Op(oid, ol, op.ops, flags, onack, NULL);
+    o->snapid = snapid;
+    o->outbl = pbl;
+    return op_submit(o);
   }
 
   // high-level helpers
@@ -391,7 +363,10 @@ class Objecter {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_STAT;
     C_Stat *fin = new C_Stat(psize, pmtime, onfinish);
-    return read(oid, ol, ops, snap, &fin->bl, flags, fin);
+    Op *o = new Op(oid, ol, ops, flags, fin, 0);
+    o->snapid = snap;
+    o->outbl = &fin->bl;
+    return op_submit(o);
   }
 
   tid_t read(const object_t& oid, ceph_object_layout ol, 
@@ -401,7 +376,10 @@ class Objecter {
     ops[0].op.op = CEPH_OSD_OP_READ;
     ops[0].op.offset = off;
     ops[0].op.length = len;
-    return read(oid, ol, ops, snap, pbl, flags, onfinish);
+    Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
+    o->snapid = snap;
+    o->outbl = pbl;
+    return op_submit(o);
   }
   tid_t read_full(const object_t& oid, ceph_object_layout ol,
 		  snapid_t snap, bufferlist *pbl, int flags,
@@ -409,21 +387,29 @@ class Objecter {
     return read(oid, ol, 0, 0, snap, pbl, flags, onfinish);
   }
      
-  tid_t mutate(const object_t& oid, ceph_object_layout ol, 
-	       ObjectMutation& mutation,
-	       const SnapContext& snapc, int flags,
+  // writes
+  tid_t _modify(const object_t& oid, ceph_object_layout ol, 
+		vector<OSDOp>& ops, utime_t mtime,
+		const SnapContext& snapc, int flags,
 	       Context *onack, Context *oncommit) {
-    return modify(oid, ol, mutation.ops, snapc, mutation.mtime, flags, onack, oncommit);
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
   }
   tid_t write(const object_t& oid, ceph_object_layout ol,
-	      __u64 off, size_t len, const SnapContext& snapc, const bufferlist &bl, utime_t mtime, int flags,
+	      __u64 off, size_t len, const SnapContext& snapc, const bufferlist &bl,
+	      utime_t mtime, int flags,
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITE;
     ops[0].op.offset = off;
     ops[0].op.length = len;
     ops[0].data = bl;
-    return modify(oid, ol, ops, snapc, mtime, flags, onack, oncommit);
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
   }
   tid_t write_full(const object_t& oid, ceph_object_layout ol,
 		   const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
@@ -433,7 +419,10 @@ class Objecter {
     ops[0].op.offset = 0;
     ops[0].op.length = bl.length();
     ops[0].data = bl;
-    return modify(oid, ol, ops, snapc, mtime, flags, onack, oncommit);
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
   }
   tid_t zero(const object_t& oid, ceph_object_layout ol, 
 	     __u64 off, size_t len, const SnapContext& snapc, utime_t mtime, int flags,
@@ -442,21 +431,30 @@ class Objecter {
     ops[0].op.op = CEPH_OSD_OP_ZERO;
     ops[0].op.offset = off;
     ops[0].op.length = len;
-    return modify_submit(new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit));
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
   }
   tid_t remove(const object_t& oid, ceph_object_layout ol, 
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_DELETE;
-    return modify_submit(new ModifyOp(oid, ol, ops, mtime, snapc, flags, onack, oncommit));
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
   }
 
-  tid_t lock(const object_t& oid, ceph_object_layout ol, int op, int flags, Context *onack, Context *oncommit) {
+  tid_t lock(const object_t& oid, ceph_object_layout ol, int op, int flags,
+	     Context *onack, Context *oncommit) {
     SnapContext snapc;  // no snapc for lock ops
     vector<OSDOp> ops(1);
     ops[0].op.op = op;
-    return modify_submit(new ModifyOp(oid, ol, ops, utime_t(), snapc, flags, onack, oncommit));
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->snapc = snapc;
+    return op_submit(o);
   }
 
 

@@ -648,8 +648,7 @@ void CInode::store(Context *fin)
 
   // write it.
   SnapContext snapc;
-  ObjectMutation m;
-  m.mtime = g_clock.now();
+  ObjectOperation m;
   m.setxattr("inode", bl);
 
   char n[30];
@@ -659,8 +658,7 @@ void CInode::store(Context *fin)
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->mutate(oid, ol,
-				 m, snapc, 0,
+  mdcache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
 				 NULL, new C_Inode_Stored(this, get_version(), fin) );
 }
 
@@ -693,15 +691,14 @@ void CInode::fetch(Context *fin)
   sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
   object_t oid(n);
 
-  ObjectRead rd;
+  ObjectOperation rd;
   rd.getxattr("inode");
 
   OSDMap *osdmap = mdcache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mdcache->mds->mdsmap->get_metadata_pg_pool());
 
-  mdcache->mds->objecter->read(oid, ol,
-			       rd, CEPH_NOSNAP, &c->bl, 0, c );
+  mdcache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &c->bl, 0, c );
 }
 
 void CInode::_fetched(bufferlist& bl, Context *fin)
