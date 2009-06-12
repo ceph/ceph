@@ -30,7 +30,7 @@ int get_method(cls_method_context_t ctx, char *indata, int datalen,
    cls_log("acl test method");
    cls_log("indata=%.*s data_len=%d", datalen, indata, datalen);
 
-   cls_getxattr(ctx, "test", outdata, outdatalen);
+   cls_getxattr(ctx, "acls", outdata, outdatalen);
 
    return 0;
 }
@@ -45,7 +45,7 @@ int set_method(cls_method_context_t ctx, char *indata, int datalen,
    cls_log("acl test method");
    cls_log("indata=%.*s data_len=%d", datalen, indata, datalen);
 
-   cls_setxattr(ctx, "test", indata, datalen);
+   cls_setxattr(ctx, "acls", indata, datalen);
 
    return 0;
 }
