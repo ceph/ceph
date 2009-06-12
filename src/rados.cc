@@ -350,6 +350,14 @@ int main(int argc, const char **argv)
 	cout << *iter << std::endl;
     }
   } 
+  else if (strcmp(nargs[0], "df") == 0) {
+    rados_statfs_t stats;
+    rados.get_fs_stats(stats);
+    cout << "Total space:    " << stats.f_total << std::endl
+	 << "Total free:     " << stats.f_free << std::endl
+	 << "Total available:" << stats.f_avail << std::endl
+	 << "Total objects  :" << stats.f_objects << std::endl;
+  }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 2)
       usage();

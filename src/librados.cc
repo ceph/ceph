@@ -369,6 +369,10 @@ bool RadosClient::_dispatch(Message *m)
   case CEPH_MSG_MDS_MAP:
     break;
 
+  case CEPH_MSG_STATFS_REPLY:
+    objecter->handle_fs_stats_reply((MStatfsReply*)m);
+  break;
+
   default:
     return false;
   }
