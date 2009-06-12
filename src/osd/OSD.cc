@@ -3918,6 +3918,10 @@ void OSD::init_op_flags(MOSDOp *op)
     if (iter->op.op & CEPH_OSD_OP_MODE_RD)
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
 
+    // set PGOP flag if there are PG ops
+    if (iter->op.op & CEPH_OSD_OP_TYPE_PG)
+      op->rmw_flags |= CEPH_OSD_FLAG_PGOP;
+
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
       {

@@ -421,7 +421,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
 {
   osd->logger->inc(l_osd_op);
 
-  if ((op->get_flags() & CEPH_OSD_FLAG_PGOP))
+  if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
   dout(0) << "do_op " << *op << dendl;
