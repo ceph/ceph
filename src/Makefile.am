@@ -123,7 +123,7 @@ testradospp_LDADD = librados.la libcrush.la
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
 
-s3gw_SOURCES = s3/s3gw.c s3/s3fs.c
+s3gw_SOURCES = s3/s3gw.cc s3/s3fs.c
 s3gw_LDADD = librados.la libcrush.la -lfcgi
 ## object classes
 
