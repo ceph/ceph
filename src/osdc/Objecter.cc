@@ -177,6 +177,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
       kick_requests(changed_pgs);
   }
   
+  finish_contexts(waiting_for_map);
+
   delete m;
 }
 

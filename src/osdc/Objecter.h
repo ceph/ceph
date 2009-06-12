@@ -265,6 +265,8 @@ class Objecter {
   map<tid_t,PoolStatOp*>    op_poolstat;
   map<tid_t,StatfsOp*>      op_statfs;
 
+  list<Context*> waiting_for_map;
+
   /**
    * track pending ops by pg
    *  ...so we can cope with failures, map changes
@@ -335,6 +337,10 @@ private:
 
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
+
+  void wait_for_new_map(Context *c) {
+    waiting_for_map.push_back(c);
+  }
 
   // mid-level helpers
   tid_t mutate(const object_t& oid, ceph_object_layout ol, 
