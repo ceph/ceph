@@ -1529,8 +1529,8 @@ void CDir::_commit(version_t want)
     return;
   }
   
-  // complete?
-  if (!is_complete()) {
+  // complete first?  (only if we're not using TMAPUP osd op)
+  if (!g_conf.mds_use_tmap && !is_complete()) {
     dout(7) << "commit not complete, fetching first" << dendl;
     if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_ffc);
     fetch(new C_Dir_RetryCommit(this, want));

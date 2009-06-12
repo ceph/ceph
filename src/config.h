@@ -200,6 +200,7 @@ struct md_config_t {
   bool mds_short_reply_trace;
 
   int mds_rdcap_ttl_ms;
+  bool mds_use_tmap;
 
   bool mds_log;
   bool mds_log_unsafe;
