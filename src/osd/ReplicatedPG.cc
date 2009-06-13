@@ -1259,6 +1259,45 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
 
       // -- trivial map --
+    case CEPH_OSD_OP_TMAPGET:
+      {
+	// write it
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_READ;
+	newop.op.offset = 0;
+	newop.op.length = 0;
+	do_osd_ops(ctx, nops, odata);
+      }
+      break;
+
+    case CEPH_OSD_OP_TMAPPUT:
+      {
+	//_dout_lock.Lock();
+	//osd_op.data.hexdump(*_dout);
+	//_dout_lock.Unlock();
+
+	// verify
+	if (0) {
+	  bufferlist header;
+	  map<nstring, bufferlist> m;
+	  ::decode(header, bp);
+	  ::decode(m, bp);
+	  assert(bp.end());
+	}
+
+	// write it
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_WRITEFULL;
+	newop.op.offset = 0;
+	newop.op.length = osd_op.data.length();
+	newop.data = osd_op.data;
+	bufferlist r;
+	do_osd_ops(ctx, nops, r);
+      }
+      break;
+
     case CEPH_OSD_OP_TMAPUP:
       {
 	// read the whole object
@@ -1270,17 +1309,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	newop.op.length = 0;
 	do_osd_ops(ctx, nops, bl);
 
-	int r = cls_cxx_read(ctx, 0, 0, &bl);
-	if (r < 0)
-	  return r;
-
 	// parse
 	bufferlist header;
 	map<nstring, bufferlist> m;
+	//bl.hexdump(*_dout);
 	if (bl.length()) {
 	  bufferlist::iterator p = bl.begin();
 	  ::decode(header, p);
 	  ::decode(m, p);
+	  //dout(0) << "m is " << m.size() << " " << m << dendl;
 	  assert(p.end());
 	}
 	

@@ -195,6 +195,8 @@ enum {
 	CEPH_OSD_OP_TRIMTRUNC = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 9,
 
 	CEPH_OSD_OP_TMAPUP    = CEPH_OSD_OP_MODE_RMW | CEPH_OSD_OP_TYPE_DATA | 10,
+	CEPH_OSD_OP_TMAPPUT   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 11,
+	CEPH_OSD_OP_TMAPGET   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 12,
 
 	/** attrs **/
 	/* read */
@@ -285,7 +287,10 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_STARTSYNC: return "startsync";
 	case CEPH_OSD_OP_SETTRUNC: return "settrunc";
 	case CEPH_OSD_OP_TRIMTRUNC: return "trimtrunc";
+
 	case CEPH_OSD_OP_TMAPUP: return "tmapup";
+	case CEPH_OSD_OP_TMAPGET: return "tmapget";
+	case CEPH_OSD_OP_TMAPPUT: return "tmapput";
 
 	case CEPH_OSD_OP_GETXATTR: return "getxattr";
 	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";

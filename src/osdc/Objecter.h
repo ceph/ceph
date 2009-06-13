@@ -44,6 +44,11 @@ struct ObjectOperation {
   vector<OSDOp> ops;
   int flags;
 
+  void add_op(int op) {
+    int s = ops.size();
+    ops.resize(s+1);
+    ops[s].op.op = op;
+  }
   void add_data(int op, __u64 off, __u64 len, bufferlist& bl) {
     int s = ops.size();
     ops.resize(s+1);
@@ -139,6 +144,17 @@ struct ObjectOperation {
     bufferlist bl;
     ::encode(attrs, bl);
     add_xattr(CEPH_OSD_OP_RESETXATTRS, prefix, bl);
+  }
+  
+  // trivialmap
+  void tmap_update(bufferlist& bl) {
+    add_data(CEPH_OSD_OP_TMAPUP, 0, 0, bl);
+  }
+  void tmap_put(bufferlist& bl) {
+    add_data(CEPH_OSD_OP_TMAPPUT, 0, bl.length(), bl);
+  }
+  void tmap_get() {
+    add_op(CEPH_OSD_OP_TMAPGET);
   }
 
   // object classes

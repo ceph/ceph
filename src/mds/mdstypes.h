@@ -478,18 +478,18 @@ struct dentry_key_t {
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
   void encode(bufferlist& bl) const {
-    unsigned off = bl.length();
-    __le32 l;
+    __u32 l = strlen(name) + 1;
+    char b[20];
+    if (snapid != CEPH_NOSNAP) {
+      sprintf(b, "%llx", (long long unsigned)snapid);
+      l += strlen(b);
+    } else {
+      b[0] = 0;
+    }
     ::encode(l, bl);
     bl.append(name, strlen(name));
     bl.append("_", 1);
-    if (snapid != CEPH_NOSNAP) {
-      char b[20];
-      sprintf(b, "%llx", (long long unsigned)snapid);
-      bl.append(b);
-    }
-    l = bl.length() - off + sizeof(l);
-    bl.copy_in(off, sizeof(l), (char*)&l);
+    bl.append(b);
   }
   static void decode_helper(bufferlist::iterator& bl, nstring& nm, snapid_t& sn) {
     nstring foo;

@@ -1048,7 +1048,9 @@ void CDir::fetch(Context *c, bool ignore_authpinnability)
   OSDMap *osdmap = cache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     cache->mds->mdsmap->get_metadata_pg_pool());
-  cache->mds->objecter->read_full(oid, ol, CEPH_NOSNAP, &fin->bl, 0, fin);
+  ObjectOperation rd;
+  rd.tmap_get();
+  cache->mds->objecter->read(oid, ol, rd, CEPH_NOSNAP, &fin->bl, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl)
@@ -1389,7 +1391,7 @@ void CDir::_commit_full(ObjectOperation& m, const set<snapid_t> *snaps)
   finalbl.claim_append(bl);
 
   // write out the full blob
-  m.write_full(finalbl);
+  m.tmap_put(finalbl);
 }
 
 void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
@@ -1440,7 +1442,7 @@ void CDir::_commit_partial(ObjectOperation& m, const set<snapid_t> *snaps)
   }
 
   // update the trivialmap at the osd
-  m.add_data(CEPH_OSD_OP_TMAPUP, 0, 0, finalbl);
+  m.tmap_update(finalbl);
 }
 
 void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
