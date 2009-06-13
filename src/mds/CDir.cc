@@ -1495,7 +1495,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     ::encode(in->old_inodes, bl);
   }
   
-  plen = bl.length() - plen_off + sizeof(__u32);
+  plen = bl.length() - plen_off - sizeof(__u32);
   bl.copy_in(plen_off, sizeof(__u32), (char*)&plen);
 }
 
