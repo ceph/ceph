@@ -69,9 +69,6 @@ void _dout_open_log()
     sprintf(_dout_file, "%s.%d", hostname, getpid());
   }
 
-  if (_dout && _dout_is_open)
-    delete _dout;
-
   _dout_out.close();
   _dout_out.open(_dout_path, ios::trunc|ios::out);
   if (!_dout_out.is_open()) {
