@@ -484,7 +484,8 @@ struct dentry_key_t {
       sprintf(b, "%llx", (long long unsigned)snapid);
       l += strlen(b);
     } else {
-      b[0] = 0;
+      strcpy(b, "head");
+      l += 4;
     }
     ::encode(l, bl);
     bl.append(name, strlen(name));
@@ -499,12 +500,16 @@ struct dentry_key_t {
     while (foo[i] != '_' && i)
       i--;
     assert(i);
-    if (i+1 == foo.length()) {
-      // name_  (head)
+    if (i+5 == foo.length() &&
+	foo[i+1] == 'h' &&
+	foo[i+2] == 'e' &&
+	foo[i+3] == 'a' &&
+	foo[i+4] == 'd') {
+      // name_head
       sn = CEPH_NOSNAP;
     } else {
       // name_%x
-      long long unsigned x;
+      long long unsigned x = 0;
       sscanf(foo.c_str() + i + 1, "%llx", &x);
       sn = x;
     }  
