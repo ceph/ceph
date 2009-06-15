@@ -274,7 +274,6 @@ struct ceph_inode_xattrs_info {
  * Ceph inode.
  */
 #define CEPH_I_COMPLETE  1  /* we have complete directory cached */
-#define CEPH_I_READDIR   2  /* no dentries trimmed since readdir start */
 #define CEPH_I_NODELAY   4  /* do not delay cap release */
 #define CEPH_I_FLUSH     8  /* do not delay cap send */
 
@@ -285,6 +284,7 @@ struct ceph_inode_info {
 	u32 i_time_warp_seq;
 
 	unsigned i_ceph_flags;
+	unsigned long i_release_count;
 
 	struct ceph_file_layout i_layout;
 	char *i_symlink;
@@ -622,6 +622,7 @@ struct ceph_file_info {
 	unsigned next_off;
 	struct dentry *dentry;
 	int at_end;
+	unsigned long dir_release_count;
 
 	/* used for -o dirstat read() on directory thing */
 	char *dir_info;

@@ -251,6 +251,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_version = 0;
 	ci->i_time_warp_seq = 0;
 	ci->i_ceph_flags = 0;
+	ci->i_release_count = 0;
 	ci->i_symlink = NULL;
 
 	ci->i_fragtree = RB_ROOT;
@@ -854,7 +855,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				ceph_inode(req->r_locked_dir);
 			dout(10, " clearing %p complete (empty trace)\n",
 			     req->r_locked_dir);
-			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
+			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+			ci->i_release_count++;
 		}
 		return 0;
 	}
@@ -1134,6 +1136,7 @@ retry_lookup:
 				    req->r_session, req->r_request_started);
 		dput(dn);
 	}
+	req->r_did_prepopulate = true;
 
 out:
 	if (snapdir) {

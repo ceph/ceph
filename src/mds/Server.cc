@@ -2209,7 +2209,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
   
   __u8 end = (it == dir->end());
-  __u8 complete = (end && !offset);
+  __u8 complete = (end && !offset);  // FIXME: what purpose does this serve
 
   // final blob
   bufferlist dirbl;
