@@ -25,6 +25,9 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 
+#include "messages/MPoolSnap.h"
+#include "messages/MPoolSnapReply.h"
+
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
 #include "messages/MStatfs.h"
@@ -74,6 +77,10 @@ void Objecter::dispatch(Message *m)
 
   case CEPH_MSG_STATFS_REPLY:
     handle_fs_stats_reply((MStatfsReply*)m);
+    break;
+
+  case MSG_POOLSNAPREPLY:
+    handle_pool_snap_reply((MPoolSnapReply*)m);
     break;
 
   default:
@@ -525,6 +532,60 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   delete m;
 }
 
+//snapshots
+
+void Objecter::create_pool_snap(int *reply, int pool, char* snapName, Context *onfinish) {
+  dout(10) << "create_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
+  SnapOp *op = new SnapOp;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->name = snapName;
+  op->onfinish = onfinish;
+  op->create = true;
+  op->replyCode = reply;
+  op_snap[op->tid] = op;
+
+  pool_snap_submit(op);
+}
+
+void Objecter::delete_pool_snap(int *reply, int pool, char* snapName, Context *onfinish) {
+  dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
+  SnapOp *op = new SnapOp;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->name = snapName;
+  op->onfinish = onfinish;
+  op->create = false;
+  op->replyCode = reply;
+  op_snap[op->tid] = op;
+
+  pool_snap_submit(op);
+}
+
+void Objecter::pool_snap_submit(SnapOp *op) {
+  dout(10) << "pool_snap_submit " << op->tid << dendl;
+  MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool, op->name, op->create);
+  int mon = monmap->pick_mon();
+  messenger->send_message(m, monmap->get_inst(mon));
+}
+
+void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
+  dout(10) << "handle_pool_snap_reply " << *m << dendl;
+  tid_t tid = m->tid;
+  if (op_snap.count(tid)) {
+    SnapOp *op = op_snap[tid];
+    dout(10) << "have request " << tid << " at " << op << " Create: " << op->create << dendl;
+    *(op->replyCode) = m->replyCode;
+    op->onfinish->finish(0);
+    delete op->onfinish;
+    op_snap.erase(tid);
+    delete op;
+  } else {
+    dout(10) << "unknown request " << tid << dendl;
+  }
+  dout(10) << "done" << dendl;
+  delete m;
+}
 
 
 // pool stats

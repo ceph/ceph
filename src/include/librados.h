@@ -114,8 +114,8 @@ public:
 		     std::map<std::string,rados_pool_stat_t>& stats);
   int get_fs_stats(rados_statfs_t& result);
 
-  int snap_create(rados_pool_t pool, const char *snapname);
-  int snap_remove(rados_pool_t pool, const char *snapname);
+  int snap_create(rados_pool_t pool, char *snapname);
+  int snap_remove(rados_pool_t pool, char *snapname);
   int snap_list(rados_pool_t pool, vector<rados_snap_t> *snaps);
   int snap_get_name(rados_pool_t pool, rados_snap_t snap, std::string *name);
   int snap_get_stamp(rados_pool_t pool, rados_snap_t snap, time_t *t);

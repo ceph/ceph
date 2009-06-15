@@ -35,6 +35,9 @@
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
 
+#define MSG_POOLSNAP               49
+#define MSG_POOLSNAPREPLY          48
+
 // osd internal
 #define MSG_OSD_PING         70
 #define MSG_OSD_BOOT         71
