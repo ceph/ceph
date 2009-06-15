@@ -25,6 +25,15 @@ v0.9
 /- object classes
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 
+- repair metadata.. parent pointer on CDir objects
+- namespace reconstruction
+- repair file ioctl?
+- repair pg (rebuild log)
+
+bugs
+- rm -r weirdness
+- spurious "ls: reading directory 1: Resource temporarily unavailable"
+  (concurrent creates and ls in a big dir)
 
 later
 - client reconnect after long eviction; and slow delayed reconnect
@@ -116,6 +125,9 @@ mds
 - anchor_destroy needs to xlock linklock.. which means it needs a Mutation wrapper?
   - ... when it gets a caller.. someday..
 - add FILE_CAP_EXTEND capability bit
+- dir fragment
+  - maybe just take dftlock for now, to keep it simple.
+- dir merge
 - snap
   - hard link backpointers
     - anchor source dir
