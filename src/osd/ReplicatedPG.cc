@@ -1301,68 +1301,142 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     case CEPH_OSD_OP_TMAPUP:
       {
 	// read the whole object
-	bufferlist bl;
+	bufferlist ibl;
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
 	newop.op.op = CEPH_OSD_OP_READ;
 	newop.op.offset = 0;
 	newop.op.length = 0;
-	do_osd_ops(ctx, nops, bl);
+	do_osd_ops(ctx, nops, ibl);
 
-	// parse
-	bufferlist header;
-	map<nstring, bufferlist> m;
-	//bl.hexdump(*_dout);
-	if (bl.length()) {
-	  bufferlist::iterator p = bl.begin();
-	  ::decode(header, p);
-	  ::decode(m, p);
-	  //dout(0) << "m is " << m.size() << " " << m << dendl;
-	  assert(p.end());
-	}
-	
-	// do the update(s)
+	bufferlist::iterator ip = ibl.begin();
+	bufferlist obl;
 	bool changed = false;
-	while (!bp.end()) {
-	  __u8 op;
-	  nstring key;
-	  ::decode(op, bp);
-	  
-	  switch (op) {
-	  case CEPH_OSD_TMAP_SET: // insert key
-	    {
-	      ::decode(key, bp);
-	      bufferlist data;
-	      ::decode(data, bp);
-	      m[key] = data;
-	      changed = true;
-	    }
-	    break;
-	    
-	  case CEPH_OSD_TMAP_RM: // remove key
-	    ::decode(key, bp);
-	    if (m.count(key)) {
-	      m.erase(key);
-	      changed = true;
-	    }
-	    break;
-	    
-	  case CEPH_OSD_TMAP_HDR: // update header
-	    {
-	      ::decode(header, bp);
-	      changed = true;
-	    }
-	    break;
 
-	  default:
-	    return -EINVAL;
+	if (0) {
+	  // parse
+	  bufferlist header;
+	  map<nstring, bufferlist> m;
+	  //ibl.hexdump(*_dout);
+	  if (ibl.length()) {
+	    ::decode(header, ip);
+	    ::decode(m, ip);
+	    //dout(0) << "m is " << m.size() << " " << m << dendl;
+	    assert(ip.end());
+	  }
+	  
+	  // do the update(s)
+	  while (!bp.end()) {
+	    __u8 op;
+	    nstring key;
+	    ::decode(op, bp);
+	    
+	    switch (op) {
+	    case CEPH_OSD_TMAP_SET: // insert key
+	      {
+		::decode(key, bp);
+		bufferlist data;
+		::decode(data, bp);
+		m[key] = data;
+		changed = true;
+	      }
+	      break;
+	      
+	    case CEPH_OSD_TMAP_RM: // remove key
+	      ::decode(key, bp);
+	      if (m.count(key)) {
+		m.erase(key);
+		changed = true;
+	      }
+	      break;
+	      
+	    case CEPH_OSD_TMAP_HDR: // update header
+	      {
+		::decode(header, bp);
+		changed = true;
+	      }
+	      break;
+	      
+	    default:
+	      return -EINVAL;
+	    }
+	  }
+
+	  // reencode
+	  ::encode(header, obl);
+	  ::encode(m, obl);
+	} else {
+	  // header
+	  bufferlist header;
+	  if (ibl.length()) {
+	    ::decode(header, ip);
+	  }
+
+	  if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
+	    ++bp;
+	    ::decode(header, bp);
+	    changed = true;
+	  } else 
+	    ++bp;
+	  
+	  ::encode(header, obl);
+
+	  // update keys
+	  nstring nextkey;
+	  bufferlist nextval;
+	  bool have_next = false;
+	  if (!ip.end()) {
+	    have_next = true;
+	    ::decode(nextkey, ip);
+	    ::decode(nextval, ip);
+	  }
+	  while (!bp.end()) {
+	    __u8 op;
+	    nstring key;
+	    ::decode(op, bp);
+	    ::decode(key, bp);
+	    
+	    // skip existing intervening keys
+	    bool stop = false;
+	    while (have_next && !stop) {
+	      if (nextkey > key)
+		break;
+	      if (nextkey < key) {
+		// copy untouched.
+		::encode(nextkey, obl);
+		::encode(nextval, obl);
+	      } else {
+		// don't copy; discard old value.  and stop.
+		stop = true;
+	      }	      
+	      if (!ip.end()) {
+		::decode(nextkey, ip);
+		::decode(nextval, ip);
+	      } else
+		have_next = false;
+	    }
+	    
+	    if (op == CEPH_OSD_TMAP_SET) {
+	      bufferlist val;
+	      ::encode(key, obl);
+	      ::encode(val, obl);
+	    } else if (op == CEPH_OSD_TMAP_RM) {
+	      // do nothing.
+	    }
+	    changed = true;
+	  }
+
+	  // copy remaining
+	  if (have_next) {
+	    ::encode(nextkey, obl);
+	    ::encode(nextval, obl);
+	  }
+	  if (!ip.end()) {
+	    bufferlist rest;
+	    rest.substr_of(ibl, ip.get_off(), ibl.length() - ip.get_off());
+	    obl.claim_append(rest);
 	  }
 	}
-	
-	// reencode
-	bufferlist obl;
-	::encode(header, obl);
-	::encode(m, obl);
 
 	// write it out
 	newop.op.op = CEPH_OSD_OP_WRITE;
