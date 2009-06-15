@@ -279,22 +279,24 @@ more:
 	dout(10, "readdir frag %x num %d off %d fragoff %d skew %d\n", frag,
 	     rinfo->dir_nr, off, fi->off, skew);
 	while (off >= skew && off+skew < rinfo->dir_nr) {
-		dout(10, "readdir off %d -> %d / %d name '%.*s'\n",
+		u64 pos = ceph_make_fpos(frag, rinfo->dir_pos[off+skew]);
+
+		dout(10, "readdir off %d -> %d / %d %lld name '%.*s'\n",
 		     off, off+skew,
-		     rinfo->dir_nr, rinfo->dir_dname_len[off+skew],
+		     rinfo->dir_nr, pos, rinfo->dir_dname_len[off+skew],
 		     rinfo->dir_dname[off+skew]);
 		ftype = le32_to_cpu(rinfo->dir_in[off+skew].in->mode) >> 12;
 		if (filldir(dirent,
 			    rinfo->dir_dname[off+skew],
 			    rinfo->dir_dname_len[off+skew],
-			    ceph_make_fpos(frag, off),
+			    pos,
 			    le64_to_cpu(rinfo->dir_in[off+skew].in->ino),
 			    ftype) < 0) {
 			dout(20, "filldir stopping us...\n");
 			return 0;
 		}
 		off++;
-		filp->f_pos++;
+		filp->f_pos = pos + 1;
 	}
 
 	if (fi->last_name) {
