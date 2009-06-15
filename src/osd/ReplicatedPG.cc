@@ -1429,8 +1429,9 @@ void ReplicatedPG::log_op(vector<Log::Entry>& logv, ObjectStore::Transaction& t)
   dout(10) << "log_op " << log << dendl;
 
   // trim log?
-  eversion_t trim_to = is_clean() ? peers_complete_thru : eversion_t();
-  if (log.top.version - log.bottom.version > info.stats.num_objects)
+  eversion_t trim_to;
+  if (is_clean() ||
+      log.top.version - log.bottom.version > info.stats.num_objects)
     trim_to = peers_complete_thru;
 
   bufferlist log_bl;
