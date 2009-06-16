@@ -426,7 +426,25 @@ int main(int argc, const char **argv)
     }
     cout << snaps.size() << " snaps" << std::endl;
   }
- 
+
+  else if (strcmp(nargs[0], "mksnap") == 0) {
+    if ( nargs.size() < 2) usage();
+    
+    cout << "Submitting snap to backend." << std::endl;
+    int result = rados.snap_create(p, nargs[1]);
+    if (result == 0 ) cout << "Success! Created snapshot " << nargs[1] << std::endl;
+    else cout << "Failure. Attempt to create snapshot returned " << result << std::endl;
+  }
+
+  else if (strcmp(nargs[0], "rmsnap") == 0) {
+    if ( nargs.size() < 2) usage();
+    
+    cout << "Submitting snap removal to backend." << std::endl;
+    int result = rados.snap_remove(p, nargs[1]);
+    if (result == 0 ) cout << "Success! Removed snapshot " << nargs[1] << std::endl;
+    else cout << "Failure. Attempt to remove snapshot returned " << result << std::endl;
+  }
+  
   else if (strcmp(nargs[0], "bench") == 0) {
     if (nargs.size() < 2)
       usage();
