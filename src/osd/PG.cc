@@ -561,7 +561,7 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
 
     lock();
     dout(10) << "build_backlog_map  " << e << dendl;
-    if (!generate_backlog_epoch) {
+    if (!generate_backlog_epoch || osd->is_stopping()) {
       dout(10) << "build_backlog_map aborting" << dendl;
       return false;
     }
