@@ -120,7 +120,7 @@ struct crush_bucket {
 	 * the linear search fallback for the other bucket types.
 	 */
 	__u32 perm_x;  /* @x for which *perm is defined */
-	__u32 perm_n;  /* how much of *perm has been calculated */
+	__u32 perm_n;  /* num elements of *perm that are permuted/defined */
 	__u32 *perm;
 };
 

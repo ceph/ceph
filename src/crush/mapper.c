@@ -59,9 +59,8 @@ int crush_find_rule(struct crush_map *map, int ruleset, int type, int size)
 static int bucket_perm_choose(struct crush_bucket *bucket,
 				int x, int r)
 {
-	unsigned i, t;
 	unsigned pr = r % bucket->size;
-	unsigned s;
+	unsigned i, s;
 
 	/* start a new permutation if @x has changed */
 	if (bucket->perm_x != x || bucket->perm_n == 0) {
@@ -74,15 +73,14 @@ static int bucket_perm_choose(struct crush_bucket *bucket,
 				bucket->size;
 			bucket->perm[0] = s;
 			bucket->perm_n = 0xffff;
-			return bucket->items[s];
-		} else {
-			for (i = 0; i < bucket->size; i++)
-				bucket->perm[i] = i;
-			bucket->perm_n = 0;
+			goto out;
 		}
-	}
-
-	if (bucket->perm_n == 0xffff) {
+		
+		for (i = 0; i < bucket->size; i++)
+			bucket->perm[i] = i;
+		bucket->perm_n = 0;
+	} else if (bucket->perm_n == 0xffff) {
+		/* clean up after the r=0 case above */
 		for (i = 1; i < bucket->size; i++)
 			bucket->perm[i] = i;
 		bucket->perm[bucket->perm[0]] = 0;
@@ -92,22 +90,26 @@ static int bucket_perm_choose(struct crush_bucket *bucket,
 	/* calculate permutation up to pr */
 	for (i = 0; i < bucket->perm_n; i++) 
 		dprintk(" perm_choose have %d: %d\n", i, bucket->perm[i]);
-	while (bucket->perm_n < pr) {
-		bucket->perm_n++;		
-		if (bucket->perm_n < bucket->size -1) {
-			i = crush_hash32_3(x, bucket->id, bucket->perm_n) %
-				(bucket->size - bucket->perm_n);
-			t = bucket->perm[bucket->perm_n + i];
-			bucket->perm[bucket->perm_n + i] =
-				bucket->perm[bucket->perm_n - 1];
-			bucket->perm[bucket->perm_n - 1] = t;
-			dprintk(" perm_choose swap %d with %d\n", bucket->perm_n-1, i);
+	while (bucket->perm_n <= pr) {
+		unsigned p = bucket->perm_n;
+		/* no point in swapping the final entry */
+		if (p < bucket->size - 1) {
+			i = crush_hash32_3(x, bucket->id, p) %
+				(bucket->size - p);
+			if (i) {
+				unsigned t = bucket->perm[p + i];
+				bucket->perm[p + i] = bucket->perm[p];
+				bucket->perm[p] = t;
+			}
+			dprintk(" perm_choose swap %d with %d\n", p, p+i);
 		}
+		bucket->perm_n++;
 	}
 	for (i = 0; i < bucket->size; i++) 
 		dprintk(" perm_choose  %d: %d\n", i, bucket->perm[i]);
 
 	s = bucket->perm[pr];
+out:
 	dprintk(" perm_choose %d sz=%d x=%d r=%d (%d) s=%d\n", bucket->id, bucket->size, x, r, pr, s);
 	return bucket->items[s];
 }
