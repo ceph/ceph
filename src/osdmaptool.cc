@@ -61,6 +61,7 @@ int main(int argc, const char **argv)
   const char *import_crush = 0;
   list<entity_addr_t> add, rm;
   const char *test_map_pg = 0;
+  bool test_crush = false;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("print", 'p')) {
@@ -82,6 +83,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&import_crush, OPT_STR);
     } else if (CONF_ARG_EQ("test_map_pg", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&test_map_pg, OPT_STR);
+    } else if (CONF_ARG_EQ("test_crush", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&test_crush, OPT_BOOL);
     } else if (!fn)
       fn = args[i];
     else 
@@ -167,6 +170,36 @@ int main(int argc, const char **argv)
     vector<int> acting;
     osdmap.pg_to_acting_osds(pgid, acting);
     cout << pgid << " maps to " << acting << std::endl;
+  }
+  if (test_crush) {
+    int pass = 0;
+    while (1) {
+      cout << "pass " << ++pass << std::endl;
+
+      hash_map<pg_t,vector<int> > m;
+      for (map<int,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+	   p != osdmap.get_pools().end();
+	   p++) {
+	const pg_pool_t& pool = osdmap.get_pg_pool(p->first);
+	for (int ps = 0; ps < pool.get_pg_num(); ps++) {
+	  pg_t pgid(ps, p->first, -1);
+	  for (int i=0; i<100; i++) {
+	    cout << pgid << " attempt " << i << std::endl;
+
+	    vector<int> r, s;
+	    osdmap.pg_to_acting_osds(pgid, r);
+	    //cout << pgid << " " << r << std::endl;
+	    if (m.count(pgid)) {
+	      if (m[pgid] != r) {
+		cout << pgid << " had " << m[pgid] << " now " << r << std::endl;
+		assert(0);
+	      }
+	    } else
+	      m[pgid] = r;
+	  }
+	}
+      }
+    }
   }
 
   if (!print && !modified && !export_crush && !import_crush && !test_map_pg) {
