@@ -21,7 +21,7 @@ public:
   ceph_fsid_t fsid;
   tid_t tid;
   int replyCode;
-  int epoch;
+  epoch_t epoch;
 
 
   MPoolSnapReply() : Message(MSG_POOLSNAPREPLY) {}

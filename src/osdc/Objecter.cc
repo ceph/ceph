@@ -184,7 +184,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
       kick_requests(changed_pgs);
   }
   
-  finish_contexts(waiting_for_map);
+  map<epoch_t,list<Context*> >::iterator p = waiting_for_map.begin();
+  while (p != waiting_for_map.end() &&
+	 p->first <= osdmap->get_epoch()) {
+    finish_contexts(p->second);
+    waiting_for_map.erase(p++);
+  }
 
   delete m;
 }
@@ -576,8 +581,12 @@ void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
     SnapOp *op = op_snap[tid];
     dout(10) << "have request " << tid << " at " << op << " Create: " << op->create << dendl;
     *(op->replyCode) = m->replyCode;
-    op->onfinish->finish(0);
-    delete op->onfinish;
+    if (osdmap->get_epoch() < m->epoch) 
+      wait_for_new_map(op->onfinish, m->epoch);
+    else {
+      op->onfinish->finish(0);
+      delete op->onfinish;
+    }
     op_snap.erase(tid);
     delete op;
   } else {

@@ -1317,7 +1317,7 @@ bool OSDMonitor::prepare_pool_snap ( MPoolSnap *m)
   return true;
 }
 
-void OSDMonitor::_pool_snap(MPoolSnap *m, int replyCode, int epoch)
+void OSDMonitor::_pool_snap(MPoolSnap *m, int replyCode, epoch_t epoch)
 {
   MPoolSnapReply *reply = new MPoolSnapReply(m->fsid, m->tid, replyCode, epoch);
   mon->messenger->send_message(reply, m->get_orig_source_inst());

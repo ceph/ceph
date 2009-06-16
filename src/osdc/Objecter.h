@@ -277,7 +277,7 @@ class Objecter {
   map<tid_t,StatfsOp*>      op_statfs;
   map<tid_t,SnapOp*>        op_snap;
 
-  list<Context*> waiting_for_map;
+  map<epoch_t,list<Context*> > waiting_for_map;
 
   /**
    * track pending ops by pg
@@ -350,8 +350,8 @@ private:
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
 
-  void wait_for_new_map(Context *c) {
-    waiting_for_map.push_back(c);
+  void wait_for_new_map(Context *c, epoch_t epoch) {
+    waiting_for_map[epoch].push_back(c);
   }
 
   // mid-level helpers

@@ -86,7 +86,7 @@ private:
 
   bool preprocess_pool_snap ( class MPoolSnap *m);
   bool prepare_pool_snap (MPoolSnap *m);
-  void _pool_snap(MPoolSnap *m, int replyCode, int epoch);
+  void _pool_snap(MPoolSnap *m, int replyCode, epoch_t epoch);
 
   struct C_Booted : public Context {
     OSDMonitor *cmon;
