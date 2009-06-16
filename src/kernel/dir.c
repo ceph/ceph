@@ -70,8 +70,7 @@ static int __dcache_readdir(struct file *filp,
 		p = parent->d_subdirs.prev;
 		dout(10, " initial p %p/%p\n", p->prev, p->next);
 	} else {
-		p = last->d_u.d_child.prev;
-		filp->f_pos++;
+		p = &last->d_u.d_child;
 	}
 
 more:
