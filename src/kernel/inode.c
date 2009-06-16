@@ -251,6 +251,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_version = 0;
 	ci->i_time_warp_seq = 0;
 	ci->i_ceph_flags = 0;
+	ci->i_release_count = 0;
 	ci->i_symlink = NULL;
 
 	ci->i_fragtree = RB_ROOT;
@@ -854,7 +855,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				ceph_inode(req->r_locked_dir);
 			dout(10, " clearing %p complete (empty trace)\n",
 			     req->r_locked_dir);
-			ci->i_ceph_flags &= ~(CEPH_I_READDIR | CEPH_I_COMPLETE);
+			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+			ci->i_release_count++;
 		}
 		return 0;
 	}
@@ -1105,8 +1107,8 @@ retry_lookup:
 		}
 
 		di = dn->d_fsdata;
-		di->offset = ceph_make_fpos(frag,
-				       i + (frag_is_leftmost(frag) ? 2 : 0));
+		di->offset = ceph_make_fpos(frag, rinfo->dir_pos[i] +
+					    (frag_is_leftmost(frag) ? 2 : 0));
 
 		/* inode */
 		if (dn->d_inode) {
@@ -1134,6 +1136,7 @@ retry_lookup:
 				    req->r_session, req->r_request_started);
 		dput(dn);
 	}
+	req->r_did_prepopulate = true;
 
 out:
 	if (snapdir) {
@@ -1559,16 +1562,19 @@ int ceph_permission(struct inode *inode, int mask)
 int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		 struct kstat *stat)
 {
+	struct inode *inode = dentry->d_inode;
 	int err;
 
-	err = ceph_do_getattr(dentry->d_inode, CEPH_STAT_CAP_INODE_ALL);
+	err = ceph_do_getattr(inode, CEPH_STAT_CAP_INODE_ALL);
 	if (!err) {
-		generic_fillattr(dentry->d_inode, stat);
-		stat->ino = dentry->d_inode->i_ino;
-		if (ceph_snap(dentry->d_inode) != CEPH_NOSNAP)
-			stat->dev = ceph_snap(dentry->d_inode);
+		generic_fillattr(inode, stat);
+		stat->ino = inode->i_ino;
+		if (ceph_snap(inode) != CEPH_NOSNAP)
+			stat->dev = ceph_snap(inode);
 		else
 			stat->dev = 0;
+		if (S_ISDIR(inode->i_mode))
+			stat->blksize = 65536;
 	}
 	return err;
 }

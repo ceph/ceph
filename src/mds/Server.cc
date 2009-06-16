@@ -2143,12 +2143,10 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
 
   __u32 numfiles = 0;
+  __u32 pos = 0;
   while (it != dir->end() && numfiles < max) {
     CDentry *dn = it->second;
     it++;
-
-    if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
-      continue;
 
     if (dn->state_test(CDentry::STATE_PURGING))
       continue;
@@ -2166,6 +2164,10 @@ void Server::handle_client_readdir(MDRequest *mdr)
       }
     }
     if (dn->last < snapid || dn->first > snapid)
+      continue;
+
+    __u32 dpos = pos++;
+    if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
       continue;
 
     CInode *in = dnl->get_inode();
@@ -2195,6 +2197,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
+    ::encode(dpos, dnbl);
     ::encode(dn->name, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 
@@ -2209,7 +2212,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
   
   __u8 end = (it == dir->end());
-  __u8 complete = (end && !offset);
+  __u8 complete = (end && !offset);  // FIXME: what purpose does this serve
 
   // final blob
   bufferlist dirbl;

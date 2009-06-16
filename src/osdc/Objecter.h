@@ -35,6 +35,8 @@ class OSDMap;
 class MonMap;
 class Message;
 
+class MPoolSnapReply;
+
 class MGetPoolStatsReply;
 class MStatfsReply;
 
@@ -259,13 +261,23 @@ class Objecter {
     Context *onfinish;
   };
 
+  struct SnapOp {
+    tid_t tid;
+    int pool;
+    string name;
+    Context *onfinish;
+    bool create;
+    int* replyCode;
+  };
+
  private:
   // pending ops
   hash_map<tid_t,Op*>       op_osd;
   map<tid_t,PoolStatOp*>    op_poolstat;
   map<tid_t,StatfsOp*>      op_statfs;
+  map<tid_t,SnapOp*>        op_snap;
 
-  list<Context*> waiting_for_map;
+  map<epoch_t,list<Context*> > waiting_for_map;
 
   /**
    * track pending ops by pg
@@ -338,8 +350,8 @@ private:
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
 
-  void wait_for_new_map(Context *c) {
-    waiting_for_map.push_back(c);
+  void wait_for_new_map(Context *c, epoch_t epoch) {
+    waiting_for_map[epoch].push_back(c);
   }
 
   // mid-level helpers
@@ -462,7 +474,14 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
-
+  // -------------------------
+  // snapshots
+private:
+  void pool_snap_submit(SnapOp *op);
+public:
+  void create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
+  void delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
+  void handle_pool_snap_reply(MPoolSnapReply *m);
 
   // --------------------------
   // pool stats

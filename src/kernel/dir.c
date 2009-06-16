@@ -70,8 +70,7 @@ static int __dcache_readdir(struct file *filp,
 		p = parent->d_subdirs.prev;
 		dout(10, " initial p %p/%p\n", p->prev, p->next);
 	} else {
-		p = last->d_u.d_child.prev;
-		filp->f_pos++;
+		p = &last->d_u.d_child;
 	}
 
 more:
@@ -157,7 +156,7 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	int err;
 	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
-	int complete = 0, len;
+	int len;
 	const int max_entries = client->mount_args.max_readdir;
 
 	dout(5, "readdir %p filp %p frag %u off %u\n", inode, filp, frag, off);
@@ -165,8 +164,8 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		return 0;
 
 	if (filp->f_pos == 0) {
-		/* set I_READDIR at start of readdir */
-		ceph_i_set(inode, CEPH_I_READDIR);
+		/* note dir version at start of readdir */
+		fi->dir_release_count = ci->i_release_count;
 
 		dout(10, "readdir off 0 -> '.'\n");
 		if (filldir(dirent, ".", 1, ceph_make_fpos(0, 0),
@@ -242,8 +241,10 @@ more:
 		     (int)req->r_reply_info.dir_end,
 		     (int)req->r_reply_info.dir_complete);
 
-		if (req->r_reply_info.dir_complete)
-			complete = 1;
+		if (!req->r_did_prepopulate) {
+			dout(10, "readdir !did_prepopulate");
+			fi->dir_release_count--;
+		}
 
 		fi->off = fi->next_off;
 		kfree(fi->last_name);
@@ -277,22 +278,25 @@ more:
 	dout(10, "readdir frag %x num %d off %d fragoff %d skew %d\n", frag,
 	     rinfo->dir_nr, off, fi->off, skew);
 	while (off >= skew && off+skew < rinfo->dir_nr) {
-		dout(10, "readdir off %d -> %d / %d name '%.*s'\n",
-		     off, off+skew,
-		     rinfo->dir_nr, rinfo->dir_dname_len[off+skew],
+		u64 pos = ceph_make_fpos(frag, rinfo->dir_pos[off+skew] +
+					 (frag_is_leftmost(frag) ? 2 : 0));
+
+		dout(10, "readdir off %d (%d/%d) -> %lld '%.*s'\n",
+		     off, off+skew, rinfo->dir_nr, pos,
+		     rinfo->dir_dname_len[off+skew],
 		     rinfo->dir_dname[off+skew]);
 		ftype = le32_to_cpu(rinfo->dir_in[off+skew].in->mode) >> 12;
 		if (filldir(dirent,
 			    rinfo->dir_dname[off+skew],
 			    rinfo->dir_dname_len[off+skew],
-			    ceph_make_fpos(frag, off),
+			    pos,
 			    le64_to_cpu(rinfo->dir_in[off+skew].in->ino),
 			    ftype) < 0) {
 			dout(20, "filldir stopping us...\n");
 			return 0;
 		}
 		off++;
-		filp->f_pos++;
+		filp->f_pos = pos + 1;
 	}
 
 	if (fi->last_name) {
@@ -312,15 +316,14 @@ more:
 	fi->at_end = 1;
 
 	/*
-	 * if I_READDIR is still set, no dentries were released
-	 * during the whole readdir, and we should have the complete
-	 * dir contents in our cache.
+	 * if dir_release_count still matches the dir, no dentries
+	 * were released during the whole readdir, and we should have
+	 * the complete dir contents in our cache.
 	 */
 	spin_lock(&inode->i_lock);
-	if (complete && (ci->i_ceph_flags & CEPH_I_READDIR)) {
+	if (ci->i_release_count == fi->dir_release_count) {
 		dout(10, " marking %p complete\n", inode);
 		ci->i_ceph_flags |= CEPH_I_COMPLETE;
-		ci->i_ceph_flags &= ~CEPH_I_READDIR;
 		ci->i_max_offset = filp->f_pos;
 	}
 	spin_unlock(&inode->i_lock);
@@ -364,9 +367,9 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 			fi->at_end = 0;
 		}
 
-		/* clear I_READDIR if we did a forward seek */
+		/* bump dir_release_count if we did a forward seek */
 		if (offset > old_offset)
-			ceph_inode(inode)->i_ceph_flags &= ~CEPH_I_READDIR;
+			fi->dir_release_count--;
 	}
 	mutex_unlock(&inode->i_mutex);
 	return retval;
@@ -903,7 +906,8 @@ static void ceph_dentry_release(struct dentry *dentry)
 		if (ci->i_rdcache_gen == di->lease_rdcache_gen) {
 			dout(10, " clearing %p complete (d_release)\n",
 			     parent_inode);
-			ci->i_ceph_flags &= ~(CEPH_I_COMPLETE|CEPH_I_READDIR);
+			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+			ci->i_release_count++;
 		}
 		spin_unlock(&parent_inode->i_lock);
 	}

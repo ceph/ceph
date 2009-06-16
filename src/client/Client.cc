@@ -638,6 +638,8 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     string dname;
     LeaseStat dlease;
     while (numdn) {
+      __u32 pos;  // dentry pos within the fragment
+      ::decode(pos, p);
       ::decode(dname, p);
       ::decode(dlease, p);
       InodeStat ist(p);

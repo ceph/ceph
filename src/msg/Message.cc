@@ -19,6 +19,9 @@ using namespace std;
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
 
+#include "messages/MPoolSnap.h"
+#include "messages/MPoolSnapReply.h"
+
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
@@ -168,7 +171,12 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case MSG_GETPOOLSTATSREPLY:
     m = new MGetPoolStatsReply;
     break;
-
+  case MSG_POOLSNAP:
+    m = new MPoolSnap;
+    break;
+  case MSG_POOLSNAPREPLY:
+    m = new MPoolSnapReply;
+    break;
   case MSG_MON_COMMAND:
     m = new MMonCommand;
     break;

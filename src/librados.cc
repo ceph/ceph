@@ -89,6 +89,8 @@ public:
   int snap_lookup(PoolCtx *pool, const char *name, rados_snap_t *snapid);
   int snap_get_name(PoolCtx *pool, rados_snap_t snapid, std::string *s);
   int snap_get_stamp(PoolCtx *pool, rados_snap_t snapid, time_t *t);
+  int snap_create(const rados_pool_t pool, const char* snapname);
+  int snap_remove(const rados_pool_t pool, const char* snapname);
 
   // io
   int write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
@@ -371,8 +373,11 @@ bool RadosClient::_dispatch(Message *m)
 
   case CEPH_MSG_STATFS_REPLY:
     objecter->handle_fs_stats_reply((MStatfsReply*)m);
-  break;
+    break;
 
+  case MSG_POOLSNAPREPLY:
+    objecter->handle_pool_snap_reply((MPoolSnapReply*)m);
+    break;
   default:
     return false;
   }
@@ -445,7 +450,50 @@ int RadosClient::get_fs_stats( rados_statfs_t& result ) {
 }
 
 
+
 // SNAPS
+
+int RadosClient::snap_create( const rados_pool_t pool, const char *snapName) {
+  int reply;
+  int poolID = ((PoolCtx *)pool)->poolid;
+  string sName = string(snapName);
+
+  Mutex mylock ("RadosClient::snap_create::mylock");
+  Cond cond;
+  bool done;
+  lock.Lock();
+  objecter->create_pool_snap(&reply,
+			     poolID,
+			     sName,
+			     new C_SafeCond(&mylock, &cond, &done));
+  lock.Unlock();
+
+  mylock.Lock();
+  while(!done) cond.Wait(mylock);
+  mylock.Unlock();
+  return reply;
+}
+
+int RadosClient::snap_remove( const rados_pool_t pool, const char *snapName) {
+  int reply;
+  int poolID = ((PoolCtx *)pool)->poolid;
+  string sName = string(snapName);
+
+  Mutex mylock ("RadosClient::snap_remove::mylock");
+  Cond cond;
+  bool done;
+  lock.Lock();
+  objecter->delete_pool_snap(&reply,
+			     poolID,
+			     sName,
+			     new C_SafeCond(&mylock, &cond, &done));
+  lock.Unlock();
+
+  mylock.Lock();
+  while(!done) cond.Wait(mylock);
+  mylock.Unlock();
+  return reply;
+}
 
 int RadosClient::snap_list(PoolCtx *pool, vector<rados_snap_t> *snaps)
 {
@@ -884,6 +932,17 @@ int Rados::close_pool(rados_pool_t pool)
 }
 
 // SNAPS
+
+int Rados::snap_create(const rados_pool_t pool, const char *snapname) {
+  if (!client) return -EINVAL;
+  return client->snap_create(pool, snapname);
+}
+
+int Rados::snap_remove(const rados_pool_t pool, const char *snapname) {
+  if (!client) return -EINVAL;
+  return client->snap_remove(pool, snapname);
+}
+
 
 void Rados::set_snap(rados_pool_t pool, snapid_t seq)
 {
