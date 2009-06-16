@@ -1333,6 +1333,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->clone_obc->obs.oi.last_reqid = oi.last_reqid;
     ctx->clone_obc->obs.oi.mtime = oi.mtime;
     ctx->clone_obc->obs.oi.snaps = snaps;
+    ctx->clone_obc->obs.exists = true;
+    ctx->clone_obc->get();
 
     ctx->clone_obc->force_start_write();
     if (is_primary())
