@@ -83,6 +83,10 @@ private:
   bool prepare_alive(class MOSDAlive *m);
   void _alive(MOSDAlive *m);
 
+  bool preprocess_pool_snap ( class MPoolSnap *m);
+  bool prepare_pool_snap (MPoolSnap *m);
+  void _pool_snap(ceph_fsid_t fsid, tid_t tid, int replyCode, int epoch);
+
   struct C_Booted : public Context {
     OSDMonitor *cmon;
     MOSDBoot *m;
@@ -113,6 +117,17 @@ private:
 	cmon->_reported_failure(m);
       else
 	cmon->dispatch((Message*)m);
+    }
+  };
+  struct C_Snap : public Context {
+    OSDMonitor *osdmon;
+    MPoolSnap *m;
+    int replyCode;
+    int epoch;
+    C_Snap(OSDMonitor * osd, MPoolSnap *m_, int rc, int e) :
+      osdmon(osd), m(m_), replyCode(rc), epoch(e) {}
+    void finish(int r) {
+      osdmon->_pool_snap(m->fsid, m->tid, replyCode, epoch);
     }
   };
 

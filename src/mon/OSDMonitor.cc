@@ -271,6 +271,9 @@ bool OSDMonitor::preprocess_query(Message *m)
     return preprocess_out((MOSDOut*)m);
     */
 
+  case MSG_POOLSNAP:
+    return preprocess_pool_snap((MPoolSnap*)m);
+
   case MSG_REMOVE_SNAPS:
     return preprocess_remove_snaps((MRemoveSnaps*)m);
     
@@ -301,6 +304,8 @@ bool OSDMonitor::prepare_update(Message *m)
   case MSG_OSD_OUT:
     return prepare_out((MOSDOut*)m);
     */
+  case MSG_POOLSNAP:
+    return prepare_pool_snap((MPoolSnap*)m);
 
   case MSG_REMOVE_SNAPS:
     return prepare_remove_snaps((MRemoveSnaps*)m);
@@ -1264,4 +1269,44 @@ out:
   return false;
 }
 
+bool OSDMonitor::preprocess_pool_snap ( MPoolSnap *m) {
+  if (m->pool < 0 ) {
+    ss << "unrecognized pool '" << m->pool << "'";
+    err = -ENOENT;
+    //create reply, set replyCode to badness
+    _pool_snap(m->fsid, m->tid, -1, pending_inc.epoch);
+    return true;
+  }
+  
+}
 
+bool OSDMonitor::prepare_pool_snap ( MPoolSnap *m) {
+  const pg_pool_t *p = &osdmap.get_pg_pool(m->pool);
+  pg_pool_t *pp = 0;
+  if (pending_inc.new_pools.count(pool)) pp = &pending_inc.new_pools[pool];
+  //if the snapname is already in use, we have a problem
+  if (p->snap_exists(m->name) ||
+      pp && pp->snap_exists(m->name)) {
+    ss << "pool " << m->pool << " snap " << m->name << " already exists";
+    err = -EEXIST;
+    _pool_snap(m->fsid, m->tid, -2, pending_inc.epoch);
+    return false;
+  } else {
+    if(!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+    pp->add_snap(m->name, g_clock.now());
+    pp->set_snap_epoch(pending_inc.epoch);
+    ss << "created pool " << m->pool << " snap " << m->name;
+    getline(ss, rs);
+    paxos->wait_for_commit(new Monitor::C_Snap(mon, m, 0, pending_inc.epoch));
+    return true;
+  }
+}
+
+ void _pool_snap(ceph_fsid_t fsid, tid_t tid, int replyCode, int epoch) {
+   MPoolSnapReply *m = new MPoolSnapReply(fsid, tid, replyCode, epoch);
+   mon->messenger->send_message(m, m->get_orig_source_inst());
+   delete m;
+ }

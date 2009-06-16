@@ -21,10 +21,12 @@ public:
   ceph_fsid_t fsid;
   tid_t tid;
   int replyCode;
+  int epoch;
+
 
   MPoolSnapReply() : Message(MSG_POOLSNAPREPLY) {}
-  MPoolSnapReply( ceph_fsid_t& f, tid_t t, int rc) :
-    Message(MSG_POOLSNAPREPLY), fsid(f), tid(t), replyCode(rc) {}
+  MPoolSnapReply( ceph_fsid_t& f, tid_t t, int rc, int e) :
+    Message(MSG_POOLSNAPREPLY), fsid(f), tid(t), replyCode(rc), epoch(e) {}
 
   const char *get_type_name() { return "poolsnapreply"; }
 
