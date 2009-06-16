@@ -264,7 +264,7 @@ class Objecter {
   struct SnapOp {
     tid_t tid;
     int pool;
-    char *name;
+    string name;
     Context *onfinish;
     bool create;
     int* replyCode;
@@ -479,8 +479,8 @@ private:
 private:
   void pool_snap_submit(SnapOp *op);
 public:
-  void create_pool_snap(int *reply, int pool, char* snapName, Context *onfinish);
-  void delete_pool_snap(int *reply, int pool, char* snapName, Context *onfinish);
+  void create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
+  void delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
   void handle_pool_snap_reply(MPoolSnapReply *m);
 
   // --------------------------

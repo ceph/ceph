@@ -21,11 +21,11 @@ public:
   ceph_fsid_t fsid;
   tid_t tid;
   int pool;
-  char *name;
+  string name;
   bool create;
 
   MPoolSnap() : Message(MSG_POOLSNAP) {}
-  MPoolSnap( ceph_fsid_t& f, tid_t t, int p, char *n, bool c) :
+  MPoolSnap( ceph_fsid_t& f, tid_t t, int p, string& n, bool c) :
     Message(MSG_POOLSNAP), fsid(f), tid(t), pool(p), name(n), create(c) {}
 
   const char *get_type_name() { return "poolsnap"; }
@@ -45,7 +45,7 @@ public:
     ::decode(fsid, p);
     ::decode(tid, p);
     ::decode(pool, p);
-    ::decode(*name, p);
+    ::decode(name, p);
     ::decode(create, p);
   }
 };

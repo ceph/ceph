@@ -534,7 +534,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 //snapshots
 
-void Objecter::create_pool_snap(int *reply, int pool, char* snapName, Context *onfinish) {
+void Objecter::create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish) {
   dout(10) << "create_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   SnapOp *op = new SnapOp;
   op->tid = ++last_tid;
@@ -548,7 +548,7 @@ void Objecter::create_pool_snap(int *reply, int pool, char* snapName, Context *o
   pool_snap_submit(op);
 }
 
-void Objecter::delete_pool_snap(int *reply, int pool, char* snapName, Context *onfinish) {
+void Objecter::delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish) {
   dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   SnapOp *op = new SnapOp;
   op->tid = ++last_tid;

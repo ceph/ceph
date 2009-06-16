@@ -32,6 +32,7 @@ using namespace std;
 class Monitor;
 class MOSDBoot;
 class MMonCommand;
+class MPoolSnap;
 
 class OSDMonitor : public PaxosService {
 public:
@@ -85,7 +86,7 @@ private:
 
   bool preprocess_pool_snap ( class MPoolSnap *m);
   bool prepare_pool_snap (MPoolSnap *m);
-  void _pool_snap(ceph_fsid_t fsid, tid_t tid, int replyCode, int epoch);
+  void _pool_snap(MPoolSnap *m, int replyCode, int epoch);
 
   struct C_Booted : public Context {
     OSDMonitor *cmon;
@@ -124,10 +125,10 @@ private:
     MPoolSnap *m;
     int replyCode;
     int epoch;
-    C_Snap(OSDMonitor * osd, MPoolSnap *m_, int rc, int e) :
+    C_Snap(OSDMonitor * osd, MPoolSnap *m_, int rc, int e) : 
       osdmon(osd), m(m_), replyCode(rc), epoch(e) {}
     void finish(int r) {
-      osdmon->_pool_snap(m->fsid, m->tid, replyCode, epoch);
+      osdmon->_pool_snap(m, replyCode, epoch);
     }
   };
 
