@@ -581,14 +581,17 @@ void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
     SnapOp *op = op_snap[tid];
     dout(10) << "have request " << tid << " at " << op << " Create: " << op->create << dendl;
     *(op->replyCode) = m->replyCode;
-    if (osdmap->get_epoch() < m->epoch) 
+    if (osdmap->get_epoch() < m->epoch) {
+      dout(20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
       wait_for_new_map(op->onfinish, m->epoch);
+    }
     else {
       op->onfinish->finish(0);
       delete op->onfinish;
     }
-    op_snap.erase(tid);
+    op->onfinish = NULL;
     delete op;
+    op_snap.erase(tid);
   } else {
     dout(10) << "unknown request " << tid << dendl;
   }
