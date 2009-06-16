@@ -1562,16 +1562,19 @@ int ceph_permission(struct inode *inode, int mask)
 int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 		 struct kstat *stat)
 {
+	struct inode *inode = dentry->d_inode;
 	int err;
 
-	err = ceph_do_getattr(dentry->d_inode, CEPH_STAT_CAP_INODE_ALL);
+	err = ceph_do_getattr(inode, CEPH_STAT_CAP_INODE_ALL);
 	if (!err) {
-		generic_fillattr(dentry->d_inode, stat);
-		stat->ino = dentry->d_inode->i_ino;
-		if (ceph_snap(dentry->d_inode) != CEPH_NOSNAP)
-			stat->dev = ceph_snap(dentry->d_inode);
+		generic_fillattr(inode, stat);
+		stat->ino = inode->i_ino;
+		if (ceph_snap(inode) != CEPH_NOSNAP)
+			stat->dev = ceph_snap(inode);
 		else
 			stat->dev = 0;
+		if (S_ISDIR(inode->i_mode))
+			stat->blksize = 65536;
 	}
 	return err;
 }
