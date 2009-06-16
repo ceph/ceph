@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "fcgiapp.h"
 
@@ -12,6 +15,8 @@
 #include <iostream>
 
 using namespace std;
+
+static FILE *dbg;
 
 
 struct req_state {
@@ -121,6 +126,11 @@ static void buf_to_hex(const unsigned char *buf, int len, char *str)
   for (i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
+}
+
+static void end_header(struct req_state *s)
+{
+  FCGX_FPrintF(s->out,"Content-type: text/plain\r\n\r\n");      
 }
 
 static void open_section(struct req_state *s, const char *name)
@@ -296,8 +306,68 @@ void do_list_objects(struct req_state *s)
   //if (args.get("name"))
 }
 
+void do_create_bucket(struct req_state *s)
+{
+  int pos;
+  char *name;
+  const char *req_name = s->path_name + 1;
+
+  char buf[strlen(req_name)];
+  pos = strchr(req_name, '/') - req_name;
+  snprintf(buf, pos + 1, "/%s", req_name);
+  name = buf + 1;
+
+  char *p = strchr(&buf[1], '/');
+  if (p)
+    *p = '\0';
+
+  time_t t;
+  time(&t);
+  char time_buf[128];
+#if 0
+  FCGX_FPrintF(s->out, "Connection: close\n", name);
+#endif
+  FCGX_FPrintF(s->out, "Status: 100\r\n\r\n"
+"HTTP/1.1 200 OK\r\n");
+
+//  FCGX_FPrintF(s->out, "Status: 200\r\n\r\n");
+//  FCGX_FPrintF(s->out, "Status: 200\n");
+  end_header(s);
+//  FCGX_FFlush(s->out);
+  // dump_start(s);
+}
+
+void do_create_object(struct req_state *s)
+{
+#if 0
+  int pos;
+  char *name;
+
+  if (!s->host)
+    return;
+
+  char buf[strlen(s->host+1)];
+  pos = strchr(s->host, '.') - s->host;
+  snprintf(buf, pos + 1, "/%s", s->host);
+  name = buf + 1;
+
+  time_t t;
+  time(&t);
+  char time_buf[128];
+  FCGX_FPrintF(s->out, "Date: %s\n", ctime_r(&t, time_buf));
+  FCGX_FPrintF(s->out, "Location: %s\n", name);
+  FCGX_FPrintF(s->out, "Content-Length: 0\n", name);
+  FCGX_FPrintF(s->out, "Connection: close\n", name);
+  FCGX_FPrintF(s->out, "Server: %s\n", SERVER_NAME);
+#endif
+  end_header(s);
+  dump_start(s);
+  FCGX_FPrintF(s->out, "Hey! this is wrong!");
+}
+
 void do_retrieve(struct req_state *s)
 {
+  end_header(s);
   dump_start(s);
   if (strcmp(s->path_name, "/") == 0)
     do_list_buckets(s);
@@ -305,23 +375,51 @@ void do_retrieve(struct req_state *s)
     do_list_objects(s);
 }
 
+void do_create(struct req_state *s)
+{
+  const char *p;
+  bool create_bucket = false;
+  if (!s->path_name)
+    return;
+
+  if (s->path_name[0] != '/')
+    return;
+
+  p = strchr(&s->path_name[1], '/');
+  if (p) {
+    if (*(p+1) == '\0')
+      create_bucket = true;
+  } else {
+    create_bucket = true;
+  }
+
+  if (create_bucket)
+    do_create_bucket(s);
+  else
+    do_create_object(s);
+}
+
 int main(void)
 {
   FCGX_Stream *in, *out, *err;
   FCGX_ParamArray envp;
   struct req_state s;
+  dbg = fopen("/tmp/fcgi.out", "a");
 
   while (FCGX_Accept(&in, &out, &err, &envp) >= 0) 
   {
-    FCGX_FPrintF(out,"Content-type: text/plain\r\n\r\n");      
-
     init_state(&s, envp, in, out);
+    static int i=0;
+
+    fprintf(dbg, "%d %s\n", i++, s.method);
 
     if (!s.method)
       continue;
 
     if (strcmp(s.method, "GET") == 0)
       do_retrieve(&s);
+    if (strcmp(s.method, "PUT") == 0)
+      do_create(&s);
   }
   return 0;
 }

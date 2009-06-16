@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#define SERVER_NAME "S3FS"
+
 typedef void *S3AccessHandle;
 
 struct S3ObjEnt {
