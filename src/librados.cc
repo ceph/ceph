@@ -44,6 +44,12 @@ using namespace std;
 #include "include/librados.h"
 
 
+#define DOUT_SUBSYS rados
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "librados: "
+
+
+
 class RadosClient : public Dispatcher
 {
   MonMap monmap;
@@ -273,10 +279,9 @@ bool RadosClient::init()
     return false;
 
   rank.bind();
-  cout << "starting radosclient." << g_conf.id
-       << " at " << rank.get_rank_addr() 
-       << " fsid " << monmap.get_fsid()
-       << std::endl;
+  dout(1) << "starting at " << rank.get_rank_addr() 
+	  << " fsid " << monmap.get_fsid()
+	  << dendl;
 
   messenger = rank.register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);
@@ -307,12 +312,12 @@ bool RadosClient::init()
   objecter->init();
 
   while (osdmap.get_epoch() == 0) {
-    dout(0) << "waiting for osdmap" << dendl;
+    dout(1) << "waiting for osdmap" << dendl;
     cond.Wait(lock);
   }
   lock.Unlock();
 
-  dout(0) << "init done" << dendl;
+  dout(1) << "init done" << dendl;
 
   return true;
 }

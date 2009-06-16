@@ -85,6 +85,7 @@ struct md_config_t {
   int debug_timer;
   int debug_filer;
   int debug_objecter;
+  int debug_rados;
   int debug_journaler;
   int debug_objectcacher;
   int debug_client;
