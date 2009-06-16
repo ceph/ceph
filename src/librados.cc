@@ -100,6 +100,7 @@ public:
 
   // io
   int write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(PoolCtx& pool, const object_t& oid);
 
@@ -672,6 +673,40 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
   return len;
 }
 
+int RadosClient::write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (pool.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  Mutex mylock("RadosClient::write_full::mylock");
+  Cond cond;
+  bool done;
+  int r;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  dout(0) << "going to write_full" << dendl;
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->write_full(oid, layout,
+		  pool.snapc, bl, ut, 0,
+		  onack, NULL);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  dout(0) << "did write_full" << dendl;
+
+  return r;
+}
+
 int RadosClient::aio_read(PoolCtx& pool, const object_t oid, off_t off, bufferlist *pbl, size_t len,
 			  AioCompletion **pc)
 {
@@ -888,6 +923,14 @@ int Rados::write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& 
     return -EINVAL;
 
   return client->write(*(RadosClient::PoolCtx *)pool, oid, off, bl, len);
+}
+
+int Rados::write_full(rados_pool_t pool, const object_t& oid, bufferlist& bl)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->write_full(*(RadosClient::PoolCtx *)pool, oid, bl);
 }
 
 int Rados::remove(rados_pool_t pool, const object_t& oid)

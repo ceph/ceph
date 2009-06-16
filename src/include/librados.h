@@ -97,6 +97,7 @@ public:
   void set_snap(rados_pool_t pool, snapid_t seq);
 
   int write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
+  int write_full(rados_pool_t pool, const object_t& oid, bufferlist& bl);
   int read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(rados_pool_t pool, const object_t& oid);
 

@@ -430,7 +430,7 @@ private:
     return op_submit(o);
   }
   tid_t write_full(const object_t& oid, ceph_object_layout ol,
-		   const SnapContext& snapc, bufferlist &bl, utime_t mtime, int flags,
+		   const SnapContext& snapc, const bufferlist &bl, utime_t mtime, int flags,
 		   Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITEFULL;

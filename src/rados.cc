@@ -375,7 +375,7 @@ int main(int argc, const char **argv)
       usage();
     }
     object_t oid(nargs[1]);
-    int r = rados.write(p, oid, 0, indata, indata.length());
+    int r = rados.write_full(p, oid, indata);
     if (r < 0) {
       cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
