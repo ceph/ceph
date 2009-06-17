@@ -61,6 +61,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 			return -ENOMEM;
 		}
 		cf->fmode = fmode;
+		cf->next_offset = 2;
 		file->private_data = cf;
 		BUG_ON(inode->i_fop->release != ceph_release);
 		break;
