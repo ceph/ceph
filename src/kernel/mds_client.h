@@ -222,6 +222,7 @@ struct ceph_mds_request {
 	bool		  r_got_unsafe, r_got_safe;
 
 	bool              r_did_prepopulate;
+	u32               r_readdir_offset;
 
 	struct ceph_cap_reservation r_caps_reservation;
 	int r_num_caps;

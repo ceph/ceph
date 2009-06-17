@@ -615,13 +615,16 @@ static inline int ceph_queue_page_invalidation(struct inode *inode)
 struct ceph_file_info {
 	int fmode;     /* initialized on open */
 
-	u32 frag;      /* one frag at a time; screw seek_dir() on large dirs */
-	unsigned off;
+	/* readdir: position within the dir */
+	u32 frag;
 	struct ceph_mds_request *last_readdir;
-	char *last_name;       /* only set if we haven't reached end of frag */
-	unsigned next_off;
-	struct dentry *dentry;
 	int at_end;
+
+	/* readdir: position within a frag */
+	unsigned offset;       /* offset of last chunk, adjusted for . and .. */
+	u64 next_offset;       /* offset of next chunk (last_name's + 1) */
+	char *last_name;       /* last entry in previous chunk */
+	struct dentry *dentry; /* next dentry (for dcache readdir) */
 	unsigned long dir_release_count;
 
 	/* used for -o dirstat read() on directory thing */

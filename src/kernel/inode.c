@@ -1107,8 +1107,7 @@ retry_lookup:
 		}
 
 		di = dn->d_fsdata;
-		di->offset = ceph_make_fpos(frag, rinfo->dir_pos[i] +
-					    (frag_is_leftmost(frag) ? 2 : 0));
+		di->offset = ceph_make_fpos(frag, i + req->r_readdir_offset);
 
 		/* inode */
 		if (dn->d_inode) {
