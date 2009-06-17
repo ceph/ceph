@@ -176,7 +176,7 @@ public:
     ss << "version " << version << std::endl;
     ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
     ss << "last_pg_scan " << last_pg_scan << std::endl;
-    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tstate\tv\treported\tosds\tlast_scrub" << std::endl;
+    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tosds\tlast_scrub" << std::endl;
     for (set<pg_t>::iterator p = pg_set.begin();
 	 p != pg_set.end();
 	 p++) {
@@ -188,6 +188,8 @@ public:
 	 << "\t" << st.num_objects_degraded
 	 << "\t" << st.num_kb
 	 << "\t" << st.num_bytes
+	 << "\t" << st.log_size
+	 << "\t" << st.ondisk_log_size
 	 << "\t" << pg_state_string(st.state)
 	 << "\t" << st.version
 	 << "\t" << st.reported
@@ -205,6 +207,8 @@ public:
 	 << "\t" << p->second.num_objects_degraded
 	 << "\t" << p->second.num_kb
 	 << "\t" << p->second.num_bytes
+	 << "\t" << p->second.log_size
+	 << "\t" << p->second.ondisk_log_size
 	 << std::endl;
     ss << " sum\t" << pg_sum.num_objects
       //<< "\t" << pg_sum.num_object_copies
@@ -212,6 +216,8 @@ public:
        << "\t" << pg_sum.num_objects_degraded
        << "\t" << pg_sum.num_kb
        << "\t" << pg_sum.num_bytes
+       << "\t" << pg_sum.log_size
+       << "\t" << pg_sum.ondisk_log_size
        << std::endl;
 
     ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;

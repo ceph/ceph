@@ -24,8 +24,8 @@
 
 
 
-#define CEPH_OSD_ONDISK_VERSION 16
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v017"
+#define CEPH_OSD_ONDISK_VERSION 18
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v018"
 
 
 
@@ -580,6 +580,9 @@ struct pg_stat_t {
   eversion_t reported;
   __u32 state;
 
+  eversion_t log_start;         // (log_start,version]
+  eversion_t ondisk_log_start;  // there may be more on disk
+
   epoch_t created;
   pg_t parent;
   __u32 parent_split_bits;
@@ -594,6 +597,8 @@ struct pg_stat_t {
   __u64 num_object_copies;  // num_objects * num_replicas
   __u64 num_objects_missing_on_primary;
   __u64 num_objects_degraded;
+  __u64 log_size;
+  __u64 ondisk_log_size;    // >= active_log_size
 
   vector<int> acting;
 
@@ -601,7 +606,8 @@ struct pg_stat_t {
 		created(0), parent_split_bits(0), 
 		num_bytes(0), num_kb(0), 
 		num_objects(0), num_object_clones(0), num_object_copies(0),
-		num_objects_missing_on_primary(0), num_objects_degraded(0)
+		num_objects_missing_on_primary(0), num_objects_degraded(0),
+		log_size(0), ondisk_log_size(0)
   { }
 
   void encode(bufferlist &bl) const {
@@ -611,6 +617,8 @@ struct pg_stat_t {
     ::encode(version, bl);
     ::encode(reported, bl);
     ::encode(state, bl);
+    ::encode(log_start, bl);
+    ::encode(ondisk_log_start, bl);
     ::encode(created, bl);
     ::encode(parent, bl);
     ::encode(parent_split_bits, bl);
@@ -623,6 +631,8 @@ struct pg_stat_t {
     ::encode(num_object_copies, bl);
     ::encode(num_objects_missing_on_primary, bl);
     ::encode(num_objects_degraded, bl);
+    ::encode(log_size, bl);
+    ::encode(ondisk_log_size, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -632,6 +642,8 @@ struct pg_stat_t {
     ::decode(version, bl);
     ::decode(reported, bl);
     ::decode(state, bl);
+    ::decode(log_start, bl);
+    ::decode(ondisk_log_start, bl);
     ::decode(created, bl);
     ::decode(parent, bl);
     ::decode(parent_split_bits, bl);
@@ -644,6 +656,8 @@ struct pg_stat_t {
     ::decode(num_object_copies, bl);
     ::decode(num_objects_missing_on_primary, bl);
     ::decode(num_objects_degraded, bl);
+    ::decode(log_size, bl);
+    ::decode(ondisk_log_size, bl);
     ::decode(acting, bl);
   }
 
@@ -655,6 +669,8 @@ struct pg_stat_t {
     num_object_copies += o.num_object_copies;
     num_objects_missing_on_primary += o.num_objects_missing_on_primary;
     num_objects_degraded += o.num_objects_degraded;
+    log_size += o.log_size;
+    ondisk_log_size += o.ondisk_log_size;
   }
   void sub(const pg_stat_t& o) {
     num_bytes -= o.num_bytes;
@@ -664,6 +680,8 @@ struct pg_stat_t {
     num_object_copies -= o.num_object_copies;
     num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
     num_objects_degraded -= o.num_objects_degraded;
+    log_size -= o.log_size;
+    ondisk_log_size -= o.ondisk_log_size;
   }
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
@@ -679,10 +697,13 @@ struct pool_stat_t {
   __u64 num_object_copies;  // num_objects * num_replicas
   __u64 num_objects_missing_on_primary;
   __u64 num_objects_degraded;
+  __u64 log_size;
+  __u64 ondisk_log_size;    // >= active_log_size
 
   pool_stat_t() : num_bytes(0), num_kb(0), 
 		  num_objects(0), num_object_clones(0), num_object_copies(0),
-		  num_objects_missing_on_primary(0), num_objects_degraded(0)
+		  num_objects_missing_on_primary(0), num_objects_degraded(0),
+		  log_size(0), ondisk_log_size(0)
   { }
 
   void encode(bufferlist &bl) const {
@@ -693,7 +714,9 @@ struct pool_stat_t {
     ::encode(num_object_copies, bl);
     ::encode(num_objects_missing_on_primary, bl);
     ::encode(num_objects_degraded, bl);
-  }
+    ::encode(log_size, bl);
+    ::encode(ondisk_log_size, bl);
+ }
   void decode(bufferlist::iterator &bl) {
     ::decode(num_bytes, bl);
     ::decode(num_kb, bl);
@@ -702,6 +725,8 @@ struct pool_stat_t {
     ::decode(num_object_copies, bl);
     ::decode(num_objects_missing_on_primary, bl);
     ::decode(num_objects_degraded, bl);
+    ::decode(log_size, bl);
+    ::decode(ondisk_log_size, bl);
   }
 
   void add(const pg_stat_t& o) {
@@ -712,6 +737,8 @@ struct pool_stat_t {
     num_object_copies += o.num_object_copies;
     num_objects_missing_on_primary += o.num_objects_missing_on_primary;
     num_objects_degraded += o.num_objects_degraded;
+    log_size += o.log_size;
+    ondisk_log_size += o.ondisk_log_size;
   }
   void sub(const pg_stat_t& o) {
     num_bytes -= o.num_bytes;
@@ -721,6 +748,8 @@ struct pool_stat_t {
     num_object_copies -= o.num_object_copies;
     num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
     num_objects_degraded -= o.num_objects_degraded;
+    log_size -= o.log_size;
+    ondisk_log_size -= o.ondisk_log_size;
   }
 };
 WRITE_CLASS_ENCODER(pool_stat_t)

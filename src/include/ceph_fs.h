@@ -28,7 +28,7 @@
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL   18 /* public/client */
 #define CEPH_MDSC_PROTOCOL   23 /* public/client */
-#define CEPH_MONC_PROTOCOL   12 /* public/client */
+#define CEPH_MONC_PROTOCOL   13 /* public/client */
 
 
 

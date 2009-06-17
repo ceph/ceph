@@ -132,6 +132,7 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
     unindex(e);         // remove from index,
     log.pop_front();    // from log
   }
+
   // raise bottom?
   if (backlog)
     backlog = false;
@@ -1591,6 +1592,11 @@ void PG::update_stats()
     pg_stats_stable.state = state;
     pg_stats_stable.acting = acting;
 
+    pg_stats_stable.log_size = ondisklog.length();
+    pg_stats_stable.ondisk_log_size = ondisklog.length();
+    pg_stats_stable.log_start = log.bottom;
+    pg_stats_stable.ondisk_log_start = log.bottom;
+
     pg_stats_stable.num_object_copies = pg_stats_stable.num_objects * osd->osdmap->get_pg_size(info.pgid);
     if (!is_clean() && is_active()) {
       pg_stats_stable.num_objects_missing_on_primary = missing.num_missing();
@@ -1709,7 +1715,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 
   assert(trim >= ondisklog.bottom);
   ondisklog.bottom = trim;
-  
+
   // adjust block_map
   while (p != ondisklog.block_map.begin()) 
     ondisklog.block_map.erase(ondisklog.block_map.begin());

@@ -172,6 +172,8 @@ crush
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 osd
+- preserve pg logs
+- pg repair
 - pg split should be a work queue
 - generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
 - rdlocks
