@@ -3990,10 +3990,10 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 
   memset(stbuf, 0, sizeof(*stbuf));
   //divide the results by 4 to give them as Posix expects
-  stbuf->f_blocks = stats.f_total/4;
-  stbuf->f_bfree = stats.f_free/4;
-  stbuf->f_bavail = stats.f_avail/4;
-  stbuf->f_files = stats.f_objects;
+  stbuf->f_blocks = stats.kb/4;
+  stbuf->f_bfree = stats.kb_avail/4;
+  stbuf->f_bavail = stats.kb_avail/4;
+  stbuf->f_files = stats.num_objects;
   //fill in rest to make Posix happy
   stbuf->f_bsize = 4096;
   stbuf->f_frsize = 4096;

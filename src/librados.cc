@@ -447,11 +447,10 @@ int RadosClient::get_fs_stats( rados_statfs_t& result ) {
   while (!done) cond.Wait(mylock);
   mylock.Unlock();
 
-  //divide by 4 to give it as Posix expects.
-  result.f_total = stats.f_total / 4 ;
-  result.f_free = stats.f_free / 4;
-  result.f_avail = stats.f_avail / 4;
-  result.f_objects = stats.f_objects / 4;
+  result.kb = stats.kb;
+  result.kb_used = stats.kb_used;
+  result.kb_avail = stats.kb_avail;
+  result.num_objects = stats.num_objects;
   return 0;
 }
 

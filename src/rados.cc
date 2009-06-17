@@ -34,7 +34,7 @@ void usage()
   */
   cerr << "Commands:\n";
   cerr << "   lspools     -- list pools\n";
-  cerr << "   dfpools     -- show pool size, usage\n\n";
+  cerr << "   df          -- show per-pool and total usage\n\n";
 
   cerr << "Pool commands:\n";
   cerr << "   get objname -- fetch object\n";
@@ -285,13 +285,16 @@ int main(int argc, const char **argv)
      exit(1);
   }
 
+  int ret = 0;
+
   // open pool?
   rados_pool_t p;
   if (pool) {
     int r = rados.open_pool(pool, &p);
     if (r < 0) {
       cerr << "error opening pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
+      ret = -1;
+      goto out;
     }
   }
 
@@ -300,7 +303,8 @@ int main(int argc, const char **argv)
     int r = rados.snap_lookup(p, snapname, &snapid);
     if (r < 0) {
       cerr << "error looking up snap '" << snapname << "': " << strerror(-r) << std::endl;
-      exit(1);
+      ret = -1;
+      goto out;
     }
   }
   if (snapid != CEPH_NOSNAP) {
@@ -308,7 +312,8 @@ int main(int argc, const char **argv)
     int r = rados.snap_get_name(p, snapid, &name);
     if (r < 0) {
       cerr << "snapid " << snapid << " doesn't exist in pool " << pool << std::endl;
-      exit(1);
+      ret = -1;
+      goto out;
     }
     rados.set_snap(p, snapid);
     cout << "selected snap " << snapid << " '" << snapname << "'" << std::endl;
@@ -321,7 +326,8 @@ int main(int argc, const char **argv)
     for (vector<string>::iterator i = vec.begin(); i != vec.end(); ++i)
       cout << *i << std::endl;
   }
-  else if (strcmp(nargs[0], "dfpools") == 0) {
+  else if (strcmp(nargs[0], "df") == 0) {
+    // pools
     vector<string> vec;
     rados.list_pools(vec);
     
@@ -337,6 +343,14 @@ int main(int argc, const char **argv)
 	     i->second.num_object_clones,
 	     i->second.num_objects_degraded);
     }
+
+    // total
+    rados_statfs_t tstats;
+    rados.get_fs_stats(tstats);
+    printf("  total used    %12lld %12lld\n", (long long unsigned)tstats.kb_used,
+	   (long long unsigned)tstats.num_objects);
+    printf("  total avail   %12lld\n", (long long unsigned)tstats.kb_avail);
+    printf("  total space   %12lld\n", (long long unsigned)tstats.kb);
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
@@ -357,14 +371,6 @@ int main(int argc, const char **argv)
 	cout << *iter << std::endl;
     }
   } 
-  else if (strcmp(nargs[0], "df") == 0) {
-    rados_statfs_t stats;
-    rados.get_fs_stats(stats);
-    cout << "Total space:    " << stats.f_total << std::endl
-	 << "Total free:     " << stats.f_free << std::endl
-	 << "Total available:" << stats.f_avail << std::endl
-	 << "Total objects  :" << stats.f_objects << std::endl;
-  }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
@@ -373,7 +379,8 @@ int main(int argc, const char **argv)
     int r = rados.read(p, oid, 0, outdata, 0);
     if (r < 0) {
       cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
+      ret = -1;
+      goto out;
     }
     else
       writeData = true;
@@ -389,7 +396,8 @@ int main(int argc, const char **argv)
     int r = rados.write_full(p, oid, indata);
     if (r < 0) {
       cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
+      ret = -1;
+      goto out;
     }
   }
   else if (strcmp(nargs[0], "rm") == 0) {
@@ -399,7 +407,8 @@ int main(int argc, const char **argv)
     int r = rados.remove(p, oid);
     if (r < 0) {
       cerr << "error removing " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
-      exit(0);
+      ret = -1;
+      goto out;
     }
   }
 
@@ -491,6 +500,8 @@ int main(int argc, const char **argv)
     }
   }
 
+
+ out:
   if (pool)
     rados.close_pool(p);
 

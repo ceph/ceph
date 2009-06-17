@@ -289,10 +289,8 @@ struct ceph_mon_statfs {
 };
 
 struct ceph_statfs {
-	__le64 f_total;
-	__le64 f_free;  /* used = total - free (KB) */
-	__le64 f_avail; /* usable */
-	__le64 f_objects;
+	__le64 kb, kb_used, kb_avail;
+	__le64 num_objects;
 };
 
 struct ceph_mon_statfs_reply {

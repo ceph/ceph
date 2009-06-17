@@ -220,10 +220,10 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply = new MStatfsReply(mon->monmap->fsid, statfs->tid);
 
   // these are in KB.
-  reply->h.st.f_total = pg_map.osd_sum.kb;
-  reply->h.st.f_free = pg_map.osd_sum.kb_avail;
-  reply->h.st.f_avail = pg_map.osd_sum.kb_avail;
-  reply->h.st.f_objects = pg_map.pg_sum.num_objects;
+  reply->h.st.kb = pg_map.osd_sum.kb;
+  reply->h.st.kb_used = pg_map.osd_sum.kb_used;
+  reply->h.st.kb_avail = pg_map.osd_sum.kb_avail;
+  reply->h.st.num_objects = pg_map.pg_sum.num_objects;
 
   // reply
   mon->messenger->send_message(reply, statfs->get_orig_source_inst());

@@ -37,10 +37,8 @@ struct rados_pool_stat_t {
 };
 
 struct rados_statfs_t {
-  int f_total;
-  int f_free;
-  int f_avail;
-  int f_objects;
+  __u64 kb, kb_used, kb_avail;
+  __u64 num_objects;
 };
 
 int rados_open_pool(const char *name, rados_pool_t *pool);
