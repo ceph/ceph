@@ -164,6 +164,7 @@ struct md_config_t {
 
   // objecter
   bool  objecter_buffer_uncommitted;
+  double objecter_mon_retry_interval;
   double objecter_map_request_interval;
   double objecter_tick_interval;
   double objecter_timeout;

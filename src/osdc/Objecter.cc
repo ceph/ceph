@@ -351,8 +351,32 @@ void Objecter::tick()
 
   // reschedule
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
+
+  //resubmit old ops
+  resend_slow_ops();
 }
 
+void Objecter::resend_slow_ops()
+{
+  utime_t cutoff = g_clock.now();
+  cutoff -= g_conf.objecter_mon_retry_interval;
+
+
+  for (map<tid_t,PoolStatOp*>::iterator p = op_poolstat.begin(); p!=op_poolstat.end(); ++p) {
+    if (p->second->last_submit < cutoff)
+      poolstat_submit(p->second);
+  }
+
+  for (map<tid_t,StatfsOp*>::iterator p = op_statfs.begin(); p!=op_statfs.end(); ++p) {
+    if (p->second->last_submit < cutoff)
+      fs_stats_submit(p->second);
+  }
+
+  for (map<tid_t,SnapOp*>::iterator p = op_snap.begin(); p!=op_snap.end(); ++p) {
+    if (p->second->last_submit < cutoff)
+      pool_snap_submit(p->second);
+  }
+}
 
 
 /*
@@ -574,6 +598,7 @@ void Objecter::pool_snap_submit(SnapOp *op) {
   MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool, op->name, op->create);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
+  op->last_submit = g_clock.now();
 }
 
 void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
@@ -625,6 +650,7 @@ void Objecter::poolstat_submit(PoolStatOp *op)
   MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
+  op->last_submit = g_clock.now();
 }
 
 void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
@@ -665,6 +691,7 @@ void Objecter::fs_stats_submit(StatfsOp *op) {
   MStatfs *m = new MStatfs(monmap->fsid, op->tid);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
+  op->last_submit = g_clock.now();
 }
 
 void Objecter::handle_fs_stats_reply(MStatfsReply *m) {

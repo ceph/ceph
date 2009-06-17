@@ -185,6 +185,7 @@ class Objecter {
     void finish(int r) { ob->tick(); }
   };
   void tick();
+  void resend_slow_ops();
 
 
   /*** track pending operations ***/
@@ -253,12 +254,16 @@ class Objecter {
 
     map<string,pool_stat_t> *pool_stats;
     Context *onfinish;
+
+    utime_t last_submit;
   };
 
   struct StatfsOp {
     tid_t tid;
     ceph_statfs *stats;
     Context *onfinish;
+
+    utime_t last_submit;
   };
 
   struct SnapOp {
@@ -268,6 +273,8 @@ class Objecter {
     Context *onfinish;
     bool create;
     int* replyCode;
+
+    utime_t last_submit;
   };
 
  private:

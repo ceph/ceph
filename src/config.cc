@@ -368,6 +368,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(objecter_buffer_uncommitted, 0, OPT_BOOL, true),  // this must be true for proper failure handling
 	OPTION(objecter_map_request_interval, 0, OPT_DOUBLE, 15.0), // request a new map every N seconds, if we have pending io
 	OPTION(objecter_tick_interval, 0, OPT_DOUBLE, 5.0),
+	OPTION(objecter_mon_retry_interval, 0, OPT_DOUBLE, 5.0),
 	OPTION(objecter_timeout, 0, OPT_DOUBLE, 10.0),    // before we ask for a map
 	OPTION(journaler_allow_split_entries, 0, OPT_BOOL, true),
 	OPTION(journaler_safe, 0, OPT_BOOL, true),  // wait for COMMIT on journal writes
