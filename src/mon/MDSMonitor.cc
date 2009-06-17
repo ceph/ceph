@@ -470,6 +470,22 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = 0;
       ss << "max_mds = " << pending_mdsmap.max_mds;
     }
+    else if (m->cmd[1] == "setmap" && m->cmd.size() == 3) {
+      MDSMap map;
+      map.decode(m->get_data());
+      epoch_t e = atoi(m->cmd[2].c_str());
+      //if (ceph_fsid_compare(&map.get_fsid(), &mon->monmap->fsid) == 0) {
+      if (pending_mdsmap.epoch == e) {
+	map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
+	pending_mdsmap = map;
+	string rs = "set mds map";
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	return true;
+      } else
+	ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
+	//} else
+	//ss << "mdsmap fsid " << map.fsid << " does not match monitor fsid " << mon->monmap->fsid;
+    }
   }
   if (r == -EINVAL) 
     ss << "unrecognized command";
