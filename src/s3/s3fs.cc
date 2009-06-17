@@ -3,9 +3,12 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <limits.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "s3access.h"
 
@@ -135,3 +138,41 @@ int list_objects(string& id, string& bucket, int max, string& prefix, string& ma
 }
 
 
+int create_bucket(std::string& id, std::string& bucket)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
+  char buf[len];
+  snprintf(buf, len, "%s/%s", DIR_NAME, bucket.c_str());
+
+  if (mkdir(buf, 0755) < 0)
+    return -errno;
+
+  return 0;
+}
+
+
+int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  char buf[len];
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  int fd;
+
+  fd = open(buf, O_CREAT | O_APPEND | O_WRONLY, 0755);
+  if (fd < 0)
+    return -errno;
+
+  int r = write(fd, data, size);
+  if (r < 0) {
+    r = -errno;
+    close(fd);
+    unlink(buf);
+    return r;
+  }
+
+  r = close(r);
+  if (r < 0)
+    return -errno;
+
+  return 0;
+}

@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #include "fcgiapp.h"
 
@@ -27,6 +28,7 @@ struct req_state {
    const char *host;
    const char *method;
    const char *query;
+   const char *length;
 };
 
 
@@ -116,6 +118,7 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   s->method = FCGX_GetParam("REQUEST_METHOD", envp);
   s->host = FCGX_GetParam("HTTP_HOST", envp);
   s->query = FCGX_GetParam("QUERY_STRING", envp);
+  s->length = FCGX_GetParam("CONTENT_LENGTH", envp);
   
 }
 
@@ -126,6 +129,46 @@ static void buf_to_hex(const unsigned char *buf, int len, char *str)
   for (i = 0; i < len; i++) {
     sprintf(&str[i*2], "%02x", (int)buf[i]);
   }
+}
+
+static void dump_status(struct req_state *s, const char *status)
+{
+  FCGX_FPrintF(s->out,"Status: %s\n", status);
+}
+struct errno_http {
+  int err;
+  const char *http_str;
+};
+
+static struct errno_http hterrs[] = {
+    { 0, "200" },
+    { EINVAL, "400" },
+    { EPERM, "401" },
+    { EACCES, "403" },
+    { ENOENT, "404" },
+    { ETIMEDOUT, "408" },
+    { EEXIST, "409" },
+    { 0, NULL }};
+
+static void dump_errno(struct req_state *s, int err)
+{
+  const char *err_str = "500";
+
+  if (err < 0)
+    err = -err;
+
+  int i=0;
+  while (hterrs[i].http_str) {
+    if (err == hterrs[i].err) {
+      err_str = hterrs[i].http_str;
+      break;
+    }
+
+    i++;
+  }
+
+  dump_status(s, err_str);
+  
 }
 
 static void end_header(struct req_state *s)
@@ -205,7 +248,6 @@ static void list_all_buckets_end(struct req_state *s)
 {
   close_section(s, "ListAllMyBucketsResult");
 }
-
 
 static void dump_bucket(struct req_state *s, S3ObjEnt& obj)
 {
@@ -308,61 +350,50 @@ void do_list_objects(struct req_state *s)
 
 void do_create_bucket(struct req_state *s)
 {
-  int pos;
-  char *name;
   const char *req_name = s->path_name + 1;
+  string str(req_name);
+  int pos = str.find('/');
+  if (pos <= 0)
+    pos = str.size();
+  string bucket_name = str.substr(0, pos);
+  string id = "0123456789ABCDEF";
 
-  char buf[strlen(req_name)];
-  pos = strchr(req_name, '/') - req_name;
-  snprintf(buf, pos + 1, "/%s", req_name);
-  name = buf + 1;
+  int r = create_bucket(id, bucket_name);
 
-  char *p = strchr(&buf[1], '/');
-  if (p)
-    *p = '\0';
-
-  time_t t;
-  time(&t);
-  char time_buf[128];
-#if 0
-  FCGX_FPrintF(s->out, "Connection: close\n", name);
-#endif
-  FCGX_FPrintF(s->out, "Status: 100\r\n\r\n"
-"HTTP/1.1 200 OK\r\n");
-
-//  FCGX_FPrintF(s->out, "Status: 200\r\n\r\n");
-//  FCGX_FPrintF(s->out, "Status: 200\n");
+  dump_errno(s, r);
   end_header(s);
-//  FCGX_FFlush(s->out);
-  // dump_start(s);
 }
 
 void do_create_object(struct req_state *s)
 {
-#if 0
-  int pos;
-  char *name;
+  const char *req_name = s->path_name + 1;
+  int r = -EINVAL;
+  string str(req_name);
+  int pos = str.find('/');
+  if (pos < 0) {
+    goto done;
+  } else {
+    string bucket_name = str.substr(0, pos);
+    string obj_name = str.substr(pos + 1);
+    string id = "0123456789ABCDEF";
 
-  if (!s->host)
-    return;
+    size_t cl = atoll(s->length);
+    char *data = NULL;
+    size_t actual = 0;
+    if (cl) {
+      data = (char *)malloc(cl);
+      if (!data) {
+         r = -ENOMEM;
+         goto done;
+      }
+      actual = FCGX_GetStr(data, cl, s->in);
+    }
+    r = put_obj(id, bucket_name, obj_name, data, actual);
+  }
+done:
+  dump_errno(s, r);
 
-  char buf[strlen(s->host+1)];
-  pos = strchr(s->host, '.') - s->host;
-  snprintf(buf, pos + 1, "/%s", s->host);
-  name = buf + 1;
-
-  time_t t;
-  time(&t);
-  char time_buf[128];
-  FCGX_FPrintF(s->out, "Date: %s\n", ctime_r(&t, time_buf));
-  FCGX_FPrintF(s->out, "Location: %s\n", name);
-  FCGX_FPrintF(s->out, "Content-Length: 0\n", name);
-  FCGX_FPrintF(s->out, "Connection: close\n", name);
-  FCGX_FPrintF(s->out, "Server: %s\n", SERVER_NAME);
-#endif
   end_header(s);
-  dump_start(s);
-  FCGX_FPrintF(s->out, "Hey! this is wrong!");
 }
 
 void do_retrieve(struct req_state *s)
