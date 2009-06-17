@@ -526,7 +526,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // do callbacks
   if (onack) {
+    dout(20) << "Calling onack->finish with rc " << rc << dendl;
     onack->finish(rc);
+    dout(20) << "Finished onack-finish" << dendl;
     delete onack;
   }
   if (oncommit) {

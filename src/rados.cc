@@ -231,7 +231,9 @@ int main(int argc, const char **argv)
   vector<const char*> nargs;
   bufferlist indata, outdata;
   const char *outfile = 0;
-  
+  bool readData = false;
+  bool writeData = false;
+
   const char *pool = 0;
  
   int concurrent_ios = 16;
@@ -252,6 +254,7 @@ int main(int argc, const char **argv)
 	exit(0);
       } else {
 	cout << "read " << indata.length() << " bytes from " << fname << std::endl;
+	readData = true;
       }
     } else if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
@@ -361,16 +364,19 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() < 2)
       usage();
     object_t oid(nargs[1]);
+    cerr << "Beginning read" << std::endl;
     int r = rados.read(p, oid, 0, outdata, 0);
     if (r < 0) {
       cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
       exit(0);
     }
+    else
+      writeData = true;
   }
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool || nargs.size() < 2)
       usage();
-    if (!indata.length()) {
+    if (!readData) {
       cerr << "must specify input file" << std::endl;
       usage();
     }
@@ -466,8 +472,8 @@ int main(int argc, const char **argv)
   }
 
   // write data?
-  int len = outdata.length();
-  if (len) {
+  if (writeData) {
+    int len = outdata.length();
     if (outfile) {
       if (strcmp(outfile, "-") == 0) {
 	::write(1, outdata.c_str(), len);

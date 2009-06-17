@@ -845,9 +845,13 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+  dout(10) << "Objecter returned from read" << dendl;
 
-  if (bl.length() < len)
+  if (bl.length() < len) {
+    dout(10) << "Apparent error. Returned length " << bl.length()
+	     << " less than original length "<< len << dendl;
     len = bl.length();
+  }
 
   return len;
 }
