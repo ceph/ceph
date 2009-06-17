@@ -291,7 +291,7 @@ more:
 		u64 pos = ceph_make_fpos(frag, off);
 		struct ceph_mds_reply_inode *in =
 			rinfo->dir_in[off - fi->offset].in;
-		dout((in ? 10:0), "readdir off %d (%d/%d) -> %lld '%.*s' %p\n",
+		dout(10, "readdir off %d (%d/%d) -> %lld '%.*s' %p\n",
 		     off, off - fi->offset, rinfo->dir_nr, pos,
 		     rinfo->dir_dname_len[off - fi->offset],
 		     rinfo->dir_dname[off - fi->offset], in);
