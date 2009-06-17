@@ -505,7 +505,7 @@ int main(int argc, const char **argv)
   if (pool)
     rados.close_pool(p);
 
-  rados_deinitialize();
+  rados.shutdown();
   return 0;
 }
 
