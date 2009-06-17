@@ -23,4 +23,6 @@ int list_objects(std::string& id, std::string& bucket, int max, std::string& pre
 int create_bucket(std::string& id, std::string& bucket);
 int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size);
 
+int delete_bucket(std::string& id, std::string& bucket);
+int delete_obj(std::string& id, std::string& bucket, std::string& obj);
 #endif

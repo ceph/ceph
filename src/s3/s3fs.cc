@@ -176,3 +176,29 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
 
   return 0;
 }
+
+
+int delete_bucket(std::string& id, std::string& bucket)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
+  char buf[len];
+  snprintf(buf, len, "%s/%s", DIR_NAME, bucket.c_str());
+
+  if (rmdir(buf) < 0)
+    return -errno;
+
+  return 0;
+}
+
+
+int delete_obj(std::string& id, std::string& bucket, std::string& obj)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  char buf[len];
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+
+  if (unlink(buf) < 0)
+    return -errno;
+
+  return 0;
+}

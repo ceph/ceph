@@ -148,6 +148,7 @@ static struct errno_http hterrs[] = {
     { ENOENT, "404" },
     { ETIMEDOUT, "408" },
     { EEXIST, "409" },
+    { ENOTEMPTY, "409" },
     { 0, NULL }};
 
 static void dump_errno(struct req_state *s, int err)
@@ -263,9 +264,15 @@ void do_list_buckets(struct req_state *s)
   S3AccessHandle handle;
   int r;
   S3ObjEnt obj;
+
+  r = list_buckets_init(id, &handle);
+  dump_errno(s, (r < 0 ? r : 0));
+  end_header(s);
+  dump_start(s);
+
   list_all_buckets_start(s);
   dump_owner(s, (const char *)id.c_str(), id.size(), "foobi");
-  r = list_buckets_init(id, &handle);
+
   open_section(s, "Buckets");
   while (r >= 0) {
     r = list_buckets_next(id, obj, &handle);
@@ -312,7 +319,21 @@ void do_list_objects(struct req_state *s)
   prefix = args.get("prefix");
   marker = args.get("marker");
   max_keys = args.get("max-keys");
+ if (!max_keys.empty()) {
+    max = atoi(max_keys.c_str());
+  } else {
+    max = -1;
+  }
   delimiter = args.get("delimiter");
+
+  vector<S3ObjEnt> objs;
+  int r = list_objects(id, bucket, max, prefix, marker, objs);
+  dump_errno(s, (r < 0 ? r : 0));
+
+  end_header(s);
+  dump_start(s);
+  if (r < 0)
+    return;
 
   open_section(s, "ListBucketResult");
   dump_value(s, "Name", bucket.c_str()); 
@@ -322,15 +343,10 @@ void do_list_objects(struct req_state *s)
     dump_value(s, "Marker", marker.c_str());
   if (!max_keys.empty()) {
     dump_value(s, "MaxKeys", max_keys.c_str());
-    max = atoi(max_keys.c_str());
-  } else {
-    max = -1;
   }
   if (!delimiter.empty())
     dump_value(s, "Delimiter", delimiter.c_str());
 
-  vector<S3ObjEnt> objs;
-  int r = list_objects(id, bucket, max, prefix, marker, objs);
   if (r >= 0) {
     vector<S3ObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -389,6 +405,46 @@ void do_create_object(struct req_state *s)
       actual = FCGX_GetStr(data, cl, s->in);
     }
     r = put_obj(id, bucket_name, obj_name, data, actual);
+    free(data);
+  }
+done:
+  dump_errno(s, r);
+
+  end_header(s);
+}
+
+void do_delete_bucket(struct req_state *s)
+{
+  const char *req_name = s->path_name + 1;
+  string str(req_name);
+  int pos = str.find('/');
+  if (pos <= 0)
+    pos = str.size();
+  string bucket_name = str.substr(0, pos);
+  string id = "0123456789ABCDEF";
+
+  int r = delete_bucket(id, bucket_name);
+
+  // FCGX_FPrintF(s->out, "bucket=%s r=%d\n", bucket_name.c_str(), r);
+
+  dump_errno(s, r);
+  end_header(s);
+}
+
+void do_delete_object(struct req_state *s)
+{
+  const char *req_name = s->path_name + 1;
+  int r = -EINVAL;
+  string str(req_name);
+  int pos = str.find('/');
+  if (pos < 0) {
+    goto done;
+  } else {
+    string bucket_name = str.substr(0, pos);
+    string obj_name = str.substr(pos + 1);
+    string id = "0123456789ABCDEF";
+
+    r = delete_obj(id, bucket_name, obj_name);
   }
 done:
   dump_errno(s, r);
@@ -398,8 +454,6 @@ done:
 
 void do_retrieve(struct req_state *s)
 {
-  end_header(s);
-  dump_start(s);
   if (strcmp(s->path_name, "/") == 0)
     do_list_buckets(s);
   else
@@ -430,6 +484,31 @@ void do_create(struct req_state *s)
     do_create_object(s);
 }
 
+void do_delete(struct req_state *s)
+{
+  const char *p;
+  bool delete_bucket = false;
+  if (!s->path_name)
+    return;
+
+  if (s->path_name[0] != '/')
+    return;
+
+  p = strchr(&s->path_name[1], '/');
+  if (p) {
+    if (*(p+1) == '\0')
+      delete_bucket = true;
+  } else {
+    delete_bucket = true;
+  }
+
+  if (delete_bucket)
+    do_delete_bucket(s);
+  else
+    do_delete_object(s);
+}
+
+
 int main(void)
 {
   FCGX_Stream *in, *out, *err;
@@ -451,6 +530,13 @@ int main(void)
       do_retrieve(&s);
     if (strcmp(s.method, "PUT") == 0)
       do_create(&s);
+    if (strcmp(s.method, "DELETE") == 0) {
+#if 0
+      end_header(&s);
+      dump_start(&s);
+#endif
+      do_delete(&s);
+    }
   }
   return 0;
 }
