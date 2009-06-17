@@ -568,10 +568,14 @@ void MDSMonitor::tick()
   cutoff -= g_conf.mds_beacon_grace;
 
   // make sure last_beacon is fully populated
-  for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = mdsmap.mds_info.begin();
-       p != mdsmap.mds_info.end();
+  for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
+       p != pending_mdsmap.mds_info.end();
        ++p) 
     if (last_beacon.count(p->second.addr) == 0) {
+      const MDSMap::mds_info_t& info = p->second;
+      dout(10) << " adding " << p->second.addr << " mds" << info.rank << "." << info.inc
+	       << " " << ceph_mds_state_name(info.state)
+	       << " to last_beacon" << dendl;
       last_beacon[p->second.addr].stamp = g_clock.now();
       last_beacon[p->second.addr].seq = 0;
     }
@@ -587,6 +591,12 @@ void MDSMonitor::tick()
       __u64 seq = p->second.seq;
       p++;
       
+      if (pending_mdsmap.mds_info.count(addr) == 0) {
+	// clean it out
+	last_beacon.erase(addr);
+	continue;
+      }
+
       if (since >= cutoff)
 	continue;
 

@@ -188,6 +188,8 @@ public:
   __u32 get_cas_pg_pool() const { return cas_pg_pool; }
   __u32 get_metadata_pg_pool() const { return metadata_pg_pool; }
 
+  const map<entity_addr_t,mds_info_t>& get_mds_info() { return mds_info; }
+
   // counts
   unsigned get_num_mds() {
     return in.size();

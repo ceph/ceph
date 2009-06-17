@@ -751,14 +751,10 @@ void OSDMonitor::bcast_latest_mds()
   epoch_t e = osdmap.get_epoch();
   dout(1) << "bcast_latest_mds epoch " << e << dendl;
   
-  // tell mds
-  set<int> up;
-  mon->mdsmon()->mdsmap.get_up_mds_set(up);
-  for (set<int>::iterator i = up.begin();
-       i != up.end();
-       i++) {
-    send_incremental(mon->mdsmon()->mdsmap.get_inst(*i), osdmap.get_epoch());
-  }
+  for (map<entity_addr_t,MDSMap::mds_info_t>::const_iterator p = mon->mdsmon()->mdsmap.get_mds_info().begin();
+       p != mon->mdsmon()->mdsmap.get_mds_info().end();
+       p++)
+    send_incremental(p->second.get_inst(), osdmap.get_epoch());
 }
 
 void OSDMonitor::bcast_latest_osd()
