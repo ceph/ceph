@@ -2143,7 +2143,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
 
   __u32 numfiles = 0;
-  __u32 pos = 0;
   while (it != dir->end() && numfiles < max) {
     CDentry *dn = it->second;
     it++;
@@ -2166,7 +2165,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
     if (dn->last < snapid || dn->first > snapid)
       continue;
 
-    __u32 dpos = pos++;
     if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
       continue;
 
@@ -2197,7 +2195,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
-    ::encode(dpos, dnbl);
     ::encode(dn->name, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, mdr->now, mdr->session);
 

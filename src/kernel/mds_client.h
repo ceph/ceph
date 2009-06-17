@@ -86,7 +86,6 @@ struct ceph_mds_reply_info_parsed {
 	u32                           *dir_dname_len;
 	struct ceph_mds_reply_lease   **dir_dlease;
 	struct ceph_mds_reply_info_in *dir_in;
-	u32                           *dir_pos;
 	u8                            dir_complete, dir_end;
 
 	/* encoded blob describing snapshot contexts for certain

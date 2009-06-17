@@ -136,22 +136,19 @@ static int parse_reply_info_dir(void **p, void *end,
 	info->dir_in = kmalloc(num * (sizeof(*info->dir_in) +
 				      sizeof(*info->dir_dname) +
 				      sizeof(*info->dir_dname_len) +
-				      sizeof(*info->dir_pos) +
 				      sizeof(*info->dir_dlease)),
 			       GFP_NOFS);
 	if (info->dir_in == NULL) {
 		err = -ENOMEM;
 		goto out_bad;
 	}
-	info->dir_pos = (void *)(info->dir_in + num);
-	info->dir_dname = (void *)(info->dir_pos + num);
+	info->dir_dname = (void *)(info->dir_in + num);
 	info->dir_dname_len = (void *)(info->dir_dname + num);
 	info->dir_dlease = (void *)(info->dir_dname_len + num);
 
 	while (num) {
 		/* dentry */
 		ceph_decode_need(p, end, sizeof(u32)*2, bad);
-		ceph_decode_32(p, info->dir_pos[i]);
 		ceph_decode_32(p, info->dir_dname_len[i]);
 		ceph_decode_need(p, end, info->dir_dname_len[i], bad);
 		info->dir_dname[i] = *p;
