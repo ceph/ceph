@@ -534,9 +534,9 @@ struct pg_pool_t {
    */
   ps_t raw_pg_to_pps(pg_t pg) const {
     if (pg.preferred() >= 0 && v.lpgp_num)
-      return ceph_stable_mod(pg.ps() + pg.pool(), v.lpgp_num, lpgp_num_mask);
+      return ceph_stable_mod(pg.ps(), v.lpgp_num, lpgp_num_mask + pg.pool());
     else
-      return ceph_stable_mod(pg.ps() + pg.pool(), v.pgp_num, pgp_num_mask);
+      return ceph_stable_mod(pg.ps(), v.pgp_num, pgp_num_mask) + pg.pool();
   }
 
   void encode(bufferlist& bl) const {
