@@ -309,7 +309,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_timer, 0, OPT_INT, 0),
 	OPTION(debug_filer, 0, OPT_INT, 0),
 	OPTION(debug_objecter, 0, OPT_INT, 0),
-	OPTION(debug_rados, 0, OPT_INT, 1),
+	OPTION(debug_rados, 0, OPT_INT, 0),
 	OPTION(debug_journaler, 0, OPT_INT, 0),
 	OPTION(debug_objectcacher, 0, OPT_INT, 0),
 	OPTION(debug_client, 0, OPT_INT, 0),
