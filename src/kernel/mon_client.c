@@ -295,10 +295,7 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 	mutex_lock(&monc->statfs_mutex);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
 	if (req) {
-		req->buf->f_total = reply->st.f_total;
-		req->buf->f_free = reply->st.f_free;
-		req->buf->f_avail = reply->st.f_avail;
-		req->buf->f_objects = reply->st.f_objects;
+		*req->buf = reply->st;
 		req->result = 0;
 	}
 	mutex_unlock(&monc->statfs_mutex);

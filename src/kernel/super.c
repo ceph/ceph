@@ -84,11 +84,12 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	 * overflow on 32-bit machines.
 	 */
 	buf->f_bsize = 1 << CEPH_BLOCK_SHIFT;     /* 1 MB */
-	buf->f_blocks = le64_to_cpu(st.f_total) >> (CEPH_BLOCK_SHIFT-10);
-	buf->f_bfree = le64_to_cpu(st.f_free) >> (CEPH_BLOCK_SHIFT-10);
-	buf->f_bavail = le64_to_cpu(st.f_avail) >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_blocks = le64_to_cpu(st.kb) >> (CEPH_BLOCK_SHIFT-10);
+	buf->f_bfree = (le64_to_cpu(st.kb) - le64_to_cpu(st.kb_used)) >>
+		(CEPH_BLOCK_SHIFT-10);
+	buf->f_bavail = le64_to_cpu(st.kb_avail) >> (CEPH_BLOCK_SHIFT-10);
 
-	buf->f_files = le64_to_cpu(st.f_objects);
+	buf->f_files = le64_to_cpu(st.num_objects);
 	buf->f_ffree = -1;
 	buf->f_namelen = PATH_MAX;
 	buf->f_frsize = PAGE_CACHE_SIZE;
