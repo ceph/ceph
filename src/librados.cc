@@ -55,7 +55,7 @@ class RadosClient : public Dispatcher
   MonMap monmap;
   OSDMap osdmap;
   Messenger *messenger;
-  MonClient *mc;
+  MonClient monclient;
   SimpleMessenger rank;
 
   bool _dispatch(Message *m);
@@ -68,9 +68,10 @@ class RadosClient : public Dispatcher
 
  
 public:
-  RadosClient() : messenger(NULL), mc(NULL), lock("radosclient") {}
+  RadosClient() : messenger(NULL), monclient(&monmap, NULL), lock("radosclient") {}
   ~RadosClient();
   bool init();
+  void shutdown();
 
   struct PoolCtx {
     int poolid;
@@ -273,10 +274,8 @@ public:
 
 bool RadosClient::init()
 {
-  mc = new MonClient(&monmap, NULL);
-
   // get monmap
-  if (!mc->get_monmap())
+  if (!monclient.get_monmap())
     return false;
 
   rank.bind();
@@ -289,7 +288,7 @@ bool RadosClient::init()
   if (!messenger)
     return false;
 
-  mc->set_messenger(messenger);
+  monclient.set_messenger(messenger);
 
   rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
@@ -298,17 +297,17 @@ bool RadosClient::init()
 
   rank.start(1);
 
-  mc->link_dispatcher(this);
+  monclient.link_dispatcher(this);
 
   objecter = new Objecter(messenger, &monmap, &osdmap, lock);
   if (!objecter)
     return false;
 
-  mc->mount(g_conf.client_mount_timeout);
+  monclient.mount(g_conf.client_mount_timeout);
 
   lock.Lock();
 
-  objecter->signed_ticket = mc->get_signed_ticket();
+  objecter->signed_ticket = monclient.get_signed_ticket();
   objecter->set_client_incarnation(0);
   objecter->init();
 
@@ -323,10 +322,19 @@ bool RadosClient::init()
   return true;
 }
 
+void RadosClient::shutdown()
+{
+  lock.Lock();
+  objecter->shutdown();
+  lock.Unlock();
+  monclient.unmount();
+  messenger->shutdown();
+  rank.wait();
+  dout(1) << "shutdown" << dendl;
+}
+
 RadosClient::~RadosClient()
 {
-  if (mc)
-    delete mc;
   if (messenger)
     messenger->shutdown();
 }
@@ -354,7 +362,6 @@ bool RadosClient::dispatch_impl(Message *m)
   lock.Lock();
   ret = _dispatch(m);
   lock.Unlock();
-
   return ret;
 }
 
@@ -884,6 +891,11 @@ int Rados::initialize(int argc, const char *argv[])
   return client->init() ? 0 : -1;
 }
 
+void Rados::shutdown()
+{
+  client->shutdown();
+}
+
 int Rados::list_pools(std::vector<string>& v)
 {
   if (!client)
@@ -1143,12 +1155,16 @@ out:
 extern "C" void rados_deinitialize()
 {
   rados_init_mutex.Lock();
+  if (!rados_initialized) {
+    dout(0) << "rados_deinitialize() called without rados_initialize()" << dendl;
+    return;
+  }
   --rados_initialized;
-
-  if (!rados_initialized)
+  if (!rados_initialized) {
+    radosp->shutdown();
     delete radosp;
-
-  radosp = NULL;
+    radosp = NULL;
+  }
 
   rados_init_mutex.Unlock();
 }

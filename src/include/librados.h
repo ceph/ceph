@@ -88,6 +88,7 @@ public:
   Rados();
   ~Rados();
   int initialize(int argc, const char *argv[]);
+  void shutdown();
 
   int open_pool(const char *name, rados_pool_t *pool);
   int close_pool(rados_pool_t pool);

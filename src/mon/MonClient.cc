@@ -16,7 +16,7 @@
 
 
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << " monclient "
+#define dout_prefix *_dout << dbeginl << "monclient: "
 
 Mutex monmap_lock("monmap_lock");
 Cond monmap_cond;
