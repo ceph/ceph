@@ -368,6 +368,7 @@ static int map_osds(struct ceph_osd_client *osdc,
 		pps = ceph_stable_mod(pgid.pg.ps,
 				      le32_to_cpu(pool->v.pgp_num),
 				      pool->pgp_num_mask);
+	pps += pgid.pg.pool;
 	num = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
 			    min_t(int, pool->v.size, ARRAY_SIZE(osds)),
 			    pgid.pg.preferred, osdc->osdmap->osd_weight);
