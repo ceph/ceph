@@ -115,8 +115,8 @@ public:
 
     // for these guys, just use a pointer.
     // but, decode to a full value, and create pointers to that.
-    vector<const char*> attrnames;
-    vector<nstring> attrnames2;
+    //vector<const char*> attrnames;
+    vector<nstring> attrnames;
     vector<map<nstring,bufferptr> > attrsets;
 
     unsigned opp, blp, oidp, cidp, lengthp, attrnamep, attrsetp;
@@ -163,7 +163,7 @@ public:
       return lengths[lengthp++];
     }
     const char *get_attrname() {
-      return attrnames[attrnamep++];
+      return attrnames[attrnamep++].c_str();
     }
     map<nstring,bufferptr>& get_attrset() {
       return attrsets[attrsetp++];
@@ -229,21 +229,22 @@ public:
       //blen++;
     }
     void setattr(coll_t cid, const sobject_t& oid, const char* name, const void* val, int len) {
+      nstring n(name);
       bufferlist bl;
       bl.append((char*)val, len);
-      setattr(cid, oid, name, bl);
-    }
-    void setattr(coll_t cid, const sobject_t& oid, nstring& s, bufferlist& val) {
-      attrnames2.push_back(nstring());
-      attrnames2.back().swap(s);
-      setattr(cid, oid, attrnames2.back().c_str(), val);
+      setattr(cid, oid, n, bl);
     }
     void setattr(coll_t cid, const sobject_t& oid, const char* name, bufferlist& val) {
+      nstring n(name);
+      setattr(cid, oid, n, val);
+    }
+    void setattr(coll_t cid, const sobject_t& oid, nstring& s, bufferlist& val) {
       int op = OP_SETATTR;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      attrnames.push_back(name);
+      attrnames.push_back(nstring());
+      attrnames.back().swap(s);
       bls.push_back(val);
       //len++;
       //blen++;
@@ -259,17 +260,17 @@ public:
       //len++;
       //blen += 5 + attrset.size();     // HACK allowance for removing old attrs
     }
-    void rmattr(coll_t cid, const sobject_t& oid, nstring& s) {
-      attrnames2.push_back(nstring());
-      attrnames2.back().swap(s);
-      rmattr(cid, oid, attrnames2.back().c_str());
+    void rmattr(coll_t cid, const sobject_t& oid, const char *name) {
+      nstring n(name);
+      rmattr(cid, oid, n);
     }
-    void rmattr(coll_t cid, const sobject_t& oid, const char* name) {
+    void rmattr(coll_t cid, const sobject_t& oid, nstring& s) {
       int op = OP_RMATTR;
       ops.push_back(op);
       cids.push_back(cid);
       oids.push_back(oid);
-      attrnames.push_back(name);
+      attrnames.push_back(nstring());
+      attrnames.back().swap(s);
       //len++;
       //blen++;
     }
@@ -330,20 +331,30 @@ public:
       collection_setattr(cid, name, bl);
     }
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
+      nstring n(name);
+      collection_setattr(cid, n, val);
+    }
+    void collection_setattr(coll_t cid, nstring& name, bufferlist& val) {
       int op = OP_COLL_SETATTR;
       ops.push_back(op);
       cids.push_back(cid);
-      attrnames.push_back(name);
+      attrnames.push_back(nstring());
+      attrnames.back().swap(name);
       bls.push_back(val);
       //len++;
       //blen++;
     }
 
     void collection_rmattr(coll_t cid, const char* name) {
+      nstring n(name);
+      collection_rmattr(cid, n);
+    }
+    void collection_rmattr(coll_t cid, nstring& name) {
       int op = OP_COLL_RMATTR;
       ops.push_back(op);
       cids.push_back(cid);
-      attrnames.push_back(name);
+      attrnames.push_back(nstring());
+      attrnames.back().swap(name);
       //len++;
       //blen++;
     }
@@ -387,11 +398,11 @@ public:
       ::decode(oids, bl);
       ::decode(cids, bl);
       ::decode(lengths, bl);
-      ::decode(attrnames2, bl);
-      for (vector<nstring>::iterator p = attrnames2.begin();
+      ::decode(attrnames, bl);
+      /*for (vector<nstring>::iterator p = attrnames2.begin();
 	   p != attrnames2.end();
 	   ++p)
-	attrnames.push_back((*p).c_str());
+	   attrnames.push_back((*p).c_str());*/
       ::decode(attrsets, bl);
     }
   };
