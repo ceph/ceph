@@ -425,8 +425,6 @@ void do_delete_bucket(struct req_state *s)
 
   int r = delete_bucket(id, bucket_name);
 
-  // FCGX_FPrintF(s->out, "bucket=%s r=%d\n", bucket_name.c_str(), r);
-
   dump_errno(s, r);
   end_header(s);
 }
@@ -530,13 +528,8 @@ int main(void)
       do_retrieve(&s);
     if (strcmp(s.method, "PUT") == 0)
       do_create(&s);
-    if (strcmp(s.method, "DELETE") == 0) {
-#if 0
-      end_header(&s);
-      dump_start(&s);
-#endif
+    if (strcmp(s.method, "DELETE") == 0)
       do_delete(&s);
-    }
   }
   return 0;
 }
