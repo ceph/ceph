@@ -591,7 +591,7 @@ void Server::recall_client_state(float ratio)
 	newlim = max_caps_per_client;
       MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
-      mds->send_message_client(m, session->inst);
+      mds->messenger->send_message(m, session->inst);
     }
   }
  
