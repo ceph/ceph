@@ -247,6 +247,8 @@ void Client::init()
   messenger->set_dispatcher(this);
   link_dispatcher(monclient);
 
+  objecter->init();
+
   tick();
 
   // do logger crap only once per process.
@@ -276,6 +278,7 @@ void Client::init()
 void Client::shutdown() 
 {
   dout(1) << "shutdown" << dendl;
+  objecter->shutdown();
   messenger->shutdown();
 }
 
