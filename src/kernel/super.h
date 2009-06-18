@@ -452,6 +452,8 @@ static inline ino_t ceph_vino_to_ino(struct ceph_vino vino)
 	ino_t ino = (ino_t)vino.ino;  /* ^ (vino.snap << 20); */
 #if BITS_PER_LONG == 32
 	ino ^= vino.ino >> (sizeof(u64)-sizeof(ino_t)) * 8;
+	if (!ino)
+		ino = 1;
 #endif
 	return ino;
 }
