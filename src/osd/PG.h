@@ -847,6 +847,7 @@ public:
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
   //bool       is_complete()    { return state_test(PG_STATE_COMPLETE); }
   bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
   bool       is_stray() const { return state_test(PG_STATE_STRAY); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }

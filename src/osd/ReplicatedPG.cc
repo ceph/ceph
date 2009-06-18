@@ -415,10 +415,13 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 
 void ReplicatedPG::calc_trim_to()
 {
-  if (is_clean() ||
-      log.top.version - log.bottom.version > info.stats.num_objects) {
-    pg_trim_to = min_last_complete_ondisk;
-    if (pg_trim_to != eversion_t()) {
+  if (!is_degraded() &&
+      (is_clean() ||
+       log.top.version - log.bottom.version > info.stats.num_objects)) {
+    if (min_last_complete_ondisk != eversion_t() &&
+	min_last_complete_ondisk != pg_trim_to) {
+      dout(10) << "calc_trim_to " << pg_trim_to << " -> " << min_last_complete_ondisk << dendl;
+      pg_trim_to = min_last_complete_ondisk;
       assert(pg_trim_to >= log.bottom);
       assert(pg_trim_to <= log.top);
     }
