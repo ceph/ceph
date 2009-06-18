@@ -46,7 +46,7 @@ public:
   int32_t result;
   
   // piggybacked osd state
-  eversion_t pg_complete_thru;
+  eversion_t last_complete_ondisk;
   osd_peer_stat_t peer_stat;
 
   map<string,bufferptr> attrset;
@@ -67,7 +67,7 @@ public:
     }
     ::decode(ack_type, p);
     ::decode(result, p);
-    ::decode(pg_complete_thru, p);
+    ::decode(last_complete_ondisk, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
   }
@@ -84,7 +84,7 @@ public:
     }
     ::encode(ack_type, payload);
     ::encode(result, payload);
-    ::encode(pg_complete_thru, payload);
+    ::encode(last_complete_ondisk, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);
   }
@@ -101,8 +101,8 @@ public:
 
   int get_result() { return result; }
 
-  void set_pg_complete_thru(eversion_t v) { pg_complete_thru = v; }
-  eversion_t get_pg_complete_thru() { return pg_complete_thru; }
+  void set_last_complete_ondisk(eversion_t v) { last_complete_ondisk = v; }
+  eversion_t get_last_complete_ondisk() { return last_complete_ondisk; }
 
   void set_peer_stat(const osd_peer_stat_t& stat) { peer_stat = stat; }
   const osd_peer_stat_t& get_peer_stat() { return peer_stat; }

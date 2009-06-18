@@ -287,7 +287,6 @@ public:
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
-    map<int,eversion_t> pg_complete_thru;
     
     RepGather(OpContext *c, ObjectContext *pi, bool noop_, tid_t rt, 
 	      eversion_t lc) :
@@ -489,7 +488,6 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " wfack=" << repop.waitfor_ack
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
-  out << " pct=" << repop.pg_complete_thru;
   if (repop.ctx->op)
     out << " op=" << *(repop.ctx->op);
   out << ")";

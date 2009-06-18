@@ -974,6 +974,8 @@ void PG::clear_primary_state()
   peer_info.clear();
   peer_missing.clear();
   need_up_thru = false;
+  peer_last_complete_ondisk.clear();
+  min_last_complete_ondisk = eversion_t();
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
 
@@ -1024,7 +1026,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
   
   // -- ok, we have all (prior_set) info.  (and maybe others.)
 
-  dout(10) << " have prior_set info.  peers_complete_thru " << peers_complete_thru << dendl;
+  dout(10) << " have prior_set info.  min_last_complete_ondisk " << min_last_complete_ondisk << dendl;
 
 
   /** CREATE THE MASTER PG::Log *********/
@@ -1035,7 +1037,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 
   oldest_update = info.last_update;  // only of acting (current) osd set.
   int oldest_who = osd->whoami;
-  peers_complete_thru = info.last_complete;
+  min_last_complete_ondisk = info.last_complete;
   
   for (map<int,Info>::iterator it = peer_info.begin();
        it != peer_info.end();
@@ -1054,8 +1056,8 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
         oldest_update = it->second.last_update;
 	oldest_who = it->first;
       }
-      if (it->second.last_complete < peers_complete_thru)
-        peers_complete_thru = it->second.last_complete;
+      if (it->second.last_complete < min_last_complete_ondisk)
+        min_last_complete_ondisk = it->second.last_complete;
     }
   }
   if (newest_update == info.last_update)   // or just me, if nobody better.
@@ -1204,7 +1206,7 @@ void PG::peer(ObjectStore::Transaction& t,
   if (!have_all_missing)
     return;
 
-  dout(10) << " peers_complete_thru " << peers_complete_thru << dendl;
+  dout(10) << " min_last_complete_ondisk " << min_last_complete_ondisk << dendl;
 
   
   // -- ok.  and have i located all pg contents?
@@ -1304,7 +1306,7 @@ void PG::activate(ObjectStore::Transaction& t,
   trim_past_intervals();
   
   if (role == 0) {    // primary state
-    peers_complete_thru = eversion_t(0,0);  // we don't know (yet)!
+    min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
 
   assert(info.last_complete >= log.bottom || log.backlog);

@@ -555,7 +555,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     // trim log?
     if (is_clean() ||
 	log.top.version - log.bottom.version > info.stats.num_objects)
-      ctx->trim_to = peers_complete_thru;
+      ctx->trim_to = min_last_complete_ondisk;
 
     log_op(ctx->log, ctx->trim_to, ctx->local_t);
   }
@@ -1490,7 +1490,7 @@ void ReplicatedPG::op_ondisk(RepGather *repop)
     dout(10) << "op_ondisk " << *repop << dendl;
     repop->waitfor_disk.erase(osd->get_nodeid());
     repop->waitfor_nvram.erase(osd->get_nodeid());
-    repop->pg_complete_thru[osd->get_nodeid()] = repop->pg_local_last_complete;
+    last_complete_ondisk = repop->pg_local_last_complete;
     eval_repop(repop);
   }
 }
@@ -1621,21 +1621,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
   // done.
   if (repop->can_delete()) {
-    // adjust peers_complete_thru
-    if (!repop->pg_complete_thru.empty()) {
-      eversion_t min = info.last_complete;  // hrm....
-      for (unsigned i=0; i<acting.size(); i++) {
-        if (repop->pg_complete_thru[acting[i]] < min)      // note: if we haven't heard, it'll be zero, which is what we want.
-          min = repop->pg_complete_thru[acting[i]];
-      }
-      
-      if (min > peers_complete_thru) {
-        dout(10) << " peers_complete_thru " 
-		 << peers_complete_thru << " -> " << min
-		 << dendl;
-        peers_complete_thru = min;
-      }
-    }
+    calc_min_last_complete_ondisk();
 
     dout(10) << " removing " << *repop << dendl;
     assert(!repop_queue.empty());
@@ -1715,7 +1701,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
  
 
 void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
-			     int fromosd, eversion_t pg_complete_thru)
+			     int fromosd, eversion_t peer_lcod)
 {
   MOSDOp *op = (MOSDOp *)repop->ctx->op;
 
@@ -1731,7 +1717,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
       repop->waitfor_disk.erase(fromosd);
       repop->waitfor_nvram.erase(fromosd);
       repop->waitfor_ack.erase(fromosd);
-      peer_info[fromosd].last_complete;
+      peer_last_complete_ondisk[fromosd] = peer_lcod;
     }
   } else if (ack_type & CEPH_OSD_FLAG_ONNVRAM) {
     // nvram
@@ -2139,8 +2125,9 @@ void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t 
            << ", sending commit to osd" << ackerosd
            << dendl;
   if (osd->osdmap->is_up(ackerosd)) {
+    last_complete_ondisk = last_complete;
     MOSDSubOpReply *commit = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-    commit->set_pg_complete_thru(last_complete);
+    commit->set_last_complete_ondisk(last_complete);
     commit->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
     osd->messenger->send_message(commit, osd->osdmap->get_inst(ackerosd));
   }
@@ -2161,7 +2148,7 @@ void ReplicatedPG::sub_op_modify_reply(MOSDSubOpReply *r)
     repop_ack(repop_map[rep_tid], 
 	      r->get_result(), r->ack_type,
 	      fromosd, 
-	      r->get_pg_complete_thru());
+	      r->get_last_complete_ondisk());
   }
 
   delete r;

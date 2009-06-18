@@ -661,10 +661,11 @@ protected:
   // primary state
  public:
   vector<int> acting;
-  eversion_t  last_complete_commit;
+  eversion_t  last_complete_ondisk;  // last_complete that has committed.
 
   // [primary only] content recovery state
-  eversion_t  peers_complete_thru;
+  map<int,eversion_t> peer_last_complete_ondisk;
+  eversion_t  min_last_complete_ondisk;  // min over last_complete_ondisk, peer_last_complete_ondisk
   bool        have_master_log;
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
@@ -724,16 +725,17 @@ public:
   void clear_prior();
   bool prior_set_affected(OSDMap *map);
 
-  bool adjust_peers_complete_thru() {
-    eversion_t t = info.last_complete;
-    for (unsigned i=1; i<acting.size(); i++) 
-      if (peer_info[i].last_complete < t)
-        t = peer_info[i].last_complete;
-    if (t > peers_complete_thru) {
-      peers_complete_thru = t;
-      return true;
+  bool calc_min_last_complete_ondisk() {
+    eversion_t min = last_complete_ondisk;
+    for (unsigned i=1; i<acting.size(); i++) {
+      if (peer_last_complete_ondisk.count(acting[i]) == 0)
+	return false;   // we don't have complete info
+      eversion_t a =peer_last_complete_ondisk[acting[i]];
+      if (a < min)
+	min = a;
     }
-    return false;
+    min_last_complete_ondisk = min;
+    return true;
   }
 
   void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
@@ -994,8 +996,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   }
 
   if (pg.get_role() == 0) {
-    out << " pct " << pg.peers_complete_thru;
-    if (!pg.have_master_log) out << " !hml";
+    out << " mlcod " << pg.min_last_complete_ondisk;
+    if (!pg.have_master_log)
+      out << " !hml";
   }
 
   out << " " << pg_state_string(pg.get_state());
