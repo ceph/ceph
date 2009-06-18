@@ -40,7 +40,7 @@ enum {
 	CRUSH_RULE_NOOP = 0,
 	CRUSH_RULE_TAKE = 1,          /* arg1 = value to start with */
 	CRUSH_RULE_CHOOSE_FIRSTN = 2, /* arg1 = num items to pick */
-	                              /* arg2 = type */
+				      /* arg2 = type */
 	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */
 	CRUSH_RULE_EMIT = 4,          /* no args */
 	CRUSH_RULE_CHOOSE_LEAF_FIRSTN = 6,
@@ -97,7 +97,8 @@ enum {
 	CRUSH_BUCKET_TREE = 3,
 	CRUSH_BUCKET_STRAW = 4
 };
-static inline const char *crush_bucket_alg_name(int alg) {
+static inline const char *crush_bucket_alg_name(int alg)
+{
 	switch (alg) {
 	case CRUSH_BUCKET_UNIFORM: return "uniform";
 	case CRUSH_BUCKET_LIST: return "list";
