@@ -491,9 +491,9 @@ public:
 	  missing[e.soid] = item(e.version, eversion_t());  // .have = nil
 	} else if (missing.count(e.soid)) {
 	  // already missing (prior).
-	  assert(missing[e.soid].need == e.prior_version);
-	  rmissing.erase(e.prior_version);
-	  missing[e.soid].need = e.version;  // .have unchanged.
+	  //assert(missing[e.soid].need == e.prior_version);
+	  rmissing.erase(missing[e.soid].need);
+	  missing[e.soid].need = e.version;  // leave .have unchanged.
 	} else {
 	  // not missing, we must have prior_version (if any)
 	  missing[e.soid] = item(e.version, e.prior_version);
