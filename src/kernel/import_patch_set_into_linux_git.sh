@@ -22,6 +22,9 @@ cp $cephtree/src/kernel/ceph.txt Documentation/filesystems
 git branch -D series_start
 git branch series_start
 
+# fs/staging
+git cherry-pick 1679fd1babdf67274080e4cdd20c2a6bb5bfbbcf
+
 git add Documentation/filesystems/ceph.txt
 git commit -F - <<EOF
 ceph: documentation
