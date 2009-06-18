@@ -250,6 +250,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
   }
 
   peer_info[from] = oinfo;
+  dout(10) << " peer osd" << from << " now " << oinfo << dendl;
 
   search_for_missing(olog, omissing, from);
   peer_missing[from].swap(omissing);
@@ -1175,7 +1176,11 @@ void PG::peer(ObjectStore::Transaction& t,
   bool have_all_missing = true;
   for (unsigned i=1; i<acting.size(); i++) {
     int peer = acting[i];
-    if (peer_info[peer].is_empty()) continue;
+    Info& pi = peer_info[peer];
+    dout(10) << " peer osd" << peer << " " << pi << dendl;
+
+    if (pi.is_empty())
+      continue;
     if (peer_missing.count(peer) == 0) {
       dout(10) << " still need log+missing from osd" << peer << dendl;
       have_all_missing = false;
@@ -1183,7 +1188,6 @@ void PG::peer(ObjectStore::Transaction& t,
     if (peer_log_requested.count(peer) ||
         peer_summary_requested.count(peer)) continue;
    
-    Info& pi = peer_info[peer];
     assert(pi.last_update <= log.top);
 
     if (pi.last_update < log.bottom) {
