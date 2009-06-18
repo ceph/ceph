@@ -659,14 +659,17 @@ protected:
   int         role;    // 0 = primary, 1 = replica, -1=none.
   int         state;   // see bit defns above
 
+public:
+  eversion_t  last_complete_ondisk;  // last_complete that has committed.
+
   // primary state
  public:
   vector<int> acting;
-  eversion_t  last_complete_ondisk;  // last_complete that has committed.
-
-  // [primary only] content recovery state
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // min over last_complete_ondisk, peer_last_complete_ondisk
+  eversion_t  pg_trim_to;
+
+  // [primary only] content recovery state
   bool        have_master_log;
  protected:
   set<int>    prior_set;   // current+prior OSDs, as defined by info.history.last_epoch_started.
@@ -740,6 +743,8 @@ public:
     min_last_complete_ondisk = min;
     return true;
   }
+
+  virtual void calc_trim_to() = 0;
 
   void proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, Missing& omissing, int from);
   bool merge_old_entry(ObjectStore::Transaction& t, Log::Entry& oe);

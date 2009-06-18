@@ -246,7 +246,6 @@ public:
 
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
-    eversion_t trim_to;
 
     ObjectContext *clone_obc;    // if we created a clone
 
@@ -437,6 +436,7 @@ protected:
 
   void apply_and_flush_repops(bool requeue);
 
+  void calc_trim_to();
 
 public:
   ReplicatedPG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 

@@ -1745,10 +1745,14 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 
 void PG::trim_peers()
 {
-  dout(10) << "trim_peers" << dendl;
-  for (unsigned i=1; i<acting.size(); i++)
-    osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid, min_last_complete_ondisk),
-				 osd->osdmap->get_inst(acting[i]));
+  calc_trim_to();
+  dout(10) << "trim_peers " << pg_trim_to << dendl;
+  if (pg_trim_to != eversion_t()) {
+    for (unsigned i=1; i<acting.size(); i++)
+      osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid,
+						  pg_trim_to),
+				   osd->osdmap->get_inst(acting[i]));
+  }
 }
 
 

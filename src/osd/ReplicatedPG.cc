@@ -413,6 +413,18 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   delete op;
 }
 
+void ReplicatedPG::calc_trim_to()
+{
+  if (is_clean() ||
+      log.top.version - log.bottom.version > info.stats.num_objects) {
+    pg_trim_to = min_last_complete_ondisk;
+    if (pg_trim_to != eversion_t()) {
+      assert(pg_trim_to >= log.bottom);
+      assert(pg_trim_to <= log.top);
+    }
+  } else
+    pg_trim_to = eversion_t();
+}
 
 /** do_op - do an op
  * pg lock will be held (if multithreaded)
@@ -553,11 +565,9 @@ void ReplicatedPG::do_op(MOSDOp *op)
     assert(op->may_write());
 
     // trim log?
-    if (is_clean() ||
-	log.top.version - log.bottom.version > info.stats.num_objects)
-      ctx->trim_to = min_last_complete_ondisk;
+    calc_trim_to();
 
-    log_op(ctx->log, ctx->trim_to, ctx->local_t);
+    log_op(ctx->log, pg_trim_to, ctx->local_t);
   }
   
   // continuing on to write path, make sure object context is registered
@@ -1668,7 +1678,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now,
     ::encode(repop->ctx->log, wr->logbl);
   }
 
-  wr->pg_trim_to = repop->ctx->trim_to;
+  wr->pg_trim_to = pg_trim_to;
   wr->peer_stat = osd->get_my_stat_for(now, dest);
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
