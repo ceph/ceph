@@ -551,7 +551,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
 
     assert(op->may_write());
 
-    log_op(ctx->log, ctx->local_t);
+    // trim log?
+    if (is_clean() ||
+	log.top.version - log.bottom.version > info.stats.num_objects)
+      ctx->trim_to = peers_complete_thru;
+
+    log_op(ctx->log, ctx->trim_to, ctx->local_t);
   }
   
   // continuing on to write path, make sure object context is registered
@@ -1426,15 +1431,10 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void ReplicatedPG::log_op(vector<Log::Entry>& logv, ObjectStore::Transaction& t)
+void ReplicatedPG::log_op(vector<Log::Entry>& logv, eversion_t trim_to,
+			  ObjectStore::Transaction& t)
 {
   dout(10) << "log_op " << log << dendl;
-
-  // trim log?
-  eversion_t trim_to;
-  if (is_clean() ||
-      log.top.version - log.bottom.version > info.stats.num_objects)
-    trim_to = peers_complete_thru;
 
   bufferlist log_bl;
   for (vector<Log::Entry>::iterator p = logv.begin();
@@ -1680,8 +1680,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now,
     ::encode(repop->ctx->log, wr->logbl);
   }
 
-  if (osd->osdmap->get_pg_size(info.pgid) == acting.size())
-    wr->pg_trim_to = peers_complete_thru;
+  wr->pg_trim_to = repop->ctx->trim_to;
   wr->peer_stat = osd->get_my_stat_for(now, dest);
   osd->messenger->send_message(wr, osd->osdmap->get_inst(dest));
 }
@@ -2081,7 +2080,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       p = op->logbl.begin();
       ::decode(log, p);
       
-      log_op(log, localt);
+      log_op(log, op->pg_trim_to, localt);
 
       tls.push_back(&opt);
       tls.push_back(&localt);
@@ -2100,7 +2099,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       ctx->snapc = op->snapc;
       
       prepare_transaction(ctx);
-      log_op(ctx->log, ctx->local_t);
+      log_op(ctx->log, op->pg_trim_to, ctx->local_t);
     
       tls.push_back(&ctx->op_t);
       tls.push_back(&ctx->local_t);
@@ -2123,7 +2122,6 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   MOSDSubOpReply *ack = new MOSDSubOpReply(op, 0, osd->osdmap->get_epoch(), CEPH_OSD_FLAG_ACK);
   ack->set_peer_stat(osd->get_my_stat_for(g_clock.now(), ackerosd));
   osd->messenger->send_message(ack, osd->osdmap->get_inst(ackerosd));
-  
 }
 
 void ReplicatedPG::sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete)

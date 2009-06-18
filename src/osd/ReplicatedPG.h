@@ -246,6 +246,7 @@ public:
 
     ObjectStore::Transaction op_t, local_t;
     vector<PG::Log::Entry> log;
+    eversion_t trim_to;
 
     ObjectContext *clone_obc;    // if we created a clone
 
@@ -403,7 +404,7 @@ protected:
   void add_interval_usage(interval_set<__u64>& s, pg_stat_t& st);  
 
   int prepare_transaction(OpContext *ctx);
-  void log_op(vector<Log::Entry>& log, ObjectStore::Transaction& t);
+  void log_op(vector<Log::Entry>& log, eversion_t trim_to, ObjectStore::Transaction& t);
   
   friend class C_OSD_OpCommit;
   friend class C_OSD_RepModifyCommit;
