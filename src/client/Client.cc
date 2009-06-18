@@ -892,6 +892,7 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_CLOSE:
     mds_sessions.erase(from);
+    mount_cond.Signal();
     // FIXME: kick requests (hard) so that they are redirected.  or fail.
     break;
 
@@ -2418,6 +2419,12 @@ int Client::unmount()
 	    << " seq " << p->second.seq << dendl;
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second.seq),
 			    mdsmap->get_inst(p->first));
+  }
+
+  // wait for sessions to close
+  while (mds_sessions.size()) {
+    dout(2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
+    mount_cond.Wait(client_lock);
   }
 
   // leave cluster
