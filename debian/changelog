@@ -1,3 +1,17 @@
+ceph (0.9-1) unstable; urgency=low
+
+  * mds exherts memory pressure on clients
+  * initial version of librados
+  * object classes
+  * a few critical crush bugfixes
+  * osd recovery fixes
+  * objects are strings
+  * improved metadata to eventually aid in disaster recovery
+  * kclient: fixed snap vs truncate bug
+  * kclient: readdir fixes
+
+ -- sage <sage@newdream.net>  Thu, 18 Jun 2009 13:18:00 -0800
+
 ceph (0.8-1) unstable; urgency=low
 
   * mount error reporting
