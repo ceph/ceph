@@ -55,14 +55,15 @@
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
+#define MSG_OSD_PG_TRIM        86
 
-#define MSG_PGSTATS            86
-#define MSG_PGSTATSACK         87
+#define MSG_PGSTATS            87
+#define MSG_PGSTATSACK         88
 
-#define MSG_OSD_PG_CREATE      88
-#define MSG_REMOVE_SNAPS       89
+#define MSG_OSD_PG_CREATE      89
+#define MSG_REMOVE_SNAPS       90
 
-#define MSG_OSD_SCRUB          90
+#define MSG_OSD_SCRUB          91
 
 
 

@@ -1691,6 +1691,18 @@ void PG::write_log(ObjectStore::Transaction& t)
   dirty_log = false;
 }
 
+void PG::trim(ObjectStore::Transaction& t, eversion_t trim_to)
+{
+  // trim?
+  if (trim_to > log.bottom) {
+    dout(10) << "trim " << log << " to " << trim_to << dendl;
+    log.trim(t, trim_to);
+    info.log_bottom = log.bottom;
+    info.log_backlog = log.backlog;
+    trim_ondisklog_to(t, trim_to);
+  }
+}
+
 void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v) 
 {
   dout(15) << "trim_ondisk_log_to v " << v << dendl;
@@ -1747,7 +1759,7 @@ void PG::add_log_entry(Log::Entry& e, bufferlist& log_bl)
 
 
 void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
-		    eversion_t log_version, eversion_t trim_to)
+		    eversion_t log_version)
 {
   dout(10) << "append_log " << ondisklog.bottom << "~" << ondisklog.length()
 	   << " adding " << bl.length() <<  dendl;
@@ -1763,17 +1775,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
   t.collection_setattr(info.pgid.to_coll(), "ondisklog", blb);
-
-  
-  // trim?
-  if (is_complete() && trim_to > log.bottom) {
-    dout(10) << " trimming " << log << " to " << trim_to << dendl;
-    log.trim(t, trim_to);
-    info.log_bottom = log.bottom;
-    info.log_backlog = log.backlog;
-    trim_ondisklog_to(t, trim_to);
-  }
-  dout(10) << " ondisklog " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
+  dout(10) << "append_log  now " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
 }
 
 void PG::read_log(ObjectStore *store)

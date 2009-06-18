@@ -57,6 +57,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGTrim.h"
 
 #include "messages/MOSDAlive.h"
 
@@ -1640,6 +1641,9 @@ void OSD::_dispatch(Message *m)
       case MSG_OSD_PG_INFO:
         handle_pg_info((MOSDPGInfo*)m);
         break;
+      case MSG_OSD_PG_TRIM:
+        handle_pg_trim((MOSDPGTrim*)m);
+        break;
 
 	// client ops
       case CEPH_MSG_OSD_OP:
@@ -3052,6 +3056,37 @@ void OSD::handle_pg_info(MOSDPGInfo *m)
   if (created)
     update_heartbeat_peers();
 
+  delete m;
+}
+
+void OSD::handle_pg_trim(MOSDPGTrim *m)
+{
+  dout(7) << "handle_pg_trim " << *m << " from " << m->get_source() << dendl;
+
+  int from = m->get_source().num();
+  if (!require_same_or_newer_map(m, m->epoch)) return;
+
+  if (!_have_pg(m->pgid)) {
+    dout(10) << " don't have pg " << m->pgid << dendl;
+  } else {
+    PG *pg = _lookup_lock_pg(m->pgid);
+    if (m->epoch < pg->info.history.same_since) {
+      dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
+      pg->unlock();
+      goto out;
+    }
+    assert(pg);
+    assert(from == pg->acting[0]);
+
+    ObjectStore::Transaction t;
+    pg->trim(t, m->trim_to);
+    pg->write_info(t);
+    pg->unlock();
+
+    store->apply_transaction(t);
+  }
+
+ out:
   delete m;
 }
 

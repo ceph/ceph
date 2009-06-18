@@ -419,6 +419,7 @@ protected:
   void finish_recovery_op();
   int recover_primary(int max);
   int recover_replicas(int max);
+  void trim_replicas();
 
   void sub_op_modify(MOSDSubOp *op);
   void sub_op_modify_ondisk(MOSDSubOp *op, int ackerosd, eversion_t last_complete);

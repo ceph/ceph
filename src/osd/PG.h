@@ -851,8 +851,9 @@ public:
   void write_info(ObjectStore::Transaction& t);
   void write_log(ObjectStore::Transaction& t);
   void append_log(ObjectStore::Transaction &t, bufferlist& bl,
-		  eversion_t log_version, eversion_t trim_to);
+		  eversion_t log_version);
   void read_log(ObjectStore *store);
+  void trim(ObjectStore::Transaction& t, eversion_t v);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
 
   void read_state(ObjectStore *store);

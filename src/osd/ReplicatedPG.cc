@@ -26,6 +26,7 @@
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGRemove.h"
+#include "messages/MOSDPGTrim.h"
 
 #include "messages/MOSDPing.h"
 
@@ -1441,7 +1442,8 @@ void ReplicatedPG::log_op(vector<Log::Entry>& logv, eversion_t trim_to,
        p != logv.end();
        p++)
     add_log_entry(*p, log_bl);
-  append_log(t, log_bl, logv[0].version, trim_to);
+  append_log(t, log_bl, logv[0].version);
+  trim(t, trim_to);
 
   // update the local pg, pg log
   write_info(t);
@@ -1729,7 +1731,7 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
       repop->waitfor_disk.erase(fromosd);
       repop->waitfor_nvram.erase(fromosd);
       repop->waitfor_ack.erase(fromosd);
-      repop->pg_complete_thru[fromosd] = pg_complete_thru;
+      peer_info[fromosd].last_complete;
     }
   } else if (ack_type & CEPH_OSD_FLAG_ONNVRAM) {
     // nvram
@@ -2102,6 +2104,12 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       log_op(ctx->log, op->pg_trim_to, ctx->local_t);
     
       tls.push_back(&ctx->op_t);
+      tls.push_back(&ctx->local_t);
+    }
+  } else {
+    // just trim the log
+    if (op->pg_trim_to != eversion_t()) {
+      trim(ctx->local_t, op->pg_trim_to);
       tls.push_back(&ctx->local_t);
     }
   }
@@ -2972,6 +2980,7 @@ int ReplicatedPG::recover_primary(int max)
   if (is_all_uptodate()) {
     dout(-7) << "recover_primary complete" << dendl;
     finish_recovery();
+    trim_replicas();
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
   }
@@ -3016,15 +3025,31 @@ int ReplicatedPG::recover_replicas(int max)
   // nothing to do!
   dout(-10) << "recover_replicas - nothing to do!" << dendl;
 
-  if (is_all_uptodate()) 
+  if (is_all_uptodate()) {
     finish_recovery();
-  else {
+    trim_replicas();
+  } else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
   }
 
   return started;
 }
 
+
+void ReplicatedPG::trim_replicas()
+{
+  dout(10) << "trim_replicas" << dendl;
+
+  return;  // hmm FIXME
+
+
+  // trim myself
+  eversion_t trim_to;
+
+  for (unsigned i=1; i<acting.size(); i++)
+    osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid, trim_to),
+				 osd->osdmap->get_inst(acting[i]));
+}
 
 
 /** clean_up_local

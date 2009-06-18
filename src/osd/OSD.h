@@ -567,6 +567,7 @@ protected:
   void handle_pg_notify(class MOSDPGNotify *m);
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_info(class MOSDPGInfo *m);
+  void handle_pg_trim(class MOSDPGTrim *m);
   void handle_pg_remove(class MOSDPGRemove *m);
 
   // helper for handle_pg_log and handle_pg_info
