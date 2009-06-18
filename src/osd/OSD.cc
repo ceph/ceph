@@ -2889,22 +2889,12 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     }
 
     if (had) {
-      if (pg->is_active() && 
-          (*it).is_uptodate() && 
-	  acting) {
-        pg->uptodate_set.insert(from);
-        dout(10) << *pg << " osd" << from << " now uptodate (" << pg->uptodate_set  
-                 << "): " << *it << dendl;
-      } else {
-        // hmm, maybe keep an eye out for cases where we see this, but peer should happen.
-        dout(10) << *pg << " already had notify info from osd" << from << ": " << *it << dendl;
-      }
-      if (pg->is_all_uptodate()) 
-	pg->finish_recovery();
+      // hmm, maybe keep an eye out for cases where we see this, but peer should happen.
+      dout(10) << *pg << " hmm, already had notify info from osd" << from << ": " << *it << dendl;
     } else {
       pg->peer(t, query_map, &info_map);
+      pg->update_stats();
     }
-    pg->update_stats();
     pg->unlock();
   }
   
