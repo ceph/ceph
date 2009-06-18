@@ -1274,13 +1274,8 @@ retry:
 		dout(10, "__do_pending_vmtruncate %p flushing snaps first\n",
 		     inode);
 		spin_unlock(&inode->i_lock);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 		filemap_write_and_wait_range(&inode->i_data, 0,
 					     CEPH_FILE_MAX_SIZE);
-#else
-# warning i may not flush all data after a snapshot + truncate.. i export need 2.6.30
-		filemap_write_and_wait(&inode->i_data);
-#endif
 		goto retry;
 	}
 

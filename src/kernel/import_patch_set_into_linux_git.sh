@@ -26,7 +26,7 @@ git branch series_start
 git cherry-pick 5556036065d8b04b2f7dd439fbf0d710e295cd44
 
 git add Documentation/filesystems/ceph.txt
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: documentation
 
 Mount options, syntax.
@@ -36,7 +36,7 @@ EOF
 git add $target/ceph/ceph_fs.h
 git add $target/ceph/msgr.h
 git add $target/ceph/rados.h
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: on-wire types
 
 These headers describe the types used to exchange messages between the
@@ -52,7 +52,7 @@ EOF
 git add $target/ceph/types.h
 git add $target/ceph/super.h
 git add $target/ceph/ceph_ver.h
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: client types
 
 We first define constants, types, and prototypes for the kernel client
@@ -64,7 +64,7 @@ monitor clients, and the messaging layer.
 EOF
 
 git add $target/ceph/super.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: super.c
 
 Mount option parsing, client setup and teardown, and a few odds and
@@ -74,7 +74,7 @@ EOF
 
 
 git add $target/ceph/inode.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: inode operations
 
 Inode cache and inode operations.  We also include routines to
@@ -93,7 +93,7 @@ to reattach it in the correct position in the hierarchy.
 EOF
 
 git add $target/ceph/dir.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: directory operations
 
 Directory operations, including lookup, are defined here.  We take
@@ -110,7 +110,7 @@ may be needed.
 EOF
 
 git add $target/ceph/file.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: file operations
 
 File open and close operations, and read and write methods that ensure
@@ -122,7 +122,7 @@ back to the MDS.
 EOF
 
 git add $target/ceph/addr.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: address space operations
 
 The ceph address space methods are concerned primarily with managing
@@ -141,7 +141,7 @@ git add $target/ceph/mds_client.h
 git add $target/ceph/mds_client.c
 git add $target/ceph/mdsmap.h
 git add $target/ceph/mdsmap.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: MDS client
 
 The MDS client is responsible for submitting requests to the MDS
@@ -168,7 +168,7 @@ git add $target/ceph/osd_client.h
 git add $target/ceph/osd_client.c
 git add $target/ceph/osdmap.h
 git add $target/ceph/osdmap.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: OSD client
 
 The OSD client is responsible for reading and writing data from/to the
@@ -189,7 +189,7 @@ git add $target/ceph/crush/crush.c
 git add $target/ceph/crush/mapper.h
 git add $target/ceph/crush/mapper.c
 git add $target/ceph/crush/hash.h
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: CRUSH mapping algorithm
 
 CRUSH is a fancy hash function designed to map inputs onto a dynamic
@@ -208,7 +208,7 @@ EOF
 
 git add $target/ceph/mon_client.h
 git add $target/ceph/mon_client.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: monitor client
 
 The monitor cluster is responsible for managing cluster membership
@@ -219,7 +219,7 @@ MDS and OSD maps, and getting statfs() information.
 EOF
 
 git add $target/ceph/caps.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: capability management
 
 The Ceph metadata servers control client access to data by issuing
@@ -243,7 +243,7 @@ those that are "wanted" due to an open file) are explicitly released.
 EOF
 
 git add $target/ceph/snap.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: snapshot management
 
 Ceph snapshots rely on client cooperation in determining which
@@ -262,7 +262,7 @@ EOF
 git add $target/ceph/decode.h
 git add $target/ceph/messenger.h
 git add $target/ceph/messenger.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: messenger library
 
 A generic message passing library is used to communicate with all
@@ -275,7 +275,7 @@ This implementation is based on TCP.
 EOF
 
 git add $target/ceph/export.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: nfs re-export support
 
 Basic NFS re-export support is included.  This mostly works.  However,
@@ -286,7 +286,7 @@ EOF
 
 git add $target/ceph/ioctl.h
 git add $target/ceph/ioctl.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: ioctls
 
 A few Ceph ioctls for getting and setting file layout (striping)
@@ -295,7 +295,7 @@ parameters.
 EOF
 
 git add $target/ceph/ceph_debug.h
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: debugging
 
 Some debugging infrastructure, including the ability to adjust the
@@ -304,7 +304,7 @@ level of debug output on a per-file basis.
 EOF
 
 git add $target/ceph/debugfs.c
-git commit -F - <<EOF
+git commit -s -F - <<EOF
 ceph: debugfs
 
 Basic state information is available via /debug/ceph, including
@@ -316,7 +316,7 @@ EOF
 git apply $cephtree/src/kernel/kbuild.staging.patch
 git add $target/ceph/Makefile
 git add $target/ceph/Kconfig
-git commit -F - <<EOF $target/Kconfig $target/ceph/Kconfig $target/Makefile $target/ceph/Makefile
+git commit -s -F - <<EOF $target/Kconfig $target/ceph/Kconfig $target/Makefile $target/ceph/Makefile
 ceph: Kconfig, Makefile
 
 Kconfig options and Makefile.

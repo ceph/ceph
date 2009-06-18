@@ -104,11 +104,7 @@ static int ceph_set_page_dirty(struct page *page)
 	spin_unlock(&inode->i_lock);
 
 	/* now adjust page */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 	spin_lock_irq(&mapping->tree_lock);
-#else
-	write_lock_irq(&mapping->tree_lock);
-#endif
 	if (page->mapping) {	/* Race with truncate? */
 		WARN_ON_ONCE(!PageUptodate(page));
 
@@ -132,11 +128,7 @@ static int ceph_set_page_dirty(struct page *page)
 		undo = 1;
 	}
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 	spin_unlock_irq(&mapping->tree_lock);
-#else
-	write_unlock_irq(&mapping->tree_lock);
-#endif
 
 	if (undo)
 		ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
@@ -315,17 +307,9 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		SetPageUptodate(page);
 		unlock_page(page);
 		if (pagevec_add(&pvec, page) == 0)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 			pagevec_lru_add_file(&pvec);   /* add to lru */
-#else
-			pagevec_lru_add(&pvec);   /* add to lru */
-#endif
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 	pagevec_lru_add_file(&pvec);
-#else
-	pagevec_lru_add(&pvec);
-#endif
 	rc = 0;
 
 out:
@@ -676,11 +660,7 @@ get_more_pages:
 			dout(20, "? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);  /* first page */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 			else if (!trylock_page(page))
-#else
-			else if (TestSetPageLocked(page))
-#endif
 				break;
 
 			/* only dirty pages, or our accounting breaks */
@@ -893,11 +873,7 @@ static int ceph_write_begin(struct file *file, struct address_space *mapping,
 
 	/* get a page*/
 retry:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
 	page = grab_cache_page_write_begin(mapping, index, 0);
-#else
-	page = __grab_cache_page(mapping, index);
-#endif
 	if (!page)
 		return -ENOMEM;
 	*pagep = page;
@@ -973,13 +949,9 @@ retry_locked:
 	     end_in_page - pos_in_page != PAGE_CACHE_SIZE)) {
 		dout(20, " zeroing %p 0 - %d and %d - %d\n",
 		     page, pos_in_page, end_in_page, (int)PAGE_CACHE_SIZE);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 		zero_user_segments(page,
 				   0, pos_in_page,
 				   end_in_page, PAGE_CACHE_SIZE);
-#else
-		simple_prepare_write(file, page, pos_in_page, end_in_page);
-#endif
 		return 0;
 	}
 
@@ -1015,13 +987,8 @@ static int ceph_write_end(struct file *file, struct address_space *mapping,
 	     inode, page, (int)pos, (int)copied, (int)len);
 
 	/* zero the stale part of the page if we did a short copy */
-	if (copied < len) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+	if (copied < len)
 		zero_user_segment(page, from+copied, len);
-#else
-		zero_user_page(page, from+copied, len-copied, KM_USER0);
-#endif
-	}
 
 	/* did file size increase? */
 	/* (no need for i_size_read(); we caller holds i_mutex */
@@ -1077,17 +1044,11 @@ const struct address_space_operations ceph_aops = {
 /*
  * Reuse write_{begin,end} here for simplicity.
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
-#else
-static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
-#endif
 {
 	struct inode *inode = vma->vm_file->f_dentry->d_inode;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 	struct page *page = vmf->page;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
-#endif
 	loff_t off = page->index << PAGE_CACHE_SHIFT;
 	loff_t size, len;
 	struct page *locked_page = NULL;
@@ -1105,7 +1066,6 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 	ret = ceph_write_begin(vma->vm_file, inode->i_mapping, off, len, 0,
 			       &locked_page, &fsdata);
 	WARN_ON(page != locked_page);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 	if (!ret) {
 		/*
 		 * doing the following, instead of calling
@@ -1119,11 +1079,6 @@ static int ceph_page_mkwrite(struct vm_area_struct *vma, struct page *page)
 	} else {
 		ret = VM_FAULT_SIGBUS;
 	}
-#else
-	if (!ret)
-		ceph_write_end(vma->vm_file, inode->i_mapping, off, len, len,
-			       locked_page, fsdata);
-#endif
 	dout(10, "page_mkwrite %p %llu~%llu = %d\n", inode, off, len, ret);
 	return ret;
 }

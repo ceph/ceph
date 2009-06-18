@@ -1197,13 +1197,8 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 
 	head->mdsmap_epoch = cpu_to_le32(mdsc->mdsmap->m_epoch);
 	head->op = cpu_to_le32(req->r_op);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
 	head->caller_uid = cpu_to_le32(current_fsuid());
 	head->caller_gid = cpu_to_le32(current_fsgid());
-#else
-	head->caller_uid = cpu_to_le32(current->fsuid);
-	head->caller_gid = cpu_to_le32(current->fsgid);
-#endif
 	head->args = req->r_args;
 
 	ceph_encode_filepath(&p, end, ino1, path1);
