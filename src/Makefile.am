@@ -331,6 +331,8 @@ noinst_HEADERS = \
         client/fuse.h\
         client/fuse_ll.h\
         client/hadoop/CephFSInterface.h\
+	cls_acl.cc\
+	cls_crypto.cc\
 	cm.txt\
         common/arch.h\
 	common/debug.h\
@@ -347,6 +349,7 @@ noinst_HEADERS = \
         common/Finisher.h\
         common/LogType.h\
         common/Logger.h\
+        common/MemoryModel.h\
         common/Mutex.h\
         common/RWLock.h\
         common/Semaphore.h\
@@ -562,6 +565,7 @@ noinst_HEADERS = \
         messages/MOSDPGNotify.h\
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\
+        messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
 	messages/MOSDScrub.h\
         messages/MOSDSubOp.h\
@@ -598,6 +602,7 @@ noinst_HEADERS = \
         msg/msg_types.h\
         msg/tcp.cc\
         msg/tcp.h\
+	objclass/objclass.h\
         os/BDBMap.h\
         os/Fake.h\
         os/FakeStoreBDBCollections.h\
@@ -612,6 +617,7 @@ noinst_HEADERS = \
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
         osd/PG.h\
+        osd/PGLS.h\
         osd/RAID4PG.h\
         osd/ReplicatedPG.h\
         osd/osd_types.h\
@@ -620,6 +626,7 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
+	s3/s3access.h\
 	sample.ceph.conf
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \
