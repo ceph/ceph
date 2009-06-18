@@ -7,28 +7,38 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include <openssl/md5.h>
+
 #include "fcgiapp.h"
 
 #include "s3access.h"
 
 #include <map>
 #include <string>
+#include <vector>
 #include <iostream>
 
 using namespace std;
 
 static FILE *dbg;
 
+struct s3_err {
+  const char *code;
+  const char *message;
+};
 
 struct req_state {
+   FCGX_ParamArray envp;
    FCGX_Stream *in;
    FCGX_Stream *out;
+   bool content_started;
    int indent;
    const char *path_name;
    const char *host;
    const char *method;
    const char *query;
    const char *length;
+   struct s3_err err;
 };
 
 
@@ -111,15 +121,18 @@ string& XMLArgs::get(const char *name)
 
 static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *in, FCGX_Stream *out)
 {
+  s->envp = envp;
   s->in = in;
   s->out = out;
+  s->content_started = false;
   s->indent = 0;
   s->path_name = FCGX_GetParam("SCRIPT_NAME", envp);
   s->method = FCGX_GetParam("REQUEST_METHOD", envp);
   s->host = FCGX_GetParam("HTTP_HOST", envp);
   s->query = FCGX_GetParam("QUERY_STRING", envp);
   s->length = FCGX_GetParam("CONTENT_LENGTH", envp);
-  
+  s->err.code = NULL;
+  s->err.message = NULL;
 }
 
 static void buf_to_hex(const unsigned char *buf, int len, char *str)
@@ -151,7 +164,7 @@ static struct errno_http hterrs[] = {
     { ENOTEMPTY, "409" },
     { 0, NULL }};
 
-static void dump_errno(struct req_state *s, int err)
+static void dump_errno(struct req_state *s, int err, const char *code = NULL, const char *message = NULL)
 {
   const char *err_str = "500";
 
@@ -169,12 +182,12 @@ static void dump_errno(struct req_state *s, int err)
   }
 
   dump_status(s, err_str);
-  
-}
-
-static void end_header(struct req_state *s)
-{
-  FCGX_FPrintF(s->out,"Content-type: text/plain\r\n\r\n");      
+  if (err) {
+    struct s3_err e;
+    e.code = code;
+    e.message = message;
+    s->err = e;
+  }
 }
 
 static void open_section(struct req_state *s, const char *name)
@@ -235,9 +248,27 @@ static void dump_owner(struct req_state *s, const char *id, int id_size, const c
   close_section(s, "Owner");
 }
 
-static void dump_start(struct req_state *s)
+static void dump_start_xml(struct req_state *s)
 {
-  dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
+  if (!s->content_started) {
+    dump_entry(s, "xml version=\"1.0\" encoding=\"UTF-8\"");
+    s->content_started = true;
+  }
+}
+
+static void end_header(struct req_state *s)
+{
+  FCGX_FPrintF(s->out,"Content-type: text/plain\r\n\r\n");
+  if (s->err.code || s->err.message) {
+    dump_start_xml(s);
+    struct s3_err &err = s->err;
+    open_section(s, "Error");
+    if (err.code)
+      dump_value(s, "Code", err.code);
+    if (err.message)
+      dump_value(s, "Message", err.message);
+    close_section(s, "Error");
+  }
 }
 
 static void list_all_buckets_start(struct req_state *s)
@@ -268,7 +299,7 @@ void do_list_buckets(struct req_state *s)
   r = list_buckets_init(id, &handle);
   dump_errno(s, (r < 0 ? r : 0));
   end_header(s);
-  dump_start(s);
+  dump_start_xml(s);
 
   list_all_buckets_start(s);
   dump_owner(s, (const char *)id.c_str(), id.size(), "foobi");
@@ -331,7 +362,7 @@ void do_list_objects(struct req_state *s)
   dump_errno(s, (r < 0 ? r : 0));
 
   end_header(s);
-  dump_start(s);
+  dump_start_xml(s);
   if (r < 0)
     return;
 
@@ -386,6 +417,9 @@ void do_create_object(struct req_state *s)
   int r = -EINVAL;
   string str(req_name);
   int pos = str.find('/');
+  char *data = NULL;
+  const char *err_code = NULL;
+  const char *err_message = NULL;
   if (pos < 0) {
     goto done;
   } else {
@@ -394,7 +428,6 @@ void do_create_object(struct req_state *s)
     string id = "0123456789ABCDEF";
 
     size_t cl = atoll(s->length);
-    char *data = NULL;
     size_t actual = 0;
     if (cl) {
       data = (char *)malloc(cl);
@@ -404,11 +437,36 @@ void do_create_object(struct req_state *s)
       }
       actual = FCGX_GetStr(data, cl, s->in);
     }
-    r = put_obj(id, bucket_name, obj_name, data, actual);
-    free(data);
+
+    char *supplied_md5 = FCGX_GetParam("HTTP_CONTENT_MD5", s->envp);
+    char calc_md5[MD5_DIGEST_LENGTH];
+    MD5_CTX c;
+    unsigned char m[MD5_DIGEST_LENGTH];
+
+    if (supplied_md5 && strlen(supplied_md5) != MD5_DIGEST_LENGTH*2) {
+      err_code = "InvalidDigest";
+      r = -EINVAL;
+      goto done;
+    }
+
+    MD5_Init(&c);
+    MD5_Update(&c, data, (unsigned long)actual);
+    MD5_Final(m, &c);
+
+    buf_to_hex(m, MD5_DIGEST_LENGTH, calc_md5);
+
+    if (supplied_md5 && strcmp(calc_md5, supplied_md5)) {
+       err_code = "BadDigest";
+       r = -EINVAL;
+       goto done;
+    }
+
+    string md5_str(calc_md5);
+    r = put_obj(id, bucket_name, obj_name, data, actual, md5_str);
   }
 done:
-  dump_errno(s, r);
+  free(data);
+  dump_errno(s, r, err_code, err_message);
 
   end_header(s);
 }

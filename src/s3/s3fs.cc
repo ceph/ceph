@@ -1,4 +1,3 @@
-
 #include <errno.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -9,6 +8,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/xattr.h>
 
 #include "s3access.h"
 
@@ -151,7 +151,7 @@ int create_bucket(std::string& id, std::string& bucket)
 }
 
 
-int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size)
+int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size, string& md5)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -169,6 +169,14 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
     unlink(buf);
     return r;
   }
+
+  r = fsetxattr(fd, "user.etag", md5.c_str(), md5.size(), 0);
+  if (r < 0) {
+     r = -errno;
+     close(r);
+     return r;
+  }
+
 
   r = close(r);
   if (r < 0)
