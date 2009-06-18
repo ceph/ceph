@@ -2567,6 +2567,20 @@ void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
   if (same_since == info.history.same_since) {
     dout(10) << "_committed last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
+
+    if (last_complete_ondisk == info.last_update) {
+      if (is_replica()) {
+	// we are fully up to date.  tell the primary!
+	osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid,
+						    last_complete_ondisk),
+				     osd->osdmap->get_inst(get_primary()));
+      } else if (is_primary()) {
+	// we are the primary.  tell replicas to trim?
+	if (calc_min_last_complete_ondisk())
+	  trim_peers();
+      }
+    }
+
   } else {
     dout(10) << "_committed pg has changed, not touching last_complete_ondisk" << dendl;
   }
@@ -2993,7 +3007,6 @@ int ReplicatedPG::recover_primary(int max)
   if (is_all_uptodate()) {
     dout(-7) << "recover_primary complete" << dendl;
     finish_recovery();
-    trim_replicas();
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
   }
@@ -3040,7 +3053,6 @@ int ReplicatedPG::recover_replicas(int max)
 
   if (is_all_uptodate()) {
     finish_recovery();
-    trim_replicas();
   } else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
   }
@@ -3048,21 +3060,6 @@ int ReplicatedPG::recover_replicas(int max)
   return started;
 }
 
-
-void ReplicatedPG::trim_replicas()
-{
-  dout(10) << "trim_replicas" << dendl;
-
-  return;  // hmm FIXME
-
-
-  // trim myself
-  eversion_t trim_to;
-
-  for (unsigned i=1; i<acting.size(); i++)
-    osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid, trim_to),
-				 osd->osdmap->get_inst(acting[i]));
-}
 
 
 /** clean_up_local

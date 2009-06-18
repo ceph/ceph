@@ -12,7 +12,6 @@
  * 
  */
 
-
 #ifndef __MOSDPGTRIM_H
 #define __MOSDPGTRIM_H
 

@@ -3076,14 +3076,23 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
       goto out;
     }
     assert(pg);
-    assert(from == pg->acting[0]);
 
-    ObjectStore::Transaction t;
-    pg->trim(t, m->trim_to);
-    pg->write_info(t);
+    if (pg->is_primary()) {
+      // peer is informing us of their last_complete_ondisk
+      dout(10) << *pg << " replica osd" << from << " lcod " << m->trim_to << dendl;
+      pg->peer_last_complete_ondisk[from] = m->trim_to;
+      if (pg->calc_min_last_complete_ondisk()) {
+	dout(10) << *pg << " min lcod now " << pg->min_last_complete_ondisk << dendl;
+	pg->trim_peers();
+      }
+    } else {
+      // primary is instructing us to trim
+      ObjectStore::Transaction t;
+      pg->trim(t, m->trim_to);
+      pg->write_info(t);
+      store->apply_transaction(t);
+    }
     pg->unlock();
-
-    store->apply_transaction(t);
   }
 
  out:

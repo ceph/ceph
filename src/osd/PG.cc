@@ -25,6 +25,7 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGTrim.h"
 
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
@@ -1740,6 +1741,14 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
 
   if (!g_conf.osd_preserve_trimmed_log)
     t.zero(0, log_oid, 0, ondisklog.bottom & ~4095);
+}
+
+void PG::trim_peers()
+{
+  dout(10) << "trim_peers" << dendl;
+  for (unsigned i=1; i<acting.size(); i++)
+    osd->messenger->send_message(new MOSDPGTrim(osd->osdmap->get_epoch(), info.pgid, min_last_complete_ondisk),
+				 osd->osdmap->get_inst(acting[i]));
 }
 
 

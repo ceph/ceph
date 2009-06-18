@@ -403,6 +403,7 @@ public:
     void trim(ObjectStore::Transaction &t, eversion_t s);
     void trim_write_ahead(eversion_t last_update);
 
+
     ostream& print(ostream& out) const;
   };
   
@@ -734,6 +735,8 @@ public:
       if (a < min)
 	min = a;
     }
+    if (min == min_last_complete_ondisk)
+      return false;
     min_last_complete_ondisk = min;
     return true;
   }
@@ -857,6 +860,7 @@ public:
   void read_log(ObjectStore *store);
   void trim(ObjectStore::Transaction& t, eversion_t v);
   void trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v);
+  void trim_peers();
 
   void read_state(ObjectStore *store);
   coll_t make_snap_collection(ObjectStore::Transaction& t, snapid_t sn);
