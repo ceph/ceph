@@ -13,27 +13,15 @@ v0.9
 /- make mds exhert memory pressure on client caps, leases
 /- librados
 /  - async io
-  - list_objects
-    - move pg iteration into Objecter (RadosClietn should be a minimal wrapper)
-  - perl swig wrapper
-  - radostool
+/  - list_objects
+/  - rados
 /    - --snap N
 /    - fetch/store/remove object
-    - call method
 /    - list objects
 /    - list pools
 /- object classes
-- optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
-
-- repair metadata.. parent pointer on CDir objects
-- namespace reconstruction
-- repair file ioctl?
-- repair pg (rebuild log)
-
-bugs
-- rm -r weirdness
-- spurious "ls: reading directory 1: Resource temporarily unavailable"
-  (concurrent creates and ls in a big dir)
+/- crush bugfixes
+/- kclient readdir fixes
 
 later
 - client reconnect after long eviction; and slow delayed reconnect
@@ -50,14 +38,22 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
+- move pg iteration into Objecter (RadosClietn should be a minimal wrapper)
+- perl swig wrapper
+- call method
 - snaps
 - merge pgs
 - destroy pg_pools
 - autosize pg_pools?
 - security
-- c library glue to c3
 
 repair
+- repair metadata.. 
+/  - parent pointer on CDir objects
+  - update on dir rename commit
+- namespace reconstruction tool
+- repair pg (rebuild log)  (online or offline?  ./cosd --repair_pg 1.ef?)
+- repair file ioctl?
 - are we concerned about
   - scrubbing
   - reconstruction after loss of subset of cdirs
@@ -172,7 +168,8 @@ crush
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
 
 osd
-- preserve pg logs
+- preserve pg logs on disk for longer period
+- optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 - pg repair
 - pg split should be a work queue
 - generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
