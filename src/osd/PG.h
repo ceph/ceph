@@ -995,6 +995,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
     }
   }
 
+  if (pg.last_complete_ondisk != pg.info.last_complete)
+    out << " lcod " << pg.last_complete_ondisk;
+
   if (pg.get_role() == 0) {
     out << " mlcod " << pg.min_last_complete_ondisk;
     if (!pg.have_master_log)

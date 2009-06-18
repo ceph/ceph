@@ -428,6 +428,10 @@ protected:
   void sub_op_push_reply(MOSDSubOpReply *reply);
   void sub_op_pull(MOSDSubOp *op);
 
+  void _committed(epoch_t same_since, eversion_t lc);
+  friend class C_OSD_Commit;
+  
+
 
   // -- scrub --
   int _scrub(ScrubMap& map, int& errors, int& fixed);

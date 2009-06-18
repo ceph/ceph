@@ -2547,6 +2547,31 @@ void ReplicatedPG::sub_op_pull(MOSDSubOp *op)
 }
 
 
+struct C_OSD_Commit : public Context {
+  ReplicatedPG *pg;
+  epoch_t same_since;
+  eversion_t last_complete;
+  C_OSD_Commit(ReplicatedPG *p, epoch_t ss, eversion_t lc) : pg(p), same_since(ss), last_complete(lc) {
+    pg->get();
+  }
+  void finish(int r) {
+    pg->lock();
+    pg->_committed(same_since, last_complete);
+    pg->unlock();
+    pg->put();
+  }
+};
+
+void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
+{
+  if (same_since == info.history.same_since) {
+    dout(10) << "_committed last_complete " << last_complete << " now ondisk" << dendl;
+    last_complete_ondisk = last_complete;
+  } else {
+    dout(10) << "_committed pg has changed, not touching last_complete_ondisk" << dendl;
+  }
+}
+
 /** op_push
  * NOTE: called from opqueue.
  */
@@ -2699,7 +2724,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   // apply to disk!
   write_info(t);
-  unsigned r = osd->store->apply_transaction(t);
+  unsigned r = osd->store->apply_transaction(t, new C_OSD_Commit(this, info.history.same_since,
+								 info.last_complete));
   assert(r == 0);
 
   osd->logger->inc(l_osd_r_pull);
