@@ -653,7 +653,7 @@ retry:
 		int want;
 		u64 offset, len;
 		struct ceph_osd_request_head *reqhead;
-		struct ceph_osd_op *op;		
+		struct ceph_osd_op *op;
 
 		next = 0;
 		locked_pages = 0;
@@ -811,7 +811,7 @@ get_more_pages:
 		reqhead = req->r_request->front.iov_base;
 		op = (void *)(reqhead + 1);
 		op->length = cpu_to_le64(len);
-                op->payload_len = op->length;
+	        op->payload_len = op->length;
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 
 		rc = ceph_osdc_start_request(&client->osdc, req);

@@ -156,7 +156,7 @@ int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need)
 		alloc++;
 	}
 	BUG_ON(have + alloc != need);
-	
+
 	spin_lock(&caps_list_lock);
 	caps_total_count += alloc;
 	caps_reserve_count += alloc;
@@ -683,7 +683,7 @@ int __ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask, int touch)
 					if (!__cap_is_valid(cap))
 						continue;
 					__touch_cap(cap);
-				}				
+				}
 			}
 			return 1;
 		}
@@ -1643,7 +1643,7 @@ int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		  loff_t endoff)
 {
 	int check_max, ret;
-	
+
 retry:
 	if (endoff > 0)
 		check_max_size(&ci->vfs_inode, endoff);
