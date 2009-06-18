@@ -154,7 +154,11 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 struct kmem_cache *ceph_inode_cachep;
 struct kmem_cache *ceph_cap_cachep;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 static void ceph_inode_init_once(void *foo)
+#else
+static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
+#endif
 {
 	struct ceph_inode_info *ci = foo;
 	inode_init_once(&ci->vfs_inode);
@@ -189,13 +193,28 @@ static void destroy_caches(void)
 	kmem_cache_destroy(ceph_cap_cachep);
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
+static void ceph_umount_begin(struct vfsmount *vfsmnt, int flags)
+#else
 static void ceph_umount_begin(struct super_block *sb)
+#endif
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
+	struct ceph_client *client = ceph_sb_to_client(vfsmnt->mnt_sb);
+#else
 	struct ceph_client *client = ceph_sb_to_client(sb);
+#endif
 
 	dout(30, "ceph_umount_begin\n");
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
+	if (!(flags & MNT_FORCE))
+		return;
+#endif
+
 	if (!client)
 		return;
+
 	client->mount_state = CEPH_MOUNT_SHUTDOWN;
 	return;
 }
@@ -782,7 +801,11 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 		    client->sb->s_root == NULL)
 			root = d_alloc_root(req->r_target_inode);
 		else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 			root = d_obtain_alias(req->r_target_inode);
+#else
+			root = d_alloc_anon(req->r_target_inode);
+#endif
 		req->r_target_inode = NULL;
 		dout(30, "open_root_inode success, root dentry is %p\n", root);
 	} else {
@@ -1058,10 +1081,13 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 
 	err = bdi_init(&client->backing_dev_info);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 	if (err < 0)
 		return err;
 
 	err = bdi_register_dev(&client->backing_dev_info, sb->s_dev);
+#endif
+
 	return err;
 }
 
@@ -1131,7 +1157,9 @@ static void ceph_kill_sb(struct super_block *s)
 	struct ceph_client *client = ceph_sb_to_client(s);
 	dout(1, "kill_sb %p\n", s);
 	ceph_mdsc_pre_umount(&client->mdsc);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 	bdi_unregister(&client->backing_dev_info);
+#endif
 	kill_anon_super(s);    /* will call put_super after sb is r/o */
 	bdi_destroy(&client->backing_dev_info);
 	ceph_destroy_client(client);

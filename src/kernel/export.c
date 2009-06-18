@@ -104,7 +104,11 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 			return ERR_PTR(err ? err : -ESTALE);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 	dentry = d_obtain_alias(inode);
+#else
+	dentry = d_alloc_anon(inode);
+#endif
 
 	if (!dentry) {
 		derr(10, "fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
