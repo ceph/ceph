@@ -2996,8 +2996,15 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
   } else {
     if (!pg->info.dne()) {
       // i am REPLICA
-      pg->merge_log(t, info, log, missing, from);
-      pg->activate(t, info_map);
+      if (!pg->is_active()) {
+	pg->merge_log(t, info, log, missing, from);
+	pg->activate(t, info_map);
+      } else {
+	// just update our stats
+	dout(10) << *pg << " writing updated stats" << dendl;
+	pg->info.stats = info.stats;
+	pg->write_info(t);
+      }
     }
   }
 

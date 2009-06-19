@@ -25,6 +25,7 @@
 #include "messages/MOSDSubOpReply.h"
 
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGTrim.h"
 
@@ -3286,6 +3287,13 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
       info.stats.num_bytes = stat.num_bytes;
       info.stats.num_kb = stat.num_kb;
       update_stats();
+
+      // tell replicas
+      for (unsigned i=1; i<acting.size(); i++) {
+	MOSDPGInfo *m = new MOSDPGInfo(osd->osdmap->get_epoch());
+	m->pg_info.push_back(info);
+	osd->messenger->send_message(m, osd->osdmap->get_inst(acting[i]));
+      }
     }
   }
 
