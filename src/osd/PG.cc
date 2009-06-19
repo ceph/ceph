@@ -123,6 +123,12 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   if (backlog && s < bottom)
     s = bottom;
 
+  if (complete_to != log.end() &&
+      complete_to->version <= s) {
+    generic_dout(0) << " bad trim to " << s << " when complete_to is " << complete_to->version
+		    << " on " << *this << dendl;
+  }
+
   while (!log.empty()) {
     Entry &e = *log.begin();
     if (e.version > s)
@@ -358,7 +364,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
     // then add all new items (_after_ split) to missing
     for (; p != log.log.end(); p++) {
       Log::Entry &ne = *p;
-      dout(10) << "merge_log merging " << ne << dendl;
+      dout(20) << "merge_log merging " << ne << dendl;
       missing.add_next_event(ne);
       if (ne.is_delete())
 	t.remove(info.pgid.to_coll(), ne.soid);
@@ -442,7 +448,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       // index, update missing, delete deleted
       for (list<Log::Entry>::iterator p = from; p != to; p++) {
 	Log::Entry &ne = *p;
-        dout(10) << "merge_log " << ne << dendl;
+        dout(20) << "merge_log " << ne << dendl;
 	log.index(ne);
 	missing.add_next_event(ne);
 	if (ne.is_delete())
@@ -520,7 +526,7 @@ void PG::search_for_missing(Log &olog, Missing &omissing, int fromosd)
     }
   }
 
-  dout(10) << "proc_replica_missing missing " << missing.missing << dendl;
+  dout(20) << "search_for_missing missing " << missing.missing << dendl;
 }
 
 
@@ -1831,7 +1837,7 @@ void PG::read_log(ObjectStore *store)
       loff_t opos = ondisklog.bottom + p.get_off();
       ::decode(e, p);
       loff_t pos = ondisklog.bottom + p.get_off();
-      dout(10) << "read_log " << pos << " " << e << dendl;
+      dout(20) << "read_log " << pos << " " << e << dendl;
 
       // [repair] in order?
       if (e.version < last) {
@@ -1848,7 +1854,7 @@ void PG::read_log(ObjectStore *store)
 	  ondisklog.block_map[opos] = e.version;
         log.log.push_back(e);
       } else {
-	dout(10) << "read_log  ignoring entry at " << pos << dendl;
+	dout(20) << "read_log  ignoring entry at " << pos << dendl;
       }
 
       // [repair] at end of log?
