@@ -10,7 +10,7 @@ test -e include/linux/mm.h || exit 0
 test -e $cephtree/src/kernel/super.h || exit 0
 
 # copy into the tree
-mkdir $target/ceph
+mkdir -p $target/ceph
 mkdir $target/ceph/crush
 cp $cephtree/src/kernel/Makefile $target/ceph
 cp $cephtree/src/kernel/Kconfig $target/ceph
@@ -23,7 +23,7 @@ git branch -D series_start
 git branch series_start
 
 # fs/staging
-git cherry-pick 1679fd1babdf67274080e4cdd20c2a6bb5bfbbcf
+git cherry-pick 5556036065d8b04b2f7dd439fbf0d710e295cd44
 
 git add Documentation/filesystems/ceph.txt
 git commit -F - <<EOF
