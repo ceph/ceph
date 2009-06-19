@@ -23,6 +23,32 @@ v0.9
 /- crush bugfixes
 /- kclient readdir fixes
 
+bugs
+
+osd/OSD.cc: In function 'void OSD::finish_recovery_op(PG*, int, bool)':
+osd/OSD.cc:3462: FAILED assert(recovery_ops_active >= 0)
+ 1: ./cosd(_ZN3OSD18finish_recovery_opEP2PGib+0x34f) [0x4a6f9f]
+ 2: ./cosd(_ZN12ReplicatedPG17sub_op_push_replyEP14MOSDSubOpReply+0x45d) [0x46681d]
+ 3: ./cosd(_ZN3OSD10dequeue_opEP2PG+0x24b) [0x4acc6b]
+ 4: ./cosd(_ZN10ThreadPool6workerEv+0x1b4) [0x56c204]
+ 5: ./cosd(_ZN10ThreadPool10WorkThread5entryEv+0xd) [0x4d476d]
+ 6: ./cosd(_ZN6Thread11_entry_funcEPv+0xc) [0x45f2ac]
+ 7: /lib/libpthread.so.0 [0x7fdb66e293f7]
+ 8: /lib/libc.so.6(clone+0x6d) [0x7fdb663f894d]
+
+mds/Server.cc: In function 'void Server::_finish_session_purge(Session*)':
+mds/Server.cc:410: FAILED assert(session->is_stale_purging())
+ 1: ./cmds(_ZN6Server21_finish_session_purgeEP7Session+0x392) [0x49edf2]
+ 2: ./cmds(_ZN6Server18find_idle_sessionsEv+0xa18) [0x4a3188]
+ 3: ./cmds(_ZN3MDS4tickEv+0x220) [0x484f60]
+ 4: ./cmds(_ZN9SafeTimer12EventWrapper6finishEi+0x1c1) [0x63eb11]
+ 5: ./cmds(_ZN5Timer11timer_entryEv+0x6f6) [0x6412d6]
+ 6: ./cmds(_ZN5Timer11TimerThread5entryEv+0xd) [0x46d53d]
+ 7: ./cmds(_ZN6Thread11_entry_funcEPv+0xc) [0x480c9c]
+ 8: /lib/libpthread.so.0 [0x7f51a9f4c3f7]
+ 9: /lib/libc.so.6(clone+0x6d) [0x7f51a951b94d]
+
+
 later
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
