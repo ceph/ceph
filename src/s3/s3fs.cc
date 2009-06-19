@@ -13,6 +13,7 @@
 #include "s3access.h"
 
 #include <string>
+#include <iostream>
 #include <vector>
 #include <map>
 
@@ -158,7 +159,7 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
   int fd;
 
-  fd = open(buf, O_CREAT | O_APPEND | O_WRONLY, 0755);
+  fd = open(buf, O_CREAT | O_WRONLY, 0755);
   if (fd < 0)
     return -errno;
 
@@ -210,3 +211,135 @@ int delete_obj(std::string& id, std::string& bucket, std::string& obj)
 
   return 0;
 }
+
+int get_etag(int fd, char **etag)
+{
+  char *etag_buf;
+#define ETAG_LEN 32
+  size_t len = ETAG_LEN;
+  while (1) {  
+    etag_buf = (char *)malloc(len);
+    ssize_t etag_len = fgetxattr(fd, "user.etag", etag_buf, len);
+    if (etag_len  > 0)
+      break;
+
+    free(etag_buf);
+    switch (errno) {
+    case ERANGE:
+      break;
+    default:
+      return -errno;
+    }
+    len *= 2;
+  }
+  *etag = etag_buf;
+
+  return 0;
+}
+
+int get_obj(std::string& bucket, std::string& obj, 
+            char **data, off_t ofs, off_t end,
+            const time_t *mod_ptr,
+            const time_t *unmod_ptr,
+            const char *if_match,
+            const char *if_nomatch,
+            struct s3_err *err)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  char buf[len];
+  int fd;
+  struct stat st;
+  int r = -EINVAL;
+  size_t max_len, pos;
+
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+
+  fd = open(buf, O_RDONLY, 0755);
+cerr << "get_obj 2 errno=" << errno << " buf=" << buf << endl;
+  if (fd < 0)
+    return -errno;
+
+  r = fstat(fd, &st);
+  if (r < 0)
+    return -errno;
+
+  if (end < 0)
+    end = st.st_size - 1;
+
+  max_len = end - ofs + 1;
+
+  r = -ECANCELED;
+  if (mod_ptr) {
+    if (st.st_mtime < *mod_ptr) {
+      err->num = "304";
+      err->code = "PreconditionFailed";
+      goto done;
+    }
+  }
+
+  if (unmod_ptr) {
+    if (st.st_mtime >= *mod_ptr) {
+      err->num = "412";
+      err->code = "PreconditionFailed";
+      goto done;
+    }
+  }
+  char *etag;
+  r = get_etag(fd, &etag);
+  if (r < 0)
+    goto done;
+
+  r = -ECANCELED;
+  if (if_match) {
+    cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
+    if (strcmp(if_match, etag)) {
+      err->num = "412";
+      err->code = "PreconditionFailed";
+      goto done;
+    }
+  }
+
+  if (if_nomatch) {
+    cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
+    if (strcmp(if_nomatch, etag) == 0) {
+      err->num = "412";
+      err->code = "PreconditionFailed";
+      goto done;
+    }
+  }
+
+  *data = (char *)malloc(max_len);
+  if (!*data) {
+    r = -ENOMEM;
+    goto done;
+  }
+
+  pos = 0;
+  while (pos < max_len) {
+    r = read(fd, (*data) + pos, max_len);
+    if (r > 0) {
+      pos += r;
+    } else {
+      if (!r) {
+        cerr << "pos=" << pos << " r=" << r << " max_len=" << max_len << endl;
+        r = -EIO; /* should not happen as we validated file size earlier */
+        goto done;
+      }
+      switch (errno) {
+      case EINTR:
+        break;
+      default:
+        r = -errno;
+        goto done;
+      }
+    }
+  } 
+
+  r = max_len;
+done:
+  close(fd);  
+
+  return r;
+}
+
+

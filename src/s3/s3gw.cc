@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <signal.h>
 
 #include <openssl/md5.h>
 
@@ -18,14 +19,20 @@
 #include <vector>
 #include <iostream>
 
+#include "include/types.h"
+#include "common/BackTrace.h"
+
 using namespace std;
 
-static FILE *dbg;
 
-struct s3_err {
-  const char *code;
-  const char *message;
-};
+#define CGI_PRINTF(stream, ...) do { \
+   fprintf(stderr, "OUT> " __VA_ARGS__); \
+   FCGX_FPrintF(stream, __VA_ARGS__); \
+} while (0)
+
+
+
+static FILE *dbg;
 
 struct req_state {
    FCGX_ParamArray envp;
@@ -38,6 +45,7 @@ struct req_state {
    const char *method;
    const char *query;
    const char *length;
+   bool err_exist;
    struct s3_err err;
 };
 
@@ -131,8 +139,8 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   s->host = FCGX_GetParam("HTTP_HOST", envp);
   s->query = FCGX_GetParam("QUERY_STRING", envp);
   s->length = FCGX_GetParam("CONTENT_LENGTH", envp);
-  s->err.code = NULL;
-  s->err.message = NULL;
+  s->err_exist = false;
+  memset(&s->err, 0, sizeof(s->err));
 }
 
 static void buf_to_hex(const unsigned char *buf, int len, char *str)
@@ -146,60 +154,70 @@ static void buf_to_hex(const unsigned char *buf, int len, char *str)
 
 static void dump_status(struct req_state *s, const char *status)
 {
-  FCGX_FPrintF(s->out,"Status: %s\n", status);
+  CGI_PRINTF(s->out,"Status: %s\n", status);
 }
 struct errno_http {
   int err;
   const char *http_str;
+  const char *default_code;
 };
 
 static struct errno_http hterrs[] = {
-    { 0, "200" },
-    { EINVAL, "400" },
-    { EPERM, "401" },
-    { EACCES, "403" },
-    { ENOENT, "404" },
-    { ETIMEDOUT, "408" },
-    { EEXIST, "409" },
-    { ENOTEMPTY, "409" },
+    { 0, "200", "" },
+    { EINVAL, "400", "InvalidArgument" },
+    { EACCES, "403", "AccessDenied" },
+    { EPERM, "403", "AccessDenied" },
+    { ENOENT, "404", "NoSuchKey" },
+    { ETIMEDOUT, "408", "RequestTimeout" },
+    { EEXIST, "409", "BucketAlreadyExists" },
+    { ENOTEMPTY, "409", "BucketNotEmpty" },
+    { ERANGE, "416", "InvalidRange" },
     { 0, NULL }};
 
-static void dump_errno(struct req_state *s, int err, const char *code = NULL, const char *message = NULL)
+static void dump_errno(struct req_state *s, int err, struct s3_err *s3err = NULL)
 {
-  const char *err_str = "500";
+  const char *err_str;
+  const char *code = (s3err ? s3err->code : NULL);
 
-  if (err < 0)
-    err = -err;
+  if (!s3err || !s3err->num) {  
+    err_str = "500";
 
-  int i=0;
-  while (hterrs[i].http_str) {
-    if (err == hterrs[i].err) {
-      err_str = hterrs[i].http_str;
-      break;
+    if (err < 0)
+      err = -err;
+
+    int i=0;
+    while (hterrs[i].http_str) {
+      if (err == hterrs[i].err) {
+        err_str = hterrs[i].http_str;
+        if (!code)
+          code = hterrs[i].default_code;
+        break;
+      }
+
+      i++;
     }
-
-    i++;
+  } else {
+    err_str = s3err->num;
   }
 
   dump_status(s, err_str);
   if (err) {
-    struct s3_err e;
-    e.code = code;
-    e.message = message;
-    s->err = e;
+    s->err_exist = true;
+    s->err.code = code;
+    s->err.message = (s3err ? s3err->message : NULL);
   }
 }
 
 static void open_section(struct req_state *s, const char *name)
 {
-  FCGX_FPrintF(s->out, "%*s<%s>\n", s->indent, "", name);
+  CGI_PRINTF(s->out, "%*s<%s>\n", s->indent, "", name);
   ++s->indent;
 }
 
 static void close_section(struct req_state *s, const char *name)
 {
   --s->indent;
-  FCGX_FPrintF(s->out, "%*s</%s>\n", s->indent, "", name);
+  CGI_PRINTF(s->out, "%*s</%s>\n", s->indent, "", name);
 }
 
 static void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
@@ -213,12 +231,12 @@ static void dump_value(struct req_state *s, const char *name, const char *fmt, .
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  FCGX_FPrintF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
+  CGI_PRINTF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
 }
 
 static void dump_entry(struct req_state *s, const char *val)
 {
-  FCGX_FPrintF(s->out, "%*s<?%s?>\n", s->indent, "", val);
+  CGI_PRINTF(s->out, "%*s<?%s?>\n", s->indent, "", val);
 }
 
 
@@ -258,8 +276,8 @@ static void dump_start_xml(struct req_state *s)
 
 static void end_header(struct req_state *s)
 {
-  FCGX_FPrintF(s->out,"Content-type: text/plain\r\n\r\n");
-  if (s->err.code || s->err.message) {
+  CGI_PRINTF(s->out,"Content-type: text/plain\r\n\r\n");
+  if (s->err_exist) {
     dump_start_xml(s);
     struct s3_err &err = s->err;
     open_section(s, "Error");
@@ -316,7 +334,94 @@ void do_list_buckets(struct req_state *s)
 }
 
 
-void do_list_objects(struct req_state *s)
+int parse_range(const char *range, off_t ofs, off_t end)
+{
+  int r = -ERANGE;
+  string s(range);
+  int pos = s.find("bytes=");
+  string ofs_str;
+  string end_str;
+
+  if (pos < 0)
+    goto done;
+
+  s = s.substr(pos + 6); /* size of("bytes=")  */
+  pos = s.find('-');
+  if (pos < 0)
+    goto done;
+
+  ofs_str = s.substr(0, pos);
+  end_str = s.substr(pos + 1);
+  ofs = atoll(ofs_str.c_str());
+  end = atoll(end_str.c_str());
+
+  if (end < ofs)
+    goto done;
+
+  r = 0;
+done:
+  return r;
+}
+
+int parse_time(const char *time_str, time_t *time)
+{
+  struct tm tm;
+  memset(&tm, 0, sizeof(struct tm));
+  if (!strptime(time_str, "%FT%T%z", &tm))
+    return -EINVAL;
+
+  *time = mktime(&tm);
+
+  return 0;
+}
+void get_object(struct req_state *s, string& bucket, string& obj)
+{
+  struct s3_err err;
+  const char *range_str = FCGX_GetParam("HTTP_RANGE", s->envp);
+  const char *if_mod = FCGX_GetParam("HTTP_IF_MODIFIED_SINCE", s->envp);
+  const char *if_unmod = FCGX_GetParam("HTTP_IF_UNMODIFIED_SINCE", s->envp);
+  const char *if_match = FCGX_GetParam("HTTP_IF_MATCH", s->envp);
+  const char *if_nomatch = FCGX_GetParam("HTTP_IF_NONE_MATCH", s->envp);
+  time_t mod_time;
+  time_t unmod_time;
+  time_t *mod_ptr = NULL;
+  time_t *unmod_ptr = NULL;
+  int r = -EINVAL;
+  off_t ofs = 0, end = -1, len = 0;
+  char *data;
+cerr << "get 1" << endl;
+  if (range_str) {
+    r = parse_range(range_str, ofs, end);
+    if (r < 0)
+      goto done;
+  }
+  if (if_mod) {
+    if (parse_time(if_mod, &mod_time) < 0)
+      goto done;
+    mod_ptr = &mod_time;
+  }
+
+  if (if_unmod) {
+    if (parse_time(if_unmod, &unmod_time) < 0)
+      goto done;
+    unmod_ptr = &unmod_time;
+  }
+
+  r = 0;
+  len = get_obj(bucket, obj, &data, ofs, end, mod_ptr, unmod_ptr, if_match, if_nomatch, &err);
+  if (len < 0)
+    r = len;
+
+cerr << "get 10 r=" << r << " len=" << len << endl;
+done:
+  dump_errno(s, r, &err);
+  end_header(s);
+  if (!r) {
+    FCGX_PutStr(data, len, s->out); 
+  }
+}
+
+void do_retrieve_objects(struct req_state *s)
 {
   int pos;
   string bucket, host_str;
@@ -328,6 +433,13 @@ void do_list_objects(struct req_state *s)
   if (s->path_name[0] == '/') {
     string tmp = s->path_name;
     bucket = tmp.substr(1);
+    int obj_pos = bucket.find('/');
+    if (obj_pos > 0 && (obj_pos < bucket.size() - 1)) {
+      string bucket_name = bucket.substr(0, obj_pos);
+      string obj_name = bucket.substr(obj_pos + 1);
+      get_object(s, bucket_name, obj_name);
+      return;
+    }
     p = s->query;
   } else if (s->path_name [0] == '?') {
     if (!s->host)
@@ -418,8 +530,7 @@ void do_create_object(struct req_state *s)
   string str(req_name);
   int pos = str.find('/');
   char *data = NULL;
-  const char *err_code = NULL;
-  const char *err_message = NULL;
+  struct s3_err err;
   if (pos < 0) {
     goto done;
   } else {
@@ -439,12 +550,12 @@ void do_create_object(struct req_state *s)
     }
 
     char *supplied_md5 = FCGX_GetParam("HTTP_CONTENT_MD5", s->envp);
-    char calc_md5[MD5_DIGEST_LENGTH];
+    char calc_md5[MD5_DIGEST_LENGTH * 2];
     MD5_CTX c;
     unsigned char m[MD5_DIGEST_LENGTH];
 
     if (supplied_md5 && strlen(supplied_md5) != MD5_DIGEST_LENGTH*2) {
-      err_code = "InvalidDigest";
+      err.code = "InvalidDigest";
       r = -EINVAL;
       goto done;
     }
@@ -456,7 +567,7 @@ void do_create_object(struct req_state *s)
     buf_to_hex(m, MD5_DIGEST_LENGTH, calc_md5);
 
     if (supplied_md5 && strcmp(calc_md5, supplied_md5)) {
-       err_code = "BadDigest";
+       err.code = "BadDigest";
        r = -EINVAL;
        goto done;
     }
@@ -466,7 +577,7 @@ void do_create_object(struct req_state *s)
   }
 done:
   free(data);
-  dump_errno(s, r, err_code, err_message);
+  dump_errno(s, r, &err);
 
   end_header(s);
 }
@@ -513,7 +624,7 @@ void do_retrieve(struct req_state *s)
   if (strcmp(s->path_name, "/") == 0)
     do_list_buckets(s);
   else
-    do_list_objects(s);
+      do_retrieve_objects(s);
 }
 
 void do_create(struct req_state *s)
@@ -564,12 +675,25 @@ void do_delete(struct req_state *s)
     do_delete_object(s);
 }
 
+static sighandler_t sighandler;
+
+static void godown(int signum)
+{
+  BackTrace bt(0);
+  bt.print(cerr);
+
+  signal(SIGSEGV, sighandler);
+}
+
 
 int main(void)
 {
   FCGX_Stream *in, *out, *err;
   FCGX_ParamArray envp;
   struct req_state s;
+
+  sighandler = signal(SIGSEGV, godown);
+
   dbg = fopen("/tmp/fcgi.out", "a");
 
   while (FCGX_Accept(&in, &out, &err, &envp) >= 0) 

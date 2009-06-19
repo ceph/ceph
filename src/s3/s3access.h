@@ -9,6 +9,15 @@
 
 typedef void *S3AccessHandle;
 
+struct s3_err {
+  const char *num;
+  const char *code;
+  const char *message;
+
+  s3_err() : num(NULL), code(NULL), message(NULL) {}
+};
+
+
 struct S3ObjEnt {
   std::string name;
   size_t size;
@@ -25,4 +34,13 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
 
 int delete_bucket(std::string& id, std::string& bucket);
 int delete_obj(std::string& id, std::string& bucket, std::string& obj);
+
+int get_obj(std::string& bucket, std::string& obj, 
+            char **data, off_t ofs, off_t end,
+            const time_t *mod_ptr,
+            const time_t *unmod_ptr,
+            const char *if_match,
+            const char *if_nomatch,
+            struct s3_err *err);
+
 #endif
