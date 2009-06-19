@@ -379,13 +379,17 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS:
-      {
+      if (op->get_pg() != info.pgid) {
+        dout(10) << " pgls pg=" << op->get_pg() << " != " << info.pgid << dendl;
+	result = 0; // hmm?
+      } else {
         dout(10) << " pgls pg=" << op->get_pg() << dendl;
 	// read into a buffer
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(__u64)(p->op.pgls_cookie);
         vector<sobject_t> sentries;
-	result = osd->store->collection_list_partial(op->get_pg().to_coll(), op->get_snapid(), sentries, p->op.length,
+	result = osd->store->collection_list_partial(info.pgid.to_coll(), op->get_snapid(),
+						     sentries, p->op.length,
 	                                             &response.handle);
 	if (!result) {
           vector<sobject_t>::iterator iter;
