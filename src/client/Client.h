@@ -577,15 +577,17 @@ public:
     utime_t cap_ttl, last_cap_renew_request;
     int num_caps;
     entity_inst_t inst;
+    bool closing;
 
     MClientCapRelease *release;
 
-    MDSSession() : seq(0), cap_gen(0), num_caps(0), release(NULL) {}
+    MDSSession() : seq(0), cap_gen(0), num_caps(0), closing(false), release(NULL) {}
   };
   map<int, MDSSession> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
 
+  void got_mds_push(int mds);
   void handle_client_session(MClientSession *m);
   void send_reconnect(int mds);
 

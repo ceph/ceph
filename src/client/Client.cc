@@ -1219,6 +1219,17 @@ void Client::kick_requests(int mds)
  * leases
  */
 
+void Client::got_mds_push(int mds)
+{
+  MDSSession& s = mds_sessions[mds];
+
+  s.seq++;
+  dout(10) << " mds" << mds << " seq now " << s.seq << dendl;
+  if (s.closing)
+    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s.seq),
+			    s.inst);
+}
+
 void Client::handle_lease(MClientLease *m)
 {
   dout(10) << "handle_lease " << *m << dendl;
@@ -1226,7 +1237,7 @@ void Client::handle_lease(MClientLease *m)
   assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
 
   int mds = m->get_source().num();
-  mds_sessions[mds].seq++;
+  got_mds_push(mds);
 
   ceph_seq_t seq = m->get_seq();
 
@@ -1922,8 +1933,7 @@ void Client::handle_snap(MClientSnap *m)
 {
   dout(10) << "handle_snap " << *m << dendl;
   int mds = m->get_source().num();
-
-  mds_sessions[mds].seq++;
+  got_mds_push(mds);
 
   list<Inode*> to_move;
   SnapRealm *realm = 0;
@@ -1996,11 +2006,7 @@ void Client::handle_caps(MClientCaps *m)
 
   m->clear_payload();  // for if/when we send back to MDS
 
-  // note push seq increment
-  if (mds_sessions.count(mds) == 0) 
-    dout(0) << "got file_caps without session from mds" << mds << " msg " << *m << dendl;
-  //assert(mds_sessions.count(mds));   // HACK FIXME SOON
-  mds_sessions[mds].seq++;
+  got_mds_push(mds);
 
   Inode *in = 0;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
@@ -2417,6 +2423,7 @@ int Client::unmount()
        ++p) {
     dout(2) << "sending client_session close to mds" << p->first
 	    << " seq " << p->second.seq << dendl;
+    p->second.closing = true;
     messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, p->second.seq),
 			    mdsmap->get_inst(p->first));
   }
