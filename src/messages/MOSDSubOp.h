@@ -50,6 +50,7 @@ public:
 
   // transaction to exec
   bufferlist logbl;
+  pg_stat_t pg_stats;
   
   // subop metadata
   tid_t rep_tid;
@@ -91,6 +92,7 @@ public:
     ::decode(snapset, p);
     ::decode(snapc, p);
     ::decode(logbl, p);
+    ::decode(pg_stats, p);
     ::decode(pg_trim_to, p);
     ::decode(peer_stat, p);
     ::decode(attrset, p);
@@ -122,6 +124,7 @@ public:
     ::encode(snapset, payload);
     ::encode(snapc, payload);
     ::encode(logbl, payload);
+    ::encode(pg_stats, payload);
     ::encode(pg_trim_to, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);

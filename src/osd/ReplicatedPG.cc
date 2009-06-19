@@ -1678,10 +1678,11 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now,
     wr->snapc = repop->ctx->snapc;
     wr->get_data() = repop->ctx->op->get_data();   // _copy_ bufferlist
   } else {
-    // ship resulting transaction and log entries
+    // ship resulting transaction, log entries, and pg_stats
     wr->ops = repop->ctx->ops;   // just fyi
     ::encode(repop->ctx->op_t, wr->get_data());
     ::encode(repop->ctx->log, wr->logbl);
+    wr->pg_stats = info.stats;
   }
 
   wr->pg_trim_to = pg_trim_to;
@@ -2084,6 +2085,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       p = op->logbl.begin();
       ::decode(log, p);
       
+      info.stats = op->pg_stats;
       log_op(log, op->pg_trim_to, localt);
 
       tls.push_back(&opt);
