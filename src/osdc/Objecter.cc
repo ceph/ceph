@@ -568,7 +568,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
 
 void Objecter::list_objects(int pool_id, int pool_snap_seq, int max_entries,
-			    std::list<object_t>& entries, ListContext * list_context, Context *onfinish) {
+			    std::list<object_t>& entries, ListContext *list_context,
+			    Context *onfinish) {
 
   dout(10) << "list_objects" << dendl;
   dout(20) << "pool_id " << pool_id
@@ -580,66 +581,66 @@ void Objecter::list_objects(int pool_id, int pool_snap_seq, int max_entries,
 	   << "\nlist_context->seed" << list_context->seed
 	   << "\nlist_context->cookie" << list_context->cookie << dendl;
 
+  if (list_context->at_end) {
+    onfinish->finish(0);
+    delete onfinish;
+    return;
+  }
+
   if (!list_context->in_loop)
     entries.clear();
 
   ceph_object_layout layout;
-  int request_size;
-
   object_t oid;
-  memset(&oid, 0, sizeof(oid)); //the read we perform later doesn't refer to an object,
-  //so make sure nothing can think it does
 
   int pg_num = osdmap->get_pg_layout(pool_id, list_context->seed, layout);
-  if (list_context->starting_pg_num == 0) {// there can't be zero pgs!
+  if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
     dout(20) << pg_num << " placement groups" << dendl;
   }
-  if (list_context->starting_pg_num != pg_num) { //start reading from the beginning; the pgs have changed
+  if (list_context->starting_pg_num != pg_num) {
+    // start reading from the beginning; the pgs have changed
     dout(10) << "The placement groups have changed, restarting with " << pg_num << dendl;
     list_context->seed = 0;
     list_context->cookie = 0;
     list_context->starting_pg_num = pg_num;
     osdmap->get_pg_layout(pool_id, list_context->seed, layout);
   }
-  if(list_context->seed == pg_num){ //this context got all the way through
+  if (list_context->seed == pg_num){ //this context got all the way through
     onfinish->finish(0);
     delete onfinish;
   }
 
   ObjectOperation op;
-  request_size = min(MAX_REQ_SIZE, max_entries);
+  int request_size = min(MAX_REQ_SIZE, max_entries);
   op.pg_ls(request_size, list_context->cookie);
 
-  C_List * onack = new C_List(pool_id, pool_snap_seq, max_entries, request_size,
-			       &entries, list_context, onfinish, this);
-  read(oid, layout, op, pool_snap_seq, &onack->bl, 0,(Context *)onack);
+  C_List *onack = new C_List(pool_id, pool_snap_seq, max_entries, request_size,
+			     &entries, list_context, onfinish, this);
+  read(oid, layout, op, pool_snap_seq, &onack->bl, 0, onack);
 }
 
-void Objecter::_list_reply(void *cxt)
+void Objecter::_list_reply(C_List *context)
 {
   dout(10) << "_list_reply" << dendl;
-  C_List * context = (C_List *) cxt;
+
   bufferlist::iterator iter = context->bl.begin();
   PGLSResponse response;
   ::decode(response, iter);
   context->list_context->cookie = (__u64)response.handle;
+
   int response_size = response.entries.size();
   dout(20) << "response.entries.size " << response_size
-	   <<"\nresponse.entries " << response.entries << dendl;
+	   << ", response.entries " << response.entries << dendl;
   if (response_size) {
     dout(20) << "got a response with objects, proceeding" << dendl;
     context->entries->merge(response.entries);
     context->max_entries -= response_size;
     if (!context->max_entries) { //yay, we're done!
       dout(20) << "reached requested number of objects, cleaning up and exiting" << dendl;
+      context->list_context->in_loop = false;
       context->final_finish->finish(0);
       delete context->final_finish;
-      context->list_context->in_loop = false;
-      context->list_context = NULL;
-      context->entries = NULL;
-      context->objecter = NULL;
-      //      delete context;
       return;
     }
     if ((response_size == context->request_size) && context->list_context->cookie) {
@@ -648,11 +649,6 @@ void Objecter::_list_reply(void *cxt)
       context->list_context->in_loop = true;
       list_objects(context->pool_id, context->pool_snap_seq, context->max_entries,
 		   *context->entries, context->list_context, context->final_finish);
-      context->final_finish = NULL;
-      context->list_context = NULL;
-      context->entries = NULL;
-      context->objecter = NULL;
-      //      delete context;
       return;
     }
   }
@@ -663,22 +659,15 @@ void Objecter::_list_reply(void *cxt)
   if(context->list_context->seed == context->list_context->starting_pg_num){ //out of pgs!
     dout(20) << "out of pgs, returning to" << context->final_finish << dendl;
     context->list_context->in_loop = false;
+    context->list_context->at_end = true;
     context->final_finish->finish(0);
     delete context->final_finish;
-    context->list_context = NULL;
-    context->entries = NULL;
-    context->objecter = NULL;
     return;
   }
   //  context->list_context->cookie = 0;
   context->list_context->in_loop = true;
   list_objects(context->pool_id, context->pool_snap_seq, context->max_entries,
 	       *context->entries, context->list_context, context->final_finish);
-  context->final_finish = NULL;
-  context->list_context = NULL;
-  context->entries = NULL;
-  context->objecter = NULL;
-  //  delete context;
   return;
 }
 

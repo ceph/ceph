@@ -556,6 +556,9 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
   object_t oid;
   Mutex mylock("RadosClient::list::mylock");
 
+  if (context->at_end)
+    return 0;
+
   lock.Lock();
   objecter->list_objects(pool.poolid, pool.snap_seq, max_entries, entries, context,
 			 new C_SafeCond(&mylock, &cond, &done, &r));

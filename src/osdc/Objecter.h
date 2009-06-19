@@ -186,7 +186,6 @@ class Objecter {
   };
   void tick();
   void resend_slow_ops();
-  void _list_reply(void *cxt);
 
   /*** track pending operations ***/
   // read
@@ -256,18 +255,21 @@ class Objecter {
     __u64 pos;
     __u64 total;
     int starting_pg_num;
-    bool in_loop;
+    bool in_loop, at_end;
 
-   ListContext() : seed(0), cookie(0), pos(0), total(0), starting_pg_num(0), in_loop(false){}
+    ListContext() : seed(0), cookie(0), pos(0), total(0), starting_pg_num(0),
+		    in_loop(false), at_end(false) {}
   };
 
   struct C_List : public Context {
     Objecter *objecter;
+    /* <these> */
     int pool_id;
     int pool_snap_seq;
     int max_entries;
     int request_size;
     std::list<object_t> *entries;
+    /* </these> can go in list_context? */
     ListContext *list_context;
     Context *final_finish;
     bufferlist bl;
@@ -276,7 +278,7 @@ class Objecter {
       objecter(o), pool_id(p_id), pool_snap_seq(p_snap), max_entries(max), request_size(rs),
       entries(entries_p), list_context(lc), final_finish(finish) {}
     void finish(int r) {
-      objecter->_list_reply((void *)this);
+      objecter->_list_reply(this);
     }
   };
   
@@ -354,7 +356,9 @@ class Objecter {
   void scan_pgs(set<pg_t>& changed_pgs);
   void scan_pgs_for(set<pg_t>& changed_pgs, int osd);
   void kick_requests(set<pg_t>& changed_pgs);
-    
+
+  void _list_reply(C_List *cxt);
+
 
  public:
   Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
