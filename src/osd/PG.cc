@@ -123,8 +123,6 @@ void PG::IndexedLog::trim(ObjectStore::Transaction& t, eversion_t s)
   if (backlog && s < bottom)
     s = bottom;
 
-  assert(complete_to == log.end());
-
   while (!log.empty()) {
     Entry &e = *log.begin();
     if (e.version > s)
