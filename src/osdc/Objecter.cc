@@ -40,7 +40,6 @@
 
 #include "config.h"
 
-#define MAX_REQ_SIZE 1024
 #define DOUT_SUBSYS objecter
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << messenger->get_myname() << ".objecter "
@@ -567,18 +566,16 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-void Objecter::list_objects(int pool_id, int pool_snap_seq, int max_entries,
-			    std::list<object_t>& entries, ListContext *list_context,
-			    Context *onfinish) {
+void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
 
   dout(10) << "list_objects" << dendl;
-  dout(20) << "pool_id " << pool_id
-	   << "\npool_snap_seq " << pool_snap_seq
-	   << "\nmax_entries " << max_entries
-	   << "\n&entries " << &entries
+  dout(20) << "pool_id " << list_context->pool_id
+	   << "\npool_snap_seq " << list_context->pool_snap_seq
+	   << "\nmax_entries " << list_context->max_entries
+	   << "\n&entries " << list_context->entries
 	   << "\nlist_context " << list_context
 	   << "\nonfinish " << onfinish
-	   << "\nlist_context->seed" << list_context->seed
+	   << "\nlist_context->current_pg" << list_context->current_pg
 	   << "\nlist_context->cookie" << list_context->cookie << dendl;
 
   if (list_context->at_end) {
@@ -587,13 +584,10 @@ void Objecter::list_objects(int pool_id, int pool_snap_seq, int max_entries,
     return;
   }
 
-  if (!list_context->in_loop)
-    entries.clear();
-
   ceph_object_layout layout;
   object_t oid;
 
-  int pg_num = osdmap->get_pg_layout(pool_id, list_context->seed, layout);
+  int pg_num = osdmap->get_pg_layout(list_context->pool_id, list_context->current_pg, layout);
   if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
     list_context->starting_pg_num = pg_num;
     dout(20) << pg_num << " placement groups" << dendl;
@@ -601,73 +595,64 @@ void Objecter::list_objects(int pool_id, int pool_snap_seq, int max_entries,
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
     dout(10) << "The placement groups have changed, restarting with " << pg_num << dendl;
-    list_context->seed = 0;
+    list_context->current_pg = 0;
     list_context->cookie = 0;
     list_context->starting_pg_num = pg_num;
-    osdmap->get_pg_layout(pool_id, list_context->seed, layout);
+    osdmap->get_pg_layout(list_context->pool_id, list_context->current_pg, layout);
   }
-  if (list_context->seed == pg_num){ //this context got all the way through
+  if (list_context->current_pg == pg_num){ //this context got all the way through
     onfinish->finish(0);
     delete onfinish;
   }
 
   ObjectOperation op;
-  int request_size = min(MAX_REQ_SIZE, max_entries);
-  op.pg_ls(request_size, list_context->cookie);
+  op.pg_ls(list_context->max_entries, list_context->cookie);
 
-  C_List *onack = new C_List(pool_id, pool_snap_seq, max_entries, request_size,
-			     &entries, list_context, onfinish, this);
-  read(oid, layout, op, pool_snap_seq, &onack->bl, 0, onack);
+  bufferlist *bl = new bufferlist();
+  C_List *onack = new C_List(list_context, onfinish, bl, this);
+  read(oid, layout, op, list_context->pool_snap_seq, bl, 0, onack);
 }
 
-void Objecter::_list_reply(C_List *context)
+void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish)
 {
   dout(10) << "_list_reply" << dendl;
 
-  bufferlist::iterator iter = context->bl.begin();
+  bufferlist::iterator iter = bl->begin();
   PGLSResponse response;
   ::decode(response, iter);
-  context->list_context->cookie = (__u64)response.handle;
+  list_context->cookie = (__u64)response.handle;
 
   int response_size = response.entries.size();
   dout(20) << "response.entries.size " << response_size
 	   << ", response.entries " << response.entries << dendl;
   if (response_size) {
     dout(20) << "got a response with objects, proceeding" << dendl;
-    context->entries->merge(response.entries);
-    context->max_entries -= response_size;
-    if (!context->max_entries) { //yay, we're done!
+    list_context->entries->merge(response.entries);
+    list_context->max_entries -= response_size;
+    if (!list_context->max_entries) { //yay, we're done!
       dout(20) << "reached requested number of objects, cleaning up and exiting" << dendl;
-      context->list_context->in_loop = false;
-      context->final_finish->finish(0);
-      delete context->final_finish;
-      return;
-    }
-    if ((response_size == context->request_size) && context->list_context->cookie) {
-      //there are probably more objects in this pg
-      dout(20) << "expect more objects in current pg, proceeding" << dendl;
-      context->list_context->in_loop = true;
-      list_objects(context->pool_id, context->pool_snap_seq, context->max_entries,
-		   *context->entries, context->list_context, context->final_finish);
+      delete bl;
+      final_finish->finish(0);
+      delete final_finish;
       return;
     }
   }
-  //if we make this this far, there are no more objects in the current pg. Move on!
-  dout(20) << "emptied current pg, moving on to next one" << dendl;
-  ++context->list_context->seed;
-  dout(20) << "new seed value: " << context->list_context->seed <<dendl;
-  if(context->list_context->seed == context->list_context->starting_pg_num){ //out of pgs!
-    dout(20) << "out of pgs, returning to" << context->final_finish << dendl;
-    context->list_context->in_loop = false;
-    context->list_context->at_end = true;
-    context->final_finish->finish(0);
-    delete context->final_finish;
+  //if we make this this far, there are no more objects in the current pg, but we want more!
+  ++list_context->current_pg;
+  dout(20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
+  if(list_context->current_pg < list_context->starting_pg_num){ //we have more pgs to go through
+    //  list_context->cookie = 0; //Should I uncomment this?
+    delete bl;
+    list_objects(list_context, final_finish);
     return;
   }
-  //  context->list_context->cookie = 0;
-  context->list_context->in_loop = true;
-  list_objects(context->pool_id, context->pool_snap_seq, context->max_entries,
-	       *context->entries, context->list_context, context->final_finish);
+  
+  //if we make it this far, there are no more pgs
+  dout(20) << "out of pgs, returning to" << final_finish << dendl;
+  list_context->at_end = true;
+  delete bl;
+  final_finish->finish(0);
+  delete final_finish;
   return;
 }
 

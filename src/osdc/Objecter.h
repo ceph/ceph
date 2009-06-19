@@ -248,37 +248,34 @@ class Objecter {
 
   // Pools and statistics 
   struct ListContext {
-    int seed;
+    int current_pg;
     __u64 cookie;
-    std::list<object_t> list;
-    std::list<object_t>::iterator iter;
-    __u64 pos;
-    __u64 total;
     int starting_pg_num;
-    bool in_loop, at_end;
+    bool at_end;
 
-    ListContext() : seed(0), cookie(0), pos(0), total(0), starting_pg_num(0),
-		    in_loop(false), at_end(false) {}
-  };
-
-  struct C_List : public Context {
-    Objecter *objecter;
-    /* <these> */
     int pool_id;
     int pool_snap_seq;
     int max_entries;
-    int request_size;
     std::list<object_t> *entries;
-    /* </these> can go in list_context? */
+
+    //silly list for the C interface
+    std::list<object_t> list;
+
+    ListContext() : current_pg(0), cookie(0), starting_pg_num(0),
+		    at_end(false), pool_id(0),
+		    pool_snap_seq(0), max_entries(0),
+		    entries(NULL) {}
+  };
+
+  struct C_List : public Context {
     ListContext *list_context;
     Context *final_finish;
-    bufferlist bl;
-    C_List(int p_id, int p_snap, int max, int rs, std::list<object_t> *entries_p,
-	   ListContext *lc, Context * finish, Objecter *o) :
-      objecter(o), pool_id(p_id), pool_snap_seq(p_snap), max_entries(max), request_size(rs),
-      entries(entries_p), list_context(lc), final_finish(finish) {}
+    bufferlist *bl;
+    Objecter *objecter;
+    C_List(ListContext *lc, Context * finish, bufferlist *b, Objecter *ob) :
+      list_context(lc), final_finish(finish), bl(b), objecter(ob) {}
     void finish(int r) {
-      objecter->_list_reply(this);
+      objecter->_list_reply(list_context, bl, final_finish);
     }
   };
   
@@ -357,7 +354,7 @@ class Objecter {
   void scan_pgs_for(set<pg_t>& changed_pgs, int osd);
   void kick_requests(set<pg_t>& changed_pgs);
 
-  void _list_reply(C_List *cxt);
+  void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
 
 
  public:
@@ -519,8 +516,7 @@ private:
   }
 
 
-  void list_objects(int pool_id, int pool_snap_seq, int max_entries, list<object_t>& entries,
-		    ListContext *p, Context *onfinish);
+  void list_objects(ListContext *p, Context *onfinish);
 
   // -------------------------
   // snapshots

@@ -43,7 +43,7 @@ using namespace std;
 
 #include "include/librados.h"
 
-
+#define RADOS_LIST_MAX_ENTRIES 1024
 #define DOUT_SUBSYS rados
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "librados: "
@@ -559,9 +559,12 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
   if (context->at_end)
     return 0;
 
+  context->pool_id = pool.poolid;
+  context->pool_snap_seq = pool.snap_seq;
+  context->entries = &entries;
+  context->max_entries = max_entries;
   lock.Lock();
-  objecter->list_objects(pool.poolid, pool.snap_seq, max_entries, entries, context,
-			 new C_SafeCond(&mylock, &cond, &done, &r));
+  objecter->list_objects(context, new C_SafeCond(&mylock, &cond, &done, &r));
   lock.Unlock();
 
   mylock.Lock();
@@ -1220,24 +1223,26 @@ extern "C" int rados_pool_list_next(rados_pool_t pool, const char **entry, rados
     if (!*listctx)
       return -ENOMEM;
   }
+
+
   Objecter::ListContext *op = (Objecter::ListContext *)*listctx;
-  if (op->pos == op->total) {
+
+  //if the list is non-empty, this method has been called before
+  if(!op->list.empty())
+    //so let's kill the previously-returned object
+    op->list.pop_front();
+
+  if (op->list.empty()) {
     op->list.clear();
-#define MAX_ENTRIES 1024
-    ret = radosp->list(*ctx, MAX_ENTRIES, op->list, op);
+    ret = radosp->list(*ctx, RADOS_LIST_MAX_ENTRIES, op->list, op);
     if (!op->list.size()) {
       delete op;
       *listctx = NULL;
       return -ENOENT;
     }
-    op->pos = 0;
-    op->total = op->list.size();
-    op->iter = op->list.begin();
   }
 
-  *entry = op->iter->name.c_str();
-  op->pos++;
-  op->iter++;
+  *entry = op->list.front().name.c_str();
 
   return 0;
 }
