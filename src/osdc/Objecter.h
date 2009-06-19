@@ -186,7 +186,7 @@ class Objecter {
   };
   void tick();
   void resend_slow_ops();
-
+  void _list_reply(void *cxt);
 
   /*** track pending operations ***/
   // read
@@ -246,8 +246,40 @@ class Objecter {
       delete fin;
     }
   };
+
+  // Pools and statistics 
+  struct ListContext {
+    int seed;
+    __u64 cookie;
+    std::list<object_t> list;
+    std::list<object_t>::iterator iter;
+    __u64 pos;
+    __u64 total;
+    int starting_pg_num;
+    bool in_loop;
+
+   ListContext() : seed(0), cookie(0), pos(0), total(0), starting_pg_num(0), in_loop(false){}
+  };
+
+  struct C_List : public Context {
+    Objecter *objecter;
+    int pool_id;
+    int pool_snap_seq;
+    int max_entries;
+    int request_size;
+    std::list<object_t> *entries;
+    ListContext *list_context;
+    Context *final_finish;
+    bufferlist bl;
+    C_List(int p_id, int p_snap, int max, int rs, std::list<object_t> *entries_p,
+	   ListContext *lc, Context * finish, Objecter *o) :
+      objecter(o), pool_id(p_id), pool_snap_seq(p_snap), max_entries(max), request_size(rs),
+      entries(entries_p), list_context(lc), final_finish(finish) {}
+    void finish(int r) {
+      objecter->_list_reply((void *)this);
+    }
+  };
   
-  // 
   struct PoolStatOp {
     tid_t tid;
     vector<string> pools;
@@ -481,6 +513,11 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
+
+
+  void list_objects(int pool_id, int pool_snap_seq, int max_entries, list<object_t>& entries,
+		    ListContext *p, Context *onfinish);
+
   // -------------------------
   // snapshots
 private:

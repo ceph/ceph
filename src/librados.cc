@@ -107,22 +107,13 @@ public:
 
   int exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
-  struct PGLSOp {
-    int seed;
-    __u64 cookie;
-    std::list<object_t> list;
-    std::list<object_t>::iterator iter;
-    __u64 pos;
-    __u64 total;
-
-   PGLSOp() : seed(0), cookie(0), pos(0), total(0) {}
-  };
 
   int list_pools(std::vector<string>& ls);
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
   int get_fs_stats( rados_statfs_t& result );
 
-  int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op);
+  int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries,
+			Objecter::ListContext *context);
 
   // --- aio ---
   struct AioCompletion {
@@ -558,67 +549,23 @@ int RadosClient::snap_get_stamp(PoolCtx *pool, rados_snap_t snapid, time_t *t)
 
 // IO
 
-int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, RadosClient::PGLSOp& op)
-{
-  utime_t ut = g_clock.now();
-
+int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entries, Objecter::ListContext *context) {
   Cond cond;
   bool done;
   int r = 0;
   object_t oid;
+  Mutex mylock("RadosClient::list::mylock");
 
-  memset(&oid, 0, sizeof(oid));
-  entries.clear();
+  lock.Lock();
+  objecter->list_objects(pool.poolid, pool.snap_seq, max_entries, entries, context,
+			 new C_SafeCond(&mylock, &cond, &done, &r));
+  lock.Unlock();
 
-  ceph_object_layout layout;
-retry:
-  int pg_num = objecter->osdmap->get_pg_num(pool.poolid);
-  
-  for (;op.seed <pg_num; op.seed++) {
-    int response_size;
-    int req_size;
-    
-    do {
-      lock.Lock();
-      int num = objecter->osdmap->get_pg_layout(pool.poolid, op.seed, layout);
-      lock.Unlock();
-      if (num != pg_num)  /* ahh.. race! */
-        goto retry;
-      
-      ObjectOperation rd;
-      bufferlist bl;
-#define MAX_REQ_SIZE 1024
-      req_size = min(MAX_REQ_SIZE, max_entries);
-      rd.pg_ls(req_size, op.cookie);
+  mylock.Lock();
+  while(!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
 
-      Mutex mylock("RadosClient::list::mylock");
-      Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-      lock.Lock();
-      objecter->read(oid, layout, rd, pool.snap_seq, &bl, 0, onack);
-      lock.Unlock();
-
-      mylock.Lock();
-      while (!done)
-        cond.Wait(mylock);
-      mylock.Unlock();
-
-      bufferlist::iterator iter = bl.begin();
-      PGLSResponse response;
-      ::decode(response, iter);
-      op.cookie = (__u64)response.handle;
-      response_size = response.entries.size();
-      if (response_size) {
-	entries.merge(response.entries);
-        max_entries -= response_size;
-        if (!max_entries)
-          return r;
-      } else {
-        op.cookie = 0;
-      }
-    } while ((response_size == req_size) && op.cookie);
-  }
-  
   return r;
 }
 
@@ -920,16 +867,15 @@ int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados:
   if (!client)
     return -EINVAL;
 
-  RadosClient::PGLSOp *op;
+  Objecter::ListContext *op;
   if (!ctx.ctx) {
-    ctx.ctx = new RadosClient::PGLSOp;
+    ctx.ctx = new Objecter::ListContext();
     if (!ctx.ctx)
       return -ENOMEM;
   }
 
-  op = (RadosClient::PGLSOp *)ctx.ctx;
-
-  return client->list(*(RadosClient::PoolCtx *)pool, max, entries, *op);
+  op = (Objecter::ListContext *) ctx.ctx;
+  return client->list(*(RadosClient::PoolCtx *)pool, max, entries, op);
 }
 
 int Rados::write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
@@ -1255,7 +1201,7 @@ extern "C" void rados_pool_init_ctx(rados_list_ctx_t *ctx)
 extern "C" void rados_pool_close_ctx(rados_list_ctx_t *ctx)
 {
   if (*ctx) {
-    RadosClient::PGLSOp *op = (RadosClient::PGLSOp *)*ctx;
+    Objecter::ListContext *op = (Objecter::ListContext *)*ctx;
     delete op;
     *ctx = NULL;
   }
@@ -1267,15 +1213,15 @@ extern "C" int rados_pool_list_next(rados_pool_t pool, const char **entry, rados
   RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
 
   if (!*listctx) {
-    *listctx = new RadosClient::PGLSOp;
+    *listctx = new Objecter::ListContext;
     if (!*listctx)
       return -ENOMEM;
   }
-  RadosClient::PGLSOp *op = (RadosClient::PGLSOp *)*listctx;
+  Objecter::ListContext *op = (Objecter::ListContext *)*listctx;
   if (op->pos == op->total) {
     op->list.clear();
 #define MAX_ENTRIES 1024
-    ret = radosp->list(*ctx, MAX_ENTRIES, op->list, *op);
+    ret = radosp->list(*ctx, MAX_ENTRIES, op->list, op);
     if (!op->list.size()) {
       delete op;
       *listctx = NULL;
