@@ -377,7 +377,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(journaler_prefetch_periods, 0, OPT_INT, 50),   // * journal object size (1~MB? see above)
 	OPTION(journaler_batch_interval, 0, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
 	OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
-	OPTION(mds_cache_size, 0, OPT_INT, 250000),
+	OPTION(mds_cache_size, 0, OPT_INT, 100000),
 	OPTION(mds_cache_mid, 0, OPT_FLOAT, .7),
 	OPTION(mds_mem_max, 0, OPT_INT, 1048576),        // KB
 	OPTION(mds_decay_halflife, 0, OPT_FLOAT, 5),
@@ -398,7 +398,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_log, 0, OPT_BOOL, true),
 	OPTION(mds_log_unsafe, 0, OPT_BOOL, false),      // only wait for log sync, when it's mostly safe to do so
 	OPTION(mds_log_max_events, 0, OPT_INT, -1),
-	OPTION(mds_log_max_segments, 0, OPT_INT, 100),  // segment size defined by FileLayout, above
+	OPTION(mds_log_max_segments, 0, OPT_INT, 30),  // segment size defined by FileLayout, above
 	OPTION(mds_log_max_expiring, 0, OPT_INT, 20),
 	OPTION(mds_log_pad_entry, 0, OPT_INT, 128),
 	OPTION(mds_log_eopen_size, 0, OPT_INT, 100),   // # open inodes per log entry
