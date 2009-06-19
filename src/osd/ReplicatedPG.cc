@@ -2746,6 +2746,8 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
       log.complete_to++;
     }
     dout(10) << "last_complete now " << info.last_complete << dendl;
+    if (log.complete_to != log.log.end())
+      dout(10) << " log.complete_to = " << log.complete_to->version << dendl;
   }
 
   // apply to disk!
