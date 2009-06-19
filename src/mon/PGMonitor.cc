@@ -638,7 +638,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	      mon->messenger->send_message(new MOSDScrub(mon->monmap->fsid, pgs,
 							 m->cmd[1] == "repair"),
 					   mon->osdmon()->osdmap.get_inst(osd));
-	      ss << "instructing pg " << pgid << " on osd" << osd << " to repair";
+	      ss << "instructing pg " << pgid << " on osd" << osd << " to " << m->cmd[1];
 	      r = 0;
 	    } else
 	      ss << "pg " << pgid << " primary osd" << osd << " not up";

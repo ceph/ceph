@@ -28,9 +28,9 @@ struct MOSDScrub : public Message {
   bool repair;
 
   MOSDScrub() {}
-  MOSDScrub(ceph_fsid_t& f) :
+  MOSDScrub(ceph_fsid_t& f, bool r) :
     Message(MSG_OSD_SCRUB),
-    fsid(f), repair(false) {}
+    fsid(f), repair(r) {}
   MOSDScrub(ceph_fsid_t& f, vector<pg_t>& pgs, bool r) :
     Message(MSG_OSD_SCRUB),
     fsid(f), scrub_pgs(pgs), repair(r) {}
