@@ -422,7 +422,6 @@ void ReplicatedPG::calc_trim_to()
 	min_last_complete_ondisk != pg_trim_to) {
       dout(10) << "calc_trim_to " << pg_trim_to << " -> " << min_last_complete_ondisk << dendl;
       pg_trim_to = min_last_complete_ondisk;
-      assert(pg_trim_to >= log.bottom);
       assert(pg_trim_to <= log.top);
     }
   } else
