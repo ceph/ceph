@@ -156,6 +156,12 @@ static void dump_status(struct req_state *s, const char *status)
 {
   CGI_PRINTF(s->out,"Status: %s\n", status);
 }
+
+static void dump_content_length(struct req_state *s, int len)
+{
+  CGI_PRINTF(s->out,"Content-Length: %d\n", len);
+}
+
 struct errno_http {
   int err;
   const char *http_str;
@@ -374,7 +380,7 @@ int parse_time(const char *time_str, time_t *time)
 
   return 0;
 }
-void get_object(struct req_state *s, string& bucket, string& obj)
+void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
 {
   struct s3_err err;
   const char *range_str = FCGX_GetParam("HTTP_RANGE", s->envp);
@@ -389,7 +395,7 @@ void get_object(struct req_state *s, string& bucket, string& obj)
   int r = -EINVAL;
   off_t ofs = 0, end = -1, len = 0;
   char *data;
-cerr << "get 1" << endl;
+
   if (range_str) {
     r = parse_range(range_str, ofs, end);
     if (r < 0)
@@ -408,20 +414,22 @@ cerr << "get 1" << endl;
   }
 
   r = 0;
-  len = get_obj(bucket, obj, &data, ofs, end, mod_ptr, unmod_ptr, if_match, if_nomatch, &err);
+  len = get_obj(bucket, obj, &data, ofs, end, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
   if (len < 0)
     r = len;
 
-cerr << "get 10 r=" << r << " len=" << len << endl;
 done:
+  if (!get_data && !r) {
+    dump_content_length(s, len);
+  }
   dump_errno(s, r, &err);
   end_header(s);
-  if (!r) {
+  if (get_data && !r) {
     FCGX_PutStr(data, len, s->out); 
   }
 }
 
-void do_retrieve_objects(struct req_state *s)
+void do_retrieve_objects(struct req_state *s, bool get_data)
 {
   int pos;
   string bucket, host_str;
@@ -433,11 +441,11 @@ void do_retrieve_objects(struct req_state *s)
   if (s->path_name[0] == '/') {
     string tmp = s->path_name;
     bucket = tmp.substr(1);
-    int obj_pos = bucket.find('/');
+    unsigned int obj_pos = bucket.find('/');
     if (obj_pos > 0 && (obj_pos < bucket.size() - 1)) {
       string bucket_name = bucket.substr(0, obj_pos);
       string obj_name = bucket.substr(obj_pos + 1);
-      get_object(s, bucket_name, obj_name);
+      get_object(s, bucket_name, obj_name, get_data);
       return;
     }
     p = s->query;
@@ -619,12 +627,12 @@ done:
   end_header(s);
 }
 
-void do_retrieve(struct req_state *s)
+void do_retrieve(struct req_state *s, bool get_data)
 {
   if (strcmp(s->path_name, "/") == 0)
     do_list_buckets(s);
   else
-      do_retrieve_objects(s);
+      do_retrieve_objects(s, get_data);
 }
 
 void do_create(struct req_state *s)
@@ -707,11 +715,13 @@ int main(void)
       continue;
 
     if (strcmp(s.method, "GET") == 0)
-      do_retrieve(&s);
-    if (strcmp(s.method, "PUT") == 0)
+      do_retrieve(&s, true);
+    else if (strcmp(s.method, "PUT") == 0)
       do_create(&s);
-    if (strcmp(s.method, "DELETE") == 0)
+    else if (strcmp(s.method, "DELETE") == 0)
       do_delete(&s);
+    else if (strcmp(s.method, "HEAD") == 0)
+      do_retrieve(&s, false);
   }
   return 0;
 }

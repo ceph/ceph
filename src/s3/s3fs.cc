@@ -243,6 +243,7 @@ int get_obj(std::string& bucket, std::string& obj,
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
+            bool get_data,
             struct s3_err *err)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -308,6 +309,10 @@ cerr << "get_obj 2 errno=" << errno << " buf=" << buf << endl;
     }
   }
 
+  if (!get_data) {
+    r = max_len;
+    goto done;
+  }
   *data = (char *)malloc(max_len);
   if (!*data) {
     r = -ENOMEM;

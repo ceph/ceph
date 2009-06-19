@@ -41,6 +41,7 @@ int get_obj(std::string& bucket, std::string& obj,
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
+            bool get_data,
             struct s3_err *err);
 
 #endif
