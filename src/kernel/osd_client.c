@@ -180,7 +180,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		head->snap_seq = cpu_to_le64(snapc->seq);
 		head->num_snaps = cpu_to_le32(snapc->num_snaps);
 		for (i = 0; i < snapc->num_snaps; i++) {
-			*(__le64 *)p = cpu_to_le64(snapc->snaps[i]);
+			put_unaligned_le64(snapc->snaps[i], p);
 			p += sizeof(u64);
 		}
 	}
@@ -590,7 +590,6 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	struct ceph_osdmap *newmap = NULL, *oldmap;
 	int err;
 	ceph_fsid_t fsid;
-	__le64 major, minor;
 
 	dout(2, "handle_map have %u\n", osdc->osdmap ? osdc->osdmap->epoch : 0);
 	p = msg->front.iov_base;
@@ -598,10 +597,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 
 	/* verify fsid */
 	ceph_decode_need(&p, end, sizeof(fsid), bad);
-	ceph_decode_64_le(&p, major);
-	__ceph_fsid_set_major(&fsid, major);
-	ceph_decode_64_le(&p, minor);
-	__ceph_fsid_set_minor(&fsid, minor);
+	ceph_decode_copy(&p, &fsid, sizeof(fsid));
 	if (ceph_fsid_compare(&fsid, &osdc->client->monc.monmap->fsid)) {
 		derr(0, "got map with wrong fsid, ignoring\n");
 		return;

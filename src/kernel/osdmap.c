@@ -372,7 +372,6 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	u32 len, max, i;
 	int err = -EINVAL;
 	void *start = *p;
-	__le64 major, minor;
 
 	dout(30, "osdmap_decode %p to %p len %d\n", *p, end, (int)(end - *p));
 
@@ -381,15 +380,10 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 		return ERR_PTR(-ENOMEM);
 
 	ceph_decode_need(p, end, 2*sizeof(u64)+6*sizeof(u32), bad);
-	ceph_decode_64_le(p, major);
-	__ceph_fsid_set_major(&map->fsid, major);
-	ceph_decode_64_le(p, minor);
-	__ceph_fsid_set_minor(&map->fsid, minor);
+	ceph_decode_copy(p, &map->fsid, sizeof(map->fsid));
 	ceph_decode_32(p, map->epoch);
-	ceph_decode_32_le(p, map->created.tv_sec);
-	ceph_decode_32_le(p, map->created.tv_nsec);
-	ceph_decode_32_le(p, map->modified.tv_sec);
-	ceph_decode_32_le(p, map->modified.tv_nsec);
+	ceph_decode_copy(p, &map->created, sizeof(map->created));
+	ceph_decode_copy(p, &map->modified, sizeof(map->modified));
 
 	ceph_decode_32(p, map->num_pools);
 	map->pg_pool = kmalloc(map->num_pools * sizeof(*map->pg_pool),
@@ -478,18 +472,13 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	__s32 new_flags, max;
 	void *start = *p;
 	int err = -EINVAL;
-	__le64 major, minor;
 
 	ceph_decode_need(p, end, sizeof(fsid)+sizeof(modified)+2*sizeof(u32),
 			 bad);
-	ceph_decode_64_le(p, major);
-	__ceph_fsid_set_major(&fsid, major);
-	ceph_decode_64_le(p, minor);
-	__ceph_fsid_set_minor(&fsid, minor);
+	ceph_decode_copy(p, &fsid, sizeof(fsid));
 	ceph_decode_32(p, epoch);
 	BUG_ON(epoch != map->epoch+1);
-	ceph_decode_32_le(p, modified.tv_sec);
-	ceph_decode_32_le(p, modified.tv_nsec);
+	ceph_decode_copy(p, &modified, sizeof(modified));
 	ceph_decode_32(p, new_flags);
 
 	/* full map? */

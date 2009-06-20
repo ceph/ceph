@@ -1,6 +1,8 @@
 #ifndef __CEPH_DECODE_H
 #define __CEPH_DECODE_H
 
+#include <asm/unaligned.h>
+
 /*
  * in all cases,
  *   void **p     pointer to position pointer
@@ -16,42 +18,25 @@
 			goto bad;			\
 	} while (0)
 
-#define ceph_decode_64(p, v)				\
-	do {						\
-		v = le64_to_cpu(*(__le64 *)*(p));	\
-		*(p) += sizeof(u64);			\
+#define ceph_decode_64(p, v)					\
+	do {							\
+		v = get_unaligned_le64(*(p));			\
+		*(p) += sizeof(u64);				\
 	} while (0)
-#define ceph_decode_32(p, v)				\
-	do {						\
-		v = le32_to_cpu(*(__le32 *)*(p));	\
-		*(p) += sizeof(u32);			\
+#define ceph_decode_32(p, v)					\
+	do {							\
+		v = get_unaligned_le32(*(p));			\
+		*(p) += sizeof(u32);				\
 	} while (0)
-#define ceph_decode_16(p, v)				\
-	do {						\
-		v = le16_to_cpu(*(__le16 *)*(p));	\
-		*(p) += sizeof(u16);			\
+#define ceph_decode_16(p, v)					\
+	do {							\
+		v = get_unaligned_le16(*(p));			\
+		*(p) += sizeof(u16);				\
 	} while (0)
 #define ceph_decode_8(p, v)				\
 	do {						\
 		v = *(u8 *)*(p);			\
 		(*p)++;					\
-	} while (0)
-
-/* decode into an __le## */
-#define ceph_decode_64_le(p, v)				\
-	do {						\
-		v = *(__le64 *)*(p);			\
-		*(p) += sizeof(u64);			\
-	} while (0)
-#define ceph_decode_32_le(p, v)				\
-	do {						\
-		v = *(__le32 *)*(p);			\
-		*(p) += sizeof(u32);			\
-	} while (0)
-#define ceph_decode_16_le(p, v)				\
-	do {						\
-		v = *(__le16 *)*(p);			\
-		*(p) += sizeof(u16);			\
 	} while (0)
 
 #define ceph_decode_copy(p, pv, n)			\
@@ -101,20 +86,20 @@
 /*
  * encoders
  */
-#define ceph_encode_64(p, v)			  \
-	do {					  \
-		*(__le64 *)*(p) = cpu_to_le64((v)); \
-		*(p) += sizeof(u64);		  \
+#define ceph_encode_64(p, v)						\
+	do {								\
+		put_unaligned_le64(v, (__le64 *)*(p));			\
+		*(p) += sizeof(u64);					\
 	} while (0)
-#define ceph_encode_32(p, v)			  \
-	do {					  \
-		*(__le32 *)*(p) = cpu_to_le32((v)); \
-		*(p) += sizeof(u32);		  \
+#define ceph_encode_32(p, v)					\
+	do {							\
+		put_unaligned_le32(v, (__le32 *)*(p));		\
+		*(p) += sizeof(u32);				\
 	} while (0)
-#define ceph_encode_16(p, v)			  \
-	do {					  \
-		*(__le16 *)*(p) = cpu_to_le16((v)); \
-		*(p) += sizeof(u16);		  \
+#define ceph_encode_16(p, v)					\
+	do {							\
+		put_unaligned_le16(v), (__le16 *)*(p));		\
+	*(p) += sizeof(u16);					\
 	} while (0)
 #define ceph_encode_8(p, v)			  \
 	do {					  \

@@ -1,4 +1,5 @@
 #include <linux/exportfs.h>
+#include <asm/unaligned.h>
 
 #include "super.h"
 #include "ceph_debug.h"
@@ -29,7 +30,7 @@ struct ceph_export_item {
 	struct ceph_vino ino;
 	struct ceph_vino parent_ino;
 	u32 parent_name_hash;
-};
+} __attribute__ ((packed));
 
 #define IPSZ ((sizeof(struct ceph_export_item) + sizeof(u32) + 1) / sizeof(u32))
 
@@ -137,10 +138,10 @@ static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
 				 int fh_len, int fh_type)
 {
 	u32 *fh = fid->raw;
-	u64 ino = *(u64 *)fh;
+	u64 ino = get_unaligned((u64 *)fh);
 	u32 hash = fh[2];
 
-	derr(10, "fh_to_parent %llx.%x\n", ino, hash);
+	derr(10, "fh_to_parent %llx.%x\n", (unsigned long long)ino, hash);
 
 	if (fh_len < 6)
 		return ERR_PTR(-ESTALE);

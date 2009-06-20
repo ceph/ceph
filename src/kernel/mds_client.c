@@ -2174,7 +2174,7 @@ void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	mask = le16_to_cpu(h->mask);
 	dname.name = (void *)h + sizeof(*h) + sizeof(u32);
 	dname.len = msg->front.iov_len - sizeof(*h) - sizeof(u32);
-	if (dname.len != le32_to_cpu(*(__le32 *)(h+1)))
+	if (dname.len != get_unaligned_le32(h+1))
 		goto bad;
 
 	/* find session */
@@ -2285,9 +2285,8 @@ void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
 	lease->ino = cpu_to_le64(ceph_vino(inode).ino);
 	lease->first = lease->last = cpu_to_le64(ceph_vino(inode).snap);
 	lease->seq = cpu_to_le32(seq);
-	*(__le32 *)((void *)lease + sizeof(*lease)) = cpu_to_le32(dnamelen);
-	memcpy((void *)lease + sizeof(*lease) + 4, dentry->d_name.name,
-	       dnamelen);
+	put_unaligned_le32(dnamelen, lease + 1);
+	memcpy((void *)(lease + 1) + 4, dentry->d_name.name, dnamelen);
 
 	/*
 	 * if this is a preemptive lease RELEASE, no need to
@@ -2623,7 +2622,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	ceph_fsid_t fsid;
 	int err = -EINVAL;
 	int from;
-	__le64 major, minor;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) == CEPH_ENTITY_TYPE_MDS)
 		from = le32_to_cpu(msg->hdr.src.name.num);
@@ -2631,10 +2629,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		from = -1;
 
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);
-	ceph_decode_64_le(&p, major);
-	__ceph_fsid_set_major(&fsid, major);
-	ceph_decode_64_le(&p, minor);
-	__ceph_fsid_set_minor(&fsid, minor);
+	ceph_decode_copy(&p, &fsid, sizeof(fsid));
 	if (ceph_fsid_compare(&fsid, &mdsc->client->monc.monmap->fsid)) {
 		derr(0, "got mdsmap with wrong fsid\n");
 		return;

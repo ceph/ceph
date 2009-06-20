@@ -1,6 +1,7 @@
 #ifndef _FS_CEPH_SUPER_H
 #define _FS_CEPH_SUPER_H
 
+#include <asm/unaligned.h>
 #include <linux/fs.h>
 #include <linux/wait.h>
 #include <linux/completion.h>
@@ -763,22 +764,22 @@ extern const char *ceph_msg_type_name(int type);
 
 static inline __le64 __ceph_fsid_minor(ceph_fsid_t *fsid)
 {
-	return *(__le64 *)&fsid->fsid[8];
+	return get_unaligned_le64(&fsid->fsid[8]);
 }
 
 static inline __le64 __ceph_fsid_major(ceph_fsid_t *fsid)
 {
-	return *(__le64 *)&fsid->fsid[0];
+	return get_unaligned_le64(&fsid->fsid[0]);
 }
 
 static inline void __ceph_fsid_set_minor(ceph_fsid_t *fsid, __le64 val)
 {
-	*(__le64 *)&fsid->fsid[8] = val;
+	put_unaligned_le64(val, &fsid->fsid[8]);
 }
 
 static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
 {
-	*(__le64 *)&fsid->fsid[0] = val;
+	put_unaligned_le64(val, &fsid->fsid[0]);
 }
 
 /* inode.c */
