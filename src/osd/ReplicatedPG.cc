@@ -1680,7 +1680,6 @@ void ReplicatedPG::issue_repop(RepGather *repop, int dest, utime_t now,
     wr->get_data() = repop->ctx->op->get_data();   // _copy_ bufferlist
   } else {
     // ship resulting transaction, log entries, and pg_stats
-    wr->ops = repop->ctx->ops;   // just fyi
     ::encode(repop->ctx->op_t, wr->get_data());
     ::encode(repop->ctx->log, wr->logbl);
     wr->pg_stats = info.stats;
@@ -2045,8 +2044,10 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   const char *opname;
   if (op->noop)
     opname = "no-op";
-  else
+  else if (op->ops.size())
     opname = ceph_osd_op_name(op->ops[0].op.op);
+  else
+    opname = "trans";
 
   dout(10) << "sub_op_modify " << opname 
            << " " << soid 

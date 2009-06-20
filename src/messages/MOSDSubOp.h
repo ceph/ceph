@@ -72,7 +72,7 @@ public:
     ::decode(pgid, p);
     ::decode(poid, p);
 
-    unsigned num_ops;
+    __u32 num_ops;
     ::decode(num_ops, p);
     ops.resize(num_ops);
     unsigned off = 0;
