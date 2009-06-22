@@ -23,7 +23,7 @@ git branch -D series_start
 git branch series_start
 
 # fs/staging
-git cherry-pick 5556036065d8b04b2f7dd439fbf0d710e295cd44
+#git cherry-pick 5556036065d8b04b2f7dd439fbf0d710e295cd44
 
 git add Documentation/filesystems/ceph.txt
 git commit -s -F - <<EOF
@@ -313,7 +313,8 @@ and hooks to adjust debug levels.
 
 EOF
 
-git apply $cephtree/src/kernel/kbuild.staging.patch
+#git apply $cephtree/src/kernel/kbuild.staging.patch
+git apply $cephtree/src/kernel/kbuild.patch
 git add $target/ceph/Makefile
 git add $target/ceph/Kconfig
 git commit -s -F - <<EOF $target/Kconfig $target/ceph/Kconfig $target/Makefile $target/ceph/Makefile
