@@ -436,10 +436,12 @@ noinst_HEADERS = \
 	kernel/messenger.h\
 	kernel/mon_client.c\
 	kernel/mon_client.h\
+	kernel/msgr.h\
 	kernel/osd_client.c\
 	kernel/osd_client.h\
 	kernel/osdmap.c\
 	kernel/osdmap.h\
+	kernel/rados.h\
 	kernel/snap.c\
 	kernel/super.c\
 	kernel/super.h\
