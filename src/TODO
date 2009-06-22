@@ -48,6 +48,7 @@ mds/Server.cc:410: FAILED assert(session->is_stale_purging())
  8: /lib/libpthread.so.0 [0x7f51a9f4c3f7]
  9: /lib/libc.so.6(clone+0x6d) [0x7f51a951b94d]
 
+- btrfs corruption
 
 later
 - client reconnect after long eviction; and slow delayed reconnect
@@ -64,8 +65,13 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
+- kill -[io] options
+- make 'ls' output to file
+- make objecter->list_objects return even with <max entries (i.e., after each non-empty pg)
+- verify 'ls' behaves with snaps
+- allow put from stdin: 'echo foo | rados -p mypool put foo -'
 - perl swig wrapper
-- call method
+- 'rados call foo.bar'?
 - merge pgs
 - destroy pg_pools
 - autosize pg_pools?
@@ -122,9 +128,17 @@ filestore
 - get file csum?
 
 btrfs
+- fix corruption bug
 - clone compressed inline extents
 - ioctl to pull out data csum?
 
+osd
+- make scrub interruptible
+- preserve pg logs on disk for longer period
+- optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
+- pg repair
+- pg split should be a work queue
+- optimize remove wrt recovery pushes?
 
 userspace client
 - handle session STALE
@@ -190,15 +204,6 @@ pgmon
 
 crush
 - allow forcefeed for more complicated rule structures.  (e.g. make force_stack a list< set<int> >)
-
-osd
-- preserve pg logs on disk for longer period
-- optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
-- pg repair
-- pg split should be a work queue
-- generalize ack semantics?  or just change ack from memory to journal?  memory/journal/disk...
-- rdlocks
-- optimize remove wrt recovery pushes
 
 simplemessenger
 - close idle connections?
