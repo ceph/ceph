@@ -48,6 +48,24 @@ mds/Server.cc:410: FAILED assert(session->is_stale_purging())
  8: /lib/libpthread.so.0 [0x7f51a9f4c3f7]
  9: /lib/libc.so.6(clone+0x6d) [0x7f51a951b94d]
 
+- osd needs to handle heartbeats from osds that are already down.. they aren't fully getting filtered
+  out, which leads to an attempted MOSDFailure on an already-down osd
+osd/OSDMap.h: In function 'entity_inst_t OSDMap::get_inst(int)':
+osd/OSDMap.h:378: FAILED assert(exists(osd) && is_up(osd))
+ 1: ./cosd(_Z18__ceph_assert_failPKcS0_iS0_+0x3a) [0x7a727b]
+ 2: ./cosd(_ZN6OSDMap8get_instEi+0x53) [0x65ff0b]
+ 3: ./cosd(_ZN3OSD13send_failuresEv+0x98) [0x68d0ac]
+ 4: ./cosd(_ZN3OSD13do_mon_reportEv+0x3c6) [0x69e89c]
+ 5: ./cosd(_ZN3OSD4tickEv+0x27a) [0x6ab8ac]
+ 6: ./cosd(_ZN3OSD6C_Tick6finishEi+0x1c) [0x70cde0]
+ 7: ./cosd(_ZN9SafeTimer12EventWrapper6finishEi+0x6d) [0x7a0041]
+ 8: ./cosd(_ZN5Timer11timer_entryEv+0x440) [0x7a132a]
+ 9: ./cosd(_ZN5Timer11TimerThread5entryEv+0x19) [0x618d77]
+ 10: ./cosd(_ZN6Thread11_entry_funcEPv+0x20) [0x629cd8]
+ 11: /lib/libpthread.so.0 [0x7fecc449f3f7]
+ 12: /lib/libc.so.6(clone+0x6d) [0x7fecc3a6e94d]
+ NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
+
 - btrfs corruption
 
 later
@@ -133,8 +151,9 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
-- make scrub interruptible
+- segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
+- make scrub interruptible
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 - pg repair
 - pg split should be a work queue
