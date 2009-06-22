@@ -3195,8 +3195,11 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
     // traverse
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
     CDir *dir = path_traverse_to_dir(p->second);
-    assert(dir);
-    if (!dir->is_complete()) {
+    if (!dir) {
+      dout(5) << " path not found " << p->first << " at " << p->second << dendl;
+      missing.insert(p->first);
+      pathmap.erase(p++);
+    } else if (!dir->is_complete()) {
       fetch_queue.insert(dir);
       p++;
     } else {
@@ -5865,6 +5868,8 @@ CDir *MDCache::path_traverse_to_dir(filepath& path)
 
   for (unsigned i=0; i<path.depth(); i++) {
     dout(20) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << dendl;
+    if (!cur->is_dir())
+      return 0;
     frag_t fg = cur->pick_dirfrag(path[i]);
     CDir *dir = cur->get_or_open_dirfrag(this, fg);
     CDentry *dn = dir->lookup(path[i]);
