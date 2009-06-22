@@ -629,19 +629,19 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
     dout(20) << "got a response with objects, proceeding" << dendl;
     list_context->entries->merge(response.entries);
     list_context->max_entries -= response_size;
-    if (!list_context->max_entries) { //yay, we're done!
-      dout(20) << "reached requested number of objects, cleaning up and exiting" << dendl;
-      delete bl;
-      final_finish->finish(0);
-      delete final_finish;
-      return;
-    }
+    if (list_context->max_entries) //we emptied this pg
+      ++list_context->current_pg;
+    dout(20) << "cleaning up and exiting" << dendl;
+    delete bl;
+    final_finish->finish(0);
+    delete final_finish;
+    return;
   }
-  //if we make this this far, there are no more objects in the current pg, but we want more!
+  //if we make this this far, there are no objects left in the current pg, but we want more!
   ++list_context->current_pg;
   dout(20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
   if(list_context->current_pg < list_context->starting_pg_num){ //we have more pgs to go through
-    //  list_context->cookie = 0; //Should I uncomment this?
+    list_context->cookie = 0;
     delete bl;
     list_objects(list_context, final_finish);
     return;

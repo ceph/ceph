@@ -38,12 +38,14 @@ public:
     ::encode(fsid, payload);
     ::encode(tid, payload);
     ::encode(replyCode, payload);
+    ::encode(epoch, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(tid, p);
     ::decode(replyCode, p);
+    ::decode(epoch, p);
   }
 };
 

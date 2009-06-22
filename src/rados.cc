@@ -17,6 +17,7 @@
 #include "common/common_init.h"
 
 #include <iostream>
+#include <fstream>
 
 #include <stdlib.h>
 #include <time.h>
@@ -231,7 +232,6 @@ int main(int argc, const char **argv)
   vector<const char*> nargs;
   bufferlist indata, outdata;
   const char *outfile = 0;
-  bool readData = false;
   bool writeData = false;
 
   const char *pool = 0;
@@ -243,20 +243,7 @@ int main(int argc, const char **argv)
   rados_snap_t snapid = CEPH_NOSNAP;
 
   FOR_EACH_ARG(args) {
-    if (CONF_ARG_EQ("out_file", 'o')) {
-      CONF_SAFE_SET_ARG_VAL(&outfile, OPT_STR);
-    } else if (CONF_ARG_EQ("in_data", 'i')) {
-      const char *fname;
-      CONF_SAFE_SET_ARG_VAL(&fname, OPT_STR);
-      int r = indata.read_file(fname);
-      if (r < 0) {
-	cerr << "error reading " << fname << ": " << strerror(-r) << std::endl;
-	exit(0);
-      } else {
-	cout << "read " << indata.length() << " bytes from " << fname << std::endl;
-	readData = true;
-      }
-    } else if (CONF_ARG_EQ("pool", 'p')) {
+    if (CONF_ARG_EQ("pool", 'p')) {
       CONF_SAFE_SET_ARG_VAL(&pool, OPT_STR);
     } else if (CONF_ARG_EQ("snapid", 'S')) {
       CONF_SAFE_SET_ARG_VAL(&snapid, OPT_LONGLONG);
@@ -354,9 +341,11 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool)
+    cerr << "lsing now" << std::endl;
+    if (!pool || nargs.size() < 2)
       usage();
-
+    outfile = nargs[1];
+    bool stdout = (strcmp(outfile, "-") == 0);
     Rados::ListCtx ctx;
     while (1) {
       list<object_t> vec;
@@ -365,17 +354,27 @@ int main(int argc, const char **argv)
 	cerr << "got error: " << strerror(-r) << std::endl;
 	break;
       }
-      if (vec.empty())
+      if (vec.empty()) {
 	break;
-      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
-	cout << *iter << std::endl;
+      }
+
+      ostream *outstream;
+      if(stdout)
+	outstream = &cout;
+      else
+	outstream = new ofstream(outfile);
+      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter) {
+	*outstream << iter->name << std::endl;
+      }
+      if (!stdout)
+	delete outstream;
     }
-  } 
+  }
   else if (strcmp(nargs[0], "get") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool || nargs.size() < 3)
       usage();
     object_t oid(nargs[1]);
-    cerr << "Beginning read" << std::endl;
+    outfile = nargs[2];
     int r = rados.read(p, oid, 0, outdata, 0);
     if (r < 0) {
       cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
@@ -386,14 +385,33 @@ int main(int argc, const char **argv)
       writeData = true;
   }
   else if (strcmp(nargs[0], "put") == 0) {
-    if (!pool || nargs.size() < 2)
+    if (!pool || nargs.size() < 3)
       usage();
-    if (!readData) {
-      cerr << "must specify input file" << std::endl;
-      usage();
-    }
+
     object_t oid(nargs[1]);
-    int r = rados.write_full(p, oid, indata);
+    bool stdin = false;
+    int r;
+    if(strcmp(nargs[2], "-") == 0) {
+      cerr << "Please input object contents" << std::endl;
+      stdin = true;
+    }
+    if(!stdin) {
+      r = indata.read_file(nargs[2]);
+      if (r < 0) {
+	cerr << "Error reading input file " << nargs[2] << std::endl;
+	ret = -1;
+	goto out;
+      }
+    }
+    else {
+      char buf[256];
+      while(!cin.eof()) {
+	cin.getline(buf, 256);
+	indata.append(buf);
+	indata.append('\n');
+      }
+    }
+    r = rados.write_full(p, oid, indata);
     if (r < 0) {
       cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
       ret = -1;

@@ -1917,7 +1917,8 @@ bool FileStore::collection_empty(coll_t c)
   return empty;
 }
 
-int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& ls, int max_count, collection_list_handle_t *handle)
+int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>& ls, int max_count,
+				       collection_list_handle_t *handle)
 {  
   if (fake_collections) return collections.collection_list(c, ls);
 
@@ -1928,10 +1929,6 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
   struct dirent *de;
   bool end;
   
-  // first, build (ino, object) list
-  vector< pair<ino_t,sobject_t> > inolist;
-
-
   dir = ::opendir(fn);
 
   if (!dir) {
@@ -1944,7 +1941,8 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
     *handle = 0;
   }
 
-  for (int i=0; i<max_count; i++) {
+  int i=0;
+  while (i < max_count) {
     errno = 0;
     end = false;
     de = ::readdir(dir);
@@ -1959,18 +1957,15 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
 
     // parse
     if (de->d_name[0] == '.') {
-      i--;
       continue;
     }
     //cout << "  got object " << de->d_name << std::endl;
     sobject_t o;
     if (parse_object(de->d_name, o)) {
-      if (o.snap != seq) {
-        i--;
-        continue;
+      if (o.snap >= seq) {
+	ls.push_back(o);
+	i++;
       }
-      inolist.push_back(pair<ino_t,sobject_t>(de->d_ino, o));
-      ls.push_back(o);
     }
   }
 
@@ -1979,12 +1974,6 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
 
   ::closedir(dir);
 
-  // build final list
-  ls.resize(inolist.size());
-  int i = 0;
-  for (vector< pair<ino_t,sobject_t> >::iterator p = inolist.begin(); p != inolist.end(); p++)
-    ls[i++] = p->second;
-  
   dout(10) << "collection_list " << fn << " = 0 (" << ls.size() << " objects)" << dendl;
   return 0;
 }

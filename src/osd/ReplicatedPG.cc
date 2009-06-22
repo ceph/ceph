@@ -377,6 +377,8 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
   bufferlist outdata;
   int result = 0;
 
+  snapid_t snapid = op->get_snapid();
+
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); p++) {
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS:
@@ -389,12 +391,33 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
         PGLSResponse response;
         response.handle = (collection_list_handle_t)(__u64)(p->op.pgls_cookie);
         vector<sobject_t> sentries;
-	result = osd->store->collection_list_partial(info.pgid.to_coll(), op->get_snapid(),
+	result = osd->store->collection_list_partial(info.pgid.to_coll(), snapid,
 						     sentries, p->op.length,
 	                                             &response.handle);
-	if (!result) {
+	if (result == 0) {
           vector<sobject_t>::iterator iter;
           for (iter = sentries.begin(); iter != sentries.end(); ++iter) {
+	    if (snapid != CEPH_NOSNAP) {
+	      // skip items not defined for this snapshot
+	      bufferlist bl;
+	      osd->store->getattr(info.pgid.to_coll(), *iter, OI_ATTR, bl);
+	      object_info_t oi(bl);
+	      bool exists = false;
+	      if (iter->snap == CEPH_NOSNAP) {
+		if (snapid <= oi.snapset.seq)
+		  continue;
+	      }
+	      else {
+	      for (vector<snapid_t>::iterator i = oi.snaps.begin(); i != oi.snaps.end(); ++i)
+		if (*i == snapid) {
+		  exists = true;
+		  break;
+		}
+	      dout(10) << *iter << " has " << oi.snaps << " .. exists=" << exists << dendl;
+	      if (!exists)
+		continue;
+	      }
+	    }
             response.entries.push_back(iter->oid);
           }
 	  ::encode(response, outdata);

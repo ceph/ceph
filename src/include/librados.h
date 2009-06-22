@@ -103,7 +103,7 @@ public:
   int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
              bufferlist& inbl, bufferlist& outbl);
 
- struct ListCtx {
+  struct ListCtx {
    void *ctx;
    ListCtx() : ctx(NULL) {}
  };
