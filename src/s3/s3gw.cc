@@ -30,25 +30,7 @@ using namespace std;
    FCGX_FPrintF(stream, __VA_ARGS__); \
 } while (0)
 
-
-
 static FILE *dbg;
-
-struct req_state {
-   FCGX_ParamArray envp;
-   FCGX_Stream *in;
-   FCGX_Stream *out;
-   bool content_started;
-   int indent;
-   const char *path_name;
-   const char *host;
-   const char *method;
-   const char *query;
-   const char *length;
-   bool err_exist;
-   struct s3_err err;
-};
-
 
 class NameVal
 {
@@ -83,7 +65,9 @@ class XMLArgs
   string str, empty_str;
   map<string, string> val_map;
  public:
+   XMLArgs() {}
    XMLArgs(string s) : str(s) {}
+   void set(string s) { val_map.clear(); str = s; }
    int parse();
    string& get(string& name);
    string& get(const char *name);
@@ -127,6 +111,93 @@ string& XMLArgs::get(const char *name)
   return get(s);
 }
 
+struct req_state {
+   FCGX_ParamArray envp;
+   FCGX_Stream *in;
+   FCGX_Stream *out;
+   bool content_started;
+   int indent;
+   const char *path_name;
+   const char *host;
+   const char *method;
+   const char *query;
+   const char *length;
+   bool err_exist;
+   struct s3_err err;
+
+   XMLArgs args;
+
+   const char *bucket;
+   const char *object;
+
+   string bucket_str;
+   string object_str;
+};
+
+void init_entities_from_header(struct req_state *s)
+{
+  s->bucket = NULL;
+  s->bucket_str = "";
+  s->object = NULL;
+  s->object_str = "";
+
+  string h(s->host);
+
+  int pos = h.find("s3.");
+
+  if (pos > 0) {
+    s->bucket_str = h.substr(0, pos-1);
+    s->bucket = s->bucket_str.c_str();
+  }
+
+  const char *req_name = s->path_name;
+  const char *p;
+
+  if (*req_name == '?') {
+    p = req_name;
+  } else {
+    p = s->query;
+  }
+
+  s->args.set(p);
+  s->args.parse();
+
+  if (*req_name != '/')
+    return;
+
+  req_name++;
+
+  if (!*req_name)
+    return;
+
+  string req(req_name);
+  string first;
+
+  pos = req.find('/');
+  if (pos >=  0) {
+    first = req.substr(0, pos);
+  } else {
+    first = req;
+  }
+  if (!s->bucket) {
+    s->bucket_str = first;
+    s->bucket = s->bucket_str.c_str();
+  } else {
+    s->object_str = first;
+    s->object = s->object_str.c_str();
+    return;
+  }
+
+  if (pos < 0)
+    return;
+
+  s->object_str = req.substr(pos+1);
+
+  if (s->object_str.size() > 0) {
+    s->object = s->object_str.c_str();
+  }
+}
+
 static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *in, FCGX_Stream *out)
 {
   s->envp = envp;
@@ -141,6 +212,8 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   s->length = FCGX_GetParam("CONTENT_LENGTH", envp);
   s->err_exist = false;
   memset(&s->err, 0, sizeof(s->err));
+
+  init_entities_from_header(s);
 }
 
 static void buf_to_hex(const unsigned char *buf, int len, char *str)
@@ -380,6 +453,7 @@ int parse_time(const char *time_str, time_t *time)
 
   return 0;
 }
+
 void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
 {
   struct s3_err err;
@@ -431,54 +505,30 @@ done:
 
 void do_retrieve_objects(struct req_state *s, bool get_data)
 {
-  int pos;
-  string bucket, host_str;
   string prefix, marker, max_keys, delimiter;
   int max;
-  const char *p;
   string id = "0123456789ABCDEF";
 
-  if (s->path_name[0] == '/') {
-    string tmp = s->path_name;
-    bucket = tmp.substr(1);
-    unsigned int obj_pos = bucket.find('/');
-    if (obj_pos > 0 && (obj_pos < bucket.size() - 1)) {
-      string bucket_name = bucket.substr(0, obj_pos);
-      string obj_name = bucket.substr(obj_pos + 1);
-      get_object(s, bucket_name, obj_name, get_data);
-      return;
-    }
-    p = s->query;
-  } else if (s->path_name [0] == '?') {
-    if (!s->host)
-      return;
-    host_str = s->host;
-    pos = host_str.find('.');
-    if (pos >= 0) {
-      bucket = host_str.substr(pos);
-    } else {
-      bucket = host_str;
-    }
-    p = s->path_name;
-  } else {
+cerr << "s->object=" << (s->object ? s->object : "NULL") << " s->bucket=" << s->bucket << std::endl;
+  if (s->object) {
+    get_object(s, s->bucket_str, s->object_str, get_data);
+    return;
+  } else if (!s->bucket) {
     return;
   }
 
-  XMLArgs args(p);
-  args.parse();
-
-  prefix = args.get("prefix");
-  marker = args.get("marker");
-  max_keys = args.get("max-keys");
+  prefix = s->args.get("prefix");
+  marker = s->args.get("marker");
+  max_keys = s->args.get("max-keys");
  if (!max_keys.empty()) {
     max = atoi(max_keys.c_str());
   } else {
     max = -1;
   }
-  delimiter = args.get("delimiter");
+  delimiter = s->args.get("delimiter");
 
   vector<S3ObjEnt> objs;
-  int r = list_objects(id, bucket, max, prefix, marker, objs);
+  int r = list_objects(id, s->bucket_str, max, prefix, marker, objs);
   dump_errno(s, (r < 0 ? r : 0));
 
   end_header(s);
@@ -487,7 +537,7 @@ void do_retrieve_objects(struct req_state *s, bool get_data)
     return;
 
   open_section(s, "ListBucketResult");
-  dump_value(s, "Name", bucket.c_str()); 
+  dump_value(s, "Name", s->bucket);
   if (!prefix.empty())
     dump_value(s, "Prefix", prefix.c_str());
   if (!marker.empty())
@@ -517,15 +567,9 @@ void do_retrieve_objects(struct req_state *s, bool get_data)
 
 void do_create_bucket(struct req_state *s)
 {
-  const char *req_name = s->path_name + 1;
-  string str(req_name);
-  int pos = str.find('/');
-  if (pos <= 0)
-    pos = str.size();
-  string bucket_name = str.substr(0, pos);
   string id = "0123456789ABCDEF";
 
-  int r = create_bucket(id, bucket_name);
+  int r = create_bucket(id, s->bucket_str);
 
   dump_errno(s, r);
   end_header(s);
@@ -533,17 +577,12 @@ void do_create_bucket(struct req_state *s)
 
 void do_create_object(struct req_state *s)
 {
-  const char *req_name = s->path_name + 1;
   int r = -EINVAL;
-  string str(req_name);
-  int pos = str.find('/');
   char *data = NULL;
   struct s3_err err;
-  if (pos < 0) {
+  if (!s->object) {
     goto done;
   } else {
-    string bucket_name = str.substr(0, pos);
-    string obj_name = str.substr(pos + 1);
     string id = "0123456789ABCDEF";
 
     size_t cl = atoll(s->length);
@@ -581,7 +620,7 @@ void do_create_object(struct req_state *s)
     }
 
     string md5_str(calc_md5);
-    r = put_obj(id, bucket_name, obj_name, data, actual, md5_str);
+    r = put_obj(id, s->bucket_str, s->object_str, data, actual, md5_str);
   }
 done:
   free(data);
@@ -592,15 +631,12 @@ done:
 
 void do_delete_bucket(struct req_state *s)
 {
-  const char *req_name = s->path_name + 1;
-  string str(req_name);
-  int pos = str.find('/');
-  if (pos <= 0)
-    pos = str.size();
-  string bucket_name = str.substr(0, pos);
+  int r = -EINVAL;
   string id = "0123456789ABCDEF";
 
-  int r = delete_bucket(id, bucket_name);
+  if (s->bucket) {
+    r = delete_bucket(id, s->bucket_str);
+  }
 
   dump_errno(s, r);
   end_header(s);
@@ -608,79 +644,43 @@ void do_delete_bucket(struct req_state *s)
 
 void do_delete_object(struct req_state *s)
 {
-  const char *req_name = s->path_name + 1;
   int r = -EINVAL;
-  string str(req_name);
-  int pos = str.find('/');
-  if (pos < 0) {
-    goto done;
-  } else {
-    string bucket_name = str.substr(0, pos);
-    string obj_name = str.substr(pos + 1);
+  if (s->object) {
     string id = "0123456789ABCDEF";
 
-    r = delete_obj(id, bucket_name, obj_name);
+    r = delete_obj(id, s->bucket_str, s->object_str);
   }
-done:
-  dump_errno(s, r);
 
+  dump_errno(s, r);
   end_header(s);
 }
 
 void do_retrieve(struct req_state *s, bool get_data)
 {
-  if (strcmp(s->path_name, "/") == 0)
-    do_list_buckets(s);
+  if (s->bucket)
+    do_retrieve_objects(s, get_data);
   else
-      do_retrieve_objects(s, get_data);
+    do_list_buckets(s);
 }
 
 void do_create(struct req_state *s)
 {
-  const char *p;
-  bool create_bucket = false;
-  if (!s->path_name)
-    return;
-
-  if (s->path_name[0] != '/')
-    return;
-
-  p = strchr(&s->path_name[1], '/');
-  if (p) {
-    if (*(p+1) == '\0')
-      create_bucket = true;
-  } else {
-    create_bucket = true;
-  }
-
-  if (create_bucket)
+  if (s->object)
+    do_create_object(s);
+  else if (s->bucket)
     do_create_bucket(s);
   else
-    do_create_object(s);
+    return;
 }
 
 void do_delete(struct req_state *s)
 {
-  const char *p;
-  bool delete_bucket = false;
-  if (!s->path_name)
-    return;
-
-  if (s->path_name[0] != '/')
-    return;
-
-  p = strchr(&s->path_name[1], '/');
-  if (p) {
-    if (*(p+1) == '\0')
-      delete_bucket = true;
-  } else {
-    delete_bucket = true;
-  }
-
-  if (delete_bucket)
+  if (s->object)
+    do_delete_object(s);
+  else if (s->bucket)
     do_delete_bucket(s);
   else
-    do_delete_object(s);
+    return;
 }
 
 static sighandler_t sighandler;
