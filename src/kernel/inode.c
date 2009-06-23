@@ -2177,7 +2177,7 @@ static int ceph_sync_setxattr(struct dentry *dentry, const char *name,
 	req->r_inode_drop = CEPH_CAP_XATTR_SHARED;
 	req->r_num_caps = 1;
 	req->r_args.setxattr.flags = cpu_to_le32(flags);
-	req->r_path2 = name;
+	req->r_path2 = kstrdup(name, GFP_NOFS);
 
 	req->r_pages = pages;
 	req->r_num_pages = nr_pages;
@@ -2308,7 +2308,7 @@ static int ceph_send_removexattr(struct dentry *dentry, const char *name)
 	req->r_inode = igrab(inode);
 	req->r_inode_drop = CEPH_CAP_XATTR_SHARED;
 	req->r_num_caps = 1;
-	req->r_path2 = name;
+	req->r_path2 = kstrdup(name, GFP_NOFS);
 
 	err = ceph_mdsc_do_request(mdsc, parent_inode, req);
 	ceph_mdsc_put_request(req);

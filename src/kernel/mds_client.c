@@ -381,6 +381,8 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 					  CEPH_CAP_PIN);
 			dput(req->r_old_dentry);
 		}
+		kfree(req->r_path1);
+		kfree(req->r_path2);
 		put_request_sessions(req);
 		ceph_unreserve_caps(&req->r_caps_reservation);
 		kfree(req);

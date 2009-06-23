@@ -93,10 +93,8 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 		if (IS_ERR(req))
 			return ERR_PTR(PTR_ERR(req));
 
-		req->r_path1 = "";
 		req->r_ino1 = fh->ino;
 		snprintf(path2, BUF_SIZE, "%d", hash);
-		req->r_path2 = "";
 		req->r_ino2 = fh->parent_ino;
 		req->r_num_caps = 1;
 		err = ceph_mdsc_do_request(mdsc, NULL, req);

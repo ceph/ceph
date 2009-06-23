@@ -241,7 +241,7 @@ more:
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_direct_hash = frag_value(frag);
 		req->r_direct_is_hash = true;
-		req->r_path2 = fi->last_name;
+		req->r_path2 = kstrdup(fi->last_name, GFP_NOFS);
 		req->r_readdir_offset = fi->next_offset;
 		req->r_args.readdir.frag = cpu_to_le32(frag);
 		req->r_args.readdir.max_entries = cpu_to_le32(max_entries);
@@ -605,7 +605,7 @@ static int ceph_symlink(struct inode *dir, struct dentry *dentry,
 	}
 	req->r_dentry = dget(dentry);
 	req->r_num_caps = 2;
-	req->r_path2 = dest;
+	req->r_path2 = kstrdup(dest, GFP_NOFS);
 	req->r_locked_dir = dir;
 	req->r_dentry_drop = CEPH_CAP_FILE_SHARED;
 	req->r_dentry_unless = CEPH_CAP_FILE_EXCL;
