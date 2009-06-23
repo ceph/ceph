@@ -143,6 +143,7 @@ void init_entities_from_header(struct req_state *s)
 
   string h(s->host);
 
+  cerr << "host=" << s->host << std::endl;
   int pos = h.find("s3.");
 
   if (pos > 0) {
@@ -174,7 +175,7 @@ void init_entities_from_header(struct req_state *s)
   string first;
 
   pos = req.find('/');
-  if (pos >=  0) {
+  if (pos >= 0) {
     first = req.substr(0, pos);
   } else {
     first = req;
@@ -200,6 +201,10 @@ void init_entities_from_header(struct req_state *s)
 
 static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *in, FCGX_Stream *out)
 {
+  char *p;
+  for (int i=0; (p = envp[i]); ++i) {
+    cerr << p << std::endl;
+  }
   s->envp = envp;
   s->in = in;
   s->out = out;
@@ -214,6 +219,7 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   memset(&s->err, 0, sizeof(s->err));
 
   init_entities_from_header(s);
+  cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
 }
 
 static void buf_to_hex(const unsigned char *buf, int len, char *str)
@@ -509,7 +515,6 @@ void do_retrieve_objects(struct req_state *s, bool get_data)
   int max;
   string id = "0123456789ABCDEF";
 
-cerr << "s->object=" << (s->object ? s->object : "NULL") << " s->bucket=" << s->bucket << std::endl;
   if (s->object) {
     get_object(s, s->bucket_str, s->object_str, get_data);
     return;
