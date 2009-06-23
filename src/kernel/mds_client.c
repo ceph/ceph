@@ -1074,7 +1074,8 @@ retry:
 }
 
 static int build_dentry_path(struct dentry *dentry,
-			     const char **ppath, int *ppathlen, u64 *pino)
+			     const char **ppath, int *ppathlen, u64 *pino,
+			     int *pfreepath)
 {
 	char *path;
 
@@ -1088,11 +1089,13 @@ static int build_dentry_path(struct dentry *dentry,
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	*ppath = path;
-	return 1;
+	*pfreepath = 1;
+	return 0;
 }
 
 static int build_inode_path(struct inode *inode,
-			    const char **ppath, int *ppathlen, u64 *pino)
+			    const char **ppath, int *ppathlen, u64 *pino,
+			    int *pfreepath)
 {
 	struct dentry *dentry;
 	char *path;
@@ -1108,7 +1111,8 @@ static int build_inode_path(struct inode *inode,
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 	*ppath = path;
-	return 1;
+	*pfreepath = 1;
+	return 0;
 }
 
 static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
@@ -1116,16 +1120,14 @@ static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
 				  const char **ppath, int *pathlen,
 				  u64 *ino, int *freepath)
 {
-	*freepath = 0;
-	*pathlen = 0;
-	*ino = 0;
+	int r = 0;
 
 	if (rinode) {
-		*freepath = build_inode_path(rinode, ppath, pathlen, ino);
+		r = build_inode_path(rinode, ppath, pathlen, ino, freepath);
 		dout(10, " inode %p %llx.%llx\n", rinode, ceph_ino(rinode),
 		     ceph_snap(rinode));
 	} else if (rdentry) {
-		*freepath = build_dentry_path(rdentry, ppath, pathlen, ino);
+		r = build_dentry_path(rdentry, ppath, pathlen, ino, freepath);
 		dout(10, " dentry %p %llx/%.*s\n", rdentry, *ino, *pathlen,
 		     *ppath);
 	} else if (rpath) {
@@ -1135,9 +1137,7 @@ static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
 		dout(10, " path %.*s\n", *pathlen, rpath);
 	}
 
-	if (*freepath < 0)
-		return *freepath;
-	return 0;
+	return r;
 }
 
 /*
@@ -1149,12 +1149,12 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_request_head *head;
-	const char *path1 = req->r_path1;
-	const char *path2 = req->r_path2;
-	u64 ino1, ino2;
-	int pathlen1, pathlen2;
+	const char *path1 = 0;
+	const char *path2 = 0;
+	u64 ino1 = 0, ino2 = 0;
+	int pathlen1 = 0, pathlen2 = 0;
+	int freepath1 = 0, freepath2 = 0;
 	int len;
-	int freepath1, freepath2;
 	u16 releases;
 	void *p, *end;
 	int ret;
