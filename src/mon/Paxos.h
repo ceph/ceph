@@ -53,7 +53,7 @@ e 12v
 #include "include/types.h"
 #include "mon_types.h"
 #include "include/buffer.h"
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 #include "msg/msg_types.h"
 
 #include "include/Context.h"
@@ -240,7 +240,7 @@ public:
     return machine_name;
   }
 
-  void dispatch(Message *m);
+  void dispatch(PaxosServiceMessage *m);
 
   void init();
 

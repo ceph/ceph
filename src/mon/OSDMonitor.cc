@@ -248,7 +248,7 @@ void OSDMonitor::committed()
 
 // -------------
 
-bool OSDMonitor::preprocess_query(Message *m)
+bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
@@ -286,7 +286,7 @@ bool OSDMonitor::preprocess_query(Message *m)
   }
 }
 
-bool OSDMonitor::prepare_update(Message *m)
+bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
 {
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   
@@ -1317,7 +1317,7 @@ bool OSDMonitor::prepare_pool_snap ( MPoolSnap *m)
 
 void OSDMonitor::_pool_snap(MPoolSnap *m, int replyCode, epoch_t epoch)
 {
-  MPoolSnapReply *reply = new MPoolSnapReply(m->fsid, m->tid, replyCode, epoch);
+  MPoolSnapReply *reply = new MPoolSnapReply(m->fsid, m->tid, replyCode, epoch, VERSION_T);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
 }

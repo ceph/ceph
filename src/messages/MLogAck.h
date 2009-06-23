@@ -16,14 +16,15 @@
 #define __MLOGACK_H
 
 #include "include/LogEntry.h"
+#include "messages/PaxosServiceMessage.h"
 
-class MLogAck : public Message {
+class MLogAck : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   version_t last;
   
-  MLogAck() : Message(MSG_LOGACK) {}
-  MLogAck(ceph_fsid_t& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
+  MLogAck() : PaxosServiceMessage(MSG_LOGACK, 0) {}
+  MLogAck(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_LOGACK, l), fsid(f), last(l) {}
 
   const char *get_type_name() { return "log_ack"; }
   void print(ostream& out) {
@@ -31,11 +32,13 @@ public:
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(last, p);
   }

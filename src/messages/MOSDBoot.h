@@ -20,14 +20,13 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 
-class MOSDBoot : public Message {
+class MOSDBoot : public PaxosServiceMessage {
  public:
   OSDSuperblock sb;
 
-  MOSDBoot() {}
-  MOSDBoot(OSDSuperblock& s) : 
-    Message(MSG_OSD_BOOT),
-    sb(s) {
+  MOSDBoot() : PaxosServiceMessage(){}
+  MOSDBoot(OSDSuperblock& s, version_t v) : 
+    PaxosServiceMessage(MSG_OSD_BOOT, v), sb(s) {
   }
 
   const char *get_type_name() { return "osd_boot"; }

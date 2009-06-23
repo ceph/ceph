@@ -36,7 +36,7 @@ const char *PaxosService::get_machine_name()
 }
 
 
-bool PaxosService::dispatch_impl(Message *m)
+bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
   

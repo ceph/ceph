@@ -17,15 +17,15 @@
 
 #include "msg/Message.h"
 
-class MMonCommandAck : public Message {
+class MMonCommandAck : public PaxosServiceMessage {
  public:
   vector<string> cmd;
   __s32 r;
   string rs;
   
-  MMonCommandAck() : Message(MSG_MON_COMMAND_ACK) {}
-  MMonCommandAck(vector<string>& c, int _r, string s) : 
-    Message(MSG_MON_COMMAND_ACK),
+  MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, 0) {}
+  MMonCommandAck(vector<string>& c, int _r, string s, version_t v) : 
+    PaxosServiceMessage(MSG_MON_COMMAND_ACK, v),
     cmd(c), r(_r), rs(s) { }
   
   const char *get_type_name() { return "mon_command"; }
@@ -34,12 +34,14 @@ class MMonCommandAck : public Message {
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(r, payload);
     ::encode(rs, payload);
     ::encode(cmd, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(r, p);
     ::decode(rs, p);
     ::decode(cmd, p);

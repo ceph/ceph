@@ -689,7 +689,7 @@ void Objecter::delete_pool_snap(int *reply, int pool, string& snapName, Context 
 
 void Objecter::pool_snap_submit(SnapOp *op) {
   dout(10) << "pool_snap_submit " << op->tid << dendl;
-  MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool, op->name, op->create);
+  MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool, op->name, op->create, VERSION_T);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
   op->last_submit = g_clock.now();
@@ -741,7 +741,7 @@ void Objecter::get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *re
 void Objecter::poolstat_submit(PoolStatOp *op)
 {
   dout(10) << "poolstat_submit " << op->tid << dendl;
-  MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools);
+  MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools, VERSION_T);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
   op->last_submit = g_clock.now();

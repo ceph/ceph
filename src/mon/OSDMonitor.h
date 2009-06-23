@@ -57,9 +57,9 @@ private:
 
   void committed();
 
-  void handle_query(Message *m);
-  bool preprocess_query(Message *m);  // true if processed.
-  bool prepare_update(Message *m);
+  void handle_query(PaxosServiceMessage *m);
+  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
+  bool prepare_update(PaxosServiceMessage *m);
   bool should_propose(double &delay);
 
   // ...
@@ -97,9 +97,10 @@ private:
       if (r >= 0)
 	cmon->_booted(m, true);
       else
-	cmon->dispatch((Message*)m);
+	cmon->dispatch((PaxosServiceMessage*)m);
     }
   };
+
   struct C_Alive : public Context {
     OSDMonitor *osdmon;
     MOSDAlive *m;
@@ -117,7 +118,7 @@ private:
       if (r >= 0)
 	cmon->_reported_failure(m);
       else
-	cmon->dispatch((Message*)m);
+	cmon->dispatch((PaxosServiceMessage*)m);
     }
   };
   struct C_Snap : public Context {

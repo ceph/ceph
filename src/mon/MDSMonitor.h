@@ -54,7 +54,7 @@ class MDSMonitor : public PaxosService {
       if (r >= 0)
 	mm->_updated(m);   // success
       else
-	mm->dispatch((Message*)m);        // try again
+	mm->dispatch((PaxosServiceMessage*)m);        // try again
     }
   };
 
@@ -67,8 +67,8 @@ class MDSMonitor : public PaxosService {
   
   void _updated(MMDSBeacon *m);
  
-  bool preprocess_query(Message *m);  // true if processed.
-  bool prepare_update(Message *m);
+  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
+  bool prepare_update(PaxosServiceMessage *m);
   bool should_propose(double& delay);
 
   void committed();

@@ -24,7 +24,7 @@ enum {
    CLASS_RESPONSE,
 };
 
-class MClass : public Message {
+class MClass : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   deque<ClassInfo> info;
@@ -34,11 +34,13 @@ public:
   __s32 action;
 
 
-  MClass() : Message(MSG_CLASS) {}
+  MClass() : PaxosServiceMessage(MSG_CLASS, 0) {}
 #if 0
-  MClass(ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) : Message(MSG_CLASS), fsid(f), entries(e), last(0), action(0) { }
+  MClass(ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) :
+    PaxosServiceMessage(MSG_CLASS, 0),
+    fsid(f), entries(e), last(0), action(0) {}
 #endif
-  MClass(ceph_fsid_t& f, version_t l) : Message(MSG_CLASS), fsid(f), last(l) {}
+  MClass(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS, l), fsid(f), last(l) {}
 
   const char *get_type_name() { return "class"; }
   void print(ostream& out) {
@@ -68,6 +70,7 @@ public:
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(info, payload);
     ::encode(impl, payload);
@@ -77,6 +80,7 @@ public:
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(info, p);
     ::decode(impl, p);

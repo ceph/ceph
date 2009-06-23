@@ -15,8 +15,10 @@
 #ifndef __MPOOLSNAP_H
 #define __MPOOLSNAP_H
 
+#include "messages/PaxosServiceMessage.h"
 
-class MPoolSnap : public Message {
+
+class MPoolSnap : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   tid_t tid;
@@ -24,9 +26,9 @@ public:
   string name;
   bool create;
 
-  MPoolSnap() : Message(MSG_POOLSNAP) {}
-  MPoolSnap( ceph_fsid_t& f, tid_t t, int p, string& n, bool c) :
-    Message(MSG_POOLSNAP), fsid(f), tid(t), pool(p), name(n), create(c) {}
+  MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, 0) {}
+  MPoolSnap( ceph_fsid_t& f, tid_t t, int p, string& n, bool c, version_t v) :
+    PaxosServiceMessage(MSG_POOLSNAP, v), fsid(f), tid(t), pool(p), name(n), create(c) {}
 
   const char *get_type_name() { return "poolsnap"; }
   void print(ostream& out) {
@@ -34,6 +36,7 @@ public:
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(tid, payload);
     ::encode(pool, payload);
@@ -42,6 +45,7 @@ public:
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(tid, p);
     ::decode(pool, p);

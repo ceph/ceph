@@ -38,6 +38,8 @@
 #define MSG_POOLSNAP               49
 #define MSG_POOLSNAPREPLY          48
 
+#define MSG_PAXOS                  40
+
 // osd internal
 #define MSG_OSD_PING         70
 #define MSG_OSD_BOOT         71

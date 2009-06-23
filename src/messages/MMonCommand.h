@@ -15,19 +15,19 @@
 #ifndef __MMONCOMMAND_H
 #define __MMONCOMMAND_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 #include <vector>
 using std::vector;
 
-class MMonCommand : public Message {
+class MMonCommand : public PaxosServiceMessage {
  public:
   ceph_fsid_t fsid;
   vector<string> cmd;
 
-  MMonCommand() : Message(MSG_MON_COMMAND) {}
-  MMonCommand(ceph_fsid_t &f) : 
-    Message(MSG_MON_COMMAND),
+  MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
+  MMonCommand(ceph_fsid_t &f, version_t version) : 
+    PaxosServiceMessage(MSG_MON_COMMAND, version),
     fsid(f) { }
   
   const char *get_type_name() { return "mon_command"; }
@@ -41,11 +41,13 @@ class MMonCommand : public Message {
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(cmd, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(cmd, p);
   }

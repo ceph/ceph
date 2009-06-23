@@ -186,7 +186,7 @@ void LogMonitor::encode_pending(bufferlist &bl)
     p->second.encode(bl);
 }
 
-bool LogMonitor::preprocess_query(Message *m)
+bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -203,7 +203,7 @@ bool LogMonitor::preprocess_query(Message *m)
   }
 }
 
-bool LogMonitor::prepare_update(Message *m)
+bool LogMonitor::prepare_update(PaxosServiceMessage *m)
 {
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {

@@ -40,8 +40,8 @@ private:
 
   void committed();
 
-  bool preprocess_query(Message *m);  // true if processed.
-  bool prepare_update(Message *m);
+  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
+  bool prepare_update(PaxosServiceMessage *m);
 
   bool preprocess_log(MLog *m);
   bool prepare_log(MLog *m);

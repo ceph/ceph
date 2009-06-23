@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMonObserveNotify : public Message {
+class MMonObserveNotify : public PaxosServiceMessage {
  public:
   ceph_fsid_t fsid;
   int32_t machine_id;
@@ -25,9 +25,9 @@ class MMonObserveNotify : public Message {
   version_t ver;
   bool is_latest;
   
-  MMonObserveNotify() : Message(MSG_MON_OBSERVE_NOTIFY) {}
+  MMonObserveNotify() : PaxosServiceMessage(MSG_MON_OBSERVE_NOTIFY, 0) {}
   MMonObserveNotify(ceph_fsid_t& f, int id, bufferlist& b, version_t v, bool l) :
-    Message(MSG_MON_OBSERVE_NOTIFY), fsid(f), machine_id(id), bl(b), ver(v), is_latest(l) {}
+    PaxosServiceMessage(MSG_MON_OBSERVE_NOTIFY, v), fsid(f), machine_id(id), bl(b), ver(v), is_latest(l) {}
     
   
   const char *get_type_name() { return "mon_observe_notify"; }
@@ -39,6 +39,7 @@ class MMonObserveNotify : public Message {
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(machine_id, payload);
     ::encode(bl, payload);
@@ -47,6 +48,7 @@ class MMonObserveNotify : public Message {
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(machine_id, p);
     ::decode(bl, p);

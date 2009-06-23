@@ -17,15 +17,15 @@
 
 #include "include/LogEntry.h"
 
-class MLog : public Message {
+class MLog : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   deque<LogEntry> entries;
   version_t last;
   
-  MLog() : Message(MSG_LOG) {}
-  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : Message(MSG_LOG), fsid(f), entries(e), last(0) { }
-  MLog(ceph_fsid_t& f, version_t l) : Message(MSG_LOG), fsid(f), last(l) {}
+  MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
+  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e), last(0) { }
+  MLog(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_LOG, l), fsid(f), last(l) {}
 
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {
@@ -38,12 +38,14 @@ public:
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(entries, payload);
     ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(entries, p);
     ::decode(last, p);

@@ -22,6 +22,7 @@ using namespace std;
 #include "messages/MPoolSnap.h"
 #include "messages/MPoolSnapReply.h"
 
+#include "messages/PaxosServiceMessage.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"

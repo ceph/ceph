@@ -16,7 +16,7 @@
 #define __MPOOLSNAPREPLY_H
 
 
-class MPoolSnapReply : public Message {
+class MPoolSnapReply : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   tid_t tid;
@@ -24,9 +24,9 @@ public:
   epoch_t epoch;
 
 
-  MPoolSnapReply() : Message(MSG_POOLSNAPREPLY) {}
-  MPoolSnapReply( ceph_fsid_t& f, tid_t t, int rc, int e) :
-    Message(MSG_POOLSNAPREPLY), fsid(f), tid(t), replyCode(rc), epoch(e) {}
+  MPoolSnapReply() : PaxosServiceMessage(MSG_POOLSNAPREPLY, 0) {}
+  MPoolSnapReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
+    PaxosServiceMessage(MSG_POOLSNAPREPLY, v), fsid(f), tid(t), replyCode(rc), epoch(e) {}
 
   const char *get_type_name() { return "poolsnapreply"; }
 
@@ -35,6 +35,7 @@ public:
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(tid, payload);
     ::encode(replyCode, payload);
@@ -42,6 +43,7 @@ public:
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(tid, p);
     ::decode(replyCode, p);

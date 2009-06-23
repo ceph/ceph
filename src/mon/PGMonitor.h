@@ -50,8 +50,8 @@ private:
 
   void committed();
 
-  bool preprocess_query(Message *m);  // true if processed.
-  bool prepare_update(Message *m);
+  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
+  bool prepare_update(PaxosServiceMessage *m);
 
   bool preprocess_pg_stats(MPGStats *stats);
   bool prepare_pg_stats(MPGStats *stats);

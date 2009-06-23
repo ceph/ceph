@@ -15,13 +15,13 @@
 #ifndef __MMDSBEACON_H
 #define __MMDSBEACON_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 #include "include/types.h"
 
 #include "mds/MDSMap.h"
 
-class MMDSBeacon : public Message {
+class MMDSBeacon : public PaxosServiceMessage {
   ceph_fsid_t fsid;
   string name;
   epoch_t last_epoch_seen;  // include last mdsmap epoch mds has seen to avoid race with monitor decree
@@ -31,9 +31,9 @@ class MMDSBeacon : public Message {
   string standby_for_name;
 
  public:
-  MMDSBeacon() : Message(MSG_MDS_BEACON) {}
+  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
   MMDSBeacon(ceph_fsid_t &f, string& n, epoch_t les, int st, version_t se) : 
-    Message(MSG_MDS_BEACON), 
+    PaxosServiceMessage(MSG_MDS_BEACON, se), 
     fsid(f), name(n), last_epoch_seen(les), state(st), seq(se),
     standby_for_rank(-1) { }
 
@@ -55,6 +55,7 @@ class MMDSBeacon : public Message {
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(last_epoch_seen, payload);
     ::encode(state, payload);
@@ -65,6 +66,7 @@ class MMDSBeacon : public Message {
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(last_epoch_seen, p);
     ::decode(state, p);

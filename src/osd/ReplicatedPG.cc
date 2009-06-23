@@ -408,14 +408,14 @@ void ReplicatedPG::do_pg_op(MOSDOp *op)
 		  continue;
 	      }
 	      else {
-	      for (vector<snapid_t>::iterator i = oi.snaps.begin(); i != oi.snaps.end(); ++i)
-		if (*i == snapid) {
-		  exists = true;
-		  break;
-		}
-	      dout(10) << *iter << " has " << oi.snaps << " .. exists=" << exists << dendl;
-	      if (!exists)
-		continue;
+		for (vector<snapid_t>::iterator i = oi.snaps.begin(); i != oi.snaps.end(); ++i)
+		  if (*i == snapid) {
+		    exists = true;
+		    break;
+		  }
+		dout(10) << *iter << " has " << oi.snaps << " .. exists=" << exists << dendl;
+		if (!exists)
+		  continue;
 	      }
 	    }
             response.entries.push_back(iter->oid);

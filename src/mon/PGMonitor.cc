@@ -159,7 +159,7 @@ void PGMonitor::encode_pending(bufferlist &bl)
   pending_inc.encode(bl);
 }
 
-bool PGMonitor::preprocess_query(Message *m)
+bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -183,7 +183,7 @@ bool PGMonitor::preprocess_query(Message *m)
   }
 }
 
-bool PGMonitor::prepare_update(Message *m)
+bool PGMonitor::prepare_update(PaxosServiceMessage *m)
 {
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -241,7 +241,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     goto out;
   }
   
-  reply = new MGetPoolStatsReply(m->fsid, m->tid);
+  reply = new MGetPoolStatsReply(m->fsid, m->tid, VERSION_T);
 
   for (vector<string>::iterator p = m->pools.begin();
        p != m->pools.end();

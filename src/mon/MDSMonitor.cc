@@ -125,7 +125,7 @@ void MDSMonitor::encode_pending(bufferlist &bl)
 }
 
 
-bool MDSMonitor::preprocess_query(Message *m)
+bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
@@ -249,7 +249,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 }
 
 
-bool MDSMonitor::prepare_update(Message *m)
+bool MDSMonitor::prepare_update(PaxosServiceMessage *m)
 {
   dout(7) << "prepare_update " << *m << dendl;
 

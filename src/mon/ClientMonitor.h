@@ -52,7 +52,7 @@ public:
       if (r >= 0)
 	cmon->_mounted(client, m);
       else
-	cmon->dispatch((Message*)m);
+	cmon->dispatch((PaxosServiceMessage*)m);
     }
   };
 
@@ -66,10 +66,9 @@ public:
       if (r >= 0)
 	cmon->_unmounted(m);
       else
-	cmon->dispatch((Message*)m);
+	cmon->dispatch((PaxosServiceMessage*)m);
     }
   };
-
 
   ClientMap client_map;
 
@@ -88,8 +87,8 @@ private:
   void _mounted(int c, MClientMount *m);
   void _unmounted(MClientUnmount *m);
  
-  bool preprocess_query(Message *m);  // true if processed.
-  bool prepare_update(Message *m);
+  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
+  bool prepare_update(PaxosServiceMessage *m);
 
   bool preprocess_command(MMonCommand *m);  // true if processed.
   bool prepare_command(MMonCommand *m);

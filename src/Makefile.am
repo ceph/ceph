@@ -580,6 +580,7 @@ noinst_HEADERS = \
         messages/MRemoveSnaps.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
+	messages/PaxosServiceMessage.h\
         mon/ClassMonitor.h\
         mon/ClientMap.h\
         mon/ClientMonitor.h\

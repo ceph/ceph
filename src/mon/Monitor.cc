@@ -20,9 +20,9 @@
 
 #include "MonitorStore.h"
 
-#include "msg/Message.h"
 #include "msg/Messenger.h"
 
+#include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MGenericMessage.h"
@@ -304,7 +304,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs)
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata)
 {
-  MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs);
+  MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, VERSION_T);
   reply->set_data(rdata);
   messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
@@ -325,7 +325,7 @@ void Monitor::handle_observe(MMonObserve *m)
 void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args)
 {
   dout(10) << "inject_args " << inst << " " << args << dendl;
-  MMonCommand *c = new MMonCommand(monmap->fsid);
+  MMonCommand *c = new MMonCommand(monmap->fsid, VERSION_T);
   c->cmd = args;
   messenger->send_message(c, inst);
 }

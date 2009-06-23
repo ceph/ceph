@@ -762,7 +762,7 @@ void Paxos::election_starting()
 }
 
 
-void Paxos::dispatch(Message *m)
+void Paxos::dispatch(PaxosServiceMessage *m)
 {
   // election in progress?
   if (mon->is_starting()) {

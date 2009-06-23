@@ -179,7 +179,7 @@ void ClassMonitor::encode_pending(bufferlist &bl)
     p->second.encode(bl);
 }
 
-bool ClassMonitor::preprocess_query(Message *m)
+bool ClassMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
@@ -196,7 +196,7 @@ bool ClassMonitor::preprocess_query(Message *m)
   }
 }
 
-bool ClassMonitor::prepare_update(Message *m)
+bool ClassMonitor::prepare_update(PaxosServiceMessage *m)
 {
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {

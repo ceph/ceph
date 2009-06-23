@@ -157,7 +157,7 @@ bool ClientMonitor::check_mount(MClientMount *m)
     return false;
 }
 
-bool ClientMonitor::preprocess_query(Message *m)
+bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
@@ -193,7 +193,7 @@ bool ClientMonitor::preprocess_query(Message *m)
   }
 }
 
-bool ClientMonitor::prepare_update(Message *m)
+bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
 {
   stringstream ss;
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;

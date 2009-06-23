@@ -17,13 +17,13 @@
 
 #include "include/ClassLibrary.h"
 
-class MClassAck : public Message {
+class MClassAck : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   version_t last;
   
-  MClassAck() : Message(MSG_CLASS_ACK) {}
-  MClassAck(ceph_fsid_t& f, version_t l) : Message(MSG_CLASS_ACK), fsid(f), last(l) {}
+  MClassAck() : PaxosServiceMessage(MSG_CLASS_ACK, 0) {}
+  MClassAck(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS_ACK, l), fsid(f), last(l) {}
 
   const char *get_type_name() { return "class_ack"; }
   void print(ostream& out) {
@@ -31,11 +31,13 @@ public:
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(last, p);
   }

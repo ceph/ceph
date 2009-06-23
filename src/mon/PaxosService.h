@@ -15,13 +15,13 @@
 #ifndef __PAXOSSERVICE_H
 #define __PAXOSSERVICE_H
 
-#include "msg/Dispatcher.h"
+#include "messages/PaxosServiceMessage.h"
 #include "include/Context.h"
 
 class Monitor;
 class Paxos;
 
-class PaxosService : public Dispatcher {
+class PaxosService {
 public:
   Monitor *mon;
   Paxos *paxos;
@@ -29,11 +29,11 @@ public:
 protected:
   class C_RetryMessage : public Context {
     PaxosService *svc;
-    Message *m;
+    PaxosServiceMessage *m;
   public:
-    C_RetryMessage(PaxosService *s, Message *m_) : svc(s), m(m_) {}
+    C_RetryMessage(PaxosService *s, PaxosServiceMessage *m_) : svc(s), m(m_) {}
     void finish(int r) {
-      svc->dispatch(m);
+      svc->dispatch(m);//FIX_ME
     }
   };
   class C_Active : public Context {
@@ -71,7 +71,6 @@ protected:
 private:
   Context *proposal_timer;
   bool have_pending;
-  bool dispatch_impl(Message *m);
 
 public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
@@ -92,6 +91,7 @@ private:
 public:
   // i implement and you use
   void propose_pending();     // propose current pending as new paxos state
+  bool dispatch(PaxosServiceMessage *m);
 
   // you implement
   virtual void create_initial(bufferlist& bl) = 0;
@@ -100,14 +100,14 @@ public:
   virtual void encode_pending(bufferlist& bl) = 0; // [leader] finish and encode pending for next paxos state
   virtual void discard_pending() { }       // [leader] discard pending
 
-  virtual bool preprocess_query(Message *m) = 0;  // true if processed (e.g., read-only)
-  virtual bool prepare_update(Message *m) = 0;
+  virtual bool preprocess_query(PaxosServiceMessage *m) = 0;  // true if processed (e.g., read-only)
+  virtual bool prepare_update(PaxosServiceMessage *m) = 0;
   virtual bool should_propose(double &delay);
 
   virtual void committed() = 0;            // [leader] called after a proposed value commits
 
   virtual void tick() {}
-  
+
 };
 
 #endif
