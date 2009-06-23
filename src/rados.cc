@@ -231,8 +231,6 @@ int main(int argc, const char **argv)
 
   vector<const char*> nargs;
   bufferlist indata, outdata;
-  const char *outfile = 0;
-  bool writeData = false;
 
   const char *pool = 0;
  
@@ -277,29 +275,26 @@ int main(int argc, const char **argv)
   // open pool?
   rados_pool_t p;
   if (pool) {
-    int r = rados.open_pool(pool, &p);
-    if (r < 0) {
-      cerr << "error opening pool " << pool << ": " << strerror(-r) << std::endl;
-      ret = -1;
+    ret = rados.open_pool(pool, &p);
+    if (ret < 0) {
+      cerr << "error opening pool " << pool << ": " << strerror(-ret) << std::endl;
       goto out;
     }
   }
 
   // snapname?
   if (snapname) {
-    int r = rados.snap_lookup(p, snapname, &snapid);
-    if (r < 0) {
-      cerr << "error looking up snap '" << snapname << "': " << strerror(-r) << std::endl;
-      ret = -1;
+    ret = rados.snap_lookup(p, snapname, &snapid);
+    if (ret < 0) {
+      cerr << "error looking up snap '" << snapname << "': " << strerror(-ret) << std::endl;
       goto out;
     }
   }
   if (snapid != CEPH_NOSNAP) {
     string name;
-    int r = rados.snap_get_name(p, snapid, &name);
-    if (r < 0) {
+    ret = rados.snap_get_name(p, snapid, &name);
+    if (ret < 0) {
       cerr << "snapid " << snapid << " doesn't exist in pool " << pool << std::endl;
-      ret = -1;
       goto out;
     }
     rados.set_snap(p, snapid);
@@ -341,80 +336,75 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    cerr << "lsing now" << std::endl;
     if (!pool || nargs.size() < 2)
       usage();
-    outfile = nargs[1];
-    bool stdout = (strcmp(outfile, "-") == 0);
+
+    bool stdout = (strcmp(nargs[1], "-") == 0);
+    ostream *outstream;
+    if(stdout)
+      outstream = &cout;
+    else
+      outstream = new ofstream(nargs[1]);
+
     Rados::ListCtx ctx;
     while (1) {
       list<object_t> vec;
-      int r = rados.list(p, 1 << 10, vec, ctx);
-      if (r < 0) {
-	cerr << "got error: " << strerror(-r) << std::endl;
-	break;
+      ret = rados.list(p, 1 << 10, vec, ctx);
+      if (ret < 0) {
+	cerr << "got error: " << strerror(-ret) << std::endl;
+	goto out;
       }
-      if (vec.empty()) {
+      if (vec.empty())
 	break;
-      }
 
-      ostream *outstream;
-      if(stdout)
-	outstream = &cout;
-      else
-	outstream = new ofstream(outfile);
-      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter) {
+      for (list<object_t>::iterator iter = vec.begin(); iter != vec.end(); ++iter)
 	*outstream << iter->name << std::endl;
-      }
-      if (!stdout)
-	delete outstream;
     }
+    if (!stdout)
+      delete outstream;
   }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool || nargs.size() < 3)
       usage();
     object_t oid(nargs[1]);
-    outfile = nargs[2];
-    int r = rados.read(p, oid, 0, outdata, 0);
-    if (r < 0) {
-      cerr << "error reading " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
-      ret = -1;
+    ret = rados.read(p, oid, 0, outdata, 0);
+    if (ret < 0) {
+      cerr << "error reading " << pool << "/" << oid << ": " << strerror(-ret) << std::endl;
       goto out;
     }
-    else
-      writeData = true;
+
+    if (strcmp(nargs[2], "-") == 0) {
+      ::write(1, outdata.c_str(), outdata.length());
+    } else {
+      outdata.write_file(nargs[2]);
+      generic_dout(0) << "wrote " << outdata.length() << " byte payload to " << nargs[2] << dendl;
+    }
   }
+
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool || nargs.size() < 3)
       usage();
 
     object_t oid(nargs[1]);
-    bool stdin = false;
-    int r;
-    if(strcmp(nargs[2], "-") == 0) {
-      cerr << "Please input object contents" << std::endl;
-      stdin = true;
-    }
-    if(!stdin) {
-      r = indata.read_file(nargs[2]);
-      if (r < 0) {
-	cerr << "Error reading input file " << nargs[2] << std::endl;
-	ret = -1;
-	goto out;
-      }
-    }
-    else {
+
+    if (strcmp(nargs[2], "-") == 0) {
       char buf[256];
       while(!cin.eof()) {
 	cin.getline(buf, 256);
 	indata.append(buf);
 	indata.append('\n');
       }
+    } else {
+      ret = indata.read_file(nargs[2]);
+      if (ret) {
+	cerr << "error reading input file " << nargs[2] << ": " << strerror(-ret) << std::endl;
+	goto out;
+      }
     }
-    r = rados.write_full(p, oid, indata);
-    if (r < 0) {
-      cerr << "error writing " << oid << " to pool " << pool << ": " << strerror(-r) << std::endl;
-      ret = -1;
+
+    ret = rados.write_full(p, oid, indata);
+    if (ret < 0) {
+      cerr << "error writing " << pool << "/" << oid << ": " << strerror(-ret) << std::endl;
       goto out;
     }
   }
@@ -422,10 +412,9 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() < 2)
       usage();
     object_t oid(nargs[1]);
-    int r = rados.remove(p, oid);
-    if (r < 0) {
-      cerr << "error removing " << oid << " from pool " << pool << ": " << strerror(-r) << std::endl;
-      ret = -1;
+    ret = rados.remove(p, oid);
+    if (ret < 0) {
+      cerr << "error removing " << pool << "/" << oid << ": " << strerror(-ret) << std::endl;
       goto out;
     }
   }
@@ -465,21 +454,29 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "mksnap") == 0) {
-    if ( nargs.size() < 2) usage();
+    if (nargs.size() < 2)
+      usage();
     
-    cout << "Submitting snap to backend." << std::endl;
-    int result = rados.snap_create(p, nargs[1]);
-    if (result == 0 ) cout << "Success! Created snapshot " << nargs[1] << std::endl;
-    else cout << "Failure. Attempt to create snapshot returned " << result << std::endl;
+    ret = rados.snap_create(p, nargs[1]);
+    if (ret < 0) {
+      cerr << "error creating pool " << pool << " snapshot " << nargs[1]
+	   << ": " << strerror(-ret) << std::endl;
+      goto out;
+    }
+    cout << "created pool " << pool << " snap " << nargs[1] << std::endl;
   }
 
   else if (strcmp(nargs[0], "rmsnap") == 0) {
-    if ( nargs.size() < 2) usage();
+    if (nargs.size() < 2)
+      usage();
     
-    cout << "Submitting snap removal to backend." << std::endl;
-    int result = rados.snap_remove(p, nargs[1]);
-    if (result == 0 ) cout << "Success! Removed snapshot " << nargs[1] << std::endl;
-    else cout << "Failure. Attempt to remove snapshot returned " << result << std::endl;
+    ret = rados.snap_remove(p, nargs[1]);
+    if (ret < 0) {
+      cerr << "error removing pool " << pool << " snapshot " << nargs[1]
+	   << ": " << strerror(-ret) << std::endl;
+      goto out;
+    }
+    cout << "removed pool " << pool << " snap " << nargs[1] << std::endl;
   }
   
   else if (strcmp(nargs[0], "bench") == 0) {
@@ -503,27 +500,13 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  // write data?
-  if (writeData) {
-    int len = outdata.length();
-    if (outfile) {
-      if (strcmp(outfile, "-") == 0) {
-	::write(1, outdata.c_str(), len);
-      } else {
-	outdata.write_file(outfile);
-      }
-      generic_dout(0) << "wrote " << len << " byte payload to " << outfile << dendl;
-    } else {
-      generic_dout(0) << "got " << len << " byte payload, discarding (specify -o <outfile)" << dendl;
-    }
-  }
-
-
  out:
   if (pool)
     rados.close_pool(p);
 
   rados.shutdown();
+  if (ret < 0)
+    return 1;
   return 0;
 }
 
