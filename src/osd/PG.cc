@@ -200,11 +200,16 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     eversion_t lu = oinfo.last_update;
     while (pp != olog.log.rend()) {
       Log::Entry& oe = *pp;
+
+      // don't continue past the bottom of our log.
+      if (oe.version < log.bottom)
+	break;
+
       if (!log.objects.count(oe.soid)) {
         dout(10) << " had " << oe << " new dne : divergent, ignoring" << dendl;
         ++pp;
         continue;
-      } 
+      }
       
       Log::Entry& ne = *log.objects[oe.soid];
       if (ne.version == oe.version) {
@@ -246,6 +251,8 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
     if (lu < oinfo.last_update) {
       dout(10) << " peer osd" << from << " last_update now " << lu << dendl;
       oinfo.last_update = lu;
+      if (lu < oinfo.last_complete)
+	oinfo.last_complete = lu;
       if (lu < oldest_update) {
         dout(10) << " oldest_update now " << lu << dendl;
         oldest_update = lu;
