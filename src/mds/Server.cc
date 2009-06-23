@@ -1433,10 +1433,10 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
   if (useino && useino != in->inode.ino) {
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
     stringstream ss;
-    ss << mdr->client_request->get_orig_source() << " specified ino " << useino << " but mds" << mds->whoami
-       << " allocated " << in->inode.ino;
+    ss << mdr->client_request->get_orig_source() << " specified ino " << useino
+       << " but mds" << mds->whoami << " allocated " << in->inode.ino;
     mds->logclient.log(LOG_ERROR, ss);
-    assert(0); // just for now.
+    //assert(0); // just for now.
   }
     
   int got = g_conf.mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
