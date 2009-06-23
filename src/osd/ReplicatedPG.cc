@@ -2963,31 +2963,34 @@ int ReplicatedPG::recover_primary(int max)
 
   map<sobject_t, Missing::item>::iterator p = missing.missing.lower_bound(log.last_requested);
   while (p != missing.missing.end()) {
-    assert(log.objects.count(p->first));
-    latest = log.objects[p->first];
-    assert(latest);
+    sobject_t soid;
 
-    const sobject_t& soid(latest->soid);
+    if (log.objects.count(p->first)) {
+      latest = log.objects[p->first];
+      assert(latest->is_update());
+      soid = latest->soid;
+    } else {
+      latest = 0;
+      soid = p->first;
+    }
+
     sobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
     dout(10) << "recover_primary "
-             << *latest
-	     << (latest->is_update() ? " (update)":"")
-	     << (missing.is_missing(latest->soid) ? " (missing)":"")
+             << soid << " " << p->second.need
+	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
-             << (pulling.count(latest->soid) ? " (pulling)":"")
+             << (pulling.count(soid) ? " (pulling)":"")
 	     << (pulling.count(head) ? " (pulling head)":"")
              << dendl;
     
-    assert(latest->is_update());
-
-    if (!pulling.count(latest->soid)) {
+    if (!pulling.count(soid)) {
       if (pulling.count(head)) {
 	++skipped;
       } else {
 	// is this a clone operation that we can do locally?
-	if (latest->op == Log::Entry::CLONE) {
+	if (latest && latest->op == Log::Entry::CLONE) {
 	  if (missing.is_missing(head) &&
 	      missing.have_old(head) == latest->prior_version) {
 	    dout(10) << "recover_primary cloning " << head << " v" << latest->prior_version
@@ -3027,7 +3030,7 @@ int ReplicatedPG::recover_primary(int max)
 
     // only advance last_requested if we haven't skipped anything
     if (!skipped)
-      log.last_requested = latest->soid;
+      log.last_requested = soid;
   }
 
   // done?
