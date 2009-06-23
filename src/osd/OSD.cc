@@ -1062,6 +1062,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
     }
 
     heartbeat_from_stamp[from] = g_clock.now(); // don't let _my_ lag interfere... //  m->get_recv_stamp();
+  } else {
+    dout(10) << " ignoring " << m->get_source_inst() << dendl;
   }
 
   if (locked) 
@@ -1615,12 +1617,6 @@ void OSD::_dispatch(Message *m)
       
       // need OSDMap
       switch (m->get_type()) {
-
-	/*
-      case MSG_OSD_PING:
-        handle_osd_ping((MOSDPing*)m);
-        break;
-	*/
 
       case MSG_OSD_PG_CREATE:
 	handle_pg_create((MOSDPGCreate*)m);

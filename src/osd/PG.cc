@@ -2086,7 +2086,7 @@ void PG::build_scrub_map(ScrubMap &map)
 
     osd->store->getattrs(c, poid, o.attrs);    
 
-    dout(15) << "   " << poid << dendl;
+    dout(25) << "   " << poid << dendl;
   }
 
   // pg attrs
