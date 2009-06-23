@@ -2138,8 +2138,8 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
   } else {
     // just trim the log
     if (op->pg_trim_to != eversion_t()) {
-      trim(ctx->local_t, op->pg_trim_to);
-      tls.push_back(&ctx->local_t);
+      trim(localt, op->pg_trim_to);
+      tls.push_back(&localt);
     }
   }
     
