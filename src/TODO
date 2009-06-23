@@ -36,18 +36,6 @@ osd/OSD.cc:3462: FAILED assert(recovery_ops_active >= 0)
  7: /lib/libpthread.so.0 [0x7fdb66e293f7]
  8: /lib/libc.so.6(clone+0x6d) [0x7fdb663f894d]
 
-mds/Server.cc: In function 'void Server::_finish_session_purge(Session*)':
-mds/Server.cc:410: FAILED assert(session->is_stale_purging())
- 1: ./cmds(_ZN6Server21_finish_session_purgeEP7Session+0x392) [0x49edf2]
- 2: ./cmds(_ZN6Server18find_idle_sessionsEv+0xa18) [0x4a3188]
- 3: ./cmds(_ZN3MDS4tickEv+0x220) [0x484f60]
- 4: ./cmds(_ZN9SafeTimer12EventWrapper6finishEi+0x1c1) [0x63eb11]
- 5: ./cmds(_ZN5Timer11timer_entryEv+0x6f6) [0x6412d6]
- 6: ./cmds(_ZN5Timer11TimerThread5entryEv+0xd) [0x46d53d]
- 7: ./cmds(_ZN6Thread11_entry_funcEPv+0xc) [0x480c9c]
- 8: /lib/libpthread.so.0 [0x7f51a9f4c3f7]
- 9: /lib/libc.so.6(clone+0x6d) [0x7f51a951b94d]
-
 - osd needs to handle heartbeats from osds that are already down.. they aren't fully getting filtered
   out, which leads to an attempted MOSDFailure on an already-down osd
 osd/OSDMap.h: In function 'entity_inst_t OSDMap::get_inst(int)':

@@ -388,10 +388,10 @@ void Server::find_idle_sessions()
     }
 
     dout(10) << "autoclosing stale session " << session->inst << " last " << session->last_cap_renew << dendl;
+    mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
     if (session->prealloc_inos.empty()) {
       _finish_session_purge(session);
     } else {
-      mds->sessionmap.set_state(session, Session::STATE_STALE_PURGING);
       C_Gather *fin = new C_Gather(new C_MDS_session_purged(this, session));
       for (map<inodeno_t,inodeno_t>::iterator p = session->prealloc_inos.m.begin();
 	   p != session->prealloc_inos.m.end();
