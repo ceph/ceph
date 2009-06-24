@@ -22,28 +22,20 @@ public:
  ~ACLGrantee() {}
 };
 
-class ACLPermission : public XMLObj
-{
-  int flags;
-public:
-  ACLPermission() : flags(0) {}
-  ~ACLPermission() {}
-  void xml_end(const char *el) {
-    const char *s = data.c_str();
-    if (strcasecmp(s, "READ") == 0) {
-      flags |= S3_PERM_READ;
-    } else if (strcasecmp(s, "WRITE") == 0) {
-      flags |= S3_PERM_WRITE;
-    } else if (strcasecmp(s, "READ_ACP") == 0) {
-      flags |= S3_PERM_READ_ACP;
-    } else if (strcasecmp(s, "WRITE_ACP") == 0) {
-      flags |= S3_PERM_WRITE_ACP;
-    } else if (strcasecmp(s, "FULL_CONTROL") == 0) {
-      flags |= S3_PERM_FULL_CONTROL;
-    }
+void ACLPermission::xml_end(const char *el) {
+  const char *s = data.c_str();
+  if (strcasecmp(s, "READ") == 0) {
+    flags |= S3_PERM_READ;
+  } else if (strcasecmp(s, "WRITE") == 0) {
+    flags |= S3_PERM_WRITE;
+  } else if (strcasecmp(s, "READ_ACP") == 0) {
+    flags |= S3_PERM_READ_ACP;
+  } else if (strcasecmp(s, "WRITE_ACP") == 0) {
+    flags |= S3_PERM_WRITE_ACP;
+  } else if (strcasecmp(s, "FULL_CONTROL") == 0) {
+    flags |= S3_PERM_FULL_CONTROL;
   }
-  int get_permissions() { return flags; }
-};
+}
 
 class ACLID : public XMLObj
 {
@@ -77,46 +69,47 @@ void ACLOwner::xml_end(const char *el) {
     display_name = acl_name->get_data();
 }
 
-class ACLGrant : public XMLObj
-{
-  ACLGrantee *grantee;
-  ACLID *id;
-  ACLURI *uri;
-  ACLPermission *permission;
-  ACLDisplayName *name;
-public:
-  ACLGrant() : grantee(NULL), id(NULL), uri(NULL), permission(NULL) {}
-  ~ACLGrant() {}
 
-  void xml_end(const char *el) {
-    grantee = (ACLGrantee *)find_first("Grantee");
-    if (!grantee)
-      return;
-    permission = (ACLPermission *)find_first("Permission");
-    if (!permission)
-      return;
-    name = (ACLDisplayName *)grantee->find_first("DisplayName");
-    id = (ACLID *)grantee->find_first("ID");
-    if (id) {
-      cout << "[" << *grantee << ", " << *permission << ", " << *id << ", " << "]" << std::endl;
-    } else {
-      uri = (ACLURI *)grantee->find_first("URI");
-      if (uri)
-        cout << "[" << *grantee << ", " << *permission << ", " << *uri << "]" << std::endl;
+void ACLGrant::xml_end(const char *el) {
+  ACLGrantee *acl_grantee;
+  ACLID *acl_id;
+  ACLURI *acl_uri;
+  ACLPermission *acl_permission;
+  ACLDisplayName *acl_name;
+
+  acl_grantee = (ACLGrantee *)find_first("Grantee");
+  if (!acl_grantee)
+    return;
+  acl_permission = (ACLPermission *)find_first("Permission");
+  if (!acl_permission)
+    return;
+  permission = *acl_permission;
+
+  acl_name = (ACLDisplayName *)acl_grantee->find_first("DisplayName");
+  if (acl_name)
+    name = acl_name->get_data();
+
+  acl_id = (ACLID *)acl_grantee->find_first("ID");
+  if (acl_id) {
+    id = acl_id->to_str();
+    cout << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << std::endl;
+  } else {
+    acl_uri = (ACLURI *)acl_grantee->find_first("URI");
+    if (acl_uri) {
+      cout << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << std::endl;
+      uri = acl_uri->get_data();
     }
   }
-  ACLID *get_id() { return id; }
-  ACLPermission *get_permission() { return permission; }
-};
+}
 
 void S3AccessControlList::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant *grant = (ACLGrant *)iter.get_next();
   while (grant) {
-    ACLID *id = (ACLID *)grant->get_id();
-    ACLPermission *perm = (ACLPermission *)grant->get_permission();
-    if (id && perm) {
-      acl_user_map[id->to_str()] |= perm->get_permissions();
+    string id = grant->get_id();
+    ACLPermission& perm = grant->get_permission();
+    if (id.size() > 0) {
+      acl_user_map[id] |= perm.get_permissions();
     }
     grant = (ACLGrant *)iter.get_next();
   }

@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <iostream>
 #include <include/types.h>
 
 #include <expat.h>
@@ -92,20 +93,107 @@ public:
 
 };
 
+class ACLPermission : public XMLObj
+{
+  int flags;
+public:
+  ACLPermission() : flags(0) {}
+  ~ACLPermission() {}
+  void xml_end(const char *el);
+  int get_permissions() { return flags; }
+
+  void encode(bufferlist& bl) const {
+     ::encode(flags, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(flags, bl);
+  }
+  ostream& to_xml(ostream& out) {
+    if ((flags & S3_PERM_FULL_CONTROL) == S3_PERM_FULL_CONTROL) {
+     out << "<Permission>FULL_CONTROL</Permission>";
+    } else {
+      if (flags & S3_PERM_READ)
+        out << "<Permission>READ</Permission";
+      if (flags & S3_PERM_WRITE)
+        out << "<Permission>WRITE</Permission";
+      if (flags & S3_PERM_READ_ACP)
+        out << "<Permission>READ_ACP</Permission";
+      if (flags & S3_PERM_WRITE_ACP)
+        out << "<Permission>WRITE_ACP</Permission";
+    }
+    return out;
+  }
+};
+WRITE_CLASS_ENCODER(ACLPermission)
+
+class ACLGrant : public XMLObj
+{
+  string id;
+  string uri;
+  ACLPermission permission;
+  string name;
+public:
+  ACLGrant() {}
+  ~ACLGrant() {}
+
+  void xml_end(const char *el);
+  string& get_id() { return id; }
+  ACLPermission& get_permission() { return permission; }
+
+  void encode(bufferlist& bl) const {
+     ::encode(id, bl);
+     ::encode(uri, bl);
+     ::encode(permission, bl);
+     ::encode(name, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(id, bl);
+    ::decode(uri, bl);
+    ::decode(permission, bl);
+    ::decode(name, bl);
+  }
+  string to_xml();
+  ostream& to_xml(ostream& out) {
+    return out << "<Grant>" <<
+            "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\">" <<
+             "<ID>" << id << "</ID>" <<
+             "<DisplayName>" << name << "</DisplayName>" <<
+            "</Grantee>" <<
+            permission <<
+           "</Grant>";
+
+  }
+};
+WRITE_CLASS_ENCODER(ACLGrant)
+
 class S3AccessControlList : public XMLObj
 {
   map<string, int> acl_user_map;
+  map<string, ACLGrant> grant_map;
+  bool user_map_initialized;
 public:
-  S3AccessControlList() {}
+  S3AccessControlList() : user_map_initialized(false) {}
   ~S3AccessControlList() {}
 
   void xml_end(const char *el);
   int get_perm(string& id, int perm_mask);
   void encode(bufferlist& bl) const {
+     ::encode(user_map_initialized, bl);
      ::encode(acl_user_map, bl);
+     ::encode(grant_map, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(user_map_initialized, bl);
     ::decode(acl_user_map, bl);
+    ::decode(grant_map, bl);
+  }
+  ostream& to_xml(ostream& out) {
+    map<string, ACLGrant>::iterator iter;
+    out << "<AccessControlList>";
+    for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
+      out << iter->second;
+    }
+    return out << "</AccessControlList>";
   }
 };
 WRITE_CLASS_ENCODER(S3AccessControlList)
@@ -126,6 +214,12 @@ public:
   void decode(bufferlist::iterator& bl) {
     ::decode(id, bl);
     ::decode(display_name, bl);
+  }
+  ostream& to_xml(ostream& out) {
+    return out << "<Owner>" <<
+                   "<ID>" << id << "</ID>" <<
+                   "<DisplayName>" << display_name << "</DisplayName>" <<
+                  "</Owner>";
   }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
@@ -148,6 +242,9 @@ public:
   void decode(bufferlist::iterator& bl) {
      ::decode(acl, bl);
    }
+  ostream& to_xml(ostream& out) {
+    return out << "<AccessControlPolicy>" << owner.to_xml(out) << acl.to_xml(out) << "</AccessControlPolicy>";
+  }
 };
 WRITE_CLASS_ENCODER(S3AccessControlPolicy)
 
