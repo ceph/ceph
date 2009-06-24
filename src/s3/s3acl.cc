@@ -4,6 +4,8 @@
 #include <vector>
 #include <map>
 
+#include "include/types.h"
+
 #include "expat.h"
 
 using namespace std;
@@ -14,6 +16,7 @@ using namespace std;
 #define S3_PERM_WRITE_ACP       0x08
 #define S3_PERM_FULL_CONTROL    ( S3_PERM_READ | S3_PERM_WRITE | \
                                   S3_PERM_READ_ACP | S3_PERM_WRITE_ACP )
+#define S3_PERM_ALL             S3_PERM_FULL_CONTROL 
                                   
 
 class XMLObj;
@@ -135,6 +138,7 @@ class ACLID : public XMLObj
 public:
   ACLID() {}
   ~ACLID() {}
+  string& to_str() { return data; }
 };
 
 class ACLURI : public XMLObj
@@ -180,11 +184,12 @@ public:
     }
   }
   ACLID *get_id() { return id; }
+  ACLPermission *get_permission() { return permission; }
 };
 
 class AccessControlList : public XMLObj
 {
-  multimap<string, ACLGrant *> acl_user_map;
+  map<string, int> acl_user_map;
 public:
   AccessControlList() {}
   ~AccessControlList() {}
@@ -194,52 +199,71 @@ public:
     ACLGrant *grant = (ACLGrant *)iter.get_next();
     while (grant) {
       ACLID *id = (ACLID *)grant->get_id();
-      if (id) {
-        acl_user_map.insert(pair<string, ACLGrant *>(id->get_data(), grant));
+      ACLPermission *perm = (ACLPermission *)grant->get_permission();
+      if (id && perm) {
+        acl_user_map[id->to_str()] |= perm->get_permissions();
       }
       grant = (ACLGrant *)iter.get_next();
     }
   }
   int get_perm(string& id, int perm_mask) {
-  /* FIXME */
+    map<string, int>::iterator iter = acl_user_map.find(id);
+    if (iter != acl_user_map.end())
+      return iter->second;
     return 0;
   }
+  void encode(bufferlist& bl) const {
+     ::encode(acl_user_map, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(acl_user_map, bl);
+  }
 };
+WRITE_CLASS_ENCODER(AccessControlList)
 
 
 class AccessControlPolicy : public XMLObj
 {
-  AccessControlList *acl;
+  AccessControlList acl;
 public:
-  AccessControlPolicy() : acl(NULL) {}
+  AccessControlPolicy() {}
   ~AccessControlPolicy() {}
 
   void xml_end(const char *el) {
-    acl = (AccessControlList *)find_first("AccessControlList");
+    acl = *(AccessControlList *)find_first("AccessControlList");
   }
 
   int get_perm(string& id, int perm_mask) {
-    if (acl)
-      return acl->get_perm(id, perm_mask);
-
-    return 0;
+    return acl.get_perm(id, perm_mask);
   }
+
+  void encode(bufferlist& bl) const {
+    ::encode(acl, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     ::decode(acl, bl);
+   }
 };
+WRITE_CLASS_ENCODER(AccessControlPolicy)
 
 class S3XMLParser : public XMLObj
 {
   XML_Parser p;
-  const char *buf;
+  char *buf;
+  int buf_len;
   XMLObj *cur_obj;
-  int pos;
 public:
-  S3XMLParser() {}
+  S3XMLParser() : buf(NULL), buf_len(0), cur_obj(NULL) {}
+  ~S3XMLParser() {
+    free(buf);
+  }
   bool init();
   void xml_start(const char *el, const char **attr);
   void xml_end(const char *el);
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf, int len, int done);
+  const char *get_xml() { return buf; }
 };
 
 void xml_start(void *data, const char *el, const char **attr) {
@@ -252,6 +276,8 @@ void S3XMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj;
   if (strcmp(el, "AccessControlPolicy") == 0) {
     obj = new AccessControlPolicy();    
+  } else if (strcmp(el, "AccessControlList") == 0) {
+    obj = new AccessControlList();    
   } else if (strcmp(el, "ID") == 0) {
     obj = new ACLID(); 
   } else if (strcmp(el, "DisplayName") == 0) {
@@ -304,7 +330,6 @@ void S3XMLParser::handle_data(const char *s, int len)
 
 bool S3XMLParser::init()
 {
-  pos = -1;
   p = XML_ParserCreate(NULL);
   if (!p) {
     cerr << "S3XMLParser::init(): ERROR allocating memory" << std::endl;
@@ -319,10 +344,13 @@ bool S3XMLParser::init()
 
 bool S3XMLParser::parse(const char *_buf, int len, int done)
 {
-  buf = _buf;
-  if (!XML_Parse(p, buf, len, done)) {
+  buf = (char *)realloc(buf, buf_len + len);
+  memcpy(&buf[buf_len], _buf, len);
+  buf_len += len;
+
+  if (!XML_Parse(p, _buf, len, done)) {
     fprintf(stderr, "Parse error at line %d:\n%s\n",
-	      XML_GetCurrentLineNumber(p),
+	      (int)XML_GetCurrentLineNumber(p),
 	      XML_ErrorString(XML_GetErrorCode(p)));
     return false;
   }
@@ -332,36 +360,37 @@ bool S3XMLParser::parse(const char *_buf, int len, int done)
 
 #if 0
 int main(int argc, char **argv) {
-  S3XMLParser s3acl;
+  S3XMLParser parser;
 
-  if (!s3acl.init())
+  if (!parser.init())
     exit(1);
 
-  char buf[2048];
+  char buf[1024];
 
   for (;;) {
     int done;
     int len;
 
-    len = fread(buf, 1, 2048, stdin);
+    len = fread(buf, 1, sizeof(buf), stdin);
     if (ferror(stdin)) {
       fprintf(stderr, "Read error\n");
       exit(-1);
     }
     done = feof(stdin);
 
-    s3acl.parse(buf, len, done);
+    parser.parse(buf, len, done);
 
     if (done)
       break;
   }
 
-  XMLObjIter iter = s3acl.find("AccessControlPolicy");
-  AccessControlPolicy *acp = (AccessControlPolicy *)iter.get_next();
-  while (acp) {
-    cout << (void *)acp << std::endl;
-    acp = (AccessControlPolicy *)iter.get_next();
+  AccessControlPolicy *policy = (AccessControlPolicy *)parser.find_first("AccessControlPolicy");
+
+  if (policy) {
+    string id="79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be";
+    cout << hex << policy->get_perm(id, S3_PERM_ALL) << dec << endl;
   }
+  cout << parser.get_xml() << endl;
 
   exit(0);
 }
