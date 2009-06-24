@@ -1855,8 +1855,10 @@ int FileStore::list_collections(vector<coll_t>& ls)
   if (!dir)
     return -errno;
 
-  struct dirent *de;
-  while ((de = ::readdir(dir)) != 0) {
+  struct dirent sde, *de;
+  while (::readdir_r(dir, &sde, &de) == 0) {
+    if (!de)
+      break;
     coll_t c;
     if (parse_coll(de->d_name, c))
       ls.push_back(c);
@@ -1900,8 +1902,10 @@ bool FileStore::collection_empty(coll_t c)
     return -errno;
 
   bool empty = true;
-  struct dirent *de;
-  while ((de = ::readdir(dir)) != 0) {
+  struct dirent sde, *de;
+  while (::readdir_r(dir, &sde, &de) == 0) {
+    if (!de)
+      break;
     // parse
     if (de->d_name[0] == '.') continue;
     //cout << "  got object " << de->d_name << std::endl;
@@ -1926,7 +1930,7 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
   get_cdir(c, fn);
 
   DIR *dir = NULL;
-  struct dirent *de;
+  struct dirent sde, *de;
   bool end;
   
   dir = ::opendir(fn);
@@ -1945,7 +1949,7 @@ int FileStore::collection_list_partial(coll_t c, snapid_t seq, vector<sobject_t>
   while (i < max_count) {
     errno = 0;
     end = false;
-    de = ::readdir(dir);
+    ::readdir_r(dir, &sde, &de);
     if (!de && errno) {
       dout(0) << "error reading directory " << fn << dendl;
       return -errno;
@@ -1994,10 +1998,13 @@ int FileStore::collection_list(coll_t c, vector<sobject_t>& ls)
   // first, build (ino, object) list
   vector< pair<ino_t,sobject_t> > inolist;
 
-  struct dirent *de;
-  while ((de = ::readdir(dir)) != 0) {
+  struct dirent sde, *de;
+  while (::readdir_r(dir, &sde, &de) == 0) {
+    if (!de)
+      break;
     // parse
-    if (de->d_name[0] == '.') continue;
+    if (de->d_name[0] == '.')
+      continue;
     //cout << "  got object " << de->d_name << std::endl;
     sobject_t o;
     if (parse_object(de->d_name, o)) {
