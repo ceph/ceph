@@ -102,29 +102,47 @@ void ACLGrant::xml_end(const char *el) {
   }
 }
 
+void S3AccessControlList::init_user_map()
+{
+  map<string, ACLGrant>::iterator iter;
+  acl_user_map.clear();
+  for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
+    ACLGrant& grant = iter->second;
+    ACLPermission& perm = grant.get_permission();
+    acl_user_map[grant.get_id()] |= perm.get_permissions();
+  }
+  user_map_initialized = true;
+}
+
 void S3AccessControlList::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant *grant = (ACLGrant *)iter.get_next();
   while (grant) {
     string id = grant->get_id();
-    ACLPermission& perm = grant->get_permission();
     if (id.size() > 0) {
-      acl_user_map[id] |= perm.get_permissions();
+      grant_map[id] = *grant;
     }
     grant = (ACLGrant *)iter.get_next();
   }
+  init_user_map();
 }
 
 int S3AccessControlList::get_perm(string& id, int perm_mask) {
   map<string, int>::iterator iter = acl_user_map.find(id);
+  if (!user_map_initialized)
+    init_user_map();
   if (iter != acl_user_map.end())
     return iter->second;
   return 0;
 }
 
 void S3AccessControlPolicy::xml_end(const char *el) {
-  acl = *(S3AccessControlList *)find_first("AccessControlList");
-  owner = *(ACLOwner *)find_first("Owner");
+  S3AccessControlList *pacl = (S3AccessControlList *)find_first("AccessControlList");
+  if (pacl)
+    acl = *pacl;
+  ACLOwner *powner = (ACLOwner *)find_first("Owner");
+  if (powner)
+    owner = *powner;
 }
 
 int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
@@ -141,6 +159,8 @@ void S3XMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj;
   if (strcmp(el, "AccessControlPolicy") == 0) {
     obj = new S3AccessControlPolicy();    
+  } else if (strcmp(el, "Owner") == 0) {
+    obj = new ACLOwner();    
   } else if (strcmp(el, "AccessControlList") == 0) {
     obj = new S3AccessControlList();    
   } else if (strcmp(el, "ID") == 0) {
@@ -209,11 +229,12 @@ bool S3XMLParser::init()
 
 bool S3XMLParser::parse(const char *_buf, int len, int done)
 {
+  int pos = buf_len;
   buf = (char *)realloc(buf, buf_len + len);
   memcpy(&buf[buf_len], _buf, len);
   buf_len += len;
 
-  if (!XML_Parse(p, _buf, len, done)) {
+  if (!XML_Parse(p, &buf[pos], len, done)) {
     fprintf(stderr, "Parse error at line %d:\n%s\n",
 	      (int)XML_GetCurrentLineNumber(p),
 	      XML_ErrorString(XML_GetErrorCode(p)));
@@ -249,13 +270,22 @@ int main(int argc, char **argv) {
       break;
   }
 
-  S3AccessControlPolicy *policy = (S3AccessControlPolicy *)parser.find_first("S3AccessControlPolicy");
+  S3AccessControlPolicy *policy = (S3AccessControlPolicy *)parser.find_first("AccessControlPolicy");
 
   if (policy) {
     string id="79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be";
     cout << hex << policy->get_perm(id, S3_PERM_ALL) << dec << endl;
+    policy->to_xml(cout);
   }
+
   cout << parser.get_xml() << endl;
+
+  S3AccessControlPolicy def;
+  string id="thisistheid!";
+  string name="foobar";
+  def.create_default(id, name);
+
+  def.to_xml(cout);
 
   exit(0);
 }
