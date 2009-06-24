@@ -740,6 +740,10 @@ unsigned FileStore::_apply_transaction(Transaction& t)
     case Transaction::OP_RMATTR:
       _rmattr(t.get_cid(), t.get_oid(), t.get_attrname());
       break;
+
+    case Transaction::OP_RMATTRS:
+      _rmattrs(t.get_cid(), t.get_oid());
+      break;
       
     case Transaction::OP_CLONE:
       {
@@ -1735,6 +1739,30 @@ int FileStore::_rmattr(coll_t cid, const sobject_t& oid, const char *name)
   get_attrname(name, n);
   int r = do_removexattr(fn, n);
   dout(10) << "rmattr " << fn << " '" << name << "' = " << r << dendl;
+  return r;
+}
+
+int FileStore::_rmattrs(coll_t cid, const sobject_t& oid) 
+{
+  //if (fake_attrs) return attrs.rmattrs(cid, oid);
+
+  char fn[PATH_MAX];
+  get_coname(cid, oid, fn);
+
+  dout(15) << "rmattrs " << fn << dendl;
+
+  map<nstring,bufferptr> aset;
+  int r = _getattrs(fn, aset);
+  if (r >= 0) {
+    for (map<nstring,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
+      char n[ATTR_MAX];
+      get_attrname(p->first.c_str(), n);
+      r = do_removexattr(fn, n);
+      if (r < 0)
+	break;
+    }
+  }
+  dout(10) << "rmattrs " << fn << " = " << r << dendl;
   return r;
 }
 

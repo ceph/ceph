@@ -101,6 +101,7 @@ public:
 
     static const int OP_STARTSYNC =    27;  // start a sync 
 
+    static const int OP_RMATTRS =      28;  // cid, oid
 
   private:
     /*
@@ -273,6 +274,12 @@ public:
       attrnames.back().swap(s);
       //len++;
       //blen++;
+    }
+    void rmattrs(coll_t cid, const sobject_t& oid) {
+      int op = OP_RMATTRS;
+      ops.push_back(op);
+      cids.push_back(cid);
+      oids.push_back(oid);
     }
     void clone(coll_t cid, const sobject_t& oid, sobject_t noid) {
       int op = OP_CLONE;
