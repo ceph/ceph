@@ -140,7 +140,7 @@ static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
 		return;
 	h = msg->front.iov_base;
 	h->fsid = monc->monmap->fsid;
-	h->want = cpu_to_le32(monc->want_mdsmap);
+	h->have = cpu_to_le64(monc->want_mdsmap - 1);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 }

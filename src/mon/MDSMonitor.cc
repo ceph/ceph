@@ -150,7 +150,7 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
 
 void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
 {
-  if (m->want <= mdsmap.get_epoch())
+  if (m->version < mdsmap.get_epoch())
     send_full(m->get_orig_source_inst());
   else
     waiting_for_map.push_back(m->get_orig_source_inst());
