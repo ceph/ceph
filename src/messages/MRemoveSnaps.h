@@ -15,28 +15,30 @@
 #ifndef __MREMOVESNAPS_H
 #define __MREMOVESNAPS_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
-struct MRemoveSnaps : public Message {
+struct MRemoveSnaps : public PaxosServiceMessage {
   map<int, vector<snapid_t> > snaps;
   
   MRemoveSnaps() : 
-    Message(MSG_REMOVE_SNAPS) { }
-  MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
-    Message(MSG_REMOVE_SNAPS) {
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) { }
+  MRemoveSnaps(map<int, vector<snapid_t> >& s, version_t v) : 
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, v) {
     snaps.swap(s);
   }
   
   const char *get_type_name() { return "remove_snaps"; }
   void print(ostream& out) {
-    out << "remove_snaps(" << snaps << ")";
+    out << "remove_snaps(" << snaps << "v " << version << ")";
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(snaps, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(snaps, p);
     assert(p.end());
   }

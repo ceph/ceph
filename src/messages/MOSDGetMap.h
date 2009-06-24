@@ -15,18 +15,18 @@
 #ifndef __MOSDGETMAP_H
 #define __MOSDGETMAP_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 #include "include/types.h"
 
-class MOSDGetMap : public Message {
+class MOSDGetMap : public PaxosServiceMessage {
  public:
   ceph_fsid_t fsid;
   epoch_t start;  // this is the first incremental the sender wants (he has start-1)
 
-  MOSDGetMap() : Message(CEPH_MSG_OSD_GETMAP) {}
+  MOSDGetMap() : PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, 0) {}
   MOSDGetMap(ceph_fsid_t& f, epoch_t s=0) : 
-    Message(CEPH_MSG_OSD_GETMAP),
+    PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, start-1),
     fsid(f), start(s) { }
 
   epoch_t get_start_epoch() { return start; }
@@ -34,15 +34,17 @@ class MOSDGetMap : public Message {
   const char *get_type_name() { return "get_osd_map"; }
   void print(ostream& out) {
     out << "get_osd_map(start " << start;
-    out << ")";
+    out << "v " << version << ")";
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(start, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(start, p);
   }

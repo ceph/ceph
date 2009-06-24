@@ -17,22 +17,24 @@
 #ifndef __MOSDOUT_H
 #define __MOSDOUT_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 
-class MOSDOut : public Message {
+class MOSDOut : public PaxosServiceMessage {
  public:
   epoch_t map_epoch;
 
-  MOSDOut(epoch_t e) : Message(MSG_OSD_OUT), map_epoch(e) {
+  MOSDOut(epoch_t e) : PaxosServiceMessage(MSG_OSD_OUT, e), map_epoch(e) {
   }
   MOSDOut() {}
 
   void encode_payload() {
+    paxos_encode();
     ::encode(map_epoch, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(map_epoch, p);
   }
 

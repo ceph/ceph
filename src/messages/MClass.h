@@ -16,6 +16,7 @@
 #define __MCLASS_H
 
 #include "include/ClassLibrary.h"
+#include "messages/PaxosServiceMessage.h"
 
 enum {
    CLASS_NOOP = 0,
@@ -66,7 +67,7 @@ public:
       out << info.size() << " entries";
     if (last)
       out << "last " << last;
-    out << ")";
+    out << "v " << version << ")";
   }
 
   void encode_payload() {

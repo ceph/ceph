@@ -16,18 +16,18 @@
 #ifndef __MOSDFAILURE_H
 #define __MOSDFAILURE_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 
-class MOSDFailure : public Message {
+class MOSDFailure : public PaxosServiceMessage {
  public:
   ceph_fsid_t fsid;
   entity_inst_t failed;
   epoch_t       epoch;
 
-  MOSDFailure() : Message(MSG_OSD_FAILURE) {}
+  MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0) {}
   MOSDFailure(ceph_fsid_t &fs, entity_inst_t f, epoch_t e) : 
-    Message(MSG_OSD_FAILURE),
+    PaxosServiceMessage(MSG_OSD_FAILURE, e),
     fsid(fs), failed(f), epoch(e) {}
  
   entity_inst_t get_failed() { return failed; }
@@ -35,11 +35,13 @@ class MOSDFailure : public Message {
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(failed, p);
     ::decode(epoch, p);
   }
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(failed, payload);
     ::encode(epoch, payload);
@@ -47,7 +49,7 @@ class MOSDFailure : public Message {
 
   const char *get_type_name() { return "osd_failure"; }
   void print(ostream& out) {
-    out << "osd_failure(" << failed << " e" << epoch << ")";
+    out << "osd_failure(" << failed << " e" << epoch << "v " << version << ")";
   }
 };
 

@@ -15,16 +15,21 @@
 #ifndef __MCLIENTMOUNT_H
 #define __MCLIENTMOUNT_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
-class MClientMount : public Message {
+class MClientMount : public PaxosServiceMessage {
 public:
-  MClientMount() : Message(CEPH_MSG_CLIENT_MOUNT) { }
+  MClientMount() : PaxosServiceMessage(CEPH_MSG_CLIENT_MOUNT, 0) { }
 
   const char *get_type_name() { return "client_mount"; }
 
-  void decode_payload() { }
-  void encode_payload() { }
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
+  }
+  void encode_payload() {
+    paxos_encode();
+  }
 };
 
 #endif

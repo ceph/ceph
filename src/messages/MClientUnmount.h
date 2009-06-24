@@ -15,16 +15,21 @@
 #ifndef __MCLIENTUNMOUNT_H
 #define __MCLIENTUNMOUNT_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
-class MClientUnmount : public Message {
+class MClientUnmount : public PaxosServiceMessage {
 public:
-  MClientUnmount() : Message(CEPH_MSG_CLIENT_UNMOUNT) { }
+  MClientUnmount() : PaxosServiceMessage(CEPH_MSG_CLIENT_UNMOUNT, 0) { }
  
   const char *get_type_name() { return "client_unmount"; }
 
-  void decode_payload() { }
-  void encode_payload() { }
+  void decode_payload() {
+    bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
+  }
+  void encode_payload() {
+    paxos_encode();
+  }
 };
 
 #endif

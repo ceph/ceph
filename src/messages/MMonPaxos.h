@@ -16,10 +16,10 @@
 #ifndef __MMONPAXOS_H
 #define __MMONPAXOS_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 #include "mon/mon_types.h"
 
-class MMonPaxos : public Message {
+class MMonPaxos : public PaxosServiceMessage {
  public:
   // op types
   const static int OP_COLLECT =   1; // proposer: propose round
@@ -58,9 +58,9 @@ class MMonPaxos : public Message {
 
   map<version_t,bufferlist> values;
 
-  MMonPaxos() : Message(MSG_MON_PAXOS) {}
+  MMonPaxos() : PaxosServiceMessage(MSG_MON_PAXOS, 0) {}
   MMonPaxos(epoch_t e, int o, int mid) : 
-    Message(MSG_MON_PAXOS),
+    PaxosServiceMessage(MSG_MON_PAXOS, e),
     epoch(e),
     op(o), machine_id(mid),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
@@ -76,10 +76,11 @@ class MMonPaxos : public Message {
 	<< " pn " << pn << " opn " << uncommitted_pn;
     if (latest_version)
       out << " latest " << latest_version << " (" << latest_value.length() << " bytes)";
-    out << ")";
+    out << "v " << version << ")";
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(epoch, payload);
     ::encode(op, payload);
     ::encode(machine_id, payload);
@@ -95,6 +96,7 @@ class MMonPaxos : public Message {
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(epoch, p);
     ::decode(op, p);
     ::decode(machine_id, p);

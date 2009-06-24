@@ -16,39 +16,35 @@
 #define __MLOG_H
 
 #include "include/LogEntry.h"
+#include "messages/PaxosServiceMessage.h"
 
 class MLog : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   deque<LogEntry> entries;
-  version_t last;
   
   MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
-  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e), last(0) { }
-  MLog(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_LOG, l), fsid(f), last(l) {}
+  MLog(ceph_fsid_t& f, deque<LogEntry>& e, version_t v) : PaxosServiceMessage(MSG_LOG, v), fsid(f), entries(e) { }
+  MLog(ceph_fsid_t& f, version_t v) : PaxosServiceMessage(MSG_LOG, v), fsid(f) {}
 
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {
     out << "log(";
     if (entries.size())
       out << entries.size() << " entries";
-    if (last)
-      out << "last " << last;
-    out << ")";
+    out << "v " << version << ")";
   }
 
   void encode_payload() {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(entries, payload);
-    ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
     ::decode(entries, p);
-    ::decode(last, p);
   }
 };
 

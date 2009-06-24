@@ -15,32 +15,34 @@
 #ifndef __MMDSGETMAP_H
 #define __MMDSGETMAP_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 #include "include/types.h"
 
-class MMDSGetMap : public Message {
+class MMDSGetMap : public PaxosServiceMessage {
  public:
   ceph_fsid_t fsid;
   epoch_t want;
 
-  MMDSGetMap() {}
+  MMDSGetMap() : PaxosServiceMessage(CEPH_MSG_MDS_GETMAP, 0) {}
   MMDSGetMap(ceph_fsid_t &f, epoch_t w=0) : 
-    Message(CEPH_MSG_MDS_GETMAP), 
+    PaxosServiceMessage(CEPH_MSG_MDS_GETMAP, w-1), 
     fsid(f),
     want(w) { }
 
   const char *get_type_name() { return "mds_getmap"; }
   void print(ostream& out) {
-    out << "mds_getmap(want " << want << ")";
+    out << "mds_getmap(want " << want << "v " << version << ")";
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(want, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(want, p);
   }

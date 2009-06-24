@@ -284,7 +284,7 @@ void get_status(bool newmon)
   vcmd[0] = prefix[which];
   vcmd[1] = "stat";
   
-  MMonCommand *m = new MMonCommand(monmap.fsid);
+  MMonCommand *m = new MMonCommand(monmap.fsid, VERSION_T);
   m->cmd.swap(vcmd);
   messenger->send_message(m, monmap.get_inst(mon));
 
@@ -377,7 +377,7 @@ struct C_Resend : public Context {
 };
 void send_command()
 {
-  MMonCommand *m = new MMonCommand(monmap.fsid);
+  MMonCommand *m = new MMonCommand(monmap.fsid, VERSION_T);
   m->cmd = pending_cmd;
   m->get_data() = pending_bl;
 

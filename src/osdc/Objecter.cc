@@ -782,7 +782,7 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
 
 void Objecter::fs_stats_submit(StatfsOp *op) {
   dout(10) << "fs_stats_submit" << op->tid << dendl;
-  MStatfs *m = new MStatfs(monmap->fsid, op->tid);
+  MStatfs *m = new MStatfs(monmap->fsid, op->tid, VERSION_T);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
   op->last_submit = g_clock.now();

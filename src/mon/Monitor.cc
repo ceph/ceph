@@ -379,7 +379,7 @@ bool Monitor::dispatch_impl(Message *m)
 
     case CEPH_MSG_SHUTDOWN:
       if (m->get_source().is_osd()) 
-	osdmon()->dispatch(m);
+	osdmon()->dispatch((PaxosServiceMessage*)m);
       else
 	handle_shutdown(m);
       break;
@@ -396,36 +396,36 @@ bool Monitor::dispatch_impl(Message *m)
     case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
     case MSG_REMOVE_SNAPS:
-      paxos_service[PAXOS_OSDMAP]->dispatch(m);
+      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       
       // MDSs
     case MSG_MDS_BEACON:
     case CEPH_MSG_MDS_GETMAP:
-      paxos_service[PAXOS_MDSMAP]->dispatch(m);
+      paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // clients
     case CEPH_MSG_CLIENT_MOUNT:
     case CEPH_MSG_CLIENT_UNMOUNT:
-      paxos_service[PAXOS_CLIENTMAP]->dispatch(m);
+      paxos_service[PAXOS_CLIENTMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // pg
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
-      paxos_service[PAXOS_PGMAP]->dispatch(m);
+      paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_POOLSNAP:
-      paxos_service[PAXOS_OSDMAP]->dispatch(m);
+     paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // log
     case MSG_LOG:
-      paxos_service[PAXOS_LOG]->dispatch(m);
+      paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // paxos
@@ -444,7 +444,7 @@ bool Monitor::dispatch_impl(Message *m)
 	// send it to the right paxos instance
 	assert(pm->machine_id < PAXOS_NUM);
 	Paxos *p = paxos[pm->machine_id];
-	p->dispatch(m);
+	p->dispatch((PaxosServiceMessage*)m);
 
 	// make sure service finds out about any state changes
 	if (p->is_active())
@@ -497,7 +497,7 @@ void Monitor::handle_shutdown(Message *m)
       for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
 	if (osdmon()->osdmap.is_down(*it)) continue;
 	dout(10) << "sending shutdown to osd" << *it << dendl;
-	messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
+	messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, VERSION_T),
 				osdmon()->osdmap.get_inst(*it));
       }
       osdmon()->mark_all_down();
@@ -505,7 +505,7 @@ void Monitor::handle_shutdown(Message *m)
       // monitors too.
       for (unsigned i=0; i<monmap->size(); i++)
 	if ((int)i != whoami)
-	  messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
+	  messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, VERSION_T), 
 				  monmap->get_inst(i));
     }
 

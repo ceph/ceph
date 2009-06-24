@@ -17,22 +17,24 @@
 #ifndef __MOSDIN_H
 #define __MOSDIN_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 
-class MOSDIn : public Message {
+class MOSDIn : public PaxosServiceMessage {
  public:
   epoch_t map_epoch;
 
-  MOSDIn(epoch_t e) : Message(MSG_OSD_IN), map_epoch(e) {
+  MOSDIn(epoch_t e) : PaxosServiceMessage(MSG_OSD_IN, e), map_epoch(e) {
   }
   MOSDIn() {}
 
   void encode_payload() {
+    paxos_encode();
     ::encode(map_epoch, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(map_epoch, p);
   }
 

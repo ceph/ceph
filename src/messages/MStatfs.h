@@ -17,26 +17,30 @@
 #define __MSTATFS_H
 
 #include <sys/statvfs.h>    /* or <sys/statfs.h> */
+#include "messages/PaxosServiceMessage.h"
 
-class MStatfs : public Message {
+class MStatfs : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   tid_t tid;
 
-  MStatfs() : Message(CEPH_MSG_STATFS) {}
-  MStatfs(ceph_fsid_t& f, tid_t t) : Message(CEPH_MSG_STATFS), fsid(f), tid(t) {}
+  MStatfs() : PaxosServiceMessage(CEPH_MSG_STATFS, 0) {}
+  MStatfs(ceph_fsid_t& f, tid_t t, version_t v) :
+    PaxosServiceMessage(CEPH_MSG_STATFS, v), fsid(f), tid(t) {}
 
   const char *get_type_name() { return "statfs"; }
   void print(ostream& out) {
-    out << "statfs(" << tid << ")";
+    out << "statfs(" << tid << "v " << version << ")";
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(tid, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(tid, p);
   }

@@ -15,7 +15,7 @@
 #ifndef __MOSDBOOT_H
 #define __MOSDBOOT_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 #include "include/types.h"
 #include "osd/osd_types.h"
@@ -25,20 +25,22 @@ class MOSDBoot : public PaxosServiceMessage {
   OSDSuperblock sb;
 
   MOSDBoot() : PaxosServiceMessage(){}
-  MOSDBoot(OSDSuperblock& s, version_t v) : 
-    PaxosServiceMessage(MSG_OSD_BOOT, v), sb(s) {
+  MOSDBoot(OSDSuperblock& s) : 
+    PaxosServiceMessage(MSG_OSD_BOOT, sb.current_epoch), sb(s) {
   }
 
   const char *get_type_name() { return "osd_boot"; }
   void print(ostream& out) {
-    out << "osd_boot(osd" << sb.whoami << ")";
+    out << "osd_boot(osd" << sb.whoami << "v " << version << ")";
   }
   
   void encode_payload() {
+    paxos_encode();
     ::encode(sb, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(sb, p);
   }
 };

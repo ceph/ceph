@@ -248,7 +248,7 @@ void SnapServer::check_osd_map(bool force)
 
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
-    MRemoveSnaps *m = new MRemoveSnaps(all_purge);
+    MRemoveSnaps *m = new MRemoveSnaps(all_purge, VERSION_T);
     int mon = mds->monmap->pick_mon();
     mds->messenger->send_message(m, mds->monmap->get_inst(mon));
   }

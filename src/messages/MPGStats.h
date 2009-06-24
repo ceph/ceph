@@ -16,8 +16,9 @@
 #define __MPGSTATS_H
 
 #include "osd/osd_types.h"
+#include "messages/PaxosServiceMessage.h"
 
-class MPGStats : public Message {
+class MPGStats : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   map<pg_t,pg_stat_t> pg_stat;
@@ -25,16 +26,17 @@ public:
   epoch_t epoch;
   utime_t had_map_for;
   
-  MPGStats() : Message(MSG_PGSTATS) {}
+  MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}
   MPGStats(ceph_fsid_t& f, epoch_t e, utime_t had) : 
-    Message(MSG_PGSTATS), fsid(f), epoch(e), had_map_for(had) {}
+    PaxosServiceMessage(MSG_PGSTATS, e), fsid(f), epoch(e), had_map_for(had) {}
 
   const char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
-    out << "pg_stats(" << pg_stat.size() << " pgs)";
+    out << "pg_stats(" << pg_stat.size() << "v " << version << " pgs)";
   }
 
   void encode_payload() {
+    paxos_encode();
     ::encode(fsid, payload);
     ::encode(osd_stat, payload);
     ::encode(pg_stat, payload);
@@ -43,6 +45,7 @@ public:
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    paxos_decode(p);
     ::decode(fsid, p);
     ::decode(osd_stat, p);
     ::decode(pg_stat, p);
