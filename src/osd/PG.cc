@@ -202,7 +202,7 @@ void PG::proc_replica_log(ObjectStore::Transaction& t, Info &oinfo, Log &olog, M
       Log::Entry& oe = *pp;
 
       // don't continue past the bottom of our log.
-      if (oe.version < log.bottom)
+      if (oe.version <= log.bottom)
 	break;
 
       if (!log.objects.count(oe.soid)) {
