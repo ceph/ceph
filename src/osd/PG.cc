@@ -438,7 +438,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
       // find start point in olog
       list<Log::Entry>::iterator to = olog.log.end();
       list<Log::Entry>::iterator from = olog.log.end();
-      list<Log::Entry>::iterator last_kept = olog.log.end();
+      eversion_t lower_bound = olog.bottom;
       while (1) {
         if (from == olog.log.begin())
 	  break;
@@ -446,7 +446,7 @@ void PG::merge_log(ObjectStore::Transaction& t,
         dout(20) << "  ? " << *from << dendl;
         if (from->version <= log.top) {
 	  dout(20) << "merge_log last shared is " << *from << dendl;
-	  last_kept = from;
+	  lower_bound = from->version;
           from++;
           break;
         }
@@ -464,16 +464,13 @@ void PG::merge_log(ObjectStore::Transaction& t,
       
       // move aside divergent items
       list<Log::Entry> divergent;
-      if (last_kept != olog.log.end()) {
-	while (1) {
-	  Log::Entry &oe = *log.log.rbegin();
-	  if (oe.version == last_kept->version ||
-	      oe.version <= olog.bottom)
-	    break;
-	  dout(10) << "merge_log divergent " << oe << dendl;
-	  divergent.push_front(oe);
-	  log.log.pop_back();
-	}
+      while (!log.log.empty()) {
+	Log::Entry &oe = *log.log.rbegin();
+	if (oe.version <= lower_bound)
+	  break;
+	dout(10) << "merge_log divergent " << oe << dendl;
+	divergent.push_front(oe);
+	log.log.pop_back();
       }
 
       // splice
