@@ -110,9 +110,30 @@ public:
 };
 WRITE_CLASS_ENCODER(S3AccessControlList)
 
+class ACLOwner : public XMLObj
+{
+  string id;
+  string display_name;
+public:
+  ACLOwner() {}
+  ~ACLOwner() {}
+
+  void xml_end(const char *el);
+  void encode(bufferlist& bl) const {
+     ::encode(id, bl);
+     ::encode(display_name, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(id, bl);
+    ::decode(display_name, bl);
+  }
+};
+WRITE_CLASS_ENCODER(ACLOwner)
+
 class S3AccessControlPolicy : public XMLObj
 {
   S3AccessControlList acl;
+  ACLOwner owner;
 public:
   S3AccessControlPolicy() {}
   ~S3AccessControlPolicy() {}

@@ -14,12 +14,6 @@ ostream& operator<<(ostream& out, XMLObj& obj) {
    return out;
 }
 
-class ACLOwner : public XMLObj
-{
-public:
-  ACLOwner() {}
-  ~ACLOwner() {}
-};
 
 class ACLGrantee : public XMLObj
 {
@@ -72,6 +66,16 @@ public:
  ACLDisplayName() {} 
  ~ACLDisplayName() {}
 };
+
+void ACLOwner::xml_end(const char *el) {
+  ACLID *acl_id = (ACLID *)find_first("ID");  
+  ACLID *acl_name = (ACLID *)find_first("DisplayName");
+
+  if (acl_id)
+    id = acl_id->get_data();
+  if (acl_name)
+    display_name = acl_name->get_data();
+}
 
 class ACLGrant : public XMLObj
 {
@@ -127,6 +131,7 @@ int S3AccessControlList::get_perm(string& id, int perm_mask) {
 
 void S3AccessControlPolicy::xml_end(const char *el) {
   acl = *(S3AccessControlList *)find_first("AccessControlList");
+  owner = *(ACLOwner *)find_first("Owner");
 }
 
 int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
