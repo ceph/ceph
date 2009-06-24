@@ -71,11 +71,6 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
-/ - kill -[io] options
-/ - make 'ls' output to file
-/ - make objecter->list_objects return even with <max entries (i.e., after each non-empty pg)
-/ - verify 'ls' behaves with snaps
-/ - allow put from stdin: 'echo foo | rados -p mypool put foo -'
 - perl swig wrapper
 - 'rados call foo.bar'?
 - merge pgs
@@ -139,6 +134,7 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- need to store SnapSet somewhere other than _head, to avoid stat/getxattr on ls to check head_exists.
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
 - make scrub interruptible

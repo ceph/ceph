@@ -1161,20 +1161,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     
     case CEPH_OSD_OP_DELETE:
       { // delete
-	t.remove(info.pgid.to_coll(), soid);
-	if (oi.snapset.clones.size()) {
-	  snapid_t newest = *oi.snapset.clones.rbegin();
-	  add_interval_usage(oi.snapset.clone_overlap[newest], info.stats);
-	  oi.snapset.clone_overlap.erase(newest);  // ok, redundant.
-	}
 	if (ctx->obs->exists) {
 	  info.stats.num_objects--;
 	  info.stats.num_bytes -= oi.size;
 	  info.stats.num_kb -= SHIFT_ROUND_UP(oi.size, 10);
 	  oi.size = 0;
-	  ctx->obs->exists = false;
 	  oi.snapset.head_exists = false;
 	}      
+	if (oi.snapset.clones.size()) {
+	  snapid_t newest = *oi.snapset.clones.rbegin();
+	  add_interval_usage(oi.snapset.clone_overlap[newest], info.stats);
+	  oi.snapset.clone_overlap.erase(newest);  // ok, redundant.
+
+	  // truncate and kill attrs, but do not delete
+	  t.truncate(info.pgid.to_coll(), soid, 0);
+	  t.rmattrs(info.pgid.to_coll(), soid);
+	} else {
+	  t.remove(info.pgid.to_coll(), soid);  // no clones, delete!
+	  ctx->obs->exists = false;
+	}
       }
       break;
     
