@@ -807,6 +807,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	int which;
 	struct dentry *root;
 	unsigned char r;
+	struct ceph_client_mount *h;
 
 	dout(10, "mount start\n");
 	mutex_lock(&client->mount_mutex);
@@ -835,11 +836,14 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		dout(10, "mount sending mount request\n");
 		get_random_bytes(&r, 1);
 		which = r % client->mount_args.num_mon;
-		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, 0, 0, 0, NULL);
+		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, sizeof(*h), 0,
+					 0, NULL);
 		if (IS_ERR(mount_msg)) {
 			err = PTR_ERR(mount_msg);
 			goto out;
 		}
+		h = mount_msg->front.iov_base;
+		h->have_version = 0;
 		mount_msg->hdr.dst.name.type =
 			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		mount_msg->hdr.dst.name.num = cpu_to_le32(which);

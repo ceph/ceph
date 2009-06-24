@@ -140,7 +140,7 @@ static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
 		return;
 	h = msg->front.iov_base;
 	h->fsid = monc->monmap->fsid;
-	h->have = cpu_to_le64(monc->want_mdsmap - 1);
+	h->have_version = cpu_to_le64(monc->want_mdsmap - 1);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 }
@@ -238,11 +238,14 @@ static void request_umount(struct ceph_mon_client *monc, int newmon)
 {
 	struct ceph_msg *msg;
 	int mon = pick_mon(monc, newmon);
+	struct ceph_client_mount *h;
 
 	dout(5, "request_umount from mon%d\n", mon);
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, 0, 0, 0, NULL);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
+	h = msg->front.iov_base;
+	h->have_version = 0;
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 }
@@ -321,6 +324,7 @@ static int send_statfs(struct ceph_mon_client *monc,
 		return PTR_ERR(msg);
 	req->request = msg;
 	h = msg->front.iov_base;
+	h->have_version = 0;
 	h->fsid = monc->monmap->fsid;
 	h->tid = cpu_to_le64(req->tid);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];

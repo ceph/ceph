@@ -284,6 +284,7 @@ ceph_full_name_hash(const char *name, unsigned int len)
 
 
 struct ceph_mon_statfs {
+	__le64 have_version;
 	ceph_fsid_t fsid;
 	__le64 tid;
 };
@@ -300,15 +301,23 @@ struct ceph_mon_statfs_reply {
 };
 
 struct ceph_osd_getmap {
+	__le64 have_version;
 	ceph_fsid_t fsid;
 	__le32 start;
 } __attribute__ ((packed));
 
 struct ceph_mds_getmap {
-	__le64 have;
+	__le64 have_version;
 	ceph_fsid_t fsid;
 } __attribute__ ((packed));
 
+struct ceph_client_mount {
+	__le64 have_version;
+} __attribute__ ((packed));
+
+struct ceph_client_unmount {
+	__le64 have_version;
+} __attribute__ ((packed));
 
 /*
  * client authentication ticket
