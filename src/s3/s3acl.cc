@@ -8,6 +8,14 @@
 
 using namespace std;
 
+#define S3_PERM_READ            0x01
+#define S3_PERM_WRITE           0x02
+#define S3_PERM_READ_ACP        0x04
+#define S3_PERM_WRITE_ACP       0x08
+#define S3_PERM_FULL_CONTROL    ( S3_PERM_READ | S3_PERM_WRITE | \
+                                  S3_PERM_READ_ACP | S3_PERM_WRITE_ACP )
+                                  
+
 class XMLObj;
 
 class XMLObjIter {
@@ -30,17 +38,22 @@ public:
 class XMLObj
 {
   XMLObj *parent;
-  const char *el_type;
+  string type;
   map<string, string> attr_map;
-  string data;
 protected:
+  string data;
   multimap<string, XMLObj *> children;
 public:
   XMLObj() {}
-  virtual ~XMLObj() {}
+  virtual ~XMLObj() {
+    multimap<string, XMLObj *>::iterator iter;
+    for (iter = children.begin(); iter != children.end(); ++iter) {
+      delete iter->second;
+    }
+  }
   void xml_start(XMLObj *parent, const char *el, const char **attr) {
     this->parent = parent;
-    el_type = el;
+    type = el;
     for (int i = 0; attr[i]; i += 2) {
       attr_map[attr[i]] = string(attr[i + 1]);
     }
@@ -62,20 +75,29 @@ public:
     iter.set(first, last);
     return iter;
   }
+
+  XMLObj *find_first(string name) {
+    XMLObjIter iter;
+    map<string, XMLObj *>::iterator first;
+    first = children.find(name);
+    if (first != children.end())
+      return first->second;
+    return NULL;
+  }
+
+  friend ostream& operator<<(ostream& out, XMLObj& obj);
+
 };
+ostream& operator<<(ostream& out, XMLObj& obj) {
+   out << obj.type << ": " << obj.data;
+   return out;
+}
 
 class ACLOwner : public XMLObj
 {
 public:
   ACLOwner() {}
   ~ACLOwner() {}
-};
-
-class ACLGrant : public XMLObj
-{
-public:
-  ACLGrant() {}
-  ~ACLGrant() {}
 };
 
 class ACLGrantee : public XMLObj
@@ -85,18 +107,27 @@ public:
  ~ACLGrantee() {}
 };
 
-class ACLDisplayName : public XMLObj
-{
-public:
- ACLDisplayName() {} 
- ~ACLDisplayName() {}
-};
-
 class ACLPermission : public XMLObj
 {
+  int flags;
 public:
-  ACLPermission() {}
+  ACLPermission() : flags(0) {}
   ~ACLPermission() {}
+  void xml_end(const char *el) {
+    const char *s = data.c_str();
+    if (strcasecmp(s, "READ") == 0) {
+      flags |= S3_PERM_READ;
+    } else if (strcasecmp(s, "WRITE") == 0) {
+      flags |= S3_PERM_WRITE;
+    } else if (strcasecmp(s, "READ_ACP") == 0) {
+      flags |= S3_PERM_READ_ACP;
+    } else if (strcasecmp(s, "WRITE_ACP") == 0) {
+      flags |= S3_PERM_WRITE_ACP;
+    } else if (strcasecmp(s, "FULL_CONTROL") == 0) {
+      flags |= S3_PERM_FULL_CONTROL;
+    }
+  }
+  int get_permissions() { return flags; }
 };
 
 class ACLID : public XMLObj
@@ -113,11 +144,86 @@ public:
   ~ACLURI() {}
 };
 
-class AccessControlPolicy : public XMLObj
+class ACLDisplayName : public XMLObj
 {
 public:
-  AccessControlPolicy() {}
+ ACLDisplayName() {} 
+ ~ACLDisplayName() {}
+};
+
+class ACLGrant : public XMLObj
+{
+  ACLGrantee *grantee;
+  ACLID *id;
+  ACLURI *uri;
+  ACLPermission *permission;
+  ACLDisplayName *name;
+public:
+  ACLGrant() : grantee(NULL), id(NULL), uri(NULL), permission(NULL) {}
+  ~ACLGrant() {}
+
+  void xml_end(const char *el) {
+    grantee = (ACLGrantee *)find_first("Grantee");
+    if (!grantee)
+      return;
+    permission = (ACLPermission *)find_first("Permission");
+    if (!permission)
+      return;
+    name = (ACLDisplayName *)grantee->find_first("DisplayName");
+    id = (ACLID *)grantee->find_first("ID");
+    if (id) {
+      cout << "[" << *grantee << ", " << *permission << ", " << *id << ", " << "]" << std::endl;
+    } else {
+      uri = (ACLURI *)grantee->find_first("URI");
+      if (uri)
+        cout << "[" << *grantee << ", " << *permission << ", " << *uri << "]" << std::endl;
+    }
+  }
+  ACLID *get_id() { return id; }
+};
+
+class AccessControlList : public XMLObj
+{
+  multimap<string, ACLGrant *> acl_user_map;
+public:
+  AccessControlList() {}
+  ~AccessControlList() {}
+
+  void xml_end(const char *el) {
+    XMLObjIter iter = find("Grant");
+    ACLGrant *grant = (ACLGrant *)iter.get_next();
+    while (grant) {
+      ACLID *id = (ACLID *)grant->get_id();
+      if (id) {
+        acl_user_map.insert(pair<string, ACLGrant *>(id->get_data(), grant));
+      }
+      grant = (ACLGrant *)iter.get_next();
+    }
+  }
+  int get_perm(string& id, int perm_mask) {
+  /* FIXME */
+    return 0;
+  }
+};
+
+
+class AccessControlPolicy : public XMLObj
+{
+  AccessControlList *acl;
+public:
+  AccessControlPolicy() : acl(NULL) {}
   ~AccessControlPolicy() {}
+
+  void xml_end(const char *el) {
+    acl = (AccessControlList *)find_first("AccessControlList");
+  }
+
+  int get_perm(string& id, int perm_mask) {
+    if (acl)
+      return acl->get_perm(id, perm_mask);
+
+    return 0;
+  }
 };
 
 class S3XMLParser : public XMLObj
@@ -132,7 +238,6 @@ public:
   void xml_start(const char *el, const char **attr);
   void xml_end(const char *el);
   void handle_data(const char *s, int len);
-  
 
   bool parse(const char *buf, int len, int done);
 };
@@ -193,7 +298,7 @@ void handle_data(void *data, const char *s, int len)
 
 void S3XMLParser::handle_data(const char *s, int len)
 {
-  printf(">%.*s\n", len, s);
+  cur_obj->xml_handle_data(s, len);
 }
 
 
@@ -253,9 +358,12 @@ int main(int argc, char **argv) {
 
   XMLObjIter iter = s3acl.find("AccessControlPolicy");
   AccessControlPolicy *acp = (AccessControlPolicy *)iter.get_next();
-  cout << (void *)acp << std::endl;
+  while (acp) {
+    cout << (void *)acp << std::endl;
+    acp = (AccessControlPolicy *)iter.get_next();
+  }
 
   exit(0);
 }
-
 #endif
+
