@@ -378,10 +378,7 @@ bool Monitor::dispatch_impl(Message *m)
       break;
 
     case CEPH_MSG_SHUTDOWN:
-      if (m->get_source().is_osd()) 
-	osdmon()->dispatch((PaxosServiceMessage*)m);
-      else
-	handle_shutdown(m);
+      handle_shutdown(m);
       break;
       
     case MSG_MON_COMMAND:

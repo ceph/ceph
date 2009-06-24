@@ -6,13 +6,11 @@
 #define VERSION_T 0
 
 class PaxosServiceMessage : public Message {
- protected:
+ public:
   version_t version;
 
- public:
-  virtual ~PaxosServiceMessage() { }
   PaxosServiceMessage() : Message(MSG_PAXOS), version(0) { }
-  PaxosServiceMessage( int type, version_t v) : Message(type), version(v) { }
+  PaxosServiceMessage(int type, version_t v) : Message(type), version(v) { }
 
   void paxos_encode() {
     ::encode(version, payload);
@@ -23,10 +21,12 @@ class PaxosServiceMessage : public Message {
   }
 
   void encode_payload() {
+    assert(0);
     paxos_encode();
   }
 
   void decode_payload() {
+    assert(0);
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
   }
