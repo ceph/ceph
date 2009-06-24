@@ -1543,6 +1543,39 @@ void PG::_finish_recovery(Context *c)
   put();
 }
 
+void PG::start_recovery_op(const sobject_t& soid)
+{
+  dout(10) << "start_recovery_op " << soid
+#ifdef DEBUG_RECOVERY_OIDS
+	   << " (" << recovering_oids << ")"
+#endif
+	   << dendl;
+  assert(recovery_ops_active >= 0);
+  recovery_ops_active++;
+#ifdef DEBUG_RECOVERY_OIDS
+  assert(recovering_oids.count(soid) == 0);
+  recovering_oids.insert(soid);
+#endif
+  osd->start_recovery_op(this, soid);
+}
+
+void PG::finish_recovery_op(const sobject_t& soid, bool dequeue)
+{
+  dout(10) << "finish_recovery_op " << soid
+#ifdef DEBUG_RECOVERY_OIDS
+	   << " (" << recovering_oids << ")" 
+#endif
+	   << dendl;
+  assert(recovery_ops_active > 0);
+  recovery_ops_active--;
+#ifdef DEBUG_RECOVERY_OIDS
+  assert(recovering_oids.count(soid));
+  recovering_oids.erase(soid);
+#endif
+  osd->finish_recovery_op(this, soid, dequeue);
+}
+
+
 void PG::defer_recovery()
 {
   osd->defer_recovery(this);
@@ -1555,7 +1588,13 @@ void PG::clear_recovery_state()
   log.reset_recovery_pointers();
   finish_sync_event = 0;
 
-  osd->finish_recovery_op(this, recovery_ops_active, true);
+  sobject_t soid;
+  while (recovery_ops_active > 0) {
+#ifdef DEBUG_RECOVERY_OIDS
+    soid = *recovering_oids.begin();
+#endif
+    finish_recovery_op(soid, true);
+  }
 
   _clear_recovery_state();  // pg impl specific hook
 }
@@ -1851,15 +1890,23 @@ void PG::read_log(ObjectStore *store)
 	osd->get_logclient()->log(LOG_ERROR, ss);
 	reorder = true;
       }
-      last = e.version;
 
-      if (e.version > log.bottom || log.backlog) { // ignore items below log.bottom
-        if (opos % 4096 < pos % 4096)
-	  ondisklog.block_map[opos] = e.version;
-        log.log.push_back(e);
-      } else {
-	dout(20) << "read_log  ignoring entry at " << pos << dendl;
+      if (e.version <= log.bottom && !log.backlog) {
+	dout(20) << "read_log  ignoring entry at " << pos << " below log.bottom" << dendl;
+	continue;
       }
+      if (last.version == e.version.version) {
+	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
+	log.log.pop_back();
+	stringstream ss;
+	ss << info.pgid << " read_log got dup " << e.version << " after " << last;
+	osd->get_logclient()->log(LOG_ERROR, ss);
+      }
+      
+      if (opos % 4096 < pos % 4096)
+	ondisklog.block_map[opos] = e.version;
+      log.log.push_back(e);
+      last = e.version;
 
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {

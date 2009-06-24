@@ -414,7 +414,6 @@ protected:
 
   void queue_for_recovery();
   int start_recovery_ops(int max);
-  void finish_recovery_op();
   int recover_primary(int max);
   int recover_replicas(int max);
 

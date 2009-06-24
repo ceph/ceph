@@ -36,6 +36,9 @@ using namespace std;
 using namespace __gnu_cxx;
 
 
+#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
+
+
 class OSD;
 class MOSDOp;
 class MOSDSubOp;
@@ -651,6 +654,9 @@ public:
 
   xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, stat_queue_item;
   int recovery_ops_active;
+#ifdef DEBUG_RECOVERY_OIDS
+  set<sobject_t> recovering_oids;
+#endif
 
   epoch_t generate_backlog_epoch;  // epoch we decided to build a backlog.
   utime_t replay_until;
@@ -778,6 +784,8 @@ public:
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
   void defer_recovery();
+  void start_recovery_op(const sobject_t& soid);
+  void finish_recovery_op(const sobject_t& soid, bool dequeue=false);
 
   loff_t get_log_write_pos() {
     return 0;

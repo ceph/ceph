@@ -625,6 +625,9 @@ protected:
   xlist<PG*> recovery_queue;
   utime_t defer_recovery_until;
   int recovery_ops_active;
+#ifdef DEBUG_RECOVERY_OIDS
+  set<sobject_t> recovery_oids;
+#endif
 
   struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
     OSD *osd;
@@ -671,8 +674,8 @@ protected:
   } recovery_wq;
 
   bool queue_for_recovery(PG *pg);
-  void start_recovery_op(PG *pg, int count);
-  void finish_recovery_op(PG *pg, int count, bool more);
+  void start_recovery_op(PG *pg, const sobject_t& soid);
+  void finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue);
   void defer_recovery(PG *pg);
   void do_recovery(PG *pg);
   bool _recover_now();

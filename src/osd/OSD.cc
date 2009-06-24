@@ -3434,10 +3434,16 @@ void OSD::do_recovery(PG *pg)
   dout(10) << "do_recovery starting " << max
 	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
 	   << *pg << dendl;
+#ifdef DEBUG_RECOVERY_OIDS
+  dout(20) << "  active was " << recovery_oids << dendl;
+#endif
 
   int started = pg->start_recovery_ops(max);
-  recovery_ops_active += started;
-  pg->recovery_ops_active += started;
+
+  dout(10) << "do_recovery started " << started
+	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops) on "
+	   << *pg << dendl;
+
   if (started < max)
     pg->recovery_item.remove_myself();
 
@@ -3445,32 +3451,43 @@ void OSD::do_recovery(PG *pg)
   pg->put();
 }
 
-void OSD::start_recovery_op(PG *pg, int count)
+void OSD::start_recovery_op(PG *pg, const sobject_t& soid)
 {
   recovery_wq.lock();
-  dout(10) << "start_recovery_op " << *pg << " count " << count
+  dout(10) << "start_recovery_op " << *pg << " " << soid
 	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
 	   << dendl;
   assert(recovery_ops_active >= 0);
-  assert(pg->recovery_ops_active >= 0);
-  recovery_ops_active += count;
-  pg->recovery_ops_active += count;
+  recovery_ops_active++;
+
+#ifdef DEBUG_RECOVERY_OIDS
+  dout(20) << "  active was " << recovery_oids << dendl;
+  assert(recovery_oids.count(soid) == 0);
+  recovery_oids.insert(soid);
+  assert((int)recovery_oids.size() == recovery_ops_active);
+#endif
+
   recovery_wq.unlock();
 }
 
-void OSD::finish_recovery_op(PG *pg, int count, bool dequeue)
+void OSD::finish_recovery_op(PG *pg, const sobject_t& soid, bool dequeue)
 {
-  dout(10) << "finish_recovery_op " << *pg << " count " << count
+  dout(10) << "finish_recovery_op " << *pg << " " << soid
 	   << " dequeue=" << dequeue
 	   << " (" << recovery_ops_active << "/" << g_conf.osd_recovery_max_active << " rops)"
 	   << dendl;
   recovery_wq.lock();
 
   // adjust count
-  recovery_ops_active -= count;
+  recovery_ops_active--;
   assert(recovery_ops_active >= 0);
-  pg->recovery_ops_active -= count;
-  assert(pg->recovery_ops_active >= 0);
+
+#ifdef DEBUG_RECOVERY_OIDS
+  dout(20) << "  active oids was " << recovery_oids << dendl;
+  assert(recovery_oids.count(soid));
+  recovery_oids.erase(soid);
+  assert((int)recovery_oids.size() == recovery_ops_active);
+#endif
 
   if (dequeue)
     pg->recovery_item.remove_myself();

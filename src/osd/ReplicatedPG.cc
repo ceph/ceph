@@ -99,7 +99,7 @@ void ReplicatedPG::wait_for_missing_object(const sobject_t& soid, Message *m)
 	    << ", pulling"
 	    << dendl;
     pull(soid);
-    osd->start_recovery_op(this, 1);
+    start_recovery_op(soid);
   }
   waiting_for_missing_object[soid].push_back(m);
 }
@@ -617,7 +617,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
       // push it before this update. 
       // FIXME, this is probably extra much work (eg if we're about to overwrite)
       push_to_replica(soid, peer);
-      osd->start_recovery_op(this, 1);
+      start_recovery_op(soid);
     }
     
     issue_repop(repop, peer, now, old_exists, old_size, old_version);
@@ -2560,7 +2560,7 @@ void ReplicatedPG::sub_op_push_reply(MOSDSubOpReply *reply)
 
     if (pushing[soid].empty()) {
       dout(10) << "pushed " << soid << " to all replicas" << dendl;
-      finish_recovery_op();
+      finish_recovery_op(soid);
     } else {
       dout(10) << "pushed " << soid << ", still waiting for push ack from " 
 	       << pushing[soid] << dendl;
@@ -2797,7 +2797,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
     // close out pull op?
     if (pulling.count(soid)) {
       pulling.erase(soid);
-      finish_recovery_op();
+      finish_recovery_op(soid);
     }
 
     update_stats();
@@ -2813,7 +2813,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 	assert(peer_missing.count(peer));
 	if (peer_missing[peer].is_missing(soid)) {
 	  push_to_replica(soid, peer);  // ok, push it, and they (will) have it now.
-	  osd->start_recovery_op(this, 1);
+	  start_recovery_op(soid);
 	}
       }
     }
@@ -2912,6 +2912,9 @@ void ReplicatedPG::on_role_change()
 void ReplicatedPG::_clear_recovery_state()
 {
   missing_loc.clear();
+#ifdef DEBUG_RECOVERY_OIDS
+  recovering_oids.clear();
+#endif
   pulling.clear();
   pushing.clear();
 }
@@ -2937,11 +2940,7 @@ int ReplicatedPG::start_recovery_ops(int max)
   return started;
 }
 
-void ReplicatedPG::finish_recovery_op()
-{
-  dout(10) << "finish_recovery_op" << dendl;
-  osd->finish_recovery_op(this, 1, false);
-}
+
 
 
 /**
@@ -3017,9 +3016,10 @@ int ReplicatedPG::recover_primary(int max)
 	  }
 	}
 	
-	if (pull(soid))
+	if (pull(soid)) {
 	  ++started;
-	else
+	  start_recovery_op(soid);
+	} else
 	  ++skipped;
 	if (started >= max)
 	  return started;
@@ -3082,6 +3082,9 @@ int ReplicatedPG::recover_replicas(int max)
     sobject_t soid = peer_missing[peer].rmissing.begin()->second;
     eversion_t v = peer_missing[peer].rmissing.begin()->first;
 
+    start_recovery_op(soid);
+    started++;
+
     push_to_replica(soid, peer);
 
     // do other peers need it too?
@@ -3092,7 +3095,7 @@ int ReplicatedPG::recover_replicas(int max)
 	push_to_replica(soid, peer);
     }
 
-    if (++started >= max)
+    if (started >= max)
       return started;
   }
   
