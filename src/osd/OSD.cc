@@ -3300,11 +3300,17 @@ void OSD::cancel_generate_backlog(PG *pg)
 
 void OSD::generate_backlog(PG *pg)
 {
+  map<eversion_t,PG::Log::Entry> omap;
   pg->lock();
   dout(10) << *pg << " generate_backlog" << dendl;
+
+  if (!pg->generate_backlog_epoch) {
+    dout(10) << *pg << " generate_backlog was canceled" << dendl;
+    goto out;
+  }
+
   assert(!pg->is_active());
 
-  map<eversion_t,PG::Log::Entry> omap;
   if (!pg->build_backlog_map(omap))
     goto out;
 
