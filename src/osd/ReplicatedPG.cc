@@ -1350,6 +1350,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	do_osd_ops(ctx, nops, ibl);
 	dout(10) << "tmapup read " << ibl.length() << dendl;
 
+	dout(30) << " starting is \n";
+	ibl.hexdump(*_dout);
+	*_dout << dendl;
+
 	bufferlist::iterator ip = ibl.begin();
 	bufferlist obl;
 	bool changed = false;
@@ -1497,8 +1501,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  if (!ip.end()) {
 	    bufferlist rest;
 	    rest.substr_of(ibl, ip.get_off(), ibl.length() - ip.get_off());
-	    dout(20) << "  keep trailing " << rest.length() << dendl;
-	    obl.claim_append(rest);
+	    dout(20) << "  keep trailing " << rest.length()
+		     << " at " << newkeydata.length() << dendl;
+	    newkeydata.claim_append(rest);
 	  }
 
 	  // encode final key count + key data
@@ -1508,6 +1513,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 
 	if (0) {
+	  dout(20) << " final is \n";
+	  obl.hexdump(*_dout);
+	  *_dout << dendl;
+
 	  // sanity check
 	  bufferlist::iterator tp = obl.begin();
 	  bufferlist h;
@@ -1911,6 +1920,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 
     dout(10) << " removing " << *repop << dendl;
     assert(!repop_queue.empty());
+    dout(20) << "   q front is " << *repop_queue.front() << dendl; 
     assert(repop_queue.front() == repop);
     repop_queue.pop_front();
     repop_map.erase(repop->rep_tid);
