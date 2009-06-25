@@ -23,6 +23,14 @@ v0.9
 /- crush bugfixes
 /- kclient readdir fixes
 
+v0.10
+/- kclient
+/  - fix unaligned memory access
+/  - fix op replay after mds restart (symlink ops)
+/- fix rados snaps vs 'ls'
+/- improved monitor read model
+- osd bugfixes
+
 bugs
 
 osd/OSD.cc: In function 'void OSD::finish_recovery_op(PG*, int, bool)':
@@ -134,7 +142,7 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
-- need to store SnapSet somewhere other than _head, to avoid stat/getxattr on ls to check head_exists.
+- what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
 - make scrub interruptible
