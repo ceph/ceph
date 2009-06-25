@@ -171,11 +171,13 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
     return r;
   }
 
-  r = fsetxattr(fd, "user.etag", md5.c_str(), md5.size(), 0);
-  if (r < 0) {
-     r = -errno;
-     close(r);
-     return r;
+  if (md5.size()) {
+    r = fsetxattr(fd, "user.etag", md5.c_str(), md5.size(), 0);
+    if (r < 0) {
+       r = -errno;
+       close(r);
+       return r;
+    }
   }
 
 
