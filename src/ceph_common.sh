@@ -29,8 +29,13 @@ check_host() {
 	    fi
 
 	    # we'll need to ssh into that host
-	    ssh="ssh root@$host"
-	    get_conf dir "$dir" "ssh path" $sections
+	    get_conf sshuser "" "user"
+	    if [ -z "$sshuser" ]; then
+		ssh="ssh $host"
+	    else
+		ssh="ssh $sshuser@$host"
+	    fi
+	    get_conf dir "$dir" "ssh path"
 	fi
     else
 	host=$hostname
@@ -47,7 +52,7 @@ do_cmd() {
 	ulimit -c unlimited
 	bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
     else
-	[ $verbose -eq 1 ] && echo "--- $host# cd $dir ; ulimit -c unlimited ; $1"
+	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
 	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
     fi
 }
