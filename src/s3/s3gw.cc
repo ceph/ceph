@@ -13,11 +13,13 @@
 #include "fcgiapp.h"
 
 #include "s3access.h"
+#include "s3acl.h"
 
 #include <map>
 #include <string>
 #include <vector>
 #include <iostream>
+#include <sstream>
 
 #include "include/types.h"
 #include "common/BackTrace.h"
@@ -50,11 +52,13 @@ int NameVal::parse()
 {
   int delim_pos = str.find('=');
 
-  if (delim_pos < 0)
-    return -1;
-
-  name = str.substr(0, delim_pos);
-  val = str.substr(delim_pos + 1);
+  if (delim_pos < 0) {
+    name = str;
+    val = "";
+  } else {
+    name = str.substr(0, delim_pos);
+    val = str.substr(delim_pos + 1);
+  }
 
   cout << "parsed: name=" << name << " val=" << val << std::endl;
   return 0; 
@@ -71,6 +75,10 @@ class XMLArgs
    int parse();
    string& get(string& name);
    string& get(const char *name);
+   bool exists(const char *name) {
+     map<string, string>::iterator iter = val_map.find(name);
+     return (iter != val_map.end());
+   }
 };
 
 int XMLArgs::parse()
@@ -359,9 +367,11 @@ static void dump_start_xml(struct req_state *s)
   }
 }
 
-static void end_header(struct req_state *s)
+static void end_header(struct req_state *s, const char *content_type = NULL)
 {
-  CGI_PRINTF(s->out,"Content-type: text/plain\r\n\r\n");
+  if (!content_type)
+    content_type = "text/plain";
+  CGI_PRINTF(s->out,"Content-type: %s\r\n\r\n", content_type);
   if (s->err_exist) {
     dump_start_xml(s);
     struct s3_err &err = s->err;
@@ -392,7 +402,7 @@ static void dump_bucket(struct req_state *s, S3ObjEnt& obj)
   close_section(s, "Bucket");
 }
 
-void do_list_buckets(struct req_state *s)
+static void do_list_buckets(struct req_state *s)
 {
   string id = "0123456789ABCDEF";
   S3AccessHandle handle;
@@ -419,7 +429,7 @@ void do_list_buckets(struct req_state *s)
 }
 
 
-int parse_range(const char *range, off_t ofs, off_t end)
+static int parse_range(const char *range, off_t ofs, off_t end)
 {
   int r = -ERANGE;
   string s(range);
@@ -460,7 +470,7 @@ int parse_time(const char *time_str, time_t *time)
   return 0;
 }
 
-void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
+static void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
 {
   struct s3_err err;
   const char *range_str = FCGX_GetParam("HTTP_RANGE", s->envp);
@@ -509,11 +519,31 @@ done:
   }
 }
 
-void do_retrieve_objects(struct req_state *s, bool get_data)
+static void get_acls(struct req_state *s)
+{
+  S3AccessControlPolicy def;
+  string id="thisistheid!";
+  string name="foobar";
+  def.create_default(id, name);
+
+  stringstream ss;
+  def.to_xml(ss);
+  string str = ss.str(); 
+  end_header(s, "application/xml");
+  dump_start_xml(s);
+  FCGX_PutStr(str.c_str(), str.size(), s->out); 
+}
+
+static void do_retrieve_objects(struct req_state *s, bool get_data)
 {
   string prefix, marker, max_keys, delimiter;
   int max;
   string id = "0123456789ABCDEF";
+
+  if (s->args.exists("acl")) {
+    get_acls(s);
+    return;
+  }
 
   if (s->object) {
     get_object(s, s->bucket_str, s->object_str, get_data);
@@ -570,7 +600,7 @@ void do_retrieve_objects(struct req_state *s, bool get_data)
   //if (args.get("name"))
 }
 
-void do_create_bucket(struct req_state *s)
+static void do_create_bucket(struct req_state *s)
 {
   string id = "0123456789ABCDEF";
 
@@ -580,7 +610,7 @@ void do_create_bucket(struct req_state *s)
   end_header(s);
 }
 
-void do_create_object(struct req_state *s)
+static void do_create_object(struct req_state *s)
 {
   int r = -EINVAL;
   char *data = NULL;
@@ -634,7 +664,7 @@ done:
   end_header(s);
 }
 
-void do_delete_bucket(struct req_state *s)
+static void do_delete_bucket(struct req_state *s)
 {
   int r = -EINVAL;
   string id = "0123456789ABCDEF";
@@ -647,7 +677,7 @@ void do_delete_bucket(struct req_state *s)
   end_header(s);
 }
 
-void do_delete_object(struct req_state *s)
+static void do_delete_object(struct req_state *s)
 {
   int r = -EINVAL;
   if (s->object) {
@@ -660,7 +690,7 @@ void do_delete_object(struct req_state *s)
   end_header(s);
 }
 
-void do_retrieve(struct req_state *s, bool get_data)
+static void do_retrieve(struct req_state *s, bool get_data)
 {
   if (s->bucket)
     do_retrieve_objects(s, get_data);
@@ -668,7 +698,7 @@ void do_retrieve(struct req_state *s, bool get_data)
     do_list_buckets(s);
 }
 
-void do_create(struct req_state *s)
+static void do_create(struct req_state *s)
 {
   if (s->object)
     do_create_object(s);
@@ -678,7 +708,7 @@ void do_create(struct req_state *s)
     return;
 }
 
-void do_delete(struct req_state *s)
+static void do_delete(struct req_state *s)
 {
   if (s->object)
     do_delete_object(s);

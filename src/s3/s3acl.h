@@ -235,7 +235,7 @@ public:
                    "<DisplayName>" << display_name << "</DisplayName>" <<
                   "</Owner>";
   }
-  void set_id(string& _id) { id = id; }
+  void set_id(string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
