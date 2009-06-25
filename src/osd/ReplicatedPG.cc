@@ -1624,7 +1624,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // we'll need this to log
   eversion_t old_version = poi->version;
 
-  bool head_existed = ctx->obs->ssc->snapset.head_exists;
+  bool head_existed = ctx->obs->exists;
 
   // prepare the actual mutation
   int result = do_osd_ops(ctx, ctx->ops, ctx->outdata);
