@@ -273,14 +273,14 @@ void Monitor::handle_command(MMonCommand *m)
 	args[1] = m->cmd[3];
 	if (m->cmd[2] == "*") {
 	  for (unsigned i=0; i<monmap->size(); i++)
-	    inject_args(monmap->get_inst(i), args, VERSION_T);
+	    inject_args(monmap->get_inst(i), args, 0);
 	  r = 0;
 	  rs = "ok bcast";
 	} else {
 	  errno = 0;
 	  int who = strtol(m->cmd[2].c_str(), 0, 10);
 	  if (!errno && who >= 0) {
-	    inject_args(monmap->get_inst(who), args, VERSION_T);
+	    inject_args(monmap->get_inst(who), args, 0);
 	    r = 0;
 	    rs = "ok";
 	  } else 
@@ -494,7 +494,7 @@ void Monitor::handle_shutdown(Message *m)
       for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
 	if (osdmon()->osdmap.is_down(*it)) continue;
 	dout(10) << "sending shutdown to osd" << *it << dendl;
-	messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, VERSION_T),
+	messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, 0),
 				osdmon()->osdmap.get_inst(*it));
       }
       osdmon()->mark_all_down();
@@ -502,7 +502,7 @@ void Monitor::handle_shutdown(Message *m)
       // monitors too.
       for (unsigned i=0; i<monmap->size(); i++)
 	if ((int)i != whoami)
-	  messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, VERSION_T), 
+	  messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, 0), 
 				  monmap->get_inst(i));
     }
 

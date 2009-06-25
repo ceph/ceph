@@ -24,7 +24,7 @@ public:
   epoch_t epoch;
 
 
-  MPoolSnapReply() : PaxosServiceMessage(MSG_POOLSNAPREPLY, VERSION_T) {}
+  MPoolSnapReply() : PaxosServiceMessage(MSG_POOLSNAPREPLY, 0) {}
   MPoolSnapReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
     PaxosServiceMessage(MSG_POOLSNAPREPLY, v), fsid(f), tid(t), replyCode(rc), epoch(e) {}
 

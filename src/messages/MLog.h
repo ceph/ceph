@@ -24,8 +24,8 @@ public:
   deque<LogEntry> entries;
   
   MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
-  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, VERSION_T), fsid(f), entries(e) { }
-  MLog(ceph_fsid_t& f) : PaxosServiceMessage(MSG_LOG, VERSION_T), fsid(f) {}
+  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, 0), fsid(f), entries(e) { }
+  MLog(ceph_fsid_t& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) {}
 
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {

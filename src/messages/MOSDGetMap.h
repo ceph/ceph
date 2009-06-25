@@ -24,7 +24,7 @@ class MOSDGetMap : public PaxosServiceMessage {
   ceph_fsid_t fsid;
   epoch_t start;  // this is the first incremental the sender wants (he has start-1)
 
-  MOSDGetMap() : PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, VERSION_T) {}
+  MOSDGetMap() : PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, 0) {}
   MOSDGetMap(ceph_fsid_t& f, epoch_t s=0) : 
     PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, s>0 ? s-1 : 0),
     fsid(f), start(s) { }

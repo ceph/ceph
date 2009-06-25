@@ -26,7 +26,7 @@ public:
   string name;
   bool create;
 
-  MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, VERSION_T) {}
+  MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, 0) {}
   MPoolSnap( ceph_fsid_t& f, tid_t t, int p, string& n, bool c, version_t v) :
     PaxosServiceMessage(MSG_POOLSNAP, v), fsid(f), tid(t), pool(p), name(n), create(c) {}
 

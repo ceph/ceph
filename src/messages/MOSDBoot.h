@@ -24,7 +24,7 @@ class MOSDBoot : public PaxosServiceMessage {
  public:
   OSDSuperblock sb;
 
-  MOSDBoot() : PaxosServiceMessage( MSG_OSD_BOOT, VERSION_T){}
+  MOSDBoot() : PaxosServiceMessage( MSG_OSD_BOOT, 0){}
   MOSDBoot(OSDSuperblock& s) : 
     PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch), sb(s) {
   }

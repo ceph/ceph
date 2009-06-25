@@ -23,7 +23,7 @@ class MMonCommandAck : public PaxosServiceMessage {
   __s32 r;
   string rs;
   
-  MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, VERSION_T) {}
+  MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, 0) {}
   MMonCommandAck(vector<string>& c, int _r, string s, version_t v) : 
     PaxosServiceMessage(MSG_MON_COMMAND_ACK, v),
     cmd(c), r(_r), rs(s) { }

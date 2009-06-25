@@ -3,8 +3,6 @@
 
 #include "msg/Message.h"
 
-#define VERSION_T 0
-
 class PaxosServiceMessage : public Message {
  public:
   version_t version;

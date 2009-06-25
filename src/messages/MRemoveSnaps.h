@@ -21,9 +21,9 @@ struct MRemoveSnaps : public PaxosServiceMessage {
   map<int, vector<snapid_t> > snaps;
   
   MRemoveSnaps() : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, VERSION_T) { }
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) { }
   MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, VERSION_T) {
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) {
     snaps.swap(s);
   }
 

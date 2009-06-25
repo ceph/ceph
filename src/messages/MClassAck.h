@@ -23,7 +23,7 @@ public:
   version_t last;
   
   MClassAck() : PaxosServiceMessage(MSG_CLASS_ACK, 0) {}
-  MClassAck(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS_ACK, VERSION_T),
+  MClassAck(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS_ACK, 0),
 					   fsid(f), last(l) {}
 
   MClassAck(ceph_fsid_t& f, version_t l, version_t paxos_version) :
