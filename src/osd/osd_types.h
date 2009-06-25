@@ -904,7 +904,11 @@ struct SnapSet {
   map<snapid_t, __u64> clone_size;
 
   SnapSet() : head_exists(false) {}
-
+  SnapSet(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
+    decode(p);
+  }
+    
   void encode(bufferlist& bl) const {
     ::encode(seq, bl);
     ::encode(head_exists, bl);
@@ -933,6 +937,7 @@ inline ostream& operator<<(ostream& out, const SnapSet& cs) {
 
 
 #define OI_ATTR "_"
+#define SS_ATTR "snapset"
 
 struct object_info_t {
   sobject_t soid;
@@ -944,13 +949,12 @@ struct object_info_t {
   utime_t mtime;
 
   osd_reqid_t wrlock_by;   // [head]
-  SnapSet snapset;         // [head]
   vector<snapid_t> snaps;  // [clone]
 
   bufferlist truncate_info;  // bah.. messy layering.
 
   void encode(bufferlist& bl) const {
-    const __u8 v = CEPH_OSD_ONDISK_VERSION;
+    const __u8 v = 1;
     ::encode(v, bl);
 
     ::encode(soid, bl);
@@ -959,10 +963,9 @@ struct object_info_t {
     ::encode(last_reqid, bl);
     ::encode(size, bl);
     ::encode(mtime, bl);
-    if (soid.snap == CEPH_NOSNAP) {
-      ::encode(snapset, bl);
+    if (soid.snap == CEPH_NOSNAP)
       ::encode(wrlock_by, bl);
-    } else
+    else
       ::encode(snaps, bl);
     ::encode(truncate_info, bl);
   }
@@ -975,10 +978,9 @@ struct object_info_t {
     ::decode(last_reqid, bl);
     ::decode(size, bl);
     ::decode(mtime, bl);
-    if (soid.snap == CEPH_NOSNAP) {
-      ::decode(snapset, bl);
+    if (soid.snap == CEPH_NOSNAP)
       ::decode(wrlock_by, bl);
-    } else
+    else
       ::decode(snaps, bl);
     ::decode(truncate_info, bl);
   }
@@ -1000,9 +1002,7 @@ inline ostream& operator<<(ostream& out, const object_info_t& oi) {
       << " " << oi.last_reqid;
   if (oi.wrlock_by.tid)
     out << " wrlock_by=" << oi.wrlock_by;
-  if (oi.soid.snap == CEPH_NOSNAP)
-    out << " " << oi.snapset << ")";
-  else
+  if (oi.soid.snap != CEPH_NOSNAP)
     out << " " << oi.snaps << ")";
   return out;
 }

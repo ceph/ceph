@@ -198,6 +198,8 @@ void FileStore::append_oname(const sobject_t &oid, char *s)
 
   if (oid.snap == CEPH_NOSNAP)
     sprintf(t, "_head");
+  else if (oid.snap == CEPH_SNAPDIR)
+    sprintf(t, "_snapdir");
   else
     sprintf(t, "_%llx", (long long unsigned)oid.snap);
   //parse_object(t+1);
@@ -231,6 +233,8 @@ bool FileStore::parse_object(char *s, sobject_t& o)
     o.oid.name = nstring(t-buf, buf);
     if (strcmp(bar+1, "head") == 0)
       o.snap = CEPH_NOSNAP;
+    else if (strcmp(bar+1, "snapdir") == 0)
+      o.snap = CEPH_SNAPDIR;
     else
       o.snap = strtoull(bar+1, &s, 16);
     return true;

@@ -24,13 +24,6 @@ class MOSDSubOpReply;
 class ReplicatedPG : public PG {
 public:  
 
-  struct ObjectState {
-    object_info_t oi;
-    bool exists;
-
-    ObjectState(const sobject_t& s) : oi(s), exists(false) {}
-  };
-
   /*
     object access states:
 
@@ -63,6 +56,23 @@ public:
       - read, write, rmw: wait
     
    */
+
+  struct SnapSetContext {
+    object_t oid;
+    int ref;
+    bool registered; 
+    SnapSet snapset;
+
+    SnapSetContext(const object_t& o) : oid(o), ref(0), registered(false) { }
+  };
+
+  struct ObjectState {
+    object_info_t oi;
+    bool exists;
+    SnapSetContext *ssc;  // may be null
+
+    ObjectState(const sobject_t& s) : oi(s), exists(false), ssc(NULL) {}
+  };
 
 
   /*
@@ -352,6 +362,7 @@ protected:
 
   // projected object info
   map<sobject_t, ObjectContext*> object_contexts;
+  map<object_t, SnapSetContext*> snapset_contexts;
 
   ObjectContext *get_object_context(const sobject_t& soid, bool can_create=true);
   void register_object_context(ObjectContext *obc) {
@@ -359,9 +370,20 @@ protected:
       obc->registered = true;
       object_contexts[obc->obs.oi.soid] = obc;
     }
+    if (obc->obs.ssc)
+      register_snapset_context(obc->obs.ssc);
   }
   void put_object_context(ObjectContext *obc);
   int find_object_context(const object_t& oid, snapid_t snapid, ObjectContext **pobc, bool can_create);
+
+  SnapSetContext *get_snapset_context(const object_t& oid, bool can_create);
+  void register_snapset_context(SnapSetContext *ssc) {
+    if (!ssc->registered) {
+      ssc->registered = true;
+      snapset_contexts[ssc->oid] = ssc;
+    }
+  }
+  void put_snapset_context(SnapSetContext *ssc);
 
   bool is_write_in_progress() {
     return !object_contexts.empty();
