@@ -262,7 +262,7 @@ public:
   bool read(version_t v, bufferlist &bl);
   version_t read_current(bufferlist &bl);
   void wait_for_readable(Context *onreadable) {
-    assert(!is_readable());
+    //assert(!is_readable());
     waiting_for_readable.push_back(onreadable);
   }
 
