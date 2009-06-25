@@ -1250,6 +1250,13 @@ void PG::peer(ObjectStore::Transaction& t,
     
     dout(10) << (missing.num_missing() - missing_loc.size())
 	     << " objects are still lost, waiting+hoping for a notify from someone else!" << dendl;
+    dout(20) << "  lost: ";
+    for (map<sobject_t,Missing::item>::iterator p = missing.missing.begin();
+	 p != missing.missing.end();
+	 p++) 
+      if (missing_loc.count(p->first) == 0)
+	*_dout << " " << p->first;
+    *_dout << dendl;
     return;
   }
 
