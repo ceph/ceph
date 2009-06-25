@@ -33,17 +33,6 @@ v0.10
 
 bugs
 
-osd/OSD.cc: In function 'void OSD::finish_recovery_op(PG*, int, bool)':
-osd/OSD.cc:3462: FAILED assert(recovery_ops_active >= 0)
- 1: ./cosd(_ZN3OSD18finish_recovery_opEP2PGib+0x34f) [0x4a6f9f]
- 2: ./cosd(_ZN12ReplicatedPG17sub_op_push_replyEP14MOSDSubOpReply+0x45d) [0x46681d]
- 3: ./cosd(_ZN3OSD10dequeue_opEP2PG+0x24b) [0x4acc6b]
- 4: ./cosd(_ZN10ThreadPool6workerEv+0x1b4) [0x56c204]
- 5: ./cosd(_ZN10ThreadPool10WorkThread5entryEv+0xd) [0x4d476d]
- 6: ./cosd(_ZN6Thread11_entry_funcEPv+0xc) [0x45f2ac]
- 7: /lib/libpthread.so.0 [0x7fdb66e293f7]
- 8: /lib/libc.so.6(clone+0x6d) [0x7fdb663f894d]
-
 - osd needs to handle heartbeats from osds that are already down.. they aren't fully getting filtered
   out, which leads to an attempted MOSDFailure on an already-down osd
 osd/OSDMap.h: In function 'entity_inst_t OSDMap::get_inst(int)':
