@@ -141,7 +141,8 @@ public:
     bool try_write(entity_inst_t& c) {
       switch (state) {
       case IDLE:
-	state = DELAYED;
+	//state = DELAYED;
+	state = RMW;     // always do RMW, until we solve pg log writing ordering issues
       case DELAYED:
 	return true;
       case RMW:
