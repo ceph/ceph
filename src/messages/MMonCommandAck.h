@@ -23,14 +23,14 @@ class MMonCommandAck : public PaxosServiceMessage {
   __s32 r;
   string rs;
   
-  MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, 0) {}
+  MMonCommandAck() : PaxosServiceMessage(MSG_MON_COMMAND_ACK, VERSION_T) {}
   MMonCommandAck(vector<string>& c, int _r, string s, version_t v) : 
     PaxosServiceMessage(MSG_MON_COMMAND_ACK, v),
     cmd(c), r(_r), rs(s) { }
   
   const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
-    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << ")";
+    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << "v " << version << ")";
   }
   
   void encode_payload() {

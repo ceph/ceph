@@ -26,13 +26,13 @@ public:
   string name;
   bool create;
 
-  MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, 0) {}
+  MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, VERSION_T) {}
   MPoolSnap( ceph_fsid_t& f, tid_t t, int p, string& n, bool c, version_t v) :
     PaxosServiceMessage(MSG_POOLSNAP, v), fsid(f), tid(t), pool(p), name(n), create(c) {}
 
   const char *get_type_name() { return "poolsnap"; }
   void print(ostream& out) {
-    out << "poolsnap(" << tid << " " << name << ")";
+    out << "poolsnap(" << tid << " " << name << "v " << version << ")";
   }
 
   void encode_payload() {

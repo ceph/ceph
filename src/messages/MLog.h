@@ -24,15 +24,15 @@ public:
   deque<LogEntry> entries;
   
   MLog() : PaxosServiceMessage(MSG_LOG, 0) {}
-  MLog(ceph_fsid_t& f, deque<LogEntry>& e, version_t v) : PaxosServiceMessage(MSG_LOG, v), fsid(f), entries(e) { }
-  MLog(ceph_fsid_t& f, version_t v) : PaxosServiceMessage(MSG_LOG, v), fsid(f) {}
+  MLog(ceph_fsid_t& f, deque<LogEntry>& e) : PaxosServiceMessage(MSG_LOG, VERSION_T), fsid(f), entries(e) { }
+  MLog(ceph_fsid_t& f) : PaxosServiceMessage(MSG_LOG, VERSION_T), fsid(f) {}
 
   const char *get_type_name() { return "log"; }
   void print(ostream& out) {
     out << "log(";
     if (entries.size())
       out << entries.size() << " entries";
-    out << "v " << version << ")";
+    out << ")";
   }
 
   void encode_payload() {

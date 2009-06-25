@@ -35,6 +35,7 @@ class LogClient : public Dispatcher {
   bool dispatch_impl(Message *m);
   bool is_synchronous;
   void _send_log();
+
  public:
 
   // -- log --

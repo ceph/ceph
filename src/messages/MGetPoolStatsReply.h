@@ -29,7 +29,7 @@ public:
 
   const char *get_type_name() { return "getpoolstats"; }
   void print(ostream& out) {
-    out << "getpoolstatsreply(" << tid << ")";
+    out << "getpoolstatsreply(" << tid << "v " << version <<  ")";
   }
 
   void encode_payload() {

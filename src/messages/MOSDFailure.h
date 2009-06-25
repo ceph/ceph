@@ -25,7 +25,7 @@ class MOSDFailure : public PaxosServiceMessage {
   entity_inst_t failed;
   epoch_t       epoch;
 
-  MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0) {}
+  MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, VERSION_T) {}
   MOSDFailure(ceph_fsid_t &fs, entity_inst_t f, epoch_t e) : 
     PaxosServiceMessage(MSG_OSD_FAILURE, e),
     fsid(fs), failed(f), epoch(e) {}

@@ -135,12 +135,12 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
-  void inject_args(const entity_inst_t& inst, string& args) {
+  void inject_args(const entity_inst_t& inst, string& args, version_t version) {
     vector<string> a(1);
     a[0] = args;
-    inject_args(inst, a);
+    inject_args(inst, a, version);
   }
-  void inject_args(const entity_inst_t& inst, vector<string>& args);  
+  void inject_args(const entity_inst_t& inst, vector<string>& args, version_t version);  
 
 public:
   struct C_Command : public Context {

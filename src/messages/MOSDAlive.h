@@ -24,7 +24,7 @@ class MOSDAlive : public PaxosServiceMessage {
   epoch_t map_epoch;
 
   MOSDAlive(epoch_t e) : PaxosServiceMessage(MSG_OSD_ALIVE, e), map_epoch(e) { }
-  MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}
+  MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, VERSION_T) {}
 
   void encode_payload() {
     paxos_encode();

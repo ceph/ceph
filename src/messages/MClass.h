@@ -35,7 +35,7 @@ public:
   __s32 action;
 
 
-  MClass() : PaxosServiceMessage(MSG_CLASS, 0), {}
+  MClass() : PaxosServiceMessage(MSG_CLASS, 0) {}
 #if 0
   MClass(ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) :
     PaxosServiceMessage(MSG_CLASS, 0),
@@ -69,7 +69,7 @@ public:
       out << info.size() << " entries";
     if (last)
       out << "last " << last;
-    out << "v " << version << ")";
+    out << ")";
   }
 
   void encode_payload() {

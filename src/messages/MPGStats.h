@@ -32,7 +32,7 @@ public:
 
   const char *get_type_name() { return "pg_stats"; }
   void print(ostream& out) {
-    out << "pg_stats(" << pg_stat.size() << "v " << version << " pgs)";
+    out << "pg_stats(" << pg_stat.size() << " pgs v " << version << ")";
   }
 
   void encode_payload() {

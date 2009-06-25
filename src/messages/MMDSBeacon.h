@@ -24,7 +24,7 @@
 class MMDSBeacon : public PaxosServiceMessage {
   ceph_fsid_t fsid;
   string name;
-  epoch_t last_epoch_seen;  // include last mdsmap epoch mds has seen to avoid race with monitor decree
+
   __u32 state;
   version_t seq;
   __s32 standby_for_rank;
@@ -33,13 +33,13 @@ class MMDSBeacon : public PaxosServiceMessage {
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
   MMDSBeacon(ceph_fsid_t &f, string& n, epoch_t les, int st, version_t se) : 
-    PaxosServiceMessage(MSG_MDS_BEACON, se), 
-    fsid(f), name(n), last_epoch_seen(les), state(st), seq(se),
+    PaxosServiceMessage(MSG_MDS_BEACON, les), 
+    fsid(f), name(n), state(st), seq(se),
     standby_for_rank(-1) { }
 
   ceph_fsid_t& get_fsid() { return fsid; }
   string& get_name() { return name; }
-  epoch_t get_last_epoch_seen() { return last_epoch_seen; }
+  epoch_t get_last_epoch_seen() { return version; }
   int get_state() { return state; }
   version_t get_seq() { return seq; }
   const char *get_type_name() { return "mdsbeacon"; }
@@ -53,11 +53,10 @@ class MMDSBeacon : public PaxosServiceMessage {
     out << "mdsbeacon(" << name << " " << ceph_mds_state_name(state) 
 	<< " seq " << seq << "v " << version << ")";
   }
-  
+
   void encode_payload() {
     paxos_encode();
     ::encode(fsid, payload);
-    ::encode(last_epoch_seen, payload);
     ::encode(state, payload);
     ::encode(seq, payload);
     ::encode(name, payload);
@@ -68,7 +67,6 @@ class MMDSBeacon : public PaxosServiceMessage {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
-    ::decode(last_epoch_seen, p);
     ::decode(state, p);
     ::decode(seq, p);
     ::decode(name, p);

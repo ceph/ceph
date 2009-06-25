@@ -19,7 +19,7 @@
 
 class MClientUnmount : public PaxosServiceMessage {
 public:
-  MClientUnmount() : PaxosServiceMessage(CEPH_MSG_CLIENT_UNMOUNT, 0) { }
+  MClientUnmount() : PaxosServiceMessage(CEPH_MSG_CLIENT_UNMOUNT, VERSION_T) { }
  
   const char *get_type_name() { return "client_unmount"; }
 

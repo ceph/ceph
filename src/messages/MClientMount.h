@@ -19,7 +19,7 @@
 
 class MClientMount : public PaxosServiceMessage {
 public:
-  MClientMount() : PaxosServiceMessage(CEPH_MSG_CLIENT_MOUNT, 0) { }
+  MClientMount() : PaxosServiceMessage(CEPH_MSG_CLIENT_MOUNT, VERSION_T) { }
 
   const char *get_type_name() { return "client_mount"; }
 

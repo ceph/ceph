@@ -77,7 +77,7 @@ void LogClient::_send_log()
 {
   if (log_queue.empty())
     return;
-  MLog *log = new MLog(monmap->get_fsid(), log_queue, VERSION_T);
+  MLog *log = new MLog(monmap->get_fsid(), log_queue);
 
   int mon;
   if (messenger->get_myname().is_mon())

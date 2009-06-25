@@ -955,14 +955,14 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       if (m->cmd[2] == "*") {
 	for (int i=0; i<osdmap.get_max_osd(); i++)
 	  if (osdmap.is_up(i))
-	    mon->inject_args(osdmap.get_inst(i), m->cmd[3]);
+	    mon->inject_args(osdmap.get_inst(i), m->cmd[3], paxos->get_version());
 	r = 0;
 	ss << "ok bcast";
       } else {
 	errno = 0;
 	int who = strtol(m->cmd[2].c_str(), 0, 10);
 	if (!errno && who >= 0 && osdmap.is_up(who)) {
-	  mon->inject_args(osdmap.get_inst(who), m->cmd[3]);
+	  mon->inject_args(osdmap.get_inst(who), m->cmd[3], paxos->get_version());
 	  r = 0;
 	  ss << "ok";
 	} else 

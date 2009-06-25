@@ -21,12 +21,12 @@ struct MRemoveSnaps : public PaxosServiceMessage {
   map<int, vector<snapid_t> > snaps;
   
   MRemoveSnaps() : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) { }
-  MRemoveSnaps(map<int, vector<snapid_t> >& s, version_t v) : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, v) {
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, VERSION_T) { }
+  MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, VERSION_T) {
     snaps.swap(s);
   }
-  
+
   const char *get_type_name() { return "remove_snaps"; }
   void print(ostream& out) {
     out << "remove_snaps(" << snaps << "v " << version << ")";

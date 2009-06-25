@@ -420,14 +420,14 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       if (m->cmd[2] == "*") {
 	for (unsigned i=0; i<mdsmap.get_max_mds(); i++)
 	  if (mdsmap.is_active(i))
-	    mon->inject_args(mdsmap.get_inst(i), m->cmd[3]);
+	    mon->inject_args(mdsmap.get_inst(i), m->cmd[3], paxos->get_version());
 	r = 0;
 	ss << "ok bcast";
       } else {
 	errno = 0;
 	int who = strtol(m->cmd[2].c_str(), 0, 10);
 	if (!errno && who >= 0 && mdsmap.is_active(who)) {
-	  mon->inject_args(mdsmap.get_inst(who), m->cmd[3]);
+	  mon->inject_args(mdsmap.get_inst(who), m->cmd[3], paxos->get_version());
 	  r = 0;
 	  ss << "ok";
 	} else 
