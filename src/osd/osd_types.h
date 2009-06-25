@@ -429,6 +429,11 @@ struct pg_pool_t {
    */
   interval_set<snapid_t> removed_snaps;
 
+  pg_pool_t() :
+    pg_num_mask(0), pgp_num_mask(0), lpg_num_mask(0), lpgp_num_mask(0) {
+    memset(&v, 0, sizeof(v));
+  }
+
   unsigned get_type() const { return v.type; }
   unsigned get_size() const { return v.size; }
   int get_crush_ruleset() const { return v.crush_ruleset; }
