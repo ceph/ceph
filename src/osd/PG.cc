@@ -1950,6 +1950,7 @@ void PG::read_log(ObjectStore *store)
       if (i->is_delete()) continue;
       
       bufferlist bv;
+      struct stat st;
       int r = osd->store->getattr(info.pgid.to_coll(), i->soid, OI_ATTR, bv);
       if (r >= 0) {
 	object_info_t oi(bv);
@@ -1957,6 +1958,24 @@ void PG::read_log(ObjectStore *store)
 	  dout(15) << "read_log  missing " << *i << " (have " << oi.version << ")" << dendl;
 	  missing.add(i->soid, i->version, oi.version);
 	}
+      } else if (i->soid.snap == CEPH_NOSNAP &&
+		 osd->store->stat(info.pgid.to_coll(), i->soid, &st) == 0) {
+	dout(0) << "read_log  rebuilding missing xattr on " << *i << dendl;
+	object_info_t oi(i->soid);
+	oi.version = i->version;
+	oi.prior_version = i->prior_version;
+	oi.size = st.st_size;
+	oi.mtime = i->mtime;
+	oi.last_reqid = i->reqid;
+	bufferlist bl;
+	::encode(oi, bl);
+	ObjectStore::Transaction t;
+	t.setattr(info.pgid.to_coll(), i->soid, OI_ATTR, bl);
+	osd->store->apply_transaction(t);
+
+	stringstream ss;
+	ss << info.pgid << " rebuilt missing xattr on " << i->soid;
+	osd->get_logclient()->log(LOG_ERROR, ss);
       } else {
 	dout(15) << "read_log  missing " << *i << dendl;
 	missing.add(i->soid, i->version, eversion_t());
