@@ -125,8 +125,6 @@ void OSDMonitor::create_initial(bufferlist& bl)
 
 bool OSDMonitor::update_from_paxos()
 {
-  assert(paxos->is_active());
-
   version_t paxosv = paxos->get_version();
   if (paxosv == osdmap.epoch) return true;
   assert(paxosv >= osdmap.epoch);

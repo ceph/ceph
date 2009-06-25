@@ -92,7 +92,6 @@ void LogMonitor::create_initial(bufferlist& bl)
 bool LogMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
-
   if (paxosv == summary.version) return true;
   assert(paxosv >= summary.version);
 

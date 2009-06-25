@@ -46,8 +46,6 @@ static ostream& _prefix(Monitor *mon, ClientMap& client_map) {
 
 bool ClientMonitor::update_from_paxos()
 {
-  assert(paxos->is_active());
-  
   version_t paxosv = paxos->get_version();
   if (paxosv == client_map.version) return true;
   assert(paxosv >= client_map.version);

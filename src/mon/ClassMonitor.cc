@@ -95,11 +95,8 @@ bool ClassMonitor::store_impl(ClassInfo& info, ClassImpl& impl)
 bool ClassMonitor::update_from_paxos()
 {
   version_t paxosv = paxos->get_version();
-
   if (paxosv == list.version) return true;
   assert(paxosv >= list.version);
-
-  dout(0) << "ClassMonitor::update_from_paxos() paxosv=" << paxosv << " list.version=" << list.version << dendl;
 
   bufferlist blog;
 

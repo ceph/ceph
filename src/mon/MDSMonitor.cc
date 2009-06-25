@@ -71,8 +71,6 @@ void MDSMonitor::create_initial(bufferlist& bl)
 
 bool MDSMonitor::update_from_paxos()
 {
-  assert(paxos->is_active());
-
   version_t paxosv = paxos->get_version();
   if (paxosv == mdsmap.epoch) return true;
   assert(paxosv >= mdsmap.epoch);
