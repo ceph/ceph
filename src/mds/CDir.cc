@@ -1108,10 +1108,6 @@ void CDir::_fetched(bufferlist &bl)
   for (unsigned i=0; i<n; i++) {
     loff_t dn_offset = p.get_off() - baseoff;
 
-    // marker
-    char type;
-    ::decode(type, p);
-
     // dname
     nstring dname;
     snapid_t first, last;
@@ -1121,6 +1117,10 @@ void CDir::_fetched(bufferlist &bl)
     ::decode(dndata, p);
     bufferlist::iterator q = dndata.begin();
     ::decode(first, q);
+
+    // marker
+    char type;
+    ::decode(type, q);
 
     dout(24) << "_fetched pos " << dn_offset << " marker '" << type << "' dname '" << dname
 	     << " [" << first << "," << last << "]"
