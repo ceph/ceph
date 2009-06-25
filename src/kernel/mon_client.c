@@ -198,6 +198,8 @@ static void request_osdmap(struct ceph_mon_client *monc, int newmon)
 	h = msg->front.iov_base;
 	h->fsid = monc->monmap->fsid;
 	h->start = cpu_to_le32(monc->want_osdmap);
+	h->have_version = cpu_to_le64(mon->want_osdmap ?
+				      mon->want_osdmap-1 : 0);
 	msg->hdr.dst = monc->monmap->mon_inst[mon];
 	ceph_msg_send(monc->client->msgr, msg, 0);
 }
