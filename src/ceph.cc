@@ -88,6 +88,8 @@ static set<int> registered;
 
 version_t map_ver[PAXOS_NUM];
 
+version_t last_seen_version = 0;
+
 void handle_observe(MMonObserve *observe)
 {
   dout(1) << observe->get_source() << " -> " << get_paxos_name(observe->machine_id)
@@ -284,7 +286,7 @@ void get_status(bool newmon)
   vcmd[0] = prefix[which];
   vcmd[1] = "stat";
   
-  MMonCommand *m = new MMonCommand(monmap.fsid, VERSION_T);
+  MMonCommand *m = new MMonCommand(monmap.fsid, last_seen_version);
   m->cmd.swap(vcmd);
   messenger->send_message(m, monmap.get_inst(mon));
 
@@ -299,6 +301,9 @@ void handle_ack(MMonCommandAck *ack)
 
     which++;
     which = which % LAST;
+
+    if(ack->version > last_seen_version)
+      last_seen_version = ack->version;
 
     string w = ack->cmd[0];
     if (ack->rs != status[w]) {
@@ -377,7 +382,7 @@ struct C_Resend : public Context {
 };
 void send_command()
 {
-  MMonCommand *m = new MMonCommand(monmap.fsid, VERSION_T);
+  MMonCommand *m = new MMonCommand(monmap.fsid, last_seen_version);
   m->cmd = pending_cmd;
   m->get_data() = pending_bl;
 

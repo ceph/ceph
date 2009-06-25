@@ -885,12 +885,14 @@ void Paxos::update_observers()
 
 // -- READ --
 
-bool Paxos::is_readable()
+bool Paxos::is_readable(version_t v)
 {
   dout(1) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire << dendl;
+  if(v > last_committed)
+    return false;
   return 
     (mon->is_peon() || mon->is_leader()) &&
-    is_active() &&
+    (is_active() || is_updating()) &&
     last_committed > 0 &&           // must have a value
     (mon->get_quorum().size() == 1 ||  // alone, or
      g_clock.now() < lease_expire);    // have lease

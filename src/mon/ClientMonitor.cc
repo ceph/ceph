@@ -303,7 +303,7 @@ bool ClientMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata);
+    mon->reply_command(m, r, rs, rdata, paxos->get_version());
     return true;
   } else
     return false;
@@ -320,7 +320,7 @@ bool ClientMonitor::prepare_command(MMonCommand *m)
   ss << "unrecognized command";
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs);
+  mon->reply_command(m, err, rs, paxos->get_version());
   return false;
 }
 

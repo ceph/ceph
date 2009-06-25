@@ -217,7 +217,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   }
 
   // fill out stfs
-  reply = new MStatfsReply(mon->monmap->fsid, statfs->tid);
+  reply = new MStatfsReply(mon->monmap->fsid, statfs->tid, mon->get_epoch());
 
   // these are in KB.
   reply->h.st.kb = pg_map.osd_sum.kb;
@@ -241,7 +241,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     goto out;
   }
   
-  reply = new MGetPoolStatsReply(m->fsid, m->tid, VERSION_T);
+  reply = new MGetPoolStatsReply(m->fsid, m->tid, paxos->get_version());
 
   for (vector<string>::iterator p = m->pools.begin();
        p != m->pools.end();
@@ -654,7 +654,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata);
+    mon->reply_command(m, r, rs, rdata, paxos->get_version());
     return true;
   } else
     return false;
@@ -671,6 +671,6 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   ss << "unrecognized command";
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs);
+  mon->reply_command(m, err, rs, paxos->get_version());
   return false;
 }

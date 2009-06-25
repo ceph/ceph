@@ -15,7 +15,7 @@
 #ifndef __MMONCOMMANDACK_H
 #define __MMONCOMMANDACK_H
 
-#include "msg/Message.h"
+#include "messages/PaxosServiceMessage.h"
 
 class MMonCommandAck : public PaxosServiceMessage {
  public:

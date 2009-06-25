@@ -132,8 +132,8 @@ public:
   void handle_observe(MMonObserve *m);
   void handle_class(MClass *m);
 
-  void reply_command(MMonCommand *m, int rc, const string &rs);
-  void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata);
+  void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
+  void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
   void inject_args(const entity_inst_t& inst, string& args) {
     vector<string> a(1);
@@ -148,10 +148,11 @@ public:
     MMonCommand *m;
     int rc;
     string rs;
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s) :
-      mon(_mm), m(_m), rc(r), rs(s) {}
+    version_t version;
+    C_Command(Monitor *_mm, MMonCommand *_m, int r, string& s, version_t v) :
+      mon(_mm), m(_m), rc(r), rs(s), version(v){}
     void finish(int r) {
-      mon->reply_command(m, rc, rs);
+      mon->reply_command(m, rc, rs, version);
     }
   };
 

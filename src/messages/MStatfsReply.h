@@ -21,9 +21,10 @@ public:
   struct ceph_mon_statfs_reply h;
 
   MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
-  MStatfsReply(ceph_fsid_t &f, tid_t t) : Message(CEPH_MSG_STATFS_REPLY) {
+  MStatfsReply(ceph_fsid_t &f, tid_t t, epoch_t epoch) : Message(CEPH_MSG_STATFS_REPLY) {
     h.fsid = f;
     h.tid = t;
+    h.version = epoch;
   }
 
   const char *get_type_name() { return "statfs_reply"; }

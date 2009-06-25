@@ -689,7 +689,8 @@ void Objecter::delete_pool_snap(int *reply, int pool, string& snapName, Context 
 
 void Objecter::pool_snap_submit(SnapOp *op) {
   dout(10) << "pool_snap_submit " << op->tid << dendl;
-  MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool, op->name, op->create, VERSION_T);
+  MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool,
+			       op->name, op->create, last_seen_version);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
   op->last_submit = g_clock.now();
@@ -702,6 +703,8 @@ void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
     SnapOp *op = op_snap[tid];
     dout(10) << "have request " << tid << " at " << op << " Create: " << op->create << dendl;
     *(op->replyCode) = m->replyCode;
+    if (m->version > last_seen_version)
+      last_seen_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {
       dout(20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
       wait_for_new_map(op->onfinish, m->epoch);
@@ -741,7 +744,7 @@ void Objecter::get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *re
 void Objecter::poolstat_submit(PoolStatOp *op)
 {
   dout(10) << "poolstat_submit " << op->tid << dendl;
-  MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools, VERSION_T);
+  MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools, last_seen_version);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
   op->last_submit = g_clock.now();
@@ -756,6 +759,8 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     PoolStatOp *op = op_poolstat[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
+    if (m->version > last_seen_version)
+      last_seen_version = m->version;
     op->onfinish->finish(0);
     delete op->onfinish;
     op_poolstat.erase(tid);
@@ -782,7 +787,7 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
 
 void Objecter::fs_stats_submit(StatfsOp *op) {
   dout(10) << "fs_stats_submit" << op->tid << dendl;
-  MStatfs *m = new MStatfs(monmap->fsid, op->tid, VERSION_T);
+  MStatfs *m = new MStatfs(monmap->fsid, op->tid, last_seen_version);
   int mon = monmap->pick_mon();
   messenger->send_message(m, monmap->get_inst(mon));
   op->last_submit = g_clock.now();
@@ -796,10 +801,8 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m) {
     StatfsOp *op = op_statfs[tid];
     dout(10) << "have request " << tid << " at " << op << dendl;
     *(op->stats) = m->h.st;
-    /*op->stats->f_total = m->h.st.f_total;
-    op->stats->f_free = m->h.st.f_free;
-    op->stats->f_avail = m->h.st.f_avail;
-    op->stats->f_objects = m->h.st.f_objects;*/
+    if (m->h.version > last_seen_version)
+      last_seen_version = m->h.version;
     op->onfinish->finish(0);
     delete op->onfinish;
     op_statfs.erase(tid);

@@ -298,7 +298,7 @@ bool ClassMonitor::preprocess_command(MMonCommand *m)
 
   string rs;
   getline(ss, rs, '\0');
-  mon->reply_command(m, r, rs, rdata);
+  mon->reply_command(m, r, rs, rdata, paxos->get_version());
   return true;
 }
 
@@ -340,7 +340,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
       ss << "updated";
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     } else if (m->cmd[1] == "del" && m->cmd.size() >= 5) {
       string name = m->cmd[2];
@@ -371,7 +371,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
       ss << "updated";
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     } else if (m->cmd[1] == "activate" && m->cmd.size() >= 4) {
       string name = m->cmd[2];
@@ -396,7 +396,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
       ss << "updated";
       getline(ss, rs);
-      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     } else if (m->cmd[1] == "list") {
       map<string, ClassVersionMap>::iterator mapiter = list.library_map.begin();
@@ -430,7 +430,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
 
 done:
   getline(ss, rs, '\0');
-  mon->reply_command(m, err, rs);
+  mon->reply_command(m, err, rs, paxos->get_version());
   return false;
 }
 

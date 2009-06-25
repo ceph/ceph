@@ -439,7 +439,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata);
+    mon->reply_command(m, r, rs, rdata, paxos->get_version());
     return true;
   } else
     return false;
@@ -479,7 +479,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 	map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
 	pending_mdsmap = map;
 	string rs = "set mds map";
-	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs));
+	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
 	return true;
       } else
 	ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -494,11 +494,11 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (r >= 0) {
     // success.. delay reply
-    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs));
+    paxos->wait_for_commit(new Monitor::C_Command(mon, m, r, rs, paxos->get_version()));
     return true;
   } else {
     // reply immediately
-    mon->reply_command(m, r, rs, rdata);
+    mon->reply_command(m, r, rs, rdata, paxos->get_version());
     return false;
   }
 }

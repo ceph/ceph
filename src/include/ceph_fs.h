@@ -297,6 +297,7 @@ struct ceph_statfs {
 struct ceph_mon_statfs_reply {
 	ceph_fsid_t fsid;
 	__le64 tid;
+	__le64 version;
 	struct ceph_statfs st;
 };
 

@@ -222,7 +222,7 @@ void Monitor::handle_command(MMonCommand *m)
 {
   if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
-    reply_command(m, -EPERM, "wrong fsid");
+    reply_command(m, -EPERM, "wrong fsid", 0);
     return;
   }
 
@@ -249,12 +249,12 @@ void Monitor::handle_command(MMonCommand *m)
     }
     if (m->cmd[0] == "stop") {
       shutdown();
-      reply_command(m, 0, "stopping");
+      reply_command(m, 0, "stopping", 0);
       return;
     }
     if (m->cmd[0] == "stop_cluster") {
       stop_cluster();
-      reply_command(m, 0, "initiating cluster shutdown");
+      reply_command(m, 0, "initiating cluster shutdown", 0);
       return;
     }
 
@@ -293,18 +293,18 @@ void Monitor::handle_command(MMonCommand *m)
   } else 
     rs = "no command";
 
-  reply_command(m, r, rs);
+  reply_command(m, r, rs, 0);
 }
 
-void Monitor::reply_command(MMonCommand *m, int rc, const string &rs)
+void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t version)
 {
   bufferlist rdata;
-  reply_command(m, rc, rs, rdata);
+  reply_command(m, rc, rs, rdata, version);
 }
 
-void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata)
+void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version)
 {
-  MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, VERSION_T);
+  MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_data(rdata);
   messenger->send_message(reply, m->get_orig_source_inst());
   delete m;

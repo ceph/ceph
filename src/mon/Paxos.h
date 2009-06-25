@@ -258,7 +258,7 @@ public:
   
   // read
   version_t get_version() { return last_committed; }
-  bool is_readable();
+  bool is_readable(version_t seen=0);
   bool read(version_t v, bufferlist &bl);
   version_t read_current(bufferlist &bl);
   void wait_for_readable(Context *onreadable) {
