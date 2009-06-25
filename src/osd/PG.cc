@@ -1432,6 +1432,9 @@ void PG::activate(ObjectStore::Transaction& t,
 	osd->messenger->send_message(m, osd->osdmap->get_inst(peer));
       }
 
+      // peer now has 
+      pi.last_update = info.last_update;
+
       // update our missing
       if (pm.num_missing() == 0) {
 	pi.last_complete = pi.last_update;
