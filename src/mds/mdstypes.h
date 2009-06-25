@@ -474,6 +474,47 @@ struct dentry_key_t {
   const char *name;
   dentry_key_t() : snapid(0), name(0) {}
   dentry_key_t(snapid_t s, const char *n) : snapid(s), name(n) {}
+
+  // encode into something that can be decoded as a string.
+  // name_ (head) or name_%x (!head)
+  void encode(bufferlist& bl) const {
+    __u32 l = strlen(name) + 1;
+    char b[20];
+    if (snapid != CEPH_NOSNAP) {
+      sprintf(b, "%llx", (long long unsigned)snapid);
+      l += strlen(b);
+    } else {
+      strcpy(b, "head");
+      l += 4;
+    }
+    ::encode(l, bl);
+    bl.append(name, strlen(name));
+    bl.append("_", 1);
+    bl.append(b);
+  }
+  static void decode_helper(bufferlist::iterator& bl, nstring& nm, snapid_t& sn) {
+    nstring foo;
+    ::decode(foo, bl);
+
+    int i = foo.length()-1;
+    while (foo[i] != '_' && i)
+      i--;
+    assert(i);
+    if (i+5 == foo.length() &&
+	foo[i+1] == 'h' &&
+	foo[i+2] == 'e' &&
+	foo[i+3] == 'a' &&
+	foo[i+4] == 'd') {
+      // name_head
+      sn = CEPH_NOSNAP;
+    } else {
+      // name_%x
+      long long unsigned x = 0;
+      sscanf(foo.c_str() + i + 1, "%llx", &x);
+      sn = x;
+    }  
+    nm = nstring(i, foo.c_str());
+  }
 };
 
 inline ostream& operator<<(ostream& out, const dentry_key_t &k)

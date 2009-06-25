@@ -395,6 +395,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_early_reply, 0, OPT_BOOL, true),
 	OPTION(mds_short_reply_trace, 0, OPT_BOOL, true),
 	OPTION(mds_rdcap_ttl_ms, 0, OPT_INT, 60*1000),
+	OPTION(mds_use_tmap, 0, OPT_BOOL, true),        // use trivialmap for dir updates
 	OPTION(mds_log, 0, OPT_BOOL, true),
 	OPTION(mds_log_unsafe, 0, OPT_BOOL, false),      // only wait for log sync, when it's mostly safe to do so
 	OPTION(mds_log_max_events, 0, OPT_INT, -1),

@@ -39,6 +39,8 @@ class MDCache;
 class MDCluster;
 class Context;
 
+class ObjectOperation;
+
 ostream& operator<<(ostream& out, class CDir& dir);
 
 
@@ -438,6 +440,9 @@ private:
   void commit_to(version_t want);
   void commit(version_t want, Context *c);
   void _commit(version_t want);
+  void _commit_full(ObjectOperation& m, const set<snapid_t> *snaps);
+  void _commit_partial(ObjectOperation& m, const set<snapid_t> *snaps);
+  void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
   void _committed(version_t v);
   void wait_for_commit(Context *c, version_t v=0);
 

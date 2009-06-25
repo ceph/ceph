@@ -161,6 +161,7 @@ struct ceph_eversion {
 #define CEPH_OSD_OP_MODE       0xf000
 #define CEPH_OSD_OP_MODE_RD    0x1000
 #define CEPH_OSD_OP_MODE_WR    0x2000
+#define CEPH_OSD_OP_MODE_RMW   0x3000
 #define CEPH_OSD_OP_MODE_SUB   0x4000
 #define CEPH_OSD_OP_MODE_EXEC  0x8000
 
@@ -192,6 +193,10 @@ enum {
 	CEPH_OSD_OP_STARTSYNC = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 7,
 	CEPH_OSD_OP_SETTRUNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 8,
 	CEPH_OSD_OP_TRIMTRUNC = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 9,
+
+	CEPH_OSD_OP_TMAPUP    = CEPH_OSD_OP_MODE_RMW | CEPH_OSD_OP_TYPE_DATA | 10,
+	CEPH_OSD_OP_TMAPPUT   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 11,
+	CEPH_OSD_OP_TMAPGET   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 12,
 
 	/** attrs **/
 	/* read */
@@ -260,6 +265,10 @@ static inline int ceph_osd_op_mode_modify(int op)
 	return (op & CEPH_OSD_OP_MODE) == CEPH_OSD_OP_MODE_WR;
 }
 
+#define CEPH_OSD_TMAP_HDR 'h'
+#define CEPH_OSD_TMAP_SET 's'
+#define CEPH_OSD_TMAP_RM  'r'
+
 static inline const char *ceph_osd_op_name(int op)
 {
 	switch (op) {
@@ -278,6 +287,10 @@ static inline const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_STARTSYNC: return "startsync";
 	case CEPH_OSD_OP_SETTRUNC: return "settrunc";
 	case CEPH_OSD_OP_TRIMTRUNC: return "trimtrunc";
+
+	case CEPH_OSD_OP_TMAPUP: return "tmapup";
+	case CEPH_OSD_OP_TMAPGET: return "tmapget";
+	case CEPH_OSD_OP_TMAPPUT: return "tmapput";
 
 	case CEPH_OSD_OP_GETXATTR: return "getxattr";
 	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";

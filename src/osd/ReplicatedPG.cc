@@ -1298,6 +1298,196 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
 
 
+      // -- trivial map --
+    case CEPH_OSD_OP_TMAPGET:
+      {
+	// write it
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_READ;
+	newop.op.offset = 0;
+	newop.op.length = 0;
+	do_osd_ops(ctx, nops, odata);
+      }
+      break;
+
+    case CEPH_OSD_OP_TMAPPUT:
+      {
+	//_dout_lock.Lock();
+	//osd_op.data.hexdump(*_dout);
+	//_dout_lock.Unlock();
+
+	// verify
+	if (0) {
+	  bufferlist header;
+	  map<nstring, bufferlist> m;
+	  ::decode(header, bp);
+	  ::decode(m, bp);
+	  assert(bp.end());
+	}
+
+	// write it
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_WRITEFULL;
+	newop.op.offset = 0;
+	newop.op.length = osd_op.data.length();
+	newop.data = osd_op.data;
+	bufferlist r;
+	do_osd_ops(ctx, nops, r);
+      }
+      break;
+
+    case CEPH_OSD_OP_TMAPUP:
+      {
+	// read the whole object
+	bufferlist ibl;
+	vector<OSDOp> nops(1);
+	OSDOp& newop = nops[0];
+	newop.op.op = CEPH_OSD_OP_READ;
+	newop.op.offset = 0;
+	newop.op.length = 0;
+	do_osd_ops(ctx, nops, ibl);
+
+	bufferlist::iterator ip = ibl.begin();
+	bufferlist obl;
+	bool changed = false;
+
+	if (0) {
+	  // parse
+	  bufferlist header;
+	  map<nstring, bufferlist> m;
+	  //ibl.hexdump(*_dout);
+	  if (ibl.length()) {
+	    ::decode(header, ip);
+	    ::decode(m, ip);
+	    //dout(0) << "m is " << m.size() << " " << m << dendl;
+	    assert(ip.end());
+	  }
+	  
+	  // do the update(s)
+	  while (!bp.end()) {
+	    __u8 op;
+	    nstring key;
+	    ::decode(op, bp);
+	    
+	    switch (op) {
+	    case CEPH_OSD_TMAP_SET: // insert key
+	      {
+		::decode(key, bp);
+		bufferlist data;
+		::decode(data, bp);
+		m[key] = data;
+		changed = true;
+	      }
+	      break;
+	      
+	    case CEPH_OSD_TMAP_RM: // remove key
+	      ::decode(key, bp);
+	      if (m.count(key)) {
+		m.erase(key);
+		changed = true;
+	      }
+	      break;
+	      
+	    case CEPH_OSD_TMAP_HDR: // update header
+	      {
+		::decode(header, bp);
+		changed = true;
+	      }
+	      break;
+	      
+	    default:
+	      return -EINVAL;
+	    }
+	  }
+
+	  // reencode
+	  ::encode(header, obl);
+	  ::encode(m, obl);
+	} else {
+	  // header
+	  bufferlist header;
+	  if (ibl.length()) {
+	    ::decode(header, ip);
+	  }
+
+	  if (!bp.end() && *bp == CEPH_OSD_TMAP_HDR) {
+	    ++bp;
+	    ::decode(header, bp);
+	    changed = true;
+	  } else 
+	    ++bp;
+	  
+	  ::encode(header, obl);
+
+	  // update keys
+	  nstring nextkey;
+	  bufferlist nextval;
+	  bool have_next = false;
+	  if (!ip.end()) {
+	    have_next = true;
+	    ::decode(nextkey, ip);
+	    ::decode(nextval, ip);
+	  }
+	  while (!bp.end()) {
+	    __u8 op;
+	    nstring key;
+	    ::decode(op, bp);
+	    ::decode(key, bp);
+	    
+	    // skip existing intervening keys
+	    bool stop = false;
+	    while (have_next && !stop) {
+	      if (nextkey > key)
+		break;
+	      if (nextkey < key) {
+		// copy untouched.
+		::encode(nextkey, obl);
+		::encode(nextval, obl);
+	      } else {
+		// don't copy; discard old value.  and stop.
+		stop = true;
+	      }	      
+	      if (!ip.end()) {
+		::decode(nextkey, ip);
+		::decode(nextval, ip);
+	      } else
+		have_next = false;
+	    }
+	    
+	    if (op == CEPH_OSD_TMAP_SET) {
+	      bufferlist val;
+	      ::encode(key, obl);
+	      ::encode(val, obl);
+	    } else if (op == CEPH_OSD_TMAP_RM) {
+	      // do nothing.
+	    }
+	    changed = true;
+	  }
+
+	  // copy remaining
+	  if (have_next) {
+	    ::encode(nextkey, obl);
+	    ::encode(nextval, obl);
+	  }
+	  if (!ip.end()) {
+	    bufferlist rest;
+	    rest.substr_of(ibl, ip.get_off(), ibl.length() - ip.get_off());
+	    obl.claim_append(rest);
+	  }
+	}
+
+	// write it out
+	newop.op.op = CEPH_OSD_OP_WRITE;
+	newop.op.offset = 0;
+	newop.op.length = obl.length();
+        newop.data = obl;
+	do_osd_ops(ctx, nops, odata);
+      }
+      break;
+
+
     default:
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)
