@@ -19,6 +19,7 @@ check_host() {
     # what host is this daemon assigned to?
     host=`$CCONF -c $conf -i $id -t $type host`
     ssh=""
+    rootssh=""
     dir=$PWD
     if [ -n "$host" ]; then
 	#echo host for $name is $host, i am $hostname
@@ -35,6 +36,7 @@ check_host() {
 	    else
 		ssh="ssh $sshuser@$host"
 	    fi
+	    rootssh="ssh root@$host"
 	    get_conf dir "$dir" "ssh path"
 	fi
     else
@@ -54,6 +56,17 @@ do_cmd() {
     else
 	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
 	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
+    fi
+}
+
+do_root_cmd() {
+    if [ -z "$ssh" ]; then
+	[ $verbose -eq 1 ] && echo "--- $host# $1"
+	ulimit -c unlimited
+	sudo "$1" || { echo "failed: '$1'" ; exit 1; }
+    else
+	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
+	$rootssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
     fi
 }
 
