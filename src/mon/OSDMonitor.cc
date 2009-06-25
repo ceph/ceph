@@ -1296,21 +1296,23 @@ bool OSDMonitor::preprocess_pool_snap ( MPoolSnap *m) {
   return false;
 }
 
-bool OSDMonitor::prepare_pool_snap ( MPoolSnap *m)
+bool OSDMonitor::prepare_pool_snap (MPoolSnap *m)
 {
   const pg_pool_t *p = &osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
   //if the pool isn't already in the update, add it
-  if (!pending_inc.new_pools.count(m->pool)) pending_inc.new_pools[m->pool] = *p;
+  if (!pending_inc.new_pools.count(m->pool))
+    pending_inc.new_pools[m->pool] = *p;
   pp = &pending_inc.new_pools[m->pool];
 
-  if (m->create) { //it's a snap creation message
+  if (m->create) {
     pp->add_snap(m->name.c_str(), g_clock.now());
-    pp->set_snap_epoch(pending_inc.epoch);
-  }
-  else { //it's a snap removal message
+    dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
+  } else {
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
   }
+  pp->set_snap_epoch(pending_inc.epoch);
+
   paxos->wait_for_commit(new OSDMonitor::C_Snap(this, m, 0, pending_inc.epoch));
   return true;
 }
