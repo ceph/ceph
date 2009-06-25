@@ -26,7 +26,7 @@ class MOSDBoot : public PaxosServiceMessage {
 
   MOSDBoot() : PaxosServiceMessage(){}
   MOSDBoot(OSDSuperblock& s) : 
-    PaxosServiceMessage(MSG_OSD_BOOT, sb.current_epoch), sb(s) {
+    PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch), sb(s) {
   }
 
   const char *get_type_name() { return "osd_boot"; }

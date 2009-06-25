@@ -26,7 +26,7 @@ class MOSDGetMap : public PaxosServiceMessage {
 
   MOSDGetMap() : PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, 0) {}
   MOSDGetMap(ceph_fsid_t& f, epoch_t s=0) : 
-    PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, start-1),
+    PaxosServiceMessage(CEPH_MSG_OSD_GETMAP, s-1),
     fsid(f), start(s) { }
 
   epoch_t get_start_epoch() { return start; }
