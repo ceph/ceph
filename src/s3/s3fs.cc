@@ -228,9 +228,11 @@ int S3FS::get_attr(const char *name, int fd, char **attr)
   char *attr_buf;
 #define ETAG_LEN 32
   size_t len = ETAG_LEN;
+  ssize_t attr_len;
+
   while (1) {  
     attr_buf = (char *)malloc(len);
-    ssize_t attr_len = fgetxattr(fd, name, attr_buf, len);
+    attr_len = fgetxattr(fd, name, attr_buf, len);
     if (attr_len  > 0)
       break;
 
@@ -245,7 +247,36 @@ int S3FS::get_attr(const char *name, int fd, char **attr)
   }
   *attr = attr_buf;
 
-  return 0;
+  return attr_len;
+}
+
+int S3FS::get_attr(std::string& bucket, std::string& obj,
+                       const char *name, bufferlist& dest)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  char buf[len];
+  int fd;
+  struct stat st;
+  int r = -EINVAL;
+  size_t max_len, pos;
+  char *data = NULL;
+
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+
+  fd = open(buf, O_RDONLY, 0755);
+
+  if (fd < 0)
+    return -errno;
+
+  r = get_attr(name, fd, &data);
+  if (r < 0)
+      goto done;
+  dest.append(data, r);
+done:
+  free(data);
+  close(fd);  
+
+  return r;
 }
 
 int S3FS::get_obj(std::string& bucket, std::string& obj, 

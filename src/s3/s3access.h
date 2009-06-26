@@ -27,10 +27,6 @@ struct S3ObjEnt {
 
 class S3Access {
 public:
-#if 0
-  S3Access();
-  virtual ~S3Access();
-#endif
   virtual int list_buckets_init(std::string& id, S3AccessHandle *handle) = 0;
   virtual int list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle) = 0;
 
@@ -51,6 +47,9 @@ public:
             const char *if_nomatch,
             bool get_data,
             struct s3_err *err) = 0;
+
+  virtual int get_attr(std::string& bucket, std::string& obj,
+                       const char *name, bufferlist& dest) = 0;
 
   static S3Access *init_storage_provider(const char *type);
   static S3Access *store;

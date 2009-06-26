@@ -742,11 +742,21 @@ done:
 
 static void get_acls(struct req_state *s)
 {
-  S3AccessControlPolicy def;
-  def.create_default(s->user.user_id, s->user.display_name);
+  S3AccessControlPolicy policy;
+  bufferlist bl;
+  int ret = s3store->get_attr(s->bucket_str, s->object_str,
+                       "user.s3acl", bl);
+
+  if (ret < 0) {
+    /* should we do that, or should we just abort? */
+    // policy.create_default(s->user.user_id, s->user.display_name);
+  } else {
+    bufferlist::iterator iter = bl.begin();
+    policy.decode(iter);
+  }
 
   stringstream ss;
-  def.to_xml(ss);
+  policy.to_xml(ss);
   string str = ss.str(); 
   end_header(s, "application/xml");
   dump_start_xml(s);
