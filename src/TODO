@@ -30,6 +30,7 @@ v0.10
 /- fix rados snaps vs 'ls'
 /- improved monitor read model
 - osd bugfixes
+- make monclient less sucky on startup
 
 bugs
 
@@ -147,6 +148,9 @@ userspace client
   - link caps with mds session
 - fix lease validation to check session ttl
 - clean up client mds session vs mdsmap behavior?
+- clean up on session close
+  - hose all caps
+  - kick any requests
 - stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
