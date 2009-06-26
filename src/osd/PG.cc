@@ -1729,10 +1729,13 @@ void PG::write_log(ObjectStore::Transaction& t)
   for (list<Log::Entry>::iterator p = log.log.begin();
        p != log.log.end();
        p++) {
-    __u64 olen = bl.length();
+    __u64 startoff = bl.length();
     ::encode(*p, bl);
-    if (olen % 4096 < bl.length() % 4096)
-      ondisklog.block_map[olen] = p->version;
+    __u64 endoff = bl.length();
+    if (startoff / 4096 != endoff / 4096) {
+      // we reached a new block. *p was the last entry with bytes in previous block
+      ondisklog.block_map[startoff] = p->version;
+    }
 
     /*
     if (g_conf.osd_pad_pg_log) {  // pad to 4k, until i fix ebofs reallocation crap.  FIXME.
@@ -1787,8 +1790,9 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   
   // we can trim!
   __u64 trim = p->first;
-  dout(10) << "  trimming ondisklog to " << ondisklog.bottom << "~" << ondisklog.length() << dendl;
-
+  dout(10) << "  " << ondisklog.bottom << "~" << ondisklog.length()
+	   << " -> " << trim << "~" << (ondisklog.top-trim)
+	   << dendl;
   assert(trim >= ondisklog.bottom);
   ondisklog.bottom = trim;
 
@@ -1842,7 +1846,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
  
   // update block map?
   if (ondisklog.top % 4096 < (ondisklog.top + bl.length()) % 4096)
-    ondisklog.block_map[ondisklog.top] = log_version;
+    ondisklog.block_map[ondisklog.top] = log_version;  // log_version is last event in prev. block
 
   t.write(0, log_oid, ondisklog.top, bl.length(), bl );
   
@@ -1887,9 +1891,8 @@ void PG::read_log(ObjectStore *store)
     eversion_t last;
     bool reorder = false;
     while (!p.end()) {
-      loff_t opos = ondisklog.bottom + p.get_off();
+      __u64 pos = ondisklog.bottom + p.get_off();
       ::decode(e, p);
-      loff_t pos = ondisklog.bottom + p.get_off();
       dout(20) << "read_log " << pos << " " << e << dendl;
 
       // [repair] in order?
@@ -1913,19 +1916,20 @@ void PG::read_log(ObjectStore *store)
 	osd->get_logclient()->log(LOG_ERROR, ss);
       }
       
-      if (opos % 4096 < pos % 4096)
-	ondisklog.block_map[opos] = e.version;
+      __u64 endpos = ondisklog.bottom + p.get_off();
+      if (endpos / 4096 != pos / 4096)
+	ondisklog.block_map[pos] = e.version;  // last event in prior block
       log.log.push_back(e);
       last = e.version;
 
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {
 	stringstream ss;
-	ss << info.pgid << " log has extra data at " << pos << "~" << (ondisklog.top-pos)
+	ss << info.pgid << " log has extra data at " << endoff << "~" << (ondisklog.top-endoff)
 	   << " after " << info.last_update;
 	osd->get_logclient()->log(LOG_ERROR, ss);
-	dout(0) << "read_log " << pos << " *** extra gunk at end of log, adjusting ondisklog.top" << dendl;
-	ondisklog.top = opos;
+	dout(0) << "read_log " << endoff << " *** extra gunk at end of log, adjusting ondisklog.top" << dendl;
+	ondisklog.top = endoff;
 	break;
       }
     }
