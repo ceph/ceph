@@ -15,13 +15,13 @@ class GroupEntry;
 
 
 class ExportControl {
-	std::map<const char *, ExportEntry *, ltstr> exports;
+	map<string,ExportEntry*> exports;
 	Mutex lock;
 
 	void _cleanup();	
 	ExportEntry *_find(entity_addr_t *addr, const char *path);
 public:
-	ExportControl() : lock("export_control") {}
+	ExportControl() : lock("ExportControl") {}
 	~ExportControl();
 
 	void load(ConfFile *cf);

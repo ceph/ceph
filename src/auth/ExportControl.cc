@@ -129,7 +129,7 @@ void Subnet::parse(const char *str)
 class GroupEntry;
 
 class GroupsManager {
-	map<const char *, GroupEntry *, ltstr> groups_map;
+	map<string,GroupEntry*> groups_map;
 
 public:
 	GroupEntry *get_group(const char  *name);
@@ -276,7 +276,7 @@ GroupEntry *GroupEntry::get_properties(entity_addr_t *addr)
 
 GroupEntry *GroupsManager::get_group(const char *name)
 {
-	map<const char *, GroupEntry *, ltstr>::iterator iter;
+	map<string, GroupEntry *>::iterator iter;
 	GroupEntry *group = NULL, *orig_group;
 	char *tmp = strdup(name);
 	char *orig_tmp = tmp;
@@ -331,7 +331,7 @@ GroupEntry *GroupsManager::get_group(const char *name)
 	dout(30) << "** creating new group with options (" << group_name <<  " options=" << options << ")" << dendl;
 	group = new GroupEntry(orig_group);
 	group->init(NULL, NULL, options);
-	groups_map[strdup(name)] = group;
+	groups_map[name] = group;
 
 done:
 	free(orig_tmp);
@@ -520,7 +520,7 @@ GroupEntry *ExportEntry::properties(entity_addr_t *addr)
 }
 
 class ExportsManager {
-	map<const char *, ExportEntry *, ltstr> exports_map;
+	map<string,ExportEntry*> exports_map;
 
 public:
 	ExportEntry *get_export(const char  *name);
@@ -529,14 +529,14 @@ public:
 
 ExportEntry *ExportsManager::get_export(const char *name)
 {
-	map<const char *, ExportEntry *, ltstr> ::iterator iter;
+	map<string, ExportEntry *> ::iterator iter;
 	ExportEntry *exp;
 
 	iter = exports_map.find(name);
 
 	if (iter == exports_map.end()) {
 		exp = new ExportEntry();
-		exports_map[strdup(name)] = exp;
+		exports_map[name] = exp;
 	} else {
 		exp = iter->second;
 	}
@@ -546,12 +546,10 @@ ExportEntry *ExportsManager::get_export(const char *name)
 
 ExportsManager::~ExportsManager()
 {
-	map<const char *, ExportEntry *, ltstr> ::iterator iter;
-
-	for (iter = exports_map.begin(); iter != exports_map.end(); ++iter) {
-		free((void *)iter->first);
+	for (map<string, ExportEntry *> ::iterator iter = exports_map.begin();
+	     iter != exports_map.end();
+	     ++iter)
 		delete iter->second;
-	}
 }
 
 static ExportsManager exports_mgr;
@@ -597,7 +595,7 @@ void ExportControl::load(ConfFile *conf)
 		if (ret) {
 			ExportEntry *exp = exports_mgr.get_export(copy_str);
 
-			exports[strdup(mnt)] = exp;
+			exports[mnt] = exp;
 		} else {
 			allow_str = NULL;
 			ret = conf->read(section, "allow", &allow_str, allow_def);
@@ -605,7 +603,7 @@ void ExportControl::load(ConfFile *conf)
 			/* it is guaranteed that there's only one space character */
 			ExportEntry *exp = exports_mgr.get_export(mnt);
 			exp->init(allow_str);
-			exports[strdup(mnt)] = exp;
+			exports[mnt] = exp;
 			free(allow_str);
 		}
 	}
@@ -666,7 +664,7 @@ ExportEntry *ExportControl::_find(entity_addr_t *addr, const char *path)
 	int len = strlen(p);
 	ExportEntry *ent = NULL;
 	
-	map<const char *, ExportEntry *, ltstr>::iterator iter, exp_end;
+	map<string, ExportEntry *>::iterator iter, exp_end;
 
 	/* only absolute paths! */
 	if (*path != '/')
@@ -704,14 +702,10 @@ out:
 
 void ExportControl::_cleanup()
 {
-	map<const char *, ExportEntry *, ltstr>::iterator iter, exp_end;
-
-	exp_end = exports.end();
-
-	for (iter = exports.begin(); iter != exp_end; ++iter) {
-		const char *mnt = iter->first;
-		free((void *)mnt);
-	}
+  for (map<string, ExportEntry*>::iterator iter = exports.begin();
+       iter != exports.end();
+       ++iter)
+    delete iter->second;
 }
 
 #if 0
