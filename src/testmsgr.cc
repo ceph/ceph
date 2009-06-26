@@ -36,7 +36,6 @@ using namespace std;
 #include <fcntl.h>
 
 
-MonMap monmap;
 Messenger *messenger = 0;
 
 Mutex lock("mylock");
@@ -77,12 +76,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   dout(0) << "i am mon" << whoami << dendl;
 
   // get monmap
-  MonClient mc(&monmap, NULL);
-  if (!mc.get_monmap())
+  MonClient mc;
+  if (mc.build_initial_monmap() < 0)
     return -1;
   
   // start up network
-  g_my_addr = monmap.get_inst(whoami).addr;
+  g_my_addr = mc.get_mon_addr(whoami);
   SimpleMessenger rank;
   int err = rank.bind();
   if (err < 0)
@@ -110,18 +109,18 @@ int main(int argc, const char **argv, const char *envp[]) {
       cond.Wait(lock);
     }
 
-    int t = rand() % monmap.size();
+    int t = rand() % mc.get_num_mon();
     if (t == whoami)
       continue;
     
     if (rand() % 10 == 0) {
       //cerr << "mark_down " << t << std::endl;
       dout(0) << "mark_down " << t << dendl;
-      messenger->mark_down(monmap.get_inst(t).addr);
+      messenger->mark_down(mc.get_mon_addr(t));
     } 
     //cerr << "pinging " << t << std::endl;
     dout(0) << "pinging " << t << dendl;
-    messenger->send_message(new MPing, monmap.get_inst(t));
+    messenger->send_message(new MPing, mc.get_mon_inst(t));
     cerr << isend << "\t" << ++sent << "\t" << received << "\r";
   }
   lock.Unlock();

@@ -371,6 +371,7 @@ void parse_config_options(std::vector<const char*>& args);
 void parse_config_option_string(string& s);
 
 extern bool parse_ip_port(const char *s, entity_addr_t& addr, const char **end=0);
+extern bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec);
 
 void generic_server_usage();
 void generic_client_usage();

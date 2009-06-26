@@ -63,16 +63,14 @@ int main(int argc, const char **argv)
   if (g_conf.clock_tare) g_clock.tare();
 
   // get monmap
-  MonMap monmap;
-  MonClient mc(&monmap, NULL);
-  if (!mc.get_monmap())
+  MonClient mc;
+  if (mc.build_initial_monmap() < 0)
     return -1;
 
   SimpleMessenger rank;
   rank.bind();
   cout << "starting mds." << g_conf.id
        << " at " << rank.get_rank_addr() 
-       << " fsid " << monmap.get_fsid()
        << std::endl;
 
   Messenger *m = rank.register_entity(entity_name_t::MDS(-1));
@@ -88,7 +86,7 @@ int main(int argc, const char **argv)
   rank.start();
   
   // start mds
-  MDS *mds = new MDS(g_conf.id, m, &monmap);
+  MDS *mds = new MDS(g_conf.id, m, &mc.monmap);
   mds->init();
   
   rank.wait();

@@ -80,18 +80,19 @@ int main(int argc, const char **argv)
   _dout_create_courtesy_output_symlink("osd", whoami);
 
   // get monmap
-  MonMap monmap;
-  MonClient mc(&monmap, NULL);
-  if (!mc.get_monmap())
+  MonClient mc;
+  if (mc.build_initial_monmap() < 0)
+    return -1;
+  if (mc.get_monmap() < 0)
     return -1;
 
   if (mkfs) {
-    int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, monmap.fsid, whoami);
+    int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
       cerr << "error creating empty object store in " << g_conf.osd_data << ": " << strerror(-err) << std::endl;
       exit(1);
     }
-    cout << "created object store for osd" << whoami << " fsid " << monmap.fsid << " on " << g_conf.osd_data << std::endl;
+    cout << "created object store for osd" << whoami << " fsid " << mc.monmap.fsid << " on " << g_conf.osd_data << std::endl;
     exit(0);
   }
 
@@ -115,8 +116,8 @@ int main(int argc, const char **argv)
     cerr << "OSD magic " << magic << " != my " << CEPH_OSD_ONDISK_MAGIC << std::endl;
     exit(1);
   }
-  if (ceph_fsid_compare(&fsid, &monmap.fsid)) {
-    cerr << "OSD fsid " << fsid << " != monmap fsid " << monmap.fsid << std::endl;
+  if (ceph_fsid_compare(&fsid, &mc.monmap.fsid)) {
+    cerr << "OSD fsid " << fsid << " != monmap fsid " << mc.monmap.fsid << std::endl;
     exit(1);
   }
 
@@ -128,7 +129,7 @@ int main(int argc, const char **argv)
        << " at " << rank.get_rank_addr() 
        << " osd_data " << g_conf.osd_data
        << " " << ((g_conf.osd_journal && g_conf.osd_journal[0]) ? g_conf.osd_journal:"(no journal)")
-       << " fsid " << monmap.fsid
+       << " fsid " << mc.monmap.fsid
        << std::endl;
 
   g_timer.shutdown();
@@ -154,7 +155,7 @@ int main(int argc, const char **argv)
   rank.start();
 
   // start osd
-  OSD *osd = new OSD(whoami, m, hbm, &monmap, g_conf.osd_data, g_conf.osd_journal);
+  OSD *osd = new OSD(whoami, m, hbm, &mc.monmap, g_conf.osd_data, g_conf.osd_journal);
   if (osd->init() < 0) {
     cout << "error initializing osd" << std::endl;
     return 1;

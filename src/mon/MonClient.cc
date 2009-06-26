@@ -18,164 +18,113 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "monclient: "
 
-Mutex monmap_lock("monmap_lock");
-Cond monmap_cond;
-bufferlist monmap_bl;
 
-int MonClient::probe_mon(MonMap *pmonmap) 
+/*
+ * build an initial monmap with any known monitor
+ * addresses.
+ */
+int MonClient::build_initial_monmap()
 {
-  vector<entity_addr_t> monaddrs;
+  // file?
+  if (g_conf.monmap) {
+    const char *monmap_fn = g_conf.monmap;
+    int r = monmap.read(monmap_fn);
+    if (r >= 0)
+      return 0;
+    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
+  }
 
-  const char *p = g_conf.mon_host;
-  const char *end = p + strlen(p);
-  while (p < end) {
-    entity_addr_t a;
-    if (parse_ip_port(p, a, &p)) {
-      monaddrs.push_back(a);
-    } else {
-      break;
+  // -m foo?
+  if (g_conf.mon_host) {
+    vector<entity_addr_t> addrs;
+    if (parse_ip_port_vec(g_conf.mon_host, addrs)) {
+      for (unsigned i=0; i<addrs.size(); i++) {
+	entity_inst_t inst;
+	inst.name = entity_name_t::MON(i);
+	inst.addr = addrs[i];
+	monmap.add_mon(inst);
+      }
+      return 0;
     }
-  }
-  if (monaddrs.empty()) {
-    cerr << "couldn't parse ip:port(s) from '" << g_conf.mon_host << "'" << std::endl;
-    return -1;
+    cerr << "unable to parse addrs in '" << g_conf.mon_host << "'" << std::endl;
   }
 
+  // config file?
+  ConfFile a(g_conf.conf);
+  ConfFile b("ceph.conf");
+  ConfFile *c = 0;
+  
+  if (a.parse())
+    c = &a;
+  else if (b.parse())
+    c = &b;
+  if (c) {
+    static string monstr;
+    for (int i=0; i<15; i++) {
+      char monname[20];
+      char *val = 0;
+      sprintf(monname, "mon%d", i);
+      c->read(monname, "mon addr", &val, 0);
+      if (!val || !val[0])
+	break;
+      
+      entity_inst_t inst;
+      if (!parse_ip_port(val, inst.addr)) {
+	cerr << "unable to parse conf's addr for " << monname << " (" << val << ")" << std::endl;
+	continue;
+      }
+      inst.name = entity_name_t::MON(monmap.mon_inst.size());
+      monmap.add_mon(inst);
+    }
+    if (monmap.size())
+      return 0;
+    cerr << "unable to find any monitors in conf" << std::endl;
+    return -EINVAL;
+  }
+
+  cerr << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
+  return -ENOENT;
+}
+
+int MonClient::get_monmap()
+{
+  dout(10) << "get_monmap" << dendl;
+  Mutex::Locker l(monc_lock);
+  
   SimpleMessenger rank; 
 
   rank.bind();
-  dout(1) << " connecting to monitor(s) at " << monaddrs << " ..." << dendl;
   
   Messenger *msgr = rank.register_entity(entity_name_t::CLIENT(-1));
   msgr->set_dispatcher(this);
-
+  
   rank.start(true);  // do not daemonize!
   
   int attempt = 10;
   int i = 0;
-  monmap_lock.Lock();
+
   srand(getpid());
-  while (monmap_bl.length() == 0) {
-    i = rand() % monaddrs.size();
-    dout(10) << "querying " << monaddrs[i] << dendl;
-    entity_inst_t mi;
-    mi.addr = monaddrs[i];
-    mi.name = entity_name_t::MON(0);  // FIXME HRM!
-    msgr->send_message(new MMonGetMap, mi);
+  while (monmap.epoch == 0) {
+    i = rand() % monmap.mon_inst.size();
+    dout(10) << "querying " << monmap.mon_inst[i] << dendl;
+    msgr->send_message(new MMonGetMap, monmap.mon_inst[i]);
     
     if (--attempt == 0)
       break;
-
+    
     utime_t interval(1, 0);
-    monmap_cond.WaitInterval(monmap_lock, interval);
+    map_cond.WaitInterval(monc_lock, interval);
   }
-  monmap_lock.Unlock();
-
-  if (monmap_bl.length()) {
-    pmonmap->decode(monmap_bl);
-    dout(1) << "[got monmap from " << monaddrs[i] << " fsid " << pmonmap->fsid << "]" << dendl;
-  }
+  
   msgr->shutdown();
   rank.wait();
   msgr->destroy();
 
-  if (monmap_bl.length())
+  if (monmap.epoch)
     return 0;
-
-  cerr << "unable to fetch monmap from " << monaddrs << std::endl;
-  return -1; // failed
+  return -1;
 }
 
-MonMap *MonClient::get_monmap()
-{
-  char *val = 0;
-  char monname[10];
-
-  if (g_conf.monmap) {
-    // file?
-    const char *monmap_fn = g_conf.monmap;
-    int r = pmonmap->read(monmap_fn);
-    if (r >= 0) {
-      vector<entity_inst_t>::iterator iter = pmonmap->mon_inst.begin();
-      unsigned int i;
-      const sockaddr_in *ipaddr;
-      entity_addr_t conf_addr;
-      ConfFile a(g_conf.conf);
-      ConfFile b("ceph.conf");
-      ConfFile *c = 0;
-
-      dout(1) << "[opened monmap at " << monmap_fn << " fsid " << pmonmap->fsid << "]" << dendl;
-
-      if (a.parse())
-        c = &a;
-      else if (b.parse())
-        c = &b;
-      if (c) {
-        for (i=0; i<pmonmap->mon_inst.size(); i++) {
-          ipaddr = &pmonmap->mon_inst[i].addr.ipaddr;
-          sprintf(monname, "mon%d", i);
-          if (c->read(monname, "mon addr", &val, 0)) {
-            if (parse_ip_port(val, conf_addr, NULL)) {
-              if ((ipaddr->sin_addr.s_addr != conf_addr.ipaddr.sin_addr.s_addr) ||
-                (ipaddr->sin_port != conf_addr.ipaddr.sin_port)) {
-                   cerr << "WARNING: 'mon addr' config option (" << monname << ") does not match monmap file" << std::endl
-                        << "         continuing with monmap configuration" << std::endl;
-              }
-	    }
-          }
-        }
-      }
-
-      return pmonmap;
-    }
-
-    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
-  }
-
-  if (!g_conf.mon_host) {
-    // cluster conf?
-    ConfFile a(g_conf.conf);
-    ConfFile b("ceph.conf");
-    ConfFile *c = 0;
-
-    if (a.parse())
-      c = &a;
-    else if (b.parse())
-      c = &b;
-    if (c) {
-      static string monstr;
-      for (int i=0; i<15; i++) {
-	sprintf(monname, "mon%d", i);
-	c->read(monname, "mon addr", &val, 0);
-	if (!val || !val[0])
-	  break;
-	
-	if (monstr.length())
-	  monstr += ",";
-	monstr += val;
-      }
-      g_conf.mon_host = strdup(monstr.c_str());
-    }
-  }
-
-  // probe?
-  if (g_conf.mon_host &&
-      probe_mon(pmonmap) == 0)  
-    return pmonmap;
-
-  cerr << "must specify monitor address (-m monaddr) or cluster conf (-c ceph.conf) or monmap file (-M monmap)" << std::endl;
-  return NULL;
-}
-
-void MonClient::handle_monmap(MMonMap *m)
-{
-  dout(10) << "handle_monmap " << *m << dendl;
-  monmap_lock.Lock();
-  monmap_bl = m->monmapbl;
-  monmap_cond.Signal();
-  monmap_lock.Unlock();
-  delete m;
-}
 
 bool MonClient::dispatch_impl(Message *m)
 {
@@ -198,6 +147,17 @@ bool MonClient::dispatch_impl(Message *m)
   return false;
 }
 
+void MonClient::handle_monmap(MMonMap *m)
+{
+  dout(10) << "handle_monmap " << *m << dendl;
+  monc_lock.Lock();
+  bufferlist::iterator p = m->monmapbl.begin();
+  ::decode(monmap, p);
+  map_cond.Signal();
+  monc_lock.Unlock();
+  delete m;
+}
+
 
 
 // -------------------
@@ -206,10 +166,10 @@ bool MonClient::dispatch_impl(Message *m)
 void MonClient::_try_mount(double timeout)
 {
   dout(10) << "_try_mount" << dendl;
-  int mon = pmonmap->pick_mon();
+  int mon = monmap.pick_mon();
   dout(2) << "sending client_mount to mon" << mon << dendl;
   messenger->set_dispatcher(this);
-  messenger->send_message(new MClientMount, pmonmap->get_inst(mon));
+  messenger->send_message(new MClientMount, monmap.get_inst(mon));
 
   // schedule timeout?
   assert(mount_timeout_event == 0);
@@ -267,8 +227,13 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 {
   dout(10) << "handle_mount_ack " << *m << dendl;
 
+  // monmap
+  bufferlist::iterator p = m->monmap_bl.begin();
+  ::decode(monmap, p);
+
+  // ticket
   signed_ticket = m->signed_ticket;
-  bufferlist::iterator p = signed_ticket.begin();
+  p = signed_ticket.begin();
   ::decode(ticket, p);
 
   messenger->reset_myname(m->get_dest());
@@ -286,9 +251,9 @@ int MonClient::unmount()
 
   // fixme: this should retry and time out too
 
-  int mon = pmonmap->pick_mon();
+  int mon = monmap.pick_mon();
   dout(2) << "sending client_unmount to mon" << mon << dendl;
-  messenger->send_message(new MClientUnmount, pmonmap->get_inst(mon));
+  messenger->send_message(new MClientUnmount, monmap.get_inst(mon));
   
   while (mounted)
     mount_cond.Wait(monc_lock);

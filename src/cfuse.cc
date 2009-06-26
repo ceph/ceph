@@ -63,9 +63,8 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   // get monmap
-  MonMap monmap;
-  MonClient mc(&monmap, NULL);
-  if (!mc.get_monmap())
+  MonClient mc;
+  if (mc.build_initial_monmap() < 0)
     return -1;
 
   // start up network
@@ -73,7 +72,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   rank.bind();
   cout << "bound to " << rank.get_rank_addr() << ", mounting ceph" << std::endl;
 
-  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &monmap);
+  Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &mc);
 
   rank.start();
 

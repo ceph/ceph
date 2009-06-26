@@ -101,11 +101,13 @@ void client_flush_set_callback(void *p, inodeno_t ino)
 
 // cons/des
 
-Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Client::client_lock")
+Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("Client::client_lock")
 {
   // which client am i?
   whoami = m->get_myname().num();
-  monmap = mm;
+
+  monclient = mc;
+  monclient->set_messenger(m);
   
   tick_event = 0;
 
@@ -128,12 +130,10 @@ Client::Client(Messenger *m, MonMap *mm) : timer(client_lock), client_lock("Clie
   // set up messengers
   messenger = m;
 
-  monclient = new MonClient(monmap, messenger);
-
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
   mdsmap = new MDSMap;
-  objecter = new Objecter(messenger, monmap, osdmap, client_lock);
+  objecter = new Objecter(messenger, &monclient->monmap, osdmap, client_lock);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock, 
 				  0,                            // all ack callback
@@ -158,7 +158,6 @@ Client::~Client()
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
   unlink_dispatcher(monclient);
-  delete monclient;
 
   if (messenger)
     messenger->destroy();
@@ -246,8 +245,6 @@ void Client::init()
   // ok!
   messenger->set_dispatcher(this);
   link_dispatcher(monclient);
-
-  objecter->init();
 
   tick();
 
@@ -809,9 +806,9 @@ MClientReply *Client::make_request(MClientRequest *req,
 
       if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
-	int mon = monmap->pick_mon();
-	messenger->send_message(new MMDSGetMap(monmap->fsid, mdsmap->get_epoch()+1),
-				monmap->get_inst(mon));
+	int mon = monclient->monmap.pick_mon();
+	messenger->send_message(new MMDSGetMap(monclient->monmap.fsid, mdsmap->get_epoch()+1),
+				monclient->monmap.get_inst(mon));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
@@ -2291,6 +2288,7 @@ int Client::mount()
   ticket = monclient->get_ticket();
 
   objecter->signed_ticket = signed_ticket;
+  objecter->init();
 
   mounted = true;
   

@@ -45,8 +45,8 @@ extern "C" {
 Mutex lock("ceph.cc lock");
 Cond cond;
 Messenger *messenger = 0;
-MonMap monmap;
 SafeTimer timer(lock);
+MonClient mc;
 
 const char *outfile = 0;
 
@@ -106,8 +106,8 @@ void handle_notify(MMonObserveNotify *notify)
 	  << (notify->is_latest ? " (latest)" : "")
 	  << dendl;
   
-  if (ceph_fsid_compare(&notify->fsid, &monmap.fsid)) {
-    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << monmap.fsid << dendl;
+  if (ceph_fsid_compare(&notify->fsid, &mc.monmap.fsid)) {
+    dout(0) << notify->get_source_inst() << " notify fsid " << notify->fsid << " != " << mc.monmap.fsid << dendl;
     delete notify;
     return;
   }
@@ -230,14 +230,14 @@ static void send_observe_requests(bool newmon)
   if (is_timeout)
     return;
 
-  int mon = monmap.pick_mon(newmon);
+  int mon = mc.monmap.pick_mon(newmon);
   bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
     if (registered.count(i))
       continue;
-    MMonObserve *m = new MMonObserve(monmap.fsid, i, map_ver[i]);
+    MMonObserve *m = new MMonObserve(mc.monmap.fsid, i, map_ver[i]);
     dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
-    messenger->send_message(m, monmap.get_inst(mon));
+    messenger->send_message(m, mc.monmap.get_inst(mon));
     sent = true;
   }
 
@@ -280,15 +280,15 @@ Context *event = 0;
 
 void get_status(bool newmon)
 {
-  int mon = monmap.pick_mon(newmon);
+  int mon = mc.monmap.pick_mon(newmon);
 
   vector<string> vcmd(2);
   vcmd[0] = prefix[which];
   vcmd[1] = "stat";
   
-  MMonCommand *m = new MMonCommand(monmap.fsid, last_seen_version);
+  MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
   m->cmd.swap(vcmd);
-  messenger->send_message(m, monmap.get_inst(mon));
+  messenger->send_message(m, mc.monmap.get_inst(mon));
 
   event = new C_Refresh;
   timer.add_event_after(.2, event);
@@ -375,20 +375,20 @@ void send_command();
 
 struct C_Resend : public Context {
   void finish(int) {
-    monmap.pick_mon(true);  // pick a new mon
+    mc.monmap.pick_mon(true);  // pick a new mon
     if (!reply)
       send_command();
   }
 };
 void send_command()
 {
-  MMonCommand *m = new MMonCommand(monmap.fsid, last_seen_version);
+  MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
   m->cmd = pending_cmd;
   m->get_data() = pending_bl;
 
-  int mon = monmap.pick_mon();
+  int mon = mc.monmap.pick_mon();
   generic_dout(0) << "mon" << mon << " <- " << pending_cmd << dendl;
-  messenger->send_message(m, monmap.get_inst(mon));
+  messenger->send_message(m, mc.monmap.get_inst(mon));
 
   resend_event = new C_Resend;
   timer.add_event_after(15.0, resend_event);
@@ -618,8 +618,7 @@ int main(int argc, const char **argv, const char *envp[])
   }
 
   // get monmap
-  MonClient mc(&monmap, NULL);
-  if (!mc.get_monmap())
+  if (mc.build_initial_monmap() < 0)
     return -1;
   
   // start up network

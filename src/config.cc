@@ -214,6 +214,20 @@ bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
   return true;
 }
 
+bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
+{
+  const char *p = s;
+  const char *end = p + strlen(p);
+  while (p < end) {
+    entity_addr_t a;
+    if (!parse_ip_port(p, a, &p))
+      return false;
+    vec.push_back(a);
+  }
+  return true;
+}
+
+
 
 
 void parse_config_option_string(string& s)

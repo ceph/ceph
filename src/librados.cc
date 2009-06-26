@@ -52,7 +52,6 @@ using namespace std;
 
 class RadosClient : public Dispatcher
 {
-  MonMap monmap;
   OSDMap osdmap;
   Messenger *messenger;
   MonClient monclient;
@@ -68,7 +67,7 @@ class RadosClient : public Dispatcher
 
  
 public:
-  RadosClient() : messenger(NULL), monclient(&monmap, NULL), lock("radosclient") {}
+  RadosClient() : messenger(NULL), lock("radosclient") {}
   ~RadosClient();
   bool init();
   void shutdown();
@@ -266,13 +265,11 @@ public:
 bool RadosClient::init()
 {
   // get monmap
-  if (!monclient.get_monmap())
+  if (monclient.build_initial_monmap() < 0)
     return false;
 
   rank.bind();
-  dout(1) << "starting at " << rank.get_rank_addr() 
-	  << " fsid " << monmap.get_fsid()
-	  << dendl;
+  dout(1) << "starting at " << rank.get_rank_addr() << dendl;
 
   messenger = rank.register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);
@@ -290,7 +287,7 @@ bool RadosClient::init()
 
   monclient.link_dispatcher(this);
 
-  objecter = new Objecter(messenger, &monmap, &osdmap, lock);
+  objecter = new Objecter(messenger, &monclient.monmap, &osdmap, lock);
   if (!objecter)
     return false;
 

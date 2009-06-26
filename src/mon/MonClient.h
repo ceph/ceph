@@ -18,6 +18,8 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
+#include "MonMap.h"
+
 #include "common/Timer.h"
 
 class MonMap;
@@ -25,24 +27,26 @@ class MMonMap;
 class MClientMountAck;
 
 class MonClient : public Dispatcher {
-  MonMap *pmonmap;
-  Context *mount_timeout_event;
+public:
+  MonMap monmap;
+private:
   Messenger *messenger;
+
+  ceph_client_ticket ticket;
+  bufferlist signed_ticket;
+
+  Context *mount_timeout_event;
 
   Mutex monc_lock;
   SafeTimer timer;
   bool mounted;
   int mounters;
   bool unmounting;
-  Cond mount_cond;
+  Cond mount_cond, map_cond;
 
-  ceph_client_ticket ticket;
-  bufferlist signed_ticket;
 
-  int probe_mon(MonMap *pmonmap);
-  void handle_monmap(MMonMap *m);
   bool dispatch_impl(Message *m);
-
+  void handle_monmap(MMonMap *m);
 
  protected:
   class C_MountTimeout : public Context {
@@ -60,18 +64,39 @@ class MonClient : public Dispatcher {
   void handle_mount_ack(MClientMountAck* m);
   void handle_unmount(Message* m);
  public:
-  MonClient(MonMap *pmm, Messenger *m) : pmonmap(pmm), messenger(m),
-					 monc_lock("mon_client"), timer(monc_lock) {
+  MonClient() : messenger(NULL),
+		monc_lock("MonClient::monc_lock"),
+		timer(monc_lock) {
     mounted = false;
     mounters = 0;
     mount_timeout_event = 0;
     unmounting = false;
   }
 
-  MonMap *get_monmap();
+  int build_initial_monmap();
+  int get_monmap();
 
   int mount(double mount_timeout);
   int unmount();
+
+  void send_mon_message(Message *m, bool new_mon=false);
+
+  entity_addr_t get_mon_addr(unsigned i) {
+    Mutex::Locker l(monc_lock);
+    if (i < monmap.size())
+      return monmap.mon_inst[i].addr;
+    return entity_addr_t();
+  }
+  entity_inst_t get_mon_inst(unsigned i) {
+    Mutex::Locker l(monc_lock);
+    if (i < monmap.size())
+      return monmap.mon_inst[i];
+    return entity_inst_t();
+  }
+  int get_num_mon() {
+    Mutex::Locker l(monc_lock);
+    return monmap.size();
+  }
 
   void set_messenger(Messenger *m) { messenger = m; }
 

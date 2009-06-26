@@ -29,7 +29,9 @@ class MonMap {
 
   int       last_mon;    // last mon i talked to
 
-  MonMap(int s=0) : epoch(s?1:0), mon_inst(s), last_mon(-1) { }
+  MonMap(int s=0) : epoch(s?1:0), mon_inst(s), last_mon(-1) {
+    memset(&fsid, 0, sizeof(fsid));
+  }
 
   ceph_fsid_t& get_fsid() { return fsid; }
 

@@ -602,7 +602,6 @@ public:
   MonClient *monclient;
   Messenger *messenger;  
   int whoami;
-  MonMap *monmap;
 
   ceph_client_ticket ticket;
   bufferlist signed_ticket;
@@ -844,7 +843,7 @@ protected:
   bool dispatch_impl(Message *m);
 
  public:
-  Client(Messenger *m, MonMap *mm);
+  Client(Messenger *m, MonClient *mc);
   ~Client();
   void tear_down_cache();   
 
