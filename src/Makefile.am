@@ -123,9 +123,9 @@ testradospp_LDADD = librados.la libcrush.la
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
 
-s3gw_SOURCES = s3/s3gw.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc
+s3gw_SOURCES = s3/s3gw.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc s3/s3access.cc
 s3gw_LDADD = librados.la libcrush.la -lfcgi -lcrypto -lexpat
-s3admin_SOURCES = s3/s3admin.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc
+s3admin_SOURCES = s3/s3admin.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc s3/s3access.cc
 s3admin_LDADD = librados.la libcrush.la -lfcgi -lcrypto -lexpat
 ## object classes
 

@@ -31,12 +31,11 @@
 using namespace std;
 
 
+
 #define CGI_PRINTF(stream, ...) do { \
    fprintf(stderr, "OUT> " __VA_ARGS__); \
    FCGX_FPrintF(stream, __VA_ARGS__); \
 } while (0)
-
-static FILE *dbg;
 
 class NameVal
 {
@@ -583,7 +582,7 @@ static void do_list_buckets(struct req_state *s)
   int r;
   S3ObjEnt obj;
 
-  r = list_buckets_init(id, &handle);
+  r = s3store->list_buckets_init(id, &handle);
   dump_errno(s, (r < 0 ? r : 0));
   end_header(s);
   dump_start_xml(s);
@@ -593,7 +592,7 @@ static void do_list_buckets(struct req_state *s)
 
   open_section(s, "Buckets");
   while (r >= 0) {
-    r = list_buckets_next(id, obj, &handle);
+    r = s3store->list_buckets_next(id, obj, &handle);
     if (r < 0)
       continue;
     dump_bucket(s, obj);
@@ -726,7 +725,7 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   }
 
   r = 0;
-  len = get_obj(bucket, obj, &data, ofs, end, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
+  len = s3store->get_obj(bucket, obj, &data, ofs, end, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
   if (len < 0)
     r = len;
 
@@ -744,9 +743,7 @@ done:
 static void get_acls(struct req_state *s)
 {
   S3AccessControlPolicy def;
-  string id="thisistheid!";
-  string name="foobar";
-  def.create_default(id, name);
+  def.create_default(s->user.user_id, s->user.display_name);
 
   stringstream ss;
   def.to_xml(ss);
@@ -785,7 +782,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   delimiter = s->args.get("delimiter");
 
   vector<S3ObjEnt> objs;
-  int r = list_objects(id, s->bucket_str, max, prefix, marker, objs);
+  int r = s3store->list_objects(id, s->bucket_str, max, prefix, marker, objs);
   dump_errno(s, (r < 0 ? r : 0));
 
   end_header(s);
@@ -826,7 +823,7 @@ static void do_create_bucket(struct req_state *s)
 {
   string id = "0123456789ABCDEF";
 
-  int r = create_bucket(id, s->bucket_str);
+  int r = s3store->create_bucket(id, s->bucket_str);
 
   dump_errno(s, r);
   end_header(s);
@@ -877,7 +874,7 @@ static void do_create_object(struct req_state *s)
     }
 
     string md5_str(calc_md5);
-    r = put_obj(id, s->bucket_str, s->object_str, data, actual, md5_str);
+    r = s3store->put_obj(id, s->bucket_str, s->object_str, data, actual, md5_str);
   }
 done:
   free(data);
@@ -892,7 +889,7 @@ static void do_delete_bucket(struct req_state *s)
   string id = "0123456789ABCDEF";
 
   if (s->bucket) {
-    r = delete_bucket(id, s->bucket_str);
+    r = s3store->delete_bucket(id, s->bucket_str);
   }
 
   dump_errno(s, r);
@@ -905,7 +902,7 @@ static void do_delete_object(struct req_state *s)
   if (s->object) {
     string id = "0123456789ABCDEF";
 
-    r = delete_obj(id, s->bucket_str, s->object_str);
+    r = s3store->delete_obj(id, s->bucket_str, s->object_str);
   }
 
   dump_errno(s, r);
@@ -957,9 +954,11 @@ int main(void)
   FCGX_ParamArray envp;
   struct req_state s;
 
-  sighandler = signal(SIGSEGV, godown);
+  if (!S3Access::init_storage_provider("fs")) {
+    cerr << "couldn't init storage provider" << std::endl;
+  }
 
-  dbg = fopen("/tmp/fcgi.out", "a");
+  sighandler = signal(SIGSEGV, godown);
 
   while (FCGX_Accept(&in, &out, &err, &envp) >= 0) 
   {

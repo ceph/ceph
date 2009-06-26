@@ -24,24 +24,39 @@ struct S3ObjEnt {
   time_t mtime;
 };
 
-int list_buckets_init(std::string& id, S3AccessHandle *handle);
-int list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle);
+class S3Access {
+public:
+#if 0
+  S3Access();
+  virtual ~S3Access();
+#endif
+  virtual int list_buckets_init(std::string& id, S3AccessHandle *handle) = 0;
+  virtual int list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle) = 0;
 
-int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& marker, std::vector<S3ObjEnt>& result);
+  virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& marker, std::vector<S3ObjEnt>& result) = 0;
 
-int create_bucket(std::string& id, std::string& bucket);
-int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size, std::string& md5);
+  virtual int create_bucket(std::string& id, std::string& bucket) = 0;
+  virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size, std::string& md5) = 0;
 
-int delete_bucket(std::string& id, std::string& bucket);
-int delete_obj(std::string& id, std::string& bucket, std::string& obj);
+  virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
+  virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj) = 0;
 
-int get_obj(std::string& bucket, std::string& obj, 
+  virtual int get_attr(const char *name, int fd, char **attr) = 0;
+  virtual int get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
             const char *if_nomatch,
             bool get_data,
-            struct s3_err *err);
+            struct s3_err *err) = 0;
+
+  static S3Access *init_storage_provider(const char *type);
+  static S3Access *store;
+};
+
+#define s3store S3Access::store
+
+
 
 #endif

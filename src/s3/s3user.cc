@@ -19,7 +19,7 @@ int s3_get_user_info(string user_id, S3UserInfo& info)
   char *data;
   struct s3_err err;
 
-  ret = get_obj(ui_bucket, user_id, &data, 0, -1, NULL, NULL, NULL, NULL, true, &err);
+  ret = s3store->get_obj(ui_bucket, user_id, &data, 0, -1, NULL, NULL, NULL, NULL, true, &err);
   if (ret < 0) {
     return ret;
   }
@@ -38,12 +38,12 @@ int s3_store_user_info(S3UserInfo& info)
   string md5;
   int ret;
 
-  ret = put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), md5);
+  ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), md5);
 
   if (ret == -ENOENT) {
-    ret = create_bucket(info.user_id /* FIXME currently means nothing */, ui_bucket);
+    ret = s3store->create_bucket(info.user_id /* FIXME currently means nothing */, ui_bucket);
     if (ret >= 0)
-      ret = put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), md5);
+      ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), md5);
   }
 
   return ret;

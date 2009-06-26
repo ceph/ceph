@@ -11,6 +11,7 @@
 #include <sys/xattr.h>
 
 #include "s3access.h"
+#include "s3fs.h"
 
 #include <string>
 #include <iostream>
@@ -25,7 +26,7 @@ struct s3fs_state {
 
 #define DIR_NAME "/tmp/s3"
 
-int list_buckets_init(string& id, S3AccessHandle *handle)
+int S3FS::list_buckets_init(string& id, S3AccessHandle *handle)
 {
   DIR *dir = opendir(DIR_NAME);
   struct s3fs_state *state;
@@ -44,7 +45,7 @@ int list_buckets_init(string& id, S3AccessHandle *handle)
   return 0;
 }
 
-int list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
+int S3FS::list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
 {
   struct s3fs_state *state;
   struct dirent *dirent;
@@ -81,7 +82,7 @@ int list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
   }
 }
 
-int list_objects(string& id, string& bucket, int max, string& prefix, string& marker, vector<S3ObjEnt>& result)
+int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, string& marker, vector<S3ObjEnt>& result)
 {
   map<string, bool> dir_map;
   char path[BUF_SIZE];
@@ -139,7 +140,7 @@ int list_objects(string& id, string& bucket, int max, string& prefix, string& ma
 }
 
 
-int create_bucket(std::string& id, std::string& bucket)
+int S3FS::create_bucket(std::string& id, std::string& bucket)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -152,7 +153,7 @@ int create_bucket(std::string& id, std::string& bucket)
 }
 
 
-int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size, string& md5)
+int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size, string& md5)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -189,7 +190,7 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
 }
 
 
-int delete_bucket(std::string& id, std::string& bucket)
+int S3FS::delete_bucket(std::string& id, std::string& bucket)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -202,7 +203,7 @@ int delete_bucket(std::string& id, std::string& bucket)
 }
 
 
-int delete_obj(std::string& id, std::string& bucket, std::string& obj)
+int S3FS::delete_obj(std::string& id, std::string& bucket, std::string& obj)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -214,18 +215,18 @@ int delete_obj(std::string& id, std::string& bucket, std::string& obj)
   return 0;
 }
 
-int get_etag(int fd, char **etag)
+int S3FS::get_attr(const char *name, int fd, char **attr)
 {
-  char *etag_buf;
+  char *attr_buf;
 #define ETAG_LEN 32
   size_t len = ETAG_LEN;
   while (1) {  
-    etag_buf = (char *)malloc(len);
-    ssize_t etag_len = fgetxattr(fd, "user.etag", etag_buf, len);
-    if (etag_len  > 0)
+    attr_buf = (char *)malloc(len);
+    ssize_t attr_len = fgetxattr(fd, name, attr_buf, len);
+    if (attr_len  > 0)
       break;
 
-    free(etag_buf);
+    free(attr_buf);
     switch (errno) {
     case ERANGE:
       break;
@@ -234,12 +235,12 @@ int get_etag(int fd, char **etag)
     }
     len *= 2;
   }
-  *etag = etag_buf;
+  *attr = attr_buf;
 
   return 0;
 }
 
-int get_obj(std::string& bucket, std::string& obj, 
+int S3FS::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
@@ -290,7 +291,7 @@ int get_obj(std::string& bucket, std::string& obj,
 
   if (if_match || if_nomatch) {
     char *etag;
-    r = get_etag(fd, &etag);
+    r = get_attr("user.etag", fd, &etag);
     if (r < 0)
       goto done;
 
