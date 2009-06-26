@@ -101,6 +101,7 @@ class Dentry : public LRUObject {
   int     ref;                       // 1 if there's a dir beneath me.
   int lease_mds;
   utime_t lease_ttl;
+  __u64 lease_gen;
   ceph_seq_t lease_seq;
   int cap_shared_gen;
   
@@ -113,7 +114,7 @@ class Dentry : public LRUObject {
     //cout << "dentry.put on " << this << " " << name << " now " << ref << std::endl;
   }
   
-  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_seq(0), cap_shared_gen(0) { }
+  Dentry() : dir(0), inode(0), ref(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
 };
 
 class Dir {

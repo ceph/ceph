@@ -503,6 +503,7 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
       dn->lease_ttl = dttl;
       dn->lease_mds = mds;
       dn->lease_seq = dlease->seq;
+      dn->lease_gen = mds_sessions[mds].cap_gen;
     }
   }
   dn->cap_shared_gen = dir->parent_inode->shared_gen;
@@ -2565,11 +2566,21 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
-    // is lease valid?
-    if ((dn->lease_mds >= 0 && 
-	 dn->lease_ttl > g_clock.now()) ||
-	((dir->caps_issued() & CEPH_CAP_FILE_SHARED) &&
-	 dn->cap_shared_gen == dir->shared_gen)) {
+    // is dn lease valid?
+    utime_t now = g_clock.now();
+    if (dn->lease_mds >= 0 && 
+	dn->lease_ttl > now &&
+	mds_sessions.count(dn->lease_mds)) {
+      MDSSession &s = mds_sessions[dn->lease_mds];
+      if (s.cap_ttl > now &&
+	  s.cap_gen == dn->lease_gen) {
+	*target = dn->inode;
+	goto done;
+      }
+    }
+    // dir lease?
+    if ((dir->caps_issued() & CEPH_CAP_FILE_SHARED) &&
+	dn->cap_shared_gen == dir->shared_gen) {
       *target = dn->inode;
       goto done;
     }
