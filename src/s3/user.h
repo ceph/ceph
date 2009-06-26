@@ -31,6 +31,12 @@ struct S3UserInfo
     ::decode(secret_key, bl);
     ::decode(display_name, bl);
   }
+
+  void clear() {
+    user_id.clear();
+    secret_key.clear();
+    display_name.clear();
+  }
 };
 WRITE_CLASS_ENCODER(S3UserInfo)
 

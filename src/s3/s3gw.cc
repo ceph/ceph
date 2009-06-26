@@ -16,6 +16,7 @@
 
 #include "s3access.h"
 #include "s3acl.h"
+#include "user.h"
 
 #include <map>
 #include <string>
@@ -156,6 +157,8 @@ struct req_state {
    string object_str;
 
    map<string, string> x_amz_map;
+
+   S3UserInfo user; 
 };
 
 void init_entities_from_header(struct req_state *s)
@@ -383,43 +386,6 @@ static void calc_hmac_sha1(const char *key, int key_len,
   buf_to_hex(result, *len, hex_str);
 
   cerr << "hmac=" << hex_str << std::endl;
-}
-
-static bool verify_signature(struct req_state *s)
-{
-  const char *http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->envp);
-  if (strncmp(http_auth, "AWS ", 4))
-    return false;
-  string auth_str(http_auth);
-  int pos = auth_str.find(':');
-  if (pos < 0)
-    return false;
-
-  string auth_id = auth_str.substr(0, pos);
-  string auth_sign = auth_str.substr(pos + 1);
-   
-  string auth_hdr;
-  get_auth_header(s, auth_hdr);
-  cerr << "auth_hdr:" << std::endl << auth_hdr << std::endl;
-
-  const char *key = "IWRWXewYr96vEWCm7maLQPnsz/vSvylgZR6keY6J"; /* bogus key, don't worry, anyway FIXME */
-  int key_len = strlen(key);
-
-  char hmac_sha1[EVP_MAX_MD_SIZE];
-  int len;
-  calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len);
-
-  char b64[64]; /* 64 is really enough */
-  int ret = encode_base64(hmac_sha1, len, b64, sizeof(b64));
-  if (ret < 0) {
-    cerr << "encode_base64 failed" << std::endl;
-    return false;
-  }
-
-  cerr << "b64=" << b64 << std::endl;
-  cerr << "auth_sign=" << b64 << std::endl;
-  cerr << "compare=" << auth_sign.compare(b64) << std::endl;
-  return (auth_sign.compare(b64) == 0);
 }
 
 static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *in, FCGX_Stream *out)
@@ -676,6 +642,54 @@ int parse_time(const char *time_str, time_t *time)
   *time = mktime(&tm);
 
   return 0;
+}
+
+static bool verify_signature(struct req_state *s)
+{
+  const char *http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->envp);
+  if (strncmp(http_auth, "AWS ", 4))
+    return false;
+  string auth_str(http_auth + 4);
+  int pos = auth_str.find(':');
+  if (pos < 0)
+    return false;
+
+  string auth_id = auth_str.substr(0, pos);
+  string auth_sign = auth_str.substr(pos + 1);
+
+  /* first get the user info */
+  if (s3_get_user_info(auth_id, s->user) < 0) {
+    cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
+    dump_errno(s, -EPERM);
+    end_header(s);
+    dump_start_xml(s);
+    return false;
+  }
+
+  /* now verify signature */
+   
+  string auth_hdr;
+  get_auth_header(s, auth_hdr);
+  cerr << "auth_hdr:" << std::endl << auth_hdr << std::endl;
+
+  const char *key = s->user.secret_key.c_str();
+  int key_len = strlen(key);
+
+  char hmac_sha1[EVP_MAX_MD_SIZE];
+  int len;
+  calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len);
+
+  char b64[64]; /* 64 is really enough */
+  int ret = encode_base64(hmac_sha1, len, b64, sizeof(b64));
+  if (ret < 0) {
+    cerr << "encode_base64 failed" << std::endl;
+    return false;
+  }
+
+  cerr << "b64=" << b64 << std::endl;
+  cerr << "auth_sign=" << b64 << std::endl;
+  cerr << "compare=" << auth_sign.compare(b64) << std::endl;
+  return (auth_sign.compare(b64) == 0);
 }
 
 static void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
@@ -954,8 +968,7 @@ int main(void)
     bool ret = verify_signature(&s);
     if (!ret) {
       cerr << "signature DOESN'T match" << std::endl;
-    } else {
-      cerr << "signature ok" << std::endl;
+      continue;
     }
 
     if (!s.method)
