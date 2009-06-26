@@ -45,6 +45,7 @@ void	*valloc(size_t);
 #include <iomanip>
 #include <list>
 #include <string>
+#include <exception>
 
 using std::istream;
 using std::string;
@@ -57,8 +58,26 @@ using std::string;
 extern atomic_t buffer_total_alloc;
 
 class buffer {
+  /*
+   * exceptions
+   */
+
+public:
+  struct error : public std::exception{
+    const char *what() {
+      return "buffer::exception";
+    }
+  };
+  struct bad_alloc : public error {
+    const char *what() { return "buffer::bad_alloc"; }
+  };
+  struct end_of_buffer : public error {
+    const char *what() { return "buffer::end_of_buffer"; }
+  };
+
+
 private:
-  
+ 
   /* hack for memory utilization debugging. */
   static void inc_total_alloc(unsigned len) {
     buffer_total_alloc.add(len);
@@ -66,6 +85,8 @@ private:
   static void dec_total_alloc(unsigned len) {
     buffer_total_alloc.sub(len);
   }
+
+ 
 
   /*
    * an abstract raw buffer.  with a reference count.
@@ -162,7 +183,8 @@ private:
   public:
     raw_mmap_pages(unsigned l) : raw(l) {
       data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
-      assert(data);
+      if (!data)
+	throw new bad_alloc;
       inc_total_alloc(len);
     }
     ~raw_mmap_pages() {
@@ -182,9 +204,11 @@ private:
 #else
       data = 0;
       int r = ::posix_memalign((void**)(void*)&data, PAGE_SIZE, len);
-      assert(r == 0);
+      if (r)
+	throw new bad_alloc;
 #endif /* DARWIN */
-      assert(data);
+      if (!data)
+	throw new bad_alloc;
       inc_total_alloc(len);
     }
     ~raw_posix_aligned() {
@@ -387,8 +411,9 @@ public:
 
     void copy_out(unsigned o, unsigned l, char *dest) const {
       assert(_raw);
-      assert(o >= 0 && o <= _len);
-      assert(l >= 0 && o+l <= _len);
+      if (!((o >= 0 && o <= _len) &&
+	    (l >= 0 && o+l <= _len)))
+	throw new end_of_buffer;
       memcpy(dest, c_str()+o, l);
     }
 
@@ -506,7 +531,8 @@ public:
 	//cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
 	p_off += o;
 	while (p_off > 0) {
-	  assert(p != ls->end());
+	  if (p == ls->end())
+	    throw new end_of_buffer;
 	  if (p_off >= p->length()) {
 	    // skip this buffer
 	    p_off -= p->length();
@@ -527,11 +553,13 @@ public:
       }
 
       char operator*() {
-	assert(p != ls->end());
+	if (p == ls->end())
+	  throw new end_of_buffer;
 	return (*p)[p_off];
       }
       iterator& operator++() {
-	assert(p != ls->end());
+	if (p == ls->end())
+	  throw new end_of_buffer;
 	advance(1);
 	return *this;
       }
@@ -542,7 +570,8 @@ public:
       void copy(unsigned len, char *dest) {
 	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls->end());
+	  if (p == ls->end())
+	    throw new end_of_buffer;
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -557,7 +586,8 @@ public:
       void copy(unsigned len, list &dest) {
 	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls->end());
+	  if (p == ls->end())
+	    throw new end_of_buffer;
 	  
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -571,7 +601,8 @@ public:
       void copy(unsigned len, std::string &dest) {
 	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls->end());
+	  if (p == ls->end())
+	    throw new end_of_buffer;
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -588,7 +619,8 @@ public:
 	// copy
 	if (p == ls->end()) seek(off);
 	while (len > 0) {
-	  assert(p != ls->end());
+	  if (p == ls->end())
+	    throw new end_of_buffer;
 
 	  unsigned howmuch = p->length() - p_off;
 	  if (len < howmuch) howmuch = len;
@@ -784,7 +816,8 @@ public:
 
     void copy(unsigned off, unsigned len, char *dest) const {
       assert(off >= 0);
-      assert(off + len <= length());
+      if (off + len > length())
+	throw new end_of_buffer;
       if (last_p.get_off() != off) 
 	last_p.seek(off);
       last_p.copy(len, dest);
@@ -792,7 +825,8 @@ public:
 
     void copy(unsigned off, unsigned len, list &dest) const {
       assert(off >= 0);
-      assert(off + len <= length());
+      if (off + len > length())
+	throw new end_of_buffer;
       if (last_p.get_off() != off) 
 	last_p.seek(off);
       last_p.copy(len, dest);
@@ -806,8 +840,9 @@ public:
     
     void copy_in(unsigned off, unsigned len, const char *src) {
       assert(off >= 0);
-      assert(off + len <= length());
-
+      if (off + len > length())
+	throw new end_of_buffer;
+      
       if (last_p.get_off() != off) 
 	last_p.seek(off);
       last_p.copy_in(len, src);
@@ -902,7 +937,9 @@ public:
      * get a char
      */
     const char& operator[](unsigned n) {
-      assert(n < _len);
+      if (n >= _len)
+	throw new end_of_buffer;
+
       for (std::list<ptr>::iterator p = _buffers.begin();
 	   p != _buffers.end();
 	   p++) {
@@ -928,7 +965,9 @@ public:
     }
 
     void substr_of(const list& other, unsigned off, unsigned len) {
-      assert(off + len <= other.length());
+      if (off + len > other.length())
+	throw new end_of_buffer;
+
       clear();
       
       // skip off
@@ -966,7 +1005,9 @@ public:
 
     // funky modifer
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */) {    // fixme?
-      assert(off < length()); 
+      if (off >= length())
+	throw new end_of_buffer;
+
       assert(len > 0);
       //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
@@ -1114,6 +1155,11 @@ inline std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
   }
   out << std::endl << ")";
   return out;
+}
+
+inline ostream& operator<<(ostream& out, buffer::error& e)
+{
+  return out << e.what();
 }
 
 #endif

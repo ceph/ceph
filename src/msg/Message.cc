@@ -470,7 +470,14 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   m->set_payload(front);
   m->set_data(data);
 
-  m->decode_payload();
+  try {
+    m->decode_payload();
+  }
+  catch (buffer::error *e) {
+    dout(0) << "failed to decode message of type " << type << ": " << *e << dendl;
+    delete e;
+    return 0;
+  }
 
   // done!
   return m;
