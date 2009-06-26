@@ -2431,7 +2431,11 @@ void PG::scrub()
   }
   */
 
-  ss << info.pgid << " " << mode << " " << errors << " errors";
+  ss << info.pgid << " " << mode << " ";
+  if (errors)
+    ss << errors << " errors";
+  else
+    ss << "ok";
   if (repair)
     ss << ", " << fixed << " fixed";
   osd->get_logclient()->log(errors ? LOG_ERROR:LOG_INFO, ss);
