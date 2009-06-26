@@ -335,6 +335,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_ns, 0, OPT_INT, 0),
 	OPTION(debug_ms, 0, OPT_INT, 0),
 	OPTION(debug_mon, 0, OPT_INT, 1),
+	OPTION(debug_monc, 0, OPT_INT, 1),
 	OPTION(debug_paxos, 0, OPT_INT, 0),
 	OPTION(debug_tp, 0, OPT_INT, 0),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
