@@ -624,8 +624,9 @@ struct cap_reconnect_t {
   ceph_mds_cap_reconnect capinfo;
 
   cap_reconnect_t() {}
-  cap_reconnect_t(inodeno_t pino, const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at, inodeno_t sr) : 
+  cap_reconnect_t(__u64 cap_id, inodeno_t pino, const string& p, int w, int i, uint64_t sz, utime_t mt, utime_t at, inodeno_t sr) : 
     path(p) {
+    capinfo.cap_id = cap_id;
     capinfo.wanted = w;
     capinfo.issued = i;
     capinfo.size = sz;
