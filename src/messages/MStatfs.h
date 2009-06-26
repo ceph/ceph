@@ -30,7 +30,7 @@ public:
 
   const char *get_type_name() { return "statfs"; }
   void print(ostream& out) {
-    out << "statfs(" << tid << "v " << version << ")";
+    out << "statfs(" << tid << " v" << version << ")";
   }
 
   void encode_payload() {

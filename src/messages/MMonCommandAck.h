@@ -30,7 +30,7 @@ class MMonCommandAck : public PaxosServiceMessage {
   
   const char *get_type_name() { return "mon_command"; }
   void print(ostream& o) {
-    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << "v " << version << ")";
+    o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }
   
   void encode_payload() {

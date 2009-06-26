@@ -51,7 +51,7 @@ class MMDSBeacon : public PaxosServiceMessage {
 
   void print(ostream& out) {
     out << "mdsbeacon(" << name << " " << ceph_mds_state_name(state) 
-	<< " seq " << seq << "v " << version << ")";
+	<< " seq " << seq << " v" << version << ")";
   }
 
   void encode_payload() {

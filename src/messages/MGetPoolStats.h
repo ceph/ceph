@@ -31,7 +31,7 @@ public:
 
   const char *get_type_name() { return "getpoolstats"; }
   void print(ostream& out) {
-    out << "getpoolstats(" << tid << " " << pools << "v " << version << ")";
+    out << "getpoolstats(" << tid << " " << pools << " v" << version << ")";
   }
 
   void encode_payload() {

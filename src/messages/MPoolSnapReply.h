@@ -31,7 +31,7 @@ public:
   const char *get_type_name() { return "poolsnapreply"; }
 
   void print(ostream& out) {
-    out << "poolsnapreply(" << tid << "v " << version << ")";
+    out << "poolsnapreply(" << tid << " v" << version << ")";
   }
 
   void encode_payload() {

@@ -49,7 +49,7 @@ class MOSDFailure : public PaxosServiceMessage {
 
   const char *get_type_name() { return "osd_failure"; }
   void print(ostream& out) {
-    out << "osd_failure(" << failed << " e" << epoch << "v " << version << ")";
+    out << "osd_failure(" << failed << " e" << epoch << " v" << version << ")";
   }
 };
 

@@ -32,7 +32,7 @@ public:
 
   const char *get_type_name() { return "poolsnap"; }
   void print(ostream& out) {
-    out << "poolsnap(" << tid << " " << name << "v " << version << ")";
+    out << "poolsnap(" << tid << " " << name << " v" << version << ")";
   }
 
   void encode_payload() {

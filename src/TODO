@@ -30,7 +30,6 @@ v0.10
 /- fix rados snaps vs 'ls'
 /- improved monitor read model
 - osd bugfixes
-- make monclient less sucky on startup
 
 bugs
 

@@ -29,7 +29,7 @@ struct MRemoveSnaps : public PaxosServiceMessage {
 
   const char *get_type_name() { return "remove_snaps"; }
   void print(ostream& out) {
-    out << "remove_snaps(" << snaps << "v " << version << ")";
+    out << "remove_snaps(" << snaps << " v" << version << ")";
   }
 
   void encode_payload() {

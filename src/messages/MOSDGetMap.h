@@ -33,8 +33,7 @@ class MOSDGetMap : public PaxosServiceMessage {
 
   const char *get_type_name() { return "get_osd_map"; }
   void print(ostream& out) {
-    out << "get_osd_map(start " << start;
-    out << "v " << version << ")";
+    out << "get_osd_map(start " << start << ")";
   }
   
   void encode_payload() {

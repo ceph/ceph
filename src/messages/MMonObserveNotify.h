@@ -35,7 +35,7 @@ class MMonObserveNotify : public PaxosServiceMessage {
     o << "mon_observe_notify(v" << ver << " " << bl.length() << " bytes";
     if (is_latest)
       o << " latest";
-    o << "v " << version << ")";
+    o << " v" << version << ")";
   }
   
   void encode_payload() {

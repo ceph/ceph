@@ -38,7 +38,7 @@ class MOSDAlive : public PaxosServiceMessage {
 
   const char *get_type_name() { return "osd_alive"; }
   void print(ostream &out) {
-    out << "osd_alive(" << map_epoch << "v " << version << ")";
+    out << "osd_alive(" << map_epoch << " v" << version << ")";
   }
   
 };
