@@ -271,3 +271,13 @@ void MonClient::handle_unmount(Message* m)
 }
 
 
+// ---------
+
+void MonClient::send_mon_message(Message *m, bool newmon)
+{
+  Mutex::Locker l(monc_lock);
+  int mon = monmap.pick_mon(newmon);
+  messenger->send_message(m, monmap.mon_inst[mon]);
+}
+
+

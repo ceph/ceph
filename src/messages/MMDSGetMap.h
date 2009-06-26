@@ -24,7 +24,7 @@ class MMDSGetMap : public PaxosServiceMessage {
   ceph_fsid_t fsid;
 
   MMDSGetMap() : PaxosServiceMessage(CEPH_MSG_MDS_GETMAP, 0) {}
-  MMDSGetMap(ceph_fsid_t &f, epoch_t have=0) : 
+  MMDSGetMap(const ceph_fsid_t &f, epoch_t have=0) : 
     PaxosServiceMessage(CEPH_MSG_MDS_GETMAP, have), 
     fsid(f) { }
 

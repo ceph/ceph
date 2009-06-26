@@ -81,6 +81,10 @@ private:
 
   void send_mon_message(Message *m, bool new_mon=false);
 
+  const ceph_fsid_t& get_fsid() {
+    return monmap.fsid;
+  }
+
   entity_addr_t get_mon_addr(unsigned i) {
     Mutex::Locker l(monc_lock);
     if (i < monmap.size())
