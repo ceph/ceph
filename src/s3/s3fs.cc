@@ -153,7 +153,8 @@ int S3FS::create_bucket(std::string& id, std::string& bucket)
 }
 
 
-int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size, string& md5)
+int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
+                  std::vector<std::pair<std::string, bufferlist> >& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -172,12 +173,19 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
     return r;
   }
 
-  if (md5.size()) {
-    r = fsetxattr(fd, "user.etag", md5.c_str(), md5.size(), 0);
-    if (r < 0) {
-       r = -errno;
-       close(fd);
-       return r;
+  vector<pair<string, bufferlist> >::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    pair<string, bufferlist>& attr = *iter;
+    string& name = attr.first;
+    bufferlist& bl = attr.second;
+    
+    if (bl.length()) {
+      r = fsetxattr(fd, name.c_str(), bl.c_str(), bl.length(), 0);
+      if (r < 0) {
+        r = -errno;
+        close(fd);
+        return r;
+      }
     }
   }
 

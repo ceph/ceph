@@ -753,6 +753,19 @@ static void get_acls(struct req_state *s)
   FCGX_PutStr(str.c_str(), str.size(), s->out); 
 }
 
+static void set_acls(struct req_state *s)
+{
+  S3AccessControlPolicy def;
+  def.create_default(s->user.user_id, s->user.display_name);
+
+  stringstream ss;
+  def.to_xml(ss);
+  string str = ss.str(); 
+  end_header(s, "application/xml");
+  dump_start_xml(s);
+  FCGX_PutStr(str.c_str(), str.size(), s->out); 
+}
+
 static void do_retrieve_objects(struct req_state *s, bool get_data)
 {
   string prefix, marker, max_keys, delimiter;
@@ -872,9 +885,18 @@ static void do_create_object(struct req_state *s)
        r = -EINVAL;
        goto done;
     }
+    S3AccessControlPolicy def;
+    def.create_default(s->user.user_id, s->user.display_name);
+    bufferlist aclbl;
+    def.encode(aclbl);
 
     string md5_str(calc_md5);
-    r = s3store->put_obj(id, s->bucket_str, s->object_str, data, actual, md5_str);
+    vector<pair<string, bufferlist> > attrs;
+    bufferlist bl;
+    bl.append(md5_str.c_str(), md5_str.size());
+    attrs.push_back(pair<string, bufferlist>("user.etag", bl));
+    attrs.push_back(pair<string, bufferlist>("user.s3acl", aclbl));
+    r = s3store->put_obj(id, s->bucket_str, s->object_str, data, actual, attrs);
   }
 done:
   free(data);
