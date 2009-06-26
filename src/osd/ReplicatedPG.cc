@@ -880,10 +880,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); p++) {
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op; 
+
+    dout(10) << "do_osd_op  " << osd_op << dendl;
+
+    // modify?
     bool is_modify;
     string cname, mname;
     bufferlist::iterator bp = osd_op.data.begin();
-
     switch (op.op) {
     case CEPH_OSD_OP_CALL:
       bp.copy(op.class_len, cname);
@@ -896,6 +899,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       break;
     }
 
+    // make writeable (i.e., clone if necessary)
+    if (is_modify)
+      make_writeable(ctx);
+
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
 	ctx->obs->exists &&
@@ -904,12 +911,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	       << " -> TRUNCATE " << op.offset << " (old size is " << oi.size << ")" << dendl;
       op.op = CEPH_OSD_OP_TRUNCATE;
     }
-
-    dout(10) << "do_osd_op  " << osd_op << dendl;
-
-    // make writeable (i.e., clone if necessary)
-    if (is_modify)
-      make_writeable(ctx);
 
     switch (op.op) {
       
@@ -1651,6 +1652,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ssc->snapset.seq = snapc.seq;
   ssc->snapset.snaps = snapc.snaps;
+  dout(20) << "make_writeable " << soid << " done" << dendl;
 }
 
 
