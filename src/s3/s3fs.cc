@@ -287,27 +287,30 @@ int get_obj(std::string& bucket, std::string& obj,
       goto done;
     }
   }
-  char *etag;
-  r = get_etag(fd, &etag);
-  if (r < 0)
-    goto done;
 
-  r = -ECANCELED;
-  if (if_match) {
-    cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
-    if (strcmp(if_match, etag)) {
-      err->num = "412";
-      err->code = "PreconditionFailed";
+  if (if_match || if_nomatch) {
+    char *etag;
+    r = get_etag(fd, &etag);
+    if (r < 0)
       goto done;
+
+    r = -ECANCELED;
+    if (if_match) {
+      cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
+      if (strcmp(if_match, etag)) {
+        err->num = "412";
+        err->code = "PreconditionFailed";
+        goto done;
+      }
     }
-  }
 
-  if (if_nomatch) {
-    cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
-    if (strcmp(if_nomatch, etag) == 0) {
-      err->num = "412";
-      err->code = "PreconditionFailed";
-      goto done;
+    if (if_nomatch) {
+      cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
+      if (strcmp(if_nomatch, etag) == 0) {
+        err->num = "412";
+        err->code = "PreconditionFailed";
+        goto done;
+      }
     }
   }
 
