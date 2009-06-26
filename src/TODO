@@ -161,6 +161,9 @@ mds
 - dir fragment
   - maybe just take dftlock for now, to keep it simple.
 - dir merge
+- handle session close/timeout with active requests
+  - attach requests to parent session
+  - ref count MDRequest
 - snap
   - hard link backpointers
     - anchor source dir

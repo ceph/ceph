@@ -251,6 +251,7 @@ enum {
  */
 struct MDRequest : public Mutation {
   Session *session;
+  xlist<MDRequest*>::item session_request_item;
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -323,7 +324,8 @@ struct MDRequest : public Mutation {
 
   // ---------------------------------------------------
   MDRequest() : 
-    session(0), client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    session(0), session_request_item(this),
+    client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
@@ -332,7 +334,8 @@ struct MDRequest : public Mutation {
   }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
-    session(0), client_request(req), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    session(0), session_request_item(this),
+    client_request(req), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
@@ -341,7 +344,8 @@ struct MDRequest : public Mutation {
   }
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
-    session(0), client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
+    session(0), session_request_item(this),
+    client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     slave_request(0),
     internal_op(-1),
@@ -546,6 +550,8 @@ public:
   void request_forget_foreign_locks(MDRequest *mdr);
   void request_drop_locks(MDRequest *r);
   void request_cleanup(MDRequest *r);
+  
+  void request_kill(MDRequest *r);  // called when session closes
 
   // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);

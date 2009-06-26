@@ -261,6 +261,11 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, r->mask, mds->locker);
     }
+
+    // kill pending requests
+    while (!session->requests.empty()) {
+      mdcache->request_kill(session->requests.front());
+    }
     
     if (piv) {
       mds->inotable->apply_release_ids(inos);
@@ -919,8 +924,10 @@ void Server::handle_client_request(MClientRequest *req)
 
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
-  if (!mdr) return;
+  if (!mdr) 
+    return;
   mdr->session = session;
+  session->requests.push_back(&mdr->session_request_item);
 
   dispatch_client_request(mdr);
   return;

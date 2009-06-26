@@ -27,6 +27,7 @@ using __gnu_cxx::hash_map;
 #include "mdstypes.h"
 
 class CInode;
+class MDRequest;
 
 #include "Capability.h"
 
@@ -53,6 +54,8 @@ private:
 public:
   entity_inst_t inst;
   xlist<Session*>::item session_list_item;
+
+  xlist<MDRequest*> requests;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.

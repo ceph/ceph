@@ -6300,16 +6300,24 @@ void MDCache::request_cleanup(MDRequest *mdr)
   // drop cache pins
   mdr->drop_pins();
 
+  // remove from session
+  mdr->session_request_item.remove_myself();
+
   // remove from map
   active_requests.erase(mdr->reqid);
   delete mdr;
-
 
   if (mds->logger)
     log_stat();
 }
 
+void MDCache::request_kill(MDRequest *mdr)
+{
+  dout(10) << "request_kill " << *mdr << dendl;
 
+  // FIXME this needs some MDRequest ref counting to work correctly.
+  request_cleanup(mdr);
+}
 
 
 // --------------------------------------------------------------------
