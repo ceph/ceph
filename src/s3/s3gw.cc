@@ -8,7 +8,12 @@
 #include <errno.h>
 #include <signal.h>
 
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 #include <openssl/md5.h>
+#include <openssl/bio.h>
+#include <openssl/evp.h>
+#include <openssl/buffer.h>
 
 #include "fcgiapp.h"
 
@@ -51,23 +56,26 @@ class NameVal
 int NameVal::parse()
 {
   int delim_pos = str.find('=');
+  int ret = 0;
 
   if (delim_pos < 0) {
     name = str;
     val = "";
+    ret = 1;
   } else {
     name = str.substr(0, delim_pos);
     val = str.substr(delim_pos + 1);
   }
 
   cout << "parsed: name=" << name << " val=" << val << std::endl;
-  return 0; 
+  return ret; 
 }
 
 class XMLArgs
 {
   string str, empty_str;
   map<string, string> val_map;
+  string sub_resource;
  public:
    XMLArgs() {}
    XMLArgs(string s) : str(s) {}
@@ -79,6 +87,7 @@ class XMLArgs
      map<string, string>::iterator iter = val_map.find(name);
      return (iter != val_map.end());
    }
+   string& get_sub_resource() { return sub_resource; }
 };
 
 int XMLArgs::parse()
@@ -94,8 +103,13 @@ int XMLArgs::parse()
        fpos = str.size(); 
     }
     NameVal nv(str.substr(pos, fpos - pos));
-    if (nv.parse() >= 0) {
+    int ret = nv.parse();
+    if (ret >= 0) {
       val_map[nv.get_name()] = nv.get_val();
+
+      if (ret > 0) { /* this is a sub-resource */
+        sub_resource = nv.get_name();
+      }
     }
 
     pos = fpos + 1;  
@@ -138,8 +152,12 @@ struct req_state {
    const char *bucket;
    const char *object;
 
+   const char *host_bucket;
+
    string bucket_str;
    string object_str;
+
+   map<string, string> x_amz_map;
 };
 
 void init_entities_from_header(struct req_state *s)
@@ -157,6 +175,9 @@ void init_entities_from_header(struct req_state *s)
   if (pos > 0) {
     s->bucket_str = h.substr(0, pos-1);
     s->bucket = s->bucket_str.c_str();
+    s->host_bucket = s->bucket;
+  } else {
+    s->host_bucket = NULL;
   }
 
   const char *req_name = s->path_name;
@@ -197,14 +218,236 @@ void init_entities_from_header(struct req_state *s)
     return;
   }
 
-  if (pos < 0)
-    return;
+  if (pos >= 0) {
+    s->object_str = req.substr(pos+1);
 
-  s->object_str = req.substr(pos+1);
-
-  if (s->object_str.size() > 0) {
-    s->object = s->object_str.c_str();
+    if (s->object_str.size() > 0) {
+      s->object = s->object_str.c_str();
+    }
   }
+}
+
+static void line_unfold(const char *line, string& sdest)
+{
+  char dest[strlen(line) + 1];
+  const char *p = line;
+  char *d = dest;
+
+  while (isspace(*p))
+    ++p;
+
+  bool last_space = false;
+
+  while (*p) {
+    switch (*p) {
+    case '\n':
+    case '\r':
+      *d = ' ';
+      if (!last_space)
+        ++d;
+      last_space = true;
+      break;
+    default:
+      *d = *p;
+      ++d;
+      last_space = false;
+      break;
+    }
+    ++p;
+  }
+  *d = 0;
+  sdest = dest;
+}
+
+static void init_auth_info(struct req_state *s)
+{
+  const char *p;
+
+  s->x_amz_map.clear();
+
+  for (int i=0; (p = s->envp[i]); ++i) {
+#define HTTP_X_AMZ "HTTP_X_AMZ"
+    if (strncmp(p, HTTP_X_AMZ, sizeof(HTTP_X_AMZ) - 1) == 0) {
+      cerr << "amz>> " << p << std::endl;
+      const char *amz = p+5; /* skip the HTTP_ part */
+      const char *eq = strchr(amz, '=');
+      if (!eq) /* shouldn't happen! */
+        continue;
+      int len = eq - amz;
+      char amz_low[len + 1];
+      int j;
+      for (j=0; j<len; j++) {
+        amz_low[j] = tolower(amz[j]);
+        if (amz_low[j] == '_')
+          amz_low[j] = '-';
+      }
+      amz_low[j] = 0;
+      string val;
+      line_unfold(eq + 1, val);
+
+      map<string, string>::iterator iter;
+      iter = s->x_amz_map.find(amz_low);
+      if (iter != s->x_amz_map.end()) {
+        string old = iter->second;
+        int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
+        old = old.substr(0, pos + 1);
+        old.append(",");
+        old.append(val);
+        s->x_amz_map[amz_low] = old;
+      } else {
+        s->x_amz_map[amz_low] = val;
+      }
+    }
+  }
+  map<string, string>::iterator iter;
+  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+    cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
+  }
+  
+}
+
+static void get_canon_amz_hdr(struct req_state *s, string& dest)
+{
+  dest = "";
+  map<string, string>::iterator iter;
+  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+    dest.append(iter->first);
+    dest.append(":");
+    dest.append(iter->second);
+    dest.append("\n");
+  }
+}
+
+static void get_canon_resource(struct req_state *s, string& dest)
+{
+  if (s->host_bucket) {
+    dest = "/";
+    dest.append(s->host_bucket);
+  }
+
+  dest.append(s->path_name);
+
+  string& sub = s->args.get_sub_resource();
+  if (sub.size() > 0) {
+    dest.append("?");
+    dest.append(sub);
+  }
+}
+
+static void get_auth_header(struct req_state *s, string& dest)
+{
+  dest = "";
+  if (s->method)
+    dest = s->method;
+  dest.append("\n");
+  
+  const char *md5 = FCGX_GetParam("HTTP_CONTENT_MD5", s->envp);
+  if (md5)
+    dest.append(md5);
+  dest.append("\n");
+
+  const char *type = FCGX_GetParam("CONTENT_TYPE", s->envp);
+  if (type)
+    dest.append(type);
+  dest.append("\n");
+
+  const char *date = FCGX_GetParam("HTTP_DATE", s->envp);
+  if (date)
+    dest.append(date);
+  dest.append("\n");
+
+  string canon_amz_hdr;
+  get_canon_amz_hdr(s, canon_amz_hdr);
+  dest.append(canon_amz_hdr);
+
+  string canon_resource;
+  get_canon_resource(s, canon_resource);
+  dest.append(canon_resource);
+}
+
+static int encode_base64(const char *in, int in_len, char *out, int out_len)
+{
+  BIO *bmem, *b64;
+  BUF_MEM *bptr; 
+
+  b64 = BIO_new(BIO_f_base64());
+  bmem = BIO_new(BIO_s_mem());
+  b64 = BIO_push(b64, bmem);
+  BIO_write(b64, in, in_len);
+  if (BIO_flush(b64) < 0) {
+    cerr << "error in BIO_flush" << std::endl;
+    return -1;
+  }
+  BIO_get_mem_ptr(b64, &bptr); 
+
+  int len = BIO_pending(bmem);
+  if (out_len <= len) {
+    cerr << "buffer too small for encode_base64" << std::endl;
+    return -1;
+  }
+  memcpy(out, bptr->data, len);
+  out[len - 1] = '\0';
+
+  BIO_free_all(b64); 
+
+  return 0;
+}
+
+static void buf_to_hex(const unsigned char *buf, int len, char *str)
+{
+  int i;
+  str[0] = '\0';
+  for (i = 0; i < len; i++) {
+    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  }
+}
+
+static void calc_hmac_sha1(const char *key, int key_len,
+                           const char *msg, int msg_len,
+                           char *dest, int *len) /* dest should be large enough to hold result */
+{
+  char hex_str[128];
+  unsigned char *result = HMAC(EVP_sha1(), key, key_len, (const unsigned char *)msg,
+                               msg_len, (unsigned char *)dest, (unsigned int *)len);
+
+  buf_to_hex(result, *len, hex_str);
+
+  cerr << "hmac=" << hex_str << std::endl;
+}
+
+static bool verify_signature(struct req_state *s)
+{
+  const char *http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->envp);
+  if (strncmp(http_auth, "AWS ", 4))
+    return false;
+  string auth_str(http_auth);
+  int pos = auth_str.find(':');
+  if (pos < 0)
+    return false;
+
+  string auth_id = auth_str.substr(0, pos);
+  string auth_sign = auth_str.substr(pos + 1);
+   
+  string auth_hdr;
+  get_auth_header(s, auth_hdr);
+  cerr << "auth_hdr:" << std::endl << auth_hdr << std::endl;
+
+  const char *key = "IWRWXewYr96vEWCm7maLQPnsz/vSvylgZR6keY6J"; /* bogus key, don't worry, anyway FIXME */
+  int key_len = strlen(key);
+
+  char hmac_sha1[EVP_MAX_MD_SIZE];
+  int len;
+  calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1, &len);
+
+  char b64[64]; /* 64 is really enough */
+  int ret = encode_base64(hmac_sha1, len, b64, sizeof(b64));
+  if (ret < 0)
+    return false;
+
+  cerr << "b64=" << b64 << std::endl;
+  cerr << "auth_sign=" << b64 << std::endl;
+  cerr << "compare=" << auth_sign.compare(b64) << std::endl;
+  return (auth_sign.compare(b64) == 0);
 }
 
 static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *in, FCGX_Stream *out)
@@ -228,15 +471,8 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
 
   init_entities_from_header(s);
   cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
-}
 
-static void buf_to_hex(const unsigned char *buf, int len, char *str)
-{
-  int i;
-  str[0] = '\0';
-  for (i = 0; i < len; i++) {
-    sprintf(&str[i*2], "%02x", (int)buf[i]);
-  }
+  init_auth_info(s);
 }
 
 static void dump_status(struct req_state *s, const char *status)
@@ -744,7 +980,12 @@ int main(void)
     init_state(&s, envp, in, out);
     static int i=0;
 
-    fprintf(dbg, "%d %s\n", i++, s.method);
+    bool ret = verify_signature(&s);
+    if (!ret) {
+      cerr << "signature DOESN'T match" << std::endl;
+    } else {
+      cerr << "signature ok" << std::endl;
+    }
 
     if (!s.method)
       continue;
