@@ -143,14 +143,7 @@ osd
 - optimize remove wrt recovery pushes?
 
 userspace client
-- handle session STALE
-- time out caps, wake up waiters on renewal
-  - link caps with mds session
-- fix lease validation to check session ttl
 - clean up client mds session vs mdsmap behavior?
-- clean up on session close
-  - hose all caps
-  - kick any requests
 - stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 

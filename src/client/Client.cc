@@ -889,7 +889,8 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_CLOSE:
     mds_sessions.erase(from);
     mount_cond.Signal();
-    // FIXME: kick requests (hard) so that they are redirected.  or fail.
+    remove_session_caps(from);
+    kick_requests(from, true);
     break;
 
   case CEPH_SESSION_RENEWCAPS:
@@ -900,6 +901,7 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_STALE:
     mds_sessions[from].was_stale = true;
+    renew_caps(from);
     break;
   default:
     assert(0);
@@ -911,7 +913,6 @@ void Client::handle_client_session(MClientSession *m)
 
   delete m;
 }
-
 
 void Client::send_request(MetaRequest *request, int mds)
 {
@@ -926,6 +927,8 @@ void Client::send_request(MetaRequest *request, int mds)
     r->set_retry_attempt(request->retry_attempt);
     r->set_dentry_wanted();
   }
+  else
+    request->retry_attempt++;
   request->request = 0;
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());
@@ -1130,7 +1133,7 @@ void Client::handle_mds_map(MMDSMap* m)
   // kick requests?
   if (frommds >= 0 &&
       mdsmap->get_state(frommds) == MDSMap::STATE_ACTIVE) {
-    kick_requests(frommds);
+    kick_requests(frommds, false);
     //failed_mds.erase(from);
   }
 
@@ -1198,7 +1201,7 @@ void Client::send_reconnect(int mds)
 }
 
 
-void Client::kick_requests(int mds)
+void Client::kick_requests(int mds, bool signal)
 {
   dout(10) << "kick_requests for mds" << mds << dendl;
 
@@ -1206,8 +1209,12 @@ void Client::kick_requests(int mds)
        p != mds_requests.end();
        ++p) 
     if (p->second->mds.count(mds)) {
-      p->second->retry_attempt++;   // inc retry counter
-      send_request(p->second, mds);
+      if (signal) {
+	p->second->caller_cond->Signal();
+      }
+      else {
+	send_request(p->second, mds);
+      }
     }
 }
 
@@ -1792,6 +1799,12 @@ void Client::remove_all_caps(Inode *in)
 {
   while (in->caps.size())
     remove_cap(in, in->caps.begin()->first);
+}
+
+void Client::remove_session_caps(int mds_num) {
+  MDSSession* mds = &mds_sessions[mds_num];
+  while (mds->caps.size())
+    remove_cap((*mds->caps.begin())->inode, mds_num);
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
@@ -2524,11 +2537,11 @@ void Client::renew_caps()
   }
 }
 
-void Client::renew_caps(const int session) {
-  dout(10) << "renew_caps(session number)" << dendl;
-  mds_sessions[session].last_cap_renew_request = g_clock.now();
+void Client::renew_caps(const int mds) {
+  dout(10) << "renew_caps mds" << mds << dendl;
+  mds_sessions[mds].last_cap_renew_request = g_clock.now();
   messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
-			  mdsmap->get_inst(session));
+			  mdsmap->get_inst(mds));
 
 }
 
@@ -5021,7 +5034,7 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
     }
 
     // or requests
-    kick_requests(mds);
+    //kick_requests(mds, false);
   }
   else 
     objecter->ms_handle_remote_reset(addr, last);

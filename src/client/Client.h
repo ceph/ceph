@@ -649,7 +649,7 @@ public:
 			     int use_mds=-1);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
-  void kick_requests(int mds);
+  void kick_requests(int mds, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
 
@@ -865,6 +865,7 @@ protected:
 		      int flags);
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
+  void remove_session_caps(int mds_num);
   void mark_caps_dirty(Inode *in, int caps);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
