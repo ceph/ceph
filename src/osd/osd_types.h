@@ -1000,10 +1000,11 @@ WRITE_CLASS_ENCODER(object_info_t)
 inline ostream& operator<<(ostream& out, const object_info_t& oi) {
   out << oi.soid << "(" << oi.version
       << " " << oi.last_reqid;
-  if (oi.wrlock_by.tid)
+  if (oi.soid.snap == CEPH_NOSNAP)
     out << " wrlock_by=" << oi.wrlock_by;
-  if (oi.soid.snap != CEPH_NOSNAP)
-    out << " " << oi.snaps << ")";
+  else
+    out << " " << oi.snaps;
+  out << ")";
   return out;
 }
 

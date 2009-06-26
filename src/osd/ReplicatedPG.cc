@@ -1703,17 +1703,21 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     bufferlist bv(sizeof(*poi));
     ::encode(*poi, bv);
     ctx->op_t.setattr(info.pgid.to_coll(), soid, OI_ATTR, bv);
-    ctx->op_t.setattr(info.pgid.to_coll(), soid, SS_ATTR, bss);
-    
+
+    dout(10) << " final snapset " << ctx->obs->ssc->snapset
+	     << " in " << soid << dendl;
+    ctx->op_t.setattr(info.pgid.to_coll(), soid, SS_ATTR, bss);   
     if (!head_existed) {
       // if we logically recreated the head, remove old _snapdir object
       sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
       ctx->op_t.remove(info.pgid.to_coll(), snapoid);
+      dout(10) << " removing old " << snapoid << dendl;
     }
-
   } else if (ctx->obs->ssc->snapset.clones.size()) {
     // save snapset on _snap
     sobject_t snapoid(soid.oid, CEPH_SNAPDIR);
+    dout(10) << " final snapset " << ctx->obs->ssc->snapset
+	     << " in " << snapoid << dendl;
     ctx->op_t.touch(info.pgid.to_coll(), snapoid);
     ctx->op_t.setattr(info.pgid.to_coll(), snapoid, SS_ATTR, bss);
   }
@@ -3614,8 +3618,8 @@ int ReplicatedPG::_scrub(ScrubMap& scrubmap, int& errors, int& fixed)
     //assert(data.length() == p->size);
 
     if (soid.snap == CEPH_NOSNAP) {
-      if (snapset.head_exists) {
-	dout(0) << mode << " snapset.head_exists=false, but " << soid << " exists" << dendl;
+      if (!snapset.head_exists) {
+	dout(0) << mode << "  snapset.head_exists=false, but " << soid << " exists" << dendl;
 	errors++;
 	continue;
       }
