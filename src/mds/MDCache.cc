@@ -5857,8 +5857,8 @@ bool MDCache::path_is_mine(filepath& path)
  *
  * @path - path to traverse (as far as we can)
  *
- * assumes we _don't_ have the full path.  (if we do, we throw an assertion.)
- * assumes that we are path for the path (we open dirfrags willy-nilly).
+ * usually we _don't_ have the full path.  (if we do, we return NULL.)
+ * also, if path calls a file a dir, we return NULL.
  */
 CDir *MDCache::path_traverse_to_dir(filepath& path)
 {
@@ -5878,8 +5878,9 @@ CDir *MDCache::path_traverse_to_dir(filepath& path)
     assert(dnl->is_primary());
     cur = dnl->get_inode();
   }
-  assert(0);
-  //return NULL; // oh, we have the full path.
+
+  // hmm, we DO have the full path.
+  return NULL;
 }
 
 
