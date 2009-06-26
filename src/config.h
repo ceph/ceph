@@ -376,6 +376,7 @@ extern bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec);
 
 void generic_server_usage();
 void generic_client_usage();
+void generic_usage();
 
 class ConfFile;
 ConfFile *conf_get_conf_file();

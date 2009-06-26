@@ -175,13 +175,13 @@ int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *
     r = fsetxattr(fd, "user.etag", md5.c_str(), md5.size(), 0);
     if (r < 0) {
        r = -errno;
-       close(r);
+       close(fd);
        return r;
     }
   }
 
 
-  r = close(r);
+  r = close(fd);
   if (r < 0)
     return -errno;
 
@@ -258,7 +258,7 @@ int get_obj(std::string& bucket, std::string& obj,
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
 
   fd = open(buf, O_RDONLY, 0755);
-cerr << "get_obj 2 errno=" << errno << " buf=" << buf << endl;
+
   if (fd < 0)
     return -errno;
 

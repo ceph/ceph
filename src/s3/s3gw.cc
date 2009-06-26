@@ -11,9 +11,6 @@
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 #include <openssl/md5.h>
-#include <openssl/bio.h>
-#include <openssl/evp.h>
-#include <openssl/buffer.h>
 
 #include "fcgiapp.h"
 
@@ -27,6 +24,7 @@
 #include <sstream>
 
 #include "include/types.h"
+#include "include/base64.h"
 #include "common/BackTrace.h"
 
 using namespace std;
@@ -365,34 +363,6 @@ static void get_auth_header(struct req_state *s, string& dest)
   dest.append(canon_resource);
 }
 
-static int encode_base64(const char *in, int in_len, char *out, int out_len)
-{
-  BIO *bmem, *b64;
-  BUF_MEM *bptr; 
-
-  b64 = BIO_new(BIO_f_base64());
-  bmem = BIO_new(BIO_s_mem());
-  b64 = BIO_push(b64, bmem);
-  BIO_write(b64, in, in_len);
-  if (BIO_flush(b64) < 0) {
-    cerr << "error in BIO_flush" << std::endl;
-    return -1;
-  }
-  BIO_get_mem_ptr(b64, &bptr); 
-
-  int len = BIO_pending(bmem);
-  if (out_len <= len) {
-    cerr << "buffer too small for encode_base64" << std::endl;
-    return -1;
-  }
-  memcpy(out, bptr->data, len);
-  out[len - 1] = '\0';
-
-  BIO_free_all(b64); 
-
-  return 0;
-}
-
 static void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   int i;
@@ -441,8 +411,10 @@ static bool verify_signature(struct req_state *s)
 
   char b64[64]; /* 64 is really enough */
   int ret = encode_base64(hmac_sha1, len, b64, sizeof(b64));
-  if (ret < 0)
+  if (ret < 0) {
+    cerr << "encode_base64 failed" << std::endl;
     return false;
+  }
 
   cerr << "b64=" << b64 << std::endl;
   cerr << "auth_sign=" << b64 << std::endl;
@@ -978,7 +950,6 @@ int main(void)
   while (FCGX_Accept(&in, &out, &err, &envp) >= 0) 
   {
     init_state(&s, envp, in, out);
-    static int i=0;
 
     bool ret = verify_signature(&s);
     if (!ret) {
