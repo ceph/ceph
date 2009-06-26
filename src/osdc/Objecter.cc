@@ -15,7 +15,8 @@
 #include "Objecter.h"
 #include "osd/OSDMap.h"
 #include "osd/PGLS.h"
-#include "mon/MonMap.h"
+
+#include "mon/MonClient.h"
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -94,8 +95,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 {
   assert(osdmap); 
 
-  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
-    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
+  if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     delete m;
     return;
   }
@@ -140,9 +141,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else {
 	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	  int mon = monmap->pick_mon();
-	  messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1), 
-				  monmap->get_inst(mon));
+	  monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
 	  break;
 	}
 	
@@ -174,9 +173,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	scan_pgs(changed_pgs);
       } else {
 	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
-	int mon = monmap->pick_mon();
-	messenger->send_message(new MOSDGetMap(monmap->fsid, 0),
-				monmap->get_inst(mon));
+	monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), 0));
       }
     }
 
@@ -209,8 +206,7 @@ void Objecter::maybe_request_map()
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
   last_epoch_requested = osdmap->get_epoch()+1;
-  messenger->send_message(new MOSDGetMap(monmap->fsid, last_epoch_requested),
-			  monmap->get_inst(monmap->pick_mon()));
+  monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), last_epoch_requested));
 }
 
 
@@ -689,10 +685,8 @@ void Objecter::delete_pool_snap(int *reply, int pool, string& snapName, Context 
 
 void Objecter::pool_snap_submit(SnapOp *op) {
   dout(10) << "pool_snap_submit " << op->tid << dendl;
-  MPoolSnap *m = new MPoolSnap(monmap->fsid, op->tid, op->pool,
-			       op->name, op->create, last_seen_version);
-  int mon = monmap->pick_mon();
-  messenger->send_message(m, monmap->get_inst(mon));
+  monc->send_mon_message(new MPoolSnap(monc->get_fsid(), op->tid, op->pool,
+				       op->name, op->create, last_seen_version));
   op->last_submit = g_clock.now();
 }
 
@@ -744,9 +738,7 @@ void Objecter::get_pool_stats(vector<string>& pools, map<string,pool_stat_t> *re
 void Objecter::poolstat_submit(PoolStatOp *op)
 {
   dout(10) << "poolstat_submit " << op->tid << dendl;
-  MGetPoolStats *m = new MGetPoolStats(monmap->fsid, op->tid, op->pools, last_seen_version);
-  int mon = monmap->pick_mon();
-  messenger->send_message(m, monmap->get_inst(mon));
+  monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid, op->pools, last_seen_version));
   op->last_submit = g_clock.now();
 }
 
@@ -785,11 +777,10 @@ void Objecter::get_fs_stats(ceph_statfs& result, Context *onfinish) {
   fs_stats_submit(op);
 }
 
-void Objecter::fs_stats_submit(StatfsOp *op) {
+void Objecter::fs_stats_submit(StatfsOp *op)
+{
   dout(10) << "fs_stats_submit" << op->tid << dendl;
-  MStatfs *m = new MStatfs(monmap->fsid, op->tid, last_seen_version);
-  int mon = monmap->pick_mon();
-  messenger->send_message(m, monmap->get_inst(mon));
+  monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid, last_seen_version));
   op->last_submit = g_clock.now();
 }
 

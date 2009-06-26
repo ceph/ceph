@@ -86,7 +86,7 @@ int main(int argc, const char **argv)
   rank.start();
   
   // start mds
-  MDS *mds = new MDS(g_conf.id, m, &mc.monmap);
+  MDS *mds = new MDS(g_conf.id, m, &mc);
   mds->init();
   
   rank.wait();

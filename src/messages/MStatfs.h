@@ -25,7 +25,7 @@ public:
   tid_t tid;
 
   MStatfs() : PaxosServiceMessage(CEPH_MSG_STATFS, 0) {}
-  MStatfs(ceph_fsid_t& f, tid_t t, version_t v) :
+  MStatfs(const ceph_fsid_t& f, tid_t t, version_t v) :
     PaxosServiceMessage(CEPH_MSG_STATFS, v), fsid(f), tid(t) {}
 
   const char *get_type_name() { return "statfs"; }

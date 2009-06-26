@@ -32,7 +32,7 @@ using namespace __gnu_cxx;
 class Context;
 class Messenger;
 class OSDMap;
-class MonMap;
+class MonClient;
 class Message;
 
 class MPoolSnapReply;
@@ -174,7 +174,7 @@ struct ObjectOperation {
 class Objecter {
  public:  
   Messenger *messenger;
-  MonMap    *monmap;
+  MonClient *monc;
   OSDMap    *osdmap;
 
   bufferlist signed_ticket;
@@ -375,8 +375,8 @@ class Objecter {
 
 
  public:
-  Objecter(Messenger *m, MonMap *mm, OSDMap *om, Mutex& l) : 
-    messenger(m), monmap(mm), osdmap(om),
+  Objecter(Messenger *m, MonClient *mc, OSDMap *om, Mutex& l) : 
+    messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
     last_epoch_requested(0),

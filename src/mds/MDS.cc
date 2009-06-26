@@ -18,6 +18,7 @@
 #include "common/Clock.h"
 
 #include "msg/Messenger.h"
+#include "mon/MonClient.h"
 
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
@@ -71,7 +72,7 @@
 
 
 // cons/des
-MDS::MDS(const char *n, Messenger *m, MonMap *mm) : 
+MDS::MDS(const char *n, Messenger *m, MonClient *mc) : 
   mds_lock("MDS::mds_lock"),
   timer(mds_lock),
   name(n),
@@ -79,16 +80,18 @@ MDS::MDS(const char *n, Messenger *m, MonMap *mm) :
   standby_for_rank(-1),
   standby_replay_for(-1),
   messenger(m),
-  monmap(mm),
-  logclient(messenger, monmap),
+  monc(mc),
+  logclient(messenger, &mc->monmap),
   sessionmap(this) {
 
   last_tid = 0;
 
+  monc->set_messenger(messenger);
+
   mdsmap = new MDSMap;
   osdmap = new OSDMap;
 
-  objecter = new Objecter(messenger, monmap, osdmap, mds_lock);
+  objecter = new Objecter(messenger, monc, osdmap, mds_lock);
   filer = new Filer(objecter);
 
   mdcache = new MDCache(this);
@@ -299,7 +302,7 @@ void MDS::send_message_mds(Message *m, int mds)
 {
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), 
+    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), 
 			    mdsmap->get_inst(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -337,7 +340,7 @@ void MDS::forward_message_mds(Message *m, int mds)
 
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), 
+    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), 
 			    mdsmap->get_inst(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -477,15 +480,16 @@ void MDS::beacon_send()
 	   << dendl;
 
   // pick new random mon if we have any outstanding beacons...
-  int mon = monmap->pick_mon(beacon_seq_stamp.size());
+  bool newmon = beacon_seq_stamp.size();
 
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
-  MMDSBeacon *beacon = new MMDSBeacon(monmap->fsid, name, mdsmap->get_epoch(), 
+  MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), name, mdsmap->get_epoch(), 
 				      want_state, beacon_last_seq);
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
-  messenger->send_message(beacon, monmap->get_inst(mon));
+
+  monc->send_mon_message(beacon, newmon);
 
   // schedule next sender
   if (beacon_sender) timer.cancel_event(beacon_sender);
@@ -500,7 +504,7 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
 
   // make note of which mon 
-  monmap->last_mon = m->get_source().num();
+  monc->note_mon_leader(m->get_source().num());
 
   // update lab
   if (beacon_seq_stamp.count(seq)) {
@@ -631,9 +635,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     // do i need an osdmap?
     if (oldwhoami < 0) {
       // we need an osdmap too.
-      int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(monmap->fsid, 0),
-			      monmap->get_inst(mon));
+      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), 0));
     }
   }
 
@@ -764,7 +766,7 @@ void MDS::bcast_mds_map()
   for (set<Session*>::const_iterator p = clients.begin();
        p != clients.end();
        ++p) 
-    messenger->send_message(new MMDSMap(monmap->fsid, mdsmap), (*p)->inst);
+    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), (*p)->inst);
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 

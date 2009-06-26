@@ -29,7 +29,7 @@ class MonMap {
 
   int       last_mon;    // last mon i talked to
 
-  MonMap(int s=0) : epoch(s?1:0), mon_inst(s), last_mon(-1) {
+  MonMap() : epoch(0), last_mon(-1) {
     memset(&fsid, 0, sizeof(fsid));
   }
 
@@ -40,7 +40,6 @@ class MonMap {
   }
 
   void add_mon(entity_inst_t inst) {
-    if (!epoch) epoch = 1;
     mon_inst.push_back(inst);
   }
 

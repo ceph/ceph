@@ -91,23 +91,27 @@ int MonClient::get_monmap()
   dout(10) << "get_monmap" << dendl;
   Mutex::Locker l(monc_lock);
   
-  SimpleMessenger rank; 
-
-  rank.bind();
-  
-  Messenger *msgr = rank.register_entity(entity_name_t::CLIENT(-1));
-  msgr->set_dispatcher(this);
-  
-  rank.start(true);  // do not daemonize!
+  SimpleMessenger *rank; 
+  bool temp_msgr = false;
+  if (!messenger) {
+    rank = new SimpleMessenger;
+    rank->bind();
+    messenger = rank->register_entity(entity_name_t::CLIENT(-1));
+    messenger->set_dispatcher(this);
+    rank->start(true);  // do not daemonize!
+    temp_msgr = true; 
+  }
   
   int attempt = 10;
   int i = 0;
 
   srand(getpid());
+  dout(10) << "have " << monmap.epoch << dendl;
+    
   while (monmap.epoch == 0) {
     i = rand() % monmap.mon_inst.size();
     dout(10) << "querying " << monmap.mon_inst[i] << dendl;
-    msgr->send_message(new MMonGetMap, monmap.mon_inst[i]);
+    messenger->send_message(new MMonGetMap, monmap.mon_inst[i]);
     
     if (--attempt == 0)
       break;
@@ -116,9 +120,12 @@ int MonClient::get_monmap()
     map_cond.WaitInterval(monc_lock, interval);
   }
   
-  msgr->shutdown();
-  rank.wait();
-  msgr->destroy();
+  if (temp_msgr) {
+    messenger->shutdown();
+    rank->wait();
+    messenger->destroy();
+    messenger = 0;
+  }
 
   if (monmap.epoch)
     return 0;

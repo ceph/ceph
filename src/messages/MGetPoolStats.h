@@ -25,7 +25,7 @@ public:
   vector<string> pools;
 
   MGetPoolStats() : PaxosServiceMessage(MSG_GETPOOLSTATS, 0) {}
-  MGetPoolStats(ceph_fsid_t& f, tid_t t, vector<string>& ls, version_t l) :
+  MGetPoolStats(const ceph_fsid_t& f, tid_t t, vector<string>& ls, version_t l) :
     PaxosServiceMessage(MSG_GETPOOLSTATS, l),
     fsid(f), tid(t), pools(ls) { }
 

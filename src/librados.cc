@@ -287,7 +287,7 @@ bool RadosClient::init()
 
   monclient.link_dispatcher(this);
 
-  objecter = new Objecter(messenger, &monclient.monmap, &osdmap, lock);
+  objecter = new Objecter(messenger, &monclient, &osdmap, lock);
   if (!objecter)
     return false;
 

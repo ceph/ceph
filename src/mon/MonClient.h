@@ -80,6 +80,9 @@ private:
   int unmount();
 
   void send_mon_message(Message *m, bool new_mon=false);
+  void note_mon_leader(int m) {
+    monmap.last_mon = m;
+  }
 
   const ceph_fsid_t& get_fsid() {
     return monmap.fsid;

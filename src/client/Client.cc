@@ -133,7 +133,7 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
   // osd interfaces
   osdmap = new OSDMap;     // initially blank.. see mount()
   mdsmap = new MDSMap;
-  objecter = new Objecter(messenger, &monclient->monmap, osdmap, client_lock);
+  objecter = new Objecter(messenger, monclient, osdmap, client_lock);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   objectcacher = new ObjectCacher(objecter, client_lock, 
 				  0,                            // all ack callback

@@ -32,7 +32,7 @@ class MMDSBeacon : public PaxosServiceMessage {
 
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
-  MMDSBeacon(ceph_fsid_t &f, string& n, epoch_t les, int st, version_t se) : 
+  MMDSBeacon(const ceph_fsid_t &f, string& n, epoch_t les, int st, version_t se) : 
     PaxosServiceMessage(MSG_MDS_BEACON, les), 
     fsid(f), name(n), state(st), seq(se),
     standby_for_rank(-1) { }

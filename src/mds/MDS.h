@@ -29,7 +29,6 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
-#include "mon/MonMap.h"
 #include "MDSMap.h"
 
 #include "SessionMap.h"
@@ -104,6 +103,8 @@ enum {
 
 class filepath;
 
+class MonClient;
+
 class OSDMap;
 class Objecter;
 class Filer;
@@ -149,7 +150,7 @@ class MDS : public Dispatcher {
   int standby_replay_for;
 
   Messenger    *messenger;
-  MonMap       *monmap;
+  MonClient    *monc;
   MDSMap       *mdsmap;
   OSDMap       *osdmap;
   Objecter     *objecter;
@@ -292,7 +293,7 @@ class MDS : public Dispatcher {
  private:
   virtual bool dispatch_impl(Message *m);
  public:
-  MDS(const char *n, Messenger *m, MonMap *mm);
+  MDS(const char *n, Messenger *m, MonClient *mc);
   ~MDS();
 
   // who am i etc

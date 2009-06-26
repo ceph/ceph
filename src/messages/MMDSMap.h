@@ -54,7 +54,7 @@ class MMDSMap : public Message {
 
   MMDSMap() : 
     Message(CEPH_MSG_MDS_MAP) {}
-  MMDSMap(ceph_fsid_t &f, MDSMap *mm) :
+  MMDSMap(const ceph_fsid_t &f, MDSMap *mm) :
     Message(CEPH_MSG_MDS_MAP),
     fsid(f) {
     epoch = mm->get_epoch();

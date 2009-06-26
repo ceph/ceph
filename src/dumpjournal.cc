@@ -97,7 +97,7 @@ int main(int argc, const char **argv, const char *envp[])
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;
   unsigned pg_pool = CEPH_METADATA_RULE;
 
-  objecter = new Objecter(messenger, &mc.monmap, &osdmap, lock);
+  objecter = new Objecter(messenger, &mc, &osdmap, lock);
   journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,  &lock);
 
   objecter->set_client_incarnation(0);

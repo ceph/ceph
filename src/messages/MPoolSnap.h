@@ -27,7 +27,7 @@ public:
   bool create;
 
   MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, 0) {}
-  MPoolSnap( ceph_fsid_t& f, tid_t t, int p, string& n, bool c, version_t v) :
+  MPoolSnap(const ceph_fsid_t& f, tid_t t, int p, string& n, bool c, version_t v) :
     PaxosServiceMessage(MSG_POOLSNAP, v), fsid(f), tid(t), pool(p), name(n), create(c) {}
 
   const char *get_type_name() { return "poolsnap"; }

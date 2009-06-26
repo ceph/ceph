@@ -15,6 +15,7 @@
 #include "SnapServer.h"
 #include "MDS.h"
 #include "osd/OSDMap.h"
+#include "mon/MonClient.h"
 
 #include "include/types.h"
 #include "messages/MMDSTableRequest.h"
@@ -249,8 +250,7 @@ void SnapServer::check_osd_map(bool force)
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
     MRemoveSnaps *m = new MRemoveSnaps(all_purge);
-    int mon = mds->monmap->pick_mon();
-    mds->messenger->send_message(m, mds->monmap->get_inst(mon));
+    mds->monc->send_mon_message(m);
   }
 
   last_checked_osdmap = version;
