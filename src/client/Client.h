@@ -88,6 +88,23 @@ extern class Logger  *client_logger;
  - when Dir is empty, it's removed (and it's Inode ref--)
  
 */
+struct InodeCap;
+struct MDSSession {
+  version_t seq;
+  __u64 cap_gen;
+  utime_t cap_ttl, last_cap_renew_request;
+  int num_caps;
+  entity_inst_t inst;
+  bool closing;
+  bool was_stale;
+
+  xlist<InodeCap*> caps;
+  
+  MClientCapRelease *release;
+  
+  MDSSession() : seq(0), cap_gen(0), num_caps(0),
+		 closing(false), was_stale(false), release(NULL) {}
+};
 
 class Dir;
 class Inode;
@@ -126,9 +143,6 @@ class Dir {
 
   bool is_empty() {  return dentries.empty(); }
 };
-
-
-struct InodeCap;
 
 struct SnapRealm {
   inodeno_t ino;
@@ -173,14 +187,20 @@ inline ostream& operator<<(ostream& out, const SnapRealm& r) {
 }
 
 struct InodeCap {
+  MDSSession *session;
+  Inode *inode;
+  xlist<InodeCap*>::item cap_item;
+
   __u64 cap_id;
   unsigned issued;
   unsigned implemented;
   unsigned wanted;   // as known to mds.
   __u64 seq;
   __u32 mseq;  // migration seq
+  __u32 gen;
 
-  InodeCap() : issued(0), implemented(0), wanted(0), seq(0), mseq(0) {}
+  InodeCap() : session(NULL), inode(NULL), cap_item(this), issued(0),
+	       implemented(0), wanted(0), seq(0), mseq(0), gen(0) {}
 };
 
 struct CapSnap {
@@ -335,12 +355,27 @@ class Inode {
     return caps.size() || exporting_mds >= 0;
   }
 
+  bool cap_is_valid(InodeCap* cap) {
+    cout << "cap_gen     " << cap->session-> cap_gen << std::endl
+	 << "session gen " << cap->gen << std::endl
+	 << "cap expire  " << cap->session->cap_ttl << std::endl
+	 << "cur time    " << g_clock.now() << std::endl;
+    if ((cap->session->cap_gen <= cap->gen)
+	&& (g_clock.now() < cap->session->cap_ttl)) {
+      return true;
+    }
+    //if we make it here, the capabilities aren't up-to-date
+    cap->session->was_stale = true;
+    return true;
+  }
+
   int caps_issued() {
     int c = exporting_issued | snap_caps;
     for (map<int,InodeCap*>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      c |= it->second->issued;
+      if (cap_is_valid(it->second))
+	c |= it->second->issued;
     return c;
   }
 
@@ -559,6 +594,7 @@ class Client : public Dispatcher {
   Context *tick_event;
   utime_t last_cap_renew;
   void renew_caps();
+  void renew_caps(int s);
 public:
   void tick();
 
@@ -572,18 +608,6 @@ public:
   bufferlist signed_ticket;
   
   // mds sessions
-  struct MDSSession {
-    version_t seq;
-    __u64 cap_gen;
-    utime_t cap_ttl, last_cap_renew_request;
-    int num_caps;
-    entity_inst_t inst;
-    bool closing;
-
-    MClientCapRelease *release;
-
-    MDSSession() : seq(0), cap_gen(0), num_caps(0), closing(false), release(NULL) {}
-  };
   map<int, MDSSession> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
   list<Cond*> waiting_for_mdsmap;
@@ -698,6 +722,7 @@ protected:
   Mutex                  client_lock;
 
   // helpers
+  void wake_inode_waiters(int mds);
   void wait_on_list(list<Cond*>& ls);
   void signal_cond_list(list<Cond*>& ls);
 

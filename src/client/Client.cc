@@ -900,12 +900,12 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_RENEWCAPS:
     mds_sessions[from].cap_ttl = 
       mds_sessions[from].last_cap_renew_request + mdsmap->get_session_timeout();
+    wake_inode_waiters(from);
     break;
 
   case CEPH_SESSION_STALE:
-    // FIXME
+    mds_sessions[from].was_stale = true;
     break;
-
   default:
     assert(0);
   }
@@ -1170,8 +1170,7 @@ void Client::send_reconnect(int mds)
 	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
-	m->add_cap(p->first.ino, in->caps[mds]->cap_id,
-		   path.get_ino(), path.get_path(),   
+	m->add_cap(p->first.ino, path.get_ino(), path.get_path(),   // ino
 		   in->caps_wanted(), // wanted
 		   in->caps[mds]->issued,     // issued
 		   in->inode.size, in->inode.mtime, in->inode.atime, in->snaprealm->ino);
@@ -1644,6 +1643,15 @@ void Client::signal_cond_list(list<Cond*>& ls)
   ls.clear();
 }
 
+void Client::wake_inode_waiters(int mds_num)
+{
+  MDSSession * mds = &mds_sessions[mds_num];
+  xlist<InodeCap*>::iterator iter = mds->caps.begin();
+  while (!iter.end()){
+    signal_cond_list((*iter)->inode->waitfor_caps);
+    ++iter;
+  }
+}
 
 
 // flush dirty data (from objectcache)
@@ -1721,6 +1729,10 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
       in->exporting_mseq = 0;
     }
     in->caps[mds] = cap = new InodeCap;
+    mds_sessions[mds].caps.push_back(&cap->cap_item);
+    cap->session = &mds_sessions[mds];
+    cap->inode = in;
+    cap->gen = mds_sessions[mds].cap_gen;
     cap_list.push_back(&in->cap_item);
   }
 
@@ -1763,6 +1775,8 @@ void Client::remove_cap(Inode *in, int mds)
   i.seq = cap->seq;
   i.migrate_seq = cap->mseq;
   session->release->caps.push_back(i);
+  
+  cap->cap_item.remove_myself();
 
   if (in->auth_cap == cap)
     in->auth_cap = NULL;
@@ -2501,17 +2515,23 @@ void Client::tick()
 
 void Client::renew_caps()
 {
-  dout(10) << "renew_caps" << dendl;
+  dout(10) << "renew_caps()" << dendl;
   last_cap_renew = g_clock.now();
   
   for (map<int,MDSSession>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        p++) {
     dout(15) << "renew_caps requesting from mds" << p->first << dendl;
-    p->second.last_cap_renew_request = g_clock.now();
-    messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
-			    mdsmap->get_inst(p->first));
+    renew_caps(p->first);
   }
+}
+
+void Client::renew_caps(const int session) {
+  dout(10) << "renew_caps(session number)" << dendl;
+  mds_sessions[session].last_cap_renew_request = g_clock.now();
+  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
+			  mdsmap->get_inst(session));
+
 }
 
 
