@@ -47,6 +47,24 @@ int gen_rand_base64(char *dest, int size) /* size should be the required string 
   return 0;
 }
 
+static const char alphanum_table[]="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+int gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
+{
+  int ret = RAND_bytes((unsigned char *)dest, size);
+  if (!ret) {
+    cerr << "RAND_bytes failed, entropy problem?" << std::endl;
+    return -1;
+  }
+
+  for (int i=0; i<size; i++) {
+    int pos = (unsigned)dest[i];
+    dest[i] = alphanum_table[pos % (sizeof(alphanum_table) - 1)];
+  }
+
+  return 0;
+}
+
 
 int main(int argc, const char **argv) 
 {
@@ -119,7 +137,7 @@ int main(int argc, const char **argv)
       secret_key = secret_key_buf;
     }
     if (!user_id) {
-      ret = gen_rand_base64(public_id_buf, sizeof(public_id_buf));
+      ret = gen_rand_alphanumeric(public_id_buf, sizeof(public_id_buf));
       if (ret < 0) {
         cerr << "aborting" << std::endl;
         exit(1);
