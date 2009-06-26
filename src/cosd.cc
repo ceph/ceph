@@ -155,7 +155,7 @@ int main(int argc, const char **argv)
   rank.start();
 
   // start osd
-  OSD *osd = new OSD(whoami, m, hbm, &mc.monmap, g_conf.osd_data, g_conf.osd_journal);
+  OSD *osd = new OSD(whoami, m, hbm, &mc, g_conf.osd_data, g_conf.osd_journal);
   if (osd->init() < 0) {
     cout << "error initializing osd" << std::endl;
     return 1;

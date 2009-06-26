@@ -23,8 +23,6 @@
 #include "common/WorkQueue.h"
 #include "common/LogClient.h"
 
-#include "mon/MonMap.h"
-
 #include "os/ObjectStore.h"
 #include "PG.h"
 
@@ -82,6 +80,7 @@ enum {
 
 class Messenger;
 class Message;
+class MonClient;
 class Logger;
 class ObjectStore;
 class OSDMap;
@@ -96,9 +95,9 @@ protected:
   SafeTimer timer;    // safe timer (osd_lock)
 
   Messenger   *messenger; 
+  MonClient   *monc;
   Logger      *logger;
   ObjectStore *store;
-  MonMap      *monmap;
 
   LogClient   logclient;
 
@@ -770,7 +769,7 @@ protected:
  private:
   virtual bool dispatch_impl(Message *m);
  public:
-  OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev = 0, const char *jdev = 0);
+  OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0);
   ~OSD();
 
   // static bits

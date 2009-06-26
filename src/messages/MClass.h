@@ -37,12 +37,12 @@ public:
 
   MClass() : PaxosServiceMessage(MSG_CLASS, 0) {}
 #if 0
-  MClass(ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) :
+  MClass(const ceph_fsid_t& f, deque<ClassLibraryIncremental>& e) :
     PaxosServiceMessage(MSG_CLASS, 0),
     fsid(f), entries(e), last(0), action(0) {}
 #endif
-  MClass(ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS, 0), fsid(f), last(l) {}
-  MClass(ceph_fsid_t& f, version_t l, version_t paxos_version) :
+  MClass(const ceph_fsid_t& f, version_t l) : PaxosServiceMessage(MSG_CLASS, 0), fsid(f), last(l) {}
+  MClass(const ceph_fsid_t& f, version_t l, version_t paxos_version) :
     PaxosServiceMessage(MSG_CLASS, paxos_version), fsid(f), last(l) {}
 
   const char *get_type_name() { return "class"; }

@@ -287,4 +287,10 @@ void MonClient::send_mon_message(Message *m, bool newmon)
   messenger->send_message(m, monmap.mon_inst[mon]);
 }
 
-
+void MonClient::pick_new_mon()
+{
+  Mutex::Locker l(monc_lock);
+  int oldmon = monmap.pick_mon();
+  messenger->mark_down(monmap.get_inst(oldmon).addr);
+  monmap.pick_mon(true);
+}

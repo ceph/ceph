@@ -630,6 +630,8 @@ int main(int argc, const char **argv, const char *envp[])
   rank.start();
   rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
 
+  mc.set_messenger(messenger);
+  dispatcher.link_dispatcher(&mc);
   if (mc.get_monmap() < 0)
     return -1;
 

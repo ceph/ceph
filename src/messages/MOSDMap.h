@@ -47,8 +47,8 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP) { }
-  MOSDMap(ceph_fsid_t &f, OSDMap *oc=0) : Message(CEPH_MSG_OSD_MAP),
-				      fsid(f) {
+  MOSDMap(const ceph_fsid_t &f, OSDMap *oc=0) : Message(CEPH_MSG_OSD_MAP),
+						fsid(f) {
     if (oc)
       oc->encode(maps[oc->get_epoch()]);
   }

@@ -372,6 +372,11 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 int MDS::init()
 {
+  // get monmap
+  monc->set_messenger(messenger);
+  link_dispatcher(monc);
+  monc->get_monmap();
+
   mds_lock.Lock();
 
   // starting beacon.  this will induce an MDSMap from the monitor

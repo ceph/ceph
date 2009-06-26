@@ -83,6 +83,7 @@ private:
   void note_mon_leader(int m) {
     monmap.last_mon = m;
   }
+  void pick_new_mon();
 
   const ceph_fsid_t& get_fsid() {
     return monmap.fsid;

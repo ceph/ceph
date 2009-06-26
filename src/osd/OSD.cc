@@ -35,6 +35,8 @@
 #include "msg/Messenger.h"
 #include "msg/Message.h"
 
+#include "mon/MonClient.h"
+
 #include "messages/MLog.h"
 
 #include "messages/MGenericMessage.h"
@@ -219,14 +221,14 @@ int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& who
 
 // cons/des
 
-OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, const char *jdev) : 
+OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, const char *jdev) : 
   osd_lock("OSD::osd_lock"),
   timer(osd_lock),
   messenger(m),
+  monc(mc),
   logger(NULL),
   store(NULL),
-  monmap(mm),
-  logclient(messenger, monmap),
+  logclient(messenger, &mc->monmap),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
@@ -261,6 +263,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonMap *mm, const char *dev, cons
   snap_trim_wq(this, &disk_tp),
   scrub_wq(this, &disk_tp)
 {
+  monc->set_messenger(messenger);
+  
   osdmap = 0;
 
   memset(&my_stat, 0, sizeof(my_stat));
@@ -555,8 +559,8 @@ int OSD::read_superblock()
 
   dout(10) << "read_superblock " << superblock << dendl;
 
-  if (ceph_fsid_compare(&superblock.fsid, &monmap->fsid)) {
-    derr(0) << "read_superblock fsid " << superblock.fsid << " != monmap " << monmap->fsid << dendl;
+  if (ceph_fsid_compare(&superblock.fsid, &monc->get_fsid())) {
+    derr(0) << "read_superblock fsid " << superblock.fsid << " != monmap " << monc->get_fsid() << dendl;
     return -1;
   }
 
@@ -1166,9 +1170,7 @@ void OSD::heartbeat()
     if (now - last_mon_heartbeat > g_conf.osd_mon_heartbeat_interval) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-      int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
-			      monmap->get_inst(mon));
+      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
     }
   }
 
@@ -1257,10 +1259,8 @@ void OSD::do_mon_report()
   pg_stat_queue_lock.Unlock();
 
   if (retry) {
-    int oldmon = monmap->pick_mon();
-    messenger->mark_down(monmap->get_inst(oldmon).addr);
-    int mon = monmap->pick_mon(true);
-    dout(10) << "marked down old mon" << oldmon << ", chose new mon" << mon << dendl;
+    monc->pick_new_mon();
+    dout(10) << "picked a new mon" << dendl;
   }
 
   // do any pending reports
@@ -1276,10 +1276,8 @@ void OSD::do_mon_report()
 
 void OSD::send_boot()
 {
-  int mon = monmap->pick_mon(true);
-  dout(10) << "send_boot to mon" << mon << dendl;
-  messenger->send_message(new MOSDBoot(superblock), 
-			  monmap->get_inst(mon));
+  dout(10) << "send_boot" << dendl;
+  monc->send_mon_message(new MOSDBoot(superblock));
 }
 
 void OSD::queue_want_up_thru(epoch_t want)
@@ -1309,20 +1307,16 @@ void OSD::send_alive()
   dout(10) << "send_alive up_thru currently " << up_thru << " want " << up_thru_wanted << dendl;
   if (up_thru_wanted > up_thru) {
     up_thru_pending = up_thru_wanted;
-    int mon = monmap->pick_mon();
-    dout(10) << "send_alive to mon" << mon << " (want " << up_thru_wanted << ")" << dendl;
-    messenger->send_message(new MOSDAlive(osdmap->get_epoch()),
-			    monmap->get_inst(mon));
+    dout(10) << "send_alive want " << up_thru_wanted << dendl;
+    monc->send_mon_message(new MOSDAlive(osdmap->get_epoch()));
   }
 }
 
 void OSD::send_failures()
 {
-  int mon = monmap->pick_mon();
   while (!failure_queue.empty()) {
     int osd = *failure_queue.begin();
-    messenger->send_message(new MOSDFailure(monmap->fsid, osdmap->get_inst(osd), osdmap->get_epoch()),
-			    monmap->get_inst(mon));
+    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), osdmap->get_inst(osd), osdmap->get_epoch()));
     failure_queue.erase(osd);
   }
 }
@@ -1375,8 +1369,7 @@ void OSD::send_pg_stats()
       m->osd_stat.hb_out.push_back(p->first);
     dout(20) << " osd_stat " << m->osd_stat << dendl;
     
-    int mon = monmap->pick_mon();
-    messenger->send_message(m, monmap->get_inst(mon));  
+    monc->send_mon_message(m);
   }
 
   pg_stat_queue_lock.Unlock();
@@ -1676,8 +1669,8 @@ void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
   
-  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
-    dout(0) << "handle_scrub fsid " << m->fsid << " != " << monmap->fsid << dendl;
+  if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
+    dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     delete m;
     return;
   }
@@ -1725,9 +1718,7 @@ void OSD::wait_for_new_map(Message *m)
 {
   // ask 
   if (waiting_for_osdmap.empty()) {
-    int mon = monmap->pick_mon();
-    messenger->send_message(new MOSDGetMap(monmap->fsid, osdmap->get_epoch()+1),
-                            monmap->get_inst(mon));
+    monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
   }
   
   waiting_for_osdmap.push_back(m);
@@ -1769,8 +1760,8 @@ void OSD::note_up_osd(int osd)
 void OSD::handle_osd_map(MOSDMap *m)
 {
   assert(osd_lock.is_locked());
-  if (ceph_fsid_compare(&m->fsid, &monmap->fsid)) {
-    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monmap->fsid << dendl;
+  if (ceph_fsid_compare(&m->fsid, &monc->get_fsid())) {
+    dout(0) << "handle_osd_map fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
     delete m;
     return;
   }
@@ -1947,8 +1938,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
-      int mon = monmap->pick_mon();
-      messenger->send_message(new MOSDGetMap(monmap->fsid, cur+1), monmap->get_inst(mon));
+      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), cur+1));
       break;
     }
 
@@ -2297,7 +2287,7 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
   
-  MOSDMap *m = new MOSDMap(monmap->fsid);
+  MOSDMap *m = new MOSDMap(monc->get_fsid());
   
   for (epoch_t e = osdmap->get_epoch();
        e > since;
@@ -3953,14 +3943,13 @@ void OSD::handle_class(MClass *m)
 void OSD::send_class_request(const char *cname, ClassVersion& version)
 {
   dout(10) << "send_class_request class=" << cname << " version=" << version << dendl;
-  MClass *m = new MClass(monmap->get_fsid(), 0);
+  MClass *m = new MClass(monc->get_fsid(), 0);
   ClassInfo info;
   info.name = cname;
   info.version = version;
   m->info.push_back(info);
   m->action = CLASS_GET;
-  int mon = monmap->pick_mon();
-  messenger->send_message(m, monmap->get_inst(mon));
+  monc->send_mon_message(m);
 }
 
 
