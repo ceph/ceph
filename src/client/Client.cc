@@ -4615,8 +4615,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name)) {
       Dentry *dn = dir->dir->dentries[name];
-      if (dn)
-	unlink(dn);
+      unlink(dn);
     }
   }
   delete reply;
@@ -4652,11 +4651,9 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name) ) {
       Dentry *dn = dir->dir->dentries[name];
-      if (dn) {
-	if (dn->inode->dir && dn->inode->dir->is_empty()) 
-	  close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
-	unlink(dn);
-      }
+      if (dn->inode->dir && dn->inode->dir->is_empty()) 
+	close_dir(dn->inode->dir);  // FIXME: maybe i shoudl proactively hose the whole subtree from cache?
+      unlink(dn);
     }
   }
   delete reply;
@@ -4694,10 +4691,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   int res = reply->get_result();
   if (res == 0) {
     // remove from local cache
-    if(fromdir->dir->dentries.count(fromname) )
+    if (fromdir->dir->dentries.count(fromname)) {
       Dentry *dn = fromdir->dir->dentries[fromname];
-    if (dn)
       unlink(dn);
+    }
   }
   delete reply;
   dout(10) << "rename result is " << res << dendl;
