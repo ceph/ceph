@@ -4,6 +4,18 @@
 #include <features.h>
 #include "common/tls.h"
 
+#ifdef __cplusplus
+
+class BackTrace;
+
+struct FailedAssertion {
+  BackTrace *backtrace;
+  FailedAssertion(BackTrace *bt) : backtrace(bt) {}
+};
+
+#endif
+
+
 #if defined __cplusplus && __GNUC_PREREQ (2,95)
 # define __CEPH_ASSERT_VOID_CAST static_cast<void>
 #else
@@ -28,12 +40,19 @@
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
   __attribute__ ((__noreturn__));
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
-#if 1
+
+
 #define assert(expr)							\
   ((expr)								\
    ? __CEPH_ASSERT_VOID_CAST (0)					\
    : __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
-#else
+
+#define assert_warn(expr)							\
+  ((expr)								\
+   ? __CEPH_ASSERT_VOID_CAST (0)					\
+   : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
+
+/*
 #define assert(expr)							\
   do {									\
 	static int __assert_flag = 0;					\
@@ -47,15 +66,11 @@ extern void __ceph_assert_warn(const char *assertion, const char *file, int line
 	: __ceph_assert_fail (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION)); \
   } while (0)
 #endif
-
-#define assert_warn(expr)							\
-  ((expr)								\
-   ? __CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assert_warn (__STRING(expr), __FILE__, __LINE__, __ASSERT_FUNCTION))
-
+*/
+/*
 #define assert_protocol(expr)	assert(expr)
 #define assert_disk(expr)	assert(expr)
-
+*/
 
 #endif
 
