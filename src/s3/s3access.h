@@ -32,7 +32,7 @@ public:
 
   virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& marker, std::vector<S3ObjEnt>& result) = 0;
 
-  virtual int create_bucket(std::string& id, std::string& bucket) = 0;
+  virtual int create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
   virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                       std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
 

@@ -128,11 +128,15 @@ void S3AccessControlList::xml_end(const char *el) {
 }
 
 int S3AccessControlList::get_perm(string& id, int perm_mask) {
-  map<string, int>::iterator iter = acl_user_map.find(id);
+  cerr << "searching permissions for uid=" << id << " mask=" << perm_mask << std::endl;
   if (!user_map_initialized)
     init_user_map();
-  if (iter != acl_user_map.end())
-    return iter->second;
+  map<string, int>::iterator iter = acl_user_map.find(id);
+  if (iter != acl_user_map.end()) {
+    cerr << "found permission: " << iter->second << std::endl;
+    return iter->second & perm_mask;
+  }
+  cerr << "permissions for user not found" << std::endl;
   return 0;
 }
 
@@ -146,7 +150,22 @@ void S3AccessControlPolicy::xml_end(const char *el) {
 }
 
 int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
-  return acl.get_perm(id, perm_mask);
+  int perm = acl.get_perm(id, perm_mask);
+
+  if (perm == perm_mask)
+    return perm;
+
+  if (perm_mask & (S3_PERM_READ_ACP | S3_PERM_WRITE_ACP)) {
+    /* this is the owner, it has implicit permissions */
+    if (id.compare(owner.get_id()) == 0) {
+      perm |= S3_PERM_READ_ACP | S3_PERM_WRITE_ACP;
+      perm &= perm_mask; 
+    }
+  }
+
+  cerr << "id=" << id << " owner=" << owner << std::endl;
+
+  return perm;
 }
 
 void xml_start(void *data, const char *el, const char **attr) {

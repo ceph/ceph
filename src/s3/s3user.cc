@@ -42,7 +42,8 @@ int s3_store_user_info(S3UserInfo& info)
   ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), vec);
 
   if (ret == -ENOENT) {
-    ret = s3store->create_bucket(info.user_id /* FIXME currently means nothing */, ui_bucket);
+    std::vector<std::pair<std::string, bufferlist> > attrs;
+    ret = s3store->create_bucket(info.user_id /* FIXME currently means nothing */, ui_bucket, attrs);
     if (ret >= 0)
       ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), vec);
   }

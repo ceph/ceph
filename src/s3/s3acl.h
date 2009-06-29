@@ -237,6 +237,8 @@ public:
   }
   void set_id(string& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
+
+  string& get_id() { return id; }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
@@ -253,9 +255,11 @@ public:
   int get_perm(string& id, int perm_mask);
 
   void encode(bufferlist& bl) const {
+    ::encode(owner, bl);
     ::encode(acl, bl);
   }
   void decode(bufferlist::iterator& bl) {
+     ::decode(owner, bl);
      ::decode(acl, bl);
    }
   void to_xml(ostream& out) {

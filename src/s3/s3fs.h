@@ -12,7 +12,7 @@ public:
 
   int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& marker, std::vector<S3ObjEnt>& result);
 
-  int create_bucket(std::string& id, std::string& bucket);
+  int create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs);
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
               std::vector<std::pair<std::string, bufferlist> >& attrs);
 

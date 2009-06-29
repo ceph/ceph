@@ -77,7 +77,7 @@ class XMLArgs
  public:
    XMLArgs() {}
    XMLArgs(string s) : str(s) {}
-   void set(string s) { val_map.clear(); str = s; }
+   void set(string s) { val_map.clear(); sub_resource.clear(); str = s; }
    int parse();
    string& get(string& name);
    string& get(const char *name);
@@ -158,6 +158,9 @@ struct req_state {
    map<string, string> x_amz_map;
 
    S3UserInfo user; 
+   S3AccessControlPolicy *acl;
+
+   req_state() : acl(NULL) {}
 };
 
 void init_entities_from_header(struct req_state *s)
@@ -410,6 +413,11 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
 
   init_auth_info(s);
+
+  if (s->acl) {
+     delete s->acl;
+     s->acl = new S3AccessControlPolicy;
+  }
 }
 
 static void dump_status(struct req_state *s, const char *status)
@@ -686,9 +694,19 @@ static bool verify_signature(struct req_state *s)
   }
 
   cerr << "b64=" << b64 << std::endl;
-  cerr << "auth_sign=" << b64 << std::endl;
+  cerr << "auth_sign=" << auth_sign << std::endl;
   cerr << "compare=" << auth_sign.compare(b64) << std::endl;
   return (auth_sign.compare(b64) == 0);
+}
+
+static bool verify_permission(struct req_state *s, int perm)
+{
+   if (!s->acl)
+     return false;
+
+   int acl_perm = s->acl->get_perm(s->user.user_id, perm);
+
+   return (perm == acl_perm);
 }
 
 static void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
@@ -740,36 +758,41 @@ done:
   }
 }
 
-static void get_acls(struct req_state *s)
+static int read_acls(struct req_state *s)
 {
-  S3AccessControlPolicy policy;
   bufferlist bl;
-  int ret = s3store->get_attr(s->bucket_str, s->object_str,
+  int ret = 0;
+
+  if (!s->acl) {
+     s->acl = new S3AccessControlPolicy;
+     if (!s->acl)
+       return -ENOMEM;
+  }
+
+  if (s->bucket_str.size()) {
+    ret = s3store->get_attr(s->bucket_str, s->object_str,
                        "user.s3acl", bl);
 
+    if (ret >= 0) {
+      bufferlist::iterator iter = bl.begin();
+      s->acl->decode(iter);
+      s->acl->to_xml(cerr);
+    }
+  }
+
+  return ret;
+}
+
+static void get_acls(struct req_state *s)
+{
+  int ret = read_acls(s);
+
   if (ret < 0) {
-    /* should we do that, or should we just abort? */
-    // policy.create_default(s->user.user_id, s->user.display_name);
-  } else {
-    bufferlist::iterator iter = bl.begin();
-    policy.decode(iter);
+    /* FIXME */
   }
 
   stringstream ss;
-  policy.to_xml(ss);
-  string str = ss.str(); 
-  end_header(s, "application/xml");
-  dump_start_xml(s);
-  FCGX_PutStr(str.c_str(), str.size(), s->out); 
-}
-
-static void set_acls(struct req_state *s)
-{
-  S3AccessControlPolicy def;
-  def.create_default(s->user.user_id, s->user.display_name);
-
-  stringstream ss;
-  def.to_xml(ss);
+  s->acl->to_xml(ss);
   string str = ss.str(); 
   end_header(s, "application/xml");
   dump_start_xml(s);
@@ -782,8 +805,22 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   int max;
   string id = "0123456789ABCDEF";
 
+  cerr << "1" << std::endl;
+
   if (s->args.exists("acl")) {
+    if (!verify_permission(s, S3_PERM_READ_ACP)) {
+      dump_errno(s, -EACCES);
+      end_header(s);
+      return;
+    }
+
     get_acls(s);
+    return;
+  }
+
+  if (!verify_permission(s, S3_PERM_READ)) {
+    dump_errno(s, -EACCES);
+    end_header(s);
     return;
   }
 
@@ -846,7 +883,15 @@ static void do_create_bucket(struct req_state *s)
 {
   string id = "0123456789ABCDEF";
 
-  int r = s3store->create_bucket(id, s->bucket_str);
+  S3AccessControlPolicy def;
+  def.create_default(s->user.user_id, s->user.display_name);
+  bufferlist aclbl;
+  def.encode(aclbl);
+
+  std::vector<std::pair<std::string, bufferlist> > attrs;
+  attrs.push_back(pair<string, bufferlist>("user.s3acl", aclbl));
+
+  int r = s3store->create_bucket(id, s->bucket_str, attrs);
 
   dump_errno(s, r);
   end_header(s);
@@ -979,6 +1024,12 @@ static void godown(int signum)
   signal(SIGSEGV, sighandler);
 }
 
+static void abort_early(struct req_state *s, int err)
+{
+  dump_errno(s, -EPERM);
+  end_header(s);
+}
+
 
 int main(void)
 {
@@ -996,14 +1047,29 @@ int main(void)
   {
     init_state(&s, envp, in, out);
 
-    bool ret = verify_signature(&s);
+    int ret = read_acls(&s);
+    if (ret < 0) {
+      switch (ret) {
+      case -ENOENT:
+        break;
+      default:
+        cerr << "could not read acls" << " ret=" << ret << std::endl;
+        abort_early(&s, -EPERM);
+        continue;
+      }
+    }
+    ret = verify_signature(&s);
     if (!ret) {
       cerr << "signature DOESN'T match" << std::endl;
+      abort_early(&s, -EPERM);
       continue;
     }
 
-    if (!s.method)
+    if (!s.method) {
+      /* we should probably never arrive here */
+      abort_early(&s, -EACCES);
       continue;
+    }
 
     if (strcmp(s.method, "GET") == 0)
       do_retrieve(&s, true);

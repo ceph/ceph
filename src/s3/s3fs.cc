@@ -140,7 +140,7 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
 }
 
 
-int S3FS::create_bucket(std::string& id, std::string& bucket)
+int S3FS::create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -148,6 +148,22 @@ int S3FS::create_bucket(std::string& id, std::string& bucket)
 
   if (mkdir(buf, 0755) < 0)
     return -errno;
+
+  vector<pair<string, bufferlist> >::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    pair<string, bufferlist>& attr = *iter;
+    string& name = attr.first;
+    bufferlist& bl = attr.second;
+    
+    if (bl.length()) {
+      int r = setxattr(buf, name.c_str(), bl.c_str(), bl.length(), 0);
+      if (r < 0) {
+        r = -errno;
+        rmdir(buf);
+        return r;
+      }
+    }
+  }
 
   return 0;
 }
@@ -165,14 +181,7 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
   if (fd < 0)
     return -errno;
 
-  int r = write(fd, data, size);
-  if (r < 0) {
-    r = -errno;
-    close(fd);
-    unlink(buf);
-    return r;
-  }
-
+  int r;
   vector<pair<string, bufferlist> >::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     pair<string, bufferlist>& attr = *iter;
@@ -189,6 +198,13 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
     }
   }
 
+  r = write(fd, data, size);
+  if (r < 0) {
+    r = -errno;
+    close(fd);
+    unlink(buf);
+    return r;
+  }
 
   r = close(fd);
   if (r < 0)
