@@ -131,10 +131,19 @@ string& XMLArgs::get(const char *name)
   return get(s);
 }
 
+enum http_op {
+  OP_GET,
+  OP_PUT,
+  OP_DELETE,
+  OP_HEAD,
+  OP_UNKNOWN,
+};
+
 struct req_state {
    FCGX_ParamArray envp;
    FCGX_Stream *in;
    FCGX_Stream *out;
+   http_op op;
    bool content_started;
    int indent;
    const char *path_name;
@@ -409,6 +418,19 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   s->err_exist = false;
   memset(&s->err, 0, sizeof(s->err));
 
+  if (!s->method)
+    s->op = OP_UNKNOWN;
+  else if (strcmp(s->method, "GET") == 0)
+    s->op = OP_GET;
+  else if (strcmp(s->method, "PUT") == 0)
+    s->op = OP_PUT;
+  else if (strcmp(s->method, "DELETE") == 0)
+    s->op = OP_DELETE;
+  else if (strcmp(s->method, "HEAD") == 0)
+    s->op = OP_HEAD;
+  else
+    s->op = OP_UNKNOWN;
+
   init_entities_from_header(s);
   cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
 
@@ -581,6 +603,12 @@ static void dump_bucket(struct req_state *s, S3ObjEnt& obj)
   dump_value(s, "Name", obj.name.c_str());
   dump_time(s, "CreationDate", &obj.mtime);
   close_section(s, "Bucket");
+}
+
+static void abort_early(struct req_state *s, int err)
+{
+  dump_errno(s, -EPERM);
+  end_header(s);
 }
 
 static void do_list_buckets(struct req_state *s)
@@ -758,10 +786,11 @@ done:
   }
 }
 
-static int read_acls(struct req_state *s)
+static int read_acls(struct req_state *s, bool only_bucket = false)
 {
   bufferlist bl;
   int ret = 0;
+  string obj_str;
 
   if (!s->acl) {
      s->acl = new S3AccessControlPolicy;
@@ -769,8 +798,13 @@ static int read_acls(struct req_state *s)
        return -ENOMEM;
   }
 
+  /* we're passed only_bucket = true when we specifically need the bucket's
+     acls, that happens on write operations */
+  if (!only_bucket)
+    obj_str = s->object_str;
+
   if (s->bucket_str.size()) {
-    ret = s3store->get_attr(s->bucket_str, s->object_str,
+    ret = s3store->get_attr(s->bucket_str, obj_str,
                        "user.s3acl", bl);
 
     if (ret >= 0) {
@@ -805,12 +839,9 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   int max;
   string id = "0123456789ABCDEF";
 
-  cerr << "1" << std::endl;
-
   if (s->args.exists("acl")) {
     if (!verify_permission(s, S3_PERM_READ_ACP)) {
-      dump_errno(s, -EACCES);
-      end_header(s);
+      abort_early(s, -EACCES);
       return;
     }
 
@@ -819,8 +850,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   }
 
   if (!verify_permission(s, S3_PERM_READ)) {
-    dump_errno(s, -EACCES);
-    end_header(s);
+    abort_early(s, -EACCES);
     return;
   }
 
@@ -905,6 +935,11 @@ static void do_create_object(struct req_state *s)
   if (!s->object) {
     goto done;
   } else {
+    if (!verify_permission(s, S3_PERM_WRITE)) {
+      abort_early(s, -EACCES);
+      return;
+    }
+
     string id = "0123456789ABCDEF";
 
     size_t cl = atoll(s->length);
@@ -965,6 +1000,11 @@ static void do_delete_bucket(struct req_state *s)
   int r = -EINVAL;
   string id = "0123456789ABCDEF";
 
+  if (!verify_permission(s, S3_PERM_WRITE)) {
+    abort_early(s, -EACCES);
+    return;
+  }
+
   if (s->bucket) {
     r = s3store->delete_bucket(id, s->bucket_str);
   }
@@ -1024,12 +1064,33 @@ static void godown(int signum)
   signal(SIGSEGV, sighandler);
 }
 
-static void abort_early(struct req_state *s, int err)
+int read_permissions(struct req_state *s)
 {
-  dump_errno(s, -EPERM);
-  end_header(s);
-}
+  bool only_bucket;
 
+  switch (s->op) {
+  case OP_HEAD:
+  case OP_GET:
+    only_bucket = false;
+    break;
+  case OP_PUT:
+    /* is it a 'create bucket' request? */
+    if (s->object_str.size() == 0)
+      return 0;
+  case OP_DELETE:
+    only_bucket = true;
+    break;
+  default:
+    return -EINVAL;
+  }
+
+  int ret = read_acls(s, only_bucket);
+
+  if (ret < 0)
+    cerr << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << std::endl;
+
+  return ret;
+}
 
 int main(void)
 {
@@ -1065,20 +1126,29 @@ int main(void)
       continue;
     }
 
-    if (!s.method) {
-      /* we should probably never arrive here */
-      abort_early(&s, -EACCES);
+    ret = read_permissions(&s);
+    if (ret < 0) {
+      abort_early(&s, ret);
       continue;
     }
 
-    if (strcmp(s.method, "GET") == 0)
+    switch (s.op) {
+    case OP_GET:
       do_retrieve(&s, true);
-    else if (strcmp(s.method, "PUT") == 0)
+      break;
+    case OP_PUT:
       do_create(&s);
-    else if (strcmp(s.method, "DELETE") == 0)
+      break;
+    case OP_DELETE:
       do_delete(&s);
-    else if (strcmp(s.method, "HEAD") == 0)
+      break;
+    case OP_HEAD:
       do_retrieve(&s, false);
+      break;
+    default:
+      abort_early(&s, -EACCES);
+      break;
+    }
   }
   return 0;
 }

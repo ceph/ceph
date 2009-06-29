@@ -10,6 +10,7 @@ using namespace std;
 
 #include "include/base64.h"
 #include "s3/user.h"
+#include "s3access.h"
 
 
 #define SECRET_KEY_LEN 40
@@ -57,10 +58,12 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
     return -1;
   }
 
-  for (int i=0; i<size; i++) {
+  int i;
+  for (i=0; i<size - 1; i++) {
     int pos = (unsigned)dest[i];
     dest[i] = alphanum_table[pos % (sizeof(alphanum_table) - 1)];
   }
+  dest[i] = '\0';
 
   return 0;
 }
@@ -100,6 +103,11 @@ int main(int argc, const char **argv)
       ARGS_USAGE();
     }
   }
+
+  if (!S3Access::init_storage_provider("fs")) {
+    cerr << "couldn't init storage provider" << std::endl;
+  }
+
 
   if (mod_user) {
     actions++;

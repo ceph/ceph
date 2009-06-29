@@ -266,31 +266,49 @@ int S3FS::get_attr(const char *name, int fd, char **attr)
   return attr_len;
 }
 
+int S3FS::get_attr(const char *name, const char *path, char **attr)
+{
+  char *attr_buf;
+  size_t len = ETAG_LEN;
+  ssize_t attr_len;
+
+  while (1) {  
+    attr_buf = (char *)malloc(len);
+    attr_len = getxattr(path, name, attr_buf, len);
+    if (attr_len  > 0)
+      break;
+
+    free(attr_buf);
+    switch (errno) {
+    case ERANGE:
+      break;
+    default:
+      cerr << "getxattr on " << path << " returned" << -errno << std::endl;
+      return -errno;
+    }
+    len *= 2;
+  }
+  *attr = attr_buf;
+
+  return attr_len;
+}
+
 int S3FS::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
-  int fd;
-  struct stat st;
   int r = -EINVAL;
-  size_t max_len, pos;
   char *data = NULL;
 
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
 
-  fd = open(buf, O_RDONLY, 0755);
-
-  if (fd < 0)
-    return -errno;
-
-  r = get_attr(name, fd, &data);
+  r = get_attr(name, buf, &data);
   if (r < 0)
       goto done;
   dest.append(data, r);
 done:
   free(data);
-  close(fd);  
 
   return r;
 }

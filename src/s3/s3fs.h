@@ -20,6 +20,7 @@ public:
   int delete_obj(std::string& id, std::string& bucket, std::string& obj);
 
   int get_attr(const char *name, int fd, char **attr);
+  int get_attr(const char *name, const char *path, char **attr);
   int get_attr(std::string& bucket, std::string& obj,
                const char *name, bufferlist& dest);
 
