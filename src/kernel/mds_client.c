@@ -630,16 +630,13 @@ static int iterate_session_caps(struct ceph_mds_session *session,
 				 int (*cb)(struct inode *, struct ceph_cap *,
 					    void *), void *arg)
 {
-	struct list_head *p;
-	struct ceph_cap *cap;
+	struct ceph_cap *cap, *ncap;
 	struct inode *inode;
-	struct list_head *n;
 	int ret;
 
 	dout(10, "iterate_session_caps %p mds%d\n", session, session->s_mds);
 	spin_lock(&session->s_cap_lock);
-	list_for_each_safe(p, n, &session->s_caps) {
-		cap = list_entry(p, struct ceph_cap, session_caps);
+	list_for_each_entry_safe(cap, ncap, &session->s_caps, session_caps) {
 		inode = igrab(&cap->ci->vfs_inode);
 		if (!inode)
 			continue;
@@ -1376,11 +1373,9 @@ finish:
 static void __wake_requests(struct ceph_mds_client *mdsc,
 			    struct list_head *head)
 {
-	struct list_head *p, *n;
+	struct ceph_mds_request *req, *nreq;
 
-	list_for_each_safe(p, n, head) {
-		struct ceph_mds_request *req =
-			list_entry(p, struct ceph_mds_request, r_wait);
+	list_for_each_entry_safe(req, nreq, head, r_wait) {
 		list_del_init(&req->r_wait);
 		__do_request(mdsc, req);
 	}
@@ -1816,15 +1811,13 @@ bad:
 static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 				   struct ceph_mds_session *session)
 {
-	struct list_head *p, *n;
-	struct ceph_mds_request *req;
+	struct ceph_mds_request *req, *nreq;
 	int err;
 
 	dout(10, "replay_unsafe_requests mds%d\n", session->s_mds);
 
 	mutex_lock(&mdsc->mutex);
-	list_for_each_safe(p, n, &session->s_unsafe) {
-		req = list_entry(p, struct ceph_mds_request, r_unsafe_item);
+	list_for_each_entry_safe(req, nreq, &session->s_unsafe, r_unsafe_item) {
 		err = __prepare_send_request(mdsc, req, session->s_mds);
 		if (!err) {
 			ceph_msg_get(req->r_request);

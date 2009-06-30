@@ -384,7 +384,7 @@ static struct ceph_connection *__get_connection(struct ceph_messenger *msgr,
 						struct ceph_entity_addr *addr)
 {
 	struct ceph_connection *con = NULL;
-	struct list_head *head, *p;
+	struct list_head *head;
 	unsigned long key = hash_addr(addr);
 
 	head = radix_tree_lookup(&msgr->con_tree, key);
@@ -393,11 +393,9 @@ static struct ceph_connection *__get_connection(struct ceph_messenger *msgr,
 	con = list_entry(head, struct ceph_connection, list_bucket);
 	if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0)
 		goto yes;
-	list_for_each(p, head) {
-		con = list_entry(p, struct ceph_connection, list_bucket);
+	list_for_each_entry(con, head, list_bucket)
 		if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0)
 			goto yes;
-	}
 	return NULL;
 
 yes:

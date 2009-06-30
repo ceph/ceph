@@ -328,11 +328,9 @@ static struct ceph_snap_context *__get_oldest_context(struct inode *inode,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_snap_context *snapc = NULL;
-	struct list_head *p;
 	struct ceph_cap_snap *capsnap = NULL;
 
-	list_for_each(p, &ci->i_cap_snaps) {
-		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
+	list_for_each_entry(capsnap, &ci->i_cap_snaps, ci_item) {
 		dout(20, " cap_snap %p snapc %p has %d dirty pages\n", capsnap,
 		     capsnap->context, capsnap->dirty_pages);
 		if (capsnap->dirty_pages) {

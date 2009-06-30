@@ -1039,7 +1039,6 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci,
 {
 	struct inode *inode = &ci->vfs_inode;
 	int mds;
-	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
 	u32 mseq;
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -1054,9 +1053,7 @@ void __ceph_flush_snaps(struct ceph_inode_info *ci,
 
 	dout(10, "__flush_snaps %p\n", inode);
 retry:
-	list_for_each(p, &ci->i_cap_snaps) {
-		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
-
+	list_for_each_entry(capsnap, &ci->i_cap_snaps, ci_item) {
 		/* avoid an infiniute loop after retry */
 		if (capsnap->follows < next_follows)
 			continue;
@@ -1741,7 +1738,6 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 	int last = 0;
 	int last_snap = 0;
 	int found = 0;
-	struct list_head *p;
 	struct ceph_cap_snap *capsnap = NULL;
 
 	spin_lock(&inode->i_lock);
@@ -1760,8 +1756,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 		     ci->i_wrbuffer_ref, ci->i_wrbuffer_ref_head,
 		     last ? " LAST" : "");
 	} else {
-		list_for_each(p, &ci->i_cap_snaps) {
-			capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
+		list_for_each_entry(capsnap, &ci->i_cap_snaps, ci_item) {
 			if (capsnap->context == snapc) {
 				found = 1;
 				capsnap->dirty_pages -= nr;
@@ -2064,7 +2059,6 @@ static void handle_cap_flushsnap_ack(struct inode *inode,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	u64 follows = le64_to_cpu(m->snap_follows);
-	struct list_head *p;
 	struct ceph_cap_snap *capsnap;
 	int drop = 0;
 
@@ -2072,8 +2066,7 @@ static void handle_cap_flushsnap_ack(struct inode *inode,
 	     inode, ci, session->s_mds, follows);
 
 	spin_lock(&inode->i_lock);
-	list_for_each(p, &ci->i_cap_snaps) {
-		capsnap = list_entry(p, struct ceph_cap_snap, ci_item);
+	list_for_each_entry(capsnap, &ci->i_cap_snaps, ci_item) {
 		if (capsnap->follows == follows) {
 			WARN_ON(capsnap->dirty_pages || capsnap->writing);
 			dout(10, " removing cap_snap %p follows %lld\n",

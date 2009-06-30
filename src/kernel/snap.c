@@ -359,16 +359,13 @@ fail:
  */
 static void rebuild_snap_realms(struct ceph_snap_realm *realm)
 {
-	struct list_head *p;
 	struct ceph_snap_realm *child;
 
 	dout(10, "rebuild_snap_realms %llx %p\n", realm->ino, realm);
 	build_snap_context(realm);
 
-	list_for_each(p, &realm->children) {
-		child = list_entry(p, struct ceph_snap_realm, child_item);
+	list_for_each_entry(child, &realm->children, child_item)
 		rebuild_snap_realms(child);
-	}
 }
 
 
@@ -565,14 +562,12 @@ more:
 		 * ...unless it's a snap deletion!
 		 */
 		if (!deletion) {
-			struct list_head *pi;
-			struct inode *inode;
+			struct ceph_inode_info *ci;
+
 			spin_lock(&realm->inodes_with_caps_lock);
-			list_for_each(pi, &realm->inodes_with_caps) {
-				struct ceph_inode_info *ci =
-					list_entry(pi, struct ceph_inode_info,
-						   i_snap_realm_item);
-				inode = igrab(&ci->vfs_inode);
+			list_for_each_entry(ci, &realm->inodes_with_caps,
+					    i_snap_realm_item) {
+				struct inode *inode = igrab(&ci->vfs_inode);
 				spin_unlock(&realm->inodes_with_caps_lock);
 				if (inode) {
 					ceph_queue_cap_snap(ci,

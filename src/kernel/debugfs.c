@@ -401,16 +401,13 @@ static int dentry_lru_show(struct seq_file *s, void *ptr)
 {
 	struct ceph_client *client = s->private;
 	struct ceph_mds_client *mdsc = &client->mdsc;
-	struct list_head *p;
 	struct ceph_dentry_info *di;
 
 	spin_lock(&mdsc->dentry_lru_lock);
-	list_for_each(p, &mdsc->dentry_lru) {
-		struct dentry *dentry;
-		di = list_entry(p, struct ceph_dentry_info, lru);
-		dentry = di->dentry;
+	list_for_each_entry(di, &mdsc->dentry_lru, lru) {
+		struct dentry *dentry = di->dentry;
 		seq_printf(s, "%p %p\t%.*s\n",
-			di, dentry, dentry->d_name.len, dentry->d_name.name);
+			   di, dentry, dentry->d_name.len, dentry->d_name.name);
 	}
 	spin_unlock(&mdsc->dentry_lru_lock);
 
