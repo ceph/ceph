@@ -1145,9 +1145,12 @@ void OSD::heartbeat()
        p != heartbeat_from.end();
        p++) {
     if (heartbeat_from_stamp.count(p->first)) {
-      if (!osdmap->is_up(p->first) || osdmap->get_inst(p->first) != heartbeat_inst[p->first]) {
+      if (!osdmap->is_up(p->first) || osdmap->get_hb_inst(p->first) != heartbeat_inst[p->first]) {
 	dout(10) << "not checking timeout on osd" << p->first
-		 << ", who is not in my osdmap" << dendl;
+		 << " whose up " << osdmap->is_up(p->first)
+		 << " != 1 || hb inst " << heartbeat_inst[p->first]
+		 << " != map's " << osdmap->get_inst(p->first)
+		 << dendl;
       } else if (heartbeat_from_stamp[p->first] < grace) {
 	dout(0) << "no heartbeat from osd" << p->first
 		<< " since " << heartbeat_from_stamp[p->first]
