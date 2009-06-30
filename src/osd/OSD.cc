@@ -1065,7 +1065,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       take_peer_stat(from, m->peer_stat);  // only with map_lock held!
     }
 
-    heartbeat_from_stamp[from] = g_clock.now(); // don't let _my_ lag interfere... //  m->get_recv_stamp();
+    heartbeat_from_stamp[from] = g_clock.now();  // don't let _my_ lag interfere.
   } else {
     dout(10) << " ignoring " << m->get_source_inst() << dendl;
   }
@@ -1145,8 +1145,12 @@ void OSD::heartbeat()
        p != heartbeat_from.end();
        p++) {
     if (heartbeat_from_stamp.count(p->first)) {
-      if (heartbeat_from_stamp[p->first] < grace) {
-	dout(0) << "no heartbeat from osd" << p->first << " since " << heartbeat_from_stamp[p->first]
+      if (!osdmap->is_up(p->first) || osdmap->get_inst(p->first) != heartbeat_inst[p->first]) {
+	dout(10) << "not checking timeout on osd" << p->first
+		 << ", who is not in my osdmap" << dendl;
+      } else if (heartbeat_from_stamp[p->first] < grace) {
+	dout(0) << "no heartbeat from osd" << p->first
+		<< " since " << heartbeat_from_stamp[p->first]
 		<< " (cutoff " << grace << ")" << dendl;
 	queue_failure(p->first);
       }
