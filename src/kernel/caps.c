@@ -22,11 +22,11 @@ static DEFINE_SPINLOCK(cap_str_lock);
 static int last_cap_str;
 
 static spinlock_t caps_list_lock;
-static struct list_head caps_list;  // unused (reserved or unreserved)
-static int caps_total_count;        // total caps allocated
-static int caps_use_count;          // in use
-static int caps_reserve_count;      // unused, reserved
-static int caps_avail_count;        // unused, unreserved
+static struct list_head caps_list;  /* unused (reserved or unreserved) */
+static int caps_total_count;        /* total caps allocated */
+static int caps_use_count;          /* in use */
+static int caps_reserve_count;      /* unused, reserved */
+static int caps_avail_count;        /* unused, unreserved */
 
 static char *gcap_string(char *s, int c)
 {
