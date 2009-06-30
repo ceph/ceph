@@ -1925,11 +1925,11 @@ void PG::read_log(ObjectStore *store)
       // [repair] at end of log?
       if (!p.end() && e.version == info.last_update) {
 	stringstream ss;
-	ss << info.pgid << " log has extra data at " << endoff << "~" << (ondisklog.top-endoff)
+	ss << info.pgid << " log has extra data at " << endpos << "~" << (ondisklog.top-endpos)
 	   << " after " << info.last_update;
 	osd->get_logclient()->log(LOG_ERROR, ss);
-	dout(0) << "read_log " << endoff << " *** extra gunk at end of log, adjusting ondisklog.top" << dendl;
-	ondisklog.top = endoff;
+	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, adjusting ondisklog.top" << dendl;
+	ondisklog.top = endpos;
 	break;
       }
     }
