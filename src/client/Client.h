@@ -99,7 +99,7 @@ struct MDSSession {
   bool was_stale;
 
   xlist<InodeCap*> caps;
-  
+
   MClientCapRelease *release;
   
   MDSSession() : seq(0), cap_gen(0), num_caps(0),
@@ -628,8 +628,13 @@ public:
     int      resend_mds;         // someone wants you to (re)send the request here
     int      num_fwd;            // # of times i've been forwarded
     int      retry_attempt;
+    int      ref;
 
     MClientReply *reply;         // the reply
+
+    //possible responses
+    bool got_safe;
+    bool got_unsafe;
 
     Cond  *caller_cond;          // who to take up
     Cond  *dispatch_cond;        // who to kick back
@@ -637,8 +642,23 @@ public:
     MetaRequest(MClientRequest *req, tid_t t) : 
       tid(t), request(req), 
       resend_mds(-1), num_fwd(0), retry_attempt(0),
-      reply(0), 
+      ref(1), reply(0), 
+      got_safe(false), got_unsafe(false),
       caller_cond(0), dispatch_cond(0) { }
+
+    MetaRequest* get() {
+      ++ref;
+      dout(20) << "Get called on MetaRequest " << this << std::endl
+	   << "Refcount is " << ref << dendl;
+      return this; }
+    void put() {
+      dout(20) << "Put called on MetaRequest " << this << dendl;
+      if (--ref == 0) {
+	dout(20) << "MetaRequest " << this << " deleting." << dendl;
+	delete this;
+      }
+      dout(20) << "Refcount is " << ref << dendl;
+    }
   };
   tid_t last_tid;
   map<tid_t, MetaRequest*> mds_requests;
