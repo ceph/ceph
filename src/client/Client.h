@@ -89,6 +89,69 @@ extern class Logger  *client_logger;
  
 */
 struct InodeCap;
+
+struct MetaRequest {
+  tid_t tid;
+  MClientRequest *request;    
+  bufferlist request_payload;  // in case i have to retry
+  
+  int uid, gid;
+  
+  utime_t  sent_stamp;
+  set<int> mds;                // who i am asking
+  int      resend_mds;         // someone wants you to (re)send the request here
+  int      num_fwd;            // # of times i've been forwarded
+  int      retry_attempt;
+  int      ref;
+  
+  MClientReply *reply;         // the reply
+  
+  //possible responses
+  bool got_safe;
+  bool got_unsafe;
+
+private:
+  xlist<MetaRequest*>::item unsafe_item;
+public:
+  Cond  *caller_cond;          // who to take up
+  Cond  *dispatch_cond;        // who to kick back
+
+  MetaRequest(MClientRequest *req, tid_t t) : 
+    tid(t), request(req), 
+    resend_mds(-1), num_fwd(0), retry_attempt(0),
+    ref(1), reply(0), 
+    got_safe(false), got_unsafe(false), unsafe_item(this),
+    caller_cond(0), dispatch_cond(0) { }
+
+  MetaRequest* get() {
+    ++ref;
+    cerr << "Get called on MetaRequest tid " << tid
+	 << "Refcount is " << ref
+	 << " Type is " << request->head.op << std::endl;
+    return this; }
+
+  void put() {
+    cerr << "Put called on MetaRequest tid " << tid;
+    if (--ref == 0) {
+      cerr << "MetaRequest tid" << tid << " deleting." << std::endl;
+      delete this;
+    }
+    cerr << "Refcount is " << ref
+	 << " Type is " << request->head.op << std::endl;
+  }
+
+  xlist<MetaRequest*>::item * get_meta_item() {
+    get();
+    return &unsafe_item;
+  }
+
+  void remove_from_unsafe_list() {
+    unsafe_item.remove_myself();
+    put();
+  }
+};
+
+
 struct MDSSession {
   version_t seq;
   __u64 cap_gen;
@@ -99,6 +162,7 @@ struct MDSSession {
   bool was_stale;
 
   xlist<InodeCap*> caps;
+  xlist<MetaRequest*> unsafe_requests;
 
   MClientCapRelease *release;
   
@@ -614,52 +678,10 @@ public:
   void got_mds_push(int mds);
   void handle_client_session(MClientSession *m);
   void send_reconnect(int mds);
+  void resend_unsafe_requests(int mds);
 
   // mds requests
-  struct MetaRequest {
-    tid_t tid;
-    MClientRequest *request;    
-    bufferlist request_payload;  // in case i have to retry
-    
-    int uid, gid;
 
-    utime_t  sent_stamp;
-    set<int> mds;                // who i am asking
-    int      resend_mds;         // someone wants you to (re)send the request here
-    int      num_fwd;            // # of times i've been forwarded
-    int      retry_attempt;
-    int      ref;
-
-    MClientReply *reply;         // the reply
-
-    //possible responses
-    bool got_safe;
-    bool got_unsafe;
-
-    Cond  *caller_cond;          // who to take up
-    Cond  *dispatch_cond;        // who to kick back
-
-    MetaRequest(MClientRequest *req, tid_t t) : 
-      tid(t), request(req), 
-      resend_mds(-1), num_fwd(0), retry_attempt(0),
-      ref(1), reply(0), 
-      got_safe(false), got_unsafe(false),
-      caller_cond(0), dispatch_cond(0) { }
-
-    MetaRequest* get() {
-      ++ref;
-      dout(20) << "Get called on MetaRequest " << this << std::endl
-	   << "Refcount is " << ref << dendl;
-      return this; }
-    void put() {
-      dout(20) << "Put called on MetaRequest " << this << dendl;
-      if (--ref == 0) {
-	dout(20) << "MetaRequest " << this << " deleting." << dendl;
-	delete this;
-      }
-      dout(20) << "Refcount is " << ref << dendl;
-    }
-  };
   tid_t last_tid;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;

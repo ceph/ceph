@@ -133,6 +133,9 @@ public:
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
+  void set_replayed_op() {
+    head.flags = head.flags | CEPH_MDS_FLAG_REPLAY;
+  }
     
   tid_t get_tid() { return head.tid; }
   tid_t get_oldest_client_tid() { return head.oldest_client_tid; }

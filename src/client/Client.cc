@@ -770,7 +770,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   req->set_caller_uid(uid);
   req->set_caller_gid(gid);
 
-  // encode payload now, in case we have to resend (in case of mds failure)
+  // encode payload now, in case we have to resend(in case of mds failure)
   req->encode_payload();
   request->request_payload = req->get_payload();
 
@@ -861,7 +861,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   // insert trace
   utime_t from = request->sent_stamp;
-  Inode *target = insert_trace(request, from, mds);
+  Inode *target = insert_trace(request->get(), from, mds);
   if (ptarget)
     *ptarget = target;
 
@@ -1022,11 +1022,11 @@ void Client::handle_client_reply(MClientReply *reply)
   int mds_num = reply->get_source().num();
   MetaRequest *request = mds_requests[tid]->get();
   assert(request);
-
+  
   // store reply
-  if (!request->reply && !reply->is_safe()) //safe replies have no useful info
-    request->reply = reply;
-
+  //  if (!request->reply && !reply->is_safe()) //safe replies have no useful info
+  request->reply = reply;
+  
   if ((request->got_unsafe && !reply->is_safe())
       || (request->got_safe && reply->is_safe())) {
     //duplicate response
@@ -1035,21 +1035,23 @@ void Client::handle_client_reply(MClientReply *reply)
     request->put();
     return;
   }
-
-
+  
   if(reply->is_safe()) {
     //the filesystem change is committed to disk
     request->got_safe = true;
-    if (request->got_unsafe)
+    if (request->got_unsafe) {
       //we're done, clean up
+      request->remove_from_unsafe_list();
       goto cleanup;
+    }
   }
 
   if(!reply->is_safe()) {
     request->got_unsafe = true;
     if(request->got_safe)
-      //we already kicked, so don't do that, just clean up
+      //we already kicked, so just clean up
       goto cleanup;
+    mds_sessions[mds_num].unsafe_requests.push_back(request->get_meta_item());
   }
   if(request->got_safe ^ request->got_unsafe) {
     Cond cond;
@@ -1064,6 +1066,7 @@ void Client::handle_client_reply(MClientReply *reply)
       cond.Wait(client_lock);
     }
   }
+
  cleanup:
   request->put();
 }
@@ -1229,9 +1232,10 @@ void Client::send_reconnect(int mds)
       }
     }
 
-
     // reset my cap seq number
     mds_sessions[mds].seq = 0;
+
+    resend_unsafe_requests(mds);
   } else {
     dout(10) << " i had no session with this mds" << dendl;
     m->closed = true;
@@ -1253,12 +1257,31 @@ void Client::kick_requests(int mds, bool signal)
 	p->second->caller_cond->Signal();
       }
       else {
-	send_request(p->second, mds);
+	send_request(p->second->get(), mds);
       }
     }
 }
 
-
+void Client::resend_unsafe_requests(int mds_num) {
+  MDSSession& mds = mds_sessions[mds_num];
+  MetaRequest* current = mds.unsafe_requests.front()->get();
+  MClientRequest *m;
+  while (current) {
+    current->remove_from_unsafe_list();
+    m = new MClientRequest;
+    m->copy_payload(current->request_payload);
+    m->decode_payload();
+    m->set_retry_attempt(current->retry_attempt);
+    m->set_dentry_wanted();
+    m->set_replayed_op();
+    current->request = m;
+    current->got_unsafe = false;
+    current->got_safe = false;
+    send_request(current->get(), mds_num);
+    current->put();
+    current = mds.unsafe_requests.front();
+  }
+}
 
 /************
  * leases
