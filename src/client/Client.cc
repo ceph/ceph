@@ -2695,7 +2695,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       }
     }
     // dir lease?
-    if ((dir->caps_issued() & CEPH_CAP_FILE_SHARED) &&
+    if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	dn->cap_shared_gen == dir->shared_gen) {
       *target = dn->inode;
       goto done;
@@ -2925,12 +2925,11 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
 
 int Client::_getattr(Inode *in, int mask, int uid, int gid)
 {
-  int issued = in->caps_issued();
+  bool yes = in->caps_issued_mask(mask);
 
-  dout(10) << "_getattr mask " << ccap_string(mask) << " issued " << ccap_string(issued) << dendl;
-  if ((issued & mask) == mask) {
+  dout(10) << "_getattr mask " << ccap_string(mask) << " issued=" << yes << dendl;
+  if (yes)
     return 0;
-  }
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
   filepath path;
@@ -2952,7 +2951,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   dout(10) << "_setattr mask " << mask << " issued " << ccap_string(issued) << dendl;
 
   // make the change locally?
-  if (issued & CEPH_CAP_AUTH_EXCL) {
+  if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
       in->inode.mode = attr->st_mode;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
@@ -2969,7 +2968,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
       mask &= ~CEPH_SETATTR_GID;
     }
   }
-  if (issued & CEPH_CAP_FILE_EXCL) {
+  if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
 	in->inode.mtime = utime_t(attr->st_mtime, 0);
@@ -3480,7 +3479,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
-  if ((in->caps_issued() & want) == want) {
+  if (in->caps_issued_mask(want)) {
     // update wanted?
     check_caps(in, true);
   } else {
@@ -3684,7 +3683,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
       }
     } else {
       // wait for RD cap?
-      while ((issued & CEPH_CAP_FILE_RD) == 0) {
+      while (!in->caps_issued_mask(CEPH_CAP_FILE_RD)) {
 	dout(7) << " don't have read cap, waiting" << dendl;
 	goto wait;
       }
@@ -3735,7 +3734,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   int r = 0;
   if (g_conf.client_oc) {
 
-    if (issued & CEPH_CAP_FILE_CACHE) {
+    if (in->caps_issued_mask(CEPH_CAP_FILE_CACHE)) {
       // we will populate the cache here
       if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
 	in->get_cap_ref(CEPH_CAP_FILE_CACHE);
@@ -3928,7 +3927,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   
   // wait for caps, max_size
   while ((lazy && (in->caps_issued() & CEPH_CAP_FILE_LAZYIO) == 0) ||
-	 (!lazy && (in->caps_issued() & CEPH_CAP_FILE_WR) == 0 &&
+	 (!lazy && in->caps_issued_mask(CEPH_CAP_FILE_WR) == false &&
 	  (in->cap_snaps.empty() || !in->cap_snaps.rbegin()->second.writing)) ||
 	 endoff > in->inode.max_size) {
     dout(7) << "missing wr|lazy cap OR endoff " << endoff
@@ -3945,7 +3944,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
   if (g_conf.client_oc) {
-    if (in->caps_issued() & CEPH_CAP_FILE_BUFFER) {
+    if (in->caps_issued_mask(CEPH_CAP_FILE_BUFFER)) {
       // do buffered write
       if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
 	in->get_cap_ref(CEPH_CAP_FILE_BUFFER);

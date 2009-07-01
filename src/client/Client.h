@@ -436,6 +436,35 @@ class Inode {
 	c |= it->second->issued;
     return c;
   }
+  void touch_cap(InodeCap *cap) {
+    // move to back of LRU
+    cap->session->caps.push_back(&cap->cap_item);
+  }
+  bool caps_issued_mask(unsigned mask) {
+    int c = exporting_issued | snap_caps;
+    if ((c & mask) == mask)
+      return true;
+    for (map<int,InodeCap*>::iterator it = caps.begin();
+         it != caps.end();
+         it++) {
+      if (cap_is_valid(it->second)) {
+	if ((it->second->issued & mask) == mask) {
+	  touch_cap(it->second);
+	  return true;
+	}
+	c |= it->second->issued;
+      }
+    }
+    if ((c & mask) == mask) {
+      // bah.. touch them all
+      for (map<int,InodeCap*>::iterator it = caps.begin();
+	   it != caps.end();
+	   it++)
+	touch_cap(it->second);
+      return true;
+    }
+    return false;
+  }
 
   int caps_used() {
     int w = 0;

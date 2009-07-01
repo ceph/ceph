@@ -121,8 +121,6 @@ osd
 - optimize remove wrt recovery pushes?
 
 userspace client
-- make session cap list an LRU
-  - make caps_issued_mask, touch_cap helpers to || kclient
 - clean up client mds session vs mdsmap behavior?
 - stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
