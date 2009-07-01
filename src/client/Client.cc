@@ -67,7 +67,7 @@ using namespace std;
 
 #define DOUT_SUBSYS client
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "client" << whoami << " "
+#define dout_prefix *_dout << dbeginl << pthread_self() << " client" << whoami << " "
 
 #define  tout       if (g_conf.client_trace) traceout
 
@@ -850,6 +850,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   // kick dispatcher (we've got it!)
   assert(request->dispatch_cond);
   request->dispatch_cond->Signal();
+  request->dispatch_cond = 0;
   dout(20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   
   // insert trace
@@ -1030,8 +1031,26 @@ void Client::handle_client_reply(MClientReply *reply)
     return;
   }
   
-  if(reply->is_safe()) {
-    //the filesystem change is committed to disk
+  if (!request->got_unsafe) {
+    request->got_unsafe = true;
+    mds_sessions[mds_num].unsafe_requests.push_back(&request->unsafe_item);
+
+    Cond cond;
+    request->dispatch_cond = &cond;
+    
+    // wake up waiter
+    dout(20) << "handle_client_reply signalling caller " << (void*)request->caller_cond << dendl;
+    request->caller_cond->Signal();
+    
+    // wake for kick back
+    while (request->dispatch_cond) {
+      dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
+      cond.Wait(client_lock);
+    }
+  }
+
+  if (reply->is_safe()) {
+    // the filesystem change is committed to disk
     request->got_safe = true;
     if (request->got_unsafe) {
       //we're done, clean up
@@ -1040,32 +1059,11 @@ void Client::handle_client_reply(MClientReply *reply)
     }
   }
 
-  if(!reply->is_safe()) {
-    request->got_unsafe = true;
-    if(request->got_safe)
-      //we already kicked, so just clean up
-      goto cleanup;
-    mds_sessions[mds_num].unsafe_requests.push_back(&request->unsafe_item);
-  }
-  if(request->got_safe ^ request->got_unsafe) {
-    Cond cond;
-    request->dispatch_cond = &cond;
-    
-    // wake up waiter
-    request->caller_cond->Signal();
-    
-    // wake for kick back
-    while (mds_requests.count(tid)) {
-      dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
-      cond.Wait(client_lock);
-    }
-  }
-
  cleanup:
-  if(reply->is_safe()) {
+  if (reply->is_safe()) {
     mds_requests.erase(tid);
     request->put();
-    }
+  }
   return;
 }
 
