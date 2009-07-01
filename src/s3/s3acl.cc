@@ -114,14 +114,19 @@ void S3AccessControlList::init_user_map()
   user_map_initialized = true;
 }
 
+void S3AccessControlList::add_grant(ACLGrant *grant)
+{
+  string id = grant->get_id();
+  if (id.size() > 0) {
+    grant_map[id] = *grant;
+  }
+}
+
 void S3AccessControlList::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant *grant = (ACLGrant *)iter.get_next();
   while (grant) {
-    string id = grant->get_id();
-    if (id.size() > 0) {
-      grant_map[id] = *grant;
-    }
+    add_grant(grant);
     grant = (ACLGrant *)iter.get_next();
   }
   init_user_map();
@@ -141,12 +146,8 @@ int S3AccessControlList::get_perm(string& id, int perm_mask) {
 }
 
 void S3AccessControlPolicy::xml_end(const char *el) {
-  S3AccessControlList *pacl = (S3AccessControlList *)find_first("AccessControlList");
-  if (pacl)
-    acl = *pacl;
-  ACLOwner *powner = (ACLOwner *)find_first("Owner");
-  if (powner)
-    owner = *powner;
+  acl = *(S3AccessControlList *)find_first("AccessControlList");
+  owner = *(ACLOwner *)find_first("Owner");
 }
 
 int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
@@ -205,6 +206,7 @@ void S3XMLParser::xml_start(const char *el, const char **attr) {
   }
   cur_obj = obj;
 
+  objs.push_back(obj);
 }
 
 void xml_end(void *data, const char *el) {

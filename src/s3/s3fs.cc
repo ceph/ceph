@@ -313,6 +313,23 @@ done:
   return r;
 }
 
+int S3FS::set_attr(std::string& bucket, std::string& obj,
+                       const char *name, bufferlist& bl)
+{
+  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
+  char buf[len];
+  int r;
+
+  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+
+  r = setxattr(buf, name, bl.c_str(), bl.length(), 0);
+
+  int ret = (r < 0 ? -errno : 0);
+  cerr << "setxattr: path=" << buf << " ret=" << ret << std::endl;
+
+  return ret;
+}
+
 int S3FS::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
             const time_t *mod_ptr,

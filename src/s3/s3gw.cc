@@ -786,6 +786,131 @@ done:
   }
 }
 
+static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& dest)
+{
+/*
+ if (s3_get_user_info(auth_id, s->user) < 0) {
+    cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
+    dump_errno(s, -EPERM);
+    end_header(s);
+    dump_start_xml(s);
+    return false;
+  } */
+  ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
+  if (!owner)
+    return -EINVAL;
+
+  S3UserInfo owner_info;
+  if (s3_get_user_info(owner->get_id(), owner_info) < 0) {
+    cerr << "owner info does not exist" << std::endl;
+    return -EINVAL;
+  }
+  ACLOwner& new_owner = dest.get_owner();
+  new_owner.set_id(owner->get_id());
+  new_owner.set_name(owner_info.display_name);
+
+  S3AccessControlList& src_acl = src.get_acl();
+  S3AccessControlList& acl = dest.get_acl();
+
+  XMLObjIter iter = src_acl.find("Grant");
+  ACLGrant *src_grant = (ACLGrant *)iter.get_next();
+  while (src_grant) {
+    string id = src_grant->get_id();
+    
+    S3UserInfo grant_user;
+    if (s3_get_user_info(id, grant_user) < 0) {
+      cerr << "grant user does not exist:" << id << std::endl;
+    } else {
+      ACLGrant new_grant;
+      ACLPermission& perm = src_grant->get_permission();
+      new_grant.set(id, grant_user.display_name, perm.get_permissions());
+      cerr << "new grant: " << id << ":" << grant_user.display_name << std::endl;
+      acl.add_grant(&new_grant);
+    }
+    src_grant = (ACLGrant *)iter.get_next();
+  }
+
+  return 0; 
+}
+
+static void do_write_acls(struct req_state *s)
+{
+  bufferlist bl;
+  int r = 0;
+
+  size_t cl = atoll(s->length);
+  size_t actual = 0;
+  char *data = NULL;
+  S3AccessControlPolicy *policy;
+  S3XMLParser parser;
+  S3AccessControlPolicy new_policy;
+
+  if (!verify_permission(s, S3_PERM_WRITE_ACP)) {
+    abort_early(s, -EACCES);
+    return;
+  }
+
+  if (!parser.init()) {
+    r = -EINVAL;
+    goto done;
+  }
+
+  if (!s->acl) {
+     s->acl = new S3AccessControlPolicy;
+     if (!s->acl) {
+       r = -ENOMEM;
+       goto done;
+     }
+  }
+
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       r = -ENOMEM;
+       goto done;
+    }
+    actual = FCGX_GetStr(data, cl, s->in);
+    data[actual] = '\0';
+  }
+
+  cerr << "read data=" << data << " actual=" << actual << std::endl;
+
+
+  if (!parser.parse(data, actual, 1)) {
+    r = -EACCES;
+    goto done;
+  }
+  policy = (S3AccessControlPolicy *)parser.find_first("AccessControlPolicy");
+  if (!policy) {
+    r = -EINVAL;
+    goto done;
+  }
+  policy->to_xml(cerr);
+  cerr << std::endl;
+
+  r = rebuild_policy(*policy, new_policy);
+  if (r < 0)
+    goto done;
+
+  cerr << "new_policy: ";
+  new_policy.to_xml(cerr);
+  cerr << std::endl;
+
+  /* FIXME: make some checks around checks and fix policy */
+
+  new_policy.encode(bl);
+  r = s3store->set_attr(s->bucket_str, s->object_str,
+                       "user.s3acl", bl);
+
+done:
+  free(data);
+
+  dump_errno(s, r);
+  end_header(s);
+  dump_start_xml(s);
+  return;
+}
+
 static int read_acls(struct req_state *s, bool only_bucket = false)
 {
   bufferlist bl;
@@ -833,13 +958,18 @@ static void get_acls(struct req_state *s)
   FCGX_PutStr(str.c_str(), str.size(), s->out); 
 }
 
+static bool is_acl_op(struct req_state *s)
+{
+  return s->args.exists("acl");
+}
+
 static void do_retrieve_objects(struct req_state *s, bool get_data)
 {
   string prefix, marker, max_keys, delimiter;
   int max;
   string id = "0123456789ABCDEF";
 
-  if (s->args.exists("acl")) {
+  if (is_acl_op(s)) {
     if (!verify_permission(s, S3_PERM_READ_ACP)) {
       abort_early(s, -EACCES);
       return;
@@ -1036,7 +1166,9 @@ static void do_retrieve(struct req_state *s, bool get_data)
 
 static void do_create(struct req_state *s)
 {
-  if (s->object)
+  if (is_acl_op(s))
+    do_write_acls(s);
+  else if (s->object)
     do_create_object(s);
   else if (s->bucket)
     do_create_bucket(s);
@@ -1077,6 +1209,10 @@ int read_permissions(struct req_state *s)
     /* is it a 'create bucket' request? */
     if (s->object_str.size() == 0)
       return 0;
+    if (is_acl_op(s)) {
+      only_bucket = false;
+      break;
+    }
   case OP_DELETE:
     only_bucket = true;
     break;

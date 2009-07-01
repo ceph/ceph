@@ -50,6 +50,8 @@ public:
 
   virtual int get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest) = 0;
+  virtual int set_attr(std::string& bucket, std::string& obj,
+                       const char *name, bufferlist& bl) = 0;
 
   static S3Access *init_storage_provider(const char *type);
   static S3Access *store;

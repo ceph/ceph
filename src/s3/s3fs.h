@@ -23,6 +23,8 @@ public:
   int get_attr(const char *name, const char *path, char **attr);
   int get_attr(std::string& bucket, std::string& obj,
                const char *name, bufferlist& dest);
+  int set_attr(std::string& bucket, std::string& obj,
+                       const char *name, bufferlist& bl);
 
  int get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,

@@ -1,3 +1,5 @@
+#include <errno.h>
+
 #include <iostream>
 #include <string>
 
@@ -11,6 +13,7 @@ using namespace std;
 #include "include/base64.h"
 #include "s3/user.h"
 #include "s3access.h"
+#include "s3acl.h"
 
 
 #define SECRET_KEY_LEN 40
@@ -18,11 +21,13 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: s3admin <--user-gen | --user_modify> [options...]" << std::endl;
+  cerr << "usage: s3admin <--user-gen | --user-modify | --read-policy > [options...]" << std::endl;
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id>" << std::endl;
   cerr << "   --key=<key>" << std::endl;
   cerr << "   --display-name=<name>" << std::endl;
+  cerr << "   --bucket=<bucket>" << std::endl;
+  cerr << "   --object=<object>" << std::endl;
   generic_usage();
 }
 
@@ -68,6 +73,45 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
+static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& dest)
+{
+  ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
+  if (!owner)
+    return -EINVAL;
+
+  S3UserInfo owner_info;
+  if (s3_get_user_info(owner->get_id(), owner_info) < 0) {
+    cerr << "owner info does not exist" << std::endl;
+    return -EINVAL;
+  }
+  ACLOwner& new_owner = dest.get_owner();
+  new_owner.set_id(owner->get_id());
+  new_owner.set_name(owner_info.display_name);
+
+  S3AccessControlList& src_acl = src.get_acl();
+  S3AccessControlList& acl = dest.get_acl();
+
+  XMLObjIter iter = src_acl.find("Grant");
+  ACLGrant *src_grant = (ACLGrant *)iter.get_next();
+  while (src_grant) {
+    string id = src_grant->get_id();
+    
+    S3UserInfo grant_user;
+    if (s3_get_user_info(id, grant_user) < 0) {
+      cerr << "grant user does not exist:" << id << std::endl;
+    } else {
+      ACLGrant new_grant;
+      ACLPermission& perm = src_grant->get_permission();
+      new_grant.set(id, grant_user.display_name, perm.get_permissions());
+      cerr << "new grant: " << id << ":" << grant_user.display_name << std::endl;
+      acl.add_grant(&new_grant);
+    }
+    src_grant = (ACLGrant *)iter.get_next();
+  }
+
+  return 0; 
+}
+
 
 int main(int argc, const char **argv) 
 {
@@ -80,31 +124,42 @@ int main(int argc, const char **argv)
   const char *user_id = 0;
   const char *secret_key = 0;
   const char *display_name = 0;
+  const char *bucket = 0;
+  const char *object = 0;
   bool gen_user = false;
   bool mod_user = false;
+  bool read_policy = false;
   int actions = 0 ;
   S3UserInfo info;
+  S3Access *store;
 
   if (g_conf.clock_tare) g_clock.tare();
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("user-gen", 'g')) {
       gen_user = true;
-    } else if (CONF_ARG_EQ("user-modify", 'g')) {
+    } else if (CONF_ARG_EQ("user-modify", 'm')) {
       mod_user = true;
+    } else if (CONF_ARG_EQ("read-policy", 'p')) {
+      read_policy = true;
     } else if (CONF_ARG_EQ("uid", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&user_id, OPT_STR);
     } else if (CONF_ARG_EQ("key", 'k')) {
       CONF_SAFE_SET_ARG_VAL(&secret_key, OPT_STR);
     } else if (CONF_ARG_EQ("display-name", 'n')) {
       CONF_SAFE_SET_ARG_VAL(&display_name, OPT_STR);
+    } else if (CONF_ARG_EQ("bucket", 'b')) {
+      CONF_SAFE_SET_ARG_VAL(&bucket, OPT_STR);
+    } else if (CONF_ARG_EQ("object", 'o')) {
+      CONF_SAFE_SET_ARG_VAL(&object, OPT_STR);
     } else {
       cerr << "unrecognized arg " << args[i] << std::endl;
       ARGS_USAGE();
     }
   }
 
-  if (!S3Access::init_storage_provider("fs")) {
+  store = S3Access::init_storage_provider("fs");
+  if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
   }
 
@@ -171,9 +226,29 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (read_policy) {
+    actions++;
+    bufferlist bl;
+    if (!bucket)
+      bucket = "";
+    if (!object)
+      object = "";
+    string bucket_str(bucket);
+    string object_str(object);
+    int ret = store->get_attr(bucket_str, object_str,
+                       "user.s3acl", bl);
+
+    S3AccessControlPolicy policy;
+    if (ret >= 0) {
+      bufferlist::iterator iter = bl.begin();
+      policy.decode(iter);
+      policy.to_xml(cout);
+      cout << std::endl;
+    }
+  }
+
   if (!actions)
     ARGS_USAGE();
-
 
   return 0;
 }

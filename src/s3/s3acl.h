@@ -38,9 +38,9 @@ public:
   };
 };
 
-
 class XMLObj
 {
+  int refcount;
   XMLObj *parent;
   string type;
   map<string, string> attr_map;
@@ -48,13 +48,8 @@ protected:
   string data;
   multimap<string, XMLObj *> children;
 public:
-  XMLObj() {}
-  virtual ~XMLObj() {
-    multimap<string, XMLObj *>::iterator iter;
-    for (iter = children.begin(); iter != children.end(); ++iter) {
-      delete iter->second;
-    }
-  }
+  XMLObj() : refcount(0) {}
+  virtual ~XMLObj() { }
   void xml_start(XMLObj *parent, const char *el, const char **attr) {
     this->parent = parent;
     type = el;
@@ -90,7 +85,6 @@ public:
   }
 
   friend ostream& operator<<(ostream& out, XMLObj& obj);
-
 };
 
 class ACLPermission : public XMLObj
@@ -114,13 +108,13 @@ public:
      out << "<Permission>FULL_CONTROL</Permission>";
     } else {
       if (flags & S3_PERM_READ)
-        out << "<Permission>READ</Permission";
+        out << "<Permission>READ</Permission>";
       if (flags & S3_PERM_WRITE)
-        out << "<Permission>WRITE</Permission";
+        out << "<Permission>WRITE</Permission>";
       if (flags & S3_PERM_READ_ACP)
-        out << "<Permission>READ_ACP</Permission";
+        out << "<Permission>READ_ACP</Permission>";
       if (flags & S3_PERM_WRITE_ACP)
-        out << "<Permission>WRITE_ACP</Permission";
+        out << "<Permission>WRITE_ACP</Permission>";
     }
   }
 };
@@ -201,13 +195,15 @@ public:
     }
     out << "</AccessControlList>";
   }
+  void add_grant(ACLGrant *grant);
+
   void create_default(string name, string id) {
     acl_user_map.clear();
     grant_map.clear();
 
     ACLGrant grant;
     grant.set(name, id, S3_PERM_FULL_CONTROL);
-    grant_map[name] = grant;
+    add_grant(&grant);
   }
 };
 WRITE_CLASS_ENCODER(S3AccessControlList)
@@ -246,6 +242,7 @@ class S3AccessControlPolicy : public XMLObj
 {
   S3AccessControlList acl;
   ACLOwner owner;
+
 public:
   S3AccessControlPolicy() {}
   ~S3AccessControlPolicy() {}
@@ -269,10 +266,19 @@ public:
     out << "</AccessControlPolicy>";
   }
 
+  void set_owner(ACLOwner& o) { owner = o; }
+  ACLOwner& get_owner() {
+    return owner;
+  }
+
   void create_default(string& id, string& name) {
     acl.create_default(id, name);
     owner.set_id(id);
     owner.set_name(name);
+  }
+
+  S3AccessControlList& get_acl() {
+    return acl;
   }
 };
 WRITE_CLASS_ENCODER(S3AccessControlPolicy)
@@ -283,10 +289,16 @@ class S3XMLParser : public XMLObj
   char *buf;
   int buf_len;
   XMLObj *cur_obj;
+  vector<XMLObj *> objs;
 public:
   S3XMLParser() : buf(NULL), buf_len(0), cur_obj(NULL) {}
   ~S3XMLParser() {
     free(buf);
+    vector<XMLObj *>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      XMLObj *obj = *iter;
+      delete obj;
+    }
   }
   bool init();
   void xml_start(const char *el, const char **attr);
