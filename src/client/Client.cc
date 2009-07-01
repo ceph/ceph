@@ -806,7 +806,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 
       if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
-	monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()+1));
+	monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
