@@ -550,15 +550,11 @@ static void dump_time(struct req_state *s, const char *name, time_t *t)
   dump_value(s, name, buf); 
 }
 
-static void dump_owner(struct req_state *s, const char *id, int id_size, const char *name)
+static void dump_owner(struct req_state *s, string& id, string& name)
 {
-  char id_str[id_size*2 + 1];
-
-  buf_to_hex((const unsigned char *)id, id_size, id_str);
-
   open_section(s, "Owner");
-  dump_value(s, "ID", id_str);
-  dump_value(s, "DisplayName", name);
+  dump_value(s, "ID", id.c_str());
+  dump_value(s, "DisplayName", name.c_str());
   close_section(s, "Owner");
 }
 
@@ -613,28 +609,37 @@ static void abort_early(struct req_state *s, int err)
 
 static void do_list_buckets(struct req_state *s)
 {
-  string id = "0123456789ABCDEF";
-  S3AccessHandle handle;
   int r;
-  S3ObjEnt obj;
+  S3UserBuckets buckets;
 
-  r = s3store->list_buckets_init(id, &handle);
-  dump_errno(s, (r < 0 ? r : 0));
+  r = s3_get_user_buckets(s->user.user_id, buckets);
+  if (r < 0) {
+    /* hmm.. something wrong here.. the user was authenticated, so it
+       should exist, just try to recreate */
+    cerr << "WARNING: failed on s3_get_user_buckets uid=" << s->user.user_id << std::endl;
+    s3_put_user_buckets(s->user.user_id, buckets);
+    r = 0;
+  }
+
+  dump_errno(s, r);
   end_header(s);
   dump_start_xml(s);
 
   list_all_buckets_start(s);
-  dump_owner(s, (const char *)id.c_str(), id.size(), "foobi");
+  dump_owner(s, s->user.user_id, s->user.display_name);
+
+  map<string, S3ObjEnt>& m = buckets.get_buckets();
+  map<string, S3ObjEnt>::iterator iter;
 
   open_section(s, "Buckets");
-  while (r >= 0) {
-    r = s3store->list_buckets_next(id, obj, &handle);
-    if (r < 0)
-      continue;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    S3ObjEnt obj = iter->second;
     dump_bucket(s, obj);
   }
   close_section(s, "Buckets");
   list_all_buckets_end(s);
+
+  return;
 }
 
 
@@ -788,14 +793,6 @@ done:
 
 static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& dest)
 {
-/*
- if (s3_get_user_info(auth_id, s->user) < 0) {
-    cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
-    dump_errno(s, -EPERM);
-    end_header(s);
-    dump_start_xml(s);
-    return false;
-  } */
   ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
   if (!owner)
     return -EINVAL;
@@ -900,7 +897,7 @@ static void do_write_acls(struct req_state *s)
 
   new_policy.encode(bl);
   r = s3store->set_attr(s->bucket_str, s->object_str,
-                       "user.s3acl", bl);
+                       S3_ATTR_ACL, bl);
 
 done:
   free(data);
@@ -930,7 +927,7 @@ static int read_acls(struct req_state *s, bool only_bucket = false)
 
   if (s->bucket_str.size()) {
     ret = s3store->get_attr(s->bucket_str, obj_str,
-                       "user.s3acl", bl);
+                       S3_ATTR_ACL, bl);
 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
@@ -967,7 +964,6 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
 {
   string prefix, marker, max_keys, delimiter;
   int max;
-  string id = "0123456789ABCDEF";
 
   if (is_acl_op(s)) {
     if (!verify_permission(s, S3_PERM_READ_ACP)) {
@@ -1002,7 +998,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   delimiter = s->args.get("delimiter");
 
   vector<S3ObjEnt> objs;
-  int r = s3store->list_objects(id, s->bucket_str, max, prefix, marker, objs);
+  int r = s3store->list_objects(s->user.user_id, s->bucket_str, max, prefix, marker, objs);
   dump_errno(s, (r < 0 ? r : 0));
 
   end_header(s);
@@ -1031,7 +1027,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
       dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;");
       dump_value(s, "Size", "%lld", iter->size);
       dump_value(s, "StorageClass", "STANDARD");
-      dump_owner(s, (const char *)&id, sizeof(id), "foobi");
+      dump_owner(s, s->user.user_id, s->user.display_name);
       close_section(s, "Contents");
     }
   }
@@ -1041,17 +1037,31 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
 
 static void do_create_bucket(struct req_state *s)
 {
-  string id = "0123456789ABCDEF";
-
   S3AccessControlPolicy def;
   def.create_default(s->user.user_id, s->user.display_name);
   bufferlist aclbl;
   def.encode(aclbl);
 
   std::vector<std::pair<std::string, bufferlist> > attrs;
-  attrs.push_back(pair<string, bufferlist>("user.s3acl", aclbl));
+  attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
 
-  int r = s3store->create_bucket(id, s->bucket_str, attrs);
+  int r = s3store->create_bucket(s->user.user_id, s->bucket_str, attrs);
+
+  if (r == 0) {
+    S3UserBuckets buckets;
+
+    int ret = s3_get_user_buckets(s->user.user_id, buckets);
+
+    if (ret == 0 || ret == -ENOENT) {
+      S3ObjEnt new_bucket;
+      new_bucket.name = s->bucket_str;
+      new_bucket.size = 0;
+      time(&new_bucket.mtime);
+      buckets.add(new_bucket);
+      r = s3_put_user_buckets(s->user.user_id, buckets);
+    }
+  }
+  
 
   dump_errno(s, r);
   end_header(s);
@@ -1069,8 +1079,6 @@ static void do_create_object(struct req_state *s)
       abort_early(s, -EACCES);
       return;
     }
-
-    string id = "0123456789ABCDEF";
 
     size_t cl = atoll(s->length);
     size_t actual = 0;
@@ -1114,9 +1122,9 @@ static void do_create_object(struct req_state *s)
     vector<pair<string, bufferlist> > attrs;
     bufferlist bl;
     bl.append(md5_str.c_str(), md5_str.size());
-    attrs.push_back(pair<string, bufferlist>("user.etag", bl));
-    attrs.push_back(pair<string, bufferlist>("user.s3acl", aclbl));
-    r = s3store->put_obj(id, s->bucket_str, s->object_str, data, actual, attrs);
+    attrs.push_back(pair<string, bufferlist>(S3_ATTR_ETAG, bl));
+    attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
+    r = s3store->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, actual, attrs);
   }
 done:
   free(data);
@@ -1128,7 +1136,6 @@ done:
 static void do_delete_bucket(struct req_state *s)
 {
   int r = -EINVAL;
-  string id = "0123456789ABCDEF";
 
   if (!verify_permission(s, S3_PERM_WRITE)) {
     abort_early(s, -EACCES);
@@ -1136,7 +1143,18 @@ static void do_delete_bucket(struct req_state *s)
   }
 
   if (s->bucket) {
-    r = s3store->delete_bucket(id, s->bucket_str);
+    r = s3store->delete_bucket(s->user.user_id, s->bucket_str);
+
+    if (r == 0) {
+      S3UserBuckets buckets;
+
+      int ret = s3_get_user_buckets(s->user.user_id, buckets);
+
+      if (ret == 0 || ret == -ENOENT) {
+        buckets.remove(s->bucket_str);
+        r = s3_put_user_buckets(s->user.user_id, buckets);
+      }
+    }
   }
 
   dump_errno(s, r);
@@ -1147,9 +1165,7 @@ static void do_delete_object(struct req_state *s)
 {
   int r = -EINVAL;
   if (s->object) {
-    string id = "0123456789ABCDEF";
-
-    r = s3store->delete_obj(id, s->bucket_str, s->object_str);
+    r = s3store->delete_obj(s->user.user_id, s->bucket_str, s->object_str);
   }
 
   dump_errno(s, r);

@@ -236,7 +236,7 @@ int main(int argc, const char **argv)
     string bucket_str(bucket);
     string object_str(object);
     int ret = store->get_attr(bucket_str, object_str,
-                       "user.s3acl", bl);
+                       S3_ATTR_ACL, bl);
 
     S3AccessControlPolicy policy;
     if (ret >= 0) {

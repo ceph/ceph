@@ -8,6 +8,10 @@
 
 #define SERVER_NAME "S3FS"
 
+#define S3_ATTR_ACL	"user.s3.acl"
+#define S3_ATTR_ETAG    "user.s3.etag"
+#define S3_ATTR_BUCKETS	"user.s3.buckets"
+
 typedef void *S3AccessHandle;
 
 struct s3_err {
@@ -23,7 +27,19 @@ struct S3ObjEnt {
   std::string name;
   size_t size;
   time_t mtime;
+
+  void encode(bufferlist& bl) const {
+     ::encode(name, bl);
+     ::encode(size, bl);
+     ::encode(mtime, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+    ::decode(size, bl);
+    ::decode(mtime, bl);
+  }
 };
+WRITE_CLASS_ENCODER(S3ObjEnt)
 
 class S3Access {
 public:

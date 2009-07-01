@@ -381,7 +381,7 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
 
   if (if_match || if_nomatch) {
     char *etag;
-    r = get_attr("user.etag", fd, &etag);
+    r = get_attr(S3_ATTR_ETAG, fd, &etag);
     if (r < 0)
       goto done;
 
