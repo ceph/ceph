@@ -196,7 +196,6 @@ cas
 
 s3
  - integrate with rados
- - maintain a map per user for all the buckets he owns (for list buckets)
  - canned acls
  - handle location related requests (check if needed)
  - list objects, prefix and delimiter
@@ -205,3 +204,4 @@ s3
  - put object: cache control, x-amz-meta-, expiration, canned acl, content encoding, content type
  - copy object
  - gqs
+ - parse time better
