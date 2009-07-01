@@ -112,6 +112,7 @@ struct MetaRequest {
 
 private:
   xlist<MetaRequest*>::item unsafe_item;
+  Mutex lock; //for get/set sync
 public:
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
@@ -121,23 +122,27 @@ public:
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     got_safe(false), got_unsafe(false), unsafe_item(this),
+    lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0) { }
 
   MetaRequest* get() {
+    lock.Lock();
     ++ref;
-    cerr << "Get called on MetaRequest tid " << tid
-	 << "Refcount is " << ref
-	 << " Type is " << request->head.op << std::endl;
+    cout << "Get called on MetaRequest tid " << tid
+	 << "Refcount is " << ref << std::endl;
+    lock.Unlock();
     return this; }
 
   void put() {
-    cerr << "Put called on MetaRequest tid " << tid;
-    if (--ref == 0) {
-      cerr << "MetaRequest tid" << tid << " deleting." << std::endl;
+    lock.Lock();
+    cout << "Put called on MetaRequest tid " << tid;
+    --ref;
+    lock.Unlock();
+    if (ref == 0) {
+      cout << "MetaRequest tid" << tid << " deleting." << std::endl;
       delete this;
     }
-    cerr << "Refcount is " << ref
-	 << " Type is " << request->head.op << std::endl;
+    cout << "Refcount is " << ref << std::endl;
   }
 
   xlist<MetaRequest*>::item * get_meta_item() {

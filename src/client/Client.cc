@@ -842,7 +842,6 @@ MClientReply *Client::make_request(MClientRequest *req,
     // did we get a reply?
     if (request->reply) 
       break;
-
   }
 
   // got it!
@@ -854,11 +853,6 @@ MClientReply *Client::make_request(MClientRequest *req,
   request->dispatch_cond->Signal();
   dout(20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   
-  // clean up.
-  mds_requests.erase(tid);
-  request->put(); //for the dumb data structure
-
-
   // insert trace
   utime_t from = request->sent_stamp;
   Inode *target = insert_trace(request->get(), from, mds);
@@ -1020,11 +1014,11 @@ void Client::handle_client_reply(MClientReply *reply)
   dout(20) << "handle_client_reply got a reply. Safe:" << reply->is_safe()
 	   << " tid:" << tid << dendl;
   int mds_num = reply->get_source().num();
+  assert(mds_sessions.count(mds_num));
   MetaRequest *request = mds_requests[tid]->get();
   assert(request);
   
   // store reply
-  //  if (!request->reply && !reply->is_safe()) //safe replies have no useful info
   request->reply = reply;
   
   if ((request->got_unsafe && !reply->is_safe())
@@ -1032,7 +1026,7 @@ void Client::handle_client_reply(MClientReply *reply)
     //duplicate response
     dout(0) << "got a duplicate reply on " << tid << " from mds "
 	    << mds_num << " safe:" << reply->is_safe() << dendl;
-    request->put();
+    goto cleanup;
     return;
   }
   
@@ -1069,6 +1063,10 @@ void Client::handle_client_reply(MClientReply *reply)
 
  cleanup:
   request->put();
+  if(request->got_safe) {
+    mds_requests.erase(tid);
+    request->put(); //for the dumb data structure
+  }
 }
 
 
