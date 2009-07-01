@@ -124,25 +124,9 @@ struct MetaRequest {
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0) { }
 
-  MetaRequest* get() {
-    lock.Lock();
-    ++ref;
-    cout << "Get called on MetaRequest tid " << tid
-	 << "Refcount is " << ref << std::endl;
-    lock.Unlock();
-    return this; }
+  MetaRequest* get() {++ref; return this; }
 
-  void put() {
-    lock.Lock();
-    cout << "Put called on MetaRequest tid " << tid;
-    --ref;
-    lock.Unlock();
-    if (ref == 0) {
-      cout << "MetaRequest tid" << tid << " deleting." << std::endl;
-      delete this;
-    }
-    cout << "Refcount is " << ref << std::endl;
-  }
+  void put() {if(--ref == 0) delete this; }
 };
 
 
