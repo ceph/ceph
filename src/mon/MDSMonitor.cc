@@ -424,11 +424,16 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       } else {
 	errno = 0;
 	int who = strtol(m->cmd[2].c_str(), 0, 10);
-	if (!errno && who >= 0 && mdsmap.is_active(who)) {
-	  mon->inject_args(mdsmap.get_inst(who), m->cmd[3], paxos->get_version());
-	  r = 0;
-	  ss << "ok";
-	} else 
+	if (!errno && who >= 0) {
+	  if (mdsmap.is_active(who)) {
+	    mon->inject_args(mdsmap.get_inst(who), m->cmd[3], paxos->get_version());
+	    r = 0;
+	    ss << "ok";
+	  } else {
+	    ss << "mds" << who << " not up";
+	    r = -ENOENT;
+	  }
+	} else
 	  ss << "specify mds number or *";
       }
     }
