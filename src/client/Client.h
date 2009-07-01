@@ -110,10 +110,9 @@ struct MetaRequest {
   bool got_safe;
   bool got_unsafe;
 
-private:
   xlist<MetaRequest*>::item unsafe_item;
   Mutex lock; //for get/set sync
-public:
+
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
 
@@ -143,16 +142,6 @@ public:
       delete this;
     }
     cout << "Refcount is " << ref << std::endl;
-  }
-
-  xlist<MetaRequest*>::item * get_meta_item() {
-    get();
-    return &unsafe_item;
-  }
-
-  void remove_from_unsafe_list() {
-    unsafe_item.remove_myself();
-    put();
   }
 };
 

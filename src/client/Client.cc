@@ -653,7 +653,6 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       close_dir(dir);
   }
   
-  request->put();
   return in;
 }
 
@@ -833,7 +832,7 @@ MClientReply *Client::make_request(MClientRequest *req,
     }
 
     // send request.
-    send_request(request->get(), mds);
+    send_request(request, mds);
 
     // wait for signal
     dout(20) << "awaiting kick on " << &cond << dendl;
@@ -855,7 +854,7 @@ MClientReply *Client::make_request(MClientRequest *req,
   
   // insert trace
   utime_t from = request->sent_stamp;
-  Inode *target = insert_trace(request->get(), from, mds);
+  Inode *target = insert_trace(request, from, mds);
   if (ptarget)
     *ptarget = target;
 
@@ -940,7 +939,6 @@ void Client::send_request(MetaRequest *request, int mds)
   messenger->send_message(r, mdsmap->get_inst(mds));
   
   request->mds.insert(mds);
-  request->put();
 }
 
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
@@ -953,7 +951,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
     return;
   }
 
-  MetaRequest *request = mds_requests[tid]->get();
+  MetaRequest *request = mds_requests[tid];
   assert(request);
 
   // reset retry counter
@@ -997,7 +995,6 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
     request->caller_cond->Signal();
   }
 
-  request->put();
   delete fwd;
 }
 
@@ -1014,8 +1011,7 @@ void Client::handle_client_reply(MClientReply *reply)
   dout(20) << "handle_client_reply got a reply. Safe:" << reply->is_safe()
 	   << " tid:" << tid << dendl;
   int mds_num = reply->get_source().num();
-  assert(mds_sessions.count(mds_num));
-  MetaRequest *request = mds_requests[tid]->get();
+  MetaRequest *request = mds_requests[tid];
   assert(request);
   
   // store reply
@@ -1026,7 +1022,6 @@ void Client::handle_client_reply(MClientReply *reply)
     //duplicate response
     dout(0) << "got a duplicate reply on " << tid << " from mds "
 	    << mds_num << " safe:" << reply->is_safe() << dendl;
-    goto cleanup;
     return;
   }
   
@@ -1035,7 +1030,7 @@ void Client::handle_client_reply(MClientReply *reply)
     request->got_safe = true;
     if (request->got_unsafe) {
       //we're done, clean up
-      request->remove_from_unsafe_list();
+      request->unsafe_item.remove_myself();
       goto cleanup;
     }
   }
@@ -1045,7 +1040,7 @@ void Client::handle_client_reply(MClientReply *reply)
     if(request->got_safe)
       //we already kicked, so just clean up
       goto cleanup;
-    mds_sessions[mds_num].unsafe_requests.push_back(request->get_meta_item());
+    mds_sessions[mds_num].unsafe_requests.push_back(&request->unsafe_item);
   }
   if(request->got_safe ^ request->got_unsafe) {
     Cond cond;
@@ -1062,11 +1057,11 @@ void Client::handle_client_reply(MClientReply *reply)
   }
 
  cleanup:
-  request->put();
-  if(request->got_safe) {
+  if(reply->is_safe()) {
     mds_requests.erase(tid);
-    request->put(); //for the dumb data structure
-  }
+    request->put();
+    }
+  return;
 }
 
 
@@ -1255,17 +1250,17 @@ void Client::kick_requests(int mds, bool signal)
 	p->second->caller_cond->Signal();
       }
       else {
-	send_request(p->second->get(), mds);
+	send_request(p->second, mds);
       }
     }
 }
 
 void Client::resend_unsafe_requests(int mds_num) {
   MDSSession& mds = mds_sessions[mds_num];
-  MetaRequest* current = mds.unsafe_requests.front()->get();
+  MetaRequest* current = mds.unsafe_requests.front();
   MClientRequest *m;
   while (current) {
-    current->remove_from_unsafe_list();
+    current->unsafe_item.remove_myself();
     m = new MClientRequest;
     m->copy_payload(current->request_payload);
     m->decode_payload();
@@ -1275,8 +1270,7 @@ void Client::resend_unsafe_requests(int mds_num) {
     current->request = m;
     current->got_unsafe = false;
     current->got_safe = false;
-    send_request(current->get(), mds_num);
-    current->put();
+    send_request(current, mds_num);
     current = mds.unsafe_requests.front();
   }
 }
