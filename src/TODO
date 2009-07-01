@@ -193,3 +193,15 @@ cas
    ESHGHI, K.
    A framework for analyzing and improving content-based chunking algorithms.
    Tech. Rep. HPL-2005-30(R.1), Hewlett Packard Laboratories, Palo Alto, 2005. 
+
+s3
+ - integrate with rados
+ - maintain a map per user for all the buckets he owns (for list buckets)
+ - canned acls
+ - handle location related requests (check if needed)
+ - list objects, prefix and delimiter
+ - acl groups, email id
+ - logging control (?)
+ - put object: cache control, x-amz-meta-, expiration, canned acl, content encoding, content type
+ - copy object
+ - gqs
