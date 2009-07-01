@@ -75,13 +75,7 @@ public:
   };
 
 
-  /*
-   * keep tabs on object modifications that are in flight.
-   * we need to know the projected existence, size, snapset,
-   * etc., because we don't send writes down to disk until after
-   * replicas ack.
-   */
-  struct ObjectContext {
+  struct AccessMode {
     typedef enum {
       IDLE,
       DELAYED,
@@ -99,27 +93,14 @@ public:
       default: return "???";
       }
     }
-
-    int ref;
-    bool registered; 
-
     state_t state;
-
-    int num_wr, num_rmw;
+    int num_wr;
     entity_inst_t client;
     list<Message*> waiting;
     bool wake;
 
-    ObjectState obs;
-
-    void get() { ++ref; }
-    
-    bool is_delayed_mode() {
-      return state == DELAYED || state == DELAYED_FLUSHING;
-    }
-    bool is_rmw_mode() {
-      return state == RMW || state == RMW_FLUSHING;
-    }
+    AccessMode() : state(IDLE),
+		   num_wr(0), wake(false) {}
 
     bool try_read(entity_inst_t& c) {
       switch (state) {
@@ -141,8 +122,7 @@ public:
     bool try_write(entity_inst_t& c) {
       switch (state) {
       case IDLE:
-	//state = DELAYED;
-	state = RMW;     // always do RMW, until we solve pg log writing ordering issues
+	state = DELAYED;
       case DELAYED:
 	return true;
       case RMW:
@@ -179,12 +159,16 @@ public:
       }
     }
 
+    bool is_delayed_mode() {
+      return state == DELAYED || state == DELAYED_FLUSHING;
+    }
+    bool is_rmw_mode() {
+      return state == RMW || state == RMW_FLUSHING;
+    }
+
     void start_write() {
       num_wr++;
       assert(state == DELAYED || state == RMW);
-    }
-    void force_start_write() {
-      num_wr++;
     }
     void finish_write() {
       assert(num_wr > 0);
@@ -192,48 +176,37 @@ public:
       if (num_wr == 0)
 	switch (state) {
 	case DELAYED:
-	  assert(!num_rmw);
 	  state = IDLE;
 	  wake = true;
 	  break;
 	case RMW:
 	case DELAYED_FLUSHING:
 	case RMW_FLUSHING:
-	  if (!num_rmw && !num_wr) {
-	    state = IDLE;
-	    wake = true;
-	  }
+	  state = IDLE;
+	  wake = true;
 	  break;
 	default:
 	  assert(0);
 	}
     }
+  };
 
-    void start_rmw() {
-      ++num_rmw;
-      assert(state == RMW);
-    }
-    void finish_rmw() {
-      assert(num_rmw > 0);
-      --num_rmw;
-      if (num_rmw == 0) {
-	switch (state) {
-	case RMW:
-	case RMW_FLUSHING:
-	  if (!num_rmw && !num_wr) {
-	    state = IDLE;
-	    wake = true;
-	  }
-	  break;
-	default:
-	  assert(0);
-	}
-      }
-    }
+
+  /*
+   * keep tabs on object modifications that are in flight.
+   * we need to know the projected existence, size, snapset,
+   * etc., because we don't send writes down to disk until after
+   * replicas ack.
+   */
+  struct ObjectContext {
+    int ref;
+    bool registered; 
+    ObjectState obs;
 
     ObjectContext(const sobject_t& s) :
-      ref(0), registered(false), state(IDLE), num_wr(0), num_rmw(0), wake(false),
-      obs(s) {}
+      ref(0), registered(false), obs(s) {}
+
+    void get() { ++ref; }
   };
 
 
@@ -246,8 +219,6 @@ public:
     vector<OSDOp>& ops;
     bufferlist& indata;
     bufferlist outdata;
-
-    ObjectContext::state_t mode;  // DELAYED or RMW (or _FLUSHING variant?)
 
     ObjectState *obs;
 
@@ -265,8 +236,8 @@ public:
     ReplicatedPG *pg;
 
     OpContext(Message *_op, osd_reqid_t _reqid, vector<OSDOp>& _ops, bufferlist& _data,
-	      ObjectContext::state_t _mode, ObjectState *_obs, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), indata(_data), mode(_mode), obs(_obs),
+	      ObjectState *_obs, ReplicatedPG *_pg) :
+      op(_op), reqid(_reqid), ops(_ops), indata(_data), obs(_obs),
       clone_obc(0), data_off(0), pg(_pg) {}
     ~OpContext() {
       assert(!clone_obc);
@@ -346,6 +317,9 @@ public:
 
 
 protected:
+
+  AccessMode mode;
+
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
@@ -500,11 +474,7 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectState& obs)
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::ObjectContext& obc)
 {
-  out << "obc(" << obc.obs << " " << obc.get_state_name(obc.state);
-  if (!obc.waiting.empty())
-    out << " WAITING";
-  out << ")";
-  return out;
+  return out << "obc(" << obc.obs << ")";
 }
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
@@ -519,5 +489,9 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
   return out;
 }
 
+inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
+{
+  return out << mode.get_state_name(mode.state) << "(wr=" << mode.num_wr << ")";    
+}
 
 #endif

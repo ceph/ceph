@@ -487,17 +487,17 @@ void ReplicatedPG::do_op(MOSDOp *op)
   }    
   
   bool ok;
-  if (op->may_read() && op->may_write()) 
-    ok = obc->try_rmw(client);
+  if (op->may_read() && op->may_write())
+    ok = mode.try_rmw(client);
   else if (op->may_write())
-    ok = obc->try_write(client);
+    ok = mode.try_write(client);
   else if (op->may_read())
-    ok = obc->try_read(client);
+    ok = mode.try_read(client);
   else
     assert(0);
   if (!ok) {
     dout(10) << "do_op waiting on obc " << *obc << dendl;
-    obc->waiting.push_back(op);
+    mode.waiting.push_back(op);
     return;
   }
 
@@ -507,9 +507,11 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return;
   }
 
+  dout(10) << "mode now " << mode << dendl;
+
   const sobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(),
-				 obc->state, &obc->obs, this);
+				 &obc->obs, this);
   bool noop = false;
 
   if (op->may_write()) {
@@ -638,7 +640,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   }
 
   // apply immediately?
-  if (obc->is_rmw_mode())
+  if (mode.is_rmw_mode())
     apply_repop(repop);
 
   // (logical) local ack.
@@ -1609,7 +1611,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     
     // prepare clone
     ctx->clone_obc = new ObjectContext(coid);
-    ctx->clone_obc->state = ctx->mode;   // take state from head obc's
     ctx->clone_obc->obs.oi.version = ctx->at_version;
     ctx->clone_obc->obs.oi.prior_version = oi.version;
     ctx->clone_obc->obs.oi.last_reqid = oi.last_reqid;
@@ -1618,7 +1619,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->clone_obc->obs.exists = true;
     ctx->clone_obc->get();
 
-    ctx->clone_obc->force_start_write();
     if (is_primary())
       register_object_context(ctx->clone_obc);
     
@@ -1819,12 +1819,12 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   repop->applied = true;
   
   if (repop->ctx->clone_obc) {
-   repop->ctx->clone_obc->finish_write();
-   put_object_context(repop->ctx->clone_obc);
-   repop->ctx->clone_obc = 0;
+    put_object_context(repop->ctx->clone_obc);
+    repop->ctx->clone_obc = 0;
   }
 
-  repop->obc->finish_write();
+  mode.finish_write();
+  dout(10) << "mode now " << mode << dendl;
 
   put_object_context(repop->obc);
   repop->obc = 0;
@@ -1874,11 +1874,9 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   
   MOSDOp *op = (MOSDOp *)repop->ctx->op;
 
-  ObjectContext *obc = repop->obc;
-
   // apply?
   if (!repop->applied &&
-      obc->is_delayed_mode() &&
+      mode.is_delayed_mode() &&
       repop->waitfor_ack.empty())  // all replicas have acked
     apply_repop(repop);
 
@@ -1982,8 +1980,9 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
 
   RepGather *repop = new RepGather(ctx, obc, noop, rep_tid, info.last_complete);
 
-  obc->start_write();
+  mode.start_write();
   obc->get();  // we take a ref
+  dout(10) << "mode now " << mode << dendl;
 
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
@@ -2168,15 +2167,13 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
   dout(10) << "put_object_context " << obc->obs.oi.soid << " "
 	   << obc->ref << " -> " << (obc->ref-1) << dendl;
 
-  if (obc->wake) {
-    osd->take_waiters(obc->waiting);
-    obc->wake = false;
+  if (mode.wake) {
+    osd->take_waiters(mode.waiting);
+    mode.wake = false;
   }
 
   --obc->ref;
   if (obc->ref == 0) {
-    assert(obc->waiting.empty());
-
     if (obc->obs.ssc)
       put_snapset_context(obc->obs.ssc);
 
@@ -2456,7 +2453,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
       obs.oi.size = op->old_size;
       obs.exists = op->old_exists;
       
-      ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), ObjectContext::RMW, &obs, this);
+      ctx = new OpContext(op, op->reqid, op->ops, op->get_data(), &obs, this);
       
       ctx->mtime = op->mtime;
       ctx->at_version = op->version;
