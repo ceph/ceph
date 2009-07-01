@@ -652,7 +652,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     if (dir->is_empty())
       close_dir(dir);
   }
-
+  
   return in;
 }
 
@@ -757,37 +757,37 @@ MClientReply *Client::make_request(MClientRequest *req,
     req->set_oldest_client_tid(tid); // this one is the oldest.
 
   // make note
-  MetaRequest request(req, tid);
-  mds_requests[tid] = &request;
+  MetaRequest * request = new MetaRequest(req, tid);
+  mds_requests[tid] = request->get();
 
   if (uid < 0) {
     uid = geteuid();
     gid = getegid();
   }
-  request.uid = uid;
-  request.gid = gid;
+  request->uid = uid;
+  request->gid = gid;
   req->set_caller_uid(uid);
   req->set_caller_gid(gid);
 
-  // encode payload now, in case we have to resend (in case of mds failure)
+  // encode payload now, in case we have to resend(in case of mds failure)
   req->encode_payload();
-  request.request_payload = req->get_payload();
+  request->request_payload = req->get_payload();
 
   // hack target mds?
   if (use_mds >= 0)
-    request.resend_mds = use_mds;
+    request->resend_mds = use_mds;
 
   // set up wait cond
   Cond cond;
-  request.caller_cond = &cond;
+  request->caller_cond = &cond;
   
   while (1) {
     // choose mds
     int mds;
     // force use of a particular mds?
-    if (request.resend_mds >= 0) {
-      mds = request.resend_mds;
-      request.resend_mds = -1;
+    if (request->resend_mds >= 0) {
+      mds = request->resend_mds;
+      request->resend_mds = -1;
       dout(10) << "target resend_mds specified as mds" << mds << dendl;
     } else {
       mds = choose_target_mds(req);
@@ -812,7 +812,7 @@ MClientReply *Client::make_request(MClientRequest *req,
 
 	if (!mdsmap->is_active(mds)) {
 	  dout(10) << "hmm, still have no address for mds" << mds << ", trying a random mds" << dendl;
-	  request.resend_mds = mdsmap->get_random_up_mds();
+	  request->resend_mds = mdsmap->get_random_up_mds();
 	  continue;
 	}
       }	
@@ -832,33 +832,29 @@ MClientReply *Client::make_request(MClientRequest *req,
     }
 
     // send request.
-    send_request(&request, mds);
+    send_request(request, mds);
 
     // wait for signal
     dout(20) << "awaiting kick on " << &cond << dendl;
     cond.Wait(client_lock);
     
     // did we get a reply?
-    if (request.reply) 
+    if (request->reply) 
       break;
   }
 
   // got it!
-  MClientReply *reply = request.reply;
+  MClientReply *reply = request->reply;
   int mds = reply->get_source().num();
 
   // kick dispatcher (we've got it!)
-  assert(request.dispatch_cond);
-  request.dispatch_cond->Signal();
-  dout(20) << "sendrecv kickback on tid " << tid << " " << request.dispatch_cond << dendl;
+  assert(request->dispatch_cond);
+  request->dispatch_cond->Signal();
+  dout(20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   
-  // clean up.
-  mds_requests.erase(tid);
-
-
   // insert trace
-  utime_t from = request.sent_stamp;
-  Inode *target = insert_trace(&request, from, mds);
+  utime_t from = request->sent_stamp;
+  Inode *target = insert_trace(request, from, mds);
   if (ptarget)
     *ptarget = target;
 
@@ -871,6 +867,7 @@ MClientReply *Client::make_request(MClientRequest *req,
     client_logger->favg(l_c_reply,(double)lat);
   }
 
+  request->put();
   return reply;
 }
 
@@ -1015,22 +1012,61 @@ void Client::handle_client_reply(MClientReply *reply)
     delete reply;
     return;
   }
+
+  dout(20) << "handle_client_reply got a reply. Safe:" << reply->is_safe()
+	   << " tid:" << tid << dendl;
+  int mds_num = reply->get_source().num();
   MetaRequest *request = mds_requests[tid];
   assert(request);
-
+  
   // store reply
   request->reply = reply;
-
-  // wake up waiter
-  request->caller_cond->Signal();
-
-  // wake for kick back
-  Cond cond;
-  request->dispatch_cond = &cond;
-  while (mds_requests.count(tid)) {
-    dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
-    cond.Wait(client_lock);
+  
+  if ((request->got_unsafe && !reply->is_safe())
+      || (request->got_safe && reply->is_safe())) {
+    //duplicate response
+    dout(0) << "got a duplicate reply on " << tid << " from mds "
+	    << mds_num << " safe:" << reply->is_safe() << dendl;
+    return;
   }
+  
+  if(reply->is_safe()) {
+    //the filesystem change is committed to disk
+    request->got_safe = true;
+    if (request->got_unsafe) {
+      //we're done, clean up
+      request->unsafe_item.remove_myself();
+      goto cleanup;
+    }
+  }
+
+  if(!reply->is_safe()) {
+    request->got_unsafe = true;
+    if(request->got_safe)
+      //we already kicked, so just clean up
+      goto cleanup;
+    mds_sessions[mds_num].unsafe_requests.push_back(&request->unsafe_item);
+  }
+  if(request->got_safe ^ request->got_unsafe) {
+    Cond cond;
+    request->dispatch_cond = &cond;
+    
+    // wake up waiter
+    request->caller_cond->Signal();
+    
+    // wake for kick back
+    while (mds_requests.count(tid)) {
+      dout(20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
+      cond.Wait(client_lock);
+    }
+  }
+
+ cleanup:
+  if(reply->is_safe()) {
+    mds_requests.erase(tid);
+    request->put();
+    }
+  return;
 }
 
 
@@ -1194,9 +1230,10 @@ void Client::send_reconnect(int mds)
       }
     }
 
-
     // reset my cap seq number
     mds_sessions[mds].seq = 0;
+
+    resend_unsafe_requests(mds);
   } else {
     dout(10) << " i had no session with this mds" << dendl;
     m->closed = true;
@@ -1223,7 +1260,25 @@ void Client::kick_requests(int mds, bool signal)
     }
 }
 
-
+void Client::resend_unsafe_requests(int mds_num) {
+  MDSSession& mds = mds_sessions[mds_num];
+  MetaRequest* current = mds.unsafe_requests.front();
+  MClientRequest *m;
+  while (current) {
+    current->unsafe_item.remove_myself();
+    m = new MClientRequest;
+    m->copy_payload(current->request_payload);
+    m->decode_payload();
+    m->set_retry_attempt(current->retry_attempt);
+    m->set_dentry_wanted();
+    m->set_replayed_op();
+    current->request = m;
+    current->got_unsafe = false;
+    current->got_safe = false;
+    send_request(current, mds_num);
+    current = mds.unsafe_requests.front();
+  }
+}
 
 /************
  * leases
@@ -1806,11 +1861,13 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(in, in->caps.begin()->first);
 }
 
-void Client::remove_session_caps(int mds_num)
+void Client::remove_session_caps(int mds_num) 
 {
-  MDSSession *mds = &mds_sessions[mds_num];
-  while (mds->caps.size())
-    remove_cap((*mds->caps.begin())->inode, mds_num);
+  if (mds_sessions.count(mds_num)) {
+    MDSSession* mds = &mds_sessions[mds_num];
+    while (mds->caps.size())
+      remove_cap((*mds->caps.begin())->inode, mds_num);
+  }
 }
 
 void Client::trim_caps(int mds, int max)

@@ -190,6 +190,8 @@ public:
 
   void set_unsafe() { head.safe = 0; }
 
+  bool is_safe() { return head.safe; }
+
   MClientReply() {}
   MClientReply(MClientRequest *req, int result = 0) : 
     Message(CEPH_MSG_CLIENT_REPLY) {
