@@ -24,6 +24,8 @@ public:
   int get_op() { return head.op; }
   version_t get_seq() { return head.seq; }
   utime_t get_stamp() { return utime_t(head.stamp); }
+  int get_max_caps() { return head.max_caps; }
+  int get_max_leases() { return head.max_leases; }
 
   MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
   MClientSession(int o, version_t s=0) : 

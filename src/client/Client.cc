@@ -903,6 +903,11 @@ void Client::handle_client_session(MClientSession *m)
     mds_sessions[from].was_stale = true;
     renew_caps(from);
     break;
+
+  case CEPH_SESSION_RECALL_STATE:
+    trim_caps(from, m->get_max_caps());
+    break;
+
   default:
     assert(0);
   }
@@ -1801,10 +1806,34 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(in, in->caps.begin()->first);
 }
 
-void Client::remove_session_caps(int mds_num) {
-  MDSSession* mds = &mds_sessions[mds_num];
+void Client::remove_session_caps(int mds_num)
+{
+  MDSSession *mds = &mds_sessions[mds_num];
   while (mds->caps.size())
     remove_cap((*mds->caps.begin())->inode, mds_num);
+}
+
+void Client::trim_caps(int mds, int max)
+{
+  dout(10) << "trim_caps mds" << mds << " max" << max << dendl;
+  MDSSession *s = &mds_sessions[mds];
+
+  int trimmed = 0;
+  xlist<InodeCap*>::iterator p = s->caps.begin();
+  while (s->caps.size() > max && !p.end()) {
+    InodeCap *cap = *p;
+    ++p;
+    Inode *in = cap->inode;
+    if (in->caps_used() ||
+	in->caps_dirty()) {
+      dout(20) << " keeping cap on " << *in << " used " << ccap_string(in->caps_used())
+	       << " dirty " << ccap_string(in->caps_dirty()) << dendl;
+      continue;
+    }
+    dout(20) << " removing unused cap on " << *in << dendl;
+    remove_cap(in, mds);
+    trimmed++;
+  }
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)

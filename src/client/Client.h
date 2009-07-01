@@ -866,6 +866,7 @@ protected:
   void remove_cap(Inode *in, int mds);
   void remove_all_caps(Inode *in);
   void remove_session_caps(int mds_num);
+  void trim_caps(int mds, int max);
   void mark_caps_dirty(Inode *in, int caps);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 

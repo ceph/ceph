@@ -136,12 +136,15 @@ osd
 - preserve pg logs on disk for longer period
 - make scrub interruptible
 - salvage some way to allow both RMW and DELAYED mode ops?
+  - make the mode per-pg?  then at least per-pool access patterns will behave.
 - optionally separate osd interfaces (ips) for clients and osds (replication, peering, etc.)
 - pg repair
 - pg split should be a work queue
 - optimize remove wrt recovery pushes?
 
 userspace client
+- make session cap list an LRU
+  - make caps_issued_mask, touch_cap helpers to || kclient
 - clean up client mds session vs mdsmap behavior?
 - stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
