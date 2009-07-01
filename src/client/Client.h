@@ -356,10 +356,10 @@ class Inode {
   }
 
   bool cap_is_valid(InodeCap* cap) {
-    cout << "cap_gen     " << cap->session-> cap_gen << std::endl
+    /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
 	 << "session gen " << cap->gen << std::endl
 	 << "cap expire  " << cap->session->cap_ttl << std::endl
-	 << "cur time    " << g_clock.now() << std::endl;
+	 << "cur time    " << g_clock.now() << std::endl;*/
     if ((cap->session->cap_gen <= cap->gen)
 	&& (g_clock.now() < cap->session->cap_ttl)) {
       return true;
