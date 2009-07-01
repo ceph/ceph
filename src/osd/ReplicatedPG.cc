@@ -451,12 +451,12 @@ void ReplicatedPG::calc_trim_to()
 {
   if (!is_degraded() &&
       (is_clean() ||
-       log.top.version - log.bottom.version > info.stats.num_objects)) {
+       log.head.version - log.tail.version > info.stats.num_objects)) {
     if (min_last_complete_ondisk != eversion_t() &&
 	min_last_complete_ondisk != pg_trim_to) {
       dout(10) << "calc_trim_to " << pg_trim_to << " -> " << min_last_complete_ondisk << dendl;
       pg_trim_to = min_last_complete_ondisk;
-      assert(pg_trim_to <= log.top);
+      assert(pg_trim_to <= log.head);
     }
   } else
     pg_trim_to = eversion_t();
@@ -528,12 +528,12 @@ void ReplicatedPG::do_op(MOSDOp *op)
     }
 
     // version
-    ctx->at_version = log.top;
+    ctx->at_version = log.head;
     if (!noop) {
       ctx->at_version.epoch = osd->osdmap->get_epoch();
       ctx->at_version.version++;
       assert(ctx->at_version > info.last_update);
-      assert(ctx->at_version > log.top);
+      assert(ctx->at_version > log.head);
     }
 
     ctx->mtime = op->get_mtime();
@@ -3460,7 +3460,7 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
 {
   dout(10) << "clean_up_local" << dendl;
 
-  assert(info.last_update >= log.bottom);  // otherwise we need some help!
+  assert(info.last_update >= log.tail);  // otherwise we need some help!
 
   if (log.backlog) {
 

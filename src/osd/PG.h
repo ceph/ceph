@@ -80,7 +80,7 @@ public:
    * some notes: 
    *  - last_complete implies we have all objects that existed as of that
    *    stamp, OR a newer object, OR have already applied a later delete.
-   *  - if last_complete >= log.bottom, then we know pg contents thru log.top.
+   *  - if last_complete >= log.bottom, then we know pg contents thru log.head.
    *    otherwise, we have no idea what the pg is supposed to contain.
    */
   struct Info {
@@ -88,7 +88,7 @@ public:
     eversion_t last_update;    // last object version applied to store.
     eversion_t last_complete;  // last version pg was complete through.
 
-    eversion_t log_bottom;     // oldest log entry.
+    eversion_t log_tail;     // oldest log entry.
     bool       log_backlog;    // do we store a complete log?
 
     set<snapid_t> snap_trimq; // snaps we need to trim
@@ -141,7 +141,7 @@ public:
       ::encode(pgid, bl);
       ::encode(last_update, bl);
       ::encode(last_complete, bl);
-      ::encode(log_bottom, bl);
+      ::encode(log_tail, bl);
       ::encode(log_backlog, bl);
       ::encode(stats, bl);
       history.encode(bl);
@@ -154,7 +154,7 @@ public:
       ::decode(pgid, bl);
       ::decode(last_update, bl);
       ::decode(last_complete, bl);
-      ::decode(log_bottom, bl);
+      ::decode(log_tail, bl);
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
       history.decode(bl);
@@ -267,18 +267,18 @@ public:
     WRITE_CLASS_ENCODER(Entry)
 
     /*
-     *    top - newest entry (update|delete)
-     * bottom - entry previous to oldest (update|delete) for which we have
+     *   head - newest entry (update|delete)
+     *   tail - entry previous to oldest (update|delete) for which we have
      *          complete negative information.  
-     * i.e. we can infer pg contents for any store whose last_update >= bottom.
+     * i.e. we can infer pg contents for any store whose last_update >= tail.
      */
-    eversion_t top;       // newest entry (update|delete)
-    eversion_t bottom;    // version prior to oldest (update|delete) 
+    eversion_t head;    // newest entry (update|delete)
+    eversion_t tail;    // version prior to oldest (update|delete) 
 
     /*
      * backlog - true if log is a complete summary of pg contents.
      * updated will include all items in pg, but deleted will not
-     * include negative entries for items deleted prior to 'bottom'.
+     * include negative entries for items deleted prior to 'tail'.
      */
     bool backlog;
     
@@ -288,23 +288,23 @@ public:
 
     void clear() {
       eversion_t z;
-      top = bottom = z;
+      head = tail = z;
       backlog = false;
       log.clear();
     }
     bool empty() const {
-      return top.version == 0 && top.epoch == 0;
+      return head.version == 0 && head.epoch == 0;
     }
 
     void encode(bufferlist& bl) const {
-      ::encode(top, bl);
-      ::encode(bottom, bl);
+      ::encode(head, bl);
+      ::encode(tail, bl);
       ::encode(backlog, bl);
       ::encode(log, bl);
     }
     void decode(bufferlist::iterator &bl) {
-      ::decode(top, bl);
-      ::decode(bottom, bl);
+      ::decode(head, bl);
+      ::decode(tail, bl);
       ::decode(backlog, bl);
       ::decode(log, bl);
     }
@@ -372,7 +372,7 @@ public:
       caller_ops.clear();
     }
     void unindex(Entry& e) {
-      // NOTE: this only works if we remove from the _bottom_ of the log!
+      // NOTE: this only works if we remove from the _tail_ of the log!
       assert(e.op == Entry::BACKLOG || caller_ops.count(e.reqid));
       if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
@@ -394,9 +394,9 @@ public:
     void add(Entry& e) {
       // add to log
       log.push_back(e);
-      assert(e.version > top);
-      assert(top.version == 0 || e.version.version > top.version);
-      top = e.version;
+      assert(e.version > head);
+      assert(head.version == 0 || e.version.version > head.version);
+      head = e.version;
 
       // to our index
       objects[e.soid] = &(log.back());
@@ -417,22 +417,22 @@ public:
   class OndiskLog {
   public:
     // ok
-    __u64 bottom;                     // first byte of log. 
-    __u64 top;                        // byte following end of log.
+    __u64 tail;                     // first byte of log. 
+    __u64 head;                        // byte following end of log.
     map<__u64,eversion_t> block_map;  // offset->version of _last_ entry with _any_ bytes in each block
 
-    OndiskLog() : bottom(0), top(0) {}
+    OndiskLog() : tail(0), head(0) {}
 
-    __u64 length() { return top - bottom; }
+    __u64 length() { return head - tail; }
     bool trim_to(eversion_t v, ObjectStore::Transaction& t);
 
     void encode(bufferlist& bl) const {
-      ::encode(bottom, bl);
-      ::encode(top, bl);
+      ::encode(tail, bl);
+      ::encode(head, bl);
     }
     void decode(bufferlist::iterator& bl) {
-      ::decode(bottom, bl);
-      ::decode(top, bl);
+      ::decode(tail, bl);
+      ::decode(head, bl);
     }
   };
   WRITE_CLASS_ENCODER(OndiskLog)
@@ -932,10 +932,13 @@ inline ostream& operator<<(ostream& out, const PG::Info& pgi)
     out << " DNE";
   if (pgi.is_empty())
     out << " empty";
-  else
-    out << " v " << pgi.last_update << "/" << pgi.last_complete
-        << " (" << pgi.log_bottom << "," << pgi.last_update << "]"
+  else {
+    out << " v " << pgi.last_update;
+    if (pgi.last_complete != pgi.last_update)
+      out << " lc " << pgi.last_complete;
+    out << " (" << pgi.log_tail << "," << pgi.last_update << "]"
         << (pgi.log_backlog ? "+backlog":"");
+  }
   //out << " c " << pgi.epoch_created;
   out << " n=" << pgi.stats.num_objects;
   out << " " << pgi.history
@@ -956,7 +959,7 @@ inline ostream& operator<<(ostream& out, const PG::Log::Entry& e)
 
 inline ostream& operator<<(ostream& out, const PG::Log& log) 
 {
-  out << "log(" << log.bottom << "," << log.top << "]";
+  out << "log(" << log.tail << "," << log.head << "]";
   if (log.backlog) out << "+backlog";
   return out;
 }
@@ -994,19 +997,19 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
 
-  if (pg.log.bottom != pg.info.log_bottom ||
-      pg.log.top != pg.info.last_update)
+  if (pg.log.tail != pg.info.log_tail ||
+      pg.log.head != pg.info.last_update)
     out << " (info mismatch, " << pg.log << ")";
 
   if (pg.log.log.empty()) {
     // shoudl it be?
-    if (pg.log.top.version - pg.log.bottom.version != 0) {
+    if (pg.log.head.version - pg.log.tail.version != 0) {
       out << " (log bound mismatch, empty)";
     }
   } else {
-    if (((pg.log.log.begin()->version.version - 1 != pg.log.bottom.version) &&
+    if (((pg.log.log.begin()->version.version - 1 != pg.log.tail.version) &&
          !pg.log.backlog) ||
-        (pg.log.log.rbegin()->version.version != pg.log.top.version)) {
+        (pg.log.log.rbegin()->version.version != pg.log.head.version)) {
       out << " (log bound mismatch, actual=["
 	  << pg.log.log.begin()->version << ","
 	  << pg.log.log.rbegin()->version << "] len=" << pg.log.log.size() << ")";
@@ -1024,7 +1027,7 @@ inline ostream& operator<<(ostream& out, const PG& pg)
 
   out << " " << pg_state_string(pg.get_state());
 
-  //out << " (" << pg.log.bottom << "," << pg.log.top << "]";
+  //out << " (" << pg.log.tail << "," << pg.log.head << "]";
   if (pg.missing.num_missing())
     out << " m=" << pg.missing.num_missing();
   if (pg.is_primary()) {
