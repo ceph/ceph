@@ -523,6 +523,18 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
 	lock->is_stable())
       lock->get_parent()->auth_unpin(lock);
 
+    // drop loner before doing waiters
+    if (caps &&
+	in->is_auth() && in->get_loner() >= 0 &&
+	in->multiple_nonstale_caps()) {
+      dout(10) << "  trying to drop loner" << dendl;
+      if (in->try_drop_loner()) {
+	dout(10) << "  dropped loner" << dendl;
+	if (need_issue)
+	  *need_issue = true;
+      }
+    }
+
     lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
     
     if (caps) {
@@ -1027,6 +1039,7 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
   }
   if (sup)
     cap->dec_suppress();
+  
   if (share && in->is_auth() && in->filelock.is_stable())
     share_inode_max_size(in);
 }
