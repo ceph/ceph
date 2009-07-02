@@ -50,16 +50,25 @@ public:
 
   virtual int create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
   virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
+                      time_t *mtime,
                       std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
 
   virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                       std::string& src_bucket, std::string& src_obj,
-                      std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
+                      char **petag,
+                      time_t *mtime,
+                      const time_t *mod_ptr,
+                      const time_t *unmod_ptr,
+                      const char *if_match,
+                      const char *if_nomatch,
+                      std::vector<std::pair<std::string, bufferlist> >& attrs,
+                     struct s3_err *err) = 0;
   virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
   virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj) = 0;
 
   virtual int get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
+            char **petag,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,

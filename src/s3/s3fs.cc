@@ -170,6 +170,7 @@ int S3FS::create_bucket(std::string& id, std::string& bucket, std::vector<std::p
 
 
 int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
+                  time_t *mtime,
                   std::vector<std::pair<std::string, bufferlist> >& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -206,6 +207,18 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
     return r;
   }
 
+  if (mtime) {
+    struct stat st;
+    r = fstat(fd, &st);
+    if (r < 0) {
+      r = -errno;
+      close(fd);
+      unlink(buf);
+      return -errno;
+    }
+    *mtime = st.st_mtime;
+  }
+
   r = close(fd);
   if (r < 0)
     return -errno;
@@ -215,18 +228,24 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
 
 int S3FS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
-               std::vector<std::pair<std::string, bufferlist> >& attrs)
+               char **petag,
+               time_t *mtime,
+               const time_t *mod_ptr,
+               const time_t *unmod_ptr,
+               const char *if_match,
+               const char *if_nomatch,
+               std::vector<std::pair<std::string, bufferlist> >& attrs,
+               struct s3_err *err)
 {
   int ret;
   char *data;
-  struct s3_err err;
 
-  ret = get_obj(src_bucket, src_obj, &data, 0, -1,
-                NULL, NULL, NULL, NULL, true, &err);
+  ret = get_obj(src_bucket, src_obj, &data, 0, -1, petag,
+                mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
   if (ret < 0)
     return ret;
 
-  ret =  put_obj(id, dest_bucket, dest_obj, data, ret, attrs);
+  ret =  put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
 
   return ret;
 }
@@ -350,6 +369,7 @@ int S3FS::set_attr(std::string& bucket, std::string& obj,
 
 int S3FS::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
+            char **petag,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
@@ -363,6 +383,7 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
   struct stat st;
   int r = -EINVAL;
   size_t max_len, pos;
+  char *etag = NULL;
 
   snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
 
@@ -396,13 +417,16 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
       goto done;
     }
   }
-
-  if (if_match || if_nomatch) {
-    char *etag;
+  if (if_match || if_nomatch || petag) {
     r = get_attr(S3_ATTR_ETAG, fd, &etag);
     if (r < 0)
       goto done;
+    if (petag)
+      *petag = etag;
+  }
 
+
+  if (if_match || if_nomatch) {
     r = -ECANCELED;
     if (if_match) {
       cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
@@ -456,6 +480,8 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
 
   r = max_len;
 done:
+  if (etag && !petag)
+    free(etag);
   close(fd);  
 
   return r;

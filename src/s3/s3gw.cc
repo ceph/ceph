@@ -786,7 +786,7 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   }
 
   r = 0;
-  len = s3store->get_obj(bucket, obj, &data, ofs, end, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
+  len = s3store->get_obj(bucket, obj, &data, ofs, end, NULL, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
   if (len < 0)
     r = len;
 
@@ -1067,7 +1067,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
       open_section(s, "Contents");
       dump_value(s, "Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
-      dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;");
+      dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;"); /* FIXME */
       dump_value(s, "Size", "%lld", iter->size);
       dump_value(s, "StorageClass", "STANDARD");
       dump_owner(s, s->user.user_id, s->user.display_name);
@@ -1161,6 +1161,16 @@ static void copy_object(struct req_state *s, const char *copy_source)
   bufferlist bl;
   S3AccessControlPolicy src_policy;
   string src_bucket, src_object, empty_str;
+  const char *if_mod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE", s->envp);
+  const char *if_unmod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE", s->envp);
+  const char *if_match = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MATCH", s->envp);
+  const char *if_nomatch = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_NONE_MATCH", s->envp);
+  time_t mod_time;
+  time_t unmod_time;
+  time_t *mod_ptr = NULL;
+  time_t *unmod_ptr = NULL;
+  time_t mtime;
+  char *etag = NULL;
 
   if (!verify_permission(s, S3_PERM_WRITE)) {
     abort_early(s, -EACCES);
@@ -1196,17 +1206,41 @@ static void copy_object(struct req_state *s, const char *copy_source)
 
   dest_policy.encode(aclbl);
 
+  if (if_mod) {
+    if (parse_time(if_mod, &mod_time) < 0)
+      goto done;
+    mod_ptr = &mod_time;
+  }
+
+  if (if_unmod) {
+    if (parse_time(if_unmod, &unmod_time) < 0)
+      goto done;
+    unmod_ptr = &unmod_time;
+  }
+
   attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
   r = s3store->copy_obj(s->user.user_id,
                         s->bucket_str, s->object_str,
                         src_bucket, src_object,
-                        attrs);
+                        &etag, &mtime,
+                        mod_ptr,
+                        unmod_ptr,
+                        if_match,
+                        if_nomatch,
+                        attrs, &err);
 
 done:
   free(data);
   dump_errno(s, r, &err);
 
   end_header(s);
+  if (r == 0) {
+    open_section(s, "CopyObjectResult");
+    dump_time(s, "LastModified", &mtime);
+    dump_value(s, "ETag", etag);
+    close_section(s, "CopyObjectResult");
+  }
+  free(etag);
 }
 
 static void do_create_object(struct req_state *s)
@@ -1280,7 +1314,7 @@ static void do_create_object(struct req_state *s)
     bl.append(md5_str.c_str(), md5_str.size());
     attrs.push_back(pair<string, bufferlist>(S3_ATTR_ETAG, bl));
     attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
-    r = s3store->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, actual, attrs);
+    r = s3store->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, actual, NULL, attrs);
   }
 done:
   free(data);
