@@ -26,6 +26,9 @@
 #include "include/Context.h"
 #include "events/EMetaBlob.h"
 
+#include "messages/MClientRequest.h"
+#include "messages/MMDSSlaveRequest.h"
+
 class Logger;
 
 class MDS;
@@ -250,8 +253,9 @@ enum {
  * the request is finished or forwarded.  see request_*().
  */
 struct MDRequest : public Mutation {
+  int ref;
   Session *session;
-  xlist<MDRequest*>::item session_request_item;
+  xlist<MDRequest*>::item session_request_item;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
   MClientRequest *client_request; // client request (if any)
@@ -324,6 +328,7 @@ struct MDRequest : public Mutation {
 
   // ---------------------------------------------------
   MDRequest() : 
+    ref(1),
     session(0), session_request_item(this),
     client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -334,6 +339,7 @@ struct MDRequest : public Mutation {
   }
   MDRequest(metareqid_t ri, MClientRequest *req) : 
     Mutation(ri),
+    ref(1),
     session(0), session_request_item(this),
     client_request(req), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -344,6 +350,7 @@ struct MDRequest : public Mutation {
   }
   MDRequest(metareqid_t ri, int by) : 
     Mutation(ri, by),
+    ref(1),
     session(0), session_request_item(this),
     client_request(0), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
@@ -353,7 +360,18 @@ struct MDRequest : public Mutation {
     in[0] = in[1] = 0; 
   }
   ~MDRequest() {
+    delete client_request;
+    delete slave_request;
     delete _more;
+  }
+
+  MDRequest *get() {
+    ++ref;
+    return this;
+  }
+  void put() {
+    if (--ref == 0)
+      delete this;
   }
   
   More* more() { 
@@ -1057,9 +1075,12 @@ class C_MDS_RetryRequest : public Context {
   MDCache *cache;
   MDRequest *mdr;
  public:
-  C_MDS_RetryRequest(MDCache *c, MDRequest *r) : cache(c), mdr(r) {}
+  C_MDS_RetryRequest(MDCache *c, MDRequest *r) : cache(c), mdr(r) {
+    mdr->get();
+  }
   virtual void finish(int r) {
     cache->dispatch_request(mdr);
+    mdr->put();
   }
 };
 

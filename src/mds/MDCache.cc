@@ -6209,8 +6209,6 @@ void MDCache::request_finish(MDRequest *mdr)
     mds->logger->favg(l_mds_replyl, g_clock.now() - mdr->client_request->get_recv_stamp());
   }
 
-  delete mdr->client_request;
-  delete mdr->slave_request;
   request_cleanup(mdr);
 }
 
@@ -6220,6 +6218,7 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
   dout(7) << "request_forward " << *mdr << " to mds" << who << " req " << *mdr << dendl;
   
   mds->forward_message_mds(mdr->client_request, who);  
+  mdr->client_request = 0;
   request_cleanup(mdr);
 
   if (mds->logger) mds->logger->inc(l_mds_fw);
@@ -6228,6 +6227,11 @@ void MDCache::request_forward(MDRequest *mdr, int who, int port)
 
 void MDCache::dispatch_request(MDRequest *mdr)
 {
+  if (!mdr->session_request_item.is_on_xlist()) {
+    dout(10) << "request " << *mdr << " is canceled" << dendl;
+    return;
+  }
+
   if (mdr->client_request) {
     mds->server->dispatch_client_request(mdr);
   } else if (mdr->slave_request) {
@@ -6306,7 +6310,7 @@ void MDCache::request_cleanup(MDRequest *mdr)
 
   // remove from map
   active_requests.erase(mdr->reqid);
-  delete mdr;
+  mdr->put();
 
   if (mds->logger)
     log_stat();
@@ -6315,8 +6319,6 @@ void MDCache::request_cleanup(MDRequest *mdr)
 void MDCache::request_kill(MDRequest *mdr)
 {
   dout(10) << "request_kill " << *mdr << dendl;
-
-  // FIXME this needs some MDRequest ref counting to work correctly.
   request_cleanup(mdr);
 }
 
