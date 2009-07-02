@@ -653,6 +653,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
       close_dir(dir);
   }
   
+  request->target = in;
   return in;
 }
 
@@ -845,7 +846,9 @@ MClientReply *Client::make_request(MClientRequest *req,
 
   // got it!
   MClientReply *reply = request->reply;
-  int mds = reply->get_source().num();
+  request->reply = 0;
+  if (ptarget)
+    *ptarget = request->target;
 
   // kick dispatcher (we've got it!)
   assert(request->dispatch_cond);
@@ -853,16 +856,10 @@ MClientReply *Client::make_request(MClientRequest *req,
   dout(20) << "sendrecv kickback on tid " << tid << " " << request->dispatch_cond << dendl;
   request->dispatch_cond = 0;
   
-  // insert trace
-  utime_t from = request->sent_stamp;
-  Inode *target = insert_trace(request, from, mds);
-  if (ptarget)
-    *ptarget = target;
-
   // -- log times --
   if (client_logger) {
     utime_t lat = g_clock.real_now();
-    lat -= start;
+    lat -= request->sent_stamp;
     dout(20) << "lat " << lat << dendl;
     client_logger->favg(l_c_lat,(double)lat);
     client_logger->favg(l_c_reply,(double)lat);
@@ -1035,13 +1032,14 @@ void Client::handle_client_reply(MClientReply *reply)
     return;
   }
   
+  int mds = reply->get_source().num();
+  request->reply = reply;
+  insert_trace(request, request->sent_stamp, mds);
+
   if (!request->got_unsafe) {
     request->got_unsafe = true;
     mds_sessions[mds_num].unsafe_requests.push_back(&request->unsafe_item);
 
-    // store reply
-    request->reply = reply;
-    
     Cond cond;
     request->dispatch_cond = &cond;
     

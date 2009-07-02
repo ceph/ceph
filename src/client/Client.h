@@ -89,6 +89,7 @@ extern class Logger  *client_logger;
  
 */
 struct InodeCap;
+struct Inode;
 
 struct MetaRequest {
   tid_t tid;
@@ -116,13 +117,15 @@ struct MetaRequest {
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
 
+  Inode *target;
+
   MetaRequest(MClientRequest *req, tid_t t) : 
     tid(t), request(req), 
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     got_safe(false), got_unsafe(false), unsafe_item(this),
     lock("MetaRequest lock"),
-    caller_cond(0), dispatch_cond(0) { }
+    caller_cond(0), dispatch_cond(0), target(0) { }
 
   MetaRequest* get() {++ref; return this; }
 
