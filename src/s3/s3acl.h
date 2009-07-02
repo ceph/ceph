@@ -11,6 +11,8 @@
 using namespace std;
 
 
+#define S3_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
+#define S3_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
 
 #define S3_PERM_READ            0x01
 #define S3_PERM_WRITE           0x02
@@ -43,10 +45,10 @@ class XMLObj
   int refcount;
   XMLObj *parent;
   string type;
-  map<string, string> attr_map;
 protected:
   string data;
   multimap<string, XMLObj *> children;
+  map<string, string> attr_map;
 public:
   XMLObj() : refcount(0) {}
   virtual ~XMLObj() { }
@@ -63,6 +65,14 @@ public:
   XMLObj *get_parent() { return parent; }
   void add_child(string el, XMLObj *obj) {
     children.insert(pair<string, XMLObj *>(el, obj));
+  }
+
+  bool get_attr(string name, string& attr) {
+    map<string, string>::iterator iter = attr_map.find(name);
+    if (iter == attr_map.end())
+      return false;
+    attr = iter->second;
+    return true;
   }
 
   XMLObjIter find(string name) {
@@ -120,10 +130,74 @@ public:
 };
 WRITE_CLASS_ENCODER(ACLPermission)
 
+enum ACLGranteeTypeEnum {
+  ACL_TYPE_CANON_USER,
+  ACL_TYPE_EMAIL_USER,
+  ACL_TYPE_GROUP,
+  ACL_TYPE_UNKNOWN,
+};
+class ACLGranteeType
+{
+  __u32 type;
+public:
+  ACLGranteeType() : type(ACL_TYPE_UNKNOWN) {}
+  const char *to_string() {
+    switch (type) {
+    case ACL_TYPE_CANON_USER:
+      return "CanonicalUser";
+    case ACL_TYPE_EMAIL_USER:
+      return "AmazonCustomerByEmail";
+    case ACL_TYPE_GROUP:
+      return "Group";
+     default:
+      return "unknown";
+    }
+  }
+  ACLGranteeTypeEnum get_type() { return (ACLGranteeTypeEnum)type; };
+  void set(const char *s) {
+    if (!s) {
+      type = ACL_TYPE_UNKNOWN;
+      return;
+    }
+    if (strcmp(s, "CanonicalUser") == 0)
+      type = ACL_TYPE_CANON_USER;
+    else if (strcmp(s, "AmazonCustomerByEmail") == 0)
+      type = ACL_TYPE_EMAIL_USER;
+    else if (strcmp(s, "Group") == 0)
+      type = ACL_TYPE_GROUP;
+    else
+      type = ACL_TYPE_UNKNOWN;
+  }
+
+  void encode(bufferlist& bl) const {
+     ::encode(type, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+     ::decode(type, bl);
+  }
+};
+WRITE_CLASS_ENCODER(ACLGranteeType)
+
+class ACLGrantee : public XMLObj
+{
+  string type;
+public:
+  ACLGrantee() {} 
+  ~ACLGrantee() {}
+
+  void xml_start(const char *el, const char **attr);
+
+  string& get_type() { return type; }
+};
+
+
 class ACLGrant : public XMLObj
 {
+  ACLGranteeType type;
+  
   string id;
   string uri;
+  string email;
   ACLPermission permission;
   string name;
 public:
@@ -131,27 +205,56 @@ public:
   ~ACLGrant() {}
 
   void xml_end(const char *el);
-  string& get_id() { return id; }
+
+  /* there's an assumption here that email/uri/id encodings are
+     different and there can't be any overlap */
+  string& get_id() {
+    switch(type.get_type()) {
+    case ACL_TYPE_EMAIL_USER:
+      return email;
+    case ACL_TYPE_GROUP:
+      return uri;
+    default:
+      return id;
+    }
+  }
+  ACLGranteeType& get_type() { return type; }
   ACLPermission& get_permission() { return permission; }
 
   void encode(bufferlist& bl) const {
+     ::encode(type, bl);
      ::encode(id, bl);
      ::encode(uri, bl);
+     ::encode(email, bl);
      ::encode(permission, bl);
      ::encode(name, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(type, bl);
     ::decode(id, bl);
     ::decode(uri, bl);
+    ::decode(email, bl);
     ::decode(permission, bl);
     ::decode(name, bl);
   }
   void to_xml(ostream& out) {
     out << "<Grant>" <<
-            "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\">" <<
-             "<ID>" << id << "</ID>" <<
-             "<DisplayName>" << name << "</DisplayName>" <<
-            "</Grantee>";
+            "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << type.to_string() << "\">";
+    switch (type.get_type()) {
+    case ACL_TYPE_CANON_USER:
+      out << "<ID>" << id << "</ID>" <<
+             "<DisplayName>" << name << "</DisplayName>";
+      break;
+    case ACL_TYPE_EMAIL_USER:
+      out << "<EmailAddress>" << email << "</EmailAddress>";
+      break;
+    case ACL_TYPE_GROUP:
+       out << "<URI>" << uri << "</URI>";
+      break;
+    default:
+      break;
+    }
+    out << "</Grantee>";
     permission.to_xml(out);
     out << "</Grant>";
   }
@@ -160,13 +263,14 @@ public:
     name = _name;
     permission.set_permissions(perm);
   }
+  void xml_start(const char *el, const char **attr);
 };
 WRITE_CLASS_ENCODER(ACLGrant)
 
 class S3AccessControlList : public XMLObj
 {
   map<string, int> acl_user_map;
-  map<string, ACLGrant> grant_map;
+  multimap<string, ACLGrant> grant_map;
   bool user_map_initialized;
 
   void init_user_map();

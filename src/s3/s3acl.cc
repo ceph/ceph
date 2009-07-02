@@ -8,19 +8,15 @@
 #include "s3acl.h"
 
 using namespace std;
+
+static string s3_uri_all_users = S3_URI_ALL_USERS;
+static string s3_uri_auth_users = S3_URI_AUTH_USERS;
                                   
 ostream& operator<<(ostream& out, XMLObj& obj) {
    out << obj.type << ": " << obj.data;
    return out;
 }
 
-
-class ACLGrantee : public XMLObj
-{
-public:
- ACLGrantee() {} 
- ~ACLGrantee() {}
-};
 
 void ACLPermission::xml_end(const char *el) {
   const char *s = data.c_str();
@@ -52,6 +48,13 @@ public:
   ~ACLURI() {}
 };
 
+class ACLEmail : public XMLObj
+{
+public:
+  ACLEmail() {}
+  ~ACLEmail() {}
+};
+
 class ACLDisplayName : public XMLObj
 {
 public:
@@ -69,17 +72,20 @@ void ACLOwner::xml_end(const char *el) {
     display_name = acl_name->get_data();
 }
 
-
 void ACLGrant::xml_end(const char *el) {
   ACLGrantee *acl_grantee;
   ACLID *acl_id;
   ACLURI *acl_uri;
+  ACLEmail *acl_email;
   ACLPermission *acl_permission;
   ACLDisplayName *acl_name;
 
   acl_grantee = (ACLGrantee *)find_first("Grantee");
   if (!acl_grantee)
     return;
+  string type_str;
+  acl_grantee->get_attr("xsi:type", type_str);
+  type.set(type_str.c_str());
   acl_permission = (ACLPermission *)find_first("Permission");
   if (!acl_permission)
     return;
@@ -89,22 +95,36 @@ void ACLGrant::xml_end(const char *el) {
   if (acl_name)
     name = acl_name->get_data();
 
-  acl_id = (ACLID *)acl_grantee->find_first("ID");
-  if (acl_id) {
-    id = acl_id->to_str();
-    cout << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << std::endl;
-  } else {
+  switch (type.get_type()) {
+  case ACL_TYPE_CANON_USER:
+    acl_id = (ACLID *)acl_grantee->find_first("ID");
+    if (acl_id) {
+      id = acl_id->to_str();
+      cout << "[" << *acl_grantee << ", " << permission << ", " << id << ", " << "]" << std::endl;
+    }
+    break;
+  case ACL_TYPE_GROUP:
     acl_uri = (ACLURI *)acl_grantee->find_first("URI");
     if (acl_uri) {
-      cout << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << std::endl;
       uri = acl_uri->get_data();
+      cout << "[" << *acl_grantee << ", " << permission << ", " << uri << "]" << std::endl;
     }
-  }
+    break;
+  case ACL_TYPE_EMAIL_USER:
+    acl_email = (ACLEmail *)acl_grantee->find_first("EmailAddress");
+    if (acl_email) {
+      email = acl_uri->get_data();
+      cout << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << std::endl;
+    }
+    break;
+  default:
+    break;
+  };
 }
 
 void S3AccessControlList::init_user_map()
 {
-  map<string, ACLGrant>::iterator iter;
+  multimap<string, ACLGrant>::iterator iter;
   acl_user_map.clear();
   for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
     ACLGrant& grant = iter->second;
@@ -118,7 +138,7 @@ void S3AccessControlList::add_grant(ACLGrant *grant)
 {
   string id = grant->get_id();
   if (id.size() > 0) {
-    grant_map[id] = *grant;
+    grant_map.insert(pair<string, ACLGrant>(id, *grant));
   }
 }
 
@@ -164,6 +184,16 @@ int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
     }
   }
 
+  /* should we continue looking up? */
+  if ((perm & perm_mask) != perm_mask) {
+    perm |= acl.get_perm(s3_uri_all_users, perm_mask);
+
+    if (id.compare("anonymous")) {
+      /* this is not the anonymous user */
+      perm |= acl.get_perm(s3_uri_auth_users, perm_mask);
+    }
+  }
+
   cerr << "id=" << id << " owner=" << owner << std::endl;
 
   return perm;
@@ -195,6 +225,8 @@ void S3XMLParser::xml_start(const char *el, const char **attr) {
     obj = new ACLPermission(); 
   } else if (strcmp(el, "URI") == 0) {
     obj = new ACLURI(); 
+  } else if (strcmp(el, "EmailAddress") == 0) {
+    obj = new ACLEmail(); 
   } else {
     obj = new XMLObj(); 
   }
