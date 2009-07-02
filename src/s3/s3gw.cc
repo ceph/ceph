@@ -737,14 +737,19 @@ static bool verify_signature(struct req_state *s)
   return (auth_sign.compare(b64) == 0);
 }
 
-static bool verify_permission(struct req_state *s, int perm)
+static bool __verify_permission(S3AccessControlPolicy *policy, string& uid, int perm)
 {
-   if (!s->acl)
+   if (!policy)
      return false;
 
-   int acl_perm = s->acl->get_perm(s->user.user_id, perm);
+   int acl_perm = policy->get_perm(uid, perm);
 
    return (perm == acl_perm);
+}
+
+static bool verify_permission(struct req_state *s, int perm)
+{
+  return __verify_permission(s->acl, s->user.user_id, perm);
 }
 
 static void get_object(struct req_state *s, string& bucket, string& obj, bool get_data)
@@ -937,9 +942,27 @@ done:
   return;
 }
 
-static int read_acls(struct req_state *s, bool only_bucket = false)
+static int __read_acls(S3AccessControlPolicy *policy, string& bucket, string& object)
 {
   bufferlist bl;
+  int ret = 0;
+
+  if (bucket.size()) {
+    ret = s3store->get_attr(bucket, object,
+                       S3_ATTR_ACL, bl);
+
+    if (ret >= 0) {
+      bufferlist::iterator iter = bl.begin();
+      policy->decode(iter);
+      policy->to_xml(cerr);
+    }
+  }
+
+  return ret;
+}
+
+static int read_acls(struct req_state *s, bool only_bucket = false)
+{
   int ret = 0;
   string obj_str;
 
@@ -954,16 +977,7 @@ static int read_acls(struct req_state *s, bool only_bucket = false)
   if (!only_bucket)
     obj_str = s->object_str;
 
-  if (s->bucket_str.size()) {
-    ret = s3store->get_attr(s->bucket_str, obj_str,
-                       S3_ATTR_ACL, bl);
-
-    if (ret >= 0) {
-      bufferlist::iterator iter = bl.begin();
-      s->acl->decode(iter);
-      s->acl->to_xml(cerr);
-    }
-  }
+  ret = __read_acls(s->acl, s->bucket_str, obj_str);
 
   return ret;
 }
@@ -1116,6 +1130,85 @@ done:
   end_header(s);
 }
 
+static bool parse_copy_source(const char *src, string& bucket, string& object)
+{
+  if (*src == '/') ++src;
+
+  string str(src);
+
+  int pos = str.find("/");
+  if (pos <= 0)
+    return false;
+
+  bucket = str.substr(0, pos);
+  object = str.substr(pos + 1);
+
+  if (object.size() == 0)
+    return false;
+
+  return true;
+}
+
+static void copy_object(struct req_state *s, const char *copy_source)
+{
+  int r = -EINVAL;
+  char *data = NULL;
+  struct s3_err err;
+  S3AccessControlPolicy dest_policy;
+  bool ret;
+  bufferlist aclbl;
+  vector<pair<string, bufferlist> > attrs;
+  bufferlist bl;
+  S3AccessControlPolicy src_policy;
+  string src_bucket, src_object, empty_str;
+
+  if (!verify_permission(s, S3_PERM_WRITE)) {
+    abort_early(s, -EACCES);
+    return;
+  }
+
+  string canned_acl;
+  get_canned_acl_request(s, canned_acl);
+
+  ret = dest_policy.create_canned(s->user.user_id, s->user.display_name, canned_acl);
+  if (!ret) {
+     err.code = "InvalidArgument";
+     r = -EINVAL;
+     goto done;
+  }
+
+  copy_source = FCGX_GetParam("HTTP_X_AMZ_COPY_SOURCE", s->envp);
+  ret = parse_copy_source(copy_source, src_bucket, src_object);
+  if (!ret) {
+     err.code = "InvalidArgument";
+     r = -EINVAL;
+     goto done;
+  }
+  /* just checking the bucket's permission */
+  r = __read_acls(&src_policy, src_bucket, empty_str);
+  if (r < 0) {
+    goto done;
+  }
+  if (!__verify_permission(&src_policy, s->user.user_id, S3_PERM_READ)) {
+    abort_early(s, -EACCES);
+    return;
+  }
+
+  dest_policy.encode(aclbl);
+
+  attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
+  r = s3store->copy_obj(s->user.user_id,
+                        s->bucket_str, s->object_str,
+                        src_bucket, src_object,
+                        attrs);
+
+done:
+  free(data);
+  dump_errno(s, r, &err);
+
+  end_header(s);
+}
+
 static void do_create_object(struct req_state *s)
 {
   int r = -EINVAL;
@@ -1124,6 +1217,11 @@ static void do_create_object(struct req_state *s)
   if (!s->object) {
     goto done;
   } else {
+    const char *copy_source = FCGX_GetParam("HTTP_X_AMZ_COPY_SOURCE", s->envp);
+    if (copy_source) {
+      copy_object(s, copy_source);
+      return;
+    }
     S3AccessControlPolicy policy;
 
     if (!verify_permission(s, S3_PERM_WRITE)) {

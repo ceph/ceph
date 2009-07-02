@@ -213,6 +213,24 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
   return 0;
 }
 
+int S3FS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
+               std::string& src_bucket, std::string& src_obj,
+               std::vector<std::pair<std::string, bufferlist> >& attrs)
+{
+  int ret;
+  char *data;
+  struct s3_err err;
+
+  ret = get_obj(src_bucket, src_obj, &data, 0, -1,
+                NULL, NULL, NULL, NULL, true, &err);
+  if (ret < 0)
+    return ret;
+
+  ret =  put_obj(id, dest_bucket, dest_obj, data, ret, attrs);
+
+  return ret;
+}
+
 
 int S3FS::delete_bucket(std::string& id, std::string& bucket)
 {

@@ -52,6 +52,9 @@ public:
   virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                       std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
 
+  virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
+                      std::string& src_bucket, std::string& src_obj,
+                      std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
   virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
   virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj) = 0;
 

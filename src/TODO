@@ -204,4 +204,5 @@ s3
  - copy object
  - gqs
  - parse date/time better
+ - md5 should be base64 encoded
  - upload using post
