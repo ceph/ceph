@@ -929,7 +929,9 @@ void Client::send_request(MetaRequest *request, int mds)
     r->decode_payload();
     r->set_retry_attempt(request->retry_attempt);
     r->set_dentry_wanted();
-    if(request->got_unsafe) r->set_replayed_op();
+    if (request->got_unsafe)
+      r->set_replayed_op();
+    r->clear_payload();  // reencode with changes
   }
   else
     request->retry_attempt++;
@@ -1172,7 +1174,6 @@ void Client::handle_mds_map(MMDSMap* m)
   if (frommds >= 0 &&
       mdsmap->get_state(frommds) == MDSMap::STATE_ACTIVE) {
     kick_requests(frommds, false);
-    //failed_mds.erase(from);
   }
 
   // kick any waiting threads

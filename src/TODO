@@ -77,7 +77,7 @@ repair
   - or what the hell, full trace?
 - mds scrubbing
 
-kernel client
+kclient
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
 - simplify mds auth tracking?
@@ -120,7 +120,8 @@ osd
 - pg split should be a work queue
 - optimize remove wrt recovery pushes?
 
-userspace client
+uclient
+- readdir from cache
 - clean up client mds session vs mdsmap behavior?
 - stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
