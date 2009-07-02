@@ -309,7 +309,7 @@ class Inode {
   void make_long_path(filepath& p) {
     if (dn) {
       assert(dn->dir && dn->dir->parent_inode);
-      dn->dir->parent_inode->make_path(p);
+      dn->dir->parent_inode->make_long_path(p);
       p.push_dentry(dn->name);
     } else if (snapdir_parent) {
       snapdir_parent->make_path(p);
