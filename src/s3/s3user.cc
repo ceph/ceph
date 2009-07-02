@@ -31,6 +31,13 @@ int s3_get_user_info(string user_id, S3UserInfo& info)
   return 0;
 }
 
+void s3_get_anon_user(S3UserInfo& info)
+{
+  info.user_id = S3_USER_ANON_ID;
+  info.display_name.clear();
+  info.secret_key.clear();
+}
+
 int s3_store_user_info(S3UserInfo& info)
 {
   bufferlist bl;

@@ -687,6 +687,11 @@ int parse_time(const char *time_str, time_t *time)
 static bool verify_signature(struct req_state *s)
 {
   const char *http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->envp);
+  if (!http_auth || !(*http_auth)) {
+    /* anonymous access */
+    s3_get_anon_user(s->user);
+    return true;
+  }
   if (strncmp(http_auth, "AWS ", 4))
     return false;
   string auth_str(http_auth + 4);

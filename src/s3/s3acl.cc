@@ -6,6 +6,7 @@
 #include "include/types.h"
 
 #include "s3acl.h"
+#include "s3/user.h"
 
 using namespace std;
 
@@ -188,7 +189,7 @@ int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
   if ((perm & perm_mask) != perm_mask) {
     perm |= acl.get_perm(s3_uri_all_users, perm_mask);
 
-    if (id.compare("anonymous")) {
+    if (id.compare(S3_USER_ANON_ID)) {
       /* this is not the anonymous user */
       perm |= acl.get_perm(s3_uri_auth_users, perm_mask);
     }

@@ -9,8 +9,10 @@
 using namespace std;
 
 #define USER_INFO_BUCKET_NAME ".users"
-
 #define USER_INFO_VER 1
+
+#define S3_USER_ANON_ID "anonymous"
+
 
 struct S3UserInfo
 {
@@ -42,6 +44,7 @@ struct S3UserInfo
 WRITE_CLASS_ENCODER(S3UserInfo)
 
 extern int s3_get_user_info(string user_id, S3UserInfo& info);
+extern void s3_get_anon_user(S3UserInfo& info);
 extern int s3_store_user_info(S3UserInfo& info);
 
 class S3UserBuckets
