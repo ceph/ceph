@@ -885,10 +885,10 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_CLOSE:
-    mds_sessions.erase(from);
     mount_cond.Signal();
     remove_session_caps(from);
     kick_requests(from, true);
+    mds_sessions.erase(from);
     break;
 
   case CEPH_SESSION_RENEWCAPS:
