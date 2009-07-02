@@ -830,7 +830,7 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
           cerr << "grant user does not exist:" << id << std::endl;
         } else {
           ACLPermission& perm = src_grant->get_permission();
-          new_grant.set(id, grant_user.display_name, perm.get_permissions());
+          new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
           grant_ok = true;
           cerr << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << std::endl;
         }
@@ -1064,17 +1064,37 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   //if (args.get("name"))
 }
 
+static void get_canned_acl_request(struct req_state *s, string& canned_acl)
+{
+  const char *param = FCGX_GetParam("HTTP_X_AMZ_ACL", s->envp);
+
+  if (param)
+    canned_acl = param;
+  else
+    canned_acl.clear();
+}
+
 static void do_create_bucket(struct req_state *s)
 {
-  S3AccessControlPolicy def;
-  def.create_default(s->user.user_id, s->user.display_name);
-  bufferlist aclbl;
-  def.encode(aclbl);
-
+  S3AccessControlPolicy policy;
+  string canned_acl;
+  int r;
   std::vector<std::pair<std::string, bufferlist> > attrs;
+  bufferlist aclbl;
+
+  get_canned_acl_request(s, canned_acl);
+
+  bool ret = policy.create_canned(s->user.user_id, s->user.display_name, canned_acl);
+
+  if (!ret) {
+    r = -EINVAL;
+    goto done;
+  }
+  policy.encode(aclbl);
+
   attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
 
-  int r = s3store->create_bucket(s->user.user_id, s->bucket_str, attrs);
+  r = s3store->create_bucket(s->user.user_id, s->bucket_str, attrs);
 
   if (r == 0) {
     S3UserBuckets buckets;
@@ -1091,7 +1111,7 @@ static void do_create_bucket(struct req_state *s)
     }
   }
   
-
+done:
   dump_errno(s, r);
   end_header(s);
 }
@@ -1104,11 +1124,22 @@ static void do_create_object(struct req_state *s)
   if (!s->object) {
     goto done;
   } else {
+    S3AccessControlPolicy policy;
+
     if (!verify_permission(s, S3_PERM_WRITE)) {
       abort_early(s, -EACCES);
       return;
     }
 
+    string canned_acl;
+    get_canned_acl_request(s, canned_acl);
+
+    bool ret = policy.create_canned(s->user.user_id, s->user.display_name, canned_acl);
+    if (!ret) {
+       err.code = "InvalidArgument";
+       r = -EINVAL;
+       goto done;
+    }
     size_t cl = atoll(s->length);
     size_t actual = 0;
     if (cl) {
@@ -1142,10 +1173,8 @@ static void do_create_object(struct req_state *s)
        r = -EINVAL;
        goto done;
     }
-    S3AccessControlPolicy def;
-    def.create_default(s->user.user_id, s->user.display_name);
     bufferlist aclbl;
-    def.encode(aclbl);
+    policy.encode(aclbl);
 
     string md5_str(calc_md5);
     vector<pair<string, bufferlist> > attrs;

@@ -260,10 +260,15 @@ public:
     permission.to_xml(out);
     out << "</Grant>";
   }
-  void set(string& _id, string& _name, int perm) {
+  void set_canon(string& _id, string& _name, int perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
+    permission.set_permissions(perm);
+  }
+  void set_group(string& _uri, int perm) {
+    type.set(ACL_TYPE_GROUP);
+    uri = _uri;
     permission.set_permissions(perm);
   }
   void xml_start(const char *el, const char **attr);
@@ -304,14 +309,15 @@ public:
   }
   void add_grant(ACLGrant *grant);
 
-  void create_default(string name, string id) {
+  void create_default(string id, string name) {
     acl_user_map.clear();
     grant_map.clear();
 
     ACLGrant grant;
-    grant.set(name, id, S3_PERM_FULL_CONTROL);
+    grant.set_canon(id, name, S3_PERM_FULL_CONTROL);
     add_grant(&grant);
   }
+  bool create_canned(string id, string name, string canned_acl);
 };
 WRITE_CLASS_ENCODER(S3AccessControlList)
 
@@ -382,6 +388,12 @@ public:
     acl.create_default(id, name);
     owner.set_id(id);
     owner.set_name(name);
+  }
+  bool create_canned(string id, string name, string canned_acl) {
+    bool ret = acl.create_canned(id, name, canned_acl);
+    owner.set_id(id);
+    owner.set_name(name);
+    return ret;
   }
 
   S3AccessControlList& get_acl() {

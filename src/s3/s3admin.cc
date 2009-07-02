@@ -102,7 +102,7 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
     } else {
       ACLGrant new_grant;
       ACLPermission& perm = src_grant->get_permission();
-      new_grant.set(id, grant_user.display_name, perm.get_permissions());
+      new_grant.set_canon(id, grant_user.display_name, perm.get_permissions());
       cerr << "new grant: " << id << ":" << grant_user.display_name << std::endl;
       acl.add_grant(&new_grant);
     }

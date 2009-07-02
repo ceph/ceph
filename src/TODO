@@ -196,12 +196,12 @@ cas
 
 s3
  - integrate with rados
- - canned acls
  - handle location related requests (check if needed)
  - list objects, prefix and delimiter
- - acl groups, email id
+ - acl email id
  - logging control (?)
- - put object: cache control, x-amz-meta-, expiration, canned acl, content encoding, content type
+ - put object: cache control, x-amz-meta-, expiration, content encoding, content type
  - copy object
  - gqs
- - parse time better
+ - parse date/time better
+ - upload using post

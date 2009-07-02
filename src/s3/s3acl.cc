@@ -166,6 +166,40 @@ int S3AccessControlList::get_perm(string& id, int perm_mask) {
   return 0;
 }
 
+bool S3AccessControlList::create_canned(string id, string name, string canned_acl)
+{
+  acl_user_map.clear();
+  grant_map.clear();
+
+  /* owner gets full control */
+  ACLGrant grant;
+  grant.set_canon(id, name, S3_PERM_FULL_CONTROL);
+  add_grant(&grant);
+
+  if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
+    return true;
+  }
+
+  ACLGrant group_grant;
+  if (canned_acl.compare("public-read") == 0) {
+    group_grant.set_group(s3_uri_all_users, S3_PERM_READ);
+    add_grant(&group_grant);
+  } else if (canned_acl.compare("public-read-write") == 0) {
+    group_grant.set_group(s3_uri_all_users, S3_PERM_READ);
+    add_grant(&group_grant);
+    group_grant.set_group(s3_uri_all_users, S3_PERM_WRITE);
+    add_grant(&group_grant);
+  } else if (canned_acl.compare("authenticated-read") == 0) {
+    group_grant.set_group(s3_uri_auth_users, S3_PERM_READ);
+    add_grant(&group_grant);
+  } else {
+    return false;
+  }
+
+  return true;
+
+}
+
 void S3AccessControlPolicy::xml_end(const char *el) {
   acl = *(S3AccessControlList *)find_first("AccessControlList");
   owner = *(ACLOwner *)find_first("Owner");
