@@ -731,10 +731,11 @@ int Client::choose_target_mds(MClientRequest *req)
 
 
 
-MClientReply *Client::make_request(MClientRequest *req, 
-				   int uid, int gid, 
- 				   Inode **ptarget,
-				   int use_mds)
+int Client::make_request(MClientRequest *req, 
+			 int uid, int gid, 
+			 Inode **ptarget,
+			 int use_mds,
+			 bufferlist *pdirbl)
 {
   // time the call
   utime_t start = g_clock.real_now();
@@ -866,7 +867,12 @@ MClientReply *Client::make_request(MClientRequest *req,
   }
 
   request->put();
-  return reply;
+
+  int r = reply->get_result();
+  if (pdirbl)
+    pdirbl->claim(reply->get_dir_bl());
+  delete reply;
+  return r;
 }
 
 
@@ -2385,8 +2391,7 @@ int Client::mount()
   filepath fp(CEPH_INO_ROOT);
   req->set_filepath(fp);
   req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
-  MClientReply *reply = make_request(req, -1, -1);
-  int res = reply->get_result();
+  int res = make_request(req, -1, -1);
   dout(10) << "root getattr result=" << res << dendl;
   if (res < 0)
     return res;
@@ -2630,10 +2635,8 @@ int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
   req->head.args.getattr.mask = 0;
   dout(10) << "_lookup on " << path << dendl;
 
-  MClientReply *reply = make_request(req, 0, 0, target);
-  int r = reply->get_result();
+  int r = make_request(req, 0, 0, target);
   dout(10) << "_lookup res is " << r << dendl;
-  delete reply;
   return r;
 }
 
@@ -2923,10 +2926,8 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   req->set_filepath(path);
   req->head.args.getattr.mask = mask;
   
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
+  int res = make_request(req, uid, gid);
   dout(10) << "_getattr result=" << res << dendl;
-  delete reply;
   return res;
 }
 
@@ -2988,10 +2989,8 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
     req->head.args.setattr.size = attr->st_size;
   req->head.args.setattr.mask = mask;
 
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
+  int res = make_request(req, uid, gid);
   dout(10) << "_setattr result=" << res << dendl;
-  delete reply;
   return res;
 }
 
@@ -3252,8 +3251,8 @@ int Client::_readdir_get_frag(DirResult *dirp)
   req->set_filepath(path); 
   req->head.args.readdir.frag = fg;
   
-  MClientReply *reply = make_request(req, -1, -1);
-  int res = reply->get_result();
+  bufferlist dirbl;
+  int res = make_request(req, -1, -1, 0, -1, &dirbl);
   
   if (res == -EAGAIN) {
     dout(10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
@@ -3280,7 +3279,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
     }
     
     // the rest?
-    bufferlist::iterator p = reply->get_dir_bl().begin();
+    bufferlist::iterator p = dirbl.begin();
     if (!p.end()) {
       // dirstat
       DirStat dst(p);
@@ -3308,8 +3307,6 @@ int Client::_readdir_get_frag(DirResult *dirp)
     dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
     dirp->set_end();
   }
-
-  delete reply;
 
   return res;
 }
@@ -3475,9 +3472,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     req->set_filepath(path); 
     req->head.args.open.flags = flags & ~O_CREAT;
     req->head.args.open.mode = mode;
-    MClientReply *reply = make_request(req, uid, gid);
-    result = reply->get_result();
-    delete reply;
+    result = make_request(req, uid, gid);
   }
 
   // success?
@@ -4489,9 +4484,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
   bl.append((const char*)value, size);
   req->set_data(bl);
   
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
+  int res = make_request(req, uid, gid);
 
   trim_cache();
   dout(3) << "_setxattr(" << in->ino() << ", \"" << name << "\") = " << res << dendl;
@@ -4522,9 +4515,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   in->make_path(path);
   req->set_filepath(path);
  
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
+  int res = make_request(req, uid, gid);
 
   trim_cache();
   dout(3) << "_removexattr(" << in->ino() << ", \"" << name << "\") = " << res << dendl;
@@ -4582,10 +4573,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
 
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-
-  delete reply;
+  int res = make_request(req, uid, gid);
 
   trim_cache();
 
@@ -4627,9 +4615,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   req->set_filepath(path);
   req->head.args.mkdir.mode = mode;
  
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
+  int res = make_request(req, uid, gid);
   dout(10) << "mkdir result is " << res << dendl;
 
   trim_cache();
@@ -4671,9 +4657,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
   req->set_filepath(path);
   req->set_string2(target);
  
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
+  int res = make_request(req, uid, gid);
 
   trim_cache();
   dout(3) << "_symlink(\"" << path << "\", \"" << target << "\") = " << res << dendl;
@@ -4711,15 +4695,13 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   path.push_dentry(name);
   req->set_filepath(path);
  
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
+  int res = make_request(req, uid, gid);
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name)) {
       Dentry *dn = dir->dir->dentries[name];
       unlink(dn);
     }
   }
-  delete reply;
   dout(10) << "unlink result is " << res << dendl;
 
   trim_cache();
@@ -4747,8 +4729,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   path.push_dentry(name);
   req->set_filepath(path);
  
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
+  int res = make_request(req, uid, gid);
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name) ) {
       Dentry *dn = dir->dir->dentries[name];
@@ -4757,7 +4738,6 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
       unlink(dn);
     }
   }
-  delete reply;
 
   trim_cache();
   dout(3) << "rmdir(" << path << ") = " << res << dendl;
@@ -4788,8 +4768,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   req->set_filepath(to);
   req->set_filepath2(from);
  
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
+  int res = make_request(req, uid, gid);
   if (res == 0) {
     // remove from local cache
     if (fromdir->dir->dentries.count(fromname)) {
@@ -4797,7 +4776,6 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
       unlink(dn);
     }
   }
-  delete reply;
   dout(10) << "rename result is " << res << dendl;
 
   // renamed item from our cache
@@ -4831,9 +4809,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid)
   filepath existing(in->ino());
   req->set_filepath2(existing);
   
-  MClientReply *reply = make_request(req, uid, gid);
-  int res = reply->get_result();
-  delete reply;
+  int res = make_request(req, uid, gid);
   dout(10) << "link result is " << res << dendl;
 
   trim_cache();

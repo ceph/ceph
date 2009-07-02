@@ -696,9 +696,9 @@ public:
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
-  MClientReply *make_request(MClientRequest *req, int uid, int gid,
-			     Inode **ptarget = 0,
-			     int use_mds=-1);
+  int make_request(MClientRequest *req, int uid, int gid,
+		   Inode **ptarget = 0,
+		   int use_mds=-1, bufferlist *pdirbl=0);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
