@@ -812,16 +812,40 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
   XMLObjIter iter = src_acl.find("Grant");
   ACLGrant *src_grant = (ACLGrant *)iter.get_next();
   while (src_grant) {
-    string id = src_grant->get_id();
+    ACLGranteeType& type = src_grant->get_type();
+    ACLGrant new_grant;
+    bool grant_ok = false;
+    switch (type.get_type()) {
+    case ACL_TYPE_CANON_USER:
+      {
+        string id = src_grant->get_id();
     
-    S3UserInfo grant_user;
-    if (s3_get_user_info(id, grant_user) < 0) {
-      cerr << "grant user does not exist:" << id << std::endl;
-    } else {
-      ACLGrant new_grant;
-      ACLPermission& perm = src_grant->get_permission();
-      new_grant.set(id, grant_user.display_name, perm.get_permissions());
-      cerr << "new grant: " << id << ":" << grant_user.display_name << std::endl;
+        S3UserInfo grant_user;
+        if (s3_get_user_info(id, grant_user) < 0) {
+          cerr << "grant user does not exist:" << id << std::endl;
+        } else {
+          ACLPermission& perm = src_grant->get_permission();
+          new_grant.set(id, grant_user.display_name, perm.get_permissions());
+          grant_ok = true;
+          cerr << "new grant: " << new_grant.get_id() << ":" << grant_user.display_name << std::endl;
+        }
+      }
+      break;
+    case ACL_TYPE_GROUP:
+      {
+        string group = src_grant->get_id();
+        if (group.compare(S3_URI_ALL_USERS) == 0 ||
+            group.compare(S3_URI_AUTH_USERS) == 0) {
+          new_grant = *src_grant;
+          grant_ok = true;
+          cerr << "new grant: " << new_grant.get_id() << std::endl;
+        }
+      }
+    default:
+      /* FIXME: implement email based grant */
+      break;
+    }
+    if (grant_ok) {
       acl.add_grant(&new_grant);
     }
     src_grant = (ACLGrant *)iter.get_next();

@@ -154,6 +154,8 @@ public:
     }
   }
   ACLGranteeTypeEnum get_type() { return (ACLGranteeTypeEnum)type; };
+  void set(ACLGranteeTypeEnum t) { type = t; }
+
   void set(const char *s) {
     if (!s) {
       type = ACL_TYPE_UNKNOWN;
@@ -259,6 +261,7 @@ public:
     out << "</Grant>";
   }
   void set(string& _id, string& _name, int perm) {
+    type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
     permission.set_permissions(perm);
