@@ -367,7 +367,9 @@ static void get_auth_header(struct req_state *s, string& dest, bool qsr)
   if (qsr) {
     date = s->args.get("Expires");
   } else {
-    date = FCGX_GetParam("HTTP_DATE", s->envp);
+    const char *str = FCGX_GetParam("HTTP_DATE", s->envp);
+    if (str)
+      date = str;
   }
 
   if (date.size())
@@ -898,10 +900,21 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
     ACLGranteeType& type = src_grant->get_type();
     ACLGrant new_grant;
     bool grant_ok = false;
+    string id;
     switch (type.get_type()) {
+    case ACL_TYPE_EMAIL_USER:
+      {
+        string email = src_grant->get_id();
+        cerr << "grant user email=" << email << std::endl;
+        if (s3_get_uid_by_email(email, id) < 0) {
+          cerr << "grant user email not found or other error" << std::endl;
+          break;
+        }
+      }
     case ACL_TYPE_CANON_USER:
       {
-        string id = src_grant->get_id();
+        if (type.get_type() == ACL_TYPE_CANON_USER)
+          id = src_grant->get_id();
     
         S3UserInfo grant_user;
         if (s3_get_user_info(id, grant_user) < 0) {

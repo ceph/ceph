@@ -198,7 +198,6 @@ s3
  - integrate with rados
  - handle location related requests (check if needed)
  - list objects, prefix and delimiter
- - acl email id
  - logging control (?)
  - put, copy object: metadata
  - parse date/time better

@@ -114,7 +114,7 @@ void ACLGrant::xml_end(const char *el) {
   case ACL_TYPE_EMAIL_USER:
     acl_email = (ACLEmail *)acl_grantee->find_first("EmailAddress");
     if (acl_email) {
-      email = acl_uri->get_data();
+      email = acl_email->get_data();
       cout << "[" << *acl_grantee << ", " << permission << ", " << email << "]" << std::endl;
     }
     break;

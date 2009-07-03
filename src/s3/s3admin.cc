@@ -25,6 +25,7 @@ void usage()
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id>" << std::endl;
   cerr << "   --key=<key>" << std::endl;
+  cerr << "   --email=<email>" << std::endl;
   cerr << "   --display-name=<name>" << std::endl;
   cerr << "   --bucket=<bucket>" << std::endl;
   cerr << "   --object=<object>" << std::endl;
@@ -123,6 +124,7 @@ int main(int argc, const char **argv)
 
   const char *user_id = 0;
   const char *secret_key = 0;
+  const char *user_email = 0;
   const char *display_name = 0;
   const char *bucket = 0;
   const char *object = 0;
@@ -146,6 +148,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&user_id, OPT_STR);
     } else if (CONF_ARG_EQ("key", 'k')) {
       CONF_SAFE_SET_ARG_VAL(&secret_key, OPT_STR);
+    } else if (CONF_ARG_EQ("email", 'e')) {
+      CONF_SAFE_SET_ARG_VAL(&user_email, OPT_STR);
     } else if (CONF_ARG_EQ("display-name", 'n')) {
       CONF_SAFE_SET_ARG_VAL(&display_name, OPT_STR);
     } else if (CONF_ARG_EQ("bucket", 'b')) {
@@ -216,6 +220,8 @@ int main(int argc, const char **argv)
       info.secret_key = secret_key;
     if (display_name)
       info.display_name = display_name;
+    if (user_email)
+      info.user_email = user_email;
 
     if (s3_store_user_info(info) < 0) {
       cerr << "error storing user info" << std::endl;

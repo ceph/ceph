@@ -9,6 +9,7 @@
 using namespace std;
 
 #define USER_INFO_BUCKET_NAME ".users"
+#define USER_INFO_EMAIL_BUCKET_NAME ".users.email"
 #define USER_INFO_VER 1
 
 #define S3_USER_ANON_ID "anonymous"
@@ -19,6 +20,7 @@ struct S3UserInfo
   string user_id;
   string secret_key;
   string display_name;
+  string user_email;
 
   void encode(bufferlist& bl) const {
      __u32 ver = USER_INFO_VER;
@@ -26,6 +28,7 @@ struct S3UserInfo
      ::encode(user_id, bl);
      ::encode(secret_key, bl);
      ::encode(display_name, bl);
+     ::encode(user_email, bl);
   }
   void decode(bufferlist::iterator& bl) {
      __u32 ver;
@@ -33,19 +36,34 @@ struct S3UserInfo
     ::decode(user_id, bl);
     ::decode(secret_key, bl);
     ::decode(display_name, bl);
+    ::decode(user_email, bl);
   }
 
   void clear() {
     user_id.clear();
     secret_key.clear();
     display_name.clear();
+    user_email.clear();
   }
 };
 WRITE_CLASS_ENCODER(S3UserInfo)
 
+struct S3UID
+{
+  string user_id;
+  void encode(bufferlist& bl) const {
+     ::encode(user_id, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(user_id, bl);
+  }
+};
+WRITE_CLASS_ENCODER(S3UID)
+
 extern int s3_get_user_info(string user_id, S3UserInfo& info);
 extern void s3_get_anon_user(S3UserInfo& info);
 extern int s3_store_user_info(S3UserInfo& info);
+extern int s3_get_uid_by_email(string& email, string& user_id);
 
 class S3UserBuckets
 {
