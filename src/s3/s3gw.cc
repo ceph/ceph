@@ -346,7 +346,7 @@ static void get_canon_resource(struct req_state *s, string& dest)
   }
 }
 
-static void get_auth_header(struct req_state *s, string& dest)
+static void get_auth_header(struct req_state *s, string& dest, bool qsr)
 {
   dest = "";
   if (s->method)
@@ -363,9 +363,15 @@ static void get_auth_header(struct req_state *s, string& dest)
     dest.append(type);
   dest.append("\n");
 
-  const char *date = FCGX_GetParam("HTTP_DATE", s->envp);
-  if (date)
-    dest.append(date);
+  string date;
+  if (qsr) {
+    date = s->args.get("Expires");
+  } else {
+    date = FCGX_GetParam("HTTP_DATE", s->envp);
+  }
+
+  if (date.size())
+      dest.append(date);
   dest.append("\n");
 
   string canon_amz_hdr;
@@ -684,23 +690,90 @@ int parse_time(const char *time_str, time_t *time)
   return 0;
 }
 
+char hex_to_num(char c)
+{
+  static char table[256];
+  static bool initialized = false;
+
+
+  if (!initialized) {
+    memset(table, -1, sizeof(table));
+    int i;
+    for (i = '0'; i<='9'; i++)
+      table[i] = i - '0';
+    for (i = 'A'; i<='F'; i++)
+      table[i] = i - 'A' + 0xa;
+    for (i = 'a'; i<='f'; i++)
+      table[i] = i - 'a' + 0xa;
+  }
+  return table[(int)c];
+}
+
+bool url_decode(string& src_str, string& dest_str)
+{
+  const char *src = src_str.c_str();
+  char dest[src_str.size()];
+  int pos = 0;
+  char c;
+
+  while (*src) {
+    if (*src != '%') {
+      dest[pos++] = *src++;
+    } else {
+      src++;
+      char c1 = hex_to_num(*src++);
+      c = c1 << 4;
+      if (c1 < 0)
+        return false;
+      c1 = hex_to_num(*src++);
+      if (c1 < 0)
+        return false;
+      c |= c1;
+      dest[pos++] = c;
+    }
+  }
+  dest[pos] = 0;
+  dest_str = dest;
+
+  return true;
+}
+
 static bool verify_signature(struct req_state *s)
 {
   const char *http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->envp);
-  if (!http_auth || !(*http_auth)) {
-    /* anonymous access */
-    s3_get_anon_user(s->user);
-    return true;
-  }
-  if (strncmp(http_auth, "AWS ", 4))
-    return false;
-  string auth_str(http_auth + 4);
-  int pos = auth_str.find(':');
-  if (pos < 0)
-    return false;
+  bool qsr = false;
+  string auth_id;
+  string auth_sign;
 
-  string auth_id = auth_str.substr(0, pos);
-  string auth_sign = auth_str.substr(pos + 1);
+  if (!http_auth || !(*http_auth)) {
+    auth_id = s->args.get("AWSAccessKeyId");
+    if (auth_id.size()) {
+      url_decode(s->args.get("Signature"), auth_sign);
+
+      string date = s->args.get("Expires");
+      time_t exp = atoll(date.c_str());
+      time_t now;
+      time(&now);
+      if (now >= exp)
+        return false;
+
+      qsr = true;
+    } else {
+      /* anonymous access */
+      s3_get_anon_user(s->user);
+      return true;
+    }
+  } else {
+    if (strncmp(http_auth, "AWS ", 4))
+      return false;
+    string auth_str(http_auth + 4);
+    int pos = auth_str.find(':');
+    if (pos < 0)
+      return false;
+
+    auth_id = auth_str.substr(0, pos);
+    auth_sign = auth_str.substr(pos + 1);
+  }
 
   /* first get the user info */
   if (s3_get_user_info(auth_id, s->user) < 0) {
@@ -714,7 +787,7 @@ static bool verify_signature(struct req_state *s)
   /* now verify signature */
    
   string auth_hdr;
-  get_auth_header(s, auth_hdr);
+  get_auth_header(s, auth_hdr, qsr);
   cerr << "auth_hdr:" << std::endl << auth_hdr << std::endl;
 
   const char *key = s->user.secret_key.c_str();

@@ -200,8 +200,7 @@ s3
  - list objects, prefix and delimiter
  - acl email id
  - logging control (?)
- - put, copy object: cache control, x-amz-meta-, expiration, content encoding, content type
- - gqs
+ - put, copy object: metadata
  - parse date/time better
  - md5 should be base64 encoded
  - upload using post
