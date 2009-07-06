@@ -101,10 +101,8 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
     if (dirent->d_name[0] == '.')
       continue;
 
-    if (!prefix.empty()) {
-      if (prefix.compare(0, prefix.size(), prefix) == 0)
-        dir_map[dirent->d_name] = true;
-    } else {
+    if (prefix.empty() ||
+        (prefix.compare(0, prefix.size(), prefix) == 0)) {
       dir_map[dirent->d_name] = true;
     }
   }
@@ -133,6 +131,12 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
       continue;
     obj.mtime = statbuf.st_mtime;
     obj.size = statbuf.st_size;
+    char *etag;
+    if (get_attr(S3_ATTR_ETAG, buf, &etag) >= 0) {
+      strncpy(obj.etag, etag, sizeof(obj.etag));
+      obj.etag[sizeof(obj.etag)-1] = '\0';
+      free(etag);
+    }
     result.push_back(obj);
   }
 

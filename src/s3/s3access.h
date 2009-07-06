@@ -6,6 +6,8 @@
 #include <vector>
 #include <include/types.h>
 
+#include <openssl/md5.h>
+
 #define SERVER_NAME "S3FS"
 
 #define S3_ATTR_ACL	"user.s3.acl"
@@ -27,6 +29,7 @@ struct S3ObjEnt {
   std::string name;
   size_t size;
   time_t mtime;
+  char etag[MD5_DIGEST_LENGTH * 2 + 1];
 
   void encode(bufferlist& bl) const {
      ::encode(name, bl);

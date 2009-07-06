@@ -1163,7 +1163,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
       open_section(s, "Contents");
       dump_value(s, "Key", iter->name.c_str());
       dump_time(s, "LastModified", &iter->mtime);
-      dump_value(s, "ETag", "&quot;828ef3fdfa96f00ad9f27c383fc9ac7f&quot;"); /* FIXME */
+      dump_value(s, "ETag", "&quot;%s&quot;", iter->etag);
       dump_value(s, "Size", "%lld", iter->size);
       dump_value(s, "StorageClass", "STANDARD");
       dump_owner(s, s->user.user_id, s->user.display_name);
