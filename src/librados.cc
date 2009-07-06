@@ -103,7 +103,7 @@ public:
   int write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(PoolCtx& pool, const object_t& oid);
-  int stat(PoolCtx& pool, const object_t& oid, __u64 *psize, utime_t *pmtime);
+  int stat(PoolCtx& pool, const object_t& oid, __u64 *psize, time_t *pmtime);
 
   int exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
@@ -815,7 +815,7 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   return len;
 }
 
-int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, utime_t *pmtime)
+int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, time_t *pmtime)
 {
   SnapContext snapc;
 
@@ -829,15 +829,13 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, utime_t 
 
   if (!psize)
     psize = &size;
-  if (!pmtime)
-    pmtime = &mtime;
 
   dout(0) << "going to stat" << dendl;
 
   lock.Lock();
   ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
   objecter->stat(oid, layout,
-	      pool.snap_seq, psize, pmtime, 0,
+	      pool.snap_seq, psize, &mtime, 0,
               onack);
   lock.Unlock();
 
@@ -846,6 +844,10 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, utime_t 
     cond.Wait(mylock);
   mylock.Unlock();
   dout(10) << "Objecter returned from stat" << dendl;
+
+  if (r >= 0 && pmtime) {
+    *pmtime = mtime.sec();
+  }
 
   return done;
 }
@@ -1031,6 +1033,14 @@ int Rados::setxattr(rados_pool_t pool, const object_t& oid, const char *name, bu
     return -EINVAL;
 
   return client->setxattr(*(RadosClient::PoolCtx *)pool, oid, name, bl);
+}
+
+int Rados::stat(rados_pool_t pool, const object_t& oid, __u64 *psize, time_t *pmtime)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->stat(*(RadosClient::PoolCtx *)pool, oid, psize, pmtime);
 }
 
 int Rados::exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
@@ -1321,6 +1331,13 @@ extern "C" int rados_setxattr(rados_pool_t pool, const char *o, const char *name
   bufferlist bl;
   bl.append(buf, len);
   return radosp->setxattr(*ctx, oid, name, bl);
+}
+
+extern "C" int rados_stat(rados_pool_t pool, const char *o, __u64 *psize, time_t *pmtime)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  return radosp->stat(*ctx, oid, psize, pmtime);
 }
 
 extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, const char *method,
