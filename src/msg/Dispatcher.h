@@ -26,24 +26,27 @@ class Dispatcher {
 
   // how i receive messages
   virtual bool dispatch_impl(Message *m) = 0;
- public:
-  virtual ~Dispatcher() { }
-  Dispatcher() : next(NULL) { }
-
-  virtual void dispatch(Message *m) {
+  bool _dispatch(Message *m) {
     bool ret = false;
     if (next)
-      ret = next->dispatch_impl(m);
-
-    if (!ret) {
-      if (!dispatch_impl(m)) {
-	generic_dout(0) << "unhandled message " << m << " " << *m
-			<< " from " << m->get_orig_source_inst()
-			<< dendl;
-        assert(0);
-      }
+      ret = next->_dispatch(m);
+    if (!ret)
+      ret = dispatch_impl(m);
+    return ret;
+  }
+public:
+  virtual void dispatch(Message *m) {
+    if (!_dispatch(m)) {
+      generic_dout(0) << "unhandled message " << m << " " << *m
+		      << " from " << m->get_orig_source_inst()
+		      << dendl;
+      assert(0);
     }
   }
+
+public:
+  virtual ~Dispatcher() { }
+  Dispatcher() : next(NULL) { }
 
   virtual void link_dispatcher(Dispatcher *disp) {
     if (!next) {
