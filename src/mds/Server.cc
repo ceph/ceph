@@ -151,9 +151,7 @@ public:
   C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv) :
     mds(m), session(se), open(s), cmapv(mv), inotablev(0) { }
   C_MDS_session_finish(MDS *m, Session *se, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv) :
-    mds(m), session(se), open(s), cmapv(mv), inotablev(iv) {
-    inos.swap(i);
-  }
+    mds(m), session(se), open(s), cmapv(mv), inos(i), inotablev(iv) { }
   void finish(int r) {
     assert(r == 0);
     mds->server->_session_logged(session, open, cmapv, inos, inotablev);
