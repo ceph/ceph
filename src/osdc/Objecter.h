@@ -457,6 +457,22 @@ private:
     o->outbl = pbl;
     return op_submit(o);
   }
+
+  tid_t getxattr(const object_t& oid, ceph_object_layout ol,
+	     const char *name, snapid_t snap, bufferlist *pbl, int flags,
+	     Context *onfinish) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_GETXATTR;
+    ops[0].op.name_len = (name ? strlen(name) : 0);
+    ops[0].op.value_len = 0;
+    if (name)
+      ops[0].data.append(name);
+    Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
+    o->snapid = snap;
+    o->outbl = pbl;
+    return op_submit(o);
+  }
+
   tid_t read_full(const object_t& oid, ceph_object_layout ol,
 		  snapid_t snap, bufferlist *pbl, int flags,
 		  Context *onfinish) {
@@ -529,6 +545,22 @@ private:
     vector<OSDOp> ops(1);
     ops[0].op.op = op;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->snapc = snapc;
+    return op_submit(o);
+  }
+  tid_t setxattr(const object_t& oid, ceph_object_layout ol,
+	      const char *name, const SnapContext& snapc, const bufferlist &bl,
+	      utime_t mtime, int flags,
+              Context *onack, Context *oncommit) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_SETXATTR;
+    ops[0].op.name_len = (name ? strlen(name) : 0);
+    ops[0].op.value_len = bl.length();
+    if (name)
+      ops[0].data.append(name);
+   ops[0].data.append(bl);
+    Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
+    o->mtime = mtime;
     o->snapc = snapc;
     return op_submit(o);
   }

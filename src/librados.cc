@@ -103,9 +103,12 @@ public:
   int write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(PoolCtx& pool, const object_t& oid);
+  int stat(PoolCtx& pool, const object_t& oid, __u64 *psize, utime_t *pmtime);
 
   int exec(PoolCtx& pool, const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
+  int getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
+  int setxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
 
   int list_pools(std::vector<string>& ls);
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
@@ -812,6 +815,107 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   return len;
 }
 
+int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, utime_t *pmtime)
+{
+  SnapContext snapc;
+
+  Mutex mylock("RadosClient::stat::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  __u64 size;
+  utime_t mtime;
+
+  if (!psize)
+    psize = &size;
+  if (!pmtime)
+    pmtime = &mtime;
+
+  dout(0) << "going to stat" << dendl;
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->stat(oid, layout,
+	      pool.snap_seq, psize, pmtime, 0,
+              onack);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  dout(10) << "Objecter returned from stat" << dendl;
+
+  return done;
+}
+
+int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl)
+{
+  SnapContext snapc;
+
+  Mutex mylock("RadosClient::getxattr::mylock");
+  Cond cond;
+  bool done;
+  int r;
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+
+  dout(0) << "going to getxattr" << dendl;
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->getxattr(oid, layout,
+	      name, pool.snap_seq, &bl, 0,
+              onack);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  dout(10) << "Objecter returned from getxattr" << dendl;
+
+  if (r < 0)
+    return r;
+
+  return bl.length();
+}
+
+int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (pool.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  Mutex mylock("RadosClient::setxattr::mylock");
+  Cond cond;
+  bool done;
+  int r;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  dout(0) << "going to setxattr" << dendl;
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->setxattr(oid, layout, name,
+		  pool.snapc, bl, ut, 0,
+		  onack, NULL);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  dout(0) << "did setxattr" << dendl;
+
+  return bl.length();
+}
+
 // ---------------------------------------------
 
 Rados::Rados() : client(NULL)
@@ -911,6 +1015,22 @@ int Rados::read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& b
     return -EINVAL;
 
   return client->read(*(RadosClient::PoolCtx *)pool, oid, off, bl, len);
+}
+
+int Rados::getxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->getxattr(*(RadosClient::PoolCtx *)pool, oid, name, bl);
+}
+
+int Rados::setxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->setxattr(*(RadosClient::PoolCtx *)pool, oid, name, bl);
 }
 
 int Rados::exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
@@ -1175,6 +1295,32 @@ extern "C" int rados_read(rados_pool_t pool, const char *o, off_t off, char *buf
   }
 
   return ret;
+}
+
+extern "C" int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  int ret;
+  object_t oid(o);
+  bufferlist bl;
+  ret = radosp->getxattr(*ctx, oid, name, bl);
+  if (ret >= 0) {
+    if (bl.length() > len)
+      return -ERANGE;
+    bl.copy(0, bl.length(), buf);
+    ret = bl.length();
+  }
+
+  return ret;
+}
+
+extern "C" int rados_setxattr(rados_pool_t pool, const char *o, const char *name, const char *buf, size_t len)
+{
+  RadosClient::PoolCtx *ctx = (RadosClient::PoolCtx *)pool;
+  object_t oid(o);
+  bufferlist bl;
+  bl.append(buf, len);
+  return radosp->setxattr(*ctx, oid, name, bl);
 }
 
 extern "C" int rados_exec(rados_pool_t pool, const char *o, const char *cls, const char *method,

@@ -58,6 +58,8 @@ int rados_snap_get_name(rados_pool_t pool, rados_snap_t id, char *name, int maxl
 int rados_write(rados_pool_t pool, const char *oid, off_t off, const char *buf, size_t len);
 int rados_read(rados_pool_t pool, const char *oid, off_t off, char *buf, size_t len);
 int rados_remove(rados_pool_t pool, const char *oid);
+int rados_getxattr(rados_pool_t pool, const char *o, const char *name, char *buf, size_t len);
+int rados_setxattr(rados_pool_t pool, const char *o, const char *name, const char *buf, size_t len);
 int rados_exec(rados_pool_t pool, const char *oid, const char *cls, const char *method,
 	       const char *in_buf, size_t in_len, char *buf, size_t out_len);
 
@@ -99,6 +101,9 @@ public:
   int write_full(rados_pool_t pool, const object_t& oid, bufferlist& bl);
   int read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int remove(rados_pool_t pool, const object_t& oid);
+
+  int getxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl);
+  int setxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl);
 
   int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,
              bufferlist& inbl, bufferlist& outbl);
