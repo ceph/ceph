@@ -199,7 +199,6 @@ s3
  - handle location related requests (check if needed)
  - list objects, prefix and delimiter
  - logging control (?)
- - put, copy object: metadata
+ - metadata
  - parse date/time better
- - md5 should be base64 encoded
  - upload using post
