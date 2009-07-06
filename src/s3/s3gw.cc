@@ -460,6 +460,11 @@ static void dump_content_length(struct req_state *s, int len)
   CGI_PRINTF(s->out,"Content-Length: %d\n", len);
 }
 
+static void dump_etag(struct req_state *s, const char *etag)
+{
+  CGI_PRINTF(s->out,"ETag: \"%s\"\n", etag);
+}
+
 struct errno_http {
   int err;
   const char *http_str;
@@ -839,6 +844,7 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   time_t unmod_time;
   time_t *mod_ptr = NULL;
   time_t *unmod_ptr = NULL;
+  char *etag = NULL;
   int r = -EINVAL;
   off_t ofs = 0, end = -1, len = 0;
   char *data;
@@ -861,13 +867,17 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   }
 
   r = 0;
-  len = s3store->get_obj(bucket, obj, &data, ofs, end, NULL, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
+  len = s3store->get_obj(bucket, obj, &data, ofs, end, &etag, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
   if (len < 0)
     r = len;
 
 done:
   if (!get_data && !r) {
     dump_content_length(s, len);
+  }
+  if (!r) {
+    dump_etag(s, etag);
+    free(etag);
   }
   dump_errno(s, r, &err);
   end_header(s);
