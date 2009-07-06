@@ -52,6 +52,10 @@ public:
   version_t get_committing_version() { return committing_version; }
   version_t get_projected_version() { return projected_version; }
   
+  void force_replay_version(version_t v) {
+    version = projected_version = v;
+  }
+
   //version_t project_version() { return ++projected_version; }
   //version_t inc_version() { return ++version; }
 

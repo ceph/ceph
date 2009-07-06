@@ -553,6 +553,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
 	mds->inotable->replay_alloc_id(allocated_ino);
       if (preallocated_inos.size())
 	mds->inotable->replay_alloc_ids(preallocated_inos);
+
+      // [repair bad inotable updates]
+      if (inotablev > mds->inotable->get_version()) {
+	stringstream ss;
+	ss << "journal replay inotablev mismatch " << mds->inotable->get_version() << " -> " << inotablev;
+	mds->logclient.log(LOG_ERROR, ss);
+	mds->inotable->force_replay_version(inotablev);
+      }
+
       assert(inotablev == mds->inotable->get_version());
     }
   }

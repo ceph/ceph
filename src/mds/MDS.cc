@@ -372,6 +372,8 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 int MDS::init()
 {
+  messenger->set_dispatcher(this);
+
   // get monmap
   monc->set_messenger(messenger);
   link_dispatcher(monc);
@@ -391,7 +393,6 @@ int MDS::init()
   reset_tick();
 
   // i'm ready!
-  messenger->set_dispatcher(this);
   link_dispatcher(&logclient);
 
   mds_lock.Unlock();

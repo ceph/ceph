@@ -64,7 +64,6 @@ void InoTable::apply_alloc_id(inodeno_t id)
 
 void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want) 
 {
-  dout(10) << "project_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
   assert(is_active());
   while (want > 0) {
     inodeno_t start = projected_free.start();
@@ -76,6 +75,7 @@ void InoTable::project_alloc_ids(interval_set<inodeno_t>& ids, int want)
     ids.insert(start, num);
     want -= num;
   }
+  dout(10) << "project_alloc_ids " << ids << " to " << projected_free << "/" << free << dendl;
   ++projected_version;
 }
 void InoTable::apply_alloc_ids(interval_set<inodeno_t>& ids)
@@ -105,15 +105,31 @@ void InoTable::apply_release_ids(interval_set<inodeno_t>& ids)
 void InoTable::replay_alloc_id(inodeno_t id) 
 {
   dout(10) << "replay_alloc_id " << id << dendl;
-  free.erase(id);
-  projected_free.erase(id);
+  if (free.contains(id)) {
+    free.erase(id);
+    projected_free.erase(id);
+  } else {
+    stringstream ss;
+    ss << "journal replay alloc " << id << " not in free " << free;
+    mds->logclient.log(LOG_ERROR, ss);
+  }
   projected_version = ++version;
 }
 void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids) 
 {
   dout(10) << "replay_alloc_ids " << ids << dendl;
-  free.subtract(ids);
-  projected_free.subtract(ids);
+  interval_set<inodeno_t> is;
+  is.intersection_of(free, ids);
+  if (is == ids) {
+    free.subtract(ids);
+    projected_free.subtract(ids);
+  } else {
+    stringstream ss;
+    ss << "journal replay alloc " << ids << ", only " << is << " is in free " << free;
+    mds->logclient.log(LOG_ERROR, ss);
+    free.subtract(is);
+    projected_free.subtract(is);
+  }
   projected_version = ++version;
 }
 void InoTable::replay_release_ids(interval_set<inodeno_t>& ids) 

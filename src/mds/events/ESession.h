@@ -38,7 +38,8 @@ class ESession : public LogEvent {
     cmapv(v),
     inotablev(0) {
   }
-  ESession(entity_inst_t inst, bool o, version_t v, interval_set<inodeno_t>& i, version_t iv) :
+  ESession(entity_inst_t inst, bool o, version_t v,
+	   const interval_set<inodeno_t>& i, version_t iv) :
     LogEvent(EVENT_SESSION),
     client_inst(inst),
     open(o),
