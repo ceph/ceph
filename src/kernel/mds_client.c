@@ -2384,7 +2384,7 @@ static void delayed_work(struct work_struct *work)
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
 			derr(1, "mds%d session probably timed out, "
 			     "requesting mds map\n", s->s_mds);
-			want_map = mdsc->mdsmap->m_epoch;
+			want_map = mdsc->mdsmap->m_epoch + 1;
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
 			/* this mds is failed or recovering, just wait */
