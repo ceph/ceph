@@ -113,6 +113,15 @@ librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
 
+libcephs3_la_SOURCES = \
+	s3/s3fs.cc \
+	s3/s3rados.cc \
+	s3/s3acl.cc \
+	s3/s3user.cc \
+	s3/s3access.cc
+libcephs3_la_CFLAGS = ${AM_CFLAGS}
+lib_LTLIBRARIES += libcephs3.la
+
 rados_SOURCES = rados.cc
 rados_LDADD = librados.la libcrush.la
 
@@ -123,13 +132,12 @@ testradospp_LDADD = librados.la libcrush.la
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
 
-s3gw_SOURCES = s3/s3gw.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc s3/s3access.cc \
-               s3/s3rados.cc
-s3gw_LDADD = librados.la libcrush.la -lfcgi -lcrypto -lexpat
-s3admin_SOURCES = s3/s3admin.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc s3/s3access.cc
-s3admin_LDADD = librados.la libcrush.la -lfcgi -lcrypto -lexpat
-s3aclparser_SOURCES = s3/s3aclparser.cc s3/s3fs.cc s3/s3acl.cc s3/s3user.cc s3/s3access.cc
-s3aclparser_LDADD = librados.la libcrush.la -lfcgi -lcrypto -lexpat
+s3gw_SOURCES = s3/s3gw.cc
+s3gw_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+s3admin_SOURCES = s3/s3admin.cc
+s3admin_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+s3aclparser_SOURCES = s3/s3aclparser.cc
+s3aclparser_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 ## object classes
 
 # libtestclass.so: testclass.cc

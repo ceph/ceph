@@ -30,8 +30,10 @@ public:
   int delete_bucket(std::string& id, std::string& bucket);
   int delete_obj(std::string& id, std::string& bucket, std::string& obj);
 
+#if 0
   int get_attr(const char *name, int fd, char **attr);
   int get_attr(const char *name, const char *path, char **attr);
+#endif
   int get_attr(std::string& bucket, std::string& obj,
                const char *name, bufferlist& dest);
   int set_attr(std::string& bucket, std::string& obj,

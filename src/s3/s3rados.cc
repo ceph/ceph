@@ -30,6 +30,16 @@ int S3Rados::initialize()
   return 0;
 }
 
+int S3Rados::list_buckets_init(std::string& id, S3AccessHandle *handle)
+{
+  return -ENOSYS;
+}
+
+int S3Rados::list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle)
+{
+  return -ENOSYS;
+}
+
 static int open_pool(string& bucket, rados_pool_t *pool)
 {
   return rados->open_pool(bucket.c_str(), pool);
@@ -40,7 +50,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
   rados_pool_t pool;
   map<string, object_t> dir_map;
 
-  int r = open_pool(bucket, &pool);
+  int r = rados->open_pool(bucket.c_str(), &pool);
   if (r < 0)
     return r;
 
@@ -74,7 +84,6 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
   int i, count = 0;
   for (i=0; i<max && map_iter != dir_map.end(); i++, ++map_iter) {
     S3ObjEnt obj;
-    struct stat statbuf;
     obj.name = map_iter->first;
 
     if (rados->stat(pool, map_iter->second, &obj.size, &obj.mtime) < 0)
@@ -88,6 +97,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
     obj.etag[sizeof(obj.etag)-1] = '\0';
     result.push_back(obj);
   }
+  rados->close_pool(pool);
 
   return count;
 }
@@ -127,6 +137,19 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
                   time_t *mtime,
                   std::vector<std::pair<std::string, bufferlist> >& attrs)
 {
+  rados_pool_t pool;
+
+  int r = open_pool(bucket, &pool);
+  if (r < 0)
+    return r;
+
+  object_t oid(obj.c_str());
+
+  bufferlist bl;
+  bl.append(data, size);
+  r = rados->write(pool, oid, 0, bl, size);
+  if (r < 0)
+    return r;
 #if 0
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -205,6 +228,7 @@ int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& de
 
   return ret;
 #endif
+  return 0;
 }
 
 
@@ -255,6 +279,7 @@ done:
 
   return r;
 #endif
+  return 0;
 }
 
 int S3Rados::set_attr(std::string& bucket, std::string& obj,
@@ -274,6 +299,7 @@ int S3Rados::set_attr(std::string& bucket, std::string& obj,
 
   return ret;
 #endif
+  return 0;
 }
 
 int S3Rados::get_obj(std::string& bucket, std::string& obj, 
@@ -396,6 +422,6 @@ done:
 
   return r;
 #endif
+  return 0;
 }
-
 
