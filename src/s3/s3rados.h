@@ -7,7 +7,7 @@
 class S3Rados  : public S3Access
 {
 public:
-  int initialize();
+  int initialize(int argc, char *argv[]);
   int list_buckets_init(std::string& id, S3AccessHandle *handle);
   int list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle);
 

@@ -25,9 +25,15 @@ static Rados *rados = NULL;
 
 #define ROOT_POOL ".s3"
 
-int S3Rados::initialize()
+int S3Rados::initialize(int argc, char *argv[])
 {
-  return 0;
+  rados = new Rados();
+  if (!rados)
+    return -ENOMEM;
+
+  int ret = rados->initialize(argc, (const char **)argv);
+
+  return ret;
 }
 
 int S3Rados::list_buckets_init(std::string& id, S3AccessHandle *handle)
@@ -105,6 +111,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
 
 int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs)
 {
+  rados->create_pool(bucket);
 #if 0
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
