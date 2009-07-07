@@ -1393,7 +1393,7 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 	int i, got;
 
 	dout(20, "kick_requests mds%d\n", mds);
-	while (nexttid < mdsc->last_tid) {
+	while (nexttid <= mdsc->last_tid) {
 		got = radix_tree_gang_lookup(&mdsc->request_tree,
 					     (void **)&reqs, nexttid, 10);
 		if (got == 0)
