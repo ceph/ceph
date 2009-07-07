@@ -330,6 +330,7 @@ noinst_HEADERS = \
         client/Trace.h\
         client/fuse.h\
         client/fuse_ll.h\
+	client/libceph.h\
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
 	cls_crypto.cc\
