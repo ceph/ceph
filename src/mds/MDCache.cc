@@ -3776,6 +3776,8 @@ void MDCache::rejoin_gather_finish()
 
 void MDCache::process_imported_caps()
 {
+  dout(10) << "process_imported_caps" << dendl;
+
   // process cap imports
   //  ino -> client -> frommds -> capex
   map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
@@ -3794,9 +3796,9 @@ void MDCache::process_imported_caps()
       for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
+	dout(20) << " add_reconnected_cap " << in->ino() << " client" << q->first << dendl;
 	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
-	if (r->first >= 0)
-	  rejoin_import_cap(in, q->first, r->second, r->first);
+	rejoin_import_cap(in, q->first, r->second, r->first);
       }
     cap_imports.erase(p++);  // remove and move on
   }
@@ -3956,14 +3958,13 @@ void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& 
 {
   dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
 	   << " on " << *in << dendl;
-
   Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
   assert(session);
 
-  // add cap
   Capability *cap = in->reconnect_cap(client, icr, session);
 
-  do_cap_import(session, in, cap);
+  if (frommds >= 0)
+    do_cap_import(session, in, cap);
 }
 
 
