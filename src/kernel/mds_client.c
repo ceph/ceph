@@ -2110,6 +2110,12 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		}
 
 		/*
+		 * send reconnect?
+		 */
+		if (newstate > oldstate && newstate == CEPH_MDS_STATE_RECONNECT)
+			send_mds_reconnect(mdsc, i);
+
+		/*
 		 * kick requests on any mds that has gone active.
 		 *
 		 * kick requests on cur or forwarder: we may have sent
@@ -2616,12 +2622,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mdsmap *newmap, *oldmap;
 	ceph_fsid_t fsid;
 	int err = -EINVAL;
-	int from;
-
-	if (le32_to_cpu(msg->hdr.src.name.type) == CEPH_ENTITY_TYPE_MDS)
-		from = le32_to_cpu(msg->hdr.src.name.num);
-	else
-		from = -1;
 
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);
 	ceph_decode_copy(&p, &fsid, sizeof(fsid));
@@ -2655,14 +2655,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		mdsc->mdsmap = newmap;
 		check_new_map(mdsc, newmap, oldmap);
 		ceph_mdsmap_destroy(oldmap);
-
-		/* reconnect?  a recovering mds will send us an mdsmap,
-		 * indicating their state is RECONNECTING, if it wants us
-		 * to reconnect. */
-		if (from >= 0 && from < newmap->m_max_mds &&
-		    ceph_mdsmap_get_state(newmap, from) ==
-		    CEPH_MDS_STATE_RECONNECT)
-			send_mds_reconnect(mdsc, from);
 	} else {
 		mdsc->mdsmap = newmap;  /* first mds map */
 	}
