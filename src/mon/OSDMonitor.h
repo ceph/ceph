@@ -85,7 +85,9 @@ private:
   void _alive(MOSDAlive *m);
 
   bool preprocess_pool_op ( class MPoolOp *m);
+  bool preprocess_pool_op_create ( class MPoolOp *m);
   bool prepare_pool_op (MPoolOp *m);
+  bool prepare_pool_op_create (MPoolOp *m);
   void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch);
 
   struct C_Booted : public Context {
@@ -147,6 +149,8 @@ private:
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
+
+  int prepare_new_pool(string& name);
 
   void mark_all_down();
 

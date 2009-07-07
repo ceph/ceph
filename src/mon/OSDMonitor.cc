@@ -1003,6 +1003,33 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     return false;
 }
 
+int OSDMonitor::prepare_new_pool(string& name)
+{
+  int pool = 1;
+  int err = 0;
+  for (map<int,nstring>::iterator i = osdmap.pool_name.begin();
+       i != osdmap.pool_name.end();
+       i++) {
+    if (i->second == name) {
+      err = -EEXIST;
+      goto out;
+    }
+    if (i->first >= pool)
+      pool = i->first + 1;
+  }
+  pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
+  pending_inc.new_pools[pool].v.size = 2;
+  pending_inc.new_pools[pool].v.crush_ruleset = 0;
+  pending_inc.new_pools[pool].v.pg_num = 8;
+  pending_inc.new_pools[pool].v.pgp_num = 8;
+  pending_inc.new_pools[pool].v.lpg_num = 0;
+  pending_inc.new_pools[pool].v.lpgp_num = 0;
+  pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
+  pending_inc.new_pool_names[pool] = name;
+out:
+  return err;
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   stringstream ss;
@@ -1177,27 +1204,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       }
       else if (m->cmd[2] == "create" && m->cmd.size() >= 4) {
-	int pool = 1;
-	for (map<int,nstring>::iterator i = osdmap.pool_name.begin();
-	     i != osdmap.pool_name.end();
-	     i++) {
-	  if (i->second == m->cmd[3]) {
-	    ss << "pool '" << i->second << "' exists";
-	    err = -EEXIST;
-	    goto out;
-	  }
-	  if (i->first >= pool)
-	    pool = i->first + 1;
-	}
-	pending_inc.new_pools[pool].v.type = CEPH_PG_TYPE_REP;
-	pending_inc.new_pools[pool].v.size = 2;
-	pending_inc.new_pools[pool].v.crush_ruleset = 0;
-	pending_inc.new_pools[pool].v.pg_num = 8;
-	pending_inc.new_pools[pool].v.pgp_num = 8;
-	pending_inc.new_pools[pool].v.lpg_num = 0;
-	pending_inc.new_pools[pool].v.lpgp_num = 0;
-	pending_inc.new_pools[pool].v.last_change = pending_inc.epoch;
-	pending_inc.new_pool_names[pool] = m->cmd[3];
+        int ret = prepare_new_pool(m->cmd[3]);
+        if (ret < 0) {
+          if (ret == -EEXIST)
+            ss << "pool '" << m->cmd[3] << "' exists";
+          err = ret;
+          goto out;
+        }
 	ss << "pool '" << m->cmd[3] << "' created";
 	getline(ss, rs);
 	paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
@@ -1268,6 +1281,10 @@ out:
 }
 
 bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
+  if (m->op == POOL_OP_CREATE) {
+    return preprocess_pool_op_create(m);
+  }
+
   if (m->pool < 0 ) {
     _pool_op(m, -ENOENT, pending_inc.epoch);
     return true; //done with this message
@@ -1294,15 +1311,28 @@ bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
     }
     return false;
   default:
-    /* FIXME! */
+    assert(0);
     break;
   }
 
   return false;
 }
 
+bool OSDMonitor::preprocess_pool_op_create ( MPoolOp *m)
+{
+  int pool = osdmap.lookup_pg_pool_name(m->name.c_str());
+  if (pool < 0)
+    return false;
+
+  _pool_op(m, -EEXIST, pending_inc.epoch);
+  return true;
+}
+
 bool OSDMonitor::prepare_pool_op (MPoolOp *m)
 {
+  if (m->op == POOL_OP_CREATE) {
+    return prepare_pool_op_create(m);
+  }
   const pg_pool_t *p = &osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
   //if the pool isn't already in the update, add it
@@ -1319,12 +1349,19 @@ bool OSDMonitor::prepare_pool_op (MPoolOp *m)
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
     break;
    default:
-    /* FIXME */
+    assert(0);
     break;
   }
   pp->set_snap_epoch(pending_inc.epoch);
 
   paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
+  return true;
+}
+
+bool OSDMonitor::prepare_pool_op_create (MPoolOp *m)
+{
+  int err = prepare_new_pool(m->name);
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, err, pending_inc.epoch));
   return true;
 }
 
