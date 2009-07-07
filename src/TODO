@@ -78,6 +78,7 @@ repair
 - mds scrubbing
 
 kclient
+- return EBADF on files without caps
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
 - simplify mds auth tracking?

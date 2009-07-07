@@ -675,23 +675,32 @@ static void remove_session_caps(struct ceph_mds_session *session)
 	cleanup_cap_releases(session);
 }
 
-static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
-			       void *arg)
-{
-	spin_lock(&inode->i_lock);
-	wake_up(&cap->ci->i_cap_wq);
-	spin_unlock(&inode->i_lock);
-	return 0;
-}
 /*
- * wake up any threads waiting on this session's caps
+ * wake up any threads waiting on this session's caps.  if the cap is
+ * old (didn't get renewed on the client reconnect), remove it now.
  *
  * caller must hold s_mutex.
  */
+static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
+			      void *arg)
+{
+	struct ceph_mds_session *session = arg;
+
+	spin_lock(&inode->i_lock);
+	if (cap->gen != session->s_cap_gen) {
+		dout(0, "failed to reconnect %p cap %p (gen %d < session %d)\n",
+		     inode, cap, cap->gen, session->s_cap_gen);
+		__ceph_remove_cap(cap, NULL);
+	}
+	wake_up(&ceph_inode(inode)->i_cap_wq);
+	spin_unlock(&inode->i_lock);
+	return 0;
+}
+
 static void wake_up_session_caps(struct ceph_mds_session *session)
 {
 	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
-	iterate_session_caps(session, wake_up_session_cb, NULL);
+	iterate_session_caps(session, wake_up_session_cb, session);
 }
 
 /*
