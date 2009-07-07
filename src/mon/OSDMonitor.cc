@@ -26,8 +26,8 @@
 #include "messages/MOSDGetMap.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
-#include "messages/MPoolSnap.h"
-#include "messages/MPoolSnapReply.h"
+#include "messages/MPoolOp.h"
+#include "messages/MPoolOpReply.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
@@ -271,8 +271,8 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     return preprocess_out((MOSDOut*)m);
     */
 
-  case MSG_POOLSNAP:
-    return preprocess_pool_snap((MPoolSnap*)m);
+  case MSG_POOLOP:
+    return preprocess_pool_op((MPoolOp*)m);
 
   case MSG_REMOVE_SNAPS:
     return preprocess_remove_snaps((MRemoveSnaps*)m);
@@ -304,8 +304,8 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
   case MSG_OSD_OUT:
     return prepare_out((MOSDOut*)m);
     */
-  case MSG_POOLSNAP:
-    return prepare_pool_snap((MPoolSnap*)m);
+  case MSG_POOLOP:
+    return prepare_pool_op((MPoolOp*)m);
 
   case MSG_REMOVE_SNAPS:
     return prepare_remove_snaps((MRemoveSnaps*)m);
@@ -1267,9 +1267,9 @@ out:
   return false;
 }
 
-bool OSDMonitor::preprocess_pool_snap ( MPoolSnap *m) {
+bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
   if (m->pool < 0 ) {
-    _pool_snap(m, -ENOENT, pending_inc.epoch);
+    _pool_op(m, -ENOENT, pending_inc.epoch);
     return true; //done with this message
   }
   bool snap_exists = false;
@@ -1279,22 +1279,29 @@ bool OSDMonitor::preprocess_pool_snap ( MPoolSnap *m) {
   if ((osdmap.get_pg_pool(m->pool).snap_exists(m->name.c_str())) ||
       (pp && pp->snap_exists(m->name.c_str()))) snap_exists = true;
 
-  if (m->create) { //if it's a snap creation request
+  switch (m->op) {
+  case POOL_OP_CREATE_SNAP:
     if(snap_exists) {
-      _pool_snap(m, -EEXIST, pending_inc.epoch);
+      _pool_op(m, -EEXIST, pending_inc.epoch);
       return true;
     }
-    else return false; //this message needs to go through preparation
+    return false; //this message needs to go through preparation
+  case POOL_OP_DELETE_SNAP:
+    //it's a snap deletion request if we make it here
+    if (!snap_exists) {
+      _pool_op(m, -ENOENT, pending_inc.epoch);
+      return true; //done with this message
+    }
+    return false;
+  default:
+    /* FIXME! */
+    break;
   }
-  //it's a snap deletion request if we make it here
-  if (!snap_exists) {
-    _pool_snap(m, -ENOENT, pending_inc.epoch);
-    return true; //done with this message
-  }
+
   return false;
 }
 
-bool OSDMonitor::prepare_pool_snap (MPoolSnap *m)
+bool OSDMonitor::prepare_pool_op (MPoolOp *m)
 {
   const pg_pool_t *p = &osdmap.get_pg_pool(m->pool);
   pg_pool_t* pp = 0;
@@ -1303,21 +1310,27 @@ bool OSDMonitor::prepare_pool_snap (MPoolSnap *m)
     pending_inc.new_pools[m->pool] = *p;
   pp = &pending_inc.new_pools[m->pool];
 
-  if (m->create) {
+  switch (m->op) {
+  case POOL_OP_CREATE_SNAP:
     pp->add_snap(m->name.c_str(), g_clock.now());
     dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp->get_snap_epoch() << dendl;
-  } else {
+    break;
+  case POOL_OP_DELETE_SNAP:
     pp->remove_snap(pp->snap_exists(m->name.c_str()));
+    break;
+   default:
+    /* FIXME */
+    break;
   }
   pp->set_snap_epoch(pending_inc.epoch);
 
-  paxos->wait_for_commit(new OSDMonitor::C_Snap(this, m, 0, pending_inc.epoch));
+  paxos->wait_for_commit(new OSDMonitor::C_PoolOp(this, m, 0, pending_inc.epoch));
   return true;
 }
 
-void OSDMonitor::_pool_snap(MPoolSnap *m, int replyCode, epoch_t epoch)
+void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
 {
-  MPoolSnapReply *reply = new MPoolSnapReply(m->fsid, m->tid,
+  MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->tid,
 					     replyCode, epoch, mon->get_epoch());
   mon->messenger->send_message(reply, m->get_orig_source_inst());
   delete m;

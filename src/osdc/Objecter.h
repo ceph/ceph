@@ -35,7 +35,7 @@ class OSDMap;
 class MonClient;
 class Message;
 
-class MPoolSnapReply;
+class MPoolOpReply;
 
 class MGetPoolStatsReply;
 class MStatfsReply;
@@ -314,12 +314,12 @@ class Objecter {
     utime_t last_submit;
   };
 
-  struct SnapOp {
+  struct PoolOp {
     tid_t tid;
     int pool;
     string name;
     Context *onfinish;
-    bool create;
+    int pool_op;
     int* replyCode;
 
     utime_t last_submit;
@@ -330,7 +330,7 @@ class Objecter {
   hash_map<tid_t,Op*>       op_osd;
   map<tid_t,PoolStatOp*>    op_poolstat;
   map<tid_t,StatfsOp*>      op_statfs;
-  map<tid_t,SnapOp*>        op_snap;
+  map<tid_t,PoolOp*>        op_pool;
 
   map<epoch_t,list<Context*> > waiting_for_map;
 
@@ -569,13 +569,14 @@ private:
   void list_objects(ListContext *p, Context *onfinish);
 
   // -------------------------
-  // snapshots
+  // pool ops
 private:
-  void pool_snap_submit(SnapOp *op);
+  void pool_op_submit(PoolOp *op);
 public:
   void create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
   void delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
-  void handle_pool_snap_reply(MPoolSnapReply *m);
+
+  void handle_pool_op_reply(MPoolOpReply *m);
 
   // --------------------------
   // pool stats

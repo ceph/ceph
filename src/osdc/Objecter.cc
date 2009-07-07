@@ -27,8 +27,8 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
 
-#include "messages/MPoolSnap.h"
-#include "messages/MPoolSnapReply.h"
+#include "messages/MPoolOp.h"
+#include "messages/MPoolOpReply.h"
 
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
@@ -81,8 +81,8 @@ void Objecter::dispatch(Message *m)
     handle_fs_stats_reply((MStatfsReply*)m);
     break;
 
-  case MSG_POOLSNAPREPLY:
-    handle_pool_snap_reply((MPoolSnapReply*)m);
+  case MSG_POOLOPREPLY:
+    handle_pool_op_reply((MPoolOpReply*)m);
     break;
 
   default:
@@ -369,9 +369,9 @@ void Objecter::resend_slow_ops()
       fs_stats_submit(p->second);
   }
 
-  for (map<tid_t,SnapOp*>::iterator p = op_snap.begin(); p!=op_snap.end(); ++p) {
+  for (map<tid_t,PoolOp*>::iterator p = op_pool.begin(); p!=op_pool.end(); ++p) {
     if (p->second->last_submit < cutoff)
-      pool_snap_submit(p->second);
+      pool_op_submit(p->second);
   }
 }
 
@@ -657,45 +657,45 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
 
 void Objecter::create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish) {
   dout(10) << "create_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
-  SnapOp *op = new SnapOp;
+  PoolOp *op = new PoolOp;
   op->tid = ++last_tid;
   op->pool = pool;
   op->name = snapName;
   op->onfinish = onfinish;
-  op->create = true;
+  op->pool_op = POOL_OP_CREATE_SNAP;
   op->replyCode = reply;
-  op_snap[op->tid] = op;
+  op_pool[op->tid] = op;
 
-  pool_snap_submit(op);
+  pool_op_submit(op);
 }
 
 void Objecter::delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish) {
   dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
-  SnapOp *op = new SnapOp;
+  PoolOp *op = new PoolOp;
   op->tid = ++last_tid;
   op->pool = pool;
   op->name = snapName;
   op->onfinish = onfinish;
-  op->create = false;
+  op->pool_op = POOL_OP_DELETE_SNAP;
   op->replyCode = reply;
-  op_snap[op->tid] = op;
+  op_pool[op->tid] = op;
 
-  pool_snap_submit(op);
+  pool_op_submit(op);
 }
 
-void Objecter::pool_snap_submit(SnapOp *op) {
-  dout(10) << "pool_snap_submit " << op->tid << dendl;
-  monc->send_mon_message(new MPoolSnap(monc->get_fsid(), op->tid, op->pool,
-				       op->name, op->create, last_seen_version));
+void Objecter::pool_op_submit(PoolOp *op) {
+  dout(10) << "pool_op_submit " << op->tid << dendl;
+  monc->send_mon_message(new MPoolOp(monc->get_fsid(), op->tid, op->pool,
+				       op->name, op->pool_op, last_seen_version));
   op->last_submit = g_clock.now();
 }
 
-void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
-  dout(10) << "handle_pool_snap_reply " << *m << dendl;
+void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
+  dout(10) << "handle_pool_op_reply " << *m << dendl;
   tid_t tid = m->tid;
-  if (op_snap.count(tid)) {
-    SnapOp *op = op_snap[tid];
-    dout(10) << "have request " << tid << " at " << op << " Create: " << op->create << dendl;
+  if (op_pool.count(tid)) {
+    PoolOp *op = op_pool[tid];
+    dout(10) << "have request " << tid << " at " << op << " Op: " << get_pool_op_name(op->pool_op) << dendl;
     *(op->replyCode) = m->replyCode;
     if (m->version > last_seen_version)
       last_seen_version = m->version;
@@ -709,7 +709,7 @@ void Objecter::handle_pool_snap_reply(MPoolSnapReply *m) {
     }
     op->onfinish = NULL;
     delete op;
-    op_snap.erase(tid);
+    op_pool.erase(tid);
   } else {
     dout(10) << "unknown request " << tid << dendl;
   }

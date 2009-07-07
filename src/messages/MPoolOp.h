@@ -12,27 +12,46 @@
  * 
  */
 
-#ifndef __MPOOLSNAP_H
-#define __MPOOLSNAP_H
+#ifndef __MPOOLOP_H
+#define __MPOOLOP_H
 
 #include "messages/PaxosServiceMessage.h"
 
 
-class MPoolSnap : public PaxosServiceMessage {
+enum {
+  POOL_OP_CREATE,
+  POOL_OP_CREATE_SNAP,
+  POOL_OP_DELETE_SNAP,
+};
+
+static const char *get_pool_op_name(int op) {
+  switch (op) {
+  case POOL_OP_CREATE:
+    return "create pool";
+  case POOL_OP_CREATE_SNAP:
+    return "create snap";
+   case POOL_OP_DELETE_SNAP:
+    return "delete snap";
+   default:
+    return "unknown";
+  }
+}
+
+class MPoolOp : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   tid_t tid;
   int pool;
   string name;
-  bool create;
+  int op;
 
-  MPoolSnap() : PaxosServiceMessage(MSG_POOLSNAP, 0) {}
-  MPoolSnap(const ceph_fsid_t& f, tid_t t, int p, string& n, bool c, version_t v) :
-    PaxosServiceMessage(MSG_POOLSNAP, v), fsid(f), tid(t), pool(p), name(n), create(c) {}
+  MPoolOp() : PaxosServiceMessage(MSG_POOLOP, 0) {}
+  MPoolOp(const ceph_fsid_t& f, tid_t t, int p, string& n, int o, version_t v) :
+    PaxosServiceMessage(MSG_POOLOP, v), fsid(f), tid(t), pool(p), name(n), op(o) {}
 
-  const char *get_type_name() { return "poolsnap"; }
+  const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
-    out << "poolsnap(" << tid << " " << name << " v" << version << ")";
+    out << "poolop(" << tid << " " << name << " v" << version << ")";
   }
 
   void encode_payload() {
@@ -41,7 +60,7 @@ public:
     ::encode(tid, payload);
     ::encode(pool, payload);
     ::encode(name, payload);
-    ::encode(create, payload);
+    ::encode(op, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -50,7 +69,7 @@ public:
     ::decode(tid, p);
     ::decode(pool, p);
     ::decode(name, p);
-    ::decode(create, p);
+    ::decode(op, p);
   }
 };
 

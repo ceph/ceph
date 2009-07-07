@@ -416,7 +416,7 @@ bool Monitor::dispatch_impl(Message *m)
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-    case MSG_POOLSNAP:
+    case MSG_POOLOP:
      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 

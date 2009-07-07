@@ -12,11 +12,11 @@
  * 
  */
 
-#ifndef __MPOOLSNAPREPLY_H
-#define __MPOOLSNAPREPLY_H
+#ifndef __MPOOLOPREPLY_H
+#define __MPOOLOPREPLY_H
 
 
-class MPoolSnapReply : public PaxosServiceMessage {
+class MPoolOpReply : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
   tid_t tid;
@@ -24,14 +24,14 @@ public:
   epoch_t epoch;
 
 
-  MPoolSnapReply() : PaxosServiceMessage(MSG_POOLSNAPREPLY, 0) {}
-  MPoolSnapReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
-    PaxosServiceMessage(MSG_POOLSNAPREPLY, v), fsid(f), tid(t), replyCode(rc), epoch(e) {}
+  MPoolOpReply() : PaxosServiceMessage(MSG_POOLOPREPLY, 0) {}
+  MPoolOpReply( ceph_fsid_t& f, tid_t t, int rc, int e, version_t v) :
+    PaxosServiceMessage(MSG_POOLOPREPLY, v), fsid(f), tid(t), replyCode(rc), epoch(e) {}
 
-  const char *get_type_name() { return "poolsnapreply"; }
+  const char *get_type_name() { return "poolopreply"; }
 
   void print(ostream& out) {
-    out << "poolsnapreply(" << tid << " v" << version << ")";
+    out << "poolopreply(" << tid << " v" << version << ")";
   }
 
   void encode_payload() {

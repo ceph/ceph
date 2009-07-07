@@ -19,8 +19,8 @@ using namespace std;
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
 
-#include "messages/MPoolSnap.h"
-#include "messages/MPoolSnapReply.h"
+#include "messages/MPoolOp.h"
+#include "messages/MPoolOpReply.h"
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonCommand.h"
@@ -173,11 +173,11 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case MSG_GETPOOLSTATSREPLY:
     m = new MGetPoolStatsReply;
     break;
-  case MSG_POOLSNAP:
-    m = new MPoolSnap;
+  case MSG_POOLOP:
+    m = new MPoolOp;
     break;
-  case MSG_POOLSNAPREPLY:
-    m = new MPoolSnapReply;
+  case MSG_POOLOPREPLY:
+    m = new MPoolOpReply;
     break;
   case MSG_MON_COMMAND:
     m = new MMonCommand;

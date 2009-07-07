@@ -35,8 +35,8 @@
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
 
-#define MSG_POOLSNAP               49
-#define MSG_POOLSNAPREPLY          48
+#define MSG_POOLOP                 49
+#define MSG_POOLOPREPLY            48
 
 #define MSG_PAXOS                  40
 

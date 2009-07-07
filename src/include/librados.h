@@ -121,6 +121,8 @@ public:
 		     std::map<std::string,rados_pool_stat_t>& stats);
   int get_fs_stats(rados_statfs_t& result);
 
+  int create_pool(string& name);
+
   int snap_create(const rados_pool_t pool, const char *snapname);
   int snap_remove(const rados_pool_t pool, const char *snapname);
   int snap_list(rados_pool_t pool, vector<rados_snap_t> *snaps);

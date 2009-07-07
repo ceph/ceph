@@ -114,6 +114,8 @@ public:
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
   int get_fs_stats( rados_statfs_t& result );
 
+  int create_pool(string& name);
+
   int list(PoolCtx& pool, int max_entries, std::list<object_t>& entries,
 			Objecter::ListContext *context);
 
@@ -379,8 +381,8 @@ bool RadosClient::_dispatch(Message *m)
     objecter->handle_fs_stats_reply((MStatfsReply*)m);
     break;
 
-  case MSG_POOLSNAPREPLY:
-    objecter->handle_pool_snap_reply((MPoolSnapReply*)m);
+  case MSG_POOLOPREPLY:
+    objecter->handle_pool_op_reply((MPoolOpReply*)m);
     break;
   default:
     return false;
@@ -452,6 +454,11 @@ int RadosClient::get_fs_stats( rados_statfs_t& result ) {
   return 0;
 }
 
+
+int RadosClient::create_pool(string& name)
+{
+  return 0; /* TODO */
+}
 
 
 // SNAPS
@@ -964,6 +971,13 @@ int Rados::get_pool_stats(std::vector<string>& v, std::map<string,rados_pool_sta
   if (!client)
     return -EINVAL;
   return client->get_pool_stats(v, result);
+}
+
+int Rados::create_pool(string& name)
+{
+  if (!client)
+    return -EINVAL;
+  return client->create_pool(name);
 }
 
 int Rados::get_fs_stats(rados_statfs_t& result) {

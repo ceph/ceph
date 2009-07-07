@@ -84,9 +84,9 @@ private:
   bool prepare_alive(class MOSDAlive *m);
   void _alive(MOSDAlive *m);
 
-  bool preprocess_pool_snap ( class MPoolSnap *m);
-  bool prepare_pool_snap (MPoolSnap *m);
-  void _pool_snap(MPoolSnap *m, int replyCode, epoch_t epoch);
+  bool preprocess_pool_op ( class MPoolOp *m);
+  bool prepare_pool_op (MPoolOp *m);
+  void _pool_op(MPoolOp *m, int replyCode, epoch_t epoch);
 
   struct C_Booted : public Context {
     OSDMonitor *cmon;
@@ -121,15 +121,15 @@ private:
 	cmon->dispatch((PaxosServiceMessage*)m);
     }
   };
-  struct C_Snap : public Context {
+  struct C_PoolOp : public Context {
     OSDMonitor *osdmon;
-    MPoolSnap *m;
+    MPoolOp *m;
     int replyCode;
     int epoch;
-    C_Snap(OSDMonitor * osd, MPoolSnap *m_, int rc, int e) : 
+    C_PoolOp(OSDMonitor * osd, MPoolOp *m_, int rc, int e) : 
       osdmon(osd), m(m_), replyCode(rc), epoch(e) {}
     void finish(int r) {
-      osdmon->_pool_snap(m, replyCode, epoch);
+      osdmon->_pool_op(m, replyCode, epoch);
     }
   };
 
