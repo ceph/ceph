@@ -2097,10 +2097,10 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		     i, ceph_mds_state_name(oldstate),
 		     ceph_mds_state_name(newstate),
 		     session_state_name(s->s_state));
-		if (newstate < oldstate) {
-			/* if the state moved backwards, that means
-			 * the old mds failed and/or a new mds is
-			 * recovering in its place. */
+
+		if (memcmp(ceph_mdsmap_get_addr(oldmap, i),
+			   ceph_mdsmap_get_addr(newmap, i),
+			   sizeof(struct ceph_entity_addr))) {
 			/* notify messenger to close out old messages,
 			 * socket. */
 			ceph_messenger_mark_down(mdsc->client->msgr,
@@ -2115,13 +2115,14 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 
 			/* kick any requests waiting on the recovering mds */
 			kick_requests(mdsc, i, 1);
-			continue;
+		} else if (oldstate == newstate) {
+			continue;  /* nothing new with this mds */
 		}
 
 		/*
 		 * send reconnect?
 		 */
-		if (newstate > oldstate && newstate == CEPH_MDS_STATE_RECONNECT)
+		if (newstate == CEPH_MDS_STATE_RECONNECT)
 			send_mds_reconnect(mdsc, i);
 
 		/*
@@ -2133,8 +2134,7 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		 * sure it successfully forwarded our request before
 		 * it died.
 		 */
-		if (oldstate < CEPH_MDS_STATE_ACTIVE &&
-		    newstate >= CEPH_MDS_STATE_ACTIVE)
+		if (newstate >= CEPH_MDS_STATE_ACTIVE)
 			kick_requests(mdsc, i, 1);
 	}
 }
