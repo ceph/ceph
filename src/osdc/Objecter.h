@@ -529,6 +529,18 @@ private:
     o->snapc = snapc;
     return op_submit(o);
   }
+  tid_t create(const object_t& oid, ceph_object_layout ol, 
+	     const SnapContext& snapc, utime_t mtime,
+             int global_flags, int create_flags,
+             Context *onack, Context *oncommit) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_CREATE;
+    ops[0].op.flags = create_flags;
+    Op *o = new Op(oid, ol, ops, global_flags, onack, oncommit);
+    o->mtime = mtime;
+    o->snapc = snapc;
+    return op_submit(o);
+  }
   tid_t remove(const object_t& oid, ceph_object_layout ol, 
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {

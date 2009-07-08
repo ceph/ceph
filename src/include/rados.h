@@ -198,6 +198,8 @@ enum {
 	CEPH_OSD_OP_TMAPPUT   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 11,
 	CEPH_OSD_OP_TMAPGET   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 12,
 
+	CEPH_OSD_OP_CREATE    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 13,
+
 	/** attrs **/
 	/* read */
 	CEPH_OSD_OP_GETXATTR  = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_ATTR | 1,
@@ -340,6 +342,10 @@ enum {
 	CEPH_OSD_FLAG_PGOP = 1024,      /* pg op, no object */
 };
 
+enum {
+	CEPH_OSD_OP_FLAG_EXCL = 1,
+};
+
 #define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/
 #define EBLACKLISTED ESHUTDOWN /* blacklisted */
 
@@ -365,6 +371,9 @@ struct ceph_osd_op {
 		} __attribute__ ((packed));
 		struct {
 			__le64 pgls_cookie, count;
+		};
+                struct {
+			__le32 flags;
 		};
 	};
         __le32 payload_len;

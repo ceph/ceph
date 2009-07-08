@@ -1126,6 +1126,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	ssc->snapset.head_exists = true;
       }
       break;
+    case CEPH_OSD_OP_CREATE:
+      { // zero
+        int flags = le32_to_cpu(op.flags);
+	if (ctx->obs->exists && (flags & CEPH_OSD_OP_FLAG_EXCL))
+          result = -EEXIST; /* this is an exclusive create */
+        else {
+          t.touch(info.pgid.to_coll(), soid);
+          ssc->snapset.head_exists = true;
+        }
+      }
+      break;
       
     case CEPH_OSD_OP_TRUNCATE:
       { // truncate
