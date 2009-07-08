@@ -3813,35 +3813,22 @@ void MDCache::process_reconnected_caps()
 
   map<int,MClientSnap*> splits;
 
-  // adjust filelock state appropriately
+  // adjust lock states appropriately
   map<CInode*,map<int,inodeno_t> >::iterator p = reconnected_caps.begin();
   while (p != reconnected_caps.end()) {
     CInode *in = p->first;
     p++;
+
     int issued = in->get_caps_issued();
-    if (in->is_auth()) {
-      // wr?
-      if (issued & CEPH_CAP_ANY_WR) {
-	in->loner_cap = -1;
-	if (issued & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_BUFFER)) {
-	  in->filelock.set_state(LOCK_EXCL);
-	  in->try_choose_loner();
-	} else {
-	  in->filelock.set_state(LOCK_MIX);
-	}
-      }
-    } else {
-      // note that client should perform stale/reap cleanup during reconnect.
-      assert((issued & CEPH_CAP_ANY_WR) == 0);   // ????
-      in->loner_cap = -1;
-      if (in->filelock.is_xlocked())
-	in->filelock.set_state(LOCK_LOCK);
-      else
-	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
-    }
+    if (in->is_auth() &&
+	(issued & CEPH_CAP_ANY_EXCL))
+      in->try_choose_loner();
+    in->choose_lock_state(&in->filelock, issued);
+    in->choose_lock_state(&in->authlock, issued);
+    in->choose_lock_state(&in->xattrlock, issued);
+    in->choose_lock_state(&in->linklock, issued);
     dout(15) << " issued " << ccap_string(issued)
-	     << " chose " << in->filelock
-	     << " on " << *in << dendl;
+	     << " chose lock states on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
 

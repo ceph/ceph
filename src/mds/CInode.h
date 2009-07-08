@@ -590,6 +590,24 @@ public:
     return false;
   }
 
+  // choose new lock state during recovery, based on issued caps
+  void choose_lock_state(SimpleLock *lock, int allissued) {
+    int shift = lock->get_cap_shift();
+    int issued = allissued >> shift;
+    if (is_auth()) {
+      if (issued & CEPH_CAP_GEXCL)
+	lock->set_state(LOCK_EXCL);
+      else if (issued & CEPH_CAP_GWR)
+	lock->set_state(LOCK_MIX);
+      else
+	lock->set_state(LOCK_SYNC);
+    } else {
+      if (lock->is_xlocked())
+	lock->set_state(LOCK_LOCK);
+      else
+	lock->set_state(LOCK_SYNC);  // might have been lock, previously
+    }
+  }
 
   int count_nonstale_caps() {
     int n = 0;

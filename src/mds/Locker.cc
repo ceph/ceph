@@ -3189,7 +3189,7 @@ void Locker::file_mixed(ScatterLock *lock, bool *need_issue)
 void Locker::file_excl(ScatterLock *lock, bool *need_issue)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "file_excl " << *lock << " on " << *lock->get_parent() << dendl;  
 
   assert(in->is_auth());
   assert(lock->is_stable());
