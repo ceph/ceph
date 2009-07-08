@@ -4021,6 +4021,8 @@ void MDCache::do_delayed_cap_imports()
 	}
       }
       in->auth_unpin(this);
+
+      mds->locker->issue_caps(in);
     }
   }    
 }
@@ -4214,6 +4216,19 @@ void MDCache::rejoin_send_acks()
   
 }
 
+
+void MDCache::reissue_all_caps()
+{
+  dout(10) << "reissue_all_caps" << dendl;
+
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->is_any_caps())
+      mds->locker->issue_caps(in);
+  }
+}
 
 
 // ===============================================================================

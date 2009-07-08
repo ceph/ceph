@@ -1103,7 +1103,6 @@ Capability* Locker::issue_new_caps(CInode *in,
 
 
 
-
 bool Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   // allowed caps are determined by the lock mode.

@@ -1048,6 +1048,8 @@ void MDS::recovery_done()
   
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
+
+  mdcache->reissue_all_caps();
   
   // tell connected clients
   bcast_mds_map();  
