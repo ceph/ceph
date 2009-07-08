@@ -128,6 +128,8 @@ struct ceph_mds_session {
 	int               s_num_cap_releases;
 	struct list_head  s_cap_releases; /* waiting cap_release messages */
 	struct list_head  s_cap_releases_done; /* ready to send */
+
+	struct list_head  s_cap_flushing;      /* inodes w/ flushing caps */
 };
 
 /*
@@ -262,9 +264,10 @@ struct ceph_mds_client {
 	spinlock_t       cap_delay_lock;   /* protects cap_delay_list */
 	struct list_head snap_flush_list;  /* cap_snaps ready to flush */
 	spinlock_t       snap_flush_lock;
-	struct list_head cap_dirty, cap_sync; /* inodes with dirty cap data */
+	struct list_head cap_dirty;        /* inodes with dirty caps */
+	int num_cap_flushing;              /* # caps we are flushing */
 	spinlock_t       cap_dirty_lock;
-	wait_queue_head_t cap_sync_wq;
+	wait_queue_head_t cap_flushing_wq;
 
 	struct dentry 		*debugfs_file;
 

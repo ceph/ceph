@@ -307,6 +307,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_num_cap_releases = 0;
 	INIT_LIST_HEAD(&s->s_cap_releases);
 	INIT_LIST_HEAD(&s->s_cap_releases_done);
+	INIT_LIST_HEAD(&s->s_cap_flushing);
 
 	dout(10, "register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
@@ -770,7 +771,6 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 	if (wake)
 		wake_up_session_caps(session);
 }
-
 
 
 static int request_close_session(struct ceph_mds_client *mdsc,
@@ -2134,8 +2134,11 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		 * sure it successfully forwarded our request before
 		 * it died.
 		 */
-		if (newstate >= CEPH_MDS_STATE_ACTIVE)
+		if (oldstate < CEPH_MDS_STATE_ACTIVE &&
+		    newstate >= CEPH_MDS_STATE_ACTIVE) {
 			kick_requests(mdsc, i, 1);
+			ceph_kick_flushing_caps(mdsc, s);
+		}
 	}
 }
 
@@ -2445,9 +2448,9 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	INIT_LIST_HEAD(&mdsc->snap_flush_list);
 	spin_lock_init(&mdsc->snap_flush_lock);
 	INIT_LIST_HEAD(&mdsc->cap_dirty);
-	INIT_LIST_HEAD(&mdsc->cap_sync);
+	mdsc->num_cap_flushing = 0;
 	spin_lock_init(&mdsc->cap_dirty_lock);
-	init_waitqueue_head(&mdsc->cap_sync_wq);
+	init_waitqueue_head(&mdsc->cap_flushing_wq);
 	spin_lock_init(&mdsc->dentry_lru_lock);
 	INIT_LIST_HEAD(&mdsc->dentry_lru);
 }
@@ -2523,19 +2526,19 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
  */
 static int are_no_sync_caps(struct ceph_mds_client *mdsc)
 {
-	int empty;
+	int num;
 	spin_lock(&mdsc->cap_dirty_lock);
-	empty = list_empty(&mdsc->cap_sync);
+	num = mdsc->num_cap_flushing;
 	spin_unlock(&mdsc->cap_dirty_lock);
-	dout(20, "are_no_sync_caps = %d\n", empty);
-	return empty;
+	dout(20, "are_no_sync_caps = %d\n", num);
+	return num == 0;
 }
 
 void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
 	dout(10, "sync\n");
 	ceph_check_delayed_caps(mdsc);
-	wait_event(mdsc->cap_sync_wq, are_no_sync_caps(mdsc));
+	wait_event(mdsc->cap_flushing_wq, are_no_sync_caps(mdsc));
 }
 
 
