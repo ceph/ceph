@@ -1,11 +1,13 @@
 #ifndef __S3RADOS_H
 #define __S3RADOS_H
 
+#include "include/librados.h"
 #include "s3access.h"
 
 
 class S3Rados  : public S3Access
 {
+  int open_root_pool(rados_pool_t *pool);
 public:
   int initialize(int argc, char *argv[]);
   int list_buckets_init(std::string& id, S3AccessHandle *handle);

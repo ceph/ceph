@@ -23,7 +23,10 @@ using namespace std;
 
 static Rados *rados = NULL;
 
-#define ROOT_POOL ".s3"
+#define ROOT_BUCKET ".s3"
+
+static string root_bucket(ROOT_BUCKET);
+static rados_pool_t root_pool;
 
 int S3Rados::initialize(int argc, char *argv[])
 {
@@ -32,8 +35,26 @@ int S3Rados::initialize(int argc, char *argv[])
     return -ENOMEM;
 
   int ret = rados->initialize(argc, (const char **)argv);
+  if (ret < 0)
+   return ret;
+
+  ret = open_root_pool(&root_pool);
 
   return ret;
+}
+
+int S3Rados::open_root_pool(rados_pool_t *pool)
+{
+  int r = rados->open_pool(root_bucket.c_str(), pool);
+  if (r < 0) {
+    r = rados->create_pool(root_bucket.c_str());
+    if (r < 0)
+      return r;
+
+    r = rados->open_pool(root_bucket.c_str(), pool);
+  }
+
+  return r;
 }
 
 int S3Rados::list_buckets_init(std::string& id, S3AccessHandle *handle)
@@ -111,7 +132,28 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
 
 int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs)
 {
-  return rados->create_pool(bucket);
+  object_t bucket_oid(bucket.c_str());
+
+  int ret = rados->create(root_pool, bucket_oid, true);
+  if (ret < 0)
+    return ret;
+
+  vector<pair<string, bufferlist> >::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    pair<string, bufferlist>& attr = *iter;
+    string& name = attr.first;
+    bufferlist& bl = attr.second;
+    
+    if (bl.length()) {
+      ret = rados->setxattr(root_pool, bucket_oid, name.c_str(), bl);
+      if (ret < 0) {
+        delete_bucket(id, bucket);
+        return ret;
+      }
+    }
+  }
+
+ return rados->create_pool(bucket.c_str());
 #if 0
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -136,7 +178,6 @@ int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std
     }
   }
 #endif
-  return 0;
 }
 
 
@@ -255,57 +296,54 @@ int S3Rados::delete_bucket(std::string& id, std::string& bucket)
 
 int S3Rados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
 {
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
-  char buf[len];
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  rados_pool_t pool;
 
-  if (unlink(buf) < 0)
-    return -errno;
-#endif
+  int r = open_pool(bucket, &pool);
+  if (r < 0)
+    return r;
+
+  object_t oid(obj.c_str());
+
+  r = rados->remove(pool, oid);
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
 int S3Rados::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
-  char buf[len];
-  int r = -EINVAL;
-  char *data = NULL;
+  rados_pool_t pool;
 
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
-
-  r = get_attr(name, buf, &data);
+  int r = open_pool(bucket, &pool);
   if (r < 0)
-      goto done;
-  dest.append(data, r);
-done:
-  free(data);
+    return r;
 
-  return r;
-#endif
+  object_t oid(obj.c_str());
+  r = rados->getxattr(pool, oid, name, dest);
+
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
 int S3Rados::set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl)
 {
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
-  char buf[len];
-  int r;
+  rados_pool_t pool;
 
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  int r = open_pool(bucket, &pool);
+  if (r < 0)
+    return r;
 
-  r = setxattr(buf, name, bl.c_str(), bl.length(), 0);
+  object_t oid(obj.c_str());
+  r = rados->setxattr(pool, oid, name, bl);
 
-  int ret = (r < 0 ? -errno : 0);
-  cerr << "setxattr: path=" << buf << " ret=" << ret << std::endl;
+  if (r < 0)
+    return r;
 
-  return ret;
-#endif
   return 0;
 }
 

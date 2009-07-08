@@ -98,6 +98,8 @@ public:
 
   void set_snap(rados_pool_t pool, snapid_t seq);
 
+  int create(rados_pool_t pool, const object_t& oid, bool exclusive);
+
   int write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int write_full(rados_pool_t pool, const object_t& oid, bufferlist& bl);
   int read(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
@@ -121,7 +123,7 @@ public:
 		     std::map<std::string,rados_pool_stat_t>& stats);
   int get_fs_stats(rados_statfs_t& result);
 
-  int create_pool(string& name);
+  int create_pool(const char *name);
 
   int snap_create(const rados_pool_t pool, const char *snapname);
   int snap_remove(const rados_pool_t pool, const char *snapname);

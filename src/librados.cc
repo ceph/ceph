@@ -49,7 +49,6 @@ using namespace std;
 #define dout_prefix *_dout << dbeginl << "librados: "
 
 
-
 class RadosClient : public Dispatcher
 {
   OSDMap osdmap;
@@ -99,6 +98,7 @@ public:
   int snap_remove(const rados_pool_t pool, const char* snapname);
 
   // io
+  int create(PoolCtx& pool, const object_t& oid, bool exclusive);
   int write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
   int write_full(PoolCtx& pool, const object_t& oid, bufferlist& bl);
   int read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len);
@@ -596,6 +596,36 @@ int RadosClient::list(PoolCtx& pool, int max_entries, std::list<object_t>& entri
   return r;
 }
 
+int RadosClient::create(PoolCtx& pool, const object_t& oid, bool exclusive)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (pool.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  Mutex mylock("RadosClient::create::mylock");
+  Cond cond;
+  bool done;
+  int r;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->create(oid, layout,
+		  pool.snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
+		  onack, NULL);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return r;
+}
+
 int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
 {
 #if 0
@@ -987,11 +1017,12 @@ int Rados::get_pool_stats(std::vector<string>& v, std::map<string,rados_pool_sta
   return client->get_pool_stats(v, result);
 }
 
-int Rados::create_pool(string& name)
+int Rados::create_pool(const char *name)
 {
+  string str(name);
   if (!client)
     return -EINVAL;
-  return client->create_pool(name);
+  return client->create_pool(str);
 }
 
 int Rados::get_fs_stats(rados_statfs_t& result) {
@@ -1013,6 +1044,14 @@ int Rados::list(rados_pool_t pool, int max, std::list<object_t>& entries, Rados:
 
   op = (Objecter::ListContext *) ctx.ctx;
   return client->list(*(RadosClient::PoolCtx *)pool, max, entries, op);
+}
+
+int Rados::create(rados_pool_t pool, const object_t& oid, bool exclusive)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->create(*(RadosClient::PoolCtx *)pool, oid, exclusive);
 }
 
 int Rados::write(rados_pool_t pool, const object_t& oid, off_t off, bufferlist& bl, size_t len)
