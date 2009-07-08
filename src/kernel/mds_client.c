@@ -1882,7 +1882,8 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 	p += sizeof(*rec);
 	BUG_ON(p > end);
 	spin_lock(&inode->i_lock);
-	cap->seq = 0;  /* reset cap seq */
+	cap->seq = 0;        /* reset cap seq */
+	cap->issue_seq = 0;  /* and issue_seq */
 	rec->cap_id = cpu_to_le64(cap->cap_id);
 	rec->pathbase = cpu_to_le64(pathbase);
 	rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
