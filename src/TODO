@@ -32,6 +32,9 @@ v0.10
 - osd bugfixes
 
 bugs
+09.07.08 11:18:33.628589 mds0.locker  NOT changing wanted p -> - (issue_seq 16 != last_issue 0)
+
+- premature filejournal trimming?
 
 later
 - authentication
@@ -128,6 +131,7 @@ uclient
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
+- make clientreplay faster
 - fix file recovery
   - make sure we recover mtime, not just size.. i.e. max_size > 0, not > size.
   - disallow access until file is recovered?

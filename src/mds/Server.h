@@ -93,7 +93,7 @@ public:
   void reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei = 0, CDentry *tracedn = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
-		      bool is_replay, int num_dentries_wanted);
+		      int num_dentries_wanted);
 
   void encode_empty_dirstat(bufferlist& bl);
   void encode_infinite_lease(bufferlist& bl);
