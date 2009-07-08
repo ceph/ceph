@@ -1857,9 +1857,9 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 
 	ci = cap->ci;
 
-	dout(10, " adding %p ino %llx.%llx cap %p %s\n",
-		     inode, ceph_vinop(inode), cap,
-		     ceph_cap_string(cap->issued));
+	dout(10, " adding %p ino %llx.%llx cap %p %lld %s\n",
+	     inode, ceph_vinop(inode), cap, cap->cap_id,
+	     ceph_cap_string(cap->issued));
 	ceph_decode_need(&p, end, sizeof(u64), needmore);
 	ceph_encode_64(&p, ceph_ino(inode));
 

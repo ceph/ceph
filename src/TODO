@@ -32,32 +32,6 @@ v0.10
 - osd bugfixes
 
 bugs
-09.07.07 16:54:31.246206 mds0.locker  ignoring client capid 698 != my 1081
-
-mds/Locker.cc: In function 'void Locker::eval_gather(SimpleLock*, bool, bool*)':
-mds/Locker.cc:386: FAILED assert(!lock->is_stable())
- 1: ./cmds(_Z18__ceph_assert_failPKcS0_iS0_+0x34) [0x91b17a]
- 2: ./cmds(_ZN6Locker11eval_gatherEP10SimpleLockbPb+0xbf) [0x8040cf]
- 3: ./cmds(_ZN7MDCache15do_file_recoverEv+0x336) [0x787eb6]
- 4: ./cmds(_ZN7MDCache10_recoveredEP6CInodei+0x1bf) [0x7880c9]
- 5: ./cmds(_ZN13C_MDC_Recover6finishEi+0x27) [0x7fd64f]
- 6: ./cmds(_ZN5Filer7_probedEPNS_5ProbeERK8object_tm7utime_t+0xb60) [0x8d46d2]
- 7: ./cmds(_ZN5Filer7C_Probe6finishEi+0x3f) [0x8d9f97]
- 8: ./cmds(_ZN8Objecter6C_Stat6finishEi+0xa0) [0x8d9b34]
- 9: ./cmds(_ZN8Objecter19handle_osd_op_replyEP11MOSDOpReply+0xa9d) [0x8aec39]
- 10: ./cmds(_ZN3MDS9_dispatchEP7Message+0x8b0) [0x6e838e]
- 11: ./cmds(_ZN3MDS13dispatch_implEP7Message+0x69d) [0x6e979b]
- 12: ./cmds(_ZN10Dispatcher9_dispatchEP7Message+0x54) [0x6c4d8e]
- 13: ./cmds(_ZN10Dispatcher8dispatchEP7Message+0x1d) [0x6cccff]
- 14: ./cmds(_ZN9Messenger8dispatchEP7Message+0x56) [0x6db42e]
- 15: ./cmds(_ZN15SimpleMessenger8Endpoint14dispatch_entryEv+0x5cb) [0x6d5351]
- 16: ./cmds(_ZN15SimpleMessenger8Endpoint14DispatchThread5entryEv+0x19) [0x6e1627]
- 17: ./cmds(_ZN6Thread11_entry_funcEPv+0x20) [0x6db97e]
- 18: /lib/libpthread.so.0 [0x2b25cda38fc7]
- 19: /lib/libc.so.6(clone+0x6d) [0x2b25ce4b75ad]
- NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
-
-
 
 later
 - authentication

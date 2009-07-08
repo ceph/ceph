@@ -1601,6 +1601,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 		 << " issue " << ccap_string(rc->issued) << " on " << *this << dendl;
 	cap->set_wanted(rc->wanted);
 	cap->issue_norevoke(rc->issued);
+	cap->set_cap_id(rc->cap_id);
 	mdcache->remove_replay_cap_reconnect(pi->ino, client);
       }
     }
