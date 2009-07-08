@@ -50,7 +50,7 @@ bin_PROGRAMS = \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
 	testrados testradospp \
-	rados radosacl s3gw s3admin s3aclparser
+	rados radosacl s3gw s3admin s3aclparser s3test
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -138,6 +138,8 @@ s3admin_SOURCES = s3/s3admin.cc
 s3admin_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 s3aclparser_SOURCES = s3/s3aclparser.cc
 s3aclparser_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+s3test_SOURCES = s3test.cc
+s3test_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 ## object classes
 
 # libtestclass.so: testclass.cc

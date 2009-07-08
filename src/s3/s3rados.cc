@@ -1,12 +1,5 @@
 #include <errno.h>
 #include <stdlib.h>
-#include <dirent.h>
-#include <limits.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <sys/xattr.h>
 
 #include "s3access.h"
 #include "s3rados.h"
@@ -154,30 +147,6 @@ int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std
   }
 
  return rados->create_pool(bucket.c_str());
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
-  char buf[len];
-  snprintf(buf, len, "%s/%s", DIR_NAME, bucket.c_str());
-
-  if (mkdir(buf, 0755) < 0)
-    return -errno;
-
-  vector<pair<string, bufferlist> >::iterator iter;
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    pair<string, bufferlist>& attr = *iter;
-    string& name = attr.first;
-    bufferlist& bl = attr.second;
-    
-    if (bl.length()) {
-      int r = setxattr(buf, name.c_str(), bl.c_str(), bl.length(), 0);
-      if (r < 0) {
-        r = -errno;
-        rmdir(buf);
-        return r;
-      }
-    }
-  }
-#endif
 }
 
 
@@ -193,22 +162,6 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
 
   object_t oid(obj.c_str());
 
-  bufferlist bl;
-  bl.append(data, size);
-  r = rados->write(pool, oid, 0, bl, size);
-  if (r < 0)
-    return r;
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
-  char buf[len];
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
-  int fd;
-
-  fd = open(buf, O_CREAT | O_WRONLY, 0755);
-  if (fd < 0)
-    return -errno;
-
-  int r;
   vector<pair<string, bufferlist> >::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     pair<string, bufferlist>& attr = *iter;
@@ -216,39 +169,24 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
     bufferlist& bl = attr.second;
     
     if (bl.length()) {
-      r = fsetxattr(fd, name.c_str(), bl.c_str(), bl.length(), 0);
-      if (r < 0) {
-        r = -errno;
-        close(fd);
+      r = rados->setxattr(pool, oid, name.c_str(), bl);
+      if (r < 0)
         return r;
-      }
     }
   }
 
-  r = write(fd, data, size);
-  if (r < 0) {
-    r = -errno;
-    close(fd);
-    unlink(buf);
+  bufferlist bl;
+  bl.append(data, size);
+  r = rados->write(pool, oid, 0, bl, size);
+  if (r < 0)
     return r;
-  }
 
   if (mtime) {
-    struct stat st;
-    r = fstat(fd, &st);
-    if (r < 0) {
-      r = -errno;
-      close(fd);
-      unlink(buf);
-      return -errno;
-    }
-    *mtime = st.st_mtime;
+    r = rados->stat(pool, oid, NULL, mtime);
+    if (r < 0)
+      return r;
   }
 
-  r = close(fd);
-  if (r < 0)
-    return -errno;
-#endif
   return 0;
 }
 
@@ -357,34 +295,27 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
             bool get_data,
             struct s3_err *err)
 {
-#if 0
-  int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
-  char buf[len];
-  int fd;
-  struct stat st;
   int r = -EINVAL;
-  size_t max_len, pos;
-  char *etag = NULL;
+  size_t pos, size, len;
+  bufferlist etag;
+  time_t mtime;
+  bufferlist bl;
 
-  snprintf(buf, len, "%s/%s/%s", DIR_NAME, bucket.c_str(), obj.c_str());
+  rados_pool_t pool;
 
-  fd = open(buf, O_RDONLY, 0755);
-
-  if (fd < 0)
-    return -errno;
-
-  r = fstat(fd, &st);
+  r = open_pool(bucket, &pool);
   if (r < 0)
-    return -errno;
+    return r;
 
-  if (end < 0)
-    end = st.st_size - 1;
+  object_t oid(obj.c_str());
 
-  max_len = end - ofs + 1;
+  r = rados->stat(pool, oid, &size, &mtime);
+  if (r < 0)
+    return r;
 
   r = -ECANCELED;
   if (mod_ptr) {
-    if (st.st_mtime < *mod_ptr) {
+    if (mtime < *mod_ptr) {
       err->num = "304";
       err->code = "PreconditionFailed";
       goto done;
@@ -392,18 +323,20 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
   }
 
   if (unmod_ptr) {
-    if (st.st_mtime >= *mod_ptr) {
+    if (mtime >= *mod_ptr) {
       err->num = "412";
       err->code = "PreconditionFailed";
       goto done;
     }
   }
   if (if_match || if_nomatch || petag) {
-    r = get_attr(S3_ATTR_ETAG, fd, &etag);
+    r = get_attr(bucket, obj, S3_ATTR_ETAG, etag);
     if (r < 0)
       goto done;
-    if (petag)
-      *petag = etag;
+    if (petag) {
+      *petag = (char *)malloc(etag.length());
+      memcpy(*petag, etag.c_str(), etag.length());
+    }
   }
 
 
@@ -411,7 +344,7 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
     r = -ECANCELED;
     if (if_match) {
       cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
-      if (strcmp(if_match, etag)) {
+      if (strcmp(if_match, etag.c_str())) {
         err->num = "412";
         err->code = "PreconditionFailed";
         goto done;
@@ -420,7 +353,7 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
 
     if (if_nomatch) {
       cerr << "etag=" << etag << " " << " if_nomatch=" << if_nomatch << endl;
-      if (strcmp(if_nomatch, etag) == 0) {
+      if (strcmp(if_nomatch, etag.c_str()) == 0) {
         err->num = "412";
         err->code = "PreconditionFailed";
         goto done;
@@ -429,44 +362,23 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
   }
 
   if (!get_data) {
-    r = max_len;
-    goto done;
-  }
-  *data = (char *)malloc(max_len);
-  if (!*data) {
-    r = -ENOMEM;
+    r = size;
     goto done;
   }
 
-  pos = 0;
-  while (pos < max_len) {
-    r = read(fd, (*data) + pos, max_len);
-    if (r > 0) {
-      pos += r;
-    } else {
-      if (!r) {
-        cerr << "pos=" << pos << " r=" << r << " max_len=" << max_len << endl;
-        r = -EIO; /* should not happen as we validated file size earlier */
-        goto done;
-      }
-      switch (errno) {
-      case EINTR:
-        break;
-      default:
-        r = -errno;
-        goto done;
-      }
-    }
-  } 
+  if (end >= 0)
+    len = end;
+  else
+    len = end - ofs + 1;
 
-  r = max_len;
+
+  r = rados->read(pool, oid, ofs, bl, len);
+  if (r > 0) {
+    *data = (char *)malloc(r);
+    memcpy(*data, bl.c_str(), bl.length());
+  }
 done:
-  if (etag && !petag)
-    free(etag);
-  close(fd);  
 
   return r;
-#endif
-  return 0;
 }
 
