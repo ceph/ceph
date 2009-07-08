@@ -1211,6 +1211,7 @@ void Client::send_reconnect(int mds)
 	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
+	in->caps[mds]->issue_seq = 0;  // reset seq.
 	m->add_cap(p->first.ino, 
 		   in->caps[mds]->cap_id,
 		   path.get_ino(), path.get_path(),   // ino
@@ -1463,7 +1464,8 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
 				   want,
 				   flush,
 				   cap->mseq);
-    
+  m->head.issue_seq = cap->issue_seq;
+
   m->head.uid = in->inode.uid;
   m->head.gid = in->inode.gid;
   m->head.mode = in->inode.mode;
@@ -1805,6 +1807,7 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
   cap->issued |= issued;
   cap->implemented |= issued;
   cap->seq = seq;
+  cap->issue_seq = seq;
   cap->mseq = mseq;
   dout(10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap->issued)
 	   << " from mds" << mds

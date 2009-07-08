@@ -240,12 +240,12 @@ struct InodeCap {
   unsigned issued;
   unsigned implemented;
   unsigned wanted;   // as known to mds.
-  __u64 seq;
+  __u64 seq, issue_seq;
   __u32 mseq;  // migration seq
   __u32 gen;
 
   InodeCap() : session(NULL), inode(NULL), cap_item(this), issued(0),
-	       implemented(0), wanted(0), seq(0), mseq(0), gen(0) {}
+	       implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0) {}
 };
 
 struct CapSnap {
