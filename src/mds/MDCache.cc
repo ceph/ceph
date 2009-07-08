@@ -6228,6 +6228,11 @@ void MDCache::request_finish(MDRequest *mdr)
     mds->logger->favg(l_mds_replyl, g_clock.now() - mdr->client_request->get_recv_stamp());
   }
 
+  if (mdr->client_request && mdr->client_request->is_replay()) {
+    dout(10) << " queueing next replay op" << dendl;
+    mds->queue_one_replay();
+  }
+
   request_cleanup(mdr);
 }
 

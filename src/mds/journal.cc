@@ -544,7 +544,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
     } else {
-      dout(10) << " EMetaBlob.replay inotable v " << inotablev
+      dout(10) << "EMetaBlob.replay inotable v " << inotablev
 	       << " - 1 == table " << mds->inotable->get_version()
 	       << " allocated+used " << allocated_ino
 	       << " prealloc " << preallocated_inos
@@ -570,13 +570,14 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg)
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " <= table " << mds->sessionmap.version << dendl;
     } else {
-      dout(10) << " EMetaBlob.replay sessionmap v" << sessionmapv
+      dout(10) << "EMetaBlob.replay sessionmap v" << sessionmapv
 	       << " -(1|2) == table " << mds->sessionmap.version
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
       Session *session = mds->sessionmap.get_session(client_name);
       assert(session);
+      dout(20) << " (session prealloc " << session->prealloc_inos << ")" << dendl;
       if (used_preallocated_ino) {
 	inodeno_t i = session->take_ino();
 	assert(i == used_preallocated_ino);

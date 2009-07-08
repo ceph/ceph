@@ -1021,7 +1021,7 @@ void MDS::rejoin_done()
 void MDS::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
-  queue_waiters(waiting_for_replay); 
+  queue_one_replay();
 }
 
 void MDS::clientreplay_done()
@@ -1309,9 +1309,13 @@ bool MDS::_dispatch(Message *m)
     if (!finishing &&
 	is_clientreplay() &&
 	mdcache->is_open() &&
-	mdcache->get_num_active_requests() == 0 &&
-	want_state == MDSMap::STATE_CLIENTREPLAY)
-      clientreplay_done();
+	waiting_for_replay.empty() &&
+	want_state == MDSMap::STATE_CLIENTREPLAY) {
+      dout(10) << " still have " << mdcache->get_num_active_requests()
+	       << " active replay requests" << dendl;
+      if (mdcache->get_num_active_requests() == 0)
+	clientreplay_done();
+    }
   }
 
   // hack: thrash exports

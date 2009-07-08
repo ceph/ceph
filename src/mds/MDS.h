@@ -232,6 +232,13 @@ class MDS : public Dispatcher {
   void queue_waiters(list<Context*>& ls) {
     finished_queue.splice( finished_queue.end(), ls );
   }
+  bool queue_one_replay() {
+    if (waiting_for_replay.empty())
+      return false;
+    queue_waiter(waiting_for_replay.front());
+    waiting_for_replay.pop_front();
+    return true;
+  }
   
   // -- keepalive beacon --
   version_t               beacon_last_seq;          // last seq sent to monitor

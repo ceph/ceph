@@ -619,7 +619,7 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
     mdr->pin(dn);
 
   early_reply(mdr, in, dn);
-
+  
   mdr->committing = true;
   mdlog->submit_entry(le, fin,
 		      mdr->did_ino_allocation());
@@ -660,9 +660,10 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
     return;
 
   if (req->is_replay()) {
-    dout(10) << "early_reply - none for replay request" << dendl;
+    dout(10) << " no early reply on replay op" << dendl;
     return;
   }
+
 
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->set_unsafe();
@@ -899,6 +900,10 @@ void Server::handle_client_request(MClientRequest *req)
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
       mds->messenger->send_message(new MClientReply(req, 0), req->get_orig_source_inst());
+
+      if (req->is_replay())
+	mds->queue_one_replay();
+
       delete req;
       return;
     }
@@ -1427,7 +1432,8 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.projected++;
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
-	     << " (" << mdr->session->prealloc_inos.size() << " left)"
+	     << " (" << mdr->session->prealloc_inos
+	     << ", " << mdr->session->prealloc_inos.size() << " left)"
 	     << dendl;
   } else {
     mdr->alloc_ino = 
