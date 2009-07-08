@@ -409,6 +409,7 @@ private:
   void set_client_incarnation(int inc) { client_inc = inc; }
 
   void wait_for_new_map(Context *c, epoch_t epoch) {
+    maybe_request_map();
     waiting_for_map[epoch].push_back(c);
   }
 
@@ -573,8 +574,10 @@ private:
 private:
   void pool_op_submit(PoolOp *op);
 public:
-  void create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
-  void delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish);
+  int create_pool_snap(int pool, string& snapName, Context *onfinish);
+  int delete_pool_snap(int pool, string& snapName, Context *onfinish);
+
+  int create_pool(string& name, Context *onfinish);
 
   void handle_pool_op_reply(MPoolOpReply *m);
 

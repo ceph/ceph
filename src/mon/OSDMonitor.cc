@@ -1281,6 +1281,7 @@ out:
 }
 
 bool OSDMonitor::preprocess_pool_op ( MPoolOp *m) {
+  dout(0) << "m->op=" << m->op << dendl;
   if (m->op == POOL_OP_CREATE) {
     return preprocess_pool_op_create(m);
   }

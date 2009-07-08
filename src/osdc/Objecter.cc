@@ -655,32 +655,55 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
 
 //snapshots
 
-void Objecter::create_pool_snap(int *reply, int pool, string& snapName, Context *onfinish) {
+int Objecter::create_pool_snap(int pool, string& snapName, Context *onfinish) {
   dout(10) << "create_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   PoolOp *op = new PoolOp;
+  if (!op)
+    return -ENOMEM;
   op->tid = ++last_tid;
   op->pool = pool;
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_CREATE_SNAP;
-  op->replyCode = reply;
   op_pool[op->tid] = op;
 
   pool_op_submit(op);
+
+  return 0;
 }
 
-void Objecter::delete_pool_snap(int *reply, int pool, string& snapName, Context *onfinish) {
+int Objecter::delete_pool_snap(int pool, string& snapName, Context *onfinish) {
   dout(10) << "delete_pool_snap; pool: " << pool << "; snap: " << snapName << dendl;
   PoolOp *op = new PoolOp;
+  if (!op)
+    return -ENOMEM;
   op->tid = ++last_tid;
   op->pool = pool;
   op->name = snapName;
   op->onfinish = onfinish;
   op->pool_op = POOL_OP_DELETE_SNAP;
-  op->replyCode = reply;
   op_pool[op->tid] = op;
 
   pool_op_submit(op);
+
+  return 0;
+}
+
+int Objecter::create_pool(string& name, Context *onfinish) {
+  dout(10) << "create_pool name=" << name << dendl;
+  PoolOp *op = new PoolOp;
+  if (!op)
+    return -ENOMEM;
+  op->tid = ++last_tid;
+  op->pool = 0;
+  op->name = name;
+  op->onfinish = onfinish;
+  op->pool_op = POOL_OP_CREATE;
+  op_pool[op->tid] = op;
+
+  pool_op_submit(op);
+
+  return 0;
 }
 
 void Objecter::pool_op_submit(PoolOp *op) {
@@ -696,7 +719,6 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
   if (op_pool.count(tid)) {
     PoolOp *op = op_pool[tid];
     dout(10) << "have request " << tid << " at " << op << " Op: " << get_pool_op_name(op->pool_op) << dendl;
-    *(op->replyCode) = m->replyCode;
     if (m->version > last_seen_version)
       last_seen_version = m->version;
     if (osdmap->get_epoch() < m->epoch) {
@@ -704,7 +726,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m) {
       wait_for_new_map(op->onfinish, m->epoch);
     }
     else {
-      op->onfinish->finish(0);
+      op->onfinish->finish(m->replyCode);
       delete op->onfinish;
     }
     op->onfinish = NULL;

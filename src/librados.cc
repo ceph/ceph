@@ -455,27 +455,21 @@ int RadosClient::get_fs_stats( rados_statfs_t& result ) {
 }
 
 
-int RadosClient::create_pool(string& name)
-{
-  return 0; /* TODO */
-}
-
-
 // SNAPS
 
-int RadosClient::snap_create( const rados_pool_t pool, const char *snapName) {
+int RadosClient::snap_create( const rados_pool_t pool, const char *snapName)
+{
   int reply;
   int poolID = ((PoolCtx *)pool)->poolid;
-  string sName = string(snapName);
+  string sName(snapName);
 
   Mutex mylock ("RadosClient::snap_create::mylock");
   Cond cond;
   bool done;
   lock.Lock();
-  objecter->create_pool_snap(&reply,
-			     poolID,
+  objecter->create_pool_snap(poolID,
 			     sName,
-			     new C_SafeCond(&mylock, &cond, &done));
+			     new C_SafeCond(&mylock, &cond, &done, &reply));
   lock.Unlock();
 
   mylock.Lock();
@@ -484,23 +478,43 @@ int RadosClient::snap_create( const rados_pool_t pool, const char *snapName) {
   return reply;
 }
 
-int RadosClient::snap_remove( const rados_pool_t pool, const char *snapName) {
+int RadosClient::snap_remove( const rados_pool_t pool, const char *snapName)
+{
   int reply;
   int poolID = ((PoolCtx *)pool)->poolid;
-  string sName = string(snapName);
+  string sName(snapName);
 
   Mutex mylock ("RadosClient::snap_remove::mylock");
   Cond cond;
   bool done;
   lock.Lock();
-  objecter->delete_pool_snap(&reply,
-			     poolID,
+  objecter->delete_pool_snap(poolID,
 			     sName,
-			     new C_SafeCond(&mylock, &cond, &done));
+			     new C_SafeCond(&mylock, &cond, &done, &reply));
   lock.Unlock();
 
   mylock.Lock();
   while(!done) cond.Wait(mylock);
+  mylock.Unlock();
+  return reply;
+}
+
+int RadosClient::create_pool(string& name)
+{
+  int reply;
+
+  Mutex mylock ("RadosClient::pool_create::mylock");
+  Cond cond;
+  bool done;
+  lock.Lock();
+  cout << "&reply=" << (void *)&reply << std::endl;
+  objecter->create_pool(name,
+			new C_SafeCond(&mylock, &cond, &done, &reply));
+  lock.Unlock();
+
+  mylock.Lock();
+  while(!done)
+    cond.Wait(mylock);
   mylock.Unlock();
   return reply;
 }
