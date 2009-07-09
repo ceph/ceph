@@ -2449,6 +2449,7 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	spin_lock_init(&mdsc->cap_delay_lock);
 	INIT_LIST_HEAD(&mdsc->snap_flush_list);
 	spin_lock_init(&mdsc->snap_flush_lock);
+	mdsc->cap_flush_seq = 0;
 	INIT_LIST_HEAD(&mdsc->cap_dirty);
 	mdsc->num_cap_flushing = 0;
 	spin_lock_init(&mdsc->cap_dirty_lock);
@@ -2524,58 +2525,105 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 }
 
 /*
- * sync - flush all dirty inode data to disk
+ * sync - flush all dirty inode data to disk.
+ *
+ * returns true if we've flushed through want_flush_seq
  */
-static int are_no_sync_caps(struct ceph_mds_client *mdsc)
+static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
 {
-	int num;
-	spin_lock(&mdsc->cap_dirty_lock);
-	num = mdsc->num_cap_flushing;
-	spin_unlock(&mdsc->cap_dirty_lock);
-	dout(20, "are_no_sync_caps = %d\n", num);
-	return num == 0;
+	int mds, ret = 1;
+
+	dout(10, "check_cap_flush want %lld\n", want_flush_seq);
+	mutex_lock(&mdsc->mutex);
+	for (mds = 0; ret && mds < mdsc->max_sessions; mds++) {
+		struct ceph_mds_session *session = mdsc->sessions[mds];
+
+		if (!session)
+			continue;
+		get_session(session);
+		mutex_unlock(&mdsc->mutex);
+
+		mutex_lock(&session->s_mutex);
+		if (!list_empty(&session->s_cap_flushing)) {
+			struct ceph_inode_info *ci =
+				list_entry(session->s_cap_flushing.next,
+					   struct ceph_inode_info,
+					   i_flushing_item);
+			struct inode *inode = &ci->vfs_inode;
+
+			spin_lock(&inode->i_lock);
+			if (ci->i_cap_flush_seq <= want_flush_seq) {
+				dout(10, "check_cap_flush still flushing %p "
+				     "seq %lld <= %lld to mds%d\n", inode,
+				     ci->i_cap_flush_seq, want_flush_seq,
+				     session->s_mds);
+				ret = 0;
+			}
+			spin_unlock(&inode->i_lock);
+		}
+		mutex_unlock(&session->s_mutex);
+		ceph_put_mds_session(session);
+
+		if (!ret)
+			return ret;
+		mutex_lock(&mdsc->mutex);
+	}
+
+	mutex_unlock(&mdsc->mutex);
+	dout(10, "check_cap_flush ok, flushed thru %lld\n", want_flush_seq);
+	return ret;
 }
 
 /*
  * wait for all write mds requests to flush.
  */
-static void wait_unsafe_requests(struct ceph_mds_client *mdsc)
+static void wait_unsafe_requests(struct ceph_mds_client *mdsc, u64 want_tid)
 {
 	struct ceph_mds_request *req;
-	u64 last_tid, next_tid;
+	u64 next_tid;
 	int got;
 
 	mutex_lock(&mdsc->mutex);
-	last_tid = mdsc->last_tid;
-	dout(10, "wait_unsafe_requests last is %lld\n", last_tid);
+	dout(10, "wait_unsafe_requests want %lld\n", want_tid);
 	while (1) {
 		got = radix_tree_gang_lookup(&mdsc->request_tree, (void **)&req,
 					     next_tid, 1);
 		if (!got)
 			break;
-		if (req->r_tid > last_tid)
+		if (req->r_tid > want_tid)
 			break;
+
+		next_tid = req->r_tid + 1;
 		if ((req->r_op & CEPH_MDS_OP_WRITE) == 0)
 			continue;  /* not a write op */
 
-		next_tid = req->r_tid + 1;
 		ceph_mdsc_get_request(req);
 		mutex_unlock(&mdsc->mutex);
-		dout(10, "wait_unsafe_requests  wait on %llu (last is %llu)\n",
-		     req->r_tid, last_tid);
+		dout(10, "wait_unsafe_requests  wait on %llu (want %llu)\n",
+		     req->r_tid, want_tid);
 		wait_for_completion(&req->r_safe_completion);
 		mutex_lock(&mdsc->mutex);
 		ceph_mdsc_put_request(req);
 	}
 	mutex_unlock(&mdsc->mutex);
+	dout(10, "wait_unsafe_requests done\n");
 }
 
 void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
+	u64 want_tid, want_flush;
+
 	dout(10, "sync\n");
+	mutex_lock(&mdsc->mutex);
+	want_tid = mdsc->last_tid;
+	want_flush = mdsc->cap_flush_seq;
+	mutex_unlock(&mdsc->mutex);
+	dout(10, "sync want tid %lld flush_seq %lld\n", want_tid, want_flush);
+
 	ceph_check_delayed_caps(mdsc, 1);
-	wait_unsafe_requests(mdsc);
-	wait_event(mdsc->cap_flushing_wq, are_no_sync_caps(mdsc));
+
+	wait_unsafe_requests(mdsc, want_tid);
+	wait_event(mdsc->cap_flushing_wq, check_cap_flush(mdsc, want_flush));
 }
 
 

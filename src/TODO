@@ -79,8 +79,8 @@ repair
 - mds scrubbing
 
 kclient
-- make wait on cap flush smarter
-  - assign a tid to cap flush ops?
+- need a seq# in cap flush to reliably mark things clean
+  - currently we might have: dirty 1, flush 1, dirty 2, flush 2, flush_ack 1 -> mark clean (wrong!)
 - return EBADF on files without caps
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient

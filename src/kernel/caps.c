@@ -1147,9 +1147,11 @@ static void __mark_caps_flushing(struct inode *inode,
 	BUG_ON(list_empty(&ci->i_dirty_item));
 	spin_lock(&mdsc->cap_dirty_lock);
 	if (list_empty(&ci->i_flushing_item)) {
-		dout(20, " inode %p now flushing\n", &ci->vfs_inode);
-		list_add(&ci->i_flushing_item, &session->s_cap_flushing);
+		list_add_tail(&ci->i_flushing_item, &session->s_cap_flushing);
 		mdsc->num_cap_flushing++;
+		ci->i_cap_flush_seq = ++mdsc->cap_flush_seq;
+		dout(20, " inode %p now flushing seq %lld\n", &ci->vfs_inode,
+		     ci->i_cap_flush_seq);
 	}
 	spin_unlock(&mdsc->cap_dirty_lock);
 }
@@ -2089,11 +2091,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 					 struct ceph_inode_info,
 					 i_flushing_item)->vfs_inode);
 		mdsc->num_cap_flushing--;
-		if (!mdsc->num_cap_flushing)
-			wake_up(&mdsc->cap_flushing_wq);
-		else
-			dout(20, " still %d caps flushing\n",
-			     mdsc->num_cap_flushing);
+		wake_up(&mdsc->cap_flushing_wq);
 		dout(20, " inode %p now !flushing\n", inode);
 		if (!new_dirty) {
 			dout(20, " inode %p now clean\n", inode);
