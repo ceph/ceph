@@ -63,7 +63,7 @@ extern "C" void ceph_deinitialize()
   --client_initialized;
   ceph_client_mutex.Unlock();
 }
-  
+
 extern "C" int ceph_mount()
 {
   return client->mount();
@@ -235,4 +235,9 @@ extern "C" int ceph_fstat(int fd, struct stat *stbuf)
 extern "C" int ceph_sync_fs()
 {
   return client->sync_fs();
+}
+
+int ceph_getdir(const char *relpath, std::list<std::string>& names)
+{
+  return client->getdir(relpath, names);
 }

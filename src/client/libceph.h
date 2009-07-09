@@ -10,6 +10,8 @@
 #include <dirent.h>
 
 #ifdef __cplusplus
+#include <list>
+#include <string>
 extern "C" {
 #endif
 
@@ -66,6 +68,7 @@ int ceph_fstat(int fd, struct stat *stbuf);
 
 int ceph_sync_fs();
 #ifdef __cplusplus
+int ceph_getdir(const char *relpath, std::list<std::string>& names); //not for C, sorry!
 }
 #endif
 
