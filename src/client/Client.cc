@@ -116,6 +116,8 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
 
   last_tid = 0;
   last_flush_seq = 0;
+  last_flush_tid = 0;
+
   unsafe_sync_write = 0;
 
   cwd = NULL;
@@ -1445,7 +1447,8 @@ void Client::cap_delay_requeue(Inode *in)
   delayed_caps.push_back(&in->cap_item);
 }
 
-void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush)
+void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush,
+		      __u64 tid)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -1478,6 +1481,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
 				   flush,
 				   cap->mseq);
   m->head.issue_seq = cap->issue_seq;
+  m->head.client_tid = tid;
 
   m->head.uid = in->inode.uid;
   m->head.gid = in->inode.gid;
@@ -1510,6 +1514,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned wanted = in->caps_wanted();
   unsigned used = in->caps_used();
   int flush = 0;
+  __u64 flush_tid = 0;
 
   int retain = wanted;
   if (!unmounting) {
@@ -1595,10 +1600,11 @@ void Client::check_caps(Inode *in, bool is_delayed)
       }
       in->flushing_caps |= flush;
       in->dirty_caps = 0;
+      flush_tid = in->flushing_cap_tid = ++last_flush_tid;
       dout(10) << " flushing " << ccap_string(flush) << dendl;
     }
 
-    send_cap(in, mds, cap, used, wanted, retain, flush);
+    send_cap(in, mds, cap, used, wanted, retain, flush, flush_tid);
   }
 }
 
@@ -1691,7 +1697,9 @@ void Client::flush_snaps(Inode *in)
 	     << " on " << *in << dendl;
     if (p->second.dirty_data || p->second.writing)
       continue;
+    p->second.flush_tid = ++last_flush_tid;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino(), in->snaprealm->ino, 0, mseq);
+    m->set_client_tid(p->second.flush_tid);
     m->head.snap_follows = p->first;
     m->head.size = p->second.size;
     m->head.caps = p->second.issued;
@@ -1968,7 +1976,7 @@ void Client::kick_flushing_caps(int mds)
     assert(cap->session == session);
     send_cap(in, mds, cap, in->caps_used(), in->caps_wanted(), 
 	     cap->issued | cap->implemented,
-	     in->flushing_caps);
+	     in->flushing_caps, in->flushing_cap_tid);
   }
 }
 
@@ -2316,19 +2324,23 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps
   dout(5) << "handle_cap_flush_ack mds" << mds
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in << dendl;
 
-  if (in->flushing_caps) {
-    dout(5) << "  flushing_caps " << ccap_string(in->flushing_caps)
-	    << " -> " << ccap_string(in->flushing_caps & ~cleaned) << dendl;
-    in->flushing_caps &= ~cleaned;
-    if (in->flushing_caps == 0) {
-      dout(10) << " " << *in << " !flushing" << dendl;
-      in->flushing_cap_item.remove_myself();
-      num_flushing_caps--;
-      put_inode(in);
-      sync_cond.Signal();
+  if (m->get_client_tid() != in->flushing_cap_tid) {
+    dout(10) << " tid " << m->get_client_tid() << " != " << in->flushing_cap_tid << dendl;
+  } else {
+    if (in->flushing_caps) {
+      dout(5) << "  flushing_caps " << ccap_string(in->flushing_caps)
+	      << " -> " << ccap_string(in->flushing_caps & ~cleaned) << dendl;
+      in->flushing_caps &= ~cleaned;
+      if (in->flushing_caps == 0) {
+	dout(10) << " " << *in << " !flushing" << dendl;
+	in->flushing_cap_item.remove_myself();
+	num_flushing_caps--;
+	put_inode(in);
+	sync_cond.Signal();
+      }
+      if (!in->caps_dirty())
+	put_inode(in);
     }
-    if (!in->caps_dirty())
-      put_inode(in);
   }
 
   delete m;
@@ -2342,10 +2354,14 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
   snapid_t follows = m->get_snap_follows();
 
   if (in->cap_snaps.count(follows)) {
-    dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << follows
-	    << " on " << *in << dendl;
-    in->cap_snaps.erase(follows);
-    put_inode(in);
+    if (m->get_client_tid() != in->cap_snaps[follows].flush_tid) {
+      dout(10) << " tid " << m->get_client_tid() << " != " << in->cap_snaps[follows].flush_tid << dendl;
+    } else {
+      dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << follows
+	      << " on " << *in << dendl;
+      in->cap_snaps.erase(follows);
+      put_inode(in);
+    }
   } else {
     dout(5) << "handle_cap_flushedsnap DUP(?) mds" << mds << " flushed snap follows " << follows
 	    << " on " << *in << dendl;

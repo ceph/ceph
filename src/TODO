@@ -79,8 +79,7 @@ repair
 - mds scrubbing
 
 kclient
-- need a seq# in cap flush to reliably mark things clean
-  - currently we might have: dirty 1, flush 1, dirty 2, flush 2, flush_ack 1 -> mark clean (wrong!)
+- ensure cap_snaps reflush after client reconnect 
 - return EBADF on files without caps
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient

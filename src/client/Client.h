@@ -257,7 +257,8 @@ struct CapSnap {
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
   bool writing, dirty_data;
-  CapSnap() : issued(0), dirty(0), size(0), time_warp_seq(0), writing(false), dirty_data(false) {}
+  __u64 flush_tid;
+  CapSnap() : issued(0), dirty(0), size(0), time_warp_seq(0), writing(false), dirty_data(false), flush_tid(0) {}
 };
 
 
@@ -275,7 +276,7 @@ class Inode {
   map<int,InodeCap*> caps;            // mds -> InodeCap
   InodeCap *auth_cap;
   unsigned dirty_caps, flushing_caps;
-  __u64 flushing_cap_seq;
+  __u64 flushing_cap_seq, flushing_cap_tid;
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
@@ -361,7 +362,7 @@ class Inode {
     //inode(_inode),
     snapid(vino.snapid),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
+    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), flushing_cap_tid(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this), flushing_cap_item(this),
@@ -694,7 +695,7 @@ public:
 
   // mds requests
 
-  tid_t last_tid, last_flush_seq;
+  tid_t last_tid, last_flush_seq, last_flush_tid;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
@@ -938,7 +939,7 @@ protected:
   void handle_cap_flushsnap_ack(Inode *in, class MClientCaps *m);
   void handle_cap_grant(Inode *in, int mds, InodeCap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush);
+  void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush, __u64 tid);
   void check_caps(Inode *in, bool is_delayed);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
