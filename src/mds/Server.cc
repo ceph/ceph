@@ -624,7 +624,14 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
   mdlog->submit_entry(le, fin,
 		      mdr->did_ino_allocation());
   
-  if (mdr->did_early_reply)
+  if (mdr->client_request && mdr->client_request->is_replay()) {
+    if (mds->queue_one_replay()) {
+      dout(10) << " queued next replay op" << dendl;
+    } else {
+      dout(10) << " journaled last replay op, flushing" << dendl;
+      mdlog->flush();
+    }
+  } else if (mdr->did_early_reply)
     mds->locker->drop_rdlocks(mdr);
   else
     mdlog->flush();

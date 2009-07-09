@@ -131,7 +131,6 @@ uclient
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- make clientreplay faster
 - fix file recovery
   - make sure we recover mtime, not just size.. i.e. max_size > 0, not > size.
   - disallow access until file is recovered?

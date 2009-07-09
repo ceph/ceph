@@ -6215,11 +6215,6 @@ void MDCache::request_finish(MDRequest *mdr)
     mds->logger->favg(l_mds_replyl, g_clock.now() - mdr->client_request->get_recv_stamp());
   }
 
-  if (mdr->client_request && mdr->client_request->is_replay()) {
-    dout(10) << " queueing next replay op" << dendl;
-    mds->queue_one_replay();
-  }
-
   request_cleanup(mdr);
 }
 
@@ -6319,9 +6314,17 @@ void MDCache::request_cleanup(MDRequest *mdr)
   // remove from session
   mdr->session_request_item.remove_myself();
 
+  bool was_replay = mdr->client_request && mdr->client_request->is_replay();
+
   // remove from map
   active_requests.erase(mdr->reqid);
   mdr->put();
+
+  // fail-safe!
+  if (was_replay && active_requests.empty()) {
+    dout(10) << " fail-safe queueing next replay op" << dendl;
+    mds->queue_one_replay();
+  }
 
   if (mds->logger)
     log_stat();
