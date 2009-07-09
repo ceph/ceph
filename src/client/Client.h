@@ -275,6 +275,7 @@ class Inode {
   map<int,InodeCap*> caps;            // mds -> InodeCap
   InodeCap *auth_cap;
   unsigned dirty_caps, flushing_caps;
+  __u64 flushing_cap_seq;
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
@@ -360,7 +361,7 @@ class Inode {
     //inode(_inode),
     snapid(vino.snapid),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
+    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this), flushing_cap_item(this),
@@ -693,7 +694,7 @@ public:
 
   // mds requests
 
-  tid_t last_tid;
+  tid_t last_tid, last_flush_seq;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
@@ -941,6 +942,7 @@ protected:
   void check_caps(Inode *in, bool is_delayed);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
+  void wait_sync_caps(__u64 want);
   void queue_cap_snap(Inode *in, snapid_t seq=0);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
@@ -1011,6 +1013,7 @@ private:
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
+
 
 
 public:

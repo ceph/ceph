@@ -115,6 +115,7 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
   unmounting = false;
 
   last_tid = 0;
+  last_flush_seq = 0;
   unsafe_sync_write = 0;
 
   cwd = NULL;
@@ -1588,6 +1589,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
       if (flush && !in->flushing_caps) {
 	dout(10) << " " << *in << " flushing" << dendl;
 	mds_sessions[mds].flushing_caps.push_back(&in->flushing_cap_item);
+	in->flushing_cap_seq = ++last_flush_seq;
 	in->get();
 	num_flushing_caps++;
       }
@@ -1932,6 +1934,27 @@ void Client::flush_caps()
     check_caps(in, true);
   }
 }
+void Client::wait_sync_caps(__u64 want)
+{
+ retry:
+  dout(10) << "wait_sync_caps want " << want << " (last is " << last_flush_seq << ", "
+	   << num_flushing_caps << " total flushing)" << dendl;
+  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       p++) {
+    if (p->second.flushing_caps.empty())
+	continue;
+    Inode *in = p->second.flushing_caps.front();
+    if (in->flushing_cap_seq <= want) {
+      dout(10) << " waiting on mds" << p->first << " tid " << in->flushing_cap_seq
+	       << " (want " << want << ")" << dendl;
+      sync_cond.Wait(client_lock);
+      goto retry;
+    }
+  }
+}
+
+
 
 void Client::kick_flushing_caps(int mds)
 {
@@ -2302,10 +2325,7 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps
       in->flushing_cap_item.remove_myself();
       num_flushing_caps--;
       put_inode(in);
-      if (!num_flushing_caps)
-	sync_cond.Signal();
-      else
-	dout(20) << " still " << num_flushing_caps << " more flushing caps" << dendl;
+      sync_cond.Signal();
     }
     if (!in->caps_dirty())
       put_inode(in);
@@ -2541,6 +2561,7 @@ int Client::unmount()
   }
 
   flush_caps();
+  wait_sync_caps(last_flush_seq);
 
   //if (0) {// hack
   while (lru.lru_get_size() > 0 || 
@@ -4208,11 +4229,7 @@ int Client::_sync_fs()
   
   // flush caps
   flush_caps();
-  while (num_flushing_caps) {
-    // FIXME: starvation
-    dout(10) << "waiting on " << num_flushing_caps << " flushing caps" << dendl;
-    sync_cond.Wait(client_lock);
-  }
+  wait_sync_caps(last_flush_seq);
 
   // flush file data
   // FIXME
