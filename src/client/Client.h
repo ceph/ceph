@@ -143,6 +143,7 @@ struct MDSSession {
   bool was_stale;
 
   xlist<InodeCap*> caps;
+  xlist<Inode*> flushing_caps;
   xlist<MetaRequest*> unsafe_requests;
 
   MClientCapRelease *release;
@@ -280,7 +281,7 @@ class Inode {
   int exporting_mds;
   ceph_seq_t exporting_mseq;
   utime_t hold_caps_until;
-  xlist<Inode*>::item cap_item;
+  xlist<Inode*>::item cap_item, flushing_cap_item;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -362,7 +363,7 @@ class Inode {
     dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    cap_item(this),
+    cap_item(this), flushing_cap_item(this),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
@@ -725,6 +726,7 @@ protected:
 
   // all inodes with caps sit on either cap_list or delayed_caps.
   xlist<Inode*> delayed_caps, cap_list;
+  int num_flushing_caps;
   hash_map<inodeno_t,SnapRealm*> snap_realms;
 
   SnapRealm *get_snap_realm(inodeno_t r) {
@@ -887,7 +889,7 @@ protected:
   ofstream traceout;
 
 
-  Cond mount_cond;
+  Cond mount_cond, sync_cond;
 
 
   // friends
@@ -920,6 +922,8 @@ protected:
   void remove_session_caps(int mds_num);
   void trim_caps(int mds, int max);
   void mark_caps_dirty(Inode *in, int caps);
+  void flush_caps();
+  void kick_flushing_caps(int mds);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
