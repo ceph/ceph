@@ -2586,7 +2586,7 @@ static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
 static void wait_unsafe_requests(struct ceph_mds_client *mdsc, u64 want_tid)
 {
 	struct ceph_mds_request *req;
-	u64 next_tid;
+	u64 next_tid = 0;
 	int got;
 
 	mutex_lock(&mdsc->mutex);

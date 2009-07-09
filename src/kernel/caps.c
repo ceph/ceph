@@ -2081,7 +2081,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 	unsigned seq = le32_to_cpu(m->seq);
 	int cleaned = le32_to_cpu(m->dirty);
 	u64 flush_tid = le64_to_cpu(m->client_tid);
-	int old_dirty, new_dirty;
+	int old_dirty = 0, new_dirty = 0;
 
 	dout(10, "handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
 	     " flushing %s -> %s\n",
