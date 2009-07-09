@@ -87,6 +87,8 @@ namespace Hypertable {
 
     virtual void report_error(ResponseCallback *cb, int error);
 
+    inline void make_abs_path(const char *fname, String& abs);
+
     bool m_verbose;
     String m_root_dir;
   };
