@@ -130,6 +130,7 @@ struct ceph_mds_session {
 	struct list_head  s_cap_releases_done; /* ready to send */
 
 	struct list_head  s_cap_flushing;      /* inodes w/ flushing caps */
+	u64               s_cap_flush_tid;
 };
 
 /*

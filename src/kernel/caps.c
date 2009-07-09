@@ -790,7 +790,7 @@ void __ceph_remove_cap(struct ceph_cap *cap,
  */
 static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 			 int caps, int wanted, int dirty,
-			 u32 seq, u32 issue_seq, u32 mseq,
+			 u32 seq, u64 flush_tid, u32 issue_seq, u32 mseq,
 			 u64 size, u64 max_size,
 			 struct timespec *mtime, struct timespec *atime,
 			 u64 time_warp_seq,
@@ -822,6 +822,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->cap_id = cpu_to_le64(cid);
 	fc->op = cpu_to_le32(op);
 	fc->seq = cpu_to_le32(seq);
+	fc->client_tid = cpu_to_le64(flush_tid);
 	fc->issue_seq = cpu_to_le32(issue_seq);
 	fc->migrate_seq = cpu_to_le32(mseq);
 	fc->caps = cpu_to_le32(caps);
@@ -944,6 +945,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	int xattrs_blob_size = 0;
 	u64 xattr_version = 0;
 	int delayed = 0;
+	u64 flush_tid = 0;
 
 	dout(10, "__send_cap %p cap %p session %p %s -> %s (revoking %s)\n",
 	     inode, cap, cap->session,
@@ -978,6 +980,12 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	cap->implemented &= cap->issued | used;
 	cap->mds_wanted = want;
 
+	if (flushing) {
+		flush_tid = ++cap->session->s_cap_flush_tid;
+		ci->i_cap_flush_tid = flush_tid;
+		dout(10, " cap_flush_tid %lld\n", flush_tid);
+	}
+
 	keep = cap->implemented;
 	seq = cap->seq;
 	issue_seq = cap->issue_seq;
@@ -1010,7 +1018,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	}
 
 	send_cap_msg(mdsc, ceph_vino(inode).ino, cap_id,
-		     op, keep, want, flushing, seq, issue_seq, mseq,
+		     op, keep, want, flushing, seq, flush_tid, issue_seq, mseq,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
 		     xattr_version,
@@ -1091,6 +1099,7 @@ retry:
 			goto retry;
 		}
 
+		capsnap->flush_tid = ++session->s_cap_flush_tid;
 		atomic_inc(&capsnap->nref);
 		spin_unlock(&inode->i_lock);
 
@@ -1098,7 +1107,7 @@ retry:
 		     inode, capsnap, next_follows, capsnap->size);
 		send_cap_msg(mdsc, ceph_vino(inode).ino, 0,
 			     CEPH_CAP_OP_FLUSHSNAP, capsnap->issued, 0,
-			     capsnap->dirty, 0, 0, mseq,
+			     capsnap->dirty, 0, capsnap->flush_tid, 0, mseq,
 			     capsnap->size, 0,
 			     &capsnap->mtime, &capsnap->atime,
 			     capsnap->time_warp_seq,
@@ -2071,6 +2080,7 @@ static void handle_cap_flush_ack(struct inode *inode,
 	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
 	unsigned seq = le32_to_cpu(m->seq);
 	int cleaned = le32_to_cpu(m->dirty);
+	u64 flush_tid = le64_to_cpu(m->client_tid);
 	int old_dirty, new_dirty;
 
 	dout(10, "handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
@@ -2078,27 +2088,32 @@ static void handle_cap_flush_ack(struct inode *inode,
 	     inode, session->s_mds, seq, ceph_cap_string(cleaned),
 	     ceph_cap_string(ci->i_flushing_caps),
 	     ceph_cap_string(ci->i_flushing_caps & ~cleaned));
-	old_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
-	ci->i_flushing_caps &= ~cleaned;
-	new_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
-	if (old_dirty) {
-		spin_lock(&mdsc->cap_dirty_lock);
-		list_del_init(&ci->i_flushing_item);
-		if (!list_empty(&session->s_cap_flushing))
-			dout(20, " mds%d still flushing cap on %p\n",
-			     session->s_mds,
-			     &list_entry(session->s_cap_flushing.next,
-					 struct ceph_inode_info,
-					 i_flushing_item)->vfs_inode);
-		mdsc->num_cap_flushing--;
-		wake_up(&mdsc->cap_flushing_wq);
-		dout(20, " inode %p now !flushing\n", inode);
-		if (!new_dirty) {
-			dout(20, " inode %p now clean\n", inode);
-			list_del_init(&ci->i_dirty_item);
+	if (flush_tid != ci->i_cap_flush_tid) {
+		dout(10, " flush_tid %lld != my flush_tid %lld, ignoring\n",
+		     flush_tid, ci->i_cap_flush_tid);
+	} else {
+		old_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
+		ci->i_flushing_caps &= ~cleaned;
+		new_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
+		if (old_dirty) {
+			spin_lock(&mdsc->cap_dirty_lock);
+			list_del_init(&ci->i_flushing_item);
+			if (!list_empty(&session->s_cap_flushing))
+				dout(20, " mds%d still flushing cap on %p\n",
+				     session->s_mds,
+				     &list_entry(session->s_cap_flushing.next,
+						 struct ceph_inode_info,
+						 i_flushing_item)->vfs_inode);
+			mdsc->num_cap_flushing--;
+			wake_up(&mdsc->cap_flushing_wq);
+			dout(20, " inode %p now !flushing\n", inode);
+			if (!new_dirty) {
+				dout(20, " inode %p now clean\n", inode);
+				list_del_init(&ci->i_dirty_item);
+			}
+			spin_unlock(&mdsc->cap_dirty_lock);
+			wake_up(&ci->i_cap_wq);
 		}
-		spin_unlock(&mdsc->cap_dirty_lock);
-		wake_up(&ci->i_cap_wq);
 	}
 
 	spin_unlock(&inode->i_lock);
@@ -2118,6 +2133,7 @@ static void handle_cap_flushsnap_ack(struct inode *inode,
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	u64 follows = le64_to_cpu(m->snap_follows);
+	u64 flush_tid = le64_to_cpu(m->client_tid);
 	struct ceph_cap_snap *capsnap;
 	int drop = 0;
 
@@ -2127,6 +2143,12 @@ static void handle_cap_flushsnap_ack(struct inode *inode,
 	spin_lock(&inode->i_lock);
 	list_for_each_entry(capsnap, &ci->i_cap_snaps, ci_item) {
 		if (capsnap->follows == follows) {
+			if (capsnap->flush_tid != flush_tid) {
+				dout(10, " cap_snap %p follows %lld tid %lld !="
+				     " %lld\n", capsnap, follows,
+				     flush_tid, capsnap->flush_tid);
+				break;
+			}
 			WARN_ON(capsnap->dirty_pages || capsnap->writing);
 			dout(10, " removing cap_snap %p follows %lld\n",
 			     capsnap, follows);
