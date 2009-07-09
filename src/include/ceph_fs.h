@@ -27,7 +27,7 @@
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
 #define CEPH_OSDC_PROTOCOL   19 /* public/client */
-#define CEPH_MDSC_PROTOCOL   24 /* public/client */
+#define CEPH_MDSC_PROTOCOL   25 /* public/client */
 #define CEPH_MONC_PROTOCOL   14 /* public/client */
 
 
@@ -802,6 +802,7 @@ struct ceph_mds_caps {
 	__le64 snap_follows;
 	__le32 snap_trace_len;
 	__le32 ttl_ms;  /* for IMPORT op only */
+	__le64 client_tid;  /* for FLUSH(SNAP) -> FLUSH(SNAP)_ACK */
 
 	/* authlock */
 	__le32 uid, gid, mode;

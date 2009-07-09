@@ -49,6 +49,9 @@ class MClientCaps : public Message {
   int       get_migrate_seq() { return head.migrate_seq; }
   int       get_op() { return head.op; }
 
+  __u64 get_client_tid() { return head.client_tid; }
+  void set_client_tid(__u64 s) { head.client_tid = s; }
+
   snapid_t get_snap_follows() { return snapid_t(head.snap_follows); }
   void set_snap_follows(snapid_t s) { head.snap_follows = s; }
 
