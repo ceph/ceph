@@ -49,7 +49,7 @@ bin_PROGRAMS = \
 	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
-	testrados testradospp \
+	testceph testrados testradospp \
 	rados radosacl s3gw
 
 sbin_PROGRAMS = \
@@ -97,13 +97,19 @@ lib_LTLIBRARIES =
 # libceph
 libceph_la_SOURCES = \
 	client/libceph.cc \
+	client/Client.cc \
 	msg/SimpleMessenger.cc \
-	${libcommon_a_SOURCES}
+	${libcommon_a_SOURCES} \
+	${libcrush_a_SOURCES} \
+	${libosdc_a_SOURCES}
+
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
+testceph_SOURCES = client/testceph.cc
+testceph_LDADD = libceph.la
 # libcrush.so
 libcrush_la_SOURCES = \
 	crush/builder.c \

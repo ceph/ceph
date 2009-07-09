@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <fcntl.h>
+#include <iostream>
 
 #include "common/Mutex.h"
 #include "messages/MMonMap.h"
@@ -37,13 +38,15 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     //network connection
     rank = new SimpleMessenger();
     rank->bind();
+
+    //at last the client
+    client = new Client(rank->register_entity(entity_name_t::CLIENT()), monclient);
+
     rank->start();
     rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
     rank->set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
     rank->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
-    //at last the client
-    client = new Client(rank->register_entity(entity_name_t::CLIENT()), monclient);
     client->init();
 
     ++client_initialized;

@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-int ceph_initialize(int argc, const char **argv); // FIX_ME
+int ceph_initialize(int argc, const char **argv);
 void ceph_deinitialize();
 
 int ceph_mount();
