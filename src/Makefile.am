@@ -102,7 +102,6 @@ libceph_la_SOURCES = \
 	${libcommon_a_SOURCES} \
 	${libcrush_a_SOURCES} \
 	${libosdc_a_SOURCES}
-
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
