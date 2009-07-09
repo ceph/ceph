@@ -50,7 +50,7 @@ bin_PROGRAMS = \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
 	testceph testrados testradospp \
-	rados radosacl s3gw
+	rados radosacl
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -138,8 +138,12 @@ testradospp_LDADD = librados.la libcrush.la
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
 
+if WITH_S3GW
 s3gw_SOURCES = s3/s3gw.cc s3/s3fs.cc
 s3gw_LDADD = librados.la libcrush.la -lfcgi
+bin_PROGRAMS += s3gw
+endif
+
 ## object classes
 
 # libtestclass.so: testclass.cc

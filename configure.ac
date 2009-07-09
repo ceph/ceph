@@ -40,6 +40,22 @@ AC_ARG_WITH([debug],
             [with_debug=no])
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
+# s3gw?
+AC_ARG_WITH([s3gw],
+            [AS_HELP_STRING([--with-s3gw], [build S3 gateway])],
+            [with_s3gw=yes],
+            [with_s3gw=no])
+AS_IF([test "x$with_s3gw" != xno],
+	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
+             [AC_SUBST([LIBFCGI], ["-lfcgi"])
+               AC_DEFINE([HAVE_LIBFCGI], [1],
+                         [Define if you have libfcgi])
+               HAVE_LIBFCGI=1
+              ],
+             [AC_MSG_FAILURE([--with-s3gw was given, but libfcgi test failed])])])
+AM_CONDITIONAL(WITH_S3GW, test "$with_s3gw" = "yes")
+
+
 # fuse?
 AC_ARG_WITH([fuse],
             [AS_HELP_STRING([--with-fuse], [use FUSE library for client])],
