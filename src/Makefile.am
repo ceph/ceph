@@ -98,7 +98,9 @@ lib_LTLIBRARIES =
 libceph_la_SOURCES = \
 	client/libceph.cc \
 	msg/SimpleMessenger.cc \
-	${libcommon_a_SOURCES}
+	${libcommon_a_SOURCES} \
+	${libosdc_a_SOURCES} \
+	${libclient_a_SOURCES}
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
