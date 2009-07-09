@@ -1185,6 +1185,9 @@ void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 
 	spin_lock(&inode->i_lock);
 
+	if (ci->i_ceph_flags & CEPH_I_FLUSH)
+		flags |= CHECK_CAPS_FLUSH;
+
 	/* reset cap timeouts? */
 	if (!is_delayed)
 		__cap_set_timeouts(mdsc, ci);
@@ -1216,11 +1219,16 @@ retry_locked:
 		}
 	}
 
-	dout(10, "check_caps %p file_want %s used %s retain %s issued %s %s\n",
-	     inode, ceph_cap_string(file_wanted), ceph_cap_string(used),
-	     ceph_cap_string(retain),
+	dout(10, "check_caps %p file_want %s used %s dirty %s flushing %s"
+	     " issued %s retain %s %s%s%s\n", inode,
+	     ceph_cap_string(file_wanted),
+	     ceph_cap_string(used), ceph_cap_string(ci->i_dirty_caps),
+	     ceph_cap_string(ci->i_flushing_caps),
 	     ceph_cap_string(__ceph_caps_issued(ci, NULL)),
-	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY" : "");
+	     ceph_cap_string(retain),
+	     (flags & CHECK_CAPS_AUTHONLY) ? " AUTHONLY" : "",
+	     (flags & CHECK_CAPS_NODELAY) ? " NODELAY" : "",
+	     (flags & CHECK_CAPS_FLUSH) ? " FLUSH" : "");
 
 	/*
 	 * If we no longer need to hold onto old our caps, and we may
@@ -1286,6 +1294,12 @@ retry_locked:
 				dout(10, "i_size approaching max_size\n");
 				goto ack;
 			}
+		}
+		/* flush anything dirty? */
+		if (cap == ci->i_auth_cap && (flags & CHECK_CAPS_FLUSH) &&
+		    ci->i_dirty_caps) {
+			dout(10, "flushing dirty caps\n");
+			goto ack;
 		}
 
 		/* completed revocation? going down and there are no caps? */
@@ -2405,9 +2419,13 @@ bad:
 /*
  * Delayed work handler to process end of delayed cap release LRU list.
  */
-void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
+void ceph_check_delayed_caps(struct ceph_mds_client *mdsc, int flushdirty)
 {
 	struct ceph_inode_info *ci;
+	int flags = CHECK_CAPS_NODELAY;
+
+	if (flushdirty)
+		flags |= CHECK_CAPS_FLUSH;
 
 	dout(10, "check_delayed_caps\n");
 	while (1) {
@@ -2423,7 +2441,7 @@ void ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 		list_del_init(&ci->i_cap_delay_list);
 		spin_unlock(&mdsc->cap_delay_lock);
 		dout(10, "check_delayed_caps on %p\n", &ci->vfs_inode);
-		ceph_check_caps(ci, CHECK_CAPS_NODELAY, NULL);
+		ceph_check_caps(ci, flags, NULL);
 	}
 	spin_unlock(&mdsc->cap_delay_lock);
 }

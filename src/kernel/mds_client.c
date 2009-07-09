@@ -2374,7 +2374,7 @@ static void delayed_work(struct work_struct *work)
 	u32 want_map = 0;
 
 	dout(30, "delayed_work\n");
-	ceph_check_delayed_caps(mdsc);
+	ceph_check_delayed_caps(mdsc, 0);
 
 	mutex_lock(&mdsc->mutex);
 	renew_interval = mdsc->mdsmap->m_session_timeout >> 2;
@@ -2518,7 +2518,7 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 	mdsc->stopping = 1;
 
 	drop_leases(mdsc);
-	ceph_check_delayed_caps(mdsc);
+	ceph_check_delayed_caps(mdsc, 1);
 	wait_requests(mdsc);
 }
 
@@ -2572,7 +2572,7 @@ static void wait_unsafe_requests(struct ceph_mds_client *mdsc)
 void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
 	dout(10, "sync\n");
-	ceph_check_delayed_caps(mdsc);
+	ceph_check_delayed_caps(mdsc, 1);
 	wait_unsafe_requests(mdsc);
 	wait_event(mdsc->cap_flushing_wq, are_no_sync_caps(mdsc));
 }

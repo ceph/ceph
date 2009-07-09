@@ -32,7 +32,6 @@ v0.10
 - osd bugfixes
 
 bugs
-- kclient: lingering dirty caps on umount
 - premature filejournal trimming?
 
 later

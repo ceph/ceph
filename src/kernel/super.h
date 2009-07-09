@@ -176,6 +176,7 @@ struct ceph_cap {
 
 #define CHECK_CAPS_NODELAY    1  /* do not delay any further */
 #define CHECK_CAPS_AUTHONLY   2  /* only check auth cap */
+#define CHECK_CAPS_FLUSH      4  /* flush any dirty caps */
 
 /*
  * Snapped cap state that is pending flush to mds.  When a snapshot occurs,
@@ -859,7 +860,8 @@ extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 			       struct ceph_mds_session **psession);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 			    struct ceph_mds_session *session);
-extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
+extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc,
+				    int flushdirty);
 
 extern int ceph_encode_inode_release(void **p, struct inode *inode,
 				     int mds, int drop, int unless, int force);
