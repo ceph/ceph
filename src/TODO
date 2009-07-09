@@ -32,8 +32,7 @@ v0.10
 - osd bugfixes
 
 bugs
-09.07.08 11:18:33.628589 mds0.locker  NOT changing wanted p -> - (issue_seq 16 != last_issue 0)
-
+- kclient: lingering dirty caps on umount
 - premature filejournal trimming?
 
 later
@@ -81,6 +80,8 @@ repair
 - mds scrubbing
 
 kclient
+- make wait on cap flush smarter
+  - assign a tid to cap flush ops?
 - return EBADF on files without caps
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient

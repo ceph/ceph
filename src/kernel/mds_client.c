@@ -2535,10 +2535,45 @@ static int are_no_sync_caps(struct ceph_mds_client *mdsc)
 	return num == 0;
 }
 
+/*
+ * wait for all write mds requests to flush.
+ */
+static void wait_unsafe_requests(struct ceph_mds_client *mdsc)
+{
+	struct ceph_mds_request *req;
+	u64 last_tid, next_tid;
+	int got;
+
+	mutex_lock(&mdsc->mutex);
+	last_tid = mdsc->last_tid;
+	dout(10, "wait_unsafe_requests last is %lld\n", last_tid);
+	while (1) {
+		got = radix_tree_gang_lookup(&mdsc->request_tree, (void **)&req,
+					     next_tid, 1);
+		if (!got)
+			break;
+		if (req->r_tid > last_tid)
+			break;
+		if ((req->r_op & CEPH_MDS_OP_WRITE) == 0)
+			continue;  /* not a write op */
+
+		next_tid = req->r_tid + 1;
+		ceph_mdsc_get_request(req);
+		mutex_unlock(&mdsc->mutex);
+		dout(10, "wait_unsafe_requests  wait on %llu (last is %llu)\n",
+		     req->r_tid, last_tid);
+		wait_for_completion(&req->r_safe_completion);
+		mutex_lock(&mdsc->mutex);
+		ceph_mdsc_put_request(req);
+	}
+	mutex_unlock(&mdsc->mutex);
+}
+
 void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
 	dout(10, "sync\n");
 	ceph_check_delayed_caps(mdsc);
+	wait_unsafe_requests(mdsc);
 	wait_event(mdsc->cap_flushing_wq, are_no_sync_caps(mdsc));
 }
 
