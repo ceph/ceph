@@ -779,6 +779,9 @@ static int request_close_session(struct ceph_mds_client *mdsc,
 	struct ceph_msg *msg;
 	int err = 0;
 
+	dout(10, "request_close_session mds%d state %s seq %lld\n",
+	     session->s_mds, session_state_name(session->s_state),
+	     session->s_seq);
 	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
 				 session->s_seq);
 	if (IS_ERR(msg))
@@ -794,8 +797,6 @@ static int request_close_session(struct ceph_mds_client *mdsc,
 static int __close_session(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session)
 {
-	dout(10, "close_session mds%d state=%s\n", session->s_mds,
-	     session_state_name(session->s_state));
 	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
 		return 0;
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
