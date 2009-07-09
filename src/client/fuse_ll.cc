@@ -363,7 +363,8 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 
   while (1) {
     int r = client->readdir_r(dirp, &de);
-    if (r < 0) break;
+    if (r <= 0)
+      break;
     st.st_ino = make_fake_ino(de.d_ino, snap);
     st.st_mode = DT_TO_MODE(de.d_type);
 

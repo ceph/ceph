@@ -3319,17 +3319,25 @@ int Client::readdir_r(DIR *d, struct dirent *de)
   return readdirplus_r(d, de, 0, 0);
 }
 
+/*
+ * returns
+ *  1 if we got a dirent
+ *  0 for end of directory
+ * <0 on error
+ */
 int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmask)
 {  
   DirResult *dirp = (DirResult*)d;
   
   while (1) {
-    if (dirp->at_end()) return -1;
+    if (dirp->at_end())
+      return 0;
 
     if (dirp->buffer.count(dirp->frag()) == 0) {
       Mutex::Locker lock(client_lock);
       _readdir_get_frag(dirp);
-      if (dirp->at_end()) return -1;
+      if (dirp->at_end())
+	return 0;
     }
 
     frag_t fg = dirp->frag();
@@ -3345,18 +3353,19 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 
     assert(pos < ent.size());
     _readdir_fill_dirent(de, &ent[pos], dirp->offset);
-    if (st) *st = ent[pos].st;
-    if (stmask) *stmask = ent[pos].stmask;
+    if (st)
+      *st = ent[pos].st;
+    if (stmask)
+      *stmask = ent[pos].stmask;
     pos++;
     dirp->offset++;
 
     if (pos == ent.size()) 
       _readdir_next_frag(dirp);
 
-    break;
+    return 1;
   }
-
-  return 0;
+  assert(0);
 }
 
 
