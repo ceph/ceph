@@ -21,7 +21,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: s3admin <--user-gen | --user-modify | --read-policy > [options...]" << std::endl;
+  cerr << "usage: s3admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id>" << std::endl;
   cerr << "   --key=<key>" << std::endl;
@@ -131,6 +131,7 @@ int main(int argc, char **argv)
   bool gen_user = false;
   bool mod_user = false;
   bool read_policy = false;
+  bool list_buckets = false;
   int actions = 0 ;
   S3UserInfo info;
   S3Access *store;
@@ -144,6 +145,8 @@ int main(int argc, char **argv)
       mod_user = true;
     } else if (CONF_ARG_EQ("read-policy", 'p')) {
       read_policy = true;
+    } else if (CONF_ARG_EQ("list-buckets", 'l')) {
+      list_buckets = true;
     } else if (CONF_ARG_EQ("uid", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&user_id, OPT_STR);
     } else if (CONF_ARG_EQ("key", 'k')) {
@@ -250,6 +253,38 @@ int main(int argc, char **argv)
       policy.decode(iter);
       policy.to_xml(cout);
       cout << std::endl;
+    }
+  }
+
+  if (list_buckets) {
+    actions++;
+    string id;
+    S3AccessHandle handle;
+
+    if (user_id) {
+      S3UserBuckets buckets;
+      if (s3_get_user_buckets(user_id, buckets) < 0) {
+        cout << "could not get buckets for uid " << user_id << std::endl;
+      } else {
+        cout << "listing buckets for uid " << user_id << std::endl;
+        map<string, S3ObjEnt>& m = buckets.get_buckets();
+        map<string, S3ObjEnt>::iterator iter;
+
+        for (iter = m.begin(); iter != m.end(); ++iter) {
+          S3ObjEnt obj = iter->second;
+          cout << obj.name << std::endl;
+        }
+      }
+    } else {
+      if (store->list_buckets_init(id, &handle) < 0) {
+        cout << "list-buckets: no entries found" << std::endl;
+      } else {
+        S3ObjEnt obj;
+        cout << "listing all buckets" << std::endl;
+        while (store->list_buckets_next(id, obj, &handle) >= 0) {
+          cout << obj.name << std::endl;
+        }
+      }
     }
   }
 
