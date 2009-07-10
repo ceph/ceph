@@ -130,9 +130,7 @@ uclient
 
 mds
 - fix file recovery
-  - make sure we recover mtime, not just size.. i.e. max_size > 0, not > size.
   - disallow access until file is recovered?
-  - how to not recover if all clients have reconnected?
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too
