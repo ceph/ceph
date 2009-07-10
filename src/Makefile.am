@@ -49,8 +49,12 @@ bin_PROGRAMS = \
 	ceph cconf \
 	mkmonfs monmaptool osdmaptool crushtool \
 	streamtest dupstore dumpjournal testmsgr \
-	testrados testradospp \
-	rados radosacl s3gw s3admin s3aclparser
+	testceph testrados testradospp \
+	rados radosacl
+
+if WITH_S3GW
+bin_PROGRAMS += s3gw s3admin s3aclparser
+endif
 
 sbin_PROGRAMS = \
 	mount.ceph
@@ -94,6 +98,21 @@ endif
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
 
+# libceph
+libceph_la_SOURCES = \
+	client/libceph.cc \
+	client/Client.cc \
+	msg/SimpleMessenger.cc \
+	${libcommon_a_SOURCES} \
+	${libcrush_a_SOURCES} \
+	${libosdc_a_SOURCES}
+libceph_la_CFLAGS = ${AM_CFLAGS}
+libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
+libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
+lib_LTLIBRARIES += libceph.la
+
+testceph_SOURCES = client/testceph.cc
+testceph_LDADD = libceph.la
 # libcrush.so
 libcrush_la_SOURCES = \
 	crush/builder.c \
@@ -113,6 +132,7 @@ librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
 
+if WITH_S3GW
 libcephs3_la_SOURCES = \
 	s3/s3fs.cc \
 	s3/s3rados.cc \
@@ -121,6 +141,7 @@ libcephs3_la_SOURCES = \
 	s3/s3access.cc
 libcephs3_la_CFLAGS = ${AM_CFLAGS}
 lib_LTLIBRARIES += libcephs3.la
+endif
 
 rados_SOURCES = rados.cc
 rados_LDADD = librados.la libcrush.la
@@ -132,12 +153,15 @@ testradospp_LDADD = librados.la libcrush.la
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
 
+if WITH_S3GW
 s3gw_SOURCES = s3/s3gw.cc
 s3gw_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 s3admin_SOURCES = s3/s3admin.cc
 s3admin_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 s3aclparser_SOURCES = s3/s3aclparser.cc
 s3aclparser_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+endif
+
 ## object classes
 
 # libtestclass.so: testclass.cc
@@ -343,6 +367,7 @@ noinst_HEADERS = \
         client/Trace.h\
         client/fuse.h\
         client/fuse_ll.h\
+	client/libceph.h\
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
 	cls_crypto.cc\

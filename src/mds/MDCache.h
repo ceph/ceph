@@ -756,7 +756,7 @@ public:
   void do_delayed_cap_imports();
   void open_snap_parents();
 
-
+  void reissue_all_caps();
   
 
   friend class Locker;

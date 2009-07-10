@@ -307,6 +307,8 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_num_cap_releases = 0;
 	INIT_LIST_HEAD(&s->s_cap_releases);
 	INIT_LIST_HEAD(&s->s_cap_releases_done);
+	INIT_LIST_HEAD(&s->s_cap_flushing);
+	s->s_cap_flush_tid = 0;
 
 	dout(10, "register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
@@ -675,23 +677,32 @@ static void remove_session_caps(struct ceph_mds_session *session)
 	cleanup_cap_releases(session);
 }
 
-static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
-			       void *arg)
-{
-	spin_lock(&inode->i_lock);
-	wake_up(&cap->ci->i_cap_wq);
-	spin_unlock(&inode->i_lock);
-	return 0;
-}
 /*
- * wake up any threads waiting on this session's caps
+ * wake up any threads waiting on this session's caps.  if the cap is
+ * old (didn't get renewed on the client reconnect), remove it now.
  *
  * caller must hold s_mutex.
  */
+static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
+			      void *arg)
+{
+	struct ceph_mds_session *session = arg;
+
+	spin_lock(&inode->i_lock);
+	if (cap->gen != session->s_cap_gen) {
+		dout(0, "failed to reconnect %p cap %p (gen %d < session %d)\n",
+		     inode, cap, cap->gen, session->s_cap_gen);
+		__ceph_remove_cap(cap, NULL);
+	}
+	wake_up(&ceph_inode(inode)->i_cap_wq);
+	spin_unlock(&inode->i_lock);
+	return 0;
+}
+
 static void wake_up_session_caps(struct ceph_mds_session *session)
 {
 	dout(10, "wake_up_session_caps %p mds%d\n", session, session->s_mds);
-	iterate_session_caps(session, wake_up_session_cb, NULL);
+	iterate_session_caps(session, wake_up_session_cb, session);
 }
 
 /*
@@ -763,13 +774,15 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 }
 
 
-
 static int request_close_session(struct ceph_mds_client *mdsc,
 				 struct ceph_mds_session *session)
 {
 	struct ceph_msg *msg;
 	int err = 0;
 
+	dout(10, "request_close_session mds%d state %s seq %lld\n",
+	     session->s_mds, session_state_name(session->s_state),
+	     session->s_seq);
 	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
 				 session->s_seq);
 	if (IS_ERR(msg))
@@ -785,8 +798,6 @@ static int request_close_session(struct ceph_mds_client *mdsc,
 static int __close_session(struct ceph_mds_client *mdsc,
 			 struct ceph_mds_session *session)
 {
-	dout(10, "close_session mds%d state=%s\n", session->s_mds,
-	     session_state_name(session->s_state));
 	if (session->s_state >= CEPH_MDS_SESSION_CLOSING)
 		return 0;
 	session->s_state = CEPH_MDS_SESSION_CLOSING;
@@ -1196,8 +1207,13 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 
 	head->mdsmap_epoch = cpu_to_le32(mdsc->mdsmap->m_epoch);
 	head->op = cpu_to_le32(req->r_op);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29)
 	head->caller_uid = cpu_to_le32(current_fsuid());
 	head->caller_gid = cpu_to_le32(current_fsgid());
+#else
+	head->caller_uid = cpu_to_le32(current->fsuid);
+	head->caller_gid = cpu_to_le32(current->fsgid);
+#endif
 	head->args = req->r_args;
 
 	ceph_encode_filepath(&p, end, ino1, path1);
@@ -1393,7 +1409,7 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 	int i, got;
 
 	dout(20, "kick_requests mds%d\n", mds);
-	while (nexttid < mdsc->last_tid) {
+	while (nexttid <= mdsc->last_tid) {
 		got = radix_tree_gang_lookup(&mdsc->request_tree,
 					     (void **)&reqs, nexttid, 10);
 		if (got == 0)
@@ -1848,9 +1864,9 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 
 	ci = cap->ci;
 
-	dout(10, " adding %p ino %llx.%llx cap %p %s\n",
-		     inode, ceph_vinop(inode), cap,
-		     ceph_cap_string(cap->issued));
+	dout(10, " adding %p ino %llx.%llx cap %p %lld %s\n",
+	     inode, ceph_vinop(inode), cap, cap->cap_id,
+	     ceph_cap_string(cap->issued));
 	ceph_decode_need(&p, end, sizeof(u64), needmore);
 	ceph_encode_64(&p, ceph_ino(inode));
 
@@ -1873,7 +1889,8 @@ static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
 	p += sizeof(*rec);
 	BUG_ON(p > end);
 	spin_lock(&inode->i_lock);
-	cap->seq = 0;  /* reset cap seq */
+	cap->seq = 0;        /* reset cap seq */
+	cap->issue_seq = 0;  /* and issue_seq */
 	rec->cap_id = cpu_to_le64(cap->cap_id);
 	rec->pathbase = cpu_to_le64(pathbase);
 	rec->wanted = cpu_to_le32(__ceph_caps_wanted(ci));
@@ -2088,10 +2105,10 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		     i, ceph_mds_state_name(oldstate),
 		     ceph_mds_state_name(newstate),
 		     session_state_name(s->s_state));
-		if (newstate < oldstate) {
-			/* if the state moved backwards, that means
-			 * the old mds failed and/or a new mds is
-			 * recovering in its place. */
+
+		if (memcmp(ceph_mdsmap_get_addr(oldmap, i),
+			   ceph_mdsmap_get_addr(newmap, i),
+			   sizeof(struct ceph_entity_addr))) {
 			/* notify messenger to close out old messages,
 			 * socket. */
 			ceph_messenger_mark_down(mdsc->client->msgr,
@@ -2106,8 +2123,15 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 
 			/* kick any requests waiting on the recovering mds */
 			kick_requests(mdsc, i, 1);
-			continue;
+		} else if (oldstate == newstate) {
+			continue;  /* nothing new with this mds */
 		}
+
+		/*
+		 * send reconnect?
+		 */
+		if (newstate == CEPH_MDS_STATE_RECONNECT)
+			send_mds_reconnect(mdsc, i);
 
 		/*
 		 * kick requests on any mds that has gone active.
@@ -2119,8 +2143,10 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		 * it died.
 		 */
 		if (oldstate < CEPH_MDS_STATE_ACTIVE &&
-		    newstate >= CEPH_MDS_STATE_ACTIVE)
+		    newstate >= CEPH_MDS_STATE_ACTIVE) {
 			kick_requests(mdsc, i, 1);
+			ceph_kick_flushing_caps(mdsc, s);
+		}
 	}
 }
 
@@ -2355,7 +2381,7 @@ static void delayed_work(struct work_struct *work)
 	u32 want_map = 0;
 
 	dout(30, "delayed_work\n");
-	ceph_check_delayed_caps(mdsc);
+	ceph_check_delayed_caps(mdsc, 0);
 
 	mutex_lock(&mdsc->mutex);
 	renew_interval = mdsc->mdsmap->m_session_timeout >> 2;
@@ -2378,7 +2404,7 @@ static void delayed_work(struct work_struct *work)
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
 			derr(1, "mds%d session probably timed out, "
 			     "requesting mds map\n", s->s_mds);
-			want_map = mdsc->mdsmap->m_epoch;
+			want_map = mdsc->mdsmap->m_epoch + 1;
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
 			/* this mds is failed or recovering, just wait */
@@ -2429,10 +2455,11 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 	spin_lock_init(&mdsc->cap_delay_lock);
 	INIT_LIST_HEAD(&mdsc->snap_flush_list);
 	spin_lock_init(&mdsc->snap_flush_lock);
+	mdsc->cap_flush_seq = 0;
 	INIT_LIST_HEAD(&mdsc->cap_dirty);
-	INIT_LIST_HEAD(&mdsc->cap_sync);
+	mdsc->num_cap_flushing = 0;
 	spin_lock_init(&mdsc->cap_dirty_lock);
-	init_waitqueue_head(&mdsc->cap_sync_wq);
+	init_waitqueue_head(&mdsc->cap_flushing_wq);
 	spin_lock_init(&mdsc->dentry_lru_lock);
 	INIT_LIST_HEAD(&mdsc->dentry_lru);
 }
@@ -2499,28 +2526,110 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 	mdsc->stopping = 1;
 
 	drop_leases(mdsc);
-	ceph_check_delayed_caps(mdsc);
+	ceph_check_delayed_caps(mdsc, 1);
 	wait_requests(mdsc);
 }
 
 /*
- * sync - flush all dirty inode data to disk
+ * sync - flush all dirty inode data to disk.
+ *
+ * returns true if we've flushed through want_flush_seq
  */
-static int are_no_sync_caps(struct ceph_mds_client *mdsc)
+static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
 {
-	int empty;
-	spin_lock(&mdsc->cap_dirty_lock);
-	empty = list_empty(&mdsc->cap_sync);
-	spin_unlock(&mdsc->cap_dirty_lock);
-	dout(20, "are_no_sync_caps = %d\n", empty);
-	return empty;
+	int mds, ret = 1;
+
+	dout(10, "check_cap_flush want %lld\n", want_flush_seq);
+	mutex_lock(&mdsc->mutex);
+	for (mds = 0; ret && mds < mdsc->max_sessions; mds++) {
+		struct ceph_mds_session *session = mdsc->sessions[mds];
+
+		if (!session)
+			continue;
+		get_session(session);
+		mutex_unlock(&mdsc->mutex);
+
+		mutex_lock(&session->s_mutex);
+		if (!list_empty(&session->s_cap_flushing)) {
+			struct ceph_inode_info *ci =
+				list_entry(session->s_cap_flushing.next,
+					   struct ceph_inode_info,
+					   i_flushing_item);
+			struct inode *inode = &ci->vfs_inode;
+
+			spin_lock(&inode->i_lock);
+			if (ci->i_cap_flush_seq <= want_flush_seq) {
+				dout(10, "check_cap_flush still flushing %p "
+				     "seq %lld <= %lld to mds%d\n", inode,
+				     ci->i_cap_flush_seq, want_flush_seq,
+				     session->s_mds);
+				ret = 0;
+			}
+			spin_unlock(&inode->i_lock);
+		}
+		mutex_unlock(&session->s_mutex);
+		ceph_put_mds_session(session);
+
+		if (!ret)
+			return ret;
+		mutex_lock(&mdsc->mutex);
+	}
+
+	mutex_unlock(&mdsc->mutex);
+	dout(10, "check_cap_flush ok, flushed thru %lld\n", want_flush_seq);
+	return ret;
+}
+
+/*
+ * wait for all write mds requests to flush.
+ */
+static void wait_unsafe_requests(struct ceph_mds_client *mdsc, u64 want_tid)
+{
+	struct ceph_mds_request *req;
+	u64 next_tid = 0;
+	int got;
+
+	mutex_lock(&mdsc->mutex);
+	dout(10, "wait_unsafe_requests want %lld\n", want_tid);
+	while (1) {
+		got = radix_tree_gang_lookup(&mdsc->request_tree, (void **)&req,
+					     next_tid, 1);
+		if (!got)
+			break;
+		if (req->r_tid > want_tid)
+			break;
+
+		next_tid = req->r_tid + 1;
+		if ((req->r_op & CEPH_MDS_OP_WRITE) == 0)
+			continue;  /* not a write op */
+
+		ceph_mdsc_get_request(req);
+		mutex_unlock(&mdsc->mutex);
+		dout(10, "wait_unsafe_requests  wait on %llu (want %llu)\n",
+		     req->r_tid, want_tid);
+		wait_for_completion(&req->r_safe_completion);
+		mutex_lock(&mdsc->mutex);
+		ceph_mdsc_put_request(req);
+	}
+	mutex_unlock(&mdsc->mutex);
+	dout(10, "wait_unsafe_requests done\n");
 }
 
 void ceph_mdsc_sync(struct ceph_mds_client *mdsc)
 {
+	u64 want_tid, want_flush;
+
 	dout(10, "sync\n");
-	ceph_check_delayed_caps(mdsc);
-	wait_event(mdsc->cap_sync_wq, are_no_sync_caps(mdsc));
+	mutex_lock(&mdsc->mutex);
+	want_tid = mdsc->last_tid;
+	want_flush = mdsc->cap_flush_seq;
+	mutex_unlock(&mdsc->mutex);
+	dout(10, "sync want tid %lld flush_seq %lld\n", want_tid, want_flush);
+
+	ceph_check_delayed_caps(mdsc, 1);
+
+	wait_unsafe_requests(mdsc, want_tid);
+	wait_event(mdsc->cap_flushing_wq, check_cap_flush(mdsc, want_flush));
 }
 
 
@@ -2616,12 +2725,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct ceph_mdsmap *newmap, *oldmap;
 	ceph_fsid_t fsid;
 	int err = -EINVAL;
-	int from;
-
-	if (le32_to_cpu(msg->hdr.src.name.type) == CEPH_ENTITY_TYPE_MDS)
-		from = le32_to_cpu(msg->hdr.src.name.num);
-	else
-		from = -1;
 
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);
 	ceph_decode_copy(&p, &fsid, sizeof(fsid));
@@ -2655,14 +2758,6 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		mdsc->mdsmap = newmap;
 		check_new_map(mdsc, newmap, oldmap);
 		ceph_mdsmap_destroy(oldmap);
-
-		/* reconnect?  a recovering mds will send us an mdsmap,
-		 * indicating their state is RECONNECTING, if it wants us
-		 * to reconnect. */
-		if (from >= 0 && from < newmap->m_max_mds &&
-		    ceph_mdsmap_get_state(newmap, from) ==
-		    CEPH_MDS_STATE_RECONNECT)
-			send_mds_reconnect(mdsc, from);
 	} else {
 		mdsc->mdsmap = newmap;  /* first mds map */
 	}

@@ -115,12 +115,17 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
   unmounting = false;
 
   last_tid = 0;
+  last_flush_seq = 0;
+  last_flush_tid = 0;
+
   unsafe_sync_write = 0;
 
   cwd = NULL;
 
   // 
   root = 0;
+
+  num_flushing_caps = 0;
 
   lru.lru_set_max(g_conf.client_cache_size);
 
@@ -1158,26 +1163,31 @@ void Client::handle_mds_map(MMDSMap* m)
   }  
 
   dout(1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
+
+  MDSMap *oldmap = mdsmap;
+  mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
 
   // reset session
   for (map<int,MDSSession>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
-       p++)
+       p++) {
+    int oldstate = oldmap->get_state(p->first);
+    int newstate = mdsmap->get_state(p->first);
     if (!mdsmap->is_up(p->first) ||
-	mdsmap->get_inst(p->first) != p->second.inst)
+	mdsmap->get_inst(p->first) != p->second.inst) {
       messenger->mark_down(p->second.inst.addr);
-  
-  // send reconnect?
-  if (frommds >= 0 && 
-      mdsmap->get_state(frommds) == MDSMap::STATE_RECONNECT) {
-    send_reconnect(frommds);
-  }
+    } else if (oldstate == newstate)
+      continue;  // no change
+    
+    if (newstate == MDSMap::STATE_RECONNECT)
+      send_reconnect(p->first);
 
-  // kick requests?
-  if (frommds >= 0 &&
-      mdsmap->get_state(frommds) == MDSMap::STATE_ACTIVE) {
-    kick_requests(frommds, false);
+    if (oldstate < MDSMap::STATE_ACTIVE &&
+	newstate >= MDSMap::STATE_ACTIVE) {
+      kick_requests(p->first, false);
+      kick_flushing_caps(p->first);
+    }
   }
 
   // kick any waiting threads
@@ -1185,6 +1195,7 @@ void Client::handle_mds_map(MMDSMap* m)
   ls.swap(waiting_for_mdsmap);
   signal_cond_list(ls);
 
+  delete oldmap;
   delete m;
 }
 
@@ -1211,6 +1222,7 @@ void Client::send_reconnect(int mds)
 	dout(10) << "    path " << path << dendl;
 
 	in->caps[mds]->seq = 0;  // reset seq.
+	in->caps[mds]->issue_seq = 0;  // reset seq.
 	m->add_cap(p->first.ino, 
 		   in->caps[mds]->cap_id,
 		   path.get_ino(), path.get_path(),   // ino
@@ -1262,13 +1274,17 @@ void Client::kick_requests(int mds, bool signal)
     }
 }
 
-void Client::resend_unsafe_requests(int mds_num) {
+void Client::resend_unsafe_requests(int mds_num)
+{
   MDSSession& mds = mds_sessions[mds_num];
   for (xlist<MetaRequest*>::iterator iter = mds.unsafe_requests.begin();
        !iter.end();
        ++iter)
     send_request(*iter, mds_num);
 }
+
+
+
 
 /************
  * leases
@@ -1431,7 +1447,8 @@ void Client::cap_delay_requeue(Inode *in)
   delayed_caps.push_back(&in->cap_item);
 }
 
-void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush)
+void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush,
+		      __u64 tid)
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
@@ -1463,7 +1480,9 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
 				   want,
 				   flush,
 				   cap->mseq);
-    
+  m->head.issue_seq = cap->issue_seq;
+  m->head.client_tid = tid;
+
   m->head.uid = in->inode.uid;
   m->head.gid = in->inode.gid;
   m->head.mode = in->inode.mode;
@@ -1495,6 +1514,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   unsigned wanted = in->caps_wanted();
   unsigned used = in->caps_used();
   int flush = 0;
+  __u64 flush_tid = 0;
 
   int retain = wanted;
   if (!unmounting) {
@@ -1571,12 +1591,20 @@ void Client::check_caps(Inode *in, bool is_delayed)
   ack:
     if (cap == in->auth_cap) {
       flush = in->dirty_caps;
+      if (flush && !in->flushing_caps) {
+	dout(10) << " " << *in << " flushing" << dendl;
+	mds_sessions[mds].flushing_caps.push_back(&in->flushing_cap_item);
+	in->flushing_cap_seq = ++last_flush_seq;
+	in->get();
+	num_flushing_caps++;
+      }
       in->flushing_caps |= flush;
       in->dirty_caps = 0;
+      flush_tid = in->flushing_cap_tid = ++last_flush_tid;
       dout(10) << " flushing " << ccap_string(flush) << dendl;
     }
 
-    send_cap(in, mds, cap, used, wanted, retain, flush);
+    send_cap(in, mds, cap, used, wanted, retain, flush, flush_tid);
   }
 }
 
@@ -1669,7 +1697,9 @@ void Client::flush_snaps(Inode *in)
 	     << " on " << *in << dendl;
     if (p->second.dirty_data || p->second.writing)
       continue;
+    p->second.flush_tid = ++last_flush_tid;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino(), in->snaprealm->ino, 0, mseq);
+    m->set_client_tid(p->second.flush_tid);
     m->head.snap_follows = p->first;
     m->head.size = p->second.size;
     m->head.caps = p->second.issued;
@@ -1805,6 +1835,7 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
   cap->issued |= issued;
   cap->implemented |= issued;
   cap->seq = seq;
+  cap->issue_seq = seq;
   cap->mseq = mseq;
   dout(10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap->issued)
 	   << " from mds" << mds
@@ -1891,6 +1922,64 @@ void Client::mark_caps_dirty(Inode *in, int caps)
     in->get();
   in->dirty_caps |= caps;
 }
+
+void Client::flush_caps()
+{
+  dout(10) << "flush_caps" << dendl;
+  xlist<Inode*>::iterator p = delayed_caps.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
+    delayed_caps.pop_front();
+    check_caps(in, true);
+  }
+
+  // other caps, too
+  p = cap_list.begin();
+  while (!p.end()) {
+    Inode *in = *p;
+    ++p;
+    check_caps(in, true);
+  }
+}
+void Client::wait_sync_caps(__u64 want)
+{
+ retry:
+  dout(10) << "wait_sync_caps want " << want << " (last is " << last_flush_seq << ", "
+	   << num_flushing_caps << " total flushing)" << dendl;
+  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       p++) {
+    if (p->second.flushing_caps.empty())
+	continue;
+    Inode *in = p->second.flushing_caps.front();
+    if (in->flushing_cap_seq <= want) {
+      dout(10) << " waiting on mds" << p->first << " tid " << in->flushing_cap_seq
+	       << " (want " << want << ")" << dendl;
+      sync_cond.Wait(client_lock);
+      goto retry;
+    }
+  }
+}
+
+
+
+void Client::kick_flushing_caps(int mds)
+{
+  dout(10) << "kick_flushing_caps" << dendl;
+  MDSSession *session = &mds_sessions[mds];
+
+  for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
+    Inode *in = *p;
+    dout(20) << " reflushing caps on " << *in << " to mds" << mds << dendl;
+    InodeCap *cap = in->auth_cap;
+    assert(cap->session == session);
+    send_cap(in, mds, cap, in->caps_used(), in->caps_wanted(), 
+	     cap->issued | cap->implemented,
+	     in->flushing_caps, in->flushing_cap_tid);
+  }
+}
+
 
 void SnapRealm::build_snap_context()
 {
@@ -2235,12 +2324,23 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps
   dout(5) << "handle_cap_flush_ack mds" << mds
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in << dendl;
 
-  if (in->flushing_caps) {
-    dout(5) << "  flushing_caps " << ccap_string(in->flushing_caps)
-	    << " -> " << ccap_string(in->flushing_caps & ~cleaned) << dendl;
-    in->flushing_caps &= ~cleaned;
-    if (!in->caps_dirty())
-      put_inode(in);
+  if (m->get_client_tid() != in->flushing_cap_tid) {
+    dout(10) << " tid " << m->get_client_tid() << " != " << in->flushing_cap_tid << dendl;
+  } else {
+    if (in->flushing_caps) {
+      dout(5) << "  flushing_caps " << ccap_string(in->flushing_caps)
+	      << " -> " << ccap_string(in->flushing_caps & ~cleaned) << dendl;
+      in->flushing_caps &= ~cleaned;
+      if (in->flushing_caps == 0) {
+	dout(10) << " " << *in << " !flushing" << dendl;
+	in->flushing_cap_item.remove_myself();
+	num_flushing_caps--;
+	put_inode(in);
+	sync_cond.Signal();
+      }
+      if (!in->caps_dirty())
+	put_inode(in);
+    }
   }
 
   delete m;
@@ -2254,10 +2354,14 @@ void Client::handle_cap_flushsnap_ack(Inode *in, MClientCaps *m)
   snapid_t follows = m->get_snap_follows();
 
   if (in->cap_snaps.count(follows)) {
-    dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << follows
-	    << " on " << *in << dendl;
-    in->cap_snaps.erase(follows);
-    put_inode(in);
+    if (m->get_client_tid() != in->cap_snaps[follows].flush_tid) {
+      dout(10) << " tid " << m->get_client_tid() << " != " << in->cap_snaps[follows].flush_tid << dendl;
+    } else {
+      dout(5) << "handle_cap_flushedsnap mds" << mds << " flushed snap follows " << follows
+	      << " on " << *in << dendl;
+      in->cap_snaps.erase(follows);
+      put_inode(in);
+    }
   } else {
     dout(5) << "handle_cap_flushedsnap DUP(?) mds" << mds << " flushed snap follows " << follows
 	    << " on " << *in << dendl;
@@ -2472,22 +2576,8 @@ int Client::unmount()
     }
   }
 
-  // flush delayed caps
-  xlist<Inode*>::iterator p = delayed_caps.begin();
-  while (!p.end()) {
-    Inode *in = *p;
-    ++p;
-    delayed_caps.pop_front();
-    check_caps(in, true);
-  }
-
-  // other caps, too
-  p = cap_list.begin();
-  while (!p.end()) {
-    Inode *in = *p;
-    ++p;
-    check_caps(in, true);
-  }
+  flush_caps();
+  wait_sync_caps(last_flush_seq);
 
   //if (0) {// hack
   while (lru.lru_get_size() > 0 || 
@@ -3316,17 +3406,25 @@ int Client::readdir_r(DIR *d, struct dirent *de)
   return readdirplus_r(d, de, 0, 0);
 }
 
+/*
+ * returns
+ *  1 if we got a dirent
+ *  0 for end of directory
+ * <0 on error
+ */
 int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmask)
 {  
   DirResult *dirp = (DirResult*)d;
   
   while (1) {
-    if (dirp->at_end()) return -1;
+    if (dirp->at_end())
+      return 0;
 
     if (dirp->buffer.count(dirp->frag()) == 0) {
       Mutex::Locker lock(client_lock);
       _readdir_get_frag(dirp);
-      if (dirp->at_end()) return -1;
+      if (dirp->at_end())
+	return 0;
     }
 
     frag_t fg = dirp->frag();
@@ -3342,18 +3440,19 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 
     assert(pos < ent.size());
     _readdir_fill_dirent(de, &ent[pos], dirp->offset);
-    if (st) *st = ent[pos].st;
-    if (stmask) *stmask = ent[pos].stmask;
+    if (st)
+      *st = ent[pos].st;
+    if (stmask)
+      *stmask = ent[pos].stmask;
     pos++;
     dirp->offset++;
 
     if (pos == ent.size()) 
       _readdir_next_frag(dirp);
 
-    break;
+    return 1;
   }
-
-  return 0;
+  assert(0);
 }
 
 
@@ -4140,6 +4239,17 @@ int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
 int Client::_sync_fs()
 {
   dout(10) << "_sync_fs" << dendl;
+
+  // wait for unsafe mds requests
+  // FIXME
+  
+  // flush caps
+  flush_caps();
+  wait_sync_caps(last_flush_seq);
+
+  // flush file data
+  // FIXME
+
   return 0;
 }
 

@@ -106,7 +106,7 @@ int MonClient::get_monmap()
   dout(10) << "get_monmap" << dendl;
   Mutex::Locker l(monc_lock);
   
-  SimpleMessenger *rank; 
+  SimpleMessenger *rank = NULL; 
   bool temp_msgr = false;
   if (!messenger) {
     rank = new SimpleMessenger;

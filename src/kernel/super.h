@@ -176,6 +176,7 @@ struct ceph_cap {
 
 #define CHECK_CAPS_NODELAY    1  /* do not delay any further */
 #define CHECK_CAPS_AUTHONLY   2  /* only check auth cap */
+#define CHECK_CAPS_FLUSH      4  /* flush any dirty caps */
 
 /*
  * Snapped cap state that is pending flush to mds.  When a snapshot occurs,
@@ -186,7 +187,7 @@ struct ceph_cap_snap {
 	atomic_t nref;
 
 	struct list_head ci_item;
-	u64 follows;
+	u64 follows, flush_tid;
 	int issued, dirty;
 	struct ceph_snap_context *context;
 
@@ -306,7 +307,8 @@ struct ceph_inode_info {
 	struct rb_root i_caps;           /* cap list */
 	struct ceph_cap *i_auth_cap;     /* authoritative cap, if any */
 	unsigned i_dirty_caps, i_flushing_caps;     /* mask of dirtied fields */
-	struct list_head i_dirty_item, i_sync_item;
+	struct list_head i_dirty_item, i_flushing_item;
+	u64 i_cap_flush_seq, i_cap_flush_tid;
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_min; /* jiffies */
 	unsigned long i_hold_caps_max; /* jiffies */
@@ -848,6 +850,8 @@ static inline void ceph_remove_cap(struct ceph_cap *cap)
 
 extern void ceph_queue_caps_release(struct inode *inode);
 extern int ceph_write_inode(struct inode *inode, int unused);
+extern void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
+				    struct ceph_mds_session *session);
 extern int ceph_get_cap_mds(struct inode *inode);
 extern void ceph_get_cap_refs(struct ceph_inode_info *ci, int caps);
 extern void ceph_put_cap_refs(struct ceph_inode_info *ci, int had);
@@ -857,7 +861,8 @@ extern void __ceph_flush_snaps(struct ceph_inode_info *ci,
 			       struct ceph_mds_session **psession);
 extern void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 			    struct ceph_mds_session *session);
-extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc);
+extern void ceph_check_delayed_caps(struct ceph_mds_client *mdsc,
+				    int flushdirty);
 
 extern int ceph_encode_inode_release(void **p, struct inode *inode,
 				     int mds, int drop, int unless, int force);

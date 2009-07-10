@@ -1103,7 +1103,6 @@ Capability* Locker::issue_new_caps(CInode *in,
 
 
 
-
 bool Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   // allowed caps are determined by the lock mode.
@@ -1650,6 +1649,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       if (m->get_dirty()) {
 	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, 0, m->get_dirty(), 0);
 	ack->set_snap_follows(follows);
+	ack->set_client_tid(m->get_client_tid());
       }
       if (!_do_cap_update(in, cap, m->get_dirty(), 0, follows, m, ack)) {
 	if (ack)
@@ -1681,6 +1681,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 		<< " seq " << m->get_seq() << " on " << *in << dendl;
 	ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
 			      m->get_caps(), 0, m->get_dirty(), 0);
+	ack->set_client_tid(m->get_client_tid());
       }
       int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
       if (new_wanted != cap->wanted()) {
@@ -3190,7 +3191,7 @@ void Locker::file_mixed(ScatterLock *lock, bool *need_issue)
 void Locker::file_excl(ScatterLock *lock, bool *need_issue)
 {
   CInode *in = (CInode*)lock->get_parent();
-  dout(7) << "file_loner " << *lock << " on " << *lock->get_parent() << dendl;  
+  dout(7) << "file_excl " << *lock << " on " << *lock->get_parent() << dendl;  
 
   assert(in->is_auth());
   assert(lock->is_stable());

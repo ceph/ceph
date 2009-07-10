@@ -274,7 +274,8 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_dirty_caps = 0;
 	ci->i_flushing_caps = 0;
 	INIT_LIST_HEAD(&ci->i_dirty_item);
-	INIT_LIST_HEAD(&ci->i_sync_item);
+	INIT_LIST_HEAD(&ci->i_flushing_item);
+	ci->i_cap_flush_seq = 0;
 	init_waitqueue_head(&ci->i_cap_wq);
 	ci->i_hold_caps_min = 0;
 	ci->i_hold_caps_max = 0;
@@ -1274,8 +1275,13 @@ retry:
 		dout(10, "__do_pending_vmtruncate %p flushing snaps first\n",
 		     inode);
 		spin_unlock(&inode->i_lock);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 		filemap_write_and_wait_range(&inode->i_data, 0,
 					     CEPH_FILE_MAX_SIZE);
+#else
+# warning i may not flush all data after a snapshot + truncate.. i export need 2.6.30
+		filemap_write_and_wait(&inode->i_data);
+#endif
 		goto retry;
 	}
 

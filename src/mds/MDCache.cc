@@ -3776,6 +3776,8 @@ void MDCache::rejoin_gather_finish()
 
 void MDCache::process_imported_caps()
 {
+  dout(10) << "process_imported_caps" << dendl;
+
   // process cap imports
   //  ino -> client -> frommds -> capex
   map<inodeno_t,map<int, map<int,ceph_mds_cap_reconnect> > >::iterator p = cap_imports.begin();
@@ -3794,9 +3796,9 @@ void MDCache::process_imported_caps()
       for (map<int,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
+	dout(20) << " add_reconnected_cap " << in->ino() << " client" << q->first << dendl;
 	add_reconnected_cap(in, q->first, inodeno_t(r->second.snaprealm));
-	if (r->first >= 0)
-	  rejoin_import_cap(in, q->first, r->second, r->first);
+	rejoin_import_cap(in, q->first, r->second, r->first);
       }
     cap_imports.erase(p++);  // remove and move on
   }
@@ -3811,35 +3813,22 @@ void MDCache::process_reconnected_caps()
 
   map<int,MClientSnap*> splits;
 
-  // adjust filelock state appropriately
+  // adjust lock states appropriately
   map<CInode*,map<int,inodeno_t> >::iterator p = reconnected_caps.begin();
   while (p != reconnected_caps.end()) {
     CInode *in = p->first;
     p++;
+
     int issued = in->get_caps_issued();
-    if (in->is_auth()) {
-      // wr?
-      if (issued & CEPH_CAP_ANY_WR) {
-	in->loner_cap = -1;
-	if (issued & (CEPH_CAP_FILE_CACHE|CEPH_CAP_FILE_BUFFER)) {
-	  in->filelock.set_state(LOCK_EXCL);
-	  in->try_choose_loner();
-	} else {
-	  in->filelock.set_state(LOCK_MIX);
-	}
-      }
-    } else {
-      // note that client should perform stale/reap cleanup during reconnect.
-      assert((issued & CEPH_CAP_ANY_WR) == 0);   // ????
-      in->loner_cap = -1;
-      if (in->filelock.is_xlocked())
-	in->filelock.set_state(LOCK_LOCK);
-      else
-	in->filelock.set_state(LOCK_SYNC);  // might have been lock, previously
-    }
+    if (in->is_auth() &&
+	(issued & CEPH_CAP_ANY_EXCL))
+      in->try_choose_loner();
+    in->choose_lock_state(&in->filelock, issued);
+    in->choose_lock_state(&in->authlock, issued);
+    in->choose_lock_state(&in->xattrlock, issued);
+    in->choose_lock_state(&in->linklock, issued);
     dout(15) << " issued " << ccap_string(issued)
-	     << " chose " << in->filelock
-	     << " on " << *in << dendl;
+	     << " chose lock states on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
 
@@ -3956,14 +3945,13 @@ void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& 
 {
   dout(10) << "rejoin_import_cap for client" << client << " from mds" << frommds
 	   << " on " << *in << dendl;
-
   Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client));
   assert(session);
 
-  // add cap
   Capability *cap = in->reconnect_cap(client, icr, session);
 
-  do_cap_import(session, in, cap);
+  if (frommds >= 0)
+    do_cap_import(session, in, cap);
 }
 
 
@@ -4020,6 +4008,8 @@ void MDCache::do_delayed_cap_imports()
 	}
       }
       in->auth_unpin(this);
+
+      mds->locker->issue_caps(in);
     }
   }    
 }
@@ -4214,6 +4204,19 @@ void MDCache::rejoin_send_acks()
 }
 
 
+void MDCache::reissue_all_caps()
+{
+  dout(10) << "reissue_all_caps" << dendl;
+
+  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->is_any_caps())
+      mds->locker->issue_caps(in);
+  }
+}
+
 
 // ===============================================================================
 
@@ -4355,7 +4358,10 @@ void MDCache::do_file_recover()
 	       << " " << *in << dendl;
       in->state_clear(CInode::STATE_NEEDSRECOVER);
       in->auth_unpin(this);
-      mds->locker->eval_gather(&in->filelock);
+      if (in->filelock.is_stable())
+	mds->locker->eval(&in->filelock);
+      else
+	mds->locker->eval_gather(&in->filelock);
     }
   }
 }
@@ -6308,9 +6314,17 @@ void MDCache::request_cleanup(MDRequest *mdr)
   // remove from session
   mdr->session_request_item.remove_myself();
 
+  bool was_replay = mdr->client_request && mdr->client_request->is_replay();
+
   // remove from map
   active_requests.erase(mdr->reqid);
   mdr->put();
+
+  // fail-safe!
+  if (was_replay && active_requests.empty()) {
+    dout(10) << " fail-safe queueing next replay op" << dendl;
+    mds->queue_one_replay();
+  }
 
   if (mds->logger)
     log_stat();

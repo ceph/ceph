@@ -619,12 +619,19 @@ void Server::journal_and_reply(MDRequest *mdr, CInode *in, CDentry *dn, LogEvent
     mdr->pin(dn);
 
   early_reply(mdr, in, dn);
-
+  
   mdr->committing = true;
   mdlog->submit_entry(le, fin,
 		      mdr->did_ino_allocation());
   
-  if (mdr->did_early_reply)
+  if (mdr->client_request && mdr->client_request->is_replay()) {
+    if (mds->queue_one_replay()) {
+      dout(10) << " queued next replay op" << dendl;
+    } else {
+      dout(10) << " journaled last replay op, flushing" << dendl;
+      mdlog->flush();
+    }
+  } else if (mdr->did_early_reply)
     mds->locker->drop_rdlocks(mdr);
   else
     mdlog->flush();
@@ -660,9 +667,10 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
     return;
 
   if (req->is_replay()) {
-    dout(10) << "early_reply - none for replay request" << dendl;
+    dout(10) << " no early reply on replay op" << dendl;
     return;
   }
+
 
   MClientReply *reply = new MClientReply(mdr->client_request, 0);
   reply->set_unsafe();
@@ -676,7 +684,6 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   if (tracei || tracedn)
     set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->snapid,
-		   mdr->client_request->is_replay(),
 		   mdr->client_request->get_dentry_wanted());
 
   messenger->send_message(reply, client_inst);
@@ -691,6 +698,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
   MClientRequest *req = mdr->client_request;
+  int client = mdr->get_client();
   
   dout(10) << "reply_request " << reply->get_result() 
 	   << " (" << strerror(-reply->get_result())
@@ -749,10 +757,30 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     delete reply;   // mds doesn't need a reply
     reply = 0;
   } else {
-    // send reply, with trace, and possible leases
+    // send reply.
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
-	(tracei || tracedn)) 
-      set_trace_dist(session, reply, tracei, tracedn, snapid, is_replay, dentry_wanted);
+	(tracei || tracedn)) {
+      if (is_replay) {
+	// replay ops don't get a trace.
+	// reconnect cap to created inode?
+	if (tracei) {
+	  ceph_mds_cap_reconnect *rc = mdcache->get_replay_cap_reconnect(tracei->ino(), client);
+	  if (rc) {
+	    Capability *cap = tracei->get_client_cap(client);
+	    // we should only have the cap reconnect for ONE client, and from ourselves.
+	    dout(10) << " incorporating cap reconnect wanted " << ccap_string(rc->wanted)
+		     << " issue " << ccap_string(rc->issued) << " on " << *tracei << dendl;
+	    cap->set_wanted(rc->wanted);
+	    cap->issue_norevoke(rc->issued);
+	    cap->set_cap_id(rc->cap_id);
+	    mdcache->remove_replay_cap_reconnect(tracei->ino(), client);
+	  }
+	}
+      } else {
+	// include metadata in reply
+	set_trace_dist(session, reply, tracei, tracedn, snapid, dentry_wanted);
+      }
+    }
     messenger->send_message(reply, client_inst);
   }
   
@@ -799,7 +827,7 @@ void Server::encode_null_lease(bufferlist& bl)
 void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    CInode *in, CDentry *dn,
 			    snapid_t snapid,
-			    bool is_replay, int dentry_wanted)
+			    int dentry_wanted)
 {
   // inode, dentry, dir, ..., inode
   bufferlist bl;
@@ -826,7 +854,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     CDir *dir = dn->get_dir();
     CInode *diri = dir->get_inode();
 
-    diri->encode_inodestat(bl, session, NULL, snapid, is_replay);
+    diri->encode_inodestat(bl, session, NULL, snapid);
     dout(20) << "set_trace_dist added diri " << *diri << dendl;
 
 #ifdef MDS_VERIFY_FRAGSTAT
@@ -847,7 +875,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
   // inode
   if (in) {
-    in->encode_inodestat(bl, session, NULL, snapid, is_replay);
+    in->encode_inodestat(bl, session, NULL, snapid);
     dout(20) << "set_trace_dist added in   " << *in << dendl;
     reply->head.is_target = 1;
   } else
@@ -899,6 +927,10 @@ void Server::handle_client_request(MClientRequest *req)
     if (session->have_completed_request(req->get_reqid().tid)) {
       dout(5) << "already completed " << req->get_reqid() << dendl;
       mds->messenger->send_message(new MClientReply(req, 0), req->get_orig_source_inst());
+
+      if (req->is_replay())
+	mds->queue_one_replay();
+
       delete req;
       return;
     }
@@ -910,14 +942,18 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // process embedded cap releases?
-  if (req->get_source().is_client()) {
+  //  (only if NOT replay!)
+  if (req->get_source().is_client() &&
+      !req->is_replay()) {
     int client = req->get_source().num();
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
 	 p++)
       mds->locker->process_cap_update(client, inodeno_t((__u64)p->item.ino), p->item.cap_id,
 				      p->item.caps, p->item.wanted,
-				      p->item.seq, p->item.issue_seq, p->item.mseq, p->dname);
+				      p->item.seq, 
+				      p->item.issue_seq, 
+				      p->item.mseq, p->dname);
   }
 
   // register + dispatch
@@ -1427,7 +1463,8 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
     mds->sessionmap.projected++;
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
-	     << " (" << mdr->session->prealloc_inos.size() << " left)"
+	     << " (" << mdr->session->prealloc_inos
+	     << ", " << mdr->session->prealloc_inos.size() << " left)"
 	     << dendl;
   } else {
     mdr->alloc_ino = 
