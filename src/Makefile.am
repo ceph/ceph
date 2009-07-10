@@ -643,6 +643,10 @@ noinst_HEADERS = \
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
 	s3/s3access.h\
+	s3/s3acl.h\
+	s3/s3fs.h\
+	s3/s3rados.h\
+	s3/user.h\
 	sample.ceph.conf
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \
