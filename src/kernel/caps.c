@@ -368,6 +368,7 @@ static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
 static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 				struct ceph_inode_info *ci)
 {
+	__cap_set_timeouts(mdsc, ci);
 	dout(10, "__cap_delay_requeue %p flags %d at %lu\n", &ci->vfs_inode,
 	     ci->i_ceph_flags, ci->i_hold_caps_max);
 	if (!mdsc->stopping) {
@@ -527,7 +528,6 @@ retry:
 		dout(10, " issued %s, mds wanted %s, actual %s, queueing\n",
 		     ceph_cap_string(issued), ceph_cap_string(wanted),
 		     ceph_cap_string(actual_wanted));
-		__cap_set_timeouts(mdsc, ci);
 		__cap_delay_requeue(mdsc, ci);
 	}
 
@@ -1199,10 +1199,6 @@ void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 	if (ci->i_ceph_flags & CEPH_I_FLUSH)
 		flags |= CHECK_CAPS_FLUSH;
 
-	/* reset cap timeouts? */
-	if (!is_delayed)
-		__cap_set_timeouts(mdsc, ci);
-
 	/* flush snaps first time around only */
 	if (!list_empty(&ci->i_cap_snaps))
 		__ceph_flush_snaps(ci, &session);
@@ -1445,10 +1441,7 @@ int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask)
 		dirty |= I_DIRTY_DATASYNC;
 	if (dirty)
 		__mark_inode_dirty(inode, dirty);
-
-	__cap_set_timeouts(mdsc, ci);
 	__cap_delay_requeue(mdsc, ci);
-
 	return was;
 }
 
