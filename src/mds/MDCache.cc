@@ -1307,8 +1307,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   }
   if (oldin->is_any_caps())
     oldin->filelock.set_state(LOCK_LOCK);
-  else if (oldin->inode.max_size) {
-    dout(10) << "cow_inode WARNING max_size " << oldin->inode.max_size << " > 0 on " << *oldin << dendl;
+  else if (oldin->inode.client_ranges.size()) {
+    dout(10) << "cow_inode WARNING client_ranges " << oldin->inode.client_ranges << " on " << *oldin << dendl;
     //oldin->inode.max_size = 0;
   }
 
@@ -4317,7 +4317,7 @@ void MDCache::identify_files_to_recover()
     CInode *in = p->second;
     if (!in->is_auth())
       continue;
-    if (in->inode.max_size > in->inode.size) {
+    if (in->inode.client_ranges.size()) {
       in->filelock.set_state(LOCK_LOCK);
       in->loner_cap = -1;
       q.push_back(in);
@@ -4346,15 +4346,18 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    if (in->inode.max_size > in->inode.size) {
-      dout(10) << "do_file_recover starting " << in->inode.size << "/" << in->inode.max_size 
+    if (in->inode.client_ranges.size()) {
+      dout(10) << "do_file_recover starting " << in->inode.size << " " << in->inode.client_ranges
 	       << " " << *in << dendl;
       file_recovering.insert(in);
+      
+      __u64 max = in->inode.get_max_size();
+
       mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			in->inode.max_size, &in->inode.size, &in->inode.mtime, false,
+			max, &in->inode.size, &in->inode.mtime, false,
 			0, new C_MDC_Recover(this, in));    
     } else {
-      dout(10) << "do_file_recover skipping " << in->inode.size << "/" << in->inode.max_size 
+      dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
       in->state_clear(CInode::STATE_NEEDSRECOVER);
       in->auth_unpin(this);
@@ -5166,8 +5169,13 @@ void MDCache::remove_client_cap(CInode *in, int client)
 {
   in->remove_client_cap(client);
 
-  if (!in->is_auth())
+  if (in->is_auth()) {
+    // make sure we clear out the client byte range
+    if (in->get_projected_inode()->client_ranges.count(client))
+      mds->locker->check_inode_max_size(in);
+  } else {
     mds->locker->request_inode_file_caps(in);
+  }
   
   mds->locker->eval(in, CEPH_CAP_LOCKS);
 
@@ -6794,7 +6802,7 @@ void MDCache::purge_stray(CDentry *dn)
     assert(in->last == CEPH_NOSNAP);
   }
 
-  __u64 to = MAX(in->inode.size, in->inode.max_size);
+  __u64 to = MAX(in->inode.size, in->inode.get_max_size());
   dout(10) << "purge_stray 0~" << to << " snapc " << snapc << " on " << *in << dendl;
   if (to)
     mds->filer->remove(in->inode.ino, &in->inode.layout, *snapc,

@@ -143,7 +143,6 @@ struct InodeStat {
     nlink = e.nlink;
     rdev = e.rdev;
 
-    memset(&dirstat, 0, sizeof(dirstat));
     dirstat.nfiles = e.files;
     dirstat.nsubdirs = e.subdirs;
 

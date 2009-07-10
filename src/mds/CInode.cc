@@ -114,8 +114,6 @@ ostream& operator<<(ostream& out, CInode& in)
     //if (in.inode.dirstat.version > 10000) out << " BADDIRSTAT";
   } else {
     out << " s=" << in.inode.size;
-    if (in.inode.max_size)
-      out << "/" << in.inode.max_size;
     out << " nl=" << in.inode.nlink;
   }
 
@@ -140,6 +138,10 @@ ostream& operator<<(ostream& out, CInode& in)
 
   // hack: spit out crap on which clients have caps
   if (!in.get_client_caps().empty()) {
+
+    if (in.inode.client_ranges.size())
+      out << " cr=" << in.inode.client_ranges;
+
     out << " caps={";
     for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
@@ -770,10 +772,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     if (is_auth()) {
       ::encode(inode.layout, bl);
       ::encode(inode.size, bl);
-      ::encode(inode.max_size, bl);
       ::encode(inode.mtime, bl);
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
+      ::encode(inode.client_ranges, bl);
     }
 
     {
@@ -915,10 +917,10 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     if (!is_auth()) {
       ::decode(inode.layout, p);
       ::decode(inode.size, p);
-      ::decode(inode.max_size, p);
       ::decode(inode.mtime, p);
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
+      ::decode(inode.client_ranges, p);
     }
 
     {
@@ -1537,7 +1539,10 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   i = pfile ? pi:oi;
   e.layout = i->layout;
   e.size = i->size;
-  e.max_size = i->max_size;
+  if (i->client_ranges.count(client))
+    e.max_size = i->client_ranges[client].last;
+  else
+    e.max_size = 0;
   e.truncate_seq = i->truncate_seq;
   e.truncate_size = i->truncate_size;
   i->mtime.encode_timeval(&e.mtime);
@@ -1673,7 +1678,10 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   i = pfile ? pi:oi;
   m->head.layout = i->layout;
   m->head.size = i->size;
-  m->head.max_size = i->max_size;
+  if (i->client_ranges.count(client))
+    m->head.max_size = i->client_ranges[client].last;
+  else
+    m->head.max_size = 0;
   m->head.truncate_seq = i->truncate_seq;
   m->head.truncate_size = i->truncate_size;
   i->mtime.encode_timeval(&m->head.mtime);
