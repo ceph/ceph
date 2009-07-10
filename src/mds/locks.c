@@ -12,7 +12,7 @@ typedef char bool;
 #include "include/ceph_fs.h"
 #include "locks.h"
 
-struct sm_state_t simplelock[20] = {
+struct sm_state_t simplelock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   l    x    caps,other
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   ANY, 0,   CEPH_CAP_GSHARED,0,0,CEPH_CAP_GSHARED },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_SYNC, ANY,  XCL, XCL, 0,   XCL, 0,   0,0,0,0 },
@@ -48,7 +48,7 @@ struct sm_t sm_simplelock = {
 //  Tempsync _/
 // (out of date)
 
-struct sm_state_t scatterlock[30] = {
+struct sm_state_t scatterlock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   l    x    caps,other
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   ANY, 0,   CEPH_CAP_GSHARED,0,0,CEPH_CAP_GSHARED },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,0,0,0 },
@@ -77,7 +77,7 @@ struct sm_t sm_scatterlock = {
 	.can_remote_xlock = 0,
 };
 
-struct sm_state_t filelock[30] = {
+struct sm_state_t filelock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   l    x    caps(any,loner,xlocker,replica)
     [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   ANY, 0,   CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD,0,0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_SYNC, AUTH, 0,   AUTH,0,   0,   0,   CEPH_CAP_GCACHE,0,0,0 },
@@ -104,6 +104,9 @@ struct sm_state_t filelock[30] = {
     [LOCK_SYNC_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD,0,0 },
     [LOCK_MIX_EXCL]  = { LOCK_EXCL, true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR,0,0 },
     [LOCK_LOCK_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
+
+    [LOCK_PRE_SCAN]  = { LOCK_SCAN, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_SCAN]      = { 0,         false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
 };
 
 struct sm_t sm_filelock = {

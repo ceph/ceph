@@ -80,6 +80,10 @@ extern struct sm_t sm_scatterlock;
 #define LOCK_LOCK_TSYN 27
 #define LOCK_MIX_TSYN  28
 
+#define LOCK_PRE_SCAN 29
+#define LOCK_SCAN     30
+
+#define LOCK_MAX      31
 
 // -------------------------
 // lock actions
