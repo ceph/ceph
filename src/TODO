@@ -126,7 +126,6 @@ osd
 uclient
 - readdir from cache
 - clean up client mds session vs mdsmap behavior?
-- stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds

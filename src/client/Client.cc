@@ -176,7 +176,7 @@ void Client::tear_down_cache()
        it != fd_map.end();
        it++) {
     Fh *fh = it->second;
-    dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->inode.ino << dendl;
+    dout(1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->ino << dendl;
     put_inode(fh->inode);
     delete fh;
   }
@@ -207,7 +207,7 @@ void Client::tear_down_cache()
 
 void Client::dump_inode(Inode *in, set<Inode*>& did)
 {
-  dout(1) << "dump_inode: inode " << in->ino() << " ref " << in->ref << " dir " << in->dir << dendl;
+  dout(1) << "dump_inode: inode " << in->ino << " ref " << in->ref << " dir " << in->dir << dendl;
 
   if (in->dir) {
     dout(1) << "  dir size " << in->dir->dentries.size() << dendl;
@@ -303,7 +303,7 @@ void Client::trim_cache()
     if (!dn) break;  // done
     
     dout(15) << "trim_cache unlinking dn " << dn->name 
-	     << " in dir " << hex << dn->dir->parent_inode->inode.ino 
+	     << " in dir " << hex << dn->dir->parent_inode->ino 
 	     << dendl;
     unlink(dn);
   }
@@ -328,48 +328,48 @@ void Client::update_inode_file_bits(Inode *in,
 {
   bool warn = false;
 
-  if (truncate_seq > in->inode.truncate_seq ||
-      (truncate_seq == in->inode.truncate_seq && size > in->inode.size)) {
-    dout(10) << "size " << in->inode.size << " -> " << size << dendl;
-    in->inode.size = size;
+  if (truncate_seq > in->truncate_seq ||
+      (truncate_seq == in->truncate_seq && size > in->size)) {
+    dout(10) << "size " << in->size << " -> " << size << dendl;
+    in->size = size;
     in->reported_size = size;
-    in->inode.truncate_size = truncate_size;
+    in->truncate_size = truncate_size;
   }
 
   // be careful with size, mtime, atime
   if (issued & CEPH_CAP_FILE_EXCL) {
-    if (ctime > in->inode.ctime) 
-      in->inode.ctime = ctime;
-    if (time_warp_seq > in->inode.time_warp_seq)
+    if (ctime > in->ctime) 
+      in->ctime = ctime;
+    if (time_warp_seq > in->time_warp_seq)
       dout(0) << "WARNING: " << *in << " mds time_warp_seq "
-	      << time_warp_seq << " > " << in->inode.time_warp_seq << dendl;
+	      << time_warp_seq << " > " << in->time_warp_seq << dendl;
   } else if (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
-    if (time_warp_seq > in->inode.time_warp_seq) {
-      in->inode.ctime = ctime;
-      in->inode.mtime = mtime;
-      in->inode.atime = atime;
-      in->inode.time_warp_seq = time_warp_seq;
-    } else if (time_warp_seq == in->inode.time_warp_seq) {
-      if (ctime > in->inode.ctime) 
-	in->inode.ctime = ctime;
-      if (mtime > in->inode.mtime) 
-	in->inode.mtime = mtime;
-      if (atime > in->inode.atime)
-	in->inode.atime = atime;
+    if (time_warp_seq > in->time_warp_seq) {
+      in->ctime = ctime;
+      in->mtime = mtime;
+      in->atime = atime;
+      in->time_warp_seq = time_warp_seq;
+    } else if (time_warp_seq == in->time_warp_seq) {
+      if (ctime > in->ctime) 
+	in->ctime = ctime;
+      if (mtime > in->mtime) 
+	in->mtime = mtime;
+      if (atime > in->atime)
+	in->atime = atime;
     } else
       warn = true;
   } else {
-    if (time_warp_seq >= in->inode.time_warp_seq) {
-      in->inode.ctime = ctime;
-      in->inode.mtime = mtime;
-      in->inode.atime = atime;
-      in->inode.time_warp_seq = time_warp_seq;
+    if (time_warp_seq >= in->time_warp_seq) {
+      in->ctime = ctime;
+      in->mtime = mtime;
+      in->atime = atime;
+      in->time_warp_seq = time_warp_seq;
     } else
       warn = true;
   }
   if (warn) {
     dout(0) << *in << " mds time_warp_seq "
-	    << in->inode.time_warp_seq << " -> "
+	    << in->time_warp_seq << " -> "
 	    << time_warp_seq
 	    << dendl;
   }
@@ -383,7 +383,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   else {
     in = new Inode(st->vino, &st->layout);
     inode_map[st->vino] = in;
-    if (in->ino() == 1) {
+    if (in->ino == 1) {
       root = in;
       root->dir_auth = 0;
       cwd = root;
@@ -405,36 +405,35 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   }
   
   if (st->cap.caps & CEPH_CAP_PIN) {
-    in->inode.ino = st->vino.ino;
+    in->ino = st->vino.ino;
     in->snapid = st->vino.snapid;
-    in->inode.rdev = st->rdev;
+    in->rdev = st->rdev;
     in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
 
     if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
-      in->inode.mode = st->mode;
-      in->inode.uid = st->uid;
-      in->inode.gid = st->gid;
+      in->mode = st->mode;
+      in->uid = st->uid;
+      in->gid = st->gid;
     }
 
     if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
-      in->inode.nlink = st->nlink;
-      in->inode.anchored = false;  /* lie */
+      in->nlink = st->nlink;
     }
 
     if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
 	st->xattrbl.length() &&
-	st->xattr_version > in->inode.xattr_version) {
+	st->xattr_version > in->xattr_version) {
       bufferlist::iterator p = st->xattrbl.begin();
       ::decode(in->xattrs, p);
-      in->inode.xattr_version = st->xattr_version;
+      in->xattr_version = st->xattr_version;
     }
 
-    in->inode.dirstat = st->dirstat;
-    in->inode.rstat = st->rstat;
+    in->dirstat = st->dirstat;
+    in->rstat = st->rstat;
 
-    in->inode.layout = st->layout;
-    in->inode.ctime = st->ctime;
-    in->inode.max_size = st->max_size;  // right?
+    in->layout = st->layout;
+    in->ctime = st->ctime;
+    in->max_size = st->max_size;  // right?
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
@@ -442,7 +441,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
   }
 
   // symlink?
-  if (in->inode.is_symlink())
+  if (in->is_symlink())
     in->symlink = st->symlink;
 
   return in;
@@ -463,7 +462,7 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
     dn = dir->dentries[dname];
   
   dout(12) << "insert_dentry_inode " << dname << " vino " << in->vino()
-	   << " in dir " << dir->parent_inode->inode.ino
+	   << " in dir " << dir->parent_inode->ino
            << dendl;
   
   if (dn) {
@@ -522,7 +521,7 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   if (dst->frag == frag_t()) {
     in->dir_auth = dst->auth;
   } else {
-    dout(20) << "got dirfrag map for " << in->inode.ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
+    dout(20) << "got dirfrag map for " << in->ino << " frag " << dst->frag << " to mds " << dst->auth << dendl;
     in->fragmap[dst->frag] = dst->auth;
   }
 
@@ -534,10 +533,10 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
   if (!st->dirfrag_dist.empty()) {   // FIXME
     set<int> dist = st->dirfrag_dist.begin()->second;
     if (dist.empty() && !in->dir_contacts.empty())
-      dout(9) << "lost dist spec for " << in->inode.ino 
+      dout(9) << "lost dist spec for " << in->ino 
               << " " << dist << dendl;
     if (!dist.empty() && in->dir_contacts.empty()) 
-      dout(9) << "got dist spec for " << in->inode.ino 
+      dout(9) << "got dist spec for " << in->ino 
               << " " << dist << dendl;
     in->dir_contacts = dist;
   }
@@ -587,7 +586,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
   if (reply->head.is_dentry) {
     Inode *diri = add_update_inode(&dirst, from, mds);
-    update_dir_dist(diri, &dst);  // dir stat info is attached to inode...
+    update_dir_dist(diri, &dst);  // dir stat info is attached to ..
 
     if (in) {
       Dir *dir = diri->open_dir();
@@ -677,7 +676,7 @@ int Client::choose_target_mds(MClientRequest *req)
   unsigned i;
   for (i=0; i<depth; i++) {
     // dir?
-    if (diri && diri->inode.is_dir() && diri->dir) {
+    if (diri && diri->is_dir() && diri->dir) {
       Dir *dir = diri->dir;
       
       // do we have the next dentry?
@@ -686,7 +685,7 @@ int Client::choose_target_mds(MClientRequest *req)
 	break;
       }
       
-      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->inode.ino << " " << req->get_filepath()[i] << dendl;
+      dout(7) << " have path seg " << i << " on " << diri->dir_auth << " ino " << diri->ino << " " << req->get_filepath()[i] << dendl;
       
       if (i == depth-1) {  // last one!
 	item = dir->dentries[ req->get_filepath()[i] ]->inode;
@@ -724,7 +723,7 @@ int Client::choose_target_mds(MClientRequest *req)
     } else {
       // balance our traffic!
       mds = diri->pick_replica(mdsmap); // for the _inode_
-      dout(20) << "for " << req->get_filepath() << " diri " << diri->inode.ino << " rep " 
+      dout(20) << "for " << req->get_filepath() << " diri " << diri->ino << " rep " 
 	      << diri->dir_contacts
 	      << " mds" << mds << dendl;
     }
@@ -1228,7 +1227,7 @@ void Client::send_reconnect(int mds)
 		   path.get_ino(), path.get_path(),   // ino
 		   in->caps_wanted(), // wanted
 		   in->caps[mds]->issued,     // issued
-		   in->inode.size, in->inode.mtime, in->inode.atime, in->snaprealm->ino);
+		   in->size, in->mtime, in->atime, in->snaprealm->ino);
 
 	if (did_snaprealm.count(in->snaprealm->ino) == 0) {
 	  dout(10) << " snaprealm " << *in->snaprealm << dendl;
@@ -1347,10 +1346,10 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
   // dentry?
   if (dn->lease_mds >= 0 && now < dn->lease_ttl && mdsmap->is_up(dn->lease_mds)) {
     dout(10) << "release_lease mds" << dn->lease_mds << " mask " << mask
-	     << " on " << in->ino() << " " << dn->name << dendl;
+	     << " on " << in->ino << " " << dn->name << dendl;
     messenger->send_message(new MClientLease(CEPH_MDS_LEASE_RELEASE, dn->lease_seq, 
 					     CEPH_LOCK_DN,
-					     in->ino(), in->snapid, in->snapid, dn->name),
+					     in->ino, in->snapid, in->snapid, dn->name),
 			    mdsmap->get_inst(dn->lease_mds));
   }
 }
@@ -1360,14 +1359,14 @@ void Client::release_lease(Inode *in, Dentry *dn, int mask)
 
 void Client::put_inode(Inode *in, int n)
 {
-  //cout << "put_inode on " << in << " " << in->inode.ino << endl;
+  //cout << "put_inode on " << in << " " << in->ino << endl;
   in->put(n);
   if (in->ref == 0) {
     // release any caps
     remove_all_caps(in);
 
-    //cout << "put_inode deleting " << in << " " << in->inode.ino << std::endl;
-    objectcacher->release_set(in->ino());
+    //cout << "put_inode deleting " << in << " " << in->ino << std::endl;
+    objectcacher->release_set(in->ino);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
@@ -1473,7 +1472,7 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   }
   
   MClientCaps *m = new MClientCaps(op,
-				   in->ino(),
+				   in->ino,
 				   0,
 				   cap->cap_id, cap->seq,
 				   cap->issued,
@@ -1483,25 +1482,25 @@ void Client::send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int
   m->head.issue_seq = cap->issue_seq;
   m->head.client_tid = tid;
 
-  m->head.uid = in->inode.uid;
-  m->head.gid = in->inode.gid;
-  m->head.mode = in->inode.mode;
+  m->head.uid = in->uid;
+  m->head.gid = in->gid;
+  m->head.mode = in->mode;
   
-  m->head.nlink = in->inode.nlink;
+  m->head.nlink = in->nlink;
   
   m->head.xattr_len = 0; // FIXME
   
-  m->head.layout = in->inode.layout;
-  m->head.size = in->inode.size;
-  m->head.max_size = in->inode.max_size;
-  m->head.truncate_seq = in->inode.truncate_seq;
-  m->head.truncate_size = in->inode.truncate_size;
-  in->inode.mtime.encode_timeval(&m->head.mtime);
-  in->inode.atime.encode_timeval(&m->head.atime);
-  in->inode.ctime.encode_timeval(&m->head.ctime);
-  m->head.time_warp_seq = in->inode.time_warp_seq;
+  m->head.layout = in->layout;
+  m->head.size = in->size;
+  m->head.max_size = in->max_size;
+  m->head.truncate_seq = in->truncate_seq;
+  m->head.truncate_size = in->truncate_size;
+  in->mtime.encode_timeval(&m->head.mtime);
+  in->atime.encode_timeval(&m->head.atime);
+  in->ctime.encode_timeval(&m->head.ctime);
+  m->head.time_warp_seq = in->time_warp_seq;
     
-  in->reported_size = in->inode.size;
+  in->reported_size = in->size;
   m->set_max_size(in->wanted_max_size);
   in->requested_max_size = in->wanted_max_size;
   m->set_snap_follows(in->snaprealm->get_snap_context().seq);
@@ -1558,14 +1557,14 @@ void Client::check_caps(Inode *in, bool is_delayed)
 	     << " implemented " << ccap_string(cap->implemented)
 	     << " revoking " << ccap_string(revoking) << dendl;
 
-    if (in->wanted_max_size > in->inode.max_size &&
+    if (in->wanted_max_size > in->max_size &&
 	in->wanted_max_size > in->requested_max_size)
       goto ack;
 
     /* approaching file_max? */
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
-	(in->inode.size << 1) >= in->inode.max_size &&
-	(in->reported_size << 1) < in->inode.max_size) {
+	(in->size << 1) >= in->max_size &&
+	(in->reported_size << 1) < in->max_size) {
       dout(10) << "size approaching max_size" << dendl;
       goto ack;
     }
@@ -1648,11 +1647,11 @@ void Client::queue_cap_snap(Inode *in, snapid_t seq)
 void Client::finish_cap_snap(Inode *in, CapSnap *capsnap, int used)
 {
   dout(10) << "finish_cap_snap " << *in << " capsnap " << (void*)capsnap << " used " << ccap_string(used) << dendl;
-  capsnap->size = in->inode.size;
-  capsnap->mtime = in->inode.mtime;
-  capsnap->atime = in->inode.atime;
-  capsnap->ctime = in->inode.ctime;
-  capsnap->time_warp_seq = in->inode.time_warp_seq;
+  capsnap->size = in->size;
+  capsnap->mtime = in->mtime;
+  capsnap->atime = in->atime;
+  capsnap->ctime = in->ctime;
+  capsnap->time_warp_seq = in->time_warp_seq;
   if (used & CEPH_CAP_FILE_BUFFER) {
     dout(10) << "finish_cap_snap " << *in << " cap_snap " << capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
@@ -1698,7 +1697,7 @@ void Client::flush_snaps(Inode *in)
     if (p->second.dirty_data || p->second.writing)
       continue;
     p->second.flush_tid = ++last_flush_tid;
-    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino(), in->snaprealm->ino, 0, mseq);
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq);
     m->set_client_tid(p->second.flush_tid);
     m->head.snap_follows = p->first;
     m->head.size = p->second.size;
@@ -1743,7 +1742,7 @@ void Client::wake_inode_waiters(int mds_num)
 void Client::_release(Inode *in, bool checkafter)
 {
   if (in->cap_refs[CEPH_CAP_FILE_CACHE]) {
-    objectcacher->release_set(in->inode.ino);
+    objectcacher->release_set(in->ino);
     if (checkafter)
       put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     else 
@@ -1757,7 +1756,7 @@ void Client::_flush(Inode *in, Context *onfinish)
   dout(10) << "_flush " << *in << dendl;
   if (!onfinish)
     onfinish = new C_NoopContext;
-  bool safe = objectcacher->commit_set(in->inode.ino, onfinish);
+  bool safe = objectcacher->commit_set(in->ino, onfinish);
   if (safe && onfinish) {
     onfinish->finish(0);
     delete onfinish;
@@ -1780,7 +1779,7 @@ void Client::_flushed(Inode *in)
 
   // release clean pages too, if we dont hold RDCACHE reference
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
-    objectcacher->release_set(in->inode.ino);
+    objectcacher->release_set(in->ino);
 
   put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 }
@@ -1855,7 +1854,7 @@ void Client::remove_cap(Inode *in, int mds)
   if (!session->release)
     session->release = new MClientCapRelease;
   ceph_mds_cap_item i;
-  i.ino = in->ino();
+  i.ino = in->ino;
   i.cap_id = cap->cap_id;
   i.seq = cap->seq;
   i.migrate_seq = cap->mseq;
@@ -2301,20 +2300,20 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
   assert(in->caps[mds]);
 
   dout(10) << "handle_cap_trunc on ino " << *in
-	   << " size " << in->inode.size << " -> " << m->get_size()
+	   << " size " << in->size << " -> " << m->get_size()
 	   << dendl;
   // trim filecache?
   if (g_conf.client_oc &&
-      m->get_size() < in->inode.size) {
+      m->get_size() < in->size) {
     // map range to objects
     vector<ObjectExtent> ls;
-    filer->file_to_extents(in->inode.ino, &in->inode.layout, 
-			   m->get_size(), in->inode.size - m->get_size(),
+    filer->file_to_extents(in->ino, &in->layout, 
+			   m->get_size(), in->size - m->get_size(),
 			   ls);
-    objectcacher->truncate_set(in->inode.ino, ls);
+    objectcacher->truncate_set(in->ino, ls);
   }
   
-  in->reported_size = in->inode.size = m->get_size(); 
+  in->reported_size = in->size = m->get_size(); 
   delete m;
 }
 
@@ -2385,35 +2384,34 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 
   cap->seq = m->get_seq();
 
-  in->inode.layout = m->get_layout();
+  in->layout = m->get_layout();
   
   // update inode
   int issued = in->caps_issued();
   if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
-    in->inode.mode = m->head.mode;
-    in->inode.uid = m->head.uid;
-    in->inode.gid = m->head.gid;
+    in->mode = m->head.mode;
+    in->uid = m->head.uid;
+    in->gid = m->head.gid;
   }
   if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
-    in->inode.nlink = m->head.nlink;
-    in->inode.anchored = false;  /* lie */
+    in->nlink = m->head.nlink;
   }
   if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
       m->xattrbl.length() &&
-      m->head.xattr_version > in->inode.xattr_version) {
+      m->head.xattr_version > in->xattr_version) {
     bufferlist::iterator p = m->xattrbl.begin();
     ::decode(in->xattrs, p);
-    in->inode.xattr_version = m->head.xattr_version;
+    in->xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
 			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps);
 
   // max_size
   bool kick_writers = false;
-  if (m->get_max_size() != in->inode.max_size) {
-    dout(10) << "max_size " << in->inode.max_size << " -> " << m->get_max_size() << dendl;
-    in->inode.max_size = m->get_max_size();
-    if (in->inode.max_size > in->wanted_max_size) {
+  if (m->get_max_size() != in->max_size) {
+    dout(10) << "max_size " << in->max_size << " -> " << m->get_max_size() << dendl;
+    in->max_size = m->get_max_size();
+    if (in->max_size > in->wanted_max_size) {
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
     }
@@ -2734,7 +2732,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 {
   int r = 0;
 
-  if (!dir->inode.is_dir()) {
+  if (!dir->is_dir()) {
     r = -ENOTDIR;
     goto done;
   }
@@ -2808,7 +2806,7 @@ int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
       return r;
     cur = next;
     if (i == path.depth() - 1 && followsym &&
-	cur && cur->inode.is_symlink()) {
+	cur && cur->is_symlink()) {
       // resolve symlink
       if (cur->symlink[0] == '/') {
 	path = cur->symlink.c_str();
@@ -2988,7 +2986,7 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
   if (r < 0)
     return r;
   
-  if (!in->inode.is_symlink())
+  if (!in->is_symlink())
     return -EINVAL;
 
   // copy into buf (at most size bytes)
@@ -3030,17 +3028,17 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   // make the change locally?
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
-      in->inode.mode = attr->st_mode;
+      in->mode = attr->st_mode;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
     }
     if (mask & CEPH_SETATTR_UID) {
-      in->inode.uid = attr->st_uid;
+      in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
     }
     if (mask & CEPH_SETATTR_GID) {
-      in->inode.gid = attr->st_gid;
+      in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
     }
@@ -3048,10 +3046,10 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
-	in->inode.mtime = utime_t(attr->st_mtime, 0);
+	in->mtime = utime_t(attr->st_mtime, 0);
       if (mask & CEPH_SETATTR_ATIME)
-	in->inode.atime = utime_t(attr->st_atime, 0);
-      in->inode.time_warp_seq++;
+	in->atime = utime_t(attr->st_atime, 0);
+      in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
     }
@@ -3100,34 +3098,34 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask)
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat) 
 {
-  dout(10) << "fill_stat on " << in->inode.ino << " snap/dev" << in->snapid 
-	   << " mode 0" << oct << in->inode.mode << dec
-	   << " mtime " << in->inode.mtime << " ctime " << in->inode.ctime << dendl;
+  dout(10) << "fill_stat on " << in->ino << " snap/dev" << in->snapid 
+	   << " mode 0" << oct << in->mode << dec
+	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
   memset(st, 0, sizeof(struct stat));
-  st->st_ino = in->inode.ino;
+  st->st_ino = in->ino;
   st->st_dev = in->snapid;
-  st->st_mode = in->inode.mode;
-  st->st_rdev = in->inode.rdev;
-  st->st_nlink = in->inode.nlink;
-  st->st_uid = in->inode.uid;
-  st->st_gid = in->inode.gid;
-  st->st_ctime = MAX(in->inode.ctime, in->inode.mtime);
-  st->st_atime = in->inode.atime;
-  st->st_mtime = in->inode.mtime;
-  if (in->inode.is_dir()) {
-    //st->st_size = in->inode.dirstat.size();
-    st->st_size = in->inode.rstat.rbytes;
+  st->st_mode = in->mode;
+  st->st_rdev = in->rdev;
+  st->st_nlink = in->nlink;
+  st->st_uid = in->uid;
+  st->st_gid = in->gid;
+  st->st_ctime = MAX(in->ctime, in->mtime);
+  st->st_atime = in->atime;
+  st->st_mtime = in->mtime;
+  if (in->is_dir()) {
+    //st->st_size = in->dirstat.size();
+    st->st_size = in->rstat.rbytes;
     st->st_blocks = 1;
   } else {
-    st->st_size = in->inode.size;
-    st->st_blocks = (in->inode.size + 511) >> 9;
+    st->st_size = in->size;
+    st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(ceph_file_layout_su(in->inode.layout), 4096);
+  st->st_blksize = MAX(ceph_file_layout_su(in->layout), 4096);
 
   if (dirstat)
-    *dirstat = in->inode.dirstat;
+    *dirstat = in->dirstat;
   if (rstat)
-    *rstat = in->inode.rstat;
+    *rstat = in->rstat;
 
   return in->caps_issued();
 }
@@ -3246,7 +3244,7 @@ int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid)
 {
   *dirpp = new DirResult(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
-  dout(10) << "_opendir " << in->ino() << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
+  dout(10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
 
   // get the first frag
   int r = _readdir_get_frag(*dirpp);
@@ -3256,7 +3254,7 @@ int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid)
   } else {
     r = 0;
   }
-  dout(3) << "_opendir(" << in->ino() << ") = " << r << " (" << *dirpp << ")" << dendl;
+  dout(3) << "_opendir(" << in->ino << ") = " << r << " (" << *dirpp << ")" << dendl;
   return r;
 }
 
@@ -3266,7 +3264,7 @@ void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
   int stmask = fill_stat(in, &st);  
   frag_t fg = dirp->frag();
   dirp->buffer[fg].push_back(DirEntry(name, st, stmask));
-  dout(10) << "_readdir_add_dirent " << dirp << " added '" << name << "' -> " << in->inode.ino
+  dout(10) << "_readdir_add_dirent " << dirp << " added '" << name << "' -> " << in->ino
 	   << ", size now " << dirp->buffer[fg].size() << dendl;
 }
 
@@ -3327,7 +3325,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
   frag_t fg = dirp->frag();
   assert(dirp->buffer.count(fg) == 0);
   
-  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino() << " fg " << fg << dendl;
+  dout(10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
   if (dirp->inode && dirp->inode->snapid == CEPH_SNAPDIR)
@@ -3387,7 +3385,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 	InodeStat ist(p);
 
 	Inode *in = _ll_get_inode(ist.vino);
-	dout(15) << "_readdir_get_frag got " << dname << " to " << in->inode.ino << dendl;
+	dout(15) << "_readdir_get_frag got " << dname << " to " << in->ino << dendl;
 	_readdir_add_dirent(dirp, dname, in);
 
 	numdn--;
@@ -3588,7 +3586,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     f->inode = in;
     f->inode->get();
 
-    dout(10) << in->inode.ino << " mode " << cmode << dendl;
+    dout(10) << in->ino << " mode " << cmode << dendl;
 
     if (in->snapid != CEPH_NOSNAP) {
       in->snap_cap_refs++;
@@ -3672,7 +3670,7 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
     break;
 
   case SEEK_END:
-    f->pos = in->inode.size + offset;
+    f->pos = in->size + offset;
     break;
 
   default:
@@ -3780,13 +3778,13 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	goto wait;
       }
 
-      dout(10) << "file size: " << in->inode.size << dendl;
-      if (offset > 0 && (__u64)offset >= in->inode.size) {
+      dout(10) << "file size: " << in->size << dendl;
+      if (offset > 0 && (__u64)offset >= in->size) {
 	if (movepos) unlock_fh_pos(f);
 	return 0;
       }
-      if ((__u64)(offset + size) > in->inode.size) 
-	size = in->inode.size - offset;
+      if ((__u64)(offset + size) > in->size) 
+	size = in->size - offset;
       
       if (size == 0) {
 	dout(10) << "read is size=0, returning 0" << dendl;
@@ -3828,30 +3826,30 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	  l = MAX(l, g_conf.client_readahead_min);
 	if (g_conf.client_readahead_max_bytes)
 	  l = MIN(l, g_conf.client_readahead_max_bytes);
-	loff_t p = ceph_file_layout_period(in->inode.layout);
+	loff_t p = ceph_file_layout_period(in->layout);
 	if (g_conf.client_readahead_max_periods)
 	  l = MIN(l, g_conf.client_readahead_max_periods * p);
 	if (l >= 2*p)
 	  // align with period
 	  l -= (offset+l) % p;
 	// don't read past end of file
-	if (offset+l > (loff_t)in->inode.size)
-	  l = in->inode.size - offset;
+	if (offset+l > (loff_t)in->size)
+	  l = in->size - offset;
 
 	dout(10) << "readahead " << f->nr_consec_read << " reads " 
 		 << f->consec_read_bytes << " bytes ... readahead " << offset << "~" << l
 		 << " (caller wants " << offset << "~" << size << ")" << dendl;
-	objectcacher->file_read(in->inode.ino, &in->inode.layout, in->snapid,
+	objectcacher->file_read(in->ino, &in->layout, in->snapid,
 				offset, l, NULL, 0, 0);
 	dout(10) << "readahead initiated" << dendl;
       }
 
       // read (and possibly block)
       if (in->snapid == CEPH_NOSNAP)
-	r = objectcacher->file_read(in->inode.ino, &in->inode.layout, in->snapid,
+	r = objectcacher->file_read(in->ino, &in->layout, in->snapid,
 				    offset, size, bl, 0, onfinish);
       else
-	r = objectcacher->file_read(in->inode.ino, &in->inode.layout, in->snapid,
+	r = objectcacher->file_read(in->ino, &in->layout, in->snapid,
 				    offset, size, bl, 0, onfinish);
 
       
@@ -3864,7 +3862,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
 	delete onfinish;
       }
     } else {
-      r = objectcacher->file_atomic_sync_read(in->inode.ino, &in->inode.layout, in->snapid,
+      r = objectcacher->file_atomic_sync_read(in->ino, &in->layout, in->snapid,
 					      offset, size, bl, 0, client_lock);
     }
     
@@ -3875,7 +3873,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
     int flags = 0;
     if (in->hack_balance_reads || g_conf.client_hack_balance_reads)
       flags |= CEPH_OSD_FLAG_BALANCE_READS;
-    filer->read(in->inode.ino, &in->inode.layout, in->snapid,
+    filer->read(in->ino, &in->layout, in->snapid,
 		offset, size, bl, flags, onfinish);
 
     while (!done)
@@ -3972,11 +3970,11 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   if (offset < 0) {
     lock_fh_pos(f);
     /* 
-     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and inode.size may
+     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and size may
      * change out from under us.
      */
     if (f->append)
-      f->pos = in->inode.size;   // O_APPEND.
+      f->pos = in->size;   // O_APPEND.
     offset = f->pos;
     f->pos = offset+size;    
     unlock_fh_pos(f);
@@ -3984,7 +3982,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 
   bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
-  dout(10) << "cur file size is " << in->inode.size << dendl;
+  dout(10) << "cur file size is " << in->size << dendl;
 
   // time it.
   utime_t start = g_clock.real_now();
@@ -3997,8 +3995,8 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 
   // request larger max_size?
   __u64 endoff = offset + size;
-  if ((endoff >= in->inode.max_size ||
-       endoff > (in->inode.size << 1)) &&
+  if ((endoff >= in->max_size ||
+       endoff > (in->size << 1)) &&
       endoff > in->wanted_max_size) {
     dout(10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
     in->wanted_max_size = endoff;
@@ -4009,9 +4007,9 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   while ((lazy && (in->caps_issued() & CEPH_CAP_FILE_LAZYIO) == 0) ||
 	 (!lazy && in->caps_issued_mask(CEPH_CAP_FILE_WR) == false &&
 	  (in->cap_snaps.empty() || !in->cap_snaps.rbegin()->second.writing)) ||
-	 endoff > in->inode.max_size) {
+	 endoff > in->max_size) {
     dout(7) << "missing wr|lazy cap OR endoff " << endoff
-	    << " > max_size " << in->inode.max_size 
+	    << " > max_size " << in->max_size 
 	    << ", waiting" << dendl;
     wait_on_list(in->waitfor_caps);
   }
@@ -4033,11 +4031,11 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
       objectcacher->wait_for_write(size, client_lock);
       
       // async, caching, non-blocking.
-      objectcacher->file_write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
+      objectcacher->file_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 			       offset, size, bl, g_clock.now(), 0);
     } else {
       // atomic, synchronous, blocking.
-      objectcacher->file_atomic_sync_write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
+      objectcacher->file_atomic_sync_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 					   offset, size, bl, g_clock.now(), 0, client_lock);
     }   
   } else {
@@ -4051,7 +4049,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     unsafe_sync_write++;
     in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
     
-    filer->write(in->inode.ino, &in->inode.layout, in->snaprealm->get_snap_context(),
+    filer->write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);
     
     while (!done)
@@ -4068,21 +4066,21 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   __u64 totalwritten = size;
   
   // extend file?
-  if (totalwritten + offset > in->inode.size) {
-    in->inode.size = totalwritten + offset;
+  if (totalwritten + offset > in->size) {
+    in->size = totalwritten + offset;
     mark_caps_dirty(in, CEPH_CAP_FILE_WR);
     
-    if ((in->inode.size << 1) >= in->inode.max_size &&
-	(in->reported_size << 1) < in->inode.max_size)
+    if ((in->size << 1) >= in->max_size &&
+	(in->reported_size << 1) < in->max_size)
       check_caps(in, false);
       
     dout(7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
-    dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->inode.size << dendl;
+    dout(7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->size << dendl;
   }
 
   // mtime
-  in->inode.mtime = g_clock.real_now();
+  in->mtime = g_clock.real_now();
   mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
@@ -4150,11 +4148,11 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     _flush(in);
   
   while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
-    dout(10) << "ino " << in->inode.ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
+    dout(10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 	     << " uncommitted, waiting" << dendl;
     wait_on_list(in->waitfor_commit);
   }    
-  dout(10) << "ino " << in->inode.ino << " has no uncommitted writes" << dendl;
+  dout(10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
 
   return r;
 }
@@ -4192,7 +4190,7 @@ int Client::chdir(const char *relpath)
     put_inode(cwd);
   cwd = in;
   in->get();
-  dout(3) << "chdir(" << relpath << ")  cwd now " << cwd->ino() << dendl;
+  dout(3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
   return 0;
 }
 
@@ -4328,12 +4326,20 @@ int Client::rmsnap(const char *relpath, const char *name)
 Inode *Client::open_snapdir(Inode *diri)
 {
   Inode *in;
-  vinodeno_t vino(diri->ino(), CEPH_SNAPDIR);
+  vinodeno_t vino(diri->ino, CEPH_SNAPDIR);
   if (!inode_map.count(vino)) {
-    in = new Inode(vino, &diri->inode.layout);
-    in->inode = diri->inode;
+    in = new Inode(vino, &diri->layout);
+
+    in->ino = diri->ino;
     in->snapid = CEPH_SNAPDIR;
-    in->inode.mode = S_IFDIR | 0600;
+    in->mode = diri->mode;
+    in->uid = diri->uid;
+    in->gid = diri->gid;
+    in->mtime = diri->mtime;
+    in->ctime = diri->ctime;
+    in->size = diri->size;
+
+    in->mode = S_IFDIR | 0600;
     in->dirfragtree.clear();
     inode_map[vino] = in;
     in->snapdir_parent = diri;
@@ -4367,7 +4373,7 @@ int Client::ll_lookup(vinodeno_t parent, const char *name, struct stat *attr, in
     goto out;
   }
   diri = inode_map[parent];
-  if (!diri->inode.is_dir()) {
+  if (!diri->is_dir()) {
     dout(1) << "ll_lookup " << parent << " " << name << " -> ENOTDIR (parent not a dir... WTF)" << dendl;
     r = -ENOTDIR;
     attr->st_ino = 0;
@@ -4396,13 +4402,13 @@ void Client::_ll_get(Inode *in)
   if (in->ll_ref == 0) 
     in->get();
   in->ll_get();
-  dout(20) << "_ll_get " << in << " " << in->inode.ino << " -> " << in->ll_ref << dendl;
+  dout(20) << "_ll_get " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
 }
 
 int Client::_ll_put(Inode *in, int num)
 {
   in->ll_put(num);
-  dout(20) << "_ll_put " << in << " " << in->inode.ino << " " << num << " -> " << in->ll_ref << dendl;
+  dout(20) << "_ll_put " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
   if (in->ll_ref == 0) {
     put_inode(in);
     return 0;
@@ -4525,7 +4531,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
       }
     }
   }
-  dout(3) << "_getxattr(" << in->ino() << ", \"" << name << "\", " << size << ") = " << r << dendl;
+  dout(3) << "_getxattr(" << in->ino << ", \"" << name << "\", " << size << ") = " << r << dendl;
   return r;
 }
 
@@ -4564,7 +4570,7 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	r = -ERANGE;
     }
   }
-  dout(3) << "_listxattr(" << in->ino() << ", " << size << ") = " << r << dendl;
+  dout(3) << "_listxattr(" << in->ino << ", " << size << ") = " << r << dendl;
   return r;
 }
 
@@ -4597,7 +4603,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value, size_t siz
   int res = make_request(req, uid, gid);
 
   trim_cache();
-  dout(3) << "_setxattr(" << in->ino() << ", \"" << name << "\") = " << res << dendl;
+  dout(3) << "_setxattr(" << in->ino << ", \"" << name << "\") = " << res << dendl;
   return res;
 }
 
@@ -4628,7 +4634,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   int res = make_request(req, uid, gid);
 
   trim_cache();
-  dout(3) << "_removexattr(" << in->ino() << ", \"" << name << "\") = " << res << dendl;
+  dout(3) << "_removexattr(" << in->ino << ", \"" << name << "\") = " << res << dendl;
   return res;
 }
 
@@ -4661,7 +4667,7 @@ int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
   if (in->dn) touch_dn(in->dn);
 
   int r = 0;
-  if (in->inode.is_symlink()) {
+  if (in->is_symlink()) {
     *value = in->symlink.c_str();
   } else {
     *value = "";
@@ -4673,7 +4679,7 @@ int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
 
 int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid, int gid) 
 { 
-  dout(3) << "_mknod(" << dir->ino() << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
+  dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKNOD);
   filepath path;
@@ -4914,9 +4920,9 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
 int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid) 
 {
   MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LINK);
-  filepath path(newname, dir->ino());
+  filepath path(newname, dir->ino);
   req->set_filepath(path);
-  filepath existing(in->ino());
+  filepath existing(in->ino);
   req->set_filepath2(existing);
   
   int res = make_request(req, uid, gid);
@@ -5104,7 +5110,7 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
   Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
-  *lp = in->inode.layout;
+  *lp = in->layout;
 
   dout(3) << "describe_layout(" << fd << ") = 0" << dendl;
   return 0;
@@ -5141,7 +5147,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  filer->file_to_extents(in->inode.ino, &in->inode.layout, offset, length, result);
+  filer->file_to_extents(in->ino, &in->layout, offset, length, result);
 
   dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;
