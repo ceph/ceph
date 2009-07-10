@@ -1210,14 +1210,21 @@ static void do_create_bucket(struct req_state *s)
     S3UserBuckets buckets;
 
     int ret = s3_get_user_buckets(s->user.user_id, buckets);
+    S3ObjEnt new_bucket;
 
-    if (ret == 0 || ret == -ENOENT) {
-      S3ObjEnt new_bucket;
+    switch (ret) {
+    case 0:
+    case -ENOENT:
+    case -ENODATA:
       new_bucket.name = s->bucket_str;
       new_bucket.size = 0;
       time(&new_bucket.mtime);
       buckets.add(new_bucket);
       r = s3_put_user_buckets(s->user.user_id, buckets);
+      break;
+    default:
+      cerr << "s3_get_user_buckets returned " << ret << std::endl;
+      break;
     }
   }
 

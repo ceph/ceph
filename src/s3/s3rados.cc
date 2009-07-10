@@ -50,14 +50,45 @@ int S3Rados::open_root_pool(rados_pool_t *pool)
   return r;
 }
 
+class S3RadosListState {
+public:
+  vector<string> list;
+  unsigned int pos;
+  S3RadosListState() : pos(0) {}
+};
+
 int S3Rados::list_buckets_init(std::string& id, S3AccessHandle *handle)
 {
-  return -ENOSYS;
+  S3RadosListState *state = new S3RadosListState();
+
+  if (!state)
+    return -ENOMEM;
+
+  int r = rados->list_pools(state->list);
+  if (r < 0)
+    return r;
+
+  *handle = (S3AccessHandle)state;
+
+  return 0;
 }
 
 int S3Rados::list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle)
 {
-  return -ENOSYS;
+  S3RadosListState *state = (S3RadosListState *)*handle;
+
+  if (state->pos == state->list.size()) {
+    delete state;
+    return -ENOENT;
+  }
+
+
+
+  obj.name = state->list[state->pos++];
+
+  /* FIXME: should read mtime/size vals for bucket */
+
+  return 0;
 }
 
 static int open_pool(string& bucket, rados_pool_t *pool)

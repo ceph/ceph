@@ -102,7 +102,12 @@ int s3_get_user_buckets(string user_id, S3UserBuckets& buckets)
 {
   bufferlist bl;
   int ret = s3store->get_attr(ui_bucket, user_id, S3_ATTR_BUCKETS, bl);
-  if (ret < 0) {
+  switch (ret) {
+  case 0:
+    break;
+  case -ENODATA:
+    return 0;
+  default:
     return ret;
   }
 

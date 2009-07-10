@@ -510,7 +510,6 @@ int RadosClient::create_pool(string& name)
   Cond cond;
   bool done;
   lock.Lock();
-  cout << "&reply=" << (void *)&reply << std::endl;
   objecter->create_pool(name,
 			new C_SafeCond(&mylock, &cond, &done, &reply));
   lock.Unlock();
