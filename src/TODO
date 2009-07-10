@@ -202,7 +202,6 @@ cas
    Tech. Rep. HPL-2005-30(R.1), Hewlett Packard Laboratories, Palo Alto, 2005. 
 
 s3
- - integrate with rados
  - handle location related requests (check if needed)
  - list objects, prefix and delimiter
  - logging control (?)
