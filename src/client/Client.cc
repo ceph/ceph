@@ -3216,7 +3216,7 @@ int Client::getdir(const char *relpath, list<string>& contents)
 
   struct dirent de;
   int n = 0;
-  while (readdir_r(d, &de) == 0) {
+  while (readdir_r(d, &de) > 0) {
     contents.push_back(de.d_name);
     n++;
   }
