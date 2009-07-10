@@ -4317,7 +4317,19 @@ void MDCache::identify_files_to_recover()
     CInode *in = p->second;
     if (!in->is_auth())
       continue;
-    if (in->inode.client_ranges.size()) {
+    
+    bool recover = false;
+    for (map<int,byte_range_t>::iterator p = in->inode.client_ranges.begin();
+	 p != in->inode.client_ranges.end();
+	 p++) {
+      Capability *cap = in->get_client_cap(p->first);
+      if (!cap) {
+	recover = true;
+	break;
+      }
+    }
+
+    if (recover) {
       in->filelock.set_state(LOCK_LOCK);
       in->loner_cap = -1;
       q.push_back(in);
