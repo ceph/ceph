@@ -172,7 +172,6 @@ int S3FS::create_bucket(std::string& id, std::string& bucket, std::vector<std::p
   return 0;
 }
 
-
 int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
                   std::vector<std::pair<std::string, bufferlist> >& attrs)

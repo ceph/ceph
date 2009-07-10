@@ -86,7 +86,10 @@ public:
   };
 
   int lookup_pool(const char *name) {
-    return osdmap.lookup_pg_pool_name(name);
+    int ret = osdmap.lookup_pg_pool_name(name);
+    if (ret < 0)
+      return -ENOENT;
+    return ret;
   }
 
   // snaps
@@ -858,12 +861,11 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   dout(10) << "Objecter returned from read" << dendl;
 
   if (bl.length() < len) {
-    dout(10) << "Apparent error. Returned length " << bl.length()
+    dout(10) << "Returned length " << bl.length()
 	     << " less than original length "<< len << dendl;
-    len = bl.length();
   }
 
-  return len;
+  return bl.length();
 }
 
 int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, time_t *pmtime)

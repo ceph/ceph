@@ -8,7 +8,7 @@ static S3Rados rados_provider;
 
 S3Access* S3Access::store;
 
-S3Access *S3Access::init_storage_provider(const char *type)
+S3Access *S3Access::init_storage_provider(const char *type, int argc, char *argv[])
 {
   if (strcmp(type, "rados") == 0) {
     store = &rados_provider;
@@ -17,6 +17,9 @@ S3Access *S3Access::init_storage_provider(const char *type)
   } else {
     store = NULL;
   }
+
+  if (store->initialize(argc, argv) < 0)
+    store = NULL;
 
   return store;
 }

@@ -1220,7 +1220,7 @@ static void do_create_bucket(struct req_state *s)
       r = s3_put_user_buckets(s->user.user_id, buckets);
     }
   }
-  
+
 done:
   dump_errno(s, r);
   end_header(s);
@@ -1530,13 +1530,13 @@ int read_permissions(struct req_state *s)
   return ret;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
   FCGX_Stream *in, *out, *err;
   FCGX_ParamArray envp;
   struct req_state s;
 
-  if (!S3Access::init_storage_provider("fs")) {
+  if (!S3Access::init_storage_provider("rados", argc, argv)) {
     cerr << "couldn't init storage provider" << std::endl;
   }
 

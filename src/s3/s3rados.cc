@@ -77,11 +77,12 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
   list<object_t> entries;
   Rados::ListCtx ctx;
 
-  r = rados->list(pool, -1, entries, ctx);
+  r = rados->list(pool, INT_MAX, entries, ctx);
   if (r < 0)
     return r;
 
   list<object_t>::iterator iter;
+  cerr << "JJJ entries.size()=" << entries.size() << std::endl;
   for (iter = entries.begin(); iter != entries.end(); ++iter) {
     const char *name = iter->name.c_str();
 
@@ -146,9 +147,10 @@ int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std
     }
   }
 
- return rados->create_pool(bucket.c_str());
-}
+  ret = rados->create_pool(bucket.c_str());
 
+  return ret;
+}
 
 int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
@@ -201,7 +203,7 @@ int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& de
                std::vector<std::pair<std::string, bufferlist> >& attrs,
                struct s3_err *err)
 {
-#if 0
+ /* FIXME! this should use a special rados->copy() method */
   int ret;
   char *data;
 
@@ -213,13 +215,12 @@ int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& de
   ret =  put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
 
   return ret;
-#endif
-  return 0;
 }
 
 
 int S3Rados::delete_bucket(std::string& id, std::string& bucket)
 {
+  /* TODO! */
 #if 0
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -253,12 +254,19 @@ int S3Rados::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
   rados_pool_t pool;
+  string actual_bucket = bucket;
+  string actual_obj = obj;
 
-  int r = open_pool(bucket, &pool);
+  if (actual_obj.size() == 0) {
+    actual_obj = bucket;
+    actual_bucket = root_bucket;
+  }
+
+  int r = open_pool(actual_bucket, &pool);
   if (r < 0)
     return r;
 
-  object_t oid(obj.c_str());
+  object_t oid(actual_obj.c_str());
   r = rados->getxattr(pool, oid, name, dest);
 
   if (r < 0)
@@ -296,7 +304,7 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
             struct s3_err *err)
 {
   int r = -EINVAL;
-  size_t pos, size, len;
+  size_t size, len;
   bufferlist etag;
   time_t mtime;
   bufferlist bl;
@@ -366,13 +374,15 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
     goto done;
   }
 
-  if (end >= 0)
-    len = end;
+  if (end <= 0)
+    len = 0;
   else
     len = end - ofs + 1;
 
 
+  cout << "rados->read ofs=" << ofs << " len=" << len << std::endl;
   r = rados->read(pool, oid, ofs, bl, len);
+  cout << "rados->read r=" << r << std::endl;
   if (r > 0) {
     *data = (char *)malloc(r);
     memcpy(*data, bl.c_str(), bl.length());

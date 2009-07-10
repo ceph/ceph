@@ -114,11 +114,11 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
 }
 
 
-int main(int argc, const char **argv) 
+int main(int argc, char **argv) 
 {
   DEFINE_CONF_VARS(usage);
   vector<const char*> args;
-  argv_to_vec(argc, argv, args);
+  argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
   common_init(args, "s3a", true);
 
@@ -162,7 +162,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  store = S3Access::init_storage_provider("fs");
+  store = S3Access::init_storage_provider("rados", argc, argv);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
   }
