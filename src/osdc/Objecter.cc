@@ -625,13 +625,13 @@ void Objecter::_list_reply(ListContext *list_context, bufferlist *bl, Context *f
     dout(20) << "got a response with objects, proceeding" << dendl;
     list_context->entries->merge(response.entries);
     list_context->max_entries -= response_size;
-    if (list_context->max_entries) //we emptied this pg
-      ++list_context->current_pg;
     dout(20) << "cleaning up and exiting" << dendl;
-    delete bl;
-    final_finish->finish(0);
-    delete final_finish;
-    return;
+    if (!list_context->max_entries) {
+      final_finish->finish(0);
+      delete bl;
+      delete final_finish;
+      return;
+    }
   }
   //if we make this this far, there are no objects left in the current pg, but we want more!
   ++list_context->current_pg;
