@@ -105,8 +105,11 @@ int XMLArgs::parse()
     if (ret >= 0) {
       val_map[nv.get_name()] = nv.get_val();
 
-      if (ret > 0) { /* this is a sub-resource */
-        sub_resource = nv.get_name();
+      if (ret > 0) { /* this might be a sub-resource */
+        if ((nv.get_name().compare("acl") == 0) ||
+            (nv.get_name().compare("location") == 0) ||
+            (nv.get_name().compare("torrent") == 0))
+          sub_resource = nv.get_name();
       }
     }
 
@@ -543,7 +546,7 @@ static void dump_value(struct req_state *s, const char *name, const char *fmt, .
   if (n >= LARGE_SIZE)
     return;
   // CGI_PRINTF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
-  CGI_PRINTF(s->out, "%*s<%s>%s</%s>", s->indent, "", name, buf, name);
+  CGI_PRINTF(s->out, "<%s>%s</%s>", name, buf, name);
 }
 
 static void dump_entry(struct req_state *s, const char *val)
