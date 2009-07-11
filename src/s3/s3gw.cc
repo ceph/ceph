@@ -519,14 +519,16 @@ static void dump_errno(struct req_state *s, int err, struct s3_err *s3err = NULL
 
 static void open_section(struct req_state *s, const char *name)
 {
-  CGI_PRINTF(s->out, "%*s<%s>\n", s->indent, "", name);
+  //CGI_PRINTF(s->out, "%*s<%s>\n", s->indent, "", name);
+  CGI_PRINTF(s->out, "<%s>", name);
   ++s->indent;
 }
 
 static void close_section(struct req_state *s, const char *name)
 {
   --s->indent;
-  CGI_PRINTF(s->out, "%*s</%s>\n", s->indent, "", name);
+  //CGI_PRINTF(s->out, "%*s</%s>\n", s->indent, "", name);
+  CGI_PRINTF(s->out, "</%s>", name);
 }
 
 static void dump_value(struct req_state *s, const char *name, const char *fmt, ...)
@@ -540,12 +542,14 @@ static void dump_value(struct req_state *s, const char *name, const char *fmt, .
   va_end(ap);
   if (n >= LARGE_SIZE)
     return;
-  CGI_PRINTF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
+  // CGI_PRINTF(s->out, "%*s<%s>%s</%s>\n", s->indent, "", name, buf, name);
+  CGI_PRINTF(s->out, "%*s<%s>%s</%s>", s->indent, "", name, buf, name);
 }
 
 static void dump_entry(struct req_state *s, const char *val)
 {
-  CGI_PRINTF(s->out, "%*s<?%s?>\n", s->indent, "", val);
+  // CGI_PRINTF(s->out, "%*s<?%s?>\n", s->indent, "", val);
+  CGI_PRINTF(s->out, "%*s<?%s?>", s->indent, "", val);
 }
 
 
@@ -598,7 +602,7 @@ static void end_header(struct req_state *s, const char *content_type = NULL)
 
 static void list_all_buckets_start(struct req_state *s)
 {
-  open_section(s, "ListAllMyBucketsResult");
+  open_section(s, "ListAllMyBucketsResult xmlns=\"http://doc.s3.amazonaws.com/2006-03-01\"");
 }
 
 static void list_all_buckets_end(struct req_state *s)
@@ -635,7 +639,7 @@ static void do_list_buckets(struct req_state *s)
   }
 
   dump_errno(s, r);
-  end_header(s);
+  end_header(s, "application/xml");
   dump_start_xml(s);
 
   list_all_buckets_start(s);
@@ -786,7 +790,7 @@ static bool verify_signature(struct req_state *s)
   if (s3_get_user_info(auth_id, s->user) < 0) {
     cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
     dump_errno(s, -EPERM);
-    end_header(s);
+    end_header(s, "application/xml");
     dump_start_xml(s);
     return false;
   }
@@ -1033,7 +1037,7 @@ done:
   free(data);
 
   dump_errno(s, r);
-  end_header(s);
+  end_header(s, "application/xml");
   dump_start_xml(s);
   return;
 }
@@ -1140,7 +1144,7 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
   int r = s3store->list_objects(s->user.user_id, s->bucket_str, max, prefix, marker, objs);
   dump_errno(s, (r < 0 ? r : 0));
 
-  end_header(s);
+  end_header(s, "application/xml");
   dump_start_xml(s);
   if (r < 0)
     return;
