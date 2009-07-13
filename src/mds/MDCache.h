@@ -775,7 +775,7 @@ public:
   void _queue_file_recover(CInode *in);
   void identify_files_to_recover();
   void do_file_recover();
-  void _recovered(CInode *in, int r);
+  void _recovered(CInode *in, int r, __u64 size, utime_t mtime);
 
   void purge_prealloc_ino(inodeno_t ino, Context *fin);
 

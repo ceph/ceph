@@ -4332,9 +4332,11 @@ void MDCache::identify_files_to_recover()
 struct C_MDC_Recover : public Context {
   MDCache *mdc;
   CInode *in;
-  C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i) {}
+  __u64 size;
+  utime_t mtime;
+  C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i), size(0) {}
   void finish(int r) {
-    mdc->_recovered(in, r);
+    mdc->_recovered(in, r, size, mtime);
   }
 };
 
@@ -4353,11 +4355,10 @@ void MDCache::do_file_recover()
 	       << " " << *in << dendl;
       file_recovering.insert(in);
       
-      __u64 max = in->inode.get_max_size();
-
+      C_MDC_Recover *fin = new C_MDC_Recover(this, in);
       mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			max, &in->inode.size, &in->inode.mtime, false,
-			0, new C_MDC_Recover(this, in));    
+			in->get_projected_inode()->get_max_size(), &fin->size, &fin->mtime, false,
+			0, fin);    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
@@ -4371,7 +4372,7 @@ void MDCache::do_file_recover()
   }
 }
 
-void MDCache::_recovered(CInode *in, int r)
+void MDCache::_recovered(CInode *in, int r, __u64 size, utime_t mtime)
 {
   dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " mtime=" << in->inode.mtime
 	   << " for " << *in << dendl;
@@ -4385,7 +4386,7 @@ void MDCache::_recovered(CInode *in, int r)
     remove_inode(in);
   } else {
     // journal
-    mds->locker->check_inode_max_size(in, true, true, in->inode.size);
+    mds->locker->check_inode_max_size(in, true, true, size, mtime);
     in->auth_unpin(this);
   }
 

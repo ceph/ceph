@@ -1404,7 +1404,8 @@ public:
 };
 
 
-bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_size, __u64 new_size)
+bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
+				  bool update_size, __u64 new_size, utime_t new_mtime)
 {
   assert(in->is_auth());
 
@@ -1468,6 +1469,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
     dout(10) << "check_inode_max_size size " << pi->size << " -> " << new_size << dendl;
     pi->size = new_size;
     pi->rstat.rbytes = new_size;
+    dout(10) << "check_inode_max_size mtime " << pi->mtime << " -> " << new_mtime << dendl;
+    pi->mtime = new_mtime;
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.

@@ -223,7 +223,8 @@ protected:
   void file_update_finish(CInode *in, Mutation *mut, bool share, int client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0);
+  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0,
+			    utime_t mtime=utime_t());
 private:
   void share_inode_max_size(CInode *in);
 
