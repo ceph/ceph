@@ -386,10 +386,6 @@ private:
       (ino() == o->ino() && last < o->last);
   }
 
-  int64_t get_layout_size_increment() {
-    return ceph_file_layout_period(inode.layout);
-  }
-
   // -- misc -- 
   bool is_projected_ancestor_of(CInode *other);
   void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);

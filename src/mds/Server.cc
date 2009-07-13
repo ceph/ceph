@@ -2076,7 +2076,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.version = dn->pre_dirty();
   if (cmode & CEPH_FILE_MODE_WR) {
     in->inode.client_ranges[client].first = 0;
-    in->inode.client_ranges[client].last = in->get_layout_size_increment();
+    in->inode.client_ranges[client].last = in->inode.get_layout_size_increment();
   }
   in->inode.rstat.rfiles = 1;
 
@@ -2407,12 +2407,10 @@ void Server::handle_client_setattr(MDRequest *mdr)
 void Server::handle_client_opent(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->in[0];
+  int client = mdr->get_client();
   assert(in);
 
   dout(10) << "handle_client_opent " << *in << dendl;
-
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "open_truncate");
 
   // prepare
   inode_t *pi = in->project_inode();
@@ -2425,6 +2423,13 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   pi->truncate_size = 0;
   pi->truncate_seq++;
 
+  if (cmode & CEPH_FILE_MODE_WR) {
+    pi->client_ranges[client].first = 0;
+    pi->client_ranges[client].last = pi->get_layout_size_increment();
+  }
+
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "open_truncate");
   le->metablob.add_truncate_start(in->ino());
   le->metablob.add_client_req(mdr->reqid);
 
