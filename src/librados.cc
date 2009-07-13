@@ -680,6 +680,9 @@ int RadosClient::write(PoolCtx& pool, const object_t& oid, off_t off, bufferlist
     cond.Wait(mylock);
   mylock.Unlock();
 
+  if (r < 0)
+    return r;
+
   dout(0) << "did write" << dendl;
 
   return len;
@@ -857,7 +860,10 @@ int RadosClient::read(PoolCtx& pool, const object_t& oid, off_t off, bufferlist&
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
-  dout(10) << "Objecter returned from read" << dendl;
+  dout(10) << "Objecter returned from read r=" << r << dendl;
+
+  if (r < 0)
+    return r;
 
   if (bl.length() < len) {
     dout(10) << "Returned length " << bl.length()
@@ -901,7 +907,7 @@ int RadosClient::stat(PoolCtx& pool, const object_t& oid, __u64 *psize, time_t *
     *pmtime = mtime.sec();
   }
 
-  return done;
+  return r;
 }
 
 int RadosClient::getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl)
@@ -964,6 +970,9 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+
+  if (r < 0)
+    return r;
 
   dout(0) << "did setxattr" << dendl;
 

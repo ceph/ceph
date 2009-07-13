@@ -31,4 +31,24 @@ static int encode_base64(const char *in, int in_len, char *out, int out_len)
   return 0;
 }
 
+static int decode_base64(const char *in, int in_len, char *out, int out_len)
+{
+  BIO *b64, *bmem;
+  int ret;
+  char in_eol[in_len + 2];
+  memcpy(in_eol, in, in_len);
+  in_eol[in_len] = '\n';
+  in_eol[in_len + 1] = '\0';
+
+  b64 = BIO_new(BIO_f_base64());
+  bmem = BIO_new_mem_buf((unsigned char *)in_eol, in_len + 1);
+  bmem = BIO_push(b64, bmem);
+
+  ret = BIO_read(bmem, out, out_len);
+
+  BIO_free_all(bmem);
+
+  return ret;
+}
+
 #endif

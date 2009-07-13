@@ -32,9 +32,9 @@ using namespace std;
 
 
 
-#define CGI_PRINTF(stream, ...) do { \
-   fprintf(stderr, "OUT> " __VA_ARGS__); \
-   FCGX_FPrintF(stream, __VA_ARGS__); \
+#define CGI_PRINTF(stream, format, ...) do { \
+   fprintf(stderr, format, __VA_ARGS__); \
+   FCGX_FPrintF(stream, format, __VA_ARGS__); \
 } while (0)
 
 class NameVal
@@ -552,7 +552,7 @@ static void dump_value(struct req_state *s, const char *name, const char *fmt, .
 static void dump_entry(struct req_state *s, const char *val)
 {
   // CGI_PRINTF(s->out, "%*s<?%s?>\n", s->indent, "", val);
-  CGI_PRINTF(s->out, "%*s<?%s?>", s->indent, "", val);
+  CGI_PRINTF(s->out, "<?%s?>", val);
 }
 
 
@@ -792,9 +792,6 @@ static bool verify_signature(struct req_state *s)
   /* first get the user info */
   if (s3_get_user_info(auth_id, s->user) < 0) {
     cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
-    dump_errno(s, -EPERM);
-    end_header(s, "application/xml");
-    dump_start_xml(s);
     return false;
   }
 
@@ -1393,15 +1390,26 @@ static void do_create_object(struct req_state *s)
       actual = FCGX_GetStr(data, cl, s->in);
     }
 
-    char *supplied_md5 = FCGX_GetParam("HTTP_CONTENT_MD5", s->envp);
-    char calc_md5[MD5_DIGEST_LENGTH * 2];
+    char *supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->envp);
+    char supplied_md5_bin[MD5_DIGEST_LENGTH + 1];
+    char supplied_md5[MD5_DIGEST_LENGTH * 2 + 1];
+    char calc_md5[MD5_DIGEST_LENGTH * 2 + 1];
     MD5_CTX c;
     unsigned char m[MD5_DIGEST_LENGTH];
 
-    if (supplied_md5 && strlen(supplied_md5) != MD5_DIGEST_LENGTH*2) {
-      err.code = "InvalidDigest";
-      r = -EINVAL;
-      goto done;
+    if (supplied_md5_b64) {
+      cerr << "supplied_md5_b64=" << supplied_md5_b64 << std::endl;
+      int ret = decode_base64(supplied_md5_b64, strlen(supplied_md5_b64),
+                                 supplied_md5_bin, sizeof(supplied_md5_bin));
+      cerr << "decode_base64 ret=" << ret << std::endl;
+      if (ret != MD5_DIGEST_LENGTH) {
+        err.code = "InvalidDigest";
+        r = -EINVAL;
+        goto done;
+      }
+
+      buf_to_hex((const unsigned char *)supplied_md5_bin, MD5_DIGEST_LENGTH, supplied_md5);
+      cerr << "supplied_md5=" << supplied_md5 << std::endl;
     }
 
     MD5_Init(&c);
@@ -1410,7 +1418,7 @@ static void do_create_object(struct req_state *s)
 
     buf_to_hex(m, MD5_DIGEST_LENGTH, calc_md5);
 
-    if (supplied_md5 && strcmp(calc_md5, supplied_md5)) {
+    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
        err.code = "BadDigest";
        r = -EINVAL;
        goto done;
