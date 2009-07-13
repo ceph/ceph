@@ -122,8 +122,7 @@ public:
   static const int STATE_EXPORTINGCAPS = (1<<10);
   static const int STATE_NEEDSRECOVER = (1<<11);
   static const int STATE_RECOVERING =   (1<<12);
-  static const int STATE_NO_SIZE_CHECK = (1<<13);
-  static const int STATE_PURGING =     (1<<14);
+  static const int STATE_PURGING =     (1<<13);
 
   // -- waiters --
   static const __u64 WAIT_DIR         = (1<<0);
