@@ -4324,6 +4324,8 @@ void MDCache::identify_files_to_recover()
 
     if (recover) 
       q.push_back(in);
+    else
+      mds->locker->check_inode_max_size(in);
   }
   for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
     mds->locker->file_recover(&(*p)->filelock);
