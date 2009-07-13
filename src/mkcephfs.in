@@ -145,7 +145,8 @@ for name in $what; do
 	do_cmd "test -d $osd_data || mkdir -p $osd_data"
 
 	if [ $mkbtrfs -eq 1 ]; then
-	    do_root_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
+	    get_conf osd_user "root" "user"
+	    do_root_cmd "umount $btrfs_path ; for f in $btrfs_devs ; do umount \$f ; done ; modprobe btrfs ; mkfs.btrfs $btrfs_devs ; modprobe btrfs ; btrfsctl -a ; mount -t btrfs $btrfs_opt $first_dev $btrfs_path ; chown $osd_user $btrfs_path ; chmod +w $btrfs_path "
 	fi
 
 	[ -n "$ssh" ] && scp $monmap $host:$monmap
