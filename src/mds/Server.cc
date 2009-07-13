@@ -1973,6 +1973,10 @@ void Server::handle_client_open(MDRequest *mdr)
     }
   }
 
+  // increase max_size?
+  if (cmode & CEPH_FILE_MODE_WR)
+    mds->locker->check_inode_max_size(cur);
+
   // make sure this inode gets into the journal
   if (!cur->xlist_open_file.is_on_xlist()) {
     LogSegment *ls = mds->mdlog->get_current_segment();
