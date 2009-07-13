@@ -5,6 +5,17 @@ CCONF="$BINDIR/cconf"
 conf=$ETCDIR"/ceph.conf"
 hostname=`hostname | cut -d . -f 1`
 
+figure_dirs() {
+    if echo $bindir | grep -q \@; then
+	echo "using current dir"
+	BINDIR=.
+	LIBDIR=.
+	ETCDIR=.
+    else
+	echo "all good"
+	
+    fi
+}
 
 verify_conf() {
     # make sure ceph.conf exists

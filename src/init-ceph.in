@@ -11,16 +11,16 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
-# if we start up as ./init-ceph, assume everything else is in the
+# if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
     LIBDIR=.
     ETCDIR=.
 else
-    BINDIR=/usr/bin
-    LIBDIR=/usr/lib/ceph
-    ETCDIR=/etc/ceph
+    BINDIR=@bindir@
+    LIBDIR=@libdir@/ceph
+    ETCDIR=@sysconfdir@/ceph
 fi
 
 usage_exit() {

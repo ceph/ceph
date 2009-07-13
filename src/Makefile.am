@@ -198,7 +198,22 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
 #BUILT_SOURCES += libhadoopcephfs.so
 
 
+# shell scripts
+editpaths = sed \	
+	-e 's|@bindir[@]|$(bindir)|g' \
+	-e 's|@libdir[@]|$(libdir)|g' \
+	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
+	-e 's|@datadir[@]|$(pkgdatadir)|g' \
+	-e 's|@prefix[@]|$(prefix)|g'
 
+init-ceph mkcephfs: init-ceph.in mkcephfs.in Makefile
+	rm -f $@ $@.tmp
+	$(editpaths) '$(srcdir)/$@.in' >$@.tmp
+	chmod +x $@.tmp
+	chmod a-w $@.tmp
+	mv $@.tmp $@
+
+BUILT_SOURCES += init-ceph mkcephfs
 
 ##
 INCLUDES = 
@@ -234,6 +249,8 @@ ceph_ver.h : $(all_sources) .make_last_ver
 	./make_version
 
 ceph_ver.c : ceph_ver.h
+
+
 
 # cleaning
 clean-local:
