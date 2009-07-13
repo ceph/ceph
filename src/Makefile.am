@@ -199,7 +199,7 @@ libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
 
 
 # shell scripts
-editpaths = sed \	
+editpaths = sed \
 	-e 's|@bindir[@]|$(bindir)|g' \
 	-e 's|@libdir[@]|$(libdir)|g' \
 	-e 's|@sysconfdir[@]|$(sysconfdir)|g' \
