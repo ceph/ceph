@@ -2464,6 +2464,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
 
     switch (lock->get_state()) {
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
+    case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
     default: assert(0);
@@ -2493,7 +2494,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
     
     if (lock->get_type() == CEPH_LOCK_IFILE &&
-      in->state_test(CInode::STATE_NEEDSRECOVER)) {
+	in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
       mds->mdcache->do_file_recover();
       gather++;
@@ -2526,6 +2527,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     in = (CInode *)lock->get_parent();
 
   switch (lock->get_state()) {
+  case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   default: assert(0);
@@ -2577,6 +2579,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   int old_state = lock->get_state();
 
   switch (lock->get_state()) {
+  case LOCK_SCAN: lock->set_state(LOCK_SCAN_LOCK); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
@@ -3224,6 +3227,7 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   switch (lock->get_state()) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_EXCL); break;
+  case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   default: assert(0);
   }
@@ -3263,6 +3267,37 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   }
 }
 
+
+void Locker::file_recover(ScatterLock *lock)
+{
+  CInode *in = (CInode *)lock->get_parent();
+  dout(7) << "file_recover " << *lock << " on " << *in << dendl;
+
+  assert(in->is_auth());
+  assert(lock->is_stable());
+
+  int oldstate = lock->get_state();
+  lock->set_state(LOCK_PRE_SCAN);
+
+  int gather = 0;
+  
+  if (in->is_replicated() &&
+      lock->sm->states[oldstate].replica_state != LOCK_LOCK) {
+    send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    gather++;
+  }
+  if (in->issued_caps_need_gather(lock)) {
+    issue_caps(in);
+    gather++;
+  }
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+  } else {
+    lock->set_state(LOCK_SCAN);
+    mds->mdcache->queue_file_recover(in);
+  }
+}
 
 
 // messenger

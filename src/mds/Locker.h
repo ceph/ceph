@@ -197,6 +197,10 @@ protected:
   void file_mixed(ScatterLock *lock, bool *need_issue=0);
   void file_excl(ScatterLock *lock, bool *need_issue=0);
 
+public:
+  void file_recover(ScatterLock *lock);
+
+private:
   xlist<ScatterLock*> updated_filelocks;
 public:
   void mark_updated_Filelock(ScatterLock *lock);

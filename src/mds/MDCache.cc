@@ -4302,13 +4302,6 @@ void MDCache::unqueue_file_recover(CInode *in)
  */
 void MDCache::identify_files_to_recover()
 {
-  /*  no.  we may have failed a reconnect, then crashed before recovering all sizes..
-  if (!mds->server->failed_reconnects) {
-    dout(10) << "identify_files_to_recover -- all clients reconnected, nothing to do" << dendl;
-    return;
-  }
-  */
-
   dout(10) << "identify_files_to_recover" << dendl;
   vector<CInode*> q;  // put inodes in list first: queue_file_discover modifies inode_map
   for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
@@ -4329,14 +4322,11 @@ void MDCache::identify_files_to_recover()
       }
     }
 
-    if (recover) {
-      in->filelock.set_state(LOCK_LOCK);
-      in->loner_cap = -1;
+    if (recover) 
       q.push_back(in);
-    }
   }
   for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
-    queue_file_recover(*p);
+    mds->locker->file_recover(&(*p)->filelock);
 }
 
 struct C_MDC_Recover : public Context {

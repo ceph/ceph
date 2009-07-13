@@ -107,6 +107,7 @@ struct sm_state_t filelock[LOCK_MAX] = {
 
     [LOCK_PRE_SCAN]  = { LOCK_SCAN, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SCAN]      = { 0,         false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
+    [LOCK_SCAN_LOCK] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,0,0,0 },
 };
 
 struct sm_t sm_filelock = {
