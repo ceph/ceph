@@ -263,6 +263,22 @@ class Objecter {
     }
   };
 
+  struct C_GetAttrs : public Context {
+    bufferlist bl;
+    map<nstring,bufferlist>& attrset;
+    Context *fin;
+    C_GetAttrs(map<nstring, bufferlist>& set, Context *c) : attrset(set), fin(c) {}
+    void finish(int r) {
+      if (r >= 0) {
+	bufferlist::iterator p = bl.begin();
+	::decode(attrset, p);
+      }
+      fin->finish(r);
+      delete fin;
+    }
+  };
+
+
   // Pools and statistics 
   struct ListContext {
     int current_pg;
@@ -471,6 +487,18 @@ private:
     Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;
+    return op_submit(o);
+  }
+
+  tid_t getxattrs(const object_t& oid, ceph_object_layout ol, snapid_t snap,
+             map<nstring,bufferlist>& attrset,
+	     int flags, Context *onfinish) {
+    vector<OSDOp> ops(1);
+    ops[0].op.op = CEPH_OSD_OP_GETXATTRS;
+    C_GetAttrs *fin = new C_GetAttrs(attrset, onfinish);
+    Op *o = new Op(oid, ol, ops, flags, fin, 0);
+    o->snapid = snap;
+    o->outbl = &fin->bl;
     return op_submit(o);
   }
 

@@ -142,11 +142,11 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
       continue;
 
     bufferlist bl; 
-    if (rados->getxattr(pool, map_iter->second, S3_ATTR_ETAG, bl) < 0)
-      continue;
-
-    strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
-    obj.etag[sizeof(obj.etag)-1] = '\0';
+    obj.etag[0] = '\0';
+    if (rados->getxattr(pool, map_iter->second, S3_ATTR_ETAG, bl) >= 0) {
+      strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
+      obj.etag[sizeof(obj.etag)-1] = '\0';
+    }
     result.push_back(obj);
   }
   rados->close_pool(pool);
@@ -155,7 +155,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
 }
 
 
-int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs)
+int S3Rados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
 {
   object_t bucket_oid(bucket.c_str());
 
@@ -163,11 +163,10 @@ int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std
   if (ret < 0)
     return ret;
 
-  vector<pair<string, bufferlist> >::iterator iter;
+  map<nstring, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    pair<string, bufferlist>& attr = *iter;
-    string& name = attr.first;
-    bufferlist& bl = attr.second;
+    nstring name = iter->first;
+    bufferlist& bl = iter->second;
     
     if (bl.length()) {
       ret = rados->setxattr(root_pool, bucket_oid, name.c_str(), bl);
@@ -185,7 +184,7 @@ int S3Rados::create_bucket(std::string& id, std::string& bucket, std::vector<std
 
 int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
-                  std::vector<std::pair<std::string, bufferlist> >& attrs)
+                  map<nstring, bufferlist>& attrs)
 {
   rados_pool_t pool;
 
@@ -195,11 +194,10 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
 
   object_t oid(obj.c_str());
 
-  vector<pair<string, bufferlist> >::iterator iter;
+  map<nstring, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    pair<string, bufferlist>& attr = *iter;
-    string& name = attr.first;
-    bufferlist& bl = attr.second;
+    nstring name = iter->first;
+    bufferlist& bl = iter->second;
     
     if (bl.length()) {
       r = rados->setxattr(pool, oid, name.c_str(), bl);
@@ -225,23 +223,32 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
 
 int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
-               char **petag,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               std::vector<std::pair<std::string, bufferlist> >& attrs,
+               map<nstring, bufferlist>& attrs,  /* in/out */
                struct s3_err *err)
 {
  /* FIXME! this should use a special rados->copy() method */
   int ret;
   char *data;
 
-  ret = get_obj(src_bucket, src_obj, &data, 0, -1, petag,
+  cerr << "copy " << src_bucket << ":" << src_obj << " => " << dest_bucket << ":" << dest_obj << std::endl;
+
+  map<nstring, bufferlist> attrset;
+  ret = get_obj(src_bucket, src_obj, &data, 0, -1, &attrset,
                 mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
+
   if (ret < 0)
     return ret;
+
+  map<nstring, bufferlist>::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    attrset[iter->first] = iter->second;
+  }
+  attrs = attrset;
 
   ret =  put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
 
@@ -326,7 +333,7 @@ int S3Rados::set_attr(std::string& bucket, std::string& obj,
 
 int S3Rados::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
-            char **petag,
+            map<nstring, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
@@ -341,6 +348,7 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
   bufferlist bl;
 
   rados_pool_t pool;
+  map<nstring, bufferlist>::iterator iter;
 
   r = open_pool(bucket, &pool);
   if (r < 0)
@@ -351,6 +359,16 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
   r = rados->stat(pool, oid, &size, &mtime);
   if (r < 0)
     return r;
+
+  if (attrs) {
+    r = rados->getxattrs(pool, oid, *attrs);
+    for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
+      cerr << "xattr: " << iter->first << std::endl;
+    }
+    if (r < 0)
+      return r;
+  }
+
 
   r = -ECANCELED;
   if (mod_ptr) {
@@ -368,19 +386,11 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
       goto done;
     }
   }
-  if (if_match || if_nomatch || petag) {
+  if (if_match || if_nomatch) {
     r = get_attr(bucket, obj, S3_ATTR_ETAG, etag);
     if (r < 0)
       goto done;
-    if (petag) {
-      *petag = (char *)malloc(etag.length() + 1);
-      memcpy(*petag, etag.c_str(), etag.length());
-      (*petag)[etag.length()] = '\0';
-    }
-  }
 
-
-  if (if_match || if_nomatch) {
     r = -ECANCELED;
     if (if_match) {
       cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
@@ -411,14 +421,17 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
   else
     len = end - ofs + 1;
 
-
   cout << "rados->read ofs=" << ofs << " len=" << len << std::endl;
   r = rados->read(pool, oid, ofs, bl, len);
   cout << "rados->read r=" << r << std::endl;
+  if (r < 0)
+    return r;
+
   if (r > 0) {
     *data = (char *)malloc(r);
     memcpy(*data, bl.c_str(), bl.length());
   }
+
 done:
 
   return r;

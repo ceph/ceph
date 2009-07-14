@@ -169,6 +169,8 @@ struct req_state {
 
    map<string, string> x_amz_map;
 
+   vector<pair<string, string> > x_amz_meta;
+
    S3UserInfo user; 
    S3AccessControlPolicy *acl;
 
@@ -319,6 +321,24 @@ static void init_auth_info(struct req_state *s)
     cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
   }
   
+}
+
+static void get_request_metadata(struct req_state *s, vector<pair<string, bufferlist> >& attrs)
+{
+  map<string, string>::iterator iter;
+  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+    string name = iter->first;
+#define X_AMZ_META "x-amz-meta"
+    if (name.find(X_AMZ_META) == 0) {
+      cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
+      string& val = iter->second;
+      bufferlist bl;
+      bl.append(val.c_str(), val.size());
+      string attr_name = S3_ATTR_PREFIX;
+      attr_name.append(name);
+      attrs.push_back(pair<string, bufferlist>(attr_name, bl));
+    }
+  }
 }
 
 static void get_canon_amz_hdr(struct req_state *s, string& dest)
@@ -848,10 +868,10 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   time_t unmod_time;
   time_t *mod_ptr = NULL;
   time_t *unmod_ptr = NULL;
-  char *etag = NULL;
   int r = -EINVAL;
   off_t ofs = 0, end = -1, len = 0;
   char *data;
+  map<nstring, bufferlist> attrs;
 
   if (range_str) {
     r = parse_range(range_str, ofs, end);
@@ -871,7 +891,7 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   }
 
   r = 0;
-  len = s3store->get_obj(bucket, obj, &data, ofs, end, &etag, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
+  len = s3store->get_obj(bucket, obj, &data, ofs, end, &attrs, mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
   if (len < 0)
     r = len;
 
@@ -880,8 +900,14 @@ done:
     dump_content_length(s, len);
   }
   if (!r) {
-    dump_etag(s, etag);
-    free(etag);
+    map<nstring, bufferlist>::iterator iter = attrs.find(S3_ATTR_ETAG);
+    if (iter != attrs.end()) {
+      bufferlist& bl = iter->second;
+      if (bl.length()) {
+        char *etag = bl.c_str();
+        dump_etag(s, etag);
+      }
+    }
   }
   dump_errno(s, r, &err);
   end_header(s);
@@ -1193,7 +1219,7 @@ static void do_create_bucket(struct req_state *s)
   S3AccessControlPolicy policy;
   string canned_acl;
   int r;
-  std::vector<std::pair<std::string, bufferlist> > attrs;
+  map<nstring, bufferlist> attrs;
   bufferlist aclbl;
 
   get_canned_acl_request(s, canned_acl);
@@ -1206,7 +1232,7 @@ static void do_create_bucket(struct req_state *s)
   }
   policy.encode(aclbl);
 
-  attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
+  attrs[S3_ATTR_ACL] = aclbl;
 
   r = s3store->create_bucket(s->user.user_id, s->bucket_str, attrs);
 
@@ -1272,7 +1298,7 @@ static void copy_object(struct req_state *s, const char *copy_source)
   S3AccessControlPolicy dest_policy;
   bool ret;
   bufferlist aclbl;
-  vector<pair<string, bufferlist> > attrs;
+  map<nstring, bufferlist> attrs;
   bufferlist bl;
   S3AccessControlPolicy src_policy;
   string src_bucket, src_object, empty_str;
@@ -1285,7 +1311,6 @@ static void copy_object(struct req_state *s, const char *copy_source)
   time_t *mod_ptr = NULL;
   time_t *unmod_ptr = NULL;
   time_t mtime;
-  char *etag = NULL;
 
   if (!verify_permission(s, S3_PERM_WRITE)) {
     abort_early(s, -EACCES);
@@ -1333,11 +1358,13 @@ static void copy_object(struct req_state *s, const char *copy_source)
     unmod_ptr = &unmod_time;
   }
 
-  attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
+  attrs[S3_ATTR_ACL] = aclbl;
+  // get_request_metadata(s, attrs);
+
   r = s3store->copy_obj(s->user.user_id,
                         s->bucket_str, s->object_str,
                         src_bucket, src_object,
-                        &etag, &mtime,
+                        &mtime,
                         mod_ptr,
                         unmod_ptr,
                         if_match,
@@ -1352,10 +1379,16 @@ done:
   if (r == 0) {
     open_section(s, "CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
-    dump_value(s, "ETag", etag);
+    map<nstring, bufferlist>::iterator iter = attrs.find(S3_ATTR_ETAG);
+    if (iter != attrs.end()) {
+      bufferlist& bl = iter->second;
+      if (bl.length()) {
+        char *etag = bl.c_str();
+        dump_value(s, "ETag", etag);
+      }
+    }
     close_section(s, "CopyObjectResult");
   }
-  free(etag);
 }
 
 static void do_create_object(struct req_state *s)
@@ -1435,11 +1468,14 @@ static void do_create_object(struct req_state *s)
     policy.encode(aclbl);
 
     string md5_str(calc_md5);
-    vector<pair<string, bufferlist> > attrs;
+    map<nstring, bufferlist> attrs;
     bufferlist bl;
     bl.append(md5_str.c_str(), md5_str.size());
-    attrs.push_back(pair<string, bufferlist>(S3_ATTR_ETAG, bl));
-    attrs.push_back(pair<string, bufferlist>(S3_ATTR_ACL, aclbl));
+    attrs[S3_ATTR_ETAG] = bl;
+    attrs[S3_ATTR_ACL] = aclbl;
+
+    // get_request_metadata(s, attrs);
+
     r = s3store->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, actual, NULL, attrs);
   }
 done:

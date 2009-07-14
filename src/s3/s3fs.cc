@@ -144,7 +144,7 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
 }
 
 
-int S3FS::create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs)
+int S3FS::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -153,11 +153,10 @@ int S3FS::create_bucket(std::string& id, std::string& bucket, std::vector<std::p
   if (mkdir(buf, 0755) < 0)
     return -errno;
 
-  vector<pair<string, bufferlist> >::iterator iter;
+  map<nstring, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    pair<string, bufferlist>& attr = *iter;
-    string& name = attr.first;
-    bufferlist& bl = attr.second;
+    nstring name = iter->first;
+    bufferlist& bl = iter->second;
     
     if (bl.length()) {
       int r = setxattr(buf, name.c_str(), bl.c_str(), bl.length(), 0);
@@ -174,7 +173,7 @@ int S3FS::create_bucket(std::string& id, std::string& bucket, std::vector<std::p
 
 int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
-                  std::vector<std::pair<std::string, bufferlist> >& attrs)
+                  map<nstring, bufferlist>& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -186,11 +185,10 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
     return -errno;
 
   int r;
-  vector<pair<string, bufferlist> >::iterator iter;
+  map<nstring, bufferlist>::iterator iter;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    pair<string, bufferlist>& attr = *iter;
-    string& name = attr.first;
-    bufferlist& bl = attr.second;
+    nstring name = iter->first;
+    bufferlist& bl = iter->second;
     
     if (bl.length()) {
       r = fsetxattr(fd, name.c_str(), bl.c_str(), bl.length(), 0);
@@ -231,22 +229,28 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
 
 int S3FS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
-               char **petag,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               std::vector<std::pair<std::string, bufferlist> >& attrs,
+               map<nstring, bufferlist>& attrs,
                struct s3_err *err)
 {
   int ret;
   char *data;
 
-  ret = get_obj(src_bucket, src_obj, &data, 0, -1, petag,
+  map<nstring, bufferlist> attrset;
+  ret = get_obj(src_bucket, src_obj, &data, 0, -1, &attrset,
                 mod_ptr, unmod_ptr, if_match, if_nomatch, true, err);
   if (ret < 0)
     return ret;
+
+  map<nstring, bufferlist>::iterator iter;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    attrset[iter->first] = iter->second;
+  }
+  attrs = attrset;
 
   ret =  put_obj(id, dest_bucket, dest_obj, data, ret, mtime, attrs);
 
@@ -372,7 +376,7 @@ int S3FS::set_attr(std::string& bucket, std::string& obj,
 
 int S3FS::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
-            char **petag,
+            map<nstring, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
@@ -420,16 +424,11 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
       goto done;
     }
   }
-  if (if_match || if_nomatch || petag) {
+  if (if_match || if_nomatch) {
     r = get_attr(S3_ATTR_ETAG, fd, &etag);
     if (r < 0)
       goto done;
-    if (petag)
-      *petag = etag;
-  }
-
-
-  if (if_match || if_nomatch) {
+ 
     r = -ECANCELED;
     if (if_match) {
       cerr << "etag=" << etag << " " << " if_match=" << if_match << endl;
@@ -483,8 +482,7 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
 
   r = max_len;
 done:
-  if (etag && !petag)
-    free(etag);
+  free(etag);
   close(fd);  
 
   return r;

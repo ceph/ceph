@@ -46,15 +46,14 @@ int s3_store_user_info(S3UserInfo& info)
   const char *data = bl.c_str();
   string md5;
   int ret;
-  vector<pair<string,bufferlist> > vec;
+  map<nstring,bufferlist> attrs;
 
-  ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), NULL, vec);
+  ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), NULL, attrs);
 
   if (ret == -ENOENT) {
-    std::vector<std::pair<std::string, bufferlist> > attrs;
-    ret = s3store->create_bucket(info.user_id /* FIXME currently means nothing */, ui_bucket, attrs);
+    ret = s3store->create_bucket(info.user_id, ui_bucket, attrs);
     if (ret >= 0)
-      ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), NULL, vec);
+      ret = s3store->put_obj(info.user_id, ui_bucket, info.user_id, data, bl.length(), NULL, attrs);
   }
 
   if (ret < 0)
@@ -67,12 +66,12 @@ int s3_store_user_info(S3UserInfo& info)
   ui.user_id = info.user_id;
   bufferlist uid_bl;
   ui.encode(uid_bl);
-  ret = s3store->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, vec);
+  ret = s3store->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
   if (ret == -ENOENT) {
-    std::vector<std::pair<std::string, bufferlist> > attrs;
+    map<nstring, bufferlist> attrs;
     ret = s3store->create_bucket(info.user_id, ui_email_bucket, attrs);
     if (ret >= 0)
-      ret = s3store->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, vec);
+      ret = s3store->put_obj(info.user_id, ui_email_bucket, info.user_email, uid_bl.c_str(), uid_bl.length(), NULL, attrs);
   }
 
   return ret;

@@ -91,6 +91,16 @@ int main(int argc, const char **argv)
       cout << *iter << std::endl;
     }
   } while (entries);
+
+
+  map<nstring, bufferlist> attrset;
+  rados.getxattrs(pool, oid, attrset);
+
+  map<nstring, bufferlist>::iterator it;
+  for (it = attrset.begin(); it != attrset.end(); ++it) {
+    cout << "xattr: " << it->first << std::endl;
+  }
+  
 #if 0
   r = rados.remove(pool, oid);
   cout << "remove result=" << r << std::endl;

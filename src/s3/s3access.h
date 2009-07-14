@@ -10,9 +10,11 @@
 
 #define SERVER_NAME "S3FS"
 
-#define S3_ATTR_ACL	"user.s3.acl"
-#define S3_ATTR_ETAG    "user.s3.etag"
-#define S3_ATTR_BUCKETS	"user.s3.buckets"
+#define S3_ATTR_PREFIX  "user.s3."
+
+#define S3_ATTR_ACL	S3_ATTR_PREFIX "acl"
+#define S3_ATTR_ETAG    S3_ATTR_PREFIX "etag"
+#define S3_ATTR_BUCKETS	S3_ATTR_PREFIX "buckets"
 
 typedef void *S3AccessHandle;
 
@@ -52,27 +54,26 @@ public:
 
   virtual int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& marker, std::vector<S3ObjEnt>& result) = 0;
 
-  virtual int create_bucket(std::string& id, std::string& bucket, std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
+  virtual int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs) = 0;
   virtual int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                       time_t *mtime,
-                      std::vector<std::pair<std::string, bufferlist> >& attrs) = 0;
+                      map<nstring, bufferlist>& attrs) = 0;
 
   virtual int copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                       std::string& src_bucket, std::string& src_obj,
-                      char **petag,
                       time_t *mtime,
                       const time_t *mod_ptr,
                       const time_t *unmod_ptr,
                       const char *if_match,
                       const char *if_nomatch,
-                      std::vector<std::pair<std::string, bufferlist> >& attrs,
-                     struct s3_err *err) = 0;
+                      map<nstring, bufferlist>& attrs,
+                      struct s3_err *err) = 0;
   virtual int delete_bucket(std::string& id, std::string& bucket) = 0;
   virtual int delete_obj(std::string& id, std::string& bucket, std::string& obj) = 0;
 
   virtual int get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
-            char **petag,
+            map<nstring, bufferlist> *attrs,
             const time_t *mod_ptr,
             const time_t *unmod_ptr,
             const char *if_match,
