@@ -161,6 +161,7 @@ int SimpleMessenger::Accepter::start()
   sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
+  sigaction(SIGUSR2, &sa, NULL);
   sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
 
   // start thread
@@ -676,7 +677,7 @@ int SimpleMessenger::Pipe::accept()
   dout(10) << "accept replacing " << existing << dendl;
   existing->state = STATE_CLOSED;
   existing->cond.Signal();
-  existing->reader_thread.kill(SIGUSR1);
+  existing->reader_thread.kill(SIGUSR2);
   existing->unregister_pipe();
     
   // steal queue and out_seq
@@ -1145,10 +1146,12 @@ void SimpleMessenger::Pipe::stop()
   dout(10) << "stop" << dendl;
   state = STATE_CLOSED;
   cond.Signal();
+  if (sd >= 0)
+    ::close(sd);
   if (reader_running)
-    reader_thread.kill(SIGUSR1);
+    reader_thread.kill(SIGUSR2);
   if (writer_running)
-    writer_thread.kill(SIGUSR1);
+    writer_thread.kill(SIGUSR2);
 }
 
 
