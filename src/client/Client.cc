@@ -2938,6 +2938,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   tout << relpath << std::endl;
   tout << mode << std::endl;
 
+  //get through existing parts of path
   filepath path(relpath);
   unsigned int i;
   int r;
@@ -2946,20 +2947,28 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   for (i=0; (r=_lookup(cur, path[i].c_str(), &next))==0 && i<path.depth(); ++i) {
     cur = next;
   }
+  //check that we have work left to do
+  if (i==path.depth()) return -EEXIST;
   if (r!=-ENOENT) return r;
-  dout(10) << "mkdirs got to level " << i << " on path " << relpath << dendl;
+  dout(10) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
+  //make new directory at each level
   for (; i<path.depth(); ++i) {
-    string pathname = path[0];
-    for (unsigned int j=1; j<i; ++j) {
-      pathname += "/";
-      pathname += path[j];
-    }
-    dout(10) << "mkdirs: calling mkdir on " << pathname.c_str() << dendl;
-    r = mkdir(pathname.c_str(), mode);
-    dout(10) << "mkdirs: got response " << r << " on mkdir call" << dendl;
-    client_lock.Lock();
-    dout(20) << "and relocked client_lock" << dendl;
+    //make new dir
+    dout(10) << "mkdirs: calling _mkdir on " << path[i].c_str() << dendl;
+    r = _mkdir(cur, path[i].c_str(), mode);
+    dout(10) << "mkdirs: got response " << r << " on mkdirs call" << dendl;
+    //check proper creation/existence
     if (r < 0) return r;
+    r = _lookup(cur, path[i], &next);
+    if(r < 0) {
+      dout(0) << "mkdirs: successfully created new directory " << path[i]
+	      << " but can't _lookup it!" << dendl;
+      return r;
+    }
+    //move to new dir and continue
+    cur = next;
+    dout(10) << "mkdirs: successfully created directory "
+	     << filepath(cur->ino).getpath() << dendl;
   }
   return 0;
 }
@@ -4774,11 +4783,11 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
  
   dout(10) << "_mkdir: making request" << dendl;
   int res = make_request(req, uid, gid);
-  dout(10) << "mkdir result is " << res << dendl;
+  dout(10) << "_mkdir result is " << res << dendl;
 
   trim_cache();
 
-  dout(3) << "mkdir(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  dout(3) << "_mkdir(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
   return res;
 }
 
