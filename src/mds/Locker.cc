@@ -1431,10 +1431,10 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       new_ranges[p->first].first = 0;
       if (latest->client_ranges.count(p->first))
-	new_ranges[p->first].last = MAX(ROUND_UP_TO(size<<1, latest->get_layout_size_increment()),
+	new_ranges[p->first].last = MAX(ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment()),
 					latest->client_ranges[p->first].last);
       else
-	new_ranges[p->first].last = ROUND_UP_TO(size<<1, latest->get_layout_size_increment());
+	new_ranges[p->first].last = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
     }
   }
   if (latest->client_ranges != new_ranges)
@@ -1443,8 +1443,10 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (!update_size && !new_max)
     return false;
 
-  dout(10) << "check_inode_max_size on " << *in << dendl;
-  
+  dout(10) << "check_inode_max_size new_ranges " << new_ranges
+	   << " update_size " << update_size
+	   << " on " << *in << dendl;
+
   if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
     if (in->filelock.is_stable()) {
@@ -1816,9 +1818,9 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	dout(10) << "client requests file_max " << m->get_max_size()
 		 << " > max " << old_max << dendl;
 	change_max = true;
-	new_max = ROUND_UP_TO(m->get_max_size() << 1, latest->get_layout_size_increment());
+	new_max = ROUND_UP_TO((m->get_max_size()+1) << 1, latest->get_layout_size_increment());
       } else {
-	new_max = ROUND_UP_TO(size<<1, latest->get_layout_size_increment());
+	new_max = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
 	if (new_max > old_max)
 	  change_max = true;
 	else
