@@ -4222,8 +4222,10 @@ void MDCache::reissue_all_caps()
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
-    if (in->is_any_caps())
-      mds->locker->issue_caps(in);
+    if (in->is_any_caps()) {
+      if (!mds->locker->eval(in, CEPH_CAP_LOCKS))
+	mds->locker->issue_caps(in);
+    }
   }
 }
 
