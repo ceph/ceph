@@ -1542,7 +1542,7 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 {
 	struct ceph_inode_info *ci;
 
-	dout(10, "kick_flushing_caps mds%d\n", session->s_mds); 
+	dout(10, "kick_flushing_caps mds%d\n", session->s_mds);
 	list_for_each_entry(ci, &session->s_cap_flushing, i_flushing_item) {
 		struct inode *inode = &ci->vfs_inode;
 		struct ceph_cap *cap;

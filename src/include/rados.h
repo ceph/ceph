@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
+// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*-
 // vim: ts=8 sw=8 smarttab
 
 #ifndef __RADOS_H
@@ -371,7 +371,7 @@ struct ceph_osd_op {
 			__le64 pgls_cookie, count;
 		};
 	};
-        __le32 payload_len;
+	__le32 payload_len;
 } __attribute__ ((packed));
 
 /*
