@@ -1047,10 +1047,17 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
 				   Session *session,
-				   SnapRealm *realm)
+				   SnapRealm *realm,
+				   bool is_replay)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   bool is_new;
+
+  // if replay, try to reconnect cap, and otherwise do nothing.
+  if (is_replay) {
+    mds->mdcache->try_reconnect_cap(in, session);
+    return 0;
+  }
 
   // my needs
   assert(session->inst.name.is_client());

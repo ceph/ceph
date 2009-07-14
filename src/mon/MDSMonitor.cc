@@ -357,6 +357,8 @@ void MDSMonitor::committed()
       mdsmap.is_stopped()) 
     mon->messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				 mon->monmap->get_inst(mon->whoami));
+
+  tick();
 }
 
 

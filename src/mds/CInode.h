@@ -602,6 +602,15 @@ public:
 	lock->set_state(LOCK_SYNC);  // might have been lock, previously
     }
   }
+  void choose_lock_states() {
+    int issued = get_caps_issued();
+    if (is_auth() && (issued & CEPH_CAP_ANY_EXCL))
+      try_choose_loner();
+    choose_lock_state(&filelock, issued);
+    choose_lock_state(&authlock, issued);
+    choose_lock_state(&xattrlock, issued);
+    choose_lock_state(&linklock, issued);
+  }
 
   int count_nonstale_caps() {
     int n = 0;
@@ -665,7 +674,7 @@ public:
     } else {
       cap = add_client_cap(client, session);
       cap->set_wanted(icr.wanted);
-      cap->issue(icr.issued);
+      cap->issue_norevoke(icr.issued);
     }
     cap->set_cap_id(icr.cap_id);
     cap->set_last_issue_stamp(g_clock.recent_now());

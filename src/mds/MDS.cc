@@ -1295,19 +1295,17 @@ bool MDS::_dispatch(Message *m)
 
   // finish any triggered contexts
   static bool finishing = false;
-  if (!finishing && finished_queue.size()) {
-    dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
-    dout(10) << finished_queue << dendl;
-    list<Context*> ls;
-    ls.splice(ls.begin(), finished_queue);
-    assert(finished_queue.empty());
-    finishing = true;
-    finish_contexts(ls);
-    finishing = false;
-  } else {
+  if (!finishing) {
+    while (finished_queue.size()) {
+      dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
+      dout(10) << finished_queue << dendl;
+      finishing = true;
+      finish_contexts(finished_queue);
+      finishing = false;
+    }
+
     // done with all client replayed requests?
-    if (!finishing &&
-	is_clientreplay() &&
+    if (is_clientreplay() &&
 	mdcache->is_open() &&
 	waiting_for_replay.empty() &&
 	want_state == MDSMap::STATE_CLIENTREPLAY) {

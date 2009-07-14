@@ -129,8 +129,6 @@ uclient
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- fix file recovery
-  - disallow access until file is recovered?
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too

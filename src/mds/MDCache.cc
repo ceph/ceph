@@ -3819,16 +3819,8 @@ void MDCache::process_reconnected_caps()
     CInode *in = p->first;
     p++;
 
-    int issued = in->get_caps_issued();
-    if (in->is_auth() &&
-	(issued & CEPH_CAP_ANY_EXCL))
-      in->try_choose_loner();
-    in->choose_lock_state(&in->filelock, issued);
-    in->choose_lock_state(&in->authlock, issued);
-    in->choose_lock_state(&in->xattrlock, issued);
-    in->choose_lock_state(&in->linklock, issued);
-    dout(15) << " issued " << ccap_string(issued)
-	     << " chose lock states on " << *in << dendl;
+    in->choose_lock_states();
+    dout(15) << " chose lock states on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
 
@@ -3953,6 +3945,24 @@ void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& 
   if (frommds >= 0)
     do_cap_import(session, in, cap);
 }
+
+void MDCache::try_reconnect_cap(CInode *in, Session *session)
+{
+  int client = session->get_client();
+  ceph_mds_cap_reconnect *rc = get_replay_cap_reconnect(in->ino(), client);
+  if (rc) {
+    in->reconnect_cap(client, *rc, session);
+    dout(10) << "try_reconnect_cap client" << client
+	     << " reconnect wanted " << ccap_string(rc->wanted)
+	     << " issue " << ccap_string(rc->issued)
+	     << " on " << *in << dendl;
+    remove_replay_cap_reconnect(in->ino(), client);
+
+    in->choose_lock_states();
+    dout(15) << " chose lock states on " << *in << dendl;
+  }
+}
+
 
 
 // -------

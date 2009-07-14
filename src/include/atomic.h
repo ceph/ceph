@@ -38,7 +38,7 @@ public:
 
 #else
 /*
- * crappy slow implementation that uses a pthreads mutex.
+ * crappy slow implementation that uses a pthreads spinlock.
  */
 #include "common/Spinlock.h"
 
