@@ -587,7 +587,7 @@ public:
   // choose new lock state during recovery, based on issued caps
   void choose_lock_state(SimpleLock *lock, int allissued) {
     int shift = lock->get_cap_shift();
-    int issued = allissued >> shift;
+    int issued = (allissued >> shift) & lock->get_cap_mask();
     if (is_auth()) {
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
