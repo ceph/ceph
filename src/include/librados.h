@@ -107,6 +107,7 @@ public:
 
   int getxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl);
+  int getxattrs(rados_pool_t pool, const object_t& oid, map<nstring, bufferlist>& attrset);
   int stat(rados_pool_t pool, const object_t& oid, __u64 *psize, time_t *pmtime);
 
   int exec(rados_pool_t pool, const object_t& oid, const char *cls, const char *method,

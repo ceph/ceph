@@ -112,6 +112,7 @@ public:
 
   int getxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(PoolCtx& pool, const object_t& oid, const char *name, bufferlist& bl);
+  int getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, bufferlist>& attrset);
 
   int list_pools(std::vector<string>& ls);
   int get_pool_stats(std::vector<string>& ls, map<string,rados_pool_stat_t>& result);
@@ -979,6 +980,40 @@ int RadosClient::setxattr(PoolCtx& pool, const object_t& oid, const char *name, 
   return bl.length();
 }
 
+int RadosClient::getxattrs(PoolCtx& pool, const object_t& oid, map<nstring, bufferlist>& attrset)
+{
+  utime_t ut = g_clock.now();
+
+  /* can't write to a snapshot */
+  if (pool.snap_seq != CEPH_NOSNAP)
+    return -EINVAL;
+
+  Mutex mylock("RadosClient::getexattrs::mylock");
+  Cond cond;
+  bool done;
+  int r;
+
+  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+
+  dout(0) << "going to setxattr" << dendl;
+
+  lock.Lock();
+  ceph_object_layout layout = objecter->osdmap->make_object_layout(oid, pool.poolid);
+  objecter->getxattrs(oid, layout, pool.snap_seq,
+                  attrset,
+		  0, onack);
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  dout(0) << "did setxattr" << dendl;
+
+  return r;
+}
+
 // ---------------------------------------------
 
 Rados::Rados() : client(NULL)
@@ -1102,6 +1137,14 @@ int Rados::getxattr(rados_pool_t pool, const object_t& oid, const char *name, bu
     return -EINVAL;
 
   return client->getxattr(*(RadosClient::PoolCtx *)pool, oid, name, bl);
+}
+
+int Rados::getxattrs(rados_pool_t pool, const object_t& oid, map<nstring, bufferlist>& attrset)
+{
+  if (!client)
+    return -EINVAL;
+
+  return client->getxattrs(*(RadosClient::PoolCtx *)pool, oid, attrset);
 }
 
 int Rados::setxattr(rados_pool_t pool, const object_t& oid, const char *name, bufferlist& bl)

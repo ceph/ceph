@@ -1602,7 +1602,7 @@ int FileStore::_getattr(const char *fn, const char *name, bufferptr& bp)
   return l;
 }
 
-int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset) 
+int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset, bool user_only) 
 {
   // get attr list
   char names1[100];
@@ -1630,9 +1630,15 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset)
   while (name < end) {
     char *attrname = name;
     if (parse_attrname(&name)) {
-      dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
-      int r = _getattr(fn, attrname, aset[name]);
-      if (r < 0) return r;
+      char *set_name = name;
+      if (user_only)
+        set_name++;
+      if (*set_name) {
+        dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
+      
+        int r = _getattr(fn, attrname, aset[set_name]);
+        if (r < 0) return r;
+      }
     }
     name += strlen(name) + 1;
   }
@@ -1672,14 +1678,14 @@ int FileStore::getattr(coll_t cid, const sobject_t& oid, const char *name, buffe
   return r;
 }
 
-int FileStore::getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset) 
+int FileStore::getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset, bool user_only) 
 {
   if (fake_attrs) return attrs.getattrs(cid, oid, aset);
 
   char fn[PATH_MAX];
   get_coname(cid, oid, fn);
   dout(15) << "getattrs " << fn << dendl;
-  int r = _getattrs(fn, aset);
+  int r = _getattrs(fn, aset, user_only);
   dout(10) << "getattrs " << fn << " = " << r << dendl;
   return r;
 }

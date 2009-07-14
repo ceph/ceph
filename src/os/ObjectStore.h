@@ -460,7 +460,7 @@ public:
       value.push_back(bp);
     return r;
   }
-  virtual int getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset) {return 0;};
+  virtual int getattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr>& aset, bool user_only = false) {return 0;};
 
   /*
   virtual int _setattr(coll_t cid, sobject_t oid, const char *name, const void *value, size_t size) = 0;

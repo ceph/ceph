@@ -993,6 +993,24 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       }
       break;
 
+   case CEPH_OSD_OP_GETXATTRS:
+      {
+	map<nstring,bufferptr> attrset;
+        result = osd->store->getattrs(info.pgid.to_coll(), soid, attrset, true);
+        map<nstring, bufferptr>::iterator iter;
+        map<nstring, bufferlist> newattrs;
+        for (iter = attrset.begin(); iter != attrset.end(); ++iter) {
+           bufferlist bl;
+           bl.append(iter->second);
+           newattrs[iter->first] = bl;
+        }
+        
+        bufferlist bl;
+        ::encode(newattrs, bl);
+        odata.claim_append(bl);
+      }
+      break;
+
     case CEPH_OSD_OP_MASKTRUNC:
       if (p != ops.begin()) {
 	OSDOp& rd = *(p - 1);
