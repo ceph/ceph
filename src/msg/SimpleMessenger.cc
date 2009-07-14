@@ -175,11 +175,20 @@ void *SimpleMessenger::Accepter::entry()
   
   fd_set fds;
   int errors = 0;
+
+  sigset_t sigmask, sigempty;
+  sigemptyset(&sigmask);
+  sigaddset(&sigmask, SIGUSR1);
+  sigemptyset(&sigempty);
+
+  // block SIGUSR1
+  pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
+
   while (!done) {
     FD_ZERO(&fds);
     FD_SET(listen_sd, &fds);
     dout(20) << "accepter calling select" << dendl;
-    int r = ::select(listen_sd+1, &fds, 0, &fds, 0);
+    int r = ::pselect(listen_sd+1, &fds, 0, &fds, 0, &sigempty);  // unblock SIGUSR1 inside select()
     dout(20) << "accepter select got " << r << dendl;
     
     if (done) break;
@@ -215,6 +224,9 @@ void *SimpleMessenger::Accepter::entry()
 	break;
     }
   }
+
+  // unblock SIGUSR1
+  pthread_sigmask(SIG_UNBLOCK, &sigmask, NULL);
 
   dout(20) << "accepter closing" << dendl;
   // don't close socket, in case we start up again?  blech.
