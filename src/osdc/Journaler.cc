@@ -682,6 +682,8 @@ bool Journaler::is_readable()
   // partial fragment at the end?
   if (received_pos == write_pos) {
     dout(10) << "is_readable() detected partial entry at tail, adjusting write_pos to " << read_pos << dendl;
+    if (write_pos > read_pos)
+      junk_tail_pos = write_pos; // note old tail
     write_pos = flush_pos = ack_pos = safe_pos = read_pos;
     assert(write_buf.length() == 0);
 
@@ -698,6 +700,20 @@ bool Journaler::is_readable()
     _issue_read(fetch_len);
   }
 
+  return false;
+}
+
+bool Journaler::truncate_tail_junk(Context *c)
+{
+  if (!junk_tail_pos) {
+    dout(10) << "truncate_tail_junk -- no trailing junk" << dendl;
+    return true;
+  }
+
+  __s64 len = junk_tail_pos - write_pos;
+  dout(10) << "truncate_tail_junk " << write_pos << "~" << len << dendl;
+  SnapContext snapc;
+  filer.zero(ino, &layout, snapc, write_pos, len, g_clock.now(), 0, NULL, c);
   return false;
 }
 

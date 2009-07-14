@@ -60,8 +60,9 @@ using std::map;
 
 
 class MDLog {
- protected:
+public:
   MDS *mds;
+protected:
   int num_events; // in events
 
   int unflushed;
@@ -94,6 +95,8 @@ class MDLog {
 
   void _replay();         // old way
   void _replay_thread();  // new way
+  void _replay_truncated();
+  friend class C_MDL_ReplayTruncated;
 
 
   // -- segments --
