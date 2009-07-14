@@ -373,8 +373,9 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
     if (r < 0)
       goto done;
     if (petag) {
-      *petag = (char *)malloc(etag.length());
+      *petag = (char *)malloc(etag.length() + 1);
       memcpy(*petag, etag.c_str(), etag.length());
+      (*petag)[etag.length()] = '\0';
     }
   }
 

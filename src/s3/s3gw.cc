@@ -1239,6 +1239,14 @@ done:
 
 static bool parse_copy_source(const char *src, string& bucket, string& object)
 {
+  string url_src(src);
+  string dec_src;
+
+  url_decode(url_src, dec_src);
+  src = dec_src.c_str();
+
+  cerr << "decoded src=" << src << std::endl;
+
   if (*src == '/') ++src;
 
   string str(src);
