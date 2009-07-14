@@ -1080,6 +1080,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
+  int mkdirs(const char *path, mode_t mode);
   int rmdir(const char *path);
 
   // symlinks

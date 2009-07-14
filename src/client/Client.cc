@@ -2912,15 +2912,56 @@ int Client::mkdir(const char *relpath, mode_t mode)
   tout << "mkdir" << std::endl;
   tout << relpath << std::endl;
   tout << mode << std::endl;
+  dout(10) << "mkdir: " << relpath << dendl;
 
   filepath path(relpath);
+  dout(10) << "mkdir: constructed filepath: " << path.get_path() << dendl;
   string name = path.last_dentry();
+  dout(10) << "mkdir: got name from path.last_dentry()" << dendl;
   path.pop_dentry();
+  dout(10) << "mkdir: popped dentry" << dendl;
   Inode *dir;
+  dout(10) << "mkdir: calling path_walk" << dendl;
   int r = path_walk(path, &dir);
-  if (r < 0)
+  if (r < 0) {
+    dout(10) << "mkdir: path_walk returned error: " << r << dendl;
     return r;
+  }
+  dout(10) << "mkdir: path_walked successfully" << dendl;
   return _mkdir(dir, name.c_str(), mode);
+}
+
+int Client::mkdirs(const char *relpath, mode_t mode)
+{
+  Mutex::Locker lock(client_lock);
+  tout << "mkdirs" << std::endl;
+  tout << relpath << std::endl;
+  tout << mode << std::endl;
+
+  filepath path(relpath);
+  unsigned int i;
+  int r;
+  Inode *cur = cwd;
+  Inode *next;
+  for (i=0; (r=_lookup(cur, path[i].c_str(), &next))==0 && i<path.depth(); ++i) {
+    cur = next;
+  }
+  if (r!=-ENOENT) return r;
+  dout(10) << "mkdirs got to level " << i << " on path " << relpath << dendl;
+  for (; i<path.depth(); ++i) {
+    string pathname = path[0];
+    for (unsigned int j=1; j<i; ++j) {
+      pathname += "/";
+      pathname += path[j];
+    }
+    dout(10) << "mkdirs: calling mkdir on " << pathname.c_str() << dendl;
+    r = mkdir(pathname.c_str(), mode);
+    dout(10) << "mkdirs: got response " << r << " on mkdir call" << dendl;
+    client_lock.Lock();
+    dout(20) << "and relocked client_lock" << dendl;
+    if (r < 0) return r;
+  }
+  return 0;
 }
 
 int Client::rmdir(const char *relpath)
@@ -4731,6 +4772,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   req->set_filepath(path);
   req->head.args.mkdir.mode = mode;
  
+  dout(10) << "_mkdir: making request" << dendl;
   int res = make_request(req, uid, gid);
   dout(10) << "mkdir result is " << res << dendl;
 
