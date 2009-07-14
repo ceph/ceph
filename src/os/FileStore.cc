@@ -1631,10 +1631,16 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset, bool user
     char *attrname = name;
     if (parse_attrname(&name)) {
       char *set_name = name;
-      if (user_only)
-        set_name++;
-      if (*set_name) {
+      bool can_get = true;
+      if (user_only) {
+          if (*set_name =='_')
+            set_name++;
+          else
+            can_get = false;
+      }
+      if (*set_name && can_get) {
         dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
+        dout(0) << "getattrs " << fn << " set_name '" << set_name << "' user_only=" << user_only << dendl;
       
         int r = _getattr(fn, attrname, aset[set_name]);
         if (r < 0) return r;
