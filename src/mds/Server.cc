@@ -667,6 +667,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   if (req->is_replay()) {
     dout(10) << " no early reply on replay op" << dendl;
+    mds->mdlog->flush();
     return;
   }
 
