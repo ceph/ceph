@@ -90,8 +90,10 @@ class filepath {
     if (s[0] == '/') {
       path = s + 1;    
       ino = 1;
-    } else
+    } else {
       ino = 0;
+      path = s;
+    }
     bits.clear();
   }
 
