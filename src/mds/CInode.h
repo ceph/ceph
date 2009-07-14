@@ -670,11 +670,13 @@ public:
   Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session) {
     Capability *cap = get_client_cap(client);
     if (cap) {
+      // FIXME?
       cap->merge(icr.wanted, icr.issued);
     } else {
       cap = add_client_cap(client, session);
       cap->set_wanted(icr.wanted);
       cap->issue_norevoke(icr.issued);
+      cap->reset_seq();
     }
     cap->set_cap_id(icr.cap_id);
     cap->set_last_issue_stamp(g_clock.recent_now());

@@ -239,6 +239,10 @@ public:
   ceph_seq_t get_last_seq() { return last_sent; }
   ceph_seq_t get_last_issue() { return last_issue; }
 
+  void reset_seq() {
+    last_sent = 0;
+    last_issue = 0;
+  }
   
   // -- exports --
   Export make_export() {
