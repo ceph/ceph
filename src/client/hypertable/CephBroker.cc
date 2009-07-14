@@ -32,11 +32,29 @@ using namespace Hypertable;
 
 atomic_t CephBroker::ms_next_fd = ATOMIC_INIT(0);
 
-CephBroker::CephBroker(PropertiesPtr &cfg) {
+CephBroker::CephBroker(PropertiesPtr& cfg) {
   m_verbose = cfg->get_bool("Hypertable.Verbose");
-  ceph_initialize(0, NULL);
+
+  //construct an arguments array
+  const char *argv[9];
+  String zero = "cephBroker";
+  String one = "-m";
+  String logdir = "/more/greg/client.log";
+  argv[0] = zero.c_str();
+  argv[1] = one.c_str();
+  argv[2] = (cfg->get_str("CephBroker.MonAddr").c_str());
+  argv[3] = "--debug_client";
+  argv[4] = "20";
+  argv[5] = "--debug_ms";
+  argv[6] = "1";
+  argv[7] = "--lockdep";
+  argv[8] = "1";
+
+  HT_INFO("Calling ceph_initialize");
+  ceph_initialize(9, argv);
+  HT_INFO("Calling ceph_mount");
   ceph_mount();
-  /* do other stuff */
+  HT_INFO("Returning from constructor");
 }
 
 CephBroker::~CephBroker(){
@@ -52,7 +70,7 @@ void CephBroker::open(ResponseCallbackOpen *cb, const char *fname, uint32_t bufs
 
   fd = atomic_inc_return(&ms_next_fd);
 
-  if ((ceph_fd = ceph_open(abspath, O_RDONLY)) < 0) {
+  if ((ceph_fd = ceph_open(abspath.c_str(), O_RDONLY)) < 0) {
     report_error(cb, ceph_fd);
     return;
   }
@@ -60,7 +78,7 @@ void CephBroker::open(ResponseCallbackOpen *cb, const char *fname, uint32_t bufs
 
   {
     struct sockaddr_in addr;
-    OpenFileDataCephPtr fdata (new OpenFileDataCeph(ceph_fd, O_RDONLY));
+    OpenFileDataCephPtr fdata (new OpenFileDataCeph(abspath, ceph_fd, O_RDONLY));
 
     cb->get_address(addr);
 
@@ -87,12 +105,12 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, bool overwr
     flags = O_WRONLY | O_CREAT | O_APPEND;
 
   if ((ceph_fd = ceph_open(abspath.c_str(), flags, 0644)) < 0) {
-    HT_ERROR("open failed: file='%s' - %s", abspath.c_str(), strerror(errno));
+    HT_ERRORF("open failed: file=%s - %s",  abspath.c_str(), strerror(errno));
     report_error(cb, ceph_fd);
     return;
   }
 
-  HT_INFOF("create( % s ) = %d", fname, ceph_fd);
+  HT_INFOF("create % s  = %d", fname, ceph_fd);
 
   {
     struct sockaddr_in addr;
@@ -120,7 +138,7 @@ void CephBroker::close(ResponseCallback *cb, uint32_t fd) {
 void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount){
   OpenFileDataCephPtr fdata;
   ssize_t nread;
-  uint64t offset;
+  uint64_t offset;
   StaticBuffer buf(new uint8_t [amount], amount);
 
   HT_DEBUGF("read fd=%d amount = %d", fd, amount);
@@ -140,7 +158,7 @@ void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount){
   }
 
   if ((nread=ceph_read(fdata->fd, (char *)buf.base, amount)) < 0 ) {
-    HT_ERRORF("read failed: fd=%d ceph_fd=%d amount=%d - %s", fd, fdata->fd, amount, errmsg.c_str());
+    HT_ERRORF("read failed: fd=%d ceph_fd=%d amount=%d", fd, fdata->fd, amount);
     report_error(cb, nread);
     return;
   }
@@ -150,7 +168,7 @@ void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount){
 }
 
 void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
-		    uint32_t amount, const void CephBroker::*data, bool sync)
+		    uint32_t amount, const void *data, bool sync)
 {
   OpenFileDataCephPtr fdata;
   ssize_t nwritten;
@@ -173,7 +191,7 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
     return;
   }
 
-  if ((nwritten = ceph_write(fdata->fd, data, amount)) < 0) {
+  if ((nwritten = ceph_write(fdata->fd, (const char *)data, amount)) < 0) {
     HT_ERRORF("write failed: fd=%d ceph_fd=%d amount=%d - %s", fd, fdata->fd, amount,
               strerror(errno));
     report_error(cb, nwritten);
@@ -190,7 +208,7 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
   cb->response(offset, nwritten);
 }
 void CephBroker::seek(ResponseCallback *cb, uint32_t fd, uint64_t offset){
-  OpenFileDataLocalPtr fdata;
+  OpenFileDataCephPtr fdata;
 
   HT_DEBUGF("seek fd=%lu offset=%llu", (Lu)fd, (Llu)offset);
 
@@ -233,14 +251,7 @@ void CephBroker::length(ResponseCallbackLength *cb, const char *fname){
 
   HT_DEBUGF("length file='%s'", fname);
 
-  if (!m_open_file_map.get(fd, fdata)) {
-    char errbuf[32];
-    sprintf(errbuf, "%d", fd);
-    cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
-    return;
-  }
-
-  if ((res = ceph_fstat(fdata->fd, &statbuf)) < 0) {
+  if ((res = ceph_lstat(fname, &statbuf)) < 0) {
     String abspath;
     make_abs_path(fname, abspath);
     HT_ERRORF("length (stat) failed: file='%s' - %s", abspath.c_str(), strerror(errno));
@@ -254,7 +265,7 @@ void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
 		   uint32_t amount){
   OpenFileDataCephPtr fdata;
   ssize_t nread;
-  StaticBuffer buf(new unit8_t [amount], amount);
+  StaticBuffer buf(new uint8_t [amount], amount);
 
   HT_DEBUGF("pread fd=%d offset=%llu amount=%d", fd, (Llu)offset, amount);
 
@@ -284,8 +295,8 @@ void CephBroker::mkdirs(ResponseCallback *cb, const char *dname){
 
   make_abs_path(dname, absdir);
   int r;
-  if((r=ceph_mkdir(absdir.c_str(), 0644)) < 0) {
-    HT_ERRORF("mkdirs failed: dname='%s' - %s", absdir.c_str(), strerror(errno));
+  if((r=ceph_mkdirs(absdir.c_str(), 0644)) < 0) {
+    HT_ERRORF("mkdirs failed: dname='%s' - %d", absdir.c_str(), r);
     report_error(cb, r);
     return;
   }
@@ -298,7 +309,8 @@ void CephBroker::rmdir(ResponseCallback *cb, const char *dname){
   make_abs_path(dname, absdir);
   int r;
   if((r=ceph_rmdir(absdir.c_str())) < 0) {
-    HT_ERRORF("failed to remove dir %s", absdir) report_error(cb, r);
+    HT_ERRORF("failed to remove dir %s", absdir.c_str());
+    report_error(cb, r);
     return;
   }
 
@@ -349,11 +361,11 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname){
 
   //get from ceph in list<string>
   make_abs_path(dname, absdir);
-  list<string> dir_con;
-  ceph_getdir(absdir, dir_con);
+  std::list<String> dir_con;
+  ceph_getdir(absdir.c_str(), dir_con);
 
   //convert to vector<String>
-  for (list<string>::iterator i = dir_con.begin(); i!=dir_con.end(); ++i) {
+  for (std::list<String>::iterator i = dir_con.begin(); i!=dir_con.end(); ++i) {
     listing.push_back(*i); //BEWARE: Assumes getdir doesn't include . and ..
   }
   cb->response(listing);
@@ -361,12 +373,13 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname){
 
 void CephBroker::exists(ResponseCallbackExists *cb, const char *fname){
     String abspath;
+    struct stat statbuf;
 
     HT_DEBUGF("exists file='%s'", fname);
 
     make_abs_path(fname, abspath);
 
-    cb->response(ceph_fstat(abspath) == 0);
+    cb->response(ceph_lstat(abspath.c_str(), &statbuf) == 0);
 }
 
 void CephBroker::rename(ResponseCallback *cb, const char *src, const char *dst){
@@ -383,9 +396,9 @@ void CephBroker::rename(ResponseCallback *cb, const char *src, const char *dst){
   cb->response_ok();
 }
 
-void CephBroker::debug(ResponseCallback *, int32_t command,
-		   StaticBuffer &serialized_parameters){
-  HT_ERRORF("debug commands not implemented!");
+void CephBroker::debug(ResponseCallback *cb, int32_t command,
+		       StaticBuffer &serialized_parameters ){
+  HT_ERROR("debug commands not implemented!");
   cb->error(Error::NOT_IMPLEMENTED, format("Debug commands not supported"));
 }
 
@@ -393,16 +406,16 @@ void CephBroker::report_error(ResponseCallback *cb, int error) {
   char errbuf[128];
   errbuf[0] = 0;
 
-  strerror_t(error, errbuf, 128);
+  strerror_r(error, errbuf, 128);
 
   cb->error(Error::DFSBROKER_IO_ERROR, errbuf);
 }
 
 
-inline void make_abs_path(const char *fname, String& abs)
+inline void CephBroker::make_abs_path(const char *fname, String& abs)
 {
   if (fname[0] == '/')
     abs = fname;
   else
-    abs = m_rootdir + "/" + fname;
+    abs = m_root_dir + "/" + fname;
 }

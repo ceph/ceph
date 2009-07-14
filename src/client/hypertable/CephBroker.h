@@ -16,10 +16,10 @@
 #define HYPERTABLE_CEPHBROKER_H
 
 extern "C" {
-#include "libceph.h"
 #include <unistd.h>
 }
 
+#include "libceph.h"
 #include "Common/String.h"
 #include "Common/atomic.h"
 #include "Common/Properties.h"
@@ -33,16 +33,18 @@ namespace Hypertable {
    */
   class OpenFileDataCeph : public OpenFileData {
   public:
-    OpenFileDataCeph(int _fd, int _flags) : fd(_fd), flags(_flags) {}
-    virtual ~OpenFileDataCeph() { }
+    OpenFileDataCeph(const String& fname, int _fd, int _flags) :
+      fd(_fd), flags(_flags), filename(fname) {}
+    virtual ~OpenFileDataCeph() { ceph_close(fd); }
     int fd;
     int flags;
+    String filename;
   };
 
   /**
    *
    */
-  class OpenFileDataCephPointer : public OpenFileDataPtr {
+  class OpenFileDataCephPtr : public OpenFileDataPtr {
   public:
     OpenFileDataCephPtr() : OpenFileDataPtr() { }
     OpenFileDataCephPtr(OpenFileDataCeph *ofdl) : OpenFileDataPtr(ofdl, true) { }
@@ -55,6 +57,7 @@ namespace Hypertable {
   class CephBroker : public DfsBroker::Broker {
   public:
     CephBroker(PropertiesPtr& cfg);
+    //    CephBroker(PropertiesPtr& cfg, int argc, char **argv);
     virtual ~CephBroker();
 
     virtual void open(ResponseCallbackOpen *cb, const char *fname,
