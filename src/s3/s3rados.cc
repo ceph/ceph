@@ -198,7 +198,7 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     nstring name = iter->first;
     bufferlist& bl = iter->second;
-    
+
     if (bl.length()) {
       r = rados->setxattr(pool, oid, name.c_str(), bl);
       if (r < 0)

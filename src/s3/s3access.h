@@ -12,9 +12,10 @@
 
 #define S3_ATTR_PREFIX  "user.s3."
 
-#define S3_ATTR_ACL	S3_ATTR_PREFIX "acl"
-#define S3_ATTR_ETAG    S3_ATTR_PREFIX "etag"
-#define S3_ATTR_BUCKETS	S3_ATTR_PREFIX "buckets"
+#define S3_ATTR_ACL		S3_ATTR_PREFIX "acl"
+#define S3_ATTR_ETAG    	S3_ATTR_PREFIX "etag"
+#define S3_ATTR_BUCKETS		S3_ATTR_PREFIX "buckets"
+#define S3_ATTR_META_PREFIX	S3_ATTR_PREFIX "x-amz-meta-"
 
 typedef void *S3AccessHandle;
 

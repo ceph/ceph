@@ -323,7 +323,7 @@ static void init_auth_info(struct req_state *s)
   
 }
 
-static void get_request_metadata(struct req_state *s, vector<pair<string, bufferlist> >& attrs)
+static void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs)
 {
   map<string, string>::iterator iter;
   for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
@@ -336,7 +336,7 @@ static void get_request_metadata(struct req_state *s, vector<pair<string, buffer
       bl.append(val.c_str(), val.size());
       string attr_name = S3_ATTR_PREFIX;
       attr_name.append(name);
-      attrs.push_back(pair<string, bufferlist>(attr_name, bl));
+      attrs[attr_name.c_str()] = bl;
     }
   }
 }
@@ -908,6 +908,13 @@ done:
         dump_etag(s, etag);
       }
     }
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+       const char *name = iter->first.c_str();
+       if (strncmp(name, S3_ATTR_META_PREFIX, sizeof(S3_ATTR_META_PREFIX)-1) == 0) {
+         name += sizeof(S3_ATTR_PREFIX) - 1;
+         CGI_PRINTF(s->out,"%s: %s\r\n", name, iter->second.c_str());
+       }
+    }
   }
   dump_errno(s, r, &err);
   end_header(s);
@@ -1359,7 +1366,7 @@ static void copy_object(struct req_state *s, const char *copy_source)
   }
 
   attrs[S3_ATTR_ACL] = aclbl;
-  // get_request_metadata(s, attrs);
+  get_request_metadata(s, attrs);
 
   r = s3store->copy_obj(s->user.user_id,
                         s->bucket_str, s->object_str,
@@ -1470,11 +1477,11 @@ static void do_create_object(struct req_state *s)
     string md5_str(calc_md5);
     map<nstring, bufferlist> attrs;
     bufferlist bl;
-    bl.append(md5_str.c_str(), md5_str.size());
+    bl.append(md5_str.c_str(), md5_str.size() + 1);
     attrs[S3_ATTR_ETAG] = bl;
     attrs[S3_ATTR_ACL] = aclbl;
 
-    // get_request_metadata(s, attrs);
+    get_request_metadata(s, attrs);
 
     r = s3store->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, actual, NULL, attrs);
   }
