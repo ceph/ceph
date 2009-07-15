@@ -402,8 +402,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_session_timeout, 0, OPT_FLOAT, 60),    // cap bits and leases time out if client idle
 	OPTION(mds_session_autoclose, 0, OPT_FLOAT, 300), // autoclose idle session 
 	OPTION(mds_client_lease, 0, OPT_FLOAT, 120),      // (assuming session stays alive)
-	OPTION(mds_reconnect_timeout, 0, OPT_FLOAT, 30),  // seconds to wait for clients during mds restart
-							   //  make it (mds_session_timeout - mds_beacon_grace)
+	OPTION(mds_reconnect_timeout, 0, OPT_FLOAT, 45),  // seconds to wait for clients during mds restart
+							  //  make it (mds_session_timeout - mds_beacon_grace)
 	OPTION(mds_tick_interval, 0, OPT_FLOAT, 5),
 	OPTION(mds_scatter_nudge_interval, 0, OPT_FLOAT, 5),  // how quickly dirstat changes propagate up the hierarchy
 	OPTION(mds_client_prealloc_inos, 0, OPT_INT, 1000),
