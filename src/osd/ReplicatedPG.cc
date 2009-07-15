@@ -1083,10 +1083,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 
     case CEPH_OSD_OP_WRITE:
       { // write
-	assert(op.length);
-	bufferlist nbl;
-	bp.copy(op.length, nbl);
-	t.write(info.pgid.to_coll(), soid, op.offset, op.length, nbl);
+        if (op.length) {
+	  bufferlist nbl;
+	  bp.copy(op.length, nbl);
+	  t.write(info.pgid.to_coll(), soid, op.offset, op.length, nbl);
+        } else {
+          t.touch(info.pgid.to_coll(), soid);
+        }
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
 	  interval_set<__u64> ch;
