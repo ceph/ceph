@@ -2934,6 +2934,7 @@ int Client::mkdir(const char *relpath, mode_t mode)
 int Client::mkdirs(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
+  dout(10) << "Client::mkdirs " << relpath << dendl;
   tout << "mkdirs" << std::endl;
   tout << relpath << std::endl;
   tout << mode << std::endl;
@@ -2941,14 +2942,16 @@ int Client::mkdirs(const char *relpath, mode_t mode)
   //get through existing parts of path
   filepath path(relpath);
   unsigned int i;
-  int r;
+  int r=0;
   Inode *cur = cwd;
   Inode *next;
-  for (i=0; (r=_lookup(cur, path[i].c_str(), &next))==0 && i<path.depth(); ++i) {
+  for (i=0; i<path.depth(); ++i) {
+    r=_lookup(cur, path[i].c_str(), &next);
+    if (r < 0) break;
     cur = next;
   }
   //check that we have work left to do
-  if (i==path.depth()) return -EEXIST;
+  if (i==path.depth()-1) return -EEXIST;
   if (r!=-ENOENT) return r;
   dout(10) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
@@ -2968,7 +2971,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
     //move to new dir and continue
     cur = next;
     dout(10) << "mkdirs: successfully created directory "
-	     << filepath(cur->ino).getpath() << dendl;
+	     << filepath(cur->ino).get_path() << dendl;
   }
   return 0;
 }
