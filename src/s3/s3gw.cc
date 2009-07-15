@@ -333,7 +333,7 @@ static void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& 
       cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
       string& val = iter->second;
       bufferlist bl;
-      bl.append(val.c_str(), val.size());
+      bl.append(val.c_str(), val.size() + 1);
       string attr_name = S3_ATTR_PREFIX;
       attr_name.append(name);
       attrs[attr_name.c_str()] = bl;
