@@ -34,7 +34,7 @@ atomic_t CephBroker::ms_next_fd = ATOMIC_INIT(0);
 
 CephBroker::CephBroker(PropertiesPtr& cfg) {
   m_verbose = cfg->get_bool("Hypertable.Verbose");
-
+  m_root_dir = "";
   //construct an arguments array
   const char *argv[9];
   String zero = "cephBroker";
@@ -44,7 +44,7 @@ CephBroker::CephBroker(PropertiesPtr& cfg) {
   argv[1] = one.c_str();
   argv[2] = (cfg->get_str("CephBroker.MonAddr").c_str());
   argv[3] = "--debug_client";
-  argv[4] = "20";
+  argv[4] = "10";
   argv[5] = "--debug_ms";
   argv[6] = "1";
   argv[7] = "--lockdep";
@@ -71,7 +71,7 @@ void CephBroker::open(ResponseCallbackOpen *cb, const char *fname, uint32_t bufs
   fd = atomic_inc_return(&ms_next_fd);
 
   if ((ceph_fd = ceph_open(abspath.c_str(), O_RDONLY)) < 0) {
-    report_error(cb, ceph_fd);
+    report_error(cb, -ceph_fd);
     return;
   }
   HT_INFOF("open (%s) fd=%d ceph_fd=%d", fname, fd, ceph_fd);
@@ -94,6 +94,7 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, bool overwr
   int flags;
   String abspath;
 
+  make_abs_path(fname, abspath);
   HT_DEBUGF("create file='%s' overwrite=%d bufsz=%d replication=%d blksz=%lld",
             fname, (int)overwrite, bufsz, (int)replication, (Lld)blksz);
 
@@ -104,8 +105,8 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, bool overwr
   else
     flags = O_WRONLY | O_CREAT | O_APPEND;
 
-  if ((ceph_fd = ceph_open(abspath.c_str(), flags, 0644)) < 0) {
-    HT_ERRORF("open failed: file=%s - %s",  abspath.c_str(), strerror(errno));
+  if ((ceph_fd = ceph_open(abspath.c_str(), flags, O_CREAT)) < 0) {
+    HT_ERRORF("open failed: file=%s - %s",  abspath.c_str(), strerror(-ceph_fd));
     report_error(cb, ceph_fd);
     return;
   }
@@ -152,14 +153,14 @@ void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount){
   }
 
   if((offset = ceph_lseek(fdata->fd, 0, SEEK_CUR)) < 0) {
-    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=0 SEEK_CUR - %s", fd, fdata->fd, strerror(errno));
+    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=0 SEEK_CUR - %s", fd, fdata->fd, strerror(-offset));
     report_error(cb, offset);
     return;
   }
 
   if ((nread=ceph_read(fdata->fd, (char *)buf.base, amount)) < 0 ) {
     HT_ERRORF("read failed: fd=%d ceph_fd=%d amount=%d", fd, fdata->fd, amount);
-    report_error(cb, nread);
+    report_error(cb, -nread);
     return;
   }
 
@@ -186,15 +187,15 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
 
   if ((offset = (uint64_t)ceph_lseek(fdata->fd, 0, SEEK_CUR)) < 0) {
     HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=0 SEEK_CUR - %s", fd, fdata->fd,
-              strerror(errno));
+              strerror(-offset));
     report_error(cb, offset);
     return;
   }
 
   if ((nwritten = ceph_write(fdata->fd, (const char *)data, amount)) < 0) {
     HT_ERRORF("write failed: fd=%d ceph_fd=%d amount=%d - %s", fd, fdata->fd, amount,
-              strerror(errno));
-    report_error(cb, nwritten);
+              strerror(-nwritten));
+    report_error(cb, -nwritten);
     return;
   }
 
@@ -218,10 +219,10 @@ void CephBroker::seek(ResponseCallback *cb, uint32_t fd, uint64_t offset){
     cb->error(Error::DFSBROKER_BAD_FILE_HANDLE, errbuf);
     return;
   }
-
-  if ((offset = (uint64_t)ceph_lseek(fdata->fd, offset, SEEK_SET)) < 0) {
-    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=%llu - %s", fd, fdata->fd, (Llu)offset,
-              strerror(errno));
+  int r;
+  if ((r = (uint64_t)ceph_lseek(fdata->fd, offset, SEEK_SET)) < 0) {
+    HT_ERRORF("lseek failed: fd=%d ceph_fd=%d offset=%llu - %s", fd, fdata->fd,
+	      (Llu)offset, strerror(-r));
     report_error(cb, offset);
     return;
   }
@@ -238,7 +239,7 @@ void CephBroker::remove(ResponseCallback *cb, const char *fname) {
   
   int r;
   if((r=ceph_unlink(abspath.c_str())) < 0) {
-    HT_ERRORF("unlink failed: file='%s' - %s", abspath.c_str(), strerror(errno));
+    HT_ERRORF("unlink failed: file='%s' - %s", abspath.c_str(), strerror(-r));
     report_error(cb, r);
     return;
   }
@@ -246,16 +247,16 @@ void CephBroker::remove(ResponseCallback *cb, const char *fname) {
 }
 
 void CephBroker::length(ResponseCallbackLength *cb, const char *fname){
-  int res;
+  int r;
   struct stat statbuf;
 
   HT_DEBUGF("length file='%s'", fname);
 
-  if ((res = ceph_lstat(fname, &statbuf)) < 0) {
+  if ((r = ceph_lstat(fname, &statbuf)) < 0) {
     String abspath;
     make_abs_path(fname, abspath);
-    HT_ERRORF("length (stat) failed: file='%s' - %s", abspath.c_str(), strerror(errno));
-    report_error(cb, res);
+    HT_ERRORF("length (stat) failed: file='%s' - %s", abspath.c_str(), strerror(-r));
+    report_error(cb,- r);
     return;
   }
   cb->response(statbuf.st_size);
@@ -278,7 +279,7 @@ void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
 
   if ((nread = ceph_read(fdata->fd, (char *)buf.base, amount, offset)) < 0) {
     HT_ERRORF("pread failed: fd=%d ceph_fd=%d amount=%d offset=%llu - %s", fd, fdata->fd,
-              amount, (Llu)offset, strerror(errno));
+              amount, (Llu)offset, strerror(-nread));
     report_error(cb, nread);
     return;
   }
@@ -295,9 +296,9 @@ void CephBroker::mkdirs(ResponseCallback *cb, const char *dname){
 
   make_abs_path(dname, absdir);
   int r;
-  if((r=ceph_mkdirs(absdir.c_str(), 0644)) < 0) {
-    HT_ERRORF("mkdirs failed: dname='%s' - %d", absdir.c_str(), r);
-    report_error(cb, r);
+  if((r=ceph_mkdirs(absdir.c_str(), 0644)) < 0 && r!=-EEXIST) {
+    HT_ERRORF("mkdirs failed: dname='%s' - %d", absdir.c_str(), -r);
+    report_error(cb, -r);
     return;
   }
   cb->response_ok();
@@ -310,7 +311,7 @@ void CephBroker::rmdir(ResponseCallback *cb, const char *dname){
   int r;
   if((r=ceph_rmdir(absdir.c_str())) < 0) {
     HT_ERRORF("failed to remove dir %s", absdir.c_str());
-    report_error(cb, r);
+    report_error(cb, -r);
     return;
   }
 
@@ -331,8 +332,8 @@ void CephBroker::flush(ResponseCallback *cb, uint32_t fd){
 
   int r;
   if((r=ceph_fsync(fdata->fd, true)) != 0) {
-    HT_ERRORF("flush failed: fd=%d  ceph_fd=%d - %s", fd, fdata->fd, strerror(errno));
-    report_error(cb, r);
+    HT_ERRORF("flush failed: fd=%d  ceph_fd=%d - %s", fd, fdata->fd, strerror(-r));
+    report_error(cb, -r);
     return;
   }
 
