@@ -1177,9 +1177,9 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
     max = -1;
   }
   delimiter = s->args.get("delimiter");
-
   vector<S3ObjEnt> objs;
-  int r = s3store->list_objects(s->user.user_id, s->bucket_str, max, prefix, marker, objs);
+  map<string, bool> common_prefixes;
+  int r = s3store->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes);
   dump_errno(s, (r < 0 ? r : 0));
 
   end_header(s, "application/xml");
@@ -1210,6 +1210,14 @@ static void do_retrieve_objects(struct req_state *s, bool get_data)
       dump_value(s, "StorageClass", "STANDARD");
       dump_owner(s, s->user.user_id, s->user.display_name);
       close_section(s, "Contents");
+    }
+    if (common_prefixes.size() > 0) {
+      open_section(s, "CommonPrefixes");
+      map<string, bool>::iterator pref_iter;
+      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
+        dump_value(s, "Prefix", pref_iter->first.c_str());
+      }
+      close_section(s, "CommonPrefixes");
     }
   }
   close_section(s, "ListBucketResult");
@@ -1408,6 +1416,7 @@ static void do_create_object(struct req_state *s)
   int r = -EINVAL;
   char *data = NULL;
   struct s3_err err;
+  cerr << "JJJ 0" << std::endl;
   if (!s->object) {
     goto done;
   } else {
@@ -1486,9 +1495,11 @@ static void do_create_object(struct req_state *s)
     attrs[S3_ATTR_ETAG] = bl;
     attrs[S3_ATTR_ACL] = aclbl;
 
-    bl.clear();
-    bl.append(s->content_type, strlen(s->content_type) + 1);
-    attrs[S3_ATTR_CONTENT_TYPE] = bl;
+    if (s->content_type) {
+      bl.clear();
+      bl.append(s->content_type, strlen(s->content_type) + 1);
+      attrs[S3_ATTR_CONTENT_TYPE] = bl;
+    }
 
     get_request_metadata(s, attrs);
 

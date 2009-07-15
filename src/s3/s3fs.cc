@@ -82,7 +82,8 @@ int S3FS::list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
   }
 }
 
-int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, string& marker, vector<S3ObjEnt>& result)
+int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
+                       string& marker, vector<S3ObjEnt>& result, map<string, bool>& common_prefixes)
 {
   map<string, bool> dir_map;
   char path[BUF_SIZE];

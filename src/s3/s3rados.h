@@ -13,7 +13,8 @@ public:
   int list_buckets_init(std::string& id, S3AccessHandle *handle);
   int list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle);
 
-  int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& marker, std::vector<S3ObjEnt>& result);
+  int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
+                   std::string& marker, std::vector<S3ObjEnt>& result, map<string, bool>& common_prefixes);
 
   int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs);
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,

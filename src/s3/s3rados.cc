@@ -96,7 +96,8 @@ static int open_pool(string& bucket, rados_pool_t *pool)
   return rados->open_pool(bucket.c_str(), pool);
 }
 
-int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, string& marker, vector<S3ObjEnt>& result)
+int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
+                          string& marker, vector<S3ObjEnt>& result, map<string, bool>& common_prefixes)
 {
   rados_pool_t pool;
   map<string, object_t> dir_map;
@@ -113,12 +114,11 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
     return r;
 
   list<object_t>::iterator iter;
-  cerr << "JJJ entries.size()=" << entries.size() << std::endl;
   for (iter = entries.begin(); iter != entries.end(); ++iter) {
-    const char *name = iter->name.c_str();
+    string name = iter->name.c_str();
 
     if (prefix.empty() ||
-        (prefix.compare(0, prefix.size(), name) == 0)) {
+        (name.compare(0, prefix.size(), prefix) == 0)) {
       dir_map[name] = *iter;
     }
   }
@@ -137,6 +137,15 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
   for (i=0; i<max && map_iter != dir_map.end(); i++, ++map_iter) {
     S3ObjEnt obj;
     obj.name = map_iter->first;
+
+    if (!delim.empty()) {
+      int delim_pos = obj.name.find(delim, prefix.size());
+
+      if (delim_pos >= 0) {
+        common_prefixes[obj.name.substr(0, delim_pos + 1)] = true;
+        continue;
+      }
+    }
 
     if (rados->stat(pool, map_iter->second, &obj.size, &obj.mtime) < 0)
       continue;
