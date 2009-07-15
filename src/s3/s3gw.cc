@@ -154,6 +154,7 @@ struct req_state {
    const char *method;
    const char *query;
    const char *length;
+   const char *content_type;
    bool err_exist;
    struct s3_err err;
 
@@ -446,6 +447,7 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   s->host = FCGX_GetParam("HTTP_HOST", envp);
   s->query = FCGX_GetParam("QUERY_STRING", envp);
   s->length = FCGX_GetParam("CONTENT_LENGTH", envp);
+  s->content_type = FCGX_GetParam("CONTENT_TYPE", envp);
   s->err_exist = false;
   memset(&s->err, 0, sizeof(s->err));
 
@@ -872,6 +874,7 @@ static void get_object(struct req_state *s, string& bucket, string& obj, bool ge
   off_t ofs = 0, end = -1, len = 0;
   char *data;
   map<nstring, bufferlist> attrs;
+  const char *content_type = NULL;
 
   if (range_str) {
     r = parse_range(range_str, ofs, end);
@@ -913,11 +916,13 @@ done:
        if (strncmp(name, S3_ATTR_META_PREFIX, sizeof(S3_ATTR_META_PREFIX)-1) == 0) {
          name += sizeof(S3_ATTR_PREFIX) - 1;
          CGI_PRINTF(s->out,"%s: %s\r\n", name, iter->second.c_str());
+       } else if (!content_type && strcmp(name, S3_ATTR_CONTENT_TYPE) == 0) {
+         content_type = iter->second.c_str();
        }
     }
   }
   dump_errno(s, r, &err);
-  end_header(s);
+  end_header(s, content_type);
   if (get_data && !r) {
     FCGX_PutStr(data, len, s->out); 
   }
@@ -1480,6 +1485,10 @@ static void do_create_object(struct req_state *s)
     bl.append(md5_str.c_str(), md5_str.size() + 1);
     attrs[S3_ATTR_ETAG] = bl;
     attrs[S3_ATTR_ACL] = aclbl;
+
+    bl.clear();
+    bl.append(s->content_type, strlen(s->content_type) + 1);
+    attrs[S3_ATTR_CONTENT_TYPE] = bl;
 
     get_request_metadata(s, attrs);
 

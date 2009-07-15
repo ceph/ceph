@@ -16,6 +16,7 @@
 #define S3_ATTR_ETAG    	S3_ATTR_PREFIX "etag"
 #define S3_ATTR_BUCKETS		S3_ATTR_PREFIX "buckets"
 #define S3_ATTR_META_PREFIX	S3_ATTR_PREFIX "x-amz-meta-"
+#define S3_ATTR_CONTENT_TYPE	S3_ATTR_PREFIX "content_type"
 
 typedef void *S3AccessHandle;
 
