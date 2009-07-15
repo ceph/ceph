@@ -78,8 +78,8 @@ off if the monitor is using the default.  So if the monitor is at
 
  # mount -t ceph 1.2.3.4:/ /mnt/ceph
 
-is sufficient.  If mount.ceph is installed, a hostname can be used
-instead of an IP address.
+is sufficient.  If /sbin/mount.ceph is installed, a hostname can be
+used instead of an IP address.
 
 
 
@@ -120,8 +120,14 @@ Mount Options
 	must rely on TCP's error correction to detect data corruption
 	in the data payload.
 
+  noasyncreaddir
+	Disable client's use its local cache to satisfy	readdir
+	requests.  (This does not change correctness; the client uses
+	cached metadata only when a lease or capability ensures it is
+	valid.)
 
-Debugging options:
+
+Debugging options (these are also changeable via debugfs):
 
   debug=N
 	Specify the level of debug output for the Ceph client.  Larger

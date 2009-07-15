@@ -81,14 +81,8 @@ Inode cache and inode operations.  We also include routines to
 incorporate metadata structures returned by the MDS into the client
 cache, and some helpers to deal with file capabilities and metadata
 leases.  The bulk of that work is done by fill_inode() and
-fill_trace().
-
-Most MDS responses include a "trace" of dentry and inode information
-from the inode in question back to the root.  fill_trace() takes pains
-to ensure that the dcache is updated safely.  If the directory i_mutex
-is not already held and cannot be taken (via trylock), that segment of
-the trace is skipped.  If an inode is linked incorrectly, we attempt
-to reattach it in the correct position in the hierarchy.
+fill_trace(), which incorporate metadata included into the reply
+into the client's cache.
 
 EOF
 
@@ -153,14 +147,16 @@ used to control the ordering of messages within each session.
 
 An MDS request may generate two responses.  The first indicates the
 operation was a success and returns any result.  A second reply is
-sent when the operation commits to the journal.  Note that locking
-on the MDS ensures that the results of updates are visible only to
-the updating client until the operation commits.
+sent when the operation commits to disk.  Note that locking on the MDS
+ensures that the results of updates are visible only to the updating
+client before the operation commits.
 
 Requests are linked to the containing directory so that an fsync will
 wait for them to commit.
 
-If an MDS fails and/or recovers, we resubmit requests as needed.
+If an MDS fails and/or recovers, we resubmit requests as needed.  We
+also reconnect existing capabilities to a recovering MDS to
+reestablish that shared session state.
 
 EOF
 
@@ -214,7 +210,7 @@ ceph: monitor client
 The monitor cluster is responsible for managing cluster membership
 and state.  The monitor client handles what minimal interaction
 the Ceph client has with it: checking for updated versions of the
-MDS and OSD maps, and getting statfs() information.
+MDS and OSD maps, getting statfs() information, and unmounting.
 
 EOF
 
@@ -229,16 +225,16 @@ which operations are allowed.
 
 In the case of an EXCL (exclusive) or WR capabilities, the client is
 allowed to change inode attributes (e.g., file size, mtime), noting
-it's dirty state in the ceph_cap, and asynchronously flush that
+its dirty state in the ceph_cap, and asynchronously flush that
 metadata change to the MDS.
 
 In the event of a conflicting operation (perhaps by another client),
 the MDS will revoke the conflicting client capabilities.
 
-A subset of capabilities (termed 'rdcaps') are opportunistically
-issued by the MDS to grant the a client read lease on metadata, and
-time out automatically.  Other capabilities (write capabilities, and
-those that are "wanted" due to an open file) are explicitly released.
+In order for a client to cache an inode, it must hold a capability
+with at least one MDS server.  When inodes are released, release
+notifications are batched and periodically sent en masse to the MDS
+cluster to release server state.
 
 EOF
 
@@ -255,7 +251,7 @@ make this work.
 
 Portions of the hierarchy that belong to the same set of snapshots
 are described by a single 'snap realm.'  A 'snap context' describes
-the set of snapshots that exist for a given piece of metadata.
+the set of snapshots that exist for a given file or directory.
 
 EOF
 
@@ -309,7 +305,7 @@ ceph: debugfs
 
 Basic state information is available via /debug/ceph, including
 instances of the client, fsids, current monitor, mds and osd maps,
-and hooks to adjust debug levels.
+outstanding server requests, and hooks to adjust debug levels.
 
 EOF
 
