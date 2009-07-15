@@ -1,3 +1,14 @@
+ceph (0.10-1) unstable; urgency=low
+
+  * uclient fixes
+  * libceph
+  * mds: trivialmap encoding (efficient dir updates)
+  * mds: reconnect fixes
+  * osd: recovery, corruption fixes
+  * kclient: unaligned access fixes
+
+ -- sage <sage@newdream.net>  Tue, 15 Jul 2009 13:26:00 -0800
+
 ceph (0.9-1) unstable; urgency=low
 
   * mds exherts memory pressure on clients
