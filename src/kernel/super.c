@@ -272,7 +272,7 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 	p += len;
 
 	ceph_decode_32_safe(&p, end, len, bad);
-	dout(0, "ticket len %d\n", len);
+	dout(10, "ticket len %d\n", len);
 	ceph_decode_need(&p, end, len, bad);
 
 	client->signed_ticket = kmalloc(len, GFP_KERNEL);
