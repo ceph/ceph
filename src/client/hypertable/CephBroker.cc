@@ -44,11 +44,11 @@ CephBroker::CephBroker(PropertiesPtr& cfg) {
   argv[1] = one.c_str();
   argv[2] = (cfg->get_str("CephBroker.MonAddr").c_str());
   argv[3] = "--debug_client";
-  argv[4] = "10";
+  argv[4] = "0";
   argv[5] = "--debug_ms";
-  argv[6] = "1";
+  argv[6] = "0";
   argv[7] = "--lockdep";
-  argv[8] = "1";
+  argv[8] = "0";
 
   HT_INFO("Calling ceph_initialize");
   ceph_initialize(9, argv);
@@ -105,7 +105,18 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, bool overwr
   else
     flags = O_WRONLY | O_CREAT | O_APPEND;
 
-  if ((ceph_fd = ceph_open(abspath.c_str(), flags, O_CREAT)) < 0) {
+  //make sure the directories in the path exist
+  String directory = abspath.substr(0, abspath.rfind('/'));
+  int r;
+  HT_INFOF("Calling mkdirs on %s", directory.c_str());
+  if((r=ceph_mkdirs(directory.c_str(), 0644)) < 0 && r!=-EEXIST) {
+    HT_ERRORF("create failed on mkdirs: dname='%s' - %d", directory.c_str(), -r);
+    report_error(cb, -r);
+    return;
+  }
+
+  //create file
+  if ((ceph_fd = ceph_open(abspath.c_str(), flags, 0644)) < 0) {
     HT_ERRORF("open failed: file=%s - %s",  abspath.c_str(), strerror(-ceph_fd));
     report_error(cb, ceph_fd);
     return;

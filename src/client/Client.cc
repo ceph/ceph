@@ -2915,19 +2915,13 @@ int Client::mkdir(const char *relpath, mode_t mode)
   dout(10) << "mkdir: " << relpath << dendl;
 
   filepath path(relpath);
-  dout(10) << "mkdir: constructed filepath: " << path.get_path() << dendl;
   string name = path.last_dentry();
-  dout(10) << "mkdir: got name from path.last_dentry()" << dendl;
   path.pop_dentry();
-  dout(10) << "mkdir: popped dentry" << dendl;
   Inode *dir;
-  dout(10) << "mkdir: calling path_walk" << dendl;
   int r = path_walk(path, &dir);
   if (r < 0) {
-    dout(10) << "mkdir: path_walk returned error: " << r << dendl;
     return r;
   }
-  dout(10) << "mkdir: path_walked successfully" << dendl;
   return _mkdir(dir, name.c_str(), mode);
 }
 
@@ -2951,15 +2945,13 @@ int Client::mkdirs(const char *relpath, mode_t mode)
     cur = next;
   }
   //check that we have work left to do
-  if (i==path.depth()-1) return -EEXIST;
+  if (i==path.depth()) return -EEXIST;
   if (r!=-ENOENT) return r;
-  dout(10) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
+  dout(20) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
   for (; i<path.depth(); ++i) {
     //make new dir
-    dout(10) << "mkdirs: calling _mkdir on " << path[i].c_str() << dendl;
     r = _mkdir(cur, path[i].c_str(), mode);
-    dout(10) << "mkdirs: got response " << r << " on mkdirs call" << dendl;
     //check proper creation/existence
     if (r < 0) return r;
     r = _lookup(cur, path[i], &next);
@@ -2970,7 +2962,7 @@ int Client::mkdirs(const char *relpath, mode_t mode)
     }
     //move to new dir and continue
     cur = next;
-    dout(10) << "mkdirs: successfully created directory "
+    dout(20) << "mkdirs: successfully created directory "
 	     << filepath(cur->ino).get_path() << dendl;
   }
   return 0;
