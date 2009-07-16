@@ -421,8 +421,8 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	memset(monc, 0, sizeof(*monc));
 	monc->client = cl;
 	monc->monmap = kzalloc(sizeof(struct ceph_monmap) +
-		       sizeof(struct ceph_entity_addr) * MAX_MON_MOUNT_ADDR,
-		       GFP_KERNEL);
+	       sizeof(struct ceph_entity_addr) * CEPH_MAX_MON_MOUNT_ADDR,
+	       GFP_KERNEL);
 	if (monc->monmap == NULL)
 		return -ENOMEM;
 	mutex_init(&monc->statfs_mutex);

@@ -219,7 +219,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	}
 
 	frag->mds = mds;
-	frag->ndist = min_t(u32, ndist, MAX_DIRFRAG_REP);
+	frag->ndist = min_t(u32, ndist, CEPH_MAX_DIRFRAG_REP);
 	for (i = 0; i < frag->ndist; i++)
 		frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
 	dout("fill_dirfrag %llx.%llx frag %x referral mds %d ndist=%d\n",

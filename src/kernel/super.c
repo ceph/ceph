@@ -10,13 +10,18 @@
 #include <linux/backing-dev.h>
 #include <linux/statfs.h>
 
-/* debug levels; defined in super.h */
-
 #include "ceph_debug.h"
 #include "ceph_ver.h"
 #include "decode.h"
 #include "super.h"
 #include "mon_client.h"
+
+/*
+ * Ceph superblock operations
+ *
+ * Handle the basics of mounting, unmounting.  Also dispatch message
+ * types to appropriate handlers and subsystems.
+ */
 
 void ceph_dispatch(void *p, struct ceph_msg *msg);
 void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
@@ -497,7 +502,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	/* get mon ip(s) */
 	len = c - dev_name;
-	err = parse_ip(dev_name, len, args->mon_addr, MAX_MON_MOUNT_ADDR,
+	err = parse_ip(dev_name, len, args->mon_addr, CEPH_MAX_MON_MOUNT_ADDR,
 		       &args->num_mon);
 	if (err < 0)
 		return err;
@@ -1009,7 +1014,7 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 
 	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
 		client->backing_dev_info.ra_pages =
-			CEPH_DEFAULT_READ_SIZE >> PAGE_SHIFT;
+			CEPH_MOUNT_RSIZE_DEFAULT >> PAGE_SHIFT;
 
 	err = bdi_init(&client->backing_dev_info);
 

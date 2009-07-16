@@ -10,7 +10,7 @@
 #include "ceph_fs.h"
 
 /*
- * Identify inodes by both their ino and snapshot id (a u64).
+ * Identify inodes by both their ino AND snapshot id (a u64).
  */
 struct ceph_vino {
 	u64 ino;

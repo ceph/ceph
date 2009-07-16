@@ -397,7 +397,7 @@ struct ceph_osd_request_head {
 	__le32 num_snaps;
 
 	__le16 num_ops;
-	struct ceph_osd_op ops[];  /* followed by ops[], object, ticket, snaps */
+	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

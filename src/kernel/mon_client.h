@@ -38,25 +38,6 @@ struct ceph_monmap {
 struct ceph_mon_client;
 struct ceph_mon_statfs_request;
 
-struct ceph_mon_client_attr {
-	struct attribute attr;
-	ssize_t (*show)(struct ceph_mon_client *, struct ceph_mon_client_attr *,
-			char *);
-	ssize_t (*store)(struct ceph_mon_client *,
-			 struct ceph_mon_client_attr *,
-			 const char *, size_t);
-};
-
-struct ceph_mon_statfs_request_attr {
-	struct attribute attr;
-	ssize_t (*show)(struct ceph_mon_statfs_request *,
-			struct ceph_mon_statfs_request_attr *,
-			char *);
-	ssize_t (*store)(struct ceph_mon_statfs_request *,
-			 struct ceph_mon_statfs_request_attr *,
-			const char *, size_t);
-	struct ceph_entity_inst dst;
-};
 
 /*
  * Generic mechanism for resending monitor requests.
@@ -74,7 +55,6 @@ struct ceph_mon_request {
 struct ceph_mon_statfs_request {
 	u64 tid;
 	struct kobject kobj;
-	struct ceph_mon_statfs_request_attr k_op, k_mon;
 	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;

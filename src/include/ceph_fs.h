@@ -2,6 +2,10 @@
  * ceph_fs.h - Ceph constants and data types to share between kernel and
  * user space.
  *
+ * Most types in this file are defined as little-endian, and are
+ * primarily intended to describe data structures that pass over the
+ * wire or that are stored on disk.
+ *
  * LGPL2
  */
 
@@ -23,14 +27,6 @@
 #define CEPH_OSDC_PROTOCOL   19 /* server/client */
 #define CEPH_MDSC_PROTOCOL   27 /* server/client */
 #define CEPH_MONC_PROTOCOL   14 /* server/client */
-
-
-
-/*
- * types in this file are defined as little-endian, and are
- * primarily intended to describe data structures that pass
- * over the wire or that are stored on disk.
- */
 
 
 #define CEPH_INO_ROOT  1
@@ -155,6 +151,7 @@ static inline int frag_compare(__u32 a, __u32 b)
 		return 1;
 	return 0;
 }
+
 
 /*
  * ceph_file_layout - describe data layout for a file/inode

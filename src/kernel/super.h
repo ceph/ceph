@@ -25,26 +25,6 @@
 #define CEPH_BLOCK_SHIFT   20  /* 1 MB */
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
 
-#define CEPH_MOUNT_TIMEOUT_DEFAULT  60
-
-/*
- * Delay telling the MDS we no longer wnat caps, in case we reopen
- * the file.  Delay a minimum amount of time, even if we send a cap
- * message for some other reason.  Otherwise, take the oppotunity to
- * update the mds to avoid sending another message later.
- */
-#define CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT      5  /* cap release delay */
-#define CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT     60  /* cap release delay */
-
-/*
- * subtract jiffies
- */
-static inline unsigned long time_sub(unsigned long a, unsigned long b)
-{
-	BUG_ON(time_after(b, a));
-	return (long)a - (long)b;
-}
-
 /*
  * mount options
  */
@@ -64,11 +44,8 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 #define ceph_test_opt(client, opt) \
 	(!!((client)->mount_args.flags & CEPH_OPT_##opt))
 
-#define CEPH_DEFAULT_READ_SIZE	(128*1024) /* readahead */
 
-#define MAX_MON_MOUNT_ADDR	5
-#define CEPH_MSG_MAX_FRONT_LEN	(16*1024*1024)
-#define CEPH_MSG_MAX_DATA_LEN	(16*1024*1024)
+#define CEPH_MAX_MON_MOUNT_ADDR	5
 
 struct ceph_mount_args {
 	int sb_flags;
@@ -78,7 +55,7 @@ struct ceph_mount_args {
 	ceph_fsid_t fsid;
 	struct ceph_entity_addr my_addr;
 	int num_mon;
-	struct ceph_entity_addr mon_addr[MAX_MON_MOUNT_ADDR];
+	struct ceph_entity_addr mon_addr[CEPH_MAX_MON_MOUNT_ADDR];
 	int wsize;
 	int rsize;            /* max readahead */
 	int max_readdir;      /* max readdir size */
@@ -87,6 +64,26 @@ struct ceph_mount_args {
 	int cap_release_safety;
 };
 
+/*
+ * defaults
+ */
+#define CEPH_MOUNT_TIMEOUT_DEFAULT  60
+#define CEPH_MOUNT_RSIZE_DEFAULT    (128*1024) /* readahead */
+
+#define CEPH_MSG_MAX_FRONT_LEN	(16*1024*1024)
+#define CEPH_MSG_MAX_DATA_LEN	(16*1024*1024)
+
+/*
+ * Delay telling the MDS we no longer want caps, in case we reopen
+ * the file.  Delay a minimum amount of time, even if we send a cap
+ * message for some other reason.  Otherwise, take the oppotunity to
+ * update the mds to avoid sending another message later.
+ */
+#define CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT      5  /* cap release delay */
+#define CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT     60  /* cap release delay */
+
+
+/* mount state */
 enum {
 	CEPH_MOUNT_MOUNTING,
 	CEPH_MOUNT_MOUNTED,
@@ -95,13 +92,14 @@ enum {
 	CEPH_MOUNT_SHUTDOWN,
 };
 
-struct ceph_client_attr {
-	struct attribute attr;
-	ssize_t (*show)(struct ceph_client *, struct ceph_client_attr *,
-			char *);
-	ssize_t (*store)(struct ceph_client *, struct ceph_client_attr *,
-			 const char *, size_t);
-};
+/*
+ * subtract jiffies
+ */
+static inline unsigned long time_sub(unsigned long a, unsigned long b)
+{
+	BUG_ON(time_after(b, a));
+	return (long)a - (long)b;
+}
 
 /*
  * per-filesystem client state
@@ -112,7 +110,6 @@ struct ceph_client_attr {
 struct ceph_client {
 	u32 whoami;                   /* my client number */
 	struct kobject kobj;
-	struct ceph_client_attr k_fsid, k_monmap, k_mdsmap, k_osdmap;
 	struct dentry *debugfs_fsid, *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
 	struct dentry *debugfs_dir, *debugfs_dentry_lru;
@@ -151,17 +148,17 @@ static inline struct ceph_client *ceph_client(struct super_block *sb)
 
 /*
  * File i/o capability.  This tracks shared state with the metadata
- * server that allows us to read and write data to this file.  For any
- * given inode, we may have multiple capabilities, one issued by each
- * metadata server, and our cumulative access is the OR of all issued
- * capabilities.
+ * server that allows us to cache or writeback attributes or to read
+ * and write data.  For any given inode, we should have one or more
+ * capabilities, one issued by each metadata server, and our
+ * cumulative access is the OR of all issued capabilities.
  *
- * Each cap is referenced by the inode's i_caps tree and by a per-mds
- * session capability list(s).
+ * Each cap is referenced by the inode's i_caps rbtree and by per-mds
+ * session capability lists.
  */
 struct ceph_cap {
 	struct ceph_inode_info *ci;
-	struct rb_node ci_node;         /* per-ci cap tree */
+	struct rb_node ci_node;          /* per-ci cap tree */
 	struct ceph_mds_session *session;
 	struct list_head session_caps;   /* per-session caplist */
 	int mds;
@@ -220,7 +217,7 @@ static inline void ceph_put_cap_snap(struct ceph_cap_snap *capsnap)
  * A _leaf_ frag will be present in the i_fragtree IFF there is
  * delegation info.  That is, if mds >= 0 || ndist > 0.
  */
-#define MAX_DIRFRAG_REP 4
+#define CEPH_MAX_DIRFRAG_REP 4
 
 struct ceph_inode_frag {
 	struct rb_node node;
@@ -232,9 +229,13 @@ struct ceph_inode_frag {
 	/* delegation info */
 	int mds;              /* -1 if same authority as parent */
 	int ndist;            /* >0 if replicated */
-	int dist[MAX_DIRFRAG_REP];
+	int dist[CEPH_MAX_DIRFRAG_REP];
 };
 
+/*
+ * We cache inode xattrs as an encoded blob until they are first used,
+ * at which point we parse them into an rbtree.
+ */
 struct ceph_inode_xattr {
 	struct rb_node node;
 
@@ -277,7 +278,7 @@ struct ceph_inode_xattrs_info {
  */
 #define CEPH_I_COMPLETE  1  /* we have complete directory cached */
 #define CEPH_I_NODELAY   4  /* do not delay cap release */
-#define CEPH_I_FLUSH     8  /* do not delay cap send */
+#define CEPH_I_FLUSH     8  /* do not delay flush of dirty metadata */
 
 struct ceph_inode_info {
 	struct ceph_vino i_vino;   /* ceph ino + snap */
@@ -418,8 +419,8 @@ __ceph_find_frag(struct ceph_inode_info *ci, u32 f)
  * exists
  */
 extern u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
-			      struct ceph_inode_frag *pfrag,
-			      int *found);
+			    struct ceph_inode_frag *pfrag,
+			    int *found);
 
 /*
  * Ceph dentry state
@@ -571,13 +572,13 @@ static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
 }
 
 /*
- * wanted, by virtual of open file modes AND cap refs (buffered/cached data)
+ * wanted, by virtue of open file modes AND cap refs (buffered/cached data)
  */
 static inline int __ceph_caps_wanted(struct ceph_inode_info *ci)
 {
 	int w = __ceph_caps_file_wanted(ci) | __ceph_caps_used(ci);
 	if (w & CEPH_CAP_FILE_BUFFER)
-		w |= (CEPH_CAP_FILE_EXCL);  /* we want EXCL if dirty data */
+		w |= CEPH_CAP_FILE_EXCL;  /* we want EXCL if dirty data */
 	return w;
 }
 
@@ -615,7 +616,7 @@ static inline int ceph_queue_page_invalidation(struct inode *inode)
 
 
 /*
- * keep readdir buffers attached to file->private_data
+ * we keep buffered readdir results attached to file->private_data
  */
 struct ceph_file_info {
 	int fmode;     /* initialized on open */
