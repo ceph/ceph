@@ -12,6 +12,9 @@
 #include "crush/mapper.h"
 #include "decode.h"
 
+/*
+ * Implement client access to distributed object storage cluster.
+ */
 
 /*
  * calculate the mapping of a file extent onto an object, and fill out the
@@ -575,7 +578,9 @@ static void kick_requests(struct ceph_osd_client *osdc,
 /*
  * Process updated osd map.
  *
- * The message contains any number of incremental and full maps.
+ * The message contains any number of incremental and full maps, normally
+ * indicating some sort of topology change in the cluster.  Kick requests
+ * off to different OSDs as needed.
  */
 void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
@@ -809,6 +814,9 @@ void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
 	}
 }
 
+/*
+ * sync - wait for all in-flight requests to flush.  avoid starvation.
+ */
 void ceph_osdc_sync(struct ceph_osd_client *osdc)
 {
 	struct ceph_osd_request *req;
@@ -945,7 +953,7 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 }
 
 /*
- * do a sync write on N pages
+ * do a synchronous write on N pages
  */
 int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 			 struct ceph_file_layout *layout,

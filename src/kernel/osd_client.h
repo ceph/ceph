@@ -32,16 +32,6 @@ struct ceph_osd_request;
  */
 typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 
-struct ceph_osd_request_attr {
-	struct attribute attr;
-	ssize_t (*show)(struct ceph_osd_request *,
-			struct ceph_osd_request_attr *,
-			char *);
-	ssize_t (*store)(struct ceph_osd_request *,
-			 struct ceph_osd_request_attr *,
-			 const char *, size_t);
-};
-
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
