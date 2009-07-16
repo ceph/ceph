@@ -773,7 +773,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	}
 
 	/* send mount request, and wait for mon, mds, and osd maps */
-	while (!have_all_maps(client)) {
+	while (!have_all_maps(client) && !client->mount_err) {
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))
 			goto out;
@@ -800,7 +800,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		err = wait_event_interruptible_timeout(client->mount_wq,
 			       client->mount_err || have_all_maps(client),
 			       request_interval);
-		if (err == -EINTR)
+		if (err == -EINTR || err == -ERESTARTSYS)
 			goto out;
 		if (client->mount_err) {
 			err = client->mount_err;
