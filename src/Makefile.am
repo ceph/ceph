@@ -250,7 +250,7 @@ noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
 EXTRA_DIST = verify-mds-journal.sh vstart.sh \
-	     crun ceph_common.sh init-ceph mkcephfs make_version
+	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs

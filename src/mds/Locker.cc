@@ -1047,10 +1047,17 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int clien
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
 				   Session *session,
-				   SnapRealm *realm)
+				   SnapRealm *realm,
+				   bool is_replay)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
   bool is_new;
+
+  // if replay, try to reconnect cap, and otherwise do nothing.
+  if (is_replay) {
+    mds->mdcache->try_reconnect_cap(in, session);
+    return 0;
+  }
 
   // my needs
   assert(session->inst.name.is_client());
@@ -1125,15 +1132,6 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 
   // count conflicts with
   int nissued = 0;        
-
-  // should we increase client ranges?
-  if (in->is_file() &&
-      ((all_allowed|loner_allowed) & CEPH_CAP_FILE_WR) &&
-      in->is_auth() &&
-      !in->state_test(CInode::STATE_NO_SIZE_CHECK))
-    // we force an update here, which among other things avoids twiddling
-    // the lock state.
-    check_inode_max_size(in, true);
 
   // client caps
   map<int, Capability*>::iterator it;
@@ -1413,7 +1411,8 @@ public:
 };
 
 
-bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_size, __u64 new_size)
+bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
+				  bool update_size, __u64 new_size, utime_t new_mtime)
 {
   assert(in->is_auth());
 
@@ -1429,13 +1428,13 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   for (map<int,Capability*>::iterator p = in->client_caps.begin();
        p != in->client_caps.end();
        p++) {
-    if (p->second->issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
+    if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       new_ranges[p->first].first = 0;
       if (latest->client_ranges.count(p->first))
-	new_ranges[p->first].last = MAX(ROUND_UP_TO(size<<1, in->get_layout_size_increment()),
+	new_ranges[p->first].last = MAX(ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment()),
 					latest->client_ranges[p->first].last);
       else
-	new_ranges[p->first].last = ROUND_UP_TO(size<<1, in->get_layout_size_increment());
+	new_ranges[p->first].last = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
     }
   }
   if (latest->client_ranges != new_ranges)
@@ -1444,8 +1443,10 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   if (!update_size && !new_max)
     return false;
 
-  dout(10) << "check_inode_max_size on " << *in << dendl;
-  
+  dout(10) << "check_inode_max_size new_ranges " << new_ranges
+	   << " update_size " << update_size
+	   << " on " << *in << dendl;
+
   if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
     if (in->filelock.is_stable()) {
@@ -1477,6 +1478,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
     dout(10) << "check_inode_max_size size " << pi->size << " -> " << new_size << dendl;
     pi->size = new_size;
     pi->rstat.rbytes = new_size;
+    dout(10) << "check_inode_max_size mtime " << pi->mtime << " -> " << new_mtime << dendl;
+    pi->mtime = new_mtime;
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.
@@ -1810,14 +1813,14 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   uint64_t new_max = old_max;
   
   if (in->is_file()) {
-    if (cap->issued() & CEPH_CAP_ANY_FILE_WR) {
+    if ((cap->issued() | cap->wanted()) & CEPH_CAP_ANY_FILE_WR) {
       if (m->get_max_size() > new_max) {
 	dout(10) << "client requests file_max " << m->get_max_size()
 		 << " > max " << old_max << dendl;
 	change_max = true;
-	new_max = ROUND_UP_TO(m->get_max_size() << 1, in->get_layout_size_increment());
+	new_max = ROUND_UP_TO((m->get_max_size()+1) << 1, latest->get_layout_size_increment());
       } else {
-	new_max = ROUND_UP_TO(size<<1, in->get_layout_size_increment());
+	new_max = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
 	if (new_max > old_max)
 	  change_max = true;
 	else
@@ -1833,7 +1836,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     if (change_max &&
 	!in->filelock.can_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
-      in->state_set(CInode::STATE_NO_SIZE_CHECK);
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
 	cap->inc_suppress();
@@ -1847,7 +1849,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  issue_caps(in);
 	cap->dec_suppress();
       }
-      in->state_clear(CInode::STATE_NO_SIZE_CHECK);
       if (!in->filelock.can_wrlock(client)) {
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, new C_MDL_CheckMaxSize(this, in));
 	change_max = false;
@@ -2464,6 +2465,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
 
     switch (lock->get_state()) {
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
+    case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
     default: assert(0);
@@ -2493,7 +2495,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     }
     
     if (lock->get_type() == CEPH_LOCK_IFILE &&
-      in->state_test(CInode::STATE_NEEDSRECOVER)) {
+	in->state_test(CInode::STATE_NEEDSRECOVER)) {
       mds->mdcache->queue_file_recover(in);
       mds->mdcache->do_file_recover();
       gather++;
@@ -2526,6 +2528,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     in = (CInode *)lock->get_parent();
 
   switch (lock->get_state()) {
+  case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   default: assert(0);
@@ -2577,6 +2580,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   int old_state = lock->get_state();
 
   switch (lock->get_state()) {
+  case LOCK_SCAN: lock->set_state(LOCK_SCAN_LOCK); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_LOCK); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_LOCK); break;
@@ -3224,6 +3228,7 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   switch (lock->get_state()) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_EXCL); break;
+  case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   default: assert(0);
   }
@@ -3263,6 +3268,37 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   }
 }
 
+
+void Locker::file_recover(ScatterLock *lock)
+{
+  CInode *in = (CInode *)lock->get_parent();
+  dout(7) << "file_recover " << *lock << " on " << *in << dendl;
+
+  assert(in->is_auth());
+  assert(lock->is_stable());
+
+  int oldstate = lock->get_state();
+  lock->set_state(LOCK_PRE_SCAN);
+
+  int gather = 0;
+  
+  if (in->is_replicated() &&
+      lock->sm->states[oldstate].replica_state != LOCK_LOCK) {
+    send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    gather++;
+  }
+  if (in->issued_caps_need_gather(lock)) {
+    issue_caps(in);
+    gather++;
+  }
+  if (gather) {
+    lock->get_parent()->auth_pin(lock);
+  } else {
+    lock->set_state(LOCK_SCAN);
+    mds->mdcache->queue_file_recover(in);
+  }
+}
 
 
 // messenger

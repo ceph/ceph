@@ -19,6 +19,9 @@ build-stamp: configure-stamp
 	./configure --prefix=/usr
 	$(MAKE)
 
+	# LAME: 'make dist' won't include symlinks with non-existant targets.
+	cp src/init-ceph debian/ceph.init
+
 	touch $@
 clean: 
 	dh_testdir

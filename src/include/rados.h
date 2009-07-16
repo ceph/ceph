@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*- 
+// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*-
 // vim: ts=8 sw=8 smarttab
 
 #ifndef __RADOS_H
@@ -349,6 +349,10 @@ enum {
 #define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/
 #define EBLACKLISTED ESHUTDOWN /* blacklisted */
 
+/*
+ * an individual object operation.  each may be accompanied by some data
+ * payload
+ */
 struct ceph_osd_op {
 	__le16 op;
 	union {
@@ -376,19 +380,23 @@ struct ceph_osd_op {
 			__le32 flags;
 		};
 	};
-        __le32 payload_len;
+	__le32 payload_len;
 } __attribute__ ((packed));
 
+/*
+ * osd request message header.  each request may include multiple
+ * ceph_osd_op object operations.
+ */
 struct ceph_osd_request_head {
-	__le64                    tid;
-	__le32                    client_inc;
+	__le64 tid;
+	__le32 client_inc;
 	struct ceph_object_layout layout;
-	__le32                    osdmap_epoch;
+	__le32 osdmap_epoch;
 
-	__le32                    flags;
+	__le32 flags;
 
-	struct ceph_timespec      mtime;
-	struct ceph_eversion      reassert_version;
+	struct ceph_timespec mtime;
+	struct ceph_eversion reassert_version; /* if we are replaying op */
 
 	__le32 object_len;
 	__le32 ticket_len;
@@ -402,11 +410,11 @@ struct ceph_osd_request_head {
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {
-	__le64               tid;
-	__le32               client_inc;
-	__le32               flags;
+	__le64 tid;
+	__le32 client_inc;
+	__le32 flags;
 	struct ceph_object_layout layout;
-	__le32               osdmap_epoch;
+	__le32 osdmap_epoch;
 	struct ceph_eversion reassert_version;
 
 	__le32 result;

@@ -667,6 +667,7 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 
   if (req->is_replay()) {
     dout(10) << " no early reply on replay op" << dendl;
+    mds->mdlog->flush();
     return;
   }
 
@@ -697,7 +698,6 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, CDentry *tracedn) 
 {
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
   
   dout(10) << "reply_request " << reply->get_result() 
 	   << " (" << strerror(-reply->get_result())
@@ -760,21 +760,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) {
       if (is_replay) {
-	// replay ops don't get a trace.
-	// reconnect cap to created inode?
-	if (tracei) {
-	  ceph_mds_cap_reconnect *rc = mdcache->get_replay_cap_reconnect(tracei->ino(), client);
-	  if (rc) {
-	    Capability *cap = tracei->get_client_cap(client);
-	    // we should only have the cap reconnect for ONE client, and from ourselves.
-	    dout(10) << " incorporating cap reconnect wanted " << ccap_string(rc->wanted)
-		     << " issue " << ccap_string(rc->issued) << " on " << *tracei << dendl;
-	    cap->set_wanted(rc->wanted);
-	    cap->issue_norevoke(rc->issued);
-	    cap->set_cap_id(rc->cap_id);
-	    mdcache->remove_replay_cap_reconnect(tracei->ino(), client);
-	  }
-	}
+	if (tracei)
+	  mdcache->try_reconnect_cap(tracei, session);
       } else {
 	// include metadata in reply
 	set_trace_dist(session, reply, tracei, tracedn, snapid, dentry_wanted);
@@ -1959,10 +1946,11 @@ void Server::handle_client_open(MDRequest *mdr)
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->snapid == CEPH_NOSNAP) {
       // register new cap
-      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session);
-      dout(12) << "open issued caps " << ccap_string(cap->pending())
-	       << " for " << req->get_orig_source()
-	       << " on " << *cur << dendl;
+      Capability *cap = mds->locker->issue_new_caps(cur, cmode, mdr->session, 0, req->is_replay());
+      if (cap)
+	dout(12) << "open issued caps " << ccap_string(cap->pending())
+		 << " for " << req->get_orig_source()
+		 << " on " << *cur << dendl;
     } else {
       int caps = ceph_caps_for_mode(cmode);
       dout(12) << "open issued IMMUTABLE SNAP caps " << ccap_string(caps)
@@ -1972,6 +1960,10 @@ void Server::handle_client_open(MDRequest *mdr)
       mdr->snap_caps = caps;
     }
   }
+
+  // increase max_size?
+  if (cmode & CEPH_FILE_MODE_WR)
+    mds->locker->check_inode_max_size(cur);
 
   // make sure this inode gets into the journal
   if (!cur->xlist_open_file.is_on_xlist()) {
@@ -2076,7 +2068,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   in->inode.version = dn->pre_dirty();
   if (cmode & CEPH_FILE_MODE_WR) {
     in->inode.client_ranges[client].first = 0;
-    in->inode.client_ranges[client].last = in->get_layout_size_increment();
+    in->inode.client_ranges[client].last = in->inode.get_layout_size_increment();
   }
   in->inode.rstat.rfiles = 1;
 
@@ -2091,7 +2083,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_primary_dentry(dn, true, in);
 
   // do the open
-  mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
+  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
   in->authlock.set_state(LOCK_EXCL);
   in->xattrlock.set_state(LOCK_EXCL);
 
@@ -2407,12 +2399,10 @@ void Server::handle_client_setattr(MDRequest *mdr)
 void Server::handle_client_opent(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->in[0];
+  int client = mdr->get_client();
   assert(in);
 
   dout(10) << "handle_client_opent " << *in << dendl;
-
-  mdr->ls = mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mdlog, "open_truncate");
 
   // prepare
   inode_t *pi = in->project_inode();
@@ -2425,6 +2415,13 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   pi->truncate_size = 0;
   pi->truncate_seq++;
 
+  if (cmode & CEPH_FILE_MODE_WR) {
+    pi->client_ranges[client].first = 0;
+    pi->client_ranges[client].last = pi->get_layout_size_increment();
+  }
+
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "open_truncate");
   le->metablob.add_truncate_start(in->ino());
   le->metablob.add_client_req(mdr->reqid);
 
@@ -2433,7 +2430,7 @@ void Server::handle_client_opent(MDRequest *mdr, int cmode)
   
   // do the open
   SnapRealm *realm = in->find_snaprealm();
-  mds->locker->issue_new_caps(in, cmode, mdr->session, realm);
+  mds->locker->issue_new_caps(in, cmode, mdr->session, realm, mdr->client_request->is_replay());
 
   // make sure ino gets into the journal
   le->metablob.add_opened_ino(in->ino());
@@ -2754,15 +2751,17 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   
   // issue a cap on the directory
   int cmode = CEPH_FILE_MODE_RDWR;
-  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm);
-  cap->set_wanted(0);
+  Capability *cap = mds->locker->issue_new_caps(newi, cmode, mdr->session, realm, req->is_replay());
+  if (cap) {
+    cap->set_wanted(0);
 
-  // put locks in excl mode
-  newi->filelock.set_state(LOCK_EXCL);
-  newi->authlock.set_state(LOCK_EXCL);
-  newi->xattrlock.set_state(LOCK_EXCL);
-  cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
-		      CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED);
+    // put locks in excl mode
+    newi->filelock.set_state(LOCK_EXCL);
+    newi->authlock.set_state(LOCK_EXCL);
+    newi->xattrlock.set_state(LOCK_EXCL);
+    cap->issue_norevoke(CEPH_CAP_AUTH_EXCL|CEPH_CAP_AUTH_SHARED|
+			CEPH_CAP_XATTR_EXCL|CEPH_CAP_XATTR_SHARED);
+  }
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());

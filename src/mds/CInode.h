@@ -122,8 +122,7 @@ public:
   static const int STATE_EXPORTINGCAPS = (1<<10);
   static const int STATE_NEEDSRECOVER = (1<<11);
   static const int STATE_RECOVERING =   (1<<12);
-  static const int STATE_NO_SIZE_CHECK = (1<<13);
-  static const int STATE_PURGING =     (1<<14);
+  static const int STATE_PURGING =     (1<<13);
 
   // -- waiters --
   static const __u64 WAIT_DIR         = (1<<0);
@@ -386,10 +385,6 @@ private:
       (ino() == o->ino() && last < o->last);
   }
 
-  int64_t get_layout_size_increment() {
-    return ceph_file_layout_period(inode.layout);
-  }
-
   // -- misc -- 
   bool is_projected_ancestor_of(CInode *other);
   void make_path_string(string& s, bool force=false, CDentry *use_parent=NULL);
@@ -592,7 +587,7 @@ public:
   // choose new lock state during recovery, based on issued caps
   void choose_lock_state(SimpleLock *lock, int allissued) {
     int shift = lock->get_cap_shift();
-    int issued = allissued >> shift;
+    int issued = (allissued >> shift) & lock->get_cap_mask();
     if (is_auth()) {
       if (issued & CEPH_CAP_GEXCL)
 	lock->set_state(LOCK_EXCL);
@@ -606,6 +601,15 @@ public:
       else
 	lock->set_state(LOCK_SYNC);  // might have been lock, previously
     }
+  }
+  void choose_lock_states() {
+    int issued = get_caps_issued();
+    if (is_auth() && (issued & CEPH_CAP_ANY_EXCL))
+      try_choose_loner();
+    choose_lock_state(&filelock, issued);
+    choose_lock_state(&authlock, issued);
+    choose_lock_state(&xattrlock, issued);
+    choose_lock_state(&linklock, issued);
   }
 
   int count_nonstale_caps() {
@@ -666,11 +670,13 @@ public:
   Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session) {
     Capability *cap = get_client_cap(client);
     if (cap) {
+      // FIXME?
       cap->merge(icr.wanted, icr.issued);
     } else {
       cap = add_client_cap(client, session);
       cap->set_wanted(icr.wanted);
-      cap->issue(icr.issued);
+      cap->issue_norevoke(icr.issued);
+      cap->reset_seq();
     }
     cap->set_cap_id(icr.cap_id);
     cap->set_last_issue_stamp(g_clock.recent_now());

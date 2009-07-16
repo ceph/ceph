@@ -3819,16 +3819,8 @@ void MDCache::process_reconnected_caps()
     CInode *in = p->first;
     p++;
 
-    int issued = in->get_caps_issued();
-    if (in->is_auth() &&
-	(issued & CEPH_CAP_ANY_EXCL))
-      in->try_choose_loner();
-    in->choose_lock_state(&in->filelock, issued);
-    in->choose_lock_state(&in->authlock, issued);
-    in->choose_lock_state(&in->xattrlock, issued);
-    in->choose_lock_state(&in->linklock, issued);
-    dout(15) << " issued " << ccap_string(issued)
-	     << " chose lock states on " << *in << dendl;
+    in->choose_lock_states();
+    dout(15) << " chose lock states on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
 
@@ -3953,6 +3945,24 @@ void MDCache::rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& 
   if (frommds >= 0)
     do_cap_import(session, in, cap);
 }
+
+void MDCache::try_reconnect_cap(CInode *in, Session *session)
+{
+  int client = session->get_client();
+  ceph_mds_cap_reconnect *rc = get_replay_cap_reconnect(in->ino(), client);
+  if (rc) {
+    in->reconnect_cap(client, *rc, session);
+    dout(10) << "try_reconnect_cap client" << client
+	     << " reconnect wanted " << ccap_string(rc->wanted)
+	     << " issue " << ccap_string(rc->issued)
+	     << " on " << *in << dendl;
+    remove_replay_cap_reconnect(in->ino(), client);
+
+    in->choose_lock_states();
+    dout(15) << " chose lock states on " << *in << dendl;
+  }
+}
+
 
 
 // -------
@@ -4212,8 +4222,10 @@ void MDCache::reissue_all_caps()
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
-    if (in->is_any_caps())
-      mds->locker->issue_caps(in);
+    if (in->is_any_caps()) {
+      if (!mds->locker->eval(in, CEPH_CAP_LOCKS))
+	mds->locker->issue_caps(in);
+    }
   }
 }
 
@@ -4302,13 +4314,6 @@ void MDCache::unqueue_file_recover(CInode *in)
  */
 void MDCache::identify_files_to_recover()
 {
-  /*  no.  we may have failed a reconnect, then crashed before recovering all sizes..
-  if (!mds->server->failed_reconnects) {
-    dout(10) << "identify_files_to_recover -- all clients reconnected, nothing to do" << dendl;
-    return;
-  }
-  */
-
   dout(10) << "identify_files_to_recover" << dendl;
   vector<CInode*> q;  // put inodes in list first: queue_file_discover modifies inode_map
   for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
@@ -4329,22 +4334,23 @@ void MDCache::identify_files_to_recover()
       }
     }
 
-    if (recover) {
-      in->filelock.set_state(LOCK_LOCK);
-      in->loner_cap = -1;
+    if (recover) 
       q.push_back(in);
-    }
+    else
+      mds->locker->check_inode_max_size(in);
   }
   for (vector<CInode*>::iterator p = q.begin(); p != q.end(); p++)
-    queue_file_recover(*p);
+    mds->locker->file_recover(&(*p)->filelock);
 }
 
 struct C_MDC_Recover : public Context {
   MDCache *mdc;
   CInode *in;
-  C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i) {}
+  __u64 size;
+  utime_t mtime;
+  C_MDC_Recover(MDCache *m, CInode *i) : mdc(m), in(i), size(0) {}
   void finish(int r) {
-    mdc->_recovered(in, r);
+    mdc->_recovered(in, r, size, mtime);
   }
 };
 
@@ -4363,11 +4369,10 @@ void MDCache::do_file_recover()
 	       << " " << *in << dendl;
       file_recovering.insert(in);
       
-      __u64 max = in->inode.get_max_size();
-
+      C_MDC_Recover *fin = new C_MDC_Recover(this, in);
       mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			max, &in->inode.size, &in->inode.mtime, false,
-			0, new C_MDC_Recover(this, in));    
+			in->get_projected_inode()->get_max_size(), &fin->size, &fin->mtime, false,
+			0, fin);    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
@@ -4381,7 +4386,7 @@ void MDCache::do_file_recover()
   }
 }
 
-void MDCache::_recovered(CInode *in, int r)
+void MDCache::_recovered(CInode *in, int r, __u64 size, utime_t mtime)
 {
   dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " mtime=" << in->inode.mtime
 	   << " for " << *in << dendl;
@@ -4395,7 +4400,7 @@ void MDCache::_recovered(CInode *in, int r)
     remove_inode(in);
   } else {
     // journal
-    mds->locker->check_inode_max_size(in, true, true, in->inode.size);
+    mds->locker->check_inode_max_size(in, true, true, size, mtime);
     in->auth_unpin(this);
   }
 

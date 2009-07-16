@@ -7,7 +7,7 @@ repo=$1
 arch=$2
 
 rm *.deb
-rm -r ceph-$vers
+rm -rf ceph-$vers
 make dist
 tar zxvf ceph-$vers.tar.gz
 cd ceph-$vers

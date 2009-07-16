@@ -32,6 +32,7 @@
 class Logger;
 
 class MDS;
+class Session;
 class Migrator;
 class Renamer;
 
@@ -746,6 +747,7 @@ public:
   void send_snaps(map<int,MClientSnap*>& splits);
   void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);
   void finish_snaprealm_reconnect(int client, SnapRealm *realm, snapid_t seq);
+  void try_reconnect_cap(CInode *in, Session *session);
 
   // cap imports.  delayed snap parent opens.
   //  realm inode -> client -> cap inodes needing to split to this realm
@@ -775,7 +777,7 @@ public:
   void _queue_file_recover(CInode *in);
   void identify_files_to_recover();
   void do_file_recover();
-  void _recovered(CInode *in, int r);
+  void _recovered(CInode *in, int r, __u64 size, utime_t mtime);
 
   void purge_prealloc_ino(inodeno_t ino, Context *fin);
 

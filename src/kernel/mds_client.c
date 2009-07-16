@@ -1912,11 +1912,12 @@ needmore:
 
 
 /*
- * If an MDS fails and recovers, it needs to reconnect with clients in order
- * to reestablish shared state.  This includes all caps issued through this
- * session _and_ the snap_realm hierarchy.  Because it's not clear which
- * snap realms the mds cares about, we send everything we know about.. that
- * ensures we'll then get any new info the recovering MDS might have.
+ * If an MDS fails and recovers, clients need to reconnect in order to
+ * reestablish shared state.  This includes all caps issued through
+ * this session _and_ the snap_realm hierarchy.  Because it's not
+ * clear which snap realms the mds cares about, we send everything we
+ * know about.. that ensures we'll then get any new info the
+ * recovering MDS might have.
  *
  * This is a relatively heavyweight operation, but it's rare.
  *

@@ -206,7 +206,7 @@ private:
       if (!reader_running)
 	return;
       cond.Signal();
-      reader_thread.kill(SIGUSR1);
+      reader_thread.kill(SIGUSR2);
       lock.Unlock();
       reader_thread.join();
       lock.Lock();

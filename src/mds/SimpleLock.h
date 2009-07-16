@@ -228,7 +228,7 @@ public:
   }
 
   bool is_stable() {
-    return sm->states[state].next == 0;
+    return !sm || sm->states[state].next == 0;
   }
   int get_next_state() {
     return sm->states[state].next;
@@ -484,6 +484,11 @@ public:
       if (get_xlocked_by())
 	out << " by " << get_xlocked_by();
     }
+    /*if (is_stable())
+      out << " stable";
+    else
+      out << " unstable";
+    */
   }
 
   virtual void print(ostream& out) {

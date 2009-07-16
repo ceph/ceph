@@ -20,7 +20,12 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
 else
     BINDIR=@bindir@
     LIBDIR=@libdir@/ceph
-    ETCDIR=@sysconfdir@/ceph
+    # i hate autoconf:
+    if [ "@sysconfdir@" = "/usr/etc" ]; then
+	ETCDIR=/etc/ceph
+    else
+	ETCDIR=@sysconfdir@
+    fi
 fi
 
 usage_exit() {

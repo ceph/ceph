@@ -161,6 +161,7 @@ int SimpleMessenger::Accepter::start()
   sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
+  sigaction(SIGUSR2, &sa, NULL);
   sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
 
   // start thread
@@ -175,11 +176,20 @@ void *SimpleMessenger::Accepter::entry()
   
   fd_set fds;
   int errors = 0;
+
+  sigset_t sigmask, sigempty;
+  sigemptyset(&sigmask);
+  sigaddset(&sigmask, SIGUSR1);
+  sigemptyset(&sigempty);
+
+  // block SIGUSR1
+  pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
+
   while (!done) {
     FD_ZERO(&fds);
     FD_SET(listen_sd, &fds);
     dout(20) << "accepter calling select" << dendl;
-    int r = ::select(listen_sd+1, &fds, 0, &fds, 0);
+    int r = ::pselect(listen_sd+1, &fds, 0, &fds, 0, &sigempty);  // unblock SIGUSR1 inside select()
     dout(20) << "accepter select got " << r << dendl;
     
     if (done) break;
@@ -215,6 +225,9 @@ void *SimpleMessenger::Accepter::entry()
 	break;
     }
   }
+
+  // unblock SIGUSR1
+  pthread_sigmask(SIG_UNBLOCK, &sigmask, NULL);
 
   dout(20) << "accepter closing" << dendl;
   // don't close socket, in case we start up again?  blech.
@@ -664,7 +677,7 @@ int SimpleMessenger::Pipe::accept()
   dout(10) << "accept replacing " << existing << dendl;
   existing->state = STATE_CLOSED;
   existing->cond.Signal();
-  existing->reader_thread.kill(SIGUSR1);
+  existing->reader_thread.kill(SIGUSR2);
   existing->unregister_pipe();
     
   // steal queue and out_seq
@@ -1133,10 +1146,12 @@ void SimpleMessenger::Pipe::stop()
   dout(10) << "stop" << dendl;
   state = STATE_CLOSED;
   cond.Signal();
+  if (sd >= 0)
+    ::close(sd);
   if (reader_running)
-    reader_thread.kill(SIGUSR1);
+    reader_thread.kill(SIGUSR2);
   if (writer_running)
-    writer_thread.kill(SIGUSR1);
+    writer_thread.kill(SIGUSR2);
 }
 
 

@@ -197,6 +197,10 @@ protected:
   void file_mixed(ScatterLock *lock, bool *need_issue=0);
   void file_excl(ScatterLock *lock, bool *need_issue=0);
 
+public:
+  void file_recover(ScatterLock *lock);
+
+private:
   xlist<ScatterLock*> updated_filelocks;
 public:
   void mark_updated_Filelock(ScatterLock *lock);
@@ -204,7 +208,7 @@ public:
   // -- file i/o --
  public:
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm=0);
+  Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
   bool issue_caps(CInode *in, Capability *only_cap=0);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
@@ -219,7 +223,8 @@ protected:
   void file_update_finish(CInode *in, Mutation *mut, bool share, int client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0);
+  bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0,
+			    utime_t mtime=utime_t());
 private:
   void share_inode_max_size(CInode *in);
 

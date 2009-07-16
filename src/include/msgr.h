@@ -38,7 +38,8 @@ static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
 
 
 /*
- * entity_name
+ * entity_name -- logical name for a process participating in the
+ * network, e.g. 'mds0' or 'osd3'.
  */
 struct ceph_entity_name {
 	__le32 type;
@@ -50,20 +51,6 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_OSD    3
 #define CEPH_ENTITY_TYPE_CLIENT 4
 #define CEPH_ENTITY_TYPE_ADMIN  5
-
-/* used by message exchange protocol */
-#define CEPH_MSGR_TAG_READY         1  /* server->client: ready for messages */
-#define CEPH_MSGR_TAG_RESETSESSION  2  /* server->client: reset, try again */
-#define CEPH_MSGR_TAG_WAIT          3  /* server->client: wait for racing
-					  incoming connection */
-#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server->client + cseq: try again
-					  with higher cseq */
-#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again
-					  with higher gseq */
-#define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
-#define CEPH_MSGR_TAG_MSG          10  /* message */
-#define CEPH_MSGR_TAG_ACK          11  /* message ack */
-
 
 /*
  * entity_addr -- network address
@@ -91,6 +78,20 @@ struct ceph_entity_inst {
 	struct ceph_entity_name name;
 	struct ceph_entity_addr addr;
 } __attribute__ ((packed));
+
+
+/* used by message exchange protocol */
+#define CEPH_MSGR_TAG_READY         1  /* server->client: ready for messages */
+#define CEPH_MSGR_TAG_RESETSESSION  2  /* server->client: reset, try again */
+#define CEPH_MSGR_TAG_WAIT          3  /* server->client: wait for racing
+					  incoming connection */
+#define CEPH_MSGR_TAG_RETRY_SESSION 4  /* server->client + cseq: try again
+					  with higher cseq */
+#define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again
+					  with higher gseq */
+#define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
+#define CEPH_MSGR_TAG_MSG          10  /* message */
+#define CEPH_MSGR_TAG_ACK          11  /* message ack */
 
 
 /*

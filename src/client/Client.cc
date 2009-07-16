@@ -3131,7 +3131,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 }
 
 
-int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat)
+int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat, int mask)
 {
   Mutex::Locker lock(client_lock);
   tout << "lstat" << std::endl;
@@ -3141,7 +3141,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  r = _getattr(in, CEPH_STAT_CAP_INODE_ALL);
+  r = _getattr(in, mask);
   if (r < 0)
     return r;
   fill_stat(in, stbuf, dirstat);

@@ -363,6 +363,10 @@ struct inode_t {
 
   bool is_truncating() const { return truncate_size != -1ull; }
 
+  int64_t get_layout_size_increment() {
+    return ceph_file_layout_period(layout);
+  }
+
   __u64 get_max_size() const {
     __u64 max = 0;
       for (map<int,byte_range_t>::const_iterator p = client_ranges.begin();

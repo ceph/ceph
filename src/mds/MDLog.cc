@@ -466,6 +466,16 @@ public:
   }
 };
 
+struct C_MDL_ReplayTruncated : public Context {
+  MDLog *mdl;
+  C_MDL_ReplayTruncated(MDLog *l) : mdl(l) {}
+  void finish(int r) {
+    mdl->mds->mds_lock.Lock();
+    mdl->_replay_truncated();
+    mdl->mds->mds_lock.Unlock();
+  }
+};
+
 
 
 // i am a separate thread
@@ -543,22 +553,36 @@ void MDLog::_replay_thread()
   // done!
   if (r == 0) {
     assert(journaler->get_read_pos() == journaler->get_write_pos());
-    dout(10) << "_replay - complete, " << num_events << " events, new read/expire pos is " << new_expire_pos << dendl;
-    
+    dout(10) << "_replay - complete, " << num_events
+	     << " events, new read/expire pos is " << new_expire_pos << dendl;
+
     // move read pointer _back_ to first subtree map we saw, for eventual trimming
     journaler->set_read_pos(new_expire_pos);
     journaler->set_expire_pos(new_expire_pos);
     logger->set(l_mdl_expos, new_expire_pos);
+
+    dout(10) << "_replay - truncating at " << journaler->get_write_pos() << dendl;
+    Context *c = new C_MDL_ReplayTruncated(this);
+    if (journaler->truncate_tail_junk(c)) {
+      delete c;
+      
+      dout(10) << "_replay_thread nothing to truncate, kicking waiters" << dendl;
+      finish_contexts(waitfor_replay, 0);  
+    }
+  } else {
+    dout(10) << "_replay_thread kicking waiters" << dendl;
+    finish_contexts(waitfor_replay, r);  
   }
 
-  // kick waiter(s)
-  list<Context*> ls;
-  ls.swap(waitfor_replay);
-  finish_contexts(ls, r);  
-  
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();
 }
 
+
+void MDLog::_replay_truncated()
+{
+  dout(10) << "_replay_truncated" << dendl;
+  finish_contexts(waitfor_replay, 0);  
+}
 
 

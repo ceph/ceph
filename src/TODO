@@ -129,8 +129,6 @@ uclient
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
-- fix file recovery
-  - disallow access until file is recovered?
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too
@@ -164,7 +162,6 @@ journaler
 - should we pad with zeros to avoid splitting individual entries?
   - make it a g_conf flag?
   - have to fix reader to skip over zeros (either <4 bytes for size, or zeroed sizes)
-- need to truncate at detected (valid) write_pos to clear out any other partial trailing writes
 
 
 mon
