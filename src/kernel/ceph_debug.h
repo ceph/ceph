@@ -9,15 +9,16 @@ static inline const char *ceph_file_part(const char *s, int len)
 {
 	const char *e = s + len;
 
-	while (*(e-1) != '/')
+	while (e != s && *(e-1) != '/')
 		e--;
 	return e;
 }
 
 #define _dout(fmt, args...)						\
 	pr_debug(" %12.12s:%-4d : " fmt "%s",				\
-		 ceph_file_part(__FILE__, sizeof(__FILE__)), __LINE__,	\
-		 args);
+		 ceph_file_part(__FILE__, sizeof(__FILE__)),		\
+		 __LINE__, args);
 #define dout(args...) _dout(args, "")
+
 
 #endif

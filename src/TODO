@@ -34,7 +34,7 @@ v0.10
 kclient review
 - andi
 /  - server-specified max file size
-  - pr_debug
+/  - pr_debug
   - top of file comments
 
 bugs
