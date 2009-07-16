@@ -306,7 +306,7 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 	return;
 
 bad:
-	derr(10, "corrupt statfs reply, no tid\n");
+	pr_err("ceph corrupt statfs reply, no tid\n");
 }
 
 /*
@@ -353,7 +353,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	memset(&req.kobj, 0, sizeof(req.kobj));
 	if (radix_tree_insert(&monc->statfs_request_tree, req.tid, &req) < 0) {
 		mutex_unlock(&monc->statfs_mutex);
-		derr(10, "ENOMEM in do_statfs\n");
+		pr_err("ceph ENOMEM in do_statfs\n");
 		return -ENOMEM;
 	}
 	if (monc->num_statfs_requests == 0)

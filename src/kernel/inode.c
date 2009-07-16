@@ -103,8 +103,9 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci,
 
 	frag = kmalloc(sizeof(*frag), GFP_NOFS);
 	if (!frag) {
-		derr(0, "ENOMEM on %p %llx.%llx frag %x\n", &ci->vfs_inode,
-		     ceph_vinop(&ci->vfs_inode), f);
+		pr_err("ceph __get_or_create_frag ENOMEM on %p %llx.%llx "
+		       "frag %x\n", &ci->vfs_inode,
+		       ceph_vinop(&ci->vfs_inode), f);
 		return ERR_PTR(-ENOMEM);
 	}
 	frag->frag = f;
@@ -215,8 +216,8 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	if (IS_ERR(frag)) {
 		/* this is not the end of the world; we can continue
 		   with bad/inaccurate delegation info */
-		derr(0, "fill_dirfrag ENOMEM on mds ref %llx.%llx frag %x\n",
-		     ceph_vinop(inode), le32_to_cpu(dirinfo->frag));
+		pr_err("ceph fill_dirfrag ENOMEM on mds ref %llx.%llx fg %x\n",
+		       ceph_vinop(inode), le32_to_cpu(dirinfo->frag));
 		err = -ENOMEM;
 		goto out;
 	}
@@ -484,8 +485,8 @@ static int fill_inode(struct inode *inode,
 	if (iinfo->xattr_len > 4 && iinfo->xattr_len != ci->i_xattrs.len) {
 		xattr_data = kmalloc(iinfo->xattr_len, GFP_NOFS);
 		if (!xattr_data)
-			derr(10, "ENOMEM on xattr blob %d bytes\n",
-			     ci->i_xattrs.len);
+			pr_err("ceph fill_inode ENOMEM xattr blob %d bytes\n",
+			       ci->i_xattrs.len);
 	}
 
 	spin_lock(&inode->i_lock);
@@ -660,8 +661,8 @@ no_change:
 		}
 		break;
 	default:
-		derr(0, "BAD mode 0%o S_IFMT 0%o\n", inode->i_mode,
-		     inode->i_mode & S_IFMT);
+		pr_err("ceph fill_inode %llx.%llx BAD mode 0%o\n",
+		       ceph_vinop(inode), inode->i_mode);
 		err = -EINVAL;
 		goto out;
 	}
@@ -769,8 +770,8 @@ static struct dentry *splice_dentry(struct dentry *dn, struct inode *in,
 		d_drop(dn);
 	realdn = d_materialise_unique(dn, in);
 	if (IS_ERR(realdn)) {
-		derr(0, "error splicing %p (%d) inode %p ino %llx.%llx\n",
-		     dn, atomic_read(&dn->d_count), in, ceph_vinop(in));
+		pr_err("ceph splice_dentry error %p inode %p ino %llx.%llx\n",
+		       dn, in, ceph_vinop(in));
 		if (prehash)
 			*prehash = false; /* don't rehash on error */
 		dn = realdn; /* note realdn contains the error */
@@ -946,7 +947,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		if (!dn->d_inode) {
 			in = ceph_get_inode(sb, vino);
 			if (IS_ERR(in)) {
-				derr(30, "get_inode badness\n");
+				pr_err("ceph fill_trace bad get_inode "
+				       "%llx.%llx\n", vino.ino, vino.snap);
 				err = PTR_ERR(in);
 				d_delete(dn);
 				goto done;
@@ -987,7 +989,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 		vino.snap = le64_to_cpu(ininfo->snapid);
 		in = ceph_get_inode(sb, vino);
 		if (IS_ERR(in)) {
-			derr(30, "get_inode badness\n");
+			pr_err("ceph fill_inode get_inode badness %llx.%llx\n",
+			       vino.ino, vino.snap);
 			err = PTR_ERR(in);
 			d_delete(dn);
 			goto done;
@@ -1024,7 +1027,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 				 req->r_fmode : -1,
 				 &req->r_caps_reservation);
 		if (err < 0) {
-			derr(30, "fill_inode badness\n");
+			pr_err("ceph fill_inode badness %p %llx.%llx\n",
+			       in, ceph_vinop(in));
 			goto done;
 		}
 	}
@@ -1720,8 +1724,9 @@ static int __set_xattr(struct ceph_inode_info *ci,
 		ci->i_xattrs.vals_size -= xattr->val_len;
 	}
 	if (!xattr) {
-		derr(0, "ENOMEM on %p %llx.%llx xattr %s=%s\n", &ci->vfs_inode,
-		     ceph_vinop(&ci->vfs_inode), name, xattr->val);
+		pr_err("ceph __set_xattr ENOMEM on %p %llx.%llx xattr %s=%s\n",
+		       &ci->vfs_inode, ceph_vinop(&ci->vfs_inode), name,
+		       xattr->val);
 		return -ENOMEM;
 	}
 	ci->i_xattrs.names_size += name_len;

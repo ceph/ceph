@@ -355,8 +355,8 @@ static int map_osds(struct ceph_osd_client *osdc,
 	ruleno = crush_find_rule(osdc->osdmap->crush, pool->v.crush_ruleset,
 				 pool->v.type, pool->v.size);
 	if (ruleno < 0) {
-		derr(0, "map_osds no crush rule for pool %d type %d size %d\n",
-		     pgid.pg.pool, pool->v.type, pool->v.size);
+		pr_err("ceph map_osds no crush rule pool %d type %d size %d\n",
+		       pgid.pg.pool, pool->v.type, pool->v.size);
 		return -1;
 	}
 
@@ -510,9 +510,9 @@ done:
 	return;
 
 bad:
-	derr(0, "got corrupt osd_op_reply got %d %d expected %d\n",
-	     (int)msg->front.iov_len, le32_to_cpu(msg->hdr.front_len),
-	     (int)sizeof(*rhead));
+	pr_err("ceph corrupt osd_op_reply got %d %d expected %d\n",
+	       (int)msg->front.iov_len, le32_to_cpu(msg->hdr.front_len),
+	       (int)sizeof(*rhead));
 }
 
 
@@ -599,7 +599,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	ceph_decode_need(&p, end, sizeof(fsid), bad);
 	ceph_decode_copy(&p, &fsid, sizeof(fsid));
 	if (ceph_fsid_compare(&fsid, &osdc->client->monc.monmap->fsid)) {
-		derr(0, "got map with wrong fsid, ignoring\n");
+		pr_err("ceph got osdmap with wrong fsid, ignoring\n");
 		return;
 	}
 
@@ -677,7 +677,7 @@ done:
 	return;
 
 bad:
-	derr(1, "handle_map corrupt msg\n");
+	pr_err("ceph osdc handle_map corrupt msg\n");
 	up_write(&osdc->map_sem);
 	return;
 }

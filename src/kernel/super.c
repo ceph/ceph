@@ -57,7 +57,7 @@ static void ceph_put_super(struct super_block *s)
 				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
 				seconds*HZ);
 		if (rc == 0)
-			derr(0, "umount timed out after %d seconds\n", seconds);
+			pr_err("ceph umount timedout after %d s\n", seconds);
 	}
 
 	return;
@@ -266,7 +266,8 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 	ceph_decode_need(&p, end, len, bad);
 	monmap = ceph_monmap_decode(p, p + len);
 	if (IS_ERR(monmap)) {
-		derr(0, "problem decoding monmap, %d\n", (int)PTR_ERR(monmap));
+		pr_err("ceph problem decoding monmap, %d\n",
+		       (int)PTR_ERR(monmap));
 		return -EINVAL;
 	}
 	p += len;
@@ -277,8 +278,8 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 
 	client->signed_ticket = kmalloc(len, GFP_KERNEL);
 	if (!client->signed_ticket) {
-		derr(0, "problem allocating %d bytes for client ticket\n",
-		     len);
+		pr_err("ceph ENOMEM allocating %d bytes for client ticket\n",
+		       len);
 		err = -ENOMEM;
 		goto out;
 	}
@@ -298,7 +299,7 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 	return 0;
 
 bad:
-	derr(0, "error decoding mount_ack message\n");
+	pr_err("ceph error decoding mount_ack message\n");
 out:
 	kfree(monmap);
 	return err;
@@ -500,7 +501,7 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr,
 	return 0;
 
 bad:
-	derr(1, "parse_ip bad ip '%s'\n", c);
+	pr_err("ceph parse_ip bad ip '%s'\n", c);
 	return -EINVAL;
 }
 
@@ -562,7 +563,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			continue;
 		token = match_token(c, arg_tokens, argstr);
 		if (token < 0) {
-			derr(0, "bad mount option at '%s'\n", c);
+			pr_err("ceph bad mount option at '%s'\n", c);
 			return -EINVAL;
 
 		}
@@ -989,8 +990,8 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 		break;
 
 	default:
-		derr(0, "received unknown message type %d %s\n", type,
-		     ceph_msg_type_name(type));
+		pr_err("ceph received unknown message type %d %s\n", type,
+		       ceph_msg_type_name(type));
 	}
 
 	ceph_msg_put(msg);

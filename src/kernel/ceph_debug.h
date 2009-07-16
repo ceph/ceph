@@ -76,11 +76,6 @@ extern int ceph_debug_tools __read_mostly;
 
 #define _dout(x, fmt, args...) dout_flag((x), DOUT_MASK, fmt FMT_SUFFIX, args)
 
-#define _derr(x, fmt, args...) do {					\
-		printk(KERN_ERR FMT_PREFIX fmt FMT_SUFFIX, LOG_ARGS, args); \
-	} while (0)
-
 #define dout(x, args...) _dout((x), args, TRAIL_PARAM)
-#define derr(x, args...) _derr((x), args, TRAIL_PARAM)
 
 #endif

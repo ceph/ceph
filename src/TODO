@@ -33,7 +33,7 @@ v0.10
 
 kclient review
 - andi
-  - server-specified max file size
+/  - server-specified max file size
   - pr_debug
   - top of file comments
 

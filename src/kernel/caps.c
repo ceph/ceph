@@ -500,8 +500,8 @@ retry:
 				 &realm->inodes_with_caps);
 			spin_unlock(&realm->inodes_with_caps_lock);
 		} else {
-			derr(0, "couldn't find snap realm realmino=%llu\n",
-				realmino);
+			pr_err("ceph_add_cap: couldn't find snap realm %llu\n",
+			       realmino);
 		}
 	}
 
@@ -2410,7 +2410,8 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	default:
 		spin_unlock(&inode->i_lock);
-		derr(10, " unknown cap op %d %s\n", op, ceph_cap_op_name(op));
+		pr_err("ceph_handle_caps: unknown cap op %d %s\n", op,
+		       ceph_cap_op_name(op));
 	}
 
 done:
@@ -2425,7 +2426,7 @@ done:
 	return;
 
 bad:
-	derr(10, "corrupt caps message\n");
+	pr_err("ceph_handle_caps: corrupt message\n");
 	return;
 }
 

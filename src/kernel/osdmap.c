@@ -155,8 +155,8 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	ceph_decode_need(p, end, 4*sizeof(u32), bad);
 	ceph_decode_32(p, magic);
 	if (magic != CRUSH_MAGIC) {
-		derr(0, "crush_decode magic %x != current %x\n",
-		     (unsigned)magic, (unsigned)CRUSH_MAGIC);
+		pr_err("ceph crush_decode magic %x != current %x\n",
+		       (unsigned)magic, (unsigned)CRUSH_MAGIC);
 		goto bad;
 	}
 	ceph_decode_32(p, c->max_buckets);
@@ -595,8 +595,8 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	return map;
 
 bad:
-	derr(10, "corrupt incremental osdmap epoch %d off %d (%p of %p-%p)\n",
-	     epoch, (int)(*p - start), *p, start, end);
+	pr_err("ceph corrupt inc osdmap epoch %d off %d (%p of %p-%p)\n",
+	       epoch, (int)(*p - start), *p, start, end);
 	if (newcrush)
 		crush_destroy(newcrush);
 	return ERR_PTR(err);

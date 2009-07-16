@@ -37,7 +37,7 @@ int ceph_msgr_init(void)
 	ceph_msgr_wq = create_workqueue("ceph-msgr");
 	if (IS_ERR(ceph_msgr_wq)) {
 		int ret = PTR_ERR(ceph_msgr_wq);
-		derr(0, "failed to create workqueue: %d\n", ret);
+		pr_err("ceph_msgr_init failed to create workqueue: %d\n", ret);
 		ceph_msgr_wq = NULL;
 		return ret;
 	}
@@ -214,8 +214,8 @@ static struct socket *ceph_tcp_connect(struct ceph_connection *con)
 		ret = 0;
 	}
 	if (ret < 0) {
-		derr(1, "connect %u.%u.%u.%u:%u error %d\n",
-		     IPQUADPORT(*(struct sockaddr_in *)paddr), ret);
+		pr_err("ceph connect %u.%u.%u.%u:%u error %d\n",
+			IPQUADPORT(*(struct sockaddr_in *)paddr), ret);
 		sock_release(sock);
 		con->sock = NULL;
 		con->error_msg = "connect error";
@@ -244,14 +244,14 @@ static int ceph_tcp_listen(struct ceph_messenger *msgr)
 	ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
 				(char *)&optval, sizeof(optval));
 	if (ret < 0) {
-		derr(0, "failed to set SO_REUSEADDR: %d\n", ret);
+		pr_err("ceph failed to set SO_REUSEADDR: %d\n", ret);
 		goto err;
 	}
 
 	ret = sock->ops->bind(sock, (struct sockaddr *)myaddr,
 			      sizeof(*myaddr));
 	if (ret < 0) {
-		derr(0, "Failed to bind: %d\n", ret);
+		pr_err("ceph failed to bind: %d\n", ret);
 		goto err;
 	}
 
@@ -260,7 +260,7 @@ static int ceph_tcp_listen(struct ceph_messenger *msgr)
 	ret = sock->ops->getname(sock, (struct sockaddr *)myaddr, &nlen,
 				 0);
 	if (ret < 0) {
-		derr(0, "failed to getsockname: %d\n", ret);
+		pr_err("ceph failed to getsockname: %d\n", ret);
 		goto err;
 	}
 	dout(0, "listening on %u.%u.%u.%u:%u\n", IPQUADPORT(*myaddr));
@@ -294,7 +294,7 @@ static int ceph_tcp_accept(struct socket *lsock, struct ceph_connection *con)
 
 	ret = lsock->ops->accept(lsock, sock, O_NONBLOCK);
 	if (ret < 0) {
-		derr(0, "accept error: %d\n", ret);
+		pr_err("ceph accept error: %d\n", ret);
 		goto err;
 	}
 
@@ -1050,8 +1050,8 @@ out:
 static int verify_hello(struct ceph_connection *con)
 {
 	if (memcmp(con->in_banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
-		derr(10, "connection to/from %u.%u.%u.%u:%u has bad banner\n",
-		     IPQUADPORT(con->peer_addr.ipaddr));
+		pr_err("ceph connect to/from %u.%u.%u.%u:%u has bad banner\n",
+		       IPQUADPORT(con->peer_addr.ipaddr));
 		con->error_msg = "protocol error, bad banner";
 		return -1;
 	}
@@ -1064,9 +1064,9 @@ static int verify_hello(struct ceph_connection *con)
  */
 static void reset_connection(struct ceph_connection *con)
 {
-	derr(1, "%s%d %u.%u.%u.%u:%u connection reset\n",
-	     ENTITY_NAME(con->peer_name),
-	     IPQUADPORT(con->peer_addr.ipaddr));
+	pr_err("ceph %s%d %u.%u.%u.%u:%u connection reset\n",
+	       ENTITY_NAME(con->peer_name),
+	       IPQUADPORT(con->peer_addr.ipaddr));
 
 	/* reset connection, out_queue, msg_ and connect_seq */
 	/* discard existing out_queue and msg_seq */
@@ -1101,12 +1101,12 @@ static int process_connect(struct ceph_connection *con)
 	      con->actual_peer_addr.ipaddr.sin_port ==
 	      con->peer_addr.ipaddr.sin_port &&
 	      con->actual_peer_addr.nonce == con->peer_addr.nonce)) {
-		derr(1, "process_connect wrong peer, want %u.%u.%u.%u:%u/%d, "
-		     "got %u.%u.%u.%u:%u/%d, wtf\n",
-		     IPQUADPORT(con->peer_addr.ipaddr),
-		     con->peer_addr.nonce,
-		     IPQUADPORT(con->actual_peer_addr.ipaddr),
-		     con->actual_peer_addr.nonce);
+		pr_err("ceph wrong peer, want %u.%u.%u.%u:%u/%d, "
+		       "got %u.%u.%u.%u:%u/%d, wtf\n",
+		       IPQUADPORT(con->peer_addr.ipaddr),
+		       con->peer_addr.nonce,
+		       IPQUADPORT(con->actual_peer_addr.ipaddr),
+		       con->actual_peer_addr.nonce);
 		con->error_msg = "protocol error, wrong peer";
 		return -1;
 	}
@@ -1190,7 +1190,7 @@ static int process_connect(struct ceph_connection *con)
 		break;
 
 	default:
-		derr(1, "process_connect protocol error, will retry\n");
+		pr_err("ceph connect protocol error, will retry\n");
 		con->error_msg = "protocol error, garbage tag during connect";
 		return -1;
 	}
@@ -1244,7 +1244,7 @@ static int process_accept(struct ceph_connection *con)
 
 	/* do we have an existing connection for this peer? */
 	if (radix_tree_preload(GFP_NOFS) < 0) {
-		derr(10, "ENOMEM in process_accept\n");
+		pr_err("ceph ENOMEM in process_accept\n");
 		con->error_msg = "out of memory";
 		return -1;
 	}
@@ -1438,9 +1438,9 @@ static int read_partial_message(struct ceph_connection *con)
 			if (crc != le32_to_cpu(m->hdr.crc)) {
 				print_section("hdr", (u8 *)&m->hdr,
 					      sizeof(m->hdr));
-				derr(0, "read_partial_message %p bad hdr crc"
-				     " %u != expected %u\n",
-				     m, crc, m->hdr.crc);
+				pr_err("ceph read_partial_message %p bad hdr "
+				       " crc %u != expected %u\n",
+				       m, crc, m->hdr.crc);
 				return -EBADMSG;
 			}
 		}
@@ -1545,9 +1545,9 @@ no_data:
 
 	/* crc ok? */
 	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
-		derr(0, "read_partial_message %p front crc %u != expected %u\n",
-		     con->in_msg,
-		     con->in_front_crc, m->footer.front_crc);
+		pr_err("ceph read_partial_message %p front crc %u != exp. %u\n",
+		       con->in_msg,
+		       con->in_front_crc, m->footer.front_crc);
 		print_section("front", (u8 *)&m->front.iov_base,
 			      sizeof(m->front.iov_len));
 		return -EBADMSG;
@@ -1556,9 +1556,9 @@ no_data:
 	    (le32_to_cpu(m->footer.flags) & CEPH_MSG_FOOTER_NOCRC) == 0 &&
 	    con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
 		int cur_page, data_pos;
-		derr(0, "read_partial_message %p data crc %u != expected %u\n",
-		     con->in_msg,
-		     con->in_data_crc, m->footer.data_crc);
+		pr_err("ceph read_partial_message %p data crc %u != exp. %u\n",
+		       con->in_msg,
+		       con->in_data_crc, m->footer.data_crc);
 		for (data_pos = 0, cur_page = 0; data_pos < data_len;
 		     data_pos += PAGE_SIZE, cur_page++) {
 			left = min((int)(data_len - data_pos),
@@ -1566,7 +1566,6 @@ no_data:
 			mutex_lock(&m->page_mutex);
 
 			if (!m->pages) {
-				derr(0, "m->pages == NULL\n");
 				mutex_unlock(&m->page_mutex);
 				break;
 			}
@@ -1842,7 +1841,7 @@ out:
 	return ret;
 
 bad_tag:
-	derr(2, "try_read bad con->in_tag = %d\n", (int)con->in_tag);
+	pr_err("ceph try_read bad con->in_tag = %d\n", (int)con->in_tag);
 	con->error_msg = "protocol error, garbage tag";
 	ret = -1;
 	goto out;
@@ -1945,8 +1944,8 @@ out:
  */
 static void ceph_fault(struct ceph_connection *con)
 {
-	derr(1, "%s%d %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
-	     IPQUADPORT(con->peer_addr.ipaddr), con->error_msg);
+	pr_err("ceph %s%d %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
+	       IPQUADPORT(con->peer_addr.ipaddr), con->error_msg);
 	dout(10, "fault %p state %lu to peer %u.%u.%u.%u:%u\n",
 	     con, con->state, IPQUADPORT(con->peer_addr.ipaddr));
 
@@ -2003,7 +2002,7 @@ static void accept_work(struct work_struct *work)
 	/* initialize the msgr connection */
 	newcon = new_connection(msgr);
 	if (newcon == NULL) {
-		derr(1, "kmalloc failure accepting new connection\n");
+		pr_err("ceph ENOMEM accepting new connection\n");
 		return;
 	}
 
@@ -2012,7 +2011,7 @@ static void accept_work(struct work_struct *work)
 	newcon->in_tag = CEPH_MSGR_TAG_READY;  /* eventually, hopefully */
 
 	if (ceph_tcp_accept(msgr->listen_sock, newcon) < 0) {
-		derr(1, "error accepting connection\n");
+		pr_err("ceph error accepting connection\n");
 		put_connection(newcon);
 		return;
 	}
@@ -2220,7 +2219,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 
 		ret = radix_tree_preload(GFP_NOFS);
 		if (ret < 0) {
-			derr(10, "ENOMEM in ceph_msg_send\n");
+			pr_err("ceph ENOMEM in ceph_msg_send\n");
 			return ret;
 		}
 
@@ -2327,7 +2326,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
 		}
 		if (m->front.iov_base == NULL) {
-			derr(0, "ceph_msg_new can't allocate %d bytes\n",
+			pr_err("ceph_msg_new can't allocate %d bytes\n",
 			     front_len);
 			goto out2;
 		}
@@ -2347,7 +2346,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 out2:
 	ceph_msg_put(m);
 out:
-	derr(0, "msg_new can't create msg type %d len %d\n", type, front_len);
+	pr_err("ceph_msg_new can't create type %d len %d\n", type, front_len);
 	return ERR_PTR(-ENOMEM);
 }
 
@@ -2356,14 +2355,14 @@ void ceph_msg_put(struct ceph_msg *m)
 	dout(20, "ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
 	     atomic_read(&m->nref)-1);
 	if (atomic_read(&m->nref) <= 0) {
-		derr(0, "bad ceph_msg_put on %p %llu %s%d->%s%d %d=%s %d+%d\n",
-		     m, le64_to_cpu(m->hdr.seq),
-		     ENTITY_NAME(m->hdr.src.name),
-		     ENTITY_NAME(m->hdr.dst.name),
-		     le16_to_cpu(m->hdr.type),
-		     ceph_msg_type_name(le16_to_cpu(m->hdr.type)),
-		     le32_to_cpu(m->hdr.front_len),
-		     le32_to_cpu(m->hdr.data_len));
+		pr_err("bad ceph_msg_put on %p %llu %s%d->%s%d %d=%s %d+%d\n",
+		       m, le64_to_cpu(m->hdr.seq),
+		       ENTITY_NAME(m->hdr.src.name),
+		       ENTITY_NAME(m->hdr.dst.name),
+		       le16_to_cpu(m->hdr.type),
+		       ceph_msg_type_name(le16_to_cpu(m->hdr.type)),
+		       le32_to_cpu(m->hdr.front_len),
+		       le32_to_cpu(m->hdr.data_len));
 		WARN_ON(1);
 	}
 	if (atomic_dec_and_test(&m->nref)) {
