@@ -207,3 +207,4 @@ s3
  - parse date/time better
  - upload using post
  - torrent
+ - handle gracefully PUT/GET requestPayment

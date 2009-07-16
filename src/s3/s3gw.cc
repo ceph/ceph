@@ -150,6 +150,7 @@ struct req_state {
    bool content_started;
    int indent;
    const char *path_name;
+   string path_name_url;
    const char *host;
    const char *method;
    const char *query;
@@ -227,11 +228,12 @@ void init_entities_from_header(struct req_state *s)
   } else {
     first = req;
   }
+
   if (!s->bucket) {
     s->bucket_str = first;
     s->bucket = s->bucket_str.c_str();
   } else {
-    s->object_str = first;
+    s->object_str = req;
     s->object = s->object_str.c_str();
     return;
   }
@@ -361,7 +363,7 @@ static void get_canon_resource(struct req_state *s, string& dest)
     dest.append(s->host_bucket);
   }
 
-  dest.append(s->path_name);
+  dest.append(s->path_name_url.c_str());
 
   string& sub = s->args.get_sub_resource();
   if (sub.size() > 0) {
@@ -443,6 +445,10 @@ static void init_state(struct req_state *s, FCGX_ParamArray envp, FCGX_Stream *i
   s->content_started = false;
   s->indent = 0;
   s->path_name = FCGX_GetParam("SCRIPT_NAME", envp);
+  s->path_name_url = FCGX_GetParam("REQUEST_URI", envp);
+  int pos = s->path_name_url.find('?');
+  if (pos >= 0)
+    s->path_name_url = s->path_name_url.substr(0, pos);
   s->method = FCGX_GetParam("REQUEST_METHOD", envp);
   s->host = FCGX_GetParam("HTTP_HOST", envp);
   s->query = FCGX_GetParam("QUERY_STRING", envp);
