@@ -9,10 +9,6 @@
 #include "decode.h"
 
 #include "ceph_debug.h"
-
-int ceph_debug_mdsmap __read_mostly = -1;
-#define DOUT_MASK DOUT_MASK_MDSMAP
-#define DOUT_VAR ceph_debug_mdsmap
 #include "super.h"
 
 
@@ -92,7 +88,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		ceph_decode_64(p, state_seq);
 		ceph_decode_copy(p, &addr, sizeof(addr));
 		*p += sizeof(struct ceph_timespec) + 2*sizeof(u32);
-		dout(10, "mdsmap_decode %d/%d mds%d.%d %u.%u.%u.%u:%u %s\n",
+		dout("mdsmap_decode %d/%d mds%d.%d %u.%u.%u.%u:%u %s\n",
 		     i+1, n, mds, inc, IPQUADPORT(addr.ipaddr),
 		     ceph_mds_state_name(state));
 		if (mds >= 0 && mds < m->m_max_mds && state > 0) {
@@ -113,7 +109,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_32(p, m->m_cas_pg_pool);
 
 	/* ok, we don't care about the rest. */
-	dout(30, "mdsmap_decode success epoch %u\n", m->m_epoch);
+	dout("mdsmap_decode success epoch %u\n", m->m_epoch);
 	return m;
 
 badmem:

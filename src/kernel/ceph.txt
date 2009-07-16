@@ -127,47 +127,6 @@ Mount Options
 	valid.)
 
 
-Debugging options (these are also changeable via debugfs):
-
-  debug=N
-	Specify the level of debug output for the Ceph client.  Larger
-	values mean more output, and range from 0 to 50.  The default
-	is 1 (high-level informational messages only).
-
-  debug_console=N
-	If non-zero, debug messages will be printk'ed with KERN_ERR,
-	causing them to appear on the system console.  Otherwise,
-	messages will be printed with KERN_DEBUG and will appear in
-	the system log.
-
-  debug_msgr=N
-	Debug level for the messaging/communications layer, if >= 0.
-	Default is -1.
-
-  debug_mdsc=N
-	Debug level for the MDS client, if >= 0.
-
-  debug_osdc=N
-	Debug level for the OSD client, if >= 0.
-
-  debug_addr=N
-	Debug level for address space operations, if >= 0.
-
-  debug_file=N
-	Debug level for file operations, if >= 0.
-
-  debug_inode=N
-	Debug level for inode operations, if >= 0.
-
-  debug_caps=N
-	Debug level for file capability operations, if >= 0.
-
-  debug_snap=N
-	Debug level for snapshot operations, if >= 0.
-
-
-
-
 More Information
 ================
 

@@ -4,10 +4,6 @@
 #include "super.h"
 #include "ceph_debug.h"
 
-int ceph_debug_export __read_mostly = -1;
-#define DOUT_MASK DOUT_MASK_EXPORT
-#define DOUT_VAR ceph_debug_export
-
 /*
  * fh is N tuples of
  *  <ino, parent's d_name.hash>
@@ -44,7 +40,7 @@ static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 	int len;
 	struct dentry *d_parent;
 
-	dout(10, "encode_fh %p max_len %d u32s (%d export items)%s\n", dentry,
+	dout("encode_fh %p max_len %d u32s (%d export items)%s\n", dentry,
 	     *max_len, max, connectable ? " connectable" : "");
 
 	if (max < 1 || (connectable && max < 2))
@@ -122,7 +118,7 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 		iput(inode);
 		return ERR_PTR(err);
 	}
-	dout(10, "fh_to_dentry %llx.%x -- inode %p dentry %p\n", fh->ino.ino,
+	dout("fh_to_dentry %llx.%x -- inode %p dentry %p\n", fh->ino.ino,
 	     hash, inode, dentry);
 	return dentry;
 

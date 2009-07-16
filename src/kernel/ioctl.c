@@ -2,10 +2,6 @@
 #include "super.h"
 #include "ceph_debug.h"
 
-int ceph_debug_ioctl __read_mostly = -1;
-#define DOUT_MASK DOUT_MASK_IOCTL
-#define DOUT_VAR ceph_debug_ioctl
-
 
 /*
  * ioctls
@@ -53,7 +49,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 
 long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	dout(10, "ioctl file %p cmd %u arg %lu\n", file, cmd, arg);
+	dout("ioctl file %p cmd %u arg %lu\n", file, cmd, arg);
 	switch (cmd) {
 	case CEPH_IOC_GET_LAYOUT:
 		return ceph_ioctl_get_layout(file, (void __user *)arg);

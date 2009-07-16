@@ -5,10 +5,6 @@
 #include "mon_client.h"
 
 #include "ceph_debug.h"
-
-int ceph_debug_mon __read_mostly = -1;
-#define DOUT_MASK DOUT_MASK_MON
-#define DOUT_VAR ceph_debug_mon
 #include "super.h"
 #include "decode.h"
 
@@ -21,7 +17,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	int i, err = -EINVAL;
 	ceph_fsid_t fsid;
 
-	dout(30, "monmap_decode %p %p len %d\n", p, end, (int)(end-p));
+	dout("monmap_decode %p %p len %d\n", p, end, (int)(end-p));
 
 	/* The encoded and decoded sizes match. */
 	m = kmalloc(end-p, GFP_NOFS);
@@ -37,15 +33,15 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	if (p != end)
 		goto bad;
 
-	dout(30, "monmap_decode epoch %d, num_mon %d\n", m->epoch,
+	dout("monmap_decode epoch %d, num_mon %d\n", m->epoch,
 	     m->num_mon);
 	for (i = 0; i < m->num_mon; i++)
-		dout(30, "monmap_decode  mon%d is %u.%u.%u.%u:%u\n", i,
+		dout("monmap_decode  mon%d is %u.%u.%u.%u:%u\n", i,
 		     IPQUADPORT(m->mon_inst[i].addr.ipaddr));
 	return m;
 
 bad:
-	dout(30, "monmap_decode failed with %d\n", err);
+	dout("monmap_decode failed with %d\n", err);
 	kfree(m);
 	return ERR_PTR(err);
 }
@@ -134,7 +130,7 @@ static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
 	struct ceph_mds_getmap *h;
 	int mon = pick_mon(monc, newmon);
 
-	dout(5, "request_mdsmap from mon%d want %u\n", mon, monc->want_mdsmap);
+	dout("request_mdsmap from mon%d want %u\n", mon, monc->want_mdsmap);
 	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
@@ -150,7 +146,7 @@ static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
  */
 void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, u32 want)
 {
-	dout(5, "request_mdsmap want %u\n", want);
+	dout("request_mdsmap want %u\n", want);
 	mutex_lock(&monc->req_mutex);
 	if (want > monc->want_mdsmap) {
 		monc->want_mdsmap = want;
@@ -170,10 +166,10 @@ int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 got)
 
 	mutex_lock(&monc->req_mutex);
 	if (got < monc->want_mdsmap) {
-		dout(5, "got_mdsmap %u < wanted %u\n", got, monc->want_mdsmap);
+		dout("got_mdsmap %u < wanted %u\n", got, monc->want_mdsmap);
 		ret = -EAGAIN;
 	} else {
-		dout(5, "got_mdsmap %u >= wanted %u\n", got, monc->want_mdsmap);
+		dout("got_mdsmap %u >= wanted %u\n", got, monc->want_mdsmap);
 		monc->want_mdsmap = 0;
 		cancel_timeout(&monc->mdsreq);
 	}
@@ -191,7 +187,7 @@ static void request_osdmap(struct ceph_mon_client *monc, int newmon)
 	struct ceph_osd_getmap *h;
 	int mon = pick_mon(monc, newmon);
 
-	dout(5, "request_osdmap from mon%d want %u\n", mon, monc->want_osdmap);
+	dout("request_osdmap from mon%d want %u\n", mon, monc->want_osdmap);
 	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
@@ -206,7 +202,7 @@ static void request_osdmap(struct ceph_mon_client *monc, int newmon)
 
 void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want)
 {
-	dout(5, "request_osdmap want %u\n", want);
+	dout("request_osdmap want %u\n", want);
 	mutex_lock(&monc->req_mutex);
 	monc->osdreq.delay = BASE_DELAY_INTERVAL;
 	monc->want_osdmap = want;
@@ -221,10 +217,10 @@ int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 got)
 
 	mutex_lock(&monc->req_mutex);
 	if (got < monc->want_osdmap) {
-		dout(5, "got_osdmap %u < wanted %u\n", got, monc->want_osdmap);
+		dout("got_osdmap %u < wanted %u\n", got, monc->want_osdmap);
 		ret = -EAGAIN;
 	} else {
-		dout(5, "got_osdmap %u >= wanted %u\n", got, monc->want_osdmap);
+		dout("got_osdmap %u >= wanted %u\n", got, monc->want_osdmap);
 		monc->want_osdmap = 0;
 		cancel_timeout(&monc->osdreq);
 	}
@@ -242,7 +238,7 @@ static void request_umount(struct ceph_mon_client *monc, int newmon)
 	int mon = pick_mon(monc, newmon);
 	struct ceph_client_mount *h;
 
-	dout(5, "request_umount from mon%d\n", mon);
+	dout("request_umount from mon%d\n", mon);
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
@@ -270,7 +266,7 @@ void ceph_monc_request_umount(struct ceph_mon_client *monc)
 void ceph_monc_handle_umount(struct ceph_mon_client *monc,
 			     struct ceph_msg *msg)
 {
-	dout(5, "handle_umount\n");
+	dout("handle_umount\n");
 	mutex_lock(&monc->req_mutex);
 	cancel_timeout(&monc->umountreq);
 	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
@@ -292,7 +288,7 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 	if (msg->front.iov_len != sizeof(*reply))
 		goto bad;
 	tid = le64_to_cpu(reply->tid);
-	dout(10, "handle_statfs_reply %p tid %llu\n", msg, tid);
+	dout("handle_statfs_reply %p tid %llu\n", msg, tid);
 
 	mutex_lock(&monc->statfs_mutex);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
@@ -320,7 +316,7 @@ static int send_statfs(struct ceph_mon_client *monc,
 	struct ceph_mon_statfs *h;
 	int mon = pick_mon(monc, newmon ? 1 : -1);
 
-	dout(10, "send_statfs to mon%d tid %llu\n", mon, req->tid);
+	dout("send_statfs to mon%d tid %llu\n", mon, req->tid);
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
@@ -393,7 +389,7 @@ static void do_statfs_check(struct work_struct *work)
 	int newmon = 1;
 	struct ceph_mon_statfs_request *req;
 
-	dout(10, "do_statfs_check\n");
+	dout("do_statfs_check\n");
 	mutex_lock(&monc->statfs_mutex);
 	while (1) {
 		got = radix_tree_gang_lookup(&monc->statfs_request_tree,
@@ -421,7 +417,7 @@ static void do_statfs_check(struct work_struct *work)
 
 int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 {
-	dout(5, "init\n");
+	dout("init\n");
 	memset(monc, 0, sizeof(*monc));
 	monc->client = cl;
 	monc->monmap = kzalloc(sizeof(struct ceph_monmap) +
@@ -445,7 +441,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 
 void ceph_monc_stop(struct ceph_mon_client *monc)
 {
-	dout(5, "stop\n");
+	dout("stop\n");
 	cancel_timeout(&monc->mdsreq);
 	cancel_timeout(&monc->osdreq);
 	cancel_timeout(&monc->umountreq);
