@@ -31,8 +31,15 @@ v0.10
 /- improved monitor read model
 - osd bugfixes
 
+kclient review
+- andi
+  - server-specified max file size
+  - pr_debug
+  - top of file comments
+
 bugs
 - premature filejournal trimming?
+- mount.ceph doesn't update /etc/mtab
 
 later
 - authentication

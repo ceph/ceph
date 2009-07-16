@@ -57,13 +57,14 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 8*sizeof(u32), bad);
+	ceph_decode_need(p, end, 8*sizeof(u32) + sizeof(u64), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
 	ceph_decode_32(p, m->m_root);
 	ceph_decode_32(p, m->m_session_timeout);
 	ceph_decode_32(p, m->m_session_autoclose);
+	ceph_decode_64(p, m->m_max_file_size);
 	ceph_decode_32(p, m->m_max_mds);
 
 	m->m_addr = kzalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_NOFS);

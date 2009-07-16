@@ -131,6 +131,7 @@ protected:
 
   __u32 session_timeout;
   __u32 session_autoclose;
+  __u64 max_file_size;
 
   vector<__u32> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
   __u32 cas_pg_pool;            // where CAS objects go
@@ -161,6 +162,7 @@ public:
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
+    max_file_size = g_conf.mds_max_file_size;
   }
 
   utime_t get_session_timeout() {
@@ -373,6 +375,7 @@ public:
     ::encode(root, bl);
     ::encode(session_timeout, bl);
     ::encode(session_autoclose, bl);
+    ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
     ::encode(mds_info, bl);
     ::encode(data_pg_pools, bl);
@@ -396,6 +399,7 @@ public:
     ::decode(root, p);
     ::decode(session_timeout, p);
     ::decode(session_autoclose, p);
+    ::decode(max_file_size, p);
     ::decode(max_mds, p);
     ::decode(mds_info, p);
     ::decode(data_pg_pools, p);

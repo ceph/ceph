@@ -12,12 +12,6 @@
 #include "rados.h"
 
 /*
- * Max file size is a policy choice; in reality we are limited
- * by 2^64.
- */
-#define CEPH_FILE_MAX_SIZE (1ULL << 40)   /* 1 TB */
-
-/*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.  we keep rev
  * internal cluster protocols separately from the public,
@@ -26,9 +20,9 @@
 #define CEPH_OSD_PROTOCOL     6 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL   19 /* public/client */
-#define CEPH_MDSC_PROTOCOL   26 /* public/client */
-#define CEPH_MONC_PROTOCOL   14 /* public/client */
+#define CEPH_OSDC_PROTOCOL   19 /* server/client */
+#define CEPH_MDSC_PROTOCOL   27 /* server/client */
+#define CEPH_MONC_PROTOCOL   14 /* server/client */
 
 
 

@@ -180,6 +180,7 @@ struct md_config_t {
   long long unsigned journaler_batch_max;
   
   // mds
+  __u64 mds_max_file_size;
   int   mds_cache_size;
   float mds_cache_mid;
   int   mds_mem_max;

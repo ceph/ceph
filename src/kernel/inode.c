@@ -1277,7 +1277,7 @@ retry:
 		spin_unlock(&inode->i_lock);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 		filemap_write_and_wait_range(&inode->i_data, 0,
-					     CEPH_FILE_MAX_SIZE);
+					     inode->i_sb->s_maxbytes);
 #else
 # warning i may not flush all data after a snapshot + truncate.. i export need 2.6.30
 		filemap_write_and_wait(&inode->i_data);
@@ -1443,7 +1443,7 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	if (ia_valid & ATTR_SIZE) {
 		dout(10, "setattr %p size %lld -> %lld\n", inode,
 		     inode->i_size, attr->ia_size);
-		if (attr->ia_size > CEPH_FILE_MAX_SIZE) {
+		if (attr->ia_size > inode->i_sb->s_maxbytes) {
 			err = -EINVAL;
 			goto out;
 		}

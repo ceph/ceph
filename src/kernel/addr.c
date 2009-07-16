@@ -960,7 +960,7 @@ retry_locked:
 	/* past end of file? */
 	i_size = inode->i_size;   /* caller holds i_mutex */
 
-	if (i_size + len > CEPH_FILE_MAX_SIZE) {
+	if (i_size + len > inode->i_sb->s_maxbytes) {
 		/* file is too big */
 		r = -EINVAL;
 		goto fail;

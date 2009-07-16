@@ -1005,7 +1005,7 @@ static int ceph_set_super(struct super_block *s, void *data)
 	dout(10, "set_super %p data %p\n", s, data);
 
 	s->s_flags = client->mount_args.sb_flags;
-	s->s_maxbytes = min((u64)MAX_LFS_FILESIZE, CEPH_FILE_MAX_SIZE);
+	s->s_maxbytes = 1ULL << 40;  /* temp value until we get mdsmap */
 
 	s->s_fs_info = client;
 	client->sb = s;
