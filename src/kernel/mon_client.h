@@ -24,9 +24,6 @@ struct ceph_mount_args;
 
 /*
  * The monitor map enumerates the set of all monitors.
- *
- * Make sure this structure size matches the encoded map size, or change
- * ceph_monmap_decode().
  */
 struct ceph_monmap {
 	ceph_fsid_t fsid;
