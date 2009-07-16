@@ -6,9 +6,9 @@
 #define _STRINGIFY(x) #x
 #define STRINGIFY(x) _STRINGIFY(x)
 
-#define FMT_PREFIX "%-26.26s: "
+#define FMT_PREFIX " %12.12s:%-4d : "
 #define FMT_SUFFIX "%s"
-#define LOG_ARGS __FILE__ ":" STRINGIFY(__LINE__)
+#define LOG_ARGS __FILE__ + 8, __LINE__  /* strip of fs/ceph/ from __FILE__ */
 #define TRAIL_PARAM ""
 
 #define LOG_LINE FMT_PREFIX fmt, LOG_ARGS, args
