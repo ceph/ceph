@@ -287,19 +287,19 @@ struct ceph_mon_statfs {
 	__le64 have_version;
 	ceph_fsid_t fsid;
 	__le64 tid;
-};
+} __attribute__ ((packed));
 
 struct ceph_statfs {
 	__le64 kb, kb_used, kb_avail;
 	__le64 num_objects;
-};
+} __attribute__ ((packed));
 
 struct ceph_mon_statfs_reply {
 	ceph_fsid_t fsid;
 	__le64 tid;
 	__le64 version;
 	struct ceph_statfs st;
-};
+} __attribute__ ((packed));
 
 struct ceph_osd_getmap {
 	__le64 have_version;
