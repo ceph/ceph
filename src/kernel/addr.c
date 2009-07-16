@@ -13,6 +13,8 @@
 #include "osd_client.h"
 
 /*
+ * Ceph address space ops.
+ *
  * There are a few funny things going on here.
  *
  * The page->private field is used to reference a struct
@@ -38,7 +40,7 @@
  * On writeback, we must submit writes to the osd IN SNAP ORDER.  So,
  * we look for the first capsnap in i_cap_snaps and write out pages in
  * that snap context _only_.  Then we move on to the next capsnap,
- * eventually reachings the "live" or "head" context (i.e., pages that
+ * eventually reaching the "live" or "head" context (i.e., pages that
  * are not yet snapped) and are writing the most recently dirtied
  * pages.
  *
@@ -136,6 +138,7 @@ static int ceph_set_page_dirty(struct page *page)
 #endif
 
 	if (undo)
+		/* whoops, we failed to dirty the page */
 		ceph_put_wrbuffer_cap_refs(ci, 1, snapc);
 
 	__mark_inode_dirty(mapping->host, I_DIRTY_PAGES);
@@ -469,6 +472,7 @@ static void ceph_release_pages(struct page **pages, int num)
 {
 	struct pagevec pvec;
 	int i;
+
 	pagevec_init(&pvec, 0);
 	for (i = 0; i < num; i++) {
 		if (pagevec_add(&pvec, pages[i]) == 0)

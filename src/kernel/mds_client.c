@@ -57,8 +57,8 @@ bad:
 }
 
 /*
- * parse a full metadata trace from the mds: inode, dirinfo, dentry, inode...
- * sequence.
+ * parse a normal reply, which may contain a (dir+)dentry and/or a
+ * target inode.
  */
 static int parse_reply_info_trace(void **p, void *end,
 				  struct ceph_mds_reply_info_parsed *info)
@@ -622,6 +622,8 @@ static void cleanup_cap_releases(struct ceph_mds_session *session)
 }
 
 /*
+ * Helper to safely iterate over all caps associated with a session.
+ *
  * caller must hold session s_mutex
  */
 static int iterate_session_caps(struct ceph_mds_session *session,
@@ -667,9 +669,7 @@ static void remove_session_caps(struct ceph_mds_session *session)
 {
 	dout("remove_session_caps on %p\n", session);
 	iterate_session_caps(session, remove_session_caps_cb, NULL);
-
 	BUG_ON(session->s_nr_caps > 0);
-
 	cleanup_cap_releases(session);
 }
 
@@ -686,8 +686,9 @@ static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
 
 	spin_lock(&inode->i_lock);
 	if (cap->gen != session->s_cap_gen) {
-		pr_err("ceph failed reconnect %p cap %p (gen %d < sess %d)\n",
-		       inode, cap, cap->gen, session->s_cap_gen);
+		pr_err("ceph failed reconnect %p %llx.%llx cap %p "
+		       "(gen %d < session %d)\n", inode, ceph_vinop(inode),
+		       cap, cap->gen, session->s_cap_gen);
 		__ceph_remove_cap(cap, NULL);
 	}
 	wake_up(&ceph_inode(inode)->i_cap_wq);
@@ -740,7 +741,7 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
  * Note new cap ttl, and any transition from stale -> not stale (fresh?).
  */
 static void renewed_caps(struct ceph_mds_client *mdsc,
-		  struct ceph_mds_session *session, int is_renew)
+			 struct ceph_mds_session *session, int is_renew)
 {
 	int was_stale;
 	int wake = 0;
@@ -802,6 +803,13 @@ static int __close_session(struct ceph_mds_client *mdsc,
 
 /*
  * Trim old(er) caps.
+ *
+ * Because we can't cache an inode without one or more caps, we do
+ * this indirectly: if a cap is unused, we prune its aliases, at which
+ * point the inode will hopefully get dropped to.
+ *
+ * Yes, this is a bit sloppy.  Our only real goal here is to respond to
+ * memory pressure from the MDS, though, so it needn't be perfect.
  */
 static int trim_caps_cb(struct inode *inode, struct ceph_cap *cap, void *arg)
 {
@@ -843,6 +851,9 @@ out:
 	return 0;
 }
 
+/*
+ * Trim session cap count down to some max number.
+ */
 static int trim_caps(struct ceph_mds_client *mdsc,
 		     struct ceph_mds_session *session,
 		     int max_caps)
@@ -1122,6 +1133,10 @@ static int build_inode_path(struct inode *inode,
 	return 0;
 }
 
+/*
+ * request arguments may be specified via an inode *, a dentry *, or
+ * an explicit ino+path.
+ */
 static int set_request_path_attr(struct inode *rinode, struct dentry *rdentry,
 				  const char *rpath, u64 rino,
 				  const char **ppath, int *pathlen,
@@ -1383,6 +1398,9 @@ finish:
 	goto out;
 }
 
+/*
+ * called under mdsc->mutex
+ */
 static void __wake_requests(struct ceph_mds_client *mdsc,
 			    struct list_head *head)
 {
@@ -1458,10 +1476,12 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 		ceph_get_cap_refs(ceph_inode(req->r_old_dentry->d_parent->d_inode),
 				  CEPH_CAP_PIN);
 
+	/* issue */
 	mutex_lock(&mdsc->mutex);
 	__register_request(mdsc, req, listener);
 	__do_request(mdsc, req);
 
+	/* wait */
 	if (!req->r_reply) {
 		mutex_unlock(&mdsc->mutex);
 		if (req->r_timeout) {
@@ -1841,6 +1861,9 @@ static void replay_unsafe_requests(struct ceph_mds_client *mdsc,
 	mutex_unlock(&mdsc->mutex);
 }
 
+/*
+ * Encode information about a cap for a reconnect with the MDS.
+ */
 struct encode_caps_data {
 	void **pp;
 	void *end;
@@ -1848,7 +1871,7 @@ struct encode_caps_data {
 };
 
 static int encode_caps_cb(struct inode *inode, struct ceph_cap *cap,
-				    void *arg)
+			  void *arg)
 {
 	struct ceph_mds_cap_reconnect *rec;
 	struct ceph_inode_info *ci;

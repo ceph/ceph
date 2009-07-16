@@ -40,8 +40,10 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 }
 
 /*
- * Ignore any fields we don't care about in the MDS map (there are quite
- * a few of them).
+ * Decode an MDS map
+ *
+ * Ignore any fields we don't care about (there are quite a few of
+ * them).
  */
 struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 {
