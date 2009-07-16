@@ -12,13 +12,10 @@
  * specific inode (e.g., a getattr due to fstat(2)), or as a path
  * relative to, say, the root directory.
  *
- * Because the MDS does not statefully track which inodes the client
- * has in its cache, the client has to take care to only specify
- * operations relative to inodes it knows the MDS has cached.  (The
- * MDS cannot do a lookup by ino.)
- *
- * So, in general, we try to specify operations in terms of generate
- * path names relative to the root.
+ * Normally, we limit ourselves to strict inode ops (no path component)
+ * or dentry operations (a single path component relative to an ino).  The
+ * exception to this is open_root_dentry(), which will open the mount
+ * point by name.
  */
 
 const struct inode_operations ceph_dir_iops;
@@ -40,6 +37,16 @@ static unsigned fpos_off(loff_t p)
 	return p & 0xffffffff;
 }
 
+/*
+ * Satisfy a readdir by peeking at the dcache.  We make this work by
+ * carefully ordering dentryes on d_u.d_child when we initially get
+ * results back from the MDS, and falling back to a "normal" sync
+ * readdir if any dentries in the dir are dropped.
+ *
+ * I_COMPLETE tells indicates we have all dirs.  It is defined IFF we
+ * hold the CEPH_CAP_FILE_SHARED (which will be revoked by the MDS
+ * if/when the directory is modified).
+ */
 static int __dcache_readdir(struct file *filp,
 			    void *dirent, filldir_t filldir)
 {
@@ -137,21 +144,6 @@ out_unlock:
 	}
 
 	return err;
-}
-
-static void reset_readdir(struct ceph_file_info *fi)
-{
-	if (fi->last_readdir) {
-		ceph_mdsc_put_request(fi->last_readdir);
-		fi->last_readdir = NULL;
-	}
-	kfree(fi->last_name);
-	fi->next_offset = 2;  /* compensate for . and .. */
-	if (fi->dentry) {
-		dput(fi->dentry);
-		fi->dentry = NULL;
-	}
-	fi->at_end = 0;
 }
 
 static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
@@ -339,6 +331,21 @@ more:
 	return 0;
 }
 
+static void reset_readdir(struct ceph_file_info *fi)
+{
+	if (fi->last_readdir) {
+		ceph_mdsc_put_request(fi->last_readdir);
+		fi->last_readdir = NULL;
+	}
+	kfree(fi->last_name);
+	fi->next_offset = 2;  /* compensate for . and .. */
+	if (fi->dentry) {
+		dput(fi->dentry);
+		fi->dentry = NULL;
+	}
+	fi->at_end = 0;
+}
+
 static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 {
 	struct ceph_file_info *fi = file->private_data;
@@ -385,9 +392,9 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 /*
  * Process result of a lookup/open request.
  *
- * Mainly, make sure that return r_last_dentry (the dentry
- * the MDS trace ended on) in place of the original VFS-provided
- * dentry, if they differ.
+ * Mainly, make sure we return the final req->r_dentry (if it already
+ * existed) in place of the original VFS-provided dentry when they
+ * differ.
  *
  * Gracefully handle the case where the MDS replies with -ENOENT and
  * no trace (which it may do, at its discretion, e.g., if it doesn't
@@ -434,7 +441,8 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 }
 
 /*
- * Try to do a lookup+open, if possible.
+ * Look up a single dir entry.  If there is a lookup intent, inform
+ * the MDS so that it gets our 'caps wanted' value in a single op.
  */
 static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 				  struct nameidata *nd)
@@ -989,6 +997,10 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 	return size - left;
 }
 
+/*
+ * an fsync() on a dir will wait for any uncommitted directory
+ * operations to commit.
+ */
 static int ceph_dir_fsync(struct file *file, struct dentry *dentry,
 			  int datasync)
 {
