@@ -8,6 +8,27 @@
 #include "super.h"
 #include "mds_client.h"
 
+/*
+ * Ceph file operations
+ *
+ * Implement basic open/close functionality, and implement
+ * read/write.
+ *
+ * We implement three modes of file I/O:
+ *  - buffered uses the generic_file_aio_{read,write} helpers
+ *
+ *  - synchronous is used when there is multi-client read/write
+ *    sharing, avoids the page cache, and synchronously waits for an
+ *    ack from the OSD.
+ *
+ *  - direct io takes the variant of the sync path that references
+ *    user pages directly.
+ *
+ * fsync() flushes and waits on dirty pages, but just queues metadata
+ * for writeback: since the MDS can recover size and mtime there is no
+ * need to wait for MDS acknowledgement.
+ */
+
 
 /*
  * Prepare an open request.  Preallocate ceph_cap to avoid an
@@ -288,6 +309,9 @@ void ceph_release_page_vector(struct page **pages, int num_pages)
 	kfree(pages);
 }
 
+/*
+ * allocate a vector new pages
+ */
 static struct page **alloc_page_vector(int num_pages)
 {
 	struct page **pages;
