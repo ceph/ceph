@@ -264,8 +264,44 @@ struct CapSnap {
 
 class Inode {
  public:
-  inode_t   inode;    // the actual inode
+  // -- the actual inode --
+  inodeno_t ino;
   snapid_t  snapid;
+  uint32_t   rdev;    // if special file
+
+  // affected by any inode change...
+  utime_t    ctime;   // inode change time
+
+  // perm (namespace permissions)
+  uint32_t   mode;
+  uid_t      uid;
+  gid_t      gid;
+
+  // nlink
+  int32_t    nlink;  
+
+  // file (data access)
+  ceph_file_layout layout;
+  uint64_t   size;        // on directory, # dentries
+  uint32_t   truncate_seq;
+  uint64_t   truncate_size, truncate_from;
+  utime_t    mtime;   // file data modify time.
+  utime_t    atime;   // file data access time.
+  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+
+  __u64 max_size;  // max size we can write to
+
+  // dirfrag, recursive accountin
+  frag_info_t dirstat;
+  nest_info_t rstat;
+ 
+  // special stuff
+  version_t version;           // auth only
+  version_t xattr_version;
+
+  bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
+  bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
+  bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -322,12 +358,12 @@ class Inode {
       string empty;
       p.push_dentry(empty);
     } else
-      p = filepath(inode.ino);
+      p = filepath(ino);
   }
 
   void make_path(filepath& p) {
     if (snapid == CEPH_NOSNAP) {
-      p = filepath(inode.ino);
+      p = filepath(ino);
     } else if (snapdir_parent) {
       snapdir_parent->make_path(p);
       string empty;
@@ -337,7 +373,7 @@ class Inode {
       dn->dir->parent_inode->make_path(p);
       p.push_dentry(dn->name);
     } else {
-      p = filepath(inode.ino);
+      p = filepath(ino);
     }
   }
 
@@ -360,7 +396,9 @@ class Inode {
 
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
     //inode(_inode),
-    snapid(vino.snapid),
+    ino(vino.ino), snapid(vino.snapid),
+    rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
+    time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), flushing_cap_tid(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
@@ -371,18 +409,10 @@ class Inode {
     ref(0), ll_ref(0), 
     dir(0), dn(0),
     hack_balance_reads(false)
-  {
-    memset(&inode, 0, sizeof(inode));
-    //memset(open_by_mode, 0, sizeof(int)*CEPH_FILE_MODE_NUM);
-    inode.ino = vino.ino;
-  }
-  ~Inode() {
-  }
+  { }
+  ~Inode() { }
 
-  inodeno_t ino() { return inode.ino; }
-  vinodeno_t vino() { return vinodeno_t(inode.ino, snapid); }
-
-  bool is_dir() { return inode.is_dir(); }
+  vinodeno_t vino() { return vinodeno_t(ino, snapid); }
 
 
   // CAPS --------
@@ -561,7 +591,7 @@ class Inode {
 	  if (*it == a) it++;  // skip the authority
 	  if (it == s.end()) it = s.begin();
 	}
-	//if (inode.ino == 1) cout << "chose " << *it << " from " << s << std::endl;
+	//if (ino == 1) cout << "chose " << *it << " from " << s << std::endl;
 	return *it;
       }
       //cout << "num_mds is " << mdcluster->get_num_mds() << endl;
@@ -806,7 +836,7 @@ protected:
     
     // link to dir
     dn->dir = dir;
-    //cout << "link dir " << dir->parent_inode->inode.ino << " '" << name << "' -> inode " << in->inode.ino << endl;
+    //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
     dir->dentries[dn->name] = dn;
 
     // link to inode

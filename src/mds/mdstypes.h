@@ -20,7 +20,7 @@ using namespace std;
 
 #include <boost/pool/pool.hpp>
 
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v004"
+#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v005"
 
 
 //#define MDS_REF_SET      // define me for improved debug output, sanity checking
@@ -116,7 +116,7 @@ struct frag_info_t {
   __s64 size() const { return nfiles + nsubdirs; }
 
   void zero() {
-    memset(this, 0, sizeof(*this));
+    *this = frag_info_t();
   }
 
   // *this += cur - acc; acc = cur
@@ -175,7 +175,7 @@ struct nest_info_t {
 		  ranchors(0), rsnaprealms(0) {}
 
   void zero() {
-    memset(this, 0, sizeof(*this));
+    *this = nest_info_t();
   }
 
   void sub(const nest_info_t &other) {
@@ -288,6 +288,28 @@ inline ostream& operator<<(ostream &out, const vinodeno_t &vino) {
 }
 
 
+struct byte_range_t {
+  __u64 first, last;    // interval client can write to
+
+  void encode(bufferlist &bl) const {
+    ::encode(first, bl);
+    ::encode(last, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(first, bl);
+    ::decode(last, bl);
+  }    
+};
+WRITE_CLASS_ENCODER(byte_range_t)
+
+inline ostream& operator<<(ostream& out, const byte_range_t& r)
+{
+  return out << r.first << '-' << r.last;
+}
+inline bool operator==(const byte_range_t& l, const byte_range_t& r) {
+  return l.first == r.first && l.last == r.last;
+}
+
 struct inode_t {
   // base (immutable)
   inodeno_t ino;
@@ -308,12 +330,13 @@ struct inode_t {
   // file (data access)
   ceph_file_layout layout;
   uint64_t   size;        // on directory, # dentries
-  uint64_t   max_size;    // client(s) are auth to write this much...
   uint32_t   truncate_seq;
   uint64_t   truncate_size, truncate_from;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+
+  map<int,byte_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
@@ -324,12 +347,41 @@ struct inode_t {
   version_t file_data_version; // auth only
   version_t xattr_version;
 
+  inode_t() : ino(0), rdev(0),
+	      mode(0), uid(0), gid(0),
+	      nlink(0), anchored(false),
+	      size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
+	      time_warp_seq(0),
+	      version(0), file_data_version(0), xattr_version(0) { 
+    memset(&layout, 0, sizeof(layout));
+  }
+
   // file type
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   bool is_truncating() const { return truncate_size != -1ull; }
+
+  __u64 get_max_size() const {
+    __u64 max = 0;
+      for (map<int,byte_range_t>::const_iterator p = client_ranges.begin();
+	   p != client_ranges.end();
+	   p++)
+	if (p->second.last > max)
+	  max = p->second.last;
+      return max;
+  }
+  void set_max_size(__u64 new_max) {
+    if (new_max == 0) {
+      client_ranges.clear();
+    } else {
+      for (map<int,byte_range_t>::iterator p = client_ranges.begin();
+	   p != client_ranges.end();
+	   p++)
+	p->second.last = new_max;
+    }
+  }
 
   void encode(bufferlist &bl) const {
     ::encode(ino, bl);
@@ -345,13 +397,13 @@ struct inode_t {
 
     ::encode(layout, bl);
     ::encode(size, bl);
-    ::encode(max_size, bl);
     ::encode(truncate_seq, bl);
     ::encode(truncate_size, bl);
     ::encode(truncate_from, bl);
     ::encode(mtime, bl);
     ::encode(atime, bl);
     ::encode(time_warp_seq, bl);
+    ::encode(client_ranges, bl);
 
     ::encode(dirstat, bl);
     ::encode(rstat, bl);
@@ -375,13 +427,13 @@ struct inode_t {
 
     ::decode(layout, p);
     ::decode(size, p);
-    ::decode(max_size, p);
     ::decode(truncate_seq, p);
     ::decode(truncate_size, p);
     ::decode(truncate_from, p);
     ::decode(mtime, p);
     ::decode(atime, p);
     ::decode(time_warp_seq, p);
+    ::decode(client_ranges, p);
     
     ::decode(dirstat, p);
     ::decode(rstat, p);

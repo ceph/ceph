@@ -1393,7 +1393,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	bufferlist obl;
 	bool changed = false;
 
-	dout(20) << "the update command is: \n";
+	dout(30) << "the update command is: \n";
 	osd_op.data.hexdump(*_dout);
 	*_dout << dendl;
 
@@ -1548,7 +1548,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	}
 
 	if (0) {
-	  dout(20) << " final is \n";
+	  dout(30) << " final is \n";
 	  obl.hexdump(*_dout);
 	  *_dout << dendl;
 

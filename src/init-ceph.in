@@ -11,16 +11,16 @@
 # Description:       Enable Ceph distributed file system services.
 ### END INIT INFO
 
-# if we start up as ./init-ceph, assume everything else is in the
+# if we start up as ./mkcephfs, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
     LIBDIR=.
     ETCDIR=.
 else
-    BINDIR=/usr/bin
-    LIBDIR=/usr/lib/ceph
-    ETCDIR=/etc/ceph
+    BINDIR=@bindir@
+    LIBDIR=@libdir@/ceph
+    ETCDIR=@sysconfdir@/ceph
 fi
 
 usage_exit() {
@@ -32,6 +32,25 @@ usage_exit() {
 
 . $LIBDIR/ceph_common.sh
 
+
+signal_daemon() {
+    name=$1
+    daemon=$2
+    pidfile=$3
+    signal=$4
+    action=$5
+    [ -z "$action" ] && action="Stopping"
+    echo -n "$action ceph $name on $host..."
+    do_cmd "if [ -e $pidfile ]; then
+        pid=`cat $pidfile`
+        if [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; then
+	    cmd=\"kill $signal \$pid\"
+	    echo -n \$cmd...
+	    \$cmd
+        fi
+    fi"
+    echo done
+}
 
 stop_daemon() {
     name=$1
@@ -207,7 +226,7 @@ for name in $what; do
 	    ;;
 	
 	force-reload | reload)
-	    stop_daemon $name c$type $pid_file -1 "Reloading"
+	    signal_daemon $name c$type $pid_file -1 "Reloading"
 	    ;;
 
 	restart)

@@ -126,14 +126,11 @@ osd
 uclient
 - readdir from cache
 - clean up client mds session vs mdsmap behavior?
-- stop using mds's inode_t?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 
 mds
 - fix file recovery
-  - make sure we recover mtime, not just size.. i.e. max_size > 0, not > size.
   - disallow access until file is recovered?
-  - how to not recover if all clients have reconnected?
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too

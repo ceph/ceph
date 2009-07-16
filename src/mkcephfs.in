@@ -1,15 +1,15 @@
 #!/bin/sh 
 
-# if we start up with "./", assume everything else is in the current
-# directory too.
-if [ `dirname $0` = "." ] && [ $PWD != "/usr/sbin" ]; then
+# if we start up as ./init-ceph, assume everything else is in the
+# current directory too.
+if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     BINDIR=.
     LIBDIR=.
     ETCDIR=.
 else
-    BINDIR=/usr/bin
-    LIBDIR=/usr/lib/ceph
-    ETCDIR=/etc/ceph
+    BINDIR=@bindir@
+    LIBDIR=@libdir@/ceph
+    ETCDIR=@sysconfdir@/ceph
 fi
 
 usage_exit() {

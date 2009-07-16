@@ -87,6 +87,9 @@ public:
     case LOCK_EXCL_MIX: return "excl->mix";
     case LOCK_MIX_EXCL: return "mix->excl";
 
+    case LOCK_PRE_SCAN: return "*->scan";
+    case LOCK_SCAN: return "scan";
+
     default: assert(0); return 0;
     }
   }

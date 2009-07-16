@@ -502,7 +502,6 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 	
 	// mark client caps stale.
 	inode_t fake_inode;
-	memset(&fake_inode, 0, sizeof(fake_inode));
 	fake_inode.ino = p->first;
 	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
 	//stale->head.migrate_seq = 0; // FIXME ******
@@ -2030,6 +2029,7 @@ public:
 void Server::handle_client_openc(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
+  int client = mdr->get_client();
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
   
@@ -2074,7 +2074,10 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   in->inode.mode = req->head.args.open.mode | S_IFREG;
   in->inode.version = dn->pre_dirty();
-  in->inode.max_size = (cmode & CEPH_FILE_MODE_WR) ? in->get_layout_size_increment() : 0;
+  if (cmode & CEPH_FILE_MODE_WR) {
+    in->inode.client_ranges[client].first = 0;
+    in->inode.client_ranges[client].last = in->get_layout_size_increment();
+  }
   in->inode.rstat.rfiles = 1;
 
   dn->first = in->first = follows+1;

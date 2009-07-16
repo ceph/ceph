@@ -1126,7 +1126,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
   // count conflicts with
   int nissued = 0;        
 
-  // should we increase max_size?
+  // should we increase client ranges?
   if (in->is_file() &&
       ((all_allowed|loner_allowed) & CEPH_CAP_FILE_WR) &&
       in->is_auth() &&
@@ -1235,7 +1235,8 @@ void Locker::issue_truncate(CInode *in)
 void Locker::revoke_stale_caps(Session *session)
 {
   dout(10) << "revoke_stale_caps for " << session->inst.name << dendl;
-  
+  int client = session->get_client();
+
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
     cap->set_stale(true);
@@ -1245,7 +1246,7 @@ void Locker::revoke_stale_caps(Session *session)
       dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
 
-      if (in->inode.max_size > in->inode.size)
+      if (in->inode.client_ranges.count(client))
 	in->state_set(CInode::STATE_NEEDSRECOVER);
 
       if (!in->filelock.is_stable()) eval_gather(&in->filelock);
@@ -1417,22 +1418,34 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
   assert(in->is_auth());
 
   inode_t *latest = in->get_projected_inode();
-  uint64_t new_max = latest->max_size;
+  map<int,byte_range_t> new_ranges;
   __u64 size = latest->size;
   if (update_size)
     size = new_size;
+  bool new_max = false;
+
+  // increase ranges as appropriate.
+  // shrink to 0 if no WR|BUFFER caps issued.
+  for (map<int,Capability*>::iterator p = in->client_caps.begin();
+       p != in->client_caps.end();
+       p++) {
+    if (p->second->issued() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
+      new_ranges[p->first].first = 0;
+      if (latest->client_ranges.count(p->first))
+	new_ranges[p->first].last = MAX(ROUND_UP_TO(size<<1, in->get_layout_size_increment()),
+					latest->client_ranges[p->first].last);
+      else
+	new_ranges[p->first].last = ROUND_UP_TO(size<<1, in->get_layout_size_increment());
+    }
+  }
+  if (latest->client_ranges != new_ranges)
+    new_max = true;
+
+  if (!update_size && !new_max)
+    return false;
+
+  dout(10) << "check_inode_max_size on " << *in << dendl;
   
-  if ((in->get_caps_wanted() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) == 0)
-    new_max = 0;
-  else if ((size << 1) >= latest->max_size)
-    new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-
-  if (new_max == latest->max_size && !update_size)
-    return false;  // no change.
-
-  dout(10) << "check_inode_max_size " << latest->max_size << " -> " << new_max
-	   << " on " << *in << dendl;
-
   if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
     if (in->filelock.is_stable()) {
@@ -1454,10 +1467,14 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock, bool update_siz
     
   inode_t *pi = in->project_inode();
   pi->version = in->pre_dirty();
-  pi->max_size = new_max;
+
+  if (new_max) {
+    dout(10) << "check_inode_max_size client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
+    pi->client_ranges = new_ranges;
+  }
+
   if (update_size) {
-    dout(10) << "check_inode_max_size also forcing size " 
-	     << pi->size << " -> " << new_size << dendl;
+    dout(10) << "check_inode_max_size size " << pi->size << " -> " << new_size << dendl;
     pi->size = new_size;
     pi->rstat.rbytes = new_size;
   }
@@ -1514,7 +1531,7 @@ void Locker::share_inode_max_size(CInode *in)
     Capability *cap = it->second;
     if (cap->is_suppress())
       continue;
-    if (cap->pending() & (CEPH_CAP_GWR<<CEPH_CAP_SFILE)) {
+    if (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       dout(10) << "share_inode_max_size with client" << client << dendl;
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
 				       in->ino(),
@@ -1781,7 +1798,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
 	   << " wanted " << ccap_string(wanted)
-	   << " max_size " << m->get_max_size()
 	   << " on " << *in << dendl;
   assert(in->is_auth());
   int client = m->get_source().num();
@@ -1790,27 +1806,30 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   // increase or zero max_size?
   __u64 size = m->get_size();
   bool change_max = false;
-  uint64_t new_max = latest->max_size;
+  uint64_t old_max = latest->client_ranges.count(client) ? latest->client_ranges[client].last : 0;
+  uint64_t new_max = old_max;
   
   if (in->is_file()) {
-    if (latest->max_size && (wanted & CEPH_CAP_ANY_FILE_WR) == 0) {
-      change_max = true;
-      new_max = 0;
+    if (cap->issued() & CEPH_CAP_ANY_FILE_WR) {
+      if (m->get_max_size() > new_max) {
+	dout(10) << "client requests file_max " << m->get_max_size()
+		 << " > max " << old_max << dendl;
+	change_max = true;
+	new_max = ROUND_UP_TO(m->get_max_size() << 1, in->get_layout_size_increment());
+      } else {
+	new_max = ROUND_UP_TO(size<<1, in->get_layout_size_increment());
+	if (new_max > old_max)
+	  change_max = true;
+	else
+	  new_max = old_max;
+      }
+    } else {
+      if (old_max) {
+	change_max = true;
+	new_max = 0;
+      }
     }
-    else if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
-	     (size << 1) >= latest->max_size) {
-      dout(10) << " wr caps wanted, and size " << size
-	       << " *2 >= max " << latest->max_size << ", increasing" << dendl;
-      change_max = true;
-      new_max = latest->max_size ? (latest->max_size << 1):in->get_layout_size_increment();
-    }
-    if ((wanted & CEPH_CAP_ANY_FILE_WR) &&
-	m->get_max_size() > new_max) {
-      dout(10) << "client requests file_max " << m->get_max_size()
-	       << " > max " << latest->max_size << dendl;
-      change_max = true;
-      new_max = (m->get_max_size() << 1) & ~(in->get_layout_size_increment() - 1);
-    }
+
     if (change_max &&
 	!in->filelock.can_wrlock(client)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
@@ -1893,9 +1912,13 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     }
   }
   if (change_max) {
-    dout(7) << "  max_size " << pi->max_size << " -> " << new_max
+    dout(7) << "  max_size " << old_max << " -> " << new_max
 	    << " for " << *in << dendl;
-    pi->max_size = new_max;
+    if (new_max) {
+      pi->client_ranges[client].first = 0;
+      pi->client_ranges[client].last = new_max;
+    } else 
+      pi->client_ranges.erase(client);
   }
     
   if (change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) 

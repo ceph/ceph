@@ -5,6 +5,17 @@ CCONF="$BINDIR/cconf"
 conf=$ETCDIR"/ceph.conf"
 hostname=`hostname | cut -d . -f 1`
 
+figure_dirs() {
+    if echo $bindir | grep -q \@; then
+	echo "using current dir"
+	BINDIR=.
+	LIBDIR=.
+	ETCDIR=.
+    else
+	echo "all good"
+	
+    fi
+}
 
 verify_conf() {
     # make sure ceph.conf exists
@@ -21,6 +32,7 @@ check_host() {
     ssh=""
     rootssh=""
     dir=$PWD
+    get_conf user "" "user"
     if [ -n "$host" ]; then
 	#echo host for $name is $host, i am $hostname
 	if [ "$host" != "$hostname" ]; then
@@ -30,11 +42,10 @@ check_host() {
 	    fi
 
 	    # we'll need to ssh into that host
-	    get_conf sshuser "" "user"
-	    if [ -z "$sshuser" ]; then
+	    if [ -z "$user" ]; then
 		ssh="ssh $host"
 	    else
-		ssh="ssh $sshuser@$host"
+		ssh="ssh $user@$host"
 	    fi
 	    rootssh="ssh root@$host"
 	    get_conf dir "$dir" "ssh path"
@@ -52,7 +63,12 @@ do_cmd() {
     if [ -z "$ssh" ]; then
 	[ $verbose -eq 1 ] && echo "--- $host# $1"
 	ulimit -c unlimited
-	bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	whoami=`whoami`
+	if [ "$whoami" = "$user" ] || [ -z "$user" ]; then
+	    bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	else
+	    su $user -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	fi
     else
 	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
 	$ssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
@@ -63,7 +79,12 @@ do_root_cmd() {
     if [ -z "$ssh" ]; then
 	[ $verbose -eq 1 ] && echo "--- $host# $1"
 	ulimit -c unlimited
-	sudo bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	whoami=`whoami`
+	if [ "$whoami" = "root" ] || [ -z "$user" ]; then
+	    bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	else
+	    sudo bash -c "$1" || { echo "failed: '$1'" ; exit 1; }
+	fi
     else
 	[ $verbose -eq 1 ] && echo "--- $ssh $2 \"cd $dir ; ulimit -c unlimited ; $1\""
 	$rootssh $2 "cd $dir ; ulimit -c unlimited ; $1" || { echo "failed: '$ssh $1'" ; exit 1; }
