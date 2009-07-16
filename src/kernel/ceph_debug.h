@@ -1,19 +1,23 @@
 #ifndef _FS_CEPH_DEBUG_H
 #define _FS_CEPH_DEBUG_H
 
-#include <linux/string.h>
+/*
+ * wrap pr_debug to include a filename:lineno prefix on each line
+ */
 
-#define _STRINGIFY(x) #x
-#define STRINGIFY(x) _STRINGIFY(x)
+static inline const char *ceph_file_part(const char *s, int len)
+{
+	const char *e = s + len;
 
-#define FMT_PREFIX " %12.12s:%-4d : "
-#define FMT_SUFFIX "%s"
-#define LOG_ARGS __FILE__ + 8, __LINE__  /* strip of fs/ceph/ from __FILE__ */
-#define TRAIL_PARAM ""
+	while (*(e-1) != '/')
+		e--;
+	return e;
+}
 
-#define LOG_LINE FMT_PREFIX fmt, LOG_ARGS, args
-
-#define _dout(fmt, args...) pr_debug(FMT_PREFIX fmt FMT_SUFFIX, LOG_ARGS, args);
-#define dout(args...) _dout(args, TRAIL_PARAM)
+#define _dout(fmt, args...)						\
+	pr_debug(" %12.12s:%-4d : " fmt "%s",				\
+		 ceph_file_part(__FILE__, sizeof(__FILE__)), __LINE__,	\
+		 args);
+#define dout(args...) _dout(args, "")
 
 #endif

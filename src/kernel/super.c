@@ -1108,6 +1108,9 @@ static struct file_system_type ceph_fs_type = {
 	.fs_flags	= FS_RENAME_DOES_D_MOVE,
 };
 
+#define _STRINGIFY(x) #x
+#define STRINGIFY(x) _STRINGIFY(x)
+
 static int __init init_ceph(void)
 {
 	int ret = 0;
