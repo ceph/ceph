@@ -9,6 +9,7 @@
 #include <linux/version.h>
 #include <linux/backing-dev.h>
 #include <linux/statfs.h>
+#include <linux/inet.h>
 
 #include "ceph_debug.h"
 #include "ceph_ver.h"
@@ -400,39 +401,22 @@ static match_table_t arg_tokens = {
 
 #define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
 
-/*
- * FIXME: add error checking to ip parsing
- */
-static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr,
-		    int max_count, int *count)
+static int parse_ips(const char *c, int len, struct ceph_entity_addr *addr,
+		     int max_count, int *count)
 {
-	int i;
 	int v;
 	int mon_count;
-	unsigned ip = 0;
 	const char *p = c, *numstart;
 
-	dout("parse_ip on '%s' len %d\n", c, len);
+	dout("parse_ips on '%s' len %d\n", c, len);
 	for (mon_count = 0; mon_count < max_count; mon_count++) {
-		for (i = 0; !ADDR_DELIM(*p) && i < 4; i++) {
-			v = 0;
-			numstart = p;
-			while (!ADDR_DELIM(*p) && *p != '.' && p < c+len) {
-				if (*p < '0' || *p > '9')
-					goto bad;
-				v = (v * 10) + (*p - '0');
-				p++;
-			}
-			if (v > 255 || numstart == p)
-				goto bad;
-			ip = (ip << 8) + v;
+		const char *end;
+		__be32 quad;
 
-			if (*p == '.')
-				p++;
-		}
-		if (i != 4)
+		if (!in4_pton(p, len - (p - c), (u8 *)&quad, ',', &end))
 			goto bad;
-		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = htonl(ip);
+		p = end;
+		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = quad;
 
 		/* port? */
 		if (*p == ':') {
@@ -451,7 +435,7 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr,
 		} else
 			addr[mon_count].ipaddr.sin_port = htons(CEPH_MON_PORT);
 
-		dout("parse_ip got %u.%u.%u.%u:%u\n",
+		dout("parse_ips got %u.%u.%u.%u:%u\n",
 		     IPQUADPORT(addr[mon_count].ipaddr));
 
 		if (*p != ',')
@@ -468,7 +452,7 @@ static int parse_ip(const char *c, int len, struct ceph_entity_addr *addr,
 	return 0;
 
 bad:
-	pr_err("ceph parse_ip bad ip '%s'\n", c);
+	pr_err("ceph parse_ips bad ip '%s'\n", c);
 	return -EINVAL;
 }
 
@@ -502,8 +486,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 	/* get mon ip(s) */
 	len = c - dev_name;
-	err = parse_ip(dev_name, len, args->mon_addr, CEPH_MAX_MON_MOUNT_ADDR,
-		       &args->num_mon);
+	err = parse_ips(dev_name, len, args->mon_addr, CEPH_MAX_MON_MOUNT_ADDR,
+			&args->num_mon);
 	if (err < 0)
 		return err;
 
@@ -554,7 +538,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			args->my_addr.ipaddr.sin_port = htons(intval);
 			break;
 		case Opt_ip:
-			err = parse_ip(argstr[0].from,
+			err = parse_ips(argstr[0].from,
 					argstr[0].to-argstr[0].from,
 					&args->my_addr,
 					1, NULL);
