@@ -886,7 +886,7 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 				       struct ceph_msg,
 				 list_head);
 		head = msg->front.iov_base;
-		extra += CAPS_PER_RELEASE - le32_to_cpu(head->num);
+		extra += CEPH_CAPS_PER_RELEASE - le32_to_cpu(head->num);
 	}
 
 	while (session->s_num_cap_releases < session->s_nr_caps + extra) {
@@ -902,7 +902,7 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 		msg->front.iov_len = sizeof(*head);
 		spin_lock(&session->s_cap_lock);
 		list_add(&msg->list_head, &session->s_cap_releases);
-		session->s_num_cap_releases += CAPS_PER_RELEASE;
+		session->s_num_cap_releases += CEPH_CAPS_PER_RELEASE;
 	}
 
 	if (!list_empty(&session->s_cap_releases)) {
@@ -916,7 +916,7 @@ static int add_cap_releases(struct ceph_mds_client *mdsc,
 			list_move_tail(&msg->list_head,
 				      &session->s_cap_releases_done);
 			session->s_num_cap_releases -=
-				CAPS_PER_RELEASE - le32_to_cpu(head->num);
+				CEPH_CAPS_PER_RELEASE - le32_to_cpu(head->num);
 		}
 	}
 	err = 0;

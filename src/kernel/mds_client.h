@@ -105,9 +105,9 @@ enum {
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
 
-#define CAPS_PER_RELEASE ((PAGE_CACHE_SIZE - \
-			   sizeof(struct ceph_mds_cap_release)) /	\
-			  sizeof(struct ceph_mds_cap_item))
+#define CEPH_CAPS_PER_RELEASE ((PAGE_CACHE_SIZE -			\
+				sizeof(struct ceph_mds_cap_release)) /	\
+			       sizeof(struct ceph_mds_cap_item))
 
 struct ceph_mds_session {
 	int               s_mds;

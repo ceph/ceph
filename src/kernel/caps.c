@@ -884,13 +884,14 @@ void ceph_queue_caps_release(struct inode *inode)
 		session->s_num_cap_releases--;
 
 		msg->front.iov_len += sizeof(*item);
-		if (le32_to_cpu(head->num) == CAPS_PER_RELEASE) {
+		if (le32_to_cpu(head->num) == CEPH_CAPS_PER_RELEASE) {
 			dout(" release msg %p full\n", msg);
 			list_move_tail(&msg->list_head,
 				      &session->s_cap_releases_done);
 		} else {
 			dout(" release msg %p at %d/%d (%d)\n", msg,
-			     (int)le32_to_cpu(head->num), (int)CAPS_PER_RELEASE,
+			     (int)le32_to_cpu(head->num),
+			     (int)CEPH_CAPS_PER_RELEASE,
 			     (int)msg->front.iov_len);
 		}
 		spin_unlock(&session->s_cap_lock);

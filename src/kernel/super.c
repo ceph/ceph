@@ -475,7 +475,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->caps_wanted_delay_min = CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT;
 	args->caps_wanted_delay_max = CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT;
 	args->snapdir_name = ".snap";
-	args->cap_release_safety = CAPS_PER_RELEASE * 4;
+	args->cap_release_safety = CEPH_CAPS_PER_RELEASE * 4;
 	args->max_readdir = 1024;
 
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
@@ -737,7 +737,7 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 }
 
 /*
- * mount: join the ceph cluster.
+ * mount: join the ceph cluster, and open root directory.
  */
 static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		      const char *path)
@@ -957,9 +957,8 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 	struct ceph_mount_args *args = &new->mount_args;
 	struct ceph_client *other = ceph_sb_to_client(sb);
 	int i;
-	dout("ceph_compare_super %p\n", sb);
 
-	/* either compare fsid, or specified mon_hostname */
+	dout("ceph_compare_super %p\n", sb);
 	if (args->flags & CEPH_OPT_FSID) {
 		if (ceph_fsid_compare(&args->fsid, &other->fsid)) {
 			dout("fsid doesn't match\n");
