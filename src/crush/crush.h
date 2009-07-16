@@ -17,11 +17,11 @@
  */
 
 
-#define CRUSH_MAGIC 0x00010000ul
+#define CRUSH_MAGIC 0x00010000ul   /* for detecting algorithm revisions */
 
 
-#define CRUSH_MAX_DEPTH 10
-#define CRUSH_MAX_SET   10
+#define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
+#define CRUSH_MAX_SET   10  /* max size of a mapping result */
 
 
 /*
