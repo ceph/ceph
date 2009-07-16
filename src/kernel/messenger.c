@@ -263,7 +263,7 @@ static int ceph_tcp_listen(struct ceph_messenger *msgr)
 		pr_err("ceph failed to getsockname: %d\n", ret);
 		goto err;
 	}
-	dout(0, "listening on %u.%u.%u.%u:%u\n", IPQUADPORT(*myaddr));
+	pr_info("ceph listening on %u.%u.%u.%u:%u\n", IPQUADPORT(*myaddr));
 
 	/* we don't care too much if this works or not */
 	sock->ops->listen(sock, CEPH_MSGR_BACKUP);
@@ -511,7 +511,6 @@ static void __remove_connection(struct ceph_messenger *msgr,
 	unsigned long key;
 	void **slot, *val;
 
-	dout(0, "__remove_connection: %p\n", con);
 	dout(20, "__remove_connection %p\n", con);
 	if (list_empty(&con->list_all)) {
 		dout(20, "__remove_connection %p not registered\n", con);
@@ -567,7 +566,6 @@ static void __replace_connection(struct ceph_messenger *msgr,
 	unsigned long key = hash_addr(&new->peer_addr);
 	void **slot;
 
-	dout(0, "replace_connection %p with %p\n", old, new);
 	dout(10, "replace_connection %p with %p\n", old, new);
 
 	/* replace in con_tree */

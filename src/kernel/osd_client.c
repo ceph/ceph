@@ -794,7 +794,7 @@ void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
 {
 	struct ceph_msg *msg;
 
-	dout(0, "abort_request tid %llu, revoking %p pages\n", req->r_tid,
+	dout(10, "abort_request tid %llu, revoking %p pages\n", req->r_tid,
 	     req->r_request);
 	/*
 	 * mark req aborted _before_ revoking pages, so that

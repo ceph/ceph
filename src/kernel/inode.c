@@ -828,8 +828,8 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req,
 	 * invariants.
 	 */
 	if (rinfo->head->op & CEPH_MDS_OP_WRITE) {
-		dout(0, "fill_trace faking empty trace on %lld %s\n",
-		     req->r_tid, ceph_mds_op_name(rinfo->head->op));
+		pr_info("ceph fill_trace faking empty trace on %lld %s\n",
+			req->r_tid, ceph_mds_op_name(rinfo->head->op));
 		if (rinfo->head->is_dentry) {
 			rinfo->head->is_dentry = 0;
 			err = fill_inode(req->r_locked_dir,
@@ -1132,7 +1132,7 @@ retry_lookup:
 		if (fill_inode(in, &rinfo->dir_in[i], NULL, session,
 			       req->r_request_started, -1,
 			       &req->r_caps_reservation) < 0) {
-			dout(0, "fill_inode badness on %p\n", in);
+			pr_err("ceph fill_inode badness on %p\n", in);
 			dput(dn);
 			continue;
 		}

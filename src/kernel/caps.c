@@ -174,8 +174,8 @@ int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need)
 
 out_alloc_count:
 	/* we didn't manage to reserve as much as we needed */
-	dout(0, "reserve caps ctx=%p ENOMEM need=%d got=%d\n",
-	     ctx, need, have);
+	pr_warning("ceph reserve caps ctx=%p ENOMEM need=%d got=%d\n",
+		   ctx, need, have);
 	return ret;
 }
 
@@ -1558,8 +1558,8 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 				   cap->issued | cap->implemented,
 				   ci->i_flushing_caps);
 		} else {
-			dout(0, " %p auth cap %p not mds%d ???\n", inode, cap,
-			     session->s_mds);
+			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
+			       cap, session->s_mds);
 			spin_unlock(&inode->i_lock);
 		}
 	}

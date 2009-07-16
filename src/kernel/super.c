@@ -257,7 +257,8 @@ static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
 	ceph_decode_32_safe(&p, end, result, bad);
 	ceph_decode_32_safe(&p, end, len, bad);
 	if (result) {
-		dout(0, "mount denied: %.*s (%d)\n", len, (char *)p, result);
+		pr_err("ceph mount denied: %.*s (%d)\n", len, (char *)p,
+		       result);
 		return result;
 	}
 	p += len;
@@ -570,7 +571,8 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		if (token < Opt_ip) {
 			ret = match_int(&argstr[0], &intval);
 			if (ret < 0) {
-				dout(0, "bad mount arg, not int\n");
+				pr_err("ceph bad mount option arg (not int) "
+				       "at '%s'\n", c);
 				continue;
 			}
 			dout(30, "got token %d intval %d\n", token, intval);
@@ -1182,7 +1184,7 @@ static int __init init_ceph(void)
 	int ret = 0;
 
 	dout(1, "init_ceph\n");
-	dout(0, "ceph (%s)\n", STRINGIFY(CEPH_GIT_VER));
+	pr_info("ceph init (%s)\n", STRINGIFY(CEPH_GIT_VER));
 
 	ret = ceph_debugfs_init();
 	if (ret < 0)

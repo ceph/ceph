@@ -690,8 +690,8 @@ static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
 
 	spin_lock(&inode->i_lock);
 	if (cap->gen != session->s_cap_gen) {
-		dout(0, "failed to reconnect %p cap %p (gen %d < session %d)\n",
-		     inode, cap, cap->gen, session->s_cap_gen);
+		pr_err("ceph failed reconnect %p cap %p (gen %d < sess %d)\n",
+		       inode, cap, cap->gen, session->s_cap_gen);
 		__ceph_remove_cap(cap, NULL);
 	}
 	wake_up(&ceph_inode(inode)->i_cap_wq);
@@ -1539,8 +1539,8 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	/* dup? */
 	if ((req->r_got_unsafe && !head->safe) ||
 	    (req->r_got_safe && head->safe)) {
-		dout(0, "got a dup %s reply on %llu from mds%d\n",
-		     head->safe ? "safe" : "unsafe", tid, mds);
+		pr_warning("ceph got a dup %s reply on %llu from mds%d\n",
+			   head->safe ? "safe" : "unsafe", tid, mds);
 		mutex_unlock(&mdsc->mutex);
 		goto out;
 	}
@@ -2283,7 +2283,7 @@ out:
 	return;
 
 bad:
-	dout(0, "corrupt lease message\n");
+	pr_err("ceph corrupt lease message\n");
 }
 
 void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,

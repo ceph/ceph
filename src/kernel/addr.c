@@ -169,7 +169,8 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	 * warning, in case we end up with accounting problems later.
 	 */
 	if (!PageDirty(page))
-		dout(0, "%p invalidatepage %p page not dirty\n", inode, page);
+		pr_err("ceph %p invalidatepage %p page not dirty\n", inode,
+		       page);
 
 	if (offset == 0)
 		ClearPageChecked(page);
