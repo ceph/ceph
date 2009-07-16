@@ -81,8 +81,7 @@ Inode cache and inode operations.  We also include routines to
 incorporate metadata structures returned by the MDS into the client
 cache, and some helpers to deal with file capabilities and metadata
 leases.  The bulk of that work is done by fill_inode() and
-fill_trace(), which incorporate metadata included into the reply
-into the client's cache.
+fill_trace().
 
 EOF
 

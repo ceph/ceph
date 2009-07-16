@@ -12,6 +12,18 @@
 #include "super.h"
 #include "decode.h"
 
+/*
+ * Ceph inode operations
+ *
+ * Implement basic inode helpers (get, alloc) and inode ops (getattr,
+ * setattr, etc.), xattr helpers, and helpers for assimilating
+ * metadata returned by the MDS into our cache.
+ *
+ * Also define helpers for doing asynchronous writeback, invalidation,
+ * and truncation for the benefit of those who can't afford to block
+ * (typically because they are in the message handler path).
+ */
+
 static const struct inode_operations ceph_symlink_iops;
 
 static void ceph_inode_invalidate_pages(struct work_struct *work);
@@ -50,6 +62,8 @@ struct inode *ceph_get_snapdir(struct inode *parent)
 		.snap = CEPH_SNAPDIR,
 	};
 	struct inode *inode = ceph_get_inode(parent->i_sb, vino);
+
+	BUG_ON(!S_ISDIR(parent->i_mode));
 	if (IS_ERR(inode))
 		return ERR_PTR(PTR_ERR(inode));
 	inode->i_mode = parent->i_mode;
@@ -72,6 +86,13 @@ const struct inode_operations ceph_file_iops = {
 	.removexattr = ceph_removexattr,
 };
 
+
+/*
+ * We use a 'frag tree' to keep track of the cluster's directory
+ * fragments for a given inode.  We need to know when a child frag is
+ * delegated to a new MDS, or when it is flagged as replicated, so we
+ * can direct our requests accordingly.
+ */
 
 /*
  * find/create a frag in the tree
@@ -449,8 +470,8 @@ void ceph_fill_file_time(struct inode *inode, int issued,
 }
 
 /*
- * populate an inode based on info from mds.
- * may be called on new or existing inodes.
+ * Populate an inode based on info from mds.  May be called on new or
+ * existing inodes.
  */
 static int fill_inode(struct inode *inode,
 		      struct ceph_mds_reply_info_in *iinfo,
@@ -669,24 +690,23 @@ out:
 	return err;
 }
 
+/*
+ * Initialize ceph dentry state.
+ */
 int ceph_init_dentry_private(struct dentry *dentry)
 {
 	struct ceph_dentry_info *di;
 
 	if (dentry->d_fsdata)
 		return 0;
-
 	di = kmalloc(sizeof(struct ceph_dentry_info),
 		     GFP_NOFS);
-
 	if (!di)
 		return -ENOMEM;          /* oh well */
 
 	spin_lock(&dentry->d_lock);
-
 	if (dentry->d_fsdata) /* lost a race */
 		goto out_unlock;
-
 	di->dentry = dentry;
 	di->lease_session = NULL;
 	dentry->d_fsdata = di;
@@ -694,7 +714,6 @@ int ceph_init_dentry_private(struct dentry *dentry)
 	ceph_dentry_lru_add(dentry);
 out_unlock:
 	spin_unlock(&dentry->d_lock);
-
 	return 0;
 }
 
@@ -796,6 +815,10 @@ out:
  * Incorporate results into the local cache.  This is either just
  * one inode, or a directory, dentry, and possibly linked-to inode (e.g.,
  * after a lookup).
+ *
+ * A reply may contain
+ *         a directory inode along with a dentry.
+ *  and/or a target inode
  *
  * Called with snap_rwsem (read).
  */
@@ -1035,7 +1058,7 @@ done:
 }
 
 /*
- * prepopulate cache with readdir results, leases, etc.
+ * Prepopulate our cache with readdir results, leases, etc.
  */
 int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 			     struct ceph_mds_session *session)
@@ -1232,7 +1255,7 @@ out:
 /*
  * called by trunc_wq; take i_mutex ourselves
  *
- * We also truncation in a separate thread as well.
+ * We also truncate in a separate thread as well.
  */
 void ceph_vmtruncate_work(struct work_struct *work)
 {
@@ -1279,7 +1302,7 @@ retry:
 		filemap_write_and_wait_range(&inode->i_data, 0,
 					     inode->i_sb->s_maxbytes);
 #else
-# warning i may not flush all data after a snapshot + truncate.. i export need 2.6.30
+# warning i may not flush all data after a snapshot + truncate w/ < 2.6.30
 		filemap_write_and_wait(&inode->i_data);
 #endif
 		goto retry;
@@ -1818,11 +1841,8 @@ static int __remove_xattr_by_name(struct ceph_inode_info *ci,
 	int err;
 
 	p = &ci->i_xattrs.xattrs.rb_node;
-
 	xattr = __get_xattr(ci, name);
-
 	err = __remove_xattr(ci, xattr);
-
 	return err;
 }
 

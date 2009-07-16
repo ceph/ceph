@@ -72,7 +72,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	 * express utilization in terms of large blocks to avoid
 	 * overflow on 32-bit machines.
 	 */
-	buf->f_bsize = 1 << CEPH_BLOCK_SHIFT;     /* 1 MB */
+	buf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
 	buf->f_blocks = le64_to_cpu(st.kb) >> (CEPH_BLOCK_SHIFT-10);
 	buf->f_bfree = (le64_to_cpu(st.kb) - le64_to_cpu(st.kb_used)) >>
 		(CEPH_BLOCK_SHIFT-10);
