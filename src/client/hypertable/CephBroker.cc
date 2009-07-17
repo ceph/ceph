@@ -51,7 +51,7 @@ CephBroker::CephBroker(PropertiesPtr& cfg) {
   argv[argc++] = "0"; */
 
   HT_INFO("Calling ceph_initialize");
-  ceph_initialize(argc++, argv);
+  ceph_initialize(argc, argv);
   HT_INFO("Calling ceph_mount");
   ceph_mount();
   HT_INFO("Returning from constructor");
@@ -381,8 +381,6 @@ void CephBroker::status(ResponseCallback *cb) {
     included in Hypertable also do this. */
 }
 
-/* I have no idea if this is correct; it's what local and kosmos brokers do. Check the contract!
- */
 void CephBroker::shutdown(ResponseCallback *cb) {
   m_open_file_map.remove_all();
   cb->response_ok();
