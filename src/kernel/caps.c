@@ -9,19 +9,39 @@
 #include "messenger.h"
 
 /*
+ * Capability management
+ *
+ * The Ceph metadata servers control client access to inode metadata
+ * and file data by issuing capabilities, granting clients permission
+ * to read and/or write both inode field and file data to OSDs
+ * (storage nodes).  Each capability consists of a set of bits
+ * indicating which operations are allowed.
+ *
+ * If the client holds a *_SHARED cap, the client has a coherent value
+ * that can be safely read from the cached inode.
+ *
+ * In the case of a *_EXCL (exclusive) or FILE_WR capabilities, the
+ * client is allowed to change inode attributes (e.g., file size,
+ * mtime), note its dirty state in the ceph_cap, and asynchronously
+ * flush that metadata change to the MDS.
+ *
+ * In the event of a conflicting operation (perhaps by another
+ * client), the MDS will revoke the conflicting client capabilities.
+ *
+ * In order for a client to cache an inode, it must hold a capability
+ * with at least one MDS server.  When inodes are released, release
+ * notifications are batched and periodically sent en masse to the MDS
+ * cluster to release server state.
+ */
+
+
+/*
  * Generate readable cap strings for debugging output.
  */
 #define MAX_CAP_STR 20
 static char cap_str[MAX_CAP_STR][40];
 static DEFINE_SPINLOCK(cap_str_lock);
 static int last_cap_str;
-
-static spinlock_t caps_list_lock;
-static struct list_head caps_list;  /* unused (reserved or unreserved) */
-static int caps_total_count;        /* total caps allocated */
-static int caps_use_count;          /* in use */
-static int caps_reserve_count;      /* unused, reserved */
-static int caps_avail_count;        /* unused, unreserved */
 
 static char *gcap_string(char *s, int c)
 {
@@ -90,11 +110,23 @@ const char *ceph_cap_string(int caps)
 }
 
 /*
- * cap reservations
+ * Cap reservations
  *
- * maintain a global pool of preallocated struct ceph_caps, referenced
- * by struct ceph_caps_reservations.
+ * Maintain a global pool of preallocated struct ceph_caps, referenced
+ * by struct ceph_caps_reservations.  This ensures that we preallocate
+ * memory needed to successfully process an MDS response.  (If an MDS
+ * sends us cap information and we fail to process it, we will have
+ * problems due to the client and MDS being out of sync.)
+ *
+ * Reservations are 'owned' by a ceph_cap_reservation context.
  */
+static spinlock_t caps_list_lock;
+static struct list_head caps_list;  /* unused (reserved or unreserved) */
+static int caps_total_count;        /* total caps allocated */
+static int caps_use_count;          /* in use */
+static int caps_reserve_count;      /* unused, reserved */
+static int caps_avail_count;        /* unused, unreserved */
+
 void ceph_caps_init(void)
 {
 	INIT_LIST_HEAD(&caps_list);
@@ -197,7 +229,7 @@ static struct ceph_cap *get_cap(struct ceph_cap_reservation *ctx)
 {
 	struct ceph_cap *cap = NULL;
 
-	/* temporary */
+	/* temporary, until we do something about cap import/export */
 	if (!ctx)
 		return kmem_cache_alloc(ceph_cap_cachep, GFP_NOFS);
 
@@ -278,7 +310,7 @@ static struct ceph_cap *__get_cap_for_mds(struct ceph_inode_info *ci, int mds)
 }
 
 /*
- * Return id of any MDS with a cap, preferably WR|WRBUFFER|EXCL, else
+ * Return id of any MDS with a cap, preferably FILE_WR|WRBUFFER|EXCL, else
  * -1.
  */
 static int __ceph_get_cap_mds(struct ceph_inode_info *ci, u32 *mseq)
@@ -336,7 +368,8 @@ static void __insert_cap_node(struct ceph_inode_info *ci,
 }
 
 /*
- * (re)set cap hold timeouts.
+ * (re)set cap hold timeouts, which control the delayed release
+ * of unused caps back to the MDS.  Should be called on cap use.
  */
 static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
 			       struct ceph_inode_info *ci)
@@ -350,10 +383,9 @@ static void __cap_set_timeouts(struct ceph_mds_client *mdsc,
 	dout("__cap_set_timeouts %p min %lu max %lu\n", &ci->vfs_inode,
 	     ci->i_hold_caps_min - jiffies, ci->i_hold_caps_max - jiffies);
 }
+
 /*
- * (Re)queue cap at the end of the delayed cap release list.  If
- * an inode was queued but with i_hold_caps_max=0, meaning it was
- * queued for immediate flush, don't reset the timeouts.
+ * (Re)queue cap at the end of the delayed cap release list.
  *
  * If I_FLUSH is set, leave the inode at the front of the list.
  *
@@ -382,7 +414,7 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 /*
  * Queue an inode for immediate writeback.  Mark inode with I_FLUSH,
  * indicating we should send a cap message to flush dirty metadata
- * asap.
+ * asap, and move to the front of the delayed cap list.
  */
 static void __cap_delay_requeue_front(struct ceph_mds_client *mdsc,
 				      struct ceph_inode_info *ci)
@@ -399,7 +431,7 @@ static void __cap_delay_requeue_front(struct ceph_mds_client *mdsc,
 /*
  * Cancel delayed work on cap.
  *
- * Caller hold i_lock.
+ * Caller must hold i_lock.
  */
 static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 			       struct ceph_inode_info *ci)
@@ -415,12 +447,11 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 /*
  * Add a capability under the given MDS session.
  *
- * Bump i_count when adding the first cap.
- *
  * Caller should hold session snap_rwsem (read), s_mutex.
  *
  * @fmode is the open file mode, if we are opening a file,
- * otherwise it is < 0.
+ * otherwise it is < 0.  (This is so we can atomically add
+ * the cap and add an open file reference to it.)
  */
 int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session, u64 cap_id,
@@ -479,7 +510,7 @@ retry:
 		/* add to session cap list */
 		cap->session = session;
 		spin_lock(&session->s_cap_lock);
-		list_add(&cap->session_caps, &session->s_caps);
+		list_add_tail(&cap->session_caps, &session->s_caps);
 		session->s_nr_caps++;
 		spin_unlock(&session->s_cap_lock);
 	}
@@ -552,7 +583,8 @@ retry:
 
 /*
  * Return true if cap has not timed out and belongs to the current
- * generation of the MDS session.
+ * generation of the MDS session (i.e. has not gone 'stale' due to
+ * us losing touch with the mds).
  */
 static int __cap_is_valid(struct ceph_cap *cap)
 {
@@ -600,6 +632,9 @@ int __ceph_caps_issued(struct ceph_inode_info *ci, int *implemented)
 	return have;
 }
 
+/*
+ * Get cap bits issued by caps other than @ocap
+ */
 int __ceph_caps_issued_other(struct ceph_inode_info *ci, struct ceph_cap *ocap)
 {
 	int have = ci->i_snap_caps;
@@ -617,6 +652,10 @@ int __ceph_caps_issued_other(struct ceph_inode_info *ci, struct ceph_cap *ocap)
 	return have;
 }
 
+/*
+ * Move a cap to the end of the LRU (oldest caps at list head, newest
+ * at list tail).
+ */
 static void __touch_cap(struct ceph_cap *cap)
 {
 	struct ceph_mds_session *s = cap->session;
@@ -629,8 +668,9 @@ static void __touch_cap(struct ceph_cap *cap)
 }
 
 /*
- * Return true if we hold the given mask.  And move the cap(s) to the front
- * of their respective LRUs.
+ * Return true if we hold the given mask.  And move the cap(s) to the
+ * front of their respective LRUs.  (This is the preferred way for
+ * callers to check for caps they want.)
  */
 int __ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask, int touch)
 {
@@ -670,6 +710,7 @@ int __ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask, int touch)
 			if (touch) {
 				struct rb_node *q;
 
+				/* touch this + preceeding caps */
 				__touch_cap(cap);
 				for (q = rb_first(&ci->i_caps); q != p;
 				     q = rb_next(q)) {
@@ -688,7 +729,7 @@ int __ceph_caps_issued_mask(struct ceph_inode_info *ci, int mask, int touch)
 }
 
 /*
- * Return mask of caps currently being revoked by an MDS.
+ * Return true if mask caps are currently being revoked by an MDS.
  */
 int ceph_caps_revoking(struct ceph_inode_info *ci, int mask)
 {
@@ -713,7 +754,7 @@ int ceph_caps_revoking(struct ceph_inode_info *ci, int mask)
 }
 
 /*
- * Return caps we have registered with the MDS(s) as wanted.
+ * Return caps we have registered with the MDS(s) as 'wanted'.
  */
 int __ceph_caps_mds_wanted(struct ceph_inode_info *ci)
 {
@@ -850,6 +891,10 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	ceph_send_msg_mds(mdsc, msg, mds);
 }
 
+/*
+ * Queue cap releases when an inode is dropped from our
+ * cache.
+ */
 void ceph_queue_caps_release(struct inode *inode)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -977,6 +1022,11 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	cap->mds_wanted = want;
 
 	if (flushing) {
+		/*
+		 * assign a tid for flush operations so we can avoid
+		 *  flush1 -> dirty1 -> flush2 -> flushack1 -> mark clean
+		 * type races.
+		 */
 		flush_tid = ++cap->session->s_cap_flush_tid;
 		ci->i_cap_flush_tid = flush_tid;
 		dout(" cap_flush_tid %lld\n", flush_tid);
@@ -1141,7 +1191,8 @@ static void ceph_flush_snaps(struct ceph_inode_info *ci)
 }
 
 /*
- * Add dirty inode to the sync (currently flushing) list.
+ * Add dirty inode to the flushing list.  Assigned a seq number so we
+ * can wait for caps to flush without starving.
  */
 static void __mark_caps_flushing(struct inode *inode,
 				 struct ceph_mds_session *session)
@@ -1162,11 +1213,15 @@ static void __mark_caps_flushing(struct inode *inode,
 }
 
 /*
- * Swiss army knife function to examine currently used, wanted versus
- * held caps.  Release, flush, ack revoked caps to mds as appropriate.
+ * Swiss army knife function to examine currently used and wanted
+ * versus held caps.  Release, flush, ack revoked caps to mds as
+ * appropriate.
  *
- * @is_delayed indicates caller is delayed work and we should not
- * delay further.
+ *  CHECK_CAPS_NODELAY - caller is delayed work and we should not delay
+ *    cap release further.  
+ *  CHECK_CAPS_AUTHONLY - we should only check the auth cap
+ *  CHECK_CAPS_FLUSH - we should flush any dirty caps immediately, without
+ *    further delay.
  */
 void ceph_check_caps(struct ceph_inode_info *ci, int flags,
 		     struct ceph_mds_session *session)
@@ -1501,7 +1556,10 @@ static int caps_are_clean(struct inode *inode)
 }
 
 /*
- * Flush any dirty caps back to the mds
+ * Flush any dirty caps back to the mds.  If we aren't asked to wait,
+ * queue inode for flush but don't do so immediately, because we can
+ * get by with fewer MDS messages if we wait for e.g. data writeback
+ * to complete first.
  */
 int ceph_write_inode(struct inode *inode, int wait)
 {
@@ -1706,8 +1764,8 @@ retry:
 }
 
 /*
- * Take cap refs.  Caller must already now we hold at least on ref on
- * the caps in question or we don't know this is safe.
+ * Take cap refs.  Caller must already know we hold at least one ref
+ * on the caps in question or we don't know this is safe.
  */
 void ceph_get_cap_refs(struct ceph_inode_info *ci, int caps)
 {

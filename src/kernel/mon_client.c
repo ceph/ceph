@@ -9,6 +9,12 @@
 #include "decode.h"
 
 /*
+ * Interact with Ceph monitor cluster.  Handle requests for new map
+ * versions, and periodically resend as needed.  Also implement
+ * statfs() and umount().
+ */
+
+/*
  * Decode a monmap blob (e.g., during mount).
  */
 struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
@@ -65,8 +71,8 @@ int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr)
 }
 
 /*
- * Choose a monitor.  If @notmon >= 0, choose a different monitor than
- * last time.
+ * Choose a monitor.  If @newmon >= 0, try to choose a different
+ * monitor than last time.
  */
 static int pick_mon(struct ceph_mon_client *monc, int newmon)
 {
@@ -80,7 +86,8 @@ static int pick_mon(struct ceph_mon_client *monc, int newmon)
 }
 
 /*
- * Generic timeout mechanism for monitor requests
+ * Generic timeout mechanism for monitor requests, so we can resend if
+ * we don't get a timely reply.
  */
 static void reschedule_timeout(struct ceph_mon_request *req)
 {
@@ -127,7 +134,7 @@ static void init_request_type(struct ceph_mon_client *monc,
 
 
 /*
- * mds map
+ * Request a new mds map.
  */
 static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
 {
@@ -147,7 +154,7 @@ static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
 }
 
 /*
- * Register our desire for an mdsmap >= epoch @want.
+ * Register our desire for an mdsmap epoch >= @want.
  */
 void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, u32 want)
 {
@@ -407,7 +414,7 @@ static void do_statfs_check(struct work_struct *work)
 		if (time_after(jiffies, req->last_attempt + req->delay)) {
 			req->last_attempt = jiffies;
 			if (req->delay < MAX_DELAY_INTERVAL)
-				req->delay *= 2;
+				req->delay *= 2; /* exponential backoff */
 			send_statfs(monc, req, newmon);
 			newmon = 0;
 		}

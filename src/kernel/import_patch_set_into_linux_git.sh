@@ -217,13 +217,16 @@ git add $target/ceph/caps.c
 git commit -F - <<EOF
 ceph: capability management
 
-The Ceph metadata servers control client access to data by issuing
-capabilities granting clients permission to read and/or write to OSDs
+The Ceph metadata servers control client access to inode metadata and file data by issuing
+capabilities, granting clients permission to read and/or write both inode field and file data to OSDs
 (storage nodes).  Each capability consists of a set of bits indicating
 which operations are allowed.
 
-In the case of an EXCL (exclusive) or WR capabilities, the client is
-allowed to change inode attributes (e.g., file size, mtime), noting
+If the client holds a *_SHARED cap, the client has a coherent value
+that can be safely read from the cached inode.
+
+In the case of a *_EXCL (exclusive) or FILE_WR capabilities, the client
+is allowed to change inode attributes (e.g., file size, mtime), note
 its dirty state in the ceph_cap, and asynchronously flush that
 metadata change to the MDS.
 
