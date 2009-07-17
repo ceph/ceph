@@ -36,22 +36,22 @@ CephBroker::CephBroker(PropertiesPtr& cfg) {
   m_verbose = cfg->get_bool("Hypertable.Verbose");
   m_root_dir = "";
   //construct an arguments array
-  const char *argv[9];
-  String zero = "cephBroker";
-  String one = "-m";
-  String logdir = "/more/greg/client.log";
-  argv[0] = zero.c_str();
-  argv[1] = one.c_str();
+  const char *argv[3];
+  argv[0] = "cephBroker";
+  argv[1] = "-m";
   argv[2] = (cfg->get_str("CephBroker.MonAddr").c_str());
+  /*
+For Ceph debugging, uncomment these lines, fix argv/c sizes,
+and set debugging to desired level.
   argv[3] = "--debug_client";
   argv[4] = "0";
   argv[5] = "--debug_ms";
   argv[6] = "0";
   argv[7] = "--lockdep";
-  argv[8] = "0";
+  argv[8] = "0"; */
 
   HT_INFO("Calling ceph_initialize");
-  ceph_initialize(9, argv);
+  ceph_initialize(3, argv);
   HT_INFO("Calling ceph_mount");
   ceph_mount();
   HT_INFO("Returning from constructor");
@@ -142,7 +142,6 @@ void CephBroker::close(ResponseCallback *cb, uint32_t fd) {
   }
   OpenFileDataCephPtr fdata;
   m_open_file_map.get(fd, fdata);
-  ceph_close( fdata->fd); //BEWARE: the other fs'es don't do this...
   m_open_file_map.remove(fd);
   cb->response_ok();
 }
@@ -319,14 +318,39 @@ void CephBroker::rmdir(ResponseCallback *cb, const char *dname){
   String absdir;
 
   make_abs_path(dname, absdir);
-  int r;
-  if((r=ceph_rmdir(absdir.c_str())) < 0) {
-    HT_ERRORF("failed to remove dir %s", absdir.c_str());
-    report_error(cb, -r);
-    return;
-  }
 
+  int r;
+
+  if((r=rmdir_recursive(absdir.c_str())) < 0) {
+      HT_ERRORF("failed to remove dir %s, got error %d", absdir.c_str(), r);
+      report_error(cb, -r);
+      return;
+  }
   cb->response_ok();
+}
+
+int CephBroker::rmdir_recursive(const char *directory) {
+  DIR *dirp;
+  struct dirent de;
+  struct stat st;
+  int r;
+  if((r = ceph_opendir(directory, &dirp) < 0)) return r; //failed to open
+  while (r = ceph_readdirplus_r(dirp, &de, &st, 0) > 0) {
+    String new_dir = de.d_name;
+    if(!(new_dir.compare(".")==0 || new_dir.compare("..")==0)) {
+      new_dir = directory;
+      new_dir += '/';
+      new_dir += de.d_name;
+      if (S_ISDIR(st.st_mode)) { //it's a dir, clear it out...
+	if((r=rmdir_recursive(new_dir.c_str())) < 0) return r;
+      } else { //delete this file
+	if((r=ceph_unlink(new_dir.c_str())) < 0) return r;
+      }
+    }
+  }
+  if (r < 0) return r; //we got an error
+  if((r = ceph_closedir(dirp)) < 0) return r;
+  return ceph_rmdir(directory);
 }
 
 void CephBroker::flush(ResponseCallback *cb, uint32_t fd){
@@ -378,7 +402,8 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname){
 
   //convert to vector<String>
   for (std::list<String>::iterator i = dir_con.begin(); i!=dir_con.end(); ++i) {
-    listing.push_back(*i); //BEWARE: Assumes getdir doesn't include . and ..
+    if (!(i->compare(".")==0 || i->compare("..")==0))
+      listing.push_back(*i);
   }
   cb->response(listing);
 }

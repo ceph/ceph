@@ -57,7 +57,6 @@ namespace Hypertable {
   class CephBroker : public DfsBroker::Broker {
   public:
     CephBroker(PropertiesPtr& cfg);
-    //    CephBroker(PropertiesPtr& cfg, int argc, char **argv);
     virtual ~CephBroker();
 
     virtual void open(ResponseCallbackOpen *cb, const char *fname,
@@ -91,6 +90,8 @@ namespace Hypertable {
     virtual void report_error(ResponseCallback *cb, int error);
 
     inline void make_abs_path(const char *fname, String& abs);
+
+    int rmdir_recursive(const char *directory);
 
     bool m_verbose;
     String m_root_dir;
