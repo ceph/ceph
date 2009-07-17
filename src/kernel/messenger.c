@@ -11,8 +11,6 @@
 #include "super.h"
 #include "messenger.h"
 
-
-
 /* static tag bytes (protocol control messages) */
 static char tag_msg = CEPH_MSGR_TAG_MSG;
 static char tag_ack = CEPH_MSGR_TAG_ACK;

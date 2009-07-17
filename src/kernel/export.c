@@ -5,71 +5,33 @@
 #include "ceph_debug.h"
 
 /*
- * fh is N tuples of
- *  <ino, parent's d_name.hash>
- *
- * This is only a semi-reliable strategy.  The fundamental issue is
- * that ceph doesn't not have a way to locate an arbitrary inode by
- * ino.  Keeping a few parents in the handle increases the probability
- * that we'll find it in one of the MDS caches, but it is by no means
- * a guarantee.
- *
- * Also, the FINDINODE request is currently directed at a single MDS.
- * It should probably try all MDS's before giving up.  For a single MDS
- * system that isn't a problem.
- *
- * In the meantime, this works reasonably well for basic usage.
+ * fh is the ino, the parent ino, and the parent dentry hash.  we'll
+ * make them all connectable.
  */
-
-
-struct ceph_export_item {
+struct ceph_nfs_fh {
 	struct ceph_vino ino;
 	struct ceph_vino parent_ino;
 	u32 parent_name_hash;
 } __attribute__ ((packed));
 
-#define IPSZ ((sizeof(struct ceph_export_item) + sizeof(u32) + 1) / sizeof(u32))
-
 static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
-		   int connectable)
+			  int connectable)
 {
-	int type = 1;
-	struct ceph_export_item *fh =
-		(struct ceph_export_item *)rawfh;
-	int max = *max_len / IPSZ;
-	int len;
-	struct dentry *d_parent;
+	struct ceph_nfs_fh *fh = (void *)rawfh;
+	struct dentry *parent = dentry->d_parent;
 
-	dout("encode_fh %p max_len %d u32s (%d export items)%s\n", dentry,
-	     *max_len, max, connectable ? " connectable" : "");
-
-	if (max < 1 || (connectable && max < 2))
+	if (*max_len < sizeof(*fh))
 		return -ENOSPC;
 
-	for (len = 0; len < max; len++) {
-		d_parent = dentry->d_parent;
-		fh[len].ino = ceph_vino(dentry->d_inode);
-		fh[len].parent_ino = ceph_vino(d_parent->d_inode);
-		fh[len].parent_name_hash = dentry->d_parent->d_name.hash;
-
-		if (IS_ROOT(dentry))
-			break;
-
-		dentry = dentry->d_parent;
-
-		if (!dentry)
-			break;
-	}
-
-	if (len > 1)
-		type = 2;
-
-	*max_len = len * IPSZ;
-	return type;
+	dout("encode_fh %p%s\n", dentry, connectable ? " connectable" : "");
+	fh->ino = ceph_vino(dentry->d_inode);
+	fh->parent_ino = ceph_vino(parent->d_inode);
+	fh->parent_name_hash = parent->d_name.hash;
+	return 2;
 }
 
 static struct dentry *__fh_to_dentry(struct super_block *sb,
-			      struct ceph_export_item *fh, int len)
+				     struct ceph_nfs_fh *fh)
 {
 	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
 	struct inode *inode;
@@ -125,26 +87,29 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 }
 
 static struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
-				 int fh_len, int fh_type)
+					int fh_len, int fh_type)
 {
-	u32 *fh = fid->raw;
-	return __fh_to_dentry(sb, (struct ceph_export_item *)fh, fh_len/IPSZ);
+	return __fh_to_dentry(sb, (struct ceph_nfs_fh *)fid->raw);
 }
 
 static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
-				 int fh_len, int fh_type)
+					int fh_len, int fh_type)
 {
-	u32 *fh = fid->raw;
-	u64 ino = get_unaligned((u64 *)fh);
-	u32 hash = fh[2];
+	struct ceph_nfs_fh *fh = (void *)fid->raw;
+	struct inode *inode;
+	
+	pr_debug("ceph_fh_to_parent %llx\n", fh->parent_ino.ino);
 
-	pr_debug("ceph_fh_to_parent %llx.%x\n", (unsigned long long)ino, hash);
-
-	if (fh_len < 6)
+	/* TODO: this is a feeble attempt.  we should query the mds, too. */
+	inode = ceph_find_inode(sb, fh->ino);
+	if (!inode)
 		return ERR_PTR(-ESTALE);
 
-	return __fh_to_dentry(sb, (struct ceph_export_item *)fh + 1,
-			      fh_len/IPSZ - 1);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
+	return d_obtain_alias(inode);
+#else
+	return d_alloc_anon(inode);
+#endif
 }
 
 const struct export_operations ceph_export_ops = {

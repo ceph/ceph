@@ -217,10 +217,11 @@ git add $target/ceph/caps.c
 git commit -F - <<EOF
 ceph: capability management
 
-The Ceph metadata servers control client access to inode metadata and file data by issuing
-capabilities, granting clients permission to read and/or write both inode field and file data to OSDs
-(storage nodes).  Each capability consists of a set of bits indicating
-which operations are allowed.
+The Ceph metadata servers control client access to inode metadata and
+file data by issuing capabilities, granting clients permission to read
+and/or write both inode field and file data to OSDs (storage nodes).
+Each capability consists of a set of bits indicating which operations
+are allowed.
 
 If the client holds a *_SHARED cap, the client has a coherent value
 that can be safely read from the cached inode.
