@@ -378,7 +378,7 @@ static int dup_array(u64 **dst, __le64 *src, int num)
 		if (!*dst)
 			return -ENOMEM;
 		for (i = 0; i < num; i++)
-			(*dst)[i] = le64_to_cpu(src[i]);
+			(*dst)[i] = get_unaligned_le64(src + i);
 	} else {
 		*dst = NULL;
 	}
