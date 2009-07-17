@@ -89,7 +89,12 @@ namespace Hypertable {
 
     virtual void report_error(ResponseCallback *cb, int error);
 
-    inline void make_abs_path(const char *fname, String& abs);
+    void make_abs_path(const char *fname, String& abs) {
+      if (fname[0] == '/')
+	abs = fname;
+      else
+	abs = m_root_dir + "/" + fname;
+    }
 
     int rmdir_recursive(const char *directory);
 
