@@ -5,14 +5,7 @@
  * wrap pr_debug to include a filename:lineno prefix on each line
  */
 
-static inline const char *ceph_file_part(const char *s, int len)
-{
-	const char *e = s + len;
-
-	while (e != s && *(e-1) != '/')
-		e--;
-	return e;
-}
+extern const char *ceph_file_part(const char *s, int len);
 
 #define _dout(fmt, args...)						\
 	pr_debug(" %12.12s:%-4d : " fmt "%s",				\

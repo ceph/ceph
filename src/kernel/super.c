@@ -29,6 +29,19 @@ void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 		     struct ceph_entity_name *peer_name);
 
 /*
+ * find filename portion of a path (/foo/bar/baz -> baz)
+ */
+const char *ceph_file_part(const char *s, int len)
+{
+	const char *e = s + len;
+	
+	while (e != s && *(e-1) != '/')
+		e--;
+	return e;
+}
+
+
+/*
  * super ops
  */
 static void ceph_put_super(struct super_block *s)
