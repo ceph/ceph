@@ -52,6 +52,7 @@ EOF
 git add $target/ceph/types.h
 git add $target/ceph/super.h
 git add $target/ceph/ceph_ver.h
+git add $target/ceph/ceph_debug.h
 git commit -F - <<EOF
 ceph: client types
 
@@ -290,15 +291,6 @@ ceph: ioctls
 
 A few Ceph ioctls for getting and setting file layout (striping)
 parameters.
-
-EOF
-
-git add $target/ceph/ceph_debug.h
-git commit -F - <<EOF
-ceph: debugging
-
-Some debugging infrastructure, including the ability to adjust the
-level of debug output on a per-file basis.
 
 EOF
 

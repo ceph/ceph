@@ -7,6 +7,9 @@
  * ioctls
  */
 
+/*
+ * get and set the file layout
+ */
 static long ceph_ioctl_get_layout(struct file *file, void __user *arg)
 {
 	struct ceph_inode_info *ci = ceph_inode(file->f_dentry->d_inode);

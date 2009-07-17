@@ -36,6 +36,7 @@ kclient review
 /  - server-specified max file size
 /  - pr_debug
   - top of file comments
+- test nfs export
 
 bugs
 - premature filejournal trimming?

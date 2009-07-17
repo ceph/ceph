@@ -6,6 +6,21 @@
 #include "super.h"
 #include "mds_client.h"
 
+/*
+ * Implement /debug/ceph fun
+ *
+ * /debug/ceph/caps_reservation  - expose caps reservation stats
+ * /debug/ceph/client*  - an instance of the ceph client
+ *      .../fsid        - mounted fsid
+ *      .../osdmap      - current osdmap
+ *      .../mdsmap      - current mdsmap
+ *      .../monmap      - current monmap
+ *      .../osdc        - active osd requests
+ *      .../mdsc        - active mds requests
+ *      .../monc        - mon client state
+ *      .../dentry_lru  - dump contents of dentry lru
+ */
+
 static struct dentry *ceph_debugfs_dir;
 static struct dentry *ceph_debugfs_caps_reservation;
 
