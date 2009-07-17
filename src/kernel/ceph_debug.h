@@ -7,11 +7,10 @@
 
 extern const char *ceph_file_part(const char *s, int len);
 
-#define _dout(fmt, args...)						\
-	pr_debug(" %12.12s:%-4d : " fmt "%s",				\
+#define dout(fmt, ...)							\
+	pr_debug(" %12.12s:%-4d : " fmt,				\
 		 ceph_file_part(__FILE__, sizeof(__FILE__)),		\
-		 __LINE__, args);
-#define dout(args...) _dout(args, "")
+		 __LINE__, ##__VA_ARGS__);
 
 
 #endif
