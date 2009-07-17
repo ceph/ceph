@@ -379,11 +379,12 @@ class Inode {
 
   void get() { 
     ref++; 
-    //cout << "inode.get on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
+    //dout(0) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
   }
   void put(int n=1) { 
-    ref -= n; assert(ref >= 0); 
-    //cout << "inode.put on " << this << " " << hex << inode.ino << dec << " now " << ref << std::endl;
+    ref -= n; 
+    //dout(0) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    assert(ref >= 0);
   }
 
   void ll_get() {

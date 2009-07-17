@@ -2896,6 +2896,7 @@ int Client::rename(const char *relfrom, const char *relto)
   r = path_walk(to, &todir);
   if (r < 0)
     goto out_unlock;
+  todir->get();
   r = _rename(fromdir, fromname.c_str(), todir, toname.c_str());
   put_inode(todir);
  out_unlock:
