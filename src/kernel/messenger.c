@@ -45,39 +45,6 @@ void ceph_msgr_exit(void)
 	destroy_workqueue(ceph_msgr_wq);
 }
 
-/* from slub.c */
-static void print_section(char *text, u8 *addr, unsigned int length)
-{
-	int i, offset;
-	int newline = 1;
-	char ascii[17];
-
-	ascii[16] = 0;
-
-	for (i = 0; i < length; i++) {
-		if (newline) {
-			printk(KERN_ERR "%8s 0x%p: ", text, addr + i);
-			newline = 0;
-		}
-		printk(KERN_CONT " %02x", addr[i]);
-		offset = i % 16;
-		ascii[offset] = isgraph(addr[i]) ? addr[i] : '.';
-		if (offset == 15) {
-			printk(KERN_CONT " %s\n", ascii);
-			newline = 1;
-		}
-	}
-	if (!newline) {
-		i %= 16;
-		while (i < 16) {
-			printk(KERN_CONT "   ");
-			ascii[i] = ' ';
-			i++;
-		}
-		printk(KERN_CONT " %s\n", ascii);
-	}
-}
-
 /*
  * socket callback functions
  */
@@ -1428,8 +1395,6 @@ static int read_partial_message(struct ceph_connection *con)
 			u32 crc = crc32c(0, (void *)&m->hdr,
 				    sizeof(m->hdr) - sizeof(m->hdr.crc));
 			if (crc != le32_to_cpu(m->hdr.crc)) {
-				print_section("hdr", (u8 *)&m->hdr,
-					      sizeof(m->hdr));
 				pr_err("ceph read_partial_message %p bad hdr "
 				       " crc %u != expected %u\n",
 				       m, crc, m->hdr.crc);
@@ -1540,8 +1505,6 @@ no_data:
 		pr_err("ceph read_partial_message %p front crc %u != exp. %u\n",
 		       con->in_msg,
 		       con->in_front_crc, m->footer.front_crc);
-		print_section("front", (u8 *)&m->front.iov_base,
-			      sizeof(m->front.iov_len));
 		return -EBADMSG;
 	}
 	if (datacrc &&
@@ -1563,7 +1526,6 @@ no_data:
 			}
 
 			p = kmap(m->pages[cur_page]);
-			print_section("data", p, left);
 
 			kunmap(m->pages[0]);
 			mutex_unlock(&m->page_mutex);
@@ -2368,6 +2330,9 @@ void ceph_msg_put(struct ceph_msg *m)
 	}
 }
 
+/*
+ * Send a ping/keepalive message to the specified peer.
+ */
 void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
 	       struct ceph_entity_addr *addr)
 {

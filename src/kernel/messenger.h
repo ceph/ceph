@@ -126,7 +126,7 @@ struct ceph_msg_pos {
 	int did_page_crc;    /* true if we've calculated crc for current page */
 };
 
-/* ceph connection fault delay defaults */
+/* ceph connection fault delay defaults, for exponential backoff */
 #define BASE_DELAY_INTERVAL	(HZ/2)
 #define MAX_DELAY_INTERVAL	(5 * 60 * HZ)
 
