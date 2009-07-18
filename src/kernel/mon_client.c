@@ -33,6 +33,8 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	ceph_decode_need(&p, end, num_mon*sizeof(m->mon_inst[0]), bad);
 
 	/* The encoded and decoded sizes match. */
+	if (num_mon >= CEPH_MAX_MON)
+		goto bad;
 	m = kmalloc(sizeof(*m) + sizeof(m->mon_inst[0])*num_mon, GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);

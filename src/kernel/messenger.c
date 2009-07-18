@@ -303,7 +303,7 @@ static struct ceph_connection *new_connection(struct ceph_messenger *msgr)
 {
 	struct ceph_connection *con;
 
-	con = kzalloc(sizeof(struct ceph_connection), GFP_NOFS);
+	con = kzalloc(sizeof(*con), GFP_NOFS);
 	if (con == NULL)
 		return NULL;
 	con->msgr = msgr;

@@ -299,6 +299,8 @@ static int build_snap_context(struct ceph_snap_realm *realm)
 
 	/* alloc new snap context */
 	err = -ENOMEM;
+	if (num > ULONG_MAX / sizeof(u64) - sizeof(*snapc))
+		goto fail;
 	snapc = kzalloc(sizeof(*snapc) + num*sizeof(u64), GFP_NOFS);
 	if (!snapc)
 		goto fail;
@@ -374,7 +376,7 @@ static int dup_array(u64 **dst, __le64 *src, int num)
 
 	kfree(*dst);
 	if (num) {
-		*dst = kmalloc(sizeof(u64) * num, GFP_NOFS);
+		*dst = kcalloc(num, sizeof(u64), GFP_NOFS);
 		if (!*dst)
 			return -ENOMEM;
 		for (i = 0; i < num; i++)

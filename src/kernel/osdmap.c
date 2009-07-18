@@ -78,10 +78,10 @@ static int crush_decode_list_bucket(void **p, void *end,
 {
 	int j;
 	dout("crush_decode_list_bucket %p to %p\n", *p, end);
-	b->item_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
+	b->item_weights = kcalloc(b->h.size, sizeof(u32), GFP_NOFS);
 	if (b->item_weights == NULL)
 		return -ENOMEM;
-	b->sum_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
+	b->sum_weights = kcalloc(b->h.size, sizeof(u32), GFP_NOFS);
 	if (b->sum_weights == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, 2 * b->h.size * sizeof(u32), bad);
@@ -100,7 +100,7 @@ static int crush_decode_tree_bucket(void **p, void *end,
 	int j;
 	dout("crush_decode_tree_bucket %p to %p\n", *p, end);
 	ceph_decode_32_safe(p, end, b->num_nodes, bad);
-	b->node_weights = kmalloc(b->num_nodes * sizeof(u32), GFP_NOFS);
+	b->node_weights = kcalloc(b->num_nodes, sizeof(u32), GFP_NOFS);
 	if (b->node_weights == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, b->num_nodes * sizeof(u32), bad);
@@ -116,10 +116,10 @@ static int crush_decode_straw_bucket(void **p, void *end,
 {
 	int j;
 	dout("crush_decode_straw_bucket %p to %p\n", *p, end);
-	b->item_weights = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
+	b->item_weights = kcalloc(b->h.size, sizeof(u32), GFP_NOFS);
 	if (b->item_weights == NULL)
 		return -ENOMEM;
-	b->straws = kmalloc(b->h.size * sizeof(u32), GFP_NOFS);
+	b->straws = kcalloc(b->h.size, sizeof(u32), GFP_NOFS);
 	if (b->straws == NULL)
 		return -ENOMEM;
 	ceph_decode_need(p, end, 2 * b->h.size * sizeof(u32), bad);
@@ -158,17 +158,17 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	ceph_decode_32(p, c->max_rules);
 	ceph_decode_32(p, c->max_devices);
 
-	c->device_parents = kmalloc(c->max_devices * sizeof(u32), GFP_NOFS);
+	c->device_parents = kcalloc(c->max_devices, sizeof(u32), GFP_NOFS);
 	if (c->device_parents == NULL)
 		goto badmem;
-	c->bucket_parents = kmalloc(c->max_buckets * sizeof(u32), GFP_NOFS);
+	c->bucket_parents = kcalloc(c->max_buckets, sizeof(u32), GFP_NOFS);
 	if (c->bucket_parents == NULL)
 		goto badmem;
 
-	c->buckets = kmalloc(c->max_buckets * sizeof(*c->buckets), GFP_NOFS);
+	c->buckets = kcalloc(c->max_buckets, sizeof(*c->buckets), GFP_NOFS);
 	if (c->buckets == NULL)
 		goto badmem;
-	c->rules = kmalloc(c->max_rules * sizeof(*c->rules), GFP_NOFS);
+	c->rules = kcalloc(c->max_rules, sizeof(*c->rules), GFP_NOFS);
 	if (c->rules == NULL)
 		goto badmem;
 
@@ -217,10 +217,10 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 		dout("crush_decode bucket size %d off %x %p to %p\n",
 		     b->size, (int)(*p-start), *p, end);
 
-		b->items = kmalloc(b->size * sizeof(__s32), GFP_NOFS);
+		b->items = kcalloc(b->size, sizeof(__s32), GFP_NOFS);
 		if (b->items == NULL)
 			goto badmem;
-		b->perm = kmalloc(b->size * sizeof(u32), GFP_NOFS);
+		b->perm = kcalloc(b->size, sizeof(u32), GFP_NOFS);
 		if (b->perm == NULL)
 			goto badmem;
 		b->perm_n = 0;
@@ -276,7 +276,10 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 
 		/* len */
 		ceph_decode_32_safe(p, end, yes, bad);
-
+#if BITS_PER_LONG == 32
+		if (yes > ULONG_MAX / sizeof(struct crush_rule_step))
+			goto bad;
+#endif
 		r = c->rules[i] = kmalloc(sizeof(*r) +
 					  yes*sizeof(struct crush_rule_step),
 					  GFP_NOFS);
@@ -331,9 +334,9 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 	struct ceph_entity_addr *addr;
 	u32 *weight;
 
-	state = kzalloc(max * sizeof(*state), GFP_NOFS);
-	addr = kzalloc(max * sizeof(*addr), GFP_NOFS);
-	weight = kzalloc(max * sizeof(*weight), GFP_NOFS);
+	state = kcalloc(max, sizeof(*state), GFP_NOFS);
+	addr = kcalloc(max, sizeof(*addr), GFP_NOFS);
+	weight = kcalloc(max, sizeof(*weight), GFP_NOFS);
 	if (state == NULL || addr == NULL || weight == NULL) {
 		kfree(state);
 		kfree(addr);
@@ -381,7 +384,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	ceph_decode_copy(p, &map->modified, sizeof(map->modified));
 
 	ceph_decode_32(p, map->num_pools);
-	map->pg_pool = kmalloc(map->num_pools * sizeof(*map->pg_pool),
+	map->pg_pool = kcalloc(map->num_pools, sizeof(*map->pg_pool),
 			       GFP_NOFS);
 	if (!map->pg_pool) {
 		err = -ENOMEM;
@@ -523,8 +526,9 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	while (len--) {
 		ceph_decode_32_safe(p, end, pool, bad);
 		if (pool >= map->num_pools) {
-			void *pg_pool = kzalloc((pool+1)*sizeof(*map->pg_pool),
-					  GFP_NOFS);
+			void *pg_pool = kcalloc(pool + 1,
+						sizeof(*map->pg_pool),
+						GFP_NOFS);
 			if (!pg_pool) {
 				err = -ENOMEM;
 				goto bad;

@@ -31,6 +31,9 @@
 
 #define CEPH_INO_ROOT  1
 
+/* arbitrary limit on max # of monitors (cluster of 3 is typical) */
+#define CEPH_MAX_MON   31
+
 
 /*
  * "Frags" are a way to describe a subset of a 32-bit number space,

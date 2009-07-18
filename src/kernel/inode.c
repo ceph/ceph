@@ -1926,7 +1926,8 @@ start:
 		xattr_version = ci->i_xattrs.version;
 		spin_unlock(&inode->i_lock);
 
-		xattrs = kmalloc(numattr*sizeof(struct ceph_xattr *), GFP_NOFS);
+		xattrs = kcalloc(numattr, sizeof(struct ceph_xattr *),
+				 GFP_NOFS);
 		err = -ENOMEM;
 		if (!xattrs)
 			goto bad_lock;
@@ -2177,7 +2178,7 @@ static int ceph_sync_setxattr(struct dentry *dentry, const char *name,
 	/* copy value into some pages */
 	nr_pages = calc_pages_for(0, size);
 	if (nr_pages) {
-		pages = kmalloc(sizeof(pages)*nr_pages, GFP_NOFS);
+		pages = kmalloc(sizeof(pages[0])*nr_pages, GFP_NOFS);
 		if (!pages)
 			return -ENOMEM;
 		err = -ENOMEM;

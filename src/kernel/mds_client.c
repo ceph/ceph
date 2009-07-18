@@ -129,10 +129,10 @@ static int parse_reply_info_dir(void **p, void *end,
 
 	/* alloc large array */
 	info->dir_nr = num;
-	info->dir_in = kmalloc(num * (sizeof(*info->dir_in) +
-				      sizeof(*info->dir_dname) +
-				      sizeof(*info->dir_dname_len) +
-				      sizeof(*info->dir_dlease)),
+	info->dir_in = kcalloc(num, sizeof(*info->dir_in) +
+			       sizeof(*info->dir_dname) +
+			       sizeof(*info->dir_dname_len) +
+			       sizeof(*info->dir_dlease),
 			       GFP_NOFS);
 	if (info->dir_in == NULL) {
 		err = -ENOMEM;
@@ -312,7 +312,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 		struct ceph_mds_session **sa;
 
 		dout("register_session realloc to %d\n", newmax);
-		sa = kzalloc(newmax * sizeof(void *), GFP_NOFS);
+		sa = kcalloc(newmax, sizeof(void *), GFP_NOFS);
 		if (sa == NULL)
 			return ERR_PTR(-ENOMEM);
 		if (mdsc->sessions) {

@@ -65,8 +65,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_64(p, m->m_max_file_size);
 	ceph_decode_32(p, m->m_max_mds);
 
-	m->m_addr = kzalloc(m->m_max_mds*sizeof(*m->m_addr), GFP_NOFS);
-	m->m_state = kzalloc(m->m_max_mds*sizeof(*m->m_state), GFP_NOFS);
+	m->m_addr = kcalloc(m->m_max_mds, sizeof(*m->m_addr), GFP_NOFS);
+	m->m_state = kcalloc(m->m_max_mds, sizeof(*m->m_state), GFP_NOFS);
 	if (m->m_addr == NULL || m->m_state == NULL)
 		goto badmem;
 
@@ -102,7 +102,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	/* pg_pools */
 	ceph_decode_32_safe(p, end, n, bad);
 	m->m_num_data_pg_pools = n;
-	m->m_data_pg_pools = kmalloc(sizeof(u32)*n, GFP_NOFS);
+	m->m_data_pg_pools = kcalloc(n, sizeof(u32), GFP_NOFS);
 	if (!m->m_data_pg_pools)
 		goto badmem;
 	ceph_decode_need(p, end, sizeof(u32)*(n+1), bad);
