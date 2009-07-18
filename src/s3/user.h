@@ -4,49 +4,14 @@
 #include <string>
 
 #include "include/types.h"
-#include "s3/s3access.h"
+#include "s3common.h"
 
 using namespace std;
 
 #define USER_INFO_BUCKET_NAME ".users"
 #define USER_INFO_EMAIL_BUCKET_NAME ".users.email"
-#define USER_INFO_VER 1
 
 #define S3_USER_ANON_ID "anonymous"
-
-
-struct S3UserInfo
-{
-  string user_id;
-  string secret_key;
-  string display_name;
-  string user_email;
-
-  void encode(bufferlist& bl) const {
-     __u32 ver = USER_INFO_VER;
-     ::encode(ver, bl);
-     ::encode(user_id, bl);
-     ::encode(secret_key, bl);
-     ::encode(display_name, bl);
-     ::encode(user_email, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-     __u32 ver;
-    ::decode(ver, bl);
-    ::decode(user_id, bl);
-    ::decode(secret_key, bl);
-    ::decode(display_name, bl);
-    ::decode(user_email, bl);
-  }
-
-  void clear() {
-    user_id.clear();
-    secret_key.clear();
-    display_name.clear();
-    user_email.clear();
-  }
-};
-WRITE_CLASS_ENCODER(S3UserInfo)
 
 struct S3UID
 {

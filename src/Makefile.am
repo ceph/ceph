@@ -53,7 +53,7 @@ bin_PROGRAMS = \
 	rados radosacl
 
 if WITH_S3GW
-bin_PROGRAMS += s3gw s3admin s3aclparser
+bin_PROGRAMS += s3gw s3admin s3aclparser s3log
 endif
 
 sbin_PROGRAMS = \
@@ -138,7 +138,10 @@ libcephs3_la_SOURCES = \
 	s3/s3rados.cc \
 	s3/s3acl.cc \
 	s3/s3user.cc \
-	s3/s3access.cc
+	s3/s3access.cc \
+	s3/s3op.cc \
+	s3/s3rest.cc \
+	s3/s3common.cc
 libcephs3_la_CFLAGS = ${AM_CFLAGS}
 lib_LTLIBRARIES += libcephs3.la
 endif
@@ -160,6 +163,8 @@ s3admin_SOURCES = s3/s3admin.cc
 s3admin_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 s3aclparser_SOURCES = s3/s3aclparser.cc
 s3aclparser_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+s3log_SOURCES = s3/s3log.cc
+s3log_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
 endif
 
 ## object classes
@@ -688,6 +693,9 @@ noinst_HEADERS = \
 	s3/s3acl.h\
 	s3/s3fs.h\
 	s3/s3rados.h\
+	s3/s3op.h\
+	s3/s3rest.h\
+	s3/s3common.h\
 	s3/user.h\
 	sample.ceph.conf
 

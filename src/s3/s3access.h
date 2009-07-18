@@ -8,45 +8,8 @@
 
 #include <openssl/md5.h>
 
-#define SERVER_NAME "S3FS"
+#include "s3common.h"
 
-#define S3_ATTR_PREFIX  "user.s3."
-
-#define S3_ATTR_ACL		S3_ATTR_PREFIX "acl"
-#define S3_ATTR_ETAG    	S3_ATTR_PREFIX "etag"
-#define S3_ATTR_BUCKETS		S3_ATTR_PREFIX "buckets"
-#define S3_ATTR_META_PREFIX	S3_ATTR_PREFIX "x-amz-meta-"
-#define S3_ATTR_CONTENT_TYPE	S3_ATTR_PREFIX "content_type"
-
-typedef void *S3AccessHandle;
-
-struct s3_err {
-  const char *num;
-  const char *code;
-  const char *message;
-
-  s3_err() : num(NULL), code(NULL), message(NULL) {}
-};
-
-
-struct S3ObjEnt {
-  std::string name;
-  size_t size;
-  time_t mtime;
-  char etag[MD5_DIGEST_LENGTH * 2 + 1];
-
-  void encode(bufferlist& bl) const {
-     ::encode(name, bl);
-     ::encode(size, bl);
-     ::encode(mtime, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-    ::decode(size, bl);
-    ::decode(mtime, bl);
-  }
-};
-WRITE_CLASS_ENCODER(S3ObjEnt)
 
 class S3Access {
 public:
