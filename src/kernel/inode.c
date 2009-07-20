@@ -699,8 +699,7 @@ int ceph_init_dentry_private(struct dentry *dentry)
 
 	if (dentry->d_fsdata)
 		return 0;
-	di = kmalloc(sizeof(struct ceph_dentry_info),
-		     GFP_NOFS);
+	di = kmem_cache_alloc(ceph_dentry_cachep, GFP_NOFS);
 	if (!di)
 		return -ENOMEM;          /* oh well */
 

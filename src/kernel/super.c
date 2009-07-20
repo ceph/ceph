@@ -153,6 +153,7 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
  */
 struct kmem_cache *ceph_inode_cachep;
 struct kmem_cache *ceph_cap_cachep;
+struct kmem_cache *ceph_dentry_cachep;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 static void ceph_inode_init_once(void *foo)
@@ -179,20 +180,38 @@ static int init_caches(void)
 					      0, (SLAB_RECLAIM_ACCOUNT|
 						  SLAB_MEM_SPREAD),
 					      NULL);
-	if (ceph_cap_cachep == NULL) {
-		kmem_cache_destroy(ceph_inode_cachep);
-		return -ENOMEM;
-	}
+	if (ceph_cap_cachep == NULL)
+		goto bad_cap;
+
+	ceph_dentry_cachep = kmem_cache_create("ceph_dentry_cache",
+					      sizeof(struct ceph_dentry_info),
+					      0, (SLAB_RECLAIM_ACCOUNT|
+						  SLAB_MEM_SPREAD),
+					      NULL);
+	if (ceph_dentry_cachep == NULL)
+		goto bad_dentry;
 
 	return 0;
+
+bad_dentry:
+	kmem_cache_destroy(ceph_cap_cachep);
+bad_cap:
+	kmem_cache_destroy(ceph_inode_cachep);
+	return -ENOMEM;
 }
 
 static void destroy_caches(void)
 {
 	kmem_cache_destroy(ceph_inode_cachep);
 	kmem_cache_destroy(ceph_cap_cachep);
+	kmem_cache_destroy(ceph_dentry_cachep);
 }
 
+
+/*
+ * ceph_umount_begin - initiate forced umount.  Tear down down the
+ * mount, skipping steps that may hang while waiting for server(s).
+ */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
 static void ceph_umount_begin(struct vfsmount *vfsmnt, int flags)
 #else

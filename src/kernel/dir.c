@@ -930,7 +930,7 @@ static void ceph_dentry_release(struct dentry *dentry)
 		ceph_dentry_lru_del(dentry);
 		if (di->lease_session)
 			ceph_put_mds_session(di->lease_session);
-		kfree(di);
+		kmem_cache_free(ceph_dentry_cachep, di);
 		dentry->d_fsdata = NULL;
 	}
 }

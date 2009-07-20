@@ -763,6 +763,10 @@ static inline bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
 
 
 /* super.c */
+extern struct kmem_cache *ceph_inode_cachep;
+extern struct kmem_cache *ceph_cap_cachep;
+extern struct kmem_cache *ceph_dentry_cachep;
+
 extern const char *ceph_msg_type_name(int type);
 
 static inline __le64 __ceph_fsid_minor(ceph_fsid_t *fsid)
@@ -787,8 +791,6 @@ static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
-extern struct kmem_cache *ceph_inode_cachep;
-extern struct kmem_cache *ceph_cap_cachep;
 
 extern struct inode *ceph_alloc_inode(struct super_block *sb);
 extern void ceph_destroy_inode(struct inode *inode);
