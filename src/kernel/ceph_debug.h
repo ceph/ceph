@@ -17,7 +17,7 @@ extern const char *ceph_file_part(const char *s, int len);
  * compiler warnings.
  */
 # define dout(fmt, ...)	do {						\
-		if (0) printk(KERN_DEBUG pr_fmt(fmt), ##__VA_ARGS__);	\
+		if (0) printk(KERN_DEBUG fmt, ##__VA_ARGS__);	\
 	} while (0)
 #endif
 
