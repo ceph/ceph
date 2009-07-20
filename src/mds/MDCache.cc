@@ -4365,14 +4365,23 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    if (in->inode.client_ranges.size()) {
-      dout(10) << "do_file_recover starting " << in->inode.size << " " << in->inode.client_ranges
+    inode_t *pi = in->get_projected_inode();
+
+    // blech
+    if (pi->client_ranges.size() && !pi->get_max_size()) {
+      stringstream ss;
+      ss << "bad client_range " << pi->client_ranges << " on ino " << pi->ino;
+      mds->logclient.log(LOG_WARN, ss);
+    }
+
+    if (pi->client_ranges.size() && pi->get_max_size()) {
+      dout(10) << "do_file_recover starting " << in->inode.size << " " << pi->client_ranges
 	       << " " << *in << dendl;
       file_recovering.insert(in);
       
       C_MDC_Recover *fin = new C_MDC_Recover(this, in);
       mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			in->get_projected_inode()->get_max_size(), &fin->size, &fin->mtime, false,
+			pi->get_max_size(), &fin->size, &fin->mtime, false,
 			0, fin);    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size
