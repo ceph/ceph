@@ -1369,8 +1369,6 @@ static int __do_request(struct ceph_mds_client *mdsc,
 		    session->s_state == CEPH_MDS_SESSION_CLOSING)
 			__open_session(mdsc, session);
 		list_add(&req->r_wait, &session->s_waiting);
-		ceph_monc_request_mdsmap(&mdsc->client->monc,
-					 mdsc->mdsmap->m_epoch+1);
 		goto out_session;
 	}
 
