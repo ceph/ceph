@@ -5,6 +5,8 @@
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
 
+#include <string.h>
+
 static int encode_base64(const char *in, int in_len, char *out, int out_len)
 {
   BIO *bmem, *b64;

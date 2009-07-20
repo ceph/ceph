@@ -6,7 +6,7 @@
 #include "include/types.h"
 
 #include "s3acl.h"
-#include "s3/user.h"
+#include "s3user.h"
 
 using namespace std;
 

@@ -149,6 +149,10 @@ struct req_state {
    S3UserInfo user; 
    S3AccessControlPolicy *acl;
 
+   string canned_acl;
+   const char *copy_source;
+   const char *http_auth;
+
    req_state() : acl(NULL) {}
 };
 
@@ -171,7 +175,19 @@ struct S3ObjEnt {
 };
 WRITE_CLASS_ENCODER(S3ObjEnt)
 
+static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
+{
+  int i;
+  str[0] = '\0';
+  for (i = 0; i < len; i++) {
+    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  }
+}
+
 extern int parse_time(const char *time_str, time_t *time);
+extern bool verify_permission(S3AccessControlPolicy *policy, string& uid, int perm);
+extern bool verify_permission(struct req_state *s, int perm);
+extern bool url_decode(string& src_str, string& dest_str);
 
 
 #endif

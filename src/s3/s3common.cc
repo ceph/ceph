@@ -1,6 +1,7 @@
 #include <errno.h>
 
 #include "s3common.h"
+#include "s3acl.h"
 
 int parse_time(const char *time_str, time_t *time)
 {
@@ -76,6 +77,69 @@ string& XMLArgs::get(const char *name)
 {
   string s(name);
   return get(s);
+}
+
+bool verify_permission(S3AccessControlPolicy *policy, string& uid, int perm)
+{
+   if (!policy)
+     return false;
+
+   int acl_perm = policy->get_perm(uid, perm);
+
+   return (perm == acl_perm);
+}
+
+bool verify_permission(struct req_state *s, int perm)
+{
+  return verify_permission(s->acl, s->user.user_id, perm);
+}
+
+static char hex_to_num(char c)
+{
+  static char table[256];
+  static bool initialized = false;
+
+
+  if (!initialized) {
+    memset(table, -1, sizeof(table));
+    int i;
+    for (i = '0'; i<='9'; i++)
+      table[i] = i - '0';
+    for (i = 'A'; i<='F'; i++)
+      table[i] = i - 'A' + 0xa;
+    for (i = 'a'; i<='f'; i++)
+      table[i] = i - 'a' + 0xa;
+  }
+  return table[(int)c];
+}
+
+bool url_decode(string& src_str, string& dest_str)
+{
+  const char *src = src_str.c_str();
+  char dest[src_str.size()];
+  int pos = 0;
+  char c;
+
+  while (*src) {
+    if (*src != '%') {
+      dest[pos++] = *src++;
+    } else {
+      src++;
+      char c1 = hex_to_num(*src++);
+      c = c1 << 4;
+      if (c1 < 0)
+        return false;
+      c1 = hex_to_num(*src++);
+      if (c1 < 0)
+        return false;
+      c |= c1;
+      dest[pos++] = c;
+    }
+  }
+  dest[pos] = 0;
+  dest_str = dest;
+
+  return true;
 }
 
 

@@ -696,7 +696,7 @@ noinst_HEADERS = \
 	s3/s3op.h\
 	s3/s3rest.h\
 	s3/s3common.h\
-	s3/user.h\
+	s3/s3user.h\
 	sample.ceph.conf
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \

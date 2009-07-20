@@ -179,7 +179,7 @@ void dump_bucket(struct req_state *s, S3ObjEnt& obj)
 
 void abort_early(struct req_state *s, int err)
 {
-  dump_errno(s, -EPERM);
+  dump_errno(s, err);
   end_header(s);
 }
 
@@ -191,9 +191,7 @@ int S3GetObj_REST::get_params()
   if_match = FCGX_GetParam("HTTP_IF_MATCH", s->fcgx->envp);
   if_nomatch = FCGX_GetParam("HTTP_IF_NONE_MATCH", s->fcgx->envp);
 
-  int r = init();
-
-  return r;
+  return 0;
 }
 
 int S3GetObj_REST::send_response()
@@ -229,6 +227,27 @@ int S3GetObj_REST::send_response()
   }
 
   return 0;
+}
+
+void S3ListBuckets_REST::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s, "application/xml");
+  dump_start_xml(s);
+
+  list_all_buckets_start(s);
+  dump_owner(s, s->user.user_id, s->user.display_name);
+
+  map<string, S3ObjEnt>& m = buckets.get_buckets();
+  map<string, S3ObjEnt>::iterator iter;
+
+  open_section(s, "Buckets");
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    S3ObjEnt obj = iter->second;
+    dump_bucket(s, obj);
+  }
+  close_section(s, "Buckets");
+  list_all_buckets_end(s);
 }
 
 void S3ListBucket_REST::send_response()
@@ -276,4 +295,290 @@ void S3ListBucket_REST::send_response()
   close_section(s, "ListBucketResult");
 }
 
+void S3CreateBucket_REST::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s);
+}
 
+void S3DeleteBucket_REST::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s);
+}
+
+
+int S3PutObj_REST::get_params()
+{
+  size_t cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl);
+    if (!data)
+       return -ENOMEM;
+
+    len = FCGX_GetStr(data, cl, s->fcgx->in);
+  }
+
+  supplied_md5_b64 = FCGX_GetParam("HTTP_CONTENT_MD5", s->fcgx->envp);
+
+  return 0;
+}
+
+void S3PutObj_REST::send_response()
+{
+  dump_errno(s, ret, &err);
+  end_header(s);
+}
+
+void S3DeleteObj_REST::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s);
+}
+
+int S3CopyObj_REST::get_params()
+{
+  if_mod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE", s->fcgx->envp);
+  if_unmod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE", s->fcgx->envp);
+  if_match = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MATCH", s->fcgx->envp);
+  if_nomatch = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_NONE_MATCH", s->fcgx->envp);
+
+  return 0;
+}
+
+void S3CopyObj_REST::send_response()
+{
+  dump_errno(s, ret, &err);
+
+  end_header(s);
+  if (ret == 0) {
+    open_section(s, "CopyObjectResult");
+    dump_time(s, "LastModified", &mtime);
+    map<nstring, bufferlist>::iterator iter = attrs.find(S3_ATTR_ETAG);
+    if (iter != attrs.end()) {
+      bufferlist& bl = iter->second;
+      if (bl.length()) {
+        char *etag = bl.c_str();
+        dump_value(s, "ETag", etag);
+      }
+    }
+    close_section(s, "CopyObjectResult");
+  }
+}
+
+void S3GetACLs_REST::send_response()
+{
+  end_header(s, "application/xml");
+  dump_start_xml(s);
+  FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
+}
+
+int S3PutACLs_REST::get_params()
+{
+  size_t cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       ret = -ENOMEM;
+       return ret;
+    }
+    len = FCGX_GetStr(data, cl, s->fcgx->in);
+    data[len] = '\0';
+  } else {
+    len = 0;
+  }
+
+  return ret;
+}
+
+void S3PutACLs_REST::send_response()
+{
+  dump_errno(s, ret);
+  end_header(s, "application/xml");
+  dump_start_xml(s);
+}
+
+void init_entities_from_header(struct req_state *s)
+{
+  s->bucket = NULL;
+  s->bucket_str = "";
+  s->object = NULL;
+  s->object_str = "";
+
+  string h(s->host);
+
+  cerr << "host=" << s->host << std::endl;
+  int pos = h.find("s3.");
+
+  if (pos > 0) {
+    s->bucket_str = h.substr(0, pos-1);
+    s->bucket = s->bucket_str.c_str();
+    s->host_bucket = s->bucket;
+  } else {
+    s->host_bucket = NULL;
+  }
+
+  const char *req_name = s->path_name;
+  const char *p;
+
+  if (*req_name == '?') {
+    p = req_name;
+  } else {
+    p = s->query;
+  }
+
+  s->args.set(p);
+  s->args.parse();
+
+  if (*req_name != '/')
+    return;
+
+  req_name++;
+
+  if (!*req_name)
+    return;
+
+  string req(req_name);
+  string first;
+
+  pos = req.find('/');
+  if (pos >= 0) {
+    first = req.substr(0, pos);
+  } else {
+    first = req;
+  }
+
+  if (!s->bucket) {
+    s->bucket_str = first;
+    s->bucket = s->bucket_str.c_str();
+  } else {
+    s->object_str = req;
+    s->object = s->object_str.c_str();
+    return;
+  }
+
+  if (pos >= 0) {
+    s->object_str = req.substr(pos+1);
+
+    if (s->object_str.size() > 0) {
+      s->object = s->object_str.c_str();
+    }
+  }
+}
+
+static void line_unfold(const char *line, string& sdest)
+{
+  char dest[strlen(line) + 1];
+  const char *p = line;
+  char *d = dest;
+
+  while (isspace(*p))
+    ++p;
+
+  bool last_space = false;
+
+  while (*p) {
+    switch (*p) {
+    case '\n':
+    case '\r':
+      *d = ' ';
+      if (!last_space)
+        ++d;
+      last_space = true;
+      break;
+    default:
+      *d = *p;
+      ++d;
+      last_space = false;
+      break;
+    }
+    ++p;
+  }
+  *d = 0;
+  sdest = dest;
+}
+
+static void init_auth_info(struct req_state *s)
+{
+  const char *p;
+
+  s->x_amz_map.clear();
+
+  for (int i=0; (p = s->fcgx->envp[i]); ++i) {
+#define HTTP_X_AMZ "HTTP_X_AMZ"
+    if (strncmp(p, HTTP_X_AMZ, sizeof(HTTP_X_AMZ) - 1) == 0) {
+      cerr << "amz>> " << p << std::endl;
+      const char *amz = p+5; /* skip the HTTP_ part */
+      const char *eq = strchr(amz, '=');
+      if (!eq) /* shouldn't happen! */
+        continue;
+      int len = eq - amz;
+      char amz_low[len + 1];
+      int j;
+      for (j=0; j<len; j++) {
+        amz_low[j] = tolower(amz[j]);
+        if (amz_low[j] == '_')
+          amz_low[j] = '-';
+      }
+      amz_low[j] = 0;
+      string val;
+      line_unfold(eq + 1, val);
+
+      map<string, string>::iterator iter;
+      iter = s->x_amz_map.find(amz_low);
+      if (iter != s->x_amz_map.end()) {
+        string old = iter->second;
+        int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
+        old = old.substr(0, pos + 1);
+        old.append(",");
+        old.append(val);
+        s->x_amz_map[amz_low] = old;
+      } else {
+        s->x_amz_map[amz_low] = val;
+      }
+    }
+  }
+  map<string, string>::iterator iter;
+  for (iter = s->x_amz_map.begin(); iter != s->x_amz_map.end(); ++iter) {
+    cerr << "x>> " << iter->first << ":" << iter->second << std::endl;
+  }
+}
+
+void S3Handler_REST::provider_init_state()
+{
+  s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
+  s->path_name_url = FCGX_GetParam("REQUEST_URI", s->fcgx->envp);
+  int pos = s->path_name_url.find('?');
+  if (pos >= 0)
+    s->path_name_url = s->path_name_url.substr(0, pos);
+  s->method = FCGX_GetParam("REQUEST_METHOD", s->fcgx->envp);
+  s->host = FCGX_GetParam("HTTP_HOST", s->fcgx->envp);
+  s->query = FCGX_GetParam("QUERY_STRING", s->fcgx->envp);
+  s->length = FCGX_GetParam("CONTENT_LENGTH", s->fcgx->envp);
+  s->content_type = FCGX_GetParam("CONTENT_TYPE", s->fcgx->envp);
+
+  if (!s->method)
+    s->op = OP_UNKNOWN;
+  else if (strcmp(s->method, "GET") == 0)
+    s->op = OP_GET;
+  else if (strcmp(s->method, "PUT") == 0)
+    s->op = OP_PUT;
+  else if (strcmp(s->method, "DELETE") == 0)
+    s->op = OP_DELETE;
+  else if (strcmp(s->method, "HEAD") == 0)
+    s->op = OP_HEAD;
+  else
+    s->op = OP_UNKNOWN;
+
+  init_entities_from_header(s);
+  cerr << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket ? s->bucket : "<NULL>") << std::endl;
+
+  init_auth_info(s);
+
+  const char *cacl = FCGX_GetParam("HTTP_X_AMZ_ACL", s->fcgx->envp);
+  if (cacl)
+    s->canned_acl = cacl;
+
+  s->copy_source = FCGX_GetParam("HTTP_X_AMZ_COPY_SOURCE", s->fcgx->envp);
+  s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
+}

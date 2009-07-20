@@ -11,7 +11,7 @@ using namespace std;
 #include "common/common_init.h"
 
 #include "include/base64.h"
-#include "s3/user.h"
+#include "s3user.h"
 #include "s3access.h"
 #include "s3acl.h"
 
