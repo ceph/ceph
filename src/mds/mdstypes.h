@@ -20,7 +20,7 @@ using namespace std;
 
 #include <boost/pool/pool.hpp>
 
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v005"
+#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v006"
 
 
 //#define MDS_REF_SET      // define me for improved debug output, sanity checking
@@ -132,12 +132,18 @@ struct frag_info_t {
   }
 
   void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+
     ::encode(version, bl);
     ::encode(mtime, bl);
     ::encode(nfiles, bl);
     ::encode(nsubdirs, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
+
     ::decode(version, bl);
     ::decode(mtime, bl);
     ::decode(nfiles, bl);
@@ -205,6 +211,9 @@ struct nest_info_t {
   }
 
   void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+
     ::encode(version, bl);
     ::encode(rbytes, bl);
     ::encode(rfiles, bl);
@@ -214,6 +223,9 @@ struct nest_info_t {
     ::encode(rctime, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
+
     ::decode(version, bl);
     ::decode(rbytes, bl);
     ::decode(rfiles, bl);
@@ -388,6 +400,9 @@ struct inode_t {
   }
 
   void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
+
     ::encode(ino, bl);
     ::encode(rdev, bl);
     ::encode(ctime, bl);
@@ -418,6 +433,9 @@ struct inode_t {
     ::encode(xattr_version, bl);
   }
   void decode(bufferlist::iterator &p) {
+    __u8 v;
+    ::decode(v, p);
+
     ::decode(ino, p);
     ::decode(rdev, p);
     ::decode(ctime, p);
@@ -480,6 +498,8 @@ struct fnode_t {
   nest_info_t rstat, accounted_rstat;
 
   void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(version, bl);
     ::encode(snap_purged_thru, bl);
     ::encode(fragstat, bl);
@@ -488,6 +508,8 @@ struct fnode_t {
     ::encode(accounted_rstat, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(version, bl);
     ::decode(snap_purged_thru, bl);
     ::decode(fragstat, bl);
