@@ -82,6 +82,8 @@ class MonMap {
   }
 
   void encode(bufferlist& blist) {
+    __u16 v = 1;
+    ::encode(v, blist);
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
     ::encode(mon_inst, blist);
@@ -91,6 +93,8 @@ class MonMap {
     decode(p);
   }
   void decode(bufferlist::iterator &p) {
+    __u16 v;
+    ::decode(v, p);
     ::decode_raw(fsid, p);
     ::decode(epoch, p);
     ::decode(mon_inst, p);
