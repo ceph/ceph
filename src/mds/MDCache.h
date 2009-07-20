@@ -672,8 +672,7 @@ public:
   ESubtreeMap *create_subtree_map();
 
 
-  // [reconnect]
-  void reconnect_clean_open_file_lists();
+  void clean_open_file_lists();
 
 protected:
   // [rejoin]

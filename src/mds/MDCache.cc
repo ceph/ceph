@@ -3910,9 +3910,9 @@ void MDCache::send_snaps(map<int,MClientSnap*>& splits)
  * remove any items from logsegment open_file lists that don't have
  * any caps
  */
-void MDCache::reconnect_clean_open_file_lists()
+void MDCache::clean_open_file_lists()
 {
-  dout(10) << "reconnect_clean_open_file_lists" << dendl;
+  dout(10) << "clean_open_file_lists" << dendl;
   
   for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();

@@ -667,7 +667,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       recovery_done();
 
     if (is_active()) {
-      finish_contexts(waiting_for_active);  // kick waiters
+      active_start();
     } else if (is_replay() || is_standby_replay()) {
       replay_start();
     } else if (is_resolve()) {
@@ -997,8 +997,6 @@ void MDS::reconnect_done()
 {
   dout(1) << "reconnect_done" << dendl;
   request_state(MDSMap::STATE_REJOIN);    // move to rejoin state
-
-  mdcache->reconnect_clean_open_file_lists();
 }
 
 void MDS::rejoin_joint_start()
@@ -1028,6 +1026,13 @@ void MDS::clientreplay_done()
 {
   dout(1) << "clientreplay_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
+}
+
+void MDS::active_start()
+{
+  dout(1) << "active_start" << dendl;
+  mdcache->clean_open_file_lists();
+  finish_contexts(waiting_for_active);  // kick waiters
 }
 
 
