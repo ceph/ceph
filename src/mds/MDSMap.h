@@ -95,7 +95,7 @@ public:
     entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
     void encode(bufferlist& bl) const {
-      __u16 v = 1;
+      __u8 v = 1;
       ::encode(v, bl);
       ::encode(name, bl);
       ::encode(rank, bl);
@@ -108,7 +108,7 @@ public:
       ::encode(standby_for_name, bl);
     }
     void decode(bufferlist::iterator& bl) {
-      __u16 v;
+      __u8 v;
       ::decode(v, bl);
       ::decode(name, bl);
       ::decode(rank, bl);

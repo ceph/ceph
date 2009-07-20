@@ -56,8 +56,9 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, sizeof(u16) + 8*sizeof(u32) + sizeof(u64),bad);
-	ceph_decode_16(p, version);
+	ceph_decode_16_safe(p, end, version, bad);
+
+	ceph_decode_need(p, end, 8*sizeof(u32) + sizeof(u64), bad);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
@@ -78,17 +79,19 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		u32 namelen;
 		s32 mds, inc, state;
 		u64 state_seq;
-		u16 infoversion;
+		u8 infoversion;
 		struct ceph_entity_addr addr;
 
-		ceph_decode_need(p, end, sizeof(addr) + sizeof(u32), bad);
-		*p += sizeof(addr);  /* skip addr key */
-		ceph_decode_32(p, namelen);
+		ceph_decode_need(p, end, sizeof(addr) + 1 + sizeof(u32), bad);
+		*p += sizeof(addr);          /* skip addr key */
+		ceph_decode_8(p, infoversion);
+		ceph_decode_32(p, namelen);  /* skip mds name */
 		*p += namelen;
+		
 		ceph_decode_need(p, end,
-				 sizeof(u16) + 6*sizeof(u32) + sizeof(addr) +
-				 sizeof(struct ceph_timespec), bad);
-		ceph_decode_16(p, infoversion);
+				 5*sizeof(u32) + sizeof(u64) +
+				 sizeof(addr) + sizeof(struct ceph_timespec),
+				 bad);
 		ceph_decode_32(p, mds);
 		ceph_decode_32(p, inc);
 		ceph_decode_32(p, state);
