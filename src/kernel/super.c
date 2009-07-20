@@ -54,6 +54,7 @@ static void ceph_put_super(struct super_block *s)
 	ceph_mdsc_close_sessions(&cl->mdsc);
 	ceph_monc_request_umount(&cl->monc);
 
+	/* don't wait on umount -f */
 	if (cl->mount_state != CEPH_MOUNT_SHUTDOWN) {
 		rc = wait_event_timeout(cl->mount_wq,
 				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
@@ -96,7 +97,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_namelen = PATH_MAX;
 	buf->f_frsize = PAGE_CACHE_SIZE;
 
-	/* leave in little-endian, regardless of host endianness */
+	/* leave fsid little-endian, regardless of host endianness */
 	fsid = __ceph_fsid_major(&monmap->fsid) ^
 		__ceph_fsid_minor(&monmap->fsid);
 	buf->f_fsid.val[0] = le64_to_cpu(fsid) & 0xffffffff;
@@ -224,7 +225,7 @@ static void ceph_umount_begin(struct super_block *sb)
 	struct ceph_client *client = ceph_sb_to_client(sb);
 #endif
 
-	dout("ceph_umount_begin\n");
+	dout("ceph_umount_begin - starting forced umount\n");
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 26)
 	if (!(flags & MNT_FORCE))
@@ -237,7 +238,6 @@ static void ceph_umount_begin(struct super_block *sb)
 	client->mount_state = CEPH_MOUNT_SHUTDOWN;
 	return;
 }
-
 
 static const struct super_operations ceph_super_ops = {
 	.alloc_inode	= ceph_alloc_inode,
@@ -431,56 +431,60 @@ static match_table_t arg_tokens = {
 	{-1, NULL}
 };
 
+
+/*
+ * Parse an ip[:port] list into an addr array.  Use the default
+ * monitor port if a port isn't specified.
+ */
 #define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
 
-static int parse_ips(const char *c, int len, struct ceph_entity_addr *addr,
+static int parse_ips(const char *c, const char *end,
+		     struct ceph_entity_addr *addr,
 		     int max_count, int *count)
 {
-	int v;
 	int mon_count;
-	const char *p = c, *numstart;
+	const char *p = c;
 
-	dout("parse_ips on '%s' len %d\n", c, len);
+	dout("parse_ips on '%.*s'\n", (int)(end-c), c);
 	for (mon_count = 0; mon_count < max_count; mon_count++) {
-		const char *end;
+		const char *ipend;
 		__be32 quad;
 
-		if (!in4_pton(p, len - (p - c), (u8 *)&quad, ',', &end))
+		if (!in4_pton(p, end - p, (u8 *)&quad, ',', &ipend))
 			goto bad;
-		p = end;
 		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = quad;
+		p = ipend;
 
 		/* port? */
-		if (*p == ':') {
+		if (p < end && *p == ':') {
+			long port = 0;
+
 			p++;
-			numstart = p;
-			v = 0;
-			while (!ADDR_DELIM(*p) && *p != '.' && p < c+len) {
-				if (*p < '0' || *p > '9')
-					goto bad;
-				v = (v * 10) + (*p - '0');
+			while (p < end && *p >= '0' && *p <= '9') {
+				port = (port * 10) + (*p - '0');
 				p++;
 			}
-			if (v > 65535 || numstart == p)
+			if (port > 65535 || port == 0)
 				goto bad;
-			addr[mon_count].ipaddr.sin_port = htons(v);
+			addr[mon_count].ipaddr.sin_port = htons(port);
 		} else
 			addr[mon_count].ipaddr.sin_port = htons(CEPH_MON_PORT);
 
 		dout("parse_ips got %u.%u.%u.%u:%u\n",
 		     IPQUADPORT(addr[mon_count].ipaddr));
 
-		if (*p != ',')
+		if (p == end)
 			break;
+		if (*p != ',')
+			goto bad;
 		p++;
 	}
 
-	if (p < c+len)
+	if (p != end)
 		goto bad;
 
 	if (count)
 		*count = mon_count + 1;
-
 	return 0;
 
 bad:
@@ -491,15 +495,15 @@ bad:
 static int parse_mount_args(int flags, char *options, const char *dev_name,
 			    struct ceph_mount_args *args, const char **path)
 {
-	char *c;
-	int len, err;
+	const char *c;
+	int err;
 	substring_t argstr[MAX_OPT_ARGS];
 	int i;
 
 	dout("parse_mount_args dev_name '%s'\n", dev_name);
 	memset(args, 0, sizeof(*args));
 
-	/* defaults */
+	/* start with defaults */
 	args->sb_flags = flags;
 	args->flags = CEPH_OPT_DEFAULT;
 	args->osd_timeout = 5;    /* seconds */
@@ -513,18 +517,16 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
 	if (!dev_name)
 		return -EINVAL;
-	c = strstr(dev_name, ":/");
-	if (c == NULL) {
+	*path = strstr(dev_name, ":/");
+	if (*path == NULL) {
 		pr_err("ceph device name is missing path (no :/ in %s)\n",
 		       dev_name);
 		return -EINVAL;
 	}
-	*c = 0;
 
 	/* get mon ip(s) */
-	len = c - dev_name;
-	err = parse_ips(dev_name, len, args->mon_addr, CEPH_MAX_MON_MOUNT_ADDR,
-			&args->num_mon);
+	err = parse_ips(dev_name, *path, args->mon_addr,
+			CEPH_MAX_MON_MOUNT_ADDR, &args->num_mon);
 	if (err < 0)
 		return err;
 
@@ -538,10 +540,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->my_addr.ipaddr.sin_port = htons(0);
 
 	/* path on server */
-	c++;
-	while (*c == '/')
-		c++;  /* remove leading '/'(s) */
-	*path = c;
+	*path += 2;
 	dout("server path '%s'\n", *path);
 
 	/* parse mount options */
@@ -549,7 +548,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 		int token, intval, ret;
 		if (!*c)
 			continue;
-		token = match_token(c, arg_tokens, argstr);
+		token = match_token((char *)c, arg_tokens, argstr);
 		if (token < 0) {
 			pr_err("ceph bad mount option at '%s'\n", c);
 			return -EINVAL;
@@ -576,7 +575,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			break;
 		case Opt_ip:
 			err = parse_ips(argstr[0].from,
-					argstr[0].to-argstr[0].from,
+					argstr[0].to,
 					&args->my_addr,
 					1, NULL);
 			if (err < 0)
