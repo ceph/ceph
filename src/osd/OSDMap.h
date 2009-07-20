@@ -159,6 +159,8 @@ public:
 
     void encode(bufferlist& bl) {
       // base
+      __u16 v = 1;
+      ::encode(v, bl);
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
       ::encode(modified, bl);
@@ -185,6 +187,8 @@ public:
     }
     void decode(bufferlist::iterator &p) {
       // base
+      __u16 v;
+      ::decode(v, p);
       ::decode(fsid, p);
       ::decode(epoch, p);
       ::decode(modified, p);
@@ -528,6 +532,9 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& blist) {
+    __u16 v = 1;
+    ::encode(v, blist);
+
     // base
     ::encode(fsid, blist);
     ::encode(epoch, blist);
@@ -562,6 +569,9 @@ private:
   
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
+    __u16 v;
+    ::decode(v, p);
+
     // base
     ::decode(fsid, p);
     ::decode(epoch, p);

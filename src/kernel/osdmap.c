@@ -367,6 +367,7 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 struct ceph_osdmap *osdmap_decode(void **p, void *end)
 {
 	struct ceph_osdmap *map;
+	u16 version;
 	u32 len, max, i;
 	int err = -EINVAL;
 	void *start = *p;
@@ -376,6 +377,8 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	map = kzalloc(sizeof(*map), GFP_NOFS);
 	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
+
+	ceph_decode_32_safe(p, end, version, bad);
 
 	ceph_decode_need(p, end, 2*sizeof(u64)+6*sizeof(u32), bad);
 	ceph_decode_copy(p, &map->fsid, sizeof(map->fsid));
@@ -470,6 +473,9 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	__s32 new_flags, max;
 	void *start = *p;
 	int err = -EINVAL;
+	u16 version;
+
+	ceph_decode_32_safe(p, end, version, bad);
 
 	ceph_decode_need(p, end, sizeof(fsid)+sizeof(modified)+2*sizeof(u32),
 			 bad);
