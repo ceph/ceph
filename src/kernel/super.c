@@ -492,9 +492,14 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->max_readdir = 1024;
 
 	/* ip1[:port1][,ip2[:port2]...]:/subdir/in/fs */
-	c = strstr(dev_name, ":/");
-	if (c == NULL)
+	if (!dev_name)
 		return -EINVAL;
+	c = strstr(dev_name, ":/");
+	if (c == NULL) {
+		pr_err("ceph device name is missing path (no :/ in %s)\n",
+		       dev_name);
+		return -EINVAL;
+	}
 	*c = 0;
 
 	/* get mon ip(s) */
