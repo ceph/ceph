@@ -441,6 +441,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   int from = m->get_source().num();
   Session *session = mds->sessionmap.get_session(m->get_source());
 
+  if (!session) {
+    dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
+    delete m;
+    return;
+  }
+
   if (m->closed) {
     dout(7) << " client had no session, removing from session map" << dendl;
     assert(session);  // ?
