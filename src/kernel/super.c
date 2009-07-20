@@ -1011,7 +1011,7 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 }
 
 /*
- * construct our own bdi so we can control readahead
+ * construct our own bdi so we can control readahead, etc.
  */
 static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 {
@@ -1112,9 +1112,6 @@ static void ceph_kill_sb(struct super_block *s)
 	ceph_destroy_client(client);
 }
 
-
-/************************************/
-
 static struct file_system_type ceph_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "ceph",
@@ -1174,8 +1171,8 @@ static void __exit exit_ceph(void)
 module_init(init_ceph);
 module_exit(exit_ceph);
 
-MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
 MODULE_AUTHOR("Sage Weil <sage@newdream.net>");
 MODULE_AUTHOR("Yehuda Sadeh <yehuda@hq.newdream.net>");
+MODULE_AUTHOR("Patience Warnick <patience@newdream.net>");
 MODULE_DESCRIPTION("Ceph filesystem for Linux");
 MODULE_LICENSE("GPL");
