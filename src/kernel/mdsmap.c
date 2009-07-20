@@ -50,12 +50,14 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	struct ceph_mdsmap *m;
 	int i, n;
 	int err = -EINVAL;
+	u16 version;
 
 	m = kzalloc(sizeof(*m), GFP_NOFS);
 	if (m == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_need(p, end, 8*sizeof(u32) + sizeof(u64), bad);
+	ceph_decode_need(p, end, sizeof(u16) + 8*sizeof(u32) + sizeof(u64),bad);
+	ceph_decode_16(p, version);
 	ceph_decode_32(p, m->m_epoch);
 	ceph_decode_32(p, m->m_client_epoch);
 	ceph_decode_32(p, m->m_last_failure);
@@ -76,14 +78,17 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		u32 namelen;
 		s32 mds, inc, state;
 		u64 state_seq;
+		u16 infoversion;
 		struct ceph_entity_addr addr;
 
 		ceph_decode_need(p, end, sizeof(addr) + sizeof(u32), bad);
 		*p += sizeof(addr);  /* skip addr key */
 		ceph_decode_32(p, namelen);
 		*p += namelen;
-		ceph_decode_need(p, end, 6*sizeof(u32) + sizeof(addr) +
+		ceph_decode_need(p, end,
+				 sizeof(u16) + 6*sizeof(u32) + sizeof(addr) +
 				 sizeof(struct ceph_timespec), bad);
+		ceph_decode_16(p, infoversion);
 		ceph_decode_32(p, mds);
 		ceph_decode_32(p, inc);
 		ceph_decode_32(p, state);
