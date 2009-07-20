@@ -4329,6 +4329,7 @@ void MDCache::identify_files_to_recover()
 	 p++) {
       Capability *cap = in->get_client_cap(p->first);
       if (!cap) {
+	dout(10) << " client" << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
 	recover = true;
 	break;
       }

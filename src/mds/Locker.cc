@@ -1411,17 +1411,9 @@ public:
 };
 
 
-bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
-				  bool update_size, __u64 new_size, utime_t new_mtime)
+void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<int,byte_range_t>& new_ranges)
 {
-  assert(in->is_auth());
-
   inode_t *latest = in->get_projected_inode();
-  map<int,byte_range_t> new_ranges;
-  __u64 size = latest->size;
-  if (update_size)
-    size = new_size;
-  bool new_max = false;
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
@@ -1437,6 +1429,23 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 	new_ranges[p->first].last = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
     }
   }
+
+}
+
+bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
+				  bool update_size, __u64 new_size, utime_t new_mtime)
+{
+  assert(in->is_auth());
+
+  inode_t *latest = in->get_projected_inode();
+  map<int,byte_range_t> new_ranges;
+  __u64 size = latest->size;
+  if (update_size)
+    size = new_size;
+  bool new_max = false;
+
+  calc_new_client_ranges(in, size, new_ranges);
+
   if (latest->client_ranges != new_ranges)
     new_max = true;
 

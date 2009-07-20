@@ -223,11 +223,12 @@ protected:
   void file_update_finish(CInode *in, Mutation *mut, bool share, int client, Capability *cap,
 			  MClientCaps *ack);
 public:
+  void calc_new_client_ranges(CInode *in, __u64 size, map<int,byte_range_t>& new_ranges);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0,
 			    utime_t mtime=utime_t());
-private:
   void share_inode_max_size(CInode *in);
 
+private:
   friend class C_MDL_CheckMaxSize;
   friend class C_MDL_RequestInodeFileCaps;
   friend class C_Locker_FileUpdate_finish;

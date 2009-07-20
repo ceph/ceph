@@ -137,11 +137,10 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.versionlock;
 
   // hack: spit out crap on which clients have caps
+  if (in.inode.client_ranges.size())
+    out << " cr=" << in.inode.client_ranges;
+
   if (!in.get_client_caps().empty()) {
-
-    if (in.inode.client_ranges.size())
-      out << " cr=" << in.inode.client_ranges;
-
     out << " caps={";
     for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
