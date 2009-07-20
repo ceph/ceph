@@ -717,13 +717,11 @@ static void ceph_destroy_client(struct ceph_client *client)
 }
 
 /*
- * true if we have the mon, osd, and mds maps, and are thus
- * fully "mounted".
+ * true if we have the mon map (and have thus joined the cluster)
  */
-static int have_all_maps(struct ceph_client *client)
+static int have_mon_map(struct ceph_client *client)
 {
-	return client->osdc.osdmap && client->osdc.osdmap->epoch &&
-		client->monc.monmap && client->monc.monmap->epoch;
+	return client->monc.monmap && client->monc.monmap->epoch;
 }
 
 /*
@@ -809,7 +807,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	}
 
 	/* send mount request, and wait for mon, mds, and osd maps */
-	while (!have_all_maps(client) && !client->mount_err) {
+	while (!have_mon_map(client) && !client->mount_err) {
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))
 			goto out;
@@ -832,9 +830,9 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		ceph_msg_send(client->msgr, mount_msg, 0);
 
 		/* wait */
-		dout("mount sent to mon%d, waiting for maps\n", which);
+		dout("mount sent to mon%d, waiting for mon map\n", which);
 		err = wait_event_interruptible_timeout(client->mount_wq,
-			       client->mount_err || have_all_maps(client),
+			       client->mount_err || have_mon_map(client),
 			       request_interval);
 		if (err == -EINTR || err == -ERESTARTSYS)
 			goto out;
@@ -891,16 +889,12 @@ out:
 void ceph_dispatch(void *p, struct ceph_msg *msg)
 {
 	struct ceph_client *client = p;
-	int had;
 	int type = le16_to_cpu(msg->hdr.type);
 
 	switch (type) {
 	case CEPH_MSG_CLIENT_MOUNT_ACK:
-		had = client->signed_ticket ? 1 : 0;
 		client->mount_err = handle_mount_ack(client, msg);
-		if (client->mount_err ||
-		    (!had && client->signed_ticket && have_all_maps(client)))
-			wake_up(&client->mount_wq);
+		wake_up(&client->mount_wq);
 		break;
 
 		/* mon client */
@@ -936,10 +930,7 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 
 		/* osd client */
 	case CEPH_MSG_OSD_MAP:
-		had = client->osdc.osdmap ? 1 : 0;
 		ceph_osdc_handle_map(&client->osdc, msg);
-		if (!had && client->osdc.osdmap && have_all_maps(client))
-			wake_up(&client->mount_wq);
 		break;
 	case CEPH_MSG_OSD_OPREPLY:
 		ceph_osdc_handle_reply(&client->osdc, msg);
