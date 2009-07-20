@@ -27,7 +27,6 @@
 static const struct inode_operations ceph_symlink_iops;
 
 static void ceph_inode_invalidate_pages(struct work_struct *work);
-
 static void __destroy_xattrs(struct ceph_inode_info *ci);
 
 /*
@@ -75,7 +74,6 @@ struct inode *ceph_get_snapdir(struct inode *parent)
 	return inode;
 }
 
-
 const struct inode_operations ceph_file_iops = {
 	.permission = ceph_permission,
 	.setattr = ceph_setattr,
@@ -88,10 +86,11 @@ const struct inode_operations ceph_file_iops = {
 
 
 /*
- * We use a 'frag tree' to keep track of the cluster's directory
- * fragments for a given inode.  We need to know when a child frag is
- * delegated to a new MDS, or when it is flagged as replicated, so we
- * can direct our requests accordingly.
+ * We use a 'frag tree' to keep track of the MDS's directory fragments
+ * for a given inode (usually there is just a single fragment).  We
+ * need to know when a child frag is delegated to a new MDS, or when
+ * it is flagged as replicated, so we can direct our requests
+ * accordingly.
  */
 
 /*
@@ -135,7 +134,6 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci,
 
 	dout("get_or_create_frag added %llx.%llx frag %x\n",
 	     ceph_vinop(&ci->vfs_inode), f);
-
 	return frag;
 }
 
@@ -145,8 +143,8 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci,
  * it is present.
  */
 u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
-		       struct ceph_inode_frag *pfrag,
-		       int *found)
+		     struct ceph_inode_frag *pfrag,
+		     int *found)
 {
 	u32 t = frag_make(0, 0);
 	struct ceph_inode_frag *frag;
@@ -368,9 +366,9 @@ void ceph_destroy_inode(struct inode *inode)
  * Helpers to fill in size, ctime, mtime, and atime.  We have to be
  * careful because either the client or MDS may have more up to date
  * info, depending on which capabilities are held, and whether
- * time_warp_seq or truncate_seq have increased.  Ordinarily, mtime
+ * time_warp_seq or truncate_seq have increased.  (Ordinarily, mtime
  * and size are monotonically increasing, except when utimes() or
- * truncate() increments the corresponding _seq values on the MDS.
+ * truncate() increments the corresponding _seq values.)
  */
 int ceph_fill_file_size(struct inode *inode, int issued,
 			u32 truncate_seq, u64 truncate_size, u64 size)

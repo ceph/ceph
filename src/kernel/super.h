@@ -449,7 +449,7 @@ static inline loff_t ceph_make_fpos(unsigned frag, unsigned off)
 /*
  * ino_t is <64 bits on many architectures, blech.
  *
- * don't include snap in ino hash, at leaset for now.
+ * don't include snap in ino hash, at least for now.
  */
 static inline ino_t ceph_vino_to_ino(struct ceph_vino vino)
 {
