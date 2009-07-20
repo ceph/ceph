@@ -378,7 +378,7 @@ struct ceph_osdmap *osdmap_decode(void **p, void *end)
 	if (map == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	ceph_decode_32_safe(p, end, version, bad);
+	ceph_decode_16_safe(p, end, version, bad);
 
 	ceph_decode_need(p, end, 2*sizeof(u64)+6*sizeof(u32), bad);
 	ceph_decode_copy(p, &map->fsid, sizeof(map->fsid));
