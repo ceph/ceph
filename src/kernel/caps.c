@@ -1653,7 +1653,7 @@ static void __take_cap_refs(struct ceph_inode_info *ci, int got)
  * requested from the MDS.
  */
 static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
-			    int *got, loff_t endoff, int *check_max)
+			    int *got, loff_t endoff, int *check_max, int *err)
 {
 	struct inode *inode = &ci->vfs_inode;
 	int ret = 0;
@@ -1662,6 +1662,15 @@ static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 	dout("get_cap_refs %p need %s want %s\n", inode,
 	     ceph_cap_string(need), ceph_cap_string(want));
 	spin_lock(&inode->i_lock);
+	
+	/* make sure we _have_ some caps! */
+	if (!__ceph_is_any_caps(ci)) {
+		dout("get_cap_refs %p no real caps\n", inode);
+		*err = -EBADF;
+		ret = 1;
+		goto out;
+	}
+
 	if (need & CEPH_CAP_FILE_WR) {
 		if (endoff >= 0 && endoff > (loff_t)ci->i_max_size) {
 			dout("get_cap_refs %p endoff %llu > maxsize %llu\n",
@@ -1748,16 +1757,19 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		  loff_t endoff)
 {
-	int check_max, ret;
+	int check_max, ret, err;
 
 retry:
 	if (endoff > 0)
 		check_max_size(&ci->vfs_inode, endoff);
 	check_max = 0;
+	err = 0;
 	ret = wait_event_interruptible(ci->i_cap_wq,
 				       try_get_cap_refs(ci, need, want,
 							got, endoff,
-							&check_max));
+							&check_max, &err));
+	if (err)
+		ret = err;
 	if (check_max)
 		goto retry;
 	return ret;
