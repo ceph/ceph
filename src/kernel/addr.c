@@ -26,16 +26,16 @@
  * count dirty pages on the inode.  In the absense of snapshots,
  * i_wrbuffer_ref == i_wrbuffer_ref_head == the dirty page count.
  *
- * A snapshot is taken (that is, when the client receives notification
- * that a snapshot was taken), each inode with caps and with dirty
- * pages (dirty pages implies there is a cap) gets a new ceph_cap_snap
- * in the i_cap_snaps (which is sorted in ascending order, new snaps
- * go to the tail).  The i_wrbuffer_ref_head count is moved to
- * capsnap->dirty. (Unless a sync write is currently in progress.  In
- * that case, the capsnap is said to be "pending", new writes cannot
- * start, and the capsnap isn't "finalized" until the write completes
- * (or fails) and a final size/mtime for the inode for that snap can
- * be settled upon.)  i_wrbuffer_ref_head is reset to 0.
+ * When a snapshot is taken (that is, when the client receives
+ * notification that a snapshot was taken), each inode with caps and
+ * with dirty pages (dirty pages implies there is a cap) gets a new
+ * ceph_cap_snap in the i_cap_snaps list (which is sorted in ascending
+ * order, new snaps go to the tail).  The i_wrbuffer_ref_head count is
+ * moved to capsnap->dirty. (Unless a sync write is currently in
+ * progress.  In that case, the capsnap is said to be "pending", new
+ * writes cannot start, and the capsnap isn't "finalized" until the
+ * write completes (or fails) and a final size/mtime for the inode for
+ * that snap can be settled upon.)  i_wrbuffer_ref_head is reset to 0.
  *
  * On writeback, we must submit writes to the osd IN SNAP ORDER.  So,
  * we look for the first capsnap in i_cap_snaps and write out pages in
@@ -50,13 +50,8 @@
 
 
 /*
- * Dirty a page.  If @snapc is NULL, use the current snap context for
- * i_snap_realm.  Otherwise, redirty a page within the context of
- * the given *snapc.
- *
- * Caller may or may not have locked *page.  That means we can race
- * with truncate_complete_page and end up with a non-dirty page with
- * private data.
+ * Dirty a page.  Optimistically adjust accounting, on the assumption
+ * that we won't race with invalidate.  If we do, readjust.
  */
 static int ceph_set_page_dirty(struct page *page)
 {
@@ -75,10 +70,6 @@ static int ceph_set_page_dirty(struct page *page)
 		return 0;
 	}
 
-	/*
-	 * optimistically adjust accounting, on the assumption that
-	 * we won't race with invalidate.
-	 */
 	inode = mapping->host;
 	ci = ceph_inode(inode);
 
@@ -1075,7 +1066,7 @@ const struct address_space_operations ceph_aops = {
  */
 
 /*
- * Reuse write_{begin,end} here for simplicity.
+ * Reuse write_begin here for simplicity.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
