@@ -70,7 +70,7 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
 	case S_IFDIR:
 		dout("init_file %p %p 0%o (regular)\n", inode, file,
 		     inode->i_mode);
-		cf = kzalloc(sizeof(*cf), GFP_NOFS);
+		cf = kmem_cache_alloc(ceph_file_cachep, GFP_NOFS | __GFP_ZERO);
 		if (cf == NULL) {
 			ceph_put_fmode(ceph_inode(inode), fmode); /* clean up */
 			return -ENOMEM;
@@ -260,7 +260,7 @@ int ceph_release(struct inode *inode, struct file *file)
 	kfree(cf->last_name);
 	kfree(cf->dir_info);
 	dput(cf->dentry);
-	kfree(cf);
+	kmem_cache_free(ceph_file_cachep, cf);
 	return 0;
 }
 

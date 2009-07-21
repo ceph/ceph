@@ -155,6 +155,7 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 struct kmem_cache *ceph_inode_cachep;
 struct kmem_cache *ceph_cap_cachep;
 struct kmem_cache *ceph_dentry_cachep;
+struct kmem_cache *ceph_file_cachep;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 static void ceph_inode_init_once(void *foo)
@@ -177,23 +178,33 @@ static int init_caches(void)
 		return -ENOMEM;
 
 	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
-					      sizeof(struct ceph_cap),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      NULL);
+					    sizeof(struct ceph_cap),
+					    0, (SLAB_RECLAIM_ACCOUNT|
+						SLAB_MEM_SPREAD),
+					    NULL);
 	if (ceph_cap_cachep == NULL)
 		goto bad_cap;
 
 	ceph_dentry_cachep = kmem_cache_create("ceph_dentry_cache",
-					      sizeof(struct ceph_dentry_info),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      NULL);
+					       sizeof(struct ceph_dentry_info),
+					       0, (SLAB_RECLAIM_ACCOUNT|
+						   SLAB_MEM_SPREAD),
+					       NULL);
 	if (ceph_dentry_cachep == NULL)
 		goto bad_dentry;
 
+	ceph_file_cachep = kmem_cache_create("ceph_file_cache",
+					     sizeof(struct ceph_file_info),
+					     0, (SLAB_RECLAIM_ACCOUNT|
+						 SLAB_MEM_SPREAD),
+					     NULL);
+	if (ceph_file_cachep == NULL)
+		goto bad_file;
+
 	return 0;
 
+bad_file:
+	kmem_cache_destroy(ceph_dentry_cachep);
 bad_dentry:
 	kmem_cache_destroy(ceph_cap_cachep);
 bad_cap:
@@ -206,6 +217,7 @@ static void destroy_caches(void)
 	kmem_cache_destroy(ceph_inode_cachep);
 	kmem_cache_destroy(ceph_cap_cachep);
 	kmem_cache_destroy(ceph_dentry_cachep);
+	kmem_cache_destroy(ceph_file_cachep);
 }
 
 
