@@ -475,7 +475,7 @@ struct ceph_osdmap *apply_incremental(void **p, void *end,
 	int err = -EINVAL;
 	u16 version;
 
-	ceph_decode_32_safe(p, end, version, bad);
+	ceph_decode_16_safe(p, end, version, bad);
 
 	ceph_decode_need(p, end, sizeof(fsid)+sizeof(modified)+2*sizeof(u32),
 			 bad);
