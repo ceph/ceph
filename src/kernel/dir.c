@@ -7,7 +7,8 @@
 #include "super.h"
 
 /*
- * Directory operations: lookup, create, link, unlink, rename, etc.
+ * Directory operations: readdir, lookup, create, link, unlink,
+ * rename, etc.
  */
 
 /*
@@ -25,8 +26,6 @@
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
 struct dentry_operations ceph_dentry_ops;
-
-static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
 
 /*
  * for readdir, we encode the directory frag and offset within that
@@ -173,8 +172,10 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	if (fi->at_end)
 		return 0;
 
+	/* always start with . and .. */
 	if (filp->f_pos == 0) {
-		/* note dir version at start of readdir */
+		/* note dir version at start of readdir so we can tell
+		 * if any dentries get dropped */
 		fi->dir_release_count = ci->i_release_count;
 
 		dout("readdir off 0 -> '.'\n");
@@ -211,6 +212,8 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		dput(fi->dentry);
 		fi->dentry = NULL;
 	}
+
+	/* proceed with a normal readdir */
 
 more:
 	/* do we have the correct frag content buffered? */
@@ -254,13 +257,19 @@ more:
 
 		if (!req->r_did_prepopulate) {
 			dout("readdir !did_prepopulate");
-			fi->dir_release_count--;
+			fi->dir_release_count--;    /* preclude I_COMPLETE */
 		}
 
+		/*
+		 * make note of the last dentry we read, so we can
+		 * continue at the same lexicographical point,
+		 * regardless of what dir changes take place on the
+		 * server.  and choose the next offset to
+		 * readdir from.
+		 */
 		fi->offset = fi->next_offset;
 		kfree(fi->last_name);
 		fi->last_name = NULL;
-
 		if (req->r_reply_info.dir_end) {
 			fi->next_offset = 0;
 		} else {
@@ -364,7 +373,7 @@ static loff_t ceph_dir_llseek(struct file *file, loff_t offset, int origin)
 	mutex_lock(&inode->i_mutex);
 	switch (origin) {
 	case SEEK_END:
-		offset += inode->i_size;
+		offset += inode->i_size + 2;   /* FIXME */
 		break;
 	case SEEK_CUR:
 		offset += file->f_pos;
@@ -577,7 +586,7 @@ static int ceph_mknod(struct inode *dir, struct dentry *dentry,
 }
 
 static int ceph_create(struct inode *dir, struct dentry *dentry, int mode,
-			   struct nameidata *nd)
+		       struct nameidata *nd)
 {
 	dout("create in dir %p dentry %p name '%.*s'\n",
 	     dir, dentry, dentry->d_name.len, dentry->d_name.name);
@@ -813,7 +822,7 @@ static int ceph_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 /*
  * Check if dentry lease is valid.  If not, delete the lease.  Try to
- * renew if appropriate.
+ * renew if the least is more than half up.
  */
 static int dentry_lease_is_valid(struct dentry *dentry)
 {
@@ -883,7 +892,7 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 /*
  * Check if cached dentry can be trusted.
  */
-static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
+static int ceph_d_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
 
@@ -899,13 +908,11 @@ static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd)
 	if (dentry->d_inode && ceph_snap(dentry->d_inode) == CEPH_SNAPDIR)
 		goto out_touch;
 
-	if (dentry_lease_is_valid(dentry))
+	if (dentry_lease_is_valid(dentry) ||
+	    dir_lease_is_valid(dir, dentry))
 		goto out_touch;
 
-	if (dir_lease_is_valid(dir, dentry))
-		goto out_touch;
-
-	dout("dentry_revalidate %p invalid\n", dentry);
+	dout("d_revalidate %p invalid\n", dentry);
 	d_drop(dentry);
 	return 0;
 out_touch:
@@ -914,8 +921,8 @@ out_touch:
 }
 
 /*
- * When a dentry is released, only clear the dir I_COMPLETE if it was
- * part of the current dir version.
+ * When a dentry is released, clear the dir I_COMPLETE if it was part
+ * of the current dir gen.
  */
 static void ceph_dentry_release(struct dentry *dentry)
 {
@@ -943,12 +950,12 @@ static void ceph_dentry_release(struct dentry *dentry)
 	}
 }
 
-static int ceph_snapdir_dentry_revalidate(struct dentry *dentry,
+static int ceph_snapdir_d_revalidate(struct dentry *dentry,
 					  struct nameidata *nd)
 {
 	/*
 	 * Eventually, we'll want to revalidate snapped metadata
-	 * too... probably.
+	 * too... probably...
 	 */
 	return 1;
 }
@@ -1056,6 +1063,11 @@ out:
 	return ret;
 }
 
+/*
+ * We maintain a private dentry LRU.
+ *
+ * FIXME: this needs to be changed to a per-mds lru to be useful.
+ */
 void ceph_dentry_lru_add(struct dentry *dn)
 {
 	struct ceph_dentry_info *di = ceph_dentry(dn);
@@ -1133,12 +1145,12 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 struct dentry_operations ceph_dentry_ops = {
-	.d_revalidate = ceph_dentry_revalidate,
+	.d_revalidate = ceph_d_revalidate,
 	.d_release = ceph_dentry_release,
 };
 
 struct dentry_operations ceph_snapdir_dentry_ops = {
-	.d_revalidate = ceph_snapdir_dentry_revalidate,
+	.d_revalidate = ceph_snapdir_d_revalidate,
 };
 
 struct dentry_operations ceph_snap_dentry_ops = {
