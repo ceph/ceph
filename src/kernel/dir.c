@@ -7,6 +7,10 @@
 #include "super.h"
 
 /*
+ * Directory operations: lookup, create, link, unlink, rename, etc.
+ */
+
+/*
  * Ceph MDS operations are specified in terms of a base ino and
  * relative path.  Thus, the client can specify an operation on a
  * specific inode (e.g., a getattr due to fstat(2)), or as a path
@@ -25,8 +29,8 @@ struct dentry_operations ceph_dentry_ops;
 static int ceph_dentry_revalidate(struct dentry *dentry, struct nameidata *nd);
 
 /*
- * for readdir, encoding the directory frag and offset within that frag
- * into f_pos.
+ * for readdir, we encode the directory frag and offset within that
+ * frag into f_pos.
  */
 static unsigned fpos_frag(loff_t p)
 {
@@ -38,14 +42,15 @@ static unsigned fpos_off(loff_t p)
 }
 
 /*
- * Satisfy a readdir by peeking at the dcache.  We make this work by
- * carefully ordering dentryes on d_u.d_child when we initially get
- * results back from the MDS, and falling back to a "normal" sync
- * readdir if any dentries in the dir are dropped.
+ * When possible, we try to satisfy a readdir by peeking at the
+ * dcache.  We make this work by carefully ordering dentries on
+ * d_u.d_child when we initially get results back from the MDS, and
+ * falling back to a "normal" sync readdir if any dentries in the dir
+ * are dropped.
  *
- * I_COMPLETE tells indicates we have all dirs.  It is defined IFF we
- * hold the CEPH_CAP_FILE_SHARED (which will be revoked by the MDS
- * if/when the directory is modified).
+ * I_COMPLETE tells indicates we have all dentries in the dir.  It is
+ * defined IFF we hold CEPH_CAP_FILE_SHARED (which will be revoked by
+ * the MDS if/when the directory is modified).
  */
 static int __dcache_readdir(struct file *filp,
 			    void *dirent, filldir_t filldir)
@@ -59,13 +64,16 @@ static int __dcache_readdir(struct file *filp,
 	struct ceph_dentry_info *di;
 	int err = 0;
 
+	/* claim ref on last dentry we returned */
 	last = fi->dentry;
 	fi->dentry = NULL;
+
 	dout("__dcache_readdir %p at %llu (last %p)\n", dir, filp->f_pos,
 	     last);
 
 	spin_lock(&dcache_lock);
 
+	/* start at beginning? */
 	if (filp->f_pos == 2 || (last &&
 				 filp->f_pos < ceph_dentry(last)->offset)) {
 		if (list_empty(&parent->d_subdirs))
@@ -111,15 +119,15 @@ more:
 	     dentry, dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 	filp->f_pos = di->offset;
 	err = filldir(dirent, dentry->d_name.name,
-		    dentry->d_name.len, di->offset,
-		    dentry->d_inode->i_ino,
-		    dentry->d_inode->i_mode >> 12);
+		      dentry->d_name.len, di->offset,
+		      dentry->d_inode->i_ino,
+		      dentry->d_inode->i_mode >> 12);
 
 	spin_lock(&inode->i_lock);
 	spin_lock(&dcache_lock);
 
 	if (err < 0) {
-		fi->dentry = dentry;
+		fi->dentry = dentry;  /* remember our position */
 		goto out_unlock;
 	}
 
