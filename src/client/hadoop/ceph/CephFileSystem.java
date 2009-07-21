@@ -67,6 +67,7 @@ public class CephFileSystem extends FileSystem {
   private boolean ceph_isfile(String path) { return ceph_isfile(clientPointer, path); }
   private String[] ceph_getdir(String path) { return ceph_getdir(clientPointer, path); }
   private int ceph_mkdirs(String path, int mode) { return ceph_mkdirs(clientPointer, path, mode); }
+  private int ceph_open_for_append(String path) { return ceph_open_for_append(clientPointer, path); }
   private int ceph_open_for_read(String path) { return ceph_open_for_read(clientPointer, path); }
   private int ceph_open_for_overwrite(String path, int mode) { return ceph_open_for_overwrite(clientPointer, path, mode); }
 
@@ -91,6 +92,7 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_isfile            (long client, String path);
   private native String[]ceph_getdir            (long client, String path);
   private native int     ceph_mkdirs            (long client, String path, int mode);
+  private native int     ceph_open_for_append   (long client, String path, int mode);
   private native int     ceph_open_for_read     (long client, String path);
   private native int     ceph_open_for_overwrite(long client, String path, int mode);
   private native boolean ceph_kill_client       (long client);
@@ -138,6 +140,12 @@ public class CephFileSystem extends FileSystem {
     public void close() throws IOException {
     System.out.println("Pretending to shut down client with pointer " + clientPointer
 		       + ". Not really doing anything.");
+  }
+
+  public FsDataOutputStream append (Path file, int bufferSize,
+				    Progressable progress) throws IOException {
+    ceph_open_for_append(....);
+    return new CephDataOutstream(...);
   }
 
   @Override
