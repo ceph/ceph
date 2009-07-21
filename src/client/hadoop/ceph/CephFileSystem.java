@@ -66,6 +66,7 @@ public class CephFileSystem extends FileSystem {
   private boolean ceph_isdirectory(String path) { return ceph_isdirectory(clientPointer, path); }
   private boolean ceph_isfile(String path) { return ceph_isfile(clientPointer, path); }
   private String[] ceph_getdir(String path) { return ceph_getdir(clientPointer, path); }
+  private int ceph_mkdirs(String path, int mode) { return ceph_mkdirs(clientPointer, path, mode); }
   private int ceph_open_for_read(String path) { return ceph_open_for_read(clientPointer, path); }
   private int ceph_open_for_overwrite(String path, int mode) { return ceph_open_for_overwrite(clientPointer, path, mode); }
 
@@ -89,6 +90,7 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_isdirectory       (long client, String path);
   private native boolean ceph_isfile            (long client, String path);
   private native String[]ceph_getdir            (long client, String path);
+  private native int     ceph_mkdirs            (long client, String path, int mode);
   private native int     ceph_open_for_read     (long client, String path);
   private native int     ceph_open_for_overwrite(long client, String path, int mode);
   private native boolean ceph_kill_client       (long client);
@@ -106,8 +108,7 @@ public class CephFileSystem extends FileSystem {
     this.store = store;
     } */
 
-  @Override
-    public URI getUri() {
+  public URI getUri() {
     return uri;
   }
 
@@ -144,8 +145,7 @@ public class CephFileSystem extends FileSystem {
     return getUri().toString();
   }
 
-  @Override
-    public Path getWorkingDirectory() {
+  public Path getWorkingDirectory() {
     return makeAbsolute(new Path(ceph_getcwd()));
   }
 
@@ -231,54 +231,11 @@ public class CephFileSystem extends FileSystem {
 
 
   /* Creates the directory and all nonexistent parents.   */
-  @Override
-    public boolean mkdirs(Path path) throws IOException {
-
+  public boolean mkdirs(Path path, FsPermission perms) throws IOException {
     Path abs_path = makeAbsolute(path);
-    //System.out.println("mkdirs: Creating directory \"" + path.toString() + "\": Absolute path is \"" +
-    //		abs_path.toString() + "\"");
-
-    // If the directory exists, we're happy, right? less work for us!
-      
-    if(exists(abs_path))
-      throw new IOException("Error: attempting to create an existing directory");
-
-    // The basic idea:
-    // get parent. if parent = null (happens if dir is root), fail. You can't really make
-    // the root directory...
-    // if parent doesn't exist, recursively make parent; fail if this fails.
-    // ceph_mkdir desired path.
-
-    Path parent = path.getParent();
-    boolean result = true;
-
-    // if the parent's null, we're trying to create the root directory. This is BAD.
-    if (null == parent)  {
-      System.out.println("Error: failed making directory \"" + abs_path.toString() + 
-			 "\": directory has null parent (directory is root)") ;
-      result = false;
-    }
-    else {
-      // try to make the parent if it doesn't exist
-      if (!exists(parent)) {
-	//System.out.println("mkdirs: parent of directory \"" + abs_path.toString() + 
-	//			 "does not exist. Recursively creating:");
-	if(!mkdirs(parent)) {
-	  System.out.println("mkdirs: failed creating directory \"" + 
-			     abs_path.toString() + 
-			     "because of failure recursively creating parent" +
-			     parent.toString());
-	  result = false;
-	}
-      }
-    }
-    // try to make the directory, unless the parent was null or we
-    // tried and failed to make the parent
-    if (result) {
-      result = ceph_mkdir(abs_path.toString());
-    }
-    //System.out.println("mkdirs: attempted to make directory " + abs_path.toString() + 
-    //			 ": result is " + result);
+    result = ceph_mkdirs(abs_path.toString(), (int)perms.toShort());
+    /*System.out.println("mkdirs: attempted to make directory "
+      + abs_path.toString() +  ": result is " + result); */
     return result;
   }
 
@@ -323,25 +280,28 @@ public class CephFileSystem extends FileSystem {
 
   @Override
     public FileStatus getFileStatus(Path p) throws IOException {
-    // For the moment, hardwired block size and replication
+    // For the moment, hardwired replication and modification time
     Path abs_p = makeAbsolute(p);
     return new FileStatus(__getLength(abs_p), __isDirectory(abs_p), 2,
-			  8388608, 0, abs_p);			    
+			  getBlockSize(p), 0, abs_p);
   }
-    
 
   // array of statuses for the directory's contents
   // steal or factor out iteration code from delete()
-  @Override
     public FileStatus[] listStatus(Path p) throws IOException {
     Path abs_p = makeAbsolute(p);
-    
+    Path[] paths = listPathsRaw(abs_p);
+    FileStatus[] statuses = new FileStatus[paths.size()];
+    for (Path path : paths) {
+      statuses[i] = getFileStatus(path);
+    }
+    return statuses;
   }
 
 
   @Override
     public Path[] listPathsRaw(Path path) throws IOException {
-      
+
     String dirlist[];
 
     Path abs_path = makeAbsolute(path);
@@ -367,6 +327,8 @@ public class CephFileSystem extends FileSystem {
     // convert the strings to Paths
     Path paths[] = new Path[dirlist.length];
     for(int i = 0; i < dirlist.length; ++i) {
+      //we don't want . or .. entries
+      if (dirlist[i].equals(".") || dirlist[i].equals("..")) continue;
       //System.out.println("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
       //		     dirlist[i] + "\"");
 
@@ -482,13 +444,11 @@ public class CephFileSystem extends FileSystem {
     // if the path is a file, try to delete it.
     if (isFile(abs_path)) {
       boolean result = ceph_unlink(path.toString());
-      if(!result) {
-	// System.out.println("deleteRaw: failed to delete file \"" +
-	//	       abs_path.toString() + "\".");
-	return false;
-      }
-      else
-	return true;
+      /*      if(!result) {
+	System.out.println("deleteRaw: failed to delete file \"" +
+			   abs_path.toString() + "\".");
+			   } */
+      return result;
     }
     
     /* If the path is a directory, recursively try to delete its contents,
@@ -506,11 +466,6 @@ public class CephFileSystem extends FileSystem {
     // recursively delete, skipping "." and ".." entries
     Path parent = abs_path.getParent();
     for (Path p : contents) {
-      if (makeAbsolute(p).equals(abs_path)) continue; // "." entry
-      if (null != parent) {
-	if (p.equals(parent)) continue; // ".." entry
-      }
-
       if (!deleteRaw(p)) {
 	// System.out.println("deleteRaw: Failed to delete file \"" + 
 	//		 p.toString() + "\" while recursively deleting \""
