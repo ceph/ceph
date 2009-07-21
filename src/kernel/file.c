@@ -109,7 +109,8 @@ static int ceph_init_file(struct inode *inode, struct file *file, int fmode)
  *
  * If we already have the requisite capabilities, we can satisfy
  * the open request locally (no need to request new caps from the
- * MDS).
+ * MDS).  We do, however, need to inform the MDS (asynchronously)
+ * if our wanted caps set expands.
  */
 int ceph_open(struct inode *inode, struct file *file)
 {
@@ -150,9 +151,8 @@ int ceph_open(struct inode *inode, struct file *file)
 	}
 
 	/*
-	 * We re-use existing caps only if already have an open file
-	 * that also wants them.  That is, our want for the caps is
-	 * registered with the MDS.
+	 * No need to block if we have any caps.  Update wanted set
+	 * asynchronously.
 	 */
 	spin_lock(&inode->i_lock);
 	if (__ceph_is_any_real_caps(ci)) {
@@ -388,12 +388,9 @@ static int copy_page_vector_to_user(struct page **pages, char __user *data,
 
 /*
  * Completely synchronous read and write methods.  Direct from __user
- * buffer to osd.
+ * buffer to osd, or directly to user pages (if O_DIRECT).
  *
- * If read spans object boundary, just do multiple reads.
- *
- * FIXME: for a correct atomic read, we should take read locks on all
- * objects.
+ * If the read spans object boundary, just do multiple reads.
  */
 static ssize_t ceph_sync_read(struct file *file, char __user *data,
 			      unsigned left, loff_t *offset)
@@ -525,11 +522,12 @@ out:
 }
 
 /*
- * synchronous write.  from userspace.
+ * Synchronous write, straight from __user pointer or user pages (if
+ * O_DIRECT).
  *
- * FIXME: if write spans object boundary, just do two separate write.
- * for a correct atomic write, we should take write locks on all
- * objects, rollback on failure, etc.
+ * If write spans object boundary, just do multiple writes.  (For a
+ * correct atomic write, we should e.g. take write locks on all
+ * objects, rollback on failure, etc.)
  */
 static ssize_t ceph_sync_write(struct file *file, const char __user *data,
 			       size_t left, loff_t *offset)
@@ -678,15 +676,16 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	ssize_t ret;
 	int got = 0;
 
-	dout("aio_read %llx.%llx %llu~%u trying to get caps on %p\n",
-	     ceph_vinop(inode), pos, (unsigned)len, inode);
+	dout("aio_read %p %llx.%llx %llu~%u trying to get caps on %p\n",
+	     inode, ceph_vinop(inode), pos, (unsigned)len, inode);
 	__ceph_do_pending_vmtruncate(inode);
 	ret = ceph_get_caps(ci, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE,
 			    &got, -1);
 	if (ret < 0)
 		goto out;
-	dout("aio_read %llx.%llx %llu~%u got cap refs on %s\n",
-	     ceph_vinop(inode), pos, (unsigned)len, ceph_cap_string(got));
+	dout("aio_read %p %llx.%llx %llu~%u got cap refs on %s\n",
+	     inode, ceph_vinop(inode), pos, (unsigned)len,
+	     ceph_cap_string(got));
 
 	if ((got & CEPH_CAP_FILE_CACHE) == 0 ||
 	    (iocb->ki_filp->f_flags & O_DIRECT) ||
@@ -697,8 +696,8 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		ret = generic_file_aio_read(iocb, iov, nr_segs, pos);
 
 out:
-	dout("aio_read %llx.%llx dropping cap refs on %s\n",
-	     ceph_vinop(inode), ceph_cap_string(got));
+	dout("aio_read %p %llx.%llx dropping cap refs on %s\n",
+	     inode, ceph_vinop(inode), ceph_cap_string(got));
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
@@ -732,15 +731,17 @@ retry_snap:
 	if (ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_FULL))
 		return -ENOSPC;
 	__ceph_do_pending_vmtruncate(inode);
-	dout("aio_write %p %llu~%u getting caps. i_size %llu\n",
-	     inode, pos, (unsigned)iov->iov_len, inode->i_size);
+	dout("aio_write %p %llx.%llx %llu~%u getting caps. i_size %llu\n",
+	     inode, ceph_vinop(inode), pos, (unsigned)iov->iov_len,
+	     inode->i_size);
 	ret = ceph_get_caps(ci, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER,
 			    &got, endoff);
 	if (ret < 0)
 		goto out;
 
-	dout("aio_write %p %llu~%u  got cap refs on %s\n",
-	     inode, pos, (unsigned)iov->iov_len, ceph_cap_string(got));
+	dout("aio_write %p %llx.%llx %llu~%u  got cap refs on %s\n",
+	     inode, ceph_vinop(inode), pos, (unsigned)iov->iov_len,
+	     ceph_cap_string(got));
 
 	if ((got & CEPH_CAP_FILE_BUFFER) == 0 ||
 	    (iocb->ki_filp->f_flags & O_DIRECT) ||
@@ -761,13 +762,14 @@ retry_snap:
 	}
 
 out:
-	dout("aio_write %p %llu~%u  dropping cap refs on %s\n",
-	     inode, pos, (unsigned)iov->iov_len, ceph_cap_string(got));
+	dout("aio_write %p %llx.%llx %llu~%u  dropping cap refs on %s\n",
+	     inode, ceph_vinop(inode), pos, (unsigned)iov->iov_len,
+	     ceph_cap_string(got));
 	ceph_put_cap_refs(ci, got);
 
 	if (ret == -EOLDSNAPC) {
-		dout("aio_write %p %llu~%u got EOLDSNAPC, retrying\n",
-		     inode, pos, (unsigned)iov->iov_len);
+		dout("aio_write %p %llx.%llx %llu~%u got EOLDSNAPC, retrying\n",
+		     inode, ceph_vinop(inode), pos, (unsigned)iov->iov_len);
 		goto retry_snap;
 	}
 

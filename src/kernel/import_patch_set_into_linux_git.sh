@@ -101,6 +101,19 @@ However, if the MDS replies without a trace (e.g., when retrying an
 update after an MDS failure recovery), some operation-specific cleanup
 may be needed.
 
+We can validate cached dentries in two ways.  A per-dentry lease may
+be issued by the MDS, or a per-directory cap may be issued that acts
+as a lease on the entire directory.  In the latter case, a 'gen' value
+is used to determine which dentries belong to the currently leased
+directory contents.
+
+We normally prepopulate the dcache and icache with readdir results.
+This makes subsequent lookups and getattrs avoid any server
+interaction.  It also lets us satisfy readdir operation by peeking at
+the dcache IFF we hold the per-directory cap/lease, previously
+performed a readdir, and haven't dropped any of the resulting
+dentries.
+
 EOF
 
 git add $target/ceph/file.c
@@ -112,6 +125,11 @@ we have obtained the proper capabilities from the MDS cluster before
 performing IO on a file.  We take references on held capabilities for
 the duration of the read/write to avoid prematurely releasing them
 back to the MDS.
+
+We implement two main paths for read and write: one that is buffered
+(and uses generic_aio_{read,write}), and one that is fully synchronous
+and blocking (operating either on a __user pointer or, if O_DIRECT,
+directly on user pages).
 
 EOF
 
