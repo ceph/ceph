@@ -9,6 +9,31 @@
 #include "messenger.h"
 #include "decode.h"
 
+/*
+ * A cluster of MDS (metadata server) daemons is responsible for
+ * managing the file system namespace (the directory hierarchy and
+ * inodes) and for coordinating shared access to storage.  Metadata is
+ * partitioning hierarchically across a number of servers, and that
+ * partition varies over time as the cluster adjusts the distribution
+ * in order to balance load.
+ *
+ * The MDS client is primarily responsible to managing synchronous
+ * metadata requests for operations like open, unlink, and so forth.
+ * If there is a MDS failure, we find out about it when we (possibly
+ * request and) receive a new MDS map, and can resubmit affected
+ * requests.
+ *
+ * For the most part, though, we take advantage of a lossless
+ * communications channel to the MDS, and do not need to worry about
+ * timing out or resubmitting requests.
+ *
+ * We maintain a stateful "session" with each MDS we interact with.
+ * Within each session, we sent periodic heartbeat messages to ensure
+ * any capabilities or leases we have been issues remain valid.  If
+ * the session times out and goes stale, our leases and capabilities
+ * are no longer valid.
+ */
+
 static void __wake_requests(struct ceph_mds_client *mdsc,
 			    struct list_head *head);
 
@@ -244,7 +269,7 @@ static const char *session_state_name(int s)
 
 static struct ceph_mds_session *get_session(struct ceph_mds_session *s)
 {
-	dout("get_session %p %d -> %d\n", s,
+	dout("mdsc get_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)+1);
 	atomic_inc(&s->s_ref);
 	return s;
@@ -252,7 +277,7 @@ static struct ceph_mds_session *get_session(struct ceph_mds_session *s)
 
 void ceph_put_mds_session(struct ceph_mds_session *s)
 {
-	dout("put_session %p %d -> %d\n", s,
+	dout("mdsc put_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref))
 		kfree(s);
@@ -275,6 +300,12 @@ struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *mdsc,
 	return session;
 }
 
+static bool __have_session(struct ceph_mds_client *mdsc, int mds)
+{
+	if (mds >= mdsc->max_sessions)
+		return false;
+	return mdsc->sessions[mds];
+}
 
 /*
  * create+register a new session for given mds.
@@ -353,7 +384,7 @@ static void put_request_sessions(struct ceph_mds_request *req)
 
 void ceph_mdsc_put_request(struct ceph_mds_request *req)
 {
-	dout("put_request %p %d -> %d\n", req,
+	dout("mdsc put_request %p %d -> %d\n", req,
 	     atomic_read(&req->r_ref), atomic_read(&req->r_ref)-1);
 	if (atomic_dec_and_test(&req->r_ref)) {
 		if (req->r_request)
@@ -403,13 +434,14 @@ static struct ceph_mds_request *__lookup_request(struct ceph_mds_client *mdsc,
 }
 
 /*
- * Register an in-flight request, and assign a tid in msg request header.
+ * Register an in-flight request, and assign a tid.  Link to directory
+ * are modifying (if any).
  *
  * Called under mdsc->mutex.
  */
 static void __register_request(struct ceph_mds_client *mdsc,
 			       struct ceph_mds_request *req,
-			       struct inode *listener)
+			       struct inode *dir)
 {
 	req->r_tid = ++mdsc->last_tid;
 	if (req->r_num_caps)
@@ -418,11 +450,11 @@ static void __register_request(struct ceph_mds_client *mdsc,
 	ceph_mdsc_get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
 
-	if (listener) {
-		struct ceph_inode_info *ci = ceph_inode(listener);
+	if (dir) {
+		struct ceph_inode_info *ci = ceph_inode(dir);
 
 		spin_lock(&ci->i_unsafe_lock);
-		req->r_unsafe_dir = listener;
+		req->r_unsafe_dir = dir;
 		list_add_tail(&req->r_unsafe_dir_item, &ci->i_unsafe_dirops);
 		spin_unlock(&ci->i_unsafe_lock);
 	}
@@ -442,13 +474,6 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 		list_del_init(&req->r_unsafe_dir_item);
 		spin_unlock(&ci->i_unsafe_lock);
 	}
-}
-
-static bool __have_session(struct ceph_mds_client *mdsc, int mds)
-{
-	if (mds >= mdsc->max_sessions)
-		return false;
-	return mdsc->sessions[mds];
 }
 
 /*
@@ -599,6 +624,10 @@ static int __open_session(struct ceph_mds_client *mdsc,
 out:
 	return 0;
 }
+
+/*
+ * session caps
+ */
 
 /*
  * Free preallocated cap messages assigned to this session
@@ -770,7 +799,9 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 		wake_up_session_caps(session);
 }
 
-
+/*
+ * send a session close request
+ */
 static int request_close_session(struct ceph_mds_client *mdsc,
 				 struct ceph_mds_session *session)
 {
@@ -937,6 +968,56 @@ out_unlocked:
 }
 
 /*
+ * flush all dirty inode data to disk.
+ *
+ * returns true if we've flushed through want_flush_seq
+ */
+static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
+{
+	int mds, ret = 1;
+
+	dout("check_cap_flush want %lld\n", want_flush_seq);
+	mutex_lock(&mdsc->mutex);
+	for (mds = 0; ret && mds < mdsc->max_sessions; mds++) {
+		struct ceph_mds_session *session = mdsc->sessions[mds];
+
+		if (!session)
+			continue;
+		get_session(session);
+		mutex_unlock(&mdsc->mutex);
+
+		mutex_lock(&session->s_mutex);
+		if (!list_empty(&session->s_cap_flushing)) {
+			struct ceph_inode_info *ci =
+				list_entry(session->s_cap_flushing.next,
+					   struct ceph_inode_info,
+					   i_flushing_item);
+			struct inode *inode = &ci->vfs_inode;
+
+			spin_lock(&inode->i_lock);
+			if (ci->i_cap_flush_seq <= want_flush_seq) {
+				dout("check_cap_flush still flushing %p "
+				     "seq %lld <= %lld to mds%d\n", inode,
+				     ci->i_cap_flush_seq, want_flush_seq,
+				     session->s_mds);
+				ret = 0;
+			}
+			spin_unlock(&inode->i_lock);
+		}
+		mutex_unlock(&session->s_mutex);
+		ceph_put_mds_session(session);
+
+		if (!ret)
+			return ret;
+		mutex_lock(&mdsc->mutex);
+	}
+
+	mutex_unlock(&mdsc->mutex);
+	dout("check_cap_flush ok, flushed thru %lld\n", want_flush_seq);
+	return ret;
+}
+
+/*
  * called under s_mutex
  */
 static void send_cap_releases(struct ceph_mds_client *mdsc,
@@ -959,6 +1040,10 @@ static void send_cap_releases(struct ceph_mds_client *mdsc,
 	}
 	spin_unlock(&session->s_cap_lock);
 }
+
+/*
+ * requests
+ */
 
 /*
  * Create an mds request.
@@ -1458,7 +1543,7 @@ void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
  * session setup, forwarding, retry details.
  */
 int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
-			 struct inode *listener,
+			 struct inode *dir,
 			 struct ceph_mds_request *req)
 {
 	int err;
@@ -1476,7 +1561,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 
 	/* issue */
 	mutex_lock(&mdsc->mutex);
-	__register_request(mdsc, req, listener);
+	__register_request(mdsc, req, dir);
 	__do_request(mdsc, req);
 
 	/* wait */
@@ -2382,6 +2467,29 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 				 CEPH_MDS_LEASE_RELEASE, seq);
 }
 
+/*
+ * drop all leases (and dentry refs) in preparation for umount
+ */
+static void drop_leases(struct ceph_mds_client *mdsc)
+{
+	int i;
+
+	dout("drop_leases\n");
+	mutex_lock(&mdsc->mutex);
+	for (i = 0; i < mdsc->max_sessions; i++) {
+		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
+		if (!s)
+			continue;
+		mutex_unlock(&mdsc->mutex);
+		mutex_lock(&s->s_mutex);
+		mutex_unlock(&s->s_mutex);
+		ceph_put_mds_session(s);
+		mutex_lock(&mdsc->mutex);
+	}
+	mutex_unlock(&mdsc->mutex);
+}
+
+
 
 /*
  * delayed work -- periodically trim expired leases, renew caps with mds
@@ -2402,7 +2510,7 @@ static void delayed_work(struct work_struct *work)
 	int renew_caps;
 	u32 want_map = 0;
 
-	dout("delayed_work\n");
+	dout("mdsc delayed_work\n");
 	ceph_check_delayed_caps(mdsc, 0);
 
 	mutex_lock(&mdsc->mutex);
@@ -2487,28 +2595,6 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 }
 
 /*
- * drop all leases (and dentry refs) in preparation for umount
- */
-static void drop_leases(struct ceph_mds_client *mdsc)
-{
-	int i;
-
-	dout("drop_leases\n");
-	mutex_lock(&mdsc->mutex);
-	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
-		if (!s)
-			continue;
-		mutex_unlock(&mdsc->mutex);
-		mutex_lock(&s->s_mutex);
-		mutex_unlock(&s->s_mutex);
-		ceph_put_mds_session(s);
-		mutex_lock(&mdsc->mutex);
-	}
-	mutex_unlock(&mdsc->mutex);
-}
-
-/*
  * Wait for safe replies on open mds requests.  If we time out, drop
  * all requests from the tree to avoid dangling dentry refs.
  */
@@ -2550,56 +2636,6 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 	drop_leases(mdsc);
 	ceph_check_delayed_caps(mdsc, 1);
 	wait_requests(mdsc);
-}
-
-/*
- * sync - flush all dirty inode data to disk.
- *
- * returns true if we've flushed through want_flush_seq
- */
-static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
-{
-	int mds, ret = 1;
-
-	dout("check_cap_flush want %lld\n", want_flush_seq);
-	mutex_lock(&mdsc->mutex);
-	for (mds = 0; ret && mds < mdsc->max_sessions; mds++) {
-		struct ceph_mds_session *session = mdsc->sessions[mds];
-
-		if (!session)
-			continue;
-		get_session(session);
-		mutex_unlock(&mdsc->mutex);
-
-		mutex_lock(&session->s_mutex);
-		if (!list_empty(&session->s_cap_flushing)) {
-			struct ceph_inode_info *ci =
-				list_entry(session->s_cap_flushing.next,
-					   struct ceph_inode_info,
-					   i_flushing_item);
-			struct inode *inode = &ci->vfs_inode;
-
-			spin_lock(&inode->i_lock);
-			if (ci->i_cap_flush_seq <= want_flush_seq) {
-				dout("check_cap_flush still flushing %p "
-				     "seq %lld <= %lld to mds%d\n", inode,
-				     ci->i_cap_flush_seq, want_flush_seq,
-				     session->s_mds);
-				ret = 0;
-			}
-			spin_unlock(&inode->i_lock);
-		}
-		mutex_unlock(&session->s_mutex);
-		ceph_put_mds_session(session);
-
-		if (!ret)
-			return ret;
-		mutex_lock(&mdsc->mutex);
-	}
-
-	mutex_unlock(&mdsc->mutex);
-	dout("check_cap_flush ok, flushed thru %lld\n", want_flush_seq);
-	return ret;
 }
 
 /*

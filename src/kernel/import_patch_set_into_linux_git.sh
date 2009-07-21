@@ -156,25 +156,25 @@ git add $target/ceph/mdsmap.c
 git commit -s -F - <<EOF
 ceph: MDS client
 
-The MDS client is responsible for submitting requests to the MDS
-cluster and parsing the response.  We decide which MDS to submit each
-request to based on cached information about the current partition of
-the directory hierarchy across the cluster.  A stateful session is
-opened with each MDS before we submit requests to it, and a mutex is
-used to control the ordering of messages within each session.
+The MDS (metadata server) client is responsible for submitting
+requests to the MDS cluster and parsing the response.  We decide which
+MDS to submit each request to based on cached information about the
+current partition of the directory hierarchy across the cluster.  A
+stateful session is opened with each MDS before we submit requests to
+it, and a mutex is used to control the ordering of messages within
+each session.
 
 An MDS request may generate two responses.  The first indicates the
 operation was a success and returns any result.  A second reply is
 sent when the operation commits to disk.  Note that locking on the MDS
 ensures that the results of updates are visible only to the updating
-client before the operation commits.
-
-Requests are linked to the containing directory so that an fsync will
-wait for them to commit.
+client before the operation commits.  Requests are linked to the
+containing directory so that an fsync will wait for them to commit.
 
 If an MDS fails and/or recovers, we resubmit requests as needed.  We
 also reconnect existing capabilities to a recovering MDS to
-reestablish that shared session state.
+reestablish that shared session state.  Old dentry leases are
+invalidated.
 
 EOF
 
@@ -190,11 +190,11 @@ object storage pool.  This includes determining where objects are
 stored in the cluster, and ensuring that requests are retried or
 redirected in the event of a node failure or data migration.
 
-If an OSD does not respond before a timeout expires, 'ping' messages
-are sent across the lossless, ordered communications channel to
-ensure that any break in the TCP is discovered.  If the session does
-reset, a reconnection is attempted and affected requests are resent
-(by the message transport layer).
+If an OSD does not respond before a timeout expires, keepalive
+messages are sent across the lossless, ordered communications channel
+to ensure that any break in the TCP is discovered.  If the session
+does reset, a reconnection is attempted and affected requests are
+resent (by the message transport layer).
 
 EOF
 

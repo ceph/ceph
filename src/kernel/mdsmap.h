@@ -4,9 +4,9 @@
 #include "types.h"
 
 /*
- * mds map - describe servers in the mds cluster
+ * mds map - describe servers in the mds cluster.  
  *
- * fields limited to those the client cares about
+ * we limit fields to those the client actually xcares about
  */
 struct ceph_mdsmap {
 	u32 m_epoch, m_client_epoch, m_last_failure;
@@ -18,6 +18,7 @@ struct ceph_mdsmap {
 	struct ceph_entity_addr *m_addr;  /* mds addrs */
 	s32 *m_state;                   /* states */
 
+	/* which object pools file data can be stored in */
 	int m_num_data_pg_pools;
 	u32 *m_data_pg_pools;
 	u32 m_cas_pg_pool;
