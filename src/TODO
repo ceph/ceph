@@ -31,8 +31,24 @@ v0.10
 /- improved monitor read model
 - osd bugfixes
 
+v0.11
+(andi)
+/- server-specified max file size
+/- simplified pr_debug macro
+/- more comments
+/- added a few missing '__attribute__ ((packed))'
+/- kcalloc throughout (chris wright)
+/- simplified export.c (jbfields)
+/- cleaned up mount code
+/- kmem_cache for dentry_info
+/- EBADF on bad caps
+/- fixed stray unaligned access
+/- respond to control-c on slow/hung mount
+
+
 bugs
 - premature filejournal trimming?
+- mount.ceph doesn't update /etc/mtab
 
 later
 - authentication

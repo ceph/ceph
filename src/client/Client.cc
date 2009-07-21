@@ -2896,6 +2896,7 @@ int Client::rename(const char *relfrom, const char *relto)
   r = path_walk(to, &todir);
   if (r < 0)
     goto out_unlock;
+  todir->get();
   r = _rename(fromdir, fromname.c_str(), todir, toname.c_str());
   put_inode(todir);
  out_unlock:
@@ -2912,15 +2913,60 @@ int Client::mkdir(const char *relpath, mode_t mode)
   tout << "mkdir" << std::endl;
   tout << relpath << std::endl;
   tout << mode << std::endl;
+  dout(10) << "mkdir: " << relpath << dendl;
 
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
   Inode *dir;
   int r = path_walk(path, &dir);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
   return _mkdir(dir, name.c_str(), mode);
+}
+
+int Client::mkdirs(const char *relpath, mode_t mode)
+{
+  Mutex::Locker lock(client_lock);
+  dout(10) << "Client::mkdirs " << relpath << dendl;
+  tout << "mkdirs" << std::endl;
+  tout << relpath << std::endl;
+  tout << mode << std::endl;
+
+  //get through existing parts of path
+  filepath path(relpath);
+  unsigned int i;
+  int r=0;
+  Inode *cur = cwd;
+  Inode *next;
+  for (i=0; i<path.depth(); ++i) {
+    r=_lookup(cur, path[i].c_str(), &next);
+    if (r < 0) break;
+    cur = next;
+  }
+  //check that we have work left to do
+  if (i==path.depth()) return -EEXIST;
+  if (r!=-ENOENT) return r;
+  dout(20) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
+  //make new directory at each level
+  for (; i<path.depth(); ++i) {
+    //make new dir
+    r = _mkdir(cur, path[i].c_str(), mode);
+    //check proper creation/existence
+    if (r < 0) return r;
+    r = _lookup(cur, path[i], &next);
+    if(r < 0) {
+      dout(0) << "mkdirs: successfully created new directory " << path[i]
+	      << " but can't _lookup it!" << dendl;
+      return r;
+    }
+    //move to new dir and continue
+    cur = next;
+    dout(20) << "mkdirs: successfully created directory "
+	     << filepath(cur->ino).get_path() << dendl;
+  }
+  return 0;
 }
 
 int Client::rmdir(const char *relpath)
@@ -4731,12 +4777,13 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
   req->set_filepath(path);
   req->head.args.mkdir.mode = mode;
  
+  dout(10) << "_mkdir: making request" << dendl;
   int res = make_request(req, uid, gid);
-  dout(10) << "mkdir result is " << res << dendl;
+  dout(10) << "_mkdir result is " << res << dendl;
 
   trim_cache();
 
-  dout(3) << "mkdir(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  dout(3) << "_mkdir(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
   return res;
 }
 

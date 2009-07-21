@@ -95,6 +95,8 @@ public:
     entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
     void encode(bufferlist& bl) const {
+      __u8 v = 1;
+      ::encode(v, bl);
       ::encode(name, bl);
       ::encode(rank, bl);
       ::encode(inc, bl);
@@ -106,6 +108,8 @@ public:
       ::encode(standby_for_name, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      __u8 v;
+      ::decode(v, bl);
       ::decode(name, bl);
       ::decode(rank, bl);
       ::decode(inc, bl);
@@ -131,6 +135,7 @@ protected:
 
   __u32 session_timeout;
   __u32 session_autoclose;
+  __u64 max_file_size;
 
   vector<__u32> data_pg_pools;  // file data pg_pools available to clients (via an ioctl).  first is the default.
   __u32 cas_pg_pool;            // where CAS objects go
@@ -161,6 +166,7 @@ public:
     // hack.. this doesn't really belong here
     session_timeout = (int)g_conf.mds_session_timeout;
     session_autoclose = (int)g_conf.mds_session_autoclose;
+    max_file_size = g_conf.mds_max_file_size;
   }
 
   utime_t get_session_timeout() {
@@ -367,12 +373,15 @@ public:
 
 
   void encode(bufferlist& bl) const {
+    __u16 v = 1;
+    ::encode(v, bl);
     ::encode(epoch, bl);
     ::encode(client_epoch, bl);
     ::encode(last_failure, bl);
     ::encode(root, bl);
     ::encode(session_timeout, bl);
     ::encode(session_autoclose, bl);
+    ::encode(max_file_size, bl);
     ::encode(max_mds, bl);
     ::encode(mds_info, bl);
     ::encode(data_pg_pools, bl);
@@ -390,12 +399,15 @@ public:
     ::encode(stopped, bl);
   }
   void decode(bufferlist::iterator& p) {
+    __u16 v;
+    ::decode(v, p);
     ::decode(epoch, p);
     ::decode(client_epoch, p);
     ::decode(last_failure, p);
     ::decode(root, p);
     ::decode(session_timeout, p);
     ::decode(session_autoclose, p);
+    ::decode(max_file_size, p);
     ::decode(max_mds, p);
     ::decode(mds_info, p);
     ::decode(data_pg_pools, p);

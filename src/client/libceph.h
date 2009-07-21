@@ -15,6 +15,7 @@
 extern "C" {
 #endif
 
+  struct frag_info_t;
 int ceph_initialize(int argc, const char **argv);
 void ceph_deinitialize();
 
@@ -40,6 +41,7 @@ int ceph_rename(const char *from, const char *to);
 
 // dirs
 int ceph_mkdir(const char *path, mode_t mode);
+int ceph_mkdirs(const char *path, mode_t mode);
 int ceph_rmdir(const char *path);
 
 // symlinks
@@ -47,7 +49,7 @@ int ceph_readlink(const char *path, char *buf, loff_t size);
 int ceph_symlink(const char *existing, const char *newname);
 
 // inode stuff
-//  int ceph_lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0);
+int ceph_lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0);
 
 int ceph_setattr(const char *relpath, struct stat *attr, int mask);
 int ceph_chmod(const char *path, mode_t mode);

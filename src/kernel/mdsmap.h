@@ -4,7 +4,7 @@
 #include "types.h"
 
 /*
- * mds map
+ * mds map - describe servers in the mds cluster
  *
  * fields limited to those the client cares about
  */
@@ -13,6 +13,7 @@ struct ceph_mdsmap {
 	u32 m_root;
 	u32 m_session_timeout;          /* seconds */
 	u32 m_session_autoclose;        /* seconds */
+	u64 m_max_file_size;
 	u32 m_max_mds;                  /* size of m_addr, m_state arrays */
 	struct ceph_entity_addr *m_addr;  /* mds addrs */
 	s32 *m_state;                   /* states */

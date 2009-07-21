@@ -48,7 +48,6 @@
  *                 mdsc->snap_flush_lock
  *                 mdsc->cap_delay_lock
  *
- *
  */
 
 struct ceph_client;
@@ -94,6 +93,15 @@ struct ceph_mds_reply_info_parsed {
 	int snapblob_len;
 };
 
+
+/*
+ * cap releases are batched and sent to the MDS en masse.
+ */
+#define CEPH_CAPS_PER_RELEASE ((PAGE_CACHE_SIZE -			\
+				sizeof(struct ceph_mds_cap_release)) /	\
+			       sizeof(struct ceph_mds_cap_item))
+
+
 /*
  * state associated with each MDS<->client session
  */
@@ -104,10 +112,6 @@ enum {
 	CEPH_MDS_SESSION_CLOSING = 5,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
-
-#define CAPS_PER_RELEASE ((PAGE_CACHE_SIZE - \
-			   sizeof(struct ceph_mds_cap_release)) /	\
-			  sizeof(struct ceph_mds_cap_item))
 
 struct ceph_mds_session {
 	int               s_mds;
@@ -145,18 +149,11 @@ enum {
 struct ceph_mds_request;
 struct ceph_mds_client;
 
+/*
+ * request completion callback
+ */
 typedef void (*ceph_mds_request_callback_t) (struct ceph_mds_client *mdsc,
 					     struct ceph_mds_request *req);
-
-struct ceph_mds_request_attr {
-	struct attribute attr;
-	ssize_t (*show)(struct ceph_mds_request *,
-			struct ceph_mds_request_attr *,
-			char *);
-	ssize_t (*store)(struct ceph_mds_request *,
-			 struct ceph_mds_request_attr *,
-			 const char *, size_t);
-};
 
 /*
  * an in-flight mds request
@@ -165,24 +162,29 @@ struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
 
 	int r_op;
-	struct inode *r_inode;
-	struct dentry *r_dentry;
-	struct dentry *r_old_dentry; /* rename from or link from */
+
+	/* operation on what? */
+	struct inode *r_inode;              /* arg1 */
+	struct dentry *r_dentry;            /* arg1 */
+	struct dentry *r_old_dentry;        /* arg2: rename from or link from */
 	const char *r_path1, *r_path2;
 	struct ceph_vino r_ino1, r_ino2;
 
 	union ceph_mds_request_args r_args;
+
+	/* data payload is used for xattr ops */
 	struct page **r_pages;
 	int r_num_pages;
 	int r_data_len;
 
+	/* what caps shall we drop? */
 	int r_inode_drop, r_inode_unless;
 	int r_dentry_drop, r_dentry_unless;
 	int r_old_dentry_drop, r_old_dentry_unless;
 	struct inode *r_old_inode;
 	int r_old_inode_drop, r_old_inode_unless;
 
-	struct inode *r_target_inode;
+	struct inode *r_target_inode;       /* resulting inode */
 
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
@@ -199,6 +201,7 @@ struct ceph_mds_request {
 	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
 	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
+	/* link unsafe requests to parent directory, for fsync */
 	struct inode	*r_unsafe_dir;
 	struct list_head r_unsafe_dir_item;
 

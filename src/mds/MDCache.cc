@@ -3910,9 +3910,9 @@ void MDCache::send_snaps(map<int,MClientSnap*>& splits)
  * remove any items from logsegment open_file lists that don't have
  * any caps
  */
-void MDCache::reconnect_clean_open_file_lists()
+void MDCache::clean_open_file_lists()
 {
-  dout(10) << "reconnect_clean_open_file_lists" << dendl;
+  dout(10) << "clean_open_file_lists" << dendl;
   
   for (map<loff_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
@@ -4329,6 +4329,7 @@ void MDCache::identify_files_to_recover()
 	 p++) {
       Capability *cap = in->get_client_cap(p->first);
       if (!cap) {
+	dout(10) << " client" << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
 	recover = true;
 	break;
       }
@@ -4364,14 +4365,23 @@ void MDCache::do_file_recover()
     CInode *in = *file_recover_queue.begin();
     file_recover_queue.erase(in);
 
-    if (in->inode.client_ranges.size()) {
-      dout(10) << "do_file_recover starting " << in->inode.size << " " << in->inode.client_ranges
+    inode_t *pi = in->get_projected_inode();
+
+    // blech
+    if (pi->client_ranges.size() && !pi->get_max_size()) {
+      stringstream ss;
+      ss << "bad client_range " << pi->client_ranges << " on ino " << pi->ino;
+      mds->logclient.log(LOG_WARN, ss);
+    }
+
+    if (pi->client_ranges.size() && pi->get_max_size()) {
+      dout(10) << "do_file_recover starting " << in->inode.size << " " << pi->client_ranges
 	       << " " << *in << dendl;
       file_recovering.insert(in);
       
       C_MDC_Recover *fin = new C_MDC_Recover(this, in);
       mds->filer->probe(in->inode.ino, &in->inode.layout, in->last,
-			in->get_projected_inode()->get_max_size(), &fin->size, &fin->mtime, false,
+			pi->get_max_size(), &fin->size, &fin->mtime, false,
 			0, fin);    
     } else {
       dout(10) << "do_file_recover skipping " << in->inode.size

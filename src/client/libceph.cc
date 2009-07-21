@@ -54,6 +54,7 @@ extern "C" int ceph_initialize(int argc, const char **argv)
   ceph_client_mutex.Unlock();
   return 0;
 }
+
 extern "C" void ceph_deinitialize()
 {
   ceph_client_mutex.Lock();
@@ -143,6 +144,11 @@ extern "C" int ceph_mkdir(const char *path, mode_t mode)
   return client->mkdir(path, mode);
 }
 
+extern "C" int ceph_mkdirs(const char *path, mode_t mode)
+{
+  return client->mkdirs(path, mode);
+}
+
 extern "C" int ceph_rmdir(const char *path)
 {
   return client->rmdir(path);
@@ -160,9 +166,9 @@ extern "C" int ceph_symlink(const char *existing, const char *newname)
 }
 
 // inode stuff
-extern "C" int ceph_lstat(const char *path, struct stat *stbuf)
+extern "C" int ceph_lstat(const char *path, struct stat *stbuf, struct frag_info_t *dirstat)
 {
-  return client->lstat(path, stbuf);
+  return client->lstat(path, stbuf, dirstat);
 }
 
 extern "C" int ceph_setattr(const char *relpath, struct stat *attr, int mask)

@@ -358,15 +358,15 @@ struct ceph_osd_op {
 	union {
 		struct {
 			__le64 offset, length;
-		};
+		} __attribute__ ((packed));
 		struct {
 			__le32 name_len;
 			__le32 value_len;
-		};
+		} __attribute__ ((packed));
 		struct {
 			__le64 truncate_size;
 			__le32 truncate_seq;
-		};
+		} __attribute__ ((packed));
 		struct {
 			__u8 class_len;
 			__u8 method_len;
@@ -375,10 +375,10 @@ struct ceph_osd_op {
 		} __attribute__ ((packed));
 		struct {
 			__le64 pgls_cookie, count;
-		};
+		} __attribute__ ((packed));
                 struct {
 			__le32 flags;
-		};
+		} __attribute__ ((packed));
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
@@ -406,7 +406,7 @@ struct ceph_osd_request_head {
 	__le32 num_snaps;
 
 	__le16 num_ops;
-	struct ceph_osd_op ops[];  /* followed by ops[], object, ticket, snaps */
+	struct ceph_osd_op ops[];  /* followed by ops[], obj, ticket, snaps */
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {

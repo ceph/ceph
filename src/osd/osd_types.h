@@ -25,7 +25,7 @@
 
 
 #define CEPH_OSD_ONDISK_VERSION 19
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v019"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v020"
 
 
 
@@ -278,6 +278,8 @@ struct osd_stat_t {
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
 
   void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(kb, bl);
     ::encode(kb_used, bl);
     ::encode(kb_avail, bl);
@@ -287,6 +289,8 @@ struct osd_stat_t {
     ::encode(hb_out, bl);
   }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(kb, bl);
     ::decode(kb_used, bl);
     ::decode(kb_avail, bl);
@@ -616,7 +620,7 @@ struct pg_stat_t {
   { }
 
   void encode(bufferlist &bl) const {
-    __u8 v = CEPH_OSD_ONDISK_VERSION;
+    __u8 v = 1;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -712,6 +716,8 @@ struct pool_stat_t {
   { }
 
   void encode(bufferlist &bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
     ::encode(num_objects, bl);
@@ -723,6 +729,8 @@ struct pool_stat_t {
     ::encode(ondisk_log_size, bl);
  }
   void decode(bufferlist::iterator &bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(num_bytes, bl);
     ::decode(num_kb, bl);
     ::decode(num_objects, bl);
@@ -842,7 +850,7 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = CEPH_OSD_ONDISK_VERSION;
+    __u8 v = 1;
     ::encode(v, bl);
 
     ::encode(magic, bl);
@@ -910,6 +918,8 @@ struct SnapSet {
   }
     
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(seq, bl);
     ::encode(head_exists, bl);
     ::encode(snaps, bl);
@@ -918,6 +928,8 @@ struct SnapSet {
     ::encode(clone_size, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(seq, bl);
     ::decode(head_exists, bl);
     ::decode(snaps, bl);
@@ -956,7 +968,6 @@ struct object_info_t {
   void encode(bufferlist& bl) const {
     const __u8 v = 1;
     ::encode(v, bl);
-
     ::encode(soid, bl);
     ::encode(version, bl);
     ::encode(prior_version, bl);

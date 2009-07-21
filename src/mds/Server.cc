@@ -441,6 +441,13 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   int from = m->get_source().num();
   Session *session = mds->sessionmap.get_session(m->get_source());
 
+  if (!session) {
+    dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_CLOSE), m->get_source_inst());
+    delete m;
+    return;
+  }
+
   if (m->closed) {
     dout(7) << " client had no session, removing from session map" << dendl;
     assert(session);  // ?
@@ -2285,10 +2292,10 @@ class C_MDS_inode_update_finish : public Context {
   MDS *mds;
   MDRequest *mdr;
   CInode *in;
-  bool smaller;
+  bool smaller, changed_ranges;
 public:
-  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false) :
-    mds(m), mdr(r), in(i), smaller(sm) { }
+  C_MDS_inode_update_finish(MDS *m, MDRequest *r, CInode *i, bool sm=false, bool cr=false) :
+    mds(m), mdr(r), in(i), smaller(sm), changed_ranges(cr) { }
   void finish(int r) {
     assert(r == 0);
 
@@ -2305,6 +2312,9 @@ public:
     mds->balancer->hit_inode(mdr->now, in, META_POP_IWR);   
 
     mds->server->reply_request(mdr, 0);
+
+    if (changed_ranges)
+      mds->locker->share_inode_max_size(in);
   }
 };
 
@@ -2348,6 +2358,8 @@ void Server::handle_client_setattr(MDRequest *mdr)
     return;
   }
 
+  bool changed_ranges = false;
+
   // project update
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "setattr");
@@ -2378,6 +2390,15 @@ void Server::handle_client_setattr(MDRequest *mdr)
       pi->size = req->head.args.setattr.size;
     }
     pi->rstat.rbytes = pi->size;
+
+    // adjust client's max_size?
+    map<int,byte_range_t> new_ranges;
+    mds->locker->calc_new_client_ranges(cur, pi->size, new_ranges);
+    if (pi->client_ranges != new_ranges) {
+      dout(10) << " client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
+      pi->client_ranges = new_ranges;
+      changed_ranges = true;
+    }
   }
 
   pi->version = cur->pre_dirty();
@@ -2388,7 +2409,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr, &le->metablob, cur);
   
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(mds, mdr, cur, smaller, changed_ranges));
 
   // flush immediately if there are readers/writers waiting
   if (cur->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR))

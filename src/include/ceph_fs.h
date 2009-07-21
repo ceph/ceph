@@ -2,6 +2,10 @@
  * ceph_fs.h - Ceph constants and data types to share between kernel and
  * user space.
  *
+ * Most types in this file are defined as little-endian, and are
+ * primarily intended to describe data structures that pass over the
+ * wire or that are stored on disk.
+ *
  * LGPL2
  */
 
@@ -12,12 +16,6 @@
 #include "rados.h"
 
 /*
- * Max file size is a policy choice; in reality we are limited
- * by 2^64.
- */
-#define CEPH_FILE_MAX_SIZE (1ULL << 40)   /* 1 TB */
-
-/*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.  we keep rev
  * internal cluster protocols separately from the public,
@@ -26,20 +24,15 @@
 #define CEPH_OSD_PROTOCOL     6 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
 #define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL   19 /* public/client */
-#define CEPH_MDSC_PROTOCOL   26 /* public/client */
-#define CEPH_MONC_PROTOCOL   14 /* public/client */
-
-
-
-/*
- * types in this file are defined as little-endian, and are
- * primarily intended to describe data structures that pass
- * over the wire or that are stored on disk.
- */
+#define CEPH_OSDC_PROTOCOL   19 /* server/client */
+#define CEPH_MDSC_PROTOCOL   28 /* server/client */
+#define CEPH_MONC_PROTOCOL   14 /* server/client */
 
 
 #define CEPH_INO_ROOT  1
+
+/* arbitrary limit on max # of monitors (cluster of 3 is typical) */
+#define CEPH_MAX_MON   31
 
 
 /*
@@ -161,6 +154,7 @@ static inline int frag_compare(__u32 a, __u32 b)
 		return 1;
 	return 0;
 }
+
 
 /*
  * ceph_file_layout - describe data layout for a file/inode
@@ -287,19 +281,19 @@ struct ceph_mon_statfs {
 	__le64 have_version;
 	ceph_fsid_t fsid;
 	__le64 tid;
-};
+} __attribute__ ((packed));
 
 struct ceph_statfs {
 	__le64 kb, kb_used, kb_avail;
 	__le64 num_objects;
-};
+} __attribute__ ((packed));
 
 struct ceph_mon_statfs_reply {
 	ceph_fsid_t fsid;
 	__le64 tid;
 	__le64 version;
 	struct ceph_statfs st;
-};
+} __attribute__ ((packed));
 
 struct ceph_osd_getmap {
 	__le64 have_version;

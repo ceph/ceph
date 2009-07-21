@@ -392,6 +392,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(journaler_prefetch_periods, 0, OPT_INT, 50),   // * journal object size (1~MB? see above)
 	OPTION(journaler_batch_interval, 0, OPT_DOUBLE, .001),   // seconds.. max add'l latency we artificially incur
 	OPTION(journaler_batch_max, 0, OPT_LONGLONG, 0),  // max bytes we'll delay flushing; disable, for now....
+	OPTION(mds_max_file_size, 0, OPT_LONGLONG, 1ULL << 40), 
 	OPTION(mds_cache_size, 0, OPT_INT, 100000),
 	OPTION(mds_cache_mid, 0, OPT_FLOAT, .7),
 	OPTION(mds_mem_max, 0, OPT_INT, 1048576),        // KB

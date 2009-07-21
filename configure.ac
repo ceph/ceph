@@ -108,11 +108,6 @@ AC_HEADER_DIRENT
 AC_HEADER_STDC
 AC_HEADER_SYS_WAIT
 
-# include prefix in acconfig.h
-AS_IF([test "x$prefix" == xNONE],
-	    [AC_DEFINE_UNQUOTED(INSTALL_PREFIX, "", [Install prefix])],
-	    [AC_DEFINE_UNQUOTED(INSTALL_PREFIX, "$prefix", [Install prefix])])
-
 # spirit?
 AC_LANG([C++])
 AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP], [], [Description])

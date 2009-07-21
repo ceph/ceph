@@ -137,11 +137,10 @@ ostream& operator<<(ostream& out, CInode& in)
   out << " " << in.versionlock;
 
   // hack: spit out crap on which clients have caps
+  if (in.inode.client_ranges.size())
+    out << " cr=" << in.inode.client_ranges;
+
   if (!in.get_client_caps().empty()) {
-
-    if (in.inode.client_ranges.size())
-      out << " cr=" << in.inode.client_ranges;
-
     out << " caps={";
     for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
@@ -1540,15 +1539,15 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   i = pfile ? pi:oi;
   e.layout = i->layout;
   e.size = i->size;
-  if (i->client_ranges.count(client))
-    e.max_size = i->client_ranges[client].last;
-  else
-    e.max_size = 0;
   e.truncate_seq = i->truncate_seq;
   e.truncate_size = i->truncate_size;
   i->mtime.encode_timeval(&e.mtime);
   i->atime.encode_timeval(&e.atime);
   e.time_warp_seq = i->time_warp_seq;
+
+  // max_size is min of projected, actual
+  e.max_size = MIN(oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0,
+		   pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0);
 
   e.files = i->dirstat.nfiles;
   e.subdirs = i->dirstat.nsubdirs;
@@ -1679,15 +1678,15 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   i = pfile ? pi:oi;
   m->head.layout = i->layout;
   m->head.size = i->size;
-  if (i->client_ranges.count(client))
-    m->head.max_size = i->client_ranges[client].last;
-  else
-    m->head.max_size = 0;
   m->head.truncate_seq = i->truncate_seq;
   m->head.truncate_size = i->truncate_size;
   i->mtime.encode_timeval(&m->head.mtime);
   i->atime.encode_timeval(&m->head.atime);
   m->head.time_warp_seq = i->time_warp_seq;
+
+  // max_size is min of projected, actual.
+  m->head.max_size = MIN(oi->client_ranges.count(client) ? oi->client_ranges[client].last : 0,
+			 pi->client_ranges.count(client) ? pi->client_ranges[client].last : 0);
 
   i = pauth ? pi:oi;
   m->head.mode = i->mode;
