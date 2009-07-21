@@ -22,7 +22,7 @@ osdmaptool_LDADD = libcrush.a libcommon.a
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a
 
-mount_ceph_SOURCES = mount.ceph.c
+mount_ceph_SOURCES = mount/mount.ceph.c
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
@@ -634,6 +634,7 @@ noinst_HEADERS = \
         mon/Paxos.h\
         mon/PaxosService.h\
         mon/mon_types.h\
+	mount/mtab.c\
         msg/Dispatcher.h\
         msg/FakeMessenger.h\
         msg/Message.h\
