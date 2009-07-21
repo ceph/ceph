@@ -19,8 +19,10 @@ class S3Op {
 protected:
   struct req_state *s;
 public:
-  S3Op(struct req_state *s) { this->s = s; }
+  S3Op() {}
   ~S3Op() {}
+
+  virtual void init(struct req_state *s) { this->s = s; }
   virtual void execute() = 0;
 };
 
@@ -46,11 +48,20 @@ protected:
 
   int init_common();
 public:
-  S3GetObj(struct req_state *s, bool _get_data) : S3Op(s), ofs(0), len(0),
-                                                  end(-1), mod_ptr(NULL), unmod_ptr(NULL),
-                                                  get_data(_get_data) {}
+  S3GetObj() {}
   ~S3GetObj() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ofs = 0;
+    len = 0;
+    end = -1;
+    mod_ptr = NULL;
+    unmod_ptr = NULL;
+  }
+  void set_get_data(bool get_data) {
+    this->get_data = get_data;
+  }
   void execute();
 
   virtual int get_params() = 0;
@@ -63,7 +74,10 @@ protected:
   S3UserBuckets buckets;
 
 public:
-  S3ListBuckets(struct req_state *s) : S3Op(s) {}
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+  }
+  S3ListBuckets() {}
   ~S3ListBuckets() {}
 
   void execute();
@@ -83,9 +97,20 @@ protected:
   map<string, bool> common_prefixes;
 
 public:
-  S3ListBucket(struct req_state *s) : S3Op(s) {}
+  S3ListBucket() {}
   ~S3ListBucket() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    prefix.clear();
+    marker.clear();
+    max_keys.clear();
+    delimiter.clear();
+    max = 0;
+    ret = 0;
+    objs.clear();
+    common_prefixes.clear();
+  }
   void execute();
 
   virtual void send_response() = 0;
@@ -96,11 +121,14 @@ protected:
   int ret;
 
 public:
-  S3CreateBucket(struct req_state *s) : S3Op(s) {}
+  S3CreateBucket() {}
   ~S3CreateBucket() {}
 
   void execute();
-
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ret = 0;
+  }
   virtual void send_response() = 0;
 };
 
@@ -109,9 +137,13 @@ protected:
   int ret;
 
 public:
-  S3DeleteBucket(struct req_state *s) : S3Op(s) {}
+  S3DeleteBucket() {}
   ~S3DeleteBucket() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ret = 0;
+  }
   void execute();
 
   virtual void send_response() = 0;
@@ -126,9 +158,16 @@ protected:
   char *supplied_md5_b64;
 
 public:
-  S3PutObj(struct req_state *s) : S3Op(s), ret(0), len(0), data(NULL), supplied_md5_b64(NULL) {}
+  S3PutObj() {}
   ~S3PutObj() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ret = 0;
+    len = 0;
+    data = NULL;
+    supplied_md5_b64 = NULL;
+  }
   void execute();
 
   virtual int get_params() = 0;
@@ -140,9 +179,13 @@ protected:
   int ret;
 
 public:
-  S3DeleteObj(struct req_state *s) : S3Op(s) {}
+  S3DeleteObj() {}
   ~S3DeleteObj() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ret = 0;
+  }
   void execute();
 
   virtual void send_response() = 0;
@@ -168,10 +211,27 @@ protected:
 
   int init_common();
 public:
-  S3CopyObj(struct req_state *s) : S3Op(s), ofs(0), len(0),
-                                                  end(-1), mod_ptr(NULL), unmod_ptr(NULL) {}
+  S3CopyObj() {}
   ~S3CopyObj() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    if_mod = NULL;
+    if_unmod = NULL;
+    if_match = NULL;
+    if_nomatch = NULL;
+    ofs = 0;
+    len = 0;
+    end = -1;
+    mod_ptr = NULL;
+    unmod_ptr = NULL;
+    ret = 0;
+    attrs.clear();
+    memset(&err, 0, sizeof(err));
+    src_bucket.clear();
+    src_object.clear();
+    mtime = 0;
+  }
   void execute();
 
   virtual int get_params() = 0;
@@ -184,9 +244,14 @@ protected:
   string acls;
 
 public:
-  S3GetACLs(struct req_state *s) : S3Op(s) {}
+  S3GetACLs() {}
   ~S3GetACLs() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ret = 0;
+    acls.clear();
+  }
   void execute();
 
   virtual void send_response() = 0;
@@ -199,9 +264,15 @@ protected:
   char *data;
 
 public:
-  S3PutACLs(struct req_state *s) : S3Op(s), ret(0), len(0), data(NULL) {}
+  S3PutACLs() {}
   ~S3PutACLs() {}
 
+  virtual void init(struct req_state *s) {
+    S3Op::init(s);
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
   void execute();
 
   virtual int get_params() = 0;
@@ -213,10 +284,13 @@ protected:
   struct req_state *s;
 
   virtual void provider_init_state() = 0;
+  int do_read_permissions(bool only_bucket);
 public:
   S3Handler() {}
   virtual ~S3Handler() {}
   void init_state(struct req_state *s, struct fcgx_state *fcgx);
+  S3Op *get_op();
+  virtual int read_permissions() = 0;
 };
 
 #endif

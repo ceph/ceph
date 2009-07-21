@@ -582,3 +582,116 @@ void S3Handler_REST::provider_init_state()
   s->copy_source = FCGX_GetParam("HTTP_X_AMZ_COPY_SOURCE", s->fcgx->envp);
   s->http_auth = FCGX_GetParam("HTTP_AUTHORIZATION", s->fcgx->envp);
 }
+
+static bool is_acl_op(struct req_state *s)
+{
+  return s->args.exists("acl");
+}
+
+S3Op *S3Handler_REST::get_retrieve_obj_op(struct req_state *s, bool get_data)
+{
+  if (is_acl_op(s)) {
+    return &get_acls_op;
+  }
+
+  if (s->object) {
+    get_obj_op.set_get_data(get_data);
+    return &get_obj_op;
+  } else if (!s->bucket) {
+    return NULL;
+  }
+
+  return &list_bucket_op;
+}
+
+S3Op *S3Handler_REST::get_retrieve_op(struct req_state *s, bool get_data)
+{
+  if (s->bucket) {
+    if (is_acl_op(s)) {
+      return &get_acls_op;
+    }
+    return get_retrieve_obj_op(s, get_data);
+  }
+
+  return &list_buckets_op;
+}
+
+S3Op *S3Handler_REST::get_create_op(struct req_state *s)
+{
+  if (is_acl_op(s)) {
+    return &put_acls_op;
+  } else if (s->object) {
+    if (!s->copy_source)
+      return &put_obj_op;
+    else
+      return &copy_obj_op;
+  } else if (s->bucket) {
+    return &create_bucket_op;
+  }
+
+  return NULL;
+}
+
+S3Op *S3Handler_REST::get_delete_op(struct req_state *s)
+{
+  if (s->object)
+    return &delete_obj_op;
+  else if (s->bucket)
+    return &delete_bucket_op;
+
+  return NULL;
+}
+
+S3Op *S3Handler_REST::get_op()
+{
+  S3Op *op;
+  switch (s->op) {
+   case OP_GET:
+     op = get_retrieve_op(s, true);
+     break;
+   case OP_PUT:
+     op = get_create_op(s);
+     break;
+   case OP_DELETE:
+     op = get_delete_op(s);
+     break;
+   case OP_HEAD:
+     op = get_retrieve_op(s, false);
+     break;
+   default:
+     return NULL;
+  }
+
+  if (op) {
+    op->init(s);
+  }
+  return op;
+}
+
+int S3Handler_REST::read_permissions()
+{
+  bool only_bucket;
+
+  switch (s->op) {
+  case OP_HEAD:
+  case OP_GET:
+    only_bucket = false;
+    break;
+  case OP_PUT:
+    /* is it a 'create bucket' request? */
+    if (s->object_str.size() == 0)
+      return 0;
+    if (is_acl_op(s)) {
+      only_bucket = false;
+      break;
+    }
+  case OP_DELETE:
+    only_bucket = true;
+    break;
+  default:
+    return -EINVAL;
+  }
+
+  return do_read_permissions(only_bucket);
+}
+

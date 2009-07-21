@@ -186,9 +186,8 @@ void S3CreateBucket::execute()
   map<nstring, bufferlist> attrs;
   bufferlist aclbl;
 
-  bool ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
-
-  if (!ret) {
+  bool pol_ret = policy.create_canned(s->user.user_id, s->user.display_name, s->canned_acl);
+  if (!pol_ret) {
     ret = -EINVAL;
     goto done;
   }
@@ -201,10 +200,10 @@ void S3CreateBucket::execute()
   if (ret == 0) {
     S3UserBuckets buckets;
 
-    int ret = s3_get_user_buckets(s->user.user_id, buckets);
+    int r = s3_get_user_buckets(s->user.user_id, buckets);
     S3ObjEnt new_bucket;
 
-    switch (ret) {
+    switch (r) {
     case 0:
     case -ENOENT:
     case -ENODATA:
@@ -641,5 +640,15 @@ void S3Handler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   s->canned_acl.clear();
 
   provider_init_state();
+}
+
+int S3Handler::do_read_permissions(bool only_bucket)
+{
+  int ret = read_acls(s, only_bucket);
+
+  if (ret < 0)
+    cerr << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << std::endl;
+
+  return ret;
 }
 

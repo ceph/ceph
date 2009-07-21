@@ -118,12 +118,6 @@ static void calc_hmac_sha1(const char *key, int key_len,
   cerr << "hmac=" << hex_str << std::endl;
 }
 
-static void do_list_buckets(struct req_state *s)
-{
-  S3ListBuckets_REST op(s);
-  op.execute();
-}
-
 static bool verify_signature(struct req_state *s)
 {
   bool qsr = false;
@@ -192,117 +186,6 @@ static bool verify_signature(struct req_state *s)
   return (auth_sign.compare(b64) == 0);
 }
 
-static void get_object(struct req_state *s, bool get_data)
-{
-  S3GetObj_REST op(s, get_data);
-
-  op.execute();
-}
-
-static void do_write_acls(struct req_state *s)
-{
-  S3PutACLs_REST op(s);
-  op.execute();
-}
-
-static void get_acls(struct req_state *s)
-{
-  S3GetACLs_REST op(s);
-  op.execute();
-}
-
-static bool is_acl_op(struct req_state *s)
-{
-  return s->args.exists("acl");
-}
-
-static void do_retrieve_objects(struct req_state *s, bool get_data)
-{
-  if (is_acl_op(s)) {
-    get_acls(s);
-    return;
-  }
-
-  if (s->object) {
-    get_object(s, get_data);
-    return;
-  } else if (!s->bucket) {
-    return;
-  }
-
-  S3ListBucket_REST op(s);
-  op.execute();
-}
-
-static void do_create_bucket(struct req_state *s)
-{
-  S3CreateBucket_REST op(s);
-  op.execute();
-}
-
-static void do_copy_object(struct req_state *s)
-{
-  S3CopyObj_REST op(s);
-  op.execute();
-}
-
-static void do_create_object(struct req_state *s)
-{
-  S3PutObj_REST op(s);
-  op.execute();
-}
-
-static void do_delete_bucket(struct req_state *s)
-{
-  S3DeleteBucket_REST op(s);
-  op.execute();
-}
-
-static void do_delete_object(struct req_state *s)
-{
-  S3DeleteObj_REST op(s);
-  op.execute();
-}
-
-static void do_retrieve(struct req_state *s, bool get_data)
-{
-  if (s->bucket) {
-    if (is_acl_op(s)) {
-      get_acls(s);
-      return;
-    }
-
-    do_retrieve_objects(s, get_data);
-  } else {
-    do_list_buckets(s);
-  }
-}
-
-static void do_create(struct req_state *s)
-{
-  if (is_acl_op(s)) {
-    do_write_acls(s);
-  } else if (s->object) {
-    if (!s->copy_source)
-      do_create_object(s);
-    else
-      do_copy_object(s);
-  } else if (s->bucket) {
-    do_create_bucket(s);
-  } else
-    return;
-}
-
-static void do_delete(struct req_state *s)
-{
-  if (s->object)
-    do_delete_object(s);
-  else if (s->bucket)
-    do_delete_bucket(s);
-  else
-    return;
-}
-
 static sighandler_t sighandler;
 
 static void godown(int signum)
@@ -311,38 +194,6 @@ static void godown(int signum)
   bt.print(cerr);
 
   signal(SIGSEGV, sighandler);
-}
-
-int read_permissions(struct req_state *s)
-{
-  bool only_bucket;
-
-  switch (s->op) {
-  case OP_HEAD:
-  case OP_GET:
-    only_bucket = false;
-    break;
-  case OP_PUT:
-    /* is it a 'create bucket' request? */
-    if (s->object_str.size() == 0)
-      return 0;
-    if (is_acl_op(s)) {
-      only_bucket = false;
-      break;
-    }
-  case OP_DELETE:
-    only_bucket = true;
-    break;
-  default:
-    return -EINVAL;
-  }
-
-  int ret = read_acls(s, only_bucket);
-
-  if (ret < 0)
-    cerr << "read_permissions on " << s->bucket_str << ":" <<s->object_str << " only_bucket=" << only_bucket << " ret=" << ret << std::endl;
-
-  return ret;
 }
 
 int main(int argc, char *argv[])
@@ -379,28 +230,15 @@ int main(int argc, char *argv[])
       continue;
     }
 
-    ret = read_permissions(&s);
+    ret = s3handler.read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
       continue;
     }
 
-    switch (s.op) {
-    case OP_GET:
-      do_retrieve(&s, true);
-      break;
-    case OP_PUT:
-      do_create(&s);
-      break;
-    case OP_DELETE:
-      do_delete(&s);
-      break;
-    case OP_HEAD:
-      do_retrieve(&s, false);
-      break;
-    default:
-      abort_early(&s, -EACCES);
-      break;
+    S3Op *op = s3handler.get_op();
+    if (op) {
+      op->execute();
     }
   }
   return 0;
