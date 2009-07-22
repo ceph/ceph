@@ -45,6 +45,7 @@ v0.11
 /- fixed stray unaligned access
 /- respond to control-c on slow/hung mount
 
+- osdmap: allow explicit pg 'override' mappings
 
 bugs
 - premature filejournal trimming?
@@ -66,6 +67,8 @@ later
 - rename over old files should flush data, or revert back to old contents
 
 rados
+- usage accounting
+- make rest interface superset of s3?
 - perl swig wrapper
 - 'rados call foo.bar'?
 - merge pgs
