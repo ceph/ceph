@@ -206,13 +206,14 @@ git add $target/ceph/crush/hash.h
 git commit -s -F - <<EOF
 ceph: CRUSH mapping algorithm
 
-CRUSH is a fancy hash function designed to map inputs onto a dynamic
-hierarchy of devices while minimizing the extent to which inputs are
-remapped when the devices are added or removed.  It includes some
-features that are specifically useful for storage, most notably the
-ability to map each input onto a set of N devices that are separated
-across administrator-defined failure domains.  CRUSH is used to
-distribute data across the cluster of Ceph storage nodes.
+CRUSH is a pseudorandom data distribution function designed to map
+inputs onto a dynamic hierarchy of devices, while minimizing the
+extent to which inputs are remapped when the devices are added or
+removed.  It includes some features that are specifically useful for
+storage, most notably the ability to map each input onto a set of N
+devices that are separated across administrator-defined failure
+domains.  CRUSH is used to distribute data across the cluster of Ceph
+storage nodes.
 
 More information about CRUSH can be found in this paper:
 

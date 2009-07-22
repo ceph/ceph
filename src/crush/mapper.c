@@ -21,6 +21,9 @@
 #include "crush.h"
 #include "hash.h"
 
+/*
+ * Implement the core CRUSH mapping algorithm.
+ */
 
 /**
  * crush_find_rule - find a crush_rule id for a given ruleset, type, and size.
