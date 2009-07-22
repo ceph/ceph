@@ -1,3 +1,12 @@
+ceph (0.11-1) unstable; urgency=low
+
+  * kclient fixes, clean (lkml review)
+  * improved encoding of on-wire types
+  * mount.ceph now updates /etc/mtab
+  * uclient: fix rename() refcount bug
+
+ -- sage <sage@newdream.net>  Tue, 12 Jul 2009 12:36:00 -0800
+
 ceph (0.10-1) unstable; urgency=low
 
   * uclient fixes
