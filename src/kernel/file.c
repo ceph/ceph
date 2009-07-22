@@ -810,5 +810,8 @@ const struct file_operations ceph_file_fops = {
 	.splice_read = generic_file_splice_read,
 	.splice_write = generic_file_splice_write,
 	.unlocked_ioctl = ceph_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	= ceph_ioctl,
+#endif
 };
 
