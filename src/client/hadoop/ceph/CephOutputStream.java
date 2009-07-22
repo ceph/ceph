@@ -54,21 +54,10 @@ class CephOutputStream extends OutputStream {
 
     
 
-  private long ceph_seek_from_start(long pos) {
-    return ceph_seek_from_start(clientPointer, fileHandle, pos);
-  }
-  private long ceph_getpos() {
-    return ceph_getpos(clientPointer, fileHandle);
-  }
-  private int ceph_close() { return ceph_close(clientPointer, fileHandle); }
-  private int ceph_write(byte[] buffer, int buffer_offset, int length)
-  { return ceph_write(clientPointer, fileHandle, buffer, buffer_offset, length); }
-
-
-  private native long ceph_seek_from_start(long client, int fh, long pos);
-  private native long ceph_getpos(long client, int fh);
-  private native int ceph_close(long client, int fh);
-  private native int ceph_write(long client, int fh, byte[] buffer, int buffer_offset, int length);
+  private native long ceph_seek_from_start(int fh, long pos);
+  private native long ceph_getpos(int fh);
+  private native int ceph_close(int fh);
+  private native int ceph_write(int fh, byte[] buffer, int buffer_offset, int length);
 
 
   /*  public CephOutputStream(Configuration conf, FileSystemStore store,
@@ -110,7 +99,7 @@ class CephOutputStream extends OutputStream {
 
     public long getPos() throws IOException {
     // change to get the position from Ceph client
-    return ceph_getpos();
+    return ceph_getpos(fileHandle);
   }
 
   // writes a byte
@@ -125,7 +114,7 @@ class CephOutputStream extends OutputStream {
       // Stick the byte in a buffer and write it
       byte buf[] = new byte[1];
       buf[0] = (byte) b;    
-      int result = ceph_write(buf, 0, 1);
+      int result = ceph_write(fileHandle, buf, 0, 1);
       if (1 != result)
 	System.out.println("CephOutputStream.write: failed writing a single byte to fd "
 			   + fileHandle + ": Ceph write() result = " + result);
@@ -157,7 +146,7 @@ class CephOutputStream extends OutputStream {
       }
 
       // write!
-      int result = ceph_write(buf, off, len);
+      int result = ceph_write(fileHandle, buf, off, len);
       if (result < 0) {
 	throw new IOException("CephOutputStream.write: Write of " + len + 
 			      "bytes to fd " + fileHandle + " failed");
@@ -184,7 +173,7 @@ class CephOutputStream extends OutputStream {
 	throw new IOException("Stream closed");
       }
 
-      int result = ceph_close();
+      int result = ceph_close(fileHandle);
       if (result != 0) {
 	throw new IOException("Close failed!");
       }

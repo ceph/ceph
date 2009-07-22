@@ -38,16 +38,10 @@ class CephInputStream extends FSInputStream {
 
   //private long blockEnd = -1;
 
-  private native int ceph_read(long client, int fh, byte[] buffer, int buffer_offset, int length);
-  private native long ceph_seek_from_start(long client, int fh, long pos);
-  private native long ceph_getpos(long client, int fh);
-  private native int ceph_close(long client, int fh);
-
-  private int ceph_read(byte[] buffer, int buffer_offset, int length)
-  { return ceph_read(clientPointer, fileHandle, buffer, buffer_offset, length); }
-  private long ceph_seek_from_start(long pos) { return ceph_seek_from_start(clientPointer, fileHandle, pos); }
-  private long ceph_getpos() { return ceph_getpos(clientPointer, fileHandle); }
-  private int ceph_close() { return ceph_close(clientPointer, fileHandle); }
+  private native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
+  private native long ceph_seek_from_start(int fh, long pos);
+  private native long ceph_getpos(int fh);
+  private native int ceph_close(int fh);
     
   /*
     public S3InputStream(Configuration conf, FileSystemStore store,
@@ -78,7 +72,7 @@ class CephInputStream extends FSInputStream {
   }
 
   public synchronized long getPos() throws IOException {
-    return ceph_getpos();
+    return ceph_getpos(fileHandle);
   }
 
   @Override
@@ -93,7 +87,7 @@ class CephInputStream extends FSInputStream {
       throw new IOException("CephInputStream.seek: failed seeking to position " + targetPos +
 			    " on fd " + fileHandle + ": Cannot seek after EOF " + fileLength);
     }
-    ceph_seek_from_start(targetPos);
+    ceph_seek_from_start(fileHandle, targetPos);
   }
 
   //failovers are handled by the Ceph code at a very low level;
@@ -146,7 +140,7 @@ class CephInputStream extends FSInputStream {
 	  return -1;
 	}
       // actually do the read
-      int result = ceph_read(buf, off, len);
+      int result = ceph_read(fileHandle, buf, off, len);
       if (result < 0)
 	System.out.println("CephInputStream.read: Reading " + len  + " bytes from fd " 
 			   + fileHandle + " failed.");
@@ -166,7 +160,7 @@ class CephInputStream extends FSInputStream {
       throw new IOException("Stream closed");
     }
 
-    int result = ceph_close();
+    int result = ceph_close(fileHandle);
     if (result != 0) {
       throw new IOException("Close failed!");
     }

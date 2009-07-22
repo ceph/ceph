@@ -55,55 +55,26 @@ public class CephFileSystem extends FileSystem {
    * include wrapper functions to automatically add the parameter.
    */ 
   
-  private boolean ceph_copyFromLocalFile(String localPath, String cephPath) 
-  { return ceph_copyFromLocalFile(clientPointer, localPath, cephPath); }
-  private boolean ceph_copyToLocalFile(String cephPath, String localPath)
-  { return ceph_copyToLocalFile(clientPointer, cephPath, localPath); }
-  private String  ceph_getcwd() { return ceph_getcwd(clientPointer); }  
-  private boolean ceph_setcwd(String path) { return ceph_setcwd(clientPointer, path); }
-  private boolean ceph_rmdir(String path) { return ceph_rmdir(clientPointer, path); }
-  private boolean ceph_mkdir(String path) { return ceph_mkdir(clientPointer, path); }
-  private boolean ceph_unlink(String path) { return ceph_unlink(clientPointer, path); }
-  private boolean ceph_rename(String old_path, String new_path) { return ceph_rename(clientPointer, old_path, new_path); } 
-  private boolean ceph_exists(String path) { return ceph_exists(clientPointer, path); }
-  private long    ceph_getblocksize(String path) { return ceph_getblocksize(clientPointer, path); }
-  private long    ceph_getfilesize(String path) { return ceph_getfilesize(clientPointer, path); }
-  private boolean ceph_isdirectory(String path) { return ceph_isdirectory(clientPointer, path); }
-  private boolean ceph_isfile(String path) { return ceph_isfile(clientPointer, path); }
-  private String[] ceph_getdir(String path) { return ceph_getdir(clientPointer, path); }
-  private int ceph_mkdirs(String path, int mode) { return ceph_mkdirs(clientPointer, path, mode); }
-  private int ceph_open_for_append(String path) { return ceph_open_for_append(clientPointer, path); }
-  private int ceph_open_for_read(String path) { return ceph_open_for_read(clientPointer, path); }
-  private int ceph_open_for_overwrite(String path, int mode) { return ceph_open_for_overwrite(clientPointer, path, mode); }
-
-  private boolean ceph_kill_client() {
-    System.out.println("Killing Ceph client with pointer " + clientPointer);
-    return ceph_kill_client(clientPointer);
-  }
-
   private native long    ceph_initializeClient();
-  private native boolean ceph_copyFromLocalFile (long client, String localPath, String cephPath);
-  private native boolean ceph_copyToLocalFile   (long client, String cephPath, String localPath);
-  private native String  ceph_getcwd            (long client);  
-  private native boolean ceph_setcwd            (long client, String path);
-  private native boolean ceph_rmdir             (long client, String path);
-  private native boolean ceph_mkdir             (long client, String path);
-  private native boolean ceph_unlink            (long client, String path);
-  private native boolean ceph_rename            (long client, String old_path, String new_path);
-  private native boolean ceph_exists            (long client, String path);
-  private native long    ceph_getblocksize      (long client, String path);
-  private native long    ceph_getfilesize       (long client, String path);
-  private native boolean ceph_isdirectory       (long client, String path);
-  private native boolean ceph_isfile            (long client, String path);
-  private native String[]ceph_getdir            (long client, String path);
-  private native int     ceph_mkdirs            (long client, String path, int mode);
-  private native int     ceph_open_for_append   (long client, String path);
-  private native int     ceph_open_for_read     (long client, String path);
-  private native int     ceph_open_for_overwrite(long client, String path, int mode);
-  private native boolean ceph_kill_client       (long client);
-
-
-
+  private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
+  private native boolean ceph_copyToLocalFile(String cephPath, String localPath);
+  private native String  ceph_getcwd();
+  private native boolean ceph_setcwd(String path);
+  private native boolean ceph_rmdir(String path);
+  private native boolean ceph_mkdir(String path);
+  private native boolean ceph_unlink(String path);
+  private native boolean ceph_rename(String old_path, String new_path);
+  private native boolean ceph_exists(String path);
+  private native long    ceph_getblocksize(String path);
+  private native long    ceph_getfilesize(String path);
+  private native boolean ceph_isdirectory(String path);
+  private native boolean ceph_isfile(String path);
+  private native String[] ceph_getdir(String path);
+  private native int ceph_mkdirs(String path, int mode);
+  private native int ceph_open_for_append(String path);
+  private native int ceph_open_for_read(String path);
+  private native int ceph_open_for_overwrite(String path, int mode);
+  private native boolean ceph_kill_client();
 
   public CephFileSystem() {
     root = new Path("/");
