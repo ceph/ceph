@@ -7,22 +7,6 @@
 #include "types.h"
 #include "osdmap.h"
 
-/*
- * All data objects are stored within a cluster/cloud of OSDs, or
- * "object storage devices."  (Note that Ceph OSDs have _nothing_ to
- * do with the T10 OSD extensions to SCSI.)  Ceph OSDs are simply
- * remote daemons serving up and coordinating consistent and safe
- * access to storage.
- *
- * Cluster membership and the mapping of data objects onto storage devices
- * are described by the osd map.
- *
- * We keep track of pending OSD requests (read, write), resubmit
- * requests to different OSDs when the cluster topology/data layout
- * change, or retry the affected requests when the communications
- * channel with an OSD is reset.
- */
-
 struct ceph_msg;
 struct ceph_snap_context;
 struct ceph_osd_request;

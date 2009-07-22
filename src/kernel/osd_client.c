@@ -14,12 +14,28 @@
 
 /*
  * Implement client access to distributed object storage cluster.
+ *
+ * All data objects are stored within a cluster/cloud of OSDs, or
+ * "object storage devices."  (Note that Ceph OSDs have _nothing_ to
+ * do with the T10 OSD extensions to SCSI.)  Ceph OSDs are simply
+ * remote daemons serving up and coordinating consistent and safe
+ * access to storage.
+ *
+ * Cluster membership and the mapping of data objects onto storage devices
+ * are described by the osd map.
+ *
+ * We keep track of pending OSD requests (read, write), resubmit
+ * requests to different OSDs when the cluster topology/data layout
+ * change, or retry the affected requests when the communications
+ * channel with an OSD is reset.
  */
 
 /*
  * calculate the mapping of a file extent onto an object, and fill out the
  * request accordingly.  shorten extent as necessary if it crosses an
  * object boundary.
+ *
+ * fill osd op in request message.
  */
 static void calc_layout(struct ceph_osd_client *osdc,
 			struct ceph_vino vino, struct ceph_file_layout *layout,
@@ -43,7 +59,6 @@ static void calc_layout(struct ceph_osd_client *osdc,
 
 	sprintf(req->r_oid, "%llx.%08llx", vino.ino, bno);
 	req->r_oid_len = strlen(req->r_oid);
-
 
 	op->offset = cpu_to_le64(objoff);
 	op->length = cpu_to_le64(objlen);
@@ -77,7 +92,14 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
 
 /*
  * build new request AND message, calculate layout, and adjust file
- * extent as needed.  include addition truncate or sync osd ops.
+ * extent as needed.
+ *
+ * if the file was recently truncated, we include information about its
+ * old and new size so that the object can be updated appropriately.  (we
+ * avoid synchronously deleting truncated objects because it's slow.)
+ *
+ * if @do_sync, include a 'startsync' command so that the osd will flush
+ * data quickly.
  */
 struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 					       struct ceph_file_layout *layout,
@@ -101,7 +123,6 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	int i;
 	u64 prevofs;
 
-	/* we may overallocate here, if our write extent is shortened below */
 	req = kzalloc(sizeof(*req), GFP_NOFS);
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
@@ -149,7 +170,6 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		op->payload_len = cpu_to_le32(*plen);
 	}
 
-
 	/* fill in oid, ticket */
 	head->object_len = cpu_to_le32(req->r_oid_len);
 	memcpy(p, req->r_oid, req->r_oid_len);
@@ -160,14 +180,13 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	       osdc->client->signed_ticket_len);
 	p += osdc->client->signed_ticket_len;
 
-
 	/* additional ops */
 	if (do_trunc) {
 		op++;
 		op->op = cpu_to_le16(opcode == CEPH_OSD_OP_READ ?
 			     CEPH_OSD_OP_MASKTRUNC : CEPH_OSD_OP_SETTRUNC);
 		op->truncate_seq = cpu_to_le32(truncate_seq);
-		prevofs =  le64_to_cpu((op-1)->offset);
+		prevofs = le64_to_cpu((op-1)->offset);
 		op->truncate_size = cpu_to_le64(truncate_size - (off-prevofs));
 	}
 	if (do_sync) {
@@ -323,8 +342,8 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 }
 
 /*
- * Pick an osd, and put result in req->r_last_osd[_addr].  The first
- * up osd in the pg.  or -1.
+ * Pick an osd (the first 'up' osd in the pg), and put result in
+ * req->r_last_osd[_addr].  If none, set to -1.
  *
  * Caller should hold map_sem for read.
  *
@@ -761,6 +780,9 @@ int ceph_osdc_start_request(struct ceph_osd_client *osdc,
 	return rc;
 }
 
+/*
+ * wait for a request to complete
+ */
 int ceph_osdc_wait_request(struct ceph_osd_client *osdc,
 			   struct ceph_osd_request *req)
 {
