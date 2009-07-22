@@ -96,9 +96,11 @@ class CephInputStream extends FSInputStream {
     ceph_seek_from_start(targetPos);
   }
 
-  //method stub obviously
+  //failovers are handled by the Ceph code at a very low level;
+  //if there are issues that can be solved by changing sources
+  //they'll be dealt with before anybody even tries to call this method!
   public synchronized boolean seekToNewSource(long targetPos) {
-    return true;
+    return false;
   }
     
     
