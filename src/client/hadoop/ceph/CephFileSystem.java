@@ -2,12 +2,14 @@
 package org.apache.hadoop.fs.ceph;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.util.Set;
 import java.util.EnumSet;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -153,7 +155,8 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("append: Open for append failed on path \"" +
 			    abs_path.toString() + "\"");
     }
-    return new CephOutputStream(getConf(), clientPointer, fd);
+    CephOutputStream cephOStream = new CephOutputStream(getConf(), clientPointer, fd);
+    return new FSDataOutputStream(cephOStream);
   }
 
   public String getName() {
@@ -403,7 +406,7 @@ public class CephFileSystem extends FileSystem {
     }
       
     // Step 4: create the stream
-    FSOutputStream cephOStream = new CephOutputStream(getConf(), clientPointer, fh);
+    OutputStream cephOStream = new CephOutputStream(getConf(), clientPointer, fh);
     //System.out.println("createRaw: opened absolute path \""  + absfilepath.toString() 
     //		 + "\" for writing with fh " + fh);
 
