@@ -10,34 +10,34 @@ extern "C" {
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_seek_from_start
- * Signature: (JIJ)J
+ * Signature: (IJ)J
  */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1seek_1from_1start
-  (JNIEnv *, jobject, jlong, jint, jlong);
+  (JNIEnv *, jobject, jint, jlong);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_getpos
- * Signature: (JI)J
+ * Signature: (I)J
  */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1getpos
-  (JNIEnv *, jobject, jlong, jint);
+  (JNIEnv *, jobject, jint);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_close
- * Signature: (JI)I
+ * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1close
-  (JNIEnv *, jobject, jlong, jint);
+  (JNIEnv *, jobject, jint);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_write
- * Signature: (JI[BII)I
+ * Signature: (I[BII)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1write
-  (JNIEnv *, jobject, jlong, jint, jbyteArray, jint, jint);
+  (JNIEnv *, jobject, jint, jbyteArray, jint, jint);
 
 #ifdef __cplusplus
 }
