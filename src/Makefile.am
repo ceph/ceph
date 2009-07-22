@@ -163,40 +163,15 @@ libcls_acl.so: cls_acl.cc
 	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
 BUILT_SOURCES += libcls_acl.so
 
-## libcephclient.so
-#libcephclient_so_a_SOURCES = \
-#	client/Client.cc \
-#	client/SyntheticClient.cc \
-#	client/Trace.cc \
-#	msg/Message.cc \
-#	common/Logger.cc \
-#	common/Clock.cc \
-#	common/Timer.cc \
-#	common/Finisher.cc \
-#	mon/MonMap.cc \
-#	mon/MonClient.cc \
-#	osd/OSDMap.cc \
-#	config.cc \
-#	osdc/Objecter.cc \
-#	osdc/ObjectCacher.cc \
-#	osdc/Filer.cc \
-#	osdc/Journaler.cc
-#libcephclient_so_a_CXXFLAGS = ${AM_CXXFLAGS} -fPIC
-#libcephclient_so_a_CFLAGS = ${AM_CFLAGS} -fPIC
-
-#BUILT_SOURCES += libcephclient_so.a
-
-#libcephclient.so: libcephclient_so.a libcrush_so.a
-#	${CXX} -I. -fPIC -shared -Wl,-soname,$@.1 ${AM_CXXFLAGS} ${LIBS} $^ -o $@
-#BUILT_SOURCES += libcephclient.so
-
 ## hadoop client
 JAVA_BASE = /usr/lib/jvm/java-6-sun
-libhadoopcephfs.so: client/hadoop/CephFSInterface.cc libcephclient_so.a
-	${CXX} -fPIC -shared -Wl,-soname,$@.1 -I. ${AM_CXXFLAGS} -I${JAVA_BASE}/include -I${JAVA_BASE}/include/linux ${LIBS} $^ -o $@
-
-#BUILT_SOURCES += libhadoopcephfs.so
-
+libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc \
+${JAVA_BASE}/include \
+${JAVA_BASE}/include/linux
+libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
+libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
+libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
+lib_LTLIBRARIES += libhadoopcephfs.la
 
 # shell scripts
 editpaths = sed \
