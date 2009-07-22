@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.EnumSet;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSInputStream;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -295,8 +295,7 @@ public class CephFileSystem extends FileSystem {
     return result;
   }
 
-  @Override
-    public FileStatus getFileStatus(Path p) throws IOException {
+  public FileStatus getFileStatus(Path p) throws IOException {
     // For the moment, hardwired replication and modification time
     Path abs_p = makeAbsolute(p);
     return new FileStatus(__getLength(abs_p), __isDirectory(abs_p), 2,
@@ -307,7 +306,7 @@ public class CephFileSystem extends FileSystem {
   // steal or factor out iteration code from delete()
     public FileStatus[] listStatus(Path p) throws IOException {
     Path abs_p = makeAbsolute(p);
-    Path[] paths = listPathsRaw(abs_p);
+    Path[] paths = listPaths(abs_p);
     FileStatus[] statuses = new FileStatus[paths.length];
     for (int i = 0; i < paths.length; ++i) {
       statuses[i] = getFileStatus(paths[i]);
@@ -316,13 +315,13 @@ public class CephFileSystem extends FileSystem {
   }
 
 
-  public Path[] listPathsRaw(Path path) throws IOException {
+  public Path[] listPaths(Path path) throws IOException {
 
     String dirlist[];
 
     Path abs_path = makeAbsolute(path);
 
-    //System.out.println("listPathsRaw on path \"" + path.toString() + "\", absolute path \""
+    //System.out.println("listPaths on path \"" + path.toString() + "\", absolute path \""
     //		 + abs_path.toString() + "\"");
 
     // If it's a directory, get the listing. Otherwise, complain and give up.
@@ -331,10 +330,10 @@ public class CephFileSystem extends FileSystem {
     else
       {
 	if (exists(abs_path)) { }
-	//  System.out.println("listPathsRaw on path \"" + abs_path.toString() + 
+	//  System.out.println("listPaths on path \"" + abs_path.toString() + 
 	//	     "\" failed; the path is not a directory.");
 	else {}
-	// System.out.println("listPathsRaw on path \"" + abs_path.toString() + 
+	// System.out.println("listPaths on path \"" + abs_path.toString() + 
 	//	     "\" failed; the path does not exist.");
 	return null;
       }
@@ -404,18 +403,17 @@ public class CephFileSystem extends FileSystem {
     }
       
     // Step 4: create the stream
-    FSDataOutputStream result = new CephOutputStream(getConf(), clientPointer, fh);
+    FSOutputStream cephOStream = new CephOutputStream(getConf(), clientPointer, fh);
     //System.out.println("createRaw: opened absolute path \""  + absfilepath.toString() 
     //		 + "\" for writing with fh " + fh);
 
-    return result;
+    return new FSDataOutputStream(cephOStream);
   }
 
 
 
   // Opens a Ceph file and attaches the file handle to an FSDataInputStream.
-  @Override
-    public FSInputStream open(Path path, int bufferSize) throws IOException {
+    public FSDataInputStream open(Path path, int bufferSize) throws IOException {
     Path abs_path = makeAbsolute(path);
 
     if(!isFile(abs_path)) {
@@ -436,8 +434,8 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("Failed to get file size for file " + abs_path.toString() + 
 			    " but succeeded in opening file. Something bizarre is going on.");
     }
-    FSInputStream result = new CephInputStream(getConf(), clientPointer, fh, size);
-    return result;
+    FSInputStream cephIStream = new CephInputStream(getConf(), clientPointer, fh, size);
+    return new FSDataInputStream(cephIStream);
   }
 
   @Override
@@ -452,7 +450,7 @@ public class CephFileSystem extends FileSystem {
     
     Path abs_path = makeAbsolute(path);      
     
-    //System.out.println("deleteRaw: Deleting path " + abs_path.toString());
+    //System.out.println("delete: Deleting path " + abs_path.toString());
     // sanity check
     if (abs_path.toString().equals("/"))
       throw new IOException("Error: deleting the root directory is a Bad Idea.");
@@ -461,7 +459,7 @@ public class CephFileSystem extends FileSystem {
     if (isFile(abs_path)) {
       boolean result = ceph_unlink(path.toString());
       /*      if(!result) {
-	System.out.println("deleteRaw: failed to delete file \"" +
+	System.out.println("delete: failed to delete file \"" +
 			   abs_path.toString() + "\".");
 			   } */
       return result;
@@ -472,25 +470,25 @@ public class CephFileSystem extends FileSystem {
     if (!recursive) {
       throw new IOException("Directories must be deleted recursively!");
     }
-    Path[] contents = listPathsRaw(path);
+    //get the entries; listPaths will remove . and .. for us
+    Path[] contents = listPaths(path);
     if (contents == null) {
-      // System.out.println("deleteRaw: Failed to read contents of directory \"" +
+      // System.out.println("delete: Failed to read contents of directory \"" +
       //	     abs_path.toString() + "\" while trying to delete it");
       return false;
     }
-
-    // recursively delete, skipping "." and ".." entries
+    // delete the entries
     Path parent = abs_path.getParent();
     for (Path p : contents) {
-      if (!deleteRaw(p)) {
-	// System.out.println("deleteRaw: Failed to delete file \"" + 
+      if (!delete(p, true)) {
+	// System.out.println("delete: Failed to delete file \"" + 
 	//		 p.toString() + "\" while recursively deleting \""
 	//		 + abs_path.toString() + "\"" );
 	return false;
       }
     }
-  
-    boolean result = ceph_unlink(path.toString());
+    //if we've come this far it's a now-empty directory, so delete it!
+    boolean result = ceph_rmdir(path.toString());
     if (!result)
       System.out.println("delete: failed to delete \"" + abs_path.toString() + "\"");
     return result;
