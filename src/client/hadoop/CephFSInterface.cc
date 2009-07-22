@@ -1,5 +1,12 @@
-#include "config.h"
+// -*- mode:c++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 #include "CephFSInterface.h"
+
+#include "client/Client.h"
+#include "config.h"
+#include "msg/SimpleMessenger.h"
+#include "common/Timer.h"
+
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -514,6 +521,51 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   return dirListingStringArray;
 }
 
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_mkdirs
+ * Signature: (JLjava/lang/String;I)I
+ * Create the specified directory and any required intermediate ones.
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdirs
+(JNIEnv *env, jobject, jlong clientp, jstring j_path, jint mode) {
+  dout(10) << "In Hadoop mk_dirs" << dendl;
+  //get our client
+  Client* client;
+  client = *(Client**) &clientp;
+
+  //get c-style string and make the call, clean up the string...
+  jint result;
+  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  result = client->mkdirs(c_path, mode);
+  env->ReleaseStringUTFChars(j_path, c_path);
+
+  //...and return
+  return result;
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_open_for_append
+ * Signature: (JLjava/lang/String;)I
+ * Open a file for writing
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1append
+(JNIEnv *env, jobject obj, jlong clientp, jstring j_path){
+  dout(10) << "In hadoop open_for_append" << dendl;
+
+  Client* client;
+  client = *(Client**)&clientp;
+
+  jint result;
+
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
+  result = client->open(c_path, O_WRONLY|O_CREAT|O_APPEND);
+  env->ReleaseStringUTFChars(j_path, c_path);
+
+  return result;
+}
+
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
@@ -542,7 +594,6 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
   return result;
 }
 
-
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_open_for_overwrite
@@ -550,7 +601,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
  * Opens a file for overwriting; creates it if necessary.
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1overwrite
-  (JNIEnv *env, jobject obj, jlong clientp, jstring j_path)
+  (JNIEnv *env, jobject obj, jlong clientp, jstring j_path, jint mode)
 {
   dout(10) << "In open_for_overwrite" << dendl;
 
@@ -561,7 +612,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  result = client->open(c_path, O_WRONLY|O_CREAT|O_TRUNC);
+  result = client->open(c_path, O_WRONLY|O_CREAT|O_TRUNC, mode);
   env->ReleaseStringUTFChars(j_path, c_path);
 
   // returns file handle, or -1 on failure

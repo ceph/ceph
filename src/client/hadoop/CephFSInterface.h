@@ -149,7 +149,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
  * Signature: (JLjava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1append
-  (JNIEnv *, jobject, jlong, jstring);
+  (JNIEnv *, jobject, jlong, jstring, jint mode);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
