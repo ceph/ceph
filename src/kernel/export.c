@@ -5,12 +5,35 @@
 #include "ceph_debug.h"
 
 /*
- * fh is the ino, the parent ino, and the parent dentry hash.  we'll
- * make them all connectable.
+ * NFS export support
+ *
+ * NFS re-export of a ceph mount is, at present, only semireliable.
+ * The basic issue is that the Ceph architectures doesn't lend itself
+ * well to generating filehandles that will remain valid forever.
+ *
+ * So, we do our best.  If you're lucky, your inode will be in the
+ * client's cache.  If it's not, and you have a connectable fh, then
+ * the MDS server may be able to find it for you.  Otherwise, you get
+ * ESTALE.
+ *
+ * There are ways to this more reliable, but in the non-connectable fh
+ * case, we won't every work perfectly, and in the connectable case,
+ * some changes are needed on the MDS side to work better.
+ */
+
+/*
+ * Basic fh
  */
 struct ceph_nfs_fh {
-	struct ceph_vino ino;
-	struct ceph_vino parent_ino;
+	u64 ino;
+} __attribute__ ((packed));
+
+/*
+ * Larger 'connectable' fh that includes parent ino and name hash.
+ * Use this whenever possible, as it works more reliably.
+ */
+struct ceph_nfs_confh {
+	u64 ino, parent_ino;
 	u32 parent_name_hash;
 } __attribute__ ((packed));
 
@@ -18,49 +41,54 @@ static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 			  int connectable)
 {
 	struct ceph_nfs_fh *fh = (void *)rawfh;
+	struct ceph_nfs_confh *cfh = (void *)rawfh;
 	struct dentry *parent = dentry->d_parent;
+	struct inode *inode = dentry->d_inode;
+	int type;
 
-	if (*max_len < sizeof(*fh))
+	/* don't re-export snaps */
+	if (ceph_snap(inode) != CEPH_NOSNAP)
+		return -EINVAL;
+
+	if (*max_len >= sizeof(*cfh)) {
+		dout("encode_fh %p connectable\n", dentry);
+		cfh->ino = ceph_ino(dentry->d_inode);
+		cfh->parent_ino = ceph_ino(parent->d_inode);
+		cfh->parent_name_hash = parent->d_name.hash;
+		*max_len = sizeof(*cfh);
+		type = 2;
+	} else if (*max_len > sizeof(*fh)) {
+		if (connectable)
+			return -ENOSPC;
+		dout("encode_fh %p\n", dentry);
+		fh->ino = ceph_ino(dentry->d_inode);
+		*max_len = sizeof(*fh);
+		type = 1;
+	} else {
 		return -ENOSPC;
-
-	dout("encode_fh %p%s\n", dentry, connectable ? " connectable" : "");
-	fh->ino = ceph_vino(dentry->d_inode);
-	fh->parent_ino = ceph_vino(parent->d_inode);
-	fh->parent_name_hash = parent->d_name.hash;
-	return 2;
+	}		
+	return type;
 }
 
+/*
+ * convert regular fh to dentry
+ *
+ * FIXME: we should try harder by querying the mds for the ino.
+ */
 static struct dentry *__fh_to_dentry(struct super_block *sb,
 				     struct ceph_nfs_fh *fh)
 {
-	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
 	struct inode *inode;
 	struct dentry *dentry;
+	struct ceph_vino vino;
 	int err;
-#define BUF_SIZE 16
-	char path2[BUF_SIZE];
-	u32 hash = fh->parent_name_hash;
 
-	inode = ceph_find_inode(sb, fh->ino);
-	if (!inode) {
-		struct ceph_mds_request *req;
-		pr_err("ceph fh_to_dentry %llx.%x -- no inode\n", fh->ino.ino,
-		       hash);
-		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUPHASH,
-					       USE_ANY_MDS);
-		if (IS_ERR(req))
-			return ERR_PTR(PTR_ERR(req));
-
-		req->r_ino1 = fh->ino;
-		snprintf(path2, BUF_SIZE, "%d", hash);
-		req->r_ino2 = fh->parent_ino;
-		req->r_num_caps = 1;
-		err = ceph_mdsc_do_request(mdsc, NULL, req);
-		ceph_mdsc_put_request(req);
-		inode = ceph_find_inode(sb, fh->ino);
-		if (!inode)
-			return ERR_PTR(err ? err : -ESTALE);
-	}
+	dout("__fh_to_dentry %llx\n", fh->ino);
+	vino.ino = fh->ino;
+	vino.snap = CEPH_NOSNAP;
+	inode = ceph_find_inode(sb, vino);
+	if (!inode)
+		return ERR_PTR(-ESTALE);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
 	dentry = d_obtain_alias(inode);
@@ -69,8 +97,8 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 #endif
 
 	if (!dentry) {
-		pr_err("ceph fh_to_dentry %llx.%x -- inode %p but ENOMEM\n",
-		       fh->ino.ino, hash, inode);
+		pr_err("ceph fh_to_dentry %llx -- inode %p but ENOMEM\n",
+		       fh->ino, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
 	}
@@ -80,36 +108,124 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 		iput(inode);
 		return ERR_PTR(err);
 	}
-	dout("fh_to_dentry %llx.%x -- inode %p dentry %p\n", fh->ino.ino,
-	     hash, inode, dentry);
+	dout("__fh_to_dentry %llx %p dentry %p\n", fh->ino, inode, dentry);
 	return dentry;
+}
 
+/*
+ * convert connectable fh to dentry
+ */
+static struct dentry *__cfh_to_dentry(struct super_block *sb,
+				      struct ceph_nfs_confh *cfh)
+{
+	struct ceph_mds_client *mdsc = &ceph_client(sb)->mdsc;
+	struct inode *inode;
+	struct dentry *dentry;
+	struct ceph_vino vino;
+	int err;
+
+	dout("__cfh_to_dentry %llx (%llx/%x)\n",
+	     cfh->ino, cfh->parent_ino, cfh->parent_name_hash);
+
+	vino.ino = cfh->ino;
+	vino.snap = CEPH_NOSNAP;
+	inode = ceph_find_inode(sb, vino);
+	if (!inode) {
+		struct ceph_mds_request *req;
+
+		req = ceph_mdsc_create_request(mdsc, CEPH_MDS_OP_LOOKUPHASH,
+					       USE_ANY_MDS);
+		if (IS_ERR(req))
+			return ERR_PTR(PTR_ERR(req));
+
+		req->r_ino1 = vino;
+		req->r_ino2.ino = cfh->parent_ino;
+		req->r_ino2.snap = CEPH_NOSNAP;
+		req->r_path2 = kmalloc(16, GFP_NOFS);
+		snprintf(req->r_path2, 16, "%d", cfh->parent_name_hash);
+		req->r_num_caps = 1;
+		err = ceph_mdsc_do_request(mdsc, NULL, req);
+		ceph_mdsc_put_request(req);
+		inode = ceph_find_inode(sb, vino);
+		if (!inode)
+			return ERR_PTR(err ? err : -ESTALE);
+	}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
+	dentry = d_obtain_alias(inode);
+#else
+	dentry = d_alloc_anon(inode);
+#endif
+	if (!dentry) {
+		pr_err("ceph cfh_to_dentry %llx -- inode %p but ENOMEM\n",
+		       cfh->ino, inode);
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	err = ceph_init_dentry(dentry);
+	if (err < 0) {
+		iput(inode);
+		return ERR_PTR(err);
+	}
+	dout("__cfh_to_dentry %llx %p dentry %p\n", cfh->ino, inode, dentry);
+	return dentry;
 }
 
 static struct dentry *ceph_fh_to_dentry(struct super_block *sb, struct fid *fid,
 					int fh_len, int fh_type)
 {
-	return __fh_to_dentry(sb, (struct ceph_nfs_fh *)fid->raw);
+	if (fh_type == 1)
+		return __fh_to_dentry(sb, (struct ceph_nfs_fh *)fid->raw);
+	else
+		return __cfh_to_dentry(sb, (struct ceph_nfs_confh *)fid->raw);
 }
 
-static struct dentry *ceph_fh_to_parent(struct super_block *sb, struct fid *fid,
+/*
+ * get parent, if possible.
+ *
+ * FIXME: we could do better by querying the mds to discover the
+ * parent.
+ */
+static struct dentry *ceph_fh_to_parent(struct super_block *sb,
+					 struct fid *fid,
 					int fh_len, int fh_type)
 {
-	struct ceph_nfs_fh *fh = (void *)fid->raw;
+	struct ceph_nfs_confh *cfh = (void *)fid->raw;
+	struct ceph_vino vino;
 	struct inode *inode;
-	
-	pr_debug("ceph_fh_to_parent %llx\n", fh->parent_ino.ino);
+	struct dentry *dentry;
+	int err;
 
-	/* TODO: this is a feeble attempt.  we should query the mds, too. */
-	inode = ceph_find_inode(sb, fh->ino);
+	if (fh_type == 1)
+		return ERR_PTR(-ESTALE);
+
+	pr_debug("ceph_fh_to_parent %llx/%d\n", cfh->parent_ino,
+		 cfh->parent_name_hash);
+
+	vino.ino = cfh->ino;
+	vino.snap = CEPH_NOSNAP;
+	inode = ceph_find_inode(sb, vino);
 	if (!inode)
 		return ERR_PTR(-ESTALE);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 28)
-	return d_obtain_alias(inode);
+	dentry = d_obtain_alias(inode);
 #else
-	return d_alloc_anon(inode);
+	dentry = d_alloc_anon(inode);
 #endif
+	if (!dentry) {
+		pr_err("ceph fh_to_parent %llx -- inode %p but ENOMEM\n",
+		       cfh->ino, inode);
+		iput(inode);
+		return ERR_PTR(-ENOMEM);
+	}
+	err = ceph_init_dentry(dentry);
+	if (err < 0) {
+		iput(inode);
+		return ERR_PTR(err);
+	}
+	dout("fh_to_parent %llx %p dentry %p\n", cfh->ino, inode, dentry);
+	return dentry;
 }
 
 const struct export_operations ceph_export_ops = {

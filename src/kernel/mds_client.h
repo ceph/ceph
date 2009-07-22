@@ -145,7 +145,7 @@ struct ceph_mds_request {
 	struct inode *r_inode;              /* arg1 */
 	struct dentry *r_dentry;            /* arg1 */
 	struct dentry *r_old_dentry;        /* arg2: rename from or link from */
-	const char *r_path1, *r_path2;
+	char *r_path1, *r_path2;
 	struct ceph_vino r_ino1, r_ino2;
 
 	struct inode *r_locked_dir; /* dir (if any) i_mutex locked by vfs */
