@@ -58,9 +58,15 @@ int crush_find_rule(struct crush_map *map, int ruleset, int type, int size)
 
 /*
  * Choose based on a random permutation of the bucket.
+ *
+ * We used to use some prime number arithmetic to do this, but it
+ * wasn't very random, and had some other bad behaviors.  Instead, we
+ * calculate an actual random permutation of the bucket members.
+ * Since this is expensive, we optimize for the r=0 case, which
+ * captures the vast majority of calls.
  */
 static int bucket_perm_choose(struct crush_bucket *bucket,
-				int x, int r)
+			      int x, int r)
 {
 	unsigned pr = r % bucket->size;
 	unsigned i, s;
@@ -75,7 +81,7 @@ static int bucket_perm_choose(struct crush_bucket *bucket,
 			s = crush_hash32_3(x, bucket->id, 0) %
 				bucket->size;
 			bucket->perm[0] = s;
-			bucket->perm_n = 0xffff;
+			bucket->perm_n = 0xffff;   /* magic value, see below */
 			goto out;
 		}
 
@@ -151,7 +157,7 @@ static int bucket_list_choose(struct crush_bucket_list *bucket,
 }
 
 
-/* tree */
+/* (binary) tree */
 static int height(int n)
 {
 	int h = 0;
