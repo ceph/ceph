@@ -447,11 +447,11 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 /*
  * Add a capability under the given MDS session.
  *
- * Caller should hold session snap_rwsem (read), s_mutex.
+ * Caller should hold session snap_rwsem (read) and s_mutex.
  *
- * @fmode is the open file mode, if we are opening a file,
- * otherwise it is < 0.  (This is so we can atomically add
- * the cap and add an open file reference to it.)
+ * @fmode is the open file mode, if we are opening a file, otherwise
+ * it is < 0.  (This is so we can atomically add the cap and add an
+ * open file reference to it.)
  */
 int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session, u64 cap_id,
@@ -472,7 +472,7 @@ int ceph_add_cap(struct inode *inode,
 
 	/*
 	 * If we are opening the file, include file mode wanted bits
-	 * in wanted.  Needed by adjust_cap_rdcaps_listing.
+	 * in wanted.
 	 */
 	if (fmode >= 0)
 		wanted |= ceph_caps_for_mode(fmode);
@@ -516,6 +516,9 @@ retry:
 	}
 
 	if (!ci->i_snap_realm) {
+		/*
+		 * add this inode to the appropriate snap realm
+		 */
 		struct ceph_snap_realm *realm = ceph_lookup_snap_realm(mdsc,
 							       realmino);
 		if (realm) {
@@ -668,7 +671,7 @@ static void __touch_cap(struct ceph_cap *cap)
 }
 
 /*
- * Return true if we hold the given mask.  And move the cap(s) to the
+ * Check if we hold the given mask.  If so, move the cap(s) to the
  * front of their respective LRUs.  (This is the preferred way for
  * callers to check for caps they want.)
  */
@@ -1752,7 +1755,9 @@ static void check_max_size(struct inode *inode, loff_t endoff)
 }
 
 /*
- * Wait for caps, and take cap references.
+ * Wait for caps, and take cap references.  If we can't get a WR cap
+ * due to a small max_size, make sure we check_max_size (and possibly
+ * ask the mds) so we don't get hung up indefinitely.
  */
 int ceph_get_caps(struct ceph_inode_info *ci, int need, int want, int *got,
 		  loff_t endoff)
@@ -2127,7 +2132,7 @@ start:
 
 /*
  * Handle FLUSH_ACK from MDS, indicating that metadata we sent to the
- * MDS has been safely recorded.
+ * MDS has been safely committed.
  */
 static void handle_cap_flush_ack(struct inode *inode,
 				 struct ceph_mds_caps *m,
