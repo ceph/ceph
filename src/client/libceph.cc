@@ -21,8 +21,7 @@ static MonClient *monclient = NULL;
 static SimpleMessenger *rank = NULL;
 
 extern "C" int ceph_initialize(int argc, const char **argv)
-{
-  ceph_client_mutex.Lock();
+{  ceph_client_mutex.Lock();
   if (!client_initialized) {
     //create everything to start a client
     vector<const char*> args;
@@ -244,6 +243,11 @@ extern "C" int ceph_fstat(int fd, struct stat *stbuf)
 extern "C" int ceph_sync_fs()
 {
   return client->sync_fs();
+}
+
+extern "C" int ceph_get_stripe_unit(int fh)
+{
+  return client->get_stripe_unit(fh);
 }
 
 int ceph_getdir(const char *relpath, std::list<std::string>& names)

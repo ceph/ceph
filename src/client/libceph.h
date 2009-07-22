@@ -69,6 +69,7 @@ int ceph_fsync(int fd, bool syncdataonly);
 int ceph_fstat(int fd, struct stat *stbuf);
 
 int ceph_sync_fs();
+int ceph_get_stripe_unit(int fh);
 #ifdef __cplusplus
 int ceph_getdir(const char *relpath, std::list<std::string>& names); //not for C, sorry!
 }
