@@ -423,6 +423,10 @@ int RadosClient::get_pool_stats(std::vector<string>& pools, map<string,rados_poo
     v.num_object_copies = p->second.num_object_copies;
     v.num_objects_missing_on_primary = p->second.num_objects_missing_on_primary;
     v.num_objects_degraded = p->second.num_objects_degraded;
+    v.num_rd = p->second.num_rd;
+    v.num_rd_kb = p->second.num_rd_kb;
+    v.num_wr = p->second.num_wr;
+    v.num_wr_kb = p->second.num_wr_kb;
   }
 
   return 0;

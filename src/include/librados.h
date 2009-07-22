@@ -34,6 +34,7 @@ struct rados_pool_stat_t {
   long long unsigned num_object_copies;  // num_objects * num_replicas
   long long unsigned num_objects_missing_on_primary;
   long long unsigned num_objects_degraded;
+  long long unsigned num_rd, num_rd_kb,num_wr, num_wr_kb;
 };
 
 struct rados_statfs_t {

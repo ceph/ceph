@@ -29,7 +29,7 @@ v0.10
 /  - fix op replay after mds restart (symlink ops)
 /- fix rados snaps vs 'ls'
 /- improved monitor read model
-- osd bugfixes
+/- osd bugfixes
 
 v0.11
 (andi)
@@ -45,11 +45,11 @@ v0.11
 /- fixed stray unaligned access
 /- respond to control-c on slow/hung mount
 
+v0.12
 - osdmap: allow explicit pg 'override' mappings
 
 bugs
 - premature filejournal trimming?
-- mount.ceph doesn't update /etc/mtab
 
 later
 - authentication
