@@ -109,7 +109,6 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
  */
 struct ceph_client {
 	u32 whoami;                   /* my client number */
-	struct kobject kobj;
 	struct dentry *debugfs_fsid, *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
 	struct dentry *debugfs_dir, *debugfs_dentry_lru;

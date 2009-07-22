@@ -12,6 +12,18 @@
  * Interact with Ceph monitor cluster.  Handle requests for new map
  * versions, and periodically resend as needed.  Also implement
  * statfs() and umount().
+ *
+ * A small cluster of Ceph "monitors" are responsible for managing critical
+ * cluster configuration and state information.  An odd number (e.g., 3, 5)
+ * of cmon daemons use a modified version of the Paxos part-time parliament
+ * algorithm to manage the MDS map (mds cluster membership), OSD map, and
+ * list of clients who have mounted the file system.
+ *
+ * Communication with the monitor cluster is lossy, so requests for
+ * information may have to be resent if we time out waiting for a response.
+ * As long as we do not time out, we continue to send all requests to the
+ * same monitor.  If there is a problem, we randomly pick a new monitor from
+ * the cluster to try.
  */
 
 /*
@@ -92,7 +104,7 @@ static int pick_mon(struct ceph_mon_client *monc, int newmon)
 
 /*
  * Generic timeout mechanism for monitor requests, so we can resend if
- * we don't get a timely reply.
+ * we don't get a timely reply.  Exponential backoff.
  */
 static void reschedule_timeout(struct ceph_mon_request *req)
 {
@@ -363,7 +375,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	req.tid = ++monc->last_tid;
 	req.last_attempt = jiffies;
 	req.delay = BASE_DELAY_INTERVAL;
-	memset(&req.kobj, 0, sizeof(req.kobj));
 	if (radix_tree_insert(&monc->statfs_request_tree, req.tid, &req) < 0) {
 		mutex_unlock(&monc->statfs_mutex);
 		pr_err("ceph ENOMEM in do_statfs\n");

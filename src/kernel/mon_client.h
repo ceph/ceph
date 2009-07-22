@@ -5,20 +5,6 @@
 #include <linux/completion.h>
 #include <linux/radix-tree.h>
 
-/*
- * A small cluster of Ceph "monitors" are responsible for managing critical
- * cluster configuration and state information.  An odd number (e.g., 3, 5)
- * of cmon daemons use a modified version of the Paxos part-time parliament
- * algorithm to manage the MDS map (mds cluster membership), OSD map, and
- * list of clients who have mounted the file system.
- *
- * Communication with the monitor cluster is lossy, so requests for
- * information may have to be resent if we time out waiting for a response.
- * As long as we do not time out, we continue to send all requests to the
- * same monitor.  If there is a problem, we randomly pick a new monitor from
- * the cluster to try.
- */
-
 struct ceph_client;
 struct ceph_mount_args;
 
@@ -41,6 +27,8 @@ struct ceph_mon_statfs_request;
  */
 typedef void (*ceph_monc_request_func_t)(struct ceph_mon_client *monc,
 					 int newmon);
+
+/* a pending monitor request */
 struct ceph_mon_request {
 	struct ceph_mon_client *monc;
 	struct delayed_work delayed_work;
@@ -48,15 +36,17 @@ struct ceph_mon_request {
 	ceph_monc_request_func_t do_request;
 };
 
-/* statfs() is done a bit differently */
+/*
+ * statfs() is done a bit differently because we need to get data back
+ * to the caller
+ */
 struct ceph_mon_statfs_request {
 	u64 tid;
-	struct kobject kobj;
 	int result;
 	struct ceph_statfs *buf;
 	struct completion completion;
 	unsigned long last_attempt, delay; /* jiffies */
-	struct ceph_msg  *request;  /* original request */
+	struct ceph_msg *request;  /* original request */
 };
 
 struct ceph_mon_client {
@@ -88,9 +78,10 @@ extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 extern void ceph_monc_stop(struct ceph_mon_client *monc);
 
 /*
- * The model here is to indicate that we need a new map of at least epoch
- * @want, and to indicate which maps receive.  Periodically rerequest the map
- * from the monitor cluster until we get what we want.
+ * The model here is to indicate that we need a new map of at least
+ * epoch @want, and also call in when we receive a map.  We will
+ * periodically rerequest the map from the monitor cluster until we
+ * get what we want.
  */
 extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, u32 want);
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 have);
