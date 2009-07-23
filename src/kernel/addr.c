@@ -589,7 +589,9 @@ static int ceph_writepages_start(struct address_space *mapping,
 		wsize = PAGE_CACHE_SIZE;
 	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 
-	pvec = kmalloc(sizeof(*pvec), GFP_KERNEL);
+	pvec = kmalloc(sizeof(*pvec), GFP_NOFS);
+	if (!pvec)
+		return -ENOMEM;
 	pagevec_init(pvec, 0);
 
 	/* ?? */
