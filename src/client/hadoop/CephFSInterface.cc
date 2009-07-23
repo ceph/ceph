@@ -14,10 +14,10 @@ using namespace std;
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
- * Signature: ()J
+ * Signature: ()Z
  * Initializes a ceph client.
  */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
 (JNIEnv *env, jobject, jstring j_mon_host)
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
@@ -31,6 +31,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1init
 
   ceph_initialize(argc, argv);
   ceph_mount();
+  return true;
 }
 
 
@@ -273,7 +274,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
   struct stat stbuf;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  dout(10) << "Attempting lstat with file " << c_path << ":" ;
+  dout(10) << "Attempting lstat with file " << c_path << ":" << dendl;
   int result = ceph_lstat(c_path, &stbuf);
   dout(10) << "result is " << result << dendl;
   env->ReleaseStringUTFChars(j_path, c_path);

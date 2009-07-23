@@ -55,7 +55,7 @@ public class CephFileSystem extends FileSystem {
    * include wrapper functions to automatically add the parameter.
    */ 
   
-  private native long    ceph_initializeClient();
+  private native boolean ceph_initializeClient();
   private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
   private native boolean ceph_copyToLocalFile(String cephPath, String localPath);
   private native String  ceph_getcwd();
@@ -100,9 +100,10 @@ public class CephFileSystem extends FileSystem {
     this.localFs = get(URI.create("file:///"), conf);
 
     //  Initializes the client    
-    this.clientPointer = ceph_initializeClient();
-    System.out.println("Initialized client with pointer " + clientPointer 
-		       + ". Setting cwd to /");
+    if (!ceph_initializeClient()) {
+      throw new IOException("Ceph initialization failed!");
+    }
+    System.out.println("Initialized client. Setting cwd to /");
     ceph_setcwd("/");
     // DEBUG
     // attempt to do three exists operations on root
