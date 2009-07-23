@@ -163,7 +163,9 @@ libcls_acl.so: cls_acl.cc
 	${CXX} -I. -fPIC -shared -g -o libcls_acl.so cls_acl.cc
 BUILT_SOURCES += libcls_acl.so
 
+
 ## hadoop client
+if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc \
 ${JAVA_BASE}/include \
@@ -172,6 +174,8 @@ libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
 lib_LTLIBRARIES += libhadoopcephfs.la
+endif
+
 
 # shell scripts
 editpaths = sed \

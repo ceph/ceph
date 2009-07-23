@@ -76,6 +76,22 @@ AS_IF([test "x$with_fuse" != xno],
              ])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
+# jni?
+AC_ARG_WITH([hadoop],
+            [AS_HELP_STRING([--with-hadoop], [build hadoop client])],
+            [],
+            [with_hadoop=check])
+AS_IF([test "x$with_hadoop" != xno],
+	    [AC_CHECK_HEADER([jni.h],
+             [HAVE_JNI=1],
+             [if test "x$with_hadoop" != xcheck; then
+                 AC_MSG_FAILURE(
+                   [--with-hadoop was given, but jni.h not found])
+               fi
+             ])])
+AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
+
+
 # CommonC++?
 AC_ARG_WITH([ccgnu],
             [AS_HELP_STRING([--with-ccgnu],
