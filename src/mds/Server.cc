@@ -2491,7 +2491,10 @@ void Server::handle_client_setlayout(MDRequest *mdr)
 
   // project update
   inode_t *pi = cur->project_inode();
-  pi->layout = req->head.args.setlayout.layout;
+  // FIXME: only set striping parameters, for now.
+  pi->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+  pi->layout.fl_stripe_count = req->head.args.setlayout.layout.fl_stripe_count;
+  pi->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   
