@@ -557,7 +557,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int should_loop = 1;
 	pgoff_t max_pages = 0, max_pages_ever = 0;
 	struct ceph_snap_context *snapc = NULL, *last_snapc = NULL;
-	struct pagevec *pvec;
+	struct pagevec pvec;
 	int done = 0;
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
@@ -589,16 +589,13 @@ static int ceph_writepages_start(struct address_space *mapping,
 		wsize = PAGE_CACHE_SIZE;
 	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 
-	pvec = kmalloc(sizeof(*pvec), GFP_NOFS);
-	if (!pvec)
-		return -ENOMEM;
-	pagevec_init(pvec, 0);
+	pagevec_init(&pvec, 0);
 
 	/* ?? */
 	if (wbc->nonblocking && bdi_write_congested(bdi)) {
 		dout(" writepages congested\n");
 		wbc->encountered_congestion = 1;
-		goto out_free;
+		goto out_final;
 	}
 
 	/* where to start/end? */
@@ -658,14 +655,14 @@ get_more_pages:
 			   min((pgoff_t)PAGEVEC_SIZE,
 			       max_pages - (pgoff_t)locked_pages) - 1)
 			+ 1;
-		pvec_pages = pagevec_lookup_tag(pvec, mapping, &index,
+		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
 		dout("pagevec_lookup_tag got %d\n", pvec_pages);
 		if (!pvec_pages && !locked_pages)
 			break;
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
-			page = pvec->pages[i];
+			page = pvec.pages[i];
 			dout("? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);  /* first page */
@@ -778,7 +775,7 @@ get_more_pages:
 			if (pvec_pages && i == pvec_pages &&
 			    locked_pages < max_pages) {
 				dout("reached end pvec, trying for more\n");
-				pagevec_reinit(pvec);
+				pagevec_reinit(&pvec);
 				goto get_more_pages;
 			}
 
@@ -786,10 +783,10 @@ get_more_pages:
 			 * will need to release them below. */
 			for (j = i; j < pvec_pages; j++) {
 				dout(" pvec leftover page %p\n",
-				     pvec->pages[j]);
-				pvec->pages[j-i+first] = pvec->pages[j];
+				     pvec.pages[j]);
+				pvec.pages[j-i+first] = pvec.pages[j];
 			}
-			pvec->nr -= i-first;
+			pvec.nr -= i-first;
 		}
 
 		/* submit the write */
@@ -821,9 +818,9 @@ get_more_pages:
 			done = 1;
 
 	release_pvec_pages:
-		dout("pagevec_release on %d pages (%p)\n", (int)pvec->nr,
-		     pvec->nr ? pvec->pages[0] : NULL);
-		pagevec_release(pvec);
+		dout("pagevec_release on %d pages (%p)\n", (int)pvec.nr,
+		     pvec.nr ? pvec.pages[0] : NULL);
+		pagevec_release(&pvec);
 
 		if (locked_pages && !done)
 			goto retry;
@@ -847,8 +844,7 @@ out:
 		rc = 0;  /* vfs expects us to return 0 */
 	ceph_put_snap_context(snapc);
 	dout("writepages done, rc = %d\n", rc);
-out_free:
-	kfree(pvec);
+out_final:
 	return rc;
 }
 
