@@ -538,8 +538,33 @@ static void writepages_finish(struct ceph_osd_request *req)
 	ceph_put_wrbuffer_cap_refs(ci, req->r_num_pages, snapc);
 
 	ceph_release_pages(req->r_pages, req->r_num_pages);
-	kfree(req->r_pages);
+	if (req->r_pages_from_pool)
+		mempool_free(req->r_pages,
+			     ceph_client(inode->i_sb)->wb_pagevec_pool);
+	else
+		kfree(req->r_pages);
 	ceph_osdc_put_request(req);
+}
+
+/*
+ * allocate a page vec, either directly, or if necessary, via a the
+ * mempool.  we avoid the mempool if we can because req->r_num_pages
+ * may be less than the maximum write size.
+ */
+static int alloc_page_vec(struct ceph_client *client,
+			  struct ceph_osd_request *req)
+{
+	req->r_pages = kmalloc(sizeof(struct page *) * req->r_num_pages,
+			       GFP_NOFS);
+	if (req->r_pages) {
+		req->r_pages_from_pool = 0;
+		return 0;
+	}
+
+	req->r_pages = mempool_alloc(client->wb_pagevec_pool, GFP_NOFS);
+	req->r_pages_from_pool = 1;
+	WARN_ON(!req->r_pages);
+	return -ENOMEM;
 }
 
 /*
@@ -744,10 +769,8 @@ get_more_pages:
 					    &inode->i_mtime);
 				max_pages = req->r_num_pages;
 
-				rc = -ENOMEM;
-				req->r_pages = kmalloc(sizeof(*req->r_pages) *
-						       max_pages, GFP_NOFS);
-				if (req->r_pages == NULL)
+				rc = alloc_page_vec(client, req);
+				if (rc)
 					goto out;
 				req->r_callback = writepages_finish;
 				req->r_inode = inode;

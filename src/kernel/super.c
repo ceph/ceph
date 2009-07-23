@@ -724,6 +724,8 @@ static void ceph_destroy_client(struct ceph_client *client)
 		destroy_workqueue(client->trunc_wq);
 	if (client->msgr)
 		ceph_messenger_destroy(client->msgr);
+	if (client->wb_pagevec_pool)
+		mempool_destroy(client->wb_pagevec_pool);
 	kfree(client);
 	dout("destroy_client %p done\n", client);
 }
@@ -974,6 +976,13 @@ static int ceph_set_super(struct super_block *s, void *data)
 	s->s_export_op = &ceph_export_ops;
 
 	s->s_time_gran = 1000;  /* 1000 ns == 1 us */
+
+	/* set up mempools */
+	ret = -ENOMEM;
+	client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
+			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
+	if (!client->wb_pagevec_pool)
+		goto fail;
 
 	ret = set_anon_super(s, NULL);  /* what is that second arg for? */
 	if (ret != 0)

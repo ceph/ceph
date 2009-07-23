@@ -2,12 +2,13 @@
 #define _FS_CEPH_SUPER_H
 
 #include <asm/unaligned.h>
-#include <linux/fs.h>
-#include <linux/wait.h>
-#include <linux/completion.h>
-#include <linux/pagemap.h>
-#include <linux/exportfs.h>
 #include <linux/backing-dev.h>
+#include <linux/completion.h>
+#include <linux/exportfs.h>
+#include <linux/fs.h>
+#include <linux/mempool.h>
+#include <linux/pagemap.h>
+#include <linux/wait.h>
 
 #include "types.h"
 #include "ceph_debug.h"
@@ -132,6 +133,7 @@ struct ceph_client {
 	struct ceph_osd_client osdc;
 
 	/* writeback */
+	mempool_t *wb_pagevec_pool;
 	struct workqueue_struct *wb_wq;
 	struct workqueue_struct *pg_inv_wq;
 	struct workqueue_struct *trunc_wq;

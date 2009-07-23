@@ -45,6 +45,7 @@ struct ceph_osd_request {
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */
 	unsigned          r_num_pages;        /* size of page array (follows) */
 	struct page     **r_pages;            /* pages for data payload */
+	int               r_pages_from_pool;
 	int               r_own_pages;        /* if true, i own page list */
 };
 
