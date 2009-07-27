@@ -430,8 +430,9 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   &inode->i_mtime,
 				   &page, 1, 0, 0);
 	if (err < 0) {
-		dout("writepage setting page error %p\n", page);
+		dout("writepage setting page/mapping error %d %p\n", err, page);
 		SetPageError(page);
+		mapping_set_error(&inode->i_data, err);
 		if (wbc)
 			wbc->pages_skipped++;
 	} else {
