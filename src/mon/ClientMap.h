@@ -24,15 +24,10 @@
 using namespace std;
 
 #include "include/types.h"
-#if 0
-#include "msg/Messenger.h"
+#include "auth/ClientTicket.h"
 
-#include "mds/MDSMap.h"
-
-#include "PaxosService.h"
-#endif
 struct client_info_t {
-  ceph_client_ticket ticket;
+  ClientTicket ticket;
   bufferlist signed_ticket;
 
   entity_addr_t addr() { return entity_addr_t(ticket.addr); }

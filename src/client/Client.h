@@ -711,7 +711,6 @@ public:
   Messenger *messenger;  
   int whoami;
 
-  ceph_client_ticket ticket;
   bufferlist signed_ticket;
   
   // mds sessions

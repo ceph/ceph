@@ -2476,7 +2476,6 @@ int Client::mount()
   whoami = messenger->get_myname().num();
 
   signed_ticket = monclient->get_signed_ticket();
-  ticket = monclient->get_ticket();
 
   objecter->signed_ticket = signed_ticket;
   objecter->init();
