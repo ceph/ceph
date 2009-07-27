@@ -19,6 +19,7 @@ typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
+	struct rb_node  r_node;
 
 	struct ceph_msg  *r_request;
 	struct ceph_msg  *r_reply;
@@ -60,7 +61,7 @@ struct ceph_osd_client {
 	struct mutex           request_mutex;
 	u64                    timeout_tid;   /* tid of timeout triggering rq */
 	u64                    last_tid;      /* tid of last request */
-	struct radix_tree_root request_tree;  /* pending requests, by tid */
+	struct rb_root         requests;      /* pending requests */
 	int                    num_requests;
 	struct delayed_work    timeout_work;
 	struct dentry 	       *debugfs_file;

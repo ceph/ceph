@@ -47,6 +47,8 @@ v0.11
 
 v0.12
 - osdmap: allow explicit pg 'override' mappings
+- http gw
+
 
 bugs
 - premature filejournal trimming?
@@ -98,8 +100,8 @@ repair
 - mds scrubbing
 
 kclient
+- mempool for osd_request (if caller requests)
 - ensure cap_snaps reflush after client reconnect 
-- return EBADF on files without caps
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
 - simplify mds auth tracking?

@@ -220,27 +220,22 @@ static int mdsc_show(struct seq_file *s, void *p)
 	return 0;
 }
 
-static int osdc_show(struct seq_file *s, void *p)
+static int osdc_show(struct seq_file *s, void *pp)
 {
 	struct ceph_client *client = s->private;
 	struct ceph_osd_client *osdc = &client->osdc;
-	u64 nexttid = 0;
+	struct rb_node *p;
 
 	mutex_lock(&osdc->request_mutex);
-	while (nexttid < osdc->last_tid) {
+	for (p = rb_first(&osdc->requests); p; p = rb_next(p)) {
 		struct ceph_osd_request *req;
 		struct ceph_osd_request_head *head;
 		struct ceph_osd_op *op;
 		int num_ops;
 		int opcode, olen;
-		int got, i;
+		int i;
 
-		got = radix_tree_gang_lookup(&osdc->request_tree,
-					     (void **)&req, nexttid, 1);
-		if (got == 0)
-			break;
-
-		nexttid = req->r_tid + 1;
+		req = rb_entry(p, struct ceph_osd_request, r_node);
 
 		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
 			   req->r_tid,
