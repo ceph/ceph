@@ -317,9 +317,9 @@ git add $target/ceph/debugfs.c
 git commit -s -F - <<EOF
 ceph: debugfs
 
-Basic state information is available via /debug/ceph, including
-instances of the client, fsids, current monitor, mds and osd maps,
-outstanding server requests, and hooks to adjust debug levels.
+Basic state information is available via /sys/kernel/debug/ceph,
+including instances of the client, fsids, current monitor, mds and osd
+maps, outstanding server requests, and hooks to adjust debug levels.
 
 EOF
 

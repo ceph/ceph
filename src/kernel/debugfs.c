@@ -7,10 +7,10 @@
 #include "mds_client.h"
 
 /*
- * Implement /debug/ceph fun
+ * Implement /sys/kernel/debug/ceph fun
  *
- * /debug/ceph/caps_reservation  - expose caps reservation stats
- * /debug/ceph/client*  - an instance of the ceph client
+ * /sys/kernel/debug/ceph/caps_reservation  - expose caps reservation stats
+ * /sys/kernel/debug/ceph/client*  - an instance of the ceph client
  *      .../fsid        - mounted fsid
  *      .../osdmap      - current osdmap
  *      .../mdsmap      - current mdsmap
