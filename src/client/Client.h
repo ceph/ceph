@@ -50,6 +50,7 @@ enum {
 
 
 // stl
+#include <string>
 #include <set>
 #include <map>
 #include <fstream>
@@ -1056,7 +1057,7 @@ public:
 
   // crap
   int chdir(const char *s);
-  const char *getcwd();
+  void getcwd(std::string& cwd);
 
   // namespace ops
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.

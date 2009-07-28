@@ -25,7 +25,6 @@ int ceph_umount();
 int ceph_statfs(const char *path, struct statvfs *stbuf);
 
 int ceph_chdir (const char *s);
-const char *ceph_getcwd();
 
 int ceph_opendir(const char *name, DIR **dirpp);
 int ceph_closedir(DIR *dirp);
@@ -71,7 +70,9 @@ int ceph_fstat(int fd, struct stat *stbuf);
 int ceph_sync_fs();
 int ceph_get_stripe_unit(int fh);
 #ifdef __cplusplus
-int ceph_getdir(const char *relpath, std::list<std::string>& names); //not for C, sorry!
+//not for C, sorry!
+int ceph_getdir(const char *relpath, std::list<std::string>& names);
+void ceph_getcwd(std::string& cwd);
 }
 #endif
 

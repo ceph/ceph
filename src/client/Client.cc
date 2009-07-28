@@ -4239,6 +4239,13 @@ int Client::chdir(const char *relpath)
   return 0;
 }
 
+void Client::getcwd(string& dir)
+{
+  filepath path;
+  cwd->make_path(path);
+  dir = path.get_path();
+}
+
 int Client::statfs(const char *path, struct statvfs *stbuf)
 {
   Mutex::Locker l(client_lock);

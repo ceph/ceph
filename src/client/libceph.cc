@@ -87,6 +87,14 @@ extern "C" int ceph_chdir (const char *s)
   return client->chdir(s);
 }
 
+/*if we want to extern C this, we need to convert it to const char*,
+which will mean storing it somewhere or else making the caller
+responsible for delete-ing a c-string they didn't create*/
+void ceph_getcwd(string& cwd)
+{
+  client->getcwd(cwd);
+}
+
 extern "C" int ceph_opendir(const char *name, DIR **dirpp)
 {
   return client->opendir(name, dirpp);
