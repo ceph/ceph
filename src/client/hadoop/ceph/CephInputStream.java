@@ -26,8 +26,6 @@ class CephInputStream extends FSInputStream {
 
   private boolean closed;
 
-  private long clientPointer;
-
   private int fileHandle;
 
   private long fileLength;
@@ -56,11 +54,10 @@ class CephInputStream extends FSInputStream {
     }
   */
 
-  public CephInputStream(Configuration conf, long clientp, int fh, long flength) {
+  public CephInputStream(Configuration conf, int fh, long flength) {
 
     // Whoever's calling the constructor is responsible for doing the actual ceph_open
     // call and providing the file handle.
-    clientPointer = clientp;
     fileLength = flength;
     fileHandle = fh;
     //System.out.println("CephInputStream constructor: initializing stream with fh "

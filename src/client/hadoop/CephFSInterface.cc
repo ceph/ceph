@@ -18,7 +18,7 @@ using namespace std;
  * Initializes a ceph client.
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-(JNIEnv *env, jobject, jstring j_mon_host)
+(JNIEnv *env, jobject )
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
 
@@ -147,7 +147,9 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
 {
   dout(10) << "CephFSInterface: In getcwd" << dendl;
 
-  return env->NewStringUTF(ceph_getcwd());
+  string path;
+  ceph_getcwd(path);
+  return env->NewStringUTF(path.c_str());
 }
 
 /*

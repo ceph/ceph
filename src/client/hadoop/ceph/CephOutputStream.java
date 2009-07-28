@@ -42,8 +42,6 @@ class CephOutputStream extends OutputStream {
 
   private int fileHandle;
 
-  private long clientPointer;
-
   private int bytesWrittenToBlock = 0;
 
   private byte[] outBuf;
@@ -82,8 +80,7 @@ class CephOutputStream extends OutputStream {
 
 
   // The file handle 
-  public CephOutputStream(Configuration conf, long clientp, int fh) {
-    clientPointer = clientp;
+  public CephOutputStream(Configuration conf,  int fh) {
     fileHandle = fh;
     //fileLength = flength;
     closed = false;

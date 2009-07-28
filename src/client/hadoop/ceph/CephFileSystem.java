@@ -31,14 +31,12 @@ public class CephFileSystem extends FileSystem {
   private static final long DEFAULT_BLOCK_SIZE = 8 * 1024 * 1024;
   
   static {
-    System.loadLibrary("hadoopcephfs");
+    System.load("/usr/local/lib/libhadoopcephfs.so");
   }
-
+  
   private URI uri;
 
   private FileSystem localFs;
-  
-  private long clientPointer;
   
   private Path root;
 
@@ -46,14 +44,6 @@ public class CephFileSystem extends FileSystem {
   
   //private Path workingDir = new Path("/user", System.getProperty("user.name"));
   
-  /*
-   * Native Ceph methods. Each one has long client as a parameter,
-   * which should always be the member variable clientPointer. This is
-   * to avoid the hideous JNI code required to access the member variable
-   * from C++. clientPointer is set at initialization of the
-   * CephFileSystem instance, and should be untouched thereafter. I
-   * include wrapper functions to automatically add the parameter.
-   */ 
   
   private native boolean ceph_initializeClient();
   private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
@@ -79,6 +69,7 @@ public class CephFileSystem extends FileSystem {
   public CephFileSystem() {
     root = new Path("/");
     parent = new Path("..");
+    //System.out.println(System.getProperty("java.library.path"));
   }
 
   /*
@@ -99,7 +90,8 @@ public class CephFileSystem extends FileSystem {
     // TODO: local filesystem? we really need to figure out this conf thingy
     this.localFs = get(URI.create("file:///"), conf);
 
-    //  Initializes the client    
+    //  Initializes the client
+    System.out.println("Calling ceph_initializeClient");
     if (!ceph_initializeClient()) {
       throw new IOException("Ceph initialization failed!");
     }
@@ -115,8 +107,7 @@ public class CephFileSystem extends FileSystem {
 
   @Override
     public void close() throws IOException {
-    System.out.println("Pretending to shut down client with pointer " + clientPointer
-		       + ". Not really doing anything.");
+    System.out.println("Pretending to shut down client. Not really doing anything.");
   }
 
   public FSDataOutputStream append (Path file, int bufferSize,
@@ -127,7 +118,7 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("append: Open for append failed on path \"" +
 			    abs_path.toString() + "\"");
     }
-    CephOutputStream cephOStream = new CephOutputStream(getConf(), clientPointer, fd);
+    CephOutputStream cephOStream = new CephOutputStream(getConf(), fd);
     return new FSDataOutputStream(cephOStream);
   }
 
@@ -378,7 +369,7 @@ public class CephFileSystem extends FileSystem {
     }
       
     // Step 4: create the stream
-    OutputStream cephOStream = new CephOutputStream(getConf(), clientPointer, fh);
+    OutputStream cephOStream = new CephOutputStream(getConf(), fh);
     //System.out.println("createRaw: opened absolute path \""  + absfilepath.toString() 
     //		 + "\" for writing with fh " + fh);
 
@@ -409,7 +400,7 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("Failed to get file size for file " + abs_path.toString() + 
 			    " but succeeded in opening file. Something bizarre is going on.");
     }
-    FSInputStream cephIStream = new CephInputStream(getConf(), clientPointer, fh, size);
+    FSInputStream cephIStream = new CephInputStream(getConf(), fh, size);
     return new FSDataInputStream(cephIStream);
   }
 
@@ -601,9 +592,7 @@ public class CephFileSystem extends FileSystem {
     Path abs_ceph_src = makeAbsolute(ceph_src);
       
     //System.out.println("CopyToLocalFile: copying Ceph file \"" + abs_ceph_src.toString() + 
-    //		 "\" to local file \"" + local_dst.toString() + "\" using client "
-    //		 + clientPointer);
-
+    //		 "\" to local file \"" + local_dst.toString() + "\" using client");
     // make sure the alleged source file exists, and is actually a file, not
     // a directory or a ballpoint pen or something
     if (!isFile(abs_ceph_src)) {
