@@ -18,17 +18,20 @@
 #include "include/types.h"
 
 struct ClientTicket {
+  int client;
   entity_addr_t addr;
   utime_t created, expires;
   __u32 flags;
 
   void encode(bufferlist& bl) const {
+    ::encode(client, bl);
     ::encode(addr, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
     ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(client, bl);
     ::decode(addr, bl);
     ::decode(created, bl);
     ::decode(expires, bl);
