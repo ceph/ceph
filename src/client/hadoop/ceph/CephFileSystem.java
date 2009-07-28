@@ -24,8 +24,7 @@ import org.apache.hadoop.fs.CreateFlag;
  * A {@link FileSystem} backed by <a href="http://ceph.sourceforge.net">Ceph.</a>.
  * This will not start a Ceph instance; one must already be running.
  * </p>
- * @author Esteban Molina-Estolano
- */
+  */
 public class CephFileSystem extends FileSystem {
 
   private static final long DEFAULT_BLOCK_SIZE = 8 * 1024 * 1024;
@@ -67,9 +66,10 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_kill_client();
 
   public CephFileSystem() {
+    System.out.println("CephFileSystem:enter");
     root = new Path("/");
     parent = new Path("..");
-    //System.out.println(System.getProperty("java.library.path"));
+    System.out.println("CephFileSystem:exit");
   }
 
   /*
@@ -78,11 +78,14 @@ public class CephFileSystem extends FileSystem {
     } */
 
   public URI getUri() {
+    System.out.println("getUri:enter");
+    System.out.println("getUri:exit");
     return uri;
   }
 
   @Override
     public void initialize(URI uri, Configuration conf) throws IOException {
+    System.out.println("initialize:enter");
     //store.initialize(uri, conf);
     setConf(conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
@@ -99,19 +102,23 @@ public class CephFileSystem extends FileSystem {
     ceph_setcwd("/");
     // DEBUG
     // attempt to do three exists operations on root
-    //System.out.println("DEBUG: attempting isdir() on root (/)");
-    //	ceph_isdirectory("/");
-    //System.out.println("DEBUG: attempting exists() on root (/)");
-    //ceph_exists("/");
-  }  
+    System.out.println("DEBUG: attempting isdir() on root (/)");
+    System.out.println(ceph_isdirectory("/"));
+    System.out.println("DEBUG: attempting exists() on root (/)");
+    System.out.println(ceph_exists("/"));
+    System.out.println("initialize:exit");
+  }
 
   @Override
     public void close() throws IOException {
+    System.out.println("close:enter");
     System.out.println("Pretending to shut down client. Not really doing anything.");
+    System.out.println("close:exit");
   }
 
   public FSDataOutputStream append (Path file, int bufferSize,
 				    Progressable progress) throws IOException {
+    System.out.println("append:enter");
     Path abs_path = makeAbsolute(file);
     int fd = ceph_open_for_append(abs_path.toString());
     if( fd < 0 ) { //error in open
@@ -119,19 +126,25 @@ public class CephFileSystem extends FileSystem {
 			    abs_path.toString() + "\"");
     }
     CephOutputStream cephOStream = new CephOutputStream(getConf(), fd);
+    System.out.println("append:exit");
     return new FSDataOutputStream(cephOStream);
   }
 
   public String getName() {
+    System.out.println("getName:enter");
+    System.out.println("getName:exit");
     return getUri().toString();
   }
 
   public Path getWorkingDirectory() {
+    System.out.println("getWorkingDirectory:enter");
+    System.out.println("getWorkingDirectory:exit");
     return makeAbsolute(new Path(ceph_getcwd()));
   }
 
   @Override
     public void setWorkingDirectory(Path dir) {
+    System.out.println("setWorkingDirecty:enter");
     Path abs_path = makeAbsolute(dir);
 
     // error conditions if path's not a directory
@@ -159,11 +172,13 @@ public class CephFileSystem extends FileSystem {
     }
     //System.out.println("DEBUG: Attempting to change cwd to " + dir.toString() +
     //		 "changes cwd to" + getWorkingDirectory().toString());
+    System.out.println("setWorkingDirectory:exit");
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
   // also going to strip off any "ceph://null" prefix we see. 
   private Path makeAbsolute(Path path) {
+    System.out.println("makeAbsolute:enter");
     // first, check for the prefix
     if (path.toString().startsWith("ceph://null")) {
 	  
@@ -183,6 +198,8 @@ public class CephFileSystem extends FileSystem {
       return new Path(root, path);
     else
       return new Path(wd, path);
+
+    System.out.println("makeAbsolute:exit");
   }
 
   private String[] getEmptyStringArray(int size) {
