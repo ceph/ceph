@@ -24,6 +24,8 @@ struct ClientTicket {
   __u32 flags;
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(client, bl);
     ::encode(addr, bl);
     ::encode(created, bl);
@@ -31,6 +33,8 @@ struct ClientTicket {
     ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(client, bl);
     ::decode(addr, bl);
     ::decode(created, bl);
