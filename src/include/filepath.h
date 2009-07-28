@@ -169,6 +169,10 @@ class filepath {
     string s = cs;
     push_dentry(s);
   }
+  void push_front_dentry(const string& s) {
+    bits.insert(bits.begin(), s);
+    rebuild_path();
+  }
   void append(const filepath& a) {
     assert(a.pure_relative());
     for (unsigned i=0; i<a.depth(); i++) 
@@ -192,7 +196,7 @@ WRITE_CLASS_ENCODER(filepath)
 inline ostream& operator<<(ostream& out, const filepath& path)
 {
   if (path.get_ino()) {
-    out << '#' << hex << path.get_ino() << dec;
+    out << '#' << path.get_ino();
     if (path.depth())
       out << '/';
   }

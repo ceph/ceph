@@ -4242,7 +4242,28 @@ int Client::chdir(const char *relpath)
 void Client::getcwd(string& dir)
 {
   filepath path;
-  cwd->make_path(path);
+  dout(10) << "getcwd " << *cwd << dendl;
+
+  Inode *in = cwd;
+  while (in->ino != CEPH_INO_ROOT) {
+    Dentry *dn = in->dn;
+    if (!dn) {
+      // look it up
+      dout(10) << "getcwd looking up parent for " << *in << dendl;
+      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      filepath path(in->ino);
+      req->set_filepath(path);
+      int res = make_request(req, -1, -1);
+      if (res < 0)
+	break;
+
+      // start over
+      path = filepath();
+      in = cwd;
+      continue;
+    }
+    path.push_front_dentry(dn->name);
+  }
   dir = path.get_path();
 }
 
