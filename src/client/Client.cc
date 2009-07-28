@@ -4263,8 +4263,10 @@ void Client::getcwd(string& dir)
       continue;
     }
     path.push_front_dentry(dn->name);
+    in = dn->dir->parent_inode;
   }
-  dir = path.get_path();
+  dir = "/";
+  dir += path.get_path();
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf)
