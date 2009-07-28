@@ -426,6 +426,8 @@ enum {
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
 	CEPH_MDS_OP_GETATTR    = 0x00101,
 	CEPH_MDS_OP_LOOKUPHASH = 0x00102,
+	CEPH_MDS_OP_LOOKUPPARENT = 0x00103,
+
 	CEPH_MDS_OP_SETXATTR   = 0x01105,
 	CEPH_MDS_OP_RMXATTR    = 0x01106,
 	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
@@ -454,6 +456,7 @@ static inline const char *ceph_mds_op_name(int op)
 	switch (op) {
 	case CEPH_MDS_OP_LOOKUP:  return "lookup";
 	case CEPH_MDS_OP_LOOKUPHASH:  return "lookuphash";
+	case CEPH_MDS_OP_LOOKUPPARENT:  return "lookupparent";
 	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";

@@ -984,6 +984,10 @@ void Server::dispatch_client_request(MDRequest *mdr)
     handle_client_stat(mdr);
     break;
 
+  case CEPH_MDS_OP_LOOKUPPARENT:
+    handle_client_lookup_parent(mdr);
+    break;
+
   case CEPH_MDS_OP_SETATTR:
     handle_client_setattr(mdr);
     break;
@@ -1802,6 +1806,30 @@ void Server::handle_client_stat(MDRequest *mdr)
   dout(10) << "reply to stat on " << *req << dendl;
   reply_request(mdr, 0, ref,
 		req->get_op() == CEPH_MDS_OP_LOOKUP ? mdr->dn[0].back() : 0);
+}
+
+void Server::handle_client_lookup_parent(MDRequest *mdr)
+{
+  MClientRequest *req = mdr->client_request;
+
+  CInode *in = mdcache->get_inode(req->get_filepath().get_ino());
+  if (!in) {
+    reply_request(mdr, -ESTALE);
+    return;
+  }
+  if (in->is_root()) {
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
+  CDentry *dn = in->get_projected_parent_dn();
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  rdlocks.insert(&dn->lock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  reply_request(mdr, 0, in, dn);  // reply
 }
 
 
