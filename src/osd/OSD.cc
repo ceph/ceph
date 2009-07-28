@@ -1103,12 +1103,17 @@ void OSD::heartbeat()
   }
 
   // get CPU load avg
-  ifstream in("/proc/loadavg");
-  if (in.is_open()) {
-    float oneminavg;
-    in >> oneminavg;
-    logger->fset(l_osd_loadavg, oneminavg);
-    in.close();
+  try {
+    ifstream in("/proc/loadavg");
+    if (in.is_open()) {
+      float oneminavg;
+      in >> oneminavg;
+      logger->fset(l_osd_loadavg, oneminavg);
+      in.close();
+    }
+  }
+  catch (ios::failure f) {
+    dout(0) << "heartbeat: failed to read /proc/loadavg" << dendl;
   }
 
   // calc my stats
