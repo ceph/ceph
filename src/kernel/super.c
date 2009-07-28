@@ -681,6 +681,7 @@ static struct ceph_client *ceph_create_client(void)
 	client->signed_ticket = NULL;
 	client->signed_ticket_len = 0;
 
+	err = -ENOMEM;
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
 		goto fail;
@@ -694,14 +695,15 @@ static struct ceph_client *ceph_create_client(void)
 	/* subsystems */
 	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
-		return ERR_PTR(err);
+		goto fail;
+	err = ceph_osdc_init(&client->osdc, client);
+	if (err < 0)
+		goto fail;
 	ceph_mdsc_init(&client->mdsc, client);
-	ceph_osdc_init(&client->osdc, client);
-
 	return client;
 
 fail:
-	return ERR_PTR(-ENOMEM);
+	return ERR_PTR(err);
 }
 
 static void ceph_destroy_client(struct ceph_client *client)

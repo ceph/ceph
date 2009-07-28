@@ -578,7 +578,7 @@ more:
 				    ci->i_snap_realm->cached_context,
 				    do_sync,
 				    ci->i_truncate_seq, ci->i_truncate_size,
-				    &mtime);
+				    &mtime, false);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 

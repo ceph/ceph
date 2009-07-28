@@ -46,6 +46,13 @@ v0.11
 /- respond to control-c on slow/hung mount
 
 v0.12
+- mapping_set_error on failed writepage
+- document correct debugfs mount point
+- clean up layout ioctls
+- fix bad kmalloc
+- use mempool for write path allocations where appropriate
+
+
 - osdmap: allow explicit pg 'override' mappings
 - http gw
 

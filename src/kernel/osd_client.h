@@ -3,6 +3,7 @@
 
 #include <linux/radix-tree.h>
 #include <linux/completion.h>
+#include <linux/mempool.h>
 
 #include "types.h"
 #include "osdmap.h"
@@ -10,6 +11,7 @@
 struct ceph_msg;
 struct ceph_snap_context;
 struct ceph_osd_request;
+struct ceph_osd_client;
 
 /*
  * completion callback for async writepages
@@ -27,7 +29,9 @@ struct ceph_osd_request {
 	int               r_flags;     /* any additional flags for the osd */
 	int               r_aborted;   /* set if we cancel this request */
 
+	struct ceph_osd_client *r_osdc;
 	atomic_t          r_ref;
+	bool              r_mempool;
 	struct completion r_completion, r_safe_completion;
 	ceph_osdc_callback_t r_callback, r_safe_callback;
 	struct ceph_eversion r_reassert_version;
@@ -65,10 +69,12 @@ struct ceph_osd_client {
 	int                    num_requests;
 	struct delayed_work    timeout_work;
 	struct dentry 	       *debugfs_file;
+
+	mempool_t              *req_mempool;
 };
 
-extern void ceph_osdc_init(struct ceph_osd_client *osdc,
-			   struct ceph_client *client);
+extern int ceph_osdc_init(struct ceph_osd_client *osdc,
+			  struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
 
 extern void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
@@ -90,7 +96,8 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_snap_context *snapc,
 				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size,
-				      struct timespec *mtime);
+				      struct timespec *mtime,
+				      bool use_mempool);
 
 static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 {

@@ -767,7 +767,7 @@ get_more_pages:
 					    snapc, do_sync,
 					    ci->i_truncate_seq,
 					    ci->i_truncate_size,
-					    &inode->i_mtime);
+					    &inode->i_mtime, true);
 				max_pages = req->r_num_pages;
 
 				rc = alloc_page_vec(client, req);

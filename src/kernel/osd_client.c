@@ -86,7 +86,10 @@ void ceph_osdc_put_request(struct ceph_osd_request *req)
 			ceph_release_page_vector(req->r_pages,
 						 req->r_num_pages);
 		ceph_put_snap_context(req->r_snapc);
-		kfree(req);
+		if (req->r_mempool)
+			mempool_free(req, req->r_osdc->req_mempool);
+		else
+			kfree(req);
 	}
 }
 
@@ -110,7 +113,8 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 					       int do_sync,
 					       u32 truncate_seq,
 					       u64 truncate_size,
-					       struct timespec *mtime)
+					       struct timespec *mtime,
+					       bool use_mempool)
 {
 	struct ceph_osd_request *req;
 	struct ceph_msg *msg;
@@ -123,10 +127,17 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	int i;
 	u64 prevofs;
 
-	req = kzalloc(sizeof(*req), GFP_NOFS);
+	if (use_mempool) {
+		req = mempool_alloc(osdc->req_mempool, GFP_NOFS);
+		memset(req, 0, sizeof(*req));
+	} else {
+		req = kzalloc(sizeof(*req), GFP_NOFS);
+	}
 	if (req == NULL)
 		return ERR_PTR(-ENOMEM);
 
+	req->r_osdc = osdc;
+	req->r_mempool = use_mempool;
 	atomic_set(&req->r_ref, 1);
 	init_completion(&req->r_completion);
 	init_completion(&req->r_safe_completion);
@@ -912,7 +923,7 @@ void ceph_osdc_sync(struct ceph_osd_client *osdc)
 /*
  * init, shutdown
  */
-void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
+int ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 {
 	dout("init\n");
 	osdc->client = client;
@@ -926,6 +937,12 @@ void ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	osdc->requests = RB_ROOT;
 	osdc->num_requests = 0;
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
+
+	osdc->req_mempool = mempool_create_kmalloc_pool(10,
+					sizeof(struct ceph_osd_request));
+	if (!osdc->req_mempool)
+		return -ENOMEM;
+	return 0;
 }
 
 void ceph_osdc_stop(struct ceph_osd_client *osdc)
@@ -935,6 +952,7 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 		ceph_osdmap_destroy(osdc->osdmap);
 		osdc->osdmap = NULL;
 	}
+	mempool_destroy(osdc->req_mempool);
 }
 
 /*
@@ -956,7 +974,8 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 	     vino.snap, off, len);
 	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
 				    CEPH_OSD_OP_READ, CEPH_OSD_FLAG_READ,
-				    NULL, 0, truncate_seq, truncate_size, NULL);
+				    NULL, 0, truncate_seq, truncate_size, NULL,
+				    false);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -1033,7 +1052,8 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 				    flags | CEPH_OSD_FLAG_ONDISK |
 					    CEPH_OSD_FLAG_WRITE,
 				    snapc, do_sync,
-				    truncate_seq, truncate_size, mtime);
+				    truncate_seq, truncate_size, mtime,
+				    true);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
