@@ -168,8 +168,9 @@ BUILT_SOURCES += libcls_acl.so
 if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc \
-${JAVA_BASE}/include \
-${JAVA_BASE}/include/linux
+	${libceph_la_SOURCES} \
+	${JAVA_BASE}/include \
+	${JAVA_BASE}/include/linux
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
