@@ -2057,9 +2057,8 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 
 		/* estimate needed space */
 		len += session->s_nr_caps *
-			sizeof(struct ceph_mds_cap_reconnect);
-		len += session->s_nr_caps * (100); /* guess! */
-		dout("estimating i need %d bytes for %d caps\n",
+			(100+sizeof(struct ceph_mds_cap_reconnect));
+		pr_info("estimating i need %d bytes for %d caps\n",
 		     len, session->s_nr_caps);
 	} else {
 		dout("no session for mds%d, will send short reconnect\n",
@@ -2163,8 +2162,8 @@ needmore:
 	 * factor in snap realms, but it's safe.
 	 */
 	num_caps += num_realms;
-	newlen = (len * (session->s_nr_caps+3)) / (num_caps + 1);
-	dout("i guessed %d, and did %d of %d caps, retrying with %d\n",
+	newlen = len * ((100 * (session->s_nr_caps+3)) / (num_caps + 1)) / 100;
+	pr_info("i guessed %d, and did %d of %d caps, retrying with %d\n",
 	     len, num_caps, session->s_nr_caps, newlen);
 	len = newlen;
 	ceph_msg_put(reply);
