@@ -560,20 +560,24 @@ more:
 		 */
 		if (!deletion) {
 			struct ceph_inode_info *ci;
+			struct inode *lastinode = NULL;
 
 			spin_lock(&realm->inodes_with_caps_lock);
 			list_for_each_entry(ci, &realm->inodes_with_caps,
 					    i_snap_realm_item) {
 				struct inode *inode = igrab(&ci->vfs_inode);
+				if (!inode)
+					continue;
 				spin_unlock(&realm->inodes_with_caps_lock);
-				if (inode) {
-					ceph_queue_cap_snap(ci,
-						    realm->cached_context);
-					iput(inode);
-				}
+				if (lastinode)
+					iput(lastinode);
+				lastinode = inode;
+				ceph_queue_cap_snap(ci, realm->cached_context);
 				spin_lock(&realm->inodes_with_caps_lock);
 			}
 			spin_unlock(&realm->inodes_with_caps_lock);
+			if (lastinode)
+				iput(lastinode);
 			dout("update_snap_trace cap_snaps queued\n");
 		}
 
