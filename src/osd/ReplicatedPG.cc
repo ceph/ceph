@@ -473,8 +473,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
-  dout(0) << "do_op " << *op << dendl;
-  dout(0) << "do_op flags=" << hex << op->get_flags() << dec << dendl;
+  dout(10) << "do_op " << *op << dendl;
 
   entity_inst_t client = op->get_source_inst();
 
