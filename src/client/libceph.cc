@@ -21,7 +21,8 @@ static MonClient *monclient = NULL;
 static SimpleMessenger *rank = NULL;
 
 extern "C" int ceph_initialize(int argc, const char **argv)
-{  ceph_client_mutex.Lock();
+{
+  ceph_client_mutex.Lock();
   if (!client_initialized) {
     //create everything to start a client
     vector<const char*> args;
@@ -57,13 +58,15 @@ extern "C" int ceph_initialize(int argc, const char **argv)
 extern "C" void ceph_deinitialize()
 {
   ceph_client_mutex.Lock();
-  client->unmount();
-  client->shutdown();
-  delete client;
-  rank->wait();
-  delete rank;
-  delete monclient;
-  --client_initialized;
+  if(client_initialized) {
+    client->unmount();
+    client->shutdown();
+    delete client;
+    rank->wait();
+    delete rank;
+    delete monclient;
+    --client_initialized;
+  }
   ceph_client_mutex.Unlock();
 }
 
