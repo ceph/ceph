@@ -893,6 +893,7 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 			void *base = kaddr + con->out_msg_pos.page_pos;
 			u32 tmpcrc = le32_to_cpu(con->out_msg->footer.data_crc);
 
+			BUG_ON(kaddr == NULL);
 			con->out_msg->footer.data_crc =
 				cpu_to_le32(crc32c(tmpcrc, base, len));
 			con->out_msg_pos.did_page_crc = 1;
