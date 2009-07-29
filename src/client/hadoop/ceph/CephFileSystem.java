@@ -31,7 +31,7 @@ public class CephFileSystem extends FileSystem {
   private static final long DEFAULT_BLOCK_SIZE = 8 * 1024 * 1024;
   
   static {
-    System.load("/usr/local/lib/libhadoopcephfs.so");
+    System.loadLibrary("hadoopcephfs");
   }
   
   private URI uri;
@@ -105,7 +105,7 @@ public class CephFileSystem extends FileSystem {
   @Override
     public void close() throws IOException {
     debug("close:enter");
-    //ceph_kill_client();
+    ceph_kill_client();
     //for some reason this just hangs, so not doing it for now
     debug("close:exit");
   }
@@ -263,16 +263,26 @@ public class CephFileSystem extends FileSystem {
   }
 
   public FileStatus getFileStatus(Path p) throws IOException {
-    // For the moment, hardwired replication and modification time
     debug("getFileStatus:enter with path " + p);
     Path abs_p = makeAbsolute(p);
-    //check it's a file or dir!
-    boolean isFile, isDir;
-    if (!(isFile=isFile(p)) && !(isDir=__isDirectory(p))) {
-      throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem.getFileStatus:not a file or dir!");
+    // For the moment, hardwired replication and modification time
+    int replication = 2;
+    int mod_time = 0;
+    FileStatus status;
+    if (isFile(abs_p)) {
+      debug("getFileStatus: is file");
+      status = new FileStatus(__getLength(abs_p), false, replication, getBlockSize(abs_p),
+			      mod_time, abs_p);
     }
-    FileStatus status =  new FileStatus(__getLength(abs_p), __isDirectory(abs_p), 2,
-			  getBlockSize(p), 0, abs_p);
+    else if (__isDirectory(abs_p)) {
+      debug("getFileStatus: is directory");
+      status = new FileStatus( 0, true, replication, 0,
+			      mod_time, abs_p);
+    }
+    else { //fail out
+      throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
+				      + p + " does not exist.");
+    }
     debug("getFileStatus:exit");
     return status;
   }
