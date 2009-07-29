@@ -335,6 +335,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	INIT_LIST_HEAD(&s->s_cap_releases);
 	INIT_LIST_HEAD(&s->s_cap_releases_done);
 	INIT_LIST_HEAD(&s->s_cap_flushing);
+	INIT_LIST_HEAD(&s->s_cap_snaps_flushing);
 	s->s_cap_flush_tid = 0;
 
 	dout("register_session mds%d\n", mds);

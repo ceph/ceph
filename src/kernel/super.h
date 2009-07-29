@@ -183,8 +183,9 @@ struct ceph_cap {
  */
 struct ceph_cap_snap {
 	atomic_t nref;
+	struct ceph_inode_info *ci;
+	struct list_head ci_item, flushing_item;
 
-	struct list_head ci_item;
 	u64 follows, flush_tid;
 	int issued, dirty;
 	struct ceph_snap_context *context;

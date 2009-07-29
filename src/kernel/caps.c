@@ -1161,6 +1161,10 @@ retry:
 
 		capsnap->flush_tid = ++session->s_cap_flush_tid;
 		atomic_inc(&capsnap->nref);
+		if (!list_empty(&capsnap->flushing_item))
+			list_del_init(&capsnap->flushing_item);
+		list_add_tail(&capsnap->flushing_item,
+			      &session->s_cap_snaps_flushing);
 		spin_unlock(&inode->i_lock);
 
 		dout("flush_snaps %p cap_snap %p follows %lld size %llu\n",
@@ -1609,8 +1613,28 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 			     struct ceph_mds_session *session)
 {
 	struct ceph_inode_info *ci;
+	struct ceph_cap_snap *capsnap;
 
 	dout("kick_flushing_caps mds%d\n", session->s_mds);
+	list_for_each_entry(capsnap, &session->s_cap_snaps_flushing,
+			    flushing_item) {
+		struct ceph_inode_info *ci = capsnap->ci;
+		struct inode *inode = &ci->vfs_inode;
+		struct ceph_cap *cap;
+
+		spin_lock(&inode->i_lock);
+		cap = ci->i_auth_cap;
+		if (cap && cap->session == session) {
+			dout("kick_flushing_caps %p cap %p capsnap %p\n", inode,
+			     cap, capsnap);
+			__ceph_flush_snaps(ci, &session);
+		} else {
+			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
+			       cap, session->s_mds);
+			spin_unlock(&inode->i_lock);
+		}
+	}
+
 	list_for_each_entry(ci, &session->s_cap_flushing, i_flushing_item) {
 		struct inode *inode = &ci->vfs_inode;
 		struct ceph_cap *cap;
@@ -2229,6 +2253,7 @@ static void handle_cap_flushsnap_ack(struct inode *inode,
 			     capsnap, follows);
 			ceph_put_snap_context(capsnap->context);
 			list_del(&capsnap->ci_item);
+			list_del(&capsnap->flushing_item);
 			ceph_put_cap_snap(capsnap);
 			drop = 1;
 			break;
