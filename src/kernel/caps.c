@@ -262,13 +262,24 @@ static void put_cap(struct ceph_cap *cap,
 	     ctx, ctx ? ctx->count : 0, caps_total_count, caps_use_count,
 	     caps_reserve_count, caps_avail_count);
 	caps_use_count--;
-	if (ctx) {
-		ctx->count++;
-		caps_reserve_count++;
+	/*
+	 * Keep some preallocated caps around, at least enough to do a
+	 * readdir (which needs to preallocate lots of them), to avoid
+	 * lots of free/alloc churn.
+	 */
+	if (caps_avail_count >= caps_reserve_count +
+	    ceph_client(cap->ci->vfs_inode.i_sb)->mount_args.max_readdir) {
+		caps_total_count--;
+		kfree(cap);
 	} else {
-		caps_avail_count++;
+		if (ctx) {
+			ctx->count++;
+			caps_reserve_count++;
+		} else {
+			caps_avail_count++;
+		}
+		list_add(&cap->caps_item, &caps_list);
 	}
-	list_add(&cap->caps_item, &caps_list);
 
 	BUG_ON(caps_total_count != caps_use_count + caps_reserve_count +
 	       caps_avail_count);
