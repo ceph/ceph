@@ -1060,6 +1060,25 @@ void CDir::_fetched(bufferlist &bl)
   assert(is_auth());
   assert(!is_frozen());
 
+  // empty?!?
+  if (bl.length() == 0) {
+    dout(0) << "_fetched missing object for " << *this << dendl;
+    stringstream ss;
+    ss << "dir " << ino() << "." << dirfrag() << " object missing on disk; some files may be lost";
+    cache->mds->logclient.log(LOG_ERROR, ss);
+
+    log_mark_dirty();
+
+    // mark complete, !fetching
+    state_set(STATE_COMPLETE);
+    state_clear(STATE_FETCHING);
+    auth_unpin(this);
+    
+    // kick waiters
+    finish_waiting(WAIT_COMPLETE, 0);
+    return;
+  }
+
   // decode trivialmap.
   int len = bl.length();
   bufferlist::iterator p = bl.begin();
