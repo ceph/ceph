@@ -16,10 +16,6 @@ import org.apache.hadoop.fs.FSInputStream;
 
 class CephInputStream extends FSInputStream {
 
-  static {
-    System.loadLibrary("hadoopcephfs");
-  }
-
   private int bufferSize;
 
   //private Block[] blocks;

@@ -17,11 +17,6 @@ import org.apache.hadoop.util.Progressable;
 
 class CephOutputStream extends OutputStream {
 
-  static {
-    System.loadLibrary("hadoopcephfs");
-  }
-
-
   private int bufferSize;
 
   private long fileLength;
