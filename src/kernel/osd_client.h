@@ -45,6 +45,7 @@ struct ceph_osd_request {
 	int               r_last_osd;         /* pg osds */
 	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;
+	bool              r_resend;           /* msg send failed, needs retry */
 
 	struct ceph_file_layout r_file_layout;
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */
@@ -106,7 +107,8 @@ static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
 extern int ceph_osdc_start_request(struct ceph_osd_client *osdc,
-				   struct ceph_osd_request *req);
+				   struct ceph_osd_request *req,
+				   bool nofail);
 extern int ceph_osdc_wait_request(struct ceph_osd_client *osdc,
 				  struct ceph_osd_request *req);
 extern void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
@@ -128,7 +130,7 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				u32 truncate_seq, u64 truncate_size,
 				struct timespec *mtime,
 				struct page **pages, int nr_pages,
-				int flags, int do_sync);
+				int flags, int do_sync, bool nofail);
 
 #endif
 

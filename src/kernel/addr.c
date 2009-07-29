@@ -428,7 +428,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   page_off, len,
 				   ci->i_truncate_seq, ci->i_truncate_size,
 				   &inode->i_mtime,
-				   &page, 1, 0, 0);
+				   &page, 1, 0, 0, true);
 	if (err < 0) {
 		dout("writepage setting page/mapping error %d %p\n", err, page);
 		SetPageError(page);
@@ -552,20 +552,16 @@ static void writepages_finish(struct ceph_osd_request *req)
  * mempool.  we avoid the mempool if we can because req->r_num_pages
  * may be less than the maximum write size.
  */
-static int alloc_page_vec(struct ceph_client *client,
-			  struct ceph_osd_request *req)
+static void alloc_page_vec(struct ceph_client *client,
+			   struct ceph_osd_request *req)
 {
 	req->r_pages = kmalloc(sizeof(struct page *) * req->r_num_pages,
 			       GFP_NOFS);
-	if (req->r_pages) {
-		req->r_pages_from_pool = 0;
-		return 0;
+	if (!req->r_pages) {
+		req->r_pages = mempool_alloc(client->wb_pagevec_pool, GFP_NOFS);
+		req->r_pages_from_pool = 1;
+		WARN_ON(!req->r_pages);
 	}
-
-	req->r_pages = mempool_alloc(client->wb_pagevec_pool, GFP_NOFS);
-	req->r_pages_from_pool = 1;
-	WARN_ON(!req->r_pages);
-	return -ENOMEM;
 }
 
 /*
@@ -770,9 +766,7 @@ get_more_pages:
 					    &inode->i_mtime, true);
 				max_pages = req->r_num_pages;
 
-				rc = alloc_page_vec(client, req);
-				if (rc)
-					goto out;
+				alloc_page_vec(client, req);
 				req->r_callback = writepages_finish;
 				req->r_inode = inode;
 				req->r_wbc = wbc;
@@ -828,12 +822,8 @@ get_more_pages:
 		op->payload_len = op->length;
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 
-		rc = ceph_osdc_start_request(&client->osdc, req);
+		ceph_osdc_start_request(&client->osdc, req, true);
 		req = NULL;
-		/*
-		 * FIXME: if writepages_start fails (ENOMEM?) we should
-		 * really redirty all those pages and release req..
-		 */
 
 		/* continue? */
 		index = next;

@@ -107,7 +107,6 @@ repair
 - mds scrubbing
 
 kclient
-- mempool for osd_request (if caller requests)
 - ensure cap_snaps reflush after client reconnect 
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
@@ -116,10 +115,6 @@ kclient
 - unwind writeback start error in addr.c (see fixme)... by redirtying pages?
 - flock, fnctl locks
 - ACLs
-- make writepages maybe skip pages with errors?
-  - EIO, or ENOSPC?
-  - ... writeback vs ENOSPC vs flush vs close()... hrm...
-- set mapping bits for ENOSPC, EIO?
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - reconnect after being disconnected from the mds
@@ -183,15 +178,6 @@ mds
   - on replay, but dirty scatter replicas on lists so that they get flushed?  or does rejoin handle that?
   - linkage vs cdentry replicas and remote rename....
   - rename: importing inode... also journal imported client map?
-
-
-
-journaler
-- fix up for large events (e.g. imports)
-- should we pad with zeros to avoid splitting individual entries?
-  - make it a g_conf flag?
-  - have to fix reader to skip over zeros (either <4 bytes for size, or zeroed sizes)
-
 
 mon
 - mds injectargs N should take mds# or id.  * should bcast to standy mds's.

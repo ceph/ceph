@@ -618,7 +618,7 @@ more:
 	req->r_num_pages = num_pages;
 	req->r_inode = inode;
 
-	ret = ceph_osdc_start_request(&client->osdc, req);
+	ret = ceph_osdc_start_request(&client->osdc, req, false);
 	if (!ret) {
 		if (req->r_safe_callback) {
 			/*
