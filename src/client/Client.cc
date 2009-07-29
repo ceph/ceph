@@ -2009,8 +2009,6 @@ void SnapRealm::build_snap_context()
   cached_snap_context.snaps.reserve(snaps.size());
   for (set<snapid_t>::reverse_iterator p = snaps.rbegin(); p != snaps.rend(); p++)
     cached_snap_context.snaps.push_back(*p);
-
-  cout << *this << " build_snap_context got " << cached_snap_context << std::endl;
 }
 
 void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
