@@ -164,10 +164,14 @@ static int mdsc_show(struct seq_file *s, void *p)
 			break;
 		nexttid = req->r_tid + 1;
 
-		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
+		if (req->r_request) {
+			seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
 			   req->r_tid,
 			   IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
 			   ENTITY_NAME(req->r_request->hdr.dst.name));
+		} else {
+			seq_printf(s, "%lld\t(no request)\t", req->r_tid);
+		}
 
 		seq_printf(s, "%s", ceph_mds_op_name(req->r_op));
 
