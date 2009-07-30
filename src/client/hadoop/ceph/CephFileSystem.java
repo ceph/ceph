@@ -105,6 +105,7 @@ public class CephFileSystem extends FileSystem {
   @Override
     public void close() throws IOException {
     debug("close:enter");
+    System.gc(); //to run the finalizers on CephInput/OutputStreams
     ceph_kill_client();
     //for some reason this just hangs, so not doing it for now
     debug("close:exit");

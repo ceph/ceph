@@ -41,6 +41,8 @@ class CephOutputStream extends OutputStream {
 
   private byte[] outBuf;
 
+  private static boolean debug = true;
+
   //private List<Block> blocks = new ArrayList<Block>();
 
   //private Block nextBlock;
@@ -79,6 +81,15 @@ class CephOutputStream extends OutputStream {
     fileHandle = fh;
     //fileLength = flength;
     closed = false;
+  }
+
+  //Ceph requires that things be closed before it can shutdown,
+  //so closing the IOStream stuff voluntarily is good
+  public void finalize () throws Throwable {
+    try {
+      if (!closed) close();
+    }
+    finally { super.finalize();}
   }
 
   // possibly useful for the local copy, write later thing?
@@ -161,6 +172,7 @@ class CephOutputStream extends OutputStream {
     
   @Override
     public synchronized void close() throws IOException {
+      debug("CephOutputStream.close:enter");
       if (closed) {
 	throw new IOException("Stream closed");
       }
@@ -171,8 +183,12 @@ class CephOutputStream extends OutputStream {
       }
 	
       closed = true;
-
+      debug("CephOutputStream.close:exit");
     }
+
+  private void debug(String out) {
+    if (debug) System.out.println(out);
+  }
     
 
 }

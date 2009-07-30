@@ -28,6 +28,8 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
   argv[argc++] = "CephFSInterface";
   argv[argc++] = "-m";
   argv[argc++] = "10.0.1.247:6789";
+  argv[argc++] = "--debug_client";
+  argv[argc++] = "20";
 
   ceph_initialize(argc, argv);
   ceph_mount();

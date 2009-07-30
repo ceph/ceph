@@ -380,11 +380,11 @@ class Inode {
 
   void get() { 
     ref++; 
-    //dout(0) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    dout(0) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
   }
   void put(int n=1) { 
     ref -= n; 
-    //dout(0) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    dout(0) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
     assert(ref >= 0);
   }
 

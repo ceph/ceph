@@ -26,6 +26,8 @@ class CephInputStream extends FSInputStream {
 
   private long fileLength;
 
+  private static boolean debug = true;
+
   //private long pos = 0;
 
   //private DataInputStream blockStream;
@@ -62,6 +64,14 @@ class CephInputStream extends FSInputStream {
     // TODO: Then what do we need from the config? The buffer size maybe?
     // Anything? Bueller?
 
+  }
+  //Ceph requires that things be closed before it can shutdown,
+  //so closing the IOStream stuff voluntarily is good
+  public void finalize () throws Throwable {
+    try {
+      if (!closed) close();
+    }
+    finally { super.finalize(); }
   }
 
   public synchronized long getPos() throws IOException {
@@ -149,6 +159,7 @@ class CephInputStream extends FSInputStream {
 
   @Override
     public void close() throws IOException {
+    debug("CephOutputStream.close:enter");
     if (closed) {
       throw new IOException("Stream closed");
     }
@@ -157,8 +168,8 @@ class CephInputStream extends FSInputStream {
     if (result != 0) {
       throw new IOException("Close failed!");
     }
-	
     closed = true;
+    debug("CephOutputStream.close:exit");
   }
 
   /**
@@ -179,4 +190,7 @@ class CephInputStream extends FSInputStream {
     throw new IOException("Mark not supported");
   }
 
+  private void debug(String out) {
+    if (debug) System.out.println(out);
+  }
 }
