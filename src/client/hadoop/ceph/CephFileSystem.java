@@ -548,54 +548,6 @@ public class CephFileSystem extends FileSystem {
     //return getConf().getLong("fs.ceph.block.size", DEFAULT_BLOCK_SIZE);
   }
 
-  public void copyToLocalFile(Path ceph_src, Path local_dst, boolean copyCrc) throws IOException {
-    debug("copyToLocalFile:enter with src " + ceph_src +
-	  " and dest " + local_dst + "and crc " + copyCrc);
-    Path abs_ceph_src = makeAbsolute(ceph_src);
-      
-    //debug("CopyToLocalFile: copying Ceph file \"" + abs_ceph_src.toString() + 
-    //		 "\" to local file \"" + local_dst.toString() + "\" using client");
-    // make sure the alleged source file exists, and is actually a file, not
-    // a directory or a ballpoint pen or something
-    if (!isFile(abs_ceph_src)) {
-      if (!exists(abs_ceph_src)) {
-	throw new IOException("copyToLocalFile:  failed copying Ceph file \"" + 
-			      abs_ceph_src.toString() + "\" to local file \"" 
-			      + local_dst.toString() + 
-			      "\" because the source file does not exist");
-      }
-      else {
-	throw new IOException("copyToLocalFile:  failed copying Ceph file \"" + 
-			      abs_ceph_src.toString() + "\" to local file \"" + 
-			      local_dst.toString() + 
-			      "\" because the Ceph path is not a  file");
-      }
-    }
-    
-    // if the destination's parent directory doesn't exist, create it.
-    Path local_dst_parent_dir = local_dst.getParent();
-    if(null == local_dst_parent_dir)
-      throw new IOException("copyToLocalFile:  failed copying Ceph file \"" + 
-			    abs_ceph_src.toString() + "\" to local file \"" + 
-			    local_dst.toString() + 
-			    "\": destination is root");
-    
-    if(!localFs.mkdirs(local_dst_parent_dir))
-      throw new IOException("copyToLocalFile:  failed copying Ceph file \"" + 
-			    abs_ceph_src.toString() + "\" to local file \"" + 
-			    local_dst.toString() + 
-			    "\": creating the destination's parent directory failed.");
-    else {
-      if (!ceph_copyToLocalFile(abs_ceph_src.toString(), local_dst.toString())) {
-	throw new IOException("copyToLocalFile:  failed copying Ceph file \"" + 
-			      abs_ceph_src.toString() + "\" to local file \"" 
-			      + local_dst.toString() + "\"");
-      }
-    }
-    debug("copyToLocalFile:exit");
-  }
-  
-
   @Override
     public Path startLocalOutput(Path fsOutputFile, Path tmpLocalFile)
     throws IOException {
