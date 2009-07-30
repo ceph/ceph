@@ -108,8 +108,8 @@ public class CephFileSystem extends FileSystem {
     debug("close:enter");
     super.close();//this method does stuff, make sure it's run!
     System.gc(); //to run the finalizers on CephInput/OutputStreams
-    //    ceph_kill_client();
-    //for some reason this just hangs, so not doing it for now
+    //this is kinda a hack and we may need to adjust it
+    ceph_kill_client();
     debug("close:exit");
   }
 
