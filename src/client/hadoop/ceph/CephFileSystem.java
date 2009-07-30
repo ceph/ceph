@@ -546,36 +546,6 @@ public class CephFileSystem extends FileSystem {
     //return getConf().getLong("fs.ceph.block.size", DEFAULT_BLOCK_SIZE);
   }
 
-  /**
-   * Return 1x1 'localhost' cell if the file exists. Return null if otherwise.
-   */
-  public String[][] getFileCacheHints(Path f, long start, long len)
-    throws IOException {
-    // TODO: Check this is the correct behavior
-    if (!exists(f)) {
-      return null;
-    }
-    return new String[][] { { "localhost" } };
-  }
-
-  public void lock(Path path, boolean shared) throws IOException {
-    // TODO: Design and implement? or just ignore locking?
-    return;
-  }
-
-  public void release(Path path) throws IOException {
-    return; //deprecated
-  }
-
-  /* old API
-     @Override
-     public void reportChecksumFailure(Path f, 
-     FSDataInputStream in, long inPos, 
-     FSDataInputStream sums, long sumsPos) {
-     // TODO: What to do here?
-     return;
-     } */
-
   @Override
     public void moveFromLocalFile(Path src, Path dst) throws IOException {
     debug("moveFromLocalFile:enter with src " + src + " and dest " + dst);
