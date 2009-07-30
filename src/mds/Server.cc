@@ -105,7 +105,7 @@ void Server::dispatch(Message *m)
 	m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	((MClientRequest*)m)->is_replay()) {
       dout(3) << "queuing replayed op" << dendl;
-      mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+      mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
       return;
     } else if (mds->is_clientreplay() &&
 	       m->get_type() == CEPH_MSG_CLIENT_REQUEST &&

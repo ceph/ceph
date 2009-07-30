@@ -184,6 +184,7 @@ class MDS : public Dispatcher {
   int want_state;    // the state i want
 
   list<Context*> waiting_for_active, waiting_for_replay;
+  list<Context*> replay_queue;
   map<int, list<Context*> > waiting_for_active_peer;
   list<Context*> waiting_for_nolaggy;
 
@@ -200,6 +201,9 @@ class MDS : public Dispatcher {
   }
   void wait_for_replay(Context *c) { 
     waiting_for_replay.push_back(c); 
+  }
+  void enqueue_replay(Context *c) {
+    replay_queue.push_back(c);
   }
 
   int get_state() { return state; } 
@@ -233,10 +237,10 @@ class MDS : public Dispatcher {
     finished_queue.splice( finished_queue.end(), ls );
   }
   bool queue_one_replay() {
-    if (waiting_for_replay.empty())
+    if (replay_queue.empty())
       return false;
-    queue_waiter(waiting_for_replay.front());
-    waiting_for_replay.pop_front();
+    queue_waiter(replay_queue.front());
+    replay_queue.pop_front();
     return true;
   }
   

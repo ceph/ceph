@@ -1010,7 +1010,7 @@ void MDS::rejoin_done()
   mdcache->show_subtrees();
   mdcache->show_cache();
 
-  if (waiting_for_replay.empty())
+  if (replay_queue.empty())
     request_state(MDSMap::STATE_ACTIVE);
   else
     request_state(MDSMap::STATE_CLIENTREPLAY);
@@ -1019,6 +1019,7 @@ void MDS::rejoin_done()
 void MDS::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
+  finish_contexts(waiting_for_replay);  // kick waiters
   queue_one_replay();
 }
 
@@ -1032,6 +1033,7 @@ void MDS::active_start()
 {
   dout(1) << "active_start" << dendl;
   mdcache->clean_open_file_lists();
+  finish_contexts(waiting_for_replay);  // kick waiters
   finish_contexts(waiting_for_active);  // kick waiters
 }
 
@@ -1312,7 +1314,7 @@ bool MDS::_dispatch(Message *m)
     // done with all client replayed requests?
     if (is_clientreplay() &&
 	mdcache->is_open() &&
-	waiting_for_replay.empty() &&
+	replay_queue.empty() &&
 	want_state == MDSMap::STATE_CLIENTREPLAY) {
       dout(10) << " still have " << mdcache->get_num_active_requests()
 	       << " active replay requests" << dendl;

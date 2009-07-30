@@ -1611,6 +1611,11 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  << " follows " << follows 
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
+  if (!mds->is_active() && !mds->is_stopping() && !mds->is_clientreplay()) {
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
     dout(7) << "handle_client_caps on unknown ino " << m->get_ino() << ", dropping" << dendl;
