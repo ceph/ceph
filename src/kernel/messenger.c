@@ -1108,6 +1108,7 @@ static int process_connect(struct ceph_connection *con)
 		prepare_read_connect(con);
 
 		/* Tell ceph about it. */
+		pr_info("reset on %s%d\n", ENTITY_NAME(con->peer_name));
 		con->msgr->peer_reset(con->msgr->parent, &con->peer_addr,
 				      &con->peer_name);
 		break;
@@ -1250,6 +1251,7 @@ static int process_accept(struct ceph_connection *con)
 			if (peer_cseq == 0) {
 				/* peer reset, then connected to us */
 				reset_connection(existing);
+				pr_info("reset on %s%d\n", ENTITY_NAME(con->peer_name));
 				con->msgr->peer_reset(con->msgr->parent,
 						      &con->peer_addr,
 						      &con->peer_name);
