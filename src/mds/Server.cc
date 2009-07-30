@@ -108,8 +108,9 @@ void Server::dispatch(Message *m)
       mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
       return;
     } else if (mds->is_clientreplay() &&
-	       m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-	       ((MClientRequest*)m)->is_replay()) {
+	       (m->get_type() == CEPH_MSG_CLIENT_SESSION ||
+		(m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+		 ((MClientRequest*)m)->is_replay()))) {
       // replaying!
     } else {
       dout(3) << "not active yet, waiting" << dendl;
