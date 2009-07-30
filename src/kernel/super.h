@@ -311,7 +311,11 @@ struct ceph_inode_info {
 	struct ceph_cap *i_auth_cap;     /* authoritative cap, if any */
 	unsigned i_dirty_caps, i_flushing_caps;     /* mask of dirtied fields */
 	struct list_head i_dirty_item, i_flushing_item;
-	u64 i_cap_flush_seq, i_cap_flush_tid;
+	u64 i_cap_flush_seq;
+	/* we need to track cap writeback on a per-cap-bit basis, to allow
+	 * overlapping, pipelined cap flushes to the mds.  we can probably
+	 * reduce the tid to 8 bits if we're concerned about inode size. */
+	u16 i_cap_flush_last_tid, i_cap_flush_tid[CEPH_CAP_BITS];
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_min; /* jiffies */
 	unsigned long i_hold_caps_max; /* jiffies */

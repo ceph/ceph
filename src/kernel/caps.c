@@ -1001,6 +1001,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	u64 xattr_version = 0;
 	int delayed = 0;
 	u64 flush_tid = 0;
+	int i;
 
 	dout("__send_cap %p cap %p session %p %s -> %s (revoking %s)\n",
 	     inode, cap, cap->session,
@@ -1038,12 +1039,16 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	if (flushing) {
 		/*
 		 * assign a tid for flush operations so we can avoid
-		 *  flush1 -> dirty1 -> flush2 -> flushack1 -> mark clean
-		 * type races.
+		 * flush1 -> dirty1 -> flush2 -> flushack1 -> mark
+		 * clean type races.  track latest tid for every bit
+		 * so we can handle flush AxFw, flush Fw, and have the
+		 * first ack clean Ax.
 		 */
-		flush_tid = ++cap->session->s_cap_flush_tid;
-		ci->i_cap_flush_tid = flush_tid;
-		dout(" cap_flush_tid %lld\n", flush_tid);
+		flush_tid = ++ci->i_cap_flush_last_tid;
+		dout(" cap_flush_tid %d\n", (int)flush_tid);
+		for (i = 0; i < CEPH_CAP_BITS; i++)
+			if (flushing & (1 << i))
+				ci->i_cap_flush_tid[i] = flush_tid;
 	}
 
 	keep = cap->implemented;
@@ -1159,7 +1164,7 @@ retry:
 			goto retry;
 		}
 
-		capsnap->flush_tid = ++session->s_cap_flush_tid;
+		capsnap->flush_tid = ++ci->i_cap_flush_last_tid;
 		atomic_inc(&capsnap->nref);
 		if (!list_empty(&capsnap->flushing_item))
 			list_del_init(&capsnap->flushing_item);
@@ -2178,43 +2183,51 @@ static void handle_cap_flush_ack(struct inode *inode,
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_mds_client *mdsc = &ceph_client(inode->i_sb)->mdsc;
 	unsigned seq = le32_to_cpu(m->seq);
-	int cleaned = le32_to_cpu(m->dirty);
+	int dirty = le32_to_cpu(m->dirty);
+	int cleaned = 0;
 	u64 flush_tid = le64_to_cpu(m->client_tid);
 	int old_dirty = 0, new_dirty = 0;
+	int i;
 
-	dout("handle_cap_flush_ack inode %p mds%d seq %d cleaned %s,"
+	for (i = 0; i < CEPH_CAP_BITS; i++)
+		if ((dirty & (1 << i)) &&
+		    flush_tid == ci->i_cap_flush_tid[i])
+			cleaned |= 1 << i;
+
+	dout("handle_cap_flush_ack inode %p mds%d seq %d on %s cleaned %s,"
 	     " flushing %s -> %s\n",
-	     inode, session->s_mds, seq, ceph_cap_string(cleaned),
-	     ceph_cap_string(ci->i_flushing_caps),
+	     inode, session->s_mds, seq, ceph_cap_string(dirty),
+	     ceph_cap_string(cleaned), ceph_cap_string(ci->i_flushing_caps),
 	     ceph_cap_string(ci->i_flushing_caps & ~cleaned));
-	if (flush_tid != ci->i_cap_flush_tid) {
-		dout(" flush_tid %lld != my flush_tid %lld, ignoring\n",
-		     flush_tid, ci->i_cap_flush_tid);
-	} else {
-		old_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
-		ci->i_flushing_caps &= ~cleaned;
-		new_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
-		if (old_dirty) {
-			spin_lock(&mdsc->cap_dirty_lock);
-			list_del_init(&ci->i_flushing_item);
-			if (!list_empty(&session->s_cap_flushing))
-				dout(" mds%d still flushing cap on %p\n",
-				     session->s_mds,
-				     &list_entry(session->s_cap_flushing.next,
-						 struct ceph_inode_info,
-						 i_flushing_item)->vfs_inode);
-			mdsc->num_cap_flushing--;
-			wake_up(&mdsc->cap_flushing_wq);
-			dout(" inode %p now !flushing\n", inode);
-			if (!new_dirty) {
-				dout(" inode %p now clean\n", inode);
-				list_del_init(&ci->i_dirty_item);
-			}
-			spin_unlock(&mdsc->cap_dirty_lock);
-			wake_up(&ci->i_cap_wq);
-		}
-	}
 
+	if (ci->i_flushing_caps == (ci->i_flushing_caps & ~cleaned))
+		goto out;
+
+	old_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
+	ci->i_flushing_caps &= ~cleaned;
+	new_dirty = ci->i_dirty_caps | ci->i_flushing_caps;
+
+	spin_lock(&mdsc->cap_dirty_lock);
+	if (ci->i_flushing_caps == 0) {
+		list_del_init(&ci->i_flushing_item);
+		if (!list_empty(&session->s_cap_flushing))
+			dout(" mds%d still flushing cap on %p\n",
+			     session->s_mds,
+			     &list_entry(session->s_cap_flushing.next,
+					 struct ceph_inode_info,
+					 i_flushing_item)->vfs_inode);
+		mdsc->num_cap_flushing--;
+		wake_up(&mdsc->cap_flushing_wq);
+		dout(" inode %p now !flushing\n", inode);
+	}
+	if (old_dirty && !new_dirty) {
+		dout(" inode %p now clean\n", inode);
+		list_del_init(&ci->i_dirty_item);
+	}
+	spin_unlock(&mdsc->cap_dirty_lock);
+	wake_up(&ci->i_cap_wq);
+
+out:
 	spin_unlock(&inode->i_lock);
 	if (old_dirty && !new_dirty)
 		iput(inode);

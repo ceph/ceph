@@ -108,7 +108,6 @@ struct ceph_mds_session {
 	/* protected by mutex */
 	struct list_head  s_cap_flushing;     /* inodes w/ flushing caps */
 	struct list_head  s_cap_snaps_flushing;
-	u64               s_cap_flush_tid;
 	unsigned long     s_renew_requested; /* last time we sent a renew req */
 
 	atomic_t          s_ref;

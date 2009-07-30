@@ -660,6 +660,8 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_SXATTR     6
 #define CEPH_CAP_SFILE      8   /* goes at the end (uses >2 cap bits) */
 
+#define CEPH_CAP_BITS       16
+
 /* composed values */
 #define CEPH_CAP_AUTH_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SAUTH)
 #define CEPH_CAP_AUTH_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SAUTH)
