@@ -3,6 +3,7 @@ package org.apache.hadoop.fs.ceph;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
+import java.io.File;
 import java.io.OutputStream;
 import java.net.URI;
 import java.util.Set;
@@ -578,11 +579,9 @@ public class CephFileSystem extends FileSystem {
   @Override
     public void moveFromLocalFile(Path src, Path dst) throws IOException {
     debug("moveFromLocalFile:enter with src " + src + " and dest " + dst);
-    debug("calling ceph_moveFromLocalFile from java");
-    if (!ceph_copyFromLocalFile(src.toString(), dst.toString())) {
-      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.moveFromLocalFile: failed moving from local file " + src.toString() + " to Ceph file " + dst.toString());
-    }
-    debug("returned from ceph_moveFromLocalFile to java, success!");
+    copyFromLocalFile(src, dst);
+    File f = new File (src.toString());
+    if (!f.delete()) throw new IOException("Delete failed");
     debug("moveFromLocalFile:exit");
   }
 
