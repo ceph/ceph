@@ -106,8 +106,9 @@ public class CephFileSystem extends FileSystem {
   @Override
     public void close() throws IOException {
     debug("close:enter");
+    super.close();//this method does stuff, make sure it's run!
     System.gc(); //to run the finalizers on CephInput/OutputStreams
-    ceph_kill_client();
+    //    ceph_kill_client();
     //for some reason this just hangs, so not doing it for now
     debug("close:exit");
   }
@@ -126,7 +127,8 @@ public class CephFileSystem extends FileSystem {
     return new FSDataOutputStream(cephOStream);
   }
 
-  public String getName() {
+  @Deprecated
+    public String getName() {
     debug("getName:enter");
     debug("getName:exit with value " + getUri().toString());
     return getUri().toString();
@@ -631,12 +633,6 @@ public class CephFileSystem extends FileSystem {
     public Path startLocalOutput(Path fsOutputFile, Path tmpLocalFile)
     throws IOException {
     return tmpLocalFile;
-  }
-
-  @Override
-    public void completeLocalOutput(Path fsOutputFile, Path tmpLocalFile)
-    throws IOException {
-    moveFromLocalFile(tmpLocalFile, fsOutputFile);
   }
 
   private void debug(String statement) {
