@@ -87,6 +87,7 @@ public class CephFileSystem extends FileSystem {
   @Override
     public void initialize(URI uri, Configuration conf) throws IOException {
     debug("initialize:enter");
+    super.initialize(uri, conf);
     //store.initialize(uri, conf);
     setConf(conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
@@ -150,7 +151,7 @@ public class CephFileSystem extends FileSystem {
     boolean isDir = false;
     boolean path_exists = false;
     try {
-      isDir = isDirectory(abs_path);
+      isDir = __isDirectory(abs_path);
       path_exists = exists(abs_path);
     }
 
@@ -174,37 +175,13 @@ public class CephFileSystem extends FileSystem {
     debug("setWorkingDirectory:exit");
   }
 
-  // Makes a Path absolute. In a cheap, dirty hack, we're
-  // also going to strip off any "ceph://null" prefix we see. 
-  private Path makeAbsolute(Path path) {
-    debug("makeAbsolute:enter with path " + path);
-    // first, check for the prefix
-    if (path.toString().startsWith("ceph://null")) {
-	  
-      Path stripped_path = new Path(path.toString().substring("ceph://null".length()));
-      debug("makeAbsolute:exit with path " + stripped_path);
-      return stripped_path;
-    }
 
-
-    if (path.isAbsolute()) {
-      debug("makeAbsolute:exit with path " + path);
-      return path;
-    }
-    Path wd = getWorkingDirectory();
-    if (wd.toString().equals("")){
-      Path new_path = new Path(root, path);
-      debug("makeAbsolute:exit with path " + new_path);
-      return new_path;
-    }
-    else {
-      Path new_path = new Path(root, path);
-      debug("makeAbsolute:exit with path " + new_path);
-      return new_path;
-    }
-  }
 
   @Override
+    /**
+     * There's not much point to using a full getFileStatus for this since
+     * that makes more calls than we need, so override.
+     */
     public boolean exists(Path path) throws IOException {
     debug("exists:enter with path " + path);
     boolean result;
@@ -221,7 +198,6 @@ public class CephFileSystem extends FileSystem {
     return result;
   }
 
-
   /* Creates the directory and all nonexistent parents.   */
   public boolean mkdirs(Path path, FsPermission perms) throws IOException {
     debug("mkdirs:enter with path " + path);
@@ -235,22 +211,9 @@ public class CephFileSystem extends FileSystem {
     else return false;
   }
 
-  public boolean __isDirectory(Path path) throws IOException {
-    debug("__isDirectory:enter with path " + path);
-    Path abs_path = makeAbsolute(path);
-    boolean result;
-    if (abs_path.toString().equals("/")) {
-      result = true;
-    }
-    else {
-      debug("calling ceph_isdirectory from Java");
-      result = ceph_isdirectory(abs_path.toString());
-      debug("Returned from ceph_isdirectory to Java");
-    }
-    debug("__isDirectory:exit with result " + result);
-    return result;
-  }
-
+  /**
+   * As with exists, this is faster than their method
+   */
   @Override
     public boolean isFile(Path path) throws IOException {
     debug("isFile:enter with path " + path);
@@ -303,43 +266,6 @@ public class CephFileSystem extends FileSystem {
     debug("listStatus:exit");
     return statuses;
   }
-  
-
-  public Path[] listPaths(Path path) throws IOException {
-    debug("listPaths:enter with path " + path);
-    String dirlist[];
-
-    Path abs_path = makeAbsolute(path);
-
-    // If it's a directory, get the listing. Otherwise, complain and give up.
-    if (isDirectory(abs_path)) {
-      debug("calling ceph_getdir from Java with path " + abs_path);
-      dirlist = ceph_getdir(abs_path.toString());
-      debug("returning from ceph_getdir to Java");
-    }
-    else {
-      debug("listPaths:exit failed on isDirectory");
-      return null;
-    }
-    
-    // convert the strings to Paths
-    Path paths[] = new Path[dirlist.length];
-    for(int i = 0; i < dirlist.length; ++i) {
-      //we don't want . or .. entries, which Ceph includes
-      if (dirlist[i].equals(".") || dirlist[i].equals("..")) continue;
-      debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
-			 dirlist[i] + "\"");
-
-      // convert each listing to an absolute path
-      Path raw_path = new Path(dirlist[i]);
-      if (raw_path.isAbsolute())
-	paths[i] = raw_path;
-      else
-	paths[i] = new Path(abs_path, raw_path);
-    }
-    debug("listPaths:exit");
-    return paths;     
-  }
 
   public FSDataOutputStream create(Path f,
 				   FsPermission permission,
@@ -358,7 +284,7 @@ public class CephFileSystem extends FileSystem {
     // throw an exception if !CreateFlag.OVERWRITE.
 
     // Step 1: existence test
-    if(isDirectory(abs_path))
+    if(__isDirectory(abs_path))
       throw new IOException("create: Cannot overwrite existing directory \""
 			    + abs_path.toString() + "\" with a file");      
     if (!flag.contains(CreateFlag.OVERWRITE)) {
@@ -486,33 +412,17 @@ public class CephFileSystem extends FileSystem {
     debug("delete:exit");
     return result;
   }
-   
-
-  //@Override
-  private long __getLength(Path path) throws IOException {
-    debug("__getLength:enter with path " + path);
-    Path abs_path = makeAbsolute(path);
-
-    if (!exists(abs_path)) {
-      throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem.__getLength: File or directory " + abs_path.toString() + " does not exist.");
-    }	  
-
-    long filesize = ceph_getfilesize(abs_path.toString());
-    if (filesize < 0) {
-      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getLength: Size of file or directory " + abs_path.toString() + " could not be retrieved.");
-    }
-    debug("__getLength:exit with size " + filesize);
-    return filesize;
-  }
 
   /**
    * User-defined replication is not supported for Ceph file systems at the moment.
    */
-  public short getReplication(Path path) throws IOException {
+  @Deprecated
+    public short getReplication(Path path) throws IOException {
     return 1;
   }
 
-  public short getDefaultReplication() {
+  @Override
+    public short getDefaultReplication() {
     return 1;
   }
   
@@ -526,13 +436,14 @@ public class CephFileSystem extends FileSystem {
   /**
    * You need to guarantee the path exists before calling this method, for now.
    */
-  public long getBlockSize(Path path) throws IOException {
+  @Deprecated
+    public long getBlockSize(Path path) throws IOException {
     debug("getBlockSize:enter with path " + path);
     if (!exists(path)) {
       throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: File or directory " + path.toString() + " does not exist.");
     }
     long result = ceph_getblocksize(path.toString());
-
+    
     if (result < 4096) {
       debug("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: " + 
 			 "path exists; strange block size of " + result + " defaulting to 8192");
@@ -548,10 +459,102 @@ public class CephFileSystem extends FileSystem {
     //return getConf().getLong("fs.ceph.block.size", DEFAULT_BLOCK_SIZE);
   }
 
-  @Override
-    public Path startLocalOutput(Path fsOutputFile, Path tmpLocalFile)
-    throws IOException {
-    return tmpLocalFile;
+  // Makes a Path absolute. In a cheap, dirty hack, we're
+  // also going to strip off any "ceph://null" prefix we see. 
+  private Path makeAbsolute(Path path) {
+    debug("makeAbsolute:enter with path " + path);
+    // first, check for the prefix
+    if (path.toString().startsWith("ceph://null")) {
+	  
+      Path stripped_path = new Path(path.toString().substring("ceph://null".length()));
+      debug("makeAbsolute:exit with path " + stripped_path);
+      return stripped_path;
+    }
+
+
+    if (path.isAbsolute()) {
+      debug("makeAbsolute:exit with path " + path);
+      return path;
+    }
+    Path wd = getWorkingDirectory();
+    if (wd.toString().equals("")){
+      Path new_path = new Path(root, path);
+      debug("makeAbsolute:exit with path " + new_path);
+      return new_path;
+    }
+    else {
+      Path new_path = new Path(root, path);
+      debug("makeAbsolute:exit with path " + new_path);
+      return new_path;
+    }
+  }
+
+  private boolean __isDirectory(Path path) throws IOException {
+    debug("__isDirectory:enter with path " + path);
+    Path abs_path = makeAbsolute(path);
+    boolean result;
+    if (abs_path.toString().equals("/")) {
+      result = true;
+    }
+    else {
+      debug("calling ceph_isdirectory from Java");
+      result = ceph_isdirectory(abs_path.toString());
+      debug("Returned from ceph_isdirectory to Java");
+    }
+    debug("__isDirectory:exit with result " + result);
+    return result;
+  }
+
+  private long __getLength(Path path) throws IOException {
+    debug("__getLength:enter with path " + path);
+    Path abs_path = makeAbsolute(path);
+
+    if (!exists(abs_path)) {
+      throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem.__getLength: File or directory " + abs_path.toString() + " does not exist.");
+    }	  
+    
+    long filesize = ceph_getfilesize(abs_path.toString());
+    if (filesize < 0) {
+      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getLength: Size of file or directory " + abs_path.toString() + " could not be retrieved.");
+    }
+    debug("__getLength:exit with size " + filesize);
+    return filesize;
+  }
+
+  private Path[] listPaths(Path path) throws IOException {
+    debug("listPaths:enter with path " + path);
+    String dirlist[];
+
+    Path abs_path = makeAbsolute(path);
+
+    // If it's a directory, get the listing. Otherwise, complain and give up.
+    if (__isDirectory(abs_path)) {
+      debug("calling ceph_getdir from Java with path " + abs_path);
+      dirlist = ceph_getdir(abs_path.toString());
+      debug("returning from ceph_getdir to Java");
+    }
+    else {
+      debug("listPaths:exit failed on isDirectory");
+      return null;
+    }
+    
+    // convert the strings to Paths
+    Path paths[] = new Path[dirlist.length];
+    for(int i = 0; i < dirlist.length; ++i) {
+      //we don't want . or .. entries, which Ceph includes
+      if (dirlist[i].equals(".") || dirlist[i].equals("..")) continue;
+      debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
+			 dirlist[i] + "\"");
+
+      // convert each listing to an absolute path
+      Path raw_path = new Path(dirlist[i]);
+      if (raw_path.isAbsolute())
+	paths[i] = raw_path;
+      else
+	paths[i] = new Path(abs_path, raw_path);
+    }
+    debug("listPaths:exit");
+    return paths;     
   }
 
   private void debug(String statement) {
