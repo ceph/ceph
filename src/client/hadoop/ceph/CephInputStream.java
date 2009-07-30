@@ -26,7 +26,7 @@ class CephInputStream extends FSInputStream {
 
   private long fileLength;
 
-  private static boolean debug = true;
+  private static boolean debug = false;
 
   //private long pos = 0;
 

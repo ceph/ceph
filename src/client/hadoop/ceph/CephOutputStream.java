@@ -41,7 +41,7 @@ class CephOutputStream extends OutputStream {
 
   private byte[] outBuf;
 
-  private static boolean debug = true;
+  private static boolean debug = false;
 
   //private List<Block> blocks = new ArrayList<Block>();
 

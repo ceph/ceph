@@ -18,11 +18,10 @@ extern "C" {
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
- * Signature: ()Z
+ * Signature: (Ljava/lang/String;)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv *, jobject);
-
+  (JNIEnv *, jobject, jstring);
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_copyFromLocalFile

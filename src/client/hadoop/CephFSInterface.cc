@@ -10,18 +10,17 @@
 
 using namespace std;
 
-
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
- * Signature: ()Z
- * Initializes a ceph client.
+ * Signature: (Ljava/lang/String;)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-(JNIEnv *env, jobject )
+  (JNIEnv * env, jobject obj, jstring j_debug_level)
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
 
+  const char* c_debug_level = env->GetStringUTFChars(j_debug_level, 0);
   //construct an arguments array
   const char *argv[10];
   int argc = 0;
@@ -29,10 +28,11 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
   argv[argc++] = "-m";
   argv[argc++] = "10.0.1.247:6789";
   argv[argc++] = "--debug_client";
-  argv[argc++] = "20";
+  argv[argc++] = c_debug_level;
 
   ceph_initialize(argc, argv);
   ceph_mount();
+  env->ReleaseStringUTFChars(j_debug_level, c_debug_level);
   return true;
 }
 
@@ -56,6 +56,8 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1c
   int r = ::stat(c_local_path, &st);
   if (r == 0) {
     dout(0) << "CephFSInterface: failed to stat local file " << c_local_path << dendl;
+    env->ReleaseStringUTFChars(j_local_path, c_local_path);
+    env->ReleaseStringUTFChars(j_ceph_path, c_ceph_path);
     return JNI_FALSE;
   }
 

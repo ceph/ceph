@@ -43,9 +43,10 @@ public class CephFileSystem extends FileSystem {
 
   private Path parent;
 
-  private static boolean debug = true;
+  private static boolean debug = false;
+  private static String cephDebugLevel = "0";
   
-  private native boolean ceph_initializeClient();
+  private native boolean ceph_initializeClient(String debugLevel);
   private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
   private native boolean ceph_copyToLocalFile(String cephPath, String localPath);
   private native String  ceph_getcwd();
@@ -96,7 +97,7 @@ public class CephFileSystem extends FileSystem {
     this.localFs = get(URI.create("file:///"), conf);
 
     //  Initializes the client
-    if (!ceph_initializeClient()) {
+    if (!ceph_initializeClient(cephDebugLevel)) {
       throw new IOException("Ceph initialization failed!");
     }
     debug("Initialized client. Setting cwd to /");
@@ -207,8 +208,8 @@ public class CephFileSystem extends FileSystem {
     debug("Returned from ceph_mkdirs to Java with result " + result);
     debug("mkdirs:exit with result " + result);
     if (result != 0)
-      return true;
-    else return false;
+      return false;
+    else return true;
   }
 
   /**
