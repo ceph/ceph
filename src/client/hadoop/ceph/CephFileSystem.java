@@ -548,39 +548,6 @@ public class CephFileSystem extends FileSystem {
     //return getConf().getLong("fs.ceph.block.size", DEFAULT_BLOCK_SIZE);
   }
 
-  @Override
-    public void moveFromLocalFile(Path src, Path dst) throws IOException {
-    debug("moveFromLocalFile:enter with src " + src + " and dest " + dst);
-    copyFromLocalFile(src, dst);
-    File f = new File (src.toString());
-    if (!f.delete()) throw new IOException("Delete failed");
-    debug("moveFromLocalFile:exit");
-  }
-
-  @Override
-    public void copyFromLocalFile(Path src, Path dst) throws IOException {
-    debug("copyFromLocalFile:enter with src " + src + " and dest " + dst);
-    // make sure Ceph path exists
-    Path abs_src = makeAbsolute(src);
-    Path abs_dst = makeAbsolute(dst);
-
-    if (isDirectory(abs_dst))
-      throw new IOException("Error in copyFromLocalFile: " +
-			    "attempting to open an existing directory as a file");
-    Path abs_dst_parent = abs_dst.getParent();
-
-    if (!exists(abs_dst_parent))
-      mkdirs(abs_dst_parent);
-
-    debug("calling ceph_copyFromLocalFile from java");
-    if (!ceph_copyFromLocalFile(abs_src.toString(), abs_dst.toString())) {
-      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.copyFromLocalFile: failed copying from local file " + abs_src.toString() + " to Ceph file " + abs_dst.toString());
-    }
-    debug("returned from ceph_copyFromLocalFile to java, success!");
-  }
-
-
-
   public void copyToLocalFile(Path ceph_src, Path local_dst, boolean copyCrc) throws IOException {
     debug("copyToLocalFile:enter with src " + ceph_src +
 	  " and dest " + local_dst + "and crc " + copyCrc);
