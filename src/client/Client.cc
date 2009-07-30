@@ -4229,10 +4229,11 @@ int Client::chdir(const char *relpath)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  if (cwd && cwd != in)
+  if (cwd != in) {
+    in->get();
     put_inode(cwd);
-  cwd = in;
-  in->get();
+    cwd = in;
+  }
   dout(3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
   return 0;
 }
