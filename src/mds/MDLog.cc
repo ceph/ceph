@@ -470,9 +470,7 @@ struct C_MDL_ReplayTruncated : public Context {
   MDLog *mdl;
   C_MDL_ReplayTruncated(MDLog *l) : mdl(l) {}
   void finish(int r) {
-    mdl->mds->mds_lock.Lock();
     mdl->_replay_truncated();
-    mdl->mds->mds_lock.Unlock();
   }
 };
 
