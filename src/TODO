@@ -51,6 +51,7 @@ v0.12
 - clean up layout ioctls
 - fix bad kmalloc
 - use mempool for write path allocations where appropriate
+- fixed bug with cap, snap writeback
 
 
 - osdmap: allow explicit pg 'override' mappings
@@ -107,7 +108,7 @@ repair
 - mds scrubbing
 
 kclient
-- ensure cap_snaps reflush after client reconnect 
+?- ensure cap_snaps reflush after client reconnect 
 - fix up mds selection, and ESTALE handling
 - make cap import/export efficient
 - simplify mds auth tracking?
