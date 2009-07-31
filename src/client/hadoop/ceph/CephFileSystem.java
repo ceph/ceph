@@ -39,15 +39,14 @@ public class CephFileSystem extends FileSystem {
   private URI uri;
 
   private FileSystem localFs;
-  
   private Path root;
-
   private Path parent;
 
-  private static boolean debug = false;
-  private static String cephDebugLevel = "0";
+  private static boolean debug;
+  private static String cephDebugLevel;
+  private static String monAddr;
   
-  private native boolean ceph_initializeClient(String debugLevel);
+  private native boolean ceph_initializeClient(String debugLevel, String mon);
   private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
   private native boolean ceph_copyToLocalFile(String cephPath, String localPath);
   private native String  ceph_getcwd();
@@ -97,8 +96,11 @@ public class CephFileSystem extends FileSystem {
     // TODO: local filesystem? we really need to figure out this conf thingy
     this.localFs = get(URI.create("file:///"), conf);
 
+    monAddr = conf.get("fs.ceph.monAddr");
+    cephDebugLevel = conf.get("fs.ceph.debugLevel");
+    debug = ("true".equals(conf.get("fs.ceph.debug")));
     //  Initializes the client
-    if (!ceph_initializeClient(cephDebugLevel)) {
+    if (!ceph_initializeClient(cephDebugLevel, monAddr)) {
       throw new IOException("Ceph initialization failed!");
     }
     debug("Initialized client. Setting cwd to /");

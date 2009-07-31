@@ -9,24 +9,30 @@
 #include <sys/stat.h>
 
 using namespace std;
-
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
  * Signature: (Ljava/lang/String;)Z
  */
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_initializeClient
+ * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
+ */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv * env, jobject obj, jstring j_debug_level)
+  (JNIEnv * env, jobject obj, jstring j_debug_level, jstring j_mon_addr)
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
 
   const char* c_debug_level = env->GetStringUTFChars(j_debug_level, 0);
+  const char* c_mon_addr = env->GetStringUTFChars(j_mon_addr, 0);
   //construct an arguments array
   const char *argv[10];
   int argc = 0;
   argv[argc++] = "CephFSInterface";
   argv[argc++] = "-m";
-  argv[argc++] = "10.0.1.247:6789";
+  argv[argc++] = c_mon_addr;
   argv[argc++] = "--debug_client";
   argv[argc++] = c_debug_level;
 
