@@ -17,6 +17,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.CreateFlag;
@@ -66,7 +67,7 @@ public class CephFileSystem extends FileSystem {
   private native int ceph_open_for_read(String path);
   private native int ceph_open_for_overwrite(String path, int mode);
   private native boolean ceph_kill_client();
-
+  private native boolean ceph_stat(String path, Stat fill);
   public CephFileSystem() {
     debug("CephFileSystem:enter");
     root = new Path("/");
@@ -233,23 +234,20 @@ public class CephFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path p) throws IOException {
     debug("getFileStatus:enter with path " + p);
     Path abs_p = makeAbsolute(p);
-    // For the moment, hardwired replication and modification time
+    // For the moment, hardwired replication
     int replication = 2;
-    int mod_time = 0;
     FileStatus status;
-    if (isFile(abs_p)) {
-      debug("getFileStatus: is file");
-      status = new FileStatus(__getLength(abs_p), false, replication, getBlockSize(abs_p),
-			      mod_time, abs_p);
-    }
-    else if (__isDirectory(abs_p)) {
-      debug("getFileStatus: is directory");
-      status = new FileStatus( 0, true, replication, 0,
-			      mod_time, abs_p);
+    Stat lstat = new Stat();
+    if(ceph_stat(abs_p.toString(), lstat)) {
+      status = new FileStatus(lstat.size, lstat.is_dir, replication,
+			      lstat.block_size, lstat.mod_time, lstat.access_time,
+			      new FsPermission((short)lstat.mode),
+			      new Integer(lstat.user_id).toString(), 
+			      new Integer(lstat.group_id).toString(), abs_p);
     }
     else { //fail out
-      throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
-				      + p + " does not exist.");
+	throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
+					+ p + " does not exist or could not be accessed");
     }
     debug("getFileStatus:exit");
     return status;
@@ -268,6 +266,10 @@ public class CephFileSystem extends FileSystem {
     return statuses;
   }
 
+  @Override
+    public void setPermission(Path p, FsPermission permission) throws IOException {
+    
+  }
   public FSDataOutputStream create(Path f,
 				   FsPermission permission,
 				   EnumSet<CreateFlag> flag,
@@ -562,14 +564,16 @@ public class CephFileSystem extends FileSystem {
     if (debug) System.err.println(statement);
   }
 
-  // diagnostic methods
+  private class Stat {
+    public long size;
+    public boolean is_dir;
+    public long block_size;
+    public long mod_time;
+    public long access_time;
+    public int mode;
+    public int user_id;
+    public int group_id; 
 
-  /*  void dump() throws IOException {
-      store.dump();
-      }
-
-      void purge() throws IOException {
-      store.purge();
-      }*/
-
+    public Stat(){}
+  }
 }

@@ -712,3 +712,48 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1wri
   return result;
 }
 
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_stat
+ * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
+(JNIEnv * env, jobject obj, jstring j_path, jobject j_stat) {
+  //setup variables
+  struct stat st;
+  const char* c_path = env->GetStringUTFChars(j_path, 0);
+
+  jclass cls = env->GetObjectClass(j_stat);
+  jfieldID c_size_id = env->GetFieldID(cls, "size", "J");
+  jfieldID c_dir_id = env->GetFieldID(cls, "is_dir", "Z");
+  jfieldID c_block_id = env->GetFieldID(cls, "block_size", "J");
+  jfieldID c_mod_id = env->GetFieldID(cls, "mod_time", "J");
+  jfieldID c_access_id = env->GetFieldID(cls, "access_time", "J");
+  jfieldID c_mode_id = env->GetFieldID(cls, "mode", "I");
+  jfieldID c_user_id = env->GetFieldID(cls, "user_id", "I");
+  jfieldID c_group_id = env->GetFieldID(cls, "group_id", "I");
+
+  //do actual lstat
+  int r = ceph_lstat(c_path, &st);
+
+  if (r < 0) { //clean up variables and fail out; file DNE or Ceph broke
+    env->ReleaseStringUTFChars(j_path, c_path);
+    return false;
+  }
+
+  //put variables from struct stat into Java
+  env->SetLongField(j_stat, c_size_id, (long)st.st_size);
+  env->SetBooleanField(j_stat, c_dir_id, (0 != S_ISDIR(st.st_mode)));
+  env->SetLongField(j_stat, c_block_id, (long)st.st_blksize);
+  env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime);
+  env->SetLongField(j_stat, c_access_id, (long long)st.st_atime);
+  env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
+  env->SetIntField(j_stat, c_user_id, (int)st.st_uid);
+  env->SetIntField(j_stat, c_group_id, (int)st.st_gid);
+
+  //clean up variables
+  env->ReleaseStringUTFChars(j_path, c_path);
+
+  //return happy
+  return true;
+}
