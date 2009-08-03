@@ -939,7 +939,10 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
   in->linklock.export_twiddle();
   in->dirfragtreelock.export_twiddle();
   in->filelock.export_twiddle();
-
+  in->nestlock.export_twiddle();
+  in->xattrlock.export_twiddle();
+  in->snaplock.export_twiddle();
+  
   // mark auth
   assert(in->is_auth());
   in->state_clear(CInode::STATE_AUTH);
