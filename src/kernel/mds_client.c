@@ -261,6 +261,7 @@ static const char *session_state_name(int s)
 	case CEPH_MDS_SESSION_NEW: return "new";
 	case CEPH_MDS_SESSION_OPENING: return "opening";
 	case CEPH_MDS_SESSION_OPEN: return "open";
+	case CEPH_MDS_SESSION_HUNG: return "hung";
 	case CEPH_MDS_SESSION_CLOSING: return "closing";
 	case CEPH_MDS_SESSION_RECONNECTING: return "reconnecting";
 	default: return "???";
@@ -1449,7 +1450,8 @@ static int __do_request(struct ceph_mds_client *mdsc,
 		session = register_session(mdsc, mds);
 	dout("do_request mds%d session %p state %s\n", mds, session,
 	     session_state_name(session->s_state));
-	if (session->s_state != CEPH_MDS_SESSION_OPEN) {
+	if (session->s_state != CEPH_MDS_SESSION_OPEN &&
+	    session->s_state != CEPH_MDS_SESSION_HUNG) {
 		if (session->s_state == CEPH_MDS_SESSION_NEW ||
 		    session->s_state == CEPH_MDS_SESSION_CLOSING)
 			__open_session(mdsc, session);
@@ -1771,7 +1773,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	int err = -EINVAL;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
-	int from_mds;
+	int from_mds, state;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		goto bad;
@@ -1790,12 +1792,14 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		goto out;  /* dup reply? */
 	}
 
+	state = mdsc->sessions[next_mds]->s_state;
 	if (fwd_seq <= req->r_num_fwd) {
 		dout("forward %llu to mds%d - old seq %d <= %d\n",
 		     tid, next_mds, req->r_num_fwd, fwd_seq);
 	} else if (!must_resend &&
 		   __have_session(mdsc, next_mds) &&
-		   mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
+		   (state == CEPH_MDS_SESSION_OPEN ||
+		    state == CEPH_MDS_SESSION_HUNG)) {
 		/* yes.  adjust our sessions, but that's all; the old mds
 		 * forwarded our message for us. */
 		dout("forward %llu to mds%d (mds%d fwded)\n", tid, next_mds,
@@ -1866,6 +1870,12 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	dout("handle_session mds%d %s %p state %s seq %llu\n",
 	     mds, ceph_session_op_name(op), session,
 	     session_state_name(session->s_state), seq);
+
+	if (session->s_state == CEPH_MDS_SESSION_HUNG) {
+		session->s_state = CEPH_MDS_SESSION_OPEN;
+		pr_info("ceph mds%d session came back\n", session->s_mds);
+	}
+
 	switch (op) {
 	case CEPH_SESSION_OPEN:
 		session->s_state = CEPH_MDS_SESSION_OPEN;
@@ -2531,8 +2541,11 @@ static void delayed_work(struct work_struct *work)
 			continue;
 		}
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
-			pr_info("ceph mds%d session probably timed out, "
-				"requesting mds map\n", s->s_mds);
+			if (s->s_state == CEPH_MDS_SESSION_OPEN) {
+				s->s_state = CEPH_MDS_SESSION_HUNG;
+				pr_info("ceph mds%d session probably timed out,"
+					" requesting mds map\n", s->s_mds);
+			}
 			want_map = mdsc->mdsmap->m_epoch + 1;
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
