@@ -121,7 +121,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
 
   req_rate = 0;
 
-  want_state = state = MDSMap::STATE_BOOT;
+  last_state = want_state = state = MDSMap::STATE_BOOT;
 
   logger = 0;
   mlogger = 0;
@@ -613,6 +613,9 @@ void MDS::handle_mds_map(MMDSMap *m)
   state = mdsmap->get_state(addr);
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
+  if (state != oldstate)
+    last_state = oldstate;
+
   if (state == MDSMap::STATE_STANDBY) {
     want_state = state = MDSMap::STATE_STANDBY;
     dout(1) << "handle_mds_map standby" << dendl;
@@ -836,8 +839,6 @@ void MDS::creating_done()
 
   // start new segment
   mdlog->start_new_segment(0);
-
-  mdcache->open_root();
 }
 
 
@@ -1032,6 +1033,10 @@ void MDS::clientreplay_done()
 void MDS::active_start()
 {
   dout(1) << "active_start" << dendl;
+
+  if (last_state == MDSMap::STATE_CREATING)
+    mdcache->open_root();
+
   mdcache->clean_open_file_lists();
   finish_contexts(waiting_for_replay);  // kick waiters
   finish_contexts(waiting_for_active);  // kick waiters

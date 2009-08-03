@@ -180,6 +180,7 @@ class MDS : public Dispatcher {
 
  protected:
   // -- MDS state --
+  int last_state;
   int state;         // my confirmed state
   int want_state;    // the state i want
 
