@@ -478,21 +478,23 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 }
 
 /*
- * Choose mds to send request to next.  If there is a hint set in
- * the request (e.g., due to a prior forward hint from the mds), use
- * that.
+ * Choose mds to send request to next.  If there is a hint set in the
+ * request (e.g., due to a prior forward hint from the mds), use that.
+ * Otherwise, consult frag tree and/or caps to identify the
+ * appropriate mds.  If all else fails, choose randomly.
  *
  * Called under mdsc->mutex.
  */
 static int __choose_mds(struct ceph_mds_client *mdsc,
 			struct ceph_mds_request *req)
 {
+	struct inode *inode;
+	struct ceph_inode_info *ci;
+	struct ceph_cap *cap;
+	int mode = req->r_direct_mode;
 	int mds = -1;
 	u32 hash = req->r_direct_hash;
 	bool is_hash = req->r_direct_is_hash;
-	struct dentry *dentry = req->r_dentry;
-	struct ceph_inode_info *ci;
-	int mode = req->r_direct_mode;
 
 	/*
 	 * is there a specific mds we should try?  ignore hint if we have
@@ -509,65 +511,69 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	if (mode == USE_RANDOM_MDS)
 		goto random;
 
-	/*
-	 * try to find an appropriate mds to contact based on the
-	 * given dentry.  walk up the tree until we find delegation info
-	 * in the i_fragtree.
-	 *
-	 * if is_hash is true, direct request at the appropriate directory
-	 * fragment (as with a readdir on a fragmented directory).
-	 */
-	while (dentry) {
-		if (is_hash && dentry->d_inode &&
-		    S_ISDIR(dentry->d_inode->i_mode)) {
-			struct ceph_inode_frag frag;
-			int found;
+	inode = 0;
+	if (req->r_inode)
+		inode = req->r_inode;
+	else if (req->r_dentry)
+		inode = req->r_dentry->d_inode;
+	dout("__choose_mds %p mode %d\n", inode, mode);
+	if (!inode)
+		goto random;
+	ci = ceph_inode(inode);
 
-			ci = ceph_inode(dentry->d_inode);
-			ceph_choose_frag(ci, hash, &frag, &found);
-			if (found) {
-				if (mode == USE_ANY_MDS && frag.ndist > 0) {
-					u8 r;
+	if (is_hash && S_ISDIR(inode->i_mode)) {
+		struct ceph_inode_frag frag;
+		int found;
 
-					/* choose a random replica */
-					get_random_bytes(&r, 1);
-					r %= frag.ndist;
-					mds = frag.dist[r];
-					dout("choose_mds %p %llx.%llx "
-					     "frag %u mds%d (%d/%d)\n",
-					     dentry->d_inode,
-					     ceph_vinop(&ci->vfs_inode),
-					     frag.frag, frag.mds,
-					     (int)r, frag.ndist);
-					return mds;
-				}
-				/* since the more deeply nested item wasn't
-				 * known to be replicated, then we want to
-				 * look for the authoritative mds. */
-				mode = USE_AUTH_MDS;
-				if (frag.mds >= 0) {
-					/* choose auth mds */
-					mds = frag.mds;
-					dout("choose_mds %p %llx.%llx "
-					     "frag %u mds%d (auth)\n",
-					     dentry->d_inode,
-					     ceph_vinop(&ci->vfs_inode),
-					     frag.frag, mds);
-					return mds;
-				}
+		ceph_choose_frag(ci, hash, &frag, &found);
+		if (found) {
+			if (mode == USE_ANY_MDS && frag.ndist > 0) {
+				u8 r;
+
+				/* choose a random replica */
+				get_random_bytes(&r, 1);
+				r %= frag.ndist;
+				mds = frag.dist[r];
+				dout("choose_mds %p %llx.%llx "
+				     "frag %u mds%d (%d/%d)\n",
+				     inode, ceph_vinop(inode),
+				     frag.frag, frag.mds,
+				     (int)r, frag.ndist);
+				return mds;
+			}
+
+			/* since this file/dir wasn't known to be
+			 * replicated, then we want to look for the
+			 * authoritative mds. */
+			mode = USE_AUTH_MDS;
+			if (frag.mds >= 0) {
+				/* choose auth mds */
+				mds = frag.mds;
+				dout("choose_mds %p %llx.%llx "
+				     "frag %u mds%d (auth)\n",
+				     inode, ceph_vinop(inode), frag.frag, mds);
+				return mds;
 			}
 		}
-		if (IS_ROOT(dentry))
-			break;
-
-		/* move up the hierarchy, but direct request based on the hash
-		 * for the child's dentry name */
-		hash = dentry->d_name.hash;
-		is_hash = true;
-		dentry = dentry->d_parent;
 	}
 
-	/* ok, just pick one at random */
+	spin_lock(&inode->i_lock);
+	cap = 0;
+	if (mode == USE_AUTH_MDS)
+		cap = ci->i_auth_cap;
+	if (!cap && !RB_EMPTY_ROOT(&ci->i_caps))
+		cap = rb_entry(rb_first(&ci->i_caps), struct ceph_cap, ci_node);
+	if (!cap) {
+		spin_unlock(&inode->i_lock);
+		goto random;
+	}
+	mds = cap->session->s_mds;
+	dout("choose_mds %p %llx.%llx mds%d (%scap %p)\n",
+	     inode, ceph_vinop(inode), mds, 
+	     cap == ci->i_auth_cap ? "auth " : "", cap);
+	spin_unlock(&inode->i_lock);
+	return mds;
+
 random:
 	mds = ceph_mdsmap_get_random_mds(mdsc->mdsmap);
 	dout("choose_mds chose random mds%d\n", mds);

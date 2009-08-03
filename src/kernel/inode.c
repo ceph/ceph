@@ -189,7 +189,7 @@ u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 
 /*
  * Process dirfrag (delegation) info from the mds.  Include leaf
- * fragment in tree ONLY if mds >= 0 || ndist > 0.  Otherwise, only
+ * fragment in tree ONLY if ndist > 0.  Otherwise, only
  * branches/splits are included in i_fragtree)
  */
 static int ceph_fill_dirfrag(struct inode *inode,
@@ -204,7 +204,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	int err = 0;
 
 	mutex_lock(&ci->i_fragtree_mutex);
-	if (mds < 0 && ndist == 0) {
+	if (ndist == 0) {
 		/* no delegation info needed. */
 		frag = __ceph_find_frag(ci, id);
 		if (!frag)
@@ -241,8 +241,8 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	frag->ndist = min_t(u32, ndist, CEPH_MAX_DIRFRAG_REP);
 	for (i = 0; i < frag->ndist; i++)
 		frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
-	dout("fill_dirfrag %llx.%llx frag %x referral mds %d ndist=%d\n",
-	     ceph_vinop(inode), frag->frag, frag->mds, frag->ndist);
+	dout("fill_dirfrag %llx.%llx frag %x ndist=%d\n",
+	     ceph_vinop(inode), frag->frag, frag->ndist);
 
 out:
 	mutex_unlock(&ci->i_fragtree_mutex);

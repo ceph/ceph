@@ -108,12 +108,9 @@ repair
 - mds scrubbing
 
 kclient
-- async writepage
 ?- ensure cap_snaps reflush after client reconnect 
-- fix up mds selection, and ESTALE handling
+- fix up ESTALE handling
 - make cap import/export efficient
-- simplify mds auth tracking?
-  - use caps instead?
 - flock, fnctl locks
 - ACLs
 - should we try to ref CAP_PIN on special inodes that are open?  

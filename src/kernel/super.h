@@ -228,7 +228,7 @@ struct ceph_inode_frag {
 	u32 frag;
 	int split_by;         /* i.e. 2^(split_by) children */
 
-	/* delegation info */
+	/* delegation and replication info */
 	int mds;              /* -1 if same authority as parent */
 	int ndist;            /* >0 if replicated */
 	int dist[CEPH_MAX_DIRFRAG_REP];
