@@ -176,7 +176,7 @@ public class CephFileSystem extends FileSystem {
     }
     else {
       debug("calling ceph_setcwd from Java");
-      ceph_setcwd(dir.toString());
+      ceph_setcwd(abs_path.toString());
       debug("returned from ceph_setcwd to Java" );
     }
     debug("setWorkingDirectory:exit");
@@ -323,9 +323,9 @@ public class CephFileSystem extends FileSystem {
     // Step 3: open the file
     debug("calling ceph_open_for_overwrite from Java");
     int fh = ceph_open_for_overwrite(abs_path.toString(), (int)permission.toShort());
-    debug("Returned form ceph_open_for_overwrite to Java with fh " + fh);
+    debug("Returned from ceph_open_for_overwrite to Java with fh " + fh);
     if (fh < 0) {
-      throw new IOException("createRaw: Open for overwrite failed on path \"" + 
+      throw new IOException("create: Open for overwrite failed on path \"" + 
 			    abs_path.toString() + "\"");
     }
       
@@ -394,7 +394,7 @@ public class CephFileSystem extends FileSystem {
     
     // if the path is a file, try to delete it.
     if (isFile(abs_path)) {
-      boolean result = ceph_unlink(path.toString());
+      boolean result = ceph_unlink(abs_path.toString());
       /*      if(!result) {
 	debug("delete: failed to delete file \"" +
 			   abs_path.toString() + "\".");
@@ -409,7 +409,7 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("Directories must be deleted recursively!");
     }
     //get the entries; listPaths will remove . and .. for us
-    Path[] contents = listPaths(path);
+    Path[] contents = listPaths(abs_path);
     if (contents == null) {
       // debug("delete: Failed to read contents of directory \"" +
       //	     abs_path.toString() + "\" while trying to delete it");
@@ -428,7 +428,7 @@ public class CephFileSystem extends FileSystem {
       }
     }
     //if we've come this far it's a now-empty directory, so delete it!
-    boolean result = ceph_rmdir(path.toString());
+    boolean result = ceph_rmdir(abs_path.toString());
     if (!result)
       debug("delete: failed to delete \"" + abs_path.toString() + "\"");
     debug("delete:exit");
