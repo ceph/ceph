@@ -1074,6 +1074,8 @@ void Client::handle_client_reply(MClientReply *reply)
       request->put(); // for the dumb data structure
     }
   }
+  if(unmounting)
+    mount_cond.Signal();
 }
 
 
@@ -2531,6 +2533,11 @@ int Client::unmount()
 
   dout(2) << "unmounting" << dendl;
   unmounting = true;
+
+  while(!mds_requests.empty()) {
+    dout(10) << "waiting on " << mds_requests.size() << " requests" << dendl;
+    mount_cond.Wait(client_lock);
+  }
 
   if (tick_event)
     timer.cancel_event(tick_event);
