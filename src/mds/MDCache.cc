@@ -1989,6 +1989,32 @@ ESubtreeMap *MDCache::create_subtree_map()
 }
 
 
+void MDCache::resolve_start()
+{
+  dout(10) << "resolve_start" << dendl;
+
+  if (mds->mdsmap->get_root() != mds->whoami) {
+    // if we don't have the root dir, adjust it to UNKNOWN.  during
+    // resolve we want mds0 to explicit claim the portion of it that
+    // it owns, so that anything beyond its bounds get left as
+    // unknown.
+    CDir *rootdir = root->get_dirfrag(frag_t());
+    adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
+  }
+
+  set<int> who;
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_CLIENTREPLAY);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
+  for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
+    if (*p == mds->whoami)
+      continue;
+    send_resolve(*p);  // now.
+  }
+}
+
 void MDCache::send_resolve(int who)
 {
   if (migrator->is_importing() || 

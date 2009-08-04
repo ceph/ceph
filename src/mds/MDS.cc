@@ -972,16 +972,7 @@ void MDS::replay_done()
 void MDS::resolve_start()
 {
   dout(1) << "resolve_start" << dendl;
-
-  set<int> who;
-  mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
-  mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);
-  mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
-  mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
-  for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
-    if (*p == whoami) continue;
-    mdcache->send_resolve(*p);  // now.
-  }
+  mdcache->resolve_start();
 }
 void MDS::resolve_done()
 {
