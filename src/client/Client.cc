@@ -3159,9 +3159,9 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_nlink = in->nlink;
   st->st_uid = in->uid;
   st->st_gid = in->gid;
-  st->st_ctime = MAX(in->ctime, in->mtime);
-  st->st_atime = in->atime;
-  st->st_mtime = in->mtime;
+  st->st_ctime = MAX(in->ctime.sec(), in->mtime.sec());
+  st->st_atime = in->atime.sec();
+  st->st_mtime = in->mtime.sec();
   if (in->is_dir()) {
     //st->st_size = in->dirstat.size();
     st->st_size = in->rstat.rbytes;
