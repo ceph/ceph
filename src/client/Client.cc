@@ -3078,7 +3078,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   // make the change locally?
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
-      in->mode = attr->st_mode;
+      in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
     }
