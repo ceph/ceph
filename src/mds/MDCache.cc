@@ -2902,6 +2902,7 @@ void MDCache::rejoin_send_rejoins()
     rejoin_ack_gather.insert(p->first);
     mds->send_message_mds(p->second, p->first);
   }
+  rejoin_ack_gather.insert(mds->whoami);   // we need to complete rejoin_gather_finish, too
 
   // nothing?
   if (mds->is_rejoin() && rejoins.empty()) {
@@ -3790,8 +3791,11 @@ void MDCache::rejoin_gather_finish()
   process_imported_caps();
   process_reconnected_caps();
   identify_files_to_recover();
-
   rejoin_send_acks();
+  
+  // signal completion of fetches, rejoin_gather_finish, etc.
+  assert(rejoin_ack_gather.count(mds->whoami));
+  rejoin_ack_gather.erase(mds->whoami);
 
   // did we already get our acks too?
   // this happens when the rejoin_gather has to wait on a MISSING/FULL exchange.
