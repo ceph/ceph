@@ -4,62 +4,62 @@
 
 AUTOMAKE_OPTIONS = gnu
 
+bin_PROGRAMS =
+sbin_PROGRAMS =
+bin_SCRIPTS = crun
+
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
 cmon_LDADD = libmon.a libcrush.a libcommon.a 
+bin_PROGRAMS += cmon
+
+# osd
+cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
+	       objclass/class_api.cc
+cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl
+bin_PROGRAMS += cosd
+
+# mds
+cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
+cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
+bin_PROGRAMS += cmds
 
 # admin tools
 ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
 ceph_LDADD = libcrush.a libcommon.a -ledit
 mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libmon.a libcrush.a libcommon.a
+cconf_SOURCES = cconf.cc
+cconf_LDADD = libcommon.a
+bin_PROGRAMS += ceph mkmonfs cconf
+
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a
 crushtool_SOURCES = crushtool.cc
 crushtool_LDADD = libcrush.a libcommon.a 
 osdmaptool_SOURCES = osdmaptool.cc
 osdmaptool_LDADD = libcrush.a libcommon.a
-cconf_SOURCES = cconf.cc
-cconf_LDADD = libcommon.a
+bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c
-
-# mds
-cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
-cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
+sbin_PROGRAMS += mount.ceph
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
-
-# osd 
-cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
-	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl
 dupstore_SOURCES = dupstore.cc
 dupstore_LDADD = libos.a libcommon.a
 streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.a libcommon.a
+bin_PROGRAMS += dumpjournal dupstore streamtest
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
-
-bin_PROGRAMS = \
-	cmon cmds cosd csyn \
-	ceph cconf \
-	mkmonfs monmaptool osdmaptool crushtool \
-	streamtest dupstore dumpjournal testmsgr \
-	testceph testrados testradospp \
-	rados radosacl
-
-sbin_PROGRAMS = \
-	mount.ceph
-
-bin_SCRIPTS = crun
+bin_PROGRAMS += csyn
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a
-
+bin_PROGRAMS += testmsgr
 
 # fuse targets?
 if WITH_FUSE
@@ -109,6 +109,8 @@ lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
 testceph_LDADD = libceph.la
+bin_PROGRAMS += testceph
+
 # libcrush.so
 libcrush_la_SOURCES = \
 	crush/builder.c \
@@ -130,6 +132,7 @@ lib_LTLIBRARIES += librados.la
 
 rados_SOURCES = rados.cc
 rados_LDADD = librados.la libcrush.la
+bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
 testrados_LDADD = librados.la libcrush.la
@@ -137,6 +140,7 @@ testradospp_SOURCES = testradospp.cc
 testradospp_LDADD = librados.la libcrush.la
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
+bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_S3GW
 s3gw_SOURCES = s3/s3gw.cc s3/s3fs.cc
