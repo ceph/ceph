@@ -141,7 +141,8 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
   int ndom = num_dom;
   if (!ndom)
     ndom = MAX(g_conf.osd_max_rep, g_conf.osd_max_raid_width);
-  if (num_osd >= ndom*3 &&
+  if (ndom > 1 &&
+      num_osd >= ndom*3 &&
       num_osd > 8) {
     int ritems[ndom];
     int rweights[ndom];
