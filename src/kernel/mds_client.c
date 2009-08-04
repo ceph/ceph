@@ -370,7 +370,11 @@ static void unregister_session(struct ceph_mds_client *mdsc, int mds)
 	mdsc->sessions[mds] = NULL;
 }
 
-/* drop session refs in request */
+/*
+ * drop session refs in request.
+ *
+ * should be last ref, or hold mdsc->mutex
+ */
 static void put_request_sessions(struct ceph_mds_request *req)
 {
 	if (req->r_session) {
@@ -1724,9 +1728,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_num_stale++;
 		if (req->r_num_stale <= 2) {
+			mutex_unlock(&req->r_session->s_mutex);
+			mutex_lock(&mdsc->mutex);
 			put_request_sessions(req);
 			__do_request(mdsc, req);
-			goto out_session_unlock;
+			mutex_unlock(&mdsc->mutex);
+			goto out;
 		}
 	} else {
 		req->r_num_stale = 0;
