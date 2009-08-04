@@ -175,8 +175,9 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
   dout(10) << "CephFSInterface: In setcwd" << dendl;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  return (0 <= ceph_chdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
+  jboolean success = (0 <= ceph_chdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_path, c_path);
+  return success;
 }
 
 /*
@@ -191,8 +192,9 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
   dout(10) << "CephFSInterface: In rmdir" << dendl;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  return (0 == ceph_rmdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
+  jboolean success = (0 == ceph_rmdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_path, c_path);
+  return success;
 }
 
 
@@ -208,8 +210,9 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1m
   dout(10) << "CephFSInterface: In mkdir" << dendl;
 
   const char* c_path = env->GetStringUTFChars(j_path, 0);
-  return (0 == ceph_mkdir(c_path, 0xFF)) ? JNI_TRUE : JNI_FALSE; 
+  jboolean success = (0 == ceph_mkdir(c_path, 0xFF)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_path, c_path);
+  return success;
 }
 
 /*
@@ -229,8 +232,9 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
   int stat_result = ceph_lstat(c_path, &stbuf);
   if (stat_result < 0) {// then the path doesn't even exist
     dout(0) << "ceph_unlink: path " << c_path << " does not exist" << dendl;
+    env->ReleaseStringUTFChars(j_path, c_path);
     return false;
-  }  
+  }
   int result;
   if (0 != S_ISDIR(stbuf.st_mode)) { // it's a directory
     dout(10) << "ceph_unlink: path " << c_path << " is a directory. Calling client->rmdir()" << dendl;
@@ -266,9 +270,10 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
   const char* c_from = env->GetStringUTFChars(j_from, 0);
   const char* c_to   = env->GetStringUTFChars(j_to,   0);
 
-  return (0 <= ceph_rename(c_from, c_to)) ? JNI_TRUE : JNI_FALSE; 
+  jboolean success = (0 <= ceph_rename(c_from, c_to)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_from, c_from);
   env->ReleaseStringUTFChars(j_to, c_to);
+  return success;
 }
 
 /*
@@ -322,8 +327,10 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
   // we need to open the file to retrieve the stripe size
   dout(10) << "CephFSInterface: getblocksize: opening file" << dendl;
   int fh = ceph_open(c_path, O_RDONLY);  
-  if (fh < 0)
+  if (fh < 0) {
+    env->ReleaseStringUTFChars(j_path, c_path);
     return -1;
+  }
 
   result = ceph_get_stripe_unit(fh);
 
