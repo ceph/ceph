@@ -2555,7 +2555,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     gather++;
   
   if (lock->get_parent()->is_replicated() && 
-      lock->get_state() == LOCK_LOCK_EXCL) {
+      lock->get_state() != LOCK_LOCK_EXCL) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;
