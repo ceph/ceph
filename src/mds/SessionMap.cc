@@ -43,13 +43,21 @@ void SessionMap::dump()
 // ----------------
 // LOAD
 
+
+object_t SessionMap::get_object_name()
+{
+  char s[30];
+  sprintf(s, "mds%d_sessionmap", mds->whoami);
+  return object_t(s);
+}
+
 class C_SM_Load : public Context {
   SessionMap *sessionmap;
 public:
   bufferlist bl;
   C_SM_Load(SessionMap *cm) : sessionmap(cm) {}
   void finish(int r) {
-	sessionmap->_load_finish(bl);
+    sessionmap->_load_finish(r, bl);
   }
 };
 
@@ -60,17 +68,17 @@ void SessionMap::load(Context *onload)
   init_inode();
 
   if (onload)
-	waiting_for_load.push_back(onload);
+    waiting_for_load.push_back(onload);
   
   C_SM_Load *c = new C_SM_Load(this);
-  object_t oid("sessionmap");
+  object_t oid = get_object_name();
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());
   mds->objecter->read_full(oid, ol, CEPH_NOSNAP, &c->bl, 0, c);
 }
 
-void SessionMap::_load_finish(bufferlist &bl)
+void SessionMap::_load_finish(int r, bufferlist &bl)
 { 
   bufferlist::iterator blp = bl.begin();
   decode(blp);  // note: this sets last_cap_renew = now()
@@ -115,7 +123,7 @@ void SessionMap::save(Context *onsave, version_t needv)
   encode(bl);
   committing = version;
   SnapContext snapc;
-  object_t oid("sessionmap");
+  object_t oid = get_object_name();
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());

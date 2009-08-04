@@ -62,9 +62,7 @@ void MDSTable::save(Context *onfinish, version_t v)
 
   // write (async)
   SnapContext snapc;
-  char n[30];
-  sprintf(n, "mdstable_%s", table_name);
-  object_t oid(n);
+  object_t oid = get_object_name();
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());
@@ -113,6 +111,16 @@ public:
   }
 };
 
+object_t MDSTable::get_object_name()
+{
+  char n[50];
+  if (per_mds)
+    sprintf(n, "mds%d_%s", mds->whoami, table_name);
+  else
+    sprintf(n, "mds_%s", table_name);
+  return object_t(n);
+}
+
 void MDSTable::load(Context *onfinish)
 { 
   dout(10) << "load" << dendl;
@@ -123,9 +131,7 @@ void MDSTable::load(Context *onfinish)
   state = STATE_OPENING;
 
   C_MT_Load *c = new C_MT_Load(this, onfinish);
-  char n[30];
-  sprintf(n, "mdstable_%s", table_name);
-  object_t oid(n);
+  object_t oid = get_object_name();
   OSDMap *osdmap = mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     mds->mdsmap->get_metadata_pg_pool());

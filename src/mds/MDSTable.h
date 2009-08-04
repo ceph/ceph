@@ -27,7 +27,10 @@ class MDSTable {
   MDS *mds;
 
   const char *table_name;
+  bool per_mds;
   inodeno_t ino;
+
+  object_t get_object_name();
   
   static const int STATE_UNDEF   = 0;
   static const int STATE_OPENING = 1;
@@ -40,8 +43,8 @@ class MDSTable {
   map<version_t, list<Context*> > waitfor_save;
   
 public:
-  MDSTable(MDS *m, const char *n) :
-    mds(m), table_name(n),
+  MDSTable(MDS *m, const char *n, bool is_per_mds) :
+    mds(m), table_name(n), per_mds(is_per_mds),
     ino(0),
     state(STATE_UNDEF),
     version(0), committing_version(0), committed_version(0), projected_version(0) {}
