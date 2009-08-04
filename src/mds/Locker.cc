@@ -602,7 +602,7 @@ class C_Locker_Eval : public Context {
   CInode *in;
   int mask;
 public:
-  C_Locker_Eval(Locker *l, CInode *i, int m) : locker(l), in(in), mask(m) {
+  C_Locker_Eval(Locker *l, CInode *i, int m) : locker(l), in(i), mask(m) {
     in->get(CInode::PIN_PTRWAITER);    
   }
   void finish(int r) {
