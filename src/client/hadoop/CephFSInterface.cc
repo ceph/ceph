@@ -557,6 +557,20 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_setPermission
+ * Signature: (Ljava/lang/String;I)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setPermission
+(JNIEnv * env, jobject obj, jstring j_path, jint j_new_mode) {
+  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  int result = ceph_chmod(c_path, j_new_mode);
+  env->ReleaseStringUTFChars(j_path, c_path);
+
+  return (result==0);
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_kill_client
  * Signature: (J)Z
  * 

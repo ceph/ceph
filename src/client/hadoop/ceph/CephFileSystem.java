@@ -66,6 +66,7 @@ public class CephFileSystem extends FileSystem {
   private native int ceph_open_for_append(String path);
   private native int ceph_open_for_read(String path);
   private native int ceph_open_for_overwrite(String path, int mode);
+  private native boolean ceph_setPermission(String path, int mode);
   private native boolean ceph_kill_client();
   private native boolean ceph_stat(String path, Stat fill);
   public CephFileSystem() {
@@ -273,7 +274,8 @@ public class CephFileSystem extends FileSystem {
 
   @Override
     public void setPermission(Path p, FsPermission permission) throws IOException {
-    
+    Path abs_path = makeAbsolute(p);
+    ceph_setPermission(abs_path.toString(), permission.toShort());
   }
 
   /**
