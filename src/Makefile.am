@@ -67,12 +67,12 @@ cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
 cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a
 bin_PROGRAMS += cfuse
 
-if WITH_DEBUG
-fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
-fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a \
-	libclient.a libosdc.a libcrush.a 
-bin_PROGRAMS += fakefuse
-endif
+#if WITH_DEBUG
+#fakefuse_SOURCES = fakefuse.cc msg/FakeMessenger.cc client/fuse.cc client/fuse_ll.cc
+#fakefuse_LDADD = -lfuse libmon.a libmds.a libosd.a libos.a \
+#	libclient.a libosdc.a libcrush.a 
+#bin_PROGRAMS += fakefuse
+#endif
 
 endif
 
