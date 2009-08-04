@@ -2362,7 +2362,8 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 
     // -- auth --
   case LOCK_AC_LOCKACK:
-    assert(lock->get_state() == LOCK_SYNC_LOCK);
+    assert(lock->get_state() == LOCK_SYNC_LOCK ||
+	   lock->get_state() == LOCK_SYNC_EXCL);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
