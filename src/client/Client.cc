@@ -4967,13 +4967,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   req->set_filepath2(from);
  
   int res = make_request(req, uid, gid);
-  if (res == 0) {
-    // remove from local cache
-    if (fromdir->dir->dentries.count(fromname)) {
-      Dentry *dn = fromdir->dir->dentries[fromname];
-      unlink(dn);
-    }
-  }
+
   dout(10) << "rename result is " << res << dendl;
 
   // renamed item from our cache
