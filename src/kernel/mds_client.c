@@ -512,11 +512,19 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 		goto random;
 
 	inode = 0;
-	if (req->r_inode)
+	if (req->r_inode) {
 		inode = req->r_inode;
-	else if (req->r_dentry)
-		inode = req->r_dentry->d_inode;
-	dout("__choose_mds %p mode %d\n", inode, mode);
+	} else if (req->r_dentry) {
+		if (req->r_dentry->d_inode) {
+			inode = req->r_dentry->d_inode;
+		} else {
+			inode = req->r_dentry->d_parent->d_inode;
+			hash = req->r_dentry->d_name.hash;
+			is_hash = true;
+		}
+	}
+	dout("__choose_mds %p is_hash=%d (%d) mode %d\n", inode, (int)is_hash,
+	     (int)hash, mode);
 	if (!inode)
 		goto random;
 	ci = ceph_inode(inode);
