@@ -762,7 +762,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
        p != dir->replicas_end();
        ++p) {
     if (p->first == dest) continue;
-    if (!mds->mdsmap->is_active_or_stopping(p->first))
+    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first))
       continue;  // only if active
     export_warning_ack_waiting[dir].insert(p->first);
     export_notify_ack_waiting[dir].insert(p->first);  // we'll eventually get a notifyack, too!
@@ -1228,7 +1228,7 @@ void Migrator::export_logged_finish(CDir *dir)
        p != export_notify_ack_waiting[dir].end();
        ++p) {
     MExportDirNotify *notify;
-    if (mds->mdsmap->is_active_or_stopping(export_peer[dir])) 
+    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(export_peer[dir])) 
       // dest is still alive.
       notify = new MExportDirNotify(dir->dirfrag(), true,
 				    pair<int,int>(mds->get_nodeid(), dest),
@@ -1316,7 +1316,7 @@ void Migrator::export_finish(CDir *dir)
   }
 
   // send finish/commit to new auth
-  if (mds->mdsmap->is_active_or_stopping(export_peer[dir])) {
+  if (mds->mdsmap->is_clientreplay_or_active_or_stopping(export_peer[dir])) {
     mds->send_message_mds(new MExportDirFinish(dir->dirfrag()), export_peer[dir]);
   } else {
     dout(7) << "not sending MExportDirFinish, dest has failed" << dendl;

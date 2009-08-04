@@ -1369,7 +1369,7 @@ void Locker::request_inode_file_caps(CInode *in)
 void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 {
   // nobody should be talking to us during recovery.
-  assert(mds->is_rejoin() || mds->is_active() || mds->is_stopping());
+  assert(mds->is_rejoin() || mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
 
   // ok
   CInode *in = mdcache->get_inode(m->get_ino());
@@ -1611,7 +1611,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  << " follows " << follows 
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
-  if (!mds->is_active() && !mds->is_stopping() && !mds->is_clientreplay()) {
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
   }
@@ -2262,7 +2262,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
 void Locker::handle_lock(MLock *m)
 {
   // nobody should be talking to us during recovery.
-  assert(mds->is_rejoin() || mds->is_active() || mds->is_stopping());
+  assert(mds->is_rejoin() || mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
 
   SimpleLock *lock = get_lock(m->get_lock_type(), m->get_object_info());
   if (!lock) {

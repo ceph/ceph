@@ -692,7 +692,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // RESOLVE
   // is someone else newly resolving?
-  if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
+  if (is_resolve() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     set<int> oldresolve, resolve;
     oldmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
@@ -707,7 +707,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // REJOIN
   // is everybody finally rejoining?
-  if (is_rejoin() || is_active() || is_stopping()) {
+  if (is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     // did we start?
     if (!oldmap->is_rejoining() && mdsmap->is_rejoining())
       rejoin_joint_start();
@@ -721,7 +721,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "cluster recovered." << dendl;
   
   // did someone go active?
-  if (is_active() || is_stopping()) {
+  if (is_clientreplay() || is_active() || is_stopping()) {
     set<int> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
@@ -750,7 +750,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
 	mdcache->handle_mds_failure(*p);
   }
-  if (is_active() || is_stopping()) {
+  if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
     set<int> oldstopped, stopped;
     oldmap->get_stopped_mds_set(oldstopped);
@@ -1046,7 +1046,7 @@ void MDS::active_start()
 void MDS::recovery_done()
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
-  assert(is_active() || is_clientreplay());
+  assert(is_clientreplay() || is_active() || is_clientreplay());
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {

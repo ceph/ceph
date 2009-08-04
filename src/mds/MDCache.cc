@@ -794,7 +794,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     //   hit the disk before the relevant dirfrags ever close)
     if (dir->inode->is_auth() &&
 	dir->inode->can_auth_pin() &&
-	(mds->is_active() || mds->is_stopping())) {
+	(mds->is_clientreplay() || mds->is_active() || mds->is_stopping())) {
       CInode *in = dir->inode;
       dout(10) << "try_subtree_merge_at journaling merged bound " << *in << dendl;
       
@@ -2286,7 +2286,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   }
 
   // am i a surviving ambiguous importer?
-  if (mds->is_active() || mds->is_stopping()) {
+  if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     // check for any import success/failure (from this node)
     map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
@@ -3017,7 +3017,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   MMDSCacheRejoin *ack = 0;      // if survivor
   bool survivor = false;  // am i a survivor?
   
-  if (mds->is_active() || mds->is_stopping()) {
+  if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
     dout(10) << "i am a surivivor, and will ack immediately" << dendl;
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
