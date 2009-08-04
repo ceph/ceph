@@ -239,16 +239,22 @@ public class CephFileSystem extends FileSystem {
   public FileStatus getFileStatus(Path p) throws IOException {
     debug("getFileStatus:enter with path " + p);
     Path abs_p = makeAbsolute(p);
+    //sadly, Ceph doesn't really do uids/gids just yet, but
+    //everything else is filled
     // For the moment, hardwired replication
     int replication = 2;
     FileStatus status;
     Stat lstat = new Stat();
     if(ceph_stat(abs_p.toString(), lstat)) {
+      debug("getFileStatus: mod_time is " + lstat.mod_time);
       status = new FileStatus(lstat.size, lstat.is_dir, replication,
-			      lstat.block_size, lstat.mod_time, lstat.access_time,
+			      lstat.block_size,
+			      //these times in seconds get converted to millis
+			      lstat.mod_time*1000,
+			      lstat.access_time*1000,
 			      new FsPermission((short)lstat.mode),
-			      new Integer(lstat.user_id).toString(), 
-			      new Integer(lstat.group_id).toString(),
+			      null,
+			      null,
 			      new Path(fs_default_name+abs_p.toString()));
     }
     else { //fail out
