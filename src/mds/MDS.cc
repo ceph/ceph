@@ -886,9 +886,15 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
-    dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
-    mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
-    break;
+    if (is_starting()) {
+      dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
+      mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
+      break;
+    } else {
+      // replay.  make up fake root inode to start with
+      mdcache->create_root_inode();
+      step = 3;
+    }
 
   case 3:
     if (is_replay() || is_standby_replay()) {
