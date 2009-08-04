@@ -20,7 +20,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.CreateFlag;
+//import org.apache.hadoop.fs.CreateFlag;
 
 /**
  * <p>
@@ -45,6 +45,7 @@ public class CephFileSystem extends FileSystem {
   private static boolean debug;
   private static String cephDebugLevel;
   private static String monAddr;
+  private static String fs_default_name;
   
   private native boolean ceph_initializeClient(String debugLevel, String mon);
   private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
@@ -96,6 +97,7 @@ public class CephFileSystem extends FileSystem {
     // TODO: local filesystem? we really need to figure out this conf thingy
     this.localFs = get(URI.create("file:///"), conf);
 
+    fs_default_name = conf.get("fs.default.name");
     monAddr = conf.get("fs.ceph.monAddr");
     cephDebugLevel = conf.get("fs.ceph.debugLevel");
     debug = ("true".equals(conf.get("fs.ceph.debug")));
@@ -143,7 +145,7 @@ public class CephFileSystem extends FileSystem {
     debug("getWorkingDirectory:enter");
     debug("Working directory is " + ceph_getcwd());
     debug("getWorkingDirectory:exit");
-    return makeAbsolute(new Path(ceph_getcwd()));
+    return new Path(fs_default_name + makeAbsolute(new Path(ceph_getcwd())));
   }
 
   @Override
@@ -245,7 +247,8 @@ public class CephFileSystem extends FileSystem {
 			      lstat.block_size, lstat.mod_time, lstat.access_time,
 			      new FsPermission((short)lstat.mode),
 			      new Integer(lstat.user_id).toString(), 
-			      new Integer(lstat.group_id).toString(), abs_p);
+			      new Integer(lstat.group_id).toString(),
+			      new Path(fs_default_name+abs_p.toString()));
     }
     else { //fail out
 	throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
@@ -272,9 +275,15 @@ public class CephFileSystem extends FileSystem {
     public void setPermission(Path p, FsPermission permission) throws IOException {
     
   }
+
+  /**
+   * In order to run this with Hadoop .20, I had to revert back to using
+   * a boolean instead of the CreateFlag.
+   */
   public FSDataOutputStream create(Path f,
 				   FsPermission permission,
-				   EnumSet<CreateFlag> flag,
+				   //EnumSet<CreateFlag> flag,
+				   boolean overwrite,
 				   int bufferSize,
 				   short replication,
 				   long blockSize,
@@ -285,14 +294,15 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(f);
       
     // We ignore progress reporting and replication.
-    // Required semantics: if the file exists, overwrite if CreateFlag.OVERWRITE, and
+    // Required semantics: if the file exists, overwrite if CreateFlag.OVERWRITE;
     // throw an exception if !CreateFlag.OVERWRITE.
 
     // Step 1: existence test
     if(__isDirectory(abs_path))
       throw new IOException("create: Cannot overwrite existing directory \""
 			    + abs_path.toString() + "\" with a file");      
-    if (!flag.contains(CreateFlag.OVERWRITE)) {
+    //if (!flag.contains(CreateFlag.OVERWRITE)) {
+    if (!overwrite) {
       if (exists(abs_path)) {
 	throw new IOException("createRaw: Cannot open existing file \"" 
 			      + abs_path.toString() 
@@ -360,15 +370,20 @@ public class CephFileSystem extends FileSystem {
     // or path is directory with children
     debug("rename:enter");
     debug("calling ceph_rename from Java");
-    boolean result = ceph_rename(src.toString(), dst.toString());
+    Path abs_src = makeAbsolute(src);
+    Path abs_dst = makeAbsolute(dst);
+    boolean result = ceph_rename(abs_src.toString(), abs_dst.toString());
     debug("return from ceph_rename to Java with result " + result);
     debug("rename:exit");
     return result;
   }
   
+  /* Added in for .20, not required in trunk */
+  public boolean delete(Path path) throws IOException { return delete(path, true); };
+
   public boolean delete(Path path, boolean recursive) throws IOException {
     debug("delete:enter");
-    Path abs_path = makeAbsolute(path);      
+    Path abs_path = makeAbsolute(path);
     
     //debug("delete: Deleting path " + abs_path.toString());
     // sanity check
@@ -444,10 +459,11 @@ public class CephFileSystem extends FileSystem {
   @Deprecated
     public long getBlockSize(Path path) throws IOException {
     debug("getBlockSize:enter with path " + path);
-    if (!exists(path)) {
+    Path abs_path = makeAbsolute(path);
+    if (!exists(abs_path)) {
       throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: File or directory " + path.toString() + " does not exist.");
     }
-    long result = ceph_getblocksize(path.toString());
+    long result = ceph_getblocksize(abs_path.toString());
     
     if (result < 4096) {
       debug("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: " + 
@@ -465,13 +481,13 @@ public class CephFileSystem extends FileSystem {
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
-  // also going to strip off any "ceph://null" prefix we see. 
+  // also going to strip off any fs_default_name prefix we see. 
   private Path makeAbsolute(Path path) {
     debug("makeAbsolute:enter with path " + path);
     // first, check for the prefix
-    if (path.toString().startsWith("ceph://null")) {
+    if (path.toString().startsWith(fs_default_name)) {
 	  
-      Path stripped_path = new Path(path.toString().substring("ceph://null".length()));
+      Path stripped_path = new Path(path.toString().substring(fs_default_name.length()));
       debug("makeAbsolute:exit with path " + stripped_path);
       return stripped_path;
     }
