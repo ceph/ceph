@@ -67,6 +67,16 @@ public:
   void set_last_scatter(utime_t t) { last_scatter = t; }
   utime_t get_last_scatter() { return last_scatter; }
 
+  void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
+    if (rstate == LOCK_MIX || 
+	rstate == LOCK_MIX_LOCK || // replica still has wrlocks?
+	rstate == LOCK_MIX_SYNC || // "
+	rstate == LOCK_MIX_TSYN)  // "
+      state = LOCK_MIX;
+    else if (locktoo && rstate == LOCK_LOCK)
+      state = LOCK_LOCK;
+  }
+
   void print(ostream& out) {
     out << "(";
     _print(out);

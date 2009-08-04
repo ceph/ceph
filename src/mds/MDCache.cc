@@ -3440,13 +3440,13 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 		     << " on " << *in << dendl;
 	  } 
 	  
-	  // scatterlock?
-	  if (is.filelock == LOCK_MIX ||
-	      is.filelock == LOCK_MIX_LOCK)  // replica still has wrlocks
-	    in->filelock.set_state(LOCK_MIX);
-	  if (is.nestlock == LOCK_MIX ||
-	      is.nestlock == LOCK_MIX_LOCK)  // replica still has wrlocks
-	    in->nestlock.set_state(LOCK_MIX);
+	  // scatterlocks?
+	  //  infer state from replica state:
+	  //   * go to MIX if they might have wrlocks
+	  //   * go to LOCK if they are LOCK (just bc identify_files_to_recover might start twiddling filelock)
+	  in->filelock.infer_state_from_strong_rejoin(is.filelock, true);  // maybe also go to LOCK
+	  in->nestlock.infer_state_from_strong_rejoin(is.nestlock, false);
+	  in->dirfragtreelock.infer_state_from_strong_rejoin(is.dftlock, false);
 	  
 	  // auth pin?
 	  if (strong->authpinned_inodes.count(in->vino())) {
