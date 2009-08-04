@@ -256,9 +256,9 @@ extern "C" int ceph_sync_fs()
   return client->sync_fs();
 }
 
-extern "C" int ceph_get_stripe_unit(int fh)
+extern "C" int ceph_get_file_stripe_unit(int fh)
 {
-  return client->get_stripe_unit(fh);
+  return client->get_file_stripe_unit(fh);
 }
 
 int ceph_getdir(const char *relpath, std::list<std::string>& names)

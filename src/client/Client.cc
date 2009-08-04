@@ -5192,25 +5192,35 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
   return 0;
 }
 
-int Client::get_stripe_unit(int fd)
+int Client::get_file_stripe_unit(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_su(layout);
 }
 
-int Client::get_stripe_width(int fd)
+int Client::get_file_stripe_width(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_stripe_width(layout);
 }
 
-int Client::get_stripe_period(int fd)
+int Client::get_file_stripe_period(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_period(layout);
+}
+
+int Client::get_file_replication(int fd)
+{
+  return 0;
+}
+
+int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
+{
+  return 0;
 }
 
 int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,

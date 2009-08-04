@@ -332,7 +332,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
     return -1;
   }
 
-  result = ceph_get_stripe_unit(fh);
+  result = ceph_get_file_stripe_unit(fh);
 
   int close_result = ceph_close(fh);
   assert (close_result > -1);

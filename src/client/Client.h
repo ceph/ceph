@@ -1118,9 +1118,12 @@ public:
 
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
-  int get_stripe_unit(int fd);
-  int get_stripe_width(int fd);
-  int get_stripe_period(int fd);
+  int get_file_stripe_unit(int fd);
+  int get_file_stripe_width(int fd);
+  int get_file_stripe_period(int fd);
+  int get_file_replication(int fd);
+  int get_file_stripe_address(int fd, loff_t offset, string& address);
+
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 
