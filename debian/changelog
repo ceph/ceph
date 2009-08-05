@@ -1,3 +1,12 @@
+ceph (0.12-1) unstable; urgency=low
+
+  * kclient: mapping_set_error in writepage, layout ioctl, writeback mempools, cap writeback, fsync
+  * mds: various clustering fixes
+  * uclient: misc fixes
+  * msgr: fixed bad fd close (causing spurious EBADF errors)
+
+ -- sage <sage@newdream.net>  Wed, 5 Aug 2009 13:58:00 -0800
+
 ceph (0.11-1) unstable; urgency=low
 
   * kclient fixes, clean (lkml review)
