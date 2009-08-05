@@ -74,6 +74,7 @@ int ceph_get_file_replication(const char *path);
 //not for C, sorry!
 int ceph_getdir(const char *relpath, std::list<std::string>& names);
 void ceph_getcwd(std::string& cwd);
+int ceph_get_file_stripe_address(int fd, loff_t offset, std::string& address);
 }
 #endif
 

@@ -268,6 +268,10 @@ extern "C" int ceph_get_file_replication(const char *path) {
   return rep;
 }
 
+int ceph_get_file_stripe_address(int fh, loff_t offset, std::string& address) {
+  return client->get_file_stripe_address(fh, offset, address);
+}
+
 int ceph_getdir(const char *relpath, std::list<std::string>& names)
 {
   return client->getdir(relpath, names);

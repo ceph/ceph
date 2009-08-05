@@ -5228,6 +5228,32 @@ int Client::get_file_replication(int fd)
 
 int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
 {
+  Mutex::Locker lock(client_lock);
+
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  Inode *in = f->inode;
+
+  // which object?
+  vector<ObjectExtent> extents;
+  filer->file_to_extents(in->ino, &in->layout, offset, 1, extents);
+  assert(extents.size() == 1);
+
+  // now we have the object and its 'layout'
+  pg_t pg = (pg_t)extents[0].layout.ol_pgid;
+  vector<int> osds;
+  osdmap->pg_to_osds(pg, osds);
+  if (!osds.size())
+    return -EINVAL;
+  
+  // now we have the osd(s)
+  entity_addr_t addr = osdmap->get_addr(osds[0]);
+  
+  // now we need to turn it into a string
+  char foo[30];
+  __u8 *quad = (__u8*) &addr.ipaddr.sin_addr;
+  sprintf(foo, "%d.%d.%d.%d", (int)quad[0], (int)quad[1], (int)quad[2], (int)quad[3]);
+  address = foo;
   return 0;
 }
 
