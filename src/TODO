@@ -54,6 +54,9 @@ v0.12
 - fixed a problem with capability, snap metadata writeback
 - cleaned up f(data)sync wrt metadata writeback
 
+v0.13
+- client authentication
+- osd active during backlog generation
 - osdmap: allow explicit pg 'override' mappings
 - http gw
 
