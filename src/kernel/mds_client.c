@@ -1768,7 +1768,6 @@ out_err:
 	}
 
 	add_cap_releases(mdsc, req->r_session, -1);
-out_session_unlock:
 	mutex_unlock(&req->r_session->s_mutex);
 
 	/* kick calling process */
