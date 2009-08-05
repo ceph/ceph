@@ -121,6 +121,7 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 	int word_len;
 	int skip;
 	int pos = 0;
+	char *newdata = 0;
 
 	if (!optionsp || !*optionsp)
 		return 1;
@@ -133,8 +134,8 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 		/*  check if ends with trailing comma */
 		if(*data == 0)
 			break;
-
 		next_keyword = strchr(data,',');
+		newdata = 0;
 	
 		/* temporarily null terminate end of keyword=value pair */
 		if(next_keyword)
@@ -169,6 +170,35 @@ static int parse_options(char ** optionsp, int * filesys_flags)
 			*filesys_flags &= ~MS_RDONLY;
                 } else if (strncmp(data, "remount", 7) == 0) {
                         *filesys_flags |= MS_REMOUNT;
+		} else if (strncmp(data, "keyfile", 7) == 0) {
+			char *fn = value;
+			char *end = fn;
+			int fd;
+			char key[1000];
+			int len;
+
+			while (*end && *end != ',')
+				end++;
+			fd = open(fn, O_RDONLY);
+			if (fd < 0) {
+				perror("unable to read keyfile");
+				return -1;
+			}
+			len = read(fd, key, 1000);
+			if (len <= 0) {
+				perror("unable to read key from keyfile");
+				return -1;
+			}
+			end = key;
+			while (end < key + len && *end && *end != '\n' && *end != '\r')
+				end++;
+			*end = '\0';
+			close(fd);
+
+			//printf("read key of len %d from %s\n", len, fn);
+			data = "key";
+			value = key;
+			skip = 0;
 		} else {
 			skip = 0;
 			/* printf("ceph: Unknown mount option %s\n",data); */
