@@ -53,7 +53,7 @@ cd ..
 
 # upload
 rsync -v --progress *$arch.{deb,changes} sage@ceph.newdream.net:debian/dists/$repo/main/binary-$arch
-rsync -v --progress ceph_* sag@ceph.newdream.net:debian/dists/$repo/main/source
+rsync -v --progress ceph_* sage@ceph.newdream.net:debian/dists/$repo/main/source
 
 # rebuild index
 ssh sage@ceph.newdream.net build_debian_repo.sh
