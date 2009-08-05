@@ -69,6 +69,8 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_setPermission(String path, int mode);
   private native boolean ceph_kill_client();
   private native boolean ceph_stat(String path, Stat fill);
+  private native int ceph_replication(String path);
+
   public CephFileSystem() {
     debug("CephFileSystem:enter");
     root = new Path("/");
@@ -241,13 +243,12 @@ public class CephFileSystem extends FileSystem {
     Path abs_p = makeAbsolute(p);
     //sadly, Ceph doesn't really do uids/gids just yet, but
     //everything else is filled
-    // For the moment, hardwired replication
-    int replication = 2;
     FileStatus status;
     Stat lstat = new Stat();
     if(ceph_stat(abs_p.toString(), lstat)) {
       debug("getFileStatus: mod_time is " + lstat.mod_time);
-      status = new FileStatus(lstat.size, lstat.is_dir, replication,
+      status = new FileStatus(lstat.size, lstat.is_dir,
+			      ceph_replication(abs_p.toString()),
 			      lstat.block_size,
 			      //these times in seconds get converted to millis
 			      lstat.mod_time*1000,

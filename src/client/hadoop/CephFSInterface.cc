@@ -561,7 +561,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
  * Signature: (Ljava/lang/String;I)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setPermission
-(JNIEnv * env, jobject obj, jstring j_path, jint j_new_mode) {
+(JNIEnv *env, jobject obj, jstring j_path, jint j_new_mode) {
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   int result = ceph_chmod(c_path, j_new_mode);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -581,6 +581,20 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
 {  
   ceph_deinitialize();  
   return true;
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_replication
+ * Signature: (Ljava/lang/String;)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1replication
+(JNIEnv *env, jobject obj, jstring j_path) {
+  //get c-string of path, send off to libceph, release c-string, return
+  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  int replication = ceph_get_file_replication(c_path);
+  env->ReleaseStringUTFChars(j_path, c_path);
+  return replication;
 }
 
 /*
