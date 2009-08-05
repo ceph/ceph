@@ -261,6 +261,13 @@ extern "C" int ceph_get_file_stripe_unit(int fh)
   return client->get_file_stripe_unit(fh);
 }
 
+extern "C" int ceph_get_file_replication(const char *path) {
+  int fd = client->open(path, O_RDONLY);
+  int rep = client->get_file_replication(fd);
+  client->close(fd);
+  return rep;
+}
+
 int ceph_getdir(const char *relpath, std::list<std::string>& names)
 {
   return client->getdir(relpath, names);

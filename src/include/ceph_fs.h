@@ -185,6 +185,8 @@ struct ceph_file_layout {
 	((__s32)le32_to_cpu((l).fl_object_stripe_unit))
 #define ceph_file_layout_pg_preferred(l) \
 	((__s32)le32_to_cpu((l).fl_pg_preferred))
+#define ceph_file_layout_pg_pool(l) \
+        ((__s32)le32_to_cpu((l).fl_pg_pool))
 
 #define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
 					  le32_to_cpu((l).fl_stripe_count))

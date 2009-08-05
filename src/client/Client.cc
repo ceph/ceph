@@ -5215,7 +5215,15 @@ int Client::get_file_stripe_period(int fd)
 
 int Client::get_file_replication(int fd)
 {
-  return 0;
+  int pool;
+  Mutex::Locker lock(client_lock);
+
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  Inode *in = f->inode;
+
+  pool = ceph_file_layout_pg_pool(in->layout);
+  return osdmap->get_pg_pool(pool).get_size();
 }
 
 int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
