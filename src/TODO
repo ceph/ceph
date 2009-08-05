@@ -48,11 +48,11 @@ v0.11
 v0.12
 - mapping_set_error on failed writepage
 - document correct debugfs mount point
-- clean up layout ioctls
-- fix bad kmalloc
-- use mempool for write path allocations where appropriate
-- fixed bug with cap, snap writeback
-
+- simplify layout/striping ioctls
+- removed bad kmalloc in writepages
+- use mempools for writeback allocations where appropriate (*)
+- fixed a problem with capability, snap metadata writeback
+- cleaned up f(data)sync wrt metadata writeback
 
 - osdmap: allow explicit pg 'override' mappings
 - http gw
