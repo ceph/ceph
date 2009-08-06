@@ -50,6 +50,7 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
+#include "messages/MOSDPGTemp.h"
 
 #include "messages/MOSDMap.h"
 #include "messages/MOSDGetMap.h"
@@ -1281,6 +1282,7 @@ void OSD::do_mon_report()
   if (is_booting())
     send_boot();
   send_alive();
+  send_pg_temp();
   send_failures();
   send_pg_stats();
   class_handler->resend_class_requests();
@@ -1323,6 +1325,21 @@ void OSD::send_alive()
     dout(10) << "send_alive want " << up_thru_wanted << dendl;
     monc->send_mon_message(new MOSDAlive(osdmap->get_epoch()));
   }
+}
+
+void OSD::queue_want_pg_temp(pg_t pgid, vector<int>& want)
+{
+  pg_temp_wanted[pgid] = want;
+}
+
+void OSD::send_pg_temp()
+{
+  if (pg_temp_wanted.empty())
+    return;
+  dout(10) << "send_pg_temp " << pg_temp_wanted << dendl;
+  MOSDPGTemp *m = new MOSDPGTemp(osdmap->get_epoch());
+  m->pg_temp = pg_temp_wanted;
+  monc->send_mon_message(m);
 }
 
 void OSD::send_failures()
@@ -2119,12 +2136,15 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       pg->unlock();
       continue;
     }
-    
+
     // -- there was a change! --
     int oldrole = pg->get_role();
     int oldprimary = pg->get_primary();
     vector<int> oldacting = pg->acting;
     vector<int> oldup = pg->up;
+    
+    // make sure we clear out any pg_temp change requests
+    pg_temp_wanted.erase(pgid);
     
     pg->kick();
     pg->clear_prior();
@@ -2163,18 +2183,20 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->state_clear(PG_STATE_ACTIVE);
     pg->state_clear(PG_STATE_DOWN);
     pg->state_clear(PG_STATE_PEERING);  // we'll need to restart peering
+    pg->state_clear(PG_STATE_DEGRADED);
 
-    if (pg->is_primary() && 
-	osdmap->get_pg_size(pg->info.pgid) != pg->acting.size())
-      pg->state_set(PG_STATE_DEGRADED);
-    else
-      pg->state_clear(PG_STATE_DEGRADED);
+    if (pg->is_primary()) {
+      if (osdmap->get_pg_size(pg->info.pgid) != pg->acting.size())
+	pg->state_set(PG_STATE_DEGRADED);
+    }
 
     // reset primary state?
     if (oldrole == 0 || pg->get_role() == 0)
       pg->clear_primary_state();
 
-    dout(10) << *pg << " " << oldacting << " -> " << pg->acting 
+    dout(10) << *pg
+	     << " up " << oldup << " -> " << pg->up 
+	     << " acting " << oldacting << " -> " << pg->acting 
 	     << ", role " << oldrole << " -> " << role << dendl; 
     
     // pg->on_*
@@ -2239,6 +2261,12 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 		   << ", replicas changed" << dendl;
 	}
       }
+    }
+
+    // sanity check pg_temp
+    if (pg->acting.empty() && pg->up.size() && pg->up[0] == whoami) {
+      dout(10) << *pg << " acting empty, but i am up[0], clearing pg_temp" << dendl;
+      queue_want_pg_temp(pg->info.pgid, pg->acting);
     }
 
     pg->unlock();

@@ -494,6 +494,12 @@ protected:
   void queue_want_up_thru(epoch_t want);
   void send_alive();
 
+  // -- pg_temp --
+  map<pg_t, vector<int> > pg_temp_wanted;
+
+  void queue_want_pg_temp(pg_t pgid, vector<int>& want);
+  void send_pg_temp();
+
   // -- failures --
   set<int> failure_queue;
   set<int> failure_pending;

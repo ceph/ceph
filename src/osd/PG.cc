@@ -861,8 +861,8 @@ void PG::build_prior()
   clear_prior();
 
   // current nodes, of course.
-  for (unsigned i=1; i<acting.size(); i++)
-    prior_set.insert(acting[i]);
+  for (unsigned i=1; i<up.size(); i++)
+    prior_set.insert(up[i]);
 
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
@@ -893,25 +893,35 @@ void PG::build_prior()
     int crashed = 0;
     int need_down = 0;
     bool any_survived = false;
+
+    // consider UP osds
+    for (unsigned i=0; i<interval.up.size(); i++) {
+      int o = interval.up[i];
+
+      if (osd->osdmap->is_up(o)) {  // is up now
+	if (o != osd->whoami)       // and is not me
+	  prior_set.insert(o);
+      }
+    }
+
+    // consider ACTING osds
     for (unsigned i=0; i<interval.acting.size(); i++) {
-      const osd_info_t& pinfo = osd->osdmap->get_info(interval.acting[i]);
+      int o = interval.acting[i];
+      const osd_info_t& pinfo = osd->osdmap->get_info(o);
 
       // if the osd restarted after this interval but is not known to have
       // cleanly survived through this interval, we mark the pg crashed.
       if (pinfo.up_from > interval.last &&
 	  !(pinfo.last_clean_first <= interval.first &&
 	    pinfo.last_clean_last >= interval.last)) {
-	dout(10) << "build_prior  prior osd" << interval.acting[i]
+	dout(10) << "build_prior  prior osd" << o
 		 << " up_from " << pinfo.up_from
 		 << " and last clean interval " << pinfo.last_clean_first << "-" << pinfo.last_clean_last
 		 << " does not include us" << dendl;
 	crashed++;
       }
 
-      if (osd->osdmap->is_up(interval.acting[i])) {  // is up now
-	if (interval.acting[i] != osd->whoami)       // and is not me
-	  prior_set.insert(interval.acting[i]);
-
+      if (osd->osdmap->is_up(o)) {  // is up now
 	// did any osds survive _this_ interval?
 	any_survived = true;
 
@@ -920,15 +930,15 @@ void PG::build_prior()
 	    interval.last >= info.history.last_epoch_started)
 	  any_up_now = true;
       } else if (pinfo.lost_at > interval.first) {
-	dout(10) << "build_prior  prior osd" << interval.acting[i]
+	dout(10) << "build_prior  prior osd" << o
 		 << " is down, but marked lost at " << pinfo.lost_at << dendl;
-	prior_set_down.insert(interval.acting[i]);
+	prior_set_down.insert(o);
       } else {
-	dout(10) << "build_prior  prior osd" << interval.acting[i]
+	dout(10) << "build_prior  prior osd" << o
 		 << " is down, must notify mon" << dendl;
 	must_notify_mon = true;
 	need_down++;
-	prior_set_down.insert(interval.acting[i]);
+	prior_set_down.insert(o);
       }
     }
 
@@ -1003,8 +1013,6 @@ void PG::clear_primary_state()
 // if false, stop.
 bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 {
-  /** GET ALL PG::Info *********/
-
   // -- query info from everyone in prior_set.
   bool missing_info = false;
   for (set<int>::iterator it = prior_set.begin();
@@ -1023,24 +1031,17 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
       continue;
     }
     
-    if (osd->osdmap->is_up(*it)) {
-      dout(10) << " querying info from osd" << *it << dendl;
-      query_map[*it][info.pgid] = Query(Query::INFO, info.history);
-      peer_info_requested.insert(*it);
-    } else {
-      dout(10) << " not querying down osd" << *it << dendl;
-    }
+    assert(osd->osdmap->is_up(*it));
+    dout(10) << " querying info from osd" << *it << dendl;
+    query_map[*it][info.pgid] = Query(Query::INFO, info.history);
+    peer_info_requested.insert(*it);
   }
   if (missing_info)
     return false;
 
   
   // -- ok, we have all (prior_set) info.  (and maybe others.)
-
   dout(10) << " have prior_set info.  min_last_complete_ondisk " << min_last_complete_ondisk << dendl;
-
-
-  /** CREATE THE MASTER PG::Log *********/
 
   // who (of all priors and active) has the latest PG version?
   eversion_t newest_update = info.last_update;
@@ -1062,7 +1063,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
       newest_update = it->second.last_update;
       newest_update_osd = it->first;
     }
-    if (is_acting(it->first)) {
+    if (is_up(it->first)) {
       if (it->second.last_update < oldest_update) {
         oldest_update = it->second.last_update;
 	oldest_who = it->first;
@@ -1074,6 +1075,43 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
   if (newest_update == info.last_update)   // or just me, if nobody better.
     newest_update_osd = osd->whoami;
   
+  // -- decide what acting set i want, based on state of up set
+  vector<int> want = up;
+  if (newest_update_osd != osd->whoami &&
+      log.head < peer_info[newest_update_osd].log_tail) {
+    // up[0] needs a backlog to catch up
+    // make newest_update_osd primary instead?
+    for (unsigned i=1; i<want.size(); i++)
+      if (want[i] == newest_update_osd) {
+	dout(10) << " osd" << want[0] << " needs backlog to catch up, making " << want[i] << " primary" << dendl;
+	want[0] = want[i];
+	want[i] = up[0];
+	break;
+      }
+  }
+  // exclude peers who need backlogs to catch up?
+  Info& primi = (want[0] == osd->whoami) ? info : peer_info[want[0]];
+  for (vector<int>::iterator p = want.begin() + 1; p != want.end(); ) {
+    Info& pi = (*p == osd->whoami) ? info : peer_info[*p];
+    if (pi.last_update < primi.log_tail) {
+      dout(10) << " osd" << *p << " needs primary's backlog to catch up" << dendl;
+      want.erase(p);
+    } else {
+      dout(10) << " osd" << *p << " can catch up with osd" << want[0] << " log" << dendl;
+      p++;
+    }
+  }
+  if (want != acting) {
+    dout(10) << " want up " << want << " != acting " << acting << ", requesting pg_temp change" << dendl;
+    if (want == up) {
+      vector<int> empty;
+      osd->queue_want_pg_temp(info.pgid, empty);
+    } else
+      osd->queue_want_pg_temp(info.pgid, want);
+    return false;
+  }
+  dout(10) << " want " << want << " (== acting)" << dendl;
+
   // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
     Info& pi = peer_info[newest_update_osd];
@@ -1655,6 +1693,7 @@ void PG::update_stats()
     pg_stats_valid = true;
     pg_stats_stable = info.stats;
     pg_stats_stable.state = state;
+    pg_stats_stable.up = up;
     pg_stats_stable.acting = acting;
 
     pg_stats_stable.log_size = ondisklog.length();

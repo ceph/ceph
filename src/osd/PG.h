@@ -726,6 +726,11 @@ public:
       if (acting[i] == osd) return true;
     return false;
   }
+  bool is_up(int osd) const { 
+    for (unsigned i=0; i<up.size(); i++)
+      if (up[i] == osd) return true;
+    return false;
+  }
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
   
@@ -984,7 +989,7 @@ inline ostream& operator<<(ostream& out, const PG::Missing& missing)
 
 inline ostream& operator<<(ostream& out, const PG::Interval& i)
 {
-  out << "interval(" << i.first << "-" << i.last << " " << i.acting;
+  out << "interval(" << i.first << "-" << i.last << " " << i.up << "/" << i.acting;
   if (i.maybe_went_rw)
     out << " maybe_went_rw";
   out << ")";
