@@ -403,7 +403,7 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(file.getPath());
     int fh = ceph_open_for_read(abs_path.toString());
     if (fh < 0) {
-      throw new IOException ("could not open file " + abs_path.toString());
+      return null;
     }
     //get the block size
     long blockSize = ceph_getblocksize(abs_path.toString());
@@ -478,23 +478,11 @@ public class CephFileSystem extends FileSystem {
   /**
    * User-defined replication is not supported for Ceph file systems at the moment.
    */
-  @Deprecated
-    public short getReplication(Path path) throws IOException {
-    return 1;
-  }
-
   @Override
     public short getDefaultReplication() {
     return 1;
   }
   
-  /**
-   * User-defined replication is not supported for Ceph file systems at the moment.
-   */
-  public boolean setReplicationRaw(Path path, short replication) throws IOException {
-    return true;
-  }
-
   /**
    * You need to guarantee the path exists before calling this method, for now.
    */
