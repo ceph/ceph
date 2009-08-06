@@ -517,7 +517,6 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1read
   (JNIEnv *env, jobject obj, jstring j_path)
-
 {
   dout(10) << "In open_for_read" << dendl;
 
@@ -553,6 +552,20 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 
   // returns file handle, or -1 on failure
   return result;       
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_close
+ * Signature: (I)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1close
+(JNIEnv * env, jobject ojb, jint fh) {
+  dout(10) << "In CephFileSystem::ceph_close" << dendl;
+
+  jint result; 
+  result = ceph_close(fh);
+  return result;
 }
 
 /*
@@ -595,6 +608,20 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1repli
   int replication = ceph_get_file_replication(c_path);
   env->ReleaseStringUTFChars(j_path, c_path);
   return replication;
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_hosts
+ * Signature: (IJ)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1hosts
+(JNIEnv * env, jobject obj, jint j_fh, jlong j_offset) {
+  //get the address
+  string address;
+  ceph_get_file_stripe_address(j_fh, j_offset, address);
+  //make java String of address
+  return env->NewStringUTF(address.c_str());
 }
 
 /*

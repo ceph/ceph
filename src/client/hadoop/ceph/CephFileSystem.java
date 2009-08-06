@@ -8,8 +8,10 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.util.Set;
 import java.util.EnumSet;
+import java.lang.Math;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -66,10 +68,12 @@ public class CephFileSystem extends FileSystem {
   private native int ceph_open_for_append(String path);
   private native int ceph_open_for_read(String path);
   private native int ceph_open_for_overwrite(String path, int mode);
+  private native int ceph_close(int filehandle);
   private native boolean ceph_setPermission(String path, int mode);
   private native boolean ceph_kill_client();
   private native boolean ceph_stat(String path, Stat fill);
   private native int ceph_replication(String path);
+  private native String ceph_hosts(int fh, long offset);
 
   public CephFileSystem() {
     debug("CephFileSystem:enter");
@@ -262,6 +266,7 @@ public class CephFileSystem extends FileSystem {
 	throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
 					+ p + " does not exist or could not be accessed");
     }
+
     debug("getFileStatus:exit");
     return status;
   }
@@ -385,6 +390,34 @@ public class CephFileSystem extends FileSystem {
     debug("return from ceph_rename to Java with result " + result);
     debug("rename:exit");
     return result;
+  }
+
+  /*
+   * Note that this doesn't set names as the others do; there's no port
+   * info since, hey, you aren't going to talk direct to a Ceph instance!
+   */
+  @Override
+    public BlockLocation[] getFileBlockLocations(FileStatus file,
+			  long start, long len) throws IOException {
+    //sanitize and get the filehandle
+    Path abs_path = makeAbsolute(file.getPath());
+    int fh = ceph_open_for_read(abs_path.toString());
+    if (fh < 0) {
+      throw new IOException ("could not open file " + abs_path.toString());
+    }
+    //get the block size
+    long blockSize = ceph_getblocksize(abs_path.toString());
+    BlockLocation[] locations =
+      new BlockLocation[(int)Math.ceil((len-start)/(float)blockSize)];
+    for (int i = 0; i < locations.length; ++i) {
+      String host = ceph_hosts(fh, start + i*blockSize);
+      String[] hostArray = new String[1];
+      hostArray[0] = host;
+      locations[i] = new BlockLocation(hostArray, hostArray,
+				       start+i*blockSize, blockSize);
+    }
+    ceph_close(fh);
+    return locations;
   }
   
   /* Added in for .20, not required in trunk */
