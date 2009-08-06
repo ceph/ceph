@@ -47,7 +47,7 @@ void usage()
   cerr << "   mksnap foo  -- create snap 'foo'\n";
   cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
 
-  cerr << "   bench <seconds> [-c concurrentwrites] [-b writesize] [verify] [sync]\n";
+  cerr << "   bench <seconds> [-t concurrentwrites] [-b writesize] [verify] [sync]\n";
   cerr << "              default is 16 concurrent IOs and 1 MB writes size\n\n";
 
   cerr << "Options:\n";
@@ -249,7 +249,7 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&snapname, OPT_STR);
     } else if (CONF_ARG_EQ("help", 'h')) {
       usage();
-    } else if (CONF_ARG_EQ("concurrent-ios", 'c')) {
+    } else if (CONF_ARG_EQ("concurrent-ios", 't')) {
       CONF_SAFE_SET_ARG_VAL(&concurrent_ios, OPT_INT);
     } else if (CONF_ARG_EQ("block-size", 'b')) {
       CONF_SAFE_SET_ARG_VAL(&write_size, OPT_INT);
