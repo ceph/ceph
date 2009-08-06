@@ -37,6 +37,7 @@ using namespace std;
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDPGTemp.h"
 #include "messages/MOSDIn.h"
 #include "messages/MOSDOut.h"
 #include "messages/MOSDFailure.h"
@@ -222,6 +223,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_OSD_ALIVE:
     m = new MOSDAlive();
+    break;
+  case MSG_OSD_PGTEMP:
+    m = new MOSDPGTemp;
     break;
   case MSG_OSD_IN:
     m = new MOSDIn();

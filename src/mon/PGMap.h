@@ -176,7 +176,7 @@ public:
     ss << "version " << version << std::endl;
     ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
     ss << "last_pg_scan " << last_pg_scan << std::endl;
-    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tosds\tlast_scrub" << std::endl;
+    ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
     for (set<pg_t>::iterator p = pg_set.begin();
 	 p != pg_set.end();
 	 p++) {
@@ -193,6 +193,7 @@ public:
 	 << "\t" << pg_state_string(st.state)
 	 << "\t" << st.version
 	 << "\t" << st.reported
+	 << "\t" << st.up
 	 << "\t" << st.acting
 	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	 << std::endl;

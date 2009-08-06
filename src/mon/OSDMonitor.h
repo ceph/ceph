@@ -82,7 +82,10 @@ private:
 
   bool preprocess_alive(class MOSDAlive *m);
   bool prepare_alive(class MOSDAlive *m);
-  void _alive(MOSDAlive *m);
+  void _reply_map(Message *m, epoch_t e);
+
+  bool preprocess_pgtemp(class MOSDPGTemp *m);
+  bool prepare_pgtemp(class MOSDPGTemp *m);
 
   bool preprocess_pool_op ( class MPoolOp *m);
   bool preprocess_pool_op_create ( class MPoolOp *m);
@@ -103,12 +106,13 @@ private:
     }
   };
 
-  struct C_Alive : public Context {
+  struct C_ReplyMap : public Context {
     OSDMonitor *osdmon;
-    MOSDAlive *m;
-    C_Alive(OSDMonitor *o, MOSDAlive *mm) : osdmon(o), m(mm) {}
+    Message *m;
+    epoch_t e;
+    C_ReplyMap(OSDMonitor *o, Message *mm, epoch_t ee) : osdmon(o), m(mm), e(ee) {}
     void finish(int r) {
-      osdmon->_alive(m);
+      osdmon->_reply_map(m, e);
     }    
   };
   struct C_Reported : public Context {

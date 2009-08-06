@@ -612,7 +612,7 @@ struct pg_stat_t {
   __u64 num_rd, num_rd_kb;
   __u64 num_wr, num_wr_kb;
   
-  vector<int> acting;
+  vector<int> up, acting;
 
   pg_stat_t() : state(0),
 		created(0), parent_split_bits(0), 
@@ -624,7 +624,7 @@ struct pg_stat_t {
   { }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 2;
+    __u8 v = 3;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -650,6 +650,7 @@ struct pg_stat_t {
     ::encode(num_rd_kb, bl);
     ::encode(num_wr, bl);
     ::encode(num_wr_kb, bl);
+    ::encode(up, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -681,6 +682,8 @@ struct pg_stat_t {
       ::decode(num_wr, bl);
       ::decode(num_wr_kb, bl);
     }
+    if (v >= 3)
+      ::decode(up, bl);
     ::decode(acting, bl);
   }
 

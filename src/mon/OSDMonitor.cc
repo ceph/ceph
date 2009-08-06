@@ -28,6 +28,7 @@
 #include "messages/MOSDAlive.h"
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
+#include "messages/MOSDPGTemp.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
@@ -266,6 +267,8 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     return preprocess_boot((MOSDBoot*)m);
   case MSG_OSD_ALIVE:
     return preprocess_alive((MOSDAlive*)m);
+  case MSG_OSD_PGTEMP:
+    return preprocess_pgtemp((MOSDPGTemp*)m);
     /*
   case MSG_OSD_OUT:
     return preprocess_out((MOSDOut*)m);
@@ -296,6 +299,8 @@ bool OSDMonitor::prepare_update(PaxosServiceMessage *m)
     return prepare_boot((MOSDBoot*)m);
   case MSG_OSD_ALIVE:
     return prepare_alive((MOSDAlive*)m);
+  case MSG_OSD_PGTEMP:
+    return prepare_pgtemp((MOSDPGTemp*)m);
 
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
@@ -564,7 +569,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 
 
 // -------------
-// in
+// alive
 
 bool OSDMonitor::preprocess_alive(MOSDAlive *m)
 {
@@ -574,7 +579,7 @@ bool OSDMonitor::preprocess_alive(MOSDAlive *m)
       osdmap.get_up_thru(from) >= m->map_epoch) {
     // yup.
     dout(7) << "preprocess_alive e" << m->map_epoch << " dup from " << m->get_orig_source_inst() << dendl;
-    _alive(m);
+    _reply_map(m, m->map_epoch);
     return true;
   }
   
@@ -595,17 +600,52 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
 
   dout(7) << "prepare_alive e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
   pending_inc.new_up_thru[from] = m->map_epoch;
-  paxos->wait_for_commit(new C_Alive(this,m ));
+  paxos->wait_for_commit(new C_ReplyMap(this, m, m->map_epoch));
   return true;
 }
 
-void OSDMonitor::_alive(MOSDAlive *m)
+void OSDMonitor::_reply_map(Message *m, epoch_t e)
 {
-  dout(7) << "_alive e" << m->map_epoch
+  dout(7) << "_reply_map " << e
 	  << " from " << m->get_orig_source_inst()
 	  << dendl;
-  send_latest(m->get_orig_source_inst(), m->map_epoch);
+  send_latest(m->get_orig_source_inst(), e);
   delete m;
+}
+
+// -------------
+// pg_temp changes
+
+bool OSDMonitor::preprocess_pgtemp(MOSDPGTemp *m)
+{
+  dout(10) << "preprocess_pgtemp " << *m << dendl;
+
+  vector<int> empty;
+  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++) {
+    dout(20) << " " << p->first
+	     << (osdmap.pg_temp.count(p->first) ? osdmap.pg_temp[p->first] : empty)
+	     << " -> " << p->second << dendl;
+    // removal?
+    if (p->second.empty() && osdmap.pg_temp.count(p->first))
+      return false;
+    // change?
+    if (p->second.size() && (osdmap.pg_temp.count(p->first) == 0 ||
+			     osdmap.pg_temp[p->first] != p->second))
+      return false;
+  }
+
+  dout(7) << "preprocess_pgtemp e" << m->map_epoch << " no changes from " << m->get_orig_source_inst() << dendl;
+  _reply_map(m, m->map_epoch);
+  return true;
+}
+
+bool OSDMonitor::prepare_pgtemp(MOSDPGTemp *m)
+{
+  dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
+  for (map<pg_t,vector<int> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); p++)
+    pending_inc.new_pg_temp[p->first] = p->second;
+  paxos->wait_for_commit(new C_ReplyMap(this, m, m->map_epoch));
+  return true;
 }
 
 

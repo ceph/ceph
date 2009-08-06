@@ -392,6 +392,7 @@ bool Monitor::dispatch_impl(Message *m)
     case MSG_OSD_IN:
     case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
+    case MSG_OSD_PGTEMP:
     case MSG_REMOVE_SNAPS:
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;

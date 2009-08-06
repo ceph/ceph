@@ -51,6 +51,8 @@
 #define MSG_OSD_SUBOP        76
 #define MSG_OSD_SUBOPREPLY   77
 
+#define MSG_OSD_PGTEMP       78
+
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
 #define MSG_OSD_PG_SUMMARY     82
