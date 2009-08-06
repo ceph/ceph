@@ -2548,7 +2548,18 @@ int Client::unmount()
   cwd = 0;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
-  assert(fd_map.empty());
+
+  //clean up any unclosed files
+  if (!fd_map.empty())
+    std::cerr << "Warning: Some files were not closed prior to unmounting;\n"
+	      << "Ceph is closing them now.\n";
+  while (!fd_map.empty()) {
+    int fd = fd_map.begin()->first;
+    assert(fd_map.count(fd));
+    Fh *fh = fd_map[fd];
+    _release(fh);
+    fd_map.erase(fd);
+  }
 
   _ll_drop_pins();
 
