@@ -622,19 +622,21 @@ public:
 
 public:
   struct Interval {
-    vector<int> acting;
+    vector<int> up, acting;
     epoch_t first, last;
     bool maybe_went_rw;
 
     void encode(bufferlist& bl) const {
       ::encode(first, bl);
       ::encode(last, bl);
+      ::encode(up, bl);
       ::encode(acting, bl);
       ::encode(maybe_went_rw, bl);
     }
     void decode(bufferlist::iterator& bl) {
       ::decode(first, bl);
       ::decode(last, bl);
+      ::decode(up, bl);
       ::decode(acting, bl);
       ::decode(maybe_went_rw, bl);
     }
@@ -670,7 +672,7 @@ public:
 
   // primary state
  public:
-  vector<int> acting;
+  vector<int> up, acting;
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -992,7 +994,10 @@ inline ostream& operator<<(ostream& out, const PG::Interval& i)
 inline ostream& operator<<(ostream& out, const PG& pg)
 {
   out << "pg[" << pg.info 
-      << " r=" << pg.get_role();
+      << " " << pg.acting;
+  out << " r=" << pg.get_role();
+  if (pg.acting != pg.up)
+    out << " up=" << pg.up;
   
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;

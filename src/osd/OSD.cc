@@ -678,6 +678,7 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
 
   pg->set_role(0);
   pg->acting.swap(acting);
+  pg->up = pg->acting;
   pg->info.history.epoch_created = 
     pg->info.history.last_epoch_started =
     pg->info.history.same_since =
@@ -2094,9 +2095,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     PG *pg = it->second;
 
     // get new acting set
-    vector<int> tacting;
-    int nrep = osdmap->pg_to_acting_osds(pgid, tacting);
-    int role = osdmap->calc_pg_role(whoami, tacting, nrep);
+    vector<int> tup, tacting;
+    osdmap->pg_to_up_acting_osds(pgid, tup, tacting);
+    int role = osdmap->calc_pg_role(whoami, tacting, tacting.size());
 
     pg->lock();
 
@@ -2112,8 +2113,9 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     }
     
     // no change?
-    if (tacting == pg->acting && (pg->is_active() || !pg->prior_set_affected(osdmap))) {
-      dout(15) << *pg << " unchanged|active with " << tacting << dendl;
+    if (tacting == pg->acting && tup == pg->up &&
+	(pg->is_active() || !pg->prior_set_affected(osdmap))) {
+      dout(15) << *pg << " unchanged|active with " << tup << "/" << tacting << " up/acting" << dendl;
       pg->unlock();
       continue;
     }
@@ -2122,12 +2124,14 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     int oldrole = pg->get_role();
     int oldprimary = pg->get_primary();
     vector<int> oldacting = pg->acting;
+    vector<int> oldup = pg->up;
     
     pg->kick();
     pg->clear_prior();
 
     // update PG
     pg->acting.swap(tacting);
+    pg->up.swap(tup);
     pg->set_role(role);
     
     // did acting, primary|acker change?
@@ -2135,6 +2139,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
       // remember past interval
       PG::Interval& i = pg->past_intervals[pg->info.history.same_since];
       i.acting = oldacting;
+      i.up = oldup;
       i.first = pg->info.history.same_since;
       i.last = osdmap->get_epoch() - 1;
       if (i.acting.size())
@@ -2660,12 +2665,19 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     }
    
     // is it still ours?
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(on, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
+    vector<int> up, acting;
+    osdmap->pg_to_up_acting_osds(on, up, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
     if (role != 0) {
       dout(10) << "mkpg " << pgid << "  not primary (role=" << role << "), skipping" << dendl;
+      continue;
+    }
+    if (up != acting) {
+      dout(10) << "mkpg " << pgid << "  up " << up << " != acting " << acting << dendl;
+      stringstream ss;
+      ss << "mkpg " << pgid << " up " << up << " != acting " << acting;
+      logclient.log(LOG_ERROR, ss);
       continue;
     }
 
@@ -2810,9 +2822,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 
     if (!_have_pg(pgid)) {
       // same primary?
-      vector<int> acting;
-      int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-      int role = osdmap->calc_pg_role(whoami, acting, nrep);
+      vector<int> up, acting;
+      osdmap->pg_to_up_acting_osds(pgid, up, acting);
+      int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
       PG::Info::History history = it->history;
       project_pg_history(pgid, history, m->get_epoch(), acting);
@@ -2846,6 +2858,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       if (!pg) {
 	pg = _create_lock_pg(pgid, t);
 	pg->acting.swap(acting);
+	pg->up.swap(up);
 	pg->set_role(role);
 	pg->info.history = history;
 	pg->clear_primary_state();  // yep, notably, set hml=false
@@ -2931,9 +2944,9 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 
   PG *pg = 0;
   if (!_have_pg(info.pgid)) {
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(info.pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
+    vector<int> up, acting;
+    osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
+    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
     project_pg_history(info.pgid, info.history, epoch, acting);
     if (epoch < info.history.same_since) {
@@ -2946,6 +2959,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     pg = _create_lock_pg(info.pgid, t);
     dout(10) << " got info on new pg, creating" << dendl;
     pg->acting.swap(acting);
+    pg->up.swap(up);
     pg->set_role(role);
     pg->info.history = info.history;
     pg->write_info(t);
@@ -3119,9 +3133,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
     if (pg_map.count(pgid) == 0) {
       // get active crush mapping
-      vector<int> acting;
-      int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-      int role = osdmap->calc_pg_role(whoami, acting, nrep);
+      vector<int> up, acting;
+      osdmap->pg_to_up_acting_osds(pgid, up, acting);
+      int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
       // same primary?
       PG::Info::History history = it->second.history;
@@ -3144,6 +3158,7 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       ObjectStore::Transaction t;
       pg = _create_lock_pg(pgid, t);
       pg->acting.swap( acting );
+      pg->up.swap( up );
       pg->set_role(role);
       pg->info.history = history;
       pg->write_info(t);

@@ -761,7 +761,7 @@ private:
 
     map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
     if (p != pg_temp.end())
-      raw = p->second;
+      raw = p->second;      
     else
       pg_to_osds(pg, raw);
     
@@ -771,6 +771,29 @@ private:
       osds.push_back( raw[i] );
     }
     return osds.size();
+  }
+
+  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) {
+    // get rush list
+    vector<int> raw;
+    pg_to_osds(pg, raw);
+
+    up.clear();
+    for (unsigned i=0; i<raw.size(); i++) {
+      if (!exists(raw[i]) || is_down(raw[i])) continue;
+      up.push_back(raw[i]);
+    }
+    
+    map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
+    if (p != pg_temp.end()) {
+      raw = p->second;
+      acting.clear();
+      for (unsigned i=0; i<raw.size(); i++) {
+	if (!exists(raw[i]) || is_down(raw[i])) continue;
+	acting.push_back(raw[i]);
+      }
+    } else
+      acting = up;
   }
 
 

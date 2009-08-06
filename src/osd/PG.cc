@@ -717,8 +717,8 @@ void PG::generate_past_intervals()
        last_epoch >= stop;
        last_epoch = first_epoch - 1) {
     OSDMap *lastmap = nextmap;
-    vector<int> tacting;
-    lastmap->pg_to_acting_osds(get_pgid(), tacting);
+    vector<int> tup, tacting;
+    lastmap->pg_to_up_acting_osds(get_pgid(), tup, tacting);
     
     // calc first_epoch, first_map
     for (first_epoch = last_epoch; first_epoch > stop; first_epoch--) {
@@ -732,6 +732,7 @@ void PG::generate_past_intervals()
     Interval &i = past_intervals[first_epoch];
     i.first = first_epoch;
     i.last = last_epoch;
+    i.up.swap(tup);
     i.acting.swap(tacting);
     if (i.acting.size()) {
       i.maybe_went_rw = 
