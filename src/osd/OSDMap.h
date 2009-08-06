@@ -148,11 +148,10 @@ public:
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_weight;
+    map<pg_t,vector<int> > new_pg_temp;     // [] to remove
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
     map<int32_t,epoch_t> new_lost;
-    map<pg_t,uint32_t> new_pg_swap_primary;
-    list<pg_t> old_pg_swap_primary;
 
     map<entity_addr_t,utime_t> new_blacklist;
     vector<entity_addr_t> old_blacklist;
@@ -174,14 +173,13 @@ public:
       ::encode(new_up, bl);
       ::encode(new_down, bl);
       ::encode(new_weight, bl);
+      ::encode(new_pg_temp, bl);
 
       // extended
       ::encode(new_pool_names, bl);
       ::encode(new_up_thru, bl);
       ::encode(new_last_clean_interval, bl);
       ::encode(new_lost, bl);
-      ::encode(new_pg_swap_primary, bl);
-      ::encode(old_pg_swap_primary, bl);
       ::encode(new_blacklist, bl);
       ::encode(old_blacklist, bl);
     }
@@ -202,14 +200,13 @@ public:
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_weight, p);
+      ::decode(new_pg_temp, p);
       
       // extended
       ::decode(new_pool_names, p);
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
       ::decode(new_lost, p);
-      ::decode(new_pg_swap_primary, p);
-      ::decode(old_pg_swap_primary, p);
       ::decode(new_blacklist, p);
       ::decode(old_blacklist, p);
     }
@@ -238,11 +235,11 @@ private:
   vector<entity_addr_t> osd_addr;
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
+  map<pg_t,vector<int> > pg_temp;  // temp pg mapping (e.g. while we rebuild)
 
   map<int,pg_pool_t> pools;
   map<int,nstring> pool_name;
   map<nstring,int> name_pool;
-  map<pg_t,uint32_t> pg_swap_primary;  // force new osd to be pg primary (if already a member)
 
   hash_map<entity_addr_t,utime_t> blacklist;
 
@@ -496,15 +493,13 @@ private:
     for (map<int32_t,epoch_t>::iterator p = inc.new_lost.begin(); p != inc.new_lost.end(); p++)
       osd_info[p->first].lost_at = p->second;
 
-    // pg swap
-    for (map<pg_t,uint32_t>::iterator i = inc.new_pg_swap_primary.begin();
-	 i != inc.new_pg_swap_primary.end();
-	 i++)
-      pg_swap_primary[i->first] = i->second;
-    for (list<pg_t>::iterator i = inc.old_pg_swap_primary.begin();
-	 i != inc.old_pg_swap_primary.end();
-	 i++)
-      pg_swap_primary.erase(*i);
+    // pg rebuild
+    for (map<pg_t, vector<int> >::iterator p = inc.new_pg_temp.begin(); p != inc.new_pg_temp.end(); p++) {
+      if (p->second.empty())
+	pg_temp.erase(p->first);
+      else
+	pg_temp[p->first] = p->second;
+    }
 
     // blacklist
     for (map<entity_addr_t,utime_t>::iterator p = inc.new_blacklist.begin();
@@ -524,44 +519,45 @@ private:
   }
 
   // serialize, unserialize
-  void encode(bufferlist& blist) {
+  void encode(bufferlist& bl) {
     __u16 v = 1;
-    ::encode(v, blist);
+    ::encode(v, bl);
 
     // base
-    ::encode(fsid, blist);
-    ::encode(epoch, blist);
-    ::encode(created, blist);
-    ::encode(modified, blist);
+    ::encode(fsid, bl);
+    ::encode(epoch, bl);
+    ::encode(created, bl);
+    ::encode(modified, bl);
 
     int32_t max_pools = 0;
     if (pools.size())
       max_pools = pools.rbegin()->first + 1;
-    ::encode(max_pools, blist);
-    ::encode(pools, blist);
+    ::encode(max_pools, bl);
+    ::encode(pools, bl);
 
-    ::encode(flags, blist);
+    ::encode(flags, bl);
     
-    ::encode(max_osd, blist);
-    ::encode(osd_state, blist);
-    ::encode(osd_weight, blist);
-    ::encode(osd_addr, blist);
+    ::encode(max_osd, bl);
+    ::encode(osd_state, bl);
+    ::encode(osd_weight, bl);
+    ::encode(osd_addr, bl);
+
+    ::encode(pg_temp, bl);
 
     // crush
     bufferlist cbl;
     crush.encode(cbl);
-    ::encode(cbl, blist);
+    ::encode(cbl, bl);
 
     // extended
-    ::encode(osd_info, blist);
-    ::encode(pool_name, blist);
-    ::encode(pg_swap_primary, blist);
+    ::encode(osd_info, bl);
+    ::encode(pool_name, bl);
 
-    ::encode(blacklist, blist);
+    ::encode(blacklist, bl);
   }
   
-  void decode(bufferlist& blist) {
-    bufferlist::iterator p = blist.begin();
+  void decode(bufferlist& bl) {
+    bufferlist::iterator p = bl.begin();
     __u16 v;
     ::decode(v, p);
 
@@ -581,7 +577,8 @@ private:
     ::decode(osd_state, p);
     ::decode(osd_weight, p);
     ::decode(osd_addr, p);
-    
+    ::decode(pg_temp, p);
+
     // crush
     bufferlist cbl;
     ::decode(cbl, p);
@@ -595,9 +592,7 @@ private:
     name_pool.clear();
     for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
-
-    ::decode(pg_swap_primary, p);
-    
+   
     ::decode(blacklist, p);
 
   }
@@ -744,19 +739,6 @@ private:
       if (is_out(osd))
         osds.erase(osds.begin());  // oops, but it's out
     }
-
-    // swap primary?
-    if (pg_swap_primary.count(pg)) {
-      for (unsigned i=1; i<osds.size(); i++) {
-	if (osds[i] == (int)pg_swap_primary[pg]) {
-	  uint32_t t = osds[0];	  // swap primary for this pg
-	  osds[0] = osds[i];
-	  osds[i] = t;
-	  break;
-	}
-      }
-    }
-    
     return osds.size();
   }
 
@@ -765,7 +747,12 @@ private:
                         vector<int>& osds) {         // list of osd addr's
     // get rush list
     vector<int> raw;
-    pg_to_osds(pg, raw);
+
+    map<pg_t,vector<int> >::iterator p = pg_temp.find(pg);
+    if (p != pg_temp.end())
+      raw = p->second;
+    else
+      pg_to_osds(pg, raw);
     
     osds.clear();
     for (unsigned i=0; i<raw.size(); i++) {
