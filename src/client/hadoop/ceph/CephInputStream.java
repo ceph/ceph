@@ -53,7 +53,8 @@ class CephInputStream extends FSInputStream {
   */
 
   public CephInputStream(Configuration conf, int fh, long flength) {
-
+    System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
+    System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
     // Whoever's calling the constructor is responsible for doing the actual ceph_open
     // call and providing the file handle.
     fileLength = flength;

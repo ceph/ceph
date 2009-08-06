@@ -34,9 +34,7 @@ public class CephFileSystem extends FileSystem {
 
   private static final long DEFAULT_BLOCK_SIZE = 8 * 1024 * 1024;
   
-  static {
-    System.loadLibrary("hadoopcephfs");
-  }
+
   
   private URI uri;
 
@@ -96,6 +94,8 @@ public class CephFileSystem extends FileSystem {
   @Override
     public void initialize(URI uri, Configuration conf) throws IOException {
     debug("initialize:enter");
+    System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
+    System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
     super.initialize(uri, conf);
     //store.initialize(uri, conf);
     setConf(conf);

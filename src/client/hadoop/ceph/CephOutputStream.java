@@ -78,6 +78,8 @@ class CephOutputStream extends OutputStream {
 
   // The file handle 
   public CephOutputStream(Configuration conf,  int fh) {
+    System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
+    System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
     fileHandle = fh;
     //fileLength = flength;
     closed = false;
