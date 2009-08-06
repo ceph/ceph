@@ -24,7 +24,6 @@
 
 
 
-#define CEPH_OSD_ONDISK_VERSION 19
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v020"
 
 

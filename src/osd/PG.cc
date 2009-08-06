@@ -708,7 +708,7 @@ void PG::generate_past_intervals()
 {
   epoch_t first_epoch = 0;
   epoch_t stop = MAX(1, info.history.last_epoch_started);
-  epoch_t last_epoch = info.history.same_since - 1;
+  epoch_t last_epoch = info.history.same_acting_since - 1;
 
   dout(10) << "generate_past_intervals over epochs " << stop << "-" << last_epoch << dendl;
 
@@ -871,7 +871,7 @@ void PG::build_prior()
   bool some_down = false;
 
   // generate past intervals, if we don't have them.
-  if (info.history.same_since > info.history.last_epoch_started &&
+  if (info.history.same_acting_since > info.history.last_epoch_started &&
       (past_intervals.empty() ||
        past_intervals.begin()->first > info.history.last_epoch_started))
     generate_past_intervals();
@@ -1204,6 +1204,22 @@ void PG::peer(ObjectStore::Transaction& t,
     return;
   }
 
+  // do i need a backlog for an up peer excluded from acting?
+  bool need_backlog = false;
+  for (unsigned i=0; i<up.size(); i++) {
+    int o = up[i];
+    if (o == osd->whoami || is_acting(o))
+      continue;
+    Info& pi = peer_info[o];
+    if (pi.last_update < log.tail && !log.backlog) {
+      dout(10) << "must generate backlog for !acting peer osd" << o
+	       << " whose last_update " << pi.last_update << " < my log.tail " << log.tail << dendl;
+      need_backlog = true;
+    }
+  }
+  if (need_backlog)
+    osd->queue_generate_backlog(this);
+
 
   /** COLLECT MISSING+LOG FROM PEERS **********/
   /*
@@ -1305,16 +1321,16 @@ void PG::peer(ObjectStore::Transaction& t,
 
   // -- do need to notify the monitor?
   if (must_notify_mon) {
-    if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_since) {
+    if (osd->osdmap->get_up_thru(osd->whoami) < info.history.same_acting_since) {
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
-	       << " < same_since " << info.history.same_since
+	       << " < same_since " << info.history.same_acting_since
 	       << ", must notify monitor" << dendl;
       need_up_thru = true;
-      osd->queue_want_up_thru(info.history.same_since);
+      osd->queue_want_up_thru(info.history.same_acting_since);
       return;
     } else {
       dout(10) << "up_thru " << osd->osdmap->get_up_thru(osd->whoami)
-	       << " >= same_since " << info.history.same_since
+	       << " >= same_since " << info.history.same_acting_since
 	       << ", all is well" << dendl;
     }
   }
@@ -2137,9 +2153,9 @@ void PG::sub_op_scrub_reply(MOSDSubOpReply *op)
 {
   dout(7) << "sub_op_scrub_reply" << dendl;
 
-  if (op->map_epoch < info.history.same_primary_since) {
+  if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
     delete op;
     return;
   }
@@ -2251,7 +2267,7 @@ void PG::scrub()
   osd->map_lock.get_read();
   lock();
  
-  epoch_t epoch = info.history.same_since;
+  epoch_t epoch = info.history.same_acting_since;
 
   if (!is_primary()) {
     dout(10) << "scrub -- not primary" << dendl;
@@ -2304,7 +2320,7 @@ void PG::scrub()
 
   /*
   lock();
-  if (epoch != info.history.same_since) {
+  if (epoch != info.history.same_acting_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     goto out;
   }
@@ -2315,7 +2331,7 @@ void PG::scrub()
 	     << " maps, waiting" << dendl;
     wait();
 
-    if (epoch != info.history.same_since ||
+    if (epoch != info.history.same_acting_since ||
 	osd->is_stopping()) {
       dout(10) << "scrub  pg changed, aborting" << dendl;
       goto out;
@@ -2447,7 +2463,7 @@ void PG::scrub()
 
   /*
   lock();
-  if (epoch != info.history.same_since) {
+  if (epoch != info.history.same_acting_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     goto out;
   }
@@ -2465,7 +2481,7 @@ void PG::scrub()
 
   /*
   lock();
-  if (epoch != info.history.same_since) {
+  if (epoch != info.history.same_acting_since) {
     dout(10) << "scrub  pg changed, aborting" << dendl;
     goto out;
   }

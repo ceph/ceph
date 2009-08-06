@@ -682,7 +682,8 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
   pg->up = pg->acting;
   pg->info.history.epoch_created = 
     pg->info.history.last_epoch_started =
-    pg->info.history.same_since =
+    pg->info.history.same_up_since =
+    pg->info.history.same_acting_since =
     pg->info.history.same_primary_since = osdmap->get_epoch();
 
   pg->write_info(t);
@@ -840,7 +841,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
  * up until now
  */
 void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
-			     vector<int>& last)
+			     vector<int>& lastup, vector<int>& lastacting)
 {
   dout(15) << "project_pg_history " << pgid
            << " from " << from << " to " << osdmap->get_epoch()
@@ -853,26 +854,31 @@ void OSD::project_pg_history(pg_t pgid, PG::Info::History& h, epoch_t from,
     // verify during intermediate epoch (e-1)
     OSDMap *oldmap = get_map(e-1);
 
-    vector<int> acting;
-    oldmap->pg_to_acting_osds(pgid, acting);
+    vector<int> up, acting;
+    oldmap->pg_to_up_acting_osds(pgid, up, acting);
 
     // acting set change?
-    if (acting != last && 
-        e > h.same_since) {
+    if (acting != lastacting && e > h.same_acting_since) {
       dout(15) << "project_pg_history " << pgid << " changed in " << e 
-                << " from " << acting << " -> " << last << dendl;
-      h.same_since = e;
+                << " from " << acting << " -> " << lastacting << dendl;
+      h.same_acting_since = e;
+    }
+    // up set change?
+    if (up != lastup && e > h.same_up_since) {
+      dout(15) << "project_pg_history " << pgid << " changed in " << e 
+                << " from " << up << " -> " << lastup << dendl;
+      h.same_up_since = e;
     }
 
     // primary change?
-    if (!(!acting.empty() && !last.empty() && acting[0] == last[0]) &&
+    if (!(!acting.empty() && !lastacting.empty() && acting[0] == lastacting[0]) &&
         e > h.same_primary_since) {
       dout(15) << "project_pg_history " << pgid << " primary changed in " << e << dendl;
       h.same_primary_since = e;
     }
 
-    if (h.same_since >= e &&
-        h.same_primary_since >= e) break;
+    if (h.same_acting_since >= e && h.same_up_since >= e && h.same_primary_since >= e)
+      break;
   }
 
   dout(15) << "project_pg_history end " << h << dendl;
@@ -2154,27 +2160,31 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->up.swap(tup);
     pg->set_role(role);
     
-    // did acting, primary|acker change?
-    if (tacting != pg->acting) {
+    // did acting, up, primary|acker change?
+    if (tacting != pg->acting || tup != pg->up) {
       // remember past interval
-      PG::Interval& i = pg->past_intervals[pg->info.history.same_since];
+      PG::Interval& i = pg->past_intervals[pg->info.history.same_acting_since];
+      i.first = pg->info.history.same_acting_since;
+      i.last = osdmap->get_epoch() - 1;
+
       i.acting = oldacting;
       i.up = oldup;
-      i.first = pg->info.history.same_since;
-      i.last = osdmap->get_epoch() - 1;
+      if (tacting != pg->acting)
+	pg->info.history.same_acting_since = osdmap->get_epoch();
+      if (tup != pg->up)
+	pg->info.history.same_up_since = osdmap->get_epoch();
+
       if (i.acting.size())
 	i.maybe_went_rw = 
 	  lastmap->get_up_thru(i.acting[0]) >= i.first &&
 	  lastmap->get_up_from(i.acting[0]) <= i.first;
       else
 	i.maybe_went_rw = 0;
-      dout(10) << *pg << " noting past " << i << dendl;
 
-      pg->info.history.same_since = osdmap->get_epoch();
-      pg->dirty_info = true;
-    }
-    if (oldprimary != pg->get_primary()) {
-      pg->info.history.same_primary_since = osdmap->get_epoch();
+      if (oldprimary != pg->get_primary())
+	pg->info.history.same_primary_since = osdmap->get_epoch();
+
+      dout(10) << *pg << " noting past " << i << dendl;
       pg->dirty_info = true;
     }
     pg->cancel_recovery();
@@ -2300,7 +2310,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 	     !pg->is_active()) {
       // i am (inactive) primary
       if (!pg->is_peering() || 
-	  (pg->need_up_thru && up_thru >= pg->info.history.same_since))
+	  (pg->need_up_thru && up_thru >= pg->info.history.same_acting_since))
 	pg->peer(t, query_map, &info_map);
     }
     else if (pg->is_stray() &&
@@ -2723,7 +2733,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
 
     // figure history
     PG::Info::History history;
-    project_pg_history(pgid, history, created, acting);
+    project_pg_history(pgid, history, created, up, acting);
     
     // register.
     creating_pgs[pgid].created = created;
@@ -2855,7 +2865,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
       PG::Info::History history = it->history;
-      project_pg_history(pgid, history, m->get_epoch(), acting);
+      project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
       if (m->get_epoch() < history.same_primary_since) {
         dout(10) << "handle_pg_notify pg " << pgid << " primary changed in "
@@ -2976,8 +2986,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     osdmap->pg_to_up_acting_osds(info.pgid, up, acting);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    project_pg_history(info.pgid, info.history, epoch, acting);
-    if (epoch < info.history.same_since) {
+    project_pg_history(info.pgid, info.history, epoch, up, acting);
+    if (epoch < info.history.same_acting_since) {
       dout(10) << "got old info " << info << " on non-existent pg, ignoring" << dendl;
       return;
     }
@@ -2996,7 +3006,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     created++;
   } else {
     pg = _lookup_lock_pg(info.pgid);
-    if (epoch < pg->info.history.same_since) {
+    if (epoch < pg->info.history.same_primary_since) {
       dout(10) << *pg << " got old info " << info << ", ignoring" << dendl;
       pg->unlock();
       return;
@@ -3107,7 +3117,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
     dout(10) << " don't have pg " << m->pgid << dendl;
   } else {
     PG *pg = _lookup_lock_pg(m->pgid);
-    if (m->epoch < pg->info.history.same_since) {
+    if (m->epoch < pg->info.history.same_primary_since) {
       dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
       pg->unlock();
       goto out;
@@ -3167,9 +3177,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
 
       // same primary?
       PG::Info::History history = it->second.history;
-      project_pg_history(pgid, history, m->get_epoch(), acting);
+      project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
-      if (m->get_epoch() < history.same_since) {
+      if (m->get_epoch() < history.same_primary_since) {
         dout(10) << " pg " << pgid << " dne, and pg has changed in "
                  << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << dendl;
         continue;
@@ -3199,9 +3209,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg = _lookup_lock_pg(pgid);
       
       // same primary?
-      if (m->get_epoch() < pg->info.history.same_since) {
+      if (m->get_epoch() < pg->info.history.same_primary_since) {
         dout(10) << *pg << " handle_pg_query primary changed in "
-                 << pg->info.history.same_since
+                 << pg->info.history.same_primary_since
                  << " (msg from " << m->get_epoch() << ")" << dendl;
 	pg->unlock();
         continue;
@@ -3285,14 +3295,14 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
     }
 
     pg = _lookup_lock_pg(pgid);
-    if (pg->info.history.same_since <= m->get_epoch()) {
+    if (pg->info.history.same_acting_since <= m->get_epoch()) {
       dout(10) << *pg << " removing." << dendl;
       assert(pg->get_role() == -1);
       assert(pg->get_primary() == m->get_source().num());
       _remove_unlock_pg(pg);
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
-	       << pg->info.history.same_since << " > " << m->get_epoch() << dendl;
+	       << pg->info.history.same_acting_since << " > " << m->get_epoch() << dendl;
       pg->unlock();
     }
   }
@@ -3784,7 +3794,7 @@ void OSD::handle_sub_op(MOSDSubOp *op)
 
   // same pg?
   //  if pg changes _at all_, we reset and repeer!
-  if (op->map_epoch < pg->info.history.same_since) {
+  if (op->map_epoch < pg->info.history.same_acting_since) {
     dout(10) << "handle_sub_op pg changed " << pg->info.history
 	     << " after " << op->map_epoch 
 	     << ", dropping" << dendl;

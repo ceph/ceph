@@ -99,12 +99,13 @@ public:
       epoch_t epoch_created;       // epoch in which PG was created
       epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
 
-      epoch_t same_since;          // same acting set since
+      epoch_t same_up_since;       // same acting set since
+      epoch_t same_acting_since;   // same acting set since
       epoch_t same_primary_since;  // same primary at least back through this epoch.
       History() : 	      
 	epoch_created(0),
 	last_epoch_started(0),
-	same_since(0), same_primary_since(0) {}
+	same_up_since(0), same_acting_since(0), same_primary_since(0) {}
 
       void merge(const History &other) {
 	if (epoch_created < other.epoch_created)
@@ -116,13 +117,16 @@ public:
       void encode(bufferlist &bl) const {
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
-	::encode(same_since, bl);
+	::encode(same_up_since, bl);
+	::encode(same_acting_since, bl);
 	::encode(same_primary_since, bl);
       }
-      void decode(bufferlist::iterator &bl) {
+      void decode(bufferlist::iterator &bl, int v=0) {
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
-	::decode(same_since, bl);
+	if (v && v >= 20)
+	  ::decode(same_up_since, bl);
+	::decode(same_acting_since, bl);
 	::decode(same_primary_since, bl);
       }
     } history;
@@ -135,7 +139,7 @@ public:
     bool dne() const { return history.epoch_created == 0; }
 
     void encode(bufferlist &bl) const {
-      __u8 v = CEPH_OSD_ONDISK_VERSION;
+      __u8 v = 20;
       ::encode(v, bl);
 
       ::encode(pgid, bl);
@@ -148,7 +152,7 @@ public:
       ::encode(snap_trimq, bl);
     }
     void decode(bufferlist::iterator &bl) {
-      __u8 v = CEPH_OSD_ONDISK_VERSION;
+      __u8 v;
       ::decode(v, bl);
 
       ::decode(pgid, bl);
@@ -157,7 +161,7 @@ public:
       ::decode(log_tail, bl);
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
-      history.decode(bl);
+      history.decode(bl, v);
       ::decode(snap_trimq, bl);
     }
   };
@@ -929,7 +933,7 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 {
   return out << "ec=" << h.epoch_created
 	     << " les=" << h.last_epoch_started
-	     << " " << h.same_since << "/" << h.same_primary_since;
+	     << " " << h.same_up_since << "/" << h.same_acting_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 

@@ -2995,7 +2995,7 @@ struct C_OSD_Commit : public Context {
 
 void ReplicatedPG::_committed(epoch_t same_since, eversion_t last_complete)
 {
-  if (same_since == info.history.same_since) {
+  if (same_since == info.history.same_acting_since) {
     dout(10) << "_committed last_complete " << last_complete << " now ondisk" << dendl;
     last_complete_ondisk = last_complete;
 
@@ -3166,7 +3166,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   // apply to disk!
   write_info(t);
-  unsigned r = osd->store->apply_transaction(t, new C_OSD_Commit(this, info.history.same_since,
+  unsigned r = osd->store->apply_transaction(t, new C_OSD_Commit(this, info.history.same_acting_since,
 								 info.last_complete));
   assert(r == 0);
 
