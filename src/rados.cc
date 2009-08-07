@@ -95,7 +95,8 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun, int concurrenti
   time(&initialTime);
   stringstream initialTimeS("");
   initialTimeS << initialTime;
-  const char* iTime = initialTimeS.str().c_str();
+  char iTime[100];
+  strcpy(iTime, initialTimeS.str().c_str());
   maxLatency.set_from_double(0);
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
