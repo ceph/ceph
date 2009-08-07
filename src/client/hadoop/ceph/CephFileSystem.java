@@ -164,7 +164,7 @@ public class CephFileSystem extends FileSystem {
     boolean isDir = false;
     boolean path_exists = false;
     try {
-      isDir = __isDirectory(abs_path);
+      isDir = isDirectory(abs_path);
       path_exists = exists(abs_path);
     }
 
@@ -312,7 +312,7 @@ public class CephFileSystem extends FileSystem {
     // throw an exception if !CreateFlag.OVERWRITE.
 
     // Step 1: existence test
-    if(__isDirectory(abs_path))
+    if(isDirectory(abs_path))
       throw new IOException("create: Cannot overwrite existing directory \""
 			    + abs_path.toString() + "\" with a file");      
     //if (!flag.contains(CreateFlag.OVERWRITE)) {
@@ -539,9 +539,13 @@ public class CephFileSystem extends FileSystem {
       return new_path;
     }
   }
-
-  private boolean __isDirectory(Path path) throws IOException {
-    debug("__isDirectory:enter with path " + path);
+ 
+  /*
+   * This method is a bit faster than doing a full stat is.
+   */
+  @Override
+  public boolean isDirectory(Path path) throws IOException {
+    debug("isDirectory:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     boolean result;
     if (abs_path.toString().equals("/")) {
@@ -552,7 +556,7 @@ public class CephFileSystem extends FileSystem {
       result = ceph_isdirectory(abs_path.toString());
       debug("Returned from ceph_isdirectory to Java");
     }
-    debug("__isDirectory:exit with result " + result);
+    debug("isDirectory:exit with result " + result);
     return result;
   }
 
@@ -579,7 +583,7 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(path);
 
     // If it's a directory, get the listing. Otherwise, complain and give up.
-    if (__isDirectory(abs_path)) {
+    if (isDirectory(abs_path)) {
       debug("calling ceph_getdir from Java with path " + abs_path);
       dirlist = ceph_getdir(abs_path.toString());
       debug("returning from ceph_getdir to Java");
