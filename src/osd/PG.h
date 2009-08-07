@@ -119,14 +119,17 @@ public:
 	::encode(last_epoch_started, bl);
 	::encode(same_acting_since, bl);
 	::encode(same_up_since, bl);
-	//::encode(same_primary_since, bl);
+	::encode(same_primary_since, bl);
       }
-      void decode(bufferlist::iterator &bl) {
+      void decode(bufferlist::iterator &bl, version_t v) {
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
 	::decode(same_acting_since, bl);
-	::decode(same_up_since, bl);
-	//::decode(same_primary_since, bl);
+	if (v >= 20)
+	  ::decode(same_up_since, bl);
+	else
+	  same_up_since = same_acting_since;
+	::decode(same_primary_since, bl);
       }
     } history;
     
@@ -160,11 +163,11 @@ public:
       ::decode(log_tail, bl);
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
-      history.decode(bl);
+      history.decode(bl, v);
       ::decode(snap_trimq, bl);
     }
   };
-  WRITE_CLASS_ENCODER(Info::History)
+  //WRITE_CLASS_ENCODER(Info::History)
   WRITE_CLASS_ENCODER(Info)
 
   
@@ -199,7 +202,7 @@ public:
     void decode(bufferlist::iterator &bl) {
       ::decode(type, bl);
       ::decode(since, bl);
-      history.decode(bl);
+      history.decode(bl, ~0ull);
     }
   };
   WRITE_CLASS_ENCODER(Query)
@@ -677,7 +680,7 @@ public:
  public:
   vector<int> up, acting;
   map<int,eversion_t> peer_last_complete_ondisk;
-  eversion_t  min_last_complete_ondisk;  // min over last_complete_ondisk, peer_last_complete_ondisk
+  eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
 
   // [primary only] content recovery state
@@ -690,7 +693,7 @@ public:
   bool        need_up_thru;
   set<int>    stray_set;   // non-acting osds that have PG data.
   set<int>    uptodate_set;  // current OSDs that are uptodate
-  eversion_t  oldest_update; // lowest (valid) last_update in active set
+  eversion_t  oldest_update; // acting: lowest (valid) last_update in active set
   map<int,Info>        peer_info;   // info from peers (stray or prior)
   set<int>             peer_info_requested;
   map<int, Missing>    peer_missing;
@@ -737,7 +740,7 @@ public:
   bool is_prior(int osd) const { return prior_set.count(osd); }
   bool is_stray(int osd) const { return stray_set.count(osd); }
   
-  bool is_all_uptodate() const { return uptodate_set.size() == acting.size(); }
+  bool is_all_uptodate() const { return uptodate_set.size() == acting.size() && up == acting; }
 
   void generate_past_intervals();
   void trim_past_intervals();
@@ -773,6 +776,7 @@ public:
   
   void trim_write_ahead();
 
+  bool choose_acting(int newest_update_osd);
   bool recover_master_log(map< int, map<pg_t,Query> >& query_map);
   void peer(ObjectStore::Transaction& t, 
 	    map< int, map<pg_t,Query> >& query_map,
@@ -918,7 +922,7 @@ public:
   virtual void on_shutdown() = 0;
 };
 
-WRITE_CLASS_ENCODER(PG::Info::History)
+//WRITE_CLASS_ENCODER(PG::Info::History)
 WRITE_CLASS_ENCODER(PG::Info)
 WRITE_CLASS_ENCODER(PG::Query)
 WRITE_CLASS_ENCODER(PG::Missing::item)
@@ -1001,11 +1005,11 @@ inline ostream& operator<<(ostream& out, const PG::Interval& i)
 
 inline ostream& operator<<(ostream& out, const PG& pg)
 {
-  out << "pg[" << pg.info 
-      << " " << pg.acting;
-  out << " r=" << pg.get_role();
+  out << "pg[" << pg.info
+      << " " << pg.up;
   if (pg.acting != pg.up)
-    out << " up=" << pg.up;
+    out << "/" << pg.acting;
+  out << " r=" << pg.get_role();
   
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;

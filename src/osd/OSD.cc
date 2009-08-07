@@ -2206,7 +2206,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
 
     dout(10) << *pg
 	     << " up " << oldup << " -> " << pg->up 
-	     << " acting " << oldacting << " -> " << pg->acting 
+	     << ", acting " << oldacting << " -> " << pg->acting 
 	     << ", role " << oldrole << " -> " << role << dendl; 
     
     // pg->on_*
@@ -2334,6 +2334,8 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 
   clear_map_cache();  // we're done with it
   update_heartbeat_peers();
+
+  send_pg_temp();
 }
 
 
@@ -2740,7 +2742,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     creating_pgs[pgid].parent = parent;
     creating_pgs[pgid].split_bits = split_bits;
     creating_pgs[pgid].acting.swap(acting);
-    calc_priors_during(pgid, created, history.same_primary_since, 
+    calc_priors_during(pgid, created, history.same_acting_since, 
 		       creating_pgs[pgid].prior);
 
     // poll priors
@@ -3364,8 +3366,6 @@ void OSD::generate_backlog(PG *pg)
     goto out;
   }
 
-  assert(!pg->is_active());
-
   if (!pg->build_backlog_map(omap))
     goto out;
 
@@ -3380,10 +3380,10 @@ void OSD::generate_backlog(PG *pg)
     dout(10) << *pg << " generate_backlog aborting" << dendl;
     goto out2;
   }
-  assert(!pg->is_active());
 
   if (!pg->is_primary()) {
     dout(10) << *pg << "  sending info+missing+backlog to primary" << dendl;
+    assert(!pg->is_active());  // for now
     MOSDPGLog *m = new MOSDPGLog(osdmap->get_epoch(), pg->info);
     m->missing = pg->missing;
     m->log = pg->log;

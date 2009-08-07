@@ -555,7 +555,9 @@ bool PG::build_backlog_map(map<eversion_t,Log::Entry>& omap)
     Log::Entry e;
     e.soid = poid;
     bufferlist bv;
-    osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
+    int r = osd->store->getattr(info.pgid.to_coll(), poid, OI_ATTR, bv);
+    if (r < 0)
+      continue;  // musta just been deleted!
     object_info_t oi(bv);
     e.version = oi.version;
     e.prior_version = oi.prior_version;
@@ -593,6 +595,7 @@ void PG::assemble_backlog(map<eversion_t,Log::Entry>& omap)
   
   assert(!log.backlog);
   log.backlog = true;
+  info.log_backlog = true;
 
   /*
    * note that we don't create prior_version backlog entries for
@@ -660,6 +663,7 @@ void PG::drop_backlog()
 
   assert(log.backlog);
   log.backlog = false;
+  info.log_backlog = false;
   
   while (!log.log.empty()) {
     Log::Entry &e = *log.log.begin();
@@ -860,9 +864,13 @@ void PG::build_prior()
 
   clear_prior();
 
-  // current nodes, of course.
-  for (unsigned i=1; i<up.size(); i++)
-    prior_set.insert(up[i]);
+  // current up and/or acting nodes, of course.
+  for (unsigned i=0; i<up.size(); i++)
+    if (up[i] != osd->whoami)
+      prior_set.insert(up[i]);
+  for (unsigned i=0; i<acting.size(); i++)
+    if (acting[i] != osd->whoami)
+      prior_set.insert(acting[i]);
 
   // and prior PG mappings.  move backwards in time.
   state_clear(PG_STATE_CRASHED);
@@ -1009,10 +1017,56 @@ void PG::clear_primary_state()
   osd->recovery_wq.dequeue(this);
 }
 
+bool PG::choose_acting(int newest_update_osd)
+{
+  vector<int> want = up;
+  
+  Info& newest = (newest_update_osd == osd->whoami) ? info : peer_info[newest_update_osd];
+  Info& oprimi = (want[0] == osd->whoami) ? info : peer_info[want[0]];
+  if (newest_update_osd != want[0] &&
+      oprimi.last_update < newest.log_tail && !newest.log_backlog) {
+    // up[0] needs a backlog to catch up
+    // make newest_update_osd primary instead?
+    for (unsigned i=1; i<want.size(); i++)
+      if (want[i] == newest_update_osd) {
+	dout(10) << "choose_acting  up[0] osd" << want[0] << " needs backlog to catch up, making "
+		 << want[i] << " primary" << dendl;
+	want[0] = want[i];
+	want[i] = up[0];
+	break;
+      }
+  }
+  // exclude peers who need backlogs to catch up?
+  Info& primi = (want[0] == osd->whoami) ? info : peer_info[want[0]];
+  for (vector<int>::iterator p = want.begin() + 1; p != want.end(); ) {
+    Info& pi = (*p == osd->whoami) ? info : peer_info[*p];
+    if (pi.last_update < primi.log_tail && !primi.log_backlog) {
+      dout(10) << "choose_acting  osd" << *p << " needs primary backlog to catch up" << dendl;
+      want.erase(p);
+    } else {
+      dout(10) << "choose_acting  osd" << *p << " can catch up with osd" << want[0] << " log" << dendl;
+      p++;
+    }
+  }
+  if (want != acting) {
+    dout(10) << "choose_acting  want " << want << " != acting " << acting
+	     << ", requesting pg_temp change" << dendl;
+    if (want == up) {
+      vector<int> empty;
+      osd->queue_want_pg_temp(info.pgid, empty);
+    } else
+      osd->queue_want_pg_temp(info.pgid, want);
+    return false;
+  }
+  dout(10) << "choose_acting want " << want << " (== acting)" << dendl;
+  return true;
+}
 
 // if false, stop.
 bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 {
+  dout(10) << "recover_master_log" << dendl;
+
   // -- query info from everyone in prior_set.
   bool missing_info = false;
   for (set<int>::iterator it = prior_set.begin();
@@ -1063,11 +1117,13 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
       newest_update = it->second.last_update;
       newest_update_osd = it->first;
     }
-    if (is_up(it->first)) {
+    if (is_acting(it->first)) {
       if (it->second.last_update < oldest_update) {
         oldest_update = it->second.last_update;
 	oldest_who = it->first;
       }
+    }
+    if (is_up(it->first)) {
       if (it->second.last_complete < min_last_complete_ondisk)
         min_last_complete_ondisk = it->second.last_complete;
     }
@@ -1076,41 +1132,8 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
     newest_update_osd = osd->whoami;
   
   // -- decide what acting set i want, based on state of up set
-  vector<int> want = up;
-  if (newest_update_osd != osd->whoami &&
-      log.head < peer_info[newest_update_osd].log_tail) {
-    // up[0] needs a backlog to catch up
-    // make newest_update_osd primary instead?
-    for (unsigned i=1; i<want.size(); i++)
-      if (want[i] == newest_update_osd) {
-	dout(10) << " osd" << want[0] << " needs backlog to catch up, making " << want[i] << " primary" << dendl;
-	want[0] = want[i];
-	want[i] = up[0];
-	break;
-      }
-  }
-  // exclude peers who need backlogs to catch up?
-  Info& primi = (want[0] == osd->whoami) ? info : peer_info[want[0]];
-  for (vector<int>::iterator p = want.begin() + 1; p != want.end(); ) {
-    Info& pi = (*p == osd->whoami) ? info : peer_info[*p];
-    if (pi.last_update < primi.log_tail) {
-      dout(10) << " osd" << *p << " needs primary's backlog to catch up" << dendl;
-      want.erase(p);
-    } else {
-      dout(10) << " osd" << *p << " can catch up with osd" << want[0] << " log" << dendl;
-      p++;
-    }
-  }
-  if (want != acting) {
-    dout(10) << " want up " << want << " != acting " << acting << ", requesting pg_temp change" << dendl;
-    if (want == up) {
-      vector<int> empty;
-      osd->queue_want_pg_temp(info.pgid, empty);
-    } else
-      osd->queue_want_pg_temp(info.pgid, want);
+  if (!choose_acting(newest_update_osd))
     return false;
-  }
-  dout(10) << " want " << want << " (== acting)" << dendl;
 
   // gather log(+missing) from that person!
   if (newest_update_osd != osd->whoami) {
@@ -1179,7 +1202,7 @@ void PG::peer(ObjectStore::Transaction& t,
               map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map)
 {
-  dout(10) << "peer acting is " << acting << dendl;
+  dout(10) << "peer up " << up << ", acting " << acting << dendl;
 
   if (!is_active())
     state_set(PG_STATE_PEERING);
@@ -1190,9 +1213,14 @@ void PG::peer(ObjectStore::Transaction& t,
   dout(10) << "peer prior_set is " << prior_set << dendl;
   
   
-  if (!have_master_log)
+  if (!have_master_log) {
     if (!recover_master_log(query_map))
       return;
+  } else if (up != acting) {
+    // are we done generating backlog(s)?
+    if (!choose_acting(osd->whoami))
+      return;
+  }
 
 
   // -- do i need to generate backlog for any of my peers?
@@ -1392,7 +1420,8 @@ void PG::activate(ObjectStore::Transaction& t,
   clear_prior();
 
   // if we are building a backlog, cancel it!
-  osd->cancel_generate_backlog(this);
+  if (up == acting)
+    osd->cancel_generate_backlog(this);
 
   // write pg info, log
   write_info(t);
