@@ -1,8 +1,8 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include "s3access.h"
-#include "s3rados.h"
+#include "rgw_access.h"
+#include "rgw_rados.h"
 
 #include "include/librados.h"
 

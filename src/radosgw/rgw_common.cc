@@ -1,7 +1,7 @@
 #include <errno.h>
 
-#include "s3common.h"
-#include "s3acl.h"
+#include "rgw_common.h"
+#include "rgw_acl.h"
 
 int parse_time(const char *time_str, time_t *time)
 {

@@ -10,8 +10,8 @@
 #include <fcntl.h>
 #include <sys/xattr.h>
 
-#include "s3access.h"
-#include "s3fs.h"
+#include "rgw_access.h"
+#include "rgw_fs.h"
 
 #include <string>
 #include <iostream>
@@ -24,7 +24,7 @@ struct s3fs_state {
   DIR *dir;
 };
 
-#define DIR_NAME "/tmp/s3"
+#define DIR_NAME "/tmp/radosgw"
 
 int S3FS::list_buckets_init(string& id, S3AccessHandle *handle)
 {

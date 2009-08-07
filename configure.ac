@@ -53,7 +53,7 @@ AS_IF([test "x$with_s3gw" != xno],
                HAVE_LIBFCGI=1
               ],
              [AC_MSG_FAILURE([--with-s3gw was given, but libfcgi test failed])])])
-AM_CONDITIONAL(WITH_S3GW, test "$with_s3gw" = "yes")
+AM_CONDITIONAL(WITH_RADOSGW, test "$with_radosgw" = "yes")
 
 
 # fuse?

@@ -6,11 +6,11 @@
 
 #include "include/base64.h"
 
-#include "s3access.h"
-#include "s3op.h"
-#include "s3rest.h"
-#include "s3acl.h"
-#include "s3user.h"
+#include "rgw_access.h"
+#include "rgw_op.h"
+#include "rgw_rest.h"
+#include "rgw_acl.h"
+#include "rgw_user.h"
 
 using namespace std;
 

@@ -1,7 +1,7 @@
 #include <string.h>
-#include "s3access.h"
-#include "s3fs.h"
-#include "s3rados.h"
+#include "rgw_access.h"
+#include "rgw_fs.h"
+#include "rgw_rados.h"
 
 static S3FS fs_provider;
 static S3Rados rados_provider;

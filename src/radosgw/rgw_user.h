@@ -4,7 +4,7 @@
 #include <string>
 
 #include "include/types.h"
-#include "s3common.h"
+#include "rgw_common.h"
 
 using namespace std;
 

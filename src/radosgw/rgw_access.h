@@ -8,7 +8,7 @@
 
 #include <openssl/md5.h>
 
-#include "s3common.h"
+#include "rgw_common.h"
 
 
 class S3Access {

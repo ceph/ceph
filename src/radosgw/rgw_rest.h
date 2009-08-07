@@ -1,7 +1,7 @@
 #ifndef __S3REST_H
 #define __S3REST_H
 
-#include "s3op.h"
+#include "rgw_op.h"
 
 class S3GetObj_REST : public S3GetObj
 {

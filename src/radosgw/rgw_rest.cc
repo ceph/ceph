@@ -1,8 +1,8 @@
 #include <errno.h>
 
-#include "s3access.h"
-#include "s3op.h"
-#include "s3rest.h"
+#include "rgw_access.h"
+#include "rgw_op.h"
+#include "rgw_rest.h"
 
 #define CGI_PRINTF(stream, format, ...) do { \
    fprintf(stderr, format, __VA_ARGS__); \

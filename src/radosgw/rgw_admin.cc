@@ -11,9 +11,9 @@ using namespace std;
 #include "common/common_init.h"
 
 #include "include/base64.h"
-#include "s3user.h"
-#include "s3access.h"
-#include "s3acl.h"
+#include "rgw_user.h"
+#include "rgw_access.h"
+#include "rgw_acl.h"
 
 
 #define SECRET_KEY_LEN 40

@@ -2,7 +2,7 @@
 #define __S3RADOS_H
 
 #include "include/librados.h"
-#include "s3access.h"
+#include "rgw_access.h"
 
 
 class S3Rados  : public S3Access

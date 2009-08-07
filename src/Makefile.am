@@ -130,18 +130,18 @@ librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
 
-if WITH_S3GW
-libcephs3_la_SOURCES = \
-	s3/s3fs.cc \
-	s3/s3rados.cc \
-	s3/s3acl.cc \
-	s3/s3user.cc \
-	s3/s3access.cc \
-	s3/s3op.cc \
-	s3/s3rest.cc \
-	s3/s3common.cc
-libcephs3_la_CFLAGS = ${AM_CFLAGS}
-lib_LTLIBRARIES += libcephs3.la
+if WITH_RADOSGW
+libradosgw_la_SOURCES = \
+	radosgw/rgw_fs.cc \
+	radosgw/rgw_rados.cc \
+	radosgw/rgw_acl.cc \
+	radosgw/rgw_user.cc \
+	radosgw/rgw_access.cc \
+	radosgw/rgw_op.cc \
+	radosgw/rgw_rest.cc \
+	radosgw/rgw_common.cc
+libradosgw_la_CFLAGS = ${AM_CFLAGS}
+lib_LTLIBRARIES += libradosgw.la
 endif
 
 rados_SOURCES = rados.cc
@@ -156,14 +156,14 @@ radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la
 bin_PROGRAMS += testrados testradospp radosacl
 
-if WITH_S3GW
-s3gw_SOURCES = s3/s3gw.cc
-s3gw_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
-s3admin_SOURCES = s3/s3admin.cc
-s3admin_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
-s3aclparser_SOURCES = s3/s3aclparser.cc
-s3aclparser_LDADD = libcephs3.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
-bin_PROGRAMS += s3gw s3admin s3aclparser
+if WITH_RADOSGW
+rgw_SOURCES = radosgw/rgw_main.cc
+rgw_LDADD = libradosgw.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+rgw_admin_SOURCES = radosgw/rgw_admin.cc
+rgw_admin_LDADD = libradosgw.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+rgw_aclparser_SOURCES = radosgw/rgw_aclparser.cc
+rgw_aclparser_LDADD = libradosgw.la librados.la libcrush.la -lfcgi -lcrypto -lexpat
+bin_PROGRAMS += rgw rgw_admin rgw_aclparser
 endif
 
 ## object classes
@@ -668,14 +668,14 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
-	s3/s3access.h\
-	s3/s3acl.h\
-	s3/s3fs.h\
-	s3/s3rados.h\
-	s3/s3op.h\
-	s3/s3rest.h\
-	s3/s3common.h\
-	s3/s3user.h\
+	radosgw/rgw_access.h\
+	radosgw/rgw_acl.h\
+	radosgw/rgw_fs.h\
+	radosgw/rgw_rados.h\
+	radosgw/rgw_op.h\
+	radosgw/rgw_rest.h\
+	radosgw/rgw_common.h\
+	radosgw/rgw_user.h\
 	sample.ceph.conf
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \

@@ -3,8 +3,8 @@
 
 #include <string>
 
-#include "s3access.h"
-#include "s3user.h"
+#include "rgw_access.h"
+#include "rgw_user.h"
 
 using namespace std;
 

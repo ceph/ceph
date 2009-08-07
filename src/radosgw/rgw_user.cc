@@ -3,11 +3,11 @@
 #include <string>
 #include <map>
 
-#include "s3access.h"
-#include "s3acl.h"
+#include "rgw_access.h"
+#include "rgw_acl.h"
 
 #include "include/types.h"
-#include "s3user.h"
+#include "rgw_user.h"
 
 using namespace std;
 

@@ -5,8 +5,8 @@
 
 #include "include/types.h"
 
-#include "s3acl.h"
-#include "s3user.h"
+#include "rgw_acl.h"
+#include "rgw_user.h"
 
 using namespace std;
 

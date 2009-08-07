@@ -1,7 +1,7 @@
 #ifndef __S3FS_H
 #define __S3FS_H
 
-#include "s3access.h"
+#include "rgw_access.h"
 
 
 class S3FS  : public S3Access
