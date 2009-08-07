@@ -9,6 +9,31 @@
 #include "messenger.h"
 #include "decode.h"
 
+/*
+ * A cluster of MDS (metadata server) daemons is responsible for
+ * managing the file system namespace (the directory hierarchy and
+ * inodes) and for coordinating shared access to storage.  Metadata is
+ * partitioning hierarchically across a number of servers, and that
+ * partition varies over time as the cluster adjusts the distribution
+ * in order to balance load.
+ *
+ * The MDS client is primarily responsible to managing synchronous
+ * metadata requests for operations like open, unlink, and so forth.
+ * If there is a MDS failure, we find out about it when we (possibly
+ * request and) receive a new MDS map, and can resubmit affected
+ * requests.
+ *
+ * For the most part, though, we take advantage of a lossless
+ * communications channel to the MDS, and do not need to worry about
+ * timing out or resubmitting requests.
+ *
+ * We maintain a stateful "session" with each MDS we interact with.
+ * Within each session, we sent periodic heartbeat messages to ensure
+ * any capabilities or leases we have been issues remain valid.  If
+ * the session times out and goes stale, our leases and capabilities
+ * are no longer valid.
+ */
+
 static void __wake_requests(struct ceph_mds_client *mdsc,
 			    struct list_head *head);
 
@@ -236,6 +261,7 @@ static const char *session_state_name(int s)
 	case CEPH_MDS_SESSION_NEW: return "new";
 	case CEPH_MDS_SESSION_OPENING: return "opening";
 	case CEPH_MDS_SESSION_OPEN: return "open";
+	case CEPH_MDS_SESSION_HUNG: return "hung";
 	case CEPH_MDS_SESSION_CLOSING: return "closing";
 	case CEPH_MDS_SESSION_RECONNECTING: return "reconnecting";
 	default: return "???";
@@ -244,7 +270,7 @@ static const char *session_state_name(int s)
 
 static struct ceph_mds_session *get_session(struct ceph_mds_session *s)
 {
-	dout("get_session %p %d -> %d\n", s,
+	dout("mdsc get_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)+1);
 	atomic_inc(&s->s_ref);
 	return s;
@@ -252,7 +278,7 @@ static struct ceph_mds_session *get_session(struct ceph_mds_session *s)
 
 void ceph_put_mds_session(struct ceph_mds_session *s)
 {
-	dout("put_session %p %d -> %d\n", s,
+	dout("mdsc put_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref))
 		kfree(s);
@@ -275,6 +301,12 @@ struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *mdsc,
 	return session;
 }
 
+static bool __have_session(struct ceph_mds_client *mdsc, int mds)
+{
+	if (mds >= mdsc->max_sessions)
+		return false;
+	return mdsc->sessions[mds];
+}
 
 /*
  * create+register a new session for given mds.
@@ -304,7 +336,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	INIT_LIST_HEAD(&s->s_cap_releases);
 	INIT_LIST_HEAD(&s->s_cap_releases_done);
 	INIT_LIST_HEAD(&s->s_cap_flushing);
-	s->s_cap_flush_tid = 0;
+	INIT_LIST_HEAD(&s->s_cap_snaps_flushing);
 
 	dout("register_session mds%d\n", mds);
 	if (mds >= mdsc->max_sessions) {
@@ -338,7 +370,11 @@ static void unregister_session(struct ceph_mds_client *mdsc, int mds)
 	mdsc->sessions[mds] = NULL;
 }
 
-/* drop session refs in request */
+/*
+ * drop session refs in request.
+ *
+ * should be last ref, or hold mdsc->mutex
+ */
 static void put_request_sessions(struct ceph_mds_request *req)
 {
 	if (req->r_session) {
@@ -353,7 +389,7 @@ static void put_request_sessions(struct ceph_mds_request *req)
 
 void ceph_mdsc_put_request(struct ceph_mds_request *req)
 {
-	dout("put_request %p %d -> %d\n", req,
+	dout("mdsc put_request %p %d -> %d\n", req,
 	     atomic_read(&req->r_ref), atomic_read(&req->r_ref)-1);
 	if (atomic_dec_and_test(&req->r_ref)) {
 		if (req->r_request)
@@ -403,13 +439,14 @@ static struct ceph_mds_request *__lookup_request(struct ceph_mds_client *mdsc,
 }
 
 /*
- * Register an in-flight request, and assign a tid in msg request header.
+ * Register an in-flight request, and assign a tid.  Link to directory
+ * are modifying (if any).
  *
  * Called under mdsc->mutex.
  */
 static void __register_request(struct ceph_mds_client *mdsc,
 			       struct ceph_mds_request *req,
-			       struct inode *listener)
+			       struct inode *dir)
 {
 	req->r_tid = ++mdsc->last_tid;
 	if (req->r_num_caps)
@@ -418,11 +455,11 @@ static void __register_request(struct ceph_mds_client *mdsc,
 	ceph_mdsc_get_request(req);
 	radix_tree_insert(&mdsc->request_tree, req->r_tid, (void *)req);
 
-	if (listener) {
-		struct ceph_inode_info *ci = ceph_inode(listener);
+	if (dir) {
+		struct ceph_inode_info *ci = ceph_inode(dir);
 
 		spin_lock(&ci->i_unsafe_lock);
-		req->r_unsafe_dir = listener;
+		req->r_unsafe_dir = dir;
 		list_add_tail(&req->r_unsafe_dir_item, &ci->i_unsafe_dirops);
 		spin_unlock(&ci->i_unsafe_lock);
 	}
@@ -444,29 +481,24 @@ static void __unregister_request(struct ceph_mds_client *mdsc,
 	}
 }
 
-static bool __have_session(struct ceph_mds_client *mdsc, int mds)
-{
-	if (mds >= mdsc->max_sessions)
-		return false;
-	return mdsc->sessions[mds];
-}
-
 /*
- * Choose mds to send request to next.  If there is a hint set in
- * the request (e.g., due to a prior forward hint from the mds), use
- * that.
+ * Choose mds to send request to next.  If there is a hint set in the
+ * request (e.g., due to a prior forward hint from the mds), use that.
+ * Otherwise, consult frag tree and/or caps to identify the
+ * appropriate mds.  If all else fails, choose randomly.
  *
  * Called under mdsc->mutex.
  */
 static int __choose_mds(struct ceph_mds_client *mdsc,
 			struct ceph_mds_request *req)
 {
+	struct inode *inode;
+	struct ceph_inode_info *ci;
+	struct ceph_cap *cap;
+	int mode = req->r_direct_mode;
 	int mds = -1;
 	u32 hash = req->r_direct_hash;
 	bool is_hash = req->r_direct_is_hash;
-	struct dentry *dentry = req->r_dentry;
-	struct ceph_inode_info *ci;
-	int mode = req->r_direct_mode;
 
 	/*
 	 * is there a specific mds we should try?  ignore hint if we have
@@ -483,65 +515,77 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	if (mode == USE_RANDOM_MDS)
 		goto random;
 
-	/*
-	 * try to find an appropriate mds to contact based on the
-	 * given dentry.  walk up the tree until we find delegation info
-	 * in the i_fragtree.
-	 *
-	 * if is_hash is true, direct request at the appropriate directory
-	 * fragment (as with a readdir on a fragmented directory).
-	 */
-	while (dentry) {
-		if (is_hash && dentry->d_inode &&
-		    S_ISDIR(dentry->d_inode->i_mode)) {
-			struct ceph_inode_frag frag;
-			int found;
+	inode = 0;
+	if (req->r_inode) {
+		inode = req->r_inode;
+	} else if (req->r_dentry) {
+		if (req->r_dentry->d_inode) {
+			inode = req->r_dentry->d_inode;
+		} else {
+			inode = req->r_dentry->d_parent->d_inode;
+			hash = req->r_dentry->d_name.hash;
+			is_hash = true;
+		}
+	}
+	dout("__choose_mds %p is_hash=%d (%d) mode %d\n", inode, (int)is_hash,
+	     (int)hash, mode);
+	if (!inode)
+		goto random;
+	ci = ceph_inode(inode);
 
-			ci = ceph_inode(dentry->d_inode);
-			ceph_choose_frag(ci, hash, &frag, &found);
-			if (found) {
-				if (mode == USE_ANY_MDS && frag.ndist > 0) {
-					u8 r;
+	if (is_hash && S_ISDIR(inode->i_mode)) {
+		struct ceph_inode_frag frag;
+		int found;
 
-					/* choose a random replica */
-					get_random_bytes(&r, 1);
-					r %= frag.ndist;
-					mds = frag.dist[r];
-					dout("choose_mds %p %llx.%llx "
-					     "frag %u mds%d (%d/%d)\n",
-					     dentry->d_inode,
-					     ceph_vinop(&ci->vfs_inode),
-					     frag.frag, frag.mds,
-					     (int)r, frag.ndist);
-					return mds;
-				}
-				/* since the more deeply nested item wasn't
-				 * known to be replicated, then we want to
-				 * look for the authoritative mds. */
-				mode = USE_AUTH_MDS;
-				if (frag.mds >= 0) {
-					/* choose auth mds */
-					mds = frag.mds;
-					dout("choose_mds %p %llx.%llx "
-					     "frag %u mds%d (auth)\n",
-					     dentry->d_inode,
-					     ceph_vinop(&ci->vfs_inode),
-					     frag.frag, mds);
-					return mds;
-				}
+		ceph_choose_frag(ci, hash, &frag, &found);
+		if (found) {
+			if (mode == USE_ANY_MDS && frag.ndist > 0) {
+				u8 r;
+
+				/* choose a random replica */
+				get_random_bytes(&r, 1);
+				r %= frag.ndist;
+				mds = frag.dist[r];
+				dout("choose_mds %p %llx.%llx "
+				     "frag %u mds%d (%d/%d)\n",
+				     inode, ceph_vinop(inode),
+				     frag.frag, frag.mds,
+				     (int)r, frag.ndist);
+				return mds;
+			}
+
+			/* since this file/dir wasn't known to be
+			 * replicated, then we want to look for the
+			 * authoritative mds. */
+			mode = USE_AUTH_MDS;
+			if (frag.mds >= 0) {
+				/* choose auth mds */
+				mds = frag.mds;
+				dout("choose_mds %p %llx.%llx "
+				     "frag %u mds%d (auth)\n",
+				     inode, ceph_vinop(inode), frag.frag, mds);
+				return mds;
 			}
 		}
-		if (IS_ROOT(dentry))
-			break;
-
-		/* move up the hierarchy, but direct request based on the hash
-		 * for the child's dentry name */
-		hash = dentry->d_name.hash;
-		is_hash = true;
-		dentry = dentry->d_parent;
 	}
 
-	/* ok, just pick one at random */
+	spin_lock(&inode->i_lock);
+	cap = 0;
+	if (mode == USE_AUTH_MDS)
+		cap = ci->i_auth_cap;
+	if (!cap && !RB_EMPTY_ROOT(&ci->i_caps))
+		cap = rb_entry(rb_first(&ci->i_caps), struct ceph_cap, ci_node);
+	if (!cap) {
+		spin_unlock(&inode->i_lock);
+		goto random;
+	}
+	mds = cap->session->s_mds;
+	dout("choose_mds %p %llx.%llx mds%d (%scap %p)\n",
+	     inode, ceph_vinop(inode), mds, 
+	     cap == ci->i_auth_cap ? "auth " : "", cap);
+	spin_unlock(&inode->i_lock);
+	return mds;
+
 random:
 	mds = ceph_mdsmap_get_random_mds(mdsc->mdsmap);
 	dout("choose_mds chose random mds%d\n", mds);
@@ -599,6 +643,10 @@ static int __open_session(struct ceph_mds_client *mdsc,
 out:
 	return 0;
 }
+
+/*
+ * session caps
+ */
 
 /*
  * Free preallocated cap messages assigned to this session
@@ -770,7 +818,9 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 		wake_up_session_caps(session);
 }
 
-
+/*
+ * send a session close request
+ */
 static int request_close_session(struct ceph_mds_client *mdsc,
 				 struct ceph_mds_session *session)
 {
@@ -937,6 +987,56 @@ out_unlocked:
 }
 
 /*
+ * flush all dirty inode data to disk.
+ *
+ * returns true if we've flushed through want_flush_seq
+ */
+static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
+{
+	int mds, ret = 1;
+
+	dout("check_cap_flush want %lld\n", want_flush_seq);
+	mutex_lock(&mdsc->mutex);
+	for (mds = 0; ret && mds < mdsc->max_sessions; mds++) {
+		struct ceph_mds_session *session = mdsc->sessions[mds];
+
+		if (!session)
+			continue;
+		get_session(session);
+		mutex_unlock(&mdsc->mutex);
+
+		mutex_lock(&session->s_mutex);
+		if (!list_empty(&session->s_cap_flushing)) {
+			struct ceph_inode_info *ci =
+				list_entry(session->s_cap_flushing.next,
+					   struct ceph_inode_info,
+					   i_flushing_item);
+			struct inode *inode = &ci->vfs_inode;
+
+			spin_lock(&inode->i_lock);
+			if (ci->i_cap_flush_seq <= want_flush_seq) {
+				dout("check_cap_flush still flushing %p "
+				     "seq %lld <= %lld to mds%d\n", inode,
+				     ci->i_cap_flush_seq, want_flush_seq,
+				     session->s_mds);
+				ret = 0;
+			}
+			spin_unlock(&inode->i_lock);
+		}
+		mutex_unlock(&session->s_mutex);
+		ceph_put_mds_session(session);
+
+		if (!ret)
+			return ret;
+		mutex_lock(&mdsc->mutex);
+	}
+
+	mutex_unlock(&mdsc->mutex);
+	dout("check_cap_flush ok, flushed thru %lld\n", want_flush_seq);
+	return ret;
+}
+
+/*
  * called under s_mutex
  */
 static void send_cap_releases(struct ceph_mds_client *mdsc,
@@ -959,6 +1059,10 @@ static void send_cap_releases(struct ceph_mds_client *mdsc,
 	}
 	spin_unlock(&session->s_cap_lock);
 }
+
+/*
+ * requests
+ */
 
 /*
  * Create an mds request.
@@ -1364,7 +1468,8 @@ static int __do_request(struct ceph_mds_client *mdsc,
 		session = register_session(mdsc, mds);
 	dout("do_request mds%d session %p state %s\n", mds, session,
 	     session_state_name(session->s_state));
-	if (session->s_state != CEPH_MDS_SESSION_OPEN) {
+	if (session->s_state != CEPH_MDS_SESSION_OPEN &&
+	    session->s_state != CEPH_MDS_SESSION_HUNG) {
 		if (session->s_state == CEPH_MDS_SESSION_NEW ||
 		    session->s_state == CEPH_MDS_SESSION_CLOSING)
 			__open_session(mdsc, session);
@@ -1458,7 +1563,7 @@ void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
  * session setup, forwarding, retry details.
  */
 int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
-			 struct inode *listener,
+			 struct inode *dir,
 			 struct ceph_mds_request *req)
 {
 	int err;
@@ -1476,7 +1581,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 
 	/* issue */
 	mutex_lock(&mdsc->mutex);
-	__register_request(mdsc, req, listener);
+	__register_request(mdsc, req, dir);
 	__do_request(mdsc, req);
 
 	/* wait */
@@ -1623,9 +1728,12 @@ void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 		req->r_direct_mode = USE_AUTH_MDS;
 		req->r_num_stale++;
 		if (req->r_num_stale <= 2) {
+			mutex_unlock(&req->r_session->s_mutex);
+			mutex_lock(&mdsc->mutex);
 			put_request_sessions(req);
 			__do_request(mdsc, req);
-			goto out_session_unlock;
+			mutex_unlock(&mdsc->mutex);
+			goto out;
 		}
 	} else {
 		req->r_num_stale = 0;
@@ -1660,7 +1768,6 @@ out_err:
 	}
 
 	add_cap_releases(mdsc, req->r_session, -1);
-out_session_unlock:
 	mutex_unlock(&req->r_session->s_mutex);
 
 	/* kick calling process */
@@ -1686,7 +1793,7 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 	int err = -EINVAL;
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
-	int from_mds;
+	int from_mds, state;
 
 	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
 		goto bad;
@@ -1705,12 +1812,14 @@ void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
 		goto out;  /* dup reply? */
 	}
 
+	state = mdsc->sessions[next_mds]->s_state;
 	if (fwd_seq <= req->r_num_fwd) {
 		dout("forward %llu to mds%d - old seq %d <= %d\n",
 		     tid, next_mds, req->r_num_fwd, fwd_seq);
 	} else if (!must_resend &&
 		   __have_session(mdsc, next_mds) &&
-		   mdsc->sessions[next_mds]->s_state == CEPH_MDS_SESSION_OPEN) {
+		   (state == CEPH_MDS_SESSION_OPEN ||
+		    state == CEPH_MDS_SESSION_HUNG)) {
 		/* yes.  adjust our sessions, but that's all; the old mds
 		 * forwarded our message for us. */
 		dout("forward %llu to mds%d (mds%d fwded)\n", tid, next_mds,
@@ -1781,6 +1890,12 @@ void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
 	dout("handle_session mds%d %s %p state %s seq %llu\n",
 	     mds, ceph_session_op_name(op), session,
 	     session_state_name(session->s_state), seq);
+
+	if (session->s_state == CEPH_MDS_SESSION_HUNG) {
+		session->s_state = CEPH_MDS_SESSION_OPEN;
+		pr_info("ceph mds%d session came back\n", session->s_mds);
+	}
+
 	switch (op) {
 	case CEPH_SESSION_OPEN:
 		session->s_state = CEPH_MDS_SESSION_OPEN;
@@ -1972,9 +2087,8 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 
 		/* estimate needed space */
 		len += session->s_nr_caps *
-			sizeof(struct ceph_mds_cap_reconnect);
-		len += session->s_nr_caps * (100); /* guess! */
-		dout("estimating i need %d bytes for %d caps\n",
+			(100+sizeof(struct ceph_mds_cap_reconnect));
+		pr_info("estimating i need %d bytes for %d caps\n",
 		     len, session->s_nr_caps);
 	} else {
 		dout("no session for mds%d, will send short reconnect\n",
@@ -2078,8 +2192,8 @@ needmore:
 	 * factor in snap realms, but it's safe.
 	 */
 	num_caps += num_realms;
-	newlen = (len * (session->s_nr_caps+3)) / (num_caps + 1);
-	dout("i guessed %d, and did %d of %d caps, retrying with %d\n",
+	newlen = len * ((100 * (session->s_nr_caps+3)) / (num_caps + 1)) / 100;
+	pr_info("i guessed %d, and did %d of %d caps, retrying with %d\n",
 	     len, num_caps, session->s_nr_caps, newlen);
 	len = newlen;
 	ceph_msg_put(reply);
@@ -2382,6 +2496,29 @@ void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc, struct inode *inode,
 				 CEPH_MDS_LEASE_RELEASE, seq);
 }
 
+/*
+ * drop all leases (and dentry refs) in preparation for umount
+ */
+static void drop_leases(struct ceph_mds_client *mdsc)
+{
+	int i;
+
+	dout("drop_leases\n");
+	mutex_lock(&mdsc->mutex);
+	for (i = 0; i < mdsc->max_sessions; i++) {
+		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
+		if (!s)
+			continue;
+		mutex_unlock(&mdsc->mutex);
+		mutex_lock(&s->s_mutex);
+		mutex_unlock(&s->s_mutex);
+		ceph_put_mds_session(s);
+		mutex_lock(&mdsc->mutex);
+	}
+	mutex_unlock(&mdsc->mutex);
+}
+
+
 
 /*
  * delayed work -- periodically trim expired leases, renew caps with mds
@@ -2402,7 +2539,7 @@ static void delayed_work(struct work_struct *work)
 	int renew_caps;
 	u32 want_map = 0;
 
-	dout("delayed_work\n");
+	dout("mdsc delayed_work\n");
 	ceph_check_delayed_caps(mdsc, 0);
 
 	mutex_lock(&mdsc->mutex);
@@ -2424,8 +2561,11 @@ static void delayed_work(struct work_struct *work)
 			continue;
 		}
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
-			pr_info("ceph mds%d session probably timed out, "
-				"requesting mds map\n", s->s_mds);
+			if (s->s_state == CEPH_MDS_SESSION_OPEN) {
+				s->s_state = CEPH_MDS_SESSION_HUNG;
+				pr_info("ceph mds%d session probably timed out,"
+					" requesting mds map\n", s->s_mds);
+			}
 			want_map = mdsc->mdsmap->m_epoch + 1;
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
@@ -2487,28 +2627,6 @@ void ceph_mdsc_init(struct ceph_mds_client *mdsc, struct ceph_client *client)
 }
 
 /*
- * drop all leases (and dentry refs) in preparation for umount
- */
-static void drop_leases(struct ceph_mds_client *mdsc)
-{
-	int i;
-
-	dout("drop_leases\n");
-	mutex_lock(&mdsc->mutex);
-	for (i = 0; i < mdsc->max_sessions; i++) {
-		struct ceph_mds_session *s = __ceph_lookup_mds_session(mdsc, i);
-		if (!s)
-			continue;
-		mutex_unlock(&mdsc->mutex);
-		mutex_lock(&s->s_mutex);
-		mutex_unlock(&s->s_mutex);
-		ceph_put_mds_session(s);
-		mutex_lock(&mdsc->mutex);
-	}
-	mutex_unlock(&mdsc->mutex);
-}
-
-/*
  * Wait for safe replies on open mds requests.  If we time out, drop
  * all requests from the tree to avoid dangling dentry refs.
  */
@@ -2550,56 +2668,6 @@ void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc)
 	drop_leases(mdsc);
 	ceph_check_delayed_caps(mdsc, 1);
 	wait_requests(mdsc);
-}
-
-/*
- * sync - flush all dirty inode data to disk.
- *
- * returns true if we've flushed through want_flush_seq
- */
-static int check_cap_flush(struct ceph_mds_client *mdsc, u64 want_flush_seq)
-{
-	int mds, ret = 1;
-
-	dout("check_cap_flush want %lld\n", want_flush_seq);
-	mutex_lock(&mdsc->mutex);
-	for (mds = 0; ret && mds < mdsc->max_sessions; mds++) {
-		struct ceph_mds_session *session = mdsc->sessions[mds];
-
-		if (!session)
-			continue;
-		get_session(session);
-		mutex_unlock(&mdsc->mutex);
-
-		mutex_lock(&session->s_mutex);
-		if (!list_empty(&session->s_cap_flushing)) {
-			struct ceph_inode_info *ci =
-				list_entry(session->s_cap_flushing.next,
-					   struct ceph_inode_info,
-					   i_flushing_item);
-			struct inode *inode = &ci->vfs_inode;
-
-			spin_lock(&inode->i_lock);
-			if (ci->i_cap_flush_seq <= want_flush_seq) {
-				dout("check_cap_flush still flushing %p "
-				     "seq %lld <= %lld to mds%d\n", inode,
-				     ci->i_cap_flush_seq, want_flush_seq,
-				     session->s_mds);
-				ret = 0;
-			}
-			spin_unlock(&inode->i_lock);
-		}
-		mutex_unlock(&session->s_mutex);
-		ceph_put_mds_session(session);
-
-		if (!ret)
-			return ret;
-		mutex_lock(&mdsc->mutex);
-	}
-
-	mutex_unlock(&mdsc->mutex);
-	dout("check_cap_flush ok, flushed thru %lld\n", want_flush_seq);
-	return ret;
 }
 
 /*

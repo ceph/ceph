@@ -794,7 +794,7 @@ void MDCache::try_subtree_merge_at(CDir *dir)
     //   hit the disk before the relevant dirfrags ever close)
     if (dir->inode->is_auth() &&
 	dir->inode->can_auth_pin() &&
-	(mds->is_active() || mds->is_stopping())) {
+	(mds->is_clientreplay() || mds->is_active() || mds->is_stopping())) {
       CInode *in = dir->inode;
       dout(10) << "try_subtree_merge_at journaling merged bound " << *in << dendl;
       
@@ -1989,6 +1989,32 @@ ESubtreeMap *MDCache::create_subtree_map()
 }
 
 
+void MDCache::resolve_start()
+{
+  dout(10) << "resolve_start" << dendl;
+
+  if (mds->mdsmap->get_root() != mds->whoami) {
+    // if we don't have the root dir, adjust it to UNKNOWN.  during
+    // resolve we want mds0 to explicit claim the portion of it that
+    // it owns, so that anything beyond its bounds get left as
+    // unknown.
+    CDir *rootdir = root->get_dirfrag(frag_t());
+    adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
+  }
+
+  set<int> who;
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_CLIENTREPLAY);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
+  mds->mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
+  for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
+    if (*p == mds->whoami)
+      continue;
+    send_resolve(*p);  // now.
+  }
+}
+
 void MDCache::send_resolve(int who)
 {
   if (migrator->is_importing() || 
@@ -2286,7 +2312,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
   }
 
   // am i a surviving ambiguous importer?
-  if (mds->is_active() || mds->is_stopping()) {
+  if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     // check for any import success/failure (from this node)
     map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
     while (p != my_ambiguous_imports.end()) {
@@ -2605,6 +2631,9 @@ void MDCache::recalc_auth_bits()
 {
   dout(7) << "recalc_auth_bits" << dendl;
 
+  if (mds->whoami != mds->mdsmap->get_root())
+    root->state_clear(CInode::STATE_AUTH);
+
   set<CInode*> subtree_inodes;
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -2873,6 +2902,7 @@ void MDCache::rejoin_send_rejoins()
     rejoin_ack_gather.insert(p->first);
     mds->send_message_mds(p->second, p->first);
   }
+  rejoin_ack_gather.insert(mds->whoami);   // we need to complete rejoin_gather_finish, too
 
   // nothing?
   if (mds->is_rejoin() && rejoins.empty()) {
@@ -3017,7 +3047,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   MMDSCacheRejoin *ack = 0;      // if survivor
   bool survivor = false;  // am i a survivor?
   
-  if (mds->is_active() || mds->is_stopping()) {
+  if (mds->is_clientreplay() || mds->is_active() || mds->is_stopping()) {
     survivor = true;
     dout(10) << "i am a surivivor, and will ack immediately" << dendl;
     ack = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
@@ -3411,13 +3441,13 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 		     << " on " << *in << dendl;
 	  } 
 	  
-	  // scatterlock?
-	  if (is.filelock == LOCK_MIX ||
-	      is.filelock == LOCK_MIX_LOCK)  // replica still has wrlocks
-	    in->filelock.set_state(LOCK_MIX);
-	  if (is.nestlock == LOCK_MIX ||
-	      is.nestlock == LOCK_MIX_LOCK)  // replica still has wrlocks
-	    in->nestlock.set_state(LOCK_MIX);
+	  // scatterlocks?
+	  //  infer state from replica state:
+	  //   * go to MIX if they might have wrlocks
+	  //   * go to LOCK if they are LOCK (just bc identify_files_to_recover might start twiddling filelock)
+	  in->filelock.infer_state_from_strong_rejoin(is.filelock, true);  // maybe also go to LOCK
+	  in->nestlock.infer_state_from_strong_rejoin(is.nestlock, false);
+	  in->dirfragtreelock.infer_state_from_strong_rejoin(is.dftlock, false);
 	  
 	  // auth pin?
 	  if (strong->authpinned_inodes.count(in->vino())) {
@@ -3761,8 +3791,11 @@ void MDCache::rejoin_gather_finish()
   process_imported_caps();
   process_reconnected_caps();
   identify_files_to_recover();
-
   rejoin_send_acks();
+  
+  // signal completion of fetches, rejoin_gather_finish, etc.
+  assert(rejoin_ack_gather.count(mds->whoami));
+  rejoin_ack_gather.erase(mds->whoami);
 
   // did we already get our acks too?
   // this happens when the rejoin_gather has to wait on a MISSING/FULL exchange.

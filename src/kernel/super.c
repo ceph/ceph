@@ -155,6 +155,7 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 struct kmem_cache *ceph_inode_cachep;
 struct kmem_cache *ceph_cap_cachep;
 struct kmem_cache *ceph_dentry_cachep;
+struct kmem_cache *ceph_file_cachep;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
 static void ceph_inode_init_once(void *foo)
@@ -177,23 +178,33 @@ static int init_caches(void)
 		return -ENOMEM;
 
 	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
-					      sizeof(struct ceph_cap),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      NULL);
+					    sizeof(struct ceph_cap),
+					    0, (SLAB_RECLAIM_ACCOUNT|
+						SLAB_MEM_SPREAD),
+					    NULL);
 	if (ceph_cap_cachep == NULL)
 		goto bad_cap;
 
 	ceph_dentry_cachep = kmem_cache_create("ceph_dentry_cache",
-					      sizeof(struct ceph_dentry_info),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      NULL);
+					       sizeof(struct ceph_dentry_info),
+					       0, (SLAB_RECLAIM_ACCOUNT|
+						   SLAB_MEM_SPREAD),
+					       NULL);
 	if (ceph_dentry_cachep == NULL)
 		goto bad_dentry;
 
+	ceph_file_cachep = kmem_cache_create("ceph_file_cache",
+					     sizeof(struct ceph_file_info),
+					     0, (SLAB_RECLAIM_ACCOUNT|
+						 SLAB_MEM_SPREAD),
+					     NULL);
+	if (ceph_file_cachep == NULL)
+		goto bad_file;
+
 	return 0;
 
+bad_file:
+	kmem_cache_destroy(ceph_dentry_cachep);
 bad_dentry:
 	kmem_cache_destroy(ceph_cap_cachep);
 bad_cap:
@@ -206,6 +217,7 @@ static void destroy_caches(void)
 	kmem_cache_destroy(ceph_inode_cachep);
 	kmem_cache_destroy(ceph_cap_cachep);
 	kmem_cache_destroy(ceph_dentry_cachep);
+	kmem_cache_destroy(ceph_file_cachep);
 }
 
 
@@ -669,6 +681,7 @@ static struct ceph_client *ceph_create_client(void)
 	client->signed_ticket = NULL;
 	client->signed_ticket_len = 0;
 
+	err = -ENOMEM;
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
 		goto fail;
@@ -682,14 +695,15 @@ static struct ceph_client *ceph_create_client(void)
 	/* subsystems */
 	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
-		return ERR_PTR(err);
+		goto fail;
+	err = ceph_osdc_init(&client->osdc, client);
+	if (err < 0)
+		goto fail;
 	ceph_mdsc_init(&client->mdsc, client);
-	ceph_osdc_init(&client->osdc, client);
-
 	return client;
 
 fail:
-	return ERR_PTR(-ENOMEM);
+	return ERR_PTR(err);
 }
 
 static void ceph_destroy_client(struct ceph_client *client)
@@ -712,6 +726,8 @@ static void ceph_destroy_client(struct ceph_client *client)
 		destroy_workqueue(client->trunc_wq);
 	if (client->msgr)
 		ceph_messenger_destroy(client->msgr);
+	if (client->wb_pagevec_pool)
+		mempool_destroy(client->wb_pagevec_pool);
 	kfree(client);
 	dout("destroy_client %p done\n", client);
 }
@@ -962,6 +978,13 @@ static int ceph_set_super(struct super_block *s, void *data)
 	s->s_export_op = &ceph_export_ops;
 
 	s->s_time_gran = 1000;  /* 1000 ns == 1 us */
+
+	/* set up mempools */
+	ret = -ENOMEM;
+	client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
+			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
+	if (!client->wb_pagevec_pool)
+		goto fail;
 
 	ret = set_anon_super(s, NULL);  /* what is that second arg for? */
 	if (ret != 0)

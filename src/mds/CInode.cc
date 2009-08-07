@@ -1534,7 +1534,8 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
   i->ctime.encode_timeval(&e.ctime);
   
   dout(20) << " pfile " << pfile << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
-	   << " ctime " << i->ctime << dendl;
+	   << " ctime " << i->ctime
+	   << " valid=" << valid << dendl;
 
   i = pfile ? pi:oi;
   e.layout = i->layout;
@@ -1589,7 +1590,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     e.cap.mseq = 0;
     e.cap.realm = 0;
   } else {
-    if (!no_caps && valid && !cap && is_auth()) {
+    if (!no_caps && valid && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, find_snaprealm());
       if (is_auth())

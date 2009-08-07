@@ -7,10 +7,10 @@
 #include "mds_client.h"
 
 /*
- * Implement /debug/ceph fun
+ * Implement /sys/kernel/debug/ceph fun
  *
- * /debug/ceph/caps_reservation  - expose caps reservation stats
- * /debug/ceph/client*  - an instance of the ceph client
+ * /sys/kernel/debug/ceph/caps_reservation  - expose caps reservation stats
+ * /sys/kernel/debug/ceph/client*  - an instance of the ceph client
  *      .../fsid        - mounted fsid
  *      .../osdmap      - current osdmap
  *      .../mdsmap      - current mdsmap
@@ -164,10 +164,14 @@ static int mdsc_show(struct seq_file *s, void *p)
 			break;
 		nexttid = req->r_tid + 1;
 
-		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
+		if (req->r_request) {
+			seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
 			   req->r_tid,
 			   IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
 			   ENTITY_NAME(req->r_request->hdr.dst.name));
+		} else {
+			seq_printf(s, "%lld\t(no request)\t", req->r_tid);
+		}
 
 		seq_printf(s, "%s", ceph_mds_op_name(req->r_op));
 
@@ -220,27 +224,22 @@ static int mdsc_show(struct seq_file *s, void *p)
 	return 0;
 }
 
-static int osdc_show(struct seq_file *s, void *p)
+static int osdc_show(struct seq_file *s, void *pp)
 {
 	struct ceph_client *client = s->private;
 	struct ceph_osd_client *osdc = &client->osdc;
-	u64 nexttid = 0;
+	struct rb_node *p;
 
 	mutex_lock(&osdc->request_mutex);
-	while (nexttid < osdc->last_tid) {
+	for (p = rb_first(&osdc->requests); p; p = rb_next(p)) {
 		struct ceph_osd_request *req;
 		struct ceph_osd_request_head *head;
 		struct ceph_osd_op *op;
 		int num_ops;
 		int opcode, olen;
-		int got, i;
+		int i;
 
-		got = radix_tree_gang_lookup(&osdc->request_tree,
-					     (void **)&req, nexttid, 1);
-		if (got == 0)
-			break;
-
-		nexttid = req->r_tid + 1;
+		req = rb_entry(p, struct ceph_osd_request, r_node);
 
 		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
 			   req->r_tid,

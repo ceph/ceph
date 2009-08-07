@@ -159,8 +159,6 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
     return;
   }
 
-  dout(5) << "submit_entry " << journaler->get_write_pos() << " : " << *le << dendl;
-  
   // let the event register itself in the segment
   assert(!segments.empty());
   le->_segment = segments.rbegin()->second;
@@ -175,7 +173,10 @@ void MDLog::submit_entry( LogEvent *le, Context *c, bool wait_safe )
     bufferlist bl;
     ::encode(le->_type, bl);
     le->encode(bl);
-    
+
+    dout(5) << "submit_entry " << journaler->get_write_pos() << "~" << bl.length()
+	    << " : " << *le << dendl;
+      
     // journal it.
     journaler->append_entry(bl);  // bl is destroyed.
   }
@@ -470,9 +471,7 @@ struct C_MDL_ReplayTruncated : public Context {
   MDLog *mdl;
   C_MDL_ReplayTruncated(MDLog *l) : mdl(l) {}
   void finish(int r) {
-    mdl->mds->mds_lock.Lock();
     mdl->_replay_truncated();
-    mdl->mds->mds_lock.Unlock();
   }
 };
 
@@ -526,10 +525,10 @@ void MDLog::_replay_thread()
 
     // have we seen an import map yet?
     if (segments.empty()) {
-      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
+      dout(10) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos() 
 	       << " -- waiting for subtree_map.  (skipping " << *le << ")" << dendl;
     } else {
-      dout(10) << "_replay " << pos << " / " << journaler->get_write_pos() 
+      dout(10) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos() 
 	       << " : " << *le << dendl;
       le->_segment = get_current_segment();    // replay may need this
       le->_segment->num_events++;

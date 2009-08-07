@@ -185,6 +185,8 @@ struct ceph_file_layout {
 	((__s32)le32_to_cpu((l).fl_object_stripe_unit))
 #define ceph_file_layout_pg_preferred(l) \
 	((__s32)le32_to_cpu((l).fl_pg_preferred))
+#define ceph_file_layout_pg_pool(l) \
+        ((__s32)le32_to_cpu((l).fl_pg_pool))
 
 #define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
 					  le32_to_cpu((l).fl_stripe_count))
@@ -315,16 +317,6 @@ struct ceph_client_unmount {
 } __attribute__ ((packed));
 
 /*
- * client authentication ticket
- */
-struct ceph_client_ticket {
-	__u32 client;
-	struct ceph_entity_addr addr;
-	struct ceph_timespec created, expires;
-	__u32 flags;
-} __attribute__ ((packed));
-
-/*
  * mds states
  *   > 0 -> in
  *  <= 0 -> out
@@ -436,6 +428,8 @@ enum {
 	CEPH_MDS_OP_LOOKUP     = 0x00100,
 	CEPH_MDS_OP_GETATTR    = 0x00101,
 	CEPH_MDS_OP_LOOKUPHASH = 0x00102,
+	CEPH_MDS_OP_LOOKUPPARENT = 0x00103,
+
 	CEPH_MDS_OP_SETXATTR   = 0x01105,
 	CEPH_MDS_OP_RMXATTR    = 0x01106,
 	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
@@ -464,6 +458,7 @@ static inline const char *ceph_mds_op_name(int op)
 	switch (op) {
 	case CEPH_MDS_OP_LOOKUP:  return "lookup";
 	case CEPH_MDS_OP_LOOKUPHASH:  return "lookuphash";
+	case CEPH_MDS_OP_LOOKUPPARENT:  return "lookupparent";
 	case CEPH_MDS_OP_GETATTR:  return "getattr";
 	case CEPH_MDS_OP_SETXATTR: return "setxattr";
 	case CEPH_MDS_OP_SETATTR: return "setattr";
@@ -667,6 +662,8 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_SXATTR     6
 #define CEPH_CAP_SFILE      8   /* goes at the end (uses >2 cap bits) */
 
+#define CEPH_CAP_BITS       16
+
 /* composed values */
 #define CEPH_CAP_AUTH_SHARED  (CEPH_CAP_GSHARED  << CEPH_CAP_SAUTH)
 #define CEPH_CAP_AUTH_EXCL     (CEPH_CAP_GEXCL     << CEPH_CAP_SAUTH)
@@ -714,7 +711,8 @@ static inline int ceph_flags_to_mode(int flags)
 			   CEPH_CAP_LINK_EXCL |		\
 			   CEPH_CAP_XATTR_EXCL |	\
 			   CEPH_CAP_FILE_EXCL)
-#define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)
+#define CEPH_CAP_ANY_FILE_WR (CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |	\
+			      CEPH_CAP_FILE_EXCL)
 #define CEPH_CAP_ANY_WR   (CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_FILE_WR)
 #define CEPH_CAP_ANY      (CEPH_CAP_ANY_RD | CEPH_CAP_ANY_EXCL | \
 			   CEPH_CAP_ANY_FILE_WR | CEPH_CAP_PIN)

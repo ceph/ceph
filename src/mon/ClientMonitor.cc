@@ -219,7 +219,6 @@ bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
       }
       
       client_info_t info;
-      info.ticket.client = client;
       info.ticket.addr = addr;
       info.ticket.created = g_clock.now();
       info.ticket.expires = utime_t();

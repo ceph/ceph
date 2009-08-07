@@ -1103,12 +1103,17 @@ void OSD::heartbeat()
   }
 
   // get CPU load avg
-  ifstream in("/proc/loadavg");
-  if (in.is_open()) {
-    float oneminavg;
-    in >> oneminavg;
-    logger->fset(l_osd_loadavg, oneminavg);
-    in.close();
+  try {
+    ifstream in("/proc/loadavg");
+    if (in.is_open()) {
+      float oneminavg;
+      in >> oneminavg;
+      logger->fset(l_osd_loadavg, oneminavg);
+      in.close();
+    }
+  }
+  catch (ios::failure f) {
+    dout(0) << "heartbeat: failed to read /proc/loadavg" << dendl;
   }
 
   // calc my stats
@@ -1149,7 +1154,7 @@ void OSD::heartbeat()
 	dout(10) << "not checking timeout on osd" << p->first
 		 << " whose up " << osdmap->is_up(p->first)
 		 << " != 1 || hb inst " << heartbeat_inst[p->first]
-		 << " != map's " << osdmap->get_inst(p->first)
+		 << " != map's "
 		 << dendl;
       } else if (heartbeat_from_stamp[p->first] < grace) {
 	dout(0) << "no heartbeat from osd" << p->first

@@ -189,7 +189,7 @@ u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 
 /*
  * Process dirfrag (delegation) info from the mds.  Include leaf
- * fragment in tree ONLY if mds >= 0 || ndist > 0.  Otherwise, only
+ * fragment in tree ONLY if ndist > 0.  Otherwise, only
  * branches/splits are included in i_fragtree)
  */
 static int ceph_fill_dirfrag(struct inode *inode,
@@ -204,7 +204,7 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	int err = 0;
 
 	mutex_lock(&ci->i_fragtree_mutex);
-	if (mds < 0 && ndist == 0) {
+	if (ndist == 0) {
 		/* no delegation info needed. */
 		frag = __ceph_find_frag(ci, id);
 		if (!frag)
@@ -241,8 +241,8 @@ static int ceph_fill_dirfrag(struct inode *inode,
 	frag->ndist = min_t(u32, ndist, CEPH_MAX_DIRFRAG_REP);
 	for (i = 0; i < frag->ndist; i++)
 		frag->dist[i] = le32_to_cpu(dirinfo->dist[i]);
-	dout("fill_dirfrag %llx.%llx frag %x referral mds %d ndist=%d\n",
-	     ceph_vinop(inode), frag->frag, frag->mds, frag->ndist);
+	dout("fill_dirfrag %llx.%llx frag %x ndist=%d\n",
+	     ceph_vinop(inode), frag->frag, frag->ndist);
 
 out:
 	mutex_unlock(&ci->i_fragtree_mutex);
@@ -292,6 +292,8 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&ci->i_dirty_item);
 	INIT_LIST_HEAD(&ci->i_flushing_item);
 	ci->i_cap_flush_seq = 0;
+	ci->i_cap_flush_last_tid = 0;
+	memset(&ci->i_cap_flush_tid, 0, sizeof(ci->i_cap_flush_tid));
 	init_waitqueue_head(&ci->i_cap_wq);
 	ci->i_hold_caps_min = 0;
 	ci->i_hold_caps_max = 0;

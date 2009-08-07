@@ -1,7 +1,6 @@
 #ifndef __FS_CEPH_MESSENGER_H
 #define __FS_CEPH_MESSENGER_H
 
-#include <linux/kobject.h>
 #include <linux/mutex.h>
 #include <linux/net.h>
 #include <linux/radix-tree.h>
@@ -10,25 +9,6 @@
 #include <linux/workqueue.h>
 
 #include "types.h"
-
-/*
- * Ceph uses the messenger to exchange ceph_msg messages with
- * other hosts in the system.  The messenger provides ordered and
- * reliable delivery.  It tolerates TCP disconnects by reconnecting
- * (with exponential backoff) in the case of a fault (disconnection,
- * bad crc, protocol error).  Acks allow sent messages to be discarded
- * by the sender.
- *
- * The network topology is flat: there is no "client" or "server," and
- * any node can initiate a connection (i.e., send messages) to any other
- * node.  There is a fair bit of complexity to handle the "connection
- * race" case where two nodes are simultaneously connecting to each other
- * so that the end result is a single session.
- *
- * The messenger can also send messages in "lossy" mode, where there is
- * no error recovery or connect retry... the message is just dropped if
- * something goes wrong.
- */
 
 struct ceph_msg;
 

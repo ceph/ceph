@@ -9,6 +9,8 @@
 
 int verboseflag = 0;
 
+#include "mtab.c"
+
 static int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 {
 	int len2 = strlen(str2);
@@ -235,6 +237,8 @@ int main(int argc, char *argv[])
 		default:
 			printf("mount error %d = %s\n",errno,strerror(errno));
 		}
+	} else {
+		update_mtab_entry(new_argv[1], new_argv[2], "ceph", new_argv[options_pos], flags, 0, 0);
 	}
 
 	free(new_argv);	

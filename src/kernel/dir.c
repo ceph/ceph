@@ -80,7 +80,7 @@ static int __dcache_readdir(struct file *filp,
 		p = parent->d_subdirs.prev;
 		dout(" initial p %p/%p\n", p->prev, p->next);
 	} else {
-		p = &last->d_u.d_child;
+		p = last->d_u.d_child.prev;
 	}
 
 more:
@@ -109,11 +109,6 @@ more:
 	spin_unlock(&dcache_lock);
 	spin_unlock(&inode->i_lock);
 
-	if (last) {
-		dput(last);
-		last = NULL;
-	}
-
 	dout(" %llu (%llu) dentry %p %.*s %p\n", di->offset, filp->f_pos,
 	     dentry, dentry->d_name.len, dentry->d_name.name, dentry->d_inode);
 	filp->f_pos = di->offset;
@@ -122,13 +117,22 @@ more:
 		      dentry->d_inode->i_ino,
 		      dentry->d_inode->i_mode >> 12);
 
+	if (last) {
+		if (err < 0) {
+			/* remember our position */
+			fi->dentry = last;
+			fi->next_offset = di->offset;
+		} else {
+			dput(last);
+		}
+		last = NULL;
+	}
+
 	spin_lock(&inode->i_lock);
 	spin_lock(&dcache_lock);
 
-	if (err < 0) {
-		fi->dentry = dentry;  /* remember our position */
+	if (err < 0)
 		goto out_unlock;
-	}
 
 	last = dentry;
 
@@ -153,6 +157,25 @@ out_unlock:
 	return err;
 }
 
+/*
+ * make note of the last dentry we read, so we can
+ * continue at the same lexicographical point,
+ * regardless of what dir changes take place on the
+ * server.
+ */
+static int note_last_dentry(struct ceph_file_info *fi, const char *name,
+			    int len)
+{
+	kfree(fi->last_name);
+	fi->last_name = kmalloc(len+1, GFP_NOFS);
+	if (!fi->last_name)
+		return -ENOMEM;
+	memcpy(fi->last_name, name, len);
+	fi->last_name[len] = 0;
+	dout("note_last_dentry '%s'\n", fi->last_name);
+	return 0;
+}
+
 static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 {
 	struct ceph_file_info *fi = filp->private_data;
@@ -165,7 +188,6 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	int err;
 	u32 ftype;
 	struct ceph_mds_reply_info_parsed *rinfo;
-	int len;
 	const int max_entries = client->mount_args.max_readdir;
 
 	dout("readdir %p filp %p frag %u off %u\n", inode, filp, frag, off);
@@ -209,6 +231,10 @@ static int ceph_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	}
 	spin_unlock(&inode->i_lock);
 	if (fi->dentry) {
+		err = note_last_dentry(fi, fi->dentry->d_name.name,
+				       fi->dentry->d_name.len);
+		if (err)
+			return err;
 		dput(fi->dentry);
 		fi->dentry = NULL;
 	}
@@ -260,33 +286,23 @@ more:
 			fi->dir_release_count--;    /* preclude I_COMPLETE */
 		}
 
-		/*
-		 * make note of the last dentry we read, so we can
-		 * continue at the same lexicographical point,
-		 * regardless of what dir changes take place on the
-		 * server.  and choose the next offset to
-		 * readdir from.
-		 */
+		/* note next offset and last dentry name */
 		fi->offset = fi->next_offset;
-		kfree(fi->last_name);
-		fi->last_name = NULL;
+		fi->last_readdir = req;
+
 		if (req->r_reply_info.dir_end) {
+			kfree(fi->last_name);
+			fi->last_name = NULL;
 			fi->next_offset = 0;
 		} else {
 			rinfo = &req->r_reply_info;
-			len = rinfo->dir_dname_len[rinfo->dir_nr-1];
-			fi->last_name = kmalloc(len+1, GFP_NOFS);
-			if (!fi->last_name) {
-				ceph_mdsc_put_request(req);
-				return -ENOMEM;
-			}
-			memcpy(fi->last_name, rinfo->dir_dname[rinfo->dir_nr-1],
-			       len);
-			fi->last_name[len] = 0;
+			err = note_last_dentry(fi,
+				       rinfo->dir_dname[rinfo->dir_nr-1],
+				       rinfo->dir_dname_len[rinfo->dir_nr-1]);
+			if (err)
+				return err;
 			fi->next_offset += rinfo->dir_nr;
-			dout("readdir  last item is '%s'\n", fi->last_name);
 		}
-		fi->last_readdir = req;
 	}
 
 	rinfo = &fi->last_readdir->r_reply_info;

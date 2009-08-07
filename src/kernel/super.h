@@ -2,12 +2,13 @@
 #define _FS_CEPH_SUPER_H
 
 #include <asm/unaligned.h>
-#include <linux/fs.h>
-#include <linux/wait.h>
-#include <linux/completion.h>
-#include <linux/pagemap.h>
-#include <linux/exportfs.h>
 #include <linux/backing-dev.h>
+#include <linux/completion.h>
+#include <linux/exportfs.h>
+#include <linux/fs.h>
+#include <linux/mempool.h>
+#include <linux/pagemap.h>
+#include <linux/wait.h>
 
 #include "types.h"
 #include "ceph_debug.h"
@@ -109,7 +110,6 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
  */
 struct ceph_client {
 	u32 whoami;                   /* my client number */
-	struct kobject kobj;
 	struct dentry *debugfs_fsid, *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
 	struct dentry *debugfs_dir, *debugfs_dentry_lru;
@@ -133,6 +133,7 @@ struct ceph_client {
 	struct ceph_osd_client osdc;
 
 	/* writeback */
+	mempool_t *wb_pagevec_pool;
 	struct workqueue_struct *wb_wq;
 	struct workqueue_struct *pg_inv_wq;
 	struct workqueue_struct *trunc_wq;
@@ -182,8 +183,9 @@ struct ceph_cap {
  */
 struct ceph_cap_snap {
 	atomic_t nref;
+	struct ceph_inode_info *ci;
+	struct list_head ci_item, flushing_item;
 
-	struct list_head ci_item;
 	u64 follows, flush_tid;
 	int issued, dirty;
 	struct ceph_snap_context *context;
@@ -226,7 +228,7 @@ struct ceph_inode_frag {
 	u32 frag;
 	int split_by;         /* i.e. 2^(split_by) children */
 
-	/* delegation info */
+	/* delegation and replication info */
 	int mds;              /* -1 if same authority as parent */
 	int ndist;            /* >0 if replicated */
 	int dist[CEPH_MAX_DIRFRAG_REP];
@@ -309,7 +311,11 @@ struct ceph_inode_info {
 	struct ceph_cap *i_auth_cap;     /* authoritative cap, if any */
 	unsigned i_dirty_caps, i_flushing_caps;     /* mask of dirtied fields */
 	struct list_head i_dirty_item, i_flushing_item;
-	u64 i_cap_flush_seq, i_cap_flush_tid;
+	u64 i_cap_flush_seq;
+	/* we need to track cap writeback on a per-cap-bit basis, to allow
+	 * overlapping, pipelined cap flushes to the mds.  we can probably
+	 * reduce the tid to 8 bits if we're concerned about inode size. */
+	u16 i_cap_flush_last_tid, i_cap_flush_tid[CEPH_CAP_BITS];
 	wait_queue_head_t i_cap_wq;      /* threads waiting on a capability */
 	unsigned long i_hold_caps_min; /* jiffies */
 	unsigned long i_hold_caps_max; /* jiffies */
@@ -766,6 +772,7 @@ static inline bool __ceph_have_pending_cap_snap(struct ceph_inode_info *ci)
 extern struct kmem_cache *ceph_inode_cachep;
 extern struct kmem_cache *ceph_cap_cachep;
 extern struct kmem_cache *ceph_dentry_cachep;
+extern struct kmem_cache *ceph_file_cachep;
 
 extern const char *ceph_msg_type_name(int type);
 
@@ -853,6 +860,7 @@ static inline void ceph_remove_cap(struct ceph_cap *cap)
 
 extern void ceph_queue_caps_release(struct inode *inode);
 extern int ceph_write_inode(struct inode *inode, int unused);
+extern int ceph_fsync(struct file *file, struct dentry *dentry, int datasync);
 extern void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 				    struct ceph_mds_session *session);
 extern int ceph_get_cap_mds(struct inode *inode);

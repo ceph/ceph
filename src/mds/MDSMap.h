@@ -312,7 +312,7 @@ public:
   bool is_clientreplay(int m)   { return get_state(m) == STATE_CLIENTREPLAY; }
   bool is_active(int m)   { return get_state(m) == STATE_ACTIVE; }
   bool is_stopping(int m) { return get_state(m) == STATE_STOPPING; }
-  bool is_active_or_stopping(int m)   { return is_active(m) || is_stopping(m); }
+  bool is_clientreplay_or_active_or_stopping(int m)   { return is_clientreplay(m) || is_active(m) || is_stopping(m); }
 
   bool is_laggy(entity_addr_t a) { return mds_info.count(a) && mds_info[a].laggy(); }
 

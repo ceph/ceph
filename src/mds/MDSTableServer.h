@@ -78,7 +78,7 @@ private:
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { assert(0); }
 
-  MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab)), table(tab) {}
+  MDSTableServer(MDS *m, int tab) : MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
   virtual ~MDSTableServer() {}
 
   void handle_request(MMDSTableRequest *m);

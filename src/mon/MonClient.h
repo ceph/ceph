@@ -19,8 +19,10 @@
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
+#include "auth/ClientTicket.h"
 
 #include "common/Timer.h"
+
 
 class MonMap;
 class MMonMap;
@@ -32,7 +34,7 @@ public:
 private:
   Messenger *messenger;
 
-  ceph_client_ticket ticket;
+  ClientTicket ticket;
   bufferlist signed_ticket;
 
   Context *mount_timeout_event;
@@ -109,7 +111,7 @@ private:
   void set_messenger(Messenger *m) { messenger = m; }
 
   bufferlist& get_signed_ticket() { return signed_ticket; }
-  ceph_client_ticket get_ticket() { return ticket; }
+  ClientTicket& get_ticket() { return ticket; }
 
 };
 

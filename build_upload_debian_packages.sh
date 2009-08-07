@@ -52,8 +52,8 @@ dpkg-buildpackage -rfakeroot
 cd ..
 
 # upload
-rsync -v --progress *$arch.{deb,changes} ceph.newdream.net:debian/dists/$repo/main/binary-$arch
-rsync -v --progress ceph_* ceph.newdream.net:debian/dists/$repo/main/source
+rsync -v --progress *$arch.{deb,changes} sage@ceph.newdream.net:debian/dists/$repo/main/binary-$arch
+rsync -v --progress ceph_* sage@ceph.newdream.net:debian/dists/$repo/main/source
 
 # rebuild index
-ssh ceph.newdream.net build_debian_repo.sh
+ssh sage@ceph.newdream.net build_debian_repo.sh

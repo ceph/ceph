@@ -101,6 +101,19 @@ However, if the MDS replies without a trace (e.g., when retrying an
 update after an MDS failure recovery), some operation-specific cleanup
 may be needed.
 
+We can validate cached dentries in two ways.  A per-dentry lease may
+be issued by the MDS, or a per-directory cap may be issued that acts
+as a lease on the entire directory.  In the latter case, a 'gen' value
+is used to determine which dentries belong to the currently leased
+directory contents.
+
+We normally prepopulate the dcache and icache with readdir results.
+This makes subsequent lookups and getattrs avoid any server
+interaction.  It also lets us satisfy readdir operation by peeking at
+the dcache IFF we hold the per-directory cap/lease, previously
+performed a readdir, and haven't dropped any of the resulting
+dentries.
+
 EOF
 
 git add $target/ceph/file.c
@@ -112,6 +125,11 @@ we have obtained the proper capabilities from the MDS cluster before
 performing IO on a file.  We take references on held capabilities for
 the duration of the read/write to avoid prematurely releasing them
 back to the MDS.
+
+We implement two main paths for read and write: one that is buffered
+(and uses generic_aio_{read,write}), and one that is fully synchronous
+and blocking (operating either on a __user pointer or, if O_DIRECT,
+directly on user pages).
 
 EOF
 
@@ -138,25 +156,25 @@ git add $target/ceph/mdsmap.c
 git commit -s -F - <<EOF
 ceph: MDS client
 
-The MDS client is responsible for submitting requests to the MDS
-cluster and parsing the response.  We decide which MDS to submit each
-request to based on cached information about the current partition of
-the directory hierarchy across the cluster.  A stateful session is
-opened with each MDS before we submit requests to it, and a mutex is
-used to control the ordering of messages within each session.
+The MDS (metadata server) client is responsible for submitting
+requests to the MDS cluster and parsing the response.  We decide which
+MDS to submit each request to based on cached information about the
+current partition of the directory hierarchy across the cluster.  A
+stateful session is opened with each MDS before we submit requests to
+it, and a mutex is used to control the ordering of messages within
+each session.
 
 An MDS request may generate two responses.  The first indicates the
 operation was a success and returns any result.  A second reply is
 sent when the operation commits to disk.  Note that locking on the MDS
 ensures that the results of updates are visible only to the updating
-client before the operation commits.
-
-Requests are linked to the containing directory so that an fsync will
-wait for them to commit.
+client before the operation commits.  Requests are linked to the
+containing directory so that an fsync will wait for them to commit.
 
 If an MDS fails and/or recovers, we resubmit requests as needed.  We
 also reconnect existing capabilities to a recovering MDS to
-reestablish that shared session state.
+reestablish that shared session state.  Old dentry leases are
+invalidated.
 
 EOF
 
@@ -172,11 +190,11 @@ object storage pool.  This includes determining where objects are
 stored in the cluster, and ensuring that requests are retried or
 redirected in the event of a node failure or data migration.
 
-If an OSD does not respond before a timeout expires, 'ping' messages
-are sent across the lossless, ordered communications channel to
-ensure that any break in the TCP is discovered.  If the session does
-reset, a reconnection is attempted and affected requests are resent
-(by the message transport layer).
+If an OSD does not respond before a timeout expires, keepalive
+messages are sent across the lossless, ordered communications channel
+to ensure that any break in the TCP is discovered.  If the session
+does reset, a reconnection is attempted and affected requests are
+resent (by the message transport layer).
 
 EOF
 
@@ -188,13 +206,14 @@ git add $target/ceph/crush/hash.h
 git commit -s -F - <<EOF
 ceph: CRUSH mapping algorithm
 
-CRUSH is a fancy hash function designed to map inputs onto a dynamic
-hierarchy of devices while minimizing the extent to which inputs are
-remapped when the devices are added or removed.  It includes some
-features that are specifically useful for storage, most notably the
-ability to map each input onto a set of N devices that are separated
-across administrator-defined failure domains.  CRUSH is used to
-distribute data across the cluster of Ceph storage nodes.
+CRUSH is a pseudorandom data distribution function designed to map
+inputs onto a dynamic hierarchy of devices, while minimizing the
+extent to which inputs are remapped when the devices are added or
+removed.  It includes some features that are specifically useful for
+storage, most notably the ability to map each input onto a set of N
+devices that are separated across administrator-defined failure
+domains.  CRUSH is used to distribute data across the cluster of Ceph
+storage nodes.
 
 More information about CRUSH can be found in this paper:
 
@@ -298,9 +317,9 @@ git add $target/ceph/debugfs.c
 git commit -s -F - <<EOF
 ceph: debugfs
 
-Basic state information is available via /debug/ceph, including
-instances of the client, fsids, current monitor, mds and osd maps,
-outstanding server requests, and hooks to adjust debug levels.
+Basic state information is available via /sys/kernel/debug/ceph,
+including instances of the client, fsids, current monitor, mds and osd
+maps, outstanding server requests, and hooks to adjust debug levels.
 
 EOF
 

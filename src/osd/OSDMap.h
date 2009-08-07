@@ -304,13 +304,6 @@ private:
       if (exists(i))
 	ls.insert(i);
   }
-  int get_num_osds() { 
-    int n = 0;
-    for (int i=0; i<max_osd; i++)
-      //if (osd_state[i] & CEPH_OSD_EXISTS) 
-	n++;
-    return n;
-  }
   int get_num_up_osds() {
     int n = 0;
     for (int i=0; i<max_osd; i++)

@@ -30,14 +30,27 @@ int main(int argc, char **argv)
   for (int i=0; i<4; i++)
     size[i] = 0;
 
-  for (int f = 0; f < 10000; f++) {  // files
+  for (int f = 0; f < 50000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
-      object_t oid(f, b);
+      char foo[20];
+      sprintf(foo, "%d.%d", f, b);
+      object_t oid(foo);
       ceph_object_layout l = osdmap.make_object_layout(oid, 0);
+	//osdmap.file_to_object_layout(oid, g_default_file_layout);
       vector<int> osds;
       pg_t pgid = pg_t(l.ol_pgid);
+      //pgid.u.ps = f * 4 + b;
       osdmap.pg_to_osds(pgid, osds);
       size[osds.size()]++;
+      if (0) {
+	hash<object_t> H;
+	int x = H(oid);
+	x = ceph_stable_mod(x, 1023, 1023);
+	int s = crush_hash32(x) % 15;
+	//cout << "psim: x = " << x << " s = " << s << std::endl;
+	//osds[0] = s;
+      }
+      //osds[0] = crush_hash32(f) % n;
       //cout << "oid " << oid << " pgid " << pgid << " on " << osds << std::endl;
       for (unsigned i=0; i<osds.size(); i++) {
 	//cout << " rep " << i << " on " << osds[i] << std::endl;
@@ -46,9 +59,25 @@ int main(int argc, char **argv)
     }
   }
 
+  __u64 avg = 0;
   for (int i=0; i<n; i++) {
     cout << "osd" << i << "\t" << count[i] << std::endl;
+    avg += count[i];
   }
+  avg /= n;
+  double dev = 0;
+  for (int i=0; i<n; i++)
+    dev += (avg - count[i]) * (avg - count[i]);
+  dev /= n;
+  dev = sqrt(dev);
+
+  double pgavg = (double)osdmap.get_pg_pool(0).get_pg_num() / (double)n;
+  double edev = sqrt(pgavg) * (double)avg / pgavg;
+  cout << " avg " << avg
+       << " stddev " << dev
+       << " (expected " << edev << ")"
+       << " (indep object placement would be " << sqrt(avg) << ")" << std::endl;
+
   for (int i=0; i<4; i++) {
     cout << "size" << i << "\t" << size[i] << std::endl;
   }

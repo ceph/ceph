@@ -114,7 +114,7 @@ struct crush_grammar : public grammar<crush_grammar>
 				step_chooseleaf |
 				step_emit );
       crushrule = str_p("rule") >> !name >> '{'
-			   >> str_p("pool") >> posint
+			   >> str_p("ruleset") >> posint
 			   >> str_p("type") >> ( str_p("replicated") | str_p("raid4") )
 			   >> str_p("min_size") >> posint
 			   >> str_p("max_size") >> posint

@@ -151,6 +151,13 @@ for name in $what; do
     id=`echo $name | cut -c 4- | sed 's/\\.//'`
     num=$id
 
+    get_conf auto_start "" "auto start"
+    if [ -z "$@" ] || [ "$@" = "mds" ]; then
+	if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
+	    continue
+	fi
+    fi
+
     check_host || continue
 
     cmd="$BINDIR/c$type -i $id"

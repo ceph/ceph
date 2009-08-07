@@ -50,6 +50,7 @@ enum {
 
 
 // stl
+#include <string>
 #include <set>
 #include <map>
 #include <fstream>
@@ -379,11 +380,11 @@ class Inode {
 
   void get() { 
     ref++; 
-    //dout(0) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    dout(30) << "inode.get on " << this << " " << hex << ino << dec << " now " << ref << dendl;
   }
   void put(int n=1) { 
     ref -= n; 
-    //dout(0) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
+    dout(30) << "inode.put on " << this << " " << hex << ino << dec << " now " << ref << dendl;
     assert(ref >= 0);
   }
 
@@ -711,7 +712,6 @@ public:
   Messenger *messenger;  
   int whoami;
 
-  ceph_client_ticket ticket;
   bufferlist signed_ticket;
   
   // mds sessions
@@ -1057,7 +1057,7 @@ public:
 
   // crap
   int chdir(const char *s);
-  const char *getcwd();
+  void getcwd(std::string& cwd);
 
   // namespace ops
   int getdir(const char *relpath, list<string>& names);  // get the whole dir at once.
@@ -1118,9 +1118,12 @@ public:
 
   // expose file layout
   int describe_layout(int fd, ceph_file_layout* layout);
-  int get_stripe_unit(int fd);
-  int get_stripe_width(int fd);
-  int get_stripe_period(int fd);
+  int get_file_stripe_unit(int fd);
+  int get_file_stripe_width(int fd);
+  int get_file_stripe_period(int fd);
+  int get_file_replication(int fd);
+  int get_file_stripe_address(int fd, loff_t offset, string& address);
+
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
 

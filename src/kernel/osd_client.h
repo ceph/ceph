@@ -3,29 +3,15 @@
 
 #include <linux/radix-tree.h>
 #include <linux/completion.h>
+#include <linux/mempool.h>
 
 #include "types.h"
 #include "osdmap.h"
 
-/*
- * All data objects are stored within a cluster/cloud of OSDs, or
- * "object storage devices."  (Note that Ceph OSDs have _nothing_ to
- * do with the T10 OSD extensions to SCSI.)  Ceph OSDs are simply
- * remote daemons serving up and coordinating consistent and safe
- * access to storage.
- *
- * Cluster membership and the mapping of data objects onto storage devices
- * are described by the osd map.
- *
- * We keep track of pending OSD requests (read, write), resubmit
- * requests to different OSDs when the cluster topology/data layout
- * change, or retry the affected requests when the communications
- * channel with an OSD is reset.
- */
-
 struct ceph_msg;
 struct ceph_snap_context;
 struct ceph_osd_request;
+struct ceph_osd_client;
 
 /*
  * completion callback for async writepages
@@ -35,6 +21,7 @@ typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
+	struct rb_node  r_node;
 
 	struct ceph_msg  *r_request;
 	struct ceph_msg  *r_reply;
@@ -42,7 +29,9 @@ struct ceph_osd_request {
 	int               r_flags;     /* any additional flags for the osd */
 	int               r_aborted;   /* set if we cancel this request */
 
+	struct ceph_osd_client *r_osdc;
 	atomic_t          r_ref;
+	bool              r_mempool;
 	struct completion r_completion, r_safe_completion;
 	ceph_osdc_callback_t r_callback, r_safe_callback;
 	struct ceph_eversion r_reassert_version;
@@ -56,11 +45,13 @@ struct ceph_osd_request {
 	int               r_last_osd;         /* pg osds */
 	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;
+	bool              r_resend;           /* msg send failed, needs retry */
 
 	struct ceph_file_layout r_file_layout;
 	struct ceph_snap_context *r_snapc;    /* snap context for writes */
 	unsigned          r_num_pages;        /* size of page array (follows) */
 	struct page     **r_pages;            /* pages for data payload */
+	int               r_pages_from_pool;
 	int               r_own_pages;        /* if true, i own page list */
 };
 
@@ -75,14 +66,16 @@ struct ceph_osd_client {
 	struct mutex           request_mutex;
 	u64                    timeout_tid;   /* tid of timeout triggering rq */
 	u64                    last_tid;      /* tid of last request */
-	struct radix_tree_root request_tree;  /* pending requests, by tid */
+	struct rb_root         requests;      /* pending requests */
 	int                    num_requests;
 	struct delayed_work    timeout_work;
 	struct dentry 	       *debugfs_file;
+
+	mempool_t              *req_mempool;
 };
 
-extern void ceph_osdc_init(struct ceph_osd_client *osdc,
-			   struct ceph_client *client);
+extern int ceph_osdc_init(struct ceph_osd_client *osdc,
+			  struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
 
 extern void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
@@ -104,7 +97,8 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_snap_context *snapc,
 				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size,
-				      struct timespec *mtime);
+				      struct timespec *mtime,
+				      bool use_mempool);
 
 static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 {
@@ -113,7 +107,8 @@ static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 extern void ceph_osdc_put_request(struct ceph_osd_request *req);
 
 extern int ceph_osdc_start_request(struct ceph_osd_client *osdc,
-				   struct ceph_osd_request *req);
+				   struct ceph_osd_request *req,
+				   bool nofail);
 extern int ceph_osdc_wait_request(struct ceph_osd_client *osdc,
 				  struct ceph_osd_request *req);
 extern void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
@@ -135,7 +130,7 @@ extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				u32 truncate_seq, u64 truncate_size,
 				struct timespec *mtime,
 				struct page **pages, int nr_pages,
-				int flags, int do_sync);
+				int flags, int do_sync, bool nofail);
 
 #endif
 

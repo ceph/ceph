@@ -473,8 +473,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   if ((op->get_rmw_flags() & CEPH_OSD_FLAG_PGOP))
     return do_pg_op(op);
 
-  dout(0) << "do_op " << *op << dendl;
-  dout(0) << "do_op flags=" << hex << op->get_flags() << dec << dendl;
+  dout(10) << "do_op " << *op << dendl;
 
   entity_inst_t client = op->get_source_inst();
 
@@ -932,6 +931,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = r;
 	  op.length = 0;
 	}
+	info.stats.num_rd_kb += SHIFT_ROUND_UP(op.length, 10);
+	info.stats.num_rd++;
 	dout(10) << " read got " << r << " / " << op.length << " bytes from obj " << soid << dendl;
       }
       break;
@@ -976,6 +977,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  ::encode(size, odata);
 	  ::encode(oi.mtime, odata);
 	}
+	info.stats.num_rd++;
       }
       break;
 
@@ -990,6 +992,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  result = 0;
 	} else
 	  result = r;
+	info.stats.num_rd++;
       }
       break;
 
@@ -1104,6 +1107,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  info.stats.num_kb += SHIFT_ROUND_UP(new_size, 10) - SHIFT_ROUND_UP(oi.size, 10);
 	  oi.size = new_size;
 	}
+	info.stats.num_wr++;
+	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.length, 10);
 	ssc->snapset.head_exists = true;
       }
       break;
@@ -1126,6 +1131,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  info.stats.num_kb += SHIFT_ROUND_UP(op.length, 10);
 	  oi.size = op.length;
 	}
+	info.stats.num_wr++;
+	info.stats.num_wr_kb += SHIFT_ROUND_UP(op.length, 10);
 	ssc->snapset.head_exists = true;
       }
       break;
@@ -1144,6 +1151,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  ssc->snapset.clone_overlap[newest].subtract(ch);
 	  add_interval_usage(ch, info.stats);
 	}
+	info.stats.num_wr++;
 	ssc->snapset.head_exists = true;
       }
       break;
@@ -1184,6 +1192,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  info.stats.num_kb += SHIFT_ROUND_UP(op.offset, 10);
 	  oi.size = op.offset;
 	}
+	info.stats.num_wr++;
 	// do no set head_exists, or we will break above DELETE -> TRUNCATE munging.
       }
       break;
@@ -1204,6 +1213,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  ssc->snapset.head_exists = false;
 	  ctx->obs->exists = false;
 	}      
+	info.stats.num_wr++;
       }
       break;
     
@@ -1223,6 +1233,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	  t.touch(info.pgid.to_coll(), soid);
 	t.setattr(info.pgid.to_coll(), soid, name, bl);
 	ssc->snapset.head_exists = true;
+ 	info.stats.num_wr++;
       }
       break;
 
@@ -1232,6 +1243,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
 	name[0] = '_';
 	bp.copy(op.name_len, name.data()+1);
 	t.rmattr(info.pgid.to_coll(), soid, name);
+ 	info.stats.num_wr++;
       }
       break;
     

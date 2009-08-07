@@ -286,9 +286,11 @@ public:
   void encode(bufferlist& bl);
   void decode(bufferlist::iterator& blp);
 
+  object_t get_object_name();
+
   void init_inode();
   void load(Context *onload);
-  void _load_finish(bufferlist &bl);
+  void _load_finish(int r, bufferlist &bl);
   void save(Context *onsave, version_t needv=0);
   void _save_finish(version_t v);
  

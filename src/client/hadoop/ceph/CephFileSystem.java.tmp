@@ -1,0 +1,59 @@
+
+
+
+
+package org.apache.hadoop.fs.ceph;
+
+import java.io.IOException;
+import java.net.URI;
+
+
+/**
+ * <p>
+ * A {@link FileSystem} backed by a <a href="ceph.sourceforge.net">Ceph</a> store.
+ * </p>
+ */
+public class CephFileSystem extends Filesystem { 
+
+
+    private Path workingDir = new Path("/user", System.getProperty("user.name"));
+
+    private URI uri;
+
+
+    public CephFileSystem() {
+	// perform all setup in initialize()
+    }
+
+    @Override
+    public URI getURI() {
+	return uri;
+    }
+
+  @Override
+  public void initialize(URI uri, Configuration conf) throws IOException {
+    setConf(conf);
+	
+    this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
+
+    // TODO: local filesystem? we really need to figure out this conf thingy
+    this.localFs = get(URI.create("file:///"), conf);
+    
+    //  Initializes the client    
+    this.clientPointer = ceph_initializeClient();
+    System.out.println("Initialized client with pointer " + clientPointer 
+		       + ". Setting cwd to /");
+    ceph_setcwd("/");
+  }
+
+
+
+  @Override
+      public void close() throws IOException {
+      System.out.println("Pretending to shut down client with pointer " + clientPointer
+			 + ". Not really doing anything.");
+  }
+
+
+}
+

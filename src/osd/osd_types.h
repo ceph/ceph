@@ -609,6 +609,9 @@ struct pg_stat_t {
   __u64 log_size;
   __u64 ondisk_log_size;    // >= active_log_size
 
+  __u64 num_rd, num_rd_kb;
+  __u64 num_wr, num_wr_kb;
+  
   vector<int> acting;
 
   pg_stat_t() : state(0),
@@ -616,11 +619,12 @@ struct pg_stat_t {
 		num_bytes(0), num_kb(0), 
 		num_objects(0), num_object_clones(0), num_object_copies(0),
 		num_objects_missing_on_primary(0), num_objects_degraded(0),
-		log_size(0), ondisk_log_size(0)
+		log_size(0), ondisk_log_size(0),
+		num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
 
     ::encode(version, bl);
@@ -642,6 +646,10 @@ struct pg_stat_t {
     ::encode(num_objects_degraded, bl);
     ::encode(log_size, bl);
     ::encode(ondisk_log_size, bl);
+    ::encode(num_rd, bl);
+    ::encode(num_rd_kb, bl);
+    ::encode(num_wr, bl);
+    ::encode(num_wr_kb, bl);
     ::encode(acting, bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -667,6 +675,12 @@ struct pg_stat_t {
     ::decode(num_objects_degraded, bl);
     ::decode(log_size, bl);
     ::decode(ondisk_log_size, bl);
+    if (v >= 2) {
+      ::decode(num_rd, bl);
+      ::decode(num_rd_kb, bl);
+      ::decode(num_wr, bl);
+      ::decode(num_wr_kb, bl);
+    }
     ::decode(acting, bl);
   }
 
@@ -680,6 +694,10 @@ struct pg_stat_t {
     num_objects_degraded += o.num_objects_degraded;
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
+    num_rd += o.num_rd;
+    num_rd_kb += o.num_rd_kb;
+    num_wr += o.num_wr;
+    num_wr_kb += o.num_wr_kb;
   }
   void sub(const pg_stat_t& o) {
     num_bytes -= o.num_bytes;
@@ -691,6 +709,10 @@ struct pg_stat_t {
     num_objects_degraded -= o.num_objects_degraded;
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+    num_rd -= o.num_rd;
+    num_rd_kb -= o.num_rd_kb;
+    num_wr -= o.num_wr;
+    num_wr_kb -= o.num_wr_kb;
   }
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
@@ -708,15 +730,18 @@ struct pool_stat_t {
   __u64 num_objects_degraded;
   __u64 log_size;
   __u64 ondisk_log_size;    // >= active_log_size
+  __u64 num_rd, num_rd_kb;
+  __u64 num_wr, num_wr_kb;
 
   pool_stat_t() : num_bytes(0), num_kb(0), 
 		  num_objects(0), num_object_clones(0), num_object_copies(0),
 		  num_objects_missing_on_primary(0), num_objects_degraded(0),
-		  log_size(0), ondisk_log_size(0)
+		  log_size(0), ondisk_log_size(0),
+		  num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0)
   { }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
     ::encode(num_bytes, bl);
     ::encode(num_kb, bl);
@@ -727,6 +752,10 @@ struct pool_stat_t {
     ::encode(num_objects_degraded, bl);
     ::encode(log_size, bl);
     ::encode(ondisk_log_size, bl);
+    ::encode(num_rd, bl);
+    ::encode(num_rd_kb, bl);
+    ::encode(num_wr, bl);
+    ::encode(num_wr_kb, bl);
  }
   void decode(bufferlist::iterator &bl) {
     __u8 v;
@@ -740,6 +769,12 @@ struct pool_stat_t {
     ::decode(num_objects_degraded, bl);
     ::decode(log_size, bl);
     ::decode(ondisk_log_size, bl);
+    if (v >= 2) {
+      ::decode(num_rd, bl);
+      ::decode(num_rd_kb, bl);
+      ::decode(num_wr, bl);
+      ::decode(num_wr_kb, bl);
+    }
   }
 
   void add(const pg_stat_t& o) {
@@ -752,6 +787,10 @@ struct pool_stat_t {
     num_objects_degraded += o.num_objects_degraded;
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
+    num_rd += o.num_rd;
+    num_rd_kb += o.num_rd_kb;
+    num_wr += o.num_wr;
+    num_wr_kb += o.num_wr_kb;
   }
   void sub(const pg_stat_t& o) {
     num_bytes -= o.num_bytes;
@@ -763,6 +802,10 @@ struct pool_stat_t {
     num_objects_degraded -= o.num_objects_degraded;
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+    num_rd -= o.num_rd;
+    num_rd_kb -= o.num_rd_kb;
+    num_wr -= o.num_wr;
+    num_wr_kb -= o.num_wr_kb;
   }
 };
 WRITE_CLASS_ENCODER(pool_stat_t)

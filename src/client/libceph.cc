@@ -58,13 +58,15 @@ extern "C" int ceph_initialize(int argc, const char **argv)
 extern "C" void ceph_deinitialize()
 {
   ceph_client_mutex.Lock();
-  client->unmount();
-  client->shutdown();
-  delete client;
-  rank->wait();
-  delete rank;
-  delete monclient;
-  --client_initialized;
+  if(client_initialized) {
+    client->unmount();
+    client->shutdown();
+    delete client;
+    rank->wait();
+    delete rank;
+    delete monclient;
+    --client_initialized;
+  }
   ceph_client_mutex.Unlock();
 }
 
@@ -86,6 +88,14 @@ extern "C" int ceph_statfs(const char *path, struct statvfs *stbuf)
 extern "C" int ceph_chdir (const char *s)
 {
   return client->chdir(s);
+}
+
+/*if we want to extern C this, we need to convert it to const char*,
+which will mean storing it somewhere or else making the caller
+responsible for delete-ing a c-string they didn't create*/
+void ceph_getcwd(string& cwd)
+{
+  client->getcwd(cwd);
 }
 
 extern "C" int ceph_opendir(const char *name, DIR **dirpp)
@@ -244,6 +254,22 @@ extern "C" int ceph_fstat(int fd, struct stat *stbuf)
 extern "C" int ceph_sync_fs()
 {
   return client->sync_fs();
+}
+
+extern "C" int ceph_get_file_stripe_unit(int fh)
+{
+  return client->get_file_stripe_unit(fh);
+}
+
+extern "C" int ceph_get_file_replication(const char *path) {
+  int fd = client->open(path, O_RDONLY);
+  int rep = client->get_file_replication(fd);
+  client->close(fd);
+  return rep;
+}
+
+int ceph_get_file_stripe_address(int fh, loff_t offset, std::string& address) {
+  return client->get_file_stripe_address(fh, offset, address);
 }
 
 int ceph_getdir(const char *relpath, std::list<std::string>& names)

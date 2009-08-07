@@ -602,7 +602,7 @@ class C_Locker_Eval : public Context {
   CInode *in;
   int mask;
 public:
-  C_Locker_Eval(Locker *l, CInode *i, int m) : locker(l), in(in), mask(m) {
+  C_Locker_Eval(Locker *l, CInode *i, int m) : locker(l), in(i), mask(m) {
     in->get(CInode::PIN_PTRWAITER);    
   }
   void finish(int r) {
@@ -1369,7 +1369,7 @@ void Locker::request_inode_file_caps(CInode *in)
 void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 {
   // nobody should be talking to us during recovery.
-  assert(mds->is_rejoin() || mds->is_active() || mds->is_stopping());
+  assert(mds->is_rejoin() || mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
 
   // ok
   CInode *in = mdcache->get_inode(m->get_ino());
@@ -1610,6 +1610,11 @@ void Locker::handle_client_caps(MClientCaps *m)
   dout(7) << "handle_client_caps on " << m->get_ino()
 	  << " follows " << follows 
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
+
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
 
   CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
@@ -2257,7 +2262,7 @@ SimpleLock *Locker::get_lock(int lock_type, MDSCacheObjectInfo &info)
 void Locker::handle_lock(MLock *m)
 {
   // nobody should be talking to us during recovery.
-  assert(mds->is_rejoin() || mds->is_active() || mds->is_stopping());
+  assert(mds->is_rejoin() || mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
 
   SimpleLock *lock = get_lock(m->get_lock_type(), m->get_object_info());
   if (!lock) {
@@ -2357,7 +2362,8 @@ void Locker::handle_simple_lock(SimpleLock *lock, MLock *m)
 
     // -- auth --
   case LOCK_AC_LOCKACK:
-    assert(lock->get_state() == LOCK_SYNC_LOCK);
+    assert(lock->get_state() == LOCK_SYNC_LOCK ||
+	   lock->get_state() == LOCK_SYNC_EXCL);
     assert(lock->is_gathering(from));
     lock->remove_gather(from);
     
@@ -2550,7 +2556,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     gather++;
   
   if (lock->get_parent()->is_replicated() && 
-      lock->get_state() == LOCK_LOCK_EXCL) {
+      lock->get_state() != LOCK_LOCK_EXCL) {
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
     gather++;

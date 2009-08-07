@@ -414,7 +414,6 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		pr_err("ceph ENOMEM allocating ceph_cap_snap on %p\n", inode);
 		return;
 	}
-	atomic_set(&capsnap->nref, 1);
 
 	spin_lock(&inode->i_lock);
 	used = __ceph_caps_used(ci);
@@ -428,6 +427,12 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 		kfree(capsnap);
 	} else if (ci->i_wrbuffer_ref_head || (used & CEPH_CAP_FILE_WR)) {
 		igrab(inode);
+
+		atomic_set(&capsnap->nref, 1);
+		capsnap->ci = ci;
+		INIT_LIST_HEAD(&capsnap->ci_item);
+		INIT_LIST_HEAD(&capsnap->flushing_item);
+
 		capsnap->follows = snapc->seq - 1;
 		capsnap->context = ceph_get_snap_context(snapc);
 		capsnap->issued = __ceph_caps_issued(ci, NULL);
@@ -560,20 +565,24 @@ more:
 		 */
 		if (!deletion) {
 			struct ceph_inode_info *ci;
+			struct inode *lastinode = NULL;
 
 			spin_lock(&realm->inodes_with_caps_lock);
 			list_for_each_entry(ci, &realm->inodes_with_caps,
 					    i_snap_realm_item) {
 				struct inode *inode = igrab(&ci->vfs_inode);
+				if (!inode)
+					continue;
 				spin_unlock(&realm->inodes_with_caps_lock);
-				if (inode) {
-					ceph_queue_cap_snap(ci,
-						    realm->cached_context);
-					iput(inode);
-				}
+				if (lastinode)
+					iput(lastinode);
+				lastinode = inode;
+				ceph_queue_cap_snap(ci, realm->cached_context);
 				spin_lock(&realm->inodes_with_caps_lock);
 			}
 			spin_unlock(&realm->inodes_with_caps_lock);
+			if (lastinode)
+				iput(lastinode);
 			dout("update_snap_trace cap_snaps queued\n");
 		}
 

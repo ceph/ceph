@@ -822,7 +822,8 @@ void OSDMonitor::tick()
     i++;
 
     if (osdmap.is_down(o) && osdmap.is_in(o)) {
-      if (down.sec() >= g_conf.mon_osd_down_out_interval) {
+      if (g_conf.mon_osd_down_out_interval > 0 &&
+	  down.sec() >= g_conf.mon_osd_down_out_interval) {
 	dout(10) << "tick marking osd" << o << " OUT after " << down
 		 << " sec (target " << g_conf.mon_osd_down_out_interval << ")" << dendl;
 	pending_inc.new_weight[o] = CEPH_OSD_OUT;

@@ -1074,6 +1074,8 @@ void Client::handle_client_reply(MClientReply *reply)
       request->put(); // for the dumb data structure
     }
   }
+  if(unmounting)
+    mount_cond.Signal();
 }
 
 
@@ -2009,8 +2011,6 @@ void SnapRealm::build_snap_context()
   cached_snap_context.snaps.reserve(snaps.size());
   for (set<snapid_t>::reverse_iterator p = snaps.rbegin(); p != snaps.rend(); p++)
     cached_snap_context.snaps.push_back(*p);
-
-  cout << *this << " build_snap_context got " << cached_snap_context << std::endl;
 }
 
 void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
@@ -2476,7 +2476,6 @@ int Client::mount()
   whoami = messenger->get_myname().num();
 
   signed_ticket = monclient->get_signed_ticket();
-  ticket = monclient->get_ticket();
 
   objecter->signed_ticket = signed_ticket;
   objecter->init();
@@ -2535,6 +2534,11 @@ int Client::unmount()
   dout(2) << "unmounting" << dendl;
   unmounting = true;
 
+  while(!mds_requests.empty()) {
+    dout(10) << "waiting on " << mds_requests.size() << " requests" << dendl;
+    mount_cond.Wait(client_lock);
+  }
+
   if (tick_event)
     timer.cancel_event(tick_event);
   tick_event = 0;
@@ -2544,7 +2548,18 @@ int Client::unmount()
   cwd = 0;
 
   // NOTE: i'm assuming all caches are already flushing (because all files are closed).
-  assert(fd_map.empty());
+
+  //clean up any unclosed files
+  if (!fd_map.empty())
+    std::cerr << "Warning: Some files were not closed prior to unmounting;\n"
+	      << "Ceph is closing them now.\n";
+  while (!fd_map.empty()) {
+    int fd = fd_map.begin()->first;
+    assert(fd_map.count(fd));
+    Fh *fh = fd_map[fd];
+    _release(fh);
+    fd_map.erase(fd);
+  }
 
   _ll_drop_pins();
 
@@ -3074,7 +3089,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   // make the change locally?
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
-      in->mode = attr->st_mode;
+      in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
     }
@@ -3155,9 +3170,9 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_nlink = in->nlink;
   st->st_uid = in->uid;
   st->st_gid = in->gid;
-  st->st_ctime = MAX(in->ctime, in->mtime);
-  st->st_atime = in->atime;
-  st->st_mtime = in->mtime;
+  st->st_ctime = MAX(in->ctime.sec(), in->mtime.sec());
+  st->st_atime = in->atime.sec();
+  st->st_mtime = in->mtime.sec();
   if (in->is_dir()) {
     //st->st_size = in->dirstat.size();
     st->st_size = in->rstat.rbytes;
@@ -4232,12 +4247,43 @@ int Client::chdir(const char *relpath)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  if (cwd && cwd != in)
+  if (cwd != in) {
+    in->get();
     put_inode(cwd);
-  cwd = in;
-  in->get();
+    cwd = in;
+  }
   dout(3) << "chdir(" << relpath << ")  cwd now " << cwd->ino << dendl;
   return 0;
+}
+
+void Client::getcwd(string& dir)
+{
+  filepath path;
+  dout(10) << "getcwd " << *cwd << dendl;
+
+  Inode *in = cwd;
+  while (in->ino != CEPH_INO_ROOT) {
+    Dentry *dn = in->dn;
+    if (!dn) {
+      // look it up
+      dout(10) << "getcwd looking up parent for " << *in << dendl;
+      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      filepath path(in->ino);
+      req->set_filepath(path);
+      int res = make_request(req, -1, -1);
+      if (res < 0)
+	break;
+
+      // start over
+      path = filepath();
+      in = cwd;
+      continue;
+    }
+    path.push_front_dentry(dn->name);
+    in = dn->dir->parent_inode;
+  }
+  dir = "/";
+  dir += path.get_path();
 }
 
 int Client::statfs(const char *path, struct statvfs *stbuf)
@@ -4932,13 +4978,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   req->set_filepath2(from);
  
   int res = make_request(req, uid, gid);
-  if (res == 0) {
-    // remove from local cache
-    if (fromdir->dir->dentries.count(fromname)) {
-      Dentry *dn = fromdir->dir->dentries[fromname];
-      unlink(dn);
-    }
-  }
+
   dout(10) << "rename result is " << res << dendl;
 
   // renamed item from our cache
@@ -5163,25 +5203,69 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
   return 0;
 }
 
-int Client::get_stripe_unit(int fd)
+int Client::get_file_stripe_unit(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_su(layout);
 }
 
-int Client::get_stripe_width(int fd)
+int Client::get_file_stripe_width(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_stripe_width(layout);
 }
 
-int Client::get_stripe_period(int fd)
+int Client::get_file_stripe_period(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
   return ceph_file_layout_period(layout);
+}
+
+int Client::get_file_replication(int fd)
+{
+  int pool;
+  Mutex::Locker lock(client_lock);
+
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  Inode *in = f->inode;
+
+  pool = ceph_file_layout_pg_pool(in->layout);
+  return osdmap->get_pg_pool(pool).get_size();
+}
+
+int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
+{
+  Mutex::Locker lock(client_lock);
+
+  assert(fd_map.count(fd));
+  Fh *f = fd_map[fd];
+  Inode *in = f->inode;
+
+  // which object?
+  vector<ObjectExtent> extents;
+  filer->file_to_extents(in->ino, &in->layout, offset, 1, extents);
+  assert(extents.size() == 1);
+
+  // now we have the object and its 'layout'
+  pg_t pg = (pg_t)extents[0].layout.ol_pgid;
+  vector<int> osds;
+  osdmap->pg_to_osds(pg, osds);
+  if (!osds.size())
+    return -EINVAL;
+  
+  // now we have the osd(s)
+  entity_addr_t addr = osdmap->get_addr(osds[0]);
+  
+  // now we need to turn it into a string
+  char foo[30];
+  __u8 *quad = (__u8*) &addr.ipaddr.sin_addr;
+  sprintf(foo, "%d.%d.%d.%d", (int)quad[0], (int)quad[1], (int)quad[2], (int)quad[3]);
+  address = foo;
+  return 0;
 }
 
 int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,

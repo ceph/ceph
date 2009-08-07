@@ -1132,16 +1132,6 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 
   have_master_log = true;
 
-
-  // -- do i need to generate backlog for any of my peers?
-  if (oldest_update < log.tail && !log.backlog) {
-    dout(10) << "must generate backlog for some peers, my tail " 
-             << log.tail << " > oldest_update " << oldest_update
-             << dendl;
-    osd->queue_generate_backlog(this);
-    return false;
-  }
-
   return true;
 }
 
@@ -1164,6 +1154,16 @@ void PG::peer(ObjectStore::Transaction& t,
   if (!have_master_log)
     if (!recover_master_log(query_map))
       return;
+
+
+  // -- do i need to generate backlog for any of my peers?
+  if (oldest_update < log.tail && !log.backlog) {
+    dout(10) << "must generate backlog for some peers, my tail " 
+             << log.tail << " > oldest_update " << oldest_update
+             << dendl;
+    osd->queue_generate_backlog(this);
+    return;
+  }
 
 
   /** COLLECT MISSING+LOG FROM PEERS **********/

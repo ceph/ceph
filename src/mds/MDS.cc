@@ -121,7 +121,7 @@ MDS::MDS(const char *n, Messenger *m, MonClient *mc) :
 
   req_rate = 0;
 
-  want_state = state = MDSMap::STATE_BOOT;
+  last_state = want_state = state = MDSMap::STATE_BOOT;
 
   logger = 0;
   mlogger = 0;
@@ -447,7 +447,7 @@ void MDS::tick()
   }
 
   // ...
-  if (is_active() || is_stopping()) {
+  if (is_clientreplay() || is_active() || is_stopping()) {
     locker->scatter_tick();
     server->find_idle_sessions();
   }
@@ -613,6 +613,9 @@ void MDS::handle_mds_map(MMDSMap *m)
   state = mdsmap->get_state(addr);
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
+  if (state != oldstate)
+    last_state = oldstate;
+
   if (state == MDSMap::STATE_STANDBY) {
     want_state = state = MDSMap::STATE_STANDBY;
     dout(1) << "handle_mds_map standby" << dendl;
@@ -689,7 +692,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // RESOLVE
   // is someone else newly resolving?
-  if (is_resolve() || is_rejoin() || is_active() || is_stopping()) {
+  if (is_resolve() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     set<int> oldresolve, resolve;
     oldmap->get_mds_set(oldresolve, MDSMap::STATE_RESOLVE);
     mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
@@ -704,7 +707,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   
   // REJOIN
   // is everybody finally rejoining?
-  if (is_rejoin() || is_active() || is_stopping()) {
+  if (is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     // did we start?
     if (!oldmap->is_rejoining() && mdsmap->is_rejoining())
       rejoin_joint_start();
@@ -718,7 +721,7 @@ void MDS::handle_mds_map(MMDSMap *m)
     dout(1) << "cluster recovered." << dendl;
   
   // did someone go active?
-  if (is_active() || is_stopping()) {
+  if (is_clientreplay() || is_active() || is_stopping()) {
     set<int> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
@@ -747,7 +750,7 @@ void MDS::handle_mds_map(MMDSMap *m)
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p))
 	mdcache->handle_mds_failure(*p);
   }
-  if (is_active() || is_stopping()) {
+  if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
     set<int> oldstopped, stopped;
     oldmap->get_stopped_mds_set(oldstopped);
@@ -836,8 +839,6 @@ void MDS::creating_done()
 
   // start new segment
   mdlog->start_new_segment(0);
-
-  mdcache->open_root();
 }
 
 
@@ -885,9 +886,15 @@ void MDS::boot_start(int step, int r)
     break;
 
   case 2:
-    dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
-    mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
-    break;
+    if (is_starting()) {
+      dout(2) << "boot_start " << step << ": loading/discovering root inode" << dendl;
+      mdcache->open_root_inode(new C_MDS_BootStart(this, 3));
+      break;
+    } else {
+      // replay.  make up fake root inode to start with
+      mdcache->create_root_inode();
+      step = 3;
+    }
 
   case 3:
     if (is_replay() || is_standby_replay()) {
@@ -971,16 +978,7 @@ void MDS::replay_done()
 void MDS::resolve_start()
 {
   dout(1) << "resolve_start" << dendl;
-
-  set<int> who;
-  mdsmap->get_mds_set(who, MDSMap::STATE_RESOLVE);
-  mdsmap->get_mds_set(who, MDSMap::STATE_REJOIN);
-  mdsmap->get_mds_set(who, MDSMap::STATE_ACTIVE);
-  mdsmap->get_mds_set(who, MDSMap::STATE_STOPPING);
-  for (set<int>::iterator p = who.begin(); p != who.end(); ++p) {
-    if (*p == whoami) continue;
-    mdcache->send_resolve(*p);  // now.
-  }
+  mdcache->resolve_start();
 }
 void MDS::resolve_done()
 {
@@ -1010,7 +1008,7 @@ void MDS::rejoin_done()
   mdcache->show_subtrees();
   mdcache->show_cache();
 
-  if (waiting_for_replay.empty())
+  if (replay_queue.empty())
     request_state(MDSMap::STATE_ACTIVE);
   else
     request_state(MDSMap::STATE_CLIENTREPLAY);
@@ -1019,6 +1017,7 @@ void MDS::rejoin_done()
 void MDS::clientreplay_start()
 {
   dout(1) << "clientreplay_start" << dendl;
+  finish_contexts(waiting_for_replay);  // kick waiters
   queue_one_replay();
 }
 
@@ -1031,7 +1030,12 @@ void MDS::clientreplay_done()
 void MDS::active_start()
 {
   dout(1) << "active_start" << dendl;
+
+  if (last_state == MDSMap::STATE_CREATING)
+    mdcache->open_root();
+
   mdcache->clean_open_file_lists();
+  finish_contexts(waiting_for_replay);  // kick waiters
   finish_contexts(waiting_for_active);  // kick waiters
 }
 
@@ -1039,7 +1043,7 @@ void MDS::active_start()
 void MDS::recovery_done()
 {
   dout(1) << "recovery_done -- successful recovery!" << dendl;
-  assert(is_active() || is_clientreplay());
+  assert(is_clientreplay() || is_active() || is_clientreplay());
   
   // kick anchortable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
@@ -1312,7 +1316,7 @@ bool MDS::_dispatch(Message *m)
     // done with all client replayed requests?
     if (is_clientreplay() &&
 	mdcache->is_open() &&
-	waiting_for_replay.empty() &&
+	replay_queue.empty() &&
 	want_state == MDSMap::STATE_CLIENTREPLAY) {
       dout(10) << " still have " << mdcache->get_num_active_requests()
 	       << " active replay requests" << dendl;

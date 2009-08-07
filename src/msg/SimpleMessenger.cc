@@ -1146,8 +1146,10 @@ void SimpleMessenger::Pipe::stop()
   dout(10) << "stop" << dendl;
   state = STATE_CLOSED;
   cond.Signal();
-  if (sd >= 0)
+  if (sd >= 0) {
     ::close(sd);
+    sd = -1;
+  }
   if (reader_running)
     reader_thread.kill(SIGUSR2);
   if (writer_running)

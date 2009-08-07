@@ -12,31 +12,6 @@
 #include "mdsmap.h"
 
 /*
- * A cluster of MDS (metadata server) daemons is responsible for
- * managing the file system namespace (the directory hierarchy and
- * inodes) and for coordinating shared access to storage.  Metadata is
- * partitioning hierarchically across a number of servers, and that
- * partition varies over time as the cluster adjusts the distribution
- * in order to balance load.
- *
- * The MDS client is primarily responsible to managing synchronous
- * metadata requests for operations like open, unlink, and so forth.
- * If there is a MDS failure, we find out about it when we (possibly
- * request and) receive a new MDS map, and can resubmit affected
- * requests.
- *
- * For the most part, though, we take advantage of a lossless
- * communications channel to the MDS, and do not need to worry about
- * timing out or resubmitting requests.
- *
- * We maintain a stateful "session" with each MDS we interact with.
- * Within each session, we sent periodic heartbeat messages to ensure
- * any capabilities or leases we have been issues remain valid.  If
- * the session times out and goes stale, our leases and capabilities
- * are no longer valid.
- */
-
-/*
  * Some lock dependencies:
  *
  * session->s_mutex
@@ -66,9 +41,9 @@ struct ceph_mds_reply_info_in {
 };
 
 /*
- * parsed info about an mds reply, including a "trace" from
- * the referenced inode, through its parents up to the root
- * directory, and directory contents (for readdir results).
+ * parsed info about an mds reply, including information about the
+ * target inode and/or its parent directory and dentry, and directory
+ * contents (for readdir results).
  */
 struct ceph_mds_reply_info_parsed {
 	struct ceph_mds_reply_head    *head;
@@ -109,6 +84,7 @@ enum {
 	CEPH_MDS_SESSION_NEW = 1,
 	CEPH_MDS_SESSION_OPENING = 2,
 	CEPH_MDS_SESSION_OPEN = 3,
+	CEPH_MDS_SESSION_HUNG = 4,
 	CEPH_MDS_SESSION_CLOSING = 5,
 	CEPH_MDS_SESSION_RECONNECTING = 6
 };
@@ -119,22 +95,25 @@ struct ceph_mds_session {
 	unsigned long     s_ttl;      /* time until mds kills us */
 	u64               s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;    /* serialize session messages */
-	spinlock_t        s_cap_lock; /* protects s_caps, s_cap_{gen,ttl} */
+
+	/* protected by s_cap_lock */
+	spinlock_t        s_cap_lock;
 	u32               s_cap_gen;  /* inc each time we get mds stale msg */
 	unsigned long     s_cap_ttl;  /* when session caps expire */
-	unsigned long     s_renew_requested; /* last time we sent a renew req */
 	struct list_head  s_caps;     /* all caps issued by this session */
 	int               s_nr_caps, s_trim_caps;
-	atomic_t          s_ref;
-	struct list_head  s_waiting;  /* waiting requests */
-	struct list_head  s_unsafe;   /* unsafe requests */
-
 	int               s_num_cap_releases;
 	struct list_head  s_cap_releases; /* waiting cap_release messages */
 	struct list_head  s_cap_releases_done; /* ready to send */
 
-	struct list_head  s_cap_flushing;      /* inodes w/ flushing caps */
-	u64               s_cap_flush_tid;
+	/* protected by mutex */
+	struct list_head  s_cap_flushing;     /* inodes w/ flushing caps */
+	struct list_head  s_cap_snaps_flushing;
+	unsigned long     s_renew_requested; /* last time we sent a renew req */
+
+	atomic_t          s_ref;
+	struct list_head  s_waiting;  /* waiting requests */
+	struct list_head  s_unsafe;   /* unsafe requests */
 };
 
 /*
@@ -161,16 +140,25 @@ typedef void (*ceph_mds_request_callback_t) (struct ceph_mds_client *mdsc,
 struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
 
-	int r_op;
+	int r_op;                    /* mds op code */
 
 	/* operation on what? */
 	struct inode *r_inode;              /* arg1 */
 	struct dentry *r_dentry;            /* arg1 */
 	struct dentry *r_old_dentry;        /* arg2: rename from or link from */
-	const char *r_path1, *r_path2;
+	char *r_path1, *r_path2;
 	struct ceph_vino r_ino1, r_ino2;
 
+	struct inode *r_locked_dir; /* dir (if any) i_mutex locked by vfs */
+	struct inode *r_target_inode;       /* resulting inode */
+
 	union ceph_mds_request_args r_args;
+	int r_fmode;        /* file mode, if expecting cap */
+
+	/* for choosing which mds to send this request to */
+	int r_direct_mode;
+	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
+	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
 	/* data payload is used for xattr ops */
 	struct page **r_pages;
@@ -184,34 +172,22 @@ struct ceph_mds_request {
 	struct inode *r_old_inode;
 	int r_old_inode_drop, r_old_inode_unless;
 
-	struct inode *r_target_inode;       /* resulting inode */
-
 	struct ceph_msg  *r_request;  /* original request */
 	struct ceph_msg  *r_reply;
 	struct ceph_mds_reply_info_parsed r_reply_info;
 	int r_err;
-	unsigned long r_timeout;  /* optional.  jiffies */
 
+	unsigned long r_timeout;  /* optional.  jiffies */
 	unsigned long r_started;  /* start time to measure timeout against */
 	unsigned long r_request_started; /* start time for mds request only,
 					    used to measure lease durations */
-
-	/* for choosing which mds to send this request to */
-	int r_direct_mode;
-	u32 r_direct_hash;      /* choose dir frag based on this dentry hash */
-	bool r_direct_is_hash;  /* true if r_direct_hash is valid */
 
 	/* link unsafe requests to parent directory, for fsync */
 	struct inode	*r_unsafe_dir;
 	struct list_head r_unsafe_dir_item;
 
-	/* references to the trailing dentry and inode from parsing the
-	 * mds response.  also used to feed a VFS-provided dentry into
-	 * the reply handler */
-	int               r_fmode;        /* file mode, if expecting cap */
 	struct ceph_mds_session *r_session;
 	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
-	struct inode     *r_locked_dir; /* dir (if any) i_mutex locked by vfs */
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */
@@ -275,30 +251,23 @@ struct ceph_mds_client {
 	spinlock_t        cap_dirty_lock;   /* protects above items */
 	wait_queue_head_t cap_flushing_wq;
 
-	struct dentry 		*debugfs_file;
+	struct dentry 	  *debugfs_file;
 
-	spinlock_t		dentry_lru_lock;
-	struct list_head	dentry_lru;
-	int			num_dentry;
+	spinlock_t	  dentry_lru_lock;
+	struct list_head  dentry_lru;
+	int		  num_dentry;
 };
 
 extern const char *ceph_mds_op_name(int op);
 
-extern struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *, int mds);
+extern struct ceph_mds_session *
+__ceph_lookup_mds_session(struct ceph_mds_client *, int mds);
 
 inline static struct ceph_mds_session *
 ceph_get_mds_session(struct ceph_mds_session *s)
 {
 	atomic_inc(&s->s_ref);
 	return s;
-}
-
-/*
- * requests
- */
-static inline void ceph_mdsc_get_request(struct ceph_mds_request *req)
-{
-	atomic_inc(&req->r_ref);
 }
 
 extern void ceph_put_mds_session(struct ceph_mds_session *s);
@@ -334,16 +303,17 @@ ceph_mdsc_create_request(struct ceph_mds_client *mdsc, int op, int mode);
 extern void ceph_mdsc_submit_request(struct ceph_mds_client *mdsc,
 				     struct ceph_mds_request *req);
 extern int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
-				struct inode *listener,
+				struct inode *dir,
 				struct ceph_mds_request *req);
+static inline void ceph_mdsc_get_request(struct ceph_mds_request *req)
+{
+	atomic_inc(&req->r_ref);
+}
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
-
 extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 
-extern struct ceph_mds_request *ceph_mdsc_get_listener_req(struct inode *inode,
-							   u64 tid);
 extern char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base,
 				  int stop_on_nosnap);
 

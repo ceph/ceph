@@ -26,16 +26,16 @@
  * count dirty pages on the inode.  In the absense of snapshots,
  * i_wrbuffer_ref == i_wrbuffer_ref_head == the dirty page count.
  *
- * A snapshot is taken (that is, when the client receives notification
- * that a snapshot was taken), each inode with caps and with dirty
- * pages (dirty pages implies there is a cap) gets a new ceph_cap_snap
- * in the i_cap_snaps (which is sorted in ascending order, new snaps
- * go to the tail).  The i_wrbuffer_ref_head count is moved to
- * capsnap->dirty. (Unless a sync write is currently in progress.  In
- * that case, the capsnap is said to be "pending", new writes cannot
- * start, and the capsnap isn't "finalized" until the write completes
- * (or fails) and a final size/mtime for the inode for that snap can
- * be settled upon.)  i_wrbuffer_ref_head is reset to 0.
+ * When a snapshot is taken (that is, when the client receives
+ * notification that a snapshot was taken), each inode with caps and
+ * with dirty pages (dirty pages implies there is a cap) gets a new
+ * ceph_cap_snap in the i_cap_snaps list (which is sorted in ascending
+ * order, new snaps go to the tail).  The i_wrbuffer_ref_head count is
+ * moved to capsnap->dirty. (Unless a sync write is currently in
+ * progress.  In that case, the capsnap is said to be "pending", new
+ * writes cannot start, and the capsnap isn't "finalized" until the
+ * write completes (or fails) and a final size/mtime for the inode for
+ * that snap can be settled upon.)  i_wrbuffer_ref_head is reset to 0.
  *
  * On writeback, we must submit writes to the osd IN SNAP ORDER.  So,
  * we look for the first capsnap in i_cap_snaps and write out pages in
@@ -50,13 +50,8 @@
 
 
 /*
- * Dirty a page.  If @snapc is NULL, use the current snap context for
- * i_snap_realm.  Otherwise, redirty a page within the context of
- * the given *snapc.
- *
- * Caller may or may not have locked *page.  That means we can race
- * with truncate_complete_page and end up with a non-dirty page with
- * private data.
+ * Dirty a page.  Optimistically adjust accounting, on the assumption
+ * that we won't race with invalidate.  If we do, readjust.
  */
 static int ceph_set_page_dirty(struct page *page)
 {
@@ -75,10 +70,6 @@ static int ceph_set_page_dirty(struct page *page)
 		return 0;
 	}
 
-	/*
-	 * optimistically adjust accounting, on the assumption that
-	 * we won't race with invalidate.
-	 */
 	inode = mapping->host;
 	ci = ceph_inode(inode);
 
@@ -437,10 +428,11 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 				   page_off, len,
 				   ci->i_truncate_seq, ci->i_truncate_size,
 				   &inode->i_mtime,
-				   &page, 1, 0, 0);
+				   &page, 1, 0, 0, true);
 	if (err < 0) {
-		dout("writepage setting page error %p\n", page);
+		dout("writepage setting page/mapping error %d %p\n", err, page);
 		SetPageError(page);
+		mapping_set_error(&inode->i_data, err);
 		if (wbc)
 			wbc->pages_skipped++;
 	} else {
@@ -547,8 +539,29 @@ static void writepages_finish(struct ceph_osd_request *req)
 	ceph_put_wrbuffer_cap_refs(ci, req->r_num_pages, snapc);
 
 	ceph_release_pages(req->r_pages, req->r_num_pages);
-	kfree(req->r_pages);
+	if (req->r_pages_from_pool)
+		mempool_free(req->r_pages,
+			     ceph_client(inode->i_sb)->wb_pagevec_pool);
+	else
+		kfree(req->r_pages);
 	ceph_osdc_put_request(req);
+}
+
+/*
+ * allocate a page vec, either directly, or if necessary, via a the
+ * mempool.  we avoid the mempool if we can because req->r_num_pages
+ * may be less than the maximum write size.
+ */
+static void alloc_page_vec(struct ceph_client *client,
+			   struct ceph_osd_request *req)
+{
+	req->r_pages = kmalloc(sizeof(struct page *) * req->r_num_pages,
+			       GFP_NOFS);
+	if (!req->r_pages) {
+		req->r_pages = mempool_alloc(client->wb_pagevec_pool, GFP_NOFS);
+		req->r_pages_from_pool = 1;
+		WARN_ON(!req->r_pages);
+	}
 }
 
 /*
@@ -566,7 +579,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 	int should_loop = 1;
 	pgoff_t max_pages = 0, max_pages_ever = 0;
 	struct ceph_snap_context *snapc = NULL, *last_snapc = NULL;
-	struct pagevec *pvec;
+	struct pagevec pvec;
 	int done = 0;
 	int rc = 0;
 	unsigned wsize = 1 << inode->i_blkbits;
@@ -598,14 +611,13 @@ static int ceph_writepages_start(struct address_space *mapping,
 		wsize = PAGE_CACHE_SIZE;
 	max_pages_ever = wsize >> PAGE_CACHE_SHIFT;
 
-	pvec = kmalloc(sizeof(*pvec), GFP_KERNEL);
-	pagevec_init(pvec, 0);
+	pagevec_init(&pvec, 0);
 
 	/* ?? */
 	if (wbc->nonblocking && bdi_write_congested(bdi)) {
 		dout(" writepages congested\n");
 		wbc->encountered_congestion = 1;
-		goto out_free;
+		goto out_final;
 	}
 
 	/* where to start/end? */
@@ -665,14 +677,14 @@ get_more_pages:
 			   min((pgoff_t)PAGEVEC_SIZE,
 			       max_pages - (pgoff_t)locked_pages) - 1)
 			+ 1;
-		pvec_pages = pagevec_lookup_tag(pvec, mapping, &index,
+		pvec_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 						PAGECACHE_TAG_DIRTY,
 						want);
 		dout("pagevec_lookup_tag got %d\n", pvec_pages);
 		if (!pvec_pages && !locked_pages)
 			break;
 		for (i = 0; i < pvec_pages && locked_pages < max_pages; i++) {
-			page = pvec->pages[i];
+			page = pvec.pages[i];
 			dout("? %p idx %lu\n", page, page->index);
 			if (locked_pages == 0)
 				lock_page(page);  /* first page */
@@ -751,14 +763,10 @@ get_more_pages:
 					    snapc, do_sync,
 					    ci->i_truncate_seq,
 					    ci->i_truncate_size,
-					    &inode->i_mtime);
+					    &inode->i_mtime, true);
 				max_pages = req->r_num_pages;
 
-				rc = -ENOMEM;
-				req->r_pages = kmalloc(sizeof(*req->r_pages) *
-						       max_pages, GFP_NOFS);
-				if (req->r_pages == NULL)
-					goto out;
+				alloc_page_vec(client, req);
 				req->r_callback = writepages_finish;
 				req->r_inode = inode;
 				req->r_wbc = wbc;
@@ -785,7 +793,7 @@ get_more_pages:
 			if (pvec_pages && i == pvec_pages &&
 			    locked_pages < max_pages) {
 				dout("reached end pvec, trying for more\n");
-				pagevec_reinit(pvec);
+				pagevec_reinit(&pvec);
 				goto get_more_pages;
 			}
 
@@ -793,10 +801,10 @@ get_more_pages:
 			 * will need to release them below. */
 			for (j = i; j < pvec_pages; j++) {
 				dout(" pvec leftover page %p\n",
-				     pvec->pages[j]);
-				pvec->pages[j-i+first] = pvec->pages[j];
+				     pvec.pages[j]);
+				pvec.pages[j-i+first] = pvec.pages[j];
 			}
-			pvec->nr -= i-first;
+			pvec.nr -= i-first;
 		}
 
 		/* submit the write */
@@ -814,12 +822,8 @@ get_more_pages:
 		op->payload_len = op->length;
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 
-		rc = ceph_osdc_start_request(&client->osdc, req);
+		ceph_osdc_start_request(&client->osdc, req, true);
 		req = NULL;
-		/*
-		 * FIXME: if writepages_start fails (ENOMEM?) we should
-		 * really redirty all those pages and release req..
-		 */
 
 		/* continue? */
 		index = next;
@@ -828,9 +832,9 @@ get_more_pages:
 			done = 1;
 
 	release_pvec_pages:
-		dout("pagevec_release on %d pages (%p)\n", (int)pvec->nr,
-		     pvec->nr ? pvec->pages[0] : NULL);
-		pagevec_release(pvec);
+		dout("pagevec_release on %d pages (%p)\n", (int)pvec.nr,
+		     pvec.nr ? pvec.pages[0] : NULL);
+		pagevec_release(&pvec);
 
 		if (locked_pages && !done)
 			goto retry;
@@ -854,8 +858,7 @@ out:
 		rc = 0;  /* vfs expects us to return 0 */
 	ceph_put_snap_context(snapc);
 	dout("writepages done, rc = %d\n", rc);
-out_free:
-	kfree(pvec);
+out_final:
 	return rc;
 }
 
@@ -1075,7 +1078,7 @@ const struct address_space_operations ceph_aops = {
  */
 
 /*
- * Reuse write_{begin,end} here for simplicity.
+ * Reuse write_begin here for simplicity.
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 30)
 static int ceph_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
