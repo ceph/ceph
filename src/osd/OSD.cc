@@ -2934,9 +2934,13 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     // stray?
     bool acting = pg->is_acting(from);
     if (!acting) {
-      dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
-      pg->stray_set.insert(from);
-      pg->state_clear(PG_STATE_CLEAN);
+      if (pg->stray_purged.count(from)) {
+	dout(10) << *pg << " osd" << from << " sent racing info " << *it << "; already purging/purged" << dendl;
+      } else {
+	dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
+	pg->stray_set.insert(from);
+	pg->state_clear(PG_STATE_CLEAN);
+      }
     }
 
     if (had) {

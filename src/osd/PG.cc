@@ -1005,6 +1005,7 @@ void PG::clear_primary_state()
   need_up_thru = false;
   peer_last_complete_ondisk.clear();
   min_last_complete_ondisk = eversion_t();
+  stray_purged.clear();
 
   finish_sync_event = 0;  // so that _finish_recvoery doesn't go off in another thread
 
@@ -1710,6 +1711,7 @@ void PG::purge_strays()
     if (osd->osdmap->is_up(*p)) {
       dout(10) << "sending PGRemove to osd" << *p << dendl;
       osd->queue_for_removal(*p, info.pgid);
+      stray_purged.insert(*p);
     } else {
       dout(10) << "not sending PGRemove to down osd" << *p << dendl;
     }
