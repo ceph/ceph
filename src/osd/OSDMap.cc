@@ -57,6 +57,11 @@ void OSDMap::print(ostream& out)
     }
   }
   out << std::endl;
+
+  for (map<pg_t,vector<int> >::iterator p = pg_temp.begin();
+       p != pg_temp.end();
+       p++)
+    out << "pg_temp " << p->first << " " << p->second << "\n";
   
   for (hash_map<entity_addr_t,utime_t>::iterator p = blacklist.begin();
        p != blacklist.end();

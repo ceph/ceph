@@ -158,7 +158,7 @@ public:
 
     void encode(bufferlist& bl) {
       // base
-      __u16 v = 1;
+      __u16 v = 2;
       ::encode(v, bl);
       ::encode(fsid, bl);
       ::encode(epoch, bl); 
@@ -200,13 +200,20 @@ public:
       ::decode(new_up, p);
       ::decode(new_down, p);
       ::decode(new_weight, p);
-      ::decode(new_pg_temp, p);
+      if (v >= 2)
+	::decode(new_pg_temp, p);
       
       // extended
       ::decode(new_pool_names, p);
       ::decode(new_up_thru, p);
       ::decode(new_last_clean_interval, p);
       ::decode(new_lost, p);
+      if (v < 2) {
+	map<pg_t,uint32_t> new_pg_swap_primary;
+	list<pg_t> old_pg_swap_primary;
+	::decode(new_pg_swap_primary, p);
+	::decode(old_pg_swap_primary, p);
+      }
       ::decode(new_blacklist, p);
       ::decode(old_blacklist, p);
     }
@@ -520,7 +527,7 @@ private:
 
   // serialize, unserialize
   void encode(bufferlist& bl) {
-    __u16 v = 1;
+    __u16 v = 2;
     ::encode(v, bl);
 
     // base
@@ -577,7 +584,8 @@ private:
     ::decode(osd_state, p);
     ::decode(osd_weight, p);
     ::decode(osd_addr, p);
-    ::decode(pg_temp, p);
+    if (v >= 2)
+      ::decode(pg_temp, p);
 
     // crush
     bufferlist cbl;
@@ -593,8 +601,11 @@ private:
     for (map<int,nstring>::iterator i = pool_name.begin(); i != pool_name.end(); i++)
       name_pool[i->second] = i->first;
    
+    if (v < 2) {
+      map<pg_t,uint32_t> pg_swap_primary;
+      ::decode(pg_swap_primary, bl);
+    }
     ::decode(blacklist, p);
-
   }
  
 
