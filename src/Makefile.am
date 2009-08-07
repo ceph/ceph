@@ -120,15 +120,19 @@ libcrush_la_CFLAGS = ${AM_CFLAGS}
 lib_LTLIBRARIES += libcrush.la
 
 # librados
-librados_la_SOURCES = \
+librados_SOURCES = \
 	librados.cc \
 	msg/SimpleMessenger.cc \
 	osdc/Objecter.cc \
 	${libcommon_a_SOURCES}
+librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
+librados_a_SOURCES = ${librados_SOURCES}
+librados_a_CFLAGS = ${AM_CFLAGS}
+librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
@@ -158,11 +162,11 @@ bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_RADOSGW
 rgw_SOURCES = radosgw/rgw_main.cc
-rgw_LDADD = libradosgw.a librados.la libcrush.la -lfcgi -lcrypto -lexpat
+rgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 rgw_admin_SOURCES = radosgw/rgw_admin.cc
-rgw_admin_LDADD = libradosgw.a librados.la libcrush.la -lfcgi -lcrypto -lexpat
+rgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 rgw_aclparser_SOURCES = radosgw/rgw_aclparser.cc
-rgw_aclparser_LDADD = libradosgw.a librados.la libcrush.la -lfcgi -lcrypto -lexpat
+rgw_aclparser_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 bin_PROGRAMS += rgw rgw_admin rgw_aclparser
 endif
 
@@ -226,7 +230,7 @@ AM_LDFLAGS =
 noinst_LIBRARIES = \
 	libcommon.a libcrush.a \
 	libmon.a libmds.a libosdc.a libosd.a libclient.a \
-	libos.a libradosgw.a
+	libos.a librados.a libradosgw.a
 
 noinst_LIBRARIES +=  #libcephclient_so.a
 
