@@ -8,6 +8,7 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.util.Set;
 import java.util.EnumSet;
+import java.util.Vector;
 import java.lang.Math;
 
 import org.apache.hadoop.conf.Configuration;
@@ -49,8 +50,6 @@ public class CephFileSystem extends FileSystem {
   private static String fs_default_name;
   
   private native boolean ceph_initializeClient(String debugLevel, String mon);
-  private native boolean ceph_copyFromLocalFile(String localPath, String cephPath);
-  private native boolean ceph_copyToLocalFile(String cephPath, String localPath);
   private native String  ceph_getcwd();
   private native boolean ceph_setcwd(String path);
   private native boolean ceph_rmdir(String path);
@@ -615,7 +614,7 @@ public class CephFileSystem extends FileSystem {
     }
     
     // convert the strings to Paths
-    Path paths[] = new Path[dirlist.length];
+    Vector paths = new Vector(dirlist.length);
     for(int i = 0; i < dirlist.length; ++i) {
       //we don't want . or .. entries, which Ceph includes
       if (dirlist[i].equals(".") || dirlist[i].equals("..")) continue;
@@ -625,12 +624,12 @@ public class CephFileSystem extends FileSystem {
       // convert each listing to an absolute path
       Path raw_path = new Path(dirlist[i]);
       if (raw_path.isAbsolute())
-	paths[i] = raw_path;
+	paths.addElement(raw_path);
       else
-	paths[i] = new Path(abs_path, raw_path);
+	paths.addElement(new Path(abs_path, raw_path));
     }
     debug("listPaths:exit");
-    return paths;     
+    return (Path[])paths.toArray(new Path[paths.size()]);
   }
 
   private void debug(String statement) {

@@ -24,22 +24,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_copyFromLocalFile
- * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1copyFromLocalFile
-  (JNIEnv *, jobject, jstring, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_copyToLocalFile
- * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1copyToLocalFile
-  (JNIEnv *, jobject, jstring, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_getcwd
  * Signature: ()Ljava/lang/String;
  */
