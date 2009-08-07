@@ -49,7 +49,7 @@ void Elector::shutdown()
 void Elector::bump_epoch(epoch_t e) 
 {
   dout(10) << "bump_epoch " << epoch << " to " << e << dendl;
-  assert(epoch < e);
+  assert(epoch <= e);
   epoch = e;
   mon->store->put_int(epoch, "election_epoch");
 
