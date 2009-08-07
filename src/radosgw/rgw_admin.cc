@@ -21,7 +21,7 @@ using namespace std;
 
 void usage() 
 {
-  cerr << "usage: s3admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
+  cerr << "usage: rgw_admin <--user-gen | --user-modify | --read-policy | --list-buckets > [options...]" << std::endl;
   cerr << "options:" << std::endl;
   cerr << "   --uid=<id>" << std::endl;
   cerr << "   --key=<key>" << std::endl;
@@ -74,14 +74,14 @@ int gen_rand_alphanumeric(char *dest, int size) /* size should be the required s
   return 0;
 }
 
-static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& dest)
+static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
 {
   ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
   if (!owner)
     return -EINVAL;
 
-  S3UserInfo owner_info;
-  if (s3_get_user_info(owner->get_id(), owner_info) < 0) {
+  RGWUserInfo owner_info;
+  if (rgw_get_user_info(owner->get_id(), owner_info) < 0) {
     cerr << "owner info does not exist" << std::endl;
     return -EINVAL;
   }
@@ -89,16 +89,16 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
   new_owner.set_id(owner->get_id());
   new_owner.set_name(owner_info.display_name);
 
-  S3AccessControlList& src_acl = src.get_acl();
-  S3AccessControlList& acl = dest.get_acl();
+  RGWAccessControlList& src_acl = src.get_acl();
+  RGWAccessControlList& acl = dest.get_acl();
 
   XMLObjIter iter = src_acl.find("Grant");
   ACLGrant *src_grant = (ACLGrant *)iter.get_next();
   while (src_grant) {
     string id = src_grant->get_id();
     
-    S3UserInfo grant_user;
-    if (s3_get_user_info(id, grant_user) < 0) {
+    RGWUserInfo grant_user;
+    if (rgw_get_user_info(id, grant_user) < 0) {
       cerr << "grant user does not exist:" << id << std::endl;
     } else {
       ACLGrant new_grant;
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
-  common_init(args, "s3a", true);
+  common_init(args, "rgw", true);
 
   const char *user_id = 0;
   const char *secret_key = 0;
@@ -133,8 +133,8 @@ int main(int argc, char **argv)
   bool read_policy = false;
   bool list_buckets = false;
   int actions = 0 ;
-  S3UserInfo info;
-  S3Access *store;
+  RGWUserInfo info;
+  RGWAccess *store;
 
   if (g_conf.clock_tare) g_clock.tare();
 
@@ -165,7 +165,7 @@ int main(int argc, char **argv)
     }
   }
 
-  store = S3Access::init_storage_provider("rados", argc, argv);
+  store = RGWAccess::init_storage_provider("rados", argc, argv);
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
   }
@@ -181,7 +181,7 @@ int main(int argc, char **argv)
 
     string user_id_str = user_id;
 
-    if (s3_get_user_info(user_id_str, info) < 0) {
+    if (rgw_get_user_info(user_id_str, info) < 0) {
       cerr << "error reading user info, aborting" << std::endl;
       exit(1);
     }
@@ -226,7 +226,7 @@ int main(int argc, char **argv)
     if (user_email)
       info.user_email = user_email;
 
-    if (s3_store_user_info(info) < 0) {
+    if (rgw_store_user_info(info) < 0) {
       cerr << "error storing user info" << std::endl;
     } else {
       cout << "User ID: " << info.user_id << std::endl;
@@ -245,9 +245,9 @@ int main(int argc, char **argv)
     string bucket_str(bucket);
     string object_str(object);
     int ret = store->get_attr(bucket_str, object_str,
-                       S3_ATTR_ACL, bl);
+                       RGW_ATTR_ACL, bl);
 
-    S3AccessControlPolicy policy;
+    RGWAccessControlPolicy policy;
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       policy.decode(iter);
@@ -259,19 +259,19 @@ int main(int argc, char **argv)
   if (list_buckets) {
     actions++;
     string id;
-    S3AccessHandle handle;
+    RGWAccessHandle handle;
 
     if (user_id) {
-      S3UserBuckets buckets;
-      if (s3_get_user_buckets(user_id, buckets) < 0) {
+      RGWUserBuckets buckets;
+      if (rgw_get_user_buckets(user_id, buckets) < 0) {
         cout << "could not get buckets for uid " << user_id << std::endl;
       } else {
         cout << "listing buckets for uid " << user_id << std::endl;
-        map<string, S3ObjEnt>& m = buckets.get_buckets();
-        map<string, S3ObjEnt>::iterator iter;
+        map<string, RGWObjEnt>& m = buckets.get_buckets();
+        map<string, RGWObjEnt>::iterator iter;
 
         for (iter = m.begin(); iter != m.end(); ++iter) {
-          S3ObjEnt obj = iter->second;
+          RGWObjEnt obj = iter->second;
           cout << obj.name << std::endl;
         }
       }
@@ -279,7 +279,7 @@ int main(int argc, char **argv)
       if (store->list_buckets_init(id, &handle) < 0) {
         cout << "list-buckets: no entries found" << std::endl;
       } else {
-        S3ObjEnt obj;
+        RGWObjEnt obj;
         cout << "listing all buckets" << std::endl;
         while (store->list_buckets_next(id, obj, &handle) >= 0) {
           cout << obj.name << std::endl;

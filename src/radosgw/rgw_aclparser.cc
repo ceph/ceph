@@ -10,7 +10,7 @@
 using namespace std;
                                   
 int main(int argc, char **argv) {
-  S3XMLParser parser;
+  RGWXMLParser parser;
 
   if (!parser.init())
     exit(1);
@@ -34,11 +34,11 @@ int main(int argc, char **argv) {
       break;
   }
 
-  S3AccessControlPolicy *policy = (S3AccessControlPolicy *)parser.find_first("AccessControlPolicy");
+  RGWAccessControlPolicy *policy = (RGWAccessControlPolicy *)parser.find_first("AccessControlPolicy");
 
   if (policy) {
     string id="79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be";
-    cout << hex << policy->get_perm(id, S3_PERM_ALL) << dec << endl;
+    cout << hex << policy->get_perm(id, RGW_PERM_ALL) << dec << endl;
     policy->to_xml(cout);
   }
 
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
   bufferlist bl;
   policy->encode(bl);
 
-  S3AccessControlPolicy newpol;
+  RGWAccessControlPolicy newpol;
   bufferlist::iterator iter = bl.begin();
   newpol.decode(iter);
 

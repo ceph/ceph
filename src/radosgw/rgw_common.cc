@@ -79,7 +79,7 @@ string& XMLArgs::get(const char *name)
   return get(s);
 }
 
-bool verify_permission(S3AccessControlPolicy *policy, string& uid, int perm)
+bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int perm)
 {
    if (!policy)
      return false;

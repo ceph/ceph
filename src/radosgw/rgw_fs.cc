@@ -20,40 +20,40 @@
 
 using namespace std;
 
-struct s3fs_state {
+struct rgwfs_state {
   DIR *dir;
 };
 
 #define DIR_NAME "/tmp/radosgw"
 
-int S3FS::list_buckets_init(string& id, S3AccessHandle *handle)
+int RGWFS::list_buckets_init(string& id, RGWAccessHandle *handle)
 {
   DIR *dir = opendir(DIR_NAME);
-  struct s3fs_state *state;
+  struct rgwfs_state *state;
 
   if (!dir)
     return -errno;
 
-  state = (struct s3fs_state *)malloc(sizeof(struct s3fs_state));
+  state = (struct rgwfs_state *)malloc(sizeof(struct rgwfs_state));
   if (!state)
     return -ENOMEM;
 
   state->dir = dir;
 
-  *handle = (S3AccessHandle)state;
+  *handle = (RGWAccessHandle)state;
 
   return 0;
 }
 
-int S3FS::list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
+int RGWFS::list_buckets_next(string& id, RGWObjEnt& obj, RGWAccessHandle *handle)
 {
-  struct s3fs_state *state;
+  struct rgwfs_state *state;
   struct dirent *dirent;
 #define BUF_SIZE 512
 
   if (!handle)
     return -EINVAL;
-  state = *(struct s3fs_state **)handle;
+  state = *(struct rgwfs_state **)handle;
 
   if (!state)
     return -EINVAL;
@@ -82,8 +82,8 @@ int S3FS::list_buckets_next(string& id, S3ObjEnt& obj, S3AccessHandle *handle)
   }
 }
 
-int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
-                       string& marker, vector<S3ObjEnt>& result, map<string, bool>& common_prefixes)
+int RGWFS::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
+                       string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
   map<string, bool> dir_map;
   char path[BUF_SIZE];
@@ -123,7 +123,7 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
   result.clear();
   int i;
   for (i=0; i<max && iter != dir_map.end(); i++, ++iter) {
-    S3ObjEnt obj;
+    RGWObjEnt obj;
     char buf[BUF_SIZE];
     struct stat statbuf;
     obj.name = iter->first;
@@ -133,7 +133,7 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
     obj.mtime = statbuf.st_mtime;
     obj.size = statbuf.st_size;
     char *etag;
-    if (get_attr(S3_ATTR_ETAG, buf, &etag) >= 0) {
+    if (get_attr(RGW_ATTR_ETAG, buf, &etag) >= 0) {
       strncpy(obj.etag, etag, sizeof(obj.etag));
       obj.etag[sizeof(obj.etag)-1] = '\0';
       free(etag);
@@ -145,7 +145,7 @@ int S3FS::list_objects(string& id, string& bucket, int max, string& prefix, stri
 }
 
 
-int S3FS::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
+int RGWFS::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -172,7 +172,7 @@ int S3FS::create_bucket(std::string& id, std::string& bucket, map<nstring, buffe
   return 0;
 }
 
-int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
+int RGWFS::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
                   map<nstring, bufferlist>& attrs)
 {
@@ -228,7 +228,7 @@ int S3FS::put_obj(std::string& id, std::string& bucket, std::string& obj, const 
   return 0;
 }
 
-int S3FS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
+int RGWFS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -236,7 +236,7 @@ int S3FS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_
                const char *if_match,
                const char *if_nomatch,
                map<nstring, bufferlist>& attrs,
-               struct s3_err *err)
+               struct rgw_err *err)
 {
   int ret;
   char *data;
@@ -259,7 +259,7 @@ int S3FS::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_
 }
 
 
-int S3FS::delete_bucket(std::string& id, std::string& bucket)
+int RGWFS::delete_bucket(std::string& id, std::string& bucket)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1;
   char buf[len];
@@ -272,7 +272,7 @@ int S3FS::delete_bucket(std::string& id, std::string& bucket)
 }
 
 
-int S3FS::delete_obj(std::string& id, std::string& bucket, std::string& obj)
+int RGWFS::delete_obj(std::string& id, std::string& bucket, std::string& obj)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -284,7 +284,7 @@ int S3FS::delete_obj(std::string& id, std::string& bucket, std::string& obj)
   return 0;
 }
 
-int S3FS::get_attr(const char *name, int fd, char **attr)
+int RGWFS::get_attr(const char *name, int fd, char **attr)
 {
   char *attr_buf;
 #define ETAG_LEN 32
@@ -311,7 +311,7 @@ int S3FS::get_attr(const char *name, int fd, char **attr)
   return attr_len;
 }
 
-int S3FS::get_attr(const char *name, const char *path, char **attr)
+int RGWFS::get_attr(const char *name, const char *path, char **attr)
 {
   char *attr_buf;
   size_t len = ETAG_LEN;
@@ -338,7 +338,7 @@ int S3FS::get_attr(const char *name, const char *path, char **attr)
   return attr_len;
 }
 
-int S3FS::get_attr(std::string& bucket, std::string& obj,
+int RGWFS::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -358,7 +358,7 @@ done:
   return r;
 }
 
-int S3FS::set_attr(std::string& bucket, std::string& obj,
+int RGWFS::set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
@@ -375,7 +375,7 @@ int S3FS::set_attr(std::string& bucket, std::string& obj,
   return ret;
 }
 
-int S3FS::get_obj(std::string& bucket, std::string& obj, 
+int RGWFS::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
             map<nstring, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -383,7 +383,7 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
             const char *if_match,
             const char *if_nomatch,
             bool get_data,
-            struct s3_err *err)
+            struct rgw_err *err)
 {
   int len = strlen(DIR_NAME) + 1 + bucket.size() + 1 + obj.size() + 1;
   char buf[len];
@@ -426,7 +426,7 @@ int S3FS::get_obj(std::string& bucket, std::string& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(S3_ATTR_ETAG, fd, &etag);
+    r = get_attr(RGW_ATTR_ETAG, fd, &etag);
     if (r < 0)
       goto done;
  

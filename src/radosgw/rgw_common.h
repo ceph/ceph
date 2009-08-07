@@ -1,5 +1,5 @@
-#ifndef __S3COMMON_H
-#define __S3COMMON_H
+#ifndef __RGWCOMMON_H
+#define __RGWCOMMON_H
 
 #include "fcgiapp.h"
 
@@ -10,26 +10,26 @@
 
 using namespace std;
 
-#define SERVER_NAME "S3FS"
+#define SERVER_NAME "RGWFS"
 
-#define S3_ATTR_PREFIX  "user.s3."
+#define RGW_ATTR_PREFIX  "user.rgw."
 
-#define S3_ATTR_ACL		S3_ATTR_PREFIX "acl"
-#define S3_ATTR_ETAG    	S3_ATTR_PREFIX "etag"
-#define S3_ATTR_BUCKETS		S3_ATTR_PREFIX "buckets"
-#define S3_ATTR_META_PREFIX	S3_ATTR_PREFIX "x-amz-meta-"
-#define S3_ATTR_CONTENT_TYPE	S3_ATTR_PREFIX "content_type"
+#define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
+#define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
+#define RGW_ATTR_BUCKETS		RGW_ATTR_PREFIX "buckets"
+#define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX "x-amz-meta-"
+#define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
 
 #define USER_INFO_VER 1
 
-typedef void *S3AccessHandle;
+typedef void *RGWAccessHandle;
 
-struct s3_err {
+struct rgw_err {
   const char *num;
   const char *code;
   const char *message;
 
-  s3_err() : num(NULL), code(NULL), message(NULL) {}
+  rgw_err() : num(NULL), code(NULL), message(NULL) {}
 };
 
 class NameVal
@@ -80,10 +80,10 @@ struct fcgx_state {
    FCGX_Stream *err;
 };
 
-class S3AccessControlPolicy;
+class RGWAccessControlPolicy;
 
 
-struct S3UserInfo
+struct RGWUserInfo
 {
   string user_id;
   string secret_key;
@@ -114,7 +114,7 @@ struct S3UserInfo
     user_email.clear();
   }
 };
-WRITE_CLASS_ENCODER(S3UserInfo)
+WRITE_CLASS_ENCODER(RGWUserInfo)
 
 
 struct req_state {
@@ -130,7 +130,7 @@ struct req_state {
    const char *length;
    const char *content_type;
    bool err_exist;
-   struct s3_err err;
+   struct rgw_err err;
 
    XMLArgs args;
 
@@ -146,8 +146,8 @@ struct req_state {
 
    vector<pair<string, string> > x_amz_meta;
 
-   S3UserInfo user; 
-   S3AccessControlPolicy *acl;
+   RGWUserInfo user; 
+   RGWAccessControlPolicy *acl;
 
    string canned_acl;
    const char *copy_source;
@@ -156,7 +156,7 @@ struct req_state {
    req_state() : acl(NULL) {}
 };
 
-struct S3ObjEnt {
+struct RGWObjEnt {
   std::string name;
   size_t size;
   time_t mtime;
@@ -173,7 +173,7 @@ struct S3ObjEnt {
     ::decode(mtime, bl);
   }
 };
-WRITE_CLASS_ENCODER(S3ObjEnt)
+WRITE_CLASS_ENCODER(RGWObjEnt)
 
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
@@ -185,7 +185,7 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 }
 
 extern int parse_time(const char *time_str, time_t *time);
-extern bool verify_permission(S3AccessControlPolicy *policy, string& uid, int perm);
+extern bool verify_permission(RGWAccessControlPolicy *policy, string& uid, int perm);
 extern bool verify_permission(struct req_state *s, int perm);
 extern bool url_decode(string& src_str, string& dest_str);
 

@@ -54,21 +54,21 @@ void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs)
       string& val = iter->second;
       bufferlist bl;
       bl.append(val.c_str(), val.size() + 1);
-      string attr_name = S3_ATTR_PREFIX;
+      string attr_name = RGW_ATTR_PREFIX;
       attr_name.append(name);
       attrs[attr_name.c_str()] = bl;
     }
   }
 }
 
-int read_acls(S3AccessControlPolicy *policy, string& bucket, string& object)
+int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object)
 {
   bufferlist bl;
   int ret = 0;
 
   if (bucket.size()) {
-    ret = s3store->get_attr(bucket, object,
-                       S3_ATTR_ACL, bl);
+    ret = rgwstore->get_attr(bucket, object,
+                       RGW_ATTR_ACL, bl);
 
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
@@ -86,7 +86,7 @@ int read_acls(struct req_state *s, bool only_bucket)
   string obj_str;
 
   if (!s->acl) {
-     s->acl = new S3AccessControlPolicy;
+     s->acl = new RGWAccessControlPolicy;
      if (!s->acl)
        return -ENOMEM;
   }
@@ -101,9 +101,9 @@ int read_acls(struct req_state *s, bool only_bucket)
   return ret;
 }
 
-void S3GetObj::execute()
+void RGWGetObj::execute()
 {
-  if (!verify_permission(s, S3_PERM_READ)) {
+  if (!verify_permission(s, RGW_PERM_READ)) {
     ret = -EACCES;
     goto done;
   }
@@ -114,7 +114,7 @@ void S3GetObj::execute()
 
   init_common();
 
-  len = s3store->get_obj(s->bucket_str, s->object_str, &data, ofs, end, &attrs,
+  len = rgwstore->get_obj(s->bucket_str, s->object_str, &data, ofs, end, &attrs,
                          mod_ptr, unmod_ptr, if_match, if_nomatch, get_data, &err);
   if (len < 0)
     ret = len;
@@ -123,7 +123,7 @@ done:
   send_response();
 }
 
-int S3GetObj::init_common()
+int RGWGetObj::init_common()
 {
   if (range_str) {
     int r = parse_range(range_str, ofs, end);
@@ -145,23 +145,23 @@ int S3GetObj::init_common()
   return 0;
 }
 
-void S3ListBuckets::execute()
+void RGWListBuckets::execute()
 {
-  ret = s3_get_user_buckets(s->user.user_id, buckets);
+  ret = rgw_get_user_buckets(s->user.user_id, buckets);
   if (ret < 0) {
     /* hmm.. something wrong here.. the user was authenticated, so it
        should exist, just try to recreate */
-    cerr << "WARNING: failed on s3_get_user_buckets uid=" << s->user.user_id << std::endl;
-    s3_put_user_buckets(s->user.user_id, buckets);
+    cerr << "WARNING: failed on rgw_get_user_buckets uid=" << s->user.user_id << std::endl;
+    rgw_put_user_buckets(s->user.user_id, buckets);
     ret = 0;
   }
 
   send_response();
 }
 
-void S3ListBucket::execute()
+void RGWListBucket::execute()
 {
-  if (!verify_permission(s, S3_PERM_READ)) {
+  if (!verify_permission(s, RGW_PERM_READ)) {
     ret = -EACCES;
     goto done;
   }
@@ -175,14 +175,14 @@ void S3ListBucket::execute()
     max = -1;
   }
   delimiter = s->args.get("delimiter");
-  ret = s3store->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes);
+  ret = rgwstore->list_objects(s->user.user_id, s->bucket_str, max, prefix, delimiter, marker, objs, common_prefixes);
 done:
   send_response();
 }
 
-void S3CreateBucket::execute()
+void RGWCreateBucket::execute()
 {
-  S3AccessControlPolicy policy;
+  RGWAccessControlPolicy policy;
   map<nstring, bufferlist> attrs;
   bufferlist aclbl;
 
@@ -193,15 +193,15 @@ void S3CreateBucket::execute()
   }
   policy.encode(aclbl);
 
-  attrs[S3_ATTR_ACL] = aclbl;
+  attrs[RGW_ATTR_ACL] = aclbl;
 
-  ret = s3store->create_bucket(s->user.user_id, s->bucket_str, attrs);
+  ret = rgwstore->create_bucket(s->user.user_id, s->bucket_str, attrs);
 
   if (ret == 0) {
-    S3UserBuckets buckets;
+    RGWUserBuckets buckets;
 
-    int r = s3_get_user_buckets(s->user.user_id, buckets);
-    S3ObjEnt new_bucket;
+    int r = rgw_get_user_buckets(s->user.user_id, buckets);
+    RGWObjEnt new_bucket;
 
     switch (r) {
     case 0:
@@ -211,10 +211,10 @@ void S3CreateBucket::execute()
       new_bucket.size = 0;
       time(&new_bucket.mtime);
       buckets.add(new_bucket);
-      ret = s3_put_user_buckets(s->user.user_id, buckets);
+      ret = rgw_put_user_buckets(s->user.user_id, buckets);
       break;
     default:
-      cerr << "s3_get_user_buckets returned " << ret << std::endl;
+      cerr << "rgw_get_user_buckets returned " << ret << std::endl;
       break;
     }
   }
@@ -222,26 +222,26 @@ done:
   send_response();
 }
 
-void S3DeleteBucket::execute()
+void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (!verify_permission(s, S3_PERM_WRITE)) {
+  if (!verify_permission(s, RGW_PERM_WRITE)) {
     abort_early(s, -EACCES);
     return;
   }
 
   if (s->bucket) {
-    ret = s3store->delete_bucket(s->user.user_id, s->bucket_str);
+    ret = rgwstore->delete_bucket(s->user.user_id, s->bucket_str);
 
     if (ret == 0) {
-      S3UserBuckets buckets;
+      RGWUserBuckets buckets;
 
-      int r = s3_get_user_buckets(s->user.user_id, buckets);
+      int r = rgw_get_user_buckets(s->user.user_id, buckets);
 
       if (r == 0 || r == -ENOENT) {
         buckets.remove(s->bucket_str);
-        ret = s3_put_user_buckets(s->user.user_id, buckets);
+        ret = rgw_put_user_buckets(s->user.user_id, buckets);
       }
     }
   }
@@ -249,10 +249,10 @@ void S3DeleteBucket::execute()
   send_response();
 }
 
-void S3PutObj::execute()
+void RGWPutObj::execute()
 {
   ret = -EINVAL;
-  struct s3_err err;
+  struct rgw_err err;
   if (!s->object) {
     goto done;
   } else {
@@ -260,9 +260,9 @@ void S3PutObj::execute()
     if (ret < 0)
       goto done;
 
-    S3AccessControlPolicy policy;
+    RGWAccessControlPolicy policy;
 
-    if (!verify_permission(s, S3_PERM_WRITE)) {
+    if (!verify_permission(s, RGW_PERM_WRITE)) {
       ret = -EACCES;
       goto done;
     }
@@ -313,29 +313,29 @@ void S3PutObj::execute()
     map<nstring, bufferlist> attrs;
     bufferlist bl;
     bl.append(md5_str.c_str(), md5_str.size() + 1);
-    attrs[S3_ATTR_ETAG] = bl;
-    attrs[S3_ATTR_ACL] = aclbl;
+    attrs[RGW_ATTR_ETAG] = bl;
+    attrs[RGW_ATTR_ACL] = aclbl;
 
     if (s->content_type) {
       bl.clear();
       bl.append(s->content_type, strlen(s->content_type) + 1);
-      attrs[S3_ATTR_CONTENT_TYPE] = bl;
+      attrs[RGW_ATTR_CONTENT_TYPE] = bl;
     }
 
     get_request_metadata(s, attrs);
 
-    ret = s3store->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, len, NULL, attrs);
+    ret = rgwstore->put_obj(s->user.user_id, s->bucket_str, s->object_str, data, len, NULL, attrs);
   }
 done:
   free(data);
   send_response();
 }
 
-void S3DeleteObj::execute()
+void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   if (s->object) {
-    ret = s3store->delete_obj(s->user.user_id, s->bucket_str, s->object_str);
+    ret = rgwstore->delete_obj(s->user.user_id, s->bucket_str, s->object_str);
   }
 
   send_response();
@@ -368,22 +368,22 @@ static bool parse_copy_source(const char *src, string& bucket, string& object)
   return true;
 }
 
-int S3CopyObj::init_common()
+int RGWCopyObj::init_common()
 {
-  struct s3_err err;
-  S3AccessControlPolicy dest_policy;
+  struct rgw_err err;
+  RGWAccessControlPolicy dest_policy;
   bool ret;
   bufferlist aclbl;
   map<nstring, bufferlist> attrs;
   bufferlist bl;
-  S3AccessControlPolicy src_policy;
+  RGWAccessControlPolicy src_policy;
   string empty_str;
   time_t mod_time;
   time_t unmod_time;
   time_t *mod_ptr = NULL;
   time_t *unmod_ptr = NULL;
 
-  if (!verify_permission(s, S3_PERM_WRITE)) {
+  if (!verify_permission(s, RGW_PERM_WRITE)) {
     ret = -EACCES;
     return ret;
   }
@@ -406,7 +406,7 @@ int S3CopyObj::init_common()
   if (ret < 0)
     return ret;
 
-  if (!verify_permission(&src_policy, s->user.user_id, S3_PERM_READ)) {
+  if (!verify_permission(&src_policy, s->user.user_id, RGW_PERM_READ)) {
     ret = -EACCES;
     return ret;
   }
@@ -429,13 +429,13 @@ int S3CopyObj::init_common()
     unmod_ptr = &unmod_time;
   }
 
-  attrs[S3_ATTR_ACL] = aclbl;
+  attrs[RGW_ATTR_ACL] = aclbl;
   get_request_metadata(s, attrs);
 
   return 0;
 }
 
-void S3CopyObj::execute()
+void RGWCopyObj::execute()
 {
   ret = get_params();
   if (ret < 0)
@@ -444,7 +444,7 @@ void S3CopyObj::execute()
   if (init_common() < 0)
     goto done;
 
-  ret = s3store->copy_obj(s->user.user_id,
+  ret = rgwstore->copy_obj(s->user.user_id,
                         s->bucket_str, s->object_str,
                         src_bucket, src_object,
                         &mtime,
@@ -458,9 +458,9 @@ done:
   send_response();
 }
 
-void S3GetACLs::execute()
+void RGWGetACLs::execute()
 {
-  if (!verify_permission(s, S3_PERM_READ_ACP)) {
+  if (!verify_permission(s, RGW_PERM_READ_ACP)) {
     abort_early(s, -EACCES);
     return;
   }
@@ -478,14 +478,14 @@ void S3GetACLs::execute()
   send_response();
 }
 
-static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& dest)
+static int rebuild_policy(RGWAccessControlPolicy& src, RGWAccessControlPolicy& dest)
 {
   ACLOwner *owner = (ACLOwner *)src.find_first("Owner");
   if (!owner)
     return -EINVAL;
 
-  S3UserInfo owner_info;
-  if (s3_get_user_info(owner->get_id(), owner_info) < 0) {
+  RGWUserInfo owner_info;
+  if (rgw_get_user_info(owner->get_id(), owner_info) < 0) {
     cerr << "owner info does not exist" << std::endl;
     return -EINVAL;
   }
@@ -493,8 +493,8 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
   new_owner.set_id(owner->get_id());
   new_owner.set_name(owner_info.display_name);
 
-  S3AccessControlList& src_acl = src.get_acl();
-  S3AccessControlList& acl = dest.get_acl();
+  RGWAccessControlList& src_acl = src.get_acl();
+  RGWAccessControlList& acl = dest.get_acl();
 
   XMLObjIter iter = src_acl.find("Grant");
   ACLGrant *src_grant = (ACLGrant *)iter.get_next();
@@ -508,7 +508,7 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
       {
         string email = src_grant->get_id();
         cerr << "grant user email=" << email << std::endl;
-        if (s3_get_uid_by_email(email, id) < 0) {
+        if (rgw_get_uid_by_email(email, id) < 0) {
           cerr << "grant user email not found or other error" << std::endl;
           break;
         }
@@ -518,8 +518,8 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
         if (type.get_type() == ACL_TYPE_CANON_USER)
           id = src_grant->get_id();
     
-        S3UserInfo grant_user;
-        if (s3_get_user_info(id, grant_user) < 0) {
+        RGWUserInfo grant_user;
+        if (rgw_get_user_info(id, grant_user) < 0) {
           cerr << "grant user does not exist:" << id << std::endl;
         } else {
           ACLPermission& perm = src_grant->get_permission();
@@ -532,8 +532,8 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
     case ACL_TYPE_GROUP:
       {
         string group = src_grant->get_id();
-        if (group.compare(S3_URI_ALL_USERS) == 0 ||
-            group.compare(S3_URI_AUTH_USERS) == 0) {
+        if (group.compare(RGW_URI_ALL_USERS) == 0 ||
+            group.compare(RGW_URI_AUTH_USERS) == 0) {
           new_grant = *src_grant;
           grant_ok = true;
           cerr << "new grant: " << new_grant.get_id() << std::endl;
@@ -552,16 +552,16 @@ static int rebuild_policy(S3AccessControlPolicy& src, S3AccessControlPolicy& des
   return 0; 
 }
 
-void S3PutACLs::execute()
+void RGWPutACLs::execute()
 {
   bufferlist bl;
 
   char *data = NULL;
-  S3AccessControlPolicy *policy;
-  S3XMLParser parser;
-  S3AccessControlPolicy new_policy;
+  RGWAccessControlPolicy *policy;
+  RGWXMLParser parser;
+  RGWAccessControlPolicy new_policy;
 
-  if (!verify_permission(s, S3_PERM_WRITE_ACP)) {
+  if (!verify_permission(s, RGW_PERM_WRITE_ACP)) {
     ret = -EACCES;
     goto done;
   }
@@ -574,7 +574,7 @@ void S3PutACLs::execute()
   }
 
   if (!s->acl) {
-     s->acl = new S3AccessControlPolicy;
+     s->acl = new RGWAccessControlPolicy;
      if (!s->acl) {
        ret = -ENOMEM;
        goto done;
@@ -590,7 +590,7 @@ void S3PutACLs::execute()
     ret = -EACCES;
     goto done;
   }
-  policy = (S3AccessControlPolicy *)parser.find_first("AccessControlPolicy");
+  policy = (RGWAccessControlPolicy *)parser.find_first("AccessControlPolicy");
   if (!policy) {
     ret = -EINVAL;
     goto done;
@@ -609,8 +609,8 @@ void S3PutACLs::execute()
   /* FIXME: make some checks around checks and fix policy */
 
   new_policy.encode(bl);
-  ret = s3store->set_attr(s->bucket_str, s->object_str,
-                       S3_ATTR_ACL, bl);
+  ret = rgwstore->set_attr(s->bucket_str, s->object_str,
+                       RGW_ATTR_ACL, bl);
 
 done:
   free(data);
@@ -620,7 +620,7 @@ done:
 }
 
 
-void S3Handler::init_state(struct req_state *s, struct fcgx_state *fcgx)
+void RGWHandler::init_state(struct req_state *s, struct fcgx_state *fcgx)
 {
   this->s = s;
 
@@ -635,14 +635,14 @@ void S3Handler::init_state(struct req_state *s, struct fcgx_state *fcgx)
   memset(&s->err, 0, sizeof(s->err));
   if (s->acl) {
      delete s->acl;
-     s->acl = new S3AccessControlPolicy;
+     s->acl = new RGWAccessControlPolicy;
   }
   s->canned_acl.clear();
 
   provider_init_state();
 }
 
-int S3Handler::do_read_permissions(bool only_bucket)
+int RGWHandler::do_read_permissions(bool only_bucket)
 {
   int ret = read_acls(s, only_bucket);
 

@@ -3,12 +3,12 @@
 #include "rgw_fs.h"
 #include "rgw_rados.h"
 
-static S3FS fs_provider;
-static S3Rados rados_provider;
+static RGWFS fs_provider;
+static RGWRados rados_provider;
 
-S3Access* S3Access::store;
+RGWAccess* RGWAccess::store;
 
-S3Access *S3Access::init_storage_provider(const char *type, int argc, char *argv[])
+RGWAccess *RGWAccess::init_storage_provider(const char *type, int argc, char *argv[])
 {
   if (strcmp(type, "rados") == 0) {
     store = &rados_provider;

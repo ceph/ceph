@@ -10,8 +10,8 @@
 
 using namespace std;
 
-static string s3_uri_all_users = S3_URI_ALL_USERS;
-static string s3_uri_auth_users = S3_URI_AUTH_USERS;
+static string rgw_uri_all_users = RGW_URI_ALL_USERS;
+static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
                                   
 ostream& operator<<(ostream& out, XMLObj& obj) {
    out << obj.type << ": " << obj.data;
@@ -22,15 +22,15 @@ ostream& operator<<(ostream& out, XMLObj& obj) {
 void ACLPermission::xml_end(const char *el) {
   const char *s = data.c_str();
   if (strcasecmp(s, "READ") == 0) {
-    flags |= S3_PERM_READ;
+    flags |= RGW_PERM_READ;
   } else if (strcasecmp(s, "WRITE") == 0) {
-    flags |= S3_PERM_WRITE;
+    flags |= RGW_PERM_WRITE;
   } else if (strcasecmp(s, "READ_ACP") == 0) {
-    flags |= S3_PERM_READ_ACP;
+    flags |= RGW_PERM_READ_ACP;
   } else if (strcasecmp(s, "WRITE_ACP") == 0) {
-    flags |= S3_PERM_WRITE_ACP;
+    flags |= RGW_PERM_WRITE_ACP;
   } else if (strcasecmp(s, "FULL_CONTROL") == 0) {
-    flags |= S3_PERM_FULL_CONTROL;
+    flags |= RGW_PERM_FULL_CONTROL;
   }
 }
 
@@ -123,7 +123,7 @@ void ACLGrant::xml_end(const char *el) {
   };
 }
 
-void S3AccessControlList::init_user_map()
+void RGWAccessControlList::init_user_map()
 {
   multimap<string, ACLGrant>::iterator iter;
   acl_user_map.clear();
@@ -135,7 +135,7 @@ void S3AccessControlList::init_user_map()
   user_map_initialized = true;
 }
 
-void S3AccessControlList::add_grant(ACLGrant *grant)
+void RGWAccessControlList::add_grant(ACLGrant *grant)
 {
   string id = grant->get_id();
   if (id.size() > 0) {
@@ -143,7 +143,7 @@ void S3AccessControlList::add_grant(ACLGrant *grant)
   }
 }
 
-void S3AccessControlList::xml_end(const char *el) {
+void RGWAccessControlList::xml_end(const char *el) {
   XMLObjIter iter = find("Grant");
   ACLGrant *grant = (ACLGrant *)iter.get_next();
   while (grant) {
@@ -153,7 +153,7 @@ void S3AccessControlList::xml_end(const char *el) {
   init_user_map();
 }
 
-int S3AccessControlList::get_perm(string& id, int perm_mask) {
+int RGWAccessControlList::get_perm(string& id, int perm_mask) {
   cerr << "searching permissions for uid=" << id << " mask=" << perm_mask << std::endl;
   if (!user_map_initialized)
     init_user_map();
@@ -166,14 +166,14 @@ int S3AccessControlList::get_perm(string& id, int perm_mask) {
   return 0;
 }
 
-bool S3AccessControlList::create_canned(string id, string name, string canned_acl)
+bool RGWAccessControlList::create_canned(string id, string name, string canned_acl)
 {
   acl_user_map.clear();
   grant_map.clear();
 
   /* owner gets full control */
   ACLGrant grant;
-  grant.set_canon(id, name, S3_PERM_FULL_CONTROL);
+  grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
   add_grant(&grant);
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
@@ -182,15 +182,15 @@ bool S3AccessControlList::create_canned(string id, string name, string canned_ac
 
   ACLGrant group_grant;
   if (canned_acl.compare("public-read") == 0) {
-    group_grant.set_group(s3_uri_all_users, S3_PERM_READ);
+    group_grant.set_group(rgw_uri_all_users, RGW_PERM_READ);
     add_grant(&group_grant);
   } else if (canned_acl.compare("public-read-write") == 0) {
-    group_grant.set_group(s3_uri_all_users, S3_PERM_READ);
+    group_grant.set_group(rgw_uri_all_users, RGW_PERM_READ);
     add_grant(&group_grant);
-    group_grant.set_group(s3_uri_all_users, S3_PERM_WRITE);
+    group_grant.set_group(rgw_uri_all_users, RGW_PERM_WRITE);
     add_grant(&group_grant);
   } else if (canned_acl.compare("authenticated-read") == 0) {
-    group_grant.set_group(s3_uri_auth_users, S3_PERM_READ);
+    group_grant.set_group(rgw_uri_auth_users, RGW_PERM_READ);
     add_grant(&group_grant);
   } else {
     return false;
@@ -200,32 +200,32 @@ bool S3AccessControlList::create_canned(string id, string name, string canned_ac
 
 }
 
-void S3AccessControlPolicy::xml_end(const char *el) {
-  acl = *(S3AccessControlList *)find_first("AccessControlList");
+void RGWAccessControlPolicy::xml_end(const char *el) {
+  acl = *(RGWAccessControlList *)find_first("AccessControlList");
   owner = *(ACLOwner *)find_first("Owner");
 }
 
-int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
+int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   int perm = acl.get_perm(id, perm_mask);
 
   if (perm == perm_mask)
     return perm;
 
-  if (perm_mask & (S3_PERM_READ_ACP | S3_PERM_WRITE_ACP)) {
+  if (perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP)) {
     /* this is the owner, it has implicit permissions */
     if (id.compare(owner.get_id()) == 0) {
-      perm |= S3_PERM_READ_ACP | S3_PERM_WRITE_ACP;
+      perm |= RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP;
       perm &= perm_mask; 
     }
   }
 
   /* should we continue looking up? */
   if ((perm & perm_mask) != perm_mask) {
-    perm |= acl.get_perm(s3_uri_all_users, perm_mask);
+    perm |= acl.get_perm(rgw_uri_all_users, perm_mask);
 
-    if (id.compare(S3_USER_ANON_ID)) {
+    if (id.compare(RGW_USER_ANON_ID)) {
       /* this is not the anonymous user */
-      perm |= acl.get_perm(s3_uri_auth_users, perm_mask);
+      perm |= acl.get_perm(rgw_uri_auth_users, perm_mask);
     }
   }
 
@@ -235,19 +235,19 @@ int S3AccessControlPolicy::get_perm(string& id, int perm_mask) {
 }
 
 void xml_start(void *data, const char *el, const char **attr) {
-  S3XMLParser *handler = (S3XMLParser *)data;
+  RGWXMLParser *handler = (RGWXMLParser *)data;
 
   handler->xml_start(el, attr);
 }
 
-void S3XMLParser::xml_start(const char *el, const char **attr) {
+void RGWXMLParser::xml_start(const char *el, const char **attr) {
   XMLObj * obj;
   if (strcmp(el, "AccessControlPolicy") == 0) {
-    obj = new S3AccessControlPolicy();    
+    obj = new RGWAccessControlPolicy();    
   } else if (strcmp(el, "Owner") == 0) {
     obj = new ACLOwner();    
   } else if (strcmp(el, "AccessControlList") == 0) {
-    obj = new S3AccessControlList();    
+    obj = new RGWAccessControlList();    
   } else if (strcmp(el, "ID") == 0) {
     obj = new ACLID(); 
   } else if (strcmp(el, "DisplayName") == 0) {
@@ -277,12 +277,12 @@ void S3XMLParser::xml_start(const char *el, const char **attr) {
 }
 
 void xml_end(void *data, const char *el) {
-  S3XMLParser *handler = (S3XMLParser *)data;
+  RGWXMLParser *handler = (RGWXMLParser *)data;
 
   handler->xml_end(el);
 }
 
-void S3XMLParser::xml_end(const char *el) {
+void RGWXMLParser::xml_end(const char *el) {
   XMLObj *parent_obj = cur_obj->get_parent();
   cur_obj->xml_end(el);
   cur_obj = parent_obj;
@@ -290,22 +290,22 @@ void S3XMLParser::xml_end(const char *el) {
 
 void handle_data(void *data, const char *s, int len)
 {
-  S3XMLParser *handler = (S3XMLParser *)data;
+  RGWXMLParser *handler = (RGWXMLParser *)data;
 
   handler->handle_data(s, len);
 }
 
-void S3XMLParser::handle_data(const char *s, int len)
+void RGWXMLParser::handle_data(const char *s, int len)
 {
   cur_obj->xml_handle_data(s, len);
 }
 
 
-bool S3XMLParser::init()
+bool RGWXMLParser::init()
 {
   p = XML_ParserCreate(NULL);
   if (!p) {
-    cerr << "S3XMLParser::init(): ERROR allocating memory" << std::endl;
+    cerr << "RGWXMLParser::init(): ERROR allocating memory" << std::endl;
     return false;
   }
   XML_SetElementHandler(p, ::xml_start, ::xml_end);
@@ -315,7 +315,7 @@ bool S3XMLParser::init()
   return true;
 }
 
-bool S3XMLParser::parse(const char *_buf, int len, int done)
+bool RGWXMLParser::parse(const char *_buf, int len, int done)
 {
   int pos = buf_len;
   buf = (char *)realloc(buf, buf_len + len);
@@ -334,7 +334,7 @@ bool S3XMLParser::parse(const char *_buf, int len, int done)
 
 #if 0
 int main(int argc, char **argv) {
-  S3XMLParser parser;
+  RGWXMLParser parser;
 
   if (!parser.init())
     exit(1);
@@ -358,17 +358,17 @@ int main(int argc, char **argv) {
       break;
   }
 
-  S3AccessControlPolicy *policy = (S3AccessControlPolicy *)parser.find_first("AccessControlPolicy");
+  RGWAccessControlPolicy *policy = (RGWAccessControlPolicy *)parser.find_first("AccessControlPolicy");
 
   if (policy) {
     string id="79a59df900b949e55d96a1e698fbacedfd6e09d98eacf8f8d5218e7cd47ef2be";
-    cout << hex << policy->get_perm(id, S3_PERM_ALL) << dec << endl;
+    cout << hex << policy->get_perm(id, RGW_PERM_ALL) << dec << endl;
     policy->to_xml(cout);
   }
 
   cout << parser.get_xml() << endl;
 
-  S3AccessControlPolicy def;
+  RGWAccessControlPolicy def;
   string id="thisistheid!";
   string name="foobar";
   def.create_default(id, name);

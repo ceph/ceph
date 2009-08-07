@@ -16,12 +16,12 @@ using namespace std;
 
 static Rados *rados = NULL;
 
-#define ROOT_BUCKET ".s3"
+#define ROOT_BUCKET ".rgw"
 
 static string root_bucket(ROOT_BUCKET);
 static rados_pool_t root_pool;
 
-int S3Rados::initialize(int argc, char *argv[])
+int RGWRados::initialize(int argc, char *argv[])
 {
   rados = new Rados();
   if (!rados)
@@ -36,7 +36,7 @@ int S3Rados::initialize(int argc, char *argv[])
   return ret;
 }
 
-int S3Rados::open_root_pool(rados_pool_t *pool)
+int RGWRados::open_root_pool(rados_pool_t *pool)
 {
   int r = rados->open_pool(root_bucket.c_str(), pool);
   if (r < 0) {
@@ -50,16 +50,16 @@ int S3Rados::open_root_pool(rados_pool_t *pool)
   return r;
 }
 
-class S3RadosListState {
+class RGWRadosListState {
 public:
   vector<string> list;
   unsigned int pos;
-  S3RadosListState() : pos(0) {}
+  RGWRadosListState() : pos(0) {}
 };
 
-int S3Rados::list_buckets_init(std::string& id, S3AccessHandle *handle)
+int RGWRados::list_buckets_init(std::string& id, RGWAccessHandle *handle)
 {
-  S3RadosListState *state = new S3RadosListState();
+  RGWRadosListState *state = new RGWRadosListState();
 
   if (!state)
     return -ENOMEM;
@@ -68,14 +68,14 @@ int S3Rados::list_buckets_init(std::string& id, S3AccessHandle *handle)
   if (r < 0)
     return r;
 
-  *handle = (S3AccessHandle)state;
+  *handle = (RGWAccessHandle)state;
 
   return 0;
 }
 
-int S3Rados::list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle)
+int RGWRados::list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle)
 {
-  S3RadosListState *state = (S3RadosListState *)*handle;
+  RGWRadosListState *state = (RGWRadosListState *)*handle;
 
   if (state->pos == state->list.size()) {
     delete state;
@@ -96,8 +96,8 @@ static int open_pool(string& bucket, rados_pool_t *pool)
   return rados->open_pool(bucket.c_str(), pool);
 }
 
-int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
-                          string& marker, vector<S3ObjEnt>& result, map<string, bool>& common_prefixes)
+int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, string& delim,
+                          string& marker, vector<RGWObjEnt>& result, map<string, bool>& common_prefixes)
 {
   rados_pool_t pool;
   map<string, object_t> dir_map;
@@ -135,7 +135,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
   result.clear();
   int i, count = 0;
   for (i=0; i<max && map_iter != dir_map.end(); i++, ++map_iter) {
-    S3ObjEnt obj;
+    RGWObjEnt obj;
     obj.name = map_iter->first;
 
     if (!delim.empty()) {
@@ -152,7 +152,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
 
     bufferlist bl; 
     obj.etag[0] = '\0';
-    if (rados->getxattr(pool, map_iter->second, S3_ATTR_ETAG, bl) >= 0) {
+    if (rados->getxattr(pool, map_iter->second, RGW_ATTR_ETAG, bl) >= 0) {
       strncpy(obj.etag, bl.c_str(), sizeof(obj.etag));
       obj.etag[sizeof(obj.etag)-1] = '\0';
     }
@@ -164,7 +164,7 @@ int S3Rados::list_objects(string& id, string& bucket, int max, string& prefix, s
 }
 
 
-int S3Rados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
+int RGWRados::create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs)
 {
   object_t bucket_oid(bucket.c_str());
 
@@ -191,7 +191,7 @@ int S3Rados::create_bucket(std::string& id, std::string& bucket, map<nstring, bu
   return ret;
 }
 
-int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
+int RGWRados::put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
                   time_t *mtime,
                   map<nstring, bufferlist>& attrs)
 {
@@ -230,7 +230,7 @@ int S3Rados::put_obj(std::string& id, std::string& bucket, std::string& obj, con
   return 0;
 }
 
-int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
+int RGWRados::copy_obj(std::string& id, std::string& dest_bucket, std::string& dest_obj,
                std::string& src_bucket, std::string& src_obj,
                time_t *mtime,
                const time_t *mod_ptr,
@@ -238,7 +238,7 @@ int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& de
                const char *if_match,
                const char *if_nomatch,
                map<nstring, bufferlist>& attrs,  /* in/out */
-               struct s3_err *err)
+               struct rgw_err *err)
 {
  /* FIXME! this should use a special rados->copy() method */
   int ret;
@@ -265,7 +265,7 @@ int S3Rados::copy_obj(std::string& id, std::string& dest_bucket, std::string& de
 }
 
 
-int S3Rados::delete_bucket(std::string& id, std::string& bucket)
+int RGWRados::delete_bucket(std::string& id, std::string& bucket)
 {
   /* TODO! */
 #if 0
@@ -280,7 +280,7 @@ int S3Rados::delete_bucket(std::string& id, std::string& bucket)
 }
 
 
-int S3Rados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
+int RGWRados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
 {
   rados_pool_t pool;
 
@@ -297,7 +297,7 @@ int S3Rados::delete_obj(std::string& id, std::string& bucket, std::string& obj)
   return 0;
 }
 
-int S3Rados::get_attr(std::string& bucket, std::string& obj,
+int RGWRados::get_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& dest)
 {
   rados_pool_t pool;
@@ -322,7 +322,7 @@ int S3Rados::get_attr(std::string& bucket, std::string& obj,
   return 0;
 }
 
-int S3Rados::set_attr(std::string& bucket, std::string& obj,
+int RGWRados::set_attr(std::string& bucket, std::string& obj,
                        const char *name, bufferlist& bl)
 {
   rados_pool_t pool;
@@ -340,7 +340,7 @@ int S3Rados::set_attr(std::string& bucket, std::string& obj,
   return 0;
 }
 
-int S3Rados::get_obj(std::string& bucket, std::string& obj, 
+int RGWRados::get_obj(std::string& bucket, std::string& obj, 
             char **data, off_t ofs, off_t end,
             map<nstring, bufferlist> *attrs,
             const time_t *mod_ptr,
@@ -348,7 +348,7 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
             const char *if_match,
             const char *if_nomatch,
             bool get_data,
-            struct s3_err *err)
+            struct rgw_err *err)
 {
   int r = -EINVAL;
   size_t size, len;
@@ -396,7 +396,7 @@ int S3Rados::get_obj(std::string& bucket, std::string& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(bucket, obj, S3_ATTR_ETAG, etag);
+    r = get_attr(bucket, obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done;
 

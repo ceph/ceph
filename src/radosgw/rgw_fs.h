@@ -1,17 +1,17 @@
-#ifndef __S3FS_H
-#define __S3FS_H
+#ifndef __RGWFS_H
+#define __RGWFS_H
 
 #include "rgw_access.h"
 
 
-class S3FS  : public S3Access
+class RGWFS  : public RGWAccess
 {
 public:
-  int list_buckets_init(std::string& id, S3AccessHandle *handle);
-  int list_buckets_next(std::string& id, S3ObjEnt& obj, S3AccessHandle *handle);
+  int list_buckets_init(std::string& id, RGWAccessHandle *handle);
+  int list_buckets_next(std::string& id, RGWObjEnt& obj, RGWAccessHandle *handle);
 
   int list_objects(std::string& id, std::string& bucket, int max, std::string& prefix, std::string& delim,
-                   std::string& marker, std::vector<S3ObjEnt>& result, map<string, bool>& common_prefixes);
+                   std::string& marker, std::vector<RGWObjEnt>& result, map<string, bool>& common_prefixes);
 
   int create_bucket(std::string& id, std::string& bucket, map<nstring, bufferlist>& attrs);
   int put_obj(std::string& id, std::string& bucket, std::string& obj, const char *data, size_t size,
@@ -25,7 +25,7 @@ public:
                const char *if_match,
                const char *if_nomatch,
                map<nstring, bufferlist>& attrs,
-               struct s3_err *err);
+               struct rgw_err *err);
   int delete_bucket(std::string& id, std::string& bucket);
   int delete_obj(std::string& id, std::string& bucket, std::string& obj);
 
@@ -44,7 +44,7 @@ public:
             const char *if_match,
             const char *if_nomatch,
             bool get_data,
-            struct s3_err *err);
+            struct rgw_err *err);
 };
 
 #endif

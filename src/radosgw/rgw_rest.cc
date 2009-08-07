@@ -32,12 +32,12 @@ static struct errno_http hterrs[] = {
     { ERANGE, "416", "InvalidRange" },
     { 0, NULL }};
 
-void dump_errno(struct req_state *s, int err, struct s3_err *s3err)
+void dump_errno(struct req_state *s, int err, struct rgw_err *rgwerr)
 {
   const char *err_str;
-  const char *code = (s3err ? s3err->code : NULL);
+  const char *code = (rgwerr ? rgwerr->code : NULL);
 
-  if (!s3err || !s3err->num) {  
+  if (!rgwerr || !rgwerr->num) {  
     err_str = "500";
 
     if (err < 0)
@@ -55,14 +55,14 @@ void dump_errno(struct req_state *s, int err, struct s3_err *s3err)
       i++;
     }
   } else {
-    err_str = s3err->num;
+    err_str = rgwerr->num;
   }
 
   dump_status(s, err_str);
   if (err) {
     s->err_exist = true;
     s->err.code = code;
-    s->err.message = (s3err ? s3err->message : NULL);
+    s->err.message = (rgwerr ? rgwerr->message : NULL);
   }
 }
 
@@ -149,7 +149,7 @@ void end_header(struct req_state *s, const char *content_type)
   CGI_PRINTF(s->fcgx->out,"Content-type: %s\r\n\r\n", content_type);
   if (s->err_exist) {
     dump_start_xml(s);
-    struct s3_err &err = s->err;
+    struct rgw_err &err = s->err;
     open_section(s, "Error");
     if (err.code)
       dump_value(s, "Code", err.code);
@@ -169,7 +169,7 @@ void list_all_buckets_end(struct req_state *s)
   close_section(s, "ListAllMyBucketsResult");
 }
 
-void dump_bucket(struct req_state *s, S3ObjEnt& obj)
+void dump_bucket(struct req_state *s, RGWObjEnt& obj)
 {
   open_section(s, "Bucket");
   dump_value(s, "Name", obj.name.c_str());
@@ -183,7 +183,7 @@ void abort_early(struct req_state *s, int err)
   end_header(s);
 }
 
-int S3GetObj_REST::get_params()
+int RGWGetObj_REST::get_params()
 {
   range_str = FCGX_GetParam("HTTP_RANGE", s->fcgx->envp);
   if_mod = FCGX_GetParam("HTTP_IF_MODIFIED_SINCE", s->fcgx->envp);
@@ -194,7 +194,7 @@ int S3GetObj_REST::get_params()
   return 0;
 }
 
-int S3GetObj_REST::send_response()
+int RGWGetObj_REST::send_response()
 {
   const char *content_type = NULL;
 
@@ -202,7 +202,7 @@ int S3GetObj_REST::send_response()
     dump_content_length(s, len);
   }
   if (!ret) {
-    map<nstring, bufferlist>::iterator iter = attrs.find(S3_ATTR_ETAG);
+    map<nstring, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
       if (bl.length()) {
@@ -212,10 +212,10 @@ int S3GetObj_REST::send_response()
     }
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
        const char *name = iter->first.c_str();
-       if (strncmp(name, S3_ATTR_META_PREFIX, sizeof(S3_ATTR_META_PREFIX)-1) == 0) {
-         name += sizeof(S3_ATTR_PREFIX) - 1;
+       if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+         name += sizeof(RGW_ATTR_PREFIX) - 1;
          CGI_PRINTF(s->fcgx->out,"%s: %s\r\n", name, iter->second.c_str());
-       } else if (!content_type && strcmp(name, S3_ATTR_CONTENT_TYPE) == 0) {
+       } else if (!content_type && strcmp(name, RGW_ATTR_CONTENT_TYPE) == 0) {
          content_type = iter->second.c_str();
        }
     }
@@ -229,7 +229,7 @@ int S3GetObj_REST::send_response()
   return 0;
 }
 
-void S3ListBuckets_REST::send_response()
+void RGWListBuckets_REST::send_response()
 {
   dump_errno(s, ret);
   end_header(s, "application/xml");
@@ -238,19 +238,19 @@ void S3ListBuckets_REST::send_response()
   list_all_buckets_start(s);
   dump_owner(s, s->user.user_id, s->user.display_name);
 
-  map<string, S3ObjEnt>& m = buckets.get_buckets();
-  map<string, S3ObjEnt>::iterator iter;
+  map<string, RGWObjEnt>& m = buckets.get_buckets();
+  map<string, RGWObjEnt>::iterator iter;
 
   open_section(s, "Buckets");
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    S3ObjEnt obj = iter->second;
+    RGWObjEnt obj = iter->second;
     dump_bucket(s, obj);
   }
   close_section(s, "Buckets");
   list_all_buckets_end(s);
 }
 
-void S3ListBucket_REST::send_response()
+void RGWListBucket_REST::send_response()
 {
   dump_errno(s, (ret < 0 ? ret : 0));
 
@@ -272,7 +272,7 @@ void S3ListBucket_REST::send_response()
     dump_value(s, "Delimiter", delimiter.c_str());
 
   if (ret >= 0) {
-    vector<S3ObjEnt>::iterator iter;
+    vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       open_section(s, "Contents");
       dump_value(s, "Key", iter->name.c_str());
@@ -295,20 +295,20 @@ void S3ListBucket_REST::send_response()
   close_section(s, "ListBucketResult");
 }
 
-void S3CreateBucket_REST::send_response()
+void RGWCreateBucket_REST::send_response()
 {
   dump_errno(s, ret);
   end_header(s);
 }
 
-void S3DeleteBucket_REST::send_response()
+void RGWDeleteBucket_REST::send_response()
 {
   dump_errno(s, ret);
   end_header(s);
 }
 
 
-int S3PutObj_REST::get_params()
+int RGWPutObj_REST::get_params()
 {
   size_t cl = atoll(s->length);
   if (cl) {
@@ -324,19 +324,19 @@ int S3PutObj_REST::get_params()
   return 0;
 }
 
-void S3PutObj_REST::send_response()
+void RGWPutObj_REST::send_response()
 {
   dump_errno(s, ret, &err);
   end_header(s);
 }
 
-void S3DeleteObj_REST::send_response()
+void RGWDeleteObj_REST::send_response()
 {
   dump_errno(s, ret);
   end_header(s);
 }
 
-int S3CopyObj_REST::get_params()
+int RGWCopyObj_REST::get_params()
 {
   if_mod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE", s->fcgx->envp);
   if_unmod = FCGX_GetParam("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE", s->fcgx->envp);
@@ -346,7 +346,7 @@ int S3CopyObj_REST::get_params()
   return 0;
 }
 
-void S3CopyObj_REST::send_response()
+void RGWCopyObj_REST::send_response()
 {
   dump_errno(s, ret, &err);
 
@@ -354,7 +354,7 @@ void S3CopyObj_REST::send_response()
   if (ret == 0) {
     open_section(s, "CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
-    map<nstring, bufferlist>::iterator iter = attrs.find(S3_ATTR_ETAG);
+    map<nstring, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
       bufferlist& bl = iter->second;
       if (bl.length()) {
@@ -366,14 +366,14 @@ void S3CopyObj_REST::send_response()
   }
 }
 
-void S3GetACLs_REST::send_response()
+void RGWGetACLs_REST::send_response()
 {
   end_header(s, "application/xml");
   dump_start_xml(s);
   FCGX_PutStr(acls.c_str(), acls.size(), s->fcgx->out); 
 }
 
-int S3PutACLs_REST::get_params()
+int RGWPutACLs_REST::get_params()
 {
   size_t cl = atoll(s->length);
   if (cl) {
@@ -391,7 +391,7 @@ int S3PutACLs_REST::get_params()
   return ret;
 }
 
-void S3PutACLs_REST::send_response()
+void RGWPutACLs_REST::send_response()
 {
   dump_errno(s, ret);
   end_header(s, "application/xml");
@@ -544,7 +544,7 @@ static void init_auth_info(struct req_state *s)
   }
 }
 
-void S3Handler_REST::provider_init_state()
+void RGWHandler_REST::provider_init_state()
 {
   s->path_name = FCGX_GetParam("SCRIPT_NAME", s->fcgx->envp);
   s->path_name_url = FCGX_GetParam("REQUEST_URI", s->fcgx->envp);
@@ -588,7 +588,7 @@ static bool is_acl_op(struct req_state *s)
   return s->args.exists("acl");
 }
 
-S3Op *S3Handler_REST::get_retrieve_obj_op(struct req_state *s, bool get_data)
+RGWOp *RGWHandler_REST::get_retrieve_obj_op(struct req_state *s, bool get_data)
 {
   if (is_acl_op(s)) {
     return &get_acls_op;
@@ -604,7 +604,7 @@ S3Op *S3Handler_REST::get_retrieve_obj_op(struct req_state *s, bool get_data)
   return &list_bucket_op;
 }
 
-S3Op *S3Handler_REST::get_retrieve_op(struct req_state *s, bool get_data)
+RGWOp *RGWHandler_REST::get_retrieve_op(struct req_state *s, bool get_data)
 {
   if (s->bucket) {
     if (is_acl_op(s)) {
@@ -616,7 +616,7 @@ S3Op *S3Handler_REST::get_retrieve_op(struct req_state *s, bool get_data)
   return &list_buckets_op;
 }
 
-S3Op *S3Handler_REST::get_create_op(struct req_state *s)
+RGWOp *RGWHandler_REST::get_create_op(struct req_state *s)
 {
   if (is_acl_op(s)) {
     return &put_acls_op;
@@ -632,7 +632,7 @@ S3Op *S3Handler_REST::get_create_op(struct req_state *s)
   return NULL;
 }
 
-S3Op *S3Handler_REST::get_delete_op(struct req_state *s)
+RGWOp *RGWHandler_REST::get_delete_op(struct req_state *s)
 {
   if (s->object)
     return &delete_obj_op;
@@ -642,9 +642,9 @@ S3Op *S3Handler_REST::get_delete_op(struct req_state *s)
   return NULL;
 }
 
-S3Op *S3Handler_REST::get_op()
+RGWOp *RGWHandler_REST::get_op()
 {
-  S3Op *op;
+  RGWOp *op;
   switch (s->op) {
    case OP_GET:
      op = get_retrieve_op(s, true);
@@ -668,7 +668,7 @@ S3Op *S3Handler_REST::get_op()
   return op;
 }
 
-int S3Handler_REST::read_permissions()
+int RGWHandler_REST::read_permissions()
 {
   bool only_bucket;
 

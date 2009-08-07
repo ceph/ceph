@@ -11,9 +11,9 @@ using namespace std;
 #define USER_INFO_BUCKET_NAME ".users"
 #define USER_INFO_EMAIL_BUCKET_NAME ".users.email"
 
-#define S3_USER_ANON_ID "anonymous"
+#define RGW_USER_ANON_ID "anonymous"
 
-struct S3UID
+struct RGWUID
 {
   string user_id;
   void encode(bufferlist& bl) const {
@@ -23,19 +23,19 @@ struct S3UID
     ::decode(user_id, bl);
   }
 };
-WRITE_CLASS_ENCODER(S3UID)
+WRITE_CLASS_ENCODER(RGWUID)
 
-extern int s3_get_user_info(string user_id, S3UserInfo& info);
-extern void s3_get_anon_user(S3UserInfo& info);
-extern int s3_store_user_info(S3UserInfo& info);
-extern int s3_get_uid_by_email(string& email, string& user_id);
+extern int rgw_get_user_info(string user_id, RGWUserInfo& info);
+extern void rgw_get_anon_user(RGWUserInfo& info);
+extern int rgw_store_user_info(RGWUserInfo& info);
+extern int rgw_get_uid_by_email(string& email, string& user_id);
 
-class S3UserBuckets
+class RGWUserBuckets
 {
-  map<string, S3ObjEnt> buckets;
+  map<string, RGWObjEnt> buckets;
 
 public:
-  S3UserBuckets() {}
+  RGWUserBuckets() {}
   void encode(bufferlist& bl) const {
      ::encode(buckets, bl);
   }
@@ -44,28 +44,28 @@ public:
   }
 
   bool owns(string& name) {
-    map<string, S3ObjEnt>::iterator iter;
+    map<string, RGWObjEnt>::iterator iter;
     iter = buckets.find(name);
     return (iter != buckets.end());
   }
 
-  void add(S3ObjEnt& bucket) {
+  void add(RGWObjEnt& bucket) {
     buckets[bucket.name] = bucket;
   }
 
   void remove(string& name) {
-    map<string, S3ObjEnt>::iterator iter;
+    map<string, RGWObjEnt>::iterator iter;
     iter = buckets.find(name);
     if (iter != buckets.end()) {
       buckets.erase(iter);
     }
   }
 
-  map<string, S3ObjEnt>& get_buckets() { return buckets; }
+  map<string, RGWObjEnt>& get_buckets() { return buckets; }
 };
-WRITE_CLASS_ENCODER(S3UserBuckets)
+WRITE_CLASS_ENCODER(RGWUserBuckets)
 
-extern int s3_get_user_buckets(string user_id, S3UserBuckets& buckets);
-extern int s3_put_user_buckets(string user_id, S3UserBuckets& buckets);
+extern int rgw_get_user_buckets(string user_id, RGWUserBuckets& buckets);
+extern int rgw_put_user_buckets(string user_id, RGWUserBuckets& buckets);
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef __S3OP_H
-#define __S3OP_H
+#ifndef __RGWOP_H
+#define __RGWOP_H
 
 #include <string>
 
@@ -11,22 +11,22 @@ using namespace std;
 struct req_state;
 
 extern void get_request_metadata(struct req_state *s, map<nstring, bufferlist>& attrs);
-extern int read_acls(S3AccessControlPolicy *policy, string& bucket, string& object);
+extern int read_acls(RGWAccessControlPolicy *policy, string& bucket, string& object);
 extern int read_acls(struct req_state *s, bool only_bucket = false);
 
 
-class S3Op {
+class RGWOp {
 protected:
   struct req_state *s;
 public:
-  S3Op() {}
-  ~S3Op() {}
+  RGWOp() {}
+  ~RGWOp() {}
 
   virtual void init(struct req_state *s) { this->s = s; }
   virtual void execute() = 0;
 };
 
-class S3GetObj : public S3Op {
+class RGWGetObj : public RGWOp {
 protected:
   const char *range_str;
   const char *if_mod;
@@ -43,16 +43,16 @@ protected:
   map<nstring, bufferlist> attrs;
   char *data;
   int ret;
-  struct s3_err err;
+  struct rgw_err err;
   bool get_data;
 
   int init_common();
 public:
-  S3GetObj() {}
-  ~S3GetObj() {}
+  RGWGetObj() {}
+  ~RGWGetObj() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ofs = 0;
     len = 0;
     end = -1;
@@ -68,24 +68,24 @@ public:
   virtual int send_response() = 0;
 };
 
-class S3ListBuckets : public S3Op {
+class RGWListBuckets : public RGWOp {
 protected:
   int ret;
-  S3UserBuckets buckets;
+  RGWUserBuckets buckets;
 
 public:
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
   }
-  S3ListBuckets() {}
-  ~S3ListBuckets() {}
+  RGWListBuckets() {}
+  ~RGWListBuckets() {}
 
   void execute();
 
   virtual void send_response() = 0;
 };
 
-class S3ListBucket : public S3Op {
+class RGWListBucket : public RGWOp {
 protected:
   string prefix;
   string marker; 
@@ -93,15 +93,15 @@ protected:
   string delimiter;
   int max;
   int ret;
-  vector<S3ObjEnt> objs;
+  vector<RGWObjEnt> objs;
   map<string, bool> common_prefixes;
 
 public:
-  S3ListBucket() {}
-  ~S3ListBucket() {}
+  RGWListBucket() {}
+  ~RGWListBucket() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     prefix.clear();
     marker.clear();
     max_keys.clear();
@@ -116,32 +116,32 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3CreateBucket : public S3Op {
+class RGWCreateBucket : public RGWOp {
 protected:
   int ret;
 
 public:
-  S3CreateBucket() {}
-  ~S3CreateBucket() {}
+  RGWCreateBucket() {}
+  ~RGWCreateBucket() {}
 
   void execute();
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ret = 0;
   }
   virtual void send_response() = 0;
 };
 
-class S3DeleteBucket : public S3Op {
+class RGWDeleteBucket : public RGWOp {
 protected:
   int ret;
 
 public:
-  S3DeleteBucket() {}
-  ~S3DeleteBucket() {}
+  RGWDeleteBucket() {}
+  ~RGWDeleteBucket() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ret = 0;
   }
   void execute();
@@ -149,20 +149,20 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3PutObj : public S3Op {
+class RGWPutObj : public RGWOp {
 protected:
   int ret;
   size_t len;
   char *data;
-  struct s3_err err;
+  struct rgw_err err;
   char *supplied_md5_b64;
 
 public:
-  S3PutObj() {}
-  ~S3PutObj() {}
+  RGWPutObj() {}
+  ~RGWPutObj() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ret = 0;
     len = 0;
     data = NULL;
@@ -174,16 +174,16 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3DeleteObj : public S3Op {
+class RGWDeleteObj : public RGWOp {
 protected:
   int ret;
 
 public:
-  S3DeleteObj() {}
-  ~S3DeleteObj() {}
+  RGWDeleteObj() {}
+  ~RGWDeleteObj() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ret = 0;
   }
   void execute();
@@ -191,7 +191,7 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3CopyObj : public S3Op {
+class RGWCopyObj : public RGWOp {
 protected:
   const char *if_mod;
   const char *if_unmod;
@@ -204,18 +204,18 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<nstring, bufferlist> attrs;
-  struct s3_err err;
+  struct rgw_err err;
   string src_bucket;
   string src_object;
   time_t mtime;
 
   int init_common();
 public:
-  S3CopyObj() {}
-  ~S3CopyObj() {}
+  RGWCopyObj() {}
+  ~RGWCopyObj() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     if_mod = NULL;
     if_unmod = NULL;
     if_match = NULL;
@@ -238,17 +238,17 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3GetACLs : public S3Op {
+class RGWGetACLs : public RGWOp {
 protected:
   int ret;
   string acls;
 
 public:
-  S3GetACLs() {}
-  ~S3GetACLs() {}
+  RGWGetACLs() {}
+  ~RGWGetACLs() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ret = 0;
     acls.clear();
   }
@@ -257,18 +257,18 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3PutACLs : public S3Op {
+class RGWPutACLs : public RGWOp {
 protected:
   int ret;
   size_t len;
   char *data;
 
 public:
-  S3PutACLs() {}
-  ~S3PutACLs() {}
+  RGWPutACLs() {}
+  ~RGWPutACLs() {}
 
   virtual void init(struct req_state *s) {
-    S3Op::init(s);
+    RGWOp::init(s);
     ret = 0;
     len = 0;
     data = NULL;
@@ -279,17 +279,17 @@ public:
   virtual void send_response() = 0;
 };
 
-class S3Handler {
+class RGWHandler {
 protected:
   struct req_state *s;
 
   virtual void provider_init_state() = 0;
   int do_read_permissions(bool only_bucket);
 public:
-  S3Handler() {}
-  virtual ~S3Handler() {}
+  RGWHandler() {}
+  virtual ~RGWHandler() {}
   void init_state(struct req_state *s, struct fcgx_state *fcgx);
-  S3Op *get_op();
+  RGWOp *get_op();
   virtual int read_permissions() = 0;
 };
 

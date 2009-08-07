@@ -1,5 +1,5 @@
-#ifndef __S3_ACL_H
-#define __S3_ACL_H
+#ifndef __RGW_ACL_H
+#define __RGW_ACL_H
 
 #include <map>
 #include <string>
@@ -11,16 +11,16 @@
 using namespace std;
 
 
-#define S3_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
-#define S3_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
+#define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"
+#define RGW_URI_AUTH_USERS	"http://acs.amazonaws.com/groups/global/AuthenticatedUsers"
 
-#define S3_PERM_READ            0x01
-#define S3_PERM_WRITE           0x02
-#define S3_PERM_READ_ACP        0x04
-#define S3_PERM_WRITE_ACP       0x08
-#define S3_PERM_FULL_CONTROL    ( S3_PERM_READ | S3_PERM_WRITE | \
-                                  S3_PERM_READ_ACP | S3_PERM_WRITE_ACP )
-#define S3_PERM_ALL             S3_PERM_FULL_CONTROL 
+#define RGW_PERM_READ            0x01
+#define RGW_PERM_WRITE           0x02
+#define RGW_PERM_READ_ACP        0x04
+#define RGW_PERM_WRITE_ACP       0x08
+#define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
+                                  RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
+#define RGW_PERM_ALL             RGW_PERM_FULL_CONTROL 
 
 class XMLObj;
 
@@ -114,16 +114,16 @@ public:
     ::decode(flags, bl);
   }
   void to_xml(ostream& out) {
-    if ((flags & S3_PERM_FULL_CONTROL) == S3_PERM_FULL_CONTROL) {
+    if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
      out << "<Permission>FULL_CONTROL</Permission>";
     } else {
-      if (flags & S3_PERM_READ)
+      if (flags & RGW_PERM_READ)
         out << "<Permission>READ</Permission>";
-      if (flags & S3_PERM_WRITE)
+      if (flags & RGW_PERM_WRITE)
         out << "<Permission>WRITE</Permission>";
-      if (flags & S3_PERM_READ_ACP)
+      if (flags & RGW_PERM_READ_ACP)
         out << "<Permission>READ_ACP</Permission>";
-      if (flags & S3_PERM_WRITE_ACP)
+      if (flags & RGW_PERM_WRITE_ACP)
         out << "<Permission>WRITE_ACP</Permission>";
     }
   }
@@ -275,7 +275,7 @@ public:
 };
 WRITE_CLASS_ENCODER(ACLGrant)
 
-class S3AccessControlList : public XMLObj
+class RGWAccessControlList : public XMLObj
 {
   map<string, int> acl_user_map;
   multimap<string, ACLGrant> grant_map;
@@ -283,8 +283,8 @@ class S3AccessControlList : public XMLObj
 
   void init_user_map();
 public:
-  S3AccessControlList() : user_map_initialized(false) {}
-  ~S3AccessControlList() {}
+  RGWAccessControlList() : user_map_initialized(false) {}
+  ~RGWAccessControlList() {}
 
   void xml_end(const char *el);
   int get_perm(string& id, int perm_mask);
@@ -314,12 +314,12 @@ public:
     grant_map.clear();
 
     ACLGrant grant;
-    grant.set_canon(id, name, S3_PERM_FULL_CONTROL);
+    grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
     add_grant(&grant);
   }
   bool create_canned(string id, string name, string canned_acl);
 };
-WRITE_CLASS_ENCODER(S3AccessControlList)
+WRITE_CLASS_ENCODER(RGWAccessControlList)
 
 class ACLOwner : public XMLObj
 {
@@ -351,14 +351,14 @@ public:
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
-class S3AccessControlPolicy : public XMLObj
+class RGWAccessControlPolicy : public XMLObj
 {
-  S3AccessControlList acl;
+  RGWAccessControlList acl;
   ACLOwner owner;
 
 public:
-  S3AccessControlPolicy() {}
-  ~S3AccessControlPolicy() {}
+  RGWAccessControlPolicy() {}
+  ~RGWAccessControlPolicy() {}
 
   void xml_end(const char *el);
 
@@ -396,13 +396,13 @@ public:
     return ret;
   }
 
-  S3AccessControlList& get_acl() {
+  RGWAccessControlList& get_acl() {
     return acl;
   }
 };
-WRITE_CLASS_ENCODER(S3AccessControlPolicy)
+WRITE_CLASS_ENCODER(RGWAccessControlPolicy)
 
-class S3XMLParser : public XMLObj
+class RGWXMLParser : public XMLObj
 {
   XML_Parser p;
   char *buf;
@@ -410,8 +410,8 @@ class S3XMLParser : public XMLObj
   XMLObj *cur_obj;
   vector<XMLObj *> objs;
 public:
-  S3XMLParser() : buf(NULL), buf_len(0), cur_obj(NULL) {}
-  ~S3XMLParser() {
+  RGWXMLParser() : buf(NULL), buf_len(0), cur_obj(NULL) {}
+  ~RGWXMLParser() {
     free(buf);
     vector<XMLObj *>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {

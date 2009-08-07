@@ -139,7 +139,7 @@ static bool verify_signature(struct req_state *s)
       qsr = true;
     } else {
       /* anonymous access */
-      s3_get_anon_user(s->user);
+      rgw_get_anon_user(s->user);
       return true;
     }
   } else {
@@ -155,7 +155,7 @@ static bool verify_signature(struct req_state *s)
   }
 
   /* first get the user info */
-  if (s3_get_user_info(auth_id, s->user) < 0) {
+  if (rgw_get_user_info(auth_id, s->user) < 0) {
     cerr << "error reading user info, uid=" << auth_id << " can't authenticate" << std::endl;
     return false;
   }
@@ -200,9 +200,9 @@ int main(int argc, char *argv[])
 {
   struct req_state s;
   struct fcgx_state fcgx;
-  S3Handler_REST s3handler;
+  RGWHandler_REST rgwhandler;
 
-  if (!S3Access::init_storage_provider("rados", argc, argv)) {
+  if (!RGWAccess::init_storage_provider("rados", argc, argv)) {
     cerr << "couldn't init storage provider" << std::endl;
   }
 
@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
 
   while (FCGX_Accept(&fcgx.in, &fcgx.out, &fcgx.err, &fcgx.envp) >= 0) 
   {
-    s3handler.init_state(&s, &fcgx);
+    rgwhandler.init_state(&s, &fcgx);
 
     int ret = read_acls(&s);
     if (ret < 0) {
@@ -230,13 +230,13 @@ int main(int argc, char *argv[])
       continue;
     }
 
-    ret = s3handler.read_permissions();
+    ret = rgwhandler.read_permissions();
     if (ret < 0) {
       abort_early(&s, ret);
       continue;
     }
 
-    S3Op *op = s3handler.get_op();
+    RGWOp *op = rgwhandler.get_op();
     if (op) {
       op->execute();
     }
