@@ -191,6 +191,14 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ho
   (JNIEnv *, jobject, jint, jlong);
 
 /*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_setTimes
+ * Signature: (Ljava/lang/String;JJ)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTimes
+  (JNIEnv *, jobject, jstring, jlong, jlong);
+
+/*
  * Class:     org_apache_hadoop_fs_ceph_CephInputStream
  * Method:    ceph_read
  * Signature: (I[BII)I

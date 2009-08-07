@@ -536,6 +536,28 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ho
 }
 
 /*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_setTimes
+ * Signature: (Ljava/lang/String;JJ)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTimes
+(JNIEnv * env, jobject obj, jstring j_path, jlong mtime, jlong atime) {
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
+  if(c_path == NULL) return -ENOMEM;
+
+  //build the mask for ceph_setattr
+  int mask = 0;
+  if (mtime!=-1) mask = CEPH_SETATTR_MTIME;
+  if (atime!=-1) mask |= CEPH_SETTATTR_ATIME;
+  //build a struct stat and fill it in!
+  struct stat attr;
+  attr.st_mtime = mtime;
+  attr.st_atime = atime;
+  //may need to fill in uid and gid here later on...
+  ceph_setattr(c_path, &attr, mask);
+}
+
+/*
  * Class:     org_apache_hadoop_fs_ceph_CephInputStream
  * Method:    ceph_read
  * Signature: (JI[BII)I

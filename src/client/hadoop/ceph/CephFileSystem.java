@@ -72,6 +72,7 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_stat(String path, Stat fill);
   private native int ceph_replication(String path);
   private native String ceph_hosts(int fh, long offset);
+  private native int ceph_setTimes(String path, long mtime, long atime);
 
   public CephFileSystem() {
     debug("CephFileSystem:enter");
@@ -334,6 +335,26 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(p);
     ceph_setPermission(abs_path.toString(), permission.toShort());
   }
+
+  /**
+   * Set access/modification times of a file.
+   * @param p The path
+   * @param mtime Set modification time in number of millis since Jan 1, 1970.
+   * @param atime Set access time in number of millis since Jan 1, 1970.
+   */
+@Override
+  public void setTimes(Path p, long mtime, long atime) throws IOException {
+  if (!initialized) throw new IOException ("You have to initialize the"
+		       +"CephFileSystem before calling other methods.");
+  Path abs_path = makeAbsolute(p);
+  //libhadoopcephfs respects the -1 "don't set" meanings, but we
+  //need to convert these times in millis to times in seconds here
+  if (mtime != -1) mtime /= 1000;
+  if (atime != -1) atime /= 1000;
+  int r = ceph_setTimes(abs_path.toString(), mtime, atime);
+  if (r<0) throw new IOException ("Failed to set times on path "
+				  + abs_path.toString() + " Error code: " + r);
+}
 
   /**
    * In order to run this with Hadoop .20, I had to revert back to using
