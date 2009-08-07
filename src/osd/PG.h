@@ -117,17 +117,16 @@ public:
       void encode(bufferlist &bl) const {
 	::encode(epoch_created, bl);
 	::encode(last_epoch_started, bl);
-	::encode(same_up_since, bl);
 	::encode(same_acting_since, bl);
-	::encode(same_primary_since, bl);
+	::encode(same_up_since, bl);
+	//::encode(same_primary_since, bl);
       }
-      void decode(bufferlist::iterator &bl, int v=0) {
+      void decode(bufferlist::iterator &bl) {
 	::decode(epoch_created, bl);
 	::decode(last_epoch_started, bl);
-	if (v && v >= 20)
-	  ::decode(same_up_since, bl);
 	::decode(same_acting_since, bl);
-	::decode(same_primary_since, bl);
+	::decode(same_up_since, bl);
+	//::decode(same_primary_since, bl);
       }
     } history;
     
@@ -161,7 +160,7 @@ public:
       ::decode(log_tail, bl);
       ::decode(log_backlog, bl);
       ::decode(stats, bl);
-      history.decode(bl, v);
+      history.decode(bl);
       ::decode(snap_trimq, bl);
     }
   };
@@ -933,7 +932,7 @@ inline ostream& operator<<(ostream& out, const PG::Info::History& h)
 {
   return out << "ec=" << h.epoch_created
 	     << " les=" << h.last_epoch_started
-	     << " " << h.same_up_since << "/" << h.same_acting_since;
+	     << " " << h.same_up_since << "/" << h.same_acting_since << "/" << h.same_primary_since;
 }
 
 inline ostream& operator<<(ostream& out, const PG::Info& pgi) 

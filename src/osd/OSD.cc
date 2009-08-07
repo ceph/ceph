@@ -2867,9 +2867,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       PG::Info::History history = it->history;
       project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
-      if (m->get_epoch() < history.same_primary_since) {
-        dout(10) << "handle_pg_notify pg " << pgid << " primary changed in "
-                 << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << dendl;
+      if (m->get_epoch() < history.same_acting_since) {
+        dout(10) << "handle_pg_notify pg " << pgid << " acting changed in "
+                 << history.same_acting_since << " (msg from " << m->get_epoch() << ")" << dendl;
         continue;
       }
 
@@ -2912,9 +2912,9 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     } else {
       // already had it.  am i (still) the primary?
       pg = _lookup_lock_pg(pgid);
-      if (m->get_epoch() < pg->info.history.same_primary_since) {
-        dout(10) << *pg << " handle_pg_notify primary changed in "
-                 << pg->info.history.same_primary_since
+      if (m->get_epoch() < pg->info.history.same_acting_since) {
+        dout(10) << *pg << " handle_pg_notify acting changed in "
+                 << pg->info.history.same_acting_since
                  << " (msg from " << m->get_epoch() << ")" << dendl;
         pg->unlock();
         continue;
@@ -3006,7 +3006,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     created++;
   } else {
     pg = _lookup_lock_pg(info.pgid);
-    if (epoch < pg->info.history.same_primary_since) {
+    if (epoch < pg->info.history.same_acting_since) {
       dout(10) << *pg << " got old info " << info << ", ignoring" << dendl;
       pg->unlock();
       return;
@@ -3117,7 +3117,7 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
     dout(10) << " don't have pg " << m->pgid << dendl;
   } else {
     PG *pg = _lookup_lock_pg(m->pgid);
-    if (m->epoch < pg->info.history.same_primary_since) {
+    if (m->epoch < pg->info.history.same_acting_since) {
       dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
       pg->unlock();
       goto out;
@@ -3179,9 +3179,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       PG::Info::History history = it->second.history;
       project_pg_history(pgid, history, m->get_epoch(), up, acting);
 
-      if (m->get_epoch() < history.same_primary_since) {
+      if (m->get_epoch() < history.same_acting_since) {
         dout(10) << " pg " << pgid << " dne, and pg has changed in "
-                 << history.same_primary_since << " (msg from " << m->get_epoch() << ")" << dendl;
+                 << history.same_acting_since << " (msg from " << m->get_epoch() << ")" << dendl;
         continue;
       }
 
@@ -3209,9 +3209,9 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg = _lookup_lock_pg(pgid);
       
       // same primary?
-      if (m->get_epoch() < pg->info.history.same_primary_since) {
-        dout(10) << *pg << " handle_pg_query primary changed in "
-                 << pg->info.history.same_primary_since
+      if (m->get_epoch() < pg->info.history.same_acting_since) {
+        dout(10) << *pg << " handle_pg_query changed in "
+                 << pg->info.history.same_acting_since
                  << " (msg from " << m->get_epoch() << ")" << dendl;
 	pg->unlock();
         continue;

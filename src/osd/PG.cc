@@ -2132,9 +2132,9 @@ void PG::sub_op_scrub(MOSDSubOp *op)
 {
   dout(7) << "sub_op_scrub" << dendl;
 
-  if (op->map_epoch < info.history.same_primary_since) {
+  if (op->map_epoch < info.history.same_acting_since) {
     dout(10) << "sub_op_scrub discarding old sub_op from "
-	     << op->map_epoch << " < " << info.history.same_primary_since << dendl;
+	     << op->map_epoch << " < " << info.history.same_acting_since << dendl;
     delete op;
     return;
   }

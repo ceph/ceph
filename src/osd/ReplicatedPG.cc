@@ -57,18 +57,18 @@ static const int LOAD_HYBRID     = 3;
 
 bool ReplicatedPG::same_for_read_since(epoch_t e)
 {
-  return (e >= info.history.same_primary_since);
+  return (e >= info.history.same_acting_since);
 }
 
 bool ReplicatedPG::same_for_modify_since(epoch_t e)
 {
-  return (e >= info.history.same_primary_since);
+  return (e >= info.history.same_acting_since);
 }
 
 bool ReplicatedPG::same_for_rep_modify_since(epoch_t e)
 {
   // check osd map: same set, or primary+acker?
-  return e >= info.history.same_primary_since;
+  return e >= info.history.same_acting_since;
 }
 
 // ====================
@@ -2456,7 +2456,7 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
 	   << dendl;  
 
   // sanity checks
-  assert(op->map_epoch >= info.history.same_primary_since);
+  assert(op->map_epoch >= info.history.same_acting_since);
   assert(is_active());
   assert(is_replica());
   
