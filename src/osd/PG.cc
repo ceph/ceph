@@ -1252,6 +1252,10 @@ void PG::peer(ObjectStore::Transaction& t,
   if (need_backlog)
     osd->queue_generate_backlog(this);
 
+  // do we need to wait for our backlog?
+  if (info.last_complete < log.tail && !log.backlog)
+    return;
+
 
   /** COLLECT MISSING+LOG FROM PEERS **********/
   /*
