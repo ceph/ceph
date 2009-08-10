@@ -51,7 +51,7 @@ public:
 
   const char *get_type_name() { return "poolop"; }
   void print(ostream& out) {
-    out << "poolop(" << tid << " " << name << " v" << version << ")";
+    out << "poolop(" << get_pool_op_name(op) << " " << tid << " " << name << " v" << version << ")";
   }
 
   void encode_payload() {
