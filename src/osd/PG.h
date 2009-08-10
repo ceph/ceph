@@ -337,8 +337,7 @@ public:
     /****/
     IndexedLog() {}
 
-    void clear() {
-      assert(0);
+    void zero() {
       unindex();
       Log::clear();
       reset_recovery_pointers();
@@ -586,7 +585,8 @@ protected:
   Mutex _lock;
   Cond _cond;
   atomic_t ref;
-  bool deleted;
+
+  bool deleting;  // true while RemoveWQ should be chewing on us
 
 public:
   void lock(bool no_lockdep=false) {
@@ -619,10 +619,6 @@ public:
 
 
   list<Message*> op_queue;  // op queue
-
-
-  void mark_deleted() { deleted = true; }
-  bool is_deleted() { return deleted; }
 
   bool dirty_info, dirty_log;
 
@@ -660,7 +656,7 @@ public:
   set<snapid_t> snap_collections;
   map<epoch_t,Interval> past_intervals;
 
-  xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, backlog_item, scrub_item, snap_trim_item, remove_item, stat_queue_item;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
   set<sobject_t> recovering_oids;
@@ -825,9 +821,9 @@ public:
   PG(OSD *o, PGPool *_pool, pg_t p, const sobject_t& oid) : 
     osd(o), pool(_pool),
     _lock("PG::_lock"),
-    ref(0), deleted(false), dirty_info(false), dirty_log(false),
+    ref(0), deleting(false), dirty_info(false), dirty_log(false),
     info(p), log_oid(oid),
-    recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
+    recovery_item(this), backlog_item(this), scrub_item(this), snap_trim_item(this), remove_item(this), stat_queue_item(this),
     recovery_ops_active(0),
     generate_backlog_epoch(0),
     role(0),

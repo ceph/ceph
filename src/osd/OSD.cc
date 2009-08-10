@@ -262,7 +262,8 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   remove_list_lock("OSD::remove_list_lock"),
   replay_queue_lock("OSD::replay_queue_lock"),
   snap_trim_wq(this, &disk_tp),
-  scrub_wq(this, &disk_tp)
+  scrub_wq(this, &disk_tp),
+  remove_wq(this, &disk_tp)
 {
   monc->set_messenger(messenger);
   
@@ -707,66 +708,6 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
   PG *pg = pg_map[pgid];
   pg->lock();
   return pg;
-}
-
-
-void OSD::_remove_unlock_pg(PG *pg) 
-{
-  assert(osd_lock.is_locked());
-  pg_t pgid = pg->info.pgid;
-
-  dout(10) << "_remove_unlock_pg " << pgid << dendl;
-
-  recovery_wq.dequeue(pg);
-  snap_trim_wq.dequeue(pg);
-  scrub_wq.dequeue(pg);
-  backlog_wq.dequeue(pg);
-
-  // remove from store
-  vector<sobject_t> olist;
-
-  ObjectStore::Transaction t;
-  {
-    // snap collections
-    for (set<snapid_t>::iterator p = pg->snap_collections.begin();
-	 p != pg->snap_collections.end();
-	 p++) {
-      vector<sobject_t> olist;      
-      store->collection_list(pgid.to_snap_coll(*p), olist);
-      dout(10) << "_remove_unlock_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
-      for (vector<sobject_t>::iterator q = olist.begin();
-	   q != olist.end();
-	   q++)
-	t.remove(pgid.to_snap_coll(*p), *q);
-    }
-
-    // log
-    t.remove(0, pg->log_oid);
-
-    // main collection
-    store->collection_list(pgid.to_coll(), olist);
-    dout(10) << "_remove_unlock_pg " << pgid << " " << olist.size() << " objects" << dendl;
-    for (vector<sobject_t>::iterator p = olist.begin();
-	 p != olist.end();
-	 p++)
-      t.remove(pgid.to_coll(), *p);
-    t.remove_collection(pgid.to_coll());
-  }
-  dout(10) << "_remove_unlock_pg " << pgid << " applying" << dendl;
-  store->apply_transaction(t);
-
-  // mark deleted
-  pg->mark_deleted();
-
-  // remove from map
-  pg_map.erase(pgid);
-
-  _put_pool(pgid.pool());
-
-  // unlock, and probably delete
-  pg->unlock();
-  pg->put();  // will delete, if last reference
-  dout(10) << "_remove_unlock_pg " << pgid << " done" << dendl;
 }
 
 void OSD::load_pgs()
@@ -2216,6 +2157,12 @@ void OSD::advance_map(ObjectStore::Transaction& t)
     pg->on_change();
     
     if (role != oldrole) {
+      // old stray?
+      if (oldrole < 0 && pg->deleting) {
+	dout(10) << *pg << " canceling deletion!" << dendl;
+	pg->deleting = false;
+      }
+
       // old primary?
       if (oldrole == 0) {
 	pg->state_clear(PG_STATE_CLEAN);
@@ -3213,8 +3160,6 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       dout(10) << *pg << " dne (before), but i am role " << role << dendl;
     } else {
       pg = _lookup_lock_pg(pgid);
-      
-      // same primary?
       if (m->get_epoch() < pg->info.history.same_acting_since) {
         dout(10) << *pg << " handle_pg_query changed in "
                  << pg->info.history.same_acting_since
@@ -3305,17 +3250,123 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
       dout(10) << *pg << " removing." << dendl;
       assert(pg->get_role() == -1);
       assert(pg->get_primary() == m->get_source().num());
-      _remove_unlock_pg(pg);
+      pg->deleting = true;
+      remove_wq.queue(pg);
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
 	       << pg->info.history.same_acting_since << " > " << m->get_epoch() << dendl;
-      pg->unlock();
     }
+    pg->unlock();
   }
 
   delete m;
 }
 
+void OSD::_remove_pg(PG *pg)
+{
+  pg_t pgid = pg->info.pgid;
+  dout(10) << "_remove_pg " << pgid << dendl;
+  
+  pg->lock();
+  if (!pg->deleting) {
+    pg->unlock();
+    return;
+  }
+  
+  // reset log, last_complete, in case deletion gets canceled
+  pg->info.last_complete = eversion_t();
+  pg->log.zero();
+
+  {
+    ObjectStore::Transaction t;
+    pg->write_info(t);
+    t.remove(0, pg->log_oid);
+    store->apply_transaction(t);
+  }
+
+  int n = 0;
+
+  // snap collections
+  for (set<snapid_t>::iterator p = pg->snap_collections.begin();
+       p != pg->snap_collections.end();
+       p++) {
+    vector<sobject_t> olist;      
+    store->collection_list(pgid.to_snap_coll(*p), olist);
+    dout(10) << "_remove_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
+    for (vector<sobject_t>::iterator q = olist.begin();
+	 q != olist.end();
+	 q++) {
+      ObjectStore::Transaction t;
+      t.remove(pgid.to_snap_coll(*p), *q);
+      t.remove(pgid.to_coll(), *q);          // we may hit this twice, but it's harmless
+      store->apply_transaction(t);
+
+      if ((++n & 0xff) == 0) {
+	pg->unlock();
+	pg->lock();
+	if (!pg->deleting) {
+	  dout(10) << "_remove_pg aborted on " << *pg << dendl;
+	  pg->unlock();
+	  return;
+	}
+      }
+    }
+    ObjectStore::Transaction t;
+    t.remove_collection(pgid.to_snap_coll(*p));
+    store->apply_transaction(t);
+  }
+
+  // (what remains of the) main collection
+  vector<sobject_t> olist;
+  store->collection_list(pgid.to_coll(), olist);
+  dout(10) << "_remove_pg " << pgid << " " << olist.size() << " objects" << dendl;
+  for (vector<sobject_t>::iterator p = olist.begin();
+       p != olist.end();
+       p++) {
+    ObjectStore::Transaction t;
+    t.remove(pgid.to_coll(), *p);
+    store->apply_transaction(t);
+
+    if ((++n & 0xff) == 0) {
+      pg->unlock();
+      pg->lock();
+      if (!pg->deleting) {
+	dout(10) << "_remove_pg aborted on " << *pg << dendl;
+	pg->unlock();
+	return;
+      }
+    }
+  }
+
+  pg->unlock();
+  osd_lock.Lock();
+  pg->lock();
+  
+  if (!pg->deleting) {
+    osd_lock.Unlock();
+    pg->unlock();
+    return;
+  }
+
+  dout(10) << "_remove_pg " << pgid << " removing final" << dendl;
+
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(pgid.to_coll());
+    store->apply_transaction(t);
+  }
+  
+  // remove from map
+  pg_map.erase(pgid);
+
+  _put_pool(pgid.pool());
+
+  // unlock, and probably delete
+  pg->unlock();
+  pg->put();  // will delete, if last reference
+  osd_lock.Unlock();
+  dout(10) << "_remove_pg " << pgid << " all done" << dendl;
+}
 
 
 // =========================================================

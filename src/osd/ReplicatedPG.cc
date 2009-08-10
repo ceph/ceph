@@ -1814,8 +1814,7 @@ public:
   }
   void finish(int r) {
     pg->lock();
-    if (!pg->is_deleted()) 
-      pg->op_ondisk(repop);
+    pg->op_ondisk(repop);
     repop->put();
     pg->unlock();
     pg->put();

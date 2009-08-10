@@ -439,7 +439,7 @@ protected:
   PG   *_open_lock_pg(pg_t pg, bool no_lockdep_check=false);  // create new PG (in memory)
   PG   *_create_lock_pg(pg_t pg, ObjectStore::Transaction& t); // create new PG
   PG   *_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transaction& t);
-  void  _remove_unlock_pg(PG *pg);         // remove from store and memory
+  //void  _remove_unlock_pg(PG *pg);         // remove from store and memory
 
   void load_pgs();
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
@@ -573,7 +573,9 @@ protected:
   void handle_pg_log(class MOSDPGLog *m);
   void handle_pg_info(class MOSDPGInfo *m);
   void handle_pg_trim(class MOSDPGTrim *m);
+
   void handle_pg_remove(class MOSDPGRemove *m);
+  void _remove_pg(PG *pg);
 
   // helper for handle_pg_log and handle_pg_info
   void _process_pg_info(epoch_t epoch, int from,
@@ -771,6 +773,43 @@ protected:
       }
     }
   } scrub_wq;
+
+  // -- removing --
+  xlist<PG*> remove_queue;
+
+  struct RemoveWQ : public ThreadPool::WorkQueue<PG> {
+    OSD *osd;
+    RemoveWQ(OSD *o, ThreadPool *tp) : ThreadPool::WorkQueue<PG>("OSD::RemoveWQ", tp), osd(o) {}
+
+    bool _enqueue(PG *pg) {
+      if (pg->remove_item.is_on_xlist())
+	return false;
+      pg->get();
+      osd->remove_queue.push_back(&pg->remove_item);
+      return true;
+    }
+    void _dequeue(PG *pg) {
+      if (pg->remove_item.remove_myself())
+	pg->put();
+    }
+    PG *_dequeue() {
+      if (osd->remove_queue.empty())
+	return NULL;
+      PG *pg = osd->remove_queue.front();
+      osd->remove_queue.pop_front();
+      return pg;
+    }
+    void _process(PG *pg) {
+      osd->_remove_pg(pg);
+    }
+    void _clear() {
+      while (!osd->remove_queue.empty()) {
+	PG *pg = osd->remove_queue.front();
+	osd->remove_queue.pop_front();
+	pg->put();
+      }
+    }
+  } remove_wq;
 
  private:
   virtual bool dispatch_impl(Message *m);
