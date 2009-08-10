@@ -1432,7 +1432,15 @@ static int read_partial_message(struct ceph_connection *con)
 
 	while (m->front.iov_len < front_len) {
 		if (m->front.iov_base == NULL) {
-			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
+			if (front_len > PAGE_CACHE_SIZE) {
+				m->front.iov_base = __vmalloc(front_len,
+							      GFP_NOFS,
+							      PAGE_KERNEL);
+				m->front_is_vmalloc = true;
+			} else {
+				m->front.iov_base = kmalloc(front_len,
+							    GFP_NOFS);
+			}
 			if (m->front.iov_base == NULL)
 				return -ENOMEM;
 		}
@@ -2296,7 +2304,8 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	/* front */
 	if (front_len) {
 		if (front_len > PAGE_CACHE_SIZE) {
-			m->front.iov_base = vmalloc(front_len);
+			m->front.iov_base = __vmalloc(front_len, GFP_NOFS,
+						      PAGE_KERNEL);
 			m->front_is_vmalloc = true;
 		} else {
 			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
