@@ -964,18 +964,9 @@ static void prepare_read_tag(struct ceph_connection *con)
  */
 static int prepare_read_message(struct ceph_connection *con)
 {
-	int err;
-
 	dout("prepare_read_message %p\n", con);
-	con->in_base_pos = 0;
 	BUG_ON(con->in_msg != NULL);
-	con->in_msg = ceph_msg_new(0, 0, 0, 0, NULL);
-	if (IS_ERR(con->in_msg)) {
-		err = PTR_ERR(con->in_msg);
-		con->in_msg = NULL;
-		con->error_msg = "out of memory for incoming message";
-		return err;
-	}
+	con->in_base_pos = 0;
 	con->in_front_crc = con->in_data_crc = 0;
 	return 0;
 }
@@ -1394,7 +1385,7 @@ static void process_ack(struct ceph_connection *con)
  */
 static int read_partial_message(struct ceph_connection *con)
 {
-	struct ceph_msg *m = con->in_msg;
+	struct ceph_msg *m = NULL;
 	void *p;
 	int ret;
 	int to, want, left;
@@ -1405,45 +1396,48 @@ static int read_partial_message(struct ceph_connection *con)
 	dout("read_partial_message con %p msg %p\n", con, m);
 
 	/* header */
-	while (con->in_base_pos < sizeof(m->hdr)) {
-		left = sizeof(m->hdr) - con->in_base_pos;
+	while (con->in_base_pos < sizeof(con->in_hdr)) {
+		left = sizeof(con->in_hdr) - con->in_base_pos;
 		ret = ceph_tcp_recvmsg(con->sock,
-				       (char *)&m->hdr + con->in_base_pos,
+				       (char *)&con->in_hdr + con->in_base_pos,
 				       left);
 		if (ret <= 0)
 			return ret;
 		con->in_base_pos += ret;
-		if (con->in_base_pos == sizeof(m->hdr)) {
-			u32 crc = crc32c(0, (void *)&m->hdr,
-				    sizeof(m->hdr) - sizeof(m->hdr.crc));
-			if (crc != le32_to_cpu(m->hdr.crc)) {
-				pr_err("ceph read_partial_message %p bad hdr "
+		if (con->in_base_pos == sizeof(con->in_hdr)) {
+			u32 crc = crc32c(0, (void *)&con->in_hdr,
+				 sizeof(con->in_hdr) - sizeof(con->in_hdr.crc));
+			if (crc != le32_to_cpu(con->in_hdr.crc)) {
+				pr_err("ceph read_partial_message bad hdr "
 				       " crc %u != expected %u\n",
-				       m, crc, m->hdr.crc);
+				       crc, con->in_hdr.crc);
 				return -EBADMSG;
 			}
 		}
 	}
 
-	/* front */
-	front_len = le32_to_cpu(m->hdr.front_len);
+	front_len = le32_to_cpu(con->in_hdr.front_len);
 	if (front_len > CEPH_MSG_MAX_FRONT_LEN)
 		return -EIO;
 
+	dout("got hdr type %d front %d data %d\n",
+	     con->in_hdr.type, con->in_hdr.front_len, con->in_hdr.data_len);
+
+	/* allocate message */
+	con->in_msg = ceph_msg_new(0, front_len, 0, 0, NULL);
+	if (IS_ERR(con->in_msg)) {
+		ret = PTR_ERR(con->in_msg);
+		con->in_msg = NULL;
+		con->error_msg = "out of memory for incoming message";
+		return ret;
+	}
+	m = con->in_msg;
+	m->front.iov_len = 0;    /* haven't read it yet */
+	memcpy(&m->hdr, &con->in_hdr, sizeof(con->in_hdr));
+
+	/* front */
 	while (m->front.iov_len < front_len) {
-		if (m->front.iov_base == NULL) {
-			if (front_len > PAGE_CACHE_SIZE) {
-				m->front.iov_base = __vmalloc(front_len,
-							      GFP_NOFS,
-							      PAGE_KERNEL);
-				m->front_is_vmalloc = true;
-			} else {
-				m->front.iov_base = kmalloc(front_len,
-							    GFP_NOFS);
-			}
-			if (m->front.iov_base == NULL)
-				return -ENOMEM;
-		}
+		BUG_ON(m->front.iov_base == NULL);
 		left = front_len - m->front.iov_len;
 		ret = ceph_tcp_recvmsg(con->sock, (char *)m->front.iov_base +
 				       m->front.iov_len, left);
@@ -1529,6 +1523,8 @@ no_data:
 		con->in_base_pos += ret;
 	}
 	dout("read_partial_message got msg %p\n", m);
+	dout("got footer front crc %d data crc %d\n",
+	     m->footer.front_crc, m->footer.data_crc);
 
 	/* crc ok? */
 	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
@@ -1540,26 +1536,9 @@ no_data:
 	if (datacrc &&
 	    (le32_to_cpu(m->footer.flags) & CEPH_MSG_FOOTER_NOCRC) == 0 &&
 	    con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
-		int cur_page, data_pos;
 		pr_err("ceph read_partial_message %p data crc %u != exp. %u\n",
 		       con->in_msg,
-		       con->in_data_crc, m->footer.data_crc);
-		for (data_pos = 0, cur_page = 0; data_pos < data_len;
-		     data_pos += PAGE_SIZE, cur_page++) {
-			left = min((int)(data_len - data_pos),
-			   (int)(PAGE_SIZE));
-			mutex_lock(&m->page_mutex);
-
-			if (!m->pages) {
-				mutex_unlock(&m->page_mutex);
-				break;
-			}
-
-			p = kmap(m->pages[cur_page]);
-
-			kunmap(m->pages[0]);
-			mutex_unlock(&m->page_mutex);
-		}
+		       con->in_data_crc, le32_to_cpu(m->footer.data_crc));
 		return -EBADMSG;
 	}
 

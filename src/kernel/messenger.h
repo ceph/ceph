@@ -191,6 +191,7 @@ struct ceph_connection {
 	__le32 out_temp_ack; /* for writing an ack */
 
 	/* message in temps */
+	struct ceph_msg_header in_hdr;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
 	u32 in_front_crc, in_data_crc;  /* calculated crc, for comparison
