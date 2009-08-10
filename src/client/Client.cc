@@ -85,8 +85,12 @@ ostream& operator<<(ostream &out, Inode &in)
   out << in.vino() << "("
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
-      << " ref=" << in.ref
-      << " parent=" << in.dn
+      << " ref=" << in.ref;
+  if (in.dirty_caps)
+    out << " dirty_caps=" << ccap_string(in.dirty_caps);
+  if (in.flushing_caps)
+    out << " flushing_caps=" << ccap_string(in.flushing_caps);
+  out << " parent=" << in.dn
       << ")";
   return out;
 }
@@ -234,7 +238,8 @@ void Client::dump_cache()
     
     dout(1) << "dump_cache: inode " << it->first
             << " ref " << it->second->ref 
-            << " dir " << it->second->dir << dendl;
+            << " dir " << it->second->dir
+	    << " " << *it->second << dendl;
     if (it->second->dir) {
       dout(1) << "  dir size " << it->second->dir->dentries.size() << dendl;
     }
