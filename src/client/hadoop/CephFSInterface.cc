@@ -548,7 +548,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTi
   //build the mask for ceph_setattr
   int mask = 0;
   if (mtime!=-1) mask = CEPH_SETATTR_MTIME;
-  if (atime!=-1) mask |= CEPH_SETTATTR_ATIME;
+  if (atime!=-1) mask |= CEPH_SETATTR_ATIME;
   //build a struct stat and fill it in!
   struct stat attr;
   attr.st_mtime = mtime;
