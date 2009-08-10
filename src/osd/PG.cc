@@ -1086,10 +1086,13 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
       continue;
     }
     
-    assert(osd->osdmap->is_up(*it));
-    dout(10) << " querying info from osd" << *it << dendl;
-    query_map[*it][info.pgid] = Query(Query::INFO, info.history);
-    peer_info_requested.insert(*it);
+    if (osd->osdmap->is_up(*it)) {
+      dout(10) << " querying info from osd" << *it << dendl;
+      query_map[*it][info.pgid] = Query(Query::INFO, info.history);
+      peer_info_requested.insert(*it);
+    } else {
+      dout(10) << " not querying info from down osd" << *it << dendl;
+    }
   }
   if (missing_info)
     return false;
