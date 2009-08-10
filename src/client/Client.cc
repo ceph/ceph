@@ -1606,7 +1606,12 @@ void Client::check_caps(Inode *in, bool is_delayed)
       }
       in->flushing_caps |= flush;
       in->dirty_caps = 0;
-      flush_tid = in->flushing_cap_tid = ++last_flush_tid;
+      flush_tid = ++last_flush_tid;
+      //set the tid for each cap we're flushing
+      for (int i = 0; i < CEPH_CAP_BITS; ++i) {
+	if (flush & (1<<i))
+	  in->flushing_cap_tid[i] = flush_tid;
+      }
       dout(10) << " flushing " << ccap_string(flush) << dendl;
     }
 
@@ -1980,9 +1985,24 @@ void Client::kick_flushing_caps(int mds)
     dout(20) << " reflushing caps on " << *in << " to mds" << mds << dendl;
     InodeCap *cap = in->auth_cap;
     assert(cap->session == session);
-    send_cap(in, mds, cap, in->caps_used(), in->caps_wanted(), 
-	     cap->issued | cap->implemented,
-	     in->flushing_caps, in->flushing_cap_tid);
+    //ugh, it's a lot of comparisons to push the caps on same tid out together
+    int flush_now;
+    int already_flushed = 0;
+    for (int i=0; i<CEPH_CAP_BITS; ++i) {
+      if ((in->flushing_caps & 1<<i) &&
+	  !(already_flushed & 1<<i)) {
+	flush_now = 0;
+	flush_now |= 1<<i;
+	for (int j=i+1; j<CEPH_CAP_BITS; ++j) {
+	  if ((in->flushing_caps & 1<<j) &&
+	      ( in->flushing_cap_tid[j] == in->flushing_cap_tid[i]))
+	    flush_now |= 1<<j;
+	}
+	send_cap(in, mds, cap, in->caps_used(), in->caps_wanted(), 
+		 cap->issued | cap->implemented,
+		 flush_now, in->flushing_cap_tid[i]);
+      }
+    }
   }
 }
 
@@ -2324,12 +2344,21 @@ void Client::handle_cap_trunc(Inode *in, MClientCaps *m)
 
 void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
 {
-  int cleaned = m->get_dirty();
-  dout(5) << "handle_cap_flush_ack mds" << mds
-	  << " cleaned " << ccap_string(cleaned) << " on " << *in << dendl;
+  int dirty = m->get_dirty();
+  int cleaned = 0;
+  for (int i = 0; i < CEPH_CAP_BITS; ++i) {
+    if ((dirty & (1 << i)) &&
+	(m->get_client_tid() == in->flushing_cap_tid[i]))
+      cleaned |= 1 << i;
+  }
 
-  if (m->get_client_tid() != in->flushing_cap_tid) {
-    dout(10) << " tid " << m->get_client_tid() << " != " << in->flushing_cap_tid << dendl;
+  dout(5) << "handle_cap_flush_ack mds" << mds
+	  << " cleaned " << ccap_string(cleaned) << " on " << *in
+	  << " with " << ccap_string(dirty) << dendl;
+
+
+  if (!cleaned) {
+    dout(10) << " tid " << m->get_client_tid() << " != any cap bit tids" << dendl;
   } else {
     if (in->flushing_caps) {
       dout(5) << "  flushing_caps " << ccap_string(in->flushing_caps)
@@ -2346,7 +2375,7 @@ void Client::handle_cap_flush_ack(Inode *in, int mds, InodeCap *cap, MClientCaps
 	put_inode(in);
     }
   }
-
+  
   delete m;
 }
 

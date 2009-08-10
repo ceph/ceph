@@ -313,7 +313,8 @@ class Inode {
   map<int,InodeCap*> caps;            // mds -> InodeCap
   InodeCap *auth_cap;
   unsigned dirty_caps, flushing_caps;
-  __u64 flushing_cap_seq, flushing_cap_tid;
+  __u64 flushing_cap_seq;
+  __u16 flushing_cap_tid[CEPH_CAP_BITS];
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   unsigned exporting_issued;
@@ -402,7 +403,7 @@ class Inode {
     rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
-    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), flushing_cap_tid(0), shared_gen(0), cache_gen(0),
+    dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
     cap_item(this), flushing_cap_item(this),
@@ -411,7 +412,9 @@ class Inode {
     ref(0), ll_ref(0), 
     dir(0), dn(0),
     hack_balance_reads(false)
-  { }
+  {
+    memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
+  }
   ~Inode() { }
 
   vinodeno_t vino() { return vinodeno_t(ino, snapid); }
