@@ -55,14 +55,15 @@ v0.12
 - cleaned up f(data)sync wrt metadata writeback
 
 v0.13
-- client authentication
-- osd active during backlog generation
-- osdmap: allow explicit pg 'override' mappings
+/- osd active during backlog generation
+/- osdmap: allow explicit pg 'override' mappings
+/- kclient: fixed vmalloc() usage (use for incoming msgs, GFP_NOFS)
 - http gw
-
+- client authentication
 
 bugs
 - premature filejournal trimming?
+- weird osd_lock contention during osd restart?
 
 later
 - authentication
