@@ -1099,11 +1099,12 @@ void OSD::heartbeat()
        p != heartbeat_from.end();
        p++) {
     if (heartbeat_from_stamp.count(p->first)) {
-      if (!osdmap->is_up(p->first) || osdmap->get_hb_inst(p->first) != heartbeat_inst[p->first]) {
+      if (!osdmap->is_up(p->first)) {
+	dout(10) << "not checking timeout on down osd" << p->first << dendl;
+      } else if (osdmap->get_hb_inst(p->first) != heartbeat_inst[p->first]) {
 	dout(10) << "not checking timeout on osd" << p->first
-		 << " whose up " << osdmap->is_up(p->first)
-		 << " != 1 || hb inst " << heartbeat_inst[p->first]
-		 << " != map's "
+		 << " hb inst " << heartbeat_inst[p->first]
+		 << " != map's " << osdmap->get_hb_inst(p->first)
 		 << dendl;
       } else if (heartbeat_from_stamp[p->first] < grace) {
 	dout(0) << "no heartbeat from osd" << p->first
@@ -3339,6 +3340,7 @@ void OSD::_remove_pg(PG *pg)
   }
 
   pg->unlock();
+  dout(10) << "_remove_pg " << pgid << " taking osd_lock" << dendl;
   osd_lock.Lock();
   pg->lock();
   

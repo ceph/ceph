@@ -96,7 +96,7 @@ struct btrfs_ioctl_usertrans {
 
 #define DOUT_SUBSYS filestore
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "filestore(" << basedir << ") "
+#define dout_prefix *_dout << dbeginl << pthread_self() << " filestore(" << basedir << ") "
 
 #include "include/buffer.h"
 
