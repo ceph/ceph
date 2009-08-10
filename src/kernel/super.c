@@ -992,13 +992,6 @@ static int ceph_set_super(struct super_block *s, void *data)
 
 	s->s_time_gran = 1000;  /* 1000 ns == 1 us */
 
-	/* set up mempools */
-	ret = -ENOMEM;
-	client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
-			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
-	if (!client->wb_pagevec_pool)
-		goto fail;
-
 	ret = set_anon_super(s, NULL);  /* what is that second arg for? */
 	if (ret != 0)
 		goto fail;
@@ -1096,9 +1089,15 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (err < 0)
 		goto out;
 
+	/* set up mempools */
+	err = -ENOMEM;
+	client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
+			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
+	if (!client->wb_pagevec_pool)
+		goto out;
+
 	if (client->mount_args.flags & CEPH_OPT_NOSHARE)
 		compare_super = NULL;
-
 	sb = sget(fs_type, compare_super, ceph_set_super, client);
 	if (IS_ERR(sb)) {
 		err = PTR_ERR(sb);
