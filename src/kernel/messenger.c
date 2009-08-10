@@ -1424,7 +1424,7 @@ static int read_partial_message(struct ceph_connection *con)
 	     con->in_hdr.type, con->in_hdr.front_len, con->in_hdr.data_len);
 
 	/* allocate message */
-	con->in_msg = ceph_msg_new(0, front_len, 0, 0, NULL);
+	con->in_msg = con->msgr->alloc_msg(con->msgr->parent, &con->in_hdr);
 	if (IS_ERR(con->in_msg)) {
 		ret = PTR_ERR(con->in_msg);
 		con->in_msg = NULL;

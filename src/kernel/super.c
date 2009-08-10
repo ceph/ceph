@@ -24,9 +24,10 @@
  * types to appropriate handlers and subsystems.
  */
 
-void ceph_dispatch(void *p, struct ceph_msg *msg);
-void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
-		     struct ceph_entity_name *peer_name);
+static void ceph_dispatch(void *p, struct ceph_msg *msg);
+static void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
+			    struct ceph_entity_name *peer_name);
+static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr);
 
 /*
  * find filename portion of a path (/foo/bar/baz -> baz)
@@ -820,6 +821,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr->dispatch = ceph_dispatch;
 		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
 		client->msgr->peer_reset = ceph_peer_reset;
+		client->msgr->alloc_msg = ceph_alloc_msg;
 	}
 
 	/* send mount request, and wait for mon, mds, and osd maps */
@@ -895,6 +897,17 @@ out:
 	return err;
 }
 
+
+/*
+ * Allocate incoming message.
+ */
+static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr)
+{
+	int type = le32_to_cpu(hdr->type);
+	int front_len = le32_to_cpu(hdr->front_len);
+
+	return ceph_msg_new(type, front_len, 0, 0, NULL);
+}
 
 /*
  * Process an incoming message.

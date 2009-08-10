@@ -36,6 +36,9 @@ typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
 typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
 					struct ceph_entity_name *pn);
 
+typedef struct ceph_msg * (*ceph_msgr_alloc_msg_t) (void *p,
+					    struct ceph_msg_header *hdr);
+
 static inline const char *ceph_name_type_str(int t)
 {
 	switch (t) {
@@ -60,6 +63,7 @@ struct ceph_messenger {
 	ceph_msgr_dispatch_t dispatch;
 	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
+	ceph_msgr_alloc_msg_t alloc_msg;
 
 	struct ceph_entity_inst inst;    /* my name+address */
 
