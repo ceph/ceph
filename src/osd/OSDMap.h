@@ -603,7 +603,7 @@ private:
    
     if (v < 2) {
       map<pg_t,uint32_t> pg_swap_primary;
-      ::decode(pg_swap_primary, bl);
+      ::decode(pg_swap_primary, p);
     }
     ::decode(blacklist, p);
   }
