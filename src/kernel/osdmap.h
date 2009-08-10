@@ -1,6 +1,7 @@
 #ifndef _FS_CEPH_OSDMAP_H
 #define _FS_CEPH_OSDMAP_H
 
+#include <linux/rbtree.h>
 #include "types.h"
 #include "ceph_fs.h"
 #include "crush/crush.h"
@@ -22,6 +23,13 @@ struct ceph_pg_pool_info {
 	int pg_num_mask, pgp_num_mask, lpg_num_mask, lpgp_num_mask;
 };
 
+struct ceph_pg_mapping {
+	struct rb_node node;
+	u64 pgid;
+	int len;
+	int osds[];
+};
+
 struct ceph_osdmap {
 	ceph_fsid_t fsid;
 	u32 epoch;
@@ -34,6 +42,8 @@ struct ceph_osdmap {
 	u8 *osd_state;     /* CEPH_OSD_* */
 	u32 *osd_weight;   /* 0 = failed, 0x10000 = 100% normal */
 	struct ceph_entity_addr *osd_addr;
+
+	struct rb_root pg_temp;
 
 	u32 num_pools;
 	struct ceph_pg_pool_info *pg_pool;
@@ -64,9 +74,9 @@ static inline struct ceph_entity_addr *ceph_osd_addr(struct ceph_osdmap *map,
 }
 
 extern struct ceph_osdmap *osdmap_decode(void **p, void *end);
-extern struct ceph_osdmap *apply_incremental(void **p, void *end,
-					     struct ceph_osdmap *map,
-					     struct ceph_messenger *msgr);
+extern struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
+					    struct ceph_osdmap *map,
+					    struct ceph_messenger *msgr);
 extern void ceph_osdmap_destroy(struct ceph_osdmap *map);
 
 /* calculate mapping of a file extent to an object */
@@ -79,5 +89,6 @@ extern int ceph_calc_object_layout(struct ceph_object_layout *ol,
 				   const char *oid,
 				   struct ceph_file_layout *fl,
 				   struct ceph_osdmap *osdmap);
+extern int ceph_calc_pg_primary(struct ceph_osdmap *osdmap, union ceph_pg pgid);
 
 #endif

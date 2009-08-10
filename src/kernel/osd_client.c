@@ -9,7 +9,6 @@
 #include "super.h"
 #include "osd_client.h"
 #include "messenger.h"
-#include "crush/mapper.h"
 #include "decode.h"
 
 /*
@@ -355,11 +354,7 @@ static int map_osds(struct ceph_osd_client *osdc,
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
 	union ceph_pg pgid;
-	struct ceph_pg_pool_info *pool;
-	int ruleno;
-	unsigned pps; /* placement ps */
-	int osds[10], osd = -1;
-	int i, num;
+	int osd = -1;
 	int err;
 
 	err = ceph_calc_object_layout(&reqhead->layout, req->r_oid,
@@ -367,36 +362,7 @@ static int map_osds(struct ceph_osd_client *osdc,
 	if (err)
 		return err;
 	pgid.pg64 = le64_to_cpu(reqhead->layout.ol_pgid);
-	if (pgid.pg.pool >= osdc->osdmap->num_pools)
-		return -1;
-	pool = &osdc->osdmap->pg_pool[pgid.pg.pool];
-	ruleno = crush_find_rule(osdc->osdmap->crush, pool->v.crush_ruleset,
-				 pool->v.type, pool->v.size);
-	if (ruleno < 0) {
-		pr_err("ceph map_osds no crush rule pool %d type %d size %d\n",
-		       pgid.pg.pool, pool->v.type, pool->v.size);
-		return -1;
-	}
-
-	if (pgid.pg.preferred >= 0)
-		pps = ceph_stable_mod(pgid.pg.ps,
-				      le32_to_cpu(pool->v.lpgp_num),
-				      pool->lpgp_num_mask);
-	else
-		pps = ceph_stable_mod(pgid.pg.ps,
-				      le32_to_cpu(pool->v.pgp_num),
-				      pool->pgp_num_mask);
-	pps += pgid.pg.pool;
-	num = crush_do_rule(osdc->osdmap->crush, ruleno, pps, osds,
-			    min_t(int, pool->v.size, ARRAY_SIZE(osds)),
-			    pgid.pg.preferred, osdc->osdmap->osd_weight);
-
-	/* primary is first up osd */
-	for (i = 0; i < num; i++)
-		if (ceph_osd_is_up(osdc->osdmap, osds[i])) {
-			osd = osds[i];
-			break;
-		}
+	osd = ceph_calc_pg_primary(osdc->osdmap, pgid);
 	dout("map_osds tid %llu pgid %llx pool %d osd%d (was osd%d)\n",
 	     req->r_tid, pgid.pg64, pgid.pg.pool, osd, req->r_last_osd);
 	if (req->r_last_osd == osd &&
@@ -706,8 +672,9 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 		if (osdc->osdmap && osdc->osdmap->epoch+1 == epoch) {
 			dout("applying incremental map %u len %d\n",
 			     epoch, maplen);
-			newmap = apply_incremental(&p, next, osdc->osdmap,
-						   osdc->client->msgr);
+			newmap = osdmap_apply_incremental(&p, next,
+							  osdc->osdmap,
+							  osdc->client->msgr);
 			if (IS_ERR(newmap)) {
 				err = PTR_ERR(newmap);
 				goto bad;
