@@ -41,8 +41,9 @@ namespace __gnu_cxx {
   {
     size_t operator()( const nstring& x ) const
     {
-      static hash<const char*> H;
-      return H(x.c_str());
+      //static hash<const char*> H;
+      //return H(x.c_str());
+      return ceph_full_name_hash(x.c_str(), x.length());
     }
   };
 }
