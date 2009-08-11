@@ -42,6 +42,7 @@ int main(int argc, char **argv)
       //pgid.u.ps = f * 4 + b;
       osdmap.pg_to_osds(pgid, osds);
       size[osds.size()]++;
+#if 0
       if (0) {
 	hash<object_t> H;
 	int x = H(oid);
@@ -50,6 +51,7 @@ int main(int argc, char **argv)
 	//cout << "psim: x = " << x << " s = " << s << std::endl;
 	//osds[0] = s;
       }
+#endif
       //osds[0] = crush_hash32(f) % n;
       //cout << "oid " << oid << " pgid " << pgid << " on " << osds << std::endl;
       for (unsigned i=0; i<osds.size(); i++) {
