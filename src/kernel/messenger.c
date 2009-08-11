@@ -1385,7 +1385,7 @@ static void process_ack(struct ceph_connection *con)
  */
 static int read_partial_message(struct ceph_connection *con)
 {
-	struct ceph_msg *m = NULL;
+	struct ceph_msg *m = con->in_msg;
 	void *p;
 	int ret;
 	int to, want, left;
@@ -1420,20 +1420,22 @@ static int read_partial_message(struct ceph_connection *con)
 	if (front_len > CEPH_MSG_MAX_FRONT_LEN)
 		return -EIO;
 
-	dout("got hdr type %d front %d data %d\n",
-	     con->in_hdr.type, con->in_hdr.front_len, con->in_hdr.data_len);
-
-	/* allocate message */
-	con->in_msg = con->msgr->alloc_msg(con->msgr->parent, &con->in_hdr);
-	if (IS_ERR(con->in_msg)) {
-		ret = PTR_ERR(con->in_msg);
-		con->in_msg = NULL;
-		con->error_msg = "out of memory for incoming message";
-		return ret;
+	/* allocate message? */
+	if (!con->in_msg) {
+		dout("got hdr type %d front %d data %d\n", con->in_hdr.type,
+		     con->in_hdr.front_len, con->in_hdr.data_len);
+		con->in_msg = con->msgr->alloc_msg(con->msgr->parent,
+						   &con->in_hdr);
+		if (IS_ERR(con->in_msg)) {
+			ret = PTR_ERR(con->in_msg);
+			con->in_msg = NULL;
+			con->error_msg = "out of memory for incoming message";
+			return ret;
+		}
+		m = con->in_msg;
+		m->front.iov_len = 0;    /* haven't read it yet */
+		memcpy(&m->hdr, &con->in_hdr, sizeof(con->in_hdr));
 	}
-	m = con->in_msg;
-	m->front.iov_len = 0;    /* haven't read it yet */
-	memcpy(&m->hdr, &con->in_hdr, sizeof(con->in_hdr));
 
 	/* front */
 	while (m->front.iov_len < front_len) {
