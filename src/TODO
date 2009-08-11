@@ -65,7 +65,7 @@ bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 - sync mode end-of-file handling
-- mds process_cap_release suppress leads to broken cap state on revoke
+- mds process_cap_update suppress leads to broken cap state on revoke
 
 later
 - authentication

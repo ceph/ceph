@@ -235,7 +235,7 @@ noinst_LIBRARIES = \
 noinst_LIBRARIES +=  #libcephclient_so.a
 
 # extra bits
-EXTRA_DIST = verify-mds-journal.sh vstart.sh \
+EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
