@@ -2470,7 +2470,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     if ((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
       _flush(in);
     else {
-      check_caps(in, false);
+      check_caps(in, true);
     }
 
   } else if (old_caps == new_caps) {

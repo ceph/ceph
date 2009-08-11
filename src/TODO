@@ -150,6 +150,8 @@ osd
 - optimize remove wrt recovery pushes?
 
 uclient
+- clean up check_caps to more closely mirror kclient logic
+- audit max_size logic (see the kclient wrapper)
 - readdir from cache
 - clean up client mds session vs mdsmap behavior?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
