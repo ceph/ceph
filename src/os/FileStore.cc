@@ -1640,7 +1640,7 @@ int FileStore::_getattrs(const char *fn, map<nstring,bufferptr>& aset, bool user
       }
       if (*set_name && can_get) {
         dout(20) << "getattrs " << fn << " getting '" << name << "'" << dendl;
-        dout(0) << "getattrs " << fn << " set_name '" << set_name << "' user_only=" << user_only << dendl;
+        //dout(0) << "getattrs " << fn << " set_name '" << set_name << "' user_only=" << user_only << dendl;
       
         int r = _getattr(fn, attrname, aset[set_name]);
         if (r < 0) return r;
