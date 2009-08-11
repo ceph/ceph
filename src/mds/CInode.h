@@ -549,7 +549,8 @@ public:
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale() &&
-	  ((it->second->wanted() & CEPH_CAP_ANY_WR) || inode.is_dir())) {
+	  ((it->second->wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD))
+	   || inode.is_dir())) {
 	if (n)
 	  return false;
 	n++;

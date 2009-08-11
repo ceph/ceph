@@ -3095,7 +3095,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	(in->inode.is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
       // we should lose it.
-      if ((other_wanted & CEPH_CAP_GWR) ||
+      if ((other_wanted & (CEPH_CAP_GRD|CEPH_CAP_GWR)) ||
 	  lock->is_waiter_for(SimpleLock::WAIT_WR))
 	file_mixed(lock, need_issue);
       else if (!lock->is_wrlocked())   // let excl wrlocks drain first
