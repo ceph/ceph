@@ -332,7 +332,7 @@ public:
 
     // recovery pointers
     list<Entry>::iterator complete_to;  // not inclusive of referenced item
-    sobject_t last_requested;           // last object requested by primary
+    eversion_t last_requested;           // last object requested by primary
 
     /****/
     IndexedLog() {}
@@ -344,7 +344,7 @@ public:
     }
     void reset_recovery_pointers() {
       complete_to = log.end();
-      last_requested = sobject_t();
+      last_requested = eversion_t();
     }
 
     bool logged_object(const sobject_t& oid) const {

@@ -1458,7 +1458,7 @@ void PG::activate(ObjectStore::Transaction& t,
     while (log.complete_to->version <= info.last_complete)
       log.complete_to++;
     assert(log.complete_to != log.log.end());
-    log.last_requested = sobject_t();
+    log.last_requested = eversion_t();
     dout(10) << "activate -     complete_to = " << log.complete_to->version << dendl;
     if (is_primary()) {
       dout(10) << "activate - starting recovery" << dendl;
@@ -2288,7 +2288,7 @@ void PG::repair_object(ScrubMap::object *po, int bad_peer, int ok_peer)
   } else {
     missing.add(po->poid, oi.version, eversion_t());
     missing_loc[po->poid].insert(ok_peer);
-    log.last_requested = sobject_t();
+    log.last_requested = eversion_t();
   }
   uptodate_set.erase(bad_peer);
   osd->queue_for_recovery(this);

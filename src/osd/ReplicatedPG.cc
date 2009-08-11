@@ -3335,31 +3335,33 @@ int ReplicatedPG::recover_primary(int max)
 
   dout(10) << "recover_primary pulling " << pulling.size() << " in pg" << dendl;
   dout(10) << "recover_primary " << missing << dendl;
-  dout(15) << "recover_primary " << missing.missing << dendl;
+  dout(25) << "recover_primary " << missing.missing << dendl;
 
   // look at log!
   Log::Entry *latest = 0;
   int started = 0;
   int skipped = 0;
 
-  map<sobject_t, Missing::item>::iterator p = missing.missing.lower_bound(log.last_requested);
-  while (p != missing.missing.end()) {
+  map<eversion_t, sobject_t>::iterator p = missing.rmissing.lower_bound(log.last_requested);
+  while (p != missing.rmissing.end()) {
     sobject_t soid;
+    eversion_t v = p->first;
 
-    if (log.objects.count(p->first)) {
-      latest = log.objects[p->first];
+    if (log.objects.count(p->second)) {
+      latest = log.objects[p->second];
       assert(latest->is_update());
       soid = latest->soid;
     } else {
       latest = 0;
-      soid = p->first;
+      soid = p->second;
     }
+    Missing::item& item = missing.missing[p->second];
 
     sobject_t head = soid;
     head.snap = CEPH_NOSNAP;
 
     dout(10) << "recover_primary "
-             << soid << " " << p->second.need
+             << soid << " " << item.need
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
              << (pulling.count(soid) ? " (pulling)":"")
@@ -3412,7 +3414,7 @@ int ReplicatedPG::recover_primary(int max)
 
     // only advance last_requested if we haven't skipped anything
     if (!skipped)
-      log.last_requested = soid;
+      log.last_requested = v;
   }
 
   // done?
