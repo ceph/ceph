@@ -322,6 +322,7 @@ class Inode {
   ceph_seq_t exporting_mseq;
   utime_t hold_caps_until;
   xlist<Inode*>::item cap_item, flushing_cap_item;
+  tid_t last_flush_tid;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -406,7 +407,7 @@ class Inode {
     dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
     exporting_issued(0), exporting_mds(-1), exporting_mseq(0),
-    cap_item(this), flushing_cap_item(this),
+    cap_item(this), flushing_cap_item(this), last_flush_tid(0),
     snaprealm(0), snaprealm_item(this), snapdir_parent(0),
     reported_size(0), wanted_max_size(0), requested_max_size(0),
     ref(0), ll_ref(0), 
@@ -729,7 +730,7 @@ public:
 
   // mds requests
 
-  tid_t last_tid, last_flush_seq, last_flush_tid;
+  tid_t last_tid, last_flush_seq;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 

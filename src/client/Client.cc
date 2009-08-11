@@ -120,7 +120,6 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
 
   last_tid = 0;
   last_flush_seq = 0;
-  last_flush_tid = 0;
 
   unsafe_sync_write = 0;
 
@@ -1606,7 +1605,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
       }
       in->flushing_caps |= flush;
       in->dirty_caps = 0;
-      flush_tid = ++last_flush_tid;
+      flush_tid = ++in->last_flush_tid;
       //set the tid for each cap we're flushing
       for (int i = 0; i < CEPH_CAP_BITS; ++i) {
 	if (flush & (1<<i))
@@ -1708,7 +1707,7 @@ void Client::flush_snaps(Inode *in)
 	     << " on " << *in << dendl;
     if (p->second.dirty_data || p->second.writing)
       continue;
-    p->second.flush_tid = ++last_flush_tid;
+    p->second.flush_tid = ++in->last_flush_tid;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq);
     m->set_client_tid(p->second.flush_tid);
     m->head.snap_follows = p->first;
@@ -1985,23 +1984,19 @@ void Client::kick_flushing_caps(int mds)
     dout(20) << " reflushing caps on " << *in << " to mds" << mds << dendl;
     InodeCap *cap = in->auth_cap;
     assert(cap->session == session);
-    //ugh, it's a lot of comparisons to push the caps on same tid out together
-    int flush_now;
-    int already_flushed = 0;
-    for (int i=0; i<CEPH_CAP_BITS; ++i) {
-      if ((in->flushing_caps & 1<<i) &&
-	  !(already_flushed & 1<<i)) {
-	flush_now = 0;
-	flush_now |= 1<<i;
-	for (int j=i+1; j<CEPH_CAP_BITS; ++j) {
-	  if ((in->flushing_caps & 1<<j) &&
-	      ( in->flushing_cap_tid[j] == in->flushing_cap_tid[i]))
-	    flush_now |= 1<<j;
+    //if the inode is flushing caps, pick a new tid,
+    //set all the cap acks to that tid, and send off
+    //a message saying so to the new MDS.
+    if (in->flushing_caps) {
+      tid_t new_flush_tid = ++in->last_flush_tid;
+      for (int i=0; i<CEPH_CAP_BITS; ++i) {
+	if ((in->flushing_caps & 1<<i)) {
+	  in->flushing_cap_tid[i] = new_flush_tid;
 	}
-	send_cap(in, mds, cap, in->caps_used(), in->caps_wanted(), 
-		 cap->issued | cap->implemented,
-		 flush_now, in->flushing_cap_tid[i]);
       }
+      send_cap(in, mds, cap, in->caps_used(), in->caps_wanted(), 
+	       cap->issued | cap->implemented,
+	       in->flushing_caps, new_flush_tid);
     }
   }
 }
