@@ -1026,7 +1026,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
         (pg.log.log.rbegin()->version.version != pg.log.head.version)) {
       out << " (log bound mismatch, actual=["
 	  << pg.log.log.begin()->version << ","
-	  << pg.log.log.rbegin()->version << "] len=" << pg.log.log.size() << ")";
+	  << pg.log.log.rbegin()->version << "]";
+      //out << "len=" << pg.log.log.size();
+      out << ")";
     }
   }
 
