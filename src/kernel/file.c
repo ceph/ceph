@@ -450,16 +450,20 @@ more:
 			pages_left -= didpages;
 			goto more;
 		}
-
+	}
+	if (ret >= 0) {
 		ret = copy_page_vector_to_user(pages, data, start_off, read);
-		if (ret == 0)
+		if (ret >= 0) {
 			*offset = start_off + read;
+			ret = read;
+		}
 	}
 
 	if (file->f_flags & O_DIRECT)
 		put_page_vector(pages, num_pages);
 	else
 		ceph_release_page_vector(pages, num_pages);
+	dout("sync_read read %d result %d\n", read, ret);
 	return ret;
 }
 
@@ -653,8 +657,8 @@ static ssize_t ceph_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		ret = generic_file_aio_read(iocb, iov, nr_segs, pos);
 
 out:
-	dout("aio_read %p %llx.%llx dropping cap refs on %s\n",
-	     inode, ceph_vinop(inode), ceph_cap_string(got));
+	dout("aio_read %p %llx.%llx dropping cap refs on %s = %d\n",
+	     inode, ceph_vinop(inode), ceph_cap_string(got), (int)ret);
 	ceph_put_cap_refs(ci, got);
 	return ret;
 }
