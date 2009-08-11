@@ -118,9 +118,9 @@ extern void ceph_osdc_sync(struct ceph_osd_client *osdc);
 extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			       struct ceph_vino vino,
 			       struct ceph_file_layout *layout,
-			       u64 off, u64 len,
+			       u64 off, u64 *plen,
 			       u32 truncate_seq, u64 truncate_size,
-			       struct page **pages, int nr_pages, int fill);
+			       struct page **pages, int nr_pages);
 
 extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_vino vino,

@@ -953,26 +953,21 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 }
 
 /*
- * Read some contiguous pages.  If @fill, return number of bytes read/zeroed
- * (i.e., the range we tried to read).  If not @fill, return the number of
- * bytes actually read.  (We do this because mapping readpages and O_DIRECT
- * reads should zero out the full extent, but regular sync reads don't care.)
+ * Read some contiguous pages.  If we cross a stripe boundary, shorten
+ * *plen.  Return number of bytes read, or error.
  */
 int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct ceph_vino vino, struct ceph_file_layout *layout,
-			u64 off, u64 len,
+			u64 off, u64 *plen,
 			u32 truncate_seq, u64 truncate_size,
-			struct page **pages, int num_pages,
-			int fill)
+			struct page **pages, int num_pages)
 {
 	struct ceph_osd_request *req;
-	int i;
-	struct page *page;
-	int rc = 0, read = 0;
+	int rc = 0;
 
 	dout("readpages on ino %llx.%llx on %llu~%llu\n", vino.ino,
-	     vino.snap, off, len);
-	req = ceph_osdc_new_request(osdc, layout, vino, off, &len,
+	     vino.snap, off, *plen);
+	req = ceph_osdc_new_request(osdc, layout, vino, off, plen,
 				    CEPH_OSD_OP_READ, CEPH_OSD_FLAG_READ,
 				    NULL, 0, truncate_seq, truncate_size, NULL,
 				    false);
@@ -981,52 +976,15 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 
 	/* it may be a short read due to an object boundary */
 	req->r_pages = pages;
-	num_pages = calc_pages_for(off, len);
+	num_pages = calc_pages_for(off, *plen);
 	req->r_num_pages = num_pages;
 
-	dout("readpages final extent is %llu~%llu (%d pages)\n",
-	     off, len, req->r_num_pages);
+	dout("readpages  final extent is %llu~%llu (%d pages)\n",
+	     off, *plen, req->r_num_pages);
 
 	rc = ceph_osdc_start_request(osdc, req, false);
 	if (!rc)
 		rc = ceph_osdc_wait_request(osdc, req);
-
-	if (rc >= 0) {
-		read = rc;
-		if (fill)
-			rc = len;
-	} else if (rc == -ENOENT) {
-		if (fill)
-			rc = len;
-	}
-
-	/* zero trailing pages on success? */
-	if (fill && read < (num_pages << PAGE_CACHE_SHIFT)) {
-		if (read & ~PAGE_CACHE_MASK) {
-			i = read >> PAGE_CACHE_SHIFT;
-			page = pages[i];
-			dout("readpages zeroing %d %p from %d\n", i, page,
-			     (int)(read & ~PAGE_CACHE_MASK));
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-			zero_user_segment(page, read & ~PAGE_CACHE_MASK,
-					  PAGE_CACHE_SIZE);
-#else
-			zero_user_page(page, read & ~PAGE_CACHE_MASK,
-			       PAGE_CACHE_SIZE - (read & ~PAGE_CACHE_MASK),
-			       KM_USER0);
-#endif
-			read += PAGE_CACHE_SIZE;
-		}
-		for (i = read >> PAGE_CACHE_SHIFT; i < num_pages; i++) {
-			page = req->r_pages[i];
-			dout("readpages zeroing %d %p\n", i, page);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-			zero_user_segment(page, 0, PAGE_CACHE_SIZE);
-#else
-			zero_user_page(page, 0, PAGE_CACHE_SIZE, KM_USER0);
-#endif
-		}
-	}
 
 	ceph_osdc_put_request(req);
 	dout("readpages result %d\n", rc);

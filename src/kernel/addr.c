@@ -200,13 +200,14 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_inode_to_client(inode)->osdc;
 	int err = 0;
+	u64 len = PAGE_CACHE_SIZE;
 
 	dout("readpage inode %p file %p page %p index %lu\n",
 	     inode, filp, page, page->index);
 	err = ceph_osdc_readpages(osdc, ceph_vino(inode), &ci->i_layout,
-				  page->index << PAGE_SHIFT, PAGE_SIZE,
+				  page->index << PAGE_CACHE_SHIFT, &len,
 				  ci->i_truncate_seq, ci->i_truncate_size,
-				  &page, 1, 1);
+				  &page, 1);
 	if (unlikely(err < 0)) {
 		SetPageError(page);
 		goto out;
@@ -269,6 +270,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	struct page **pages;
 	struct pagevec pvec;
 	loff_t offset;
+	u64 len;
 
 	dout("readpages %p file %p nr_pages %d\n",
 	     inode, file, nr_pages);
@@ -279,10 +281,11 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 
 	/* guess read extent */
 	offset = pages[0]->index << PAGE_CACHE_SHIFT;
+	len = nr_pages << PAGE_CACHE_SHIFT;
 	rc = ceph_osdc_readpages(osdc, ceph_vino(inode), &ci->i_layout,
-				 offset, nr_pages << PAGE_CACHE_SHIFT,
+				 offset, &len,
 				 ci->i_truncate_seq, ci->i_truncate_size,
-				 pages, nr_pages, 1);
+				 pages, nr_pages);
 	if (rc < 0)
 		goto out;
 
