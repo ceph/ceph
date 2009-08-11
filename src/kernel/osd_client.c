@@ -953,14 +953,17 @@ void ceph_osdc_stop(struct ceph_osd_client *osdc)
 }
 
 /*
- * Read some contiguous pages.  Return number of bytes read (or
- * zeroed).
+ * Read some contiguous pages.  If @fill, return number of bytes read/zeroed
+ * (i.e., the range we tried to read).  If not @fill, return the number of
+ * bytes actually read.  (We do this because mapping readpages and O_DIRECT
+ * reads should zero out the full extent, but regular sync reads don't care.)
  */
 int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			struct ceph_vino vino, struct ceph_file_layout *layout,
 			u64 off, u64 len,
 			u32 truncate_seq, u64 truncate_size,
-			struct page **pages, int num_pages)
+			struct page **pages, int num_pages,
+			int fill)
 {
 	struct ceph_osd_request *req;
 	int i;
@@ -990,13 +993,15 @@ int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 
 	if (rc >= 0) {
 		read = rc;
-		rc = len;
+		if (fill)
+			rc = len;
 	} else if (rc == -ENOENT) {
-		rc = len;
+		if (fill)
+			rc = len;
 	}
 
-	/* zero trailing pages on success */
-	if (read < (num_pages << PAGE_CACHE_SHIFT)) {
+	/* zero trailing pages on success? */
+	if (fill && read < (num_pages << PAGE_CACHE_SHIFT)) {
 		if (read & ~PAGE_CACHE_MASK) {
 			i = read >> PAGE_CACHE_SHIFT;
 			page = pages[i];

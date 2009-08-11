@@ -206,7 +206,7 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	err = ceph_osdc_readpages(osdc, ceph_vino(inode), &ci->i_layout,
 				  page->index << PAGE_SHIFT, PAGE_SIZE,
 				  ci->i_truncate_seq, ci->i_truncate_size,
-				  &page, 1);
+				  &page, 1, 1);
 	if (unlikely(err < 0)) {
 		SetPageError(page);
 		goto out;
@@ -282,7 +282,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 	rc = ceph_osdc_readpages(osdc, ceph_vino(inode), &ci->i_layout,
 				 offset, nr_pages << PAGE_CACHE_SHIFT,
 				 ci->i_truncate_seq, ci->i_truncate_size,
-				 pages, nr_pages);
+				 pages, nr_pages, 1);
 	if (rc < 0)
 		goto out;
 

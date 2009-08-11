@@ -436,7 +436,8 @@ more:
 				  &ci->i_layout,
 				  pos, left, ci->i_truncate_seq,
 				  ci->i_truncate_size,
-				  page_pos, pages_left);
+				  page_pos, pages_left,
+				  file->f_flags & O_DIRECT);
 	if (ret > 0) {
 		int didpages =
 			((pos & ~PAGE_CACHE_MASK) + ret) >> PAGE_CACHE_SHIFT;

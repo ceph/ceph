@@ -120,7 +120,7 @@ extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,
 			       struct ceph_file_layout *layout,
 			       u64 off, u64 len,
 			       u32 truncate_seq, u64 truncate_size,
-			       struct page **pages, int nr_pages);
+			       struct page **pages, int nr_pages, int fill);
 
 extern int ceph_osdc_writepages(struct ceph_osd_client *osdc,
 				struct ceph_vino vino,
