@@ -318,14 +318,20 @@ public class CephFileSystem extends FileSystem {
     if (!initialized) throw new IOException ("You have to initialize the"
 		       +"CephFileSystem before calling other methods.");
     debug("listStatus:enter with path " + p);
-    Path abs_p = makeAbsolute(p);
-    Path[] paths = listPaths(abs_p);
-    FileStatus[] statuses = new FileStatus[paths.length];
-    for (int i = 0; i < paths.length; ++i) {
-      statuses[i] = getFileStatus(paths[i]);
+    Path abs_path = makeAbsolute(p);
+    if (isDirectory(abs_path)) {
+      Path[] paths = listPaths(abs_path);
+      FileStatus[] statuses = new FileStatus[paths.length];
+      for (int i = 0; i < paths.length; ++i) {
+	statuses[i] = getFileStatus(paths[i]);
+      }
+      debug("listStatus:exit");
+      return statuses;
     }
-    debug("listStatus:exit");
-    return statuses;
+    if (isFile(abs_path)) return null;
+
+    //shouldn't get here
+    throw new FileNotFoundException("listStatus found no such file " + p);
   }
 
   @Override
@@ -517,6 +523,8 @@ public class CephFileSystem extends FileSystem {
       debug("delete:exit");
       return result;
     }
+
+    if (!isDirectory(abs_path)) return false;
     
     /* If the path is a directory, recursively try to delete its contents,
        and then delete the directory. */
@@ -646,8 +654,7 @@ public class CephFileSystem extends FileSystem {
       debug("returning from ceph_getdir to Java");
     }
     else {
-      debug("listPaths:exit failed on isDirectory");
-      return null;
+      throw new IOException("listPaths: path " + path.toString() + " is not a directory.");
     }
     
     // convert the strings to Paths
