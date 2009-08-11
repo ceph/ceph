@@ -789,6 +789,8 @@ int ceph_calc_object_layout(struct ceph_object_layout *ol,
 	pgid.pg.ps = ceph_full_name_hash(oid, strlen(oid));
 	pgid.pg.preferred = preferred;
 	pgid.pg.pool = le32_to_cpu(fl->fl_pg_pool);
+	dout("calc_object_layout '%s' pgid %d.%x (%llx)\n", oid,
+	     pgid.pg.pool, pgid.pg.ps, pgid.pg64);
 
 	ol->ol_pgid = cpu_to_le64(pgid.pg64);
 	ol->ol_stripe_unit = fl->fl_object_stripe_unit;
