@@ -1143,8 +1143,6 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
     Capability *cap = it->second;
     if (cap->is_stale())
       continue;
-    if (cap->is_suppress())
-      continue;
 
     // do not issue _new_ bits when size|mtime is projected
     int allowed;
@@ -1164,6 +1162,12 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 	     << " allowed " << ccap_string(allowed) 
 	     << " wanted " << ccap_string(wanted)
 	     << dendl;
+
+    // skip if suppress, and not revocation
+    if (cap->is_suppress() && !(pending & ~allowed)) {
+      dout(20) << "  suppressed and !revoke, skipping client" << it->first << dendl;
+      continue;
+    }
 
     // are there caps that the client _wants_ and can have, but aren't pending?
     // or do we need to revoke?
