@@ -23,7 +23,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.fs.FileStatus;
-//import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.FsStatus;
+import org.apache.hadoop.fs.CreateFlag;
 
 /**
  * <p>
@@ -70,6 +71,7 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_setPermission(String path, int mode);
   private native boolean ceph_kill_client();
   private native boolean ceph_stat(String path, Stat fill);
+  private native int ceph_statfs(String Path, CephStat fill);
   private native int ceph_replication(String path);
   private native String ceph_hosts(int fh, long offset);
   private native int ceph_setTimes(String path, long mtime, long atime);
@@ -390,7 +392,7 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("create: Cannot overwrite existing directory \""
 			    + abs_path.toString() + "\" with a file");      
     if (progress!=null) progress.progress();
-    //if (!flag.contains(CreateFlag.OVERWRITE)) {
+    //    if (!flag.contains(CreateFlag.OVERWRITE)) {
     if (!overwrite) {
       if (exists(abs_path)) {
 	throw new IOException("createRaw: Cannot open existing file \"" 
@@ -499,6 +501,23 @@ public class CephFileSystem extends FileSystem {
     return locations;
   }
   
+  /*  public FsStatus getStatus (Path path) throws IOException {
+    if (!initialized) throw new IOException("You have to initialize the"
+		      + " CephFileSystem before calling other methods.");
+    debug("getStatus:enter");
+    Path abs_path = makeAbsolute(path);
+
+    //currently(Ceph .12) Ceph actually ignores the path
+    //but we still pass it in; if Ceph stops ignoring we may need more
+    //error-checking code.
+    CephStat ceph_stat = new CephStat();
+    int result = ceph_statfs(abs_path.toString(), ceph_stat);
+    if (result!=0) throw new IOException("Somehow failed to statfs the Ceph filesystem. Error code: " + result);
+    debug("getStatus:exit");
+    return new FsStatus(ceph_stat.capacity,
+			ceph_stat.used, ceph_stat.remaining);
+			}*/
+
   /* Added in for .20, not required in trunk */
   public boolean delete(Path path) throws IOException { return delete(path, true); };
 
@@ -691,5 +710,13 @@ public class CephFileSystem extends FileSystem {
     public int group_id; 
 
     public Stat(){}
+  }
+
+  private class CephStat {
+    public long capacity;
+    public long used;
+    public long remaining;
+
+    public CephStat() {}
   }
 }

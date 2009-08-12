@@ -508,6 +508,92 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_stat
+ * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
+(JNIEnv * env, jobject obj, jstring j_path, jobject j_stat) {
+  //setup variables
+  struct stat st;
+  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  if (c_path == NULL) return false;
+
+  jclass cls = env->GetObjectClass(j_stat);
+  if (cls == NULL) return false;
+  jfieldID c_size_id = env->GetFieldID(cls, "size", "J");
+  if (c_size_id == NULL) return false;
+  jfieldID c_dir_id = env->GetFieldID(cls, "is_dir", "Z");
+  if (c_dir_id == NULL) return false;
+  jfieldID c_block_id = env->GetFieldID(cls, "block_size", "J");
+  if (c_block_id == NULL) return false;
+  jfieldID c_mod_id = env->GetFieldID(cls, "mod_time", "J");
+  if (c_mod_id == NULL) return false;
+  jfieldID c_access_id = env->GetFieldID(cls, "access_time", "J");
+  if (c_access_id == NULL) return false;
+  jfieldID c_mode_id = env->GetFieldID(cls, "mode", "I");
+  if (c_mode_id == NULL) return false;
+  jfieldID c_user_id = env->GetFieldID(cls, "user_id", "I");
+  if (c_user_id == NULL) return false;
+  jfieldID c_group_id = env->GetFieldID(cls, "group_id", "I");
+  if (c_group_id == NULL) return false;
+
+  //do actual lstat
+  int r = ceph_lstat(c_path, &st);
+  env->ReleaseStringUTFChars(j_path, c_path);
+
+  if (r < 0) return false; //fail out; file DNE or Ceph broke
+
+  //put variables from struct stat into Java
+  env->SetLongField(j_stat, c_size_id, (long)st.st_size);
+  env->SetBooleanField(j_stat, c_dir_id, (0 != S_ISDIR(st.st_mode)));
+  env->SetLongField(j_stat, c_block_id, (long)st.st_blksize);
+  env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime);
+  env->SetLongField(j_stat, c_access_id, (long long)st.st_atime);
+  env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
+  env->SetIntField(j_stat, c_user_id, (int)st.st_uid);
+  env->SetIntField(j_stat, c_group_id, (int)st.st_gid);
+
+  //return happy
+  return true;
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_statfs
+ * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/CephStat;)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statfs
+(JNIEnv * env, jobject obj, jstring j_path, jobject j_cephstat)
+{
+  //setup variables
+  struct statvfs stbuf;
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
+  if (c_path == NULL) return -ENOMEM;
+  jclass cls = env->GetObjectClass(j_cephstat);
+  if (cls == NULL) return 1; //JVM error of some kind
+  jfieldID c_capacity_id = env->GetFieldID(cls, "capacity", "J");
+  jfieldID c_used_id = env->GetFieldID(cls, "used", "J");
+  jfieldID c_remaining_id = env->GetFieldID(cls, "remaining", "J");
+
+  //do the statfs
+  int r = ceph_statfs(c_path, &stbuf);
+  env->ReleaseStringUTFChars(j_path, c_path);
+
+
+  if (r!=0) return r; //something broke
+
+  //place info into Java
+  env->SetLongField(j_cephstat, c_capacity_id,
+		    (long)stbuf.f_blocks*stbuf.f_bsize);
+  env->SetLongField(j_cephstat, c_used_id,
+		    (long)(stbuf.f_blocks-stbuf.f_bavail)*stbuf.f_bsize);
+  env->SetLongField(j_cephstat, c_remaining_id,
+		    (long)stbuf.f_bavail*stbuf.f_bsize);
+  return r;
+}
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_replication
  * Signature: (Ljava/lang/String;)I
  */
@@ -554,7 +640,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTi
   attr.st_mtime = mtime;
   attr.st_atime = atime;
   //may need to fill in uid and gid here later on...
-  ceph_setattr(c_path, &attr, mask);
+  return ceph_setattr(c_path, &attr, mask);
 }
 
 /*
@@ -700,55 +786,4 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1wri
   env->ReleaseByteArrayElements(j_buffer, j_buffer_ptr, 0);
 
   return result;
-}
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_stat
- * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
-(JNIEnv * env, jobject obj, jstring j_path, jobject j_stat) {
-  //setup variables
-  struct stat st;
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
-  if (c_path == NULL) return false;
-
-  jclass cls = env->GetObjectClass(j_stat);
-  if (cls == NULL) return false;
-  jfieldID c_size_id = env->GetFieldID(cls, "size", "J");
-  if (c_size_id == NULL) return false;
-  jfieldID c_dir_id = env->GetFieldID(cls, "is_dir", "Z");
-  if (c_dir_id == NULL) return false;
-  jfieldID c_block_id = env->GetFieldID(cls, "block_size", "J");
-  if (c_block_id == NULL) return false;
-  jfieldID c_mod_id = env->GetFieldID(cls, "mod_time", "J");
-  if (c_mod_id == NULL) return false;
-  jfieldID c_access_id = env->GetFieldID(cls, "access_time", "J");
-  if (c_access_id == NULL) return false;
-  jfieldID c_mode_id = env->GetFieldID(cls, "mode", "I");
-  if (c_mode_id == NULL) return false;
-  jfieldID c_user_id = env->GetFieldID(cls, "user_id", "I");
-  if (c_user_id == NULL) return false;
-  jfieldID c_group_id = env->GetFieldID(cls, "group_id", "I");
-  if (c_group_id == NULL) return false;
-
-  //do actual lstat
-  int r = ceph_lstat(c_path, &st);
-  env->ReleaseStringUTFChars(j_path, c_path);
-
-  if (r < 0) return false; //fail out; file DNE or Ceph broke
-
-  //put variables from struct stat into Java
-  env->SetLongField(j_stat, c_size_id, (long)st.st_size);
-  env->SetBooleanField(j_stat, c_dir_id, (0 != S_ISDIR(st.st_mode)));
-  env->SetLongField(j_stat, c_block_id, (long)st.st_blksize);
-  env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime);
-  env->SetLongField(j_stat, c_access_id, (long long)st.st_atime);
-  env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
-  env->SetIntField(j_stat, c_user_id, (int)st.st_uid);
-  env->SetIntField(j_stat, c_group_id, (int)st.st_gid);
-
-  //return happy
-  return true;
 }
