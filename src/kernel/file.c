@@ -847,10 +847,60 @@ out:
 	return ret;
 }
 
+/*
+ * llseek.  be sure to verify file size on SEEK_END.
+ */
+static loff_t ceph_llseek(struct file *file, loff_t offset, int origin)
+{
+	struct inode *inode = file->f_mapping->host;
+	int ret;
+
+	mutex_lock(&inode->i_mutex);
+	__ceph_do_pending_vmtruncate(inode);
+	switch (origin) {
+	case SEEK_END:
+		ret = ceph_do_getattr(inode, CEPH_STAT_CAP_SIZE);
+		if (ret < 0) {
+			offset = ret;
+			goto out;
+		}
+		offset += inode->i_size;
+		break;
+	case SEEK_CUR:
+		/*
+		 * Here we special-case the lseek(fd, 0, SEEK_CUR)
+		 * position-querying operation.  Avoid rewriting the "same"
+		 * f_pos value back to the file because a concurrent read(),
+		 * write() or lseek() might have altered it
+		 */
+		if (offset == 0) {
+			offset = file->f_pos;
+			goto out;
+		}
+		offset += file->f_pos;
+		break;
+	}
+
+	if (offset < 0 || offset > inode->i_sb->s_maxbytes) {
+		offset = -EINVAL;
+		goto out;
+	}
+
+	/* Special lock needed here? */
+	if (offset != file->f_pos) {
+		file->f_pos = offset;
+		file->f_version = 0;
+	}
+
+out:
+	mutex_unlock(&inode->i_mutex);
+	return offset;
+}
+
 const struct file_operations ceph_file_fops = {
 	.open = ceph_open,
 	.release = ceph_release,
-	.llseek = generic_file_llseek,
+	.llseek = ceph_llseek,
 	.read = do_sync_read,
 	.write = do_sync_write,
 	.aio_read = ceph_aio_read,
