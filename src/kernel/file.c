@@ -440,13 +440,12 @@ static void zero_page_vector_range(int off, int len, struct page **pages)
  * Read a range of bytes striped over one or more objects.  Iterate over
  * objects we stripe over.  (That's not atomic, but good enough for now.)
  *
- * If @fill, zero any regions that are holes or past object EOF on
- * disk.
+ * If we get a short result from the OSD, check against i_size; we need to
+ * only return a short read to the caller if we hit EOF.
  */
 static int striped_read(struct inode *inode,
 			u64 off, u64 len,
-			struct page **pages, int num_pages,
-			bool fill)
+			struct page **pages, int num_pages)
 {
 	struct ceph_client *client = ceph_inode_to_client(inode);
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -456,7 +455,7 @@ static int striped_read(struct inode *inode,
 	int read;
 	struct page **page_pos;
 	int ret;
-	bool was_short;
+	bool hit_stripe, was_short;
 
 	/*
 	 * we may need to do multiple reads.  not atomic, unfortunately.
@@ -474,11 +473,12 @@ more:
 				  ci->i_truncate_seq,
 				  ci->i_truncate_size,
 				  page_pos, pages_left);
-	was_short = this_len < left;
+	hit_stripe = this_len < left;
+	was_short = ret >= 0 && ret < this_len;
 	if (ret == -ENOENT)
 		ret = 0;
-	dout("striped_read %llu~%u (read %u) got %d%s\n", pos, left, read, ret,
-	     was_short ? " SHORT" : "");
+	dout("striped_read %llu~%u (read %u) got %d%s%s\n", pos, left, read,
+	     ret, hit_stripe ? " HITSTRIPE" : "", was_short ? " SHORT" : "");
 
 	if (ret > 0) {
 		int didpages =
@@ -492,17 +492,36 @@ more:
 		pos += ret;
 		read = pos - off;
 		left -= ret;
-		if (left && was_short) {
-			page_pos += didpages;
-			pages_left -= didpages;
+		page_pos += didpages;
+		pages_left -= didpages;
+
+		/* hit stripe? */
+		if (left && hit_stripe)
 			goto more;
-		}
-		if (fill) {
-			dout("zero tail\n");
-			zero_page_vector_range(page_off + read,
-					       len - read, pages);
-		}
 	}
+
+	if (was_short) {
+		/* was original extent fully inside i_size? */
+		if (pos + left <= inode->i_size) {
+			dout("zero tail\n");
+			zero_page_vector_range(page_off + read, len - read,
+					       pages);
+			goto out;
+		}
+
+		/* check i_size */
+		ret = ceph_do_getattr(inode, CEPH_STAT_CAP_SIZE);
+		if (ret < 0)
+			goto out;
+
+		/* hit EOF? */
+		if (pos >= inode->i_size)
+			goto out;
+
+		goto more;
+	}
+
+out:
 	if (ret >= 0)
 		ret = read;
 	dout("striped_read returns %d\n", ret);
@@ -543,8 +562,7 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
 	if (IS_ERR(pages))
 		return PTR_ERR(pages);
 
-	ret = striped_read(inode, off, len, pages, num_pages,
-			   file->f_flags & O_DIRECT);
+	ret = striped_read(inode, off, len, pages, num_pages);
 
 	if (ret >= 0 && (file->f_flags & O_DIRECT) == 0)
 		ret = copy_page_vector_to_user(pages, data, off, ret);
