@@ -275,6 +275,9 @@ struct MDRequest : public Mutation {
   int snap_caps;
   bool did_early_reply;
 
+  // inos we did a embedded cap release on, and may need to eval if we haven't since reissued
+  map<vinodeno_t, ceph_seq_t> cap_releases;  
+
   // -- i am a slave request
   MMDSSlaveRequest *slave_request; // slave request (if one is pending; implies slave == true)
 

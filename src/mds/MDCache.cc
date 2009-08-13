@@ -6376,6 +6376,8 @@ void MDCache::request_cleanup(MDRequest *mdr)
        ++p) 
     (*p)->put_stickydirs();
 
+  mds->locker->kick_cap_releases(mdr);
+
   // drop cache pins
   mdr->drop_pins();
 

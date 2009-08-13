@@ -690,9 +690,15 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
 	   << " (" << strerror(-reply->get_result())
 	   << ") " << *req << dendl;
 
-  if (tracei || tracedn)
+  if (tracei || tracedn) {
+    if (tracei)
+      mdr->cap_releases.erase(tracei->vino());
+    if (tracedn)
+      mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
+
     set_trace_dist(mdr->session, reply, tracei, tracedn, mdr->snapid,
 		   mdr->client_request->get_dentry_wanted());
+  }
 
   messenger->send_message(reply, client_inst);
 
@@ -715,28 +721,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   if (req->is_write() && mdr->session)
     mdr->session->add_completed_request(mdr->reqid.tid);
 
-  /*
-  if (tracei && !tracei->hack_accessed) {
-    tracei->hack_accessed = true;
-    mds->logger->inc("newt");
-    if (tracei->parent &&
-	tracei->parent->dir->hack_num_accessed >= 0) {
-      tracei->parent->dir->hack_num_accessed++;
-      if (tracei->parent->dir->hack_num_accessed == 1)
-	mds->logger->inc("dirt1");
-      if (tracei->parent->dir->hack_num_accessed == 2)
-	mds->logger->inc("dirt2");
-      if (tracei->parent->dir->hack_num_accessed == 3)
-	mds->logger->inc("dirt3");
-      if (tracei->parent->dir->hack_num_accessed == 4)
-	mds->logger->inc("dirt4");
-      if (tracei->parent->dir->hack_num_accessed == 5)
-	mds->logger->inc("dirt5");
-    }
-  }
-  */
-
-  reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
+  // give any preallocated inos to the session
+  apply_allocated_inos(mdr);
 
   // get tracei/tracedn from mdr?
   snapid_t snapid = mdr->snapid;
@@ -745,17 +731,21 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   if (!tracedn)
     tracedn = mdr->tracedn;
 
-  // give any preallocated inos to the session
-  apply_allocated_inos(mdr);
-
   bool is_replay = mdr->client_request->is_replay();
+  bool did_early_reply = mdr->did_early_reply;
+  Session *session = mdr->session;
+  entity_inst_t client_inst = req->get_orig_source_inst();
+  int dentry_wanted = req->get_dentry_wanted();
+
+  if (!did_early_reply && !is_replay) {
+    if (tracei)
+      mdr->cap_releases.erase(tracei->vino());
+    if (tracedn)
+      mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
+  }
 
   // clean up request, drop locks, etc.
   // do this before replying, so that we can issue leases
-  Session *session = mdr->session;
-  bool did_early_reply = mdr->did_early_reply;
-  entity_inst_t client_inst = req->get_orig_source_inst();
-  int dentry_wanted = req->get_dentry_wanted();
   mdcache->request_finish(mdr);
   mdr = 0;
 
@@ -775,6 +765,8 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 	set_trace_dist(session, reply, tracei, tracedn, snapid, dentry_wanted);
       }
     }
+
+    reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
     messenger->send_message(reply, client_inst);
   }
   
@@ -935,6 +927,13 @@ void Server::handle_client_request(MClientRequest *req)
     session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
+  // register + dispatch
+  MDRequest *mdr = mdcache->request_start(req);
+  if (!mdr) 
+    return;
+  mdr->session = session;
+  session->requests.push_back(&mdr->session_request_item);
+
   // process embedded cap releases?
   //  (only if NOT replay!)
   if (req->get_source().is_client() &&
@@ -943,19 +942,13 @@ void Server::handle_client_request(MClientRequest *req)
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
 	 p++)
-      mds->locker->process_cap_update(client, inodeno_t((__u64)p->item.ino), p->item.cap_id,
+      mds->locker->process_cap_update(mdr, client,
+				      inodeno_t((__u64)p->item.ino), p->item.cap_id,
 				      p->item.caps, p->item.wanted,
 				      p->item.seq, 
 				      p->item.issue_seq, 
 				      p->item.mseq, p->dname);
   }
-
-  // register + dispatch
-  MDRequest *mdr = mdcache->request_start(req);
-  if (!mdr) 
-    return;
-  mdr->session = session;
-  session->requests.push_back(&mdr->session_request_item);
 
   dispatch_client_request(mdr);
   return;

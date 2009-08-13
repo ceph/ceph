@@ -168,9 +168,12 @@ public:
 
 
   // caps
-  void process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int wanted,
+  void process_cap_update(MDRequest *mdr, int client,
+			  inodeno_t ino, __u64 cap_id, int caps, int wanted,
 			  int seq, int issue_seq, int mseq,
 			  const nstring& dname);
+  void kick_cap_releases(MDRequest *mdr);
+
  protected:
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);

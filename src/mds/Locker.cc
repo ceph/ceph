@@ -1769,7 +1769,8 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int caps, int wanted,
+void Locker::process_cap_update(MDRequest *mdr, int client,
+				inodeno_t ino, __u64 cap_id, int caps, int wanted,
 				int seq, int issue_seq, int mseq,
 				const nstring& dname)
 {
@@ -1791,6 +1792,9 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
     cap->inc_suppress();
     eval(in, CEPH_CAP_LOCKS);
     cap->dec_suppress();
+
+    // take note; we may need to reissue on this cap later
+    mdr->cap_releases[in->vino()] = cap->get_last_seq();
   }
   
   if (dname.length()) {
@@ -1805,7 +1809,26 @@ void Locker::process_cap_update(int client, inodeno_t ino, __u64 cap_id, int cap
       }
     }
   }
+}
 
+void Locker::kick_cap_releases(MDRequest *mdr)
+{
+  int client = mdr->get_client();
+  for (map<vinodeno_t,ceph_seq_t>::iterator p = mdr->cap_releases.begin();
+       p != mdr->cap_releases.end();
+       p++) {
+    CInode *in = mdcache->get_inode(p->first);
+    if (!in)
+      continue;
+    Capability *cap = in->get_client_cap(client);
+    if (!cap)
+      continue;
+    if (cap->get_last_sent() == p->second) {
+      dout(10) << "kick_cap_releases released at current seq " << p->second
+	       << ", reissuing" << dendl;
+      issue_caps(in, cap);
+    }
+  }
 }
 
 /*
