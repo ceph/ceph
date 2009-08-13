@@ -106,22 +106,24 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
   if (r < 0)
     return r;
 
-  list<object_t> entries;
+
   Rados::ListCtx ctx;
+#define MAX_ENTRIES 1000
+  do {
+    list<object_t> entries;
+    r = rados->list(pool, MAX_ENTRIES, entries, ctx);
+    if (r < 0)
+      return r;
 
-  r = rados->list(pool, INT_MAX, entries, ctx);
-  if (r < 0)
-    return r;
+    for (iter = entries.begin(); iter != entries.end(); ++iter) {
+      string name = iter->name.c_str();
 
-  list<object_t>::iterator iter;
-  for (iter = entries.begin(); iter != entries.end(); ++iter) {
-    string name = iter->name.c_str();
-
-    if (prefix.empty() ||
-        (name.compare(0, prefix.size(), prefix) == 0)) {
-      dir_map[name] = *iter;
+      if (prefix.empty() ||
+          (name.compare(0, prefix.size(), prefix) == 0)) {
+        dir_map[name] = *iter;
+      }
     }
-  }
+  } while (r);
 
   map<string, object_t>::iterator map_iter;
   if (!marker.empty())
