@@ -453,13 +453,18 @@ class Inode {
     return true;
   }
 
-  int caps_issued() {
+  int caps_issued(int *implemented = 0) {
     int c = exporting_issued | snap_caps;
+    int i = 0;
     for (map<int,InodeCap*>::iterator it = caps.begin();
          it != caps.end();
          it++)
-      if (cap_is_valid(it->second))
+      if (cap_is_valid(it->second)) {
 	c |= it->second->issued;
+	i |= it->second->implemented;
+      }
+    if (implemented)
+      *implemented = i;
     return c;
   }
   void touch_cap(InodeCap *cap) {
@@ -1023,6 +1028,10 @@ private:
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
+
+  int _get_caps(Inode *in, int need, int want, int *got, loff_t endoff);
+  int _read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl);
+  int _read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl);
 
   // internal interface
   //   call these with client_lock held!
