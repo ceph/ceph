@@ -3749,6 +3749,7 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
   Inode *in = f->inode;
+  int r;
 
   switch (whence) {
   case SEEK_SET: 
@@ -3760,6 +3761,9 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
     break;
 
   case SEEK_END:
+    r = _getattr(in, CEPH_STAT_CAP_SIZE);
+    if (r < 0)
+      return r;
     f->pos = in->size + offset;
     break;
 
