@@ -966,6 +966,7 @@ protected:
   void mark_caps_dirty(Inode *in, int caps);
   void flush_caps();
   void kick_flushing_caps(int mds);
+  int get_caps(Inode *in, int need, int want, int *got, loff_t endoff);
 
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
@@ -1029,7 +1030,6 @@ private:
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
 
-  int _get_caps(Inode *in, int need, int want, int *got, loff_t endoff);
   int _read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl);
   int _read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl);
 
@@ -1053,6 +1053,7 @@ private:
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
+  loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, __s64 offset, __u64 size, bufferlist *bl);
   int _write(Fh *fh, __s64 offset, __u64 size, const char *buf);
   int _flush(Fh *fh);

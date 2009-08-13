@@ -1443,6 +1443,47 @@ void Client::put_cap_ref(Inode *in, int cap)
   }
 }
 
+
+int Client::get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
+{
+  while (1) {
+    if (endoff > 0 &&
+	(endoff >= (loff_t)in->max_size ||
+	 endoff > (loff_t)(in->size << 1)) &&
+	endoff > (loff_t)in->wanted_max_size) {
+      dout(10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
+      in->wanted_max_size = endoff;
+      check_caps(in, false);
+    }
+    
+    if (endoff >= 0 && endoff > (loff_t)in->max_size) {
+      dout(10) << "waiting on max_size" << dendl;
+    } else if (!in->cap_snaps.empty() && in->cap_snaps.rbegin()->second.writing) {
+      dout(10) << "waiting on cap_snap write to complete" << dendl;
+    } else {
+      int implemented;
+      int have = in->caps_issued(&implemented);
+      if ((have & need) == need) {
+	int butnot = want & ~(have & need);
+	int revoking = implemented & ~have;
+	dout(10) << "get_caps " << *in << " have " << ccap_string(have)
+		 << " need " << ccap_string(need) << " want " << ccap_string(want)
+		 << " but not  " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
+		 << dendl;
+	if ((revoking & butnot) == 0) {
+	  *got = need | (have & want);
+	  in->get_cap_ref(need);
+	  return 0;
+	}
+      }
+      dout(10) << "waiting for caps need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
+    }
+    
+    wait_on_list(in->waitfor_caps);
+  }
+}
+
+
 void Client::cap_delay_requeue(Inode *in)
 {
   dout(10) << "cap_delay_requeue on " << *in << dendl;
@@ -3748,6 +3789,11 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
+  return _lseek(f, offset, whence);
+}
+
+loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
+{
   Inode *in = f->inode;
   int r;
 
@@ -3771,10 +3817,8 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
     assert(0);
   }
   
-  loff_t pos = f->pos;
-
-  dout(3) << "lseek(" << fd << ", " << offset << ", " << whence << ") = " << pos << dendl;
-  return pos;
+  dout(3) << "_lseek(" << f << ", " << offset << ", " << whence << ") = " << f->pos << dendl;
+  return f->pos;
 }
 
 
@@ -3805,36 +3849,6 @@ void Client::unlock_fh_pos(Fh *f)
 
 // 
 
-int Client::_get_caps(Inode *in, int need, int want, int *got, loff_t endoff)
-{
-  while (1) {
-    if (endoff > 0) {
-      // ...
-    }
-    
-    int implemented;
-    int have = in->caps_issued(&implemented);
-    if ((have & need) == need) {
-      int butnot = want & ~(have & need);
-      int revoking = implemented & ~have;
-      dout(10) << "get_caps " << *in << " have " << ccap_string(have)
-	       << " need " << ccap_string(need) << " want " << ccap_string(want)
-	       << " but not  " << ccap_string(butnot) << " revoking " << ccap_string(revoking)
-	       << dendl;
-      if ((revoking & butnot) == 0) {
-	*got = need | (have & want);
-	in->get_cap_ref(need);
-	return 0;
-      }
-    }
-    
-    // wait
-    dout(10) << "get_caps " << *in << " waiting" << dendl;
-    wait_on_list(in->waitfor_caps);
-  }
-}
-
-
 // blocking osd interface
 
 int Client::read(int fd, char *buf, loff_t size, loff_t offset) 
@@ -3864,7 +3878,7 @@ int Client::_read(Fh *f, __s64 offset, __u64 size, bufferlist *bl)
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   int got;
-  int r = _get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &got, -1);
+  int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &got, -1);
   if (r < 0)
     return r;
 
@@ -4103,13 +4117,13 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
      * change out from under us.
      */
     if (f->append)
-      f->pos = in->size;   // O_APPEND.
+      _lseek(f, 0, SEEK_END);
     offset = f->pos;
     f->pos = offset+size;    
     unlock_fh_pos(f);
   }
 
-  bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
+  //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
   dout(10) << "cur file size is " << in->size << dendl;
 
@@ -4122,31 +4136,11 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   bufferlist bl;
   bl.push_back( bp );
 
-  // request larger max_size?
   __u64 endoff = offset + size;
-  if ((endoff >= in->max_size ||
-       endoff > (in->size << 1)) &&
-      endoff > in->wanted_max_size) {
-    dout(10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
-    in->wanted_max_size = endoff;
-    check_caps(in, false);
-  }
-  
-  // wait for caps, max_size
-  while ((lazy && (in->caps_issued() & CEPH_CAP_FILE_LAZYIO) == 0) ||
-	 (!lazy && in->caps_issued_mask(CEPH_CAP_FILE_WR) == false &&
-	  (in->cap_snaps.empty() || !in->cap_snaps.rbegin()->second.writing)) ||
-	 endoff > in->max_size) {
-    dout(7) << "missing wr|lazy cap OR endoff " << endoff
-	    << " > max_size " << in->max_size 
-	    << ", waiting" << dendl;
-    wait_on_list(in->waitfor_caps);
-  }
-
-  in->get_cap_ref(CEPH_CAP_FILE_WR);
-
-  // avoid livelock with fsync?
-  // FIXME
+  int got;
+  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &got, endoff);
+  if (r < 0)
+    return r;
   
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
