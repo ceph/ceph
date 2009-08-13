@@ -134,20 +134,6 @@ librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
-if WITH_RADOSGW
-libradosgw_a_SOURCES = \
-	radosgw/rgw_fs.cc \
-	radosgw/rgw_rados.cc \
-	radosgw/rgw_acl.cc \
-	radosgw/rgw_user.cc \
-	radosgw/rgw_access.cc \
-	radosgw/rgw_op.cc \
-	radosgw/rgw_rest.cc \
-	radosgw/rgw_common.cc
-libradosgw_a_CFLAGS = ${AM_CFLAGS}
-# lib_LTLIBRARIES += libradosgw.a
-endif
-
 rados_SOURCES = rados.cc
 rados_LDADD = librados.la libcrush.la
 bin_PROGRAMS += rados
@@ -161,6 +147,18 @@ radosacl_LDADD = librados.la libcrush.la
 bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_RADOSGW
+libradosgw_a_SOURCES = \
+	radosgw/rgw_fs.cc \
+	radosgw/rgw_rados.cc \
+	radosgw/rgw_acl.cc \
+	radosgw/rgw_user.cc \
+	radosgw/rgw_access.cc \
+	radosgw/rgw_op.cc \
+	radosgw/rgw_rest.cc \
+	radosgw/rgw_common.cc
+libradosgw_a_CFLAGS = ${AM_CFLAGS}
+# lib_LTLIBRARIES += libradosgw.a
+
 rgw_SOURCES = radosgw/rgw_main.cc
 rgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 rgw_admin_SOURCES = radosgw/rgw_admin.cc

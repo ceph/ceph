@@ -40,21 +40,20 @@ AC_ARG_WITH([debug],
             [with_debug=no])
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
-# s3gw?
-AC_ARG_WITH([s3gw],
-            [AS_HELP_STRING([--with-s3gw], [build S3 gateway])],
-            [with_s3gw=yes],
-            [with_s3gw=no])
-AS_IF([test "x$with_s3gw" != xno],
+# radosgw?
+AC_ARG_WITH([radosgw],
+            [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
+            [],
+            [with_radosgw=check])
+AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
-             [AC_SUBST([LIBFCGI], ["-lfcgi"])
-               AC_DEFINE([HAVE_LIBFCGI], [1],
-                         [Define if you have libfcgi])
-               HAVE_LIBFCGI=1
-              ],
-             [AC_MSG_FAILURE([--with-s3gw was given, but libfcgi test failed])])])
-AM_CONDITIONAL(WITH_RADOSGW, test "$with_radosgw" = "yes")
-
+             [HAVE_LIBFCGI=1],
+	     [if test "x$with_radosgw" != xcheck; then
+                 AC_MSG_FAILURE(
+                   [--with-radosgw was given, but libfcgi not found])
+               fi
+             ])])
+AM_CONDITIONAL(WITH_RADOSGW, test "$HAVE_LIBFCGI" = "1")
 
 # fuse?
 AC_ARG_WITH([fuse],
@@ -90,7 +89,6 @@ AS_IF([test "x$with_hadoop" != xno],
                fi
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
-
 
 # CommonC++?
 AC_ARG_WITH([ccgnu],
