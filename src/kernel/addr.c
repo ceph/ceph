@@ -211,6 +211,13 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 	if (unlikely(err < 0)) {
 		SetPageError(page);
 		goto out;
+	} else if (err < PAGE_CACHE_SIZE) {
+		/* zero fill remainder of page */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+		zero_user_segment(page, err, PAGE_CACHE_SIZE);
+#else
+		zero_user_page(page, err, PAGE_CACHE_SIZE - err, KM_USER0);
+#endif
 	}
 	SetPageUptodate(page);
 
@@ -297,6 +304,15 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 		BUG_ON(list_empty(page_list));
 		page = list_entry(page_list->prev, struct page, lru);
 		list_del(&page->lru);
+
+		if (rc < PAGE_CACHE_SIZE) {
+			/* zero remainder of page */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
+			zero_user_segment(page, rc, PAGE_CACHE_SIZE);
+#else
+			zero_user_page(page, rc, PAGE_CACHE_SIZE-rc, KM_USER0);
+#endif
+		}
 
 		if (add_to_page_cache(page, mapping, page->index, GFP_NOFS)) {
 			page_cache_release(page);
