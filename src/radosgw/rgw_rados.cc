@@ -109,12 +109,14 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
 
   Rados::ListCtx ctx;
 #define MAX_ENTRIES 1000
+
   do {
     list<object_t> entries;
     r = rados->list(pool, MAX_ENTRIES, entries, ctx);
     if (r < 0)
       return r;
 
+    list<object_t>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       string name = iter->name.c_str();
 
@@ -131,8 +133,9 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
   else
     map_iter = dir_map.begin();
 
-  if (max < 0)
-    max = INT_MAX;
+  if (max < 0) {
+    max = dir_map.size();
+  }
 
   result.clear();
   int i, count = 0;
