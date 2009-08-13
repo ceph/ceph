@@ -58,14 +58,15 @@ v0.13
 /- osd active during backlog generation
 /- osdmap: allow explicit pg 'override' mappings
 /- kclient: fixed vmalloc() usage (use for incoming msgs, GFP_NOFS)
-- http gw
+/- http gw
 - client authentication
+/- kclient: fix sync read vs EOF
+/- uclient: fix sync read vs EOF
+- uclient: fix write vs max_size
 
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
-- sync mode end-of-file handling
-- mds process_cap_update suppress leads to broken cap state on revoke
 
 later
 - authentication
@@ -114,6 +115,7 @@ repair
 - mds scrubbing
 
 kclient
+- fix llseek SEEK_END .. if !FILE_SHARED, we need to stat the inode
 ?- ensure cap_snaps reflush after client reconnect 
 - fix up ESTALE handling
 - make cap import/export efficient
