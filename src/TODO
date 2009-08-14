@@ -69,9 +69,11 @@ bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 - cap revoke/issue race......
+                                         2=pAsxLsXsxF  rw/pAsxXsxFsxwb@4
   m->c revoke ino 10000000000 7 seq 5 caps=pAsxLsXsxF  r
   m->c revoke ino 10000000000 7 seq 6 caps=pAs LsXsxF  r
   m->c  grant ino 10000000000 7 seq 7 caps=pAs LsXsxFscr
+                                         2=pAsxLsXsxFscrw/pAsxXsxFsxwb@7
   m->c revoke ino 10000000000 7 seq 8 caps=pAs LsXsxF  r
   m<-c update ino 10000000000 7 seq 5 caps=pAsxLsXsxF  r
                                          2=pAsxLsXsxFscrw/pAsxXsxFsxwb@8

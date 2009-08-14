@@ -107,6 +107,79 @@ private:
   utime_t last_issue_stamp;
 
 
+  // track in-flight caps --------------
+  //  - add new caps to _pending
+  //  - track revocations in _revokes list
+public:
+  struct revoke_info {
+    __u32 before;
+    ceph_seq_t seq;
+    revoke_info() {}
+    revoke_info(__u32 b, ceph_seq_t s) : before(b), seq(s) {}
+    void encode(bufferlist& bl) const {
+      ::encode(before, bl);
+      ::encode(seq, bl);
+    }
+    void decode(bufferlist::iterator& bl) {
+      ::decode(before, bl);
+      ::decode(seq, bl);
+    }
+  };
+private:
+  __u32 _pending;
+  list<revoke_info> _revokes;
+
+public:
+  int pending() { return _pending; }
+  int issued() {
+    int c = _pending;
+    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); p++)
+      c |= p->before;
+    return c;
+  }
+  ceph_seq_t issue(unsigned c) {
+    if (_pending & ~c) {
+      // revoking (and maybe adding) bits.  note caps prior to this revocation
+      _revokes.push_back(revoke_info(_pending, last_sent));
+      _pending = c;
+    } else if (~_pending & c) {
+      // adding bits only.  remove obsolete revocations?
+      _pending |= c;
+      // drop old _revokes with no bits we don't have
+      while (!_revokes.empty() &&
+	     (_revokes.back().before & ~_pending) == 0)
+	_revokes.pop_back();
+    } else {
+      // no change.
+      assert(_pending == c);
+    }
+    //last_issue = 
+    ++last_sent;
+    return last_sent;
+  }
+  ceph_seq_t issue_norevoke(unsigned c) {
+    _pending |= c;
+    //check_rdcaps_list();
+    ++last_sent;
+    return last_sent;
+  }
+  void confirm_receipt(ceph_seq_t seq, unsigned caps) {
+    if (seq == last_sent) {
+      _pending = caps;
+      _revokes.clear();
+    } else {
+      // can i forget any revocations?
+      while (!_revokes.empty() &&
+	     _revokes.front().seq <= seq)
+	_revokes.pop_front();
+    }
+    //check_rdcaps_list();
+  }
+  bool is_null() {
+    return !_pending && _revokes.empty();
+  }
+
+#if 0
   // track up to N revocations ---------
   static const int _max_revoke = 3;
   __u32 _pending, _issued;
@@ -171,6 +244,7 @@ public:
   bool is_null() {
     return !_pending && !_issued && !_num_revoke;
   }
+#endif
 
 private:
   ceph_seq_t last_sent;
@@ -192,7 +266,7 @@ public:
     inode(i), client(c),
     cap_id(id),
     _wanted(0),
-    _pending(0), _issued(0), _num_revoke(0),
+    _pending(0),
     last_sent(0),
     mseq(0),
     suppress(0), stale(false),
@@ -286,10 +360,7 @@ public:
 
     ::encode(_wanted, bl);
     ::encode(_pending, bl);
-    ::encode(_issued, bl);
-    ::encode(_num_revoke, bl);
-    ::encode_array_nohead(_revoke_before, _num_revoke, bl);
-    ::encode_array_nohead(_revoke_seq, _num_revoke, bl);
+    ::encode(_revokes, bl);
   }
   void decode(bufferlist::iterator &bl) {
     ::decode(last_sent, bl);
@@ -297,15 +368,13 @@ public:
 
     ::decode(_wanted, bl);
     ::decode(_pending, bl);
-    ::decode(_issued, bl);
-    ::decode(_num_revoke, bl);
-    ::decode_array_nohead(_revoke_before, _num_revoke, bl);
-    ::decode_array_nohead(_revoke_seq, _num_revoke, bl);
+    ::decode(_revokes, bl);
   }
   
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)
+WRITE_CLASS_ENCODER(Capability::revoke_info)
 WRITE_CLASS_ENCODER(Capability)
 
 
