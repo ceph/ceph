@@ -126,25 +126,32 @@ public:
     }
   };
 private:
-  __u32 _pending;
+  __u32 _pending, _issued;
   list<revoke_info> _revokes;
 
 public:
   int pending() { return _pending; }
   int issued() {
-    int c = _pending;
-    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); p++)
-      c |= p->before;
-    return c;
+    if (1) {
+#warning capability debug sanity check, remove me someday
+      unsigned o = _issued;
+      _calc_issued();
+      assert(o == _issued);
+    }
+    return _issued;
   }
+  bool is_null() { return !_pending && _revokes.empty(); }
+
   ceph_seq_t issue(unsigned c) {
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
       _revokes.push_back(revoke_info(_pending, last_sent));
       _pending = c;
+      _issued |= c;
     } else if (~_pending & c) {
       // adding bits only.  remove obsolete revocations?
       _pending |= c;
+      _issued |= c;
       // drop old _revokes with no bits we don't have
       while (!_revokes.empty() &&
 	     (_revokes.back().before & ~_pending) == 0)
@@ -159,92 +166,31 @@ public:
   }
   ceph_seq_t issue_norevoke(unsigned c) {
     _pending |= c;
+    _issued |= c;
     //check_rdcaps_list();
     ++last_sent;
     return last_sent;
+  }
+  void _calc_issued() {
+    _issued = _pending;
+    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); p++)
+      _issued |= p->before;
   }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {
     if (seq == last_sent) {
       _pending = caps;
       _revokes.clear();
+      _issued = caps;
     } else {
       // can i forget any revocations?
       while (!_revokes.empty() &&
 	     _revokes.front().seq <= seq)
 	_revokes.pop_front();
+      _calc_issued();
     }
     //check_rdcaps_list();
   }
-  bool is_null() {
-    return !_pending && _revokes.empty();
-  }
 
-#if 0
-  // track up to N revocations ---------
-  static const int _max_revoke = 3;
-  __u32 _pending, _issued;
-  __u32 _revoke_before[_max_revoke];  // caps before this issue
-  ceph_seq_t _revoke_seq[_max_revoke];
-  int _num_revoke;
-
-public:
-  int pending() { return _pending; }
-  int issued() {
-    int c = _pending | _issued;
-    for (int i=0; i<_num_revoke; i++)
-      c |= _revoke_before[i];
-    return c;
-  }
-  ceph_seq_t issue(int c) {
-    if (_pending & ~c) {
-      // note _revoked_ caps prior to this revocation
-      if (_num_revoke < _max_revoke) {
-	_num_revoke++;
-	_revoke_before[_num_revoke-1] = 0;
-      }
-      _revoke_before[_num_revoke-1] |= _pending|_issued;
-      _revoke_seq[_num_revoke-1] = last_sent;
-    }
-
-    _pending = c;
-    //check_rdcaps_list();
-    //last_issue = 
-    ++last_sent;
-    return last_sent;
-  }
-  ceph_seq_t issue_norevoke(int c) {
-    _pending |= c;
-    //check_rdcaps_list();
-    ++last_sent;
-    return last_sent;
-  }
-  void confirm_receipt(ceph_seq_t seq, int caps) {
-    _issued = caps;
-    if (seq == last_sent) {
-      _pending = caps;
-      _num_revoke = 0;
-    } else {
-      // can i forget any revocations?
-      int i = 0, o = 0;
-      while (i < _num_revoke) {
-	if (_revoke_seq[i] > seq) {
-	  // keep this one
-	  if (o < i) {
-	    _revoke_before[o] = _revoke_before[i];
-	    _revoke_seq[o] = _revoke_before[i];
-	  }
-	  o++;
-	}
-	i++;
-      }
-      _num_revoke = o;
-    }
-    //check_rdcaps_list();
-  }
-  bool is_null() {
-    return !_pending && !_issued && !_num_revoke;
-  }
-#endif
 
 private:
   ceph_seq_t last_sent;
@@ -266,7 +212,7 @@ public:
     inode(i), client(c),
     cap_id(id),
     _wanted(0),
-    _pending(0),
+    _pending(0), _issued(0),
     last_sent(0),
     mseq(0),
     suppress(0), stale(false),
@@ -369,6 +315,8 @@ public:
     ::decode(_wanted, bl);
     ::decode(_pending, bl);
     ::decode(_revokes, bl);
+
+    _calc_issued();
   }
   
 };
