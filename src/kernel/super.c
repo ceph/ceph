@@ -17,6 +17,7 @@
 #include "decode.h"
 #include "super.h"
 #include "mon_client.h"
+#include "auth.h"
 
 /*
  * Ceph superblock operations
@@ -338,6 +339,38 @@ out:
 	return err;
 }
 
+static int handle_auth_reply(struct ceph_client *client, struct ceph_msg *msg)
+{
+	void *p, *end;
+	s32 result;
+	int err = -EINVAL;
+
+	dout("handle_auth_reply\n");
+	p = msg->front.iov_base;
+	end = p + msg->front.iov_len;
+
+	ceph_decode_32_safe(&p, end, result, out);
+	pr_err("ceph auth result: (%d) msg=%p\n", result, msg);
+
+	if (!client->aops) {
+		/* FIXME: reset aops according to to the first response */
+		client->aops = ceph_x_auth_get_ops();
+
+		err = client->aops->init(&client->auth_data);
+		if (err < 0)
+			goto out;
+	}
+
+	err = client->aops->handle_response(client, &client->auth_data, p, result, (end - p));
+
+	/* FIXME */
+	if (!err)
+		client->session.session_id = 1;
+
+out:
+	return err;
+}
+
 const char *ceph_msg_type_name(int type)
 {
 	switch (type) {
@@ -350,6 +383,8 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_CLIENT_UNMOUNT: return "client_unmount";
 	case CEPH_MSG_STATFS: return "statfs";
 	case CEPH_MSG_STATFS_REPLY: return "statfs_reply";
+	case CEPH_MSG_CLIENT_AUTH: return "client auth";
+	case CEPH_MSG_CLIENT_AUTH_REPLY: return "client auth reply";
 	case CEPH_MSG_MDS_GETMAP: return "mds_getmap";
 	case CEPH_MSG_MDS_MAP: return "mds_map";
 	case CEPH_MSG_CLIENT_SESSION: return "client_session";
@@ -698,6 +733,9 @@ static struct ceph_client *ceph_create_client(void)
 	client->signed_ticket = NULL;
 	client->signed_ticket_len = 0;
 
+	client->auth_err = 0;
+	client->session.session_id = 0;
+
 	err = -ENOMEM;
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
@@ -851,6 +889,122 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	return root;
 }
 
+static int ceph_supported_auth[] = { CEPH_AUTH_NONE,
+				     CEPH_AUTH_CEPH };
+
+static int build_auth_req(struct ceph_client *client,
+			  const char *blob,
+			  int blob_len,
+			  struct ceph_msg **msg)
+{
+	int len;
+	char *f;
+	struct ceph_mon_auth_req_hdr *h;
+
+	/* later on we'll identify client mount options in order to request
+	   specific auth types */
+	len = sizeof(struct ceph_mon_auth_req_hdr) + blob_len;
+	*msg = ceph_msg_new(CEPH_MSG_CLIENT_AUTH, len, 0,
+					 0, NULL);
+	if (IS_ERR(*msg)) {
+		return PTR_ERR(*msg);
+	}
+
+	f = (*msg)->front.iov_base;
+	h = (struct ceph_mon_auth_req_hdr *)f;
+	h->have_version = 0;
+	memcpy(f + sizeof(*h), blob, blob_len);
+
+	return 0;
+}
+
+static int build_sess_init_req(struct ceph_client *client,
+			       struct ceph_msg **msg)
+{
+	struct ceph_mon_auth_init_req *req;
+	int ret, i;
+	int max_auth_types = sizeof(ceph_supported_auth) / sizeof(ceph_supported_auth[0]);
+	int len = sizeof (struct ceph_mon_auth_init_req) +
+			max_auth_types * sizeof(struct ceph_auth_type);
+
+	req = (struct ceph_mon_auth_init_req *)kmalloc(len, GFP_KERNEL);
+	if (!req) {
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < max_auth_types; i++) {
+		req->auth_type[i].type = cpu_to_le32(ceph_supported_auth[i]);
+	}
+
+	ret = build_auth_req(client, (const char *)req, len, msg);
+	kfree(req);
+
+	return ret;
+}
+
+static int auth_user(struct ceph_client *client)
+{
+	unsigned long timeout = client->mount_args.mount_timeout * HZ;
+	unsigned long started = jiffies;  /* note the start time */
+	unsigned char r;
+	int which;
+	struct ceph_msg *auth_msg;
+	int err = 0;
+	int request_interval = 5 * HZ;
+	int i;
+
+	i = 0;
+	do {
+		err = -EIO;
+		if (timeout && time_after_eq(jiffies, started + timeout))
+			goto out;
+		pr_info("mount sending auth request\n");
+		get_random_bytes(&r, 1);
+		which = r % client->mount_args.num_mon;
+		if (!i) {
+			err = build_sess_init_req(client, &auth_msg);
+		} else {
+			char *blob;
+			int len;
+			err = client->aops->create_request(client, &client->auth_data,
+							&blob, &len);
+			if (err < 0)
+				goto out;
+
+			err = build_auth_req(client, blob, len, &auth_msg);
+		}
+
+		if (err < 0)
+			goto out;
+
+		auth_msg->hdr.dst.name.type =
+			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
+		auth_msg->hdr.dst.name.num = cpu_to_le32(which);
+		auth_msg->hdr.dst.addr = client->mount_args.mon_addr[which];
+		init_completion(&client->auth_completion);
+		ceph_msg_send(client->msgr, auth_msg, 0);
+
+		/* wait */
+		pr_info("session_init sent to mon%d, waiting for reply\n", which);
+		err = wait_for_completion_interruptible_timeout(&client->auth_completion,
+				request_interval);
+		if (err == -EINTR || err == -ERESTARTSYS)
+			goto out;
+		if (client->auth_err && client->auth_err != -EAGAIN) {
+			err = client->auth_err;
+			goto out;
+		}
+
+		i++;
+	} while (client->auth_err == -EAGAIN);
+
+out:
+	if (client->aops) {
+		client->aops->finalize(&client->auth_data);
+	}
+	return err;
+}
+
 /*
  * mount: join the ceph cluster, and open root directory.
  */
@@ -862,7 +1016,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	int err;
 	int request_interval = 5 * HZ;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
-	unsigned long started = jiffies;  /* note the start time */
+	unsigned long started;
 	int which;
 	struct dentry *root;
 	unsigned char r;
@@ -889,6 +1043,9 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr->alloc_middle = ceph_alloc_middle;
 	}
 
+	auth_user(client);
+
+	started = jiffies;  /* note the start time */
 	/* send mount request, and wait for mon, mds, and osd maps */
 	while (!have_mon_map(client) && !client->mount_err) {
 		err = -EIO;
@@ -1072,6 +1229,11 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 	case CEPH_MSG_CLIENT_MOUNT_ACK:
 		client->mount_err = handle_mount_ack(client, msg);
 		wake_up(&client->mount_wq);
+		break;
+
+	case CEPH_MSG_CLIENT_AUTH_REPLY:
+		client->auth_err = handle_auth_reply(client, msg);
+		complete(&client->auth_completion);
 		break;
 
 		/* mon client */

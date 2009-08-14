@@ -18,6 +18,7 @@
 #include "mds_client.h"
 #include "osd_client.h"
 #include "ceph_fs.h"
+#include "auth.h"
 
 /* f_type in struct statfs */
 #define CEPH_SUPER_MAGIC 0x00c36400
@@ -105,6 +106,10 @@ static inline unsigned long time_sub(unsigned long a, unsigned long b)
 	return (long)a - (long)b;
 }
 
+struct ceph_mon_session {
+	u64 session_id;
+};
+
 /*
  * per-filesystem client state
  *
@@ -156,6 +161,12 @@ struct ceph_client {
 	struct workqueue_struct *trunc_wq;
 
 	struct backing_dev_info backing_dev_info;
+
+	struct ceph_mon_session session;
+	struct completion auth_completion;
+	int auth_err;
+	struct ceph_auth_ops *aops;
+	struct ceph_auth_data auth_data;
 };
 
 static inline struct ceph_client *ceph_client(struct super_block *sb)

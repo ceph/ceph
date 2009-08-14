@@ -20,6 +20,8 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonMap.h"
+#include "messages/MClientAuth.h"
+#include "messages/MClientAuthReply.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientUnmount.h"
@@ -155,11 +157,26 @@ bool ClientMonitor::check_mount(MClientMount *m)
     return false;
 }
 
+bool ClientMonitor::check_auth(MClientAuth *m)
+{
+    stringstream ss;
+    // already mounted?
+    dout(0) << "ClientMonitor::check_auth() blob_size=" << m->get_blob_len() << dendl;
+    entity_addr_t addr = m->get_orig_source_addr();
+    mon->messenger->send_message(new MClientAuthReply(0),
+				   m->get_orig_source_inst());
+    return true;
+}
+
 bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
+  case CEPH_MSG_CLIENT_AUTH:
+        dout(0) << "YY preprocess_query" << dendl;
+        return check_auth((MClientAuth *)m);
+
   case CEPH_MSG_CLIENT_MOUNT:
 	return check_mount((MClientMount *)m);
     

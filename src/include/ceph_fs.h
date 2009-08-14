@@ -256,6 +256,8 @@ ceph_full_name_hash(const char *name, unsigned int len)
 #define CEPH_MSG_CLIENT_UNMOUNT         12
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
+#define CEPH_MSG_CLIENT_AUTH		15
+#define CEPH_MSG_CLIENT_AUTH_REPLY	16
 
 /* client <-> mds */
 #define CEPH_MSG_MDS_GETMAP             20
@@ -278,6 +280,14 @@ ceph_full_name_hash(const char *name, unsigned int len)
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43
 
+/* auth */
+
+#define CEPH_AUTH_NONE	0
+#define CEPH_AUTH_CEPH	1
+
+struct ceph_auth_type {
+	__le32 type;
+} __attribute__ ((packed));
 
 struct ceph_mon_statfs {
 	__le64 have_version;
@@ -295,6 +305,27 @@ struct ceph_mon_statfs_reply {
 	__le64 tid;
 	__le64 version;
 	struct ceph_statfs st;
+} __attribute__ ((packed));
+
+struct ceph_mon_auth_req_hdr {
+	__le64 have_version;
+} __attribute__ ((packed));
+
+struct ceph_mon_auth_init_req {
+	__le32 num_auth;
+	struct ceph_auth_type auth_type[0];
+} __attribute__ ((packed));
+
+struct ceph_mon_auth_reply_hdr {
+	__le32 status;
+} __attribute__ ((packed));
+
+struct ceph_mon_auth_x_reply {
+	__le64 server_challenge;
+} __attribute__ ((packed));
+
+struct ceph_mon_auth_x_request {
+	__le64 client_challenge;
 } __attribute__ ((packed));
 
 struct ceph_osd_getmap {
@@ -315,6 +346,7 @@ struct ceph_client_mount {
 struct ceph_client_unmount {
 	__le64 have_version;
 } __attribute__ ((packed));
+
 
 /*
  * mds states

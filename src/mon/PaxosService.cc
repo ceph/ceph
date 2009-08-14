@@ -39,7 +39,6 @@ const char *PaxosService::get_machine_name()
 bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
-  
   // make sure our map is readable and up to date
   if (!paxos->is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable" << dendl;

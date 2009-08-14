@@ -63,6 +63,8 @@ using namespace std;
 #include "messages/MMonMap.h"
 #include "messages/MMonGetMap.h"
 
+#include "messages/MClientAuth.h"
+#include "messages/MClientAuthReply.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientUnmount.h"
@@ -305,6 +307,12 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
 
     // clients
+  case CEPH_MSG_CLIENT_AUTH:
+    m = new MClientAuth;
+    break;
+  case CEPH_MSG_CLIENT_AUTH_REPLY:
+    m = new MClientAuthReply;
+    break;
   case CEPH_MSG_CLIENT_MOUNT:
     m = new MClientMount;
     break;
