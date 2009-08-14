@@ -582,13 +582,13 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statf
 
   if (r!=0) return r; //something broke
 
-  //place info into Java
+  //place info into Java; convert from bytes to kilobytes
   env->SetLongField(j_cephstat, c_capacity_id,
-		    (long)stbuf.f_blocks*stbuf.f_bsize);
+		    (long)stbuf.f_blocks*stbuf.f_bsize/1024);
   env->SetLongField(j_cephstat, c_used_id,
-		    (long)(stbuf.f_blocks-stbuf.f_bavail)*stbuf.f_bsize);
+		    (long)(stbuf.f_blocks-stbuf.f_bavail)*stbuf.f_bsize/1024);
   env->SetLongField(j_cephstat, c_remaining_id,
-		    (long)stbuf.f_bavail*stbuf.f_bsize);
+		    (long)stbuf.f_bavail*stbuf.f_bsize/1024);
   return r;
 }
 
