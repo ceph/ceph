@@ -295,24 +295,27 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 				 offset, &len,
 				 ci->i_truncate_seq, ci->i_truncate_size,
 				 pages, nr_pages);
+	if (rc == -ENOENT)
+		rc = 0;
 	if (rc < 0)
 		goto out;
 
 	/* set uptodate and add to lru in pagevec-sized chunks */
 	pagevec_init(&pvec, 0);
-	for (; rc > 0; rc -= PAGE_CACHE_SIZE) {
-		struct page *page;
+	for (; !list_empty(page_list) && len > 0;
+	     rc -= PAGE_CACHE_SIZE, len -= PAGE_CACHE_SIZE) {
+		struct page *page =
+			list_entry(page_list->prev, struct page, lru);
 
-		BUG_ON(list_empty(page_list));
-		page = list_entry(page_list->prev, struct page, lru);
 		list_del(&page->lru);
 
 		if (rc < PAGE_CACHE_SIZE) {
-			/* zero remainder of page */
+			/* zero (remainder of) page */
+			int s = rc < 0 ? 0 : rc;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
-			zero_user_segment(page, rc, PAGE_CACHE_SIZE);
+			zero_user_segment(page, s, PAGE_CACHE_SIZE);
 #else
-			zero_user_page(page, rc, PAGE_CACHE_SIZE-rc, KM_USER0);
+			zero_user_page(page, s, PAGE_CACHE_SIZE-s, KM_USER0);
 #endif
 		}
 
