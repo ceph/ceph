@@ -208,7 +208,9 @@ static int readpage_nounlock(struct file *filp, struct page *page)
 				  page->index << PAGE_CACHE_SHIFT, &len,
 				  ci->i_truncate_seq, ci->i_truncate_size,
 				  &page, 1);
-	if (unlikely(err < 0)) {
+	if (err == -ENOENT)
+		err = 0;
+	if (err < 0) {
 		SetPageError(page);
 		goto out;
 	} else if (err < PAGE_CACHE_SIZE) {
