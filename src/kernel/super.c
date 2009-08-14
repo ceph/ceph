@@ -137,16 +137,16 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 		seq_puts(m, ",unsafewriteback");
 	if (args->flags & CEPH_OPT_DIRSTAT)
 		seq_puts(m, ",dirstat");
-	else
-		seq_puts(m, ",nodirstat");
-	if (args->flags & CEPH_OPT_RBYTES)
-		seq_puts(m, ",rbytes");
-	else
+	if ((args->flags & CEPH_OPT_RBYTES) == 0)
 		seq_puts(m, ",norbytes");
 	if (args->flags & CEPH_OPT_NOCRC)
 		seq_puts(m, ",nocrc");
 	if (args->flags & CEPH_OPT_NOASYNCREADDIR)
 		seq_puts(m, ",noasyncreaddir");
+	if (strcmp(args->snapdir_name, CEPH_SNAPDIRNAME_DEFAULT))
+		seq_printf(m, ",snapdirname=%s", args->snapdir_name);
+	if (args->secret)
+		seq_puts(m, ",secret=<hidden>");
 	return 0;
 }
 
@@ -406,6 +406,9 @@ enum {
 	Opt_caps_wanted_delay_max,
 	Opt_readdir_max_entries,
 	/* int args above */
+	Opt_snapdirname,
+	Opt_secret,
+	/* string args above */
 	Opt_ip,
 	Opt_noshare,
 	Opt_unsafewriteback,
@@ -431,6 +434,9 @@ static match_table_t arg_tokens = {
 	{Opt_caps_wanted_delay_max, "caps_wanted_delay_max=%d"},
 	{Opt_readdir_max_entries, "readdir_max_entries=%d"},
 	/* int args above */
+	{Opt_snapdirname, "snapdirname=%s"},
+	{Opt_secret, "secret=%s"},
+	/* string args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_noshare, "noshare"},
 	{Opt_unsafewriteback, "unsafewriteback"},
@@ -523,7 +529,7 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	args->mount_timeout = CEPH_MOUNT_TIMEOUT_DEFAULT; /* seconds */
 	args->caps_wanted_delay_min = CEPH_CAPS_WANTED_DELAY_MIN_DEFAULT;
 	args->caps_wanted_delay_max = CEPH_CAPS_WANTED_DELAY_MAX_DEFAULT;
-	args->snapdir_name = ".snap";
+	args->snapdir_name = kstrdup(CEPH_SNAPDIRNAME_DEFAULT, GFP_KERNEL);
 	args->cap_release_safety = CEPH_CAPS_PER_RELEASE * 4;
 	args->max_readdir = 1024;
 
@@ -596,6 +602,18 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 			args->flags |= CEPH_OPT_MYIP;
 			break;
 
+		case Opt_snapdirname:
+			kfree(args->snapdir_name);
+			args->snapdir_name = kstrndup(argstr[0].from,
+					      argstr[0].to-argstr[0].from,
+					      GFP_KERNEL);
+			break;
+		case Opt_secret:
+			args->secret = kstrndup(argstr[0].from,
+						argstr[0].to-argstr[0].from,
+						GFP_KERNEL);
+			break;
+
 			/* misc */
 		case Opt_wsize:
 			args->wsize = intval;
@@ -654,6 +672,14 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	}
 
 	return 0;
+}
+
+static void release_mount_args(struct ceph_mount_args *args)
+{
+	kfree(args->snapdir_name);
+	args->snapdir_name = 0;
+	kfree(args->secret);
+	args->secret = 0;
 }
 
 /*
@@ -729,6 +755,9 @@ static void ceph_destroy_client(struct ceph_client *client)
 		ceph_messenger_destroy(client->msgr);
 	if (client->wb_pagevec_pool)
 		mempool_destroy(client->wb_pagevec_pool);
+
+	release_mount_args(&client->mount_args);
+
 	kfree(client);
 	dout("destroy_client %p done\n", client);
 }
