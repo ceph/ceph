@@ -7,7 +7,6 @@
 #include "common/Mutex.h"
 #include "messages/MMonMap.h"
 #include "common/common_init.h"
-#include "Client.h"
 #include "msg/SimpleMessenger.h"
 
 /* ************* ************* ************* *************
@@ -181,7 +180,7 @@ extern "C" int ceph_lstat(const char *path, struct stat *stbuf, struct frag_info
   return client->lstat(path, stbuf, dirstat);
 }
 
-extern "C" int ceph_setattr(const char *relpath, struct stat *attr, int mask)
+extern "C" int ceph_setattr(const char *relpath, Client::stat_precise *attr, int mask)
 {
   return client->setattr(relpath, attr, mask);
 }

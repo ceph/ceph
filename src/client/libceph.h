@@ -12,6 +12,7 @@
 #ifdef __cplusplus
 #include <list>
 #include <string>
+#include "Client.h"
 extern "C" {
 #endif
 
@@ -50,7 +51,7 @@ int ceph_symlink(const char *existing, const char *newname);
 // inode stuff
 int ceph_lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0);
 
-int ceph_setattr(const char *relpath, struct stat *attr, int mask);
+int ceph_setattr(const char *relpath, Client::stat_precise *attr, int mask);
 int ceph_chmod(const char *path, mode_t mode);
 int ceph_chown(const char *path, uid_t uid, gid_t gid);
 int ceph_utime(const char *path, struct utimbuf *buf);
