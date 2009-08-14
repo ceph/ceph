@@ -636,9 +636,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTi
   if (mtime!=-1) mask = CEPH_SETATTR_MTIME;
   if (atime!=-1) mask |= CEPH_SETATTR_ATIME;
   //build a struct stat and fill it in!
-  struct stat attr;
-  attr.st_mtime = mtime;
-  attr.st_atime = atime;
+  //remember to convert from millis to seconds plus microseconds
+  Client::stat_precise attr;
+  attr.st_mtime_sec = mtime / 1000;
+  attr.st_mtime_micro = (mtime % 1000) * 1000;
+  attr.st_atime_sec = atime / 1000;
+  attr.st_atime_micro = (atime % 1000) * 1000;
   //may need to fill in uid and gid here later on...
   return ceph_setattr(c_path, &attr, mask);
 }

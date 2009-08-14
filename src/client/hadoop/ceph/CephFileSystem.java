@@ -435,10 +435,6 @@ public class CephFileSystem extends FileSystem {
   if (!initialized) throw new IOException ("You have to initialize the"
 		       +"CephFileSystem before calling other methods.");
   Path abs_path = makeAbsolute(p);
-  //libhadoopcephfs respects the -1 "don't set" meanings, but we
-  //need to convert these times in millis to times in seconds here
-  if (mtime != -1) mtime /= 1000;
-  if (atime != -1) atime /= 1000;
   int r = ceph_setTimes(abs_path.toString(), mtime, atime);
   if (r<0) throw new IOException ("Failed to set times on path "
 				  + abs_path.toString() + " Error code: " + r);
