@@ -1,50 +1,3 @@
-v0.8
-/- osd recovery fixes
-/- backup homiebackup5
-/- backup backup.
-/- bug fixes?
-/- mount error reporting
-/- fix mds file size/mtime recovery
-/- changes for 2.6.30
-/- mds cap fixes
-/- crush fixes
-
-v0.9
-/- make mds exhert memory pressure on client caps, leases
-/- librados
-/  - async io
-/  - list_objects
-/  - rados
-/    - --snap N
-/    - fetch/store/remove object
-/    - list objects
-/    - list pools
-/- object classes
-/- crush bugfixes
-/- kclient readdir fixes
-
-v0.10
-/- kclient
-/  - fix unaligned memory access
-/  - fix op replay after mds restart (symlink ops)
-/- fix rados snaps vs 'ls'
-/- improved monitor read model
-/- osd bugfixes
-
-v0.11
-(andi)
-/- server-specified max file size
-/- simplified pr_debug macro
-/- more comments
-/- added a few missing '__attribute__ ((packed))'
-/- kcalloc throughout (chris wright)
-/- simplified export.c (jbfields)
-/- cleaned up mount code
-/- kmem_cache for dentry_info
-/- EBADF on bad caps
-/- fixed stray unaligned access
-/- respond to control-c on slow/hung mount
-
 v0.12
 - mapping_set_error on failed writepage
 - document correct debugfs mount point
@@ -68,22 +21,6 @@ v0.13
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
-- cap revoke/issue race......
-                                         2=pAsxLsXsxF  rw/pAsxXsxFsxwb@4
-  m->c revoke ino 10000000000 7 seq 5 caps=pAsxLsXsxF  r
-  m->c revoke ino 10000000000 7 seq 6 caps=pAs LsXsxF  r
-  m->c  grant ino 10000000000 7 seq 7 caps=pAs LsXsxFscr
-                                         2=pAsxLsXsxFscrw/pAsxXsxFsxwb@7
-  m->c revoke ino 10000000000 7 seq 8 caps=pAs LsXsxF  r
-  m<-c update ino 10000000000 7 seq 5 caps=pAsxLsXsxF  r
-                                         2=pAsxLsXsxFscrw/pAsxXsxFsxwb@8
-  m->c  grant ino 10000000000 7 seq 9 caps=pAs LsXsxF  rw
-  m<-c revoke ino 10000000000 7 seq 6 caps=pAs LsXsxF  r
-                                         2=pAsxLsXsxFscrw/pAsxXsxFsxwb@9
-  m<-c revoke ino 10000000000 7 seq 8 caps=pAs LsXsxF  r
-      ... mds thinks client has          2=pAsxLsXsxFscrw/pAsxXsxFsxwb@9
-
-
 
 later
 - authentication
@@ -132,7 +69,6 @@ repair
 - mds scrubbing
 
 kclient
-- fix llseek SEEK_END .. if !FILE_SHARED, we need to stat the inode
 ?- ensure cap_snaps reflush after client reconnect 
 - fix up ESTALE handling
 - make cap import/export efficient
@@ -172,9 +108,7 @@ osd
 
 uclient
 - clean up check_caps to more closely mirror kclient logic
-- audit max_size logic (see the kclient wrapper)
 - readdir from cache
-- clean up client mds session vs mdsmap behavior?
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - hadoop: clean up assert usage
 
