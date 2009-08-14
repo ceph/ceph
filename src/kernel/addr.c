@@ -1009,7 +1009,7 @@ retry_locked:
 	up_read(&mdsc->snap_rwsem);
 	r = readpage_nounlock(file, page);
 	if (r < 0)
-		goto fail;
+		goto fail_nosnap;
 	goto retry_locked;
 
 fail:
