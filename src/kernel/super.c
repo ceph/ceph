@@ -133,8 +133,6 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 			   __ceph_fsid_minor(&args->fsid));
 	if (args->flags & CEPH_OPT_NOSHARE)
 		seq_puts(m, ",noshare");
-	if (args->flags & CEPH_OPT_UNSAFE_WRITEBACK)
-		seq_puts(m, ",unsafewriteback");
 	if (args->flags & CEPH_OPT_DIRSTAT)
 		seq_puts(m, ",dirstat");
 	if ((args->flags & CEPH_OPT_RBYTES) == 0)
@@ -411,8 +409,6 @@ enum {
 	/* string args above */
 	Opt_ip,
 	Opt_noshare,
-	Opt_unsafewriteback,
-	Opt_safewriteback,
 	Opt_dirstat,
 	Opt_nodirstat,
 	Opt_rbytes,
@@ -439,8 +435,6 @@ static match_table_t arg_tokens = {
 	/* string args above */
 	{Opt_ip, "ip=%s"},
 	{Opt_noshare, "noshare"},
-	{Opt_unsafewriteback, "unsafewriteback"},
-	{Opt_safewriteback, "safewriteback"},
 	{Opt_dirstat, "dirstat"},
 	{Opt_nodirstat, "nodirstat"},
 	{Opt_rbytes, "rbytes"},
@@ -639,12 +633,6 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 
 		case Opt_noshare:
 			args->flags |= CEPH_OPT_NOSHARE;
-			break;
-		case Opt_unsafewriteback:
-			args->flags |= CEPH_OPT_UNSAFE_WRITEBACK;
-			break;
-		case Opt_safewriteback:
-			args->flags &= ~CEPH_OPT_UNSAFE_WRITEBACK;
 			break;
 
 		case Opt_dirstat:
