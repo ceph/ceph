@@ -2219,6 +2219,7 @@ start:
 			cap->implemented = newcaps;
 			cap->mds_wanted = wanted;
 
+			grant->issue_seq = cpu_to_le32(cap->issue_seq);
 			grant->size = cpu_to_le64(inode->i_size);
 			grant->max_size = 0;  /* don't re-request */
 			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
