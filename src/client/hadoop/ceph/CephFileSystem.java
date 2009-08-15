@@ -836,8 +836,6 @@ public class CephFileSystem extends FileSystem {
     public long mod_time;
     public long access_time;
     public int mode;
-    public int user_id;
-    public int group_id; 
 
     public Stat(){}
   }

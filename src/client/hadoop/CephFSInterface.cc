@@ -506,11 +506,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
   if (c_access_id == NULL) return false;
   jfieldID c_mode_id = env->GetFieldID(cls, "mode", "I");
   if (c_mode_id == NULL) return false;
-  jfieldID c_user_id = env->GetFieldID(cls, "user_id", "I");
-  if (c_user_id == NULL) return false;
-  jfieldID c_group_id = env->GetFieldID(cls, "group_id", "I");
-  if (c_group_id == NULL) return false;
-
   //do actual lstat
   int r = ceph_lstat(c_path, &st);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -524,8 +519,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
   env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime);
   env->SetLongField(j_stat, c_access_id, (long long)st.st_atime);
   env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
-  env->SetIntField(j_stat, c_user_id, (int)st.st_uid);
-  env->SetIntField(j_stat, c_group_id, (int)st.st_gid);
 
   //return happy
   return true;
@@ -610,13 +603,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTi
   if (mtime!=-1) mask = CEPH_SETATTR_MTIME;
   if (atime!=-1) mask |= CEPH_SETATTR_ATIME;
   //build a struct stat and fill it in!
-  //remember to convert from millis to seconds plus microseconds
+  //remember to convert from millis to seconds and microseconds
   Client::stat_precise attr;
   attr.st_mtime_sec = mtime / 1000;
   attr.st_mtime_micro = (mtime % 1000) * 1000;
   attr.st_atime_sec = atime / 1000;
   attr.st_atime_micro = (atime % 1000) * 1000;
-  //may need to fill in uid and gid here later on...
   return ceph_setattr(c_path, &attr, mask);
 }
 
