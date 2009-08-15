@@ -47,7 +47,7 @@ import org.apache.hadoop.fs.FileStatus;
 public class CephFileSystem extends FileSystem {
 
   private static final long DEFAULT_BLOCK_SIZE = 4 * 1024 * 1024;
-  
+  private static final int EEXIST = 17;
 
   
   private URI uri;
@@ -489,9 +489,9 @@ public class CephFileSystem extends FileSystem {
     // Step 2: create any nonexistent directories in the path
     Path parent =  abs_path.getParent();
     if (parent != null) { // if parent is root, we're done
-      if(!exists(parent)) {
-	mkdirs(parent);
-      }
+      int r = mkdirs(parent);
+      if (!(r==0 || r==-EEXIST))
+	throw new IOException ("Error creating parent directory; code: " + r);
     }
     if (progress!=null) progress.progress();
     // Step 3: open the file
