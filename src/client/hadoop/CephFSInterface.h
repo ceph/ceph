@@ -88,14 +88,6 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_getfilesize
- * Signature: (Ljava/lang/String;)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getfilesize
-  (JNIEnv *, jobject, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_isdirectory
  * Signature: (Ljava/lang/String;)Z
  */

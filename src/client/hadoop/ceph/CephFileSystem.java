@@ -71,7 +71,6 @@ public class CephFileSystem extends FileSystem {
   private native boolean ceph_rename(String old_path, String new_path);
   private native boolean ceph_exists(String path);
   private native long    ceph_getblocksize(String path);
-  private native long    ceph_getfilesize(String path);
   private native boolean ceph_isdirectory(String path);
   private native boolean ceph_isfile(String path);
   private native String[] ceph_getdir(String path);
@@ -791,22 +790,6 @@ public class CephFileSystem extends FileSystem {
     }
   }
  
-  private long __getLength(Path path) throws IOException {
-    debug("__getLength:enter with path " + path);
-    Path abs_path = makeAbsolute(path);
-
-    if (!exists(abs_path)) {
-      throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem.__getLength: File or directory " + abs_path.toString() + " does not exist.");
-    }	  
-    
-    long filesize = ceph_getfilesize(abs_path.toString());
-    if (filesize < 0) {
-      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getLength: Size of file or directory " + abs_path.toString() + " could not be retrieved.");
-    }
-    debug("__getLength:exit with size " + filesize);
-    return filesize;
-  }
-
   private Path[] listPaths(Path path) throws IOException {
     debug("listPaths:enter with path " + path);
     String dirlist[];

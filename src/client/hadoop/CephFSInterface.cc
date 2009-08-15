@@ -253,32 +253,6 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_getfilesize
- * Signature: (Ljava/lang/String;)J
- * Returns the file size, or -1 on failure.
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getfilesize
-  (JNIEnv *env, jobject, jstring j_path)
-{
-  dout(10) << "In getfilesize" << dendl;
-
-  struct stat stbuf;
-
-  jlong result;
-
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
-  if (c_path == NULL) return -ENOMEM;
-  result = ceph_lstat(c_path, &stbuf);
-  env->ReleaseStringUTFChars(j_path, c_path);
-
-  if (result < 0) return result;
-  else result = stbuf.st_size;
-
-  return result;
-}
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_isfile
  * Signature: (Ljava/lang/String;)Z
  */
