@@ -13,6 +13,7 @@
 #include "types.h"
 #include "ceph_debug.h"
 #include "messenger.h"
+#include "msgpool.h"
 #include "mon_client.h"
 #include "mds_client.h"
 #include "osd_client.h"
@@ -133,6 +134,20 @@ struct ceph_client {
 	struct ceph_mon_client monc;
 	struct ceph_mds_client mdsc;
 	struct ceph_osd_client osdc;
+
+	/* msg pools */
+	struct ceph_msg_pool msgpool_mount_ack;
+	struct ceph_msg_pool msgpool_unmount;
+	struct ceph_msg_pool msgpool_statfs_reply;
+	struct ceph_msg_pool msgpool_mds_map;
+	struct ceph_msg_pool msgpool_client_session;
+	struct ceph_msg_pool msgpool_client_reply;
+	struct ceph_msg_pool msgpool_client_request_forward;
+	struct ceph_msg_pool msgpool_client_caps;
+	struct ceph_msg_pool msgpool_client_snap;
+	struct ceph_msg_pool msgpool_client_lease;
+	struct ceph_msg_pool msgpool_osd_map;
+	struct ceph_msg_pool msgpool_osd_opreply;
 
 	/* writeback */
 	mempool_t *wb_pagevec_pool;

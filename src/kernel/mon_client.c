@@ -384,6 +384,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		schedule_delayed_work(&monc->statfs_delayed_work,
 				      round_jiffies_relative(1*HZ));
 	monc->num_statfs_requests++;
+	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, 1);
 	mutex_unlock(&monc->statfs_mutex);
 
 	/* send request and wait */
@@ -396,6 +397,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	monc->num_statfs_requests--;
 	if (monc->num_statfs_requests == 0)
 		cancel_delayed_work(&monc->statfs_delayed_work);
+	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, -1);
 	mutex_unlock(&monc->statfs_mutex);
 
 	if (!err)
