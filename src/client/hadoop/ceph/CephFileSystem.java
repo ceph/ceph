@@ -489,7 +489,7 @@ public class CephFileSystem extends FileSystem {
     // Step 2: create any nonexistent directories in the path
     Path parent =  abs_path.getParent();
     if (parent != null) { // if parent is root, we're done
-      int r = mkdirs(parent);
+      int r = ceph_mkdirs(parent.toString(), permission.toShort());
       if (!(r==0 || r==-EEXIST))
 	throw new IOException ("Error creating parent directory; code: " + r);
     }
@@ -537,7 +537,9 @@ public class CephFileSystem extends FileSystem {
     if (fh < 0) {
       throw new IOException("open: Failed to open file " + abs_path.toString());
     }
-    long size = ceph_getfilesize(abs_path.toString());
+    Stat lstat = new Stat();
+    ceph_stat(abs_path.toString(), lstat);
+    long size = lstat.size;
     if (size < 0) {
       throw new IOException("Failed to get file size for file " + abs_path.toString() + 
 			    " but succeeded in opening file. Something bizarre is going on.");
