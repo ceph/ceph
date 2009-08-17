@@ -80,6 +80,7 @@ int ceph_msgpool_init(struct ceph_msg_pool *pool,
 
 void ceph_msgpool_destroy(struct ceph_msg_pool *pool)
 {
+	dout("msgpool_destroy %p\n", pool);
 	spin_lock(&pool->lock);
 	pool->min = 0;
 	__fill_msgpool(pool);

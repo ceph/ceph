@@ -1,15 +1,16 @@
-#include <linux/module.h>
-#include <linux/parser.h>
+#include <linux/backing-dev.h>
 #include <linux/fs.h>
+#include <linux/inet.h>
+#include <linux/module.h>
 #include <linux/mount.h>
+#include <linux/parser.h>
 #include <linux/rwsem.h>
-#include <linux/seq_file.h>
 #include <linux/sched.h>
+#include <linux/seq_file.h>
+#include <linux/statfs.h>
 #include <linux/string.h>
 #include <linux/version.h>
-#include <linux/backing-dev.h>
-#include <linux/statfs.h>
-#include <linux/inet.h>
+#include <linux/vmalloc.h>
 
 #include "ceph_debug.h"
 #include "ceph_ver.h"
@@ -781,13 +782,13 @@ static void ceph_destroy_client(struct ceph_client *client)
 	ceph_msgpool_destroy(&client->msgpool_statfs_reply);
 	ceph_msgpool_destroy(&client->msgpool_mds_map);
 	ceph_msgpool_destroy(&client->msgpool_client_session);
-	ceph_msgpool_destroy(&client->msgpool_client_reply);
+	//ceph_msgpool_destroy(&client->msgpool_client_reply);
 	ceph_msgpool_destroy(&client->msgpool_client_request_forward);
-	ceph_msgpool_destroy(&client->msgpool_client_caps);
-	ceph_msgpool_destroy(&client->msgpool_client_snap);
+	//ceph_msgpool_destroy(&client->msgpool_client_caps);
+	//ceph_msgpool_destroy(&client->msgpool_client_snap);
 	ceph_msgpool_destroy(&client->msgpool_client_lease);
-	ceph_msgpool_destroy(&client->msgpool_osd_map);
-	ceph_msgpool_destroy(&client->msgpool_osd_opreply);
+	//ceph_msgpool_destroy(&client->msgpool_osd_map);
+	//ceph_msgpool_destroy(&client->msgpool_osd_opreply);
 
 	release_mount_args(&client->mount_args);
 
