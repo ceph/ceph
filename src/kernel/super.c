@@ -29,6 +29,7 @@ static void ceph_dispatch(void *p, struct ceph_msg *msg);
 static void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
 			    struct ceph_entity_name *peer_name);
 static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr);
+static int ceph_alloc_middle(void *p, struct ceph_msg *msg);
 
 /*
  * find filename portion of a path (/foo/bar/baz -> baz)
@@ -885,6 +886,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
 		client->msgr->peer_reset = ceph_peer_reset;
 		client->msgr->alloc_msg = ceph_alloc_msg;
+		client->msgr->alloc_middle = ceph_alloc_middle;
 	}
 
 	/* send mount request, and wait for mon, mds, and osd maps */
@@ -1030,6 +1032,30 @@ static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr)
 	msg->front.iov_len = front_len;
 	return msg;
 }
+
+/*
+ * Allocate "middle" portion of a message, if it is needed and wasn't
+ * allocated by alloc_msg.  This allows us to read a small fixed-size
+ * per-type header in the front and then gracefully fail (i.e.,
+ * propagate the error to the caller based on info in the front) when
+ * the middle is too large.
+ */
+static int ceph_alloc_middle(void *p, struct ceph_msg *msg)
+{
+	int type = le32_to_cpu(msg->hdr.type);
+	int middle_len = le32_to_cpu(msg->hdr.middle_len);
+
+	dout("alloc_middle %p type %d %s middle_len %d\n", msg, type,
+	     ceph_msg_type_name(type), middle_len);
+	BUG_ON(!middle_len);
+	BUG_ON(msg->middle.iov_base);
+
+	msg->middle.iov_base = __vmalloc(middle_len, GFP_NOFS, PAGE_KERNEL);
+	if (!msg->middle.iov_base)
+		return -ENOMEM;
+	return 0;
+}
+
 
 /*
  * Process an incoming message.

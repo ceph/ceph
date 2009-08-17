@@ -38,6 +38,7 @@ typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
 
 typedef struct ceph_msg * (*ceph_msgr_alloc_msg_t) (void *p,
 					    struct ceph_msg_header *hdr);
+typedef int (*ceph_msgr_alloc_middle_t) (void *p, struct ceph_msg *msg);
 
 
 static inline const char *ceph_name_type_str(int t)
@@ -65,6 +66,7 @@ struct ceph_messenger {
 	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	ceph_msgr_alloc_msg_t alloc_msg;
+	ceph_msgr_alloc_middle_t alloc_middle;
 
 	struct ceph_entity_inst inst;    /* my name+address */
 
@@ -95,7 +97,7 @@ struct ceph_messenger {
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
 	struct ceph_msg_footer footer;	/* footer */
-	struct kvec front;              /* first bit of message */
+	struct kvec front, middle;      /* unaligned blobs of message */
 	struct mutex page_mutex;
 	struct page **pages;            /* data payload.  NOT OWNER. */
 	unsigned nr_pages;              /* size of page array */
@@ -202,8 +204,7 @@ struct ceph_connection {
 	struct ceph_msg_header in_hdr;
 	struct ceph_msg *in_msg;
 	struct ceph_msg_pos in_msg_pos;
-	u32 in_front_crc, in_data_crc;  /* calculated crc, for comparison
-					   message footer */
+	u32 in_front_crc, in_middle_crc, in_data_crc;  /* calculated crc */
 
 	char in_tag;         /* protocol control byte */
 	int in_base_pos;     /* bytes read */

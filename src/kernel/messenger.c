@@ -668,6 +668,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_msg->footer.flags = 0;
 	con->out_msg->footer.front_crc =
 		cpu_to_le32(crc32c(0, m->front.iov_base, m->front.iov_len));
+	con->out_msg->footer.middle_crc = 0;
 	con->out_msg->footer.data_crc = 0;
 
 	/* is there a data payload? */
@@ -967,7 +968,7 @@ static int prepare_read_message(struct ceph_connection *con)
 	dout("prepare_read_message %p\n", con);
 	BUG_ON(con->in_msg != NULL);
 	con->in_base_pos = 0;
-	con->in_front_crc = con->in_data_crc = 0;
+	con->in_front_crc = con->in_middle_crc = con->in_data_crc = 0;
 	return 0;
 }
 
@@ -1389,7 +1390,7 @@ static int read_partial_message(struct ceph_connection *con)
 	void *p;
 	int ret;
 	int to, want, left;
-	unsigned front_len, data_len, data_off;
+	unsigned front_len, middle_len, data_len, data_off;
 	struct ceph_client *client = con->msgr->parent;
 	int datacrc = !ceph_test_opt(client, NOCRC);
 
@@ -1419,6 +1420,9 @@ static int read_partial_message(struct ceph_connection *con)
 	front_len = le32_to_cpu(con->in_hdr.front_len);
 	if (front_len > CEPH_MSG_MAX_FRONT_LEN)
 		return -EIO;
+	middle_len = le32_to_cpu(con->in_hdr.middle_len);
+	if (middle_len > CEPH_MSG_MAX_DATA_LEN)
+		return -EIO;
 	data_len = le32_to_cpu(con->in_hdr.data_len);
 	if (data_len > CEPH_MSG_MAX_DATA_LEN)
 		return -EIO;
@@ -1432,7 +1436,7 @@ static int read_partial_message(struct ceph_connection *con)
 		if (!con->in_msg) {
 			/* skip this message */
 			dout("alloc_msg returned NULL, skipping message\n");
-			con->in_base_pos = -front_len - data_len -
+			con->in_base_pos = -front_len - middle_len - data_len -
 				sizeof(m->footer);
 			con->in_tag = CEPH_MSGR_TAG_READY;
 			return 0;
@@ -1445,6 +1449,7 @@ static int read_partial_message(struct ceph_connection *con)
 		}
 		m = con->in_msg;
 		m->front.iov_len = 0;    /* haven't read it yet */
+		m->middle.iov_len = 0;    /* haven't read it yet */
 		memcpy(&m->hdr, &con->in_hdr, sizeof(con->in_hdr));
 	}
 
@@ -1460,6 +1465,32 @@ static int read_partial_message(struct ceph_connection *con)
 		if (m->front.iov_len == front_len)
 			con->in_front_crc = crc32c(0, m->front.iov_base,
 						      m->front.iov_len);
+	}
+
+	/* middle */
+	while (m->middle.iov_len < middle_len) {
+		if (m->middle.iov_base == NULL) {
+			BUG_ON(!con->msgr->alloc_middle);
+			ret = con->msgr->alloc_middle(con->msgr->parent, m);
+			if (ret < 0) {
+				dout("alloc_middle failed, skipping payload\n");
+				con->in_base_pos = -middle_len - data_len
+					- sizeof(m->footer);
+				ceph_msg_put(con->in_msg);
+				con->in_msg = NULL;
+				con->in_tag = CEPH_MSGR_TAG_READY;
+				return 0;
+			}
+		}
+		left = middle_len - m->middle.iov_len;
+		ret = ceph_tcp_recvmsg(con->sock, (char *)m->middle.iov_base +
+				       m->middle.iov_len, left);
+		if (ret <= 0)
+			return ret;
+		m->middle.iov_len += ret;
+		if (m->middle.iov_len == middle_len)
+			con->in_middle_crc = crc32c(0, m->middle.iov_base,
+						      m->middle.iov_len);
 	}
 
 	/* (page) data */
@@ -1493,8 +1524,8 @@ static int read_partial_message(struct ceph_connection *con)
 		if (!m->pages) {
 			dout("pages revoked during msg read\n");
 			mutex_unlock(&m->page_mutex);
-			con->in_base_pos = con->in_msg_pos.data_pos - data_len -
-				sizeof(m->footer);
+			con->in_base_pos = middle_len - con->in_msg_pos.data_pos
+				- data_len - sizeof(m->footer);
 			ceph_msg_put(m);
 			con->in_msg = NULL;
 			con->in_tag = CEPH_MSGR_TAG_READY;
@@ -1532,14 +1563,18 @@ no_data:
 		con->in_base_pos += ret;
 	}
 	dout("read_partial_message got msg %p\n", m);
-	dout("got footer front crc %d data crc %d\n",
-	     m->footer.front_crc, m->footer.data_crc);
+	dout("got footer front crc %d middle crc %d data crc %d\n",
+	     m->footer.front_crc, m->footer.middle_crc, m->footer.data_crc);
 
 	/* crc ok? */
 	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
 		pr_err("ceph read_partial_message %p front crc %u != exp. %u\n",
-		       con->in_msg,
-		       con->in_front_crc, m->footer.front_crc);
+		       con->in_msg, con->in_front_crc, m->footer.front_crc);
+		return -EBADMSG;
+	}
+	if (con->in_middle_crc != le32_to_cpu(m->footer.middle_crc)) {
+		pr_err("ceph read_partial_message %p middle crc %u != exp %u\n",
+		       con->in_msg, con->in_middle_crc, m->footer.middle_crc);
 		return -EBADMSG;
 	}
 	if (datacrc &&
@@ -1582,14 +1617,14 @@ static void process_message(struct ceph_connection *con)
 	con->in_seq++;
 	spin_unlock(&con->out_queue_lock);
 
-	dout("===== %p %llu from %s%d %d=%s len %d+%d (%u %u) =====\n",
+	dout("===== %p %llu from %s%d %d=%s len %d+%d (%u %u %u) =====\n",
 	     con->in_msg, le64_to_cpu(con->in_msg->hdr.seq),
 	     ENTITY_NAME(con->in_msg->hdr.src.name),
 	     le16_to_cpu(con->in_msg->hdr.type),
 	     ceph_msg_type_name(le16_to_cpu(con->in_msg->hdr.type)),
 	     le32_to_cpu(con->in_msg->hdr.front_len),
 	     le32_to_cpu(con->in_msg->hdr.data_len),
-	     con->in_front_crc, con->in_data_crc);
+	     con->in_front_crc, con->in_middle_crc, con->in_data_crc);
 	con->msgr->dispatch(con->msgr->parent, con->in_msg);
 	con->in_msg = NULL;
 	prepare_read_tag(con);
@@ -2274,6 +2309,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 
 	m->hdr.type = cpu_to_le16(type);
 	m->hdr.front_len = cpu_to_le32(front_len);
+	m->hdr.middle_len = 0;
 	m->hdr.data_len = cpu_to_le32(page_len);
 	m->hdr.data_off = cpu_to_le16(page_off);
 	m->hdr.priority = cpu_to_le16(CEPH_MSG_PRIO_DEFAULT);
@@ -2284,6 +2320,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->hdr.mds_protocol = CEPH_MDS_PROTOCOL;
 	m->hdr.mdsc_protocol = CEPH_MDSC_PROTOCOL;
 	m->footer.front_crc = 0;
+	m->footer.middle_crc = 0;
 	m->footer.data_crc = 0;
 	m->front_max = front_len;
 	m->front_is_vmalloc = false;
@@ -2309,7 +2346,11 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	}
 	m->front.iov_len = front_len;
 
-	/* pages */
+	/* middle */
+	m->middle.iov_base = NULL;
+	m->middle.iov_len = 0;
+
+	/* data */
 	m->nr_pages = calc_pages_for(page_off, page_len);
 	m->pages = pages;
 
@@ -2329,11 +2370,18 @@ out:
  */
 void ceph_msg_kfree(struct ceph_msg *m)
 {
+	dout("msg_kfree %p\n", m);
 	if (m->front_is_vmalloc)
 		vfree(m->front.iov_base);
 	else
 		kfree(m->front.iov_base);
+	if (m->middle.iov_base) {
+		dout("vfree %p\n", m->middle.iov_base);
+		vfree(m->middle.iov_base);
+		dout("vfree done\n");
+	}
 	kfree(m);
+	dout("msg_kfree %p done\n", m);
 }
 
 void ceph_msg_put(struct ceph_msg *m)
