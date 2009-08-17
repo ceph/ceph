@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 013\n"
+#define CEPH_BANNER "ceph 014\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -123,6 +123,7 @@ struct ceph_msg_header {
 	__le16 priority;  /* priority.  higher value == higher priority */
 
 	__le32 front_len; /* bytes in main payload */
+	__le32 middle_len;/* bytes in middle payload */
 	__le32 data_len;  /* bytes of data payload */
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
@@ -145,8 +146,7 @@ struct ceph_msg_header {
  */
 struct ceph_msg_footer {
 	__le32 flags;
-	__le32 front_crc;
-	__le32 data_crc;
+	__le32 front_crc, middle_crc, data_crc;
 } __attribute__ ((packed));
 
 #define CEPH_MSG_FOOTER_ABORTED   (1<<0)   /* drop this message */
