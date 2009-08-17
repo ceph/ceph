@@ -476,6 +476,8 @@ noinst_HEADERS = \
 	kernel/messenger.h\
 	kernel/mon_client.c\
 	kernel/mon_client.h\
+	kernel/msgpool.c\
+	kernel/msgpool.h\
 	kernel/msgr.h\
 	kernel/osd_client.c\
 	kernel/osd_client.h\

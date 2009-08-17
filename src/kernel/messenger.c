@@ -1419,6 +1419,9 @@ static int read_partial_message(struct ceph_connection *con)
 	front_len = le32_to_cpu(con->in_hdr.front_len);
 	if (front_len > CEPH_MSG_MAX_FRONT_LEN)
 		return -EIO;
+	data_len = le32_to_cpu(con->in_hdr.data_len);
+	if (data_len > CEPH_MSG_MAX_DATA_LEN)
+		return -EIO;
 
 	/* allocate message? */
 	if (!con->in_msg) {
@@ -1426,6 +1429,14 @@ static int read_partial_message(struct ceph_connection *con)
 		     con->in_hdr.front_len, con->in_hdr.data_len);
 		con->in_msg = con->msgr->alloc_msg(con->msgr->parent,
 						   &con->in_hdr);
+		if (!con->in_msg) {
+			/* skip this message */
+			dout("alloc_msg returned NULL, skipping message\n");
+			con->in_base_pos = -front_len - data_len -
+				sizeof(m->footer);
+			con->in_tag = CEPH_MSGR_TAG_READY;
+			return 0;
+		}
 		if (IS_ERR(con->in_msg)) {
 			ret = PTR_ERR(con->in_msg);
 			con->in_msg = NULL;
@@ -1452,10 +1463,6 @@ static int read_partial_message(struct ceph_connection *con)
 	}
 
 	/* (page) data */
-	data_len = le32_to_cpu(m->hdr.data_len);
-	if (data_len > CEPH_MSG_MAX_DATA_LEN)
-		return -EIO;
-
 	data_off = le16_to_cpu(m->hdr.data_off);
 	if (data_len == 0)
 		goto no_data;
@@ -2249,7 +2256,6 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	return ret;
 }
 
-
 /*
  * construct a new message with given type, size
  * the new msg has a ref count of 1.
@@ -2279,8 +2285,10 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->hdr.mdsc_protocol = CEPH_MDSC_PROTOCOL;
 	m->footer.front_crc = 0;
 	m->footer.data_crc = 0;
+	m->front_max = front_len;
 	m->front_is_vmalloc = false;
 	m->more_to_follow = false;
+	m->pool = NULL;
 
 	/* front */
 	if (front_len) {
@@ -2316,6 +2324,18 @@ out:
 	return ERR_PTR(-ENOMEM);
 }
 
+/*
+ * Free a generically kmalloc'd message.
+ */
+void ceph_msg_kfree(struct ceph_msg *m)
+{
+	if (m->front_is_vmalloc)
+		vfree(m->front.iov_base);
+	else
+		kfree(m->front.iov_base);
+	kfree(m);
+}
+
 void ceph_msg_put(struct ceph_msg *m)
 {
 	dout("ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
@@ -2334,11 +2354,10 @@ void ceph_msg_put(struct ceph_msg *m)
 	if (atomic_dec_and_test(&m->nref)) {
 		dout("ceph_msg_put last one on %p\n", m);
 		WARN_ON(!list_empty(&m->list_head));
-		if (m->front_is_vmalloc)
-			vfree(m->front.iov_base);
+		if (m->pool)
+			ceph_msgpool_put(m->pool, m);
 		else
-			kfree(m->front.iov_base);
-		kfree(m);
+			ceph_msg_kfree(m);
 	}
 }
 
@@ -2358,3 +2377,4 @@ void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
 	m->hdr.dst.addr = *addr;
 	ceph_msg_send(msgr, m, BASE_DELAY_INTERVAL);
 }
+

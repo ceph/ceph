@@ -39,6 +39,7 @@ typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
 typedef struct ceph_msg * (*ceph_msgr_alloc_msg_t) (void *p,
 					    struct ceph_msg_header *hdr);
 
+
 static inline const char *ceph_name_type_str(int t)
 {
 	switch (t) {
@@ -102,6 +103,9 @@ struct ceph_msg {
 	atomic_t nref;
 	bool front_is_vmalloc;
 	bool more_to_follow;
+	int front_max;
+
+	struct ceph_msg_pool *pool;
 };
 
 struct ceph_msg_pos {
@@ -221,6 +225,7 @@ extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
+extern void ceph_msg_kfree(struct ceph_msg *m);
 
 static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
 {
