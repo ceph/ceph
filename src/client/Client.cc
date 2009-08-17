@@ -4007,7 +4007,7 @@ int Client::_read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl)
 
   Mutex flock("Client::_read_sync flock");
   Cond cond;
-  while (1) {
+  while (left > 0) {
     int r = 0;
     bool done = false;
     Context *onfinish = new C_SafeCond(&flock, &cond, &done, &r);
@@ -4050,6 +4050,7 @@ int Client::_read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl)
 	return read;
     }
   }
+  return read;
 }
 
 
