@@ -161,7 +161,7 @@ public class CephFileSystem extends FileSystem {
   /**
    * Get an FSDataOutputStream to append onto a file.
    * @param file The File you want to append onto
-   * @param bufferSize The size of the buffer to use in flushing writes
+   * @param bufferSize Ceph does internal buffering; this is ignored.
    * @param progress The Progressable to report progress to.
    * Reporting is limited but exists.
    * @return An FSDataOutputStream that connects to the file on Ceph.
@@ -444,7 +444,7 @@ public class CephFileSystem extends FileSystem {
    * @param path The file to create.
    * @param permission The permissions to apply to the file.
    * @param overwrite If true, overwrite any existing file with this name.
-   * @param bufferSize The size of the write buffer in the returned OutputStream.
+   * @param bufferSize Ceph does internal buffering; this is ignored.
    * @param replication Ignored by Ceph. This can be configured via Ceph configuration.
    * @param blockSize Ignored by Ceph.
    * @param progress A Progressable to report back to. Reporting is limited but exists.
@@ -513,7 +513,7 @@ public class CephFileSystem extends FileSystem {
   /**
    * Open a Ceph file and attach the file handle to an FSDataInputStream.
    * @param path The file to open
-   * @param bufferSize the size of the read buffer in the returned FSDataInputStream.
+   * @param bufferSize Ceph does internal buffering; this is ignored.
    * @return FSDataInputStream reading from the given path.
    * @throws IOException if initialize() hasn't been called, the path DNE or is a
    * directory, or there is an error getting data to set up the FSDataInputStream.
