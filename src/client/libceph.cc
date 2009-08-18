@@ -180,6 +180,11 @@ extern "C" int ceph_lstat(const char *path, struct stat *stbuf, struct frag_info
   return client->lstat(path, stbuf, dirstat);
 }
 
+int ceph_lstat(const char *path, Client::stat_precise *stbuf, frag_info_t *dirstat)
+{
+  return client->lstat_precise(path, stbuf, dirstat);
+}
+
 extern "C" int ceph_setattr(const char *relpath, Client::stat_precise *attr, int mask)
 {
   return client->setattr(relpath, attr, mask);

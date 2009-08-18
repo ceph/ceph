@@ -709,6 +709,7 @@ class Client : public Dispatcher {
     nlink_t st_nlink;
     uid_t st_uid;
     gid_t st_gid;
+    dev_t st_rdev;
     off_t st_size;
     blksize_t st_blksize;
     blkcnt_t st_blocks;
@@ -950,6 +951,7 @@ protected:
   Inode *cwd;
   int path_walk(const filepath& fp, Inode **end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  int fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 
   // trim cache.
@@ -1134,6 +1136,7 @@ public:
 
   // inode stuff
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int lstat_precise(const char *relpath, struct stat_precise *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
   int setattr(const char *relpath, stat_precise *attr, int mask);

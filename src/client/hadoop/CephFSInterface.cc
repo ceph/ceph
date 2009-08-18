@@ -488,7 +488,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
 (JNIEnv * env, jobject obj, jstring j_path, jobject j_stat) {
   //setup variables
-  struct stat st;
+  struct Client::stat_precise st;
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
 
@@ -516,8 +516,10 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
   env->SetLongField(j_stat, c_size_id, (long)st.st_size);
   env->SetBooleanField(j_stat, c_dir_id, (0 != S_ISDIR(st.st_mode)));
   env->SetLongField(j_stat, c_block_id, (long)st.st_blksize);
-  env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime);
-  env->SetLongField(j_stat, c_access_id, (long long)st.st_atime);
+  env->SetLongField(j_stat, c_mod_id, (long long)st.st_mtime_sec*1000
+		    +st.st_mtime_micro/1000);
+  env->SetLongField(j_stat, c_access_id, (long long)st.st_atime_sec*1000
+		    +st.st_atime_micro/1000);
   env->SetIntField(j_stat, c_mode_id, (int)st.st_mode);
 
   //return happy

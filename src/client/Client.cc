@@ -3280,6 +3280,64 @@ int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat,
   fill_stat(in, stbuf, dirstat);
   return r;
 }
+int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat, nest_info_t *rstat) 
+{
+  dout(10) << "fill_stat_precise on " << in->ino << " snap/dev" << in->snapid 
+	   << " mode 0" << oct << in->mode << dec
+	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
+  memset(st, 0, sizeof(struct stat_precise));
+  st->st_ino = in->ino;
+  st->st_dev = in->snapid;
+  st->st_mode = in->mode;
+  st->st_rdev = in->rdev;
+  st->st_nlink = in->nlink;
+  st->st_uid = in->uid;
+  st->st_gid = in->gid;
+  if (in->ctime.sec() > in->mtime.sec()) {
+    st->st_ctime_sec = in->ctime.sec();
+    st->st_ctime_micro = in->ctime.usec();
+  } else {
+    st->st_ctime_sec = in->mtime.sec();
+    st->st_ctime_micro = in->ctime.usec();
+  }
+  st->st_atime_sec = in->atime.sec();
+  st->st_atime_micro = in->atime.usec();
+  st->st_mtime_sec = in->mtime.sec();
+  st->st_mtime_micro = in->mtime.usec();
+  if (in->is_dir()) {
+    //st->st_size = in->dirstat.size();
+    st->st_size = in->rstat.rbytes;
+    st->st_blocks = 1;
+  } else {
+    st->st_size = in->size;
+    st->st_blocks = (in->size + 511) >> 9;
+  }
+  st->st_blksize = MAX(ceph_file_layout_su(in->layout), 4096);
+
+  if (dirstat)
+    *dirstat = in->dirstat;
+  if (rstat)
+    *rstat = in->rstat;
+
+  return in->caps_issued();
+}
+
+int Client::lstat_precise(const char *relpath, struct stat_precise *stbuf,
+			  frag_info_t *dirstat, int mask) {
+  Mutex::Locker lock(client_lock);
+  tout << "lstat_precise" << std::endl;
+  tout << relpath << std::endl;
+  filepath path(relpath);
+  Inode *in;
+  int r = path_walk(path, &in);
+  if (r < 0)
+    return r;
+  r = _getattr(in, mask);
+  if (r < 0)
+    return r;
+  fill_stat_precise(in, stbuf, dirstat);
+  return r;
+}
 
 int Client::chmod(const char *relpath, mode_t mode)
 {

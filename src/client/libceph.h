@@ -72,11 +72,13 @@ int ceph_sync_fs();
 int ceph_get_file_stripe_unit(int fh);
 int ceph_get_file_replication(const char *path);
 #ifdef __cplusplus
+}
 //not for C, sorry!
 int ceph_getdir(const char *relpath, std::list<std::string>& names);
 void ceph_getcwd(std::string& cwd);
 int ceph_get_file_stripe_address(int fd, loff_t offset, std::string& address);
-}
+int ceph_lstat(const char *path, Client::stat_precise *stbuf, frag_info_t *dirstat=0);
+
 #endif
 
 #endif
