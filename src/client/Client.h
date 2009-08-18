@@ -725,12 +725,12 @@ class Client : public Dispatcher {
 			       st_size(attr.st_size),
 			       st_blksize(attr.st_blksize),
 			       st_blocks(attr.st_blocks),
-			       st_atime_sec(attr.st_atime/1000),
-			       st_atime_micro((attr.st_atime%1000)*1000),
-			       st_mtime_sec(attr.st_mtime/1000),
-			       st_mtime_micro((attr.st_mtime%1000)*1000),
-			       st_ctime_sec(attr.st_ctime/1000),
-			       st_ctime_micro((attr.st_ctime%1000)*1000) {}
+			       st_atime_sec(attr.st_atime),
+			       st_atime_micro(0),
+			       st_mtime_sec(attr.st_mtime),
+			       st_mtime_micro(0),
+			       st_ctime_sec(attr.st_ctime),
+			       st_ctime_micro(0) {}
   };
 
   // cluster descriptors
