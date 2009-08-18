@@ -4,6 +4,7 @@
 #include "ceph_debug.h"
 #include "ceph_ver.h"
 #include "auth.h"
+#include "decode.h"
 #include "super.h"
 
 
@@ -48,27 +49,39 @@ static int ceph_x_auth_handle_response(struct ceph_client *client,
 {
 	struct ceph_x_auth *auth_data = (struct ceph_x_auth *)data->private_data;
 	const struct ceph_x_response *response;
+	u32 blob_len;
+
+	printk(KERN_ERR "ceph_x_auth_handle_response len=%d\n", len);
 	if (err) {
 		return err;
 	}
 
+	if (len < sizeof(u32))
+		return -EINVAL;
+
+	ceph_decode_32_safe(&blob, blob + len, blob_len, bad);
+
 	switch (auth_data->state) {
 	case 0:
-		if (len != sizeof(struct ceph_x_response))
+		printk(KERN_ERR "blob_len=%d sizeof=%ld\n", blob_len, sizeof(struct ceph_x_response));
+		if (blob_len != sizeof(struct ceph_x_response))
 			return -EINVAL;
 
 		response = (const struct ceph_x_response *)blob;
 		auth_data->state++;
 		auth_data->server_challenge = le64_to_cpu(response->server_challenge);
+		printk(KERN_ERR "server_challenge=%llx\b", auth_data->server_challenge);
 		break;
 	case 1:
-		if (len == 0)
+		if (blob_len == 0)
 			break;
 	default:
 		return -EINVAL;
 	}
 
-	return 0;	
+	return 0;
+bad:
+	return err;
 }
 					
 

@@ -31,12 +31,15 @@ using namespace std;
 #include "PaxosService.h"
 #include "ClientMap.h"
 
+#include "auth/AuthManager.h"
+
 class Monitor;
 class Paxos;
 class MClientAuth;
 class MClientMount;
 class MClientUnmount;
 class MMonCommand;
+class ClientAuthManager;
 
 
 class ClientMonitor : public PaxosService {
@@ -72,7 +75,7 @@ public:
   };
 
   ClientMap client_map;
-
+  AuthManager auth_mgr;
 private:
   // leader
   ClientMap::Incremental pending_inc;
@@ -96,7 +99,7 @@ private:
   bool prepare_command(MMonCommand *m);
 
  public:
-  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
+  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { auth_mgr.init(mn); }
   
   void tick();  // check state, take actions
 

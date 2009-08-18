@@ -159,13 +159,26 @@ bool ClientMonitor::check_mount(MClientMount *m)
 
 bool ClientMonitor::check_auth(MClientAuth *m)
 {
-    stringstream ss;
-    // already mounted?
-    dout(0) << "ClientMonitor::check_auth() blob_size=" << m->get_blob_len() << dendl;
-    entity_addr_t addr = m->get_orig_source_addr();
-    mon->messenger->send_message(new MClientAuthReply(0),
-				   m->get_orig_source_inst());
-    return true;
+  stringstream ss;
+  // already mounted?
+  dout(0) << "ClientMonitor::check_auth() blob_size=" << m->get_auth_payload().length() << dendl;
+  entity_addr_t addr = m->get_orig_source_addr();
+
+  AuthHandler* handler = auth_mgr.get_auth_handler(addr);
+  assert(handler);
+
+  bufferlist response_bl;
+
+  int ret = handler->handle_request(m->get_auth_payload(), response_bl);
+  MClientAuthReply *reply = new MClientAuthReply(&response_bl, ret);
+
+  if (reply) {
+    mon->messenger->send_message(reply,
+  				   m->get_orig_source_inst());
+  } else {
+    /* out of memory.. what are we supposed to do now? */
+  }
+  return true;
 }
 
 bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)

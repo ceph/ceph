@@ -268,6 +268,7 @@ libcommon_a_SOURCES = \
 # this list ommits the ceph_ver.c file
 libcommon_files = \
 	auth/ExportControl.cc \
+	auth/AuthManager.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \

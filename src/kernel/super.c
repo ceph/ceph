@@ -357,6 +357,7 @@ static int handle_auth_reply(struct ceph_client *client, struct ceph_msg *msg)
 		client->aops = ceph_x_auth_get_ops();
 
 		err = client->aops->init(&client->auth_data);
+		pr_err("ceph_auth err=%d\n", err);
 		if (err < 0)
 			goto out;
 	}
@@ -931,6 +932,8 @@ static int build_sess_init_req(struct ceph_client *client,
 	if (!req) {
 		return -ENOMEM;
 	}
+
+	req->num_auth = max_auth_types;
 
 	for (i = 0; i < max_auth_types; i++) {
 		req->auth_type[i].type = cpu_to_le32(ceph_supported_auth[i]);
