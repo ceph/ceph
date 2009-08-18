@@ -311,8 +311,10 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 		    << " <== " << m->get_source_inst()
 		    << " " << m->get_seq()
 		    << " ==== " << *m
-		    << " ==== " << m->get_payload().length() << "+" << m->get_data().length()
-		    << " (" << m->get_footer().front_crc << " " << m->get_footer().data_crc << ")"
+		    << " ==== " << m->get_payload().length() << "+" << m->get_middle().length()
+		    << "+" << m->get_data().length()
+		    << " (" << m->get_footer().front_crc << " " << m->get_footer().middle_crc
+		    << " " << m->get_footer().data_crc << ")"
 		    << " " << m 
 		    << dendl;
 	    dispatch(m);
@@ -1411,7 +1413,7 @@ void SimpleMessenger::Pipe::writer()
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
-        if (m->empty_payload()) 
+        if (m->empty_payload())
 	  m->encode_payload();
 	m->calc_front_crc();
 
@@ -1501,15 +1503,26 @@ Message *SimpleMessenger::Pipe::read_message()
 
   // read front
   bufferlist front;
-  bufferptr bp;
   int front_len = header.front_len;
   if (front_len) {
-    bp = buffer::create(front_len);
+    bufferptr bp = buffer::create(front_len);
     if (tcp_read( sd, bp.c_str(), front_len ) < 0) 
       return 0;
     front.push_back(bp);
     dout(20) << "reader got front " << front.length() << dendl;
   }
+
+  // read middle
+  bufferlist middle;
+  int middle_len = header.middle_len;
+  if (middle_len) {
+    bufferptr bp = buffer::create(middle_len);
+    if (tcp_read( sd, bp.c_str(), middle_len ) < 0) 
+      return 0;
+    middle.push_back(bp);
+    dout(20) << "reader got middle " << middle.length() << dendl;
+  }
+
 
   // read data
   bufferlist data;
@@ -1521,7 +1534,7 @@ Message *SimpleMessenger::Pipe::read_message()
       // head
       int head = MIN(PAGE_SIZE - (data_off & ~PAGE_MASK),
 		     (unsigned)left);
-      bp = buffer::create(head);
+      bufferptr bp = buffer::create(head);
       if (tcp_read( sd, bp.c_str(), head ) < 0) 
 	return 0;
       data.push_back(bp);
@@ -1532,7 +1545,7 @@ Message *SimpleMessenger::Pipe::read_message()
     // middle
     int middle = left & PAGE_MASK;
     if (middle > 0) {
-      bp = buffer::create_page_aligned(middle);
+      bufferptr bp = buffer::create_page_aligned(middle);
       if (tcp_read( sd, bp.c_str(), middle ) < 0) 
 	return 0;
       data.push_back(bp);
@@ -1541,7 +1554,7 @@ Message *SimpleMessenger::Pipe::read_message()
     }
 
     if (left) {
-      bp = buffer::create(left);
+      bufferptr bp = buffer::create(left);
       if (tcp_read( sd, bp.c_str(), left ) < 0) 
 	return 0;
       data.push_back(bp);
@@ -1556,7 +1569,7 @@ Message *SimpleMessenger::Pipe::read_message()
   int aborted = (le32_to_cpu(footer.flags) & CEPH_MSG_FOOTER_ABORTED);
   dout(10) << "aborted = " << aborted << dendl;
   if (aborted) {
-    dout(0) << "reader got " << front.length() << " + " << data.length()
+    dout(0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	    << " byte message from " << header.src << ".. ABORTED" << dendl;
     // MEH FIXME 
     Message *m = new MGenericMessage(CEPH_MSG_PING);
@@ -1565,9 +1578,9 @@ Message *SimpleMessenger::Pipe::read_message()
     return m;
   }
 
-  dout(20) << "reader got " << front.length() << " + " << data.length()
+  dout(20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message from " << header.src << dendl;
-  return decode_message(header, footer, front, data);
+  return decode_message(header, footer, front, middle, data);
 }
 
 
@@ -1649,11 +1662,13 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 
   // get envelope, buffers
   header.front_len = m->get_payload().length();
+  header.middle_len = m->get_middle().length();
   header.data_len = m->get_data().length();
   footer.flags = 0;
   m->calc_header_crc();
 
   bufferlist blist = m->get_payload();
+  blist.append(m->get_middle());
   blist.append(m->get_data());
   
   dout(20)  << "write_message " << m << " to " << header.dst << dendl;

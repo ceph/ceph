@@ -130,20 +130,34 @@ using namespace std;
 
 
 Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
-			bufferlist& front, bufferlist& data)
+			bufferlist& front, bufferlist& middle, bufferlist& data)
 {
   // verify crc
   if (!g_conf.ms_nocrc) {
     __u32 front_crc = front.crc32c(0);
+    __u32 middle_crc = middle.crc32c(0);
     __u32 data_crc = data.crc32c(0);
 
     if (front_crc != footer.front_crc) {
-      dout(0) << "bad crc in front " << front_crc << " != " << footer.front_crc << dendl;
+      dout(0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+      dout(20);
+      front.hexdump(*_dout);
+      *_dout << dendl;
+      return 0;
+    }
+    if (middle_crc != footer.middle_crc) {
+      dout(0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+      dout(20);
+      middle.hexdump(*_dout);
+      *_dout << dendl;
       return 0;
     }
     if (data_crc != footer.data_crc &&
         !(footer.flags & CEPH_MSG_FOOTER_NOCRC)) {
-      dout(0) << "bad crc in data " << data_crc << " != " << footer.data_crc << dendl;
+      dout(0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+      dout(20);
+      data.hexdump(*_dout);
+      *_dout << dendl;
       return 0;
     }
   }
@@ -472,6 +486,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);
+  m->set_middle(middle);
   m->set_data(data);
 
   try {
@@ -480,6 +495,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   catch (buffer::error *e) {
     dout(0) << "failed to decode message of type " << type << ": " << *e << dendl;
     delete e;
+    assert(0);
     return 0;
   }
 

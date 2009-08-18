@@ -645,20 +645,24 @@ static void prepare_write_message(struct ceph_connection *con)
 	list_move_tail(&m->list_head, &con->out_sent);
 	con->out_msg = m;   /* we don't bother taking a reference here. */
 
-	dout("prepare_write_message %p seq %lld type %d len %d+%d %d pgs\n",
+	dout("prepare_write_message %p seq %lld type %d len %d+%d+%d %d pgs\n",
 	     m, le64_to_cpu(m->hdr.seq), le16_to_cpu(m->hdr.type),
-	     le32_to_cpu(m->hdr.front_len), le32_to_cpu(m->hdr.data_len),
+	     le32_to_cpu(m->hdr.front_len), le32_to_cpu(m->hdr.middle_len),
+	     le32_to_cpu(m->hdr.data_len),
 	     m->nr_pages);
 	BUG_ON(le32_to_cpu(m->hdr.front_len) != m->front.iov_len);
 
-	/* tag + hdr + front */
+	/* tag + hdr + front + middle */
 	con->out_kvec[v].iov_base = &tag_msg;
 	con->out_kvec[v++].iov_len = 1;
 	con->out_kvec[v].iov_base = &m->hdr;
 	con->out_kvec[v++].iov_len = sizeof(m->hdr);
 	con->out_kvec[v++] = m->front;
+	if (m->middle.iov_len)
+		con->out_kvec[v++] = m->middle;
 	con->out_kvec_left = v;
-	con->out_kvec_bytes += 1 + sizeof(m->hdr) + m->front.iov_len;
+	con->out_kvec_bytes += 1 + sizeof(m->hdr) + m->front.iov_len +
+		m->middle.iov_len;
 	con->out_kvec_cur = con->out_kvec;
 
 	/* fill in crc (except data pages), footer */
@@ -668,8 +672,16 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_msg->footer.flags = 0;
 	con->out_msg->footer.front_crc =
 		cpu_to_le32(crc32c(0, m->front.iov_base, m->front.iov_len));
-	con->out_msg->footer.middle_crc = 0;
+	if (m->middle.iov_base)
+		con->out_msg->footer.middle_crc =
+			cpu_to_le32(crc32c(0, m->middle.iov_base,
+					   m->middle.iov_len));
+	else
+		con->out_msg->footer.middle_crc = 0;
 	con->out_msg->footer.data_crc = 0;
+	dout("prepare_write_message front_crc %u data_crc %u\n",
+	     le32_to_cpu(con->out_msg->footer.front_crc),
+	     le32_to_cpu(con->out_msg->footer.middle_crc));
 
 	/* is there a data payload? */
 	if (le32_to_cpu(m->hdr.data_len) > 0) {
@@ -2268,11 +2280,12 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		ceph_msg_put(msg);
 	} else {
 		msg->hdr.seq = cpu_to_le64(++con->out_seq);
-		dout("----- %p %u to %s%d %d=%s len %d+%d -----\n", msg,
+		dout("----- %p %u to %s%d %d=%s len %d+%d+%d -----\n", msg,
 		     (unsigned)con->out_seq,
 		     ENTITY_NAME(msg->hdr.dst.name), le16_to_cpu(msg->hdr.type),
 		     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),
 		     le32_to_cpu(msg->hdr.front_len),
+		     le32_to_cpu(msg->hdr.middle_len),
 		     le32_to_cpu(msg->hdr.data_len));
 		dout("ceph_msg_send %p seq %llu for %s%d on %p pgs %d\n",
 		     msg, le64_to_cpu(msg->hdr.seq),

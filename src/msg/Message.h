@@ -138,6 +138,7 @@ protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
   bufferlist       payload;  // "front" unaligned blob
+  bufferlist       middle;   // "middle" unaligned blob
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
   
   utime_t recv_stamp;
@@ -181,11 +182,14 @@ public:
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
 
-  void clear_payload() { payload.clear(); }
+  void clear_payload() { payload.clear(); middle.clear(); }
   bool empty_payload() { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
   void set_payload(bufferlist& bl) { payload.claim(bl); }
   void copy_payload(const bufferlist& bl) { payload = bl; }
+
+  void set_middle(bufferlist& bl) { middle.claim(bl); }
+  bufferlist& get_middle() { return middle; }
 
   void set_data(const bufferlist &d) { data = d; }
   void copy_data(const bufferlist &d) { data = d; }
@@ -201,6 +205,7 @@ public:
   }
   void calc_front_crc() {
     footer.front_crc = payload.crc32c(0);
+    footer.middle_crc = middle.crc32c(0);
   }
   void calc_data_crc() {
     footer.data_crc = data.crc32c(0);
@@ -242,7 +247,7 @@ public:
 };
 
 extern Message *decode_message(ceph_msg_header &header, ceph_msg_footer& footer,
-			       bufferlist& front, bufferlist& data);
+			       bufferlist& front, bufferlist& middle, bufferlist& data);
 inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   return out;
