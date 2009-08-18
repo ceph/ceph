@@ -20,7 +20,11 @@
 
 #include "config.h"
 
-struct CephXResponse {
+/*
+   the first X request is empty, we then send a response and get another request which
+   is not empty and contains the client challenge and the key
+*/
+struct CephXResponse1 {
   uint64_t server_challenge;
 
   void encode(bufferlist& bl) const {
@@ -30,10 +34,27 @@ struct CephXResponse {
     ::decode(server_challenge, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXResponse);
+WRITE_CLASS_ENCODER(CephXResponse1);
+
+struct CephXRequest2 {
+  uint64_t client_challenge;
+  uint64_t key;
+
+  void encode(bufferlist& bl) const {
+    ::encode(client_challenge, bl);
+    ::encode(key, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(client_challenge, bl);
+    ::decode(key, bl);
+  }
+};
+
+WRITE_CLASS_ENCODER(CephXRequest2);
 
 class CephAuth_X  : public AuthHandler {
   int state;
+  uint64_t server_challenge;
 public:
   CephAuth_X() : state(0) {}
   int handle_request(bufferlist& bl, bufferlist& result_bl);
@@ -45,13 +66,23 @@ int CephAuth_X::handle_request(bufferlist& bl, bufferlist& result_bl)
   switch(state) {
   case 0:
     {
-      CephXResponse response;
-      response.server_challenge = 0x1234ffff;
+      CephXResponse1 response;
+      server_challenge = 0x1234ffff;
+      response.server_challenge = server_challenge;
       ::encode(response, result_bl);
       ret = -EAGAIN;
     }
     break;
   case 1:
+    {
+      CephXRequest2 req;
+      bufferlist::iterator iter = bl.begin();
+      req.decode(iter);
+      if (req.key != (server_challenge ^ req.client_challenge))
+        ret = -EPERM;
+      else
+	ret = 0;
+    }
     break;
   default:
     return -EINVAL;

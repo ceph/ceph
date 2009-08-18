@@ -927,8 +927,6 @@ static int auth_user(struct ceph_client *client)
 		if (timeout && time_after_eq(jiffies, started + timeout))
 			goto out;
 		pr_info("mount sending auth request\n");
-		get_random_bytes(&r, 1);
-		which = r % client->mount_args.num_mon;
 		err = client->aops->create_request(client, &client->auth_data,
 							&blob, &len);
 		if (err < 0)
@@ -938,6 +936,8 @@ static int auth_user(struct ceph_client *client)
 		if (err < 0)
 			goto out;
 
+		get_random_bytes(&r, 1);
+		which = r % client->mount_args.num_mon;
 		auth_msg->hdr.dst.name.type =
 			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		auth_msg->hdr.dst.name.num = cpu_to_le32(which);
