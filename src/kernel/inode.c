@@ -7,6 +7,7 @@
 #include <linux/kernel.h>
 #include <linux/namei.h>
 #include <linux/writeback.h>
+#include <linux/vmalloc.h>
 
 #include "ceph_debug.h"
 #include "super.h"
@@ -273,17 +274,15 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_fragtree = RB_ROOT;
 	mutex_init(&ci->i_fragtree_mutex);
 
-	ci->i_xattrs.xattrs = RB_ROOT;
-	ci->i_xattrs.len = 0;
-	ci->i_xattrs.version = 0;
-	ci->i_xattrs.index_version = 0;
-	ci->i_xattrs.data = NULL;
+	ci->i_xattrs.blob = NULL;
+	ci->i_xattrs.prealloc_blob = NULL;
+	ci->i_xattrs.dirty = false;
+	ci->i_xattrs.index = RB_ROOT;
 	ci->i_xattrs.count = 0;
 	ci->i_xattrs.names_size = 0;
 	ci->i_xattrs.vals_size = 0;
-	ci->i_xattrs.prealloc_blob = NULL;
-	ci->i_xattrs.prealloc_size = 0;
-	ci->i_xattrs.dirty = 0;
+	ci->i_xattrs.version = 0;
+	ci->i_xattrs.index_version = 0;
 
 	ci->i_caps = RB_ROOT;
 	ci->i_auth_cap = NULL;
@@ -358,8 +357,11 @@ void ceph_destroy_inode(struct inode *inode)
 		rb_erase(n, &ci->i_fragtree);
 		kfree(frag);
 	}
-	kfree(ci->i_xattrs.data);
+
 	__destroy_xattrs(ci);
+	ceph_buffer_put(ci->i_xattrs.blob);
+	ceph_buffer_put(ci->i_xattrs.prealloc_blob);
+
 	kmem_cache_free(ceph_inode_cachep, ci);
 }
 
@@ -486,7 +488,7 @@ static int fill_inode(struct inode *inode,
 	int issued, implemented;
 	struct timespec mtime, atime, ctime;
 	u32 nsplits;
-	void *xattr_data = NULL;
+	struct ceph_buffer *xattr_blob = NULL;
 	int err = 0;
 	int queue_trunc = 0;
 
@@ -499,11 +501,11 @@ static int fill_inode(struct inode *inode,
 	 * if len > 4 (meaning there are actually xattrs; the first 4
 	 * bytes are the xattr count).
 	 */
-	if (iinfo->xattr_len > 4 && iinfo->xattr_len != ci->i_xattrs.len) {
-		xattr_data = kmalloc(iinfo->xattr_len, GFP_NOFS);
-		if (!xattr_data)
+	if (iinfo->xattr_len > 4) {
+		xattr_blob = ceph_buffer_new_alloc(iinfo->xattr_len, GFP_NOFS);
+		if (!xattr_blob)
 			pr_err("ceph fill_inode ENOMEM xattr blob %d bytes\n",
-			       ci->i_xattrs.len);
+			       iinfo->xattr_len);
 	}
 
 	spin_lock(&inode->i_lock);
@@ -555,18 +557,15 @@ static int fill_inode(struct inode *inode,
 
 	/* xattrs */
 	/* note that if i_xattrs.len <= 4, i_xattrs.data will still be NULL. */
-	if (iinfo->xattr_len && (issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+	if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
 	    le64_to_cpu(info->xattr_version) > ci->i_xattrs.version) {
-		if (ci->i_xattrs.len != iinfo->xattr_len) {
-			kfree(ci->i_xattrs.data);
-			ci->i_xattrs.len = iinfo->xattr_len;
-			ci->i_xattrs.version = le64_to_cpu(info->xattr_version);
-			ci->i_xattrs.data = xattr_data;
-			xattr_data = NULL;
-		}
-		if (ci->i_xattrs.len > 4)
-			memcpy(ci->i_xattrs.data, iinfo->xattr_data,
-			       ci->i_xattrs.len);
+		if (ci->i_xattrs.blob)
+			ceph_buffer_put(ci->i_xattrs.blob);
+		ci->i_xattrs.blob = xattr_blob;
+		if (xattr_blob)
+			memcpy(ci->i_xattrs.blob->vec.iov_base,
+			       iinfo->xattr_data, iinfo->xattr_len);
+		ci->i_xattrs.version = le64_to_cpu(info->xattr_version);
 	}
 
 	inode->i_mapping->a_ops = &ceph_aops;
@@ -686,7 +685,7 @@ no_change:
 	err = 0;
 
 out:
-	kfree(xattr_data);
+	ceph_buffer_put(xattr_blob);
 	return err;
 }
 
@@ -1699,7 +1698,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 	int c;
 	int new = 0;
 
-	p = &ci->i_xattrs.xattrs.rb_node;
+	p = &ci->i_xattrs.index.rb_node;
 	while (*p) {
 		parent = *p;
 		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
@@ -1760,7 +1759,7 @@ static int __set_xattr(struct ceph_inode_info *ci,
 
 	if (new) {
 		rb_link_node(&xattr->node, parent, p);
-		rb_insert_color(&xattr->node, &ci->i_xattrs.xattrs);
+		rb_insert_color(&xattr->node, &ci->i_xattrs.index);
 		dout("__set_xattr_val p=%p\n", p);
 	}
 
@@ -1778,7 +1777,7 @@ static struct ceph_inode_xattr *__get_xattr(struct ceph_inode_info *ci,
 	struct ceph_inode_xattr *xattr = NULL;
 	int c;
 
-	p = &ci->i_xattrs.xattrs.rb_node;
+	p = &ci->i_xattrs.index.rb_node;
 	while (*p) {
 		parent = *p;
 		xattr = rb_entry(parent, struct ceph_inode_xattr, node);
@@ -1817,7 +1816,7 @@ static int __remove_xattr(struct ceph_inode_info *ci,
 	if (!xattr)
 		return -EOPNOTSUPP;
 
-	rb_erase(&xattr->node, &ci->i_xattrs.xattrs);
+	rb_erase(&xattr->node, &ci->i_xattrs.index);
 
 	if (xattr->should_free_name)
 		kfree((void *)xattr->name);
@@ -1839,7 +1838,7 @@ static int __remove_xattr_by_name(struct ceph_inode_info *ci,
 	struct ceph_inode_xattr *xattr;
 	int err;
 
-	p = &ci->i_xattrs.xattrs.rb_node;
+	p = &ci->i_xattrs.index.rb_node;
 	xattr = __get_xattr(ci, name);
 	err = __remove_xattr(ci, xattr);
 	return err;
@@ -1851,7 +1850,7 @@ static char *__copy_xattr_names(struct ceph_inode_info *ci,
 	struct rb_node *p;
 	struct ceph_inode_xattr *xattr = NULL;
 
-	p = rb_first(&ci->i_xattrs.xattrs);
+	p = rb_first(&ci->i_xattrs.index);
 	dout("__copy_xattr_names count=%d\n", ci->i_xattrs.count);
 
 	while (p) {
@@ -1874,7 +1873,7 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 	struct rb_node *p, *tmp;
 	struct ceph_inode_xattr *xattr = NULL;
 
-	p = rb_first(&ci->i_xattrs.xattrs);
+	p = rb_first(&ci->i_xattrs.index);
 
 	dout("__destroy_xattrs p=%p\n", p);
 
@@ -1884,7 +1883,7 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 		p = rb_next(tmp);
 		dout("__destroy_xattrs next p=%p (%.*s)\n", p,
 		     xattr->name_len, xattr->name);
-		rb_erase(tmp, &ci->i_xattrs.xattrs);
+		rb_erase(tmp, &ci->i_xattrs.index);
 
 		__free_xattr(xattr);
 	}
@@ -1893,7 +1892,7 @@ static void __destroy_xattrs(struct ceph_inode_info *ci)
 	ci->i_xattrs.vals_size = 0;
 	ci->i_xattrs.index_version = 0;
 	ci->i_xattrs.count = 0;
-	ci->i_xattrs.xattrs = RB_ROOT;
+	ci->i_xattrs.index = RB_ROOT;
 }
 
 static int __build_xattrs(struct inode *inode)
@@ -1909,7 +1908,8 @@ static int __build_xattrs(struct inode *inode)
 	int err;
 	int i;
 
-	dout("__build_xattrs(): ci->i_xattrs.len=%d\n", ci->i_xattrs.len);
+	dout("__build_xattrs() len=%d\n",
+	     ci->i_xattrs.blob ? (int)ci->i_xattrs.blob->vec.iov_len : 0);
 
 	if (ci->i_xattrs.index_version >= ci->i_xattrs.version)
 		return 0; /* already built */
@@ -1918,9 +1918,9 @@ static int __build_xattrs(struct inode *inode)
 
 start:
 	/* updated internal xattr rb tree */
-	if (ci->i_xattrs.len > 4) {
-		p = ci->i_xattrs.data;
-		end = p + ci->i_xattrs.len;
+	if (ci->i_xattrs.blob && ci->i_xattrs.blob->vec.iov_len > 4) {
+		p = ci->i_xattrs.blob->vec.iov_base;
+		end = p + ci->i_xattrs.blob->vec.iov_len;
 		ceph_decode_32_safe(&p, end, numattr, bad);
 		xattr_version = ci->i_xattrs.version;
 		spin_unlock(&inode->i_lock);
@@ -1965,7 +1965,7 @@ start:
 		kfree(xattrs);
 	}
 	ci->i_xattrs.index_version = ci->i_xattrs.version;
-	ci->i_xattrs.dirty = 0;
+	ci->i_xattrs.dirty = false;
 
 	return err;
 bad_lock:
@@ -2000,24 +2000,26 @@ static int __get_required_blob_size(struct ceph_inode_info *ci, int name_size,
 	return size;
 }
 
-void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
-			      void **xattrs_blob,
-			      int *blob_size)
+/*
+ * If there are dirty xattrs, reencode xattrs into the prealloc_blob
+ * and swap into place.
+ */
+void __ceph_build_xattrs_blob(struct ceph_inode_info *ci)
 {
 	struct rb_node *p;
 	struct ceph_inode_xattr *xattr = NULL;
 	void *dest;
 
+	dout("__build_xattrs_blob %p\n", &ci->vfs_inode);
 	if (ci->i_xattrs.dirty) {
-		int required_blob_size = __get_required_blob_size(ci, 0, 0);
+		int need = __get_required_blob_size(ci, 0, 0);
 
-		BUG_ON(required_blob_size > ci->i_xattrs.prealloc_size);
+		BUG_ON(need > ci->i_xattrs.prealloc_blob->alloc_len);
 
-		p = rb_first(&ci->i_xattrs.xattrs);
+		p = rb_first(&ci->i_xattrs.index);
+		dest = ci->i_xattrs.prealloc_blob->vec.iov_base;
 
-		dest = ci->i_xattrs.prealloc_blob;
 		ceph_encode_32(&dest, ci->i_xattrs.count);
-
 		while (p) {
 			xattr = rb_entry(p, struct ceph_inode_xattr, node);
 
@@ -2031,13 +2033,14 @@ void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
 			p = rb_next(p);
 		}
 
-		*xattrs_blob =  ci->i_xattrs.prealloc_blob;
-		*blob_size = ci->i_xattrs.prealloc_size;
-	} else {
-		/* actually, we're using the same data that we got from the
-		   mds, don't build anything */
-		*xattrs_blob = NULL;
-		*blob_size = 0;
+		/* adjust buffer len; it may be larger than we need */
+		ci->i_xattrs.prealloc_blob->vec.iov_len =
+			dest - ci->i_xattrs.prealloc_blob->vec.iov_base;
+
+		ceph_buffer_put(ci->i_xattrs.blob);
+		ci->i_xattrs.blob = ci->i_xattrs.prealloc_blob;
+		ci->i_xattrs.prealloc_blob = NULL;
+		ci->i_xattrs.dirty = false;
 	}
 }
 
@@ -2237,7 +2240,6 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	struct ceph_inode_xattr *xattr = NULL;
 	int issued;
 	int required_blob_size;
-	void *prealloc_blob = NULL;
 
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
@@ -2249,6 +2251,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (_ceph_match_vir_xattr(name) != NULL)
 		return -EOPNOTSUPP;
 
+	/* preallocate memory for xattr name, value, index node */
 	err = -ENOMEM;
 	newname = kmalloc(name_len + 1, GFP_NOFS);
 	if (!newname)
@@ -2269,33 +2272,25 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 
 	spin_lock(&inode->i_lock);
 retry:
-	__build_xattrs(inode);
 	issued = __ceph_caps_issued(ci, NULL);
 	if (!(issued & CEPH_CAP_XATTR_EXCL))
 		goto do_sync;
+	__build_xattrs(inode);
 
 	required_blob_size = __get_required_blob_size(ci, name_len, val_len);
 
-	if (required_blob_size > ci->i_xattrs.prealloc_size) {
-		int prealloc_len = required_blob_size;
+	if (!ci->i_xattrs.prealloc_blob ||
+	    required_blob_size > ci->i_xattrs.prealloc_blob->alloc_len) {
+		struct ceph_buffer *blob = NULL;
 
 		spin_unlock(&inode->i_lock);
-		dout(" required_blob_size=%d\n", required_blob_size);
-		prealloc_blob = kmalloc(prealloc_len, GFP_NOFS);
-		if (!prealloc_blob)
+		dout(" preaallocating new blob size=%d\n", required_blob_size);
+		blob = ceph_buffer_new_alloc(required_blob_size, GFP_NOFS);
+		if (!blob)
 			goto out;
 		spin_lock(&inode->i_lock);
-
-		required_blob_size = __get_required_blob_size(ci, name_len,
-							      val_len);
-		if (prealloc_len < required_blob_size) {
-			/* lost a race and preallocated buffer is too small */
-			kfree(prealloc_blob);
-		} else {
-			kfree(ci->i_xattrs.prealloc_blob);
-			ci->i_xattrs.prealloc_blob = prealloc_blob;
-			ci->i_xattrs.prealloc_size = prealloc_len;
-		}
+		ceph_buffer_put(ci->i_xattrs.prealloc_blob);
+		ci->i_xattrs.prealloc_blob = blob;
 		goto retry;
 	}
 
@@ -2303,7 +2298,7 @@ retry:
 	err = __set_xattr(ci, newname, name_len, newval,
 			  val_len, 1, 1, 1, &xattr);
 	__ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
-	ci->i_xattrs.dirty = 1;
+	ci->i_xattrs.dirty = true;
 	inode->i_ctime = CURRENT_TIME;
 	spin_unlock(&inode->i_lock);
 
@@ -2369,7 +2364,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 
 	err = __remove_xattr_by_name(ceph_inode(inode), name);
 	__ceph_mark_dirty_caps(ci, CEPH_CAP_XATTR_EXCL);
-	ci->i_xattrs.dirty = 1;
+	ci->i_xattrs.dirty = true;
 	inode->i_ctime = CURRENT_TIME;
 
 	spin_unlock(&inode->i_lock);

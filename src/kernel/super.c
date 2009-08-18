@@ -1048,10 +1048,10 @@ static int ceph_alloc_middle(void *p, struct ceph_msg *msg)
 	dout("alloc_middle %p type %d %s middle_len %d\n", msg, type,
 	     ceph_msg_type_name(type), middle_len);
 	BUG_ON(!middle_len);
-	BUG_ON(msg->middle.iov_base);
+	BUG_ON(msg->middle);
 
-	msg->middle.iov_base = __vmalloc(middle_len, GFP_NOFS, PAGE_KERNEL);
-	if (!msg->middle.iov_base)
+	msg->middle = ceph_buffer_new_alloc(middle_len, GFP_NOFS);
+	if (!msg->middle)
 		return -ENOMEM;
 	return 0;
 }

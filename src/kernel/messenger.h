@@ -9,6 +9,7 @@
 #include <linux/workqueue.h>
 
 #include "types.h"
+#include "buffer.h"
 
 struct ceph_msg;
 
@@ -97,7 +98,8 @@ struct ceph_messenger {
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
 	struct ceph_msg_footer footer;	/* footer */
-	struct kvec front, middle;      /* unaligned blobs of message */
+	struct kvec front;              /* unaligned blobs of message */
+	struct ceph_buffer *middle;
 	struct mutex page_mutex;
 	struct page **pages;            /* data payload.  NOT OWNER. */
 	unsigned nr_pages;              /* size of page array */

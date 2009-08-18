@@ -64,6 +64,17 @@ monitor clients, and the messaging layer.
 
 EOF
 
+git add $target/ceph/buffer.h
+git commit -s -F - <<EOF
+ceph: ref counted buffer
+
+struct ceph_buffer is a simple ref-counted buffer.  We transparently
+choose between kmalloc for small buffers and vmalloc for large ones.
+
+This is used for allocating memory for xattr data, among other things.
+
+EOF
+
 git add $target/ceph/super.c
 git commit -s -F - <<EOF
 ceph: super.c

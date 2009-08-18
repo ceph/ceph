@@ -269,27 +269,21 @@ struct ceph_inode_xattr {
 };
 
 struct ceph_inode_xattrs_info {
-	struct rb_root xattrs;
-
 	/*
 	 * (still encoded) xattr blob. we avoid the overhead of parsing
 	 * this until someone actually calls getxattr, etc.
 	 *
-	 * if i_xattrs.len == 0 or 4, i_xattrs.data == NULL.
-	 * i_xattrs.len == 4 implies there are no xattrs; 0 means we
-	 * don't know.
+	 * blob->vec.iov_len == 4 implies there are no xattrs; blob ==
+	 * NULL means we don't know.
 	*/
-	int len;
-	char *data;
+	struct ceph_buffer *blob, *prealloc_blob;
+
+	struct rb_root index;
+	bool dirty;
 	int count;
 	int names_size;
 	int vals_size;
-	u64 version;
-	u64 index_version;
-	int dirty;
-
-	void *prealloc_blob;
-	int prealloc_size;
+	u64 version, index_version;
 };
 
 /*
@@ -851,9 +845,7 @@ extern int ceph_setxattr(struct dentry *, const char *, const void *,
 extern ssize_t ceph_getxattr(struct dentry *, const char *, void *, size_t);
 extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
 extern int ceph_removexattr(struct dentry *, const char *);
-extern void __ceph_build_xattrs_blob(struct ceph_inode_info *ci,
-				      void **xattrs_blob,
-				      int *blob_size);
+extern void __ceph_build_xattrs_blob(struct ceph_inode_info *ci);
 
 /* caps.c */
 extern const char *ceph_cap_string(int c);

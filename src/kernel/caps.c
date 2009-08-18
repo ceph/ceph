@@ -1,6 +1,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/vmalloc.h>
 #include <linux/wait.h>
 
 #include "ceph_debug.h"
@@ -846,7 +847,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 			 u64 time_warp_seq,
 			 uid_t uid, gid_t gid, mode_t mode,
 			 u64 xattr_version,
-			 void *xattrs_blob, int xattrs_blob_size,
+			 struct ceph_buffer *xattrs_buf,
 			 u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
@@ -858,10 +859,9 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	     cid, ino, ceph_cap_string(caps), ceph_cap_string(wanted),
 	     ceph_cap_string(dirty),
 	     seq, issue_seq, mseq, follows, size, max_size,
-	     xattr_version, xattrs_blob_size);
+	     xattr_version, xattrs_buf ? (int)xattrs_buf->vec.iov_len : 0);
 
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc) + xattrs_blob_size,
-			   0, 0, NULL);
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 
@@ -894,12 +894,10 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 	fc->mode = cpu_to_le32(mode);
 
 	fc->xattr_version = cpu_to_le64(xattr_version);
-	if (xattrs_blob) {
-		char *dst = (char *)fc;
-		dst += sizeof(*fc);
-
-		fc->xattr_len = cpu_to_le32(xattrs_blob_size);
-		memcpy(dst,  xattrs_blob, xattrs_blob_size);
+	if (xattrs_buf) {
+		msg->middle = ceph_buffer_get(xattrs_buf);
+		fc->xattr_len = cpu_to_le32(xattrs_buf->vec.iov_len);
+		msg->hdr.middle_len = cpu_to_le32(xattrs_buf->vec.iov_len);
 	}
 
 	ceph_send_msg_mds(mdsc, msg, mds);
@@ -997,8 +995,6 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	uid_t uid;
 	gid_t gid;
 	int mds = cap->session->s_mds;
-	void *xattrs_blob = NULL;
-	int xattrs_blob_size = 0;
 	u64 xattr_version = 0;
 	int delayed = 0;
 	u64 flush_tid = 0;
@@ -1071,9 +1067,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	mode = inode->i_mode;
 
 	if (dropping & CEPH_CAP_XATTR_EXCL) {
-		__ceph_build_xattrs_blob(ci, &xattrs_blob, &xattrs_blob_size);
-		ci->i_xattrs.prealloc_blob = NULL;
-		ci->i_xattrs.prealloc_size = 0;
+		__ceph_build_xattrs_blob(ci);
 		xattr_version = ci->i_xattrs.version + 1;
 	}
 
@@ -1090,10 +1084,8 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		     size, max_size, &mtime, &atime, time_warp_seq,
 		     uid, gid, mode,
 		     xattr_version,
-		     xattrs_blob, xattrs_blob_size,
+		     (flushing & CEPH_CAP_XATTR_EXCL) ? ci->i_xattrs.blob : NULL,
 		     follows, mds);
-
-	kfree(xattrs_blob);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -1184,7 +1176,7 @@ retry:
 			     &capsnap->mtime, &capsnap->atime,
 			     capsnap->time_warp_seq,
 			     capsnap->uid, capsnap->gid, capsnap->mode,
-			     0, NULL, 0,
+			     0, NULL,
 			     capsnap->follows, mds);
 
 		next_follows = capsnap->follows + 1;
@@ -2058,7 +2050,7 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
 static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			    struct ceph_mds_session *session,
 			    struct ceph_cap *cap,
-			    void **xattr_data)
+			    struct ceph_buffer *xattr_buf)
 	__releases(inode->i_lock)
 
 {
@@ -2148,15 +2140,13 @@ start:
 		int len = le32_to_cpu(grant->xattr_len);
 		u64 version = le64_to_cpu(grant->xattr_version);
 
-		if (!(len > 4 && *xattr_data == NULL) &&  /* ENOMEM in caller */
-		    version > ci->i_xattrs.version) {
+		if (version > ci->i_xattrs.version) {
 			dout(" got new xattrs v%llu on %p len %d\n",
 			     version, inode, len);
-			kfree(ci->i_xattrs.data);
-			ci->i_xattrs.len = len;
+			if (ci->i_xattrs.blob)
+				ceph_buffer_put(ci->i_xattrs.blob);
+			ci->i_xattrs.blob = ceph_buffer_get(xattr_buf);
 			ci->i_xattrs.version = version;
-			ci->i_xattrs.data = *xattr_data;
-			*xattr_data = NULL;
 		}
 	}
 
@@ -2528,7 +2518,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	u64 cap_id;
 	u64 size, max_size;
 	int check_caps = 0;
-	void *xattr_data = NULL;
 	int r;
 
 	dout("handle_caps from mds%d\n", mds);
@@ -2579,15 +2568,11 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	case CEPH_CAP_OP_IMPORT:
 		handle_cap_import(mdsc, inode, h, session,
-				  msg->front.iov_base + sizeof(*h),
+				  msg->middle,
 				  le32_to_cpu(h->snap_trace_len));
 		check_caps = 1; /* we may have sent a RELEASE to the old auth */
 		goto done;
 	}
-
-	/* preallocate space for xattrs? */
-	if (le32_to_cpu(h->xattr_len) > 4)
-		xattr_data = kmalloc(le32_to_cpu(h->xattr_len), GFP_NOFS);
 
 	/* the rest require a cap */
 	spin_lock(&inode->i_lock);
@@ -2603,7 +2588,7 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	switch (op) {
 	case CEPH_CAP_OP_REVOKE:
 	case CEPH_CAP_OP_GRANT:
-		r = handle_cap_grant(inode, h, session, cap, &xattr_data);
+		r = handle_cap_grant(inode, h, session, cap, msg->middle);
 		if (r == 1) {
 			dout(" sending reply back to mds%d\n", mds);
 			ceph_msg_get(msg);
@@ -2633,7 +2618,6 @@ done:
 	mutex_unlock(&session->s_mutex);
 	ceph_put_mds_session(session);
 
-	kfree(xattr_data);
 	if (check_caps)
 		ceph_check_caps(ceph_inode(inode), CHECK_CAPS_NODELAY, NULL);
 	if (inode)

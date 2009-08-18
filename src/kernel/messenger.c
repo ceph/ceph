@@ -658,11 +658,11 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_kvec[v].iov_base = &m->hdr;
 	con->out_kvec[v++].iov_len = sizeof(m->hdr);
 	con->out_kvec[v++] = m->front;
-	if (m->middle.iov_len)
-		con->out_kvec[v++] = m->middle;
+	if (m->middle)
+		con->out_kvec[v++] = m->middle->vec;
 	con->out_kvec_left = v;
 	con->out_kvec_bytes += 1 + sizeof(m->hdr) + m->front.iov_len +
-		m->middle.iov_len;
+		(m->middle ? m->middle->vec.iov_len : 0);
 	con->out_kvec_cur = con->out_kvec;
 
 	/* fill in crc (except data pages), footer */
@@ -672,10 +672,10 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_msg->footer.flags = 0;
 	con->out_msg->footer.front_crc =
 		cpu_to_le32(crc32c(0, m->front.iov_base, m->front.iov_len));
-	if (m->middle.iov_base)
+	if (m->middle)
 		con->out_msg->footer.middle_crc =
-			cpu_to_le32(crc32c(0, m->middle.iov_base,
-					   m->middle.iov_len));
+			cpu_to_le32(crc32c(0, m->middle->vec.iov_base,
+					   m->middle->vec.iov_len));
 	else
 		con->out_msg->footer.middle_crc = 0;
 	con->out_msg->footer.data_crc = 0;
@@ -1461,7 +1461,6 @@ static int read_partial_message(struct ceph_connection *con)
 		}
 		m = con->in_msg;
 		m->front.iov_len = 0;    /* haven't read it yet */
-		m->middle.iov_len = 0;    /* haven't read it yet */
 		memcpy(&m->hdr, &con->in_hdr, sizeof(con->in_hdr));
 	}
 
@@ -1480,8 +1479,9 @@ static int read_partial_message(struct ceph_connection *con)
 	}
 
 	/* middle */
-	while (m->middle.iov_len < middle_len) {
-		if (m->middle.iov_base == NULL) {
+	while (middle_len > 0 && (!m->middle ||
+				  m->middle->vec.iov_len < middle_len)) {
+		if (m->middle == NULL) {
 			BUG_ON(!con->msgr->alloc_middle);
 			ret = con->msgr->alloc_middle(con->msgr->parent, m);
 			if (ret < 0) {
@@ -1493,16 +1493,18 @@ static int read_partial_message(struct ceph_connection *con)
 				con->in_tag = CEPH_MSGR_TAG_READY;
 				return 0;
 			}
+			m->middle->vec.iov_len = 0;
 		}
-		left = middle_len - m->middle.iov_len;
-		ret = ceph_tcp_recvmsg(con->sock, (char *)m->middle.iov_base +
-				       m->middle.iov_len, left);
+		left = middle_len - m->middle->vec.iov_len;
+		ret = ceph_tcp_recvmsg(con->sock,
+				       (char *)m->middle->vec.iov_base +
+				       m->middle->vec.iov_len, left);
 		if (ret <= 0)
 			return ret;
-		m->middle.iov_len += ret;
-		if (m->middle.iov_len == middle_len)
-			con->in_middle_crc = crc32c(0, m->middle.iov_base,
-						      m->middle.iov_len);
+		m->middle->vec.iov_len += ret;
+		if (m->middle->vec.iov_len == middle_len)
+			con->in_middle_crc = crc32c(0, m->middle->vec.iov_base,
+						      m->middle->vec.iov_len);
 	}
 
 	/* (page) data */
@@ -2360,8 +2362,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->front.iov_len = front_len;
 
 	/* middle */
-	m->middle.iov_base = NULL;
-	m->middle.iov_len = 0;
+	m->middle = NULL;
 
 	/* data */
 	m->nr_pages = calc_pages_for(page_off, page_len);
@@ -2388,11 +2389,7 @@ void ceph_msg_kfree(struct ceph_msg *m)
 		vfree(m->front.iov_base);
 	else
 		kfree(m->front.iov_base);
-	if (m->middle.iov_base) {
-		dout("vfree %p\n", m->middle.iov_base);
-		vfree(m->middle.iov_base);
-		dout("vfree done\n");
-	}
+	ceph_buffer_put(m->middle);
 	kfree(m);
 	dout("msg_kfree %p done\n", m);
 }
