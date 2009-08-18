@@ -110,29 +110,35 @@ public class CephFileSystem extends FileSystem {
    * Starts up the connection to Ceph, reads in configuraton options, etc.
    * @param uri The URI for this filesystem.
    * @param conf The Hadoop Configuration to retrieve properties from.
-   * @throws IOException if the Ceph client initialization fails.
+   * @throws IOException if the Ceph client initialization fails
+   * or necessary properties are unset.
    */
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
     debug("initialize:enter");
-    System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
-    System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
-    super.initialize(uri, conf);
-    //store.initialize(uri, conf);
-    setConf(conf);
-    this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
-
-    fs_default_name = conf.get("fs.default.name");
-    monAddr = conf.get("fs.ceph.monAddr");
-    cephDebugLevel = conf.get("fs.ceph.debugLevel");
-    debug = ("true".equals(conf.get("fs.ceph.debug")));
-    //  Initializes the client
-    if (!ceph_initializeClient(cephDebugLevel, monAddr)) {
-      throw new IOException("Ceph initialization failed!");
+    if (!initialized) {
+      System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
+      System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
+      super.initialize(uri, conf);
+      //store.initialize(uri, conf);
+      setConf(conf);
+      this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
+      
+      conf.setIfUnset("fs.ceph.debugLevel", "0");
+      conf.setIfUnset("fs.ceph.debug", "false");
+      fs_default_name = conf.get("fs.default.name");
+      monAddr = conf.get("fs.ceph.monAddr");
+      if (monAddr == NULL) throw new IOException("You must specify a Ceph monito address!");
+      cephDebugLevel = conf.get("fs.ceph.debugLevel");
+      debug = ("true".equals(conf.get("fs.ceph.debug")));
+      //  Initializes the client
+      if (!ceph_initializeClient(cephDebugLevel, monAddr)) {
+	throw new IOException("Ceph initialization failed!");
+      }
+      initialized = true;
+      debug("Initialized client. Setting cwd to /");
+      ceph_setcwd("/");
     }
-    initialized = true;
-    debug("Initialized client. Setting cwd to /");
-    ceph_setcwd("/");
     debug("initialize:exit");
   }
 
