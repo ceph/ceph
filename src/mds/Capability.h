@@ -132,8 +132,8 @@ private:
 public:
   int pending() { return _pending; }
   int issued() {
-    if (1) {
-#warning capability debug sanity check, remove me someday
+    if (0) {
+      //#warning capability debug sanity check, remove me someday
       unsigned o = _issued;
       _calc_issued();
       assert(o == _issued);
