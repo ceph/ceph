@@ -24,8 +24,6 @@ class CephInputStream extends FSInputStream {
 
   private int bufferSize;
 
-  //private Block[] blocks;
-
   private boolean closed;
 
   private int fileHandle;
@@ -59,6 +57,8 @@ class CephInputStream extends FSInputStream {
     // call and providing the file handle.
     fileLength = flength;
     fileHandle = fh;
+    closed = false;
+    debug = ("true".equals(conf.get("fs.ceph.debug")));
     debug("CephInputStream constructor: initializing stream with fh "
 	  + fh + " and file length " + flength);
       

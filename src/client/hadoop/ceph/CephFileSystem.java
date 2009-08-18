@@ -49,15 +49,12 @@ public class CephFileSystem extends FileSystem {
   private static final long DEFAULT_BLOCK_SIZE = 4 * 1024 * 1024;
   private static final int EEXIST = 17;
 
-  
   private URI uri;
 
-  private FileSystem localFs;
   private Path root;
-  private Path parent;
   private boolean initialized = false;
 
-  private static boolean debug;
+  private static boolean debug = false;
   private static String cephDebugLevel;
   private static String monAddr;
   private static String fs_default_name;
@@ -93,7 +90,6 @@ public class CephFileSystem extends FileSystem {
   public CephFileSystem() {
     debug("CephFileSystem:enter");
     root = new Path("/");
-    parent = new Path("..");
     debug("CephFileSystem:exit");
   }
 
@@ -125,9 +121,6 @@ public class CephFileSystem extends FileSystem {
     //store.initialize(uri, conf);
     setConf(conf);
     this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
-
-    // TODO: local filesystem? we really need to figure out this conf thingy
-    this.localFs = get(URI.create("file:///"), conf);
 
     fs_default_name = conf.get("fs.default.name");
     monAddr = conf.get("fs.ceph.monAddr");

@@ -19,35 +19,12 @@ class CephOutputStream extends OutputStream {
 
   private int bufferSize;
 
-  private long fileLength;
-
-  //private FileSystemStore store;
-
-  private Path path;
-
-  private long blockSize;
-
-  private File backupFile;
-
-  private OutputStream backupStream;
-
-  private Random r = new Random();
-
   private boolean closed;
 
   private int fileHandle;
 
-  private int bytesWrittenToBlock = 0;
-
-  private byte[] outBuf;
-
   private static boolean debug = false;
 
-  //private List<Block> blocks = new ArrayList<Block>();
-
-  //private Block nextBlock;
-
-    
 
   private native long ceph_seek_from_start(int fh, long pos);
   private native long ceph_getpos(int fh);
@@ -64,8 +41,8 @@ class CephOutputStream extends OutputStream {
     System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
     System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
     fileHandle = fh;
-    //fileLength = flength;
     closed = false;
+    debug = ("true".equals(conf.get("fs.ceph.debug")));
   }
 
   //Ceph likes things to be closed before it shuts down,
@@ -191,8 +168,4 @@ class CephOutputStream extends OutputStream {
   private void debug(String out) {
     if (debug) System.out.println(out);
   }
-    
-
 }
-
-
