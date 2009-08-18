@@ -22,6 +22,8 @@ struct ceph_auth_ops {
 };
 
 
+extern struct ceph_auth_ops *ceph_auth_get_generic_ops(void);
+
 extern struct ceph_auth_ops *ceph_x_auth_get_ops(void);
 
 

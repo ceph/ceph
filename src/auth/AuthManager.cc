@@ -41,12 +41,14 @@ public:
 
 int CephAuth_X::handle_request(bufferlist& bl, bufferlist& result_bl)
 {
+  int ret = 0;
   switch(state) {
   case 0:
     {
       CephXResponse response;
       response.server_challenge = 0x1234ffff;
       ::encode(response, result_bl);
+      ret = -EAGAIN;
     }
     break;
   case 1:
@@ -55,7 +57,7 @@ int CephAuth_X::handle_request(bufferlist& bl, bufferlist& result_bl)
     return -EINVAL;
   }
   state++;
-  return 0;
+  return ret;
 }
 
 
@@ -112,6 +114,7 @@ AuthHandler *AuthHandler::get_instance() {
 int AuthHandler::handle_request(bufferlist& bl, bufferlist& result)
 {
   bufferlist::iterator iter = bl.begin();
+  CephAuth_X *auth = NULL;
   AuthInitReq req;
   try {
     req.decode(iter);
@@ -122,12 +125,14 @@ int AuthHandler::handle_request(bufferlist& bl, bufferlist& result)
   }
 
   if (req.supports(CEPH_AUTH_CEPH)) {
-    CephAuth_X *auth = new CephAuth_X();
+    auth = new CephAuth_X();
     if (!auth)
       return -ENOMEM;
     instance = auth;
-    return -EAGAIN;
   }
+
+  if (auth)
+    return auth->handle_request(bl, result);
 
   return -EINVAL;
 }

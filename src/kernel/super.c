@@ -352,16 +352,6 @@ static int handle_auth_reply(struct ceph_client *client, struct ceph_msg *msg)
 	ceph_decode_32_safe(&p, end, result, out);
 	pr_err("ceph auth result: (%d) msg=%p\n", result, msg);
 
-	if (!client->aops) {
-		/* FIXME: reset aops according to to the first response */
-		client->aops = ceph_x_auth_get_ops();
-
-		err = client->aops->init(&client->auth_data);
-		pr_err("ceph_auth err=%d\n", err);
-		if (err < 0)
-			goto out;
-	}
-
 	err = client->aops->handle_response(client, &client->auth_data, p, result, (end - p));
 
 	/* FIXME */
@@ -736,6 +726,7 @@ static struct ceph_client *ceph_create_client(void)
 
 	client->auth_err = 0;
 	client->session.session_id = 0;
+	client->aops = ceph_auth_get_generic_ops();
 
 	err = -ENOMEM;
 	client->wb_wq = create_workqueue("ceph-writeback");
@@ -890,9 +881,6 @@ static struct dentry *open_root_dentry(struct ceph_client *client,
 	return root;
 }
 
-static int ceph_supported_auth[] = { CEPH_AUTH_NONE,
-				     CEPH_AUTH_CEPH };
-
 static int build_auth_req(struct ceph_client *client,
 			  const char *blob,
 			  int blob_len,
@@ -919,32 +907,6 @@ static int build_auth_req(struct ceph_client *client,
 	return 0;
 }
 
-static int build_sess_init_req(struct ceph_client *client,
-			       struct ceph_msg **msg)
-{
-	struct ceph_mon_auth_init_req *req;
-	int ret, i;
-	int max_auth_types = sizeof(ceph_supported_auth) / sizeof(ceph_supported_auth[0]);
-	int len = sizeof (struct ceph_mon_auth_init_req) +
-			max_auth_types * sizeof(struct ceph_auth_type);
-
-	req = (struct ceph_mon_auth_init_req *)kmalloc(len, GFP_KERNEL);
-	if (!req) {
-		return -ENOMEM;
-	}
-
-	req->num_auth = max_auth_types;
-
-	for (i = 0; i < max_auth_types; i++) {
-		req->auth_type[i].type = cpu_to_le32(ceph_supported_auth[i]);
-	}
-
-	ret = build_auth_req(client, (const char *)req, len, msg);
-	kfree(req);
-
-	return ret;
-}
-
 static int auth_user(struct ceph_client *client)
 {
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
@@ -958,25 +920,21 @@ static int auth_user(struct ceph_client *client)
 
 	i = 0;
 	do {
+		char *blob;
+		int len;
+
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))
 			goto out;
 		pr_info("mount sending auth request\n");
 		get_random_bytes(&r, 1);
 		which = r % client->mount_args.num_mon;
-		if (!i) {
-			err = build_sess_init_req(client, &auth_msg);
-		} else {
-			char *blob;
-			int len;
-			err = client->aops->create_request(client, &client->auth_data,
+		err = client->aops->create_request(client, &client->auth_data,
 							&blob, &len);
-			if (err < 0)
-				goto out;
+		if (err < 0)
+			goto out;
 
-			err = build_auth_req(client, blob, len, &auth_msg);
-		}
-
+		err = build_auth_req(client, blob, len, &auth_msg);
 		if (err < 0)
 			goto out;
 
@@ -997,7 +955,6 @@ static int auth_user(struct ceph_client *client)
 			err = client->auth_err;
 			goto out;
 		}
-
 		i++;
 	} while (client->auth_err == -EAGAIN);
 
