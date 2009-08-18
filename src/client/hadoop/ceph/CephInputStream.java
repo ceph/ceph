@@ -162,6 +162,7 @@ class CephInputStream extends FSInputStream {
 	    + fileHandle + ": succeeded in reading " + result + " bytes");   
       return result;
   }
+
   /**
    * Close the CephInputStream and release the associated filehandle.
    */
@@ -178,33 +179,6 @@ class CephInputStream extends FSInputStream {
     }
     closed = true;
     debug("CephOutputStream.close:exit");
-  }
-
-  /**
-   * Marks are not supported.
-   * @return false
-   */
-  @Override
-  public boolean markSupported() {
-    return false;
-  }
-
-  /**
-   * Since marking isn't supported, this function throws an IOException.
-   * @throws IOException whenever called.
-   */
-  @Override
-  public void mark(int readLimit) {
-    throw new IOException("Mark not supported");
-  }
-
-  /**
-   * Since marks aren't supported, this function throws an IOException.
-   * @throws IOException whenever called.
-   */
-  @Override
-  public void reset() throws IOException {
-    throw new IOException("Mark not supported");
   }
 
   private void debug(String out) {
