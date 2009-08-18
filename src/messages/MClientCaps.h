@@ -131,14 +131,18 @@ class MClientCaps : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.snap_trace_len, snapbl, p);
-    ::decode_nohead(head.xattr_len, xattrbl, p);
+
+    assert(middle.length() == head.xattr_len);
+    if (head.xattr_len)
+      xattrbl = middle;
   }
   void encode_payload() {
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
     ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
-    ::encode_nohead(xattrbl, payload);
+
+    middle = xattrbl;
   }
 };
 
