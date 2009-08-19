@@ -12,18 +12,13 @@
  */
 
 #include "AuthTypes.h"
+#include "CryptoTools.h"
 #include "openssl/evp.h"
 #include "openssl/aes.h"
 
 #define CEPH_CRYPTO_STUPID   0x0
 #define CEPH_CRYPTO_AES      0x1
 
-
-class CryptoHandler {
-public:
-  virtual bool encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out) = 0;
-  virtual bool decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out) = 0;
-};
 
 class CryptoStupid : public CryptoHandler {
 public:
@@ -67,11 +62,12 @@ public:
   bool decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
 };
 
-static const char *aes_iv = "cephsageyudagreg";
+static const unsigned char *aes_iv = (const unsigned char *)"cephsageyudagreg";
 
 bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
 {
   bufferlist sec_bl = secret.get_secret();
+  const unsigned char *key = (const unsigned char *)sec_bl.c_str();
   int in_len = in.length();
   const unsigned char *in_buf = (const unsigned char *)in.c_str();
   int outlen = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
@@ -81,10 +77,9 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   if (sec_bl.length() < AES_KEY_LEN)
     return false;
 
-  const char *key = sec_bl.c_str();
   EVP_CIPHER_CTX ctx;
   EVP_CIPHER_CTX_init(&ctx);
-  EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, (const unsigned char *)key, (const unsigned char *)aes_iv);
+  EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
 
   unsigned char *outbuf = (unsigned char *)outptr.c_str();
 
@@ -102,18 +97,50 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
 
 bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
 {
-  return false;
+  bufferlist sec_bl = secret.get_secret();
+  const unsigned char *key = (const unsigned char *)sec_bl.c_str();
+
+  int in_len = in.length();
+  int dec_len = 0;
+  int last_dec_len = 0;
+
+  bufferptr outptr(in_len);
+  unsigned char *dec_data = (unsigned char *)outptr.c_str();
+  bool result = false;
+
+  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+  EVP_CIPHER_CTX_init(ctx);
+
+  int res = EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
+  if (res == 1) {
+    res = EVP_DecryptUpdate(ctx, dec_data,
+           &dec_len, (const unsigned char *)in.c_str(), in.length());
+
+    if (res == 1) {
+      EVP_DecryptFinal_ex(ctx,
+            dec_data + dec_len,
+            &last_dec_len);
+
+            dec_len += last_dec_len;
+      outptr.set_length(dec_len);
+      out.append(outptr);
+      dout(0) << "decrypted size: %d" << dec_len << dendl;
+
+      result = true;
+    } else {
+            dout(0) << "EVP_DecryptUpdate error" << dendl;
+    }
+  } else {
+    dout(0) << "EVP_DecryptInit_ex error" << dendl;
+  }
+
+  EVP_CIPHER_CTX_free(ctx);
+  EVP_cleanup();
+  return result;
 }
 
 static CryptoStupid crypto_stupid;
 static CryptoAES crypto_aes;
-
-
-class CryptoManager {
-public:
-  CryptoHandler *get_crypto(int type);
-};
-
 
 CryptoHandler *CryptoManager::get_crypto(int type)
 {
@@ -126,3 +153,7 @@ CryptoHandler *CryptoManager::get_crypto(int type)
       return NULL;
   }
 }
+
+CryptoManager ceph_crypto_mgr;
+
+
