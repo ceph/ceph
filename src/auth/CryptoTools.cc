@@ -72,7 +72,8 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   const unsigned char *in_buf = (const unsigned char *)in.c_str();
   int outlen = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
   int tmplen;
-  unsigned char outbuf[outlen];
+#define OUT_BUF_EXTRA 128
+  unsigned char outbuf[outlen + OUT_BUF_EXTRA];
 
   if (sec_bl.length() < AES_KEY_LEN) {
     derr(0) << "key is too short" << dendl;
@@ -92,7 +93,7 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
     return false;
   }
 
-  out.append((const char *)outbuf, outlen);
+  out.append((const char *)outbuf, outlen + tmplen);
 
   return true;
 }
