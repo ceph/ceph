@@ -72,7 +72,7 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   const unsigned char *in_buf = (const unsigned char *)in.c_str();
   int outlen = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
   int tmplen;
-  bufferptr outptr(outlen);
+  unsigned char outbuf[outlen];
 
   if (sec_bl.length() < AES_KEY_LEN) {
     derr(0) << "key is too short" << dendl;
@@ -83,8 +83,6 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   EVP_CIPHER_CTX_init(&ctx);
   EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
 
-  unsigned char *outbuf = (unsigned char *)outptr.c_str();
-
   if(!EVP_EncryptUpdate(&ctx, outbuf, &outlen, in_buf, in.length())) {
     derr(0) << "EVP_EncryptUpdate error" << dendl;
     return false;
@@ -94,7 +92,7 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
     return false;
   }
 
-  out.append(outptr);
+  out.append((const char *)outbuf, outlen);
 
   return true;
 }
@@ -108,8 +106,7 @@ bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   int dec_len = 0;
   int last_dec_len = 0;
 
-  bufferptr outptr(in_len);
-  unsigned char *dec_data = (unsigned char *)outptr.c_str();
+  unsigned char dec_data[in_len];
   bool result = false;
 
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
@@ -119,7 +116,6 @@ bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   if (res == 1) {
     res = EVP_DecryptUpdate(ctx, dec_data,
            &dec_len, (const unsigned char *)in.c_str(), in_len);
-    dout(0) << "in_len=" << in_len << " dec_len=" << dec_len << dendl;
 
     if (res == 1) {
       EVP_DecryptFinal_ex(ctx,
@@ -127,9 +123,7 @@ bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
             &last_dec_len);
 
             dec_len += last_dec_len;
-      outptr.set_length(dec_len);
-      out.append(outptr);
-      dout(0) << "decrypted size: " << dec_len << dendl;
+      out.append((const char *)dec_data, dec_len);
 
       result = true;
     } else {
