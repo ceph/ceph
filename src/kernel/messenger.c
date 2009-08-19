@@ -2389,7 +2389,6 @@ void ceph_msg_kfree(struct ceph_msg *m)
 		vfree(m->front.iov_base);
 	else
 		kfree(m->front.iov_base);
-	ceph_buffer_put(m->middle);
 	kfree(m);
 	dout("msg_kfree %p done\n", m);
 }
@@ -2412,6 +2411,15 @@ void ceph_msg_put(struct ceph_msg *m)
 	if (atomic_dec_and_test(&m->nref)) {
 		dout("ceph_msg_put last one on %p\n", m);
 		WARN_ON(!list_empty(&m->list_head));
+
+		/* drop middle, data, if any */
+		if (m->middle) {
+			ceph_buffer_put(m->middle);
+			m->middle = NULL;
+		}
+		m->nr_pages = 0;
+		m->pages = NULL;
+
 		if (m->pool)
 			ceph_msgpool_put(m->pool, m);
 		else

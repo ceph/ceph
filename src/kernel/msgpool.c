@@ -132,11 +132,6 @@ void ceph_msgpool_put(struct ceph_msg_pool *pool, struct ceph_msg *msg)
 {
 	spin_lock(&pool->lock);
 	if (pool->num < pool->min) {
-		/* drop middle, if any */
-		if (msg->middle) {
-			ceph_buffer_put(msg->middle);
-			msg->middle = NULL;
-		}
 		ceph_msg_get(msg);   /* retake a single ref */
 		list_add(&msg->list_head, &pool->msgs);
 		pool->num++;
