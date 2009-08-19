@@ -18,18 +18,20 @@
 #include "include/types.h"
 
 struct ClientTicket {
-  int client;
   entity_addr_t addr;
   utime_t created, expires;
+  string nonce;
+  map<string, bufferlist> caps;
   __u32 flags;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
-    ::encode(client, bl);
     ::encode(addr, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
+    ::encode(nonce, bl);
+    ::encode(caps, bl);
     ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -39,9 +41,10 @@ struct ClientTicket {
     ::decode(addr, bl);
     ::decode(created, bl);
     ::decode(expires, bl);
+    ::decode(nonce, bl);
+    ::decode(caps, bl);
     ::decode(flags, bl);
   }
-
 };
 WRITE_CLASS_ENCODER(ClientTicket)
 
