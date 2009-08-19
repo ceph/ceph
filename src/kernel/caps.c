@@ -839,16 +839,16 @@ void __ceph_remove_cap(struct ceph_cap *cap,
  *
  * Caller should be holding s_mutex.
  */
-static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
-			 int caps, int wanted, int dirty,
-			 u32 seq, u64 flush_tid, u32 issue_seq, u32 mseq,
-			 u64 size, u64 max_size,
-			 struct timespec *mtime, struct timespec *atime,
-			 u64 time_warp_seq,
-			 uid_t uid, gid_t gid, mode_t mode,
-			 u64 xattr_version,
-			 struct ceph_buffer *xattrs_buf,
-			 u64 follows, int mds)
+static int send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
+			int caps, int wanted, int dirty,
+			u32 seq, u64 flush_tid, u32 issue_seq, u32 mseq,
+			u64 size, u64 max_size,
+			struct timespec *mtime, struct timespec *atime,
+			u64 time_warp_seq,
+			uid_t uid, gid_t gid, mode_t mode,
+			u64 xattr_version,
+			struct ceph_buffer *xattrs_buf,
+			u64 follows, int mds)
 {
 	struct ceph_mds_caps *fc;
 	struct ceph_msg *msg;
@@ -863,7 +863,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_CAPS, sizeof(*fc), 0, 0, NULL);
 	if (IS_ERR(msg))
-		return;
+		return PTR_ERR(msg);
 
 	fc = msg->front.iov_base;
 
@@ -900,7 +900,7 @@ static void send_cap_msg(struct ceph_mds_client *mdsc, u64 ino, u64 cid, int op,
 		msg->hdr.middle_len = cpu_to_le32(xattrs_buf->vec.iov_len);
 	}
 
-	ceph_send_msg_mds(mdsc, msg, mds);
+	return ceph_send_msg_mds(mdsc, msg, mds);
 }
 
 /*
@@ -970,7 +970,8 @@ void ceph_queue_caps_release(struct inode *inode)
  * dropping RDCACHE.  Note that this will leave behind locked pages
  * that we'll then need to deal with elsewhere.
  *
- * Return non-zero if delayed release.
+ * Return non-zero if delayed release, or we experienced an error
+ * such that the caller should requeue + retry later.
  *
  * called with i_lock, then drops it.
  * caller should hold snap_rwsem (read), s_mutex.
@@ -999,6 +1000,7 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	int delayed = 0;
 	u64 flush_tid = 0;
 	int i;
+	int ret;
 
 	dout("__send_cap %p cap %p session %p %s -> %s (revoking %s)\n",
 	     inode, cap, cap->session,
@@ -1079,13 +1081,17 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 		invalidate_mapping_pages(&inode->i_data, 0, -1);
 	}
 
-	send_cap_msg(mdsc, ceph_vino(inode).ino, cap_id,
+	ret = send_cap_msg(mdsc, ceph_vino(inode).ino, cap_id,
 		op, keep, want, flushing, seq, flush_tid, issue_seq, mseq,
 		size, max_size, &mtime, &atime, time_warp_seq,
 		uid, gid, mode,
 		xattr_version,
 		(flushing & CEPH_CAP_XATTR_EXCL) ? ci->i_xattrs.blob : NULL,
 		follows, mds);
+	if (ret < 0) {
+		dout("error sending cap msg, must requeue %p\n", inode);
+		delayed = 1;
+	}
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -1531,6 +1537,7 @@ retry:
 		struct ceph_cap *cap = ci->i_auth_cap;
 		int used = __ceph_caps_used(ci);
 		int want = __ceph_caps_wanted(ci);
+		int delayed;
 
 		if (!session) {
 			spin_unlock(&inode->i_lock);
@@ -1553,10 +1560,14 @@ retry:
 		ci->i_dirty_caps = 0;
 
 		/* __send_cap drops i_lock */
-		__send_cap(mdsc, cap, CEPH_CAP_OP_FLUSH, used, want,
-			   cap->issued | cap->implemented, flushing,
-			   flush_tid);
-		goto out_unlocked;
+		delayed = __send_cap(mdsc, cap, CEPH_CAP_OP_FLUSH, used, want,
+				     cap->issued | cap->implemented, flushing,
+				     flush_tid);
+		if (!delayed)
+			goto out_unlocked;
+
+		spin_lock(&inode->i_lock);
+		__cap_delay_requeue(mdsc, ci);
 	}
 out:
 	spin_unlock(&inode->i_lock);
@@ -1729,17 +1740,23 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 	list_for_each_entry(ci, &session->s_cap_flushing, i_flushing_item) {
 		struct inode *inode = &ci->vfs_inode;
 		struct ceph_cap *cap;
+		int delayed = 0;
 
 		spin_lock(&inode->i_lock);
 		cap = ci->i_auth_cap;
 		if (cap && cap->session == session) {
 			dout("kick_flushing_caps %p cap %p %s\n", inode,
 			     cap, ceph_cap_string(ci->i_flushing_caps));
-			__send_cap(mdsc, cap, CEPH_CAP_OP_FLUSH,
-				   __ceph_caps_used(ci),
-				   __ceph_caps_wanted(ci),
-				   cap->issued | cap->implemented,
-				   ci->i_flushing_caps, NULL);
+			delayed = __send_cap(mdsc, cap, CEPH_CAP_OP_FLUSH,
+					     __ceph_caps_used(ci),
+					     __ceph_caps_wanted(ci),
+					     cap->issued | cap->implemented,
+					     ci->i_flushing_caps, NULL);
+			if (delayed) {
+				spin_lock(&inode->i_lock);
+				__cap_delay_requeue(mdsc, ci);
+				spin_unlock(&inode->i_lock);
+			}
 		} else {
 			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
 			       cap, session->s_mds);
