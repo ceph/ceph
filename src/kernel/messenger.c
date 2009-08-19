@@ -1522,7 +1522,7 @@ static int read_partial_message(struct ceph_connection *con)
 		BUG_ON(!con->msgr->prepare_pages);
 		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
 		if (ret < 0) {
-			dout("prepare_pages failed, skipping payload\n");
+			dout("%p prepare_pages failed, skipping payload\n", m);
 			con->in_base_pos = -data_len - sizeof(m->footer);
 			ceph_msg_put(con->in_msg);
 			con->in_msg = NULL;
@@ -1576,26 +1576,26 @@ no_data:
 			return ret;
 		con->in_base_pos += ret;
 	}
-	dout("read_partial_message got msg %p\n", m);
-	dout("got footer front crc %d middle crc %d data crc %d\n",
-	     m->footer.front_crc, m->footer.middle_crc, m->footer.data_crc);
+	dout("read_partial_message got msg %p %d (%u) + %d (%u) + %d (%u)\n",
+	     m, front_len, m->footer.front_crc, middle_len,
+	     m->footer.middle_crc, data_len, m->footer.data_crc);
 
 	/* crc ok? */
 	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
 		pr_err("ceph read_partial_message %p front crc %u != exp. %u\n",
-		       con->in_msg, con->in_front_crc, m->footer.front_crc);
+		       m, con->in_front_crc, m->footer.front_crc);
 		return -EBADMSG;
 	}
 	if (con->in_middle_crc != le32_to_cpu(m->footer.middle_crc)) {
 		pr_err("ceph read_partial_message %p middle crc %u != exp %u\n",
-		       con->in_msg, con->in_middle_crc, m->footer.middle_crc);
+		       m, con->in_middle_crc, m->footer.middle_crc);
 		return -EBADMSG;
 	}
 	if (datacrc &&
 	    (le32_to_cpu(m->footer.flags) & CEPH_MSG_FOOTER_NOCRC) == 0 &&
 	    con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
 		pr_err("ceph read_partial_message %p data crc %u != exp. %u\n",
-		       con->in_msg,
+		       m,
 		       con->in_data_crc, le32_to_cpu(m->footer.data_crc));
 		return -EBADMSG;
 	}
@@ -1607,7 +1607,7 @@ no_data:
 		 * message, before anyone else knows we exist, so this is
 		 * safe.
 		 */
-		con->msgr->inst.addr.ipaddr = con->in_msg->hdr.dst.addr.ipaddr;
+		con->msgr->inst.addr.ipaddr = m->hdr.dst.addr.ipaddr;
 		dout("read_partial_message learned my addr is "
 		     "%u.%u.%u.%u:%u\n",
 		     IPQUADPORT(con->msgr->inst.addr.ipaddr));
