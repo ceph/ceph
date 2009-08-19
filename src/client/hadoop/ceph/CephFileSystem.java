@@ -33,7 +33,7 @@ import org.apache.hadoop.fs.FileStatus;
  * </p>
  * Configuration of the CephFileSystem is handled via a few Hadoop
  * Configuration properties: <br>
- * fs.ceph.monAddr -- the ip address of the monitor to connect to. <br>
+ * fs.ceph.monAddr -- the ip address/port of the monitor to connect to. <br>
  * fs.ceph.libDir -- the directory that libceph and libhadoopceph are
  * located in. This assumes Hadoop is being run on a linux-style machine
  * with names like libceph.so.
@@ -128,7 +128,7 @@ public class CephFileSystem extends FileSystem {
       conf.setIfUnset("fs.ceph.debug", "false");
       fs_default_name = conf.get("fs.default.name");
       monAddr = conf.get("fs.ceph.monAddr");
-      if (monAddr == NULL) throw new IOException("You must specify a Ceph monito address!");
+      if (monAddr == null) throw new IOException("You must specify a Ceph monitor address!");
       cephDebugLevel = conf.get("fs.ceph.debugLevel");
       debug = ("true".equals(conf.get("fs.ceph.debug")));
       //  Initializes the client
