@@ -16,40 +16,27 @@
 #include "openssl/evp.h"
 #include "openssl/aes.h"
 
-#define CEPH_CRYPTO_STUPID   0x0
-#define CEPH_CRYPTO_AES      0x1
 
-
-class CryptoStupid : public CryptoHandler {
+class CryptoNone : public CryptoHandler {
 public:
-  CryptoStupid() {}
-  ~CryptoStupid() {}
+  CryptoNone() {}
+  ~CryptoNone() {}
   bool encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
   bool decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
 };
 
-bool CryptoStupid::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoNone::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
 {
-  bufferlist sec_bl = secret.get_secret();
-  const char *sec = sec_bl.c_str();
-  int sec_len = sec_bl.length();
-
-  int in_len = in.length();
-  bufferptr outptr(in_len);
-  out.append(outptr);
-  const char *inbuf = in.c_str();
-  char *outbuf = outptr.c_str();
-
-  for (int i=0; i<in_len; i++) {
-    outbuf[i] = inbuf[i] ^ sec[i % sec_len];
-  }
+  out = in;
 
   return true;
 }
 
-bool CryptoStupid::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoNone::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
 {
-  return encrypt(secret, in, out);
+  out = in;
+
+  return true;
 }
 
 #define AES_KEY_LEN     AES_BLOCK_SIZE
@@ -139,14 +126,14 @@ bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   return result;
 }
 
-static CryptoStupid crypto_stupid;
+static CryptoNone crypto_none;
 static CryptoAES crypto_aes;
 
 CryptoHandler *CryptoManager::get_crypto(int type)
 {
   switch (type) {
-    case CEPH_CRYPTO_STUPID:
-      return &crypto_stupid;
+    case CEPH_CRYPTO_NONE:
+      return &crypto_none;
     case CEPH_CRYPTO_AES:
       return &crypto_aes;
     default:

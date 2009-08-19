@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[])
 {
-  CryptoHandler *handler = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
+  CryptoHandler *handler = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_NONE);
 
   if (!handler) {
     derr(0) << "handler == NULL" << dendl;
