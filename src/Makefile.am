@@ -269,6 +269,7 @@ libcommon_a_SOURCES = \
 libcommon_files = \
 	auth/ExportControl.cc \
 	auth/AuthManager.cc \
+	auth/CryptoTools.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
