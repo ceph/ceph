@@ -168,6 +168,9 @@ rgw_aclparser_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
 bin_PROGRAMS += rgw rgw_admin rgw_aclparser
 endif
 
+testcrypto_SOURCES = testcrypto.cc
+testcrypto_LDADD = libcommon.a -lcrypto
+bin_PROGRAMS += testcrypto
 ## object classes
 
 # libtestclass.so: testclass.cc
@@ -365,6 +368,8 @@ libclient_a_SOURCES = \
 noinst_HEADERS = \
 	auth/ClientTicket.h\
 	auth/ExportControl.h\
+	auth/AuthTypes.h\
+	auth/CryptoTools.h\
 	ceph_ver.h \
         client/Client.h\
         client/SyntheticClient.h\

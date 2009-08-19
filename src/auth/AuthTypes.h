@@ -23,6 +23,8 @@ protected:
   bufferlist secret;
 
 public:
+  EntitySecret(bufferlist& bl) { secret = bl; }
+
   void encode(bufferlist& bl) const {
     ::encode(secret, bl);
   }

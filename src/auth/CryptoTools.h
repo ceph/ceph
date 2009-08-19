@@ -14,6 +14,8 @@
 #ifndef __CRYPTOTOOLS_H
 #define __CRYPTOTOOLS_H
 
+#include "AuthTypes.h"
+
 #define CEPH_CRYPTO_STUPID   0x0
 #define CEPH_CRYPTO_AES      0x1
 

@@ -74,8 +74,10 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   int tmplen;
   bufferptr outptr(outlen);
 
-  if (sec_bl.length() < AES_KEY_LEN)
+  if (sec_bl.length() < AES_KEY_LEN) {
+    derr(0) << "key is too short" << dendl;
     return false;
+  }
 
   EVP_CIPHER_CTX ctx;
   EVP_CIPHER_CTX_init(&ctx);
@@ -84,13 +86,15 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   unsigned char *outbuf = (unsigned char *)outptr.c_str();
 
   if(!EVP_EncryptUpdate(&ctx, outbuf, &outlen, in_buf, in.length())) {
-    dout(0) << "EVP_EncryptUpdate error" << dendl;
+    derr(0) << "EVP_EncryptUpdate error" << dendl;
     return false;
   }
   if(!EVP_EncryptFinal_ex(&ctx, outbuf + outlen, &tmplen)) {
-    dout(0) << "EVP_EncryptFinal error" << dendl;
+    derr(0) << "EVP_EncryptFinal error" << dendl;
     return false;
   }
+
+  out.append(outptr);
 
   return true;
 }
@@ -114,7 +118,8 @@ bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   int res = EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
   if (res == 1) {
     res = EVP_DecryptUpdate(ctx, dec_data,
-           &dec_len, (const unsigned char *)in.c_str(), in.length());
+           &dec_len, (const unsigned char *)in.c_str(), in_len);
+    dout(0) << "in_len=" << in_len << " dec_len=" << dec_len << dendl;
 
     if (res == 1) {
       EVP_DecryptFinal_ex(ctx,
@@ -124,7 +129,7 @@ bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
             dec_len += last_dec_len;
       outptr.set_length(dec_len);
       out.append(outptr);
-      dout(0) << "decrypted size: %d" << dec_len << dendl;
+      dout(0) << "decrypted size: " << dec_len << dendl;
 
       result = true;
     } else {
