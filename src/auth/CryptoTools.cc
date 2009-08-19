@@ -13,9 +13,10 @@
 
 #include "AuthTypes.h"
 #include "openssl/evp.h"
+#include "openssl/aes.h"
 
-#define CRYPTO_STUPID   0x0
-#define CRYPTO_AES      0x1
+#define CEPH_CRYPTO_STUPID   0x0
+#define CEPH_CRYPTO_AES      0x1
 
 
 class CryptoHandler {
@@ -56,35 +57,38 @@ bool CryptoStupid::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out
   return encrypt(secret, in, out);
 }
 
-#define AES_KEY_LEN     16
+#define AES_KEY_LEN     AES_BLOCK_SIZE
 
 class CryptoAES : public CryptoHandler {
 public:
-  CryptoStupid() {}
-  ~CryptoStupid() {}
+  CryptoAES() {}
+  ~CryptoAES() {}
   bool encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
   bool decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
 };
 
-static const unsigned char *aes_iv = "cephsageyudagreg";
+static const char *aes_iv = "cephsageyudagreg";
 
-bool CryptoStupid::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
 {
   bufferlist sec_bl = secret.get_secret();
-  int outlen, tmplen;
+  int in_len = in.length();
+  const unsigned char *in_buf = (const unsigned char *)in.c_str();
+  int outlen = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
+  int tmplen;
   bufferptr outptr(outlen);
 
   if (sec_bl.length() < AES_KEY_LEN)
     return false;
 
   const char *key = sec_bl.c_str();
-  char intext[] = "12345678901234567890123456789012";
   EVP_CIPHER_CTX ctx;
-  FILE *out;
   EVP_CIPHER_CTX_init(&ctx);
-  EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
+  EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, (const unsigned char *)key, (const unsigned char *)aes_iv);
 
-  if(!EVP_EncryptUpdate(&ctx, outbuf, &outlen, intext, strlen(intext))) {
+  unsigned char *outbuf = (unsigned char *)outptr.c_str();
+
+  if(!EVP_EncryptUpdate(&ctx, outbuf, &outlen, in_buf, in.length())) {
     dout(0) << "EVP_EncryptUpdate error" << dendl;
     return false;
   }
@@ -96,7 +100,13 @@ bool CryptoStupid::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out
   return true;
 }
 
+bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+{
+  return false;
+}
+
 static CryptoStupid crypto_stupid;
+static CryptoAES crypto_aes;
 
 
 class CryptoManager {
@@ -108,8 +118,10 @@ public:
 CryptoHandler *CryptoManager::get_crypto(int type)
 {
   switch (type) {
-    case CRYPTO_STUPID:
+    case CEPH_CRYPTO_STUPID:
       return &crypto_stupid;
+    case CEPH_CRYPTO_AES:
+      return &crypto_aes;
     default:
       return NULL;
   }
