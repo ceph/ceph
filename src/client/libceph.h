@@ -12,6 +12,7 @@
 #ifdef __cplusplus
 #include <list>
 #include <string>
+#include "Client.h"
 extern "C" {
 #endif
 
@@ -50,7 +51,7 @@ int ceph_symlink(const char *existing, const char *newname);
 // inode stuff
 int ceph_lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0);
 
-int ceph_setattr(const char *relpath, struct stat *attr, int mask);
+int ceph_setattr(const char *relpath, Client::stat_precise *attr, int mask);
 int ceph_chmod(const char *path, mode_t mode);
 int ceph_chown(const char *path, uid_t uid, gid_t gid);
 int ceph_utime(const char *path, struct utimbuf *buf);
@@ -71,11 +72,13 @@ int ceph_sync_fs();
 int ceph_get_file_stripe_unit(int fh);
 int ceph_get_file_replication(const char *path);
 #ifdef __cplusplus
+}
 //not for C, sorry!
 int ceph_getdir(const char *relpath, std::list<std::string>& names);
 void ceph_getcwd(std::string& cwd);
 int ceph_get_file_stripe_address(int fd, loff_t offset, std::string& address);
-}
+int ceph_lstat(const char *path, Client::stat_precise *stbuf, frag_info_t *dirstat=0);
+
 #endif
 
 #endif

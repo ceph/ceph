@@ -20,13 +20,13 @@ using namespace std;
 int main(int argc, const char **argv)
 {
   if (ceph_initialize(argc, argv) < 0) {
-    cerr << "error initializing\n" << endl;
+    cerr << "error initializing\n" << std::endl;
     return(1);
   }
   cout << "Successfully initialized Ceph!" << std::endl;
 
   if(ceph_mount() < 0) {
-    cerr << "error mounting\n" << endl;
+    cerr << "error mounting\n" << std::endl;
     return(1);
   }
   cout << "Successfully mounted Ceph!" << std::endl;

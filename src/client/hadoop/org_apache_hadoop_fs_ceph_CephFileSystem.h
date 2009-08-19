@@ -179,6 +179,14 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_statfs
+ * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/CephStat;)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statfs
+  (JNIEnv *, jobject, jstring, jobject);
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_replication
  * Signature: (Ljava/lang/String;)I
  */

@@ -3150,7 +3150,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   return res;
 }
 
-int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
+int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, int gid)
 {
   int issued = in->caps_issued();
 
@@ -3177,9 +3177,9 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
-	in->mtime = utime_t(attr->st_mtime, 0);
+	in->mtime = utime_t(attr->st_mtime_sec, attr->st_mtime_micro);
       if (mask & CEPH_SETATTR_ATIME)
-	in->atime = utime_t(attr->st_atime, 0);
+	in->atime = utime_t(attr->st_atime_sec, attr->st_atime_micro);
       in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
@@ -3201,9 +3201,11 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   if (mask & CEPH_SETATTR_GID)
     req->head.args.setattr.gid = attr->st_gid;
   if (mask & CEPH_SETATTR_MTIME)
-    req->head.args.setattr.mtime = utime_t(attr->st_mtime, 0);
+    req->head.args.setattr.mtime =
+      utime_t(attr->st_mtime_sec, attr->st_mtime_micro);
   if (mask & CEPH_SETATTR_ATIME)
-    req->head.args.setattr.atime = utime_t(attr->st_atime, 0);
+    req->head.args.setattr.atime =
+      utime_t(attr->st_atime_sec, attr->st_atime_micro);
   if (mask & CEPH_SETATTR_SIZE)
     req->head.args.setattr.size = attr->st_size;
   req->head.args.setattr.mask = mask;
@@ -3213,7 +3215,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid)
   return res;
 }
 
-int Client::setattr(const char *relpath, struct stat *attr, int mask)
+int Client::setattr(const char *relpath, struct stat_precise *attr, int mask)
 {
   Mutex::Locker lock(client_lock);
   tout << "setattr" << std::endl;
@@ -3278,6 +3280,64 @@ int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat,
   fill_stat(in, stbuf, dirstat);
   return r;
 }
+int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat, nest_info_t *rstat) 
+{
+  dout(10) << "fill_stat_precise on " << in->ino << " snap/dev" << in->snapid 
+	   << " mode 0" << oct << in->mode << dec
+	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
+  memset(st, 0, sizeof(struct stat_precise));
+  st->st_ino = in->ino;
+  st->st_dev = in->snapid;
+  st->st_mode = in->mode;
+  st->st_rdev = in->rdev;
+  st->st_nlink = in->nlink;
+  st->st_uid = in->uid;
+  st->st_gid = in->gid;
+  if (in->ctime.sec() > in->mtime.sec()) {
+    st->st_ctime_sec = in->ctime.sec();
+    st->st_ctime_micro = in->ctime.usec();
+  } else {
+    st->st_ctime_sec = in->mtime.sec();
+    st->st_ctime_micro = in->ctime.usec();
+  }
+  st->st_atime_sec = in->atime.sec();
+  st->st_atime_micro = in->atime.usec();
+  st->st_mtime_sec = in->mtime.sec();
+  st->st_mtime_micro = in->mtime.usec();
+  if (in->is_dir()) {
+    //st->st_size = in->dirstat.size();
+    st->st_size = in->rstat.rbytes;
+    st->st_blocks = 1;
+  } else {
+    st->st_size = in->size;
+    st->st_blocks = (in->size + 511) >> 9;
+  }
+  st->st_blksize = MAX(ceph_file_layout_su(in->layout), 4096);
+
+  if (dirstat)
+    *dirstat = in->dirstat;
+  if (rstat)
+    *rstat = in->rstat;
+
+  return in->caps_issued();
+}
+
+int Client::lstat_precise(const char *relpath, struct stat_precise *stbuf,
+			  frag_info_t *dirstat, int mask) {
+  Mutex::Locker lock(client_lock);
+  tout << "lstat_precise" << std::endl;
+  tout << relpath << std::endl;
+  filepath path(relpath);
+  Inode *in;
+  int r = path_walk(path, &in);
+  if (r < 0)
+    return r;
+  r = _getattr(in, mask);
+  if (r < 0)
+    return r;
+  fill_stat_precise(in, stbuf, dirstat);
+  return r;
+}
 
 int Client::chmod(const char *relpath, mode_t mode)
 {
@@ -3290,7 +3350,7 @@ int Client::chmod(const char *relpath, mode_t mode)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  struct stat attr;
+  stat_precise attr;
   attr.st_mode = mode;
   return _setattr(in, &attr, CEPH_SETATTR_MODE);
 }
@@ -3307,7 +3367,7 @@ int Client::chown(const char *relpath, uid_t uid, gid_t gid)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  struct stat attr;
+  stat_precise attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
   return _setattr(in, &attr, CEPH_SETATTR_UID|CEPH_SETATTR_GID);
@@ -3325,9 +3385,9 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
-  struct stat attr;
-  attr.st_mtime = buf->modtime;
-  attr.st_atime = buf->actime;
+  stat_precise attr;
+  attr.st_mtime_sec = buf->modtime;
+  attr.st_atime_sec = buf->actime;
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 
@@ -4005,7 +4065,7 @@ int Client::_read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl)
 
   Mutex flock("Client::_read_sync flock");
   Cond cond;
-  while (1) {
+  while (left > 0) {
     int r = 0;
     bool done = false;
     Context *onfinish = new C_SafeCond(&flock, &cond, &done, &r);
@@ -4048,6 +4108,7 @@ int Client::_read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl)
 	return read;
     }
   }
+  return read;
 }
 
 
@@ -4222,7 +4283,7 @@ int Client::_flush(Fh *f)
 
 int Client::truncate(const char *relpath, loff_t length) 
 {
-  struct stat attr;
+  stat_precise attr;
   attr.st_size = length;
   return setattr(relpath, &attr, CEPH_SETATTR_SIZE);
 }
@@ -4236,7 +4297,7 @@ int Client::ftruncate(int fd, loff_t length)
 
   assert(fd_map.count(fd));
   Fh *f = fd_map[fd];
-  struct stat attr;
+  stat_precise attr;
   attr.st_size = length;
   return _setattr(f->inode, &attr, CEPH_SETATTR_SIZE);
 }
@@ -4656,8 +4717,8 @@ int Client::ll_setattr(vinodeno_t vino, struct stat *attr, int mask, int uid, in
   tout << mask << std::endl;
 
   Inode *in = _ll_get_inode(vino);
-
-  int res = _setattr(in, attr, mask, uid, gid);
+  stat_precise precise_attr(*attr);
+  int res = _setattr(in, &precise_attr, mask, uid, gid);
   if (res == 0)
     fill_stat(in, attr);
   dout(3) << "ll_setattr " << vino << " = " << res << dendl;

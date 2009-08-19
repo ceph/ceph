@@ -702,6 +702,37 @@ class Client : public Dispatcher {
     bool at_end() { return (offset == END); }
   };
 
+  struct stat_precise {
+    ino_t st_ino;
+    dev_t st_dev;
+    mode_t st_mode;
+    nlink_t st_nlink;
+    uid_t st_uid;
+    gid_t st_gid;
+    dev_t st_rdev;
+    off_t st_size;
+    blksize_t st_blksize;
+    blkcnt_t st_blocks;
+    time_t st_atime_sec;
+    time_t st_atime_micro;
+    time_t st_mtime_sec;
+    time_t st_mtime_micro;
+    time_t st_ctime_sec;
+    time_t st_ctime_micro;
+    stat_precise() {}
+    stat_precise(struct stat attr): st_ino(attr.st_ino), st_dev(attr.st_dev),
+			       st_mode(attr.st_mode), st_nlink(attr.st_nlink),
+			       st_uid(attr.st_uid), st_gid(attr.st_gid),
+			       st_size(attr.st_size),
+			       st_blksize(attr.st_blksize),
+			       st_blocks(attr.st_blocks),
+			       st_atime_sec(attr.st_atime),
+			       st_atime_micro(0),
+			       st_mtime_sec(attr.st_mtime),
+			       st_mtime_micro(0),
+			       st_ctime_sec(attr.st_ctime),
+			       st_ctime_micro(0) {}
+  };
 
   // cluster descriptors
   MDSMap *mdsmap; 
@@ -920,6 +951,7 @@ protected:
   Inode *cwd;
   int path_walk(const filepath& fp, Inode **end, bool followsym=true);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  int fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   void touch_dn(Dentry *dn) { lru.lru_touch(dn); }  
 
   // trim cache.
@@ -1045,7 +1077,7 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1);
-  int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1);
+  int _setattr(Inode *in, stat_precise *attr, int mask, int uid=-1, int gid=-1);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
@@ -1104,9 +1136,10 @@ public:
 
   // inode stuff
   int lstat(const char *path, struct stat *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
+  int lstat_precise(const char *relpath, struct stat_precise *stbuf, frag_info_t *dirstat=0, int mask=CEPH_STAT_CAP_INODE_ALL);
   int lstatlite(const char *path, struct statlite *buf);
 
-  int setattr(const char *relpath, struct stat *attr, int mask);
+  int setattr(const char *relpath, stat_precise *attr, int mask);
   int chmod(const char *path, mode_t mode);
   int chown(const char *path, uid_t uid, gid_t gid);
   int utime(const char *path, struct utimbuf *buf);

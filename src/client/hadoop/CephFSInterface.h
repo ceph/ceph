@@ -88,14 +88,6 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_getfilesize
- * Signature: (Ljava/lang/String;)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getfilesize
-  (JNIEnv *, jobject, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_isdirectory
  * Signature: (Ljava/lang/String;)Z
  */
@@ -173,6 +165,22 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1kill_1client
   (JNIEnv *, jobject);
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_stat
+ * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
+ */
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
+  (JNIEnv *, jobject, jstring, jobject);
+
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Method:    ceph_statfs
+ * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/CephStat;)I
+ */
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statfs
+(JNIEnv * env, jobject obj, jstring j_path, jobject j_cephstat);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
@@ -261,14 +269,6 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1clo
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1write
   (JNIEnv *, jobject, jint, jbyteArray, jint, jint);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_stat
- * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
-  (JNIEnv *, jobject, jstring, jobject);
 
 #ifdef __cplusplus
 }
