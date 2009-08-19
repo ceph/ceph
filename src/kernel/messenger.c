@@ -1536,9 +1536,9 @@ static int read_partial_message(struct ceph_connection *con)
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
 		mutex_lock(&m->page_mutex);
 		if (!m->pages) {
-			dout("pages revoked during msg read\n");
+			dout("%p pages revoked during msg read\n", m);
 			mutex_unlock(&m->page_mutex);
-			con->in_base_pos = middle_len - con->in_msg_pos.data_pos
+			con->in_base_pos = con->in_msg_pos.data_pos
 				- data_len - sizeof(m->footer);
 			ceph_msg_put(m);
 			con->in_msg = NULL;
