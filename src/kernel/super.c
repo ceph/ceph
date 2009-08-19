@@ -731,6 +731,9 @@ static struct ceph_client *ceph_create_client(void)
 				sizeof(struct ceph_mds_lease) + PATH_MAX, 1);
 	if (err < 0)
 		goto fail;
+	err = ceph_msgpool_init(&client->msgpool_client_caps, 4096, 1);
+	if (err < 0)
+		goto fail;
 	err = ceph_msgpool_init(&client->msgpool_osd_opreply, 4096, 1);
 	if (err < 0)
 		goto fail;
@@ -979,14 +982,14 @@ static struct ceph_msg_pool *get_pool(struct ceph_client *client, int type)
 		return &client->msgpool_client_request_forward;
 	case CEPH_MSG_CLIENT_LEASE:
 		return &client->msgpool_client_lease;
-
+	case CEPH_MSG_CLIENT_CAPS:
+		return &client->msgpool_client_caps;
 	case CEPH_MSG_OSD_OPREPLY:
 		return &client->msgpool_osd_opreply;
 
-	case CEPH_MSG_CLIENT_REPLY:
-	case CEPH_MSG_CLIENT_CAPS:
-	case CEPH_MSG_CLIENT_SNAP:
 	case CEPH_MSG_OSD_MAP:
+	case CEPH_MSG_CLIENT_REPLY:
+	case CEPH_MSG_CLIENT_SNAP:
 	default:
 		return NULL;
 	}
