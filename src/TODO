@@ -17,6 +17,10 @@ v0.13
 /- uclient: fix sync read vs EOF
 - uclient: fix write vs max_size
 /- [uk]client lseek SEEK_END
+- kclient msg pools
+  - don't reuse incoming cap message for revoke ack
+  - retry/requeue cap send on ENOMEM
+
 
 bugs
 - premature filejournal trimming?

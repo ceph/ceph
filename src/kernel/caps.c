@@ -1080,12 +1080,12 @@ static int __send_cap(struct ceph_mds_client *mdsc, struct ceph_cap *cap,
 	}
 
 	send_cap_msg(mdsc, ceph_vino(inode).ino, cap_id,
-		     op, keep, want, flushing, seq, flush_tid, issue_seq, mseq,
-		     size, max_size, &mtime, &atime, time_warp_seq,
-		     uid, gid, mode,
-		     xattr_version,
-		     (flushing & CEPH_CAP_XATTR_EXCL) ? ci->i_xattrs.blob : NULL,
-		     follows, mds);
+		op, keep, want, flushing, seq, flush_tid, issue_seq, mseq,
+		size, max_size, &mtime, &atime, time_warp_seq,
+		uid, gid, mode,
+		xattr_version,
+		(flushing & CEPH_CAP_XATTR_EXCL) ? ci->i_xattrs.blob : NULL,
+		follows, mds);
 
 	if (wake)
 		wake_up(&ci->i_cap_wq);
@@ -2044,8 +2044,8 @@ void ceph_put_wrbuffer_cap_refs(struct ceph_inode_info *ci, int nr,
  * caller holds s_mutex.
  * return value:
  *  0 - ok
- *  1 - send the msg back to mds
- *  2 - check_caps
+ *  1 - check_caps on auth cap only (writeback)
+ *  2 - check_caps (ack revoke)
  */
 static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 			    struct ceph_mds_session *session,
@@ -2196,30 +2196,13 @@ start:
 	if (cap->issued & ~newcaps) {
 		dout("revocation: %s -> %s\n", ceph_cap_string(cap->issued),
 		     ceph_cap_string(newcaps));
-		if ((used & ~newcaps) & CEPH_CAP_FILE_BUFFER) {
+		if ((used & ~newcaps) & CEPH_CAP_FILE_BUFFER)
 			writeback = 1; /* will delay ack */
-		} else if (dirty & ~newcaps) {
-			reply = 2;     /* initiate writeback in check_caps */
-		} else if (((used & ~newcaps) & CEPH_CAP_FILE_CACHE) == 0 ||
-			   revoked_rdcache) {
-			/*
-			 * we're not using revoked caps.. ack now.
-			 * re-use incoming message.
-			 */
-			cap->implemented = newcaps;
-			cap->mds_wanted = wanted;
-
-			grant->issue_seq = cpu_to_le32(cap->issue_seq);
-			grant->size = cpu_to_le64(inode->i_size);
-			grant->max_size = 0;  /* don't re-request */
-			ceph_encode_timespec(&grant->mtime, &inode->i_mtime);
-			ceph_encode_timespec(&grant->atime, &inode->i_atime);
-			grant->time_warp_seq = cpu_to_le32(ci->i_time_warp_seq);
-			grant->snap_follows =
-			     cpu_to_le64(ci->i_snap_realm->cached_context->seq);
-			reply = 1;
-			wake = 1;
-		}
+		else if (dirty & ~newcaps)
+			reply = 1;     /* initiate writeback in check_caps */
+		else if (((used & ~newcaps) & CEPH_CAP_FILE_CACHE) == 0 ||
+			   revoked_rdcache)
+			reply = 2;     /* send revoke ack in check_caps */
 		cap->issued = newcaps;
 	} else if (cap->issued == newcaps) {
 		dout("caps unchanged: %s -> %s\n",
@@ -2589,15 +2572,14 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	case CEPH_CAP_OP_REVOKE:
 	case CEPH_CAP_OP_GRANT:
 		r = handle_cap_grant(inode, h, session, cap, msg->middle);
-		if (r == 1) {
-			dout(" sending reply back to mds%d\n", mds);
-			ceph_msg_get(msg);
-			ceph_send_msg_mds(mdsc, msg, mds);
-		} else if (r == 2) {
+		if (r == 1)
 			ceph_check_caps(ceph_inode(inode),
 					CHECK_CAPS_NODELAY|CHECK_CAPS_AUTHONLY,
 					session);
-		}
+		else if (r == 2)
+			ceph_check_caps(ceph_inode(inode),
+					CHECK_CAPS_NODELAY,
+					session);
 		break;
 
 	case CEPH_CAP_OP_FLUSH_ACK:
