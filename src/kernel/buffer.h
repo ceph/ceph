@@ -3,6 +3,7 @@
 
 #include <linux/mm.h>
 #include <linux/types.h>
+#include <linux/uio.h>
 #include <linux/vmalloc.h>
 
 #include "ceph_debug.h"

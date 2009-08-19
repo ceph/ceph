@@ -236,6 +236,19 @@ ceph_full_name_hash(const char *name, unsigned int len)
 
 
 
+/*
+ * An encryption key/secret.
+ */
+struct ceph_secret {
+	__le16 type;
+	__le16 len;
+	char key[];
+} __attribute__ ((packed));
+
+#define CEPH_SECRET_NONE 0x0
+#define CEPH_SECRET_AES  0x1
+
+
 /*********************************************
  * message layer
  */

@@ -452,11 +452,14 @@ noinst_HEADERS = \
 	kernel/Kconfig\
         kernel/Makefile\
 	kernel/addr.c\
+	kernel/armor.c\
 	kernel/buffer.h\
 	kernel/caps.c\
 	kernel/ceph_debug.h\
 	kernel/ceph_fs.h\
 	kernel/ceph_ver.h\
+	kernel/crypt.c\
+	kernel/crypt.h\
         kernel/crush/crush.c\
         kernel/crush/crush.h\
         kernel/crush/hash.h\

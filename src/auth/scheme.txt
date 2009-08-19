@@ -42,7 +42,7 @@ authenticate principle:
 
 C->M : client_name, client_addr.  authenticate me.
  ...monitor does lookup in database...
-M->C : A= {client/mon session key}^clientsecret
+M->C : A= {client/mon session key, validity}^clientsecret
        B= {client ticket, validity, client/mon session key}^monsecret
 
 
@@ -56,7 +56,9 @@ authorize for service:
 
 C->M : B, {client_addr, timestamp}^client/mon session key.  authorize me!
 M->C : E= {svc ticket}^svcsecret
-       F= {client ticket, validity, svc session key}^client/mon session key
+       F= {svc session key, validity}^client/mon session key
+
+svc ticket = (client addr, validity, svc session key)
 
 
 on opening session to service:

@@ -1,6 +1,21 @@
 #ifndef _FS_CEPH_AUTH_H
 #define _FS_CEPH_AUTH_H
 
+#include "buffer.h"
+
+
+/*
+ * A ticket allows us to open a secure session to a service and prove
+ * authorization.
+ */
+struct ceph_ticket {
+	struct ceph_buffer *session_key;     /* a ceph_secret */
+	struct ceph_buffer *enc_ticket;      /* opaque to us */
+	unsigned long renew_after, expires;
+};
+
+
+
 struct ceph_auth_data {
 	void *private_data;
 };
@@ -25,6 +40,7 @@ struct ceph_auth_ops {
 extern struct ceph_auth_ops *ceph_auth_get_generic_ops(void);
 
 extern struct ceph_auth_ops *ceph_x_auth_get_ops(void);
+
 
 
 #endif
