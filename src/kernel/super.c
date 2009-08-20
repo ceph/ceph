@@ -710,34 +710,6 @@ static struct ceph_client *ceph_create_client(void)
 		goto fail;
 
 	/* msg pools */
-	/* simple pools: */
-	err = ceph_msgpool_init(&client->msgpool_mount_ack, 16384, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_unmount, 4096, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_mds_map, 16384, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_session,
-				sizeof(struct ceph_mds_session_head), 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_request_forward, 32, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_lease,
-				sizeof(struct ceph_mds_lease) + PATH_MAX, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_caps, 4096, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_osd_opreply, 4096, 1);
-	if (err < 0)
-		goto fail;
-
 	/* preallocated at request time: */
 	err = ceph_msgpool_init(&client->msgpool_statfs_reply, 4096, 0);
 	if (err < 0)
@@ -781,18 +753,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 		mempool_destroy(client->wb_pagevec_pool);
 
 	/* msg pools */
-	ceph_msgpool_destroy(&client->msgpool_mount_ack);
-	ceph_msgpool_destroy(&client->msgpool_unmount);
 	ceph_msgpool_destroy(&client->msgpool_statfs_reply);
-	ceph_msgpool_destroy(&client->msgpool_mds_map);
-	ceph_msgpool_destroy(&client->msgpool_client_session);
-	//ceph_msgpool_destroy(&client->msgpool_client_reply);
-	ceph_msgpool_destroy(&client->msgpool_client_request_forward);
-	//ceph_msgpool_destroy(&client->msgpool_client_caps);
-	//ceph_msgpool_destroy(&client->msgpool_client_snap);
-	ceph_msgpool_destroy(&client->msgpool_client_lease);
-	//ceph_msgpool_destroy(&client->msgpool_osd_map);
-	//ceph_msgpool_destroy(&client->msgpool_osd_opreply);
 
 	release_mount_args(&client->mount_args);
 
@@ -968,25 +929,16 @@ out:
 static struct ceph_msg_pool *get_pool(struct ceph_client *client, int type)
 {
 	switch (type) {
-	case CEPH_MSG_CLIENT_MOUNT_ACK:
-		return &client->msgpool_mount_ack;
-	case CEPH_MSG_CLIENT_UNMOUNT:
-		return &client->msgpool_unmount;
 	case CEPH_MSG_STATFS_REPLY:
 		return &client->msgpool_statfs_reply;
+	case CEPH_MSG_CLIENT_MOUNT_ACK:
+	case CEPH_MSG_CLIENT_UNMOUNT:
 	case CEPH_MSG_MDS_MAP:
-		return &client->msgpool_mds_map;
 	case CEPH_MSG_CLIENT_SESSION:
-		return &client->msgpool_client_session;
 	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-		return &client->msgpool_client_request_forward;
 	case CEPH_MSG_CLIENT_LEASE:
-		return &client->msgpool_client_lease;
 	case CEPH_MSG_CLIENT_CAPS:
-		return &client->msgpool_client_caps;
 	case CEPH_MSG_OSD_OPREPLY:
-		return &client->msgpool_osd_opreply;
-
 	case CEPH_MSG_OSD_MAP:
 	case CEPH_MSG_CLIENT_REPLY:
 	case CEPH_MSG_CLIENT_SNAP:
