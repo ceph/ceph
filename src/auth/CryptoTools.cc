@@ -16,6 +16,8 @@
 #include "openssl/evp.h"
 #include "openssl/aes.h"
 
+#include "include/ceph_fs.h"
+
 
 class CryptoNone : public CryptoHandler {
 public:
@@ -145,9 +147,9 @@ static CryptoAES crypto_aes;
 CryptoHandler *CryptoManager::get_crypto(int type)
 {
   switch (type) {
-    case CEPH_CRYPTO_NONE:
+    case CEPH_SECRET_NONE:
       return &crypto_none;
-    case CEPH_CRYPTO_AES:
+    case CEPH_SECRET_AES:
       return &crypto_aes;
     default:
       return NULL;

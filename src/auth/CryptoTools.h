@@ -16,10 +16,6 @@
 
 #include "AuthTypes.h"
 
-#define CEPH_CRYPTO_NONE     0x0
-#define CEPH_CRYPTO_AES      0x1
-
-
 class CryptoHandler {
 public:
   virtual bool encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out) = 0;
