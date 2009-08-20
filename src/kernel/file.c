@@ -581,7 +581,8 @@ static ssize_t ceph_sync_read(struct file *file, char __user *data,
  * Write commit callback, called if we requested both an ACK and
  * ONDISK commit reply from the OSD.
  */
-static void sync_write_commit(struct ceph_osd_request *req)
+static void sync_write_commit(struct ceph_osd_request *req,
+			      struct ceph_msg *msg)
 {
 	struct ceph_inode_info *ci = ceph_inode(req->r_inode);
 

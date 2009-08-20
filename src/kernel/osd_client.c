@@ -514,31 +514,34 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	ceph_osdc_get_request(req);
 	flags = le32_to_cpu(rhead->flags);
 
+	if (req->r_reply) {
+		/*
+		 * once we see the message has been received, we don't
+		 * need a ref (which is only needed for revoking
+		 * pages)
+		 */
+		ceph_msg_put(req->r_reply);
+		req->r_reply = NULL;
+	}
+
 	if (req->r_aborted) {
 		dout("handle_reply tid %llu aborted\n", tid);
 		goto done;
 	}
 	if (!req->r_got_reply) {
-		struct ceph_osd_reply_head *replyhead;
 		unsigned bytes;
 
-		replyhead = msg->front.iov_base;
-		req->r_result = le32_to_cpu(replyhead->result);
+		req->r_result = le32_to_cpu(rhead->result);
 		bytes = le32_to_cpu(msg->hdr.data_len);
 		dout("handle_reply result %d bytes %d\n", req->r_result,
 		     bytes);
 		if (req->r_result == 0)
 			req->r_result = bytes;
-		req->r_got_reply = 1;
-	}
-	if (req->r_reply) {
-		ceph_msg_put(req->r_reply);
-		req->r_reply = NULL;
-	}
 
-	if (req->r_reassert_version.epoch == 0) {
-		/* in case we need to replay this op, */
+		/* in case this is a write and we need to replay, */
 		req->r_reassert_version = rhead->reassert_version;
+
+		req->r_got_reply = 1;
 	} else if ((flags & CEPH_OSD_FLAG_ONDISK) == 0) {
 		dout("handle_reply tid %llu dup ack\n", tid);
 		goto done;
@@ -554,13 +557,13 @@ void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	mutex_unlock(&osdc->request_mutex);
 
 	if (req->r_callback)
-		req->r_callback(req);
+		req->r_callback(req, msg);
 	else
 		complete(&req->r_completion);
 
 	if (flags & CEPH_OSD_FLAG_ONDISK) {
 		if (req->r_safe_callback)
-			req->r_safe_callback(req);
+			req->r_safe_callback(req, msg);
 		complete(&req->r_safe_completion);  /* fsync waiter */
 	}
 
@@ -862,7 +865,7 @@ void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
 {
 	struct ceph_msg *msg;
 
-	dout("abort_request tid %llu, revoking %p pages\n", req->r_tid,
+	pr_err("abort_request tid %llu, revoking %p pages\n", req->r_tid,
 	     req->r_request);
 	/*
 	 * mark req aborted _before_ revoking pages, so that
@@ -879,6 +882,8 @@ void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
 		mutex_lock(&req->r_reply->page_mutex);
 		req->r_reply->pages = NULL;
 		mutex_unlock(&req->r_reply->page_mutex);
+		ceph_msg_put(req->r_reply);
+		req->r_reply = NULL;
 	}
 }
 

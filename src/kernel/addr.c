@@ -506,7 +506,8 @@ static void ceph_release_pages(struct page **pages, int num)
  *
  * FIXME: What should we be doing here?
  */
-static void writepages_finish(struct ceph_osd_request *req)
+static void writepages_finish(struct ceph_osd_request *req,
+			      struct ceph_msg *msg)
 {
 	struct inode *inode = req->r_inode;
 	struct ceph_osd_reply_head *replyhead;
@@ -523,13 +524,11 @@ static void writepages_finish(struct ceph_osd_request *req)
 	u64 bytes = 0;
 
 	/* parse reply */
-	if (req->r_reply) {
-		replyhead = req->r_reply->front.iov_base;
-		WARN_ON(le32_to_cpu(replyhead->num_ops) == 0);
-		op = (void *)(replyhead + 1);
-		rc = le32_to_cpu(replyhead->result);
-		bytes = le64_to_cpu(op->length);
-	}
+	replyhead = msg->front.iov_base;
+	WARN_ON(le32_to_cpu(replyhead->num_ops) == 0);
+	op = (void *)(replyhead + 1);
+	rc = le32_to_cpu(replyhead->result);
+	bytes = le64_to_cpu(op->length);
 
 	if (rc >= 0) {
 		wrote = (bytes + (offset & ~PAGE_CACHE_MASK) + ~PAGE_CACHE_MASK)

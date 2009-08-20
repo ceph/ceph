@@ -16,7 +16,8 @@ struct ceph_osd_client;
 /*
  * completion callback for async writepages
  */
-typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
+typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *,
+				     struct ceph_msg *);
 
 /* an in-flight request */
 struct ceph_osd_request {

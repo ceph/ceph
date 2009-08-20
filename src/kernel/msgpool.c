@@ -119,7 +119,7 @@ struct ceph_msg *ceph_msgpool_get(struct ceph_msg_pool *pool)
 		}
 		spin_unlock(&pool->lock);
 
-		dout("msgpool_get %p now %d/%d, waiting\n", pool,
+		pr_err("msgpool_get %p now %d/%d, waiting\n", pool,
 		     pool->num, pool->min);
 		init_wait(&wait);
 		prepare_to_wait(&pool->wait, &wait, TASK_UNINTERRUPTIBLE);
