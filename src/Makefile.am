@@ -610,6 +610,7 @@ noinst_HEADERS = \
         messages/MOSDPGNotify.h\
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\
+        messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
 	messages/MOSDScrub.h\

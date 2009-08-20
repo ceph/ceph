@@ -12,15 +12,18 @@ v0.13
 /- osdmap: allow explicit pg 'override' mappings
 /- kclient: fixed vmalloc() usage (use for incoming msgs, GFP_NOFS)
 /- http gw
-- client authentication
 /- kclient: fix sync read vs EOF
 /- uclient: fix sync read vs EOF
 - uclient: fix write vs max_size
 /- [uk]client lseek SEEK_END
-- kclient msg pools
-  - don't reuse incoming cap message for revoke ack
-  - retry/requeue cap send on ENOMEM
+/- kclient msg pools
+/  - don't reuse incoming cap message for revoke ack
+/  - retry/requeue cap send on ENOMEM
+/- mds: bugfix for multiclient file access
 
+
+v0.14
+- client authentication
 
 bugs
 - premature filejournal trimming?
@@ -100,7 +103,6 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
-- remove needs to be in a work queue!
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
