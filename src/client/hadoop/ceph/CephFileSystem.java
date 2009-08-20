@@ -369,9 +369,8 @@ public class CephFileSystem extends FileSystem {
       status = new FileStatus(lstat.size, lstat.is_dir,
 			      ceph_replication(abs_path.toString()),
 			      lstat.block_size,
-			      //these times in seconds get converted to millis
-			      lstat.mod_time*1000,
-			      lstat.access_time*1000,
+			      lstat.mod_time,
+			      lstat.access_time,
 			      new FsPermission((short)lstat.mode),
 			      null,
 			      null,
