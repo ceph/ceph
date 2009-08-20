@@ -21,22 +21,25 @@
 /*
  * match encoding of struct ceph_secret
  */
-class EntitySecret {
+class CryptoKey {
 protected:
   __u16 type;
+  utime_t timestamp;
   bufferlist secret;
 
 public:
-  EntitySecret(bufferlist& bl) { secret = bl; }
+  CryptoKey(bufferlist& bl) { secret = bl; }
 
   void encode(bufferlist& bl) const {
     ::encode(type, bl);
+    ::encode(timestamp, bl);
     __u16 len = secret.length();
     ::encode(len, bl);
     bl.append(secret);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(type, bl);
+    ::decode(timestamp, bl);
     __u16 len;
     ::decode(len, bl);
     bl.copy(len, secret);
@@ -44,8 +47,7 @@ public:
 
   bufferlist& get_secret() { return secret; }
 };
-WRITE_CLASS_ENCODER(EntitySecret);
-
+WRITE_CLASS_ENCODER(CryptoKey);
 
 
 /*
@@ -53,7 +55,7 @@ WRITE_CLASS_ENCODER(EntitySecret);
  * (monitor, osd, mds).
  */
 struct ServiceTicket {
-  EntitySecret session_key;
+  CryptoKey session_key;
   bufferlist enc_ticket;        // opaque to us
   string nonce;
   utime_t renew_after, expires;
@@ -175,35 +177,5 @@ struct AuthRequest {
     return true;
   }
 };
-
-
-
-
-class ServiceSecret : public EntitySecret {
-  utime_t created;
-
-public:
-  void encode(bufferlist& bl) const {
-    ::encode(secret, bl);
-    ::encode(created, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(secret, bl);
-    ::decode(created, bl);
-  }
-};
-WRITE_CLASS_ENCODER(ServiceSecret);
-
-struct SessionKey {
-  bufferlist key;
-
-  void encode(bufferlist& bl) const {
-    ::encode(key, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(key, bl);
-  }
-};
-WRITE_CLASS_ENCODER(SessionKey);
 
 #endif

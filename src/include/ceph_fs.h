@@ -241,6 +241,7 @@ ceph_full_name_hash(const char *name, unsigned int len)
  */
 struct ceph_secret {
 	__le16 type;
+	__le64 timestamp;
 	__le16 len;
 	char key[];
 } __attribute__ ((packed));

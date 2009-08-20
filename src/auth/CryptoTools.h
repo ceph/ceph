@@ -22,8 +22,8 @@
 
 class CryptoHandler {
 public:
-  virtual bool encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out) = 0;
-  virtual bool decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out) = 0;
+  virtual bool encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out) = 0;
+  virtual bool decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out) = 0;
 };
 
 class CryptoManager {

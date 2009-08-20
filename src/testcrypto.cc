@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
   memset(aes_key, 0x77, sizeof(aes_key));
   bufferlist keybl;
   keybl.append(aes_key, sizeof(aes_key));
-  EntitySecret key(keybl);
+  CryptoKey key(keybl);
 
   const char *msg="hello! this is a message\n";
   bufferptr ptr(msg, strlen(msg));

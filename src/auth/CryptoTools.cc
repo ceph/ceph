@@ -21,18 +21,18 @@ class CryptoNone : public CryptoHandler {
 public:
   CryptoNone() {}
   ~CryptoNone() {}
-  bool encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
-  bool decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
+  bool encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
+  bool decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
 };
 
-bool CryptoNone::encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
+bool CryptoNone::encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
 {
   out = in;
 
   return true;
 }
 
-bool CryptoNone::decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
+bool CryptoNone::decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
 {
   out = in;
 
@@ -45,13 +45,13 @@ class CryptoAES : public CryptoHandler {
 public:
   CryptoAES() {}
   ~CryptoAES() {}
-  bool encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
-  bool decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
+  bool encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
+  bool decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
 };
 
 static const unsigned char *aes_iv = (const unsigned char *)"cephsageyudagreg";
 
-bool CryptoAES::encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
+bool CryptoAES::encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
 {
   bufferlist sec_bl = secret.get_secret();
   const unsigned char *key = (const unsigned char *)sec_bl.c_str();
@@ -91,7 +91,7 @@ bool CryptoAES::encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& 
   return true;
 }
 
-bool CryptoAES::decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
+bool CryptoAES::decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
 {
   bufferlist sec_bl = secret.get_secret();
   const unsigned char *key = (const unsigned char *)sec_bl.c_str();
