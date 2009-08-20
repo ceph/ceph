@@ -45,15 +45,24 @@ AC_ARG_WITH([radosgw],
             [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
             [],
             [with_radosgw=check])
+RADOSGW=1
 AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
-             [HAVE_LIBFCGI=1],
+             [RADOSGW=0],
 	     [if test "x$with_radosgw" != xcheck; then
                  AC_MSG_FAILURE(
                    [--with-radosgw was given, but libfcgi not found])
                fi
-             ])])
-AM_CONDITIONAL(WITH_RADOSGW, test "$HAVE_LIBFCGI" = "1")
+             ])
+	     AC_CHECK_LIB([expat], [XML_Parse],
+             [RADOSGW=0],
+	     [if test "x$with_radosgw" != xcheck; then
+                 AC_MSG_FAILURE(
+                   [--with-radosgw was given, but libexpat (libexpat1-dev on debian) not found])
+               fi
+             ])
+	     ])
+AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 # fuse?
 AC_ARG_WITH([fuse],
