@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[])
 {
-  CryptoHandler *handler = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_NONE);
+  CryptoHandler *handler = ceph_crypto_mgr.get_crypto(CEPH_CRYPTO_AES);
 
   if (!handler) {
     derr(0) << "handler == NULL" << dendl;
@@ -21,8 +21,10 @@ int main(int argc, char *argv[])
   EntitySecret key(keybl);
 
   const char *msg="hello! this is a message\n";
+  bufferptr ptr(msg, strlen(msg));
   bufferlist enc_in;
-  enc_in.append(msg, strlen(msg) + 1);
+  enc_in.append(ptr);
+  enc_in.append(ptr);
   bufferlist enc_out;
 
   if (!handler->encrypt(key, enc_in, enc_out)) {

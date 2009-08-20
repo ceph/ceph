@@ -21,18 +21,18 @@ class CryptoNone : public CryptoHandler {
 public:
   CryptoNone() {}
   ~CryptoNone() {}
-  bool encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
-  bool decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
+  bool encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
+  bool decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
 };
 
-bool CryptoNone::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoNone::encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
 {
   out = in;
 
   return true;
 }
 
-bool CryptoNone::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoNone::decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
 {
   out = in;
 
@@ -45,20 +45,21 @@ class CryptoAES : public CryptoHandler {
 public:
   CryptoAES() {}
   ~CryptoAES() {}
-  bool encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
-  bool decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out);
+  bool encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
+  bool decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out);
 };
 
 static const unsigned char *aes_iv = (const unsigned char *)"cephsageyudagreg";
 
-bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoAES::encrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
 {
   bufferlist sec_bl = secret.get_secret();
   const unsigned char *key = (const unsigned char *)sec_bl.c_str();
   int in_len = in.length();
-  const unsigned char *in_buf = (const unsigned char *)in.c_str();
-  int outlen = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
-  int tmplen;
+  const unsigned char *in_buf;
+  int max_out = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
+  int total_out = 0;
+  int outlen;
 #define OUT_BUF_EXTRA 128
   unsigned char outbuf[outlen + OUT_BUF_EXTRA];
 
@@ -71,54 +72,66 @@ bool CryptoAES::encrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
   EVP_CIPHER_CTX_init(&ctx);
   EVP_EncryptInit_ex(&ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
 
-  if(!EVP_EncryptUpdate(&ctx, outbuf, &outlen, in_buf, in.length())) {
-    derr(0) << "EVP_EncryptUpdate error" << dendl;
+  for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
+       it != in.buffers().end(); it++) {
+    outlen = max_out - total_out;
+    in_buf = (const unsigned char *)it->c_str();
+    if(!EVP_EncryptUpdate(&ctx, &outbuf[total_out], &outlen, in_buf, it->length())) {
+      return false;
+    }
+    total_out += outlen;
+  }
+  if(!EVP_EncryptFinal_ex(&ctx, outbuf + total_out, &outlen)) {
     return false;
   }
-  if(!EVP_EncryptFinal_ex(&ctx, outbuf + outlen, &tmplen)) {
-    derr(0) << "EVP_EncryptFinal error" << dendl;
-    return false;
-  }
+  total_out += outlen;
 
-  out.append((const char *)outbuf, outlen + tmplen);
+  out.append((const char *)outbuf, total_out);
 
   return true;
 }
 
-bool CryptoAES::decrypt(EntitySecret& secret, bufferlist& in, bufferlist& out)
+bool CryptoAES::decrypt(EntitySecret& secret, const bufferlist& in, bufferlist& out)
 {
   bufferlist sec_bl = secret.get_secret();
   const unsigned char *key = (const unsigned char *)sec_bl.c_str();
 
   int in_len = in.length();
   int dec_len = 0;
-  int last_dec_len = 0;
+  int total_dec_len = 0;
 
   unsigned char dec_data[in_len];
-  bool result = false;
+  bool result = true;
 
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   EVP_CIPHER_CTX_init(ctx);
 
   int res = EVP_DecryptInit_ex(ctx, EVP_aes_128_cbc(), NULL, key, aes_iv);
   if (res == 1) {
-    res = EVP_DecryptUpdate(ctx, dec_data,
-           &dec_len, (const unsigned char *)in.c_str(), in_len);
+    for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
+       it != in.buffers().end(); it++) {
+      const unsigned char *in_buf = (const unsigned char *)it->c_str();
+      res = EVP_DecryptUpdate(ctx, &dec_data[total_dec_len],
+            &dec_len, in_buf, it->length());
+      total_dec_len += dec_len;
 
-    if (res == 1) {
-      EVP_DecryptFinal_ex(ctx,
-            dec_data + dec_len,
-            &last_dec_len);
-
-            dec_len += last_dec_len;
-      out.append((const char *)dec_data, dec_len);
-
-      result = true;
-    } else {
-            dout(0) << "EVP_DecryptUpdate error" << dendl;
+      if (res != 1) {
+        dout(0) << "EVP_DecryptUpdate error" << dendl;
+        result = false;
+      }
     }
   } else {
     dout(0) << "EVP_DecryptInit_ex error" << dendl;
+    result = false;
+  }
+
+  if (result) {
+    EVP_DecryptFinal_ex(ctx,
+              &dec_data[total_dec_len],
+              &dec_len);
+
+    total_dec_len += dec_len;
+    out.append((const char *)dec_data, total_dec_len);
   }
 
   EVP_CIPHER_CTX_free(ctx);
