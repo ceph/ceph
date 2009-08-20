@@ -117,6 +117,7 @@ uclient
 - hadoop: clean up assert usage
 
 mds
+- pass issued, wanted into eval(lock) when eval() already has it?  (and otherwise optimize eval paths..)
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too

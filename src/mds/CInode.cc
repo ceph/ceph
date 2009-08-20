@@ -151,8 +151,12 @@ ostream& operator<<(ostream& out, CInode& in)
 	  << "@" << it->second->get_last_sent();
     }
     out << "}";
-    if (in.get_loner() >= 0)
+    if (in.get_loner() >= 0 || in.get_wanted_loner() >= 0) {
       out << ",l=" << in.get_loner();
+      if (in.get_loner() != in.get_wanted_loner())
+	out << "(" << in.get_wanted_loner() << ")";
+    }
+    
   }
 
   if (in.get_num_ref()) {
@@ -1593,8 +1597,12 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (!no_caps && valid && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, find_snaprealm());
-      if (is_auth())
-	try_choose_loner();
+      if (is_auth()) {
+	if (choose_ideal_loner() >= 0)
+	  try_set_loner();
+	else if (get_wanted_loner() < 0)
+	  try_drop_loner();
+      }
     }
 
     if (cap && valid) {

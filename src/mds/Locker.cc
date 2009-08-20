@@ -525,8 +525,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
 
     // drop loner before doing waiters
     if (caps &&
-	in->is_auth() && in->get_loner() >= 0 &&
-	in->multiple_nonstale_caps()) {
+	in->is_auth() && in->get_loner() >= 0 && in->get_wanted_loner() < 0) {
       dout(10) << "  trying to drop loner" << dendl;
       if (in->try_drop_loner()) {
 	dout(10) << "  dropped loner" << dendl;
@@ -557,18 +556,18 @@ bool Locker::eval(CInode *in, int mask)
   dout(10) << "eval " << mask << " " << *in << dendl;
 
   // choose loner?
-  if (in->is_auth() && in->get_loner() < 0) {
-    int wanted = in->get_caps_wanted();
-    if (((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GEXCL)) ||
-	 (in->inode.is_dir() && !in->has_subtree_root_dirfrag() &&
-	  !in->multiple_nonstale_caps())) &&
-	in->try_choose_loner()) {
-      dout(10) << "  chose loner client" << in->get_loner() << dendl;
-      need_issue = true;
-      mask = -1;
-    }
+  if (in->is_auth()) {
+    if (in->choose_ideal_loner() >= 0) {
+      if (in->try_set_loner()) {
+	dout(10) << "eval set loner to client" << in->get_loner() << dendl;
+	need_issue = true;
+	mask = -1;
+      } else
+	dout(10) << "eval want loner client" << in->get_wanted_loner() << " but failed to set it" << dendl;
+    } else
+      dout(10) << "eval doesn't want loner" << dendl;
   }
-
+    
   if (mask & CEPH_LOCK_IFILE)
     eval_any(&in->filelock, &need_issue);
   if (mask & CEPH_LOCK_IAUTH)
@@ -581,8 +580,7 @@ bool Locker::eval(CInode *in, int mask)
     eval_any(&in->nestlock, &need_issue);
 
   // drop loner?
-  if (in->is_auth() && in->get_loner() >= 0 &&
-      in->multiple_nonstale_caps()) {
+  if (in->is_auth() && in->get_loner() >= 0 && in->get_wanted_loner() < 0) {
     dout(10) << "  trying to drop loner" << dendl;
     if (in->try_drop_loner()) {
       dout(10) << "  dropped loner" << dendl;
@@ -1463,7 +1461,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
     if (in->filelock.is_stable()) {
-      if (in->get_loner() >= 0)
+      if (in->get_target_loner() >= 0)
 	file_excl(&in->filelock);
       else
 	simple_lock(&in->filelock);
@@ -1880,7 +1878,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
 	cap->inc_suppress();
-	if (in->get_loner() >= 0 || in->try_choose_loner()) {
+	if (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner())) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
 	    file_excl(&in->filelock, &need_issue);
 	  need_issue = false;  // loner!
@@ -2469,7 +2467,7 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   
   // -> excl?
   if (lock->get_state() != LOCK_EXCL &&
-      in && in->get_loner() >= 0 &&
+      in && in->get_target_loner() >= 0 &&
       (wanted & CEPH_CAP_GEXCL)) {
     dout(7) << "simple_eval stable, going to excl " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
@@ -2480,8 +2478,9 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_SYNC &&
 	   !lock->is_xlocked() &&
 	   !lock->is_wrlocked() &&
-	   !(issued & CEPH_CAP_GEXCL) &&
-	   !lock->is_waiter_for(SimpleLock::WAIT_WR)) {
+	   ((!(issued & CEPH_CAP_GEXCL) &&
+	     !lock->is_waiter_for(SimpleLock::WAIT_WR)) ||
+	    (lock->get_state() == LOCK_EXCL && in && in->get_target_loner() < 0))) {
     dout(7) << "simple_eval stable, syncing " << *lock 
 	    << " on " << *lock->get_parent() << dendl;
     simple_sync(lock, need_issue);
@@ -3138,7 +3137,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
 	   ((wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
 	    (in->inode.is_dir() && !in->has_subtree_root_dirfrag())) &&
-	   in->try_choose_loner()) {
+	   in->get_target_loner() >= 0) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock, need_issue);

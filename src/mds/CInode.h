@@ -334,7 +334,7 @@ private:
     xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
     snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
     nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
-    loner_cap(-1)
+    loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
     g_num_inoa++;
@@ -534,14 +534,22 @@ public:
 
   // -- caps -- (new)
   // client caps
-  int loner_cap;
+  int loner_cap, want_loner_cap;
 
-  bool try_choose_loner() {
-    if (loner_cap >= 0)
-      return true;
+  int get_loner() { return loner_cap; }
+  int get_wanted_loner() { return want_loner_cap; }
 
+  // this is the loner state our locks should aim for
+  int get_target_loner() {
+    if (loner_cap == want_loner_cap)
+      return loner_cap;
+    else
+      return -1;
+  }
+
+  int calc_ideal_loner() {
     if (!mds_caps_wanted.empty())
-      return false;
+      return -1;
 
     int n = 0;
     int loner = -1;
@@ -549,24 +557,30 @@ public:
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale() &&
-	  ((it->second->wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD))
-	   || inode.is_dir())) {
+	  ((it->second->wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD)) ||
+	   (inode.is_dir() && !has_subtree_root_dirfrag()))) {
 	if (n)
-	  return false;
+	  return -1;
 	n++;
 	loner = it->first;
       }
-    if (n == 1) {
-      loner_cap = loner;
-      authlock.excl_client = loner;
-      filelock.excl_client = loner;
-      linklock.excl_client = loner;
-      xattrlock.excl_client = loner;
-      return true;
-    }
-    return false;
+    return loner;
   }
-  
+  int choose_ideal_loner() {
+    want_loner_cap = calc_ideal_loner();
+    return want_loner_cap;
+  }
+  bool try_set_loner() {
+    assert(want_loner_cap >= 0);
+    if (loner_cap >= 0 && loner_cap != want_loner_cap)
+      return false;
+    loner_cap = want_loner_cap;
+    authlock.excl_client = loner_cap;
+    filelock.excl_client = loner_cap;
+    linklock.excl_client = loner_cap;
+    xattrlock.excl_client = loner_cap;
+    return true;
+  }
   bool try_drop_loner() {
     if (loner_cap < 0)
       return true;
@@ -605,8 +619,9 @@ public:
   }
   void choose_lock_states() {
     int issued = get_caps_issued();
-    if (is_auth() && (issued & CEPH_CAP_ANY_EXCL))
-      try_choose_loner();
+    if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
+	choose_ideal_loner() >= 0)
+      try_set_loner();
     choose_lock_state(&filelock, issued);
     choose_lock_state(&authlock, issued);
     choose_lock_state(&xattrlock, issued);
@@ -633,9 +648,6 @@ public:
 	n++;
       }
     return false;
-  }
-  int get_loner() {
-    return loner_cap;
   }
 
   bool is_any_caps() { return !client_caps.empty(); }
