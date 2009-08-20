@@ -37,7 +37,6 @@ struct ClientTicket {
   void decode(bufferlist::iterator& bl) {
     __u8 v;
     ::decode(v, bl);
-    ::decode(client, bl);
     ::decode(addr, bl);
     ::decode(created, bl);
     ::decode(expires, bl);

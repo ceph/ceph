@@ -85,12 +85,12 @@ struct ServiceTicket {
 };
 
 
-bool verify_authenticator(bufferlist& bl)
+static bool verify_authenticator(bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   bufferlist enc_ticket, enc_info;
   ::decode(enc_ticket, p);
-  ::decode(info, p);
+  ::decode(enc_info, p);
 
   bufferlist ticket;
   // decrypt with my key
@@ -98,10 +98,15 @@ bool verify_authenticator(bufferlist& bl)
   // decrypt info with session key
 
 
+  /* FIXME */
+#if 0
   if (info.nonce != ticket.nonce)
     return false;
+
   if (old)
     return false;
+#endif
+  return true;
 }
 
 
