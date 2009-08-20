@@ -23,11 +23,11 @@ struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
 	struct rb_node  r_node;
 
-	struct ceph_msg  *r_request;
-	struct ceph_msg  *r_reply;
+	struct ceph_msg  *r_request, *r_reply;
 	int               r_result;
 	int               r_flags;     /* any additional flags for the osd */
 	int               r_aborted;   /* set if we cancel this request */
+	int r_prepared_pages, r_got_reply;
 
 	struct ceph_osd_client *r_osdc;
 	atomic_t          r_ref;
