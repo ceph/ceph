@@ -711,7 +711,7 @@ static struct ceph_client *ceph_create_client(void)
 
 	/* msg pools */
 	/* preallocated at request time: */
-	err = ceph_msgpool_init(&client->msgpool_statfs_reply, 4096, 0);
+	err = ceph_msgpool_init(&client->msgpool_statfs_reply, 4096, 0, false);
 	if (err < 0)
 		goto fail;
 
