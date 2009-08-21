@@ -487,6 +487,7 @@ static inline const char *ceph_mds_op_name(int op)
 #define CEPH_SETATTR_MTIME  8
 #define CEPH_SETATTR_ATIME 16
 #define CEPH_SETATTR_SIZE  32
+#define CEPH_SETATTR_CTIME 64
 
 union ceph_mds_request_args {
 	struct {
