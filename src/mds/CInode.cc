@@ -146,8 +146,11 @@ ostream& operator<<(ostream& out, CInode& in)
          it != in.get_client_caps().end();
          it++) {
       if (it != in.get_client_caps().begin()) out << ",";
-      out << it->first << "=" << ccap_string(it->second->issued())
-	  << "/" << ccap_string(it->second->wanted())
+      out << it->first << "="
+	  << ccap_string(it->second->pending());
+      if (it->second->issued() != it->second->pending())
+	out << "/" << ccap_string(it->second->issued());
+      out << "/" << ccap_string(it->second->wanted())
 	  << "@" << it->second->get_last_sent();
     }
     out << "}";
