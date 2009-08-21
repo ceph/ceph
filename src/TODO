@@ -19,11 +19,12 @@ v0.13
 /- kclient msg pools
 /  - don't reuse incoming cap message for revoke ack
 /  - retry/requeue cap send on ENOMEM
-/- mds: bugfix for multiclient file access
-
+/- mds: misc bugfixes for multiclient file access
 
 v0.14
+- kclient: retry alloc on ENOMEM when reading from connection
 - client authentication
+- radosgw
 
 bugs
 - premature filejournal trimming?
