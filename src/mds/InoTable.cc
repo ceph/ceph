@@ -23,11 +23,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << "." << table_name << ": "
 
-void InoTable::init_inode()
-{
-  ino = MDS_INO_IDS_OFFSET + mds->get_nodeid();
-}
-
 void InoTable::reset_state()
 {
   // use generic range. FIXME THIS IS CRAP

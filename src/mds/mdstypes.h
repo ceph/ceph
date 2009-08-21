@@ -20,7 +20,7 @@ using namespace std;
 
 #include <boost/pool/pool.hpp>
 
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v007"
+#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v008"
 
 
 //#define MDS_REF_SET      // define me for improved debug output, sanity checking
@@ -42,9 +42,6 @@ using namespace std;
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
 #define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
-#define MDS_INO_IDS_OFFSET        (3*MAX_MDS)
-#define MDS_INO_CLIENTMAP_OFFSET  (4*MAX_MDS)
-#define MDS_INO_SESSIONMAP_OFFSET (5*MAX_MDS)
 #define MDS_INO_STRAY_OFFSET      (6*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       (10*MAX_MDS)

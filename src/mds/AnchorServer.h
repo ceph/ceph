@@ -31,15 +31,18 @@ class AnchorServer : public MDSTableServer {
   map<version_t, inodeno_t> pending_destroy;
   map<version_t, pair<inodeno_t, vector<Anchor> > > pending_update;
 
-  void init_inode();
   void reset_state();
   void encode_server_state(bufferlist& bl) {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(anchor_map, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_update, bl);
   }
   void decode_server_state(bufferlist::iterator& p) {
+    __u8 v;
+    ::decode(v, p);
     ::decode(anchor_map, p);
     ::decode(pending_create, p);
     ::decode(pending_destroy, p);

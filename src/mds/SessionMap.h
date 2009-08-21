@@ -290,7 +290,6 @@ public:
 
   object_t get_object_name();
 
-  void init_inode();
   void load(Context *onload);
   void _load_finish(int r, bufferlist &bl);
   void save(Context *onsave, version_t needv=0);

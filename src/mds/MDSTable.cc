@@ -91,7 +91,6 @@ void MDSTable::save_2(version_t v)
 
 void MDSTable::reset()
 {
-  init_inode();
   reset_state();
   state = STATE_ACTIVE;
 }
@@ -124,8 +123,6 @@ object_t MDSTable::get_object_name()
 void MDSTable::load(Context *onfinish)
 { 
   dout(10) << "load" << dendl;
-
-  init_inode();
 
   assert(is_undef());
   state = STATE_OPENING;
