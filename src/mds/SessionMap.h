@@ -148,15 +148,17 @@ public:
     cap_push_seq(0) { }
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(inst, bl);
-    ::encode(cap_push_seq, bl);
     ::encode(completed_requests, bl);
     ::encode(prealloc_inos, bl);   // hacky, see below.
     ::encode(used_inos, bl);
   }
   void decode(bufferlist::iterator& p) {
+    __u8 v;
+    ::decode(v, p);
     ::decode(inst, p);
-    ::decode(cap_push_seq, p);
     ::decode(completed_requests, p);
     ::decode(prealloc_inos, p);
     ::decode(used_inos, p);
