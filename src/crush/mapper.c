@@ -441,11 +441,11 @@ int crush_do_rule(struct crush_map *map,
 		  int force, __u32 *weight)
 {
 	int result_len;
-	int *force_context = NULL;
+	int force_context[CRUSH_MAX_DEPTH];
 	int force_pos = -1;
-	int *a = NULL;
-	int *b = NULL;
-	int *c = NULL;
+	int a[CRUSH_MAX_SET];
+	int b[CRUSH_MAX_SET];
+	int c[CRUSH_MAX_SET];
 	int recurse_to_leaf;
 	int *w;
 	int wsize = 0;
@@ -460,19 +460,6 @@ int crush_do_rule(struct crush_map *map,
 	int rc = -1;
 
 	BUG_ON(ruleno >= map->max_rules);
-
-	a = kmalloc(CRUSH_MAX_SET * sizeof(int), GFP_KERNEL);
-	if (!a)
-		goto out;
-	b = kmalloc(CRUSH_MAX_SET * sizeof(int), GFP_KERNEL);
-	if (!b)
-		goto out;
-	c = kmalloc(CRUSH_MAX_SET * sizeof(int), GFP_KERNEL);
-	if (!c)
-		goto out;
-	force_context = kmalloc(CRUSH_MAX_DEPTH * sizeof(int), GFP_KERNEL);
-	if (!force_context)
-		goto out;
 
 	rule = map->rules[ruleno];
 	result_len = 0;
@@ -595,11 +582,6 @@ int crush_do_rule(struct crush_map *map,
 	rc = result_len;
 
 out:
-	kfree(a);
-	kfree(b);
-	kfree(c);
-	kfree(force_context);
-
 	return rc;
 }
 
