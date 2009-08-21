@@ -1,7 +1,7 @@
 #!/bin/bash
 
 set -e
-name=`echo $0 | sed 's/\//_/'`
+name=`echo $0 | sed 's/\//_/g'`
 mkdir $name
 cd $name
 
