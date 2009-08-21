@@ -134,32 +134,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   dout(10) << "CephFSInterface: In unlink for path " << c_path <<  ":" << dendl;
-  // is it a file or a directory?
-  struct stat stbuf;
-  int stat_result = ceph_lstat(c_path, &stbuf);
-  if (stat_result < 0) {// then the path doesn't even exist
-    dout(0) << "ceph_unlink: path " << c_path << " does not exist" << dendl;
-    env->ReleaseStringUTFChars(j_path, c_path);
-    return false;
-  }
-  int result;
-  if (0 != S_ISDIR(stbuf.st_mode)) { // it's a directory
-    dout(10) << "ceph_unlink: path " << c_path << " is a directory. Calling client->rmdir()" << dendl;
-    result = ceph_rmdir(c_path);
-  }
-  else if (0 != S_ISREG(stbuf.st_mode)) { // it's a file
-    dout(10) << "ceph_unlink: path " << c_path << " is a file. Calling client->unlink()" << dendl;
-    result = ceph_unlink(c_path);
-  }
-  else {
-    dout(0) << "ceph_unlink: path " << c_path << " is not a file or a directory. Failing:" << dendl;
-    result = -1;
-  }
-    
-  dout(10) << "In ceph_unlink for path " << c_path << 
-    ": got result " 
-       << result << ". Returning..."<< dendl;
-
+  int result = ceph_unlink(c_path);
   env->ReleaseStringUTFChars(j_path, c_path);
   return (0 == result) ? JNI_TRUE : JNI_FALSE; 
 }
