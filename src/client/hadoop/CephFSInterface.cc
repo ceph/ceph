@@ -302,10 +302,36 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   list<string> contents;
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return NULL;
-  int result = ceph_getdir(c_path, contents);
+  DIR *dirp;
+  ceph_opendir(c_path, &dirp);
+  int r;
+  int buflen = 100; //good default?
+  char *buf = new char[buflen];
+  string *ent;
+  int bufpos;
+  while (1) {
+    r = ceph_getdnames(dirp, buf, buflen);
+    if (r==-ERANGE) { //expand the buffer
+      delete buf;
+      buflen *= 2;
+      buf = new char[buflen];
+      continue;
+    }
+    if (r<=0) break;
+
+    //if we make it here, we got at least one name or an unexpected return value
+    bufpos = 0;
+    while (bufpos<r) {//make new strings and add them to listing
+      ent = new string(buf+bufpos);
+      contents.push_back(*ent);
+      bufpos+=ent->size()+1;
+      delete ent;
+    }
+  }
+  ceph_closedir(dirp);
   env->ReleaseStringUTFChars(j_path, c_path);
   
-  if (result < 0) return NULL;
+  if (r < 0) return NULL;
 
   dout(10) << "checking for empty dir" << dendl;
   int dir_size = contents.size();

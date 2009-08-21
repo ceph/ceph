@@ -28,6 +28,8 @@ struct stat_precise {
   time_t st_ctime_sec;
   time_t st_ctime_micro;
 };
+
+extern "C" {
 int ceph_initialize(int argc, const char **argv);
 void ceph_deinitialize();
 
@@ -88,5 +90,6 @@ int ceph_sync_fs();
 int ceph_get_file_stripe_unit(int fh);
 int ceph_get_file_replication(const char *path);
 int ceph_get_file_stripe_address(int fd, loff_t offset, char *buf, int buflen);
+}
 
 #endif

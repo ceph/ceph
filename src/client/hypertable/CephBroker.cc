@@ -421,6 +421,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
       delete ent;
     }
   }
+  ceph_closedir(dirp);
   cb->response(listing);
 }
 
