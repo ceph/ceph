@@ -3644,6 +3644,56 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   assert(0);
 }
 
+int Client::getdnames(DIR *d, char *buf, int buflen)
+{
+  DirResult *dirp = (DirResult*)d;
+  int ret = 0;
+  
+  while (1) {
+    if (dirp->at_end())
+      return 0;
+
+    if (dirp->buffer.count(dirp->frag()) == 0) {
+      Mutex::Locker lock(client_lock);
+      _readdir_get_frag(dirp);
+      if (dirp->at_end())
+	return 0;
+    }
+
+    frag_t fg = dirp->frag();
+    uint32_t pos = dirp->fragpos();
+    assert(dirp->buffer.count(fg));   
+    vector<DirEntry> &ent = dirp->buffer[fg];
+
+    if (ent.empty()) {
+      dout(10) << "empty frag " << fg << ", moving on to next" << dendl;
+      _readdir_next_frag(dirp);
+      continue;
+    }
+
+    assert(pos < ent.size());
+
+    // is there room?
+    int dlen = ent[pos].d_name.length();
+    const char *dname = ent[pos].d_name.c_str();
+    if (ret + dlen + 1 > buflen) {
+      if (!ret)
+	return -ERANGE;  // the buffer is too small for the first name!
+      return ret;
+    }
+    memcpy(buf + ret, dname, dlen + 1);
+    ret += dlen + 1;
+
+    pos++;
+    dirp->offset++;
+
+    if (pos == ent.size()) 
+      _readdir_next_frag(dirp);
+  }
+  assert(0);
+}
+
+
 
 int Client::closedir(DIR *dir) 
 {

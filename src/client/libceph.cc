@@ -117,6 +117,11 @@ extern "C" int ceph_readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st,
   return client->readdirplus_r(dirp, de, st, stmask);
 }
 
+extern "C" int ceph_getdnames(DIR *dirp, char *buf, int buflen)
+{
+  return client->getdnames(dirp, buf, buflen);
+}
+
 extern "C" void ceph_rewinddir(DIR *dirp)
 {
   client->rewinddir(dirp);

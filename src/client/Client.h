@@ -1112,6 +1112,7 @@ public:
   int closedir(DIR *dirp);
   int readdir_r(DIR *dirp, struct dirent *de);
   int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+  int getdnames(DIR *dirp, char *buf, int buflen);  // get a bunch of dentries at once
   void rewinddir(DIR *dirp); 
   loff_t telldir(DIR *dirp);
   void seekdir(DIR *dirp, loff_t offset);
