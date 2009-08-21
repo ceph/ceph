@@ -69,3 +69,19 @@ O->C : {timestamp+1}^svc session key
 
 
 
+
+To authenticate:
+
+ client -> auth:
+   {client_name, client_addr}^client_secret
+ auth -> client:
+   {session key, validity, nonce}^client_secret
+   {client_ticket, session key}^service_secret  ... "enc_ticket"
+
+where client_ticket is { client_addr, created, expires, none, capabilities }.
+
+To gain access using our ticket:
+
+
+   
+

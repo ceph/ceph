@@ -583,6 +583,11 @@ public:
 	}
       }
 
+      void copy(unsigned len, ptr &dest) {
+	dest = create(len);
+	copy(len, dest.c_str());
+      }
+
       void copy(unsigned len, list &dest) {
 	if (p == ls->end()) seek(off);
 	while (len > 0) {

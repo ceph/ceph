@@ -11,35 +11,64 @@
  * 
  */
 
-#include "AuthTypes.h"
-#include "CryptoTools.h"
+#include "Crypto.h"
+
 #include "openssl/evp.h"
 #include "openssl/aes.h"
 
 #include "include/ceph_fs.h"
+#include "config.h"
 
+#include <errno.h>
+
+static int get_random_bytes(int len, bufferlist& out)
+{
+  char buf[len];
+  char *t = buf;
+  int fd = ::open("/dev/random", O_RDONLY);
+  if (fd < 0)
+    return -errno;
+  while (len) {
+    int r = ::read(fd, t, len);
+    if (r < 0)
+      return -errno;
+    t += r;
+    len -= r;
+  }
+  out.append(buf, len);
+  return 0;
+}
+
+// ---------------------------------------------------
 
 class CryptoNone : public CryptoHandler {
 public:
   CryptoNone() {}
   ~CryptoNone() {}
-  bool encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
-  bool decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
+  int create(bufferptr& secret);
+  int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
+  int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
 };
 
-bool CryptoNone::encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
+int CryptoNone::create(bufferptr& secret)
 {
-  out = in;
-
-  return true;
+  return 0;
 }
 
-bool CryptoNone::decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
+int CryptoNone::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
   out = in;
-
-  return true;
+  return 0;
 }
+
+int CryptoNone::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
+{
+  out = in;
+  return 0;
+}
+
+
+// ---------------------------------------------------
 
 #define AES_KEY_LEN     AES_BLOCK_SIZE
 
@@ -47,16 +76,26 @@ class CryptoAES : public CryptoHandler {
 public:
   CryptoAES() {}
   ~CryptoAES() {}
-  bool encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
-  bool decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out);
+  int create(bufferptr& secret);
+  int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
+  int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
 };
 
 static const unsigned char *aes_iv = (const unsigned char *)"cephsageyudagreg";
 
-bool CryptoAES::encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
+int CryptoAES::create(bufferptr& secret)
 {
-  bufferlist sec_bl = secret.get_secret();
-  const unsigned char *key = (const unsigned char *)sec_bl.c_str();
+  bufferlist bl;
+  int r = get_random_bytes(AES_KEY_LEN, bl);
+  if (r < 0)
+    return r;
+  secret = buffer::ptr(bl.c_str(), bl.length());
+  return 0;
+}
+
+int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
+{
+  const unsigned char *key = (const unsigned char *)secret.c_str();
   int in_len = in.length();
   const unsigned char *in_buf;
   int max_out = (in_len + AES_BLOCK_SIZE) & ~(AES_BLOCK_SIZE -1);
@@ -65,7 +104,7 @@ bool CryptoAES::encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out
 #define OUT_BUF_EXTRA 128
   unsigned char outbuf[outlen + OUT_BUF_EXTRA];
 
-  if (sec_bl.length() < AES_KEY_LEN) {
+  if (secret.length() < AES_KEY_LEN) {
     derr(0) << "key is too short" << dendl;
     return false;
   }
@@ -93,17 +132,16 @@ bool CryptoAES::encrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out
   return true;
 }
 
-bool CryptoAES::decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out)
+int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
-  bufferlist sec_bl = secret.get_secret();
-  const unsigned char *key = (const unsigned char *)sec_bl.c_str();
+  const unsigned char *key = (const unsigned char *)secret.c_str();
 
   int in_len = in.length();
   int dec_len = 0;
   int total_dec_len = 0;
 
   unsigned char dec_data[in_len];
-  bool result = true;
+  int result = 0;
 
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   EVP_CIPHER_CTX_init(ctx);
@@ -119,12 +157,12 @@ bool CryptoAES::decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out
 
       if (res != 1) {
         dout(0) << "EVP_DecryptUpdate error" << dendl;
-        result = false;
+        result = -1;
       }
     }
   } else {
     dout(0) << "EVP_DecryptInit_ex error" << dendl;
-    result = false;
+    result = -1;
   }
 
   if (result) {
@@ -140,6 +178,9 @@ bool CryptoAES::decrypt(CryptoKey& secret, const bufferlist& in, bufferlist& out
   EVP_cleanup();
   return result;
 }
+
+
+// ---------------------------------------------------
 
 static CryptoNone crypto_none;
 static CryptoAES crypto_aes;
@@ -159,3 +200,31 @@ CryptoHandler *CryptoManager::get_crypto(int type)
 CryptoManager ceph_crypto_mgr;
 
 
+// ---------------------------------------------------
+
+int CryptoKey::create(int t)
+{
+  type = t;
+  created = g_clock.now();
+
+  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  if (!h)
+    return -EOPNOTSUPP;
+  return h->create(secret);
+}
+
+int CryptoKey::encrypt(const bufferlist& in, bufferlist& out)
+{
+  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  if (!h)
+    return -EOPNOTSUPP;
+  return h->encrypt(this->secret, in, out);
+}
+
+int CryptoKey::decrypt(const bufferlist& in, bufferlist& out)
+{
+  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  if (!h)
+    return -EOPNOTSUPP;
+  return h->decrypt(this->secret, in, out);
+}

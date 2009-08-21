@@ -1,4 +1,4 @@
-#include "auth/CryptoTools.h"
+#include "auth/Crypto.h"
 
 #include "config.h"
 
@@ -7,18 +7,10 @@
 
 int main(int argc, char *argv[])
 {
-  CryptoHandler *handler = ceph_crypto_mgr.get_crypto(CEPH_SECRET_AES);
-
-  if (!handler) {
-    derr(0) << "handler == NULL" << dendl;
-    exit(1);
-  }
-
   char aes_key[AES_KEY_LEN];
   memset(aes_key, 0x77, sizeof(aes_key));
-  bufferlist keybl;
-  keybl.append(aes_key, sizeof(aes_key));
-  CryptoKey key(keybl);
+  bufferptr keybuf(aes_key, sizeof(aes_key));
+  CryptoKey key(CEPH_SECRET_AES, g_clock.now(), keybuf);
 
   const char *msg="hello! this is a message\n";
   bufferptr ptr(msg, strlen(msg));
@@ -27,7 +19,7 @@ int main(int argc, char *argv[])
   enc_in.append(ptr);
   bufferlist enc_out;
 
-  if (!handler->encrypt(key, enc_in, enc_out)) {
+  if (key.encrypt(enc_in, enc_out) < 0) {
     derr(0) << "couldn't encode!" << dendl;
     exit(1);
   }
@@ -36,7 +28,7 @@ int main(int argc, char *argv[])
 
   dec_in = enc_out;
 
-  if (!handler->decrypt(key, dec_in, dec_out)) {
+  if (key.decrypt(dec_in, dec_out) < 0) {
     derr(0) << "couldn't decode!" << dendl;
   }
 
