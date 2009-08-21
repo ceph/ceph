@@ -3677,7 +3677,9 @@ int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
     int dlen = ent[pos].d_name.length();
     if (fullent)
       dlen += sizeof(struct dirent);
-    if (ret + dlen + 1 > buflen) {
+    else
+      dlen += 1; // null terminator
+    if (ret + dlen > buflen) {
       if (!ret)
 	return -ERANGE;  // the buffer is too small for the first name!
       return ret;
@@ -3685,8 +3687,8 @@ int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
     if (fullent)
       _readdir_fill_dirent((struct dirent *)(buf + ret), &ent[pos], dirp->offset);
     else
-      memcpy(buf + ret, ent[pos].d_name.c_str(), dlen + 1);
-    ret += dlen + 1;
+      memcpy(buf + ret, ent[pos].d_name.c_str(), dlen);
+    ret += dlen;
 
     pos++;
     dirp->offset++;
