@@ -2045,6 +2045,10 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     }
     if (p->seq != cap->get_last_issue()) {
       dout(10) << " seq " << p->seq << " != " << cap->get_last_issue() << " on " << *in << dendl;
+      
+      // clean out any old revoke history
+      cap->clean_revoke_from(p->seq);
+      eval_cap_gather(in);
       continue;
     }
 

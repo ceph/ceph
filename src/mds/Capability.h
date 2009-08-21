@@ -113,16 +113,18 @@ private:
 public:
   struct revoke_info {
     __u32 before;
-    ceph_seq_t seq;
+    ceph_seq_t seq, last_issue;
     revoke_info() {}
-    revoke_info(__u32 b, ceph_seq_t s) : before(b), seq(s) {}
+    revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const {
       ::encode(before, bl);
       ::encode(seq, bl);
+      ::encode(last_issue, bl);
     }
     void decode(bufferlist::iterator& bl) {
       ::decode(before, bl);
       ::decode(seq, bl);
+      ::decode(last_issue, bl);
     }
   };
 private:
@@ -145,7 +147,7 @@ public:
   ceph_seq_t issue(unsigned c) {
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
-      _revokes.push_back(revoke_info(_pending, last_sent));
+      _revokes.push_back(revoke_info(_pending, last_sent, last_issue));
       _pending = c;
       _issued |= c;
     } else if (~_pending & c) {
@@ -189,6 +191,17 @@ public:
       _calc_issued();
     }
     //check_rdcaps_list();
+  }
+  // we may get a release racing with revocations, which means our revokes will be ignored
+  // by the client.  clean them out of our _revokes history so we don't wait on them.
+  void clean_revoke_from(ceph_seq_t li) {
+    bool changed = false;
+    while (!_revokes.empty() && _revokes.front().last_issue <= li) {
+      _revokes.pop_front();
+      changed = true;
+    }
+    if (changed)
+      _calc_issued();
   }
 
 
