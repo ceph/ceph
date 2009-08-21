@@ -2545,12 +2545,13 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 
 	mutex_lock(&session->s_mutex);
 	session->s_seq++;
-	dout(" mds%d seq %lld\n", session->s_mds, session->s_seq);
+	dout(" mds%d seq %lld cap seq %u\n", session->s_mds, session->s_seq,
+	     (unsigned)seq);
 
 	/* lookup ino */
 	inode = ceph_find_inode(sb, vino);
-	dout(" op %s ino %llx inode %p\n", ceph_cap_op_name(op), vino.ino,
-	     inode);
+	dout(" op %s ino %llx.%llx inode %p\n", ceph_cap_op_name(op), vino.ino,
+	     vino.snap, inode);
 	if (!inode) {
 		dout(" i don't have ino %llx\n", vino.ino);
 		goto done;
