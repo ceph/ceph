@@ -1117,11 +1117,6 @@ public:
   loff_t telldir(DIR *dirp);
   void seekdir(DIR *dirp, loff_t offset);
 
-  struct dirent_plus *readdirplus(DIR *dirp);
-  int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
-  struct dirent_lite *readdirlite(DIR *dirp);
-  int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
- 
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);
