@@ -114,7 +114,8 @@ class CephInputStream extends FSInputStream {
       byte result[] = new byte[1];
       if (getPos() >= fileLength) return -1;
       if (-1 == read(result, 0, 1)) return -1;
-      return result[0];
+      if (result[0]<0) return 256+(int)result[0];
+      else return result[0];
     }
 
   /**
