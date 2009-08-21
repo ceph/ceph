@@ -8,6 +8,7 @@
 #include "messages/MMonMap.h"
 #include "common/common_init.h"
 #include "msg/SimpleMessenger.h"
+#include "Client.h"
 
 /* ************* ************* ************* *************
  * C interface
@@ -83,7 +84,21 @@ extern "C" int ceph_statfs(const char *path, struct statvfs *stbuf)
 {
   return client->statfs(path, stbuf);
 }
-  
+
+extern "C" int ceph_getcwd(char *buf, int buflen)
+{
+  string cwd;
+  client->getcwd(cwd);
+  int size = cwd.size()+1; //need space for null character
+  if (size > buflen) {
+    if (buflen == 0) return size;
+    else return -ERANGE;
+  }
+  size = cwd.copy(buf, size);
+  buf[size] = '\0'; //fill in null character
+  return 0;
+}
+
 extern "C" int ceph_chdir (const char *s)
 {
   return client->chdir(s);
@@ -185,19 +200,25 @@ extern "C" int ceph_symlink(const char *existing, const char *newname)
 }
 
 // inode stuff
-extern "C" int ceph_lstat(const char *path, struct stat *stbuf, struct frag_info_t *dirstat)
+extern "C" int ceph_lstat(const char *path, struct stat *stbuf)
 {
-  return client->lstat(path, stbuf, dirstat);
+  return client->lstat(path, stbuf);
 }
 
-int ceph_lstat(const char *path, Client::stat_precise *stbuf, frag_info_t *dirstat)
+extern "C" int ceph_lstat_precise(const char *path, stat_precise *stbuf)
 {
-  return client->lstat_precise(path, stbuf, dirstat);
+  return client->lstat_precise(path, (Client::stat_precise*)stbuf);
 }
 
-extern "C" int ceph_setattr(const char *relpath, Client::stat_precise *attr, int mask)
+extern "C" int ceph_setattr(const char *relpath, struct stat *attr, int mask)
 {
-  return client->setattr(relpath, attr, mask);
+  Client::stat_precise p_attr = Client::stat_precise(*attr);
+  return client->setattr(relpath, &p_attr, mask);
+}
+
+extern "C" int ceph_setattr_precise(const char *relpath,
+				    struct stat_precise *attr, int mask) {
+  return client->setattr(relpath, (Client::stat_precise*)attr, mask);
 }
 
 extern "C" int ceph_chmod(const char *path, mode_t mode)
@@ -282,11 +303,18 @@ extern "C" int ceph_get_file_replication(const char *path) {
   return rep;
 }
 
-int ceph_get_file_stripe_address(int fh, loff_t offset, std::string& address) {
-  return client->get_file_stripe_address(fh, offset, address);
-}
-
-int ceph_getdir(const char *relpath, std::list<std::string>& names)
+int ceph_get_file_stripe_address(int fh, loff_t offset, char *buf, int buflen)
 {
-  return client->getdir(relpath, names);
+  string address;
+  int r = client->get_file_stripe_address(fh, offset, address);
+  if (r != 0) return r; //at time of writing, method ONLY returns
+  // 0 or -EINVAL if there are no known osds
+  int len = address.size()+1;
+  if (len > buflen) {
+    if (buflen == 0) return len;
+    else return -ERANGE;
+  }
+  len = address.copy(buf, len, 0);
+  buf[len] = '\0'; // write a null char to terminate c-style string
+  return 0;
 }

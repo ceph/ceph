@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 
 using namespace std;
+const static int IP_ADDR_LENGTH = 24;//a buffer size; may want to up for IPv6.
+static int path_size;
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
@@ -32,6 +34,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
     env->ReleaseStringUTFChars(j_debug_level, c_debug_level);
     return false;
   }
+  path_size = 64; //reasonable starting point?
   //construct an arguments array
   const char *argv[10];
   int argc = 0;
@@ -61,9 +64,17 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
 {
   dout(10) << "CephFSInterface: In getcwd" << dendl;
 
-  string path;
-  ceph_getcwd(path);
-  return env->NewStringUTF(path.c_str());
+  char *path = new char[path_size];
+  int r = ceph_getcwd(path, path_size);
+  if (r==-ERANGE) { //path is too short
+    path_size = ceph_getcwd(path, 0) * 1.2; //leave some extra
+    delete path;
+    path = new char[path_size];
+    ceph_getcwd(path, path_size);
+  }
+  jstring j_path = env->NewStringUTF(path);
+  delete path;
+  return j_path;
 }
 
 /*
@@ -463,7 +474,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
 (JNIEnv * env, jobject obj, jstring j_path, jobject j_stat) {
   //setup variables
-  struct Client::stat_precise st;
+  struct stat_precise st;
   const char* c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
 
@@ -482,7 +493,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
   jfieldID c_mode_id = env->GetFieldID(cls, "mode", "I");
   if (c_mode_id == NULL) return false;
   //do actual lstat
-  int r = ceph_lstat(c_path, &st);
+  int r = ceph_lstat_precise(c_path, &st);
   env->ReleaseStringUTFChars(j_path, c_path);
 
   if (r < 0) return false; //fail out; file DNE or Ceph broke
@@ -559,10 +570,21 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1repli
 JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1hosts
 (JNIEnv * env, jobject obj, jint j_fh, jlong j_offset) {
   //get the address
-  string address;
-  ceph_get_file_stripe_address(j_fh, j_offset, address);
+  char *address = new char[IP_ADDR_LENGTH];
+  int r = ceph_get_file_stripe_address(j_fh, j_offset, address, IP_ADDR_LENGTH);
+  if (r == -ERANGE) {//buffer's too small
+    delete address;
+    int size = ceph_get_file_stripe_address(j_fh, j_offset, address, 0);
+    address = new char[size];
+    r = ceph_get_file_stripe_address(j_fh, j_offset, address, size);
+  }
+  if (r != 0) { //some rather worse problem
+    if (r == -EINVAL) return NULL; //ceph thinks there are no OSDs
+  }
   //make java String of address
-  return env->NewStringUTF(address.c_str());
+  jstring j_addr = env->NewStringUTF(address);
+  delete address;
+  return j_addr;
 }
 
 /*
@@ -581,12 +603,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTi
   if (atime!=-1) mask |= CEPH_SETATTR_ATIME;
   //build a struct stat and fill it in!
   //remember to convert from millis to seconds and microseconds
-  Client::stat_precise attr;
+  stat_precise attr;
   attr.st_mtime_sec = mtime / 1000;
   attr.st_mtime_micro = (mtime % 1000) * 1000;
   attr.st_atime_sec = atime / 1000;
   attr.st_atime_micro = (atime % 1000) * 1000;
-  return ceph_setattr(c_path, &attr, mask);
+  return ceph_setattr_precise(c_path, &attr, mask);
 }
 
 /*
