@@ -31,6 +31,7 @@ int ceph_opendir(const char *name, DIR **dirpp);
 int ceph_closedir(DIR *dirp);
 int ceph_readdir_r(DIR *dirp, struct dirent *de);
 int ceph_readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+int ceph_getdents(DIR *dirp, char *name, int buflen);
 int ceph_getdnames(DIR *dirp, char *name, int buflen);
 void ceph_rewinddir(DIR *dirp); 
 loff_t ceph_telldir(DIR *dirp);

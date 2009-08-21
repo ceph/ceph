@@ -3644,9 +3644,9 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   assert(0);
 }
 
-int Client::getdnames(DIR *d, char *buf, int buflen)
+int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
 {
-  DirResult *dirp = (DirResult*)d;
+  DirResult *dirp = (DirResult *)dir;
   int ret = 0;
   
   while (1) {
@@ -3675,13 +3675,17 @@ int Client::getdnames(DIR *d, char *buf, int buflen)
 
     // is there room?
     int dlen = ent[pos].d_name.length();
-    const char *dname = ent[pos].d_name.c_str();
+    if (fullent)
+      dlen += sizeof(struct dirent);
     if (ret + dlen + 1 > buflen) {
       if (!ret)
 	return -ERANGE;  // the buffer is too small for the first name!
       return ret;
     }
-    memcpy(buf + ret, dname, dlen + 1);
+    if (fullent)
+      _readdir_fill_dirent((struct dirent *)(buf + ret), &ent[pos], dirp->offset);
+    else
+      memcpy(buf + ret, ent[pos].d_name.c_str(), dlen + 1);
     ret += dlen + 1;
 
     pos++;
