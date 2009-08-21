@@ -202,7 +202,7 @@ bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)
 	_unmounted((MClientUnmount*)m);
 	return true;
       }
-      if (client_map.client_info[client].addr() == m->get_orig_source_addr() &&
+      if (client_map.client_info[client].addr == m->get_orig_source_addr() &&
 	  pending_inc.unmount.count(client)) {
 	dout(7) << " client" << client << " already unmounting" << dendl;
 	delete m;
@@ -242,17 +242,15 @@ bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
       } else {
 	dout(10) << "mount: client" << client << " requested by " << addr << dendl;
 	if (client_map.client_info.count(client)) {
-	  assert(client_map.client_info[client].addr() != addr);
+	  assert(client_map.client_info[client].addr != addr);
 	  dout(0) << "mount: WARNING: client" << client << " requested by " << addr
-		  << ", which used to be "  << client_map.client_info[client].addr() << dendl;
+		  << ", which used to be "  << client_map.client_info[client].addr << dendl;
 	}
       }
       
       client_info_t info;
-      info.ticket.addr = addr;
-      info.ticket.created = g_clock.now();
-      info.ticket.expires = utime_t();
-      ::encode(info.ticket, info.signed_ticket);
+      info.addr = addr;
+      info.created = g_clock.now();
       pending_inc.add_mount(client, info);
       paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
       ss << "client" << client << " " << addr << " mounted";
@@ -269,7 +267,7 @@ bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
       
       pending_inc.add_unmount(client);
       paxos->wait_for_commit(new C_Unmounted(this, (MClientUnmount*)m));
-      ss << "client" << client << " " << client_map.client_info[client].addr() << " unmounted";
+      ss << "client" << client << " " << client_map.client_info[client].addr << " unmounted";
       mon->get_logclient()->log(LOG_INFO, ss);
     }
     return true;
@@ -312,8 +310,8 @@ bool ClientMonitor::preprocess_command(MMonCommand *m)
 	   p != client_map.client_info.end();
 	   p++) {
 	ss << "client" << p->first
-	   << "\t" << p->second.addr()
-	   << "\t" << p->second.created()
+	   << "\t" << p->second.addr
+	   << "\t" << p->second.created
 	   << std::endl;
       }
       while (!ss.eof()) {
@@ -366,7 +364,6 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
   // reply with client ticket
   MClientMountAck *ack = new MClientMountAck;
   mon->monmap->encode(ack->monmap_bl);
-  ack->signed_ticket = client_map.client_info[client].signed_ticket;
 
   mon->messenger->send_message(ack, to);
 

@@ -255,8 +255,6 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
   // ticket
   signed_ticket = m->signed_ticket;
-  p = signed_ticket.begin();
-  ::decode(ticket, p);
 
   messenger->reset_myname(m->get_dest());
 

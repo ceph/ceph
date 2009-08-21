@@ -19,7 +19,6 @@
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
-#include "auth/ClientTicket.h"
 
 #include "common/Timer.h"
 
@@ -34,7 +33,6 @@ public:
 private:
   Messenger *messenger;
 
-  ClientTicket ticket;
   bufferlist signed_ticket;
 
   Context *mount_timeout_event;
@@ -111,7 +109,6 @@ private:
   void set_messenger(Messenger *m) { messenger = m; }
 
   bufferlist& get_signed_ticket() { return signed_ticket; }
-  ClientTicket& get_ticket() { return ticket; }
 
 };
 

@@ -24,22 +24,22 @@
 using namespace std;
 
 #include "include/types.h"
-#include "auth/ClientTicket.h"
 
 struct client_info_t {
-  ClientTicket ticket;
-  bufferlist signed_ticket;
-
-  entity_addr_t addr() { return entity_addr_t(ticket.addr); }
-  utime_t created() { return utime_t(ticket.created); }
+  entity_addr_t addr;
+  utime_t created;
 
   void encode(bufferlist& bl) const {
-    ::encode(ticket, bl);
-    ::encode(signed_ticket, bl);
+    __u8 v = 1;
+    ::encode(v, bl);
+    ::encode(addr, bl);
+    ::encode(created, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(ticket, bl);
-    ::decode(signed_ticket, bl);
+    __u8 v;
+    ::decode(v, bl);
+    ::decode(addr, bl);
+    ::decode(created, bl);
   }
 };
 
@@ -97,7 +97,7 @@ public:
     for (map<uint32_t,client_info_t>::iterator p = client_info.begin();
 	 p != client_info.end();
 	 ++p) {
-      addr_client[p->second.addr()] = p->first;
+      addr_client[p->second.addr] = p->first;
     }
   }
   void apply_incremental(Incremental &inc) {
@@ -108,14 +108,14 @@ public:
 	   p != inc.mount.end();
 	   ++p) {
 	client_info[p->first] = p->second;
-	addr_client[p->second.addr()] = p->first;
+	addr_client[p->second.addr] = p->first;
     }
 
     for (set<int32_t>::iterator p = inc.unmount.begin();
 	   p != inc.unmount.end();
 	   ++p) {
 	assert(client_info.count(*p));
-	addr_client.erase(client_info[*p].addr());
+	addr_client.erase(client_info[*p].addr);
 	client_info.erase(*p);
     }
   }
