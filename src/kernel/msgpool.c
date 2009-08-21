@@ -65,7 +65,7 @@ int ceph_msgpool_init(struct ceph_msg_pool *pool,
 {
 	int ret;
 
-	pr_err("msgpool_init %p front_len %d min %d\n", pool, front_len, min);
+	dout("msgpool_init %p front_len %d min %d\n", pool, front_len, min);
 	spin_lock_init(&pool->lock);
 	pool->front_len = front_len;
 	INIT_LIST_HEAD(&pool->msgs);
