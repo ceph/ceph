@@ -18,6 +18,7 @@
 #include "super.h"
 #include "mon_client.h"
 #include "auth.h"
+#include "crypt.h"
 
 /*
  * Ceph superblock operations
@@ -1446,13 +1447,19 @@ static int __init init_ceph(void)
 	if (ret)
 		goto out_msgr;
 
+	ret = ceph_crypt_init();
+	if (ret)
+		goto out_icache;
+
 	ceph_caps_init();
 
 	ret = register_filesystem(&ceph_fs_type);
 	if (ret)
-		goto out_icache;
+		goto out_crypt;
 	return 0;
 
+out_crypt:
+	ceph_crypt_exit();
 out_icache:
 	destroy_caches();
 out_msgr:
@@ -1468,6 +1475,7 @@ static void __exit exit_ceph(void)
 	dout("exit_ceph\n");
 	unregister_filesystem(&ceph_fs_type);
 	ceph_caps_finalize();
+	ceph_crypt_exit();
 	destroy_caches();
 	ceph_msgr_exit();
 	ceph_debugfs_cleanup();

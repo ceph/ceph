@@ -4,6 +4,9 @@
 #include "types.h"
 #include "buffer.h"
 
+extern int ceph_crypt_init(void);
+extern void ceph_crypt_exit(void);
+
 extern int ceph_armor(char *dst, const char *src, const char *end);
 extern int ceph_unarmor(char *dst, const char *src, const char *end);
 
