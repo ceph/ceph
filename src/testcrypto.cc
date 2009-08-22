@@ -13,15 +13,25 @@ int main(int argc, char *argv[])
   CryptoKey key(CEPH_SECRET_AES, g_clock.now(), keybuf);
 
   const char *msg="hello! this is a message\n";
+  char pad[16];
+  memset(pad, 0, 16);
   bufferptr ptr(msg, strlen(msg));
   bufferlist enc_in;
   enc_in.append(ptr);
-  enc_in.append(ptr);
-  bufferlist enc_out;
+  enc_in.append(msg, strlen(msg));
 
+  int src_len = enc_in.length();
+  bufferlist enc_out;
   if (key.encrypt(enc_in, enc_out) < 0) {
     derr(0) << "couldn't encode!" << dendl;
     exit(1);
+  }
+
+  const char *enc_buf = enc_out.c_str();
+  for (int i=0; i<enc_out.length(); i++) {
+    std::cout << hex << (int)(unsigned char)enc_buf[i] << dec << " ";
+    if (i && !(i%16))
+      std::cout << std::endl;
   }
 
   bufferlist dec_in, dec_out;
@@ -32,6 +42,7 @@ int main(int argc, char *argv[])
     derr(0) << "couldn't decode!" << dendl;
   }
 
+  dout(0) << "decoded len: " << dec_out.length() << dendl;
   dout(0) << "decoded msg: " << dec_out.c_str() << dendl;
 
   return 0;

@@ -12,9 +12,9 @@ extern int ceph_unarmor(char *dst, const char *src, const char *end);
 
 extern struct ceph_buffer *ceph_secret_unarmor(const char *key, int len);
 
-extern int ceph_decrypt(struct ceph_secret *secret, char *dst, const char *src,
-			size_t len);
-extern int ceph_encrypt(struct ceph_secret *secret, char *dst, const char *src,
-			size_t len);
+extern int ceph_decrypt(struct ceph_secret *secret, char *dst, size_t *dst_len,
+			const char *src, size_t src_len);
+extern int ceph_encrypt(struct ceph_secret *secret, char *dst, size_t *dst_len,
+			const char *src, size_t src_len);
 
 #endif
