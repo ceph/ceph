@@ -3651,13 +3651,13 @@ int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
   
   while (1) {
     if (dirp->at_end())
-      return 0;
+      return ret;
 
     if (dirp->buffer.count(dirp->frag()) == 0) {
       Mutex::Locker lock(client_lock);
       _readdir_get_frag(dirp);
       if (dirp->at_end())
-	return 0;
+	return ret;
     }
 
     frag_t fg = dirp->frag();
