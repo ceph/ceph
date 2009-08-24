@@ -23,13 +23,13 @@ static int path_size;
  * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv * env, jobject obj, jstring j_debug_level, jstring j_mon_addr)
+  (JNIEnv *env, jobject obj, jstring j_debug_level, jstring j_mon_addr)
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
 
-  const char* c_debug_level = env->GetStringUTFChars(j_debug_level, 0);
+  const char *c_debug_level = env->GetStringUTFChars(j_debug_level, 0);
   if (c_debug_level == NULL) return false; //out of memory!
-  const char* c_mon_addr = env->GetStringUTFChars(j_mon_addr, 0);
+  const char *c_mon_addr = env->GetStringUTFChars(j_mon_addr, 0);
   if(c_mon_addr == NULL) {
     env->ReleaseStringUTFChars(j_debug_level, c_debug_level);
     return false;
@@ -89,7 +89,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
 {
   dout(10) << "CephFSInterface: In setcwd" << dendl;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if(c_path == NULL ) return false;
   jboolean success = (0 <= ceph_chdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -107,7 +107,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 {
   dout(10) << "CephFSInterface: In rmdir" << dendl;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if(c_path == NULL ) return false;
   jboolean success = (0 == ceph_rmdir(c_path)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -122,11 +122,11 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
  * Creates a directory with full permissions.
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
-  (JNIEnv * env, jobject, jstring j_path)
+  (JNIEnv *env, jobject, jstring j_path)
 {
   dout(10) << "CephFSInterface: In mkdir" << dendl;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   jboolean success = (0 == ceph_mkdir(c_path, 0xFF)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -140,9 +140,9 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1m
  * Unlinks a path.
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1unlink
-  (JNIEnv * env, jobject, jstring j_path)
+  (JNIEnv *env, jobject, jstring j_path)
 {
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   dout(10) << "CephFSInterface: In unlink for path " << c_path <<  ":" << dendl;
   int result = ceph_unlink(c_path);
@@ -160,9 +160,9 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
   (JNIEnv *env, jobject, jstring j_from, jstring j_to)
 {
   dout(10) << "CephFSInterface: In rename" << dendl;
-  const char* c_from = env->GetStringUTFChars(j_from, 0);
+  const char *c_from = env->GetStringUTFChars(j_from, 0);
   if (c_from == NULL) return false;
-  const char* c_to   = env->GetStringUTFChars(j_to,   0);
+  const char *c_to   = env->GetStringUTFChars(j_to,   0);
   if (c_to == NULL) {
     env->ReleaseStringUTFChars(j_from, c_from);
     return false;
@@ -188,7 +188,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
 
   struct stat stbuf;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   dout(10) << "Attempting lstat with file " << c_path << ":" << dendl;
   int result = ceph_lstat(c_path, &stbuf);
@@ -221,7 +221,7 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
   
   jint result;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return -ENOMEM;
   // we need to open the file to retrieve the stripe size
   dout(10) << "CephFSInterface: getblocksize: opening file" << dendl;
@@ -249,7 +249,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 
   struct stat stbuf;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   int result = ceph_lstat(c_path, &stbuf);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -275,7 +275,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 
   struct stat stbuf;
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   int result = ceph_lstat(c_path, &stbuf);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -294,13 +294,13 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
  * Returns a Java array of Strings with the directory contents
  */
 JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getdir
-(JNIEnv *env, jobject obj, jstring j_path) {
-
+(JNIEnv *env, jobject obj, jstring j_path)
+{
   dout(10) << "In getdir" << dendl;
 
   // get the directory listing
   list<string> contents;
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return NULL;
   DIR *dirp;
   ceph_opendir(c_path, &dirp);
@@ -370,12 +370,13 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
  * Create the specified directory and any required intermediate ones.
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdirs
-(JNIEnv *env, jobject, jstring j_path, jint mode) {
+(JNIEnv *env, jobject, jstring j_path, jint mode)
+{
   dout(10) << "In Hadoop mk_dirs" << dendl;
 
   //get c-style string and make the call, clean up the string...
   jint result;
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return -ENOMEM;
   result = ceph_mkdirs(c_path, mode);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -391,7 +392,8 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
  * Open a file for writing
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1append
-(JNIEnv *env, jobject obj, jstring j_path){
+(JNIEnv *env, jobject obj, jstring j_path)
+{
   dout(10) << "In hadoop open_for_append" << dendl;
 
   jint result;
@@ -419,7 +421,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
   jint result; 
 
   // open as read-only: flag = O_RDONLY
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return -ENOMEM;
   result = ceph_open(c_path, O_RDONLY);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -442,7 +444,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
   jint result; 
 
 
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return -ENOMEM;
   result = ceph_open(c_path, O_WRONLY|O_CREAT|O_TRUNC, mode);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -457,7 +459,8 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
  * Signature: (I)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1close
-(JNIEnv * env, jobject ojb, jint fh) {
+(JNIEnv *env, jobject ojb, jint fh)
+{
   dout(10) << "In CephFileSystem::ceph_close" << dendl;
 
   return ceph_close(fh);
@@ -469,8 +472,9 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1close
  * Signature: (Ljava/lang/String;I)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setPermission
-(JNIEnv *env, jobject obj, jstring j_path, jint j_new_mode) {
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+(JNIEnv *env, jobject obj, jstring j_path, jint j_new_mode)
+{
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
   int result = ceph_chmod(c_path, j_new_mode);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -498,10 +502,11 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
  * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
-(JNIEnv * env, jobject obj, jstring j_path, jobject j_stat) {
+(JNIEnv *env, jobject obj, jstring j_path, jobject j_stat)
+{
   //setup variables
   struct stat_precise st;
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return false;
 
   jclass cls = env->GetObjectClass(j_stat);
@@ -544,7 +549,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
  * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/CephStat;)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statfs
-(JNIEnv * env, jobject obj, jstring j_path, jobject j_cephstat)
+(JNIEnv *env, jobject obj, jstring j_path, jobject j_cephstat)
 {
   //setup variables
   struct statvfs stbuf;
@@ -579,9 +584,10 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statf
  * Signature: (Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1replication
-(JNIEnv *env, jobject obj, jstring j_path) {
+(JNIEnv *env, jobject obj, jstring j_path)
+{
   //get c-string of path, send off to libceph, release c-string, return
-  const char* c_path = env->GetStringUTFChars(j_path, 0);
+  const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return -ENOMEM;
   int replication = ceph_get_file_replication(c_path);
   env->ReleaseStringUTFChars(j_path, c_path);
@@ -594,7 +600,8 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1repli
  * Signature: (IJ)Ljava/lang/String;
  */
 JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1hosts
-(JNIEnv * env, jobject obj, jint j_fh, jlong j_offset) {
+(JNIEnv *env, jobject obj, jint j_fh, jlong j_offset)
+{
   //get the address
   char *address = new char[IP_ADDR_LENGTH];
   int r = ceph_get_file_stripe_address(j_fh, j_offset, address, IP_ADDR_LENGTH);
@@ -619,7 +626,8 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ho
  * Signature: (Ljava/lang/String;JJ)I
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTimes
-(JNIEnv * env, jobject obj, jstring j_path, jlong mtime, jlong atime) {
+(JNIEnv *env, jobject obj, jstring j_path, jlong mtime, jlong atime)
+{
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if(c_path == NULL) return -ENOMEM;
 
@@ -656,9 +664,9 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
   jint result; 
 
   // Step 1: get a pointer to the buffer.
-  jbyte* j_buffer_ptr = env->GetByteArrayElements(j_buffer, NULL);
+  jbyte *j_buffer_ptr = env->GetByteArrayElements(j_buffer, NULL);
   if (j_buffer_ptr == NULL) return -ENOMEM;
-  char* c_buffer = (char*) j_buffer_ptr;
+  char *c_buffer = (char*) j_buffer_ptr;
 
   // Step 2: pointer arithmetic to start in the right buffer position
   c_buffer += (int)buffer_offset;
@@ -766,9 +774,9 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1wri
   jint result; 
 
   // Step 1: get a pointer to the buffer.
-  jbyte* j_buffer_ptr = env->GetByteArrayElements(j_buffer, NULL);
+  jbyte *j_buffer_ptr = env->GetByteArrayElements(j_buffer, NULL);
   if (j_buffer_ptr == NULL) return -ENOMEM;
-  char* c_buffer = (char*) j_buffer_ptr;
+  char *c_buffer = (char*) j_buffer_ptr;
 
   // Step 2: pointer arithmetic to start in the right buffer position
   c_buffer += (int)buffer_offset;
