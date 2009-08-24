@@ -16,6 +16,7 @@
 
 static Mutex ceph_client_mutex("ceph_client");
 static int client_initialized = 0;
+static int client_mount = 0;
 static Client *client = NULL;
 static MonClient *monclient = NULL;
 static SimpleMessenger *rank = NULL;
@@ -48,9 +49,8 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     rank->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
     client->init();
-
-    ++client_initialized;
   }
+  ++client_initialized;
   ceph_client_mutex.Unlock();
   return 0;
 }
@@ -58,26 +58,38 @@ extern "C" int ceph_initialize(int argc, const char **argv)
 extern "C" void ceph_deinitialize()
 {
   ceph_client_mutex.Lock();
-  if(client_initialized) {
+  --client_initialized;
+  if(!client_initialized) {
     client->unmount();
     client->shutdown();
     delete client;
     rank->wait();
     delete rank;
     delete monclient;
-    --client_initialized;
   }
   ceph_client_mutex.Unlock();
 }
 
 extern "C" int ceph_mount()
 {
-  return client->mount();
+  int ret;
+  Mutex::Locker lock(ceph_client_mutex);
+  if(!client_mount) {
+     ret = client->mount();
+     if (ret!=0)
+       return ret;
+  }
+  ++client_mount;
+  return 0;
 }
 
 extern "C" int ceph_umount()
 {
-  return client->unmount();
+  Mutex::Locker lock(ceph_client_mutex);
+  --client_mount;
+  if (!client_mount)
+    return client->unmount();
+  return 0;
 }
 
 extern "C" int ceph_statfs(const char *path, struct statvfs *stbuf)
