@@ -7,6 +7,8 @@
  */
 
 /*
+ * CLIENT: request authentication
+ *
  * client_name, client_addr.  "please authenticate me."
  */
 void build_authenticate_request(EntityName& client_name, entity_addr_t client_addr,
@@ -17,6 +19,8 @@ void build_authenticate_request(EntityName& client_name, entity_addr_t client_ad
 }
 
 /*
+ * AUTH SERVER: authenticate
+ *
  * {session key, validity, nonce}^client_secret
  * {client_ticket, session key}^service_secret  ... "enc_ticket"
  */
@@ -40,7 +44,7 @@ void build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_sec
 }
 
 /*
- * verify our attempt to authenticate succeeded.  fill out
+ * CLIENT: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
  */
 bool ServiceTicket::verify_authenticate_reply(CryptoKey& client_secret,
@@ -72,10 +76,9 @@ bool ServiceTicket::verify_authenticate_reply(CryptoKey& client_secret,
 }
 
 /*
- * Build authenticator to access the service.
+ * CLIENT: build authenticator to access the service.
  *
- * enc_ticket
- * {nonce, timestamp}^client/mon session key.  do foo (assign id)
+ * enc_ticket, {timestamp, nonce}^session_key
  */
 utime_t ServiceTicket::build_authenticator(bufferlist& bl)
 {
@@ -92,7 +95,9 @@ utime_t ServiceTicket::build_authenticator(bufferlist& bl)
 }
 
 /*
- * Verify authenticator and generate reply authenticator
+ * SERVICE: verify authenticator and generate reply authenticator
+ *
+ * {timestamp + 1}^session_key
  */
 bool verify_authenticator(CryptoKey& service_secret, bufferlist& bl,
 			  bufferlist& enc_reply)
@@ -142,7 +147,7 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist& bl,
 
 
 /*
- * Verify reply is authentic
+ * CLIENT: verify reply is authentic
  */
 bool ServiceTicket::verify_reply_authenticator(utime_t then, bufferlist& enc_reply)
 {
