@@ -2827,6 +2827,9 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
   mut->cleanup();
   delete mut;
 
+  if (lock->is_stable())
+    lock->finish_waiters(ScatterLock::WAIT_STABLE);
+
   //scatter_eval_gather(lock);
 }
 
@@ -2910,10 +2913,18 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
   }
 
   if (p->is_auth()) {
-    dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
     if (c)
       lock->add_waiter(SimpleLock::WAIT_STABLE, c);
     if (lock->is_stable()) {
+      // can we do it now?
+      if (lock->can_wrlock(-1)) {
+	dout(10) << "scatter_nudge auth, propagating " << *lock << " on " << *p << dendl;
+	scatter_writebehind(lock);
+	return;
+      }
+
+      // adjust lock state
+      dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
       switch (lock->get_type()) {
       case CEPH_LOCK_IFILE:
 	if (p->is_replicated() && lock->get_state() != LOCK_MIX)
@@ -2936,6 +2947,8 @@ void Locker::scatter_nudge(ScatterLock *lock, Context *c)
       default:
 	assert(0);
       }
+    } else {
+      dout(10) << "scatter_nudge auth, waiting for stable " << *lock << " on " << *p << dendl;
     }
   } else {
     dout(10) << "scatter_nudge replica, requesting scatter/unscatter of " 
