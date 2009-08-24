@@ -14,7 +14,6 @@ v0.13
 /- http gw
 /- kclient: fix sync read vs EOF
 /- uclient: fix sync read vs EOF
-- uclient: fix write vs max_size
 /- [uk]client lseek SEEK_END
 /- kclient msg pools
 /  - don't reuse incoming cap message for revoke ack
@@ -25,6 +24,7 @@ v0.14
 - kclient: retry alloc on ENOMEM when reading from connection
 - client authentication
 - radosgw
+- uclient: fix write vs max_size?
 
 bugs
 - premature filejournal trimming?
@@ -77,14 +77,13 @@ repair
 - mds scrubbing
 
 kclient
-?- ensure cap_snaps reflush after client reconnect 
 - fix up ESTALE handling
-- make cap import/export efficient
+- make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
-- reconnect after being disconnected from the mds
+- try to reconnect after being disconnected from the mds?
 - inotify for updates from other clients?
 
 vfs issues
