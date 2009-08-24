@@ -9,7 +9,6 @@
 #include <unistd.h>
 #include <dirent.h>
 
-struct frag_info_t;
 struct stat_precise {
   ino_t st_ino;
   dev_t st_dev;
