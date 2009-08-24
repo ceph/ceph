@@ -1,0 +1,14 @@
+
+- ensure debian package builds
+
+ $ ./build_upload_debian_packages.sh unstable amd64
+
+- adjust version in configure.ac
+- add entry to debian/changelog, with proper version
+- commit
+- git tag version
+- make dist, upload to ceph.newdream.net:ceph.newdream.net/downloads
+- build debs for amd64, i386
+- email ml + post news entry
+
+- rebase kclient_clean

@@ -1,3 +1,13 @@
+ceph (0.13-1) unstable; urgency=low
+
+  * osd: stay active during backlog generation
+  * osdmap: override mappings (pg_temp)
+  * kclient: some improvements in kmalloc, memory preallocation
+  * [ku]lcient: fix sync read vs eof, lseek(..., SEEK_END)
+  * mds: misc bugfixes for multiclient file access
+
+ -- sage <sage@newdream.net>  Mon, 24 Aug 2009 10:43:00 -0800
+
 ceph (0.12-1) unstable; urgency=low
 
   * kclient: mapping_set_error in writepage, layout ioctl, writeback mempools, cap writeback, fsync
