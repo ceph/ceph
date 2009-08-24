@@ -495,7 +495,8 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   catch (buffer::error *e) {
     dout(0) << "failed to decode message of type " << type << ": " << *e << dendl;
     delete e;
-    assert(0);
+    if (g_conf.ms_die_on_bad_msg)
+      assert(0);
     return 0;
   }
 

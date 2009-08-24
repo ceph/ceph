@@ -345,6 +345,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_fail_interval, 0, OPT_DOUBLE, 15.0),  // fail after this long
 	OPTION(ms_die_on_failure, 0, OPT_BOOL, false),
 	OPTION(ms_nocrc, 0, OPT_BOOL, false),
+	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
 	OPTION(mon_osd_down_out_interval, 0, OPT_INT, 300), // seconds

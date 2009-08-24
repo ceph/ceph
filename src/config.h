@@ -121,6 +121,7 @@ struct md_config_t {
   double ms_fail_interval;
   bool ms_die_on_failure;
   bool ms_nocrc;
+  bool ms_die_on_bad_msg;
 
   // mon
   const char *mon_data;

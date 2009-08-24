@@ -7,8 +7,8 @@
 - add entry to debian/changelog, with proper version
 - commit
 - git tag version
-- make dist, upload to ceph.newdream.net:ceph.newdream.net/downloads
 - build debs for amd64, i386
+- make dist, upload to ceph.newdream.net:ceph.newdream.net/downloads
 - email ml + post news entry
 
 - rebase kclient_clean
