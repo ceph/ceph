@@ -702,6 +702,7 @@ class Client : public Dispatcher {
     bool at_end() { return (offset == END); }
   };
 
+  // **** WARNING: be sure to update the struct in libceph.h too! ****
   struct stat_precise {
     ino_t st_ino;
     dev_t st_dev;
