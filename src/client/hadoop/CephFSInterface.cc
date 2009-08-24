@@ -319,15 +319,18 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
     }
     if (r<=0) break;
 
-    //if we make it here, we got at least one name or an unexpected return value
+    //if we make it here, we got at least one name
     bufpos = 0;
     while (bufpos<r) {//make new strings and add them to listing
       ent = new string(buf+bufpos);
-      contents.push_back(*ent);
+      if (ent->compare(".") && ent->compare(".."))
+	//we DON'T want to include dot listings; Hadoop gets confused
+	contents.push_back(*ent);
       bufpos+=ent->size()+1;
       delete ent;
     }
   }
+  delete buf;
   ceph_closedir(dirp);
   env->ReleaseStringUTFChars(j_path, c_path);
   
@@ -338,7 +341,6 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   assert ( dir_size>= 0);
 
   // Create a Java String array of the size of the directory listing
-  // jstring blankString = env->NewStringUTF("");
   jclass stringClass = env->FindClass("java/lang/String");
   if (stringClass == NULL) {
     dout(0) << "ERROR: java String class not found; dying a horrible, painful death" << dendl;
@@ -352,14 +354,12 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   for (list<string>::iterator it = contents.begin();
        it != contents.end();
        it++) {
-    if (0 == dir_size)
-      dout(0) << "CephFSInterface: WARNING: adding stuff to an empty array." << dendl;
     assert (i < dir_size);
     env->SetObjectArrayElement(dirListingStringArray, i, 
 			       env->NewStringUTF(it->c_str()));
     ++i;
   }
-			     
+  
   return dirListingStringArray;
 }
 

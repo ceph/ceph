@@ -807,22 +807,19 @@ public class CephFileSystem extends FileSystem {
     }
     
     // convert the strings to Paths
-    Vector<Path> paths = new Vector<Path>(dirlist.length);
+    Path[] paths = new Path[dirlist.length];
     for(int i = 0; i < dirlist.length; ++i) {
-      //we don't want . or .. entries, which Ceph includes
-      if (dirlist[i].equals(".") || dirlist[i].equals("..")) continue;
       debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
 			 dirlist[i] + "\"");
-
       // convert each listing to an absolute path
       Path raw_path = new Path(dirlist[i]);
       if (raw_path.isAbsolute())
-	paths.addElement(raw_path);
+	paths[i] = raw_path;
       else
-	paths.addElement(new Path(abs_path, raw_path));
+	paths[i] = new Path(abs_path, raw_path);
     }
     debug("listPaths:exit");
-    return paths.toArray(new Path[paths.size()]);
+    return paths;
   }
 
   private void debug(String statement) {
