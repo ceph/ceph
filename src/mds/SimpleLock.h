@@ -111,7 +111,22 @@ protected:
   // parent (what i lock)
   MDSCacheObject *parent;
   int type;
-  int wait_shift;
+
+  int get_wait_shift() {
+    switch (type) {
+    case CEPH_LOCK_DN:       return 8;
+    case CEPH_LOCK_IAUTH:    return 5 +   SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_ILINK:    return 5 +   SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IDFT:     return 5 + 2*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IFILE:    return 5 + 3*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IVERSION: return 5 + 4*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IXATTR:   return 5 + 5*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_ISNAP:    return 5 + 6*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_INEST:    return 5 + 7*SimpleLock::WAIT_BITS;
+    default:
+      assert(0);
+    }
+  }
 
   // lock state
   __s32 state;
@@ -127,8 +142,8 @@ public:
 
 
 public:
-  SimpleLock(MDSCacheObject *o, int t, int ws) :
-    parent(o), type(t), wait_shift(ws),
+  SimpleLock(MDSCacheObject *o, int t) :
+    parent(o), type(t),
     state(LOCK_SYNC), num_client_lease(0),
     num_rdlock(0), num_wrlock(0), num_xlock(0),
     xlock_by(0), xlock_by_client(-1), excl_client(-1) {
@@ -196,16 +211,16 @@ public:
     parent->encode_lock_state(type, bl);
   }
   void finish_waiters(__u64 mask, int r=0) {
-    parent->finish_waiting(mask << wait_shift, r);
+    parent->finish_waiting(mask << get_wait_shift(), r);
   }
   void take_waiting(__u64 mask, list<Context*>& ls) {
-    parent->take_waiting(mask << wait_shift, ls);
+    parent->take_waiting(mask << get_wait_shift(), ls);
   }
   void add_waiter(__u64 mask, Context *c) {
-    parent->add_waiter(mask << wait_shift, c);
+    parent->add_waiter(mask << get_wait_shift(), c);
   }
   bool is_waiter_for(__u64 mask) {
-    return parent->is_waiter_for(mask << wait_shift);
+    return parent->is_waiter_for(mask << get_wait_shift());
   }
   
   

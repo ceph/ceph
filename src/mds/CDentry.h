@@ -80,7 +80,7 @@ public:
   };
 
   // -- wait --
-  static const int WAIT_LOCK_OFFSET = 8;
+  //static const int WAIT_LOCK_OFFSET = 8;
 
   void add_waiter(__u64 tag, Context *c);
 
@@ -161,7 +161,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) {
+    lock(this, CEPH_LOCK_DN) {
     g_num_dn++;
     g_num_dna++;
   }
@@ -173,7 +173,7 @@ public:
     version(0), projected_version(0),
     xlist_dirty(this),
     auth_pins(0), nested_auth_pins(0), nested_anchors(0),
-    lock(this, CEPH_LOCK_DN, WAIT_LOCK_OFFSET) {
+    lock(this, CEPH_LOCK_DN) {
     g_num_dn++;
     g_num_dna++;
     linkage.remote_ino = ino;

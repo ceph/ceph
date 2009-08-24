@@ -27,8 +27,8 @@ public:
   xlist<ScatterLock*>::item xlistitem_updated;
   utime_t update_stamp;
 
-  ScatterLock(MDSCacheObject *o, int t, int ws) : 
-    SimpleLock(o, t, ws),
+  ScatterLock(MDSCacheObject *o, int t) : 
+    SimpleLock(o, t),
     dirty(false), flushing(false), scatter_wanted(false),
     xlistitem_updated(this) {}
   ~ScatterLock() {

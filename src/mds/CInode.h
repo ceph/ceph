@@ -131,15 +131,6 @@ public:
   static const __u64 WAIT_FROZEN      = (1<<3);
   static const __u64 WAIT_TRUNC       = (1<<4);
   
-  static const int WAIT_AUTHLOCK_OFFSET        = 5;
-  static const int WAIT_LINKLOCK_OFFSET        = 5 +   SimpleLock::WAIT_BITS;
-  static const int WAIT_DIRFRAGTREELOCK_OFFSET = 5 + 2*SimpleLock::WAIT_BITS;
-  static const int WAIT_FILELOCK_OFFSET        = 5 + 3*SimpleLock::WAIT_BITS;
-  static const int WAIT_VERSIONLOCK_OFFSET     = 5 + 4*SimpleLock::WAIT_BITS;
-  static const int WAIT_XATTRLOCK_OFFSET       = 5 + 5*SimpleLock::WAIT_BITS;
-  static const int WAIT_SNAPLOCK_OFFSET        = 5 + 6*SimpleLock::WAIT_BITS;
-  static const int WAIT_NESTLOCK_OFFSET        = 5 + 7*SimpleLock::WAIT_BITS;
-
   static const __u64 WAIT_ANY_MASK	= (__u64)(-1);
 
   // misc
@@ -326,14 +317,14 @@ private:
     xlist_dirty_dirfrag_dirfragtree(this), 
     auth_pins(0), nested_auth_pins(0),
     nested_anchors(0),
-    versionlock(this, CEPH_LOCK_IVERSION, WAIT_VERSIONLOCK_OFFSET),
-    authlock(this, CEPH_LOCK_IAUTH, WAIT_AUTHLOCK_OFFSET),
-    linklock(this, CEPH_LOCK_ILINK, WAIT_LINKLOCK_OFFSET),
-    dirfragtreelock(this, CEPH_LOCK_IDFT, WAIT_DIRFRAGTREELOCK_OFFSET),
-    filelock(this, CEPH_LOCK_IFILE, WAIT_FILELOCK_OFFSET),
-    xattrlock(this, CEPH_LOCK_IXATTR, WAIT_XATTRLOCK_OFFSET),
-    snaplock(this, CEPH_LOCK_ISNAP, WAIT_SNAPLOCK_OFFSET),
-    nestlock(this, CEPH_LOCK_INEST, WAIT_NESTLOCK_OFFSET),
+    versionlock(this, CEPH_LOCK_IVERSION),
+    authlock(this, CEPH_LOCK_IAUTH),
+    linklock(this, CEPH_LOCK_ILINK),
+    dirfragtreelock(this, CEPH_LOCK_IDFT),
+    filelock(this, CEPH_LOCK_IFILE),
+    xattrlock(this, CEPH_LOCK_IXATTR),
+    snaplock(this, CEPH_LOCK_ISNAP),
+    nestlock(this, CEPH_LOCK_INEST),
     loner_cap(-1), want_loner_cap(-1)
   {
     g_num_ino++;
