@@ -1667,6 +1667,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
   list<CInode*> lsi;
   CInode *cur = in;
   CDentry *parentdn = cur->get_projected_parent_dn();
+  bool first = true;
   while (parent) {
     //assert(cur->is_auth() || !primary_dn);  // this breaks the rename auth twiddle hack
     assert(parent->is_auth());
@@ -1749,6 +1750,26 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
       dout(10) << "predirty_journal_parents !auth or ambig on " << *pin << dendl;
       stop = true;
     }
+
+    // delay propagating until later?
+    if (!stop && !first &&
+	g_conf.mds_dirstat_min_interval > 0) {
+      if (pin->last_dirstat_prop.sec() > 0) {
+	double since_last_prop = mut->now - pin->last_dirstat_prop;
+	if (since_last_prop < g_conf.mds_dirstat_min_interval) {
+	  dout(10) << "predirty_journal_parents last prop " << since_last_prop
+		   << " < " << g_conf.mds_dirstat_min_interval
+		   << ", stopping" << dendl;
+	  stop = true;
+	} else {
+	  dout(10) << "predirty_journal_parents last prop " << since_last_prop << " ago, continuing" << dendl;
+	}
+      } else {
+	dout(10) << "predirty_journal_parents last prop never, stopping" << dendl;
+	stop = true;
+      }
+    }
+
     if (!stop &&
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
 	(!pin->can_auth_pin() ||
@@ -1772,6 +1793,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     assert(mut->wrlocks.count(&pin->nestlock) ||
 	   mut->is_slave());
+    
+    pin->last_dirstat_prop = mut->now;
 
     // dirfrag -> diri
     mut->auth_pin(pin);
@@ -1827,6 +1850,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     linkunlink = 0;
     do_parent_mtime = false;
     primary_dn = true;
+    first = false;
   }
 
   // now, stick it in the blob

@@ -39,6 +39,9 @@ public:
   void clear_scatter_wanted() { scatter_wanted = false; }
   bool get_scatter_wanted() { return scatter_wanted; }
 
+  bool is_updated() {
+    return dirty;
+  }
   void mark_dirty() { 
     if (!dirty) {
       if (!flushing) 

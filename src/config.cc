@@ -407,6 +407,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_reconnect_timeout, 0, OPT_FLOAT, 45),  // seconds to wait for clients during mds restart
 							  //  make it (mds_session_timeout - mds_beacon_grace)
 	OPTION(mds_tick_interval, 0, OPT_FLOAT, 5),
+	OPTION(mds_dirstat_min_interval, 0, OPT_FLOAT, 1),    // try to avoid propagating more often than this
 	OPTION(mds_scatter_nudge_interval, 0, OPT_FLOAT, 5),  // how quickly dirstat changes propagate up the hierarchy
 	OPTION(mds_client_prealloc_inos, 0, OPT_INT, 1000),
 	OPTION(mds_early_reply, 0, OPT_BOOL, true),

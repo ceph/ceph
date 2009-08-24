@@ -198,6 +198,7 @@ struct md_config_t {
   float mds_reconnect_timeout;
 
   float mds_tick_interval;
+  float mds_dirstat_min_interval;
   float mds_scatter_nudge_interval;
 
   int mds_client_prealloc_inos;

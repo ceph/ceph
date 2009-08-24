@@ -2546,6 +2546,12 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
       gather++;
     }
     
+    if (!gather && lock->is_updated()) {
+      lock->get_parent()->auth_pin(lock);
+      scatter_writebehind((ScatterLock*)lock);
+      return false;
+    }
+
     if (gather) {
       lock->get_parent()->auth_pin(lock);
       return false;
@@ -2664,8 +2670,9 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
 
   if (!gather && lock->is_updated()) {
+    lock->get_parent()->auth_pin(lock);
     scatter_writebehind((ScatterLock*)lock);
-    gather++;
+    return;
   }
 
   if (gather) {
