@@ -214,6 +214,7 @@ void *SimpleMessenger::Accepter::entry()
       rank->lock.Lock();
       if (rank->num_local > 0) {
 	Pipe *p = new Pipe(rank, Pipe::STATE_ACCEPTING);
+	p->policy = rank->default_policy;
 	p->sd = sd;
 	p->start_reader();
 	rank->pipes.insert(p);
@@ -1370,8 +1371,12 @@ void SimpleMessenger::Pipe::writer()
 
     // connect?
     if (state == STATE_CONNECTING) {
-      connect();
-      continue;
+      if (policy.server) {
+	state = STATE_STANDBY;
+      } else {
+	connect();
+	continue;
+      }
     }
     
     if (state == STATE_CLOSING) {

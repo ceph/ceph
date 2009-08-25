@@ -26,6 +26,9 @@ v0.14
 - radosgw
 - uclient: fix write vs max_size?
 
+- msgr: unidirectional option
+- mds: put migration vectors in mdsmap
+
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?

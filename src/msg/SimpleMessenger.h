@@ -40,35 +40,43 @@ class SimpleMessenger {
 public:
   struct Policy {
     bool lossy_tx;                // 
+    bool server;
     float retry_interval;         // initial retry interval.  0 => fail immediately (lossy_tx=true)
     float fail_interval;          // before we call ms_handle_failure (lossy_tx=true)
     bool drop_msg_callback;
     bool fail_callback;
     bool remote_reset_callback;
     Policy() : 
-      lossy_tx(false),
+      lossy_tx(false), server(false),
       retry_interval(g_conf.ms_retry_interval),
       fail_interval(g_conf.ms_fail_interval),
       drop_msg_callback(true),
       fail_callback(true),
       remote_reset_callback(true) {}
 
-    Policy(bool tx, float r, float f, bool dmc, bool fc, bool rrc) :
-      lossy_tx(tx),
+    Policy(bool tx, bool sr, float r, float f, bool dmc, bool fc, bool rrc) :
+      lossy_tx(tx), server(sr),
       retry_interval(r), fail_interval(f),
       drop_msg_callback(dmc),
       fail_callback(fc),
       remote_reset_callback(rrc) {}
 
-    static Policy lossless() { return Policy(false,
+    // new
+    static Policy stateful_server() { return Policy(false, true, g_conf.ms_retry_interval, 0,
+						    true, true, true); }
+    static Policy stateless_server() { return Policy(true, true, -1, -1,
+						     true, true, true); }
+
+    // old
+    static Policy lossless() { return Policy(false, false,
 					     g_conf.ms_retry_interval, 0,
 					     true, true, true); }
     static Policy lossy_fail_after(float f) {
-      return Policy(true, 
+      return Policy(true, false,
 		    MIN(g_conf.ms_retry_interval, f), f,
 		    true, true, true);
     }
-    static Policy lossy_fast_fail() { return Policy(true, -1, -1, true, true, true); }
+    static Policy lossy_fast_fail() { return Policy(true, false, -1, -1, true, true, true); }
 
     /*
     static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
@@ -392,6 +400,7 @@ private:
   hash_map<entity_addr_t, Pipe*> rank_pipe;
  
   int my_type;
+  Policy default_policy;
   map<int, Policy> policy_map; // entity_name_t::type -> Policy
 
   set<Pipe*>      pipes;
@@ -439,6 +448,9 @@ public:
   // create a new messenger
   Endpoint *new_entity(entity_name_t addr);
 
+  void set_default_policy(Policy p) {
+    default_policy = p;
+  }
   void set_policy(int type, Policy p) {
     policy_map[type] = p;
   }
