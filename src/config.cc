@@ -365,6 +365,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(client_cache_readdir_ttl, 0, OPT_INT, 1),  // 1 second only
 	OPTION(client_use_random_mds, 0, OPT_BOOL, false),
 	OPTION(client_mount_timeout, 0, OPT_DOUBLE, 10.0),  // retry every N seconds
+	OPTION(client_unmount_timeout, 0, OPT_DOUBLE, 10.0),  // retry every N seconds
 	OPTION(client_tick_interval, 0, OPT_DOUBLE, 1.0),
 	OPTION(client_hack_balance_reads, 0, OPT_BOOL, false),
 	OPTION(client_trace, 0, OPT_STR, 0),

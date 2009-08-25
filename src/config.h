@@ -146,6 +146,7 @@ struct md_config_t {
   int      client_cache_readdir_ttl;
   bool     client_use_random_mds;          // debug flag
   double   client_mount_timeout;
+  double   client_unmount_timeout;
   double   client_tick_interval;
   bool client_hack_balance_reads;
   const char *client_trace;

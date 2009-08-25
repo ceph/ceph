@@ -2538,7 +2538,7 @@ int Client::mount()
   }
 
   client_lock.Unlock();
-  int r = monclient->mount(30.0);
+  int r = monclient->mount(g_conf.client_mount_timeout);
   client_lock.Lock();
   if (r < 0)
     return r;
@@ -2711,7 +2711,7 @@ int Client::unmount()
 
   // leave cluster
   client_lock.Unlock();
-  monclient->unmount();
+  monclient->unmount(g_conf.client_unmount_timeout);
   client_lock.Lock();
   mounted = false;
 

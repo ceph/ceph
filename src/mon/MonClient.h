@@ -40,7 +40,6 @@ private:
   Context *mount_timeout_event;
 
   Mutex monc_lock;
-  SafeTimer timer;
   bool mounted;
   int mounters;
   bool unmounting;
@@ -63,34 +62,42 @@ private:
   class MonClientOpHandler {
   protected:
     MonClient *client;
+    Mutex op_lock;
+    SafeTimer timer;
   public:
     bool done;
     int num_waiters;
     Cond cond;
     Context *timeout_event;
 
-    MonClientOpHandler(MonClient *c) : client(c) {
+    MonClientOpHandler(MonClient *c) : client(c),
+                op_lock("MonClientOpHandler::op_lock"),
+		timer(op_lock) {
       done = false;
       num_waiters = 0;
     }
 
+    void _op_timeout(double timeout);
+    void _try_do_op(double timeout);
+    int do_op(double timeout);
+
     virtual ~MonClientOpHandler() {}
 
     virtual Message *build_request() = 0;
-    virtual bool got_data() = 0;
+    virtual void handle_response(Message *response) = 0;
+    virtual bool got_response() = 0;
   };
   
   class C_OpTimeout : public Context {
   protected:
-    MonClient *client;
-    MonClientOpHandler *op_ctx;
+    MonClientOpHandler *op_handler;
     double timeout;
   public:
-    C_OpTimeout(MonClient *c, MonClientOpHandler *opc, double to) :
-                                        client(c), op_ctx(opc), timeout(to) {
+    C_OpTimeout(MonClientOpHandler *oph, double to) :
+                                        op_handler(oph), timeout(to) {
     }
     void finish(int r) {
-      if (r >= 0) client->_op_timeout(op_ctx, timeout);
+      if (r >= 0) op_handler->_op_timeout(timeout);
     }
   };
 
@@ -100,7 +107,20 @@ private:
     ~MonClientMountHandler() {}
 
     Message *build_request();
-    bool got_data() { return client->signed_ticket.length() != 0; }
+    void handle_response(Message *response);
+    bool got_response() { return client->signed_ticket.length() != 0; }
+  };
+
+  class MonClientUnmountHandler : public MonClientOpHandler {
+    bool got_ack;
+  public:
+    MonClientUnmountHandler(MonClient *c) : MonClientOpHandler(c),
+                            got_ack(false) {}
+    ~MonClientUnmountHandler() {}
+
+    Message *build_request();
+    void handle_response(Message *response);
+    bool got_response() { return got_ack; }
   };
 
   class MonClientGetTGTHandler : public MonClientOpHandler {
@@ -110,22 +130,23 @@ private:
     ~MonClientGetTGTHandler() {}
 
     Message *build_request();
-    bool got_data() { return client->tgt.length() != 0; }
+    void handle_response(Message *response);
+    bool got_response() { return client->tgt.length() != 0; }
   };
+
+  MonClientMountHandler mount_handler;
+  MonClientUnmountHandler unmount_handler;
 
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
   void handle_mount_ack(MClientMountAck* m);
   void handle_unmount(Message* m);
-  void _op_timeout(MonClientOpHandler *ctx, double timeout);
-
-  void _try_do_op(MonClientOpHandler *ctx, double timeout);
-  int do_op(MonClientOpHandler* ctx, double timeout);
 
  public:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),
-		timer(monc_lock) {
+                mount_handler(this),
+                unmount_handler(this) {
     mounted = false;
     mounters = 0;
     mount_timeout_event = 0;
@@ -136,7 +157,7 @@ private:
   int get_monmap();
 
   int mount(double mount_timeout);
-  int unmount();
+  int unmount(double timeout);
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {
@@ -167,12 +188,10 @@ private:
     int num_waiters;
     Cond cond;
     Context *timeout_event;
-    bool got_data;
 
     MonClientOpCtx() {
       done = false;
       num_waiters = 0;
-      got_data = false;
     }
   };
   

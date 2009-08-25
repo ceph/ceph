@@ -154,6 +154,7 @@ int MonClient::get_monmap()
 
 bool MonClient::dispatch_impl(Message *m)
 {
+  MonClientOpHandler *op_handler;
   dout(10) << "dispatch " << *m << dendl;
 
   switch (m->get_type()) {
@@ -162,13 +163,19 @@ bool MonClient::dispatch_impl(Message *m)
     return true;
 
   case CEPH_MSG_CLIENT_MOUNT_ACK:
-    handle_mount_ack((MClientMountAck*)m);
+    op_handler = &mount_handler;
     return true;
 
   case CEPH_MSG_CLIENT_UNMOUNT:
-    handle_unmount((MClientUnmount*)m);
+    op_handler = &unmount_handler;
     return true;
+  default:
+    return false;
   }
+
+  op_handler->handle_response(m);
+
+  delete m;
 
   return false;
 }
@@ -184,119 +191,17 @@ void MonClient::handle_monmap(MMonMap *m)
   delete m;
 }
 
-
-
-// -------------------
-// MOUNT
-
-void MonClient::_try_mount(double timeout)
-{
-  dout(10) << "_try_mount" << dendl;
-  int mon = monmap.pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << dendl;
-  messenger->set_dispatcher(this);
-  messenger->send_message(new MClientMount, monmap.get_inst(mon));
-
-  // schedule timeout?
-  assert(mount_timeout_event == 0);
-  mount_timeout_event = new C_MountTimeout(this, timeout);
-  timer.add_event_after(timeout, mount_timeout_event);
-}
-
-void MonClient::_mount_timeout(double timeout)
-{
-  dout(10) << "_mount_timeout" << dendl;
-  mount_timeout_event = 0;
-  _try_mount(timeout);
-}
-
 int MonClient::mount(double mount_timeout)
 {
-  Mutex::Locker lock(monc_lock);
-
-  if (mounted) {
-    dout(5) << "already mounted" << dendl;;
-    return 0;
-  }
-
-  // only first mounter does the work
-  bool itsme = false;
-  if (!mounters) {
-    itsme = true;
-    _try_mount(mount_timeout);
-  } else {
-    dout(5) << "additional mounter" << dendl;
-  }
-  mounters++;
-
-  while (signed_ticket.length() == 0 ||
-	 (!itsme && !mounted))       // non-doers wait a little longer
-    mount_cond.Wait(monc_lock);
-
-  if (!itsme) {
-    dout(5) << "additional mounter returning" << dendl;
-    assert(mounted);
-    return 0;
-  }
-
-  // finish.
-  timer.cancel_event(mount_timeout_event);
-  mount_timeout_event = 0;
-
-  mounted = true;
-  mount_cond.SignalAll(); // wake up non-doers
-
-  return 0;
+  return mount_handler.do_op(mount_timeout);
 }
 
-void MonClient::handle_mount_ack(MClientMountAck* m)
+int MonClient::unmount(double timeout)
 {
-  dout(10) << "handle_mount_ack " << *m << dendl;
-
-  // monmap
-  bufferlist::iterator p = m->monmap_bl.begin();
-  ::decode(monmap, p);
-
-  // ticket
-  signed_ticket = m->signed_ticket;
-
-  messenger->reset_myname(m->get_dest());
-
-  mount_cond.Signal();
-
-  delete m;
+  return unmount_handler.do_op(timeout);
 }
-
-
-// UNMOUNT
-int MonClient::unmount()
-{
-  Mutex::Locker lock(monc_lock);
-
-  // fixme: this should retry and time out too
-
-  int mon = monmap.pick_mon();
-  dout(2) << "sending client_unmount to mon" << mon << dendl;
-  messenger->send_message(new MClientUnmount, monmap.get_inst(mon));
-  
-  while (mounted)
-    mount_cond.Wait(monc_lock);
-
-  dout(2) << "unmounted." << dendl;
-  return 0;
-}
-
-void MonClient::handle_unmount(Message* m)
-{
-  Mutex::Locker lock(monc_lock);
-  mounted = false;
-  mount_cond.Signal();
-  delete m;
-}
-
 
 // ---------
-
 void MonClient::send_mon_message(Message *m, bool newmon)
 {
   Mutex::Locker l(monc_lock);
@@ -312,73 +217,105 @@ void MonClient::pick_new_mon()
   monmap.pick_mon(true);
 }
 
-void MonClient::_try_do_op(MonClientOpHandler *ctx, double timeout)
+void MonClient::MonClientOpHandler::_try_do_op(double timeout)
 {
   dout(10) << "_try_do_op" << dendl;
-  int mon = monmap.pick_mon();
+  int mon = client->monmap.pick_mon();
   dout(2) << "sending client_mount to mon" << mon << dendl;
 
-  Message *msg = ctx->build_request();
+  Message *msg = build_request();
   
-  messenger->set_dispatcher(this);
-  messenger->send_message(msg, monmap.get_inst(mon));
+  client->messenger->set_dispatcher(client);
+  client->messenger->send_message(msg, client->monmap.get_inst(mon));
 
   // schedule timeout?
-  assert(ctx->timeout_event == 0);
-  ctx->timeout_event = new C_OpTimeout(this, ctx, timeout);
-  timer.add_event_after(timeout, ctx->timeout_event);
+  assert(timeout_event == 0);
+  timeout_event = new C_OpTimeout(this, timeout);
+  timer.add_event_after(timeout, timeout_event);
 }
 
-int MonClient::do_op(MonClientOpHandler *ctx, double timeout)
+int MonClient::MonClientOpHandler::do_op(double timeout)
 {
-  Mutex::Locker lock(monc_lock);
+  Mutex::Locker lock(op_lock);
 
-  if (ctx->done) {
+  if (done) {
     dout(5) << "op already done" << dendl;;
     return 0;
   }
-
   // only the first does the work
   bool itsme = false;
-  if (!ctx->num_waiters) {
+  if (!num_waiters) {
     itsme = true;
-    _try_do_op(ctx, timeout);
+    _try_do_op(timeout);
   } else {
     dout(5) << "additional get_tgt" << dendl;
   }
-  ctx->num_waiters++;
+  num_waiters++;
 
-  while (!ctx->got_data() ||
-	 (!itsme && !ctx->done)) // non-doers wait a little longer
-	ctx->cond.Wait(monc_lock);
+  while (!got_response() ||
+	 (!itsme && !done)) // non-doers wait a little longer
+	cond.Wait(op_lock);
 
   if (!itsme) {
     dout(5) << "additional get_tgt returning" << dendl;
-    assert(ctx->got_data());
+    assert(got_response());
     return 0;
   }
 
   // finish.
-  timer.cancel_event(ctx->timeout_event);
-  ctx->timeout_event = 0;
+  timer.cancel_event(timeout_event);
+  timeout_event = 0;
 
-  ctx->cond.SignalAll(); // wake up non-doers
+  cond.SignalAll(); // wake up non-doers
 
   return 0;
 }
 
-void MonClient::_op_timeout(MonClientOpHandler *ctx, double timeout)
+void MonClient::MonClientOpHandler::_op_timeout(double timeout)
 {
   dout(10) << "_op_timeout" << dendl;
-  ctx->timeout_event = 0;
-  _try_do_op(ctx, timeout);
+  timeout_event = 0;
+  _try_do_op(timeout);
 }
 
+// -------------------
+// MOUNT
 Message *MonClient::MonClientMountHandler::build_request()
 {
   return new MClientMount;
 }
 
+void MonClient::MonClientMountHandler::handle_response(Message *response)
+{
+  MClientMountAck* m = (MClientMountAck *)response;
+  dout(10) << "handle_mount_ack " << *m << dendl;
+
+  // monmap
+  bufferlist::iterator p = m->monmap_bl.begin();
+  ::decode(client->monmap, p);
+
+  // ticket
+  client->signed_ticket = m->signed_ticket;
+
+  client->messenger->reset_myname(m->get_dest());
+
+  cond.Signal();
+}
+
+Message *MonClient::MonClientUnmountHandler::build_request()
+{
+  return new MClientUnmount;
+}
+
+// -------------------
+// UNMOUNT
+void MonClient::MonClientUnmountHandler::handle_response(Message *response)
+{
+  Mutex::Locker lock(op_lock);
+  client->mounted = false;
+  got_ack = true;
+  cond.Signal();
+}
 
 Message *MonClient::MonClientGetTGTHandler::build_request()
 {
@@ -396,3 +333,7 @@ Message *MonClient::MonClientGetTGTHandler::build_request()
   return msg;
 }
 
+void MonClient::MonClientGetTGTHandler::handle_response(Message *response)
+{
+  return; /* FIXME */
+}
