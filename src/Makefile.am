@@ -546,7 +546,8 @@ noinst_HEADERS = \
         mds/mds_table_types.h\
         mds/mdstypes.h\
         mds/snap.h\
-        messages/MCacheExpire.h\
+        messages/MAuth.h\
+        messages/MAuthReply.h\
 	messages/MClass.h\
 	messages/MClassAck.h\
         messages/MClientCaps.h\

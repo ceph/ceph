@@ -12,18 +12,18 @@
  * 
  */
 
-#ifndef __MCLIENTAUTHREPLY_H
-#define __MCLIENTAUTHREPLY_H
+#ifndef __MAUTHREPLY_H
+#define __MAUTHREPLY_H
 
 #include "msg/Message.h"
 
-struct MClientAuthReply : public Message {
+struct MAuthReply : public Message {
   __s32 result;
   cstring result_msg;
   bufferlist result_bl;
 
-  MClientAuthReply(bufferlist *bl = NULL, int r = 0, const char *msg = 0) :
-    Message(CEPH_MSG_CLIENT_AUTH_REPLY),
+  MAuthReply(bufferlist *bl = NULL, int r = 0, const char *msg = 0) :
+    Message(CEPH_MSG_AUTH_REPLY),
     result(r),
     result_msg(msg) {
     if (bl) {
@@ -32,9 +32,9 @@ struct MClientAuthReply : public Message {
     }
   }
 
-  const char *get_type_name() { return "client_auth_reply"; }
+  const char *get_type_name() { return "auth_reply"; }
   void print(ostream& o) {
-    o << "client_auth_reply(" << result;
+    o << "auth_reply(" << result;
     if (result_msg.length()) o << " " << result_msg;
     o << ")";
   }
@@ -50,7 +50,7 @@ struct MClientAuthReply : public Message {
     ::encode(result_bl, payload);
     ::encode(result_msg, payload);
 
-    dout(0) << "MClientAuthReply size=" << payload.length() << dendl;
+    dout(0) << "MAuthReply size=" << payload.length() << dendl;
   }
 };
 

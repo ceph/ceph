@@ -20,8 +20,8 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonMap.h"
-#include "messages/MClientAuth.h"
-#include "messages/MClientAuthReply.h"
+#include "messages/MAuth.h"
+#include "messages/MAuthReply.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MClientUnmount.h"
@@ -157,7 +157,7 @@ bool ClientMonitor::check_mount(MClientMount *m)
     return false;
 }
 
-bool ClientMonitor::check_auth(MClientAuth *m)
+bool ClientMonitor::check_auth(MAuth *m)
 {
   stringstream ss;
   // already mounted?
@@ -170,7 +170,7 @@ bool ClientMonitor::check_auth(MClientAuth *m)
   bufferlist response_bl;
 
   int ret = handler->handle_request(m->get_auth_payload(), response_bl);
-  MClientAuthReply *reply = new MClientAuthReply(&response_bl, ret);
+  MAuthReply *reply = new MAuthReply(&response_bl, ret);
 
   if (reply) {
     mon->messenger->send_message(reply,
@@ -186,9 +186,9 @@ bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
-  case CEPH_MSG_CLIENT_AUTH:
+  case CEPH_MSG_AUTH:
         dout(0) << "YY preprocess_query" << dendl;
-        return check_auth((MClientAuth *)m);
+        return check_auth((MAuth *)m);
 
   case CEPH_MSG_CLIENT_MOUNT:
 	return check_mount((MClientMount *)m);

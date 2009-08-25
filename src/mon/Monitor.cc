@@ -405,7 +405,7 @@ bool Monitor::dispatch_impl(Message *m)
       break;
 
       // clients
-    case CEPH_MSG_CLIENT_AUTH:
+    case CEPH_MSG_AUTH:
       dout(0) << "Monitor::dispatch_impl() got CEPH_MSG_CLIENT_AUTH" << dendl;
     case CEPH_MSG_CLIENT_MOUNT:
     case CEPH_MSG_CLIENT_UNMOUNT:

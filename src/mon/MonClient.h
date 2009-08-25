@@ -35,6 +35,8 @@ private:
 
   bufferlist signed_ticket;
 
+  bufferlist tgt;
+
   Context *mount_timeout_event;
 
   Mutex monc_lock;
@@ -43,7 +45,6 @@ private:
   int mounters;
   bool unmounting;
   Cond mount_cond, map_cond;
-
 
   bool dispatch_impl(Message *m);
   void handle_monmap(MMonMap *m);
@@ -59,10 +60,43 @@ private:
     }
   };
 
+  class MonClientOpCtx {
+  public:
+    bool done;
+    int num_waiters;
+    Cond cond;
+    Context *timeout_event;
+    bool got_data;
+
+    MonClientOpCtx() {
+      done = false;
+      num_waiters = 0;
+      got_data = false;
+    }
+  };
+  
+  class C_OpTimeout : public Context {
+    MonClient *client;
+    MonClientOpCtx *op_ctx;
+    double timeout;
+  public:
+    C_OpTimeout(MonClient *c, MonClientOpCtx *opc, double to) :
+                                        client(c), op_ctx(opc), timeout(to) {
+    }
+    void finish(int r) {
+      if (r >= 0) client->_op_timeout(*op_ctx, timeout);
+    }
+  };
+
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
   void handle_mount_ack(MClientMountAck* m);
   void handle_unmount(Message* m);
+  void _op_timeout(MonClientOpCtx& ctx, double timeout);
+
+  void _try_do_op(MonClientOpCtx& ctx, double timeout);
+  int do_op(MonClientOpCtx& ctx, double timeout);
+
  public:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),

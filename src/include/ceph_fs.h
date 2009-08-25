@@ -270,8 +270,8 @@ struct ceph_secret {
 #define CEPH_MSG_CLIENT_UNMOUNT         12
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
-#define CEPH_MSG_CLIENT_AUTH		15
-#define CEPH_MSG_CLIENT_AUTH_REPLY	16
+#define CEPH_MSG_AUTH			15
+#define CEPH_MSG_AUTH_REPLY		16
 
 /* client <-> mds */
 #define CEPH_MSG_MDS_GETMAP             20

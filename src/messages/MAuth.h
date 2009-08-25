@@ -12,15 +12,15 @@
  * 
  */
 
-#ifndef __MCLIENTAUTH_H
-#define __MCLIENTAUTH_H
+#ifndef __MAUTH_H
+#define __MAUTH_H
 
 #include "messages/PaxosServiceMessage.h"
 
-class MClientAuth : public PaxosServiceMessage {
+class MAuth : public PaxosServiceMessage {
   bufferlist auth_payload;
 public:
-  MClientAuth() : PaxosServiceMessage(CEPH_MSG_CLIENT_AUTH, 0) { }
+  MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0) { }
 
   const char *get_type_name() { return "client_auth"; }
 

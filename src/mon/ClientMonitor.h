@@ -35,7 +35,7 @@ using namespace std;
 
 class Monitor;
 class Paxos;
-class MClientAuth;
+class MAuth;
 class MClientMount;
 class MClientUnmount;
 class MMonCommand;
@@ -87,7 +87,7 @@ private:
 
   void committed();
 
-  bool check_auth(MClientAuth *m);
+  bool check_auth(MAuth *m);
   bool check_mount(MClientMount *m);
   void _mounted(int c, MClientMount *m);
   void _unmounted(MClientUnmount *m);
