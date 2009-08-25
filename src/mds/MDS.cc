@@ -1178,6 +1178,11 @@ bool MDS::dispatch_impl(Message *m)
     return true;
   }
 
+  if (m->get_type() == CEPH_MSG_PING) {
+    delete m;
+    return true;
+  }    
+
   mds_lock.Lock();
   ret = _dispatch(m);
   mds_lock.Unlock();
