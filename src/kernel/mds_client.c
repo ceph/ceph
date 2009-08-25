@@ -2576,8 +2576,17 @@ static void delayed_work(struct work_struct *work)
 		mutex_unlock(&mdsc->mutex);
 
 		mutex_lock(&s->s_mutex);
-		if (renew_caps)
+		if (renew_caps) {
 			send_renew_caps(mdsc, s);
+		} else {
+			struct ceph_entity_name name = {
+				.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS),
+				.num = cpu_to_le32(s->s_mds)
+			};
+
+			ceph_ping(mdsc->client->msgr, name,
+				  ceph_mdsmap_get_addr(mdsc->mdsmap, s->s_mds));
+		}
 		add_cap_releases(mdsc, s, -1);
 		send_cap_releases(mdsc, s);
 		mutex_unlock(&s->s_mutex);
