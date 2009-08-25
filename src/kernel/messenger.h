@@ -71,12 +71,8 @@ struct ceph_messenger {
 
 	struct ceph_entity_inst inst;    /* my name+address */
 
-	struct socket *listen_sock; 	 /* listening socket */
-	struct work_struct awork;	 /* accept work */
-
 	spinlock_t con_lock;
 	struct list_head con_all;        /* all open connections */
-	struct list_head con_accepting;  /*  accepting */
 	struct radix_tree_root con_tree; /*  established */
 
 	struct page *zero_page;          /* used in certain error cases */
@@ -131,7 +127,6 @@ struct ceph_msg_pos {
 #define LOSSYTX         0  /* we can close channel or drop messages on errors */
 #define LOSSYRX         1  /* peer may reset/drop messages */
 #define CONNECTING	2
-#define ACCEPTING	3
 #define WRITE_PENDING	4  /* we have data ready to send */
 #define QUEUED          5  /* there is work queued on this connection */
 #define BUSY            6  /* work is being done */
@@ -160,7 +155,7 @@ struct ceph_connection {
 	atomic_t nref;
 
 	struct list_head list_all;     /* msgr->con_all */
-	struct list_head list_bucket;  /* msgr->con_tree or con_accepting */
+	struct list_head list_bucket;
 
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
