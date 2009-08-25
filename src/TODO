@@ -26,8 +26,15 @@ v0.14
 - radosgw
 - uclient: fix write vs max_size?
 
-- msgr: unidirectional option
 - mds: put migration vectors in mdsmap
+
+- msgr: unidirectional option
+  - what about mon -> mds/osd messages?
+- kclient msgr fixups
+  - private field in ceph_connection
+  - kill radix_tree; allocate connections in callers (osdc, monc, mdsc)
+  - simplify ceph_ping (should be a single byte)
+
 
 bugs
 - premature filejournal trimming?

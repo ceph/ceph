@@ -92,6 +92,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
 #define CEPH_MSGR_TAG_MSG          10  /* message */
 #define CEPH_MSGR_TAG_ACK          11  /* message ack */
+#define CEPH_MSGR_TAG_KEEPALIVE    12  /* just a keepalive byte! */
 
 
 /*

@@ -54,8 +54,6 @@ static inline const char *ceph_name_type_str(int t)
 	}
 }
 
-#define CEPH_MSGR_BACKUP 10  /* backlogged incoming connections */
-
 /* use format string %s%d */
 #define ENTITY_NAME(n)				   \
 	ceph_name_type_str(le32_to_cpu((n).type)), \
@@ -127,6 +125,7 @@ struct ceph_msg_pos {
 #define LOSSYTX         0  /* we can close channel or drop messages on errors */
 #define LOSSYRX         1  /* peer may reset/drop messages */
 #define CONNECTING	2
+#define KEEPALIVE_PENDING      3
 #define WRITE_PENDING	4  /* we have data ready to send */
 #define QUEUED          5  /* there is work queued on this connection */
 #define BUSY            6  /* work is being done */
@@ -147,6 +146,8 @@ struct ceph_msg_pos {
  * messages in the case of a TCP disconnect.
  */
 struct ceph_connection {
+	void *private;
+
 	struct ceph_messenger *msgr;
 	struct socket *sock;
 	unsigned long state;	/* connection state (see flags above) */
@@ -168,6 +169,7 @@ struct ceph_connection {
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending/sent but unacked */
 	u32 out_seq;		     /* last message queued for send */
+	bool out_keepalive_pending;
 
 	u32 in_seq, in_seq_acked;  /* last message received, acked */
 
@@ -217,6 +219,13 @@ extern void ceph_msgr_exit(void);
 extern struct ceph_messenger *
 ceph_messenger_create(struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
+
+extern void ceph_con_init(struct ceph_messenger *msgr,
+			  struct ceph_connection *con,
+			  struct ceph_entity_addr *addr);
+extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
+
+
 extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 				     struct ceph_entity_addr *addr);
 
