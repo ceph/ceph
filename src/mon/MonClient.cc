@@ -312,15 +312,79 @@ void MonClient::pick_new_mon()
   monmap.pick_mon(true);
 }
 
-void MonClient::_try_do_op(MonClientOpCtx& ctx, double timeout)
+void MonClient::_try_do_op(MonClientOpHandler *ctx, double timeout)
 {
   dout(10) << "_try_do_op" << dendl;
   int mon = monmap.pick_mon();
   dout(2) << "sending client_mount to mon" << mon << dendl;
 
+  Message *msg = ctx->build_request();
+  
+  messenger->set_dispatcher(this);
+  messenger->send_message(msg, monmap.get_inst(mon));
+
+  // schedule timeout?
+  assert(ctx->timeout_event == 0);
+  ctx->timeout_event = new C_OpTimeout(this, ctx, timeout);
+  timer.add_event_after(timeout, ctx->timeout_event);
+}
+
+int MonClient::do_op(MonClientOpHandler *ctx, double timeout)
+{
+  Mutex::Locker lock(monc_lock);
+
+  if (ctx->done) {
+    dout(5) << "op already done" << dendl;;
+    return 0;
+  }
+
+  // only the first does the work
+  bool itsme = false;
+  if (!ctx->num_waiters) {
+    itsme = true;
+    _try_do_op(ctx, timeout);
+  } else {
+    dout(5) << "additional get_tgt" << dendl;
+  }
+  ctx->num_waiters++;
+
+  while (!ctx->got_data() ||
+	 (!itsme && !ctx->done)) // non-doers wait a little longer
+	ctx->cond.Wait(monc_lock);
+
+  if (!itsme) {
+    dout(5) << "additional get_tgt returning" << dendl;
+    assert(ctx->got_data());
+    return 0;
+  }
+
+  // finish.
+  timer.cancel_event(ctx->timeout_event);
+  ctx->timeout_event = 0;
+
+  ctx->cond.SignalAll(); // wake up non-doers
+
+  return 0;
+}
+
+void MonClient::_op_timeout(MonClientOpHandler *ctx, double timeout)
+{
+  dout(10) << "_op_timeout" << dendl;
+  ctx->timeout_event = 0;
+  _try_do_op(ctx, timeout);
+}
+
+Message *MonClient::MonClientMountHandler::build_request()
+{
+  return new MClientMount;
+}
+
+
+Message *MonClient::MonClientGetTGTHandler::build_request()
+{
   MAuth *msg = new MAuth;
   if (!msg)
-    return;
+    return NULL;
 
   bufferlist& bl = msg->get_auth_payload();
 
@@ -328,62 +392,7 @@ void MonClient::_try_do_op(MonClientOpCtx& ctx, double timeout)
   entity_addr_t my_addr;
 
   build_authenticate_request(name, my_addr, bl);
-  
-  messenger->set_dispatcher(this);
-  messenger->send_message(msg, monmap.get_inst(mon));
 
-  // schedule timeout?
-  assert(ctx.timeout_event == 0);
-  ctx.timeout_event = new C_OpTimeout(this, &ctx, timeout);
-  timer.add_event_after(timeout, ctx.timeout_event);
-}
-
-/*
-  get ticket-granting-ticket for this principle
-*/
-int MonClient::do_op(MonClientOpCtx& ctx, double timeout)
-{
-  Mutex::Locker lock(monc_lock);
-
-  if (ctx.done) {
-    dout(5) << "op already done" << dendl;;
-    return 0;
-  }
-
-  // only the first does the work
-  bool itsme = false;
-  if (!ctx.num_waiters) {
-    itsme = true;
-    _try_do_op(ctx, timeout);
-  } else {
-    dout(5) << "additional get_tgt" << dendl;
-  }
-  ctx.num_waiters++;
-
-  while (!ctx.got_data ||
-	 (!itsme && !ctx.done)) // non-doers wait a little longer
-	ctx.cond.Wait(monc_lock);
-
-  if (!itsme) {
-    dout(5) << "additional get_tgt returning" << dendl;
-    assert(ctx.got_data);
-    return 0;
-  }
-
-  // finish.
-  timer.cancel_event(ctx.timeout_event);
-  ctx.timeout_event = 0;
-
-  ctx.got_data = true;
-  ctx.cond.SignalAll(); // wake up non-doers
-
-  return 0;
-}
-
-void MonClient::_op_timeout(MonClientOpCtx& ctx, double timeout)
-{
-  dout(10) << "_op_timeout" << dendl;
-  ctx.timeout_event = 0;
-  _try_do_op(ctx, timeout);
+  return msg;
 }
 

@@ -60,42 +60,67 @@ private:
     }
   };
 
-  class MonClientOpCtx {
+  class MonClientOpHandler {
+  protected:
+    MonClient *client;
   public:
     bool done;
     int num_waiters;
     Cond cond;
     Context *timeout_event;
-    bool got_data;
 
-    MonClientOpCtx() {
+    MonClientOpHandler(MonClient *c) : client(c) {
       done = false;
       num_waiters = 0;
-      got_data = false;
     }
+
+    virtual ~MonClientOpHandler() {}
+
+    virtual Message *build_request() = 0;
+    virtual bool got_data() = 0;
   };
   
   class C_OpTimeout : public Context {
+  protected:
     MonClient *client;
-    MonClientOpCtx *op_ctx;
+    MonClientOpHandler *op_ctx;
     double timeout;
   public:
-    C_OpTimeout(MonClient *c, MonClientOpCtx *opc, double to) :
+    C_OpTimeout(MonClient *c, MonClientOpHandler *opc, double to) :
                                         client(c), op_ctx(opc), timeout(to) {
     }
     void finish(int r) {
-      if (r >= 0) client->_op_timeout(*op_ctx, timeout);
+      if (r >= 0) client->_op_timeout(op_ctx, timeout);
     }
+  };
+
+  class MonClientMountHandler : public MonClientOpHandler {
+  public:
+    MonClientMountHandler(MonClient *c) : MonClientOpHandler(c) {}
+    ~MonClientMountHandler() {}
+
+    Message *build_request();
+    bool got_data() { return client->signed_ticket.length() != 0; }
+  };
+
+  class MonClientGetTGTHandler : public MonClientOpHandler {
+    bool has_data;
+  public:
+    MonClientGetTGTHandler(MonClient *c) : MonClientOpHandler(c) {}
+    ~MonClientGetTGTHandler() {}
+
+    Message *build_request();
+    bool got_data() { return client->tgt.length() != 0; }
   };
 
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
   void handle_mount_ack(MClientMountAck* m);
   void handle_unmount(Message* m);
-  void _op_timeout(MonClientOpCtx& ctx, double timeout);
+  void _op_timeout(MonClientOpHandler *ctx, double timeout);
 
-  void _try_do_op(MonClientOpCtx& ctx, double timeout);
-  int do_op(MonClientOpCtx& ctx, double timeout);
+  void _try_do_op(MonClientOpHandler *ctx, double timeout);
+  int do_op(MonClientOpHandler* ctx, double timeout);
 
  public:
   MonClient() : messenger(NULL),
@@ -136,6 +161,22 @@ private:
     return entity_inst_t();
   }
   int get_num_mon() {
+  class MonClientOpCtx {
+  public:
+    bool done;
+    int num_waiters;
+    Cond cond;
+    Context *timeout_event;
+    bool got_data;
+
+    MonClientOpCtx() {
+      done = false;
+      num_waiters = 0;
+      got_data = false;
+    }
+  };
+  
+
     Mutex::Locker l(monc_lock);
     return monmap.size();
   }
