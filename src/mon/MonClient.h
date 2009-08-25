@@ -34,10 +34,7 @@ private:
   Messenger *messenger;
 
   bufferlist signed_ticket;
-
   bufferlist tgt;
-
-  Context *mount_timeout_event;
 
   Mutex monc_lock;
   bool mounted;
@@ -75,6 +72,7 @@ private:
 		timer(op_lock) {
       done = false;
       num_waiters = 0;
+      timeout_event = NULL;
     }
 
     void _op_timeout(double timeout);
@@ -102,13 +100,14 @@ private:
   };
 
   class MonClientMountHandler : public MonClientOpHandler {
+    bool response_flag;
   public:
-    MonClientMountHandler(MonClient *c) : MonClientOpHandler(c) {}
+    MonClientMountHandler(MonClient *c) : MonClientOpHandler(c) { response_flag = false; }
     ~MonClientMountHandler() {}
 
     Message *build_request();
     void handle_response(Message *response);
-    bool got_response() { return client->signed_ticket.length() != 0; }
+    bool got_response() { return response_flag; }
   };
 
   class MonClientUnmountHandler : public MonClientOpHandler {
@@ -149,7 +148,6 @@ private:
                 unmount_handler(this) {
     mounted = false;
     mounters = 0;
-    mount_timeout_event = 0;
     unmounting = false;
   }
 

@@ -164,11 +164,11 @@ bool MonClient::dispatch_impl(Message *m)
 
   case CEPH_MSG_CLIENT_MOUNT_ACK:
     op_handler = &mount_handler;
-    return true;
+    break;
 
   case CEPH_MSG_CLIENT_UNMOUNT:
     op_handler = &unmount_handler;
-    return true;
+    break;
   default:
     return false;
   }
@@ -177,7 +177,7 @@ bool MonClient::dispatch_impl(Message *m)
 
   delete m;
 
-  return false;
+  return true;
 }
 
 void MonClient::handle_monmap(MMonMap *m)
@@ -193,7 +193,11 @@ void MonClient::handle_monmap(MMonMap *m)
 
 int MonClient::mount(double mount_timeout)
 {
-  return mount_handler.do_op(mount_timeout);
+  int ret = mount_handler.do_op(mount_timeout);
+
+  dout(0) << "mount ret=" << ret << dendl;
+
+  return ret;
 }
 
 int MonClient::unmount(double timeout)
@@ -253,11 +257,12 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
   num_waiters++;
 
   while (!got_response() ||
-	 (!itsme && !done)) // non-doers wait a little longer
+	 (!itsme && !done)) { // non-doers wait a little longer
 	cond.Wait(op_lock);
+  }
 
   if (!itsme) {
-    dout(5) << "additional get_tgt returning" << dendl;
+    dout(5) << "additional returning" << dendl;
     assert(got_response());
     return 0;
   }
@@ -265,6 +270,8 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
   // finish.
   timer.cancel_event(timeout_event);
   timeout_event = 0;
+
+  done = true;
 
   cond.SignalAll(); // wake up non-doers
 
@@ -294,10 +301,9 @@ void MonClient::MonClientMountHandler::handle_response(Message *response)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(client->monmap, p);
 
-  // ticket
-  client->signed_ticket = m->signed_ticket;
-
   client->messenger->reset_myname(m->get_dest());
+
+  response_flag = true;
 
   cond.Signal();
 }
@@ -317,6 +323,8 @@ void MonClient::MonClientUnmountHandler::handle_response(Message *response)
   cond.Signal();
 }
 
+// -------------------
+// GET TGT
 Message *MonClient::MonClientGetTGTHandler::build_request()
 {
   MAuth *msg = new MAuth;
