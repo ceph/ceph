@@ -1358,11 +1358,11 @@ public:
 
 class C_Dir_Committed : public Context {
   CDir *dir;
-  version_t version;
+  version_t version, last_renamed_version;
 public:
-  C_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
+  C_Dir_Committed(CDir *d, version_t v, version_t lrv) : dir(d), version(v), last_renamed_version(lrv) { }
   void finish(int r) {
-    dir->_committed(version);
+    dir->_committed(version, last_renamed_version);
   }
 };
 
@@ -1587,6 +1587,10 @@ void CDir::_commit(version_t want)
     _commit_partial(m, snaps);
   }
 
+  // update parent pointer while we're here.
+  //  NOTE: the pointer is ONLY required to be valid for the first frag.  we put the xattr
+  //        on other frags too because it can't hurt, but it won't necessarily be up to date
+  //        in that case!!
   inode->encode_parent_mutation(m);
 
   SnapContext snapc;
@@ -1596,7 +1600,7 @@ void CDir::_commit(version_t want)
 						     cache->mds->mdsmap->get_metadata_pg_pool());
 
   cache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
-			       NULL, new C_Dir_Committed(this, get_version()) );
+			       NULL, new C_Dir_Committed(this, get_version(), inode->inode.last_renamed_version) );
 }
 
 
@@ -1605,10 +1609,19 @@ void CDir::_commit(version_t want)
  *
  * @param v version i just committed
  */
-void CDir::_committed(version_t v)
+void CDir::_committed(version_t v, version_t lrv)
 {
-  dout(10) << "_committed v " << v << " on " << *this << dendl;
+  dout(10) << "_committed v " << v << " (last renamed " << lrv << ") on " << *this << dendl;
   assert(is_auth());
+
+  // did we update the parent pointer too?
+  if (get_frag() == frag_t() &&     // only counts on first frag
+      inode->state_test(CInode::STATE_DIRTYPARENT) &&
+      lrv == inode->inode.last_renamed_version) {
+    inode->xlist_renamed_file.remove_myself();
+    inode->state_clear(CInode::STATE_DIRTYPARENT);
+    dout(10) << "_committed  stored parent pointer, removed from renamed_files list " << *inode << dendl;
+  }
   
   // take note.
   assert(v > committed_version);

@@ -356,12 +356,14 @@ struct inode_t {
   version_t file_data_version; // auth only
   version_t xattr_version;
 
+  version_t last_renamed_version;      // when i was last renamed
+
   inode_t() : ino(0), rdev(0),
 	      mode(0), uid(0), gid(0),
 	      nlink(0), anchored(false),
 	      size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
 	      time_warp_seq(0),
-	      version(0), file_data_version(0), xattr_version(0) { 
+	      version(0), file_data_version(0), xattr_version(0), last_renamed_version(0) { 
     memset(&layout, 0, sizeof(layout));
   }
 
@@ -397,7 +399,7 @@ struct inode_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
 
     ::encode(ino, bl);
@@ -428,6 +430,7 @@ struct inode_t {
     ::encode(version, bl);
     ::encode(file_data_version, bl);
     ::encode(xattr_version, bl);
+    ::encode(last_renamed_version, bl);
   }
   void decode(bufferlist::iterator &p) {
     __u8 v;
@@ -461,6 +464,8 @@ struct inode_t {
     ::decode(version, p);
     ::decode(file_data_version, p);
     ::decode(xattr_version, p);
+    if (v >= 2)
+      ::decode(last_renamed_version, p);
   }
 };
 WRITE_CLASS_ENCODER(inode_t)

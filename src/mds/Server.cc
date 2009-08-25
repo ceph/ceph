@@ -4246,6 +4246,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   if (!silent) {
     if (pi) {
+      pi->last_renamed_version = pi->version;
       pi->ctime = mdr->now;
       if (linkmerge)
 	pi->nlink--;
@@ -4456,7 +4457,15 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     }
 
     if (destdn->is_auth()) {
-      destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
+      CInode *desti = destdnl->get_inode();
+      desti->pop_and_dirty_projected_inode(mdr->ls);
+
+      
+      if (desti->is_dir()) {
+	mdr->ls->renamed_files.push_back(&desti->xlist_renamed_file);
+	desti->state_set(CInode::STATE_DIRTYPARENT);
+	dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
+      }
     }
 
     // snap parent update?

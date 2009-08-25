@@ -101,6 +101,7 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
+  if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
@@ -736,10 +737,11 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
 
 struct C_Inode_StoredParent : public Context {
   CInode *in;
+  version_t version;
   Context *fin;
-  C_Inode_StoredParent(CInode *i, Context *f) : in(i), fin(f) {}
+  C_Inode_StoredParent(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
   void finish(int r) {
-    in->_stored_parent(fin);
+    in->_stored_parent(version, fin);
   }
 };
 
@@ -780,13 +782,20 @@ void CInode::store_parent(Context *fin)
 						     mdcache->mds->mdsmap->get_metadata_pg_pool());
 
   mdcache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
-				 NULL, new C_Inode_StoredParent(this, fin) );
+				 NULL, new C_Inode_StoredParent(this, inode.last_renamed_version, fin) );
 
 }
 
-void CInode::_stored_parent(Context *fin)
+void CInode::_stored_parent(version_t v, Context *fin)
 {
-  dout(10) << "stored_parent" << dendl;
+  if (v == inode.last_renamed_version) {
+    dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
+    xlist_renamed_file.remove_myself();
+    state_clear(STATE_DIRTYPARENT);
+  } else {
+    dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
+	     << ", renamed again, not removing from list" << dendl;
+  }
   if (fin) {
     fin->finish(0);
     delete fin;

@@ -56,9 +56,6 @@ rados
 - security
 
 repair
-- repair metadata.. 
-/  - parent pointer on CDir objects
-  - update on dir rename commit
 - namespace reconstruction tool
 - repair pg (rebuild log)  (online or offline?  ./cosd --repair_pg 1.ef?)
 - repair file ioctl?
@@ -69,11 +66,6 @@ repair
 - data object 
   - path backpointers?
   - parent dir pointer?
-- cdir objects
-  - parent dir pointer
-    - update on rename?  or on cdir store?
-      on cdir store is sufficient if mdlog survives...
-  - or what the hell, full trace?
 - mds scrubbing
 
 kclient

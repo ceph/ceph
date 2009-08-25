@@ -124,6 +124,7 @@ public:
   static const int STATE_NEEDSRECOVER = (1<<11);
   static const int STATE_RECOVERING =   (1<<12);
   static const int STATE_PURGING =     (1<<13);
+  static const int STATE_DIRTYPARENT =  (1<<14);
 
   // -- waiters --
   static const __u64 WAIT_DIR         = (1<<0);
@@ -272,6 +273,7 @@ protected:
 public:
   xlist<CInode*>::item xlist_caps;
   xlist<CInode*>::item xlist_open_file;
+  xlist<CInode*>::item xlist_renamed_file;
   xlist<CInode*>::item xlist_dirty_dirfrag_dir;
   xlist<CInode*>::item xlist_dirty_dirfrag_nest;
   xlist<CInode*>::item xlist_dirty_dirfrag_dirfragtree;
@@ -312,7 +314,7 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    xlist_dirty(this), xlist_caps(this), xlist_open_file(this), 
+    xlist_dirty(this), xlist_caps(this), xlist_open_file(this), xlist_renamed_file(this), 
     xlist_dirty_dirfrag_dir(this), 
     xlist_dirty_dirfrag_nest(this), 
     xlist_dirty_dirfrag_dirfragtree(this), 
@@ -401,7 +403,7 @@ private:
   void _fetched(bufferlist& bl, Context *fin);  
 
   void store_parent(Context *fin);
-  void _stored_parent(Context *fin);
+  void _stored_parent(version_t v, Context *fin);
 
   void encode_parent_mutation(ObjectOperation& m);
 

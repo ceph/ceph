@@ -41,6 +41,7 @@ class LogSegment {
   xlist<CDentry*> dirty_dentries;
 
   xlist<CInode*>  open_files;
+  xlist<CInode*>  renamed_files;
   xlist<CInode*>  dirty_dirfrag_dir;
   xlist<CInode*>  dirty_dirfrag_nest;
   xlist<CInode*>  dirty_dirfrag_dirfragtree;
