@@ -730,6 +730,70 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
 }
 
 
+
+// ------------------
+// parent dir
+
+struct C_Inode_StoredParent : public Context {
+  CInode *in;
+  Context *fin;
+  C_Inode_StoredParent(CInode *i, Context *f) : in(i), fin(f) {}
+  void finish(int r) {
+    in->_stored_parent(fin);
+  }
+};
+
+void CInode::encode_parent_mutation(ObjectOperation& m)
+{
+  string path;
+  make_path_string(path);
+  m.setxattr("path", path);
+
+  CDentry *pdn = get_parent_dn();
+  if (pdn) {
+    bufferlist parent(32 + pdn->name.length());
+    __u64 ino = pdn->get_dir()->get_inode()->ino();
+    __u8 v = 1;
+    ::encode(v, parent);
+    ::encode(inode.version, parent);
+    ::encode(ino, parent);
+    ::encode(pdn->name, parent);
+    m.setxattr("parent", parent);
+  }
+}
+
+void CInode::store_parent(Context *fin)
+{
+  dout(10) << "store_parent" << dendl;
+  
+  ObjectOperation m;
+  encode_parent_mutation(m);
+
+  // write it.
+  SnapContext snapc;
+
+  char n[30];
+  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  object_t oid(n);
+  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+
+  mdcache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
+				 NULL, new C_Inode_StoredParent(this, fin) );
+
+}
+
+void CInode::_stored_parent(Context *fin)
+{
+  dout(10) << "stored_parent" << dendl;
+  if (fin) {
+    fin->finish(0);
+    delete fin;
+  }
+}
+
+
 // ------------------
 // locking
 

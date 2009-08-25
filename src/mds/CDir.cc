@@ -1587,18 +1587,7 @@ void CDir::_commit(version_t want)
     _commit_partial(m, snaps);
   }
 
-  string path;
-  inode->make_path_string(path);
-  m.setxattr("path", path);
-
-  CDentry *pdn = inode->get_parent_dn();
-  if (pdn) {
-    bufferlist parent(16 + pdn->name.length());
-    __u64 ino = pdn->get_dir()->get_inode()->ino();
-    ::encode(ino, parent);
-    ::encode(pdn->name, parent);
-    m.setxattr("parent", parent);
-  }
+  inode->encode_parent_mutation(m);
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();

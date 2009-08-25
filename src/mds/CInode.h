@@ -48,6 +48,7 @@ class LogSegment;
 class SnapRealm;
 class Session;
 class MClientCaps;
+class ObjectOperation;
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -398,6 +399,11 @@ private:
   void _stored(version_t cv, Context *fin);
   void fetch(Context *fin);
   void _fetched(bufferlist& bl, Context *fin);  
+
+  void store_parent(Context *fin);
+  void _stored_parent(Context *fin);
+
+  void encode_parent_mutation(ObjectOperation& m);
 
   void encode_store(bufferlist& bl) {
     ::encode(inode, bl);
