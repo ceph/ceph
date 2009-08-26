@@ -29,6 +29,7 @@
 #include "MonMap.h"
 
 #include "auth/Auth.h"
+#include "auth/AuthProtocol.h"
 
 #include "config.h"
 
@@ -169,6 +170,11 @@ bool MonClient::dispatch_impl(Message *m)
   case CEPH_MSG_CLIENT_UNMOUNT:
     op_handler = &unmount_handler;
     break;
+
+  case CEPH_MSG_AUTH_REPLY:
+    op_handler = &auth_handler;
+    break;
+
   default:
     return false;
   }
@@ -203,6 +209,15 @@ int MonClient::mount(double mount_timeout)
 int MonClient::unmount(double timeout)
 {
   return unmount_handler.do_op(timeout);
+}
+
+int MonClient::get_tgt(double mount_timeout)
+{
+  int ret = auth_handler.do_op(mount_timeout);
+
+  dout(0) << "auth ret=" << ret << dendl;
+
+  return ret;
 }
 
 // ---------
@@ -252,7 +267,7 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
     itsme = true;
     _try_do_op(timeout);
   } else {
-    dout(5) << "additional get_tgt" << dendl;
+    dout(5) << "additional doer" << dendl;
   }
   num_waiters++;
 
@@ -324,24 +339,31 @@ void MonClient::MonClientUnmountHandler::handle_response(Message *response)
 }
 
 // -------------------
-// GET TGT
-Message *MonClient::MonClientGetTGTHandler::build_request()
+// AUTH
+Message *MonClient::MonClientAuthHandler::build_request()
 {
   MAuth *msg = new MAuth;
   if (!msg)
     return NULL;
-
   bufferlist& bl = msg->get_auth_payload();
+#if 0
 
   EntityName name;
   entity_addr_t my_addr;
 
   build_authenticate_request(name, my_addr, bl);
+#endif
+  CephXRequest1 req;
+  req.init();
+
+  ::encode(req, bl);
 
   return msg;
 }
 
-void MonClient::MonClientGetTGTHandler::handle_response(Message *response)
+void MonClient::MonClientAuthHandler::handle_response(Message *response)
 {
+  Mutex::Locker lock(op_lock);
+  cond.Signal();
   return; /* FIXME */
 }

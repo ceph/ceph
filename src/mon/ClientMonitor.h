@@ -31,7 +31,7 @@ using namespace std;
 #include "PaxosService.h"
 #include "ClientMap.h"
 
-#include "auth/AuthManager.h"
+#include "auth/AuthServiceManager.h"
 
 class Monitor;
 class Paxos;
@@ -75,7 +75,7 @@ public:
   };
 
   ClientMap client_map;
-  AuthManager auth_mgr;
+  AuthServiceManager auth_mgr;
 private:
   // leader
   ClientMap::Incremental pending_inc;

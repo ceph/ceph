@@ -488,7 +488,7 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
 
   default:
-    dout(0) << "can't decode unknown message type " << type << dendl;
+    dout(0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
     assert(0);
   }
   

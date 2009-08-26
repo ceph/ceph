@@ -122,11 +122,11 @@ private:
     bool got_response() { return got_ack; }
   };
 
-  class MonClientGetTGTHandler : public MonClientOpHandler {
+  class MonClientAuthHandler : public MonClientOpHandler {
     bool has_data;
   public:
-    MonClientGetTGTHandler(MonClient *c) : MonClientOpHandler(c) {}
-    ~MonClientGetTGTHandler() {}
+    MonClientAuthHandler(MonClient *c) : MonClientOpHandler(c) {}
+    ~MonClientAuthHandler() {}
 
     Message *build_request();
     void handle_response(Message *response);
@@ -135,6 +135,7 @@ private:
 
   MonClientMountHandler mount_handler;
   MonClientUnmountHandler unmount_handler;
+  MonClientAuthHandler auth_handler;
 
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
@@ -145,7 +146,8 @@ private:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),
                 mount_handler(this),
-                unmount_handler(this) {
+                unmount_handler(this),
+                auth_handler(this) {
     mounted = false;
     mounters = 0;
     unmounting = false;
@@ -156,6 +158,7 @@ private:
 
   int mount(double mount_timeout);
   int unmount(double timeout);
+  int get_tgt(double timeout);
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {

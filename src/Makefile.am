@@ -271,9 +271,10 @@ libcommon_a_SOURCES = \
 # this list ommits the ceph_ver.c file
 libcommon_files = \
 	auth/Auth.cc \
-	auth/ExportControl.cc \
-	auth/AuthManager.cc \
+	auth/AuthClientHandler.cc \
+	auth/AuthServiceManager.cc \
 	auth/Crypto.cc \
+	auth/ExportControl.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
@@ -368,6 +369,8 @@ libclient_a_SOURCES = \
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
 	auth/Auth.h\
+	auth/AuthProtocol.h\
+	auth/AuthServiceManager.h\
 	auth/Crypto.h\
 	auth/ExportControl.h\
 	ceph_ver.h \

@@ -164,7 +164,7 @@ bool ClientMonitor::check_auth(MAuth *m)
   dout(0) << "ClientMonitor::check_auth() blob_size=" << m->get_auth_payload().length() << dendl;
   entity_addr_t addr = m->get_orig_source_addr();
 
-  AuthHandler* handler = auth_mgr.get_auth_handler(addr);
+  AuthServiceHandler* handler = auth_mgr.get_auth_handler(addr);
   assert(handler);
 
   bufferlist response_bl;

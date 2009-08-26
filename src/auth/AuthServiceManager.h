@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHMANAGER_H
-#define __AUTHMANAGER_H
+#ifndef __AUTHSERVICEMANAGER_H
+#define __AUTHSERVICEMANAGER_H
 
 #include <map>
 #include <set>
@@ -26,28 +26,28 @@ using namespace std;
 class Monitor;
 
 
-class AuthHandler {
+class AuthServiceHandler {
   Monitor *mon;
-  AuthHandler *instance;
+  AuthServiceHandler *instance;
 protected:
   bufferlist response_payload;
 public:
-  AuthHandler() : instance(NULL) {}
+  AuthServiceHandler() : instance(NULL) {}
   void init(Monitor *m) { mon = m; }
-  virtual ~AuthHandler();
+  virtual ~AuthServiceHandler();
   virtual int handle_request(bufferlist& bl, bufferlist& result);
-  AuthHandler *get_instance();
+  AuthServiceHandler *get_instance();
   bufferlist& get_response_payload();
 };
 
-class AuthManager
+class AuthServiceManager
 {
   /* FIXME: map locking */
-  map<entity_addr_t, AuthHandler> m;
+  map<entity_addr_t, AuthServiceHandler> m;
   Monitor *mon;
 
 public:
-  AuthHandler *get_auth_handler(entity_addr_t& addr);
+  AuthServiceHandler *get_auth_handler(entity_addr_t& addr);
   void init(Monitor *m) { mon = m; }
 };
 
