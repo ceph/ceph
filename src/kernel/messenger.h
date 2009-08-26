@@ -65,7 +65,6 @@ static inline const char *ceph_name_type_str(int t)
 struct ceph_messenger {
 	void *parent;                    /* normally struct ceph_client * */
 	ceph_msgr_dispatch_t dispatch;
-	ceph_msgr_peer_reset_t peer_reset;
 	ceph_msgr_prepare_pages_t prepare_pages;
 	ceph_msgr_alloc_msg_t alloc_msg;
 	ceph_msgr_alloc_middle_t alloc_middle;
@@ -153,6 +152,8 @@ struct ceph_connection {
 	ceph_con_get_t get;
 	ceph_con_put_t put;
 	atomic_t nref;
+
+	ceph_msgr_peer_reset_t peer_reset;
 
 	struct ceph_messenger *msgr;
 	struct socket *sock;

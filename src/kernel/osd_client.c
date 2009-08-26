@@ -11,6 +11,9 @@
 #include "messenger.h"
 #include "decode.h"
 
+
+static void kick_requests(struct ceph_osd_client *osdc, struct ceph_osd *osd);
+
 /*
  * Implement client access to distributed object storage cluster.
  *
@@ -282,11 +285,29 @@ __lookup_request_ge(struct ceph_osd_client *osdc,
 
 
 /*
+ * If we detect that a tcp connection to an osd resets, we need to
+ * resubmit all requests for that osd.  That's because although we reliably
+ * deliver our requests, the osd doesn't not try as hard to deliver the
+ * reply (because it does not get notification when clients, mds' leave
+ * the cluster).
+ */
+static void peer_reset(void *p, struct ceph_connection *con)
+{
+	struct ceph_osd *osd = p;
+	struct ceph_osd_client *osdc = osd->o_osdc;
+	
+	down_read(&osdc->map_sem);
+	kick_requests(osdc, osd);
+	up_read(&osdc->map_sem);
+}
+
+/*
  * Track open sessions with osds.
  */
 static int init_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd, int o)
 {
 	dout("init_osd %p osd%d\n", osd, o);
+	osd->o_osdc = osdc;
 	osd->o_osd = o;
 	INIT_LIST_HEAD(&osd->o_requests);
 
@@ -295,6 +316,8 @@ static int init_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd, int o)
 		return -ENOMEM;
 	ceph_con_init(osdc->client->msgr, osd->o_con,
 		      &osdc->osdmap->osd_addr[o]);
+	osd->o_con->private = osd;
+	osd->o_con->peer_reset = peer_reset;
 	osd->o_con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 	osd->o_con->peer_name.num = cpu_to_le32(o);
 	return 0;
@@ -676,7 +699,7 @@ bad:
  * Caller should hold map_sem for read and request_mutex.
  */
 static void kick_requests(struct ceph_osd_client *osdc,
-			  struct ceph_entity_addr *who)
+			  struct ceph_osd *osd)
 {
 #if 0
 	struct ceph_osd_request *req;
@@ -835,21 +858,6 @@ bad:
 	pr_err("ceph osdc handle_map corrupt msg\n");
 	up_write(&osdc->map_sem);
 	return;
-}
-
-/*
- * If we detect that a tcp connection to an osd resets, we need to
- * resubmit all requests for that osd.  That's because although we reliably
- * deliver our requests, the osd doesn't not try as hard to deliver the
- * reply (because it does not get notification when clients, mds' leave
- * the cluster).
- */
-void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
-			    struct ceph_entity_addr *addr)
-{
-	down_read(&osdc->map_sem);
-	kick_requests(osdc, addr);
-	up_read(&osdc->map_sem);
 }
 
 

@@ -22,6 +22,7 @@ typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *,
 
 /* a given osd we're communicating with */
 struct ceph_osd {
+	struct ceph_osd_client *o_osdc;
 	int o_osd;
 	struct rb_node o_node;
 	struct ceph_connection *o_con;
@@ -88,9 +89,6 @@ struct ceph_osd_client {
 extern int ceph_osdc_init(struct ceph_osd_client *osdc,
 			  struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
-
-extern void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
-				   struct ceph_entity_addr *addr);
 
 extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc,
 				   struct ceph_msg *msg);

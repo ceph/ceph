@@ -312,6 +312,18 @@ static void con_put(struct ceph_connection *con)
 }
 
 /*
+ * if the client is unresponsive for long enough, the mds will kill
+ * the session entirely.
+ */
+static void peer_reset(void *p, struct ceph_connection *con)
+{
+	struct ceph_mds_session *s = p;
+
+	pr_err("ceph mds%d gave us the boot.  IMPLEMENT RECONNECT.\n",
+	       s->s_mds);
+}
+
+/*
  * create+register a new session for given mds.
  * called under mdsc->mutex.
  */
@@ -330,6 +342,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	ceph_con_init(mdsc->client->msgr, &s->s_con,
 		      ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 	s->s_con.private = s;
+	s->s_con.peer_reset = peer_reset;
 	s->s_con.get = con_get;
 	s->s_con.put = con_put;
 	s->s_con.peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS);
@@ -2211,17 +2224,6 @@ needmore:
 	ceph_msg_put(reply);
 	goto retry;
 }
-
-
-/*
- * if the client is unresponsive for long enough, the mds will kill
- * the session entirely.
- */
-void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds)
-{
-	pr_err("ceph mds%d gave us the boot.  IMPLEMENT RECONNECT.\n", mds);
-}
-
 
 
 /*

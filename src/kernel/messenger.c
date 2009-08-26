@@ -930,8 +930,7 @@ static int process_connect(struct ceph_connection *con)
 
 		/* Tell ceph about it. */
 		pr_info("reset on %s%d\n", ENTITY_NAME(con->peer_name));
-		con->msgr->peer_reset(con->msgr->parent, &con->peer_addr,
-				      &con->peer_name);
+		con->peer_reset(con->private, con);
 		break;
 
 	case CEPH_MSGR_TAG_RETRY_SESSION:

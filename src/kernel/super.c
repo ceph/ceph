@@ -26,8 +26,6 @@
  */
 
 static void ceph_dispatch(void *p, struct ceph_msg *msg);
-static void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
-			    struct ceph_entity_name *peer_name);
 static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr);
 static int ceph_alloc_middle(void *p, struct ceph_msg *msg);
 
@@ -292,26 +290,6 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_OSD_OP: return "osd_op";
 	case CEPH_MSG_OSD_OPREPLY: return "osd_opreply";
 	default: return "unknown";
-	}
-}
-
-/*
- * Called when a message socket is explicitly reset by a peer.
- */
-void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
-		     struct ceph_entity_name *peer_name)
-{
-	struct ceph_client *client = p;
-
-	dout("ceph_peer_reset %s%d\n", ENTITY_NAME(*peer_name));
-	switch (le32_to_cpu(peer_name->type)) {
-	case CEPH_ENTITY_TYPE_MDS:
-		ceph_mdsc_handle_reset(&client->mdsc,
-					      le32_to_cpu(peer_name->num));
-		break;
-	case CEPH_ENTITY_TYPE_OSD:
-		ceph_osdc_handle_reset(&client->osdc, peer_addr);
-		break;
 	}
 }
 
@@ -786,7 +764,6 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		client->msgr->parent = client;
 		client->msgr->dispatch = ceph_dispatch;
 		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
-		client->msgr->peer_reset = ceph_peer_reset;
 		client->msgr->alloc_msg = ceph_alloc_msg;
 		client->msgr->alloc_middle = ceph_alloc_middle;
 	}
