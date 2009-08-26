@@ -22,6 +22,8 @@
 
 #include "common/Timer.h"
 
+#include "auth/AuthClientHandler.h"
+
 
 class MonMap;
 class MMonMap;
@@ -41,6 +43,7 @@ private:
   int mounters;
   bool unmounting;
   Cond mount_cond, map_cond;
+  AuthClientHandler auth_client_handler;
 
   bool dispatch_impl(Message *m);
   void handle_monmap(MMonMap *m);
@@ -158,7 +161,7 @@ private:
 
   int mount(double mount_timeout);
   int unmount(double timeout);
-  int get_tgt(double timeout);
+  int authorize(double timeout);
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {

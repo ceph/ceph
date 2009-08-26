@@ -302,8 +302,8 @@ bool RadosClient::init()
 
   monclient.mount(g_conf.client_mount_timeout);
 
-  dout(0) << "librados: before monclient.get_tgt()" << dendl;
-  monclient.get_tgt(g_conf.client_mount_timeout);
+  dout(0) << "librados: before monclient.authorize()" << dendl;
+  monclient.authorize(g_conf.client_mount_timeout);
 
   lock.Lock();
 

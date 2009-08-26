@@ -211,7 +211,7 @@ int MonClient::unmount(double timeout)
   return unmount_handler.do_op(timeout);
 }
 
-int MonClient::get_tgt(double mount_timeout)
+int MonClient::authorize(double mount_timeout)
 {
   int ret = auth_handler.do_op(mount_timeout);
 

@@ -16,35 +16,7 @@
 #include <errno.h>
 
 #include "AuthProtocol.h"
-
-#include "config.h"
-
-
-
-#define AUTH_CAP_MON_ACCESS 0x01
-#define AUTH_CAP_OSD_ACCESS 0x02
-#define AUTH_CAP_MDS_ACCESS 0x04
-
-class AuthClientHandler {
-  int request_state;
-  int response_state;
-
-  bufferlist tgt;
-
-  uint32_t requested_caps;
-  int generate_auth_protocol_request(bufferlist& bl);
-  int handle_auth_protocol_response(bufferlist& bl);
-public:
-  AuthClientHandler() : requested_caps(0) {}
-  int get_caps(uint32_t flags) {
-    requested_caps = flags;
-    return 0;
-  }
-
-  int generate_request(bufferlist& bl);
-  int handle_response(bufferlist& bl);
-  
-};
+#include "AuthClientHandler.h"
 
 int AuthClientHandler::generate_request(bufferlist& bl)
 {
