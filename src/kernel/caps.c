@@ -271,7 +271,7 @@ static void put_cap(struct ceph_cap *cap,
 	if (caps_avail_count >= caps_reserve_count +
 	    ceph_client(cap->ci->vfs_inode.i_sb)->mount_args.max_readdir) {
 		caps_total_count--;
-		kfree(cap);
+		kmem_cache_free(ceph_cap_cachep, cap);
 	} else {
 		if (ctx) {
 			ctx->count++;
