@@ -111,6 +111,7 @@ int MonClient::get_monmap()
   if (!messenger) {
     rank = new SimpleMessenger;
     rank->bind();
+    rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
     messenger = rank->register_entity(entity_name_t::CLIENT(-1));
     messenger->set_dispatcher(this);
     rank->start(true);  // do not daemonize!
