@@ -55,8 +55,6 @@ struct ceph_mount_args {
 	int caps_wanted_delay_min, caps_wanted_delay_max;
 	ceph_fsid_t fsid;
 	struct ceph_entity_addr my_addr;
-	int num_mon;
-	struct ceph_entity_addr mon_addr[CEPH_MAX_MON_MOUNT_ADDR];
 	int wsize;
 	int rsize;            /* max readahead */
 	int max_readdir;      /* max readdir size */

@@ -54,6 +54,8 @@ struct ceph_mon_client {
 	int last_mon;                       /* last monitor i contacted */
 	struct ceph_monmap *monmap;
 
+	struct ceph_connection *con;
+
 	/* pending statfs requests */
 	struct mutex statfs_mutex;
 	struct radix_tree_root statfs_request_tree;
@@ -63,7 +65,7 @@ struct ceph_mon_client {
 
 	/* mds/osd map or umount requests */
 	struct mutex req_mutex;
-	struct ceph_mon_request mdsreq, osdreq, umountreq;
+	struct ceph_mon_request mdsreq, osdreq, mountreq, umountreq;
 	u32 want_mdsmap;
 	u32 want_osdmap;
 
@@ -89,6 +91,9 @@ extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 have);
 extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want);
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 have);
 
+extern void ceph_monc_request_mount(struct ceph_mon_client *monc);
+extern void ceph_handle_mount_ack(struct ceph_client *client,
+				  struct ceph_msg *msg);
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 
 extern int ceph_monc_do_statfs(struct ceph_mon_client *monc,

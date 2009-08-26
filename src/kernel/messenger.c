@@ -321,6 +321,7 @@ static void put_connection(struct ceph_connection *con)
 void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con,
 		   struct ceph_entity_addr *addr)
 {
+	dout("con_init %p %u.%u.%u.%u:%u\n", con, IPQUADPORT(addr->ipaddr));
 	atomic_set(&con->nref, 1);
 	con->msgr = msgr;
 	INIT_LIST_HEAD(&con->list_all);
