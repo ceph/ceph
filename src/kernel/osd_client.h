@@ -1,9 +1,9 @@
 #ifndef _FS_CEPH_OSD_CLIENT_H
 #define _FS_CEPH_OSD_CLIENT_H
 
-#include <linux/radix-tree.h>
 #include <linux/completion.h>
 #include <linux/mempool.h>
+#include <linux/rbtree.h>
 
 #include "types.h"
 #include "osdmap.h"
@@ -12,6 +12,7 @@ struct ceph_msg;
 struct ceph_snap_context;
 struct ceph_osd_request;
 struct ceph_osd_client;
+struct ceph_connection;
 
 /*
  * completion callback for async writepages
@@ -19,10 +20,20 @@ struct ceph_osd_client;
 typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *,
 				     struct ceph_msg *);
 
+/* a given osd we're communicating with */
+struct ceph_osd {
+	int o_osd;
+	struct rb_node o_node;
+	struct ceph_connection *o_con;
+	struct list_head o_requests;
+};
+
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
 	struct rb_node  r_node;
+	struct list_head r_osd_item;
+	struct ceph_osd *r_osd;
 
 	struct ceph_msg  *r_request, *r_reply;
 	int               r_result;
@@ -43,8 +54,6 @@ struct ceph_osd_request {
 
 	char              r_oid[40];          /* object name */
 	int               r_oid_len;
-	int               r_last_osd;         /* pg osds */
-	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;
 	bool              r_resend;           /* msg send failed, needs retry */
 
@@ -65,6 +74,7 @@ struct ceph_osd_client {
 	u64                    last_requested_map;
 
 	struct mutex           request_mutex;
+	struct rb_root         osds;          /* osds */
 	u64                    timeout_tid;   /* tid of timeout triggering rq */
 	u64                    last_tid;      /* tid of last request */
 	struct rb_root         requests;      /* pending requests */
