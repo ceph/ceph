@@ -57,7 +57,7 @@ int AuthClientHandler::generate_request(bufferlist& bl)
   case 0:
     /* initialize  */
     { 
-      CephXRequest1 req;
+      CephXEnvRequest1 req;
       req.init();
 
       ::encode(req, bl);
@@ -67,7 +67,7 @@ int AuthClientHandler::generate_request(bufferlist& bl)
    /* authenticate */
     {
       /* FIXME: init req fields */
-      CephXRequest2 req;
+      CephXEnvRequest2 req;
       ::encode(req, bl);
     }
     break;
@@ -81,7 +81,27 @@ int AuthClientHandler::generate_request(bufferlist& bl)
 
 int AuthClientHandler::handle_response(bufferlist& bl)
 {
-  return 0;
+  bufferlist::iterator iter = bl.begin();
+  switch(response_state) {
+  case 0:
+    /* initialize  */
+    { 
+      CephXEnvResponse1 response;
+
+      ::decode(response, iter);
+    }
+    break;
+  case 1:
+   /* authenticate */
+    {
+      /* FIXME: init req fields */
+    }
+    break;
+  default:
+    return handle_auth_protocol_response(bl);
+  }
+  response_state++;
+  return  -EAGAIN;
 }
 
 int AuthClientHandler::generate_auth_protocol_request(bufferlist& bl)

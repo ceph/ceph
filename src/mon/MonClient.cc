@@ -353,7 +353,7 @@ Message *MonClient::MonClientAuthHandler::build_request()
 
   build_authenticate_request(name, my_addr, bl);
 #endif
-  CephXRequest1 req;
+  CephXEnvRequest1 req;
   req.init();
 
   ::encode(req, bl);

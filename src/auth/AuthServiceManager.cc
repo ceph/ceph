@@ -40,7 +40,7 @@ int CephAuthService_X::handle_request(bufferlist& bl, bufferlist& result_bl)
   switch(state) {
   case 0:
     {
-      CephXResponse1 response;
+      CephXEnvResponse1 response;
       server_challenge = 0x1234ffff;
       response.server_challenge = server_challenge;
       ::encode(response, result_bl);
@@ -49,7 +49,7 @@ int CephAuthService_X::handle_request(bufferlist& bl, bufferlist& result_bl)
     break;
   case 1:
     {
-      CephXRequest2 req;
+      CephXEnvRequest2 req;
       bufferlist::iterator iter = bl.begin();
       req.decode(iter);
       if (req.key != (server_challenge ^ req.client_challenge))
@@ -83,7 +83,7 @@ int AuthServiceHandler::handle_request(bufferlist& bl, bufferlist& result)
 {
   bufferlist::iterator iter = bl.begin();
   CephAuthService_X *auth = NULL;
-  CephXRequest1 req;
+  CephXEnvRequest1 req;
   try {
     req.decode(iter);
   } catch (buffer::error *e) {

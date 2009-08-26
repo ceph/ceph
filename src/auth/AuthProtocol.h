@@ -25,7 +25,10 @@ using namespace std;
 
 class Monitor;
 
-struct CephXRequest1 {
+/*
+  Ceph X-Envelope protocol
+*/
+struct CephXEnvRequest1 {
   map<uint32_t, bool> auth_types;
 
   void encode(bufferlist& bl) const {
@@ -64,9 +67,9 @@ struct CephXRequest1 {
     auth_types[CEPH_AUTH_CEPH] = true;
   }
 };
-WRITE_CLASS_ENCODER(CephXRequest1)
+WRITE_CLASS_ENCODER(CephXEnvRequest1)
 
-struct CephXResponse1 {
+struct CephXEnvResponse1 {
   uint64_t server_challenge;
 
   void encode(bufferlist& bl) const {
@@ -76,9 +79,9 @@ struct CephXResponse1 {
     ::decode(server_challenge, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXResponse1);
+WRITE_CLASS_ENCODER(CephXEnvResponse1);
 
-struct CephXRequest2 {
+struct CephXEnvRequest2 {
   uint64_t client_challenge;
   uint64_t key;
 
@@ -91,7 +94,7 @@ struct CephXRequest2 {
     ::decode(key, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXRequest2);
+WRITE_CLASS_ENCODER(CephXEnvRequest2);
 
 
 #endif
