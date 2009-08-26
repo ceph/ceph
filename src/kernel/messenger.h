@@ -12,6 +12,7 @@
 #include "buffer.h"
 
 struct ceph_msg;
+struct ceph_connection;
 
 #define IPQUADPORT(n)							\
 	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr) >> 24)) & 0xFF, \
@@ -41,6 +42,8 @@ typedef struct ceph_msg * (*ceph_msgr_alloc_msg_t) (void *p,
 					    struct ceph_msg_header *hdr);
 typedef int (*ceph_msgr_alloc_middle_t) (void *p, struct ceph_msg *msg);
 
+typedef void (*ceph_con_get_t)(struct ceph_connection *);
+typedef void (*ceph_con_put_t)(struct ceph_connection *);
 
 static inline const char *ceph_name_type_str(int t)
 {
@@ -147,13 +150,14 @@ struct ceph_msg_pos {
  */
 struct ceph_connection {
 	void *private;
+	ceph_con_get_t get;
+	ceph_con_put_t put;
+	atomic_t nref;
 
 	struct ceph_messenger *msgr;
 	struct socket *sock;
 	unsigned long state;	/* connection state (see flags above) */
 	const char *error_msg;  /* error message, if any */
-
-	atomic_t nref;
 
 	struct list_head list_all;     /* msgr->con_all */
 	struct list_head list_bucket;
@@ -224,7 +228,8 @@ extern void ceph_con_init(struct ceph_messenger *msgr,
 			  struct ceph_connection *con,
 			  struct ceph_entity_addr *addr);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
-
+extern void ceph_con_keepalive(struct ceph_connection *con);
+extern void ceph_con_close(struct ceph_connection *con);
 
 extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 				     struct ceph_entity_addr *addr);
