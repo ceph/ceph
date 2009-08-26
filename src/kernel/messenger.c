@@ -283,7 +283,7 @@ static int con_close_socket(struct ceph_connection *con)
 /*
  * clean up connection state
  */
-static void ceph_con_destroy(struct ceph_connection *con)
+void ceph_con_destroy(struct ceph_connection *con)
 {
 	dout("con_destroy %p destroying\n", con);
 	ceph_msg_put_list(&con->out_queue);

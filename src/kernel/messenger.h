@@ -227,6 +227,7 @@ extern void ceph_messenger_destroy(struct ceph_messenger *);
 extern void ceph_con_init(struct ceph_messenger *msgr,
 			  struct ceph_connection *con,
 			  struct ceph_entity_addr *addr);
+void ceph_con_destroy(struct ceph_connection *con);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
 extern void ceph_con_keepalive(struct ceph_connection *con);
 extern void ceph_con_close(struct ceph_connection *con);
