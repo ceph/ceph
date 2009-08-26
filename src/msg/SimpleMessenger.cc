@@ -1199,6 +1199,12 @@ void SimpleMessenger::Pipe::reader()
       continue;
     }
 
+    if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
+      dout(20) << "reader got KEEPALIVE" << dendl;
+      lock.Lock();
+      continue;
+    }
+
     // open ...
     if (tag == CEPH_MSGR_TAG_ACK) {
       dout(20) << "reader got ACK" << dendl;
