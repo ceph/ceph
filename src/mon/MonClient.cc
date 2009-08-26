@@ -172,7 +172,7 @@ bool MonClient::dispatch_impl(Message *m)
     break;
 
   case CEPH_MSG_AUTH_REPLY:
-    op_handler = &auth_handler;
+    op_handler = cur_auth_handler;
     break;
 
   default:
@@ -213,9 +213,21 @@ int MonClient::unmount(double timeout)
 
 int MonClient::authorize(double mount_timeout)
 {
-  int ret = auth_handler.do_op(mount_timeout);
+  Mutex::Locker l(auth_lock);
+  int ret;
 
-  dout(0) << "auth ret=" << ret << dendl;
+  do {
+    MonClientAuthHandler h(this);
+
+    cur_auth_handler = &h;
+
+    int err = h.do_op(mount_timeout);
+    if (err < 0)
+      return err;
+
+    ret =  h.get_result();
+    dout(0) << "auth ret=" << ret << dendl;
+  } while (ret == -EAGAIN);
 
   return ret;
 }
@@ -259,6 +271,7 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
 
   if (done) {
     dout(5) << "op already done" << dendl;;
+    dout(5) << "op already done" << dendl;;
     return 0;
   }
   // only the first does the work
@@ -275,6 +288,7 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
 	 (!itsme && !done)) { // non-doers wait a little longer
 	cond.Wait(op_lock);
   }
+  num_waiters--;
 
   if (!itsme) {
     dout(5) << "additional returning" << dendl;
@@ -289,6 +303,7 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
   done = true;
 
   cond.SignalAll(); // wake up non-doers
+
 
   return 0;
 }
@@ -346,24 +361,29 @@ Message *MonClient::MonClientAuthHandler::build_request()
   if (!msg)
     return NULL;
   bufferlist& bl = msg->get_auth_payload();
-#if 0
 
-  EntityName name;
-  entity_addr_t my_addr;
-
-  build_authenticate_request(name, my_addr, bl);
-#endif
-  CephXEnvRequest1 req;
-  req.init();
-
-  ::encode(req, bl);
+  if (client->auth_client_handler.generate_request(bl) < 0) {
+    delete msg;
+    return NULL;
+  }
 
   return msg;
 }
 
 void MonClient::MonClientAuthHandler::handle_response(Message *response)
 {
+  MAuthReply* m = (MAuthReply *)response;
   Mutex::Locker lock(op_lock);
+
+  dout(0) << "ret=" << m->result << dendl;
+
+  last_result = (int)m->result;
+
+  if (m->result == 0 || m->result == -EAGAIN) {
+    client->auth_client_handler.handle_response(m->result_bl);
+  }
+
   cond.Signal();
   return; /* FIXME */
 }
+

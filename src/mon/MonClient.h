@@ -39,6 +39,7 @@ private:
   bufferlist tgt;
 
   Mutex monc_lock;
+  Mutex auth_lock;
   bool mounted;
   int mounters;
   bool unmounting;
@@ -127,18 +128,23 @@ private:
 
   class MonClientAuthHandler : public MonClientOpHandler {
     bool has_data;
+    int last_result;
   public:
-    MonClientAuthHandler(MonClient *c) : MonClientOpHandler(c) {}
+    MonClientAuthHandler(MonClient *c) : MonClientOpHandler(c) {
+      last_result = 0;
+    }
     ~MonClientAuthHandler() {}
 
     Message *build_request();
     void handle_response(Message *response);
-    bool got_response() { return client->tgt.length() != 0; }
+    bool got_response() { return !client->auth_client_handler.request_pending(); }
+    int get_result() { return last_result; }
   };
 
   MonClientMountHandler mount_handler;
   MonClientUnmountHandler unmount_handler;
-  MonClientAuthHandler auth_handler;
+
+  MonClientAuthHandler *cur_auth_handler;
 
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
@@ -148,9 +154,10 @@ private:
  public:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),
+		auth_lock("MonClient::auth_lock"),
                 mount_handler(this),
-                unmount_handler(this),
-                auth_handler(this) {
+                unmount_handler(this) {
+    //            auth_handler(this) {
     mounted = false;
     mounters = 0;
     unmounting = false;
