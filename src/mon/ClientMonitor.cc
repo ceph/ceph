@@ -335,6 +335,8 @@ void ClientMonitor::_mounted(int client, MClientMount *m)
   
   // reply with client ticket
   MClientMountAck *ack = new MClientMountAck;
+  ack->client = client;
+  ack->addr = to.addr;
   mon->monmap->encode(ack->monmap_bl);
   ack->signed_ticket = client_map.client_info[client].signed_ticket;
 

@@ -436,6 +436,14 @@ int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
 
 
 
+void SimpleMessenger::Endpoint::_set_myaddr(entity_addr_t a)
+{
+  Messenger::_set_myaddr(a);  // still call original
+
+  dout(10) << "_set_myaddr " << a << dendl;
+  rank->rank_addr.ipaddr = a.ipaddr;
+}
+
 void SimpleMessenger::Endpoint::reset_myname(entity_name_t newname)
 {
   entity_name_t oldname = get_myname();

@@ -1113,19 +1113,6 @@ no_data:
 		return -EBADMSG;
 	}
 
-	/* did i learn my ip? */
-	if (con->msgr->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
-		/*
-		 * in practice, we learn our ip from the first incoming mon
-		 * message, before anyone else knows we exist, so this is
-		 * safe.
-		 */
-		con->msgr->inst.addr.ipaddr = m->hdr.dst.addr.ipaddr;
-		dout("read_partial_message learned my addr is "
-		     "%u.%u.%u.%u:%u\n",
-		     IPQUADPORT(con->msgr->inst.addr.ipaddr));
-	}
-
 	return 1; /* done! */
 }
 
@@ -1625,21 +1612,20 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	/* set src+dst */
 	msg->hdr.src = con->msgr->inst;
 	msg->hdr.orig_src = con->msgr->inst;
-	msg->hdr.dst.addr = con->peer_addr;
-	msg->hdr.dst.name = con->peer_name;
+	msg->hdr.dst_erank = con->peer_addr.erank;
 
 	/* queue */
 	spin_lock(&con->out_queue_lock);
 	msg->hdr.seq = cpu_to_le64(++con->out_seq);
 	dout("----- %p %u to %s%d %d=%s len %d+%d+%d -----\n", msg,
 	     (unsigned)con->out_seq,
-	     ENTITY_NAME(msg->hdr.dst.name), le16_to_cpu(msg->hdr.type),
+	     ENTITY_NAME(con->peer_name), le16_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),
 	     le32_to_cpu(msg->hdr.front_len),
 	     le32_to_cpu(msg->hdr.middle_len),
 	     le32_to_cpu(msg->hdr.data_len));
 	dout("ceph_con_send %p %s%d %p seq %llu pgs %d\n",
-	     con, ENTITY_NAME(msg->hdr.dst.name), msg,
+	     con, ENTITY_NAME(con->peer_name), msg,
 	     le64_to_cpu(msg->hdr.seq), msg->nr_pages);
 	list_add_tail(&msg->list_head, &con->out_queue);
 	spin_unlock(&con->out_queue_lock);
@@ -1798,10 +1784,8 @@ void ceph_msg_put(struct ceph_msg *m)
 	dout("ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
 	     atomic_read(&m->nref)-1);
 	if (atomic_read(&m->nref) <= 0) {
-		pr_err("bad ceph_msg_put on %p %llu %s%d->%s%d %d=%s %d+%d\n",
+		pr_err("bad ceph_msg_put on %p %llu %d=%s %d+%d\n",
 		       m, le64_to_cpu(m->hdr.seq),
-		       ENTITY_NAME(m->hdr.src.name),
-		       ENTITY_NAME(m->hdr.dst.name),
 		       le16_to_cpu(m->hdr.type),
 		       ceph_msg_type_name(le16_to_cpu(m->hdr.type)),
 		       le32_to_cpu(m->hdr.front_len),

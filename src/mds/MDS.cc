@@ -377,6 +377,7 @@ int MDS::init()
   // get monmap
   monc->set_messenger(messenger);
   link_dispatcher(monc);
+
   monc->get_monmap();
 
   mds_lock.Lock();

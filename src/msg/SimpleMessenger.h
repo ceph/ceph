@@ -365,6 +365,7 @@ private:
     
     int get_dispatch_queue_len() { return qlen; }
 
+    void _set_myaddr(entity_addr_t a);
     void reset_myname(entity_name_t m);
 
     int shutdown();

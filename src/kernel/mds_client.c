@@ -1397,6 +1397,7 @@ static int __prepare_send_request(struct ceph_mds_client *mdsc,
 	struct ceph_msg *msg;
 	int flags = 0;
 
+	req->r_mds = mds;
 	req->r_attempts++;
 	dout("prepare_send_request %p tid %lld %s (attempt %d)\n", req,
 	     req->r_tid, ceph_mds_op_name(req->r_op), req->r_attempts);

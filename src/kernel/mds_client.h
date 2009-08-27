@@ -144,6 +144,7 @@ struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
 
 	int r_op;                    /* mds op code */
+	int r_mds;
 
 	/* operation on what? */
 	struct inode *r_inode;              /* arg1 */

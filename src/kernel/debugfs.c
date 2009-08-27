@@ -136,9 +136,7 @@ static int monc_show(struct seq_file *s, void *p)
 			break;
 		nexttid = req->tid + 1;
 
-		seq_printf(s, "%u.%u.%u.%u:%u (%s%d)\tstatfs\n",
-			IPQUADPORT(req->request->hdr.dst.addr.ipaddr),
-			ENTITY_NAME(req->request->hdr.dst.name));
+		seq_printf(s, "%lld statfs\n", req->tid);
 	}
 	mutex_unlock(&monc->statfs_mutex);
 
@@ -165,10 +163,7 @@ static int mdsc_show(struct seq_file *s, void *p)
 		nexttid = req->r_tid + 1;
 
 		if (req->r_request) {
-			seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
-			   req->r_tid,
-			   IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
-			   ENTITY_NAME(req->r_request->hdr.dst.name));
+			seq_printf(s, "%lld\tmds%d\t", req->r_tid, req->r_mds);
 		} else {
 			seq_printf(s, "%lld\t(no request)\t", req->r_tid);
 		}
@@ -241,10 +236,7 @@ static int osdc_show(struct seq_file *s, void *pp)
 
 		req = rb_entry(p, struct ceph_osd_request, r_node);
 
-		seq_printf(s, "%lld\t%u.%u.%u.%u:%u (%s%d)\t",
-			   req->r_tid,
-			   IPQUADPORT(req->r_request->hdr.dst.addr.ipaddr),
-			   ENTITY_NAME(req->r_request->hdr.dst.name));
+		seq_printf(s, "%lld\tosd%d\t", req->r_tid, req->r_osd->o_osd);
 
 		head = req->r_request->front.iov_base;
 		op = (void *)(head + 1);
