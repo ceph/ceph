@@ -37,12 +37,15 @@ import org.apache.hadoop.fs.FileStatus;
  * fs.ceph.libDir -- the directory that libceph and libhadoopceph are
  * located in. This assumes Hadoop is being run on a linux-style machine
  * with names like libceph.so.
+ * fs.ceph.commandLine -- if you prefer you can fill in this property
+ * just as you would when starting Ceph up from the command line. Specific
+ * properties override any configuration specified here.
  * <p>
  * You can also enable debugging of the CephFileSystem and Ceph itself: <br>
  * fs.ceph.debug -- if 'true' will print out method enter/exit messages,
  * plus a little more.
- * fs.ceph.debugLevel -- a number that will print out diagnostic messages
- * from Ceph of at least that importance.
+ * fs.ceph.clientDebug/fs.ceph.messengerDebug -- will print out debugging
+ * from the respective Ceph system of at least that importance.
  */
 public class CephFileSystem extends FileSystem {
 
@@ -59,7 +62,7 @@ public class CephFileSystem extends FileSystem {
   private static String monAddr;
   private static String fs_default_name;
   
-  private native boolean ceph_initializeClient(String debugLevel, String mon);
+  private native boolean ceph_initializeClient(String arguments);
   private native String  ceph_getcwd();
   private native boolean ceph_setcwd(String path);
   private native boolean ceph_rmdir(String path);
@@ -120,19 +123,36 @@ public class CephFileSystem extends FileSystem {
       System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
       System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
       super.initialize(uri, conf);
-      //store.initialize(uri, conf);
       setConf(conf);
       this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
       
-      conf.setIfUnset("fs.ceph.debugLevel", "0");
-      conf.setIfUnset("fs.ceph.debug", "false");
       fs_default_name = conf.get("fs.default.name");
-      monAddr = conf.get("fs.ceph.monAddr");
-      if (monAddr == null) throw new IOException("You must specify a Ceph monitor address!");
-      cephDebugLevel = conf.get("fs.ceph.debugLevel");
-      debug = ("true".equals(conf.get("fs.ceph.debug")));
-      //  Initializes the client
-      if (!ceph_initializeClient(cephDebugLevel, monAddr)) {
+      debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
+      //build up the arguments for Ceph
+      String arguments = new String();
+      arguments += conf.get("fs.ceph.commandLine", "");
+      if (conf.get("fs.ceph.clientDebug") != null) {
+	arguments += " --debug_client ";
+	arguments += conf.get("fs.ceph.clientDebug");
+      }
+      if (conf.get("fs.ceph.messengerDebug") != null) {
+	arguments += " --debug_ms ";
+	arguments += conf.get("fs.ceph.messengerDebug");
+      }
+      if (conf.get("fs.ceph.monAddr") != null) {
+	arguments += " -m ";
+	arguments += conf.get("fs.ceph.monAddr");
+      }
+      //make sure they gave us a ceph monitor address or conf file
+      if ( (conf.get("fs.ceph.monAddr") == null) &&
+	   (arguments.indexOf("-m") == -1) &&
+	   (arguments.indexOf("-c") == -1) ) {
+	debug("You need to specify a Ceph monitor address.");
+	throw new IOException("You must specify a Ceph monitor address or config file!");
+      }
+      //  Initialize the client
+      if (!ceph_initializeClient(arguments)) {
+	debug("Ceph initialization failed!");
 	throw new IOException("Ceph initialization failed!");
       }
       initialized = true;
