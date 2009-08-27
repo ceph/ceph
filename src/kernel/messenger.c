@@ -233,6 +233,16 @@ static int con_close_socket(struct ceph_connection *con)
 }
 
 /*
+ * mark a peer down.  drop any open connections.
+ */
+void ceph_con_close(struct ceph_connection *con)
+{
+	dout("close %p peer %u.%u.%u.%u:%u\n", con,
+	     IPQUADPORT(con->peer_addr.ipaddr));
+	set_bit(CLOSED, &con->state);  /* in case there's queued work */
+}
+
+/*
  * clean up connection state
  */
 void ceph_con_destroy(struct ceph_connection *con)
@@ -1556,16 +1566,6 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 	__free_page(msgr->zero_page);
 	kfree(msgr);
 	dout("destroyed messenger %p\n", msgr);
-}
-
-/*
- * mark a peer down.  drop any open connections.
- */
-void ceph_con_close(struct ceph_connection *con)
-{
-	dout("close %p peer %u.%u.%u.%u:%u\n", con,
-	     IPQUADPORT(con->peer_addr.ipaddr));
-	set_bit(CLOSED, &con->state);  /* in case there's queued work */
 }
 
 /*
