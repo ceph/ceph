@@ -49,7 +49,6 @@ import org.apache.hadoop.fs.FileStatus;
  */
 public class CephFileSystem extends FileSystem {
 
-  private static final long DEFAULT_BLOCK_SIZE = 4 * 1024 * 1024;
   private static final int EEXIST = 17;
 
   private URI uri;
@@ -775,8 +774,7 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public long getDefaultBlockSize() {
-    return DEFAULT_BLOCK_SIZE;
-    //return getConf().getLong("fs.ceph.block.size", DEFAULT_BLOCK_SIZE);
+    return ceph_getblocksize("/");
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
