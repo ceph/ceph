@@ -257,7 +257,7 @@ static struct ceph_connection *__get_connection(struct ceph_messenger *msgr,
 	return NULL;
 
 yes:
-	con->get(con);
+	con->ops->get(con);
 	dout("get_connection %p nref = %d -> %d\n", con,
 	     atomic_read(&con->nref) - 1, atomic_read(&con->nref));
 	return con;
@@ -295,16 +295,16 @@ void ceph_con_destroy(struct ceph_connection *con)
 /*
  * generic get/put
  */
-static void get_connection(struct ceph_connection *con)
+void ceph_con_get(struct ceph_connection *con)
 {
-	dout("get_connection %p nref = %d -> %d\n", con,
+	dout("con_get %p nref = %d -> %d\n", con,
 	     atomic_read(&con->nref), atomic_read(&con->nref) + 1);
 	atomic_inc(&con->nref);
 }
 
-static void put_connection(struct ceph_connection *con)
+void ceph_con_put(struct ceph_connection *con)
 {
-	dout("put_connection %p nref = %d -> %d\n", con,
+	dout("con_put %p nref = %d -> %d\n", con,
 	     atomic_read(&con->nref), atomic_read(&con->nref) - 1);
 	BUG_ON(atomic_read(&con->nref) == 0);
 	if (atomic_dec_and_test(&con->nref)) {
@@ -333,8 +333,6 @@ void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con,
 	con->peer_addr = *addr;
 
 	con->private = NULL;
-	con->get = get_connection;
-	con->put = put_connection;
 }
 
 /*
@@ -351,7 +349,7 @@ static int __register_connection(struct ceph_messenger *msgr,
 
 	dout("register_connection %p %d -> %d\n", con,
 	     atomic_read(&con->nref), atomic_read(&con->nref) + 1);
-	con->get(con);
+	con->ops->get(con);
 
 	list_add(&con->list_all, &msgr->con_all);
 
@@ -367,7 +365,7 @@ static int __register_connection(struct ceph_messenger *msgr,
 		rc = radix_tree_insert(&msgr->con_tree, key, &con->list_bucket);
 		if (rc < 0) {
 			list_del(&con->list_all);
-			con->put(con);
+			con->ops->put(con);
 			return rc;
 		}
 	}
@@ -417,7 +415,7 @@ static void __remove_connection(struct ceph_messenger *msgr,
 			list_del_init(&con->list_bucket);
 		}
 	}
-	con->put(con);
+	con->ops->put(con);
 }
 
 static void remove_connection(struct ceph_messenger *msgr,
@@ -930,7 +928,7 @@ static int process_connect(struct ceph_connection *con)
 
 		/* Tell ceph about it. */
 		pr_info("reset on %s%d\n", ENTITY_NAME(con->peer_name));
-		con->peer_reset(con->private, con);
+		con->ops->peer_reset(con);
 		break;
 
 	case CEPH_MSGR_TAG_RETRY_SESSION:
@@ -1089,8 +1087,8 @@ static int read_partial_message(struct ceph_connection *con)
 	if (!con->in_msg) {
 		dout("got hdr type %d front %d data %d\n", con->in_hdr.type,
 		     con->in_hdr.front_len, con->in_hdr.data_len);
-		con->in_msg = con->msgr->alloc_msg(con->msgr->parent,
-						   &con->in_hdr);
+		con->in_msg = con->ops->alloc_msg(con->msgr->parent,
+						  &con->in_hdr);
 		if (!con->in_msg) {
 			/* skip this message */
 			dout("alloc_msg returned NULL, skipping message\n");
@@ -1128,8 +1126,8 @@ static int read_partial_message(struct ceph_connection *con)
 	while (middle_len > 0 && (!m->middle ||
 				  m->middle->vec.iov_len < middle_len)) {
 		if (m->middle == NULL) {
-			BUG_ON(!con->msgr->alloc_middle);
-			ret = con->msgr->alloc_middle(con->msgr->parent, m);
+			BUG_ON(!con->ops->alloc_middle);
+			ret = con->ops->alloc_middle(con->msgr->parent, m);
 			if (ret < 0) {
 				dout("alloc_middle failed, skipping payload\n");
 				con->in_base_pos = -middle_len - data_len
@@ -1165,8 +1163,8 @@ static int read_partial_message(struct ceph_connection *con)
 		/* find pages for data payload */
 		want = calc_pages_for(data_off & ~PAGE_MASK, data_len);
 		ret = 0;
-		BUG_ON(!con->msgr->prepare_pages);
-		ret = con->msgr->prepare_pages(con->msgr->parent, m, want);
+		BUG_ON(!con->ops->prepare_pages);
+		ret = con->ops->prepare_pages(con->msgr->parent, m, want);
 		if (ret < 0) {
 			dout("%p prepare_pages failed, skipping payload\n", m);
 			con->in_base_pos = -data_len - sizeof(m->footer);
@@ -1285,7 +1283,7 @@ static void process_message(struct ceph_connection *con)
 	     le32_to_cpu(con->in_msg->hdr.front_len),
 	     le32_to_cpu(con->in_msg->hdr.data_len),
 	     con->in_front_crc, con->in_middle_crc, con->in_data_crc);
-	con->msgr->dispatch(con->msgr->parent, con->in_msg);
+	con->ops->dispatch(con, con->in_msg);
 	con->in_msg = NULL;
 	prepare_read_tag(con);
 }
@@ -1536,13 +1534,13 @@ static void ceph_queue_con(struct ceph_connection *con)
 		return;
 	}
 
-	con->get(con);
+	con->ops->get(con);
 
 	set_bit(QUEUED, &con->state);
 	if (test_bit(BUSY, &con->state) ||
 	    !queue_work(ceph_msgr_wq, &con->work.work)) {
 		dout("ceph_queue_con %p - already BUSY or queued\n", con);
-		con->put(con);
+		con->ops->put(con);
 	} else {
 		dout("ceph_queue_con %p\n", con);
 	}
@@ -1595,7 +1593,7 @@ done:
 	dout("con_work %p done\n", con);
 
 out:
-	con->put(con);
+	con->ops->put(con);
 }
 
 
@@ -1645,7 +1643,7 @@ static void ceph_fault(struct ceph_connection *con)
 	dout("fault queueing %p %d -> %d delay %lu\n", con,
 	     atomic_read(&con->nref), atomic_read(&con->nref) + 1,
 	     con->delay);
-	con->get(con);
+	con->ops->get(con);
 	queue_delayed_work(ceph_msgr_wq, &con->work,
 			   round_jiffies_relative(con->delay));
 }
@@ -1707,15 +1705,15 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 				 list_all);
 		dout("destroy removing connection %p\n", con);
 		set_bit(CLOSED, &con->state);
-		con->get(con);
+		con->ops->get(con);
 		__remove_connection(msgr, con);
 
 		/* in case there's queued work.  drop a reference if
 		 * we successfully cancel work. */
 		spin_unlock(&msgr->con_lock);
 		if (cancel_delayed_work_sync(&con->work))
-			con->put(con);
-		con->put(con);
+			con->ops->put(con);
+		con->ops->put(con);
 		dout("destroy removed connection %p\n", con);
 
 		spin_lock(&msgr->con_lock);
@@ -1758,7 +1756,7 @@ void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 	}
 	spin_unlock(&msgr->con_lock);
 	if (con)
-		con->put(con);
+		con->ops->put(con);
 }
 
 /*
@@ -1841,7 +1839,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 		spin_lock(&msgr->con_lock);
 		con = __get_connection(msgr, &msg->hdr.dst.addr);
 		if (con) {
-			con->put(newcon);
+			con->ops->put(newcon);
 			dout("ceph_msg_send (lost race and) had connection "
 			     "%p to peer %u.%u.%u.%u:%u\n", con,
 			     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
@@ -1895,7 +1893,7 @@ int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
 	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0)
 		ceph_queue_con(con);
 
-	con->put(con);
+	con->ops->put(con);
 	dout("ceph_msg_send done\n");
 	return ret;
 }
@@ -1921,9 +1919,9 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	     le32_to_cpu(msg->hdr.front_len),
 	     le32_to_cpu(msg->hdr.middle_len),
 	     le32_to_cpu(msg->hdr.data_len));
-	dout("ceph_con_send %p %p seq %llu for %s%d on %p pgs %d\n",
-	     con, msg, le64_to_cpu(msg->hdr.seq),
-	     ENTITY_NAME(msg->hdr.dst.name), con, msg->nr_pages);
+	dout("ceph_con_send %p %s%d %p seq %llu pgs %d\n",
+	     con, ENTITY_NAME(msg->hdr.dst.name), msg,
+	     le64_to_cpu(msg->hdr.seq), msg->nr_pages);
 	list_add_tail(&msg->list_head, &con->out_queue);
 	spin_unlock(&con->out_queue_lock);
 
@@ -2013,6 +2011,48 @@ out:
 	pr_err("ceph_msg_new can't create type %d len %d\n", type, front_len);
 	return ERR_PTR(-ENOMEM);
 }
+
+/*
+ * Generic message allocator, for incoming messages.
+ */
+struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
+				struct ceph_msg_header *hdr)
+{
+	int type = le32_to_cpu(hdr->type);
+	int front_len = le32_to_cpu(hdr->front_len);
+	struct ceph_msg *msg = ceph_msg_new(type, front_len, 0, 0, NULL);
+
+	if (!msg) {
+		pr_err("ceph: unable to allocate msg type %d len %d\n",
+		       type, front_len);
+		return ERR_PTR(-ENOMEM);
+	}
+	return msg;
+}
+
+/*
+ * Allocate "middle" portion of a message, if it is needed and wasn't
+ * allocated by alloc_msg.  This allows us to read a small fixed-size
+ * per-type header in the front and then gracefully fail (i.e.,
+ * propagate the error to the caller based on info in the front) when
+ * the middle is too large.
+ */
+int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	int type = le32_to_cpu(msg->hdr.type);
+	int middle_len = le32_to_cpu(msg->hdr.middle_len);
+
+	dout("alloc_middle %p type %d %s middle_len %d\n", msg, type,
+	     ceph_msg_type_name(type), middle_len);
+	BUG_ON(!middle_len);
+	BUG_ON(msg->middle);
+
+	msg->middle = ceph_buffer_new_alloc(middle_len, GFP_NOFS);
+	if (!msg->middle)
+		return -ENOMEM;
+	return 0;
+}
+
 
 /*
  * Free a generically kmalloc'd message.

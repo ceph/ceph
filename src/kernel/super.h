@@ -794,6 +794,12 @@ static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
 	put_unaligned_le64(val, &fsid->fsid[0]);
 }
 
+/*
+extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
+extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
+				       struct ceph_msg_header *hdr);
+*/
+
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
 

@@ -92,17 +92,12 @@ extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want);
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 have);
 
 extern void ceph_monc_request_mount(struct ceph_mon_client *monc);
-extern void ceph_handle_mount_ack(struct ceph_client *client,
-				  struct ceph_msg *msg);
+extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 
 extern int ceph_monc_do_statfs(struct ceph_mon_client *monc,
 			       struct ceph_statfs *buf);
-extern void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
-					  struct ceph_msg *msg);
 
-extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
-extern void ceph_monc_handle_umount(struct ceph_mon_client *monc,
-				    struct ceph_msg *msg);
+
 
 #endif

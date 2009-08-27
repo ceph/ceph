@@ -37,6 +37,9 @@
 static void __wake_requests(struct ceph_mds_client *mdsc,
 			    struct list_head *head);
 
+const static struct ceph_connection_operations mds_con_ops;
+
+
 /*
  * mds reply parsing
  */
@@ -297,32 +300,6 @@ static bool __have_session(struct ceph_mds_client *mdsc, int mds)
 	return mdsc->sessions[mds];
 }
 
-static void con_get(struct ceph_connection *con)
-{
-	struct ceph_mds_session *s = con->private;
-
-	ceph_get_mds_session(s);
-}
-
-static void con_put(struct ceph_connection *con)
-{
-	struct ceph_mds_session *s = con->private;
-
-	ceph_put_mds_session(s);
-}
-
-/*
- * if the client is unresponsive for long enough, the mds will kill
- * the session entirely.
- */
-static void peer_reset(void *p, struct ceph_connection *con)
-{
-	struct ceph_mds_session *s = p;
-
-	pr_err("ceph mds%d gave us the boot.  IMPLEMENT RECONNECT.\n",
-	       s->s_mds);
-}
-
 /*
  * create+register a new session for given mds.
  * called under mdsc->mutex.
@@ -333,6 +310,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	struct ceph_mds_session *s;
 
 	s = kzalloc(sizeof(*s), GFP_NOFS);
+	s->s_mdsc = mdsc;
 	s->s_mds = mds;
 	s->s_state = CEPH_MDS_SESSION_NEW;
 	s->s_ttl = 0;
@@ -342,9 +320,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	ceph_con_init(mdsc->client->msgr, &s->s_con,
 		      ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 	s->s_con.private = s;
-	s->s_con.peer_reset = peer_reset;
-	s->s_con.get = con_get;
-	s->s_con.put = con_put;
+	s->s_con.ops = &mds_con_ops;
 	s->s_con.peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS);
 	s->s_con.peer_name.num = cpu_to_le32(mds);
 
@@ -1652,7 +1628,7 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
  * This preserves the logical ordering of replies, capabilities, etc., sent
  * by the MDS as they are applied to our local cache.
  */
-void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+static void handle_reply(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
 	struct ceph_mds_reply_head *head = msg->front.iov_base;
@@ -1807,8 +1783,7 @@ out:
 /*
  * handle mds notification that our request has been forwarded.
  */
-void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
-			      struct ceph_msg *msg)
+static void handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct ceph_mds_request *req;
 	u64 tid;
@@ -1874,8 +1849,7 @@ bad:
 /*
  * handle a mds session control message
  */
-void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
-			      struct ceph_msg *msg)
+static void handle_session(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	u32 op;
 	u64 seq;
@@ -2315,7 +2289,7 @@ void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry)
 	di->lease_session = NULL;
 }
 
-void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
+static void handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 {
 	struct super_block *sb = mdsc->client->sb;
 	struct inode *inode;
@@ -2881,6 +2855,79 @@ bad:
 	pr_err("ceph error decoding mdsmap %d\n", err);
 	return;
 }
+
+static void con_get(struct ceph_connection *con)
+{
+	struct ceph_mds_session *s = con->private;
+
+	ceph_get_mds_session(s);
+}
+
+static void con_put(struct ceph_connection *con)
+{
+	struct ceph_mds_session *s = con->private;
+
+	ceph_put_mds_session(s);
+}
+
+/*
+ * if the client is unresponsive for long enough, the mds will kill
+ * the session entirely.
+ */
+static void peer_reset(struct ceph_connection *con)
+{
+	struct ceph_mds_session *s = con->private;
+
+	pr_err("ceph mds%d gave us the boot.  IMPLEMENT RECONNECT.\n",
+	       s->s_mds);
+}
+
+static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	struct ceph_mds_session *s = con->private;
+	struct ceph_mds_client *mdsc = s->s_mdsc;
+	int type = le16_to_cpu(msg->hdr.type);
+
+	switch (type) {
+	case CEPH_MSG_MDS_MAP:
+		ceph_mdsc_handle_map(mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_SESSION:
+		handle_session(mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_REPLY:
+		handle_reply(mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
+		handle_forward(mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_CAPS:
+		ceph_handle_caps(mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_SNAP:
+		ceph_handle_snap(mdsc, msg);
+		break;
+	case CEPH_MSG_CLIENT_LEASE:
+		handle_lease(mdsc, msg);
+		break;
+
+	default:
+		pr_err("ceph received unknown message type %d %s\n", type,
+		       ceph_msg_type_name(type));
+	}
+	ceph_msg_put(msg);
+}
+
+const static struct ceph_connection_operations mds_con_ops = {
+	.get = con_get,
+	.put = con_put,
+	.dispatch = dispatch,
+	.peer_reset = peer_reset,
+	.alloc_msg = ceph_alloc_msg,
+	.alloc_middle = ceph_alloc_middle,
+};
+
+
 
 
 /* eof */

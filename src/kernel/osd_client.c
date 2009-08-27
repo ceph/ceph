@@ -11,6 +11,7 @@
 #include "messenger.h"
 #include "decode.h"
 
+const static struct ceph_connection_operations osd_con_ops;
 
 static void kick_requests(struct ceph_osd_client *osdc, struct ceph_osd *osd);
 
@@ -291,9 +292,9 @@ __lookup_request_ge(struct ceph_osd_client *osdc,
  * reply (because it does not get notification when clients, mds' leave
  * the cluster).
  */
-static void peer_reset(void *p, struct ceph_connection *con)
+static void peer_reset(struct ceph_connection *con)
 {
-	struct ceph_osd *osd = p;
+	struct ceph_osd *osd = con->private;
 	struct ceph_osd_client *osdc = osd->o_osdc;
 	
 	down_read(&osdc->map_sem);
@@ -317,7 +318,7 @@ static int init_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd, int o)
 	ceph_con_init(osdc->client->msgr, osd->o_con,
 		      &osdc->osdmap->osd_addr[o]);
 	osd->o_con->private = osd;
-	osd->o_con->peer_reset = peer_reset;
+	osd->o_con->ops = &osd_con_ops;
 	osd->o_con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 	osd->o_con->peer_name.num = cpu_to_le32(o);
 	return 0;
@@ -327,7 +328,7 @@ static void destroy_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd)
 {
 	dout("destroy_osd %p\n", osd);
 	rb_erase(&osd->o_node, &osdc->osds);
-	osd->o_con->put(osd->o_con);
+	osd->o_con->ops->put(osd->o_con);
 }
 
 static void __insert_osd(struct ceph_osd_client *osdc, struct ceph_osd *new)
@@ -597,7 +598,7 @@ static void handle_timeout(struct work_struct *work)
  * handle osd op reply.  either call the callback if it is specified,
  * or do the completion to wake up the waiting thread.
  */
-void ceph_osdc_handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
+static void handle_reply(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 {
 	struct ceph_osd_reply_head *rhead = msg->front.iov_base;
 	struct ceph_osd_request *req;
@@ -1032,6 +1033,7 @@ int ceph_osdc_init(struct ceph_osd_client *osdc, struct ceph_client *client)
 	mutex_init(&osdc->request_mutex);
 	osdc->timeout_tid = 0;
 	osdc->last_tid = 0;
+	osdc->osds = RB_ROOT;
 	osdc->requests = RB_ROOT;
 	osdc->num_requests = 0;
 	INIT_DELAYED_WORK(&osdc->timeout_work, handle_timeout);
@@ -1134,4 +1136,38 @@ int ceph_osdc_writepages(struct ceph_osd_client *osdc, struct ceph_vino vino,
 	dout("writepages result %d\n", rc);
 	return rc;
 }
+
+/*
+ * handle incoming message
+ */
+static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	struct ceph_osd *osd = con->private;
+	struct ceph_osd_client *osdc = osd->o_osdc;
+	int type = le16_to_cpu(msg->hdr.type);
+
+	switch (type) {
+	case CEPH_MSG_OSD_MAP:
+		ceph_osdc_handle_map(osdc, msg);
+		break;
+	case CEPH_MSG_OSD_OPREPLY:
+		handle_reply(osdc, msg);
+		break;
+
+	default:
+		pr_err("ceph received unknown message type %d %s\n", type,
+		       ceph_msg_type_name(type));
+	}
+	ceph_msg_put(msg);
+}
+
+const static struct ceph_connection_operations osd_con_ops = {
+	.get = ceph_con_get,
+	.put = ceph_con_put,
+	.dispatch = dispatch,
+	.peer_reset = peer_reset,
+	.alloc_msg = ceph_alloc_msg,
+	.alloc_middle = ceph_alloc_middle,
+};
+
 

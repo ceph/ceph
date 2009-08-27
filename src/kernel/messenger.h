@@ -25,25 +25,28 @@ struct ceph_connection;
 extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
 
 /*
- * Ceph defines these callbacks for handling events:
+ * Ceph defines these callbacks for handling connection events.
  */
-/* handle an incoming message. */
-typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
-/* an incoming message has a data payload; tell me what pages I
- * should read the data into. */
-typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
-					  int want);
-/* a remote host as terminated a message exchange session, and messages
- * we sent (or they tried to send us) may be lost. */
-typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
-					struct ceph_entity_name *pn);
+struct ceph_connection_operations {
+	void (*get)(struct ceph_connection *);
+	void (*put)(struct ceph_connection *);
 
-typedef struct ceph_msg * (*ceph_msgr_alloc_msg_t) (void *p,
-					    struct ceph_msg_header *hdr);
-typedef int (*ceph_msgr_alloc_middle_t) (void *p, struct ceph_msg *msg);
+	/* handle an incoming message. */
+	void (*dispatch) (struct ceph_connection *con, struct ceph_msg *m);
 
-typedef void (*ceph_con_get_t)(struct ceph_connection *);
-typedef void (*ceph_con_put_t)(struct ceph_connection *);
+	/* a remote host as terminated a message exchange session, and messages
+	 * we sent (or they tried to send us) may be lost. */
+	void (*peer_reset) (struct ceph_connection *con);
+
+	struct ceph_msg * (*alloc_msg) (struct ceph_connection *con,
+					struct ceph_msg_header *hdr);
+	int (*alloc_middle) (struct ceph_connection *con,
+			     struct ceph_msg *msg);
+	/* an incoming message has a data payload; tell me what pages I
+	 * should read the data into. */
+	int (*prepare_pages) (struct ceph_connection *con, struct ceph_msg *m,
+			      int want);
+};
 
 static inline const char *ceph_name_type_str(int t)
 {
@@ -64,10 +67,6 @@ static inline const char *ceph_name_type_str(int t)
 
 struct ceph_messenger {
 	void *parent;                    /* normally struct ceph_client * */
-	ceph_msgr_dispatch_t dispatch;
-	ceph_msgr_prepare_pages_t prepare_pages;
-	ceph_msgr_alloc_msg_t alloc_msg;
-	ceph_msgr_alloc_middle_t alloc_middle;
 
 	struct ceph_entity_inst inst;    /* my name+address */
 
@@ -149,11 +148,9 @@ struct ceph_msg_pos {
  */
 struct ceph_connection {
 	void *private;
-	ceph_con_get_t get;
-	ceph_con_put_t put;
 	atomic_t nref;
 
-	ceph_msgr_peer_reset_t peer_reset;
+	const struct ceph_connection_operations *ops;
 
 	struct ceph_messenger *msgr;
 	struct socket *sock;
@@ -232,6 +229,12 @@ void ceph_con_destroy(struct ceph_connection *con);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
 extern void ceph_con_keepalive(struct ceph_connection *con);
 extern void ceph_con_close(struct ceph_connection *con);
+extern void ceph_con_get(struct ceph_connection *con);
+extern void ceph_con_put(struct ceph_connection *con);
+
+extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
+				       struct ceph_msg_header *hdr);
+extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
 
 extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
 				     struct ceph_entity_addr *addr);

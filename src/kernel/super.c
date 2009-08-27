@@ -21,13 +21,9 @@
 /*
  * Ceph superblock operations
  *
- * Handle the basics of mounting, unmounting.  Also dispatch message
- * types to appropriate handlers and subsystems.
+ * Handle the basics of mounting, unmounting.
  */
 
-static void ceph_dispatch(void *p, struct ceph_msg *msg);
-static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr);
-static int ceph_alloc_middle(void *p, struct ceph_msg *msg);
 
 /*
  * find filename portion of a path (/foo/bar/baz -> baz)
@@ -762,10 +758,6 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			goto out;
 		}
 		client->msgr->parent = client;
-		client->msgr->dispatch = ceph_dispatch;
-		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
-		client->msgr->alloc_msg = ceph_alloc_msg;
-		client->msgr->alloc_middle = ceph_alloc_middle;
 	}
 
 	/* send mount request, and wait for mon, mds, and osd maps */
@@ -825,6 +817,7 @@ out:
 	return err;
 }
 
+#if 0
 static struct ceph_msg_pool *get_pool(struct ceph_client *client, int type)
 {
 	switch (type) {
@@ -850,7 +843,8 @@ static struct ceph_msg_pool *get_pool(struct ceph_client *client, int type)
  * Allocate incoming message.  Return message, or NULL to ignore message,
  * or error to fault connection.
  */
-static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr)
+struct ceph_msg *my_ceph_alloc_msg(struct ceph_connection *con,
+				struct ceph_msg_header *hdr)
 {
 	struct ceph_client *client = p;
 	int type = le32_to_cpu(hdr->type);
@@ -886,94 +880,7 @@ static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr)
 	msg->front.iov_len = front_len;
 	return msg;
 }
-
-/*
- * Allocate "middle" portion of a message, if it is needed and wasn't
- * allocated by alloc_msg.  This allows us to read a small fixed-size
- * per-type header in the front and then gracefully fail (i.e.,
- * propagate the error to the caller based on info in the front) when
- * the middle is too large.
- */
-static int ceph_alloc_middle(void *p, struct ceph_msg *msg)
-{
-	int type = le32_to_cpu(msg->hdr.type);
-	int middle_len = le32_to_cpu(msg->hdr.middle_len);
-
-	dout("alloc_middle %p type %d %s middle_len %d\n", msg, type,
-	     ceph_msg_type_name(type), middle_len);
-	BUG_ON(!middle_len);
-	BUG_ON(msg->middle);
-
-	msg->middle = ceph_buffer_new_alloc(middle_len, GFP_NOFS);
-	if (!msg->middle)
-		return -ENOMEM;
-	return 0;
-}
-
-
-/*
- * Process an incoming message.
- *
- * This should be relatively fast and must not do any work that waits
- * on other messages to be received.
- */
-void ceph_dispatch(void *p, struct ceph_msg *msg)
-{
-	struct ceph_client *client = p;
-	int type = le16_to_cpu(msg->hdr.type);
-
-	switch (type) {
-	case CEPH_MSG_CLIENT_MOUNT_ACK:
-		ceph_handle_mount_ack(client, msg);
-		break;
-
-		/* mon client */
-	case CEPH_MSG_STATFS_REPLY:
-		ceph_monc_handle_statfs_reply(&client->monc, msg);
-		break;
-	case CEPH_MSG_CLIENT_UNMOUNT:
-		ceph_monc_handle_umount(&client->monc, msg);
-		break;
-
-		/* mds client */
-	case CEPH_MSG_MDS_MAP:
-		ceph_mdsc_handle_map(&client->mdsc, msg);
-		break;
-	case CEPH_MSG_CLIENT_SESSION:
-		ceph_mdsc_handle_session(&client->mdsc, msg);
-		break;
-	case CEPH_MSG_CLIENT_REPLY:
-		ceph_mdsc_handle_reply(&client->mdsc, msg);
-		break;
-	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-		ceph_mdsc_handle_forward(&client->mdsc, msg);
-		break;
-	case CEPH_MSG_CLIENT_CAPS:
-		ceph_handle_caps(&client->mdsc, msg);
-		break;
-	case CEPH_MSG_CLIENT_SNAP:
-		ceph_handle_snap(&client->mdsc, msg);
-		break;
-	case CEPH_MSG_CLIENT_LEASE:
-		ceph_mdsc_handle_lease(&client->mdsc, msg);
-		break;
-
-		/* osd client */
-	case CEPH_MSG_OSD_MAP:
-		ceph_osdc_handle_map(&client->osdc, msg);
-		break;
-	case CEPH_MSG_OSD_OPREPLY:
-		ceph_osdc_handle_reply(&client->osdc, msg);
-		break;
-
-	default:
-		pr_err("ceph received unknown message type %d %s\n", type,
-		       ceph_msg_type_name(type));
-	}
-
-	ceph_msg_put(msg);
-}
-
+#endif
 
 static int ceph_set_super(struct super_block *s, void *data)
 {

@@ -26,6 +26,8 @@
  * the cluster to try.
  */
 
+const static struct ceph_connection_operations mon_con_ops;
+
 /*
  * Decode a monmap blob (e.g., during mount).
  */
@@ -101,7 +103,7 @@ static int open_session(struct ceph_mon_client *monc, int newmon)
 
 	if (monc->con) {
 		dout("open_session closing mon%d\n", monc->last_mon);
-		monc->con->put(monc->con);
+		monc->con->ops->put(monc->con);
 	}
 
 	get_random_bytes(&r, 1);
@@ -116,6 +118,8 @@ static int open_session(struct ceph_mon_client *monc, int newmon)
 	dout("open_session mon%d opened\n", monc->last_mon);
 	ceph_con_init(monc->client->msgr, monc->con,
 		      &monc->monmap->mon_inst[monc->last_mon].addr);
+	monc->con->private = monc;
+	monc->con->ops = &mon_con_ops;
 	monc->con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 	monc->con->peer_name.num = cpu_to_le32(monc->last_mon);
 	return 0;
@@ -315,10 +319,10 @@ void ceph_monc_request_mount(struct ceph_mon_client *monc)
  * The monitor responds with mount ack indicate mount success.  The
  * included client ticket allows the client to talk to MDSs and OSDs.
  */
-void ceph_handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
+static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 {
-	struct ceph_mon_client *monc = &client->monc;
-	struct ceph_monmap *monmap = NULL, *old = client->monc.monmap;
+	struct ceph_client *client = monc->client;
+	struct ceph_monmap *monmap = NULL, *old = monc->monmap;
 	void *p, *end;
 	s32 result;
 	u32 len;
@@ -432,8 +436,7 @@ void ceph_monc_request_umount(struct ceph_mon_client *monc)
 	mutex_unlock(&monc->req_mutex);
 }
 
-void ceph_monc_handle_umount(struct ceph_mon_client *monc,
-			     struct ceph_msg *msg)
+static void handle_umount(struct ceph_mon_client *monc, struct ceph_msg *msg)
 {
 	dout("handle_umount\n");
 	mutex_lock(&monc->req_mutex);
@@ -447,8 +450,8 @@ void ceph_monc_handle_umount(struct ceph_mon_client *monc,
 /*
  * statfs
  */
-void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
-				   struct ceph_msg *msg)
+static void handle_statfs_reply(struct ceph_mon_client *monc,
+				struct ceph_msg *msg)
 {
 	struct ceph_mon_statfs_request *req;
 	struct ceph_mon_statfs_reply *reply = msg->front.iov_base;
@@ -618,8 +621,51 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 	cancel_timeout(&monc->umountreq);
 	cancel_delayed_work_sync(&monc->statfs_delayed_work);
 	if (monc->con) {
-		monc->con->put(monc->con);
+		monc->con->ops->put(monc->con);
 		monc->con = NULL;
 	}
 	kfree(monc->monmap);
 }
+
+
+/*
+ * handle incoming message
+ */
+static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	struct ceph_mon_client *monc = con->private;
+	int type = le16_to_cpu(msg->hdr.type);
+
+	switch (type) {
+	case CEPH_MSG_CLIENT_MOUNT_ACK:
+		handle_mount_ack(monc, msg);
+		break;
+	case CEPH_MSG_STATFS_REPLY:
+		handle_statfs_reply(monc, msg);
+		break;
+	case CEPH_MSG_CLIENT_UNMOUNT:
+		handle_umount(monc, msg);
+		break;
+
+	case CEPH_MSG_MDS_MAP:
+		ceph_mdsc_handle_map(&monc->client->mdsc, msg);
+		break;
+
+	case CEPH_MSG_OSD_MAP:
+		ceph_osdc_handle_map(&monc->client->osdc, msg);
+		break;
+
+	default:
+		pr_err("ceph received unknown message type %d %s\n", type,
+		       ceph_msg_type_name(type));
+	}
+	ceph_msg_put(msg);
+}
+
+const static struct ceph_connection_operations mon_con_ops = {
+	.get = ceph_con_get,
+	.put = ceph_con_put,
+	.dispatch = dispatch,
+	.alloc_msg = ceph_alloc_msg,
+	.alloc_middle = ceph_alloc_middle,
+};
