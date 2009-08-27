@@ -28,7 +28,7 @@ extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
  * Ceph defines these callbacks for handling connection events.
  */
 struct ceph_connection_operations {
-	void (*get)(struct ceph_connection *);
+	struct ceph_connection *(*get)(struct ceph_connection *);
 	void (*put)(struct ceph_connection *);
 
 	/* handle an incoming message. */
@@ -222,7 +222,7 @@ extern void ceph_con_destroy(struct ceph_connection *con);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
 extern void ceph_con_keepalive(struct ceph_connection *con);
 extern void ceph_con_close(struct ceph_connection *con);
-extern void ceph_con_get(struct ceph_connection *con);
+extern struct ceph_connection *ceph_con_get(struct ceph_connection *con);
 extern void ceph_con_put(struct ceph_connection *con);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,

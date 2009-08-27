@@ -2856,11 +2856,13 @@ bad:
 	return;
 }
 
-static void con_get(struct ceph_connection *con)
+static struct ceph_connection *con_get(struct ceph_connection *con)
 {
 	struct ceph_mds_session *s = con->private;
 
-	ceph_get_mds_session(s);
+	if (ceph_get_mds_session(s))
+		return con;
+	return NULL;
 }
 
 static void con_put(struct ceph_connection *con)

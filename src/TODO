@@ -31,9 +31,8 @@ v0.14
 - msgr: unidirectional option
   - what about mon -> mds/osd messages?
 - kclient msgr fixups
-  - private field in ceph_connection
-  - kill radix_tree; allocate connections in callers (osdc, monc, mdsc)
-  - simplify ceph_ping (should be a single byte)
+  - allow msg to be revoked from connection  (per-msg queue_seq, mutex)
+  - kill maybe_dup_msg
 
 
 bugs

@@ -247,11 +247,13 @@ void ceph_con_destroy(struct ceph_connection *con)
 /*
  * generic get/put
  */
-void ceph_con_get(struct ceph_connection *con)
+struct ceph_connection *ceph_con_get(struct ceph_connection *con)
 {
 	dout("con_get %p nref = %d -> %d\n", con,
 	     atomic_read(&con->nref), atomic_read(&con->nref) + 1);
-	atomic_inc(&con->nref);
+	if (atomic_inc_not_zero(&con->nref))
+		return con;
+	return NULL;
 }
 
 void ceph_con_put(struct ceph_connection *con)
@@ -1390,7 +1392,10 @@ static void ceph_queue_con(struct ceph_connection *con)
 		return;
 	}
 
-	con->ops->get(con);
+	if (!con->ops->get(con)) {
+		dout("ceph_queue_con %p ref count 0\n", con);
+		return;
+	}
 
 	set_bit(QUEUED, &con->state);
 	if (test_bit(BUSY, &con->state) ||
