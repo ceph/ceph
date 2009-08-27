@@ -2507,11 +2507,11 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
  * Identify the appropriate session, inode, and call the right handler
  * based on the cap op.
  */
-void ceph_handle_caps(struct ceph_mds_client *mdsc,
+void ceph_handle_caps(struct ceph_mds_session *session,
 		      struct ceph_msg *msg)
 {
+	struct ceph_mds_client *mdsc = session->s_mdsc;
 	struct super_block *sb = mdsc->client->sb;
-	struct ceph_mds_session *session;
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct ceph_mds_caps *h;
@@ -2537,15 +2537,6 @@ void ceph_handle_caps(struct ceph_mds_client *mdsc,
 	seq = le32_to_cpu(h->seq);
 	size = le64_to_cpu(h->size);
 	max_size = le64_to_cpu(h->max_size);
-
-	/* find session */
-	mutex_lock(&mdsc->mutex);
-	session = __ceph_lookup_mds_session(mdsc, mds);
-	mutex_unlock(&mdsc->mutex);
-	if (!session) {
-		dout("WTF, got cap but no session for mds%d\n", mds);
-		return;
-	}
 
 	mutex_lock(&session->s_mutex);
 	session->s_seq++;

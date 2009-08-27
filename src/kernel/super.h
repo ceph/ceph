@@ -842,7 +842,7 @@ extern void __ceph_build_xattrs_blob(struct ceph_inode_info *ci);
 
 /* caps.c */
 extern const char *ceph_cap_string(int c);
-extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
+extern void ceph_handle_caps(struct ceph_mds_session *session,
 			     struct ceph_msg *msg);
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session, u64 cap_id,
