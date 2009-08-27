@@ -129,7 +129,7 @@ public class CephFileSystem extends FileSystem {
       fs_default_name = conf.get("fs.default.name");
       debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
       //build up the arguments for Ceph
-      String arguments = new String();
+      String arguments = new String("CephFSInterface");
       arguments += conf.get("fs.ceph.commandLine", "");
       if (conf.get("fs.ceph.clientDebug") != null) {
 	arguments += " --debug_client ";
