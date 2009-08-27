@@ -125,6 +125,8 @@ int main(int argc, const char **argv)
   SimpleMessenger rank;
   rank.bind();
 
+  rank.set_addr(mc.get_my_addr());
+
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
        << " osd_data " << g_conf.osd_data

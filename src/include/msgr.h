@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 014\n"
+#define CEPH_BANNER "ceph 015\n"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -133,7 +133,8 @@ struct ceph_msg_header {
 	__u8 osd_protocol, osdc_protocol;  /* internal and public */
 	__u8 mds_protocol, mdsc_protocol;
 
-	struct ceph_entity_inst src, orig_src, dst;
+	struct ceph_entity_inst src, orig_src;
+	__le32 dst_erank;
 	__le32 crc;       /* header crc32c */
 } __attribute__ ((packed));
 

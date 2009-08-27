@@ -19,20 +19,25 @@
 
 class MMonMap : public Message {
 public:
+  entity_addr_t addr;
   bufferlist monmapbl;
 
   MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
+  MMonMap(entity_addr_t t, bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
+    addr = t;
     monmapbl.claim(bl);
   }
 
   const char *get_type_name() { return "mon_map"; }
 
   void encode_payload() { 
-    payload = monmapbl;
+    ::encode(addr, payload);
+    ::encode(monmapbl, payload);
   }
   void decode_payload() { 
-    monmapbl = payload;
+    bufferlist::iterator p = payload.begin();
+    ::decode(addr, p);
+    ::decode(monmapbl, p);
   }
 };
 

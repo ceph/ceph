@@ -34,6 +34,8 @@ public:
 private:
   Messenger *messenger;
 
+  entity_addr_t my_addr;
+
   ClientTicket ticket;
   bufferlist signed_ticket;
 
@@ -86,6 +88,8 @@ private:
     monmap.last_mon = m;
   }
   void pick_new_mon();
+
+  entity_addr_t get_my_addr() { return my_addr; }
 
   const ceph_fsid_t& get_fsid() {
     return monmap.fsid;

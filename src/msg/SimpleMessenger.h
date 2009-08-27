@@ -129,7 +129,6 @@ private:
     int sd;
     int new_sd;
     entity_addr_t peer_addr;
-    entity_name_t last_dest_name;
     Policy policy;
     bool lossy_rx;
     
@@ -244,7 +243,6 @@ private:
     void _send(Message *m) {
       m->get();
       q[m->get_priority()].push_back(m);
-      last_dest_name = m->get_dest();
       cond.Signal();
     }
     Message *_get_next_outgoing() {
@@ -311,28 +309,28 @@ private:
     }
 
     enum { BAD_REMOTE_RESET, BAD_RESET, BAD_FAILED };
-    list<pair<entity_addr_t,entity_name_t> > remote_reset_q;
-    list<pair<entity_addr_t,entity_name_t> > reset_q;
-    list<pair<Message*,entity_inst_t> > failed_q;
+    list<entity_addr_t> remote_reset_q;
+    list<entity_addr_t> reset_q;
+    list<pair<Message*,entity_addr_t> > failed_q;
 
-    void queue_remote_reset(entity_addr_t a, entity_name_t n) {
+    void queue_remote_reset(entity_addr_t a) {
       lock.Lock();
-      remote_reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
+      remote_reset_q.push_back(a);
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_REMOTE_RESET);
       cond.Signal();
       lock.Unlock();
     }
-    void queue_reset(entity_addr_t a, entity_name_t n) {
+    void queue_reset(entity_addr_t a) {
       lock.Lock();
-      reset_q.push_back(pair<entity_addr_t,entity_name_t>(a,n));
+      reset_q.push_back(a);
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
       cond.Signal();
       lock.Unlock();
     }
-    void queue_failure(Message *m, entity_inst_t i) {
+    void queue_failure(Message *m, entity_addr_t a) {
       lock.Lock();
       m->get();
-      failed_q.push_back(pair<Message*,entity_inst_t>(m,i));
+      failed_q.push_back(pair<Message*,entity_addr_t>(m, a));
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
       cond.Signal();
       lock.Unlock();
@@ -438,11 +436,16 @@ public:
     return ++global_seq;
   }
 
+  void set_addr(entity_addr_t a) {
+    rank_addr = a;
+    need_addr = false;
+  }
+
   Endpoint *register_entity(entity_name_t addr);
   void rename_entity(Endpoint *ms, entity_name_t newaddr);
   void unregister_entity(Endpoint *ms);
 
-  void submit_message(Message *m, const entity_addr_t& addr, bool lazy=false);  
+  void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
   void prepare_dest(const entity_inst_t& inst);
 
   // create a new messenger

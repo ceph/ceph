@@ -18,19 +18,20 @@
 #include "msg/Message.h"
 
 struct MClientMountAck : public Message {
+  __s32 client;
   __s32 result;
   cstring result_msg;
   bufferlist monmap_bl;
   bufferlist signed_ticket;
 
-  MClientMountAck(int r = 0, const char *msg = 0) :
+  MClientMountAck(int c = -1, int r = 0, const char *msg = 0) :
     Message(CEPH_MSG_CLIENT_MOUNT_ACK),
-    result(r),
+    client(c), result(r),
     result_msg(msg) { }
 
   const char *get_type_name() { return "client_mount_ack"; }
   void print(ostream& o) {
-    o << "client_mount_ack(" << result;
+    o << "client_mount_ack(client" << client << " " << result;
     if (result_msg.length()) o << " " << result_msg;
     if (monmap_bl.length()) o << " + monmap";
     if (signed_ticket.length()) o << " + ticket";
@@ -39,12 +40,14 @@ struct MClientMountAck : public Message {
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(client, p);
     ::decode(result, p);
     ::decode(result_msg, p);
     ::decode(monmap_bl, p);
     ::decode(signed_ticket, p);
   }
   void encode_payload() {
+    ::encode(client, payload);
     ::encode(result, payload);
     ::encode(result_msg, payload);
     ::encode(monmap_bl, payload);

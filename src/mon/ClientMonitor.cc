@@ -139,7 +139,7 @@ bool ClientMonitor::check_mount(MClientMount *m)
 
       string s;
       getline(ss, s);
-      mon->messenger->send_message(new MClientMountAck(-EPERM, s.c_str()),
+      mon->messenger->send_message(new MClientMountAck(-1, -EPERM, s.c_str()),
 				   m->get_orig_source_inst());
       return true;
     }

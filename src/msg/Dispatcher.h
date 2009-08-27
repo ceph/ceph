@@ -64,18 +64,18 @@ public:
   }
 
   // how i deal with transmission failures.
-  virtual void ms_handle_failure(Message *m, const entity_inst_t& inst) {  }
+  virtual void ms_handle_failure(Message *m, const entity_addr_t& addr) {  }
 
   /*
    * on any connection reset.
    * this indicates that the ordered+reliable delivery semantics have 
    * been violated.  messages may have been lost.
    */
-  virtual void ms_handle_reset(const entity_addr_t& peer, entity_name_t last) { }
+  virtual void ms_handle_reset(const entity_addr_t& peer) { }
 
   // on deliberate reset of connection by remote
   //  implies incoming messages dropped; possibly/probably some of our previous outgoing too.
-  virtual void ms_handle_remote_reset(const entity_addr_t& peer, entity_name_t last) { }
+  virtual void ms_handle_remote_reset(const entity_addr_t& peer) { }
 };
 
 #endif

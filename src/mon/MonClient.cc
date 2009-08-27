@@ -174,6 +174,11 @@ void MonClient::handle_monmap(MMonMap *m)
 {
   dout(10) << "handle_monmap " << *m << dendl;
   monc_lock.Lock();
+
+  my_addr = m->addr;
+  messenger->_set_myaddr(m->addr);
+  dout(10) << " i am " << m->addr << dendl;
+
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
   map_cond.Signal();
@@ -259,7 +264,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   p = signed_ticket.begin();
   ::decode(ticket, p);
 
-  messenger->reset_myname(m->get_dest());
+  messenger->reset_myname(entity_name_t::CLIENT(m->client));
 
   mount_cond.Signal();
 

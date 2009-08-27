@@ -360,7 +360,7 @@ bool Monitor::dispatch_impl(Message *m)
       ss << "client protocol v " << (int)m->get_header().monc_protocol << " != server v " << CEPH_MONC_PROTOCOL;
       string s;
       getline(ss, s);
-      messenger->send_message(new MClientMountAck(-EINVAL, s.c_str()),
+      messenger->send_message(new MClientMountAck(-1, -EINVAL, s.c_str()),
 			      m->get_orig_source_inst());
     }
 
@@ -477,7 +477,7 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
   dout(10) << "handle_mon_get_map" << dendl;
   bufferlist bl;
   monmap->encode(bl);
-  messenger->send_message(new MMonMap(bl), m->get_orig_source_inst());
+  messenger->send_message(new MMonMap(m->get_orig_source_addr(), bl), m->get_orig_source_inst());
   delete m;
 }
 
