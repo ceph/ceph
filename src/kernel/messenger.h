@@ -134,6 +134,7 @@ struct ceph_msg_pos {
 #define CLOSED		10 /* we've closed the connection */
 #define SOCK_CLOSED	11 /* socket state changed to closed */
 #define REGISTERED      12 /* connection appears in con_tree */
+#define REOPEN          13 /* reopen connection w/ new peer */
 
 /*
  * A single connection with another host.
