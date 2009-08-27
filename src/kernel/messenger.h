@@ -70,10 +70,6 @@ struct ceph_messenger {
 
 	struct ceph_entity_inst inst;    /* my name+address */
 
-	spinlock_t con_lock;
-	struct list_head con_all;        /* all open connections */
-	struct radix_tree_root con_tree; /*  established */
-
 	struct page *zero_page;          /* used in certain error cases */
 
 	/*
@@ -157,9 +153,6 @@ struct ceph_connection {
 	unsigned long state;	/* connection state (see flags above) */
 	const char *error_msg;  /* error message, if any */
 
-	struct list_head list_all;     /* msgr->con_all */
-	struct list_head list_bucket;
-
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
 	u32 connect_seq;      /* identify the most recent connection
@@ -218,40 +211,35 @@ struct ceph_connection {
 extern int ceph_msgr_init(void);
 extern void ceph_msgr_exit(void);
 
-extern struct ceph_messenger *
-ceph_messenger_create(struct ceph_entity_addr *myaddr);
+extern struct ceph_messenger *ceph_messenger_create(
+	struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
 
 extern void ceph_con_init(struct ceph_messenger *msgr,
 			  struct ceph_connection *con,
 			  struct ceph_entity_addr *addr);
-void ceph_con_destroy(struct ceph_connection *con);
+extern void ceph_con_destroy(struct ceph_connection *con);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
 extern void ceph_con_keepalive(struct ceph_connection *con);
 extern void ceph_con_close(struct ceph_connection *con);
 extern void ceph_con_get(struct ceph_connection *con);
 extern void ceph_con_put(struct ceph_connection *con);
 
-extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
-				       struct ceph_msg_header *hdr);
-extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
-
-extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
-				     struct ceph_entity_addr *addr);
-
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
 extern void ceph_msg_kfree(struct ceph_msg *m);
 
+extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
+				       struct ceph_msg_header *hdr);
+extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
+
+
 static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
 {
-	/*printk("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
-	  atomic_read(&msg->nref)+1);*/
 	atomic_inc(&msg->nref);
 	return msg;
 }
-
 extern void ceph_msg_put(struct ceph_msg *msg);
 
 static inline void ceph_msg_remove(struct ceph_msg *msg)
@@ -259,7 +247,6 @@ static inline void ceph_msg_remove(struct ceph_msg *msg)
 	list_del_init(&msg->list_head);
 	ceph_msg_put(msg);
 }
-
 static inline void ceph_msg_put_list(struct list_head *head)
 {
 	while (!list_empty(head)) {
@@ -270,11 +257,5 @@ static inline void ceph_msg_put_list(struct list_head *head)
 }
 
 extern struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *msg);
-
-extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
-			 unsigned long timeout);
-
-extern void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
-		      struct ceph_entity_addr *addr);
 
 #endif

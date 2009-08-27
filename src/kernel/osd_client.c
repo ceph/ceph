@@ -695,6 +695,8 @@ bad:
  * a new osd map if osds are down, or we are otherwise unable to determine
  * how to direct a request.
  *
+ * Close connections to down osds.
+ *
  * If @who is specified, resubmit requests for that specific osd.
  *
  * Caller should hold map_sem for read and request_mutex.
@@ -702,6 +704,7 @@ bad:
 static void kick_requests(struct ceph_osd_client *osdc,
 			  struct ceph_osd *osd)
 {
+#warning fixme
 #if 0
 	struct ceph_osd_request *req;
 	struct rb_node *p;

@@ -217,54 +217,6 @@ static int ceph_tcp_sendmsg(struct socket *sock, struct kvec *iov,
 
 
 /*
- * The con_tree radix_tree has an unsigned long key and void * value.
- * Since ceph_entity_addr is bigger than that, we use a trivial hash
- * key, and point to a list_head in ceph_connection, as you would with
- * a hash table.  If the trivial hash collides, we just traverse the
- * (hopefully short) list until we find what we want.
- */
-static unsigned long hash_addr(struct ceph_entity_addr *addr)
-{
-	unsigned long key;
-
-	key = *(u32 *)&addr->ipaddr.sin_addr.s_addr;
-	key ^= *(u16 *)&addr->ipaddr.sin_port;
-	return key;
-}
-
-/*
- * Get an existing connection, if any, for given addr.  Note that we
- * may need to traverse the list_bucket list, which has to "head."
- *
- * called under con_lock.
- */
-static struct ceph_connection *__get_connection(struct ceph_messenger *msgr,
-						struct ceph_entity_addr *addr)
-{
-	struct ceph_connection *con = NULL;
-	struct list_head *head;
-	unsigned long key = hash_addr(addr);
-
-	head = radix_tree_lookup(&msgr->con_tree, key);
-	if (head == NULL)
-		return NULL;
-	con = list_entry(head, struct ceph_connection, list_bucket);
-	if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0)
-		goto yes;
-	list_for_each_entry(con, head, list_bucket)
-		if (memcmp(&con->peer_addr, addr, sizeof(addr)) == 0)
-			goto yes;
-	return NULL;
-
-yes:
-	con->ops->get(con);
-	dout("get_connection %p nref = %d -> %d\n", con,
-	     atomic_read(&con->nref) - 1, atomic_read(&con->nref));
-	return con;
-}
-
-
-/*
  * Shutdown/close the socket for the given connection.
  */
 static int con_close_socket(struct ceph_connection *con)
@@ -324,8 +276,6 @@ void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con,
 	dout("con_init %p %u.%u.%u.%u:%u\n", con, IPQUADPORT(addr->ipaddr));
 	atomic_set(&con->nref, 1);
 	con->msgr = msgr;
-	INIT_LIST_HEAD(&con->list_all);
-	INIT_LIST_HEAD(&con->list_bucket);
 	spin_lock_init(&con->out_queue_lock);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
@@ -334,98 +284,6 @@ void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con,
 
 	con->private = NULL;
 }
-
-/*
- * add a connection to the con_tree.
- *
- * called under con_lock.
- */
-static int __register_connection(struct ceph_messenger *msgr,
-				 struct ceph_connection *con)
-{
-	struct list_head *head;
-	unsigned long key = hash_addr(&con->peer_addr);
-	int rc = 0;
-
-	dout("register_connection %p %d -> %d\n", con,
-	     atomic_read(&con->nref), atomic_read(&con->nref) + 1);
-	con->ops->get(con);
-
-	list_add(&con->list_all, &msgr->con_all);
-
-	head = radix_tree_lookup(&msgr->con_tree, key);
-	if (head) {
-		dout("register_connection %p in old bucket %lu head %p\n",
-		     con, key, head);
-		list_add(&con->list_bucket, head);
-	} else {
-		dout("register_connection %p in new bucket %lu head %p\n",
-		     con, key, &con->list_bucket);
-		INIT_LIST_HEAD(&con->list_bucket);   /* empty */
-		rc = radix_tree_insert(&msgr->con_tree, key, &con->list_bucket);
-		if (rc < 0) {
-			list_del(&con->list_all);
-			con->ops->put(con);
-			return rc;
-		}
-	}
-	set_bit(REGISTERED, &con->state);
-	return 0;
-}
-
-/*
- * Remove connection from all list.  Also, from con_tree, if it should
- * have been there.
- *
- * called under con_lock.
- */
-static void __remove_connection(struct ceph_messenger *msgr,
-				struct ceph_connection *con)
-{
-	unsigned long key;
-	void **slot, *val;
-
-	dout("__remove_connection %p\n", con);
-	if (list_empty(&con->list_all)) {
-		dout("__remove_connection %p not registered\n", con);
-		return;
-	}
-	list_del_init(&con->list_all);
-	if (test_bit(REGISTERED, &con->state)) {
-		key = hash_addr(&con->peer_addr);
-		if (list_empty(&con->list_bucket)) {
-			/* last one in this bucket */
-			dout("__remove_connection %p and bucket %lu\n",
-			     con, key);
-			radix_tree_delete(&msgr->con_tree, key);
-		} else {
-			/* if we share this bucket, and the radix tree points
-			 * to us, adjust it to point to the next guy. */
-			slot = radix_tree_lookup_slot(&msgr->con_tree, key);
-			val = radix_tree_deref_slot(slot);
-			dout("__remove_connection %p from bucket %lu "
-			     "head %p\n", con, key, val);
-			if (val == &con->list_bucket) {
-				dout("__remove_connection adjusting bucket"
-				     " for %lu to next item, %p\n", key,
-				     con->list_bucket.next);
-				radix_tree_replace_slot(slot,
-							con->list_bucket.next);
-			}
-			list_del_init(&con->list_bucket);
-		}
-	}
-	con->ops->put(con);
-}
-
-static void remove_connection(struct ceph_messenger *msgr,
-			      struct ceph_connection *con)
-{
-	spin_lock(&msgr->con_lock);
-	__remove_connection(msgr, con);
-	spin_unlock(&msgr->con_lock);
-}
-
 
 
 /*
@@ -443,8 +301,6 @@ static u32 get_global_seq(struct ceph_messenger *msgr, u32 gt)
 	spin_unlock(&msgr->global_seq_lock);
 	return ret;
 }
-
-
 
 
 /*
@@ -1610,7 +1466,6 @@ static void ceph_fault(struct ceph_connection *con)
 
 	if (test_bit(LOSSYTX, &con->state)) {
 		dout("fault on LOSSYTX channel\n");
-		remove_connection(con->msgr, con);
 		return;
 	}
 
@@ -1661,9 +1516,6 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	if (msgr == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	spin_lock_init(&msgr->con_lock);
-	INIT_LIST_HEAD(&msgr->con_all);
-	INIT_RADIX_TREE(&msgr->con_tree, GFP_ATOMIC);
 	spin_lock_init(&msgr->global_seq_lock);
 
 	/* the zero page is needed if a request is "canceled" while the message
@@ -1694,35 +1546,9 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 
 void ceph_messenger_destroy(struct ceph_messenger *msgr)
 {
-	struct ceph_connection *con;
-
 	dout("destroy %p\n", msgr);
-
-	/* kill off connections */
-	spin_lock(&msgr->con_lock);
-	while (!list_empty(&msgr->con_all)) {
-		con = list_first_entry(&msgr->con_all, struct ceph_connection,
-				 list_all);
-		dout("destroy removing connection %p\n", con);
-		set_bit(CLOSED, &con->state);
-		con->ops->get(con);
-		__remove_connection(msgr, con);
-
-		/* in case there's queued work.  drop a reference if
-		 * we successfully cancel work. */
-		spin_unlock(&msgr->con_lock);
-		if (cancel_delayed_work_sync(&con->work))
-			con->ops->put(con);
-		con->ops->put(con);
-		dout("destroy removed connection %p\n", con);
-
-		spin_lock(&msgr->con_lock);
-	}
-	spin_unlock(&msgr->con_lock);
-
 	kunmap(msgr->zero_page);
 	__free_page(msgr->zero_page);
-
 	kfree(msgr);
 	dout("destroyed messenger %p\n", msgr);
 }
@@ -1735,28 +1561,6 @@ void ceph_con_close(struct ceph_connection *con)
 	dout("close %p peer %u.%u.%u.%u:%u\n", con,
 	     IPQUADPORT(con->peer_addr.ipaddr));
 	set_bit(CLOSED, &con->state);  /* in case there's queued work */
-}
-
-void ceph_messenger_mark_down(struct ceph_messenger *msgr,
-			      struct ceph_entity_addr *addr)
-{
-	struct ceph_connection *con;
-
-	dout("mark_down peer %u.%u.%u.%u:%u\n",
-	     IPQUADPORT(addr->ipaddr));
-
-	spin_lock(&msgr->con_lock);
-	con = __get_connection(msgr, addr);
-	if (con) {
-		dout("mark_down %s%d %u.%u.%u.%u:%u (%p)\n",
-		     ENTITY_NAME(con->peer_name),
-		     IPQUADPORT(con->peer_addr.ipaddr), con);
-		set_bit(CLOSED, &con->state);  /* in case there's queued work */
-		__remove_connection(msgr, con);
-	}
-	spin_unlock(&msgr->con_lock);
-	if (con)
-		con->ops->put(con);
 }
 
 /*
@@ -1794,110 +1598,6 @@ struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
 	return dup;
 }
 
-
-/*
- * Queue up an outgoing message.
- *
- * This consumes a msg reference.  That is, if the caller wants to
- * keep @msg around, it had better call ceph_msg_get first.
- */
-int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
-		  unsigned long timeout)
-{
-	struct ceph_connection *con, *newcon;
-	int ret = 0;
-
-	/* set source */
-	msg->hdr.src = msgr->inst;
-	msg->hdr.orig_src = msgr->inst;
-
-	/* do we have the connection? */
-	spin_lock(&msgr->con_lock);
-	con = __get_connection(msgr, &msg->hdr.dst.addr);
-	if (!con) {
-		/* drop lock while we allocate a new connection */
-		spin_unlock(&msgr->con_lock);
-
-		newcon = kzalloc(sizeof(*con), GFP_NOFS);
-		if (!newcon)
-			return -ENOMEM;
-		ceph_con_init(msgr, newcon, &msg->hdr.dst.addr);
-
-		newcon->out_connect.flags = 0;
-		if (!timeout) {
-			dout("ceph_msg_send setting LOSSYTX\n");
-			newcon->out_connect.flags |= CEPH_MSG_CONNECT_LOSSY;
-			set_bit(LOSSYTX, &newcon->state);
-		}
-
-		ret = radix_tree_preload(GFP_NOFS);
-		if (ret < 0) {
-			pr_err("ceph ENOMEM in ceph_msg_send\n");
-			return ret;
-		}
-
-		spin_lock(&msgr->con_lock);
-		con = __get_connection(msgr, &msg->hdr.dst.addr);
-		if (con) {
-			con->ops->put(newcon);
-			dout("ceph_msg_send (lost race and) had connection "
-			     "%p to peer %u.%u.%u.%u:%u\n", con,
-			     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
-		} else {
-			con = newcon;
-			con->peer_addr = msg->hdr.dst.addr;
-			con->peer_name = msg->hdr.dst.name;
-			__register_connection(msgr, con);
-			dout("ceph_msg_send new connection %p to peer "
-			     "%u.%u.%u.%u:%u\n", con,
-			     IPQUADPORT(msg->hdr.dst.addr.ipaddr));
-		}
-		spin_unlock(&msgr->con_lock);
-		radix_tree_preload_end();
-	} else {
-		dout("ceph_msg_send had connection %p to peer "
-		     "%u.%u.%u.%u:%u con->sock=%p\n", con,
-		     IPQUADPORT(msg->hdr.dst.addr.ipaddr), con->sock);
-		spin_unlock(&msgr->con_lock);
-	}
-
-	/* queue */
-	spin_lock(&con->out_queue_lock);
-
-	/* avoid queuing multiple PING messages in a row. */
-	if (unlikely(le16_to_cpu(msg->hdr.type) == CEPH_MSG_PING &&
-		     !list_empty(&con->out_queue) &&
-		     le16_to_cpu(list_entry(con->out_queue.prev,
-					    struct ceph_msg,
-				    list_head)->hdr.type) == CEPH_MSG_PING)) {
-		dout("ceph_msg_send dropping dup ping\n");
-		ceph_msg_put(msg);
-	} else {
-		msg->hdr.seq = cpu_to_le64(++con->out_seq);
-		dout("----- %p %u to %s%d %d=%s len %d+%d+%d -----\n", msg,
-		     (unsigned)con->out_seq,
-		     ENTITY_NAME(msg->hdr.dst.name), le16_to_cpu(msg->hdr.type),
-		     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),
-		     le32_to_cpu(msg->hdr.front_len),
-		     le32_to_cpu(msg->hdr.middle_len),
-		     le32_to_cpu(msg->hdr.data_len));
-		dout("ceph_msg_send %p seq %llu for %s%d on %p pgs %d\n",
-		     msg, le64_to_cpu(msg->hdr.seq),
-		     ENTITY_NAME(msg->hdr.dst.name), con, msg->nr_pages);
-		list_add_tail(&msg->list_head, &con->out_queue);
-	}
-	spin_unlock(&con->out_queue_lock);
-
-	/* if there wasn't anything waiting to send before, queue
-	 * new work */
-	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0)
-		ceph_queue_con(con);
-
-	con->ops->put(con);
-	dout("ceph_msg_send done\n");
-	return ret;
-}
-
 /*
  * Queue up an outgoing message on the given connection.
  */
@@ -1931,6 +1631,9 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 		ceph_queue_con(con);
 }
 
+/*
+ * Queue a keepalive byte to ensure the tcp connection is alive.
+ */
 void ceph_con_keepalive(struct ceph_connection *con)
 {
 	if (test_and_set_bit(KEEPALIVE_PENDING, &con->state) == 0 &&
@@ -2068,6 +1771,9 @@ void ceph_msg_kfree(struct ceph_msg *m)
 	dout("msg_kfree %p done\n", m);
 }
 
+/*
+ * Drop a msg ref.  Destroy as needed.
+ */
 void ceph_msg_put(struct ceph_msg *m)
 {
 	dout("ceph_msg_put %p %d -> %d\n", m, atomic_read(&m->nref),
@@ -2101,21 +1807,3 @@ void ceph_msg_put(struct ceph_msg *m)
 			ceph_msg_kfree(m);
 	}
 }
-
-/*
- * Send a ping/keepalive message to the specified peer.
- */
-void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
-	       struct ceph_entity_addr *addr)
-{
-	struct ceph_msg *m;
-
-	m = ceph_msg_new(CEPH_MSG_PING, 0, 0, 0, NULL);
-	if (!m)
-		return;
-	memset(m->front.iov_base, 0, m->front.iov_len);
-	m->hdr.dst.name = name;
-	m->hdr.dst.addr = *addr;
-	ceph_msg_send(msgr, m, BASE_DELAY_INTERVAL);
-}
-
