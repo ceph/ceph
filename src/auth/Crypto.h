@@ -45,6 +45,7 @@ public:
     secret.c_str();   // make sure it's a single buffer!
   }
 
+  int set_secret(int type, bufferptr& s);
   bufferptr& get_secret() { return secret; }
 
   // --
@@ -61,6 +62,7 @@ WRITE_CLASS_ENCODER(CryptoKey);
 class CryptoHandler {
 public:
   virtual int create(bufferptr& secret) = 0;
+  virtual int validate_secret(bufferptr& secret) = 0;
   virtual int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out) = 0;
   virtual int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out) = 0;
 };

@@ -139,9 +139,9 @@ rados_LDADD = librados.la libcrush.la -lcrypto
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
-testrados_LDADD = librados.la libcrush.la -lcrypto
+testrados_LDADD = librados.la libcrush.a -lcrypto
 testradospp_SOURCES = testradospp.cc
-testradospp_LDADD = librados.la libcrush.la -lcrypto
+testradospp_LDADD = librados.a libcrush.la -lcrypto
 radosacl_SOURCES = radosacl.cc
 radosacl_LDADD = librados.la libcrush.la -lcrypto
 bin_PROGRAMS += testrados testradospp radosacl

@@ -26,14 +26,15 @@ static int get_random_bytes(int len, bufferlist& out)
   char buf[len];
   char *t = buf;
   int fd = ::open("/dev/random", O_RDONLY);
+  int l = len;
   if (fd < 0)
     return -errno;
-  while (len) {
-    int r = ::read(fd, t, len);
+  while (l) {
+    int r = ::read(fd, t, l);
     if (r < 0)
       return -errno;
     t += r;
-    len -= r;
+    l -= r;
   }
   out.append(buf, len);
   return 0;
@@ -46,11 +47,17 @@ public:
   CryptoNone() {}
   ~CryptoNone() {}
   int create(bufferptr& secret);
+  int validate_secret(bufferptr& secret);
   int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
   int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
 };
 
 int CryptoNone::create(bufferptr& secret)
+{
+  return 0;
+}
+
+int CryptoNone::validate_secret(bufferptr& secret)
 {
   return 0;
 }
@@ -77,6 +84,7 @@ public:
   CryptoAES() {}
   ~CryptoAES() {}
   int create(bufferptr& secret);
+  int validate_secret(bufferptr& secret);
   int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
   int decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out);
 };
@@ -93,6 +101,16 @@ int CryptoAES::create(bufferptr& secret)
   return 0;
 }
 
+int CryptoAES::validate_secret(bufferptr& secret)
+{
+  if (secret.length() < AES_KEY_LEN) {
+    dout(0) << "key is too short" << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
 {
   const unsigned char *key = (const unsigned char *)secret.c_str();
@@ -103,6 +121,8 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   int outlen;
 #define OUT_BUF_EXTRA 128
   unsigned char outbuf[outlen + OUT_BUF_EXTRA];
+
+  dout(0) << "secret.length=" << secret.length() << dendl;
 
   if (secret.length() < AES_KEY_LEN) {
     derr(0) << "key is too short" << dendl;
@@ -165,7 +185,7 @@ int CryptoAES::decrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
     result = -1;
   }
 
-  if (result) {
+  if (!result) {
     EVP_DecryptFinal_ex(ctx,
               &dec_data[total_dec_len],
               &dec_len);
@@ -201,6 +221,25 @@ CryptoManager ceph_crypto_mgr;
 
 
 // ---------------------------------------------------
+
+int CryptoKey::set_secret(int type, bufferptr& s)
+{
+  this->type = type;
+  created = g_clock.now();
+
+  CryptoHandler *h = ceph_crypto_mgr.get_crypto(type);
+  if (!h)
+    return -EOPNOTSUPP;
+
+  int ret = h->validate_secret(s);
+
+  if (ret < 0)
+    return ret;
+
+  secret = s;
+
+  return 0;
+}
 
 int CryptoKey::create(int t)
 {

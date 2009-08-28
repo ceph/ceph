@@ -2,6 +2,8 @@
 #include "Auth.h"
 #include "common/Clock.h"
 
+#include "config.h"
+
 /*
  * Authentication
  */
@@ -24,7 +26,7 @@ void build_authenticate_request(EntityName& client_name, entity_addr_t client_ad
  * {session key, validity, nonce}^client_secret
  * {client_ticket, session key}^service_secret  ... "enc_ticket"
  */
-void build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_secret,
+bool build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_secret,
 			      CryptoKey& session_key, CryptoKey& service_secret,
 			      bufferlist& reply)
 {
@@ -33,14 +35,26 @@ void build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_sec
   ::encode(client_ticket.renew_after, info);
   ::encode(client_ticket.expires, info);
   ::encode(client_ticket.nonce, info);
-  client_secret.encrypt(info, enc_info);
+  dout(0) << "encoded expires=" << client_ticket.expires << dendl;
+  if (client_secret.encrypt(info, enc_info) < 0) {
+    dout(0) << "error encrypting client ticket" << dendl;
+    return false;
+  }
   ::encode(enc_info, reply);
 
   bufferlist ticket, enc_ticket;
   ::encode(client_ticket, ticket);
   ::encode(session_key, ticket);
-  service_secret.encrypt(ticket, enc_ticket);
+  if (service_secret.encrypt(ticket, enc_ticket) < 0) {
+    dout(0) << "error ecryptng result" << dendl;
+    return false;
+  }
   ::encode(enc_ticket, reply);  
+
+  dout(0) << "enc_info.length()=" << enc_info.length() << dendl;
+  dout(0) << "enc_ticket.length()=" << enc_ticket.length() << dendl;
+
+  return true;
 }
 
 /*
@@ -48,30 +62,35 @@ void build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_sec
  * this ServiceTicket with the result.
  */
 bool ServiceTicket::verify_authenticate_reply(CryptoKey& client_secret,
-					      bufferlist& reply)
+					      bufferlist::iterator& indata)
 {
+  dout(0) << "1" << dendl;
   bufferlist enc_info, info;
-  bufferlist::iterator p = reply.begin();
-  ::decode(enc_info, p);
-  ::decode(enc_ticket, p);
+  ::decode(enc_info, indata);
+  ::decode(enc_ticket, indata);
   
-  client_secret.decrypt(enc_info, info);
+  if (client_secret.decrypt(enc_info, info) < 0) {
+    dout(0) << "error decrypting data" << dendl;
+    return false;
+  }
+
+  dout(0) << "enc_info.length()=" << enc_info.length() << dendl;
+  dout(0) << "info.length()=" << info.length() << dendl;
   bufferlist::iterator q = info.begin();
   try {
     ::decode(session_key, q);
     ::decode(renew_after, q);
-    ::decode(expires, p);
-    ::decode(nonce, p);
+    ::decode(expires, q);
+    ::decode(nonce, q);
+    dout(0) << "decoded expires=" << expires << dendl;
   }
   catch (buffer::error *e) {
     delete e;
     return false;
   }
-  if (!p.end())
+  if (!indata.end())
     return false;
   
-  // yay!
-  enc_ticket = enc_ticket;
   return true;
 }
 

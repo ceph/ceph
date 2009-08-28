@@ -271,7 +271,6 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
 
   if (done) {
     dout(5) << "op already done" << dendl;;
-    dout(5) << "op already done" << dendl;;
     return 0;
   }
   // only the first does the work
@@ -379,9 +378,7 @@ void MonClient::MonClientAuthHandler::handle_response(Message *response)
 
   last_result = (int)m->result;
 
-  if (m->result == 0 || m->result == -EAGAIN) {
-    client->auth_client_handler.handle_response(m->result_bl);
-  }
+  client->auth_client_handler.handle_response(m->result, m->result_bl);
 
   cond.Signal();
   return; /* FIXME */

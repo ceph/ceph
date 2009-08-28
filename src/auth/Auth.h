@@ -75,7 +75,7 @@ WRITE_CLASS_ENCODER(ClientTicket)
  */
 extern void build_authenticate_request(EntityName& client_name, entity_addr_t client_addr,
 				       bufferlist& request);
-extern void build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_secret,
+extern bool build_authenticate_reply(ClientTicket& client_ticket, CryptoKey& client_secret,
 				     CryptoKey& session_key, CryptoKey& service_secret,
 				     bufferlist& reply);
 
@@ -92,7 +92,7 @@ struct ServiceTicket {
 
   // to build our ServiceTicket
   bool verify_authenticate_reply(CryptoKey& client_secret,
-				 bufferlist& reply);
+				 bufferlist::iterator& indata);
 
   // to access the service
   utime_t build_authenticator(bufferlist& bl);

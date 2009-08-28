@@ -168,8 +168,14 @@ bool ClientMonitor::check_auth(MAuth *m)
   assert(handler);
 
   bufferlist response_bl;
-
-  int ret = handler->handle_request(m->get_auth_payload(), response_bl);
+  
+  int ret;
+  try {
+    ret = handler->handle_request(m->get_auth_payload(), response_bl);
+  } catch (buffer::error *err) {
+    ret = -EINVAL;
+    dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+  }
   MAuthReply *reply = new MAuthReply(&response_bl, ret);
 
   if (reply) {
