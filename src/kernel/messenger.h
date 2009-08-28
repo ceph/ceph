@@ -135,6 +135,7 @@ struct ceph_msg_pos {
 #define SOCK_CLOSED	11 /* socket state changed to closed */
 #define REGISTERED      12 /* connection appears in con_tree */
 #define REOPEN          13 /* reopen connection w/ new peer */
+#define DEAD            14 /* dead, about to kfree */
 
 /*
  * A single connection with another host.
@@ -223,6 +224,8 @@ extern void ceph_con_destroy(struct ceph_connection *con);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
 extern void ceph_con_keepalive(struct ceph_connection *con);
 extern void ceph_con_close(struct ceph_connection *con);
+extern void ceph_con_reopen(struct ceph_connection *con,
+			    struct ceph_entity_addr *addr);
 extern struct ceph_connection *ceph_con_get(struct ceph_connection *con);
 extern void ceph_con_put(struct ceph_connection *con);
 
