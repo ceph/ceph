@@ -255,11 +255,6 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(monmap, p);
 
-  // ticket
-  signed_ticket = m->signed_ticket;
-  p = signed_ticket.begin();
-  ::decode(ticket, p);
-
   messenger->reset_myname(entity_name_t::CLIENT(m->client));
 
   mount_cond.Signal();
