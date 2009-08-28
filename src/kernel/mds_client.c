@@ -260,10 +260,14 @@ static const char *session_state_name(int s)
 
 static struct ceph_mds_session *get_session(struct ceph_mds_session *s)
 {
-	dout("mdsc get_session %p %d -> %d\n", s,
-	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)+1);
-	atomic_inc(&s->s_ref);
-	return s;
+	if (atomic_inc_not_zero(&s->s_ref)) {
+		dout("mdsc get_session %p %d -> %d\n", s,
+		     atomic_read(&s->s_ref)-1, atomic_read(&s->s_ref));
+		return s;
+	} else {
+		dout("mdsc get_session %p 0 -- FAIL", s);
+		return NULL;
+	}
 }
 
 void ceph_put_mds_session(struct ceph_mds_session *s)
@@ -287,8 +291,8 @@ struct ceph_mds_session *__ceph_lookup_mds_session(struct ceph_mds_client *mdsc,
 	if (mds >= mdsc->max_sessions || mdsc->sessions[mds] == NULL)
 		return NULL;
 	session = mdsc->sessions[mds];
-	dout("lookup_mds_session %p %d -> %d\n", session,
-	     atomic_read(&session->s_ref), atomic_read(&session->s_ref)+1);
+	dout("lookup_mds_session %p %d\n", session,
+	     atomic_read(&session->s_ref));
 	get_session(session);
 	return session;
 }
@@ -831,8 +835,7 @@ static int request_close_session(struct ceph_mds_client *mdsc,
 	dout("request_close_session mds%d state %s seq %lld\n",
 	     session->s_mds, session_state_name(session->s_state),
 	     session->s_seq);
-	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE,
-				 session->s_seq);
+	msg = create_session_msg(CEPH_SESSION_REQUEST_CLOSE, session->s_seq);
 	if (IS_ERR(msg))
 		err = PTR_ERR(msg);
 	else
@@ -2071,6 +2074,9 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		session->s_state = CEPH_MDS_SESSION_RECONNECTING;
 		session->s_seq = 0;
 
+		ceph_con_reopen(&session->s_con,
+				ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
+
 		/* replay unsafe requests */
 		replay_unsafe_requests(mdsc, session);
 
@@ -2222,15 +2228,19 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		if (memcmp(ceph_mdsmap_get_addr(oldmap, i),
 			   ceph_mdsmap_get_addr(newmap, i),
 			   sizeof(struct ceph_entity_addr))) {
-			/* notify messenger to close out old messages,
-			 * socket. */
-			ceph_con_close(&s->s_con);
-
 			if (s->s_state == CEPH_MDS_SESSION_OPENING) {
 				/* the session never opened, just close it
 				 * out now */
 				__wake_requests(mdsc, &s->s_waiting);
 				unregister_session(mdsc, i);
+			} else {
+				/* just close it */
+				mutex_unlock(&mdsc->mutex);
+				mutex_lock(&s->s_mutex);
+				mutex_lock(&mdsc->mutex);
+				ceph_con_close(&s->s_con);
+				mutex_unlock(&s->s_mutex);
+				s->s_state = CEPH_MDS_SESSION_RESTARTING;
 			}
 
 			/* kick any requests waiting on the recovering mds */
@@ -2242,7 +2252,8 @@ static void check_new_map(struct ceph_mds_client *mdsc,
 		/*
 		 * send reconnect?
 		 */
-		if (newstate == CEPH_MDS_STATE_RECONNECT)
+		if (s->s_state == CEPH_MDS_SESSION_RESTARTING &&
+		    newstate >= CEPH_MDS_STATE_RECONNECT)
 			send_mds_reconnect(mdsc, i);
 
 		/*
@@ -2850,7 +2861,7 @@ static struct ceph_connection *con_get(struct ceph_connection *con)
 {
 	struct ceph_mds_session *s = con->private;
 
-	if (ceph_get_mds_session(s))
+	if (get_session(s))
 		return con;
 	return NULL;
 }
