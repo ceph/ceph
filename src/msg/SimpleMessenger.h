@@ -416,6 +416,13 @@ private:
 
   void reaper();
 
+  Policy get_policy(int t) {
+    if (policy_map.count(t))
+      return policy_map[t];
+    else
+      return default_policy;
+  }
+
 public:
   SimpleMessenger() : accepter(this),
 	   lock("SimpleMessenger::lock"), started(false), need_addr(true),
