@@ -1428,6 +1428,7 @@ void Client::get_cap_ref(Inode *in, int cap)
     dout(5) << "get_cap_ref got first FILE_BUFFER ref on " << *in << dendl;
     in->get();
   }
+  in->get_cap_ref(cap);
 }
 
 void Client::put_cap_ref(Inode *in, int cap)
