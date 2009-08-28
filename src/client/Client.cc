@@ -1421,6 +1421,15 @@ bool Inode::put_cap_ref(int cap)
   return last;
 }
 
+void Client::get_cap_ref(Inode *in, int cap)
+{
+  if ((cap & CEPH_CAP_FILE_BUFFER) &&
+      in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
+    dout(5) << "get_cap_ref got first FILE_BUFFER ref on " << *in << dendl;
+    in->get();
+  }
+}
+
 void Client::put_cap_ref(Inode *in, int cap)
 {
   if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
@@ -1433,12 +1442,17 @@ void Client::put_cap_ref(Inode *in, int cap)
       signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
     }
     if (cap & CEPH_CAP_FILE_BUFFER) {
+      int last = in->cap_refs[CEPH_CAP_FILE_BUFFER];
       for (map<snapid_t,CapSnap>::iterator p = in->cap_snaps.begin();
 	   p != in->cap_snaps.end();
 	   p++)
 	p->second.dirty_data = 0;
       check_caps(in, false);
       signal_cond_list(in->waitfor_commit);
+      if (last) {
+	dout(5) << "put_cap_ref dropped last FILE_BUFFER ref on " << *in << dendl;
+	put_inode(in);
+      }
     }
   }
 }
@@ -4265,7 +4279,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     if (in->caps_issued_mask(CEPH_CAP_FILE_BUFFER)) {
       // do buffered write
       if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
-	in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
+	get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
       
       // wait? (this may block!)
       objectcacher->wait_for_write(size, client_lock);
@@ -4287,7 +4301,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
-    in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     
     filer->write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);

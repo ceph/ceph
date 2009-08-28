@@ -1015,6 +1015,7 @@ protected:
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush, __u64 tid);
   void check_caps(Inode *in, bool is_delayed);
+  void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
   void wait_sync_caps(__u64 want);
