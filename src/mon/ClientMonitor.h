@@ -93,6 +93,8 @@ private:
   bool preprocess_command(MMonCommand *m);  // true if processed.
   bool prepare_command(MMonCommand *m);
 
+  bool should_propose(double& delay);
+
  public:
   ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
   

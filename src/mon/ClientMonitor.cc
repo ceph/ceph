@@ -366,6 +366,12 @@ void ClientMonitor::_unmounted(MClientUnmount *m)
   }
 }
 
+
+bool ClientMonitor::should_propose(double& delay)
+{
+  return true;  // never delay!  we want fast mounts!
+}
+
 void ClientMonitor::tick()
 {
   if (!paxos->is_active()) return;
