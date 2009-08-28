@@ -325,7 +325,8 @@ void MDS::forward_message_mds(Message *m, int mds)
      * the affected metadata may migrate, in which case the new authority
      * won't have the metareq_id in the completed request map.
      */
-    bool client_must_resend = !creq->can_forward();
+    // NEW: always make the client resend!  
+    bool client_must_resend = true;  //!creq->can_forward();
 
     // tell the client where it should go
     messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd(),
