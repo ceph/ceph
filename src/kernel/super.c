@@ -44,22 +44,9 @@ const char *ceph_file_part(const char *s, int len)
 static void ceph_put_super(struct super_block *s)
 {
 	struct ceph_client *cl = ceph_client(s);
-	int rc;
-	int seconds = 15;
 
 	dout("put_super\n");
 	ceph_mdsc_close_sessions(&cl->mdsc);
-	ceph_monc_request_umount(&cl->monc);
-
-	/* don't wait on umount -f */
-	if (cl->mount_state != CEPH_MOUNT_SHUTDOWN) {
-		rc = wait_event_timeout(cl->mount_wq,
-				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
-				seconds*HZ);
-		if (rc == 0)
-			pr_err("ceph umount timedout after %d s\n", seconds);
-	}
-
 	return;
 }
 
@@ -267,7 +254,6 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_MON_GET_MAP: return "mon_get_map";
 	case CEPH_MSG_CLIENT_MOUNT: return "client_mount";
 	case CEPH_MSG_CLIENT_MOUNT_ACK: return "client_mount_ack";
-	case CEPH_MSG_CLIENT_UNMOUNT: return "client_unmount";
 	case CEPH_MSG_STATFS: return "statfs";
 	case CEPH_MSG_STATFS_REPLY: return "statfs_reply";
 	case CEPH_MSG_MDS_GETMAP: return "mds_getmap";

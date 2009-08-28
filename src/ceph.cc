@@ -150,13 +150,7 @@ void handle_notify(MMonObserveNotify *notify)
   case PAXOS_CLIENTMAP:
     {
       bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_latest) {
-	clientmap.decode(p);
-      } else  {
-	ClientMap::Incremental inc;
-	inc.decode(p);
-	clientmap.apply_incremental(inc);
-      }
+      clientmap.decode(p);
       dout(0) << "client " << clientmap << dendl;
     }
     break;

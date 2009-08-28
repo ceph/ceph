@@ -406,7 +406,6 @@ bool Monitor::dispatch_impl(Message *m)
 
       // clients
     case CEPH_MSG_CLIENT_MOUNT:
-    case CEPH_MSG_CLIENT_UNMOUNT:
       paxos_service[PAXOS_CLIENTMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 

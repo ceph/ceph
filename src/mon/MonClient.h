@@ -45,7 +45,6 @@ private:
   SafeTimer timer;
   bool mounted;
   int mounters;
-  bool unmounting;
   Cond mount_cond, map_cond;
 
 
@@ -66,7 +65,6 @@ private:
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
   void handle_mount_ack(MClientMountAck* m);
-  void handle_unmount(Message* m);
  public:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),
@@ -74,14 +72,12 @@ private:
     mounted = false;
     mounters = 0;
     mount_timeout_event = 0;
-    unmounting = false;
   }
 
   int build_initial_monmap();
   int get_monmap();
 
   int mount(double mount_timeout);
-  int unmount();
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {

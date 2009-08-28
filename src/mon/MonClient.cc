@@ -20,7 +20,6 @@
 #include "include/nstring.h"
 
 #include "messages/MClientMountAck.h"
-#include "messages/MClientUnmount.h"
 #include "common/ConfUtils.h"
 
 #include "MonClient.h"
@@ -162,9 +161,6 @@ bool MonClient::dispatch_impl(Message *m)
     handle_mount_ack((MClientMountAck*)m);
     return true;
 
-  case CEPH_MSG_CLIENT_UNMOUNT:
-    handle_unmount((MClientUnmount*)m);
-    return true;
   }
 
   return false;
@@ -268,33 +264,6 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
   mount_cond.Signal();
 
-  delete m;
-}
-
-
-// UNMOUNT
-int MonClient::unmount()
-{
-  Mutex::Locker lock(monc_lock);
-
-  // fixme: this should retry and time out too
-
-  int mon = monmap.pick_mon();
-  dout(2) << "sending client_unmount to mon" << mon << dendl;
-  messenger->send_message(new MClientUnmount, monmap.get_inst(mon));
-  
-  while (mounted)
-    mount_cond.Wait(monc_lock);
-
-  dout(2) << "unmounted." << dendl;
-  return 0;
-}
-
-void MonClient::handle_unmount(Message* m)
-{
-  Mutex::Locker lock(monc_lock);
-  mounted = false;
-  mount_cond.Signal();
   delete m;
 }
 

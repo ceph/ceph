@@ -550,7 +550,6 @@ noinst_HEADERS = \
         messages/MClientRequestForward.h\
         messages/MClientSession.h\
         messages/MClientSnap.h\
-        messages/MClientUnmount.h\
         messages/MDentryUnlink.h\
         messages/MDirUpdate.h\
         messages/MDiscover.h\

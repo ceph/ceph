@@ -37,7 +37,6 @@ using namespace std;
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
-#include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -1078,7 +1077,7 @@ void Client::handle_client_reply(MClientReply *reply)
       request->put(); // for the dumb data structure
     }
   }
-  if(unmounting)
+  if (unmounting)
     mount_cond.Signal();
 }
 
@@ -2711,7 +2710,6 @@ int Client::unmount()
 
   // leave cluster
   client_lock.Unlock();
-  monclient->unmount();
   client_lock.Lock();
   mounted = false;
 

@@ -65,7 +65,6 @@ using namespace std;
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
-#include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -310,9 +309,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case CEPH_MSG_CLIENT_MOUNT_ACK:
     m = new MClientMountAck;
-    break;
-  case CEPH_MSG_CLIENT_UNMOUNT:
-    m = new MClientUnmount;
     break;
   case CEPH_MSG_CLIENT_SESSION:
     m = new MClientSession;

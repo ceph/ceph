@@ -253,7 +253,6 @@ ceph_full_name_hash(const char *name, unsigned int len)
 #define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_CLIENT_MOUNT           10
 #define CEPH_MSG_CLIENT_MOUNT_ACK       11
-#define CEPH_MSG_CLIENT_UNMOUNT         12
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 

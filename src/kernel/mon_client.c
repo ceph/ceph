@@ -326,7 +326,7 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	void *p, *end;
 	s32 result;
 	u32 len;
-	s32 cnum;
+	s64 cnum;
 	struct ceph_entity_addr addr;
 	int err = -EINVAL;
 
@@ -339,7 +339,7 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	p = msg->front.iov_base;
 	end = p + msg->front.iov_len;
 
-	ceph_decode_32_safe(&p, end, cnum, bad);
+	ceph_decode_64_safe(&p, end, cnum, bad);
 	ceph_decode_need(&p, end, sizeof(addr), bad);
 	ceph_decode_copy(&p, &addr, sizeof(addr));
 	
@@ -364,23 +364,11 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	}
 	p += len;
 
-	ceph_decode_32_safe(&p, end, len, bad);
-	dout("ticket len %d\n", len);
-	ceph_decode_need(&p, end, len, bad);
-
-	client->signed_ticket = kmalloc(len, GFP_KERNEL);
-	if (!client->signed_ticket) {
-		pr_err("ceph ENOMEM allocating %d bytes for client ticket\n",
-		       len);
-		err = -ENOMEM;
-		goto out_free;
-	}
-
-	memcpy(client->signed_ticket, p, len);
-	client->signed_ticket_len = len;
-
 	client->monc.monmap = monmap;
 	kfree(old);
+
+	client->signed_ticket = NULL;
+	client->signed_ticket_len = 0;
 
 	client->whoami = cnum;
 	client->msgr->inst.name.num = cpu_to_le32(cnum);
@@ -399,8 +387,6 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 
 bad:
 	pr_err("ceph error decoding mount_ack message\n");
-out_free:
-	kfree(monmap);
 out:
 	client->mount_err = err;
 	mutex_lock(&monc->req_mutex);
@@ -410,52 +396,6 @@ out:
 }
 
 
-
-/*
- * umount
- */
-static void request_umount(struct ceph_mon_client *monc, int newmon)
-{
-	struct ceph_msg *msg;
-	struct ceph_client_mount *h;
-	int err;
-
-	dout("request_umount\n");
-	err = open_session(monc, newmon);
-	if (err)
-		return;
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, sizeof(*h), 0, 0, NULL);
-	if (IS_ERR(msg))
-		return;
-	h = msg->front.iov_base;
-	h->have_version = 0;
-	ceph_con_send(monc->con, msg);
-}
-
-void ceph_monc_request_umount(struct ceph_mon_client *monc)
-{
-	struct ceph_client *client = monc->client;
-
-	/* don't bother if forced unmount */
-	if (client->mount_state == CEPH_MOUNT_SHUTDOWN)
-		return;
-
-	mutex_lock(&monc->req_mutex);
-	monc->umountreq.delay = BASE_DELAY_INTERVAL;
-	request_umount(monc, 0);
-	reschedule_timeout(&monc->umountreq);
-	mutex_unlock(&monc->req_mutex);
-}
-
-static void handle_umount(struct ceph_mon_client *monc, struct ceph_msg *msg)
-{
-	dout("handle_umount\n");
-	mutex_lock(&monc->req_mutex);
-	cancel_timeout(&monc->umountreq);
-	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
-	mutex_unlock(&monc->req_mutex);
-	wake_up(&monc->client->mount_wq);
-}
 
 
 /*
@@ -615,7 +555,6 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	init_request_type(monc, &monc->mdsreq, request_mdsmap);
 	init_request_type(monc, &monc->osdreq, request_osdmap);
 	init_request_type(monc, &monc->mountreq, request_mount);
-	init_request_type(monc, &monc->umountreq, request_umount);
 	mutex_init(&monc->req_mutex);
 	monc->want_mdsmap = 0;
 	monc->want_osdmap = 0;
@@ -629,7 +568,6 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 	cancel_timeout(&monc->mdsreq);
 	cancel_timeout(&monc->osdreq);
 	cancel_timeout(&monc->mountreq);
-	cancel_timeout(&monc->umountreq);
 	cancel_delayed_work_sync(&monc->statfs_delayed_work);
 	if (monc->con) {
 		monc->con->ops->put(monc->con);
@@ -653,9 +591,6 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 		break;
 	case CEPH_MSG_STATFS_REPLY:
 		handle_statfs_reply(monc, msg);
-		break;
-	case CEPH_MSG_CLIENT_UNMOUNT:
-		handle_umount(monc, msg);
 		break;
 
 	case CEPH_MSG_MDS_MAP:

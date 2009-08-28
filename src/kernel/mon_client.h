@@ -63,9 +63,9 @@ struct ceph_mon_client {
 	u64 last_tid;
 	struct delayed_work statfs_delayed_work;
 
-	/* mds/osd map or umount requests */
+	/* mds/osd map or mount requests */
 	struct mutex req_mutex;
-	struct ceph_mon_request mdsreq, osdreq, mountreq, umountreq;
+	struct ceph_mon_request mdsreq, osdreq, mountreq;
 	u32 want_mdsmap;
 	u32 want_osdmap;
 
