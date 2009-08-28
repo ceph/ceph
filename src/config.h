@@ -126,6 +126,7 @@ struct md_config_t {
   // mon
   const char *mon_data;
   int mon_tick_interval;
+  double mon_subscribe_interval;
   int mon_osd_down_out_interval;
   float mon_lease;
   float mon_lease_renew_interval;

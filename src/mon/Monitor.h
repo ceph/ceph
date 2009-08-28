@@ -43,6 +43,7 @@ class PaxosService;
 
 class MMonGetMap;
 class MMonObserve;
+class MMonSubscribe;
 class MClass;
 
 class Monitor : public Dispatcher {
@@ -126,6 +127,7 @@ public:
 
 
   // messages
+  void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   void handle_shutdown(Message *m);
   void handle_command(class MMonCommand *m);

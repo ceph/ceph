@@ -348,6 +348,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
 	OPTION(mon_data, 0, OPT_STR, ""),
 	OPTION(mon_tick_interval, 0, OPT_INT, 5),
+	OPTION(mon_subscribe_interval, 0, OPT_DOUBLE, 300),
 	OPTION(mon_osd_down_out_interval, 0, OPT_INT, 300), // seconds
 	OPTION(mon_lease, 0, OPT_FLOAT, 5),  		    // lease interval
 	OPTION(mon_lease_renew_interval, 0, OPT_FLOAT, 3), // on leader, to renew the lease

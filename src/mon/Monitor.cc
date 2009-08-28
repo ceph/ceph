@@ -36,6 +36,9 @@
 
 #include "messages/MClientMountAck.h"
 
+#include "messages/MMonSubscribe.h"
+#include "messages/MMonSubscribeAck.h"
+
 #include "common/Timer.h"
 #include "common/Clock.h"
 
@@ -385,6 +388,10 @@ bool Monitor::dispatch_impl(Message *m)
       handle_command((MMonCommand*)m);
       break;
 
+    case CEPH_MSG_MON_SUBSCRIBE:
+      handle_subscribe((MMonSubscribe*)m);
+      break;
+
       // OSDs
     case CEPH_MSG_OSD_GETMAP:
     case MSG_OSD_FAILURE:
@@ -469,6 +476,30 @@ bool Monitor::dispatch_impl(Message *m)
   lock.Unlock();
 
   return true;
+}
+
+void Monitor::handle_subscribe(MMonSubscribe *m)
+{
+  dout(10) << "handle_subscribe " << *m << dendl;
+
+  utime_t until = g_clock.now();
+  until += g_conf.mon_subscribe_interval;
+
+  for (map<nstring,version_t>::iterator p = m->what.begin();
+       p != m->what.end();
+       p++) {
+    if (p->first == "osdmap")
+      osdmon()->subscribe(m->get_source_inst(), p->second, until);
+    else if (p->first == "mdsmap")
+      mdsmon()->subscribe(m->get_source_inst(), p->second, until);
+    else
+      dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
+  }
+
+  messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
+			  m->get_source_inst());
+
+  delete m;
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)

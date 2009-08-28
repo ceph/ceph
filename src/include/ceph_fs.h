@@ -255,6 +255,8 @@ ceph_full_name_hash(const char *name, unsigned int len)
 #define CEPH_MSG_CLIENT_MOUNT_ACK       11
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
+#define CEPH_MSG_MON_SUBSCRIBE          15
+#define CEPH_MSG_MON_SUBSCRIBE_ACK      16
 
 /* client <-> mds */
 #define CEPH_MSG_MDS_GETMAP             20

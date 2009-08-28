@@ -594,6 +594,8 @@ noinst_HEADERS = \
         messages/MMonObserve.h\
         messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
+        messages/MMonSubscribe.h\
+        messages/MMonSubscribeAck.h\
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
         messages/MOSDFailure.h\
@@ -639,6 +641,7 @@ noinst_HEADERS = \
         mon/PGMonitor.h\
         mon/Paxos.h\
         mon/PaxosService.h\
+        mon/SubscriptionMap.h\
         mon/mon_types.h\
 	mount/mtab.c\
         msg/Dispatcher.h\
