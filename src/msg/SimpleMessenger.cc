@@ -623,10 +623,11 @@ int SimpleMessenger::Pipe::accept()
 
       if (connect.connect_seq == existing->connect_seq) {
 	// connection race?
-	if (peer_addr < rank->rank_addr) {
+	if (peer_addr < rank->rank_addr ||
+	    existing->policy.server) {
 	  // incoming wins
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << connect.connect_seq << ", replacing my attempt" << dendl;
+		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
 		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
@@ -1384,8 +1385,12 @@ void SimpleMessenger::Pipe::writer()
 
     // connect?
     if (state == STATE_CONNECTING) {
-      connect();
-      continue;
+      if (policy.server) {
+	state = STATE_STANDBY;
+      } else {
+	connect();
+	continue;
+      }
     }
     
     if (state == STATE_CLOSING) {
