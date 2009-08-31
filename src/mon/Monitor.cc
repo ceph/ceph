@@ -499,13 +499,13 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   utime_t until = g_clock.now();
   until += g_conf.mon_subscribe_interval;
 
-  for (map<nstring,version_t>::iterator p = m->what.begin();
+  for (map<nstring,MMonSubscribe::sub_rec>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
     if (p->first == "osdmap")
-      osdmon()->subscribe(m->get_source_inst(), p->second, until);
+      osdmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
     else if (p->first == "mdsmap")
-      mdsmon()->subscribe(m->get_source_inst(), p->second, until);
+      mdsmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
     else
       dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
   }

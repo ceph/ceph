@@ -23,6 +23,7 @@
 
 #include "common/Timer.h"
 
+#include "messages/MMonSubscribe.h"
 
 class MonMap;
 class MMonMap;
@@ -67,16 +68,26 @@ private:
 
   // mon subscriptions
 private:
-  map<nstring,version_t> sub_have;  // my subs, and current versions
+  map<nstring,MMonSubscribe::sub_rec> sub_have;  // my subs, and current versions
   utime_t sub_renew_sent, sub_renew_after;
 
 public:
   void renew_subs();
-  void update_sub(nstring what, version_t have) {
-    bool had = sub_have.count(what);
-    sub_have[what] = have;
-    if (!had)
-      renew_subs();
+  void sub_want(nstring what, version_t have) {
+    sub_have[what].have = have;
+    sub_have[what].onetime = false;
+  }
+  void sub_want_onetime(nstring what, version_t have) {
+    sub_have[what].have = have;
+    sub_have[what].onetime = true;
+  }
+  void sub_got(nstring what, version_t have) {
+    if (sub_have.count(what)) {
+      if (sub_have[what].onetime)
+	sub_have.erase(what);
+      else
+	sub_have[what].have = have;
+    }
   }
   void handle_subscribe_ack(MMonSubscribeAck* m);
 

@@ -33,7 +33,16 @@ struct SubscriptionMap {
   void trim(utime_t now) {
     map<entity_inst_t, sub_info>::iterator p = subs.begin();
     while (p != subs.end())
-      if (p->second.until < now)
+      if (p->second.until != utime_t() &&
+	  p->second.until < now)
+	subs.erase(p++);
+      else
+	p++;
+  }
+  void trim_onetime() {
+    map<entity_inst_t, sub_info>::iterator p = subs.begin();
+    while (p != subs.end())
+      if (p->second.until == utime_t())
 	subs.erase(p++);
       else
 	p++;

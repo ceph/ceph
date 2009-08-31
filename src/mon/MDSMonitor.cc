@@ -563,7 +563,8 @@ void MDSMonitor::check_subs()
       send_full(p->first);
       p->second.last = mdsmap.get_epoch();
     }
-  }      
+  }
+  subs.trim_onetime();
 }
 
 

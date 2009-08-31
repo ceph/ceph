@@ -128,7 +128,7 @@ else
         lockdep = 1
 	debug mon = 20
         debug paxos = 20
-        debug ms = 1'
+        debug ms = 20'
     COSDDEBUG='
         lockdep = 1
         debug ms = 1
@@ -137,7 +137,7 @@ else
         debug filestore = 10'
     CMDSDEBUG='
         lockdep = 1
-        debug ms = 1
+        debug ms = 20
         debug mds = 20
         mds log max segments = 2'
 fi

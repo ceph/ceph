@@ -1202,7 +1202,7 @@ void Client::handle_mds_map(MMDSMap* m)
   delete oldmap;
   delete m;
 
-  monclient->update_sub("mdsmap", mdsmap->get_epoch());
+  monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
 
 void Client::send_reconnect(int mds)
@@ -2554,7 +2554,8 @@ int Client::mount()
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << dendl;
 
-  monclient->update_sub("mdsmap", mdsmap->get_epoch());
+  monclient->sub_want("mdsmap", mdsmap->get_epoch());
+  monclient->renew_subs();
 
   
   // hack: get+pin root inode.

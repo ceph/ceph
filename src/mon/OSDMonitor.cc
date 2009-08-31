@@ -856,7 +856,8 @@ void OSDMonitor::check_subs()
       send_latest(p->first, p->second.last);
       p->second.last = osdmap.get_epoch();
     }
-  }      
+  }
+  subs.trim_onetime();
 }
 
 
