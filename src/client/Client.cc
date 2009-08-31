@@ -1085,7 +1085,7 @@ void Client::handle_client_reply(MClientReply *reply)
 // ------------------------
 // incoming messages
 
-bool Client::dispatch_impl(Message *m)
+bool Client::ms_dispatch(Message *m)
 {
   client_lock.Lock();
 

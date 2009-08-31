@@ -150,7 +150,7 @@ int MonClient::get_monmap()
 }
 
 
-bool MonClient::dispatch_impl(Message *m)
+bool MonClient::ms_dispatch(Message *m)
 {
   dout(10) << "dispatch " << *m << dendl;
 

@@ -44,7 +44,7 @@ Cond cond;
 __u64 received = 0;
 
 class Admin : public Dispatcher {
-  bool dispatch_impl(Message *m) {
+  bool ms_dispatch(Message *m) {
 
     //cerr << "got ping from " << m->get_source() << std::endl;
     dout(0) << "got ping from " << m->get_source() << dendl;

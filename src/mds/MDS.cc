@@ -1146,7 +1146,7 @@ void MDS::suicide()
 
 
 
-bool MDS::dispatch_impl(Message *m)
+bool MDS::ms_dispatch(Message *m)
 {
   bool ret;
 

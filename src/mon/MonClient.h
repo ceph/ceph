@@ -45,7 +45,7 @@ private:
   int mounters;
   Cond mount_cond, map_cond;
 
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
   void handle_monmap(MMonMap *m);
 
   void ms_handle_reset(const entity_addr_t& peer);

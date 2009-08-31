@@ -102,7 +102,7 @@ void LogClient::handle_log_ack(MLogAck *m)
   delete m;
 }
 
-bool LogClient::dispatch_impl(Message *m)
+bool LogClient::ms_dispatch(Message *m)
 {
   dout(20) << "dispatch " << m << dendl;
 

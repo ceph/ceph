@@ -57,7 +57,7 @@ class RadosClient : public Dispatcher
   SimpleMessenger rank;
 
   bool _dispatch(Message *m);
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
 
   Objecter *objecter;
 
@@ -335,7 +335,7 @@ RadosClient::~RadosClient()
 }
 
 
-bool RadosClient::dispatch_impl(Message *m)
+bool RadosClient::ms_dispatch(Message *m)
 {
   bool ret;
 

@@ -303,7 +303,7 @@ class MDS : public Dispatcher {
   int get_req_rate() { return req_rate; }
 
  private:
-  virtual bool dispatch_impl(Message *m);
+  virtual bool ms_dispatch(Message *m);
  public:
   MDS(const char *n, Messenger *m, MonClient *mc);
   ~MDS();

@@ -204,7 +204,7 @@ public:
 
   struct HeartbeatDispatcher : public Dispatcher {
   private:
-    bool dispatch_impl(Message *m) {
+    bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     };
   public:
@@ -812,7 +812,7 @@ protected:
   } remove_wq;
 
  private:
-  virtual bool dispatch_impl(Message *m);
+  virtual bool ms_dispatch(Message *m);
  public:
   OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0);
   ~OSD();

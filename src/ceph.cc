@@ -336,7 +336,7 @@ void handle_ack(MMonCommandAck *ack)
 }
 
 class Admin : public Dispatcher {
-  bool dispatch_impl(Message *m) {
+  bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
     case MSG_MON_COMMAND_ACK:
       handle_ack((MMonCommandAck*)m);

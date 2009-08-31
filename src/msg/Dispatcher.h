@@ -25,24 +25,41 @@ class Dispatcher {
   Dispatcher *next;
 
   // how i receive messages
-  virtual bool dispatch_impl(Message *m) = 0;
-  bool _dispatch(Message *m) {
+  virtual bool ms_dispatch(Message *m) = 0;
+  bool _ms_deliver_dispatch(Message *m) {
     bool ret = false;
     if (next)
-      ret = next->_dispatch(m);
+      ret = next->_ms_deliver_dispatch(m);
     if (!ret)
-      ret = dispatch_impl(m);
+      ret = ms_dispatch(m);
     return ret;
   }
 public:
-  virtual void dispatch(Message *m) {
-    if (!_dispatch(m)) {
+  void ms_deliver_dispatch(Message *m) {
+    if (!_ms_deliver_dispatch(m)) {
       generic_dout(0) << "unhandled message " << m << " " << *m
 		      << " from " << m->get_orig_source_inst()
 		      << dendl;
       assert(0);
     }
   }
+
+  void ms_deliver_handle_reset(const entity_addr_t& peer) {
+    ms_handle_reset(peer);
+    if (next)
+      next->ms_handle_reset(peer);
+  }
+  void ms_deliver_handle_remote_reset(const entity_addr_t& peer) {
+    ms_handle_remote_reset(peer);
+    if (next)
+      next->ms_handle_remote_reset(peer);
+  }
+  void ms_deliver_handle_failure(Message *m, const entity_addr_t& peer) {
+    ms_handle_failure(m, peer);
+    if (next)
+      next->ms_handle_failure(m, peer);
+  }
+
 
 public:
   virtual ~Dispatcher() { }

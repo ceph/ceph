@@ -967,7 +967,7 @@ protected:
 
   // friends
   friend class SyntheticClient;
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
 
  public:
   Client(Messenger *m, MonClient *mc);

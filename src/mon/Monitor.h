@@ -166,7 +166,7 @@ public:
   };
 
  private:
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

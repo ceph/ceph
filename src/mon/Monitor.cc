@@ -354,7 +354,7 @@ void Monitor::stop_cluster()
 }
 
 
-bool Monitor::dispatch_impl(Message *m)
+bool Monitor::ms_dispatch(Message *m)
 {
   // verify protocol version
   if (m->get_orig_source().is_mon() &&

@@ -32,7 +32,7 @@ class LogClient : public Dispatcher {
   Messenger *messenger;
   MonMap *monmap;
 
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
   bool is_synchronous;
   void _send_log();
 

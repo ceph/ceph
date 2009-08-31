@@ -91,7 +91,7 @@ protected:
   // dispatch incoming messages
   virtual void dispatch(Message *m) {
     assert(dispatcher);
-    dispatcher->dispatch(m);
+    dispatcher->ms_deliver_dispatch(m);
   }
 
   // shutdown
