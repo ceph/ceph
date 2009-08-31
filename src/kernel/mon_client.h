@@ -51,9 +51,11 @@ struct ceph_mon_statfs_request {
 
 struct ceph_mon_client {
 	struct ceph_client *client;
-	int last_mon;                       /* last monitor i contacted */
 	struct ceph_monmap *monmap;
 
+	int cur_mon;                       /* last monitor i contacted */
+	bool subscribed;
+	unsigned long sub_sent, sub_renew_after;
 	struct ceph_connection *con;
 
 	/* pending statfs requests */
@@ -61,12 +63,11 @@ struct ceph_mon_client {
 	struct radix_tree_root statfs_request_tree;
 	int num_statfs_requests;
 	u64 last_tid;
-	struct delayed_work statfs_delayed_work;
 
 	/* mds/osd map or mount requests */
 	struct mutex req_mutex;
-	struct ceph_mon_request mdsreq, osdreq, mountreq;
-	u32 want_mdsmap;
+	struct ceph_mon_request osdreq, mountreq;
+	u32 have_mdsmap;
 	u32 want_osdmap;
 
 	struct dentry *debugfs_file;
@@ -85,15 +86,12 @@ extern void ceph_monc_stop(struct ceph_mon_client *monc);
  * periodically rerequest the map from the monitor cluster until we
  * get what we want.
  */
-extern void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, u32 want);
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 have);
 
 extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want);
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 have);
 
 extern void ceph_monc_request_mount(struct ceph_mon_client *monc);
-extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
-extern void ceph_monc_request_umount(struct ceph_mon_client *monc);
 
 extern int ceph_monc_do_statfs(struct ceph_mon_client *monc,
 			       struct ceph_statfs *buf);

@@ -126,8 +126,8 @@ static int monc_show(struct seq_file *s, void *p)
 
 	if (monc->want_osdmap)
 		seq_printf(s, "want osdmap %u\n", (unsigned)monc->want_osdmap);
-	if (monc->want_mdsmap)
-		seq_printf(s, "want mdsmap %u\n", (unsigned)monc->want_mdsmap);
+	if (monc->have_mdsmap)
+		seq_printf(s, "have mdsmap %u\n", (unsigned)monc->have_mdsmap);
 
 	while (nexttid < monc->last_tid) {
 		got = radix_tree_gang_lookup(&monc->statfs_request_tree,

@@ -1462,8 +1462,6 @@ static int __do_request(struct ceph_mds_client *mdsc,
 	    ceph_mdsmap_get_state(mdsc->mdsmap, mds) < CEPH_MDS_STATE_ACTIVE) {
 		dout("do_request no mds or not active, waiting for map\n");
 		list_add(&req->r_wait, &mdsc->waiting_for_map);
-		ceph_monc_request_mdsmap(&mdsc->client->monc,
-					 mdsc->mdsmap->m_epoch+1);
 		goto out;
 	}
 
@@ -2526,7 +2524,6 @@ static void delayed_work(struct work_struct *work)
 		container_of(work, struct ceph_mds_client, delayed_work.work);
 	int renew_interval;
 	int renew_caps;
-	u32 want_map = 0;
 
 	dout("mdsc delayed_work\n");
 	ceph_check_delayed_caps(mdsc, 0);
@@ -2555,7 +2552,6 @@ static void delayed_work(struct work_struct *work)
 				pr_info("ceph mds%d session probably timed out,"
 					" requesting mds map\n", s->s_mds);
 			}
-			want_map = mdsc->mdsmap->m_epoch + 1;
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
 			/* this mds is failed or recovering, just wait */
@@ -2577,9 +2573,6 @@ static void delayed_work(struct work_struct *work)
 		mutex_lock(&mdsc->mutex);
 	}
 	mutex_unlock(&mdsc->mutex);
-
-	if (want_map)
-		ceph_monc_request_mdsmap(&mdsc->client->monc, want_map);
 
 	schedule_delayed(mdsc);
 }

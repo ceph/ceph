@@ -252,6 +252,8 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_PING: return "ping";
 	case CEPH_MSG_MON_MAP: return "mon_map";
 	case CEPH_MSG_MON_GET_MAP: return "mon_get_map";
+	case CEPH_MSG_MON_SUBSCRIBE: return "mon_subscribe";
+	case CEPH_MSG_MON_SUBSCRIBE_ACK: return "mon_subscribe_ack";
 	case CEPH_MSG_CLIENT_MOUNT: return "client_mount";
 	case CEPH_MSG_CLIENT_MOUNT_ACK: return "client_mount_ack";
 	case CEPH_MSG_STATFS: return "statfs";
