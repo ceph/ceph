@@ -41,6 +41,8 @@ using namespace std;
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 
+#include "auth/AuthProtocol.h"
+
 #include "include/librados.h"
 
 #define RADOS_LIST_MAX_ENTRIES 1024
@@ -303,7 +305,8 @@ bool RadosClient::init()
   monclient.mount(g_conf.client_mount_timeout);
 
   dout(0) << "librados: before monclient.authorize()" << dendl;
-  monclient.authorize(g_conf.client_mount_timeout);
+  monclient.authorize(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD,
+                      g_conf.client_mount_timeout);
 
   lock.Lock();
 

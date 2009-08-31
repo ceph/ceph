@@ -211,10 +211,12 @@ int MonClient::unmount(double timeout)
   return unmount_handler.do_op(timeout);
 }
 
-int MonClient::authorize(double mount_timeout)
+int MonClient::authorize(uint32_t want_keys, double mount_timeout)
 {
   Mutex::Locker l(auth_lock);
   int ret;
+
+  auth_client_handler.set_request_keys(want_keys);
 
   do {
     MonClientAuthHandler h(this);

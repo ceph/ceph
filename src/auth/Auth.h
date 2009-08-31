@@ -89,6 +89,9 @@ struct ServiceTicket {
   bufferlist enc_ticket;        // opaque to us
   string nonce;
   utime_t renew_after, expires;
+  bool has_key_flag;
+
+  ServiceTicket() : has_key_flag(false) {}
 
   // to build our ServiceTicket
   bool verify_authenticate_reply(CryptoKey& client_secret,
@@ -97,6 +100,8 @@ struct ServiceTicket {
   // to access the service
   utime_t build_authenticator(bufferlist& bl);
   bool verify_reply_authenticator(utime_t then, bufferlist& enc_reply);
+
+  bool has_key() { return has_key_flag; }
 };
 
 

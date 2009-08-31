@@ -20,6 +20,7 @@
 
 int AuthClientHandler::generate_request(bufferlist& bl)
 {
+  dout(0) << "status=" << status << dendl;
   if (status < 0) {
     return status;
   }
@@ -110,7 +111,8 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
 {
   CephXRequestHeader header;
 
-  if (!auth_session_key.length()) {
+  if (!auth_ticket.has_key()) {
+    dout(0) << "auth ticket: doesn't have key" << dendl;
     /* we first need to get the principle/auth session key */
 
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
@@ -120,19 +122,16 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
     return 0;
   }
 
-  if (!cur_cap) {
-    uint32_t left_caps = (want_caps ^ have_caps) & want_caps;
+  dout(0) << "want_keys=" << hex << want_keys << " have_keys=" << have_keys << dec << dendl;
 
-    for (uint32_t i=0; i<sizeof(left_caps)*8; i++) {
-      cur_cap = (left_caps & (1 << i));
-      if (cur_cap)
-        break;
-    }
-    if (!cur_cap) /* done */
-      return 0;
-  }
+  if (want_keys == have_keys)
+    return 0;
 
-  ::encode(cur_cap, bl);
+  header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY | want_keys;
+
+  ::encode(header, bl);
+  
+  auth_ts = auth_ticket.build_authenticator(bl);
 
   return 0;
 }
@@ -155,12 +154,20 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
       bufferptr p(PRINCIPAL_SECRET, sizeof(PRINCIPAL_SECRET) - 1);
       secret.set_secret(CEPH_SECRET_AES, p);
   
-      auth_ticket.verify_authenticate_reply(secret, indata);
+      if (!auth_ticket.verify_authenticate_reply(secret, indata)) {
+        dout(0) << "could not verify authenticate reply" << dendl;
+        return -EPERM;
+      }
+
+      if (want_keys)
+        ret = -EAGAIN;
     }
     break;
 
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
-    dout(0) << "FIXME: CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
+    dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
+    {
+    }
     break;
 
   case CEPHX_OPEN_SESSION:

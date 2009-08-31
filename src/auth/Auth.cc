@@ -90,7 +90,9 @@ bool ServiceTicket::verify_authenticate_reply(CryptoKey& client_secret,
   }
   if (!indata.end())
     return false;
-  
+
+  has_key_flag = true;
+
   return true;
 }
 
@@ -110,7 +112,7 @@ utime_t ServiceTicket::build_authenticator(bufferlist& bl)
   ::encode(nonce, info);
   session_key.encrypt(info, enc_info);
   ::encode(enc_info, bl);
-    return now;
+  return now;
 }
 
 /*
@@ -131,7 +133,8 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist& bl,
   CryptoKey session_key;
   {
     bufferlist bl;
-    service_secret.decrypt(enc_ticket, bl);
+    if (service_secret.decrypt(enc_ticket, bl) < 0)
+      return false;
     bufferlist::iterator p = bl.begin();
     ::decode(ticket, p);
     ::decode(session_key, p);
@@ -142,7 +145,8 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist& bl,
   string nonce;
   {
     bufferlist info;
-    session_key.decrypt(enc_info, info);
+    if (session_key.decrypt(enc_info, info) < 0)
+      return false;
     bufferlist::iterator p = info.begin();
     ::decode(timestamp, p);
     ::decode(nonce, p);
@@ -159,7 +163,8 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist& bl,
   bufferlist reply;
   timestamp += 1;
   ::encode(timestamp, reply);
-  session_key.encrypt(reply, enc_reply);
+  if (session_key.encrypt(reply, enc_reply) < 0)
+    return false;
 
   return true;
 }
@@ -171,13 +176,17 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist& bl,
 bool ServiceTicket::verify_reply_authenticator(utime_t then, bufferlist& enc_reply)
 {
   bufferlist reply;
-  session_key.decrypt(enc_reply, reply);
+  if (session_key.decrypt(enc_reply, reply) < 0)
+    return false;
   
   bufferlist::iterator p = reply.begin();
   utime_t later;
   ::decode(later, p);
-  if (then + 1 == later)
+  dout(0) << "later=" << later << " then=" << then << dendl;
+  if (then + 1 == later) {
     return true;
+  }
+
   return false;
 }
 

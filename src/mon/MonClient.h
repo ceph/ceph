@@ -168,7 +168,7 @@ private:
 
   int mount(double mount_timeout);
   int unmount(double timeout);
-  int authorize(double timeout);
+  int authorize(uint32_t want_keys, double timeout);
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {
