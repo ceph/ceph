@@ -53,8 +53,6 @@ void Objecter::init()
   assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
   maybe_request_map();
-  
-  //monc->update_sub("osdmap", 0);
 }
 
 void Objecter::shutdown() 
@@ -193,24 +191,14 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
   delete m;
 
-  //monc->update_sub("osdmap", osdmap->get_epoch());
+  monc->sub_got("osdmap", osdmap->get_epoch());
 }
 
 
 void Objecter::maybe_request_map()
 {
-  utime_t now;
-  assert (osdmap);
-  if (!osdmap->get_epoch() || last_epoch_requested <= osdmap->get_epoch()) goto yes;
-  now = g_clock.now();
-  if (now - last_epoch_requested_stamp > g_conf.objecter_map_request_interval) goto yes;
-  return;
-  
- yes:
-  dout(10) << "maybe_request_map requesting next osd map" << dendl;
-  last_epoch_requested_stamp = now;
-  last_epoch_requested = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
-  monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), last_epoch_requested));
+  dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
+  monc->sub_want_onetime("osdmap", osdmap->get_epoch());
 }
 
 

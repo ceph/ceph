@@ -184,9 +184,6 @@ class Objecter {
   int num_unacked;
   int num_uncommitted;
 
-  epoch_t last_epoch_requested;
-  utime_t last_epoch_requested_stamp;
-
   void maybe_request_map();
 
   version_t last_seen_version;
@@ -393,8 +390,6 @@ class Objecter {
     messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
-    last_epoch_requested(0),
-    last_seen_version(0),
     client_lock(l), timer(l)
   { }
   ~Objecter() { }

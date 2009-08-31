@@ -495,13 +495,16 @@ bool Monitor::ms_dispatch(Message *m)
 void Monitor::handle_subscribe(MMonSubscribe *m)
 {
   dout(10) << "handle_subscribe " << *m << dendl;
-
+  
+  bool reply = false;
   utime_t until = g_clock.now();
   until += g_conf.mon_subscribe_interval;
 
-  for (map<nstring,MMonSubscribe::sub_rec>::iterator p = m->what.begin();
+  for (map<nstring,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
+    if (!p->second.onetime)
+      reply = true;
     if (p->first == "osdmap")
       osdmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
     else if (p->first == "mdsmap")
@@ -510,8 +513,9 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
   }
 
-  messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval * 1000),
-			  m->get_source_inst());
+  if (reply)
+    messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval * 1000),
+			    m->get_source_inst());
 
   delete m;
 }
