@@ -209,7 +209,7 @@ void Objecter::maybe_request_map()
  yes:
   dout(10) << "maybe_request_map requesting next osd map" << dendl;
   last_epoch_requested_stamp = now;
-  last_epoch_requested = osdmap->get_epoch()+1;
+  last_epoch_requested = osdmap->get_epoch() ? osdmap->get_epoch()+1 : 0;
   monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), last_epoch_requested));
 }
 
