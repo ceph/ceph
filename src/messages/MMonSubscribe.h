@@ -18,22 +18,7 @@
 #include "msg/Message.h"
 
 struct MMonSubscribe : public Message {
-  struct sub_rec {
-    version_t have;
-    bool onetime;    // just one version, or keep sending them?
-    
-    void encode(bufferlist& bl) const {
-      ::encode(have, bl);
-      ::encode(onetime, bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      ::decode(have, bl);
-      ::decode(onetime, bl);
-    }
-  };
-  WRITE_CLASS_ENCODER(sub_rec)
-
-  map<nstring, sub_rec> what;
+  map<nstring, ceph_mon_subscribe_item> what;
   
   MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE) {}
   
@@ -59,11 +44,5 @@ struct MMonSubscribe : public Message {
     ::encode(what, payload);
   }
 };
-WRITE_CLASS_ENCODER(MMonSubscribe::sub_rec)
-
-static inline ostream& operator<<(ostream& out, const MMonSubscribe::sub_rec& r)
-{
-  return out << r.have << (r.onetime ? "(onetime)":"(persistent)");
-}
 
 #endif

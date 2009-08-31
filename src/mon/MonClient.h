@@ -68,7 +68,7 @@ private:
 
   // mon subscriptions
 private:
-  map<nstring,MMonSubscribe::sub_rec> sub_have;  // my subs, and current versions
+  map<nstring,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
   utime_t sub_renew_sent, sub_renew_after;
 
 public:
@@ -78,8 +78,11 @@ public:
     sub_have[what].onetime = false;
   }
   void sub_want_onetime(nstring what, version_t have) {
-    sub_have[what].have = have;
-    sub_have[what].onetime = true;
+    if (sub_have.count(what) == 0) {
+      sub_have[what].have = have;
+      sub_have[what].onetime = true;
+      renew_subs();
+    }
   }
   void sub_got(nstring what, version_t have) {
     if (sub_have.count(what)) {

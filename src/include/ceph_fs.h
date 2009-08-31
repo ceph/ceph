@@ -313,8 +313,9 @@ struct ceph_client_mount {
 	__le64 have_version;
 } __attribute__ ((packed));
 
-struct ceph_client_unmount {
-	__le64 have_version;
+struct ceph_mon_subscribe_item {
+	__le64 have;
+	__u8 onetime;
 } __attribute__ ((packed));
 
 /*
