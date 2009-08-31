@@ -35,6 +35,8 @@ using namespace std;
 
 #include "messages/MPing.h"
 
+#include "messages/MRoute.h"
+
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MOSDPGTemp.h"
@@ -128,7 +130,18 @@ using namespace std;
 #define DEBUGLVL  10    // debug level of output
 
 
-
+void Message::encode()
+{
+  // encode and copy out of *m
+  if (empty_payload())
+    encode_payload();
+  calc_front_crc();
+  
+  if (!g_conf.ms_nocrc)
+    calc_data_crc();
+  else
+    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
+}
 
 Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle, bufferlist& data)
@@ -224,6 +237,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case CEPH_MSG_PING:
     m = new MPing();
+    break;
+  case MSG_ROUTE:
+    m = new MRoute;
     break;
     
   case CEPH_MSG_MON_MAP:

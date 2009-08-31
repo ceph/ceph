@@ -217,6 +217,8 @@ WRITE_RAW_ENCODER(ceph_frag_tree_split)
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
 WRITE_RAW_ENCODER(ceph_osd_op)
+WRITE_RAW_ENCODER(ceph_msg_header)
+WRITE_RAW_ENCODER(ceph_msg_footer)
 
 WRITE_RAW_ENCODER(ceph_mon_statfs)
 WRITE_RAW_ENCODER(ceph_mon_statfs_reply)

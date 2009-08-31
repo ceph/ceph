@@ -17,6 +17,7 @@
  
 /* public message types */
 #include "include/types.h"
+#include "config.h"
 
 // monitor internal
 #define MSG_MON_ELECTION           60
@@ -38,7 +39,10 @@
 #define MSG_POOLOP                 49
 #define MSG_POOLOPREPLY            48
 
+#define MSG_ROUTE                  47
+
 #define MSG_PAXOS                  40
+
 
 // osd internal
 #define MSG_OSD_PING         70
@@ -239,7 +243,9 @@ public:
   virtual void print(ostream& out) {
     out << get_type_name();
   }
-  
+
+  void encode();
+
 };
 
 extern Message *decode_message(ceph_msg_header &header, ceph_msg_footer& footer,

@@ -33,6 +33,7 @@
 
 #include "messages/MMonPaxos.h"
 #include "messages/MClass.h"
+#include "messages/MRoute.h"
 
 #include "messages/MClientMountAck.h"
 
@@ -309,7 +310,10 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 {
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_data(rdata);
-  messenger->send_message(reply, m->get_orig_source_inst());
+  if (m->get_source().is_mon())
+    messenger->send_message(new MRoute(m, m->get_orig_source_inst()), m->get_source_inst());
+  else 
+    messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
 }
 
@@ -375,6 +379,10 @@ bool Monitor::dispatch_impl(Message *m)
   {
     switch (m->get_type()) {
       
+    case MSG_ROUTE:
+      handle_route((MRoute*)m);
+      break;
+
       // misc
     case CEPH_MSG_MON_GET_MAP:
       handle_mon_get_map((MMonGetMap*)m);
@@ -496,7 +504,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
   }
 
-  messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
+  messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval * 1000),
 			  m->get_source_inst());
 
   delete m;
@@ -653,3 +661,12 @@ void Monitor::handle_class(MClass *m)
   }
 }
 
+
+void Monitor::handle_route(MRoute *m)
+{
+  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+  
+  messenger->send_message(m->msg, m->dest);
+  m->msg = NULL;
+  delete m;
+}
