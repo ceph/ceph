@@ -139,6 +139,11 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
+  void send_reply(Message *req, Message *reply, entity_inst_t to);
+  void send_reply(Message *req, Message *reply) {
+    send_reply(req, reply, req->get_orig_source_inst());
+  }
+
   void inject_args(const entity_inst_t& inst, string& args, version_t version) {
     vector<string> a(1);
     a[0] = args;

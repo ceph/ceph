@@ -23,7 +23,6 @@
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MMonCommand.h"
-#include "messages/MRoute.h"
 
 #include "common/Timer.h"
 
@@ -240,12 +239,7 @@ void ClientMonitor::_mounted(__s64 client, MClientMount *m)
   ack->addr = to.addr;
   mon->monmap->encode(ack->monmap_bl);
 
-  if (m->get_source().is_mon()) {
-    // route reply
-    mon->messenger->send_message(new MRoute(ack, to), m->get_source_inst());
-  } else {
-    mon->messenger->send_message(ack, to);
-  }
+  mon->send_reply(m, ack, to);
 
   // also send latest mds and osd maps
   //mon->mdsmon()->send_latest(to);

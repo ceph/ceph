@@ -310,11 +310,17 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 {
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_data(rdata);
-  if (m->get_source().is_mon())
-    messenger->send_message(new MRoute(m, m->get_orig_source_inst()), m->get_source_inst());
-  else 
-    messenger->send_message(reply, m->get_orig_source_inst());
+  send_reply(m, reply);
   delete m;
+}
+
+void Monitor::send_reply(Message *req, Message *reply, entity_inst_t to)
+{
+  if (req->get_source().is_mon()) {
+    messenger->send_message(new MRoute(reply, to), req->get_source_inst());
+  } else {
+    messenger->send_message(reply, to);
+  }
 }
 
 void Monitor::handle_observe(MMonObserve *m)
