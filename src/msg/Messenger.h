@@ -105,6 +105,7 @@ protected:
   virtual int lazy_send_message(Message *m, entity_inst_t dest) {
     return send_message(m, dest);
   }
+  virtual int send_keepalive(entity_inst_t dest) = 0;
 
   virtual void mark_down(entity_addr_t a) {}
 

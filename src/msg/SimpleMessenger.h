@@ -146,6 +146,7 @@ private:
     map<int, list<Message*> > q;  // priority queue
     list<Message*> sent;
     Cond cond;
+    bool keepalive;
     
     __u32 connect_seq, peer_global_seq;
     __u32 out_seq;
@@ -160,6 +161,7 @@ private:
     int write_message(Message *m);
     int do_sendmsg(int sd, struct msghdr *msg, int len);
     int write_ack(unsigned s);
+    int write_keepalive();
 
     void fault(bool silent=false, bool reader=false);
     void fail();
@@ -192,6 +194,7 @@ private:
       lock("SimpleMessenger::Pipe::lock"),
       state(st), 
       reader_running(false), writer_running(false),
+      keepalive(false),
       connect_seq(0), peer_global_seq(0),
       out_seq(0), in_seq(0), in_seq_acked(0),
       reader_thread(this), writer_thread(this) { }
@@ -227,6 +230,8 @@ private:
 
     __u32 get_out_seq() { return out_seq; }
 
+    bool is_queued() { return !q.empty() || keepalive; }
+
     void register_pipe();
     void unregister_pipe();
     void join() {
@@ -243,6 +248,15 @@ private:
     void _send(Message *m) {
       m->get();
       q[m->get_priority()].push_back(m);
+      cond.Signal();
+    }
+    void send_keepalive() {
+      lock.Lock();
+      _send_keepalive();
+      lock.Unlock();
+    }    
+    void _send_keepalive() {
+      keepalive = true;
       cond.Signal();
     }
     Message *_get_next_outgoing() {
@@ -374,7 +388,8 @@ private:
     int send_message(Message *m, entity_inst_t dest);
     int forward_message(Message *m, entity_inst_t dest);
     int lazy_send_message(Message *m, entity_inst_t dest);
-    
+    int send_keepalive(entity_inst_t dest);
+
     void mark_down(entity_addr_t a);
     void mark_up(entity_name_t a, entity_addr_t& i);
   };
@@ -455,6 +470,7 @@ public:
 
   void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
   void prepare_dest(const entity_inst_t& inst);
+  void send_keepalive(const entity_inst_t& addr);  
 
   // create a new messenger
   Endpoint *new_entity(entity_name_t addr);

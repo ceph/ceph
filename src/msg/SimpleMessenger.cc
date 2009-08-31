@@ -434,6 +434,12 @@ int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
   return 0;
 }
 
+int SimpleMessenger::Endpoint::send_keepalive(entity_inst_t dest)
+{
+  rank->send_keepalive(dest);
+  return 0;
+}
+
 
 
 void SimpleMessenger::Endpoint::_set_myaddr(entity_addr_t a)
@@ -1380,7 +1386,7 @@ void SimpleMessenger::Pipe::writer()
     dout(10) << "writer: state = " << state << " policy.server=" << policy.server << dendl;
 
     // standby?
-    if (!q.empty() && state == STATE_STANDBY && !policy.server)
+    if (is_queued() && state == STATE_STANDBY && !policy.server)
       state = STATE_CONNECTING;
 
     // connect?
@@ -1405,7 +1411,20 @@ void SimpleMessenger::Pipe::writer()
     }
 
     if (state != STATE_CONNECTING && state != STATE_WAIT && state != STATE_STANDBY &&
-	(!q.empty() || in_seq > in_seq_acked)) {
+	(is_queued() || in_seq > in_seq_acked)) {
+
+      // keepalive?
+      if (keepalive) {
+	lock.Unlock();
+	int rc = write_keepalive();
+	lock.Lock();
+	if (rc < 0) {
+	  dout(2) << "writer couldn't write keepalive, " << strerror(errno) << dendl;
+	  fault();
+ 	  continue;
+	}
+	keepalive = false;
+      }
 
       // send ack?
       if (in_seq > in_seq_acked) {
@@ -1432,14 +1451,7 @@ void SimpleMessenger::Pipe::writer()
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
-        if (m->empty_payload())
-	  m->encode_payload();
-	m->calc_front_crc();
-
-	if (!g_conf.ms_nocrc)
-	  m->calc_data_crc();
-	else
-	  m->get_footer().flags = (unsigned)m->get_footer().flags | CEPH_MSG_FOOTER_NOCRC;
+	m->encode();
 
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
@@ -1669,6 +1681,25 @@ int SimpleMessenger::Pipe::write_ack(unsigned seq)
   msg.msg_iovlen = 2;
   
   if (do_sendmsg(sd, &msg, 5) < 0) 
+    return -1;	
+  return 0;
+}
+
+int SimpleMessenger::Pipe::write_keepalive()
+{
+  dout(10) << "write_keepalive" << dendl;
+
+  char c = CEPH_MSGR_TAG_KEEPALIVE;
+
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+  struct iovec msgvec[2];
+  msgvec[0].iov_base = &c;
+  msgvec[0].iov_len = 1;
+  msg.msg_iov = msgvec;
+  msg.msg_iovlen = 1;
+  
+  if (do_sendmsg(sd, &msg, 1) < 0) 
     return -1;	
   return 0;
 }
@@ -2075,6 +2106,43 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 	  pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
 	  pipe->send(m);
 	}
+      }
+    }
+  }
+
+  lock.Unlock();
+}
+
+void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
+{
+  const entity_addr_t dest_addr = dest.addr;
+  entity_addr_t dest_proc_addr = dest_addr;
+  lock.Lock();
+  {
+    // local?
+    if (!rank_addr.is_local_to(dest_addr)) {
+      // remote.
+      Pipe *pipe = 0;
+      if (rank_pipe.count( dest_proc_addr )) {
+        // connected?
+        pipe = rank_pipe[ dest_proc_addr ];
+	pipe->lock.Lock();
+	if (pipe->state == Pipe::STATE_CLOSED) {
+	  dout(20) << "send_keepalive remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
+	  pipe->unregister_pipe();
+	  pipe->lock.Unlock();
+	  pipe = 0;
+	} else {
+	  dout(20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
+	  pipe->_send_keepalive();
+	  pipe->lock.Unlock();
+	}
+      }
+      if (!pipe) {
+	dout(20) << "send_keepalive remote, " << dest_addr << ", new pipe." << dendl;
+	// not connected.
+	pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
+	pipe->send_keepalive();
       }
     }
   }
