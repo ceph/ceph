@@ -310,7 +310,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
   if (sub_renew_sent != utime_t()) {
     sub_renew_after = sub_renew_sent;
-    sub_renew_after += 1000.0 * m->interval_ms;
+    sub_renew_after += m->interval_ms / 1000.0 / 2.0;
     dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
     sub_renew_sent = utime_t();
   } else {
@@ -320,8 +320,6 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 
 void MonClient::tick()
 {
-  dout(10) << "tick" << dendl;
-
   if (!mounted)
     return;
 
@@ -332,9 +330,12 @@ void MonClient::tick()
     return;
   last_tick = now;
 
+  dout(10) << "tick" << dendl;
+
   if (now > sub_renew_after)
     renew_subs();
 
   int oldmon = monmap.pick_mon();
   messenger->send_keepalive(monmap.mon_inst[oldmon]);
 }
+
