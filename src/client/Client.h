@@ -753,8 +753,6 @@ public:
   Messenger *messenger;  
   int whoami;
 
-  bufferlist signed_ticket;
-  
   // mds sessions
   map<int, MDSSession> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;

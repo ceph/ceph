@@ -27,6 +27,7 @@
 class MonMap;
 class MMonMap;
 class MClientMountAck;
+class MMonSubscribeAck;
 
 class MonClient : public Dispatcher {
 public:
@@ -36,9 +37,6 @@ private:
 
   entity_addr_t my_addr;
 
-  ClientTicket ticket;
-  bufferlist signed_ticket;
-
   Context *mount_timeout_event;
 
   Mutex monc_lock;
@@ -47,9 +45,10 @@ private:
   int mounters;
   Cond mount_cond, map_cond;
 
-
   bool dispatch_impl(Message *m);
   void handle_monmap(MMonMap *m);
+
+  void ms_handle_reset(const entity_addr_t& peer);
 
  protected:
   class C_MountTimeout : public Context {
@@ -65,19 +64,37 @@ private:
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
   void handle_mount_ack(MClientMountAck* m);
+
+  // mon subscriptions
+private:
+  map<nstring,version_t> sub_have;  // my subs, and current versions
+  utime_t sub_renew_sent, sub_renew_after;
+
+public:
+  void renew_subs();
+  void update_sub(nstring what, version_t have) {
+    bool had = sub_have.count(what);
+    sub_have[what] = have;
+    if (!had)
+      renew_subs();
+  }
+  void handle_subscribe_ack(MMonSubscribeAck* m);
+
  public:
   MonClient() : messenger(NULL),
+		mount_timeout_event(NULL),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock) {
     mounted = false;
     mounters = 0;
-    mount_timeout_event = 0;
   }
 
   int build_initial_monmap();
   int get_monmap();
 
   int mount(double mount_timeout);
+
+  void tick();
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {
@@ -110,8 +127,6 @@ private:
 
   void set_messenger(Messenger *m) { messenger = m; }
 
-  bufferlist& get_signed_ticket() { return signed_ticket; }
-  ClientTicket& get_ticket() { return ticket; }
 
 };
 

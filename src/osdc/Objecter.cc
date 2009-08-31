@@ -53,6 +53,8 @@ void Objecter::init()
   assert(client_lock.is_locked());  // otherwise event cancellation is unsafe
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
   maybe_request_map();
+  
+  //monc->update_sub("osdmap", 0);
 }
 
 void Objecter::shutdown() 
@@ -190,6 +192,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   delete m;
+
+  //monc->update_sub("osdmap", osdmap->get_epoch());
 }
 
 
@@ -442,7 +446,9 @@ tid_t Objecter::op_submit(Op *op)
     if (op->onack)
       flags |= CEPH_OSD_FLAG_ACK;
 
-    MOSDOp *m = new MOSDOp(signed_ticket, client_inc, op->tid,
+    bufferlist empty_ticket_fixme;
+#warning remove signed ticket ref
+    MOSDOp *m = new MOSDOp(empty_ticket_fixme, client_inc, op->tid,
 			   op->oid, op->layout, osdmap->get_epoch(),
 			   flags);
 

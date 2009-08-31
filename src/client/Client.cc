@@ -815,7 +815,7 @@ int Client::make_request(MClientRequest *req,
 
       if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
-	monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
+	//monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
@@ -1201,6 +1201,8 @@ void Client::handle_mds_map(MMDSMap* m)
 
   delete oldmap;
   delete m;
+
+  monclient->update_sub("mdsmap", mdsmap->get_epoch());
 }
 
 void Client::send_reconnect(int mds)
@@ -2544,9 +2546,6 @@ int Client::mount()
   
   whoami = messenger->get_myname().num();
 
-  signed_ticket = monclient->get_signed_ticket();
-
-  objecter->signed_ticket = signed_ticket;
   objecter->init();
 
   mounted = true;
@@ -2554,6 +2553,9 @@ int Client::mount()
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << dendl;
+
+  monclient->update_sub("mdsmap", mdsmap->get_epoch());
+
   
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
@@ -2736,6 +2738,8 @@ void Client::tick()
   dout(21) << "tick" << dendl;
   tick_event = new C_C_Tick(this);
   timer.add_event_after(g_conf.client_tick_interval, tick_event);
+
+  monclient->tick();
   
   utime_t now = g_clock.now();
 

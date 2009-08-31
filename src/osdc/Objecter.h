@@ -177,8 +177,6 @@ class Objecter {
   MonClient *monc;
   OSDMap    *osdmap;
 
-  bufferlist signed_ticket;
-
  
  private:
   tid_t last_tid;
