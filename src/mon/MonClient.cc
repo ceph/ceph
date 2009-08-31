@@ -247,6 +247,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(monmap, p);
 
+  messenger->_set_myaddr(m->addr);
   messenger->reset_myname(entity_name_t::CLIENT(m->client));
 
   // finish.
@@ -279,9 +280,9 @@ void MonClient::pick_new_mon()
 }
 
 
-void MonClient::ms_handle_reset(const entity_addr_t& peer)
+void MonClient::ms_handle_remote_reset(const entity_addr_t& peer)
 {
-  dout(10) << "ms_handle_reset " << peer << dendl;
+  dout(10) << "ms_handle_peer_reset " << peer << dendl;
   pick_new_mon();
   renew_subs();
 }

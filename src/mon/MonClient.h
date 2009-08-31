@@ -48,7 +48,7 @@ private:
   bool ms_dispatch(Message *m);
   void handle_monmap(MMonMap *m);
 
-  void ms_handle_reset(const entity_addr_t& peer);
+  void ms_handle_remote_reset(const entity_addr_t& peer);
 
  protected:
   class C_MountTimeout : public Context {

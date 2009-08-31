@@ -76,7 +76,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   rank.start();
 
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless());
   rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
   rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
