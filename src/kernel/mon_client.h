@@ -56,6 +56,7 @@ struct ceph_mon_client {
 	struct mutex mutex;
 	struct delayed_work delayed_work;
 
+	bool hunting;
 	int cur_mon;                       /* last monitor i contacted */
 	unsigned long sub_sent, sub_renew_after;
 	struct ceph_connection *con;

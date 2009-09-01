@@ -90,22 +90,29 @@ int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr)
 }
 
 /*
+ * Close monitor session, if any.
+ */
+static void __close_session(struct ceph_mon_client *monc)
+{
+	if (monc->con) {
+		dout("__close_session closing mon%d\n", monc->cur_mon);
+		monc->con->private = NULL;
+		monc->con->ops->put(monc->con);
+		monc->con = NULL;
+	}
+}
+
+/*
  * Open a session with a (new) monitor.
  */
-static int __open_session(struct ceph_mon_client *monc, int newmon)
+static int __open_session(struct ceph_mon_client *monc)
 {
 	char r;
 
-	if (!monc->con || newmon) {
-		if (monc->con) {
-			dout("open_session closing mon%d\n", monc->cur_mon);
-			monc->con->private = NULL;
-			monc->con->ops->put(monc->con);
-		}
-
+	if (!monc->con) {
 		get_random_bytes(&r, 1);
 		monc->cur_mon = r % monc->monmap->num_mon;
-		dout("open_session newmon=%d num=%d r=%d -> mon%d\n", newmon,
+		dout("open_session num=%d r=%d -> mon%d\n",
 		     monc->monmap->num_mon, r, monc->cur_mon);
 		monc->sub_sent = 0;
 		monc->sub_renew_after = jiffies;  /* i.e., expired */
@@ -208,9 +215,16 @@ static void handle_subscribe_ack(struct ceph_mon_client *monc,
 	void *end = p + msg->front.iov_len;
 
 	ceph_decode_32_safe(&p, end, seconds, bad);
+	mutex_lock(&monc->mutex);
+	if (monc->hunting) {
+		pr_info("ceph mon%d %u.%u.%u.%u:%u session established\n",
+			monc->cur_mon, IPQUADPORT(monc->con->peer_addr.ipaddr));
+		monc->hunting = false;
+	}
 	dout("handle_subscribe_ack after %d seconds\n", seconds);
 	monc->sub_renew_after = monc->sub_sent + seconds*HZ - 1;
 	monc->sub_sent = 0;
+	mutex_unlock(&monc->mutex);
 	return;
 bad:
 	pr_err("ceph got corrupt subscribe-ack msg\n");
@@ -261,7 +275,7 @@ static void __request_mount(struct ceph_mon_client *monc)
 	int err;
 
 	dout("__request_mount\n");
-	err = __open_session(monc, 1);
+	err = __open_session(monc);
 	if (err)
 		return;
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, sizeof(*h), 0, 0, NULL);
@@ -406,7 +420,7 @@ static int send_statfs(struct ceph_mon_client *monc,
 	int err;
 
 	dout("send_statfs tid %llu\n", req->tid);
-	err = __open_session(monc, 0);
+	err = __open_session(monc);
 	if (err)
 		return err;
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);
@@ -501,11 +515,12 @@ static void delayed_work(struct work_struct *work)
 		__request_mount(monc);
 	} else {
 		if (__sub_expired(monc)) {
-			__open_session(monc, 1);  /* keep hunting */
+			__close_session(monc);
+			__open_session(monc);  /* continue hunting */
 		} else {
 			ceph_con_keepalive(monc->con);
-			__send_subscribe(monc);
 		}
+		__send_subscribe(monc);
 	}
 	__schedule_delayed(monc);
 	mutex_unlock(&monc->mutex);
@@ -520,6 +535,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	mutex_init(&monc->mutex);
 	monc->con = NULL;
 
+	monc->hunting = false;  /* not really */
 	monc->sub_renew_after = jiffies;
 	monc->sub_sent = 0;
 
@@ -539,11 +555,9 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 {
 	dout("stop\n");
 	cancel_delayed_work_sync(&monc->delayed_work);
-	if (monc->con) {
-		monc->con->private = NULL;
-		monc->con->ops->put(monc->con);
-		monc->con = NULL;
-	}
+	mutex_lock(&monc->mutex);
+	__close_session(monc);
+	mutex_unlock(&monc->mutex);
 	kfree(monc->monmap);
 }
 
@@ -602,9 +616,23 @@ static void mon_fault(struct ceph_connection *con)
 	mutex_lock(&monc->mutex);
 	if (!con->private)
 		goto out;
-	if (__open_session(monc, 1) == 0) {  /* else delayed_work will retry */
-		__send_subscribe(monc);
-		__resend_statfs(monc);
+
+	if (monc->con && !monc->hunting)
+		pr_info("ceph mon%d %u.%u.%u.%u:%u session lost, "
+			"hunting for new mon\n", monc->cur_mon,
+			IPQUADPORT(monc->con->peer_addr.ipaddr));
+
+	__close_session(monc);
+	if (!monc->hunting) {
+		/* start hunting */
+		monc->hunting = true;
+		if (__open_session(monc) == 0) {
+			__send_subscribe(monc);
+			__resend_statfs(monc);
+		}
+	} else {
+		/* already hunting, let's wait a bit */
+		__schedule_delayed(monc);
 	}
 out:
 	mutex_unlock(&monc->mutex);
