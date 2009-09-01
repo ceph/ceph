@@ -122,7 +122,7 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, bool overwr
     return;
   }
 
-  HT_INFOF("create % s  = %d", fname, ceph_fd);
+  HT_INFOF("create %s  = %d", fname, ceph_fd);
 
   {
     struct sockaddr_in addr;
@@ -335,7 +335,7 @@ int CephBroker::rmdir_recursive(const char *directory) {
   int r;
   if ((r = ceph_opendir(directory, &dirp) < 0))
     return r; //failed to open
-  while (r = ceph_readdirplus_r(dirp, &de, &st, 0) > 0) {
+  while ((r = ceph_readdirplus_r(dirp, &de, &st, 0)) > 0) {
     String new_dir = de.d_name;
     if(!(new_dir.compare(".")==0 || new_dir.compare("..")==0)) {
       new_dir = directory;
@@ -401,7 +401,7 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
   int r;
   int buflen = 100; //good default?
   char *buf = new char[buflen];
-  string *ent;
+  String *ent;
   int bufpos;
   while (1) {
     r = ceph_getdnames(dirp, buf, buflen);
@@ -411,17 +411,23 @@ void CephBroker::readdir(ResponseCallbackReaddir *cb, const char *dname) {
       buf = new char[buflen];
       continue;
     }
-    if (r==0) break;
+    if (r<=0) break;
+
     //if we make it here, we got at least one name, maybe more
     bufpos = 0;
     while (bufpos<r) {//make new strings and add them to listing
-      ent = new string(buf+bufpos);
-      listing.push_back(*ent);
+      ent = new String(buf+bufpos);
+      if (ent->compare(".") && ent->compare(".."))
+	listing.push_back(*ent);
       bufpos+=ent->size()+1;
       delete ent;
     }
   }
+  delete buf;
   ceph_closedir(dirp);
+
+  if (r < 0) report_error(cb, -r); //Ceph shouldn't return r<0 on getdnames
+  //(except for ERANGE) so if it happens this is bad
   cb->response(listing);
 }
 
