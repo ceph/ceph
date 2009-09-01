@@ -98,6 +98,7 @@ bool MDSMonitor::update_from_paxos()
   }
 
   send_to_waiting();
+  check_subs();
 
   return true;
 }
