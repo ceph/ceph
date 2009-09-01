@@ -765,9 +765,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 	for (p = rb_first(&osdc->requests); p; p = rb_next(p)) {
 		req = rb_entry(p, struct ceph_osd_request, r_node);
 
-		if (req->r_resend)
-			goto kick;
-		if (osd == req->r_osd)
+		if (req->r_osd && (req->r_resend || osd == req->r_osd))
 			goto kick;
 
 		err = __map_osds(osdc, req);
