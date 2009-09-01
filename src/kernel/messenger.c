@@ -1517,12 +1517,11 @@ static void ceph_fault(struct ceph_connection *con)
 		con->delay *= 2;
 
 	/* explicitly schedule work to try to reconnect again later. */
-	dout("fault queueing %p %d -> %d delay %lu\n", con,
-	     atomic_read(&con->nref), atomic_read(&con->nref) + 1,
-	     con->delay);
+	dout("fault queueing %p delay %lu\n", con, con->delay);
 	con->ops->get(con);
-	queue_delayed_work(ceph_msgr_wq, &con->work,
-			   round_jiffies_relative(con->delay));
+	if (queue_delayed_work(ceph_msgr_wq, &con->work,
+			       round_jiffies_relative(con->delay)) == 0)
+		con->ops->put(con);
 }
 
 
