@@ -378,17 +378,13 @@ static void unregister_session(struct ceph_mds_client *mdsc, int mds)
 /*
  * drop session refs in request.
  *
- * should be last ref, or hold mdsc->mutex
+ * should be last request ref, or hold mdsc->mutex
  */
-static void put_request_sessions(struct ceph_mds_request *req)
+static void put_request_session(struct ceph_mds_request *req)
 {
 	if (req->r_session) {
 		ceph_put_mds_session(req->r_session);
 		req->r_session = NULL;
-	}
-	if (req->r_fwd_session) {
-		ceph_put_mds_session(req->r_fwd_session);
-		req->r_fwd_session = NULL;
 	}
 }
 
@@ -422,7 +418,7 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 		}
 		kfree(req->r_path1);
 		kfree(req->r_path2);
-		put_request_sessions(req);
+		put_request_session(req);
 		ceph_unreserve_caps(&req->r_caps_reservation);
 		kfree(req);
 	}
@@ -1539,12 +1535,10 @@ static void kick_requests(struct ceph_mds_client *mdsc, int mds, int all)
 		for (i = 0; i < got; i++) {
 			if (reqs[i]->r_got_unsafe)
 				continue;
-			if (((reqs[i]->r_session &&
-			      reqs[i]->r_session->s_mds == mds) ||
-			     (all && reqs[i]->r_fwd_session &&
-			      reqs[i]->r_fwd_session->s_mds == mds))) {
+			if (reqs[i]->r_session &&
+			    reqs[i]->r_session->s_mds == mds) {
 				dout(" kicking tid %llu\n", reqs[i]->r_tid);
-				put_request_sessions(reqs[i]);
+				put_request_session(reqs[i]);
 				__do_request(mdsc, reqs[i]);
 			}
 		}
@@ -1691,7 +1685,6 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 			 * useful we could do with a revised return value.
 			 */
 			dout("got safe reply %llu, mds%d\n", tid, mds);
-			BUG_ON(req->r_session == NULL);
 			list_del_init(&req->r_unsafe_item);
 
 			/* last unsafe request during umount? */
@@ -1733,7 +1726,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		if (req->r_num_stale <= 2) {
 			mutex_unlock(&req->r_session->s_mutex);
 			mutex_lock(&mdsc->mutex);
-			put_request_sessions(req);
+			put_request_session(req);
 			__do_request(mdsc, req);
 			mutex_unlock(&mdsc->mutex);
 			goto out;
@@ -1807,6 +1800,8 @@ static void handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	ceph_decode_32(&p, fwd_seq);
 	ceph_decode_8(&p, must_resend);
 
+	WARN_ON(must_resend);  /* shouldn't happen. */
+
 	mutex_lock(&mdsc->mutex);
 	req = __lookup_request(mdsc, tid);
 	if (!req) {
@@ -1818,25 +1813,12 @@ static void handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	if (fwd_seq <= req->r_num_fwd) {
 		dout("forward %llu to mds%d - old seq %d <= %d\n",
 		     tid, next_mds, req->r_num_fwd, fwd_seq);
-	} else if (!must_resend &&
-		   __have_session(mdsc, next_mds) &&
-		   (state == CEPH_MDS_SESSION_OPEN ||
-		    state == CEPH_MDS_SESSION_HUNG)) {
-		/* yes.  adjust our sessions, but that's all; the old mds
-		 * forwarded our message for us. */
-		dout("forward %llu to mds%d (mds%d fwded)\n", tid, next_mds,
-		     from_mds);
-		req->r_num_fwd = fwd_seq;
-		put_request_sessions(req);
-		req->r_session = __ceph_lookup_mds_session(mdsc, next_mds);
-		req->r_fwd_session = __ceph_lookup_mds_session(mdsc, from_mds);
 	} else {
-		/* no, resend. */
-		/* forward race not possible; mds would drop */
+		/* resend. forward race not possible; mds would drop */
 		dout("forward %llu to mds%d (we resend)\n", tid, next_mds);
 		req->r_num_fwd = fwd_seq;
 		req->r_resend_mds = next_mds;
-		put_request_sessions(req);
+		put_request_session(req);
 		__do_request(mdsc, req);
 	}
 	ceph_mdsc_put_request(req);
@@ -2854,8 +2836,12 @@ static struct ceph_connection *con_get(struct ceph_connection *con)
 {
 	struct ceph_mds_session *s = con->private;
 
-	if (get_session(s))
+	if (get_session(s)) {
+		dout("mdsc con_get %p %d -> %d\n", s,
+		     atomic_read(&s->s_ref) - 1, atomic_read(&s->s_ref));
 		return con;
+	}
+	dout("mdsc con_get %p FAIL\n", s);		
 	return NULL;
 }
 
@@ -2863,6 +2849,8 @@ static void con_put(struct ceph_connection *con)
 {
 	struct ceph_mds_session *s = con->private;
 
+	dout("mdsc con_put %p %d -> %d\n", s, atomic_read(&s->s_ref),
+	     atomic_read(&s->s_ref) - 1);
 	ceph_put_mds_session(s);
 }
 
