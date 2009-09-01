@@ -3775,6 +3775,8 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   tout << relpath << std::endl;
   tout << flags << std::endl;
 
+  Fh *fh = NULL;
+
   filepath path(relpath);
   Inode *in;
   int r = path_walk(path, &in);
@@ -3788,21 +3790,17 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     r = path_walk(dirpath, &dir);
     if (r < 0)
       return r;
-    r = _mknod(dir, dname.c_str(), mode, 0);
-    if (r == 0) {
-      Dentry *dn = dir->dir->dentries[dname];
-      in = dn->inode;
-      assert(in);
-    }
+    r = _create(dir, dname.c_str(), flags, mode, &in, &fh);
   }
   if (r < 0)
     return r;
 
-  Fh *fh;
-  r = _open(in, flags, mode, &fh);
+  if (!fh)
+    r = _open(in, flags, mode, &fh);
   if (r >= 0) {
     // allocate a integer file descriptor
     assert(fh);
+    assert(in);
     r = get_fd();
     assert(fd_map.count(r) == 0);
     fd_map[r] = fh;
@@ -3811,6 +3809,30 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   tout << r << std::endl;
   dout(3) << "open(" << path << ", " << flags << ") = " << r << dendl;
   return r;
+}
+
+Fh *Client::_create_fh(Inode *in, int flags, int cmode)
+{
+  // yay
+  Fh *f = new Fh;
+  f->mode = cmode;
+  if (flags & O_APPEND)
+    f->append = true;
+  
+  // inode
+  assert(in);
+  f->inode = in;
+  f->inode->get();
+
+  dout(10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
+
+  if (in->snapid != CEPH_NOSNAP) {
+    in->snap_cap_refs++;
+    dout(5) << "open success, fh is " << f << " combined IMMUTABLE SNAP caps " 
+	    << ccap_string(in->caps_issued()) << dendl;
+  }
+
+  return f;
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) 
@@ -3836,25 +3858,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   // success?
   if (result >= 0) {
-    // yay
-    Fh *f = new Fh;
-    if (fhp) *fhp = f;
-    f->mode = cmode;
-    if (flags & O_APPEND)
-      f->append = true;
-
-    // inode
-    assert(in);
-    f->inode = in;
-    f->inode->get();
-
-    dout(10) << in->ino << " mode " << cmode << dendl;
-
-    if (in->snapid != CEPH_NOSNAP) {
-      in->snap_cap_refs++;
-      dout(5) << "open success, fh is " << f << " combined IMMUTABLE SNAP caps " 
-	      << ccap_string(in->caps_issued()) << dendl;
-    }
+    *fhp = _create_fh(in, flags, cmode);
   } else {
     in->put_open_ref(cmode);
   }
@@ -5007,6 +5011,36 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
 	  << " = " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   return r;
 }
+
+int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid, int gid) 
+{ 
+  dout(3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
+  
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CREATE);
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
+  req->set_filepath(path); 
+  req->head.args.open.flags = flags | O_CREAT;
+  req->head.args.open.mode = mode;
+  
+  int res = make_request(req, uid, gid);
+  
+  if (res >= 0) {
+    res = _lookup(dir, name, inp);
+    if (res >= 0) {
+      int cmode = ceph_flags_to_mode(flags);
+      (*inp)->get_open_ref(cmode);
+      *fhp = _create_fh(*inp, flags, cmode);
+    }
+  }
+    
+  trim_cache();
+
+  dout(3) << "create(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  return res;
+}
+
 
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {

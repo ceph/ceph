@@ -1064,6 +1064,8 @@ private:
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
 
+  Fh *_create_fh(Inode *in, int flags, int cmode);
+
   int _read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl);
   int _read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl);
 
@@ -1086,6 +1088,7 @@ private:
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
+  int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, __s64 offset, __u64 size, bufferlist *bl);
