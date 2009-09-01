@@ -311,7 +311,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
   if (sub_renew_sent != utime_t()) {
     sub_renew_after = sub_renew_sent;
-    sub_renew_after += m->interval_ms / 1000.0 / 2.0;
+    sub_renew_after += m->interval / 2.0;
     dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
     sub_renew_sent = utime_t();
   } else {

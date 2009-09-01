@@ -18,22 +18,22 @@
 #include "msg/Message.h"
 
 struct MMonSubscribeAck : public Message {
-  __u32 interval_ms;
+  __u32 interval;
   
   MMonSubscribeAck(int i = 0) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
-				interval_ms(i) {}
+				interval(i) {}
   
   const char *get_type_name() { return "mon_subscribe_ack"; }
   void print(ostream& o) {
-    o << "mon_subscribe_ack(" << interval_ms << "ms)";
+    o << "mon_subscribe_ack(" << interval << "s)";
   }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(interval_ms, p);
+    ::decode(interval, p);
   }
   void encode_payload() {
-    ::encode(interval_ms, payload);
+    ::encode(interval, payload);
   }
 };
 

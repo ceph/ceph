@@ -514,7 +514,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   }
 
   if (reply)
-    messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval * 1000),
+    messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
 			    m->get_source_inst());
 
   delete m;
