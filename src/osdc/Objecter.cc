@@ -434,9 +434,7 @@ tid_t Objecter::op_submit(Op *op)
     if (op->onack)
       flags |= CEPH_OSD_FLAG_ACK;
 
-    bufferlist empty_ticket_fixme;
-#warning remove signed ticket ref
-    MOSDOp *m = new MOSDOp(empty_ticket_fixme, client_inc, op->tid,
+    MOSDOp *m = new MOSDOp(client_inc, op->tid,
 			   op->oid, op->layout, osdmap->get_epoch(),
 			   flags);
 

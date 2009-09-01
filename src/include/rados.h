@@ -399,7 +399,6 @@ struct ceph_osd_request_head {
 	struct ceph_eversion reassert_version; /* if we are replaying op */
 
 	__le32 object_len;
-	__le32 ticket_len;
 
 	__le64 snapid;
 	__le64 snap_seq;       /* writer's snap context */

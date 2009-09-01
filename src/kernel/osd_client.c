@@ -150,7 +150,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 	WARN_ON((flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE)) == 0);
 
 	/* create message; allow space for oid */
-	msg_size += 40 + osdc->client->signed_ticket_len;
+	msg_size += 40;
 	if (snapc)
 		msg_size += sizeof(u64) * snapc->num_snaps;
 	msg = ceph_msg_new(CEPH_MSG_OSD_OP, msg_size, 0, 0, NULL);
@@ -183,15 +183,10 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		op->payload_len = cpu_to_le32(*plen);
 	}
 
-	/* fill in oid, ticket */
+	/* fill in oid */
 	head->object_len = cpu_to_le32(req->r_oid_len);
 	memcpy(p, req->r_oid, req->r_oid_len);
 	p += req->r_oid_len;
-
-	head->ticket_len = cpu_to_le32(osdc->client->signed_ticket_len);
-	memcpy(p, osdc->client->signed_ticket,
-	       osdc->client->signed_ticket_len);
-	p += osdc->client->signed_ticket_len;
 
 	/* additional ops */
 	if (do_trunc) {
