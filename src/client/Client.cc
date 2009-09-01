@@ -1443,7 +1443,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
     }
     if (cap & CEPH_CAP_FILE_BUFFER) {
-      int last = in->cap_refs[CEPH_CAP_FILE_BUFFER];
+      bool last = (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0);
       for (map<snapid_t,CapSnap>::iterator p = in->cap_snaps.begin();
 	   p != in->cap_snaps.end();
 	   p++)
