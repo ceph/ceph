@@ -517,7 +517,7 @@ int SimpleMessenger::Pipe::accept()
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
     banner[strlen(CEPH_BANNER)] = 0;
-    dout(10) << "accept peer sent bad banner '" << banner << "'" << dendl;
+    dout(1) << "accept peer sent bad banner '" << banner << "' (should be '" << CEPH_BANNER << "')" << dendl;
     state = STATE_CLOSED;
     return -1;
   }
