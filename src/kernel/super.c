@@ -727,7 +727,6 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 {
 	struct ceph_entity_addr *myaddr = NULL;
 	int err;
-	int request_interval = 5 * HZ;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
 	unsigned long started = jiffies;  /* note the start time */
 	struct dentry *root;
@@ -756,10 +755,10 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			goto out;
 
 		/* wait */
-		dout("mount waiting for niynt\n");
+		dout("mount waiting for mount\n");
 		err = wait_event_interruptible_timeout(client->mount_wq,
 			       client->mount_err || have_mon_map(client),
-			       request_interval);
+			       timeout);
 		if (err == -EINTR || err == -ERESTARTSYS)
 			goto out;
 		if (client->mount_err) {
@@ -767,7 +766,6 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			goto out;
 		}
 	}
-
 
 	dout("mount opening root\n");
 	root = open_root_dentry(client, "", started);

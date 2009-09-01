@@ -523,8 +523,7 @@ static int send_request(struct ceph_osd_client *osdc,
 		return err;
 	if (req->r_osd == NULL) {
 		dout("send_request %p no up osds in pg\n", req);
-		ceph_monc_request_osdmap(&osdc->client->monc,
-					 osdc->osdmap->epoch+1);
+		ceph_monc_request_next_osdmap(&osdc->client->monc);
 		return 0;
 	}
 
@@ -565,7 +564,7 @@ static void handle_timeout(struct work_struct *work)
 	dout("timeout\n");
 	down_read(&osdc->map_sem);
 
-	ceph_monc_request_osdmap(&osdc->client->monc, osdc->osdmap->epoch+1);
+	ceph_monc_request_next_osdmap(&osdc->client->monc);
 
 	mutex_lock(&osdc->request_mutex);
 	for (p = rb_first(&osdc->requests); p; p = rb_next(p)) {
@@ -770,8 +769,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 
 	if (needmap) {
 		dout("%d requests for down osds, need new map\n", needmap);
-		ceph_monc_request_osdmap(&osdc->client->monc,
-					 osdc->osdmap->epoch+1);
+		ceph_monc_request_next_osdmap(&osdc->client->monc);
 	}
 }
 

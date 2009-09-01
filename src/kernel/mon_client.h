@@ -53,22 +53,22 @@ struct ceph_mon_client {
 	struct ceph_client *client;
 	struct ceph_monmap *monmap;
 
+	struct mutex mutex;
+	struct delayed_work delayed_work;
+
 	int cur_mon;                       /* last monitor i contacted */
 	bool subscribed;
 	unsigned long sub_sent, sub_renew_after;
 	struct ceph_connection *con;
 
 	/* pending statfs requests */
-	struct mutex statfs_mutex;
 	struct radix_tree_root statfs_request_tree;
 	int num_statfs_requests;
 	u64 last_tid;
 
 	/* mds/osd map or mount requests */
-	struct mutex req_mutex;
-	struct ceph_mon_request osdreq, mountreq;
-	u32 have_mdsmap;
-	u32 want_osdmap;
+	bool want_mount, want_next_osdmap;
+	u32 have_osdmap, have_mdsmap;
 
 	struct dentry *debugfs_file;
 };
@@ -87,9 +87,9 @@ extern void ceph_monc_stop(struct ceph_mon_client *monc);
  * get what we want.
  */
 extern int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 have);
-
-extern void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want);
 extern int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 have);
+
+extern void ceph_monc_request_next_osdmap(struct ceph_mon_client *monc);
 
 extern void ceph_monc_request_mount(struct ceph_mon_client *monc);
 

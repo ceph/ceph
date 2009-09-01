@@ -122,12 +122,14 @@ static int monc_show(struct seq_file *s, void *p)
 	int got;
 	struct ceph_mon_client *monc = &client->monc;
 
-	mutex_lock(&monc->statfs_mutex);
+	mutex_lock(&monc->mutex);
 
-	if (monc->want_osdmap)
-		seq_printf(s, "want osdmap %u\n", (unsigned)monc->want_osdmap);
 	if (monc->have_mdsmap)
 		seq_printf(s, "have mdsmap %u\n", (unsigned)monc->have_mdsmap);
+	if (monc->have_osdmap)
+		seq_printf(s, "have osdmap %u\n", (unsigned)monc->have_osdmap);
+	if (monc->want_next_osdmap)
+		seq_printf(s, "want next osdmap\n");
 
 	while (nexttid < monc->last_tid) {
 		got = radix_tree_gang_lookup(&monc->statfs_request_tree,
@@ -138,7 +140,7 @@ static int monc_show(struct seq_file *s, void *p)
 
 		seq_printf(s, "%lld statfs\n", req->tid);
 	}
-	mutex_unlock(&monc->statfs_mutex);
+	mutex_unlock(&monc->mutex);
 
 	return 0;
 }
