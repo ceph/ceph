@@ -99,11 +99,14 @@ static int __open_session(struct ceph_mon_client *monc, int newmon)
 	if (!monc->con || newmon) {
 		if (monc->con) {
 			dout("open_session closing mon%d\n", monc->cur_mon);
+			monc->con->private = NULL;
 			monc->con->ops->put(monc->con);
 		}
 
 		get_random_bytes(&r, 1);
 		monc->cur_mon = r % monc->monmap->num_mon;
+		dout("open_session newmon=%d num=%d r=%d -> mon%d\n", newmon,
+		     monc->monmap->num_mon, r, monc->cur_mon);
 		monc->sub_sent = 0;
 		monc->sub_renew_after = jiffies;  /* i.e., expired */
 		monc->want_next_osdmap = !!monc->want_next_osdmap;
@@ -139,7 +142,7 @@ static void __schedule_delayed(struct ceph_mon_client *monc)
 {
 	unsigned delay;
 
-	if (monc->want_mount || __sub_expired(monc))
+	if (!monc->con || monc->want_mount || __sub_expired(monc))
 		delay = 10 * HZ;
 	else
 		delay = 20 * HZ;
@@ -462,14 +465,13 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 /*
  * Resend pending statfs requests.
  */
-static void resend_statfs(struct ceph_mon_client *monc)
+static void __resend_statfs(struct ceph_mon_client *monc)
 {
 	u64 next_tid = 0;
 	int got;
 	int did = 0;
 	struct ceph_mon_statfs_request *req;
 
-	mutex_lock(&monc->mutex);
 	while (1) {
 		got = radix_tree_gang_lookup(&monc->statfs_request_tree,
 					     (void **)&req,
@@ -481,7 +483,6 @@ static void resend_statfs(struct ceph_mon_client *monc)
 
 		send_statfs(monc, req);
 	}
-	mutex_unlock(&monc->mutex);
 }
 
 /*
@@ -539,6 +540,7 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 	dout("stop\n");
 	cancel_delayed_work_sync(&monc->delayed_work);
 	if (monc->con) {
+		monc->con->private = NULL;
 		monc->con->ops->put(monc->con);
 		monc->con = NULL;
 	}
@@ -553,6 +555,9 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 {
 	struct ceph_mon_client *monc = con->private;
 	int type = le16_to_cpu(msg->hdr.type);
+
+	if (!monc)
+		return;
 
 	switch (type) {
 	case CEPH_MSG_CLIENT_MOUNT_ACK:
@@ -586,16 +591,23 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
  * If the monitor connection resets, pick a new monitor and resubmit
  * any pending requests.
  */
-static void mon_reset(struct ceph_connection *con)
+static void mon_fault(struct ceph_connection *con)
 {
 	struct ceph_mon_client *monc = con->private;
 
-	dout("mon_reset\n");
-	if (__open_session(monc, 1) < 0)
-		return;   /* delayed work handler will retry */
+	if (!monc)
+		return;
 
-	__send_subscribe(monc);
-	resend_statfs(monc);
+	dout("mon_fault\n");
+	mutex_lock(&monc->mutex);
+	if (!con->private)
+		goto out;
+	if (__open_session(monc, 1) == 0) {  /* else delayed_work will retry */
+		__send_subscribe(monc);
+		__resend_statfs(monc);
+	}
+out:
+	mutex_unlock(&monc->mutex);
 }
 
 
@@ -603,7 +615,7 @@ const static struct ceph_connection_operations mon_con_ops = {
 	.get = ceph_con_get,
 	.put = ceph_con_put,
 	.dispatch = dispatch,
-	.peer_reset = mon_reset,
+	.fault = mon_fault,
 	.alloc_msg = ceph_alloc_msg,
 	.alloc_middle = ceph_alloc_middle,
 };

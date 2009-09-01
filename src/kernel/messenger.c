@@ -1488,7 +1488,7 @@ static void ceph_fault(struct ceph_connection *con)
 
 	if (test_bit(LOSSYTX, &con->state)) {
 		dout("fault on LOSSYTX channel\n");
-		return;
+		goto out;
 	}
 
 	clear_bit(BUSY, &con->state);  /* to avoid an improbable race */
@@ -1503,7 +1503,7 @@ static void ceph_fault(struct ceph_connection *con)
 		dout("fault setting STANDBY\n");
 		set_bit(STANDBY, &con->state);
 		spin_unlock(&con->out_queue_lock);
-		return;
+		goto out;
 	}
 
 	/* Requeue anything that hasn't been acked, and retry after a
@@ -1522,6 +1522,10 @@ static void ceph_fault(struct ceph_connection *con)
 	if (queue_delayed_work(ceph_msgr_wq, &con->work,
 			       round_jiffies_relative(con->delay)) == 0)
 		con->ops->put(con);
+
+out:
+	if (con->ops->fault)
+		con->ops->fault(con);
 }
 
 

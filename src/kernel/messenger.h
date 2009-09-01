@@ -34,6 +34,9 @@ struct ceph_connection_operations {
 	/* handle an incoming message. */
 	void (*dispatch) (struct ceph_connection *con, struct ceph_msg *m);
 
+	/* there was some error on the socket (disconnect, whatever) */
+	void (*fault) (struct ceph_connection *con);
+
 	/* a remote host as terminated a message exchange session, and messages
 	 * we sent (or they tried to send us) may be lost. */
 	void (*peer_reset) (struct ceph_connection *con);
