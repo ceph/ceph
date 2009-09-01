@@ -69,11 +69,10 @@ static inline const char *ceph_name_type_str(int t)
 		le32_to_cpu((n).num)
 
 struct ceph_messenger {
-	void *parent;                    /* normally struct ceph_client * */
-
 	struct ceph_entity_inst inst;    /* my name+address */
-
 	struct page *zero_page;          /* used in certain error cases */
+
+	bool nocrc;
 
 	/*
 	 * the global_seq counts connections i (attempt to) initiate

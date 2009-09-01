@@ -744,7 +744,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			client->msgr = NULL;
 			goto out;
 		}
-		client->msgr->parent = client;
+		client->msgr->nocrc = ceph_test_opt(client, NOCRC);
 	}
 
 	/* send mount request, and wait for mon, mds, and osd maps */
@@ -802,71 +802,6 @@ out:
 	mutex_unlock(&client->mount_mutex);
 	return err;
 }
-
-#if 0
-static struct ceph_msg_pool *get_pool(struct ceph_client *client, int type)
-{
-	switch (type) {
-	case CEPH_MSG_STATFS_REPLY:
-		return &client->msgpool_statfs_reply;
-	case CEPH_MSG_CLIENT_MOUNT_ACK:
-	case CEPH_MSG_CLIENT_UNMOUNT:
-	case CEPH_MSG_MDS_MAP:
-	case CEPH_MSG_CLIENT_SESSION:
-	case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-	case CEPH_MSG_CLIENT_LEASE:
-	case CEPH_MSG_CLIENT_CAPS:
-	case CEPH_MSG_OSD_OPREPLY:
-	case CEPH_MSG_OSD_MAP:
-	case CEPH_MSG_CLIENT_REPLY:
-	case CEPH_MSG_CLIENT_SNAP:
-	default:
-		return NULL;
-	}
-}
-
-/*
- * Allocate incoming message.  Return message, or NULL to ignore message,
- * or error to fault connection.
- */
-struct ceph_msg *my_ceph_alloc_msg(struct ceph_connection *con,
-				struct ceph_msg_header *hdr)
-{
-	struct ceph_client *client = p;
-	int type = le32_to_cpu(hdr->type);
-	int front_len = le32_to_cpu(hdr->front_len);
-	struct ceph_msg *msg;
-	struct ceph_msg_pool *pool;
-
-	pool = get_pool(client, type);
-	if (!pool) {
-		dout("alloc_msg type %d %s len %d (NO POOL)\n", type,
-		     ceph_msg_type_name(type), front_len);
-		msg = ceph_msg_new(type, front_len, 0, 0, NULL);
-		return msg;
-	}
-
-	dout("alloc_msg type %d %s pool %p front_len %d/%d\n", type,
-	     ceph_msg_type_name(type), pool, front_len, pool->front_len);
-	msg = ceph_msgpool_get(pool);
-
-	/* verify front_len */
-	WARN_ON(front_len > msg->front_max);
-	if (front_len > msg->front_max) {
-		pr_err("ceph: need type %d len %d > pool len %d\n",
-			type, front_len, msg->front_max);
-		ceph_msg_put(msg);
-		msg = ceph_msg_new(type, front_len, 0, 0, NULL);
-		if (!msg) {
-			pr_err("ceph: unable to allocate msg type %d len %d\n",
-			       type, front_len);
-			return ERR_PTR(-ENOMEM);
-		}
-	}
-	msg->front.iov_len = front_len;
-	return msg;
-}
-#endif
 
 static int ceph_set_super(struct super_block *s, void *data)
 {

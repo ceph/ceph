@@ -586,11 +586,10 @@ out:
  */
 static int write_partial_msg_pages(struct ceph_connection *con)
 {
-	struct ceph_client *client = con->msgr->parent;
 	struct ceph_msg *msg = con->out_msg;
 	unsigned data_len = le32_to_cpu(msg->hdr.data_len);
 	size_t len;
-	int crc = !ceph_test_opt(client, NOCRC);
+	int crc = con->msgr->nocrc;
 	int ret;
 
 	dout("write_partial_msg_pages %p msg %p page %d/%d offset %d\n",
@@ -926,8 +925,7 @@ static int read_partial_message(struct ceph_connection *con)
 	int ret;
 	int to, want, left;
 	unsigned front_len, middle_len, data_len, data_off;
-	struct ceph_client *client = con->msgr->parent;
-	int datacrc = !ceph_test_opt(client, NOCRC);
+	int datacrc = con->msgr->nocrc;
 
 	dout("read_partial_message con %p msg %p\n", con, m);
 
@@ -966,8 +964,7 @@ static int read_partial_message(struct ceph_connection *con)
 	if (!con->in_msg) {
 		dout("got hdr type %d front %d data %d\n", con->in_hdr.type,
 		     con->in_hdr.front_len, con->in_hdr.data_len);
-		con->in_msg = con->ops->alloc_msg(con->msgr->parent,
-						  &con->in_hdr);
+		con->in_msg = con->ops->alloc_msg(con, &con->in_hdr);
 		if (!con->in_msg) {
 			/* skip this message */
 			dout("alloc_msg returned NULL, skipping message\n");
@@ -1006,7 +1003,7 @@ static int read_partial_message(struct ceph_connection *con)
 				  m->middle->vec.iov_len < middle_len)) {
 		if (m->middle == NULL) {
 			BUG_ON(!con->ops->alloc_middle);
-			ret = con->ops->alloc_middle(con->msgr->parent, m);
+			ret = con->ops->alloc_middle(con, m);
 			if (ret < 0) {
 				dout("alloc_middle failed, skipping payload\n");
 				con->in_base_pos = -middle_len - data_len
@@ -1043,7 +1040,7 @@ static int read_partial_message(struct ceph_connection *con)
 		want = calc_pages_for(data_off & ~PAGE_MASK, data_len);
 		ret = 0;
 		BUG_ON(!con->ops->prepare_pages);
-		ret = con->ops->prepare_pages(con->msgr->parent, m, want);
+		ret = con->ops->prepare_pages(con, m, want);
 		if (ret < 0) {
 			dout("%p prepare_pages failed, skipping payload\n", m);
 			con->in_base_pos = -data_len - sizeof(m->footer);

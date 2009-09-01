@@ -930,12 +930,16 @@ static int prepare_pages(struct ceph_connection *con, struct ceph_msg *m,
 			 int want)
 {
 	struct ceph_osd *osd = con->private;
-	struct ceph_osd_client *osdc = osd->o_osdc;
+	struct ceph_osd_client *osdc;
 	struct ceph_osd_reply_head *rhead = m->front.iov_base;
 	struct ceph_osd_request *req;
 	u64 tid;
 	int ret = -1;
 	int type = le16_to_cpu(m->hdr.type);
+
+	if (!osd)
+		return -1;
+	osdc = osd->o_osdc;
 
 	dout("prepare_pages on msg %p want %d\n", m, want);
 	if (unlikely(type != CEPH_MSG_OSD_OPREPLY))
