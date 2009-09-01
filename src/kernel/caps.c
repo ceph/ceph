@@ -2611,7 +2611,6 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 
 done:
 	mutex_unlock(&session->s_mutex);
-	ceph_put_mds_session(session);
 
 	if (check_caps)
 		ceph_check_caps(ceph_inode(inode), CHECK_CAPS_NODELAY, NULL);
