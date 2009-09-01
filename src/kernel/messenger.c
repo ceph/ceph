@@ -1559,7 +1559,8 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 		dout("create ip not specified, initially INADDR_ANY\n");
 		msgr->inst.addr.ipaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 		msgr->inst.addr.ipaddr.sin_port = htons(0);  /* any port */
-		msgr->inst.addr.nonce = get_random_int();
+		get_random_bytes(&msgr->inst.addr.nonce,
+				 sizeof(msgr->inst.addr.nonce));
 	}
 	msgr->inst.addr.ipaddr.sin_family = AF_INET;
 
