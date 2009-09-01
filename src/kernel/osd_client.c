@@ -325,6 +325,7 @@ static void init_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd, int o)
 	osd->o_osdc = osdc;
 	osd->o_osd = o;
 	INIT_LIST_HEAD(&osd->o_requests);
+	osd->o_con = NULL;
 }
 
 static void destroy_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd)
@@ -523,7 +524,8 @@ static int __map_osds(struct ceph_osd_client *osdc,
 		__insert_osd(osdc, req->r_osd);
 	}
 
-	list_add(&req->r_osd_item, &req->r_osd->o_requests);
+	if (req->r_osd)
+		list_add(&req->r_osd_item, &req->r_osd->o_requests);
 	err = 1;   /* osd changed */
 
 out:

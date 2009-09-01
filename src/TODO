@@ -79,6 +79,8 @@ repair
 
 kclient
 - fix up ESTALE handling
+- allow struct ceph_msg revoke from a connection
+- don't retry on ENOMEM on non-nofail requests in kick_requests
 - make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
