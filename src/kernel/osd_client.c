@@ -329,9 +329,10 @@ static void destroy_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd)
 	dout("destroy_osd %p\n", osd);
 	BUG_ON(!list_empty(&osd->o_requests));
 	rb_erase(&osd->o_node, &osdc->osds);
+	osd->o_con->private = NULL;
 	ceph_con_close(osd->o_con);
 	osd->o_con->ops->put(osd->o_con);
-	kfree(osd);
+	osd->o_con = NULL;
 }
 
 static int reset_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd)
@@ -341,9 +342,11 @@ static int reset_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd)
 	dout("reset_osd %p osd%d\n", osd, osd->o_osd);
 	if (list_empty(&osd->o_requests)) {
 		destroy_osd(osdc, osd);
+		kfree(osd);
 	} else {
 		ceph_con_close(osd->o_con);
 		osd->o_con->ops->put(osd->o_con);
+		osd->o_con = NULL;
 		ret = open_osd_session(osdc, osd);
 	}
 	return ret;
@@ -432,8 +435,10 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 	osdc->num_requests--;
 
 	list_del_init(&req->r_osd_item);
-	if (list_empty(&req->r_osd->o_requests))
+	if (list_empty(&req->r_osd->o_requests)) {
 		destroy_osd(osdc, req->r_osd);
+		kfree(req->r_osd);
+	}
 	req->r_osd = NULL;
 
 	ceph_osdc_put_request(req);
@@ -458,20 +463,22 @@ static void __unregister_request(struct ceph_osd_client *osdc,
 
 
 /*
- * Pick an osd (the first 'up' osd in the pg), and put result in
- * req->r_last_osd[_addr].  If none, set to -1.
+ * Pick an osd (the first 'up' osd in the pg), allocate the osd struct
+ * (as needed), and set the request r_osd appropriately.  If there is
+ * no up osd, set r_osd to NULL.
  *
- * Caller should hold map_sem for read.
+ * Return 0 if unchanged, 1 if changed, or negative on error.
  *
- * return 0 if unchanged, 1 if changed.
+ * Caller should hold map_sem for read and request_mutex.
  */
-static int map_osds(struct ceph_osd_client *osdc,
-		    struct ceph_osd_request *req)
+static int __map_osds(struct ceph_osd_client *osdc,
+		      struct ceph_osd_request *req)
 {
 	struct ceph_osd_request_head *reqhead = req->r_request->front.iov_base;
 	union ceph_pg pgid;
 	int o = -1;
 	int err;
+	struct ceph_osd *newosd = NULL;
 
 	err = ceph_calc_object_layout(&reqhead->layout, req->r_oid,
 				      &req->r_file_layout, osdc->osdmap);
@@ -480,33 +487,45 @@ static int map_osds(struct ceph_osd_client *osdc,
 	pgid.pg64 = le64_to_cpu(reqhead->layout.ol_pgid);
 	o = ceph_calc_pg_primary(osdc->osdmap, pgid);
 
-	if (req->r_osd && req->r_osd->o_osd == o)
-		return 0;
+	if ((req->r_osd && req->r_osd->o_osd == o) ||
+	    (req->r_osd == NULL && o == -1))
+		return 0;  /* no change */
 
 	dout("map_osds tid %llu pgid %llx pool %d osd%d (was osd%d)\n",
 	     req->r_tid, pgid.pg64, pgid.pg.pool, o,
 	     req->r_osd ? req->r_osd->o_osd : -1);
 
-	/* XXX FIXME: try to reuse r_osd where possible */
 	if (req->r_osd) {
 		list_del_init(&req->r_osd_item);
-		if (list_empty(&req->r_osd->o_requests))
-			destroy_osd(osdc, req->r_osd);
+		if (list_empty(&req->r_osd->o_requests)) {
+			/* try to re-use r_osd if possible */
+			newosd = req->r_osd;
+			destroy_osd(osdc, newosd);
+		}
 		req->r_osd = NULL;
 	}
 
 	req->r_osd = __lookup_osd(osdc, o);
-	if (!req->r_osd) {
-		req->r_osd = kmalloc(sizeof(*req->r_osd), GFP_NOFS);
-		if (!req->r_osd)
-			return -ENOMEM;
+	if (!req->r_osd && o >= 0) {
+		if (newosd) {
+			req->r_osd = newosd;
+			newosd = NULL;
+		} else {
+			err = -ENOMEM;
+			req->r_osd = kmalloc(sizeof(*req->r_osd), GFP_NOFS);
+			if (!req->r_osd)
+				goto out;
+		}
 		init_osd(osdc, req->r_osd, o);
-#warning check return value
-		open_osd_session(osdc, req->r_osd);
 		__insert_osd(osdc, req->r_osd);
 	}
+
 	list_add(&req->r_osd_item, &req->r_osd->o_requests);
-	return 1;
+	err = 1;   /* osd changed */
+
+out:
+	kfree(newosd);
+	return err;
 }
 
 /*
