@@ -2101,6 +2101,16 @@ void Server::handle_client_openc(MDRequest *mdr)
   }
   in->inode.rstat.rfiles = 1;
 
+  if (req->head.args.open.stripe_unit != 0xffffffff)
+    in->inode.layout.fl_stripe_unit = req->head.args.open.stripe_unit;
+  if (req->head.args.open.stripe_count != 0xffffffff)
+    in->inode.layout.fl_stripe_count = req->head.args.open.stripe_count;
+  if (req->head.args.open.object_size != 0xffffffff)
+    in->inode.layout.fl_object_size = req->head.args.open.object_size;
+  /*if(req->head.args->open.file_replication != 0xffffffff)
+    in->inode.layout.fl_pg_pool.set_size(req->head.args.open.file_replication);
+  */
+
   dn->first = in->first = follows+1;
   
   // prepare finisher
