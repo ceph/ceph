@@ -281,17 +281,20 @@ __lookup_request_ge(struct ceph_osd_client *osdc,
 
 
 /*
- * If we detect that a tcp connection to an osd resets, we need to
- * resubmit all requests for that osd.  That's because although we reliably
- * deliver our requests, the osd doesn't not try as hard to deliver the
- * reply (because it does not get notification when clients, mds' leave
- * the cluster).
+ * The messaging layer will reconnect to the osd as needed.  If the
+ * session has dropped, the OSD will have dropped the session state,
+ * and we'll get notified by the messaging layer.  If that happens, we
+ * need to resubmit all requests for that osd.
  */
-static void peer_reset(struct ceph_connection *con)
+static void osd_reset(struct ceph_connection *con)
 {
 	struct ceph_osd *osd = con->private;
-	struct ceph_osd_client *osdc = osd->o_osdc;
+	struct ceph_osd_client *osdc;
 	
+	if (!osd)
+		return;
+	dout("osd_reset osd%d\n", osd->o_osd);
+	osdc = osd->o_osdc;
 	down_read(&osdc->map_sem);
 	kick_requests(osdc, osd);
 	up_read(&osdc->map_sem);
@@ -537,8 +540,8 @@ static int send_request(struct ceph_osd_client *osdc,
 	struct ceph_osd_request_head *reqhead;
 	int err;
 
-	err = map_osds(osdc, req);
-	if (err == -ENOMEM)
+	err = __map_osds(osdc, req);
+	if (err < 0)
 		return err;
 	if (req->r_osd == NULL) {
 		dout("send_request %p no up osds in pg\n", req);
@@ -548,6 +551,12 @@ static int send_request(struct ceph_osd_client *osdc,
 
 	dout("send_request %p tid %llu to osd%d flags %d\n",
 	     req, req->r_tid, req->r_osd->o_osd, req->r_flags);
+
+	if (req->r_osd->o_con == NULL) {
+		err = open_osd_session(osdc, req->r_osd);
+		if (err < 0)
+			return err;
+	}
 
 	reqhead = req->r_request->front.iov_base;
 	reqhead->osdmap_epoch = cpu_to_le32(osdc->osdmap->epoch);
@@ -761,9 +770,19 @@ static void kick_requests(struct ceph_osd_client *osdc,
 		if (osd == req->r_osd)
 			goto kick;
 
-		if (map_osds(osdc, req) == 0)
+		err = __map_osds(osdc, req);
+		if (err == 0)
 			continue;  /* no change */
-
+		if (err < 0) {
+			/*
+			 * FIXME: really, we should set the request
+			 * error and fail if this isn't a 'nofail'
+			 * request, but that's a fair bit more
+			 * complicated to do.  So retry!
+			 */
+			req->r_resend = true;
+			continue;
+		}
 		if (req->r_osd == NULL) {
 			dout("tid %llu maps to no valid osd\n", req->r_tid);
 			needmap++;  /* request a newer map */
@@ -1185,6 +1204,9 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 	struct ceph_osd_client *osdc = osd->o_osdc;
 	int type = le16_to_cpu(msg->hdr.type);
 
+	if (!osd)
+		return;
+
 	switch (type) {
 	case CEPH_MSG_OSD_MAP:
 		ceph_osdc_handle_map(osdc, msg);
@@ -1204,7 +1226,7 @@ const static struct ceph_connection_operations osd_con_ops = {
 	.get = ceph_con_get,
 	.put = ceph_con_put,
 	.dispatch = dispatch,
-	.peer_reset = peer_reset,
+	.peer_reset = osd_reset,
 	.alloc_msg = ceph_alloc_msg,
 	.alloc_middle = ceph_alloc_middle,
 };
