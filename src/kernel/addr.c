@@ -396,8 +396,6 @@ static struct ceph_snap_context *get_oldest_context(struct inode *inode,
  *
  * If we get a write error, set the page error bit, but still adjust the
  * dirty page accounting (i.e., page is no longer dirty).
- *
- * FIXME: Is that the right thing to do?
  */
 static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 {
@@ -503,8 +501,6 @@ static void ceph_release_pages(struct page **pages, int num)
  *
  * If we get an error, set the mapping error bit, but not the individual
  * page error bits.
- *
- * FIXME: What should we be doing here?
  */
 static void writepages_finish(struct ceph_osd_request *req,
 			      struct ceph_msg *msg)
