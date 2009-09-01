@@ -57,7 +57,6 @@ struct ceph_mon_client {
 	struct delayed_work delayed_work;
 
 	int cur_mon;                       /* last monitor i contacted */
-	bool subscribed;
 	unsigned long sub_sent, sub_renew_after;
 	struct ceph_connection *con;
 
@@ -67,7 +66,8 @@ struct ceph_mon_client {
 	u64 last_tid;
 
 	/* mds/osd map or mount requests */
-	bool want_mount, want_next_osdmap;
+	bool want_mount;
+	int want_next_osdmap; /* 1 = want, 2 = want+asked */
 	u32 have_osdmap, have_mdsmap;
 
 	struct dentry *debugfs_file;

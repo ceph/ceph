@@ -104,8 +104,9 @@ static int __open_session(struct ceph_mon_client *monc, int newmon)
 
 		get_random_bytes(&r, 1);
 		monc->cur_mon = r % monc->monmap->num_mon;
-		monc->subscribed = false;
 		monc->sub_sent = 0;
+		monc->sub_renew_after = jiffies;  /* i.e., expired */
+		monc->want_next_osdmap = !!monc->want_next_osdmap;
 
 		monc->con = kzalloc(sizeof(*monc->con), GFP_NOFS);
 		if (!monc->con) {
@@ -126,6 +127,11 @@ static int __open_session(struct ceph_mon_client *monc, int newmon)
 	return 0;
 }
 
+static bool __sub_expired(struct ceph_mon_client *monc)
+{
+	return time_after_eq(jiffies, monc->sub_renew_after);
+}
+
 /*
  * Reschedule delayed work timer.
  */
@@ -133,7 +139,7 @@ static void __schedule_delayed(struct ceph_mon_client *monc)
 {
 	unsigned delay;
 
-	if (monc->want_mount)
+	if (monc->want_mount || __sub_expired(monc))
 		delay = 10 * HZ;
 	else
 		delay = 20 * HZ;
@@ -146,9 +152,11 @@ static void __schedule_delayed(struct ceph_mon_client *monc)
  */
 static void __send_subscribe(struct ceph_mon_client *monc)
 {
-	if ((!monc->subscribed && !monc->sub_sent) ||
-	    time_before(jiffies, monc->sub_renew_after) ||
-	    !monc->want_next_osdmap) {
+	dout("__send_subscribe sub_sent=%u exp=%u want_osd=%d\n",
+	     (unsigned)monc->sub_sent, __sub_expired(monc),
+	     monc->want_next_osdmap);
+	if ((__sub_expired(monc) && !monc->sub_sent) ||
+	    monc->want_next_osdmap == 1) {
 		struct ceph_msg *msg;
 		struct ceph_mon_subscribe_item *i;
 		void *p, *end;
@@ -157,30 +165,35 @@ static void __send_subscribe(struct ceph_mon_client *monc)
 		if (!msg)
 			return;
 
-		dout("open_session subscribing to 'mdsmap' at %u\n",
-		     (unsigned)monc->have_mdsmap);
 		p = msg->front.iov_base;
 		end = p + msg->front.iov_len;
 
-		ceph_encode_32(&p, 1 + monc->want_next_osdmap);
-		ceph_encode_string(&p, end, "mdsmap", 6);
-		i = p;
-		i->have = cpu_to_le64(monc->have_mdsmap);
-		i->onetime = 0;
-		p += sizeof(*i);
+		dout("__send_subscribe to 'mdsmap' %u+\n",
+		     (unsigned)monc->have_mdsmap);
 		if (monc->want_next_osdmap) {
+			dout("__send_subscribe to 'osdmap' %u\n",
+			     (unsigned)monc->have_osdmap);
+			ceph_encode_32(&p, 2);
 			ceph_encode_string(&p, end, "osdmap", 6);
 			i = p;
 			i->have = cpu_to_le64(monc->have_osdmap);
 			i->onetime = 1;
 			p += sizeof(*i);
+			monc->want_next_osdmap = 2;  /* requested */
+		} else {
+			ceph_encode_32(&p, 1);
 		}
+		ceph_encode_string(&p, end, "mdsmap", 6);
+		i = p;
+		i->have = cpu_to_le64(monc->have_mdsmap);
+		i->onetime = 0;
+		p += sizeof(*i);
 
 		msg->front.iov_len = p - msg->front.iov_base;
 		msg->hdr.front_len = cpu_to_le32(msg->front.iov_len);
 		ceph_con_send(monc->con, msg);
 
-		monc->sub_sent = jiffies;
+		monc->sub_sent = jiffies | 1;  /* never 0 */
 	}
 }
 
@@ -191,11 +204,11 @@ static void handle_subscribe_ack(struct ceph_mon_client *monc,
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 
-	dout("handle_subscribe_ack\n");
-	ceph_decode_64_safe(&p, end, seconds, bad);
-	monc->subscribed = true;
-	monc->sub_renew_after = monc->sub_sent + seconds*HZ;
-	
+	ceph_decode_32_safe(&p, end, seconds, bad);
+	dout("handle_subscribe_ack after %d seconds\n", seconds);
+	monc->sub_renew_after = monc->sub_sent + seconds*HZ - 1;
+	monc->sub_sent = 0;
+	return;
 bad:
 	pr_err("ceph got corrupt subscribe-ack msg\n");
 }
@@ -215,7 +228,7 @@ int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 got)
 {
 	mutex_lock(&monc->mutex);
 	monc->have_osdmap = got;
-	monc->want_next_osdmap = false;
+	monc->want_next_osdmap = 0;
 	mutex_unlock(&monc->mutex);
 	return 0;
 }
@@ -227,8 +240,10 @@ void ceph_monc_request_next_osdmap(struct ceph_mon_client *monc)
 {
 	dout("request_next_osdmap have %u\n", monc->have_osdmap);
 	mutex_lock(&monc->mutex);
-	monc->want_next_osdmap = true;
-	__send_subscribe(monc);
+	if (!monc->want_next_osdmap)
+		monc->want_next_osdmap = 1;
+	if (monc->want_next_osdmap < 2)
+		__send_subscribe(monc);
 	mutex_unlock(&monc->mutex);
 }
 
@@ -484,8 +499,12 @@ static void delayed_work(struct work_struct *work)
 	if (monc->want_mount) {
 		__request_mount(monc);
 	} else {
-		ceph_con_keepalive(monc->con);
-		__send_subscribe(monc);
+		if (__sub_expired(monc)) {
+			__open_session(monc, 1);  /* keep hunting */
+		} else {
+			ceph_con_keepalive(monc->con);
+			__send_subscribe(monc);
+		}
 	}
 	__schedule_delayed(monc);
 	mutex_unlock(&monc->mutex);
@@ -500,6 +519,9 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	mutex_init(&monc->mutex);
 	monc->con = NULL;
 
+	monc->sub_renew_after = jiffies;
+	monc->sub_sent = 0;
+
 	INIT_DELAYED_WORK(&monc->delayed_work, delayed_work);
 	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
 	monc->num_statfs_requests = 0;
@@ -507,7 +529,7 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 
 	monc->have_mdsmap = 0;
 	monc->have_osdmap = 0;
-	monc->want_next_osdmap = true;
+	monc->want_next_osdmap = 1;
 	monc->want_mount = true;
 	return 0;
 }
