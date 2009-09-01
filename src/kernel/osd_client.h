@@ -95,10 +95,6 @@ extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc,
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc,
 				 struct ceph_msg *msg);
 
-/* incoming read messages use this to discover which pages to read
- * the data payload into. */
-extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
-
 extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_file_layout *layout,
 				      struct ceph_vino vino,

@@ -924,10 +924,11 @@ bad:
  * find those pages.
  *  0 = success, -1 failure.
  */
-int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want)
+static int prepare_pages(struct ceph_connection *con, struct ceph_msg *m,
+			 int want)
 {
-	struct ceph_client *client = p;
-	struct ceph_osd_client *osdc = &client->osdc;
+	struct ceph_osd *osd = con->private;
+	struct ceph_osd_client *osdc = osd->o_osdc;
 	struct ceph_osd_reply_head *rhead = m->front.iov_base;
 	struct ceph_osd_request *req;
 	u64 tid;
@@ -1227,6 +1228,5 @@ const static struct ceph_connection_operations osd_con_ops = {
 	.peer_reset = osd_reset,
 	.alloc_msg = ceph_alloc_msg,
 	.alloc_middle = ceph_alloc_middle,
+	.prepare_pages = prepare_pages,
 };
-
-
