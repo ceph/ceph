@@ -125,6 +125,11 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
 
   cwd = NULL;
 
+  file_stripe_unit = -1;
+  file_stripe_count = -1;
+  object_size = -1;
+  file_replication = -1;
+
   // 
   root = 0;
 
@@ -5024,6 +5029,11 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.flags = flags | O_CREAT;
   req->head.args.open.mode = mode;
   
+  req->head.args.open.stripe_unit = file_stripe_unit;
+  req->head.args.open.stripe_count = file_stripe_count;
+  req->head.args.open.object_size = object_size;
+  req->head.args.open.file_replication = file_replication;
+
   int res = make_request(req, uid, gid);
   
   if (res >= 0) {
@@ -5415,7 +5425,25 @@ int Client::ll_release(Fh *fh)
 
 // =========================================
 // layout
+void Client::set_default_file_stripe_unit(int stripe_unit)
+{
+  file_stripe_unit = stripe_unit;
+}
 
+void Client::set_default_file_stripe_count(int count)
+{
+  file_stripe_count = count;
+}
+
+void Client::set_default_object_size(int size)
+{
+  object_size = size;
+}
+
+void Client::set_default_file_replication(int replication)
+{
+  file_replication = replication;
+}
 
 int Client::describe_layout(int fd, ceph_file_layout *lp)
 {

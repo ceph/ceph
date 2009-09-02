@@ -326,6 +326,26 @@ extern "C" int ceph_get_file_replication(const char *path) {
   return rep;
 }
 
+extern "C" int ceph_set_default_file_stripe_unit(int stripe)
+{
+  client->set_default_file_stripe_unit(stripe);
+}
+
+int ceph_set_default_file_stripe_count(int count)
+{
+  client->set_default_file_stripe_unit(count);
+}
+
+int ceph_set_default_object_size(int size)
+{
+  client->set_default_object_size(size);
+}
+
+int ceph_set_default_file_replication(int replication)
+{
+  client->set_default_file_replication(replication);
+}
+
 int ceph_get_file_stripe_address(int fh, loff_t offset, char *buf, int buflen)
 {
   string address;

@@ -784,6 +784,11 @@ public:
   bool   unmounting;
 
   int    unsafe_sync_write;
+
+  int file_stripe_unit;
+  int file_stripe_count;
+  int object_size;
+  int file_replication;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void sync_write_commit(Inode *in);
@@ -1179,6 +1184,11 @@ public:
   int get_file_stripe_period(int fd);
   int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
+
+  void set_default_file_stripe_unit(int stripe_unit);
+  void set_default_file_stripe_count(int count);
+  void set_default_object_size(int size);
+  void set_default_file_replication(int replication);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);
