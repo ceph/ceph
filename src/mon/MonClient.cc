@@ -285,6 +285,7 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
   }
   num_waiters++;
 
+  dout(10) << "got_response=" << got_response() << " itsme=" << itsme << " done=" << done << dendl;
   while (!got_response() ||
 	 (!itsme && !done)) { // non-doers wait a little longer
 	cond.Wait(op_lock);

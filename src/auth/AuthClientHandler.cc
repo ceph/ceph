@@ -78,6 +78,8 @@ char buf[1024];
   bufferlist::iterator iter = bl.begin();
 
   if (ret != 0 && ret != -EAGAIN) {
+    response_state = request_state;
+    cephx_response_state = cephx_request_state;
     status = ret;
     return ret;
   }
@@ -118,21 +120,25 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
 
    ::encode(header, bl);
-    build_authenticate_request(name, addr, bl);
+    build_get_tgt_request(name, addr, bl);
+    cephx_request_state = 1;
     return 0;
   }
 
   dout(0) << "want_keys=" << hex << want_keys << " have_keys=" << have_keys << dec << dendl;
 
-  if (want_keys == have_keys)
-    return 0;
+  cephx_request_state = 2;
 
-  header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY | want_keys;
+  if (want_keys == have_keys) {
+    cephx_response_state = 2;
+    return 0;
+  }
+
+  header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
 
   ::encode(header, bl);
+  auth_ticket.get_session_keys(want_keys, addr, bl);
   
-  auth_ts = auth_ticket.build_authenticator(bl);
-
   return 0;
 }
 
@@ -146,7 +152,8 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
   dout(0) << "handle_cephx_response()" << dendl;
 
   switch (header.request_type & CEPHX_REQUEST_TYPE_MASK) {
-  case CEPHX_GET_AUTH_SESSION_KEY:  
+  case CEPHX_GET_AUTH_SESSION_KEY:
+    cephx_response_state = 1;
     dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
 
 #define PRINCIPAL_SECRET "123456789ABCDEF0"
@@ -154,7 +161,7 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
       bufferptr p(PRINCIPAL_SECRET, sizeof(PRINCIPAL_SECRET) - 1);
       secret.set_secret(CEPH_SECRET_AES, p);
   
-      if (!auth_ticket.verify_authenticate_reply(secret, indata)) {
+      if (!auth_ticket.verify_service_ticket_reply(secret, indata)) {
         dout(0) << "could not verify authenticate reply" << dendl;
         return -EPERM;
       }
@@ -165,12 +172,14 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
     break;
 
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
+    cephx_response_state = 2;
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
     {
     }
     break;
 
   case CEPHX_OPEN_SESSION:
+    cephx_response_state = 3;
     dout(0) << "FIXME: CEPHX_OPEN_SESSION" << dendl;
     break;
   default:

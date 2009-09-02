@@ -24,13 +24,16 @@
 
 /* FIXME */
 #define SERVICE_SECRET   "0123456789ABCDEF"
-#define PRINCIPAL_SECRET "123456789ABCDEF0"
 #define AUTH_SESSION_KEY "23456789ABCDEF01"
+
+#define PRINCIPAL_CLIENT_SECRET "123456789ABCDEF0"
+#define PRINCIPAL_OSD_SECRET "3456789ABCDEF012"
 
 class CephAuthServer {
   /* FIXME: this is all temporary */
-  ClientTicket client_ticket;
-  CryptoKey principal_secret;
+  PrincipalTicket principal_ticket;
+  CryptoKey client_secret;
+  CryptoKey osd_secret;
   CryptoKey auth_session_key;
   CryptoKey service_secret;
   
@@ -39,17 +42,25 @@ public:
     bufferptr ptr1(SERVICE_SECRET, sizeof(SERVICE_SECRET) - 1);
     service_secret.set_secret(CEPH_SECRET_AES, ptr1);
 
-    bufferptr ptr2(PRINCIPAL_SECRET, sizeof(PRINCIPAL_SECRET) - 1);
-    principal_secret.set_secret(CEPH_SECRET_AES, ptr2);
+    bufferptr ptr2(PRINCIPAL_CLIENT_SECRET, sizeof(PRINCIPAL_CLIENT_SECRET) - 1);
+    client_secret.set_secret(CEPH_SECRET_AES, ptr2);
+
+    bufferptr ptr2(PRINCIPAL_OSD_SECRET, sizeof(PRINCIPAL_OSD_SECRET) - 1);
+    osd_secret.set_secret(CEPH_SECRET_AES, ptr2);
 
     bufferptr ptr3(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
     auth_session_key.set_secret(CEPH_SECRET_AES, ptr3);
   }
 
-  int get_principal_secret(EntityName& principal_name, entity_addr_t principal_addr,
+/* FIXME: temporary stabs */
+  int get_client_secret(CryptoKey& secret) {
+     secret = client_secret;
+     return 0;
+  }
+
+  int get_osd_secret(EntityName& principal_name, entity_addr_t principal_addr,
                         CryptoKey& secret) {
-     /* FIXME */
-     secret = principal_secret;
+     secret = osd_secret;
      return 0;
   }
 
@@ -141,22 +152,22 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       EntityName name; /* FIXME should take it from the request */
       entity_addr_t addr;
-      ClientTicket ticket;
+      PrincipalTicket ticket;
       CryptoKey principal_secret;
       CryptoKey session_key;
       CryptoKey service_secret;
 
       ticket.expires = g_clock.now();
 
-      auth_server.get_principal_secret(name, addr, principal_secret);
+      auth_server.get_client_secret(name, addr, principal_secret);
       auth_server.get_session_key(session_key);
       auth_server.get_service_secret(service_secret);
 
       build_cephx_response_header(request_type, 0, result_bl);
-      if (!build_authenticate_reply(ticket, principal_secret, session_key, service_secret, result_bl)) {
+      if (!build_get_tgt_reply(ticket, principal_secret, session_key, service_secret, result_bl)) {
         ret = -EIO;
       }
-
+#if 0
       char buf[1024];
       const char *s = result_bl.c_str();
       int pos = 0;
@@ -168,6 +179,34 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
           pos += snprintf(&buf[pos], 1024-pos, "\n");
       }
       dout(0) << "result_buf=" << buf << dendl;
+#endif
+    }
+    break;
+  case CEPHX_GET_PRINCIPAL_SESSION_KEY:
+    dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY principal type=" << (cephx_header.request_type & CEPHX_PRINCIPAL_TYPE_MASK) << dendl;
+    {
+      EntityName name; /* FIXME should take it from the request */
+      entity_addr_t addr;
+      CryptoKey session_key;
+      CryptoKey service_secret;
+      uint32_t keys;
+
+      auth_server.get_session_key(session_key);
+      auth_server.get_service_secret(service_secret);
+
+      if (!verify_get_session_keys_request(service_secret,
+                                     session_key, keys, indata)) {
+        ret = -EPERM;
+      }
+
+      ServiceTicket service_ticket;
+      CryptoKey osd_secret;
+      auth_server.get_osd_secret(osd_secret);
+
+      CryptoKey osd_secret;
+      auth_server.get_osd_secret(osd_secret);
+      build_cephx_response_header(request_type, ret, result_bl);
+      build_ticket_reply(service_ticket, session_key, osd_secret, result_bl);
     }
     break;
   default:
