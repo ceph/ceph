@@ -357,8 +357,8 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	client->msgr->inst.name.num = cpu_to_le32(cnum);
 	client->msgr->inst.name.type = CEPH_ENTITY_TYPE_CLIENT;
 	memcpy(&client->msgr->inst.addr, &addr, sizeof(addr));
-	pr_info("ceph client%d %u.%u.%u.%u:%u fsid %llx.%llx\n", client->whoami,
-		IPQUADPORT(addr.ipaddr),
+	pr_info("ceph client%lld %u.%u.%u.%u:%u fsid %llx.%llx\n",
+		client->whoami, IPQUADPORT(addr.ipaddr),
 		le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
 		le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
 

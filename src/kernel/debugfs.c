@@ -363,7 +363,7 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 #define TMP_NAME_SIZE 16
 	char name[TMP_NAME_SIZE];
 
-	snprintf(name, TMP_NAME_SIZE, "client%d", client->whoami);
+	snprintf(name, TMP_NAME_SIZE, "client%lld", client->whoami);
 
 	client->debugfs_dir = debugfs_create_dir(name, ceph_debugfs_dir);
 	if (!client->debugfs_dir)
