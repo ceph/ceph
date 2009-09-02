@@ -224,12 +224,20 @@ inline void decode(entity_inst_t &i, bufferlist::iterator& p) {
   decode(i.addr, p);
 }
 
-inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
-inline bool operator!=(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }
-inline bool operator<(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) < 0; }
-inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) <= 0; }
-inline bool operator>(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) > 0; }
-inline bool operator>=(const entity_inst_t& a, const entity_inst_t& b) { return memcmp(&a, &b, sizeof(a)) >= 0; }
+inline bool operator==(const entity_inst_t& a, const entity_inst_t& b) { 
+  return a.name == b.name && a.addr == b.addr;
+}
+inline bool operator!=(const entity_inst_t& a, const entity_inst_t& b) { 
+  return a.name != b.name || a.addr != b.addr;
+}
+inline bool operator<(const entity_inst_t& a, const entity_inst_t& b) { 
+  return a.name < b.name || (a.name == b.name && a.addr < b.addr);
+}
+inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) {
+  return a.name < b.name || (a.name == b.name && a.addr <= b.addr);
+}
+inline bool operator>(const entity_inst_t& a, const entity_inst_t& b) { return b < a; }
+inline bool operator>=(const entity_inst_t& a, const entity_inst_t& b) { return b <= a; }
 
 namespace __gnu_cxx {
   template<> struct hash< entity_inst_t >
