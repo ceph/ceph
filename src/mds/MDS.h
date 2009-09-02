@@ -316,7 +316,7 @@ class MDS : public Dispatcher {
   void send_message_mds(Message *m, int mds);
   void forward_message_mds(Message *req, int mds);
 
-  void send_message_client(Message *m, int client);
+  void send_message_client(Message *m, client_t client);
   void send_message_client(Message *m, entity_inst_t clientinst);
 
 

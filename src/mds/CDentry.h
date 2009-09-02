@@ -230,11 +230,11 @@ public:
     return get_projected_linkage()->inode;
   }
 
-  bool use_projected(int client, Mutation *mut) {
+  bool use_projected(client_t client, Mutation *mut) {
     return lock.can_read_projected(client) || 
       lock.get_xlocked_by() == mut;
   }
-  linkage_t *get_linkage(int client, Mutation *mut) {
+  linkage_t *get_linkage(client_t client, Mutation *mut) {
     return use_projected(client, mut) ? get_projected_linkage() : get_linkage();
   }
 
@@ -352,17 +352,17 @@ public:
   // ---------------------------------------------
   // replicas (on clients)
  public:
-  map<int,ClientLease*> client_lease_map;
+  map<client_t,ClientLease*> client_lease_map;
 
   bool is_any_leases() {
     return !client_lease_map.empty();
   }
-  ClientLease *get_client_lease(int c) {
+  ClientLease *get_client_lease(client_t c) {
     if (client_lease_map.count(c))
       return client_lease_map[c];
     return 0;
   }
-  int get_client_lease_mask(int c) {
+  int get_client_lease_mask(client_t c) {
     ClientLease *l = get_client_lease(c);
     if (l) 
       return l->mask;
@@ -370,7 +370,7 @@ public:
       return 0;
   }
 
-  ClientLease *add_client_lease(int c, int mask);
+  ClientLease *add_client_lease(client_t c, int mask);
   int remove_client_lease(ClientLease *r, int mask, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   
 

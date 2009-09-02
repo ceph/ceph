@@ -153,7 +153,7 @@ bool Locker::acquire_locks(MDRequest *mdr,
   }
   dout(10) << "acquire_locks " << *mdr << dendl;
 
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
 
   set<SimpleLock*, SimpleLock::ptr_lt> sorted;  // sort everything we will lock
   set<SimpleLock*> mustpin = xlocks;            // items to authpin
@@ -684,7 +684,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock)
   return false;
 }
 
-bool Locker::rdlock_try(SimpleLock *lock, int client, Context *con)
+bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
 {
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -708,7 +708,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequest *mut)
   dout(7) << "rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
   // client may be allowed to rdlock the same item it has xlocked.
-  int client = mut->get_client();
+  client_t client = mut->get_client();
 
   if (!lock->get_parent()->is_auth() &&
       lock->fw_rdlock_to_auth()) {
@@ -791,7 +791,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
     ((CInode*)lock->get_parent())->has_subtree_root_dirfrag();
     
   CInode *in = (CInode *)lock->get_parent();
-  int client = mut->get_client();
+  client_t client = mut->get_client();
   Capability *cap = 0;
   if (client >= 0)
     cap = in->get_client_cap(client);
@@ -868,7 +868,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequest *mut)
     return local_xlock_start((LocalLock*)lock, mut);
 
   dout(7) << "xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
-  int client = mut->get_client();
+  client_t client = mut->get_client();
 
   // auth?
   if (lock->get_parent()->is_auth()) {
@@ -998,10 +998,10 @@ struct C_Locker_FileUpdate_finish : public Context {
   CInode *in;
   Mutation *mut;
   bool share;
-  int client;
+  client_t client;
   Capability *cap;
   MClientCaps *ack;
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, int c=-1,
+  C_Locker_FileUpdate_finish(Locker *l, CInode *i, Mutation *m, bool e=false, client_t c=-1,
 			     Capability *cp = 0,
 			     MClientCaps *ac = 0) : 
     locker(l), in(i), mut(m), share(e), client(c), cap(cp),
@@ -1013,7 +1013,7 @@ struct C_Locker_FileUpdate_finish : public Context {
   }
 };
 
-void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, int client, 
+void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t client, 
 				Capability *cap, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
@@ -1115,7 +1115,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
   int loner_allowed = in->get_caps_allowed_by_type(CAP_LONER);
   int xlocker_allowed = in->get_caps_allowed_by_type(CAP_XLOCKER);
 
-  int loner = in->get_loner();
+  client_t loner = in->get_loner();
   if (loner >= 0) {
     dout(7) << "issue_caps loner client" << loner
 	    << " allowed=" << ccap_string(loner_allowed) 
@@ -1132,7 +1132,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
   int nissued = 0;        
 
   // client caps
-  map<int, Capability*>::iterator it;
+  map<client_t, Capability*>::iterator it;
   if (only_cap)
     it = in->client_caps.find(only_cap->get_client());
   else
@@ -1213,7 +1213,7 @@ void Locker::issue_truncate(CInode *in)
 {
   dout(7) << "issue_truncate on " << *in << dendl;
   
-  for (map<int, Capability*>::iterator it = in->client_caps.begin();
+  for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
     Capability *cap = it->second;
@@ -1235,7 +1235,7 @@ void Locker::issue_truncate(CInode *in)
 void Locker::revoke_stale_caps(Session *session)
 {
   dout(10) << "revoke_stale_caps for " << session->inst.name << dendl;
-  int client = session->get_client();
+  client_t client = session->get_client();
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
@@ -1413,13 +1413,13 @@ public:
 };
 
 
-void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<int,byte_range_t>& new_ranges)
+void Locker::calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_range_t>& new_ranges)
 {
   inode_t *latest = in->get_projected_inode();
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
-  for (map<int,Capability*>::iterator p = in->client_caps.begin();
+  for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
        p != in->client_caps.end();
        p++) {
     if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
@@ -1440,7 +1440,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   assert(in->is_auth());
 
   inode_t *latest = in->get_projected_inode();
-  map<int,byte_range_t> new_ranges;
+  map<client_t,byte_range_t> new_ranges;
   __u64 size = latest->size;
   if (update_size)
     size = new_size;
@@ -1538,10 +1538,10 @@ void Locker::share_inode_max_size(CInode *in)
    * the cap later.
    */
   dout(10) << "share_inode_max_size on " << *in << dendl;
-  for (map<int,Capability*>::iterator it = in->client_caps.begin();
+  for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
        it++) {
-    const int client = it->first;
+    const client_t client = it->first;
     Capability *cap = it->second;
     if (cap->is_suppress())
       continue;
@@ -1606,7 +1606,7 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
  */
 void Locker::handle_client_caps(MClientCaps *m)
 {
-  int client = m->get_source().num();
+  client_t client = m->get_source().num();
 
   snapid_t follows = m->get_snap_follows();
   dout(7) << "handle_client_caps on " << m->get_ino()
@@ -1767,7 +1767,7 @@ void Locker::handle_client_caps(MClientCaps *m)
   delete m;
 }
 
-void Locker::process_cap_update(MDRequest *mdr, int client,
+void Locker::process_cap_update(MDRequest *mdr, client_t client,
 				inodeno_t ino, __u64 cap_id, int caps, int wanted,
 				int seq, int issue_seq, int mseq,
 				const nstring& dname)
@@ -1811,7 +1811,7 @@ void Locker::process_cap_update(MDRequest *mdr, int client,
 
 void Locker::kick_cap_releases(MDRequest *mdr)
 {
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
   for (map<vinodeno_t,ceph_seq_t>::iterator p = mdr->cap_releases.begin();
        p != mdr->cap_releases.end();
        p++) {
@@ -1842,7 +1842,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	   << " wanted " << ccap_string(wanted)
 	   << " on " << *in << dendl;
   assert(in->is_auth());
-  int client = m->get_source().num();
+  client_t client = m->get_source().num();
   inode_t *latest = in->get_projected_inode();
 
   // increase or zero max_size?
@@ -2019,7 +2019,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
 void Locker::handle_client_cap_release(MClientCapRelease *m)
 {
-  int client = m->get_source().num();
+  client_t client = m->get_source().num();
   dout(10) << "handle_client_cap_release " << *m << dendl;
 
   for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); p++) {
@@ -2064,7 +2064,7 @@ void Locker::handle_client_lease(MClientLease *m)
   dout(10) << "handle_client_lease " << *m << dendl;
 
   assert(m->get_source().is_client());
-  int client = m->get_source().num();
+  client_t client = m->get_source().num();
 
   CInode *in = mdcache->get_inode(m->get_ino(), m->get_last());
   if (!in) {
@@ -2135,7 +2135,7 @@ void Locker::handle_client_lease(MClientLease *m)
 
 
 
-void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, int client,
+void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, client_t client,
 				 bufferlist &bl, utime_t now, Session *session)
 {
   LeaseStat e;
@@ -2160,7 +2160,7 @@ void Locker::_issue_client_lease(CDentry *dn, int mask, int pool, int client,
 
 
 /*
-int Locker::issue_client_lease(CInode *in, int client, 
+int Locker::issue_client_lease(CInode *in, client_t client, 
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int mask = CEPH_LOCK_INO;
@@ -2175,7 +2175,7 @@ int Locker::issue_client_lease(CInode *in, int client,
 }
 */
 
-int Locker::issue_client_lease(CDentry *dn, int client,
+int Locker::issue_client_lease(CDentry *dn, client_t client,
 			       bufferlist &bl, utime_t now, Session *session)
 {
   int pool = 1;   // fixme.. do something smart!
@@ -2201,7 +2201,7 @@ void Locker::revoke_client_leases(SimpleLock *lock)
 {
   int n = 0;
   CDentry *dn = (CDentry*)lock->get_parent();
-  for (map<int, ClientLease*>::iterator p = dn->client_lease_map.begin();
+  for (map<client_t, ClientLease*>::iterator p = dn->client_lease_map.begin();
        p != dn->client_lease_map.end();
        p++) {
     ClientLease *l = p->second;

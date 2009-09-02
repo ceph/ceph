@@ -104,7 +104,7 @@ public:
   void try_eval(CInode *in, int mask);
 
   bool _rdlock_kick(SimpleLock *lock);
-  bool rdlock_try(SimpleLock *lock, int client, Context *c);
+  bool rdlock_try(SimpleLock *lock, client_t client, Context *c);
   bool rdlock_start(SimpleLock *lock, MDRequest *mut);
   void rdlock_finish(SimpleLock *lock, Mutation *mut);
 
@@ -168,7 +168,7 @@ public:
 
 
   // caps
-  void process_cap_update(MDRequest *mdr, int client,
+  void process_cap_update(MDRequest *mdr, client_t client,
 			  inodeno_t ino, __u64 cap_id, int caps, int wanted,
 			  int seq, int issue_seq, int mseq,
 			  const nstring& dname);
@@ -223,10 +223,10 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, Mutation *mut, bool share, int client, Capability *cap,
+  void file_update_finish(CInode *in, Mutation *mut, bool share, client_t client, Capability *cap,
 			  MClientCaps *ack);
 public:
-  void calc_new_client_ranges(CInode *in, __u64 size, map<int,byte_range_t>& new_ranges);
+  void calc_new_client_ranges(CInode *in, __u64 size, map<client_t,byte_range_t>& new_ranges);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false, bool update_size=false, __u64 newsize=0,
 			    utime_t mtime=utime_t());
   void share_inode_max_size(CInode *in);
@@ -241,9 +241,9 @@ private:
 public:
   void handle_client_lease(class MClientLease *m);
 
-  void _issue_client_lease(CDentry *dn, int mask, int pool, int client, bufferlist &bl, utime_t now, Session *session);
-  int issue_client_lease(CInode *in, int client, bufferlist &bl, utime_t now, Session *session);
-  int issue_client_lease(CDentry *dn, int client, bufferlist &bl, utime_t now, Session *session);
+  void _issue_client_lease(CDentry *dn, int mask, int pool, client_t client, bufferlist &bl, utime_t now, Session *session);
+  int issue_client_lease(CInode *in, client_t client, bufferlist &bl, utime_t now, Session *session);
+  int issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
   void revoke_client_leases(SimpleLock *lock);
 };
 

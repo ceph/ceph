@@ -65,18 +65,18 @@ public:
 
   // -- sessions and recovery --
   utime_t  reconnect_start;
-  set<int> client_reconnect_gather;  // clients i need a reconnect msg from.
+  set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
 
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   void _finish_session_purge(Session *);
-  version_t prepare_force_open_sessions(map<__u32,entity_inst_t> &cm);
-  void finish_force_open_sessions(map<__u32,entity_inst_t> &cm);
+  version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm);
+  void finish_force_open_sessions(map<client_t,entity_inst_t> &cm);
   void terminate_sessions();
   void find_idle_sessions();
   void reconnect_clients();
   void handle_client_reconnect(class MClientReconnect *m);
-  void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
+  //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
   void reconnect_gather_finish();
   void reconnect_tick();
 

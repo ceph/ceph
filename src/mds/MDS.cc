@@ -351,12 +351,12 @@ void MDS::forward_message_mds(Message *m, int mds)
 
 
 
-void MDS::send_message_client(Message *m, int client)
+void MDS::send_message_client(Message *m, client_t client)
 {
-  if (sessionmap.have_session(entity_name_t::CLIENT(client))) {
+  if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
     version_t seq = sessionmap.inc_push_seq(client);
     dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
+    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client.v))->inst);
   } else {
     dout(10) << "send_message_client no session for client" << client << " " << *m << dendl;
   }

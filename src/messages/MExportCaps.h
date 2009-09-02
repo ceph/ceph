@@ -23,7 +23,7 @@ class MExportCaps : public Message {
  public:  
   inodeno_t ino;
   bufferlist cap_bl;
-  map<__u32,entity_inst_t> client_map;
+  map<client_t,entity_inst_t> client_map;
 
   MExportCaps() :
     Message(MSG_MDS_EXPORTCAPS) {}

@@ -117,7 +117,7 @@ protected:
   map<CDir*,set<int> >            import_bystanders;
   map<CDir*,list<dirfrag_t> >     import_bound_ls;
   map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
-  map<CDir*, map<CInode*, map<__u32,Capability::Export> > > import_caps;
+  map<CDir*, map<CInode*, map<client_t,Capability::Export> > > import_caps;
 
 
 public:
@@ -183,15 +183,15 @@ public:
   }
   
   void encode_export_inode(CInode *in, bufferlist& bl, 
-			   map<__u32,entity_inst_t>& exported_client_map);
+			   map<client_t,entity_inst_t>& exported_client_map);
   void encode_export_inode_caps(CInode *in, bufferlist& bl,
-				map<__u32,entity_inst_t>& exported_client_map);
+				map<client_t,entity_inst_t>& exported_client_map);
   void finish_export_inode(CInode *in, utime_t now, list<Context*>& finished);
   void finish_export_inode_caps(CInode *in);
 
   int encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
-			map<__u32,entity_inst_t>& exported_client_map,
+			map<client_t,entity_inst_t>& exported_client_map,
 			utime_t now);
   void finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now);
 
@@ -230,18 +230,18 @@ public:
 public:
   void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int oldauth, 
 			   LogSegment *ls,
-			   map<CInode*, map<__u32,Capability::Export> >& cap_imports,
+			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in,
 				bufferlist::iterator &blp,
-				map<CInode*, map<__u32,Capability::Export> >& cap_imports);
-  void finish_import_inode_caps(CInode *in, int from, map<__u32,Capability::Export> &cap_map);
+				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
+  void finish_import_inode_caps(CInode *in, int from, map<client_t,Capability::Export> &cap_map);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
 			EImportStart *le, 
 			LogSegment *ls,
-			map<CInode*, map<__u32,Capability::Export> >& cap_imports,
+			map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			list<ScatterLock*>& updated_scatterlocks);
 
 public:
@@ -252,7 +252,7 @@ protected:
   void import_reverse_final(CDir *dir);
   void import_notify_abort(CDir *dir, set<CDir*>& bounds);
   void import_logged_start(CDir *dir, int from,
-			   map<__u32,entity_inst_t> &imported_client_map);
+			   map<client_t,entity_inst_t> &imported_client_map);
   void handle_export_finish(MExportDirFinish *m);
 public:
   void import_finish(CDir *dir);
@@ -261,7 +261,7 @@ protected:
   void handle_export_caps(MExportCaps *m);
   void logged_import_caps(CInode *in, 
 			  int from,
-			  map<CInode*, map<__u32,Capability::Export> >& cap_imports);
+			  map<CInode*, map<client_t,Capability::Export> >& cap_imports);
 
 
   friend class C_MDS_ImportDirLoggedStart;

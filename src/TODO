@@ -21,6 +21,11 @@ v0.13
 /- mds: misc bugfixes for multiclient file access
 
 v0.14
+/- dir backpointer update on rename (fsck assist)
+/- uclient bugs
+/- msgr: unidirectional option (client->mon, client->mds, client->osd)
+/- mon subscriptions to get osd, mds map updates.  single mon connection.
+
 - kclient: retry alloc on ENOMEM when reading from connection
 - client authentication
 - radosgw
@@ -35,9 +40,11 @@ v0.14
   - kill maybe_dup_msg
 
 
+
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
+- clientid needs to be u64, and consistent throughout
 
 later
 - authentication

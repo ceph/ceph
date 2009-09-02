@@ -262,7 +262,7 @@ public:
   // -- distributed state --
 protected:
   // file capabilities
-  map<int, Capability*> client_caps;         // client -> caps
+  map<client_t, Capability*> client_caps;         // client -> caps
   map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
   utime_t               replica_caps_wanted_keep_until;
@@ -533,26 +533,26 @@ public:
 
   // -- caps -- (new)
   // client caps
-  int loner_cap, want_loner_cap;
+  client_t loner_cap, want_loner_cap;
 
-  int get_loner() { return loner_cap; }
-  int get_wanted_loner() { return want_loner_cap; }
+  client_t get_loner() { return loner_cap; }
+  client_t get_wanted_loner() { return want_loner_cap; }
 
   // this is the loner state our locks should aim for
-  int get_target_loner() {
+  client_t get_target_loner() {
     if (loner_cap == want_loner_cap)
       return loner_cap;
     else
       return -1;
   }
 
-  int calc_ideal_loner() {
+  client_t calc_ideal_loner() {
     if (!mds_caps_wanted.empty())
       return -1;
 
     int n = 0;
-    int loner = -1;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
+    client_t loner = -1;
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale() &&
@@ -565,7 +565,7 @@ public:
       }
     return loner;
   }
-  int choose_ideal_loner() {
+  client_t choose_ideal_loner() {
     want_loner_cap = calc_ideal_loner();
     return want_loner_cap;
   }
@@ -629,7 +629,7 @@ public:
 
   int count_nonstale_caps() {
     int n = 0;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale())
@@ -638,7 +638,7 @@ public:
   }
   bool multiple_nonstale_caps() {
     int n = 0;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) 
       if (!it->second->is_stale()) {
@@ -652,23 +652,23 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
-  map<int,Capability*>& get_client_caps() { return client_caps; }
-  Capability *get_client_cap(int client) {
+  map<client_t,Capability*>& get_client_caps() { return client_caps; }
+  Capability *get_client_cap(client_t client) {
     if (client_caps.count(client))
       return client_caps[client];
     return 0;
   }
-  int get_client_cap_pending(int client) {
+  int get_client_cap_pending(client_t client) {
     Capability *c = get_client_cap(client);
     if (c) return c->pending();
     return 0;
   }
 
-  Capability *add_client_cap(int client, Session *session, SnapRealm *conrealm=0);
-  void remove_client_cap(int client);
+  Capability *add_client_cap(client_t client, Session *session, SnapRealm *conrealm=0);
+  void remove_client_cap(client_t client);
 
   void move_to_containing_realm(SnapRealm *realm) {
-    for (map<int,Capability*>::iterator q = client_caps.begin();
+    for (map<client_t,Capability*>::iterator q = client_caps.begin();
 	 q != client_caps.end();
 	 q++) {
       containing_realm->remove_cap(q->first, q->second);
@@ -679,7 +679,7 @@ public:
     containing_realm = realm;
   }
 
-  Capability *reconnect_cap(int client, ceph_mds_cap_reconnect& icr, Session *session) {
+  Capability *reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, Session *session) {
     Capability *cap = get_client_cap(client);
     if (cap) {
       // FIXME?
@@ -701,8 +701,8 @@ public:
     while (!client_caps.empty())
       remove_client_cap(client_caps.begin()->first);
   }
-  void export_client_caps(map<int,Capability::Export>& cl) {
-    for (map<int,Capability*>::iterator it = client_caps.begin();
+  void export_client_caps(map<client_t,Capability::Export>& cl) {
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
       cl[it->first] = it->second->make_export();
@@ -739,14 +739,14 @@ public:
       (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
       (linklock.gcaps_careful() << linklock.get_cap_shift());
   }
-  int get_xlocker_mask(int client) {
+  int get_xlocker_mask(client_t client) {
     return 
       (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
       (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
       (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
       (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
   }
-  int get_caps_allowed_for_client(int client) {
+  int get_caps_allowed_for_client(client_t client) {
     int allowed = get_caps_allowed_by_type(client == get_loner() ? CAP_LONER : CAP_ANY);
     allowed |= get_caps_allowed_by_type(CAP_XLOCKER) & get_xlocker_mask(client);
     return allowed;
@@ -759,7 +759,7 @@ public:
     int loner = 0, other = 0, xlocker = 0;
     if (!is_auth())
       loner_cap = -1;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
       int i = it->second->issued();
@@ -778,7 +778,7 @@ public:
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
     int w = 0;
     int loner = 0, other = 0;
-    for (map<int,Capability*>::iterator it = client_caps.begin();
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
          it != client_caps.end();
          it++) {
       if (!it->second->is_stale()) {

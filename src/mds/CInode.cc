@@ -143,7 +143,7 @@ ostream& operator<<(ostream& out, CInode& in)
 
   if (!in.get_client_caps().empty()) {
     out << " caps={";
-    for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
+    for (map<client_t,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
          it++) {
       if (it != in.get_client_caps().begin()) out << ",";
@@ -515,7 +515,7 @@ void CInode::name_stray_dentry(string& dname)
 }
 
 
-Capability *CInode::add_client_cap(int client, Session *session, SnapRealm *conrealm)
+Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
   if (client_caps.empty()) {
     get(PIN_CAPS);
@@ -542,7 +542,7 @@ Capability *CInode::add_client_cap(int client, Session *session, SnapRealm *conr
   return cap;
 }
 
-void CInode::remove_client_cap(int client)
+void CInode::remove_client_cap(client_t client)
 {
   assert(client_caps.count(client) == 1);
   Capability *cap = client_caps[client];
@@ -1743,7 +1743,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 
 void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 {
-  int client = cap->get_client();
+  client_t client = cap->get_client();
 
   bool pfile = filelock.is_xlocked_by_client(client) ||
     (cap && (cap->issued() & CEPH_CAP_FILE_EXCL));

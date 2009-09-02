@@ -25,7 +25,7 @@ protected:
   version_t cmapv;  // client map version
 
 public:
-  map<__u32,entity_inst_t> client_map;
+  map<client_t,entity_inst_t> client_map;
 
   ESessions() : LogEvent(EVENT_SESSION) { }
   ESessions(version_t v) :

@@ -98,7 +98,7 @@ public:
 
 private:
   CInode *inode;
-  int client;
+  client_t client;
 
   __u64 cap_id;
 
@@ -221,7 +221,7 @@ public:
 
   xlist<Capability*>::item snaprealm_caps_item;
 
-  Capability(CInode *i, __u64 id, int c) : 
+  Capability(CInode *i, __u64 id, client_t c) : 
     inode(i), client(c),
     cap_id(id),
     _wanted(0),
@@ -260,7 +260,7 @@ public:
   void set_stale(bool b) { stale = b; }
 
   CInode *get_inode() { return inode; }
-  int get_client() { return client; }
+  client_t get_client() { return client; }
 
   // caps this client wants to hold
   int wanted() { return _wanted; }

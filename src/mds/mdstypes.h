@@ -100,6 +100,7 @@ inline string ccap_string(int cap)
 }
 
 
+
 struct frag_info_t {
   version_t version;
 
@@ -345,7 +346,7 @@ struct inode_t {
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  map<int,byte_range_t> client_ranges;  // client(s) can write to these ranges
+  map<client_t,byte_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
@@ -380,7 +381,7 @@ struct inode_t {
 
   __u64 get_max_size() const {
     __u64 max = 0;
-      for (map<int,byte_range_t>::const_iterator p = client_ranges.begin();
+      for (map<client_t,byte_range_t>::const_iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   p++)
 	if (p->second.last > max)
@@ -391,7 +392,7 @@ struct inode_t {
     if (new_max == 0) {
       client_ranges.clear();
     } else {
-      for (map<int,byte_range_t>::iterator p = client_ranges.begin();
+      for (map<client_t,byte_range_t>::iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   p++)
 	p->second.last = new_max;
@@ -1018,7 +1019,7 @@ class MDSCacheObject;
  * for metadata leases to clients
  */
 struct ClientLease {
-  int client;
+  client_t client;
   int mask;                 // CEPH_STAT_MASK_*
   MDSCacheObject *parent;
 
@@ -1027,7 +1028,7 @@ struct ClientLease {
   xlist<ClientLease*>::item session_lease_item; // per-session list
   xlist<ClientLease*>::item lease_item;         // global list
 
-  ClientLease(int c, MDSCacheObject *p) : 
+  ClientLease(client_t c, MDSCacheObject *p) : 
     client(c), mask(0), parent(p), seq(0),
     session_lease_item(this),
     lease_item(this) { }

@@ -136,9 +136,9 @@ protected:
   // local state
   int num_rdlock, num_wrlock, num_xlock;
   Mutation *xlock_by;
-  int xlock_by_client;
+  client_t xlock_by_client;
 public:
-  int excl_client;
+  client_t excl_client;
 
 
 public:
@@ -278,33 +278,33 @@ public:
 
 
   // can_*
-  bool can_lease(int client) {
+  bool can_lease(client_t client) {
     return sm->states[state].can_lease == ANY ||
       (sm->states[state].can_lease == AUTH && parent->is_auth()) ||
       (sm->states[state].can_lease == XCL && client >= 0 && xlock_by_client == client);
   }
-  bool can_read(int client) {
+  bool can_read(client_t client) {
     return sm->states[state].can_read == ANY ||
       (sm->states[state].can_read == AUTH && parent->is_auth()) ||
       (sm->states[state].can_read == XCL && client >= 0 && xlock_by_client == client);
   }
-  bool can_read_projected(int client) {
+  bool can_read_projected(client_t client) {
     return sm->states[state].can_read_projected == ANY ||
       (sm->states[state].can_read_projected == AUTH && parent->is_auth()) ||
       (sm->states[state].can_read_projected == XCL && client >= 0 && xlock_by_client == client);
   }
-  bool can_rdlock(int client) {
+  bool can_rdlock(client_t client) {
     return sm->states[state].can_rdlock == ANY ||
       (sm->states[state].can_rdlock == AUTH && parent->is_auth()) ||
       (sm->states[state].can_rdlock == XCL && client >= 0 && xlock_by_client == client);
   }
-  bool can_wrlock(int client) {
+  bool can_wrlock(client_t client) {
     return sm->states[state].can_wrlock == ANY ||
       (sm->states[state].can_wrlock == AUTH && parent->is_auth()) ||
       (sm->states[state].can_wrlock == XCL && client >= 0 && (xlock_by_client == client ||
 							      excl_client == client));
   }
-  bool can_xlock(int client) {
+  bool can_xlock(client_t client) {
     return sm->states[state].can_xlock == ANY ||
       (sm->states[state].can_xlock == AUTH && parent->is_auth()) ||
       (sm->states[state].can_xlock == XCL && client >= 0 && xlock_by_client == client);
@@ -338,7 +338,7 @@ public:
   int get_num_wrlocks() { return num_wrlock; }
 
   // xlock
-  void get_xlock(Mutation *who, int client) { 
+  void get_xlock(Mutation *who, client_t client) { 
     assert(xlock_by == 0);
     assert(state == LOCK_XLOCK);
     parent->get(MDSCacheObject::PIN_LOCK);
@@ -363,7 +363,7 @@ public:
   }
   bool is_xlocked() { return num_xlock > 0; }
   int get_num_xlocks() { return num_xlock; }
-  bool is_xlocked_by_client(int c) {
+  bool is_xlocked_by_client(client_t c) {
     return xlock_by_client == c;
   }
   Mutation *get_xlocked_by() { return xlock_by; }
@@ -439,7 +439,7 @@ public:
   }
 
 
-  int gcaps_xlocker_mask(int client) {
+  int gcaps_xlocker_mask(client_t client) {
     if (client == xlock_by_client)
       return type == CEPH_LOCK_IFILE ? 0xffff : (CEPH_CAP_GSHARED|CEPH_CAP_GEXCL);
     return 0;
