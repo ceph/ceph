@@ -16,37 +16,44 @@ static int path_size;
  * Method:    ceph_initializeClient
  * Signature: (Ljava/lang/String;)Z
  */
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_initializeClient
- * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
- */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv *env, jobject obj, jstring j_debug_level, jstring j_mon_addr)
+  (JNIEnv *env, jobject obj, jstring j_args )
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
-
-  const char *c_debug_level = env->GetStringUTFChars(j_debug_level, 0);
-  if (c_debug_level == NULL) return false; //out of memory!
-  const char *c_mon_addr = env->GetStringUTFChars(j_mon_addr, 0);
-  if(c_mon_addr == NULL) {
-    env->ReleaseStringUTFChars(j_debug_level, c_debug_level);
-    return false;
-  }
+  const char *c_args = env->GetStringUTFChars(j_args, 0);
+  if (c_args == NULL) return false; //out of memory!
+  string args(c_args);
   path_size = 64; //reasonable starting point?
-  //construct an arguments array
-  const char *argv[10];
-  int argc = 0;
-  argv[argc++] = "CephFSInterface";
-  argv[argc++] = "-m";
-  argv[argc++] = c_mon_addr;
-  argv[argc++] = "--debug_client";
-  argv[argc++] = c_debug_level;
 
-  int r = ceph_initialize(argc, argv);
-  env->ReleaseStringUTFChars(j_debug_level, c_debug_level);
-  env->ReleaseStringUTFChars(j_mon_addr, c_mon_addr);
+  //construct an arguments vector
+  vector<string> args_vec;
+  size_t i = 0;
+  size_t j = 0;
+  while (1) {
+    j = args.find(' ', i);
+    if (j == string::npos) {
+      if (i == 0) { //there were no spaces? That can't happen!
+	env->ReleaseStringUTFChars(j_args, c_args);
+	return false;
+      }
+      //otherwise it's the last argument, so push it on and exit loop
+      args_vec.push_back(args.substr(i, args.size()));
+      break;
+    }
+    if (j!=i) //if there are two spaces in a row, dont' make a new arg
+      args_vec.push_back(args.substr(i, j-i));
+    i = j+1;
+  }
+
+  //convert to array
+  const char ** argv = new const char*[args_vec.size()];
+  for (size_t i = 0; i < args_vec.size(); ++i)
+    argv[i] = args_vec[i].c_str();
+
+  int r = ceph_initialize(args_vec.size(), argv);
+  env->ReleaseStringUTFChars(j_args, c_args);
+  delete argv;
+
   if (r < 0) return false;
   r = ceph_mount();
   if (r < 0) return false;

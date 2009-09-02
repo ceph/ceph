@@ -14,8 +14,20 @@
  * C interface
  */
 
+extern "C" const char *ceph_version(int *major, int *minor, int *patch)
+{
+  if (major)
+    *major = CEPH_VERSION_MAJOR;
+  if (minor)
+    *minor = CEPH_VERSION_MINOR;
+  if (patch)
+    *patch = CEPH_VERSION_PATCH;
+  return CEPH_VERSION;
+}
+
 static Mutex ceph_client_mutex("ceph_client");
 static int client_initialized = 0;
+static int client_mount = 0;
 static Client *client = NULL;
 static MonClient *monclient = NULL;
 static SimpleMessenger *rank = NULL;
@@ -48,9 +60,8 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     rank->set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
     client->init();
-
-    ++client_initialized;
   }
+  ++client_initialized;
   ceph_client_mutex.Unlock();
   return 0;
 }
@@ -58,26 +69,38 @@ extern "C" int ceph_initialize(int argc, const char **argv)
 extern "C" void ceph_deinitialize()
 {
   ceph_client_mutex.Lock();
-  if(client_initialized) {
+  --client_initialized;
+  if(!client_initialized) {
     client->unmount();
     client->shutdown();
     delete client;
     rank->wait();
     delete rank;
     delete monclient;
-    --client_initialized;
   }
   ceph_client_mutex.Unlock();
 }
 
 extern "C" int ceph_mount()
 {
-  return client->mount();
+  int ret;
+  Mutex::Locker lock(ceph_client_mutex);
+  if(!client_mount) {
+     ret = client->mount();
+     if (ret!=0)
+       return ret;
+  }
+  ++client_mount;
+  return 0;
 }
 
 extern "C" int ceph_umount()
 {
-  return client->unmount();
+  Mutex::Locker lock(ceph_client_mutex);
+  --client_mount;
+  if (!client_mount)
+    return client->unmount();
+  return 0;
 }
 
 extern "C" int ceph_statfs(const char *path, struct statvfs *stbuf)
@@ -303,7 +326,31 @@ extern "C" int ceph_get_file_replication(const char *path) {
   return rep;
 }
 
-int ceph_get_file_stripe_address(int fh, loff_t offset, char *buf, int buflen)
+extern "C" int ceph_set_default_file_stripe_unit(int stripe)
+{
+  client->set_default_file_stripe_unit(stripe);
+  return 0;
+}
+
+extern "C" int ceph_set_default_file_stripe_count(int count)
+{
+  client->set_default_file_stripe_unit(count);
+  return 0;
+}
+
+extern "C" int ceph_set_default_object_size(int size)
+{
+  client->set_default_object_size(size);
+  return 0;
+}
+
+extern "C" int ceph_set_default_file_replication(int replication)
+{
+  client->set_default_file_replication(replication);
+  return 0;
+}
+
+extern "C" int ceph_get_file_stripe_address(int fh, loff_t offset, char *buf, int buflen)
 {
   string address;
   int r = client->get_file_stripe_address(fh, offset, address);

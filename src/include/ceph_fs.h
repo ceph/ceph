@@ -16,6 +16,18 @@
 #include "rados.h"
 
 /*
+ * Ceph release version
+ */
+#define CEPH_VERSION_MAJOR 0
+#define CEPH_VERSION_MINOR 13
+#define CEPH_VERSION_PATCH 0
+
+#define _CEPH_STRINGIFY(x) #x
+#define CEPH_STRINGIFY(x) _CEPH_STRINGIFY(x)
+#define CEPH_MAKE_VERSION(x, y, z) CEPH_STRINGIFY(x) "." CEPH_STRINGIFY(y) "." CEPH_STRINGIFY(z)
+#define CEPH_VERSION CEPH_MAKE_VERSION(CEPH_VERSION_MAJOR, CEPH_VERSION_MINOR, CEPH_VERSION_PATCH)
+
+/*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.  we keep rev
  * internal cluster protocols separately from the public,
@@ -518,6 +530,10 @@ union ceph_mds_request_args {
 	struct {
 		__le32 flags;
 		__le32 mode;
+		__le32 stripe_unit;
+		__le32 stripe_count;
+		__le32 object_size;
+		__le32 file_replication;
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;

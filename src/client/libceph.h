@@ -29,6 +29,9 @@ struct stat_precise {
 };
 
 extern "C" {
+
+const char *ceph_version(int *major, int *minor, int *patch);
+
 int ceph_initialize(int argc, const char **argv);
 void ceph_deinitialize();
 
@@ -89,6 +92,10 @@ int ceph_sync_fs();
 int ceph_get_file_stripe_unit(int fh);
 int ceph_get_file_replication(const char *path);
 int ceph_get_file_stripe_address(int fd, loff_t offset, char *buf, int buflen);
+int ceph_set_default_file_stripe_unit(int stripe);
+int ceph_set_default_file_stripe_count(int count);
+int ceph_set_default_object_size(int size);
+int ceph_set_default_file_replication(int replication);
 }
 
 #endif
