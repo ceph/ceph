@@ -61,6 +61,9 @@ later
 - osd failure declarations
 - rename over old files should flush data, or revert back to old contents
 
+mount.ceph
+- should look at multiple A records, pass all IPs to kernel
+
 rados
 - usage accounting
 - make rest interface superset of s3?

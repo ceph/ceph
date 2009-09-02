@@ -505,6 +505,23 @@ int SimpleMessenger::Pipe::accept()
     state = STATE_CLOSED;
     return -1;
   }
+
+  // and peer's socket addr (they might not know their ip)
+  entity_addr_t socket_addr;
+  socklen_t len = sizeof(socket_addr.ipaddr);
+  int r = ::getpeername(sd, (sockaddr*)&socket_addr.ipaddr, &len);
+  if (r < 0) {
+    dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+  rc = tcp_write(sd, (char*)&socket_addr, sizeof(socket_addr));
+  if (rc < 0) {
+    dout(10) << "accept couldn't write peer addr" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+
   dout(10) << "accept sd=" << sd << dendl;
   
   // identify peer
@@ -530,16 +547,11 @@ int SimpleMessenger::Pipe::accept()
   dout(10) << "accept peer addr is " << peer_addr << dendl;
   if (peer_addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     // peer apparently doesn't know what ip they have; figure it out for them.
-    entity_addr_t old_addr = peer_addr;
-    socklen_t len = sizeof(peer_addr.ipaddr);
-    int r = ::getpeername(sd, (sockaddr*)&peer_addr.ipaddr, &len);
-    if (r < 0) {
-      dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
-      state = STATE_CLOSED;
-      return -1;
-    }
-    peer_addr.ipaddr.sin_port = old_addr.ipaddr.sin_port;
-    dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
+    entity_addr_t was = peer_addr;
+    peer_addr.ipaddr = socket_addr.ipaddr;
+    peer_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+    dout(0) << "accept peer addr is really " << peer_addr
+	    << " (they said " << was << ", socket is " << socket_addr << ")" << dendl;
   }
   
   ceph_msg_connect connect;
@@ -774,6 +786,7 @@ int SimpleMessenger::Pipe::connect()
   int msglen;
   char banner[strlen(CEPH_BANNER)];
   entity_addr_t paddr;
+  entity_addr_t peer_addr_for_me, socket_addr;
 
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -855,8 +868,26 @@ int SimpleMessenger::Pipe::connect()
       goto fail;
     }
   }
-  
-  // identify myself
+
+  // peer addr for me
+  rc = tcp_read(sd, (char*)&peer_addr_for_me, sizeof(peer_addr_for_me));
+  if (rc < 0) {
+    dout(2) << "connect couldn't read peer addr for me, " << strerror(errno) << dendl;
+    goto fail;
+  }
+  dout(20) << "connect peer addr for me is " << peer_addr_for_me << dendl;
+
+  if (rank->need_addr) {
+    rank->lock.Lock();
+    entity_addr_t was = rank->rank_addr;
+    rank->rank_addr.ipaddr = peer_addr_for_me.ipaddr;
+    rank->rank_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+    dout(0) << "rank discovered i am " << rank->rank_addr
+	    << " (was " << was << ", peer says i am " << peer_addr_for_me << ")" << dendl;
+    rank->need_addr = false;
+    rank->lock.Unlock();
+  }
+
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = (char*)&rank->rank_addr;
   msgvec[0].iov_len = sizeof(rank->rank_addr);
