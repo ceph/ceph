@@ -306,7 +306,6 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	s32 result;
 	u32 len;
 	s64 cnum;
-	struct ceph_entity_addr addr;
 	int err = -EINVAL;
 
 	if (client->whoami >= 0) {
@@ -321,9 +320,6 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	end = p + msg->front.iov_len;
 
 	ceph_decode_64_safe(&p, end, cnum, bad);
-	ceph_decode_need(&p, end, sizeof(addr), bad);
-	ceph_decode_copy(&p, &addr, sizeof(addr));
-	
 	ceph_decode_32_safe(&p, end, result, bad);
 	ceph_decode_32_safe(&p, end, len, bad);
 	if (result) {
@@ -356,9 +352,8 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	client->whoami = cnum;
 	client->msgr->inst.name.num = cpu_to_le32(cnum);
 	client->msgr->inst.name.type = CEPH_ENTITY_TYPE_CLIENT;
-	memcpy(&client->msgr->inst.addr, &addr, sizeof(addr));
-	pr_info("ceph client%lld %u.%u.%u.%u:%u fsid %llx.%llx\n",
-		client->whoami, IPQUADPORT(addr.ipaddr),
+	pr_info("ceph client%lld fsid %llx.%llx\n",
+		client->whoami,
 		le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
 		le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
 

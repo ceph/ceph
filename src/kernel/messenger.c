@@ -733,6 +733,10 @@ static int read_partial_connect(struct ceph_connection *con)
 			   &con->actual_peer_addr);
 	if (ret <= 0)
 		goto out;
+	ret = read_partial(con, &to, sizeof(con->peer_addr_for_me),
+			   &con->peer_addr_for_me);
+	if (ret <= 0)
+		goto out;
 	ret = read_partial(con, &to, sizeof(con->in_reply), &con->in_reply);
 	if (ret <= 0)
 		goto out;
@@ -784,6 +788,20 @@ static int process_connect(struct ceph_connection *con)
 		       con->actual_peer_addr.nonce);
 		con->error_msg = "protocol error, wrong peer";
 		return -1;
+	}
+
+	/*
+	 * did we learn our address?
+	 */
+	if (con->msgr->inst.addr.ipaddr.sin_addr.s_addr == htons(INADDR_ANY)) {
+		int port = con->msgr->inst.addr.ipaddr.sin_port;
+
+		memcpy(&con->msgr->inst.addr.ipaddr,
+		       &con->peer_addr_for_me.ipaddr,
+		       sizeof(con->peer_addr_for_me.ipaddr));
+		con->msgr->inst.addr.ipaddr.sin_port = port;
+		dout("process_connect learned my addr is %u.%u.%u.%u:%u\n",
+		     IPQUADPORT(con->msgr->inst.addr.ipaddr));
 	}
 
 	switch (con->in_reply.tag) {
