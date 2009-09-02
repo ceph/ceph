@@ -237,11 +237,13 @@ EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
+	mkdir -p $(DESTDIR)$(sbindir)/ceph
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
+	mkdir -p $(DESTDIR)/etc/init.d
+	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)/etc/init.d/ceph
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
-	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)$(sysconfdir)/init.d/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
 
 .make_last_ver:
