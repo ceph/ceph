@@ -744,18 +744,21 @@ bad:
  * Caller should hold map_sem for read and request_mutex.
  */
 static void kick_requests(struct ceph_osd_client *osdc,
-			  struct ceph_osd *osd)
+			  struct ceph_osd *kickosd)
 {
 	struct ceph_osd_request *req;
 	struct rb_node *p, *n;
 	int needmap = 0;
 	int err;
 
+	dout("kick_requests osd%d\n", kickosd ? kickosd->o_osd : -1);
 	mutex_lock(&osdc->request_mutex);
-	if (!osd) {
+	if (!kickosd) {
 		for (p = rb_first(&osdc->osds); p; p = n) {
+			struct ceph_osd *osd =
+				rb_entry(p, struct ceph_osd, o_node);
+
 			n = rb_next(p);
-			osd = rb_entry(p, struct ceph_osd, o_node);
 			if (!ceph_osd_is_up(osdc->osdmap, osd->o_osd) ||
 			    !ceph_entity_addr_equal(&osd->o_con->peer_addr,
 					    ceph_osd_addr(osdc->osdmap,
@@ -767,7 +770,11 @@ static void kick_requests(struct ceph_osd_client *osdc,
 	for (p = rb_first(&osdc->requests); p; p = rb_next(p)) {
 		req = rb_entry(p, struct ceph_osd_request, r_node);
 
-		if (req->r_osd && (req->r_resend || osd == req->r_osd))
+		if (req->r_resend) {
+			dout(" r_resend set on tid %llu\n", req->r_tid);
+			goto kick;
+		}
+		if (req->r_osd && kickosd == req->r_osd)
 			goto kick;
 
 		err = __map_osds(osdc, req);
@@ -780,6 +787,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 			 * request, but that's a fair bit more
 			 * complicated to do.  So retry!
 			 */
+			dout(" setting r_resend on %llu\n", req->r_tid);
 			req->r_resend = true;
 			continue;
 		}
@@ -797,8 +805,10 @@ static void kick_requests(struct ceph_osd_client *osdc,
 		if (!req->r_aborted) {
 			req->r_flags |= CEPH_OSD_FLAG_RETRY;
 			err = send_request(osdc, req);
-			if (err)
+			if (err) {
+				dout(" setting r_resend on %llu\n", req->r_tid);
 				req->r_resend = true;
+			}
 		}
 		ceph_osdc_put_request(req);
 		mutex_lock(&osdc->request_mutex);
