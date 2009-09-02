@@ -387,7 +387,7 @@ int MDS::init()
   want_state = MDSMap::STATE_BOOT;
   beacon_start();
   whoami = -1;
-  messenger->reset_myname(entity_name_t::MDS(whoami));
+  messenger->set_myname(entity_name_t::MDS(whoami));
 
   objecter->init();
    
@@ -641,7 +641,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (oldwhoami != whoami) {
     // update messenger.
     dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
-    messenger->reset_myname(entity_name_t::MDS(whoami));
+    messenger->set_myname(entity_name_t::MDS(whoami));
 
     // do i need an osdmap?
     if (oldwhoami < 0) {

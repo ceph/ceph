@@ -291,10 +291,7 @@ private:
     bool stop;
     int qlen;
     int my_rank;
-  public:
-    bool need_addr;
 
-  private:
     class DispatchThread : public Thread {
       Endpoint *m;
     public:
@@ -358,7 +355,6 @@ private:
       stop(false),
       qlen(0),
       my_rank(rn),
-      need_addr(false),
       dispatch_thread(this) { }
     ~Endpoint() { }
 
@@ -379,8 +375,8 @@ private:
     
     int get_dispatch_queue_len() { return qlen; }
 
-    void _set_myaddr(entity_addr_t a);
-    void reset_myname(entity_name_t m);
+    entity_addr_t get_myaddr();
+
 
     int shutdown();
     void suicide();
@@ -471,6 +467,8 @@ public:
   void submit_message(Message *m, const entity_inst_t& addr, bool lazy=false);  
   void prepare_dest(const entity_inst_t& inst);
   void send_keepalive(const entity_inst_t& addr);  
+
+  void learned_addr(entity_addr_t peer_addr_for_me);
 
   // create a new messenger
   Endpoint *new_entity(entity_name_t addr);

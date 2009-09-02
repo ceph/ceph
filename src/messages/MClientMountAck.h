@@ -19,7 +19,6 @@
 
 struct MClientMountAck : public Message {
   __s64 client;
-  entity_addr_t addr;
   __s32 result;
   cstring result_msg;
   bufferlist monmap_bl;
@@ -40,14 +39,12 @@ struct MClientMountAck : public Message {
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(client, p);
-    ::decode(addr, p);
     ::decode(result, p);
     ::decode(result_msg, p);
     ::decode(monmap_bl, p);
   }
   void encode_payload() {
     ::encode(client, payload);
-    ::encode(addr, payload);
     ::encode(result, payload);
     ::encode(result_msg, payload);
     ::encode(monmap_bl, payload);

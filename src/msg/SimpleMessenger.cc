@@ -144,9 +144,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   }
   rank->rank_addr.erank = 0;
 
-  dout(1) << "accepter.bind rank_addr is " << rank->rank_addr 
-	  << " need_addr=" << rank->need_addr
-	  << dendl;
+  dout(1) << "accepter.bind rank_addr is " << rank->rank_addr << " need_addr=" << rank->need_addr << dendl;
   return 0;
 }
 
@@ -379,11 +377,12 @@ void SimpleMessenger::Endpoint::prepare_dest(const entity_inst_t& inst)
 int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source_inst(_myinst);
-  m->set_orig_source_inst(_myinst);
+  m->get_header().src = get_myinst();
+  m->get_header().orig_src = m->get_header().src;
+
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << m->get_source()
+  dout(1) << m->get_source_inst()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
@@ -398,7 +397,8 @@ int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
 int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source_inst(_myinst);
+  m->get_header().src = get_myinst();
+
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
@@ -418,8 +418,9 @@ int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source_inst(_myinst);
-  m->set_orig_source_inst(_myinst);
+  m->get_header().src = get_myinst();
+  m->get_header().orig_src = m->get_header().src;
+
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << "lazy " << m->get_source()
@@ -442,27 +443,18 @@ int SimpleMessenger::Endpoint::send_keepalive(entity_inst_t dest)
 
 
 
-void SimpleMessenger::Endpoint::_set_myaddr(entity_addr_t a)
-{
-  Messenger::_set_myaddr(a);  // still call original
-
-  dout(10) << "_set_myaddr " << a << dendl;
-  rank->rank_addr.ipaddr = a.ipaddr;
-}
-
-void SimpleMessenger::Endpoint::reset_myname(entity_name_t newname)
-{
-  entity_name_t oldname = get_myname();
-  dout(10) << "reset_myname " << oldname << " to " << newname << dendl;
-  _set_myname(newname);
-}
-
-
 void SimpleMessenger::Endpoint::mark_down(entity_addr_t a)
 {
   rank->mark_down(a);
 }
 
+
+entity_addr_t SimpleMessenger::Endpoint::get_myaddr()
+{
+  entity_addr_t a = rank->rank_addr;
+  a.erank = my_rank;
+  return a;  
+}
 
 
 
@@ -877,16 +869,8 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(20) << "connect peer addr for me is " << peer_addr_for_me << dendl;
 
-  if (rank->need_addr) {
-    rank->lock.Lock();
-    entity_addr_t was = rank->rank_addr;
-    rank->rank_addr.ipaddr = peer_addr_for_me.ipaddr;
-    rank->rank_addr.ipaddr.sin_port = was.ipaddr.sin_port;
-    dout(0) << "rank discovered i am " << rank->rank_addr
-	    << " (was " << was << ", peer says i am " << peer_addr_for_me << ")" << dendl;
-    rank->need_addr = false;
-    rank->lock.Unlock();
-  }
+  if (rank->need_addr)
+    rank->learned_addr(peer_addr_for_me);
 
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = (char*)&rank->rank_addr;
@@ -1319,23 +1303,6 @@ void SimpleMessenger::Pipe::reader()
 	  // find entity
 	  entity = rank->local[erank];
 	  entity->get();
-
-	  // first message?
-	  /*
-	  if (entity->need_addr) {
-	    entity->_set_myaddr(m->get_dest_inst().addr);
-	    dout(2) << "reader entity addr is " << entity->get_myaddr() << dendl;
-	    entity->need_addr = false;
-	  }
-
-	  if (rank->need_addr) {
-	    rank->rank_addr = m->get_dest_inst().addr;
-	    rank->rank_addr.erank = 0;
-	    dout(2) << "reader rank_addr is " << rank->rank_addr << dendl;
-	    rank->need_addr = false;
-	  }
-	  */
-
 	} else {
 	  derr(0) << "reader got message " << *m << ", which isn't local" << dendl;
 	}
@@ -2038,14 +2005,8 @@ SimpleMessenger::Endpoint *SimpleMessenger::register_entity(entity_name_t name)
   msgr->get();
   local[erank] = msgr;
   stopped[erank] = false;
-  msgr->_myinst.addr = rank_addr;
-  if (msgr->_myinst.addr.ipaddr == entity_addr_t().ipaddr)
-    msgr->need_addr = true;
-  msgr->_myinst.addr.erank = erank;
 
-  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr 
-	   << " need_addr=" << need_addr
-	   << dendl;
+  dout(10) << "register_entity " << name << " at " << msgr->get_myaddr() << dendl;
 
   num_local++;
   
@@ -2261,3 +2222,13 @@ void SimpleMessenger::mark_down(entity_addr_t addr)
   lock.Unlock();
 }
 
+void SimpleMessenger::learned_addr(entity_addr_t peer_addr_for_me)
+{
+  lock.Lock();
+  entity_addr_t was = rank_addr;
+  rank_addr.ipaddr = peer_addr_for_me.ipaddr;
+  rank_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+  dout(1) << "learned my addr " << rank_addr << dendl;
+  need_addr = false;
+  lock.Unlock();
+}

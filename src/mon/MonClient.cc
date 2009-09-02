@@ -154,6 +154,9 @@ bool MonClient::ms_dispatch(Message *m)
 {
   dout(10) << "dispatch " << *m << dendl;
 
+  if (my_addr == entity_addr_t())
+    my_addr = messenger->get_myaddr();
+
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_monmap((MMonMap*)m);
@@ -175,10 +178,6 @@ void MonClient::handle_monmap(MMonMap *m)
 {
   dout(10) << "handle_monmap " << *m << dendl;
   monc_lock.Lock();
-
-  my_addr = m->addr;
-  messenger->_set_myaddr(m->addr);
-  dout(10) << " i am " << m->addr << dendl;
 
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
@@ -247,8 +246,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(monmap, p);
 
-  messenger->_set_myaddr(m->addr);
-  messenger->reset_myname(entity_name_t::CLIENT(m->client));
+  messenger->set_myname(entity_name_t::CLIENT(m->client));
 
   // finish.
   timer.cancel_event(mount_timeout_event);

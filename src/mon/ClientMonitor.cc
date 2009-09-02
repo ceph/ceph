@@ -236,7 +236,6 @@ void ClientMonitor::_mounted(__s64 client, MClientMount *m)
   // reply with client ticket
   MClientMountAck *ack = new MClientMountAck;
   ack->client = client;
-  ack->addr = to.addr;
   mon->monmap->encode(ack->monmap_bl);
 
   mon->send_reply(m, ack, to);

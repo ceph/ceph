@@ -36,7 +36,7 @@ class Messenger {
   Dispatcher          *dispatcher;
 
 protected:
-  entity_inst_t _myinst;
+  entity_name_t _my_name;
   int default_send_priority;
 
   atomic_t nref;
@@ -45,7 +45,7 @@ protected:
   Messenger(entity_name_t w) : dispatcher(0),
 			       default_send_priority(CEPH_MSG_PRIO_DEFAULT),
 			       nref(1) {
-    _myinst.name = w;
+    _my_name = w;
   }
   virtual ~Messenger() {
     assert(nref.test() == 0);
@@ -63,13 +63,11 @@ protected:
   }
   
   // accessors
-  entity_name_t get_myname() { return _myinst.name; }
-  const entity_addr_t& get_myaddr() { return _myinst.addr; }
-  const entity_inst_t& get_myinst() { return _myinst; }
+  entity_name_t get_myname() { return _my_name; }
+  virtual entity_addr_t get_myaddr() = 0;
+  entity_inst_t get_myinst() { return entity_inst_t(get_myname(), get_myaddr()); }
   
-  void _set_myname(entity_name_t m) { _myinst.name = m; }
-  virtual void _set_myaddr(entity_addr_t a) { _myinst.addr = a; }
-  virtual void reset_myname(entity_name_t m) = 0;
+  void set_myname(entity_name_t m) { _my_name = m; }
 
   void set_default_send_priority(int p) { default_send_priority = p; }
   int get_default_send_priority() { return default_send_priority; }
