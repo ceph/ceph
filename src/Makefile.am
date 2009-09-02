@@ -245,6 +245,15 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)/etc/init.d/ceph
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
+	mkdir -p $(DESTDIR)$(includedir)/ceph
+	$(install_sh_SCRIPT) -m 0600 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
+	mkdir -p $(DESTDIR)$(includedir)/rados
+	$(install_sh_SCRIPT) -m 0600 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	mkdir -p $(DESTDIR)$(includedir)/crush
+	$(install_sh_SCRIPT) -m 0600 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
+	$(install_sh_SCRIPT) -m 0600 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
+	$(install_sh_SCRIPT) -m 0600 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
+	$(install_sh_SCRIPT) -m 0600 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
 
 .make_last_ver:
 	./make_version --check
