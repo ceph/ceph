@@ -29,6 +29,9 @@ struct stat_precise {
 };
 
 extern "C" {
+
+const char *ceph_version(int *major, int *minor, int *patch);
+
 int ceph_initialize(int argc, const char **argv);
 void ceph_deinitialize();
 

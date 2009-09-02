@@ -14,6 +14,17 @@
  * C interface
  */
 
+extern "C" const char *ceph_version(int *major, int *minor, int *patch)
+{
+  if (major)
+    *major = CEPH_VERSION_MAJOR;
+  if (minor)
+    *minor = CEPH_VERSION_MINOR;
+  if (patch)
+    *patch = CEPH_VERSION_PATCH;
+  return CEPH_VERSION;
+}
+
 static Mutex ceph_client_mutex("ceph_client");
 static int client_initialized = 0;
 static int client_mount = 0;
