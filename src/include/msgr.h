@@ -42,8 +42,8 @@ static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
  * network, e.g. 'mds0' or 'osd3'.
  */
 struct ceph_entity_name {
-	__le32 type;
-	__le32 num;
+	__u8 type;
+	__le64 num;
 } __attribute__ ((packed));
 
 #define CEPH_ENTITY_TYPE_MON    1

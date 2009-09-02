@@ -22,7 +22,8 @@
 
 class entity_name_t {
 public:
-  __u32 _type, _num;
+  __u8 _type;
+  __s64 _num;
 
 public:
   static const int TYPE_MON = CEPH_ENTITY_TYPE_MON;
@@ -35,7 +36,7 @@ public:
 
   // cons
   entity_name_t() : _type(0), _num(0) { }
-  entity_name_t(int t, int n) : _type(t), _num(n) { }
+  entity_name_t(int t, __s64 n) : _type(t), _num(n) { }
   entity_name_t(const ceph_entity_name &n) : 
     _type(n.type), _num(n.num) { }
 
@@ -46,7 +47,7 @@ public:
   static entity_name_t CLIENT(int i=NEW) { return entity_name_t(TYPE_CLIENT, i); }
   static entity_name_t ADMIN(int i=NEW) { return entity_name_t(TYPE_ADMIN, i); }
   
-  int num() const { return _num; }
+  __s64 num() const { return _num; }
   int type() const { return _type; }
   const char *type_str() const {
     switch (type()) {
@@ -68,7 +69,7 @@ public:
   bool is_admin() const { return type() == TYPE_ADMIN; }
 
   operator ceph_entity_name() const {
-    ceph_entity_name n = { init_le32(_type), init_le32(_num) };
+    ceph_entity_name n = { _type, init_le64(_num) };
     return n;
   }
 
