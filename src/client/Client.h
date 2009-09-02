@@ -751,7 +751,7 @@ public:
  protected:
   MonClient *monclient;
   Messenger *messenger;  
-  int whoami;
+  client_t whoami;
 
   // mds sessions
   map<int, MDSSession> mds_sessions;  // mds -> push seq
@@ -974,7 +974,7 @@ protected:
   ~Client();
   void tear_down_cache();   
 
-  int get_nodeid() { return whoami; }
+  client_t get_nodeid() { return whoami; }
 
   void init();
   void shutdown();

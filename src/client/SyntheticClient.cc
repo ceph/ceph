@@ -293,7 +293,7 @@ string SyntheticClient::get_sarg(int seq)
   }
   if (a.length() == 0 || a == "~") {
     char s[20];
-    sprintf(s,"/syn.%d.%d", client->whoami, seq);
+    sprintf(s,"/syn.%d.%d", client->whoami.v, seq);
     a = s;
   } 
   return a;
@@ -342,7 +342,7 @@ int SyntheticClient::run()
 	  run_only = client->get_nodeid();
           dout(2) << "onlyrange [" << first << ", " << last << ") includes me" << dendl;
 	} else
-	  run_only = client->get_nodeid()+1;  // not me
+	  run_only = client->get_nodeid().v+1;  // not me
       }
       break;
     case SYNCLIENT_MODE_EXCLUDE:
@@ -350,7 +350,7 @@ int SyntheticClient::run()
         exclude = iargs.front();
         iargs.pop_front();
         if (exclude == client->get_nodeid()) {
-	  run_only = client->get_nodeid() + 1;
+	  run_only = client->get_nodeid().v + 1;
           dout(2) << "not running " << exclude << dendl;
 	} else
 	  run_only = -1;
@@ -391,7 +391,7 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();
         iargs.pop_front();
         if (run_me()) {
-          srand(time(0) + getpid() + client->whoami);
+          srand(time(0) + getpid() + client->whoami.v);
           sleep(rand() % iarg1);
         }
 	did_run_me();
@@ -753,7 +753,7 @@ int SyntheticClient::run()
 	int playdata = iargs.front(); iargs.pop_front();
         string prefix = get_sarg(0);
 	char realtfile[100];
-	sprintf(realtfile, tfile.c_str(), client->get_nodeid());
+	sprintf(realtfile, tfile.c_str(), (int)client->get_nodeid().v);
 
         if (run_me()) {
           dout(-2) << "trace " << tfile << " prefix=" << prefix << " count=" << iarg1 << " data=" << playdata << dendl;
@@ -1735,7 +1735,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
 
 int SyntheticClient::make_files(int num, int count, int priv, bool more)
 {
-  int whoami = client->get_nodeid();
+  int whoami = client->get_nodeid().v;
   char d[255];
 
   if (priv) {
@@ -1939,7 +1939,7 @@ int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size i
     while ((char*)p < buf + wrsize) {
       *p = (uint64_t)i*(uint64_t)wrsize + (uint64_t)((char*)p - buf);      
       p++;
-      *p = client->get_nodeid();
+      *p = client->get_nodeid().v;
       p++;
     }
 
@@ -1994,7 +1994,7 @@ int SyntheticClient::write_fd(int fd, int size, int wrsize)   // size is in MB, 
     while ((char*)p < buf + wrsize) {
       *p = (uint64_t)i*(uint64_t)wrsize + (uint64_t)((char*)p - buf);      
       p++;
-      *p = client->get_nodeid();
+      *p = client->get_nodeid().v;
       p++;
     }
 
@@ -2116,14 +2116,14 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 
   if (1) {
     // strided
-    start = client->get_nodeid(); //nobjs % numc;
+    start = client->get_nodeid().v; //nobjs % numc;
     inc = numc;
     end = start + nobj;
   } else {
     // segments
-    start = nobj * client->get_nodeid() / numc;
+    start = nobj * client->get_nodeid().v / numc;
     inc = 1;
-    end = nobj * (client->get_nodeid()+1) / numc;
+    end = nobj * (client->get_nodeid().v+1) / numc;
   }
 
   dout(5) << "create_objects " << nobj << " size=" << osize 
@@ -2393,7 +2393,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
     while ((char*)p < buf + rdsize) {
       *p = offset*rdsize + (char*)p - buf;      
       p++;
-      *p = client->get_nodeid();
+      *p = client->get_nodeid().v;
       p++;
     }
 
@@ -2570,7 +2570,7 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
 	    while ((char*)p < buf + rdsize) {
 	      *p = offset*rdsize + (char*)p - buf;      
 	      p++;
-	      *p = client->get_nodeid();
+	      *p = client->get_nodeid().v;
 	      p++;
 	    }
 	    

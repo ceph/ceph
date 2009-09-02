@@ -87,7 +87,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // use my argc, argv (make sure you pass a mount point!)
   client->mount();
 
-  _dout_create_courtesy_output_symlink("client", client->get_nodeid());
+  _dout_create_courtesy_output_symlink("client", client->get_nodeid().v);
   cout << "starting fuse" << std::endl;
 
   //cerr << "starting fuse on pid " << getpid() << std::endl;

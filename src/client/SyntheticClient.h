@@ -189,8 +189,8 @@ class SyntheticClient {
   utime_t run_start;
   utime_t run_until;
 
-  int run_only;
-  int exclude;
+  client_t run_only;
+  client_t exclude;
 
   string get_sarg(int seq);
   int get_iarg() {
