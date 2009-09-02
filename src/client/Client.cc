@@ -125,10 +125,10 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
 
   cwd = NULL;
 
-  file_stripe_unit = -1;
-  file_stripe_count = -1;
-  object_size = -1;
-  file_replication = -1;
+  file_stripe_unit = 0;
+  file_stripe_count = 0;
+  object_size = 0;
+  file_replication = 0;
 
   // 
   root = 0;
