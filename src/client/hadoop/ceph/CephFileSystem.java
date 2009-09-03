@@ -61,7 +61,7 @@ public class CephFileSystem extends FileSystem {
   private static String monAddr;
   private static String fs_default_name;
   
-  private native boolean ceph_initializeClient(String arguments);
+  private native boolean ceph_initializeClient(String arguments, int block_size);
   private native String  ceph_getcwd();
   private native boolean ceph_setcwd(String path);
   private native boolean ceph_rmdir(String path);
@@ -150,7 +150,8 @@ public class CephFileSystem extends FileSystem {
 	throw new IOException("You must specify a Ceph monitor address or config file!");
       }
       //  Initialize the client
-      if (!ceph_initializeClient(arguments)) {
+      if (!ceph_initializeClient(arguments,
+				 conf.getInt("fs.ceph.blockSize", 1<<26))) {
 	debug("Ceph initialization failed!");
 	throw new IOException("Ceph initialization failed!");
       }
@@ -774,7 +775,7 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public long getDefaultBlockSize() {
-    return ceph_getblocksize("/");
+    return getConf().getInt("fs.ceph.blockSize", 1<<26);
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
