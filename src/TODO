@@ -33,18 +33,18 @@ v0.14
 
 - mds: put migration vectors in mdsmap
 
-- msgr: unidirectional option
-  - what about mon -> mds/osd messages?
-- kclient msgr fixups
-  - allow msg to be revoked from connection  (per-msg queue_seq, mutex)
-  - kill maybe_dup_msg
-
+- msgr
+  - check protocols during connection handshake, not per-message?
+- kclient msgr
+  - allow msg to be revoked from connection (per-msg queue_seq, mutex)
+  - and then kill maybe_dup_msg
 
 
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 - clientid needs to be u64, and consistent throughout
+- ceph needs to detect monitor session drop
 
 later
 - authentication
