@@ -96,9 +96,8 @@ static void __close_session(struct ceph_mon_client *monc)
 {
 	if (monc->con) {
 		dout("__close_session closing mon%d\n", monc->cur_mon);
-		monc->con->private = NULL;
-		monc->con->ops->put(monc->con);
-		monc->con = NULL;
+		ceph_con_close(monc->con);
+		monc->cur_mon = -1;
 	}
 }
 
@@ -109,7 +108,7 @@ static int __open_session(struct ceph_mon_client *monc)
 {
 	char r;
 
-	if (!monc->con) {
+	if (monc->cur_mon < 0) {
 		get_random_bytes(&r, 1);
 		monc->cur_mon = r % monc->monmap->num_mon;
 		dout("open_session num=%d r=%d -> mon%d\n",
@@ -118,16 +117,7 @@ static int __open_session(struct ceph_mon_client *monc)
 		monc->sub_renew_after = jiffies;  /* i.e., expired */
 		monc->want_next_osdmap = !!monc->want_next_osdmap;
 
-		monc->con = kzalloc(sizeof(*monc->con), GFP_NOFS);
-		if (!monc->con) {
-			pr_err("open_session mon%d ENOMEM\n", monc->cur_mon);
-			return -ENOMEM;
-		}
-
-		dout("open_session mon%d opened\n", monc->cur_mon);
-		ceph_con_init(monc->client->msgr, monc->con);
-		monc->con->private = monc;
-		monc->con->ops = &mon_con_ops;
+		dout("open_session mon%d opening\n", monc->cur_mon);
 		monc->con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		monc->con->peer_name.num = cpu_to_le32(monc->cur_mon);
 		ceph_con_open(monc->con,
@@ -150,7 +140,7 @@ static void __schedule_delayed(struct ceph_mon_client *monc)
 {
 	unsigned delay;
 
-	if (!monc->con || monc->want_mount || __sub_expired(monc))
+	if (monc->cur_mon < 0 || monc->want_mount || __sub_expired(monc))
 		delay = 10 * HZ;
 	else
 		delay = 20 * HZ;
@@ -287,12 +277,22 @@ static void __request_mount(struct ceph_mon_client *monc)
 	ceph_con_send(monc->con, msg);
 }
 
-void ceph_monc_request_mount(struct ceph_mon_client *monc)
+int ceph_monc_request_mount(struct ceph_mon_client *monc)
 {
+	if (!monc->con) {
+		monc->con = kzalloc(sizeof(*monc->con), GFP_KERNEL);
+		if (!monc->con)
+			return -ENOMEM;
+		ceph_con_init(monc->client->msgr, monc->con);
+		monc->con->private = monc;
+		monc->con->ops = &mon_con_ops;
+	}
+
 	mutex_lock(&monc->mutex);
 	__request_mount(monc);
 	__schedule_delayed(monc);
 	mutex_unlock(&monc->mutex);
+	return 0;
 }
 
 /*
@@ -529,8 +529,10 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	monc->client = cl;
 	monc->monmap = NULL;
 	mutex_init(&monc->mutex);
+
 	monc->con = NULL;
 
+	monc->cur_mon = -1;
 	monc->hunting = false;  /* not really */
 	monc->sub_renew_after = jiffies;
 	monc->sub_sent = 0;
@@ -551,9 +553,16 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 {
 	dout("stop\n");
 	cancel_delayed_work_sync(&monc->delayed_work);
+
 	mutex_lock(&monc->mutex);
 	__close_session(monc);
+	if (monc->con) {
+		monc->con->private = NULL;
+		monc->con->ops->put(monc->con);
+		monc->con = NULL;
+	}
 	mutex_unlock(&monc->mutex);
+
 	kfree(monc->monmap);
 }
 
@@ -633,7 +642,6 @@ static void mon_fault(struct ceph_connection *con)
 out:
 	mutex_unlock(&monc->mutex);
 }
-
 
 const static struct ceph_connection_operations mon_con_ops = {
 	.get = ceph_con_get,
