@@ -4108,7 +4108,7 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     dout(10) << "readahead " << f->nr_consec_read << " reads " 
 	     << f->consec_read_bytes << " bytes ... readahead " << off << "~" << l
 	     << " (caller wants " << off << "~" << len << ")" << dendl;
-    if (l > len) {
+    if (l > (loff_t)len) {
       objectcacher->file_read(in->ino, &in->layout, in->snapid,
 			      off, l, NULL, 0, 0);
       dout(10) << "readahead initiated" << dendl;
