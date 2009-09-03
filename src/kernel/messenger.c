@@ -257,7 +257,7 @@ static void reset_connection(struct ceph_connection *con)
  */
 void ceph_con_close(struct ceph_connection *con)
 {
-	dout("close %p peer %u.%u.%u.%u:%u\n", con,
+	dout("con_close %p peer %u.%u.%u.%u:%u\n", con,
 	     IPQUADPORT(con->peer_addr.ipaddr));
 	set_bit(CLOSED, &con->state);  /* in case there's queued work */
 	clear_bit(STANDBY, &con->state);  /* avoid connect_seq bump */
