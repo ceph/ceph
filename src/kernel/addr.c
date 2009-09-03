@@ -311,7 +311,7 @@ static int ceph_readpages(struct file *file, struct address_space *mapping,
 
 		list_del(&page->lru);
 
-		if (rc < PAGE_CACHE_SIZE) {
+		if (rc < (int)PAGE_CACHE_SIZE) {
 			/* zero (remainder of) page */
 			int s = rc < 0 ? 0 : rc;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)
