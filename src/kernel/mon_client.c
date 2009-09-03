@@ -19,11 +19,11 @@
  * algorithm to manage the MDS map (mds cluster membership), OSD map, and
  * list of clients who have mounted the file system.
  *
- * Communication with the monitor cluster is lossy, so requests for
- * information may have to be resent if we time out waiting for a response.
- * As long as we do not time out, we continue to send all requests to the
- * same monitor.  If there is a problem, we randomly pick a new monitor from
- * the cluster to try.
+ * We maintain an open, active session with a monitor at all times in order to
+ * receive timely MDSMap updates.  We periodically send a keepalive byte on the
+ * TCP socket to ensure we detect a failure.  If the connection does break, we
+ * randomly hunt for a new monitor.  Once the connection is reestablished, we
+ * resend any outstanding requests.
  */
 
 const static struct ceph_connection_operations mon_con_ops;
@@ -516,8 +516,8 @@ static void delayed_work(struct work_struct *work)
 		} else {
 			ceph_con_keepalive(monc->con);
 		}
-		__send_subscribe(monc);
 	}
+	__send_subscribe(monc);
 	__schedule_delayed(monc);
 	mutex_unlock(&monc->mutex);
 }
