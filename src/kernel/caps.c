@@ -1950,7 +1950,7 @@ void ceph_get_cap_refs(struct ceph_inode_info *ci, int caps)
 void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 {
 	struct inode *inode = &ci->vfs_inode;
-	int last = 0, flushsnaps = 0, wake = 0;
+	int last = 0, put = 0, flushsnaps = 0, wake = 0;
 	struct ceph_cap_snap *capsnap;
 
 	spin_lock(&inode->i_lock);
@@ -1963,8 +1963,10 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		if (--ci->i_rdcache_ref == 0)
 			last++;
 	if (had & CEPH_CAP_FILE_BUFFER) {
-		if (--ci->i_wrbuffer_ref == 0)
+		if (--ci->i_wrbuffer_ref == 0) {
 			last++;
+			put++;
+		}
 		dout("put_cap_refs %p wrbuffer %d -> %d (?)\n",
 		     inode, ci->i_wrbuffer_ref+1, ci->i_wrbuffer_ref);
 	}
@@ -1995,6 +1997,8 @@ void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
 		ceph_flush_snaps(ci);
 	if (wake)
 		wake_up(&ci->i_cap_wq);
+	if (put)
+		iput(inode);
 }
 
 /*
