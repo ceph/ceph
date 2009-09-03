@@ -242,7 +242,7 @@ void ClientMonitor::_mounted(__s64 client, MClientMount *m)
 
   // also send latest mds and osd maps
   //mon->mdsmon()->send_latest(to);
-  mon->osdmon()->send_latest(to);
+  //mon->osdmon()->send_latest(to);
 
   delete m;
 }
