@@ -246,7 +246,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(monmap, p);
 
-  messenger->set_myname(entity_name_t::CLIENT(m->client));
+  messenger->set_myname(entity_name_t::CLIENT(m->client.v));
 
   // finish.
   timer.cancel_event(mount_timeout_event);

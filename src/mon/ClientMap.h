@@ -29,7 +29,7 @@ using namespace std;
 class ClientMap {
 public:
   version_t version;
-  __u64 next_client;
+  client_t next_client;
 
   ClientMap() : version(0), next_client(0) {}
 

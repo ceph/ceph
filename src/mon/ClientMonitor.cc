@@ -144,7 +144,9 @@ bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
   case CEPH_MSG_CLIENT_MOUNT:
     {
       entity_addr_t addr = m->get_orig_source_addr();
-      __s64 client = ++pending_map.next_client;
+      client_t client = pending_map.next_client;
+      pending_map.next_client.v++;
+
       dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
 
       paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
@@ -225,11 +227,11 @@ bool ClientMonitor::prepare_command(MMonCommand *m)
 // MOUNT
 
 
-void ClientMonitor::_mounted(__s64 client, MClientMount *m)
+void ClientMonitor::_mounted(client_t client, MClientMount *m)
 {
   entity_inst_t to;
   to.addr = m->get_orig_source_addr();
-  to.name = entity_name_t::CLIENT(client);
+  to.name = entity_name_t::CLIENT(client.v);
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
   
