@@ -125,12 +125,13 @@ static int __open_session(struct ceph_mon_client *monc)
 		}
 
 		dout("open_session mon%d opened\n", monc->cur_mon);
-		ceph_con_init(monc->client->msgr, monc->con,
-			      &monc->monmap->mon_inst[monc->cur_mon].addr);
+		ceph_con_init(monc->client->msgr, monc->con);
 		monc->con->private = monc;
 		monc->con->ops = &mon_con_ops;
 		monc->con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
 		monc->con->peer_name.num = cpu_to_le32(monc->cur_mon);
+		ceph_con_open(monc->con,
+			      &monc->monmap->mon_inst[monc->cur_mon].addr);
 	} else {
 		dout("open_session mon%d already open\n", monc->cur_mon);
 	}

@@ -275,7 +275,7 @@ void ceph_put_mds_session(struct ceph_mds_session *s)
 	dout("mdsc put_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref)) {
-		ceph_con_destroy(&s->s_con);
+		ceph_con_shutdown(&s->s_con);
 		kfree(s);
 	}
 }
@@ -321,12 +321,12 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_seq = 0;
 	mutex_init(&s->s_mutex);
 
-	ceph_con_init(mdsc->client->msgr, &s->s_con,
-		      ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
+	ceph_con_init(mdsc->client->msgr, &s->s_con);
 	s->s_con.private = s;
 	s->s_con.ops = &mds_con_ops;
 	s->s_con.peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS);
 	s->s_con.peer_name.num = cpu_to_le32(mds);
+	ceph_con_open(&s->s_con, ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 
 	spin_lock_init(&s->s_cap_lock);
 	s->s_cap_gen = 0;
@@ -2050,8 +2050,8 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		session->s_state = CEPH_MDS_SESSION_RECONNECTING;
 		session->s_seq = 0;
 
-		ceph_con_reopen(&session->s_con,
-				ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
+		ceph_con_open(&session->s_con,
+			      ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 
 		/* replay unsafe requests */
 		replay_unsafe_requests(mdsc, session);

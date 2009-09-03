@@ -266,9 +266,9 @@ void ceph_con_close(struct ceph_connection *con)
 /*
  * clean up connection state
  */
-void ceph_con_destroy(struct ceph_connection *con)
+void ceph_con_shutdown(struct ceph_connection *con)
 {
-	dout("con_destroy %p destroying\n", con);
+	dout("con_shutdown %p\n", con);
 	reset_connection(con);
 	set_bit(DEAD, &con->state);
 	con_close_socket(con); /* silently ignore errors */
@@ -277,11 +277,10 @@ void ceph_con_destroy(struct ceph_connection *con)
 /*
  * Reopen a closed connection, with a new peer address.
  */
-void ceph_con_reopen(struct ceph_connection *con, struct ceph_entity_addr *addr)
+void ceph_con_open(struct ceph_connection *con, struct ceph_entity_addr *addr)
 {
-	dout("con_reopen %p %u.%u.%u.%u:%u\n", con, IPQUADPORT(addr->ipaddr));
-	BUG_ON(!test_bit(CLOSED, &con->state));
-	set_bit(REOPEN, &con->state);
+	dout("con_open %p %u.%u.%u.%u:%u\n", con, IPQUADPORT(addr->ipaddr));
+	set_bit(OPENING, &con->state);
 	clear_bit(CLOSED, &con->state);
 	memcpy(&con->peer_addr, addr, sizeof(*addr));
 	queue_con(con);
@@ -305,7 +304,7 @@ void ceph_con_put(struct ceph_connection *con)
 	     atomic_read(&con->nref), atomic_read(&con->nref) - 1);
 	BUG_ON(atomic_read(&con->nref) == 0);
 	if (atomic_dec_and_test(&con->nref)) {
-		ceph_con_destroy(con);
+		ceph_con_shutdown(con);
 		kfree(con);
 	}
 }
@@ -315,18 +314,15 @@ void ceph_con_put(struct ceph_connection *con)
  *
  * NOTE: assumes struct is initially zeroed!
  */
-void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con,
-		   struct ceph_entity_addr *addr)
+void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
-	dout("con_init %p %u.%u.%u.%u:%u\n", con, IPQUADPORT(addr->ipaddr));
+	dout("con_init %p\n", con);
 	atomic_set(&con->nref, 1);
 	con->msgr = msgr;
 	spin_lock_init(&con->out_queue_lock);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, con_work);
-	con->peer_addr = *addr;
-
 	con->private = NULL;
 }
 
@@ -1455,9 +1451,9 @@ more:
 		con_close_socket(con);
 		goto done;
 	}
-	if (test_and_clear_bit(REOPEN, &con->state)) {
+	if (test_and_clear_bit(OPENING, &con->state)) {
 		/* reopen w/ new peer */
-		dout("con_work REOPEN\n");
+		dout("con_work OPENING\n");
 		con_close_socket(con);
 	}
 	if (test_bit(WAIT, &con->state)) {   /* we are a zombie */

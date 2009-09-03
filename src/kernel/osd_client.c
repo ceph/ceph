@@ -310,12 +310,12 @@ static int open_osd_session(struct ceph_osd_client *osdc, struct ceph_osd *osd)
 	osd->o_con = kzalloc(sizeof(*osd->o_con), GFP_NOFS);
 	if (!osd->o_con)
 		return -ENOMEM;
-	ceph_con_init(osdc->client->msgr, osd->o_con,
-		      &osdc->osdmap->osd_addr[o]);
+	ceph_con_init(osdc->client->msgr, osd->o_con);
 	osd->o_con->private = osd;
 	osd->o_con->ops = &osd_con_ops;
 	osd->o_con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
 	osd->o_con->peer_name.num = cpu_to_le32(o);
+	ceph_con_open(osd->o_con, &osdc->osdmap->osd_addr[o]);
 	return 0;
 }
 
