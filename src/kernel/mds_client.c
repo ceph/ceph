@@ -1671,6 +1671,24 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		goto out;
 	}
 
+	result = le32_to_cpu(head->result);
+
+	/*
+	 * Tolerate 2 consecutive ESTALEs from the same mds.
+	 * FIXME: we should be looking at the cap migrate_seq.
+	 */
+	if (result == -ESTALE) {
+		req->r_direct_mode = USE_AUTH_MDS;
+		req->r_num_stale++;
+		if (req->r_num_stale <= 2) {
+			__do_request(mdsc, req);
+			mutex_unlock(&mdsc->mutex);
+			goto out;
+		}
+	} else {
+		req->r_num_stale = 0;
+	}
+
 	if (head->safe) {
 		req->r_got_safe = true;
 		__unregister_request(mdsc, req);
@@ -1702,37 +1720,15 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		list_add_tail(&req->r_unsafe_item, &req->r_session->s_unsafe);
 	}
 
+	dout("handle_reply tid %lld result %d\n", tid, result);
+	rinfo = &req->r_reply_info;
+	err = parse_reply_info(msg, rinfo);
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&session->s_mutex);
-
-	/* parse */
-	rinfo = &req->r_reply_info;
-	err = parse_reply_info(msg, rinfo);
 	if (err < 0) {
 		pr_err("ceph_mdsc_handle_reply got corrupt reply mds%d\n", mds);
 		goto out_err;
-	}
-	result = le32_to_cpu(rinfo->head->result);
-	dout("handle_reply tid %lld result %d\n", tid, result);
-
-	/*
-	 * Tolerate 2 consecutive ESTALEs from the same mds.
-	 * FIXME: we should be looking at the cap migrate_seq.
-	 */
-	if (result == -ESTALE) {
-		req->r_direct_mode = USE_AUTH_MDS;
-		req->r_num_stale++;
-		if (req->r_num_stale <= 2) {
-			mutex_unlock(&req->r_session->s_mutex);
-			mutex_lock(&mdsc->mutex);
-			put_request_session(req);
-			__do_request(mdsc, req);
-			mutex_unlock(&mdsc->mutex);
-			goto out;
-		}
-	} else {
-		req->r_num_stale = 0;
 	}
 
 	/* snap trace */
