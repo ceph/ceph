@@ -263,17 +263,17 @@ bool ClientMonitor::prepare_command(MMonCommand *m)
 // MOUNT
 
 
-void ClientMonitor::_mounted(__s64 client, MClientMount *m)
+void ClientMonitor::_mounted(client_t client, MClientMount *m)
 {
   entity_inst_t to;
   to.addr = m->get_orig_source_addr();
-  to.name = entity_name_t::CLIENT(client);
+  to.name = entity_name_t::CLIENT(client.v);
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
   
   // reply with client ticket
   MClientMountAck *ack = new MClientMountAck;
-  ack->client = client;
+  ack->client = client.v;
   mon->monmap->encode(ack->monmap_bl);
 
   mon->send_reply(m, ack, to);

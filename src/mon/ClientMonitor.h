@@ -47,10 +47,10 @@ public:
 
   class C_Mounted : public Context {
     ClientMonitor *cmon;
-    __s64 client;
+    client_t client;
     MClientMount *m;
   public:
-    C_Mounted(ClientMonitor *cm, __s64 c, MClientMount *m_) : 
+    C_Mounted(ClientMonitor *cm, client_t c, MClientMount *m_) : 
       cmon(cm), client(c), m(m_) {}
     void finish(int r) {
       if (r >= 0)
@@ -75,7 +75,7 @@ private:
 
   bool check_auth(MAuth *m);
   bool check_mount(MClientMount *m);
-  void _mounted(__s64 c, MClientMount *m);
+  void _mounted(client_t c, MClientMount *m);
  
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
