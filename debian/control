@@ -54,6 +54,15 @@ Description: CRUSH mapping algorithm
  in storage clusters, where one wants to minimize movement of objects
  between servers when servers fail or are added to the cluster.
 
+Package: libcrush-dev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: CRUSH mapping algorithm (development files)
+ CRUSH is a pseudo-random hash-like algorithm for mapping inputs to
+ a changing hierarchy of devices.  It was originally designed for use
+ in storage clusters, where one wants to minimize movement of objects
+ between servers when servers fail or are added to the cluster.
+
 Package: librados
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush
@@ -63,10 +72,28 @@ Description: RADOS distributed object store client library
  shared library allowing applications to access the distributed object
  store using a simple file-like interface.
 
+Package: librados-dev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush, librados
+Description: RADOS distributed object store client library (development files)
+ RADOS is a reliable, autonomic distributed object storage cluster
+ developed as part of the Ceph distributed storage system.  This is a
+ shared library allowing applications to access the distributed object
+ store using a simple file-like interface.
+
 Package: libceph
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush
 Description: Ceph distributed file system client library
+ Ceph is a distributed network file system designed to provide
+ excellent performance, reliability, and scalability.  This is a
+ shared library allowing applications to access a Ceph distributed
+ file system via a POSIX-like interface.
+
+Package: libceph-dev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush
+Description: Ceph distributed file system client library (development files)
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
  shared library allowing applications to access a Ceph distributed

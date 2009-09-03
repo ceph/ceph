@@ -24,11 +24,6 @@
 #define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".sessionmap "
 
 
-void SessionMap::init_inode()
-{
-  ino = MDS_INO_SESSIONMAP_OFFSET + mds->get_nodeid();
-}
-
 void SessionMap::dump()
 {
   hash<entity_name_t> H;
@@ -64,8 +59,6 @@ public:
 void SessionMap::load(Context *onload)
 {
   dout(10) << "load" << dendl;
-
-  init_inode();
 
   if (onload)
     waiting_for_load.push_back(onload);
@@ -119,7 +112,6 @@ void SessionMap::save(Context *onsave, version_t needv)
   
   bufferlist bl;
   
-  init_inode();
   encode(bl);
   committing = version;
   SnapContext snapc;

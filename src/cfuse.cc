@@ -76,7 +76,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   rank.start();
 
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless());
   rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
   rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
@@ -87,7 +87,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // use my argc, argv (make sure you pass a mount point!)
   client->mount();
 
-  _dout_create_courtesy_output_symlink("client", client->get_nodeid());
+  _dout_create_courtesy_output_symlink("client", client->get_nodeid().v);
   cout << "starting fuse" << std::endl;
 
   //cerr << "starting fuse on pid " << getpid() << std::endl;

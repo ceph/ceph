@@ -1,0 +1,62 @@
+<html>
+
+<!--
+   Licensed to the Apache Software Foundation (ASF) under one or more
+   contributor license agreements.  See the NOTICE file distributed with
+   this work for additional information regarding copyright ownership.
+   The ASF licenses this file to You under the Apache License, Version 2.0
+   (the "License"); you may not use this file except in compliance with
+   the License.  You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+
+<head></head>
+<body>
+<h1>A client for the Ceph filesystem</h1>
+
+<h3>Introduction</h3>
+
+This page describes how to use <a href="http://ceph.newdream.net"> Ceph </a>
+as a backing store with Hadoop.   This page assumes that you have downloaded
+the Ceph software and installed necessary binaries as outlined in the Ceph
+documentation.
+
+<h3>Steps</h3>
+<ul>
+  <li>In the Hadoop conf directory edit core-site.xml,
+      adding the following (with appropriate substitutions). Note that
+      different nodes can connect to different monitors in the same cluster
+      without issue (the Ceph client will automatically redirect as necessary).
+<pre>
+&lt;property&gt;
+  &lt;name&gt;fs.default.name&lt;/name&gt;
+  &lt;value&gt;ceph://null&lt;/value&gt; 
+&lt;/property&gt;
+
+&lt;property&gt;
+  &lt;name&gt;fs.ceph.monAddr&lt;/name&gt;
+  &lt;value&gt;&lt;serverIP:port&gt;&lt;/value&gt;
+  &lt;description&gt;The location of the Ceph monitor to connect to.
+  This should be an IP address, not a domain-based web address.&lt;/description&gt;
+&lt;/property&gt;
+
+&lt;property&gt;
+  &lt;name&gt;fs.ceph.libDir&lt;/name&gt;
+  &lt;value&gt;/usr/local/lib&lt;/value&gt;
+  &lt;description&gt;The folder holding libceph and libhadoopceph&lt;/description&gt;
+  &lt;/property&gt;
+</pre>
+  
+  <li>Start up your Ceph instance according to the Ceph documentation.</li>
+  <li>Do not use the bin/start-all.sh commands, as they will attempt to start
+      up an hdfs instance. Just start whatever systems you need and they will
+      automatically make use of the Ceph filesystem once configured as above.</li>
+</body>
+</html>

@@ -16,6 +16,18 @@
 #include "rados.h"
 
 /*
+ * Ceph release version
+ */
+#define CEPH_VERSION_MAJOR 0
+#define CEPH_VERSION_MINOR 13
+#define CEPH_VERSION_PATCH 0
+
+#define _CEPH_STRINGIFY(x) #x
+#define CEPH_STRINGIFY(x) _CEPH_STRINGIFY(x)
+#define CEPH_MAKE_VERSION(x, y, z) CEPH_STRINGIFY(x) "." CEPH_STRINGIFY(y) "." CEPH_STRINGIFY(z)
+#define CEPH_VERSION CEPH_MAKE_VERSION(CEPH_VERSION_MAJOR, CEPH_VERSION_MINOR, CEPH_VERSION_PATCH)
+
+/*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.  we keep rev
  * internal cluster protocols separately from the public,
@@ -267,11 +279,12 @@ struct ceph_secret {
 #define CEPH_MSG_MON_GET_MAP            5
 #define CEPH_MSG_CLIENT_MOUNT           10
 #define CEPH_MSG_CLIENT_MOUNT_ACK       11
-#define CEPH_MSG_CLIENT_UNMOUNT         12
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
-#define CEPH_MSG_AUTH			15
-#define CEPH_MSG_AUTH_REPLY		16
+#define CEPH_MSG_MON_SUBSCRIBE          15
+#define CEPH_MSG_MON_SUBSCRIBE_ACK      16
+#define CEPH_MSG_AUTH			17
+#define CEPH_MSG_AUTH_REPLY		18
 
 /* client <-> mds */
 #define CEPH_MSG_MDS_GETMAP             20
@@ -357,8 +370,9 @@ struct ceph_client_mount {
 	__le64 have_version;
 } __attribute__ ((packed));
 
-struct ceph_client_unmount {
-	__le64 have_version;
+struct ceph_mon_subscribe_item {
+	__le64 have;
+	__u8 onetime;
 } __attribute__ ((packed));
 
 
@@ -533,6 +547,7 @@ static inline const char *ceph_mds_op_name(int op)
 #define CEPH_SETATTR_MTIME  8
 #define CEPH_SETATTR_ATIME 16
 #define CEPH_SETATTR_SIZE  32
+#define CEPH_SETATTR_CTIME 64
 
 union ceph_mds_request_args {
 	struct {
@@ -561,6 +576,10 @@ union ceph_mds_request_args {
 	struct {
 		__le32 flags;
 		__le32 mode;
+		__le32 stripe_unit;
+		__le32 stripe_count;
+		__le32 object_size;
+		__le32 file_replication;
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;

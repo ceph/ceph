@@ -33,20 +33,22 @@ import org.apache.hadoop.fs.FileStatus;
  * </p>
  * Configuration of the CephFileSystem is handled via a few Hadoop
  * Configuration properties: <br>
- * fs.ceph.monAddr -- the ip address of the monitor to connect to. <br>
+ * fs.ceph.monAddr -- the ip address/port of the monitor to connect to. <br>
  * fs.ceph.libDir -- the directory that libceph and libhadoopceph are
  * located in. This assumes Hadoop is being run on a linux-style machine
  * with names like libceph.so.
+ * fs.ceph.commandLine -- if you prefer you can fill in this property
+ * just as you would when starting Ceph up from the command line. Specific
+ * properties override any configuration specified here.
  * <p>
  * You can also enable debugging of the CephFileSystem and Ceph itself: <br>
  * fs.ceph.debug -- if 'true' will print out method enter/exit messages,
  * plus a little more.
- * fs.ceph.debugLevel -- a number that will print out diagnostic messages
- * from Ceph of at least that importance.
+ * fs.ceph.clientDebug/fs.ceph.messengerDebug -- will print out debugging
+ * from the respective Ceph system of at least that importance.
  */
 public class CephFileSystem extends FileSystem {
 
-  private static final long DEFAULT_BLOCK_SIZE = 4 * 1024 * 1024;
   private static final int EEXIST = 17;
 
   private URI uri;
@@ -59,7 +61,7 @@ public class CephFileSystem extends FileSystem {
   private static String monAddr;
   private static String fs_default_name;
   
-  private native boolean ceph_initializeClient(String debugLevel, String mon);
+  private native boolean ceph_initializeClient(String arguments);
   private native String  ceph_getcwd();
   private native boolean ceph_setcwd(String path);
   private native boolean ceph_rmdir(String path);
@@ -110,29 +112,52 @@ public class CephFileSystem extends FileSystem {
    * Starts up the connection to Ceph, reads in configuraton options, etc.
    * @param uri The URI for this filesystem.
    * @param conf The Hadoop Configuration to retrieve properties from.
-   * @throws IOException if the Ceph client initialization fails.
+   * @throws IOException if the Ceph client initialization fails
+   * or necessary properties are unset.
    */
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
     debug("initialize:enter");
-    System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
-    System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
-    super.initialize(uri, conf);
-    //store.initialize(uri, conf);
-    setConf(conf);
-    this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
-
-    fs_default_name = conf.get("fs.default.name");
-    monAddr = conf.get("fs.ceph.monAddr");
-    cephDebugLevel = conf.get("fs.ceph.debugLevel");
-    debug = ("true".equals(conf.get("fs.ceph.debug")));
-    //  Initializes the client
-    if (!ceph_initializeClient(cephDebugLevel, monAddr)) {
-      throw new IOException("Ceph initialization failed!");
+    if (!initialized) {
+      System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
+      System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
+      super.initialize(uri, conf);
+      setConf(conf);
+      this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());    
+      
+      fs_default_name = conf.get("fs.default.name");
+      debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
+      //build up the arguments for Ceph
+      String arguments = new String("CephFSInterface");
+      arguments += conf.get("fs.ceph.commandLine", "");
+      if (conf.get("fs.ceph.clientDebug") != null) {
+	arguments += " --debug_client ";
+	arguments += conf.get("fs.ceph.clientDebug");
+      }
+      if (conf.get("fs.ceph.messengerDebug") != null) {
+	arguments += " --debug_ms ";
+	arguments += conf.get("fs.ceph.messengerDebug");
+      }
+      if (conf.get("fs.ceph.monAddr") != null) {
+	arguments += " -m ";
+	arguments += conf.get("fs.ceph.monAddr");
+      }
+      //make sure they gave us a ceph monitor address or conf file
+      if ( (conf.get("fs.ceph.monAddr") == null) &&
+	   (arguments.indexOf("-m") == -1) &&
+	   (arguments.indexOf("-c") == -1) ) {
+	debug("You need to specify a Ceph monitor address.");
+	throw new IOException("You must specify a Ceph monitor address or config file!");
+      }
+      //  Initialize the client
+      if (!ceph_initializeClient(arguments)) {
+	debug("Ceph initialization failed!");
+	throw new IOException("Ceph initialization failed!");
+      }
+      initialized = true;
+      debug("Initialized client. Setting cwd to /");
+      ceph_setcwd("/");
     }
-    initialized = true;
-    debug("Initialized client. Setting cwd to /");
-    ceph_setcwd("/");
     debug("initialize:exit");
   }
 
@@ -363,9 +388,8 @@ public class CephFileSystem extends FileSystem {
       status = new FileStatus(lstat.size, lstat.is_dir,
 			      ceph_replication(abs_path.toString()),
 			      lstat.block_size,
-			      //these times in seconds get converted to millis
-			      lstat.mod_time*1000,
-			      lstat.access_time*1000,
+			      lstat.mod_time,
+			      lstat.access_time,
 			      new FsPermission((short)lstat.mode),
 			      null,
 			      null,
@@ -750,8 +774,7 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public long getDefaultBlockSize() {
-    return DEFAULT_BLOCK_SIZE;
-    //return getConf().getLong("fs.ceph.block.size", DEFAULT_BLOCK_SIZE);
+    return ceph_getblocksize("/");
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
@@ -802,22 +825,19 @@ public class CephFileSystem extends FileSystem {
     }
     
     // convert the strings to Paths
-    Vector<Path> paths = new Vector<Path>(dirlist.length);
+    Path[] paths = new Path[dirlist.length];
     for(int i = 0; i < dirlist.length; ++i) {
-      //we don't want . or .. entries, which Ceph includes
-      if (dirlist[i].equals(".") || dirlist[i].equals("..")) continue;
       debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
 			 dirlist[i] + "\"");
-
       // convert each listing to an absolute path
       Path raw_path = new Path(dirlist[i]);
       if (raw_path.isAbsolute())
-	paths.addElement(raw_path);
+	paths[i] = raw_path;
       else
-	paths.addElement(new Path(abs_path, raw_path));
+	paths[i] = new Path(abs_path, raw_path);
     }
     debug("listPaths:exit");
-    return paths.toArray(new Path[paths.size()]);
+    return paths;
   }
 
   private void debug(String statement) {

@@ -30,11 +30,6 @@
 #define dout_prefix *_dout << dbeginl << "mds" << mds->get_nodeid() << ".snap "
 
 
-void SnapServer::init_inode()
-{
-  ino = MDS_INO_SNAPTABLE;
-}
-
 void SnapServer::reset_state()
 {
   last_snap = 1;  /* snapid 1 reserved for initial root snaprealm */

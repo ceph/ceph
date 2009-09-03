@@ -23,15 +23,9 @@
 /*
  * Ceph superblock operations
  *
- * Handle the basics of mounting, unmounting.  Also dispatch message
- * types to appropriate handlers and subsystems.
+ * Handle the basics of mounting, unmounting.
  */
 
-static void ceph_dispatch(void *p, struct ceph_msg *msg);
-static void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
-			    struct ceph_entity_name *peer_name);
-static struct ceph_msg *ceph_alloc_msg(void *p, struct ceph_msg_header *hdr);
-static int ceph_alloc_middle(void *p, struct ceph_msg *msg);
 
 /*
  * find filename portion of a path (/foo/bar/baz -> baz)
@@ -52,22 +46,9 @@ const char *ceph_file_part(const char *s, int len)
 static void ceph_put_super(struct super_block *s)
 {
 	struct ceph_client *cl = ceph_client(s);
-	int rc;
-	int seconds = 15;
 
 	dout("put_super\n");
 	ceph_mdsc_close_sessions(&cl->mdsc);
-	ceph_monc_request_umount(&cl->monc);
-
-	/* don't wait on umount -f */
-	if (cl->mount_state != CEPH_MOUNT_SHUTDOWN) {
-		rc = wait_event_timeout(cl->mount_wq,
-				(cl->mount_state == CEPH_MOUNT_UNMOUNTED),
-				seconds*HZ);
-		if (rc == 0)
-			pr_err("ceph umount timedout after %d s\n", seconds);
-	}
-
 	return;
 }
 
@@ -266,103 +247,6 @@ static const struct super_operations ceph_super_ops = {
 };
 
 
-
-/*
- * The monitor responds with mount ack indicate mount success.  The
- * included client ticket allows the client to talk to MDSs and OSDs.
- */
-static int handle_mount_ack(struct ceph_client *client, struct ceph_msg *msg)
-{
-	struct ceph_monmap *monmap = NULL, *old = client->monc.monmap;
-	void *p, *end;
-	s32 result;
-	u32 len;
-	int err = -EINVAL;
-
-	if (client->signed_ticket) {
-		dout("handle_mount_ack - already mounted\n");
-		return 0;
-	}
-
-	dout("handle_mount_ack\n");
-	p = msg->front.iov_base;
-	end = p + msg->front.iov_len;
-
-	ceph_decode_32_safe(&p, end, result, bad);
-	ceph_decode_32_safe(&p, end, len, bad);
-	if (result) {
-		pr_err("ceph mount denied: %.*s (%d)\n", len, (char *)p,
-		       result);
-		return result;
-	}
-	p += len;
-
-	ceph_decode_32_safe(&p, end, len, bad);
-	ceph_decode_need(&p, end, len, bad);
-	monmap = ceph_monmap_decode(p, p + len);
-	if (IS_ERR(monmap)) {
-		pr_err("ceph problem decoding monmap, %d\n",
-		       (int)PTR_ERR(monmap));
-		return -EINVAL;
-	}
-	p += len;
-
-	ceph_decode_32_safe(&p, end, len, bad);
-	dout("ticket len %d\n", len);
-	ceph_decode_need(&p, end, len, bad);
-
-	client->signed_ticket = kmalloc(len, GFP_KERNEL);
-	if (!client->signed_ticket) {
-		pr_err("ceph ENOMEM allocating %d bytes for client ticket\n",
-		       len);
-		err = -ENOMEM;
-		goto out;
-	}
-
-	memcpy(client->signed_ticket, p, len);
-	client->signed_ticket_len = len;
-
-	client->monc.monmap = monmap;
-	kfree(old);
-
-	client->whoami = le32_to_cpu(msg->hdr.dst.name.num);
-	client->msgr->inst.name = msg->hdr.dst.name;
-	pr_info("ceph mount as client%d fsid is %llx.%llx\n", client->whoami,
-		le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
-		le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
-	ceph_debugfs_client_init(client);
-	return 0;
-
-bad:
-	pr_err("ceph error decoding mount_ack message\n");
-out:
-	kfree(monmap);
-	return err;
-}
-
-static int handle_auth_reply(struct ceph_client *client, struct ceph_msg *msg)
-{
-	void *p, *end;
-	s32 result;
-	int err = -EINVAL;
-
-	dout("handle_auth_reply\n");
-	p = msg->front.iov_base;
-	end = p + msg->front.iov_len;
-
-	ceph_decode_32_safe(&p, end, result, out);
-	pr_err("ceph auth result: (%d) msg=%p\n", result, msg);
-
-	err = client->aops->handle_response(client, &client->auth_data, p, result, (end - p));
-
-	/* FIXME */
-	if (!err)
-		client->session.session_id = 1;
-
-out:
-	return err;
-}
-
 const char *ceph_msg_type_name(int type)
 {
 	switch (type) {
@@ -370,9 +254,12 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_PING: return "ping";
 	case CEPH_MSG_MON_MAP: return "mon_map";
 	case CEPH_MSG_MON_GET_MAP: return "mon_get_map";
+	case CEPH_MSG_MON_SUBSCRIBE: return "mon_subscribe";
+	case CEPH_MSG_MON_SUBSCRIBE_ACK: return "mon_subscribe_ack";
+	case CEPH_MSG_AUTH: return "auth";
+	case CEPH_MSG_AUTH_REPLY: return "auth_reply";
 	case CEPH_MSG_CLIENT_MOUNT: return "client_mount";
 	case CEPH_MSG_CLIENT_MOUNT_ACK: return "client_mount_ack";
-	case CEPH_MSG_CLIENT_UNMOUNT: return "client_unmount";
 	case CEPH_MSG_STATFS: return "statfs";
 	case CEPH_MSG_STATFS_REPLY: return "statfs_reply";
 	case CEPH_MSG_CLIENT_AUTH: return "client auth";
@@ -393,26 +280,6 @@ const char *ceph_msg_type_name(int type)
 	case CEPH_MSG_OSD_OP: return "osd_op";
 	case CEPH_MSG_OSD_OPREPLY: return "osd_opreply";
 	default: return "unknown";
-	}
-}
-
-/*
- * Called when a message socket is explicitly reset by a peer.
- */
-void ceph_peer_reset(void *p, struct ceph_entity_addr *peer_addr,
-		     struct ceph_entity_name *peer_name)
-{
-	struct ceph_client *client = p;
-
-	dout("ceph_peer_reset %s%d\n", ENTITY_NAME(*peer_name));
-	switch (le32_to_cpu(peer_name->type)) {
-	case CEPH_ENTITY_TYPE_MDS:
-		ceph_mdsc_handle_reset(&client->mdsc,
-					      le32_to_cpu(peer_name->num));
-		break;
-	case CEPH_ENTITY_TYPE_OSD:
-		ceph_osdc_handle_reset(&client->osdc, peer_addr);
-		break;
 	}
 }
 
@@ -534,12 +401,16 @@ bad:
 	return -EINVAL;
 }
 
-static int parse_mount_args(int flags, char *options, const char *dev_name,
-			    struct ceph_mount_args *args, const char **path)
+static int parse_mount_args(struct ceph_client *client,
+			    int flags, char *options, const char *dev_name,
+			    const char **path)
 {
+	struct ceph_mount_args *args = &client->mount_args;
 	const char *c;
 	int err;
 	substring_t argstr[MAX_OPT_ARGS];
+	int num_mon;
+	struct ceph_entity_addr mon_addr[CEPH_MAX_MON_MOUNT_ADDR];
 	int i;
 
 	dout("parse_mount_args dev_name '%s'\n", dev_name);
@@ -567,16 +438,28 @@ static int parse_mount_args(int flags, char *options, const char *dev_name,
 	}
 
 	/* get mon ip(s) */
-	err = parse_ips(dev_name, *path, args->mon_addr,
-			CEPH_MAX_MON_MOUNT_ADDR, &args->num_mon);
+	err = parse_ips(dev_name, *path, mon_addr,
+			CEPH_MAX_MON_MOUNT_ADDR, &num_mon);
 	if (err < 0)
 		return err;
 
-	for (i = 0; i < args->num_mon; i++) {
-		args->mon_addr[i].ipaddr.sin_family = AF_INET;
-		args->mon_addr[i].erank = 0;
-		args->mon_addr[i].nonce = 0;
+	/* build initial monmap */
+	client->monc.monmap = kzalloc(sizeof(*client->monc.monmap) + 
+			       num_mon*sizeof(client->monc.monmap->mon_inst[0]),
+			       GFP_KERNEL);
+	if (!client->monc.monmap)
+		return -ENOMEM;
+	for (i = 0; i < num_mon; i++) {
+		client->monc.monmap->mon_inst[i].addr = mon_addr[i];
+		client->monc.monmap->mon_inst[i].addr.ipaddr.sin_family =
+			AF_INET;
+		client->monc.monmap->mon_inst[i].addr.erank = 0;
+		client->monc.monmap->mon_inst[i].addr.nonce = 0;
+		client->monc.monmap->mon_inst[i].name.type =
+			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
+		client->monc.monmap->mon_inst[i].name.num = cpu_to_le32(i);
 	}
+	client->monc.monmap->num_mon = num_mon;
 	args->my_addr.ipaddr.sin_family = AF_INET;
 	args->my_addr.ipaddr.sin_addr.s_addr = htonl(0);
 	args->my_addr.ipaddr.sin_port = htons(0);
@@ -741,33 +624,8 @@ static struct ceph_client *ceph_create_client(void)
 		goto fail;
 
 	/* msg pools */
-	/* simple pools: */
-	err = ceph_msgpool_init(&client->msgpool_mount_ack, 16384, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_unmount, 4096, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_mds_map, 16384, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_session,
-				sizeof(struct ceph_mds_session_head), 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_request_forward, 32, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_client_lease,
-				sizeof(struct ceph_mds_lease) + PATH_MAX, 1);
-	if (err < 0)
-		goto fail;
-	err = ceph_msgpool_init(&client->msgpool_osd_opreply, 4096, 1);
-	if (err < 0)
-		goto fail;
-
 	/* preallocated at request time: */
-	err = ceph_msgpool_init(&client->msgpool_statfs_reply, 4096, 0);
+	err = ceph_msgpool_init(&client->msgpool_statfs_reply, 4096, 0, false);
 	if (err < 0)
 		goto fail;
 
@@ -809,18 +667,7 @@ static void ceph_destroy_client(struct ceph_client *client)
 		mempool_destroy(client->wb_pagevec_pool);
 
 	/* msg pools */
-	ceph_msgpool_destroy(&client->msgpool_mount_ack);
-	ceph_msgpool_destroy(&client->msgpool_unmount);
 	ceph_msgpool_destroy(&client->msgpool_statfs_reply);
-	ceph_msgpool_destroy(&client->msgpool_mds_map);
-	ceph_msgpool_destroy(&client->msgpool_client_session);
-	//ceph_msgpool_destroy(&client->msgpool_client_reply);
-	ceph_msgpool_destroy(&client->msgpool_client_request_forward);
-	//ceph_msgpool_destroy(&client->msgpool_client_caps);
-	//ceph_msgpool_destroy(&client->msgpool_client_snap);
-	ceph_msgpool_destroy(&client->msgpool_client_lease);
-	//ceph_msgpool_destroy(&client->msgpool_osd_map);
-	//ceph_msgpool_destroy(&client->msgpool_osd_opreply);
 
 	release_mount_args(&client->mount_args);
 
@@ -973,15 +820,15 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 		      const char *path)
 {
 	struct ceph_entity_addr *myaddr = NULL;
-	struct ceph_msg *mount_msg;
 	int err;
-	int request_interval = 5 * HZ;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
+<<<<<<< HEAD:src/kernel/super.c
 	unsigned long started;
 	int which;
+=======
+	unsigned long started = jiffies;  /* note the start time */
+>>>>>>> unstable:src/kernel/super.c
 	struct dentry *root;
-	unsigned char r;
-	struct ceph_client_mount *h;
 
 	dout("mount start\n");
 	mutex_lock(&client->mount_mutex);
@@ -996,45 +843,24 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			client->msgr = NULL;
 			goto out;
 		}
-		client->msgr->parent = client;
-		client->msgr->dispatch = ceph_dispatch;
-		client->msgr->prepare_pages = ceph_osdc_prepare_pages;
-		client->msgr->peer_reset = ceph_peer_reset;
-		client->msgr->alloc_msg = ceph_alloc_msg;
-		client->msgr->alloc_middle = ceph_alloc_middle;
+		client->msgr->nocrc = ceph_test_opt(client, NOCRC);
 	}
 
 	auth_user(client);
 
 	started = jiffies;  /* note the start time */
 	/* send mount request, and wait for mon, mds, and osd maps */
+	ceph_monc_request_mount(&client->monc);
 	while (!have_mon_map(client) && !client->mount_err) {
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))
 			goto out;
-		dout("mount sending mount request\n");
-		get_random_bytes(&r, 1);
-		which = r % client->mount_args.num_mon;
-		mount_msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, sizeof(*h), 0,
-					 0, NULL);
-		if (IS_ERR(mount_msg)) {
-			err = PTR_ERR(mount_msg);
-			goto out;
-		}
-		h = mount_msg->front.iov_base;
-		h->have_version = 0;
-		mount_msg->hdr.dst.name.type =
-			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
-		mount_msg->hdr.dst.name.num = cpu_to_le32(which);
-		mount_msg->hdr.dst.addr = client->mount_args.mon_addr[which];
-
-		ceph_msg_send(client->msgr, mount_msg, 0);
 
 		/* wait */
-		dout("mount sent to mon%d, waiting for mon map\n", which);
+		dout("mount waiting for mount\n");
 		err = wait_event_interruptible_timeout(client->mount_wq,
 			       client->mount_err || have_mon_map(client),
-			       request_interval);
+			       timeout);
 		if (err == -EINTR || err == -ERESTARTSYS)
 			goto out;
 		if (client->mount_err) {
@@ -1042,7 +868,6 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 			goto out;
 		}
 	}
-
 
 	dout("mount opening root\n");
 	root = open_root_dentry(client, "", started);
@@ -1080,6 +905,7 @@ out:
 	return err;
 }
 
+<<<<<<< HEAD:src/kernel/super.c
 static struct ceph_msg_pool *get_pool(struct ceph_client *client, int type)
 {
 	switch (type) {
@@ -1245,6 +1071,8 @@ void ceph_dispatch(void *p, struct ceph_msg *msg)
 }
 
 
+=======
+>>>>>>> unstable:src/kernel/super.c
 static int ceph_set_super(struct super_block *s, void *data)
 {
 	struct ceph_client *client = data;
@@ -1293,11 +1121,11 @@ static int ceph_compare_super(struct super_block *sb, void *data)
 		}
 	} else {
 		/* do we share (a) monitor? */
-		for (i = 0; i < args->num_mon; i++)
+		for (i = 0; i < new->monc.monmap->num_mon; i++)
 			if (ceph_monmap_contains(other->monc.monmap,
-						 &args->mon_addr[i]))
+					 &new->monc.monmap->mon_inst[i].addr))
 				break;
-		if (i == args->num_mon) {
+		if (i == new->monc.monmap->num_mon) {
 			dout("mon ip not part of monmap\n");
 			return 0;
 		}
@@ -1355,8 +1183,7 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (IS_ERR(client))
 		return PTR_ERR(client);
 
-	err = parse_mount_args(flags, data, dev_name,
-			       &client->mount_args, &path);
+	err = parse_mount_args(client, flags, data, dev_name, &path);
 	if (err < 0)
 		goto out;
 

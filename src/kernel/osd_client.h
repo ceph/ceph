@@ -1,9 +1,9 @@
 #ifndef _FS_CEPH_OSD_CLIENT_H
 #define _FS_CEPH_OSD_CLIENT_H
 
-#include <linux/radix-tree.h>
 #include <linux/completion.h>
 #include <linux/mempool.h>
+#include <linux/rbtree.h>
 
 #include "types.h"
 #include "osdmap.h"
@@ -12,22 +12,35 @@ struct ceph_msg;
 struct ceph_snap_context;
 struct ceph_osd_request;
 struct ceph_osd_client;
+struct ceph_connection;
 
 /*
  * completion callback for async writepages
  */
-typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *);
+typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *,
+				     struct ceph_msg *);
+
+/* a given osd we're communicating with */
+struct ceph_osd {
+	struct ceph_osd_client *o_osdc;
+	int o_osd;
+	struct rb_node o_node;
+	struct ceph_connection *o_con;
+	struct list_head o_requests;
+};
 
 /* an in-flight request */
 struct ceph_osd_request {
 	u64             r_tid;              /* unique for this client */
 	struct rb_node  r_node;
+	struct list_head r_osd_item;
+	struct ceph_osd *r_osd;
 
-	struct ceph_msg  *r_request;
-	struct ceph_msg  *r_reply;
+	struct ceph_msg  *r_request, *r_reply;
 	int               r_result;
 	int               r_flags;     /* any additional flags for the osd */
 	int               r_aborted;   /* set if we cancel this request */
+	int r_prepared_pages, r_got_reply;
 
 	struct ceph_osd_client *r_osdc;
 	atomic_t          r_ref;
@@ -42,8 +55,6 @@ struct ceph_osd_request {
 
 	char              r_oid[40];          /* object name */
 	int               r_oid_len;
-	int               r_last_osd;         /* pg osds */
-	struct ceph_entity_addr r_last_osd_addr;
 	unsigned long     r_timeout_stamp;
 	bool              r_resend;           /* msg send failed, needs retry */
 
@@ -64,6 +75,7 @@ struct ceph_osd_client {
 	u64                    last_requested_map;
 
 	struct mutex           request_mutex;
+	struct rb_root         osds;          /* osds */
 	u64                    timeout_tid;   /* tid of timeout triggering rq */
 	u64                    last_tid;      /* tid of last request */
 	struct rb_root         requests;      /* pending requests */
@@ -78,17 +90,10 @@ extern int ceph_osdc_init(struct ceph_osd_client *osdc,
 			  struct ceph_client *client);
 extern void ceph_osdc_stop(struct ceph_osd_client *osdc);
 
-extern void ceph_osdc_handle_reset(struct ceph_osd_client *osdc,
-				   struct ceph_entity_addr *addr);
-
 extern void ceph_osdc_handle_reply(struct ceph_osd_client *osdc,
 				   struct ceph_msg *msg);
 extern void ceph_osdc_handle_map(struct ceph_osd_client *osdc,
 				 struct ceph_msg *msg);
-
-/* incoming read messages use this to discover which pages to read
- * the data payload into. */
-extern int ceph_osdc_prepare_pages(void *p, struct ceph_msg *m, int want);
 
 extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      struct ceph_file_layout *layout,

@@ -121,9 +121,9 @@ struct Mutation {
   bool is_master() { return slave_to_mds < 0; }
   bool is_slave() { return slave_to_mds >= 0; }
 
-  int get_client() {
+  client_t get_client() {
     if (reqid.name.is_client())
-      return reqid.name.num();
+      return client_t(reqid.name.num());
     return -1;
   }
 
@@ -303,8 +303,8 @@ struct MDRequest : public Mutation {
     CInode* destdn_was_remote_inode;
     bool was_link_merge;
 
-    map<__u32,entity_inst_t> imported_client_map;
-    map<CInode*, map<__u32,Capability::Export> > cap_imports;
+    map<client_t,entity_inst_t> imported_client_map;
+    map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for snaps
     version_t stid;
@@ -466,7 +466,7 @@ public:
   // -- client caps --
   __u64              last_cap_id;
   
-  void remove_client_cap(CInode *in, int client);
+  void remove_client_cap(CInode *in, client_t client);
 
 
   // -- discover --
@@ -684,10 +684,10 @@ protected:
   set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
 
-  map<inodeno_t,map<int,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
+  map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
   map<inodeno_t,string> cap_export_paths;
 
-  map<inodeno_t,map<int,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
+  map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
   set<inodeno_t> cap_imports_missing;
   
@@ -709,16 +709,16 @@ protected:
 public:
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
-  void rejoin_export_caps(inodeno_t ino, int client, cap_reconnect_t& icr) {
+  void rejoin_export_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr) {
     cap_exports[ino][client] = icr.capinfo;
     cap_export_paths[ino] = icr.path;
   }
-  void rejoin_recovered_caps(inodeno_t ino, int client, cap_reconnect_t& icr, 
+  void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     int frommds=-1) {
     cap_imports[ino][client][frommds] = icr.capinfo;
     cap_import_paths[ino] = filepath(icr.path, (__u64)icr.capinfo.pathbase);
   }
-  ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, int client) {
+  ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
 	cap_imports[ino].count(client) &&
 	cap_imports[ino][client].count(-1)) {
@@ -726,36 +726,36 @@ public:
     }
     return NULL;
   }
-  void remove_replay_cap_reconnect(inodeno_t ino, int client) {
+  void remove_replay_cap_reconnect(inodeno_t ino, client_t client) {
     assert(cap_imports[ino].size() == 1);
     assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
   }
 
   // [reconnect/rejoin caps]
-  map<CInode*,map<int, inodeno_t> >  reconnected_caps;   // inode -> client -> realmino
-  map<inodeno_t,map<int, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
+  map<CInode*,map<client_t, inodeno_t> >  reconnected_caps;   // inode -> client -> realmino
+  map<inodeno_t,map<client_t, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
 
-  void add_reconnected_cap(CInode *in, int client, inodeno_t realm) {
+  void add_reconnected_cap(CInode *in, client_t client, inodeno_t realm) {
     reconnected_caps[in][client] = realm;
   }
-  void add_reconnected_snaprealm(int client, inodeno_t ino, snapid_t seq) {
+  void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
   }
   void process_imported_caps();
   void process_reconnected_caps();
-  void prepare_realm_split(SnapRealm *realm, int client, inodeno_t ino,
-			   map<int,MClientSnap*>& splits);
+  void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
+			   map<client_t,MClientSnap*>& splits);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop);
-  void send_snaps(map<int,MClientSnap*>& splits);
-  void rejoin_import_cap(CInode *in, int client, ceph_mds_cap_reconnect& icr, int frommds);
-  void finish_snaprealm_reconnect(int client, SnapRealm *realm, snapid_t seq);
+  void send_snaps(map<client_t,MClientSnap*>& splits);
+  void rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, int frommds);
+  void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq);
   void try_reconnect_cap(CInode *in, Session *session);
 
   // cap imports.  delayed snap parent opens.
   //  realm inode -> client -> cap inodes needing to split to this realm
-  map<CInode*,map<int, set<inodeno_t> > > missing_snap_parents; 
-  map<int,set<CInode*> > delayed_imported_caps;
+  map<CInode*,map<client_t, set<inodeno_t> > > missing_snap_parents; 
+  map<client_t,set<CInode*> > delayed_imported_caps;
 
   void do_cap_import(Session *session, CInode *in, Capability *cap);
   void do_delayed_cap_imports();

@@ -24,10 +24,12 @@
 
 #include "auth/AuthClientHandler.h"
 
+#include "messages/MMonSubscribe.h"
 
 class MonMap;
 class MMonMap;
 class MClientMountAck;
+class MMonSubscribeAck;
 
 class MonClient : public Dispatcher {
 public:
@@ -35,19 +37,22 @@ public:
 private:
   Messenger *messenger;
 
-  bufferlist signed_ticket;
   bufferlist tgt;
+  entity_addr_t my_addr;
+
+  Context *mount_timeout_event;
 
   Mutex monc_lock;
   Mutex auth_lock;
   bool mounted;
   int mounters;
-  bool unmounting;
   Cond mount_cond, map_cond;
   AuthClientHandler auth_client_handler;
 
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
   void handle_monmap(MMonMap *m);
+
+  void ms_handle_remote_reset(const entity_addr_t& peer);
 
  protected:
   class C_MountTimeout : public Context {
@@ -149,10 +154,38 @@ private:
   void _try_mount(double timeout);
   void _mount_timeout(double timeout);
   void handle_mount_ack(MClientMountAck* m);
-  void handle_unmount(Message* m);
+
+  // mon subscriptions
+private:
+  map<nstring,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
+  utime_t sub_renew_sent, sub_renew_after;
+
+public:
+  void renew_subs();
+  void sub_want(nstring what, version_t have) {
+    sub_have[what].have = have;
+    sub_have[what].onetime = false;
+  }
+  void sub_want_onetime(nstring what, version_t have) {
+    if (sub_have.count(what) == 0) {
+      sub_have[what].have = have;
+      sub_have[what].onetime = true;
+      renew_subs();
+    }
+  }
+  void sub_got(nstring what, version_t have) {
+    if (sub_have.count(what)) {
+      if (sub_have[what].onetime)
+	sub_have.erase(what);
+      else
+	sub_have[what].have = have;
+    }
+  }
+  void handle_subscribe_ack(MMonSubscribeAck* m);
 
  public:
   MonClient() : messenger(NULL),
+		mount_timeout_event(NULL),
 		monc_lock("MonClient::monc_lock"),
 		auth_lock("MonClient::auth_lock"),
                 mount_handler(this),
@@ -160,21 +193,23 @@ private:
     //            auth_handler(this) {
     mounted = false;
     mounters = 0;
-    unmounting = false;
   }
 
   int build_initial_monmap();
   int get_monmap();
 
   int mount(double mount_timeout);
-  int unmount(double timeout);
   int authorize(uint32_t want_keys, double timeout);
+
+  void tick();
 
   void send_mon_message(Message *m, bool new_mon=false);
   void note_mon_leader(int m) {
     monmap.last_mon = m;
   }
   void pick_new_mon();
+
+  entity_addr_t get_my_addr() { return my_addr; }
 
   const ceph_fsid_t& get_fsid() {
     return monmap.fsid;
@@ -212,8 +247,6 @@ private:
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
-
-  bufferlist& get_signed_ticket() { return signed_ticket; }
 
 };
 

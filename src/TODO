@@ -12,19 +12,39 @@ v0.13
 /- osdmap: allow explicit pg 'override' mappings
 /- kclient: fixed vmalloc() usage (use for incoming msgs, GFP_NOFS)
 /- http gw
-- client authentication
 /- kclient: fix sync read vs EOF
 /- uclient: fix sync read vs EOF
-- uclient: fix write vs max_size
 /- [uk]client lseek SEEK_END
-- kclient msg pools
-  - don't reuse incoming cap message for revoke ack
-  - retry/requeue cap send on ENOMEM
+/- kclient msg pools
+/  - don't reuse incoming cap message for revoke ack
+/  - retry/requeue cap send on ENOMEM
+/- mds: misc bugfixes for multiclient file access
+
+v0.14
+/- dir backpointer update on rename (fsck assist)
+/- uclient bugs
+/- msgr: unidirectional option (client->mon, client->mds, client->osd)
+/- mon subscriptions to get osd, mds map updates.  single mon connection.
+
+- kclient: retry alloc on ENOMEM when reading from connection
+- client authentication
+- radosgw
+- uclient: fix write vs max_size?
+
+- mds: put migration vectors in mdsmap
+
+- msgr
+  - check protocols during connection handshake, not per-message?
+- kclient msgr
+  - allow msg to be revoked from connection (per-msg queue_seq, mutex)
+  - and then kill maybe_dup_msg
 
 
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
+- clientid needs to be u64, and consistent throughout
+- ceph needs to detect monitor session drop
 
 later
 - authentication
@@ -41,6 +61,9 @@ later
 - osd failure declarations
 - rename over old files should flush data, or revert back to old contents
 
+mount.ceph
+- should look at multiple A records, pass all IPs to kernel
+
 rados
 - usage accounting
 - make rest interface superset of s3?
@@ -52,9 +75,6 @@ rados
 - security
 
 repair
-- repair metadata.. 
-/  - parent pointer on CDir objects
-  - update on dir rename commit
 - namespace reconstruction tool
 - repair pg (rebuild log)  (online or offline?  ./cosd --repair_pg 1.ef?)
 - repair file ioctl?
@@ -65,22 +85,18 @@ repair
 - data object 
   - path backpointers?
   - parent dir pointer?
-- cdir objects
-  - parent dir pointer
-    - update on rename?  or on cdir store?
-      on cdir store is sufficient if mdlog survives...
-  - or what the hell, full trace?
 - mds scrubbing
 
 kclient
-?- ensure cap_snaps reflush after client reconnect 
 - fix up ESTALE handling
-- make cap import/export efficient
+- allow struct ceph_msg revoke from a connection
+- don't retry on ENOMEM on non-nofail requests in kick_requests
+- make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
-- reconnect after being disconnected from the mds
+- try to reconnect after being disconnected from the mds?
 - inotify for updates from other clients?
 
 vfs issues
@@ -100,7 +116,6 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
-- remove needs to be in a work queue!
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
@@ -117,6 +132,7 @@ uclient
 - hadoop: clean up assert usage
 
 mds
+- pass issued, wanted into eval(lock) when eval() already has it?  (and otherwise optimize eval paths..)
 - add an up:shadow mode?
   - tail the mds log as it is written
   - periodically check head so that we trim, too

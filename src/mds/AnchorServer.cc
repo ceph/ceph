@@ -23,11 +23,6 @@
 
 // table
 
-void AnchorServer::init_inode()
-{
-  ino = MDS_INO_ANCHORTABLE;
-}
-
 void AnchorServer::reset_state()
 {
   anchor_map.clear();

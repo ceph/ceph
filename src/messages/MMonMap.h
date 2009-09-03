@@ -29,10 +29,11 @@ public:
   const char *get_type_name() { return "mon_map"; }
 
   void encode_payload() { 
-    payload = monmapbl;
+    ::encode(monmapbl, payload);
   }
   void decode_payload() { 
-    monmapbl = payload;
+    bufferlist::iterator p = payload.begin();
+    ::decode(monmapbl, p);
   }
 };
 

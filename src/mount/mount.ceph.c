@@ -11,6 +11,17 @@ int verboseflag = 0;
 
 #include "mtab.c"
 
+void
+block_signals (int how) {
+     sigset_t sigs;
+
+     sigfillset (&sigs);
+     sigdelset(&sigs, SIGTRAP);
+     sigdelset(&sigs, SIGSEGV);
+     sigprocmask (how, &sigs, (sigset_t *) 0);
+}
+
+
 static int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 {
 	int len2 = strlen(str2);
@@ -259,6 +270,8 @@ int main(int argc, char *argv[])
 
 	parse_options(&new_argv[options_pos], &flags);
 
+	block_signals(SIG_BLOCK);
+
 	if (mount(new_argv[1], new_argv[2], "ceph", flags, new_argv[options_pos])) {
 		switch (errno) {
 		case ENODEV:
@@ -270,6 +283,8 @@ int main(int argc, char *argv[])
 	} else {
 		update_mtab_entry(new_argv[1], new_argv[2], "ceph", new_argv[options_pos], flags, 0, 0);
 	}
+
+	block_signals(SIG_UNBLOCK);
 
 	free(new_argv);	
 	exit(0);

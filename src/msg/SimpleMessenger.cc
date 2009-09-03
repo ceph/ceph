@@ -144,9 +144,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   }
   rank->rank_addr.erank = 0;
 
-  dout(1) << "accepter.bind rank_addr is " << rank->rank_addr 
-	  << " need_addr=" << rank->need_addr
-	  << dendl;
+  dout(1) << "accepter.bind rank_addr is " << rank->rank_addr << " need_addr=" << rank->need_addr << dendl;
   return 0;
 }
 
@@ -286,29 +284,26 @@ void SimpleMessenger::Endpoint::dispatch_entry()
           ls.pop_front();
 	  if ((long)m == BAD_REMOTE_RESET) {
 	    lock.Lock();
-	    entity_addr_t a = remote_reset_q.front().first;
-	    entity_name_t n = remote_reset_q.front().second;
+	    entity_addr_t a = remote_reset_q.front();
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_handle_remote_reset(a, n);
+	    get_dispatcher()->ms_deliver_handle_remote_reset(a);
  	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
-	    entity_addr_t a = reset_q.front().first;
-	    entity_name_t n = reset_q.front().second;
+	    entity_addr_t a = reset_q.front();
 	    reset_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_handle_reset(a, n);
+	    get_dispatcher()->ms_deliver_handle_reset(a);
 	  } else if ((long)m == BAD_FAILED) {
 	    lock.Lock();
 	    m = failed_q.front().first;
-	    entity_inst_t i = failed_q.front().second;
+	    entity_addr_t a = failed_q.front().second;
 	    failed_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_handle_failure(m, i);
+	    get_dispatcher()->ms_deliver_handle_failure(m, a);
 	    m->put();
 	  } else {
-	    dout(1) << m->get_dest() 
-		    << " <== " << m->get_source_inst()
+	    dout(1) << "<== " << m->get_source_inst()
 		    << " " << m->get_seq()
 		    << " ==== " << *m
 		    << " ==== " << m->get_payload().length() << "+" << m->get_middle().length()
@@ -374,7 +369,7 @@ void SimpleMessenger::Endpoint::prepare_dest(const entity_inst_t& inst)
   rank->lock.Lock();
   {
     if (rank->rank_pipe.count(inst.addr) == 0)
-      rank->connect_rank(inst.addr, rank->policy_map[inst.name.type()]);
+      rank->connect_rank(inst.addr, rank->get_policy(inst.name.type()));
   }
   rank->lock.Unlock();
 }
@@ -382,19 +377,19 @@ void SimpleMessenger::Endpoint::prepare_dest(const entity_inst_t& inst)
 int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source_inst(_myinst);
-  m->set_orig_source_inst(_myinst);
-  m->set_dest_inst(dest);
+  m->get_header().src = get_myinst();
+  m->get_header().orig_src = m->get_header().src;
+
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << m->get_source()
+  dout(1) << m->get_source_inst()
           << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
 	  << dendl;
 
-  rank->submit_message(m, dest.addr);
+  rank->submit_message(m, dest);
 
   return 0;
 }
@@ -402,8 +397,8 @@ int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
 int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source_inst(_myinst);
-  m->set_dest_inst(dest);
+  m->get_header().src = get_myinst();
+
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << m->get_source()
@@ -413,7 +408,7 @@ int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 	  << " " << m 
           << dendl;
 
-  rank->submit_message(m, dest.addr);
+  rank->submit_message(m, dest);
 
   return 0;
 }
@@ -423,9 +418,9 @@ int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
 {
   // set envelope
-  m->set_source_inst(_myinst);
-  m->set_orig_source_inst(_myinst);
-  m->set_dest_inst(dest);
+  m->get_header().src = get_myinst();
+  m->get_header().orig_src = m->get_header().src;
+
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
   dout(1) << "lazy " << m->get_source()
@@ -435,19 +430,17 @@ int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
 	  << " " << m 
           << dendl;
 
-  rank->submit_message(m, dest.addr, true);
+  rank->submit_message(m, dest, true);
 
   return 0;
 }
 
-
-
-void SimpleMessenger::Endpoint::reset_myname(entity_name_t newname)
+int SimpleMessenger::Endpoint::send_keepalive(entity_inst_t dest)
 {
-  entity_name_t oldname = get_myname();
-  dout(10) << "reset_myname " << oldname << " to " << newname << dendl;
-  _set_myname(newname);
+  rank->send_keepalive(dest);
+  return 0;
 }
+
 
 
 void SimpleMessenger::Endpoint::mark_down(entity_addr_t a)
@@ -455,6 +448,13 @@ void SimpleMessenger::Endpoint::mark_down(entity_addr_t a)
   rank->mark_down(a);
 }
 
+
+entity_addr_t SimpleMessenger::Endpoint::get_myaddr()
+{
+  entity_addr_t a = rank->rank_addr;
+  a.erank = my_rank;
+  return a;  
+}
 
 
 
@@ -471,6 +471,7 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix() {
 		<< " sd=" << sd
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
+		<< " ltx=" << policy.lossy_tx
 		<< ").";
 }
 
@@ -496,6 +497,23 @@ int SimpleMessenger::Pipe::accept()
     state = STATE_CLOSED;
     return -1;
   }
+
+  // and peer's socket addr (they might not know their ip)
+  entity_addr_t socket_addr;
+  socklen_t len = sizeof(socket_addr.ipaddr);
+  int r = ::getpeername(sd, (sockaddr*)&socket_addr.ipaddr, &len);
+  if (r < 0) {
+    dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+  rc = tcp_write(sd, (char*)&socket_addr, sizeof(socket_addr));
+  if (rc < 0) {
+    dout(10) << "accept couldn't write peer addr" << dendl;
+    state = STATE_CLOSED;
+    return -1;
+  }
+
   dout(10) << "accept sd=" << sd << dendl;
   
   // identify peer
@@ -508,7 +526,7 @@ int SimpleMessenger::Pipe::accept()
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
     banner[strlen(CEPH_BANNER)] = 0;
-    dout(10) << "accept peer sent bad banner '" << banner << "'" << dendl;
+    dout(1) << "accept peer sent bad banner '" << banner << "' (should be '" << CEPH_BANNER << "')" << dendl;
     state = STATE_CLOSED;
     return -1;
   }
@@ -521,16 +539,11 @@ int SimpleMessenger::Pipe::accept()
   dout(10) << "accept peer addr is " << peer_addr << dendl;
   if (peer_addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
     // peer apparently doesn't know what ip they have; figure it out for them.
-    entity_addr_t old_addr = peer_addr;
-    socklen_t len = sizeof(peer_addr.ipaddr);
-    int r = ::getpeername(sd, (sockaddr*)&peer_addr.ipaddr, &len);
-    if (r < 0) {
-      dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
-      state = STATE_CLOSED;
-      return -1;
-    }
-    peer_addr.ipaddr.sin_port = old_addr.ipaddr.sin_port;
-    dout(2) << "accept peer says " << old_addr << ", socket says " << peer_addr << dendl;
+    entity_addr_t was = peer_addr;
+    peer_addr.ipaddr = socket_addr.ipaddr;
+    peer_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+    dout(0) << "accept peer addr is really " << peer_addr
+	    << " (they said " << was << ", socket is " << socket_addr << ")" << dendl;
   }
   
   ceph_msg_connect connect;
@@ -553,7 +566,9 @@ int SimpleMessenger::Pipe::accept()
     rank->lock.Lock();
 
     // note peer's type, flags
-    policy = rank->policy_map[connect.host_type];  /* apply policy */
+    policy = rank->get_policy(connect.host_type);
+    dout(10) << "accept host_type " << connect.host_type
+	     << ", setting policy, lossy_tx=" << policy.lossy_tx << dendl;
     lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
 
     memset(&reply, 0, sizeof(reply));
@@ -618,10 +633,11 @@ int SimpleMessenger::Pipe::accept()
 
       if (connect.connect_seq == existing->connect_seq) {
 	// connection race?
-	if (peer_addr < rank->rank_addr) {
+	if (peer_addr < rank->rank_addr ||
+	    existing->policy.server) {
 	  // incoming wins
 	  dout(10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
-		   << " == " << connect.connect_seq << ", replacing my attempt" << dendl;
+		   << " == " << connect.connect_seq << ", or we are server, replacing my attempt" << dendl;
 	  assert(existing->state == STATE_CONNECTING ||
 		 existing->state == STATE_STANDBY ||
 		 existing->state == STATE_WAIT);
@@ -762,6 +778,7 @@ int SimpleMessenger::Pipe::connect()
   int msglen;
   char banner[strlen(CEPH_BANNER)];
   entity_addr_t paddr;
+  entity_addr_t peer_addr_for_me, socket_addr;
 
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -843,8 +860,18 @@ int SimpleMessenger::Pipe::connect()
       goto fail;
     }
   }
-  
-  // identify myself
+
+  // peer addr for me
+  rc = tcp_read(sd, (char*)&peer_addr_for_me, sizeof(peer_addr_for_me));
+  if (rc < 0) {
+    dout(2) << "connect couldn't read peer addr for me, " << strerror(errno) << dendl;
+    goto fail;
+  }
+  dout(20) << "connect peer addr for me is " << peer_addr_for_me << dendl;
+
+  if (rank->need_addr)
+    rank->learned_addr(peer_addr_for_me);
+
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = (char*)&rank->rank_addr;
   msgvec[0].iov_len = sizeof(rank->rank_addr);
@@ -1094,7 +1121,7 @@ void SimpleMessenger::Pipe::fail()
 
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i] && rank->local[i]->get_dispatcher())
-      rank->local[i]->queue_reset(peer_addr, last_dest_name);
+      rank->local[i]->queue_reset(peer_addr);
 
   // unregister
   lock.Unlock();
@@ -1112,7 +1139,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   report_failures();
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i] && rank->local[i]->get_dispatcher())
-      rank->local[i]->queue_remote_reset(peer_addr, last_dest_name);
+      rank->local[i]->queue_remote_reset(peer_addr);
 
   out_seq = 0;
   in_seq = 0;
@@ -1136,7 +1163,7 @@ void SimpleMessenger::Pipe::report_failures()
 	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
       } else {
 	dout(10) << "fail on " << *m << dendl;
-	rank->local[srcrank]->queue_failure(m, m->get_dest_inst());
+	rank->local[srcrank]->queue_failure(m, peer_addr);
       }
     }
     m->put();
@@ -1193,6 +1220,12 @@ void SimpleMessenger::Pipe::reader()
       continue;
     }
 
+    if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
+      dout(20) << "reader got KEEPALIVE" << dendl;
+      lock.Lock();
+      continue;
+    }
+
     // open ...
     if (tag == CEPH_MSGR_TAG_ACK) {
       dout(20) << "reader got ACK" << dendl;
@@ -1236,7 +1269,6 @@ void SimpleMessenger::Pipe::reader()
       if (m->get_seq() <= in_seq) {
 	dout(-10) << "reader got old message "
 		  << m->get_seq() << " <= " << in_seq << " " << m << " " << *m
-		  << " for " << m->get_dest() 
 		  << ", discarding" << dendl;
 	delete m;
 	continue;
@@ -1259,35 +1291,20 @@ void SimpleMessenger::Pipe::reader()
       
       dout(10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
-	       << " for " << m->get_dest() << dendl;
+	       << dendl;
       
       // deliver
       Endpoint *entity = 0;
       
       rank->lock.Lock();
       {
-	unsigned erank = m->get_dest_inst().addr.erank;
+	unsigned erank = m->get_header().dst_erank;
 	if (erank < rank->max_local && rank->local[erank]) {
 	  // find entity
 	  entity = rank->local[erank];
 	  entity->get();
-
-	  // first message?
-	  if (entity->need_addr) {
-	    entity->_set_myaddr(m->get_dest_inst().addr);
-	    dout(2) << "reader entity addr is " << entity->get_myaddr() << dendl;
-	    entity->need_addr = false;
-	  }
-
-	  if (rank->need_addr) {
-	    rank->rank_addr = m->get_dest_inst().addr;
-	    rank->rank_addr.erank = 0;
-	    dout(2) << "reader rank_addr is " << rank->rank_addr << dendl;
-	    rank->need_addr = false;
-	  }
-
 	} else {
-	  derr(0) << "reader got message " << *m << " for " << m->get_dest() << ", which isn't local" << dendl;
+	  derr(0) << "reader got message " << *m << ", which isn't local" << dendl;
 	}
       }
       rank->lock.Unlock();
@@ -1364,14 +1381,20 @@ void SimpleMessenger::Pipe::writer()
   lock.Lock();
 
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
+    dout(10) << "writer: state = " << state << " policy.server=" << policy.server << dendl;
+
     // standby?
-    if (!q.empty() && state == STATE_STANDBY)
+    if (is_queued() && state == STATE_STANDBY && !policy.server)
       state = STATE_CONNECTING;
 
     // connect?
     if (state == STATE_CONNECTING) {
-      connect();
-      continue;
+      if (policy.server) {
+	state = STATE_STANDBY;
+      } else {
+	connect();
+	continue;
+      }
     }
     
     if (state == STATE_CLOSING) {
@@ -1386,7 +1409,20 @@ void SimpleMessenger::Pipe::writer()
     }
 
     if (state != STATE_CONNECTING && state != STATE_WAIT && state != STATE_STANDBY &&
-	(!q.empty() || in_seq > in_seq_acked)) {
+	(is_queued() || in_seq > in_seq_acked)) {
+
+      // keepalive?
+      if (keepalive) {
+	lock.Unlock();
+	int rc = write_keepalive();
+	lock.Lock();
+	if (rc < 0) {
+	  dout(2) << "writer couldn't write keepalive, " << strerror(errno) << dendl;
+	  fault();
+ 	  continue;
+	}
+	keepalive = false;
+      }
 
       // send ack?
       if (in_seq > in_seq_acked) {
@@ -1413,21 +1449,14 @@ void SimpleMessenger::Pipe::writer()
         dout(20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
-        if (m->empty_payload())
-	  m->encode_payload();
-	m->calc_front_crc();
-
-	if (!g_conf.ms_nocrc)
-	  m->calc_data_crc();
-	else
-	  m->get_footer().flags = (unsigned)m->get_footer().flags | CEPH_MSG_FOOTER_NOCRC;
+	m->encode();
 
         dout(20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(m);
 
 	lock.Lock();
 	if (rc < 0) {
-          derr(1) << "writer error sending " << m << " to " << m->get_header().dst << ", "
+          derr(1) << "writer error sending " << m << ", "
 		  << errno << ": " << strerror(errno) << dendl;
 	  fault();
         }
@@ -1481,7 +1510,7 @@ Message *SimpleMessenger::Pipe::read_message()
     return 0;
   
   dout(20) << "reader got envelope type=" << header.type
-           << " src " << header.src << " dst " << header.dst
+           << " src " << header.src
            << " front=" << header.front_len
 	   << " data=" << header.data_len
 	   << " off " << header.data_off
@@ -1654,6 +1683,25 @@ int SimpleMessenger::Pipe::write_ack(unsigned seq)
   return 0;
 }
 
+int SimpleMessenger::Pipe::write_keepalive()
+{
+  dout(10) << "write_keepalive" << dendl;
+
+  char c = CEPH_MSGR_TAG_KEEPALIVE;
+
+  struct msghdr msg;
+  memset(&msg, 0, sizeof(msg));
+  struct iovec msgvec[2];
+  msgvec[0].iov_base = &c;
+  msgvec[0].iov_len = 1;
+  msg.msg_iov = msgvec;
+  msg.msg_iovlen = 1;
+  
+  if (do_sendmsg(sd, &msg, 1) < 0) 
+    return -1;	
+  return 0;
+}
+
 
 int SimpleMessenger::Pipe::write_message(Message *m)
 {
@@ -1671,7 +1719,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   blist.append(m->get_middle());
   blist.append(m->get_data());
   
-  dout(20)  << "write_message " << m << " to " << header.dst << dendl;
+  dout(20)  << "write_message " << m << dendl;
   
   // set up msghdr and iovecs
   struct msghdr msg;
@@ -1957,14 +2005,8 @@ SimpleMessenger::Endpoint *SimpleMessenger::register_entity(entity_name_t name)
   msgr->get();
   local[erank] = msgr;
   stopped[erank] = false;
-  msgr->_myinst.addr = rank_addr;
-  if (msgr->_myinst.addr.ipaddr == entity_addr_t().ipaddr)
-    msgr->need_addr = true;
-  msgr->_myinst.addr.erank = erank;
 
-  dout(10) << "register_entity " << name << " at " << msgr->_myinst.addr 
-	   << " need_addr=" << need_addr
-	   << dendl;
+  dout(10) << "register_entity " << name << " at " << msgr->get_myaddr() << dendl;
 
   num_local++;
   
@@ -1995,9 +2037,10 @@ void SimpleMessenger::unregister_entity(Endpoint *msgr)
 }
 
 
-void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr, bool lazy)
+void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool lazy)
 {
-  const entity_name_t dest = m->get_dest();
+  const entity_addr_t& dest_addr = dest.addr;
+  m->get_header().dst_erank = dest_addr.erank;
 
   assert(m->nref.test() == 0);
 
@@ -2018,10 +2061,10 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
     if (rank_addr.is_local_to(dest_addr)) {
       if (dest_addr.erank < max_local && local[dest_addr.erank]) {
         // local
-        dout(20) << "submit_message " << *m << " dest " << dest << " local" << dendl;
+        dout(20) << "submit_message " << *m << " local" << dendl;
 	local[dest_addr.erank]->queue_message(m);
       } else {
-        derr(0) << "submit_message " << *m << " dest " << dest << " " << dest_addr << " local but not in local map?  dropping." << dendl;
+        derr(0) << "submit_message " << *m << " " << dest_addr << " local but not in local map?  dropping." << dendl;
         //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
 	delete m;
       }
@@ -2034,17 +2077,12 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
         pipe = rank_pipe[ dest_proc_addr ];
 	pipe->lock.Lock();
 	if (pipe->state == Pipe::STATE_CLOSED) {
-	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
+	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
 	  pipe->unregister_pipe();
 	  pipe->lock.Unlock();
 	  pipe = 0;
 	} else {
-	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", have pipe." << dendl;
-
-	  // if this pipe was created by an incoming connection, but we haven't received
-	  // a message yet, then it won't have the policy set.
-	  if (pipe->get_out_seq() == 0)
-	    pipe->policy = policy_map[m->get_dest().type()];
+	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", have pipe." << dendl;
 
 	  pipe->_send(m);
 	  pipe->lock.Unlock();
@@ -2052,14 +2090,51 @@ void SimpleMessenger::submit_message(Message *m, const entity_addr_t& dest_addr,
       }
       if (!pipe) {
 	if (lazy) {
-	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", lazy, dropping." << dendl;
+	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", lazy, dropping." << dendl;
 	  delete m;
 	} else {
-	  dout(20) << "submit_message " << *m << " dest " << dest << " remote, " << dest_addr << ", new pipe." << dendl;
+	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.
-	  pipe = connect_rank(dest_proc_addr, policy_map[m->get_dest().type()]);
+	  pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
 	  pipe->send(m);
 	}
+      }
+    }
+  }
+
+  lock.Unlock();
+}
+
+void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
+{
+  const entity_addr_t dest_addr = dest.addr;
+  entity_addr_t dest_proc_addr = dest_addr;
+  lock.Lock();
+  {
+    // local?
+    if (!rank_addr.is_local_to(dest_addr)) {
+      // remote.
+      Pipe *pipe = 0;
+      if (rank_pipe.count( dest_proc_addr )) {
+        // connected?
+        pipe = rank_pipe[ dest_proc_addr ];
+	pipe->lock.Lock();
+	if (pipe->state == Pipe::STATE_CLOSED) {
+	  dout(20) << "send_keepalive remote, " << dest_addr << ", ignoring old closed pipe." << dendl;
+	  pipe->unregister_pipe();
+	  pipe->lock.Unlock();
+	  pipe = 0;
+	} else {
+	  dout(20) << "send_keepalive remote, " << dest_addr << ", have pipe." << dendl;
+	  pipe->_send_keepalive();
+	  pipe->lock.Unlock();
+	}
+      }
+      if (!pipe) {
+	dout(20) << "send_keepalive remote, " << dest_addr << ", new pipe." << dendl;
+	// not connected.
+	pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
+	pipe->send_keepalive();
       }
     }
   }
@@ -2147,3 +2222,13 @@ void SimpleMessenger::mark_down(entity_addr_t addr)
   lock.Unlock();
 }
 
+void SimpleMessenger::learned_addr(entity_addr_t peer_addr_for_me)
+{
+  lock.Lock();
+  entity_addr_t was = rank_addr;
+  rank_addr.ipaddr = peer_addr_for_me.ipaddr;
+  rank_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+  dout(1) << "learned my addr " << rank_addr << dendl;
+  need_addr = false;
+  lock.Unlock();
+}

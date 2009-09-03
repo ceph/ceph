@@ -1476,7 +1476,7 @@ bool OSD::heartbeat_dispatch(Message *m)
   return true;
 }
 
-bool OSD::dispatch_impl(Message *m)
+bool OSD::ms_dispatch(Message *m)
 {
   // verify protocol version
   if (m->get_orig_source().is_osd() &&

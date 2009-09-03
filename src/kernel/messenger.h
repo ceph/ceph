@@ -12,6 +12,7 @@
 #include "buffer.h"
 
 struct ceph_msg;
+struct ceph_connection;
 
 #define IPQUADPORT(n)							\
 	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr) >> 24)) & 0xFF, \
@@ -24,23 +25,31 @@ struct ceph_msg;
 extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
 
 /*
- * Ceph defines these callbacks for handling events:
+ * Ceph defines these callbacks for handling connection events.
  */
-/* handle an incoming message. */
-typedef void (*ceph_msgr_dispatch_t) (void *p, struct ceph_msg *m);
-/* an incoming message has a data payload; tell me what pages I
- * should read the data into. */
-typedef int (*ceph_msgr_prepare_pages_t) (void *p, struct ceph_msg *m,
-					  int want);
-/* a remote host as terminated a message exchange session, and messages
- * we sent (or they tried to send us) may be lost. */
-typedef void (*ceph_msgr_peer_reset_t) (void *p, struct ceph_entity_addr *addr,
-					struct ceph_entity_name *pn);
+struct ceph_connection_operations {
+	struct ceph_connection *(*get)(struct ceph_connection *);
+	void (*put)(struct ceph_connection *);
 
-typedef struct ceph_msg * (*ceph_msgr_alloc_msg_t) (void *p,
-					    struct ceph_msg_header *hdr);
-typedef int (*ceph_msgr_alloc_middle_t) (void *p, struct ceph_msg *msg);
+	/* handle an incoming message. */
+	void (*dispatch) (struct ceph_connection *con, struct ceph_msg *m);
 
+	/* there was some error on the socket (disconnect, whatever) */
+	void (*fault) (struct ceph_connection *con);
+
+	/* a remote host as terminated a message exchange session, and messages
+	 * we sent (or they tried to send us) may be lost. */
+	void (*peer_reset) (struct ceph_connection *con);
+
+	struct ceph_msg * (*alloc_msg) (struct ceph_connection *con,
+					struct ceph_msg_header *hdr);
+	int (*alloc_middle) (struct ceph_connection *con,
+			     struct ceph_msg *msg);
+	/* an incoming message has a data payload; tell me what pages I
+	 * should read the data into. */
+	int (*prepare_pages) (struct ceph_connection *con, struct ceph_msg *m,
+			      int want);
+};
 
 static inline const char *ceph_name_type_str(int t)
 {
@@ -54,32 +63,16 @@ static inline const char *ceph_name_type_str(int t)
 	}
 }
 
-#define CEPH_MSGR_BACKUP 10  /* backlogged incoming connections */
-
 /* use format string %s%d */
 #define ENTITY_NAME(n)				   \
 	ceph_name_type_str(le32_to_cpu((n).type)), \
 		le32_to_cpu((n).num)
 
 struct ceph_messenger {
-	void *parent;                    /* normally struct ceph_client * */
-	ceph_msgr_dispatch_t dispatch;
-	ceph_msgr_peer_reset_t peer_reset;
-	ceph_msgr_prepare_pages_t prepare_pages;
-	ceph_msgr_alloc_msg_t alloc_msg;
-	ceph_msgr_alloc_middle_t alloc_middle;
-
 	struct ceph_entity_inst inst;    /* my name+address */
-
-	struct socket *listen_sock; 	 /* listening socket */
-	struct work_struct awork;	 /* accept work */
-
-	spinlock_t con_lock;
-	struct list_head con_all;        /* all open connections */
-	struct list_head con_accepting;  /*  accepting */
-	struct radix_tree_root con_tree; /*  established */
-
 	struct page *zero_page;          /* used in certain error cases */
+
+	bool nocrc;
 
 	/*
 	 * the global_seq counts connections i (attempt to) initiate
@@ -131,7 +124,7 @@ struct ceph_msg_pos {
 #define LOSSYTX         0  /* we can close channel or drop messages on errors */
 #define LOSSYRX         1  /* peer may reset/drop messages */
 #define CONNECTING	2
-#define ACCEPTING	3
+#define KEEPALIVE_PENDING      3
 #define WRITE_PENDING	4  /* we have data ready to send */
 #define QUEUED          5  /* there is work queued on this connection */
 #define BUSY            6  /* work is being done */
@@ -143,6 +136,8 @@ struct ceph_msg_pos {
 #define CLOSED		10 /* we've closed the connection */
 #define SOCK_CLOSED	11 /* socket state changed to closed */
 #define REGISTERED      12 /* connection appears in con_tree */
+#define REOPEN          13 /* reopen connection w/ new peer */
+#define DEAD            14 /* dead, about to kfree */
 
 /*
  * A single connection with another host.
@@ -152,18 +147,19 @@ struct ceph_msg_pos {
  * messages in the case of a TCP disconnect.
  */
 struct ceph_connection {
+	void *private;
+	atomic_t nref;
+
+	const struct ceph_connection_operations *ops;
+
 	struct ceph_messenger *msgr;
 	struct socket *sock;
 	unsigned long state;	/* connection state (see flags above) */
 	const char *error_msg;  /* error message, if any */
 
-	atomic_t nref;
-
-	struct list_head list_all;     /* msgr->con_all */
-	struct list_head list_bucket;  /* msgr->con_tree or con_accepting */
-
 	struct ceph_entity_addr peer_addr; /* peer address */
 	struct ceph_entity_name peer_name; /* peer name */
+	struct ceph_entity_addr peer_addr_for_me;
 	u32 connect_seq;      /* identify the most recent connection
 				 attempt for this connection, client */
 	u32 peer_global_seq;  /* peer's global seq for this connection */
@@ -173,6 +169,7 @@ struct ceph_connection {
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending/sent but unacked */
 	u32 out_seq;		     /* last message queued for send */
+	bool out_keepalive_pending;
 
 	u32 in_seq, in_seq_acked;  /* last message received, acked */
 
@@ -219,25 +216,37 @@ struct ceph_connection {
 extern int ceph_msgr_init(void);
 extern void ceph_msgr_exit(void);
 
-extern struct ceph_messenger *
-ceph_messenger_create(struct ceph_entity_addr *myaddr);
+extern struct ceph_messenger *ceph_messenger_create(
+	struct ceph_entity_addr *myaddr);
 extern void ceph_messenger_destroy(struct ceph_messenger *);
-extern void ceph_messenger_mark_down(struct ceph_messenger *msgr,
-				     struct ceph_entity_addr *addr);
+
+extern void ceph_con_init(struct ceph_messenger *msgr,
+			  struct ceph_connection *con,
+			  struct ceph_entity_addr *addr);
+extern void ceph_con_destroy(struct ceph_connection *con);
+extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
+extern void ceph_con_keepalive(struct ceph_connection *con);
+extern void ceph_con_close(struct ceph_connection *con);
+extern void ceph_con_reopen(struct ceph_connection *con,
+			    struct ceph_entity_addr *addr);
+extern struct ceph_connection *ceph_con_get(struct ceph_connection *con);
+extern void ceph_con_put(struct ceph_connection *con);
 
 extern struct ceph_msg *ceph_msg_new(int type, int front_len,
 				     int page_len, int page_off,
 				     struct page **pages);
 extern void ceph_msg_kfree(struct ceph_msg *m);
 
+extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
+				       struct ceph_msg_header *hdr);
+extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
+
+
 static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
 {
-	/*printk("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
-	  atomic_read(&msg->nref)+1);*/
 	atomic_inc(&msg->nref);
 	return msg;
 }
-
 extern void ceph_msg_put(struct ceph_msg *msg);
 
 static inline void ceph_msg_remove(struct ceph_msg *msg)
@@ -245,7 +254,6 @@ static inline void ceph_msg_remove(struct ceph_msg *msg)
 	list_del_init(&msg->list_head);
 	ceph_msg_put(msg);
 }
-
 static inline void ceph_msg_put_list(struct list_head *head)
 {
 	while (!list_empty(head)) {
@@ -256,11 +264,5 @@ static inline void ceph_msg_put_list(struct list_head *head)
 }
 
 extern struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *msg);
-
-extern int ceph_msg_send(struct ceph_messenger *msgr, struct ceph_msg *msg,
-			 unsigned long timeout);
-
-extern void ceph_ping(struct ceph_messenger *msgr, struct ceph_entity_name name,
-		      struct ceph_entity_addr *addr);
 
 #endif

@@ -54,6 +54,9 @@ cd ..
 # upload
 rsync -v --progress *$arch.{deb,changes} sage@ceph.newdream.net:debian/dists/$repo/main/binary-$arch
 rsync -v --progress ceph_* sage@ceph.newdream.net:debian/dists/$repo/main/source
+if [ "$repo" == "stable" ]; then
+    scp ceph-$vers.tar.gz sage@ceph.newdream.net:ceph.newdream.net/downloads
+fi
 
 # rebuild index
 ssh sage@ceph.newdream.net build_debian_repo.sh

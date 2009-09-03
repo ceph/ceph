@@ -43,7 +43,9 @@ class PaxosService;
 
 class MMonGetMap;
 class MMonObserve;
+class MMonSubscribe;
 class MClass;
+class MRoute;
 
 class Monitor : public Dispatcher {
 public:
@@ -126,14 +128,21 @@ public:
 
 
   // messages
+  void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   void handle_shutdown(Message *m);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_class(MClass *m);
+  void handle_route(MRoute *m);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
+
+  void send_reply(Message *req, Message *reply, entity_inst_t to);
+  void send_reply(Message *req, Message *reply) {
+    send_reply(req, reply, req->get_orig_source_inst());
+  }
 
   void inject_args(const entity_inst_t& inst, string& args, version_t version) {
     vector<string> a(1);
@@ -157,7 +166,7 @@ public:
   };
 
  private:
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

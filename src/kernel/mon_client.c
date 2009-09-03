@@ -26,6 +26,8 @@
  * the cluster to try.
  */
 
+const static struct ceph_connection_operations mon_con_ops;
+
 /*
  * Decode a monmap blob (e.g., during mount).
  */
@@ -88,227 +90,295 @@ int ceph_monmap_contains(struct ceph_monmap *m, struct ceph_entity_addr *addr)
 }
 
 /*
- * Choose a monitor.  If @newmon >= 0, try to choose a different
- * monitor than last time.
+ * Close monitor session, if any.
  */
-static int pick_mon(struct ceph_mon_client *monc, int newmon)
+static void __close_session(struct ceph_mon_client *monc)
+{
+	if (monc->con) {
+		dout("__close_session closing mon%d\n", monc->cur_mon);
+		monc->con->private = NULL;
+		monc->con->ops->put(monc->con);
+		monc->con = NULL;
+	}
+}
+
+/*
+ * Open a session with a (new) monitor.
+ */
+static int __open_session(struct ceph_mon_client *monc)
 {
 	char r;
 
-	if (!newmon && monc->last_mon >= 0)
-		return monc->last_mon;
-	get_random_bytes(&r, 1);
-	monc->last_mon = r % monc->monmap->num_mon;
-	return monc->last_mon;
-}
+	if (!monc->con) {
+		get_random_bytes(&r, 1);
+		monc->cur_mon = r % monc->monmap->num_mon;
+		dout("open_session num=%d r=%d -> mon%d\n",
+		     monc->monmap->num_mon, r, monc->cur_mon);
+		monc->sub_sent = 0;
+		monc->sub_renew_after = jiffies;  /* i.e., expired */
+		monc->want_next_osdmap = !!monc->want_next_osdmap;
 
-/*
- * Generic timeout mechanism for monitor requests, so we can resend if
- * we don't get a timely reply.  Exponential backoff.
- */
-static void reschedule_timeout(struct ceph_mon_request *req)
-{
-	schedule_delayed_work(&req->delayed_work, req->delay);
-	if (req->delay < MAX_DELAY_INTERVAL)
-		req->delay *= 2;
-	else
-		req->delay = MAX_DELAY_INTERVAL;
-}
+		monc->con = kzalloc(sizeof(*monc->con), GFP_NOFS);
+		if (!monc->con) {
+			pr_err("open_session mon%d ENOMEM\n", monc->cur_mon);
+			return -ENOMEM;
+		}
 
-static void retry_request(struct work_struct *work)
-{
-	struct ceph_mon_request *req =
-		container_of(work, struct ceph_mon_request,
-			     delayed_work.work);
-
-	/*
-	 * if lock is contended, reschedule sooner.  we can't wait for
-	 * mutex because we cancel the timeout sync with lock held.
-	 */
-	if (mutex_trylock(&req->monc->req_mutex)) {
-		req->do_request(req->monc, 1);
-		reschedule_timeout(req);
-		mutex_unlock(&req->monc->req_mutex);
-	} else
-		schedule_delayed_work(&req->delayed_work, BASE_DELAY_INTERVAL);
-}
-
-static void cancel_timeout(struct ceph_mon_request *req)
-{
-	cancel_delayed_work_sync(&req->delayed_work);
-	req->delay = BASE_DELAY_INTERVAL;
-}
-
-static void init_request_type(struct ceph_mon_client *monc,
-			      struct ceph_mon_request *req,
-			      ceph_monc_request_func_t func)
-{
-	req->monc = monc;
-	INIT_DELAYED_WORK(&req->delayed_work, retry_request);
-	req->delay = 0;
-	req->do_request = func;
-}
-
-
-/*
- * Request a new mds map.
- */
-static void request_mdsmap(struct ceph_mon_client *monc, int newmon)
-{
-	struct ceph_msg *msg;
-	struct ceph_mds_getmap *h;
-	int mon = pick_mon(monc, newmon);
-
-	dout("request_mdsmap from mon%d want %u\n", mon, monc->want_mdsmap);
-	msg = ceph_msg_new(CEPH_MSG_MDS_GETMAP, sizeof(*h), 0, 0, NULL);
-	if (IS_ERR(msg))
-		return;
-	h = msg->front.iov_base;
-	h->fsid = monc->monmap->fsid;
-	h->have_version = cpu_to_le64(monc->want_mdsmap - 1);
-	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, 0);
-}
-
-/*
- * Register our desire for an mdsmap epoch >= @want.
- */
-void ceph_monc_request_mdsmap(struct ceph_mon_client *monc, u32 want)
-{
-	dout("request_mdsmap want %u\n", want);
-	mutex_lock(&monc->req_mutex);
-	if (want > monc->want_mdsmap) {
-		monc->want_mdsmap = want;
-		monc->mdsreq.delay = BASE_DELAY_INTERVAL;
-		request_mdsmap(monc, 0);
-		reschedule_timeout(&monc->mdsreq);
+		dout("open_session mon%d opened\n", monc->cur_mon);
+		ceph_con_init(monc->client->msgr, monc->con,
+			      &monc->monmap->mon_inst[monc->cur_mon].addr);
+		monc->con->private = monc;
+		monc->con->ops = &mon_con_ops;
+		monc->con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
+		monc->con->peer_name.num = cpu_to_le32(monc->cur_mon);
+	} else {
+		dout("open_session mon%d already open\n", monc->cur_mon);
 	}
-	mutex_unlock(&monc->req_mutex);
+	return 0;
+}
+
+static bool __sub_expired(struct ceph_mon_client *monc)
+{
+	return time_after_eq(jiffies, monc->sub_renew_after);
 }
 
 /*
- * Possibly cancel our desire for a new map
+ * Reschedule delayed work timer.
+ */
+static void __schedule_delayed(struct ceph_mon_client *monc)
+{
+	unsigned delay;
+
+	if (!monc->con || monc->want_mount || __sub_expired(monc))
+		delay = 10 * HZ;
+	else
+		delay = 20 * HZ;
+	dout("__schedule_delayed after %u\n", delay);
+	schedule_delayed_work(&monc->delayed_work, delay);
+}
+
+/*
+ * Send subscribe request for mdsmap and/or osdmap.
+ */
+static void __send_subscribe(struct ceph_mon_client *monc)
+{
+	dout("__send_subscribe sub_sent=%u exp=%u want_osd=%d\n",
+	     (unsigned)monc->sub_sent, __sub_expired(monc),
+	     monc->want_next_osdmap);
+	if ((__sub_expired(monc) && !monc->sub_sent) ||
+	    monc->want_next_osdmap == 1) {
+		struct ceph_msg *msg;
+		struct ceph_mon_subscribe_item *i;
+		void *p, *end;
+
+		msg = ceph_msg_new(CEPH_MSG_MON_SUBSCRIBE, 64, 0, 0, 0);
+		if (!msg)
+			return;
+
+		p = msg->front.iov_base;
+		end = p + msg->front.iov_len;
+
+		dout("__send_subscribe to 'mdsmap' %u+\n",
+		     (unsigned)monc->have_mdsmap);
+		if (monc->want_next_osdmap) {
+			dout("__send_subscribe to 'osdmap' %u\n",
+			     (unsigned)monc->have_osdmap);
+			ceph_encode_32(&p, 2);
+			ceph_encode_string(&p, end, "osdmap", 6);
+			i = p;
+			i->have = cpu_to_le64(monc->have_osdmap);
+			i->onetime = 1;
+			p += sizeof(*i);
+			monc->want_next_osdmap = 2;  /* requested */
+		} else {
+			ceph_encode_32(&p, 1);
+		}
+		ceph_encode_string(&p, end, "mdsmap", 6);
+		i = p;
+		i->have = cpu_to_le64(monc->have_mdsmap);
+		i->onetime = 0;
+		p += sizeof(*i);
+
+		msg->front.iov_len = p - msg->front.iov_base;
+		msg->hdr.front_len = cpu_to_le32(msg->front.iov_len);
+		ceph_con_send(monc->con, msg);
+
+		monc->sub_sent = jiffies | 1;  /* never 0 */
+	}
+}
+
+static void handle_subscribe_ack(struct ceph_mon_client *monc,
+				 struct ceph_msg *msg)
+{
+	unsigned seconds;
+	void *p = msg->front.iov_base;
+	void *end = p + msg->front.iov_len;
+
+	ceph_decode_32_safe(&p, end, seconds, bad);
+	mutex_lock(&monc->mutex);
+	if (monc->hunting) {
+		pr_info("ceph mon%d %u.%u.%u.%u:%u session established\n",
+			monc->cur_mon, IPQUADPORT(monc->con->peer_addr.ipaddr));
+		monc->hunting = false;
+	}
+	dout("handle_subscribe_ack after %d seconds\n", seconds);
+	monc->sub_renew_after = monc->sub_sent + seconds*HZ - 1;
+	monc->sub_sent = 0;
+	mutex_unlock(&monc->mutex);
+	return;
+bad:
+	pr_err("ceph got corrupt subscribe-ack msg\n");
+}
+
+/*
+ * Keep track of which maps we have
  */
 int ceph_monc_got_mdsmap(struct ceph_mon_client *monc, u32 got)
 {
-	int ret = 0;
-
-	mutex_lock(&monc->req_mutex);
-	if (got < monc->want_mdsmap) {
-		dout("got_mdsmap %u < wanted %u\n", got, monc->want_mdsmap);
-		ret = -EAGAIN;
-	} else {
-		dout("got_mdsmap %u >= wanted %u\n", got, monc->want_mdsmap);
-		monc->want_mdsmap = 0;
-		cancel_timeout(&monc->mdsreq);
-	}
-	mutex_unlock(&monc->req_mutex);
-	return ret;
-}
-
-
-/*
- * osd map
- */
-static void request_osdmap(struct ceph_mon_client *monc, int newmon)
-{
-	struct ceph_msg *msg;
-	struct ceph_osd_getmap *h;
-	int mon = pick_mon(monc, newmon);
-
-	dout("request_osdmap from mon%d want %u\n", mon, monc->want_osdmap);
-	msg = ceph_msg_new(CEPH_MSG_OSD_GETMAP, sizeof(*h), 0, 0, NULL);
-	if (IS_ERR(msg))
-		return;
-	h = msg->front.iov_base;
-	h->fsid = monc->monmap->fsid;
-	h->start = cpu_to_le32(monc->want_osdmap);
-	h->have_version = cpu_to_le64(monc->want_osdmap ?
-				      monc->want_osdmap-1 : 0);
-	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, 0);
-}
-
-void ceph_monc_request_osdmap(struct ceph_mon_client *monc, u32 want)
-{
-	dout("request_osdmap want %u\n", want);
-	mutex_lock(&monc->req_mutex);
-	monc->osdreq.delay = BASE_DELAY_INTERVAL;
-	monc->want_osdmap = want;
-	request_osdmap(monc, 0);
-	reschedule_timeout(&monc->osdreq);
-	mutex_unlock(&monc->req_mutex);
+	mutex_lock(&monc->mutex);
+	monc->have_mdsmap = got;
+	mutex_unlock(&monc->mutex);
+	return 0;
 }
 
 int ceph_monc_got_osdmap(struct ceph_mon_client *monc, u32 got)
 {
-	int ret = 0;
+	mutex_lock(&monc->mutex);
+	monc->have_osdmap = got;
+	monc->want_next_osdmap = 0;
+	mutex_unlock(&monc->mutex);
+	return 0;
+}
 
-	mutex_lock(&monc->req_mutex);
-	if (got < monc->want_osdmap) {
-		dout("got_osdmap %u < wanted %u\n", got, monc->want_osdmap);
-		ret = -EAGAIN;
-	} else {
-		dout("got_osdmap %u >= wanted %u\n", got, monc->want_osdmap);
-		monc->want_osdmap = 0;
-		cancel_timeout(&monc->osdreq);
-	}
-	mutex_unlock(&monc->req_mutex);
-	return ret;
+/*
+ * Register interest in the next osdmap
+ */
+void ceph_monc_request_next_osdmap(struct ceph_mon_client *monc)
+{
+	dout("request_next_osdmap have %u\n", monc->have_osdmap);
+	mutex_lock(&monc->mutex);
+	if (!monc->want_next_osdmap)
+		monc->want_next_osdmap = 1;
+	if (monc->want_next_osdmap < 2)
+		__send_subscribe(monc);
+	mutex_unlock(&monc->mutex);
 }
 
 
 /*
- * umount
+ * mount
  */
-static void request_umount(struct ceph_mon_client *monc, int newmon)
+static void __request_mount(struct ceph_mon_client *monc)
 {
 	struct ceph_msg *msg;
-	int mon = pick_mon(monc, newmon);
 	struct ceph_client_mount *h;
+	int err;
 
-	dout("request_umount from mon%d\n", mon);
-	msg = ceph_msg_new(CEPH_MSG_CLIENT_UNMOUNT, sizeof(*h), 0, 0, NULL);
+	dout("__request_mount\n");
+	err = __open_session(monc);
+	if (err)
+		return;
+	msg = ceph_msg_new(CEPH_MSG_CLIENT_MOUNT, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return;
 	h = msg->front.iov_base;
 	h->have_version = 0;
-	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, 0);
+	ceph_con_send(monc->con, msg);
 }
 
-void ceph_monc_request_umount(struct ceph_mon_client *monc)
+void ceph_monc_request_mount(struct ceph_mon_client *monc)
+{
+	mutex_lock(&monc->mutex);
+	__request_mount(monc);
+	__schedule_delayed(monc);
+	mutex_unlock(&monc->mutex);
+}
+
+/*
+ * The monitor responds with mount ack indicate mount success.  The
+ * included client ticket allows the client to talk to MDSs and OSDs.
+ */
+static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 {
 	struct ceph_client *client = monc->client;
+	struct ceph_monmap *monmap = NULL, *old = monc->monmap;
+	void *p, *end;
+	s32 result;
+	u32 len;
+	s64 cnum;
+	int err = -EINVAL;
 
-	/* don't bother if forced unmount */
-	if (client->mount_state == CEPH_MOUNT_SHUTDOWN)
+	if (client->whoami >= 0) {
+		dout("handle_mount_ack - already mounted\n");
 		return;
+	}
 
-	mutex_lock(&monc->req_mutex);
-	monc->umountreq.delay = BASE_DELAY_INTERVAL;
-	request_umount(monc, 0);
-	reschedule_timeout(&monc->umountreq);
-	mutex_unlock(&monc->req_mutex);
+	mutex_lock(&monc->mutex);
+
+	dout("handle_mount_ack\n");
+	p = msg->front.iov_base;
+	end = p + msg->front.iov_len;
+
+	ceph_decode_64_safe(&p, end, cnum, bad);
+	ceph_decode_32_safe(&p, end, result, bad);
+	ceph_decode_32_safe(&p, end, len, bad);
+	if (result) {
+		pr_err("ceph mount denied: %.*s (%d)\n", len, (char *)p,
+		       result);
+		err = result;
+		goto out;
+	}
+	p += len;
+
+	ceph_decode_32_safe(&p, end, len, bad);
+	ceph_decode_need(&p, end, len, bad);
+	monmap = ceph_monmap_decode(p, p + len);
+	if (IS_ERR(monmap)) {
+		pr_err("ceph problem decoding monmap, %d\n",
+		       (int)PTR_ERR(monmap));
+		err = -EINVAL;
+		goto out;
+	}
+	p += len;
+
+	client->monc.monmap = monmap;
+	kfree(old);
+
+	client->signed_ticket = NULL;
+	client->signed_ticket_len = 0;
+
+	monc->want_mount = false;
+
+	client->whoami = cnum;
+	client->msgr->inst.name.num = cpu_to_le32(cnum);
+	client->msgr->inst.name.type = CEPH_ENTITY_TYPE_CLIENT;
+	pr_info("ceph client%lld fsid %llx.%llx\n",
+		client->whoami,
+		le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
+		le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+
+	ceph_debugfs_client_init(client);
+	__send_subscribe(monc);
+
+	err = 0;
+	goto out;
+
+bad:
+	pr_err("ceph error decoding mount_ack message\n");
+out:
+	client->mount_err = err;
+	mutex_unlock(&monc->mutex);
+	wake_up(&client->mount_wq);
 }
 
-void ceph_monc_handle_umount(struct ceph_mon_client *monc,
-			     struct ceph_msg *msg)
-{
-	dout("handle_umount\n");
-	mutex_lock(&monc->req_mutex);
-	cancel_timeout(&monc->umountreq);
-	monc->client->mount_state = CEPH_MOUNT_UNMOUNTED;
-	mutex_unlock(&monc->req_mutex);
-	wake_up(&monc->client->mount_wq);
-}
+
 
 
 /*
  * statfs
  */
-void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
-				   struct ceph_msg *msg)
+static void handle_statfs_reply(struct ceph_mon_client *monc,
+				struct ceph_msg *msg)
 {
 	struct ceph_mon_statfs_request *req;
 	struct ceph_mon_statfs_reply *reply = msg->front.iov_base;
@@ -319,13 +389,13 @@ void ceph_monc_handle_statfs_reply(struct ceph_mon_client *monc,
 	tid = le64_to_cpu(reply->tid);
 	dout("handle_statfs_reply %p tid %llu\n", msg, tid);
 
-	mutex_lock(&monc->statfs_mutex);
+	mutex_lock(&monc->mutex);
 	req = radix_tree_lookup(&monc->statfs_request_tree, tid);
 	if (req) {
 		*req->buf = reply->st;
 		req->result = 0;
 	}
-	mutex_unlock(&monc->statfs_mutex);
+	mutex_unlock(&monc->mutex);
 	if (req)
 		complete(&req->completion);
 	return;
@@ -338,14 +408,16 @@ bad:
  * (re)send a statfs request
  */
 static int send_statfs(struct ceph_mon_client *monc,
-		       struct ceph_mon_statfs_request *req,
-		       int newmon)
+		       struct ceph_mon_statfs_request *req)
 {
 	struct ceph_msg *msg;
 	struct ceph_mon_statfs *h;
-	int mon = pick_mon(monc, newmon ? 1 : -1);
+	int err;
 
-	dout("send_statfs to mon%d tid %llu\n", mon, req->tid);
+	dout("send_statfs tid %llu\n", req->tid);
+	err = __open_session(monc);
+	if (err)
+		return err;
 	msg = ceph_msg_new(CEPH_MSG_STATFS, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
@@ -354,8 +426,7 @@ static int send_statfs(struct ceph_mon_client *monc,
 	h->have_version = 0;
 	h->fsid = monc->monmap->fsid;
 	h->tid = cpu_to_le64(req->tid);
-	msg->hdr.dst = monc->monmap->mon_inst[mon];
-	ceph_msg_send(monc->client->msgr, msg, 0);
+	ceph_con_send(monc->con, msg);
 	return 0;
 }
 
@@ -371,34 +442,29 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	init_completion(&req.completion);
 
 	/* register request */
-	mutex_lock(&monc->statfs_mutex);
+	mutex_lock(&monc->mutex);
 	req.tid = ++monc->last_tid;
 	req.last_attempt = jiffies;
 	req.delay = BASE_DELAY_INTERVAL;
 	if (radix_tree_insert(&monc->statfs_request_tree, req.tid, &req) < 0) {
-		mutex_unlock(&monc->statfs_mutex);
+		mutex_unlock(&monc->mutex);
 		pr_err("ceph ENOMEM in do_statfs\n");
 		return -ENOMEM;
 	}
-	if (monc->num_statfs_requests == 0)
-		schedule_delayed_work(&monc->statfs_delayed_work,
-				      round_jiffies_relative(1*HZ));
 	monc->num_statfs_requests++;
 	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, 1);
-	mutex_unlock(&monc->statfs_mutex);
+	mutex_unlock(&monc->mutex);
 
 	/* send request and wait */
-	err = send_statfs(monc, &req, 0);
+	err = send_statfs(monc, &req);
 	if (!err)
 		err = wait_for_completion_interruptible(&req.completion);
 
-	mutex_lock(&monc->statfs_mutex);
+	mutex_lock(&monc->mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
-	if (monc->num_statfs_requests == 0)
-		cancel_delayed_work(&monc->statfs_delayed_work);
 	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, -1);
-	mutex_unlock(&monc->statfs_mutex);
+	mutex_unlock(&monc->mutex);
 
 	if (!err)
 		err = req.result;
@@ -406,21 +472,15 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 }
 
 /*
- * Resend any statfs requests that have timed out.
+ * Resend pending statfs requests.
  */
-static void do_statfs_check(struct work_struct *work)
+static void __resend_statfs(struct ceph_mon_client *monc)
 {
-	struct ceph_mon_client *monc =
-		container_of(work, struct ceph_mon_client,
-			     statfs_delayed_work.work);
 	u64 next_tid = 0;
 	int got;
 	int did = 0;
-	int newmon = 1;
 	struct ceph_mon_statfs_request *req;
 
-	dout("do_statfs_check\n");
-	mutex_lock(&monc->statfs_mutex);
 	while (1) {
 		got = radix_tree_gang_lookup(&monc->statfs_request_tree,
 					     (void **)&req,
@@ -429,52 +489,156 @@ static void do_statfs_check(struct work_struct *work)
 			break;
 		did++;
 		next_tid = req->tid + 1;
-		if (time_after(jiffies, req->last_attempt + req->delay)) {
-			req->last_attempt = jiffies;
-			if (req->delay < MAX_DELAY_INTERVAL)
-				req->delay *= 2; /* exponential backoff */
-			send_statfs(monc, req, newmon);
-			newmon = 0;
-		}
-	}
-	mutex_unlock(&monc->statfs_mutex);
 
-	if (did)
-		schedule_delayed_work(&monc->statfs_delayed_work,
-				      round_jiffies_relative(1*HZ));
+		send_statfs(monc, req);
+	}
 }
 
+/*
+ * Delayed work.  If we haven't mounted yet, retry.  Otherwise,
+ * renew/retry subscription as needed (in case it is timing out, or we
+ * got an ENOMEM).  And keep the monitor connection alive.
+ */
+static void delayed_work(struct work_struct *work)
+{
+	struct ceph_mon_client *monc =
+		container_of(work, struct ceph_mon_client, delayed_work.work);
+
+	dout("monc delayed_work\n");
+	mutex_lock(&monc->mutex);
+	if (monc->want_mount) {
+		__request_mount(monc);
+	} else {
+		if (__sub_expired(monc)) {
+			__close_session(monc);
+			__open_session(monc);  /* continue hunting */
+		} else {
+			ceph_con_keepalive(monc->con);
+		}
+		__send_subscribe(monc);
+	}
+	__schedule_delayed(monc);
+	mutex_unlock(&monc->mutex);
+}
 
 int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 {
 	dout("init\n");
 	memset(monc, 0, sizeof(*monc));
 	monc->client = cl;
-	monc->monmap = kzalloc(sizeof(struct ceph_monmap) +
-	       sizeof(struct ceph_entity_addr) * CEPH_MAX_MON_MOUNT_ADDR,
-	       GFP_KERNEL);
-	if (monc->monmap == NULL)
-		return -ENOMEM;
-	mutex_init(&monc->statfs_mutex);
+	monc->monmap = NULL;
+	mutex_init(&monc->mutex);
+	monc->con = NULL;
+
+	monc->hunting = false;  /* not really */
+	monc->sub_renew_after = jiffies;
+	monc->sub_sent = 0;
+
+	INIT_DELAYED_WORK(&monc->delayed_work, delayed_work);
 	INIT_RADIX_TREE(&monc->statfs_request_tree, GFP_NOFS);
 	monc->num_statfs_requests = 0;
 	monc->last_tid = 0;
-	INIT_DELAYED_WORK(&monc->statfs_delayed_work, do_statfs_check);
-	init_request_type(monc, &monc->mdsreq, request_mdsmap);
-	init_request_type(monc, &monc->osdreq, request_osdmap);
-	init_request_type(monc, &monc->umountreq, request_umount);
-	mutex_init(&monc->req_mutex);
-	monc->want_mdsmap = 0;
-	monc->want_osdmap = 0;
+
+	monc->have_mdsmap = 0;
+	monc->have_osdmap = 0;
+	monc->want_next_osdmap = 1;
+	monc->want_mount = true;
 	return 0;
 }
 
 void ceph_monc_stop(struct ceph_mon_client *monc)
 {
 	dout("stop\n");
-	cancel_timeout(&monc->mdsreq);
-	cancel_timeout(&monc->osdreq);
-	cancel_timeout(&monc->umountreq);
-	cancel_delayed_work_sync(&monc->statfs_delayed_work);
+	cancel_delayed_work_sync(&monc->delayed_work);
+	mutex_lock(&monc->mutex);
+	__close_session(monc);
+	mutex_unlock(&monc->mutex);
 	kfree(monc->monmap);
 }
+
+
+/*
+ * handle incoming message
+ */
+static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	struct ceph_mon_client *monc = con->private;
+	int type = le16_to_cpu(msg->hdr.type);
+
+	if (!monc)
+		return;
+
+	switch (type) {
+	case CEPH_MSG_CLIENT_MOUNT_ACK:
+		handle_mount_ack(monc, msg);
+		break;
+
+	case CEPH_MSG_MON_SUBSCRIBE_ACK:
+		handle_subscribe_ack(monc, msg);
+		break;
+
+	case CEPH_MSG_STATFS_REPLY:
+		handle_statfs_reply(monc, msg);
+		break;
+
+	case CEPH_MSG_MDS_MAP:
+		ceph_mdsc_handle_map(&monc->client->mdsc, msg);
+		break;
+
+	case CEPH_MSG_OSD_MAP:
+		ceph_osdc_handle_map(&monc->client->osdc, msg);
+		break;
+
+	default:
+		pr_err("ceph received unknown message type %d %s\n", type,
+		       ceph_msg_type_name(type));
+	}
+	ceph_msg_put(msg);
+}
+
+/*
+ * If the monitor connection resets, pick a new monitor and resubmit
+ * any pending requests.
+ */
+static void mon_fault(struct ceph_connection *con)
+{
+	struct ceph_mon_client *monc = con->private;
+
+	if (!monc)
+		return;
+
+	dout("mon_fault\n");
+	mutex_lock(&monc->mutex);
+	if (!con->private)
+		goto out;
+
+	if (monc->con && !monc->hunting)
+		pr_info("ceph mon%d %u.%u.%u.%u:%u session lost, "
+			"hunting for new mon\n", monc->cur_mon,
+			IPQUADPORT(monc->con->peer_addr.ipaddr));
+
+	__close_session(monc);
+	if (!monc->hunting) {
+		/* start hunting */
+		monc->hunting = true;
+		if (__open_session(monc) == 0) {
+			__send_subscribe(monc);
+			__resend_statfs(monc);
+		}
+	} else {
+		/* already hunting, let's wait a bit */
+		__schedule_delayed(monc);
+	}
+out:
+	mutex_unlock(&monc->mutex);
+}
+
+
+const static struct ceph_connection_operations mon_con_ops = {
+	.get = ceph_con_get,
+	.put = ceph_con_put,
+	.dispatch = dispatch,
+	.fault = mon_fault,
+	.alloc_msg = ceph_alloc_msg,
+	.alloc_middle = ceph_alloc_middle,
+};

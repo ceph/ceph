@@ -33,8 +33,12 @@
 
 #include "messages/MMonPaxos.h"
 #include "messages/MClass.h"
+#include "messages/MRoute.h"
 
 #include "messages/MClientMountAck.h"
+
+#include "messages/MMonSubscribe.h"
+#include "messages/MMonSubscribeAck.h"
 
 #include "common/Timer.h"
 #include "common/Clock.h"
@@ -306,8 +310,17 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 {
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_data(rdata);
-  messenger->send_message(reply, m->get_orig_source_inst());
+  send_reply(m, reply);
   delete m;
+}
+
+void Monitor::send_reply(Message *req, Message *reply, entity_inst_t to)
+{
+  if (req->get_source().is_mon()) {
+    messenger->send_message(new MRoute(reply, to), req->get_source_inst());
+  } else {
+    messenger->send_message(reply, to);
+  }
 }
 
 void Monitor::handle_observe(MMonObserve *m)
@@ -341,7 +354,7 @@ void Monitor::stop_cluster()
 }
 
 
-bool Monitor::dispatch_impl(Message *m)
+bool Monitor::ms_dispatch(Message *m)
 {
   // verify protocol version
   if (m->get_orig_source().is_mon() &&
@@ -360,7 +373,7 @@ bool Monitor::dispatch_impl(Message *m)
       ss << "client protocol v " << (int)m->get_header().monc_protocol << " != server v " << CEPH_MONC_PROTOCOL;
       string s;
       getline(ss, s);
-      messenger->send_message(new MClientMountAck(-EINVAL, s.c_str()),
+      messenger->send_message(new MClientMountAck(-1, -EINVAL, s.c_str()),
 			      m->get_orig_source_inst());
     }
 
@@ -372,6 +385,10 @@ bool Monitor::dispatch_impl(Message *m)
   {
     switch (m->get_type()) {
       
+    case MSG_ROUTE:
+      handle_route((MRoute*)m);
+      break;
+
       // misc
     case CEPH_MSG_MON_GET_MAP:
       handle_mon_get_map((MMonGetMap*)m);
@@ -383,6 +400,10 @@ bool Monitor::dispatch_impl(Message *m)
       
     case MSG_MON_COMMAND:
       handle_command((MMonCommand*)m);
+      break;
+
+    case CEPH_MSG_MON_SUBSCRIBE:
+      handle_subscribe((MMonSubscribe*)m);
       break;
 
       // OSDs
@@ -408,7 +429,6 @@ bool Monitor::dispatch_impl(Message *m)
     case CEPH_MSG_AUTH:
       dout(0) << "Monitor::dispatch_impl() got CEPH_MSG_CLIENT_AUTH" << dendl;
     case CEPH_MSG_CLIENT_MOUNT:
-    case CEPH_MSG_CLIENT_UNMOUNT:
       paxos_service[PAXOS_CLIENTMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -472,6 +492,34 @@ bool Monitor::dispatch_impl(Message *m)
   lock.Unlock();
 
   return true;
+}
+
+void Monitor::handle_subscribe(MMonSubscribe *m)
+{
+  dout(10) << "handle_subscribe " << *m << dendl;
+  
+  bool reply = false;
+  utime_t until = g_clock.now();
+  until += g_conf.mon_subscribe_interval;
+
+  for (map<nstring,ceph_mon_subscribe_item>::iterator p = m->what.begin();
+       p != m->what.end();
+       p++) {
+    if (!p->second.onetime)
+      reply = true;
+    if (p->first == "osdmap")
+      osdmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
+    else if (p->first == "mdsmap")
+      mdsmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
+    else
+      dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
+  }
+
+  if (reply)
+    messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
+			    m->get_source_inst());
+
+  delete m;
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)
@@ -625,3 +673,12 @@ void Monitor::handle_class(MClass *m)
   }
 }
 
+
+void Monitor::handle_route(MRoute *m)
+{
+  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+  
+  messenger->send_message(m->msg, m->dest);
+  m->msg = NULL;
+  delete m;
+}

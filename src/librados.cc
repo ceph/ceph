@@ -59,7 +59,7 @@ class RadosClient : public Dispatcher
   SimpleMessenger rank;
 
   bool _dispatch(Message *m);
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
 
   Objecter *objecter;
 
@@ -310,7 +310,6 @@ bool RadosClient::init()
 
   lock.Lock();
 
-  objecter->signed_ticket = monclient.get_signed_ticket();
   objecter->set_client_incarnation(0);
   objecter->init();
 
@@ -330,7 +329,6 @@ void RadosClient::shutdown()
   lock.Lock();
   objecter->shutdown();
   lock.Unlock();
-  monclient.unmount(g_conf.client_unmount_timeout);
   messenger->shutdown();
   rank.wait();
   dout(1) << "shutdown" << dendl;
@@ -343,7 +341,7 @@ RadosClient::~RadosClient()
 }
 
 
-bool RadosClient::dispatch_impl(Message *m)
+bool RadosClient::ms_dispatch(Message *m)
 {
   bool ret;
 

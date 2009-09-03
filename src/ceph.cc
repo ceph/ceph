@@ -150,13 +150,7 @@ void handle_notify(MMonObserveNotify *notify)
   case PAXOS_CLIENTMAP:
     {
       bufferlist::iterator p = notify->bl.begin();
-      if (notify->is_latest) {
-	clientmap.decode(p);
-      } else  {
-	ClientMap::Incremental inc;
-	inc.decode(p);
-	clientmap.apply_incremental(inc);
-      }
+      clientmap.decode(p);
       dout(0) << "client " << clientmap << dendl;
     }
     break;
@@ -342,7 +336,7 @@ void handle_ack(MMonCommandAck *ack)
 }
 
 class Admin : public Dispatcher {
-  bool dispatch_impl(Message *m) {
+  bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
     case MSG_MON_COMMAND_ACK:
       handle_ack((MMonCommandAck*)m);
@@ -628,7 +622,7 @@ int main(int argc, const char **argv, const char *envp[])
   messenger->set_dispatcher(&dispatcher);
 
   rank.start();
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
+  rank.set_default_policy(SimpleMessenger::Policy::lossy_fail_after(1.0));
 
   mc.set_messenger(messenger);
   dispatcher.link_dispatcher(&mc);

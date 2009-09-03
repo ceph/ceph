@@ -240,12 +240,23 @@ EXTRA_DIST = verify-mds-journal.sh vstart.sh stop.sh \
 	     crun ceph_common.sh init-ceph.in mkcephfs.in make_version
 
 install-data-local:
+	mkdir -p $(DESTDIR)$(sbindir)/ceph
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
+	mkdir -p $(DESTDIR)/etc/init.d
+	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)/etc/init.d/ceph
 	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
-	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)$(sysconfdir)/init.d/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
+	mkdir -p $(DESTDIR)$(includedir)/ceph
+	$(install_sh_SCRIPT) -m 0600 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
+	mkdir -p $(DESTDIR)$(includedir)/rados
+	$(install_sh_SCRIPT) -m 0600 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	mkdir -p $(DESTDIR)$(includedir)/crush
+	$(install_sh_SCRIPT) -m 0600 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
+	$(install_sh_SCRIPT) -m 0600 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
+	$(install_sh_SCRIPT) -m 0600 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
+	$(install_sh_SCRIPT) -m 0600 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
 
 .make_last_ver:
 	./make_version --check
@@ -564,7 +575,6 @@ noinst_HEADERS = \
         messages/MClientRequestForward.h\
         messages/MClientSession.h\
         messages/MClientSnap.h\
-        messages/MClientUnmount.h\
         messages/MDentryUnlink.h\
         messages/MDirUpdate.h\
         messages/MDiscover.h\
@@ -609,6 +619,8 @@ noinst_HEADERS = \
         messages/MMonObserve.h\
         messages/MMonObserveNotify.h\
         messages/MMonPaxos.h\
+        messages/MMonSubscribe.h\
+        messages/MMonSubscribeAck.h\
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
         messages/MOSDFailure.h\
@@ -624,6 +636,7 @@ noinst_HEADERS = \
         messages/MOSDPGNotify.h\
         messages/MOSDPGQuery.h\
         messages/MOSDPGRemove.h\
+        messages/MOSDPGTemp.h\
         messages/MOSDPGTrim.h\
         messages/MOSDPing.h\
 	messages/MOSDScrub.h\
@@ -653,6 +666,7 @@ noinst_HEADERS = \
         mon/PGMonitor.h\
         mon/Paxos.h\
         mon/PaxosService.h\
+        mon/SubscriptionMap.h\
         mon/mon_types.h\
 	mount/mtab.c\
         msg/Dispatcher.h\

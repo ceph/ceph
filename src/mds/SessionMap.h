@@ -81,7 +81,7 @@ public:
     return prealloc_inos.size() + pending_prealloc_inos.size();
   }
 
-  int get_client() { return inst.name.num(); }
+  client_t get_client() { return client_t(inst.name.num()); }
 
   bool is_undef() { return state == STATE_UNDEF; }
   bool is_opening() { return state == STATE_OPENING; }
@@ -148,15 +148,17 @@ public:
     cap_push_seq(0) { }
 
   void encode(bufferlist& bl) const {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(inst, bl);
-    ::encode(cap_push_seq, bl);
     ::encode(completed_requests, bl);
     ::encode(prealloc_inos, bl);   // hacky, see below.
     ::encode(used_inos, bl);
   }
   void decode(bufferlist::iterator& p) {
+    __u8 v;
+    ::decode(v, p);
     ::decode(inst, p);
-    ::decode(cap_push_seq, p);
     ::decode(completed_requests, p);
     ::decode(prealloc_inos, p);
     ::decode(used_inos, p);
@@ -227,7 +229,7 @@ public:
   }
   void dump();
 
-  void get_client_set(set<int>& s) {
+  void get_client_set(set<client_t>& s) {
     for (hash_map<entity_name_t,Session*>::iterator p = session_map.begin();
 	 p != session_map.end();
 	 p++)
@@ -242,8 +244,8 @@ public:
 	s.insert(p->second);
   }
 
-  void open_sessions(map<__u32,entity_inst_t>& client_map) {
-    for (map<__u32,entity_inst_t>::iterator p = client_map.begin(); 
+  void open_sessions(map<client_t,entity_inst_t>& client_map) {
+    for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
       Session *session = get_or_add_session(p->second);
@@ -258,11 +260,11 @@ public:
     assert(session_map.count(w));
     return session_map[w]->inst;
   }
-  version_t inc_push_seq(int client) {
-    return get_session(entity_name_t::CLIENT(client))->inc_push_seq();
+  version_t inc_push_seq(client_t client) {
+    return get_session(entity_name_t::CLIENT(client.v))->inc_push_seq();
   }
-  version_t get_push_seq(int client) {
-    return get_session(entity_name_t::CLIENT(client))->get_push_seq();
+  version_t get_push_seq(client_t client) {
+    return get_session(entity_name_t::CLIENT(client.v))->get_push_seq();
   }
   bool have_completed_request(metareqid_t rid) {
     Session *session = get_session(rid.name);
@@ -288,7 +290,6 @@ public:
 
   object_t get_object_name();
 
-  void init_inode();
   void load(Context *onload);
   void _load_finish(int r, bufferlist &bl);
   void save(Context *onsave, version_t needv=0);

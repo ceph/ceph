@@ -28,7 +28,6 @@ class MDSTable {
 
   const char *table_name;
   bool per_mds;
-  inodeno_t ino;
 
   object_t get_object_name();
   
@@ -45,7 +44,6 @@ class MDSTable {
 public:
   MDSTable(MDS *m, const char *n, bool is_per_mds) :
     mds(m), table_name(n), per_mds(is_per_mds),
-    ino(0),
     state(STATE_UNDEF),
     version(0), committing_version(0), committed_version(0), projected_version(0) {}
   virtual ~MDSTable() {}
@@ -79,7 +77,6 @@ public:
   void load_2(int, bufferlist&, Context *onfinish);
 
   // child must overload these
-  virtual void init_inode() = 0;  
   virtual void reset_state() = 0;
   virtual void decode_state(bufferlist::iterator& p) = 0;
   virtual void encode_state(bufferlist& bl) = 0;

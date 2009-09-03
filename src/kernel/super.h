@@ -56,8 +56,6 @@ struct ceph_mount_args {
 	int caps_wanted_delay_min, caps_wanted_delay_max;
 	ceph_fsid_t fsid;
 	struct ceph_entity_addr my_addr;
-	int num_mon;
-	struct ceph_entity_addr mon_addr[CEPH_MAX_MON_MOUNT_ADDR];
 	int wsize;
 	int rsize;            /* max readahead */
 	int max_readdir;      /* max readdir size */
@@ -117,7 +115,7 @@ struct ceph_mon_session {
  * mounting the same ceph filesystem/cluster.
  */
 struct ceph_client {
-	u32 whoami;                   /* my client number */
+	__s64 whoami;                   /* my client number */
 	struct dentry *debugfs_fsid, *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
 	struct dentry *debugfs_dir, *debugfs_dentry_lru;
@@ -141,18 +139,7 @@ struct ceph_client {
 	struct ceph_osd_client osdc;
 
 	/* msg pools */
-	struct ceph_msg_pool msgpool_mount_ack;
-	struct ceph_msg_pool msgpool_unmount;
 	struct ceph_msg_pool msgpool_statfs_reply;
-	struct ceph_msg_pool msgpool_mds_map;
-	struct ceph_msg_pool msgpool_client_session;
-	struct ceph_msg_pool msgpool_client_reply;
-	struct ceph_msg_pool msgpool_client_request_forward;
-	struct ceph_msg_pool msgpool_client_caps;
-	struct ceph_msg_pool msgpool_client_snap;
-	struct ceph_msg_pool msgpool_client_lease;
-	struct ceph_msg_pool msgpool_osd_map;
-	struct ceph_msg_pool msgpool_osd_opreply;
 
 	/* writeback */
 	mempool_t *wb_pagevec_pool;
@@ -818,6 +805,12 @@ static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
 	put_unaligned_le64(val, &fsid->fsid[0]);
 }
 
+/*
+extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
+extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
+				       struct ceph_msg_header *hdr);
+*/
+
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;
 
@@ -860,7 +853,7 @@ extern void __ceph_build_xattrs_blob(struct ceph_inode_info *ci);
 
 /* caps.c */
 extern const char *ceph_cap_string(int c);
-extern void ceph_handle_caps(struct ceph_mds_client *mdsc,
+extern void ceph_handle_caps(struct ceph_mds_session *session,
 			     struct ceph_msg *msg);
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session, u64 cap_id,

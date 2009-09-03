@@ -38,9 +38,10 @@ public:
   SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP),
 		       last_checked_osdmap(0) { }
     
-  void init_inode();
   void reset_state();
   void encode_server_state(bufferlist& bl) {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(last_snap, bl);
     ::encode(snaps, bl);
     ::encode(need_to_purge, bl);
@@ -49,6 +50,8 @@ public:
     ::encode(pending_noop, bl);
   }
   void decode_server_state(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(last_snap, bl);
     ::decode(snaps, bl);
     ::decode(need_to_purge, bl);

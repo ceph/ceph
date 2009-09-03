@@ -101,6 +101,7 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.state_test(CInode::STATE_AMBIGUOUSAUTH)) out << " AMBIGAUTH";
   if (in.state_test(CInode::STATE_NEEDSRECOVER)) out << " needsrecover";
   if (in.state_test(CInode::STATE_RECOVERING)) out << " recovering";
+  if (in.state_test(CInode::STATE_DIRTYPARENT)) out << " dirtyparent";
   if (in.is_freezing_inode()) out << " FREEZING=" << in.auth_pin_freeze_allowance;
   if (in.is_frozen_inode()) out << " FROZEN";
 
@@ -142,17 +143,24 @@ ostream& operator<<(ostream& out, CInode& in)
 
   if (!in.get_client_caps().empty()) {
     out << " caps={";
-    for (map<int,Capability*>::iterator it = in.get_client_caps().begin();
+    for (map<client_t,Capability*>::iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
          it++) {
       if (it != in.get_client_caps().begin()) out << ",";
-      out << it->first << "=" << ccap_string(it->second->issued())
-	  << "/" << ccap_string(it->second->wanted())
+      out << it->first << "="
+	  << ccap_string(it->second->pending());
+      if (it->second->issued() != it->second->pending())
+	out << "/" << ccap_string(it->second->issued());
+      out << "/" << ccap_string(it->second->wanted())
 	  << "@" << it->second->get_last_sent();
     }
     out << "}";
-    if (in.get_loner() >= 0)
+    if (in.get_loner() >= 0 || in.get_wanted_loner() >= 0) {
       out << ",l=" << in.get_loner();
+      if (in.get_loner() != in.get_wanted_loner())
+	out << "(" << in.get_wanted_loner() << ")";
+    }
+    
   }
 
   if (in.get_num_ref()) {
@@ -507,7 +515,7 @@ void CInode::name_stray_dentry(string& dname)
 }
 
 
-Capability *CInode::add_client_cap(int client, Session *session, SnapRealm *conrealm)
+Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
   if (client_caps.empty()) {
     get(PIN_CAPS);
@@ -534,7 +542,7 @@ Capability *CInode::add_client_cap(int client, Session *session, SnapRealm *conr
   return cap;
 }
 
-void CInode::remove_client_cap(int client)
+void CInode::remove_client_cap(client_t client)
 {
   assert(client_caps.count(client) == 1);
   Capability *cap = client_caps[client];
@@ -720,6 +728,78 @@ void CInode::_fetched(bufferlist& bl, Context *fin)
     fin->finish(0);
   }
   delete fin;
+}
+
+
+
+// ------------------
+// parent dir
+
+struct C_Inode_StoredParent : public Context {
+  CInode *in;
+  version_t version;
+  Context *fin;
+  C_Inode_StoredParent(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  void finish(int r) {
+    in->_stored_parent(version, fin);
+  }
+};
+
+void CInode::encode_parent_mutation(ObjectOperation& m)
+{
+  string path;
+  make_path_string(path);
+  m.setxattr("path", path);
+
+  CDentry *pdn = get_parent_dn();
+  if (pdn) {
+    bufferlist parent(32 + pdn->name.length());
+    __u64 ino = pdn->get_dir()->get_inode()->ino();
+    __u8 v = 1;
+    ::encode(v, parent);
+    ::encode(inode.version, parent);
+    ::encode(ino, parent);
+    ::encode(pdn->name, parent);
+    m.setxattr("parent", parent);
+  }
+}
+
+void CInode::store_parent(Context *fin)
+{
+  dout(10) << "store_parent" << dendl;
+  
+  ObjectOperation m;
+  encode_parent_mutation(m);
+
+  // write it.
+  SnapContext snapc;
+
+  char n[30];
+  sprintf(n, "%llx.%08llx", (long long unsigned)ino(), (long long unsigned)frag_t());
+  object_t oid(n);
+  OSDMap *osdmap = mdcache->mds->objecter->osdmap;
+  ceph_object_layout ol = osdmap->make_object_layout(oid,
+						     mdcache->mds->mdsmap->get_metadata_pg_pool());
+
+  mdcache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
+				 NULL, new C_Inode_StoredParent(this, inode.last_renamed_version, fin) );
+
+}
+
+void CInode::_stored_parent(version_t v, Context *fin)
+{
+  if (v == inode.last_renamed_version) {
+    dout(10) << "stored_parent committed v" << v << ", removing from list" << dendl;
+    xlist_renamed_file.remove_myself();
+    state_clear(STATE_DIRTYPARENT);
+  } else {
+    dout(10) << "stored_parent committed v" << v << " < " << inode.last_renamed_version
+	     << ", renamed again, not removing from list" << dendl;
+  }
+  if (fin) {
+    fin->finish(0);
+    delete fin;
+  }
 }
 
 
@@ -1593,8 +1673,12 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (!no_caps && valid && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, find_snaprealm());
-      if (is_auth())
-	try_choose_loner();
+      if (is_auth()) {
+	if (choose_ideal_loner() >= 0)
+	  try_set_loner();
+	else if (get_wanted_loner() < 0)
+	  try_drop_loner();
+      }
     }
 
     if (cap && valid) {
@@ -1659,7 +1743,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 
 void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 {
-  int client = cap->get_client();
+  client_t client = cap->get_client();
 
   bool pfile = filelock.is_xlocked_by_client(client) ||
     (cap && (cap->issued() & CEPH_CAP_FILE_EXCL));

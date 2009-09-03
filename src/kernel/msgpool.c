@@ -61,7 +61,7 @@ static int __fill_msgpool(struct ceph_msg_pool *pool)
 }
 
 int ceph_msgpool_init(struct ceph_msg_pool *pool,
-		      int front_len, int min)
+		      int front_len, int min, bool blocking)
 {
 	int ret;
 
@@ -71,6 +71,7 @@ int ceph_msgpool_init(struct ceph_msg_pool *pool,
 	INIT_LIST_HEAD(&pool->msgs);
 	pool->num = 0;
 	pool->min = min;
+	pool->blocking = blocking;
 	init_waitqueue_head(&pool->wait);
 
 	spin_lock(&pool->lock);
@@ -103,13 +104,17 @@ int ceph_msgpool_resv(struct ceph_msg_pool *pool, int delta)
 struct ceph_msg *ceph_msgpool_get(struct ceph_msg_pool *pool)
 {
 	wait_queue_t wait;
+	struct ceph_msg *msg;
+
+	msg = ceph_msg_new(0, pool->front_len, 0, 0, NULL);
+	if (!IS_ERR(msg))
+		return msg;
 
 	while (1) {
 		spin_lock(&pool->lock);
 		if (likely(pool->num)) {
-			struct ceph_msg *msg =
-				list_entry(pool->msgs.next, struct ceph_msg,
-					   list_head);
+			msg = list_entry(pool->msgs.next, struct ceph_msg,
+					 list_head);
 			list_del_init(&msg->list_head);
 			pool->num--;
 			dout("msgpool_get %p got %p, now %d/%d\n", pool, msg,
@@ -117,10 +122,13 @@ struct ceph_msg *ceph_msgpool_get(struct ceph_msg_pool *pool)
 			spin_unlock(&pool->lock);
 			return msg;
 		}
+		pr_err("msgpool_get %p now %d/%d, %s\n", pool, pool->num,
+		       pool->min, pool->blocking ? "waiting" : "failing");
 		spin_unlock(&pool->lock);
 
-		dout("msgpool_get %p now %d/%d, waiting\n", pool,
-		     pool->num, pool->min);
+		if (!pool->blocking)
+			return ERR_PTR(-ENOMEM);
+
 		init_wait(&wait);
 		prepare_to_wait(&pool->wait, &wait, TASK_UNINTERRUPTIBLE);
 		schedule();
@@ -132,11 +140,6 @@ void ceph_msgpool_put(struct ceph_msg_pool *pool, struct ceph_msg *msg)
 {
 	spin_lock(&pool->lock);
 	if (pool->num < pool->min) {
-		/* drop middle, if any */
-		if (msg->middle) {
-			ceph_buffer_put(msg->middle);
-			msg->middle = NULL;
-		}
 		ceph_msg_get(msg);   /* retake a single ref */
 		list_add(&msg->list_head, &pool->msgs);
 		pool->num++;

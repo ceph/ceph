@@ -47,10 +47,10 @@ public:
 
   class C_Mounted : public Context {
     ClientMonitor *cmon;
-    int client;
+    __s64 client;
     MClientMount *m;
   public:
-    C_Mounted(ClientMonitor *cm, int c, MClientMount *m_) : 
+    C_Mounted(ClientMonitor *cm, __s64 c, MClientMount *m_) : 
       cmon(cm), client(c), m(m_) {}
     void finish(int r) {
       if (r >= 0)
@@ -60,25 +60,11 @@ public:
     }
   };
 
-  class C_Unmounted : public Context {
-    ClientMonitor *cmon;
-    MClientUnmount *m;
-  public:
-    C_Unmounted(ClientMonitor *cm, MClientUnmount *m_) : 
-      cmon(cm), m(m_) {}
-    void finish(int r) {
-      if (r >= 0)
-	cmon->_unmounted(m);
-      else
-	cmon->dispatch((PaxosServiceMessage*)m);
-    }
-  };
-
-  ClientMap client_map;
+  ClientMap client_map, pending_map;
   AuthServiceManager auth_mgr;
+
 private:
   // leader
-  ClientMap::Incremental pending_inc;
 
   void create_initial(bufferlist& bl);
   bool update_from_paxos();
@@ -89,14 +75,15 @@ private:
 
   bool check_auth(MAuth *m);
   bool check_mount(MClientMount *m);
-  void _mounted(int c, MClientMount *m);
-  void _unmounted(MClientUnmount *m);
+  void _mounted(__s64 c, MClientMount *m);
  
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
 
   bool preprocess_command(MMonCommand *m);  // true if processed.
   bool prepare_command(MMonCommand *m);
+
+  bool should_propose(double& delay);
 
  public:
   ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { auth_mgr.init(mn); }

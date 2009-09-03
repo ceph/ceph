@@ -35,6 +35,8 @@ using namespace std;
 
 #include "messages/MPing.h"
 
+#include "messages/MRoute.h"
+
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MOSDPGTemp.h"
@@ -67,7 +69,8 @@ using namespace std;
 #include "messages/MAuthReply.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
-#include "messages/MClientUnmount.h"
+#include "messages/MMonSubscribe.h"
+#include "messages/MMonSubscribeAck.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -129,7 +132,18 @@ using namespace std;
 #define DEBUGLVL  10    // debug level of output
 
 
-
+void Message::encode()
+{
+  // encode and copy out of *m
+  if (empty_payload())
+    encode_payload();
+  calc_front_crc();
+  
+  if (!g_conf.ms_nocrc)
+    calc_data_crc();
+  else
+    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
+}
 
 Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle, bufferlist& data)
@@ -226,6 +240,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case CEPH_MSG_PING:
     m = new MPing();
     break;
+  case MSG_ROUTE:
+    m = new MRoute;
+    break;
     
   case CEPH_MSG_MON_MAP:
     m = new MMonMap;
@@ -320,8 +337,11 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case CEPH_MSG_CLIENT_MOUNT_ACK:
     m = new MClientMountAck;
     break;
-  case CEPH_MSG_CLIENT_UNMOUNT:
-    m = new MClientUnmount;
+  case CEPH_MSG_MON_SUBSCRIBE:
+    m = new MMonSubscribe;
+    break;
+  case CEPH_MSG_MON_SUBSCRIBE_ACK:
+    m = new MMonSubscribeAck;
     break;
   case CEPH_MSG_CLIENT_SESSION:
     m = new MClientSession;
@@ -504,7 +524,8 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   catch (buffer::error *e) {
     dout(0) << "failed to decode message of type " << type << ": " << *e << dendl;
     delete e;
-    assert(0);
+    if (g_conf.ms_die_on_bad_msg)
+      assert(0);
     return 0;
   }
 

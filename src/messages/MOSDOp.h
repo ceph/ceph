@@ -35,7 +35,6 @@ private:
 public:
   object_t oid;
   vector<OSDOp> ops;
-  bufferlist ticket;
   vector<snapid_t> snaps;
   osd_peer_stat_t peer_stat;
   int rmw_flags;
@@ -78,19 +77,16 @@ public:
     return peer_stat; 
   }
 
-  bufferlist& get_ticket() { return ticket; }
-
   //void inc_shed_count() { head.shed_count = get_shed_count() + 1; }
   //int get_shed_count() { return head.shed_count; }
  
 
 
-  MOSDOp(const bufferlist& tkt, int inc, long tid,
+  MOSDOp(int inc, long tid,
          object_t& _oid, ceph_object_layout ol, epoch_t mapepoch,
 	 int flags) :
     Message(CEPH_MSG_OSD_OP),
     oid(_oid),
-    ticket(tkt),
     rmw_flags(flags) {
     memset(&head, 0, sizeof(head));
     head.tid = tid;
@@ -164,7 +160,6 @@ public:
     head.object_len = oid.name.length();
     head.num_snaps = snaps.size();
     head.num_ops = ops.size();
-    head.ticket_len = ticket.length();
     ::encode(head, payload);
 
     for (unsigned i = 0; i < head.num_ops; i++) {
@@ -174,7 +169,6 @@ public:
     }
 
     ::encode_nohead(oid.name, payload);
-    ::encode_nohead(ticket, payload);
     ::encode_nohead(snaps, payload);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::encode(peer_stat, payload);
@@ -191,7 +185,6 @@ public:
       off += ops[i].op.payload_len;
     }
     decode_nohead(head.object_len, oid.name, p);
-    decode_nohead(head.ticket_len, ticket, p);
     decode_nohead(head.num_snaps, snaps, p);
     if (head.flags & CEPH_OSD_FLAG_PEERSTAT)
       ::decode(peer_stat, p);

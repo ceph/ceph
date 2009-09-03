@@ -28,6 +28,8 @@ using namespace std;
 #include "mds/MDSMap.h"
 
 #include "PaxosService.h"
+#include "SubscriptionMap.h"
+
 
 class MMDSBeacon;
 class MMDSGetMap;
@@ -40,6 +42,8 @@ class MDSMonitor : public PaxosService {
   bufferlist mdsmap_bl;   // encoded
 
   MDSMap pending_mdsmap;  // current + pending updates
+
+  SubscriptionMap subs;
 
   // my helpers
   void print_map(MDSMap &m, int dbl=7);
@@ -103,6 +107,9 @@ public:
 
   void tick();     // check state, take actions
   void do_stop();
+
+  void subscribe(entity_inst_t inst, version_t have, utime_t until);
+  void check_subs();
 
 };
 

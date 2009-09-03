@@ -702,6 +702,7 @@ class Client : public Dispatcher {
     bool at_end() { return (offset == END); }
   };
 
+  // **** WARNING: be sure to update the struct in libceph.h too! ****
   struct stat_precise {
     ino_t st_ino;
     dev_t st_dev;
@@ -750,10 +751,8 @@ public:
  protected:
   MonClient *monclient;
   Messenger *messenger;  
-  int whoami;
+  client_t whoami;
 
-  bufferlist signed_ticket;
-  
   // mds sessions
   map<int, MDSSession> mds_sessions;  // mds -> push seq
   map<int, list<Cond*> > waiting_for_session;
@@ -783,6 +782,11 @@ public:
   bool   unmounting;
 
   int    unsafe_sync_write;
+
+  int file_stripe_unit;
+  int file_stripe_count;
+  int object_size;
+  int file_replication;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void sync_write_commit(Inode *in);
@@ -968,14 +972,14 @@ protected:
 
   // friends
   friend class SyntheticClient;
-  bool dispatch_impl(Message *m);
+  bool ms_dispatch(Message *m);
 
  public:
   Client(Messenger *m, MonClient *mc);
   ~Client();
   void tear_down_cache();   
 
-  int get_nodeid() { return whoami; }
+  client_t get_nodeid() { return whoami; }
 
   void init();
   void shutdown();
@@ -1014,6 +1018,7 @@ protected:
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, int mds, InodeCap *cap, int used, int want, int retain, int flush, __u64 tid);
   void check_caps(Inode *in, bool is_delayed);
+  void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in);
   void wait_sync_caps(__u64 want);
@@ -1062,6 +1067,8 @@ private:
   int _ll_put(Inode *in, int num);
   void _ll_drop_pins();
 
+  Fh *_create_fh(Inode *in, int flags, int cmode);
+
   int _read_sync(Fh *f, __u64 off, __u64 len, bufferlist *bl);
   int _read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl);
 
@@ -1084,6 +1091,7 @@ private:
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
+  int _create(Inode *in, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid=-1, int gid=-1);
   int _release(Fh *fh);
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, __s64 offset, __u64 size, bufferlist *bl);
@@ -1112,15 +1120,19 @@ public:
   int closedir(DIR *dirp);
   int readdir_r(DIR *dirp, struct dirent *de);
   int readdirplus_r(DIR *dirp, struct dirent *de, struct stat *st, int *stmask);
+
+  int _getdents(DIR *dirp, char *buf, int buflen, bool ful);  // get a bunch of dentries at once
+  int getdents(DIR *dirp, char *buf, int buflen) {
+    return _getdents(dirp, buf, buflen, true);
+  }
+  int getdnames(DIR *dirp, char *buf, int buflen) {
+    return _getdents(dirp, buf, buflen, false);
+  }
+
   void rewinddir(DIR *dirp); 
   loff_t telldir(DIR *dirp);
   void seekdir(DIR *dirp, loff_t offset);
 
-  struct dirent_plus *readdirplus(DIR *dirp);
-  int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
-  struct dirent_lite *readdirlite(DIR *dirp);
-  int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
- 
   int link(const char *existing, const char *newname);
   int unlink(const char *path);
   int rename(const char *from, const char *to);
@@ -1170,6 +1182,11 @@ public:
   int get_file_stripe_period(int fd);
   int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
+
+  void set_default_file_stripe_unit(int stripe_unit);
+  void set_default_file_stripe_count(int count);
+  void set_default_object_size(int size);
+  void set_default_file_replication(int replication);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

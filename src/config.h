@@ -121,10 +121,12 @@ struct md_config_t {
   double ms_fail_interval;
   bool ms_die_on_failure;
   bool ms_nocrc;
+  bool ms_die_on_bad_msg;
 
   // mon
   const char *mon_data;
   int mon_tick_interval;
+  double mon_subscribe_interval;
   int mon_osd_down_out_interval;
   float mon_lease;
   float mon_lease_renew_interval;
@@ -198,6 +200,7 @@ struct md_config_t {
   float mds_reconnect_timeout;
 
   float mds_tick_interval;
+  float mds_dirstat_min_interval;
   float mds_scatter_nudge_interval;
 
   int mds_client_prealloc_inos;

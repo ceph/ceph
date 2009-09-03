@@ -283,13 +283,13 @@ void Server::_session_logged(Session *session, bool open, version_t pv, interval
   mds->sessionmap.version++;  // noop
 }
 
-version_t Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
+version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm)
 {
   version_t pv = ++mds->sessionmap.projected;
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
-  for (map<__u32,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+  for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
     if (session->is_undef() || session->is_closing())
       mds->sessionmap.set_state(session, Session::STATE_OPENING);
@@ -298,7 +298,7 @@ version_t Server::prepare_force_open_sessions(map<__u32,entity_inst_t>& cm)
   return pv;
 }
 
-void Server::finish_force_open_sessions(map<__u32,entity_inst_t>& cm)
+void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm)
 {
   /*
    * FIXME: need to carefully consider the race conditions between a
@@ -307,7 +307,7 @@ void Server::finish_force_open_sessions(map<__u32,entity_inst_t>& cm)
    */
   dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
 	   << " v " << mds->sessionmap.version << " -> " << (mds->sessionmap.version+1) << dendl;
-  for (map<__u32,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+  for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
     if (session->is_opening()) {
@@ -550,10 +550,10 @@ void Server::reconnect_tick()
   if (g_clock.now() >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
-    for (set<int>::iterator p = client_reconnect_gather.begin();
+    for (set<client_t>::iterator p = client_reconnect_gather.begin();
 	 p != client_reconnect_gather.end();
 	 p++) {
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(*p));
+      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       dout(1) << "reconnect gave up on " << session->inst << dendl;
 
       /* no, we need to respect g_conf.mds_session_autoclose
@@ -818,7 +818,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
   // inode, dentry, dir, ..., inode
   bufferlist bl;
   int whoami = mds->get_nodeid();
-  int client = session->get_client();
+  client_t client = session->get_client();
   utime_t now = g_clock.now();
 
   dout(20) << "set_trace_dist snapid " << snapid << dendl;
@@ -938,7 +938,7 @@ void Server::handle_client_request(MClientRequest *req)
   //  (only if NOT replay!)
   if (req->get_source().is_client() &&
       !req->is_replay()) {
-    int client = req->get_source().num();
+    client_t client = req->get_source().num();
     for (vector<MClientRequest::Release>::iterator p = req->releases.begin();
 	 p != req->releases.end();
 	 p++)
@@ -1401,7 +1401,7 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
   dout(10) << "prepare_null_dentry " << dname << " in " << *dir << dendl;
   assert(dir->is_auth());
   
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
 
   // does it already exist?
   CDentry *dn = dir->lookup(dname);
@@ -1642,7 +1642,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequest *mdr, int n,
 
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
 
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
 
   if (mdr->done_locking)
     return mdr->dn[n].back();
@@ -1778,7 +1778,7 @@ void Server::handle_client_stat(MDRequest *mdr)
    * handling this case here is easier than weakening rdlock
    * semantics... that would cause problems elsewhere.
    */
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
   int issued = 0;
   Capability *cap = ref->get_client_cap(client);
   if (cap)
@@ -2050,7 +2050,7 @@ public:
 void Server::handle_client_openc(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
   
@@ -2101,6 +2101,16 @@ void Server::handle_client_openc(MDRequest *mdr)
   }
   in->inode.rstat.rfiles = 1;
 
+  if (req->head.args.open.stripe_unit)
+    in->inode.layout.fl_stripe_unit = req->head.args.open.stripe_unit;
+  if (req->head.args.open.stripe_count)
+    in->inode.layout.fl_stripe_count = req->head.args.open.stripe_count;
+  if (req->head.args.open.object_size)
+    in->inode.layout.fl_object_size = req->head.args.open.object_size;
+  /*if(req->head.args->open.file_replication)
+    in->inode.layout.fl_pg_pool.set_size(req->head.args.open.file_replication);
+  */
+
   dn->first = in->first = follows+1;
   
   // prepare finisher
@@ -2130,7 +2140,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 void Server::handle_client_readdir(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = req->get_orig_source().num();
+  client_t client = req->get_orig_source().num();
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
   CInode *diri = rdlock_path_pin_ref(mdr, 0, rdlocks, false);
   if (!diri) return;
@@ -2414,7 +2424,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
     pi->rstat.rbytes = pi->size;
 
     // adjust client's max_size?
-    map<int,byte_range_t> new_ranges;
+    map<client_t,byte_range_t> new_ranges;
     mds->locker->calc_new_client_ranges(cur, pi->size, new_ranges);
     if (pi->client_ranges != new_ranges) {
       dout(10) << " client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
@@ -2442,7 +2452,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
 void Server::handle_client_opent(MDRequest *mdr, int cmode)
 {
   CInode *in = mdr->in[0];
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
   assert(in);
 
   dout(10) << "handle_client_opent " << *in << dendl;
@@ -3401,7 +3411,7 @@ void Server::handle_slave_link_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m)
 void Server::handle_client_unlink(MDRequest *mdr)
 {
   MClientRequest *req = mdr->client_request;
-  int client = mdr->get_client();
+  client_t client = mdr->get_client();
 
   // rmdir or unlink?
   bool rmdir = false;
@@ -4246,6 +4256,7 @@ void Server::_rename_prepare(MDRequest *mdr,
 
   if (!silent) {
     if (pi) {
+      pi->last_renamed_version = pi->version;
       pi->ctime = mdr->now;
       if (linkmerge)
 	pi->nlink--;
@@ -4456,7 +4467,15 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     }
 
     if (destdn->is_auth()) {
-      destdnl->get_inode()->pop_and_dirty_projected_inode(mdr->ls);
+      CInode *desti = destdnl->get_inode();
+      desti->pop_and_dirty_projected_inode(mdr->ls);
+
+      
+      if (desti->is_dir()) {
+	mdr->ls->renamed_files.push_back(&desti->xlist_renamed_file);
+	desti->state_set(CInode::STATE_DIRTYPARENT);
+	dout(10) << "added dir to logsegment renamed_files list " << *desti << dendl;
+      }
     }
 
     // snap parent update?
@@ -4688,7 +4707,7 @@ void Server::_logged_slave_rename(MDRequest *mdr,
   // export srci?
   if (srcdn->is_auth() && srcdnl->is_primary()) {
     list<Context*> finished;
-    map<__u32,entity_inst_t> exported_client_map;
+    map<client_t,entity_inst_t> exported_client_map;
     bufferlist inodebl;
     mdcache->migrator->encode_export_inode(srcdnl->get_inode(), inodebl, 
 					   exported_client_map);

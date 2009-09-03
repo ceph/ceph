@@ -20,7 +20,7 @@ using namespace std;
 
 #include <boost/pool/pool.hpp>
 
-#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v007"
+#define CEPH_FS_ONDISK_MAGIC "ceph fs volume v009"
 
 
 //#define MDS_REF_SET      // define me for improved debug output, sanity checking
@@ -42,9 +42,6 @@ using namespace std;
 
 #define MDS_INO_MDSDIR_OFFSET     (1*MAX_MDS)
 #define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
-#define MDS_INO_IDS_OFFSET        (3*MAX_MDS)
-#define MDS_INO_CLIENTMAP_OFFSET  (4*MAX_MDS)
-#define MDS_INO_SESSIONMAP_OFFSET (5*MAX_MDS)
 #define MDS_INO_STRAY_OFFSET      (6*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       (10*MAX_MDS)
@@ -101,6 +98,7 @@ inline string ccap_string(int cap)
     s = "-";
   return s;
 }
+
 
 
 struct frag_info_t {
@@ -348,7 +346,7 @@ struct inode_t {
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
 
-  map<int,byte_range_t> client_ranges;  // client(s) can write to these ranges
+  map<client_t,byte_range_t> client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;
@@ -359,12 +357,14 @@ struct inode_t {
   version_t file_data_version; // auth only
   version_t xattr_version;
 
+  version_t last_renamed_version;      // when i was last renamed
+
   inode_t() : ino(0), rdev(0),
 	      mode(0), uid(0), gid(0),
 	      nlink(0), anchored(false),
 	      size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
 	      time_warp_seq(0),
-	      version(0), file_data_version(0), xattr_version(0) { 
+	      version(0), file_data_version(0), xattr_version(0), last_renamed_version(0) { 
     memset(&layout, 0, sizeof(layout));
   }
 
@@ -381,7 +381,7 @@ struct inode_t {
 
   __u64 get_max_size() const {
     __u64 max = 0;
-      for (map<int,byte_range_t>::const_iterator p = client_ranges.begin();
+      for (map<client_t,byte_range_t>::const_iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   p++)
 	if (p->second.last > max)
@@ -392,7 +392,7 @@ struct inode_t {
     if (new_max == 0) {
       client_ranges.clear();
     } else {
-      for (map<int,byte_range_t>::iterator p = client_ranges.begin();
+      for (map<client_t,byte_range_t>::iterator p = client_ranges.begin();
 	   p != client_ranges.end();
 	   p++)
 	p->second.last = new_max;
@@ -400,7 +400,7 @@ struct inode_t {
   }
 
   void encode(bufferlist &bl) const {
-    __u8 v = 1;
+    __u8 v = 2;
     ::encode(v, bl);
 
     ::encode(ino, bl);
@@ -431,6 +431,7 @@ struct inode_t {
     ::encode(version, bl);
     ::encode(file_data_version, bl);
     ::encode(xattr_version, bl);
+    ::encode(last_renamed_version, bl);
   }
   void decode(bufferlist::iterator &p) {
     __u8 v;
@@ -464,6 +465,8 @@ struct inode_t {
     ::decode(version, p);
     ::decode(file_data_version, p);
     ::decode(xattr_version, p);
+    if (v >= 2)
+      ::decode(last_renamed_version, p);
   }
 };
 WRITE_CLASS_ENCODER(inode_t)
@@ -1016,7 +1019,7 @@ class MDSCacheObject;
  * for metadata leases to clients
  */
 struct ClientLease {
-  int client;
+  client_t client;
   int mask;                 // CEPH_STAT_MASK_*
   MDSCacheObject *parent;
 
@@ -1025,7 +1028,7 @@ struct ClientLease {
   xlist<ClientLease*>::item session_lease_item; // per-session list
   xlist<ClientLease*>::item lease_item;         // global list
 
-  ClientLease(int c, MDSCacheObject *p) : 
+  ClientLease(client_t c, MDSCacheObject *p) : 
     client(c), mask(0), parent(p), seq(0),
     session_lease_item(this),
     lease_item(this) { }

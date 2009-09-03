@@ -20,8 +20,8 @@
 
 class LocalLock : public SimpleLock {
 public:
-  LocalLock(MDSCacheObject *o, int t, int ws) : 
-    SimpleLock(o, t, ws) {
+  LocalLock(MDSCacheObject *o, int t) : 
+    SimpleLock(o, t) {
     set_state(LOCK_LOCK); // always.
   }
 

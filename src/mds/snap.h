@@ -132,7 +132,7 @@ struct SnapRealm {
   bufferlist cached_snap_trace;
 
   xlist<CInode*> inodes_with_caps;             // for efficient realm splits
-  map<int, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
+  map<client_t, xlist<Capability*> > client_caps;   // to identify clients who need snap notifications
 
   SnapRealm(MDCache *c, CInode *in) : 
     seq(0), created(0),
@@ -209,10 +209,10 @@ struct SnapRealm {
   void split_at(SnapRealm *child);
   void join(SnapRealm *child);
 
-  void add_cap(int client, Capability *cap) {
+  void add_cap(client_t client, Capability *cap) {
     client_caps[client].push_back(&cap->snaprealm_caps_item);
   }
-  void remove_cap(int client, Capability *cap) {
+  void remove_cap(client_t client, Capability *cap) {
     cap->snaprealm_caps_item.remove_myself();
     if (client_caps[client].empty())
       client_caps.erase(client);

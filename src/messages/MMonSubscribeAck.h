@@ -12,23 +12,28 @@
  * 
  */
 
-#ifndef __MCLIENTUNMOUNT_H
-#define __MCLIENTUNMOUNT_H
+#ifndef __MMONSUBSCRIBEACK_H
+#define __MMONSUBSCRIBEACK_H
 
-#include "messages/PaxosServiceMessage.h"
+#include "msg/Message.h"
 
-class MClientUnmount : public PaxosServiceMessage {
-public:
-  MClientUnmount() : PaxosServiceMessage(CEPH_MSG_CLIENT_UNMOUNT, 0) { }
- 
-  const char *get_type_name() { return "client_unmount"; }
+struct MMonSubscribeAck : public Message {
+  __u32 interval;
+  
+  MMonSubscribeAck(int i = 0) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
+				interval(i) {}
+  
+  const char *get_type_name() { return "mon_subscribe_ack"; }
+  void print(ostream& o) {
+    o << "mon_subscribe_ack(" << interval << "s)";
+  }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    paxos_decode(p);
+    ::decode(interval, p);
   }
   void encode_payload() {
-    paxos_encode();
+    ::encode(interval, payload);
   }
 };
 

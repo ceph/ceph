@@ -28,6 +28,7 @@ using namespace std;
 #include "osd/OSDMap.h"
 
 #include "PaxosService.h"
+#include "SubscriptionMap.h"
 
 class Monitor;
 class MOSDBoot;
@@ -37,6 +38,7 @@ class MPoolSnap;
 class OSDMonitor : public PaxosService {
 public:
   OSDMap osdmap;
+  SubscriptionMap subs;
 
 private:
   map<entity_inst_t, epoch_t> waiting_for_map;  // who -> start epoch
@@ -165,6 +167,9 @@ private:
   void fake_osd_failure(int osd, bool down);
   void fake_osdmap_update();
   void fake_reorg();
+
+  void subscribe(entity_inst_t inst, version_t have, utime_t until);
+  void check_subs();
 
 };
 

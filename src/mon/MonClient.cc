@@ -22,7 +22,8 @@
 #include "include/nstring.h"
 
 #include "messages/MClientMountAck.h"
-#include "messages/MClientUnmount.h"
+#include "messages/MMonSubscribe.h"
+#include "messages/MMonSubscribeAck.h"
 #include "common/ConfUtils.h"
 
 #include "MonClient.h"
@@ -116,6 +117,7 @@ int MonClient::get_monmap()
   if (!messenger) {
     rank = new SimpleMessenger;
     rank->bind();
+    rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
     messenger = rank->register_entity(entity_name_t::CLIENT(-1));
     messenger->set_dispatcher(this);
     rank->start(true);  // do not daemonize!
@@ -153,10 +155,13 @@ int MonClient::get_monmap()
 }
 
 
-bool MonClient::dispatch_impl(Message *m)
+bool MonClient::ms_dispatch(Message *m)
 {
   MonClientOpHandler *op_handler;
   dout(10) << "dispatch " << *m << dendl;
+
+  if (my_addr == entity_addr_t())
+    my_addr = messenger->get_myaddr();
 
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
@@ -167,16 +172,13 @@ bool MonClient::dispatch_impl(Message *m)
     op_handler = &mount_handler;
     break;
 
-  case CEPH_MSG_CLIENT_UNMOUNT:
-    op_handler = &unmount_handler;
-    break;
-
   case CEPH_MSG_AUTH_REPLY:
     op_handler = cur_auth_handler;
     break;
 
-  default:
-    return false;
+  case CEPH_MSG_MON_SUBSCRIBE_ACK:
+    handle_subscribe_ack((MMonSubscribeAck*)m);
+    return true;
   }
 
   op_handler->handle_response(m);
@@ -190,6 +192,7 @@ void MonClient::handle_monmap(MMonMap *m)
 {
   dout(10) << "handle_monmap " << *m << dendl;
   monc_lock.Lock();
+
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
   map_cond.Signal();
@@ -306,7 +309,6 @@ int MonClient::MonClientOpHandler::do_op(double timeout)
 
   cond.SignalAll(); // wake up non-doers
 
-
   return 0;
 }
 
@@ -333,7 +335,7 @@ void MonClient::MonClientMountHandler::handle_response(Message *response)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(client->monmap, p);
 
-  client->messenger->reset_myname(m->get_dest());
+  client->messenger->set_myname(entity_name_t::CLIENT(m->client));
 
   response_flag = true;
 
@@ -385,5 +387,66 @@ void MonClient::MonClientAuthHandler::handle_response(Message *response)
 
   cond.Signal();
   return; /* FIXME */
+}
+
+
+void MonClient::ms_handle_remote_reset(const entity_addr_t& peer)
+{
+  dout(10) << "ms_handle_peer_reset " << peer << dendl;
+  pick_new_mon();
+  renew_subs();
+}
+
+
+// ---------
+
+void MonClient::renew_subs()
+{
+  if (sub_have.empty()) {
+    dout(10) << "renew_subs - empty" << dendl;
+    return;
+  }
+
+  dout(10) << "renew_subs" << dendl;
+
+  if (sub_renew_sent == utime_t())
+    sub_renew_sent = g_clock.now();
+
+  MMonSubscribe *m = new MMonSubscribe;
+  m->what = sub_have;
+  send_mon_message(m);
+}
+
+void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
+{
+  if (sub_renew_sent != utime_t()) {
+    sub_renew_after = sub_renew_sent;
+    sub_renew_after += m->interval / 2.0;
+    dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
+    sub_renew_sent = utime_t();
+  } else {
+    dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << ", ignoring" << dendl;
+  }
+}
+
+void MonClient::tick()
+{
+  if (!mounted)
+    return;
+
+  utime_t now = g_clock.now();
+  static utime_t last_tick;
+
+  if (now - last_tick < 10.0)
+    return;
+  last_tick = now;
+
+  dout(10) << "tick" << dendl;
+
+  if (now > sub_renew_after)
+    renew_subs();
+
+  int oldmon = monmap.pick_mon();
+  messenger->send_keepalive(monmap.mon_inst[oldmon]);
 }
 

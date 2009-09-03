@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph 014\n"
+#define CEPH_BANNER "ceph v016"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -42,8 +42,8 @@ static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
  * network, e.g. 'mds0' or 'osd3'.
  */
 struct ceph_entity_name {
-	__le32 type;
-	__le32 num;
+	__u8 type;
+	__le64 num;
 } __attribute__ ((packed));
 
 #define CEPH_ENTITY_TYPE_MON    1
@@ -92,6 +92,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
 #define CEPH_MSGR_TAG_MSG          10  /* message */
 #define CEPH_MSGR_TAG_ACK          11  /* message ack */
+#define CEPH_MSGR_TAG_KEEPALIVE    12  /* just a keepalive byte! */
 
 
 /*
@@ -132,7 +133,8 @@ struct ceph_msg_header {
 	__u8 osd_protocol, osdc_protocol;  /* internal and public */
 	__u8 mds_protocol, mdsc_protocol;
 
-	struct ceph_entity_inst src, orig_src, dst;
+	struct ceph_entity_inst src, orig_src;
+	__le32 dst_erank;
 	__le32 crc;       /* header crc32c */
 } __attribute__ ((packed));
 

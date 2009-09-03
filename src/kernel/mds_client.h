@@ -86,15 +86,19 @@ enum {
 	CEPH_MDS_SESSION_OPEN = 3,
 	CEPH_MDS_SESSION_HUNG = 4,
 	CEPH_MDS_SESSION_CLOSING = 5,
-	CEPH_MDS_SESSION_RECONNECTING = 6
+	CEPH_MDS_SESSION_RESTARTING = 6,
+	CEPH_MDS_SESSION_RECONNECTING = 7,
 };
 
 struct ceph_mds_session {
+	struct ceph_mds_client *s_mdsc;
 	int               s_mds;
 	int               s_state;
 	unsigned long     s_ttl;      /* time until mds kills us */
 	u64               s_seq;      /* incoming msg seq # */
 	struct mutex      s_mutex;    /* serialize session messages */
+
+	struct ceph_connection s_con;
 
 	/* protected by s_cap_lock */
 	spinlock_t        s_cap_lock;
@@ -141,6 +145,7 @@ struct ceph_mds_request {
 	u64 r_tid;                   /* transaction id */
 
 	int r_op;                    /* mds op code */
+	int r_mds;
 
 	/* operation on what? */
 	struct inode *r_inode;              /* arg1 */
@@ -187,7 +192,6 @@ struct ceph_mds_request {
 	struct list_head r_unsafe_dir_item;
 
 	struct ceph_mds_session *r_session;
-	struct ceph_mds_session *r_fwd_session;  /* forwarded from */
 
 	int               r_attempts;   /* resend attempts */
 	int               r_num_fwd;    /* number of forward attempts */
@@ -282,18 +286,6 @@ extern void ceph_mdsc_stop(struct ceph_mds_client *mdsc);
 
 extern void ceph_mdsc_sync(struct ceph_mds_client *mdsc);
 
-extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
-				 struct ceph_msg *msg);
-extern void ceph_mdsc_handle_session(struct ceph_mds_client *mdsc,
-				     struct ceph_msg *msg);
-extern void ceph_mdsc_handle_reply(struct ceph_mds_client *mdsc,
-				   struct ceph_msg *msg);
-extern void ceph_mdsc_handle_forward(struct ceph_mds_client *mdsc,
-				     struct ceph_msg *msg);
-
-extern void ceph_mdsc_handle_lease(struct ceph_mds_client *mdsc,
-				   struct ceph_msg *msg);
-
 extern void ceph_mdsc_lease_release(struct ceph_mds_client *mdsc,
 				    struct inode *inode,
 				    struct dentry *dn, int mask);
@@ -312,15 +304,17 @@ static inline void ceph_mdsc_get_request(struct ceph_mds_request *req)
 extern void ceph_mdsc_put_request(struct ceph_mds_request *req);
 
 extern void ceph_mdsc_pre_umount(struct ceph_mds_client *mdsc);
-extern void ceph_mdsc_handle_reset(struct ceph_mds_client *mdsc, int mds);
 
 extern char *ceph_mdsc_build_path(struct dentry *dentry, int *plen, u64 *base,
 				  int stop_on_nosnap);
 
 extern void __ceph_mdsc_drop_dentry_lease(struct dentry *dentry);
-extern void ceph_mdsc_lease_send_msg(struct ceph_mds_client *mdsc, int mds,
+extern void ceph_mdsc_lease_send_msg(struct ceph_mds_session *session,
 				     struct inode *inode,
 				     struct dentry *dentry, char action,
 				     u32 seq);
+
+extern void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc,
+				 struct ceph_msg *msg);
 
 #endif

@@ -190,23 +190,15 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   delete m;
+
+  monc->sub_got("osdmap", osdmap->get_epoch());
 }
 
 
 void Objecter::maybe_request_map()
 {
-  utime_t now;
-  assert (osdmap);
-  if (!osdmap->get_epoch() || last_epoch_requested <= osdmap->get_epoch()) goto yes;
-  now = g_clock.now();
-  if (now - last_epoch_requested_stamp > g_conf.objecter_map_request_interval) goto yes;
-  return;
-  
- yes:
-  dout(10) << "maybe_request_map requesting next osd map" << dendl;
-  last_epoch_requested_stamp = now;
-  last_epoch_requested = osdmap->get_epoch()+1;
-  monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), last_epoch_requested));
+  dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
+  monc->sub_want_onetime("osdmap", osdmap->get_epoch());
 }
 
 
@@ -442,7 +434,7 @@ tid_t Objecter::op_submit(Op *op)
     if (op->onack)
       flags |= CEPH_OSD_FLAG_ACK;
 
-    MOSDOp *m = new MOSDOp(signed_ticket, client_inc, op->tid,
+    MOSDOp *m = new MOSDOp(client_inc, op->tid,
 			   op->oid, op->layout, osdmap->get_epoch(),
 			   flags);
 

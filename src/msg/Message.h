@@ -17,6 +17,7 @@
  
 /* public message types */
 #include "include/types.h"
+#include "config.h"
 
 // monitor internal
 #define MSG_MON_ELECTION           60
@@ -38,7 +39,10 @@
 #define MSG_POOLOP                 49
 #define MSG_POOLOPREPLY            48
 
+#define MSG_ROUTE                  47
+
 #define MSG_PAXOS                  40
+
 
 // osd internal
 #define MSG_OSD_PING         70
@@ -222,10 +226,6 @@ public:
   void set_priority(__s16 p) { header.priority = p; }
 
   // source/dest
-  entity_inst_t get_dest_inst() { return entity_inst_t(header.dst); }
-  entity_name_t get_dest() { return entity_name_t(header.dst.name); }
-  void set_dest_inst(entity_inst_t& inst) { header.dst = inst; }
-
   entity_inst_t get_source_inst() { return entity_inst_t(header.src); }
   entity_name_t get_source() { return entity_name_t(header.src.name); }
   entity_addr_t get_source_addr() { return entity_addr_t(header.src.addr); }
@@ -243,7 +243,9 @@ public:
   virtual void print(ostream& out) {
     out << get_type_name();
   }
-  
+
+  void encode();
+
 };
 
 extern Message *decode_message(ceph_msg_header &header, ceph_msg_footer& footer,

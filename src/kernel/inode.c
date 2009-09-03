@@ -1493,10 +1493,30 @@ int ceph_setattr(struct dentry *dentry, struct iattr *attr)
 	}
 
 	/* these do nothing */
-	if (ia_valid & ATTR_CTIME)
-		dout("setattr %p ctime %ld.%ld -> %ld.%ld\n", inode,
+	if (ia_valid & ATTR_CTIME) {
+		bool only = (ia_valid & (ATTR_SIZE|ATTR_MTIME|ATTR_ATIME|
+					 ATTR_MODE|ATTR_UID|ATTR_GID)) == 0;
+		dout("setattr %p ctime %ld.%ld -> %ld.%ld (%s)\n", inode,
 		     inode->i_ctime.tv_sec, inode->i_ctime.tv_nsec,
-		     attr->ia_ctime.tv_sec, attr->ia_ctime.tv_nsec);
+		     attr->ia_ctime.tv_sec, attr->ia_ctime.tv_nsec,
+		     only ? "ctime only" : "ignored");
+		inode->i_ctime = attr->ia_ctime;
+		if (only) {
+			/*
+			 * if kernel wants to dirty ctime but nothing else,
+			 * we need to choose a cap to dirty under, or do
+			 * a almost-no-op setattr
+			 */
+			if (issued & CEPH_CAP_AUTH_EXCL)
+				dirtied |= CEPH_CAP_AUTH_EXCL;
+			else if (issued & CEPH_CAP_FILE_EXCL)
+				dirtied |= CEPH_CAP_FILE_EXCL;
+			else if (issued & CEPH_CAP_XATTR_EXCL)
+				dirtied |= CEPH_CAP_XATTR_EXCL;
+			else
+				mask |= CEPH_SETATTR_CTIME;
+		}
+	}
 	if (ia_valid & ATTR_FILE)
 		dout("setattr %p ATTR_FILE ... hrm!\n", inode);
 

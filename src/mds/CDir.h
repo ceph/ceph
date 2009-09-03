@@ -443,7 +443,7 @@ private:
   void _commit_full(ObjectOperation& m, const set<snapid_t> *snaps);
   void _commit_partial(ObjectOperation& m, const set<snapid_t> *snaps);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
-  void _committed(version_t v);
+  void _committed(version_t v, version_t last_renamed_version);
   void wait_for_commit(Context *c, version_t v=0);
 
   // -- dirtyness --

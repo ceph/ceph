@@ -325,7 +325,8 @@ void MDS::forward_message_mds(Message *m, int mds)
      * the affected metadata may migrate, in which case the new authority
      * won't have the metareq_id in the completed request map.
      */
-    bool client_must_resend = !creq->can_forward();
+    // NEW: always make the client resend!  
+    bool client_must_resend = true;  //!creq->can_forward();
 
     // tell the client where it should go
     messenger->send_message(new MClientRequestForward(creq->get_tid(), mds, creq->get_num_fwd(),
@@ -350,12 +351,12 @@ void MDS::forward_message_mds(Message *m, int mds)
 
 
 
-void MDS::send_message_client(Message *m, int client)
+void MDS::send_message_client(Message *m, client_t client)
 {
-  if (sessionmap.have_session(entity_name_t::CLIENT(client))) {
+  if (sessionmap.have_session(entity_name_t::CLIENT(client.v))) {
     version_t seq = sessionmap.inc_push_seq(client);
     dout(10) << "send_message_client client" << client << " seq " << seq << " " << *m << dendl;
-    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client))->inst);
+    messenger->send_message(m, sessionmap.get_session(entity_name_t::CLIENT(client.v))->inst);
   } else {
     dout(10) << "send_message_client no session for client" << client << " " << *m << dendl;
   }
@@ -377,6 +378,7 @@ int MDS::init()
   // get monmap
   monc->set_messenger(messenger);
   link_dispatcher(monc);
+
   monc->get_monmap();
 
   mds_lock.Lock();
@@ -385,7 +387,7 @@ int MDS::init()
   want_state = MDSMap::STATE_BOOT;
   beacon_start();
   whoami = -1;
-  messenger->reset_myname(entity_name_t::MDS(whoami));
+  messenger->set_myname(entity_name_t::MDS(whoami));
 
   objecter->init();
    
@@ -639,7 +641,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (oldwhoami != whoami) {
     // update messenger.
     dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
-    messenger->reset_myname(entity_name_t::MDS(whoami));
+    messenger->set_myname(entity_name_t::MDS(whoami));
 
     // do i need an osdmap?
     if (oldwhoami < 0) {
@@ -1144,7 +1146,7 @@ void MDS::suicide()
 
 
 
-bool MDS::dispatch_impl(Message *m)
+bool MDS::ms_dispatch(Message *m)
 {
   bool ret;
 
@@ -1177,6 +1179,11 @@ bool MDS::dispatch_impl(Message *m)
     delete m;
     return true;
   }
+
+  if (m->get_type() == CEPH_MSG_PING) {
+    delete m;
+    return true;
+  }    
 
   mds_lock.Lock();
   ret = _dispatch(m);

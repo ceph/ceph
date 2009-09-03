@@ -8,14 +8,16 @@
 extern "C" {
 #endif
 #undef org_apache_hadoop_fs_ceph_CephFileSystem_DEFAULT_BLOCK_SIZE
-#define org_apache_hadoop_fs_ceph_CephFileSystem_DEFAULT_BLOCK_SIZE 8388608LL
+#define org_apache_hadoop_fs_ceph_CephFileSystem_DEFAULT_BLOCK_SIZE 4194304LL
+#undef org_apache_hadoop_fs_ceph_CephFileSystem_EEXIST
+#define org_apache_hadoop_fs_ceph_CephFileSystem_EEXIST 17L
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
- * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
+ * Signature: (Ljava/lang/String;)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv *, jobject, jstring, jstring);
+  (JNIEnv *, jobject, jstring);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
@@ -79,14 +81,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
  * Signature: (Ljava/lang/String;)J
  */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getblocksize
-  (JNIEnv *, jobject, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_getfilesize
- * Signature: (Ljava/lang/String;)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getfilesize
   (JNIEnv *, jobject, jstring);
 
 /*

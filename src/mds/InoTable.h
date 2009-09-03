@@ -41,12 +41,15 @@ class InoTable : public MDSTable {
   void replay_alloc_ids(interval_set<inodeno_t>& inos);
   void replay_release_ids(interval_set<inodeno_t>& inos);
 
-  void init_inode();
   void reset_state();
   void encode_state(bufferlist& bl) {
+    __u8 v = 1;
+    ::encode(v, bl);
     ::encode(free, bl);
   }
   void decode_state(bufferlist::iterator& bl) {
+    __u8 v;
+    ::decode(v, bl);
     ::decode(free, bl);
     projected_free = free;
   }

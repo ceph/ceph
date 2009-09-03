@@ -37,7 +37,6 @@ using namespace std;
 
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
-#include "messages/MClientUnmount.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -124,6 +123,11 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
   unsafe_sync_write = 0;
 
   cwd = NULL;
+
+  file_stripe_unit = 0;
+  file_stripe_count = 0;
+  object_size = 0;
+  file_replication = 0;
 
   // 
   root = 0;
@@ -816,7 +820,7 @@ int Client::make_request(MClientRequest *req,
 
       if (!mdsmap->is_active(mds)) {
 	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
-	monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
+	//monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
@@ -1078,7 +1082,7 @@ void Client::handle_client_reply(MClientReply *reply)
       request->put(); // for the dumb data structure
     }
   }
-  if(unmounting)
+  if (unmounting)
     mount_cond.Signal();
 }
 
@@ -1086,7 +1090,7 @@ void Client::handle_client_reply(MClientReply *reply)
 // ------------------------
 // incoming messages
 
-bool Client::dispatch_impl(Message *m)
+bool Client::ms_dispatch(Message *m)
 {
   client_lock.Lock();
 
@@ -1202,6 +1206,8 @@ void Client::handle_mds_map(MMDSMap* m)
 
   delete oldmap;
   delete m;
+
+  monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
 
 void Client::send_reconnect(int mds)
@@ -1421,6 +1427,16 @@ bool Inode::put_cap_ref(int cap)
   return last;
 }
 
+void Client::get_cap_ref(Inode *in, int cap)
+{
+  if ((cap & CEPH_CAP_FILE_BUFFER) &&
+      in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
+    dout(5) << "get_cap_ref got first FILE_BUFFER ref on " << *in << dendl;
+    in->get();
+  }
+  in->get_cap_ref(cap);
+}
+
 void Client::put_cap_ref(Inode *in, int cap)
 {
   if (in->put_cap_ref(cap) && in->snapid == CEPH_NOSNAP) {
@@ -1433,12 +1449,17 @@ void Client::put_cap_ref(Inode *in, int cap)
       signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
     }
     if (cap & CEPH_CAP_FILE_BUFFER) {
+      bool last = (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0);
       for (map<snapid_t,CapSnap>::iterator p = in->cap_snaps.begin();
 	   p != in->cap_snaps.end();
 	   p++)
 	p->second.dirty_data = 0;
       check_caps(in, false);
       signal_cond_list(in->waitfor_commit);
+      if (last) {
+	dout(5) << "put_cap_ref dropped last FILE_BUFFER ref on " << *in << dendl;
+	put_inode(in);
+      }
     }
   }
 }
@@ -1820,8 +1841,8 @@ void Client::flush_set_callback(inodeno_t ino)
   //  Mutex::Locker l(client_lock);
   assert(client_lock.is_locked());   // will be called via dispatch() -> objecter -> ...
   Inode *in = inode_map[vinodeno_t(ino,CEPH_NOSNAP)];
-  assert(in);
-  _flushed(in);
+  if (in)
+    _flushed(in);
 }
 
 void Client::_flushed(Inode *in)
@@ -2545,9 +2566,6 @@ int Client::mount()
   
   whoami = messenger->get_myname().num();
 
-  signed_ticket = monclient->get_signed_ticket();
-
-  objecter->signed_ticket = signed_ticket;
   objecter->init();
 
   mounted = true;
@@ -2555,6 +2573,10 @@ int Client::mount()
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << dendl;
+
+  monclient->sub_want("mdsmap", mdsmap->get_epoch());
+  monclient->renew_subs();
+
   
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
@@ -2709,10 +2731,6 @@ int Client::unmount()
     mount_cond.Wait(client_lock);
   }
 
-  // leave cluster
-  client_lock.Unlock();
-  monclient->unmount(g_conf.client_unmount_timeout);
-  client_lock.Lock();
   mounted = false;
 
   dout(2) << "unmounted." << dendl;
@@ -2738,6 +2756,8 @@ void Client::tick()
   dout(21) << "tick" << dendl;
   tick_event = new C_C_Tick(this);
   timer.add_event_after(g_conf.client_tick_interval, tick_event);
+
+  monclient->tick();
   
   utime_t now = g_clock.now();
 
@@ -3644,6 +3664,62 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
   assert(0);
 }
 
+int Client::_getdents(DIR *dir, char *buf, int buflen, bool fullent)
+{
+  DirResult *dirp = (DirResult *)dir;
+  int ret = 0;
+  
+  while (1) {
+    if (dirp->at_end())
+      return ret;
+
+    if (dirp->buffer.count(dirp->frag()) == 0) {
+      Mutex::Locker lock(client_lock);
+      _readdir_get_frag(dirp);
+      if (dirp->at_end())
+	return ret;
+    }
+
+    frag_t fg = dirp->frag();
+    uint32_t pos = dirp->fragpos();
+    assert(dirp->buffer.count(fg));   
+    vector<DirEntry> &ent = dirp->buffer[fg];
+
+    if (ent.empty()) {
+      dout(10) << "empty frag " << fg << ", moving on to next" << dendl;
+      _readdir_next_frag(dirp);
+      continue;
+    }
+
+    assert(pos < ent.size());
+
+    // is there room?
+    int dlen = ent[pos].d_name.length();
+    if (fullent)
+      dlen += sizeof(struct dirent);
+    else
+      dlen += 1; // null terminator
+    if (ret + dlen > buflen) {
+      if (!ret)
+	return -ERANGE;  // the buffer is too small for the first name!
+      return ret;
+    }
+    if (fullent)
+      _readdir_fill_dirent((struct dirent *)(buf + ret), &ent[pos], dirp->offset);
+    else
+      memcpy(buf + ret, ent[pos].d_name.c_str(), dlen);
+    ret += dlen;
+
+    pos++;
+    dirp->offset++;
+
+    if (pos == ent.size()) 
+      _readdir_next_frag(dirp);
+  }
+  assert(0);
+}
+
+
 
 int Client::closedir(DIR *dir) 
 {
@@ -3704,6 +3780,8 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   tout << relpath << std::endl;
   tout << flags << std::endl;
 
+  Fh *fh = NULL;
+
   filepath path(relpath);
   Inode *in;
   int r = path_walk(path, &in);
@@ -3717,21 +3795,17 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     r = path_walk(dirpath, &dir);
     if (r < 0)
       return r;
-    r = _mknod(dir, dname.c_str(), mode, 0);
-    if (r == 0) {
-      Dentry *dn = dir->dir->dentries[dname];
-      in = dn->inode;
-      assert(in);
-    }
+    r = _create(dir, dname.c_str(), flags, mode, &in, &fh);
   }
   if (r < 0)
     return r;
 
-  Fh *fh;
-  r = _open(in, flags, mode, &fh);
+  if (!fh)
+    r = _open(in, flags, mode, &fh);
   if (r >= 0) {
     // allocate a integer file descriptor
     assert(fh);
+    assert(in);
     r = get_fd();
     assert(fd_map.count(r) == 0);
     fd_map[r] = fh;
@@ -3740,6 +3814,30 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   tout << r << std::endl;
   dout(3) << "open(" << path << ", " << flags << ") = " << r << dendl;
   return r;
+}
+
+Fh *Client::_create_fh(Inode *in, int flags, int cmode)
+{
+  // yay
+  Fh *f = new Fh;
+  f->mode = cmode;
+  if (flags & O_APPEND)
+    f->append = true;
+  
+  // inode
+  assert(in);
+  f->inode = in;
+  f->inode->get();
+
+  dout(10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
+
+  if (in->snapid != CEPH_NOSNAP) {
+    in->snap_cap_refs++;
+    dout(5) << "open success, fh is " << f << " combined IMMUTABLE SNAP caps " 
+	    << ccap_string(in->caps_issued()) << dendl;
+  }
+
+  return f;
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid) 
@@ -3765,25 +3863,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
   // success?
   if (result >= 0) {
-    // yay
-    Fh *f = new Fh;
-    if (fhp) *fhp = f;
-    f->mode = cmode;
-    if (flags & O_APPEND)
-      f->append = true;
-
-    // inode
-    assert(in);
-    f->inode = in;
-    f->inode->get();
-
-    dout(10) << in->ino << " mode " << cmode << dendl;
-
-    if (in->snapid != CEPH_NOSNAP) {
-      in->snap_cap_refs++;
-      dout(5) << "open success, fh is " << f << " combined IMMUTABLE SNAP caps " 
-	      << ccap_string(in->caps_issued()) << dendl;
-    }
+    *fhp = _create_fh(in, flags, cmode);
   } else {
     in->put_open_ref(cmode);
   }
@@ -4209,7 +4289,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     if (in->caps_issued_mask(CEPH_CAP_FILE_BUFFER)) {
       // do buffered write
       if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
-	in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
+	get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
       
       // wait? (this may block!)
       objectcacher->wait_for_write(size, client_lock);
@@ -4231,7 +4311,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
-    in->get_cap_ref(CEPH_CAP_FILE_BUFFER);
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     
     filer->write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);
@@ -4937,6 +5017,41 @@ int Client::ll_mknod(vinodeno_t parent, const char *name, mode_t mode, dev_t rde
   return r;
 }
 
+int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode **inp, Fh **fhp, int uid, int gid) 
+{ 
+  dout(3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
+  
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CREATE);
+  filepath path;
+  dir->make_path(path);
+  path.push_dentry(name);
+  req->set_filepath(path); 
+  req->head.args.open.flags = flags | O_CREAT;
+  req->head.args.open.mode = mode;
+  
+  req->head.args.open.stripe_unit = file_stripe_unit;
+  req->head.args.open.stripe_count = file_stripe_count;
+  req->head.args.open.object_size = object_size;
+  req->head.args.open.file_replication = file_replication;
+
+  int res = make_request(req, uid, gid);
+  
+  if (res >= 0) {
+    res = _lookup(dir, name, inp);
+    if (res >= 0) {
+      int cmode = ceph_flags_to_mode(flags);
+      (*inp)->get_open_ref(cmode);
+      *fhp = _create_fh(*inp, flags, cmode);
+    }
+  }
+    
+  trim_cache();
+
+  dout(3) << "create(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  return res;
+}
+
+
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {
   MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
@@ -5310,7 +5425,25 @@ int Client::ll_release(Fh *fh)
 
 // =========================================
 // layout
+void Client::set_default_file_stripe_unit(int stripe_unit)
+{
+  file_stripe_unit = stripe_unit;
+}
 
+void Client::set_default_file_stripe_count(int count)
+{
+  file_stripe_count = count;
+}
+
+void Client::set_default_object_size(int size)
+{
+  object_size = size;
+}
+
+void Client::set_default_file_replication(int replication)
+{
+  file_replication = replication;
+}
 
 int Client::describe_layout(int fd, ceph_file_layout *lp)
 {

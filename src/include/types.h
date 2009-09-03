@@ -217,6 +217,9 @@ WRITE_RAW_ENCODER(ceph_frag_tree_split)
 WRITE_RAW_ENCODER(ceph_osd_request_head)
 WRITE_RAW_ENCODER(ceph_osd_reply_head)
 WRITE_RAW_ENCODER(ceph_osd_op)
+WRITE_RAW_ENCODER(ceph_msg_header)
+WRITE_RAW_ENCODER(ceph_msg_footer)
+WRITE_RAW_ENCODER(ceph_mon_subscribe_item)
 
 WRITE_RAW_ENCODER(ceph_mon_statfs)
 WRITE_RAW_ENCODER(ceph_mon_statfs_reply)
@@ -229,8 +232,40 @@ typedef __u64 tid_t;         // transaction id
 typedef __u64 version_t;
 typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
-
 #define O_LAZY 01000000
+
+
+
+// --------------------------------------
+// identify individual mount clients by 64bit value
+
+struct client_t {
+  __s64 v;
+
+  client_t(__s64 _v = -2) : v(_v) {}
+  
+  void encode(bufferlist& bl) const {
+    ::encode(v, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(v, bl);
+  }
+};
+WRITE_CLASS_ENCODER(client_t)
+
+static inline bool operator==(const client_t& l, const client_t& r) { return l.v == r.v; }
+static inline bool operator!=(const client_t& l, const client_t& r) { return l.v != r.v; }
+static inline bool operator<(const client_t& l, const client_t& r) { return l.v < r.v; }
+static inline bool operator<=(const client_t& l, const client_t& r) { return l.v <= r.v; }
+static inline bool operator>(const client_t& l, const client_t& r) { return l.v > r.v; }
+static inline bool operator>=(const client_t& l, const client_t& r) { return l.v >= r.v; }
+
+static inline bool operator>=(const client_t& l, __s64 o) { return l.v >= o; }
+static inline bool operator<(const client_t& l, __s64 o) { return l.v < o; }
+
+inline ostream& operator<<(ostream& out, const client_t& c) {
+  return out << c.v;
+}
 
 
 
@@ -382,6 +417,9 @@ inline ostream& operator<<(ostream& out, const kb_t& kb)
   return out << kb.v << " KB";
 }
 
-
+inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
+{
+  return out << i.have << (i.onetime ? "" : "+");
+}
 
 #endif

@@ -629,10 +629,8 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 		ceph_decode_32_safe(p, end, osd, bad);
 		(*p)++;  /* clean flag */
 		pr_info("ceph osd%d down\n", osd);
-		if (osd < map->max_osd) {
+		if (osd < map->max_osd)
 			map->osd_state[osd] &= ~CEPH_OSD_UP;
-			ceph_messenger_mark_down(msgr, &map->osd_addr[osd]);
-		}
 	}
 
 	/* new_weight */
