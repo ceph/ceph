@@ -4112,13 +4112,19 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     if (off+l > in->size)
       l = in->size - off;
     
-    dout(10) << "readahead " << f->nr_consec_read << " reads " 
+    loff_t min = MIN((loff_t)len, l/2);
+
+    dout(20) << "readahead " << f->nr_consec_read << " reads " 
 	     << f->consec_read_bytes << " bytes ... readahead " << off << "~" << l
+	     << " min " << min
 	     << " (caller wants " << off << "~" << len << ")" << dendl;
     if (l > (loff_t)len) {
-      objectcacher->file_read(in->ino, &in->layout, in->snapid,
-			      off, l, NULL, 0, 0);
-      dout(10) << "readahead initiated" << dendl;
+      if (objectcacher->file_is_cached(in->ino, &in->layout, in->snapid, off, min))
+	dout(20) << "readahead already have min" << dendl;
+      else {
+	objectcacher->file_read(in->ino, &in->layout, in->snapid, off, l, NULL, 0, 0);
+	dout(20) << "readahead initiated" << dendl;
+      }
     }
   }
   
