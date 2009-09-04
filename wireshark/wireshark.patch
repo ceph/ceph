@@ -1,94 +1,94 @@
 Index: configure.in
 ===================================================================
---- configure.in	(revision 26859)
+--- configure.in	(revision 29691)
 +++ configure.in	(working copy)
-@@ -1671,6 +1671,7 @@
-   plugins/agentx/Makefile
-   plugins/artnet/Makefile
+@@ -1742,6 +1742,7 @@
+   packaging/svr4/pkginfo
+   plugins/Makefile
    plugins/asn1/Makefile
 +  plugins/ceph/Makefile
-   plugins/ciscosm/Makefile
    plugins/docsis/Makefile
-   plugins/enttec/Makefile
+   plugins/ethercat/Makefile
+   plugins/giop/Makefile
 Index: Makefile.am
 ===================================================================
---- Makefile.am	(revision 26859)
+--- Makefile.am	(revision 29691)
 +++ Makefile.am	(working copy)
-@@ -243,6 +243,7 @@
- 	-dlopen plugins/agentx/agentx.la \
- 	-dlopen plugins/artnet/artnet.la \
+@@ -264,6 +264,7 @@
+ -include plugins/Custom.make
+ plugin_ldadd = $(_CUSTOM_plugin_ldadd_) \
  	-dlopen plugins/asn1/asn1.la \
 +	-dlopen plugins/ceph/ceph.la \
- 	-dlopen plugins/ciscosm/ciscosm.la \
  	-dlopen plugins/docsis/docsis.la \
- 	-dlopen plugins/enttec/enttec.la \
+ 	-dlopen plugins/ethercat/ethercat.la \
+ 	-dlopen plugins/giop/cosnaming.la \
 Index: plugins/Makefile.nmake
 ===================================================================
---- plugins/Makefile.nmake	(revision 26859)
+--- plugins/Makefile.nmake	(revision 29691)
 +++ plugins/Makefile.nmake	(working copy)
-@@ -39,6 +39,9 @@
+@@ -33,6 +33,9 @@
  	cd asn1
  	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
  	cd ..
 +	cd ceph
 +	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
 +	cd ..
- 	cd ciscosm
+ 	cd docsis
  	$(MAKE) /$(MAKEFLAGS) -f Makefile.nmake $(PLUGIN_TARGET)
  	cd ..
-@@ -128,6 +131,7 @@
- 	xcopy agentx\*.dll $(VERSION) /d
- 	xcopy artnet\*.dll $(VERSION) /d
- 	xcopy asn1\*.dll $(VERSION) /d
-+	xcopy ceph\*.dll $(VERSION) /d
- 	xcopy ciscosm\*.dll $(VERSION) /d
- 	xcopy docsis\*.dll $(VERSION) /d
- 	xcopy enttec\*.dll $(VERSION) /d
+@@ -86,6 +89,7 @@
+ !IFDEF ENABLE_LIBWIRESHARK
+ 	cd..
+ 	xcopy plugins\asn1\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
++	xcopy plugins\ceph\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
+ 	xcopy plugins\docsis\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
+ 	xcopy plugins\ethercat\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
+ 	xcopy plugins\giop\*.dll $(INSTALL_DIR)\plugins\$(VERSION) /d
 Index: plugins/Makefile.am
 ===================================================================
---- plugins/Makefile.am	(revision 26859)
+--- plugins/Makefile.am	(revision 29691)
 +++ plugins/Makefile.am	(working copy)
-@@ -26,6 +26,7 @@
- 	agentx \
- 	artnet \
+@@ -24,6 +24,7 @@
+ -include Custom.make
+ SUBDIRS = $(_CUSTOM_SUBDIRS_) \
  	asn1 \
 +	ceph \
- 	ciscosm \
  	docsis \
- 	enttec \
+ 	ethercat \
+ 	giop \
 Index: epan/Makefile.am
 ===================================================================
---- epan/Makefile.am	(revision 26859)
+--- epan/Makefile.am	(revision 29691)
 +++ epan/Makefile.am	(working copy)
-@@ -189,6 +189,7 @@
+@@ -201,6 +201,7 @@
+ -include ../plugins/Custom.make
  plugin_src = \
- 	../plugins/artnet/packet-artnet.c \
  	../plugins/asn1/packet-asn1.c \
 +	../plugins/ceph/packet-ceph.c \
+ 	../plugins/docsis/packet-bintrngreq.c \
  	../plugins/docsis/packet-bpkmattr.c \
  	../plugins/docsis/packet-bpkmreq.c \
- 	../plugins/docsis/packet-bpkmrsp.c \
 Index: packaging/nsis/Makefile.nmake
 ===================================================================
---- packaging/nsis/Makefile.nmake	(revision 26859)
+--- packaging/nsis/Makefile.nmake	(revision 29691)
 +++ packaging/nsis/Makefile.nmake	(working copy)
-@@ -47,6 +47,7 @@
- 	../../plugins/agentx/agentx.dll \
- 	../../plugins/artnet/artnet.dll \
+@@ -44,6 +44,7 @@
+ 
+ PLUGINS= \
  	../../plugins/asn1/asn1.dll \
 +	../../plugins/ceph/ceph.dll \
- 	../../plugins/ciscosm/ciscosm.dll \
  	../../plugins/docsis/docsis.dll \
- 	../../plugins/enttec/enttec.dll \
+ 	../../plugins/ethercat/ethercat.dll \
+ 	../../plugins/giop/coseventcomm.dll \
 Index: packaging/nsis/wireshark.nsi
 ===================================================================
---- packaging/nsis/wireshark.nsi	(revision 26859)
+--- packaging/nsis/wireshark.nsi	(revision 29691)
 +++ packaging/nsis/wireshark.nsi	(working copy)
-@@ -779,6 +779,7 @@
- File "..\..\plugins\agentx\agentx.dll"
- File "..\..\plugins\artnet\artnet.dll"
+@@ -875,6 +875,7 @@
+ ;-------------------------------------------
+ SetOutPath '$INSTDIR\plugins\${VERSION}'
  File "..\..\plugins\asn1\asn1.dll"
 +File "..\..\plugins\ceph\ceph.dll"
- File "..\..\plugins\ciscosm\ciscosm.dll"
  File "..\..\plugins\docsis\docsis.dll"
- File "..\..\plugins\enttec\enttec.dll"
+ File "..\..\plugins\ethercat\ethercat.dll"
+ File "..\..\plugins\giop\coseventcomm.dll"
