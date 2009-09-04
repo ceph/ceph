@@ -4,6 +4,8 @@
 
 ifneq ($(KERNELRELEASE),)
 
+CFLAGS += -Wall
+
 obj-$(CONFIG_CEPH_FS) += ceph.o
 
 ceph-objs := super.o inode.o dir.o file.o addr.o ioctl.o \
