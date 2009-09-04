@@ -261,7 +261,10 @@ WRITE_CLASS_ENCODER(AuthMsg_F);
 extern bool verify_get_session_keys_request(CryptoKey& service_secret,
                                      CryptoKey& session_key, uint32_t& keys, bufferlist::iterator& indata);
 
-extern bool build_ticket_reply(ServiceTicket service_ticket, CryptoKey auth_session_key, CryptoKey& service_secret,
+extern bool build_ticket_reply(ServiceTicket service_ticket,
+                        CryptoKey session_key,
+                        CryptoKey auth_session_key,
+                        CryptoKey& service_secret,
 			bufferlist& reply);
 /*
  * Verify authenticator and generate reply authenticator

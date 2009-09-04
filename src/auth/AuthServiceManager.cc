@@ -25,6 +25,7 @@
 /* FIXME */
 #define SERVICE_SECRET   "0123456789ABCDEF"
 #define AUTH_SESSION_KEY "23456789ABCDEF01"
+#define TEST_SESSION_KEY "456789ABCDEF0123"
 
 #define PRINCIPAL_CLIENT_SECRET "123456789ABCDEF0"
 #define PRINCIPAL_OSD_SECRET "3456789ABCDEF012"
@@ -36,6 +37,7 @@ class CephAuthServer {
   CryptoKey osd_secret;
   CryptoKey auth_session_key;
   CryptoKey service_secret;
+  CryptoKey test_session_key;
   
 public:
   CephAuthServer() {
@@ -50,7 +52,10 @@ public:
 
     bufferptr ptr4(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
     auth_session_key.set_secret(CEPH_SECRET_AES, ptr3);
-  }
+
+    bufferptr ptr5(TEST_SESSION_KEY, sizeof(TEST_SESSION_KEY) - 1);
+    test_session_key.set_secret(CEPH_SECRET_AES, ptr5);
+   }
 
 /* FIXME: temporary stabs */
   int get_client_secret(CryptoKey& secret) {
@@ -68,8 +73,13 @@ public:
     return 0;
   }
 
-  int get_session_key(CryptoKey& key) {
+  int get_auth_session_key(CryptoKey& key) {
     key = auth_session_key; 
+    return 0;
+  }
+
+  int get_test_session_key(CryptoKey& key) {
+    key = test_session_key; 
     return 0;
   }
 };
@@ -160,7 +170,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       ticket.expires = g_clock.now();
 
       auth_server.get_client_secret(principal_secret);
-      auth_server.get_session_key(session_key);
+      auth_server.get_auth_session_key(session_key);
       auth_server.get_service_secret(service_secret);
 
       build_cephx_response_header(request_type, 0, result_bl);
@@ -187,15 +197,17 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       EntityName name; /* FIXME should take it from the request */
       entity_addr_t addr;
+      CryptoKey auth_session_key;
       CryptoKey session_key;
       CryptoKey service_secret;
       uint32_t keys;
 
-      auth_server.get_session_key(session_key);
+      auth_server.get_auth_session_key(session_key);
       auth_server.get_service_secret(service_secret);
+      auth_server.get_test_session_key(session_key);
 
       if (!verify_get_session_keys_request(service_secret,
-                                     session_key, keys, indata)) {
+                                     auth_session_key, keys, indata)) {
         ret = -EPERM;
       }
 
@@ -206,7 +218,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       auth_server.get_osd_secret(osd_secret);
       build_cephx_response_header(request_type, ret, result_bl);
 
-      build_ticket_reply(service_ticket, session_key, osd_secret, result_bl);
+      build_ticket_reply(service_ticket, session_key, auth_session_key, osd_secret, result_bl);
     }
     break;
   default:

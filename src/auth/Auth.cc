@@ -164,27 +164,24 @@ bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal
  *        F= {principal/service session key, validity}^principal/auth session key
  *
  */
-bool build_ticket_reply(ServiceTicket service_ticket, CryptoKey auth_session_key, CryptoKey& service_secret,
+bool build_ticket_reply(ServiceTicket service_ticket,
+                        CryptoKey session_key,
+                        CryptoKey auth_session_key,
+                        CryptoKey& service_secret,
 			bufferlist& reply)
 {
-  bufferlist ticket, enc_ticket;
+  AuthMsg_E e;
 
-  /* E */
-  ::encode(service_ticket, ticket);
-  if (service_secret.encrypt(ticket, enc_ticket) < 0) {
+  e.ticket = service_ticket;
+  if (e.encode_encrypt(service_secret, reply) < 0)
     return false;
-  }
 
-  bufferlist principal, principal_enc;
 
-  ::encode(service_ticket.session_key, principal);
-  
-  if (service_secret.encrypt(principal, principal_enc) < 0) {
-    return false;
-  }
-
-  ::encode(enc_ticket, reply);
-  ::encode(principal_enc, reply);
+   AuthMsg_F f;
+   f.session_key = session_key;
+   f.validity = 0; /* FIXME */
+   if (f.encode_encrypt(auth_session_key, reply) < 0)
+     return false;
   
   return true;
 }
