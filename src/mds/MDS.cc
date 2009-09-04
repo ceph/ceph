@@ -497,7 +497,9 @@ void MDS::beacon_send()
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
 
-  monc->send_mon_message(beacon, newmon);
+  if (newmon)
+    monc->pick_new_mon();
+  monc->send_mon_message(beacon);
 
   // schedule next sender
   if (beacon_sender) timer.cancel_event(beacon_sender);

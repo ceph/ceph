@@ -2760,8 +2760,6 @@ void Client::tick()
   tick_event = new C_C_Tick(this);
   timer.add_event_after(g_conf.client_tick_interval, tick_event);
 
-  monclient->tick();
-  
   utime_t now = g_clock.now();
 
   if (mdsmap->get_epoch()) {

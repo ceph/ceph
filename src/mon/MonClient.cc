@@ -191,25 +191,11 @@ void MonClient::handle_monmap(MMonMap *m)
 // -------------------
 // MOUNT
 
-void MonClient::_try_mount(double timeout)
+void MonClient::_send_mount()
 {
-  dout(10) << "_try_mount" << dendl;
-  int mon = monmap.pick_mon();
-  dout(2) << "sending client_mount to mon" << mon << dendl;
-  messenger->set_dispatcher(this);
-  messenger->send_message(new MClientMount, monmap.get_inst(mon));
-
-  // schedule timeout?
-  assert(mount_timeout_event == 0);
-  mount_timeout_event = new C_MountTimeout(this, timeout);
-  timer.add_event_after(timeout, mount_timeout_event);
-}
-
-void MonClient::_mount_timeout(double timeout)
-{
-  dout(10) << "_mount_timeout" << dendl;
-  mount_timeout_event = 0;
-  _try_mount(timeout);
+  dout(10) << "_send_mount" << dendl;
+  _send_mon_message(new MClientMount);
+  mount_started = g_clock.now();
 }
 
 int MonClient::mount(double mount_timeout)
@@ -222,25 +208,33 @@ int MonClient::mount(double mount_timeout)
   }
 
   // only first mounter does the work
-  bool itsme = false;
   if (!mounters) {
-    itsme = true;
-    _try_mount(mount_timeout);
-  } else {
+    // init
+    messenger->set_dispatcher(this);
+    timer.add_event_after(10.0, new C_Tick(this));
+  
+    _send_mount();
+  } else
     dout(5) << "additional mounter" << dendl;
-  }
   mounters++;
 
-  while (!mounted)
+  while (!mounted && !mount_err)
     mount_cond.Wait(monc_lock);
 
-  dout(5) << "mount success" << dendl;
-  return 0;
+  if (!mounted) {
+    mounters--;
+  } else {
+    dout(5) << "mount success" << dendl;
+  }
+
+  return mount_err;
 }
 
 void MonClient::handle_mount_ack(MClientMountAck* m)
 {
   dout(10) << "handle_mount_ack " << *m << dendl;
+
+  hunting = false;
 
   // monmap
   bufferlist::iterator p = m->monmap_bl.begin();
@@ -248,12 +242,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
   messenger->set_myname(entity_name_t::CLIENT(m->client.v));
 
-  // finish.
-  timer.cancel_event(mount_timeout_event);
-  mount_timeout_event = 0;
-
   mounted = true;
-
   mount_cond.SignalAll();
   
   delete m;
@@ -262,33 +251,63 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 // ---------
 
-void MonClient::send_mon_message(Message *m, bool newmon)
+void MonClient::_send_mon_message(Message *m)
 {
-  Mutex::Locker l(monc_lock);
-  int mon = monmap.pick_mon(newmon);
+  int mon = monmap.pick_mon();
   messenger->send_message(m, monmap.mon_inst[mon]);
 }
 
-void MonClient::pick_new_mon()
+void MonClient::_pick_new_mon()
 {
-  Mutex::Locker l(monc_lock);
   int oldmon = monmap.pick_mon();
   messenger->mark_down(monmap.get_inst(oldmon).addr);
   monmap.pick_mon(true);
 }
 
 
-void MonClient::ms_handle_remote_reset(const entity_addr_t& peer)
+void MonClient::ms_handle_reset(const entity_addr_t& peer)
 {
-  dout(10) << "ms_handle_peer_reset " << peer << dendl;
-  pick_new_mon();
-  renew_subs();
+  dout(10) << "ms_handle_reset " << peer << dendl;
+  if (!hunting) {
+    dout(0) << "staring hunt for new mon" << dendl;
+    hunting = true;
+    _pick_new_mon();
+    if (!mounted)
+      _send_mount();
+    _renew_subs();
+  }
+}
+
+void MonClient::tick()
+{
+  dout(10) << "tick" << dendl;
+
+  if (hunting) {
+    dout(0) << "continuing hunt mounted=" << mounted << dendl;
+    // try new monitor
+    _pick_new_mon();
+    if (!mounted)
+      _send_mount();
+    _renew_subs();
+  } else {
+    // just renew as needed
+    utime_t now = g_clock.now();
+    if (mounted && now > sub_renew_after)
+      _renew_subs();
+
+    int oldmon = monmap.pick_mon();
+    messenger->send_keepalive(monmap.mon_inst[oldmon]);
+  }
+
+  timer.add_event_after(10.0, new C_Tick(this));
+  dout(10) << "tick done" << dendl;
+
 }
 
 
 // ---------
 
-void MonClient::renew_subs()
+void MonClient::_renew_subs()
 {
   if (sub_have.empty()) {
     dout(10) << "renew_subs - empty" << dendl;
@@ -302,11 +321,13 @@ void MonClient::renew_subs()
 
   MMonSubscribe *m = new MMonSubscribe;
   m->what = sub_have;
-  send_mon_message(m);
+  _send_mon_message(m);
 }
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
+  hunting = false;
+
   if (sub_renew_sent != utime_t()) {
     sub_renew_after = sub_renew_sent;
     sub_renew_after += m->interval / 2.0;
@@ -315,26 +336,5 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   } else {
     dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << ", ignoring" << dendl;
   }
-}
-
-void MonClient::tick()
-{
-  if (!mounted)
-    return;
-
-  utime_t now = g_clock.now();
-  static utime_t last_tick;
-
-  if (now - last_tick < 10.0)
-    return;
-  last_tick = now;
-
-  dout(10) << "tick" << dendl;
-
-  if (now > sub_renew_after)
-    renew_subs();
-
-  int oldmon = monmap.pick_mon();
-  messenger->send_keepalive(monmap.mon_inst[oldmon]);
 }
 

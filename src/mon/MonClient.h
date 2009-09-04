@@ -38,53 +38,72 @@ private:
 
   entity_addr_t my_addr;
 
-  Context *mount_timeout_event;
-
   Mutex monc_lock;
   SafeTimer timer;
-  bool mounted;
-  int mounters;
-  Cond mount_cond, map_cond;
 
   bool ms_dispatch(Message *m);
   void handle_monmap(MMonMap *m);
 
-  void ms_handle_remote_reset(const entity_addr_t& peer);
+  void ms_handle_reset(const entity_addr_t& peer);
 
- protected:
-  class C_MountTimeout : public Context {
-    MonClient *client;
-    double timeout;
-  public:
-    C_MountTimeout(MonClient *c, double to) : client(c), timeout(to) { }
+
+  // monitor session
+  bool hunting;
+
+  struct C_Tick : public Context {
+    MonClient *monc;
+    C_Tick(MonClient *m) : monc(m) {}
     void finish(int r) {
-      if (r >= 0) client->_mount_timeout(timeout);
+      monc->tick();
     }
   };
+  void tick();
 
-  void _try_mount(double timeout);
-  void _mount_timeout(double timeout);
+  // mount
+private:
+  bool mounted;
+  int mount_err;
+  int mounters;
+  Cond mount_cond, map_cond;
+  utime_t mount_started;
+
+  void _pick_new_mon();
+  void _send_mon_message(Message *m);
+  void _send_mount();
   void handle_mount_ack(MClientMountAck* m);
+
+public:
+  int mount(double mount_timeout);
+
 
   // mon subscriptions
 private:
   map<nstring,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
   utime_t sub_renew_sent, sub_renew_after;
 
+  void _renew_subs();
+  void handle_subscribe_ack(MMonSubscribeAck* m);
+
 public:
-  void renew_subs();
+  void renew_subs() {
+    Mutex::Locker l(monc_lock);
+    _renew_subs();
+  }
   void sub_want(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
   void sub_want_onetime(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
-      renew_subs();
+      _renew_subs();
     }
   }
   void sub_got(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
     if (sub_have.count(what)) {
       if (sub_have[what].onetime)
 	sub_have.erase(what);
@@ -92,29 +111,35 @@ public:
 	sub_have[what].have = have;
     }
   }
-  void handle_subscribe_ack(MMonSubscribeAck* m);
 
  public:
   MonClient() : messenger(NULL),
-		mount_timeout_event(NULL),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock) {
+    hunting = false;
     mounted = false;
     mounters = 0;
+    mount_err = 0;
+  }
+  ~MonClient() {
+    timer.cancel_all_events();
   }
 
   int build_initial_monmap();
   int get_monmap();
 
-  int mount(double mount_timeout);
-
-  void tick();
-
-  void send_mon_message(Message *m, bool new_mon=false);
+  void send_mon_message(Message *m) {
+    Mutex::Locker l(monc_lock);
+    _send_mon_message(m);
+  }
   void note_mon_leader(int m) {
+    Mutex::Locker l(monc_lock);
     monmap.last_mon = m;
   }
-  void pick_new_mon();
+  void pick_new_mon() {
+    Mutex::Locker l(monc_lock);
+    _pick_new_mon();
+  }
 
   entity_addr_t get_my_addr() { return my_addr; }
 
