@@ -419,6 +419,8 @@ int OSD::init()
   link_dispatcher(&logclient);
   heartbeat_messenger->set_dispatcher(&heartbeat_dispatcher);
   
+  monc->init();
+
   // announce to monitor i exist and have booted.
   do_mon_report();
   
@@ -535,6 +537,9 @@ int OSD::shutdown()
   messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
+
+  monc->shutdown();
+
   return r;
 }
 

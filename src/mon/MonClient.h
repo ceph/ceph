@@ -125,6 +125,9 @@ public:
     timer.cancel_all_events();
   }
 
+  void init();
+  void shutdown();
+
   int build_initial_monmap();
   int get_monmap();
 

@@ -94,7 +94,7 @@ bool MDSMonitor::update_from_paxos()
 
   if (mon->is_leader()) {
     // bcast map to mds
-    bcast_latest_mds();
+    //bcast_latest_mds();
   }
 
   send_to_waiting();

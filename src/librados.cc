@@ -300,6 +300,7 @@ bool RadosClient::init()
   if (!objecter)
     return false;
 
+  monclient.init();
   monclient.mount(g_conf.client_mount_timeout);
 
   lock.Lock();

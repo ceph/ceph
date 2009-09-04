@@ -379,7 +379,10 @@ int MDS::init()
   monc->set_messenger(messenger);
   link_dispatcher(monc);
 
+  monc->init();
   monc->get_monmap();
+
+  monc->sub_want("mdsmap", 0);
 
   mds_lock.Lock();
 
@@ -487,9 +490,6 @@ void MDS::beacon_send()
 	   << " (currently " << ceph_mds_state_name(state) << ")"
 	   << dendl;
 
-  // pick new random mon if we have any outstanding beacons...
-  bool newmon = beacon_seq_stamp.size();
-
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
   MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), name, mdsmap->get_epoch(), 
@@ -497,8 +497,6 @@ void MDS::beacon_send()
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
 
-  if (newmon)
-    monc->pick_new_mon();
   monc->send_mon_message(beacon);
 
   // schedule next sender
@@ -603,19 +601,24 @@ void MDS::handle_mds_map(MMDSMap *m)
   mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
 
-  // do i exist?
-  if (mdsmap->is_dne(messenger->get_myaddr())) {
-    dout(1) << "handle_mds_map i (" << addr
-	    << ") dne in the mdsmap, killing myself" << dendl;
-    suicide();
-    goto out;
-  }
+  monc->sub_got("mdsmap", mdsmap->get_epoch());
 
   // see who i am
   addr = messenger->get_myaddr();
   whoami = mdsmap->get_rank(addr);
   state = mdsmap->get_state(addr);
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
+
+  if (whoami < 0) {
+    if (want_state == MDSMap::STATE_BOOT) {
+      dout(10) << "not in map yet" << dendl;
+    } else {
+      dout(1) << "handle_mds_map i (" << addr
+	      << ") dne in the mdsmap, killing myself" << dendl;
+      suicide();
+    }
+    goto out;
+  }
 
   if (state != oldstate)
     last_state = oldstate;
@@ -1142,6 +1145,8 @@ void MDS::suicide()
   // shut down messenger
   unlink_dispatcher(&logclient);
   messenger->shutdown();
+
+  monc->shutdown();
 }
 
 

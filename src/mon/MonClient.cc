@@ -198,6 +198,20 @@ void MonClient::_send_mount()
   mount_started = g_clock.now();
 }
 
+void MonClient::init()
+{
+  dout(10) << "init" << dendl;
+  messenger->set_dispatcher(this);
+
+  Mutex::Locker l(monc_lock);
+  timer.add_event_after(10.0, new C_Tick(this));
+}
+
+void MonClient::shutdown()
+{
+  timer.cancel_all_events();
+}
+
 int MonClient::mount(double mount_timeout)
 {
   Mutex::Locker lock(monc_lock);
@@ -209,10 +223,6 @@ int MonClient::mount(double mount_timeout)
 
   // only first mounter does the work
   if (!mounters) {
-    // init
-    messenger->set_dispatcher(this);
-    timer.add_event_after(10.0, new C_Tick(this));
-  
     _send_mount();
   } else
     dout(5) << "additional mounter" << dendl;
