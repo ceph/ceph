@@ -61,9 +61,9 @@ private:
 
   // mount
 private:
-  bool mounted;
+  client_t clientid;
+  int mounting;
   int mount_err;
-  int mounters;
   Cond mount_cond, map_cond;
   utime_t mount_started;
 
@@ -115,12 +115,9 @@ public:
  public:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),
-		timer(monc_lock) {
-    hunting = false;
-    mounted = false;
-    mounters = 0;
-    mount_err = 0;
-  }
+		timer(monc_lock),
+		hunting(false),
+		mounting(0), mount_err(0) { }
   ~MonClient() {
     timer.cancel_all_events();
   }

@@ -216,25 +216,21 @@ int MonClient::mount(double mount_timeout)
 {
   Mutex::Locker lock(monc_lock);
 
-  if (mounted) {
+  if (clientid >= 0) {
     dout(5) << "already mounted" << dendl;;
     return 0;
   }
 
   // only first mounter does the work
-  if (!mounters) {
+  if (!mounting)
     _send_mount();
-  } else
-    dout(5) << "additional mounter" << dendl;
-  mounters++;
-
-  while (!mounted && !mount_err)
+  mounting++;
+  while (clientid < 0 && !mount_err)
     mount_cond.Wait(monc_lock);
+  mounting--;
 
-  if (!mounted) {
-    mounters--;
-  } else {
-    dout(5) << "mount success" << dendl;
+  if (clientid >= 0) {
+    dout(5) << "mount success, client" << clientid << dendl;
   }
 
   return mount_err;
@@ -250,9 +246,9 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   bufferlist::iterator p = m->monmap_bl.begin();
   ::decode(monmap, p);
 
+  clientid = m->client;
   messenger->set_myname(entity_name_t::CLIENT(m->client.v));
 
-  mounted = true;
   mount_cond.SignalAll();
   
   delete m;
@@ -282,7 +278,7 @@ void MonClient::ms_handle_reset(const entity_addr_t& peer)
     dout(0) << "staring hunt for new mon" << dendl;
     hunting = true;
     _pick_new_mon();
-    if (!mounted)
+    if (mounting)
       _send_mount();
     _renew_subs();
   }
@@ -293,16 +289,16 @@ void MonClient::tick()
   dout(10) << "tick" << dendl;
 
   if (hunting) {
-    dout(0) << "continuing hunt mounted=" << mounted << dendl;
+    dout(0) << "continuing hunt" << dendl;
     // try new monitor
     _pick_new_mon();
-    if (!mounted)
+    if (mounting)
       _send_mount();
     _renew_subs();
   } else {
     // just renew as needed
     utime_t now = g_clock.now();
-    if (mounted && now > sub_renew_after)
+    if (now > sub_renew_after)
       _renew_subs();
 
     int oldmon = monmap.pick_mon();
