@@ -104,6 +104,9 @@ public:
   virtual bool prepare_update(PaxosServiceMessage *m) = 0;
   virtual bool should_propose(double &delay);
 
+  virtual void on_active() { }
+  virtual void on_election_start() { }
+
   virtual void committed() = 0;            // [leader] called after a proposed value commits
 
   virtual void tick() {}

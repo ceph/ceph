@@ -148,6 +148,8 @@ void PaxosService::election_starting()
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
+
+  on_election_start();
 }
 
 void PaxosService::election_finished()
@@ -181,6 +183,8 @@ void PaxosService::_active()
       have_pending = true;
     }
   }
+
+  on_active();
 }
 
 

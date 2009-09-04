@@ -63,7 +63,18 @@ bool ClientMonitor::update_from_paxos()
 
   paxos->stash_latest(paxosv, bl);
 
+  if (next_client < 0) {
+    dout(10) << "in-core next_client reset to " << client_map.next_client << dendl;
+    next_client = client_map.next_client;
+  }
+
   return true;
+}
+
+void ClientMonitor::on_election_start()
+{
+  dout(10) << "in-core next_client cleared" << dendl;
+  next_client = -1;
 }
 
 void ClientMonitor::create_pending()
@@ -96,34 +107,13 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 
 // -------
 
-bool ClientMonitor::check_mount(MClientMount *m)
-{
-    stringstream ss;
-    // already mounted?
-    entity_addr_t addr = m->get_orig_source_addr();
-    ExportControl *ec = conf_get_export_control();
-    if (ec && (!ec->is_authorized(&addr, "/"))) {
-      dout(0) << "client is not authorized to mount" << dendl;
-      ss << "client " << addr << " is not authorized to mount";
-      mon->get_logclient()->log(LOG_SEC, ss);
-
-      string s;
-      getline(ss, s);
-      mon->messenger->send_message(new MClientMountAck(-1, -EPERM, s.c_str()),
-				   m->get_orig_source_inst());
-      return true;
-    }
-
-    return false;
-}
-
 bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_MOUNT:
-	return check_mount((MClientMount *)m);
+    return preprocess_mount((MClientMount *)m);
     
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
@@ -142,18 +132,7 @@ bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
   
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_MOUNT:
-    {
-      entity_addr_t addr = m->get_orig_source_addr();
-      client_t client = pending_map.next_client;
-      pending_map.next_client.v++;
-
-      dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
-
-      paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
-      ss << "client" << client << " " << addr << " mounted";
-      mon->get_logclient()->log(LOG_INFO, ss);
-    }
-    return true;
+    return prepare_mount((MClientMount*)m);
 
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
@@ -164,6 +143,91 @@ bool ClientMonitor::prepare_update(PaxosServiceMessage *m)
     return false;
   }
 
+}
+
+
+// MOUNT
+
+bool ClientMonitor::preprocess_mount(MClientMount *m)
+{
+  stringstream ss;
+  
+  // allowed?
+  entity_addr_t addr = m->get_orig_source_addr();
+  ExportControl *ec = conf_get_export_control();
+  if (ec && (!ec->is_authorized(&addr, "/"))) {
+    dout(0) << "client is not authorized to mount" << dendl;
+    ss << "client " << addr << " is not authorized to mount";
+    mon->get_logclient()->log(LOG_SEC, ss);
+    
+    string s;
+    getline(ss, s);
+    mon->messenger->send_message(new MClientMountAck(-1, -EPERM, s.c_str()),
+				 m->get_orig_source_inst());
+    return true;
+  }
+  
+  // fast mount?
+  if (mon->is_leader() &&
+      next_client < client_map.next_client) {
+    client_t client = next_client;
+    next_client.v++;
+
+    dout(10) << "preprocess_mount fast mount client" << client << ", in-core next is " << next_client
+	     << ", paxos next is " << pending_map.next_client << dendl;
+    _mounted(client, m);
+    
+    if (next_client == pending_map.next_client) {
+      pending_map.next_client.v += g_conf.mon_clientid_prealloc;
+      propose_pending();
+    }
+
+    return true;
+  }      
+  
+  return false;
+}
+
+bool ClientMonitor::prepare_mount(MClientMount *m)
+{
+  stringstream ss;
+  entity_addr_t addr = m->get_orig_source_addr();
+
+  assert(next_client <= client_map.next_client);
+
+  client_t client = next_client;
+  next_client.v++;
+  
+  pending_map.next_client.v = next_client.v + g_conf.mon_clientid_prealloc;
+  
+  dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
+  
+  paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
+  ss << "client" << client << " " << addr << " mounted";
+  mon->get_logclient()->log(LOG_INFO, ss);
+  return true;
+}
+
+void ClientMonitor::_mounted(client_t client, MClientMount *m)
+{
+  entity_inst_t to;
+  to.addr = m->get_orig_source_addr();
+  to.name = entity_name_t::CLIENT(client.v);
+
+  dout(10) << "_mounted client" << client << " at " << to << dendl;
+  
+  // reply with client ticket
+  MClientMountAck *ack = new MClientMountAck;
+  ack->client = client;
+  mon->monmap->encode(ack->monmap_bl);
+
+  mon->send_reply(m, ack, to);
+
+  // also send latest mds and osd maps
+  //mon->mdsmon()->send_latest(to);
+  //mon->osdmon()->send_latest(to);
+
+  delete m;
 }
 
 
@@ -223,31 +287,6 @@ bool ClientMonitor::prepare_command(MMonCommand *m)
   return false;
 }
 
-
-// MOUNT
-
-
-void ClientMonitor::_mounted(client_t client, MClientMount *m)
-{
-  entity_inst_t to;
-  to.addr = m->get_orig_source_addr();
-  to.name = entity_name_t::CLIENT(client.v);
-
-  dout(10) << "_mounted client" << client << " at " << to << dendl;
-  
-  // reply with client ticket
-  MClientMountAck *ack = new MClientMountAck;
-  ack->client = client;
-  mon->monmap->encode(ack->monmap_bl);
-
-  mon->send_reply(m, ack, to);
-
-  // also send latest mds and osd maps
-  //mon->mdsmon()->send_latest(to);
-  //mon->osdmon()->send_latest(to);
-
-  delete m;
-}
 
 bool ClientMonitor::should_propose(double& delay)
 {

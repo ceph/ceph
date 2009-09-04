@@ -57,6 +57,7 @@ public:
   };
 
   ClientMap client_map, pending_map;
+  client_t next_client;
 
 private:
   // leader
@@ -68,7 +69,8 @@ private:
 
   void committed();
 
-  bool check_mount(MClientMount *m);
+  bool preprocess_mount(MClientMount *m);
+  bool prepare_mount(MClientMount *m);
   void _mounted(client_t c, MClientMount *m);
  
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
@@ -79,8 +81,10 @@ private:
 
   bool should_propose(double& delay);
 
+  void on_election_start();
+
  public:
-  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
+  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), next_client(-1) { }
   
   void tick();  // check state, take actions
 

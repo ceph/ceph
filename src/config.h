@@ -137,6 +137,7 @@ struct md_config_t {
   bool mon_stop_with_last_mds;
   bool mon_allow_mds_bully;
   float mon_pg_create_interval;
+  int mon_clientid_prealloc;
 
   double paxos_propose_interval;
   double paxos_observer_timeout;
