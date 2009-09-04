@@ -126,6 +126,40 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
     merge_left(bh, p->second);
 }
 
+/*
+ * count bytes we have cached in given range
+ */
+bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
+{
+  map<loff_t, BufferHead*>::iterator p = data.lower_bound(cur);
+  
+  if (p != data.begin() && 
+      (p == data.end() || p->first > cur)) {
+    p--;     // might overlap!
+    if (p->first + p->second->length() <= cur) 
+      p++;   // doesn't overlap.
+  }
+  
+  while (left > 0) {
+    if (p == data.end())
+      return false;
+
+    if (p->first <= cur) {
+      // have part of it
+      loff_t lenfromcur = MIN(p->second->end() - cur, left);
+      cur += lenfromcur;
+      left -= lenfromcur;
+      p++;
+      continue;
+    } else if (p->first > cur) {
+      // gap
+      return false;
+    } else
+      assert(0);
+  }
+
+  return true;
+}
 
 /*
  * map a range of bytes into buffer_heads.
@@ -747,6 +781,25 @@ void ObjectCacher::trim(loff_t max)
 
 
 /* public */
+
+bool ObjectCacher::is_cached(inodeno_t ino, vector<ObjectExtent>& extents, snapid_t snapid)
+{
+  for (vector<ObjectExtent>::iterator ex_it = extents.begin();
+       ex_it != extents.end();
+       ex_it++) {
+    dout(10) << "is_cached " << *ex_it << dendl;
+
+    // get Object cache
+    sobject_t soid(ex_it->oid, snapid);
+    Object *o = get_object_maybe(soid, ino, ex_it->layout);
+    if (!o)
+      return false;
+    if (!o->is_cached(ex_it->offset, ex_it->length))
+      return false;
+  }
+  return true;
+}
+
 
 /*
  * returns # bytes read (if in cache).  onfinish is untouched (caller must delete it)
@@ -1568,6 +1621,38 @@ loff_t ObjectCacher::release_set(inodeno_t ino)
 
   return unclean;
 }
+
+
+__u64 ObjectCacher::release_all()
+{
+  dout(10) << "release_all" << dendl;
+  __u64 unclean = 0;
+  
+  hash_map<sobject_t, Object*>::iterator p = objects.begin();
+  while (p != objects.end()) {
+    hash_map<sobject_t, Object*>::iterator n = p;
+    n++;
+
+    Object *ob = p->second;
+
+    loff_t o_unclean = release(ob);
+    unclean += o_unclean;
+
+    if (o_unclean) 
+      dout(10) << "release_all " << *ob 
+               << " has " << o_unclean << " bytes left"
+               << dendl;
+  }
+
+  if (unclean) {
+    dout(10) << "release_all unclean " << unclean << " bytes left" << dendl;
+  }
+
+  return unclean;
+}
+
+
+
 
 void ObjectCacher::truncate_set(inodeno_t ino, vector<ObjectExtent>& exls)
 {
