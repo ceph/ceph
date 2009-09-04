@@ -179,6 +179,9 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
     handle_subscribe_ack((MMonSubscribeAck*)m);
     return true;
+
+  default:
+    return false;
   }
 
   op_handler->handle_response(m);
