@@ -1,0 +1,100 @@
+# Makefile.nmake
+# nmake file for Wireshark plugin
+#
+# $Id: Makefile.nmake 24520 2008-03-01 12:31:01Z jake $
+#
+
+include ..\..\config.nmake
+include moduleinfo.nmake
+
+include Makefile.common
+
+CFLAGS=/WX /DHAVE_CONFIG_H /I../.. /I../../wiretap $(GLIB_CFLAGS) \
+	/I$(PCAP_DIR)\include -D_U_="" $(LOCAL_CFLAGS)
+
+.c.obj::
+	$(CC) $(CFLAGS) -Fd.\ -c $<
+	
+LDFLAGS = $(PLUGIN_LDFLAGS)
+
+!IFDEF ENABLE_LIBWIRESHARK
+LINK_PLUGIN_WITH=..\..\epan\libwireshark.lib
+CFLAGS=/DHAVE_WIN32_LIBWIRESHARK_LIB /D_NEED_VAR_IMPORT_ $(CFLAGS)
+
+DISSECTOR_OBJECTS = $(DISSECTOR_SRC:.c=.obj)
+
+DISSECTOR_SUPPORT_OBJECTS = $(DISSECTOR_SUPPORT_SRC:.c=.obj)
+
+OBJECTS = $(DISSECTOR_OBJECTS) $(DISSECTOR_SUPPORT_OBJECTS) plugin.obj
+
+RESOURCE=$(PLUGIN_NAME).res
+
+all: $(PLUGIN_NAME).dll
+
+$(PLUGIN_NAME).rc : moduleinfo.nmake
+	sed -e s/@PLUGIN_NAME@/$(PLUGIN_NAME)/ \
+	-e s/@RC_MODULE_VERSION@/$(RC_MODULE_VERSION)/ \
+	-e s/@RC_VERSION@/$(RC_VERSION)/ \
+	-e s/@MODULE_VERSION@/$(MODULE_VERSION)/ \
+	-e s/@PACKAGE@/$(PACKAGE)/ \
+	-e s/@VERSION@/$(VERSION)/ \
+	-e s/@MSVC_VARIANT@/$(MSVC_VARIANT)/ \
+	< plugin.rc.in > $@
+
+$(PLUGIN_NAME).dll $(PLUGIN_NAME).exp $(PLUGIN_NAME).lib : $(OBJECTS) $(LINK_PLUGIN_WITH) $(RESOURCE)
+	link -dll /out:$(PLUGIN_NAME).dll $(LDFLAGS) $(OBJECTS) $(LINK_PLUGIN_WITH) \
+	$(GLIB_LIBS) $(RESOURCE)
+
+#
+# Build plugin.c, which contains the plugin version[] string, a
+# function plugin_register() that calls the register routines for all
+# protocols, and a function plugin_reg_handoff() that calls the handoff
+# registration routines for all protocols.
+#
+# We do this by scanning sources.  If that turns out to be too slow,
+# maybe we could just require every .o file to have an register routine
+# of a given name (packet-aarp.o -> proto_register_aarp, etc.).
+#
+# Formatting conventions:  The name of the proto_register_* routines an
+# proto_reg_handoff_* routines must start in column zero, or must be
+# preceded only by "void " starting in column zero, and must not be
+# inside #if.
+#
+# DISSECTOR_SRC is assumed to have all the files that need to be scanned.
+#
+# For some unknown reason, having a big "for" loop in the Makefile
+# to scan all the files doesn't work with some "make"s; they seem to
+# pass only the first few names in the list to the shell, for some
+# reason.
+#
+# Therefore, we have a script to generate the plugin.c file.
+# The shell script runs slowly, as multiple greps and seds are run
+# for each input file; this is especially slow on Windows.  Therefore,
+# if Python is present (as indicated by PYTHON being defined), we run
+# a faster Python script to do that work instead.
+#
+# The first argument is the directory in which the source files live.
+# The second argument is "plugin", to indicate that we should build
+# a plugin.c file for a plugin.
+# All subsequent arguments are the files to scan.
+#
+!IFDEF PYTHON
+plugin.c: $(DISSECTOR_SRC) moduleinfo.h ../../tools/make-dissector-reg.py
+	@echo Making plugin.c (using python)
+	@$(PYTHON) "../../tools/make-dissector-reg.py" . plugin $(DISSECTOR_SRC)
+!ELSE
+plugin.c: $(DISSECTOR_SRC) moduleinfo.h ../../tools/make-dissector-reg
+	@echo Making plugin.c (using sh)
+	@$(SH) ../../tools/make-dissector-reg . plugin $(DISSECTOR_SRC)
+!ENDIF
+
+!ENDIF
+
+clean:
+	rm -f $(OBJECTS) $(RESOURCE) plugin.c *.pdb \
+	    $(PLUGIN_NAME).dll $(PLUGIN_NAME).dll.manifest $(PLUGIN_NAME).lib \
+	    $(PLUGIN_NAME).exp $(PLUGIN_NAME).rc 
+
+distclean: clean
+
+maintainer-clean: distclean
