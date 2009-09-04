@@ -45,10 +45,10 @@ public:
     bufferptr ptr2(PRINCIPAL_CLIENT_SECRET, sizeof(PRINCIPAL_CLIENT_SECRET) - 1);
     client_secret.set_secret(CEPH_SECRET_AES, ptr2);
 
-    bufferptr ptr2(PRINCIPAL_OSD_SECRET, sizeof(PRINCIPAL_OSD_SECRET) - 1);
+    bufferptr ptr3(PRINCIPAL_OSD_SECRET, sizeof(PRINCIPAL_OSD_SECRET) - 1);
     osd_secret.set_secret(CEPH_SECRET_AES, ptr2);
 
-    bufferptr ptr3(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
+    bufferptr ptr4(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
     auth_session_key.set_secret(CEPH_SECRET_AES, ptr3);
   }
 
@@ -58,8 +58,7 @@ public:
      return 0;
   }
 
-  int get_osd_secret(EntityName& principal_name, entity_addr_t principal_addr,
-                        CryptoKey& secret) {
+  int get_osd_secret(CryptoKey& secret) {
      secret = osd_secret;
      return 0;
   }
@@ -159,7 +158,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       ticket.expires = g_clock.now();
 
-      auth_server.get_client_secret(name, addr, principal_secret);
+      auth_server.get_client_secret(principal_secret);
       auth_server.get_session_key(session_key);
       auth_server.get_service_secret(service_secret);
 
@@ -203,7 +202,6 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       CryptoKey osd_secret;
       auth_server.get_osd_secret(osd_secret);
 
-      CryptoKey osd_secret;
       auth_server.get_osd_secret(osd_secret);
       build_cephx_response_header(request_type, ret, result_bl);
       build_ticket_reply(service_ticket, session_key, osd_secret, result_bl);
