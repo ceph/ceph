@@ -7,12 +7,12 @@
 
 #include "types.h"
 #include "osdmap.h"
+#include "messenger.h"
 
 struct ceph_msg;
 struct ceph_snap_context;
 struct ceph_osd_request;
 struct ceph_osd_client;
-struct ceph_connection;
 
 /*
  * completion callback for async writepages
@@ -22,10 +22,11 @@ typedef void (*ceph_osdc_callback_t)(struct ceph_osd_request *,
 
 /* a given osd we're communicating with */
 struct ceph_osd {
+	atomic_t o_ref;
 	struct ceph_osd_client *o_osdc;
 	int o_osd;
 	struct rb_node o_node;
-	struct ceph_connection *o_con;
+	struct ceph_connection o_con;
 	struct list_head o_requests;
 };
 

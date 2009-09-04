@@ -1,0 +1,28 @@
+#
+# $Id: moduleinfo.nmake 20158 2006-12-19 22:23:37Z jake $
+#
+
+# The name
+PACKAGE=ceph
+
+# The version
+MODULE_VERSION_MAJOR=0
+MODULE_VERSION_MINOR=0
+MODULE_VERSION_MICRO=1
+MODULE_VERSION_EXTRA=0
+
+#
+# The RC_VERSION should be comma-separated, not dot-separated, 
+# as per Graham Bloice's message in
+#
+#	http://www.ethereal.com/lists/ethereal-dev/200303/msg00283.html
+#
+# "The RC_VERSION variable in config.nmake should be comma separated. 
+# This allows the resources to be built correctly and the version
+# number to be correctly displayed in the explorer properties dialog
+# for the executables, and XP's tooltip, rather than 0.0.0.0."
+#
+
+MODULE_VERSION=$(MODULE_VERSION_MAJOR).$(MODULE_VERSION_MINOR).$(MODULE_VERSION_MICRO).$(MODULE_VERSION_EXTRA)
+RC_MODULE_VERSION=$(MODULE_VERSION_MAJOR),$(MODULE_VERSION_MINOR),$(MODULE_VERSION_MICRO),$(MODULE_VERSION_EXTRA)
+

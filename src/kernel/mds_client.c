@@ -275,7 +275,7 @@ void ceph_put_mds_session(struct ceph_mds_session *s)
 	dout("mdsc put_session %p %d -> %d\n", s,
 	     atomic_read(&s->s_ref), atomic_read(&s->s_ref)-1);
 	if (atomic_dec_and_test(&s->s_ref)) {
-		ceph_con_destroy(&s->s_con);
+		ceph_con_shutdown(&s->s_con);
 		kfree(s);
 	}
 }
@@ -321,12 +321,12 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_seq = 0;
 	mutex_init(&s->s_mutex);
 
-	ceph_con_init(mdsc->client->msgr, &s->s_con,
-		      ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
+	ceph_con_init(mdsc->client->msgr, &s->s_con);
 	s->s_con.private = s;
 	s->s_con.ops = &mds_con_ops;
 	s->s_con.peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS);
 	s->s_con.peer_name.num = cpu_to_le32(mds);
+	ceph_con_open(&s->s_con, ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 
 	spin_lock_init(&s->s_cap_lock);
 	s->s_cap_gen = 0;
@@ -1671,6 +1671,24 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		goto out;
 	}
 
+	result = le32_to_cpu(head->result);
+
+	/*
+	 * Tolerate 2 consecutive ESTALEs from the same mds.
+	 * FIXME: we should be looking at the cap migrate_seq.
+	 */
+	if (result == -ESTALE) {
+		req->r_direct_mode = USE_AUTH_MDS;
+		req->r_num_stale++;
+		if (req->r_num_stale <= 2) {
+			__do_request(mdsc, req);
+			mutex_unlock(&mdsc->mutex);
+			goto out;
+		}
+	} else {
+		req->r_num_stale = 0;
+	}
+
 	if (head->safe) {
 		req->r_got_safe = true;
 		__unregister_request(mdsc, req);
@@ -1702,37 +1720,15 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		list_add_tail(&req->r_unsafe_item, &req->r_session->s_unsafe);
 	}
 
+	dout("handle_reply tid %lld result %d\n", tid, result);
+	rinfo = &req->r_reply_info;
+	err = parse_reply_info(msg, rinfo);
 	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&session->s_mutex);
-
-	/* parse */
-	rinfo = &req->r_reply_info;
-	err = parse_reply_info(msg, rinfo);
 	if (err < 0) {
 		pr_err("ceph_mdsc_handle_reply got corrupt reply mds%d\n", mds);
 		goto out_err;
-	}
-	result = le32_to_cpu(rinfo->head->result);
-	dout("handle_reply tid %lld result %d\n", tid, result);
-
-	/*
-	 * Tolerate 2 consecutive ESTALEs from the same mds.
-	 * FIXME: we should be looking at the cap migrate_seq.
-	 */
-	if (result == -ESTALE) {
-		req->r_direct_mode = USE_AUTH_MDS;
-		req->r_num_stale++;
-		if (req->r_num_stale <= 2) {
-			mutex_unlock(&req->r_session->s_mutex);
-			mutex_lock(&mdsc->mutex);
-			put_request_session(req);
-			__do_request(mdsc, req);
-			mutex_unlock(&mdsc->mutex);
-			goto out;
-		}
-	} else {
-		req->r_num_stale = 0;
 	}
 
 	/* snap trace */
@@ -2054,8 +2050,8 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 		session->s_state = CEPH_MDS_SESSION_RECONNECTING;
 		session->s_seq = 0;
 
-		ceph_con_reopen(&session->s_con,
-				ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
+		ceph_con_open(&session->s_con,
+			      ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 
 		/* replay unsafe requests */
 		replay_unsafe_requests(mdsc, session);

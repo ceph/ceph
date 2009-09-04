@@ -850,7 +850,10 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 
 	started = jiffies;  /* note the start time */
 	/* send mount request, and wait for mon, mds, and osd maps */
-	ceph_monc_request_mount(&client->monc);
+	err = ceph_monc_request_mount(&client->monc);
+	if (err < 0)
+		goto out;
+
 	while (!have_mon_map(client) && !client->mount_err) {
 		err = -EIO;
 		if (timeout && time_after_eq(jiffies, started + timeout))

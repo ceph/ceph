@@ -4090,9 +4090,14 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     loff_t p = ceph_file_layout_period(in->layout);
     if (g_conf.client_readahead_max_periods)
       l = MIN(l, g_conf.client_readahead_max_periods * p);
+
     if (l >= 2*p)
-      // align with period
+      // align large readahead with period
       l -= (off+l) % p;
+    else 
+      // align all readahead with stripe unit
+      l -= (off+l) % ceph_file_layout_su(in->layout);
+
     // don't read past end of file
     if (off+l > in->size)
       l = in->size - off;
@@ -4100,7 +4105,7 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     dout(10) << "readahead " << f->nr_consec_read << " reads " 
 	     << f->consec_read_bytes << " bytes ... readahead " << off << "~" << l
 	     << " (caller wants " << off << "~" << len << ")" << dendl;
-    if (l > 0) {
+    if (l > len) {
       objectcacher->file_read(in->ino, &in->layout, in->snapid,
 			      off, l, NULL, 0, 0);
       dout(10) << "readahead initiated" << dendl;
