@@ -131,9 +131,11 @@ struct ServiceTicket {
 };
 WRITE_CLASS_ENCODER(ServiceTicket)
 
-extern bool verify_get_session_key_request(CryptoKey& service_secret,
+extern bool verify_get_session_keys_request(CryptoKey& service_secret,
                                      CryptoKey& session_key, uint32_t& keys, bufferlist::iterator& indata);
 
+extern bool build_ticket_reply(ServiceTicket service_ticket, CryptoKey auth_session_key, CryptoKey& service_secret,
+			bufferlist& reply);
 /*
  * Verify authenticator and generate reply authenticator
  */

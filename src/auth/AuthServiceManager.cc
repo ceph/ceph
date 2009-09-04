@@ -204,6 +204,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       auth_server.get_osd_secret(osd_secret);
       build_cephx_response_header(request_type, ret, result_bl);
+
       build_ticket_reply(service_ticket, session_key, osd_secret, result_bl);
     }
     break;

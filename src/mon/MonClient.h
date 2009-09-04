@@ -147,7 +147,6 @@ private:
   };
 
   MonClientMountHandler mount_handler;
-  MonClientUnmountHandler unmount_handler;
 
   MonClientAuthHandler *cur_auth_handler;
 
@@ -188,8 +187,7 @@ public:
 		mount_timeout_event(NULL),
 		monc_lock("MonClient::monc_lock"),
 		auth_lock("MonClient::auth_lock"),
-                mount_handler(this),
-                unmount_handler(this) {
+                mount_handler(this) {
     //            auth_handler(this) {
     mounted = false;
     mounters = 0;

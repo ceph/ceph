@@ -209,11 +209,6 @@ int MonClient::mount(double mount_timeout)
   return ret;
 }
 
-int MonClient::unmount(double timeout)
-{
-  return unmount_handler.do_op(timeout);
-}
-
 int MonClient::authorize(uint32_t want_keys, double mount_timeout)
 {
   Mutex::Locker l(auth_lock);
@@ -339,21 +334,6 @@ void MonClient::MonClientMountHandler::handle_response(Message *response)
 
   response_flag = true;
 
-  cond.Signal();
-}
-
-Message *MonClient::MonClientUnmountHandler::build_request()
-{
-  return new MClientUnmount;
-}
-
-// -------------------
-// UNMOUNT
-void MonClient::MonClientUnmountHandler::handle_response(Message *response)
-{
-  Mutex::Locker lock(op_lock);
-  client->mounted = false;
-  got_ack = true;
   cond.Signal();
 }
 
