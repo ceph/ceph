@@ -118,6 +118,8 @@ void parse_syn_options(vector<const char*>& args)
       } else if (strcmp(args[i],"dumpplacement") == 0) {
 	syn_modes.push_back( SYNCLIENT_MODE_DUMP );
 	syn_sargs.push_back( args[++i] );   
+      } else if (strcmp(args[i],"dropcache") == 0) {
+	syn_modes.push_back( SYNCLIENT_MODE_DROPCACHE );
       } else if (strcmp(args[i],"makedirs") == 0) {
         syn_modes.push_back( SYNCLIENT_MODE_MAKEDIRS );
         syn_iargs.push_back( atoi(args[++i]) );
@@ -436,6 +438,13 @@ int SyntheticClient::run()
       }
       break;
 
+
+    case SYNCLIENT_MODE_DROPCACHE:
+      {
+	client->sync_fs();
+	client->drop_caches();
+      }
+      break;
 
     case SYNCLIENT_MODE_DUMP:
       {

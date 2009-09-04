@@ -1170,6 +1170,7 @@ public:
   int fstat(int fd, struct stat *stbuf);
 
   int sync_fs();
+  __s64 drop_caches();
 
   // hpc lazyio
   int lazyio_propogate(int fd, loff_t offset, size_t count);

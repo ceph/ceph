@@ -4573,6 +4573,12 @@ int Client::sync_fs()
   return _sync_fs();
 }
 
+__s64 Client::drop_caches()
+{
+  Mutex::Locker l(client_lock);
+  return objectcacher->release_all();
+}
+
 
 int Client::lazyio_propogate(int fd, loff_t offset, size_t count)
 {
