@@ -4081,6 +4081,10 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
     in->get_cap_ref(CEPH_CAP_FILE_CACHE);
   
+  dout(10) << "readahead=" << readahead << " nr_consec=" << f->nr_consec_read
+	   << " max_byes=" << g_conf.client_readahead_max_bytes
+	   << " max_periods=" << g_conf.client_readahead_max_periods << dendl;
+
   // readahead?
   if (readahead &&
       f->nr_consec_read &&
@@ -4098,10 +4102,12 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     if (l >= 2*p)
       // align large readahead with period
       l -= (off+l) % p;
-    else 
-      // align all readahead with stripe unit
-      l -= (off+l) % ceph_file_layout_su(in->layout);
-
+    else {
+      // align readahead with stripe unit if we cross su boundary
+      int su = ceph_file_layout_su(in->layout);
+      if ((off+l)/su != off/su) l -= (off+l) % su;
+    }
+    
     // don't read past end of file
     if (off+l > in->size)
       l = in->size - off;
