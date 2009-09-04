@@ -3784,6 +3784,8 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   tout << relpath << std::endl;
   tout << flags << std::endl;
 
+  dout(5) << "open(" << relpath << ", " << flags << ", " << mode << ")" << dendl;
+
   Fh *fh = NULL;
 
   filepath path(relpath);
@@ -3802,7 +3804,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     r = _create(dir, dname.c_str(), flags, mode, &in, &fh);
   }
   if (r < 0)
-    return r;
+    goto out;
 
   if (!fh)
     r = _open(in, flags, mode, &fh);
@@ -3815,6 +3817,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     fd_map[r] = fh;
   }
   
+ out:
   tout << r << std::endl;
   dout(3) << "open(" << path << ", " << flags << ") = " << r << dendl;
   return r;
