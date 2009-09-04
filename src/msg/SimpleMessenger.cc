@@ -1070,7 +1070,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   // requeue sent items
   requeue_sent();
 
-  if (q.empty()) {
+  if (!is_queued()) {
     if (state == STATE_CLOSING || onconnect) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
