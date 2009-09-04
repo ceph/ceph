@@ -244,9 +244,7 @@ install-data-local:
 	$(install_sh_SCRIPT) -m 0755 mkcephfs $(DESTDIR)$(sbindir)/mkcephfs
 	mkdir -p $(DESTDIR)$(libdir)/ceph
 	$(install_sh_SCRIPT) -m 0755 ceph_common.sh $(DESTDIR)$(libdir)/ceph/ceph_common.sh
-	mkdir -p $(DESTDIR)/etc/init.d
-	$(install_sh_SCRIPT) -m 0755 init-ceph $(DESTDIR)/etc/init.d/ceph
-	mkdir -p $(DESTDIR)$(sysconfdir)/init.d
+	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
 	mkdir -p $(DESTDIR)$(includedir)/ceph
 	$(install_sh_SCRIPT) -m 0600 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
