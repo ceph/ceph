@@ -4,6 +4,7 @@
 
 #include "config.h"
 
+
 /*
  * Authentication
  */
@@ -42,37 +43,23 @@ void build_get_tgt_request(EntityName& principal_name, entity_addr_t principal_a
  * {session key, validity, nonce}^principal_secret
  * {principal_ticket, session key}^service_secret  ... "enc_ticket"
  */
-bool build_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal_secret,
-			      CryptoKey& session_key, CryptoKey& service_secret,
-			      bufferlist& reply)
+bool build_get_tgt_reply(PrincipalTicket& principal_ticket,
+                     CryptoKey& session_key,
+                     CryptoKey& principal_secret,
+                     CryptoKey& service_secret,
+                     bufferlist& reply)
 {
-  bufferlist info, enc_info;
-  ::encode(session_key, info);
-  ::encode(principal_ticket.renew_after, info);
-  ::encode(principal_ticket.expires, info);
-  ::encode(principal_ticket.nonce, info);
-  dout(0) << "encoded expires=" << principal_ticket.expires << dendl;
-  if (principal_secret.encrypt(info, enc_info) < 0) {
-    dout(0) << "error encrypting principal ticket" << dendl;
+  AuthMsg_A msg_a;
+
+  msg_a.session_key = session_key;
+  if (msg_a.encode_encrypt(principal_secret, reply) < 0)
     return false;
-  }
-  ::encode(enc_info, reply);
 
-  /*
-     Build TGT
-   */
-  bufferlist ticket, tgt;
-  encode_tgt(principal_ticket, session_key, ticket);
-
-  if (service_secret.encrypt(ticket, tgt) < 0) {
-    dout(0) << "error ecryptng result" << dendl;
+  TGT tgt;
+  tgt.session_key = session_key;
+  tgt.ticket = principal_ticket;
+  if (tgt.encode_encrypt(service_secret, reply) < 0)
     return false;
-  }
-  ::encode(tgt, reply);  
-
-  dout(0) << "enc_info.length()=" << enc_info.length() << dendl;
-  dout(0) << "tgt.length()=" << tgt.length() << dendl;
-
   return true;
 }
 
@@ -84,29 +71,13 @@ bool ServiceTicket::verify_service_ticket_reply(CryptoKey& principal_secret,
 					      bufferlist::iterator& indata)
 {
   dout(0) << "1" << dendl;
-  bufferlist enc_info, info;
-  ::decode(enc_info, indata);
-  ::decode(enc_ticket, indata);
-  
-  if (principal_secret.decrypt(enc_info, info) < 0) {
-    dout(0) << "error decrypting data" << dendl;
-    return false;
-  }
 
-  dout(0) << "enc_info.length()=" << enc_info.length() << dendl;
-  dout(0) << "info.length()=" << info.length() << dendl;
-  bufferlist::iterator q = info.begin();
-  try {
-    ::decode(session_key, q);
-    ::decode(renew_after, q);
-    ::decode(expires, q);
-    ::decode(nonce, q);
-    dout(0) << "decoded expires=" << expires << dendl;
-  }
-  catch (buffer::error *e) {
-    delete e;
+  AuthMsg_A msg_a;
+  if (msg_a.decode_decrypt(principal_secret, indata) < 0)
     return false;
-  }
+
+  ::decode(enc_ticket, indata);
+
   if (!indata.end())
     return false;
 
@@ -118,21 +89,18 @@ bool ServiceTicket::verify_service_ticket_reply(CryptoKey& principal_secret,
 /*
  * PRINCIPAL: build request to retrieve a service ticket
  *
- * TGT, {principal_addr, timestamp}^principal/auth session key
+ * TGT, D = {principal_addr, timestamp}^principal/auth session key
  */
 bool ServiceTicket::get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl)
 {
-  utime_t now = g_clock.now();
+  AuthMsg_D msg;
+  msg.timestamp = g_clock.now();
+  msg.principal_addr = principal_addr;
 
-  bufferlist req, req_enc;
-  ::encode(principal_addr, req);
-  ::encode(now, req);
-  if (session_key.encrypt(req, req_enc) < 0)
+  if (msg.encode_encrypt(session_key, bl) < 0)
     return false;
 
-  ::encode(keys, bl);
   ::encode(enc_ticket, bl);
-  ::encode(req_enc, bl);
 
   return true;
 }
@@ -140,38 +108,21 @@ bool ServiceTicket::get_session_keys(uint32_t keys, entity_addr_t& principal_add
 bool verify_get_session_keys_request(CryptoKey& service_secret,
                                      CryptoKey& session_key, uint32_t& keys, bufferlist::iterator& indata)
 {
-  utime_t now;
-  bufferlist enc_ticket, ticket;
-  bufferlist req_enc, req;
-  entity_addr_t principal_addr;
-
-  ::decode(keys, indata);
-  ::decode(enc_ticket, indata);
-  ::decode(req_enc, indata);
-
-  if (session_key.decrypt(req_enc, req) < 0)
+  AuthMsg_D msg;
+  if (msg.decode_decrypt(session_key, indata) < 0)
     return false;
 
-  bufferlist::iterator iter = req.begin();
+  dout(0) << "decoded now=" << msg.timestamp << " addr=" << msg.principal_addr << dendl;
 
-  ::decode(principal_addr, iter);
-  ::decode(now, iter);
-  dout(0) << "decoded now=" << now << " addr=" << principal_addr << dendl;
-
-  CryptoKey ticket_session_key;
-  PrincipalTicket principal_ticket;
-
-  if (service_secret.decrypt(enc_ticket, ticket) < 0)
+  TGT tgt;
+  if (tgt.decode_decrypt(service_secret, indata) < 0)
     return false;
-
-  /* decode the TGT */
-  decode_tgt(principal_ticket, ticket_session_key, ticket);
 
   /* FIXME: validate that request makes sense */
 
   return true;
 }
-
+#if 0
 bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal_secret,
 			      CryptoKey& session_key, CryptoKey& service_secret,
 			      bufferlist& reply)
@@ -205,7 +156,7 @@ bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal
 
   return true;
 }
-
+#endif
 /*
  * AUTH SERVER: build ticket for service reply
  *

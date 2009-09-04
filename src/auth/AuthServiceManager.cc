@@ -149,6 +149,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
   switch (request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
     {
+      dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
       EntityName name; /* FIXME should take it from the request */
       entity_addr_t addr;
       PrincipalTicket ticket;
@@ -163,7 +164,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       auth_server.get_service_secret(service_secret);
 
       build_cephx_response_header(request_type, 0, result_bl);
-      if (!build_get_tgt_reply(ticket, principal_secret, session_key, service_secret, result_bl)) {
+      if (!build_get_tgt_reply(ticket, session_key, principal_secret, service_secret, result_bl)) {
         ret = -EIO;
       }
 #if 0
@@ -182,7 +183,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     }
     break;
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
-    dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY principal type=" << (cephx_header.request_type & CEPHX_PRINCIPAL_TYPE_MASK) << dendl;
+    dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
       EntityName name; /* FIXME should take it from the request */
       entity_addr_t addr;
