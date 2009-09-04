@@ -98,7 +98,6 @@ public:
 private:
   list<entity_inst_t> waiting_for_map;
 
-  void bcast_latest_mds();
   void send_full(entity_inst_t dest);
   void send_to_waiting();
 
