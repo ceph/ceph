@@ -40,7 +40,11 @@ void build_authenticate_request(EntityName& principal_name, entity_addr_t& princ
   ticket_req.addr =  principal_addr;
   ticket_req.timestamp = g_clock.now();
   ticket_req.keys = keys;
-  ::encode(ticket_req, request);
+  if (!encrypt) {
+    ::encode(ticket_req, request);
+  } else {
+    ticket_req.encode_encrypt(session_key, request);
+  }
   ::encode(ticket_info, request);
 }
 
@@ -64,10 +68,10 @@ bool build_authenticate_reply(AuthTicket& ticket,
   if (msg_a.encode_encrypt(principal_secret, reply) < 0)
     return false;
 
-  AuthServiceTicketInfo tgt;
-  tgt.session_key = session_key;
-  tgt.ticket = ticket;
-  if (tgt.encode_encrypt(service_secret, reply) < 0)
+  AuthServiceTicketInfo ticket_info;
+  ticket_info.session_key = session_key;
+  ticket_info.ticket = ticket;
+  if (ticket_info.encode_encrypt(service_secret, reply) < 0)
     return false;
   return true;
 }
@@ -81,17 +85,25 @@ bool verify_service_ticket_request(bool encrypted,
   AuthServiceTicketRequest msg;
 
   if (encrypted) {
+    dout(0) << "verify encrypted service ticket request" << dendl;
     if (msg.decode_decrypt(session_key, indata) < 0)
       return false;
 
-    dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << dendl;
+    dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << " (was encrypted)" << dendl;
 
     AuthServiceTicketInfo ticket_info;
     if (ticket_info.decode_decrypt(service_secret, indata) < 0)
       return false;
+  } else {
+    ::decode(msg, indata);
+
+    dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << dendl;
   }
 
   /* FIXME: validate that request makes sense */
+
+  keys = msg.keys;
+  dout(0) << "requested keys=" << keys << dendl;
 
   return true;
 }
@@ -103,8 +115,6 @@ bool verify_service_ticket_request(bool encrypted,
 bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 					      bufferlist::iterator& indata)
 {
-  dout(0) << "1" << dendl;
-
   AuthServiceTicket msg_a;
   if (msg_a.decode_decrypt(secret, indata) < 0)
     return false;
