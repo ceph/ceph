@@ -1243,12 +1243,12 @@ more_kvec:
 			spin_unlock(&con->out_queue_lock);
 			goto more;
 		}
+		if (test_and_clear_bit(KEEPALIVE_PENDING, &con->state)) {
+			prepare_write_keepalive(con);
+			spin_unlock(&con->out_queue_lock);
+			goto more;
+		}
 		spin_unlock(&con->out_queue_lock);
-	}
-
-	if (test_and_clear_bit(KEEPALIVE_PENDING, &con->state)) {
-		prepare_write_keepalive(con);
-		goto more_kvec;
 	}
 
 	/* Nothing to do! */
@@ -1493,7 +1493,7 @@ static void ceph_fault(struct ceph_connection *con)
 	/* If there are no messages in the queue, place the connection
 	 * in a STANDBY state (i.e., don't try to reconnect just yet). */
 	spin_lock(&con->out_queue_lock);
-	if (list_empty(&con->out_queue)) {
+	if (list_empty(&con->out_queue) && !con->out_keepalive_pending) {
 		dout("fault setting STANDBY\n");
 		set_bit(STANDBY, &con->state);
 		spin_unlock(&con->out_queue_lock);
