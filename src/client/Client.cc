@@ -1636,7 +1636,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
 	(in->size << 1) >= in->max_size &&
 	(in->reported_size << 1) < in->max_size) {
-      dout(10) << "size approaching max_size" << dendl;
+      dout(10) << "size " << in->size << " approaching max_size " << in->max_size
+	       << ", reported " << in->reported_size << dendl;
       goto ack;
     }
 
