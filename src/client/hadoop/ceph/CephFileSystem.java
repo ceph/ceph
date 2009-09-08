@@ -231,7 +231,8 @@ public class CephFileSystem extends FileSystem {
 
   /**
    * Set the current working directory for the given file system. All relative
-   * paths will be resolved relative to it.
+   * paths will be resolved relative to it. You need to have initialized the
+   * filesystem prior to calling this method.
    *
    * @param dir The directory to change to.
    */
@@ -356,7 +357,7 @@ public class CephFileSystem extends FileSystem {
     debug("isDirectory:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     boolean result;
-    if (abs_path.toString().equals("/")) {
+    if (abs_path.toString().equals(root)) {
       result = true;
     }
     else {
@@ -682,7 +683,7 @@ public class CephFileSystem extends FileSystem {
     
     //debug("delete: Deleting path " + abs_path.toString());
     // sanity check
-    if (abs_path.toString().equals("/"))
+    if (abs_path.toString().equals(root))
       throw new IOException("Error: deleting the root directory is a Bad Idea.");
     
     // if the path is a file, try to delete it.
@@ -784,29 +785,19 @@ public class CephFileSystem extends FileSystem {
     debug("makeAbsolute:enter with path " + path);
     if (path == null) return new Path("/");
     // first, check for the prefix
-    if (path.toString().startsWith(fs_default_name)) {
-	  
+    if (path.toString().startsWith(fs_default_name)) {	  
       Path stripped_path = new Path(path.toString().substring(fs_default_name.length()));
       debug("makeAbsolute:exit with path " + stripped_path);
       return stripped_path;
     }
 
-
     if (path.isAbsolute()) {
       debug("makeAbsolute:exit with path " + path);
       return path;
     }
-    Path wd = getWorkingDirectory();
-    if (wd.toString().equals("")){
-      Path new_path = new Path(root, path);
-      debug("makeAbsolute:exit with path " + new_path);
-      return new_path;
-    }
-    else {
-      Path new_path = new Path(root, path);
-      debug("makeAbsolute:exit with path " + new_path);
-      return new_path;
-    }
+    Path new_path = new Path(ceph_getcwd(), path);
+    debug("makeAbsolute:exit with path " + new_path);
+    return new_path;
   }
  
   private Path[] listPaths(Path path) throws IOException {
@@ -827,7 +818,7 @@ public class CephFileSystem extends FileSystem {
     
     // convert the strings to Paths
     Path[] paths = new Path[dirlist.length];
-    for(int i = 0; i < dirlist.length; ++i) {
+    for (int i = 0; i < dirlist.length; ++i) {
       debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
 			 dirlist[i] + "\"");
       // convert each listing to an absolute path
