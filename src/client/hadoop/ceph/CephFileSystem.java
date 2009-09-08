@@ -50,6 +50,7 @@ import org.apache.hadoop.fs.FileStatus;
 public class CephFileSystem extends FileSystem {
 
   private static final int EEXIST = 17;
+  private static final int ENOENT = 2;
 
   private URI uri;
 
@@ -523,16 +524,20 @@ public class CephFileSystem extends FileSystem {
     debug("open:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     
-    if (!exists(abs_path))
-      throw new IOException("open:  absolute path \""  + abs_path.toString()
-			    + "\" does not exist");
-    if(!isFile(abs_path))
-      throw new IOException("open:  absolute path \""  + abs_path.toString()
-			    + "\" is not a file");
-
     int fh = ceph_open_for_read(abs_path.toString());
-    if (fh < 0) {
-      throw new IOException("open: Failed to open file " + abs_path.toString());
+    if (fh < 0) { //uh-oh, something's bad!
+      if (fh == -ENOENT) //well that was a stupid open
+	throw new IOException("open:  absolute path \""  + abs_path.toString()
+			      + "\" does not exist");
+      else //hrm...the file exists but we can't open it :(
+	throw new IOException("open: Failed to open file " + abs_path.toString());
+    }
+
+    if(isDirectory(abs_path)) { //yes, it is possible to open Ceph directories
+      //but that doesn't mean you should in Hadoop!
+      ceph_close(fh);
+      throw new IOException("open:  absolute path \""  + abs_path.toString()
+			    + "\" is a directory!");
     }
     Stat lstat = new Stat();
     ceph_stat(abs_path.toString(), lstat);
