@@ -178,31 +178,6 @@ struct AuthTicketHandler {
   bool verify_reply_authenticator(utime_t then, bufferlist& enc_reply);
 
   bool has_key() { return has_key_flag; }
-#if 0
-  void encode(bufferlist& bl) const {
-    __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(session_key, bl);
-    ::encode(enc_ticket, bl);
-    ::encode(nonce, bl);
-    ::encode(renew_after, bl);
-    ::encode(expires, bl);
-    __u8 f = has_key_flag;
-    ::encode(f, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    __u8 v;
-    ::decode(v, bl);
-    ::decode(session_key, bl);
-    ::decode(enc_ticket, bl);
-    ::decode(nonce, bl);
-    ::decode(renew_after, bl);
-    ::decode(expires, bl);
-    __u8 f;
-    ::decode(f, bl);
-    has_key_flag = f;
-  }
-#endif
 };
 //WRITE_CLASS_ENCODER(ServiceTicket)
 
@@ -259,41 +234,6 @@ struct AuthServiceTicketInfo : public AuthEnc {
   }
 };
 WRITE_CLASS_ENCODER(AuthServiceTicketInfo);
-
-#if 0
-/* D */
-struct AuthMsg_D : public AuthEnc {
-  entity_addr_t principal_addr;
-  utime_t timestamp;
-  uint32_t keys;
-
-  void encode(bufferlist& bl) const {
-    ::encode(keys, bl);
-    ::encode(principal_addr, bl);
-    ::encode(timestamp, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(keys, bl);
-    ::decode(principal_addr, bl);
-    ::decode(timestamp, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthMsg_D);
-
-
-/* E */
-struct AuthMsg_E : public AuthEnc {
-  ServiceTicket ticket;
-
-  void encode(bufferlist& bl) const {
-    ::encode(ticket, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(ticket, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthMsg_E);
-#endif
 
 struct AuthAuthenticate : public AuthEnc {
   utime_t now;
