@@ -314,6 +314,7 @@ filehandle that will be valid forever, so this is of limited utility.
 
 EOF
 
+git apply $cephtree/src/kernel/ioctl-number.patch
 git add $target/ceph/ioctl.h
 git add $target/ceph/ioctl.c
 git commit -s -F - <<EOF
