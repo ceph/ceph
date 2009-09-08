@@ -313,8 +313,9 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   const char *c_path = env->GetStringUTFChars(j_path, 0);
   if (c_path == NULL) return NULL;
   DIR *dirp;
-  ceph_opendir(c_path, &dirp);
   int r;
+  r = ceph_opendir(c_path, &dirp);
+  if (r<0) return r;
   int buflen = 100; //good default?
   char *buf = new char[buflen];
   string *ent;
