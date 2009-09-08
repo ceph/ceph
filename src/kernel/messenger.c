@@ -854,18 +854,6 @@ static int process_connect(struct ceph_connection *con)
 		prepare_read_connect(con);
 		break;
 
-	case CEPH_MSGR_TAG_WAIT:
-		/*
-		 * If there is a connection race (we are opening connections to
-		 * each other), one of us may just have to WAIT.  We will keep
-		 * our queued messages, in expectation of being replaced by an
-		 * incoming connection.
-		 */
-		dout("process_connect peer connecting WAIT\n");
-		set_bit(WAIT, &con->state);
-		con_close_socket(con);
-		break;
-
 	case CEPH_MSGR_TAG_READY:
 		clear_bit(CONNECTING, &con->state);
 		if (con->in_reply.flags & CEPH_MSG_CONNECT_LOSSY)
@@ -882,6 +870,15 @@ static int process_connect(struct ceph_connection *con)
 		con->delay = 0;  /* reset backoff memory */
 		prepare_read_tag(con);
 		break;
+
+	case CEPH_MSGR_TAG_WAIT:
+		/*
+		 * If there is a connection race (we are opening
+		 * connections to each other), one of us may just have
+		 * to WAIT.  This shouldn't happen if we are the
+		 * client.
+		 */
+		pr_err("process_connect peer connecting WAIT\n");
 
 	default:
 		pr_err("ceph connect protocol error, will retry\n");
@@ -1305,7 +1302,7 @@ more:
 		ret = read_partial_connect(con);
 		if (ret <= 0)
 			goto done;
-		if (process_connect(con) < 0 || test_bit(WAIT, &con->state)) {
+		if (process_connect(con) < 0) {
 			ret = -1;
 			goto out;
 		}
@@ -1412,9 +1409,8 @@ bad_tag:
  */
 static void queue_con(struct ceph_connection *con)
 {
-	if (test_bit(WAIT, &con->state) ||
-	    test_bit(DEAD, &con->state)) {
-		dout("queue_con %p ignoring: WAIT|DEAD\n",
+	if (test_bit(DEAD, &con->state)) {
+		dout("queue_con %p ignoring: DEAD\n",
 		     con);
 		return;
 	}
@@ -1460,10 +1456,6 @@ more:
 		/* reopen w/ new peer */
 		dout("con_work OPENING\n");
 		con_close_socket(con);
-	}
-	if (test_bit(WAIT, &con->state)) {   /* we are a zombie */
-		dout("con_work WAIT\n");
-		goto done;
 	}
 
 	if (test_and_clear_bit(SOCK_CLOSED, &con->state) ||
