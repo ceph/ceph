@@ -247,7 +247,7 @@ public class CephFileSystem extends FileSystem {
     boolean path_exists = false;
     try {
       isDir = isDirectory(abs_path);
-      path_exists = exists(abs_path);
+      if (!isDir) path_exists = exists(abs_path);
     }
 
     catch (IOException e) {
@@ -428,10 +428,7 @@ public class CephFileSystem extends FileSystem {
       debug("listStatus:exit");
       return statuses;
     }
-    if (isFile(abs_path)) return null;
-
-    //shouldn't get here
-    throw new FileNotFoundException("listStatus found no such file " + path);
+    return null; //it's a file, or DNE
   }
 
   @Override
