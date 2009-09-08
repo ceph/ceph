@@ -18,6 +18,36 @@
 #include "Crypto.h"
 #include "msg/msg_types.h"
 
+struct AuthEnc {
+  virtual void encode(bufferlist& bl) const = 0;
+  virtual void decode(bufferlist::iterator& bl) = 0;
+
+  int encode_encrypt(CryptoKey key, bufferlist& out) {
+     bufferlist bl, bl_enc;
+
+     encode(bl);
+     int ret = key.encrypt(bl, bl_enc);
+      if (ret < 0)
+        return ret;
+
+     ::encode(bl_enc, out);
+     return 0;
+  }
+
+  int decode_decrypt(CryptoKey key, bufferlist::iterator& iter) {
+     bufferlist bl_enc, bl;
+     ::decode(bl_enc, iter);
+
+     int ret = key.decrypt(bl_enc, bl);
+     if (ret < 0)
+       return ret;
+
+     bufferlist::iterator iter2 = bl.begin();
+     decode(iter2); 
+     return 0;
+  }
+};
+
 struct EntityName {
   uint32_t entity_type;
   string name;
@@ -39,12 +69,13 @@ WRITE_CLASS_ENCODER(EntityName);
  * services as described by 'caps' during the specified validity
  * period.
  */
-struct AuthTicket {
+struct AuthTicket : public AuthEnc {
   entity_addr_t addr;
   utime_t created, renew_after, expires;
   string nonce;
   map<string, bufferlist> caps;
   __u32 flags;
+  CryptoKey session_key;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
@@ -55,6 +86,7 @@ struct AuthTicket {
     ::encode(nonce, bl);
     ::encode(caps, bl);
     ::encode(flags, bl);
+    ::encode(session_key, bl);
   }
   void decode(bufferlist::iterator& bl) {
     __u8 v;
@@ -65,6 +97,7 @@ struct AuthTicket {
     ::decode(nonce, bl);
     ::decode(caps, bl);
     ::decode(flags, bl);
+    ::decode(session_key, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthTicket)
@@ -173,36 +206,6 @@ struct AuthTicketHandler {
 };
 //WRITE_CLASS_ENCODER(ServiceTicket)
 
-struct AuthEnc {
-  virtual void encode(bufferlist& bl) const = 0;
-  virtual void decode(bufferlist::iterator& bl) = 0;
-
-  int encode_encrypt(CryptoKey key, bufferlist& out) {
-     bufferlist bl, bl_enc;
-
-     encode(bl);
-     int ret = key.encrypt(bl, bl_enc);
-      if (ret < 0)
-        return ret;
-
-     ::encode(bl_enc, out);
-     return 0;
-  }
-
-  int decode_decrypt(CryptoKey key, bufferlist::iterator& iter) {
-     bufferlist bl_enc, bl;
-     ::decode(bl_enc, iter);
-
-     int ret = key.decrypt(bl_enc, bl);
-     if (ret < 0)
-       return ret;
-
-     bufferlist::iterator iter2 = bl.begin();
-     decode(iter2); 
-     return 0;
-  }
-};
-
 struct AuthServiceTicketRequest : public AuthEnc {
   entity_addr_t addr;
   utime_t timestamp;
@@ -291,6 +294,32 @@ struct AuthMsg_E : public AuthEnc {
 };
 WRITE_CLASS_ENCODER(AuthMsg_E);
 #endif
+
+struct AuthAuthenticate : public AuthEnc {
+  utime_t now;
+  string nonce;
+  void encode(bufferlist& bl) const {
+    ::encode(now, bl);
+    ::encode(nonce, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(now, bl);
+    ::decode(nonce, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthAuthenticate);
+
+struct AuthAuthenticateReply : public AuthEnc {
+  utime_t timestamp;
+  void encode(bufferlist& bl) const {
+    ::encode(timestamp, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(timestamp, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthAuthenticateReply);
+
 
 
 extern void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,

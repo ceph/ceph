@@ -247,19 +247,19 @@ bool build_get_session_keys_response(ServiceTicket& ticket, CryptoKey& service_s
 /*
  * PRINCIPAL: build authenticator to access the service.
  *
- * enc_ticket, {timestamp, nonce}^session_key
+ * ticket, {timestamp, nonce}^session_key
  */
 utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
 {
   utime_t now = g_clock.now();
-  
+
   ::encode(ticket, bl);
-  
-  bufferlist info, enc_info;
-  ::encode(now, info);
-  ::encode(nonce, info);
-  session_key.encrypt(info, enc_info);
-  ::encode(enc_info, bl);
+
+  AuthAuthenticate msg;
+  msg.now = now;
+  msg.nonce = nonce;
+  msg.encode_encrypt(session_key, bl);
+
   return now;
 }
 
@@ -269,40 +269,20 @@ utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
  * {timestamp + 1}^session_key
  */
 bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indata,
-			  bufferlist& enc_reply)
+			  bufferlist& reply_bl)
 {
+  AuthTicket ticket;
+  ticket.decode_decrypt(service_secret, indata);
+
+  AuthAuthenticate auth_msg;
+  auth_msg.decode_decrypt(ticket.session_key, indata);
+
   bufferlist enc_ticket, enc_info;
   ::decode(enc_ticket, indata);
   ::decode(enc_info, indata);
 
-  // decrypt ticket
-  AuthTicket ticket;
-  CryptoKey session_key;
-  {
-    bufferlist bl;
-    if (service_secret.decrypt(enc_ticket, bl) < 0)
-      return false;
-    dout(0) << "verify_authenticator: decrypted ticket" << dendl;
-    bufferlist::iterator p = bl.begin();
-    ::decode(ticket, p);
-    ::decode(session_key, p);
-  }
-  
-  // decrypt info with session key
-  utime_t timestamp;
-  string nonce;
-  {
-    bufferlist info;
-    if (session_key.decrypt(enc_info, info) < 0)
-      return false;
-    dout(0) << "verify_authenticator: decrypted session key" << dendl;
-    bufferlist::iterator p = info.begin();
-    ::decode(timestamp, p);
-    ::decode(nonce, p);
-  }
-
   // it's authentic if the nonces match
-  if (nonce != ticket.nonce)
+  if (auth_msg.nonce != ticket.nonce)
     return false;
   dout(0) << "verify_authenticator: nonce ok" << dendl;
   
@@ -310,11 +290,10 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indat
    * Reply authenticator:
    *  {timestamp + 1}^session_key
    */
-  bufferlist reply;
-  timestamp += 1;
-  ::encode(timestamp, reply);
-  if (session_key.encrypt(reply, enc_reply) < 0)
-    return false;
+  AuthAuthenticateReply reply;
+  reply.timestamp = auth_msg.now;
+  reply.timestamp += 1;
+  reply.encode_encrypt(ticket.session_key, reply_bl);
 
   dout(0) << "verify_authenticator: ok" << dendl;
 
