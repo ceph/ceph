@@ -3290,6 +3290,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 
 int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat, int mask)
 {
+  dout(3) << "lstat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout << "lstat" << std::endl;
   tout << relpath << std::endl;
@@ -3302,6 +3303,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat,
   if (r < 0)
     return r;
   fill_stat(in, stbuf, dirstat);
+  dout(3) << "lstat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat, nest_info_t *rstat) 
@@ -3348,6 +3350,7 @@ int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *d
 
 int Client::lstat_precise(const char *relpath, struct stat_precise *stbuf,
 			  frag_info_t *dirstat, int mask) {
+  dout(3) << "lstat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout << "lstat_precise" << std::endl;
   tout << relpath << std::endl;
@@ -3357,9 +3360,12 @@ int Client::lstat_precise(const char *relpath, struct stat_precise *stbuf,
   if (r < 0)
     return r;
   r = _getattr(in, mask);
-  if (r < 0)
+  if (r < 0) {
+    dout(3) << "lstat exit on error!" << dendl;
     return r;
+  }
   fill_stat_precise(in, stbuf, dirstat);
+  dout(3) << "lstat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
@@ -3779,6 +3785,7 @@ void Client::seekdir(DIR *dirp, loff_t offset)
 
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
+  dout(3) << "open enter(" << relpath << ", " << flags << ") = " << dendl;
   Mutex::Locker lock(client_lock);
   tout << "open" << std::endl;
   tout << relpath << std::endl;
@@ -3819,7 +3826,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
   
  out:
   tout << r << std::endl;
-  dout(3) << "open(" << path << ", " << flags << ") = " << r << dendl;
+  dout(3) << "open exit(" << path << ", " << flags << ") = " << r << dendl;
   return r;
 }
 
@@ -3885,15 +3892,16 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
 int Client::close(int fd)
 {
+  dout(3) << "close enter(" << fd << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout << "close" << std::endl;
   tout << fd << std::endl;
 
-  dout(3) << "close(" << fd << ")" << dendl;
   assert(fd_map.count(fd));
   Fh *fh = fd_map[fd];
   _release(fh);
   fd_map.erase(fd);
+  dout(3) << "close exit(" << fd << ")" << dendl;
   return 0;
 }
 
