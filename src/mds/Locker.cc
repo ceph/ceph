@@ -1829,6 +1829,18 @@ void Locker::kick_cap_releases(MDRequest *mdr)
   }
 }
 
+
+static __u64 calc_bounding(__u64 t)
+{
+  t |= t >> 1;
+  t |= t >> 2;
+  t |= t >> 4;
+  t |= t >> 8;
+  t |= t >> 16;
+  t |= t >> 32;
+  return t + 1;
+}
+
 /*
  * update inode based on cap flush|flushsnap|wanted.
  *  adjust max_size, if needed.
@@ -1859,7 +1871,8 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	change_max = true;
 	new_max = ROUND_UP_TO((m->get_max_size()+1) << 1, latest->get_layout_size_increment());
       } else {
-	new_max = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+	//new_max = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+	new_max = calc_bounding(size * 2);
 	if (new_max > old_max)
 	  change_max = true;
 	else
