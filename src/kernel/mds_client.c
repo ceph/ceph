@@ -2778,7 +2778,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	void *p = msg->front.iov_base;
 	void *end = p + msg->front.iov_len;
 	struct ceph_mdsmap *newmap, *oldmap;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	int err = -EINVAL;
 
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);

@@ -35,7 +35,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 {
 	struct ceph_monmap *m = 0;
 	int i, err = -EINVAL;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	u32 epoch, num_mon;
 	u16 version;
 

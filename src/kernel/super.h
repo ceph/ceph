@@ -52,7 +52,7 @@ struct ceph_mount_args {
 	int flags;
 	int mount_timeout;
 	int caps_wanted_delay_min, caps_wanted_delay_max;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	struct ceph_entity_addr my_addr;
 	int wsize;
 	int rsize;            /* max readahead */
@@ -116,7 +116,7 @@ struct ceph_client {
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 
 	struct super_block *sb;
 
@@ -770,22 +770,22 @@ extern struct kmem_cache *ceph_file_cachep;
 
 extern const char *ceph_msg_type_name(int type);
 
-static inline __le64 __ceph_fsid_minor(ceph_fsid_t *fsid)
+static inline __le64 __ceph_fsid_minor(struct ceph_fsid *fsid)
 {
 	return get_unaligned_le64(&fsid->fsid[8]);
 }
 
-static inline __le64 __ceph_fsid_major(ceph_fsid_t *fsid)
+static inline __le64 __ceph_fsid_major(struct ceph_fsid *fsid)
 {
 	return get_unaligned_le64(&fsid->fsid[0]);
 }
 
-static inline void __ceph_fsid_set_minor(ceph_fsid_t *fsid, __le64 val)
+static inline void __ceph_fsid_set_minor(struct ceph_fsid *fsid, __le64 val)
 {
 	put_unaligned_le64(val, &fsid->fsid[8]);
 }
 
-static inline void __ceph_fsid_set_major(ceph_fsid_t *fsid, __le64 val)
+static inline void __ceph_fsid_set_major(struct ceph_fsid *fsid, __le64 val)
 {
 	put_unaligned_le64(val, &fsid->fsid[0]);
 }

@@ -519,7 +519,7 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 {
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = NULL;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	u32 epoch = 0;
 	struct ceph_timespec modified;
 	u32 len, pool;

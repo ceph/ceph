@@ -11,10 +11,12 @@
 /*
  * fs id
  */
-typedef struct { unsigned char fsid[16]; } ceph_fsid_t;
+struct ceph_fsid {
+	unsigned char fsid[16];
+};
 
-static inline int ceph_fsid_compare(const ceph_fsid_t *a,
-				    const ceph_fsid_t *b)
+static inline int ceph_fsid_compare(const struct ceph_fsid *a,
+				    const struct ceph_fsid *b)
 {
 	return memcmp(a, b, sizeof(*a));
 }
