@@ -14,23 +14,11 @@
 /*
  * Ceph uses the messenger to exchange ceph_msg messages with other
  * hosts in the system.  The messenger provides ordered and reliable
- * delivery.  It tolerates TCP disconnects by reconnecting (with
+ * delivery.  We tolerate TCP disconnects by reconnecting (with
  * exponential backoff) in the case of a fault (disconnection, bad
  * crc, protocol error).  Acks allow sent messages to be discarded by
  * the sender.
- *
- * The network topology is flat: there is no "client" or "server," and
- * any node can initiate a connection (i.e., send messages) to any
- * other node.  There is a fair bit of complexity to handle the
- * "connection race" case where two nodes are simultaneously
- * connecting to each other so that the end result is a single
- * session.
- *
- * The messenger can also send messages in "lossy" mode, where there
- * is no error recovery or connect retry... the message is just
- * dropped if something goes wrong.
  */
-
 
 /* static tag bytes (protocol control messages) */
 static char tag_msg = CEPH_MSGR_TAG_MSG;
@@ -313,19 +301,17 @@ void ceph_con_put(struct ceph_connection *con)
 
 /*
  * initialize a new connection.
- *
- * NOTE: assumes struct is initially zeroed!
  */
 void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	dout("con_init %p\n", con);
+	memset(con, 0, sizeof(*con));
 	atomic_set(&con->nref, 1);
 	con->msgr = msgr;
 	spin_lock_init(&con->out_queue_lock);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, con_work);
-	con->private = NULL;
 }
 
 

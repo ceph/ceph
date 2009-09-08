@@ -280,7 +280,7 @@ static void __request_mount(struct ceph_mon_client *monc)
 int ceph_monc_request_mount(struct ceph_mon_client *monc)
 {
 	if (!monc->con) {
-		monc->con = kzalloc(sizeof(*monc->con), GFP_KERNEL);
+		monc->con = kmalloc(sizeof(*monc->con), GFP_KERNEL);
 		if (!monc->con)
 			return -ENOMEM;
 		ceph_con_init(monc->client->msgr, monc->con);
