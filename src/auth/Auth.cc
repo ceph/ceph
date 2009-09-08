@@ -8,58 +8,91 @@
 /*
  * Authentication
  */
-
-static void encode_tgt(PrincipalTicket& ticket, CryptoKey& key, bufferlist& bl)
+#if 0
+static void encode_tgt(AuthTicket& ticket, CryptoKey& key, bufferlist& bl)
 {
   ::encode(ticket, bl);
   ::encode(key, bl);
 }
 
-static void decode_tgt(PrincipalTicket& ticket, CryptoKey& key, bufferlist& bl)
+static void decode_tgt(AuthTicket& ticket, CryptoKey& key, bufferlist& bl)
 {
   bufferlist::iterator iter = bl.begin();
   ::decode(ticket, iter);
   ::decode(key, iter);
 }
-
+#endif
 
 /*
  * PRINCIPAL: request authentication
  *
  * principal_name, principal_addr.  "please authenticate me."
  */
-void build_get_tgt_request(EntityName& principal_name, entity_addr_t principal_addr,
+void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
+                                uint32_t keys,
+                                bool encrypt,
+                                CryptoKey& session_key,
+                                AuthBlob& ticket_info,
 				bufferlist& request)
 {
-  ::encode(principal_name, request);
-  ::encode(principal_addr, request);
+  AuthServiceTicketRequest ticket_req;
+
+  ticket_req.addr =  principal_addr;
+  ticket_req.timestamp = g_clock.now();
+  ticket_req.keys = keys;
+  ::encode(ticket_req, request);
+  ::encode(ticket_info, request);
 }
 
 /*
  * AUTH SERVER: authenticate
  *
- * Authenticate principal, respond with TGT
+ * Authenticate principal, respond with AuthServiceTicketInfo
  *
  * {session key, validity, nonce}^principal_secret
  * {principal_ticket, session key}^service_secret  ... "enc_ticket"
  */
-bool build_get_tgt_reply(PrincipalTicket& principal_ticket,
+bool build_authenticate_reply(AuthTicket& ticket,
                      CryptoKey& session_key,
                      CryptoKey& principal_secret,
                      CryptoKey& service_secret,
                      bufferlist& reply)
 {
-  AuthMsg_A msg_a;
+  AuthServiceTicket msg_a;
 
   msg_a.session_key = session_key;
   if (msg_a.encode_encrypt(principal_secret, reply) < 0)
     return false;
 
-  TGT tgt;
+  AuthServiceTicketInfo tgt;
   tgt.session_key = session_key;
-  tgt.ticket = principal_ticket;
+  tgt.ticket = ticket;
   if (tgt.encode_encrypt(service_secret, reply) < 0)
     return false;
+  return true;
+}
+
+bool verify_service_ticket_request(bool encrypted,
+                                   CryptoKey& service_secret,
+                                   CryptoKey& session_key,
+                                   uint32_t& keys,
+                                   bufferlist::iterator& indata)
+{
+  AuthServiceTicketRequest msg;
+
+  if (encrypted) {
+    if (msg.decode_decrypt(session_key, indata) < 0)
+      return false;
+
+    dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << dendl;
+
+    AuthServiceTicketInfo ticket_info;
+    if (ticket_info.decode_decrypt(service_secret, indata) < 0)
+      return false;
+  }
+
+  /* FIXME: validate that request makes sense */
+
   return true;
 }
 
@@ -67,16 +100,16 @@ bool build_get_tgt_reply(PrincipalTicket& principal_ticket,
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
  */
-bool ServiceTicket::verify_service_ticket_reply(CryptoKey& principal_secret,
+bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 					      bufferlist::iterator& indata)
 {
   dout(0) << "1" << dendl;
 
-  AuthMsg_A msg_a;
-  if (msg_a.decode_decrypt(principal_secret, indata) < 0)
+  AuthServiceTicket msg_a;
+  if (msg_a.decode_decrypt(secret, indata) < 0)
     return false;
 
-  ::decode(enc_ticket, indata);
+  ::decode(ticket, indata);
 
   if (!indata.end())
     return false;
@@ -86,12 +119,13 @@ bool ServiceTicket::verify_service_ticket_reply(CryptoKey& principal_secret,
   return true;
 }
 
+#if 0
 /*
  * PRINCIPAL: build request to retrieve a service ticket
  *
- * TGT, D = {principal_addr, timestamp}^principal/auth session key
+ * AuthServiceTicketInfo, D = {principal_addr, timestamp}^principal/auth session key
  */
-bool ServiceTicket::get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl)
+bool AuthTicketHandler::get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl)
 {
   AuthMsg_D msg;
   msg.timestamp = g_clock.now();
@@ -114,7 +148,7 @@ bool verify_get_session_keys_request(CryptoKey& service_secret,
 
   dout(0) << "decoded now=" << msg.timestamp << " addr=" << msg.principal_addr << dendl;
 
-  TGT tgt;
+  AuthServiceTicketInfo tgt;
   if (tgt.decode_decrypt(service_secret, indata) < 0)
     return false;
 
@@ -122,8 +156,8 @@ bool verify_get_session_keys_request(CryptoKey& service_secret,
 
   return true;
 }
-#if 0
-bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal_secret,
+
+bool build_get_tgt_reply(AuthTicket& principal_ticket, CryptoKey& principal_secret,
 			      CryptoKey& session_key, CryptoKey& service_secret,
 			      bufferlist& reply)
 {
@@ -140,7 +174,7 @@ bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal
   ::encode(enc_info, reply);
 
   /*
-     Build TGT
+     Build AuthServiceTicketInfo
    */
   bufferlist ticket, tgt;
   encode_tgt(principal_ticket, session_key, ticket);
@@ -157,6 +191,8 @@ bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal
   return true;
 }
 #endif
+
+#if 0
 /*
  * AUTH SERVER: build ticket for service reply
  *
@@ -164,7 +200,7 @@ bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal
  *        F= {principal/service session key, validity}^principal/auth session key
  *
  */
-bool build_ticket_reply(ServiceTicket service_ticket,
+bool build_ticket_reply(AuthTicketHandler service_ticket,
                         CryptoKey session_key,
                         CryptoKey auth_session_key,
                         CryptoKey& service_secret,
@@ -177,9 +213,8 @@ bool build_ticket_reply(ServiceTicket service_ticket,
     return false;
 
 
-   AuthMsg_F f;
+   AuthServiceTicket f;
    f.session_key = session_key;
-   f.validity = 0; /* FIXME */
    if (f.encode_encrypt(auth_session_key, reply) < 0)
      return false;
   
@@ -189,7 +224,7 @@ bool build_ticket_reply(ServiceTicket service_ticket,
 /*
  * AUTH SERVER: verify a request to retrieve a service ticket, build response
  *
- * TGT, {principal_addr, timestamp}^principal/auth session key
+ * AuthServiceTicketInfo, {principal_addr, timestamp}^principal/auth session key
  */
 bool build_get_session_keys_response(ServiceTicket& ticket, CryptoKey& service_secret,
                                      bufferlist::iterator& indata, bufferlist& out)
@@ -198,17 +233,17 @@ bool build_get_session_keys_response(ServiceTicket& ticket, CryptoKey& service_s
 
   return true;
 }
-
+#endif
 /*
  * PRINCIPAL: build authenticator to access the service.
  *
  * enc_ticket, {timestamp, nonce}^session_key
  */
-utime_t ServiceTicket::build_authenticator(bufferlist& bl)
+utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
 {
   utime_t now = g_clock.now();
   
-  ::encode(enc_ticket, bl);
+  ::encode(ticket, bl);
   
   bufferlist info, enc_info;
   ::encode(now, info);
@@ -231,7 +266,7 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indat
   ::decode(enc_info, indata);
 
   // decrypt ticket
-  PrincipalTicket ticket;
+  AuthTicket ticket;
   CryptoKey session_key;
   {
     bufferlist bl;
@@ -279,7 +314,7 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indat
 /*
  * PRINCIPAL: verify reply is authentic
  */
-bool ServiceTicket::verify_reply_authenticator(utime_t then, bufferlist& enc_reply)
+bool AuthTicketHandler::verify_reply_authenticator(utime_t then, bufferlist& enc_reply)
 {
   bufferlist reply;
   if (session_key.decrypt(enc_reply, reply) < 0)

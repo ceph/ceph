@@ -32,7 +32,7 @@
 
 class CephAuthServer {
   /* FIXME: this is all temporary */
-  PrincipalTicket principal_ticket;
+  AuthTicket ticket;
   CryptoKey client_secret;
   CryptoKey osd_secret;
   CryptoKey auth_session_key;
@@ -162,34 +162,31 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
       EntityName name; /* FIXME should take it from the request */
       entity_addr_t addr;
-      PrincipalTicket ticket;
+      AuthTicket ticket;
       CryptoKey principal_secret;
       CryptoKey session_key;
       CryptoKey service_secret;
 
       ticket.expires = g_clock.now();
 
+      uint32_t keys;
+
+     if (!verify_service_ticket_request(false, service_secret,
+                                     session_key, keys, indata)) {
+        ret = -EPERM;
+        break;
+      }
+
       auth_server.get_client_secret(principal_secret);
       auth_server.get_auth_session_key(session_key);
       auth_server.get_service_secret(service_secret);
 
+
       build_cephx_response_header(request_type, 0, result_bl);
-      if (!build_get_tgt_reply(ticket, session_key, principal_secret, service_secret, result_bl)) {
+      if (!build_authenticate_reply(ticket, session_key, principal_secret, service_secret, result_bl)) {
         ret = -EIO;
+        break;
       }
-#if 0
-      char buf[1024];
-      const char *s = result_bl.c_str();
-      int pos = 0;
-      for (int i=0; i<result_bl.length(); i++) {
-        pos += snprintf(&buf[pos], 1024-pos, "%0.2x ", (int)(unsigned char)s[i]);
-        if (i && !(i%8))
-          pos += snprintf(&buf[pos], 1024-pos, " ");
-        if (i && !(i%16))
-          pos += snprintf(&buf[pos], 1024-pos, "\n");
-      }
-      dout(0) << "result_buf=" << buf << dendl;
-#endif
     }
     break;
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
@@ -206,19 +203,20 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       auth_server.get_service_secret(service_secret);
       auth_server.get_test_session_key(session_key);
 
-      if (!verify_get_session_keys_request(service_secret,
+      if (!verify_service_ticket_request(true, service_secret,
                                      auth_session_key, keys, indata)) {
         ret = -EPERM;
+        break;
       }
 
-      ServiceTicket service_ticket;
+      AuthTicket service_ticket;
       CryptoKey osd_secret;
       auth_server.get_osd_secret(osd_secret);
 
       auth_server.get_osd_secret(osd_secret);
       build_cephx_response_header(request_type, ret, result_bl);
 
-      build_ticket_reply(service_ticket, session_key, auth_session_key, osd_secret, result_bl);
+      build_authenticate_reply(service_ticket, session_key, auth_session_key, osd_secret, result_bl);
     }
     break;
   default:

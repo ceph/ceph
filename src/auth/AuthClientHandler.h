@@ -38,7 +38,7 @@ class AuthClientHandler {
 
   /* ceph-x protocol */
   utime_t auth_ts;
-  ServiceTicket auth_ticket;
+  AuthTicketHandler ticket_handler;
 
   CryptoKey secret;
 

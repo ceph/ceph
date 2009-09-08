@@ -111,6 +111,7 @@ WRITE_CLASS_ENCODER(CephXEnvRequest2);
 
   1. Obtaining principal/auth session key
 
+  (Authenticate Request)
   p->a : principal, principal_addr.  authenticate me!
 
  ...authenticator does lookup in database...
@@ -118,7 +119,9 @@ WRITE_CLASS_ENCODER(CephXEnvRequest2);
   a->p : A= {principal/auth session key, validity}^principal_secret (*)
          B= {principal ticket, validity, principal/auth session key}^authsecret
 
-  B is also known as TGT
+  
+  [principal/auth session key, validity] = service ticket
+  [principal ticket, validity, principal/auth session key] = service ticket info
 
   (*) annotation: ^ signifies 'encrypted by'
 
@@ -133,6 +136,8 @@ WRITE_CLASS_ENCODER(CephXEnvRequest2);
   a->p : E= {service ticket}^svcsecret
          F= {principal/service session key, validity}^principal/auth session key
 
+  principal_addr, timestamp = authenticator
+
   service ticket = principal name, client network address, validity, principal/service session key
 
   Note that steps 1 and 2 are pretty much the same thing; contacting the
@@ -146,19 +151,22 @@ WRITE_CLASS_ENCODER(CephXEnvRequest2);
   p->s : E + {principal_addr, timestamp}^principal/service session key
   s->p : {timestamp+1}^principal/service/session key
 
+  timestamp+1 = reply authenticator
+
   Now, the principal is fully authenticated with the service. So, logically we
   have 2 main actions here. The first one would be to obtain a session key to
   the service (steps 1 and 2), and the second one would be to authenticate with
   the service, using that ticket.
 */
 
-#define CEPHX_PRINCIPAL_MON             0x0001
-#define CEPHX_PRINCIPAL_OSD             0x0002
-#define CEPHX_PRINCIPAL_MDS             0x0004
+#define CEPHX_PRINCIPAL_AUTH            0x0001
+#define CEPHX_PRINCIPAL_MON             0x0002
+#define CEPHX_PRINCIPAL_OSD             0x0004
+#define CEPHX_PRINCIPAL_MDS             0x0008
 
 #define CEPHX_PRINCIPAL_TYPE_MASK       0x00FF
 
-#define CEPHX_GET_AUTH_SESSION_KEY      0x0100    /* Get TGT */
+#define CEPHX_GET_AUTH_SESSION_KEY      0x0100
 #define CEPHX_GET_PRINCIPAL_SESSION_KEY 0x0200
 #define CEPHX_OPEN_SESSION              0x0300
 

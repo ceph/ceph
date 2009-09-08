@@ -35,11 +35,11 @@ WRITE_CLASS_ENCODER(EntityName);
 
 
 /*
- * The principal ticket (if properly validated) authorizes the principal use
+ * The ticket (if properly validated) authorizes the principal use
  * services as described by 'caps' during the specified validity
  * period.
  */
-struct PrincipalTicket {
+struct AuthTicket {
   entity_addr_t addr;
   utime_t created, renew_after, expires;
   string nonce;
@@ -67,16 +67,41 @@ struct PrincipalTicket {
     ::decode(flags, bl);
   }
 };
-WRITE_CLASS_ENCODER(PrincipalTicket)
+WRITE_CLASS_ENCODER(AuthTicket)
 
 /*
  * Authentication
  */
-extern void build_get_tgt_request(EntityName& principal_name, entity_addr_t principal_addr,
+extern void build_authenticate_request(EntityName& principal_name, entity_addr_t principal_addr,
 				       bufferlist& request);
-extern bool build_get_tgt_reply(PrincipalTicket& principal_ticket, CryptoKey& principal_secret,
+extern bool build_authenticate_reply(AuthTicket& principal_ticket, CryptoKey& principal_secret,
 				     CryptoKey& session_key, CryptoKey& service_secret,
 				     bufferlist& reply);
+
+class AuthenticateRequest {
+  EntityName name;
+  entity_addr_t addr;
+public:
+  AuthenticateRequest(EntityName& principal_name, entity_addr_t principal_addr) : name(principal_name), addr(principal_addr) {}
+
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+    ::encode(addr, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+    ::decode(addr, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthenticateRequest)
+
+class AuthenticateReply {
+
+  bool verify() {
+    /* FIXME */
+    return false;
+  };
+};
 
 
 struct AuthBlob {
@@ -96,14 +121,17 @@ WRITE_CLASS_ENCODER(AuthBlob);
  * ServiceTicket gives a principal access to some service
  * (monitor, osd, mds).
  */
-struct ServiceTicket {
+struct AuthTicketHandler {
   CryptoKey session_key;
-  AuthBlob enc_ticket;        // opaque to us
+  AuthBlob ticket;        // opaque to us
   string nonce;
   utime_t renew_after, expires;
   bool has_key_flag;
 
-  ServiceTicket() : has_key_flag(false) {}
+  AuthTicketHandler() : has_key_flag(false) {}
+
+  bool build_authenticate_request();
+  bool verify_authenticate_response();
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
@@ -117,6 +145,7 @@ struct ServiceTicket {
   bool verify_reply_authenticator(utime_t then, bufferlist& enc_reply);
 
   bool has_key() { return has_key_flag; }
+#if 0
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
@@ -140,8 +169,9 @@ struct ServiceTicket {
     ::decode(f, bl);
     has_key_flag = f;
   }
+#endif
 };
-WRITE_CLASS_ENCODER(ServiceTicket)
+//WRITE_CLASS_ENCODER(ServiceTicket)
 
 struct AuthEnc {
   virtual void encode(bufferlist& bl) const = 0;
@@ -173,10 +203,28 @@ struct AuthEnc {
   }
 };
 
+struct AuthServiceTicketRequest : public AuthEnc {
+  entity_addr_t addr;
+  utime_t timestamp;
+  uint32_t keys;
+
+  void encode(bufferlist& bl) const {
+    ::encode(addr, bl);
+    ::encode(timestamp, bl);
+    ::encode(keys, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(addr, bl);
+    ::decode(timestamp, bl);
+    ::decode(keys, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthServiceTicketRequest);
+
 /* A */
-struct AuthMsg_A : public AuthEnc {
-  utime_t validity;
+struct AuthServiceTicket : public AuthEnc {
   CryptoKey session_key;
+  utime_t validity;
 
   void encode(bufferlist& bl) const {
     ::encode(session_key, bl);
@@ -187,10 +235,11 @@ struct AuthMsg_A : public AuthEnc {
     ::decode(validity, bl);
   }
 };
-WRITE_CLASS_ENCODER(AuthMsg_A);
+WRITE_CLASS_ENCODER(AuthServiceTicket);
+
 /* B */
-struct TGT : public AuthEnc {
-  PrincipalTicket ticket;
+struct AuthServiceTicketInfo : public AuthEnc {
+  AuthTicket ticket;
   CryptoKey session_key;
 
   void encode(bufferlist& bl) const {
@@ -206,8 +255,9 @@ struct TGT : public AuthEnc {
     ::decode(session_key, bl);
   }
 };
-WRITE_CLASS_ENCODER(TGT);
+WRITE_CLASS_ENCODER(AuthServiceTicketInfo);
 
+#if 0
 /* D */
 struct AuthMsg_D : public AuthEnc {
   entity_addr_t principal_addr;
@@ -228,7 +278,6 @@ struct AuthMsg_D : public AuthEnc {
 WRITE_CLASS_ENCODER(AuthMsg_D);
 
 
-
 /* E */
 struct AuthMsg_E : public AuthEnc {
   ServiceTicket ticket;
@@ -241,27 +290,17 @@ struct AuthMsg_E : public AuthEnc {
   }
 };
 WRITE_CLASS_ENCODER(AuthMsg_E);
+#endif
 
-/* F */
-struct AuthMsg_F : public AuthEnc {
-  CryptoKey session_key;
-  utime_t validity;
 
-  void encode(bufferlist& bl) const {
-    ::encode(session_key, bl);
-    ::encode(validity, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(session_key, bl);
-    ::decode(validity, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthMsg_F);
+extern void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
+                                uint32_t keys,
+                                bool encrypt,
+                                CryptoKey& session_key,
+                                AuthBlob& ticket_info,
+				bufferlist& request);
 
-extern bool verify_get_session_keys_request(CryptoKey& service_secret,
-                                     CryptoKey& session_key, uint32_t& keys, bufferlist::iterator& indata);
-
-extern bool build_ticket_reply(ServiceTicket service_ticket,
+extern bool build_authenticate_reply(AuthTicketHandler ticket_handler,
                         CryptoKey session_key,
                         CryptoKey auth_session_key,
                         CryptoKey& service_secret,
@@ -269,6 +308,13 @@ extern bool build_ticket_reply(ServiceTicket service_ticket,
 /*
  * Verify authenticator and generate reply authenticator
  */
+
+extern bool verify_service_ticket_request(bool encrypted,
+                                   CryptoKey& service_secret,
+                                   CryptoKey& session_key,
+                                   uint32_t& keys,
+                                   bufferlist::iterator& indata);
+
 extern bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& bl,
 				 bufferlist& enc_reply);
 
