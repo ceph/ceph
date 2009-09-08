@@ -184,6 +184,8 @@ bool MonClient::ms_dispatch(Message *m)
     return false;
   }
 
+  dout(0) << "about to call op_handler=" << (void *)op_handler << dendl;
+
   op_handler->handle_response(m);
 
   delete m;
@@ -231,6 +233,7 @@ int MonClient::authorize(uint32_t want_keys, double mount_timeout)
     ret =  h.get_result();
     dout(0) << "auth ret=" << ret << dendl;
   } while (ret == -EAGAIN);
+  cur_auth_handler = NULL;
 
   return ret;
 }
@@ -359,6 +362,8 @@ Message *MonClient::MonClientAuthHandler::build_request()
 
 void MonClient::MonClientAuthHandler::handle_response(Message *response)
 {
+  dout(0) << "inside op_handler=" << (void *)this << dendl;
+
   MAuthReply* m = (MAuthReply *)response;
   Mutex::Locker lock(op_lock);
 

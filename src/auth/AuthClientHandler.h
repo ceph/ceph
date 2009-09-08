@@ -25,6 +25,7 @@ class AuthClientHandler {
   uint32_t have_keys;
   int request_state;
   int response_state;
+
   int status;
 
   int cephx_request_state;
@@ -56,7 +57,7 @@ public:
   int generate_request(bufferlist& bl);
   int handle_response(int ret, bufferlist& bl);
 
-  bool request_pending() { return (request_state != response_state) || (cephx_request_state != cephx_response_state); }
+  bool request_pending();
 };
 
 

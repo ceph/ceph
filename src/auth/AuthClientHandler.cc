@@ -180,6 +180,7 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
     {
     }
+    ret = 0;
     break;
 
   case CEPHX_OPEN_SESSION:
@@ -193,4 +194,9 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
   }
 
   return ret;
+}
+
+bool AuthClientHandler::request_pending() {
+  dout(0) << "request_pending(): cephx_request_state=" << cephx_request_state << " cephx_response_state=" << cephx_response_state << dendl;
+  return (request_state != response_state) || (cephx_request_state != cephx_response_state);
 }

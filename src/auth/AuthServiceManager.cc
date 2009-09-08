@@ -217,6 +217,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       build_cephx_response_header(request_type, ret, result_bl);
 
       build_authenticate_reply(service_ticket, session_key, auth_session_key, osd_secret, result_bl);
+      ret = 0;
     }
     break;
   default:
