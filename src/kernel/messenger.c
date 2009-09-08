@@ -1525,7 +1525,7 @@ out:
 
 
 /*
- * create a new messenger instance, creates listening socket
+ * create a new messenger instance
  */
 struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 {
@@ -1546,20 +1546,17 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	}
 	kmap(msgr->zero_page);
 
-	/* pick listening address */
 	if (myaddr) {
 		msgr->inst.addr = *myaddr;
 	} else {
-		dout("create ip not specified, initially INADDR_ANY\n");
 		msgr->inst.addr.ipaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-		msgr->inst.addr.ipaddr.sin_port = htons(0);  /* any port */
-		get_random_bytes(&msgr->inst.addr.nonce,
-				 sizeof(msgr->inst.addr.nonce));
+		msgr->inst.addr.ipaddr.sin_port = htons(0);
 	}
 	msgr->inst.addr.ipaddr.sin_family = AF_INET;
 
-	if (myaddr)
-		msgr->inst.addr.ipaddr.sin_addr = myaddr->ipaddr.sin_addr;
+	/* select a random nonce */
+	get_random_bytes(&msgr->inst.addr.nonce,
+			 sizeof(msgr->inst.addr.nonce));
 
 	dout("messenger_create %p\n", msgr);
 	return msgr;
