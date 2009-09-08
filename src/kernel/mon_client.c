@@ -453,7 +453,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		return -ENOMEM;
 	}
 	monc->num_statfs_requests++;
-	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, 1);
 	mutex_unlock(&monc->mutex);
 
 	/* send request and wait */
@@ -464,7 +463,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	mutex_lock(&monc->mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
-	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, -1);
 	mutex_unlock(&monc->mutex);
 
 	if (!err)
