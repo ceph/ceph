@@ -25,9 +25,10 @@ v0.14
 /- uclient bugs
 /- msgr: unidirectional option (client->mon, client->mds, client->osd)
 /- mon subscriptions to get osd, mds map updates.  single mon connection.
-- many libceph/uclient fixes (version api, readahead, hadoop client improvements)
-- deb packages fixed up
+/- many libceph/uclient fixes (version api, readahead, hadoop client improvements)
+/- deb packages fixed up
 
+v0.15
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
 - radosgw
