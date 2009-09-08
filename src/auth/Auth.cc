@@ -29,7 +29,7 @@ void build_authenticate_request(EntityName& principal_name, entity_addr_t& princ
   if (!encrypt) {
     ::encode(ticket_req, request);
   } else {
-    ticket_req.encode_encrypt(session_key, request);
+    encode_encrypt(ticket_req, session_key, request);
   }
   ::encode(ticket_info, request);
 }
@@ -51,13 +51,13 @@ bool build_authenticate_reply(AuthTicket& ticket,
   AuthServiceTicket msg_a;
 
   msg_a.session_key = session_key;
-  if (msg_a.encode_encrypt(principal_secret, reply) < 0)
+  if (encode_encrypt(msg_a, principal_secret, reply) < 0)
     return false;
 
   AuthServiceTicketInfo ticket_info;
   ticket_info.session_key = session_key;
   ticket_info.ticket = ticket;
-  if (ticket_info.encode_encrypt(service_secret, reply) < 0)
+  if (encode_encrypt(ticket_info, service_secret, reply) < 0)
     return false;
   return true;
 }
@@ -72,13 +72,13 @@ bool verify_service_ticket_request(bool encrypted,
 
   if (encrypted) {
     dout(0) << "verify encrypted service ticket request" << dendl;
-    if (msg.decode_decrypt(session_key, indata) < 0)
+    if (decode_decrypt(msg, session_key, indata) < 0)
       return false;
 
     dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << " (was encrypted)" << dendl;
 
     AuthServiceTicketInfo ticket_info;
-    if (ticket_info.decode_decrypt(service_secret, indata) < 0)
+    if (decode_decrypt(ticket_info, service_secret, indata) < 0)
       return false;
   } else {
     ::decode(msg, indata);
@@ -102,7 +102,7 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 					      bufferlist::iterator& indata)
 {
   AuthServiceTicket msg_a;
-  if (msg_a.decode_decrypt(secret, indata) < 0)
+  if (decode_decrypt(msg_a, secret, indata) < 0)
     return false;
 
   ::decode(ticket, indata);
@@ -129,7 +129,7 @@ utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
   AuthAuthenticate msg;
   msg.now = now;
   msg.nonce = nonce;
-  msg.encode_encrypt(session_key, bl);
+  encode_encrypt(msg, session_key, bl);
 
   return now;
 }
@@ -142,18 +142,14 @@ utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
 bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indata,
 			  bufferlist& reply_bl)
 {
-  AuthTicket ticket;
-  ticket.decode_decrypt(service_secret, indata);
+  AuthServiceTicketInfo ticket_info;
+  decode_decrypt(ticket_info, service_secret, indata);
 
   AuthAuthenticate auth_msg;
-  auth_msg.decode_decrypt(ticket.session_key, indata);
-
-  bufferlist enc_ticket, enc_info;
-  ::decode(enc_ticket, indata);
-  ::decode(enc_info, indata);
+  decode_decrypt(auth_msg, ticket_info.session_key, indata);
 
   // it's authentic if the nonces match
-  if (auth_msg.nonce != ticket.nonce)
+  if (auth_msg.nonce != ticket_info.ticket.nonce)
     return false;
   dout(0) << "verify_authenticator: nonce ok" << dendl;
   
@@ -164,7 +160,7 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indat
   AuthAuthenticateReply reply;
   reply.timestamp = auth_msg.now;
   reply.timestamp += 1;
-  reply.encode_encrypt(ticket.session_key, reply_bl);
+  encode_encrypt(reply, ticket_info.session_key, reply_bl);
 
   dout(0) << "verify_authenticator: ok" << dendl;
 
