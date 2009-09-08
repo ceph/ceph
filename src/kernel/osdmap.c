@@ -147,7 +147,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	c = kzalloc(sizeof(*c), GFP_NOFS);
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
-	
+
 	ceph_decode_need(p, end, 4*sizeof(u32), bad);
 	ceph_decode_32(p, magic);
 	if (magic != CRUSH_MAGIC) {
