@@ -1059,8 +1059,8 @@ static int ceph_dir_fsync(struct file *file, struct dentry *dentry,
 		dout("dir_fsync %p wait on tid %llu (until %llu)\n",
 		     inode, req->r_tid, last_tid);
 		if (req->r_timeout) {
-			ret = wait_for_completion_timeout(&req->r_safe_completion,
-							  req->r_timeout);
+			ret = wait_for_completion_timeout(
+				&req->r_safe_completion, req->r_timeout);
 			if (ret > 0)
 				ret = 0;
 			else if (ret == 0)

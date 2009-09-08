@@ -31,7 +31,7 @@
 const char *ceph_file_part(const char *s, int len)
 {
 	const char *e = s + len;
-	
+
 	while (e != s && *(e-1) != '/')
 		e--;
 	return e;
@@ -438,7 +438,7 @@ static int parse_mount_args(struct ceph_client *client,
 		return err;
 
 	/* build initial monmap */
-	client->monc.monmap = kzalloc(sizeof(*client->monc.monmap) + 
+	client->monc.monmap = kzalloc(sizeof(*client->monc.monmap) +
 			       num_mon*sizeof(client->monc.monmap->mon_inst[0]),
 			       GFP_KERNEL);
 	if (!client->monc.monmap)

@@ -24,8 +24,10 @@
 
 #define _CEPH_STRINGIFY(x) #x
 #define CEPH_STRINGIFY(x) _CEPH_STRINGIFY(x)
-#define CEPH_MAKE_VERSION(x, y, z) CEPH_STRINGIFY(x) "." CEPH_STRINGIFY(y) "." CEPH_STRINGIFY(z)
-#define CEPH_VERSION CEPH_MAKE_VERSION(CEPH_VERSION_MAJOR, CEPH_VERSION_MINOR, CEPH_VERSION_PATCH)
+#define CEPH_MAKE_VERSION(x, y, z) CEPH_STRINGIFY(x) "." CEPH_STRINGIFY(y) \
+	"." CEPH_STRINGIFY(z)
+#define CEPH_VERSION CEPH_MAKE_VERSION(CEPH_VERSION_MAJOR, \
+				       CEPH_VERSION_MINOR, CEPH_VERSION_PATCH)
 
 /*
  * subprotocol versions.  when specific messages types or high-level
@@ -198,7 +200,7 @@ struct ceph_file_layout {
 #define ceph_file_layout_pg_preferred(l) \
 	((__s32)le32_to_cpu((l).fl_pg_preferred))
 #define ceph_file_layout_pg_pool(l) \
-        ((__s32)le32_to_cpu((l).fl_pg_pool))
+	((__s32)le32_to_cpu((l).fl_pg_pool))
 
 #define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
 					  le32_to_cpu((l).fl_stripe_count))
@@ -341,7 +343,7 @@ struct ceph_mon_subscribe_item {
 #define CEPH_MDS_STATE_BOOT        -4  /* up, boot announcement. */
 #define CEPH_MDS_STATE_STANDBY     -5  /* up, idle.  waiting for assignment. */
 #define CEPH_MDS_STATE_CREATING    -6  /* up, creating MDS instance. */
-#define CEPH_MDS_STATE_STARTING    -7  /* up, starting previously stopped mds. */
+#define CEPH_MDS_STATE_STARTING    -7  /* up, starting previously stopped mds */
 #define CEPH_MDS_STATE_STANDBY_REPLAY -8 /* up, tailing active node's journal */
 
 #define CEPH_MDS_STATE_REPLAY       8  /* up, replaying journal. */

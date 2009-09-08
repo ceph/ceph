@@ -290,7 +290,7 @@ static void osd_reset(struct ceph_connection *con)
 {
 	struct ceph_osd *osd = con->private;
 	struct ceph_osd_client *osdc;
-	
+
 	if (!osd)
 		return;
 	dout("osd_reset osd%d\n", osd->o_osd);

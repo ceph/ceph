@@ -412,8 +412,9 @@ void ceph_mdsc_put_request(struct ceph_mds_request *req)
 		if (req->r_dentry)
 			dput(req->r_dentry);
 		if (req->r_old_dentry) {
-			ceph_put_cap_refs(ceph_inode(req->r_old_dentry->d_parent->d_inode),
-					  CEPH_CAP_PIN);
+			ceph_put_cap_refs(
+			     ceph_inode(req->r_old_dentry->d_parent->d_inode),
+			     CEPH_CAP_PIN);
 			dput(req->r_old_dentry);
 		}
 		kfree(req->r_path1);
@@ -582,7 +583,7 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	}
 	mds = cap->session->s_mds;
 	dout("choose_mds %p %llx.%llx mds%d (%scap %p)\n",
-	     inode, ceph_vinop(inode), mds, 
+	     inode, ceph_vinop(inode), mds,
 	     cap == ci->i_auth_cap ? "auth " : "", cap);
 	spin_unlock(&inode->i_lock);
 	return mds;
@@ -807,7 +808,8 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 			pr_info("ceph mds%d caps renewed\n", session->s_mds);
 			wake = 1;
 		} else {
-			pr_info("ceph mds%d caps still stale\n",session->s_mds);
+			pr_info("ceph mds%d caps still stale\n",
+				session->s_mds);
 		}
 	}
 	dout("renewed_caps mds%d ttl now %lu, was %s, now %s\n",
@@ -1573,8 +1575,9 @@ int ceph_mdsc_do_request(struct ceph_mds_client *mdsc,
 	if (req->r_locked_dir)
 		ceph_get_cap_refs(ceph_inode(req->r_locked_dir), CEPH_CAP_PIN);
 	if (req->r_old_dentry)
-		ceph_get_cap_refs(ceph_inode(req->r_old_dentry->d_parent->d_inode),
-				  CEPH_CAP_PIN);
+		ceph_get_cap_refs(
+			ceph_inode(req->r_old_dentry->d_parent->d_inode),
+			CEPH_CAP_PIN);
 
 	/* issue */
 	mutex_lock(&mdsc->mutex);
@@ -1852,7 +1855,7 @@ static void handle_session(struct ceph_mds_session *session,
 	mutex_lock(&mdsc->mutex);
 	/* FIXME: this ttl calculation is generous */
 	session->s_ttl = jiffies + HZ*mdsc->mdsmap->m_session_autoclose;
-	mutex_unlock(&mdsc->mutex);	
+	mutex_unlock(&mdsc->mutex);
 
 	mutex_lock(&session->s_mutex);
 
@@ -2837,7 +2840,7 @@ static struct ceph_connection *con_get(struct ceph_connection *con)
 		     atomic_read(&s->s_ref) - 1, atomic_read(&s->s_ref));
 		return con;
 	}
-	dout("mdsc con_get %p FAIL\n", s);		
+	dout("mdsc con_get %p FAIL\n", s);
 	return NULL;
 }
 
