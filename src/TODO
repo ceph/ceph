@@ -25,8 +25,10 @@ v0.14
 /- uclient bugs
 /- msgr: unidirectional option (client->mon, client->mds, client->osd)
 /- mon subscriptions to get osd, mds map updates.  single mon connection.
+- many libceph/uclient fixes (version api, readahead, hadoop client improvements)
+- deb packages fixed up
 
-- kclient: retry alloc on ENOMEM when reading from connection
+- kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
 - radosgw
 - uclient: fix write vs max_size?
@@ -43,7 +45,6 @@ v0.14
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
-- clientid needs to be u64, and consistent throughout
 - ceph needs to detect monitor session drop
 
 later
