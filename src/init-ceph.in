@@ -204,32 +204,32 @@ for name in $what; do
 		get_conf pre_mount "true" "pre mount command"
 		get_conf btrfs_opt "flushoncommit" "btrfs options"
 		[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
-		[ -n "$pre_mount" ] && do_cmd $pre_mount
+		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
 		do_root_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"
 	    get_conf post_start "" "post start command"
-            [ -n "$pre_start" ] && do_cmd $pre_start
+            [ -n "$pre_start" ] && do_cmd "$pre_start"
 	    do_cmd "$cmd" $runarg
-            [ -n "$post_start" ] && do_cmd $post_start
+            [ -n "$post_start" ] && do_cmd "$post_start"
 	    ;;
 	
 	stop)
 	    get_conf pre_stop "" "pre stop command"
 	    get_conf post_stop "" "post stop command"
-	    [ -n "$pre_stop" ] && do_cmd $pre_stop
+	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
 	    stop_daemon $name c$type $pid_file
-	    [ -n "$post_stop" ] && do_cmd $post_stop
+	    [ -n "$post_stop" ] && do_cmd "$post_stop"
 	    ;;
 
 	forcestop)
 	    get_conf pre_forcestop "" "pre forcestop command"
 	    get_conf post_forcestop "" "post forcestop command"
-	    [ -n "$pre_forcestop" ] && do_cmd $pre_forcestop
+	    [ -n "$pre_forcestop" ] && do_cmd "$pre_forcestop"
 	    stop_daemon $name c$type $pid_file -9
-	    [ -n "$post_forcestop" ] && do_cmd $post_forcestop
+	    [ -n "$post_forcestop" ] && do_cmd "$post_forcestop"
 	    ;;
 	    
 	killall)
