@@ -225,19 +225,34 @@ static int con_close_socket(struct ceph_connection *con)
  * Reset a connection.  Discard all incoming and outgoing messages
  * and clear *_seq state.
  */
+static void ceph_msg_remove(struct ceph_msg *msg)
+{
+	list_del_init(&msg->list_head);
+	ceph_msg_put(msg);
+}
+static void ceph_msg_remove_list(struct list_head *head)
+{
+	while (!list_empty(head)) {
+		struct ceph_msg *msg = list_first_entry(head, struct ceph_msg,
+							list_head);
+		ceph_msg_remove(msg);
+	}
+}
+
 static void reset_connection(struct ceph_connection *con)
 {
 	/* reset connection, out_queue, msg_ and connect_seq */
 	/* discard existing out_queue and msg_seq */
-	spin_lock(&con->out_queue_lock);
-	ceph_msg_put_list(&con->out_queue);
-	ceph_msg_put_list(&con->out_sent);
+	mutex_lock(&con->out_mutex);
+	ceph_msg_remove_list(&con->out_queue);
+	ceph_msg_remove_list(&con->out_sent);
 
 	con->connect_seq = 0;
 	con->out_seq = 0;
+	con->out_qlen = 0;
 	con->out_msg = NULL;
 	con->in_seq = 0;
-	spin_unlock(&con->out_queue_lock);
+	mutex_unlock(&con->out_mutex);
 }
 
 /*
@@ -308,7 +323,7 @@ void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con)
 	memset(con, 0, sizeof(*con));
 	atomic_set(&con->nref, 1);
 	con->msgr = msgr;
-	spin_lock_init(&con->out_queue_lock);
+	mutex_init(&con->out_mutex);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, con_work);
@@ -341,6 +356,7 @@ static void prepare_write_message_footer(struct ceph_connection *con, int v)
 	struct ceph_msg *m = con->out_msg;
 
 	dout("prepare_write_message_footer %p\n", con);
+	con->out_kvec_is_msg = true;
 	con->out_kvec[v].iov_base = &m->footer;
 	con->out_kvec[v].iov_len = sizeof(m->footer);
 	con->out_kvec_bytes += sizeof(m->footer);
@@ -358,6 +374,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	int v = 0;
 
 	con->out_kvec_bytes = 0;
+	con->out_kvec_is_msg = true;
 
 	/* Sneak an ack in there first?  If we can get it into the same
 	 * TCP packet that's a good thing. */
@@ -377,8 +394,13 @@ static void prepare_write_message(struct ceph_connection *con)
 	list_move_tail(&m->list_head, &con->out_sent);
 	con->out_msg = m;   /* we don't bother taking a reference here. */
 
+	BUG_ON(!con->out_qlen);
+	con->out_qlen--;
+
+	m->hdr.seq = cpu_to_le64(++con->out_seq);
+
 	dout("prepare_write_message %p seq %lld type %d len %d+%d+%d %d pgs\n",
-	     m, le64_to_cpu(m->hdr.seq), le16_to_cpu(m->hdr.type),
+	     m, con->out_seq, le16_to_cpu(m->hdr.type),
 	     le32_to_cpu(m->hdr.front_len), le32_to_cpu(m->hdr.middle_len),
 	     le32_to_cpu(m->hdr.data_len),
 	     m->nr_pages);
@@ -401,7 +423,7 @@ static void prepare_write_message(struct ceph_connection *con)
 	con->out_msg->hdr.crc =
 		cpu_to_le32(crc32c(0, (void *)&m->hdr,
 				      sizeof(m->hdr) - sizeof(m->hdr.crc)));
-	con->out_msg->footer.flags = 0;
+	con->out_msg->footer.flags = CEPH_MSG_FOOTER_COMPLETE;
 	con->out_msg->footer.front_crc =
 		cpu_to_le32(crc32c(0, m->front.iov_base, m->front.iov_len));
 	if (m->middle)
@@ -555,6 +577,7 @@ static int write_partial_kvec(struct ceph_connection *con)
 		}
 	}
 	con->out_kvec_left = 0;
+	con->out_kvec_is_msg = false;
 	ret = 1;
 out:
 	dout("write_partial_kvec %p %d left in %d kvecs ret = %d\n", con,
@@ -590,7 +613,6 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 		 * to map the page.  if our pages[] has been revoked, use the
 		 * zero page.
 		 */
-		mutex_lock(&msg->page_mutex);
 		if (msg->pages) {
 			page = msg->pages[con->out_msg_pos.page];
 			if (crc)
@@ -620,7 +642,6 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 		if (crc && msg->pages)
 			kunmap(page);
 
-		mutex_unlock(&msg->page_mutex);
 		if (ret <= 0)
 			goto out;
 
@@ -637,8 +658,7 @@ static int write_partial_msg_pages(struct ceph_connection *con)
 
 	/* prepare and queue up footer, too */
 	if (!crc)
-		con->out_msg->footer.flags |=
-			cpu_to_le32(CEPH_MSG_FOOTER_NOCRC);
+		con->out_msg->footer.flags |= CEPH_MSG_FOOTER_NOCRC;
 	con->out_kvec_bytes = 0;
 	con->out_kvec_left = 0;
 	con->out_kvec_cur = con->out_kvec;
@@ -648,7 +668,28 @@ out:
 	return ret;
 }
 
+/*
+ * write some zeros
+ */
+static int write_partial_skip(struct ceph_connection *con)
+{
+	int ret;
 
+	while (con->out_skip > 0) {
+		struct kvec iov = {
+			.iov_base = page_address(con->msgr->zero_page),
+			.iov_len = min(con->out_skip, (int)PAGE_CACHE_SIZE)
+		};
+
+		ret = ceph_tcp_sendmsg(con->sock, &iov, 1, iov.iov_len, 1);
+		if (ret <= 0)
+			goto out;
+		con->out_skip -= ret;
+	}
+	ret = 1;
+out:
+	return ret;
+}
 
 /*
  * Prepare to read connection handshake, or an ack.
@@ -896,7 +937,7 @@ static void process_ack(struct ceph_connection *con)
 	u32 ack = le32_to_cpu(con->in_temp_ack);
 	u64 seq;
 
-	spin_lock(&con->out_queue_lock);
+	mutex_lock(&con->out_mutex);
 	while (!list_empty(&con->out_sent)) {
 		m = list_first_entry(&con->out_sent, struct ceph_msg,
 				     list_head);
@@ -907,7 +948,7 @@ static void process_ack(struct ceph_connection *con)
 		     le16_to_cpu(m->hdr.type), m);
 		ceph_msg_remove(m);
 	}
-	spin_unlock(&con->out_queue_lock);
+	mutex_unlock(&con->out_mutex);
 	prepare_read_tag(con);
 }
 
@@ -1056,17 +1097,7 @@ static int read_partial_message(struct ceph_connection *con)
 	while (con->in_msg_pos.data_pos < data_len) {
 		left = min((int)(data_len - con->in_msg_pos.data_pos),
 			   (int)(PAGE_SIZE - con->in_msg_pos.page_pos));
-		mutex_lock(&m->page_mutex);
-		if (!m->pages) {
-			dout("%p pages revoked during msg read\n", m);
-			mutex_unlock(&m->page_mutex);
-			con->in_base_pos = con->in_msg_pos.data_pos
-				- data_len - sizeof(m->footer);
-			ceph_msg_put(m);
-			con->in_msg = NULL;
-			con->in_tag = CEPH_MSGR_TAG_READY;
-			return 0;
-		}
+		BUG_ON(m->pages == NULL);
 		p = kmap(m->pages[con->in_msg_pos.page]);
 		ret = ceph_tcp_recvmsg(con->sock, p + con->in_msg_pos.page_pos,
 				       left);
@@ -1075,7 +1106,6 @@ static int read_partial_message(struct ceph_connection *con)
 				crc32c(con->in_data_crc,
 					  p + con->in_msg_pos.page_pos, ret);
 		kunmap(m->pages[con->in_msg_pos.page]);
-		mutex_unlock(&m->page_mutex);
 		if (ret <= 0)
 			return ret;
 		con->in_msg_pos.data_pos += ret;
@@ -1114,7 +1144,7 @@ no_data:
 		return -EBADMSG;
 	}
 	if (datacrc &&
-	    (le32_to_cpu(m->footer.flags) & CEPH_MSG_FOOTER_NOCRC) == 0 &&
+	    (m->footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0 &&
 	    con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
 		pr_err("ceph read_partial_message %p data crc %u != exp. %u\n",
 		       m,
@@ -1140,9 +1170,9 @@ static void process_message(struct ceph_connection *con)
 	if (con->peer_name.type == 0)
 		con->peer_name = msg->hdr.src.name;
 
-	spin_lock(&con->out_queue_lock);
+	mutex_lock(&con->out_mutex);
 	con->in_seq++;
-	spin_unlock(&con->out_queue_lock);
+	mutex_unlock(&con->out_mutex);
 
 	dout("===== %p %llu from %s%d %d=%s len %d+%d (%u %u %u) =====\n",
 	     msg, le64_to_cpu(msg->hdr.seq),
@@ -1157,12 +1187,6 @@ static void process_message(struct ceph_connection *con)
 }
 
 
-
-
-
-
-
-
 /*
  * Write something to the socket.  Called in a worker thread when the
  * socket appears to be writeable and we have something ready to send.
@@ -1175,6 +1199,7 @@ static int try_write(struct ceph_connection *con)
 	dout("try_write start %p state %lu nref %d\n", con, con->state,
 	     atomic_read(&con->nref));
 
+	mutex_lock(&con->out_mutex);
 more:
 	dout("try_write out_kvec_bytes %d\n", con->out_kvec_bytes);
 
@@ -1206,6 +1231,15 @@ more:
 
 more_kvec:
 	/* kvec data queued? */
+	if (con->out_skip) {
+		ret = write_partial_skip(con);
+		if (ret <= 0)
+			goto done;
+		if (ret < 0) {
+			dout("try_write write_partial_skip err %d\n", ret);
+			goto done;
+		}
+	}
 	if (con->out_kvec_left) {
 		ret = write_partial_kvec(con);
 		if (ret <= 0)
@@ -1232,23 +1266,18 @@ more_kvec:
 
 	if (!test_bit(CONNECTING, &con->state)) {
 		/* is anything else pending? */
-		spin_lock(&con->out_queue_lock);
 		if (!list_empty(&con->out_queue)) {
 			prepare_write_message(con);
-			spin_unlock(&con->out_queue_lock);
 			goto more;
 		}
 		if (con->in_seq > con->in_seq_acked) {
 			prepare_write_ack(con);
-			spin_unlock(&con->out_queue_lock);
 			goto more;
 		}
 		if (test_and_clear_bit(KEEPALIVE_PENDING, &con->state)) {
 			prepare_write_keepalive(con);
-			spin_unlock(&con->out_queue_lock);
 			goto more;
 		}
-		spin_unlock(&con->out_queue_lock);
 	}
 
 	/* Nothing to do! */
@@ -1257,6 +1286,7 @@ more_kvec:
 done:
 	ret = 0;
 out:
+	mutex_unlock(&con->out_mutex);
 	dout("try_write done on %p\n", con);
 	return ret;
 }
@@ -1492,18 +1522,18 @@ static void ceph_fault(struct ceph_connection *con)
 
 	/* If there are no messages in the queue, place the connection
 	 * in a STANDBY state (i.e., don't try to reconnect just yet). */
-	spin_lock(&con->out_queue_lock);
+	mutex_lock(&con->out_mutex);
 	if (list_empty(&con->out_queue) && !con->out_keepalive_pending) {
 		dout("fault setting STANDBY\n");
 		set_bit(STANDBY, &con->state);
-		spin_unlock(&con->out_queue_lock);
+		mutex_unlock(&con->out_mutex);
 		goto out;
 	}
 
 	/* Requeue anything that hasn't been acked, and retry after a
 	 * delay. */
 	list_splice_init(&con->out_sent, &con->out_queue);
-	spin_unlock(&con->out_queue_lock);
+	mutex_unlock(&con->out_mutex);
 
 	if (con->delay == 0)
 		con->delay = BASE_DELAY_INTERVAL;
@@ -1572,41 +1602,6 @@ void ceph_messenger_destroy(struct ceph_messenger *msgr)
 }
 
 /*
- * A single ceph_msg can't be queued for send twice, unless it's
- * already been delivered (i.e. we have the only remaining reference),
- * because of the list_head indicating which queue it is on.
- *
- * So, we dup the message if there is more than once reference.  If it has
- * pages (a data payload), steal the pages away from the old message.
- */
-struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *old)
-{
-	struct ceph_msg *dup;
-
-	if (atomic_read(&old->nref) == 1)
-		return old;  /* we have only ref, all is well */
-
-	dup = ceph_msg_new(le16_to_cpu(old->hdr.type),
-			   le32_to_cpu(old->hdr.front_len),
-			   le32_to_cpu(old->hdr.data_len),
-			   le16_to_cpu(old->hdr.data_off),
-			   old->pages);
-	if (!dup)
-		return ERR_PTR(-ENOMEM);
-	memcpy(dup->front.iov_base, old->front.iov_base,
-	       le32_to_cpu(old->hdr.front_len));
-
-	/* revoke old message's pages */
-	mutex_lock(&old->page_mutex);
-	old->pages = NULL;
-	old->footer.flags |= cpu_to_le32(CEPH_MSG_FOOTER_ABORTED);
-	mutex_unlock(&old->page_mutex);
-
-	ceph_msg_put(old);
-	return dup;
-}
-
-/*
  * Queue up an outgoing message on the given connection.
  */
 void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
@@ -1623,25 +1618,48 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	msg->hdr.dst_erank = con->peer_addr.erank;
 
 	/* queue */
-	spin_lock(&con->out_queue_lock);
-	msg->hdr.seq = cpu_to_le64(++con->out_seq);
-	dout("----- %p %u to %s%d %d=%s len %d+%d+%d -----\n", msg,
-	     (unsigned)con->out_seq,
+	mutex_lock(&con->out_mutex);
+	list_add_tail(&msg->list_head, &con->out_queue);
+	con->out_qlen++;
+	dout("----- %p %llu to %s%d %d=%s len %d+%d+%d -----\n", msg,
+	     con->out_seq + con->out_qlen,
 	     ENTITY_NAME(con->peer_name), le16_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),
 	     le32_to_cpu(msg->hdr.front_len),
 	     le32_to_cpu(msg->hdr.middle_len),
 	     le32_to_cpu(msg->hdr.data_len));
-	dout("ceph_con_send %p %s%d %p seq %llu pgs %d\n",
-	     con, ENTITY_NAME(con->peer_name), msg,
-	     le64_to_cpu(msg->hdr.seq), msg->nr_pages);
-	list_add_tail(&msg->list_head, &con->out_queue);
-	spin_unlock(&con->out_queue_lock);
+	mutex_unlock(&con->out_mutex);
 
 	/* if there wasn't anything waiting to send before, queue
 	 * new work */
 	if (test_and_set_bit(WRITE_PENDING, &con->state) == 0)
 		queue_con(con);
+}
+
+/*
+ * Revoke a message that was previously queued for send
+ */
+void ceph_con_revoke(struct ceph_connection *con, struct ceph_msg *msg)
+{
+	mutex_lock(&con->out_mutex);
+	if (!list_empty(&msg->list_head)) {
+		dout("con_revoke %p msg %p\n", con, msg);
+		list_del_init(&msg->list_head);
+		ceph_msg_put(msg);
+		if (msg->hdr.seq == 0)
+			con->out_qlen--;
+		else
+			msg->hdr.seq = 0;
+		if (con->out_msg == msg)
+			con->out_msg = NULL;
+		if (con->out_kvec_is_msg) {
+			con->out_skip = con->out_kvec_bytes;
+			con->out_kvec_is_msg = false;
+		}
+	} else {
+		dout("con_revoke %p msg %p - not queued (sent?)\n", con, msg);
+	}
+	mutex_unlock(&con->out_mutex);
 }
 
 /*
@@ -1668,7 +1686,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	if (m == NULL)
 		goto out;
 	atomic_set(&m->nref, 1);
-	mutex_init(&m->page_mutex);
 	INIT_LIST_HEAD(&m->list_head);
 
 	m->hdr.type = cpu_to_le16(type);

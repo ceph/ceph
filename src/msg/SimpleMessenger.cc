@@ -1598,7 +1598,7 @@ Message *SimpleMessenger::Pipe::read_message()
   if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
     return 0;
   
-  int aborted = (le32_to_cpu(footer.flags) & CEPH_MSG_FOOTER_ABORTED);
+  int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
   dout(10) << "aborted = " << aborted << dendl;
   if (aborted) {
     dout(0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
@@ -1750,7 +1750,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   header.front_len = m->get_payload().length();
   header.middle_len = m->get_middle().length();
   header.data_len = m->get_data().length();
-  footer.flags = 0;
+  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
   m->calc_header_crc();
 
   bufferlist blist = m->get_payload();

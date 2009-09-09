@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v016"
+#define CEPH_BANNER "ceph v017"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -147,11 +147,11 @@ struct ceph_msg_header {
  * follows data payload
  */
 struct ceph_msg_footer {
-	__le32 flags;
 	__le32 front_crc, middle_crc, data_crc;
+	__u8 flags;
 } __attribute__ ((packed));
 
-#define CEPH_MSG_FOOTER_ABORTED   (1<<0)   /* drop this message */
+#define CEPH_MSG_FOOTER_COMPLETE  (1<<0)   /* msg wasn't aborted */
 #define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
 
 

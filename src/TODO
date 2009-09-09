@@ -38,9 +38,6 @@ v0.15
 
 - msgr
   - check protocols during connection handshake, not per-message?
-- kclient msgr
-  - allow msg to be revoked from connection (per-msg queue_seq, mutex)
-  - and then kill maybe_dup_msg
 
 
 bugs
@@ -91,7 +88,6 @@ repair
 
 kclient
 - fix up ESTALE handling
-- allow struct ceph_msg revoke from a connection
 - don't retry on ENOMEM on non-nofail requests in kick_requests
 - make cap import/export more efficient?
 - flock, fnctl locks

@@ -661,12 +661,14 @@ static void cleanup_cap_releases(struct ceph_mds_session *session)
 	while (!list_empty(&session->s_cap_releases)) {
 		msg = list_first_entry(&session->s_cap_releases,
 				       struct ceph_msg, list_head);
-		ceph_msg_remove(msg);
+		list_del_init(&msg->list_head);
+		ceph_msg_put(msg);
 	}
 	while (!list_empty(&session->s_cap_releases_done)) {
 		msg = list_first_entry(&session->s_cap_releases_done,
 				       struct ceph_msg, list_head);
-		ceph_msg_remove(msg);
+		list_del_init(&msg->list_head);
+		ceph_msg_put(msg);
 	}
 	spin_unlock(&session->s_cap_lock);
 }

@@ -2682,6 +2682,10 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 /*
  * Helpers for embedding cap and dentry lease releases into mds
  * requests.
+ *
+ * @force is used by dentry_release (below) to force inclusion of a
+ * record for the directory inode, even when there aren't any caps to
+ * drop.
  */
 int ceph_encode_inode_release(void **p, struct inode *inode,
 			      int mds, int drop, int unless, int force)
