@@ -1253,6 +1253,9 @@ void SimpleMessenger::Pipe::reader()
     else if (tag == CEPH_MSGR_TAG_MSG) {
       dout(20) << "reader got MSG" << dendl;
       Message *m = read_message();
+
+      m->set_connection(connection_state->get());
+
       lock.Lock();
       
       if (!m) {

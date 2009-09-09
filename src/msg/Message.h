@@ -134,8 +134,61 @@ using std::list;
 
 // ======================================================
 
-// abstract Message class
+// abstract Connection, for keeping per-connection state
 
+struct RefCountedObject {
+  atomic_t nref;
+  RefCountedObject() : nref(1) {}
+  virtual ~RefCountedObject() {}
+  
+  RefCountedObject *get() {
+    nref.inc();
+    return this;
+  }
+  void put() {
+    if (nref.dec() == 0)
+      delete this;
+  }
+};
+
+struct Connection : public RefCountedObject {
+  atomic_t nref;
+  Mutex lock;
+  RefCountedObject *priv;
+
+public:
+  Connection() : nref(1), lock("Connection::lock"), priv(NULL) {}
+  ~Connection() {
+    if (priv)
+      priv->put();
+  }
+
+  Connection *get() {
+    nref.inc();
+    return this;
+  }
+  void put() {
+    if (nref.dec() == 0)
+      delete this;
+  }
+
+  void set_priv(RefCountedObject *o) {
+    Mutex::Locker l(lock);
+    if (priv)
+      priv->put();
+    priv = o->get();
+  }
+  RefCountedObject *get_priv() {
+    Mutex::Locker l(lock);
+    if (priv)
+      return priv->get();
+    return NULL;
+  }
+};
+
+
+
+// abstract Message class
 
 class Message {
 protected:
@@ -146,17 +199,18 @@ protected:
   bufferlist       data;     // data payload (page-alignment will be preserved where possible)
   
   utime_t recv_stamp;
+  Connection *connection;
 
   friend class Messenger;
-
+  
 public:
   atomic_t nref;
 
-  Message() : nref(0) {
+  Message() : connection(NULL), nref(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   };
-  Message(int t) : nref(0) {
+  Message(int t) : connection(NULL), nref(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
     header.priority = 0;  // undef
@@ -165,13 +219,16 @@ public:
   }
   virtual ~Message() { 
     assert(nref.test() == 0);
+    if (connection)
+      connection->put();
   }
 
-  void get() {
+  Message *get() {
     //int r = 
-      nref.inc();
+    nref.inc();
     //*_dout << dbeginl << "message(" << this << ").get " << (r-1) << " -> " << r << std::endl;
     //_dout_end_line();
+    return this;
   }
   void put() {
     int r = nref.dec();
@@ -181,6 +238,9 @@ public:
       delete this;
   }
 
+  Connection *get_connection() { return connection; }
+  void set_connection(Connection *c) { connection = c; }
+ 
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }

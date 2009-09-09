@@ -31,6 +31,7 @@ using namespace std;
 class MDS;
 class Timer;
 
+
 class Messenger {
  private:
   Dispatcher          *dispatcher;
@@ -42,7 +43,7 @@ protected:
   atomic_t nref;
 
  public:
-  Messenger(entity_name_t w) : dispatcher(0),
+  Messenger(entity_name_t w) : dispatcher(0), 
 			       default_send_priority(CEPH_MSG_PRIO_DEFAULT),
 			       nref(1) {
     _my_name = w;
@@ -61,7 +62,7 @@ protected:
   virtual void destroy() {
     put();
   }
-  
+
   // accessors
   entity_name_t get_myname() { return _my_name; }
   virtual entity_addr_t get_myaddr() = 0;
