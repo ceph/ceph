@@ -165,26 +165,23 @@ bool MonClient::ms_dispatch(Message *m)
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_monmap((MMonMap*)m);
-    break;
+    return true;
 
   case CEPH_MSG_CLIENT_MOUNT_ACK:
     handle_mount_ack((MClientMountAck*)m);
-    break;
+    return true;
 
   case CEPH_MSG_AUTH_REPLY:
     auth.handle_auth_reply((MAuthReply*)m);
-    break;
+    delete m;
+    return true;
 
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
     handle_subscribe_ack((MMonSubscribeAck*)m);
-    break;
-
-  default:
-    return false;
+    return true;
   }
 
-  delete m;
-  return true;
+  return false;
 }
 
 void MonClient::handle_monmap(MMonMap *m)
@@ -355,5 +352,7 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   } else {
     dout(10) << "handle_subscribe_ack sent " << sub_renew_sent << ", ignoring" << dendl;
   }
+
+  delete m;
 }
 
