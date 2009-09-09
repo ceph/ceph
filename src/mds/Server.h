@@ -67,6 +67,7 @@ public:
   utime_t  reconnect_start;
   set<client_t> client_reconnect_gather;  // clients i need a reconnect msg from.
 
+  Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   void _finish_session_purge(Session *);
