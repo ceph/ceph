@@ -30,13 +30,13 @@ class CInode;
 class MDRequest;
 
 #include "Capability.h"
-
+#include "msg/Message.h"
 
 /* 
  * session
  */
 
-class Session {
+class Session : public RefCountedObject {
   // -- state etc --
 public:
   static const int STATE_UNDEF = 0;
@@ -146,6 +146,9 @@ public:
     state(STATE_UNDEF), 
     session_list_item(this),
     cap_push_seq(0) { }
+  ~Session() {
+    assert(!session_list_item.is_on_xlist());
+  }
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
@@ -211,7 +214,7 @@ public:
     s->trim_completed_requests(0);
     s->session_list_item.remove_myself();
     session_map.erase(s->inst.name);
-    delete s;
+    s->put();
   }
   void touch_session(Session *session) {
     by_state[session->state].push_back(&session->session_list_item);

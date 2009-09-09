@@ -646,6 +646,7 @@ noinst_HEADERS = \
 	messages/MPoolOp.h\
 	messages/MPoolOpReply.h\
         messages/MRemoveSnaps.h\
+	messages/MRoute.h\
         messages/MStatfs.h\
         messages/MStatfsReply.h\
 	messages/PaxosServiceMessage.h\

@@ -62,6 +62,7 @@ public:
 
   ClientMap client_map, pending_map;
   AuthServiceManager auth_mgr;
+  client_t next_client;
 
 private:
   // leader
@@ -74,7 +75,9 @@ private:
   void committed();
 
   bool check_auth(MAuth *m);
-  bool check_mount(MClientMount *m);
+
+  bool preprocess_mount(MClientMount *m);
+  bool prepare_mount(MClientMount *m);
   void _mounted(client_t c, MClientMount *m);
  
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
@@ -85,8 +88,10 @@ private:
 
   bool should_propose(double& delay);
 
+  void on_election_start();
+
  public:
-  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { auth_mgr.init(mn); }
+  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), next_client(-1) { auth_mgr.init(mn); }
   
   void tick();  // check state, take actions
 

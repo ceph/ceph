@@ -66,7 +66,7 @@ static int ceph_encode_fh(struct dentry *dentry, u32 *rawfh, int *max_len,
 		type = 1;
 	} else {
 		return -ENOSPC;
-	}		
+	}
 	return type;
 }
 

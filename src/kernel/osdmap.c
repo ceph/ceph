@@ -147,7 +147,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	c = kzalloc(sizeof(*c), GFP_NOFS);
 	if (c == NULL)
 		return ERR_PTR(-ENOMEM);
-	
+
 	ceph_decode_need(p, end, 4*sizeof(u32), bad);
 	ceph_decode_32(p, magic);
 	if (magic != CRUSH_MAGIC) {
@@ -519,7 +519,7 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 {
 	struct ceph_osdmap *newmap = map;
 	struct crush_map *newcrush = NULL;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	u32 epoch = 0;
 	struct ceph_timespec modified;
 	u32 len, pool;

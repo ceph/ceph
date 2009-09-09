@@ -40,139 +40,72 @@ private:
   bufferlist tgt;
   entity_addr_t my_addr;
 
-  Context *mount_timeout_event;
-
   Mutex monc_lock;
-  Mutex auth_lock;
-  bool mounted;
-  int mounters;
-  Cond mount_cond, map_cond;
-  AuthClientHandler auth_client_handler;
+  SafeTimer timer;
 
   bool ms_dispatch(Message *m);
   void handle_monmap(MMonMap *m);
 
-  void ms_handle_remote_reset(const entity_addr_t& peer);
+  void ms_handle_reset(const entity_addr_t& peer);
 
- protected:
-  class C_MountTimeout : public Context {
-    MonClient *client;
-    double timeout;
-  public:
-    C_MountTimeout(MonClient *c, double to) : client(c), timeout(to) { }
+
+  // monitor session
+  bool hunting;
+
+  struct C_Tick : public Context {
+    MonClient *monc;
+    C_Tick(MonClient *m) : monc(m) {}
     void finish(int r) {
-      if (r >= 0) client->_mount_timeout(timeout);
+      monc->tick();
     }
   };
+  void tick();
 
-  class MonClientOpHandler {
-  protected:
-    MonClient *client;
-    Mutex op_lock;
-    SafeTimer timer;
-  public:
-    bool done;
-    int num_waiters;
-    Cond cond;
-    Context *timeout_event;
+  // mount
+private:
+  client_t clientid;
+  int mounting;
+  int mount_err;
+  Cond mount_cond, map_cond;
+  utime_t mount_started;
 
-    MonClientOpHandler(MonClient *c) : client(c),
-                op_lock("MonClientOpHandler::op_lock"),
-		timer(op_lock) {
-      done = false;
-      num_waiters = 0;
-      timeout_event = NULL;
-    }
-
-    void _op_timeout(double timeout);
-    void _try_do_op(double timeout);
-    int do_op(double timeout);
-
-    virtual ~MonClientOpHandler() {}
-
-    virtual Message *build_request() = 0;
-    virtual void handle_response(Message *response) = 0;
-    virtual bool got_response() = 0;
-  };
-  
-  class C_OpTimeout : public Context {
-  protected:
-    MonClientOpHandler *op_handler;
-    double timeout;
-  public:
-    C_OpTimeout(MonClientOpHandler *oph, double to) :
-                                        op_handler(oph), timeout(to) {
-    }
-    void finish(int r) {
-      if (r >= 0) op_handler->_op_timeout(timeout);
-    }
-  };
-
-  class MonClientMountHandler : public MonClientOpHandler {
-    bool response_flag;
-  public:
-    MonClientMountHandler(MonClient *c) : MonClientOpHandler(c) { response_flag = false; }
-    ~MonClientMountHandler() {}
-
-    Message *build_request();
-    void handle_response(Message *response);
-    bool got_response() { return response_flag; }
-  };
-
-  class MonClientUnmountHandler : public MonClientOpHandler {
-    bool got_ack;
-  public:
-    MonClientUnmountHandler(MonClient *c) : MonClientOpHandler(c),
-                            got_ack(false) {}
-    ~MonClientUnmountHandler() {}
-
-    Message *build_request();
-    void handle_response(Message *response);
-    bool got_response() { return got_ack; }
-  };
-
-  class MonClientAuthHandler : public MonClientOpHandler {
-    bool has_data;
-    int last_result;
-  public:
-    MonClientAuthHandler(MonClient *c) : MonClientOpHandler(c) {
-      last_result = 0;
-    }
-    ~MonClientAuthHandler() {}
-
-    Message *build_request();
-    void handle_response(Message *response);
-    bool got_response() { return !client->auth_client_handler.request_pending(); }
-    int get_result() { return last_result; }
-  };
-
-  MonClientMountHandler mount_handler;
-
-  MonClientAuthHandler *cur_auth_handler;
-
-  void _try_mount(double timeout);
-  void _mount_timeout(double timeout);
+  void _pick_new_mon();
+  void _send_mon_message(Message *m);
+  void _send_mount();
   void handle_mount_ack(MClientMountAck* m);
+
+public:
+  int mount(double mount_timeout);
+
 
   // mon subscriptions
 private:
   map<nstring,ceph_mon_subscribe_item> sub_have;  // my subs, and current versions
   utime_t sub_renew_sent, sub_renew_after;
 
+  void _renew_subs();
+  void handle_subscribe_ack(MMonSubscribeAck* m);
+
 public:
-  void renew_subs();
+  void renew_subs() {
+    Mutex::Locker l(monc_lock);
+    _renew_subs();
+  }
   void sub_want(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
   void sub_want_onetime(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
-      renew_subs();
+      _renew_subs();
     }
   }
   void sub_got(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
     if (sub_have.count(what)) {
       if (sub_have[what].onetime)
 	sub_have.erase(what);
@@ -180,32 +113,45 @@ public:
 	sub_have[what].have = have;
     }
   }
-  void handle_subscribe_ack(MMonSubscribeAck* m);
+
+
+  // auth tickets
+private:
+  AuthClientHandler auth_client_handler;
+  __u32 want_tickets;
+
+public:
+  void set_want_tickets(__u32 want_tickets);
 
  public:
   MonClient() : messenger(NULL),
-		mount_timeout_event(NULL),
 		monc_lock("MonClient::monc_lock"),
-		auth_lock("MonClient::auth_lock"),
-                mount_handler(this) {
-    //            auth_handler(this) {
-    mounted = false;
-    mounters = 0;
+		timer(monc_lock),
+		hunting(false),
+		mounting(0), mount_err(0),
+		want_keys(0) { }
+  ~MonClient() {
+    timer.cancel_all_events();
   }
+
+  void init();
+  void shutdown();
 
   int build_initial_monmap();
   int get_monmap();
 
-  int mount(double mount_timeout);
-  int authorize(uint32_t want_keys, double timeout);
-
-  void tick();
-
-  void send_mon_message(Message *m, bool new_mon=false);
+  void send_mon_message(Message *m) {
+    Mutex::Locker l(monc_lock);
+    _send_mon_message(m);
+  }
   void note_mon_leader(int m) {
+    Mutex::Locker l(monc_lock);
     monmap.last_mon = m;
   }
-  void pick_new_mon();
+  void pick_new_mon() {
+    Mutex::Locker l(monc_lock);
+    _pick_new_mon();
+  }
 
   entity_addr_t get_my_addr() { return my_addr; }
 
@@ -226,20 +172,6 @@ public:
     return entity_inst_t();
   }
   int get_num_mon() {
-  class MonClientOpCtx {
-  public:
-    bool done;
-    int num_waiters;
-    Cond cond;
-    Context *timeout_event;
-
-    MonClientOpCtx() {
-      done = false;
-      num_waiters = 0;
-    }
-  };
-  
-
     Mutex::Locker l(monc_lock);
     return monmap.size();
   }

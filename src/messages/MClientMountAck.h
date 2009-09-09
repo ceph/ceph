@@ -18,12 +18,12 @@
 #include "msg/Message.h"
 
 struct MClientMountAck : public Message {
-  __s64 client;
+  client_t client;
   __s32 result;
   cstring result_msg;
   bufferlist monmap_bl;
 
-  MClientMountAck(__s64 c = -1, int r = 0, const char *msg = 0) :
+  MClientMountAck(client_t c = -1, int r = 0, const char *msg = 0) :
     Message(CEPH_MSG_CLIENT_MOUNT_ACK),
     client(c), result(r),
     result_msg(msg) { }

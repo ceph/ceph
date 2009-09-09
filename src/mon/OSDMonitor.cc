@@ -73,10 +73,6 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
     pending_inc.new_weight[osd] = CEPH_OSD_OUT;
   }
   propose_pending();
-
-  // fixme
-  //bcast_latest_osd();
-  //bcast_latest_mds();
 }
 
 void OSDMonitor::fake_osdmap_update()
@@ -176,8 +172,6 @@ bool OSDMonitor::update_from_paxos()
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
-
-    bcast_latest_mds();
   }
 
   send_to_waiting();
@@ -784,34 +778,6 @@ void OSDMonitor::send_incremental(entity_inst_t dest, epoch_t from)
   mon->messenger->send_message(m, dest);
 }
 
-
-void OSDMonitor::bcast_latest_mds()
-{
-  epoch_t e = osdmap.get_epoch();
-  dout(1) << "bcast_latest_mds epoch " << e << dendl;
-  
-  for (map<entity_addr_t,MDSMap::mds_info_t>::const_iterator p = mon->mdsmon()->mdsmap.get_mds_info().begin();
-       p != mon->mdsmon()->mdsmap.get_mds_info().end();
-       p++)
-    send_incremental(p->second.get_inst(), osdmap.get_epoch());
-}
-
-void OSDMonitor::bcast_latest_osd()
-{
-  epoch_t e = osdmap.get_epoch();
-  dout(1) << "bcast_latest_osd epoch " << e << dendl;
-
-  // tell osds
-  set<int32_t> osds;
-  osdmap.get_all_osds(osds);
-  for (set<int32_t>::iterator it = osds.begin();
-       it != osds.end();
-       it++) {
-    if (osdmap.is_down(*it)) continue;
-    
-    send_incremental(osdmap.get_inst(*it), osdmap.get_epoch());
-  }  
-}
 
 void OSDMonitor::bcast_full_osd()
 {

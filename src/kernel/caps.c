@@ -1246,7 +1246,7 @@ static void __mark_caps_flushing(struct inode *inode,
  * appropriate.
  *
  *  CHECK_CAPS_NODELAY - caller is delayed work and we should not delay
- *    cap release further.  
+ *    cap release further.
  *  CHECK_CAPS_AUTHONLY - we should only check the auth cap
  *  CHECK_CAPS_FLUSH - we should flush any dirty caps immediately, without
  *    further delay.
@@ -1812,7 +1812,7 @@ static int try_get_cap_refs(struct ceph_inode_info *ci, int need, int want,
 	dout("get_cap_refs %p need %s want %s\n", inode,
 	     ceph_cap_string(need), ceph_cap_string(want));
 	spin_lock(&inode->i_lock);
-	
+
 	/* make sure we _have_ some caps! */
 	if (!__ceph_is_any_caps(ci)) {
 		dout("get_cap_refs %p no real caps\n", inode);

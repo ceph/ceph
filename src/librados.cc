@@ -302,6 +302,7 @@ bool RadosClient::init()
   if (!objecter)
     return false;
 
+  monclient.init();
   monclient.mount(g_conf.client_mount_timeout);
 
   dout(0) << "librados: before monclient.authorize()" << dendl;

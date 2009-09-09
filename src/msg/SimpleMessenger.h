@@ -136,6 +136,7 @@ private:
     int state;
 
   protected:
+    Connection *connection_state;
 
     utime_t first_fault;   // time of original failure
     utime_t last_attempt;  // time of last reconnect attempt
@@ -193,6 +194,7 @@ private:
       sd(-1),
       lock("SimpleMessenger::Pipe::lock"),
       state(st), 
+      connection_state(new Connection),
       reader_running(false), writer_running(false),
       keepalive(false),
       connect_seq(0), peer_global_seq(0),
@@ -201,6 +203,7 @@ private:
     ~Pipe() {
       assert(q.empty());
       assert(sent.empty());
+      connection_state->put();
     }
 
 

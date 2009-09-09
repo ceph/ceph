@@ -159,11 +159,28 @@ public:
   }
 };
 
+Session *Server::get_session(Message *m)
+{
+  Session *session = (Session *)m->get_connection()->get_priv();
+  if (session) {
+    dout(20) << "get_session got " << session->inst << " from message" << dendl;
+    session->put();  // not carry ref
+  } else {
+    session = mds->sessionmap.get_session(m->get_source());
+    if (session) {
+      dout(20) << "get_session set " << session->inst << " in connection" << dendl;
+      m->get_connection()->set_priv(session);
+    } else {
+      dout(20) << "get_session " << m->get_source() << " dne" << dendl;
+    }
+  }
+  return session;
+}
 
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv, piv = 0;
-  Session *session = mds->sessionmap.get_session(m->get_source());
+  Session *session = get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   assert(m->get_source().is_client()); // should _not_ come from an mds!
@@ -440,7 +457,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source() << dendl;
   int from = m->get_source().num();
-  Session *session = mds->sessionmap.get_session(m->get_source());
+  Session *session = get_session(m);
 
   if (!session) {
     dout(1) << " no session for " << m->get_source() << ", ignoring reconnect, sending close" << dendl;
@@ -891,7 +908,7 @@ void Server::handle_client_request(MClientRequest *req)
   // active session?
   Session *session = 0;
   if (req->get_orig_source().is_client()) {
-    session = mds->sessionmap.get_session(req->get_orig_source());
+    session = get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_orig_source() << ", dropping" << dendl;
       delete req;

@@ -92,11 +92,6 @@ bool MDSMonitor::update_from_paxos()
   dout(4) << "new map" << dendl;
   print_map(mdsmap, 0);
 
-  if (mon->is_leader()) {
-    // bcast map to mds
-    bcast_latest_mds();
-  }
-
   send_to_waiting();
   check_subs();
 
@@ -509,17 +504,6 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   }
 }
 
-
-
-void MDSMonitor::bcast_latest_mds()
-{
-  dout(10) << "bcast_latest_mds " << mdsmap.get_epoch() << dendl;
-  
-  for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = mdsmap.mds_info.begin();
-       p != mdsmap.mds_info.end();
-       p++)
-    send_full(p->second.get_inst());
-}
 
 void MDSMonitor::send_full(entity_inst_t dest)
 {

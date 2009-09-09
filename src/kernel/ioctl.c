@@ -46,7 +46,7 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	    (l.stripe_unit & ~PAGE_MASK) ||
 	    !l.stripe_unit ||
 	    (l.object_size &&
-	     (unsigned)l.object_size % (unsigned)l.stripe_unit)) 
+	     (unsigned)l.object_size % (unsigned)l.stripe_unit))
 		return -EINVAL;
 
 	/* make sure it's a valid data pool */

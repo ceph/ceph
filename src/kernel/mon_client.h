@@ -12,7 +12,7 @@ struct ceph_mount_args;
  * The monitor map enumerates the set of all monitors.
  */
 struct ceph_monmap {
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	u32 epoch;
 	u32 num_mon;
 	struct ceph_entity_inst mon_inst[0];

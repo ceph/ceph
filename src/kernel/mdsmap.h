@@ -4,7 +4,7 @@
 #include "types.h"
 
 /*
- * mds map - describe servers in the mds cluster.  
+ * mds map - describe servers in the mds cluster.
  *
  * we limit fields to those the client actually xcares about
  */

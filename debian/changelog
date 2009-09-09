@@ -1,3 +1,15 @@
+ceph (0.14-1) unstable; urgency=low
+
+  * mds: dir backpointers updated on rename (for fsck)
+  * uclient: many bugs fixed
+  * msgr: many messenger protocol changes... much more client-server like
+  * mon: subscriptions for osd, mds maps
+  * libceph: lots of fixes
+  * kclient: cleanups, new msgr.  no msgpools (for now)
+  * deb packages fixed up
+
+ -- sage <sage@newdream.net>  Mon, 8 Sep 2009 14:48:00 -0800
+
 ceph (0.13-1) unstable; urgency=low
 
   * osd: stay active during backlog generation

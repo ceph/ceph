@@ -537,7 +537,8 @@ int crush_do_rule(struct crush_map *map,
 					while (force_pos &&
 					       force_context[force_pos] < 0 &&
 					       rule->steps[step].arg2 !=
-					       map->buckets[-1 - force_context[force_pos]]->type)
+					       map->buckets[-1 -
+					       force_context[force_pos]]->type)
 						force_pos--;
 					o[osize] = force_context[force_pos];
 					if (recurse_to_leaf)

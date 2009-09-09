@@ -82,8 +82,9 @@ void ceph_get_snap_realm(struct ceph_mds_client *mdsc,
  *
  * caller must hold snap_rwsem for write.
  */
-static struct ceph_snap_realm *ceph_create_snap_realm(struct ceph_mds_client *mdsc,
-					       u64 ino)
+static struct ceph_snap_realm *ceph_create_snap_realm(
+	struct ceph_mds_client *mdsc,
+	u64 ino)
 {
 	struct ceph_snap_realm *realm;
 

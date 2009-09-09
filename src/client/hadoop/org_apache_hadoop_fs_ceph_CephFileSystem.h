@@ -7,17 +7,15 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#undef org_apache_hadoop_fs_ceph_CephFileSystem_DEFAULT_BLOCK_SIZE
-#define org_apache_hadoop_fs_ceph_CephFileSystem_DEFAULT_BLOCK_SIZE 4194304LL
 #undef org_apache_hadoop_fs_ceph_CephFileSystem_EEXIST
 #define org_apache_hadoop_fs_ceph_CephFileSystem_EEXIST 17L
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
- * Signature: (Ljava/lang/String;)Z
+ * Signature: (Ljava/lang/String;I)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
-  (JNIEnv *, jobject, jstring);
+  (JNIEnv *, jobject, jstring, jint);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
