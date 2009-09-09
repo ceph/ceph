@@ -116,20 +116,15 @@ public:
 
 
   // auth tickets
-private:
-  AuthClientHandler auth_client_handler;
-  __u32 want_tickets;
-
 public:
-  void set_want_tickets(__u32 want_tickets);
+  AuthClientHandler auth;
 
  public:
   MonClient() : messenger(NULL),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
-		mounting(0), mount_err(0),
-		want_keys(0) { }
+		mounting(0), mount_err(0) { }
   ~MonClient() {
     timer.cancel_all_events();
   }

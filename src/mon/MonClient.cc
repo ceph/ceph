@@ -172,7 +172,7 @@ bool MonClient::ms_dispatch(Message *m)
     break;
 
   case CEPH_MSG_AUTH_REPLY:
-    //client_auth_handler->handle(m);
+    auth.handle_auth_reply((MAuthReply*)m);
     break;
 
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
@@ -265,36 +265,6 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 }
 
 
-
-
-// --------------
-// auth
-
-void MonClient::set_want_tickets(__u32 want_tickets)
-{
-  Mutex::Locker l(monc_lock);
-
-  auth_client_handler.set_request_keys(want_tickets);
-  /*
-  do {
-    MonClientAuthHandler h(this);
-
-    cur_auth_handler = &h;
-
-    int err = h.do_op(mount_timeout);
-    if (err < 0)
-      return err;
-
-    ret =  h.get_result();
-    dout(0) << "auth ret=" << ret << dendl;
-  } while (ret == -EAGAIN);
-  cur_auth_handler = NULL;
-  return ret;
-  */
-}
-
-
-
 // ---------
 
 void MonClient::_send_mon_message(Message *m)
@@ -320,6 +290,7 @@ void MonClient::ms_handle_reset(const entity_addr_t& peer)
     if (mounting)
       _send_mount();
     _renew_subs();
+    auth.start_session();
   }
 }
 
@@ -334,6 +305,7 @@ void MonClient::tick()
     if (mounting)
       _send_mount();
     _renew_subs();
+    auth.start_session();
   } else {
     // just renew as needed
     utime_t now = g_clock.now();
@@ -343,6 +315,8 @@ void MonClient::tick()
     int oldmon = monmap.pick_mon();
     messenger->send_keepalive(monmap.mon_inst[oldmon]);
   }
+
+  auth.tick();
 
   timer.add_event_after(10.0, new C_Tick(this));
   dout(10) << "tick done" << dendl;
