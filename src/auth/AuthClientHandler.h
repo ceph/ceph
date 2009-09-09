@@ -39,7 +39,7 @@ class AuthClientHandler {
 
   /* ceph-x protocol */
   utime_t auth_ts;
-  AuthTicketHandler ticket_handler;
+  AuthTicketsManager tickets;
 
   CryptoKey secret;
 

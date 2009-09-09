@@ -62,15 +62,15 @@ int AuthClientHandler::generate_request(bufferlist& bl)
 
 int AuthClientHandler::handle_response(int ret, bufferlist& bl)
 {
-char buf[1024];
+char buf[4096];
       const char *s = bl.c_str();
       int pos = 0;
-      for (unsigned int i=0; i<bl.length(); i++) {
-        pos += snprintf(&buf[pos], 1024-pos, "%.2x ", (int)(unsigned char)s[i]);
+      for (unsigned int i=0; i<bl.length() && pos<sizeof(buf) - 8; i++) {
+        pos += snprintf(&buf[pos], sizeof(buf)-pos, "%.2x ", (int)(unsigned char)s[i]);
         if (i && !(i%8))
-          pos += snprintf(&buf[pos], 1024-pos, " ");
+          pos += snprintf(&buf[pos], sizeof(buf)-pos, " ");
         if (i && !(i%16))
-          pos += snprintf(&buf[pos], 1024-pos, "\n");
+          pos += snprintf(&buf[pos], sizeof(buf)-pos, "\n");
       }
       dout(0) << "result_buf=" << buf << dendl;
 
@@ -112,7 +112,7 @@ char buf[1024];
 int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
 {
   CephXRequestHeader header;
-
+  AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
   if (!ticket_handler.has_key()) {
     dout(0) << "auth ticket: doesn't have key" << dendl;
     /* we first need to get the principle/auth session key */
@@ -122,7 +122,7 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
    ::encode(header, bl);
     CryptoKey key;
     AuthBlob blob;
-    build_authenticate_request(name, addr, CEPHX_PRINCIPAL_AUTH,
+    build_service_ticket_request(name, addr, CEPHX_PRINCIPAL_AUTH,
                                false, key, blob, bl);
     cephx_request_state = 1;
     return 0;
@@ -140,7 +140,7 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
   header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
 
   ::encode(header, bl);
-  build_authenticate_request(name, addr, want_keys,
+  build_service_ticket_request(name, addr, want_keys,
                              true, ticket_handler.session_key, ticket_handler.ticket, bl);
   
   return 0;
@@ -164,9 +164,10 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
     {
       bufferptr p(PRINCIPAL_SECRET, sizeof(PRINCIPAL_SECRET) - 1);
       secret.set_secret(CEPH_SECRET_AES, p);
+      // AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
   
-      if (!ticket_handler.verify_service_ticket_reply(secret, indata)) {
-        dout(0) << "could not verify authenticate reply" << dendl;
+      if (!tickets.verify_service_ticket_reply(secret, indata)) {
+        dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }
 
@@ -179,6 +180,12 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
     cephx_response_state = 2;
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
     {
+      AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+  
+      if (!tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
+        dout(0) << "could not verify service_ticket reply" << dendl;
+        return -EPERM;
+      }
     }
     ret = 0;
     break;

@@ -18,6 +18,7 @@
 #include "Crypto.h"
 #include "msg/msg_types.h"
 
+
 struct EntityName {
   uint32_t entity_type;
   string name;
@@ -32,7 +33,6 @@ struct EntityName {
   }
 };
 WRITE_CLASS_ENCODER(EntityName);
-
 
 /*
  * The ticket (if properly validated) authorizes the principal use
@@ -69,14 +69,41 @@ struct AuthTicket {
 };
 WRITE_CLASS_ENCODER(AuthTicket)
 
+struct AuthBlob {
+  bufferlist blob;
+
+  void encode(bufferlist& bl) const {
+    ::encode(blob, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    ::decode(blob, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthBlob);
+
+struct SessionAuthInfo {
+  uint32_t service_id;
+  AuthTicket ticket;
+  CryptoKey session_key;
+  CryptoKey service_secret;
+};
+
+
 /*
  * Authentication
  */
-extern void build_authenticate_request(EntityName& principal_name, entity_addr_t principal_addr,
-				       bufferlist& request);
-extern bool build_authenticate_reply(AuthTicket& principal_ticket, CryptoKey& principal_secret,
-				     CryptoKey& session_key, CryptoKey& service_secret,
-				     bufferlist& reply);
+extern void build_service_ticket_request(EntityName& principal_name, entity_addr_t& principal_addr,
+                                uint32_t keys,
+                                bool encrypt,
+                                CryptoKey& session_key,
+                                AuthBlob& ticket_info,
+				bufferlist& request);
+
+extern bool build_service_ticket_reply(
+                     CryptoKey& principal_secret,
+                     vector<SessionAuthInfo> ticket_info,
+                     bufferlist& reply);
 
 class AuthenticateRequest {
   EntityName name;
@@ -95,22 +122,8 @@ public:
 };
 WRITE_CLASS_ENCODER(AuthenticateRequest)
 
-struct AuthBlob {
-  bufferlist blob;
-
-  void encode(bufferlist& bl) const {
-    ::encode(blob, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    ::decode(blob, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthBlob);
-
 /*
- * ServiceTicket gives a principal access to some service
- * (monitor, osd, mds).
+ * AuthTicketHandler
  */
 struct AuthTicketHandler {
   CryptoKey session_key;
@@ -127,17 +140,27 @@ struct AuthTicketHandler {
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
-
+#if 0
   // to build a new ServiceTicket, to access different service
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
-
+#endif
   // to access the service
   utime_t build_authenticator(bufferlist& bl);
   bool verify_reply_authenticator(utime_t then, bufferlist& enc_reply);
 
   bool has_key() { return has_key_flag; }
 };
-//WRITE_CLASS_ENCODER(ServiceTicket)
+
+struct AuthTicketsManager {
+  map<uint32_t, AuthTicketHandler> tickets_map;
+
+  bool verify_service_ticket_reply(CryptoKey& principal_secret,
+				 bufferlist::iterator& indata);
+
+  bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
+
+  AuthTicketHandler& get_handler(uint32_t type) { return tickets_map[type]; }
+};
 
 struct AuthServiceTicketRequest {
   entity_addr_t addr;

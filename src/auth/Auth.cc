@@ -4,6 +4,23 @@
 
 #include "config.h"
 
+static void hexdump(string msg, const char *s, int len)
+{
+  int buf_len = len*4;
+  char buf[buf_len];
+  int pos = 0;
+  for (unsigned int i=0; i<len && pos<buf_len - 8; i++) {
+    if (i && !(i%8))
+      pos += snprintf(&buf[pos], buf_len-pos, " ");
+    if (i && !(i%16))
+      pos += snprintf(&buf[pos], buf_len-pos, "\n");
+    pos += snprintf(&buf[pos], buf_len-pos, "%.2x ", (int)(unsigned char)s[i]);
+  }
+  dout(0) << msg << ":\n" << buf << dendl;
+}
+
+
+
 
 /*
  * Authentication
@@ -14,7 +31,7 @@
  *
  * principal_name, principal_addr.  "please authenticate me."
  */
-void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
+void build_service_ticket_request(EntityName& principal_name, entity_addr_t& principal_addr,
                                 uint32_t keys,
                                 bool encrypt,
                                 CryptoKey& session_key,
@@ -29,6 +46,8 @@ void build_authenticate_request(EntityName& principal_name, entity_addr_t& princ
   if (!encrypt) {
     ::encode(ticket_req, request);
   } else {
+    bufferptr& s1 = session_key.get_secret();
+    hexdump("encoding, session key", s1.c_str(), s1.length());
     encode_encrypt(ticket_req, session_key, request);
   }
   ::encode(ticket_info, request);
@@ -42,23 +61,35 @@ void build_authenticate_request(EntityName& principal_name, entity_addr_t& princ
  * {session key, validity, nonce}^principal_secret
  * {principal_ticket, session key}^service_secret  ... "enc_ticket"
  */
-bool build_authenticate_reply(AuthTicket& ticket,
-                     CryptoKey& session_key,
+bool build_service_ticket_reply(
                      CryptoKey& principal_secret,
-                     CryptoKey& service_secret,
+                     vector<SessionAuthInfo> ticket_info,
                      bufferlist& reply)
 {
-  AuthServiceTicket msg_a;
+  vector<SessionAuthInfo>::iterator ticket_iter = ticket_info.begin(); 
 
-  msg_a.session_key = session_key;
-  if (encode_encrypt(msg_a, principal_secret, reply) < 0)
-    return false;
+  uint32_t num = ticket_info.size();
+  ::encode(num, reply);
 
-  AuthServiceTicketInfo ticket_info;
-  ticket_info.session_key = session_key;
-  ticket_info.ticket = ticket;
-  if (encode_encrypt(ticket_info, service_secret, reply) < 0)
-    return false;
+  while (ticket_iter != ticket_info.end()) {
+    SessionAuthInfo& info = *ticket_iter;
+
+    ::encode(info.service_id, reply);
+
+    AuthServiceTicket msg_a;
+
+    msg_a.session_key = info.session_key;
+    if (encode_encrypt(msg_a, principal_secret, reply) < 0)
+      return false;
+
+    AuthServiceTicketInfo ticket_info;
+    ticket_info.session_key = info.session_key;
+    ticket_info.ticket = info.ticket;
+    if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
+      return false;
+
+    ++ticket_iter;
+  }
   return true;
 }
 
@@ -71,6 +102,9 @@ bool verify_service_ticket_request(bool encrypted,
   AuthServiceTicketRequest msg;
 
   if (encrypted) {
+    bufferptr& s1 = session_key.get_secret();
+    hexdump("decoding, session key", s1.c_str(), s1.length());
+    
     dout(0) << "verify encrypted service ticket request" << dendl;
     if (decode_decrypt(msg, session_key, indata) < 0)
       return false;
@@ -102,15 +136,43 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 					      bufferlist::iterator& indata)
 {
   AuthServiceTicket msg_a;
+
+  bufferptr& s1 = secret.get_secret();
+  hexdump("decoding, session key", s1.c_str(), s1.length());
   if (decode_decrypt(msg_a, secret, indata) < 0)
     return false;
-
+  /* FIXME: decode into relevant ticket */
   ::decode(ticket, indata);
+
+  bufferptr& s = msg_a.session_key.get_secret();
+  hexdump("decoded ticket.session key", s.c_str(), s.length());
+  session_key = msg_a.session_key;
+  has_key_flag = true;
+
+  return true;
+}
+
+/*
+ * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
+ * this ServiceTicket with the result.
+ */
+bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
+					      bufferlist::iterator& indata)
+{
+  uint32_t num;
+  ::decode(num, indata);
+  dout(0) << "received " << num << " keys" << dendl;
+
+  for (int i=0; i<(int)num; i++) {
+    uint32_t type;
+    ::decode(type, indata);
+    dout(0) << "received key type=" << type << dendl;
+    if (!tickets_map[type].verify_service_ticket_reply(secret, indata))
+      return false;
+  }
 
   if (!indata.end())
     return false;
-
-  has_key_flag = true;
 
   return true;
 }

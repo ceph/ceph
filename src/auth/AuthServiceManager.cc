@@ -25,19 +25,33 @@
 /* FIXME */
 #define SERVICE_SECRET   "0123456789ABCDEF"
 #define AUTH_SESSION_KEY "23456789ABCDEF01"
-#define TEST_SESSION_KEY "456789ABCDEF0123"
+#define SESSION_KEY "456789ABCDEF0123"
 
 #define PRINCIPAL_CLIENT_SECRET "123456789ABCDEF0"
 #define PRINCIPAL_OSD_SECRET "3456789ABCDEF012"
+
+static inline void hexdump(string msg, const char *s, int len)
+{
+  int buf_len = len*4;
+  char buf[buf_len];
+  int pos = 0;
+  for (unsigned int i=0; i<len && pos<buf_len - 8; i++) {
+    if (i && !(i%8))
+      pos += snprintf(&buf[pos], buf_len-pos, " ");
+    if (i && !(i%16))
+      pos += snprintf(&buf[pos], buf_len-pos, "\n");
+    pos += snprintf(&buf[pos], buf_len-pos, "%.2x ", (int)(unsigned char)s[i]);
+  }
+  dout(0) << msg << ":\n" << buf << dendl;
+}
+
 
 class CephAuthServer {
   /* FIXME: this is all temporary */
   AuthTicket ticket;
   CryptoKey client_secret;
-  CryptoKey osd_secret;
   CryptoKey auth_session_key;
   CryptoKey service_secret;
-  CryptoKey test_session_key;
   
 public:
   CephAuthServer() {
@@ -47,14 +61,8 @@ public:
     bufferptr ptr2(PRINCIPAL_CLIENT_SECRET, sizeof(PRINCIPAL_CLIENT_SECRET) - 1);
     client_secret.set_secret(CEPH_SECRET_AES, ptr2);
 
-    bufferptr ptr3(PRINCIPAL_OSD_SECRET, sizeof(PRINCIPAL_OSD_SECRET) - 1);
-    osd_secret.set_secret(CEPH_SECRET_AES, ptr2);
-
     bufferptr ptr4(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
-    auth_session_key.set_secret(CEPH_SECRET_AES, ptr3);
-
-    bufferptr ptr5(TEST_SESSION_KEY, sizeof(TEST_SESSION_KEY) - 1);
-    test_session_key.set_secret(CEPH_SECRET_AES, ptr5);
+    auth_session_key.set_secret(CEPH_SECRET_AES, ptr4);
    }
 
 /* FIXME: temporary stabs */
@@ -63,23 +71,23 @@ public:
      return 0;
   }
 
-  int get_osd_secret(CryptoKey& secret) {
-     secret = osd_secret;
-     return 0;
-  }
+  int get_service_secret(CryptoKey& secret, uint32_t service_id) {
+    char buf[16];
+    memcpy(buf, SERVICE_SECRET, 16);
+    buf[0] = service_id & 0xFF;
+    bufferptr ptr(buf, 16);
+    secret.set_secret(CEPH_SECRET_AES, ptr);
 
-  int get_service_secret(CryptoKey& secret) {
-    secret = service_secret;
     return 0;
   }
 
-  int get_auth_session_key(CryptoKey& key) {
-    key = auth_session_key; 
-    return 0;
-  }
+  int get_service_session_key(CryptoKey& secret, uint32_t service_id) {
+    char buf[16];
+    memcpy(buf, SERVICE_SECRET, 16);
+    buf[0] = service_id & 0xFF;
+    bufferptr ptr(buf, 16);
+    secret.set_secret(CEPH_SECRET_AES, ptr);
 
-  int get_test_session_key(CryptoKey& key) {
-    key = test_session_key; 
     return 0;
   }
 };
@@ -165,25 +173,31 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       AuthTicket ticket;
       CryptoKey principal_secret;
       CryptoKey session_key;
-      CryptoKey service_secret;
+      CryptoKey auth_secret;
 
       ticket.expires = g_clock.now();
 
       uint32_t keys;
 
-     if (!verify_service_ticket_request(false, service_secret,
-                                     session_key, keys, indata)) {
-        ret = -EPERM;
-        break;
-      }
-
       auth_server.get_client_secret(principal_secret);
-      auth_server.get_auth_session_key(session_key);
-      auth_server.get_service_secret(service_secret);
+      auth_server.get_service_session_key(session_key, CEPHX_PRINCIPAL_AUTH);
+      auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
 
+      if (!verify_service_ticket_request(false, auth_secret,
+                                     session_key, keys, indata)) {
+         ret = -EPERM;
+         break;
+       }
 
       build_cephx_response_header(request_type, 0, result_bl);
-      if (!build_authenticate_reply(ticket, session_key, principal_secret, service_secret, result_bl)) {
+      vector<SessionAuthInfo> info_vec;
+      SessionAuthInfo info;
+      info.ticket = ticket;
+      info.service_id = CEPHX_PRINCIPAL_AUTH;
+      info.session_key = session_key;
+      info.service_secret = auth_secret;
+      info_vec.push_back(info);
+      if (!build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
         ret = -EIO;
         break;
       }
@@ -194,29 +208,49 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       EntityName name; /* FIXME should take it from the request */
       entity_addr_t addr;
+      CryptoKey auth_secret;
       CryptoKey auth_session_key;
       CryptoKey session_key;
       CryptoKey service_secret;
       uint32_t keys;
 
-      auth_server.get_auth_session_key(session_key);
-      auth_server.get_service_secret(service_secret);
-      auth_server.get_test_session_key(session_key);
+      auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
+      auth_server.get_service_session_key(auth_session_key, CEPHX_PRINCIPAL_AUTH);
 
-      if (!verify_service_ticket_request(true, service_secret,
+      vector<SessionAuthInfo> info_vec;
+
+      if (!verify_service_ticket_request(true, auth_secret,
                                      auth_session_key, keys, indata)) {
         ret = -EPERM;
         break;
       }
 
-      AuthTicket service_ticket;
-      CryptoKey osd_secret;
-      auth_server.get_osd_secret(osd_secret);
+      auth_server.get_service_session_key(auth_session_key, CEPHX_PRINCIPAL_AUTH);
 
-      auth_server.get_osd_secret(osd_secret);
+      for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
+        if (keys & service_id) {
+          auth_server.get_service_secret(service_secret, service_id);
+
+          SessionAuthInfo info;
+
+          AuthTicket service_ticket;
+          /* FIXME: initialize service_ticket */
+
+          auth_server.get_service_secret(service_secret, service_id);
+          auth_server.get_service_session_key(session_key, service_id);
+
+          info.service_id = service_id;
+          info.ticket = service_ticket;
+          info.session_key = session_key;
+          info.service_secret = service_secret;
+
+          info_vec.push_back(info);
+        }
+      }
+
       build_cephx_response_header(request_type, ret, result_bl);
+      build_service_ticket_reply(auth_session_key, info_vec, result_bl);
 
-      build_authenticate_reply(service_ticket, session_key, auth_session_key, osd_secret, result_bl);
       ret = 0;
     }
     break;
