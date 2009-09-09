@@ -50,6 +50,7 @@ import org.apache.hadoop.fs.FileStatus;
 public class CephFileSystem extends FileSystem {
 
   private static final int EEXIST = 17;
+  private static final int ENOENT = 2;
 
   private URI uri;
 
@@ -61,7 +62,7 @@ public class CephFileSystem extends FileSystem {
   private static String monAddr;
   private static String fs_default_name;
   
-  private native boolean ceph_initializeClient(String arguments);
+  private native boolean ceph_initializeClient(String arguments, int block_size);
   private native String  ceph_getcwd();
   private native boolean ceph_setcwd(String path);
   private native boolean ceph_rmdir(String path);
@@ -150,7 +151,8 @@ public class CephFileSystem extends FileSystem {
 	throw new IOException("You must specify a Ceph monitor address or config file!");
       }
       //  Initialize the client
-      if (!ceph_initializeClient(arguments)) {
+      if (!ceph_initializeClient(arguments,
+				 conf.getInt("fs.ceph.blockSize", 1<<26))) {
 	debug("Ceph initialization failed!");
 	throw new IOException("Ceph initialization failed!");
       }
@@ -230,7 +232,8 @@ public class CephFileSystem extends FileSystem {
 
   /**
    * Set the current working directory for the given file system. All relative
-   * paths will be resolved relative to it.
+   * paths will be resolved relative to it. You need to have initialized the
+   * filesystem prior to calling this method.
    *
    * @param dir The directory to change to.
    */
@@ -239,32 +242,10 @@ public class CephFileSystem extends FileSystem {
     if (!initialized) return;
     debug("setWorkingDirecty:enter with new working dir " + dir);
     Path abs_path = makeAbsolute(dir);
-
-    // error conditions if path's not a directory
-    boolean isDir = false;
-    boolean path_exists = false;
-    try {
-      isDir = isDirectory(abs_path);
-      path_exists = exists(abs_path);
-    }
-
-    catch (IOException e) {
-      debug("Warning: isDirectory threw an exception");
-    }
-
-    if (!isDir) {
-      if (path_exists)
-	debug("Warning: SetWorkingDirectory(" + dir.toString() + 
-			   "): path is not a directory");
-      else
-	debug("Warning: SetWorkingDirectory(" + dir.toString() + 
-			   "): path does not exist");
-    }
-    else {
-      debug("calling ceph_setcwd from Java");
-      ceph_setcwd(abs_path.toString());
-      debug("returned from ceph_setcwd to Java" );
-    }
+    debug("calling ceph_setcwd from Java");
+    if (!ceph_setcwd(abs_path.toString()))
+      debug("Warning:ceph_setcwd failed for some reason on path " + abs_path);
+    debug("returned from ceph_setcwd to Java" );
     debug("setWorkingDirectory:exit");
   }
 
@@ -355,7 +336,7 @@ public class CephFileSystem extends FileSystem {
     debug("isDirectory:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     boolean result;
-    if (abs_path.toString().equals("/")) {
+    if (abs_path.toString().equals(root)) {
       result = true;
     }
     else {
@@ -417,8 +398,8 @@ public class CephFileSystem extends FileSystem {
 		       +"CephFileSystem before calling other methods.");
     debug("listStatus:enter with path " + path);
     Path abs_path = makeAbsolute(path);
-    if (isDirectory(abs_path)) {
-      Path[] paths = listPaths(abs_path);
+    Path[] paths = listPaths(abs_path);
+    if (paths != null) {
       FileStatus[] statuses = new FileStatus[paths.length];
       for (int i = 0; i < paths.length; ++i) {
 	statuses[i] = getFileStatus(paths[i]);
@@ -426,10 +407,9 @@ public class CephFileSystem extends FileSystem {
       debug("listStatus:exit");
       return statuses;
     }
-    if (isFile(abs_path)) return null;
-
-    //shouldn't get here
-    throw new FileNotFoundException("listStatus found no such file " + path);
+    if (!isFile(path)) throw new FileNotFoundException(); //if we get here, listPaths returned null
+    //which means that the input wasn't a directory, so throw an Exception if it's not a file
+    return null; //or return null if it's a file
   }
 
   @Override
@@ -490,27 +470,30 @@ public class CephFileSystem extends FileSystem {
     // throw an exception if !CreateFlag.OVERWRITE.
 
     // Step 1: existence test
-    if(isDirectory(abs_path))
-      throw new IOException("create: Cannot overwrite existing directory \""
-			    + path.toString() + "\" with a file");      
-    if (progress!=null) progress.progress();
-    //    if (!flag.contains(CreateFlag.OVERWRITE)) {
-    if (!overwrite) {
-      if (exists(abs_path)) {
+    boolean exists = exists(abs_path);
+    if (exists) {
+      if(isDirectory(abs_path))
+	throw new IOException("create: Cannot overwrite existing directory \""
+			      + path.toString() + "\" with a file");
+      if (!overwrite)
+      //if (!flag.contains(CreateFlag.OVERWRITE)) {
 	throw new IOException("createRaw: Cannot open existing file \"" 
 			      + abs_path.toString() 
 			      + "\" for writing without overwrite flag");
-      }
     }
 
-    // Step 2: create any nonexistent directories in the path
-    Path parent =  abs_path.getParent();
-    if (parent != null) { // if parent is root, we're done
-      int r = ceph_mkdirs(parent.toString(), permission.toShort());
-      if (!(r==0 || r==-EEXIST))
-	throw new IOException ("Error creating parent directory; code: " + r);
-    }
     if (progress!=null) progress.progress();
+
+    // Step 2: create any nonexistent directories in the path
+    if (!exists) {
+      Path parent = abs_path.getParent();
+      if (parent != null) { // if parent is root, we're done
+	int r = ceph_mkdirs(parent.toString(), permission.toShort());
+	if (!(r==0 || r==-EEXIST))
+	  throw new IOException ("Error creating parent directory; code: " + r);
+      }
+      if (progress!=null) progress.progress();
+    }
     // Step 3: open the file
     debug("calling ceph_open_for_overwrite from Java");
     int fh = ceph_open_for_overwrite(abs_path.toString(), (int)permission.toShort());
@@ -541,18 +524,20 @@ public class CephFileSystem extends FileSystem {
     debug("open:enter with path " + path);
     Path abs_path = makeAbsolute(path);
     
-    if(!isFile(abs_path)) {
-      if (!exists(abs_path))
+    int fh = ceph_open_for_read(abs_path.toString());
+    if (fh < 0) { //uh-oh, something's bad!
+      if (fh == -ENOENT) //well that was a stupid open
 	throw new IOException("open:  absolute path \""  + abs_path.toString()
 			      + "\" does not exist");
-      else
-	throw new IOException("open:  absolute path \""  + abs_path.toString()
-			      + "\" is not a file");
+      else //hrm...the file exists but we can't open it :(
+	throw new IOException("open: Failed to open file " + abs_path.toString());
     }
-    
-    int fh = ceph_open_for_read(abs_path.toString());
-    if (fh < 0) {
-      throw new IOException("open: Failed to open file " + abs_path.toString());
+
+    if(isDirectory(abs_path)) { //yes, it is possible to open Ceph directories
+      //but that doesn't mean you should in Hadoop!
+      ceph_close(fh);
+      throw new IOException("open:  absolute path \""  + abs_path.toString()
+			    + "\" is a directory!");
     }
     Stat lstat = new Stat();
     ceph_stat(abs_path.toString(), lstat);
@@ -564,7 +549,7 @@ public class CephFileSystem extends FileSystem {
     FSInputStream cephIStream = new CephInputStream(getConf(), fh, size);
     debug("open:exit");
     return new FSDataInputStream(cephIStream);
-  }
+    }
 
   /**
    * Rename a file or directory.
@@ -681,9 +666,11 @@ public class CephFileSystem extends FileSystem {
     
     //debug("delete: Deleting path " + abs_path.toString());
     // sanity check
-    if (abs_path.toString().equals("/"))
+    if (abs_path.toString().equals(root))
       throw new IOException("Error: deleting the root directory is a Bad Idea.");
-    
+
+    if (!exists(abs_path)) return false;
+
     // if the path is a file, try to delete it.
     if (isFile(abs_path)) {
       boolean result = ceph_unlink(abs_path.toString());
@@ -695,9 +682,7 @@ public class CephFileSystem extends FileSystem {
       return result;
     }
 
-    if (!isDirectory(abs_path)) return false;
-    
-    /* If the path is a directory, recursively try to delete its contents,
+    /* The path is a directory, so recursively try to delete its contents,
        and then delete the directory. */
     if (!recursive) {
       throw new IOException("Directories must be deleted recursively!");
@@ -754,16 +739,12 @@ public class CephFileSystem extends FileSystem {
 		       +"CephFileSystem before calling other methods.");
     debug("getBlockSize:enter with path " + path);
     Path abs_path = makeAbsolute(path);
-    if (!exists(abs_path)) {
-      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: File or directory " + path.toString() + " does not exist.");
-    }
     long result = ceph_getblocksize(abs_path.toString());
-    
-    if (result < 4096) {
-      debug("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: " + 
-			 "path exists; strange block size of " + result + " defaulting to 4096");
-      return 4096;
-    }
+  
+    if (result < 0)
+      throw new IOException("org.apache.hadoop.fs.ceph.CephFileSystem.getBlockSize: File or directory "
+			    + path.toString() + " does not exist.");
+
     debug("getBlockSize:exit with result " + result);
     return result;
   }
@@ -774,7 +755,7 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public long getDefaultBlockSize() {
-    return ceph_getblocksize("/");
+    return getConf().getInt("fs.ceph.blockSize", 1<<26);
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
@@ -783,29 +764,19 @@ public class CephFileSystem extends FileSystem {
     debug("makeAbsolute:enter with path " + path);
     if (path == null) return new Path("/");
     // first, check for the prefix
-    if (path.toString().startsWith(fs_default_name)) {
-	  
+    if (path.toString().startsWith(fs_default_name)) {	  
       Path stripped_path = new Path(path.toString().substring(fs_default_name.length()));
       debug("makeAbsolute:exit with path " + stripped_path);
       return stripped_path;
     }
 
-
     if (path.isAbsolute()) {
       debug("makeAbsolute:exit with path " + path);
       return path;
     }
-    Path wd = getWorkingDirectory();
-    if (wd.toString().equals("")){
-      Path new_path = new Path(root, path);
-      debug("makeAbsolute:exit with path " + new_path);
-      return new_path;
-    }
-    else {
-      Path new_path = new Path(root, path);
-      debug("makeAbsolute:exit with path " + new_path);
-      return new_path;
-    }
+    Path new_path = new Path(ceph_getcwd(), path);
+    debug("makeAbsolute:exit with path " + new_path);
+    return new_path;
   }
  
   private Path[] listPaths(Path path) throws IOException {
@@ -815,18 +786,17 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(path);
 
     // If it's a directory, get the listing. Otherwise, complain and give up.
-    if (isDirectory(abs_path)) {
-      debug("calling ceph_getdir from Java with path " + abs_path);
-      dirlist = ceph_getdir(abs_path.toString());
-      debug("returning from ceph_getdir to Java");
-    }
-    else {
+    debug("calling ceph_getdir from Java with path " + abs_path);
+    dirlist = ceph_getdir(abs_path.toString());
+    debug("returning from ceph_getdir to Java");
+
+    if (dirlist == null) {
       throw new IOException("listPaths: path " + path.toString() + " is not a directory.");
     }
     
     // convert the strings to Paths
     Path[] paths = new Path[dirlist.length];
-    for(int i = 0; i < dirlist.length; ++i) {
+    for (int i = 0; i < dirlist.length; ++i) {
       debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
 			 dirlist[i] + "\"");
       // convert each listing to an absolute path

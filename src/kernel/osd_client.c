@@ -290,7 +290,7 @@ static void osd_reset(struct ceph_connection *con)
 {
 	struct ceph_osd *osd = con->private;
 	struct ceph_osd_client *osdc;
-	
+
 	if (!osd)
 		return;
 	dout("osd_reset osd%d\n", osd->o_osd);
@@ -848,7 +848,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	u32 epoch;
 	struct ceph_osdmap *newmap = NULL, *oldmap;
 	int err;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 
 	dout("handle_map have %u\n", osdc->osdmap ? osdc->osdmap->epoch : 0);
 	p = msg->front.iov_base;

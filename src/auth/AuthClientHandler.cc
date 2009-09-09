@@ -18,6 +18,9 @@
 #include "AuthProtocol.h"
 #include "AuthClientHandler.h"
 
+#include "messages/MAuthReply.h"
+
+#if 0
 int AuthClientHandler::generate_request(bufferlist& bl)
 {
   dout(0) << "status=" << status << dendl;
@@ -206,4 +209,33 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
 bool AuthClientHandler::request_pending() {
   dout(0) << "request_pending(): cephx_request_state=" << cephx_request_state << " cephx_response_state=" << cephx_response_state << dendl;
   return (request_state != response_state) || (cephx_request_state != cephx_response_state);
+}
+
+#endif
+
+// -----------
+
+void AuthClientHandler::handle_auth_reply(MAuthReply *m)
+{
+  Mutex::Locker l(lock);
+  dout(10) << "handle_auth_reply " << *m << dendl;
+
+}
+
+void AuthClientHandler::start_session()
+{
+  Mutex::Locker l(lock);
+  dout(10) << "start_session" << dendl;
+  _reset();
+
+  // ...
+}
+
+void AuthClientHandler::tick()
+{
+  Mutex::Locker l(lock);
+
+  // do i need to renew any tickets?
+  // ...
+
 }

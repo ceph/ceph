@@ -101,8 +101,6 @@ struct ceph_msg {
 	bool front_is_vmalloc;
 	bool more_to_follow;
 	int front_max;
-
-	struct ceph_msg_pool *pool;
 };
 
 struct ceph_msg_pos {
@@ -131,8 +129,6 @@ struct ceph_msg_pos {
 #define STANDBY		8  /* no outgoing messages, socket closed.  we keep
 			    * the ceph_connection around to maintain shared
 			    * state with the peer. */
-#define WAIT		9  /* waiting for peer to connect to us (during a
-			    * connection race) */
 #define CLOSED		10 /* we've closed the connection */
 #define SOCK_CLOSED	11 /* socket state changed to closed */
 #define REGISTERED      12 /* connection appears in con_tree */

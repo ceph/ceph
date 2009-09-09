@@ -18,11 +18,19 @@
 
 #include "auth/Auth.h"
 
-#include "config.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
+
+class MAuthReply;
 
 class AuthClientHandler {
-  uint32_t want_keys;
-  uint32_t have_keys;
+  Mutex lock;
+  Cond cond;
+
+  uint32_t want;
+  uint32_t have;
+
+  // session state
   int request_state;
   int response_state;
 
@@ -45,19 +53,46 @@ class AuthClientHandler {
 
   int generate_cephx_protocol_request(bufferlist& bl);
   int handle_cephx_protocol_response(bufferlist::iterator& indata);
-public:
-  AuthClientHandler() : want_keys(0), request_state(0), response_state(0),
-                        status(0),
-                        cephx_request_state(0), cephx_response_state(0) {}
-  int set_request_keys(uint32_t keys) {
-    want_keys = keys;
-    return 0;
+
+  void _reset() {
+    request_state = 0;
+    response_state = 0;
+    status = 0;
+    cephx_request_state = 0;
+    cephx_response_state = 0;
   }
 
-  int generate_request(bufferlist& bl);
-  int handle_response(int ret, bufferlist& bl);
 
-  bool request_pending();
+public:
+  AuthClientHandler() : lock("AuthClientHandler::lock"),
+			want(0), have(0) {
+    _reset();
+  }
+  
+  void set_want_keys(__u32 keys) {
+    Mutex::Locker l(lock);
+    want = keys;
+  }
+  bool have_keys(__u32 k) {
+    Mutex::Locker l(lock);
+    return (k & have) == have;
+  }
+  bool have_keys() {
+    Mutex::Locker l(lock);
+    return (want & have) == have;
+  }
+  bool wait_for_keys(double timeout) {
+    Mutex::Locker l(lock);
+    utime_t t;
+    t += timeout;
+    while ((want & have) != have)
+      cond.WaitInterval(lock, t);
+    return (want & have) == have;
+  }
+
+  void start_session();
+  void handle_auth_reply(MAuthReply *m);
+  void tick();
 };
 
 

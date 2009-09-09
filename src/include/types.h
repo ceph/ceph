@@ -197,7 +197,7 @@ struct ltstr
 
 #include "encoding.h"
 
-WRITE_RAW_ENCODER(ceph_fsid_t)
+WRITE_RAW_ENCODER(ceph_fsid)
 WRITE_RAW_ENCODER(ceph_file_layout)
 WRITE_RAW_ENCODER(ceph_pg_pool)
 WRITE_RAW_ENCODER(ceph_mds_session_head)
@@ -234,7 +234,7 @@ typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 ye
 
 #define O_LAZY 01000000
 
-
+typedef struct ceph_fsid ceph_fsid_t;
 
 // --------------------------------------
 // identify individual mount clients by 64bit value
@@ -389,7 +389,7 @@ inline ostream& operator<<(ostream& out, const SnapContext& snapc) {
 
 // --
 
-inline ostream& operator<<(ostream& out, const ceph_fsid_t& f) {
+inline ostream& operator<<(ostream& out, const ceph_fsid& f) {
   char b[37];
   sprintf(b, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 	  f.fsid[0], f.fsid[1], f.fsid[2], f.fsid[3], f.fsid[4], f.fsid[5], f.fsid[6], f.fsid[7],

@@ -35,7 +35,7 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 {
 	struct ceph_monmap *m = 0;
 	int i, err = -EINVAL;
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	u32 epoch, num_mon;
 	u16 version;
 
@@ -280,7 +280,7 @@ static void __request_mount(struct ceph_mon_client *monc)
 int ceph_monc_request_mount(struct ceph_mon_client *monc)
 {
 	if (!monc->con) {
-		monc->con = kzalloc(sizeof(*monc->con), GFP_KERNEL);
+		monc->con = kmalloc(sizeof(*monc->con), GFP_KERNEL);
 		if (!monc->con)
 			return -ENOMEM;
 		ceph_con_init(monc->client->msgr, monc->con);
@@ -453,7 +453,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 		return -ENOMEM;
 	}
 	monc->num_statfs_requests++;
-	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, 1);
 	mutex_unlock(&monc->mutex);
 
 	/* send request and wait */
@@ -464,7 +463,6 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	mutex_lock(&monc->mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
-	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, -1);
 	mutex_unlock(&monc->mutex);
 
 	if (!err)

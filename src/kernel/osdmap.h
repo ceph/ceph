@@ -31,7 +31,7 @@ struct ceph_pg_mapping {
 };
 
 struct ceph_osdmap {
-	ceph_fsid_t fsid;
+	struct ceph_fsid fsid;
 	u32 epoch;
 	u32 mkfs_epoch;
 	struct ceph_timespec created, modified;

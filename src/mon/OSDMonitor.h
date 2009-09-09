@@ -68,8 +68,6 @@ private:
   void send_to_waiting();     // send current map to waiters.
   void send_full(entity_inst_t dest);
   void send_incremental(entity_inst_t dest, epoch_t since);
-  void bcast_latest_mds();
-  void bcast_latest_osd();
   void bcast_full_osd();
  
   void handle_osd_getmap(class MOSDGetMap *m);

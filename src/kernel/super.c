@@ -33,7 +33,7 @@
 const char *ceph_file_part(const char *s, int len)
 {
 	const char *e = s + len;
-	
+
 	while (e != s && *(e-1) != '/')
 		e--;
 	return e;
@@ -444,7 +444,7 @@ static int parse_mount_args(struct ceph_client *client,
 		return err;
 
 	/* build initial monmap */
-	client->monc.monmap = kzalloc(sizeof(*client->monc.monmap) + 
+	client->monc.monmap = kzalloc(sizeof(*client->monc.monmap) +
 			       num_mon*sizeof(client->monc.monmap->mon_inst[0]),
 			       GFP_KERNEL);
 	if (!client->monc.monmap)
@@ -623,12 +623,6 @@ static struct ceph_client *ceph_create_client(void)
 	if (client->trunc_wq == NULL)
 		goto fail;
 
-	/* msg pools */
-	/* preallocated at request time: */
-	err = ceph_msgpool_init(&client->msgpool_statfs_reply, 4096, 0, false);
-	if (err < 0)
-		goto fail;
-
 	/* subsystems */
 	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
@@ -665,9 +659,6 @@ static void ceph_destroy_client(struct ceph_client *client)
 		ceph_messenger_destroy(client->msgr);
 	if (client->wb_pagevec_pool)
 		mempool_destroy(client->wb_pagevec_pool);
-
-	/* msg pools */
-	ceph_msgpool_destroy(&client->msgpool_statfs_reply);
 
 	release_mount_args(&client->mount_args);
 

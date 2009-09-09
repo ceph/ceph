@@ -20,7 +20,6 @@ int main(int argc, char *argv[])
   enc_in.append(ptr);
   enc_in.append(msg, strlen(msg));
 
-  int src_len = enc_in.length();
   bufferlist enc_out;
   if (key.encrypt(enc_in, enc_out) < 0) {
     derr(0) << "couldn't encode!" << dendl;
@@ -28,7 +27,7 @@ int main(int argc, char *argv[])
   }
 
   const char *enc_buf = enc_out.c_str();
-  for (int i=0; i<enc_out.length(); i++) {
+  for (unsigned i=0; i<enc_out.length(); i++) {
     std::cout << hex << (int)(unsigned char)enc_buf[i] << dec << " ";
     if (i && !(i%16))
       std::cout << std::endl;

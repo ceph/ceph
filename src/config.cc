@@ -359,6 +359,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_stop_with_last_mds, 0, OPT_BOOL, false),
 	OPTION(mon_allow_mds_bully, 0, OPT_BOOL, false),   // allow a booting mds to (forcibly) claim an mds # .. FIXME
 	OPTION(mon_pg_create_interval, 0, OPT_FLOAT, 30.0), // no more than every 30s
+	OPTION(mon_clientid_prealloc, 0, OPT_INT, 100),   // how many clientids to prealloc
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
 	OPTION(paxos_observer_timeout, 0, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
 	OPTION(client_cache_size, 0, OPT_INT, 1000),

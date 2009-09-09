@@ -259,6 +259,8 @@ void Client::init()
   messenger->set_dispatcher(this);
   link_dispatcher(monclient);
 
+  monclient->init();
+
   tick();
 
   // do logger crap only once per process.
@@ -289,6 +291,7 @@ void Client::shutdown()
 {
   dout(1) << "shutdown" << dendl;
   objecter->shutdown();
+  monclient->shutdown();
   messenger->shutdown();
 }
 
@@ -1633,7 +1636,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
     if ((cap->issued & CEPH_CAP_FILE_WR) &&
 	(in->size << 1) >= in->max_size &&
 	(in->reported_size << 1) < in->max_size) {
-      dout(10) << "size approaching max_size" << dendl;
+      dout(10) << "size " << in->size << " approaching max_size " << in->max_size
+	       << ", reported " << in->reported_size << dendl;
       goto ack;
     }
 
@@ -2757,8 +2761,6 @@ void Client::tick()
   tick_event = new C_C_Tick(this);
   timer.add_event_after(g_conf.client_tick_interval, tick_event);
 
-  monclient->tick();
-  
   utime_t now = g_clock.now();
 
   if (mdsmap->get_epoch()) {
@@ -3286,6 +3288,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 
 int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat, int mask)
 {
+  dout(3) << "lstat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout << "lstat" << std::endl;
   tout << relpath << std::endl;
@@ -3298,6 +3301,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf, frag_info_t *dirstat,
   if (r < 0)
     return r;
   fill_stat(in, stbuf, dirstat);
+  dout(3) << "lstat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *dirstat, nest_info_t *rstat) 
@@ -3344,6 +3348,7 @@ int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *d
 
 int Client::lstat_precise(const char *relpath, struct stat_precise *stbuf,
 			  frag_info_t *dirstat, int mask) {
+  dout(3) << "lstat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout << "lstat_precise" << std::endl;
   tout << relpath << std::endl;
@@ -3353,9 +3358,12 @@ int Client::lstat_precise(const char *relpath, struct stat_precise *stbuf,
   if (r < 0)
     return r;
   r = _getattr(in, mask);
-  if (r < 0)
+  if (r < 0) {
+    dout(3) << "lstat exit on error!" << dendl;
     return r;
+  }
   fill_stat_precise(in, stbuf, dirstat);
+  dout(3) << "lstat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
@@ -3775,10 +3783,13 @@ void Client::seekdir(DIR *dirp, loff_t offset)
 
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
+  dout(3) << "open enter(" << relpath << ", " << flags << ") = " << dendl;
   Mutex::Locker lock(client_lock);
   tout << "open" << std::endl;
   tout << relpath << std::endl;
   tout << flags << std::endl;
+
+  dout(5) << "open(" << relpath << ", " << flags << ", " << mode << ")" << dendl;
 
   Fh *fh = NULL;
 
@@ -3798,7 +3809,7 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     r = _create(dir, dname.c_str(), flags, mode, &in, &fh);
   }
   if (r < 0)
-    return r;
+    goto out;
 
   if (!fh)
     r = _open(in, flags, mode, &fh);
@@ -3811,8 +3822,9 @@ int Client::open(const char *relpath, int flags, mode_t mode)
     fd_map[r] = fh;
   }
   
+ out:
   tout << r << std::endl;
-  dout(3) << "open(" << path << ", " << flags << ") = " << r << dendl;
+  dout(3) << "open exit(" << path << ", " << flags << ") = " << r << dendl;
   return r;
 }
 
@@ -3878,15 +3890,16 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
 
 int Client::close(int fd)
 {
+  dout(3) << "close enter(" << fd << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout << "close" << std::endl;
   tout << fd << std::endl;
 
-  dout(3) << "close(" << fd << ")" << dendl;
   assert(fd_map.count(fd));
   Fh *fh = fd_map[fd];
   _release(fh);
   fd_map.erase(fd);
+  dout(3) << "close exit(" << fd << ")" << dendl;
   return 0;
 }
 
@@ -4077,6 +4090,10 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0)
     in->get_cap_ref(CEPH_CAP_FILE_CACHE);
   
+  dout(10) << "readahead=" << readahead << " nr_consec=" << f->nr_consec_read
+	   << " max_byes=" << g_conf.client_readahead_max_bytes
+	   << " max_periods=" << g_conf.client_readahead_max_periods << dendl;
+
   // readahead?
   if (readahead &&
       f->nr_consec_read &&
@@ -4094,21 +4111,29 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
     if (l >= 2*p)
       // align large readahead with period
       l -= (off+l) % p;
-    else 
-      // align all readahead with stripe unit
-      l -= (off+l) % ceph_file_layout_su(in->layout);
-
+    else {
+      // align readahead with stripe unit if we cross su boundary
+      int su = ceph_file_layout_su(in->layout);
+      if ((off+l)/su != off/su) l -= (off+l) % su;
+    }
+    
     // don't read past end of file
     if (off+l > in->size)
       l = in->size - off;
     
-    dout(10) << "readahead " << f->nr_consec_read << " reads " 
+    loff_t min = MIN((loff_t)len, l/2);
+
+    dout(20) << "readahead " << f->nr_consec_read << " reads " 
 	     << f->consec_read_bytes << " bytes ... readahead " << off << "~" << l
+	     << " min " << min
 	     << " (caller wants " << off << "~" << len << ")" << dendl;
-    if (l > len) {
-      objectcacher->file_read(in->ino, &in->layout, in->snapid,
-			      off, l, NULL, 0, 0);
-      dout(10) << "readahead initiated" << dendl;
+    if (l > (loff_t)len) {
+      if (objectcacher->file_is_cached(in->ino, &in->layout, in->snapid, off, min))
+	dout(20) << "readahead already have min" << dendl;
+      else {
+	objectcacher->file_read(in->ino, &in->layout, in->snapid, off, l, NULL, 0, 0);
+	dout(20) << "readahead initiated" << dendl;
+      }
     }
   }
   
@@ -4555,6 +4580,12 @@ int Client::sync_fs()
 {
   Mutex::Locker l(client_lock);
   return _sync_fs();
+}
+
+__s64 Client::drop_caches()
+{
+  Mutex::Locker l(client_lock);
+  return objectcacher->release_all();
 }
 
 

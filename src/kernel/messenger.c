@@ -14,23 +14,11 @@
 /*
  * Ceph uses the messenger to exchange ceph_msg messages with other
  * hosts in the system.  The messenger provides ordered and reliable
- * delivery.  It tolerates TCP disconnects by reconnecting (with
+ * delivery.  We tolerate TCP disconnects by reconnecting (with
  * exponential backoff) in the case of a fault (disconnection, bad
  * crc, protocol error).  Acks allow sent messages to be discarded by
  * the sender.
- *
- * The network topology is flat: there is no "client" or "server," and
- * any node can initiate a connection (i.e., send messages) to any
- * other node.  There is a fair bit of complexity to handle the
- * "connection race" case where two nodes are simultaneously
- * connecting to each other so that the end result is a single
- * session.
- *
- * The messenger can also send messages in "lossy" mode, where there
- * is no error recovery or connect retry... the message is just
- * dropped if something goes wrong.
  */
-
 
 /* static tag bytes (protocol control messages) */
 static char tag_msg = CEPH_MSGR_TAG_MSG;
@@ -313,19 +301,17 @@ void ceph_con_put(struct ceph_connection *con)
 
 /*
  * initialize a new connection.
- *
- * NOTE: assumes struct is initially zeroed!
  */
 void ceph_con_init(struct ceph_messenger *msgr, struct ceph_connection *con)
 {
 	dout("con_init %p\n", con);
+	memset(con, 0, sizeof(*con));
 	atomic_set(&con->nref, 1);
 	con->msgr = msgr;
 	spin_lock_init(&con->out_queue_lock);
 	INIT_LIST_HEAD(&con->out_queue);
 	INIT_LIST_HEAD(&con->out_sent);
 	INIT_DELAYED_WORK(&con->work, con_work);
-	con->private = NULL;
 }
 
 
@@ -854,18 +840,6 @@ static int process_connect(struct ceph_connection *con)
 		prepare_read_connect(con);
 		break;
 
-	case CEPH_MSGR_TAG_WAIT:
-		/*
-		 * If there is a connection race (we are opening connections to
-		 * each other), one of us may just have to WAIT.  We will keep
-		 * our queued messages, in expectation of being replaced by an
-		 * incoming connection.
-		 */
-		dout("process_connect peer connecting WAIT\n");
-		set_bit(WAIT, &con->state);
-		con_close_socket(con);
-		break;
-
 	case CEPH_MSGR_TAG_READY:
 		clear_bit(CONNECTING, &con->state);
 		if (con->in_reply.flags & CEPH_MSG_CONNECT_LOSSY)
@@ -882,6 +856,15 @@ static int process_connect(struct ceph_connection *con)
 		con->delay = 0;  /* reset backoff memory */
 		prepare_read_tag(con);
 		break;
+
+	case CEPH_MSGR_TAG_WAIT:
+		/*
+		 * If there is a connection race (we are opening
+		 * connections to each other), one of us may just have
+		 * to WAIT.  This shouldn't happen if we are the
+		 * client.
+		 */
+		pr_err("process_connect peer connecting WAIT\n");
 
 	default:
 		pr_err("ceph connect protocol error, will retry\n");
@@ -1260,12 +1243,12 @@ more_kvec:
 			spin_unlock(&con->out_queue_lock);
 			goto more;
 		}
+		if (test_and_clear_bit(KEEPALIVE_PENDING, &con->state)) {
+			prepare_write_keepalive(con);
+			spin_unlock(&con->out_queue_lock);
+			goto more;
+		}
 		spin_unlock(&con->out_queue_lock);
-	}
-
-	if (test_and_clear_bit(KEEPALIVE_PENDING, &con->state)) {
-		prepare_write_keepalive(con);
-		goto more_kvec;
 	}
 
 	/* Nothing to do! */
@@ -1305,7 +1288,7 @@ more:
 		ret = read_partial_connect(con);
 		if (ret <= 0)
 			goto done;
-		if (process_connect(con) < 0 || test_bit(WAIT, &con->state)) {
+		if (process_connect(con) < 0) {
 			ret = -1;
 			goto out;
 		}
@@ -1412,9 +1395,8 @@ bad_tag:
  */
 static void queue_con(struct ceph_connection *con)
 {
-	if (test_bit(WAIT, &con->state) ||
-	    test_bit(DEAD, &con->state)) {
-		dout("queue_con %p ignoring: WAIT|DEAD\n",
+	if (test_bit(DEAD, &con->state)) {
+		dout("queue_con %p ignoring: DEAD\n",
 		     con);
 		return;
 	}
@@ -1460,10 +1442,6 @@ more:
 		/* reopen w/ new peer */
 		dout("con_work OPENING\n");
 		con_close_socket(con);
-	}
-	if (test_bit(WAIT, &con->state)) {   /* we are a zombie */
-		dout("con_work WAIT\n");
-		goto done;
 	}
 
 	if (test_and_clear_bit(SOCK_CLOSED, &con->state) ||
@@ -1515,7 +1493,7 @@ static void ceph_fault(struct ceph_connection *con)
 	/* If there are no messages in the queue, place the connection
 	 * in a STANDBY state (i.e., don't try to reconnect just yet). */
 	spin_lock(&con->out_queue_lock);
-	if (list_empty(&con->out_queue)) {
+	if (list_empty(&con->out_queue) && !con->out_keepalive_pending) {
 		dout("fault setting STANDBY\n");
 		set_bit(STANDBY, &con->state);
 		spin_unlock(&con->out_queue_lock);
@@ -1547,7 +1525,7 @@ out:
 
 
 /*
- * create a new messenger instance, creates listening socket
+ * create a new messenger instance
  */
 struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 {
@@ -1568,20 +1546,17 @@ struct ceph_messenger *ceph_messenger_create(struct ceph_entity_addr *myaddr)
 	}
 	kmap(msgr->zero_page);
 
-	/* pick listening address */
 	if (myaddr) {
 		msgr->inst.addr = *myaddr;
 	} else {
-		dout("create ip not specified, initially INADDR_ANY\n");
 		msgr->inst.addr.ipaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-		msgr->inst.addr.ipaddr.sin_port = htons(0);  /* any port */
-		get_random_bytes(&msgr->inst.addr.nonce,
-				 sizeof(msgr->inst.addr.nonce));
+		msgr->inst.addr.ipaddr.sin_port = htons(0);
 	}
 	msgr->inst.addr.ipaddr.sin_family = AF_INET;
 
-	if (myaddr)
-		msgr->inst.addr.ipaddr.sin_addr = myaddr->ipaddr.sin_addr;
+	/* select a random nonce */
+	get_random_bytes(&msgr->inst.addr.nonce,
+			 sizeof(msgr->inst.addr.nonce));
 
 	dout("messenger_create %p\n", msgr);
 	return msgr;
@@ -1714,7 +1689,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->front_max = front_len;
 	m->front_is_vmalloc = false;
 	m->more_to_follow = false;
-	m->pool = NULL;
 
 	/* front */
 	if (front_len) {
@@ -1836,9 +1810,6 @@ void ceph_msg_put(struct ceph_msg *m)
 		m->nr_pages = 0;
 		m->pages = NULL;
 
-		if (m->pool)
-			ceph_msgpool_put(m->pool, m);
-		else
-			ceph_msg_kfree(m);
+		ceph_msg_kfree(m);
 	}
 }

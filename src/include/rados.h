@@ -1,6 +1,3 @@
-// -*- mode:C; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*-
-// vim: ts=8 sw=8 smarttab
-
 #ifndef __RADOS_H
 #define __RADOS_H
 
@@ -14,10 +11,12 @@
 /*
  * fs id
  */
-typedef struct { unsigned char fsid[16]; } ceph_fsid_t;
+struct ceph_fsid {
+	unsigned char fsid[16];
+};
 
-static inline int ceph_fsid_compare(const ceph_fsid_t *a,
-				    const ceph_fsid_t *b)
+static inline int ceph_fsid_compare(const struct ceph_fsid *a,
+				    const struct ceph_fsid *b)
 {
 	return memcmp(a, b, sizeof(*a));
 }
@@ -194,11 +193,11 @@ enum {
 	CEPH_OSD_OP_SETTRUNC  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 8,
 	CEPH_OSD_OP_TRIMTRUNC = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 9,
 
-	CEPH_OSD_OP_TMAPUP    = CEPH_OSD_OP_MODE_RMW | CEPH_OSD_OP_TYPE_DATA | 10,
-	CEPH_OSD_OP_TMAPPUT   = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 11,
-	CEPH_OSD_OP_TMAPGET   = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 12,
+	CEPH_OSD_OP_TMAPUP  = CEPH_OSD_OP_MODE_RMW | CEPH_OSD_OP_TYPE_DATA | 10,
+	CEPH_OSD_OP_TMAPPUT = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 11,
+	CEPH_OSD_OP_TMAPGET = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 12,
 
-	CEPH_OSD_OP_CREATE    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 13,
+	CEPH_OSD_OP_CREATE  = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 13,
 
 	/** attrs **/
 	/* read */
@@ -376,7 +375,7 @@ struct ceph_osd_op {
 		struct {
 			__le64 pgls_cookie, count;
 		} __attribute__ ((packed));
-                struct {
+		struct {
 			__le32 flags;
 		} __attribute__ ((packed));
 	};

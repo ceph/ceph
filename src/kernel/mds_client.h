@@ -267,7 +267,7 @@ extern const char *ceph_mds_op_name(int op);
 extern struct ceph_mds_session *
 __ceph_lookup_mds_session(struct ceph_mds_client *, int mds);
 
-inline static struct ceph_mds_session *
+static inline struct ceph_mds_session *
 ceph_get_mds_session(struct ceph_mds_session *s)
 {
 	atomic_inc(&s->s_ref);

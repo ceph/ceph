@@ -224,6 +224,7 @@ class ObjectCacher {
     void merge_left(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
+    bool is_cached(loff_t off, loff_t len);
     int map_read(OSDRead *rd,
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
@@ -269,6 +270,13 @@ class ObjectCacher {
   
 
   // objects
+  Object *get_object_maybe(sobject_t oid, inodeno_t ino, ceph_object_layout &l) {
+    // have it?
+    if (objects.count(oid))
+      return objects[oid];
+    return NULL;
+  }
+
   Object *get_object(sobject_t oid, inodeno_t ino, ceph_object_layout &l) {
     // have it?
     if (objects.count(oid))
@@ -514,6 +522,7 @@ class ObjectCacher {
   // non-blocking.  async.
   int readx(OSDRead *rd, inodeno_t ino, Context *onfinish);
   int writex(OSDWrite *wr, inodeno_t ino);
+  bool is_cached(inodeno_t ino, vector<ObjectExtent>& extents, snapid_t snapid);
 
   // write blocking
   bool wait_for_write(size_t len, Mutex& lock);
@@ -534,6 +543,7 @@ class ObjectCacher {
   void purge_set(inodeno_t ino);
 
   loff_t release_set(inodeno_t ino);  // returns # of bytes not released (ie non-clean)
+  __u64 release_all();
 
   void truncate_set(inodeno_t ino, vector<ObjectExtent>& ex);
 
@@ -544,6 +554,13 @@ class ObjectCacher {
   // file functions
 
   /*** async+caching (non-blocking) file interface ***/
+  int file_is_cached(inodeno_t ino, ceph_file_layout *layout, snapid_t snapid,
+		     loff_t offset, size_t len) {
+    vector<ObjectExtent> extents;
+    filer.file_to_extents(ino, layout, offset, len, extents);
+    return is_cached(ino, extents, snapid);
+  }
+
   int file_read(inodeno_t ino, ceph_file_layout *layout, snapid_t snapid,
                 loff_t offset, size_t len, 
                 bufferlist *bl,

@@ -877,7 +877,7 @@ inline ostream& operator<<(ostream& out, ObjectExtent &ex)
 class OSDSuperblock {
 public:
   nstring magic;
-  ceph_fsid_t fsid;
+  ceph_fsid fsid;
   int32_t whoami;    // my role in this fs.
   epoch_t current_epoch;             // most recent epoch
   epoch_t oldest_map, newest_map;    // oldest/newest maps we have.

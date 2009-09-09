@@ -1070,7 +1070,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   // requeue sent items
   requeue_sent();
 
-  if (q.empty()) {
+  if (!is_queued()) {
     if (state == STATE_CLOSING || onconnect) {
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
@@ -1253,6 +1253,9 @@ void SimpleMessenger::Pipe::reader()
     else if (tag == CEPH_MSGR_TAG_MSG) {
       dout(20) << "reader got MSG" << dendl;
       Message *m = read_message();
+
+      m->set_connection(connection_state->get());
+
       lock.Lock();
       
       if (!m) {
@@ -1635,6 +1638,41 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
       errno = EINTR;
       return -1; // close enough
     }
+
+    if (0) {
+      // hex dump
+      struct iovec *v = msg->msg_iov;
+      size_t left = r;
+      size_t vpos = 0;
+      dout(0) << "do_sendmsg wrote " << r << " bytes, hexdump:\n";
+      int pos = 0;
+      int col = 0;
+      char buf[20];
+      while (left > 0) {
+	if (col == 0) {
+	  sprintf(buf, "%05x : ", pos);
+	  *_dout << buf;
+	}
+	sprintf(buf, " %02x", ((unsigned char*)v->iov_base)[vpos]);
+	*_dout << buf;
+	left--;
+	if (!left)
+	  break;
+	vpos++;
+	pos++;
+	if (vpos == v->iov_len) {
+	  v++;
+	  vpos = 0;
+	}	  
+	col++;
+	if (col == 16) {
+	  *_dout << "\n";
+	  col = 0;
+	}
+      }
+      *_dout << dendl;
+    }
+
     len -= r;
     if (len == 0) break;
     
@@ -1650,7 +1688,7 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
       } else {
 	// partial!
 	//dout(30) << "adjusting " << msg->msg_iov[0].iov_len << ", " << msg->msg_iovlen << " v, " << r << " left" << dendl;
-	msg->msg_iov[0].iov_base = (void*)((long)msg->msg_iov[0].iov_base + r);
+	msg->msg_iov[0].iov_base = (char *)msg->msg_iov[0].iov_base + r;
 	msg->msg_iov[0].iov_len -= r;
 	break;
       }
