@@ -30,7 +30,7 @@ v0.14
 
 v0.15
 /- clean up msgr protocol checks
-- kclient checkpatch fixes
+/- kclient checkpatch fixes
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication

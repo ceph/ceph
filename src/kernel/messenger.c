@@ -853,7 +853,7 @@ static int process_connect(struct ceph_connection *con)
 		dout("process_connect got BADPROTOVER my %d != their %d\n",
 		     le32_to_cpu(con->out_connect.protocol_version),
 		     le32_to_cpu(con->in_reply.protocol_version));
-		pr_err("ceph %s%d %u.%u.%u.%u:%u protocol version mismatch,"
+		pr_err("ceph %s%lld %u.%u.%u.%u:%u protocol version mismatch,"
 		       " my %d != server's %d\n",
 		       ENTITY_NAME(con->peer_name),
 		       IPQUADPORT(con->peer_addr.ipaddr),
@@ -877,7 +877,7 @@ static int process_connect(struct ceph_connection *con)
 		 */
 		dout("process_connect got RESET peer seq %u\n",
 		     le32_to_cpu(con->in_connect.connect_seq));
-		pr_err("ceph %s%d %u.%u.%u.%u:%u connection reset\n",
+		pr_err("ceph %s%lld %u.%u.%u.%u:%u connection reset\n",
 		       ENTITY_NAME(con->peer_name),
 		       IPQUADPORT(con->peer_addr.ipaddr));
 		reset_connection(con);
@@ -885,7 +885,7 @@ static int process_connect(struct ceph_connection *con)
 		prepare_read_connect(con);
 
 		/* Tell ceph about it. */
-		pr_info("reset on %s%d\n", ENTITY_NAME(con->peer_name));
+		pr_info("reset on %s%lld\n", ENTITY_NAME(con->peer_name));
 		if (con->ops->peer_reset)
 			con->ops->peer_reset(con);
 		break;
@@ -1210,7 +1210,7 @@ static void process_message(struct ceph_connection *con)
 	con->in_seq++;
 	mutex_unlock(&con->out_mutex);
 
-	dout("===== %p %llu from %s%d %d=%s len %d+%d (%u %u %u) =====\n",
+	dout("===== %p %llu from %s%lld %d=%s len %d+%d (%u %u %u) =====\n",
 	     msg, le64_to_cpu(msg->hdr.seq),
 	     ENTITY_NAME(msg->hdr.src.name),
 	     le16_to_cpu(msg->hdr.type),
@@ -1543,7 +1543,7 @@ out:
  */
 static void ceph_fault(struct ceph_connection *con)
 {
-	pr_err("ceph %s%d %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
+	pr_err("ceph %s%lld %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
 	       IPQUADPORT(con->peer_addr.ipaddr), con->error_msg);
 	dout("fault %p state %lu to peer %u.%u.%u.%u:%u\n",
 	     con, con->state, IPQUADPORT(con->peer_addr.ipaddr));
@@ -1659,7 +1659,7 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	mutex_lock(&con->out_mutex);
 	list_add_tail(&msg->list_head, &con->out_queue);
 	con->out_qlen++;
-	dout("----- %p %llu to %s%d %d=%s len %d+%d+%d -----\n", msg,
+	dout("----- %p %llu to %s%lld %d=%s len %d+%d+%d -----\n", msg,
 	     con->out_seq + con->out_qlen,
 	     ENTITY_NAME(con->peer_name), le16_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),

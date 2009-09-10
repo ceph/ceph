@@ -46,7 +46,7 @@ static int monmap_show(struct seq_file *s, void *p)
 		struct ceph_entity_inst *inst =
 			&client->monc.monmap->mon_inst[i];
 
-		seq_printf(s, "\t%s%d\t%u.%u.%u.%u:%u\n",
+		seq_printf(s, "\t%s%lld\t%u.%u.%u.%u:%u\n",
 			       ENTITY_NAME(inst->name),
 			       IPQUADPORT(inst->addr.ipaddr));
 	}
