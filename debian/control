@@ -2,7 +2,7 @@ Source: ceph
 Section: admin
 Priority: optional
 Maintainer: Sage Weil <sage@newdream.net>
-Build-Depends: debhelper (>= 5), autotools-dev, autoconf, automake, g++, gcc, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool
+Build-Depends: debhelper (>= 5), autotools-dev, autoconf, automake, g++, gcc, cdbs, libfuse-dev, libboost-dev, libedit-dev, libssl-dev, libtool, libexpat1-dev, libfcgi-dev
 Standards-Version: 3.7.2
 
 Package: ceph
@@ -98,4 +98,15 @@ Description: Ceph distributed file system client library (development files)
  excellent performance, reliability, and scalability.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
+
+Package: radosgw
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1
+Description: REST gateway for RADOS distributed object store
+ RADOS is a distributed object store used by the Ceph distributed
+ storage system.  This package provides a REST gateway to the
+ object store that aims to implement a superset of Amazon's S3
+ service.
+ .
+ This package contains the proxy daemon and related tools only.
 
