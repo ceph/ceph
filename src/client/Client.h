@@ -107,6 +107,7 @@ struct MetaRequest {
   int      ref;
   
   MClientReply *reply;         // the reply
+  bool kick;
   
   //possible responses
   bool got_safe;
@@ -124,7 +125,7 @@ struct MetaRequest {
     tid(t), request(req), 
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
-    got_safe(false), got_unsafe(false), unsafe_item(this),
+    kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0), target(0) { }
 

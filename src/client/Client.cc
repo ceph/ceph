@@ -852,8 +852,12 @@ int Client::make_request(MClientRequest *req,
     send_request(request, mds);
 
     // wait for signal
-    dout(20) << "awaiting kick on " << &cond << dendl;
-    cond.Wait(client_lock);
+    dout(20) << "awaiting reply|forward|kick on " << &cond << dendl;
+    request->kick = false;
+    while (!request->reply &&         // reply
+	   request->resend_mds < 0 && // forward
+	   !request->kick)
+      cond.Wait(client_lock);
     
     // did we get a reply?
     if (request->reply) 
@@ -984,43 +988,18 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   // reset retry counter
   request->retry_attempt = 0;
 
-  if (!fwd->must_resend() && 
-      mds_sessions.count(fwd->get_dest_mds())) {
-    // dest mds has a session, and request was forwarded for us.
-
-    // note new mds set.
-    if (request->num_fwd < fwd->get_num_fwd()) {
-      // there are now exactly two mds's whose failure should trigger a resend
-      // of this request.
-      request->mds.clear();
-      request->mds.insert(fwd->get_source().num());
-      request->mds.insert(fwd->get_dest_mds());
-      request->num_fwd = fwd->get_num_fwd();
-      dout(10) << "handle_client_request tid " << tid
-	       << " fwd " << fwd->get_num_fwd() 
-	       << " to mds" << fwd->get_dest_mds() 
-	       << ", mds set now " << request->mds
-	       << dendl;
-    } else {
-      dout(10) << "handle_client_request tid " << tid
-	       << " previously forwarded to mds" << fwd->get_dest_mds() 
-	       << ", mds still " << request->mds
-		 << dendl;
-    }
-  } else {
-    // request not forwarded, or dest mds has no session.
-    // resend.
-    dout(10) << "handle_client_request tid " << tid
-	     << " fwd " << fwd->get_num_fwd() 
-	     << " to mds" << fwd->get_dest_mds() 
-	     << ", non-idempotent, resending to " << fwd->get_dest_mds()
-	     << dendl;
-
-    request->mds.clear();
-    request->num_fwd = fwd->get_num_fwd();
-    request->resend_mds = fwd->get_dest_mds();
-    request->caller_cond->Signal();
-  }
+  // request not forwarded, or dest mds has no session.
+  // resend.
+  dout(10) << "handle_client_request tid " << tid
+	   << " fwd " << fwd->get_num_fwd() 
+	   << " to mds" << fwd->get_dest_mds() 
+	   << ", resending to " << fwd->get_dest_mds()
+	   << dendl;
+  
+  request->mds.clear();
+  request->num_fwd = fwd->get_num_fwd();
+  request->resend_mds = fwd->get_dest_mds();
+  request->caller_cond->Signal();
 
   delete fwd;
 }
@@ -1280,6 +1259,7 @@ void Client::kick_requests(int mds, bool signal)
        ++p) 
     if (p->second->mds.count(mds)) {
       if (signal) {
+	p->second->kick = true;
 	p->second->caller_cond->Signal();
       }
       else {
