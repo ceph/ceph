@@ -1666,7 +1666,7 @@ Message *SimpleMessenger::Pipe::read_message()
 }
 
 
-int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
+int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
 {
   while (len > 0) {
     if (0) { // sanity
@@ -1676,7 +1676,7 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
       assert(l == len);
     }
 
-    int r = ::sendmsg(sd, msg, 0);
+    int r = ::sendmsg(sd, msg, more ? MSG_MORE : 0);
     if (r == 0) 
       dout(10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
@@ -1766,7 +1766,7 @@ int SimpleMessenger::Pipe::write_ack(__u64 seq)
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 2;
   
-  if (do_sendmsg(sd, &msg, 1 + sizeof(s)) < 0) 
+  if (do_sendmsg(sd, &msg, 1 + sizeof(s), true) < 0) 
     return -1;	
   return 0;
 }
@@ -1848,7 +1848,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 	     << dendl;
     
     if (msg.msg_iovlen >= IOV_MAX-2) {
-      if (do_sendmsg(sd, &msg, msglen)) 
+      if (do_sendmsg(sd, &msg, msglen, true)) 
 	return -1;	
       
       // and restart the iov

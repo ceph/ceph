@@ -160,7 +160,7 @@ private:
 
     Message *read_message();
     int write_message(Message *m);
-    int do_sendmsg(int sd, struct msghdr *msg, int len);
+    int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
     int write_ack(__u64 s);
     int write_keepalive();
 
