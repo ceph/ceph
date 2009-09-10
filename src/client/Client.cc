@@ -904,6 +904,7 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_OPEN:
     mds_sessions[from].seq = 0;
     mds_sessions[from].inst = m->get_source_inst();
+    renew_caps(from);
     break;
 
   case CEPH_SESSION_CLOSE:
@@ -914,9 +915,11 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_RENEWCAPS:
-    mds_sessions[from].cap_ttl = 
-      mds_sessions[from].last_cap_renew_request + mdsmap->get_session_timeout();
-    wake_inode_waiters(from);
+    if (mds_sessions[from].cap_renew_seq == m->get_seq()) {
+      mds_sessions[from].cap_ttl = 
+	mds_sessions[from].last_cap_renew_request + mdsmap->get_session_timeout();
+      wake_inode_waiters(from);
+    }
     break;
 
   case CEPH_SESSION_STALE:
@@ -2793,7 +2796,8 @@ void Client::renew_caps()
 void Client::renew_caps(const int mds) {
   dout(10) << "renew_caps mds" << mds << dendl;
   mds_sessions[mds].last_cap_renew_request = g_clock.now();
-  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
+  __u64 seq = ++mds_sessions[mds].cap_renew_seq;
+  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq),
 			  mdsmap->get_inst(mds));
 
 }
@@ -2845,7 +2849,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       dir->dir->dentries.count(dname)) {
     Dentry *dn = dir->dir->dentries[dname];
 
-    dout(20) << " have dn " << dname << " mds" << dn->lease_mds << " ttl " << dn->lease_ttl
+    dout(20) << "_lookup have dn " << dname << " mds" << dn->lease_mds << " ttl " << dn->lease_ttl
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
@@ -2860,6 +2864,8 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	*target = dn->inode;
 	goto done;
       }
+      dout(20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
+	       << " vs lease_gen " << dn->lease_gen << dendl;
     }
     // dir lease?
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
