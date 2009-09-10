@@ -1728,12 +1728,6 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->hdr.data_len = cpu_to_le32(page_len);
 	m->hdr.data_off = cpu_to_le16(page_off);
 	m->hdr.priority = cpu_to_le16(CEPH_MSG_PRIO_DEFAULT);
-	m->hdr.mon_protocol = CEPH_MON_PROTOCOL;
-	m->hdr.monc_protocol = CEPH_MONC_PROTOCOL;
-	m->hdr.osd_protocol = CEPH_OSD_PROTOCOL;
-	m->hdr.osdc_protocol = CEPH_OSDC_PROTOCOL;
-	m->hdr.mds_protocol = CEPH_MDS_PROTOCOL;
-	m->hdr.mdsc_protocol = CEPH_MDSC_PROTOCOL;
 	m->footer.front_crc = 0;
 	m->footer.middle_crc = 0;
 	m->footer.data_crc = 0;

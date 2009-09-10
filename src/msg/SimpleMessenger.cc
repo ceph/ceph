@@ -2133,13 +2133,6 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 
   assert(m->nref.test() == 0);
 
-  m->get_header().mon_protocol = CEPH_MON_PROTOCOL;
-  m->get_header().monc_protocol = CEPH_MONC_PROTOCOL;
-  m->get_header().mds_protocol = CEPH_MDS_PROTOCOL;
-  m->get_header().mdsc_protocol = CEPH_MDSC_PROTOCOL;
-  m->get_header().osd_protocol = CEPH_OSD_PROTOCOL;
-  m->get_header().osdc_protocol = CEPH_OSDC_PROTOCOL;
-
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
   dest_proc_addr.erank = 0;

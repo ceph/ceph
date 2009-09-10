@@ -132,10 +132,6 @@ struct ceph_msg_header {
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 
-	__u8 mon_protocol, monc_protocol;  /* protocol versions, */
-	__u8 osd_protocol, osdc_protocol;  /* internal and public */
-	__u8 mds_protocol, mdsc_protocol;
-
 	struct ceph_entity_inst src, orig_src;
 	__le32 dst_erank;
 	__le32 crc;       /* header crc32c */
