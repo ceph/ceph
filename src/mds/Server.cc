@@ -211,7 +211,7 @@ void Server::handle_client_session(MClientSession *m)
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
       mds->locker->resume_stale_caps(session);
     }
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_stamp()), 
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
 				 session->inst);
     break;
     
