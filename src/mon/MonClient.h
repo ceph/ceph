@@ -22,6 +22,7 @@
 
 #include "common/Timer.h"
 
+#include "auth/AuthClient.h"
 #include "auth/AuthClientHandler.h"
 
 #include "messages/MMonSubscribe.h"
@@ -31,7 +32,7 @@ class MMonMap;
 class MClientMountAck;
 class MMonSubscribeAck;
 
-class MonClient : public Dispatcher {
+class MonClient : public Dispatcher, public AuthClient {
 public:
   MonMap monmap;
 private:
@@ -76,7 +77,7 @@ private:
 
 public:
   int mount(double mount_timeout);
-
+  int authorize(double timeout);
 
   // mon subscriptions
 private:
@@ -118,6 +119,7 @@ public:
   // auth tickets
 public:
   AuthClientHandler auth;
+  double auth_timeout;
 
  public:
   MonClient() : messenger(NULL),
@@ -173,6 +175,7 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
 
+  void send_message(Message *m);
 };
 
 #endif

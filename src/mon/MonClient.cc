@@ -261,6 +261,14 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   delete m;
 }
 
+int MonClient::authorize(double timeout)
+{
+  Mutex::Locker lock(monc_lock);
+
+  auth_timeout = timeout;
+
+  return auth.start_session(this, timeout);
+}
 
 // ---------
 
@@ -268,6 +276,11 @@ void MonClient::_send_mon_message(Message *m)
 {
   int mon = monmap.pick_mon();
   messenger->send_message(m, monmap.mon_inst[mon]);
+}
+
+void MonClient::send_message(Message *m)
+{
+  _send_mon_message(m);
 }
 
 void MonClient::_pick_new_mon()
@@ -287,7 +300,7 @@ void MonClient::ms_handle_reset(const entity_addr_t& peer)
     if (mounting)
       _send_mount();
     _renew_subs();
-    auth.start_session();
+    auth.start_session(this, 30.0);
   }
 }
 
@@ -302,7 +315,7 @@ void MonClient::tick()
     if (mounting)
       _send_mount();
     _renew_subs();
-    auth.start_session();
+    auth.start_session(this, 30.0);
   } else {
     // just renew as needed
     utime_t now = g_clock.now();

@@ -18,9 +18,10 @@
 #include "AuthProtocol.h"
 #include "AuthClientHandler.h"
 
+#include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
-#if 0
+
 int AuthClientHandler::generate_request(bufferlist& bl)
 {
   dout(0) << "status=" << status << dendl;
@@ -63,9 +64,13 @@ int AuthClientHandler::generate_request(bufferlist& bl)
 }
 
 
-int AuthClientHandler::handle_response(int ret, bufferlist& bl)
+int AuthClientHandler::handle_response(Message *response)
 {
-char buf[4096];
+  bufferlist bl;
+  int ret;
+
+#if 1
+      char buf[4096];
       const char *s = bl.c_str();
       int pos = 0;
       for (unsigned int i=0; i<bl.length() && pos<sizeof(buf) - 8; i++) {
@@ -76,14 +81,19 @@ char buf[4096];
           pos += snprintf(&buf[pos], sizeof(buf)-pos, "\n");
       }
       dout(0) << "result_buf=" << buf << dendl;
+#endif
 
+  MAuthReply* m = (MAuthReply *)response;
+  bl = m->result_bl;
+  ret = m->result;
+
+  got_response = true;
 
   bufferlist::iterator iter = bl.begin();
 
   if (ret != 0 && ret != -EAGAIN) {
     response_state = request_state;
     cephx_response_state = cephx_request_state;
-    status = ret;
     return ret;
   }
 
@@ -94,6 +104,7 @@ char buf[4096];
     { 
       CephXEnvResponse1 response;
 
+      response_state++;
       ::decode(response, iter);
       server_challenge = response.server_challenge;
     }
@@ -108,8 +119,7 @@ char buf[4096];
   default:
     return handle_cephx_protocol_response(iter);
   }
-  response_state++;
-  return  -EAGAIN;
+  return -EAGAIN;
 }
 
 int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
@@ -131,11 +141,11 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
     return 0;
   }
 
-  dout(0) << "want_keys=" << hex << want_keys << " have_keys=" << have_keys << dec << dendl;
+  dout(0) << "want=" << hex << want << " have=" << have << dec << dendl;
 
   cephx_request_state = 2;
 
-  if (want_keys == have_keys) {
+  if (want == have) {
     cephx_response_state = 2;
     return 0;
   }
@@ -143,7 +153,7 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
   header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
 
   ::encode(header, bl);
-  build_service_ticket_request(name, addr, want_keys,
+  build_service_ticket_request(name, addr, want,
                              true, ticket_handler.session_key, ticket_handler.ticket, bl);
   
   return 0;
@@ -174,7 +184,7 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
         return -EPERM;
       }
 
-      if (want_keys)
+      if (want)
         ret = -EAGAIN;
     }
     break;
@@ -211,24 +221,26 @@ bool AuthClientHandler::request_pending() {
   return (request_state != response_state) || (cephx_request_state != cephx_response_state);
 }
 
-#endif
 
 // -----------
 
-void AuthClientHandler::handle_auth_reply(MAuthReply *m)
+int AuthClientHandler::start_session(AuthClient *client, double timeout)
 {
   Mutex::Locker l(lock);
-  dout(10) << "handle_auth_reply " << *m << dendl;
-
-}
-
-void AuthClientHandler::start_session()
-{
-  Mutex::Locker l(lock);
+  this->client = client;
   dout(10) << "start_session" << dendl;
   _reset();
 
-  // ...
+  do {
+    status = 0;
+    int err = _do_request(timeout);
+    dout(0) << "_do_request returned " << err << dendl;
+    if (err < 0)
+      return err;
+
+  } while (status == -EAGAIN);
+
+  return status;
 }
 
 void AuthClientHandler::tick()
@@ -239,3 +251,75 @@ void AuthClientHandler::tick()
   // ...
 
 }
+
+Message *AuthClientHandler::build_request()
+{
+  MAuth *msg = new MAuth;
+  if (!msg)
+    return NULL;
+  bufferlist& bl = msg->get_auth_payload();
+
+  if (generate_request(bl) < 0) {
+    delete msg;
+    return NULL;
+  }
+
+  return msg;
+}
+
+int AuthClientHandler::_do_request(double timeout)
+{
+  Message *msg = build_request();
+
+  if (!msg)
+    return -EIO;
+
+  got_response = false;
+ 
+  client->send_message(msg);
+
+  // schedule timeout?
+  assert(timeout_event == 0);
+  timeout_event = new C_OpTimeout(this, timeout);
+  timer.add_event_after(timeout, timeout_event);
+
+  Cond request_cond;
+
+  cur_request_cond = &request_cond;
+
+  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
+
+  while (!got_response && !got_timeout) {
+    request_cond.Wait(lock);
+  }
+
+  cur_request_cond = NULL;
+
+  // finish.
+  timer.cancel_event(timeout_event);
+  timeout_event = 0;
+
+  return 0;
+}
+
+void AuthClientHandler::_request_timeout(double timeout)
+{
+  Mutex::Locker l(lock);
+  dout(10) << "_op_timeout" << dendl;
+  timeout_event = 0;
+  if (!got_response) {
+    got_timeout = 1;
+    assert(cur_request_cond);
+    cur_request_cond->Signal();
+  }
+  status = -ETIMEDOUT;
+}
+
+void AuthClientHandler::handle_auth_reply(MAuthReply *m)
+{
+  Mutex::Locker l(lock);
+
+  status = handle_response(m);
+  cur_request_cond->Signal();
+}
+

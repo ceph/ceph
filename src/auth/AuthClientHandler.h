@@ -17,15 +17,22 @@
 
 
 #include "auth/Auth.h"
+#include "auth/AuthClient.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
 
+#include "common/Timer.h"
+
 class MAuthReply;
+class Message;
+class AuthClient;
 
 class AuthClientHandler {
   Mutex lock;
-  Cond cond;
+  Cond keys_cond;
+  Cond *cur_request_cond;
+  Context *timeout_event;
 
   uint32_t want;
   uint32_t have;
@@ -39,6 +46,9 @@ class AuthClientHandler {
   int cephx_request_state;
   int cephx_response_state;
 
+  bool got_response;
+  bool got_timeout;
+
   EntityName name;
   entity_addr_t addr;
 
@@ -51,6 +61,13 @@ class AuthClientHandler {
 
   CryptoKey secret;
 
+  AuthClient *client;
+
+  bool request_pending();
+  Message *build_request();
+
+  int generate_request(bufferlist& bl);
+  int handle_response(Message *response);
   int generate_cephx_protocol_request(bufferlist& bl);
   int handle_cephx_protocol_response(bufferlist::iterator& indata);
 
@@ -60,12 +77,33 @@ class AuthClientHandler {
     status = 0;
     cephx_request_state = 0;
     cephx_response_state = 0;
+    got_response = false;
+    got_timeout = false;
+    timeout_event = NULL;
+    cur_request_cond = NULL;
   }
 
+  SafeTimer timer;
+
+ class C_OpTimeout : public Context {
+  protected:
+    AuthClientHandler *client_handler;
+    double timeout;
+  public:
+    C_OpTimeout(AuthClientHandler *handler, double to) :
+                                        client_handler(handler), timeout(to) {
+    }
+    void finish(int r) {
+      if (r >= 0) client_handler->_request_timeout(timeout);
+    }
+  };
+
+  void _request_timeout(double timeout);
+  int _do_request(double timeout);
 
 public:
   AuthClientHandler() : lock("AuthClientHandler::lock"),
-			want(0), have(0) {
+			want(0), have(0), client(NULL), timer(lock) {
     _reset();
   }
   
@@ -86,11 +124,11 @@ public:
     utime_t t;
     t += timeout;
     while ((want & have) != have)
-      cond.WaitInterval(lock, t);
+      keys_cond.WaitInterval(lock, t);
     return (want & have) == have;
   }
 
-  void start_session();
+  int start_session(AuthClient *client, double timeout);
   void handle_auth_reply(MAuthReply *m);
   void tick();
 };
