@@ -33,7 +33,7 @@ const static struct ceph_connection_operations mon_con_ops;
  */
 struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 {
-	struct ceph_monmap *m = 0;
+	struct ceph_monmap *m = NULL;
 	int i, err = -EINVAL;
 	struct ceph_fsid fsid;
 	u32 epoch, num_mon;
@@ -118,8 +118,8 @@ static int __open_session(struct ceph_mon_client *monc)
 		monc->want_next_osdmap = !!monc->want_next_osdmap;
 
 		dout("open_session mon%d opening\n", monc->cur_mon);
-		monc->con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
-		monc->con->peer_name.num = cpu_to_le32(monc->cur_mon);
+		monc->con->peer_name.type = CEPH_ENTITY_TYPE_MON;
+		monc->con->peer_name.num = cpu_to_le64(monc->cur_mon);
 		ceph_con_open(monc->con,
 			      &monc->monmap->mon_inst[monc->cur_mon].addr);
 	} else {
@@ -162,7 +162,7 @@ static void __send_subscribe(struct ceph_mon_client *monc)
 		struct ceph_mon_subscribe_item *i;
 		void *p, *end;
 
-		msg = ceph_msg_new(CEPH_MSG_MON_SUBSCRIBE, 64, 0, 0, 0);
+		msg = ceph_msg_new(CEPH_MSG_MON_SUBSCRIBE, 64, 0, 0, NULL);
 		if (!msg)
 			return;
 
@@ -351,12 +351,10 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	monc->want_mount = false;
 
 	client->whoami = cnum;
-	client->msgr->inst.name.num = cpu_to_le32(cnum);
 	client->msgr->inst.name.type = CEPH_ENTITY_TYPE_CLIENT;
-	pr_info("ceph client%lld fsid %llx.%llx\n",
-		client->whoami,
-		le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
-		le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+	client->msgr->inst.name.num = cpu_to_le64(cnum);
+	pr_info("ceph client%lld fsid " FSID_FORMAT "\n",
+		client->whoami, PR_FSID(&client->monc.monmap->fsid));
 
 	ceph_debugfs_client_init(client);
 	__send_subscribe(monc);

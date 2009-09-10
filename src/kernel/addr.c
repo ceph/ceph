@@ -840,7 +840,7 @@ get_more_pages:
 		reqhead = req->r_request->front.iov_base;
 		op = (void *)(reqhead + 1);
 		op->length = cpu_to_le64(len);
-		op->payload_len = op->length;
+		op->payload_len = cpu_to_le32(len);
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 
 		ceph_osdc_start_request(&client->osdc, req, true);

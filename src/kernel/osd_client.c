@@ -318,7 +318,7 @@ static struct ceph_osd *create_osd(struct ceph_osd_client *osdc)
 	ceph_con_init(osdc->client->msgr, &osd->o_con);
 	osd->o_con.private = osd;
 	osd->o_con.ops = &osd_con_ops;
-	osd->o_con.peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_OSD);
+	osd->o_con.peer_name.type = CEPH_ENTITY_TYPE_OSD;
 	return osd;
 }
 
@@ -548,7 +548,7 @@ static int __map_osds(struct ceph_osd_client *osdc,
 
 		dout("map_osds osd %p is osd%d\n", req->r_osd, o);
 		req->r_osd->o_osd = o;
-		req->r_osd->o_con.peer_name.num = cpu_to_le32(o);
+		req->r_osd->o_con.peer_name.num = cpu_to_le64(o);
 		__insert_osd(osdc, req->r_osd);
 
 		ceph_con_open(&req->r_osd->o_con, &osdc->osdmap->osd_addr[o]);

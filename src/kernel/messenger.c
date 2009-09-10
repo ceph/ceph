@@ -837,8 +837,8 @@ static int process_connect(struct ceph_connection *con)
 	/*
 	 * did we learn our address?
 	 */
-	if (con->msgr->inst.addr.ipaddr.sin_addr.s_addr == htons(INADDR_ANY)) {
-		int port = con->msgr->inst.addr.ipaddr.sin_port;
+	if (con->msgr->inst.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+		__be16 port = con->msgr->inst.addr.ipaddr.sin_port;
 
 		memcpy(&con->msgr->inst.addr.ipaddr,
 		       &con->peer_addr_for_me.ipaddr,
@@ -1782,7 +1782,7 @@ out:
 struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
 				struct ceph_msg_header *hdr)
 {
-	int type = le32_to_cpu(hdr->type);
+	int type = le16_to_cpu(hdr->type);
 	int front_len = le32_to_cpu(hdr->front_len);
 	struct ceph_msg *msg = ceph_msg_new(type, front_len, 0, 0, NULL);
 
@@ -1803,7 +1803,7 @@ struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
  */
 int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg)
 {
-	int type = le32_to_cpu(msg->hdr.type);
+	int type = le16_to_cpu(msg->hdr.type);
 	int middle_len = le32_to_cpu(msg->hdr.middle_len);
 
 	dout("alloc_middle %p type %d %s middle_len %d\n", msg, type,

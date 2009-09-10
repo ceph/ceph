@@ -324,8 +324,8 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	ceph_con_init(mdsc->client->msgr, &s->s_con);
 	s->s_con.private = s;
 	s->s_con.ops = &mds_con_ops;
-	s->s_con.peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MDS);
-	s->s_con.peer_name.num = cpu_to_le32(mds);
+	s->s_con.peer_name.type = CEPH_ENTITY_TYPE_MDS;
+	s->s_con.peer_name.num = cpu_to_le64(mds);
 	ceph_con_open(&s->s_con, ceph_mdsmap_get_addr(mdsc->mdsmap, mds));
 
 	spin_lock_init(&s->s_cap_lock);
@@ -517,7 +517,7 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	if (mode == USE_RANDOM_MDS)
 		goto random;
 
-	inode = 0;
+	inode = NULL;
 	if (req->r_inode) {
 		inode = req->r_inode;
 	} else if (req->r_dentry) {
@@ -572,7 +572,7 @@ static int __choose_mds(struct ceph_mds_client *mdsc,
 	}
 
 	spin_lock(&inode->i_lock);
-	cap = 0;
+	cap = NULL;
 	if (mode == USE_AUTH_MDS)
 		cap = ci->i_auth_cap;
 	if (!cap && !RB_EMPTY_ROOT(&ci->i_caps))
@@ -1279,8 +1279,8 @@ static struct ceph_msg *create_request_message(struct ceph_mds_client *mdsc,
 {
 	struct ceph_msg *msg;
 	struct ceph_mds_request_head *head;
-	const char *path1 = 0;
-	const char *path2 = 0;
+	const char *path1 = NULL;
+	const char *path2 = NULL;
 	u64 ino1 = 0, ino2 = 0;
 	int pathlen1 = 0, pathlen2 = 0;
 	int freepath1 = 0, freepath2 = 0;
@@ -1639,7 +1639,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 	int err, result;
 	int mds;
 
-	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
+	if (msg->hdr.src.name.type != CEPH_ENTITY_TYPE_MDS)
 		return;
 	if (msg->front.iov_len < sizeof(*head)) {
 		pr_err("ceph_mdsc_handle_reply got corrupt (short) reply\n");
@@ -1656,7 +1656,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 		return;
 	}
 	dout("handle_reply %p\n", req);
-	mds = le32_to_cpu(msg->hdr.src.name.num);
+	mds = le64_to_cpu(msg->hdr.src.name.num);
 
 	/* correct session? */
 	if (!req->r_session && req->r_session != session) {
@@ -1791,9 +1791,9 @@ static void handle_forward(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	void *end = p + msg->front.iov_len;
 	int from_mds, state;
 
-	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
+	if (msg->hdr.src.name.type != CEPH_ENTITY_TYPE_MDS)
 		goto bad;
-	from_mds = le32_to_cpu(msg->hdr.src.name.num);
+	from_mds = le64_to_cpu(msg->hdr.src.name.num);
 
 	ceph_decode_need(&p, end, sizeof(u64)+2*sizeof(u32), bad);
 	ceph_decode_64(&p, tid);
@@ -1844,9 +1844,9 @@ static void handle_session(struct ceph_mds_session *session,
 	struct ceph_mds_session_head *h = msg->front.iov_base;
 	int wake = 0;
 
-	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
+	if (msg->hdr.src.name.type != CEPH_ENTITY_TYPE_MDS)
 		return;
-	mds = le32_to_cpu(msg->hdr.src.name.num);
+	mds = le64_to_cpu(msg->hdr.src.name.num);
 
 	/* decode */
 	if (msg->front.iov_len != sizeof(*h))
@@ -2286,9 +2286,9 @@ static void handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	struct qstr dname;
 	int release = 0;
 
-	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
+	if (msg->hdr.src.name.type != CEPH_ENTITY_TYPE_MDS)
 		return;
-	mds = le32_to_cpu(msg->hdr.src.name.num);
+	mds = le64_to_cpu(msg->hdr.src.name.num);
 	dout("handle_lease from mds%d\n", mds);
 
 	/* decode */

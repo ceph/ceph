@@ -1715,13 +1715,12 @@ int ceph_write_inode(struct inode *inode, int wait)
  *
  * Caller holds session->s_mutex.
  */
-void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
-			     struct ceph_mds_session *session)
+static void kick_flushing_capsnaps(struct ceph_mds_client *mdsc,
+				   struct ceph_mds_session *session)
 {
-	struct ceph_inode_info *ci;
 	struct ceph_cap_snap *capsnap;
 
-	dout("kick_flushing_caps mds%d\n", session->s_mds);
+	dout("kick_flushing_capsnaps mds%d\n", session->s_mds);
 	list_for_each_entry(capsnap, &session->s_cap_snaps_flushing,
 			    flushing_item) {
 		struct ceph_inode_info *ci = capsnap->ci;
@@ -1740,7 +1739,16 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 			spin_unlock(&inode->i_lock);
 		}
 	}
+}
 
+void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
+			     struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci;
+
+	kick_flushing_capsnaps(mdsc, session);
+
+	dout("kick_flushing_caps mds%d\n", session->s_mds);
 	list_for_each_entry(ci, &session->s_cap_flushing, i_flushing_item) {
 		struct inode *inode = &ci->vfs_inode;
 		struct ceph_cap *cap;
@@ -2519,7 +2527,7 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct ceph_mds_caps *h;
-	int mds = le32_to_cpu(msg->hdr.src.name.num);
+	int mds = le64_to_cpu(msg->hdr.src.name.num);
 	int op;
 	u32 seq;
 	struct ceph_vino vino;

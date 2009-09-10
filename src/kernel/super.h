@@ -770,31 +770,12 @@ extern struct kmem_cache *ceph_file_cachep;
 
 extern const char *ceph_msg_type_name(int type);
 
-static inline __le64 __ceph_fsid_minor(struct ceph_fsid *fsid)
-{
-	return get_unaligned_le64(&fsid->fsid[8]);
-}
-
-static inline __le64 __ceph_fsid_major(struct ceph_fsid *fsid)
-{
-	return get_unaligned_le64(&fsid->fsid[0]);
-}
-
-static inline void __ceph_fsid_set_minor(struct ceph_fsid *fsid, __le64 val)
-{
-	put_unaligned_le64(val, &fsid->fsid[8]);
-}
-
-static inline void __ceph_fsid_set_major(struct ceph_fsid *fsid, __le64 val)
-{
-	put_unaligned_le64(val, &fsid->fsid[0]);
-}
-
-/*
-extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
-extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
-				       struct ceph_msg_header *hdr);
-*/
+#define FSID_FORMAT "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-" \
+	"%02x%02x%02x%02x%02x%02x"
+#define PR_FSID(f) (f)->fsid[0], (f)->fsid[1], (f)->fsid[2], (f)->fsid[3], \
+		(f)->fsid[4], (f)->fsid[5], (f)->fsid[6], (f)->fsid[7],    \
+		(f)->fsid[8], (f)->fsid[9], (f)->fsid[10], (f)->fsid[11],  \
+		(f)->fsid[12], (f)->fsid[13], (f)->fsid[14], (f)->fsid[15]
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;

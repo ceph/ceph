@@ -707,9 +707,9 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 	int i;
 	int locked_rwsem = 0;
 
-	if (le32_to_cpu(msg->hdr.src.name.type) != CEPH_ENTITY_TYPE_MDS)
+	if (msg->hdr.src.name.type != CEPH_ENTITY_TYPE_MDS)
 		return;
-	mds = le32_to_cpu(msg->hdr.src.name.num);
+	mds = le64_to_cpu(msg->hdr.src.name.num);
 
 	/* decode */
 	if (msg->front.iov_len < sizeof(*h))

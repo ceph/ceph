@@ -55,7 +55,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	struct ceph_client *client = ceph_inode_to_client(dentry->d_inode);
 	struct ceph_monmap *monmap = client->monc.monmap;
 	struct ceph_statfs st;
-	__le64 fsid;
+	u64 fsid;
 	int err;
 
 	dout("statfs\n");
@@ -82,10 +82,9 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_frsize = PAGE_CACHE_SIZE;
 
 	/* leave fsid little-endian, regardless of host endianness */
-	fsid = __ceph_fsid_major(&monmap->fsid) ^
-		__ceph_fsid_minor(&monmap->fsid);
-	buf->f_fsid.val[0] = le64_to_cpu(fsid) & 0xffffffff;
-	buf->f_fsid.val[1] = le64_to_cpu(fsid) >> 32;
+	fsid = *(u64 *)(&monmap->fsid) ^ *((u64 *)&monmap->fsid + 1);
+	buf->f_fsid.val[0] = fsid & 0xffffffff;
+	buf->f_fsid.val[1] = fsid >> 32;
 
 	return 0;
 }
@@ -112,8 +111,8 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 
 	if (args->flags & CEPH_OPT_FSID)
 		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu",
-			   __ceph_fsid_major(&args->fsid),
-			   __ceph_fsid_minor(&args->fsid));
+			   le64_to_cpu(*(__le64 *)&args->fsid.fsid[0]),
+			   le64_to_cpu(*(__le64 *)&args->fsid.fsid[8]));
 	if (args->flags & CEPH_OPT_NOSHARE)
 		seq_puts(m, ",noshare");
 	if (args->flags & CEPH_OPT_DIRSTAT)
@@ -450,8 +449,8 @@ static int parse_mount_args(struct ceph_client *client,
 		client->monc.monmap->mon_inst[i].addr.erank = 0;
 		client->monc.monmap->mon_inst[i].addr.nonce = 0;
 		client->monc.monmap->mon_inst[i].name.type =
-			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
-		client->monc.monmap->mon_inst[i].name.num = cpu_to_le32(i);
+			CEPH_ENTITY_TYPE_MON;
+		client->monc.monmap->mon_inst[i].name.num = cpu_to_le64(i);
 	}
 	client->monc.monmap->num_mon = num_mon;
 	args->my_addr.ipaddr.sin_family = AF_INET;
@@ -484,10 +483,10 @@ static int parse_mount_args(struct ceph_client *client,
 		}
 		switch (token) {
 		case Opt_fsidmajor:
-			__ceph_fsid_set_major(&args->fsid, cpu_to_le64(intval));
+			*(__le64 *)&args->fsid.fsid[0] = cpu_to_le64(intval);
 			break;
 		case Opt_fsidminor:
-			__ceph_fsid_set_minor(&args->fsid, cpu_to_le64(intval));
+			*(__le64 *)&args->fsid.fsid[8] = cpu_to_le64(intval);
 			break;
 		case Opt_port:
 			args->my_addr.ipaddr.sin_port = htons(intval);
@@ -571,9 +570,9 @@ static int parse_mount_args(struct ceph_client *client,
 static void release_mount_args(struct ceph_mount_args *args)
 {
 	kfree(args->snapdir_name);
-	args->snapdir_name = 0;
+	args->snapdir_name = NULL;
 	kfree(args->secret);
-	args->secret = 0;
+	args->secret = NULL;
 }
 
 /*

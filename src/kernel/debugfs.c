@@ -27,10 +27,9 @@ static struct dentry *ceph_debugfs_caps_reservation;
 static int fsid_show(struct seq_file *s, void *p)
 {
 	struct ceph_client *client = s->private;
+	struct ceph_fsid *f = &client->monc.monmap->fsid;
 
-	seq_printf(s, "%llx.%llx\n",
-	       le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
-	       le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+	seq_printf(s, FSID_FORMAT "\n", PR_FSID(f));
 	return 0;
 }
 
