@@ -369,7 +369,7 @@ void SimpleMessenger::Endpoint::prepare_dest(const entity_inst_t& inst)
   rank->lock.Lock();
   {
     if (rank->rank_pipe.count(inst.addr) == 0)
-      rank->connect_rank(inst.addr, rank->get_policy(inst.name.type()));
+      rank->connect_rank(inst.addr, inst.name.type());
   }
   rank->lock.Unlock();
 }
@@ -475,6 +475,36 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix() {
 		<< ").";
 }
 
+static int get_proto_version(int my_type, int peer_type, bool connect)
+{
+  // set reply protocol version
+  if (peer_type == my_type) {
+    // internal
+    switch (my_type) {
+    case CEPH_ENTITY_TYPE_OSD: return CEPH_OSD_PROTOCOL;
+    case CEPH_ENTITY_TYPE_MDS: return CEPH_MDS_PROTOCOL;
+    case CEPH_ENTITY_TYPE_MON: return CEPH_MON_PROTOCOL;
+    }
+  } else {
+    // public
+    if (connect) {
+      switch (peer_type) {
+      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
+      }
+    } else {
+      switch (my_type) {
+      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
+      }
+    }
+  }
+  return 0;
+}
+
+
 int SimpleMessenger::Pipe::accept()
 {
   dout(10) << "accept" << dendl;
@@ -566,13 +596,24 @@ int SimpleMessenger::Pipe::accept()
     rank->lock.Lock();
 
     // note peer's type, flags
+    peer_type = connect.host_type;
     policy = rank->get_policy(connect.host_type);
     dout(10) << "accept host_type " << connect.host_type
 	     << ", setting policy, lossy_tx=" << policy.lossy_tx << dendl;
     lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
 
     memset(&reply, 0, sizeof(reply));
+    reply.protocol_version = get_proto_version(rank->my_type, peer_type, false);
 
+    // mismatch?
+    dout(10) << "accept my proto " << reply.protocol_version
+	     << ", their proto " << connect.protocol_version << dendl;
+    if (connect.protocol_version != reply.protocol_version) {
+      reply.tag = CEPH_MSGR_TAG_BADPROTOVER;
+      rank->lock.Unlock();
+      goto reply;
+    }
+    
     // existing?
     if (rank->rank_pipe.count(peer_addr)) {
       existing = rank->rank_pipe[peer_addr];
@@ -889,6 +930,7 @@ int SimpleMessenger::Pipe::connect()
     connect.host_type = rank->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
+    connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
     connect.flags = 0;
     if (policy.lossy_tx)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;
@@ -899,7 +941,8 @@ int SimpleMessenger::Pipe::connect()
     msg.msg_iovlen = 1;
     msglen = msgvec[0].iov_len;
 
-    dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq << dendl;
+    dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq
+	     << " proto=" << connect.protocol_version << dendl;
     if (do_sendmsg(sd, &msg, msglen)) {
       dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
       goto fail;
@@ -914,6 +957,7 @@ int SimpleMessenger::Pipe::connect()
     dout(20) << "connect got reply tag " << (int)reply.tag
 	     << " connect_seq " << reply.connect_seq
 	     << " global_seq " << reply.global_seq
+	     << " proto " << reply.protocol_version
 	     << " flags " << (int)reply.flags
 	     << dendl;
 
@@ -921,6 +965,12 @@ int SimpleMessenger::Pipe::connect()
     if (state != STATE_CONNECTING) {
       dout(0) << "connect got RESETSESSION but no longer connecting" << dendl;
       goto stop_locked;
+    }
+
+    if (reply.tag == CEPH_MSGR_TAG_BADPROTOVER) {
+      dout(0) << "connect protocol version mismatch, my " << connect.protocol_version
+	      << " != " << reply.protocol_version << dendl;
+      goto fail_locked;
     }
 
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
@@ -1993,7 +2043,7 @@ int SimpleMessenger::start(bool nodaemon)
 /* connect_rank
  * NOTE: assumes rank.lock held.
  */
-SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, const Policy& p)
+SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, int type)
 {
   assert(lock.is_locked());
   assert(addr != rank_addr);
@@ -2002,7 +2052,8 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   
   // create pipe
   Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
-  pipe->policy = p;
+  pipe->peer_type = type;
+  pipe->policy = get_policy(type);
   pipe->peer_addr = addr;
   pipe->start_writer();
   pipe->register_pipe();
@@ -2133,7 +2184,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.
-	  pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
+	  pipe = connect_rank(dest_proc_addr, dest.name.type());
 	  pipe->send(m);
 	}
       }
@@ -2171,7 +2222,7 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
       if (!pipe) {
 	dout(20) << "send_keepalive remote, " << dest_addr << ", new pipe." << dendl;
 	// not connected.
-	pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
+	pipe = connect_rank(dest_proc_addr, dest.name.type());
 	pipe->send_keepalive();
       }
     }

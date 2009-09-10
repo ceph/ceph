@@ -34,6 +34,9 @@ struct ceph_connection_operations {
 	/* handle an incoming message. */
 	void (*dispatch) (struct ceph_connection *con, struct ceph_msg *m);
 
+	/* protocol version mismatch */
+	void (*bad_proto) (struct ceph_connection *con);
+
 	/* there was some error on the socket (disconnect, whatever) */
 	void (*fault) (struct ceph_connection *con);
 

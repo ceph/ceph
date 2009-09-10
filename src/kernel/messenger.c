@@ -501,12 +501,28 @@ static void prepare_write_connect(struct ceph_messenger *msgr,
 {
 	int len = strlen(CEPH_BANNER);
 	unsigned global_seq = get_global_seq(con->msgr, 0);
+	int proto;
 
-	dout("prepare_write_connect %p connect_seq=%d global_seq=%d\n", con,
-	     con->connect_seq, global_seq);
+	switch (con->peer_name.type) {
+	case CEPH_ENTITY_TYPE_MON:
+		proto = CEPH_MONC_PROTOCOL;
+		break;
+	case CEPH_ENTITY_TYPE_OSD:
+		proto = CEPH_OSDC_PROTOCOL;
+		break;
+	case CEPH_ENTITY_TYPE_MDS:
+		proto = CEPH_MDSC_PROTOCOL;
+		break;
+	default:
+		BUG();
+	}
+
+	dout("prepare_write_connect %p cseq=%d gseq=%d proto=%d\n", con,
+	     con->connect_seq, global_seq, proto);
 	con->out_connect.host_type = cpu_to_le32(CEPH_ENTITY_TYPE_CLIENT);
 	con->out_connect.connect_seq = cpu_to_le32(con->connect_seq);
 	con->out_connect.global_seq = cpu_to_le32(global_seq);
+	con->out_connect.protocol_version = cpu_to_le32(proto);
 	con->out_connect.flags = 0;
 	if (test_bit(LOSSYTX, &con->state))
 		con->out_connect.flags = CEPH_MSG_CONNECT_LOSSY;
@@ -831,6 +847,24 @@ static int process_connect(struct ceph_connection *con)
 	}
 
 	switch (con->in_reply.tag) {
+	case CEPH_MSGR_TAG_BADPROTOVER:
+		dout("process_connect got BADPROTOVER my %d != their %d\n",
+		     le32_to_cpu(con->out_connect.protocol_version),
+		     le32_to_cpu(con->in_reply.protocol_version));
+		pr_err("ceph %s%d %u.%u.%u.%u:%u protocol version mismatch,"
+		       " my %d != server's %d\n",
+		       ENTITY_NAME(con->peer_name),
+		       IPQUADPORT(con->peer_addr.ipaddr),
+		       le32_to_cpu(con->out_connect.protocol_version),
+		       le32_to_cpu(con->in_reply.protocol_version));
+		con->error_msg = "protocol version mismatch";
+		if (con->ops->bad_proto)
+			con->ops->bad_proto(con);
+		reset_connection(con);
+		set_bit(CLOSED, &con->state);  /* in case there's queued work */
+		return -1;
+
+
 	case CEPH_MSGR_TAG_RESETSESSION:
 		/*
 		 * If we connected with a large connect_seq but the peer

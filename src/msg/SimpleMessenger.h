@@ -127,7 +127,7 @@ private:
     };
 
     int sd;
-    int new_sd;
+    int peer_type;
     entity_addr_t peer_addr;
     Policy policy;
     bool lossy_rx;
@@ -191,7 +191,7 @@ private:
   public:
     Pipe(SimpleMessenger *r, int st) : 
       rank(r),
-      sd(-1),
+      sd(-1), peer_type(-1),
       lock("SimpleMessenger::Pipe::lock"),
       state(st), 
       connection_state(new Connection),
@@ -422,7 +422,7 @@ private:
   Mutex global_seq_lock;
   __u32 global_seq;
       
-  Pipe *connect_rank(const entity_addr_t& addr, const Policy& p);
+  Pipe *connect_rank(const entity_addr_t& addr, int type);
 
   const entity_addr_t &get_rank_addr() { return rank_addr; }
 
