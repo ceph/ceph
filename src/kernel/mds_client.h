@@ -114,6 +114,7 @@ struct ceph_mds_session {
 	struct list_head  s_cap_flushing;     /* inodes w/ flushing caps */
 	struct list_head  s_cap_snaps_flushing;
 	unsigned long     s_renew_requested; /* last time we sent a renew req */
+	u64               s_renew_seq;
 
 	atomic_t          s_ref;
 	struct list_head  s_waiting;  /* waiting requests */

@@ -332,6 +332,7 @@ static struct ceph_mds_session *register_session(struct ceph_mds_client *mdsc,
 	s->s_cap_gen = 0;
 	s->s_cap_ttl = 0;
 	s->s_renew_requested = 0;
+	s->s_renew_seq = 0;
 	INIT_LIST_HEAD(&s->s_caps);
 	s->s_nr_caps = 0;
 	atomic_set(&s->s_ref, 1);
@@ -782,7 +783,8 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 	dout("send_renew_caps to mds%d (%s)\n", session->s_mds,
 		ceph_mds_state_name(state));
 	session->s_renew_requested = jiffies;
-	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS, 0);
+	msg = create_session_msg(CEPH_SESSION_REQUEST_RENEWCAPS,
+				 ++session->s_renew_seq);
 	if (IS_ERR(msg))
 		return PTR_ERR(msg);
 	ceph_con_send(&session->s_con, msg);
@@ -1880,7 +1882,8 @@ static void handle_session(struct ceph_mds_session *session,
 		break;
 
 	case CEPH_SESSION_RENEWCAPS:
-		renewed_caps(mdsc, session, 1);
+		if (session->s_renew_seq == seq)
+			renewed_caps(mdsc, session, 1);
 		break;
 
 	case CEPH_SESSION_CLOSE:
