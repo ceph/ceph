@@ -150,8 +150,8 @@ private:
     bool keepalive;
     
     __u32 connect_seq, peer_global_seq;
-    __u32 out_seq;
-    __u32 in_seq, in_seq_acked;
+    __u64 out_seq;
+    __u64 in_seq, in_seq_acked;
     
     int accept();   // server handshake
     int connect();  // client handshake
@@ -161,7 +161,7 @@ private:
     Message *read_message();
     int write_message(Message *m);
     int do_sendmsg(int sd, struct msghdr *msg, int len);
-    int write_ack(unsigned s);
+    int write_ack(__u64 s);
     int write_keepalive();
 
     void fault(bool silent=false, bool reader=false);

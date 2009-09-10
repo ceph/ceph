@@ -168,7 +168,7 @@ struct ceph_connection {
 	u64 out_seq_sent;            /* last message sent */
 	bool out_keepalive_pending;
 
-	u32 in_seq, in_seq_acked;  /* last message received, acked */
+	u64 in_seq, in_seq_acked;  /* last message received, acked */
 
 	/* connection negotiation temps */
 	char in_banner[CEPH_BANNER_MAX_LEN];
@@ -196,7 +196,7 @@ struct ceph_connection {
 	int out_kvec_bytes;  /* total bytes left */
 	bool out_kvec_is_msg; /* kvec refers to out_msg */
 	int out_more;        /* there is more data after the kvecs */
-	__le32 out_temp_ack; /* for writing an ack */
+	__le64 out_temp_ack; /* for writing an ack */
 
 	/* message in temps */
 	struct ceph_msg_header in_hdr;
@@ -206,7 +206,7 @@ struct ceph_connection {
 
 	char in_tag;         /* protocol control byte */
 	int in_base_pos;     /* bytes read */
-	__le32 in_temp_ack;  /* for reading an ack */
+	__le64 in_temp_ack;  /* for reading an ack */
 
 	struct delayed_work work;	    /* send|recv work */
 	unsigned long       delay;          /* current delay interval */

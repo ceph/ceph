@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v018"
+#define CEPH_BANNER "ceph v019"
 #define CEPH_BANNER_MAX_LEN 30
 
 

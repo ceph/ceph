@@ -384,10 +384,10 @@ static void prepare_write_message(struct ceph_connection *con)
 		con->in_seq_acked = con->in_seq;
 		con->out_kvec[v].iov_base = &tag_ack;
 		con->out_kvec[v++].iov_len = 1;
-		con->out_temp_ack = cpu_to_le32(con->in_seq_acked);
+		con->out_temp_ack = cpu_to_le64(con->in_seq_acked);
 		con->out_kvec[v].iov_base = &con->out_temp_ack;
-		con->out_kvec[v++].iov_len = 4;
-		con->out_kvec_bytes = 1 + 4;
+		con->out_kvec[v++].iov_len = sizeof(con->out_temp_ack);
+		con->out_kvec_bytes = 1 + sizeof(con->out_temp_ack);
 	}
 
 	/* move message to sending/sent list */
@@ -461,17 +461,17 @@ static void prepare_write_message(struct ceph_connection *con)
  */
 static void prepare_write_ack(struct ceph_connection *con)
 {
-	dout("prepare_write_ack %p %u -> %u\n", con,
+	dout("prepare_write_ack %p %llu -> %llu\n", con,
 	     con->in_seq_acked, con->in_seq);
 	con->in_seq_acked = con->in_seq;
 
 	con->out_kvec[0].iov_base = &tag_ack;
 	con->out_kvec[0].iov_len = 1;
-	con->out_temp_ack = cpu_to_le32(con->in_seq_acked);
+	con->out_temp_ack = cpu_to_le64(con->in_seq_acked);
 	con->out_kvec[1].iov_base = &con->out_temp_ack;
-	con->out_kvec[1].iov_len = 4;
+	con->out_kvec[1].iov_len = sizeof(con->out_temp_ack);
 	con->out_kvec_left = 2;
-	con->out_kvec_bytes = 1 + 4;
+	con->out_kvec_bytes = 1 + sizeof(con->out_temp_ack);
 	con->out_kvec_cur = con->out_kvec;
 	con->out_more = 1;  /* more will follow.. eventually.. */
 	set_bit(WRITE_PENDING, &con->state);
