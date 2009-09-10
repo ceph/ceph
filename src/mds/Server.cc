@@ -720,6 +720,11 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   messenger->send_message(reply, client_inst);
 
   mdr->did_early_reply = true;
+
+  mds->logger->inc(l_mds_reply);
+  double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
+  mds->logger->favg(l_mds_replyl, lat);
+  dout(0) << "lat " << lat << dendl;
 }
 
 /*
@@ -755,6 +760,12 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   int dentry_wanted = req->get_dentry_wanted();
 
   if (!did_early_reply && !is_replay) {
+
+    mds->logger->inc(l_mds_reply);
+    double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
+    mds->logger->favg(l_mds_replyl, lat);
+    dout(0) << "lat " << lat << dendl;
+    
     if (tracei)
       mdr->cap_releases.erase(tracei->vino());
     if (tracedn)

@@ -6302,11 +6302,6 @@ void MDCache::request_finish(MDRequest *mdr)
     return; 
   }
 
-  if (mdr->client_request && mds->logger) {
-    mds->logger->inc(l_mds_reply);
-    mds->logger->favg(l_mds_replyl, g_clock.now() - mdr->client_request->get_recv_stamp());
-  }
-
   request_cleanup(mdr);
 }
 
