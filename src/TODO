@@ -29,15 +29,15 @@ v0.14
 /- deb packages fixed up
 
 v0.15
+/- clean up msgr protocol checks
+- kclient checkpatch fixes
+
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
 - radosgw
 - uclient: fix write vs max_size?
 
 - mds: put migration vectors in mdsmap
-
-- msgr
-  - check protocols during connection handshake, not per-message?
 
 
 bugs

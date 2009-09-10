@@ -418,7 +418,7 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 			list_del_init(&ci->i_cap_delay_list);
 		}
 		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
-	no_change:
+no_change:
 		spin_unlock(&mdsc->cap_delay_lock);
 	}
 }

@@ -819,7 +819,7 @@ static void kick_requests(struct ceph_osd_client *osdc,
 			continue;
 		}
 
-	kick:
+kick:
 		dout("kicking tid %llu osd%d\n", req->r_tid, req->r_osd->o_osd);
 		req->r_flags |= CEPH_OSD_FLAG_RETRY;
 		err = __send_request(osdc, req);

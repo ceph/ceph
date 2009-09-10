@@ -852,7 +852,7 @@ get_more_pages:
 		if (wbc->nr_to_write <= 0)
 			done = 1;
 
-	release_pvec_pages:
+release_pvec_pages:
 		dout("pagevec_release on %d pages (%p)\n", (int)pvec.nr,
 		     pvec.nr ? pvec.pages[0] : NULL);
 		pagevec_release(&pvec);
