@@ -23,7 +23,7 @@ class CephOutputStream extends OutputStream {
 
   private int fileHandle;
 
-  private static boolean debug = false;
+  private static boolean debug;
 
 
   private native long ceph_seek_from_start(int fh, long pos);
@@ -42,7 +42,7 @@ class CephOutputStream extends OutputStream {
     System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
     fileHandle = fh;
     closed = false;
-    debug = ("true".equals(conf.get("fs.ceph.debug")));
+    debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
   }
 
   //Ceph likes things to be closed before it shuts down,
@@ -70,7 +70,7 @@ class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void write(int b) throws IOException {
-      debug("CephOutputStream.write: writing a single byte to fd " + fileHandle);
+      if(debug) debug("CephOutputStream.write: writing a single byte to fd " + fileHandle);
 
       if (closed) {
 	throw new IOException("CephOutputStream.write: cannot write " + 
@@ -81,7 +81,7 @@ class CephOutputStream extends OutputStream {
       buf[0] = (byte) b;    
       int result = ceph_write(fileHandle, buf, 0, 1);
       if (1 != result)
-	debug("CephOutputStream.write: failed writing a single byte to fd "
+	if(debug) debug("CephOutputStream.write: failed writing a single byte to fd "
 	      + fileHandle + ": Ceph write() result = " + result);
       return;
     }
@@ -98,7 +98,7 @@ class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void write(byte buf[], int off, int len) throws IOException {
-     debug("CephOutputStream.write: writing " + len + 
+     if(debug) debug("CephOutputStream.write: writing " + len + 
 	   " bytes to fd " + fileHandle);
       // make sure stream is open
       if (closed) {
@@ -151,7 +151,7 @@ class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void close() throws IOException {
-      debug("CephOutputStream.close:enter");
+      if(debug) debug("CephOutputStream.close:enter");
       if (closed) {
 	throw new IOException("Stream closed");
       }
@@ -162,10 +162,10 @@ class CephOutputStream extends OutputStream {
       }
 	
       closed = true;
-      debug("CephOutputStream.close:exit");
+      if(debug) debug("CephOutputStream.close:exit");
     }
 
   private void debug(String out) {
-    if (debug) System.out.println(out);
+    System.err.println(out);
   }
 }
