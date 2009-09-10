@@ -104,12 +104,13 @@ static void ceph_state_change(struct sock *sk)
 		dout("ceph_state_change TCP_CLOSE\n");
 	case TCP_CLOSE_WAIT:
 		dout("ceph_state_change TCP_CLOSE_WAIT\n");
-		set_bit(SOCK_CLOSED, &con->state);
-		if (test_bit(CONNECTING, &con->state))
-			con->error_msg = "connection failed";
-		else
-			con->error_msg = "socket closed";
-		queue_con(con);
+		if (test_and_set_bit(SOCK_CLOSED, &con->state) != 0) {
+			if (test_bit(CONNECTING, &con->state))
+				con->error_msg = "connection failed";
+			else
+				con->error_msg = "socket closed";
+			queue_con(con);
+		}
 		break;
 	case TCP_ESTABLISHED:
 		dout("ceph_state_change TCP_ESTABLISHED\n");
@@ -214,6 +215,7 @@ static int con_close_socket(struct ceph_connection *con)
 	dout("con_close_socket on %p sock %p\n", con, con->sock);
 	if (!con->sock)
 		return 0;
+	set_bit(SOCK_CLOSED, &con->state);
 	rc = con->sock->ops->shutdown(con->sock, SHUT_RDWR);
 	sock_release(con->sock);
 	con->sock = NULL;
@@ -1471,9 +1473,11 @@ static void queue_con(struct ceph_connection *con)
 	}
 
 	set_bit(QUEUED, &con->state);
-	if (test_bit(BUSY, &con->state) ||
-	    !queue_work(ceph_msgr_wq, &con->work.work)) {
-		dout("queue_con %p - already BUSY or queued\n", con);
+	if (test_bit(BUSY, &con->state)) {
+		dout("queue_con %p - already BUSY\n", con);
+		con->ops->put(con);
+	} else if (!queue_work(ceph_msgr_wq, &con->work.work)) {
+		dout("queue_con %p - already queued\n", con);
 		con->ops->put(con);
 	} else {
 		dout("queue_con %p\n", con);
