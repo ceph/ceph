@@ -23,8 +23,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.fs.FileStatus;
-//import org.apache.hadoop.fs.FsStatus;
-//import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.FsStatus;
+import org.apache.hadoop.fs.CreateFlag;
 
 /**
  * <p>
@@ -442,11 +442,15 @@ public class CephFileSystem extends FileSystem {
    * Create a new file and open an FSDataOutputStream that's connected to it.
    * @param path The file to create.
    * @param permission The permissions to apply to the file.
-   * @param overwrite If true, overwrite any existing file with this name.
+   * @param flag If CreateFlag.OVERWRITE, overwrite any existing
+   * file with this name; otherwise don't.
    * @param bufferSize Ceph does internal buffering; this is ignored.
-   * @param replication Ignored by Ceph. This can be configured via Ceph configuration.
-   * @param blockSize Ignored by Ceph.
-   * @param progress A Progressable to report back to. Reporting is limited but exists.
+   * @param replication Ignored by Ceph. This can be
+   * configured via Ceph configuration.
+   * @param blockSize Ignored by Ceph. You can set client-wide block sizes
+   * via the fs.ceph.blockSize param if you like.
+   * @param progress A Progressable to report back to.
+   * Reporting is limited but exists.
    * @return An FSDataOutputStream pointing to the created file.
    * @throws IOException if initialize() hasn't been called, or the path is an
    * existing directory, or the path exists but overwrite is false, or there is a
@@ -454,8 +458,8 @@ public class CephFileSystem extends FileSystem {
    */
   public FSDataOutputStream create(Path path,
 				   FsPermission permission,
-				   //EnumSet<CreateFlag> flag,
-				   boolean overwrite,
+				   EnumSet<CreateFlag> flag,
+				   //boolean overwrite,
 				   int bufferSize,
 				   short replication,
 				   long blockSize,
@@ -477,8 +481,8 @@ public class CephFileSystem extends FileSystem {
       if(isDirectory(abs_path))
 	throw new IOException("create: Cannot overwrite existing directory \""
 			      + path.toString() + "\" with a file");
-      if (!overwrite)
-      //if (!flag.contains(CreateFlag.OVERWRITE)) {
+      //if (!overwrite)
+      if (!flag.contains(CreateFlag.OVERWRITE))
 	throw new IOException("createRaw: Cannot open existing file \"" 
 			      + abs_path.toString() 
 			      + "\" for writing without overwrite flag");
@@ -510,7 +514,7 @@ public class CephFileSystem extends FileSystem {
     OutputStream cephOStream = new CephOutputStream(getConf(), fh);
     if(debug) debug("create:exit");
     return new FSDataOutputStream(cephOStream);
-  }
+    }
 
   /**
    * Open a Ceph file and attach the file handle to an FSDataInputStream.
@@ -621,7 +625,7 @@ public class CephFileSystem extends FileSystem {
    * @return FsStatus reportin capacity, usage, and remaining spac.
    * @throws IOException if initialize() hasn't been called, or the
    * stat somehow fails.
-   *
+   */
   public FsStatus getStatus (Path path) throws IOException {
     if (!initialized) throw new IOException("You have to initialize the"
 		      + " CephFileSystem before calling other methods.");
@@ -637,7 +641,7 @@ public class CephFileSystem extends FileSystem {
     if(debug) debug("getStatus:exit");
     return new FsStatus(ceph_stat.capacity,
 			ceph_stat.used, ceph_stat.remaining);
-  } */
+  }
 
   /**
    * Delete the given path, and any children if it's a directory.
