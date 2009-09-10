@@ -424,6 +424,7 @@ noinst_HEADERS = \
 	include/LogEntry.h\
 	include/assert.h\
         include/atomic.h\
+	include/base64.h\
         include/bitmapper.h\
         include/blobhash.h\
         include/buffer.h\
