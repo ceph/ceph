@@ -59,8 +59,8 @@ class AuthClientHandler {
   int cephx_request_state;
   int cephx_response_state;
 
-  bool got_response;
-  bool got_timeout;
+  bool got_authenticate_response;
+  bool got_authenticate_timeout;
 
   EntityName name;
   entity_addr_t addr;
@@ -79,14 +79,14 @@ class AuthClientHandler {
   AuthorizeContextMap context_map;
 
   bool request_pending();
-  Message *build_request();
+  Message *build_authenticate_request();
 
-  int generate_request(bufferlist& bl);
+  int generate_authenticate_request(bufferlist& bl);
   int handle_response(Message *response);
 
   /* cephx requests */
   int generate_cephx_authenticate_request(bufferlist& bl);
-  int generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl);
+  int generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl, AuthorizeContext& ctx);
 
   /* cephx responses */
   int handle_cephx_response(bufferlist::iterator& indata);
@@ -97,8 +97,8 @@ class AuthClientHandler {
     status = 0;
     cephx_request_state = 0;
     cephx_response_state = 0;
-    got_response = false;
-    got_timeout = false;
+    got_authenticate_response = false;
+    got_authenticate_timeout = false;
     timeout_event = NULL;
     cur_request_cond = NULL;
   }
@@ -114,12 +114,13 @@ class AuthClientHandler {
                                         client_handler(handler), timeout(to) {
     }
     void finish(int r) {
-      if (r >= 0) client_handler->_request_timeout(timeout);
+      if (r >= 0) client_handler->_authenticate_request_timeout(timeout);
     }
   };
 
-  void _request_timeout(double timeout);
-  int _do_request(double timeout);
+  void _authenticate_request_timeout(double timeout);
+  int _do_authenticate_request(double timeout);
+  int _do_request_generic(double timeout, Message *msg, Cond& request_cond);
 
 public:
   AuthClientHandler() : lock("AuthClientHandler::lock"),

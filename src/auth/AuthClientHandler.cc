@@ -21,7 +21,7 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
-int AuthClientHandler::generate_request(bufferlist& bl)
+int AuthClientHandler::generate_authenticate_request(bufferlist& bl)
 {
   dout(0) << "status=" << status << dendl;
   if (status < 0) {
@@ -86,7 +86,7 @@ int AuthClientHandler::handle_response(Message *response)
   bl = m->result_bl;
   ret = m->result;
 
-  got_response = true;
+  got_authenticate_response = true;
 
   bufferlist::iterator iter = bl.begin();
 
@@ -158,7 +158,7 @@ int AuthClientHandler::generate_cephx_authenticate_request(bufferlist& bl)
   return 0;
 }
 
-int AuthClientHandler::generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl)
+int AuthClientHandler::generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl, AuthorizeContext& ctx)
 {
   CephXRequestHeader header;
   if (!(have & service_id)) {
@@ -169,7 +169,7 @@ int AuthClientHandler::generate_cephx_authorize_request(uint32_t service_id, buf
   header.request_type = CEPHX_OPEN_SESSION;
 
   ::encode(header, bl);
-  AuthorizeContext& ctx = context_map.create();
+  //AuthorizeContext& ctx = context_map.create();
   utime_t now;
   if (!tickets.build_authorizer(service_id, bl, ctx))
     return -EINVAL;
@@ -254,8 +254,8 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
 
   do {
     status = 0;
-    int err = _do_request(timeout);
-    dout(0) << "_do_request returned " << err << dendl;
+    int err = _do_authenticate_request(timeout);
+    dout(0) << "_do_authenticate_request returned " << err << dendl;
     if (err < 0)
       return err;
 
@@ -266,9 +266,19 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
 
 int AuthClientHandler::authorize(uint32_t service_id)
 {
-  /* FIXME: do it via _do_request(), so that we get timeout handling */
+  MAuth *msg = new MAuth;
+  if (!msg)
+    return NULL;
+  bufferlist& bl = msg->get_auth_payload();
 
-  
+  AuthorizeContext& ctx = context_map.create();
+
+  int err = generate_cephx_authorize_request(service_id, bl, ctx);
+  if (err < 0) {
+    context_map.remove(ctx.id);
+  }
+
+  client->send_message(msg);
 
   return 0;  
 }
@@ -282,14 +292,14 @@ void AuthClientHandler::tick()
 
 }
 
-Message *AuthClientHandler::build_request()
+Message *AuthClientHandler::build_authenticate_request()
 {
   MAuth *msg = new MAuth;
   if (!msg)
     return NULL;
   bufferlist& bl = msg->get_auth_payload();
 
-  if (generate_request(bl) < 0) {
+  if (generate_authenticate_request(bl) < 0) {
     delete msg;
     return NULL;
   }
@@ -297,15 +307,25 @@ Message *AuthClientHandler::build_request()
   return msg;
 }
 
-int AuthClientHandler::_do_request(double timeout)
+int AuthClientHandler::_do_authenticate_request(double timeout)
 {
-  Message *msg = build_request();
-
+  Message *msg = build_authenticate_request();
   if (!msg)
     return -EIO;
 
-  got_response = false;
- 
+  Cond request_cond;
+  cur_request_cond = &request_cond;
+  got_authenticate_response = false;
+
+  int ret = _do_request_generic(timeout, msg, request_cond);
+
+  cur_request_cond = NULL;
+
+  return ret;
+}
+
+int AuthClientHandler::_do_request_generic(double timeout, Message *msg, Cond& request_cond)
+{
   client->send_message(msg);
 
   // schedule timeout?
@@ -313,32 +333,24 @@ int AuthClientHandler::_do_request(double timeout)
   timeout_event = new C_OpTimeout(this, timeout);
   timer.add_event_after(timeout, timeout_event);
 
-  Cond request_cond;
+  dout(0) << "got_authenticate_response=" << got_authenticate_response << " got_timeout=" << got_authenticate_timeout << dendl;
 
-  cur_request_cond = &request_cond;
-
-  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
-
-  while (!got_response && !got_timeout) {
-    request_cond.Wait(lock);
-  }
-
-  cur_request_cond = NULL;
+  request_cond.Wait(lock);
 
   // finish.
   timer.cancel_event(timeout_event);
-  timeout_event = 0;
+  timeout_event = NULL;
 
   return 0;
 }
 
-void AuthClientHandler::_request_timeout(double timeout)
+void AuthClientHandler::_authenticate_request_timeout(double timeout)
 {
   Mutex::Locker l(lock);
   dout(10) << "_op_timeout" << dendl;
   timeout_event = 0;
-  if (!got_response) {
-    got_timeout = 1;
+  if (!got_authenticate_response) {
+    got_authenticate_timeout = 1;
     assert(cur_request_cond);
     cur_request_cond->Signal();
   }
