@@ -151,7 +151,7 @@ struct MDSSession {
 
   MClientCapRelease *release;
   
-  MDSSession() : seq(0), cap_gen(0), num_caps(0), cap_renew_seq(0),
+  MDSSession() : seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0), 
 		 closing(false), was_stale(false), release(NULL) {}
 };
 
