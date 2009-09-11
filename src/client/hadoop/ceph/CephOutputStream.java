@@ -1,4 +1,23 @@
 // -*- mode:Java; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/**
+ *
+ * Licensed under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * 
+ * Implements the Hadoop FS interfaces to allow applications to store
+ * files in Ceph.
+ */
+
 package org.apache.hadoop.fs.ceph;
 
 import java.io.File;
@@ -15,7 +34,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.Progressable;
 
-class CephOutputStream extends OutputStream {
+/**
+ * <p>
+ * An {@link OutputStream} for a CephFileSystem and corresponding
+ * Ceph instance.
+ */
+public class CephOutputStream extends OutputStream {
 
   private int bufferSize;
 
@@ -45,8 +69,9 @@ class CephOutputStream extends OutputStream {
     debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
   }
 
-  //Ceph likes things to be closed before it shuts down,
-  //so closing the IOStream stuff voluntarily is good
+  /**Ceph likes things to be closed before it shuts down,
+   *so closing the IOStream stuff voluntarily is good
+   */
   public void finalize () throws Throwable {
     try {
       if (!closed) close();
@@ -88,7 +113,7 @@ class CephOutputStream extends OutputStream {
 
   /**
    * Write a byte buffer into the Ceph file.
-   * @param buf[] the byte array to write from
+   * @param buf the byte array to write from
    * @param off the position in the file to start writing at.
    * @param len The number of bytes to actually write.
    * @throws IOException if you have closed the CephOutputStream, or

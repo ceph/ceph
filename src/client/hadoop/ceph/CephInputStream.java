@@ -1,4 +1,22 @@
 // -*- mode:Java; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/**
+ *
+ * Licensed under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * 
+ * Implements the Hadoop FS interfaces to allow applications to store
+ * files in Ceph.
+ */
 package org.apache.hadoop.fs.ceph;
 
 import java.io.BufferedOutputStream;
@@ -20,7 +38,7 @@ import org.apache.hadoop.fs.FSInputStream;
  * An {@link FSInputStream} for a CephFileSystem and corresponding
  * Ceph instance.
  */
-class CephInputStream extends FSInputStream {
+public class CephInputStream extends FSInputStream {
 
   private int bufferSize;
 
@@ -57,8 +75,9 @@ class CephInputStream extends FSInputStream {
 	  + fh + " and file length " + flength);
       
   }
-  //Ceph likes things to be closed before it shuts down,
-  //so closing the IOStream stuff voluntarily is good
+  /** Ceph likes things to be closed before it shuts down,
+   * so closing the IOStream stuff voluntarily in a finalizer is good
+   */
   public void finalize () throws Throwable {
     try {
       if (!closed) close();
@@ -69,7 +88,9 @@ class CephInputStream extends FSInputStream {
   public synchronized long getPos() throws IOException {
     return ceph_getpos(fileHandle);
   }
-
+  /**
+   * Find the number of bytes remaining in the file.
+   */
   @Override
   public synchronized int available() throws IOException {
       return (int) (fileLength - getPos());
@@ -114,7 +135,7 @@ class CephInputStream extends FSInputStream {
 
   /**
    * Read a specified number of bytes into a byte[] from the file.
-   * @param buf[] the byte array to read into.
+   * @param buf the byte array to read into.
    * @param off the offset to start at in the file
    * @param len the number of bytes to read
    * @return 0 if successful, otherwise an error code.
