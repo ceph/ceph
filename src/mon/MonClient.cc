@@ -261,7 +261,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   delete m;
 }
 
-int MonClient::authorize(double timeout)
+int MonClient::authenticate(double timeout)
 {
   Mutex::Locker lock(monc_lock);
 
@@ -297,10 +297,10 @@ void MonClient::ms_handle_reset(const entity_addr_t& peer)
     dout(0) << "staring hunt for new mon" << dendl;
     hunting = true;
     _pick_new_mon();
+    auth.start_session(this, 30.0);
     if (mounting)
       _send_mount();
     _renew_subs();
-    auth.start_session(this, 30.0);
   }
 }
 
@@ -367,5 +367,10 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   }
 
   delete m;
+}
+
+int MonClient::authorize()
+{
+  return auth.authorize(CEPHX_PRINCIPAL_MON);
 }
 

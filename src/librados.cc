@@ -303,10 +303,10 @@ bool RadosClient::init()
     return false;
 
   monclient.init();
-  monclient.mount(g_conf.client_mount_timeout);
-  dout(0) << "librados: before monclient.authorize()" << dendl;
+  dout(0) << "librados: before monclient.authenticate()" << dendl;
   monclient.auth.set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD);
-  monclient.authorize(g_conf.client_mount_timeout);
+  monclient.authenticate(g_conf.client_mount_timeout);
+  monclient.mount(g_conf.client_mount_timeout);
 
   lock.Lock();
 

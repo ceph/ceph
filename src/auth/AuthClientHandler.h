@@ -28,6 +28,19 @@ class MAuthReply;
 class Message;
 class AuthClient;
 
+class AuthorizeContextMap {
+  map<int, AuthorizeContext> m;
+
+  Mutex lock;
+  int max_id;
+
+public:
+  AuthorizeContextMap() : lock("AuthorizeMap") {}
+  AuthorizeContext& create();
+  void remove(int id);
+  AuthorizeContext *get(int id);
+};
+
 class AuthClientHandler {
   Mutex lock;
   Cond keys_cond;
@@ -63,13 +76,20 @@ class AuthClientHandler {
 
   AuthClient *client;
 
+  AuthorizeContextMap context_map;
+
   bool request_pending();
   Message *build_request();
 
   int generate_request(bufferlist& bl);
   int handle_response(Message *response);
-  int generate_cephx_protocol_request(bufferlist& bl);
-  int handle_cephx_protocol_response(bufferlist::iterator& indata);
+
+  /* cephx requests */
+  int generate_cephx_authenticate_request(bufferlist& bl);
+  int generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl);
+
+  /* cephx responses */
+  int handle_cephx_response(bufferlist::iterator& indata);
 
   void _reset() {
     request_state = 0;
@@ -129,6 +149,7 @@ public:
   }
 
   int start_session(AuthClient *client, double timeout);
+  int authorize(uint32_t service_id);
   void handle_auth_reply(MAuthReply *m);
   void tick();
 };

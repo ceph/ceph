@@ -18,6 +18,10 @@
 #include "Crypto.h"
 #include "msg/msg_types.h"
 
+struct AuthorizeContext {
+  int id;
+  utime_t timestamp;
+};
 
 struct EntityName {
   uint32_t entity_type;
@@ -145,8 +149,8 @@ struct AuthTicketHandler {
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 #endif
   // to access the service
-  utime_t build_authenticator(bufferlist& bl);
-  bool verify_reply_authenticator(utime_t then, bufferlist& enc_reply);
+  bool build_authorizer(bufferlist& bl, AuthorizeContext& ctx);
+  bool verify_reply_authorizer(utime_t then, bufferlist::iterator& enc_reply);
 
   bool has_key() { return has_key_flag; }
 };
@@ -160,6 +164,7 @@ struct AuthTicketsManager {
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 
   AuthTicketHandler& get_handler(uint32_t type) { return tickets_map[type]; }
+  bool build_authorizer(uint32_t service_id, bufferlist& bl, AuthorizeContext& context);
 };
 
 struct AuthServiceTicketRequest {
@@ -216,30 +221,36 @@ struct AuthServiceTicketInfo {
 };
 WRITE_CLASS_ENCODER(AuthServiceTicketInfo);
 
-struct AuthAuthenticate {
+struct AuthAuthorize {
+  uint32_t trans_id;
   utime_t now;
   string nonce;
   void encode(bufferlist& bl) const {
+    ::encode(trans_id, bl);
     ::encode(now, bl);
     ::encode(nonce, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(trans_id, bl);
     ::decode(now, bl);
     ::decode(nonce, bl);
   }
 };
-WRITE_CLASS_ENCODER(AuthAuthenticate);
+WRITE_CLASS_ENCODER(AuthAuthorize);
 
-struct AuthAuthenticateReply {
+struct AuthAuthorizeReply {
+  uint32_t trans_id;
   utime_t timestamp;
   void encode(bufferlist& bl) const {
+    ::encode(trans_id, bl);
     ::encode(timestamp, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(trans_id, bl);
     ::decode(timestamp, bl);
   }
 };
-WRITE_CLASS_ENCODER(AuthAuthenticateReply);
+WRITE_CLASS_ENCODER(AuthAuthorizeReply);
 
 template <class T>
 int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
@@ -282,7 +293,7 @@ extern bool build_authenticate_reply(AuthTicketHandler ticket_handler,
                         CryptoKey& service_secret,
 			bufferlist& reply);
 /*
- * Verify authenticator and generate reply authenticator
+ * Verify authorizer and generate reply authorizer
  */
 
 extern bool verify_service_ticket_request(bool encrypted,
@@ -291,7 +302,7 @@ extern bool verify_service_ticket_request(bool encrypted,
                                    uint32_t& keys,
                                    bufferlist::iterator& indata);
 
-extern bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& bl,
+extern bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& bl,
 				 bufferlist& enc_reply);
 
 #endif

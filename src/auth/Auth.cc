@@ -9,7 +9,7 @@ static void hexdump(string msg, const char *s, int len)
   int buf_len = len*4;
   char buf[buf_len];
   int pos = 0;
-  for (unsigned int i=0; i<len && pos<buf_len - 8; i++) {
+  for (int i=0; i<len && pos<buf_len - 8; i++) {
     if (i && !(i%8))
       pos += snprintf(&buf[pos], buf_len-pos, " ");
     if (i && !(i%16))
@@ -182,18 +182,34 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
  *
  * ticket, {timestamp, nonce}^session_key
  */
-utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
+bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthorizeContext& ctx)
 {
-  utime_t now = g_clock.now();
+  ctx.timestamp = g_clock.now();
 
   ::encode(ticket, bl);
 
-  AuthAuthenticate msg;
-  msg.now = now;
+  AuthAuthorize msg;
+  msg.trans_id = ctx.id;
+  msg.now = ctx.timestamp;
   msg.nonce = nonce;
   encode_encrypt(msg, session_key, bl);
 
-  return now;
+  return true;
+}
+
+/*
+ * PRINCIPAL: build authenticator to access the service.
+ *
+ * ticket, {timestamp, nonce}^session_key
+ */
+bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, AuthorizeContext& ctx)
+{
+  map<uint32_t, AuthTicketHandler>::iterator iter = tickets_map.find(service_id);
+  if (iter == tickets_map.end())
+    return false;
+
+  AuthTicketHandler& handler = iter->second;
+  return handler.build_authorizer(bl, ctx);
 }
 
 /*
@@ -201,13 +217,13 @@ utime_t AuthTicketHandler::build_authenticator(bufferlist& bl)
  *
  * {timestamp + 1}^session_key
  */
-bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indata,
+bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
 			  bufferlist& reply_bl)
 {
   AuthServiceTicketInfo ticket_info;
   decode_decrypt(ticket_info, service_secret, indata);
 
-  AuthAuthenticate auth_msg;
+  AuthAuthorize auth_msg;
   decode_decrypt(auth_msg, ticket_info.session_key, indata);
 
   // it's authentic if the nonces match
@@ -219,7 +235,8 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indat
    * Reply authenticator:
    *  {timestamp + 1}^session_key
    */
-  AuthAuthenticateReply reply;
+  AuthAuthorizeReply reply;
+  reply.trans_id = auth_msg.trans_id;
   reply.timestamp = auth_msg.now;
   reply.timestamp += 1;
   encode_encrypt(reply, ticket_info.session_key, reply_bl);
@@ -232,17 +249,13 @@ bool verify_authenticator(CryptoKey& service_secret, bufferlist::iterator& indat
 /*
  * PRINCIPAL: verify reply is authentic
  */
-bool AuthTicketHandler::verify_reply_authenticator(utime_t then, bufferlist& enc_reply)
+bool AuthTicketHandler::verify_reply_authorizer(utime_t then, bufferlist::iterator& indata)
 {
-  bufferlist reply;
-  if (session_key.decrypt(enc_reply, reply) < 0)
+  AuthAuthorizeReply reply;
+  if (decode_decrypt(reply, session_key, indata) < 0)
     return false;
-  
-  bufferlist::iterator p = reply.begin();
-  utime_t later;
-  ::decode(later, p);
-  dout(0) << "later=" << later << " then=" << then << dendl;
-  if (then + 1 == later) {
+
+  if (then + 1 == reply.timestamp) {
     return true;
   }
 

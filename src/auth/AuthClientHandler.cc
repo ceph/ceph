@@ -21,7 +21,6 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
-
 int AuthClientHandler::generate_request(bufferlist& bl)
 {
   dout(0) << "status=" << status << dendl;
@@ -53,11 +52,11 @@ int AuthClientHandler::generate_request(bufferlist& bl)
       req.piggyback = 1;
       ::encode(req, bl);
       request_state++;
-      return generate_cephx_protocol_request(bl);
+      return generate_cephx_authenticate_request(bl);
     }
     break;
   default:
-    return generate_cephx_protocol_request(bl);
+    return generate_cephx_authenticate_request(bl);
   }
   request_state++;
   return 0;
@@ -69,7 +68,7 @@ int AuthClientHandler::handle_response(Message *response)
   bufferlist bl;
   int ret;
 
-#if 1
+#if 0
       char buf[4096];
       const char *s = bl.c_str();
       int pos = 0;
@@ -113,16 +112,16 @@ int AuthClientHandler::handle_response(Message *response)
     /* authenticate */
     {
       response_state++;
-      return handle_cephx_protocol_response(iter);
+      return handle_cephx_response(iter);
     }
     break;
   default:
-    return handle_cephx_protocol_response(iter);
+    return handle_cephx_response(iter);
   }
   return -EAGAIN;
 }
 
-int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
+int AuthClientHandler::generate_cephx_authenticate_request(bufferlist& bl)
 {
   CephXRequestHeader header;
   AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
@@ -159,7 +158,26 @@ int AuthClientHandler::generate_cephx_protocol_request(bufferlist& bl)
   return 0;
 }
 
-int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& indata)
+int AuthClientHandler::generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl)
+{
+  CephXRequestHeader header;
+  if (!(have & service_id)) {
+    dout(0) << "can't authorize: missing service key" << dendl;
+    return -EPERM;
+  }
+
+  header.request_type = CEPHX_OPEN_SESSION;
+
+  ::encode(header, bl);
+  AuthorizeContext& ctx = context_map.create();
+  utime_t now;
+  if (!tickets.build_authorizer(service_id, bl, ctx))
+    return -EINVAL;
+  
+  return 0;
+}
+
+int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
 {
   int ret = 0;
   struct CephXResponseHeader header;
@@ -204,8 +222,11 @@ int AuthClientHandler::handle_cephx_protocol_response(bufferlist::iterator& inda
     break;
 
   case CEPHX_OPEN_SESSION:
-    cephx_response_state = 3;
-    dout(0) << "FIXME: CEPHX_OPEN_SESSION" << dendl;
+    {
+      AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+      utime_t then; /* FIXME */
+      ticket_handler.verify_reply_authorizer(then, indata);
+    }
     break;
   default:
     dout(0) << "header.request_type = " << hex << header.request_type << dec << dendl;
@@ -241,6 +262,15 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
   } while (status == -EAGAIN);
 
   return status;
+}
+
+int AuthClientHandler::authorize(uint32_t service_id)
+{
+  /* FIXME: do it via _do_request(), so that we get timeout handling */
+
+  
+
+  return 0;  
 }
 
 void AuthClientHandler::tick()
@@ -322,4 +352,42 @@ void AuthClientHandler::handle_auth_reply(MAuthReply *m)
   status = handle_response(m);
   cur_request_cond->Signal();
 }
+
+/*
+class AuthorizeMap {
+  map<int, AuthorizeContext> map;
+
+  Mutex lock;
+  int max_id;
+
+public:
+*/
+AuthorizeContext& AuthorizeContextMap::create()
+{
+  Mutex::Locker l(lock);
+  AuthorizeContext& ctx = m[max_id];
+  ctx.id = max_id;
+  ++max_id;
+  
+  return ctx;
+}
+
+void AuthorizeContextMap::remove(int id)
+{
+  std::map<int, AuthorizeContext>::iterator iter = m.find(id);
+  if (iter != m.end()) {
+    m.erase(iter);
+  }
+}
+
+AuthorizeContext *AuthorizeContextMap::get(int id)
+{
+  Mutex::Locker l(lock);
+  std::map<int, AuthorizeContext>::iterator iter = m.find(id);
+  if (iter != m.end())
+    return &iter->second;
+
+  return NULL;
+}
+
 
