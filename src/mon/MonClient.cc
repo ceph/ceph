@@ -369,8 +369,8 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   delete m;
 }
 
-int MonClient::authorize()
+int MonClient::authorize(double timeout)
 {
-  return auth.authorize(CEPHX_PRINCIPAL_MON);
+  return auth.authorize(CEPHX_PRINCIPAL_MON, timeout);
 }
 

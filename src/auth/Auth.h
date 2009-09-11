@@ -18,9 +18,13 @@
 #include "Crypto.h"
 #include "msg/msg_types.h"
 
+class Cond;
+
 struct AuthorizeContext {
+  int status;
   int id;
   utime_t timestamp;
+  Cond *cond;
 };
 
 struct EntityName {
@@ -126,6 +130,21 @@ public:
 };
 WRITE_CLASS_ENCODER(AuthenticateRequest)
 
+struct AuthAuthorizeReply {
+  uint32_t trans_id;
+  utime_t timestamp;
+  void encode(bufferlist& bl) const {
+    ::encode(trans_id, bl);
+    ::encode(timestamp, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(trans_id, bl);
+    ::decode(timestamp, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthAuthorizeReply);
+
+
 /*
  * AuthTicketHandler
  */
@@ -150,7 +169,8 @@ struct AuthTicketHandler {
 #endif
   // to access the service
   bool build_authorizer(bufferlist& bl, AuthorizeContext& ctx);
-  bool verify_reply_authorizer(utime_t then, bufferlist::iterator& enc_reply);
+  bool decode_reply_authorizer(bufferlist::iterator& indata, AuthAuthorizeReply& reply);
+  bool verify_reply_authorizer(AuthorizeContext& ctx, AuthAuthorizeReply& reply);
 
   bool has_key() { return has_key_flag; }
 };
@@ -237,20 +257,6 @@ struct AuthAuthorize {
   }
 };
 WRITE_CLASS_ENCODER(AuthAuthorize);
-
-struct AuthAuthorizeReply {
-  uint32_t trans_id;
-  utime_t timestamp;
-  void encode(bufferlist& bl) const {
-    ::encode(trans_id, bl);
-    ::encode(timestamp, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(trans_id, bl);
-    ::decode(timestamp, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthAuthorizeReply);
 
 template <class T>
 int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {

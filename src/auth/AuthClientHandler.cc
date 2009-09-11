@@ -224,8 +224,25 @@ int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
   case CEPHX_OPEN_SESSION:
     {
       AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
-      utime_t then; /* FIXME */
-      ticket_handler.verify_reply_authorizer(then, indata);
+      AuthAuthorizeReply reply;
+      if (!ticket_handler.decode_reply_authorizer(indata, reply)) {
+        ret = -EINVAL;
+        break;
+      }
+      AuthorizeContext *ctx = context_map.get(reply.trans_id);
+      if (!ctx) {
+        ret = -EINVAL;
+        break;
+      }
+      bool result = ticket_handler.verify_reply_authorizer(*ctx, reply);
+      if (result)
+        ctx->status = 0;
+      else
+        ctx->status = -EPERM;
+
+       ctx->cond->Signal();
+       ret = 0;
+       break;
     }
     break;
   default:
@@ -264,7 +281,7 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
   return status;
 }
 
-int AuthClientHandler::authorize(uint32_t service_id)
+int AuthClientHandler::authorize(uint32_t service_id, double timeout)
 {
   MAuth *msg = new MAuth;
   if (!msg)
@@ -278,9 +295,12 @@ int AuthClientHandler::authorize(uint32_t service_id)
     context_map.remove(ctx.id);
   }
 
-  client->send_message(msg);
+  Cond cond;
 
-  return 0;  
+  ctx.cond = &cond;
+  err = _do_request_generic(timeout, msg, cond);
+
+  return err;
 }
 
 void AuthClientHandler::tick()
@@ -365,20 +385,12 @@ void AuthClientHandler::handle_auth_reply(MAuthReply *m)
   cur_request_cond->Signal();
 }
 
-/*
-class AuthorizeMap {
-  map<int, AuthorizeContext> map;
-
-  Mutex lock;
-  int max_id;
-
-public:
-*/
 AuthorizeContext& AuthorizeContextMap::create()
 {
   Mutex::Locker l(lock);
   AuthorizeContext& ctx = m[max_id];
   ctx.id = max_id;
+  ctx.cond = NULL;
   ++max_id;
   
   return ctx;

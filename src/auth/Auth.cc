@@ -246,16 +246,20 @@ bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
   return true;
 }
 
-/*
- * PRINCIPAL: verify reply is authentic
- */
-bool AuthTicketHandler::verify_reply_authorizer(utime_t then, bufferlist::iterator& indata)
+bool AuthTicketHandler::decode_reply_authorizer(bufferlist::iterator& indata, AuthAuthorizeReply& reply)
 {
-  AuthAuthorizeReply reply;
   if (decode_decrypt(reply, session_key, indata) < 0)
     return false;
 
-  if (then + 1 == reply.timestamp) {
+  return true;
+}
+
+/*
+ * PRINCIPAL: verify reply is authentic
+ */
+bool AuthTicketHandler::verify_reply_authorizer(AuthorizeContext& ctx, AuthAuthorizeReply& reply)
+{
+  if (ctx.timestamp == reply.timestamp) {
     return true;
   }
 

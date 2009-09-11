@@ -150,7 +150,7 @@ public:
   }
 
   int start_session(AuthClient *client, double timeout);
-  int authorize(uint32_t service_id);
+  int authorize(uint32_t service_id, double timeout);
   void handle_auth_reply(MAuthReply *m);
   void tick();
 };

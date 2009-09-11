@@ -78,7 +78,7 @@ private:
 public:
   int mount(double mount_timeout);
   int authenticate(double timeout);
-  int authorize();
+  int authorize(double timeout);
 
   // mon subscriptions
 private:
