@@ -94,13 +94,14 @@ struct Inode;
 
 struct MetaRequest {
   tid_t tid;
-  MClientRequest *request;    
+  MClientRequest *request;    // the actual request to send out
   bufferlist request_payload;  // in case i have to retry
-  
-  int uid, gid;
-  
+  //used in constructing MClientRequests
+  ceph_mds_request_head head;
+  filepath path, path2;
+ 
   utime_t  sent_stamp;
-  set<int> mds;                // who i am asking
+  int      mds;                // who i am asking
   int      resend_mds;         // someone wants you to (re)send the request here
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
@@ -127,11 +128,39 @@ struct MetaRequest {
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
     lock("MetaRequest lock"),
-    caller_cond(0), dispatch_cond(0), target(0) { }
+    caller_cond(0), dispatch_cond(0), target(0) {
+    memcpy(&head, &req->head, sizeof(ceph_mds_request_head));
+  }
+
+  MetaRequest(int op) : 
+    tid(-1), request(NULL),
+    resend_mds(-1), num_fwd(0), retry_attempt(0),
+    ref(1), reply(0), 
+    kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
+    lock("MetaRequest lock"),
+    caller_cond(0), dispatch_cond(0), target(0) {
+    memset(&head, 0, sizeof(ceph_mds_request_head));
+    head.op = op;
+}
 
   MetaRequest* get() {++ref; return this; }
 
   void put() {if(--ref == 0) delete this; }
+
+  // normal fields
+  void set_tid(tid_t t) { head.tid = t; }
+  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
+  void set_retry_attempt(int a) { head.num_retry = a; }
+  void set_filepath(const filepath& fp) { path = fp; }
+  void set_filepath2(const filepath& fp) { path2 = fp; }
+  void set_string2(const char *s) { path2.set_path(s, 0); }
+  void set_caller_uid(unsigned u) { head.caller_uid = u; }
+  void set_caller_gid(unsigned g) { head.caller_gid = g; }
+  void set_dentry_wanted() {
+    head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
+  }
+  int get_op() { return head.op; }
 };
 
 
@@ -778,9 +807,12 @@ public:
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
-  int make_request(MClientRequest *req, int uid, int gid,
+  int make_request(MetaRequest *req, int uid, int gid,
+		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
+  void encode_cap_release(MetaRequest *req, int remove_cap,
+			 int unless_have_cap, Inode *in);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
