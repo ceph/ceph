@@ -791,8 +791,8 @@ int Client::make_request(MClientRequest *req,
     uid = geteuid();
     gid = getegid();
   }
-  request->uid = uid;
-  request->gid = gid;
+  request->set_caller_uid(uid);
+  request->set_caller_gid(gid);
   req->set_caller_uid(uid);
   req->set_caller_gid(gid);
 
@@ -974,7 +974,7 @@ void Client::send_request(MetaRequest *request, int mds)
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());
 
-  if (request->mds.empty()) {
+  if (request->mds == -1) {
     request->sent_stamp = g_clock.now();
     dout(20) << "send_request set sent_stamp to " << request->sent_stamp << dendl;
   }
@@ -982,7 +982,7 @@ void Client::send_request(MetaRequest *request, int mds)
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));
   
-  request->mds.insert(mds);
+  request->mds = mds;
 }
 
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
@@ -1009,7 +1009,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 	   << ", resending to " << fwd->get_dest_mds()
 	   << dendl;
   
-  request->mds.clear();
+  request->mds = -1;
   request->num_fwd = fwd->get_num_fwd();
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->Signal();
@@ -1270,7 +1270,7 @@ void Client::kick_requests(int mds, bool signal)
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) 
-    if (p->second->mds.count(mds)) {
+    if (p->second->mds == mds) {
       if (signal) {
 	p->second->kick = true;
 	p->second->caller_cond->Signal();
