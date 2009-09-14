@@ -47,7 +47,7 @@ public class CephOutputStream extends OutputStream {
 
   private int fileHandle;
 
-  private static boolean debug;
+  private boolean debug;
 
 
   private native long ceph_seek_from_start(int fh, long pos);
@@ -72,7 +72,7 @@ public class CephOutputStream extends OutputStream {
   /**Ceph likes things to be closed before it shuts down,
    *so closing the IOStream stuff voluntarily is good
    */
-  public void finalize () throws Throwable {
+  protected void finalize () throws Throwable {
     try {
       if (!closed) close();
     }

@@ -48,7 +48,7 @@ public class CephInputStream extends FSInputStream {
 
   private long fileLength;
 
-  private static boolean debug;
+  private boolean debug;
 
   private native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
   private native long ceph_seek_from_start(int fh, long pos);
@@ -78,7 +78,7 @@ public class CephInputStream extends FSInputStream {
   /** Ceph likes things to be closed before it shuts down,
    * so closing the IOStream stuff voluntarily in a finalizer is good
    */
-  public void finalize () throws Throwable {
+  protected void finalize () throws Throwable {
     try {
       if (!closed) close();
     }
