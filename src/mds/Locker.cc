@@ -487,6 +487,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *need_issue)
 
       if (lock->is_updated()) {
 	scatter_writebehind((ScatterLock*)lock);
+	mds->mdlog->flush();
 	return;
       }
       
@@ -2562,6 +2563,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     if (!gather && lock->is_updated()) {
       lock->get_parent()->auth_pin(lock);
       scatter_writebehind((ScatterLock*)lock);
+      mds->mdlog->flush();
       return false;
     }
 
@@ -2685,6 +2687,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   if (!gather && lock->is_updated()) {
     lock->get_parent()->auth_pin(lock);
     scatter_writebehind((ScatterLock*)lock);
+    mds->mdlog->flush();
     return;
   }
 
@@ -2824,7 +2827,6 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   
   mds->mdlog->submit_entry(le);
   mds->mdlog->wait_for_sync(new C_Locker_ScatterWB(this, lock, mut));
-  mds->mdlog->flush();
 }
 
 void Locker::scatter_writebehind_finish(ScatterLock *lock, Mutation *mut)
@@ -3003,6 +3005,7 @@ void Locker::scatter_tick()
     updated_scatterlocks.pop_front();
     scatter_nudge(lock, 0);
   }
+  mds->mdlog->flush();
 }
 
 
@@ -3543,6 +3546,7 @@ void Locker::handle_file_lock(ScatterLock *lock, MLock *m)
       dout(7) << "handle_file_lock trying nudge on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
       scatter_nudge(lock, 0);
+      mds->mdlog->flush();
     } else {
       dout(7) << "handle_file_lock IGNORING nudge on non-auth " << *lock
 	      << " on " << *lock->get_parent() << dendl;

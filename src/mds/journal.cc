@@ -273,6 +273,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
 
   if (gather) {
     dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
+    mds->mdlog->flush();
   } else {
     dout(6) << "LogSegment(" << offset << ").try_to_expire success" << dendl;
   }
