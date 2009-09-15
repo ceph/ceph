@@ -21,7 +21,7 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
-int AuthClientHandler::generate_authenticate_request(bufferlist& bl)
+int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
 {
   dout(0) << "status=" << status << dendl;
   if (status < 0) {
@@ -62,33 +62,44 @@ int AuthClientHandler::generate_authenticate_request(bufferlist& bl)
   return 0;
 }
 
+AuthClientProtocolHandler *AuthClientHandler::_get_proto_handler(uint32_t id)
+{
+  map<uint32_t, AuthClientProtocolHandler *>::iterator iter = handlers_map.find(id);
+  if (iter == handlers_map.end())
+    return NULL;
+
+  return iter->second;
+}
+
+uint32_t AuthClientHandler::_add_proto_handler(AuthClientProtocolHandler *handler)
+{
+  uint32_t id = max_proto_handlers++;
+  handlers_map[id] = handler;
+  return id;
+}
+
 
 int AuthClientHandler::handle_response(Message *response)
 {
   bufferlist bl;
   int ret;
 
-#if 0
-      char buf[4096];
-      const char *s = bl.c_str();
-      int pos = 0;
-      for (unsigned int i=0; i<bl.length() && pos<sizeof(buf) - 8; i++) {
-        pos += snprintf(&buf[pos], sizeof(buf)-pos, "%.2x ", (int)(unsigned char)s[i]);
-        if (i && !(i%8))
-          pos += snprintf(&buf[pos], sizeof(buf)-pos, " ");
-        if (i && !(i%16))
-          pos += snprintf(&buf[pos], sizeof(buf)-pos, "\n");
-      }
-      dout(0) << "result_buf=" << buf << dendl;
-#endif
-
   MAuthReply* m = (MAuthReply *)response;
   bl = m->result_bl;
   ret = m->result;
 
-  got_authenticate_response = true;
-
+  CephXPremable pre;
   bufferlist::iterator iter = bl.begin();
+  ::decode(pre, iter);
+  AuthClientProtocolHandler *handler = _get_proto_handler(pre.trans_id);
+  if (!handler)
+    return -EINVAL;
+
+  return handler->handle_response(ret, iter);
+}
+
+int AuthClientAuthenticateHandler::_handle_response(int ret, bufferlist::iterator& iter)
+{
 
   if (ret != 0 && ret != -EAGAIN) {
     response_state = request_state;
@@ -121,10 +132,10 @@ int AuthClientHandler::handle_response(Message *response)
   return -EAGAIN;
 }
 
-int AuthClientHandler::generate_cephx_authenticate_request(bufferlist& bl)
+int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlist& bl)
 {
   CephXRequestHeader header;
-  AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+  AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
   if (!ticket_handler.has_key()) {
     dout(0) << "auth ticket: doesn't have key" << dendl;
     /* we first need to get the principle/auth session key */
@@ -134,7 +145,7 @@ int AuthClientHandler::generate_cephx_authenticate_request(bufferlist& bl)
    ::encode(header, bl);
     CryptoKey key;
     AuthBlob blob;
-    build_service_ticket_request(name, addr, CEPHX_PRINCIPAL_AUTH,
+    build_service_ticket_request(client->name, client->addr, CEPHX_PRINCIPAL_AUTH,
                                false, key, blob, bl);
     cephx_request_state = 1;
     return 0;
@@ -152,32 +163,41 @@ int AuthClientHandler::generate_cephx_authenticate_request(bufferlist& bl)
   header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
 
   ::encode(header, bl);
-  build_service_ticket_request(name, addr, want,
+  build_service_ticket_request(client->name, client->addr, want,
                              true, ticket_handler.session_key, ticket_handler.ticket, bl);
   
   return 0;
 }
 
-int AuthClientHandler::generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl, AuthorizeContext& ctx)
+int AuthClientAuthorizeHandler::_build_request()
 {
   CephXRequestHeader header;
-  if (!(have & service_id)) {
+  if (!(client->have & service_id)) {
     dout(0) << "can't authorize: missing service key" << dendl;
     return -EPERM;
   }
 
   header.request_type = CEPHX_OPEN_SESSION;
 
+  bufferlist& bl = msg->get_auth_payload();
+
   ::encode(header, bl);
-  //AuthorizeContext& ctx = context_map.create();
   utime_t now;
-  if (!tickets.build_authorizer(service_id, bl, ctx))
+#if 0
+  if (!client->tickets.build_authorizer(service_id, bl, ctx))
     return -EINVAL;
-  
+#endif
   return 0;
 }
 
-int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
+int AuthClientAuthorizeHandler::_handle_response(int ret, bufferlist::iterator& iter)
+{
+  /* FIXME: implement */
+
+  return 0;
+}
+
+int AuthClientAuthenticateHandler::handle_cephx_response(bufferlist::iterator& indata)
 {
   int ret = 0;
   struct CephXResponseHeader header;
@@ -194,10 +214,10 @@ int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
 #define PRINCIPAL_SECRET "123456789ABCDEF0"
     {
       bufferptr p(PRINCIPAL_SECRET, sizeof(PRINCIPAL_SECRET) - 1);
-      secret.set_secret(CEPH_SECRET_AES, p);
+      client->secret.set_secret(CEPH_SECRET_AES, p);
       // AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
   
-      if (!tickets.verify_service_ticket_reply(secret, indata)) {
+      if (!client->tickets.verify_service_ticket_reply(client->secret, indata)) {
         dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }
@@ -211,9 +231,9 @@ int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
     cephx_response_state = 2;
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
     {
-      AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
   
-      if (!tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
+      if (!client->tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
         dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }
@@ -223,13 +243,13 @@ int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
 
   case CEPHX_OPEN_SESSION:
     {
-      AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
       AuthAuthorizeReply reply;
       if (!ticket_handler.decode_reply_authorizer(indata, reply)) {
         ret = -EINVAL;
         break;
       }
-      AuthorizeContext *ctx = context_map.get(reply.trans_id);
+      AuthContext *ctx = client->context_map.get(reply.trans_id);
       if (!ctx) {
         ret = -EINVAL;
         break;
@@ -254,8 +274,8 @@ int AuthClientHandler::handle_cephx_response(bufferlist::iterator& indata)
   return ret;
 }
 
-bool AuthClientHandler::request_pending() {
-  dout(0) << "request_pending(): cephx_request_state=" << cephx_request_state << " cephx_response_state=" << cephx_response_state << dendl;
+bool AuthClientAuthenticateHandler::request_pending() {
+  dout(0) << "request_pending(): request_state=" << cephx_request_state << " cephx_response_state=" << cephx_response_state << dendl;
   return (request_state != response_state) || (cephx_request_state != cephx_response_state);
 }
 
@@ -267,40 +287,68 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
   Mutex::Locker l(lock);
   this->client = client;
   dout(10) << "start_session" << dendl;
-  _reset();
+
+  AuthClientAuthenticateHandler handler(this, want, have);
+
+  int err;
 
   do {
-    status = 0;
-    int err = _do_authenticate_request(timeout);
-    dout(0) << "_do_authenticate_request returned " << err << dendl;
+    err = handler.build_request();
     if (err < 0)
       return err;
 
-  } while (status == -EAGAIN);
+    err = handler.do_request(timeout);
+    dout(0) << "handler.do_request returned " << err << dendl;
+    if (err < 0)
+      return err;
 
-  return status;
+  } while (err == -EAGAIN);
+
+  return err;
+}
+
+AuthClientProtocolHandler::AuthClientProtocolHandler(AuthClientHandler *client) : 
+                        msg(NULL), got_response(false), got_timeout(false),
+                        timeout_event(NULL)
+{
+  this->client = client;
+  reset();
+  id = client->_add_proto_handler(this);
+}
+
+AuthClientProtocolHandler::~AuthClientProtocolHandler()
+{
+  if (msg)
+    delete msg;
+}
+
+int AuthClientProtocolHandler::build_request()
+{
+  msg = new MAuth;
+  if (!msg)
+    return -ENOMEM;
+
+  bufferlist& bl = msg->get_auth_payload();
+  CephXPremable pre;
+  pre.trans_id = id;
+  ::encode(pre, bl);
+
+  int ret = _build_request(); 
+
+  return ret;
 }
 
 int AuthClientHandler::authorize(uint32_t service_id, double timeout)
 {
-  MAuth *msg = new MAuth;
-  if (!msg)
-    return NULL;
-  bufferlist& bl = msg->get_auth_payload();
+  AuthClientAuthorizeHandler handler(this, service_id);
 
-  AuthorizeContext& ctx = context_map.create();
+  int ret = handler.build_request();
+  if (ret < 0)
+    return ret;
 
-  int err = generate_cephx_authorize_request(service_id, bl, ctx);
-  if (err < 0) {
-    context_map.remove(ctx.id);
-  }
+  ret = handler.do_request(timeout);
 
-  Cond cond;
-
-  ctx.cond = &cond;
-  err = _do_request_generic(timeout, msg, cond);
-
-  return err;
+  return ret;
 }
 
 void AuthClientHandler::tick()
@@ -312,83 +360,84 @@ void AuthClientHandler::tick()
 
 }
 
-Message *AuthClientHandler::build_authenticate_request()
+int AuthClientAuthenticateHandler::_build_request()
 {
-  MAuth *msg = new MAuth;
+  msg = new MAuth;
   if (!msg)
-    return NULL;
+    return -ENOMEM;
+
   bufferlist& bl = msg->get_auth_payload();
 
-  if (generate_authenticate_request(bl) < 0) {
+  int ret = generate_authenticate_request(bl);
+  if (ret < 0) {
     delete msg;
-    return NULL;
   }
 
-  return msg;
+  return ret;
 }
 
-int AuthClientHandler::_do_authenticate_request(double timeout)
+#if 0
+int AuthClientAuthenticateHandler::_do_request()
 {
   Message *msg = build_authenticate_request();
   if (!msg)
     return -EIO;
 
-  Cond request_cond;
-  cur_request_cond = &request_cond;
-  got_authenticate_response = false;
-
-  int ret = _do_request_generic(timeout, msg, request_cond);
-
-  cur_request_cond = NULL;
+  int ret = _do_request_generic(timeout, msg);
 
   return ret;
 }
+#endif
 
-int AuthClientHandler::_do_request_generic(double timeout, Message *msg, Cond& request_cond)
+int AuthClientProtocolHandler::do_request(double timeout)
 {
-  client->send_message(msg);
+  got_response = false;
+  client->client->send_message(msg);
 
   // schedule timeout?
   assert(timeout_event == 0);
   timeout_event = new C_OpTimeout(this, timeout);
-  timer.add_event_after(timeout, timeout_event);
+  client->timer.add_event_after(timeout, timeout_event);
 
-  dout(0) << "got_authenticate_response=" << got_authenticate_response << " got_timeout=" << got_authenticate_timeout << dendl;
+  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
 
-  request_cond.Wait(lock);
+  cond.Wait(client->lock);
 
   // finish.
-  timer.cancel_event(timeout_event);
+  client->timer.cancel_event(timeout_event);
   timeout_event = NULL;
 
   return 0;
 }
 
-void AuthClientHandler::_authenticate_request_timeout(double timeout)
+void AuthClientProtocolHandler::_request_timeout(double timeout)
 {
-  Mutex::Locker l(lock);
-  dout(10) << "_op_timeout" << dendl;
+  Mutex::Locker l(client->lock);
+  dout(10) << "_request_timeout" << dendl;
   timeout_event = 0;
-  if (!got_authenticate_response) {
-    got_authenticate_timeout = 1;
-    assert(cur_request_cond);
-    cur_request_cond->Signal();
+  if (!got_response) {
+    got_timeout = 1;
+    cond.Signal();
   }
   status = -ETIMEDOUT;
 }
 
-void AuthClientHandler::handle_auth_reply(MAuthReply *m)
+int AuthClientProtocolHandler::handle_response(int ret, bufferlist::iterator& iter)
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(client->lock);
 
-  status = handle_response(m);
-  cur_request_cond->Signal();
+  got_response = true;
+
+  status = _handle_response(ret, iter);
+  cond.Signal();
+
+  return status;
 }
 
-AuthorizeContext& AuthorizeContextMap::create()
+AuthContext& AuthContextMap::create()
 {
   Mutex::Locker l(lock);
-  AuthorizeContext& ctx = m[max_id];
+  AuthContext& ctx = m[max_id];
   ctx.id = max_id;
   ctx.cond = NULL;
   ++max_id;
@@ -396,18 +445,19 @@ AuthorizeContext& AuthorizeContextMap::create()
   return ctx;
 }
 
-void AuthorizeContextMap::remove(int id)
+void AuthContextMap::remove(int id)
 {
-  std::map<int, AuthorizeContext>::iterator iter = m.find(id);
+  Mutex::Locker l(lock);
+  std::map<int, AuthContext>::iterator iter = m.find(id);
   if (iter != m.end()) {
     m.erase(iter);
   }
 }
 
-AuthorizeContext *AuthorizeContextMap::get(int id)
+AuthContext *AuthContextMap::get(int id)
 {
   Mutex::Locker l(lock);
-  std::map<int, AuthorizeContext>::iterator iter = m.find(id);
+  std::map<int, AuthContext>::iterator iter = m.find(id);
   if (iter != m.end())
     return &iter->second;
 

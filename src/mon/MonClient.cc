@@ -172,7 +172,7 @@ bool MonClient::ms_dispatch(Message *m)
     return true;
 
   case CEPH_MSG_AUTH_REPLY:
-    auth.handle_auth_reply((MAuthReply*)m);
+    auth.handle_response((MAuthReply*)m);
     delete m;
     return true;
 

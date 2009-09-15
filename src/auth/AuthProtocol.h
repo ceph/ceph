@@ -25,6 +25,19 @@ using namespace std;
 
 class Monitor;
 
+struct CephXPremable {
+  uint32_t trans_id;
+
+  void encode(bufferlist& bl) const {
+    ::encode(trans_id, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    ::decode(trans_id, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXPremable)
+
 /*
   Ceph X-Envelope protocol
 */
@@ -190,6 +203,7 @@ WRITE_CLASS_ENCODER(CephXRequestHeader);
 
 struct CephXResponseHeader {
   uint16_t request_type;
+  uint32_t trans_id;
   int32_t status;
 
   void encode(bufferlist& bl) const {

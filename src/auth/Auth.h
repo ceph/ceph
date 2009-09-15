@@ -20,7 +20,7 @@
 
 class Cond;
 
-struct AuthorizeContext {
+struct AuthContext {
   int status;
   int id;
   utime_t timestamp;
@@ -168,9 +168,9 @@ struct AuthTicketHandler {
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 #endif
   // to access the service
-  bool build_authorizer(bufferlist& bl, AuthorizeContext& ctx);
+  bool build_authorizer(bufferlist& bl, AuthContext& ctx);
   bool decode_reply_authorizer(bufferlist::iterator& indata, AuthAuthorizeReply& reply);
-  bool verify_reply_authorizer(AuthorizeContext& ctx, AuthAuthorizeReply& reply);
+  bool verify_reply_authorizer(AuthContext& ctx, AuthAuthorizeReply& reply);
 
   bool has_key() { return has_key_flag; }
 };
@@ -184,7 +184,7 @@ struct AuthTicketsManager {
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 
   AuthTicketHandler& get_handler(uint32_t type) { return tickets_map[type]; }
-  bool build_authorizer(uint32_t service_id, bufferlist& bl, AuthorizeContext& context);
+  bool build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& context);
 };
 
 struct AuthServiceTicketRequest {

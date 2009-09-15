@@ -24,109 +24,156 @@
 
 #include "common/Timer.h"
 
+class MAuth;
 class MAuthReply;
 class Message;
 class AuthClient;
 
-class AuthorizeContextMap {
-  map<int, AuthorizeContext> m;
+class AuthContextMap {
+  map<int, AuthContext> m;
 
   Mutex lock;
   int max_id;
 
 public:
-  AuthorizeContextMap() : lock("AuthorizeMap") {}
-  AuthorizeContext& create();
+  AuthContextMap() : lock("AuthorizeMap") {}
+  AuthContext& create();
   void remove(int id);
-  AuthorizeContext *get(int id);
+  AuthContext *get(int id);
 };
 
-class AuthClientHandler {
-  Mutex lock;
-  Cond keys_cond;
-  Cond *cur_request_cond;
-  Context *timeout_event;
+class AuthClientHandler;
 
-  uint32_t want;
-  uint32_t have;
+class AuthClientProtocolHandler {
+ class C_OpTimeout : public Context {
+  protected:
+    AuthClientProtocolHandler *client;
+    double timeout;
+  public:
+    C_OpTimeout(AuthClientProtocolHandler *handler, double to) :
+                                        client(handler), timeout(to) {
+    }
+    void finish(int r) {
+      if (r >= 0) client->_request_timeout(timeout);
+    }
+  };
+
+protected:
+  AuthClientHandler *client;
+  MAuth *msg;
+  bool got_response;
+  bool got_timeout;
+  Context *timeout_event;
+  uint32_t id;
 
   // session state
+  int status;
+
+  virtual void _reset() {}
+
+  void reset() {
+    status = 0;
+    _reset();
+  }
+
+  Cond cond;
+
+  virtual int _handle_response(int ret, bufferlist::iterator& iter) = 0;
+  virtual int _build_request() = 0;
+
+  void _request_timeout(double timeout);
+public:
+  AuthClientProtocolHandler(AuthClientHandler *ch);
+  virtual ~AuthClientProtocolHandler();
+  int build_request();
+
+  int handle_response(int ret, bufferlist::iterator& iter);
+  int do_request(double timeout);
+};
+
+class AuthClientAuthenticateHandler : public AuthClientProtocolHandler {
   int request_state;
   int response_state;
-
-  int status;
 
   int cephx_request_state;
   int cephx_response_state;
 
-  bool got_authenticate_response;
-  bool got_authenticate_timeout;
-
-  EntityName name;
-  entity_addr_t addr;
-
   /* envelope protocol parameters */
   uint64_t server_challenge;
 
+  /* envelope protocol */
+  int generate_authenticate_request(bufferlist& bl);
+  /* auth protocol */
+  int generate_cephx_authenticate_request(bufferlist& bl);
+  int handle_cephx_response(bufferlist::iterator& indata);
+
+  uint32_t want;
+  uint32_t have;
+
+protected:
+  void reset() {
+    request_state = 0;
+    response_state = 0;
+    cephx_request_state = 0;
+    cephx_response_state = 0;
+    timeout_event = NULL;
+  }
+
+  bool request_pending();
+
+  int _build_request();
+  int _handle_response(int ret, bufferlist::iterator& iter);
+public:
+  AuthClientAuthenticateHandler(AuthClientHandler *client, uint32_t _want, uint32_t _have) :
+             AuthClientProtocolHandler(client), want(_want), have(_have) {}
+};
+
+class AuthClientAuthorizeHandler : public AuthClientProtocolHandler {
+  uint32_t service_id;
+protected:
+  int _build_request();
+  int _handle_response(int ret, bufferlist::iterator& iter);
+public:
+  AuthClientAuthorizeHandler(AuthClientHandler *client, uint32_t sid) : AuthClientProtocolHandler(client), service_id(sid) {}
+};
+
+class AuthClientHandler {
+  friend class AuthClientProtocolHandler;
+
+  Mutex lock;
+  Cond keys_cond;
+
+
   /* ceph-x protocol */
   utime_t auth_ts;
-  AuthTicketsManager tickets;
-
-  CryptoKey secret;
 
   AuthClient *client;
 
-  AuthorizeContextMap context_map;
-
-  bool request_pending();
   Message *build_authenticate_request();
 
-  int generate_authenticate_request(bufferlist& bl);
-  int handle_response(Message *response);
-
-  /* cephx requests */
-  int generate_cephx_authenticate_request(bufferlist& bl);
-  int generate_cephx_authorize_request(uint32_t service_id, bufferlist& bl, AuthorizeContext& ctx);
-
-  /* cephx responses */
-  int handle_cephx_response(bufferlist::iterator& indata);
-
-  void _reset() {
-    request_state = 0;
-    response_state = 0;
-    status = 0;
-    cephx_request_state = 0;
-    cephx_response_state = 0;
-    got_authenticate_response = false;
-    got_authenticate_timeout = false;
-    timeout_event = NULL;
-    cur_request_cond = NULL;
-  }
 
   SafeTimer timer;
 
- class C_OpTimeout : public Context {
-  protected:
-    AuthClientHandler *client_handler;
-    double timeout;
-  public:
-    C_OpTimeout(AuthClientHandler *handler, double to) :
-                                        client_handler(handler), timeout(to) {
-    }
-    void finish(int r) {
-      if (r >= 0) client_handler->_authenticate_request_timeout(timeout);
-    }
-  };
+  uint32_t max_proto_handlers;
+  map<uint32_t, AuthClientProtocolHandler *> handlers_map;
+
+  AuthClientProtocolHandler *_get_proto_handler(uint32_t id);
+  uint32_t _add_proto_handler(AuthClientProtocolHandler *handler);
 
   void _authenticate_request_timeout(double timeout);
   int _do_authenticate_request(double timeout);
-  int _do_request_generic(double timeout, Message *msg, Cond& request_cond);
-
 public:
+  EntityName name;
+  entity_addr_t addr;
+  uint32_t want;
+  uint32_t have;
+  CryptoKey secret;
+
+  AuthContextMap context_map;
+  AuthTicketsManager tickets;
+
   AuthClientHandler() : lock("AuthClientHandler::lock"),
-			want(0), have(0), client(NULL), timer(lock) {
-    _reset();
-  }
+			client(NULL), timer(lock), max_proto_handlers(0) { }
   
   void set_want_keys(__u32 keys) {
     Mutex::Locker l(lock);
@@ -149,9 +196,10 @@ public:
     return (want & have) == have;
   }
 
+  int handle_response(Message *response);
+
   int start_session(AuthClient *client, double timeout);
   int authorize(uint32_t service_id, double timeout);
-  void handle_auth_reply(MAuthReply *m);
   void tick();
 };
 

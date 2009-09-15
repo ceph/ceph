@@ -182,7 +182,7 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
  *
  * ticket, {timestamp, nonce}^session_key
  */
-bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthorizeContext& ctx)
+bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
 {
   ctx.timestamp = g_clock.now();
 
@@ -202,7 +202,7 @@ bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthorizeContext& ctx)
  *
  * ticket, {timestamp, nonce}^session_key
  */
-bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, AuthorizeContext& ctx)
+bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& ctx)
 {
   map<uint32_t, AuthTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
@@ -257,7 +257,7 @@ bool AuthTicketHandler::decode_reply_authorizer(bufferlist::iterator& indata, Au
 /*
  * PRINCIPAL: verify reply is authentic
  */
-bool AuthTicketHandler::verify_reply_authorizer(AuthorizeContext& ctx, AuthAuthorizeReply& reply)
+bool AuthTicketHandler::verify_reply_authorizer(AuthContext& ctx, AuthAuthorizeReply& reply)
 {
   if (ctx.timestamp == reply.timestamp) {
     return true;
