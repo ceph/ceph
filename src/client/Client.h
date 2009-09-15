@@ -93,9 +93,7 @@ struct InodeCap;
 struct Inode;
 
 struct MetaRequest {
-  tid_t tid;
   MClientRequest *request;    // the actual request to send out
-  bufferlist request_payload;  // in case i have to retry
   //used in constructing MClientRequests
   ceph_mds_request_head head;
   filepath path, path2;
@@ -121,10 +119,11 @@ struct MetaRequest {
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
 
+  Inode *source;
   Inode *target;
 
   MetaRequest(MClientRequest *req, tid_t t) : 
-    tid(t), request(req), 
+    request(req), 
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
@@ -134,7 +133,7 @@ struct MetaRequest {
   }
 
   MetaRequest(int op) : 
-    tid(-1), request(NULL),
+    request(NULL),
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
@@ -1152,7 +1151,7 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
 
-
+  MClientRequest* make_request_from_Meta(MetaRequest * request);
 
 public:
   int mount();

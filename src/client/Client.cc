@@ -790,16 +790,8 @@ int Client::make_request(MetaRequest *request,
     request->set_oldest_client_tid(tid); // this one is the oldest.
 
   // -- make request --
-  MClientRequest *req = new MClientRequest(request->get_op());
-  memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
-  req->set_filepath(request->get_filepath());
-  req->set_filepath2(request->get_filepath2());
-  req->set_data(request->data);
-
-  // encode payload now, in case we have to resend(in case of mds failure)
+  MClientRequest *req = make_request_from_Meta(request);
   request->request = req;
-  req->encode_payload();
-  request->request_payload = req->get_payload();
 
   // hack target mds?
   if (use_mds >= 0)
@@ -906,6 +898,17 @@ int Client::make_request(MetaRequest *request,
   return r;
 }
 
+inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
+{
+  MClientRequest *req = new MClientRequest(request->get_op());
+  memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
+  req->set_filepath(request->get_filepath());
+  req->set_filepath2(request->get_filepath2());
+  req->set_data(request->data);
+  req->set_retry_attempt(request->retry_attempt);
+  return req;
+}
+
 /*
 //call me from something that has client_lock held, I think
 void encode_cap_release(MetaRequest *req, int remove_cap,
@@ -979,14 +982,10 @@ void Client::send_request(MetaRequest *request, int mds)
     // make a new one
     dout(10) << "send_request rebuilding request " << request->get_tid()
 	     << " for mds" << mds << dendl;
-    r = new MClientRequest;
-    r->copy_payload(request->request_payload);
-    r->decode_payload();
-    r->set_retry_attempt(request->retry_attempt);
+    r = make_request_from_Meta(request);
     r->set_dentry_wanted();
     if (request->got_unsafe)
       r->set_replayed_op();
-    r->clear_payload();  // reencode with changes
   }
   else
     request->retry_attempt++;
