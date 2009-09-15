@@ -152,6 +152,14 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   return true;
 }
 
+bool AuthTicketsManager::has_key(uint32_t service_id)
+{
+  map<uint32_t, AuthTicketHandler>::iterator iter = tickets_map.find(service_id);
+  if (iter == tickets_map.end())
+    return false;
+  return iter->second.has_key();
+}
+
 /*
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
@@ -259,7 +267,7 @@ bool AuthTicketHandler::decode_reply_authorizer(bufferlist::iterator& indata, Au
  */
 bool AuthTicketHandler::verify_reply_authorizer(AuthContext& ctx, AuthAuthorizeReply& reply)
 {
-  if (ctx.timestamp == reply.timestamp) {
+  if (ctx.timestamp + 1 == reply.timestamp) {
     return true;
   }
 

@@ -29,19 +29,6 @@ class MAuthReply;
 class Message;
 class AuthClient;
 
-class AuthContextMap {
-  map<int, AuthContext> m;
-
-  Mutex lock;
-  int max_id;
-
-public:
-  AuthContextMap() : lock("AuthorizeMap") {}
-  AuthContext& create();
-  void remove(int id);
-  AuthContext *get(int id);
-};
-
 class AuthClientHandler;
 
 class AuthClientProtocolHandler {
@@ -130,6 +117,7 @@ public:
 
 class AuthClientAuthorizeHandler : public AuthClientProtocolHandler {
   uint32_t service_id;
+  AuthContext ctx;
 protected:
   int _build_request();
   int _handle_response(int ret, bufferlist::iterator& iter);
@@ -169,7 +157,6 @@ public:
   uint32_t have;
   CryptoKey secret;
 
-  AuthContextMap context_map;
   AuthTicketsManager tickets;
 
   AuthClientHandler() : lock("AuthClientHandler::lock"),

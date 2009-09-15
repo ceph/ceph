@@ -185,6 +185,7 @@ struct AuthTicketsManager {
 
   AuthTicketHandler& get_handler(uint32_t type) { return tickets_map[type]; }
   bool build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& context);
+  bool has_key(uint32_t service_id);
 };
 
 struct AuthServiceTicketRequest {

@@ -265,6 +265,23 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       ret = 0;
     }
     break;
+  case CEPHX_OPEN_SESSION:
+    {
+      CryptoKey service_secret;
+
+      auth_server.get_service_secret(service_secret, CEPHX_PRINCIPAL_MON);
+
+      ret = 0;
+      bufferlist tmp_bl;
+      if (!verify_authorizer(service_secret, indata, tmp_bl)) {
+        ret = -EPERM;
+      }
+      build_cephx_response_header(request_type, ret, result_bl);
+      result_bl.claim_append(tmp_bl);
+
+      break;
+    }
+    break;
   default:
     ret = -EINVAL;
     build_cephx_response_header(request_type, -EINVAL, result_bl);
