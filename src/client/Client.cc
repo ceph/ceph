@@ -4304,24 +4304,23 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
-  if (g_conf.client_oc) {
-    if (in->caps_issued_mask(CEPH_CAP_FILE_BUFFER)) {
-      // do buffered write
-      if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
-	get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-      
-      // wait? (this may block!)
-      objectcacher->wait_for_write(size, client_lock);
-      
-      // async, caching, non-blocking.
-      objectcacher->file_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-			       offset, size, bl, g_clock.now(), 0);
-    } else {
+  if (g_conf.client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
+    // do buffered write
+    if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
+      get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    
+    // wait? (this may block!)
+    objectcacher->wait_for_write(size, client_lock);
+    
+    // async, caching, non-blocking.
+    objectcacher->file_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+			     offset, size, bl, g_clock.now(), 0);
+  } else {
+    /*
       // atomic, synchronous, blocking.
       objectcacher->file_atomic_sync_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 					   offset, size, bl, g_clock.now(), 0, client_lock);
-    }   
-  } else {
+    */
     // simple, non-atomic sync write
     Mutex flock("Client::_write flock");
     Cond cond;
@@ -4330,7 +4329,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
     
     filer->write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);

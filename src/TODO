@@ -35,8 +35,6 @@ v0.15
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
-- radosgw
-- uclient: fix write vs max_size?
 
 - mds: put migration vectors in mdsmap
 
@@ -65,8 +63,9 @@ mount.ceph
 - should look at multiple A records, pass all IPs to kernel
 
 rados
-- usage accounting
 - make rest interface superset of s3?
+  - create/delete snapshots
+  - list, access snapped version
 - perl swig wrapper
 - 'rados call foo.bar'?
 - merge pgs
