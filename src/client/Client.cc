@@ -169,8 +169,6 @@ Client::~Client()
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
-  unlink_dispatcher(monclient);
-
   if (messenger)
     messenger->destroy();
 }
@@ -256,8 +254,7 @@ void Client::init()
   Mutex::Locker lock(client_lock);
 
   // ok!
-  messenger->set_dispatcher(this);
-  link_dispatcher(monclient);
+  messenger->add_dispatcher_head(this);
 
   monclient->init();
 
@@ -5570,21 +5567,22 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 
 // ===============================
 
-void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
+void Client::ms_handle_failure(Message *m, const entity_addr_t& addr)
 {
-  entity_name_t dest = inst.name;
-  dout(0) << "ms_handle_failure " << *m << " to " << inst << dendl;
+  dout(0) << "ms_handle_failure " << *m << " to " << addr << dendl;
 }
 
-void Client::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
+bool Client::ms_handle_reset(const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
+  return false;
 }
 
 
-void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
+void Client::ms_handle_remote_reset(const entity_addr_t& addr) 
 {
-  dout(0) << "ms_handle_remote_reset on " << addr << ", last " << last << dendl;
+  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+#if 0
   if (last.is_mds()) {
     int mds = last.num();
     dout(0) << "ms_handle_remote_reset on " << last << ", " << mds_sessions[mds].num_caps
@@ -5610,5 +5608,5 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
   }
   else 
     objecter->ms_handle_remote_reset(addr, last);
-
+#endif
 }

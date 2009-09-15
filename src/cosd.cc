@@ -83,7 +83,7 @@ int main(int argc, const char **argv)
   MonClient mc;
   if (mc.build_initial_monmap() < 0)
     return -1;
-  if (mc.get_monmap() < 0)
+  if (mc.get_monmap_privately() < 0)
     return -1;
 
   if (mkfs) {

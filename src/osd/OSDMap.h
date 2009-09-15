@@ -368,6 +368,14 @@ private:
   bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
   bool is_in(int osd) { return exists(osd) && !is_out(osd); }
   
+  bool have_addr(const entity_addr_t& addr) const {
+    for (vector<entity_addr_t>::const_iterator p = osd_addr.begin();
+	 p != osd_addr.end();
+	 p++)
+      if (*p == addr)
+	return true;
+    return false;
+  }
   bool have_inst(int osd) {
     return exists(osd) && is_up(osd); 
   }

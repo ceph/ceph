@@ -167,6 +167,9 @@ public:
 
  private:
   bool ms_dispatch(Message *m);
+  bool ms_handle_reset(const entity_addr_t& peer) { return false; }
+  void ms_handle_failure(Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(const entity_addr_t& peer) {}
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

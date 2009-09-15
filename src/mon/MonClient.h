@@ -36,15 +36,20 @@ public:
 private:
   Messenger *messenger;
 
+  int cur_mon;
+
   entity_addr_t my_addr;
 
   Mutex monc_lock;
   SafeTimer timer;
 
   bool ms_dispatch(Message *m);
-  void handle_monmap(MMonMap *m);
+  bool ms_handle_reset(const entity_addr_t& peer);
 
-  void ms_handle_reset(const entity_addr_t& peer);
+  void ms_handle_failure(Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(const entity_addr_t& peer) {}
+
+  void handle_monmap(MMonMap *m);
 
 
   // monitor session
@@ -59,6 +64,9 @@ private:
   };
   void tick();
 
+  // monclient
+  bool want_monmap;
+
   // mount
 private:
   client_t clientid;
@@ -67,6 +75,8 @@ private:
   Cond mount_cond, map_cond;
   utime_t mount_started;
 
+  void _finish_hunting();
+  void _reopen_session();
   void _pick_new_mon();
   void _send_mon_message(Message *m);
   void _send_mount();
@@ -113,7 +123,7 @@ public:
   }
 
  public:
-  MonClient() : messenger(NULL),
+  MonClient() : messenger(NULL), cur_mon(-1),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
@@ -127,6 +137,7 @@ public:
 
   int build_initial_monmap();
   int get_monmap();
+  int get_monmap_privately();
 
   void send_mon_message(Message *m) {
     Mutex::Locker l(monc_lock);

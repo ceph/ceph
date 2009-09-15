@@ -59,6 +59,10 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
+  bool ms_handle_reset(const entity_addr_t& peer) { return false; }
+  void ms_handle_failure(Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(const entity_addr_t& peer) {}
+
   Objecter *objecter;
 
   Mutex lock;
@@ -293,8 +297,6 @@ bool RadosClient::init()
   rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossless());  // mds does its own timeout/markdown
 
   rank.start(1);
-
-  monclient.link_dispatcher(this);
 
   objecter = new Objecter(messenger, &monclient, &osdmap, lock);
   if (!objecter)

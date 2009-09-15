@@ -373,11 +373,11 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 int MDS::init()
 {
-  messenger->set_dispatcher(this);
+  messenger->add_dispatcher_tail(this);
+  messenger->add_dispatcher_head(&logclient);
 
   // get monmap
   monc->set_messenger(messenger);
-  link_dispatcher(monc);
 
   monc->init();
   monc->get_monmap();
@@ -396,9 +396,6 @@ int MDS::init()
    
   // schedule tick
   reset_tick();
-
-  // i'm ready!
-  link_dispatcher(&logclient);
 
   mds_lock.Unlock();
   return 0;
@@ -1143,7 +1140,6 @@ void MDS::suicide()
   objecter->shutdown();
   
   // shut down messenger
-  unlink_dispatcher(&logclient);
   messenger->shutdown();
 
   monc->shutdown();
@@ -1399,21 +1395,22 @@ bool MDS::_dispatch(Message *m)
 
 
 
-void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
+void MDS::ms_handle_failure(Message *m, const entity_addr_t& addr) 
 {
   mds_lock.Lock();
-  dout(0) << "ms_handle_failure to " << inst << " on " << *m << dendl;
+  dout(0) << "ms_handle_failure to " << addr << " on " << *m << dendl;
   mds_lock.Unlock();
 }
 
-void MDS::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
+bool MDS::ms_handle_reset(const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
+  return false;
 }
 
 
-void MDS::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
+void MDS::ms_handle_remote_reset(const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
-  objecter->ms_handle_remote_reset(addr, last);
+  objecter->ms_handle_remote_reset(addr);
 }

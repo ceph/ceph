@@ -36,6 +36,11 @@ class LogClient : public Dispatcher {
   bool is_synchronous;
   void _send_log();
 
+  bool ms_handle_reset(const entity_addr_t& peer) { return false; }
+  void ms_handle_failure(Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(const entity_addr_t& peer) {}
+
+
  public:
 
   // -- log --

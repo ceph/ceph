@@ -934,28 +934,10 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 }
 
 
-void Objecter::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t dest)
+void Objecter::ms_handle_remote_reset(const entity_addr_t& addr)
 {
-  entity_inst_t inst;
-  inst.name = dest;
-  inst.addr = addr;
-
-  if (dest.is_osd()) {
-    if (!osdmap->have_inst(dest.num()) ||
-	(osdmap->get_inst(dest.num()) != inst)) {
-      dout(0) << "ms_handle_remote_reset " << dest << " inst " << inst
-	      << ", ignoring, already have newer osdmap" << dendl;
-    } else {
-      // kick requests
-      set<pg_t> changed_pgs;
-      dout(0) << "ms_handle_remote_reset " << dest << dendl;
-      scan_pgs_for(changed_pgs, dest.num());
-      if (!changed_pgs.empty()) {
-	dout(0) << "ms_handle_remote_reset " << dest << " kicking " << changed_pgs << dendl;
-	kick_requests(changed_pgs);
-      }
-    }
-  }
+  if (osdmap->have_addr(addr))
+    maybe_request_map();
 }
 
 

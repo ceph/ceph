@@ -415,9 +415,10 @@ int OSD::init()
 
   
   // i'm ready!
-  messenger->set_dispatcher(this);
-  link_dispatcher(&logclient);
-  heartbeat_messenger->set_dispatcher(&heartbeat_dispatcher);
+  messenger->add_dispatcher_head(this);
+  messenger->add_dispatcher_head(&logclient);
+
+  heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   
   monc->init();
 
@@ -533,7 +534,6 @@ int OSD::shutdown()
   }
   pg_map.clear();
 
-  unlink_dispatcher(&logclient);
   messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
@@ -1611,18 +1611,6 @@ void OSD::_dispatch(Message *m)
     }
   }
 }
-
-
-void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
-{
-  entity_name_t dest = inst.name;
-
-  dout(1) << "ms_handle_failure " << inst << " on " << *m << dendl;
-  if (g_conf.ms_die_on_failure)
-    assert(0);
-}
-
-
 
 
 void OSD::handle_scrub(MOSDScrub *m)

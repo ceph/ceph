@@ -57,8 +57,9 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  void ms_handle_failure(Message *m, const entity_inst_t& inst) { 
-  }
+  bool ms_handle_reset(const entity_addr_t& peer) { return false; }
+  void ms_handle_failure(Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(const entity_addr_t& peer) {}
 
 } dispatcher;
 
@@ -92,7 +93,7 @@ int main(int argc, const char **argv, const char *envp[]) {
   // start monitor
   messenger = rank.register_entity(entity_name_t::MON(whoami));
   messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
-  messenger->set_dispatcher(&dispatcher);
+  messenger->add_dispatcher_head(&dispatcher);
 
   rank.start();
   

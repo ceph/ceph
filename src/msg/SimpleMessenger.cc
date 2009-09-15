@@ -287,20 +287,20 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	    entity_addr_t a = remote_reset_q.front();
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_deliver_handle_remote_reset(a);
+	    ms_deliver_handle_remote_reset(a);
  	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
 	    entity_addr_t a = reset_q.front();
 	    reset_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_deliver_handle_reset(a);
+	    ms_deliver_handle_reset(a);
 	  } else if ((long)m == BAD_FAILED) {
 	    lock.Lock();
 	    m = failed_q.front().first;
 	    entity_addr_t a = failed_q.front().second;
 	    failed_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_deliver_handle_failure(m, a);
+	    ms_deliver_handle_failure(m, a);
 	    m->put();
 	  } else {
 	    dout(1) << "<== " << m->get_source_inst()
@@ -312,7 +312,7 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 		    << " " << m->get_footer().data_crc << ")"
 		    << " " << m 
 		    << dendl;
-	    dispatch(m);
+	    ms_deliver_dispatch(m);
 	    dout(20) << "done calling dispatch on " << m << dendl;
 	  }
         }
@@ -1170,7 +1170,7 @@ void SimpleMessenger::Pipe::fail()
   report_failures();
 
   for (unsigned i=0; i<rank->local.size(); i++) 
-    if (rank->local[i] && rank->local[i]->get_dispatcher())
+    if (rank->local[i])
       rank->local[i]->queue_reset(peer_addr);
 
   // unregister
@@ -1188,7 +1188,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   dout(10) << "was_session_reset" << dendl;
   report_failures();
   for (unsigned i=0; i<rank->local.size(); i++) 
-    if (rank->local[i] && rank->local[i]->get_dispatcher())
+    if (rank->local[i])
       rank->local[i]->queue_remote_reset(peer_addr);
 
   out_seq = 0;

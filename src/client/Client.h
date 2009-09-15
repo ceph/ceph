@@ -976,6 +976,11 @@ protected:
   friend class SyntheticClient;
   bool ms_dispatch(Message *m);
 
+  bool ms_handle_reset(const entity_addr_t& peer);
+  void ms_handle_failure(Message *m, const entity_addr_t& peer);
+  void ms_handle_remote_reset(const entity_addr_t& peer);
+
+
  public:
   Client(Messenger *m, MonClient *mc);
   ~Client();
@@ -1225,11 +1230,6 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
-
-  // failure
-  void ms_handle_failure(Message*, const entity_inst_t& inst);
-  void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
-  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);
 };
 
 #endif

@@ -102,9 +102,26 @@ int MonClient::build_initial_monmap()
   return -ENOENT;
 }
 
+
 int MonClient::get_monmap()
 {
   dout(10) << "get_monmap" << dendl;
+  Mutex::Locker l(monc_lock);
+  
+  want_monmap = true;
+  _reopen_session();
+
+  while (want_monmap)
+    map_cond.Wait(monc_lock);
+
+  dout(10) << "get_monmap done" << dendl;
+
+  return 0;
+}
+
+int MonClient::get_monmap_privately()
+{
+  dout(10) << "get_monmap_privately" << dendl;
   Mutex::Locker l(monc_lock);
   
   SimpleMessenger *rank = NULL; 
@@ -114,17 +131,17 @@ int MonClient::get_monmap()
     rank->bind();
     rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
     messenger = rank->register_entity(entity_name_t::CLIENT(-1));
-    messenger->set_dispatcher(this);
+    messenger->add_dispatcher_head(this);
     rank->start(true);  // do not daemonize!
     temp_msgr = true; 
   }
   
   int attempt = 10;
   int i = 0;
-
   srand(getpid());
+  
   dout(10) << "have " << monmap.epoch << dendl;
-    
+  
   while (monmap.epoch == 0) {
     i = rand() % monmap.mon_inst.size();
     dout(10) << "querying " << monmap.mon_inst[i] << dendl;
@@ -143,7 +160,7 @@ int MonClient::get_monmap()
     messenger->destroy();
     messenger = 0;
   }
-
+ 
   if (monmap.epoch)
     return 0;
   return -1;
@@ -174,14 +191,27 @@ bool MonClient::ms_dispatch(Message *m)
   return false;
 }
 
+void MonClient::_finish_hunting()
+{
+  if (hunting) {
+    dout(0) << "found new mon" << cur_mon << dendl; 
+    hunting = false;
+  }
+}
+
 void MonClient::handle_monmap(MMonMap *m)
 {
   dout(10) << "handle_monmap " << *m << dendl;
   monc_lock.Lock();
 
+  _finish_hunting();
+
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
+
   map_cond.Signal();
+  want_monmap = false;
+
   monc_lock.Unlock();
   delete m;
 }
@@ -201,7 +231,7 @@ void MonClient::_send_mount()
 void MonClient::init()
 {
   dout(10) << "init" << dendl;
-  messenger->set_dispatcher(this);
+  messenger->add_dispatcher_head(this);
 
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
@@ -240,7 +270,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 {
   dout(10) << "handle_mount_ack " << *m << dendl;
 
-  hunting = false;
+  _finish_hunting();
 
   // monmap
   bufferlist::iterator p = m->monmap_bl.begin();
@@ -259,29 +289,41 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 void MonClient::_send_mon_message(Message *m)
 {
-  int mon = monmap.pick_mon();
-  messenger->send_message(m, monmap.mon_inst[mon]);
+  messenger->send_message(m, monmap.mon_inst[cur_mon]);
 }
 
 void MonClient::_pick_new_mon()
 {
-  int oldmon = monmap.pick_mon();
-  messenger->mark_down(monmap.get_inst(oldmon).addr);
-  monmap.pick_mon(true);
+  if (cur_mon >= 0)
+    messenger->mark_down(monmap.get_inst(cur_mon).addr);
+  cur_mon = monmap.pick_mon(true);
+  dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
 
 
-void MonClient::ms_handle_reset(const entity_addr_t& peer)
+void MonClient::_reopen_session()
+{
+  dout(10) << "_reopen_session" << dendl;
+  _pick_new_mon();
+  if (mounting)
+    _send_mount();
+  if (!sub_have.empty())
+    _renew_subs();
+  if (!mounting && sub_have.empty()) {
+    _send_mon_message(new MMonGetMap);
+  }
+}
+
+bool MonClient::ms_handle_reset(const entity_addr_t& peer)
 {
   dout(10) << "ms_handle_reset " << peer << dendl;
-  if (!hunting) {
-    dout(0) << "staring hunt for new mon" << dendl;
-    hunting = true;
-    _pick_new_mon();
-    if (mounting)
-      _send_mount();
-    _renew_subs();
-  }
+  if (hunting)
+    return true;
+
+  dout(0) << "starting hunt for new mon" << dendl;
+  hunting = true;
+  _reopen_session();
+  return false;
 }
 
 void MonClient::tick()
@@ -290,11 +332,7 @@ void MonClient::tick()
 
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
-    // try new monitor
-    _pick_new_mon();
-    if (mounting)
-      _send_mount();
-    _renew_subs();
+    _reopen_session();
   } else {
     // just renew as needed
     utime_t now = g_clock.now();
@@ -306,8 +344,6 @@ void MonClient::tick()
   }
 
   timer.add_event_after(10.0, new C_Tick(this));
-  dout(10) << "tick done" << dendl;
-
 }
 
 
@@ -332,7 +368,7 @@ void MonClient::_renew_subs()
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
-  hunting = false;
+  _finish_hunting();
 
   if (sub_renew_sent != utime_t()) {
     sub_renew_after = sub_renew_sent;

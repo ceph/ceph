@@ -125,8 +125,8 @@ void Monitor::init()
   logclient.set_synchronous(true);
   
   // i'm ready!
-  messenger->set_dispatcher(this);
-  link_dispatcher(&logclient);
+  messenger->add_dispatcher_tail(this);
+  messenger->add_dispatcher_head(&logclient);
   
   // start ticker
   reset_tick();
@@ -159,8 +159,6 @@ void Monitor::shutdown()
   timer.cancel_all();
   timer.join();  
 
-  unlink_dispatcher(&logclient);
-  
   // die.
   messenger->shutdown();
 }

@@ -697,7 +697,7 @@ public:
     }
   }
 
-  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t dest);
+  void ms_handle_remote_reset(const entity_addr_t& addr);
 
 };
 
