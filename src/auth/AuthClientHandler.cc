@@ -25,15 +25,13 @@ AuthClientProtocolHandler::AuthClientProtocolHandler(AuthClientHandler *client) 
                         msg(NULL), got_response(false), got_timeout(false),
                         timeout_event(NULL)
 {
+  dout(0) << "AuthClientProtocolHandler::AuthClientProtocolHandler" << dendl;
   this->client = client;
-  reset();
   id = client->_add_proto_handler(this);
 }
 
 AuthClientProtocolHandler::~AuthClientProtocolHandler()
 {
-  if (msg)
-    delete msg;
 }
 
 int AuthClientProtocolHandler::build_request()
@@ -44,6 +42,7 @@ int AuthClientProtocolHandler::build_request()
 
   bufferlist& bl = msg->get_auth_payload();
   CephXPremable pre;
+  dout(0) << "pre=" << id << dendl;
   pre.trans_id = id;
   ::encode(pre, bl);
 
@@ -62,15 +61,15 @@ int AuthClientProtocolHandler::do_request(double timeout)
   timeout_event = new C_OpTimeout(this, timeout);
   client->timer.add_event_after(timeout, timeout_event);
 
-  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
-
   cond.Wait(client->lock);
+
+  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
 
   // finish.
   client->timer.cancel_event(timeout_event);
   timeout_event = NULL;
 
-  return 0;
+  return status;
 }
 
 void AuthClientProtocolHandler::_request_timeout(double timeout)
@@ -99,10 +98,7 @@ int AuthClientProtocolHandler::handle_response(int ret, bufferlist::iterator& it
 
 int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
 {
-  dout(0) << "status=" << status << dendl;
-  if (status < 0) {
-    return status;
-  }
+  dout(0) << "request_state=" << request_state << " response_state=" << response_state << dendl;
   if (request_state != response_state) {
     dout(0) << "can't generate request while waiting for response" << dendl;
     return -EINVAL;
@@ -114,7 +110,6 @@ int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
     { 
       CephXEnvRequest1 req;
       req.init();
-
       ::encode(req, bl);
     }
     break;
@@ -293,16 +288,9 @@ bool AuthClientAuthenticateHandler::request_pending() {
 
 int AuthClientAuthenticateHandler::_build_request()
 {
-  msg = new MAuth;
-  if (!msg)
-    return -ENOMEM;
-
   bufferlist& bl = msg->get_auth_payload();
 
   int ret = generate_authenticate_request(bl);
-  if (ret < 0) {
-    delete msg;
-  }
 
   return ret;
 }
@@ -378,6 +366,7 @@ int AuthClientHandler::handle_response(Message *response)
   bufferlist::iterator iter = bl.begin();
   ::decode(pre, iter);
   AuthClientProtocolHandler *handler = _get_proto_handler(pre.trans_id);
+  dout(0) << "AuthClientHandler::handle_response(): got response " << *response << " trans_id=" << pre.trans_id << " handler=" << handler << dendl;
   if (!handler)
     return -EINVAL;
 
@@ -399,12 +388,13 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
 
   do {
     err = handler.build_request();
+    dout(0) << "handler.build_request returned " << err << dendl;
     if (err < 0)
       return err;
 
     err = handler.do_request(timeout);
     dout(0) << "handler.do_request returned " << err << dendl;
-    if (err < 0)
+    if (err < 0 && err != -EAGAIN)
       return err;
 
   } while (err == -EAGAIN);

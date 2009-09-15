@@ -111,7 +111,7 @@ class AuthClientAuthenticateHandler : public AuthClientProtocolHandler {
   uint32_t have;
 
 protected:
-  void reset() {
+  void _reset() {
     request_state = 0;
     response_state = 0;
     cephx_request_state = 0;
@@ -125,7 +125,7 @@ protected:
   int _handle_response(int ret, bufferlist::iterator& iter);
 public:
   AuthClientAuthenticateHandler(AuthClientHandler *client, uint32_t _want, uint32_t _have) :
-             AuthClientProtocolHandler(client), want(_want), have(_have) {}
+             AuthClientProtocolHandler(client), want(_want), have(_have) { reset(); }
 };
 
 class AuthClientAuthorizeHandler : public AuthClientProtocolHandler {

@@ -203,7 +203,6 @@ WRITE_CLASS_ENCODER(CephXRequestHeader);
 
 struct CephXResponseHeader {
   uint16_t request_type;
-  uint32_t trans_id;
   int32_t status;
 
   void encode(bufferlist& bl) const {

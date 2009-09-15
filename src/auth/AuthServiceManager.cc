@@ -116,6 +116,15 @@ int CephAuthService_X::handle_request(bufferlist& bl, bufferlist& result_bl)
   bufferlist::iterator indata = bl.begin();
 
   dout(0) << "CephAuthService_X: handle request" << dendl;
+  if (state != 0) {
+    CephXPremable pre;
+    ::decode(pre, indata);
+    dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
+    ::encode(pre, result_bl);
+  }
+
+  dout(0) << "state=" << state << dendl;
+
   switch(state) {
   case 0:
     {
@@ -129,7 +138,7 @@ int CephAuthService_X::handle_request(bufferlist& bl, bufferlist& result_bl)
   case 1:
     {
       CephXEnvRequest2 req;
-      req.decode(indata);
+      ::decode(req, indata);
       uint64_t expected_key = (server_challenge ^ req.client_challenge); /* FIXME: obviously not */
       if (req.key != expected_key) {
         dout(0) << "unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
@@ -163,6 +172,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
   uint16_t request_type = cephx_header.request_type & CEPHX_REQUEST_TYPE_MASK;
   int ret = -EAGAIN;
+
+  dout(0) << "request_type=" << request_type << dendl;
 
   switch (request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -288,8 +299,14 @@ int AuthServiceHandler::handle_request(bufferlist& bl, bufferlist& result)
   bufferlist::iterator iter = bl.begin();
   CephAuthService_X *auth = NULL;
   CephXEnvRequest1 req;
+
   try {
-    req.decode(iter);
+    CephXPremable pre;
+    ::decode(pre, iter);
+    dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
+    ::encode(pre, result);
+
+    ::decode(req, iter);
   } catch (buffer::error *e) {
     dout(0) << "failed to decode message auth message" << dendl;
     delete e;
