@@ -756,7 +756,7 @@ int Client::choose_target_mds(MClientRequest *req)
 
 
 
-int Client::make_request(MClientRequest *req, 
+int Client::make_request(MetaRequest *request, 
 			 int uid, int gid, 
 			 Inode **ptarget,
 			 int use_mds,
@@ -766,37 +766,38 @@ int Client::make_request(MClientRequest *req,
   utime_t start = g_clock.real_now();
   
   bool nojournal = false;
-  int op = req->get_op();
+  int op = request->get_op();
   if (op == CEPH_MDS_OP_GETATTR ||
       op == CEPH_MDS_OP_READDIR ||
       op == CEPH_MDS_OP_OPEN)
     nojournal = true;
 
-
-  // -- request --
   // assign a unique tid
   tid_t tid = ++last_tid;
-  req->set_tid(tid);
-
-  if (!mds_requests.empty()) 
-    req->set_oldest_client_tid(mds_requests.begin()->first);
-  else
-    req->set_oldest_client_tid(tid); // this one is the oldest.
-
+  request->set_tid(tid);
   // make note
-  MetaRequest * request = new MetaRequest(req, tid);
   mds_requests[tid] = request->get();
-
   if (uid < 0) {
     uid = geteuid();
     gid = getegid();
   }
   request->set_caller_uid(uid);
   request->set_caller_gid(gid);
-  req->set_caller_uid(uid);
-  req->set_caller_gid(gid);
+
+  if (!mds_requests.empty()) 
+    request->set_oldest_client_tid(mds_requests.begin()->first);
+  else
+    request->set_oldest_client_tid(tid); // this one is the oldest.
+
+  // -- make request --
+  MClientRequest *req = new MClientRequest(request->get_op());
+  memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
+  req->set_filepath(request->get_filepath());
+  req->set_filepath2(request->get_filepath2());
+  req->set_data(request->data);
 
   // encode payload now, in case we have to resend(in case of mds failure)
+  request->request = req;
   req->encode_payload();
   request->request_payload = req->get_payload();
 
@@ -859,6 +860,7 @@ int Client::make_request(MClientRequest *req,
     }
 
     // send request.
+    //encode_cap_request(request, req);
     send_request(request, mds);
 
     // wait for signal
@@ -904,6 +906,24 @@ int Client::make_request(MClientRequest *req,
   return r;
 }
 
+/*
+//call me from something that has client_lock held, I think
+void encode_cap_release(MetaRequest *req, int remove_cap,
+		       int unless_have_cap, Inode *in) {
+  dout(20) << "encode_cap_release " << remove_cap << " unless " << in
+	   << " has " << unless_have_cap << ". Inode caps are "
+	   << in->caps_issued() << dendl;
+  
+  ceph_mds_request_release release;
+  int caps = in->caps[x];
+  if ((caps & drop) && (caps & unless)==0) {
+    //encode message to drop the caps
+in->
+    dout(20) << "encode_inode_release quitting after encoding drop of "
+	     << remove_cap << " from inode " << in << dendl;
+  }
+  else dout(20) << "encode_cap_release is quitting because we don't need to drop!" << dendl;
+  } */
 
 void Client::handle_client_session(MClientSession *m) 
 {
@@ -957,7 +977,7 @@ void Client::send_request(MetaRequest *request, int mds)
   MClientRequest *r = request->request;
   if (!r) {
     // make a new one
-    dout(10) << "send_request rebuilding request " << request->tid
+    dout(10) << "send_request rebuilding request " << request->get_tid()
 	     << " for mds" << mds << dendl;
     r = new MClientRequest;
     r->copy_payload(request->request_payload);
@@ -2583,7 +2603,7 @@ int Client::mount()
   
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
   req->set_filepath(fp);
   req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
@@ -2825,7 +2845,7 @@ void Client::renew_caps(const int mds) {
 int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
-  MClientRequest *req = new MClientRequest(op);
+  MetaRequest *req = new MetaRequest(op);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -3173,7 +3193,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   if (yes)
     return 0;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
@@ -3222,7 +3242,7 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   if (!mask)
     return 0;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   filepath path;
   in->make_path(path);
@@ -3566,7 +3586,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
   Inode *diri = dirp->inode;
 
-  MClientRequest *req = new MClientRequest(op);
+  MetaRequest *req = new MetaRequest(op);
   filepath path;
   diri->make_path(path);
   req->set_filepath(path); 
@@ -3883,7 +3903,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     // update wanted?
     check_caps(in, true);
   } else {
-    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN);
+    MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_path(path);
     req->set_filepath(path); 
@@ -4518,7 +4538,7 @@ void Client::getcwd(string& dir)
     if (!dn) {
       // look it up
       dout(10) << "getcwd looking up parent for " << *in << dendl;
-      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
       filepath path(in->ino);
       req->set_filepath(path);
       int res = make_request(req, -1, -1);
@@ -4938,7 +4958,7 @@ int Client::ll_listxattr(vinodeno_t vino, char *names, size_t size, int uid, int
 int Client::_setxattr(Inode *in, const char *name, const void *value, size_t size, int flags,
 		      int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETXATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
@@ -4975,7 +4995,7 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
 
 int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMXATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
@@ -5030,7 +5050,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
 { 
   dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKNOD);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5075,7 +5095,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 { 
   dout(3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
   
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CREATE);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5108,7 +5128,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
+  MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5151,7 +5171,7 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 
 int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SYMLINK);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5190,7 +5210,7 @@ int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, s
 
 int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UNLINK);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5224,7 +5244,7 @@ int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
+  MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5259,7 +5279,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
   filepath from;
   fromdir->make_path(from);
   from.push_dentry(fromname);
@@ -5298,7 +5318,7 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
 
 int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid) 
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LINK);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
   filepath path(newname, dir->ino);
   req->set_filepath(path);
   filepath existing(in->ino);

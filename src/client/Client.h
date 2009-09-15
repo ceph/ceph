@@ -99,6 +99,7 @@ struct MetaRequest {
   //used in constructing MClientRequests
   ceph_mds_request_head head;
   filepath path, path2;
+  bufferlist data;
  
   utime_t  sent_stamp;
   int      mds;                // who i am asking
@@ -157,10 +158,14 @@ struct MetaRequest {
   void set_string2(const char *s) { path2.set_path(s, 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
+  void set_data(const bufferlist &d) { data = d; }
   void set_dentry_wanted() {
     head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
   }
   int get_op() { return head.op; }
+  tid_t get_tid() { return head.tid; }
+  filepath& get_filepath() { return path; }
+  filepath& get_filepath2() { return path2; }
 };
 
 
@@ -811,7 +816,7 @@ public:
 		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
-  void encode_cap_release(MetaRequest *req, int remove_cap,
+  void encode_cap_release(MetaRequest *request, MClientRequest *m,
 			 int unless_have_cap, Inode *in);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
