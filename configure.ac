@@ -48,10 +48,10 @@ AC_ARG_WITH([radosgw],
 RADOSGW=1
 AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
-             [],
+             [true],
 	     [RADOSGW=0])
 	     AC_CHECK_LIB([expat], [XML_Parse],
-             [],
+             [true],
 	     [RADOSGW=0])]
 	     if test "$RADOSGW" != "1" -a "x$with_radosgw" != "xcheck"; then
 	     	    AC_MSG_FAILURE([--with-radosgw was given, but libexpat (libexpat1-dev on debian) not found])
