@@ -346,7 +346,6 @@ uint32_t AuthClientHandler::_add_proto_handler(AuthClientProtocolHandler *handle
   return id;
 }
 
-
 int AuthClientHandler::handle_response(Message *response)
 {
   bufferlist bl;
@@ -359,16 +358,16 @@ int AuthClientHandler::handle_response(Message *response)
   CephXPremable pre;
   bufferlist::iterator iter = bl.begin();
   ::decode(pre, iter);
+
+  lock.Lock();
   AuthClientProtocolHandler *handler = _get_proto_handler(pre.trans_id);
+  lock.Unlock();
   dout(0) << "AuthClientHandler::handle_response(): got response " << *response << " trans_id=" << pre.trans_id << " handler=" << handler << dendl;
   if (!handler)
     return -EINVAL;
 
   return handler->handle_response(ret, iter);
 }
-
-
-// -----------
 
 int AuthClientHandler::start_session(AuthClient *client, double timeout)
 {
