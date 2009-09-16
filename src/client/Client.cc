@@ -909,24 +909,46 @@ inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
   return req;
 }
 
-/*
-//call me from something that has client_lock held, I think
-void encode_cap_release(MetaRequest *req, int remove_cap,
-		       int unless_have_cap, Inode *in) {
-  dout(20) << "encode_cap_release " << remove_cap << " unless " << in
-	   << " has " << unless_have_cap << ". Inode caps are "
-	   << in->caps_issued() << dendl;
-  
-  ceph_mds_request_release release;
-  int caps = in->caps[x];
-  if ((caps & drop) && (caps & unless)==0) {
+/*This won't do anything if the MetaRequest doesn't have set:
+ *MClientRequest *request
+ *Inode *source
+ *int caps_dropped
+ */
+void Client::encode_cap_release(MetaRequest *req, int mds) {
+  Inode *in;
+  int caps;
+  if (!req->source) goto invalid_exit;
+  in = req->source;
+  caps = in->caps_issued();
+  dout(20) << "encode_cap_release " << req->caps_dropped << " unless "
+	   << in << " has " << req->unless_have_caps
+	   << ". Inode caps are " << caps << dendl;
+  if ( req->request &&                   //we need a request to bundle with
+       req->caps_dropped &&              //and caps to drop
+       (caps & req->caps_dropped) &&     //and to have some of those caps
+       !(caps & req->unless_have_caps) ) {//and to not have the 'saving' caps
+    InodeCap *icap = in->caps[mds];
     //encode message to drop the caps
-in->
-    dout(20) << "encode_inode_release quitting after encoding drop of "
-	     << remove_cap << " from inode " << in << dendl;
+    ceph_mds_request_release release;
+    icap->issued &= ~req->caps_dropped;
+    icap->implemented &= ~req->caps_dropped;
+    release.ino = in->ino;
+    release.cap_id = icap->cap_id;
+    release.caps = icap->issued;
+    release.wanted = icap->wanted;
+    release.seq = icap->seq;
+    release.issue_seq = icap->issue_seq;
+    release.mseq = icap->mseq;
+    release.dname_seq = 0;
+    release.dname_len = 0;
+    dout(20) << "encode_cap_release quitting after encoding drop of "
+	     << req->caps_dropped << " from inode " << in << dendl;
+    goto clean_exit;
   }
-  else dout(20) << "encode_cap_release is quitting because we don't need to drop!" << dendl;
-  } */
+ invalid_exit:
+  dout(20) << "encode_cap_release is quitting because we don't need to drop!" << dendl;
+ clean_exit: ;
+}
 
 void Client::handle_client_session(MClientSession *m) 
 {
