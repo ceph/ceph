@@ -191,14 +191,6 @@ bool MonClient::ms_dispatch(Message *m)
   return false;
 }
 
-void MonClient::_finish_hunting()
-{
-  if (hunting) {
-    dout(0) << "found new mon" << cur_mon << dendl; 
-    hunting = false;
-  }
-}
-
 void MonClient::handle_monmap(MMonMap *m)
 {
   dout(10) << "handle_monmap " << *m << dendl;
@@ -320,10 +312,18 @@ bool MonClient::ms_handle_reset(const entity_addr_t& peer)
   if (hunting)
     return true;
 
-  dout(0) << "starting hunt for new mon" << dendl;
+  dout(0) << "hunting for new mon" << dendl;
   hunting = true;
   _reopen_session();
   return false;
+}
+
+void MonClient::_finish_hunting()
+{
+  if (hunting) {
+    dout(0) << "found mon" << cur_mon << dendl; 
+    hunting = false;
+  }
 }
 
 void MonClient::tick()
