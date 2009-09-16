@@ -30,8 +30,10 @@ v0.14
 
 v0.15
 /- clean up msgr protocol checks
-/- kclient checkpatch fixes
-- radosgw package
+/- kclient: checkpatch fixes, cleanups.  allow msg revoke (nice interface cleanup)
+/- monclient fixes; ceph detects monitor session drop
+/- msgr: protocol check cleanups; ack seq # fix; 
+/- debian: radosgw package, fix header perms
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
@@ -42,7 +44,6 @@ v0.15
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
-- ceph needs to detect monitor session drop
 
 later
 - authentication
