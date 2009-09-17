@@ -575,6 +575,61 @@ static int fill_inode(struct inode *inode,
 	inode->i_mapping->backing_dev_info =
 		&ceph_client(inode->i_sb)->backing_dev_info;
 
+	switch (inode->i_mode & S_IFMT) {
+	case S_IFIFO:
+	case S_IFBLK:
+	case S_IFCHR:
+	case S_IFSOCK:
+		init_special_inode(inode, inode->i_mode, inode->i_rdev);
+		inode->i_op = &ceph_file_iops;
+		break;
+	case S_IFREG:
+		inode->i_op = &ceph_file_iops;
+		inode->i_fop = &ceph_file_fops;
+		break;
+	case S_IFLNK:
+		inode->i_op = &ceph_symlink_iops;
+		if (!ci->i_symlink) {
+			int symlen = iinfo->symlink_len;
+
+			BUG_ON(symlen != inode->i_size);
+			err = -ENOMEM;
+			ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
+			if (!ci->i_symlink)
+				goto out;
+			memcpy(ci->i_symlink, iinfo->symlink, symlen);
+			ci->i_symlink[symlen] = 0;
+		}
+		break;
+	case S_IFDIR:
+		inode->i_op = &ceph_dir_iops;
+		inode->i_fop = &ceph_dir_fops;
+
+		ci->i_files = le64_to_cpu(info->files);
+		ci->i_subdirs = le64_to_cpu(info->subdirs);
+		ci->i_rbytes = le64_to_cpu(info->rbytes);
+		ci->i_rfiles = le64_to_cpu(info->rfiles);
+		ci->i_rsubdirs = le64_to_cpu(info->rsubdirs);
+		ceph_decode_timespec(&ci->i_rctime, &info->rctime);
+
+		/* set dir completion flag? */
+		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
+		    ceph_snap(inode) == CEPH_NOSNAP &&
+		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_SHARED)) {
+			dout(" marking %p complete (empty)\n", inode);
+			ci->i_ceph_flags |= CEPH_I_COMPLETE;
+			ci->i_max_offset = 2;
+		}
+
+		/* it may be better to set st_size in getattr instead? */
+		if (ceph_test_opt(ceph_client(inode->i_sb), RBYTES))
+			inode->i_size = ci->i_rbytes;
+		break;
+	default:
+		pr_err("ceph fill_inode %llx.%llx BAD mode 0%o\n",
+		       ceph_vinop(inode), inode->i_mode);
+	}
+
 no_change:
 	spin_unlock(&inode->i_lock);
 
@@ -629,62 +684,6 @@ no_change:
 	if (dirinfo)
 		ceph_fill_dirfrag(inode, dirinfo);
 
-	switch (inode->i_mode & S_IFMT) {
-	case S_IFIFO:
-	case S_IFBLK:
-	case S_IFCHR:
-	case S_IFSOCK:
-		init_special_inode(inode, inode->i_mode, inode->i_rdev);
-		inode->i_op = &ceph_file_iops;
-		break;
-	case S_IFREG:
-		inode->i_op = &ceph_file_iops;
-		inode->i_fop = &ceph_file_fops;
-		break;
-	case S_IFLNK:
-		inode->i_op = &ceph_symlink_iops;
-		if (!ci->i_symlink) {
-			int symlen = iinfo->symlink_len;
-
-			BUG_ON(symlen != inode->i_size);
-			err = -ENOMEM;
-			ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
-			if (!ci->i_symlink)
-				goto out;
-			memcpy(ci->i_symlink, iinfo->symlink, symlen);
-			ci->i_symlink[symlen] = 0;
-		}
-		break;
-	case S_IFDIR:
-		inode->i_op = &ceph_dir_iops;
-		inode->i_fop = &ceph_dir_fops;
-
-		ci->i_files = le64_to_cpu(info->files);
-		ci->i_subdirs = le64_to_cpu(info->subdirs);
-		ci->i_rbytes = le64_to_cpu(info->rbytes);
-		ci->i_rfiles = le64_to_cpu(info->rfiles);
-		ci->i_rsubdirs = le64_to_cpu(info->rsubdirs);
-		ceph_decode_timespec(&ci->i_rctime, &info->rctime);
-
-		/* it may be better to set st_size in getattr instead? */
-		if (ceph_test_opt(ceph_client(inode->i_sb), RBYTES))
-			inode->i_size = ci->i_rbytes;
-
-		/* set dir completion flag? */
-		if (ci->i_files == 0 && ci->i_subdirs == 0 &&
-		    ceph_snap(inode) == CEPH_NOSNAP &&
-		    (le32_to_cpu(info->cap.caps) & CEPH_CAP_FILE_SHARED)) {
-			dout(" marking %p complete (empty)\n", inode);
-			ci->i_ceph_flags |= CEPH_I_COMPLETE;
-			ci->i_max_offset = 2;
-		}
-		break;
-	default:
-		pr_err("ceph fill_inode %llx.%llx BAD mode 0%o\n",
-		       ceph_vinop(inode), inode->i_mode);
-		err = -EINVAL;
-		goto out;
-	}
 	err = 0;
 
 out:
