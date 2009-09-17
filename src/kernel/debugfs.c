@@ -11,7 +11,6 @@
  *
  * /sys/kernel/debug/ceph/caps_reservation  - expose caps reservation stats
  * /sys/kernel/debug/ceph/client*  - an instance of the ceph client
- *      .../fsid        - mounted fsid
  *      .../osdmap      - current osdmap
  *      .../mdsmap      - current mdsmap
  *      .../monmap      - current monmap
@@ -23,15 +22,6 @@
 
 static struct dentry *ceph_debugfs_dir;
 static struct dentry *ceph_debugfs_caps_reservation;
-
-static int fsid_show(struct seq_file *s, void *p)
-{
-	struct ceph_client *client = s->private;
-	struct ceph_fsid *f = &client->monc.monmap->fsid;
-
-	seq_printf(s, FSID_FORMAT "\n", PR_FSID(f));
-	return 0;
-}
 
 static int monmap_show(struct seq_file *s, void *p)
 {
@@ -315,7 +305,6 @@ static const struct file_operations name##_fops = {			\
 	.release	= single_release,				\
 };
 
-DEFINE_SHOW_FUNC(fsid_show)
 DEFINE_SHOW_FUNC(monmap_show)
 DEFINE_SHOW_FUNC(mdsmap_show)
 DEFINE_SHOW_FUNC(osdmap_show)
@@ -358,10 +347,10 @@ void ceph_debugfs_cleanup(void)
 int ceph_debugfs_client_init(struct ceph_client *client)
 {
 	int ret = 0;
-#define TMP_NAME_SIZE 16
-	char name[TMP_NAME_SIZE];
+	char name[80];
 
-	snprintf(name, TMP_NAME_SIZE, "client%lld", client->whoami);
+	snprintf(name, sizeof(name), "client%lld." FSID_FORMAT,
+		 client->whoami, PR_FSID(&client->monc.monmap->fsid));
 
 	client->debugfs_dir = debugfs_create_dir(name, ceph_debugfs_dir);
 	if (!client->debugfs_dir)
@@ -389,14 +378,6 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 						      client,
 						      &osdc_show_fops);
 	if (ret)
-		goto out;
-
-	client->debugfs_fsid = debugfs_create_file("fsid",
-					0600,
-					client->debugfs_dir,
-					client,
-					&fsid_show_fops);
-	if (!client->debugfs_fsid)
 		goto out;
 
 	client->debugfs_monmap = debugfs_create_file("monmap",
@@ -447,7 +428,6 @@ void ceph_debugfs_client_cleanup(struct ceph_client *client)
 	debugfs_remove(client->debugfs_monmap);
 	debugfs_remove(client->debugfs_mdsmap);
 	debugfs_remove(client->debugfs_osdmap);
-	debugfs_remove(client->debugfs_fsid);
 	debugfs_remove(client->debugfs_dir);
 }
 
