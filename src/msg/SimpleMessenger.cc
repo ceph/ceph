@@ -1304,8 +1304,6 @@ void SimpleMessenger::Pipe::reader()
       dout(20) << "reader got MSG" << dendl;
       Message *m = read_message();
 
-      m->set_connection(connection_state->get());
-
       lock.Lock();
       
       if (!m) {
@@ -1317,6 +1315,8 @@ void SimpleMessenger::Pipe::reader()
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING)
 	continue;
+
+      m->set_connection(connection_state->get());
 
       // check received seq#
       if (m->get_seq() <= in_seq) {
