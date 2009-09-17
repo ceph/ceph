@@ -3228,51 +3228,44 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
  * @pathmap - map of inodeno to full pathnames.  we remove items from this map 
  *            as we discover we have them.
  *
- * returns a C_Gather* is there is work to do.  caller is responsible for setting
+ * returns a C_Gather* if there is work to do.  caller is responsible for setting
  * the C_Gather completer.
  */
+
 C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing)
 {
   dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
+
+  C_Gather *gather = new C_Gather;
 
   // scan list
   set<CDir*> fetch_queue;
   map<inodeno_t,filepath>::iterator p = pathmap.begin();
   while (p != pathmap.end()) {
-    CInode *in = get_inode(p->first);
-    if (in) {
-      dout(15) << " have " << *in << dendl;
+    // do we have the target already?
+    CInode *cur = get_inode(p->first);
+    if (cur) {
+      dout(15) << " have " << *cur << dendl;
       pathmap.erase(p++);
       continue;
     }
 
     // traverse
     dout(17) << " missing " << p->first << " at " << p->second << dendl;
-    CDir *dir = path_traverse_to_dir(p->second);
-    if (!dir) {
-      dout(5) << " path not found " << p->first << " at " << p->second << dendl;
-      missing.insert(p->first);
+    if (parallel_fetch_traverse_dir(p->first, p->second, fetch_queue, missing, gather))
       pathmap.erase(p++);
-    } else if (!dir->is_complete()) {
-      fetch_queue.insert(dir);
+    else
       p++;
-    } else {
-      // probably because the client created it and held a cap but it never committed
-      // to the journal, and the op hasn't replayed yet.
-      dout(5) << " dne (not created yet?) " << p->first << " at " << p->second << dendl;
-      missing.insert(p->first);
-      pathmap.erase(p++);
-    }
   }
 
-  if (pathmap.empty()) {
+  if (pathmap.empty() && gather->empty()) {
     dout(10) << "parallel_fetch done" << dendl;
     assert(fetch_queue.empty());
+    delete gather;
     return false;
   }
 
   // do a parallel fetch
-  C_Gather *gather = new C_Gather;
   for (set<CDir*>::iterator p = fetch_queue.begin();
        p != fetch_queue.end();
        ++p) {
@@ -3282,6 +3275,63 @@ C_Gather *MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_
   
   return gather;
 }
+
+// true if we're done with this path
+bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
+					  set<CDir*>& fetch_queue, set<inodeno_t>& missing, C_Gather *gather)
+{
+  CInode *cur = get_inode(path.get_ino());
+  if (!cur) {
+    dout(5) << " missing " << path << " base ino " << path.get_ino() << dendl;
+    missing.insert(ino);
+    return true;
+  }
+
+  for (unsigned i=0; i<path.depth(); i++) {
+    dout(20) << " path " << path << " seg " << i << "/" << path.depth() << ": " << path[i]
+	     << " under " << *cur << dendl;
+    if (!cur->is_dir()) {
+      dout(5) << " bad path " << path << " ENOTDIR at " << path[i] << dendl;
+      missing.insert(ino);
+      return true;
+    }
+      
+    frag_t fg = cur->pick_dirfrag(path[i]);
+    CDir *dir = cur->get_or_open_dirfrag(this, fg);
+    CDentry *dn = dir->lookup(path[i]);
+    if (!dn) {
+      if (!dir->is_complete()) {
+	// fetch dir
+	fetch_queue.insert(dir);
+	return false;
+      } else {
+	// probably because the client created it and held a cap but it never committed
+	// to the journal, and the op hasn't replayed yet.
+	dout(5) << " dne (not created yet?) " << ino << " at " << path << dendl;
+	missing.insert(ino);
+	return true;
+      }
+    }
+    CDentry::linkage_t *dnl = dn->get_linkage();
+    cur = dnl->get_inode();
+    if (!cur) {
+      assert(dnl->is_remote());
+      cur = get_inode(dnl->get_remote_ino());
+      if (cur) {
+	dn->link_remote(dnl, cur);
+      } else {
+	// open remote ino
+	open_remote_ino(dnl->get_remote_ino(), gather->new_sub());
+	return false;
+      }
+    }
+  }
+
+  dout(5) << " ino not found " << ino << " at " << path << dendl;
+  missing.insert(ino);
+  return true;
+}
+
 
 
 
@@ -5948,38 +5998,6 @@ bool MDCache::path_is_mine(filepath& path)
   return cur->is_auth();
 }
 
-
-
-/**
- * path_traverse_to_dir -- traverse to deepest dir we have
- *
- * @path - path to traverse (as far as we can)
- *
- * usually we _don't_ have the full path.  (if we do, we return NULL.)
- * also, if path calls a file a dir, we return NULL.
- */
-CDir *MDCache::path_traverse_to_dir(filepath& path)
-{
-  CInode *cur = get_inode(path.get_ino());
-  if (!cur)
-    return 0;   // useless!
-
-  for (unsigned i=0; i<path.depth(); i++) {
-    dout(20) << "path_traverse_to_dir seg " << i << ": " << path[i] << " under " << *cur << dendl;
-    if (!cur->is_dir())
-      return 0;
-    frag_t fg = cur->pick_dirfrag(path[i]);
-    CDir *dir = cur->get_or_open_dirfrag(this, fg);
-    CDentry *dn = dir->lookup(path[i]);
-    if (!dn) return dir;
-    CDentry::linkage_t *dnl = dn->get_linkage();
-    assert(dnl->is_primary());
-    cur = dnl->get_inode();
-  }
-
-  // hmm, we DO have the full path.
-  return NULL;
-}
 
 
 /**
