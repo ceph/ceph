@@ -16,6 +16,7 @@
 #define __AUTHTYPES_H
 
 #include "Crypto.h"
+#include "AuthProtocol.h"
 #include "msg/msg_types.h"
 
 class Cond;
@@ -38,6 +39,66 @@ struct EntityName {
   void decode(bufferlist::iterator& bl) {
     ::decode(entity_type, bl);
     ::decode(name, bl);
+  }
+
+  void to_str(string& str) const {
+    switch (entity_type) {
+      case CEPHX_PRINCIPAL_AUTH:
+        str = "auth";
+        break;
+      case CEPHX_PRINCIPAL_MON:
+        str = "mon";
+        break;
+      case CEPHX_PRINCIPAL_OSD:
+        str = "osd";
+        break;
+      case CEPHX_PRINCIPAL_MDS:
+        str = "mds";
+        break;
+      case CEPHX_PRINCIPAL_CLIENT:
+        str = "client";
+        break;
+      default:
+        str = "???";
+        break;
+    }
+    str.append(".");
+    str.append(name);
+  }
+  string to_str() const {
+    string s;
+    to_str(s);
+    return s;
+  }
+
+  bool from_str(string& s) {
+    int pos = s.find('.');
+
+    if (pos < 0)
+      return false;
+    if (pos >= (int)s.size())
+      return false;
+   
+    string pre = s.substr(0, pos);
+    const char *pres = pre.c_str();
+
+    if (strcmp(pres, "auth") == 0) {
+      entity_type = CEPHX_PRINCIPAL_AUTH;
+    } else if (strcmp(pres, "mon") == 0) {
+      entity_type = CEPHX_PRINCIPAL_MON;
+    } else if (strcmp(pres, "osd") == 0) {
+      entity_type = CEPHX_PRINCIPAL_OSD;
+    } else if (strcmp(pres, "mds") == 0) {
+      entity_type = CEPHX_PRINCIPAL_MDS;
+    } else if (strcmp(pres, "client") == 0) {
+      entity_type = CEPHX_PRINCIPAL_CLIENT;
+    } else {
+      return false;
+    }
+
+    name = s.substr(pos);
+
+    return true;
   }
 };
 WRITE_CLASS_ENCODER(EntityName);

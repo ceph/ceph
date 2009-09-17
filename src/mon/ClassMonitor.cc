@@ -71,7 +71,7 @@ void ClassMonitor::create_initial(bufferlist& bl)
   ClassLibraryIncremental inc;
   ::encode(i, inc.impl);
   ::encode(l, inc.info);
-  inc.op = INC_NOP;
+  inc.op = CLASS_INC_NOP;
   pending_class.insert(pair<utime_t,ClassLibraryIncremental>(i.stamp, inc));
 }
 
@@ -124,17 +124,17 @@ bool ClassMonitor::update_from_paxos()
     ClassInfo info;
     inc.decode_info(info);
     switch (inc.op) {
-    case INC_ADD:
+    case CLASS_INC_ADD:
       inc.decode_impl(impl);
       if (impl.binary.length() > 0) {
         store_impl(info, impl);
         list.add(info.name, info.version);
       }
       break;
-    case INC_DEL:
+    case CLASS_INC_DEL:
       list.remove(info.name, info.version);
       break;
-    case INC_ACTIVATE:
+    case CLASS_INC_ACTIVATE:
       {
         map<string, ClassVersionMap>::iterator mapiter = list.library_map.find(info.name);
         if (mapiter == list.library_map.end()) {
@@ -144,7 +144,7 @@ bool ClassMonitor::update_from_paxos()
         }
       }
       break;
-    case INC_NOP:
+    case CLASS_INC_NOP:
       break;
     default:
       assert(0);
@@ -332,7 +332,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       dout(0) << "storing class " << name << " v" << info.version << dendl;
       ::encode(impl, inc.impl);
       ::encode(info, inc.info);
-      inc.op = INC_ADD;
+      inc.op = CLASS_INC_ADD;
       pending_list.add(info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
       ss << "updated";
@@ -362,7 +362,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       ClassImpl impl;
       impl.stamp = g_clock.now();
       ::encode(*info, inc.info);
-      inc.op = INC_DEL;
+      inc.op = CLASS_INC_DEL;
       pending_list.add(*info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
 
@@ -388,7 +388,7 @@ bool ClassMonitor::prepare_command(MMonCommand *m)
       ClassImpl impl;
       impl.stamp = g_clock.now();
       ::encode(info, inc.info);
-      inc.op = INC_ACTIVATE;
+      inc.op = CLASS_INC_ACTIVATE;
       pending_list.add(info);
       pending_class.insert(pair<utime_t,ClassLibraryIncremental>(impl.stamp, inc));
       ss << "updated";

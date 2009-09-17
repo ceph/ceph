@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CLASSENTRY_H
-#define __CLASSENTRY_H
+#ifndef __CLASSLIBRARY_H
+#define __CLASSLIBRARY_H
 
 #include "include/types.h"
 #include "include/encoding.h"
@@ -56,10 +56,10 @@ struct ClassInfo {
 WRITE_CLASS_ENCODER(ClassInfo)
 
 typedef enum {
-  INC_NOP,
-  INC_ADD,
-  INC_DEL,
-  INC_ACTIVATE,
+  CLASS_INC_NOP,
+  CLASS_INC_ADD,
+  CLASS_INC_DEL,
+  CLASS_INC_ACTIVATE,
 } ClassLibraryIncOp;
 
 struct ClassLibraryIncremental {
@@ -77,7 +77,7 @@ struct ClassLibraryIncremental {
     __u32 _op;
     ::decode(_op, bl);
     op = (ClassLibraryIncOp)_op;
-    assert( op >= INC_NOP && op <= INC_ACTIVATE);
+    assert( op >= CLASS_INC_NOP && op <= CLASS_INC_ACTIVATE);
     ::decode(info, bl);
     ::decode(impl, bl);
   }

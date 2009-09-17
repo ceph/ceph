@@ -49,6 +49,7 @@
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "ClassMonitor.h"
+#include "AuthMonitor.h"
 
 #include "osd/OSDMap.h"
 
@@ -93,6 +94,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
   paxos_service[PAXOS_CLASS] = new ClassMonitor(this, add_paxos(PAXOS_CLASS));
+  paxos_service[PAXOS_AUTH] = new AuthMonitor(this, add_paxos(PAXOS_AUTH));
 }
 
 Paxos *Monitor::add_paxos(int type)
@@ -270,7 +272,11 @@ void Monitor::handle_command(MMonCommand *m)
       classmon()->dispatch(m);
       return;
     }
-    if (m->cmd[0] == "mon") {
+    if (m->cmd[0] == "auth") {
+      authmon()->dispatch(m);
+      return;
+    }
+  if (m->cmd[0] == "mon") {
       if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
 	vector<string> args(2);
 	args[0] = "_injectargs";

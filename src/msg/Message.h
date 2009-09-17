@@ -20,8 +20,8 @@
 #include "config.h"
 
 // monitor internal
-#define MSG_MON_ELECTION           60
-#define MSG_MON_PAXOS              61
+#define MSG_MON_ELECTION           65
+#define MSG_MON_PAXOS              66
 
 /* monitor <-> mon admin tool */
 #define MSG_MON_COMMAND            50
@@ -35,6 +35,9 @@
 
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
+
+#define MSG_AUTHMON                60
+#define MSG_AUTHMON_ACK            61
 
 #define MSG_POOLOP                 49
 #define MSG_POOLOPREPLY            48

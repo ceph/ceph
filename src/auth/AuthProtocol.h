@@ -176,6 +176,7 @@ WRITE_CLASS_ENCODER(CephXEnvRequest2);
 #define CEPHX_PRINCIPAL_MON             0x0002
 #define CEPHX_PRINCIPAL_OSD             0x0004
 #define CEPHX_PRINCIPAL_MDS             0x0008
+#define CEPHX_PRINCIPAL_CLIENT          0x0010
 
 #define CEPHX_PRINCIPAL_TYPE_MASK       0x00FF
 

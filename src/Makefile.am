@@ -31,7 +31,9 @@ mkmonfs_SOURCES = mkmonfs.cc
 mkmonfs_LDADD = libmon.a libcrush.a libcommon.a -lcrypto
 cconf_SOURCES = cconf.cc
 cconf_LDADD = libcommon.a -lcrypto
-bin_PROGRAMS += ceph mkmonfs cconf
+authtool_SOURCES = authtool.cc
+authtool_LDADD = libcommon.a -lcrypto
+bin_PROGRAMS += ceph mkmonfs cconf authtool
 
 monmaptool_SOURCES = monmaptool.cc
 monmaptool_LDADD = libcommon.a -lcrypto
@@ -329,6 +331,7 @@ libmon_a_SOURCES = \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
 	mon/ClassMonitor.cc \
+	mon/AuthMonitor.cc \
 	mon/Elector.cc \
 	mon/MonitorStore.cc
 
@@ -717,7 +720,7 @@ noinst_HEADERS = \
 	radosgw/rgw_user.h\
 	sample.ceph.conf
 
-all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(monmaptool_SOURCES) \
+all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(authtool_SOURCES) $(monmaptool_SOURCES) \
 	$(crushtool_SOURCES) $(osdmaptool_SOURCES) $(cconf_SOURCES) $(mount_ceph_SOURCES) $(cmds_SOURCES) \
 	$(dumpjournal_SOURCES) $(cosd_SOURCES) $(dupstore_SOURCES) $(streamtest_SOURCES) $(csyn_SOURCES)  \
 	$(testmsgr_SOURCES) $(cfuse_SOURCES) $(fakefuse_SOURCES) $(psim_SOURCES) \

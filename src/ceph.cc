@@ -72,6 +72,7 @@ Context *resend_event = 0;
 #include "mds/MDSMap.h"
 #include "include/LogEntry.h"
 #include "include/ClassLibrary.h"
+#include "include/AuthLibrary.h"
 
 #include "mon/mon_types.h"
 
@@ -195,6 +196,28 @@ void handle_notify(MMonObserveNotify *notify)
 	while (!p.end()) {
           info.decode(p);
 	  dout(0) << "   class " << info << dendl;
+	}
+      }
+      break;
+    }
+
+  case PAXOS_AUTH:
+    {
+      bufferlist::iterator p = notify->bl.begin();
+      if (notify->is_latest) {
+	AuthLibrary list;
+	::decode(list, p);
+	// show the first class info
+        map<EntityName, AuthLibEntry>::iterator mapiter = list.library_map.begin();
+	if (mapiter != list.library_map.end()) {
+	    dout(0) << "   auth " <<  mapiter->first.to_str() << dendl;
+	}
+      } else {
+	AuthLibEntry entry;
+
+	while (!p.end()) {
+          entry.decode(p);
+	  dout(0) << "   auth " << entry.name.to_str() << dendl;
 	}
       }
       break;
