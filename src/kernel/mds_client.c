@@ -769,7 +769,7 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 
 	if (time_after_eq(jiffies, session->s_cap_ttl) &&
 	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
-		pr_info("ceph mds%d session caps stale\n", session->s_mds);
+		pr_info("ceph mds%d caps stale\n", session->s_mds);
 
 	/* do not try to renew caps until a recovering mds has reconnected
 	 * with its clients. */
@@ -1869,7 +1869,7 @@ static void handle_session(struct ceph_mds_session *session,
 
 	if (session->s_state == CEPH_MDS_SESSION_HUNG) {
 		session->s_state = CEPH_MDS_SESSION_OPEN;
-		pr_info("ceph mds%d session came back\n", session->s_mds);
+		pr_info("ceph mds%d came back\n", session->s_mds);
 	}
 
 	switch (op) {
@@ -2535,7 +2535,7 @@ static void delayed_work(struct work_struct *work)
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
 			if (s->s_state == CEPH_MDS_SESSION_OPEN) {
 				s->s_state = CEPH_MDS_SESSION_HUNG;
-				pr_info("ceph mds%d session hung\n", s->s_mds);
+				pr_info("ceph mds%d hung\n", s->s_mds);
 			}
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
