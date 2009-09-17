@@ -187,8 +187,9 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   hash_map<nstring, Dentry*> dentries;
+  __u64 release_count;
 
-  Dir(Inode* in) { parent_inode = in; }
+  Dir(Inode* in) : release_count(0) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };
@@ -265,6 +266,9 @@ struct CapSnap {
 };
 
 
+// inode flags
+#define I_COMPLETE 1
+
 class Inode {
  public:
   // -- the actual inode --
@@ -305,6 +309,8 @@ class Inode {
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
+
+  unsigned flags;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -401,10 +407,10 @@ class Inode {
   }
 
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
-    //inode(_inode),
     ino(vino.ino), snapid(vino.snapid),
     rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
+    flags(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
@@ -680,9 +686,10 @@ class Client : public Dispatcher {
 
     Inode *inode;
     int64_t offset;   // high bits: frag_t, low bits: an offset
+    __u64 release_count;
     map<frag_t, vector<DirEntry> > buffer;
 
-    DirResult(Inode *in) : inode(in), offset(0) { 
+    DirResult(Inode *in) : inode(in), offset(0), release_count(0) { 
       inode->get();
     }
 

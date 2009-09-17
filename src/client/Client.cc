@@ -313,6 +313,11 @@ void Client::trim_cache()
     dout(15) << "trim_cache unlinking dn " << dn->name 
 	     << " in dir " << hex << dn->dir->parent_inode->ino 
 	     << dendl;
+    if (dn->dir->parent_inode->flags & I_COMPLETE) {
+      dout(10) << " clearing I_COMPLETE on " << *dn->dir->parent_inode << dendl;
+      dn->dir->parent_inode->flags &= ~I_COMPLETE;
+      dn->dir->release_count++;
+    }
     unlink(dn);
   }
 
@@ -446,6 +451,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
 			   in->caps_issued());
+
+    if (in->is_dir() &&
+	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+	in->dirstat.nfiles == 0 &&
+	in->dirstat.nsubdirs == 0) {
+      dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
+      in->flags |= I_COMPLETE;
+    }
   }
 
   // symlink?
@@ -1856,11 +1869,11 @@ void Client::check_cap_issue(Inode *in, InodeCap *cap, unsigned issued)
       !(had & CEPH_CAP_FILE_SHARED)) {
     in->shared_gen++;
 
-    if (in->is_dir()) {
-      // ...
+    if (in->is_dir() && (in->flags & I_COMPLETE)) {
+      dout(10) << " clearing I_COMPLETE on " << *in << dendl;
+      in->flags &= ~I_COMPLETE;
     }
   }
-
 }
 
 void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
@@ -2876,6 +2889,13 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       *target = dn->inode;
       goto done;
     }
+  } else {
+    // can we conclude ENOENT locally?
+    if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
+	(dir->flags & I_COMPLETE)) {
+      dout(10) << "_lookup concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
+      return -ENOENT;
+    }
   }
 
   r = _do_lookup(dir, dname.c_str(), target);
@@ -3455,6 +3475,8 @@ int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid)
 {
   *dirpp = new DirResult(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
+  if (in->dir)
+    (*dirpp)->release_count = in->dir->release_count;
   dout(10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
 
   // get the first frag
@@ -3601,6 +3623,11 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
 	numdn--;
       }
+    }
+
+    if (diri->dir->release_count == dirp->release_count) {
+      dout(10) << " marking I_COMPLETE on " << *diri << dendl;
+      diri->flags |= I_COMPLETE;
     }
   } else {
     dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
