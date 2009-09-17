@@ -42,6 +42,9 @@ struct EntityName {
 };
 WRITE_CLASS_ENCODER(EntityName);
 
+inline bool operator<(const EntityName& a, const EntityName& b) {
+  return a.entity_type < b.entity_type || (a.entity_type == b.entity_type && a.name < b.name);
+}
 /*
  * The ticket (if properly validated) authorizes the principal use
  * services as described by 'caps' during the specified validity

@@ -92,7 +92,6 @@ public:
   }
 };
 
-
 static CephAuthServer auth_server;
 
 /*

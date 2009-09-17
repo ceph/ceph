@@ -171,6 +171,10 @@ endif
 testcrypto_SOURCES = testcrypto.cc
 testcrypto_LDADD = libcommon.a -lcrypto
 bin_PROGRAMS += testcrypto
+
+testkeys_SOURCES = testkeys.cc
+testkeys_LDADD = libcommon.a -lcrypto
+bin_PROGRAMS += testkeys
 ## object classes
 
 # libtestclass.so: testclass.cc
@@ -284,6 +288,8 @@ libcommon_files = \
 	auth/AuthServiceManager.cc \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
+	auth/KeyRing.cc \
+	auth/KeysServer.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
