@@ -112,7 +112,7 @@ struct ceph_client {
 	__s64 whoami;                   /* my client number */
 	struct dentry *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
-	struct dentry *debugfs_dir, *debugfs_dentry_lru;
+	struct dentry *debugfs_dir, *debugfs_dentry_lru, *debugfs_caps;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
@@ -589,7 +589,8 @@ extern void ceph_caps_init(void);
 extern void ceph_caps_finalize(void);
 extern int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need);
 extern int ceph_unreserve_caps(struct ceph_cap_reservation *ctx);
-extern void ceph_reservation_status(int *total, int *avail, int *used,
+extern void ceph_reservation_status(struct ceph_client *client,
+				    int *total, int *avail, int *used,
 				    int *reserved);
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)

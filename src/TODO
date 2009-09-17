@@ -87,6 +87,7 @@ repair
 - mds scrubbing
 
 kclient
+- make caps reservations per-client
 - fix up ESTALE handling
 - don't retry on ENOMEM on non-nofail requests in kick_requests
 - make cap import/export more efficient?

@@ -287,7 +287,8 @@ static void put_cap(struct ceph_cap *cap,
 	spin_unlock(&caps_list_lock);
 }
 
-void ceph_reservation_status(int *total, int *avail, int *used, int *reserved)
+void ceph_reservation_status(struct ceph_client *client,
+			     int *total, int *avail, int *used, int *reserved)
 {
 	if (total)
 		*total = caps_total_count;
