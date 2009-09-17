@@ -458,6 +458,37 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 }
 
 /*
+ * Common issue checks for add_cap, handle_cap_grant.
+ */
+static void __check_cap_issue(struct ceph_inode_info *ci, struct ceph_cap *cap,
+			      unsigned issued)
+{
+	unsigned had = __ceph_caps_issued(ci, NULL);
+
+	/*
+	 * Each time we receive FILE_CACHE anew, we increment
+	 * i_rdcache_gen.
+	 */
+	if ((issued & CEPH_CAP_FILE_CACHE) &&
+	    (had & CEPH_CAP_FILE_CACHE) == 0)
+		ci->i_rdcache_gen++;
+
+	/*
+	 * if we are newly issued FILE_SHARED, clear I_COMPLETE; we
+	 * don't know what happened to this directory while we didn't
+	 * have the cap.
+	 */
+	if ((issued & CEPH_CAP_FILE_SHARED) &&
+	    (had & CEPH_CAP_FILE_SHARED) == 0) {
+		ci->i_shared_gen++;
+		if (S_ISDIR(ci->vfs_inode.i_mode)) {
+			dout(" marking %p NOT complete\n", &ci->vfs_inode);
+			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+		}
+	}
+}
+
+/*
  * Add a capability under the given MDS session.
  *
  * Caller should hold session snap_rwsem (read) and s_mutex.
@@ -547,17 +578,7 @@ retry:
 		}
 	}
 
-	/*
-	 * if we are newly issued FILE_SHARED, clear I_COMPLETE; we
-	 * don't know what happened to this directory while we didn't
-	 * have the cap.
-	 */
-	if (S_ISDIR(inode->i_mode) &&
-	    (issued & CEPH_CAP_FILE_SHARED) &&
-	    (cap->issued & CEPH_CAP_FILE_SHARED) == 0) {
-		dout(" marking %p NOT complete\n", inode);
-		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
-	}
+	__check_cap_issue(ci, cap, issued);
 
 	/*
 	 * If we are issued caps we don't want, or the mds' wanted
@@ -2112,20 +2133,7 @@ start:
 
 	cap->gen = session->s_cap_gen;
 
-	/*
-	 * Each time we receive CACHE anew, we increment i_rdcache_gen.
-	 * Also clear I_COMPLETE: we don't know what happened to this directory
-	 */
-	if ((newcaps & CEPH_CAP_FILE_CACHE) &&          /* got RDCACHE */
-	    (cap->issued & CEPH_CAP_FILE_CACHE) == 0 && /* but not before */
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_CACHE) == 0) {
-		ci->i_rdcache_gen++;
-
-		if (S_ISDIR(inode->i_mode)) {
-			dout(" marking %p NOT complete\n", inode);
-			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
-		}
-	}
+	__check_cap_issue(ci, cap, newcaps);
 
 	/*
 	 * If CACHE is being revoked, and we have no dirty buffers,

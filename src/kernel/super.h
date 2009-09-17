@@ -337,9 +337,10 @@ struct ceph_inode_info {
 	int i_pin_ref;
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	int i_wrbuffer_ref, i_wrbuffer_ref_head;
-	u32 i_rdcache_gen;      /* we increment this each time we get RDCACHE.
-				   If it's non-zero, we _may_ have cached
-				   pages. */
+	u32 i_shared_gen;       /* increment each time we get FILE_SHARED */
+	u32 i_rdcache_gen;      /* we increment this each time we get
+				   FILE_CACHE.  If it's non-zero, we
+				   _may_ have cached pages. */
 	u32 i_rdcache_revoking; /* RDCACHE gen to async invalidate, if any */
 
 	struct list_head i_unsafe_writes; /* uncommitted sync writes */
@@ -427,7 +428,7 @@ extern u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
  */
 struct ceph_dentry_info {
 	struct ceph_mds_session *lease_session;
-	u32 lease_gen, lease_rdcache_gen;
+	u32 lease_gen, lease_shared_gen;
 	u32 lease_seq;
 	unsigned long lease_renew_after, lease_renew_from;
 	struct list_head lru;

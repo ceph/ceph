@@ -322,6 +322,7 @@ struct inode *ceph_alloc_inode(struct super_block *sb)
 	ci->i_wr_ref = 0;
 	ci->i_wrbuffer_ref = 0;
 	ci->i_wrbuffer_ref_head = 0;
+	ci->i_shared_gen = 0;
 	ci->i_rdcache_gen = 0;
 	ci->i_rdcache_revoking = 0;
 
@@ -546,6 +547,8 @@ static int fill_inode(struct inode *inode,
 	queue_trunc = ceph_fill_file_size(inode, issued,
 					  le32_to_cpu(info->truncate_seq),
 					  le64_to_cpu(info->truncate_size),
+					  S_ISDIR(inode->i_mode) ?
+					  ci->i_rbytes :
 					  le64_to_cpu(info->size));
 	ceph_fill_file_time(inode, issued,
 			    le32_to_cpu(info->time_warp_seq),
@@ -739,7 +742,7 @@ static void update_dentry_lease(struct dentry *dentry,
 
 	/* make lease_rdcache_gen match directory */
 	dir = dentry->d_parent->d_inode;
-	di->lease_rdcache_gen = ceph_inode(dir)->i_rdcache_gen;
+	di->lease_shared_gen = ceph_inode(dir)->i_shared_gen;
 
 	if (lease->mask == 0)
 		goto out_unlock;
