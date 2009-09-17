@@ -2535,8 +2535,7 @@ static void delayed_work(struct work_struct *work)
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
 			if (s->s_state == CEPH_MDS_SESSION_OPEN) {
 				s->s_state = CEPH_MDS_SESSION_HUNG;
-				pr_info("ceph mds%d session probably timed out,"
-					" requesting mds map\n", s->s_mds);
+				pr_info("ceph mds%d session hung\n", s->s_mds);
 			}
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
