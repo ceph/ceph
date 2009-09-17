@@ -109,7 +109,8 @@ int MonClient::get_monmap()
   Mutex::Locker l(monc_lock);
   
   want_monmap = true;
-  _reopen_session();
+  if (cur_mon < 0)
+    _reopen_session();
 
   while (want_monmap)
     map_cond.Wait(monc_lock);
@@ -244,9 +245,12 @@ int MonClient::mount(double mount_timeout)
   }
 
   // only first mounter does the work
-  if (!mounting)
-    _send_mount();
   mounting++;
+  if (mounting == 1) {
+    if (cur_mon < 0)
+      _reopen_session();
+    _send_mount();
+  }
   while (clientid < 0 && !mount_err)
     mount_cond.Wait(monc_lock);
   mounting--;
@@ -281,6 +285,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 void MonClient::_send_mon_message(Message *m)
 {
+  assert(cur_mon >= 0);
   messenger->send_message(m, monmap.mon_inst[cur_mon]);
 }
 
@@ -363,6 +368,8 @@ void MonClient::_renew_subs()
 
   MMonSubscribe *m = new MMonSubscribe;
   m->what = sub_have;
+  if (cur_mon < 0)
+    _reopen_session();
   _send_mon_message(m);
 }
 
