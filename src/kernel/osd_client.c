@@ -295,6 +295,7 @@ static void osd_reset(struct ceph_connection *con)
 		return;
 	dout("osd_reset osd%d\n", osd->o_osd);
 	osdc = osd->o_osdc;
+	osd->o_incarnation++;
 	down_read(&osdc->map_sem);
 	kick_requests(osdc, osd);
 	up_read(&osdc->map_sem);
@@ -314,6 +315,7 @@ static struct ceph_osd *create_osd(struct ceph_osd_client *osdc)
 	atomic_set(&osd->o_ref, 1);
 	osd->o_osdc = osdc;
 	INIT_LIST_HEAD(&osd->o_requests);
+	osd->o_incarnation = 1;
 
 	ceph_con_init(osdc->client->msgr, &osd->o_con);
 	osd->o_con.private = osd;
@@ -369,6 +371,7 @@ static int reset_osd(struct ceph_osd_client *osdc, struct ceph_osd *osd)
 	} else {
 		ceph_con_close(&osd->o_con);
 		ceph_con_open(&osd->o_con, &osdc->osdmap->osd_addr[osd->o_osd]);
+		osd->o_incarnation++;
 	}
 	return ret;
 }
@@ -485,7 +488,7 @@ static void __cancel_request(struct ceph_osd_request *req)
 {
 	if (req->r_sent) {
 		ceph_con_revoke(&req->r_osd->o_con, req->r_request);
-		req->r_sent = false;
+		req->r_sent = 0;
 	}
 }
 
@@ -515,7 +518,8 @@ static int __map_osds(struct ceph_osd_client *osdc,
 	pgid.pg64 = le64_to_cpu(reqhead->layout.ol_pgid);
 	o = ceph_calc_pg_primary(osdc->osdmap, pgid);
 
-	if ((req->r_osd && req->r_osd->o_osd == o) ||
+	if ((req->r_osd && req->r_osd->o_osd == o &&
+	     req->r_sent >= req->r_osd->o_incarnation) ||
 	    (req->r_osd == NULL && o == -1))
 		return 0;  /* no change */
 
@@ -594,7 +598,7 @@ static int __send_request(struct ceph_osd_client *osdc,
 
 	ceph_msg_get(req->r_request); /* send consumes a ref */
 	ceph_con_send(&req->r_osd->o_con, req->r_request);
-	req->r_sent = true;
+	req->r_sent = req->r_osd->o_incarnation;
 	return 0;
 }
 

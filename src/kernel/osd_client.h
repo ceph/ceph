@@ -25,6 +25,7 @@ struct ceph_osd {
 	atomic_t o_ref;
 	struct ceph_osd_client *o_osdc;
 	int o_osd;
+	int o_incarnation;
 	struct rb_node o_node;
 	struct ceph_connection o_con;
 	struct list_head o_requests;
@@ -40,7 +41,7 @@ struct ceph_osd_request {
 	struct ceph_msg  *r_request, *r_reply;
 	int               r_result;
 	int               r_flags;     /* any additional flags for the osd */
-	bool              r_sent;      /* true if r_request is sending/sent */
+	u32               r_sent;      /* >0 if r_request is sending/sent */
 	int r_prepared_pages, r_got_reply;
 
 	struct ceph_osd_client *r_osdc;
