@@ -2770,11 +2770,22 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 	struct inode *dir = dentry->d_parent->d_inode;
 	struct ceph_mds_request_release *rel = *p;
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
+	int force = 0;
 	int ret;
 
-	ret = ceph_encode_inode_release(p, dir, mds, drop, unless, 1);
+	/*
+	 * force an record for the directory caps if we have a dentry lease.
+	 * this is racy (can't take i_lock and d_lock together), but it
+	 * doesn't have to be perfect; the mds will revoke anything we don't
+	 * release.
+	 */
+	spin_lock(&dentry->d_lock);
+	if (di->lease_session && di->lease_session->s_mds == mds)
+		force = 1;
+	spin_unlock(&dentry->d_lock);
 
-	/* drop dentry lease too? */
+	ret = ceph_encode_inode_release(p, dir, mds, drop, unless, force);
+
 	spin_lock(&dentry->d_lock);
 	if (ret && di->lease_session && di->lease_session->s_mds == mds) {
 		dout("encode_dentry_release %p mds%d seq %d\n",
