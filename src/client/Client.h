@@ -999,6 +999,7 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
+  void check_cap_issue(Inode *in, InodeCap *cap, unsigned issued);
   void add_update_cap(Inode *in, int mds, __u64 cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);

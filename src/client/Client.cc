@@ -1843,10 +1843,26 @@ void Client::_flushed(Inode *in)
 
 
 
-/** handle_file_caps
- * handle caps update from mds.  including mds to mds caps transitions.
- * do not block.
- */
+// checks common to add_update_cap, handle_cap_grant
+void Client::check_cap_issue(Inode *in, InodeCap *cap, unsigned issued)
+{
+  unsigned had = in->caps_issued();
+
+  if ((issued & CEPH_CAP_FILE_CACHE) &&
+      !(had & CEPH_CAP_FILE_CACHE))
+    in->cache_gen++;
+
+  if ((issued & CEPH_CAP_FILE_SHARED) &&
+      !(had & CEPH_CAP_FILE_SHARED)) {
+    in->shared_gen++;
+
+    if (in->is_dir()) {
+      // ...
+    }
+  }
+
+}
+
 void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 			    int flags)
@@ -1876,15 +1892,10 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
     cap_list.push_back(&in->cap_item);
   }
 
+  check_cap_issue(in, cap, issued);
+
   if (flags & CEPH_CAP_FLAG_AUTH)
     in->auth_cap = cap;
-
-  if ((issued & CEPH_CAP_FILE_SHARED) &&
-      !(cap->issued & CEPH_CAP_FILE_SHARED))
-    in->shared_gen++;
-  if ((issued & CEPH_CAP_FILE_CACHE) &&
-      !(cap->issued & CEPH_CAP_FILE_CACHE))
-    in->cache_gen++;
 
   unsigned old_caps = cap->issued;
   cap->cap_id = cap_id;
@@ -2493,12 +2504,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     kick_writers = true;
   }
 
-  if ((issued & CEPH_CAP_FILE_CACHE) &&
-      !(cap->issued & CEPH_CAP_FILE_CACHE))
-    in->cache_gen++;
-  if ((issued & CEPH_CAP_FILE_SHARED) &&
-      !(cap->issued & CEPH_CAP_FILE_SHARED))
-    in->shared_gen++;
+  check_cap_issue(in, cap, issued);
 
   // update caps
   if (old_caps & ~new_caps) { 
