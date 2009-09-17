@@ -63,7 +63,7 @@ bool ClientMonitor::update_from_paxos()
 
   paxos->stash_latest(paxosv, bl);
 
-  if (next_client < 0) {
+  if (next_client <= client_map.next_client) {
     dout(10) << "in-core next_client reset to " << client_map.next_client << dendl;
     next_client = client_map.next_client;
   }
@@ -73,8 +73,8 @@ bool ClientMonitor::update_from_paxos()
 
 void ClientMonitor::on_election_start()
 {
-  dout(10) << "in-core next_client cleared" << dendl;
-  next_client = -1;
+  dout(10) << "in-core next_client reset to " << client_map.next_client << dendl;
+  next_client = client_map.next_client;
 }
 
 void ClientMonitor::create_pending()
