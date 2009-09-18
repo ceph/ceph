@@ -298,7 +298,7 @@ ceph: messenger library
 A generic message passing library is used to communicate with all
 other components in the Ceph file system.  The messenger library
 provides ordered, reliable delivery of messages between two nodes in
-the system, or notifies the higher layer when it is unable to do so.
+the system.
 
 This implementation is based on TCP.
 
