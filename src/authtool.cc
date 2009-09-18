@@ -25,9 +25,6 @@ void usage()
   exit(1);
 }
 
-
-
-
 int main(int argc, const char **argv)
 {
   vector<const char*> args;

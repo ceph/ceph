@@ -287,11 +287,22 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       string entity_name = m->cmd[2];
 
       AuthLibEntry entry;
-      entry.name.from_str(entity_name);
+      if (!entry.name.from_str(entity_name)) {
+        ss << "bad entity name";
+        rs = -EINVAL;
+        goto done;
+      }
 
       bufferlist bl = m->get_data();
+      dout(0) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
       bufferlist::iterator iter = bl.begin();
-      ::decode(entry.secret, iter);
+      try {
+        ::decode(entry.secret, iter);
+      } catch (buffer::error *err) {
+        ss << "error decoding key";
+        rs = -EINVAL;
+        goto done;
+      }
 
       AuthLibIncremental inc;
       dout(0) << "storing auth for " << entity_name  << dendl;
@@ -303,7 +314,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
-    } else if (m->cmd[1] == "del" && m->cmd.size() >= 5) {
+    } else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
       string name = m->cmd[2];
       AuthLibEntry entry;
       entry.name.from_str(name);

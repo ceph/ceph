@@ -96,7 +96,7 @@ struct EntityName {
       return false;
     }
 
-    name = s.substr(pos);
+    name = s.substr(pos + 1);
 
     return true;
   }
