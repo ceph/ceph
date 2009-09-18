@@ -133,9 +133,6 @@ struct ceph_client {
 	struct ceph_mds_client mdsc;
 	struct ceph_osd_client osdc;
 
-	/* msg pools */
-	struct ceph_msg_pool msgpool_statfs_reply;
-
 	/* writeback */
 	mempool_t *wb_pagevec_pool;
 	struct workqueue_struct *wb_wq;

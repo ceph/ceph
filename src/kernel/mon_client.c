@@ -441,7 +441,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	init_completion(&req.completion);
 
 	/* allocate memory for reply */
-	err = ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, 1);
+	err = ceph_msgpool_resv(&monc->msgpool_statfs_reply, 1);
 	if (err)
 		return err;
 
@@ -466,7 +466,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	mutex_lock(&monc->mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
-	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, -1);
+	ceph_msgpool_resv(&monc->msgpool_statfs_reply, -1);
 	mutex_unlock(&monc->mutex);
 
 	if (!err)
@@ -526,6 +526,8 @@ static void delayed_work(struct work_struct *work)
 
 int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 {
+	int err = 0;
+
 	dout("init\n");
 	memset(monc, 0, sizeof(*monc));
 	monc->client = cl;
@@ -533,6 +535,18 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	mutex_init(&monc->mutex);
 
 	monc->con = NULL;
+
+	/* msg pools */
+	err = ceph_msgpool_init(&monc->msgpool_mount_ack, 4096, 1, false);
+	if (err < 0)
+		goto out;
+	err = ceph_msgpool_init(&monc->msgpool_subscribe_ack, 8, 1, false);
+	if (err < 0)
+		goto out;
+	err = ceph_msgpool_init(&monc->msgpool_statfs_reply,
+				sizeof(struct ceph_mon_statfs_reply), 0, false);
+	if (err < 0)
+		goto out;
 
 	monc->cur_mon = -1;
 	monc->hunting = false;  /* not really */
@@ -548,7 +562,8 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	monc->have_osdmap = 0;
 	monc->want_next_osdmap = 1;
 	monc->want_mount = true;
-	return 0;
+out:
+	return err;
 }
 
 void ceph_monc_stop(struct ceph_mon_client *monc)
@@ -564,6 +579,10 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 		monc->con = NULL;
 	}
 	mutex_unlock(&monc->mutex);
+
+	ceph_msgpool_destroy(&monc->msgpool_mount_ack);
+	ceph_msgpool_destroy(&monc->msgpool_subscribe_ack);
+	ceph_msgpool_destroy(&monc->msgpool_statfs_reply);
 
 	kfree(monc->monmap);
 }
@@ -618,8 +637,12 @@ static struct ceph_msg *mon_alloc_msg(struct ceph_connection *con,
 	int type = le32_to_cpu(hdr->type);
 
 	switch (type) {
+	case CEPH_MSG_CLIENT_MOUNT_ACK:
+		return ceph_msgpool_get(&monc->msgpool_mount_ack);
+	case CEPH_MSG_MON_SUBSCRIBE_ACK:
+		return ceph_msgpool_get(&monc->msgpool_subscribe_ack);
 	case CEPH_MSG_STATFS_REPLY:
-		return ceph_msgpool_get(&monc->client->msgpool_statfs_reply);
+		return ceph_msgpool_get(&monc->msgpool_statfs_reply);
 	}
 	return ceph_alloc_msg(con, hdr);
 }
