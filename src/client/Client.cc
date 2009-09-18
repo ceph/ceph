@@ -2982,7 +2982,8 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
   return r;
 }
 
-int Client::get_or_create(Inode *dir, const string& name, Dentry **pdn)
+int Client::get_or_create(Inode *dir, const char* name,
+			  Dentry **pdn, bool expect_null)
 {
   // lookup
   if (dir->dir && dir->dir->dentries.count(name)) {
@@ -2997,13 +2998,15 @@ int Client::get_or_create(Inode *dir, const string& name, Dentry **pdn)
       MDSSession &s = mds_sessions[dn->lease_mds];
       if (s.cap_ttl > now &&
 	  s.cap_gen == dn->lease_gen) {
-	return -EEXIST;
+	if (expect_null)
+	  return -EEXIST;
+	else return 0;
       }
     }
-  } else {
-    // link up new one
-    *pdn = link(dir->dir, name.c_str(), NULL);
   }
+  
+  // otherwise link up a new one
+  *pdn = link(dir->dir, name, NULL);
   return 0;
 }
 

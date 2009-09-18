@@ -1182,7 +1182,8 @@ private:
   int _sync_fs();
 
   MClientRequest* make_request_from_Meta(MetaRequest * request);
-  int get_or_create(Inode *dir, const string& name, Dentry **pdn);
+  int get_or_create(Inode *dir, const char* name,
+		    Dentry **pdn, bool expect_null=false);
 
 public:
   int mount();
