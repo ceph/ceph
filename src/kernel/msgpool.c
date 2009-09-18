@@ -106,6 +106,13 @@ struct ceph_msg *ceph_msgpool_get(struct ceph_msgpool *pool)
 	wait_queue_t wait;
 	struct ceph_msg *msg;
 
+	if (pool->blocking) {
+		/* mempool_t behavior; first try to alloc */
+		msg = ceph_msg_new(0, pool->front_len, 0, 0, NULL);
+		if (!IS_ERR(msg))
+			return msg;
+	}
+
 	while (1) {
 		spin_lock(&pool->lock);
 		if (likely(pool->num)) {
@@ -122,15 +129,16 @@ struct ceph_msg *ceph_msgpool_get(struct ceph_msgpool *pool)
 		       pool->min, pool->blocking ? "waiting" : "failing");
 		spin_unlock(&pool->lock);
 
-		WARN_ON(1);
+		if (!pool->blocking) {
+			WARN_ON(1);
 
-		/* maybe we can allocate it now? */
-		msg = ceph_msg_new(0, pool->front_len, 0, 0, NULL);
-		if (!IS_ERR(msg))
-			return msg;
+			/* maybe we can allocate it now? */
+			msg = ceph_msg_new(0, pool->front_len, 0, 0, NULL);
+			if (!IS_ERR(msg))
+				return msg;
 
-		if (!pool->blocking)
 			return ERR_PTR(-ENOMEM);
+		}
 
 		init_wait(&wait);
 		prepare_to_wait(&pool->wait, &wait, TASK_UNINTERRUPTIBLE);
