@@ -612,6 +612,13 @@ static struct ceph_client *ceph_create_client(void)
 	if (client->trunc_wq == NULL)
 		goto fail;
 
+	/* msg pools */
+	/* preallocated at request time: */
+	err = ceph_msgpool_init(&client->msgpool_statfs_reply,
+				sizeof(struct ceph_mon_statfs_reply), 0, false);
+	if (err < 0)
+		goto fail;
+
 	/* subsystems */
 	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
@@ -648,6 +655,9 @@ static void ceph_destroy_client(struct ceph_client *client)
 		ceph_messenger_destroy(client->msgr);
 	if (client->wb_pagevec_pool)
 		mempool_destroy(client->wb_pagevec_pool);
+
+	/* msg pools */
+	ceph_msgpool_destroy(&client->msgpool_statfs_reply);
 
 	release_mount_args(&client->mount_args);
 

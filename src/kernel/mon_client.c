@@ -440,6 +440,11 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	req.buf = buf;
 	init_completion(&req.completion);
 
+	/* allocate memory for reply */
+	err = ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, 1);
+	if (err)
+		return err;
+
 	/* register request */
 	mutex_lock(&monc->mutex);
 	req.tid = ++monc->last_tid;
@@ -461,6 +466,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	mutex_lock(&monc->mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
+	ceph_msgpool_resv(&monc->client->msgpool_statfs_reply, -1);
 	mutex_unlock(&monc->mutex);
 
 	if (!err)
@@ -603,6 +609,22 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 }
 
 /*
+ * Allocate memory for incoming message
+ */
+static struct ceph_msg *mon_alloc_msg(struct ceph_connection *con,
+				      struct ceph_msg_header *hdr)
+{
+	struct ceph_mon_client *monc = con->private;
+	int type = le32_to_cpu(hdr->type);
+
+	switch (type) {
+	case CEPH_MSG_STATFS_REPLY:
+		return ceph_msgpool_get(&monc->client->msgpool_statfs_reply);
+	}
+	return ceph_alloc_msg(con, hdr);
+}
+
+/*
  * If the monitor connection resets, pick a new monitor and resubmit
  * any pending requests.
  */
@@ -644,6 +666,6 @@ const static struct ceph_connection_operations mon_con_ops = {
 	.put = ceph_con_put,
 	.dispatch = dispatch,
 	.fault = mon_fault,
-	.alloc_msg = ceph_alloc_msg,
+	.alloc_msg = mon_alloc_msg,
 	.alloc_middle = ceph_alloc_middle,
 };

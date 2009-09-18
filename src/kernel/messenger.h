@@ -100,6 +100,8 @@ struct ceph_msg {
 	bool front_is_vmalloc;
 	bool more_to_follow;
 	int front_max;
+
+	struct ceph_msg_pool *pool;
 };
 
 struct ceph_msg_pos {

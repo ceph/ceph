@@ -1738,6 +1738,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 	m->front_max = front_len;
 	m->front_is_vmalloc = false;
 	m->more_to_follow = false;
+	m->pool = NULL;
 
 	/* front */
 	if (front_len) {
@@ -1859,6 +1860,9 @@ void ceph_msg_put(struct ceph_msg *m)
 		m->nr_pages = 0;
 		m->pages = NULL;
 
-		ceph_msg_kfree(m);
+		if (m->pool)
+			ceph_msgpool_put(m->pool, m);
+		else
+			ceph_msg_kfree(m);
 	}
 }
