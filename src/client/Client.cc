@@ -852,7 +852,6 @@ int Client::make_request(MetaRequest *request,
     }
 
     // send request.
-    //encode_cap_request(request, req);
     send_request(request, mds);
 
     // wait for signal
@@ -909,46 +908,77 @@ inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
   return req;
 }
 
-/*This won't do anything if the MetaRequest doesn't have set:
- *MClientRequest *request
- *Inode *source
- *int caps_dropped
- */
-void Client::encode_cap_release(MetaRequest *req, int mds) {
-  Inode *in;
-  int caps;
-  if (!req->source) goto invalid_exit;
-  in = req->source;
-  caps = in->caps_issued();
-  dout(20) << "encode_cap_release " << req->caps_dropped << " unless "
-	   << in << " has " << req->unless_have_caps
-	   << ". Inode caps are " << caps << dendl;
-  if ( req->request &&                   //we need a request to bundle with
-       req->caps_dropped &&              //and caps to drop
-       (caps & req->caps_dropped) &&     //and to have some of those caps
-       !(caps & req->unless_have_caps) ) {//and to not have the 'saving' caps
-    InodeCap *icap = in->caps[mds];
-    //encode message to drop the caps
-    ceph_mds_request_release release;
-    icap->issued &= ~req->caps_dropped;
-    icap->implemented &= ~req->caps_dropped;
-    release.ino = in->ino;
-    release.cap_id = icap->cap_id;
-    release.caps = icap->issued;
-    release.wanted = icap->wanted;
-    release.seq = icap->seq;
-    release.issue_seq = icap->issue_seq;
-    release.mseq = icap->mseq;
-    release.dname_seq = 0;
-    release.dname_len = 0;
-    dout(20) << "encode_cap_release quitting after encoding drop of "
-	     << req->caps_dropped << " from inode " << in << dendl;
-    goto clean_exit;
+int Client::encode_inode_release(Inode *in, MClientRequest *req,
+			 int mds, int drop,
+			 int unless, int force)
+{
+  int released = 0;
+  InodeCap *caps = in->caps[mds];
+  if (drop & caps->issued &&
+      !(unless & caps->issued)) {
+    caps->issued &= ~drop;
+    caps->implemented &= ~drop;
+    released = 1;
+    force = 1;
   }
- invalid_exit:
-  dout(20) << "encode_cap_release is quitting because we don't need to drop!" << dendl;
- clean_exit: ;
+  if (force) {
+    ceph_mds_request_release rel;
+    rel.ino = in->ino;
+    rel.cap_id = caps->cap_id;
+    rel.seq = caps->seq;
+    rel.issue_seq = caps->issue_seq;
+    rel.mseq = caps->mseq;
+    rel.caps = caps->issued;
+    rel.wanted = caps->wanted;
+    rel.dname_len = 0;
+    rel.dname_seq = 0;
+    req->releases.push_back(MClientRequest::Release(rel,""));
+  }
+  return released;
 }
+
+void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
+			   int mds, int drop, int unless)
+{
+  int released = encode_inode_release(dn->dir->parent_inode, req,
+				      mds, drop, unless, 1);
+  if (released && dn->lease_mds == mds) {
+    MClientRequest::Release& rel = req->releases.back();
+    rel.item.dname_len = dn->name.length();
+    rel.item.dname_seq = dn->lease_seq;
+    rel.dname = dn->name;
+  }
+}
+
+
+/*
+ * This requires the MClientRequest *request member to be set.
+ * It will error out horribly without one.
+ * Additionally, if you set any *drop member, you'd better have
+ * set the corresponding dentry!
+ */
+void Client::encode_cap_releases(MetaRequest *req, int mds) {
+  if (req->inode_drop)
+    encode_inode_release(req->inode, req->request,
+			 mds, req->inode_drop,
+			 req->inode_unless);
+
+  if (req->old_inode_drop)
+    encode_inode_release(req->old_inode, req->request,
+			 mds, req->old_inode_drop,
+			 req->old_inode_unless);
+
+  if (req->dentry_drop)
+    encode_dentry_release(req->dentry, req->request,
+			  mds, req->dentry_drop,
+			  req->dentry_unless);
+  
+  if (req->old_dentry_drop)
+    encode_dentry_release(req->old_dentry, req->request,
+			  mds, req->old_dentry_drop,
+			  req->old_dentry_unless);
+}
+
 
 void Client::handle_client_session(MClientSession *m) 
 {
@@ -1008,9 +1038,12 @@ void Client::send_request(MetaRequest *request, int mds)
     r->set_dentry_wanted();
     if (request->got_unsafe)
       r->set_replayed_op();
+    request->request = r;
   }
   else
     request->retry_attempt++;
+  if (!r->releases.size())
+    encode_cap_releases(request, mds);
   request->request = 0;
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());

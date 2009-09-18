@@ -90,7 +90,8 @@ extern class Logger  *client_logger;
  
 */
 struct InodeCap;
-struct Inode;
+class Inode;
+class Dentry;
 
 struct MetaRequest {
   MClientRequest *request;    // the actual request to send out
@@ -98,8 +99,15 @@ struct MetaRequest {
   ceph_mds_request_head head;
   filepath path, path2;
   bufferlist data;
-  int caps_dropped; //the caps this operation will drop
-  int unless_have_caps; //unless we have these caps already
+  int inode_drop; //the inode caps this operation will drop
+  int inode_unless; //unless we have these caps already
+  int old_inode_drop, old_inode_unless;
+  int dentry_drop, dentry_unless;
+  int old_dentry_drop, old_dentry_unless;
+  Inode *inode;
+  Inode *old_inode;
+  Dentry *dentry; //associated with path
+  Dentry *old_dentry; //associated with path2
 
  
   utime_t  sent_stamp;
@@ -122,28 +130,37 @@ struct MetaRequest {
   Cond  *caller_cond;          // who to take up
   Cond  *dispatch_cond;        // who to kick back
 
-  Inode *source; //Inode being affected -- useful for cap references
   Inode *target;
 
   MetaRequest(MClientRequest *req, tid_t t) : 
-    request(req), caps_dropped(0), unless_have_caps(0),
+    request(req), inode_drop(0), inode_unless(0),
+    old_inode_drop(0), old_inode_unless(0),
+    dentry_drop(0), dentry_unless(0),
+    old_dentry_drop(0), old_dentry_unless(0),
+    inode(NULL), old_inode(NULL),
+    dentry(NULL), old_dentry(NULL),
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0),
-    source(0), target(0) {
+    target(0) {
     memcpy(&head, &req->head, sizeof(ceph_mds_request_head));
   }
 
   MetaRequest(int op) : 
-    request(NULL), caps_dropped(0), unless_have_caps(0),
+    request(NULL), inode_drop(0), inode_unless(0),
+    old_inode_drop(0), old_inode_unless(0),
+    dentry_drop(0), dentry_unless(0),
+    old_dentry_drop(0), old_dentry_unless(0),
+    inode(NULL), old_inode(NULL),
+    dentry(NULL), old_dentry(NULL),
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
     kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0),
-    source(0), target(0) {
+    target(0) {
     memset(&head, 0, sizeof(ceph_mds_request_head));
     head.op = op;
 }
@@ -820,7 +837,12 @@ public:
 		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
-  void encode_cap_release(MetaRequest *request, int mds);
+  void encode_cap_releases(MetaRequest *request, int mds);
+  int encode_inode_release(Inode *in, MClientRequest *req,
+			   int mds, int drop,
+			   int unless,int force=0);
+  void encode_dentry_release(Dentry *dn, MClientRequest *req,
+			     int mds, int drop, int unless);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
