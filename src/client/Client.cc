@@ -2982,6 +2982,31 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
   return r;
 }
 
+int Client::get_or_create(Inode *dir, const string& name, Dentry **pdn)
+{
+  // lookup
+  if (dir->dir && dir->dir->dentries.count(name)) {
+    Dentry *dn = *pdn = dir->dir->dentries[name];
+    
+    // is dn lease valid?
+    utime_t now = g_clock.now();
+    if (dn->inode &&
+	dn->lease_mds >= 0 && 
+	dn->lease_ttl > now &&
+	mds_sessions.count(dn->lease_mds)) {
+      MDSSession &s = mds_sessions[dn->lease_mds];
+      if (s.cap_ttl > now &&
+	  s.cap_gen == dn->lease_gen) {
+	return -EEXIST;
+      }
+    }
+  } else {
+    // link up new one
+    *pdn = link(dir->dir, name.c_str(), NULL);
+  }
+  return 0;
+}
+
 int Client::path_walk(const filepath& origpath, Inode **final, bool followsym)
 {
   filepath path = origpath;

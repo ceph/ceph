@@ -946,6 +946,9 @@ protected:
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
 
+  /**
+   * Don't call this with in==NULL, use get_or_create for that
+   */
   Dentry* link(Dir *dir, const string& name, Inode *in) {
     Dentry *dn = new Dentry;
     dn->name = name;
@@ -955,13 +958,14 @@ protected:
     //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
     dir->dentries[dn->name] = dn;
 
-    // link to inode
-    dn->inode = in;
-    assert(in->dn == 0);
-    in->dn = dn;
-    in->get();
-
-    if (in->dir) dn->get();  // dir -> dn pin
+    if (in) {    // link to inode
+      dn->inode = in;
+      assert(in->dn == 0);
+      in->dn = dn;
+      in->get();
+      
+      if (in->dir) dn->get();  // dir -> dn pin
+    }
 
     lru.lru_insert_mid(dn);    // mid or top?
     return dn;
@@ -1178,6 +1182,7 @@ private:
   int _sync_fs();
 
   MClientRequest* make_request_from_Meta(MetaRequest * request);
+  int get_or_create(Inode *dir, const string& name, Dentry **pdn);
 
 public:
   int mount();
