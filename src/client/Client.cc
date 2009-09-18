@@ -912,6 +912,9 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
 			 int mds, int drop,
 			 int unless, int force)
 {
+  dout(20) << "encode_inode_release enter(in:" << in << ", req:" << req
+	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
+	   << ", force:" << force << ")" << dendl;
   int released = 0;
   InodeCap *caps = in->caps[mds];
   if (drop & caps->issued &&
@@ -934,20 +937,27 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
     rel.dname_seq = 0;
     req->releases.push_back(MClientRequest::Release(rel,""));
   }
+  dout(25) << "encode_inode_release exit(in:" << in << ") released:"
+	   << released << dendl;
   return released;
 }
 
 void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
 			   int mds, int drop, int unless)
 {
+  dout(20) << "encode_dentry_release enter(dn:"
+	   << dn << ")" << dendl;
   int released = encode_inode_release(dn->dir->parent_inode, req,
 				      mds, drop, unless, 1);
   if (released && dn->lease_mds == mds) {
+    dout(25) << "preemptively releasing dn to mds" << dendl;
     MClientRequest::Release& rel = req->releases.back();
     rel.item.dname_len = dn->name.length();
     rel.item.dname_seq = dn->lease_seq;
     rel.dname = dn->name;
   }
+  dout(25) << "encode_dentry_release exit(dn:"
+	   << dn << ")" << dendl;
 }
 
 
@@ -958,16 +968,18 @@ void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
  * set the corresponding dentry!
  */
 void Client::encode_cap_releases(MetaRequest *req, int mds) {
+  dout(20) << "encode_cap_releases enter (req: "
+	   << req << ", mds: " << mds << dendl;
   if (req->inode_drop)
     encode_inode_release(req->inode, req->request,
 			 mds, req->inode_drop,
 			 req->inode_unless);
-
+  
   if (req->old_inode_drop)
     encode_inode_release(req->old_inode, req->request,
 			 mds, req->old_inode_drop,
 			 req->old_inode_unless);
-
+  
   if (req->dentry_drop)
     encode_dentry_release(req->dentry, req->request,
 			  mds, req->dentry_drop,
@@ -977,8 +989,9 @@ void Client::encode_cap_releases(MetaRequest *req, int mds) {
     encode_dentry_release(req->old_dentry, req->request,
 			  mds, req->old_dentry_drop,
 			  req->old_dentry_unless);
+  dout(25) << "encode_cap_releases exit (req: "
+	   << req << ", mds " << mds <<dendl;
 }
-
 
 void Client::handle_client_session(MClientSession *m) 
 {
@@ -3000,7 +3013,8 @@ int Client::get_or_create(Inode *dir, const char* name,
 	  s.cap_gen == dn->lease_gen) {
 	if (expect_null)
 	  return -EEXIST;
-	else return 0;
+	else
+	  return 0;
       }
     }
   }
