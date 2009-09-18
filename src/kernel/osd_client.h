@@ -86,6 +86,9 @@ struct ceph_osd_client {
 	struct dentry 	       *debugfs_file;
 
 	mempool_t              *req_mempool;
+
+	struct ceph_msg_pool   msgpool_op;
+	struct ceph_msg_pool   msgpool_op_reply;
 };
 
 extern int ceph_osdc_init(struct ceph_osd_client *osdc,
@@ -105,7 +108,7 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size,
 				      struct timespec *mtime,
-				      bool use_mempool);
+				      bool use_mempool, int num_reply);
 
 static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 {
