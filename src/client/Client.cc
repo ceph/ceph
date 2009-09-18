@@ -3699,7 +3699,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
       }
     }
 
-    if (diri->dir->release_count == dirp->release_count) {
+    if (diri->dir && diri->dir->release_count == dirp->release_count) {
       dout(10) << " marking I_COMPLETE on " << *diri << dendl;
       diri->flags |= I_COMPLETE;
     }
