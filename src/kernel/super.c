@@ -607,22 +607,31 @@ static struct ceph_client *ceph_create_client(void)
 		goto fail;
 	client->pg_inv_wq = create_workqueue("ceph-pg-invalid");
 	if (client->pg_inv_wq == NULL)
-		goto fail;
+		goto fail_wb_wq;
 	client->trunc_wq = create_workqueue("ceph-trunc");
 	if (client->trunc_wq == NULL)
-		goto fail;
+		goto fail_pg_inv_wq;
 
 	/* subsystems */
 	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
-		goto fail;
+		goto fail_trunc_wq;
 	err = ceph_osdc_init(&client->osdc, client);
 	if (err < 0)
-		goto fail;
+		goto fail_monc;
 	ceph_mdsc_init(&client->mdsc, client);
 	return client;
 
+fail_monc:
+	ceph_monc_stop(&client->monc);
+fail_trunc_wq:
+	destroy_workqueue(client->trunc_wq);
+fail_pg_inv_wq:
+	destroy_workqueue(client->pg_inv_wq);
+fail_wb_wq:
+	destroy_workqueue(client->wb_wq);
 fail:
+	kfree(client);
 	return ERR_PTR(err);
 }
 
@@ -638,12 +647,10 @@ static void ceph_destroy_client(struct ceph_client *client)
 	kfree(client->signed_ticket);
 
 	ceph_debugfs_client_cleanup(client);
-	if (client->wb_wq)
-		destroy_workqueue(client->wb_wq);
-	if (client->pg_inv_wq)
-		destroy_workqueue(client->pg_inv_wq);
-	if (client->trunc_wq)
-		destroy_workqueue(client->trunc_wq);
+	destroy_workqueue(client->wb_wq);
+	destroy_workqueue(client->pg_inv_wq);
+	destroy_workqueue(client->trunc_wq);
+
 	if (client->msgr)
 		ceph_messenger_destroy(client->msgr);
 	if (client->wb_pagevec_pool)
@@ -910,13 +917,6 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (err < 0)
 		goto out;
 
-	/* set up mempools */
-	err = -ENOMEM;
-	client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
-			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
-	if (!client->wb_pagevec_pool)
-		goto out;
-
 	if (client->mount_args.flags & CEPH_OPT_NOSHARE)
 		compare_super = NULL;
 	sb = sget(fs_type, compare_super, ceph_set_super, client);
@@ -931,6 +931,14 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		dout("get_sb got existing client %p\n", client);
 	} else {
 		dout("get_sb using new client %p\n", client);
+
+		/* set up mempools */
+		err = -ENOMEM;
+		client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
+			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
+		if (!client->wb_pagevec_pool)
+			goto out_splat;
+
 		err = ceph_init_bdi(sb, client);
 		if (err < 0)
 			goto out_splat;
@@ -948,6 +956,7 @@ out_splat:
 	up_write(&sb->s_umount);
 	deactivate_super(sb);
 	goto out_final;
+
 out:
 	ceph_destroy_client(client);
 out_final:
