@@ -55,8 +55,7 @@ public:
     nstring dname;
 
     Release() : item(), dname() {}
-
-    Release(ceph_mds_request_release rel, nstring name) :
+    Release(const ceph_mds_request_release& rel, nstring name) :
       item(rel), dname(name) {}
 
     void encode(bufferlist& bl) const {
