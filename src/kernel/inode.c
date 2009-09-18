@@ -591,14 +591,23 @@ static int fill_inode(struct inode *inode,
 		inode->i_op = &ceph_symlink_iops;
 		if (!ci->i_symlink) {
 			int symlen = iinfo->symlink_len;
+			char *sym;
 
 			BUG_ON(symlen != inode->i_size);
+			spin_unlock(&inode->i_lock);
+			
 			err = -ENOMEM;
-			ci->i_symlink = kmalloc(symlen+1, GFP_NOFS);
-			if (!ci->i_symlink)
+			sym = kmalloc(symlen+1, GFP_NOFS);
+			if (!sym)
 				goto out;
-			memcpy(ci->i_symlink, iinfo->symlink, symlen);
-			ci->i_symlink[symlen] = 0;
+			memcpy(sym, iinfo->symlink, symlen);
+			sym[symlen] = 0;
+			
+			spin_lock(&inode->i_lock);
+			if (!ci->i_symlink)
+				ci->i_symlink = sym;
+			else
+				kfree(sym); /* lost a race */
 		}
 		break;
 	case S_IFDIR:
