@@ -5053,6 +5053,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
+  req->set_filepath2(name);
  
   int res = make_request(req, uid, gid);
 
