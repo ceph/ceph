@@ -4,12 +4,11 @@ v0.15
 /- monclient fixes; ceph detects monitor session drop
 /- msgr: protocol check cleanups; ack seq # fix; 
 /- debian: radosgw package, fix header perms
+/- kclient: GET_DATALOC ioctl
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
-
 - mds: put migration vectors in mdsmap
-
 
 bugs
 - premature filejournal trimming?

@@ -321,7 +321,8 @@ git commit -s -F - <<EOF
 ceph: ioctls
 
 A few Ceph ioctls for getting and setting file layout (striping)
-parameters.
+parameters, and learning the identity and network address of the OSD a
+given region of a file is stored on.
 
 EOF
 

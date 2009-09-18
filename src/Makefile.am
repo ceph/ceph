@@ -61,6 +61,9 @@ testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a
 bin_PROGRAMS += testmsgr
 
+test_ioctls_SOURCES = client/test_ioctls.c
+bin_PROGRAMS += test_ioctls
+
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
