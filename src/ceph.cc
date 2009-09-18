@@ -208,8 +208,8 @@ void handle_notify(MMonObserveNotify *notify)
 	AuthLibrary list;
 	::decode(list, p);
 	// show the first class info
-        map<EntityName, AuthLibEntry>::iterator mapiter = list.library_map.begin();
-	if (mapiter != list.library_map.end()) {
+        map<EntityName, CryptoKey>::iterator mapiter = list.keys.secrets_begin();
+	if (mapiter != list.keys.secrets_end()) {
 	    dout(0) << "   auth " <<  mapiter->first.to_str() << dendl;
 	}
       } else {

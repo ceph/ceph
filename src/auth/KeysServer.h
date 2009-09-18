@@ -39,6 +39,58 @@ struct RotatingSecret {
 WRITE_CLASS_ENCODER(RotatingSecret);
 
 
+struct KeysServerData {
+  bool initialized;
+
+  /* for each entity */
+  map<EntityName, CryptoKey> secrets;
+
+  /* for each service type */
+  map<uint32_t, RotatingSecret> rotating_secrets;
+
+  KeysServerData() : initialized(false) {}
+
+  void encode(bufferlist& bl) const {
+    __s32 i = (__s32)initialized;
+    ::encode(i, bl);
+    ::encode(secrets, bl);
+    ::encode(rotating_secrets, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    __s32 i;
+    ::decode(i, bl);
+    initialized = (bool)i;
+    ::decode(secrets, bl);
+    ::decode(rotating_secrets, bl);
+  }
+
+  bool contains(EntityName& name) {
+    return (secrets.find(name) != secrets.end());
+  }
+
+  void add_secret(const EntityName& name, CryptoKey& secret) {
+    secrets[name] = secret;
+  }
+
+  void remove_secret(const EntityName& name) {
+    map<EntityName, CryptoKey>::iterator iter = secrets.find(name);
+    if (iter == secrets.end())
+      return;
+    secrets.erase(iter);
+  }
+
+  void add_rotating_secret(uint32_t service_id, RotatingSecret& secret) {
+    rotating_secrets[service_id] = secret;
+  }
+
+  bool get_service_secret(uint32_t service_id, RotatingSecret& secret);
+  bool get_secret(EntityName& name, CryptoKey& secret);
+
+  map<EntityName, CryptoKey>::iterator secrets_begin() { return secrets.begin(); }
+  map<EntityName, CryptoKey>::iterator secrets_end() { return secrets.end(); }
+};
+WRITE_CLASS_ENCODER(KeysServerData);
+
 class KeysServer {
  class C_RotateTimeout : public Context {
   protected:
@@ -53,12 +105,7 @@ class KeysServer {
     }
   };
 
-
-  /* for each service type */
-  map<uint32_t, RotatingSecret> rotating_secrets;
-
-  /* for each entity */
-  map<EntityName, CryptoKey> secrets;
+  KeysServerData data;
 
   Mutex rotating_lock;
   Mutex secrets_lock;
@@ -73,6 +120,7 @@ public:
   KeysServer();
 
   bool get_secret(EntityName& name, CryptoKey& secret);
+  int start_server();
   void rotate_timeout(double timeout);
 
   /* get current secret for specific service type */
@@ -81,12 +129,10 @@ public:
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
   void encode(bufferlist& bl) const {
-    ::encode(secrets, bl);
-    ::encode(rotating_secrets, bl);
+    ::encode(data, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(secrets, bl);
-    ::decode(rotating_secrets, bl);
+    ::decode(data, bl);
   }
 };
 WRITE_CLASS_ENCODER(KeysServer);

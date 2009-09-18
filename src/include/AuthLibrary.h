@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "include/encoding.h"
 #include "auth/Auth.h"
+#include "auth/KeysServer.h"
 
 struct AuthLibEntry {
   EntityName name;
@@ -67,38 +68,32 @@ WRITE_CLASS_ENCODER(AuthLibIncremental)
 
 struct AuthLibrary {
   version_t version;
-  map<EntityName, AuthLibEntry> library_map;
+  KeysServerData keys;
 
   AuthLibrary() : version(0) {}
 
   void add(const EntityName& name, CryptoKey& secret) {
-    AuthLibEntry entry;
-    entry.name = name;
-    entry.secret = secret;
-    add(entry);
+    keys.add_secret(name, secret);
   }
 
   void add(AuthLibEntry& entry) {
-    library_map[entry.name] = entry;
+    add(entry.name, entry.secret);
   }
 
   void remove(const EntityName& name) {
-    map<EntityName, AuthLibEntry>::iterator mapiter = library_map.find(name);
-    if (mapiter == library_map.end())
-      return;
-    library_map.erase(mapiter);
+    keys.remove_secret(name);
   }
 
   bool contains(EntityName& name) {
-    return (library_map.find(name) != library_map.end());
+    return keys.contains(name);
   }
   void encode(bufferlist& bl) const {
     ::encode(version, bl);
-    ::encode(library_map, bl);
+    ::encode(keys, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(version, bl);
-    ::decode(library_map, bl);
+    ::decode(keys, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthLibrary)

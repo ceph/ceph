@@ -318,8 +318,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       string name = m->cmd[2];
       AuthLibEntry entry;
       entry.name.from_str(name);
-      map<EntityName, AuthLibEntry>::iterator iter = list.library_map.find(entry.name);
-      if (iter == list.library_map.end()) {
+      if (!list.keys.contains(entry.name)) {
         ss << "couldn't find entry " << name;
         rs = -ENOENT;
         goto done;
@@ -335,15 +334,15 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     } else if (m->cmd[1] == "list") {
-      map<EntityName, AuthLibEntry>::iterator mapiter = list.library_map.begin();
-      if (mapiter != list.library_map.end()) {
+      map<EntityName, CryptoKey>::iterator mapiter = list.keys.secrets_begin();
+      if (mapiter != list.keys.secrets_end()) {
         ss << "installed auth entries: " << std::endl;      
 
-       while (mapiter != list.library_map.end()) {
-         AuthLibEntry& entry = mapiter->second;
-         ss << entry.name.to_str() << std::endl;
+        while (mapiter != list.keys.secrets_end()) {
+          const EntityName& name = mapiter->first;
+          ss << name.to_str() << std::endl;
           
-         ++mapiter;
+          ++mapiter;
        }
       } else {
         ss << "no installed auth entries!";

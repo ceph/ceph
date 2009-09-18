@@ -36,17 +36,45 @@ static void hexdump(string msg, const char *s, int len)
   dout(0) << msg << ":\n" << buf << dendl;
 }
 
+bool KeysServerData::get_service_secret(uint32_t service_id, RotatingSecret& secret)
+{
+  map<uint32_t, RotatingSecret>::iterator iter = rotating_secrets.find(service_id);
+  if (iter == rotating_secrets.end())
+    return false;
 
+  secret = iter->second;
+  return true;
+}
+
+bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret)
+{
+  map<EntityName, CryptoKey>::iterator iter = secrets.find(name);
+  if (iter == secrets.end())
+    return false;
+
+  secret = iter->second;
+  return true;
+}
 
 KeysServer::KeysServer() : rotating_lock("KeysServer::rotating_lock"),
                  secrets_lock("KeysServer::secrets_lock"), timer(rotating_lock)
 {
+}
+
+int KeysServer::start_server()
+{
   Mutex::Locker l(rotating_lock);
 
-  generate_all_rotating_secrets();
+  if (!data.initialized) {  
+    generate_all_rotating_secrets();
+    data.initialized = true;
+  }
 
   rotate_event = new C_RotateTimeout(this, KEY_ROTATE_TIME);
+  if (!rotate_event)
+    return -ENOMEM;
   timer.add_event_after(KEY_ROTATE_TIME, rotate_event);
+  return 0;
 }
 
 void KeysServer::generate_all_rotating_secrets()
@@ -58,9 +86,9 @@ void KeysServer::generate_all_rotating_secrets()
 
   dout(0) << "generated: " << dendl;
   
-  map<uint32_t, RotatingSecret>::iterator iter = rotating_secrets.begin();
+  map<uint32_t, RotatingSecret>::iterator iter = data.rotating_secrets.begin();
 
-  for (; iter != rotating_secrets.end(); ++iter) {
+  for (; iter != data.rotating_secrets.end(); ++iter) {
     dout(0) << "service id: " << iter->first << dendl;
     RotatingSecret& key = iter->second;
     bufferptr bp = key.secret.get_secret();
@@ -76,7 +104,7 @@ void KeysServer::_rotate_secret(uint32_t service_id)
   secret.expiration = g_clock.now();
   secret.expiration += (KEY_ROTATE_TIME * 3);
 
-  rotating_secrets[service_id] = secret;
+  data.add_rotating_secret(service_id, secret);
 }
 
 void KeysServer::rotate_timeout(double timeout)
@@ -91,24 +119,14 @@ bool KeysServer::get_secret(EntityName& name, CryptoKey& secret)
 {
   Mutex::Locker l(secrets_lock);
 
-  map<EntityName, CryptoKey>::iterator iter = secrets.find(name);
-  if (iter == secrets.end())
-    return false;
-
-  secret = iter->second;
-  return true;
+  return data.get_secret(name, secret);
 }
 
 bool KeysServer::get_service_secret(uint32_t service_id, RotatingSecret& secret)
 {
   Mutex::Locker l(rotating_lock);
 
-  map<uint32_t, RotatingSecret>::iterator iter = rotating_secrets.find(service_id);
-  if (iter == rotating_secrets.end())
-    return false;
-
-  secret = iter->second;
-  return true;
+  return data.get_service_secret(service_id, secret);
 }
 
 bool KeysServer::generate_secret(CryptoKey& secret)
@@ -133,7 +151,7 @@ bool KeysServer::generate_secret(EntityName& name, CryptoKey& secret)
 
   Mutex::Locker l(secrets_lock);
 
-  secrets[name] = secret;
+  data.add_secret(name, secret);
 
   return true;
 }
