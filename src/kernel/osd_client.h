@@ -87,8 +87,8 @@ struct ceph_osd_client {
 
 	mempool_t              *req_mempool;
 
-	struct ceph_msg_pool   msgpool_op;
-	struct ceph_msg_pool   msgpool_op_reply;
+	struct ceph_msgpool   msgpool_op;
+	struct ceph_msgpool   msgpool_op_reply;
 };
 
 extern int ceph_osdc_init(struct ceph_osd_client *osdc,

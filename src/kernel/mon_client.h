@@ -64,9 +64,9 @@ struct ceph_mon_client {
 	struct ceph_connection *con;
 
 	/* msg pools */
-	struct ceph_msg_pool msgpool_mount_ack;
-	struct ceph_msg_pool msgpool_subscribe_ack;
-	struct ceph_msg_pool msgpool_statfs_reply;
+	struct ceph_msgpool msgpool_mount_ack;
+	struct ceph_msgpool msgpool_subscribe_ack;
+	struct ceph_msgpool msgpool_statfs_reply;
 
 	/* pending statfs requests */
 	struct radix_tree_root statfs_request_tree;

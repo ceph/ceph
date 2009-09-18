@@ -33,7 +33,7 @@
 /*
  * Allocate or release as necessary to meet our target pool size.
  */
-static int __fill_msgpool(struct ceph_msg_pool *pool)
+static int __fill_msgpool(struct ceph_msgpool *pool)
 {
 	struct ceph_msg *msg;
 
@@ -60,7 +60,7 @@ static int __fill_msgpool(struct ceph_msg_pool *pool)
 	return 0;
 }
 
-int ceph_msgpool_init(struct ceph_msg_pool *pool,
+int ceph_msgpool_init(struct ceph_msgpool *pool,
 		      int front_len, int min, bool blocking)
 {
 	int ret;
@@ -80,7 +80,7 @@ int ceph_msgpool_init(struct ceph_msg_pool *pool,
 	return ret;
 }
 
-void ceph_msgpool_destroy(struct ceph_msg_pool *pool)
+void ceph_msgpool_destroy(struct ceph_msgpool *pool)
 {
 	dout("msgpool_destroy %p\n", pool);
 	spin_lock(&pool->lock);
@@ -89,7 +89,7 @@ void ceph_msgpool_destroy(struct ceph_msg_pool *pool)
 	spin_unlock(&pool->lock);
 }
 
-int ceph_msgpool_resv(struct ceph_msg_pool *pool, int delta)
+int ceph_msgpool_resv(struct ceph_msgpool *pool, int delta)
 {
 	int ret;
 
@@ -101,7 +101,7 @@ int ceph_msgpool_resv(struct ceph_msg_pool *pool, int delta)
 	return ret;
 }
 
-struct ceph_msg *ceph_msgpool_get(struct ceph_msg_pool *pool)
+struct ceph_msg *ceph_msgpool_get(struct ceph_msgpool *pool)
 {
 	wait_queue_t wait;
 	struct ceph_msg *msg;
@@ -139,7 +139,7 @@ struct ceph_msg *ceph_msgpool_get(struct ceph_msg_pool *pool)
 	}
 }
 
-void ceph_msgpool_put(struct ceph_msg_pool *pool, struct ceph_msg *msg)
+void ceph_msgpool_put(struct ceph_msgpool *pool, struct ceph_msg *msg)
 {
 	spin_lock(&pool->lock);
 	if (pool->num < pool->min) {

@@ -101,7 +101,7 @@ struct ceph_msg {
 	bool more_to_follow;
 	int front_max;
 
-	struct ceph_msg_pool *pool;
+	struct ceph_msgpool *pool;
 };
 
 struct ceph_msg_pos {
