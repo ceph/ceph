@@ -5147,6 +5147,10 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
 { 
   dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
+  Dentry *dn;
+  int res = get_or_create(dir, name, &dn);
+  if (res<0)
+    return res;
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
   filepath path;
   dir->make_path(path);
@@ -5154,8 +5158,10 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   req->set_filepath(path); 
   req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
-
-  int res = make_request(req, uid, gid);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry = dn;
+  res = make_request(req, uid, gid);
 
   trim_cache();
 
