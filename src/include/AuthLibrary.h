@@ -21,17 +21,39 @@
 #include "auth/KeysServer.h"
 
 struct AuthLibEntry {
+  bool rotating;
+
   EntityName name;
   CryptoKey secret;
 
+  uint32_t service_id;
+  RotatingSecret rotating_secret;
+
   void encode(bufferlist& bl) const {
-    ::encode(name, bl);
-    ::encode(secret, bl);
+    __s32 r = (__s32)rotating;
+    ::encode(r, bl); 
+    if (!rotating) {
+      ::encode(name, bl);
+      ::encode(secret, bl);
+    } else {
+      ::encode(service_id, bl);
+      ::encode(rotating_secret, bl);
+    }
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-    ::decode(secret, bl);
+    __s32 r;
+    ::decode(r, bl);
+    rotating = (bool)r;
+    if (!rotating) {
+      ::decode(name, bl);
+      ::decode(secret, bl);
+    } else {
+      ::decode(service_id, bl);
+      ::decode(rotating, bl);
+    }
   }
+
+  AuthLibEntry() : rotating(false), service_id(0) {}
 };
 WRITE_CLASS_ENCODER(AuthLibEntry)
 
@@ -39,7 +61,6 @@ typedef enum {
   AUTH_INC_NOP,
   AUTH_INC_ADD,
   AUTH_INC_DEL,
-  AUTH_INC_ACTIVATE,
 } AuthLibIncOp;
 
 struct AuthLibIncremental {
@@ -55,7 +76,7 @@ struct AuthLibIncremental {
     __u32 _op;
     ::decode(_op, bl);
     op = (AuthLibIncOp)_op;
-    assert( op >= AUTH_INC_NOP && op <= AUTH_INC_ACTIVATE);
+    assert( op >= AUTH_INC_NOP && op <= AUTH_INC_DEL);
     ::decode(info, bl);
   }
 
@@ -72,12 +93,16 @@ struct AuthLibrary {
 
   AuthLibrary() : version(0) {}
 
-  void add(const EntityName& name, CryptoKey& secret) {
+  void add_secret(const EntityName& name, CryptoKey& secret) {
     keys.add_secret(name, secret);
   }
 
   void add(AuthLibEntry& entry) {
-    add(entry.name, entry.secret);
+    if (entry.rotating) {
+      keys.add_rotating_secret(entry.service_id, entry.rotating_secret);
+    } else {
+      add_secret(entry.name, entry.secret);
+    }
   }
 
   void remove(const EntityName& name) {
