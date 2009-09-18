@@ -86,10 +86,11 @@ int main(int argc, const char **argv)
   if (mc.get_monmap_privately() < 0)
     return -1;
 
+  char buf[80];
   if (mkfs) {
     int err = OSD::mkfs(g_conf.osd_data, g_conf.osd_journal, mc.monmap.fsid, whoami);
     if (err < 0) {
-      cerr << "error creating empty object store in " << g_conf.osd_data << ": " << strerror(-err) << std::endl;
+      cerr << "error creating empty object store in " << g_conf.osd_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
       exit(1);
     }
     cout << "created object store for osd" << whoami << " fsid " << mc.monmap.fsid << " on " << g_conf.osd_data << std::endl;
@@ -102,10 +103,10 @@ int main(int argc, const char **argv)
   int r = OSD::peek_super(g_conf.osd_data, magic, fsid, w);
   if (r < 0) {
     cerr << TEXT_RED << " ** " << TEXT_HAZARD << "ERROR: " << TEXT_RED
-         << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << TEXT_NORMAL << std::endl;
+         << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << TEXT_NORMAL << std::endl;
     if (r == -ENOTSUP)
       cerr << TEXT_RED << " **        please verify that underlying storage supports xattrs" << TEXT_NORMAL << std::endl;
-    derr(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror(-r) << dendl;
+    derr(0) << "unable to open OSD superblock on " << g_conf.osd_data << ": " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     exit(1);
   }
   if (w != whoami) {

@@ -29,6 +29,7 @@
 
 int FileJournal::_open(bool forwrite, bool create)
 {
+  char buf[80];
   int flags;
 
   if (forwrite) {
@@ -44,7 +45,7 @@ int FileJournal::_open(bool forwrite, bool create)
     ::close(fd);
   fd = ::open(fn.c_str(), flags, 0644);
   if (fd < 0) {
-    dout(2) << "_open failed " << errno << " " << strerror(errno) << dendl;
+    dout(2) << "_open failed " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
 
@@ -90,6 +91,7 @@ int FileJournal::_open(bool forwrite, bool create)
 
 int FileJournal::create()
 {
+  char buf[80];
   dout(2) << "create " << fn << dendl;
 
   int err = _open(true, true);
@@ -111,7 +113,7 @@ int FileJournal::create()
   buffer::ptr bp = prepare_header();
   int r = ::pwrite(fd, bp.c_str(), bp.length(), 0);
   if (r < 0) {
-    dout(0) << "create write header error " << errno << " " << strerror(errno) << dendl;
+    dout(0) << "create write header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
 
@@ -247,8 +249,10 @@ void FileJournal::read_header()
     memset(&header, 0, sizeof(header));  // zero out (read may fail)
     r = ::pread(fd, &header, sizeof(header), 0);
   }
-  if (r < 0) 
-    dout(0) << "read_header error " << errno << " " << strerror(errno) << dendl;
+  if (r < 0) {
+    char buf[80];
+    dout(0) << "read_header error " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+  }
   print_header();
 }
 
@@ -493,10 +497,12 @@ void FileJournal::do_write(bufferlist& bl)
        it++) {
     if ((*it).length() == 0) continue;  // blank buffer.
     int r = ::write(fd, (char*)(*it).c_str(), (*it).length());
-    if (r < 0)
-      derr(0) << "do_write failed with " << errno << " " << strerror(errno) 
+    if (r < 0) {
+      char buf[80];
+      derr(0) << "do_write failed with " << errno << " " << strerror_r(errno, buf, sizeof(buf)) 
 	      << " with " << (void*)(*it).c_str() << " len " << (*it).length()
 	      << dendl;
+    }
     pos += (*it).length();
   }
   if (!directio) {

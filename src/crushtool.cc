@@ -701,7 +701,8 @@ int main(int argc, const char **argv)
     bufferlist bl;
     int r = bl.read_file(dinfn);
     if (r < 0) {
-      cerr << me << ": error reading '" << dinfn << "': " << strerror(-r) << std::endl;
+      char buf[80];
+      cerr << me << ": error reading '" << dinfn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
       exit(1);
     }
     bufferlist::iterator p = bl.begin();
@@ -841,7 +842,8 @@ int main(int argc, const char **argv)
       crush.encode(bl);
       int r = bl.write_file(outfn);
       if (r < 0) {
-	cerr << me << ": error writing '" << outfn << "': " << strerror(-r) << std::endl;
+	char buf[80];
+	cerr << me << ": error writing '" << outfn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
 	exit(1);
       }
       if (verbose)

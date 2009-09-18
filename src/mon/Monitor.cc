@@ -592,7 +592,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   // create it
   int err = store->mkfs();
   if (err < 0) {
-    cerr << "error " << err << " " << strerror(err) << std::endl;
+    char buf[80];
+    cerr << "error " << err << " " << strerror_r(err, buf, sizeof(buf)) << std::endl;
     exit(1);
   }
   

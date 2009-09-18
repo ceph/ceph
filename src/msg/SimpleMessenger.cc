@@ -79,8 +79,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   /* socket creation */
   listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (listen_sd < 0) {
+    char buf[80];
     derr(0) << "accepter.bind unable to create socket: "
-	    << strerror(errno) << dendl;
+	    << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   opened_socket();
@@ -94,8 +95,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     // specific port
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
     if (rc < 0) {
+      char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
-	      << ": " << strerror(errno) << dendl;
+	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
     }
   } else {
@@ -107,9 +109,10 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
 	break;
     }
     if (rc < 0) {
+      char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
-	      << ": " << strerror(errno) << dendl;
+	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
     }
   }
@@ -123,8 +126,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   // listen!
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
+    char buf[80];
     derr(0) << "accepter.bind unable to listen on " << g_my_addr.ipaddr 
-	    << ": " << strerror(errno) << dendl;
+	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   
@@ -183,6 +187,8 @@ void *SimpleMessenger::Accepter::entry()
   // block SIGUSR1
   pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
 
+  char buf[80];
+
   while (!done) {
     FD_ZERO(&fds);
     FD_SET(listen_sd, &fds);
@@ -205,8 +211,8 @@ void *SimpleMessenger::Accepter::entry()
       if (g_conf.ms_tcp_nodelay) {
 	int flag = 1;
 	int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
-	if (r < 0) 
-	  dout(0) << "accepter could't set TCP_NODELAY: " << strerror(errno) << dendl;
+	if (r < 0)
+	  dout(0) << "accepter could't set TCP_NODELAY: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       }
       
       rank->lock.Lock();
@@ -218,7 +224,7 @@ void *SimpleMessenger::Accepter::entry()
       }
       rank->lock.Unlock();
     } else {
-      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror(errno) << dendl;
+      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       if (++errors > 4)
 	break;
     }
@@ -533,7 +539,8 @@ int SimpleMessenger::Pipe::accept()
   socklen_t len = sizeof(socket_addr.ipaddr);
   int r = ::getpeername(sd, (sockaddr*)&socket_addr.ipaddr, &len);
   if (r < 0) {
-    dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
+    char buf[80];
+    dout(0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     state = STATE_CLOSED;
     return -1;
   }
@@ -824,7 +831,8 @@ int SimpleMessenger::Pipe::connect()
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (sd < 0) {
-    dout(-1) << "connect couldn't created socket " << strerror(errno) << dendl;
+    char buf[80];
+    dout(-1) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     assert(0);
     goto fail;
   }
@@ -837,17 +845,20 @@ int SimpleMessenger::Pipe::connect()
   dout(10) << "binding to " << myAddr << dendl;
   rc = ::bind(sd, (struct sockaddr *)&myAddr, sizeof(myAddr));
   if (rc < 0) {
+    char buf[80];
     dout(2) << "bind error " << myAddr
-	     << ", " << errno << ": " << strerror(errno) << dendl;
+	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
+
+  char buf[80];
 
   // connect!
   dout(10) << "connecting to " << peer_addr.ipaddr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.ipaddr, sizeof(peer_addr.ipaddr));
   if (rc < 0) {
     dout(2) << "connect error " << peer_addr.ipaddr
-	     << ", " << errno << ": " << strerror(errno) << dendl;
+	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
 
@@ -856,14 +867,14 @@ int SimpleMessenger::Pipe::connect()
     int flag = 1;
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) 
-      dout(0) << "connect couldn't set TCP_NODELAY: " << strerror(errno) << dendl;
+      dout(0) << "connect couldn't set TCP_NODELAY: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
   }
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
   rc = tcp_read(sd, (char*)&banner, strlen(CEPH_BANNER));
   if (rc < 0) {
-    dout(2) << "connect couldn't read banner, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
@@ -878,14 +889,14 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(sd, &msg, msglen)) {
-    dout(2) << "connect couldn't write my banner, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't write my banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
 
   // identify peer
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
   if (rc < 0) {
-    dout(2) << "connect couldn't read peer addr, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read peer addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   dout(20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
@@ -905,7 +916,7 @@ int SimpleMessenger::Pipe::connect()
   // peer addr for me
   rc = tcp_read(sd, (char*)&peer_addr_for_me, sizeof(peer_addr_for_me));
   if (rc < 0) {
-    dout(2) << "connect couldn't read peer addr for me, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read peer addr for me, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   dout(20) << "connect peer addr for me is " << peer_addr_for_me << dendl;
@@ -920,7 +931,7 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(sd, &msg, msglen)) {
-    dout(2) << "connect couldn't write my addr, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't write my addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
@@ -944,14 +955,14 @@ int SimpleMessenger::Pipe::connect()
     dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
     if (do_sendmsg(sd, &msg, msglen)) {
-      dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
+      dout(2) << "connect couldn't write gseq, cseq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       goto fail;
     }
 
     dout(20) << "connect wrote (self +) cseq, waiting for reply" << dendl;
     ceph_msg_connect_reply reply;
     if (tcp_read(sd, (char*)&reply, sizeof(reply)) < 0) {
-      dout(2) << "connect read reply " << strerror(errno) << dendl;
+      dout(2) << "connect read reply " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       goto fail;
     }
     dout(20) << "connect got reply tag " << (int)reply.tag
@@ -1095,8 +1106,9 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
     dout(10) << "fault already connecting, reader shutting down" << dendl;
     return;
   }
-
-  if (!onconnect) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
+  
+  char buf[80];
+  if (!onconnect) dout(2) << "fault " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
@@ -1260,12 +1272,13 @@ void SimpleMessenger::Pipe::reader()
 
     lock.Unlock();
 
+    char buf[80];
     char tag = -1;
     dout(20) << "reader reading tag..." << dendl;
     int rc = tcp_read(sd, (char*)&tag, 1);
     if (rc < 0) {
       lock.Lock();
-      dout(2) << "reader couldn't read tag, " << strerror(errno) << dendl;
+      dout(2) << "reader couldn't read tag, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       fault(false, true);
       continue;
     }
@@ -1283,7 +1296,7 @@ void SimpleMessenger::Pipe::reader()
       int rc = tcp_read( sd, (char*)&seq, sizeof(seq));
       lock.Lock();
       if (rc < 0) {
-	dout(2) << "reader couldn't read ack seq, " << strerror(errno) << dendl;
+	dout(2) << "reader couldn't read ack seq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	fault(false, true);
       } else if (state != STATE_CLOSED) {
 	dout(15) << "reader got ack seq " << seq << dendl;
@@ -1307,7 +1320,7 @@ void SimpleMessenger::Pipe::reader()
       lock.Lock();
       
       if (!m) {
-	derr(2) << "reader read null message, " << strerror(errno) << dendl;
+	derr(2) << "reader read null message, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	fault(false, true);
 	continue;
       }
@@ -1431,6 +1444,8 @@ public:
  */
 void SimpleMessenger::Pipe::writer()
 {
+  char buf[80];
+
   lock.Lock();
 
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
@@ -1470,7 +1485,7 @@ void SimpleMessenger::Pipe::writer()
 	int rc = write_keepalive();
 	lock.Lock();
 	if (rc < 0) {
-	  dout(2) << "writer couldn't write keepalive, " << strerror(errno) << dendl;
+	  dout(2) << "writer couldn't write keepalive, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
  	  continue;
 	}
@@ -1484,7 +1499,7 @@ void SimpleMessenger::Pipe::writer()
 	int rc = write_ack(send_seq);
 	lock.Lock();
 	if (rc < 0) {
-	  dout(2) << "writer couldn't write ack, " << strerror(errno) << dendl;
+	  dout(2) << "writer couldn't write ack, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
  	  continue;
 	}
@@ -1510,7 +1525,7 @@ void SimpleMessenger::Pipe::writer()
 	lock.Lock();
 	if (rc < 0) {
           derr(1) << "writer error sending " << m << ", "
-		  << errno << ": " << strerror(errno) << dendl;
+		  << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
         }
 	m->put();
@@ -1668,6 +1683,8 @@ Message *SimpleMessenger::Pipe::read_message()
 
 int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
 {
+  char buf[80];
+
   while (len > 0) {
     if (0) { // sanity
       int l = 0;
@@ -1680,7 +1697,7 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool 
     if (r == 0) 
       dout(10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
-      dout(1) << "do_sendmsg error " << strerror(errno) << dendl;
+      dout(1) << "do_sendmsg error " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -1;
     }
     if (state == STATE_CLOSED) {

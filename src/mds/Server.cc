@@ -703,8 +703,9 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   // mark xlocks "done", indicating that we are exposing uncommitted changes
   mds->locker->set_xlocks_done(mdr);
 
+  char buf[80];
   dout(10) << "early_reply " << reply->get_result() 
-	   << " (" << strerror(-reply->get_result())
+	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
 	   << ") " << *req << dendl;
 
   if (tracei || tracedn) {
@@ -735,8 +736,9 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 {
   MClientRequest *req = mdr->client_request;
   
+  char buf[80];
   dout(10) << "reply_request " << reply->get_result() 
-	   << " (" << strerror(-reply->get_result())
+	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
 	   << ") " << *req << dendl;
 
   // note result code in session map?

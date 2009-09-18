@@ -203,7 +203,7 @@ bool ClientMonitor::prepare_mount(MClientMount *m)
   dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
   
   paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
-  ss << "client" << client << " " << addr << " mounted";
+  ss << "client" << client << " " << addr;
   mon->get_logclient()->log(LOG_INFO, ss);
   return true;
 }

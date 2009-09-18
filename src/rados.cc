@@ -272,13 +272,14 @@ int main(int argc, const char **argv)
   }
 
   int ret = 0;
+  char buf[80];
 
   // open pool?
   rados_pool_t p;
   if (pool) {
     ret = rados.open_pool(pool, &p);
     if (ret < 0) {
-      cerr << "error opening pool " << pool << ": " << strerror(-ret) << std::endl;
+      cerr << "error opening pool " << pool << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
   }
@@ -287,7 +288,7 @@ int main(int argc, const char **argv)
   if (snapname) {
     ret = rados.snap_lookup(p, snapname, &snapid);
     if (ret < 0) {
-      cerr << "error looking up snap '" << snapname << "': " << strerror(-ret) << std::endl;
+      cerr << "error looking up snap '" << snapname << "': " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
   }
@@ -355,7 +356,7 @@ int main(int argc, const char **argv)
       list<object_t> vec;
       ret = rados.list(p, 1 << 10, vec, ctx);
       if (ret < 0) {
-	cerr << "got error: " << strerror(-ret) << std::endl;
+	cerr << "got error: " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
 	goto out;
       }
       if (vec.empty())
@@ -373,7 +374,7 @@ int main(int argc, const char **argv)
     object_t oid(nargs[1]);
     ret = rados.read(p, oid, 0, outdata, 0);
     if (ret < 0) {
-      cerr << "error reading " << pool << "/" << oid << ": " << strerror(-ret) << std::endl;
+      cerr << "error reading " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
 
@@ -401,14 +402,14 @@ int main(int argc, const char **argv)
     } else {
       ret = indata.read_file(nargs[2]);
       if (ret) {
-	cerr << "error reading input file " << nargs[2] << ": " << strerror(-ret) << std::endl;
+	cerr << "error reading input file " << nargs[2] << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
 	goto out;
       }
     }
 
     ret = rados.write_full(p, oid, indata);
     if (ret < 0) {
-      cerr << "error writing " << pool << "/" << oid << ": " << strerror(-ret) << std::endl;
+      cerr << "error writing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
   }
@@ -418,7 +419,7 @@ int main(int argc, const char **argv)
     object_t oid(nargs[1]);
     ret = rados.remove(p, oid);
     if (ret < 0) {
-      cerr << "error removing " << pool << "/" << oid << ": " << strerror(-ret) << std::endl;
+      cerr << "error removing " << pool << "/" << oid << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
   }
@@ -464,7 +465,7 @@ int main(int argc, const char **argv)
     ret = rados.snap_create(p, nargs[1]);
     if (ret < 0) {
       cerr << "error creating pool " << pool << " snapshot " << nargs[1]
-	   << ": " << strerror(-ret) << std::endl;
+	   << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
     cout << "created pool " << pool << " snap " << nargs[1] << std::endl;
@@ -477,7 +478,7 @@ int main(int argc, const char **argv)
     ret = rados.snap_remove(p, nargs[1]);
     if (ret < 0) {
       cerr << "error removing pool " << pool << " snapshot " << nargs[1]
-	   << ": " << strerror(-ret) << std::endl;
+	   << ": " << strerror_r(-ret, buf, sizeof(buf)) << std::endl;
       goto out;
     }
     cout << "removed pool " << pool << " snap " << nargs[1] << std::endl;

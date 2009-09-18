@@ -509,7 +509,8 @@ int do_cli()
       if (out.read_file(infile) == 0) {
 	cout << "read " << out.length() << " from " << infile << std::endl;
       } else {
-	cerr << "couldn't read from " << infile << ": " << strerror(errno) << std::endl;
+	char buf[80];
+	cerr << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
 	continue;
       }
     }

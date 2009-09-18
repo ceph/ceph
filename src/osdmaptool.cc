@@ -105,8 +105,9 @@ int main(int argc, const char **argv)
     r = bl.read_file(fn);
     osdmap.decode(bl);
   }
+  char buf[80];
   if (!createsimple && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror(errno) << std::endl;
+    cerr << me << ": couldn't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -1;
   }    
   else if (createsimple && !clobber && r == 0) {
@@ -223,7 +224,7 @@ int main(int argc, const char **argv)
 	 << std::endl;
     int r = bl.write_file(fn);
     if (r < 0) {
-      cerr << "osdmaptool: error writing to '" << fn << "': " << strerror(-r) << std::endl;
+      cerr << "osdmaptool: error writing to '" << fn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
       return 1;
     }
   }

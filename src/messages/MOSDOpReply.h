@@ -112,8 +112,10 @@ public:
 	out << " ack";
     }
     out << " = " << get_result();
-    if (get_result() < 0) 
-      out << " (" << strerror(-get_result()) << ")";
+    if (get_result() < 0) {
+      char buf[80];
+      out << " (" << strerror_r(-get_result(), buf, sizeof(buf)) << ")";
+    }
     out << ")";
   }
 

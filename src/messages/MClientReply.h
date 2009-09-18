@@ -204,8 +204,10 @@ public:
   void print(ostream& o) {
     o << "client_reply(???:" << head.tid;
     o << " = " << get_result();
-    if (get_result() <= 0)
-      o << " " << strerror(-get_result());
+    if (get_result() <= 0) {
+      char buf[80];
+      o << " " << strerror_r(-get_result(), buf, sizeof(buf));
+    }
     if (head.op & CEPH_MDS_OP_WRITE) {
       if (head.safe)
 	o << " safe";

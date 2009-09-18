@@ -15,8 +15,9 @@ int JournalingObjectStore::journal_replay()
 
   int err = journal->open(op_seq+1);
   if (err < 0) {
+    char buf[80];
     dout(3) << "journal_replay open failed with" << err
-	    << " " << strerror(err) << dendl;
+	    << " " << strerror_r(err, buf, sizeof(buf)) << dendl;
     delete journal;
     journal = 0;
     return err;

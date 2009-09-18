@@ -47,7 +47,8 @@ int MonClient::build_initial_monmap()
     int r = monmap.read(monmap_fn);
     if (r >= 0)
       return 0;
-    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror(errno) << std::endl;
+    char buf[80];
+    cerr << "unable to read monmap from " << monmap_fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
   }
 
   // -m foo?
