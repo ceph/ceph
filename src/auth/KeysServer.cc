@@ -21,6 +21,8 @@
 #include "Auth.h"
 #include "AuthProtocol.h"
 
+#include <sstream>
+
 static void hexdump(string msg, const char *s, int len)
 {
   int buf_len = len*4;
@@ -56,20 +58,17 @@ bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret)
   return true;
 }
 
-KeysServer::KeysServer() : rotating_lock("KeysServer::rotating_lock"),
-                 secrets_lock("KeysServer::secrets_lock"), timer(rotating_lock)
+KeysServer::KeysServer() : lock("KeysServer::lock"), timer(lock)
 {
 }
 
-int KeysServer::start_server()
+int KeysServer::start_server(bool init)
 {
-  Mutex::Locker l(rotating_lock);
+  Mutex::Locker l(lock);
 
-  if (!data.initialized) {  
-    generate_all_rotating_secrets();
-    data.initialized = true;
+  if (init) {
+    _generate_all_rotating_secrets();
   }
-
   rotate_event = new C_RotateTimeout(this, KEY_ROTATE_TIME);
   if (!rotate_event)
     return -ENOMEM;
@@ -77,8 +76,9 @@ int KeysServer::start_server()
   return 0;
 }
 
-void KeysServer::generate_all_rotating_secrets()
+void KeysServer::_generate_all_rotating_secrets()
 {
+  data.rotating_ver++;
   dout(0) << "generate_all_rotating_secrets()" << dendl;
   _rotate_secret(CEPHX_PRINCIPAL_MON);
   _rotate_secret(CEPHX_PRINCIPAL_OSD);
@@ -109,7 +109,8 @@ void KeysServer::_rotate_secret(uint32_t service_id)
 
 void KeysServer::rotate_timeout(double timeout)
 {
-  generate_all_rotating_secrets();
+  dout(0) << "KeysServer::rotate_timeout" << dendl;
+  _generate_all_rotating_secrets();
 
   rotate_event = new C_RotateTimeout(this, timeout);
   timer.add_event_after(timeout, rotate_event);
@@ -117,14 +118,14 @@ void KeysServer::rotate_timeout(double timeout)
 
 bool KeysServer::get_secret(EntityName& name, CryptoKey& secret)
 {
-  Mutex::Locker l(secrets_lock);
+  Mutex::Locker l(lock);
 
   return data.get_secret(name, secret);
 }
 
 bool KeysServer::get_service_secret(uint32_t service_id, RotatingSecret& secret)
 {
-  Mutex::Locker l(rotating_lock);
+  Mutex::Locker l(lock);
 
   return data.get_service_secret(service_id, secret);
 }
@@ -149,10 +150,59 @@ bool KeysServer::generate_secret(EntityName& name, CryptoKey& secret)
   if (!generate_secret(secret))
     return false;
 
-  Mutex::Locker l(secrets_lock);
+  Mutex::Locker l(lock);
 
   data.add_secret(name, secret);
 
   return true;
+}
+
+bool KeysServer::contains(EntityName& name)
+{
+  Mutex::Locker l(lock);
+
+  return data.contains(name);
+}
+
+void KeysServer::list_secrets(stringstream& ss)
+{
+  map<EntityName, CryptoKey>::iterator mapiter = data.secrets_begin();
+  if (mapiter != data.secrets_end()) {
+    ss << "installed auth entries: " << std::endl;      
+
+    while (mapiter != data.secrets_end()) {
+      const EntityName& name = mapiter->first;
+      ss << name.to_str() << std::endl;
+      
+      ++mapiter;
+    }
+  } else {
+    ss << "no installed auth entries!";
+  }
+}
+
+bool KeysServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
+{
+  Mutex::Locker l(lock);
+
+  if (data.rotating_ver <= rotating_ver)
+    return false;
+
+  ::encode(data.rotating_ver, rotating_bl);
+  ::encode(data.rotating_secrets, rotating_bl);
+
+  rotating_ver = data.rotating_ver;
+
+  return true;
+}
+
+void KeysServer::decode_rotating(bufferlist& rotating_bl)
+{
+  Mutex::Locker l(lock);
+
+  bufferlist::iterator iter = rotating_bl.begin();
+
+  ::decode(data.rotating_ver, iter);
+  ::decode(data.rotating_secrets, iter);
 }
 

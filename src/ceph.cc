@@ -205,13 +205,16 @@ void handle_notify(MMonObserveNotify *notify)
     {
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
-	AuthLibrary list;
-	::decode(list, p);
+	KeysServerData data;
+	::decode(data, p);
+	dout(0) << "   auth " << dendl;
+#if 0
 	// show the first class info
         map<EntityName, CryptoKey>::iterator mapiter = list.keys.secrets_begin();
 	if (mapiter != list.keys.secrets_end()) {
 	    dout(0) << "   auth " <<  mapiter->first.to_str() << dendl;
 	}
+#endif
       } else {
 	AuthLibEntry entry;
 

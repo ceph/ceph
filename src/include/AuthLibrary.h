@@ -26,8 +26,7 @@ struct AuthLibEntry {
   EntityName name;
   CryptoKey secret;
 
-  uint32_t service_id;
-  RotatingSecret rotating_secret;
+  bufferlist rotating_bl;
 
   void encode(bufferlist& bl) const {
     __s32 r = (__s32)rotating;
@@ -36,8 +35,7 @@ struct AuthLibEntry {
       ::encode(name, bl);
       ::encode(secret, bl);
     } else {
-      ::encode(service_id, bl);
-      ::encode(rotating_secret, bl);
+      ::encode(rotating_bl, bl);
     }
   }
   void decode(bufferlist::iterator& bl) {
@@ -48,12 +46,11 @@ struct AuthLibEntry {
       ::decode(name, bl);
       ::decode(secret, bl);
     } else {
-      ::decode(service_id, bl);
-      ::decode(rotating, bl);
+      ::decode(rotating_bl, bl);
     }
   }
 
-  AuthLibEntry() : rotating(false), service_id(0) {}
+  AuthLibEntry() : rotating(false) {}
 };
 WRITE_CLASS_ENCODER(AuthLibEntry)
 
@@ -61,6 +58,7 @@ typedef enum {
   AUTH_INC_NOP,
   AUTH_INC_ADD,
   AUTH_INC_DEL,
+  AUTH_INC_SET_ROTATING,
 } AuthLibIncOp;
 
 struct AuthLibIncremental {
@@ -76,7 +74,7 @@ struct AuthLibIncremental {
     __u32 _op;
     ::decode(_op, bl);
     op = (AuthLibIncOp)_op;
-    assert( op >= AUTH_INC_NOP && op <= AUTH_INC_DEL);
+    assert( op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
     ::decode(info, bl);
   }
 
@@ -86,7 +84,7 @@ struct AuthLibIncremental {
   }
 };
 WRITE_CLASS_ENCODER(AuthLibIncremental)
-
+#if 0
 struct AuthLibrary {
   version_t version;
   KeysServerData keys;
@@ -122,6 +120,7 @@ struct AuthLibrary {
   }
 };
 WRITE_CLASS_ENCODER(AuthLibrary)
+#endif
 
 inline ostream& operator<<(ostream& out, const AuthLibEntry& e)
 {

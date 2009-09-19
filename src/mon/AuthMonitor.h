@@ -25,15 +25,18 @@ using namespace std;
 #include "mon/Monitor.h"
 
 #include "include/AuthLibrary.h"
+#include "auth/KeysServer.h"
 
 class MMonCommand;
 class MAuthMon;
 
 class AuthMonitor : public PaxosService {
   void auth_usage(stringstream& ss);
-private:
   vector<AuthLibIncremental> pending_auth;
-  AuthLibrary pending_list, list;
+  KeysServer keys_server;
+  version_t last_rotating_ver;
+
+  void on_active();
 
   void create_initial(bufferlist& bl);
   bool update_from_paxos();
@@ -62,8 +65,10 @@ private:
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
   bool store_entry(AuthLibEntry& entry);
+
+  void check_rotate();
  public:
-  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
+  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0) { }
   void handle_request(MAuthMon *m);
   
   void tick();  // check state, take actions

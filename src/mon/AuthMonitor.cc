@@ -47,6 +47,21 @@ ostream& operator<<(ostream& out, AuthMonitor& pm)
   return out << "auth";
 }
 
+void AuthMonitor::check_rotate()
+{
+  AuthLibEntry entry;
+  if (!keys_server.updated_rotating(entry.rotating_bl, last_rotating_ver))
+    return;
+  dout(0) << "AuthMonitor::tick() updated rotating, now calling propose_pending" << dendl;
+
+  AuthLibIncremental inc;
+  inc.op = AUTH_INC_SET_ROTATING;
+  entry.rotating = true;
+  ::encode(entry, inc.info);
+  pending_auth.push_back(inc);
+  propose_pending();
+}
+
 /*
  Tick function to update the map based on performance every N seconds
 */
@@ -60,6 +75,18 @@ void AuthMonitor::tick()
 
   if (!mon->is_leader()) return; 
 
+  check_rotate();
+}
+
+void AuthMonitor::on_active()
+{
+  dout(0) << "AuthMonitor::on_active()" << dendl;
+
+  if (!mon->is_leader())
+    return;
+  keys_server.start_server(true);
+
+  check_rotate();
 }
 
 void AuthMonitor::create_initial(bufferlist& bl)
@@ -78,7 +105,6 @@ bool AuthMonitor::store_entry(AuthLibEntry& entry)
 
   entry.name.to_str(entry_str);
 
-
   bufferlist bl;
   ::encode(entry, bl);
   mon->store->put_bl_ss(bl, "auth_lib", entry_str.c_str());
@@ -90,27 +116,27 @@ bool AuthMonitor::store_entry(AuthLibEntry& entry)
 
 bool AuthMonitor::update_from_paxos()
 {
+  dout(0) << "AuthMonitor::update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
-  if (paxosv == list.version) return true;
-  assert(paxosv >= list.version);
+  version_t keys_ver = keys_server.get_ver();
+  if (paxosv == keys_ver) return true;
+  assert(paxosv >= keys_ver);
 
-  bufferlist blog;
-
-  if (list.version == 0 && paxosv > 1) {
+  if (keys_ver == 0 && paxosv > 1) {
     // startup: just load latest full map
     bufferlist latest;
     version_t v = paxos->get_latest(latest);
     if (v) {
       dout(7) << "update_from_paxos startup: loading summary e" << v << dendl;
       bufferlist::iterator p = latest.begin();
-      ::decode(list, p);
+      ::decode(keys_server, p);
     }
   } 
 
   // walk through incrementals
-  while (paxosv > list.version) {
+  while (paxosv > keys_ver) {
     bufferlist bl;
-    bool success = paxos->read(list.version+1, bl);
+    bool success = paxos->read(keys_ver+1, bl);
     assert(success);
 
     bufferlist::iterator p = bl.begin();
@@ -120,10 +146,20 @@ bool AuthMonitor::update_from_paxos()
     inc.decode_entry(entry);
     switch (inc.op) {
     case AUTH_INC_ADD:
-      list.add(entry);
+      if (entry.rotating) {
+        keys_server.add_secret(entry.name, entry.secret);
+      } else {
+        derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
+      }
       break;
     case AUTH_INC_DEL:
-      list.remove(entry.name);
+      keys_server.remove_secret(entry.name);
+      break;
+    case AUTH_INC_SET_ROTATING:
+      {
+        dout(0) << "AuthMonitor::update_from_paxos: decode_rotating" << dendl;
+        keys_server.decode_rotating(entry.rotating_bl);
+      }
       break;
     case AUTH_INC_NOP:
       break;
@@ -131,11 +167,12 @@ bool AuthMonitor::update_from_paxos()
       assert(0);
     }
 
-    list.version++;
+    keys_ver++;
+    keys_server.set_ver(keys_ver);
   }
 
   bufferlist bl;
-  ::encode(list, bl);
+  ::encode(keys_server, bl);
   paxos->stash_latest(paxosv, bl);
 
   return true;
@@ -144,7 +181,6 @@ bool AuthMonitor::update_from_paxos()
 void AuthMonitor::create_pending()
 {
   pending_auth.clear();
-  pending_list = list;
   dout(10) << "create_pending v " << (paxos->get_version() + 1) << dendl;
 }
 
@@ -202,7 +238,7 @@ bool AuthMonitor::preprocess_auth(MAuthMon *m)
   for (deque<AuthLibEntry>::iterator p = m->info.begin();
        p != m->info.end();
        p++) {
-    if (!pending_list.contains((*p).name))
+    if (!keys_server.contains((*p).name))
       num_new++;
   }
   if (!num_new) {
@@ -224,12 +260,9 @@ bool AuthMonitor::prepare_auth(MAuthMon *m)
   for (deque<AuthLibEntry>::iterator p = m->info.begin();
        p != m->info.end(); p++) {
     dout(10) << " writing auth " << *p << dendl;
-    if (!pending_list.contains((*p).name)) {
-      AuthLibIncremental inc;
-      ::encode(*p, inc.info);
-      pending_list.add(*p);
-      pending_auth.push_back(inc);
-    }
+    AuthLibIncremental inc;
+    ::encode(*p, inc.info);
+    pending_auth.push_back(inc);
   }
 
   paxos->wait_for_commit(new C_Auth(this, m, m->get_orig_source_inst()));
@@ -304,11 +337,16 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
         goto done;
       }
 
+      if (entry.rotating) {
+        ss << "can't apply a rotating key";
+        rs = -EINVAL;
+        goto done;
+      }
+
       AuthLibIncremental inc;
       dout(0) << "storing auth for " << entity_name  << dendl;
       ::encode(entry, inc.info);
       inc.op = AUTH_INC_ADD;
-      pending_list.add(entry);
       pending_auth.push_back(inc);
       ss << "updated";
       getline(ss, rs);
@@ -318,7 +356,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       string name = m->cmd[2];
       AuthLibEntry entry;
       entry.name.from_str(name);
-      if (!list.keys.contains(entry.name)) {
+      if (!keys_server.contains(entry.name)) {
         ss << "couldn't find entry " << name;
         rs = -ENOENT;
         goto done;
@@ -326,7 +364,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       AuthLibIncremental inc;
       ::encode(entry, inc.info);
       inc.op = AUTH_INC_DEL;
-      pending_list.add(entry);
       pending_auth.push_back(inc);
 
       ss << "updated";
@@ -334,19 +371,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     } else if (m->cmd[1] == "list") {
-      map<EntityName, CryptoKey>::iterator mapiter = list.keys.secrets_begin();
-      if (mapiter != list.keys.secrets_end()) {
-        ss << "installed auth entries: " << std::endl;      
-
-        while (mapiter != list.keys.secrets_end()) {
-          const EntityName& name = mapiter->first;
-          ss << name.to_str() << std::endl;
-          
-          ++mapiter;
-       }
-      } else {
-        ss << "no installed auth entries!";
-      }
+      keys_server.list_secrets(ss);
       err = 0;
       goto done;
     } else {

@@ -40,7 +40,8 @@ WRITE_CLASS_ENCODER(RotatingSecret);
 
 
 struct KeysServerData {
-  bool initialized;
+  version_t version;
+  version_t rotating_ver;
 
   /* for each entity */
   map<EntityName, CryptoKey> secrets;
@@ -48,18 +49,17 @@ struct KeysServerData {
   /* for each service type */
   map<uint32_t, RotatingSecret> rotating_secrets;
 
-  KeysServerData() : initialized(false) {}
+  KeysServerData() : version(0), rotating_ver(0) {}
 
   void encode(bufferlist& bl) const {
-    __s32 i = (__s32)initialized;
-    ::encode(i, bl);
+    ::encode(version, bl);
+    ::encode(rotating_ver, bl);
     ::encode(secrets, bl);
     ::encode(rotating_secrets, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    __s32 i;
-    ::decode(i, bl);
-    initialized = (bool)i;
+    ::decode(version, bl);
+    ::decode(rotating_ver, bl);
     ::decode(secrets, bl);
     ::decode(rotating_secrets, bl);
   }
@@ -107,20 +107,19 @@ class KeysServer {
 
   KeysServerData data;
 
-  Mutex rotating_lock;
-  Mutex secrets_lock;
+  Mutex lock;
 
   SafeTimer timer;
   Context *rotate_event;
 
   bool generate_secret(CryptoKey& secret);
   void _rotate_secret(uint32_t service_id);
-  void generate_all_rotating_secrets();
+  void _generate_all_rotating_secrets();
 public:
   KeysServer();
 
   bool get_secret(EntityName& name, CryptoKey& secret);
-  int start_server();
+  int start_server(bool init);
   void rotate_timeout(double timeout);
 
   /* get current secret for specific service type */
@@ -134,6 +133,39 @@ public:
   void decode(bufferlist::iterator& bl) {
     ::decode(data, bl);
   }
+  bool contains(EntityName& name);
+  void list_secrets(stringstream& ss);
+  version_t get_ver() {
+    Mutex::Locker l(lock);
+    return data.version;    
+  }
+
+  void set_ver(version_t ver) {
+    Mutex::Locker l(lock);
+    data.version = ver;
+  }
+
+  void add_secret(const EntityName& name, CryptoKey& secret) {
+    Mutex::Locker l(lock);
+    data.add_secret(name, secret);
+  }
+
+  void remove_secret(const EntityName& name) {
+    Mutex::Locker l(lock);
+    data.remove_secret(name);
+  }
+
+  void add_rotating_secret(uint32_t service_id, RotatingSecret& secret) {
+    Mutex::Locker l(lock);
+    data.add_rotating_secret(service_id, secret);
+  }
+  void clone_to(KeysServerData& dst) {
+    Mutex::Locker l(lock);
+    dst = data;
+  }
+
+  bool updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver);
+  void decode_rotating(bufferlist& rotating_bl);
 };
 WRITE_CLASS_ENCODER(KeysServer);
 
