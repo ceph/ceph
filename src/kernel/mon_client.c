@@ -634,7 +634,7 @@ static struct ceph_msg *mon_alloc_msg(struct ceph_connection *con,
 				      struct ceph_msg_header *hdr)
 {
 	struct ceph_mon_client *monc = con->private;
-	int type = le32_to_cpu(hdr->type);
+	int type = le16_to_cpu(hdr->type);
 
 	switch (type) {
 	case CEPH_MSG_CLIENT_MOUNT_ACK:

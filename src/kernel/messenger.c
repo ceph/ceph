@@ -970,7 +970,7 @@ static int read_partial_ack(struct ceph_connection *con)
 static void process_ack(struct ceph_connection *con)
 {
 	struct ceph_msg *m;
-	u32 ack = le32_to_cpu(con->in_temp_ack);
+	u64 ack = le64_to_cpu(con->in_temp_ack);
 	u64 seq;
 
 	mutex_lock(&con->out_mutex);
