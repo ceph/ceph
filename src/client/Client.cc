@@ -1050,7 +1050,8 @@ void Client::send_request(MetaRequest *request, int mds)
   dout(10) << "send_request rebuilding request " << request->get_tid()
 	   << " for mds" << mds << dendl;
   r = make_request_from_Meta(request);
-  r->set_dentry_wanted();
+  if (request->dentry)
+    r->set_dentry_wanted();
   if (request->got_unsafe)
     r->set_replayed_op();
 
