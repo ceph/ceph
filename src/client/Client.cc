@@ -2645,14 +2645,14 @@ int Client::mount()
 
   objecter->init();
 
+  monclient->sub_want("mdsmap", mdsmap->get_epoch());
+  monclient->renew_subs();
+
   mounted = true;
   
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << dendl;
-
-  monclient->sub_want("mdsmap", mdsmap->get_epoch());
-  monclient->renew_subs();
 
   
   // hack: get+pin root inode.

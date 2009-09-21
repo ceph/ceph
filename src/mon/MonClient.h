@@ -94,26 +94,17 @@ private:
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-public:
-  void renew_subs() {
-    Mutex::Locker l(monc_lock);
-    _renew_subs();
-  }
-  void sub_want(nstring what, version_t have) {
-    Mutex::Locker l(monc_lock);
+  void _sub_want(nstring what, version_t have) {
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
-  void sub_want_onetime(nstring what, version_t have) {
-    Mutex::Locker l(monc_lock);
+  void _sub_want_onetime(nstring what, version_t have) {
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
-      _renew_subs();
     }
   }
-  void sub_got(nstring what, version_t have) {
-    Mutex::Locker l(monc_lock);
+  void _sub_got(nstring what, version_t have) {
     if (sub_have.count(what)) {
       if (sub_have[what].onetime)
 	sub_have.erase(what);
@@ -121,6 +112,25 @@ public:
 	sub_have[what].have = have;
     }
   }
+
+public:
+  void renew_subs() {
+    Mutex::Locker l(monc_lock);
+    _renew_subs();
+  }
+  void sub_want(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
+    _sub_want(what, have);
+  }
+  void sub_want_onetime(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
+    _sub_want_onetime(what, have);
+  }
+  void sub_got(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
+    _sub_got(what, have);
+  }
+  
 
  public:
   MonClient() : messenger(NULL), cur_mon(-1),

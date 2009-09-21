@@ -382,8 +382,6 @@ int MDS::init()
   monc->init();
   monc->get_monmap();
 
-  monc->sub_want("mdsmap", 0);
-
   mds_lock.Lock();
 
   // starting beacon.  this will induce an MDSMap from the monitor
@@ -393,7 +391,10 @@ int MDS::init()
   messenger->set_myname(entity_name_t::MDS(whoami));
 
   objecter->init();
-   
+
+  monc->sub_want("mdsmap", 0);
+  monc->renew_subs();
+
   // schedule tick
   reset_tick();
 

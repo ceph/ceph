@@ -203,6 +203,8 @@ void MonClient::handle_monmap(MMonMap *m)
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
 
+  _sub_got("monmap", monmap.get_epoch());
+
   map_cond.Signal();
   want_monmap = false;
 
@@ -259,6 +261,8 @@ int MonClient::mount(double mount_timeout)
 
   if (clientid >= 0) {
     dout(5) << "mount success, client" << clientid << dendl;
+
+    _sub_want("monmap", monmap.get_epoch());
   }
 
   return mount_err;
