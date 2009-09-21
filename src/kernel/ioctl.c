@@ -1,3 +1,5 @@
+#include <linux/in.h>
+
 #include "ioctl.h"
 #include "super.h"
 #include "ceph_debug.h"
@@ -84,6 +86,55 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	return err;
 }
 
+static long ceph_ioctl_get_dataloc(struct file *file, void __user *arg)
+{
+	struct ceph_ioctl_dataloc dl;
+	struct inode *inode = file->f_dentry->d_inode;
+	struct ceph_inode_info *ci = ceph_inode(inode);
+	struct ceph_osd_client *osdc = &ceph_client(inode->i_sb)->osdc;
+	u64 len = 1, olen;
+	u64 tmp;
+	char oid[80];
+	struct ceph_object_layout ol;
+	union ceph_pg pgid;
+
+	/* copy and validate */
+	if (copy_from_user(&dl, arg, sizeof(dl)))
+		return -EFAULT;
+
+	down_read(&osdc->map_sem);
+	ceph_calc_file_object_mapping(&ci->i_layout, dl.file_offset, &len,
+				      &dl.object_no, &dl.object_offset, &olen);
+	dl.file_offset -= dl.object_offset;
+	dl.object_size = ceph_file_layout_object_size(ci->i_layout);
+	dl.block_size = ceph_file_layout_su(ci->i_layout);
+
+	/* block_offset = object_offset % block_size */
+	tmp = dl.object_offset;
+	dl.block_offset = do_div(tmp, dl.block_size);
+
+	sprintf(oid, "%llx.%08llx", ceph_ino(inode), dl.object_no);
+	ceph_calc_object_layout(&ol, oid, &ci->i_layout, osdc->osdmap);
+
+	pgid.pg64 = le64_to_cpu(ol.ol_pgid);
+	dl.osd = ceph_calc_pg_primary(osdc->osdmap, pgid);
+	if (dl.osd >= 0) {
+		struct ceph_entity_addr *a =
+			ceph_osd_addr(osdc->osdmap, dl.osd);
+		if (a)
+			memcpy(&dl.osd_addr, &a->ipaddr, sizeof(dl.osd_addr));
+	} else {
+		memset(&dl.osd_addr, 0, sizeof(dl.osd_addr));
+	}
+	up_read(&osdc->map_sem);
+
+	/* send result back to user */
+	if (copy_to_user(arg, &dl, sizeof(dl)))
+		return -EFAULT;
+
+	return 0;
+}
+
 long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	dout("ioctl file %p cmd %u arg %lu\n", file, cmd, arg);
@@ -93,6 +144,9 @@ long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case CEPH_IOC_SET_LAYOUT:
 		return ceph_ioctl_set_layout(file, (void __user *)arg);
+
+	case CEPH_IOC_GET_DATALOC:
+		return ceph_ioctl_get_dataloc(file, (void __user *)arg);
 	}
 	return -ENOTTY;
 }

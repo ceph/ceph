@@ -63,6 +63,9 @@ testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
 testmsgr_LDADD = libcommon.a -lcrypto
 bin_PROGRAMS += testmsgr
 
+test_ioctls_SOURCES = client/test_ioctls.c
+bin_PROGRAMS += test_ioctls
+
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
@@ -253,14 +256,14 @@ install-data-local:
 	mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	$(install_sh_SCRIPT) -m 0600 sample.ceph.conf $(DESTDIR)$(sysconfdir)/ceph/sample.ceph.conf
 	mkdir -p $(DESTDIR)$(includedir)/ceph
-	$(install_sh_SCRIPT) -m 0600 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
+	$(install_sh_SCRIPT) -m 0644 client/libceph.h $(DESTDIR)$(includedir)/ceph/libceph.h
 	mkdir -p $(DESTDIR)$(includedir)/rados
-	$(install_sh_SCRIPT) -m 0600 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
+	$(install_sh_SCRIPT) -m 0644 include/librados.h $(DESTDIR)$(includedir)/rados/librados.h
 	mkdir -p $(DESTDIR)$(includedir)/crush
-	$(install_sh_SCRIPT) -m 0600 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
-	$(install_sh_SCRIPT) -m 0600 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
-	$(install_sh_SCRIPT) -m 0600 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
-	$(install_sh_SCRIPT) -m 0600 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
+	$(install_sh_SCRIPT) -m 0644 crush/hash.h $(DESTDIR)$(includedir)/crush/hash.h
+	$(install_sh_SCRIPT) -m 0644 crush/crush.h $(DESTDIR)$(includedir)/crush/crush.h
+	$(install_sh_SCRIPT) -m 0644 crush/types.h $(DESTDIR)$(includedir)/crush/types.h
+	$(install_sh_SCRIPT) -m 0644 crush/mapper.h $(DESTDIR)$(includedir)/crush/mapper.h
 
 .make_last_ver:
 	./make_version --check
@@ -444,6 +447,7 @@ noinst_HEADERS = \
 	include/LogEntry.h\
 	include/assert.h\
         include/atomic.h\
+	include/base64.h\
         include/bitmapper.h\
         include/blobhash.h\
         include/buffer.h\
@@ -676,7 +680,7 @@ noinst_HEADERS = \
         mon/PGMonitor.h\
         mon/Paxos.h\
         mon/PaxosService.h\
-        mon/SubscriptionMap.h\
+        mon/Session.h\
         mon/mon_types.h\
 	mount/mtab.c\
         msg/Dispatcher.h\

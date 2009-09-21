@@ -31,6 +31,7 @@
 #include "MonMap.h"
 #include "Elector.h"
 #include "Paxos.h"
+#include "Session.h"
 
 #include "osd/OSDMap.h"
 
@@ -129,6 +130,15 @@ public:
   friend class LogMonitor;
 
 
+  // -- sessions --
+  SessionMap session_map;
+
+  void check_subs();
+  void check_sub(Subscription *sub);
+
+  void send_latest_monmap(entity_inst_t i);
+  
+
   // messages
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
@@ -170,6 +180,9 @@ public:
 
  private:
   bool ms_dispatch(Message *m);
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

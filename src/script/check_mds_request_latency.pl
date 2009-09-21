@@ -18,20 +18,21 @@ while (<>) {
     chomp;
     my ($stamp) = /^\S+ (\S+)/;
 
-    my ($req,$desc) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \d+ \S+ client_request\((\S+) ([^\)]+)/;
+    my ($req,$desc) = /\<\=\= client\d+ \S+ \d+ \=\=\=\= client_request\((\S+) ([^\)]+)/;
     
     if (defined $req) {
-	#print "$req $len ($r{$req} - $stamp)\n";
+	#print "$req\n"; # ($r{$req} - $stamp)\n";
 	$r{$req} = $stamp;
 	$what{$req} = $desc;
 	next;
     }
 
-    ($req,$desc) = /\d+ -- \S+ mds\d+ ... client\d+ \S+ \S+ client_reply\((\S+) ([^\)]+)/;
+    my $who;
+    ($who, $req,$desc) = /\-\-\> (client\d+) \S+ \-\- client_reply\((\S+) ([^\)]+)/;
     if (defined $req) {
+	$req =~ s/\?\?\?/$who/;
 	if (exists $r{$req}) {
 	    my $len = tosec($stamp) - tosec($r{$req});
-	    
 	    #print "$req $len ($r{$req} - $stamp)\n";
 	    $lat_req{$len} = $req;
 	    

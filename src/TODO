@@ -1,54 +1,21 @@
-v0.12
-- mapping_set_error on failed writepage
-- document correct debugfs mount point
-- simplify layout/striping ioctls
-- removed bad kmalloc in writepages
-- use mempools for writeback allocations where appropriate (*)
-- fixed a problem with capability, snap metadata writeback
-- cleaned up f(data)sync wrt metadata writeback
-
-v0.13
-/- osd active during backlog generation
-/- osdmap: allow explicit pg 'override' mappings
-/- kclient: fixed vmalloc() usage (use for incoming msgs, GFP_NOFS)
-/- http gw
-/- kclient: fix sync read vs EOF
-/- uclient: fix sync read vs EOF
-/- [uk]client lseek SEEK_END
-/- kclient msg pools
-/  - don't reuse incoming cap message for revoke ack
-/  - retry/requeue cap send on ENOMEM
-/- mds: misc bugfixes for multiclient file access
-
-v0.14
-/- dir backpointer update on rename (fsck assist)
-/- uclient bugs
-/- msgr: unidirectional option (client->mon, client->mds, client->osd)
-/- mon subscriptions to get osd, mds map updates.  single mon connection.
-/- many libceph/uclient fixes (version api, readahead, hadoop client improvements)
-/- deb packages fixed up
-
 v0.15
+/- clean up msgr protocol checks
+/- kclient: checkpatch fixes, cleanups.  allow msg revoke (nice interface cleanup)
+/- monclient fixes; ceph detects monitor session drop
+/- msgr: protocol check cleanups; ack seq # fix; 
+/- debian: radosgw package, fix header perms
+/- kclient: GET_DATALOC ioctl
+
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
-- radosgw
-- uclient: fix write vs max_size?
-
 - mds: put migration vectors in mdsmap
-
-- msgr
-  - check protocols during connection handshake, not per-message?
-- kclient msgr
-  - allow msg to be revoked from connection (per-msg queue_seq, mutex)
-  - and then kill maybe_dup_msg
-
 
 bugs
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
-- ceph needs to detect monitor session drop
 
 later
+- mon cluster expansion, contraction
 - authentication
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
@@ -67,8 +34,9 @@ mount.ceph
 - should look at multiple A records, pass all IPs to kernel
 
 rados
-- usage accounting
 - make rest interface superset of s3?
+  - create/delete snapshots
+  - list, access snapped version
 - perl swig wrapper
 - 'rados call foo.bar'?
 - merge pgs
@@ -90,15 +58,14 @@ repair
 - mds scrubbing
 
 kclient
+- make caps reservations per-client
 - fix up ESTALE handling
-- allow struct ceph_msg revoke from a connection
 - don't retry on ENOMEM on non-nofail requests in kick_requests
 - make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
-- try to reconnect after being disconnected from the mds?
 - inotify for updates from other clients?
 
 vfs issues

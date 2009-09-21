@@ -61,6 +61,10 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+
   Objecter *objecter;
 
   Mutex lock;
@@ -296,8 +300,6 @@ bool RadosClient::init()
 
   rank.start(1);
 
-  monclient.link_dispatcher(this);
-
   objecter = new Objecter(messenger, &monclient, &osdmap, lock);
   if (!objecter)
     return false;
@@ -344,25 +346,8 @@ RadosClient::~RadosClient()
 
 bool RadosClient::ms_dispatch(Message *m)
 {
-  bool ret;
-
-  if (m->get_orig_source().is_mon() &&
-      m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
-    dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-  if (m->get_orig_source().is_osd() &&
-      m->get_header().osdc_protocol != CEPH_OSDC_PROTOCOL) {
-    dout(0) << "osdc protocol v " << (int)m->get_header().osdc_protocol << " != my " << CEPH_OSDC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-
   lock.Lock();
-  ret = _dispatch(m);
+  bool ret = _dispatch(m);
   lock.Unlock();
   return ret;
 }

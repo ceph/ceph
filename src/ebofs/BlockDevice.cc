@@ -300,7 +300,8 @@ block_t BlockDevice::get_num_blocks()
 #endif
     } else {
       // hmm, try stat!
-      dout(10) << "get_num_blocks ioctl(2) failed with " << errno << " " << strerror(errno) << ", using stat(2)" << dendl;
+      char buf[80];
+      dout(10) << "get_num_blocks ioctl(2) failed with " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << ", using stat(2)" << dendl;
       struct stat st;
       fstat(fd, &st);
       uint64_t bytes = st.st_size;
@@ -714,9 +715,10 @@ int BlockDevice::_write(int fd, unsigned bno, unsigned num, bufferlist& bl)
     int r = ::writev(fd, iov, n);
     
     if (r < 0) {
+      char buf[80];
       dout(1) << "couldn't write bno " << bno << " num " << num 
 	      << " (" << len << " bytes) in " << n << " iovs,  r=" << r 
-	      << " errno " << errno << " " << strerror(errno) << dendl;
+	      << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       dout(1) << "bl is " << bl << dendl;
       assert(0);
     } else if (r < (int)len) {
@@ -761,7 +763,8 @@ int BlockDevice::open(kicker *idle)
   // open?
   fd = open_fd();
   if (fd < 0) {
-    dout(1) << "open failed, r = " << fd << " " << strerror(errno) << dendl;
+    char buf[80];
+    dout(1) << "open failed, r = " << fd << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     fd = 0;
     return -1;
   }

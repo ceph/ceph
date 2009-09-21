@@ -127,7 +127,7 @@ private:
     };
 
     int sd;
-    int new_sd;
+    int peer_type;
     entity_addr_t peer_addr;
     Policy policy;
     bool lossy_rx;
@@ -150,8 +150,8 @@ private:
     bool keepalive;
     
     __u32 connect_seq, peer_global_seq;
-    __u32 out_seq;
-    __u32 in_seq, in_seq_acked;
+    __u64 out_seq;
+    __u64 in_seq, in_seq_acked;
     
     int accept();   // server handshake
     int connect();  // client handshake
@@ -160,8 +160,8 @@ private:
 
     Message *read_message();
     int write_message(Message *m);
-    int do_sendmsg(int sd, struct msghdr *msg, int len);
-    int write_ack(unsigned s);
+    int do_sendmsg(int sd, struct msghdr *msg, int len, bool more=false);
+    int write_ack(__u64 s);
     int write_keepalive();
 
     void fault(bool silent=false, bool reader=false);
@@ -191,7 +191,7 @@ private:
   public:
     Pipe(SimpleMessenger *r, int st) : 
       rank(r),
-      sd(-1),
+      sd(-1), peer_type(-1),
       lock("SimpleMessenger::Pipe::lock"),
       state(st), 
       connection_state(new Connection),
@@ -323,28 +323,34 @@ private:
     }
 
     enum { BAD_REMOTE_RESET, BAD_RESET, BAD_FAILED };
-    list<entity_addr_t> remote_reset_q;
-    list<entity_addr_t> reset_q;
-    list<pair<Message*,entity_addr_t> > failed_q;
+    list<pair<Connection*,entity_addr_t> > remote_reset_q;
+    list<pair<Connection*,entity_addr_t> > reset_q;
+    struct fail_item {
+      Connection *con;
+      Message *msg;
+      entity_addr_t addr;
+      fail_item(Connection *c, Message *m, entity_addr_t a) : con(c), msg(m), addr(a) {}
+    };
+    list<fail_item> failed_q;
 
-    void queue_remote_reset(entity_addr_t a) {
+    void queue_remote_reset(Connection *con, entity_addr_t a) {
       lock.Lock();
-      remote_reset_q.push_back(a);
+      remote_reset_q.push_back(pair<Connection*,entity_addr_t>(con, a));
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_REMOTE_RESET);
       cond.Signal();
       lock.Unlock();
     }
-    void queue_reset(entity_addr_t a) {
+    void queue_reset(Connection *con, entity_addr_t a) {
       lock.Lock();
-      reset_q.push_back(a);
+      reset_q.push_back(pair<Connection*,entity_addr_t>(con, a));
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
       cond.Signal();
       lock.Unlock();
     }
-    void queue_failure(Message *m, entity_addr_t a) {
+    void queue_failure(Connection *con, Message *m, entity_addr_t a) {
       lock.Lock();
       m->get();
-      failed_q.push_back(pair<Message*,entity_addr_t>(m, a));
+      failed_q.push_back(fail_item(con, m, a));
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
       cond.Signal();
       lock.Unlock();
@@ -422,7 +428,7 @@ private:
   Mutex global_seq_lock;
   __u32 global_seq;
       
-  Pipe *connect_rank(const entity_addr_t& addr, const Policy& p);
+  Pipe *connect_rank(const entity_addr_t& addr, int type);
 
   const entity_addr_t &get_rank_addr() { return rank_addr; }
 

@@ -33,8 +33,8 @@ class Timer;
 
 
 class Messenger {
- private:
-  Dispatcher          *dispatcher;
+private:
+  list<Dispatcher*> dispatchers;
 
 protected:
   entity_name_t _my_name;
@@ -43,8 +43,7 @@ protected:
   atomic_t nref;
 
  public:
-  Messenger(entity_name_t w) : dispatcher(0), 
-			       default_send_priority(CEPH_MSG_PRIO_DEFAULT),
+  Messenger(entity_name_t w) : default_send_priority(CEPH_MSG_PRIO_DEFAULT),
 			       nref(1) {
     _my_name = w;
   }
@@ -77,20 +76,52 @@ protected:
   virtual int get_dispatch_queue_len() { return 0; };
 
   // setup
-  void set_dispatcher(Dispatcher *d) { 
-    if (!dispatcher) {
-      dispatcher = d; 
-      ready(); 
-    }
+  void add_dispatcher_head(Dispatcher *d) { 
+    bool first = dispatchers.empty();
+    dispatchers.push_front(d);
+    if (first)
+      ready();
   }
-  Dispatcher *get_dispatcher() { return dispatcher; }
+  void add_dispatcher_tail(Dispatcher *d) { 
+    bool first = dispatchers.empty();
+    dispatchers.push_back(d);
+    if (first)
+      ready();
+  }
+
   virtual void ready() { }
-  bool is_ready() { return dispatcher != 0; }
+  bool is_ready() { return !dispatchers.empty(); }
 
   // dispatch incoming messages
-  virtual void dispatch(Message *m) {
-    assert(dispatcher);
-    dispatcher->ms_deliver_dispatch(m);
+  void ms_deliver_dispatch(Message *m) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_dispatch(m))
+	return;
+    generic_dout(0) << "unhandled message " << m << " " << *m
+		    << " from " << m->get_orig_source_inst()
+		    << dendl;
+    assert(0);
+  }
+  void ms_deliver_handle_reset(Connection *con, const entity_addr_t& peer) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_handle_reset(con, peer))
+	return;
+  }
+  void ms_deliver_handle_remote_reset(Connection *con, const entity_addr_t& peer) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_remote_reset(con, peer);
+  }
+  void ms_deliver_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_failure(con, m, peer);
   }
 
   // shutdown

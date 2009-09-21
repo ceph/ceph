@@ -230,34 +230,28 @@ void handle_notify(MMonObserveNotify *notify)
   map_ver[notify->machine_id] = notify->ver;
 }
 
-static void send_observe_requests(bool);
-static bool is_timeout = false;
+static void send_observe_requests();
 
 class C_ObserverRefresh : public Context {
 public:
   bool newmon;
   C_ObserverRefresh(bool n) : newmon(n) {}
   void finish(int r) {
-    is_timeout = false;
-    send_observe_requests(newmon);
+    send_observe_requests();
   }
 };
 
-static void send_observe_requests(bool newmon)
+static void send_observe_requests()
 {
-  dout(1) << "send_observe_requests " << newmon << dendl;
+  dout(1) << "send_observe_requests " << dendl;
 
-  if (is_timeout)
-    return;
-
-  int mon = mc.monmap.pick_mon(newmon);
   bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
     if (registered.count(i))
       continue;
     MMonObserve *m = new MMonObserve(mc.monmap.fsid, i, map_ver[i]);
-    dout(1) << "mon" << mon << " <- observe " << get_paxos_name(i) << dendl;
-    messenger->send_message(m, mc.monmap.get_inst(mon));
+    dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
+    mc.send_mon_message(m);
     sent = true;
   }
 
@@ -269,7 +263,7 @@ static void send_observe_requests(bool newmon)
     dout(1) << " refresh after " << seconds << " with same mon" << dendl;
     timer.add_event_after(seconds, new C_ObserverRefresh(false));
   } else {
-    is_timeout = true;
+    //is_timeout = true;
     dout(1) << " refresh after " << retry_seconds << " with new mon" << dendl;
     timer.add_event_after(retry_seconds, new C_ObserverRefresh(true));
   }
@@ -300,15 +294,13 @@ Context *event = 0;
 
 void get_status(bool newmon)
 {
-  int mon = mc.monmap.pick_mon(newmon);
-
   vector<string> vcmd(2);
   vcmd[0] = prefix[which];
   vcmd[1] = "stat";
   
   MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
   m->cmd.swap(vcmd);
-  messenger->send_message(m, mc.monmap.get_inst(mon));
+  mc.send_mon_message(m);
 
   event = new C_Refresh;
   timer.add_event_after(.2, event);
@@ -361,6 +353,17 @@ void handle_ack(MMonCommandAck *ack)
   }
 }
 
+void send_command()
+{
+  MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
+  m->cmd = pending_cmd;
+  m->get_data() = pending_bl;
+
+  generic_dout(0) << "mon" << " <- " << pending_cmd << dendl;
+  mc.send_mon_message(m);
+}
+
+
 class Admin : public Dispatcher {
   bool ms_dispatch(Message *m) {
     switch (m->get_type()) {
@@ -382,37 +385,21 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  void ms_handle_reset(const entity_addr_t& peer, entity_name_t last) {
-    if (observe) {
-      lock.Lock();
-      send_observe_requests(true);
-      lock.Unlock();
-    }
-  }
-} dispatcher;
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) {}
 
-void send_command();
-
-struct C_Resend : public Context {
-  void finish(int) {
-    mc.monmap.pick_mon(true);  // pick a new mon
-    if (!reply)
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) {
+    lock.Lock();
+    if (observe)
+      send_observe_requests();
+    if (pending_cmd.size())
       send_command();
+    lock.Unlock();
+    return true;
   }
-};
-void send_command()
-{
-  MMonCommand *m = new MMonCommand(mc.monmap.fsid, last_seen_version);
-  m->cmd = pending_cmd;
-  m->get_data() = pending_bl;
 
-  int mon = mc.monmap.pick_mon();
-  generic_dout(0) << "mon" << mon << " <- " << pending_cmd << dendl;
-  messenger->send_message(m, mc.monmap.get_inst(mon));
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
 
-  resend_event = new C_Resend;
-  timer.add_event_after(15.0, resend_event);
-}
+} dispatcher;
 
 int do_command(vector<string>& cmd, bufferlist& bl, string& rs, bufferlist& rbl)
 {
@@ -548,7 +535,8 @@ int do_cli()
       if (out.read_file(infile) == 0) {
 	cout << "read " << out.length() << " from " << infile << std::endl;
       } else {
-	cerr << "couldn't read from " << infile << ": " << strerror(errno) << std::endl;
+	char buf[80];
+	cerr << "couldn't read from " << infile << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
 	continue;
       }
     }
@@ -645,13 +633,14 @@ int main(int argc, const char **argv, const char *envp[])
   SimpleMessenger rank;
   rank.bind();
   messenger = rank.register_entity(entity_name_t::ADMIN());
-  messenger->set_dispatcher(&dispatcher);
+  messenger->add_dispatcher_head(&dispatcher);
 
   rank.start();
   rank.set_default_policy(SimpleMessenger::Policy::lossy_fail_after(1.0));
 
   mc.set_messenger(messenger);
-  dispatcher.link_dispatcher(&mc);
+  mc.init();
+
   if (mc.get_monmap() < 0)
     return -1;
 
@@ -662,7 +651,7 @@ int main(int argc, const char **argv, const char *envp[])
   }
   if (observe) {
     lock.Lock();
-    send_observe_requests(true);
+    send_observe_requests();
     lock.Unlock();
   }
   if (!watch && !observe) {

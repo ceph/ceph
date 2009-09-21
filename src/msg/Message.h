@@ -146,10 +146,12 @@ struct RefCountedObject {
   virtual ~RefCountedObject() {}
   
   RefCountedObject *get() {
+    //generic_dout(0) << "RefCountedObject::get " << this << " " << nref.test() << " -> " << (nref.test() + 1) << dendl;
     nref.inc();
     return this;
   }
   void put() {
+    //generic_dout(0) << "RefCountedObject::put " << this << " " << nref.test() << " -> " << (nref.test() - 1) << dendl;
     if (nref.dec() == 0)
       delete this;
   }
@@ -163,8 +165,11 @@ struct Connection : public RefCountedObject {
 public:
   Connection() : nref(1), lock("Connection::lock"), priv(NULL) {}
   ~Connection() {
-    if (priv)
+    //generic_dout(0) << "~Connection " << this << dendl;
+    if (priv) {
+      //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;
       priv->put();
+    }
   }
 
   Connection *get() {
@@ -180,7 +185,7 @@ public:
     Mutex::Locker l(lock);
     if (priv)
       priv->put();
-    priv = o->get();
+    priv = o;
   }
   RefCountedObject *get_priv() {
     Mutex::Locker l(lock);

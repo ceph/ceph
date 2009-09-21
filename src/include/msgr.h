@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v016"
+#define CEPH_BANNER "ceph v019"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -93,6 +93,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_MSG          10  /* message */
 #define CEPH_MSGR_TAG_ACK          11  /* message ack */
 #define CEPH_MSGR_TAG_KEEPALIVE    12  /* just a keepalive byte! */
+#define CEPH_MSGR_TAG_BADPROTOVER  13  /* bad protocol version */
 
 
 /*
@@ -102,6 +103,7 @@ struct ceph_msg_connect {
 	__le32 host_type;  /* CEPH_ENTITY_TYPE_* */
 	__le32 global_seq;
 	__le32 connect_seq;
+	__le32 protocol_version;
 	__u8  flags;
 } __attribute__ ((packed));
 
@@ -109,6 +111,7 @@ struct ceph_msg_connect_reply {
 	__u8 tag;
 	__le32 global_seq;
 	__le32 connect_seq;
+	__le32 protocol_version;
 	__u8 flags;
 } __attribute__ ((packed));
 
@@ -129,10 +132,6 @@ struct ceph_msg_header {
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 
-	__u8 mon_protocol, monc_protocol;  /* protocol versions, */
-	__u8 osd_protocol, osdc_protocol;  /* internal and public */
-	__u8 mds_protocol, mdsc_protocol;
-
 	struct ceph_entity_inst src, orig_src;
 	__le32 dst_erank;
 	__le32 crc;       /* header crc32c */
@@ -147,11 +146,11 @@ struct ceph_msg_header {
  * follows data payload
  */
 struct ceph_msg_footer {
-	__le32 flags;
 	__le32 front_crc, middle_crc, data_crc;
+	__u8 flags;
 } __attribute__ ((packed));
 
-#define CEPH_MSG_FOOTER_ABORTED   (1<<0)   /* drop this message */
+#define CEPH_MSG_FOOTER_COMPLETE  (1<<0)   /* msg wasn't aborted */
 #define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
 
 

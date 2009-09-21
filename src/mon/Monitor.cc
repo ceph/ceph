@@ -127,8 +127,8 @@ void Monitor::init()
   logclient.set_synchronous(true);
   
   // i'm ready!
-  messenger->set_dispatcher(this);
-  link_dispatcher(&logclient);
+  messenger->add_dispatcher_tail(this);
+  messenger->add_dispatcher_head(&logclient);
   
   // start ticker
   reset_tick();
@@ -161,8 +161,6 @@ void Monitor::shutdown()
   timer.cancel_all();
   timer.join();  
 
-  unlink_dispatcher(&logclient);
-  
   // die.
   messenger->shutdown();
 }
@@ -362,31 +360,6 @@ void Monitor::stop_cluster()
 
 bool Monitor::ms_dispatch(Message *m)
 {
-  // verify protocol version
-  if (m->get_orig_source().is_mon() &&
-      m->get_header().mon_protocol != CEPH_MON_PROTOCOL) {
-    dout(0) << "mon protocol v " << (int)m->get_header().mon_protocol << " != my " << CEPH_MON_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-  if (m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
-    dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-
-    if (m->get_type() == CEPH_MSG_CLIENT_MOUNT) {
-      stringstream ss;
-      ss << "client protocol v " << (int)m->get_header().monc_protocol << " != server v " << CEPH_MONC_PROTOCOL;
-      string s;
-      getline(ss, s);
-      messenger->send_message(new MClientMountAck(-1, -EINVAL, s.c_str()),
-			      m->get_orig_source_inst());
-    }
-
-    delete m;
-    return true;
-  }
-
   lock.Lock();
   {
     switch (m->get_type()) {
@@ -508,35 +481,92 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   dout(10) << "handle_subscribe " << *m << dendl;
   
   bool reply = false;
-  utime_t until = g_clock.now();
-  until += g_conf.mon_subscribe_interval;
+
+  Session *s = (Session *)m->get_connection()->get_priv();
+  if (!s) {
+    s = session_map.new_session(m->get_source_inst());
+    m->get_connection()->set_priv(s->get());
+    dout(10) << " new session " << s << " for " << s->inst << dendl;
+  } else {
+    dout(10) << " existing session " << s << " for " << s->inst << dendl;
+  }
+
+  s->until = g_clock.now();
+  s->until += g_conf.mon_subscribe_interval;
 
   for (map<nstring,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
     if (!p->second.onetime)
       reply = true;
-    if (p->first == "osdmap")
-      osdmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
-    else if (p->first == "mdsmap")
-      mdsmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
-    else
-      dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
+    session_map.add_update_sub(s, p->first, p->second.have, p->second.onetime);
+
+    if (p->first == "mdsmap")
+      mdsmon()->check_sub(s->sub_map["mdsmap"]);
+    else if (p->first == "osdmap")
+      osdmon()->check_sub(s->sub_map["osdmap"]);
+    else if (p->first == "monmap")
+      check_sub(s->sub_map["monmap"]);
   }
+
+  // ???
 
   if (reply)
     messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
 			    m->get_source_inst());
 
+  s->put();
   delete m;
+}
+
+bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
+{
+  Session *s = (Session *)con->get_priv();
+  if (!s)
+    return false;
+
+  dout(10) << "reset/close on session " << s->inst << dendl;
+  session_map.remove_session(s);
+  s->put();
+  return true;
+}
+
+void Monitor::check_subs()
+{
+  nstring type = "monmap";
+  xlist<Subscription*>::iterator p = session_map.subs[type].begin();
+  while (!p.end()) {
+    Subscription *sub = *p;
+    ++p;
+    check_sub(sub);
+  }
+}
+
+void Monitor::check_sub(Subscription *sub)
+{
+  if (sub->last < monmap->get_epoch()) {
+    send_latest_monmap(sub->session->inst);
+    if (sub->onetime)
+      session_map.remove_sub(sub);
+    else
+      sub->last = monmap->get_epoch();
+  }
+}
+
+
+// -----
+
+void Monitor::send_latest_monmap(entity_inst_t i)
+{
+  bufferlist bl;
+  monmap->encode(bl);
+  messenger->send_message(new MMonMap(bl), i);
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
-  bufferlist bl;
-  monmap->encode(bl);
-  messenger->send_message(new MMonMap(bl), m->get_orig_source_inst());
+  send_latest_monmap(m->get_orig_source_inst());
   delete m;
 }
 
@@ -613,6 +643,19 @@ void Monitor::tick()
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->tick();
   
+  // trim sessions
+  utime_t now = g_clock.now();
+  xlist<Session*>::iterator p = session_map.sessions.begin();
+  while (!p.end()) {
+    Session *s = *p;
+    ++p;
+    if (s->until < now) {
+      dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
+      messenger->mark_down(s->inst.addr);
+      session_map.remove_session(s);
+    }
+  }
+
   // next tick!
   reset_tick();
 }
@@ -630,7 +673,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   // create it
   int err = store->mkfs();
   if (err < 0) {
-    cerr << "error " << err << " " << strerror(err) << std::endl;
+    char buf[80];
+    cerr << "error " << err << " " << strerror_r(err, buf, sizeof(buf)) << std::endl;
     exit(1);
   }
   

@@ -303,7 +303,8 @@ class MDS : public Dispatcher {
   int get_req_rate() { return req_rate; }
 
  private:
-  virtual bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m);
+
  public:
   MDS(const char *n, Messenger *m, MonClient *mc);
   ~MDS();
@@ -360,9 +361,9 @@ class MDS : public Dispatcher {
   // messages
   bool _dispatch(Message *m);
   
-  void ms_handle_failure(Message *m, const entity_inst_t& inst);
-  void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
-  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer);
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
 
   // special message types
   void handle_mds_map(class MMDSMap *m);

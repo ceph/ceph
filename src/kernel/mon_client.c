@@ -33,7 +33,7 @@ const static struct ceph_connection_operations mon_con_ops;
  */
 struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 {
-	struct ceph_monmap *m = 0;
+	struct ceph_monmap *m = NULL;
 	int i, err = -EINVAL;
 	struct ceph_fsid fsid;
 	u32 epoch, num_mon;
@@ -118,8 +118,8 @@ static int __open_session(struct ceph_mon_client *monc)
 		monc->want_next_osdmap = !!monc->want_next_osdmap;
 
 		dout("open_session mon%d opening\n", monc->cur_mon);
-		monc->con->peer_name.type = cpu_to_le32(CEPH_ENTITY_TYPE_MON);
-		monc->con->peer_name.num = cpu_to_le32(monc->cur_mon);
+		monc->con->peer_name.type = CEPH_ENTITY_TYPE_MON;
+		monc->con->peer_name.num = cpu_to_le64(monc->cur_mon);
 		ceph_con_open(monc->con,
 			      &monc->monmap->mon_inst[monc->cur_mon].addr);
 	} else {
@@ -162,7 +162,7 @@ static void __send_subscribe(struct ceph_mon_client *monc)
 		struct ceph_mon_subscribe_item *i;
 		void *p, *end;
 
-		msg = ceph_msg_new(CEPH_MSG_MON_SUBSCRIBE, 64, 0, 0, 0);
+		msg = ceph_msg_new(CEPH_MSG_MON_SUBSCRIBE, 64, 0, 0, NULL);
 		if (!msg)
 			return;
 
@@ -351,12 +351,10 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	monc->want_mount = false;
 
 	client->whoami = cnum;
-	client->msgr->inst.name.num = cpu_to_le32(cnum);
 	client->msgr->inst.name.type = CEPH_ENTITY_TYPE_CLIENT;
-	pr_info("ceph client%lld fsid %llx.%llx\n",
-		client->whoami,
-		le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
-		le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
+	client->msgr->inst.name.num = cpu_to_le64(cnum);
+	pr_info("ceph client%lld fsid " FSID_FORMAT "\n",
+		client->whoami, PR_FSID(&client->monc.monmap->fsid));
 
 	ceph_debugfs_client_init(client);
 	__send_subscribe(monc);
@@ -442,6 +440,11 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	req.buf = buf;
 	init_completion(&req.completion);
 
+	/* allocate memory for reply */
+	err = ceph_msgpool_resv(&monc->msgpool_statfs_reply, 1);
+	if (err)
+		return err;
+
 	/* register request */
 	mutex_lock(&monc->mutex);
 	req.tid = ++monc->last_tid;
@@ -463,6 +466,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	mutex_lock(&monc->mutex);
 	radix_tree_delete(&monc->statfs_request_tree, req.tid);
 	monc->num_statfs_requests--;
+	ceph_msgpool_resv(&monc->msgpool_statfs_reply, -1);
 	mutex_unlock(&monc->mutex);
 
 	if (!err)
@@ -522,6 +526,8 @@ static void delayed_work(struct work_struct *work)
 
 int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 {
+	int err = 0;
+
 	dout("init\n");
 	memset(monc, 0, sizeof(*monc));
 	monc->client = cl;
@@ -529,6 +535,18 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	mutex_init(&monc->mutex);
 
 	monc->con = NULL;
+
+	/* msg pools */
+	err = ceph_msgpool_init(&monc->msgpool_mount_ack, 4096, 1, false);
+	if (err < 0)
+		goto out;
+	err = ceph_msgpool_init(&monc->msgpool_subscribe_ack, 8, 1, false);
+	if (err < 0)
+		goto out;
+	err = ceph_msgpool_init(&monc->msgpool_statfs_reply,
+				sizeof(struct ceph_mon_statfs_reply), 0, false);
+	if (err < 0)
+		goto out;
 
 	monc->cur_mon = -1;
 	monc->hunting = false;  /* not really */
@@ -544,7 +562,8 @@ int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl)
 	monc->have_osdmap = 0;
 	monc->want_next_osdmap = 1;
 	monc->want_mount = true;
-	return 0;
+out:
+	return err;
 }
 
 void ceph_monc_stop(struct ceph_mon_client *monc)
@@ -560,6 +579,10 @@ void ceph_monc_stop(struct ceph_mon_client *monc)
 		monc->con = NULL;
 	}
 	mutex_unlock(&monc->mutex);
+
+	ceph_msgpool_destroy(&monc->msgpool_mount_ack);
+	ceph_msgpool_destroy(&monc->msgpool_subscribe_ack);
+	ceph_msgpool_destroy(&monc->msgpool_statfs_reply);
 
 	kfree(monc->monmap);
 }
@@ -605,6 +628,26 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 }
 
 /*
+ * Allocate memory for incoming message
+ */
+static struct ceph_msg *mon_alloc_msg(struct ceph_connection *con,
+				      struct ceph_msg_header *hdr)
+{
+	struct ceph_mon_client *monc = con->private;
+	int type = le32_to_cpu(hdr->type);
+
+	switch (type) {
+	case CEPH_MSG_CLIENT_MOUNT_ACK:
+		return ceph_msgpool_get(&monc->msgpool_mount_ack);
+	case CEPH_MSG_MON_SUBSCRIBE_ACK:
+		return ceph_msgpool_get(&monc->msgpool_subscribe_ack);
+	case CEPH_MSG_STATFS_REPLY:
+		return ceph_msgpool_get(&monc->msgpool_statfs_reply);
+	}
+	return ceph_alloc_msg(con, hdr);
+}
+
+/*
  * If the monitor connection resets, pick a new monitor and resubmit
  * any pending requests.
  */
@@ -646,6 +689,6 @@ const static struct ceph_connection_operations mon_con_ops = {
 	.put = ceph_con_put,
 	.dispatch = dispatch,
 	.fault = mon_fault,
-	.alloc_msg = ceph_alloc_msg,
+	.alloc_msg = mon_alloc_msg,
 	.alloc_middle = ceph_alloc_middle,
 };

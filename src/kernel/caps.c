@@ -287,7 +287,8 @@ static void put_cap(struct ceph_cap *cap,
 	spin_unlock(&caps_list_lock);
 }
 
-void ceph_reservation_status(int *total, int *avail, int *used, int *reserved)
+void ceph_reservation_status(struct ceph_client *client,
+			     int *total, int *avail, int *used, int *reserved)
 {
 	if (total)
 		*total = caps_total_count;
@@ -418,7 +419,7 @@ static void __cap_delay_requeue(struct ceph_mds_client *mdsc,
 			list_del_init(&ci->i_cap_delay_list);
 		}
 		list_add_tail(&ci->i_cap_delay_list, &mdsc->cap_delay_list);
-	no_change:
+no_change:
 		spin_unlock(&mdsc->cap_delay_lock);
 	}
 }
@@ -454,6 +455,37 @@ static void __cap_delay_cancel(struct ceph_mds_client *mdsc,
 	spin_lock(&mdsc->cap_delay_lock);
 	list_del_init(&ci->i_cap_delay_list);
 	spin_unlock(&mdsc->cap_delay_lock);
+}
+
+/*
+ * Common issue checks for add_cap, handle_cap_grant.
+ */
+static void __check_cap_issue(struct ceph_inode_info *ci, struct ceph_cap *cap,
+			      unsigned issued)
+{
+	unsigned had = __ceph_caps_issued(ci, NULL);
+
+	/*
+	 * Each time we receive FILE_CACHE anew, we increment
+	 * i_rdcache_gen.
+	 */
+	if ((issued & CEPH_CAP_FILE_CACHE) &&
+	    (had & CEPH_CAP_FILE_CACHE) == 0)
+		ci->i_rdcache_gen++;
+
+	/*
+	 * if we are newly issued FILE_SHARED, clear I_COMPLETE; we
+	 * don't know what happened to this directory while we didn't
+	 * have the cap.
+	 */
+	if ((issued & CEPH_CAP_FILE_SHARED) &&
+	    (had & CEPH_CAP_FILE_SHARED) == 0) {
+		ci->i_shared_gen++;
+		if (S_ISDIR(ci->vfs_inode.i_mode)) {
+			dout(" marking %p NOT complete\n", &ci->vfs_inode);
+			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
+		}
+	}
 }
 
 /*
@@ -546,17 +578,7 @@ retry:
 		}
 	}
 
-	/*
-	 * if we are newly issued FILE_SHARED, clear I_COMPLETE; we
-	 * don't know what happened to this directory while we didn't
-	 * have the cap.
-	 */
-	if (S_ISDIR(inode->i_mode) &&
-	    (issued & CEPH_CAP_FILE_SHARED) &&
-	    (cap->issued & CEPH_CAP_FILE_SHARED) == 0) {
-		dout(" marking %p NOT complete\n", inode);
-		ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
-	}
+	__check_cap_issue(ci, cap, issued);
 
 	/*
 	 * If we are issued caps we don't want, or the mds' wanted
@@ -1715,13 +1737,12 @@ int ceph_write_inode(struct inode *inode, int wait)
  *
  * Caller holds session->s_mutex.
  */
-void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
-			     struct ceph_mds_session *session)
+static void kick_flushing_capsnaps(struct ceph_mds_client *mdsc,
+				   struct ceph_mds_session *session)
 {
-	struct ceph_inode_info *ci;
 	struct ceph_cap_snap *capsnap;
 
-	dout("kick_flushing_caps mds%d\n", session->s_mds);
+	dout("kick_flushing_capsnaps mds%d\n", session->s_mds);
 	list_for_each_entry(capsnap, &session->s_cap_snaps_flushing,
 			    flushing_item) {
 		struct ceph_inode_info *ci = capsnap->ci;
@@ -1740,7 +1761,16 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 			spin_unlock(&inode->i_lock);
 		}
 	}
+}
 
+void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
+			     struct ceph_mds_session *session)
+{
+	struct ceph_inode_info *ci;
+
+	kick_flushing_capsnaps(mdsc, session);
+
+	dout("kick_flushing_caps mds%d\n", session->s_mds);
 	list_for_each_entry(ci, &session->s_cap_flushing, i_flushing_item) {
 		struct inode *inode = &ci->vfs_inode;
 		struct ceph_cap *cap;
@@ -2103,20 +2133,7 @@ start:
 
 	cap->gen = session->s_cap_gen;
 
-	/*
-	 * Each time we receive CACHE anew, we increment i_rdcache_gen.
-	 * Also clear I_COMPLETE: we don't know what happened to this directory
-	 */
-	if ((newcaps & CEPH_CAP_FILE_CACHE) &&          /* got RDCACHE */
-	    (cap->issued & CEPH_CAP_FILE_CACHE) == 0 && /* but not before */
-	    (__ceph_caps_issued(ci, NULL) & CEPH_CAP_FILE_CACHE) == 0) {
-		ci->i_rdcache_gen++;
-
-		if (S_ISDIR(inode->i_mode)) {
-			dout(" marking %p NOT complete\n", inode);
-			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;
-		}
-	}
+	__check_cap_issue(ci, cap, newcaps);
 
 	/*
 	 * If CACHE is being revoked, and we have no dirty buffers,
@@ -2519,7 +2536,7 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 	struct inode *inode;
 	struct ceph_cap *cap;
 	struct ceph_mds_caps *h;
-	int mds = le32_to_cpu(msg->hdr.src.name.num);
+	int mds = le64_to_cpu(msg->hdr.src.name.num);
 	int op;
 	u32 seq;
 	struct ceph_vino vino;
@@ -2682,6 +2699,10 @@ void ceph_put_fmode(struct ceph_inode_info *ci, int fmode)
 /*
  * Helpers for embedding cap and dentry lease releases into mds
  * requests.
+ *
+ * @force is used by dentry_release (below) to force inclusion of a
+ * record for the directory inode, even when there aren't any caps to
+ * drop.
  */
 int ceph_encode_inode_release(void **p, struct inode *inode,
 			      int mds, int drop, int unless, int force)
@@ -2749,11 +2770,22 @@ int ceph_encode_dentry_release(void **p, struct dentry *dentry,
 	struct inode *dir = dentry->d_parent->d_inode;
 	struct ceph_mds_request_release *rel = *p;
 	struct ceph_dentry_info *di = ceph_dentry(dentry);
+	int force = 0;
 	int ret;
 
-	ret = ceph_encode_inode_release(p, dir, mds, drop, unless, 1);
+	/*
+	 * force an record for the directory caps if we have a dentry lease.
+	 * this is racy (can't take i_lock and d_lock together), but it
+	 * doesn't have to be perfect; the mds will revoke anything we don't
+	 * release.
+	 */
+	spin_lock(&dentry->d_lock);
+	if (di->lease_session && di->lease_session->s_mds == mds)
+		force = 1;
+	spin_unlock(&dentry->d_lock);
 
-	/* drop dentry lease too? */
+	ret = ceph_encode_inode_release(p, dir, mds, drop, unless, force);
+
 	spin_lock(&dentry->d_lock);
 	if (ret && di->lease_session && di->lease_session->s_mds == mds) {
 		dout("encode_dentry_release %p mds%d seq %d\n",

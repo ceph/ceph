@@ -521,7 +521,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			spin_unlock(&dir->i_lock);
 			dout(" dir %p complete, -ENOENT\n", dir);
 			d_add(dentry, NULL);
-			di->lease_rdcache_gen = ci->i_rdcache_gen;
+			di->lease_shared_gen = ci->i_shared_gen;
 			return NULL;
 		}
 		spin_unlock(&dir->i_lock);
@@ -898,12 +898,12 @@ static int dir_lease_is_valid(struct inode *dir, struct dentry *dentry)
 	int valid = 0;
 
 	spin_lock(&dir->i_lock);
-	if (ci->i_rdcache_gen == di->lease_rdcache_gen)
+	if (ci->i_shared_gen == di->lease_shared_gen)
 		valid = __ceph_caps_issued_mask(ci, CEPH_CAP_FILE_SHARED, 1);
 	spin_unlock(&dir->i_lock);
 	dout("dir_lease_is_valid dir %p v%u dentry %p v%u = %d\n",
-	     dir, (unsigned)ci->i_rdcache_gen, dentry,
-	     (unsigned)di->lease_rdcache_gen, valid);
+	     dir, (unsigned)ci->i_shared_gen, dentry,
+	     (unsigned)di->lease_shared_gen, valid);
 	return valid;
 }
 
@@ -951,7 +951,7 @@ static void ceph_dentry_release(struct dentry *dentry)
 		struct ceph_inode_info *ci = ceph_inode(parent_inode);
 
 		spin_lock(&parent_inode->i_lock);
-		if (ci->i_rdcache_gen == di->lease_rdcache_gen) {
+		if (ci->i_shared_gen == di->lease_shared_gen) {
 			dout(" clearing %p complete (d_release)\n",
 			     parent_inode);
 			ci->i_ceph_flags &= ~CEPH_I_COMPLETE;

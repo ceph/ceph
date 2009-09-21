@@ -79,8 +79,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   /* socket creation */
   listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (listen_sd < 0) {
+    char buf[80];
     derr(0) << "accepter.bind unable to create socket: "
-	    << strerror(errno) << dendl;
+	    << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   opened_socket();
@@ -94,8 +95,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     // specific port
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
     if (rc < 0) {
+      char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
-	      << ": " << strerror(errno) << dendl;
+	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
     }
   } else {
@@ -107,9 +109,10 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
 	break;
     }
     if (rc < 0) {
+      char buf[80];
       derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
-	      << ": " << strerror(errno) << dendl;
+	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
     }
   }
@@ -123,8 +126,9 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   // listen!
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
+    char buf[80];
     derr(0) << "accepter.bind unable to listen on " << g_my_addr.ipaddr 
-	    << ": " << strerror(errno) << dendl;
+	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   
@@ -183,6 +187,8 @@ void *SimpleMessenger::Accepter::entry()
   // block SIGUSR1
   pthread_sigmask(SIG_BLOCK, &sigmask, NULL);
 
+  char buf[80];
+
   while (!done) {
     FD_ZERO(&fds);
     FD_SET(listen_sd, &fds);
@@ -205,8 +211,8 @@ void *SimpleMessenger::Accepter::entry()
       if (g_conf.ms_tcp_nodelay) {
 	int flag = 1;
 	int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
-	if (r < 0) 
-	  dout(0) << "accepter could't set TCP_NODELAY: " << strerror(errno) << dendl;
+	if (r < 0)
+	  dout(0) << "accepter could't set TCP_NODELAY: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       }
       
       rank->lock.Lock();
@@ -218,7 +224,7 @@ void *SimpleMessenger::Accepter::entry()
       }
       rank->lock.Unlock();
     } else {
-      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror(errno) << dendl;
+      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       if (++errors > 4)
 	break;
     }
@@ -284,23 +290,29 @@ void SimpleMessenger::Endpoint::dispatch_entry()
           ls.pop_front();
 	  if ((long)m == BAD_REMOTE_RESET) {
 	    lock.Lock();
-	    entity_addr_t a = remote_reset_q.front();
+	    Connection *con = remote_reset_q.front().first;
+	    entity_addr_t a = remote_reset_q.front().second;
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_deliver_handle_remote_reset(a);
+	    ms_deliver_handle_remote_reset(con, a);
+	    con->put();
  	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
-	    entity_addr_t a = reset_q.front();
+	    Connection *con = reset_q.front().first;
+	    entity_addr_t a = reset_q.front().second;
 	    reset_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_deliver_handle_reset(a);
+	    ms_deliver_handle_reset(con, a);
+	    con->put();
 	  } else if ((long)m == BAD_FAILED) {
 	    lock.Lock();
-	    m = failed_q.front().first;
-	    entity_addr_t a = failed_q.front().second;
+	    Connection *con = failed_q.front().con;
+	    m = failed_q.front().msg;
+	    entity_addr_t a = failed_q.front().addr;
 	    failed_q.pop_front();
 	    lock.Unlock();
-	    get_dispatcher()->ms_deliver_handle_failure(m, a);
+	    ms_deliver_handle_failure(con, m, a);
+	    con->put();
 	    m->put();
 	  } else {
 	    dout(1) << "<== " << m->get_source_inst()
@@ -312,7 +324,7 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 		    << " " << m->get_footer().data_crc << ")"
 		    << " " << m 
 		    << dendl;
-	    dispatch(m);
+	    ms_deliver_dispatch(m);
 	    dout(20) << "done calling dispatch on " << m << dendl;
 	  }
         }
@@ -369,7 +381,7 @@ void SimpleMessenger::Endpoint::prepare_dest(const entity_inst_t& inst)
   rank->lock.Lock();
   {
     if (rank->rank_pipe.count(inst.addr) == 0)
-      rank->connect_rank(inst.addr, rank->get_policy(inst.name.type()));
+      rank->connect_rank(inst.addr, inst.name.type());
   }
   rank->lock.Unlock();
 }
@@ -475,6 +487,36 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix() {
 		<< ").";
 }
 
+static int get_proto_version(int my_type, int peer_type, bool connect)
+{
+  // set reply protocol version
+  if (peer_type == my_type) {
+    // internal
+    switch (my_type) {
+    case CEPH_ENTITY_TYPE_OSD: return CEPH_OSD_PROTOCOL;
+    case CEPH_ENTITY_TYPE_MDS: return CEPH_MDS_PROTOCOL;
+    case CEPH_ENTITY_TYPE_MON: return CEPH_MON_PROTOCOL;
+    }
+  } else {
+    // public
+    if (connect) {
+      switch (peer_type) {
+      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
+      }
+    } else {
+      switch (my_type) {
+      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
+      }
+    }
+  }
+  return 0;
+}
+
+
 int SimpleMessenger::Pipe::accept()
 {
   dout(10) << "accept" << dendl;
@@ -503,7 +545,8 @@ int SimpleMessenger::Pipe::accept()
   socklen_t len = sizeof(socket_addr.ipaddr);
   int r = ::getpeername(sd, (sockaddr*)&socket_addr.ipaddr, &len);
   if (r < 0) {
-    dout(0) << "accept failed to getpeername " << errno << " " << strerror(errno) << dendl;
+    char buf[80];
+    dout(0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     state = STATE_CLOSED;
     return -1;
   }
@@ -566,13 +609,24 @@ int SimpleMessenger::Pipe::accept()
     rank->lock.Lock();
 
     // note peer's type, flags
+    peer_type = connect.host_type;
     policy = rank->get_policy(connect.host_type);
     dout(10) << "accept host_type " << connect.host_type
 	     << ", setting policy, lossy_tx=" << policy.lossy_tx << dendl;
     lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
 
     memset(&reply, 0, sizeof(reply));
+    reply.protocol_version = get_proto_version(rank->my_type, peer_type, false);
 
+    // mismatch?
+    dout(10) << "accept my proto " << reply.protocol_version
+	     << ", their proto " << connect.protocol_version << dendl;
+    if (connect.protocol_version != reply.protocol_version) {
+      reply.tag = CEPH_MSGR_TAG_BADPROTOVER;
+      rank->lock.Unlock();
+      goto reply;
+    }
+    
     // existing?
     if (rank->rank_pipe.count(peer_addr)) {
       existing = rank->rank_pipe[peer_addr];
@@ -783,7 +837,8 @@ int SimpleMessenger::Pipe::connect()
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (sd < 0) {
-    dout(-1) << "connect couldn't created socket " << strerror(errno) << dendl;
+    char buf[80];
+    dout(-1) << "connect couldn't created socket " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     assert(0);
     goto fail;
   }
@@ -796,17 +851,20 @@ int SimpleMessenger::Pipe::connect()
   dout(10) << "binding to " << myAddr << dendl;
   rc = ::bind(sd, (struct sockaddr *)&myAddr, sizeof(myAddr));
   if (rc < 0) {
+    char buf[80];
     dout(2) << "bind error " << myAddr
-	     << ", " << errno << ": " << strerror(errno) << dendl;
+	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
+
+  char buf[80];
 
   // connect!
   dout(10) << "connecting to " << peer_addr.ipaddr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.ipaddr, sizeof(peer_addr.ipaddr));
   if (rc < 0) {
     dout(2) << "connect error " << peer_addr.ipaddr
-	     << ", " << errno << ": " << strerror(errno) << dendl;
+	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
 
@@ -815,14 +873,14 @@ int SimpleMessenger::Pipe::connect()
     int flag = 1;
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) 
-      dout(0) << "connect couldn't set TCP_NODELAY: " << strerror(errno) << dendl;
+      dout(0) << "connect couldn't set TCP_NODELAY: " << strerror_r(errno, buf, sizeof(buf)) << dendl;
   }
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
   rc = tcp_read(sd, (char*)&banner, strlen(CEPH_BANNER));
   if (rc < 0) {
-    dout(2) << "connect couldn't read banner, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
@@ -837,14 +895,14 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(sd, &msg, msglen)) {
-    dout(2) << "connect couldn't write my banner, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't write my banner, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
 
   // identify peer
   rc = tcp_read(sd, (char*)&paddr, sizeof(paddr));
   if (rc < 0) {
-    dout(2) << "connect couldn't read peer addr, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read peer addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   dout(20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
@@ -864,7 +922,7 @@ int SimpleMessenger::Pipe::connect()
   // peer addr for me
   rc = tcp_read(sd, (char*)&peer_addr_for_me, sizeof(peer_addr_for_me));
   if (rc < 0) {
-    dout(2) << "connect couldn't read peer addr for me, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't read peer addr for me, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   dout(20) << "connect peer addr for me is " << peer_addr_for_me << dendl;
@@ -879,7 +937,7 @@ int SimpleMessenger::Pipe::connect()
   msg.msg_iovlen = 1;
   msglen = msgvec[0].iov_len;
   if (do_sendmsg(sd, &msg, msglen)) {
-    dout(2) << "connect couldn't write my addr, " << strerror(errno) << dendl;
+    dout(2) << "connect couldn't write my addr, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
@@ -889,6 +947,7 @@ int SimpleMessenger::Pipe::connect()
     connect.host_type = rank->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
+    connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
     connect.flags = 0;
     if (policy.lossy_tx)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;
@@ -899,21 +958,23 @@ int SimpleMessenger::Pipe::connect()
     msg.msg_iovlen = 1;
     msglen = msgvec[0].iov_len;
 
-    dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq << dendl;
+    dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq
+	     << " proto=" << connect.protocol_version << dendl;
     if (do_sendmsg(sd, &msg, msglen)) {
-      dout(2) << "connect couldn't write gseq, cseq, " << strerror(errno) << dendl;
+      dout(2) << "connect couldn't write gseq, cseq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       goto fail;
     }
 
     dout(20) << "connect wrote (self +) cseq, waiting for reply" << dendl;
     ceph_msg_connect_reply reply;
     if (tcp_read(sd, (char*)&reply, sizeof(reply)) < 0) {
-      dout(2) << "connect read reply " << strerror(errno) << dendl;
+      dout(2) << "connect read reply " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       goto fail;
     }
     dout(20) << "connect got reply tag " << (int)reply.tag
 	     << " connect_seq " << reply.connect_seq
 	     << " global_seq " << reply.global_seq
+	     << " proto " << reply.protocol_version
 	     << " flags " << (int)reply.flags
 	     << dendl;
 
@@ -921,6 +982,12 @@ int SimpleMessenger::Pipe::connect()
     if (state != STATE_CONNECTING) {
       dout(0) << "connect got RESETSESSION but no longer connecting" << dendl;
       goto stop_locked;
+    }
+
+    if (reply.tag == CEPH_MSGR_TAG_BADPROTOVER) {
+      dout(0) << "connect protocol version mismatch, my " << connect.protocol_version
+	      << " != " << reply.protocol_version << dendl;
+      goto fail_locked;
     }
 
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
@@ -1045,8 +1112,9 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
     dout(10) << "fault already connecting, reader shutting down" << dendl;
     return;
   }
-
-  if (!onconnect) dout(2) << "fault " << errno << ": " << strerror(errno) << dendl;
+  
+  char buf[80];
+  if (!onconnect) dout(2) << "fault " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
@@ -1120,8 +1188,8 @@ void SimpleMessenger::Pipe::fail()
   report_failures();
 
   for (unsigned i=0; i<rank->local.size(); i++) 
-    if (rank->local[i] && rank->local[i]->get_dispatcher())
-      rank->local[i]->queue_reset(peer_addr);
+    if (rank->local[i])
+      rank->local[i]->queue_reset(connection_state->get(), peer_addr);
 
   // unregister
   lock.Unlock();
@@ -1138,8 +1206,8 @@ void SimpleMessenger::Pipe::was_session_reset()
   dout(10) << "was_session_reset" << dendl;
   report_failures();
   for (unsigned i=0; i<rank->local.size(); i++) 
-    if (rank->local[i] && rank->local[i]->get_dispatcher())
-      rank->local[i]->queue_remote_reset(peer_addr);
+    if (rank->local[i])
+      rank->local[i]->queue_remote_reset(connection_state->get(), peer_addr);
 
   out_seq = 0;
   in_seq = 0;
@@ -1163,7 +1231,7 @@ void SimpleMessenger::Pipe::report_failures()
 	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
       } else {
 	dout(10) << "fail on " << *m << dendl;
-	rank->local[srcrank]->queue_failure(m, peer_addr);
+	rank->local[srcrank]->queue_failure(connection_state->get(), m, peer_addr);
       }
     }
     m->put();
@@ -1210,12 +1278,13 @@ void SimpleMessenger::Pipe::reader()
 
     lock.Unlock();
 
+    char buf[80];
     char tag = -1;
     dout(20) << "reader reading tag..." << dendl;
     int rc = tcp_read(sd, (char*)&tag, 1);
     if (rc < 0) {
       lock.Lock();
-      dout(2) << "reader couldn't read tag, " << strerror(errno) << dendl;
+      dout(2) << "reader couldn't read tag, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       fault(false, true);
       continue;
     }
@@ -1229,11 +1298,11 @@ void SimpleMessenger::Pipe::reader()
     // open ...
     if (tag == CEPH_MSGR_TAG_ACK) {
       dout(20) << "reader got ACK" << dendl;
-      __u32 seq;
+      __le64 seq;
       int rc = tcp_read( sd, (char*)&seq, sizeof(seq));
       lock.Lock();
       if (rc < 0) {
-	dout(2) << "reader couldn't read ack seq, " << strerror(errno) << dendl;
+	dout(2) << "reader couldn't read ack seq, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	fault(false, true);
       } else if (state != STATE_CLOSED) {
 	dout(15) << "reader got ack seq " << seq << dendl;
@@ -1254,12 +1323,10 @@ void SimpleMessenger::Pipe::reader()
       dout(20) << "reader got MSG" << dendl;
       Message *m = read_message();
 
-      m->set_connection(connection_state->get());
-
       lock.Lock();
       
       if (!m) {
-	derr(2) << "reader read null message, " << strerror(errno) << dendl;
+	derr(2) << "reader read null message, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	fault(false, true);
 	continue;
       }
@@ -1267,6 +1334,8 @@ void SimpleMessenger::Pipe::reader()
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING)
 	continue;
+
+      m->set_connection(connection_state->get());
 
       // check received seq#
       if (m->get_seq() <= in_seq) {
@@ -1381,6 +1450,8 @@ public:
  */
 void SimpleMessenger::Pipe::writer()
 {
+  char buf[80];
+
   lock.Lock();
 
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
@@ -1420,7 +1491,7 @@ void SimpleMessenger::Pipe::writer()
 	int rc = write_keepalive();
 	lock.Lock();
 	if (rc < 0) {
-	  dout(2) << "writer couldn't write keepalive, " << strerror(errno) << dendl;
+	  dout(2) << "writer couldn't write keepalive, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
  	  continue;
 	}
@@ -1434,7 +1505,7 @@ void SimpleMessenger::Pipe::writer()
 	int rc = write_ack(send_seq);
 	lock.Lock();
 	if (rc < 0) {
-	  dout(2) << "writer couldn't write ack, " << strerror(errno) << dendl;
+	  dout(2) << "writer couldn't write ack, " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
  	  continue;
 	}
@@ -1460,7 +1531,7 @@ void SimpleMessenger::Pipe::writer()
 	lock.Lock();
 	if (rc < 0) {
           derr(1) << "writer error sending " << m << ", "
-		  << errno << ": " << strerror(errno) << dendl;
+		  << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
 	  fault();
         }
 	m->put();
@@ -1598,7 +1669,7 @@ Message *SimpleMessenger::Pipe::read_message()
   if (tcp_read(sd, (char*)&footer, sizeof(footer)) < 0) 
     return 0;
   
-  int aborted = (le32_to_cpu(footer.flags) & CEPH_MSG_FOOTER_ABORTED);
+  int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
   dout(10) << "aborted = " << aborted << dendl;
   if (aborted) {
     dout(0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
@@ -1616,8 +1687,10 @@ Message *SimpleMessenger::Pipe::read_message()
 }
 
 
-int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
+int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len, bool more)
 {
+  char buf[80];
+
   while (len > 0) {
     if (0) { // sanity
       int l = 0;
@@ -1626,11 +1699,11 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
       assert(l == len);
     }
 
-    int r = ::sendmsg(sd, msg, 0);
+    int r = ::sendmsg(sd, msg, more ? MSG_MORE : 0);
     if (r == 0) 
       dout(10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
-      dout(1) << "do_sendmsg error " << strerror(errno) << dendl;
+      dout(1) << "do_sendmsg error " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -1;
     }
     if (state == STATE_CLOSED) {
@@ -1698,12 +1771,12 @@ int SimpleMessenger::Pipe::do_sendmsg(int sd, struct msghdr *msg, int len)
 }
 
 
-int SimpleMessenger::Pipe::write_ack(unsigned seq)
+int SimpleMessenger::Pipe::write_ack(__u64 seq)
 {
   dout(10) << "write_ack " << seq << dendl;
 
   char c = CEPH_MSGR_TAG_ACK;
-  __le32 s;
+  __le64 s;
   s = seq;
 
   struct msghdr msg;
@@ -1716,7 +1789,7 @@ int SimpleMessenger::Pipe::write_ack(unsigned seq)
   msg.msg_iov = msgvec;
   msg.msg_iovlen = 2;
   
-  if (do_sendmsg(sd, &msg, 5) < 0) 
+  if (do_sendmsg(sd, &msg, 1 + sizeof(s), true) < 0) 
     return -1;	
   return 0;
 }
@@ -1750,7 +1823,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
   header.front_len = m->get_payload().length();
   header.middle_len = m->get_middle().length();
   header.data_len = m->get_data().length();
-  footer.flags = 0;
+  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
   m->calc_header_crc();
 
   bufferlist blist = m->get_payload();
@@ -1798,7 +1871,7 @@ int SimpleMessenger::Pipe::write_message(Message *m)
 	     << dendl;
     
     if (msg.msg_iovlen >= IOV_MAX-2) {
-      if (do_sendmsg(sd, &msg, msglen)) 
+      if (do_sendmsg(sd, &msg, msglen, true)) 
 	return -1;	
       
       // and restart the iov
@@ -1993,7 +2066,7 @@ int SimpleMessenger::start(bool nodaemon)
 /* connect_rank
  * NOTE: assumes rank.lock held.
  */
-SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, const Policy& p)
+SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, int type)
 {
   assert(lock.is_locked());
   assert(addr != rank_addr);
@@ -2002,7 +2075,8 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   
   // create pipe
   Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
-  pipe->policy = p;
+  pipe->peer_type = type;
+  pipe->policy = get_policy(type);
   pipe->peer_addr = addr;
   pipe->start_writer();
   pipe->register_pipe();
@@ -2082,13 +2156,6 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 
   assert(m->nref.test() == 0);
 
-  m->get_header().mon_protocol = CEPH_MON_PROTOCOL;
-  m->get_header().monc_protocol = CEPH_MONC_PROTOCOL;
-  m->get_header().mds_protocol = CEPH_MDS_PROTOCOL;
-  m->get_header().mdsc_protocol = CEPH_MDSC_PROTOCOL;
-  m->get_header().osd_protocol = CEPH_OSD_PROTOCOL;
-  m->get_header().osdc_protocol = CEPH_OSDC_PROTOCOL;
-
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
   dest_proc_addr.erank = 0;
@@ -2133,7 +2200,7 @@ void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool
 	} else {
 	  dout(20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
 	  // not connected.
-	  pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
+	  pipe = connect_rank(dest_proc_addr, dest.name.type());
 	  pipe->send(m);
 	}
       }
@@ -2171,7 +2238,7 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
       if (!pipe) {
 	dout(20) << "send_keepalive remote, " << dest_addr << ", new pipe." << dendl;
 	// not connected.
-	pipe = connect_rank(dest_proc_addr, get_policy(dest.name.type()));
+	pipe = connect_rank(dest_proc_addr, dest.name.type());
 	pipe->send_keepalive();
       }
     }

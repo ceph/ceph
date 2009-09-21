@@ -62,6 +62,10 @@ class Dumper : public Dispatcher {
     }
     return true;
   }
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+
 } dispatcher;
 
 
@@ -92,7 +96,7 @@ int main(int argc, const char **argv, const char *envp[])
   g_conf.daemonize = false; // not us!
   rank.start();
   messenger = rank.register_entity(entity_name_t::ADMIN());
-  messenger->set_dispatcher(&dispatcher);
+  messenger->add_dispatcher_head(&dispatcher);
 
   inodeno_t ino = MDS_INO_LOG_OFFSET + mds;
   unsigned pg_pool = CEPH_METADATA_RULE;

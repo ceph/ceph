@@ -169,8 +169,6 @@ Client::~Client()
   if (osdmap) { delete osdmap; osdmap = 0; }
   if (mdsmap) { delete mdsmap; mdsmap = 0; }
 
-  unlink_dispatcher(monclient);
-
   if (messenger)
     messenger->destroy();
 }
@@ -256,8 +254,7 @@ void Client::init()
   Mutex::Locker lock(client_lock);
 
   // ok!
-  messenger->set_dispatcher(this);
-  link_dispatcher(monclient);
+  messenger->add_dispatcher_head(this);
 
   monclient->init();
 
@@ -316,6 +313,11 @@ void Client::trim_cache()
     dout(15) << "trim_cache unlinking dn " << dn->name 
 	     << " in dir " << hex << dn->dir->parent_inode->ino 
 	     << dendl;
+    if (dn->dir->parent_inode->flags & I_COMPLETE) {
+      dout(10) << " clearing I_COMPLETE on " << *dn->dir->parent_inode << dendl;
+      dn->dir->parent_inode->flags &= ~I_COMPLETE;
+      dn->dir->release_count++;
+    }
     unlink(dn);
   }
 
@@ -449,6 +451,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
 			   in->caps_issued());
+
+    if (in->is_dir() &&
+	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+	in->dirstat.nfiles == 0 &&
+	in->dirstat.nsubdirs == 0) {
+      dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
+      in->flags |= I_COMPLETE;
+    }
   }
 
   // symlink?
@@ -746,7 +756,7 @@ int Client::choose_target_mds(MClientRequest *req)
 
 
 
-int Client::make_request(MClientRequest *req, 
+int Client::make_request(MetaRequest *request, 
 			 int uid, int gid, 
 			 Inode **ptarget,
 			 int use_mds,
@@ -756,39 +766,32 @@ int Client::make_request(MClientRequest *req,
   utime_t start = g_clock.real_now();
   
   bool nojournal = false;
-  int op = req->get_op();
+  int op = request->get_op();
   if (op == CEPH_MDS_OP_GETATTR ||
       op == CEPH_MDS_OP_READDIR ||
       op == CEPH_MDS_OP_OPEN)
     nojournal = true;
 
-
-  // -- request --
   // assign a unique tid
   tid_t tid = ++last_tid;
-  req->set_tid(tid);
-
-  if (!mds_requests.empty()) 
-    req->set_oldest_client_tid(mds_requests.begin()->first);
-  else
-    req->set_oldest_client_tid(tid); // this one is the oldest.
-
+  request->set_tid(tid);
   // make note
-  MetaRequest * request = new MetaRequest(req, tid);
   mds_requests[tid] = request->get();
-
   if (uid < 0) {
     uid = geteuid();
     gid = getegid();
   }
-  request->uid = uid;
-  request->gid = gid;
-  req->set_caller_uid(uid);
-  req->set_caller_gid(gid);
+  request->set_caller_uid(uid);
+  request->set_caller_gid(gid);
 
-  // encode payload now, in case we have to resend(in case of mds failure)
-  req->encode_payload();
-  request->request_payload = req->get_payload();
+  if (!mds_requests.empty()) 
+    request->set_oldest_client_tid(mds_requests.begin()->first);
+  else
+    request->set_oldest_client_tid(tid); // this one is the oldest.
+
+  // -- make request --
+  MClientRequest *req = make_request_from_Meta(request);
+  request->request = req;
 
   // hack target mds?
   if (use_mds >= 0)
@@ -852,8 +855,12 @@ int Client::make_request(MClientRequest *req,
     send_request(request, mds);
 
     // wait for signal
-    dout(20) << "awaiting kick on " << &cond << dendl;
-    cond.Wait(client_lock);
+    dout(20) << "awaiting reply|forward|kick on " << &cond << dendl;
+    request->kick = false;
+    while (!request->reply &&         // reply
+	   request->resend_mds < 0 && // forward
+	   !request->kick)
+      cond.Wait(client_lock);
     
     // did we get a reply?
     if (request->reply) 
@@ -890,6 +897,88 @@ int Client::make_request(MClientRequest *req,
   return r;
 }
 
+inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
+{
+  MClientRequest *req = new MClientRequest(request->get_op());
+  memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
+  req->set_filepath(request->get_filepath());
+  req->set_filepath2(request->get_filepath2());
+  req->set_data(request->data);
+  req->set_retry_attempt(request->retry_attempt);
+  return req;
+}
+
+int Client::encode_inode_release(Inode *in, MClientRequest *req,
+			 int mds, int drop,
+			 int unless, int force)
+{
+  int released = 0;
+  InodeCap *caps = in->caps[mds];
+  if (drop & caps->issued &&
+      !(unless & caps->issued)) {
+    caps->issued &= ~drop;
+    caps->implemented &= ~drop;
+    released = 1;
+    force = 1;
+  }
+  if (force) {
+    ceph_mds_request_release rel;
+    rel.ino = in->ino;
+    rel.cap_id = caps->cap_id;
+    rel.seq = caps->seq;
+    rel.issue_seq = caps->issue_seq;
+    rel.mseq = caps->mseq;
+    rel.caps = caps->issued;
+    rel.wanted = caps->wanted;
+    rel.dname_len = 0;
+    rel.dname_seq = 0;
+    req->releases.push_back(MClientRequest::Release(rel,""));
+  }
+  return released;
+}
+
+void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
+			   int mds, int drop, int unless)
+{
+  int released = encode_inode_release(dn->dir->parent_inode, req,
+				      mds, drop, unless, 1);
+  if (released && dn->lease_mds == mds) {
+    MClientRequest::Release& rel = req->releases.back();
+    rel.item.dname_len = dn->name.length();
+    rel.item.dname_seq = dn->lease_seq;
+    rel.dname = dn->name;
+  }
+}
+
+
+/*
+ * This requires the MClientRequest *request member to be set.
+ * It will error out horribly without one.
+ * Additionally, if you set any *drop member, you'd better have
+ * set the corresponding dentry!
+ */
+void Client::encode_cap_releases(MetaRequest *req, int mds) {
+  if (req->inode_drop)
+    encode_inode_release(req->inode, req->request,
+			 mds, req->inode_drop,
+			 req->inode_unless);
+
+  if (req->old_inode_drop)
+    encode_inode_release(req->old_inode, req->request,
+			 mds, req->old_inode_drop,
+			 req->old_inode_unless);
+
+  if (req->dentry_drop)
+    encode_dentry_release(req->dentry, req->request,
+			  mds, req->dentry_drop,
+			  req->dentry_unless);
+  
+  if (req->old_dentry_drop)
+    encode_dentry_release(req->old_dentry, req->request,
+			  mds, req->old_dentry_drop,
+			  req->old_dentry_unless);
+}
+
 
 void Client::handle_client_session(MClientSession *m) 
 {
@@ -900,6 +989,7 @@ void Client::handle_client_session(MClientSession *m)
   case CEPH_SESSION_OPEN:
     mds_sessions[from].seq = 0;
     mds_sessions[from].inst = m->get_source_inst();
+    renew_caps(from);
     break;
 
   case CEPH_SESSION_CLOSE:
@@ -910,9 +1000,11 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_RENEWCAPS:
-    mds_sessions[from].cap_ttl = 
-      mds_sessions[from].last_cap_renew_request + mdsmap->get_session_timeout();
-    wake_inode_waiters(from);
+    if (mds_sessions[from].cap_renew_seq == m->get_seq()) {
+      mds_sessions[from].cap_ttl = 
+	mds_sessions[from].last_cap_renew_request + mdsmap->get_session_timeout();
+      wake_inode_waiters(from);
+    }
     break;
 
   case CEPH_SESSION_STALE:
@@ -940,24 +1032,23 @@ void Client::send_request(MetaRequest *request, int mds)
   MClientRequest *r = request->request;
   if (!r) {
     // make a new one
-    dout(10) << "send_request rebuilding request " << request->tid
+    dout(10) << "send_request rebuilding request " << request->get_tid()
 	     << " for mds" << mds << dendl;
-    r = new MClientRequest;
-    r->copy_payload(request->request_payload);
-    r->decode_payload();
-    r->set_retry_attempt(request->retry_attempt);
+    r = make_request_from_Meta(request);
     r->set_dentry_wanted();
     if (request->got_unsafe)
       r->set_replayed_op();
-    r->clear_payload();  // reencode with changes
+    request->request = r;
   }
   else
     request->retry_attempt++;
+  if (!r->releases.size())
+    encode_cap_releases(request, mds);
   request->request = 0;
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());
 
-  if (request->mds.empty()) {
+  if (request->mds == -1) {
     request->sent_stamp = g_clock.now();
     dout(20) << "send_request set sent_stamp to " << request->sent_stamp << dendl;
   }
@@ -965,7 +1056,7 @@ void Client::send_request(MetaRequest *request, int mds)
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));
   
-  request->mds.insert(mds);
+  request->mds = mds;
 }
 
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
@@ -984,43 +1075,18 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   // reset retry counter
   request->retry_attempt = 0;
 
-  if (!fwd->must_resend() && 
-      mds_sessions.count(fwd->get_dest_mds())) {
-    // dest mds has a session, and request was forwarded for us.
-
-    // note new mds set.
-    if (request->num_fwd < fwd->get_num_fwd()) {
-      // there are now exactly two mds's whose failure should trigger a resend
-      // of this request.
-      request->mds.clear();
-      request->mds.insert(fwd->get_source().num());
-      request->mds.insert(fwd->get_dest_mds());
-      request->num_fwd = fwd->get_num_fwd();
-      dout(10) << "handle_client_request tid " << tid
-	       << " fwd " << fwd->get_num_fwd() 
-	       << " to mds" << fwd->get_dest_mds() 
-	       << ", mds set now " << request->mds
-	       << dendl;
-    } else {
-      dout(10) << "handle_client_request tid " << tid
-	       << " previously forwarded to mds" << fwd->get_dest_mds() 
-	       << ", mds still " << request->mds
-		 << dendl;
-    }
-  } else {
-    // request not forwarded, or dest mds has no session.
-    // resend.
-    dout(10) << "handle_client_request tid " << tid
-	     << " fwd " << fwd->get_num_fwd() 
-	     << " to mds" << fwd->get_dest_mds() 
-	     << ", non-idempotent, resending to " << fwd->get_dest_mds()
-	     << dendl;
-
-    request->mds.clear();
-    request->num_fwd = fwd->get_num_fwd();
-    request->resend_mds = fwd->get_dest_mds();
-    request->caller_cond->Signal();
-  }
+  // request not forwarded, or dest mds has no session.
+  // resend.
+  dout(10) << "handle_client_request tid " << tid
+	   << " fwd " << fwd->get_num_fwd() 
+	   << " to mds" << fwd->get_dest_mds() 
+	   << ", resending to " << fwd->get_dest_mds()
+	   << dendl;
+  
+  request->mds = -1;
+  request->num_fwd = fwd->get_num_fwd();
+  request->resend_mds = fwd->get_dest_mds();
+  request->caller_cond->Signal();
 
   delete fwd;
 }
@@ -1278,8 +1344,9 @@ void Client::kick_requests(int mds, bool signal)
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) 
-    if (p->second->mds.count(mds)) {
+    if (p->second->mds == mds) {
       if (signal) {
+	p->second->kick = true;
 	p->second->caller_cond->Signal();
       }
       else {
@@ -1863,10 +1930,26 @@ void Client::_flushed(Inode *in)
 
 
 
-/** handle_file_caps
- * handle caps update from mds.  including mds to mds caps transitions.
- * do not block.
- */
+// checks common to add_update_cap, handle_cap_grant
+void Client::check_cap_issue(Inode *in, InodeCap *cap, unsigned issued)
+{
+  unsigned had = in->caps_issued();
+
+  if ((issued & CEPH_CAP_FILE_CACHE) &&
+      !(had & CEPH_CAP_FILE_CACHE))
+    in->cache_gen++;
+
+  if ((issued & CEPH_CAP_FILE_SHARED) &&
+      !(had & CEPH_CAP_FILE_SHARED)) {
+    in->shared_gen++;
+
+    if (in->is_dir() && (in->flags & I_COMPLETE)) {
+      dout(10) << " clearing I_COMPLETE on " << *in << dendl;
+      in->flags &= ~I_COMPLETE;
+    }
+  }
+}
+
 void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
 			    unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 			    int flags)
@@ -1896,15 +1979,10 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
     cap_list.push_back(&in->cap_item);
   }
 
+  check_cap_issue(in, cap, issued);
+
   if (flags & CEPH_CAP_FLAG_AUTH)
     in->auth_cap = cap;
-
-  if ((issued & CEPH_CAP_FILE_SHARED) &&
-      !(cap->issued & CEPH_CAP_FILE_SHARED))
-    in->shared_gen++;
-  if ((issued & CEPH_CAP_FILE_CACHE) &&
-      !(cap->issued & CEPH_CAP_FILE_CACHE))
-    in->cache_gen++;
 
   unsigned old_caps = cap->issued;
   cap->cap_id = cap_id;
@@ -2513,12 +2591,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     kick_writers = true;
   }
 
-  if ((issued & CEPH_CAP_FILE_CACHE) &&
-      !(cap->issued & CEPH_CAP_FILE_CACHE))
-    in->cache_gen++;
-  if ((issued & CEPH_CAP_FILE_SHARED) &&
-      !(cap->issued & CEPH_CAP_FILE_SHARED))
-    in->shared_gen++;
+  check_cap_issue(in, cap, issued);
 
   // update caps
   if (old_caps & ~new_caps) { 
@@ -2572,19 +2645,19 @@ int Client::mount()
 
   objecter->init();
 
+  monclient->sub_want("mdsmap", mdsmap->get_epoch());
+  monclient->renew_subs();
+
   mounted = true;
   
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
 	  << dendl;
 
-  monclient->sub_want("mdsmap", mdsmap->get_epoch());
-  monclient->renew_subs();
-
   
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
   req->set_filepath(fp);
   req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
@@ -2810,7 +2883,8 @@ void Client::renew_caps()
 void Client::renew_caps(const int mds) {
   dout(10) << "renew_caps mds" << mds << dendl;
   mds_sessions[mds].last_cap_renew_request = g_clock.now();
-  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS),
+  __u64 seq = ++mds_sessions[mds].cap_renew_seq;
+  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_RENEWCAPS, seq),
 			  mdsmap->get_inst(mds));
 
 }
@@ -2822,7 +2896,7 @@ void Client::renew_caps(const int mds) {
 int Client::_do_lookup(Inode *dir, const char *name, Inode **target)
 {
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
-  MClientRequest *req = new MClientRequest(op);
+  MetaRequest *req = new MetaRequest(op);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -2862,7 +2936,7 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       dir->dir->dentries.count(dname)) {
     Dentry *dn = dir->dir->dentries[dname];
 
-    dout(20) << " have dn " << dname << " mds" << dn->lease_mds << " ttl " << dn->lease_ttl
+    dout(20) << "_lookup have dn " << dname << " mds" << dn->lease_mds << " ttl " << dn->lease_ttl
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
@@ -2877,12 +2951,21 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
 	*target = dn->inode;
 	goto done;
       }
+      dout(20) << " bad lease, cap_ttl " << s.cap_ttl << ", cap_gen " << s.cap_gen
+	       << " vs lease_gen " << dn->lease_gen << dendl;
     }
     // dir lease?
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	dn->cap_shared_gen == dir->shared_gen) {
       *target = dn->inode;
       goto done;
+    }
+  } else {
+    // can we conclude ENOENT locally?
+    if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
+	(dir->flags & I_COMPLETE)) {
+      dout(10) << "_lookup concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
+      return -ENOENT;
     }
   }
 
@@ -3161,7 +3244,7 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid)
   if (yes)
     return 0;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_GETATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
@@ -3210,7 +3293,7 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   if (!mask)
     return 0;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETATTR);
 
   filepath path;
   in->make_path(path);
@@ -3463,6 +3546,8 @@ int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid)
 {
   *dirpp = new DirResult(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
+  if (in->dir)
+    (*dirpp)->release_count = in->dir->release_count;
   dout(10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
 
   // get the first frag
@@ -3552,7 +3637,7 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
   Inode *diri = dirp->inode;
 
-  MClientRequest *req = new MClientRequest(op);
+  MetaRequest *req = new MetaRequest(op);
   filepath path;
   diri->make_path(path);
   req->set_filepath(path); 
@@ -3609,6 +3694,11 @@ int Client::_readdir_get_frag(DirResult *dirp)
 
 	numdn--;
       }
+    }
+
+    if (diri->dir && diri->dir->release_count == dirp->release_count) {
+      dout(10) << " marking I_COMPLETE on " << *diri << dendl;
+      diri->flags |= I_COMPLETE;
     }
   } else {
     dout(10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
@@ -3864,7 +3954,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
     // update wanted?
     check_caps(in, true);
   } else {
-    MClientRequest *req = new MClientRequest(CEPH_MDS_OP_OPEN);
+    MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_path(path);
     req->set_filepath(path); 
@@ -4315,24 +4405,23 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
   
   dout(10) << " snaprealm " << *in->snaprealm << dendl;
 
-  if (g_conf.client_oc) {
-    if (in->caps_issued_mask(CEPH_CAP_FILE_BUFFER)) {
-      // do buffered write
-      if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
-	get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-      
-      // wait? (this may block!)
-      objectcacher->wait_for_write(size, client_lock);
-      
-      // async, caching, non-blocking.
-      objectcacher->file_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-			       offset, size, bl, g_clock.now(), 0);
-    } else {
+  if (g_conf.client_oc && (got & CEPH_CAP_FILE_BUFFER)) {
+    // do buffered write
+    if (in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0)
+      get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    
+    // wait? (this may block!)
+    objectcacher->wait_for_write(size, client_lock);
+    
+    // async, caching, non-blocking.
+    objectcacher->file_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+			     offset, size, bl, g_clock.now(), 0);
+  } else {
+    /*
       // atomic, synchronous, blocking.
       objectcacher->file_atomic_sync_write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 					   offset, size, bl, g_clock.now(), 0, client_lock);
-    }   
-  } else {
+    */
     // simple, non-atomic sync write
     Mutex flock("Client::_write flock");
     Cond cond;
@@ -4341,7 +4430,7 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
     Context *onsafe = new C_Client_SyncCommit(this, in);
 
     unsafe_sync_write++;
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
     
     filer->write(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		 offset, size, bl, g_clock.now(), 0, onfinish, onsafe);
@@ -4500,7 +4589,7 @@ void Client::getcwd(string& dir)
     if (!dn) {
       // look it up
       dout(10) << "getcwd looking up parent for " << *in << dendl;
-      MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
       filepath path(in->ino);
       req->set_filepath(path);
       int res = make_request(req, -1, -1);
@@ -4920,7 +5009,7 @@ int Client::ll_listxattr(vinodeno_t vino, char *names, size_t size, int uid, int
 int Client::_setxattr(Inode *in, const char *name, const void *value, size_t size, int flags,
 		      int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETXATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
@@ -4957,10 +5046,11 @@ int Client::ll_setxattr(vinodeno_t vino, const char *name, const void *value, si
 
 int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RMXATTR);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RMXATTR);
   filepath path;
   in->make_path(path);
   req->set_filepath(path);
+  req->set_filepath2(name);
  
   int res = make_request(req, uid, gid);
 
@@ -5012,7 +5102,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
 { 
   dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_MKNOD);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5057,7 +5147,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 { 
   dout(3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
   
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_CREATE);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5090,7 +5180,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
+  MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5133,7 +5223,7 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 
 int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SYMLINK);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5172,7 +5262,7 @@ int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, s
 
 int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_UNLINK);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5206,7 +5296,7 @@ int Client::ll_unlink(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
+  MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5241,7 +5331,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_RENAME);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
   filepath from;
   fromdir->make_path(from);
   from.push_dentry(fromname);
@@ -5280,7 +5370,7 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
 
 int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid) 
 {
-  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_LINK);
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
   filepath path(newname, dir->ino);
   req->set_filepath(path);
   filepath existing(in->ino);
@@ -5582,21 +5672,22 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 
 // ===============================
 
-void Client::ms_handle_failure(Message *m, const entity_inst_t& inst)
+void Client::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr)
 {
-  entity_name_t dest = inst.name;
-  dout(0) << "ms_handle_failure " << *m << " to " << inst << dendl;
+  dout(0) << "ms_handle_failure " << *m << " to " << addr << dendl;
 }
 
-void Client::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
+bool Client::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
+  return false;
 }
 
 
-void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
+void Client::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
 {
-  dout(0) << "ms_handle_remote_reset on " << addr << ", last " << last << dendl;
+  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+#if 0
   if (last.is_mds()) {
     int mds = last.num();
     dout(0) << "ms_handle_remote_reset on " << last << ", " << mds_sessions[mds].num_caps
@@ -5622,5 +5713,5 @@ void Client::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t las
   }
   else 
     objecter->ms_handle_remote_reset(addr, last);
-
+#endif
 }

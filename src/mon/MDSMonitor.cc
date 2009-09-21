@@ -529,30 +529,27 @@ void MDSMonitor::send_latest(entity_inst_t dest)
     waiting_for_map.push_back(dest);
 }
 
-void MDSMonitor::subscribe(entity_inst_t inst, version_t have, utime_t until)
-{
-  if (paxos->is_readable() &&
-      have < mdsmap.get_epoch()) {
-    send_full(inst);
-    subs.subscribe(inst, mdsmap.get_epoch(), until);    
-  } else
-    subs.subscribe(inst, have, until);
-}
-
 void MDSMonitor::check_subs()
 {
-  for (map<entity_inst_t, SubscriptionMap::sub_info>::iterator p = subs.subs.begin();
-       p != subs.subs.end();
-       p++) {
-    if (p->second.last < mdsmap.get_epoch()) {
-      send_full(p->first);
-      p->second.last = mdsmap.get_epoch();
-    }
+  nstring type = "mdsmap";
+  xlist<Subscription*>::iterator p = mon->session_map.subs[type].begin();
+  while (!p.end()) {
+    Subscription *sub = *p;
+    ++p;
+    check_sub(sub);
   }
-  subs.trim_onetime();
 }
 
-
+void MDSMonitor::check_sub(Subscription *sub)
+{
+  if (sub->last < mdsmap.get_epoch()) {
+    send_full(sub->session->inst);
+    if (sub->onetime)
+      mon->session_map.remove_sub(sub);
+    else
+      sub->last = mdsmap.get_epoch();
+  }
+}
 
 void MDSMonitor::tick()
 {
@@ -564,8 +561,6 @@ void MDSMonitor::tick()
   dout(10) << mdsmap << dendl;
   
   bool do_propose = false;
-
-  subs.trim(g_clock.now());
 
   if (!mon->is_leader()) return;
 

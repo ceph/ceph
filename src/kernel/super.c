@@ -57,7 +57,7 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	struct ceph_client *client = ceph_inode_to_client(dentry->d_inode);
 	struct ceph_monmap *monmap = client->monc.monmap;
 	struct ceph_statfs st;
-	__le64 fsid;
+	u64 fsid;
 	int err;
 
 	dout("statfs\n");
@@ -84,10 +84,9 @@ static int ceph_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_frsize = PAGE_CACHE_SIZE;
 
 	/* leave fsid little-endian, regardless of host endianness */
-	fsid = __ceph_fsid_major(&monmap->fsid) ^
-		__ceph_fsid_minor(&monmap->fsid);
-	buf->f_fsid.val[0] = le64_to_cpu(fsid) & 0xffffffff;
-	buf->f_fsid.val[1] = le64_to_cpu(fsid) >> 32;
+	fsid = *(u64 *)(&monmap->fsid) ^ *((u64 *)&monmap->fsid + 1);
+	buf->f_fsid.val[0] = fsid & 0xffffffff;
+	buf->f_fsid.val[1] = fsid >> 32;
 
 	return 0;
 }
@@ -114,8 +113,8 @@ static int ceph_show_options(struct seq_file *m, struct vfsmount *mnt)
 
 	if (args->flags & CEPH_OPT_FSID)
 		seq_printf(m, ",fsidmajor=%llu,fsidminor%llu",
-			   __ceph_fsid_major(&args->fsid),
-			   __ceph_fsid_minor(&args->fsid));
+			   le64_to_cpu(*(__le64 *)&args->fsid.fsid[0]),
+			   le64_to_cpu(*(__le64 *)&args->fsid.fsid[8]));
 	if (args->flags & CEPH_OPT_NOSHARE)
 		seq_puts(m, ",noshare");
 	if (args->flags & CEPH_OPT_DIRSTAT)
@@ -456,8 +455,8 @@ static int parse_mount_args(struct ceph_client *client,
 		client->monc.monmap->mon_inst[i].addr.erank = 0;
 		client->monc.monmap->mon_inst[i].addr.nonce = 0;
 		client->monc.monmap->mon_inst[i].name.type =
-			cpu_to_le32(CEPH_ENTITY_TYPE_MON);
-		client->monc.monmap->mon_inst[i].name.num = cpu_to_le32(i);
+			CEPH_ENTITY_TYPE_MON;
+		client->monc.monmap->mon_inst[i].name.num = cpu_to_le64(i);
 	}
 	client->monc.monmap->num_mon = num_mon;
 	args->my_addr.ipaddr.sin_family = AF_INET;
@@ -490,10 +489,10 @@ static int parse_mount_args(struct ceph_client *client,
 		}
 		switch (token) {
 		case Opt_fsidmajor:
-			__ceph_fsid_set_major(&args->fsid, cpu_to_le64(intval));
+			*(__le64 *)&args->fsid.fsid[0] = cpu_to_le64(intval);
 			break;
 		case Opt_fsidminor:
-			__ceph_fsid_set_minor(&args->fsid, cpu_to_le64(intval));
+			*(__le64 *)&args->fsid.fsid[8] = cpu_to_le64(intval);
 			break;
 		case Opt_port:
 			args->my_addr.ipaddr.sin_port = htons(intval);
@@ -577,9 +576,9 @@ static int parse_mount_args(struct ceph_client *client,
 static void release_mount_args(struct ceph_mount_args *args)
 {
 	kfree(args->snapdir_name);
-	args->snapdir_name = 0;
+	args->snapdir_name = NULL;
 	kfree(args->secret);
-	args->secret = 0;
+	args->secret = NULL;
 }
 
 /*
@@ -618,22 +617,31 @@ static struct ceph_client *ceph_create_client(void)
 		goto fail;
 	client->pg_inv_wq = create_workqueue("ceph-pg-invalid");
 	if (client->pg_inv_wq == NULL)
-		goto fail;
+		goto fail_wb_wq;
 	client->trunc_wq = create_workqueue("ceph-trunc");
 	if (client->trunc_wq == NULL)
-		goto fail;
+		goto fail_pg_inv_wq;
 
 	/* subsystems */
 	err = ceph_monc_init(&client->monc, client);
 	if (err < 0)
-		goto fail;
+		goto fail_trunc_wq;
 	err = ceph_osdc_init(&client->osdc, client);
 	if (err < 0)
-		goto fail;
+		goto fail_monc;
 	ceph_mdsc_init(&client->mdsc, client);
 	return client;
 
+fail_monc:
+	ceph_monc_stop(&client->monc);
+fail_trunc_wq:
+	destroy_workqueue(client->trunc_wq);
+fail_pg_inv_wq:
+	destroy_workqueue(client->pg_inv_wq);
+fail_wb_wq:
+	destroy_workqueue(client->wb_wq);
 fail:
+	kfree(client);
 	return ERR_PTR(err);
 }
 
@@ -649,12 +657,10 @@ static void ceph_destroy_client(struct ceph_client *client)
 	kfree(client->signed_ticket);
 
 	ceph_debugfs_client_cleanup(client);
-	if (client->wb_wq)
-		destroy_workqueue(client->wb_wq);
-	if (client->pg_inv_wq)
-		destroy_workqueue(client->pg_inv_wq);
-	if (client->trunc_wq)
-		destroy_workqueue(client->trunc_wq);
+	destroy_workqueue(client->wb_wq);
+	destroy_workqueue(client->pg_inv_wq);
+	destroy_workqueue(client->trunc_wq);
+
 	if (client->msgr)
 		ceph_messenger_destroy(client->msgr);
 	if (client->wb_pagevec_pool)
@@ -1181,13 +1187,6 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 	if (err < 0)
 		goto out;
 
-	/* set up mempools */
-	err = -ENOMEM;
-	client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
-			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
-	if (!client->wb_pagevec_pool)
-		goto out;
-
 	if (client->mount_args.flags & CEPH_OPT_NOSHARE)
 		compare_super = NULL;
 	sb = sget(fs_type, compare_super, ceph_set_super, client);
@@ -1202,6 +1201,14 @@ static int ceph_get_sb(struct file_system_type *fs_type,
 		dout("get_sb got existing client %p\n", client);
 	} else {
 		dout("get_sb using new client %p\n", client);
+
+		/* set up mempools */
+		err = -ENOMEM;
+		client->wb_pagevec_pool = mempool_create_kmalloc_pool(10,
+			      client->mount_args.wsize >> PAGE_CACHE_SHIFT);
+		if (!client->wb_pagevec_pool)
+			goto out_splat;
+
 		err = ceph_init_bdi(sb, client);
 		if (err < 0)
 			goto out_splat;
@@ -1219,6 +1226,7 @@ out_splat:
 	up_write(&sb->s_umount);
 	deactivate_super(sb);
 	goto out_final;
+
 out:
 	ceph_destroy_client(client);
 out_final:

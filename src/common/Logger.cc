@@ -295,7 +295,7 @@ double Logger::favg(int key, double v)
   logger_lock.Lock();
   int i = type->lookup_key(key);
   vals[i]++;
-  double r = fvals[i] = v;
+  double r = fvals[i] += v;
   if (g_conf.logger_calc_variance)
     vals_to_avg[i].push_back(v);
   logger_lock.Unlock();

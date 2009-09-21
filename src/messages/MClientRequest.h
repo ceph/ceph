@@ -54,6 +54,10 @@ public:
     mutable ceph_mds_request_release item;
     nstring dname;
 
+    Release() : item(), dname() {}
+    Release(const ceph_mds_request_release& rel, nstring name) :
+      item(rel), dname(name) {}
+
     void encode(bufferlist& bl) const {
       item.dname_len = dname.length();
       ::encode(item, bl);

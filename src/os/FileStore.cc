@@ -388,7 +388,8 @@ int FileStore::lock_fsid()
   l.l_len = 0;
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
-    derr(0) << "mount failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror(errno) << dendl;
+    char buf[80];
+    derr(0) << "mount failed to lock " << basedir << "/fsid, is another cosd still running? " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   return 0;
@@ -396,6 +397,8 @@ int FileStore::lock_fsid()
 
 int FileStore::mount() 
 {
+  char buf[80];
+
   if (g_conf.filestore_dev) {
     dout(0) << "mounting" << dendl;
     char cmd[100];
@@ -409,7 +412,7 @@ int FileStore::mount()
   struct stat st;
   int r = ::stat(basedir.c_str(), &st);
   if (r != 0) {
-    derr(0) << "unable to stat basedir " << basedir << ", " << strerror(errno) << dendl;
+    derr(0) << "unable to stat basedir " << basedir << ", " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
   
@@ -433,7 +436,7 @@ int FileStore::mount()
 	     << " " << strerror(errno)
 	     << dendl;*/
     if (x != y) {
-      derr(0) << "xattrs don't appear to work (" << strerror(errno) << ") on " << basedir << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
+      derr(0) << "xattrs don't appear to work (" << strerror_r(errno, buf, sizeof(buf)) << ") on " << basedir << ", be sure to mount underlying file system with 'user_xattr' option" << dendl;
       return -errno;
     }
   }
@@ -500,11 +503,11 @@ int FileStore::mount()
     if (r == -EBADF) {
       dout(0) << "mount detected shiny new btrfs" << dendl;      
     } else {
-      dout(0) << "mount detected dingey old btrfs (r=" << r << " " << strerror(-r) << ")" << dendl;
+      dout(0) << "mount detected dingey old btrfs (r=" << r << " " << strerror_r(-r, buf, sizeof(buf)) << ")" << dendl;
       btrfs = 1;
     }
   } else {
-    dout(0) << "mount did NOT detect btrfs: " << strerror(-r) << dendl;
+    dout(0) << "mount did NOT detect btrfs: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     btrfs = 0;
   }
 
@@ -629,14 +632,15 @@ int FileStore::_transaction_start(int len)
       !g_conf.filestore_btrfs_trans)
     return 0;
 
+  char buf[80];
   int fd = ::open(basedir.c_str(), O_RDONLY);
   if (fd < 0) {
-    derr(0) << "transaction_start got " << strerror(errno)
+    derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs open" << dendl;
     assert(0);
   }
   if (::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
-    derr(0) << "transaction_start got " << strerror(errno)
+    derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs ioctl" << dendl;    
     ::close(fd);
     return -errno;
@@ -1209,7 +1213,7 @@ unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
   if (trans->len) {
     r = ::ioctl(fsid_fd, BTRFS_IOC_USERTRANS, (unsigned long)trans);
     if (r < 0) {
-      derr(0) << "apply_transaction_end got " << strerror(errno)
+      derr(0) << "apply_transaction_end got " << strerror_r(errno, buf, sizeof(buf))
 	      << " from btrfs usertrans ioctl" << dendl;    
       r = -errno;
     } 
@@ -1266,7 +1270,8 @@ int FileStore::read(coll_t cid, const sobject_t& oid,
   int r;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror(errno) << dendl;
+    char buf[80];
+    dout(10) << "read couldn't open " << fn << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
   } else {
     __u64 actual = ::lseek64(fd, offset, SEEK_SET);
@@ -1345,10 +1350,11 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
   dout(15) << "write " << fn << " " << offset << "~" << len << dendl;
   int r;
 
+  char buf[80];
   int flags = O_WRONLY|O_CREAT;
   int fd = ::open(fn, flags, 0644);
   if (fd < 0) {
-    derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror(errno) << dendl;
+    derr(0) << "write couldn't open " << fn << " flags " << flags << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     r = -errno;
   } else {
     
@@ -1365,12 +1371,12 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
       if (r > 0)
 	did += r;
       else {
-	derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
+	derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       }
     }
     
     if (did < 0) {
-      derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror(errno) << dendl;
+      derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
     
     ::close(fd);
@@ -1735,7 +1741,8 @@ int FileStore::_setattrs(coll_t cid, const sobject_t& oid, map<nstring,bufferptr
       val = "";
     r = do_setxattr(fn, n, val, p->second.length());
     if (r < 0) {
-      cerr << "error setxattr " << strerror(errno) << std::endl;
+      char buf[80];
+      cerr << "error setxattr " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
       break;
     }
   }

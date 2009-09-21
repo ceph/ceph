@@ -25,6 +25,7 @@ struct ceph_osd {
 	atomic_t o_ref;
 	struct ceph_osd_client *o_osdc;
 	int o_osd;
+	int o_incarnation;
 	struct rb_node o_node;
 	struct ceph_connection o_con;
 	struct list_head o_requests;
@@ -40,7 +41,7 @@ struct ceph_osd_request {
 	struct ceph_msg  *r_request, *r_reply;
 	int               r_result;
 	int               r_flags;     /* any additional flags for the osd */
-	int               r_aborted;   /* set if we cancel this request */
+	u32               r_sent;      /* >0 if r_request is sending/sent */
 	int r_prepared_pages, r_got_reply;
 
 	struct ceph_osd_client *r_osdc;
@@ -85,6 +86,9 @@ struct ceph_osd_client {
 	struct dentry 	       *debugfs_file;
 
 	mempool_t              *req_mempool;
+
+	struct ceph_msgpool   msgpool_op;
+	struct ceph_msgpool   msgpool_op_reply;
 };
 
 extern int ceph_osdc_init(struct ceph_osd_client *osdc,
@@ -104,7 +108,7 @@ extern struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *,
 				      int do_sync, u32 truncate_seq,
 				      u64 truncate_size,
 				      struct timespec *mtime,
-				      bool use_mempool);
+				      bool use_mempool, int num_reply);
 
 static inline void ceph_osdc_get_request(struct ceph_osd_request *req)
 {
@@ -117,8 +121,6 @@ extern int ceph_osdc_start_request(struct ceph_osd_client *osdc,
 				   bool nofail);
 extern int ceph_osdc_wait_request(struct ceph_osd_client *osdc,
 				  struct ceph_osd_request *req);
-extern void ceph_osdc_abort_request(struct ceph_osd_client *osdc,
-				    struct ceph_osd_request *req);
 extern void ceph_osdc_sync(struct ceph_osd_client *osdc);
 
 extern int ceph_osdc_readpages(struct ceph_osd_client *osdc,

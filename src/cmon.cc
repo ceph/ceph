@@ -69,7 +69,8 @@ int main(int argc, const char **argv)
   MonitorStore store(g_conf.mon_data);
   err = store.mount();
   if (err < 0) {
-    cerr << "problem opening monitor store in " << g_conf.mon_data << ": " << strerror(-err) << std::endl;
+    char buf[80];
+    cerr << "problem opening monitor store in " << g_conf.mon_data << ": " << strerror_r(-err, buf, sizeof(buf)) << std::endl;
     exit(1);
   }
 

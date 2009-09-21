@@ -97,8 +97,9 @@ int main(int argc, const char **argv)
   if (!(create && clobber))
     r = monmap.read(fn);
 
+  char buf[80];
   if (!create && r < 0) {
-    cerr << me << ": couldn't open " << fn << ": " << strerror(errno) << std::endl;
+    cerr << me << ": couldn't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
     return -1;
   }    
   else if (create && !clobber && r == 0) {
@@ -140,7 +141,7 @@ int main(int argc, const char **argv)
 	 << std::endl;
     int r = monmap.write(fn);
     if (r < 0) {
-      cerr << "monmaptool: error writing to '" << fn << "': " << strerror(-r) << std::endl;
+      cerr << "monmaptool: error writing to '" << fn << "': " << strerror_r(-r, buf, sizeof(buf)) << std::endl;
       return 1;
     }
   }

@@ -941,7 +941,6 @@ public:
     filepath path(p, 1);
     return path_is_mine(path);
   }
-  CDir *path_traverse_to_dir(filepath& path);
 
   void open_remote_dirfrag(CInode *diri, frag_t fg, Context *fin);
   CInode *get_dentry_inode(CDentry *dn, MDRequest *mdr, bool projected=false);
@@ -954,6 +953,9 @@ public:
   void _open_remote_dentry_finish(int r, CDentry *dn, bool projected, Context *fin);
 
   C_Gather *parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing);
+  bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
+				   set<CDir*>& fetch_queue, set<inodeno_t>& missing, C_Gather *gather);
+
 
   void make_trace(vector<CDentry*>& trace, CInode *in);
   

@@ -295,7 +295,7 @@ string SyntheticClient::get_sarg(int seq)
   }
   if (a.length() == 0 || a == "~") {
     char s[30];
-    sprintf(s,"/syn.%lld.%d", (long long)client->whoami.v, seq);
+    sprintf(s,"syn.%lld.%d", (long long)client->whoami.v, seq);
     a = s;
   } 
   return a;

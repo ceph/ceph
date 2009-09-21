@@ -1,4 +1,23 @@
 // -*- mode:Java; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/**
+ *
+ * Licensed under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * 
+ * Implements the Hadoop FS interfaces to allow applications to store
+ * files in Ceph.
+ */
+
 package org.apache.hadoop.fs.ceph;
 
 import java.io.File;
@@ -15,7 +34,12 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.Progressable;
 
-class CephOutputStream extends OutputStream {
+/**
+ * <p>
+ * An {@link OutputStream} for a CephFileSystem and corresponding
+ * Ceph instance.
+ */
+public class CephOutputStream extends OutputStream {
 
   private int bufferSize;
 
@@ -23,7 +47,7 @@ class CephOutputStream extends OutputStream {
 
   private int fileHandle;
 
-  private static boolean debug = false;
+  private boolean debug;
 
 
   private native long ceph_seek_from_start(int fh, long pos);
@@ -42,12 +66,13 @@ class CephOutputStream extends OutputStream {
     System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
     fileHandle = fh;
     closed = false;
-    debug = ("true".equals(conf.get("fs.ceph.debug")));
+    debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
   }
 
-  //Ceph likes things to be closed before it shuts down,
-  //so closing the IOStream stuff voluntarily is good
-  public void finalize () throws Throwable {
+  /**Ceph likes things to be closed before it shuts down,
+   *so closing the IOStream stuff voluntarily is good
+   */
+  protected void finalize () throws Throwable {
     try {
       if (!closed) close();
     }
@@ -70,7 +95,7 @@ class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void write(int b) throws IOException {
-      debug("CephOutputStream.write: writing a single byte to fd " + fileHandle);
+      if(debug) debug("CephOutputStream.write: writing a single byte to fd " + fileHandle);
 
       if (closed) {
 	throw new IOException("CephOutputStream.write: cannot write " + 
@@ -81,14 +106,14 @@ class CephOutputStream extends OutputStream {
       buf[0] = (byte) b;    
       int result = ceph_write(fileHandle, buf, 0, 1);
       if (1 != result)
-	debug("CephOutputStream.write: failed writing a single byte to fd "
+	if(debug) debug("CephOutputStream.write: failed writing a single byte to fd "
 	      + fileHandle + ": Ceph write() result = " + result);
       return;
     }
 
   /**
    * Write a byte buffer into the Ceph file.
-   * @param buf[] the byte array to write from
+   * @param buf the byte array to write from
    * @param off the position in the file to start writing at.
    * @param len The number of bytes to actually write.
    * @throws IOException if you have closed the CephOutputStream, or
@@ -98,7 +123,7 @@ class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void write(byte buf[], int off, int len) throws IOException {
-     debug("CephOutputStream.write: writing " + len + 
+     if(debug) debug("CephOutputStream.write: writing " + len + 
 	   " bytes to fd " + fileHandle);
       // make sure stream is open
       if (closed) {
@@ -151,7 +176,7 @@ class CephOutputStream extends OutputStream {
    */
   @Override
   public synchronized void close() throws IOException {
-      debug("CephOutputStream.close:enter");
+      if(debug) debug("CephOutputStream.close:enter");
       if (closed) {
 	throw new IOException("Stream closed");
       }
@@ -162,10 +187,10 @@ class CephOutputStream extends OutputStream {
       }
 	
       closed = true;
-      debug("CephOutputStream.close:exit");
+      if(debug) debug("CephOutputStream.close:exit");
     }
 
   private void debug(String out) {
-    if (debug) System.out.println(out);
+    System.err.println(out);
   }
 }

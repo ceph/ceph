@@ -21,6 +21,12 @@ echo cleanup
 rm *.deb *.tar.gz *.changes *.dsc
 rm -rf ceph-$vers*
 
+echo generating git version stamp
+cd src
+./make_version
+grep GIT_VER ceph_ver.h
+cd ..
+
 echo building tarball
 make dist
 

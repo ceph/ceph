@@ -1,4 +1,22 @@
 // -*- mode:Java; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+/**
+ *
+ * Licensed under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ *
+ * 
+ * Implements the Hadoop FS interfaces to allow applications to store
+ * files in Ceph.
+ */
 package org.apache.hadoop.fs.ceph;
 
 import java.io.BufferedOutputStream;
@@ -20,7 +38,7 @@ import org.apache.hadoop.fs.FSInputStream;
  * An {@link FSInputStream} for a CephFileSystem and corresponding
  * Ceph instance.
  */
-class CephInputStream extends FSInputStream {
+public class CephInputStream extends FSInputStream {
 
   private int bufferSize;
 
@@ -30,13 +48,7 @@ class CephInputStream extends FSInputStream {
 
   private long fileLength;
 
-  private static boolean debug = false;
-
-  //private long pos = 0;
-
-  //private DataInputStream blockStream;
-
-  //private long blockEnd = -1;
+  private boolean debug;
 
   private native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
   private native long ceph_seek_from_start(int fh, long pos);
@@ -58,14 +70,15 @@ class CephInputStream extends FSInputStream {
     fileLength = flength;
     fileHandle = fh;
     closed = false;
-    debug = ("true".equals(conf.get("fs.ceph.debug")));
-    debug("CephInputStream constructor: initializing stream with fh "
+    debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
+    if(debug) debug("CephInputStream constructor: initializing stream with fh "
 	  + fh + " and file length " + flength);
       
   }
-  //Ceph likes things to be closed before it shuts down,
-  //so closing the IOStream stuff voluntarily is good
-  public void finalize () throws Throwable {
+  /** Ceph likes things to be closed before it shuts down,
+   * so closing the IOStream stuff voluntarily in a finalizer is good
+   */
+  protected void finalize () throws Throwable {
     try {
       if (!closed) close();
     }
@@ -75,14 +88,16 @@ class CephInputStream extends FSInputStream {
   public synchronized long getPos() throws IOException {
     return ceph_getpos(fileHandle);
   }
-
+  /**
+   * Find the number of bytes remaining in the file.
+   */
   @Override
   public synchronized int available() throws IOException {
       return (int) (fileLength - getPos());
     }
 
   public synchronized void seek(long targetPos) throws IOException {
-    debug("CephInputStream.seek: Seeking to position " + targetPos +
+    if(debug) debug("CephInputStream.seek: Seeking to position " + targetPos +
 	  " on fd " + fileHandle);
     if (targetPos > fileLength) {
       throw new IOException("CephInputStream.seek: failed seeking to position " + targetPos +
@@ -108,7 +123,7 @@ class CephInputStream extends FSInputStream {
    */
   @Override
   public synchronized int read() throws IOException {
-      debug("CephInputStream.read: Reading a single byte from fd " + fileHandle
+      if(debug) debug("CephInputStream.read: Reading a single byte from fd " + fileHandle
 	    + " by calling general read function");
 
       byte result[] = new byte[1];
@@ -120,14 +135,14 @@ class CephInputStream extends FSInputStream {
 
   /**
    * Read a specified number of bytes into a byte[] from the file.
-   * @param buf[] the byte array to read into.
+   * @param buf the byte array to read into.
    * @param off the offset to start at in the file
    * @param len the number of bytes to read
    * @return 0 if successful, otherwise an error code.
    */
   @Override
   public synchronized int read(byte buf[], int off, int len) throws IOException {
-      debug("CephInputStream.read: Reading " + len  + " bytes from fd " + fileHandle);
+      if(debug) debug("CephInputStream.read: Reading " + len  + " bytes from fd " + fileHandle);
       
       if (closed) {
 	throw new IOException("CephInputStream.read: cannot read " + len  + 
@@ -147,7 +162,7 @@ class CephInputStream extends FSInputStream {
       // ensure we're not past the end of the file
       if (getPos() >= fileLength) 
 	{
-	  debug("CephInputStream.read: cannot read " + len  + 
+	  if(debug) debug("CephInputStream.read: cannot read " + len  + 
 			     " bytes from fd " + fileHandle + ": current position is " +
 			     getPos() + " and file length is " + fileLength);
 	  
@@ -156,10 +171,10 @@ class CephInputStream extends FSInputStream {
       // actually do the read
       int result = ceph_read(fileHandle, buf, off, len);
       if (result < 0)
-	debug("CephInputStream.read: Reading " + len
+	if(debug) debug("CephInputStream.read: Reading " + len
 			   + " bytes from fd " + fileHandle + " failed.");
 
-      debug("CephInputStream.read: Reading " + len  + " bytes from fd " 
+      if(debug) debug("CephInputStream.read: Reading " + len  + " bytes from fd " 
 	    + fileHandle + ": succeeded in reading " + result + " bytes");   
       return result;
   }
@@ -169,7 +184,7 @@ class CephInputStream extends FSInputStream {
    */
   @Override
   public void close() throws IOException {
-    debug("CephOutputStream.close:enter");
+    if(debug) debug("CephOutputStream.close:enter");
     if (closed) {
       throw new IOException("Stream closed");
     }
@@ -179,10 +194,10 @@ class CephInputStream extends FSInputStream {
       throw new IOException("Close failed!");
     }
     closed = true;
-    debug("CephOutputStream.close:exit");
+    if(debug) debug("CephOutputStream.close:exit");
   }
 
   private void debug(String out) {
-    if (debug) System.out.println(out);
+    System.err.println(out);
   }
 }

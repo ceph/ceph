@@ -34,6 +34,9 @@ struct ceph_connection_operations {
 	/* handle an incoming message. */
 	void (*dispatch) (struct ceph_connection *con, struct ceph_msg *m);
 
+	/* protocol version mismatch */
+	void (*bad_proto) (struct ceph_connection *con);
+
 	/* there was some error on the socket (disconnect, whatever) */
 	void (*fault) (struct ceph_connection *con);
 
@@ -64,9 +67,7 @@ static inline const char *ceph_name_type_str(int t)
 }
 
 /* use format string %s%d */
-#define ENTITY_NAME(n)				   \
-	ceph_name_type_str(le32_to_cpu((n).type)), \
-		le32_to_cpu((n).num)
+#define ENTITY_NAME(n) ceph_name_type_str((n).type), le64_to_cpu((n).num)
 
 struct ceph_messenger {
 	struct ceph_entity_inst inst;    /* my name+address */
@@ -85,15 +86,13 @@ struct ceph_messenger {
 /*
  * a single message.  it contains a header (src, dest, message type, etc.),
  * footer (crc values, mainly), a "front" message body, and possibly a
- * data payload (stored in some number of pages).  The page_mutex protects
- * access to the page vector.
+ * data payload (stored in some number of pages).
  */
 struct ceph_msg {
 	struct ceph_msg_header hdr;	/* header */
 	struct ceph_msg_footer footer;	/* footer */
 	struct kvec front;              /* unaligned blobs of message */
 	struct ceph_buffer *middle;
-	struct mutex page_mutex;
 	struct page **pages;            /* data payload.  NOT OWNER. */
 	unsigned nr_pages;              /* size of page array */
 	struct list_head list_head;
@@ -101,6 +100,8 @@ struct ceph_msg {
 	bool front_is_vmalloc;
 	bool more_to_follow;
 	int front_max;
+
+	struct ceph_msgpool *pool;
 };
 
 struct ceph_msg_pos {
@@ -161,13 +162,15 @@ struct ceph_connection {
 	u32 peer_global_seq;  /* peer's global seq for this connection */
 
 	/* out queue */
-	spinlock_t out_queue_lock;   /* protects out_queue, out_sent, out_seq */
+	struct mutex out_mutex;
 	struct list_head out_queue;
-	struct list_head out_sent;   /* sending/sent but unacked */
-	u32 out_seq;		     /* last message queued for send */
+	struct list_head out_sent;   /* sending or sent but unacked */
+	unsigned out_qlen;
+	u64 out_seq;		     /* last message queued for send */
+	u64 out_seq_sent;            /* last message sent */
 	bool out_keepalive_pending;
 
-	u32 in_seq, in_seq_acked;  /* last message received, acked */
+	u64 in_seq, in_seq_acked;  /* last message received, acked */
 
 	/* connection negotiation temps */
 	char in_banner[CEPH_BANNER_MAX_LEN];
@@ -188,12 +191,14 @@ struct ceph_connection {
 					    out_sent) */
 	struct ceph_msg_pos out_msg_pos;
 
-	struct kvec out_kvec[6],         /* sending header/footer data */
+	struct kvec out_kvec[8],         /* sending header/footer data */
 		*out_kvec_cur;
 	int out_kvec_left;   /* kvec's left in out_kvec */
+	int out_skip;        /* skip this many bytes */
 	int out_kvec_bytes;  /* total bytes left */
+	bool out_kvec_is_msg; /* kvec refers to out_msg */
 	int out_more;        /* there is more data after the kvecs */
-	__le32 out_temp_ack; /* for writing an ack */
+	__le64 out_temp_ack; /* for writing an ack */
 
 	/* message in temps */
 	struct ceph_msg_header in_hdr;
@@ -203,7 +208,7 @@ struct ceph_connection {
 
 	char in_tag;         /* protocol control byte */
 	int in_base_pos;     /* bytes read */
-	__le32 in_temp_ack;  /* for reading an ack */
+	__le64 in_temp_ack;  /* for reading an ack */
 
 	struct delayed_work work;	    /* send|recv work */
 	unsigned long       delay;          /* current delay interval */
@@ -223,6 +228,7 @@ extern void ceph_con_open(struct ceph_connection *con,
 			  struct ceph_entity_addr *addr);
 extern void ceph_con_close(struct ceph_connection *con);
 extern void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg);
+extern void ceph_con_revoke(struct ceph_connection *con, struct ceph_msg *msg);
 extern void ceph_con_keepalive(struct ceph_connection *con);
 extern struct ceph_connection *ceph_con_get(struct ceph_connection *con);
 extern void ceph_con_put(struct ceph_connection *con);
@@ -239,25 +245,11 @@ extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
 
 static inline struct ceph_msg *ceph_msg_get(struct ceph_msg *msg)
 {
+	dout("ceph_msg_get %p %d -> %d\n", msg, atomic_read(&msg->nref),
+	     atomic_read(&msg->nref)+1);
 	atomic_inc(&msg->nref);
 	return msg;
 }
 extern void ceph_msg_put(struct ceph_msg *msg);
-
-static inline void ceph_msg_remove(struct ceph_msg *msg)
-{
-	list_del_init(&msg->list_head);
-	ceph_msg_put(msg);
-}
-static inline void ceph_msg_put_list(struct list_head *head)
-{
-	while (!list_empty(head)) {
-		struct ceph_msg *msg = list_first_entry(head, struct ceph_msg,
-							list_head);
-		ceph_msg_remove(msg);
-	}
-}
-
-extern struct ceph_msg *ceph_msg_maybe_dup(struct ceph_msg *msg);
 
 #endif

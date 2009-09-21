@@ -417,9 +417,10 @@ int OSD::init()
 
   
   // i'm ready!
-  messenger->set_dispatcher(this);
-  link_dispatcher(&logclient);
-  heartbeat_messenger->set_dispatcher(&heartbeat_dispatcher);
+  messenger->add_dispatcher_head(this);
+  messenger->add_dispatcher_head(&logclient);
+
+  heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
   
   monc->init();
 
@@ -547,7 +548,6 @@ int OSD::shutdown()
   }
   pg_map.clear();
 
-  unlink_dispatcher(&logclient);
   messenger->shutdown();
   if (heartbeat_messenger)
     heartbeat_messenger->shutdown();
@@ -1497,29 +1497,6 @@ bool OSD::heartbeat_dispatch(Message *m)
 
 bool OSD::ms_dispatch(Message *m)
 {
-  // verify protocol version
-  if (m->get_orig_source().is_osd() &&
-      m->get_header().osd_protocol != CEPH_OSD_PROTOCOL) {
-    dout(0) << "osd protocol v " << (int)m->get_header().osd_protocol << " != my " << CEPH_OSD_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-
-  if (m->get_header().osdc_protocol != CEPH_OSDC_PROTOCOL) {
-    dout(0) << "osdc protocol v " << (int)m->get_header().osdc_protocol << " != my " << CEPH_OSDC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-  if (m->get_orig_source().is_mon() &&
-      m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
-    dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-
   // lock!
   osd_lock.Lock();
   _dispatch(m);
@@ -1648,18 +1625,6 @@ void OSD::_dispatch(Message *m)
     }
   }
 }
-
-
-void OSD::ms_handle_failure(Message *m, const entity_inst_t& inst)
-{
-  entity_name_t dest = inst.name;
-
-  dout(1) << "ms_handle_failure " << inst << " on " << *m << dendl;
-  if (g_conf.ms_die_on_failure)
-    assert(0);
-}
-
-
 
 
 void OSD::handle_scrub(MOSDScrub *m)

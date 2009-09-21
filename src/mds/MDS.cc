@@ -373,16 +373,14 @@ void MDS::send_message_client(Message *m, entity_inst_t clientinst)
 
 int MDS::init()
 {
-  messenger->set_dispatcher(this);
+  messenger->add_dispatcher_tail(this);
+  messenger->add_dispatcher_head(&logclient);
 
   // get monmap
   monc->set_messenger(messenger);
-  link_dispatcher(monc);
 
   monc->init();
   monc->get_monmap();
-
-  monc->sub_want("mdsmap", 0);
 
   mds_lock.Lock();
 
@@ -393,12 +391,12 @@ int MDS::init()
   messenger->set_myname(entity_name_t::MDS(whoami));
 
   objecter->init();
-   
+
+  monc->sub_want("mdsmap", 0);
+  monc->renew_subs();
+
   // schedule tick
   reset_tick();
-
-  // i'm ready!
-  link_dispatcher(&logclient);
 
   mds_lock.Unlock();
   return 0;
@@ -609,17 +607,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   state = mdsmap->get_state(addr);
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
-  if (whoami < 0) {
-    if (want_state == MDSMap::STATE_BOOT) {
-      dout(10) << "not in map yet" << dendl;
-    } else {
-      dout(1) << "handle_mds_map i (" << addr
-	      << ") dne in the mdsmap, killing myself" << dendl;
-      suicide();
-    }
-    goto out;
-  }
-
   if (state != oldstate)
     last_state = oldstate;
 
@@ -630,6 +617,17 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (standby_replay_for >= 0)
       request_state(MDSMap::STATE_STANDBY_REPLAY);
 
+    goto out;
+  }
+
+  if (whoami < 0) {
+    if (want_state == MDSMap::STATE_BOOT) {
+      dout(10) << "not in map yet" << dendl;
+    } else {
+      dout(1) << "handle_mds_map i (" << addr
+	      << ") dne in the mdsmap, killing myself" << dendl;
+      suicide();
+    }
     goto out;
   }
 
@@ -1143,7 +1141,6 @@ void MDS::suicide()
   objecter->shutdown();
   
   // shut down messenger
-  unlink_dispatcher(&logclient);
   messenger->shutdown();
 
   monc->shutdown();
@@ -1155,47 +1152,9 @@ void MDS::suicide()
 
 bool MDS::ms_dispatch(Message *m)
 {
-  bool ret;
-
-  // verify protocol version
-  if (m->get_orig_source().is_mds() &&
-      m->get_header().mds_protocol != CEPH_MDS_PROTOCOL) {
-    dout(0) << "mds protocol v " << (int)m->get_header().mds_protocol << " != my " << CEPH_MDS_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-
-  if (m->get_header().mdsc_protocol != CEPH_MDSC_PROTOCOL) {
-    dout(0) << "mdsc protocol v " << (int)m->get_header().mdsc_protocol << " != my " << CEPH_MDSC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-  if (m->get_orig_source().is_mon() &&
-      m->get_header().monc_protocol != CEPH_MONC_PROTOCOL) {
-    dout(0) << "monc protocol v " << (int)m->get_header().monc_protocol << " != my " << CEPH_MONC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-  if (m->get_orig_source().is_osd() &&
-      m->get_header().osdc_protocol != CEPH_OSDC_PROTOCOL) {
-    dout(0) << "osdc protocol v " << (int)m->get_header().osdc_protocol << " != my " << CEPH_OSDC_PROTOCOL
-	    << " from " << m->get_orig_source_inst() << " " << *m << dendl;
-    delete m;
-    return true;
-  }
-
-  if (m->get_type() == CEPH_MSG_PING) {
-    delete m;
-    return true;
-  }    
-
   mds_lock.Lock();
-  ret = _dispatch(m);
+  bool ret = _dispatch(m);
   mds_lock.Unlock();
-
   return ret;
 }
 
@@ -1437,21 +1396,22 @@ bool MDS::_dispatch(Message *m)
 
 
 
-void MDS::ms_handle_failure(Message *m, const entity_inst_t& inst) 
+void MDS::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) 
 {
   mds_lock.Lock();
-  dout(0) << "ms_handle_failure to " << inst << " on " << *m << dendl;
+  dout(0) << "ms_handle_failure to " << addr << " on " << *m << dendl;
   mds_lock.Unlock();
 }
 
-void MDS::ms_handle_reset(const entity_addr_t& addr, entity_name_t last) 
+bool MDS::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
+  return false;
 }
 
 
-void MDS::ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last) 
+void MDS::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
-  objecter->ms_handle_remote_reset(addr, last);
+  objecter->ms_handle_remote_reset(addr);
 }

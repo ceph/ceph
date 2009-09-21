@@ -784,7 +784,7 @@ get_more_pages:
 					    snapc, do_sync,
 					    ci->i_truncate_seq,
 					    ci->i_truncate_size,
-					    &inode->i_mtime, true);
+					    &inode->i_mtime, true, 1);
 				max_pages = req->r_num_pages;
 
 				alloc_page_vec(client, req);
@@ -840,7 +840,7 @@ get_more_pages:
 		reqhead = req->r_request->front.iov_base;
 		op = (void *)(reqhead + 1);
 		op->length = cpu_to_le64(len);
-		op->payload_len = op->length;
+		op->payload_len = cpu_to_le32(len);
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 
 		ceph_osdc_start_request(&client->osdc, req, true);
@@ -852,7 +852,7 @@ get_more_pages:
 		if (wbc->nr_to_write <= 0)
 			done = 1;
 
-	release_pvec_pages:
+release_pvec_pages:
 		dout("pagevec_release on %d pages (%p)\n", (int)pvec.nr,
 		     pvec.nr ? pvec.pages[0] : NULL);
 		pagevec_release(&pvec);

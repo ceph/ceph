@@ -1,9 +1,11 @@
 #ifndef _FS_CEPH_MON_CLIENT_H
 #define _FS_CEPH_MON_CLIENT_H
 
-#include "messenger.h"
 #include <linux/completion.h>
 #include <linux/radix-tree.h>
+
+#include "messenger.h"
+#include "msgpool.h"
 
 struct ceph_client;
 struct ceph_mount_args;
@@ -60,6 +62,11 @@ struct ceph_mon_client {
 	int cur_mon;                       /* last monitor i contacted */
 	unsigned long sub_sent, sub_renew_after;
 	struct ceph_connection *con;
+
+	/* msg pools */
+	struct ceph_msgpool msgpool_mount_ack;
+	struct ceph_msgpool msgpool_subscribe_ack;
+	struct ceph_msgpool msgpool_statfs_reply;
 
 	/* pending statfs requests */
 	struct radix_tree_root statfs_request_tree;

@@ -17,4 +17,21 @@ struct ceph_ioctl_layout {
 #define CEPH_IOC_SET_LAYOUT _IOW(CEPH_IOCTL_MAGIC, 2,		\
 				   struct ceph_ioctl_layout)
 
+/*
+ * Extract identity, address of the OSD storing a given file offset.
+ */
+struct ceph_ioctl_dataloc {
+	__u64 file_offset;           /* in+out: file offset */
+	__u64 object_offset;         /* out: offset in object */
+	__u64 object_no;             /* out: object # */
+	__u64 object_size;           /* out: object size */
+	__u64 block_offset;          /* out: offset in block */
+	__u64 block_size;            /* out: block length */
+	__s64 osd;                   /* out: osd # */
+	struct sockaddr_in osd_addr; /* out: osd address */
+};
+
+#define CEPH_IOC_GET_DATALOC _IOWR(CEPH_IOCTL_MAGIC, 3,	\
+				   struct ceph_ioctl_dataloc)
+
 #endif

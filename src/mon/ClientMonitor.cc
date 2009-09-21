@@ -75,8 +75,8 @@ bool ClientMonitor::update_from_paxos()
 
 void ClientMonitor::on_election_start()
 {
-  dout(10) << "in-core next_client cleared" << dendl;
-  next_client = -1;
+  dout(10) << "in-core next_client reset to " << client_map.next_client << dendl;
+  next_client = client_map.next_client;
 }
 
 void ClientMonitor::create_pending()
@@ -241,7 +241,7 @@ bool ClientMonitor::prepare_mount(MClientMount *m)
   dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
   
   paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
-  ss << "client" << client << " " << addr << " mounted";
+  ss << "client" << client << " " << addr;
   mon->get_logclient()->log(LOG_INFO, ss);
   return true;
 }

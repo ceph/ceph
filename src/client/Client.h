@@ -90,23 +90,35 @@ extern class Logger  *client_logger;
  
 */
 struct InodeCap;
-struct Inode;
+class Inode;
+class Dentry;
 
 struct MetaRequest {
-  tid_t tid;
-  MClientRequest *request;    
-  bufferlist request_payload;  // in case i have to retry
-  
-  int uid, gid;
-  
+  MClientRequest *request;    // the actual request to send out
+  //used in constructing MClientRequests
+  ceph_mds_request_head head;
+  filepath path, path2;
+  bufferlist data;
+  int inode_drop; //the inode caps this operation will drop
+  int inode_unless; //unless we have these caps already
+  int old_inode_drop, old_inode_unless;
+  int dentry_drop, dentry_unless;
+  int old_dentry_drop, old_dentry_unless;
+  Inode *inode;
+  Inode *old_inode;
+  Dentry *dentry; //associated with path
+  Dentry *old_dentry; //associated with path2
+
+ 
   utime_t  sent_stamp;
-  set<int> mds;                // who i am asking
+  int      mds;                // who i am asking
   int      resend_mds;         // someone wants you to (re)send the request here
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
   int      ref;
   
   MClientReply *reply;         // the reply
+  bool kick;
   
   //possible responses
   bool got_safe;
@@ -121,16 +133,60 @@ struct MetaRequest {
   Inode *target;
 
   MetaRequest(MClientRequest *req, tid_t t) : 
-    tid(t), request(req), 
+    request(req), inode_drop(0), inode_unless(0),
+    old_inode_drop(0), old_inode_unless(0),
+    dentry_drop(0), dentry_unless(0),
+    old_dentry_drop(0), old_dentry_unless(0),
+    inode(NULL), old_inode(NULL),
+    dentry(NULL), old_dentry(NULL),
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
-    got_safe(false), got_unsafe(false), unsafe_item(this),
+    kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
     lock("MetaRequest lock"),
-    caller_cond(0), dispatch_cond(0), target(0) { }
+    caller_cond(0), dispatch_cond(0),
+    target(0) {
+    memcpy(&head, &req->head, sizeof(ceph_mds_request_head));
+  }
+
+  MetaRequest(int op) : 
+    request(NULL), inode_drop(0), inode_unless(0),
+    old_inode_drop(0), old_inode_unless(0),
+    dentry_drop(0), dentry_unless(0),
+    old_dentry_drop(0), old_dentry_unless(0),
+    inode(NULL), old_inode(NULL),
+    dentry(NULL), old_dentry(NULL),
+    resend_mds(-1), num_fwd(0), retry_attempt(0),
+    ref(1), reply(0), 
+    kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
+    lock("MetaRequest lock"),
+    caller_cond(0), dispatch_cond(0),
+    target(0) {
+    memset(&head, 0, sizeof(ceph_mds_request_head));
+    head.op = op;
+}
 
   MetaRequest* get() {++ref; return this; }
 
   void put() {if(--ref == 0) delete this; }
+
+  // normal fields
+  void set_tid(tid_t t) { head.tid = t; }
+  void set_oldest_client_tid(tid_t t) { head.oldest_client_tid = t; }
+  void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
+  void set_retry_attempt(int a) { head.num_retry = a; }
+  void set_filepath(const filepath& fp) { path = fp; }
+  void set_filepath2(const filepath& fp) { path2 = fp; }
+  void set_string2(const char *s) { path2.set_path(s, 0); }
+  void set_caller_uid(unsigned u) { head.caller_uid = u; }
+  void set_caller_gid(unsigned g) { head.caller_gid = g; }
+  void set_data(const bufferlist &d) { data = d; }
+  void set_dentry_wanted() {
+    head.flags = head.flags | CEPH_MDS_FLAG_WANT_DENTRY;
+  }
+  int get_op() { return head.op; }
+  tid_t get_tid() { return head.tid; }
+  filepath& get_filepath() { return path; }
+  filepath& get_filepath2() { return path2; }
 };
 
 
@@ -138,6 +194,7 @@ struct MDSSession {
   version_t seq;
   __u64 cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
+  __u64 cap_renew_seq;
   int num_caps;
   entity_inst_t inst;
   bool closing;
@@ -149,7 +206,7 @@ struct MDSSession {
 
   MClientCapRelease *release;
   
-  MDSSession() : seq(0), cap_gen(0), num_caps(0),
+  MDSSession() : seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0), 
 		 closing(false), was_stale(false), release(NULL) {}
 };
 
@@ -185,8 +242,9 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   hash_map<nstring, Dentry*> dentries;
+  __u64 release_count;
 
-  Dir(Inode* in) { parent_inode = in; }
+  Dir(Inode* in) : release_count(0) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };
@@ -263,6 +321,9 @@ struct CapSnap {
 };
 
 
+// inode flags
+#define I_COMPLETE 1
+
 class Inode {
  public:
   // -- the actual inode --
@@ -303,6 +364,8 @@ class Inode {
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
+
+  unsigned flags;
 
   // about the dir (if this is one!)
   int       dir_auth;
@@ -399,10 +462,10 @@ class Inode {
   }
 
   Inode(vinodeno_t vino, ceph_file_layout *layout) : 
-    //inode(_inode),
     ino(vino.ino), snapid(vino.snapid),
     rdev(0), mode(0), uid(0), gid(0), nlink(0), size(0), truncate_seq(0), truncate_size(0), truncate_from(0),
     time_warp_seq(0), max_size(0), version(0), xattr_version(0),
+    flags(0),
     dir_auth(-1), dir_hashed(false), dir_replicated(false), 
     dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
     snap_caps(0), snap_cap_refs(0),
@@ -678,9 +741,10 @@ class Client : public Dispatcher {
 
     Inode *inode;
     int64_t offset;   // high bits: frag_t, low bits: an offset
+    __u64 release_count;
     map<frag_t, vector<DirEntry> > buffer;
 
-    DirResult(Inode *in) : inode(in), offset(0) { 
+    DirResult(Inode *in) : inode(in), offset(0), release_count(0) { 
       inode->get();
     }
 
@@ -769,9 +833,16 @@ public:
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
 
-  int make_request(MClientRequest *req, int uid, int gid,
+  int make_request(MetaRequest *req, int uid, int gid,
+		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
+  void encode_cap_releases(MetaRequest *request, int mds);
+  int encode_inode_release(Inode *in, MClientRequest *req,
+			   int mds, int drop,
+			   int unless,int force=0);
+  void encode_dentry_release(Dentry *dn, MClientRequest *req,
+			     int mds, int drop, int unless);
   int choose_target_mds(MClientRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
@@ -974,6 +1045,11 @@ protected:
   friend class SyntheticClient;
   bool ms_dispatch(Message *m);
 
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer);
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
+
+
  public:
   Client(Messenger *m, MonClient *mc);
   ~Client();
@@ -992,6 +1068,7 @@ protected:
   void release_lease(Inode *in, Dentry *dn, int mask);
 
   // file caps
+  void check_cap_issue(Inode *in, InodeCap *cap, unsigned issued);
   void add_update_cap(Inode *in, int mds, __u64 cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags);
@@ -1100,7 +1177,7 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
 
-
+  MClientRequest* make_request_from_Meta(MetaRequest * request);
 
 public:
   int mount();
@@ -1223,11 +1300,6 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_release(Fh *fh);
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
-
-  // failure
-  void ms_handle_failure(Message*, const entity_inst_t& inst);
-  void ms_handle_reset(const entity_addr_t& addr, entity_name_t last);
-  void ms_handle_remote_reset(const entity_addr_t& addr, entity_name_t last);
 };
 
 #endif

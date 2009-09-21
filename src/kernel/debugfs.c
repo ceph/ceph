@@ -9,9 +9,7 @@
 /*
  * Implement /sys/kernel/debug/ceph fun
  *
- * /sys/kernel/debug/ceph/caps_reservation  - expose caps reservation stats
  * /sys/kernel/debug/ceph/client*  - an instance of the ceph client
- *      .../fsid        - mounted fsid
  *      .../osdmap      - current osdmap
  *      .../mdsmap      - current mdsmap
  *      .../monmap      - current monmap
@@ -19,20 +17,10 @@
  *      .../mdsc        - active mds requests
  *      .../monc        - mon client state
  *      .../dentry_lru  - dump contents of dentry lru
+ *      .../caps        - expose cap (reservation) stats
  */
 
 static struct dentry *ceph_debugfs_dir;
-static struct dentry *ceph_debugfs_caps_reservation;
-
-static int fsid_show(struct seq_file *s, void *p)
-{
-	struct ceph_client *client = s->private;
-
-	seq_printf(s, "%llx.%llx\n",
-	       le64_to_cpu(__ceph_fsid_major(&client->monc.monmap->fsid)),
-	       le64_to_cpu(__ceph_fsid_minor(&client->monc.monmap->fsid)));
-	return 0;
-}
 
 static int monmap_show(struct seq_file *s, void *p)
 {
@@ -47,7 +35,7 @@ static int monmap_show(struct seq_file *s, void *p)
 		struct ceph_entity_inst *inst =
 			&client->monc.monmap->mon_inst[i];
 
-		seq_printf(s, "\t%s%d\t%u.%u.%u.%u:%u\n",
+		seq_printf(s, "\t%s%lld\t%u.%u.%u.%u:%u\n",
 			       ENTITY_NAME(inst->name),
 			       IPQUADPORT(inst->addr.ipaddr));
 	}
@@ -266,12 +254,12 @@ static int osdc_show(struct seq_file *s, void *pp)
 	return 0;
 }
 
-static int caps_reservation_show(struct seq_file *s, void *p)
+static int caps_show(struct seq_file *s, void *p)
 {
+	struct ceph_client *client = p;
 	int total, avail, used, reserved;
 
-	ceph_reservation_status(&total, &avail, &used, &reserved);
-
+	ceph_reservation_status(client, &total, &avail, &used, &reserved);
 	seq_printf(s, "total\t\t%d\n"
 		      "avail\t\t%d\n"
 		      "used\t\t%d\n"
@@ -316,33 +304,22 @@ static const struct file_operations name##_fops = {			\
 	.release	= single_release,				\
 };
 
-DEFINE_SHOW_FUNC(fsid_show)
 DEFINE_SHOW_FUNC(monmap_show)
 DEFINE_SHOW_FUNC(mdsmap_show)
 DEFINE_SHOW_FUNC(osdmap_show)
 DEFINE_SHOW_FUNC(monc_show)
 DEFINE_SHOW_FUNC(mdsc_show)
 DEFINE_SHOW_FUNC(osdc_show)
-DEFINE_SHOW_FUNC(caps_reservation_show)
 DEFINE_SHOW_FUNC(dentry_lru_show)
+DEFINE_SHOW_FUNC(caps_show)
 
 int ceph_debugfs_init(void)
 {
 	int ret = -ENOMEM;
 
 	ceph_debugfs_dir = debugfs_create_dir("ceph", NULL);
-
 	if (!ceph_debugfs_dir)
 		goto out;
-
-	ceph_debugfs_caps_reservation = debugfs_create_file("caps_reservation",
-					0400,
-					ceph_debugfs_dir,
-					NULL,
-					&caps_reservation_show_fops);
-	if (!ceph_debugfs_caps_reservation)
-		goto out;
-
 	return 0;
 
 out:
@@ -352,17 +329,16 @@ out:
 
 void ceph_debugfs_cleanup(void)
 {
-	debugfs_remove(ceph_debugfs_caps_reservation);
 	debugfs_remove(ceph_debugfs_dir);
 }
 
 int ceph_debugfs_client_init(struct ceph_client *client)
 {
 	int ret = 0;
-#define TMP_NAME_SIZE 16
-	char name[TMP_NAME_SIZE];
+	char name[80];
 
-	snprintf(name, TMP_NAME_SIZE, "client%lld", client->whoami);
+	snprintf(name, sizeof(name), FSID_FORMAT ".client%lld", 
+		 PR_FSID(&client->monc.monmap->fsid), client->whoami);
 
 	client->debugfs_dir = debugfs_create_dir(name, ceph_debugfs_dir);
 	if (!client->debugfs_dir)
@@ -373,7 +349,7 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 						      client->debugfs_dir,
 						      client,
 						      &monc_show_fops);
-	if (ret)
+	if (!client->monc.debugfs_file)
 		goto out;
 
 	client->mdsc.debugfs_file = debugfs_create_file("mdsc",
@@ -381,7 +357,7 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 						      client->debugfs_dir,
 						      client,
 						      &mdsc_show_fops);
-	if (ret)
+	if (!client->mdsc.debugfs_file)
 		goto out;
 
 	client->osdc.debugfs_file = debugfs_create_file("osdc",
@@ -389,15 +365,7 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 						      client->debugfs_dir,
 						      client,
 						      &osdc_show_fops);
-	if (ret)
-		goto out;
-
-	client->debugfs_fsid = debugfs_create_file("fsid",
-					0600,
-					client->debugfs_dir,
-					client,
-					&fsid_show_fops);
-	if (!client->debugfs_fsid)
+	if (!client->osdc.debugfs_file)
 		goto out;
 
 	client->debugfs_monmap = debugfs_create_file("monmap",
@@ -429,7 +397,15 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 					client->debugfs_dir,
 					client,
 					&dentry_lru_show_fops);
-	if (!client->debugfs_osdmap)
+	if (!client->debugfs_dentry_lru)
+		goto out;
+
+	client->debugfs_caps = debugfs_create_file("caps",
+						   0400,
+						   client->debugfs_dir,
+						   client,
+						   &caps_show_fops);
+	if (!client->debugfs_caps)
 		goto out;
 
 	return 0;
@@ -441,14 +417,14 @@ out:
 
 void ceph_debugfs_client_cleanup(struct ceph_client *client)
 {
-	debugfs_remove(client->monc.debugfs_file);
-	debugfs_remove(client->mdsc.debugfs_file);
-	debugfs_remove(client->osdc.debugfs_file);
+	debugfs_remove(client->debugfs_caps);
 	debugfs_remove(client->debugfs_dentry_lru);
-	debugfs_remove(client->debugfs_monmap);
-	debugfs_remove(client->debugfs_mdsmap);
 	debugfs_remove(client->debugfs_osdmap);
-	debugfs_remove(client->debugfs_fsid);
+	debugfs_remove(client->debugfs_mdsmap);
+	debugfs_remove(client->debugfs_monmap);
+	debugfs_remove(client->osdc.debugfs_file);
+	debugfs_remove(client->mdsc.debugfs_file);
+	debugfs_remove(client->monc.debugfs_file);
 	debugfs_remove(client->debugfs_dir);
 }
 

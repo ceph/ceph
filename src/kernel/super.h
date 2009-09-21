@@ -13,6 +13,7 @@
 #include "types.h"
 #include "ceph_debug.h"
 #include "messenger.h"
+#include "msgpool.h"
 #include "mon_client.h"
 #include "mds_client.h"
 #include "osd_client.h"
@@ -115,9 +116,9 @@ struct ceph_mon_session {
  */
 struct ceph_client {
 	__s64 whoami;                   /* my client number */
-	struct dentry *debugfs_fsid, *debugfs_monmap;
+	struct dentry *debugfs_monmap;
 	struct dentry *debugfs_mdsmap, *debugfs_osdmap;
-	struct dentry *debugfs_dir, *debugfs_dentry_lru;
+	struct dentry *debugfs_dir, *debugfs_dentry_lru, *debugfs_caps;
 
 	struct mutex mount_mutex;       /* serialize mount attempts */
 	struct ceph_mount_args mount_args;
@@ -348,9 +349,10 @@ struct ceph_inode_info {
 	int i_pin_ref;
 	int i_rd_ref, i_rdcache_ref, i_wr_ref;
 	int i_wrbuffer_ref, i_wrbuffer_ref_head;
-	u32 i_rdcache_gen;      /* we increment this each time we get RDCACHE.
-				   If it's non-zero, we _may_ have cached
-				   pages. */
+	u32 i_shared_gen;       /* increment each time we get FILE_SHARED */
+	u32 i_rdcache_gen;      /* we increment this each time we get
+				   FILE_CACHE.  If it's non-zero, we
+				   _may_ have cached pages. */
 	u32 i_rdcache_revoking; /* RDCACHE gen to async invalidate, if any */
 
 	struct list_head i_unsafe_writes; /* uncommitted sync writes */
@@ -438,7 +440,7 @@ extern u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
  */
 struct ceph_dentry_info {
 	struct ceph_mds_session *lease_session;
-	u32 lease_gen, lease_rdcache_gen;
+	u32 lease_gen, lease_shared_gen;
 	u32 lease_seq;
 	unsigned long lease_renew_after, lease_renew_from;
 	struct list_head lru;
@@ -600,7 +602,8 @@ extern void ceph_caps_init(void);
 extern void ceph_caps_finalize(void);
 extern int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need);
 extern int ceph_unreserve_caps(struct ceph_cap_reservation *ctx);
-extern void ceph_reservation_status(int *total, int *avail, int *used,
+extern void ceph_reservation_status(struct ceph_client *client,
+				    int *total, int *avail, int *used,
 				    int *reserved);
 
 static inline struct ceph_client *ceph_inode_to_client(struct inode *inode)
@@ -781,31 +784,12 @@ extern struct kmem_cache *ceph_file_cachep;
 
 extern const char *ceph_msg_type_name(int type);
 
-static inline __le64 __ceph_fsid_minor(struct ceph_fsid *fsid)
-{
-	return get_unaligned_le64(&fsid->fsid[8]);
-}
-
-static inline __le64 __ceph_fsid_major(struct ceph_fsid *fsid)
-{
-	return get_unaligned_le64(&fsid->fsid[0]);
-}
-
-static inline void __ceph_fsid_set_minor(struct ceph_fsid *fsid, __le64 val)
-{
-	put_unaligned_le64(val, &fsid->fsid[8]);
-}
-
-static inline void __ceph_fsid_set_major(struct ceph_fsid *fsid, __le64 val)
-{
-	put_unaligned_le64(val, &fsid->fsid[0]);
-}
-
-/*
-extern int ceph_alloc_middle(struct ceph_connection *con, struct ceph_msg *msg);
-extern struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
-				       struct ceph_msg_header *hdr);
-*/
+#define FSID_FORMAT "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-" \
+	"%02x%02x%02x%02x%02x%02x"
+#define PR_FSID(f) (f)->fsid[0], (f)->fsid[1], (f)->fsid[2], (f)->fsid[3], \
+		(f)->fsid[4], (f)->fsid[5], (f)->fsid[6], (f)->fsid[7],    \
+		(f)->fsid[8], (f)->fsid[9], (f)->fsid[10], (f)->fsid[11],  \
+		(f)->fsid[12], (f)->fsid[13], (f)->fsid[14], (f)->fsid[15]
 
 /* inode.c */
 extern const struct inode_operations ceph_file_iops;

@@ -1617,6 +1617,7 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 	   << " ctime " << i->ctime
 	   << " valid=" << valid << dendl;
 
+  // file
   i = pfile ? pi:oi;
   e.layout = i->layout;
   e.size = i->size;
@@ -1632,21 +1633,26 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   e.files = i->dirstat.nfiles;
   e.subdirs = i->dirstat.nsubdirs;
+
+  // nest (do same as file... :/)
   i->rstat.rctime.encode_timeval(&e.rctime);
   e.rbytes = i->rstat.rbytes;
   e.rfiles = i->rstat.rfiles;
   e.rsubdirs = i->rstat.rsubdirs;
 
+  // auth
   i = pauth ? pi:oi;
   e.mode = i->mode;
   e.uid = i->uid;
   e.gid = i->gid;
 
+  // link
   i = plink ? pi:oi;
   e.nlink = i->nlink;
   
   e.fragtree.nsplits = dirfragtree._splits.size();
 
+  // xattr
   i = pxattr ? pi:oi;
   bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
     cap->client_xattr_version == i->xattr_version;

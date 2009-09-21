@@ -39,16 +39,24 @@ public:
 private:
   Messenger *messenger;
 
+<<<<<<< HEAD:src/mon/MonClient.h
   bufferlist tgt;
+=======
+  int cur_mon;
+
+>>>>>>> origin/unstable:src/mon/MonClient.h
   entity_addr_t my_addr;
 
   Mutex monc_lock;
   SafeTimer timer;
 
   bool ms_dispatch(Message *m);
-  void handle_monmap(MMonMap *m);
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
 
-  void ms_handle_reset(const entity_addr_t& peer);
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+
+  void handle_monmap(MMonMap *m);
 
 
   // monitor session
@@ -81,6 +89,9 @@ private:
   };
 
   void handle_auth_rotating_response(MAuthRotating *m);
+  // monclient
+  bool want_monmap;
+
   // mount
 private:
   client_t clientid;
@@ -89,6 +100,8 @@ private:
   Cond mount_cond, map_cond;
   utime_t mount_started;
 
+  void _finish_hunting();
+  void _reopen_session();
   void _pick_new_mon();
   void _send_mon_message(Message *m);
   void _send_mount();
@@ -114,26 +127,17 @@ private:
   void _renew_subs();
   void handle_subscribe_ack(MMonSubscribeAck* m);
 
-public:
-  void renew_subs() {
-    Mutex::Locker l(monc_lock);
-    _renew_subs();
-  }
-  void sub_want(nstring what, version_t have) {
-    Mutex::Locker l(monc_lock);
+  void _sub_want(nstring what, version_t have) {
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
-  void sub_want_onetime(nstring what, version_t have) {
-    Mutex::Locker l(monc_lock);
+  void _sub_want_onetime(nstring what, version_t have) {
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
-      _renew_subs();
     }
   }
-  void sub_got(nstring what, version_t have) {
-    Mutex::Locker l(monc_lock);
+  void _sub_got(nstring what, version_t have) {
     if (sub_have.count(what)) {
       if (sub_have[what].onetime)
 	sub_have.erase(what);
@@ -142,14 +146,30 @@ public:
     }
   }
 
-
   // auth tickets
 public:
   AuthClientHandler auth;
   double auth_timeout;
-
+public:
+  void renew_subs() {
+    Mutex::Locker l(monc_lock);
+    _renew_subs();
+  }
+  void sub_want(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
+    _sub_want(what, have);
+  }
+  void sub_want_onetime(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
+    _sub_want_onetime(what, have);
+  }
+  void sub_got(nstring what, version_t have) {
+    Mutex::Locker l(monc_lock);
+    _sub_got(what, have);
+  }
+  
  public:
-  MonClient() : messenger(NULL),
+  MonClient() : messenger(NULL), cur_mon(-1),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
@@ -165,6 +185,7 @@ public:
 
   int build_initial_monmap();
   int get_monmap();
+  int get_monmap_privately();
 
   void send_mon_message(Message *m) {
     Mutex::Locker l(monc_lock);

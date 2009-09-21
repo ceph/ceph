@@ -169,7 +169,7 @@ Session *Server::get_session(Message *m)
     session = mds->sessionmap.get_session(m->get_source());
     if (session) {
       dout(20) << "get_session set " << session->inst << " in connection" << dendl;
-      m->get_connection()->set_priv(session);
+      m->get_connection()->set_priv(session->get());
     } else {
       dout(20) << "get_session " << m->get_source() << " dne" << dendl;
     }
@@ -211,7 +211,7 @@ void Server::handle_client_session(MClientSession *m)
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
       mds->locker->resume_stale_caps(session);
     }
-    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_stamp()), 
+    mds->messenger->send_message(new MClientSession(CEPH_SESSION_RENEWCAPS, m->get_seq()), 
 				 session->inst);
     break;
     
@@ -703,8 +703,9 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   // mark xlocks "done", indicating that we are exposing uncommitted changes
   mds->locker->set_xlocks_done(mdr);
 
+  char buf[80];
   dout(10) << "early_reply " << reply->get_result() 
-	   << " (" << strerror(-reply->get_result())
+	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
 	   << ") " << *req << dendl;
 
   if (tracei || tracedn) {
@@ -720,6 +721,11 @@ void Server::early_reply(MDRequest *mdr, CInode *tracei, CDentry *tracedn)
   messenger->send_message(reply, client_inst);
 
   mdr->did_early_reply = true;
+
+  mds->logger->inc(l_mds_reply);
+  double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
+  mds->logger->favg(l_mds_replyl, lat);
+  dout(0) << "lat " << lat << dendl;
 }
 
 /*
@@ -730,8 +736,9 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
 {
   MClientRequest *req = mdr->client_request;
   
+  char buf[80];
   dout(10) << "reply_request " << reply->get_result() 
-	   << " (" << strerror(-reply->get_result())
+	   << " (" << strerror_r(-reply->get_result(), buf, sizeof(buf))
 	   << ") " << *req << dendl;
 
   // note result code in session map?
@@ -755,6 +762,12 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   int dentry_wanted = req->get_dentry_wanted();
 
   if (!did_early_reply && !is_replay) {
+
+    mds->logger->inc(l_mds_reply);
+    double lat = g_clock.now() - mdr->client_request->get_recv_stamp();
+    mds->logger->favg(l_mds_replyl, lat);
+    dout(0) << "lat " << lat << dendl;
+    
     if (tracei)
       mdr->cap_releases.erase(tracei->vino());
     if (tracedn)

@@ -367,7 +367,8 @@ static int osdmap_set_max_osd(struct ceph_osdmap *map, int max)
 /*
  * Insert a new pg_temp mapping
  */
-void __insert_pg_mapping(struct ceph_pg_mapping *new, struct rb_root *root)
+static void __insert_pg_mapping(struct ceph_pg_mapping *new,
+				struct rb_root *root)
 {
 	struct rb_node **p = &root->rb_node;
 	struct rb_node *parent = NULL;
@@ -654,10 +655,10 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 		struct ceph_pg_mapping *pg;
 		int j;
 		u64 pgid;
-		u32 len;
+		u32 pglen;
 		ceph_decode_need(p, end, sizeof(u64) + sizeof(u32), bad);
 		ceph_decode_64(p, pgid);
-		ceph_decode_32(p, len);
+		ceph_decode_32(p, pglen);
 
 		/* remove any? */
 		while (rbp && rb_entry(rbp, struct ceph_pg_mapping,
@@ -669,20 +670,20 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 			rb_erase(cur, &map->pg_temp);
 		}
 
-		if (len) {
+		if (pglen) {
 			/* insert */
-			ceph_decode_need(p, end, len*sizeof(u32), bad);
-			pg = kmalloc(sizeof(*pg) + sizeof(u32)*len, GFP_NOFS);
+			ceph_decode_need(p, end, pglen*sizeof(u32), bad);
+			pg = kmalloc(sizeof(*pg) + sizeof(u32)*pglen, GFP_NOFS);
 			if (!pg) {
 				err = -ENOMEM;
 				goto bad;
 			}
 			pg->pgid = pgid;
-			pg->len = len;
+			pg->len = pglen;
 			for (j = 0; j < len; j++)
 				ceph_decode_32(p, pg->osds[j]);
 			__insert_pg_mapping(pg, &map->pg_temp);
-			dout(" added pg_temp %llx len %d\n", pgid, len);
+			dout(" added pg_temp %llx len %d\n", pgid, pglen);
 		}
 	}
 	while (rbp) {
@@ -745,7 +746,7 @@ void ceph_calc_file_object_mapping(struct ceph_file_layout *layout,
 	stripepos = bl % sc;
 	objsetno = stripeno / su_per_object;
 
-	*bno = cpu_to_le32(objsetno * sc + stripepos);
+	*bno = objsetno * sc + stripepos;
 	dout("objset %u * sc %u = bno %u\n", objsetno, sc, (unsigned)*bno);
 	/* *oxoff = *off / layout->fl_stripe_unit; */
 	t = off;
