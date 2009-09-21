@@ -39,12 +39,8 @@ public:
 private:
   Messenger *messenger;
 
-<<<<<<< HEAD:src/mon/MonClient.h
-  bufferlist tgt;
-=======
   int cur_mon;
 
->>>>>>> origin/unstable:src/mon/MonClient.h
   entity_addr_t my_addr;
 
   Mutex monc_lock;
