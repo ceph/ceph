@@ -22,21 +22,41 @@
 #include "Auth.h"
 
 #define KEY_ROTATE_TIME 5
+#define KEY_ROTATE_NUM 3
 
-struct RotatingSecret {
-  CryptoKey secret;
+struct ExpiringCryptoKey {
+  CryptoKey key;
   utime_t expiration;
 
   void encode(bufferlist& bl) const {
-    ::encode(secret, bl);
+    ::encode(key, bl);
     ::encode(expiration, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(secret, bl);
+    ::decode(key, bl);
     ::decode(expiration, bl);
   }
 };
-WRITE_CLASS_ENCODER(RotatingSecret);
+WRITE_CLASS_ENCODER(ExpiringCryptoKey);
+
+
+
+struct RotatingSecrets {
+  map<uint64_t, ExpiringCryptoKey> secrets;
+  version_t max_ver;
+
+  void encode(bufferlist& bl) const {
+    ::encode(secrets, bl);
+    ::encode(max_ver, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(secrets, bl);
+    ::decode(max_ver, bl);
+  }
+
+  void add(ExpiringCryptoKey& key);
+};
+WRITE_CLASS_ENCODER(RotatingSecrets);
 
 
 struct KeysServerData {
@@ -47,7 +67,7 @@ struct KeysServerData {
   map<EntityName, CryptoKey> secrets;
 
   /* for each service type */
-  map<uint32_t, RotatingSecret> rotating_secrets;
+  map<uint32_t, RotatingSecrets> rotating_secrets;
 
   KeysServerData() : version(0), rotating_ver(0) {}
 
@@ -79,11 +99,11 @@ struct KeysServerData {
     secrets.erase(iter);
   }
 
-  void add_rotating_secret(uint32_t service_id, RotatingSecret& secret) {
-    rotating_secrets[service_id] = secret;
+  void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
+    rotating_secrets[service_id].add(key);
   }
 
-  bool get_service_secret(uint32_t service_id, RotatingSecret& secret);
+  bool get_service_secret(uint32_t service_id, RotatingSecrets& secret);
   bool get_secret(EntityName& name, CryptoKey& secret);
 
   map<EntityName, CryptoKey>::iterator secrets_begin() { return secrets.begin(); }
@@ -123,7 +143,7 @@ public:
   void rotate_timeout(double timeout);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, RotatingSecret& service_key);
+  bool get_service_secret(uint32_t service_id, RotatingSecrets& service_key);
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
@@ -155,9 +175,9 @@ public:
     data.remove_secret(name);
   }
 
-  void add_rotating_secret(uint32_t service_id, RotatingSecret& secret) {
+  void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
     Mutex::Locker l(lock);
-    data.add_rotating_secret(service_id, secret);
+    data.add_rotating_secret(service_id, key);
   }
   void clone_to(KeysServerData& dst) {
     Mutex::Locker l(lock);

@@ -18,6 +18,7 @@ using namespace std;
 
 #include "common/common_init.h"
 #include "auth/Crypto.h"
+#include "auth/KeysServer.h"
 
 void usage()
 {

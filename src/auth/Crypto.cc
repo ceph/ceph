@@ -25,7 +25,7 @@ static int get_random_bytes(int len, bufferlist& out)
 {
   char buf[len];
   char *t = buf;
-  int fd = ::open("/dev/random", O_RDONLY);
+  int fd = ::open("/dev/urandom", O_RDONLY);
   int l = len;
   if (fd < 0)
     return -errno;

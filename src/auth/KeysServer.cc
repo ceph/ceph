@@ -38,9 +38,19 @@ static void hexdump(string msg, const char *s, int len)
   dout(0) << msg << ":\n" << buf << dendl;
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, RotatingSecret& secret)
+void RotatingSecrets::add(ExpiringCryptoKey& key)
 {
-  map<uint32_t, RotatingSecret>::iterator iter = rotating_secrets.find(service_id);
+  secrets[++max_ver] = key;
+
+  while (secrets.size() > KEY_ROTATE_NUM) {
+    map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.lower_bound(0);
+    secrets.erase(iter);
+  }
+}
+
+bool KeysServerData::get_service_secret(uint32_t service_id, RotatingSecrets& secret)
+{
+  map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end())
     return false;
 
@@ -86,25 +96,30 @@ void KeysServer::_generate_all_rotating_secrets()
 
   dout(0) << "generated: " << dendl;
   
-  map<uint32_t, RotatingSecret>::iterator iter = data.rotating_secrets.begin();
+  map<uint32_t, RotatingSecrets>::iterator iter = data.rotating_secrets.begin();
 
   for (; iter != data.rotating_secrets.end(); ++iter) {
     dout(0) << "service id: " << iter->first << dendl;
-    RotatingSecret& key = iter->second;
-    bufferptr bp = key.secret.get_secret();
-    hexdump("key", bp.c_str(), bp.length());
-    dout(0) << "expiration: " << key.expiration << dendl;
+    RotatingSecrets& key = iter->second;
+
+    map<uint64_t, ExpiringCryptoKey>::iterator mapiter = key.secrets.begin();
+    for (; mapiter != key.secrets.end(); ++mapiter) {
+      dout(0) << "  id: " << mapiter->first << dendl;
+      bufferptr bp = mapiter->second.key.get_secret();
+      hexdump("    key", bp.c_str(), bp.length());
+      dout(0) << "    expiration: " << mapiter->second.expiration << dendl;
+    }
   }
 }
 
 void KeysServer::_rotate_secret(uint32_t service_id)
 {
-  RotatingSecret secret;
-  generate_secret(secret.secret);
-  secret.expiration = g_clock.now();
-  secret.expiration += (KEY_ROTATE_TIME * 3);
-
-  data.add_rotating_secret(service_id, secret);
+  ExpiringCryptoKey ek;
+  generate_secret(ek.key);
+  ek.expiration = g_clock.now();
+  ek.expiration += (KEY_ROTATE_TIME * 3);
+  
+  data.add_rotating_secret(service_id, ek);
 }
 
 void KeysServer::rotate_timeout(double timeout)
@@ -123,7 +138,7 @@ bool KeysServer::get_secret(EntityName& name, CryptoKey& secret)
   return data.get_secret(name, secret);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, RotatingSecret& secret)
+bool KeysServer::get_service_secret(uint32_t service_id, RotatingSecrets& secret)
 {
   Mutex::Locker l(lock);
 
