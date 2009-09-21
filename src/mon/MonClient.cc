@@ -163,6 +163,8 @@ bool MonClient::ms_dispatch(Message *m)
   if (my_addr == entity_addr_t())
     my_addr = messenger->get_myaddr();
 
+  dout(0) << "dispatch type=" << m->get_type() << dendl;
+
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
     handle_monmap((MMonMap*)m);
@@ -385,7 +387,10 @@ int MonClient::start_auth_rotating(EntityName& name, double timeout)
   MAuthRotating *m = new MAuthRotating();
   if (!m)
     return -ENOMEM;
-  send_mon_message(m);
+
+  Mutex::Locker l(monc_lock);
+
+  _send_mon_message(m);
 
   auth_timeout_event = new C_AuthRotatingTimeout(this, timeout);
   if (!auth_timeout_event)
@@ -396,13 +401,13 @@ int MonClient::start_auth_rotating(EntityName& name, double timeout)
   auth_cond.Wait(monc_lock);
   dout(0) << "MonClient::start_auth_rotating wait ended" << dendl;
 
-  timer.cancel_event(auth_timeout_event);
-  auth_timeout_event = NULL;
-
   if (auth_got_timeout) {
     dout(0) << "MonClient::start_auth_rotating got timeout" << dendl;
     return -ETIMEDOUT;
   }
+
+  timer.cancel_event(auth_timeout_event);
+  auth_timeout_event = NULL;
 
   return 0;
 }
@@ -415,10 +420,6 @@ void MonClient::handle_auth_rotating_response(MAuthRotating *m)
     return;
 
   auth_cond.Signal();
-
-  timer.cancel_event(auth_timeout_event);
-  auth_timeout_event = NULL;
-
 
   dout(0) << "MonClient::handle_auth_rotating_response got_response status=" << m->status << " length=" << m->response_bl.length() << dendl;
 }

@@ -442,13 +442,14 @@ int OSD::init()
 
   signal(SIGTERM, handle_signal);
   signal(SIGINT, handle_signal);
-
+#if 0
   int ret = monc->start_auth_rotating(ename, KEY_ROTATE_TIME);
   if (ret < 0) {
     dout(0) << "could not start rotating keys, err=" << ret << dendl;
     return ret;
   }
   dout(0) << "started rotating keys" << dendl;
+#endif
 
   return 0;
 }
