@@ -607,17 +607,6 @@ void MDS::handle_mds_map(MMDSMap *m)
   state = mdsmap->get_state(addr);
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
-  if (whoami < 0) {
-    if (want_state == MDSMap::STATE_BOOT) {
-      dout(10) << "not in map yet" << dendl;
-    } else {
-      dout(1) << "handle_mds_map i (" << addr
-	      << ") dne in the mdsmap, killing myself" << dendl;
-      suicide();
-    }
-    goto out;
-  }
-
   if (state != oldstate)
     last_state = oldstate;
 
@@ -628,6 +617,17 @@ void MDS::handle_mds_map(MMDSMap *m)
     if (standby_replay_for >= 0)
       request_state(MDSMap::STATE_STANDBY_REPLAY);
 
+    goto out;
+  }
+
+  if (whoami < 0) {
+    if (want_state == MDSMap::STATE_BOOT) {
+      dout(10) << "not in map yet" << dendl;
+    } else {
+      dout(1) << "handle_mds_map i (" << addr
+	      << ") dne in the mdsmap, killing myself" << dendl;
+      suicide();
+    }
     goto out;
   }
 
