@@ -131,6 +131,10 @@ public:
   // -- sessions --
   SessionMap session_map;
 
+  void check_subs();
+  void check_sub(Subscription *sub);
+
+  void send_latest_monmap(entity_inst_t i);
   
 
   // messages

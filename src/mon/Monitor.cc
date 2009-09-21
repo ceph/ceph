@@ -494,6 +494,8 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       mdsmon()->check_sub(s->sub_map["mdsmap"]);
     else if (p->first == "osdmap")
       osdmon()->check_sub(s->sub_map["osdmap"]);
+    else if (p->first == "monmap")
+      check_sub(s->sub_map["monmap"]);
   }
 
   // ???
@@ -518,12 +520,42 @@ bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
   return true;
 }
 
+void Monitor::check_subs()
+{
+  nstring type = "monmap";
+  xlist<Subscription*>::iterator p = session_map.subs[type].begin();
+  while (!p.end()) {
+    Subscription *sub = *p;
+    ++p;
+    check_sub(sub);
+  }
+}
+
+void Monitor::check_sub(Subscription *sub)
+{
+  if (sub->last < monmap->get_epoch()) {
+    send_latest_monmap(sub->session->inst);
+    if (sub->onetime)
+      session_map.remove_sub(sub);
+    else
+      sub->last = monmap->get_epoch();
+  }
+}
+
+
+// -----
+
+void Monitor::send_latest_monmap(entity_inst_t i)
+{
+  bufferlist bl;
+  monmap->encode(bl);
+  messenger->send_message(new MMonMap(bl), i);
+}
+
 void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
-  bufferlist bl;
-  monmap->encode(bl);
-  messenger->send_message(new MMonMap(bl), m->get_orig_source_inst());
+  send_latest_monmap(m->get_orig_source_inst());
   delete m;
 }
 

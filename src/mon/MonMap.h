@@ -39,6 +39,8 @@ class MonMap {
     return mon_inst.size();
   }
 
+  epoch_t get_epoch() { return epoch; }
+
   void add_mon(entity_inst_t inst) {
     mon_inst.push_back(inst);
   }
