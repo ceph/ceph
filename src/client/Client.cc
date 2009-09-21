@@ -689,7 +689,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 
 // -------
 
-int Client::choose_target_mds(MClientRequest *req) 
+int Client::choose_target_mds(MetaRequest *req) 
 {
   int mds = 0;
     
@@ -794,10 +794,6 @@ int Client::make_request(MetaRequest *request,
   else
     request->set_oldest_client_tid(tid); // this one is the oldest.
 
-  // -- make request --
-  MClientRequest *req = make_request_from_Meta(request);
-  request->request = req;
-
   // hack target mds?
   if (use_mds >= 0)
     request->resend_mds = use_mds;
@@ -815,7 +811,7 @@ int Client::make_request(MetaRequest *request,
       request->resend_mds = -1;
       dout(10) << "target resend_mds specified as mds" << mds << dendl;
     } else {
-      mds = choose_target_mds(req);
+      mds = choose_target_mds(request);
       if (mds >= 0) {
 	dout(10) << "chose target mds" << mds << " based on hierarchy" << dendl;
       } else {
@@ -1050,20 +1046,16 @@ void Client::handle_client_session(MClientSession *m)
 void Client::send_request(MetaRequest *request, int mds)
 {
   MClientRequest *r = request->request;
-  if (!r) {
-    // make a new one
-    dout(10) << "send_request rebuilding request " << request->get_tid()
-	     << " for mds" << mds << dendl;
-    r = make_request_from_Meta(request);
-    r->set_dentry_wanted();
-    if (request->got_unsafe)
-      r->set_replayed_op();
-    request->request = r;
-  }
-  else
-    request->retry_attempt++;
-  if (!r->releases.size())
-    encode_cap_releases(request, mds);
+  // make the request
+  dout(10) << "send_request rebuilding request " << request->get_tid()
+	   << " for mds" << mds << dendl;
+  r = make_request_from_Meta(request);
+  r->set_dentry_wanted();
+  if (request->got_unsafe)
+    r->set_replayed_op();
+
+  request->request = r;
+  encode_cap_releases(request, mds);
   request->request = 0;
 
   r->set_mdsmap_epoch(mdsmap->get_epoch());

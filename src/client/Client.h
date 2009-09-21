@@ -187,6 +187,29 @@ struct MetaRequest {
   tid_t get_tid() { return head.tid; }
   filepath& get_filepath() { return path; }
   filepath& get_filepath2() { return path2; }
+
+  bool is_write() {
+    return
+      (head.op & CEPH_MDS_OP_WRITE) || 
+      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC))) ||
+      (head.op == CEPH_MDS_OP_CREATE && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
+  }
+  bool can_forward() {
+    if (is_write() ||
+	head.op == CEPH_MDS_OP_OPEN ||   // do not forward _any_ open request.
+	head.op == CEPH_MDS_OP_CREATE)   // do not forward _any_ open request.
+      return false;
+    return true;
+  }
+  bool auth_is_best() {
+    if (is_write()) 
+      return true;
+    if (head.op == CEPH_MDS_OP_OPEN ||
+	head.op == CEPH_MDS_OP_CREATE ||
+	head.op == CEPH_MDS_OP_READDIR) 
+      return true;
+    return false;    
+  }
 };
 
 
@@ -843,7 +866,7 @@ public:
 			   int unless,int force=0);
   void encode_dentry_release(Dentry *dn, MClientRequest *req,
 			     int mds, int drop, int unless);
-  int choose_target_mds(MClientRequest *req);
+  int choose_target_mds(MetaRequest *req);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
