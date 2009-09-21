@@ -487,17 +487,21 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
            << dendl;
   
   if (dn) {
-    if (dn->inode->vino() == in->vino()) {
-      touch_dn(dn);
-      dout(12) << " had dentry " << dname
-               << " with correct vino " << dn->inode->vino()
-               << dendl;
+    if (dn->inode) {
+      if (dn->inode->vino() == in->vino()) {
+	touch_dn(dn);
+	dout(12) << " had dentry " << dname
+		 << " with correct vino " << dn->inode->vino()
+		 << dendl;
+      } else {
+	dout(12) << " had dentry " << dname
+		 << " with WRONG vino " << dn->inode->vino()
+		 << dendl;
+	unlink(dn, true);
+	dn = NULL;
+      }
     } else {
-      dout(12) << " had dentry " << dname
-               << " with WRONG vino " << dn->inode->vino()
-               << dendl;
-      unlink(dn, true);
-      dn = NULL;
+      link(dir, dname, in, dn);
     }
   }
   
@@ -969,7 +973,7 @@ void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
  */
 void Client::encode_cap_releases(MetaRequest *req, int mds) {
   dout(20) << "encode_cap_releases enter (req: "
-	   << req << ", mds: " << mds << dendl;
+	   << req << ", mds: " << mds << ")" << dendl;
   if (req->inode_drop)
     encode_inode_release(req->inode, req->request,
 			 mds, req->inode_drop,

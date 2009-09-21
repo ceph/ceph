@@ -948,15 +948,20 @@ protected:
 
   /**
    * Don't call this with in==NULL, use get_or_create for that
+   * leave dn set to default NULL unless you're trying to add
+   * a new inode to a pre-created Dentry
    */
-  Dentry* link(Dir *dir, const string& name, Inode *in) {
-    Dentry *dn = new Dentry;
-    dn->name = name;
-    
-    // link to dir
-    dn->dir = dir;
-    //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
-    dir->dentries[dn->name] = dn;
+  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn=NULL) {
+    if (!dn) { //create a new Dentry
+      dn = new Dentry;
+      dn->name = name;
+      
+      // link to dir
+      dn->dir = dir;
+      //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
+      dir->dentries[dn->name] = dn;
+      lru.lru_insert_mid(dn);    // mid or top?
+    }
 
     if (in) {    // link to inode
       dn->inode = in;
@@ -967,7 +972,6 @@ protected:
       if (in->dir) dn->get();  // dir -> dn pin
     }
 
-    lru.lru_insert_mid(dn);    // mid or top?
     return dn;
   }
 
