@@ -55,9 +55,10 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	printf("dataloc: file_offset %lld\n", dl.file_offset);
-	printf(" object_offset %lld\n object_size %lld object_no %lld\n",
-	       dl.object_offset, dl.object_size, dl.object_no);
+	printf("dataloc:\n");
+	printf(" file_offset %lld (of object start)\n", dl.file_offset);
+	printf(" object '%s'\n object_offset %lld\n object_size %lld object_no %lld\n",
+	       dl.object_name, dl.object_offset, dl.object_size, dl.object_no);
 	printf(" block_offset %lld\n block_size %lld\n",
 	       dl.block_offset, dl.block_size);
 	printf(" osd%lld %u.%u.%u.%u:%u\n", dl.osd, IPQUADPORT(dl.osd_addr));
