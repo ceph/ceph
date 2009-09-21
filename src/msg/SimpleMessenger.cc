@@ -290,23 +290,29 @@ void SimpleMessenger::Endpoint::dispatch_entry()
           ls.pop_front();
 	  if ((long)m == BAD_REMOTE_RESET) {
 	    lock.Lock();
-	    entity_addr_t a = remote_reset_q.front();
+	    Connection *con = remote_reset_q.front().first;
+	    entity_addr_t a = remote_reset_q.front().second;
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_remote_reset(a);
+	    ms_deliver_handle_remote_reset(con, a);
+	    con->put();
  	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
-	    entity_addr_t a = reset_q.front();
+	    Connection *con = reset_q.front().first;
+	    entity_addr_t a = reset_q.front().second;
 	    reset_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_reset(a);
+	    ms_deliver_handle_reset(con, a);
+	    con->put();
 	  } else if ((long)m == BAD_FAILED) {
 	    lock.Lock();
-	    m = failed_q.front().first;
-	    entity_addr_t a = failed_q.front().second;
+	    Connection *con = failed_q.front().con;
+	    m = failed_q.front().msg;
+	    entity_addr_t a = failed_q.front().addr;
 	    failed_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_failure(m, a);
+	    ms_deliver_handle_failure(con, m, a);
+	    con->put();
 	    m->put();
 	  } else {
 	    dout(1) << "<== " << m->get_source_inst()
@@ -1183,7 +1189,7 @@ void SimpleMessenger::Pipe::fail()
 
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
-      rank->local[i]->queue_reset(peer_addr);
+      rank->local[i]->queue_reset(connection_state->get(), peer_addr);
 
   // unregister
   lock.Unlock();
@@ -1201,7 +1207,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   report_failures();
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
-      rank->local[i]->queue_remote_reset(peer_addr);
+      rank->local[i]->queue_remote_reset(connection_state->get(), peer_addr);
 
   out_seq = 0;
   in_seq = 0;
@@ -1225,7 +1231,7 @@ void SimpleMessenger::Pipe::report_failures()
 	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
       } else {
 	dout(10) << "fail on " << *m << dendl;
-	rank->local[srcrank]->queue_failure(m, peer_addr);
+	rank->local[srcrank]->queue_failure(connection_state->get(), m, peer_addr);
       }
     }
     m->put();

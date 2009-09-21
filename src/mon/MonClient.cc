@@ -313,7 +313,7 @@ void MonClient::_reopen_session()
   }
 }
 
-bool MonClient::ms_handle_reset(const entity_addr_t& peer)
+bool MonClient::ms_handle_reset(Connection *con, const entity_addr_t& peer)
 {
   dout(10) << "ms_handle_reset " << peer << dendl;
   if (hunting)

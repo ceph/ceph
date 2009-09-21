@@ -359,9 +359,9 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  void ms_handle_failure(Message *m, const entity_addr_t& addr) {}
+  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) {}
 
-  bool ms_handle_reset(const entity_addr_t& peer) {
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) {
     lock.Lock();
     if (observe)
       send_observe_requests();
@@ -371,7 +371,7 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  void ms_handle_remote_reset(const entity_addr_t& peer) {}
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
 
 } dispatcher;
 

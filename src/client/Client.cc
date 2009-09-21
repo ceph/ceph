@@ -5675,19 +5675,19 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
 
 // ===============================
 
-void Client::ms_handle_failure(Message *m, const entity_addr_t& addr)
+void Client::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr)
 {
   dout(0) << "ms_handle_failure " << *m << " to " << addr << dendl;
 }
 
-bool Client::ms_handle_reset(const entity_addr_t& addr) 
+bool Client::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
   return false;
 }
 
 
-void Client::ms_handle_remote_reset(const entity_addr_t& addr) 
+void Client::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
 #if 0

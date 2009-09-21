@@ -33,7 +33,7 @@ class Timer;
 
 
 class Messenger {
- private:
+private:
   list<Dispatcher*> dispatchers;
 
 protected:
@@ -104,24 +104,24 @@ protected:
 		    << dendl;
     assert(0);
   }
-  void ms_deliver_handle_reset(const entity_addr_t& peer) {
+  void ms_deliver_handle_reset(Connection *con, const entity_addr_t& peer) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      if ((*p)->ms_handle_reset(peer))
+      if ((*p)->ms_handle_reset(con, peer))
 	return;
   }
-  void ms_deliver_handle_remote_reset(const entity_addr_t& peer) {
+  void ms_deliver_handle_remote_reset(Connection *con, const entity_addr_t& peer) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      (*p)->ms_handle_remote_reset(peer);
+      (*p)->ms_handle_remote_reset(con, peer);
   }
-  void ms_deliver_handle_failure(Message *m, const entity_addr_t& peer) {
+  void ms_deliver_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      (*p)->ms_handle_failure(m, peer);
+      (*p)->ms_handle_failure(con, m, peer);
   }
 
   // shutdown

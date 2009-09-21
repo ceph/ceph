@@ -30,18 +30,18 @@ public:
   virtual bool ms_dispatch(Message *m) = 0;
 
   // how i deal with transmission failures.
-  virtual void ms_handle_failure(Message *m, const entity_addr_t& addr) = 0;
+  virtual void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) = 0;
 
   /*
    * on any connection reset.
    * this indicates that the ordered+reliable delivery semantics have 
    * been violated.  messages may have been lost.
    */
-  virtual bool ms_handle_reset(const entity_addr_t& peer) = 0;
+  virtual bool ms_handle_reset(Connection *con, const entity_addr_t& peer) = 0;
 
   // on deliberate reset of connection by remote
   //  implies incoming messages dropped; possibly/probably some of our previous outgoing too.
-  virtual void ms_handle_remote_reset(const entity_addr_t& peer) = 0;
+  virtual void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) = 0;
 };
 
 #endif
