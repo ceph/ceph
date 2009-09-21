@@ -323,6 +323,38 @@ struct AuthAuthorize {
 };
 WRITE_CLASS_ENCODER(AuthAuthorize);
 
+struct ExpiringCryptoKey {
+  CryptoKey key;
+  utime_t expiration;
+
+  void encode(bufferlist& bl) const {
+    ::encode(key, bl);
+    ::encode(expiration, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(key, bl);
+    ::decode(expiration, bl);
+  }
+};
+WRITE_CLASS_ENCODER(ExpiringCryptoKey);
+
+struct RotatingSecrets {
+  map<uint64_t, ExpiringCryptoKey> secrets;
+  version_t max_ver;
+
+  void encode(bufferlist& bl) const {
+    ::encode(secrets, bl);
+    ::encode(max_ver, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(secrets, bl);
+    ::decode(max_ver, bl);
+  }
+
+  void add(ExpiringCryptoKey& key);
+};
+WRITE_CLASS_ENCODER(RotatingSecrets);
+
 template <class T>
 int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
    bufferlist bl_enc, bl;

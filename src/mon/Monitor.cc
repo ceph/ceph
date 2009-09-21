@@ -491,6 +491,9 @@ bool Monitor::ms_dispatch(Message *m)
       handle_class((MClass *)m);
       break;
       
+    case MSG_AUTH_ROTATING:
+      handle_rotating((MAuthRotating *)m);
+      break;
     default:
         return false;
     }
@@ -677,6 +680,15 @@ void Monitor::handle_class(MClass *m)
       assert(0);
       break;
   }
+}
+
+/*
+  get auth rotating secret request
+ */
+
+void Monitor::handle_rotating(MAuthRotating *m)
+{
+  authmon()->handle_request(m);
 }
 
 

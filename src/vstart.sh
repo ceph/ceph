@@ -263,6 +263,8 @@ EOF
 	    echo mkfs osd$osd
 	    echo $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	    $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
+            $SUDO $CEPH_BIN/authtool --gen-key dev/osd$osd/key.bin
+            $SUDO $CEPH_BIN/ceph -i dev/osd$osd/key.bin auth add osd.$osd
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS

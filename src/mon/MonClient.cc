@@ -24,6 +24,7 @@
 #include "messages/MClientMountAck.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
+#include "messages/MAuthRotating.h"
 #include "common/ConfUtils.h"
 
 #include "MonClient.h"
@@ -179,7 +180,12 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
     handle_subscribe_ack((MMonSubscribeAck*)m);
     return true;
+
+  case MSG_AUTH_ROTATING:
+    handle_auth_rotating_response((MAuthRotating*)m);
+    return true;
   }
+
 
   return false;
 }
@@ -372,5 +378,48 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 int MonClient::authorize(double timeout)
 {
   return auth.authorize(CEPHX_PRINCIPAL_MON, timeout);
+}
+
+int MonClient::start_auth_rotating(EntityName& name, double timeout)
+{
+  MAuthRotating *m = new MAuthRotating();
+  if (!m)
+    return -ENOMEM;
+  send_mon_message(m);
+
+  auth_timeout_event = new C_AuthRotatingTimeout(this, timeout);
+  if (!auth_timeout_event)
+    return -ENOMEM;
+  timer.add_event_after(timeout, auth_timeout_event);
+
+  dout(0) << "MonClient::start_auth_rotating waiting" << dendl;
+  auth_cond.Wait(monc_lock);
+  dout(0) << "MonClient::start_auth_rotating wait ended" << dendl;
+
+  timer.cancel_event(auth_timeout_event);
+  auth_timeout_event = NULL;
+
+  if (auth_got_timeout) {
+    dout(0) << "MonClient::start_auth_rotating got timeout" << dendl;
+    return -ETIMEDOUT;
+  }
+
+  return 0;
+}
+
+void MonClient::handle_auth_rotating_response(MAuthRotating *m)
+{
+  Mutex::Locker l(monc_lock);
+
+  if (auth_got_timeout)
+    return;
+
+  auth_cond.Signal();
+
+  timer.cancel_event(auth_timeout_event);
+  auth_timeout_event = NULL;
+
+
+  dout(0) << "MonClient::handle_auth_rotating_response got_response status=" << m->status << " length=" << m->response_bl.length() << dendl;
 }
 

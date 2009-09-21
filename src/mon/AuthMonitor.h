@@ -29,6 +29,7 @@ using namespace std;
 
 class MMonCommand;
 class MAuthMon;
+class MAuthRotating;
 
 class AuthMonitor : public PaxosService {
   void auth_usage(stringstream& ss);
@@ -70,6 +71,7 @@ class AuthMonitor : public PaxosService {
  public:
   AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0) { }
   void handle_request(MAuthMon *m);
+  void handle_request(MAuthRotating *m);
   
   void tick();  // check state, take actions
 };

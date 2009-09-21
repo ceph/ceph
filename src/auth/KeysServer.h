@@ -24,40 +24,6 @@
 #define KEY_ROTATE_TIME 5
 #define KEY_ROTATE_NUM 3
 
-struct ExpiringCryptoKey {
-  CryptoKey key;
-  utime_t expiration;
-
-  void encode(bufferlist& bl) const {
-    ::encode(key, bl);
-    ::encode(expiration, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(key, bl);
-    ::decode(expiration, bl);
-  }
-};
-WRITE_CLASS_ENCODER(ExpiringCryptoKey);
-
-
-
-struct RotatingSecrets {
-  map<uint64_t, ExpiringCryptoKey> secrets;
-  version_t max_ver;
-
-  void encode(bufferlist& bl) const {
-    ::encode(secrets, bl);
-    ::encode(max_ver, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(secrets, bl);
-    ::decode(max_ver, bl);
-  }
-
-  void add(ExpiringCryptoKey& key);
-};
-WRITE_CLASS_ENCODER(RotatingSecrets);
-
 
 struct KeysServerData {
   version_t version;
@@ -108,6 +74,7 @@ struct KeysServerData {
 
   map<EntityName, CryptoKey>::iterator secrets_begin() { return secrets.begin(); }
   map<EntityName, CryptoKey>::iterator secrets_end() { return secrets.end(); }
+  map<EntityName, CryptoKey>::iterator find_name(EntityName& name) { return secrets.find(name); }
 };
 WRITE_CLASS_ENCODER(KeysServerData);
 
@@ -186,6 +153,8 @@ public:
 
   bool updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver);
   void decode_rotating(bufferlist& rotating_bl);
+
+  bool get_rotating_encrypted(EntityName& name, bufferlist& enc_bl);
 };
 WRITE_CLASS_ENCODER(KeysServer);
 

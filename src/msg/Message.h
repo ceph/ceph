@@ -38,6 +38,7 @@
 
 #define MSG_AUTHMON                60
 #define MSG_AUTHMON_ACK            61
+#define MSG_AUTH_ROTATING          62
 
 #define MSG_POOLOP                 49
 #define MSG_POOLOPREPLY            48

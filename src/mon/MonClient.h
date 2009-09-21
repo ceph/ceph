@@ -31,6 +31,7 @@ class MonMap;
 class MMonMap;
 class MClientMountAck;
 class MMonSubscribeAck;
+class MAuthRotating;
 
 class MonClient : public Dispatcher, public AuthClient {
 public:
@@ -62,6 +63,24 @@ private:
   };
   void tick();
 
+  Context *auth_timeout_event;
+  bool auth_got_timeout;
+  Cond auth_cond;
+
+  class C_AuthRotatingTimeout : public Context {
+  protected:
+    MonClient *client;
+    double timeout;
+  public:
+    C_AuthRotatingTimeout(MonClient *c, double to) :
+                                        client(c), timeout(to) {
+    }
+    void finish(int r) {
+      if (r >= 0) client->_auth_rotating_timeout(timeout);
+    }
+  };
+
+  void handle_auth_rotating_response(MAuthRotating *m);
   // mount
 private:
   client_t clientid;
@@ -76,6 +95,13 @@ private:
   void handle_mount_ack(MClientMountAck* m);
 
 public:
+  void _auth_rotating_timeout(double timeout) {
+    auth_got_timeout = true;
+    auth_cond.Signal();
+  }
+
+ int start_auth_rotating(EntityName& name, double timeout);
+
   int mount(double mount_timeout);
   int authenticate(double timeout);
   int authorize(double timeout);
@@ -127,6 +153,8 @@ public:
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
+                auth_timeout_event(NULL),
+                auth_got_timeout(false),
 		mounting(0), mount_err(0) { }
   ~MonClient() {
     timer.cancel_all_events();

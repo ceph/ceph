@@ -80,6 +80,8 @@
 
 #include "common/ClassHandler.h"
 
+#include "auth/KeysServer.h"
+
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
@@ -421,6 +423,10 @@ int OSD::init()
   
   monc->init();
 
+  EntityName ename;
+  ename.entity_type = CEPHX_PRINCIPAL_OSD;
+  ename.name = g_conf.id;
+
   // announce to monitor i exist and have booted.
   do_mon_report();
   
@@ -436,6 +442,13 @@ int OSD::init()
 
   signal(SIGTERM, handle_signal);
   signal(SIGINT, handle_signal);
+
+  int ret = monc->start_auth_rotating(ename, KEY_ROTATE_TIME);
+  if (ret < 0) {
+    dout(0) << "could not start rotating keys, err=" << ret << dendl;
+    return ret;
+  }
+  dout(0) << "started rotating keys" << dendl;
 
   return 0;
 }

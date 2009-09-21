@@ -221,3 +221,22 @@ void KeysServer::decode_rotating(bufferlist& rotating_bl)
   ::decode(data.rotating_secrets, iter);
 }
 
+bool KeysServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
+{
+  Mutex::Locker l(lock);
+
+  map<EntityName, CryptoKey>::iterator mapiter = data.find_name(name);
+  if (mapiter == data.secrets_end())
+    return false;
+
+  CryptoKey& specific_key = mapiter->second;
+
+  map<uint32_t, RotatingSecrets>::iterator rotate_iter = data.rotating_secrets.find(name.entity_type);
+  if (rotate_iter == data.rotating_secrets.end())
+    return false;
+
+  RotatingSecrets secrets = rotate_iter->second;
+
+  encode_encrypt(secrets, specific_key, enc_bl);
+}
+

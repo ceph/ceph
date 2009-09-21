@@ -20,6 +20,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MAuthMon.h"
 #include "messages/MAuthMonAck.h"
+#include "messages/MAuthRotating.h"
 
 #include "include/AuthLibrary.h"
 #include "common/Timer.h"
@@ -386,3 +387,23 @@ done:
   mon->reply_command(m, err, rs, paxos->get_version());
   return false;
 }
+
+
+void AuthMonitor::handle_request(MAuthRotating *m)
+{
+  dout(10) << "handle_request " << *m << " from " << m->get_orig_source() << dendl;
+  MAuthRotating *reply = new MAuthRotating();
+
+  if (!reply)
+    return;
+
+  if (keys_server.get_rotating_encrypted(m->entity_name, reply->response_bl)) {
+    reply->status = 0;
+  } else {
+    reply->status = -EPERM;
+  }
+  
+  mon->messenger->send_message(reply, m->get_orig_source_inst());
+  delete m;
+}
+
