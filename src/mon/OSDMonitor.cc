@@ -804,29 +804,27 @@ void OSDMonitor::blacklist(entity_addr_t a, utime_t until)
 }
 
 
-void OSDMonitor::subscribe(entity_inst_t inst, version_t have, utime_t until)
-{
-  if (paxos->is_readable() &&
-      have < osdmap.get_epoch()) {
-    send_latest(inst, have);
-    subs.subscribe(inst, osdmap.get_epoch(), until);    
-  } else
-    subs.subscribe(inst, have, until);
-}
-
 void OSDMonitor::check_subs()
 {
-  for (map<entity_inst_t, SubscriptionMap::sub_info>::iterator p = subs.subs.begin();
-       p != subs.subs.end();
-       p++) {
-    if (p->second.last < osdmap.get_epoch()) {
-      send_latest(p->first, p->second.last);
-      p->second.last = osdmap.get_epoch();
-    }
+  nstring type = "osdmap";
+  xlist<Subscription*>::iterator p = mon->session_map.subs[type].begin();
+  while (!p.end()) {
+    Subscription *sub = *p;
+    ++p;
+    check_sub(sub);
   }
-  subs.trim_onetime();
 }
 
+void OSDMonitor::check_sub(Subscription *sub)
+{
+  if (sub->last < osdmap.get_epoch()) {
+    send_latest(sub->session->inst, sub->last);
+    if (sub->onetime)
+      mon->session_map.remove_sub(sub);
+    else
+      sub->last = osdmap.get_epoch();
+  }
+}
 
 
 // TICK
@@ -838,8 +836,6 @@ void OSDMonitor::tick()
 
   update_from_paxos();
   dout(10) << osdmap << dendl;
-
-  subs.trim(g_clock.now());
 
   if (!mon->is_leader()) return;
 

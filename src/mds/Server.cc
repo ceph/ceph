@@ -169,7 +169,7 @@ Session *Server::get_session(Message *m)
     session = mds->sessionmap.get_session(m->get_source());
     if (session) {
       dout(20) << "get_session set " << session->inst << " in connection" << dendl;
-      m->get_connection()->set_priv(session);
+      m->get_connection()->set_priv(session->get());
     } else {
       dout(20) << "get_session " << m->get_source() << " dne" << dendl;
     }

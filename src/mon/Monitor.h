@@ -31,6 +31,7 @@
 #include "MonMap.h"
 #include "Elector.h"
 #include "Paxos.h"
+#include "Session.h"
 
 #include "osd/OSDMap.h"
 
@@ -126,6 +127,11 @@ public:
   friend class PGMonitor;
   friend class LogMonitor;
 
+
+  // -- sessions --
+  SessionMap session_map;
+
+  
 
   // messages
   void handle_subscribe(MMonSubscribe *m);

@@ -470,27 +470,52 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   dout(10) << "handle_subscribe " << *m << dendl;
   
   bool reply = false;
-  utime_t until = g_clock.now();
-  until += g_conf.mon_subscribe_interval;
+
+  Session *s = (Session *)m->get_connection()->get_priv();
+  if (!s) {
+    s = session_map.new_session(m->get_source_inst());
+    m->get_connection()->set_priv(s->get());
+    dout(10) << " new session " << s << " for " << s->inst << dendl;
+  } else {
+    dout(10) << " existing session " << s << " for " << s->inst << dendl;
+  }
+
+  s->until = g_clock.now();
+  s->until += g_conf.mon_subscribe_interval;
 
   for (map<nstring,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        p++) {
     if (!p->second.onetime)
       reply = true;
-    if (p->first == "osdmap")
-      osdmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
-    else if (p->first == "mdsmap")
-      mdsmon()->subscribe(m->get_source_inst(), p->second.have, p->second.onetime ? utime_t() : until);
-    else
-      dout(10) << " ignoring sub for '" << p->first << "'" << dendl;
+    session_map.add_update_sub(s, p->first, p->second.have, p->second.onetime);
+
+    if (p->first == "mdsmap")
+      mdsmon()->check_sub(s->sub_map["mdsmap"]);
+    else if (p->first == "osdmap")
+      osdmon()->check_sub(s->sub_map["osdmap"]);
   }
+
+  // ???
 
   if (reply)
     messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
 			    m->get_source_inst());
 
+  s->put();
   delete m;
+}
+
+bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
+{
+  Session *s = (Session *)con->get_priv();
+  if (!s)
+    return false;
+
+  dout(10) << "reset/close on session " << s->inst << dendl;
+  session_map.remove_session(s);
+  s->put();
+  return true;
 }
 
 void Monitor::handle_mon_get_map(MMonGetMap *m)
@@ -575,6 +600,19 @@ void Monitor::tick()
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->tick();
   
+  // trim sessions
+  utime_t now = g_clock.now();
+  xlist<Session*>::iterator p = session_map.sessions.begin();
+  while (!p.end()) {
+    Session *s = *p;
+    ++p;
+    if (s->until < now) {
+      dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
+      messenger->mark_down(s->inst.addr);
+      session_map.remove_session(s);
+    }
+  }
+
   // next tick!
   reset_tick();
 }

@@ -655,7 +655,7 @@ noinst_HEADERS = \
         mon/PGMonitor.h\
         mon/Paxos.h\
         mon/PaxosService.h\
-        mon/SubscriptionMap.h\
+        mon/Session.h\
         mon/mon_types.h\
 	mount/mtab.c\
         msg/Dispatcher.h\

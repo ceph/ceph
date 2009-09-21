@@ -15,6 +15,7 @@ bugs
 - weird osd_lock contention during osd restart?
 
 later
+- mon cluster expansion, contraction
 - authentication
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
