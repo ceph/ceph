@@ -84,7 +84,8 @@ ostream& operator<<(ostream &out, Inode &in)
   out << in.vino() << "("
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
-      << " ref=" << in.ref;
+      << " ref=" << in.ref
+      << " caps=" << ccap_string(in.caps_issued());
   if (in.dirty_caps)
     out << " dirty_caps=" << ccap_string(in.dirty_caps);
   if (in.flushing_caps)
@@ -916,17 +917,19 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
 			 int mds, int drop,
 			 int unless, int force)
 {
-  dout(20) << "encode_inode_release enter(in:" << in << ", req:" << req
+  dout(20) << "encode_inode_release enter(in:" << *in << ", req:" << req
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
-	   << ", force:" << force << ")" << dendl;
+	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
   InodeCap *caps = in->caps[mds];
   if (drop & caps->issued &&
       !(unless & caps->issued)) {
+    dout(25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
     caps->issued &= ~drop;
     caps->implemented &= ~drop;
     released = 1;
     force = 1;
+    dout(25) << "Now have: " << ccap_string(caps->issued) << dendl;
   }
   if (force) {
     ceph_mds_request_release rel;
@@ -941,7 +944,7 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
     rel.dname_seq = 0;
     req->releases.push_back(MClientRequest::Release(rel,""));
   }
-  dout(25) << "encode_inode_release exit(in:" << in << ") released:"
+  dout(25) << "encode_inode_release exit(in:" << *in << ") released:"
 	   << released << dendl;
   return released;
 }
@@ -3003,7 +3006,8 @@ int Client::get_or_create(Inode *dir, const char* name,
 			  Dentry **pdn, bool expect_null)
 {
   // lookup
-  if (dir->dir && dir->dir->dentries.count(name)) {
+  dir->open_dir();
+  if (dir->dir->dentries.count(name)) {
     Dentry *dn = *pdn = dir->dir->dentries[name];
     
     // is dn lease valid?
