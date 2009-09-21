@@ -250,7 +250,8 @@ int MonClient::mount(double mount_timeout)
   if (mounting == 1) {
     if (cur_mon < 0)
       _reopen_session();
-    _send_mount();
+    else
+      _send_mount();
   }
   while (clientid < 0 && !mount_err)
     mount_cond.Wait(monc_lock);
