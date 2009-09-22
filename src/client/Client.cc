@@ -3018,6 +3018,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 	  return 0;
       }
     }
+    return 0;
   }
   
   // otherwise link up a new one
