@@ -340,12 +340,9 @@ void Objecter::tick()
 
   // reschedule
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
-
-  //resubmit old ops
-  resend_slow_ops();
 }
 
-void Objecter::resend_slow_ops()
+void Objecter::resend_mon_ops()
 {
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.objecter_mon_retry_interval;
@@ -933,6 +930,12 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
   }
 }
 
+
+void Objecter::ms_handle_reset(const entity_addr_t& addr)
+{
+  if (monc->monmap.contains(addr))
+    resend_mon_ops();
+}
 
 void Objecter::ms_handle_remote_reset(const entity_addr_t& addr)
 {

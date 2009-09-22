@@ -197,7 +197,6 @@ class Objecter {
     void finish(int r) { ob->tick(); }
   };
   void tick();
-  void resend_slow_ops();
 
   /*** track pending operations ***/
   // read
@@ -384,6 +383,7 @@ class Objecter {
 
   void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
 
+  void resend_mon_ops();
 
  public:
   Objecter(Messenger *m, MonClient *mc, OSDMap *om, Mutex& l) : 
@@ -698,6 +698,7 @@ public:
     }
   }
 
+  void ms_handle_reset(const entity_addr_t& addr);
   void ms_handle_remote_reset(const entity_addr_t& addr);
 
 };
