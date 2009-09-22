@@ -8,6 +8,11 @@ v0.15
 /- kclient: osdc bug fix
 /- kclient: clean up debugfs layout
 
+v0.16
+- kclient cleanup: uninline strings, use pr_fmt, prefix frag_ macros
+- 
+
+
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
 - mds: put migration vectors in mdsmap
