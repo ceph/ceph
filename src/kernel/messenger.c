@@ -105,7 +105,7 @@ static void ceph_state_change(struct sock *sk)
 		dout("ceph_state_change TCP_CLOSE\n");
 	case TCP_CLOSE_WAIT:
 		dout("ceph_state_change TCP_CLOSE_WAIT\n");
-		if (test_and_set_bit(SOCK_CLOSED, &con->state) != 0) {
+		if (test_and_set_bit(SOCK_CLOSED, &con->state) == 0) {
 			if (test_bit(CONNECTING, &con->state))
 				con->error_msg = "connection failed";
 			else
