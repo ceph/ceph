@@ -5148,11 +5148,8 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
 { 
   dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
 
-  Dentry *dn;
-  int res = get_or_create(dir, name, &dn);
-  if (res<0)
-    return res;
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
+
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5161,7 +5158,11 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   req->head.args.mknod.rdev = rdev;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->dentry = dn;
+
+  int res = get_or_create(dir, name, &req->dentry);
+  if (res<0)
+    return res;
+
   res = make_request(req, uid, gid);
 
   trim_cache();
@@ -5200,6 +5201,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   dout(3) << "_create(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ")" << dendl;
   
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
+
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
@@ -5211,8 +5213,14 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_count = file_stripe_count;
   req->head.args.open.object_size = object_size;
   req->head.args.open.file_replication = file_replication;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  int res = make_request(req, uid, gid);
+  int res = get_or_create(dir, name, &req->dentry);
+  if (res<0)
+    return res;
+
+  res = make_request(req, uid, gid);
   
   if (res >= 0) {
     res = _lookup(dir, name, inp);
@@ -5233,14 +5241,21 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
 int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid)
 {
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
+
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
   req->head.args.mkdir.mode = mode;
- 
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL; 
+
+  int res = get_or_create(dir, name, &req->dentry);
+  if (res < 0)
+    return res;
+  
   dout(10) << "_mkdir: making request" << dendl;
-  int res = make_request(req, uid, gid);
+  res = make_request(req, uid, gid);
   dout(10) << "_mkdir result is " << res << dendl;
 
   trim_cache();
@@ -5276,13 +5291,20 @@ int Client::ll_mkdir(vinodeno_t parent, const char *name, mode_t mode, struct st
 int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, int gid)
 {
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
+
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
-  req->set_string2(target);
- 
-  int res = make_request(req, uid, gid);
+  req->set_string2(target); 
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  int res = get_or_create(dir, name, &req->dentry);
+  if (res < 0)
+    return res;
+
+  res = make_request(req, uid, gid);
 
   trim_cache();
   dout(3) << "_symlink(\"" << path << "\", \"" << target << "\") = " << res << dendl;
@@ -5315,12 +5337,21 @@ int Client::ll_symlink(vinodeno_t parent, const char *name, const char *value, s
 int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
 {
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
+
   filepath path;
   dir->make_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
- 
-  int res = make_request(req, uid, gid);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  int res = get_or_create(dir, name, &req->dentry);
+  if (res < 0)
+    return res;
+  res = _lookup(dir, name, &req->inode);
+
+  res = make_request(req, uid, gid);
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name)) {
       Dentry *dn = dir->dir->dentries[name];
@@ -5353,8 +5384,18 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   dir->make_path(path);
   path.push_dentry(name);
   req->set_filepath(path);
- 
-  int res = make_request(req, uid, gid);
+
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+  req->inode = dir;
+
+  int res = get_or_create(dir, name, &req->dentry);
+  if (res < 0)
+    return res;
+  res = _lookup(dir, name, &req->inode);
+
+  res = make_request(req, uid, gid);
   if (res == 0) {
     if (dir->dir && dir->dir->dentries.count(name) ) {
       Dentry *dn = dir->dir->dentries[name];
@@ -5384,6 +5425,7 @@ int Client::ll_rmdir(vinodeno_t vino, const char *name, int uid, int gid)
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, int uid, int gid)
 {
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
+
   filepath from;
   fromdir->make_path(from);
   from.push_dentry(fromname);
@@ -5392,8 +5434,25 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   to.push_dentry(toname);
   req->set_filepath(to);
   req->set_filepath2(from);
- 
-  int res = make_request(req, uid, gid);
+  req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+  req->inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+
+  int res = get_or_create(fromdir, fromname, &req->old_dentry);
+  if (res < 0)
+    return res;
+  res = get_or_create(todir, toname, &req->dentry);
+  if (res < 0)
+    return res;
+  res = _lookup(fromdir, fromname, &req->old_inode);
+  if (res < 0)
+    return res;
+  res = _lookup(todir, toname, &req->inode);
+  
+  res = make_request(req, uid, gid);
 
   dout(10) << "rename result is " << res << dendl;
 
@@ -5423,12 +5482,20 @@ int Client::ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent,
 int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid) 
 {
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
+
   filepath path(newname, dir->ino);
   req->set_filepath(path);
   filepath existing(in->ino);
   req->set_filepath2(existing);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  req->inode = in;
+  int res = get_or_create(dir, newname, &req->dentry);
+  if (res < 0)
+    return res;
   
-  int res = make_request(req, uid, gid);
+  res = make_request(req, uid, gid);
   dout(10) << "link result is " << res << dendl;
 
   trim_cache();
