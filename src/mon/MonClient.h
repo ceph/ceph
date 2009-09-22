@@ -41,6 +41,8 @@ private:
 
   int cur_mon;
 
+  EntityName entity_name;
+
   entity_addr_t my_addr;
 
   Mutex monc_lock;
@@ -104,12 +106,13 @@ private:
   void handle_mount_ack(MClientMountAck* m);
 
 public:
+  void set_entity_name(EntityName name) { entity_name = name; }
   void _auth_rotating_timeout(double timeout) {
     auth_got_timeout = true;
     auth_cond.Signal();
   }
 
- int start_auth_rotating(EntityName& name, double timeout);
+  int _start_auth_rotating(double timeout);
 
   int mount(double mount_timeout);
   int authenticate(double timeout);

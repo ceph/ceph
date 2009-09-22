@@ -238,5 +238,7 @@ bool KeysServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
   RotatingSecrets secrets = rotate_iter->second;
 
   encode_encrypt(secrets, specific_key, enc_bl);
+
+  return true;
 }
 

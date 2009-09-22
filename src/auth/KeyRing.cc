@@ -55,7 +55,7 @@ bool KeyRing::load_master(const char *filename)
   struct stat st;
   int rc = fstat(fd, &st);
   if (rc != 0) {
-    dout(0) << "error stating key ring file " << filename << dendl;
+    dout(0) << "error stat'ing key ring file " << filename << dendl;
     return false;
   }
   __int32_t len = st.st_size;

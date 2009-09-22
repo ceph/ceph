@@ -32,6 +32,7 @@
 
 #include "auth/Auth.h"
 #include "auth/AuthProtocol.h"
+#include "auth/KeysServer.h"
 
 #include "config.h"
 
@@ -335,7 +336,13 @@ void MonClient::_reopen_session()
 {
   dout(10) << "_reopen_session" << dendl;
   _pick_new_mon();
+
+  dout(0) << "_reopen_session 0" << dendl;
   auth.start_session(this, 30.0);
+  dout(0) << "_reopen_session 1" << dendl;
+  _start_auth_rotating(KEY_ROTATE_TIME);
+  dout(0) << "_reopen_session 2" << dendl;
+
   if (mounting)
     _send_mount();
   if (!sub_have.empty())
@@ -432,13 +439,16 @@ int MonClient::authorize(double timeout)
   return auth.authorize(CEPHX_PRINCIPAL_MON, timeout);
 }
 
-int MonClient::start_auth_rotating(EntityName& name, double timeout)
+int MonClient::_start_auth_rotating(double timeout)
 {
+  if (entity_name.entity_type != CEPHX_PRINCIPAL_OSD)
+    return 0;
+
   MAuthRotating *m = new MAuthRotating();
   if (!m)
     return -ENOMEM;
 
-  Mutex::Locker l(monc_lock);
+  m->entity_name = entity_name;
 
   _send_mon_message(m);
 
@@ -447,12 +457,12 @@ int MonClient::start_auth_rotating(EntityName& name, double timeout)
     return -ENOMEM;
   timer.add_event_after(timeout, auth_timeout_event);
 
-  dout(0) << "MonClient::start_auth_rotating waiting" << dendl;
+  dout(0) << "MonClient::_start_auth_rotating waiting" << dendl;
   auth_cond.Wait(monc_lock);
-  dout(0) << "MonClient::start_auth_rotating wait ended" << dendl;
+  dout(0) << "MonClient::_start_auth_rotating wait ended" << dendl;
 
   if (auth_got_timeout) {
-    dout(0) << "MonClient::start_auth_rotating got timeout" << dendl;
+    dout(0) << "MonClient::_start_auth_rotating got timeout" << dendl;
     return -ETIMEDOUT;
   }
 

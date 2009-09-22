@@ -428,6 +428,8 @@ int OSD::init()
   ename.entity_type = CEPHX_PRINCIPAL_OSD;
   ename.name = g_conf.id;
 
+  monc->set_entity_name(ename);
+
   monc->sub_want("monmap", 0);
   monc->renew_subs();  
 

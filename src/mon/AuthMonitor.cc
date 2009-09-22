@@ -147,7 +147,7 @@ bool AuthMonitor::update_from_paxos()
     inc.decode_entry(entry);
     switch (inc.op) {
     case AUTH_INC_ADD:
-      if (entry.rotating) {
+      if (!entry.rotating) {
         keys_server.add_secret(entry.name, entry.secret);
       } else {
         derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
@@ -293,7 +293,6 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" ||
         m->cmd[1] == "del" ||
-        m->cmd[1] == "activate" ||
         m->cmd[1] == "list") {
       return false;
     }
