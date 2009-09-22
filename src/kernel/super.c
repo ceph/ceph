@@ -1,3 +1,6 @@
+
+#include "ceph_debug.h"
+
 #include <linux/backing-dev.h>
 #include <linux/fs.h>
 #include <linux/inet.h>
@@ -12,7 +15,6 @@
 #include <linux/version.h>
 #include <linux/vmalloc.h>
 
-#include "ceph_debug.h"
 #include "ceph_ver.h"
 #include "decode.h"
 #include "super.h"
@@ -390,7 +392,7 @@ static int parse_ips(const char *c, const char *end,
 	return 0;
 
 bad:
-	pr_err("ceph parse_ips bad ip '%s'\n", c);
+	pr_err("parse_ips bad ip '%s'\n", c);
 	return -EINVAL;
 }
 
@@ -425,7 +427,7 @@ static int parse_mount_args(struct ceph_client *client,
 		return -EINVAL;
 	*path = strstr(dev_name, ":/");
 	if (*path == NULL) {
-		pr_err("ceph device name is missing path (no :/ in %s)\n",
+		pr_err("device name is missing path (no :/ in %s)\n",
 		       dev_name);
 		return -EINVAL;
 	}
@@ -468,14 +470,14 @@ static int parse_mount_args(struct ceph_client *client,
 			continue;
 		token = match_token((char *)c, arg_tokens, argstr);
 		if (token < 0) {
-			pr_err("ceph bad mount option at '%s'\n", c);
+			pr_err("bad mount option at '%s'\n", c);
 			return -EINVAL;
 
 		}
 		if (token < Opt_ip) {
 			ret = match_int(&argstr[0], &intval);
 			if (ret < 0) {
-				pr_err("ceph bad mount option arg (not int) "
+				pr_err("bad mount option arg (not int) "
 				       "at '%s'\n", c);
 				continue;
 			}
@@ -992,7 +994,7 @@ static int __init init_ceph(void)
 {
 	int ret = 0;
 
-	pr_info("ceph init (%s)\n", STRINGIFY(CEPH_GIT_VER));
+	pr_info("init (%s)\n", STRINGIFY(CEPH_GIT_VER));
 
 	ret = ceph_debugfs_init();
 	if (ret < 0)

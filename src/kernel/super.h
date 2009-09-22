@@ -1,6 +1,8 @@
 #ifndef _FS_CEPH_SUPER_H
 #define _FS_CEPH_SUPER_H
 
+#include "ceph_debug.h"
+
 #include <asm/unaligned.h>
 #include <linux/backing-dev.h>
 #include <linux/completion.h>
@@ -11,7 +13,6 @@
 #include <linux/wait.h>
 
 #include "types.h"
-#include "ceph_debug.h"
 #include "messenger.h"
 #include "msgpool.h"
 #include "mon_client.h"

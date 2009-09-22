@@ -1,3 +1,5 @@
+#include "ceph_debug.h"
+
 #include <linux/bug.h>
 #include <linux/err.h>
 #include <linux/random.h>
@@ -8,7 +10,6 @@
 #include "messenger.h"
 #include "decode.h"
 
-#include "ceph_debug.h"
 #include "super.h"
 
 
@@ -125,7 +126,7 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 badmem:
 	err = -ENOMEM;
 bad:
-	pr_err("ceph corrupt mdsmap\n");
+	pr_err("corrupt mdsmap\n");
 	ceph_mdsmap_destroy(m);
 	return ERR_PTR(-EINVAL);
 }

@@ -1,3 +1,5 @@
+#include "ceph_debug.h"
+
 #include <linux/crc32c.h>
 #include <linux/kthread.h>
 #include <linux/socket.h>
@@ -7,7 +9,6 @@
 #include <linux/ctype.h>
 #include <net/tcp.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 #include "messenger.h"
 
@@ -41,7 +42,7 @@ int ceph_msgr_init(void)
 	ceph_msgr_wq = create_workqueue("ceph-msgr");
 	if (IS_ERR(ceph_msgr_wq)) {
 		int ret = PTR_ERR(ceph_msgr_wq);
-		pr_err("ceph_msgr_init failed to create workqueue: %d\n", ret);
+		pr_err("msgr_init failed to create workqueue: %d\n", ret);
 		ceph_msgr_wq = NULL;
 		return ret;
 	}
@@ -167,7 +168,7 @@ static struct socket *ceph_tcp_connect(struct ceph_connection *con)
 		ret = 0;
 	}
 	if (ret < 0) {
-		pr_err("ceph connect %u.%u.%u.%u:%u error %d\n",
+		pr_err("connect %u.%u.%u.%u:%u error %d\n",
 			IPQUADPORT(*(struct sockaddr_in *)paddr), ret);
 		sock_release(sock);
 		con->sock = NULL;
@@ -794,7 +795,7 @@ out:
 static int verify_hello(struct ceph_connection *con)
 {
 	if (memcmp(con->in_banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
-		pr_err("ceph connect to/from %u.%u.%u.%u:%u has bad banner\n",
+		pr_err("connect to/from %u.%u.%u.%u:%u has bad banner\n",
 		       IPQUADPORT(con->peer_addr.ipaddr));
 		con->error_msg = "protocol error, bad banner";
 		return -1;
@@ -820,7 +821,7 @@ static int process_connect(struct ceph_connection *con)
 	      con->actual_peer_addr.ipaddr.sin_port ==
 	      con->peer_addr.ipaddr.sin_port &&
 	      con->actual_peer_addr.nonce == con->peer_addr.nonce)) {
-		pr_err("ceph wrong peer, want %u.%u.%u.%u:%u/%d, "
+		pr_err("wrong peer, want %u.%u.%u.%u:%u/%d, "
 		       "got %u.%u.%u.%u:%u/%d, wtf\n",
 		       IPQUADPORT(con->peer_addr.ipaddr),
 		       con->peer_addr.nonce,
@@ -849,7 +850,7 @@ static int process_connect(struct ceph_connection *con)
 		dout("process_connect got BADPROTOVER my %d != their %d\n",
 		     le32_to_cpu(con->out_connect.protocol_version),
 		     le32_to_cpu(con->in_reply.protocol_version));
-		pr_err("ceph %s%lld %u.%u.%u.%u:%u protocol version mismatch,"
+		pr_err("%s%lld %u.%u.%u.%u:%u protocol version mismatch,"
 		       " my %d != server's %d\n",
 		       ENTITY_NAME(con->peer_name),
 		       IPQUADPORT(con->peer_addr.ipaddr),
@@ -873,7 +874,7 @@ static int process_connect(struct ceph_connection *con)
 		 */
 		dout("process_connect got RESET peer seq %u\n",
 		     le32_to_cpu(con->in_connect.connect_seq));
-		pr_err("ceph %s%lld %u.%u.%u.%u:%u connection reset\n",
+		pr_err("%s%lld %u.%u.%u.%u:%u connection reset\n",
 		       ENTITY_NAME(con->peer_name),
 		       IPQUADPORT(con->peer_addr.ipaddr));
 		reset_connection(con);
@@ -940,7 +941,7 @@ static int process_connect(struct ceph_connection *con)
 		pr_err("process_connect peer connecting WAIT\n");
 
 	default:
-		pr_err("ceph connect protocol error, will retry\n");
+		pr_err("connect protocol error, will retry\n");
 		con->error_msg = "protocol error, garbage tag during connect";
 		return -1;
 	}
@@ -1016,7 +1017,7 @@ static int read_partial_message(struct ceph_connection *con)
 			u32 crc = crc32c(0, (void *)&con->in_hdr,
 				 sizeof(con->in_hdr) - sizeof(con->in_hdr.crc));
 			if (crc != le32_to_cpu(con->in_hdr.crc)) {
-				pr_err("ceph read_partial_message bad hdr "
+				pr_err("read_partial_message bad hdr "
 				       " crc %u != expected %u\n",
 				       crc, con->in_hdr.crc);
 				return -EBADMSG;
@@ -1166,20 +1167,19 @@ no_data:
 
 	/* crc ok? */
 	if (con->in_front_crc != le32_to_cpu(m->footer.front_crc)) {
-		pr_err("ceph read_partial_message %p front crc %u != exp. %u\n",
+		pr_err("read_partial_message %p front crc %u != exp. %u\n",
 		       m, con->in_front_crc, m->footer.front_crc);
 		return -EBADMSG;
 	}
 	if (con->in_middle_crc != le32_to_cpu(m->footer.middle_crc)) {
-		pr_err("ceph read_partial_message %p middle crc %u != exp %u\n",
+		pr_err("read_partial_message %p middle crc %u != exp %u\n",
 		       m, con->in_middle_crc, m->footer.middle_crc);
 		return -EBADMSG;
 	}
 	if (datacrc &&
 	    (m->footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0 &&
 	    con->in_data_crc != le32_to_cpu(m->footer.data_crc)) {
-		pr_err("ceph read_partial_message %p data crc %u != exp. %u\n",
-		       m,
+		pr_err("read_partial_message %p data crc %u != exp. %u\n", m,
 		       con->in_data_crc, le32_to_cpu(m->footer.data_crc));
 		return -EBADMSG;
 	}
@@ -1430,7 +1430,7 @@ out:
 	return ret;
 
 bad_tag:
-	pr_err("ceph try_read bad con->in_tag = %d\n", (int)con->in_tag);
+	pr_err("try_read bad con->in_tag = %d\n", (int)con->in_tag);
 	con->error_msg = "protocol error, garbage tag";
 	ret = -1;
 	goto out;
@@ -1539,7 +1539,7 @@ out:
  */
 static void ceph_fault(struct ceph_connection *con)
 {
-	pr_err("ceph %s%lld %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
+	pr_err("%s%lld %u.%u.%u.%u:%u %s\n", ENTITY_NAME(con->peer_name),
 	       IPQUADPORT(con->peer_addr.ipaddr), con->error_msg);
 	dout("fault %p state %lu to peer %u.%u.%u.%u:%u\n",
 	     con, con->state, IPQUADPORT(con->peer_addr.ipaddr));
@@ -1741,7 +1741,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 			m->front.iov_base = kmalloc(front_len, GFP_NOFS);
 		}
 		if (m->front.iov_base == NULL) {
-			pr_err("ceph_msg_new can't allocate %d bytes\n",
+			pr_err("msg_new can't allocate %d bytes\n",
 			     front_len);
 			goto out2;
 		}
@@ -1764,7 +1764,7 @@ struct ceph_msg *ceph_msg_new(int type, int front_len,
 out2:
 	ceph_msg_put(m);
 out:
-	pr_err("ceph_msg_new can't create type %d len %d\n", type, front_len);
+	pr_err("msg_new can't create type %d len %d\n", type, front_len);
 	return ERR_PTR(-ENOMEM);
 }
 
@@ -1779,7 +1779,7 @@ struct ceph_msg *ceph_alloc_msg(struct ceph_connection *con,
 	struct ceph_msg *msg = ceph_msg_new(type, front_len, 0, 0, NULL);
 
 	if (!msg) {
-		pr_err("ceph: unable to allocate msg type %d len %d\n",
+		pr_err("unable to allocate msg type %d len %d\n",
 		       type, front_len);
 		return ERR_PTR(-ENOMEM);
 	}

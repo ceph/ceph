@@ -151,7 +151,7 @@ static struct crush_map *crush_decode(void *pbyval, void *end)
 	ceph_decode_need(p, end, 4*sizeof(u32), bad);
 	ceph_decode_32(p, magic);
 	if (magic != CRUSH_MAGIC) {
-		pr_err("ceph crush_decode magic %x != current %x\n",
+		pr_err("crush_decode magic %x != current %x\n",
 		       (unsigned)magic, (unsigned)CRUSH_MAGIC);
 		goto bad;
 	}
@@ -617,7 +617,7 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 		struct ceph_entity_addr addr;
 		ceph_decode_32_safe(p, end, osd, bad);
 		ceph_decode_copy_safe(p, end, &addr, sizeof(addr), bad);
-		pr_info("ceph osd%d up\n", osd);
+		pr_info("osd%d up\n", osd);
 		BUG_ON(osd >= map->max_osd);
 		map->osd_state[osd] |= CEPH_OSD_UP;
 		map->osd_addr[osd] = addr;
@@ -641,7 +641,7 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 		ceph_decode_need(p, end, sizeof(u32)*2, bad);
 		ceph_decode_32(p, osd);
 		ceph_decode_32(p, off);
-		pr_info("ceph osd%d weight 0x%x %s\n", osd, off,
+		pr_info("osd%d weight 0x%x %s\n", osd, off,
 		     off == CEPH_OSD_IN ? "(in)" :
 		     (off == CEPH_OSD_OUT ? "(out)" : ""));
 		if (osd < map->max_osd)
@@ -699,7 +699,7 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end,
 	return map;
 
 bad:
-	pr_err("ceph corrupt inc osdmap epoch %d off %d (%p of %p-%p)\n",
+	pr_err("corrupt inc osdmap epoch %d off %d (%p of %p-%p)\n",
 	       epoch, (int)(*p - start), *p, start, end);
 	if (newcrush)
 		crush_destroy(newcrush);
@@ -830,7 +830,7 @@ static int *calc_pg_raw(struct ceph_osdmap *osdmap, union ceph_pg pgid,
 	ruleno = crush_find_rule(osdmap->crush, pool->v.crush_ruleset,
 				 pool->v.type, pool->v.size);
 	if (ruleno < 0) {
-		pr_err("ceph no crush rule pool %d type %d size %d\n",
+		pr_err("no crush rule pool %d type %d size %d\n",
 		       pgid.pg.pool, pool->v.type, pool->v.size);
 		return NULL;
 	}

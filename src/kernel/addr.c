@@ -1,3 +1,4 @@
+#include "ceph_debug.h"
 
 #include <linux/backing-dev.h>
 #include <linux/fs.h>
@@ -7,9 +8,7 @@
 #include <linux/pagevec.h>
 #include <linux/task_io_accounting_ops.h>
 
-#include "ceph_debug.h"
 #include "super.h"
-
 #include "osd_client.h"
 
 /*
@@ -162,8 +161,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	 * warning, in case we end up with accounting problems later.
 	 */
 	if (!PageDirty(page))
-		pr_err("ceph %p invalidatepage %p page not dirty\n", inode,
-		       page);
+		pr_err("%p invalidatepage %p page not dirty\n", inode, page);
 
 	if (offset == 0)
 		ClearPageChecked(page);
@@ -623,7 +621,7 @@ static int ceph_writepages_start(struct address_space *mapping,
 
 	client = ceph_inode_to_client(inode);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
-		pr_warning("ceph writepage_start %p on forced umount\n", inode);
+		pr_warning("writepage_start %p on forced umount\n", inode);
 		return -EIO; /* we're in a forced umount, don't write! */
 	}
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)

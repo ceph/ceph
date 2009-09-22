@@ -1,10 +1,11 @@
+#include "ceph_debug.h"
+
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 #include "decode.h"
 #include "messenger.h"
@@ -202,7 +203,7 @@ int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need)
 
 out_alloc_count:
 	/* we didn't manage to reserve as much as we needed */
-	pr_warning("ceph reserve caps ctx=%p ENOMEM need=%d got=%d\n",
+	pr_warning("reserve caps ctx=%p ENOMEM need=%d got=%d\n",
 		   ctx, need, have);
 	return ret;
 }
@@ -1756,7 +1757,7 @@ static void kick_flushing_capsnaps(struct ceph_mds_client *mdsc,
 			     cap, capsnap);
 			__ceph_flush_snaps(ci, &session);
 		} else {
-			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
+			pr_err("%p auth cap %p not mds%d ???\n", inode,
 			       cap, session->s_mds);
 			spin_unlock(&inode->i_lock);
 		}
@@ -1792,7 +1793,7 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 				spin_unlock(&inode->i_lock);
 			}
 		} else {
-			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
+			pr_err("%p auth cap %p not mds%d ???\n", inode,
 			       cap, session->s_mds);
 			spin_unlock(&inode->i_lock);
 		}
