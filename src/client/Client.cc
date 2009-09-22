@@ -5794,38 +5794,14 @@ void Client::ms_handle_failure(Connection *con, Message *m, const entity_addr_t&
 bool Client::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;
+  Mutex::Locker l(client_lock);
+  objecter->ms_handle_reset(addr);
   return false;
 }
-
 
 void Client::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_remote_reset on " << addr << dendl;
-#if 0
-  if (last.is_mds()) {
-    int mds = last.num();
-    dout(0) << "ms_handle_remote_reset on " << last << ", " << mds_sessions[mds].num_caps
-	    << " caps, kicking requests" << dendl;
-
-    mds_sessions.erase(mds); // "kill" session
-
-    // reopen if caps
-    if (mds_sessions[mds].num_caps > 0) {
-      waiting_for_session[mds].size();  // make sure entry exists
-      messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
-			      mdsmap->get_inst(mds));
-      
-      /*
-       * FIXME: actually, we need to do a reconnect or similar to reestablish
-       * our caps (where possible)
-       */
-      dout(0) << "FIXME: client needs to reconnect to restablish existing caps ****" << dendl;
-    }
-
-    // or requests
-    //kick_requests(mds, false);
-  }
-  else 
-    objecter->ms_handle_remote_reset(addr, last);
-#endif
+  Mutex::Locker l(client_lock);
+  objecter->ms_handle_remote_reset(addr);
 }
