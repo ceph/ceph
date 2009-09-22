@@ -390,6 +390,7 @@ class Objecter {
     messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
+    last_seen_version(0),
     client_lock(l), timer(l)
   { }
   ~Objecter() { }

@@ -887,8 +887,9 @@ void Paxos::update_observers()
 
 bool Paxos::is_readable(version_t v)
 {
-  dout(1) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire << dendl;
-  if(v > last_committed)
+  dout(1) << "is_readable now=" << g_clock.now() << " lease_expire=" << lease_expire
+	  << " has v" << v << " lc " << last_committed << dendl;
+  if (v > last_committed)
     return false;
   return 
     (mon->is_peon() || mon->is_leader()) &&
