@@ -290,6 +290,8 @@ bool RadosClient::init()
     return false;
 
   monclient.set_messenger(messenger);
+  
+  messenger->add_dispatcher_head(this);
 
   rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
@@ -309,6 +311,7 @@ bool RadosClient::init()
 
   objecter->set_client_incarnation(0);
   objecter->init();
+  monclient.renew_subs();
 
   while (osdmap.get_epoch() == 0) {
     dout(1) << "waiting for osdmap" << dendl;
