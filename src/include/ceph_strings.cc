@@ -120,7 +120,6 @@ const char *ceph_mds_op_name(int op)
 	return "???";
 }
 
-
 const char *ceph_cap_op_name(int op)
 {
 	switch (op) {
