@@ -481,6 +481,7 @@ noinst_HEADERS = \
 	kernel/inode.c\
 	kernel/ioctl.c\
 	kernel/ioctl.h\
+	kernel/ioctl-number.patch\
 	kernel/kbuild.patch\
 	kernel/mds_client.c\
 	kernel/mds_client.h\
