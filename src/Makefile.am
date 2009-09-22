@@ -301,6 +301,7 @@ libcommon_files = \
 	common/common_init.cc \
 	common/buffer.cc \
 	common/debug.cc \
+	include/ceph_strings.cc \
 	config.cc \
 	common/lockdep.cc
 
@@ -500,6 +501,7 @@ noinst_HEADERS = \
 	kernel/osdmap.h\
 	kernel/rados.h\
 	kernel/snap.c\
+	kernel/ceph_strings.c\
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
