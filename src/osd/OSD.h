@@ -31,6 +31,8 @@
 
 #include "include/LogEntry.h"
 
+#include "auth/KeyRing.h"
+
 #include <map>
 using namespace std;
 
@@ -100,6 +102,8 @@ protected:
   ObjectStore *store;
 
   LogClient   logclient;
+
+  KeyRing     keyring;
 
   int whoami;
   const char *dev_path, *journal_path;

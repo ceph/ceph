@@ -392,6 +392,7 @@ noinst_HEADERS = \
 	auth/Auth.h\
 	auth/AuthProtocol.h\
 	auth/AuthServiceManager.h\
+	auth/KeyRing.h\
 	auth/KeysServer.h\
 	auth/Crypto.h\
 	auth/ExportControl.h\

@@ -338,6 +338,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_monc, 0, OPT_INT, 1),
 	OPTION(debug_paxos, 0, OPT_INT, 0),
 	OPTION(debug_tp, 0, OPT_INT, 0),
+	OPTION(key_file, 'k', OPT_STR, "key.bin"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),

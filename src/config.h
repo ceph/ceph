@@ -105,6 +105,9 @@ struct md_config_t {
   bool clock_lock;
   bool clock_tare;
 
+  // auth
+  const char *key_file;
+
   // messenger
 
   /*bool tcp_skip_rank0;

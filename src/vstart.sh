@@ -259,6 +259,7 @@ if [ "$start_osd" -eq 1 ]; then
         osd data = dev/osd$osd
         osd journal = dev/osd$osd/journal
         osd journal size = 100
+        key file = dev/osd$osd/key.bin
 EOF
 	    echo mkfs osd$osd
 	    echo $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20

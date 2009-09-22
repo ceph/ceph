@@ -18,36 +18,16 @@
 #include "config.h"
 
 #include "Crypto.h"
+#include "auth/KeyRing.h"
+#include "auth/KeysServer.h"
 
 using namespace std;
-
-#define NUM_CONCURRENT_KEYS 3
-
-/*
-  KeyRing is being used at the service side, for holding the temporary rotating
-  key of that service
-*/
-
-class KeyRing {
-  CryptoKey master;
-  map<uint32_t, CryptoKey> keys;
-  deque<uint32_t> keys_fifo;
-  Mutex lock;
-public:
-  KeyRing() : lock("KeyRing") {}
-
-  bool load_master(const char *filename);
-  bool set_next_key(uint64_t id, CryptoKey& key);
-
-  void get_master(CryptoKey& dest);
-};
-
 
 bool KeyRing::load_master(const char *filename)
 {
   int fd = open(filename, O_RDONLY);
   if (fd < 0) {
-    dout(0) << "can't open key ring file " << filename << dendl;
+    dout(0) << "can't open key file " << filename << dendl;
     return false;
   }
 
@@ -55,7 +35,7 @@ bool KeyRing::load_master(const char *filename)
   struct stat st;
   int rc = fstat(fd, &st);
   if (rc != 0) {
-    dout(0) << "error stat'ing key ring file " << filename << dendl;
+    dout(0) << "error stat'ing key file " << filename << dendl;
     return false;
   }
   __int32_t len = st.st_size;
@@ -74,6 +54,8 @@ bool KeyRing::load_master(const char *filename)
   }
   bl.append(bp);
   close(fd);
+
+  ::decode(master, bl);
   
   return true;
 }
@@ -85,7 +67,7 @@ bool KeyRing::set_next_key(uint64_t id, CryptoKey& key)
   keys[id] = key;
   keys_fifo.push_back(id);
 
-  while (keys_fifo.size() > NUM_CONCURRENT_KEYS) {
+  while (keys_fifo.size() > KEY_ROTATE_NUM) {
     uint32_t old_id = keys_fifo[0];
     keys_fifo.pop_front();
     map<uint32_t, CryptoKey>::iterator iter = keys.find(old_id);
