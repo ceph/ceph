@@ -1019,14 +1019,20 @@ protected:
     delete dn;
   }
 
-  Dentry *relink_inode(Dir *dir, const string& name, Inode *in) {
+  Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *newdn=NULL) {
     Dentry *olddn = in->dn;
     Dir *olddir = olddn->dir;  // note: might == dir!
+    bool made_new = false;
 
     // newdn, attach to inode.  don't touch inode ref.
-    Dentry *newdn = new Dentry;
-    newdn->dir = dir;
-    newdn->name = name;
+    if (!newdn) {
+      made_new = true;
+      newdn = new Dentry;
+      newdn->dir = dir;
+      newdn->name = name;
+    } else {
+      assert(newdn->inode == NULL);
+    }
     newdn->inode = in;
     in->dn = newdn;
 
@@ -1044,7 +1050,10 @@ protected:
     
     // link new dn to dir
     dir->dentries[name] = newdn;
-    lru.lru_insert_mid(newdn);
+    if (made_new)
+      lru.lru_insert_mid(newdn);
+    else
+      lru.lru_midtouch(newdn);
     
     // olddir now empty?  (remember, olddir might == dir)
     if (olddir->is_empty()) 

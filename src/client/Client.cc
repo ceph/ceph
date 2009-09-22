@@ -487,37 +487,33 @@ void Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dleas
 	   << " in dir " << dir->parent_inode->ino
            << dendl;
   
-  if (dn) {
-    if (dn->inode) {
-      if (dn->inode->vino() == in->vino()) {
-	touch_dn(dn);
-	dout(12) << " had dentry " << dname
-		 << " with correct vino " << dn->inode->vino()
-		 << dendl;
-      } else {
-	dout(12) << " had dentry " << dname
-		 << " with WRONG vino " << dn->inode->vino()
-		 << dendl;
-	unlink(dn, true);
-	dn = NULL;
-      }
+  if (dn && dn->inode) {
+    if (dn->inode->vino() == in->vino()) {
+      touch_dn(dn);
+      dout(12) << " had dentry " << dname
+	       << " with correct vino " << dn->inode->vino()
+	       << dendl;
     } else {
-      link(dir, dname, in, dn);
+      dout(12) << " had dentry " << dname
+	       << " with WRONG vino " << dn->inode->vino()
+	       << dendl;
+      unlink(dn, true);
+      dn = NULL;
     }
   }
   
-  if (!dn) {
+  if (!dn || dn->inode == 0) {
     // have inode linked elsewhere?  -> unlink and relink!
     if (in->dn) {
       dout(12) << " had vino " << in->vino()
 	       << " not linked or linked at the right position, relinking"
 	       << dendl;
-      dn = relink_inode(dir, dname, in);
+      dn = relink_inode(dir, dname, in, dn);
     } else {
       // link
       dout(12) << " had vino " << in->vino()
 	       << " unlinked, linking" << dendl;
-      dn = link(dir, dname, in);
+      dn = link(dir, dname, in, dn);
     }
   }
 
