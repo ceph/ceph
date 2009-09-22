@@ -109,7 +109,7 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci,
 	while (*p) {
 		parent = *p;
 		frag = rb_entry(parent, struct ceph_inode_frag, node);
-		c = frag_compare(f, frag->frag);
+		c = ceph_frag_compare(f, frag->frag);
 		if (c < 0)
 			p = &(*p)->rb_left;
 		else if (c > 0)
@@ -147,7 +147,7 @@ u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 		     struct ceph_inode_frag *pfrag,
 		     int *found)
 {
-	u32 t = frag_make(0, 0);
+	u32 t = ceph_frag_make(0, 0);
 	struct ceph_inode_frag *frag;
 	unsigned nway, i;
 	u32 n;
@@ -157,7 +157,7 @@ u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 
 	mutex_lock(&ci->i_fragtree_mutex);
 	while (1) {
-		WARN_ON(!frag_contains_value(t, v));
+		WARN_ON(!ceph_frag_contains_value(t, v));
 		frag = __ceph_find_frag(ci, t);
 		if (!frag)
 			break; /* t is a leaf */
@@ -174,8 +174,8 @@ u32 ceph_choose_frag(struct ceph_inode_info *ci, u32 v,
 		dout("choose_frag(%x) %x splits by %d (%d ways)\n", v, t,
 		     frag->split_by, nway);
 		for (i = 0; i < nway; i++) {
-			n = frag_make_child(t, frag->split_by, i);
-			if (frag_contains_value(n, v)) {
+			n = ceph_frag_make_child(t, frag->split_by, i);
+			if (ceph_frag_contains_value(n, v)) {
 				t = n;
 				break;
 			}

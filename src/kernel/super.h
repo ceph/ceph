@@ -405,7 +405,7 @@ __ceph_find_frag(struct ceph_inode_info *ci, u32 f)
 	while (n) {
 		struct ceph_inode_frag *frag =
 			rb_entry(n, struct ceph_inode_frag, node);
-		int c = frag_compare(f, frag->frag);
+		int c = ceph_frag_compare(f, frag->frag);
 		if (c < 0)
 			n = n->rb_left;
 		else if (c > 0)

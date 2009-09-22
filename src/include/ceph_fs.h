@@ -66,102 +66,102 @@
  * can't sort encoded frags numerically.  However, it does allow you
  * to feed encoded frags as values into frag_contains_value.
  */
-static inline __u32 frag_make(__u32 b, __u32 v)
+static inline __u32 ceph_frag_make(__u32 b, __u32 v)
 {
 	return (b << 24) |
 		(v & (0xffffffu << (24-b)) & 0xffffffu);
 }
-static inline __u32 frag_bits(__u32 f)
+static inline __u32 ceph_frag_bits(__u32 f)
 {
 	return f >> 24;
 }
-static inline __u32 frag_value(__u32 f)
+static inline __u32 ceph_frag_value(__u32 f)
 {
 	return f & 0xffffffu;
 }
-static inline __u32 frag_mask(__u32 f)
+static inline __u32 ceph_frag_mask(__u32 f)
 {
-	return (0xffffffu << (24-frag_bits(f))) & 0xffffffu;
+	return (0xffffffu << (24-ceph_frag_bits(f))) & 0xffffffu;
 }
-static inline __u32 frag_mask_shift(__u32 f)
+static inline __u32 ceph_frag_mask_shift(__u32 f)
 {
-	return 24 - frag_bits(f);
+	return 24 - ceph_frag_bits(f);
 }
 
-static inline int frag_contains_value(__u32 f, __u32 v)
+static inline int ceph_frag_contains_value(__u32 f, __u32 v)
 {
-	return (v & frag_mask(f)) == frag_value(f);
+	return (v & ceph_frag_mask(f)) == ceph_frag_value(f);
 }
-static inline int frag_contains_frag(__u32 f, __u32 sub)
+static inline int ceph_frag_contains_frag(__u32 f, __u32 sub)
 {
 	/* is sub as specific as us, and contained by us? */
-	return frag_bits(sub) >= frag_bits(f) &&
-		(frag_value(sub) & frag_mask(f)) == frag_value(f);
+	return ceph_frag_bits(sub) >= ceph_frag_bits(f) &&
+	       (ceph_frag_value(sub) & ceph_frag_mask(f)) == ceph_frag_value(f);
 }
 
-static inline __u32 frag_parent(__u32 f)
+static inline __u32 ceph_frag_parent(__u32 f)
 {
-	return frag_make(frag_bits(f) - 1,
-			 frag_value(f) & (frag_mask(f) << 1));
+	return ceph_frag_make(ceph_frag_bits(f) - 1,
+			 ceph_frag_value(f) & (ceph_frag_mask(f) << 1));
 }
-static inline int frag_is_left_child(__u32 f)
+static inline int ceph_frag_is_left_child(__u32 f)
 {
-	return frag_bits(f) > 0 &&
-		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 0;
+	return ceph_frag_bits(f) > 0 &&
+		(ceph_frag_value(f) & (0x1000000 >> ceph_frag_bits(f))) == 0;
 }
-static inline int frag_is_right_child(__u32 f)
+static inline int ceph_frag_is_right_child(__u32 f)
 {
-	return frag_bits(f) > 0 &&
-		(frag_value(f) & (0x1000000 >> frag_bits(f))) == 1;
+	return ceph_frag_bits(f) > 0 &&
+		(ceph_frag_value(f) & (0x1000000 >> ceph_frag_bits(f))) == 1;
 }
-static inline __u32 frag_sibling(__u32 f)
+static inline __u32 ceph_frag_sibling(__u32 f)
 {
-	return frag_make(frag_bits(f),
-			 frag_value(f) ^ (0x1000000 >> frag_bits(f)));
+	return ceph_frag_make(ceph_frag_bits(f),
+		      ceph_frag_value(f) ^ (0x1000000 >> ceph_frag_bits(f)));
 }
-static inline __u32 frag_left_child(__u32 f)
+static inline __u32 ceph_frag_left_child(__u32 f)
 {
-	return frag_make(frag_bits(f)+1, frag_value(f));
+	return ceph_frag_make(ceph_frag_bits(f)+1, ceph_frag_value(f));
 }
-static inline __u32 frag_right_child(__u32 f)
+static inline __u32 ceph_frag_right_child(__u32 f)
 {
-	return frag_make(frag_bits(f)+1,
-			 frag_value(f) | (0x1000000 >> (1+frag_bits(f))));
+	return ceph_frag_make(ceph_frag_bits(f)+1,
+	      ceph_frag_value(f) | (0x1000000 >> (1+ceph_frag_bits(f))));
 }
-static inline __u32 frag_make_child(__u32 f, int by, int i)
+static inline __u32 ceph_frag_make_child(__u32 f, int by, int i)
 {
-	int newbits = frag_bits(f) + by;
-	return frag_make(newbits,
-			 frag_value(f) | (i << (24 - newbits)));
+	int newbits = ceph_frag_bits(f) + by;
+	return ceph_frag_make(newbits,
+			 ceph_frag_value(f) | (i << (24 - newbits)));
 }
-static inline int frag_is_leftmost(__u32 f)
+static inline int ceph_frag_is_leftmost(__u32 f)
 {
-	return frag_value(f) == 0;
+	return ceph_frag_value(f) == 0;
 }
-static inline int frag_is_rightmost(__u32 f)
+static inline int ceph_frag_is_rightmost(__u32 f)
 {
-	return frag_value(f) == frag_mask(f);
+	return ceph_frag_value(f) == ceph_frag_mask(f);
 }
-static inline __u32 frag_next(__u32 f)
+static inline __u32 ceph_frag_next(__u32 f)
 {
-	return frag_make(frag_bits(f),
-			 frag_value(f) + (0x1000000 >> frag_bits(f)));
+	return ceph_frag_make(ceph_frag_bits(f),
+			 ceph_frag_value(f) + (0x1000000 >> ceph_frag_bits(f)));
 }
 
 /*
  * comparator to sort frags logically, as when traversing the
  * number space in ascending order...
  */
-static inline int frag_compare(__u32 a, __u32 b)
+static inline int ceph_frag_compare(__u32 a, __u32 b)
 {
-	unsigned va = frag_value(a);
-	unsigned vb = frag_value(b);
+	unsigned va = ceph_frag_value(a);
+	unsigned vb = ceph_frag_value(b);
 	if (va < vb)
 		return -1;
 	if (va > vb)
 		return 1;
-	va = frag_bits(a);
-	vb = frag_bits(b);
+	va = ceph_frag_bits(a);
+	vb = ceph_frag_bits(b);
 	if (va < vb)
 		return -1;
 	if (va > vb)

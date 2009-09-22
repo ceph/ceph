@@ -264,7 +264,7 @@ more:
 		req->r_dentry = dget(filp->f_dentry);
 		/* hints to request -> mds selection code */
 		req->r_direct_mode = USE_AUTH_MDS;
-		req->r_direct_hash = frag_value(frag);
+		req->r_direct_hash = ceph_frag_value(frag);
 		req->r_direct_is_hash = true;
 		req->r_path2 = kstrdup(fi->last_name, GFP_NOFS);
 		req->r_readdir_offset = fi->next_offset;
@@ -338,8 +338,8 @@ more:
 	}
 
 	/* more frags? */
-	if (!frag_is_rightmost(frag)) {
-		frag = frag_next(frag);
+	if (!ceph_frag_is_rightmost(frag)) {
+		frag = ceph_frag_next(frag);
 		off = 0;
 		filp->f_pos = ceph_make_fpos(frag, off);
 		dout("readdir next frag is %x\n", frag);
