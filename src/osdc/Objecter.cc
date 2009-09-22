@@ -365,17 +365,6 @@ void Objecter::resend_mon_ops()
 }
 
 
-/*
-void Objecter::handle_osd_op_reply(MOSDOpReply *m)
-{
-  if (m->may_write())
-    handle_osd_modify_reply(m);
-  else
-    handle_osd_read_reply(m);
-}
-*/
-
-
 
 // read | write ---------------------------
 
