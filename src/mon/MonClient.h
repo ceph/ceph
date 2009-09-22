@@ -24,6 +24,7 @@
 
 #include "auth/AuthClient.h"
 #include "auth/AuthClientHandler.h"
+#include "auth/KeyRing.h"
 
 #include "messages/MMonSubscribe.h"
 
@@ -72,6 +73,7 @@ private:
   Context *auth_timeout_event;
   bool auth_got_timeout;
   Cond auth_cond;
+  KeyRing *keyring;
 
   class C_AuthRotatingTimeout : public Context {
   protected:
@@ -174,6 +176,7 @@ public:
 		hunting(false),
                 auth_timeout_event(NULL),
                 auth_got_timeout(false),
+                keyring(NULL),
 		mounting(0), mount_err(0) { }
   ~MonClient() {
     timer.cancel_all_events();
@@ -185,6 +188,8 @@ public:
   int build_initial_monmap();
   int get_monmap();
   int get_monmap_privately();
+
+  void set_keyring(KeyRing *ring) { keyring = ring; }
 
   void send_mon_message(Message *m) {
     Mutex::Locker l(monc_lock);

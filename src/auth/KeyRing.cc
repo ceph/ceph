@@ -23,6 +23,23 @@
 
 using namespace std;
 
+static void hexdump(string msg, const char *s, int len)
+{
+  int buf_len = len*4;
+  char buf[buf_len];
+  int pos = 0;
+  for (int i=0; i<len && pos<buf_len - 8; i++) {
+    if (i && !(i%8))
+      pos += snprintf(&buf[pos], buf_len-pos, " ");
+    if (i && !(i%16))
+      pos += snprintf(&buf[pos], buf_len-pos, "\n");
+    pos += snprintf(&buf[pos], buf_len-pos, "%.2x ", (int)(unsigned char)s[i]);
+  }
+  dout(0) << msg << ":\n" << buf << dendl;
+}
+
+
+
 bool KeyRing::load_master(const char *filename)
 {
   int fd = open(filename, O_RDONLY);
@@ -55,27 +72,33 @@ bool KeyRing::load_master(const char *filename)
   bl.append(bp);
   close(fd);
 
-  ::decode(master, bl);
+  bufferlist::iterator iter = bl.begin();
+
+  ::decode(master, iter);
   
   return true;
 }
 
-bool KeyRing::set_next_key(uint64_t id, CryptoKey& key)
+void KeyRing::set_rotating(RotatingSecrets& secrets)
 {
   Mutex::Locker l(lock);
 
-  keys[id] = key;
-  keys_fifo.push_back(id);
+  rotating_secrets = secrets;
 
-  while (keys_fifo.size() > KEY_ROTATE_NUM) {
-    uint32_t old_id = keys_fifo[0];
-    keys_fifo.pop_front();
-    map<uint32_t, CryptoKey>::iterator iter = keys.find(old_id);
-    assert(iter != keys.end());
-    keys.erase(iter);
+  dout(0) << "KeyRing::set_rotating max_ver=" << secrets.max_ver << dendl;
+
+  map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.secrets.begin();
+  version_t max_ver;
+
+  for (; iter != secrets.secrets.end(); ++iter) {
+    ExpiringCryptoKey& key = iter->second;
+
+    dout(0) << "key.expiration: " << key.expiration << dendl;
+    bufferptr& bp = key.key.get_secret();
+    bufferlist bl;
+    bl.append(bp);
+    hexdump(" key", bl.c_str(), bl.length());
   }
-
-  return true;
 }
 
 void KeyRing::get_master(CryptoKey& dest)

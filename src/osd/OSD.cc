@@ -428,6 +428,8 @@ int OSD::init()
   ename.entity_type = CEPHX_PRINCIPAL_OSD;
   ename.name = g_conf.id;
 
+  monc->set_keyring(&keyring);
+
   if (keyring.load_master(g_conf.key_file)) {
     dout(0) << "successfuly loaded secret key from " << g_conf.key_file << dendl;
   } else {

@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include "auth/Crypto.h"
+#include "auth/Auth.h"
 
 /*
   KeyRing is being used at the service side, for holding the temporary rotating
@@ -26,14 +27,13 @@
 
 class KeyRing {
   CryptoKey master;
-  map<uint32_t, CryptoKey> keys;
-  deque<uint32_t> keys_fifo;
+  RotatingSecrets rotating_secrets;
   Mutex lock;
 public:
   KeyRing() : lock("KeyRing") {}
 
   bool load_master(const char *filename);
-  bool set_next_key(uint64_t id, CryptoKey& key);
+  void set_rotating(RotatingSecrets& secrets);
 
   void get_master(CryptoKey& dest);
 };
