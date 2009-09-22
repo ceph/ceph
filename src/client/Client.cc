@@ -3587,20 +3587,12 @@ int Client::opendir(const char *relpath, DIR **dirpp)
 
 int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid) 
 {
+  int r = 0;
   *dirpp = new DirResult(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
   if (in->dir)
     (*dirpp)->release_count = in->dir->release_count;
   dout(10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
-
-  // get the first frag
-  int r = _readdir_get_frag(*dirpp);
-  if (r < 0) {
-    _closedir(*dirpp);
-    *dirpp = 0;
-  } else {
-    r = 0;
-  }
   dout(3) << "_opendir(" << in->ino << ") = " << r << " (" << *dirpp << ")" << dendl;
   return r;
 }
@@ -3766,6 +3758,11 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
 {  
   DirResult *dirp = (DirResult*)d;
   
+  dout(10) << "readdirplus_r " << *dirp->inode << " offset " << dirp->offset
+	   << " frag " << dirp->frag() << " fragpos " << dirp->fragpos()
+	   << " at_end=" << dirp->at_end()
+	   << dendl;
+
   while (1) {
     if (dirp->at_end())
       return 0;
@@ -3782,7 +3779,8 @@ int Client::readdirplus_r(DIR *d, struct dirent *de, struct stat *st, int *stmas
     assert(dirp->buffer.count(fg));   
     vector<DirEntry> &ent = dirp->buffer[fg];
 
-    if (ent.empty()) {
+    if (ent.empty() ||
+	pos >= ent.size()) {
       dout(10) << "empty frag " << fg << ", moving on to next" << dendl;
       _readdir_next_frag(dirp);
       continue;
