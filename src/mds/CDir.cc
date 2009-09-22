@@ -1225,8 +1225,8 @@ void CDir::_fetched(bufferlist &bl)
       } else {
 	// add inode
 	CInode *in = 0;
-	if (cache->have_inode(inode.ino, first)) {
-	  in = cache->get_inode(inode.ino, first);
+	if (cache->have_inode(inode.ino, last)) {
+	  in = cache->get_inode(inode.ino, last);
 	  dout(-12) << "_fetched  got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << dendl;
