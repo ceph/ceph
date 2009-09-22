@@ -251,7 +251,6 @@ static void reset_connection(struct ceph_connection *con)
 
 	con->connect_seq = 0;
 	con->out_seq = 0;
-	con->out_qlen = 0;
 	con->out_msg = NULL;
 	con->in_seq = 0;
 	mutex_unlock(&con->out_mutex);
@@ -395,9 +394,6 @@ static void prepare_write_message(struct ceph_connection *con)
 		       struct ceph_msg, list_head);
 	list_move_tail(&m->list_head, &con->out_sent);
 	con->out_msg = m;   /* we don't bother taking a reference here. */
-
-	BUG_ON(!con->out_qlen);
-	con->out_qlen--;
 
 	m->hdr.seq = cpu_to_le64(++con->out_seq);
 
@@ -1658,9 +1654,7 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 	/* queue */
 	mutex_lock(&con->out_mutex);
 	list_add_tail(&msg->list_head, &con->out_queue);
-	con->out_qlen++;
-	dout("----- %p %llu to %s%lld %d=%s len %d+%d+%d -----\n", msg,
-	     con->out_seq + con->out_qlen,
+	dout("----- %p to %s%lld %d=%s len %d+%d+%d -----\n", msg,
 	     ENTITY_NAME(con->peer_name), le16_to_cpu(msg->hdr.type),
 	     ceph_msg_type_name(le16_to_cpu(msg->hdr.type)),
 	     le32_to_cpu(msg->hdr.front_len),
@@ -1684,10 +1678,7 @@ void ceph_con_revoke(struct ceph_connection *con, struct ceph_msg *msg)
 		dout("con_revoke %p msg %p\n", con, msg);
 		list_del_init(&msg->list_head);
 		ceph_msg_put(msg);
-		if (msg->hdr.seq == 0)
-			con->out_qlen--;
-		else
-			msg->hdr.seq = 0;
+		msg->hdr.seq = 0;
 		if (con->out_msg == msg)
 			con->out_msg = NULL;
 		if (con->out_kvec_is_msg) {

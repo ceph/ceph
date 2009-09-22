@@ -165,7 +165,6 @@ struct ceph_connection {
 	struct mutex out_mutex;
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending or sent but unacked */
-	unsigned out_qlen;
 	u64 out_seq;		     /* last message queued for send */
 	u64 out_seq_sent;            /* last message sent */
 	bool out_keepalive_pending;
