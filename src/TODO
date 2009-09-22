@@ -5,8 +5,8 @@ v0.15
 /- msgr: protocol check cleanups; ack seq # fix; 
 /- debian: radosgw package, fix header perms
 /- kclient: GET_DATALOC ioctl
-- kclient: osdc bug fix
-- kclient: clean up debugfs layout
+/- kclient: osdc bug fix
+/- kclient: clean up debugfs layout
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
@@ -87,6 +87,7 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- clean up monitor session handling
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
