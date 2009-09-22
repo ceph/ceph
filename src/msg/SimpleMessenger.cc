@@ -394,8 +394,7 @@ int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << m->get_source_inst()
-          << " --> " << dest.name << " " << dest.addr
+  dout(1) << "--> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
@@ -413,8 +412,7 @@ int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << m->get_source()
-          << " **> " << dest.name << " " << dest.addr
+  dout(1) << "**> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
@@ -435,8 +433,8 @@ int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << "lazy " << m->get_source()
-          << " --> " << dest.name << " " << dest.addr
+  dout(1) << "lazy "
+	  << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
