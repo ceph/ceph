@@ -191,9 +191,9 @@ public:
     Mutex::Locker l(monc_lock);
     monmap.last_mon = m;
   }
-  void pick_new_mon() {
+  void reopen_session() {
     Mutex::Locker l(monc_lock);
-    _pick_new_mon();
+    _reopen_session();
   }
 
   entity_addr_t get_my_addr() { return my_addr; }

@@ -18,13 +18,15 @@ struct ceph_ioctl_layout {
 				   struct ceph_ioctl_layout)
 
 /*
- * Extract identity, address of the OSD storing a given file offset.
+ * Extract identity, address of the OSD and object storing a given
+ * file offset.
  */
 struct ceph_ioctl_dataloc {
 	__u64 file_offset;           /* in+out: file offset */
 	__u64 object_offset;         /* out: offset in object */
 	__u64 object_no;             /* out: object # */
 	__u64 object_size;           /* out: object size */
+	char object_name[64];        /* out: object name */
 	__u64 block_offset;          /* out: offset in block */
 	__u64 block_size;            /* out: block length */
 	__s64 osd;                   /* out: osd # */

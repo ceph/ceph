@@ -595,14 +595,14 @@ static int fill_inode(struct inode *inode,
 
 			BUG_ON(symlen != inode->i_size);
 			spin_unlock(&inode->i_lock);
-			
+
 			err = -ENOMEM;
 			sym = kmalloc(symlen+1, GFP_NOFS);
 			if (!sym)
 				goto out;
 			memcpy(sym, iinfo->symlink, symlen);
 			sym[symlen] = 0;
-			
+
 			spin_lock(&inode->i_lock);
 			if (!ci->i_symlink)
 				ci->i_symlink = sym;

@@ -399,15 +399,16 @@ void MonClient::_renew_subs()
   }
 
   dout(10) << "renew_subs" << dendl;
-
-  if (sub_renew_sent == utime_t())
-    sub_renew_sent = g_clock.now();
-
-  MMonSubscribe *m = new MMonSubscribe;
-  m->what = sub_have;
   if (cur_mon < 0)
     _reopen_session();
-  _send_mon_message(m);
+  else {
+    if (sub_renew_sent == utime_t())
+      sub_renew_sent = g_clock.now();
+
+    MMonSubscribe *m = new MMonSubscribe;
+    m->what = sub_have;
+    _send_mon_message(m);
+  }
 }
 
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)

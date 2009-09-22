@@ -86,6 +86,10 @@ static long ceph_ioctl_set_layout(struct file *file, void __user *arg)
 	return err;
 }
 
+/*
+ * Return object name, size/offset information, and location (OSD
+ * number, network address) for a given file offset.
+ */
 static long ceph_ioctl_get_dataloc(struct file *file, void __user *arg)
 {
 	struct ceph_ioctl_dataloc dl;
@@ -94,7 +98,6 @@ static long ceph_ioctl_get_dataloc(struct file *file, void __user *arg)
 	struct ceph_osd_client *osdc = &ceph_client(inode->i_sb)->osdc;
 	u64 len = 1, olen;
 	u64 tmp;
-	char oid[80];
 	struct ceph_object_layout ol;
 	union ceph_pg pgid;
 
@@ -113,8 +116,10 @@ static long ceph_ioctl_get_dataloc(struct file *file, void __user *arg)
 	tmp = dl.object_offset;
 	dl.block_offset = do_div(tmp, dl.block_size);
 
-	sprintf(oid, "%llx.%08llx", ceph_ino(inode), dl.object_no);
-	ceph_calc_object_layout(&ol, oid, &ci->i_layout, osdc->osdmap);
+	snprintf(dl.object_name, sizeof(dl.object_name), "%llx.%08llx",
+		 ceph_ino(inode), dl.object_no);
+	ceph_calc_object_layout(&ol, dl.object_name, &ci->i_layout,
+				osdc->osdmap);
 
 	pgid.pg64 = le64_to_cpu(ol.ol_pgid);
 	dl.osd = ceph_calc_pg_primary(osdc->osdmap, pgid);

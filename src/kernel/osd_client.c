@@ -168,7 +168,7 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		ceph_osdc_put_request(req);
 		return ERR_PTR(PTR_ERR(msg));
 	}
-	msg->hdr.type = cpu_to_le32(CEPH_MSG_OSD_OP);
+	msg->hdr.type = cpu_to_le16(CEPH_MSG_OSD_OP);
 	memset(msg->front.iov_base, 0, msg->front.iov_len);
 	head = msg->front.iov_base;
 	op = (void *)(head + 1);
@@ -1255,7 +1255,7 @@ static struct ceph_msg *alloc_msg(struct ceph_connection *con,
 {
 	struct ceph_osd *osd = con->private;
 	struct ceph_osd_client *osdc = osd->o_osdc;
-	int type = le32_to_cpu(hdr->type);
+	int type = le16_to_cpu(hdr->type);
 
 	switch (type) {
 	case CEPH_MSG_OSD_OPREPLY:

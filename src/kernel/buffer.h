@@ -18,17 +18,8 @@ struct ceph_buffer {
 	atomic_t nref;
 	struct kvec vec;
 	size_t alloc_len;
-	bool is_static, is_vmalloc;
+	bool is_vmalloc;
 };
-
-static inline void ceph_buffer_init_static(struct ceph_buffer *b)
-{
-	atomic_set(&b->nref, 1);
-	b->vec.iov_base = NULL;
-	b->vec.iov_len = 0;
-	b->alloc_len = 0;
-	b->is_static = true;
-}
 
 static inline struct ceph_buffer *ceph_buffer_new(gfp_t gfp)
 {
@@ -41,7 +32,6 @@ static inline struct ceph_buffer *ceph_buffer_new(gfp_t gfp)
 	b->vec.iov_base = NULL;
 	b->vec.iov_len = 0;
 	b->alloc_len = 0;
-	b->is_static = false;
 	return b;
 }
 

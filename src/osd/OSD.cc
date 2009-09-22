@@ -428,6 +428,9 @@ int OSD::init()
   ename.entity_type = CEPHX_PRINCIPAL_OSD;
   ename.name = g_conf.id;
 
+  monc->sub_want("monmap", 0);
+  monc->renew_subs();  
+
   // announce to monitor i exist and have booted.
   do_mon_report();
   
@@ -1240,7 +1243,7 @@ void OSD::do_mon_report()
   pg_stat_queue_lock.Unlock();
 
   if (retry) {
-    monc->pick_new_mon();
+    monc->reopen_session();
     dout(10) << "picked a new mon" << dendl;
   }
 
