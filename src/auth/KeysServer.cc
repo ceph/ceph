@@ -77,7 +77,7 @@ int KeysServer::start_server(bool init)
   Mutex::Locker l(lock);
 
   if (init) {
-    _generate_all_rotating_secrets();
+    _generate_all_rotating_secrets(init);
   }
   rotate_event = new C_RotateTimeout(this, KEY_ROTATE_TIME);
   if (!rotate_event)
@@ -86,13 +86,21 @@ int KeysServer::start_server(bool init)
   return 0;
 }
 
-void KeysServer::_generate_all_rotating_secrets()
+void KeysServer::_generate_all_rotating_secrets(bool init)
 {
   data.rotating_ver++;
   dout(0) << "generate_all_rotating_secrets()" << dendl;
-  _rotate_secret(CEPHX_PRINCIPAL_MON);
-  _rotate_secret(CEPHX_PRINCIPAL_OSD);
-  _rotate_secret(CEPHX_PRINCIPAL_MDS);
+
+  int i = KEY_ROTATE_NUM;
+
+  if (init)
+    i = 1;
+
+  for (; i <= KEY_ROTATE_NUM; i++) {
+    _rotate_secret(CEPHX_PRINCIPAL_MON, i);
+    _rotate_secret(CEPHX_PRINCIPAL_OSD, i);
+    _rotate_secret(CEPHX_PRINCIPAL_MDS, i);
+  }
 
   dout(0) << "generated: " << dendl;
   
@@ -112,12 +120,12 @@ void KeysServer::_generate_all_rotating_secrets()
   }
 }
 
-void KeysServer::_rotate_secret(uint32_t service_id)
+void KeysServer::_rotate_secret(uint32_t service_id, int factor)
 {
   ExpiringCryptoKey ek;
   generate_secret(ek.key);
   ek.expiration = g_clock.now();
-  ek.expiration += (KEY_ROTATE_TIME * 3);
+  ek.expiration += (KEY_ROTATE_TIME * factor);
   
   data.add_rotating_secret(service_id, ek);
 }
@@ -125,7 +133,7 @@ void KeysServer::_rotate_secret(uint32_t service_id)
 void KeysServer::rotate_timeout(double timeout)
 {
   dout(0) << "KeysServer::rotate_timeout" << dendl;
-  _generate_all_rotating_secrets();
+  _generate_all_rotating_secrets(false);
 
   rotate_event = new C_RotateTimeout(this, timeout);
   timer.add_event_after(timeout, rotate_event);

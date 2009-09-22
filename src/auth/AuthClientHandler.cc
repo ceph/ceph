@@ -23,7 +23,7 @@
 
 AuthClientProtocolHandler::AuthClientProtocolHandler(AuthClientHandler *client) : 
                         msg(NULL), got_response(false), got_timeout(false),
-                        timeout_event(NULL)
+                        timeout_event(NULL), lock("AuthClientProtocolHandler")
 {
   dout(0) << "AuthClientProtocolHandler::AuthClientProtocolHandler" << dendl;
   this->client = client;
@@ -61,21 +61,47 @@ int AuthClientProtocolHandler::do_request(double timeout)
   timeout_event = new C_OpTimeout(this, timeout);
   client->timer.add_event_after(timeout, timeout_event);
 
-  cond.Wait(client->lock);
+  cond.Wait(lock);
 
   dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
 
   // finish.
-  client->timer.cancel_event(timeout_event);
-  timeout_event = NULL;
+  if (timeout_event) {
+    client->timer.cancel_event(timeout_event);
+    timeout_event = NULL;
+  }
 
   return status;
+}
+
+int AuthClientProtocolHandler::do_async_request(double timeout)
+{
+  got_response = false;
+  client->client->send_message(msg);
+
+#if 0
+  // schedule timeout?
+  assert(timeout_event == 0);
+  timeout_event = new C_OpTimeout(this, timeout);
+  client->timer.add_event_after(timeout, timeout_event);
+
+
+  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
+
+  // finish.
+  if (timeout_event) {
+    client->timer.cancel_event(timeout_event);
+    timeout_event = NULL;
+  }
+#endif
+
+  return 0;
 }
 
 void AuthClientProtocolHandler::_request_timeout(double timeout)
 {
   dout(10) << "_request_timeout" << dendl;
-  timeout_event = 0;
+  timeout_event = NULL;
   if (!got_response) {
     got_timeout = 1;
     cond.Signal();
@@ -85,12 +111,14 @@ void AuthClientProtocolHandler::_request_timeout(double timeout)
 
 int AuthClientProtocolHandler::handle_response(int ret, bufferlist::iterator& iter)
 {
-  Mutex::Locker l(client->lock);
+  if (!client) {
+    derr(0) << "AuthClientProtocolHandler::handle_response() but client is NULL" << dendl;
+    return -EINVAL;
+  }
 
-  got_response = true;
+  Mutex::Locker l(lock);
 
   status = _handle_response(ret, iter);
-  cond.Signal();
 
   return status;
 }
@@ -390,6 +418,23 @@ int AuthClientHandler::start_session(AuthClient *client, double timeout)
       return err;
 
   } while (err == -EAGAIN);
+
+  return err;
+}
+
+int AuthClientHandler::send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout)
+{
+  Mutex::Locker l(lock);
+  this->client = client;
+  dout(10) << "start_session" << dendl;
+
+  int err = handler->build_request();
+  dout(0) << "handler.build_request returned " << err << dendl;
+  if (err < 0)
+    return err;
+
+  err = handler->do_async_request(timeout);
+  dout(0) << "handler.do_async_request returned " << err << dendl;
 
   return err;
 }

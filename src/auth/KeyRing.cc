@@ -108,3 +108,19 @@ void KeyRing::get_master(CryptoKey& dest)
   dest = master;
 }
 
+bool KeyRing::need_rotating_secrets()
+{
+  Mutex::Locker l(lock);
+
+  if (rotating_secrets.secrets.size() < KEY_ROTATE_NUM)
+    return true;
+
+  map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.lower_bound(0);
+  ExpiringCryptoKey& key = iter->second;
+  if (key.expiration < g_clock.now()) {
+    dout(0) << "key.expiration=" << key.expiration << " now=" << g_clock.now() << dendl;
+    return true;
+  }
+
+  return false;
+}

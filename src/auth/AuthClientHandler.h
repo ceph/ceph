@@ -52,6 +52,7 @@ protected:
   bool got_timeout;
   Context *timeout_event;
   uint32_t id;
+  Mutex lock;
 
   // session state
   int status;
@@ -76,6 +77,7 @@ public:
 
   int handle_response(int ret, bufferlist::iterator& iter);
   int do_request(double timeout);
+  int do_async_request(double timeout);
 };
 
 class AuthClientAuthenticateHandler : public AuthClientProtocolHandler {
@@ -186,6 +188,7 @@ public:
   int handle_response(Message *response);
 
   int start_session(AuthClient *client, double timeout);
+  int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout);
   int authorize(uint32_t service_id, double timeout);
   void tick();
 };

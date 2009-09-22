@@ -36,6 +36,8 @@ public:
   void set_rotating(RotatingSecrets& secrets);
 
   void get_master(CryptoKey& dest);
+
+  bool need_rotating_secrets();
 };
 
 

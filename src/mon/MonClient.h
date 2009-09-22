@@ -34,10 +34,19 @@ class MClientMountAck;
 class MMonSubscribeAck;
 class MAuthRotating;
 
+
+enum MonClientState {
+  MC_STATE_NONE,
+  MC_STATE_AUTHENTICATING,
+  MC_STATE_AUTHENTICATED,
+};
+
 class MonClient : public Dispatcher, public AuthClient {
 public:
   MonMap monmap;
 private:
+  MonClientState state;
+
   Messenger *messenger;
 
   int cur_mon;
@@ -56,6 +65,8 @@ private:
   void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
 
   void handle_monmap(MMonMap *m);
+
+  void handle_auth(MAuthReply *m);
 
 
   // monitor session
@@ -150,6 +161,7 @@ private:
   // auth tickets
 public:
   AuthClientHandler auth;
+  AuthClientAuthenticateHandler auth_handler;
   double auth_timeout;
 public:
   void renew_subs() {
@@ -170,14 +182,16 @@ public:
   }
   
  public:
-  MonClient() : messenger(NULL), cur_mon(-1),
+  MonClient() : state(MC_STATE_NONE),
+                messenger(NULL), cur_mon(-1),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
                 auth_timeout_event(NULL),
                 auth_got_timeout(false),
                 keyring(NULL),
-		mounting(0), mount_err(0) { }
+		mounting(0), mount_err(0),
+                auth_handler(&auth, 0, 0) { }
   ~MonClient() {
     timer.cancel_all_events();
   }

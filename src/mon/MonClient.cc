@@ -187,7 +187,9 @@ bool MonClient::ms_dispatch(Message *m)
 
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
+    dout(0) << "CEPH_MSG_MON_MAP begin" << dendl;
     handle_monmap((MMonMap*)m);
+    dout(0) << "CEPH_MSG_MON_MAP end" << dendl;
     return true;
 
   case CEPH_MSG_CLIENT_MOUNT_ACK:
@@ -195,8 +197,7 @@ bool MonClient::ms_dispatch(Message *m)
     return true;
 
   case CEPH_MSG_AUTH_REPLY:
-    auth.handle_response((MAuthReply*)m);
-    delete m;
+    handle_auth((MAuthReply*)m);
     return true;
 
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
@@ -302,6 +303,20 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
   delete m;
 }
 
+void MonClient::handle_auth(MAuthReply *m)
+{
+  int ret = auth.handle_response((MAuthReply*)m);
+  delete m;
+
+  if (ret == -EAGAIN) {
+    auth.send_session_request(this, &auth_handler, 30.0);
+  } else {
+    state = MC_STATE_AUTHENTICATED;
+    _reopen_session();
+  }
+}
+
+
 int MonClient::authenticate(double timeout)
 {
   Mutex::Locker lock(monc_lock);
@@ -338,9 +353,17 @@ void MonClient::_reopen_session()
   _pick_new_mon();
 
   dout(0) << "_reopen_session 0" << dendl;
-  auth.start_session(this, 30.0);
-  dout(0) << "_reopen_session 1" << dendl;
-  _start_auth_rotating(KEY_ROTATE_TIME);
+  if (state == MC_STATE_NONE) {
+    state = MC_STATE_AUTHENTICATING;
+    auth.send_session_request(this, &auth_handler, 30.0);
+    return;
+  }
+
+  if (state == MC_STATE_AUTHENTICATING)
+    return;
+
+  if (keyring && keyring->need_rotating_secrets())
+    _start_auth_rotating(KEY_ROTATE_TIME);
   dout(0) << "_reopen_session 2" << dendl;
 
   if (mounting)
@@ -375,6 +398,11 @@ void MonClient::_finish_hunting()
 void MonClient::tick()
 {
   dout(10) << "tick" << dendl;
+
+  if (keyring && keyring->need_rotating_secrets()) {
+    dout(0) << "MonClient::tick: need rotating secret" << dendl;
+    _start_auth_rotating(KEY_ROTATE_TIME);
+  }
 
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
@@ -466,8 +494,10 @@ int MonClient::_start_auth_rotating(double timeout)
     return -ETIMEDOUT;
   }
 
-  timer.cancel_event(auth_timeout_event);
-  auth_timeout_event = NULL;
+  if (auth_timeout_event) {
+    timer.cancel_event(auth_timeout_event);
+    auth_timeout_event = NULL;
+  }
 
   return 0;
 }

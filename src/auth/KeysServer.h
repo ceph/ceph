@@ -21,7 +21,7 @@
 #include "common/Timer.h"
 #include "Auth.h"
 
-#define KEY_ROTATE_TIME 5
+#define KEY_ROTATE_TIME 20
 #define KEY_ROTATE_NUM 3
 
 
@@ -100,8 +100,8 @@ class KeysServer {
   Context *rotate_event;
 
   bool generate_secret(CryptoKey& secret);
-  void _rotate_secret(uint32_t service_id);
-  void _generate_all_rotating_secrets();
+  void _rotate_secret(uint32_t service_id, int factor);
+  void _generate_all_rotating_secrets(bool init);
 public:
   KeysServer();
 
