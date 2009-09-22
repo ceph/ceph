@@ -1229,7 +1229,7 @@ void OSD::do_mon_report()
   pg_stat_queue_lock.Unlock();
 
   if (retry) {
-    monc->pick_new_mon();
+    monc->reopen_session();
     dout(10) << "picked a new mon" << dendl;
   }
 
