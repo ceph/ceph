@@ -973,22 +973,22 @@ void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
 void Client::encode_cap_releases(MetaRequest *req, int mds) {
   dout(20) << "encode_cap_releases enter (req: "
 	   << req << ", mds: " << mds << ")" << dendl;
-  if (req->inode_drop)
+  if (req->inode_drop && req->inode)
     encode_inode_release(req->inode, req->request,
 			 mds, req->inode_drop,
 			 req->inode_unless);
   
-  if (req->old_inode_drop)
+  if (req->old_inode_drop && req->old_inode)
     encode_inode_release(req->old_inode, req->request,
 			 mds, req->old_inode_drop,
 			 req->old_inode_unless);
   
-  if (req->dentry_drop)
+  if (req->dentry_drop && req->dentry)
     encode_dentry_release(req->dentry, req->request,
 			  mds, req->dentry_drop,
 			  req->dentry_unless);
   
-  if (req->old_dentry_drop)
+  if (req->old_dentry_drop && req->old_dentry)
     encode_dentry_release(req->old_dentry, req->request,
 			  mds, req->old_dentry_drop,
 			  req->old_dentry_unless);
