@@ -74,7 +74,6 @@ int AuthClientProtocolHandler::do_request(double timeout)
 
 void AuthClientProtocolHandler::_request_timeout(double timeout)
 {
-  Mutex::Locker l(client->lock);
   dout(10) << "_request_timeout" << dendl;
   timeout_event = 0;
   if (!got_response) {
