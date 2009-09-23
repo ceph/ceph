@@ -88,9 +88,10 @@ class ObjectStore;
 class OSDMap;
 class MLog;
 class MClass;
+class MAuth;
+
 
 class OSD : public Dispatcher {
-
   /** OSD **/
 protected:
   Mutex osd_lock;     // global lock
@@ -176,6 +177,16 @@ private:
   ThreadPool recovery_tp;
   ThreadPool disk_tp;
 
+  // -- sessions --
+public:
+  struct Session : public RefCountedObject {
+    AuthTicket ticket;
+  };
+
+private:
+  Mutex session_lock;
+  
+  void handle_auth(MAuth *m);
 
 
   // -- heartbeat --

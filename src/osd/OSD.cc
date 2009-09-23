@@ -41,6 +41,7 @@
 
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
+#include "messages/MAuth.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
@@ -238,6 +239,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
   recovery_tp("OSD::recovery_tp", 1),
   disk_tp("OSD::disk_tp", 2),
+  session_lock("OSD::session_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_epoch(0),
   heartbeat_messenger(hbm),
@@ -1547,6 +1549,10 @@ void OSD::_dispatch(Message *m)
   dout(20) << "_dispatch " << m << " " << *m << dendl;
 
   switch (m->get_type()) {
+
+  case CEPH_MSG_AUTH:
+    handle_auth((MAuth*)m);
+    break;
 
     // -- don't need lock -- 
   case CEPH_MSG_PING:
@@ -4115,3 +4121,30 @@ void OSD::init_op_flags(MOSDOp *op)
   }
 }
 
+
+void OSD::handle_auth(MAuth *m)
+{
+  dout(10) << "handle_auth " << *m << dendl;
+  Mutex::Locker l(session_lock);
+
+  Session *s = (Session *)m->get_connection()->get_priv();
+  if (!s) {
+    s = new Session;
+    m->get_connection()->set_priv(s->get());
+    dout(10) << " new session " << s << dendl;
+  }
+
+  /*
+  bufferlist::iterator p = m->auth_payload.begin();
+  AuthBlob blob;
+  ::decode(blob, p);
+
+  AuthTicket ticket;
+  decode_decrypt(blob.blob, 
+  ::decode(
+  */
+
+
+  s->put();
+  delete m;
+}
