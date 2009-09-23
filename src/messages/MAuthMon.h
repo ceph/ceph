@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __MAUTH_H
-#define __MAUTH_H
+#ifndef __MAUTHMON_H
+#define __MAUTHMON_H
 
 #include "include/AuthLibrary.h"
 #include "messages/PaxosServiceMessage.h"

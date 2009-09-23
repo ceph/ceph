@@ -404,9 +404,14 @@ bool Monitor::ms_dispatch(Message *m)
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // clients
+      // auth
     case CEPH_MSG_AUTH:
-      dout(0) << "Monitor::dispatch_impl() got CEPH_MSG_CLIENT_AUTH" << dendl;
+    case MSG_AUTH_ROTATING:
+    case MSG_AUTHMON:
+      paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
+      break;
+
+      // clients
     case CEPH_MSG_CLIENT_MOUNT:
       paxos_service[PAXOS_CLIENTMAP]->dispatch((PaxosServiceMessage*)m);
       break;
@@ -464,9 +469,6 @@ bool Monitor::ms_dispatch(Message *m)
       handle_class((MClass *)m);
       break;
       
-    case MSG_AUTH_ROTATING:
-      handle_rotating((MAuthRotating *)m);
-      break;
     default:
         return false;
     }
@@ -725,16 +727,6 @@ void Monitor::handle_class(MClass *m)
       break;
   }
 }
-
-/*
-  get auth rotating secret request
- */
-
-void Monitor::handle_rotating(MAuthRotating *m)
-{
-  authmon()->handle_request(m);
-}
-
 
 void Monitor::handle_route(MRoute *m)
 {

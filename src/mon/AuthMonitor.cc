@@ -18,6 +18,8 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonCommand.h"
+#include "messages/MAuth.h"
+#include "messages/MAuthReply.h"
 #include "messages/MAuthMon.h"
 #include "messages/MAuthMonAck.h"
 #include "messages/MAuthRotating.h"
@@ -201,8 +203,14 @@ bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
 
+  case CEPH_MSG_AUTH:
+    return preprocess_auth((MAuth *)m);
+
+  case MSG_AUTH_ROTATING:
+    return preprocess_auth_rotating((MAuthRotating *)m);
+
   case MSG_AUTHMON:
-    return preprocess_auth((MAuthMon*)m);
+    return preprocess_auth_mon((MAuthMon*)m);
 
   default:
     assert(0);
@@ -218,7 +226,7 @@ bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
   case MSG_AUTHMON:
-    return prepare_auth((MAuthMon*)m);
+    return prepare_auth_mon((MAuthMon*)m);
   default:
     assert(0);
     delete m;
@@ -231,9 +239,65 @@ void AuthMonitor::committed()
 
 }
 
-bool AuthMonitor::preprocess_auth(MAuthMon *m)
+
+bool AuthMonitor::preprocess_auth(MAuth *m)
 {
-  dout(10) << "preprocess_auth " << *m << " from " << m->get_orig_source() << dendl;
+  stringstream ss;
+  // already mounted?
+  dout(0) << "preprocess_auth() blob_size=" << m->get_auth_payload().length() << dendl;
+  entity_addr_t addr = m->get_orig_source_addr();
+
+  dout(0) << "preprocess_auth() addr=" << addr << dendl;
+
+  AuthServiceHandler *handler = auth_mgr.get_auth_handler(addr);
+  assert(handler);
+
+  bufferlist response_bl;
+  
+  int ret;
+  try {
+    ret = handler->handle_request(m->get_auth_payload(), response_bl);
+  } catch (buffer::error *err) {
+    ret = -EINVAL;
+    dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+  }
+  MAuthReply *reply = new MAuthReply(&response_bl, ret);
+
+  if (reply) {
+    mon->messenger->send_message(reply,
+  				   m->get_orig_source_inst());
+  } else {
+    /* out of memory.. what are we supposed to do now? */
+  }
+  return true;
+}
+
+
+bool AuthMonitor::preprocess_auth_rotating(MAuthRotating *m)
+{
+  dout(10) << "handle_request " << *m << " from " << m->get_orig_source() << dendl;
+  MAuthRotating *reply = new MAuthRotating();
+
+  if (!reply)
+    return true;
+
+  if (keys_server.get_rotating_encrypted(m->entity_name, reply->response_bl)) {
+    reply->status = 0;
+  } else {
+    reply->status = -EPERM;
+  }
+  
+  mon->messenger->send_message(reply, m->get_orig_source_inst());
+  delete m;
+  return true;
+}
+
+
+// auth mon
+
+bool AuthMonitor::preprocess_auth_mon(MAuthMon *m)
+{
+  dout(10) << "preprocess_auth_mon " << *m << " from " << m->get_orig_source() << dendl;
   
   int num_new = 0;
   for (deque<AuthLibEntry>::iterator p = m->info.begin();
@@ -249,7 +313,7 @@ bool AuthMonitor::preprocess_auth(MAuthMon *m)
   return false;
 }
 
-bool AuthMonitor::prepare_auth(MAuthMon *m) 
+bool AuthMonitor::prepare_auth_mon(MAuthMon *m) 
 {
   dout(10) << "prepare_auth " << *m << " from " << m->get_orig_source() << dendl;
 
@@ -385,24 +449,5 @@ done:
   getline(ss, rs, '\0');
   mon->reply_command(m, err, rs, paxos->get_version());
   return false;
-}
-
-
-void AuthMonitor::handle_request(MAuthRotating *m)
-{
-  dout(10) << "handle_request " << *m << " from " << m->get_orig_source() << dendl;
-  MAuthRotating *reply = new MAuthRotating();
-
-  if (!reply)
-    return;
-
-  if (keys_server.get_rotating_encrypted(m->entity_name, reply->response_bl)) {
-    reply->status = 0;
-  } else {
-    reply->status = -EPERM;
-  }
-  
-  mon->messenger->send_message(reply, m->get_orig_source_inst());
-  delete m;
 }
 

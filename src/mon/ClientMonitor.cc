@@ -20,8 +20,6 @@
 #include "MonitorStore.h"
 
 #include "messages/MMonMap.h"
-#include "messages/MAuth.h"
-#include "messages/MAuthReply.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 #include "messages/MMonCommand.h"
@@ -109,47 +107,11 @@ void ClientMonitor::encode_pending(bufferlist &bl)
 
 // -------
 
-bool ClientMonitor::check_auth(MAuth *m)
-{
-  stringstream ss;
-  // already mounted?
-  dout(0) << "ClientMonitor::check_auth() blob_size=" << m->get_auth_payload().length() << dendl;
-  entity_addr_t addr = m->get_orig_source_addr();
-
-  dout(0) << "ClientMonitor::check_auth() addr=" << addr << dendl;
-
-  AuthServiceHandler* handler = auth_mgr.get_auth_handler(addr);
-  assert(handler);
-
-  bufferlist response_bl;
-  
-  int ret;
-  try {
-    ret = handler->handle_request(m->get_auth_payload(), response_bl);
-  } catch (buffer::error *err) {
-    ret = -EINVAL;
-    dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
-  }
-  MAuthReply *reply = new MAuthReply(&response_bl, ret);
-
-  if (reply) {
-    mon->messenger->send_message(reply,
-  				   m->get_orig_source_inst());
-  } else {
-    /* out of memory.. what are we supposed to do now? */
-  }
-  return true;
-}
-
 bool ClientMonitor::preprocess_query(PaxosServiceMessage *m)
 {
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   switch (m->get_type()) {
-  case CEPH_MSG_AUTH:
-        dout(0) << "YY preprocess_query" << dendl;
-        return check_auth((MAuth *)m);
-
   case CEPH_MSG_CLIENT_MOUNT:
     return preprocess_mount((MClientMount *)m);
     

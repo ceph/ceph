@@ -25,9 +25,13 @@ using namespace std;
 #include "mon/Monitor.h"
 
 #include "include/AuthLibrary.h"
+
 #include "auth/KeysServer.h"
+#include "auth/AuthServiceManager.h"
+
 
 class MMonCommand;
+class MAuth;
 class MAuthMon;
 class MAuthRotating;
 
@@ -36,6 +40,8 @@ class AuthMonitor : public PaxosService {
   vector<AuthLibIncremental> pending_auth;
   KeysServer keys_server;
   version_t last_rotating_ver;
+
+  AuthServiceManager auth_mgr;
 
   void on_active();
 
@@ -49,8 +55,12 @@ class AuthMonitor : public PaxosService {
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
 
-  bool preprocess_auth(MAuthMon *m);
-  bool prepare_auth(MAuthMon *m);
+  bool preprocess_auth(MAuth *m);
+
+  bool preprocess_auth_rotating(MAuthRotating *m);
+
+  bool preprocess_auth_mon(MAuthMon *m);
+  bool prepare_auth_mon(MAuthMon *m);
   void _updated_auth(MAuthMon *m, entity_inst_t who);
 
   struct C_Auth : public Context {
@@ -69,9 +79,10 @@ class AuthMonitor : public PaxosService {
 
   void check_rotate();
  public:
-  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0) { }
-  void handle_request(MAuthMon *m);
-  void handle_request(MAuthRotating *m);
+  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0) {
+    auth_mgr.init(mn); 
+  }
+  void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions
 };

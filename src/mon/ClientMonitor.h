@@ -31,8 +31,6 @@ using namespace std;
 #include "PaxosService.h"
 #include "ClientMap.h"
 
-#include "auth/AuthServiceManager.h"
-
 class Monitor;
 class Paxos;
 class MAuth;
@@ -61,7 +59,6 @@ public:
   };
 
   ClientMap client_map, pending_map;
-  AuthServiceManager auth_mgr;
   client_t next_client;
 
 private:
@@ -73,8 +70,6 @@ private:
   void encode_pending(bufferlist &bl);  // propose pending update to peers
 
   void committed();
-
-  bool check_auth(MAuth *m);
 
   bool preprocess_mount(MClientMount *m);
   bool prepare_mount(MClientMount *m);
@@ -91,7 +86,7 @@ private:
   void on_election_start();
 
  public:
-  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), next_client(-1) { auth_mgr.init(mn); }
+  ClientMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), next_client(-1) { }
   
   void tick();  // check state, take actions
 

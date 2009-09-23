@@ -146,7 +146,6 @@ public:
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_class(MClass *m);
-  void handle_rotating(MAuthRotating *m);
   void handle_route(MRoute *m);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);

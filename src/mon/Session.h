@@ -17,6 +17,7 @@
 
 #include "include/xlist.h"
 #include "msg/msg_types.h"
+#include "auth/Crypto.h"
 
 struct Session;
 
@@ -38,6 +39,8 @@ struct Session : public RefCountedObject {
   xlist<Session*>::item item;
 
   map<nstring, Subscription*> sub_map;
+
+  CryptoKey session_key;
 
   Session(entity_inst_t i) : inst(i), closed(false), item(this) {}
   ~Session() {
