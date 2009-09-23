@@ -18,6 +18,7 @@ v0.16
 - mds: put migration vectors in mdsmap
 
 bugs
+- mislinked directory?
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 
