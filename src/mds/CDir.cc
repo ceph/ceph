@@ -1227,10 +1227,18 @@ void CDir::_fetched(bufferlist &bl)
 	CInode *in = 0;
 	if (cache->have_inode(inode.ino, last)) {
 	  in = cache->get_inode(inode.ino, last);
-	  dout(-12) << "_fetched  got (but i already had) " << *in 
+	  dout(-12) << "_fetched  badness: got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << dendl;
-	  assert(0);  // this shouldn't happen!! 
+	  stringstream ss;
+	  string dirpath, inopath;
+	  this->inode->make_path_string(dirpath);
+	  in->make_path_string(inopath);
+	  ss << "loaded dup inode " << inode.ino << " [" << first << "," << last << "] v" << inode.version
+	     << " at " << dirpath << "/" << dname
+	     << ", but inode " << in->vino() << " v" << in->inode.version << " already exists at " << inopath;
+	  cache->mds->logclient.log(LOG_ERROR, ss);
+	  continue;
 	} else {
 	  // inode
 	  in = new CInode(cache, true, first, last);
