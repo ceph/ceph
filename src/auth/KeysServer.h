@@ -106,6 +106,7 @@ public:
   KeysServer();
 
   bool get_secret(EntityName& name, CryptoKey& secret);
+  bool get_active_rotating_secret(EntityName& name, CryptoKey& secret);
   int start_server(bool init);
   void rotate_timeout(double timeout);
 
@@ -118,6 +119,7 @@ public:
     ::encode(data, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    Mutex::Locker l(lock);
     ::decode(data, bl);
   }
   bool contains(EntityName& name);
@@ -155,6 +157,8 @@ public:
   void decode_rotating(bufferlist& rotating_bl);
 
   bool get_rotating_encrypted(EntityName& name, bufferlist& enc_bl);
+
+  Mutex& get_lock() { return lock; }
 };
 WRITE_CLASS_ENCODER(KeysServer);
 

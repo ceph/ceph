@@ -54,6 +54,9 @@ bool KeysServerData::get_service_secret(uint32_t service_id, RotatingSecrets& se
   if (iter == rotating_secrets.end())
     return false;
 
+  if (rotating_secrets.size() > 1)
+    ++iter; /* avoid giving the oldest rotating secret, as it'll expire soon */
+
   secret = iter->second;
   return true;
 }
@@ -189,6 +192,8 @@ bool KeysServer::contains(EntityName& name)
 
 void KeysServer::list_secrets(stringstream& ss)
 {
+  Mutex::Locker l(lock);
+
   map<EntityName, CryptoKey>::iterator mapiter = data.secrets_begin();
   if (mapiter != data.secrets_end()) {
     ss << "installed auth entries: " << std::endl;      

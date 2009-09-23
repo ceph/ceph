@@ -38,7 +38,6 @@ class MAuthRotating;
 class AuthMonitor : public PaxosService {
   void auth_usage(stringstream& ss);
   vector<AuthLibIncremental> pending_auth;
-  KeysServer keys_server;
   version_t last_rotating_ver;
 
   AuthServiceManager auth_mgr;

@@ -38,7 +38,7 @@ struct CephXPremable {
 };
 WRITE_CLASS_ENCODER(CephXPremable)
 
-/*
+/* 
   Ceph X-Envelope protocol
 */
 struct CephXEnvRequest1 {
@@ -58,15 +58,12 @@ struct CephXEnvRequest1 {
   void decode(bufferlist::iterator& bl) {
     uint32_t num_auth;
     ::decode(num_auth, bl);
-
-    dout(0) << "num_auth=" << num_auth << dendl;
-
+ 
     auth_types.clear();
 
     for (uint32_t i=0; i<num_auth; i++) {
       uint32_t auth_type;
       ::decode(auth_type, bl);
-    dout(0) << "auth_type[" << i << "] = " << auth_type << dendl;
       auth_types[auth_type] = true;
     }
   }

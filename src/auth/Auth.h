@@ -394,7 +394,8 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool verify_service_ticket_request(CryptoKey& service_secret,
+extern bool verify_service_ticket_request(EntityName& name,
+                                          CryptoKey& service_secret,
 					  CryptoKey& session_key,
 					  AuthServiceTicketRequest& ticket_req,
 					  AuthServiceTicketInfo& ticket_info,

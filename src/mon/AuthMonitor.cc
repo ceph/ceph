@@ -53,7 +53,7 @@ ostream& operator<<(ostream& out, AuthMonitor& pm)
 void AuthMonitor::check_rotate()
 {
   AuthLibEntry entry;
-  if (!keys_server.updated_rotating(entry.rotating_bl, last_rotating_ver))
+  if (!mon->keys_server.updated_rotating(entry.rotating_bl, last_rotating_ver))
     return;
   dout(0) << "AuthMonitor::tick() updated rotating, now calling propose_pending" << dendl;
 
@@ -87,7 +87,7 @@ void AuthMonitor::on_active()
 
   if (!mon->is_leader())
     return;
-  keys_server.start_server(true);
+  mon->keys_server.start_server(true);
 
   check_rotate();
 }
@@ -121,7 +121,7 @@ bool AuthMonitor::update_from_paxos()
 {
   dout(0) << "AuthMonitor::update_from_paxos()" << dendl;
   version_t paxosv = paxos->get_version();
-  version_t keys_ver = keys_server.get_ver();
+  version_t keys_ver = mon->keys_server.get_ver();
   if (paxosv == keys_ver) return true;
   assert(paxosv >= keys_ver);
 
@@ -132,7 +132,7 @@ bool AuthMonitor::update_from_paxos()
     if (v) {
       dout(7) << "update_from_paxos startup: loading summary e" << v << dendl;
       bufferlist::iterator p = latest.begin();
-      ::decode(keys_server, p);
+      ::decode(mon->keys_server, p);
     }
   } 
 
@@ -150,18 +150,18 @@ bool AuthMonitor::update_from_paxos()
     switch (inc.op) {
     case AUTH_INC_ADD:
       if (!entry.rotating) {
-        keys_server.add_secret(entry.name, entry.secret);
+        mon->keys_server.add_secret(entry.name, entry.secret);
       } else {
         derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
       }
       break;
     case AUTH_INC_DEL:
-      keys_server.remove_secret(entry.name);
+      mon->keys_server.remove_secret(entry.name);
       break;
     case AUTH_INC_SET_ROTATING:
       {
         dout(0) << "AuthMonitor::update_from_paxos: decode_rotating" << dendl;
-        keys_server.decode_rotating(entry.rotating_bl);
+        mon->keys_server.decode_rotating(entry.rotating_bl);
       }
       break;
     case AUTH_INC_NOP:
@@ -171,11 +171,12 @@ bool AuthMonitor::update_from_paxos()
     }
 
     keys_ver++;
-    keys_server.set_ver(keys_ver);
+    mon->keys_server.set_ver(keys_ver);
   }
 
   bufferlist bl;
-  ::encode(keys_server, bl);
+  Mutex::Locker l(mon->keys_server.get_lock());
+  ::encode(mon->keys_server, bl);
   paxos->stash_latest(paxosv, bl);
 
   return true;
@@ -291,7 +292,7 @@ bool AuthMonitor::preprocess_auth_rotating(MAuthRotating *m)
   if (!reply)
     return true;
 
-  if (keys_server.get_rotating_encrypted(m->entity_name, reply->response_bl)) {
+  if (mon->keys_server.get_rotating_encrypted(m->entity_name, reply->response_bl)) {
     reply->status = 0;
   } else {
     reply->status = -EPERM;
@@ -313,7 +314,7 @@ bool AuthMonitor::preprocess_auth_mon(MAuthMon *m)
   for (deque<AuthLibEntry>::iterator p = m->info.begin();
        p != m->info.end();
        p++) {
-    if (!keys_server.contains((*p).name))
+    if (!mon->keys_server.contains((*p).name))
       num_new++;
   }
   if (!num_new) {
@@ -430,7 +431,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       string name = m->cmd[2];
       AuthLibEntry entry;
       entry.name.from_str(name);
-      if (!keys_server.contains(entry.name)) {
+      if (!mon->keys_server.contains(entry.name)) {
         ss << "couldn't find entry " << name;
         rs = -ENOENT;
         goto done;
@@ -445,7 +446,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
     } else if (m->cmd[1] == "list") {
-      keys_server.list_secrets(ss);
+      mon->keys_server.list_secrets(ss);
       err = 0;
       goto done;
     } else {

@@ -45,7 +45,6 @@ static inline void hexdump(string msg, const char *s, int len)
   dout(0) << msg << ":\n" << buf << dendl;
 }
 
-
 class CephAuthServer {
   /* FIXME: this is all temporary */
   AuthTicket ticket;
@@ -233,10 +232,12 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       CryptoKey auth_secret;
       auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
+      // ... FIXME .. get entity name, session_key from Monitor::Session
 
       AuthServiceTicketRequest ticket_req;
       AuthServiceTicketInfo ticket_info;
-      if (!verify_service_ticket_request(auth_secret, session_key, ticket_req, ticket_info, indata)) {
+      EntityName name;
+      if (!verify_service_ticket_request(name, auth_secret, session_key, ticket_req, ticket_info, indata)) {
         ret = -EPERM;
         break;
       }

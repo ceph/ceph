@@ -97,7 +97,8 @@ bool build_service_ticket_reply(
   return true;
 }
 
-bool verify_service_ticket_request(CryptoKey& service_secret,
+bool verify_service_ticket_request(EntityName& name,
+                                   CryptoKey& service_secret,
                                    CryptoKey& session_key,
 				   AuthServiceTicketRequest& ticket_req,
 				   AuthServiceTicketInfo& ticket_info,

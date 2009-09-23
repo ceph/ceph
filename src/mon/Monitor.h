@@ -37,6 +37,8 @@
 
 #include "common/LogClient.h"
 
+#include "auth/KeysServer.h"
+
 
 class MonitorStore;
 
@@ -66,6 +68,8 @@ public:
   void cancel_tick();
   void reset_tick();
   friend class C_Mon_Tick;
+
+  KeysServer keys_server;
 
   // -- local storage --
 public:
