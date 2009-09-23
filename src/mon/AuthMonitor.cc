@@ -242,18 +242,14 @@ void AuthMonitor::committed()
 
 bool AuthMonitor::preprocess_auth(MAuth *m)
 {
-  stringstream ss;
-  // already mounted?
   dout(0) << "preprocess_auth() blob_size=" << m->get_auth_payload().length() << dendl;
+
   entity_addr_t addr = m->get_orig_source_addr();
-
   dout(0) << "preprocess_auth() addr=" << addr << dendl;
-
   AuthServiceHandler *handler = auth_mgr.get_auth_handler(addr);
   assert(handler);
 
   bufferlist response_bl;
-  
   int ret;
   try {
     ret = handler->handle_request(m->get_auth_payload(), response_bl);
@@ -262,13 +258,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
   }
   MAuthReply *reply = new MAuthReply(&response_bl, ret);
-
-  if (reply) {
-    mon->messenger->send_message(reply,
-  				   m->get_orig_source_inst());
-  } else {
-    /* out of memory.. what are we supposed to do now? */
-  }
+  mon->messenger->send_message(reply, m->get_orig_source_inst());
   return true;
 }
 

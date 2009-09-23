@@ -26,10 +26,8 @@ struct MAuthReply : public Message {
     Message(CEPH_MSG_AUTH_REPLY),
     result(r),
     result_msg(msg) {
-    if (bl) {
-      bufferlist::iterator iter = bl->begin();
-      iter.copy(bl->length(), result_bl);
-    }
+    if (bl)
+      result_bl = *bl;
   }
 
   const char *get_type_name() { return "auth_reply"; }
