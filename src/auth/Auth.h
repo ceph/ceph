@@ -112,15 +112,19 @@ inline bool operator<(const EntityName& a, const EntityName& b) {
  * period.
  */
 struct AuthTicket {
+  EntityName name;
   entity_addr_t addr;
   utime_t created, renew_after, expires;
   string nonce;
   map<string, bufferlist> caps;
   __u32 flags;
 
+  AuthTicket() : flags(0) {}
+
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
+    ::encode(name, bl);
     ::encode(addr, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
@@ -131,6 +135,7 @@ struct AuthTicket {
   void decode(bufferlist::iterator& bl) {
     __u8 v;
     ::decode(v, bl);
+    ::decode(name, bl);
     ::decode(addr, bl);
     ::decode(created, bl);
     ::decode(expires, bl);
@@ -182,21 +187,18 @@ extern bool build_service_ticket_reply(CryptoKey& principal_secret,
 struct AuthAuthenticateRequest {
   EntityName name;
   entity_addr_t addr;
-  utime_t timestamp;
 
   AuthAuthenticateRequest() {}
-  AuthAuthenticateRequest(EntityName& principal_name, entity_addr_t principal_addr, utime_t t) :
-    name(principal_name), addr(principal_addr), timestamp(t) {}
+  AuthAuthenticateRequest(EntityName& principal_name, entity_addr_t principal_addr) :
+    name(principal_name), addr(principal_addr) {}
 
   void encode(bufferlist& bl) const {
     ::encode(name, bl);
     ::encode(addr, bl);
-    ::encode(timestamp, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(name, bl);
     ::decode(addr, bl);
-    ::decode(timestamp, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthAuthenticateRequest)
@@ -392,8 +394,6 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool verify_authenticate_request(CryptoKey& service_secret,
-					bufferlist::iterator& indata);
 extern bool verify_service_ticket_request(CryptoKey& service_secret,
 					  CryptoKey& session_key,
 					  uint32_t& keys,

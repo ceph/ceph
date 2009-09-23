@@ -75,5 +75,7 @@ public:
 
 extern CryptoManager ceph_crypto_mgr;
 
+extern void generate_random_string(string& s, int len);
+
 
 #endif

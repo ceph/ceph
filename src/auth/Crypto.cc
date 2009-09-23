@@ -21,9 +21,8 @@
 
 #include <errno.h>
 
-static int get_random_bytes(int len, bufferlist& out)
+static int get_random_bytes(char *buf, int len)
 {
-  char buf[len];
   char *t = buf;
   int fd = ::open("/dev/urandom", O_RDONLY);
   int l = len;
@@ -36,8 +35,23 @@ static int get_random_bytes(int len, bufferlist& out)
     t += r;
     l -= r;
   }
-  out.append(buf, len);
   return 0;
+}
+
+static int get_random_bytes(int len, bufferlist& bl)
+{
+  char buf[len];
+  get_random_bytes(buf, len);
+  bl.append(buf, len);
+  return 0;
+}
+
+void generate_random_string(string& s, int len)
+{
+  char buf[len+1];
+  get_random_bytes(buf, len);
+  buf[len] = 0;
+  s = buf;
 }
 
 // ---------------------------------------------------

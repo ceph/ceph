@@ -35,7 +35,7 @@ static inline void hexdump(string msg, const char *s, int len)
   int buf_len = len*4;
   char buf[buf_len];
   int pos = 0;
-  for (unsigned int i=0; i<len && pos<buf_len - 8; i++) {
+  for (int i=0; i<len && pos<buf_len - 8; i++) {
     if (i && !(i%8))
       pos += snprintf(&buf[pos], buf_len-pos, " ");
     if (i && !(i%16))
@@ -66,7 +66,7 @@ public:
    }
 
 /* FIXME: temporary stabs */
-  int get_client_secret(CryptoKey& secret) {
+  int lookup_entity(const EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps) {
      secret = client_secret;
      return 0;
   }
@@ -178,25 +178,33 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
   case CEPHX_GET_AUTH_SESSION_KEY:
     {
       dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
-      EntityName name; /* FIXME should take it from the request */
-      entity_addr_t addr;
+
+      AuthAuthenticateRequest req;
+      ::decode(req, indata);
+
       AuthTicket ticket;
+
       CryptoKey principal_secret;
+      if (auth_server.lookup_entity(req.name, principal_secret, ticket.caps) < 0) {
+	ret = -EPERM;
+	break;
+      }
+
+      ticket.name = req.name;
+      ticket.addr = req.addr;
+      ticket.created = g_clock.now();
+      ticket.expires = ticket.created;
+      ticket.expires += g_conf.auth_mon_ticket_ttl;
+      ticket.renew_after = ticket.created;
+      ticket.renew_after += g_conf.auth_mon_ticket_ttl / 2.0;
+      generate_random_string(ticket.nonce, g_conf.auth_nonce_len);
+
+
       CryptoKey session_key;
       CryptoKey auth_secret;
-
-      ticket.expires = g_clock.now();
-
-      auth_server.get_client_secret(principal_secret);
       auth_server.get_service_session_key(session_key, CEPHX_PRINCIPAL_AUTH);
       auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
 
-      if (!verify_authenticate_request(auth_secret, indata)) {
-         ret = -EPERM;
-         break;
-      }
-
-      // checking password?
 
       build_cephx_response_header(request_type, 0, result_bl);
       vector<SessionAuthInfo> info_vec;

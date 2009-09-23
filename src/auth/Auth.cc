@@ -34,7 +34,7 @@ static void hexdump(string msg, const char *s, int len)
 void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
 				bufferlist& request)
 {
-  AuthAuthenticateRequest req(principal_name, principal_addr, g_clock.now());
+  AuthAuthenticateRequest req(principal_name, principal_addr);
   ::encode(req, request);
 }
 
@@ -94,17 +94,6 @@ bool build_service_ticket_reply(
 
     ++ticket_iter;
   }
-  return true;
-}
-
-bool verify_authenticate_request(CryptoKey& service_secret,
-				 bufferlist::iterator& indata)
-{
-  AuthAuthenticateRequest msg;
-  ::decode(msg, indata);
-  dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << dendl;
-
-  /* FIXME: validate that request makes sense */
   return true;
 }
 

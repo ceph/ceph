@@ -145,6 +145,11 @@ struct md_config_t {
   double paxos_propose_interval;
   double paxos_observer_timeout;
 
+  // auth
+  double auth_mon_ticket_ttl;
+  double auth_service_ticket_ttl;
+  int auth_nonce_len;
+
   // client
   int      client_cache_size;
   float    client_cache_mid;
