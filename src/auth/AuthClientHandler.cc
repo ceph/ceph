@@ -204,11 +204,9 @@ int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlis
 
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
 
-   ::encode(header, bl);
-    CryptoKey key;
-    AuthBlob blob;
-    build_service_ticket_request(client->name, client->addr, CEPHX_PRINCIPAL_AUTH,
-                               false, key, blob, bl);
+    ::encode(header, bl);
+
+    build_authenticate_request(client->name, client->addr, bl);
     cephx_request_state = 1;
     return 0;
   }
@@ -226,7 +224,7 @@ int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlis
 
   ::encode(header, bl);
   build_service_ticket_request(client->name, client->addr, want,
-                             true, ticket_handler.session_key, ticket_handler.ticket, bl);
+			       ticket_handler.session_key, ticket_handler.ticket, bl);
   
   return 0;
 }

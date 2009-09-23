@@ -187,17 +187,16 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       ticket.expires = g_clock.now();
 
-      uint32_t keys;
-
       auth_server.get_client_secret(principal_secret);
       auth_server.get_service_session_key(session_key, CEPHX_PRINCIPAL_AUTH);
       auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
 
-      if (!verify_service_ticket_request(false, auth_secret,
-                                     session_key, keys, indata)) {
+      if (!verify_authenticate_request(auth_secret, indata)) {
          ret = -EPERM;
          break;
-       }
+      }
+
+      // checking password?
 
       build_cephx_response_header(request_type, 0, result_bl);
       vector<SessionAuthInfo> info_vec;
@@ -229,8 +228,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       vector<SessionAuthInfo> info_vec;
 
-      if (!verify_service_ticket_request(true, auth_secret,
-                                     auth_session_key, keys, indata)) {
+      if (!verify_service_ticket_request(auth_secret, auth_session_key, keys, indata)) {
         ret = -EPERM;
         break;
       }

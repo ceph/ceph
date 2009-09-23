@@ -31,9 +31,15 @@ static void hexdump(string msg, const char *s, int len)
  *
  * principal_name, principal_addr.  "please authenticate me."
  */
+void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
+				bufferlist& request)
+{
+  AuthAuthenticateRequest req(principal_name, principal_addr, g_clock.now());
+  ::encode(req, request);
+}
+
 void build_service_ticket_request(EntityName& principal_name, entity_addr_t& principal_addr,
                                 uint32_t keys,
-                                bool encrypt,
                                 CryptoKey& session_key,
                                 AuthBlob& ticket_info,
 				bufferlist& request)
@@ -43,13 +49,11 @@ void build_service_ticket_request(EntityName& principal_name, entity_addr_t& pri
   ticket_req.addr =  principal_addr;
   ticket_req.timestamp = g_clock.now();
   ticket_req.keys = keys;
-  if (!encrypt) {
-    ::encode(ticket_req, request);
-  } else {
-    bufferptr& s1 = session_key.get_secret();
-    hexdump("encoding, session key", s1.c_str(), s1.length());
-    encode_encrypt(ticket_req, session_key, request);
-  }
+
+  bufferptr& s1 = session_key.get_secret();
+  hexdump("encoding, session key", s1.c_str(), s1.length());
+  encode_encrypt(ticket_req, session_key, request);
+
   ::encode(ticket_info, request);
 }
 
@@ -93,32 +97,36 @@ bool build_service_ticket_reply(
   return true;
 }
 
-bool verify_service_ticket_request(bool encrypted,
-                                   CryptoKey& service_secret,
+bool verify_authenticate_request(CryptoKey& service_secret,
+				 bufferlist::iterator& indata)
+{
+  AuthAuthenticateRequest msg;
+  ::decode(msg, indata);
+  dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << dendl;
+
+  /* FIXME: validate that request makes sense */
+  return true;
+}
+
+bool verify_service_ticket_request(CryptoKey& service_secret,
                                    CryptoKey& session_key,
                                    uint32_t& keys,
                                    bufferlist::iterator& indata)
 {
   AuthServiceTicketRequest msg;
 
-  if (encrypted) {
-    bufferptr& s1 = session_key.get_secret();
-    hexdump("decoding, session key", s1.c_str(), s1.length());
-    
-    dout(0) << "verify encrypted service ticket request" << dendl;
-    if (decode_decrypt(msg, session_key, indata) < 0)
+  bufferptr& s1 = session_key.get_secret();
+  hexdump("decoding, session key", s1.c_str(), s1.length());
+  
+  dout(0) << "verify encrypted service ticket request" << dendl;
+  if (decode_decrypt(msg, session_key, indata) < 0)
+    return false;
+  
+  dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << " (was encrypted)" << dendl;
+  
+  AuthServiceTicketInfo ticket_info;
+  if (decode_decrypt(ticket_info, service_secret, indata) < 0)
       return false;
-
-    dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << " (was encrypted)" << dendl;
-
-    AuthServiceTicketInfo ticket_info;
-    if (decode_decrypt(ticket_info, service_secret, indata) < 0)
-      return false;
-  } else {
-    ::decode(msg, indata);
-
-    dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << dendl;
-  }
 
   /* FIXME: validate that request makes sense */
 

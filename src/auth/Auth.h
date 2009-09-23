@@ -165,34 +165,60 @@ struct SessionAuthInfo {
 /*
  * Authentication
  */
+extern void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
+				       bufferlist& request);
+
+
 extern void build_service_ticket_request(EntityName& principal_name, entity_addr_t& principal_addr,
-                                uint32_t keys,
-                                bool encrypt,
-                                CryptoKey& session_key,
-                                AuthBlob& ticket_info,
-				bufferlist& request);
+					 uint32_t keys,
+					 CryptoKey& session_key,
+					 AuthBlob& ticket_info,
+					 bufferlist& request);
 
-extern bool build_service_ticket_reply(
-                     CryptoKey& principal_secret,
-                     vector<SessionAuthInfo> ticket_info,
-                     bufferlist& reply);
+extern bool build_service_ticket_reply(CryptoKey& principal_secret,
+				       vector<SessionAuthInfo> ticket_info,
+				       bufferlist& reply);
 
-class AuthenticateRequest {
+struct AuthAuthenticateRequest {
   EntityName name;
   entity_addr_t addr;
-public:
-  AuthenticateRequest(EntityName& principal_name, entity_addr_t principal_addr) : name(principal_name), addr(principal_addr) {}
+  utime_t timestamp;
+
+  AuthAuthenticateRequest() {}
+  AuthAuthenticateRequest(EntityName& principal_name, entity_addr_t principal_addr, utime_t t) :
+    name(principal_name), addr(principal_addr), timestamp(t) {}
 
   void encode(bufferlist& bl) const {
     ::encode(name, bl);
     ::encode(addr, bl);
+    ::encode(timestamp, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(name, bl);
     ::decode(addr, bl);
+    ::decode(timestamp, bl);
   }
 };
-WRITE_CLASS_ENCODER(AuthenticateRequest)
+WRITE_CLASS_ENCODER(AuthAuthenticateRequest)
+
+struct AuthServiceTicketRequest {
+  entity_addr_t addr;
+  utime_t timestamp;
+  uint32_t keys;
+
+  void encode(bufferlist& bl) const {
+    ::encode(addr, bl);
+    ::encode(timestamp, bl);
+    ::encode(keys, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(addr, bl);
+    ::decode(timestamp, bl);
+    ::decode(keys, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthServiceTicketRequest);
+
 
 struct AuthAuthorizeReply {
   uint32_t trans_id;
@@ -220,9 +246,6 @@ struct AuthTicketHandler {
   bool has_key_flag;
 
   AuthTicketHandler() : has_key_flag(false) {}
-
-  bool build_authenticate_request();
-  bool verify_authenticate_response();
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
@@ -252,23 +275,6 @@ struct AuthTicketsManager {
   bool has_key(uint32_t service_id);
 };
 
-struct AuthServiceTicketRequest {
-  entity_addr_t addr;
-  utime_t timestamp;
-  uint32_t keys;
-
-  void encode(bufferlist& bl) const {
-    ::encode(addr, bl);
-    ::encode(timestamp, bl);
-    ::encode(keys, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(addr, bl);
-    ::decode(timestamp, bl);
-    ::decode(keys, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthServiceTicketRequest);
 
 /* A */
 struct AuthServiceTicket {
@@ -383,27 +389,15 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
   return 0;
 }
 
-extern void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
-                                uint32_t keys,
-                                bool encrypt,
-                                CryptoKey& session_key,
-                                AuthBlob& ticket_info,
-				bufferlist& request);
-
-extern bool build_authenticate_reply(AuthTicketHandler ticket_handler,
-                        CryptoKey session_key,
-                        CryptoKey auth_session_key,
-                        CryptoKey& service_secret,
-			bufferlist& reply);
 /*
  * Verify authorizer and generate reply authorizer
  */
-
-extern bool verify_service_ticket_request(bool encrypted,
-                                   CryptoKey& service_secret,
-                                   CryptoKey& session_key,
-                                   uint32_t& keys,
-                                   bufferlist::iterator& indata);
+extern bool verify_authenticate_request(CryptoKey& service_secret,
+					bufferlist::iterator& indata);
+extern bool verify_service_ticket_request(CryptoKey& service_secret,
+					  CryptoKey& session_key,
+					  uint32_t& keys,
+					  bufferlist::iterator& indata);
 
 extern bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& bl,
 				 bufferlist& enc_reply);
