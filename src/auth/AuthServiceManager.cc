@@ -108,6 +108,9 @@ static CephAuthServer auth_server;
 class CephAuthService_X  : public AuthServiceHandler {
   int state;
   uint64_t server_challenge;
+
+  CryptoKey session_key;
+
 public:
   CephAuthService_X(Monitor *m) : AuthServiceHandler(m), state(0) {}
   ~CephAuthService_X() {}
@@ -207,10 +210,11 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       info.ticket.expires += g_conf.auth_mon_ticket_ttl;
       info.ticket.renew_after = info.ticket.created;
       info.ticket.renew_after += g_conf.auth_mon_ticket_ttl / 2.0;
+
       generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
+      auth_server.create_session_key(session_key);
 
-      auth_server.create_session_key(info.session_key);
-
+      info.session_key = session_key;
       info.service_id = CEPHX_PRINCIPAL_AUTH;
       auth_server.get_service_secret(info.service_secret, CEPHX_PRINCIPAL_AUTH);
 
@@ -228,9 +232,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
       CryptoKey auth_secret;
-      CryptoKey session_key;
       auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
-      // ... FIXME .. get session_key from Monitor::Session
 
       AuthServiceTicketRequest ticket_req;
       AuthServiceTicketInfo ticket_info;

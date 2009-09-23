@@ -17,7 +17,7 @@
 
 #include "include/xlist.h"
 #include "msg/msg_types.h"
-#include "auth/Crypto.h"
+
 #include "auth/AuthServiceManager.h"
 
 struct Session;
@@ -41,7 +41,6 @@ struct Session : public RefCountedObject {
 
   map<nstring, Subscription*> sub_map;
 
-  CryptoKey session_key;
   AuthServiceHandler *auth_handler;
 
   Session(entity_inst_t i) : inst(i), closed(false), item(this),
