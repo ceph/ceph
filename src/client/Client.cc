@@ -898,6 +898,24 @@ inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
 {
   MClientRequest *req = new MClientRequest(request->get_op());
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
+  //if the filepath's haven't been set, set them!
+  if (!request->path.length()) {
+    if (request->inode)
+      request->inode->make_path(request->path);
+    else if (request->dentry) {
+      if (request->dentry->inode)
+	request->inode->make_path(request->path);
+      else if (request->dentry->dir) {
+	request->dentry->dir->parent_inode->make_path(request->path);
+	request->path.push_dentry(request->dentry->name);
+      }
+      else dout(1) << "Warning -- unable to construct a filepath!"
+		   << " No path, inode, or appropriately-endowed dentry given!"
+		   << dendl;
+    } else dout(1) << "Warning -- unable to construct a filepath!"
+		   << " No path, inode, or dentry given!"
+		   << dendl;
+  }
   req->set_filepath(request->get_filepath());
   req->set_filepath2(request->get_filepath2());
   req->set_data(request->data);
