@@ -396,7 +396,8 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
  */
 extern bool verify_service_ticket_request(CryptoKey& service_secret,
 					  CryptoKey& session_key,
-					  uint32_t& keys,
+					  AuthServiceTicketRequest& ticket_req,
+					  AuthServiceTicketInfo& ticket_info,
 					  bufferlist::iterator& indata);
 
 extern bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& bl,

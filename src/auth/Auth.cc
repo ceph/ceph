@@ -99,29 +99,25 @@ bool build_service_ticket_reply(
 
 bool verify_service_ticket_request(CryptoKey& service_secret,
                                    CryptoKey& session_key,
-                                   uint32_t& keys,
+				   AuthServiceTicketRequest& ticket_req,
+				   AuthServiceTicketInfo& ticket_info,
                                    bufferlist::iterator& indata)
 {
-  AuthServiceTicketRequest msg;
-
   bufferptr& s1 = session_key.get_secret();
   hexdump("decoding, session key", s1.c_str(), s1.length());
   
   dout(0) << "verify encrypted service ticket request" << dendl;
-  if (decode_decrypt(msg, session_key, indata) < 0)
+  if (decode_decrypt(ticket_req, session_key, indata) < 0)
     return false;
   
-  dout(0) << "decoded timestamp=" << msg.timestamp << " addr=" << msg.addr << " (was encrypted)" << dendl;
+  dout(0) << "decoded timestamp=" << ticket_req.timestamp
+	  << " addr=" << ticket_req.addr
+	  << " (was encrypted)" << dendl;
   
-  AuthServiceTicketInfo ticket_info;
   if (decode_decrypt(ticket_info, service_secret, indata) < 0)
       return false;
 
   /* FIXME: validate that request makes sense */
-
-  keys = msg.keys;
-  dout(0) << "requested keys=" << keys << dendl;
-
   return true;
 }
 

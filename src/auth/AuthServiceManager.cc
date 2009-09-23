@@ -90,6 +90,11 @@ public:
 
     return 0;
   }
+
+  int create_session_key(CryptoKey& key) {
+    return key.create(CEPH_SECRET_AES);
+  }
+
 };
 
 static CephAuthServer auth_server;
@@ -182,38 +187,32 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       AuthAuthenticateRequest req;
       ::decode(req, indata);
 
-      AuthTicket ticket;
+      SessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (auth_server.lookup_entity(req.name, principal_secret, ticket.caps) < 0) {
+      if (auth_server.lookup_entity(req.name, principal_secret, info.ticket.caps) < 0) {
 	ret = -EPERM;
 	break;
       }
 
-      ticket.name = req.name;
-      ticket.addr = req.addr;
-      ticket.created = g_clock.now();
-      ticket.expires = ticket.created;
-      ticket.expires += g_conf.auth_mon_ticket_ttl;
-      ticket.renew_after = ticket.created;
-      ticket.renew_after += g_conf.auth_mon_ticket_ttl / 2.0;
-      generate_random_string(ticket.nonce, g_conf.auth_nonce_len);
+      info.ticket.name = req.name;
+      info.ticket.addr = req.addr;
+      info.ticket.created = g_clock.now();
+      info.ticket.expires = info.ticket.created;
+      info.ticket.expires += g_conf.auth_mon_ticket_ttl;
+      info.ticket.renew_after = info.ticket.created;
+      info.ticket.renew_after += g_conf.auth_mon_ticket_ttl / 2.0;
+      generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
 
+      auth_server.create_session_key(info.session_key);
 
-      CryptoKey session_key;
-      CryptoKey auth_secret;
-      auth_server.get_service_session_key(session_key, CEPHX_PRINCIPAL_AUTH);
-      auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
+      info.service_id = CEPHX_PRINCIPAL_AUTH;
+      auth_server.get_service_secret(info.service_secret, CEPHX_PRINCIPAL_AUTH);
 
+      vector<SessionAuthInfo> info_vec;
+      info_vec.push_back(info);
 
       build_cephx_response_header(request_type, 0, result_bl);
-      vector<SessionAuthInfo> info_vec;
-      SessionAuthInfo info;
-      info.ticket = ticket;
-      info.service_id = CEPHX_PRINCIPAL_AUTH;
-      info.session_key = session_key;
-      info.service_secret = auth_secret;
-      info_vec.push_back(info);
       if (!build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
         ret = -EIO;
         break;
@@ -223,28 +222,22 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
-      EntityName name; /* FIXME should take it from the request */
-      entity_addr_t addr;
       CryptoKey auth_secret;
-      CryptoKey auth_session_key;
       CryptoKey session_key;
-      CryptoKey service_secret;
-      uint32_t keys;
-
       auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
-      auth_server.get_service_session_key(auth_session_key, CEPHX_PRINCIPAL_AUTH);
+      // ... FIXME .. get session_key from Monitor::Session
 
-      vector<SessionAuthInfo> info_vec;
-
-      if (!verify_service_ticket_request(auth_secret, auth_session_key, keys, indata)) {
+      AuthServiceTicketRequest ticket_req;
+      AuthServiceTicketInfo ticket_info;
+      if (!verify_service_ticket_request(auth_secret, session_key, ticket_req, ticket_info, indata)) {
         ret = -EPERM;
         break;
       }
 
-      auth_server.get_service_session_key(auth_session_key, CEPHX_PRINCIPAL_AUTH);
-
+      vector<SessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
-        if (keys & service_id) {
+        if (ticket_req.keys & service_id) {
+	  CryptoKey service_secret;
           auth_server.get_service_secret(service_secret, service_id);
 
           SessionAuthInfo info;
@@ -265,7 +258,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       }
 
       build_cephx_response_header(request_type, ret, result_bl);
-      build_service_ticket_reply(auth_session_key, info_vec, result_bl);
+      build_service_ticket_reply(session_key, info_vec, result_bl);
 
       ret = 0;
     }
