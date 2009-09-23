@@ -18,6 +18,7 @@
 #include "include/xlist.h"
 #include "msg/msg_types.h"
 #include "auth/Crypto.h"
+#include "auth/AuthServiceManager.h"
 
 struct Session;
 
@@ -41,13 +42,16 @@ struct Session : public RefCountedObject {
   map<nstring, Subscription*> sub_map;
 
   CryptoKey session_key;
+  AuthServiceHandler *auth_handler;
 
-  Session(entity_inst_t i) : inst(i), closed(false), item(this) {}
+  Session(entity_inst_t i) : inst(i), closed(false), item(this),
+			     auth_handler(NULL) {}
   ~Session() {
     generic_dout(0) << "~Session " << this << dendl;
     // we should have been removed before we get destructed; see SessionMap::remove_session()
     assert(!item.is_on_xlist());
     assert(sub_map.empty());
+    delete auth_handler;
   }
 };
 

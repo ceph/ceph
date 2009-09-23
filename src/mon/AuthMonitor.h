@@ -79,9 +79,8 @@ class AuthMonitor : public PaxosService {
 
   void check_rotate();
  public:
-  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0) {
-    auth_mgr.init(mn); 
-  }
+  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0),
+				       auth_mgr(mn) {}
   void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions

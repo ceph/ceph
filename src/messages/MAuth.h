@@ -17,9 +17,9 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MAuth : public PaxosServiceMessage {
+struct MAuth : public PaxosServiceMessage {
   bufferlist auth_payload;
-public:
+
   MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0) { }
 
   const char *get_type_name() { return "client_auth"; }
@@ -27,11 +27,11 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    p.copy(payload.length() - p.get_off(), auth_payload);
+    ::decode(auth_payload, p);
   }
   void encode_payload() {
     paxos_encode();
-    payload.append(auth_payload);
+    ::encode(auth_payload, payload);
   }
   bufferlist& get_auth_payload() { return auth_payload; }
 };

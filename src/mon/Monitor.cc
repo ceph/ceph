@@ -360,7 +360,18 @@ void Monitor::stop_cluster()
 
 bool Monitor::ms_dispatch(Message *m)
 {
+  bool ret = true;
   lock.Lock();
+
+  Session *s = (Session *)m->get_connection()->get_priv();
+  if (!s) {
+    s = session_map.new_session(m->get_source_inst());
+    m->get_connection()->set_priv(s->get());
+    dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+  } else {
+    dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
+  }
+
   {
     switch (m->get_type()) {
       
@@ -470,12 +481,13 @@ bool Monitor::ms_dispatch(Message *m)
       break;
       
     default:
-        return false;
+      ret = false;
     }
   }
+  s->put();
   lock.Unlock();
 
-  return true;
+  return ret;
 }
 
 void Monitor::handle_subscribe(MMonSubscribe *m)
@@ -485,13 +497,6 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   bool reply = false;
 
   Session *s = (Session *)m->get_connection()->get_priv();
-  if (!s) {
-    s = session_map.new_session(m->get_source_inst());
-    m->get_connection()->set_priv(s->get());
-    dout(10) << " new session " << s << " for " << s->inst << dendl;
-  } else {
-    dout(10) << " existing session " << s << " for " << s->inst << dendl;
-  }
 
   s->until = g_clock.now();
   s->until += g_conf.mon_subscribe_interval;

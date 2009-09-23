@@ -243,19 +243,39 @@ void AuthMonitor::committed()
 bool AuthMonitor::preprocess_auth(MAuth *m)
 {
   dout(0) << "preprocess_auth() blob_size=" << m->get_auth_payload().length() << dendl;
+  int ret = 0;
 
-  entity_addr_t addr = m->get_orig_source_addr();
-  dout(0) << "preprocess_auth() addr=" << addr << dendl;
-  AuthServiceHandler *handler = auth_mgr.get_auth_handler(addr);
-  assert(handler);
+  Session *s = (Session *)m->get_connection()->get_priv();
+  s->put();
+
+  // set up handler?
+  if (!s->auth_handler) {
+    set<__u32> supported;
+   
+    bufferlist::iterator p = m->auth_payload.begin();
+    try {
+      ::decode(supported, p);
+    } catch (buffer::error *e) {
+      dout(0) << "failed to decode message auth message" << dendl;
+      ret = -EINVAL;
+    }
+
+    if (!ret) {
+      s->auth_handler = auth_mgr.get_auth_handler(supported);
+      if (!s->auth_handler)
+	ret = -EPERM;
+    }
+  }
 
   bufferlist response_bl;
-  int ret;
-  try {
-    ret = handler->handle_request(m->get_auth_payload(), response_bl);
-  } catch (buffer::error *err) {
-    ret = -EINVAL;
-    dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+  if (s->auth_handler && !ret) {
+    // handle the request
+    try {
+      ret = s->auth_handler->handle_request(m->get_auth_payload(), response_bl);
+    } catch (buffer::error *err) {
+      ret = -EINVAL;
+      dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+    }
   }
   MAuthReply *reply = new MAuthReply(&response_bl, ret);
   mon->messenger->send_message(reply, m->get_orig_source_inst());

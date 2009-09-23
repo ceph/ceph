@@ -99,6 +99,8 @@ public:
 
 static CephAuthServer auth_server;
 
+
+
 /*
    the first X request is empty, we then send a response and get another request which
    is not empty and contains the client challenge and the key
@@ -107,11 +109,14 @@ class CephAuthService_X  : public AuthServiceHandler {
   int state;
   uint64_t server_challenge;
 public:
-  CephAuthService_X() : state(0) {}
+  CephAuthService_X(Monitor *m) : AuthServiceHandler(m), state(0) {}
+  ~CephAuthService_X() {}
+
   int handle_request(bufferlist& bl, bufferlist& result_bl);
   int handle_cephx_protocol(bufferlist::iterator& indata, bufferlist& result_bl);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };
+
 
 int CephAuthService_X::handle_request(bufferlist& bl, bufferlist& result_bl)
 {
@@ -297,56 +302,15 @@ void CephAuthService_X::build_cephx_response_header(int request_type, int status
   ::encode(header, bl);
 }
 
-AuthServiceHandler::~AuthServiceHandler()
+
+// --------------
+
+AuthServiceHandler *AuthServiceManager::get_auth_handler(set<__u32>& supported)
 {
-  if (instance)
-    delete instance;
-}
-
-AuthServiceHandler *AuthServiceHandler::get_instance() {
-  if (instance)
-    return instance;
-  return this;
-}
-
-int AuthServiceHandler::handle_request(bufferlist& bl, bufferlist& result)
-{
-  bufferlist::iterator iter = bl.begin();
-  CephAuthService_X *auth = NULL;
-  CephXEnvRequest1 req;
-
-  try {
-    CephXPremable pre;
-    ::decode(pre, iter);
-    dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
-    ::encode(pre, result);
-
-    ::decode(req, iter);
-  } catch (buffer::error *e) {
-    dout(0) << "failed to decode message auth message" << dendl;
-    delete e;
-    return -EINVAL;
+  if (supported.count(CEPH_AUTH_CEPH)) {
+    return new CephAuthService_X(mon);
   }
-
-  if (req.supports(CEPH_AUTH_CEPH)) {
-    auth = new CephAuthService_X();
-    if (!auth)
-      return -ENOMEM;
-    instance = auth;
-  }
-
-  if (auth)
-    return auth->handle_request(bl, result);
-
-  return -EINVAL;
-}
-
-
-AuthServiceHandler *AuthServiceManager::get_auth_handler(entity_addr_t& addr)
-{
-  AuthServiceHandler& handler = m[addr];
-
-  return handler.get_instance();
+  return NULL;
 }
 
 
