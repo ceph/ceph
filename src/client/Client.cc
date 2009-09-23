@@ -3342,20 +3342,41 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   in->make_path(path);
   req->set_filepath(path);
 
-  if (mask & CEPH_SETATTR_MODE)
+  if (mask & CEPH_SETATTR_MODE) {
     req->head.args.setattr.mode = attr->st_mode;
-  if (mask & CEPH_SETATTR_UID)
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+    req->inode = in;
+  }
+  if (mask & CEPH_SETATTR_UID) {
     req->head.args.setattr.uid = attr->st_uid;
-  if (mask & CEPH_SETATTR_GID)
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+    req->inode = in;
+  }
+  if (mask & CEPH_SETATTR_GID) {
     req->head.args.setattr.gid = attr->st_gid;
-  if (mask & CEPH_SETATTR_MTIME)
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+    req->inode = in;
+  }
+  if (mask & CEPH_SETATTR_MTIME) {
     req->head.args.setattr.mtime =
       utime_t(attr->st_mtime_sec, attr->st_mtime_micro);
-  if (mask & CEPH_SETATTR_ATIME)
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
+      CEPH_CAP_FILE_WR;
+    req->inode = in;
+  }
+  if (mask & CEPH_SETATTR_ATIME) {
     req->head.args.setattr.atime =
       utime_t(attr->st_atime_sec, attr->st_atime_micro);
-  if (mask & CEPH_SETATTR_SIZE)
+    req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
+      CEPH_CAP_FILE_WR;
+    req->inode = in;
+  }
+  if (mask & CEPH_SETATTR_SIZE) {
     req->head.args.setattr.size = attr->st_size;
+    req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
+      CEPH_CAP_FILE_WR;
+    req->inode = in;
+  }
   req->head.args.setattr.mask = mask;
 
   int res = make_request(req, uid, gid);
