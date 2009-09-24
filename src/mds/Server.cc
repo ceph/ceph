@@ -961,8 +961,10 @@ void Server::handle_client_request(MClientRequest *req)
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) 
     return;
-  mdr->session = session;
-  session->requests.push_back(&mdr->session_request_item);
+  if (session) {
+    mdr->session = session;
+    session->requests.push_back(&mdr->session_request_item);
+  }
 
   // process embedded cap releases?
   //  (only if NOT replay!)
