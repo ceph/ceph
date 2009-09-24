@@ -2990,13 +2990,13 @@ int Client::_lookup(Inode *dir, const string& dname, Inode **target)
       *target = dn->inode;
       goto done;
     }
-  } else {
+  } else { /*
     // can we conclude ENOENT locally?
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	(dir->flags & I_COMPLETE)) {
       dout(10) << "_lookup concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
       return -ENOENT;
-    }
+      }*/
   }
 
   r = _do_lookup(dir, dname.c_str(), target);
@@ -5191,7 +5191,7 @@ int Client::ll_readlink(vinodeno_t vino, const char **value, int uid, int gid)
 
 int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid, int gid) 
 { 
-  dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ")" << dendl;
+  dout(3) << "_mknod(" << dir->ino << " " << name << ", 0" << oct << mode << dec << ", " << rdev << ", uid " << uid << ", gid " << gid << ")" << dendl;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
@@ -5621,7 +5621,7 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
 		      struct stat *attr, Fh **fhp, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
-  dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags << dendl;
+  dout(3) << "ll_create " << parent << " " << name << " 0" << oct << mode << dec << " " << flags << ", uid " << uid << ", gid " << gid << dendl;
   tout << "ll_create" << std::endl;
   tout << parent.ino.val << std::endl;
   tout << name << std::endl;
@@ -5629,7 +5629,7 @@ int Client::ll_create(vinodeno_t parent, const char *name, mode_t mode, int flag
   tout << flags << std::endl;
 
   Inode *dir = _ll_get_inode(parent);
-  int r = _mknod(dir, name, mode, 0);
+  int r = _mknod(dir, name, mode, 0, uid, gid);
   if (r < 0)
     return r;
   Dentry *dn = dir->dir->dentries[name];
