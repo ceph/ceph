@@ -1607,6 +1607,8 @@ void CDir::_commit(version_t want)
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     cache->mds->mdsmap->get_metadata_pg_pool());
 
+  m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
+
   cache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
 			       NULL, new C_Dir_Committed(this, get_version(), inode->inode.last_renamed_version) );
 }
