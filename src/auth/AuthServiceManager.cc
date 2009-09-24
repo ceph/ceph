@@ -47,61 +47,6 @@ static inline void hexdump(string msg, const char *s, int len)
   dout(0) << msg << ":\n" << buf << dendl;
 }
 
-class CephAuthServer {
-  /* FIXME: this is all temporary */
-  AuthTicket ticket;
-  CryptoKey client_secret;
-  CryptoKey auth_session_key;
-  CryptoKey service_secret;
-  
-public:
-  CephAuthServer() {
-    bufferptr ptr1(SERVICE_SECRET, sizeof(SERVICE_SECRET) - 1);
-    service_secret.set_secret(CEPH_SECRET_AES, ptr1);
-
-    bufferptr ptr2(PRINCIPAL_CLIENT_SECRET, sizeof(PRINCIPAL_CLIENT_SECRET) - 1);
-    client_secret.set_secret(CEPH_SECRET_AES, ptr2);
-
-    bufferptr ptr4(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
-    auth_session_key.set_secret(CEPH_SECRET_AES, ptr4);
-   }
-
-/* FIXME: temporary stabs */
-  int lookup_entity(const EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps) {
-     secret = client_secret;
-     return 0;
-  }
-
-  int get_service_secret(CryptoKey& secret, uint32_t service_id) {
-    char buf[16];
-    memcpy(buf, SERVICE_SECRET, 16);
-    buf[0] = service_id & 0xFF;
-    bufferptr ptr(buf, 16);
-    secret.set_secret(CEPH_SECRET_AES, ptr);
-
-    return 0;
-  }
-
-  int get_service_session_key(CryptoKey& secret, uint32_t service_id) {
-    char buf[16];
-    memcpy(buf, SERVICE_SECRET, 16);
-    buf[0] = service_id & 0xFF;
-    bufferptr ptr(buf, 16);
-    secret.set_secret(CEPH_SECRET_AES, ptr);
-
-    return 0;
-  }
-
-  int create_session_key(CryptoKey& key) {
-    return key.create(CEPH_SECRET_AES);
-  }
-
-};
-
-static CephAuthServer auth_server;
-
-
-
 /*
    the first X request is empty, we then send a response and get another request which
    is not empty and contains the client challenge and the key
@@ -212,7 +157,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       info.ticket.renew_after += g_conf.auth_mon_ticket_ttl / 2.0;
 
       generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
-      auth_server.create_session_key(session_key);
+      mon->keys_server.generate_secret(session_key);
 
       info.session_key = session_key;
       info.service_id = CEPHX_PRINCIPAL_AUTH;
@@ -266,7 +211,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
           CryptoKey session_key;
 
-          auth_server.get_service_session_key(session_key, service_id);
+          mon->keys_server.generate_secret(session_key);
 
           info.service_id = service_id;
           info.ticket = service_ticket;

@@ -100,11 +100,12 @@ class KeysServer {
   SafeTimer timer;
   Context *rotate_event;
 
-  bool generate_secret(CryptoKey& secret);
   void _rotate_secret(uint32_t service_id, int factor);
   void _generate_all_rotating_secrets(bool init);
 public:
   KeysServer();
+
+  bool generate_secret(CryptoKey& secret);
 
   bool get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps);
   bool get_active_rotating_secret(EntityName& name, CryptoKey& secret);
