@@ -45,6 +45,9 @@ class MStatfsReply;
 struct ObjectOperation {
   vector<OSDOp> ops;
   int flags;
+  int priority;
+
+  ObjectOperation() : flags(0), priority(0) {}
 
   void add_op(int op) {
     int s = ops.size();
@@ -163,8 +166,6 @@ struct ObjectOperation {
   void call(const char *cname, const char *method, bufferlist &indata) {
     add_call(CEPH_OSD_OP_CALL, cname, method, indata);
   }
- 
-  ObjectOperation() : flags(0) {}
 };
 
 
@@ -214,7 +215,7 @@ class Objecter {
     bufferlist inbl;
     bufferlist *outbl;
 
-    int flags;
+    int flags, priority;
     Context *onack, *oncommit;
 
     tid_t tid;
@@ -226,7 +227,7 @@ class Objecter {
     Op(const object_t& o, ceph_object_layout& l, vector<OSDOp>& op,
        int f, Context *ac, Context *co) :
       oid(o), layout(l), 
-      snapid(CEPH_NOSNAP), outbl(0), flags(f), onack(ac), oncommit(co), 
+      snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
       paused(false) {
       ops.swap(op);
@@ -429,6 +430,7 @@ private:
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
     Op *o = new Op(oid, ol, op.ops, flags, onack, oncommit);
+    o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     return op_submit(o);
@@ -438,6 +440,7 @@ private:
 	     snapid_t snapid, bufferlist *pbl, int flags,
 	     Context *onack) {
     Op *o = new Op(oid, ol, op.ops, flags, onack, NULL);
+    o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
     return op_submit(o);

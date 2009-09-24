@@ -435,6 +435,9 @@ tid_t Objecter::op_submit(Op *op)
     if (op->version != eversion_t())
       m->set_version(op->version);  // we're replaying this op!
 
+    if (op->priority)
+      m->set_priority(op->priority);
+
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   } else 
     maybe_request_map();
