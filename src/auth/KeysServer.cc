@@ -48,20 +48,36 @@ void RotatingSecrets::add(ExpiringCryptoKey& key)
   }
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, RotatingSecrets& secret)
+bool KeysServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret)
 {
   map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end())
     return false;
 
-  if (rotating_secrets.size() > 1)
-    ++iter; /* avoid giving the oldest rotating secret, as it'll expire soon */
+  RotatingSecrets& secrets = iter->second;
+  map<uint64_t, ExpiringCryptoKey>::iterator riter = secrets.secrets.lower_bound(0);
+  if (secrets.secrets.size() > 1)
+    ++riter;
 
-  secret = iter->second;
+
+  secret = riter->second;
+
   return true;
 }
 
-bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret)
+bool KeysServerData::get_service_secret(uint32_t service_id, CryptoKey& secret)
+{
+  ExpiringCryptoKey e;
+
+  if (!get_service_secret(service_id, e))
+    return false;
+
+  secret = e.key;
+
+  return true;
+}
+
+bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps)
 {
   map<EntityName, CryptoKey>::iterator iter = secrets.find(name);
   if (iter == secrets.end())
@@ -142,14 +158,21 @@ void KeysServer::rotate_timeout(double timeout)
   timer.add_event_after(timeout, rotate_event);
 }
 
-bool KeysServer::get_secret(EntityName& name, CryptoKey& secret)
+bool KeysServer::get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps)
 {
   Mutex::Locker l(lock);
 
-  return data.get_secret(name, secret);
+  return data.get_secret(name, secret, caps);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, RotatingSecrets& secret)
+bool KeysServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret)
+{
+  Mutex::Locker l(lock);
+
+  return data.get_service_secret(service_id, secret);
+}
+
+bool KeysServer::get_service_secret(uint32_t service_id, CryptoKey& secret)
 {
   Mutex::Locker l(lock);
 

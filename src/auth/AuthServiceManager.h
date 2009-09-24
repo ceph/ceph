@@ -21,6 +21,7 @@
 class Monitor;
 
 class AuthServiceHandler {
+protected:
   Monitor *mon;
 
 public:

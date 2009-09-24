@@ -17,6 +17,8 @@
 #include "AuthProtocol.h"
 #include "Auth.h"
 
+#include "mon/Monitor.h"
+
 #include <errno.h>
 #include <sstream>
 
@@ -197,7 +199,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       SessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (auth_server.lookup_entity(req.name, principal_secret, info.ticket.caps) < 0) {
+      if (mon->keys_server.get_secret(req.name, principal_secret, info.ticket.caps) < 0) {
 	ret = -EPERM;
 	break;
       }
@@ -215,7 +217,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       info.session_key = session_key;
       info.service_id = CEPHX_PRINCIPAL_AUTH;
-      auth_server.get_service_secret(info.service_secret, CEPHX_PRINCIPAL_AUTH);
+      mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, info.service_secret);
 
       vector<SessionAuthInfo> info_vec;
       info_vec.push_back(info);
@@ -231,7 +233,10 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
       CryptoKey auth_secret;
-      auth_server.get_service_secret(auth_secret, CEPHX_PRINCIPAL_AUTH);
+      CryptoKey session_key;
+      if (mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, auth_secret) < 0) {
+        ret = -EPERM;
+      }
       // ... FIXME .. get entity name, session_key from Monitor::Session
 
       AuthServiceTicketRequest ticket_req;
@@ -246,14 +251,16 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
         if (ticket_req.keys & service_id) {
 	  CryptoKey service_secret;
-          auth_server.get_service_secret(service_secret, service_id);
+          if (mon->keys_server.get_service_secret(service_id, service_secret) < 0) {
+            ret = -EPERM;
+            break;
+          }
 
           SessionAuthInfo info;
 
           AuthTicket service_ticket;
           /* FIXME: initialize service_ticket */
 
-          auth_server.get_service_secret(service_secret, service_id);
           auth_server.get_service_session_key(session_key, service_id);
 
           info.service_id = service_id;
@@ -275,7 +282,10 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       CryptoKey service_secret;
 
-      auth_server.get_service_secret(service_secret, CEPHX_PRINCIPAL_MON);
+      if (mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_MON, service_secret) < 0) {
+        ret = -EPERM;
+        break;
+      }
 
       ret = 0;
       bufferlist tmp_bl;
