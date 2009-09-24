@@ -3390,7 +3390,12 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
     req->inode = in;
   }
   if (mask & CEPH_SETATTR_SIZE) {
-    req->head.args.setattr.size = attr->st_size;
+    if ((unsigned long)attr->st_size < mdsmap->get_max_filesize())
+      req->head.args.setattr.size = attr->st_size;
+    else { //too big!
+      delete req;
+      return -EBADF;
+    }
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
     req->inode = in;
@@ -4445,6 +4450,8 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 
 int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 {
+  if ((__u64)(offset+size) > mdsmap->get_max_filesize()) //too large!
+    return -EBADF;
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
 

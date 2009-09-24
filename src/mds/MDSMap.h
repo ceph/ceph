@@ -172,6 +172,7 @@ public:
   utime_t get_session_timeout() {
     return utime_t(session_timeout,0);
   }
+  __u64 get_max_filesize() { return max_file_size; }
   
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
