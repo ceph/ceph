@@ -339,7 +339,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_monc, 0, OPT_INT, 1),
 	OPTION(debug_paxos, 0, OPT_INT, 0),
 	OPTION(debug_tp, 0, OPT_INT, 0),
-	OPTION(key_file, 'k', OPT_STR, "key.bin"),
+	OPTION(keys_file, 'k', OPT_STR, "keys.bin"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
@@ -941,6 +941,8 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
       g_conf.log_to_stdout = false;
     } else if (isdaemon && CONF_ARG_EQ("id", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
+    } else if (!isdaemon && CONF_ARG_EQ("id", 'I')) {
+      CONF_SAFE_SET_ARG_VAL(&g_conf.id, OPT_STR);
     } else {
       nargs.push_back(args[i]);
     }
@@ -964,6 +966,8 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
   assert(g_conf.entity_name);
 
   g_conf.entity_name->from_type_id(g_conf.type, g_conf.id);
+  dout(0) << "entity name: " << g_conf.entity_name->to_str() << dendl;
+
 
   if (cf)
 	delete cf;

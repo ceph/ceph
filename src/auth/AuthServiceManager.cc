@@ -59,26 +59,18 @@ public:
   CephAuthService_X(Monitor *m) : AuthServiceHandler(m), state(0) {}
   ~CephAuthService_X() {}
 
-  int handle_request(bufferlist& bl, bufferlist& result_bl);
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl);
   int handle_cephx_protocol(bufferlist::iterator& indata, bufferlist& result_bl);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };
 
 
-int CephAuthService_X::handle_request(bufferlist& bl, bufferlist& result_bl)
+int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& result_bl)
 {
   int ret = 0;
   bool piggyback = false;
-  bufferlist::iterator indata = bl.begin();
 
   dout(0) << "CephAuthService_X: handle request" << dendl;
-  if (state != 0) {
-    CephXPremable pre;
-    ::decode(pre, indata);
-    dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
-    ::encode(pre, result_bl);
-  }
-
   dout(0) << "state=" << state << dendl;
 
   switch(state) {

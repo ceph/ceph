@@ -100,6 +100,42 @@ void AuthMonitor::create_initial(bufferlist& bl)
   ::encode(l, inc.info);
   inc.op = AUTH_INC_NOP;
   pending_auth.push_back(inc);
+
+  if (g_conf.keys_file) {
+    map<string, CryptoKey> keys_map;
+    dout(0) << "reading initial keys file " << dendl;
+    bufferlist bl;
+    int r = bl.read_file(g_conf.keys_file);
+    if (r >= 0) {
+      bool read_ok = false;
+      try {
+        bufferlist::iterator iter = bl.begin();
+        ::decode(keys_map, iter);
+        read_ok = true;
+      } catch (buffer::error *err) {
+        cerr << "error reading file " << g_conf.keys_file << std::endl;
+      }
+      if (read_ok) {
+        map<string, CryptoKey>::iterator iter = keys_map.begin();
+        for (; iter != keys_map.end(); ++iter) {
+          string n = iter->first;
+          if (!n.empty()) {
+            dout(0) << "read key for entry: " << n << dendl;
+            AuthLibEntry entry;
+            if (!entry.name.from_str(n)) {
+              dout(0) << "bad entity name " << n << dendl;
+              continue;
+            }
+            entry.secret = iter->second; 
+            ::encode(entry, inc.info);
+            inc.op = AUTH_INC_ADD;
+            pending_auth.push_back(inc);
+          }
+        }
+      }
+
+    }
+  }
 }
 
 bool AuthMonitor::store_entry(AuthLibEntry& entry)
@@ -249,13 +285,20 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
   Session *s = (Session *)m->get_connection()->get_priv();
   s->put();
 
+  bufferlist response_bl;
+  bufferlist::iterator indata = m->auth_payload.begin();
+
+  CephXPremable pre;
+  ::decode(pre, indata);
+  dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
+  ::encode(pre, response_bl);
+
   // set up handler?
   if (!s->auth_handler) {
     set<__u32> supported;
    
-    bufferlist::iterator p = m->auth_payload.begin();
     try {
-      ::decode(supported, p);
+      ::decode(supported, indata);
     } catch (buffer::error *e) {
       dout(0) << "failed to decode message auth message" << dendl;
       ret = -EINVAL;
@@ -268,11 +311,10 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     }
   }
 
-  bufferlist response_bl;
   if (s->auth_handler && !ret) {
     // handle the request
     try {
-      ret = s->auth_handler->handle_request(m->get_auth_payload(), response_bl);
+      ret = s->auth_handler->handle_request(indata, response_bl);
     } catch (buffer::error *err) {
       ret = -EINVAL;
       dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;

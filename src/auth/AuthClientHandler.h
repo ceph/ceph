@@ -163,6 +163,7 @@ public:
 
   AuthClientHandler() : lock("AuthClientHandler::lock"),
 			client(NULL), timer(lock), max_proto_handlers(0) { }
+  void init(EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
     Mutex::Locker l(lock);

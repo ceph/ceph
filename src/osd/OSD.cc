@@ -432,10 +432,10 @@ int OSD::init()
 
   monc->set_keyring(&keyring);
 
-  if (keyring.load_master(g_conf.key_file)) {
-    dout(0) << "successfuly loaded secret key from " << g_conf.key_file << dendl;
+  if (keyring.load_master(g_conf.keys_file)) {
+    dout(0) << "successfuly loaded secret key from " << g_conf.keys_file << dendl;
   } else {
-    dout(0) << "failed to load secret key" << g_conf.key_file << dendl;
+    dout(0) << "failed to load secret key from" << g_conf.keys_file << dendl;
   }
 
   monc->set_entity_name(ename);

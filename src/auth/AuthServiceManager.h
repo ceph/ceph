@@ -28,7 +28,7 @@ public:
   AuthServiceHandler(Monitor *m) : mon(m) { }
   virtual ~AuthServiceHandler() { }
 
-  virtual int handle_request(bufferlist& bl, bufferlist& result) = 0;
+  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result) = 0;
 };
 
 class AuthServiceManager

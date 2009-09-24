@@ -12,6 +12,7 @@
  * 
  */
 
+#include "common/common_init.h"
 #include "mon/MonitorStore.cc"
 #include "config.h"
 
@@ -33,11 +34,12 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   DEFINE_CONF_VARS(usage);
+  common_init(args, "mon", false);
 
   bool clobber = false;
-  const char *fsdir = 0;
+  const char *fsdir = g_conf.mon_data;
   int whoami = -1;
-  const char *monmapfn = 0;
+  const char *monmapfn = g_conf.monmap;
   const char *osdmapfn = 0;
 
   FOR_EACH_ARG(args) {
@@ -45,14 +47,12 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&clobber, OPT_BOOL);
     } else if (CONF_ARG_EQ("mon", 'i')) {
       CONF_SAFE_SET_ARG_VAL(&whoami, OPT_INT);
-    } else if (CONF_ARG_EQ("monmap", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&monmapfn, OPT_STR);
     } else if (CONF_ARG_EQ("osdmap", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
-    } else if (CONF_ARG_EQ("mon_data", '\0')) {
-      CONF_SAFE_SET_ARG_VAL(&fsdir, OPT_STR);
-    } else 
+    } else {
+  cerr << "2 " <<  args[i] << std::endl;
       usage();
+    }
   }
   if (!fsdir || !monmapfn || whoami < 0)
     usage();

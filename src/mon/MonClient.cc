@@ -247,6 +247,8 @@ void MonClient::init()
   dout(10) << "init" << dendl;
   messenger->add_dispatcher_head(this);
 
+  auth.init(*g_conf.entity_name);
+
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
 }

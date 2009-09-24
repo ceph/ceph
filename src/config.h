@@ -108,7 +108,7 @@ struct md_config_t {
   bool clock_tare;
 
   // auth
-  const char *key_file;
+  const char *keys_file;
 
   // messenger
 

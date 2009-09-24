@@ -74,8 +74,21 @@ bool KeyRing::load_master(const char *filename)
 
   bufferlist::iterator iter = bl.begin();
 
-  ::decode(master, iter);
-  
+  map<string, CryptoKey> m;
+  map<string, CryptoKey>::iterator miter;
+
+  ::decode(m, iter);
+
+  string name = g_conf.entity_name->to_str();
+
+  miter = m.find(name);
+  if (miter == m.end()) {
+    miter = m.find("");
+    if (miter == m.end())
+      return false; 
+  }
+  master = miter->second;
+
   return true;
 }
 

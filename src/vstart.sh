@@ -217,6 +217,8 @@ EOF
 			echo
 		fi
 
+            	$SUDO $CEPH_BIN/authtool --gen-key --name=client.admin monkeys.bin
+
 		# build a fresh fs monmap, mon fs
 		# $CEPH_BIN/monmaptool --create --clobber --print .ceph_monmap
 		str="$CEPH_BIN/monmaptool --create --clobber"
@@ -227,6 +229,7 @@ EOF
 [mon$f]
         mon data = "dev/mon$f"
         mon addr = $IP:$(($CEPH_PORT+$f))
+        keys file = dev/mon$f/monkeys.bin
 EOF
 		done
 		str=$str" --print .ceph_monmap"
@@ -236,7 +239,8 @@ EOF
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
 		    echo $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
-		    $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
+		    cp monkeys.bin dev/mon$f/
+		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
 		done
 	fi
 
@@ -259,13 +263,13 @@ if [ "$start_osd" -eq 1 ]; then
         osd data = dev/osd$osd
         osd journal = dev/osd$osd/journal
         osd journal size = 100
-        key file = dev/osd$osd/key.bin
+        keys file = dev/osd$osd/keys.bin
 EOF
 	    echo mkfs osd$osd
 	    echo $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	    $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-            $SUDO $CEPH_BIN/authtool --gen-key dev/osd$osd/key.bin
-            $SUDO $CEPH_BIN/ceph -i dev/osd$osd/key.bin auth add osd.$osd
+            $SUDO $CEPH_BIN/authtool --gen-key dev/osd$osd/keys.bin
+            $SUDO $CEPH_BIN/ceph -i dev/osd$osd/keys.bin auth add osd.$osd
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
