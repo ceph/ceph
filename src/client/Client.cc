@@ -3325,16 +3325,19 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
   // make the change locally?
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
     if (mask & CEPH_SETATTR_MODE) {
+      in->ctime = g_clock.now();
       in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
     }
     if (mask & CEPH_SETATTR_UID) {
+      in->ctime = g_clock.now();
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
     }
     if (mask & CEPH_SETATTR_GID) {
+      in->ctime = g_clock.now();
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
@@ -3346,6 +3349,7 @@ int Client::_setattr(Inode *in, struct stat_precise *attr, int mask, int uid, in
 	in->mtime = utime_t(attr->st_mtime_sec, attr->st_mtime_micro);
       if (mask & CEPH_SETATTR_ATIME)
 	in->atime = utime_t(attr->st_atime_sec, attr->st_atime_micro);
+      in->ctime = g_clock.now();
       in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
       mask &= ~(CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
