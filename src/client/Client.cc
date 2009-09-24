@@ -899,7 +899,7 @@ inline MClientRequest* Client::make_request_from_Meta(MetaRequest *request)
   MClientRequest *req = new MClientRequest(request->get_op());
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
   //if the filepath's haven't been set, set them!
-  if (!request->path.length()) {
+  if (request->path.empty()) {
     if (request->inode)
       request->inode->make_path(request->path);
     else if (request->dentry) {

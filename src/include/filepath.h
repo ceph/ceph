@@ -108,7 +108,7 @@ class filepath {
     if (bits.empty() && path.length() > 0) parse_bits();
     return bits.size();
   }
-  bool empty() const { return path.length() == 0; }
+  bool empty() const { return path.length() == 0 && ino == 0; }
 
   bool absolute() const { return ino == 1; }
   bool pure_relative() const { return ino == 0; }
