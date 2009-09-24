@@ -38,23 +38,14 @@ void build_authenticate_request(EntityName& principal_name, entity_addr_t& princ
   ::encode(req, request);
 }
 
-void build_service_ticket_request(EntityName& principal_name, entity_addr_t& principal_addr,
-                                uint32_t keys,
-                                CryptoKey& session_key,
-                                AuthBlob& ticket_info,
-				bufferlist& request)
+void build_service_ticket_request(uint32_t keys,
+				  bufferlist& request)
 {
   AuthServiceTicketRequest ticket_req;
 
-  ticket_req.addr =  principal_addr;
-  ticket_req.timestamp = g_clock.now();
   ticket_req.keys = keys;
 
-  bufferptr& s1 = session_key.get_secret();
-  hexdump("encoding, session key", s1.c_str(), s1.length());
-  encode_encrypt(ticket_req, session_key, request);
-
-  ::encode(ticket_info, request);
+  ::encode(ticket_req, request);
 }
 
 /*
@@ -97,28 +88,11 @@ bool build_service_ticket_reply(
   return true;
 }
 
-bool verify_service_ticket_request(EntityName& name,
-                                   CryptoKey& service_secret,
-                                   CryptoKey& session_key,
-				   AuthServiceTicketRequest& ticket_req,
-				   AuthServiceTicketInfo& ticket_info,
+bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
                                    bufferlist::iterator& indata)
 {
-  bufferptr& s1 = session_key.get_secret();
-  hexdump("decoding, session key", s1.c_str(), s1.length());
-  
-  dout(0) << "verify encrypted service ticket request" << dendl;
-  if (decode_decrypt(ticket_req, session_key, indata) < 0)
-    return false;
-  
-  dout(0) << "decoded timestamp=" << ticket_req.timestamp
-	  << " addr=" << ticket_req.addr
-	  << " (was encrypted)" << dendl;
-  
-  if (decode_decrypt(ticket_info, service_secret, indata) < 0)
-      return false;
+  ::decode(ticket_req, indata);
 
-  /* FIXME: validate that request makes sense */
   return true;
 }
 
@@ -191,7 +165,7 @@ bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
   ::encode(ticket, bl);
 
   AuthAuthorize msg;
-  msg.trans_id = ctx.id;
+  // msg.trans_id = ctx.id;
   msg.now = ctx.timestamp;
   msg.nonce = nonce;
   encode_encrypt(msg, session_key, bl);
@@ -220,10 +194,11 @@ bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, A
  * {timestamp + 1}^session_key
  */
 bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
-			  bufferlist& reply_bl)
+                       CryptoKey& session_key, bufferlist& reply_bl)
 {
   AuthServiceTicketInfo ticket_info;
   decode_decrypt(ticket_info, service_secret, indata);
+  session_key = ticket_info.session_key;
 
   AuthAuthorize auth_msg;
   decode_decrypt(auth_msg, ticket_info.session_key, indata);
@@ -238,7 +213,7 @@ bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
    *  {timestamp + 1}^session_key
    */
   AuthAuthorizeReply reply;
-  reply.trans_id = auth_msg.trans_id;
+  // reply.trans_id = auth_msg.trans_id;
   reply.timestamp = auth_msg.now;
   reply.timestamp += 1;
   encode_encrypt(reply, ticket_info.session_key, reply_bl);

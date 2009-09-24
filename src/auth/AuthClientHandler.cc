@@ -223,8 +223,15 @@ int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlis
   header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
 
   ::encode(header, bl);
+#if 0
   build_service_ticket_request(client->name, client->addr, want,
 			       ticket_handler.session_key, ticket_handler.ticket, bl);
+#endif
+  if (!ticket_handler.build_authorizer(bl, ctx))
+    return -EINVAL;
+
+  build_service_ticket_request(want, bl);
+
   
   return 0;
 }

@@ -23,7 +23,7 @@ class Cond;
 
 struct AuthContext {
   int status;
-  int id;
+  // int id;
   utime_t timestamp;
   Cond *cond;
 };
@@ -174,10 +174,7 @@ extern void build_authenticate_request(EntityName& principal_name, entity_addr_t
 				       bufferlist& request);
 
 
-extern void build_service_ticket_request(EntityName& principal_name, entity_addr_t& principal_addr,
-					 uint32_t keys,
-					 CryptoKey& session_key,
-					 AuthBlob& ticket_info,
+extern void build_service_ticket_request(uint32_t keys,
 					 bufferlist& request);
 
 extern bool build_service_ticket_reply(CryptoKey& principal_secret,
@@ -204,18 +201,12 @@ struct AuthAuthenticateRequest {
 WRITE_CLASS_ENCODER(AuthAuthenticateRequest)
 
 struct AuthServiceTicketRequest {
-  entity_addr_t addr;
-  utime_t timestamp;
   uint32_t keys;
 
   void encode(bufferlist& bl) const {
-    ::encode(addr, bl);
-    ::encode(timestamp, bl);
     ::encode(keys, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(addr, bl);
-    ::decode(timestamp, bl);
     ::decode(keys, bl);
   }
 };
@@ -223,14 +214,14 @@ WRITE_CLASS_ENCODER(AuthServiceTicketRequest);
 
 
 struct AuthAuthorizeReply {
-  uint32_t trans_id;
+  // uint32_t trans_id;
   utime_t timestamp;
   void encode(bufferlist& bl) const {
-    ::encode(trans_id, bl);
+    // ::encode(trans_id, bl);
     ::encode(timestamp, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(trans_id, bl);
+    // ::decode(trans_id, bl);
     ::decode(timestamp, bl);
   }
 };
@@ -315,16 +306,16 @@ struct AuthServiceTicketInfo {
 WRITE_CLASS_ENCODER(AuthServiceTicketInfo);
 
 struct AuthAuthorize {
-  uint32_t trans_id;
+  // uint32_t trans_id;
   utime_t now;
   string nonce;
   void encode(bufferlist& bl) const {
-    ::encode(trans_id, bl);
+    // ::encode(trans_id, bl);
     ::encode(now, bl);
     ::encode(nonce, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(trans_id, bl);
+    // ::decode(trans_id, bl);
     ::decode(now, bl);
     ::decode(nonce, bl);
   }
@@ -394,14 +385,10 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
 /*
  * Verify authorizer and generate reply authorizer
  */
-extern bool verify_service_ticket_request(EntityName& name,
-                                          CryptoKey& service_secret,
-					  CryptoKey& session_key,
-					  AuthServiceTicketRequest& ticket_req,
-					  AuthServiceTicketInfo& ticket_info,
+extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 					  bufferlist::iterator& indata);
 
 extern bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& bl,
-				 bufferlist& enc_reply);
+			      CryptoKey& session_key, bufferlist& enc_reply);
 
 #endif

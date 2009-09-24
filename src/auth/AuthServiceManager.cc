@@ -110,8 +110,6 @@ class CephAuthService_X  : public AuthServiceHandler {
   int state;
   uint64_t server_challenge;
 
-  CryptoKey session_key;
-
 public:
   CephAuthService_X(Monitor *m) : AuthServiceHandler(m), state(0) {}
   ~CephAuthService_X() {}
@@ -196,6 +194,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       AuthAuthenticateRequest req;
       ::decode(req, indata);
 
+      CryptoKey session_key;
       SessionAuthInfo info;
 
       CryptoKey principal_secret;
@@ -233,16 +232,20 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
       CryptoKey auth_secret;
-      CryptoKey session_key;
       if (mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, auth_secret) < 0) {
         ret = -EPERM;
       }
-      // ... FIXME .. get entity name, session_key from Monitor::Session
 
       AuthServiceTicketRequest ticket_req;
       AuthServiceTicketInfo ticket_info;
       EntityName name;
-      if (!verify_service_ticket_request(name, auth_secret, session_key, ticket_req, ticket_info, indata)) {
+      bufferlist tmp_bl;
+      CryptoKey auth_session_key;
+      if (!verify_authorizer(auth_secret, indata, auth_session_key, tmp_bl)) {
+        ret = -EPERM;
+      }
+
+      if (!verify_service_ticket_request(ticket_req, indata)) {
         ret = -EPERM;
         break;
       }
@@ -261,6 +264,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
           AuthTicket service_ticket;
           /* FIXME: initialize service_ticket */
 
+          CryptoKey session_key;
+
           auth_server.get_service_session_key(session_key, service_id);
 
           info.service_id = service_id;
@@ -273,7 +278,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       }
 
       build_cephx_response_header(request_type, ret, result_bl);
-      build_service_ticket_reply(session_key, info_vec, result_bl);
+      build_service_ticket_reply(auth_session_key, info_vec, result_bl);
 
       ret = 0;
     }
@@ -289,7 +294,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       ret = 0;
       bufferlist tmp_bl;
-      if (!verify_authorizer(service_secret, indata, tmp_bl)) {
+      CryptoKey session_key;
+      if (!verify_authorizer(service_secret, indata, session_key, tmp_bl)) {
         ret = -EPERM;
       }
       build_cephx_response_header(request_type, ret, result_bl);

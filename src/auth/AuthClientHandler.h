@@ -53,6 +53,7 @@ protected:
   Context *timeout_event;
   uint32_t id;
   Mutex lock;
+  AuthContext ctx;
 
   // session state
   int status;
@@ -119,7 +120,6 @@ public:
 
 class AuthClientAuthorizeHandler : public AuthClientProtocolHandler {
   uint32_t service_id;
-  AuthContext ctx;
 protected:
   int _build_request();
   int _handle_response(int ret, bufferlist::iterator& iter);
