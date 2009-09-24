@@ -35,6 +35,8 @@ extern entity_addr_t g_my_addr;
 
 extern bool g_daemon;
 
+struct EntityName;
+
 struct md_config_t {
   char *type;
   char *id;
@@ -149,6 +151,7 @@ struct md_config_t {
   double auth_mon_ticket_ttl;
   double auth_service_ticket_ttl;
   int auth_nonce_len;
+  EntityName *entity_name;
 
   // client
   int      client_cache_size;

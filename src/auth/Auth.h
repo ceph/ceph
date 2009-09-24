@@ -82,23 +82,29 @@ struct EntityName {
     string pre = s.substr(0, pos);
     const char *pres = pre.c_str();
 
-    if (strcmp(pres, "auth") == 0) {
-      entity_type = CEPHX_PRINCIPAL_AUTH;
-    } else if (strcmp(pres, "mon") == 0) {
-      entity_type = CEPHX_PRINCIPAL_MON;
-    } else if (strcmp(pres, "osd") == 0) {
-      entity_type = CEPHX_PRINCIPAL_OSD;
-    } else if (strcmp(pres, "mds") == 0) {
-      entity_type = CEPHX_PRINCIPAL_MDS;
-    } else if (strcmp(pres, "client") == 0) {
-      entity_type = CEPHX_PRINCIPAL_CLIENT;
-    } else {
-      return false;
-    }
+    set_type(pres);
 
     name = s.substr(pos + 1);
 
     return true;
+  }
+
+  void set_type(const char *type) {
+    if (strcmp(type, "auth") == 0) {
+      entity_type = CEPHX_PRINCIPAL_AUTH;
+    } else if (strcmp(type, "mon") == 0) {
+      entity_type = CEPHX_PRINCIPAL_MON;
+    } else if (strcmp(type, "osd") == 0) {
+      entity_type = CEPHX_PRINCIPAL_OSD;
+    } else if (strcmp(type, "mds") == 0) {
+      entity_type = CEPHX_PRINCIPAL_MDS;
+    } else {
+      entity_type = CEPHX_PRINCIPAL_CLIENT;
+    }
+  }
+  void from_type_id(const char *type, const char *id) {
+    set_type(type);
+    name = id;
   }
 };
 WRITE_CLASS_ENCODER(EntityName);

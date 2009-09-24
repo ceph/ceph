@@ -39,6 +39,7 @@ stringtable g_stab;
 #include "common/dyn_snprintf.h"
 
 #include "auth/ExportControl.h"
+#include "auth/Auth.h"
 
 static bool show_config = false;
 
@@ -959,6 +960,10 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
 	g_conf.name = g_conf.type;
     }
   }
+  g_conf.entity_name = new EntityName;
+  assert(g_conf.entity_name);
+
+  g_conf.entity_name->from_type_id(g_conf.type, g_conf.id);
 
   if (cf)
 	delete cf;
