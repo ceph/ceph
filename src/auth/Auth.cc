@@ -178,12 +178,10 @@ bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, A
  * {timestamp + 1}^session_key
  */
 bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
-                       CryptoKey& session_key, bufferlist& reply_bl)
+                       AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
-  AuthServiceTicketInfo ticket_info;
   if (decode_decrypt(ticket_info, service_secret, indata) < 0)
     return false;
-  session_key = ticket_info.session_key;
 
   AuthAuthorize auth_msg;
   if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0)

@@ -131,6 +131,14 @@ struct AuthTicket {
 
   AuthTicket() : flags(0) {}
 
+  void init_timestamps(utime_t now, double ttl) {
+    created = now;
+    expires = now;
+    expires += ttl;
+    renew_after = now;
+    renew_after += ttl / 2.0;
+  }
+
   void encode(bufferlist& bl) const {
     __u8 v = 1;
     ::encode(v, bl);
@@ -407,6 +415,6 @@ extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 					  bufferlist::iterator& indata);
 
 extern bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& bl,
-			      CryptoKey& session_key, bufferlist& enc_reply);
+			      AuthServiceTicketInfo& ticket_info, bufferlist& enc_reply);
 
 #endif

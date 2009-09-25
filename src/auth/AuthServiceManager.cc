@@ -183,11 +183,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       info.ticket.name = req.name;
       info.ticket.addr = req.addr;
-      info.ticket.created = g_clock.now();
-      info.ticket.expires = info.ticket.created;
-      info.ticket.expires += g_conf.auth_mon_ticket_ttl;
-      info.ticket.renew_after = info.ticket.created;
-      info.ticket.renew_after += g_conf.auth_mon_ticket_ttl / 2.0;
+      info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
 
       generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
       mon->keys_server.generate_secret(session_key);
@@ -206,6 +202,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       }
     }
     break;
+
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
@@ -218,8 +215,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       AuthServiceTicketInfo ticket_info;
       EntityName name;
       bufferlist tmp_bl;
-      CryptoKey auth_session_key;
-      if (!verify_authorizer(auth_secret, indata, auth_session_key, tmp_bl)) {
+      AuthServiceTicketInfo auth_ticket_info;
+      if (!verify_authorizer(auth_secret, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
 
@@ -238,25 +235,25 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
           }
 
           SessionAuthInfo info;
+	  info.ticket.name = auth_ticket_info.ticket.name;
+	  info.ticket.addr = auth_ticket_info.ticket.addr;
+	  info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
 
-          AuthTicket service_ticket;
-          /* FIXME: initialize service_ticket */
+	  generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
+          mon->keys_server.generate_secret(info.session_key);
 
-          CryptoKey session_key;
-
-          mon->keys_server.generate_secret(session_key);
+          auth_server.get_service_secret(info.service_secret, service_id);
 
           info.service_id = service_id;
-          info.ticket = service_ticket;
-          info.session_key = session_key;
-          info.service_secret = service_secret;
+	  
+	  info.ticket.caps = auth_ticket_info.ticket.caps;
 
           info_vec.push_back(info);
         }
       }
 
       build_cephx_response_header(request_type, ret, result_bl);
-      build_service_ticket_reply(auth_session_key, info_vec, result_bl);
+      build_service_ticket_reply(auth_ticket_info.session_key, info_vec, result_bl);
       ret = 0;
     }
     break;
@@ -272,8 +269,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       ret = 0;
       bufferlist tmp_bl;
-      CryptoKey session_key;
-      if (!verify_authorizer(service_secret, indata, session_key, tmp_bl)) {
+      AuthServiceTicketInfo auth_ticket_info;
+      if (!verify_authorizer(service_secret, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
       build_cephx_response_header(request_type, ret, result_bl);
