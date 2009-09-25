@@ -531,7 +531,6 @@ ConfSection *ConfFile::_add_section(const char *section, ConfLine *cl)
 	return sec;
 }
 
-
 bool ConfFile::_parse(char *filename, ConfSection **psection)
 {
 	char *buf;
@@ -543,8 +542,6 @@ bool ConfFile::_parse(char *filename, ConfSection **psection)
 	int max_line = MAX_LINE;
 
 	line = (char *)malloc(max_line);
-
-	
 
 	fd = open(filename, O_RDONLY);
 	if (fd < 0)
