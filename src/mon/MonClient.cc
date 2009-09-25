@@ -405,9 +405,16 @@ void MonClient::tick()
     _start_auth_rotating(KEY_ROTATE_TIME);
   }
 
+  if (state == MC_STATE_NONE) {
+    state = MC_STATE_AUTHENTICATING;
+    auth.send_session_request(this, &auth_handler, 30.0);
+    return;
+  }
+  if (state == MC_STATE_AUTHENTICATING)
+    return;
+
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
-    auth.start_session(this, 30.0);
     _reopen_session();
   } else {
     // just renew as needed
