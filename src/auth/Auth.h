@@ -383,7 +383,7 @@ int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
     return ret;
 
   bufferlist::iterator iter2 = bl.begin();
-  ::decode(magic, iter);
+  ::decode(magic, iter2);
   if (magic != AUTH_ENC_MAGIC)
     return -EPERM;
 
