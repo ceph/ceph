@@ -2430,6 +2430,8 @@ void Server::handle_client_setattr(MDRequest *mdr)
 
   pi = cur->project_inode();
 
+  utime_t now = g_clock.real_now();
+
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   if (mask & CEPH_SETATTR_UID)
@@ -2454,6 +2456,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
       pi->size = req->head.args.setattr.size;
     }
     pi->rstat.rbytes = pi->size;
+    pi->mtime = now;
 
     // adjust client's max_size?
     map<client_t,byte_range_t> new_ranges;
@@ -2466,7 +2469,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   }
 
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
+  pi->ctime = now;
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid());
