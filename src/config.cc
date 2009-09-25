@@ -574,10 +574,11 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long 
     *(long long *)field = intval;
     break;
   case OPT_STR:
-    if (val)
+    if (val) {
       *(char **)field = strdup(val);
-    else
+    } else {
       *(char **)field = NULL;
+    }
     break;
   case OPT_FLOAT:
     *(float *)field = doubleval;
@@ -591,6 +592,35 @@ bool conf_set_conf_val(void *field, opt_type_t type, const char *val, long long 
   
   return true;
 }
+
+static bool conf_reset_val(void *field, opt_type_t type)
+{
+  switch (type) {
+  case OPT_BOOL:
+    *(bool *)field = 0;
+    break;
+  case OPT_INT:
+    *(int *)field = 0;
+    break;
+  case OPT_LONGLONG:
+    *(long long *)field = 0;
+    break;
+  case OPT_STR:
+      *(char **)field = NULL;
+    break;
+  case OPT_FLOAT:
+    *(float *)field = 0;
+    break;
+  case OPT_DOUBLE:
+    *(double *)field = 0;
+    break;
+  default:
+    return false;
+  }
+
+  return true;
+}
+
 
 static void set_conf_name(config_option *opt)
 {
@@ -636,7 +666,7 @@ static bool init_g_conf()
   for (i = 0; i<len; i++) {
     opt = &config_optionsp[i];
     if (opt->val_ptr) {
-      *(char **)opt->val_ptr = NULL;
+      conf_reset_val(opt->val_ptr, opt->type);
     }
     if (!conf_set_conf_val(opt->val_ptr,
 			   opt->type,
