@@ -32,20 +32,61 @@
 #define PRINCIPAL_CLIENT_SECRET "123456789ABCDEF0"
 #define PRINCIPAL_OSD_SECRET "3456789ABCDEF012"
 
-static inline void hexdump(string msg, const char *s, int len)
-{
-  int buf_len = len*4;
-  char buf[buf_len];
-  int pos = 0;
-  for (int i=0; i<len && pos<buf_len - 8; i++) {
-    if (i && !(i%8))
-      pos += snprintf(&buf[pos], buf_len-pos, " ");
-    if (i && !(i%16))
-      pos += snprintf(&buf[pos], buf_len-pos, "\n");
-    pos += snprintf(&buf[pos], buf_len-pos, "%.2x ", (int)(unsigned char)s[i]);
+
+class CephAuthServer {
+  /* FIXME: this is all temporary */
+  AuthTicket ticket;
+  CryptoKey client_secret;
+  CryptoKey auth_session_key;
+  CryptoKey service_secret;
+  
+public:
+  CephAuthServer() {
+    bufferptr ptr1(SERVICE_SECRET, sizeof(SERVICE_SECRET) - 1);
+    service_secret.set_secret(CEPH_SECRET_AES, ptr1);
+
+    bufferptr ptr2(PRINCIPAL_CLIENT_SECRET, sizeof(PRINCIPAL_CLIENT_SECRET) - 1);
+    client_secret.set_secret(CEPH_SECRET_AES, ptr2);
+
+    bufferptr ptr4(AUTH_SESSION_KEY, sizeof(AUTH_SESSION_KEY) - 1);
+    auth_session_key.set_secret(CEPH_SECRET_AES, ptr4);
+   }
+
+/* FIXME: temporary stabs */
+  int lookup_entity(const EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps) {
+     secret = client_secret;
+     return 0;
   }
-  dout(0) << msg << ":\n" << buf << dendl;
-}
+
+  int get_service_secret(CryptoKey& secret, uint32_t service_id) {
+    char buf[16];
+    memcpy(buf, SERVICE_SECRET, 16);
+    buf[0] = service_id & 0xFF;
+    bufferptr ptr(buf, 16);
+    secret.set_secret(CEPH_SECRET_AES, ptr);
+
+    return 0;
+  }
+
+  int get_service_session_key(CryptoKey& secret, uint32_t service_id) {
+    char buf[16];
+    memcpy(buf, SERVICE_SECRET, 16);
+    buf[0] = service_id & 0xFF;
+    bufferptr ptr(buf, 16);
+    secret.set_secret(CEPH_SECRET_AES, ptr);
+
+    return 0;
+  }
+
+  int create_session_key(CryptoKey& key) {
+    return key.create(CEPH_SECRET_AES);
+  }
+
+};
+
+static CephAuthServer auth_server;
+
+
 
 /*
    the first X request is empty, we then send a response and get another request which
