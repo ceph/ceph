@@ -119,7 +119,7 @@ AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
 
 # newsyn?  requires mpi.
 #AC_ARG_WITH([newsyn],
-#            [AS_HELP_STRING([--with-newsyn], [build newsyn target, requires mpi])],
+#            [AS_HELP_STRING([--with-newsyn], [build newsyn target requires mpi])],
 #            [],
 #            [with_newsyn=no])
 
@@ -133,17 +133,17 @@ AC_LANG([C++])
 AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP], [], [Description])
 AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP])],
-                [AC_MSG_ERROR([Sorry, you need to install the Boost spirit parser library (libboost-dev on debian)])])
+                [AC_MSG_ERROR([Sorry you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
 AC_LANG([C])
 
 AC_CHECK_HEADER([histedit.h],
 	[],
-	[AC_MSG_ERROR([Sorry, you need histedit.h (libedit-dev on debian)])])
+	[AC_MSG_ERROR([Sorry you need histedit.h (libedit-dev on debian)])])
 
 AC_CHECK_HEADER([openssl/md5.h],
 	[],
-	[AC_MSG_ERROR([Sorry, you need openssl dev files (libssl-dev on debian)])])
+	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
 
 AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 
