@@ -17,9 +17,11 @@
 
 #include "AuthProtocol.h"
 #include "AuthClientHandler.h"
+#include "KeyRing.h"
 
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
+
 
 AuthClientProtocolHandler::AuthClientProtocolHandler(AuthClientHandler *client) : 
                         msg(NULL), got_response(false), got_timeout(false),
@@ -223,15 +225,11 @@ int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlis
   header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
 
   ::encode(header, bl);
-#if 0
-  build_service_ticket_request(client->name, client->addr, want,
-			       ticket_handler.session_key, ticket_handler.ticket, bl);
-#endif
+
   if (!ticket_handler.build_authorizer(bl, ctx))
     return -EINVAL;
 
   build_service_ticket_request(want, bl);
-
   
   return 0;
 }
@@ -250,13 +248,11 @@ int AuthClientAuthenticateHandler::handle_cephx_response(bufferlist::iterator& i
     cephx_response_state = 1;
     dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
 
-#define PRINCIPAL_SECRET "123456789ABCDEF0"
     {
-      bufferptr p(PRINCIPAL_SECRET, sizeof(PRINCIPAL_SECRET) - 1);
-      client->secret.set_secret(CEPH_SECRET_AES, p);
-      // AuthTicketHandler& ticket_handler = tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
-  
-      if (!client->tickets.verify_service_ticket_reply(client->secret, indata)) {
+      CryptoKey secret;
+      g_keyring.get_master(secret);
+
+      if (!client->tickets.verify_service_ticket_reply(secret, indata)) {
         dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }

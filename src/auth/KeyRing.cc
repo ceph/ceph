@@ -25,23 +25,6 @@ using namespace std;
 
 KeyRing g_keyring;
 
-static void hexdump(string msg, const char *s, int len)
-{
-  int buf_len = len*4;
-  char buf[buf_len];
-  int pos = 0;
-  for (int i=0; i<len && pos<buf_len - 8; i++) {
-    if (i && !(i%8))
-      pos += snprintf(&buf[pos], buf_len-pos, " ");
-    if (i && !(i%16))
-      pos += snprintf(&buf[pos], buf_len-pos, "\n");
-    pos += snprintf(&buf[pos], buf_len-pos, "%.2x ", (int)(unsigned char)s[i]);
-  }
-  dout(0) << msg << ":\n" << buf << dendl;
-}
-
-
-
 bool KeyRing::load_master(const char *filename)
 {
   int fd = open(filename, O_RDONLY);
@@ -103,7 +86,6 @@ void KeyRing::set_rotating(RotatingSecrets& secrets)
   dout(0) << "KeyRing::set_rotating max_ver=" << secrets.max_ver << dendl;
 
   map<uint64_t, ExpiringCryptoKey>::iterator iter = secrets.secrets.begin();
-  version_t max_ver;
 
   for (; iter != secrets.secrets.end(); ++iter) {
     ExpiringCryptoKey& key = iter->second;

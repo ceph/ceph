@@ -32,6 +32,7 @@ void build_service_ticket_request(uint32_t keys,
   ::encode(ticket_req, request);
 }
 
+
 /*
  * AUTH SERVER: authenticate
  *
@@ -56,6 +57,11 @@ bool build_service_ticket_reply(
     ::encode(info.service_id, reply);
 
     AuthServiceTicket msg_a;
+
+    bufferptr& s1 = principal_secret.get_secret();
+    if (s1.length()) {
+      hexdump("encoding, using key", s1.c_str(), s1.length());
+    }
 
     msg_a.session_key = info.session_key;
     if (encode_encrypt(msg_a, principal_secret, reply) < 0)
@@ -90,7 +96,7 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   AuthServiceTicket msg_a;
 
   bufferptr& s1 = secret.get_secret();
-  hexdump("decoding, session key", s1.c_str(), s1.length());
+  hexdump("decoding, using key", s1.c_str(), s1.length());
   if (decode_decrypt(msg_a, secret, indata) < 0)
     return false;
   /* FIXME: decode into relevant ticket */
