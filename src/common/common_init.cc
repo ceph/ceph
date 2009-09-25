@@ -6,7 +6,7 @@
 
 #include "auth/KeyRing.h"
 
-void common_init(std::vector<const char*>& args, const char *module_type, bool daemon)
+void common_init(std::vector<const char*>& args, const char *module_type, bool daemon, bool init_keys)
 {
   tls_init();
   tls_get_val()->disable_assert = 0;
@@ -31,10 +31,12 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
   if (!g_conf.log_to_stdout)
     _dout_open_log();
 
-  if (g_keyring.load_master(g_conf.keys_file)) {
-    dout(0) << "successfuly loaded secret key from " << g_conf.keys_file << dendl;
-  } else {
-    dout(0) << "failed to load secret key from " << g_conf.keys_file << dendl;
+  if (init_keys) {
+    if (g_keyring.load_master(g_conf.keys_file)) {
+      dout(0) << "successfuly loaded secret key from " << g_conf.keys_file << dendl;
+    } else {
+      dout(0) << "failed to load secret key from " << g_conf.keys_file << dendl;
+    }
   }
 }
 

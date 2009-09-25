@@ -42,7 +42,7 @@ int main(int argc, const char **argv, char *envp[])
   //cerr << "csyn starting" << std::endl;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  common_init(args, "csyn", false);
+  common_init(args, "csyn", false, true);
   parse_syn_options(args);   // for SyntheticClient
 
   vec_to_argv(args, argc, argv);

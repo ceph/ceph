@@ -45,7 +45,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   DEFINE_CONF_VARS(usage);
-  common_init(args, "osdmaptool", false);
+  common_init(args, "osdmaptool", false, false);
 
   const char *me = argv[0];
 

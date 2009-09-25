@@ -5,6 +5,7 @@
 
 void common_init(std::vector<const char*>& args,
 		 const char *module_type,
-		 bool daemon);
+		 bool daemon,
+                 bool init_keys);
 
 #endif

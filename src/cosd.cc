@@ -49,7 +49,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "osd", true);
+  common_init(args, "osd", true, true);
 
   if (g_conf.clock_tare) g_clock.tare();
 

@@ -96,7 +96,9 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   AuthServiceTicket msg_a;
 
   bufferptr& s1 = secret.get_secret();
-  hexdump("decoding, using key", s1.c_str(), s1.length());
+  if (s1.length()) {
+    hexdump("decoding, using key", s1.c_str(), s1.length());
+  }
   if (decode_decrypt(msg_a, secret, indata) < 0)
     return false;
   /* FIXME: decode into relevant ticket */

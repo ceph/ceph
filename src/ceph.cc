@@ -577,7 +577,7 @@ int main(int argc, const char **argv, const char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "ceph", false);
+  common_init(args, "ceph", false, true);
   char *fname;
 
   vec_to_argv(args, argc, argv);

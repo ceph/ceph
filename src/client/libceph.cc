@@ -39,7 +39,7 @@ extern "C" int ceph_initialize(int argc, const char **argv)
     //create everything to start a client
     vector<const char*> args;
     argv_to_vec(argc, argv, args);
-    common_init(args, "libceph", false);
+    common_init(args, "libceph", false, true);
     if (g_conf.clock_tare) g_clock.tare();
     //monmap
     monclient = new MonClient();

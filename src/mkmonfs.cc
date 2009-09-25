@@ -34,7 +34,7 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   DEFINE_CONF_VARS(usage);
-  common_init(args, "mon", false);
+  common_init(args, "mon", false, false);
 
   bool clobber = false;
   const char *fsdir = g_conf.mon_data;
