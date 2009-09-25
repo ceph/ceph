@@ -211,15 +211,13 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
         ret = -EPERM;
       }
 
-      AuthServiceTicketRequest ticket_req;
-      AuthServiceTicketInfo ticket_info;
-      EntityName name;
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
       if (!verify_authorizer(auth_secret, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
 
+      AuthServiceTicketRequest ticket_req;
       if (!verify_service_ticket_request(ticket_req, indata)) {
         ret = -EPERM;
         break;
