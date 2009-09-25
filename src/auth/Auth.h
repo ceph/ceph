@@ -19,7 +19,11 @@
 #include "AuthProtocol.h"
 #include "msg/msg_types.h"
 
+#include <errno.h>
+
 class Cond;
+
+#define AUTH_ENC_MAGIC 0xff009cad8826aa55
 
 struct AuthContext {
   int status;
@@ -362,21 +366,29 @@ WRITE_CLASS_ENCODER(RotatingSecrets);
 
 template <class T>
 int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
-   bufferlist bl_enc, bl;
-   ::decode(bl_enc, iter);
+  uint64_t magic;
+  bufferlist bl_enc, bl;
+  ::decode(bl_enc, iter);
 
-   int ret = key.decrypt(bl_enc, bl);
-   if (ret < 0)
-     return ret;
+  int ret = key.decrypt(bl_enc, bl);
+  if (ret < 0)
+    return ret;
 
-   bufferlist::iterator iter2 = bl.begin();
-   ::decode(t, iter2); 
-   return 0;
+  bufferlist::iterator iter2 = bl.begin();
+  ::decode(magic, iter);
+  if (magic != AUTH_ENC_MAGIC)
+    return -EPERM;
+
+  ::decode(t, iter2);
+
+  return 0;
 }
 
 template <class T>
 int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
+  uint64_t magic = AUTH_ENC_MAGIC;
   bufferlist bl;
+  ::encode(magic, bl);
   ::encode(t, bl);
 
   bufferlist bl_enc;

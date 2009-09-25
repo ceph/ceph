@@ -197,11 +197,13 @@ bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
                        CryptoKey& session_key, bufferlist& reply_bl)
 {
   AuthServiceTicketInfo ticket_info;
-  decode_decrypt(ticket_info, service_secret, indata);
+  if (decode_decrypt(ticket_info, service_secret, indata) < 0)
+    return false;
   session_key = ticket_info.session_key;
 
   AuthAuthorize auth_msg;
-  decode_decrypt(auth_msg, ticket_info.session_key, indata);
+  if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0)
+    return false;
 
   // it's authentic if the nonces match
   if (auth_msg.nonce != ticket_info.ticket.nonce)
