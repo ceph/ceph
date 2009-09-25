@@ -51,13 +51,13 @@ AS_IF([test "x$with_radosgw" != xno],
              [true],
 	     [RADOSGW=0
 	     if test "x$with_radosgw" != "xcheck"; then
-		AC_MSG_FAILURE([--with-radosgw was given, but libfcgi (libfcgi-dev on debian) not found])
+		AC_MSG_FAILURE([--with-radosgw was given but libfcgi (libfcgi-dev on debian) not found])
 	     fi])
 	     AC_CHECK_LIB([expat], [XML_Parse],
              [true],
 	     [RADOSGW=0
 	     if test "x$with_radosgw" != "xcheck"; then
-		AC_MSG_FAILURE([--with-radosgw was given, but libexpat (libexpat1-dev on debian) not found])
+		AC_MSG_FAILURE([--with-radosgw was given but libexpat (libexpat1-dev on debian) not found])
 	     fi])])
 AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
@@ -76,7 +76,7 @@ AS_IF([test "x$with_fuse" != xno],
               ],
              [if test "x$with_fuse" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-fuse was given, but test failed])
+                   [--with-fuse was given but test failed])
                fi
              ])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
@@ -91,7 +91,7 @@ AS_IF([test "x$with_hadoop" != xno],
              [HAVE_JNI=1],
              [if test "x$with_hadoop" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-hadoop was given, but jni.h not found])
+                   [--with-hadoop was given but jni.h not found])
                fi
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
@@ -112,7 +112,7 @@ AS_IF([test "x$with_ccgnu" == xyes],
              ],
              [if test "x$with_ccgnu" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-ccgnu was given, but test failed])
+                   [--with-ccgnu was given but test failed])
                fi
              ], [-ldl -lpthread])])
 AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
