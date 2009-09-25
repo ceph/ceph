@@ -40,7 +40,7 @@ static ostream& _prefix(Monitor *mon, version_t v) {
   return *_dout << dbeginl
 		<< "mon" << mon->whoami
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".class v" << v << " ";
+		<< ".auth v" << v << " ";
 }
 
 ostream& operator<<(ostream& out, AuthMonitor& pm)
@@ -95,11 +95,7 @@ void AuthMonitor::on_active()
 void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(0) << "create_initial -- creating initial map" << dendl;
-  AuthLibEntry l;
   AuthLibIncremental inc;
-  ::encode(l, inc.info);
-  inc.op = AUTH_INC_NOP;
-  pending_auth.push_back(inc);
 
   if (g_conf.keys_file) {
     map<string, CryptoKey> keys_map;
@@ -136,6 +132,11 @@ void AuthMonitor::create_initial(bufferlist& bl)
 
     }
   }
+
+  AuthLibEntry l;
+  ::encode(l, inc.info);
+  inc.op = AUTH_INC_NOP;
+  pending_auth.push_back(inc);
 }
 
 bool AuthMonitor::store_entry(AuthLibEntry& entry)
@@ -180,32 +181,33 @@ bool AuthMonitor::update_from_paxos()
 
     bufferlist::iterator p = bl.begin();
     AuthLibIncremental inc;
-    ::decode(inc, p);
-    AuthLibEntry entry;
-    inc.decode_entry(entry);
-    switch (inc.op) {
-    case AUTH_INC_ADD:
-      if (!entry.rotating) {
-        mon->keys_server.add_secret(entry.name, entry.secret);
-      } else {
-        derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
+    while (!p.end()) {
+      ::decode(inc, p);
+      AuthLibEntry entry;
+      inc.decode_entry(entry);
+      switch (inc.op) {
+      case AUTH_INC_ADD:
+        if (!entry.rotating) {
+          mon->keys_server.add_secret(entry.name, entry.secret);
+        } else {
+          derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
+        }
+        break;
+      case AUTH_INC_DEL:
+        mon->keys_server.remove_secret(entry.name);
+        break;
+      case AUTH_INC_SET_ROTATING:
+        {
+          dout(0) << "AuthMonitor::update_from_paxos: decode_rotating" << dendl;
+          mon->keys_server.decode_rotating(entry.rotating_bl);
+        }
+        break;
+      case AUTH_INC_NOP:
+        break;
+      default:
+        assert(0);
       }
-      break;
-    case AUTH_INC_DEL:
-      mon->keys_server.remove_secret(entry.name);
-      break;
-    case AUTH_INC_SET_ROTATING:
-      {
-        dout(0) << "AuthMonitor::update_from_paxos: decode_rotating" << dendl;
-        mon->keys_server.decode_rotating(entry.rotating_bl);
-      }
-      break;
-    case AUTH_INC_NOP:
-      break;
-    default:
-      assert(0);
     }
-
     keys_ver++;
     mon->keys_server.set_ver(keys_ver);
   }

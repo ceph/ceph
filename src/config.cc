@@ -966,8 +966,6 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
   assert(g_conf.entity_name);
 
   g_conf.entity_name->from_type_id(g_conf.type, g_conf.id);
-  dout(0) << "entity name: " << g_conf.entity_name->to_str() << dendl;
-
 
   if (cf)
 	delete cf;

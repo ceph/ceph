@@ -183,13 +183,9 @@ bool MonClient::ms_dispatch(Message *m)
   if (my_addr == entity_addr_t())
     my_addr = messenger->get_myaddr();
 
-  dout(0) << "dispatch type=" << m->get_type() << dendl;
-
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
-    dout(0) << "CEPH_MSG_MON_MAP begin" << dendl;
     handle_monmap((MMonMap*)m);
-    dout(0) << "CEPH_MSG_MON_MAP end" << dendl;
     return true;
 
   case CEPH_MSG_CLIENT_MOUNT_ACK:

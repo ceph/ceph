@@ -239,8 +239,7 @@ EOF
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
 		    echo $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
-		    cp monkeys.bin dev/mon$f/
-		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
+		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=monkeys.bin
 		done
 	fi
 
