@@ -2131,17 +2131,13 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	     inode, cap, mds, seq, ceph_cap_string(newcaps));
 	dout(" size %llu max_size %llu, i_size %llu\n", size, max_size,
 		inode->i_size);
-start:
-
-	cap->gen = session->s_cap_gen;
-
-	__check_cap_issue(ci, cap, newcaps);
 
 	/*
 	 * If CACHE is being revoked, and we have no dirty buffers,
 	 * try to invalidate (once).  (If there are dirty buffers, we
 	 * will invalidate _after_ writeback.)
 	 */
+restart:
 	if (((cap->issued & ~newcaps) & CEPH_CAP_FILE_CACHE) &&
 	    !ci->i_wrbuffer_ref && !tried_invalidate) {
 		dout("CACHE invalidation\n");
@@ -2163,11 +2159,17 @@ start:
 			ci->i_rdcache_gen = 0;
 			ci->i_rdcache_revoking = 0;
 		}
-		goto start;
+		goto restart;
 	}
+
+	/* side effects now are allowed */
 
 	issued = __ceph_caps_issued(ci, &implemented);
 	issued |= implemented | __ceph_caps_dirty(ci);
+
+	cap->gen = session->s_cap_gen;
+
+	__check_cap_issue(ci, cap, newcaps);
 
 	if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
 		inode->i_mode = le32_to_cpu(grant->mode);
@@ -2255,9 +2257,9 @@ start:
 		dout("grant: %s -> %s\n", ceph_cap_string(cap->issued),
 		     ceph_cap_string(newcaps));
 		cap->issued = newcaps;
-		cap->implemented |= newcaps;    /* add bits only, to
-						 * avoid stepping on a
-						 * pending revocation */
+		cap->implemented |= newcaps; /* add bits only, to
+					      * avoid stepping on a
+					      * pending revocation */
 		wake = 1;
 	}
 
