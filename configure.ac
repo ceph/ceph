@@ -49,13 +49,16 @@ RADOSGW=1
 AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
              [true],
-	     [RADOSGW=0])
+	     [RADOSGW=0
+	     if test "x$with_radosgw" != "xcheck"; then
+	     	AC_MSG_FAILURE([--with-radosgw was given, but libfcgi (libfcgi-dev on debian) not found])
+	     fi])
 	     AC_CHECK_LIB([expat], [XML_Parse],
              [true],
-	     [RADOSGW=0])]
-	     if test "$RADOSGW" != "1" -a "x$with_radosgw" != "xcheck"; then
-	     	    AC_MSG_FAILURE([--with-radosgw was given, but libexpat (libexpat1-dev on debian) not found])
-	     fi)
+	     [RADOSGW=0
+	     if test "x$with_radosgw" != "xcheck"; then
+	     	AC_MSG_FAILURE([--with-radosgw was given, but libexpat (libexpat1-dev on debian) not found])
+	     fi])])
 AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 # fuse?
