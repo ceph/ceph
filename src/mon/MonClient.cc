@@ -33,6 +33,7 @@
 #include "auth/Auth.h"
 #include "auth/AuthProtocol.h"
 #include "auth/KeysServer.h"
+#include "auth/KeyRing.h"
 
 #include "config.h"
 
@@ -243,7 +244,9 @@ void MonClient::init()
   dout(10) << "init" << dendl;
   messenger->add_dispatcher_head(this);
 
-  auth.init(*g_conf.entity_name);
+  entity_name = *g_conf.entity_name;
+
+  auth.init(entity_name);
 
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
@@ -360,7 +363,7 @@ void MonClient::_reopen_session()
   if (state == MC_STATE_AUTHENTICATING)
     return;
 
-  if (keyring && keyring->need_rotating_secrets())
+  if (g_keyring.need_rotating_secrets())
     _start_auth_rotating(KEY_ROTATE_TIME);
   dout(0) << "_reopen_session 2" << dendl;
 
@@ -397,7 +400,7 @@ void MonClient::tick()
 {
   dout(10) << "tick" << dendl;
 
-  if (keyring && keyring->need_rotating_secrets()) {
+  if (g_keyring.need_rotating_secrets()) {
     dout(0) << "MonClient::tick: need rotating secret" << dendl;
     _start_auth_rotating(KEY_ROTATE_TIME);
   }
@@ -509,17 +512,15 @@ void MonClient::handle_auth_rotating_response(MAuthRotating *m)
 
   auth_cond.Signal();
 
-  assert(keyring);
-
   dout(0) << "MonClient::handle_auth_rotating_response got_response status=" << m->status << " length=" << m->response_bl.length() << dendl;
 
   if (!m->status) {
     RotatingSecrets secrets;
     CryptoKey secret_key;
-    keyring->get_master(secret_key);
+    g_keyring.get_master(secret_key);
     bufferlist::iterator iter = m->response_bl.begin();
     if (decode_decrypt(secrets, secret_key, iter) == 0) {
-      keyring->set_rotating(secrets);
+      g_keyring.set_rotating(secrets);
     } else {
       derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
     }

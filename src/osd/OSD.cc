@@ -426,20 +426,6 @@ int OSD::init()
   
   monc->init();
 
-  EntityName ename;
-  ename.entity_type = CEPHX_PRINCIPAL_OSD;
-  ename.name = g_conf.id;
-
-  monc->set_keyring(&keyring);
-
-  if (keyring.load_master(g_conf.keys_file)) {
-    dout(0) << "successfuly loaded secret key from " << g_conf.keys_file << dendl;
-  } else {
-    dout(0) << "failed to load secret key from" << g_conf.keys_file << dendl;
-  }
-
-  monc->set_entity_name(ename);
-
   monc->sub_want("monmap", 0);
   monc->renew_subs();  
 

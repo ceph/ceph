@@ -4,6 +4,8 @@
 
 #include "include/color.h"
 
+#include "auth/KeyRing.h"
+
 void common_init(std::vector<const char*>& args, const char *module_type, bool daemon)
 {
   tls_init();
@@ -28,5 +30,11 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
   // open log file?
   if (!g_conf.log_to_stdout)
     _dout_open_log();
+
+  if (g_keyring.load_master(g_conf.keys_file)) {
+    dout(0) << "successfuly loaded secret key from " << g_conf.keys_file << dendl;
+  } else {
+    dout(0) << "failed to load secret key from " << g_conf.keys_file << dendl;
+  }
 }
 

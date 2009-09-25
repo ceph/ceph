@@ -40,6 +40,8 @@ public:
   bool need_rotating_secrets();
 };
 
+extern KeyRing g_keyring;
+
 
 
 #endif

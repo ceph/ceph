@@ -279,6 +279,7 @@ public:
 
 bool RadosClient::init()
 {
+  dout(0) << "entity name=" << g_conf.entity_name->to_str() << dendl;
   // get monmap
   if (monclient.build_initial_monmap() < 0)
     return false;
