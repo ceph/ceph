@@ -257,10 +257,10 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       build_cephx_response_header(request_type, ret, result_bl);
       build_service_ticket_reply(auth_session_key, info_vec, result_bl);
-
       ret = 0;
     }
     break;
+
   case CEPHX_OPEN_SESSION:
     {
       CryptoKey service_secret;
@@ -278,10 +278,10 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       }
       build_cephx_response_header(request_type, ret, result_bl);
       result_bl.claim_append(tmp_bl);
-
       break;
     }
     break;
+
   default:
     ret = -EINVAL;
     build_cephx_response_header(request_type, -EINVAL, result_bl);

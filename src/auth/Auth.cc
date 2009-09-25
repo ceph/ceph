@@ -138,7 +138,7 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
 }
 
 /*
- * PRINCIPAL: build authenticator to access the service.
+ * PRINCIPAL: build authorizer to access the service.
  *
  * ticket, {timestamp, nonce}^session_key
  */
@@ -158,7 +158,7 @@ bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
 }
 
 /*
- * PRINCIPAL: build authenticator to access the service.
+ * PRINCIPAL: build authorizer to access the service.
  *
  * ticket, {timestamp, nonce}^session_key
  */
@@ -173,7 +173,7 @@ bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, A
 }
 
 /*
- * SERVICE: verify authenticator and generate reply authenticator
+ * SERVICE: verify authorizer and generate reply authorizer
  *
  * {timestamp + 1}^session_key
  */
@@ -192,10 +192,10 @@ bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
   // it's authentic if the nonces match
   if (auth_msg.nonce != ticket_info.ticket.nonce)
     return false;
-  dout(0) << "verify_authenticator: nonce ok" << dendl;
+  dout(0) << "verify_authorizer: nonce ok" << dendl;
   
   /*
-   * Reply authenticator:
+   * Reply authorizer:
    *  {timestamp + 1}^session_key
    */
   AuthAuthorizeReply reply;
@@ -204,7 +204,7 @@ bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
   reply.timestamp += 1;
   encode_encrypt(reply, ticket_info.session_key, reply_bl);
 
-  dout(0) << "verify_authenticator: ok" << dendl;
+  dout(0) << "verify_authorizer: ok" << dendl;
 
   return true;
 }
