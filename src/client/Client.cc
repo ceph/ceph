@@ -85,7 +85,8 @@ ostream& operator<<(ostream &out, Inode &in)
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " ref=" << in.ref
-      << " caps=" << ccap_string(in.caps_issued());
+      << " caps=" << ccap_string(in.caps_issued())
+      << " mtime=" << in.mtime;
   if (in.dirty_caps)
     out << " dirty_caps=" << ccap_string(in.dirty_caps);
   if (in.flushing_caps)
@@ -341,50 +342,66 @@ void Client::update_inode_file_bits(Inode *in,
 				    int issued)
 {
   bool warn = false;
-
+  dout(10) << "update_inode_file_bits " << *in << " " << ccap_string(issued)
+	   << " mtime " << mtime << dendl;
+  dout(25) << "truncate_seq: mds " << truncate_seq <<  " local "
+	   << in->truncate_seq << " time_warp_seq: mds " << time_warp_seq
+	   << " local " << in->time_warp_seq << dendl;
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
     dout(10) << "size " << in->size << " -> " << size << dendl;
     in->size = size;
     in->reported_size = size;
+    if (truncate_seq != in->truncate_seq) {
+      dout(10) << "truncate_seq " << in->truncate_seq << " -> "
+	       << truncate_seq << dendl;
+      in->truncate_seq = truncate_seq;
+    }
+  }
+  if (truncate_seq >= in->truncate_seq &&
+      in->truncate_size != truncate_size) {
+    dout(10) << "truncate_size " << in->truncate_size << " -> "
+	     << truncate_size << dendl;
     in->truncate_size = truncate_size;
   }
-
+  
   // be careful with size, mtime, atime
-  if (issued & CEPH_CAP_FILE_EXCL) {
+  if (issued & (CEPH_CAP_FILE_EXCL|
+		CEPH_CAP_FILE_WR|
+		CEPH_CAP_FILE_BUFFER)) {
+    dout(30) << "Yay have enough caps to look at our times" << dendl;
     if (ctime > in->ctime) 
       in->ctime = ctime;
-    if (time_warp_seq > in->time_warp_seq)
-      dout(0) << "WARNING: " << *in << " mds time_warp_seq "
-	      << time_warp_seq << " > " << in->time_warp_seq << dendl;
-  } else if (issued & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
     if (time_warp_seq > in->time_warp_seq) {
-      in->ctime = ctime;
+      dout(10) << "mds time_warp_seq " << time_warp_seq << " on inode " << *in
+	       << " is higher than local time_warp_seq "
+	       << in->time_warp_seq << dendl;
+      //the mds updated times, so take those!
       in->mtime = mtime;
       in->atime = atime;
       in->time_warp_seq = time_warp_seq;
     } else if (time_warp_seq == in->time_warp_seq) {
-      if (ctime > in->ctime) 
-	in->ctime = ctime;
-      if (mtime > in->mtime) 
+      //take max times
+      if (mtime > in->mtime)
 	in->mtime = mtime;
       if (atime > in->atime)
 	in->atime = atime;
-    } else
-      warn = true;
+    } else if (issued & CEPH_CAP_FILE_EXCL) {
+      //ignore mds values as we have a higher seq
+    } else warn = true;
   } else {
+    dout(30) << "Don't have enough caps, just taking mds' time values" << dendl;
     if (time_warp_seq >= in->time_warp_seq) {
       in->ctime = ctime;
       in->mtime = mtime;
       in->atime = atime;
       in->time_warp_seq = time_warp_seq;
-    } else
-      warn = true;
+    } else warn = true;
   }
   if (warn) {
-    dout(0) << *in << " mds time_warp_seq "
-	    << in->time_warp_seq << " -> "
-	    << time_warp_seq
+    dout(0) << "WARNING: " << *in << " mds time_warp_seq "
+	    << time_warp_seq << " is lower than local time_warp_seq "
+	    << in->time_warp_seq
 	    << dendl;
   }
 }
