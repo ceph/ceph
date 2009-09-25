@@ -435,38 +435,47 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
   // nothing here yet
   if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "add" && m->cmd.size() >= 3) {
-      string entity_name = m->cmd[2];
-
+    if (m->cmd[1] == "add" && m->cmd.size() >= 2) {
+      string entity_name;
       AuthLibEntry entry;
-      if (!entry.name.from_str(entity_name)) {
-        ss << "bad entity name";
-        rs = -EINVAL;
-        goto done;
+      if (m->cmd.size() >= 3) {
+        entity_name = m->cmd[2];
+        if (!entry.name.from_str(entity_name)) {
+          ss << "bad entity name";
+          rs = -EINVAL;
+          goto done;
+        }
       }
 
       bufferlist bl = m->get_data();
       dout(0) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
       bufferlist::iterator iter = bl.begin();
+      map<string, CryptoKey> crypto_map;
+      map<string, CryptoKey>::iterator miter;
       try {
-        ::decode(entry.secret, iter);
+        ::decode(crypto_map, iter);
       } catch (buffer::error *err) {
         ss << "error decoding key";
         rs = -EINVAL;
         goto done;
       }
 
-      if (entry.rotating) {
-        ss << "can't apply a rotating key";
-        rs = -EINVAL;
-        goto done;
+      for (miter = crypto_map.begin(); miter != crypto_map.end(); ++miter) {
+        AuthLibIncremental inc;
+        dout(0) << "storing auth for " << entity_name  << dendl;
+        if (miter->first.empty()) {
+          if (entity_name.empty())
+            continue;
+          entry.name.from_str(entity_name);
+        } else {
+          string s = miter->first;
+          entry.name.from_str(s);
+        }
+        entry.secret = miter->second;
+        ::encode(entry, inc.info);
+        inc.op = AUTH_INC_ADD;
+        pending_auth.push_back(inc);
       }
-
-      AuthLibIncremental inc;
-      dout(0) << "storing auth for " << entity_name  << dendl;
-      ::encode(entry, inc.info);
-      inc.op = AUTH_INC_ADD;
-      pending_auth.push_back(inc);
       ss << "updated";
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
