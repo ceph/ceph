@@ -424,8 +424,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
 
   //dout(12) << "update_inode mask " << lease->mask << " ttl " << ttl << dendl;
   dout(12) << "add_update_inode " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
-
-  int issued = in->caps_issued();
+  int implemented = 0;
+  int issued = in->caps_issued(&implemented) | in->caps_dirty();
+  issued |= implemented;
 
   if (st->cap.caps) {
     if (in->snapid == CEPH_NOSNAP)
@@ -468,7 +469,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
 			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
-			   in->caps_issued());
+			   issued);
 
     if (in->is_dir() &&
 	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
@@ -2604,7 +2605,10 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
   in->layout = m->get_layout();
   
   // update inode
-  int issued = in->caps_issued();
+  int implemented = 0;
+  int issued = in->caps_issued(&implemented) | in->caps_dirty();
+  issued |= implemented;
+
   if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
     in->mode = m->head.mode;
     in->uid = m->head.uid;
@@ -2621,7 +2625,7 @@ void Client::handle_cap_grant(Inode *in, int mds, InodeCap *cap, MClientCaps *m)
     in->xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
-			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), old_caps);
+			 m->get_time_warp_seq(), m->get_ctime(), m->get_mtime(), m->get_atime(), issued);
 
   // max_size
   bool kick_writers = false;
