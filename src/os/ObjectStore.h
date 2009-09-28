@@ -23,6 +23,8 @@
 
 #include "include/Distribution.h"
 
+#include "osd/osd_types.h"
+
 #include <sys/stat.h>
 
 #ifdef DARWIN

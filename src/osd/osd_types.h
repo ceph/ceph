@@ -130,22 +130,32 @@ struct pg_t {
   
   operator uint64_t() const { return u.pg64; }
 
-  coll_t to_coll() const {
+  /*coll_t to_coll() const {
     return coll_t(u.pg64, 0); 
   }
   coll_t to_snap_coll(snapid_t sn) const {
     return coll_t(u.pg64, sn);
-  }
+    }*/
 
+  int print(char *o) {
+    if (preferred() >= 0)
+      return sprintf(o, "%d.%xp%d", pool(), ps(), preferred());
+    else
+      return sprintf(o, "%d.%x", pool(), ps());
+  }
   bool parse(const char *s) {
     int pool;
     int ps;
-    int r = sscanf(s, "%d.%x", &pool, &ps);
+    int preferred;
+    int r = sscanf(s, "%d.%xp%x", &pool, &ps, &preferred);
     if (r < 2)
       return false;
     u.pg.pool = pool;
     u.pg.ps = ps;
-    u.pg.preferred = -1;
+    if (r == 3)
+      u.pg.preferred = preferred;
+    else
+      u.pg.preferred = -1;
     return true;
   }
 
@@ -182,6 +192,94 @@ namespace __gnu_cxx {
   };
 }
 
+
+// ----------------------
+
+struct coll_t {
+  pg_t pgid;
+  snapid_t snap;
+
+  coll_t(__u64 p=0, snapid_t s=0) : pgid(p), snap(s) {}
+  
+  static coll_t build_pg_coll(pg_t p) {
+    return coll_t(p, CEPH_NOSNAP);
+  }
+  static coll_t build_snap_pg_coll(pg_t p, snapid_t s) {
+    return coll_t(p, s);
+  }
+
+  int print(char *o) {
+    if (pgid == pg_t() && snap == 0)
+      return sprintf(o, "meta");
+    int len = pgid.print(o);
+    if (snap != CEPH_NOSNAP)
+      len += sprintf(o+len, "_%llx", (long long unsigned)snap);
+    else {
+      strcat(o+len, "_head");
+      len += 5;
+    }
+    return len;
+  }
+  bool parse(char *s) {
+    if (strncmp(s, "meta", 4) == 0) {
+      *this = coll_t();
+      return true;
+    }
+    if (!pgid.parse(s))
+      return false;
+    char *sn = strchr(s, '_');
+    if (!sn)
+      return false;
+    if (strncmp(sn, "_head", 5) == 0)
+      snap = CEPH_NOSNAP;
+    else
+      snap = strtoull(sn+1, 0, 16);
+    return true;
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(pgid, bl);
+    ::encode(snap, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(pgid, bl);
+    ::decode(snap, bl);
+  }
+};
+WRITE_CLASS_ENCODER(coll_t)
+
+inline ostream& operator<<(ostream& out, const coll_t& c) {
+  return out << hex << c.pgid << '_' << c.snap << dec;
+}
+
+inline bool operator<(const coll_t& l, const coll_t& r) {
+  return l.pgid < r.pgid || (l.pgid == r.pgid && l.snap < r.snap);
+}
+inline bool operator<=(const coll_t& l, const coll_t& r) {
+  return l.pgid < r.pgid || (l.pgid == r.pgid && l.snap <= r.snap);
+}
+inline bool operator==(const coll_t& l, const coll_t& r) {
+  return l.pgid == r.pgid && l.snap == r.snap;
+}
+inline bool operator!=(const coll_t& l, const coll_t& r) {
+  return l.pgid != r.pgid || l.snap != r.snap;
+}
+inline bool operator>(const coll_t& l, const coll_t& r) {
+  return l.pgid > r.pgid || (l.pgid == r.pgid && l.snap > r.snap);
+}
+inline bool operator>=(const coll_t& l, const coll_t& r) {
+  return l.pgid > r.pgid || (l.pgid == r.pgid && l.snap >= r.snap);
+}
+
+namespace __gnu_cxx {
+  template<> struct hash<coll_t> {
+    size_t operator()(const coll_t &c) const { 
+      static rjhash<uint32_t> H;
+      static rjhash<uint64_t> I;
+      return H(c.pgid) ^ I(c.snap);
+    }
+  };
+}
 
 
 

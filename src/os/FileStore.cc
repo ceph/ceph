@@ -19,6 +19,8 @@
 
 #include "FileJournal.h"
 
+#include "osd/osd_types.h"
+
 #include "common/Timer.h"
 
 #include <unistd.h>
@@ -39,6 +41,8 @@
 #include <sys/param.h>
 #include <sys/mount.h>
 #endif // DARWIN
+
+#include <sstream>
 
 
 #define ATTR_MAX 80
@@ -253,23 +257,15 @@ bool FileStore::parse_object(char *s, sobject_t& o)
 
 bool FileStore::parse_coll(char *s, coll_t& c)
 {
-  if (strlen(s) == 33 && s[16] == '.') {
-    s[16] = 0;
-    c.pgid = strtoull(s, 0, 16);
-    c.snap = strtoull(s+17, 0, 16);
-    return true;
-  } else 
-    return false;
+  bool r = c.parse(s);
+  dout(0) << "parse " << s << " -> " << c << " = " << r << dendl;
+  return r;
 }
 
 void FileStore::get_cdir(coll_t cid, char *s) 
 {
-  assert(sizeof(cid) == 16);
-#ifdef __LP64__
-  sprintf(s, "%s/%016lx.%016lx", basedir.c_str(), cid.pgid, (__u64)cid.snap);
-#else
-  sprintf(s, "%s/%016llx.%016llx", basedir.c_str(), cid.pgid, (__u64)cid.snap);
-#endif
+  s += sprintf(s, "%s/", basedir.c_str());
+  s += cid.print(s);
 }
 
 void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s) 
