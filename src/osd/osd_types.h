@@ -569,8 +569,8 @@ inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
   case CEPH_PG_TYPE_REP: out << "rep"; break;
   default: out << "type " << p.get_type();
   }
-  out << " size " << p.get_size()
-      << " ruleset " << p.get_crush_ruleset()
+  out << " pg_size " << p.get_size()
+      << " crush_ruleset " << p.get_crush_ruleset()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
       << " lpg_num " << p.get_lpg_num()
