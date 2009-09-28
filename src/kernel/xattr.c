@@ -2,6 +2,8 @@
 #include "super.h"
 #include "decode.h"
 
+#include <linux/xattr.h>
+
 static bool ceph_is_valid_xattr(const char *name)
 {
 	return !strncmp(name, XATTR_SECURITY_PREFIX,
@@ -492,7 +494,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	struct ceph_vxattr_cb *vxattr = NULL;
 
 	if (!strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
-		return generic_getxattr(dentry, name, buffer, size);
+		return generic_getxattr(dentry, name, value, size);
 	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
@@ -694,7 +696,7 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 		return -EROFS;
 
 	if (!strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
-		return generic_getxattr(dentry, name, buffer, size);
+		return generic_setxattr(dentry, name, value, size, flags);
 	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
@@ -803,7 +805,7 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 		return -EROFS;
 
 	if (!strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
-		return generic_getxattr(dentry, name, buffer, size);
+		return generic_removexattr(dentry, name);
 	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
