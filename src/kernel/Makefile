@@ -7,7 +7,7 @@ ifneq ($(KERNELRELEASE),)
 obj-$(CONFIG_CEPH_FS) += ceph.o
 
 ceph-objs := super.o inode.o dir.o file.o addr.o ioctl.o \
-	export.o caps.o snap.o \
+	export.o caps.o snap.o xattr.o \
 	messenger.o msgpool.o \
 	mds_client.o mdsmap.o \
 	mon_client.o \

@@ -473,8 +473,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_lpg_bits, 0, OPT_INT, 1),  // bits per osd
 	OPTION(osd_object_layout, 0, OPT_INT, CEPH_OBJECT_LAYOUT_HASHINO),
 	OPTION(osd_pg_layout, 0, OPT_INT, CEPH_PG_LAYOUT_CRUSH),
-	OPTION(osd_min_rep, 0, OPT_INT, 2),
-	OPTION(osd_max_rep, 0, OPT_INT, 3),
+	OPTION(osd_min_rep, 0, OPT_INT, 1),
+	OPTION(osd_max_rep, 0, OPT_INT, 10),
 	OPTION(osd_min_raid_width, 0, OPT_INT, 3),
 	OPTION(osd_max_raid_width, 0, OPT_INT, 2),
 	OPTION(osd_maxthreads, 0, OPT_INT, 2),    // 0 == no threading

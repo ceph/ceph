@@ -368,13 +368,20 @@ private:
   bool is_out(int osd) { return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT; }
   bool is_in(int osd) { return exists(osd) && !is_out(osd); }
   
+  int identify_osd(const entity_addr_t& addr) const {
+    for (unsigned i=0; i<osd_addr.size(); i++)
+      if (osd_addr[i] == addr)
+	return i;
+    return -1;
+  }
   bool have_addr(const entity_addr_t& addr) const {
-    for (vector<entity_addr_t>::const_iterator p = osd_addr.begin();
-	 p != osd_addr.end();
-	 p++)
-      if (*p == addr)
-	return true;
-    return false;
+    return identify_osd(addr) >= 0;
+  }
+  bool find_osd_on_ip(const entity_addr_t& ip) const {
+    for (unsigned i=0; i<osd_addr.size(); i++)
+      if (memcmp(&osd_addr[i].ipaddr.sin_addr, &ip.ipaddr.sin_addr, sizeof(ip.ipaddr.sin_addr)) == 0)
+	return i;
+    return -1;
   }
   bool have_inst(int osd) {
     return exists(osd) && is_up(osd); 

@@ -353,7 +353,7 @@ void SimpleMessenger::Endpoint::ready()
 
 int SimpleMessenger::Endpoint::shutdown()
 {
-  dout(10) << "shutdown " << get_myaddr() << dendl;
+  dout(0) << "shutdown " << get_myaddr() << dendl;
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
@@ -2268,14 +2268,14 @@ void SimpleMessenger::wait()
   lock.Unlock();
   
   // done!  clean up.
-  dout(20) << "wait: stopping accepter thread" << dendl;
+  dout(0) << "wait: stopping accepter thread" << dendl;
   accepter.stop();
   dout(20) << "wait: stopped accepter thread" << dendl;
 
   // close+reap all pipes
   lock.Lock();
   {
-    dout(10) << "wait: closing pipes" << dendl;
+    dout(0) << "wait: closing pipes" << dendl;
     list<Pipe*> toclose;
     for (hash_map<entity_addr_t,Pipe*>::iterator i = rank_pipe.begin();
          i != rank_pipe.end();
@@ -2291,8 +2291,8 @@ void SimpleMessenger::wait()
     }
 
     reaper();
-    dout(10) << "wait: waiting for pipes " << pipes << " to close" << dendl;
     while (!pipes.empty()) {
+      dout(0) << "wait: waiting for pipes " << pipes << " to close" << dendl;
       wait_cond.Wait(lock);
       reaper();
     }
@@ -2300,7 +2300,7 @@ void SimpleMessenger::wait()
   lock.Unlock();
 
   dout(10) << "wait: done." << dendl;
-  dout(1) << "shutdown complete." << dendl;
+  dout(0) << "shutdown complete." << dendl;
   remove_pid_file();
   started = false;
   my_type = -1;

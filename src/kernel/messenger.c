@@ -1653,6 +1653,7 @@ void ceph_con_send(struct ceph_connection *con, struct ceph_msg *msg)
 
 	/* queue */
 	mutex_lock(&con->out_mutex);
+	BUG_ON(!list_empty(&msg->list_head));
 	list_add_tail(&msg->list_head, &con->out_queue);
 	dout("----- %p to %s%lld %d=%s len %d+%d+%d -----\n", msg,
 	     ENTITY_NAME(con->peer_name), le16_to_cpu(msg->hdr.type),

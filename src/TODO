@@ -10,12 +10,14 @@ v0.15
 
 v0.16
 - kclient cleanup: uninline strings, use pr_fmt, prefix frag_ macros
-- 
+- kclient: xattr cleanups
 
+- libceph: identify self
+- hadoop: set primary replica on self
+- mds: put migration vectors in mdsmap
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
-- mds: put migration vectors in mdsmap
 
 bugs
 - mislinked directory?
@@ -72,6 +74,7 @@ kclient
 - make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
+  - init security xattrs
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - inotify for updates from other clients?

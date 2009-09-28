@@ -122,6 +122,9 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
   last_tid = 0;
   last_flush_seq = 0;
 
+  local_osd = -1;
+  local_osd_epoch = 0;
+
   unsafe_sync_write = 0;
 
   cwd = NULL;
@@ -5850,6 +5853,22 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   dout(3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;
 }
+
+
+/*
+ * find an osd with the same ip.  -1 if none.
+ */
+int Client::get_local_osd()
+{
+  Mutex::Locker lock(client_lock);
+
+  if (osdmap->get_epoch() != local_osd_epoch) {
+    local_osd = osdmap->find_osd_on_ip(messenger->get_myaddr());
+    local_osd_epoch = osdmap->get_epoch();
+  }
+  return local_osd;
+}
+
 
 
 

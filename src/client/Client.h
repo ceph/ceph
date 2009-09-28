@@ -851,7 +851,6 @@ public:
   void resend_unsafe_requests(int mds);
 
   // mds requests
-
   tid_t last_tid, last_flush_seq;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
@@ -875,7 +874,10 @@ public:
   bool   mounted;
   bool   unmounting;
 
-  int    unsafe_sync_write;
+  int local_osd;
+  epoch_t local_osd_epoch;
+
+  int unsafe_sync_write;
 
   int file_stripe_unit;
   int file_stripe_count;
@@ -1302,6 +1304,7 @@ public:
   int get_file_stripe_period(int fd);
   int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
+  int get_local_osd();
 
   void set_default_file_stripe_unit(int stripe_unit);
   void set_default_file_stripe_count(int count);

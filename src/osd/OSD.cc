@@ -1054,8 +1054,9 @@ void OSD::heartbeat()
 
   if (got_sigterm) {
     dout(0) << "got SIGTERM, shutting down" << dendl;
-    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
-			    messenger->get_myinst());
+    Message *m = new MGenericMessage(CEPH_MSG_SHUTDOWN);
+    m->set_priority(CEPH_MSG_PRIO_HIGHEST);
+    messenger->send_message(m, messenger->get_myinst());
     return;
   }
 
