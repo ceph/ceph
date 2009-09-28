@@ -698,8 +698,12 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
-	if (vxattrs && ceph_match_vxattr(vxattrs, name) != NULL)
-		return -EOPNOTSUPP;
+	if (vxattrs) {
+		struct ceph_vxattr_cb *vxattr =
+			ceph_match_vxattr(vxattrs, name);
+		if (vxattr && vxattr->readonly)
+			return -EOPNOTSUPP;
+	}
 
 	/* preallocate memory for xattr name, value, index node */
 	err = -ENOMEM;
@@ -803,8 +807,12 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
-	if (vxattrs && ceph_match_vxattr(vxattrs, name) != NULL)
-		return -EOPNOTSUPP;
+	if (vxattrs) {
+		struct ceph_vxattr_cb *vxattr =
+			ceph_match_vxattr(vxattrs, name);
+		if (vxattr && vxattr->readonly)
+			return -EOPNOTSUPP;
+	}
 
 	spin_lock(&inode->i_lock);
 	__build_xattrs(inode);
