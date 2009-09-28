@@ -98,7 +98,7 @@ static size_t ceph_vxattrcb_layout(struct ceph_inode_info *ci, char *val,
 }
 
 static struct ceph_vxattr_cb ceph_file_vxattrs[] = {
-	{ false, "user.ceph.layout", ceph_vxattrcb_layout},
+	{ true, "user.ceph.layout", ceph_vxattrcb_layout},
 	{ NULL, NULL }
 };
 

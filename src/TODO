@@ -72,6 +72,7 @@ kclient
 - make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
+  - init security xattrs
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - inotify for updates from other clients?
