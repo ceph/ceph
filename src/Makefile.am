@@ -505,6 +505,7 @@ noinst_HEADERS = \
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
+	kernel/xattr.c\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
