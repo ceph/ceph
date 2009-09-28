@@ -2,6 +2,15 @@
 #include "super.h"
 #include "decode.h"
 
+static bool ceph_is_valid_xattr(const char *name)
+{
+	return !strncmp(name, XATTR_SECURITY_PREFIX,
+			XATTR_SECURITY_PREFIX_LEN) ||
+	       !strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN) ||
+	       !strncmp(name, XATTR_TRUSTED_PREFIX, XATTR_TRUSTED_PREFIX_LEN) ||
+	       !strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN);
+}
+
 /*
  * These define virtual xattrs exposing the recursive directory
  * statistics and layout metadata.
@@ -482,6 +491,11 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	struct ceph_inode_xattr *xattr;
 	struct ceph_vxattr_cb *vxattr = NULL;
 
+	if (!strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
+		return generic_getxattr(dentry, name, buffer, size);
+	if (!ceph_is_valid_xattr(name))
+		return -EOPNOTSUPP;
+
 	/* let's see if a virtual xattr was requested */
 	if (vxattrs)
 		vxattr = ceph_match_vxattr(vxattrs, name);
@@ -679,8 +693,9 @@ int ceph_setxattr(struct dentry *dentry, const char *name,
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
-	/* only support user.* xattrs, for now */
-	if (strncmp(name, "user.", 5) != 0)
+	if (!strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
+		return generic_getxattr(dentry, name, buffer, size);
+	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
 	if (vxattrs && ceph_match_vxattr(vxattrs, name) != NULL)
@@ -783,8 +798,9 @@ int ceph_removexattr(struct dentry *dentry, const char *name)
 	if (ceph_snap(inode) != CEPH_NOSNAP)
 		return -EROFS;
 
-	/* only support user.* xattrs, for now */
-	if (strncmp(name, "user.", 5) != 0)
+	if (!strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
+		return generic_getxattr(dentry, name, buffer, size);
+	if (!ceph_is_valid_xattr(name))
 		return -EOPNOTSUPP;
 
 	if (vxattrs && ceph_match_vxattr(vxattrs, name) != NULL)
