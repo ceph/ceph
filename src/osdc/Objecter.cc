@@ -199,6 +199,7 @@ void Objecter::maybe_request_map()
 {
   dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
   monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+  monc->renew_subs();
 }
 
 
