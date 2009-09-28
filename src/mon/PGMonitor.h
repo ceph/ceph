@@ -75,6 +75,7 @@ private:
 
   map<int,utime_t> last_sent_pg_create;  // per osd throttle
 
+  void register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool);
   bool register_new_pgs();
   void send_pg_creates();
 

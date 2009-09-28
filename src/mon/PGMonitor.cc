@@ -461,6 +461,43 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   send_pg_creates();
 }
 
+void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool)
+{
+  pg_t parent;
+  int split_bits = 0;
+  if (!new_pool) {
+    parent = pgid;
+    while (1) {
+      // remove most significant bit
+      int msb = pool.calc_bits_of(parent.u.pg.ps);
+      if (!msb) break;
+      parent.u.pg.ps &= ~(1<<(msb-1));
+      split_bits++;
+      dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
+      //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
+      if (pg_map.pg_stat.count(parent) &&
+	  pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
+	dout(10) << "  parent is " << parent << dendl;
+	break;
+      }
+    }
+  }
+  
+  pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
+  pending_inc.pg_stat_updates[pgid].created = epoch;
+  pending_inc.pg_stat_updates[pgid].parent = parent;
+  pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
+  
+  if (split_bits == 0) {
+    dout(10) << "register_new_pgs  will create " << pgid << dendl;
+  } else {
+    dout(10) << "register_new_pgs  will create " << pgid
+	     << " parent " << parent
+	     << " by " << split_bits << " bits"
+	     << dendl;
+  }
+}
+
 bool PGMonitor::register_new_pgs()
 {
   // iterate over crush mapspace
@@ -468,14 +505,16 @@ bool PGMonitor::register_new_pgs()
   dout(10) << "register_new_pgs checking pg pools for osdmap epoch " << epoch
 	   << ", last_pg_scan " << pg_map.last_pg_scan << dendl;
 
+  OSDMap *osdmap = &mon->osdmon()->osdmap;
+
   int created = 0;
-  for (map<int,pg_pool_t>::iterator p = mon->osdmon()->osdmap.pools.begin();
-       p != mon->osdmon()->osdmap.pools.end();
+  for (map<int,pg_pool_t>::iterator p = osdmap->pools.begin();
+       p != osdmap->pools.end();
        p++) {
     int poolid = p->first;
     pg_pool_t &pool = p->second;
     int ruleno = pool.get_crush_ruleset();
-    if (!mon->osdmon()->osdmap.crush.rule_exists(ruleno)) 
+    if (!osdmap->crush.rule_exists(ruleno)) 
       continue;
 
     if (pool.get_last_change() <= pg_map.last_pg_scan ||
@@ -494,42 +533,20 @@ bool PGMonitor::register_new_pgs()
 	dout(20) << "register_new_pgs  have " << pgid << dendl;
 	continue;
       }
+      created++;
+      register_pg(pool, pgid, epoch, new_pool);
+    }
 
-      pg_t parent;
-      int split_bits = 0;
-      if (!new_pool) {
-	parent = pgid;
-	while (1) {
-	  // remove most significant bit
-	  int msb = pool.calc_bits_of(parent.u.pg.ps);
-	  if (!msb) break;
-	  parent.u.pg.ps &= ~(1<<(msb-1));
-	  split_bits++;
-	  dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
-	  //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {
-	  if (pg_map.pg_stat.count(parent) &&
-	      pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
-	    dout(10) << "  parent is " << parent << dendl;
-	    break;
-	  }
+    for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
+      for (int osd = 0; osd < osdmap->get_max_osd(); osd++) {
+	pg_t pgid(ps, poolid, osd);
+	if (pg_map.pg_stat.count(pgid)) {
+	  dout(20) << "register_new_pgs  have " << pgid << dendl;
+	  continue;
 	}
+	created++;
+	register_pg(pool, pgid, epoch, new_pool);
       }
-      
-      pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
-      pending_inc.pg_stat_updates[pgid].created = epoch;
-      pending_inc.pg_stat_updates[pgid].parent = parent;
-      pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
-      created++;	
-      
-      if (split_bits == 0) {
-	dout(10) << "register_new_pgs  will create " << pgid << dendl;
-      } else {
-	dout(10) << "register_new_pgs  will create " << pgid
-		 << " parent " << parent
-		 << " by " << split_bits << " bits"
-		 << dendl;
-      }
-      
     }
   } 
   dout(10) << "register_new_pgs registered " << created << " new pgs" << dendl;
