@@ -537,7 +537,7 @@ bool PGMonitor::register_new_pgs()
       register_pg(pool, pgid, epoch, new_pool);
     }
 
-    for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
+    for (ps_t ps = 0; ps < pool.get_lpg_num(); ps++) {
       for (int osd = 0; osd < osdmap->get_max_osd(); osd++) {
 	pg_t pgid(ps, poolid, osd);
 	if (pg_map.pg_stat.count(pgid)) {
