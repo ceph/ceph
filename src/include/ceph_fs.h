@@ -475,6 +475,7 @@ union ceph_mds_request_args {
 		__le32 stripe_count;
 		__le32 object_size;
 		__le32 file_replication;
+		__le32 preferred;
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;
