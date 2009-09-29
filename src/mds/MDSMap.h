@@ -84,7 +84,7 @@ public:
     version_t state_seq;
     entity_addr_t addr;
     utime_t laggy_since;
-    int standby_for_rank;
+    int32_t standby_for_rank;
     string standby_for_name;
     set<int32_t> export_targets;
 
