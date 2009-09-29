@@ -428,6 +428,8 @@ int OSD::init()
 
   monc->sub_want("monmap", 0);
   monc->renew_subs();  
+  monc->wait_authenticate(30.0);
+  monc->wait_auth_rotating(30.0);
 
   // announce to monitor i exist and have booted.
   do_mon_report();

@@ -80,22 +80,7 @@ private:
   };
   void tick();
 
-  Context *auth_timeout_event;
-  bool auth_got_timeout;
   Cond auth_cond;
-
-  class C_AuthRotatingTimeout : public Context {
-  protected:
-    MonClient *client;
-    double timeout;
-  public:
-    C_AuthRotatingTimeout(MonClient *c, double to) :
-                                        client(c), timeout(to) {
-    }
-    void finish(int r) {
-      if (r >= 0) client->_auth_rotating_timeout(timeout);
-    }
-  };
 
   void handle_auth_rotating_response(MAuthRotating *m);
   // monclient
@@ -107,9 +92,11 @@ private:
   int mounting;
   int mount_err;
   Cond mount_cond, map_cond;
+  Cond authenticate_cond;
   utime_t mount_started;
 
   void _finish_hunting();
+  void _open_session();
   void _reopen_session();
   void _pick_new_mon();
   void _send_mon_message(Message *m);
@@ -118,16 +105,16 @@ private:
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
-  void _auth_rotating_timeout(double timeout) {
-    auth_got_timeout = true;
-    auth_cond.Signal();
-  }
 
-  int _start_auth_rotating(double timeout);
+  int _start_auth_rotating();
+  int _wait_auth_rotating(double timeout);
+  int wait_auth_rotating(double timeout);
 
   int mount(double mount_timeout);
   int authenticate(double timeout);
   int authorize(double timeout);
+ 
+  int wait_authenticate(double timeout);
 
   // mon subscriptions
 private:
@@ -185,8 +172,6 @@ public:
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
-                auth_timeout_event(NULL),
-                auth_got_timeout(false),
 		mounting(0), mount_err(0),
                 auth_handler(&auth, 0, 0) { }
   ~MonClient() {

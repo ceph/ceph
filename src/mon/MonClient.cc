@@ -313,7 +313,8 @@ void MonClient::handle_auth(MAuthReply *m)
     auth.send_session_request(this, &auth_handler, 30.0);
   } else {
     state = MC_STATE_AUTHENTICATED;
-    _reopen_session();
+    authenticate_cond.SignalAll();
+    _open_session();
   }
 }
 
@@ -348,12 +349,12 @@ void MonClient::_pick_new_mon()
   dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
 
-void MonClient::_reopen_session()
+void MonClient::_open_session()
 {
-  dout(10) << "_reopen_session" << dendl;
+  dout(10) << "_open_session" << dendl;
   _pick_new_mon();
 
-  dout(0) << "_reopen_session 0" << dendl;
+  dout(0) << "_open_session 0" << dendl;
   if (state == MC_STATE_NONE) {
     state = MC_STATE_AUTHENTICATING;
     auth.send_session_request(this, &auth_handler, 30.0);
@@ -363,9 +364,11 @@ void MonClient::_reopen_session()
   if (state == MC_STATE_AUTHENTICATING)
     return;
 
-  if (g_keyring.need_rotating_secrets())
-    _start_auth_rotating(KEY_ROTATE_TIME);
-  dout(0) << "_reopen_session 2" << dendl;
+  if (g_keyring.need_rotating_secrets()) {
+    _start_auth_rotating();
+    //_wait_auth_rotating(KEY_ROTATE_TIME);
+  }
+  dout(0) << "_open_session 2" << dendl;
 
   if (mounting)
     _send_mount();
@@ -375,6 +378,14 @@ void MonClient::_reopen_session()
     _send_mon_message(new MMonGetMap);
   }
 }
+
+void MonClient::_reopen_session()
+{
+  dout(10) << "_reopen_session" << dendl;
+  _pick_new_mon();
+  _open_session();
+}
+
 
 bool MonClient::ms_handle_reset(Connection *con, const entity_addr_t& peer)
 {
@@ -402,7 +413,7 @@ void MonClient::tick()
 
   if (g_keyring.need_rotating_secrets()) {
     dout(0) << "MonClient::tick: need rotating secret" << dendl;
-    _start_auth_rotating(KEY_ROTATE_TIME);
+    _start_auth_rotating();
   }
 
   if (state == MC_STATE_NONE) {
@@ -470,12 +481,25 @@ void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
   delete m;
 }
 
+int MonClient::wait_authenticate(double timeout)
+{
+  Mutex::Locker l(monc_lock);
+  utime_t interval;
+  interval += timeout;
+
+  int ret = authenticate_cond.WaitInterval(monc_lock, interval);
+
+  dout(0) << "wait_authenticate ended, returned " << ret << dendl;
+
+  return ret;
+}
+
 int MonClient::authorize(double timeout)
 {
   return auth.authorize(CEPHX_PRINCIPAL_MON, timeout);
 }
 
-int MonClient::_start_auth_rotating(double timeout)
+int MonClient::_start_auth_rotating()
 {
   if (entity_name.entity_type != CEPHX_PRINCIPAL_OSD)
     return 0;
@@ -486,8 +510,9 @@ int MonClient::_start_auth_rotating(double timeout)
 
   m->entity_name = entity_name;
 
+  dout(0) << "MonClient::_start_auth_rotating sending message" << dendl;
   _send_mon_message(m);
-
+#if 0
   auth_timeout_event = new C_AuthRotatingTimeout(this, timeout);
   if (!auth_timeout_event)
     return -ENOMEM;
@@ -506,18 +531,39 @@ int MonClient::_start_auth_rotating(double timeout)
     timer.cancel_event(auth_timeout_event);
     auth_timeout_event = NULL;
   }
+#endif
 
   return 0;
+}
+
+int MonClient::_wait_auth_rotating(double timeout)
+{
+  utime_t interval;
+  interval += timeout;
+
+  int ret = auth_cond.WaitInterval(monc_lock, interval);
+
+  return ret;
+}
+
+int MonClient::wait_auth_rotating(double timeout)
+{
+  Mutex::Locker l(monc_lock);
+
+  if (entity_name.entity_type != CEPHX_PRINCIPAL_OSD)
+    return 0;
+
+  if (!g_keyring.need_rotating_secrets())
+    return 0;
+
+  return _wait_auth_rotating(timeout);
 }
 
 void MonClient::handle_auth_rotating_response(MAuthRotating *m)
 {
   Mutex::Locker l(monc_lock);
 
-  if (auth_got_timeout)
-    return;
-
-  auth_cond.Signal();
+  auth_cond.SignalAll();
 
   dout(0) << "MonClient::handle_auth_rotating_response got_response status=" << m->status << " length=" << m->response_bl.length() << dendl;
 
