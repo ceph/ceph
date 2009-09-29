@@ -13,8 +13,8 @@ v0.16
 - kclient: xattr cleanups
 - kclient: fix invalidate recursion bug
 
-- libceph: identify self
-- hadoop: set primary replica on self
+/- libceph: identify self
+/- hadoop: set primary replica on self
 - mds: put migration vectors in mdsmap
 
 - kclient: retry alloc on ENOMEM when reading from connection?

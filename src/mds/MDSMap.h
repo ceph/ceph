@@ -86,7 +86,7 @@ public:
     utime_t laggy_since;
     int standby_for_rank;
     string standby_for_name;
-    set<int> export_targets;
+    set<int32_t> export_targets;
 
     mds_info_t() : rank(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
 
