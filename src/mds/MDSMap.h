@@ -86,6 +86,7 @@ public:
     utime_t laggy_since;
     int standby_for_rank;
     string standby_for_name;
+    set<int> export_targets;
 
     mds_info_t() : rank(-1), inc(0), state(STATE_STANDBY), state_seq(0) { }
 
@@ -95,7 +96,7 @@ public:
     entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
 
     void encode(bufferlist& bl) const {
-      __u8 v = 1;
+      __u8 v = 2;
       ::encode(v, bl);
       ::encode(name, bl);
       ::encode(rank, bl);
@@ -106,6 +107,7 @@ public:
       ::encode(laggy_since, bl);
       ::encode(standby_for_rank, bl);
       ::encode(standby_for_name, bl);
+      ::encode(export_targets, bl);
     }
     void decode(bufferlist::iterator& bl) {
       __u8 v;
@@ -119,6 +121,8 @@ public:
       ::decode(laggy_since, bl);
       ::decode(standby_for_rank, bl);
       ::decode(standby_for_name, bl);
+      if (v >= 2)
+	::decode(export_targets, bl);
     }
   };
 
