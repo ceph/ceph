@@ -58,8 +58,9 @@ static int mdsmap_show(struct seq_file *s, void *p)
 	seq_printf(s, "session_autoclose %d\n",
 		       client->mdsc.mdsmap->m_session_autoclose);
 	for (i = 0; i < client->mdsc.mdsmap->m_max_mds; i++) {
-		struct ceph_entity_addr *addr = &client->mdsc.mdsmap->m_addr[i];
-		int state = client->mdsc.mdsmap->m_state[i];
+		struct ceph_entity_addr *addr =
+			&client->mdsc.mdsmap->m_info[i].addr;
+		int state = client->mdsc.mdsmap->m_info[i].state;
 
 		seq_printf(s, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
 			       i,
