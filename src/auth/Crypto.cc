@@ -30,11 +30,14 @@ int get_random_bytes(char *buf, int len)
     return -errno;
   while (l) {
     int r = ::read(fd, t, l);
-    if (r < 0)
+    if (r < 0) {
+      ::close(fd);
       return -errno;
+    }
     t += r;
     l -= r;
   }
+  ::close(fd);
   return 0;
 }
 
