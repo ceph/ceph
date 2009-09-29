@@ -603,6 +603,7 @@ noinst_HEADERS = \
         messages/MMDSBeacon.h\
         messages/MMDSBoot.h\
         messages/MMDSCacheRejoin.h\
+	messages/MMDSLoadTargets.h\
         messages/MMDSFragmentNotify.h\
         messages/MMDSGetMap.h\
         messages/MMDSMap.h\
