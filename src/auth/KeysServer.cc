@@ -70,6 +70,7 @@ bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret, map<string,
     return false;
 
   secret = iter->second;
+
   return true;
 }
 

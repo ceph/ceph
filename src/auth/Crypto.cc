@@ -21,7 +21,7 @@
 
 #include <errno.h>
 
-static int get_random_bytes(char *buf, int len)
+int get_random_bytes(char *buf, int len)
 {
   char *t = buf;
   int fd = ::open("/dev/urandom", O_RDONLY);

@@ -23,92 +23,6 @@ using namespace std;
 
 #include "config.h"
 
-class Monitor;
-
-struct CephXPremable {
-  uint32_t trans_id;
-
-  void encode(bufferlist& bl) const {
-    ::encode(trans_id, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    ::decode(trans_id, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CephXPremable)
-
-/* 
-  Ceph X-Envelope protocol
-*/
-struct CephXEnvRequest1 {
-  map<uint32_t, bool> auth_types;
-
-  void encode(bufferlist& bl) const {
-    uint32_t num_auth = auth_types.size();
-    ::encode(num_auth, bl);
-
-    map<uint32_t, bool>::const_iterator iter = auth_types.begin();
-
-    for (iter = auth_types.begin(); iter != auth_types.end(); ++iter) {
-       uint32_t auth_type = iter->first;
-       ::encode(auth_type, bl);
-    }
-  }
-  void decode(bufferlist::iterator& bl) {
-    uint32_t num_auth;
-    ::decode(num_auth, bl);
- 
-    auth_types.clear();
-
-    for (uint32_t i=0; i<num_auth; i++) {
-      uint32_t auth_type;
-      ::decode(auth_type, bl);
-      auth_types[auth_type] = true;
-    }
-  }
-
-  bool supports(uint32_t auth_type) {
-    return (auth_types.find(auth_type) != auth_types.end());
-  }
-
-  void init() {
-    auth_types.clear();
-    auth_types[CEPH_AUTH_CEPH] = true;
-  }
-};
-WRITE_CLASS_ENCODER(CephXEnvRequest1)
-
-struct CephXEnvResponse1 {
-  uint64_t server_challenge;
-
-  void encode(bufferlist& bl) const {
-    ::encode(server_challenge, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(server_challenge, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CephXEnvResponse1);
-
-struct CephXEnvRequest2 {
-  uint64_t client_challenge;
-  uint64_t key;
-  char piggyback; /* do we piggyback X protocol */
-
-  void encode(bufferlist& bl) const {
-    ::encode(client_challenge, bl);
-    ::encode(key, bl);
-    ::encode(piggyback, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(client_challenge, bl);
-    ::decode(key, bl);
-    ::decode(piggyback, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CephXEnvRequest2);
-
 /*
   Ceph X protocol
 
@@ -185,6 +99,151 @@ WRITE_CLASS_ENCODER(CephXEnvRequest2);
 #define CEPHX_OPEN_SESSION              0x0300
 
 #define CEPHX_REQUEST_TYPE_MASK         0x0F00
+
+class Monitor;
+
+struct EntityName {
+  uint32_t entity_type;
+  string name;
+
+  void encode(bufferlist& bl) const {
+    ::encode(entity_type, bl);
+    ::encode(name, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(entity_type, bl);
+    ::decode(name, bl);
+  }
+
+  void to_str(string& str) const {
+    switch (entity_type) {
+      case CEPHX_PRINCIPAL_AUTH:
+        str = "auth";
+        break;
+      case CEPHX_PRINCIPAL_MON:
+        str = "mon";
+        break;
+      case CEPHX_PRINCIPAL_OSD:
+        str = "osd";
+        break;
+      case CEPHX_PRINCIPAL_MDS:
+        str = "mds";
+        break;
+      case CEPHX_PRINCIPAL_CLIENT:
+        str = "client";
+        break;
+      default:
+        str = "???";
+        break;
+    }
+    str.append(".");
+    str.append(name);
+  }
+  string to_str() const {
+    string s;
+    to_str(s);
+    return s;
+  }
+
+  bool from_str(string& s) {
+    int pos = s.find('.');
+
+    if (pos < 0)
+      return false;
+    if (pos >= (int)s.size())
+      return false;
+   
+    string pre = s.substr(0, pos);
+    const char *pres = pre.c_str();
+
+    set_type(pres);
+
+    name = s.substr(pos + 1);
+
+    return true;
+  }
+
+  void set_type(const char *type) {
+    if (strcmp(type, "auth") == 0) {
+      entity_type = CEPHX_PRINCIPAL_AUTH;
+    } else if (strcmp(type, "mon") == 0) {
+      entity_type = CEPHX_PRINCIPAL_MON;
+    } else if (strcmp(type, "osd") == 0) {
+      entity_type = CEPHX_PRINCIPAL_OSD;
+    } else if (strcmp(type, "mds") == 0) {
+      entity_type = CEPHX_PRINCIPAL_MDS;
+    } else {
+      entity_type = CEPHX_PRINCIPAL_CLIENT;
+    }
+  }
+  void from_type_id(const char *type, const char *id) {
+    set_type(type);
+    name = id;
+  }
+};
+WRITE_CLASS_ENCODER(EntityName);
+
+inline bool operator<(const EntityName& a, const EntityName& b) {
+  return (a.entity_type < b.entity_type) || (a.entity_type == b.entity_type && a.name < b.name);
+}
+
+struct CephXPremable {
+  uint32_t trans_id;
+
+  void encode(bufferlist& bl) const {
+    ::encode(trans_id, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    ::decode(trans_id, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXPremable)
+
+/* 
+  Ceph X-Envelope protocol
+*/
+struct CephXEnvRequest1 {
+  EntityName name;
+
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXEnvRequest1)
+
+struct CephXEnvResponse1 {
+  uint64_t server_challenge;
+
+  void encode(bufferlist& bl) const {
+    ::encode(server_challenge, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(server_challenge, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXEnvResponse1);
+
+struct CephXEnvRequest2 {
+  uint64_t client_challenge;
+  uint64_t key;
+  char piggyback; /* do we piggyback X protocol */
+
+  void encode(bufferlist& bl) const {
+    ::encode(client_challenge, bl);
+    ::encode(key, bl);
+    ::encode(piggyback, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(client_challenge, bl);
+    ::decode(key, bl);
+    ::decode(piggyback, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXEnvRequest2);
 
 
 struct CephXRequestHeader {

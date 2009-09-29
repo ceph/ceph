@@ -95,6 +95,7 @@ static CephAuthServer auth_server;
 class CephAuthService_X  : public AuthServiceHandler {
   int state;
   uint64_t server_challenge;
+  EntityName entity_name;
 
 public:
   CephAuthService_X(Monitor *m) : AuthServiceHandler(m), state(0) {}
@@ -117,8 +118,11 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
   switch(state) {
   case 0:
     {
+      CephXEnvRequest1 req;
+      ::decode(req, indata);
+      entity_name = req.name;
       CephXEnvResponse1 response;
-      server_challenge = 0x1234ffff;
+      get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
       response.server_challenge = server_challenge;
       ::encode(response, result_bl);
       ret = -EAGAIN;
@@ -128,17 +132,36 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
     {
       CephXEnvRequest2 req;
       ::decode(req, indata);
-      uint64_t expected_key = (server_challenge ^ req.client_challenge); /* FIXME: obviously not */
+
+      CryptoKey secret;
+      map<string,bufferlist> caps;
+      dout(0) << "entity_name=" << entity_name.to_str() << dendl;
+      if (!mon->keys_server.get_secret(entity_name, secret, caps)) {
+	ret = -EPERM;
+	break;
+      }
+
+      bufferlist key, key_enc;
+      ::encode(server_challenge, key);
+      ::encode(req.client_challenge, key);
+      ret = encode_encrypt(key, secret, key_enc);
+      if (ret < 0)
+        break;
+      uint64_t expected_key = 0;
+      const uint64_t *p = (const uint64_t *)key_enc.c_str();
+      for (int pos = 0; pos + sizeof(req.key) <= key_enc.length(); pos+=sizeof(req.key), p++) {
+        expected_key ^= *p;
+      }
+      dout(0) << "checking key: req.key=" << hex << req.key << " expected_key=" << expected_key << dec << dendl;
       if (req.key != expected_key) {
         dout(0) << "unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
         ret = -EPERM;
       } else {
 	ret = 0;
+        piggyback = req.piggyback;
       }
-
-      piggyback = req.piggyback;
-      break;
     }
+    break;
 
   case 2:
     return handle_cephx_protocol(indata, result_bl);
