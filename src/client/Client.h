@@ -886,6 +886,7 @@ public:
   int file_stripe_count;
   int object_size;
   int file_replication;
+  int preferred_pg;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void sync_write_commit(Inode *in);
@@ -1308,11 +1309,13 @@ public:
   int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
   int get_local_osd();
+  int get_default_preferred_pg(int fd);
 
   void set_default_file_stripe_unit(int stripe_unit);
   void set_default_file_stripe_count(int count);
   void set_default_object_size(int size);
   void set_default_file_replication(int replication);
+  void set_default_preferred_pg(int pg);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

@@ -133,6 +133,7 @@ Client::Client(Messenger *m, MonClient *mc) : timer(client_lock), client_lock("C
   file_stripe_count = 0;
   object_size = 0;
   file_replication = 0;
+  preferred_pg = 0;
 
   // 
   root = 0;
@@ -5313,6 +5314,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   req->head.args.open.stripe_count = file_stripe_count;
   req->head.args.open.object_size = object_size;
   req->head.args.open.file_replication = file_replication;
+  req->head.args.open.preferred = preferred_pg;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
@@ -5790,6 +5792,11 @@ void Client::set_default_file_replication(int replication)
   file_replication = replication;
 }
 
+void Client::set_default_preferred_pg(int pg)
+{
+  preferred_pg = pg;
+}
+
 int Client::describe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
@@ -5836,6 +5843,13 @@ int Client::get_file_replication(int fd)
 
   pool = ceph_file_layout_pg_pool(in->layout);
   return osdmap->get_pg_pool(pool).get_size();
+}
+
+int Client::get_default_preferred_pg(int fd)
+{
+  ceph_file_layout layout;
+  describe_layout(fd, &layout);
+  return ceph_file_layout_pg_preferred(layout);
 }
 
 int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
