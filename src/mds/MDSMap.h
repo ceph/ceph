@@ -200,6 +200,14 @@ public:
   __u32 get_metadata_pg_pool() const { return metadata_pg_pool; }
 
   const map<entity_addr_t,mds_info_t>& get_mds_info() { return mds_info; }
+  const mds_info_t& get_mds_info(entity_addr_t a) {
+    assert(mds_info.count(a));
+    return mds_info[a];
+  }
+  const mds_info_t& get_mds_info(int m) {
+    assert(up.count(m) && mds_info.count(up[m]));
+    return mds_info[up[m]];
+  }
 
   // counts
   unsigned get_num_mds() {
@@ -354,6 +362,10 @@ public:
   const entity_inst_t get_inst(int m) {
     assert(up.count(m));
     return mds_info[up[m]].get_inst();
+  }
+  const entity_addr_t get_addr(int m) {
+    assert(up.count(m));
+    return mds_info[up[m]].addr;
   }
   bool get_inst(int m, entity_inst_t& inst) { 
     if (up.count(m)) {
