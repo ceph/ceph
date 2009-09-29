@@ -11,6 +11,7 @@ v0.15
 v0.16
 - kclient cleanup: uninline strings, use pr_fmt, prefix frag_ macros
 - kclient: xattr cleanups
+- kclient: fix invalidate recursion bug
 
 - libceph: identify self
 - hadoop: set primary replica on self
