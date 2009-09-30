@@ -86,6 +86,8 @@ private:
   // monclient
   bool want_monmap;
 
+  uint32_t want_keys;
+
   // mount
 private:
   client_t clientid;
@@ -224,6 +226,10 @@ public:
   void set_messenger(Messenger *m) { messenger = m; }
 
   void send_message(Message *m);
+
+  void set_want_keys(uint32_t want) {
+    auth_handler.set_want_keys(want);
+  }
 };
 
 #endif

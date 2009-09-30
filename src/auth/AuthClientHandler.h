@@ -116,6 +116,9 @@ protected:
 public:
   AuthClientAuthenticateHandler(AuthClientHandler *client, uint32_t _want, uint32_t _have) :
              AuthClientProtocolHandler(client), want(_want), have(_have) { reset(); }
+  void set_want_keys(__u32 keys) {
+    want = keys;
+  }
 };
 
 class AuthClientAuthorizeHandler : public AuthClientProtocolHandler {
