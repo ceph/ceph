@@ -324,6 +324,12 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
   return 0;
 }
 
+static inline bool auth_principal_needs_rotating_keys(EntityName& name)
+{
+  return ((name.entity_type == CEPHX_PRINCIPAL_OSD) ||
+          (name.entity_type == CEPHX_PRINCIPAL_MDS));
+}
+
 /*
  * Verify authorizer and generate reply authorizer
  */

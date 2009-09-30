@@ -383,6 +383,9 @@ int MDS::init()
 
   monc->get_monmap();
 
+  monc->wait_authenticate(30.0);
+  monc->wait_auth_rotating(30.0);
+
   mds_lock.Lock();
 
   // starting beacon.  this will induce an MDSMap from the monitor
@@ -395,8 +398,6 @@ int MDS::init()
 
   monc->sub_want("mdsmap", 0);
   monc->renew_subs();
-  monc->wait_authenticate(30.0);
-  monc->wait_auth_rotating(30.0);
 
   // schedule tick
   reset_tick();

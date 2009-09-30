@@ -501,7 +501,7 @@ int MonClient::authorize(double timeout)
 
 int MonClient::_start_auth_rotating()
 {
-  if (entity_name.entity_type != CEPHX_PRINCIPAL_OSD)
+  if (!auth_principal_needs_rotating_keys(entity_name))
     return 0;
 
   MAuthRotating *m = new MAuthRotating();
@@ -512,26 +512,6 @@ int MonClient::_start_auth_rotating()
 
   dout(0) << "MonClient::_start_auth_rotating sending message" << dendl;
   _send_mon_message(m);
-#if 0
-  auth_timeout_event = new C_AuthRotatingTimeout(this, timeout);
-  if (!auth_timeout_event)
-    return -ENOMEM;
-  timer.add_event_after(timeout, auth_timeout_event);
-
-  dout(0) << "MonClient::_start_auth_rotating waiting" << dendl;
-  auth_cond.Wait(monc_lock);
-  dout(0) << "MonClient::_start_auth_rotating wait ended" << dendl;
-
-  if (auth_got_timeout) {
-    dout(0) << "MonClient::_start_auth_rotating got timeout" << dendl;
-    return -ETIMEDOUT;
-  }
-
-  if (auth_timeout_event) {
-    timer.cancel_event(auth_timeout_event);
-    auth_timeout_event = NULL;
-  }
-#endif
 
   return 0;
 }
@@ -550,7 +530,7 @@ int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
 
-  if (entity_name.entity_type != CEPHX_PRINCIPAL_OSD)
+  if (!auth_principal_needs_rotating_keys(entity_name))
     return 0;
 
   if (!g_keyring.need_rotating_secrets())
