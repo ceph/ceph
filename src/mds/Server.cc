@@ -2142,7 +2142,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   /*if(req->head.args->open.file_replication)
     in->inode.layout.fl_pg_pool.set_size(req->head.args.open.file_replication);
   */
-  in->inode.layout.fl_object_size = req->head.args.open.preferred;
+  in->inode.layout.fl_pg_preferred = req->head.args.open.preferred;
 
   dn->first = in->first = follows+1;
   
