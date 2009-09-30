@@ -695,8 +695,6 @@ no_change:
 				     le32_to_cpu(info->cap.seq),
 				     le32_to_cpu(info->cap.mseq),
 				     le64_to_cpu(info->cap.realm),
-				     le32_to_cpu(info->cap.ttl_ms),
-				     ttl_from,
 				     info->cap.flags,
 				     caps_reservation);
 		} else {

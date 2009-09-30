@@ -4089,7 +4089,6 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
 					cap->pending(), cap->wanted(), 0,
 					cap->get_mseq());
     in->encode_cap_message(reap, cap);
-    reap->head.ttl_ms = g_conf.mds_rdcap_ttl_ms;
     realm->build_snap_trace(reap->snapbl);
     mds->send_message_client(reap, session->inst);
   } else {

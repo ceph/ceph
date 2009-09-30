@@ -29,6 +29,7 @@ v0.16
 - ceph_buffer and vmalloc?
 - ceph_i_test
 - bit ops in messenger
+- name args in ceph_osd_op union
 
 bugs
 - mislinked directory?

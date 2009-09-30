@@ -789,8 +789,7 @@ extern void ceph_handle_caps(struct ceph_mds_session *session,
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session, u64 cap_id,
 			int fmode, unsigned issued, unsigned wanted,
-			unsigned cap, unsigned seq, u64 realmino,
-			unsigned ttl_ms, unsigned long ttl_from, int flags,
+			unsigned cap, unsigned seq, u64 realmino, int flags,
 			struct ceph_cap_reservation *caps_reservation);
 extern void __ceph_remove_cap(struct ceph_cap *cap,
 			      struct ceph_cap_reservation *ctx);

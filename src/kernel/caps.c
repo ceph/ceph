@@ -501,8 +501,7 @@ static void __check_cap_issue(struct ceph_inode_info *ci, struct ceph_cap *cap,
 int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session, u64 cap_id,
 		 int fmode, unsigned issued, unsigned wanted,
-		 unsigned seq, unsigned mseq, u64 realmino,
-		 unsigned ttl_ms, unsigned long ttl_from, int flags,
+		 unsigned seq, unsigned mseq, u64 realmino, int flags,
 		 struct ceph_cap_reservation *caps_reservation)
 {
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -2548,8 +2547,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 			       false);
 	downgrade_write(&mdsc->snap_rwsem);
 	ceph_add_cap(inode, session, cap_id, -1,
-		     issued, wanted, seq, mseq, realmino,
-		     ttl_ms, jiffies - ttl_ms/2, CEPH_CAP_FLAG_AUTH,
+		     issued, wanted, seq, mseq, realmino, CEPH_CAP_FLAG_AUTH,
 		     NULL /* no caps context */);
 	try_flush_caps(inode, session, NULL);
 	up_read(&mdsc->snap_rwsem);

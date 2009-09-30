@@ -1702,14 +1702,12 @@ bool CInode::encode_inodestat(bufferlist& bl, Session *session,
       dout(10) << "encode_inodestat issueing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
       e.cap.mseq = cap->get_mseq();
       e.cap.realm = find_snaprealm()->inode->ino();
-      e.cap.ttl_ms = g_conf.mds_rdcap_ttl_ms;
     } else {
       e.cap.caps = 0;
       e.cap.seq = 0;
       e.cap.mseq = 0;
       e.cap.realm = 0;
       e.cap.wanted = 0;
-      e.cap.ttl_ms = 0;
     }
   }
   e.cap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH:0;
