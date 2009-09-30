@@ -23,7 +23,10 @@ v0.16
 
 /- uninline frags
 /- uninline string hash
-
+- document data structures
+- audit all inline in kclient
+- document on-wire protocol
+- ceph_buffer fixes
 
 bugs
 - mislinked directory?

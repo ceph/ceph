@@ -65,7 +65,7 @@ static unsigned long ceph_partial_name_hash(unsigned long c, unsigned long prevh
  */
 static unsigned long ceph_end_name_hash(unsigned long hash)
 {
-	return (unsigned int) hash;
+	return hash & 0xffffffff;
 }
 
 /* Compute the hash for a name string. */

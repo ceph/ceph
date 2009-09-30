@@ -53,7 +53,9 @@ struct ceph_osdmap {
 	struct crush_map *crush;
 };
 
-/* file layout helpers */
+/*
+ * file layout helpers
+ */
 #define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
 #define ceph_file_layout_stripe_count(l) \
 	((__s32)le32_to_cpu((l).fl_stripe_count))
@@ -66,12 +68,19 @@ struct ceph_osdmap {
 #define ceph_file_layout_pg_pool(l) \
 	((__s32)le32_to_cpu((l).fl_pg_pool))
 
-#define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
-					  le32_to_cpu((l).fl_stripe_count))
+static inline unsigned ceph_file_layout_stripe_width(struct ceph_file_layout *l)
+{
+	return le32_to_cpu(l->fl_stripe_unit) *
+		le32_to_cpu(l->fl_stripe_count);
+}
 
 /* "period" == bytes before i start on a new set of objects */
-#define ceph_file_layout_period(l) (le32_to_cpu((l).fl_object_size) *	\
-				    le32_to_cpu((l).fl_stripe_count))
+static inline unsigned ceph_file_layout_period(struct ceph_file_layout *l)
+{
+	return le32_to_cpu(l->fl_object_size) *
+		le32_to_cpu(l->fl_stripe_count);
+}
+
 
 static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
 {

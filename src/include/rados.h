@@ -2,8 +2,8 @@
 #define __RADOS_H
 
 /*
- * Data types for RADOS, the distributed object storage layer used by
- * the Ceph file system.
+ * Data types for the Ceph distributed object storage layer RADOS
+ * (Reliable Autonomic Distributed Object Store).
  */
 
 #include "msgr.h"
@@ -55,19 +55,14 @@ struct ceph_timespec {
  * placement group.
  * we encode this into one __le64.
  */
-#define CEPH_PG_TYPE_REP     1
-#define CEPH_PG_TYPE_RAID4   2
 union ceph_pg {
 	__u64 pg64;
 	struct {
 		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
 		__u32 pool;      /* implies crush ruleset */
-	} pg;
+	} __attribute__ ((packed)) pg;
 } __attribute__ ((packed));
-
-#define ceph_pg_is_rep(pg)   ((pg).pg.type == CEPH_PG_TYPE_REP)
-#define ceph_pg_is_raid4(pg) ((pg).pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
  * pg_pool is a set of pgs storing a pool of objects
@@ -86,6 +81,8 @@ union ceph_pg {
  *
  *  lpgp_num -- as above.
  */
+#define CEPH_PG_TYPE_REP     1
+#define CEPH_PG_TYPE_RAID4   2
 struct ceph_pg_pool {
 	__u8 type;
 	__u8 size;

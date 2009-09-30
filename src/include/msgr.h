@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v019"
+#define CEPH_BANNER "ceph v020"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -90,10 +90,10 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again
 					  with higher gseq */
 #define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
-#define CEPH_MSGR_TAG_MSG          10  /* message */
-#define CEPH_MSGR_TAG_ACK          11  /* message ack */
-#define CEPH_MSGR_TAG_KEEPALIVE    12  /* just a keepalive byte! */
-#define CEPH_MSGR_TAG_BADPROTOVER  13  /* bad protocol version */
+#define CEPH_MSGR_TAG_MSG           7  /* message */
+#define CEPH_MSGR_TAG_ACK           8  /* message ack */
+#define CEPH_MSGR_TAG_KEEPALIVE     9  /* just a keepalive byte! */
+#define CEPH_MSGR_TAG_BADPROTOVER  10  /* bad protocol version */
 
 
 /*
