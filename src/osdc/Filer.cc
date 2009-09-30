@@ -226,7 +226,7 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
   map< object_t, ObjectExtent > object_extents;
   
   __u32 object_size = layout->fl_object_size;
-  __u32 su = layout->fl_object_stripe_unit;
+  __u32 su = layout->fl_stripe_unit;
   __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
   __u64 stripes_per_object = object_size / su;

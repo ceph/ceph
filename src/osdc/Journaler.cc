@@ -315,7 +315,7 @@ __s64 Journaler::append_entry(bufferlist& bl)
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
-    int p = layout.fl_object_stripe_unit;
+    int p = layout.fl_stripe_unit;
     if (write_pos / p != (write_pos + (__s64)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
@@ -357,7 +357,7 @@ __s64 Journaler::append_entry(bufferlist& bl)
   write_pos += sizeof(s) + s;
 
   // flush previous object?
-  int su = layout.fl_object_stripe_unit;
+  int su = layout.fl_stripe_unit;
   int write_off = write_pos % su;
   int write_obj = write_pos / su;
   int flush_obj = flush_pos / su;

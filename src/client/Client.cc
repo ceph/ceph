@@ -3505,7 +3505,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_size = in->size;
     st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(in->layout.fl_object_stripe_unit, 4096);
+  st->st_blksize = MAX(in->layout.fl_stripe_unit, 4096);
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -3566,7 +3566,7 @@ int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *d
     st->st_size = in->size;
     st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(in->layout.fl_object_stripe_unit, 4096);
+  st->st_blksize = MAX(in->layout.fl_stripe_unit, 4096);
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -4348,7 +4348,7 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
       l -= (off+l) % p;
     else {
       // align readahead with stripe unit if we cross su boundary
-      int su = in->layout.fl_object_stripe_unit;
+      int su = in->layout.fl_stripe_unit;
       if ((off+l)/su != off/su) l -= (off+l) % su;
     }
     
@@ -5815,14 +5815,14 @@ int Client::get_file_stripe_unit(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
-  return layout.fl_object_stripe_unit;
+  return layout.fl_stripe_unit;
 }
 
 int Client::get_file_stripe_width(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
-  return layout.fl_object_stripe_unit * layout.fl_stripe_count;
+  return layout.fl_stripe_unit * layout.fl_stripe_count;
 }
 
 int Client::get_file_stripe_period(int fd)

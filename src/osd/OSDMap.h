@@ -632,7 +632,7 @@ private:
   ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) {
     return make_object_layout(oid, layout.fl_pg_pool,
 			      layout.fl_pg_preferred,
-			      layout.fl_object_stripe_unit);
+			      layout.fl_stripe_unit);
   }
 
   ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
