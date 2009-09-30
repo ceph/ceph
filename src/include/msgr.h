@@ -42,7 +42,7 @@ static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
  * network, e.g. 'mds0' or 'osd3'.
  */
 struct ceph_entity_name {
-	__u8 type;
+	__u8 type;      /* CEPH_ENTITY_TYPE_* */
 	__le64 num;
 } __attribute__ ((packed));
 
@@ -100,11 +100,11 @@ struct ceph_entity_inst {
  * connection negotiation
  */
 struct ceph_msg_connect {
-	__le32 host_type;  /* CEPH_ENTITY_TYPE_* */
-	__le32 global_seq;
-	__le32 connect_seq;
+	__le32 host_type;    /* CEPH_ENTITY_TYPE_* */
+	__le32 global_seq;   /* count connections initiated by this host */
+	__le32 connect_seq;  /* count connections initiated in this session */
 	__le32 protocol_version;
-	__u8  flags;
+	__u8  flags;         /* CEPH_MSG_CONNECT_* */
 } __attribute__ ((packed));
 
 struct ceph_msg_connect_reply {

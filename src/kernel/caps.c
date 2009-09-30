@@ -2525,7 +2525,6 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	unsigned seq = le32_to_cpu(im->seq);
 	unsigned mseq = le32_to_cpu(im->migrate_seq);
 	u64 realmino = le64_to_cpu(im->realm);
-	unsigned long ttl_ms = le32_to_cpu(im->ttl_ms);
 	u64 cap_id = le64_to_cpu(im->cap_id);
 
 	if (ci->i_cap_exporting_mds >= 0 &&
