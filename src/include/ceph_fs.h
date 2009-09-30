@@ -72,6 +72,8 @@ struct ceph_file_layout {
 	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
 } __attribute__ ((packed));
 
+#define CEPH_DEFAULT_OBJECT_SIZE 2<<22
+#define CEPH_DEFAULT_STRIPE_COUNT 1
 
 
 

@@ -5774,26 +5774,31 @@ int Client::ll_release(Fh *fh)
 // layout
 void Client::set_default_file_stripe_unit(int stripe_unit)
 {
-  file_stripe_unit = stripe_unit;
+  if (stripe_unit > 0)
+    file_stripe_unit = stripe_unit;
 }
 
 void Client::set_default_file_stripe_count(int count)
 {
-  file_stripe_count = count;
+  if (count > 0)
+    file_stripe_count = count;
 }
 
 void Client::set_default_object_size(int size)
 {
-  object_size = size;
+  if (size > 0)
+    object_size = size;
 }
 
 void Client::set_default_file_replication(int replication)
 {
-  file_replication = replication;
+  if (replication >= 0)
+    file_replication = replication;
 }
 
 void Client::set_default_preferred_pg(int pg)
 {
+  if (pg >= 0)
   preferred_pg = pg;
 }
 

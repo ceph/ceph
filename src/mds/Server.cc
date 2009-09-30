@@ -2557,9 +2557,15 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   // project update
   inode_t *pi = cur->project_inode();
   // FIXME: only set striping parameters, for now.
-  pi->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
-  pi->layout.fl_stripe_count = req->head.args.setlayout.layout.fl_stripe_count;
-  pi->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_object_size > 0)
+    pi->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  else pi->layout.fl_object_size = CEPH_DEFAULT_OBJECT_SIZE;
+  if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
+    pi->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+  else pi->layout.fl_stripe_unit = pi->layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_stripe_count > 0)
+    pi->layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+  else pi->layout.fl_stripe_count = CEPH_DEFAULT_STRIPE_COUNT;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   
