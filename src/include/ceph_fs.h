@@ -49,125 +49,7 @@
 #define CEPH_MAX_MON   31
 
 
-/*
- * "Frags" are a way to describe a subset of a 32-bit number space,
- * using a mask and a value to match against that mask.  Any given frag
- * (subset of the number space) can be partitioned into 2^n sub-frags.
- *
- * Frags are encoded into a 32-bit word:
- *   8 upper bits = "bits"
- *  24 lower bits = "value"
- * (We could go to 5+27 bits, but who cares.)
- *
- * We use the _most_ significant bits of the 24 bit value.  This makes
- * values logically sort.
- *
- * Unfortunately, because the "bits" field is still in the high bits, we
- * can't sort encoded frags numerically.  However, it does allow you
- * to feed encoded frags as values into frag_contains_value.
- */
-static inline __u32 ceph_frag_make(__u32 b, __u32 v)
-{
-	return (b << 24) |
-		(v & (0xffffffu << (24-b)) & 0xffffffu);
-}
-static inline __u32 ceph_frag_bits(__u32 f)
-{
-	return f >> 24;
-}
-static inline __u32 ceph_frag_value(__u32 f)
-{
-	return f & 0xffffffu;
-}
-static inline __u32 ceph_frag_mask(__u32 f)
-{
-	return (0xffffffu << (24-ceph_frag_bits(f))) & 0xffffffu;
-}
-static inline __u32 ceph_frag_mask_shift(__u32 f)
-{
-	return 24 - ceph_frag_bits(f);
-}
-
-static inline int ceph_frag_contains_value(__u32 f, __u32 v)
-{
-	return (v & ceph_frag_mask(f)) == ceph_frag_value(f);
-}
-static inline int ceph_frag_contains_frag(__u32 f, __u32 sub)
-{
-	/* is sub as specific as us, and contained by us? */
-	return ceph_frag_bits(sub) >= ceph_frag_bits(f) &&
-	       (ceph_frag_value(sub) & ceph_frag_mask(f)) == ceph_frag_value(f);
-}
-
-static inline __u32 ceph_frag_parent(__u32 f)
-{
-	return ceph_frag_make(ceph_frag_bits(f) - 1,
-			 ceph_frag_value(f) & (ceph_frag_mask(f) << 1));
-}
-static inline int ceph_frag_is_left_child(__u32 f)
-{
-	return ceph_frag_bits(f) > 0 &&
-		(ceph_frag_value(f) & (0x1000000 >> ceph_frag_bits(f))) == 0;
-}
-static inline int ceph_frag_is_right_child(__u32 f)
-{
-	return ceph_frag_bits(f) > 0 &&
-		(ceph_frag_value(f) & (0x1000000 >> ceph_frag_bits(f))) == 1;
-}
-static inline __u32 ceph_frag_sibling(__u32 f)
-{
-	return ceph_frag_make(ceph_frag_bits(f),
-		      ceph_frag_value(f) ^ (0x1000000 >> ceph_frag_bits(f)));
-}
-static inline __u32 ceph_frag_left_child(__u32 f)
-{
-	return ceph_frag_make(ceph_frag_bits(f)+1, ceph_frag_value(f));
-}
-static inline __u32 ceph_frag_right_child(__u32 f)
-{
-	return ceph_frag_make(ceph_frag_bits(f)+1,
-	      ceph_frag_value(f) | (0x1000000 >> (1+ceph_frag_bits(f))));
-}
-static inline __u32 ceph_frag_make_child(__u32 f, int by, int i)
-{
-	int newbits = ceph_frag_bits(f) + by;
-	return ceph_frag_make(newbits,
-			 ceph_frag_value(f) | (i << (24 - newbits)));
-}
-static inline int ceph_frag_is_leftmost(__u32 f)
-{
-	return ceph_frag_value(f) == 0;
-}
-static inline int ceph_frag_is_rightmost(__u32 f)
-{
-	return ceph_frag_value(f) == ceph_frag_mask(f);
-}
-static inline __u32 ceph_frag_next(__u32 f)
-{
-	return ceph_frag_make(ceph_frag_bits(f),
-			 ceph_frag_value(f) + (0x1000000 >> ceph_frag_bits(f)));
-}
-
-/*
- * comparator to sort frags logically, as when traversing the
- * number space in ascending order...
- */
-static inline int ceph_frag_compare(__u32 a, __u32 b)
-{
-	unsigned va = ceph_frag_value(a);
-	unsigned vb = ceph_frag_value(b);
-	if (va < vb)
-		return -1;
-	if (va > vb)
-		return 1;
-	va = ceph_frag_bits(a);
-	vb = ceph_frag_bits(b);
-	if (va < vb)
-		return -1;
-	if (va > vb)
-		return 1;
-	return 0;
-}
+unsigned int ceph_full_name_hash(const char *name, unsigned int len);
 
 
 /*
@@ -190,63 +72,6 @@ struct ceph_file_layout {
 	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
 } __attribute__ ((packed));
 
-#define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
-#define ceph_file_layout_stripe_count(l) \
-	((__s32)le32_to_cpu((l).fl_stripe_count))
-#define ceph_file_layout_object_size(l) ((__s32)le32_to_cpu((l).fl_object_size))
-#define ceph_file_layout_cas_hash(l) ((__s32)le32_to_cpu((l).fl_cas_hash))
-#define ceph_file_layout_object_su(l) \
-	((__s32)le32_to_cpu((l).fl_object_stripe_unit))
-#define ceph_file_layout_pg_preferred(l) \
-	((__s32)le32_to_cpu((l).fl_pg_preferred))
-#define ceph_file_layout_pg_pool(l) \
-	((__s32)le32_to_cpu((l).fl_pg_pool))
-
-#define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
-					  le32_to_cpu((l).fl_stripe_count))
-
-/* "period" == bytes before i start on a new set of objects */
-#define ceph_file_layout_period(l) (le32_to_cpu((l).fl_object_size) *	\
-				    le32_to_cpu((l).fl_stripe_count))
-
-
-
-/*
- * string hash.
- *
- * taken from Linux, tho we should probably take care to use this one
- * in case the upstream hash changes.
- */
-
-/* Name hashing routines. Initial hash value */
-/* Hash courtesy of the R5 hash in reiserfs modulo sign bits */
-#define ceph_init_name_hash()		0
-
-/* partial hash update function. Assume roughly 4 bits per character */
-static inline unsigned long
-ceph_partial_name_hash(unsigned long c, unsigned long prevhash)
-{
-	return (prevhash + (c << 4) + (c >> 4)) * 11;
-}
-
-/*
- * Finally: cut down the number of bits to a int value (and try to avoid
- * losing bits)
- */
-static inline unsigned long ceph_end_name_hash(unsigned long hash)
-{
-	return (unsigned int) hash;
-}
-
-/* Compute the hash for a name string. */
-static inline unsigned int
-ceph_full_name_hash(const char *name, unsigned int len)
-{
-	unsigned long hash = ceph_init_name_hash();
-	while (len--)
-		hash = ceph_partial_name_hash(*name++, hash);
-	return ceph_end_name_hash(hash);
-}
 
 
 
@@ -582,26 +407,7 @@ struct ceph_mds_reply_dirfrag {
 #define CEPH_FILE_MODE_LAZY       4  /* lazy io */
 #define CEPH_FILE_MODE_NUM        8  /* bc these are bit fields.. mostly */
 
-static inline int ceph_flags_to_mode(int flags)
-{
-#ifdef O_DIRECTORY  /* fixme */
-	if ((flags & O_DIRECTORY) == O_DIRECTORY)
-		return CEPH_FILE_MODE_PIN;
-#endif
-#ifdef O_LAZY
-	if (flags & O_LAZY)
-		return CEPH_FILE_MODE_LAZY;
-#endif
-	if ((flags & O_APPEND) == O_APPEND)
-		flags |= O_WRONLY;
-
-	flags &= O_ACCMODE;
-	if ((flags & O_RDWR) == O_RDWR)
-		return CEPH_FILE_MODE_RDWR;
-	if ((flags & O_WRONLY) == O_WRONLY)
-		return CEPH_FILE_MODE_WR;
-	return CEPH_FILE_MODE_RD;
-}
+int ceph_flags_to_mode(int flags);
 
 
 /* capability bits */
@@ -681,30 +487,7 @@ static inline int ceph_flags_to_mode(int flags)
 #define CEPH_CAP_LOCKS (CEPH_LOCK_IFILE | CEPH_LOCK_IAUTH | CEPH_LOCK_ILINK | \
 			CEPH_LOCK_IXATTR)
 
-static inline int ceph_caps_for_mode(int mode)
-{
-	switch (mode) {
-	case CEPH_FILE_MODE_PIN:
-		return CEPH_CAP_PIN;
-	case CEPH_FILE_MODE_RD:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
-			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE;
-	case CEPH_FILE_MODE_RDWR:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
-			CEPH_CAP_FILE_EXCL |
-			CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE |
-			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
-			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
-			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
-	case CEPH_FILE_MODE_WR:
-		return CEPH_CAP_PIN | CEPH_CAP_FILE_SHARED |
-			CEPH_CAP_FILE_EXCL |
-			CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER |
-			CEPH_CAP_AUTH_SHARED | CEPH_CAP_AUTH_EXCL |
-			CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
-	}
-	return 0;
-}
+int ceph_caps_for_mode(int mode);
 
 enum {
 	CEPH_CAP_OP_GRANT,     /* mds->client grant */

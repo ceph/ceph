@@ -53,6 +53,26 @@ struct ceph_osdmap {
 	struct crush_map *crush;
 };
 
+/* file layout helpers */
+#define ceph_file_layout_su(l) ((__s32)le32_to_cpu((l).fl_stripe_unit))
+#define ceph_file_layout_stripe_count(l) \
+	((__s32)le32_to_cpu((l).fl_stripe_count))
+#define ceph_file_layout_object_size(l) ((__s32)le32_to_cpu((l).fl_object_size))
+#define ceph_file_layout_cas_hash(l) ((__s32)le32_to_cpu((l).fl_cas_hash))
+#define ceph_file_layout_object_su(l) \
+	((__s32)le32_to_cpu((l).fl_object_stripe_unit))
+#define ceph_file_layout_pg_preferred(l) \
+	((__s32)le32_to_cpu((l).fl_pg_preferred))
+#define ceph_file_layout_pg_pool(l) \
+	((__s32)le32_to_cpu((l).fl_pg_pool))
+
+#define ceph_file_layout_stripe_width(l) (le32_to_cpu((l).fl_stripe_unit) * \
+					  le32_to_cpu((l).fl_stripe_count))
+
+/* "period" == bytes before i start on a new set of objects */
+#define ceph_file_layout_period(l) (le32_to_cpu((l).fl_object_size) *	\
+				    le32_to_cpu((l).fl_stripe_count))
+
 static inline int ceph_osd_is_up(struct ceph_osdmap *map, int osd)
 {
 	return (osd < map->max_osd) && (map->osd_state[osd] & CEPH_OSD_UP);

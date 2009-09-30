@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "ceph_fs.h"
+#include "ceph_frag.h"
 
 #define _BACKWARD_BACKWARD_WARNING_H   /* make gcc 4.3 shut up about hash_*. */
 

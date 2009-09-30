@@ -20,6 +20,11 @@ v0.16
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
 
+
+/- uninline frags
+/- uninline string hash
+
+
 bugs
 - mislinked directory?
 - premature filejournal trimming?

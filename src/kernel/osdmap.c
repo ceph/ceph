@@ -8,7 +8,6 @@
 #include "decode.h"
 #include "ceph_debug.h"
 
-
 char *ceph_osdmap_state_str(char *str, int len, int state)
 {
 	int flag = 0;

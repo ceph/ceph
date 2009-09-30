@@ -3505,7 +3505,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_size = in->size;
     st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(ceph_file_layout_su(in->layout), 4096);
+  st->st_blksize = MAX(in->layout.fl_object_stripe_unit, 4096);
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -3566,7 +3566,7 @@ int Client::fill_stat_precise(Inode *in, struct stat_precise *st, frag_info_t *d
     st->st_size = in->size;
     st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(ceph_file_layout_su(in->layout), 4096);
+  st->st_blksize = MAX(in->layout.fl_object_stripe_unit, 4096);
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -4339,7 +4339,7 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
       l = MAX(l, g_conf.client_readahead_min);
     if (g_conf.client_readahead_max_bytes)
       l = MIN(l, g_conf.client_readahead_max_bytes);
-    loff_t p = ceph_file_layout_period(in->layout);
+    loff_t p = in->layout.fl_stripe_count * in->layout.fl_object_size;
     if (g_conf.client_readahead_max_periods)
       l = MIN(l, g_conf.client_readahead_max_periods * p);
 
@@ -4348,7 +4348,7 @@ int Client::_read_async(Fh *f, __u64 off, __u64 len, bufferlist *bl)
       l -= (off+l) % p;
     else {
       // align readahead with stripe unit if we cross su boundary
-      int su = ceph_file_layout_su(in->layout);
+      int su = in->layout.fl_object_stripe_unit;
       if ((off+l)/su != off/su) l -= (off+l) % su;
     }
     
@@ -5815,21 +5815,21 @@ int Client::get_file_stripe_unit(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
-  return ceph_file_layout_su(layout);
+  return layout.fl_object_stripe_unit;
 }
 
 int Client::get_file_stripe_width(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
-  return ceph_file_layout_stripe_width(layout);
+  return layout.fl_object_stripe_unit * layout.fl_stripe_count;
 }
 
 int Client::get_file_stripe_period(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
-  return ceph_file_layout_period(layout);
+  return layout.fl_object_size * layout.fl_stripe_count;
 }
 
 int Client::get_file_replication(int fd)
@@ -5841,7 +5841,7 @@ int Client::get_file_replication(int fd)
   Fh *f = fd_map[fd];
   Inode *in = f->inode;
 
-  pool = ceph_file_layout_pg_pool(in->layout);
+  pool = in->layout.fl_pg_pool;
   return osdmap->get_pg_pool(pool).get_size();
 }
 
@@ -5849,7 +5849,7 @@ int Client::get_default_preferred_pg(int fd)
 {
   ceph_file_layout layout;
   describe_layout(fd, &layout);
-  return ceph_file_layout_pg_preferred(layout);
+  return layout.fl_pg_preferred;
 }
 
 int Client::get_file_stripe_address(int fd, loff_t offset, string& address)

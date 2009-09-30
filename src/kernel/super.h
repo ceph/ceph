@@ -398,24 +398,8 @@ static inline bool ceph_i_test(struct inode *inode, unsigned mask)
 
 
 /* find a specific frag @f */
-static inline struct ceph_inode_frag *
-__ceph_find_frag(struct ceph_inode_info *ci, u32 f)
-{
-	struct rb_node *n = ci->i_fragtree.rb_node;
-
-	while (n) {
-		struct ceph_inode_frag *frag =
-			rb_entry(n, struct ceph_inode_frag, node);
-		int c = ceph_frag_compare(f, frag->frag);
-		if (c < 0)
-			n = n->rb_left;
-		else if (c > 0)
-			n = n->rb_right;
-		else
-			return frag;
-	}
-	return NULL;
-}
+extern struct ceph_inode_frag *__ceph_find_frag(struct ceph_inode_info *ci,
+						u32 f);
 
 /*
  * choose fragment for value @v.  copy frag content to pfrag, if leaf

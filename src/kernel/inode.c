@@ -139,6 +139,27 @@ static struct ceph_inode_frag *__get_or_create_frag(struct ceph_inode_info *ci,
 }
 
 /*
+ * find a specific frag @f
+ */
+struct ceph_inode_frag *__ceph_find_frag(struct ceph_inode_info *ci, u32 f)
+{
+	struct rb_node *n = ci->i_fragtree.rb_node;
+
+	while (n) {
+		struct ceph_inode_frag *frag =
+			rb_entry(n, struct ceph_inode_frag, node);
+		int c = ceph_frag_compare(f, frag->frag);
+		if (c < 0)
+			n = n->rb_left;
+		else if (c > 0)
+			n = n->rb_right;
+		else
+			return frag;
+	}
+	return NULL;
+}
+
+/*
  * Choose frag containing the given value @v.  If @pfrag is
  * specified, copy the frag delegation info to the caller if
  * it is present.

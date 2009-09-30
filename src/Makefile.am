@@ -301,7 +301,9 @@ libcommon_files = \
 	common/common_init.cc \
 	common/buffer.cc \
 	common/debug.cc \
+	include/ceph_fs.cc \
 	include/ceph_strings.cc \
+	include/ceph_frag.cc \
 	config.cc \
 	common/lockdep.cc
 
@@ -433,6 +435,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
+	include/ceph_frag.h\
         include/ceph_fs.h\
 	include/color.h\
 	include/crc32c.h\
@@ -467,7 +470,11 @@ noinst_HEADERS = \
 	kernel/buffer.h\
 	kernel/caps.c\
 	kernel/ceph_debug.h\
+	kernel/ceph_frag.c\
+	kernel/ceph_frag.h\
+	kernel/ceph_fs.c\
 	kernel/ceph_fs.h\
+	kernel/ceph_strings.c\
 	kernel/ceph_ver.h\
         kernel/crush/crush.c\
         kernel/crush/crush.h\

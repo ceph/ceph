@@ -21,6 +21,8 @@
 #include <iostream>
 #include "buffer.h"
 
+#include "ceph_frag.h"
+
 /*
  * 
  * the goal here is to use a binary split strategy to partition a namespace.  

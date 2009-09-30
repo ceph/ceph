@@ -35,7 +35,7 @@ void Journaler::create(ceph_file_layout *l)
 
   write_pos = flush_pos = ack_pos = safe_pos =
     read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos = ceph_file_layout_period(layout);
+    expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
 }
 
 void Journaler::set_layout(ceph_file_layout *l)
@@ -48,7 +48,7 @@ void Journaler::set_layout(ceph_file_layout *l)
 
   // prefetch intelligently.
   // (watch out, this is big if you use big objects or weird striping)
-  fetch_len = ceph_file_layout_period(layout) * g_conf.journaler_prefetch_periods;
+  fetch_len = layout.fl_stripe_count * layout.fl_object_size * g_conf.journaler_prefetch_periods;
   prefetch_from = fetch_len / 2;
 }
 
@@ -315,7 +315,7 @@ __s64 Journaler::append_entry(bufferlist& bl)
 
   if (!g_conf.journaler_allow_split_entries) {
     // will we span a stripe boundary?
-    int p = ceph_file_layout_su(layout);
+    int p = layout.fl_object_stripe_unit;
     if (write_pos / p != (write_pos + (__s64)(bl.length() + sizeof(s))) / p) {
       // yes.
       // move write_pos forward.
@@ -357,7 +357,7 @@ __s64 Journaler::append_entry(bufferlist& bl)
   write_pos += sizeof(s) + s;
 
   // flush previous object?
-  int su = ceph_file_layout_su(layout);
+  int su = layout.fl_object_stripe_unit;
   int write_off = write_pos % su;
   int write_obj = write_pos / su;
   int flush_obj = flush_pos / su;
@@ -783,7 +783,7 @@ public:
 void Journaler::trim()
 {
   __s64 trim_to = last_committed.expire_pos;
-  trim_to -= trim_to % ceph_file_layout_period(layout);
+  trim_to -= trim_to % (layout.fl_stripe_count * layout.fl_object_size);
   dout(10) << "trim last_commited head was " << last_committed
 	   << ", can trim to " << trim_to
 	   << dendl;

@@ -376,7 +376,7 @@ struct inode_t {
   bool is_truncating() const { return truncate_size != -1ull; }
 
   int64_t get_layout_size_increment() {
-    return ceph_file_layout_period(layout);
+    return layout.fl_object_size * layout.fl_stripe_count;
   }
 
   __u64 get_max_size() const {
