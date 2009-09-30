@@ -24,9 +24,11 @@ v0.16
 /- uninline frags
 /- uninline string hash
 - document data structures
-- audit all inline in kclient
+/- audit all inline in kclient
 - document on-wire protocol
-- ceph_buffer fixes
+- ceph_buffer and vmalloc?
+- ceph_i_test
+- bit ops in messenger
 
 bugs
 - mislinked directory?

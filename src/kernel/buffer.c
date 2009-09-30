@@ -18,8 +18,8 @@ struct ceph_buffer *ceph_buffer_new(gfp_t gfp)
 
 int ceph_buffer_alloc(struct ceph_buffer *b, int len, gfp_t gfp)
 {
-	if (len <= PAGE_SIZE) {
-		b->vec.iov_base = kmalloc(len, gfp);
+	b->vec.iov_base = kmalloc(len, gfp | __GFP_NOWARN);
+	if (b->vec.iov_base) {
 		b->is_vmalloc = false;
 	} else {
 		b->vec.iov_base = __vmalloc(len, gfp, PAGE_KERNEL);
