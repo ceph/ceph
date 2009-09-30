@@ -239,7 +239,8 @@ EOF
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
 		    echo $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
-		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=monkeys.bin
+		    key_fn=monkeys.bin
+		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=$key_fn
 		done
 	fi
 
@@ -262,13 +263,14 @@ if [ "$start_osd" -eq 1 ]; then
         osd data = dev/osd$osd
         osd journal = dev/osd$osd/journal
         osd journal size = 100
-        keys file = dev/osd$osd/keys.bin
+        keys file = dev/osd$osd/osd$osd.keys.bin
 EOF
 	    echo mkfs osd$osd
 	    echo $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	    $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
-            $SUDO $CEPH_BIN/authtool --gen-key dev/osd$osd/keys.bin
-            $SUDO $CEPH_BIN/ceph -i dev/osd$osd/keys.bin auth add osd.$osd
+	    key_fn=dev/osd$osd/osd$osd.keys.bin
+            $SUDO $CEPH_BIN/authtool --gen-key $key_fn
+            $SUDO $CEPH_BIN/ceph -i $key_fn auth add osd.$osd
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
@@ -280,10 +282,14 @@ if [ "$start_mds" -eq 1 ]; then
     mds=0
     for name in a b c d e f g h i j k l m n o p
     do
+        key_fn=dev/mds_$name.keys.bin
 	if [ "$new" -eq 1 ]; then
 	    cat <<EOF >> $conf
 [mds.$name]
+        keys file = $key_fn
 EOF
+            $SUDO $CEPH_BIN/authtool --gen-key $key_fn
+            $SUDO $CEPH_BIN/ceph -i $key_fn auth add mds.$name
 	fi
 	
 	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS

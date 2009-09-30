@@ -380,6 +380,7 @@ int MDS::init()
   monc->set_messenger(messenger);
 
   monc->init();
+
   monc->get_monmap();
 
   mds_lock.Lock();
@@ -394,6 +395,8 @@ int MDS::init()
 
   monc->sub_want("mdsmap", 0);
   monc->renew_subs();
+  monc->wait_authenticate(30.0);
+  monc->wait_auth_rotating(30.0);
 
   // schedule tick
   reset_tick();
