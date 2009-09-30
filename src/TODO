@@ -17,6 +17,8 @@ v0.16
 /- hadoop: set primary replica on self
 - mds: put migration vectors in mdsmap
 
+- revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
+
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
 
