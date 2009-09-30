@@ -300,17 +300,22 @@ bool RadosClient::init()
   rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossless());  // mds does its own timeout/markdown
 
   rank.start(1);
+  messenger->add_dispatcher_head(this);
+
+  monclient.auth.set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD);
+  monclient.init();
+
+  if (monclient.get_monmap() < 0)
+    return false;
+
+  monclient.wait_authenticate(30.0);
+
+  monclient.mount(g_conf.client_mount_timeout);
 
   objecter = new Objecter(messenger, &monclient, &osdmap, lock);
   if (!objecter)
     return false;
 
-  monclient.init();
-  dout(0) << "librados: before monclient.authenticate()" << dendl;
-  monclient.auth.set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD);
-  monclient.authenticate(g_conf.client_mount_timeout);
-  monclient.authorize(g_conf.client_mount_timeout);
-  monclient.mount(g_conf.client_mount_timeout);
 
   lock.Lock();
 

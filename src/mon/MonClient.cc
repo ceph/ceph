@@ -312,6 +312,7 @@ void MonClient::handle_auth(MAuthReply *m)
   if (ret == -EAGAIN) {
     auth.send_session_request(this, &auth_handler, 30.0);
   } else {
+    dout(0) << "done authenticating" << dendl;
     state = MC_STATE_AUTHENTICATED;
     authenticate_cond.SignalAll();
     _open_session();
@@ -351,10 +352,7 @@ void MonClient::_pick_new_mon()
 
 void MonClient::_open_session()
 {
-  dout(10) << "_open_session" << dendl;
-  _pick_new_mon();
-
-  dout(0) << "_open_session 0" << dendl;
+  dout(0) << "_open_session" << dendl;
   if (state == MC_STATE_NONE) {
     state = MC_STATE_AUTHENTICATING;
     auth.send_session_request(this, &auth_handler, 30.0);
@@ -366,7 +364,6 @@ void MonClient::_open_session()
 
   if (g_keyring.need_rotating_secrets()) {
     _start_auth_rotating();
-    //_wait_auth_rotating(KEY_ROTATE_TIME);
   }
   dout(0) << "_open_session 2" << dendl;
 
@@ -486,6 +483,12 @@ int MonClient::wait_authenticate(double timeout)
   Mutex::Locker l(monc_lock);
   utime_t interval;
   interval += timeout;
+
+  if (state == MC_STATE_AUTHENTICATED)
+    return 0;
+
+  if (cur_mon < 0)
+    _reopen_session();
 
   int ret = authenticate_cond.WaitInterval(monc_lock, interval);
 
