@@ -152,8 +152,8 @@ class Filer {
     if (extents.size() == 1) {
       vector<OSDOp> ops(1);
       ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
-      ops[0].op.truncate_seq = truncate_seq;
-      ops[0].op.truncate_size = extents[0].offset;
+      ops[0].op.trunc.truncate_seq = truncate_seq;
+      ops[0].op.trunc.truncate_size = extents[0].offset;
       objecter->_modify(extents[0].oid, extents[0].layout, ops, mtime, snapc, flags, onack, oncommit);
     } else {
       C_Gather *gack = 0, *gcom = 0;
@@ -164,8 +164,8 @@ class Filer {
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); p++) {
 	vector<OSDOp> ops(1);
 	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
-	ops[0].op.truncate_size = p->offset;
-	ops[0].op.truncate_seq = truncate_seq;
+	ops[0].op.trunc.truncate_size = p->offset;
+	ops[0].op.trunc.truncate_seq = truncate_seq;
 	objecter->_modify(extents[0].oid, p->layout, ops, mtime, snapc, flags,
 			  gack ? gack->new_sub():0,
 			  gcom ? gcom->new_sub():0);

@@ -64,8 +64,8 @@ static void calc_layout(struct ceph_osd_client *osdc,
 	sprintf(req->r_oid, "%llx.%08llx", vino.ino, bno);
 	req->r_oid_len = strlen(req->r_oid);
 
-	op->offset = cpu_to_le64(objoff);
-	op->length = cpu_to_le64(objlen);
+	op->extent.offset = cpu_to_le64(objoff);
+	op->extent.length = cpu_to_le64(objlen);
 	req->r_num_pages = calc_pages_for(off, *plen);
 
 	dout("calc_layout %s (%d) %llu~%llu (%d pages)\n",
@@ -205,9 +205,10 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		op++;
 		op->op = cpu_to_le16(opcode == CEPH_OSD_OP_READ ?
 			     CEPH_OSD_OP_MASKTRUNC : CEPH_OSD_OP_SETTRUNC);
-		op->truncate_seq = cpu_to_le32(truncate_seq);
-		prevofs = le64_to_cpu((op-1)->offset);
-		op->truncate_size = cpu_to_le64(truncate_size - (off-prevofs));
+		op->trunc.truncate_seq = cpu_to_le32(truncate_seq);
+		prevofs = le64_to_cpu((op-1)->extent.offset);
+		op->trunc.truncate_size = cpu_to_le64(truncate_size -
+						      (off-prevofs));
 	}
 	if (do_sync) {
 		op++;

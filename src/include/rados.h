@@ -301,31 +301,29 @@ enum {
  * payload
  */
 struct ceph_osd_op {
-	__le16 op;
+	__le16 op;           /* CEPH_OSD_OP_* */
+	__le32 flags;        /* CEPH_OSD_FLAG_* */
 	union {
 		struct {
 			__le64 offset, length;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) extent;
 		struct {
 			__le32 name_len;
 			__le32 value_len;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) xattr;
 		struct {
 			__le64 truncate_size;
 			__le32 truncate_seq;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) trunc;
 		struct {
 			__u8 class_len;
 			__u8 method_len;
 			__u8 argc;
 			__le32 indata_len;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) cls;
 		struct {
-			__le64 pgls_cookie, count;
-		} __attribute__ ((packed));
-		struct {
-			__le32 flags;
-		} __attribute__ ((packed));
+			__le64 cookie, count;
+		} __attribute__ ((packed)) pgls;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

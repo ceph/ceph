@@ -524,7 +524,7 @@ static void writepages_finish(struct ceph_osd_request *req,
 	WARN_ON(le32_to_cpu(replyhead->num_ops) == 0);
 	op = (void *)(replyhead + 1);
 	rc = le32_to_cpu(replyhead->result);
-	bytes = le64_to_cpu(op->length);
+	bytes = le64_to_cpu(op->extent.length);
 
 	if (rc >= 0) {
 		wrote = (bytes + (offset & ~PAGE_CACHE_MASK) + ~PAGE_CACHE_MASK)
@@ -837,7 +837,7 @@ get_more_pages:
 		req->r_num_pages = locked_pages;
 		reqhead = req->r_request->front.iov_base;
 		op = (void *)(reqhead + 1);
-		op->length = cpu_to_le64(len);
+		op->extent.length = cpu_to_le64(len);
 		op->payload_len = cpu_to_le32(len);
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 

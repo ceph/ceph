@@ -4073,8 +4073,8 @@ void OSD::init_op_flags(MOSDOp *op)
 	bufferlist::iterator bp = iter->data.begin();
 	int is_write, is_read;
 	string cname, mname;
-	bp.copy(iter->op.class_len, cname);
-	bp.copy(iter->op.method_len, mname);
+	bp.copy(iter->op.cls.class_len, cname);
+	bp.copy(iter->op.cls.method_len, mname);
 	is_read = class_handler->get_method_flags(cname, mname) & CLS_METHOD_RD;
 	is_write = class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
 	dout(0) << "class " << cname << " method " << mname

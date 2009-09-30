@@ -1222,31 +1222,31 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
     case CEPH_OSD_OP_DELETE:
       break;
     case CEPH_OSD_OP_TRUNCATE:
-      out << " " << op.op.offset;
+      out << " " << op.op.extent.offset;
       break;
     case CEPH_OSD_OP_SETTRUNC:
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.truncate_seq << "@" << op.op.truncate_size;      
+      out << " " << op.op.trunc.truncate_seq << "@" << op.op.trunc.truncate_size;
       break;
     default:
-      out << " " << op.op.offset << "~" << op.op.length;
+      out << " " << op.op.extent.offset << "~" << op.op.extent.length;
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
-    if (op.op.name_len && op.data.length()) {
+    if (op.op.xattr.name_len && op.data.length()) {
       out << " ";
-      op.data.write(0, op.op.name_len, out);
+      op.data.write(0, op.op.xattr.name_len, out);
     }
-    if (op.op.value_len)
-      out << " (" << op.op.value_len << ")";
+    if (op.op.xattr.value_len)
+      out << " (" << op.op.xattr.value_len << ")";
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
-    if (op.op.class_len && op.data.length()) {
+    if (op.op.cls.class_len && op.data.length()) {
       out << " ";
-      op.data.write(0, op.op.class_len, out);
+      op.data.write(0, op.op.cls.class_len, out);
       out << ".";
-      op.data.write(op.op.class_len, op.op.method_len, out);
+      op.data.write(op.op.cls.class_len, op.op.cls.method_len, out);
     }
   }
   return out;

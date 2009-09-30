@@ -58,16 +58,16 @@ struct ObjectOperation {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.offset = off;
-    ops[s].op.length = len;
+    ops[s].op.extent.offset = off;
+    ops[s].op.extent.length = len;
     ops[s].data.claim_append(bl);
   }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.name_len = (name ? strlen(name) : 0);
-    ops[s].op.value_len = data.length();
+    ops[s].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[s].op.xattr.value_len = data.length();
     if (name)
       ops[s].data.append(name);
     ops[s].data.append(data);
@@ -76,19 +76,19 @@ struct ObjectOperation {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.class_len = strlen(cname);
-    ops[s].op.method_len = strlen(method);
-    ops[s].op.indata_len = indata.length();
-    ops[s].data.append(cname, ops[s].op.class_len);
-    ops[s].data.append(method, ops[s].op.method_len);
+    ops[s].op.cls.class_len = strlen(cname);
+    ops[s].op.cls.method_len = strlen(method);
+    ops[s].op.cls.indata_len = indata.length();
+    ops[s].data.append(cname, ops[s].op.cls.class_len);
+    ops[s].data.append(method, ops[s].op.cls.method_len);
     ops[s].data.append(indata);
   }
   void add_pgls(int op, __u64 count, __u64 cookie) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.count = count;
-    ops[s].op.pgls_cookie = cookie;
+    ops[s].op.pgls.count = count;
+    ops[s].op.pgls.cookie = cookie;
   }
 
   // ------
@@ -464,8 +464,8 @@ private:
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_READ;
-    ops[0].op.offset = off;
-    ops[0].op.length = len;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
     Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;
@@ -477,8 +477,8 @@ private:
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_GETXATTR;
-    ops[0].op.name_len = (name ? strlen(name) : 0);
-    ops[0].op.value_len = 0;
+    ops[0].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[0].op.xattr.value_len = 0;
     if (name)
       ops[0].data.append(name);
     Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
@@ -521,8 +521,8 @@ private:
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITE;
-    ops[0].op.offset = off;
-    ops[0].op.length = len;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
     ops[0].data = bl;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
@@ -534,8 +534,8 @@ private:
 		   Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
-    ops[0].op.offset = 0;
-    ops[0].op.length = bl.length();
+    ops[0].op.extent.offset = 0;
+    ops[0].op.extent.length = bl.length();
     ops[0].data = bl;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
@@ -547,8 +547,8 @@ private:
              Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_ZERO;
-    ops[0].op.offset = off;
-    ops[0].op.length = len;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -592,8 +592,8 @@ private:
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_SETXATTR;
-    ops[0].op.name_len = (name ? strlen(name) : 0);
-    ops[0].op.value_len = bl.length();
+    ops[0].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[0].op.xattr.value_len = bl.length();
     if (name)
       ops[0].data.append(name);
    ops[0].data.append(bl);
