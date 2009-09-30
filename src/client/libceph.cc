@@ -108,6 +108,11 @@ extern "C" int ceph_statfs(const char *path, struct statvfs *stbuf)
   return client->statfs(path, stbuf);
 }
 
+extern "C" int ceph_get_local_osd()
+{
+  return client->get_local_osd();
+}
+
 extern "C" int ceph_getcwd(char *buf, int buflen)
 {
   string cwd;
