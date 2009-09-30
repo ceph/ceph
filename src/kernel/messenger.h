@@ -54,17 +54,7 @@ struct ceph_connection_operations {
 			      int want);
 };
 
-static inline const char *ceph_name_type_str(int t)
-{
-	switch (t) {
-	case CEPH_ENTITY_TYPE_MON: return "mon";
-	case CEPH_ENTITY_TYPE_MDS: return "mds";
-	case CEPH_ENTITY_TYPE_OSD: return "osd";
-	case CEPH_ENTITY_TYPE_CLIENT: return "client";
-	case CEPH_ENTITY_TYPE_ADMIN: return "admin";
-	default: return "???";
-	}
-}
+extern const char *ceph_name_type_str(int t);
 
 /* use format string %s%d */
 #define ENTITY_NAME(n) ceph_name_type_str((n).type), le64_to_cpu((n).num)

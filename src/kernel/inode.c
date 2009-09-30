@@ -722,32 +722,6 @@ out:
 }
 
 /*
- * Initialize ceph dentry state.
- */
-int ceph_init_dentry_private(struct dentry *dentry)
-{
-	struct ceph_dentry_info *di;
-
-	if (dentry->d_fsdata)
-		return 0;
-	di = kmem_cache_alloc(ceph_dentry_cachep, GFP_NOFS);
-	if (!di)
-		return -ENOMEM;          /* oh well */
-
-	spin_lock(&dentry->d_lock);
-	if (dentry->d_fsdata) /* lost a race */
-		goto out_unlock;
-	di->dentry = dentry;
-	di->lease_session = NULL;
-	dentry->d_fsdata = di;
-	dentry->d_time = jiffies;
-	ceph_dentry_lru_add(dentry);
-out_unlock:
-	spin_unlock(&dentry->d_lock);
-	return 0;
-}
-
-/*
  * caller should hold session s_mutex.
  */
 static void update_dentry_lease(struct dentry *dentry,

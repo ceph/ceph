@@ -791,6 +791,35 @@ int ceph_caps_revoking(struct ceph_inode_info *ci, int mask)
 	return ret;
 }
 
+int __ceph_caps_used(struct ceph_inode_info *ci)
+{
+	int used = 0;
+	if (ci->i_pin_ref)
+		used |= CEPH_CAP_PIN;
+	if (ci->i_rd_ref)
+		used |= CEPH_CAP_FILE_RD;
+	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
+		used |= CEPH_CAP_FILE_CACHE;
+	if (ci->i_wr_ref)
+		used |= CEPH_CAP_FILE_WR;
+	if (ci->i_wrbuffer_ref)
+		used |= CEPH_CAP_FILE_BUFFER;
+	return used;
+}
+
+/*
+ * wanted, by virtue of open file modes
+ */
+int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
+{
+	int want = 0;
+	int mode;
+	for (mode = 0; mode < 4; mode++)
+		if (ci->i_nr_by_mode[mode])
+			want |= ceph_caps_for_mode(mode);
+	return want;
+}
+
 /*
  * Return caps we have registered with the MDS(s) as 'wanted'.
  */

@@ -528,35 +528,9 @@ static inline int __ceph_caps_dirty(struct ceph_inode_info *ci)
 extern int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask);
 
 extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
+extern int __ceph_caps_used(struct ceph_inode_info *ci);
 
-static inline int __ceph_caps_used(struct ceph_inode_info *ci)
-{
-	int used = 0;
-	if (ci->i_pin_ref)
-		used |= CEPH_CAP_PIN;
-	if (ci->i_rd_ref)
-		used |= CEPH_CAP_FILE_RD;
-	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
-		used |= CEPH_CAP_FILE_CACHE;
-	if (ci->i_wr_ref)
-		used |= CEPH_CAP_FILE_WR;
-	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_FILE_BUFFER;
-	return used;
-}
-
-/*
- * wanted, by virtue of open file modes
- */
-static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
-{
-	int want = 0;
-	int mode;
-	for (mode = 0; mode < 4; mode++)
-		if (ci->i_nr_by_mode[mode])
-			want |= ceph_caps_for_mode(mode);
-	return want;
-}
+extern int __ceph_caps_file_wanted(struct ceph_inode_info *ci);
 
 /*
  * wanted, by virtue of open file modes AND cap refs (buffered/cached data)
@@ -892,23 +866,8 @@ extern void ceph_dentry_lru_del(struct dentry *dn);
  * our d_ops vary depending on whether the inode is live,
  * snapshotted (read-only), or a virtual ".snap" directory.
  */
-int ceph_init_dentry_private(struct dentry *dentry);
+int ceph_init_dentry(struct dentry *dentry);
 
-static inline int ceph_init_dentry(struct dentry *dentry)
-{
-	int ret;
-
-	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
-		dentry->d_op = &ceph_dentry_ops;
-	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)
-		dentry->d_op = &ceph_snapdir_dentry_ops;
-	else
-		dentry->d_op = &ceph_snap_dentry_ops;
-
-	ret = ceph_init_dentry_private(dentry);
-
-	return ret;
-}
 
 /* ioctl.c */
 extern long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg);

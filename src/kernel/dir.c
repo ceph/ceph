@@ -29,6 +29,42 @@ const struct file_operations ceph_dir_fops;
 struct dentry_operations ceph_dentry_ops;
 
 /*
+ * Initialize ceph dentry state.
+ */
+int ceph_init_dentry(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+
+	if (dentry->d_fsdata)
+		return 0;
+
+	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
+		dentry->d_op = &ceph_dentry_ops;
+	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)
+		dentry->d_op = &ceph_snapdir_dentry_ops;
+	else
+		dentry->d_op = &ceph_snap_dentry_ops;
+
+	di = kmem_cache_alloc(ceph_dentry_cachep, GFP_NOFS);
+	if (!di)
+		return -ENOMEM;          /* oh well */
+
+	spin_lock(&dentry->d_lock);
+	if (dentry->d_fsdata) /* lost a race */
+		goto out_unlock;
+	di->dentry = dentry;
+	di->lease_session = NULL;
+	dentry->d_fsdata = di;
+	dentry->d_time = jiffies;
+	ceph_dentry_lru_add(dentry);
+out_unlock:
+	spin_unlock(&dentry->d_lock);
+	return 0;
+}
+
+
+
+/*
  * for readdir, we encode the directory frag and offset within that
  * frag into f_pos.
  */
