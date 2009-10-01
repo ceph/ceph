@@ -45,7 +45,7 @@ class MDBalancer {
   utime_t last_heartbeat;
   utime_t last_fragment;
   utime_t last_sample;    
-
+  utime_t rebalance_time; //ensure a consistent view of load for rebalance
 
   // todo
   set<dirfrag_t>   split_queue;
@@ -88,13 +88,17 @@ class MDBalancer {
   void do_fragmenting();
 
   void export_empties();
+  //set up the rebalancing targets for export; maybe time for a name change?
   void do_rebalance(int beat);
+  /*check if the monitor has recorded the current export targets;
+    if it has then do the actual export. Otherwise send off our
+    export targets message again*/
+  void try_rebalance();
   void find_exports(CDir *dir, 
                     double amount, 
                     list<CDir*>& exports, 
                     double& have,
-                    set<CDir*>& already_exporting,
-		    utime_t now);
+                    set<CDir*>& already_exporting);
 
 
   void subtract_export(class CDir *ex);
