@@ -84,6 +84,7 @@ using namespace std;
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
+#include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSResolve.h"
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSCacheRejoin.h"
@@ -375,6 +376,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break;
   case MSG_MDS_BEACON:
     m = new MMDSBeacon;
+    break;
+  case MSG_MDS_OFFLOAD_TARGETS:
+    m = new MMDSLoadTargets;
     break;
   case MSG_MDS_RESOLVE:
     m = new MMDSResolve;
