@@ -360,7 +360,9 @@ EOF
 git apply $cephtree/src/kernel/kbuild.patch
 git add $target/ceph/Makefile
 git add $target/ceph/Kconfig
-git commit -s -F - <<EOF $target/Kconfig $target/ceph/Kconfig $target/Makefile $target/ceph/Makefile
+git apply $cephtree/src/kernel/maintainers.patch
+git add MAINTAINERS
+git commit -s -F - <<EOF
 ceph: Kconfig, Makefile
 
 Kconfig options and Makefile.
