@@ -135,6 +135,12 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
 
+  case MSG_MDS_OFFLOAD_TARGETS:
+    return true;
+
+  case MSG_MDS_OFFLOAD_COMPLETE:
+    return true;
+
   default:
     assert(0);
     delete m;
