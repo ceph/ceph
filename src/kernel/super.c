@@ -331,8 +331,6 @@ static match_table_t arg_tokens = {
  * Parse an ip[:port] list into an addr array.  Use the default
  * monitor port if a port isn't specified.
  */
-#define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
-
 static int parse_ips(const char *c, const char *end,
 		     struct ceph_entity_addr *addr,
 		     int max_count, int *count)
@@ -868,21 +866,17 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 {
 	int err;
 
-	if (client->mount_args.rsize)
+	err = bdi_init(&client->backing_dev_info);
+	if (err < 0)
+		return err;
+
+	/* set ra_pages based on rsize mount option? */
+	if (client->mount_args.rsize >= PAGE_CACHE_SIZE)
 		client->backing_dev_info.ra_pages =
 			(client->mount_args.rsize + PAGE_CACHE_SIZE - 1)
 			>> PAGE_SHIFT;
 
-	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
-		client->backing_dev_info.ra_pages =
-			CEPH_MOUNT_RSIZE_DEFAULT >> PAGE_SHIFT;
-
-	err = bdi_init(&client->backing_dev_info);
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
-	if (err < 0)
-		return err;
-
 	err = bdi_register_dev(&client->backing_dev_info, sb->s_dev);
 #endif
 
