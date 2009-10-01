@@ -598,10 +598,10 @@ static struct ceph_client *ceph_create_client(void)
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
 		goto fail;
-	client->pg_inv_wq = create_workqueue("ceph-pg-invalid");
+	client->pg_inv_wq = create_singlethread_workqueue("ceph-pg-invalid");
 	if (client->pg_inv_wq == NULL)
 		goto fail_wb_wq;
-	client->trunc_wq = create_workqueue("ceph-trunc");
+	client->trunc_wq = create_singlethread_workqueue("ceph-trunc");
 	if (client->trunc_wq == NULL)
 		goto fail_pg_inv_wq;
 
