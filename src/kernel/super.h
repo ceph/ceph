@@ -390,9 +390,8 @@ static inline bool ceph_i_test(struct inode *inode, unsigned mask)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	bool r;
 
-	spin_lock(&inode->i_lock);
+	smp_mb();
 	r = (ci->i_ceph_flags & mask) == mask;
-	spin_unlock(&inode->i_lock);
 	return r;
 }
 
