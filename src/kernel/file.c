@@ -826,8 +826,12 @@ retry_snap:
 		if ((ret >= 0 || ret == -EIOCBQUEUED) &&
 		    ((file->f_flags & O_SYNC) || IS_SYNC(file->f_mapping->host)
 		     || ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32)
 			ret = vfs_fsync_range(file, file->f_path.dentry,
 					      pos, pos + ret - 1, 1);
+#else
+			ret = sync_page_range(inode, &inode->i_data, pos, ret);
+#endif
 	}
 	if (ret >= 0) {
 		spin_lock(&inode->i_lock);
