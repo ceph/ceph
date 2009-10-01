@@ -1,17 +1,17 @@
-From a1a8d91bfa04cb0cbf8d30295cd19d849bff1a39 Mon Sep 17 00:00:00 2001
+From c629c17b36c8e85396d4764f4bdee447c68c3d71 Mon Sep 17 00:00:00 2001
 From: Sage Weil <sage@newdream.net>
-Date: Thu, 1 Oct 2009 13:13:58 -0700
-Subject: [PATCH] ceph: add to MAINTAINERS
+Date: Thu, 1 Oct 2009 13:44:41 -0700
+Subject: [PATCH] asdf
 
 ---
- MAINTAINERS |    7 +++++++
- 1 files changed, 7 insertions(+), 0 deletions(-)
+ MAINTAINERS |    9 +++++++++
+ 1 files changed, 9 insertions(+), 0 deletions(-)
 
 diff --git a/MAINTAINERS b/MAINTAINERS
-index c450f3a..d1fa767 100644
+index c450f3a..9b680ff 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
-@@ -1294,6 +1294,13 @@ F:	arch/powerpc/include/asm/spu*.h
+@@ -1294,6 +1294,15 @@ F:	arch/powerpc/include/asm/spu*.h
  F:	arch/powerpc/oprofile/*cell*
  F:	arch/powerpc/platforms/cell/
  
@@ -19,7 +19,9 @@ index c450f3a..d1fa767 100644
 +M:	Sage Weil <sage@newdream.net>
 +L:	ceph-devel@lists.sourceforge.net
 +W:	http://ceph.newdream.net/
++T:	git git://ceph.newdream.net/linux-ceph-client.git
 +S:	Supported
++F:	Documentation/filesystems/ceph.txt
 +F:	fs/ceph
 +
  CERTIFIED WIRELESS USB (WUSB) SUBSYSTEM:
