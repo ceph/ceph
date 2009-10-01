@@ -789,7 +789,6 @@ static ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		       unsigned long nr_segs, loff_t pos)
 {
 	struct file *file = iocb->ki_filp;
-	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_client(inode->i_sb)->osdc;
@@ -824,9 +823,11 @@ retry_snap:
 	} else {
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 
-		if (ret >= 0 &&
-		    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL))
-			ret = sync_page_range(inode, mapping, pos, ret);
+		if ((ret >= 0 || ret == -EIOCBQUEUED) &&
+		    ((file->f_flags & O_SYNC) || IS_SYNC(file->f_mapping->host)
+		     || ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)))
+			ret = vfs_fsync_range(file, file->f_path.dentry,
+					      pos, pos + ret - 1, 1);
 	}
 	if (ret >= 0) {
 		spin_lock(&inode->i_lock);
