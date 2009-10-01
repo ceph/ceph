@@ -28,9 +28,9 @@ v0.16
 /- document data structures
 /- audit all inline in kclient
 - document on-wire protocol
-- ceph_buffer and vmalloc?
-- ceph_i_test
-- bit ops in messenger
+/- ceph_buffer and vmalloc?
+/- ceph_i_test
+/- bit ops in messenger
 /- name args in ceph_osd_op union
 
 bugs

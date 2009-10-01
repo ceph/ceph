@@ -2139,9 +2139,6 @@ void Server::handle_client_openc(MDRequest *mdr)
     in->inode.layout.fl_stripe_count = req->head.args.open.stripe_count;
   if (req->head.args.open.object_size)
     in->inode.layout.fl_object_size = req->head.args.open.object_size;
-  /*if(req->head.args->open.file_replication)
-    in->inode.layout.fl_pg_pool.set_size(req->head.args.open.file_replication);
-  */
   in->inode.layout.fl_pg_preferred = req->head.args.open.preferred;
 
   dn->first = in->first = follows+1;
