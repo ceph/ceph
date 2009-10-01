@@ -70,7 +70,10 @@ class MDBalancer {
     return mds_meta_load[ex] - target_load - exported[ex];    
   }
 
- public:
+private:
+  void send_targets_message();
+
+public:
   MDBalancer(MDS *m) : 
     mds(m),
     beat_epoch(0),

@@ -765,6 +765,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
 
+  balancer->try_rebalance();
+
  out:
   delete m;
   delete oldmap;
