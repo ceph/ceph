@@ -150,37 +150,28 @@ static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
 	inode_init_once(&ci->vfs_inode);
 }
 
-static int init_caches(void)
+static int __init init_caches(void)
 {
-	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
-					      sizeof(struct ceph_inode_info),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      ceph_inode_init_once);
+	ceph_inode_cachep = kmem_cache_create("ceph_inode_info",
+				      sizeof(struct ceph_inode_info),
+				      __alignof__(struct ceph_inode_info),
+				      (SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD),
+				      ceph_inode_init_once);
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 
-	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
-					    sizeof(struct ceph_cap),
-					    0, (SLAB_RECLAIM_ACCOUNT|
-						SLAB_MEM_SPREAD),
-					    NULL);
+	ceph_cap_cachep = KMEM_CACHE(ceph_cap,
+				     SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_cap_cachep == NULL)
 		goto bad_cap;
 
-	ceph_dentry_cachep = kmem_cache_create("ceph_dentry_cache",
-					       sizeof(struct ceph_dentry_info),
-					       0, (SLAB_RECLAIM_ACCOUNT|
-						   SLAB_MEM_SPREAD),
-					       NULL);
+	ceph_dentry_cachep = KMEM_CACHE(ceph_dentry_info,
+					SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_dentry_cachep == NULL)
 		goto bad_dentry;
 
-	ceph_file_cachep = kmem_cache_create("ceph_file_cache",
-					     sizeof(struct ceph_file_info),
-					     0, (SLAB_RECLAIM_ACCOUNT|
-						 SLAB_MEM_SPREAD),
-					     NULL);
+	ceph_file_cachep = KMEM_CACHE(ceph_file_info,
+				      SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_file_cachep == NULL)
 		goto bad_file;
 
@@ -340,8 +331,6 @@ static match_table_t arg_tokens = {
  * Parse an ip[:port] list into an addr array.  Use the default
  * monitor port if a port isn't specified.
  */
-#define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
-
 static int parse_ips(const char *c, const char *end,
 		     struct ceph_entity_addr *addr,
 		     int max_count, int *count)
@@ -607,10 +596,10 @@ static struct ceph_client *ceph_create_client(void)
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
 		goto fail;
-	client->pg_inv_wq = create_workqueue("ceph-pg-invalid");
+	client->pg_inv_wq = create_singlethread_workqueue("ceph-pg-invalid");
 	if (client->pg_inv_wq == NULL)
 		goto fail_wb_wq;
-	client->trunc_wq = create_workqueue("ceph-trunc");
+	client->trunc_wq = create_singlethread_workqueue("ceph-trunc");
 	if (client->trunc_wq == NULL)
 		goto fail_pg_inv_wq;
 
@@ -877,21 +866,17 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 {
 	int err;
 
-	if (client->mount_args.rsize)
+	err = bdi_init(&client->backing_dev_info);
+	if (err < 0)
+		return err;
+
+	/* set ra_pages based on rsize mount option? */
+	if (client->mount_args.rsize >= PAGE_CACHE_SIZE)
 		client->backing_dev_info.ra_pages =
 			(client->mount_args.rsize + PAGE_CACHE_SIZE - 1)
 			>> PAGE_SHIFT;
 
-	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
-		client->backing_dev_info.ra_pages =
-			CEPH_MOUNT_RSIZE_DEFAULT >> PAGE_SHIFT;
-
-	err = bdi_init(&client->backing_dev_info);
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
-	if (err < 0)
-		return err;
-
 	err = bdi_register_dev(&client->backing_dev_info, sb->s_dev);
 #endif
 

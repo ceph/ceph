@@ -129,7 +129,7 @@ static int caps_use_count;          /* in use */
 static int caps_reserve_count;      /* unused, reserved */
 static int caps_avail_count;        /* unused, unreserved */
 
-void ceph_caps_init(void)
+void __init ceph_caps_init(void)
 {
 	INIT_LIST_HEAD(&caps_list);
 	spin_lock_init(&caps_list_lock);

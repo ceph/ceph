@@ -48,7 +48,7 @@ const char *ceph_name_type_str(int t)
  */
 struct workqueue_struct *ceph_msgr_wq;
 
-int ceph_msgr_init(void)
+int __init ceph_msgr_init(void)
 {
 	ceph_msgr_wq = create_workqueue("ceph-msgr");
 	if (IS_ERR(ceph_msgr_wq)) {
