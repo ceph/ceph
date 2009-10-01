@@ -614,8 +614,8 @@ static int ceph_writepages_start(struct address_space *mapping,
 	do_sync = wbc->sync_mode == WB_SYNC_ALL;
 	if (ceph_caps_revoking(ci, CEPH_CAP_FILE_BUFFER))
 		do_sync = 1;
-	dout("writepages_start %p dosync=%d (pdflush=%d mode=%s)\n",
-	     inode, do_sync, current_is_pdflush(),
+	dout("writepages_start %p dosync=%d (mode=%s)\n",
+	     inode, do_sync,
 	     wbc->sync_mode == WB_SYNC_NONE ? "NONE" :
 	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL" : "HOLD"));
 
