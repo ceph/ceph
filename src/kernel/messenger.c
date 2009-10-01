@@ -1480,7 +1480,6 @@ static void queue_con(struct ceph_connection *con)
 	}
 
 	set_bit(QUEUED, &con->state);
-	smp_mb();
 	if (test_bit(BUSY, &con->state)) {
 		dout("queue_con %p - already BUSY\n", con);
 		con->ops->put(con);
@@ -1529,7 +1528,6 @@ more:
 
 done:
 	clear_bit(BUSY, &con->state);
-	smp_mb();
 	dout("con->state=%lu\n", con->state);
 	if (test_bit(QUEUED, &con->state)) {
 		if (!backoff) {
