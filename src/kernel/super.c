@@ -152,35 +152,26 @@ static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
 
 static int __init init_caches(void)
 {
-	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
-					      sizeof(struct ceph_inode_info),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      ceph_inode_init_once);
+	ceph_inode_cachep = kmem_cache_create("ceph_inode_info",
+				      sizeof(struct ceph_inode_info),
+				      __alignof__(struct ceph_inode_info),
+				      (SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD),
+				      ceph_inode_init_once);
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 
-	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
-					    sizeof(struct ceph_cap),
-					    0, (SLAB_RECLAIM_ACCOUNT|
-						SLAB_MEM_SPREAD),
-					    NULL);
+	ceph_cap_cachep = KMEM_CACHE(ceph_cap,
+				     SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_cap_cachep == NULL)
 		goto bad_cap;
 
-	ceph_dentry_cachep = kmem_cache_create("ceph_dentry_cache",
-					       sizeof(struct ceph_dentry_info),
-					       0, (SLAB_RECLAIM_ACCOUNT|
-						   SLAB_MEM_SPREAD),
-					       NULL);
+	ceph_dentry_cachep = KMEM_CACHE(ceph_dentry_info,
+					SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_dentry_cachep == NULL)
 		goto bad_dentry;
 
-	ceph_file_cachep = kmem_cache_create("ceph_file_cache",
-					     sizeof(struct ceph_file_info),
-					     0, (SLAB_RECLAIM_ACCOUNT|
-						 SLAB_MEM_SPREAD),
-					     NULL);
+	ceph_file_cachep = KMEM_CACHE(ceph_file_info,
+				      SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_file_cachep == NULL)
 		goto bad_file;
 
