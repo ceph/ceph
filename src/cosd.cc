@@ -49,7 +49,16 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  common_init(args, "osd", true, true);
+  bool should_authenticate = true;
+  vector<const char *>::iterator args_iter;
+
+  for (args_iter = args.begin(); args_iter != args.end(); ++args_iter) {
+    if (strcmp(*args_iter, "--mkfs") == 0) {
+      should_authenticate = false;
+      break;
+    } 
+  }
+  common_init(args, "osd", true, should_authenticate);
 
   if (g_conf.clock_tare) g_clock.tare();
 

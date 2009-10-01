@@ -137,6 +137,7 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
       map<string,bufferlist> caps;
       dout(0) << "entity_name=" << entity_name.to_str() << dendl;
       if (!mon->keys_server.get_secret(entity_name, secret, caps)) {
+        dout(0) << "couldn't find entity name: " << entity_name.to_str() << dendl;
 	ret = -EPERM;
 	break;
       }
@@ -281,6 +282,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
   case CEPHX_OPEN_SESSION:
     {
+      dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
       CryptoKey service_secret;
 
       if (mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_MON, service_secret) < 0) {
@@ -292,6 +294,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
       if (!verify_authorizer(service_secret, indata, auth_ticket_info, tmp_bl)) {
+        dout(0) << "could not verify authorizer" << dendl;
         ret = -EPERM;
       }
       build_cephx_response_header(request_type, ret, result_bl);

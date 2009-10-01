@@ -180,6 +180,9 @@ echo "ip $IP"
 [ "$CEPH_BIN" = "" ] && CEPH_BIN=.
 [ "$CEPH_PORT" = "" ] && CEPH_PORT=6789
 
+monkeys_fn=monkeys.bin
+CEPH_ADM="$CEPH_BIN/ceph -k $monkeys_fn -I admin"
+
 if [ "$start_mon" -eq 1 ]; then
 	if [ "$new" -eq 1 ]; then
 	# build and inject an initial osd map
@@ -217,7 +220,7 @@ EOF
 			echo
 		fi
 
-            	$SUDO $CEPH_BIN/authtool --gen-key --name=client.admin monkeys.bin
+	        $SUDO $CEPH_BIN/authtool --gen-key --name=client.admin $monkeys_fn
 
 		# build a fresh fs monmap, mon fs
 		# $CEPH_BIN/monmaptool --create --clobber --print .ceph_monmap
@@ -229,7 +232,6 @@ EOF
 [mon$f]
         mon data = "dev/mon$f"
         mon addr = $IP:$(($CEPH_PORT+$f))
-        keys file = dev/mon$f/monkeys.bin
 EOF
 		done
 		str=$str" --print .ceph_monmap"
@@ -239,8 +241,7 @@ EOF
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
 		    echo $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
-		    key_fn=monkeys.bin
-		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=$key_fn
+		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=$monkeys_fn
 		done
 	fi
 
@@ -270,7 +271,7 @@ EOF
 	    $SUDO $CEPH_BIN/cosd -i $osd $ARGS --mkfs # --debug_journal 20 --debug_osd 20 --debug_filestore 20 --debug_ebofs 20
 	    key_fn=dev/osd$osd/osd$osd.keys.bin
             $SUDO $CEPH_BIN/authtool --gen-key $key_fn
-            $SUDO $CEPH_BIN/ceph -i $key_fn auth add osd.$osd
+            $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/cosd -i $osd $ARGS $COSD_ARGS
@@ -289,7 +290,7 @@ if [ "$start_mds" -eq 1 ]; then
         keys file = $key_fn
 EOF
             $SUDO $CEPH_BIN/authtool --gen-key $key_fn
-            $SUDO $CEPH_BIN/ceph -i $key_fn auth add mds.$name
+            $SUDO $CEPH_ADM -i $key_fn auth add mds.$name
 	fi
 	
 	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
@@ -299,10 +300,10 @@ EOF
 
 #valgrind --tool=massif $CEPH_BIN/cmds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/cmds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_BIN/ceph mds set_max_mds 2
+#$CEPH_ADM mds set_max_mds 2
     done
-    echo $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
-    $CEPH_BIN/ceph mds set_max_mds $CEPH_NUM_MDS
+    echo $CEPH_ADM mds set_max_mds $CEPH_NUM_MDS
+    $CEPH_ADM mds set_max_mds $CEPH_NUM_MDS
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."

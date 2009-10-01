@@ -433,7 +433,7 @@ void MonClient::tick()
     auth.send_session_request(this, &auth_handler, 30.0);
     return;
   }
-  if (state == MC_STATE_AUTHENTICATING)
+  if (state != MC_STATE_HAVE_SESSION)
     return;
 
   if (hunting) {

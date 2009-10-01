@@ -66,6 +66,8 @@ bool KeyRing::load_master(const char *filename)
 
   string name = g_conf.entity_name->to_str();
 
+  dout(0) << "looking for key entry name=" << name << dendl;
+
   miter = m.find(name);
   if (miter == m.end()) {
     miter = m.find("");
