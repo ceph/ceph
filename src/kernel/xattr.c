@@ -8,7 +8,6 @@ static bool ceph_is_valid_xattr(const char *name)
 {
 	return !strncmp(name, XATTR_SECURITY_PREFIX,
 			XATTR_SECURITY_PREFIX_LEN) ||
-	       !strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN) ||
 	       !strncmp(name, XATTR_TRUSTED_PREFIX, XATTR_TRUSTED_PREFIX_LEN) ||
 	       !strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN);
 }
@@ -494,7 +493,7 @@ ssize_t ceph_getxattr(struct dentry *dentry, const char *name, void *value,
 	struct ceph_vxattr_cb *vxattr = NULL;
 
 	if (!ceph_is_valid_xattr(name))
-		return -EOPNOTSUPP;
+		return -ENODATA;
 
 	/* let's see if a virtual xattr was requested */
 	if (vxattrs)
