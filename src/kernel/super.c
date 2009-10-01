@@ -150,7 +150,7 @@ static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
 	inode_init_once(&ci->vfs_inode);
 }
 
-static int init_caches(void)
+static int __init init_caches(void)
 {
 	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
 					      sizeof(struct ceph_inode_info),

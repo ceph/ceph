@@ -317,7 +317,7 @@ DEFINE_SHOW_FUNC(osdc_show)
 DEFINE_SHOW_FUNC(dentry_lru_show)
 DEFINE_SHOW_FUNC(caps_show)
 
-int ceph_debugfs_init(void)
+int __init ceph_debugfs_init(void)
 {
 	int ret = -ENOMEM;
 
