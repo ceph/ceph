@@ -38,6 +38,7 @@ enum MonClientState {
   MC_STATE_NONE,
   MC_STATE_AUTHENTICATING,
   MC_STATE_AUTHENTICATED,
+  MC_STATE_HAVE_SESSION,
 };
 
 class MonClient : public Dispatcher, public AuthClient {
@@ -149,6 +150,7 @@ private:
 public:
   AuthClientHandler auth;
   AuthClientAuthenticateHandler auth_handler;
+  AuthClientAuthorizeHandler authorize_handler;
   double auth_timeout;
 public:
   void renew_subs() {
@@ -175,7 +177,8 @@ public:
 		timer(monc_lock),
 		hunting(false),
 		mounting(0), mount_err(0),
-                auth_handler(&auth, 0, 0) { }
+                auth_handler(&auth, CEPHX_PRINCIPAL_MON, 0),
+                authorize_handler(&auth, CEPHX_PRINCIPAL_MON) { }
   ~MonClient() {
     timer.cancel_all_events();
   }
@@ -228,7 +231,7 @@ public:
   void send_message(Message *m);
 
   void set_want_keys(uint32_t want) {
-    auth_handler.set_want_keys(want);
+    auth_handler.set_want_keys(want | CEPHX_PRINCIPAL_MON);
   }
 };
 

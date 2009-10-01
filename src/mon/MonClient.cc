@@ -312,10 +312,25 @@ void MonClient::handle_auth(MAuthReply *m)
   if (ret == -EAGAIN) {
     auth.send_session_request(this, &auth_handler, 30.0);
   } else {
-    dout(0) << "done authenticating" << dendl;
-    state = MC_STATE_AUTHENTICATED;
-    authenticate_cond.SignalAll();
-    _open_session();
+    switch (state) {
+    case MC_STATE_AUTHENTICATING:
+      {
+        dout(0) << "done authenticating" << dendl;
+        state = MC_STATE_AUTHENTICATED;
+        auth.send_session_request(this, &authorize_handler, 30.0);
+      }
+      break;
+    case MC_STATE_AUTHENTICATED:
+      {
+        dout(0) << "done authorizing" << dendl;
+        state = MC_STATE_HAVE_SESSION;
+        authenticate_cond.SignalAll();
+        _open_session();
+      }
+      break;
+    default:
+      assert(false);
+    }
   }
 }
 
@@ -359,7 +374,7 @@ void MonClient::_open_session()
     return;
   }
 
-  if (state == MC_STATE_AUTHENTICATING)
+  if (state != MC_STATE_HAVE_SESSION)
     return;
 
   if (g_keyring.need_rotating_secrets()) {
@@ -484,7 +499,7 @@ int MonClient::wait_authenticate(double timeout)
   utime_t interval;
   interval += timeout;
 
-  if (state == MC_STATE_AUTHENTICATED)
+  if (state == MC_STATE_HAVE_SESSION)
     return 0;
 
   if (cur_mon < 0)
