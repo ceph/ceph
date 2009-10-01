@@ -60,6 +60,9 @@ class MDBalancer {
   map<int,double> my_targets;
   map<int,double> imported;
   map<int,double> exported;
+  //Check if all our current offload targets are in MDSMap
+  bool targets_safe();
+
 
   double try_match(int ex, double& maxex,
                    int im, double& maxim);
@@ -71,6 +74,7 @@ class MDBalancer {
   }
 
 private:
+  //send an MMDSOffloadTargets message to the monitor
   void send_targets_message();
 
 public:
