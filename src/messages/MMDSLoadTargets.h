@@ -23,11 +23,11 @@ using std::map;
 
 class MMDSLoadTargets : public Message {
  public:
-  map<int, double> targets;
+  set<int32_t> targets;
 
   MMDSLoadTargets() : Message(MSG_MDS_OFFLOAD_TARGETS) {}
 
-  MMDSLoadTargets(map<int, double>& mds_targets) :
+  MMDSLoadTargets(set<int32_t>& mds_targets) :
     Message(MSG_MDS_OFFLOAD_TARGETS),
     targets(mds_targets) {}
 

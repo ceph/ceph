@@ -666,7 +666,12 @@ void MDBalancer::try_rebalance()
 
 inline void MDBalancer::send_targets_message()
 {
-  MMDSLoadTargets* m = new MMDSLoadTargets(my_targets);
+  set<int32_t> targets;
+  for (map<int, double>::iterator i = my_targets.begin();
+       i != my_targets.end();
+       ++i)
+    targets.insert(i->first);
+  MMDSLoadTargets* m = new MMDSLoadTargets(targets);
   mds->monc->send_mon_message(m);
 }
 
