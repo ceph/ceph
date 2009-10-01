@@ -979,8 +979,6 @@ static int __init init_ceph(void)
 {
 	int ret = 0;
 
-	pr_info("init (%s)\n", STRINGIFY(CEPH_GIT_VER));
-
 	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
@@ -998,6 +996,8 @@ static int __init init_ceph(void)
 	ret = register_filesystem(&ceph_fs_type);
 	if (ret)
 		goto out_icache;
+
+	pr_info("loaded (%s)\n", STRINGIFY(CEPH_GIT_VER));
 	return 0;
 
 out_icache:

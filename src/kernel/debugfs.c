@@ -319,16 +319,10 @@ DEFINE_SHOW_FUNC(caps_show)
 
 int __init ceph_debugfs_init(void)
 {
-	int ret = -ENOMEM;
-
 	ceph_debugfs_dir = debugfs_create_dir("ceph", NULL);
 	if (!ceph_debugfs_dir)
-		goto out;
+		return -ENOMEM;
 	return 0;
-
-out:
-	ceph_debugfs_cleanup();
-	return ret;
 }
 
 void ceph_debugfs_cleanup(void)
