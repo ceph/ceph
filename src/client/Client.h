@@ -1006,13 +1006,15 @@ protected:
 
   void unlink(Dentry *dn, bool keepdir = false) {
     Inode *in = dn->inode;
-    assert(in->dn == dn);
 
     // unlink from inode
-    if (dn->inode->dir) dn->put();        // dir -> dn pin
-    dn->inode = 0;
-    in->dn = 0;
-    put_inode(in);
+    if (in) {
+      assert(in->dn == dn);
+      if (in->dir) dn->put();        // dir -> dn pin
+      dn->inode = 0;
+      in->dn = 0;
+      put_inode(in);
+    }
         
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
