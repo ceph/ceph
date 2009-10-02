@@ -979,8 +979,11 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
-  InodeCap *caps = in->caps[mds];
-  if (drop & caps->issued &&
+  InodeCap *caps = NULL;
+  if (in->caps.count(mds))
+    caps = in->caps[mds];
+  if (caps &&
+      drop & caps->issued &&
       !(unless & caps->issued)) {
     dout(25) << "Dropping caps. Initial " << ccap_string(caps->issued) << dendl;
     caps->issued &= ~drop;
@@ -989,7 +992,7 @@ int Client::encode_inode_release(Inode *in, MClientRequest *req,
     force = 1;
     dout(25) << "Now have: " << ccap_string(caps->issued) << dendl;
   }
-  if (force) {
+  if (force && caps) {
     ceph_mds_request_release rel;
     rel.ino = in->ino;
     rel.cap_id = caps->cap_id;
@@ -2083,6 +2086,11 @@ void Client::add_update_cap(Inode *in, int mds, __u64 cap_id,
 void Client::remove_cap(Inode *in, int mds)
 {
   dout(10) << "remove_cap mds" << mds << " on " << *in << dendl;
+  if (!in->caps.count(mds)) {
+    dout(10) << "no caps from mds " << mds << "on this inode!\n"
+	     << "remove_cap returning" << dendl;
+    return;
+  }
   InodeCap *cap = in->caps[mds];
   MDSSession *session = &mds_sessions[mds];
   
@@ -2462,6 +2470,7 @@ void Client::handle_caps(MClientCaps *m)
     delete m;
     return;
   }
+
   InodeCap *cap = in->caps[mds];
 
   switch (m->get_op()) {
