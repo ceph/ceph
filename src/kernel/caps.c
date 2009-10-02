@@ -573,7 +573,7 @@ retry:
 				 &realm->inodes_with_caps);
 			spin_unlock(&realm->inodes_with_caps_lock);
 		} else {
-			pr_err("ceph_add_cap: couldn't find snap realm %llu\n",
+			pr_err("ceph_add_cap: couldn't find snap realm %llx\n",
 			       realmino);
 		}
 	}
@@ -872,7 +872,7 @@ void __ceph_remove_cap(struct ceph_cap *cap,
 
 	put_cap(cap, ctx);
 
-	if (!__ceph_is_any_caps(ci)) {
+	if (!__ceph_is_any_caps(ci) && ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ci->i_snap_realm;
 		spin_lock(&realm->inodes_with_caps_lock);
 		list_del_init(&ci->i_snap_realm_item);
