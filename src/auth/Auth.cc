@@ -39,7 +39,7 @@ void build_service_ticket_request(uint32_t keys,
  *
  * Authenticate principal, respond with AuthServiceTicketInfo
  *
- * {session key, validity, nonce}^principal_secret
+ * {session key, validity}^principal_secret
  * {principal_ticket, session key}^service_secret  ... "enc_ticket"
  */
 bool build_service_ticket_reply(
@@ -153,7 +153,7 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
 /*
  * PRINCIPAL: build authorizer to access the service.
  *
- * ticket, {timestamp, nonce}^session_key
+ * ticket, {timestamp}^session_key
  */
 bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
 {
@@ -162,10 +162,9 @@ bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
   ::encode(ticket, bl);
 
   AuthAuthorize msg;
-  // msg.trans_id = ctx.id;
   msg.now = ctx.timestamp;
-  msg.nonce = nonce;
-  encode_encrypt(msg, session_key, bl);
+  if (encode_encrypt(msg, session_key, bl) < 0)
+    return false;
 
   return true;
 }
@@ -173,7 +172,7 @@ bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
 /*
  * PRINCIPAL: build authorizer to access the service.
  *
- * ticket, {timestamp, nonce}^session_key
+ * ticket, {timestamp}^session_key
  */
 bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& ctx)
 {
@@ -212,13 +211,6 @@ bool verify_authorizer(uint32_t service_id, KeysServer& keys, bufferlist::iterat
     return false;
   }
 
-  // it's authentic if the nonces match
-  if (auth_msg.nonce != ticket_info.ticket.nonce) {
-    dout(0) << "nonces mismatch" << dendl;
-    return false;
-  }
-  dout(0) << "verify_authorizer: nonce ok" << dendl;
-  
   /*
    * Reply authorizer:
    *  {timestamp + 1}^session_key
@@ -227,7 +219,8 @@ bool verify_authorizer(uint32_t service_id, KeysServer& keys, bufferlist::iterat
   // reply.trans_id = auth_msg.trans_id;
   reply.timestamp = auth_msg.now;
   reply.timestamp += 1;
-  encode_encrypt(reply, ticket_info.session_key, reply_bl);
+  if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
+    return false;
 
   dout(0) << "verify_authorizer: ok" << dendl;
 

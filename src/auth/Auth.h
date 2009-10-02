@@ -41,7 +41,6 @@ struct AuthTicket {
   EntityName name;
   entity_addr_t addr;
   utime_t created, renew_after, expires;
-  string nonce;
   map<string, bufferlist> caps;
   __u32 flags;
 
@@ -62,7 +61,6 @@ struct AuthTicket {
     ::encode(addr, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
-    ::encode(nonce, bl);
     ::encode(caps, bl);
     ::encode(flags, bl);
   }
@@ -73,7 +71,6 @@ struct AuthTicket {
     ::decode(addr, bl);
     ::decode(created, bl);
     ::decode(expires, bl);
-    ::decode(nonce, bl);
     ::decode(caps, bl);
     ::decode(flags, bl);
   }
@@ -173,7 +170,6 @@ struct AuthTicketHandler {
   CryptoKey session_key;
   uint64_t secret_id;
   AuthBlob ticket;        // opaque to us
-  string nonce;
   utime_t renew_after, expires;
   bool has_key_flag;
 
@@ -232,13 +228,11 @@ struct AuthServiceTicketInfo {
   void encode(bufferlist& bl) const {
     ::encode(ticket.renew_after, bl);
     ::encode(ticket.expires, bl);
-    ::encode(ticket.nonce, bl);
     ::encode(session_key, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(ticket.renew_after, bl);
     ::decode(ticket.expires, bl);
-    ::decode(ticket.nonce, bl);
     ::decode(session_key, bl);
   }
 };
@@ -247,16 +241,13 @@ WRITE_CLASS_ENCODER(AuthServiceTicketInfo);
 struct AuthAuthorize {
   // uint32_t trans_id;
   utime_t now;
-  string nonce;
   void encode(bufferlist& bl) const {
     // ::encode(trans_id, bl);
     ::encode(now, bl);
-    ::encode(nonce, bl);
   }
   void decode(bufferlist::iterator& bl) {
     // ::decode(trans_id, bl);
     ::decode(now, bl);
-    ::decode(nonce, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthAuthorize);

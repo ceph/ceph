@@ -209,7 +209,6 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       info.ticket.addr = req.addr;
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
 
-      generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
       mon->keys_server.generate_secret(session_key);
 
       info.session_key = session_key;
@@ -261,7 +260,6 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 	  info.ticket.addr = auth_ticket_info.ticket.addr;
 	  info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
 
-	  generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
           mon->keys_server.generate_secret(info.session_key);
 
           mon->keys_server.get_service_secret(service_id, info.service_secret, info.secret_id);
