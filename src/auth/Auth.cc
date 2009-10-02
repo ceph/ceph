@@ -1,5 +1,6 @@
 
 #include "Auth.h"
+#include "KeysServer.h"
 #include "common/Clock.h"
 
 #include "config.h"
@@ -43,15 +44,16 @@ void build_service_ticket_request(uint32_t keys,
  */
 bool build_service_ticket_reply(
                      CryptoKey& principal_secret,
-                     vector<SessionAuthInfo> ticket_info,
+                     vector<SessionAuthInfo> ticket_info_vec,
                      bufferlist& reply)
 {
-  vector<SessionAuthInfo>::iterator ticket_iter = ticket_info.begin(); 
+  vector<SessionAuthInfo>::iterator ticket_iter = ticket_info_vec.begin(); 
 
-  uint32_t num = ticket_info.size();
+  uint32_t num = ticket_info_vec.size();
   ::encode(num, reply);
+  dout(0) << "encoding " << num << " tickets" << dendl;
 
-  while (ticket_iter != ticket_info.end()) {
+  while (ticket_iter != ticket_info_vec.end()) {
     SessionAuthInfo& info = *ticket_iter;
 
     ::encode(info.service_id, reply);
@@ -70,6 +72,8 @@ bool build_service_ticket_reply(
     AuthServiceTicketInfo ticket_info;
     ticket_info.session_key = info.session_key;
     ticket_info.ticket = info.ticket;
+    ::encode(info.secret_id, reply);
+    dout(0) << "encoded info.secret_id=" << info.secret_id << dendl;
     if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
       return false;
 
@@ -101,8 +105,9 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   }
   if (decode_decrypt(msg_a, secret, indata) < 0)
     return false;
-  /* FIXME: decode into relevant ticket */
+  dout(0) << "decoded message" << dendl;
   ::decode(ticket, indata);
+  dout(0) << "decoded ticket secret_id=" << ticket.secret_id << dendl;
 
   bufferptr& s = msg_a.session_key.get_secret();
   hexdump("decoded ticket.session key", s.c_str(), s.length());
@@ -185,19 +190,33 @@ bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, A
  *
  * {timestamp + 1}^session_key
  */
-bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& indata,
+bool verify_authorizer(uint32_t service_id, KeysServer& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
-  if (decode_decrypt(ticket_info, service_secret, indata) < 0)
+  uint64_t secret_id;
+  CryptoKey service_secret;
+
+  ::decode(secret_id, indata);
+  if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
+    dout(0) << "could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
     return false;
+  }
+  if (decode_decrypt(ticket_info, service_secret, indata) < 0) {
+    dout(0) << "could not decrypt ticket info" << dendl;
+    return false;
+  }
 
   AuthAuthorize auth_msg;
-  if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0)
+  if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0) {
+    dout(0) << "could not decrypt authorize request" << dendl;
     return false;
+  }
 
   // it's authentic if the nonces match
-  if (auth_msg.nonce != ticket_info.ticket.nonce)
+  if (auth_msg.nonce != ticket_info.ticket.nonce) {
+    dout(0) << "nonces mismatch" << dendl;
     return false;
+  }
   dout(0) << "verify_authorizer: nonce ok" << dendl;
   
   /*

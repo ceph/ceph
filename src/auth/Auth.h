@@ -81,13 +81,16 @@ struct AuthTicket {
 WRITE_CLASS_ENCODER(AuthTicket)
 
 struct AuthBlob {
+  uint64_t secret_id;
   bufferlist blob;
 
   void encode(bufferlist& bl) const {
+    ::encode(secret_id, bl);
     ::encode(blob, bl);
   }
 
   void decode(bufferlist::iterator& bl) {
+    ::decode(secret_id, bl);
     ::decode(blob, bl);
   }
 };
@@ -95,6 +98,7 @@ WRITE_CLASS_ENCODER(AuthBlob);
 
 struct SessionAuthInfo {
   uint32_t service_id;
+  uint64_t secret_id;
   AuthTicket ticket;
   CryptoKey session_key;
   CryptoKey service_secret;
@@ -167,6 +171,7 @@ WRITE_CLASS_ENCODER(AuthAuthorizeReply);
  */
 struct AuthTicketHandler {
   CryptoKey session_key;
+  uint64_t secret_id;
   AuthBlob ticket;        // opaque to us
   string nonce;
   utime_t renew_after, expires;
@@ -336,7 +341,9 @@ static inline bool auth_principal_needs_rotating_keys(EntityName& name)
 extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 					  bufferlist::iterator& indata);
 
-extern bool verify_authorizer(CryptoKey& service_secret, bufferlist::iterator& bl,
-			      AuthServiceTicketInfo& ticket_info, bufferlist& enc_reply);
+class KeysServer;
+
+extern bool verify_authorizer(uint32_t service_id, KeysServer& keys, bufferlist::iterator& indata,
+                       AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
 #endif

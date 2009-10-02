@@ -214,7 +214,11 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       info.session_key = session_key;
       info.service_id = CEPHX_PRINCIPAL_AUTH;
-      mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, info.service_secret);
+      if (!mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, info.service_secret, info.secret_id)) {
+        dout(0) << "could not get service secret for auth subsystem" << dendl;
+        ret = -EIO;
+        break;
+      }
 
       vector<SessionAuthInfo> info_vec;
       info_vec.push_back(info);
@@ -230,14 +234,9 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
     {
-      CryptoKey auth_secret;
-      if (mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, auth_secret) < 0) {
-        ret = -EPERM;
-      }
-
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(auth_secret, indata, auth_ticket_info, tmp_bl)) {
+      if (!verify_authorizer(CEPHX_PRINCIPAL_AUTH, mon->keys_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
 
@@ -250,8 +249,9 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       vector<SessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
         if (ticket_req.keys & service_id) {
-	  CryptoKey service_secret;
-          if (mon->keys_server.get_service_secret(service_id, service_secret) < 0) {
+          uint64_t secret_id;
+          CryptoKey service_secret;
+          if (mon->keys_server.get_service_secret(service_id, service_secret, secret_id) < 0) {
             ret = -EPERM;
             break;
           }
@@ -264,9 +264,10 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 	  generate_random_string(info.ticket.nonce, g_conf.auth_nonce_len);
           mon->keys_server.generate_secret(info.session_key);
 
-          auth_server.get_service_secret(info.service_secret, service_id);
+          mon->keys_server.get_service_secret(service_id, info.service_secret, info.secret_id);
 
           info.service_id = service_id;
+          info.secret_id = secret_id;
 	  
 	  info.ticket.caps = auth_ticket_info.ticket.caps;
 
@@ -282,18 +283,12 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
   case CEPHX_OPEN_SESSION:
     {
-      dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
-      CryptoKey service_secret;
-
-      if (mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_MON, service_secret) < 0) {
-        ret = -EPERM;
-        break;
-      }
+      dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
 
       ret = 0;
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(service_secret, indata, auth_ticket_info, tmp_bl)) {
+      if (!verify_authorizer(CEPHX_PRINCIPAL_MON, mon->keys_server, indata, auth_ticket_info, tmp_bl)) {
         dout(0) << "could not verify authorizer" << dendl;
         ret = -EPERM;
       }

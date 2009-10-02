@@ -34,7 +34,7 @@ void RotatingSecrets::add(ExpiringCryptoKey& key)
   }
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret)
+bool KeysServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
 {
   map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end())
@@ -46,19 +46,37 @@ bool KeysServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& 
     ++riter;
 
 
+  secret_id = riter->first;
   secret = riter->second;
 
   return true;
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, CryptoKey& secret)
+bool KeysServerData::get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id)
 {
   ExpiringCryptoKey e;
 
-  if (!get_service_secret(service_id, e))
+  if (!get_service_secret(service_id, e, secret_id))
     return false;
 
   secret = e.key;
+
+  return true;
+}
+
+bool KeysServerData::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
+{
+  map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
+  if (iter == rotating_secrets.end())
+    return false;
+
+  RotatingSecrets& secrets = iter->second;
+  map<uint64_t, ExpiringCryptoKey>::iterator riter = secrets.secrets.find(secret_id);
+
+  if (riter == secrets.secrets.end())
+    return false;
+
+  secret = riter->second.key;
 
   return true;
 }
@@ -103,6 +121,7 @@ void KeysServer::_generate_all_rotating_secrets(bool init)
     i = 1;
 
   for (; i <= KEY_ROTATE_NUM; i++) {
+    _rotate_secret(CEPHX_PRINCIPAL_AUTH, i);
     _rotate_secret(CEPHX_PRINCIPAL_MON, i);
     _rotate_secret(CEPHX_PRINCIPAL_OSD, i);
     _rotate_secret(CEPHX_PRINCIPAL_MDS, i);
@@ -152,18 +171,25 @@ bool KeysServer::get_secret(EntityName& name, CryptoKey& secret, map<string,buff
   return data.get_secret(name, secret, caps);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret)
+bool KeysServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
 {
   Mutex::Locker l(lock);
 
-  return data.get_service_secret(service_id, secret);
+  return data.get_service_secret(service_id, secret, secret_id);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, CryptoKey& secret)
+bool KeysServer::get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id)
 {
   Mutex::Locker l(lock);
 
-  return data.get_service_secret(service_id, secret);
+  return data.get_service_secret(service_id, secret, secret_id);
+}
+
+bool KeysServer::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
+{
+  Mutex::Locker l(lock);
+
+  return data.get_service_secret(service_id, secret_id, secret);
 }
 
 bool KeysServer::generate_secret(CryptoKey& secret)

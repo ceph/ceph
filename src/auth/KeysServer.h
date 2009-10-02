@@ -69,8 +69,9 @@ struct KeysServerData {
     rotating_secrets[service_id].add(key);
   }
 
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret);
-  bool get_service_secret(uint32_t service_id, CryptoKey& secret);
+  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id);
+  bool get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id);
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
   bool get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps);
 
   map<EntityName, CryptoKey>::iterator secrets_begin() { return secrets.begin(); }
@@ -113,8 +114,9 @@ public:
   void rotate_timeout(double timeout);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key);
-  bool get_service_secret(uint32_t service_id, CryptoKey& service_key);
+  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key, uint64_t& secret_id);
+  bool get_service_secret(uint32_t service_id, CryptoKey& service_key, uint64_t& secret_id);
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 
