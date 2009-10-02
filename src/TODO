@@ -21,13 +21,13 @@ v0.16
  - document data structures
  - audit all inline in kclient
  - ceph_buffer and vmalloc?
- - ceph_i_test
+ - ceph_i_test smp_mb instead of spinlock
  - bit ops in messenger
  - name args in ceph_osd_op union
 - disk format, wire protocol changes
+- use sockaddr_storage; some ipv6 groundwork
 
 - mds: put migration vectors in mdsmap
-
 
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
 
