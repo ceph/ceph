@@ -37,9 +37,9 @@ static int monmap_show(struct seq_file *s, void *p)
 		struct ceph_entity_inst *inst =
 			&client->monc.monmap->mon_inst[i];
 
-		seq_printf(s, "\t%s%lld\t%u.%u.%u.%u:%u\n",
-			       ENTITY_NAME(inst->name),
-			       IPQUADPORT(inst->addr.ipaddr));
+		seq_printf(s, "\t%s%lld\t%s\n",
+			   ENTITY_NAME(inst->name),
+			   pr_addr(&inst->addr.in_addr));
 	}
 	return 0;
 }
@@ -62,9 +62,7 @@ static int mdsmap_show(struct seq_file *s, void *p)
 			&client->mdsc.mdsmap->m_info[i].addr;
 		int state = client->mdsc.mdsmap->m_info[i].state;
 
-		seq_printf(s, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
-			       i,
-			       IPQUADPORT(addr->ipaddr),
+		seq_printf(s, "\tmds%d\t%s\t(%s)\n", i, pr_addr(&addr->in_addr),
 			       ceph_mds_state_name(state));
 	}
 	return 0;
@@ -96,11 +94,10 @@ static int osdmap_show(struct seq_file *s, void *p)
 		int state = client->osdc.osdmap->osd_state[i];
 		char sb[64];
 
-		seq_printf(s,
-		       "\tosd%d\t%u.%u.%u.%u:%u\t%3d%%\t(%s)\n",
-		       i, IPQUADPORT(addr->ipaddr),
-		       ((client->osdc.osdmap->osd_weight[i]*100) >> 16),
-		       ceph_osdmap_state_str(sb, sizeof(sb), state));
+		seq_printf(s, "\tosd%d\t%s\t%3d%%\t(%s)\n",
+			   i, pr_addr(&addr->in_addr),
+			   ((client->osdc.osdmap->osd_weight[i]*100) >> 16),
+			   ceph_osdmap_state_str(sb, sizeof(sb), state));
 	}
 	return 0;
 }

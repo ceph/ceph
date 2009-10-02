@@ -379,7 +379,7 @@ private:
   }
   bool find_osd_on_ip(const entity_addr_t& ip) const {
     for (unsigned i=0; i<osd_addr.size(); i++)
-      if (memcmp(&osd_addr[i].ipaddr.sin_addr, &ip.ipaddr.sin_addr, sizeof(ip.ipaddr.sin_addr)) == 0)
+      if (osd_addr[i].is_same_host(ip))
 	return i;
     return -1;
   }
@@ -407,7 +407,7 @@ private:
     assert(exists(osd));
     entity_inst_t i(entity_name_t::OSD(osd),
 		    osd_addr[osd]);
-    i.addr.erank++;  // heartbeat addr erank is regular addr erank + 1
+    i.addr.v.erank = i.addr.v.erank + 1;  // heartbeat addr erank is regular addr erank + 1
     return i;
   }
 

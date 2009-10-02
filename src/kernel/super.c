@@ -4,6 +4,7 @@
 #include <linux/backing-dev.h>
 #include <linux/fs.h>
 #include <linux/inet.h>
+#include <linux/in6.h>
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/parser.h>
@@ -277,7 +278,6 @@ enum {
 	Opt_fsidmajor,
 	Opt_fsidminor,
 	Opt_monport,
-	Opt_port,
 	Opt_wsize,
 	Opt_rsize,
 	Opt_osdtimeout,
@@ -303,7 +303,6 @@ static match_table_t arg_tokens = {
 	{Opt_fsidmajor, "fsidmajor=%ld"},
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_monport, "monport=%d"},
-	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
 	{Opt_rsize, "rsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
@@ -326,64 +325,6 @@ static match_table_t arg_tokens = {
 	{-1, NULL}
 };
 
-
-/*
- * Parse an ip[:port] list into an addr array.  Use the default
- * monitor port if a port isn't specified.
- */
-static int parse_ips(const char *c, const char *end,
-		     struct ceph_entity_addr *addr,
-		     int max_count, int *count)
-{
-	int mon_count;
-	const char *p = c;
-
-	dout("parse_ips on '%.*s'\n", (int)(end-c), c);
-	for (mon_count = 0; mon_count < max_count; mon_count++) {
-		const char *ipend;
-		__be32 quad;
-
-		if (!in4_pton(p, end - p, (u8 *)&quad, ',', &ipend))
-			goto bad;
-		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = quad;
-		p = ipend;
-
-		/* port? */
-		if (p < end && *p == ':') {
-			long port = 0;
-
-			p++;
-			while (p < end && *p >= '0' && *p <= '9') {
-				port = (port * 10) + (*p - '0');
-				p++;
-			}
-			if (port > 65535 || port == 0)
-				goto bad;
-			addr[mon_count].ipaddr.sin_port = htons(port);
-		} else
-			addr[mon_count].ipaddr.sin_port = htons(CEPH_MON_PORT);
-
-		dout("parse_ips got %u.%u.%u.%u:%u\n",
-		     IPQUADPORT(addr[mon_count].ipaddr));
-
-		if (p == end)
-			break;
-		if (*p != ',')
-			goto bad;
-		p++;
-	}
-
-	if (p != end)
-		goto bad;
-
-	if (count)
-		*count = mon_count + 1;
-	return 0;
-
-bad:
-	pr_err("parse_ips bad ip '%s'\n", c);
-	return -EINVAL;
-}
 
 static int parse_mount_args(struct ceph_client *client,
 			    int flags, char *options, const char *dev_name,
@@ -422,8 +363,8 @@ static int parse_mount_args(struct ceph_client *client,
 	}
 
 	/* get mon ip(s) */
-	err = parse_ips(dev_name, *path, mon_addr,
-			CEPH_MAX_MON_MOUNT_ADDR, &num_mon);
+	err = ceph_parse_ips(dev_name, *path, mon_addr,
+			     CEPH_MAX_MON_MOUNT_ADDR, &num_mon);
 	if (err < 0)
 		return err;
 
@@ -435,8 +376,6 @@ static int parse_mount_args(struct ceph_client *client,
 		return -ENOMEM;
 	for (i = 0; i < num_mon; i++) {
 		client->monc.monmap->mon_inst[i].addr = mon_addr[i];
-		client->monc.monmap->mon_inst[i].addr.ipaddr.sin_family =
-			AF_INET;
 		client->monc.monmap->mon_inst[i].addr.erank = 0;
 		client->monc.monmap->mon_inst[i].addr.nonce = 0;
 		client->monc.monmap->mon_inst[i].name.type =
@@ -444,9 +383,7 @@ static int parse_mount_args(struct ceph_client *client,
 		client->monc.monmap->mon_inst[i].name.num = cpu_to_le64(i);
 	}
 	client->monc.monmap->num_mon = num_mon;
-	args->my_addr.ipaddr.sin_family = AF_INET;
-	args->my_addr.ipaddr.sin_addr.s_addr = htonl(0);
-	args->my_addr.ipaddr.sin_port = htons(0);
+	memset(&args->my_addr.in_addr, 0, sizeof(args->my_addr.in_addr));
 
 	/* path on server */
 	*path += 2;
@@ -479,14 +416,11 @@ static int parse_mount_args(struct ceph_client *client,
 		case Opt_fsidminor:
 			*(__le64 *)&args->fsid.fsid[8] = cpu_to_le64(intval);
 			break;
-		case Opt_port:
-			args->my_addr.ipaddr.sin_port = htons(intval);
-			break;
 		case Opt_ip:
-			err = parse_ips(argstr[0].from,
-					argstr[0].to,
-					&args->my_addr,
-					1, NULL);
+			err = ceph_parse_ips(argstr[0].from,
+					     argstr[0].to,
+					     &args->my_addr,
+					     1, NULL);
 			if (err < 0)
 				return err;
 			args->flags |= CEPH_OPT_MYIP;

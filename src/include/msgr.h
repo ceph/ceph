@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v020"
+#define CEPH_BANNER "ceph v021"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -58,14 +58,14 @@ struct ceph_entity_name {
 struct ceph_entity_addr {
 	__le32 erank;  /* entity's rank in process */
 	__le32 nonce;  /* unique id for process (e.g. pid) */
-	struct sockaddr_in ipaddr;
+	struct sockaddr_storage in_addr;
 } __attribute__ ((packed));
 
 static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
 					     const struct ceph_entity_addr *b)
 {
 	return a->nonce == b->nonce &&
-		a->ipaddr.sin_addr.s_addr == b->ipaddr.sin_addr.s_addr;
+		memcmp(&a->in_addr, &b->in_addr, sizeof(a->in_addr)) == 0;
 }
 
 static inline bool ceph_entity_addr_equal(const struct ceph_entity_addr *a,

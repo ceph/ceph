@@ -5877,7 +5877,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, string& address)
   
   // now we need to turn it into a string
   char foo[30];
-  __u8 *quad = (__u8*) &addr.ipaddr.sin_addr;
+  __u8 *quad = (__u8*) &addr.in4_addr().sin_addr;
   sprintf(foo, "%d.%d.%d.%d", (int)quad[0], (int)quad[1], (int)quad[2], (int)quad[3]);
   address = foo;
   return 0;

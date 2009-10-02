@@ -66,8 +66,8 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	dout("monmap_decode epoch %d, num_mon %d\n", m->epoch,
 	     m->num_mon);
 	for (i = 0; i < m->num_mon; i++)
-		dout("monmap_decode  mon%d is %u.%u.%u.%u:%u\n", i,
-		     IPQUADPORT(m->mon_inst[i].addr.ipaddr));
+		dout("monmap_decode  mon%d is %s\n", i,
+		     pr_addr(&m->mon_inst[i].addr.in_addr));
 	return m;
 
 bad:
@@ -208,8 +208,8 @@ static void handle_subscribe_ack(struct ceph_mon_client *monc,
 	ceph_decode_32_safe(&p, end, seconds, bad);
 	mutex_lock(&monc->mutex);
 	if (monc->hunting) {
-		pr_info("mon%d %u.%u.%u.%u:%u session established\n",
-			monc->cur_mon, IPQUADPORT(monc->con->peer_addr.ipaddr));
+		pr_info("mon%d %s session established\n",
+			monc->cur_mon, pr_addr(&monc->con->peer_addr.in_addr));
 		monc->hunting = false;
 	}
 	dout("handle_subscribe_ack after %d seconds\n", seconds);
@@ -664,9 +664,9 @@ static void mon_fault(struct ceph_connection *con)
 		goto out;
 
 	if (monc->con && !monc->hunting)
-		pr_info("mon%d %u.%u.%u.%u:%u session lost, "
+		pr_info("mon%d %s session lost, "
 			"hunting for new mon\n", monc->cur_mon,
-			IPQUADPORT(monc->con->peer_addr.ipaddr));
+			pr_addr(&monc->con->peer_addr.in_addr));
 
 	__close_session(monc);
 	if (!monc->hunting) {

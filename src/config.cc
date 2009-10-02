@@ -200,7 +200,7 @@ bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
     s++; off++;
 
     if (count <= 3)
-      a.set_ipquad(count, val);
+      a.set_in4_quad(count, val);
     else 
       a.set_port(val);
     

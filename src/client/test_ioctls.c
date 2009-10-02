@@ -8,15 +8,10 @@
 
 #include <sys/ioctl.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "../kernel/ioctl.h"
-
-#define IPQUADPORT(n)							\
-	(unsigned int)((ntohl((n).sin_addr.s_addr) >> 24)) & 0xFF, \
-	(unsigned int)((ntohl((n).sin_addr.s_addr)) >> 16) & 0xFF, \
-	(unsigned int)((ntohl((n).sin_addr.s_addr))>>8) & 0xFF, \
-	(unsigned int)((ntohl((n).sin_addr.s_addr))) & 0xFF, \
-	(unsigned int)(ntohs((n).sin_port))
 
 int main(int argc, char **argv)
 {
@@ -61,7 +56,10 @@ int main(int argc, char **argv)
 	       dl.object_name, dl.object_offset, dl.object_size, dl.object_no);
 	printf(" block_offset %lld\n block_size %lld\n",
 	       dl.block_offset, dl.block_size);
-	printf(" osd%lld %u.%u.%u.%u:%u\n", dl.osd, IPQUADPORT(dl.osd_addr));
+
+	char buf[80];
+	getnameinfo((struct sockaddr *)&dl.osd_addr, sizeof(dl.osd_addr), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
+	printf(" osd%lld %s\n", dl.osd, buf);
 
 	return 0;	
 }

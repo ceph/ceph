@@ -111,8 +111,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 			num_export_targets = 0;
 		}
 
-		dout("mdsmap_decode %d/%d mds%d.%d %u.%u.%u.%u:%u %s\n",
-		     i+1, n, mds, inc, IPQUADPORT(addr.ipaddr),
+		dout("mdsmap_decode %d/%d mds%d.%d %s %s\n",
+		     i+1, n, mds, inc, pr_addr(&addr.in_addr),
 		     ceph_mds_state_name(state));
 		if (mds >= 0 && mds < m->m_max_mds && state > 0) {
 			m->m_info[mds].state = state;
