@@ -189,7 +189,7 @@ bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, A
  *
  * {timestamp + 1}^session_key
  */
-bool verify_authorizer(uint32_t service_id, KeysServer& keys, bufferlist::iterator& indata,
+bool verify_authorizer(uint32_t service_id, KeysKeeper& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
   uint64_t secret_id;

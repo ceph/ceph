@@ -80,7 +80,7 @@ struct KeysServerData {
 };
 WRITE_CLASS_ENCODER(KeysServerData);
 
-class KeysServer {
+class KeysServer : public KeysKeeper {
  class C_RotateTimeout : public Context {
   protected:
     KeysServer *server;

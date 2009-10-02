@@ -20,6 +20,7 @@
 #include "KeyRing.h"
 
 #include "messages/MAuth.h"
+#include "messages/MAuthorize.h"
 #include "messages/MAuthReply.h"
 
 
@@ -38,11 +39,11 @@ AuthClientProtocolHandler::~AuthClientProtocolHandler()
 
 int AuthClientProtocolHandler::build_request()
 {
-  msg = new MAuth;
+  msg = _get_new_msg();
   if (!msg)
     return -ENOMEM;
+  bufferlist& bl = _get_msg_bl(msg);
 
-  bufferlist& bl = msg->get_auth_payload();
   CephXPremable pre;
   dout(0) << "pre=" << id << dendl;
   pre.trans_id = id;
@@ -308,11 +309,36 @@ bool AuthClientAuthenticateHandler::request_pending() {
 
 int AuthClientAuthenticateHandler::_build_request()
 {
-  bufferlist& bl = msg->get_auth_payload();
+  MAuth *m = (MAuth *)msg;
+  bufferlist& bl = m->get_auth_payload();
 
   int ret = generate_authenticate_request(bl);
 
   return ret;
+}
+
+Message *AuthClientAuthenticateHandler::_get_new_msg()
+{
+  MAuth *m = new MAuth;
+
+  return m;
+}
+
+bufferlist& AuthClientAuthenticateHandler::_get_msg_bl(Message *m)
+{
+  return ((MAuth *)m)->get_auth_payload();
+}
+
+Message *AuthClientAuthorizeHandler::_get_new_msg()
+{
+  MAuthorize *m = new MAuthorize;
+
+  return m;
+}
+
+bufferlist& AuthClientAuthorizeHandler::_get_msg_bl(Message *m)
+{
+  return ((MAuthorize *)m)->get_auth_payload();
 }
 
 int AuthClientAuthorizeHandler::_build_request()
@@ -325,7 +351,8 @@ int AuthClientAuthorizeHandler::_build_request()
 
   header.request_type = CEPHX_OPEN_SESSION;
 
-  bufferlist& bl = msg->get_auth_payload();
+  MAuthorize *m = (MAuthorize *)msg;
+  bufferlist& bl = m->get_auth_payload();
 
   ::encode(header, bl);
   utime_t now;

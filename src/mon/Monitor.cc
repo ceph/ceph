@@ -53,6 +53,8 @@
 
 #include "osd/OSDMap.h"
 
+#include "auth/AuthorizeServer.h"
+
 #include "config.h"
 
 #define DOUT_SUBSYS mon
@@ -78,6 +80,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   monmap(map),
   logclient(messenger, monmap),
   timer(lock), tick_timer(0),
+  authorizer(m, &keys_server),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -129,6 +132,7 @@ void Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&logclient);
+  authorizer.init();
   
   // start ticker
   reset_tick();

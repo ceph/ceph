@@ -214,7 +214,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       ret = 0;
     }
     break;
-
+#if 0
   case CEPHX_OPEN_SESSION:
     {
       dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
@@ -228,10 +228,9 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       }
       build_cephx_response_header(request_type, ret, result_bl);
       result_bl.claim_append(tmp_bl);
-      break;
     }
     break;
-
+#endif
   default:
     ret = -EINVAL;
     build_cephx_response_header(request_type, -EINVAL, result_bl);

@@ -24,8 +24,6 @@
 
 #include "common/Timer.h"
 
-class MAuth;
-class MAuthReply;
 class Message;
 class AuthClient;
 
@@ -47,7 +45,7 @@ class AuthClientProtocolHandler {
 
 protected:
   AuthClientHandler *client;
-  MAuth *msg;
+  Message *msg;
   bool got_response;
   bool got_timeout;
   Context *timeout_event;
@@ -69,6 +67,8 @@ protected:
 
   virtual int _handle_response(int ret, bufferlist::iterator& iter) = 0;
   virtual int _build_request() = 0;
+  virtual Message *_get_new_msg() = 0;
+  virtual bufferlist& _get_msg_bl(Message *m) = 0;
 
   void _request_timeout(double timeout);
 public:
@@ -113,6 +113,8 @@ protected:
 
   int _build_request();
   int _handle_response(int ret, bufferlist::iterator& iter);
+  Message *_get_new_msg();
+  bufferlist& _get_msg_bl(Message *m);
 public:
   AuthClientAuthenticateHandler(AuthClientHandler *client, uint32_t _want, uint32_t _have) :
              AuthClientProtocolHandler(client), want(_want), have(_have) { reset(); }
@@ -126,6 +128,8 @@ class AuthClientAuthorizeHandler : public AuthClientProtocolHandler {
 protected:
   int _build_request();
   int _handle_response(int ret, bufferlist::iterator& iter);
+  Message *_get_new_msg();
+  bufferlist& _get_msg_bl(Message *m);
 public:
   AuthClientAuthorizeHandler(AuthClientHandler *client, uint32_t sid) : AuthClientProtocolHandler(client), service_id(sid) {}
 };

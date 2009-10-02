@@ -31,6 +31,7 @@ class MonMap;
 class MMonMap;
 class MClientMountAck;
 class MMonSubscribeAck;
+class MAuthReply;
 class MAuthRotating;
 
 

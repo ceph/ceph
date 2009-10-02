@@ -38,6 +38,7 @@
 #include "common/LogClient.h"
 
 #include "auth/KeysServer.h"
+#include "auth/AuthorizeServer.h"
 
 
 class MonitorStore;
@@ -50,6 +51,8 @@ class MMonSubscribe;
 class MClass;
 class MAuthRotating;
 class MRoute;
+
+class AuthorizeServer;
 
 class Monitor : public Dispatcher {
 public:
@@ -70,6 +73,9 @@ public:
   friend class C_Mon_Tick;
 
   KeysServer keys_server;
+
+  AuthorizeServer authorizer;
+
 
   // -- local storage --
 public:

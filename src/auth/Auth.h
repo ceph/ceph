@@ -284,6 +284,11 @@ struct RotatingSecrets {
 };
 WRITE_CLASS_ENCODER(RotatingSecrets);
 
+class KeysKeeper {
+public:
+  virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
+};
+
 template <class T>
 int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
   uint64_t magic;
@@ -334,7 +339,7 @@ extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 
 class KeysServer;
 
-extern bool verify_authorizer(uint32_t service_id, KeysServer& keys, bufferlist::iterator& indata,
+extern bool verify_authorizer(uint32_t service_id, KeysKeeper& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
 #endif

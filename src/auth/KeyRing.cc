@@ -123,3 +123,21 @@ bool KeyRing::need_rotating_secrets()
 
   return false;
 }
+
+bool KeyRing::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
+{
+  Mutex::Locker l(lock);
+  /* we ignore the service id, there's only one service id that we're handling */
+
+  map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.find(secret_id);
+  if (iter == rotating_secrets.secrets.end())
+    return false;
+
+  ExpiringCryptoKey& key = iter->second;
+  if (key.expiration < g_clock.now()) {
+    secret = key.key;
+    return true;
+  }
+  return false;
+}
+

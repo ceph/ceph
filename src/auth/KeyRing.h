@@ -25,7 +25,7 @@
   key of that service
 */
 
-class KeyRing {
+class KeyRing : public KeysKeeper {
   CryptoKey master;
   RotatingSecrets rotating_secrets;
   Mutex lock;
@@ -38,6 +38,8 @@ public:
   void get_master(CryptoKey& dest);
 
   bool need_rotating_secrets();
+
+  bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
 };
 
 extern KeyRing g_keyring;
