@@ -248,8 +248,12 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
 {
-  return (m->targets ==
-	  pending_mdsmap.get_mds_info(m->get_orig_source_addr()).export_targets);
+  dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
+  const entity_addr_t& a = m->get_orig_source_addr();
+  if (mdsmap.mds_info.count(a) &&
+      m->targets == mdsmap.mds_info[a].export_targets)
+    return true;
+  return false;
 }
 
 
@@ -337,8 +341,13 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
 {
-  pending_mdsmap.mds_info[m->get_orig_source_addr()].
-    export_targets = m->targets;
+  const entity_addr_t& a = m->get_orig_source_addr();
+  if (pending_mdsmap.mds_info.count(a)) {
+    dout(10) << "prepare_offload_targets " << a << " " << m->targets << dendl;
+    pending_mdsmap.mds_info[a].export_targets = m->targets;
+  } else {
+    dout(10) << "prepare_offload_targets " << a << " not in map" << dendl;
+  }
   return true;
 }
 

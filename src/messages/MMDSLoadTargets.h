@@ -32,6 +32,9 @@ class MMDSLoadTargets : public Message {
     targets(mds_targets) {}
 
   const char* get_type_name() { return "mds_load_targets"; }
+  void print(ostream& o) {
+    o << "mds_load_targets(" << targets << ")";
+  }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
