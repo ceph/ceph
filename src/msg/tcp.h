@@ -7,20 +7,25 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 using std::ostream;
 
-inline ostream& operator<<(ostream& out, const sockaddr_in &a)
+inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
-  unsigned char *addr = (unsigned char*)&a.sin_addr.s_addr;
-  //out << "(" << a.sin_family << ")";
-  out << (unsigned)addr[0] << "."
-      << (unsigned)addr[1] << "."
-      << (unsigned)addr[2] << "."
-      << (unsigned)addr[3] << ":"
-      << ntohs(a.sin_port);
-  return out;
+  char buf[NI_MAXHOST];
+  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
+  return out << buf;
 }
+
+inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
+{
+  char buf[NI_MAXHOST];
+  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
+  return out << buf;
+}
+
 
 inline int tcp_read(int sd, char *buf, int len) {
   while (len > 0) {

@@ -226,54 +226,6 @@ struct entity_addr_t {
 };
 WRITE_CLASS_ENCODER(entity_addr_t)
 
-inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
-{
-  switch (ss.ss_family) {
-  case AF_INET:
-    {
-      sockaddr_in *a = (sockaddr_in *)&ss;
-      unsigned char *addr = (unsigned char*)&a->sin_addr.s_addr;
-      return out << (unsigned)addr[0] << "."
-		 << (unsigned)addr[1] << "."
-		 << (unsigned)addr[2] << "."
-		 << (unsigned)addr[3] << ":"
-		 << ntohs(a->sin_port);
-    }
-    break;
-
-  case AF_INET6:
-    {
-      sockaddr_in6& in6 = *(sockaddr_in6 *)&ss;
-      if (in6.sin6_addr.s6_addr32[0] == 0 &&
-	  in6.sin6_addr.s6_addr32[1] == 0 &&
-	  in6.sin6_addr.s6_addr16[4] == 0 &&
-	  in6.sin6_addr.s6_addr16[5] == 0xffff)
-	return out << "::ffff:"
-		   << in6.sin6_addr.s6_addr[12] << '.' 
-		   << in6.sin6_addr.s6_addr[13] << '.' 
-		   << in6.sin6_addr.s6_addr[14] << '.' 
-		   << in6.sin6_addr.s6_addr[15]
-		   << ':' << ntohs(in6.sin6_port);
-      char b[40];
-      sprintf(b, "%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
-	      in6.sin6_addr.s6_addr16[0],
-	      in6.sin6_addr.s6_addr16[1],
-	      in6.sin6_addr.s6_addr16[2],
-	      in6.sin6_addr.s6_addr16[3],
-	      in6.sin6_addr.s6_addr16[4],
-	      in6.sin6_addr.s6_addr16[5],
-	      in6.sin6_addr.s6_addr16[6],
-	      in6.sin6_addr.s6_addr16[7]);
-      return out << b << ':' << ntohs(in6.sin6_port);
-    }
-    break;
-
-  case 0:
-    return out << "(null sockaddr_storage)";
-  }
-  return out << "(unrecognized sockaddr_storage family " << ss.ss_family << ")";  
-}
-
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
   return out << addr.v.in_addr << '/' << addr.v.nonce << '/' << addr.v.erank;
