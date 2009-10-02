@@ -1,12 +1,13 @@
 #include "ceph_debug.h"
 
 #include <linux/crc32c.h>
-#include <linux/kthread.h>
-#include <linux/socket.h>
-#include <linux/net.h>
-#include <linux/string.h>
-#include <linux/highmem.h>
 #include <linux/ctype.h>
+#include <linux/highmem.h>
+#include <linux/inet.h>
+#include <linux/kthread.h>
+#include <linux/net.h>
+#include <linux/socket.h>
+#include <linux/string.h>
 #include <net/tcp.h>
 
 #include "super.h"
