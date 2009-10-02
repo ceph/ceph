@@ -233,6 +233,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logger(NULL),
   store(NULL),
   logclient(messenger, &mc->monmap),
+  authorizer(m, &keyring),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
@@ -423,6 +424,8 @@ int OSD::init()
   messenger->add_dispatcher_head(&logclient);
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+
+  authorizer.init();
   
   monc->init();
 
