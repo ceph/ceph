@@ -124,6 +124,24 @@ protected:
       (*p)->ms_handle_failure(con, m, peer);
   }
 
+  bool ms_deliver_get_authorizer(int peer_type, bufferlist& authorizer, bool force_new) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_get_authorizer(peer_type, authorizer, force_new))
+	return true;
+    return false;
+  }
+  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
+				    bufferlist& authorizer, bufferlist& authorizer_reply, bool& isvalid) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_verify_authorizer(con, peer_type, authorizer, authorizer_reply, isvalid))
+	return true;
+    return false;
+  }
+
   // shutdown
   virtual int shutdown() = 0;
   virtual void suicide() = 0;

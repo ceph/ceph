@@ -589,7 +589,10 @@ int SimpleMessenger::Pipe::accept()
   ceph_msg_connect connect;
   ceph_msg_connect_reply reply;
   Pipe *existing = 0;
-  
+  bufferptr bp;
+  bufferlist authorizer, authorizer_reply;
+  bool authorizer_valid;
+
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
 
@@ -599,6 +602,16 @@ int SimpleMessenger::Pipe::accept()
       dout(10) << "accept couldn't read connect" << dendl;
       goto fail_unlocked;
     }
+
+    bp = buffer::create(connect.authorizer_len);
+    if (tcp_read(sd, bp.c_str(), connect.authorizer_len) < 0) {
+      dout(10) << "accept couldn't read connect authorizer" << dendl;
+      goto fail_unlocked;
+    }
+    authorizer.clear();
+    authorizer.push_back(bp);
+    authorizer_reply.clear();
+
     dout(20) << "accept got peer connect_seq " << connect.connect_seq
 	     << " global_seq " << connect.global_seq
 	     << dendl;
@@ -620,6 +633,15 @@ int SimpleMessenger::Pipe::accept()
 	     << ", their proto " << connect.protocol_version << dendl;
     if (connect.protocol_version != reply.protocol_version) {
       reply.tag = CEPH_MSGR_TAG_BADPROTOVER;
+      rank->lock.Unlock();
+      goto reply;
+    }
+    
+    if (rank->verify_authorizer(connection_state, peer_type,
+				authorizer, authorizer_reply, authorizer_valid) &&
+	!authorizer_valid) {
+      dout(10) << "accept bad authorizer" << dendl;
+      reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
       rank->lock.Unlock();
       goto reply;
     }
@@ -737,9 +759,15 @@ int SimpleMessenger::Pipe::accept()
     assert(0);    
 
   reply:
+    reply.authorizer_len = authorizer_reply.length();
     rc = tcp_write(sd, (char*)&reply, sizeof(reply));
     if (rc < 0)
       goto fail_unlocked;
+    if (authorizer_reply.length()) {
+      rc = tcp_write(sd, authorizer_reply.c_str(), authorizer_reply.length());
+      if (rc < 0)
+	goto fail_unlocked;
+    }
   }
   
  replace:
@@ -830,6 +858,7 @@ int SimpleMessenger::Pipe::connect()
   char banner[strlen(CEPH_BANNER)];
   entity_addr_t paddr;
   entity_addr_t peer_addr_for_me, socket_addr;
+  bufferlist authorizer;
 
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -939,8 +968,7 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
 
-  bufferlist authorizer;
-  //get_authorizer(peer_type, authorizer);
+  rank->get_authorizer(peer_type, authorizer, false);
 
   while (1) {
     ceph_msg_connect connect;
@@ -997,6 +1025,12 @@ int SimpleMessenger::Pipe::connect()
       goto fail_locked;
     }
 
+    if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
+      dout(0) << "connect got BADAUTHORIZER" << dendl;
+      lock.Unlock();
+      rank->get_authorizer(peer_type, authorizer, true);  // try harder
+      continue;
+    }
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       dout(0) << "connect got RESETSESSION" << dendl;
       was_session_reset();
@@ -2097,6 +2131,28 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
 
 
 
+
+bool SimpleMessenger::get_authorizer(int peer_type, bufferlist& authorizer, bool force_new)
+{
+  for (unsigned r = 0; r < max_local; r++) {
+    if (!local[r])
+      continue;
+    return local[r]->ms_deliver_get_authorizer(peer_type, authorizer, force_new);
+  }
+  return false;
+}
+
+bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
+					bufferlist& authorizer, bufferlist& authorizer_reply,
+					bool& isvalid)
+{
+  for (unsigned r = 0; r < max_local; r++) {
+    if (!local[r])
+      continue;
+    return local[r]->ms_deliver_verify_authorizer(con, peer_type, authorizer, authorizer_reply, isvalid);
+  }
+  return false;
+}
 
 
 

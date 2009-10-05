@@ -46,9 +46,11 @@ public:
   
   // authorization handshake provides mutual authentication of peers.
   //  connecting side
-  virtual bool ms_get_authorizer(int dest_type, bufferlist& authorizer);
+  virtual bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new) { return false; };
   //  accepting side
-  virtual bool ms_verify_authorizer(Connection *con, bufferlist& authorizer, bufferlist& authorizer_reply);
+  virtual bool ms_verify_authorizer(Connection *con, int peer_type,
+				    bufferlist& authorizer, bufferlist& authorizer_reply,
+				    bool& isvalid) { return false; };
 };
 
 #endif

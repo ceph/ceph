@@ -469,6 +469,10 @@ public:
     need_addr = false;
   }
 
+  bool get_authorizer(int peer_type, bufferlist& bl, bool force_new);
+  bool verify_authorizer(Connection *con, int peer_type, bufferlist& auth, bufferlist& auth_reply,
+			 bool& isvalid);
+
   Endpoint *register_entity(entity_name_t addr);
   void rename_entity(Endpoint *ms, entity_name_t newaddr);
   void unregister_entity(Endpoint *ms);

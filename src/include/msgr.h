@@ -94,6 +94,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_ACK           8  /* message ack */
 #define CEPH_MSGR_TAG_KEEPALIVE     9  /* just a keepalive byte! */
 #define CEPH_MSGR_TAG_BADPROTOVER  10  /* bad protocol version */
+#define CEPH_MSGR_TAG_BADAUTHORIZER 11 /* bad authorizer */
 
 
 /*
