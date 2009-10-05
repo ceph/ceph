@@ -1,3 +1,16 @@
+ceph (0.16-1) unstable; urgency=low
+
+  * libceph: identify self
+  * hadoop: write to local osd
+  * disk format, wire changes
+  * use sockaddr_storage throughout
+  * kclient: fix msgr bug
+  * kclient: uninline strings, use pr_fmt, prefix frag_ macros
+  * kclient: lots of inline cleanups
+  * kclient: misc akpm review cleanups
+
+ -- sage <sage@newdream.net>  Tue, 05 Oct 2009 14:54:00 -0800
+
 ceph (0.15-1) unstable; urgency=low
 
   * msgr: clean up protocol checks; ack seq # fix
