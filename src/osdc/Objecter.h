@@ -17,6 +17,7 @@
 
 #include "include/types.h"
 #include "include/buffer.h"
+#include "include/xlist.h"
 
 #include "osd/OSDMap.h"
 #include "messages/MOSDOp.h"
@@ -199,11 +200,14 @@ class Objecter {
   };
   void tick();
 
+public:
   /*** track pending operations ***/
   // read
  public:
 
   struct Op {
+    xlist<Op*>::item session_item;
+
     object_t oid;
     ceph_object_layout layout;
     vector<OSDOp> ops;
@@ -226,6 +230,7 @@ class Objecter {
 
     Op(const object_t& o, ceph_object_layout& l, vector<OSDOp>& op,
        int f, Context *ac, Context *co) :
+      session_item(this),
       oid(o), layout(l), 
       snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
@@ -335,6 +340,16 @@ class Objecter {
 
     utime_t last_submit;
   };
+
+
+  // -- osd sessions --
+  struct Session {
+    xlist<Op*> ops;
+    int osd;
+    int incarnation;
+  };
+  map<int,Session*> sessions;
+
 
  private:
   // pending ops
