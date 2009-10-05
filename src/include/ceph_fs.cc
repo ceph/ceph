@@ -54,7 +54,8 @@ int ceph_caps_for_mode(int mode)
 #define ceph_init_name_hash()		0
 
 /* partial hash update function. Assume roughly 4 bits per character */
-static unsigned long ceph_partial_name_hash(unsigned long c, unsigned long prevhash)
+static unsigned long ceph_partial_name_hash(unsigned long c,
+					    unsigned long prevhash)
 {
 	return (prevhash + (c << 4) + (c >> 4)) * 11;
 }

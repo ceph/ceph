@@ -871,10 +871,11 @@ static bool addr_is_blank(struct sockaddr_storage *ss)
 	case AF_INET:
 		return ((struct sockaddr_in *)ss)->sin_addr.s_addr == 0;
 	case AF_INET6:
-		return ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[0]==0 &&
-		       ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[1]==0 &&
-		       ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[1]==0 &&
-			((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[3]==0;
+		return
+		     ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[0] == 0 &&
+		     ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[1] == 0 &&
+		     ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[2] == 0 &&
+		     ((struct sockaddr_in6 *)ss)->sin6_addr.s6_addr32[3] == 0;
 	}
 	return false;
 }
