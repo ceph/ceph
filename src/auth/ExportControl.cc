@@ -54,7 +54,7 @@ public:
 	subnet_addr_t& get_subnet() { return subnet; }
 };
 
-#define GET_IP(addr) (addr)->ipaddr.sin_addr.s_addr
+#define GET_IP(addr) (addr)->in4_addr().sin_addr.s_addr
 
 bool Subnet::contains(entity_addr_t *addr)
 {

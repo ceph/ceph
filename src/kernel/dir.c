@@ -1,9 +1,10 @@
+#include "ceph_debug.h"
+
 #include <linux/spinlock.h>
 #include <linux/fs_struct.h>
 #include <linux/namei.h>
 #include <linux/sched.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 
 /*
@@ -26,6 +27,42 @@
 const struct inode_operations ceph_dir_iops;
 const struct file_operations ceph_dir_fops;
 struct dentry_operations ceph_dentry_ops;
+
+/*
+ * Initialize ceph dentry state.
+ */
+int ceph_init_dentry(struct dentry *dentry)
+{
+	struct ceph_dentry_info *di;
+
+	if (dentry->d_fsdata)
+		return 0;
+
+	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
+		dentry->d_op = &ceph_dentry_ops;
+	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)
+		dentry->d_op = &ceph_snapdir_dentry_ops;
+	else
+		dentry->d_op = &ceph_snap_dentry_ops;
+
+	di = kmem_cache_alloc(ceph_dentry_cachep, GFP_NOFS);
+	if (!di)
+		return -ENOMEM;          /* oh well */
+
+	spin_lock(&dentry->d_lock);
+	if (dentry->d_fsdata) /* lost a race */
+		goto out_unlock;
+	di->dentry = dentry;
+	di->lease_session = NULL;
+	dentry->d_fsdata = di;
+	dentry->d_time = jiffies;
+	ceph_dentry_lru_add(dentry);
+out_unlock:
+	spin_unlock(&dentry->d_lock);
+	return 0;
+}
+
+
 
 /*
  * for readdir, we encode the directory frag and offset within that
@@ -264,7 +301,7 @@ more:
 		req->r_dentry = dget(filp->f_dentry);
 		/* hints to request -> mds selection code */
 		req->r_direct_mode = USE_AUTH_MDS;
-		req->r_direct_hash = frag_value(frag);
+		req->r_direct_hash = ceph_frag_value(frag);
 		req->r_direct_is_hash = true;
 		req->r_path2 = kstrdup(fi->last_name, GFP_NOFS);
 		req->r_readdir_offset = fi->next_offset;
@@ -338,8 +375,8 @@ more:
 	}
 
 	/* more frags? */
-	if (!frag_is_rightmost(frag)) {
-		frag = frag_next(frag);
+	if (!ceph_frag_is_rightmost(frag)) {
+		frag = ceph_frag_next(frag);
 		off = 0;
 		filp->f_pos = ceph_make_fpos(frag, off);
 		dout("readdir next frag is %x\n", frag);

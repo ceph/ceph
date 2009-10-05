@@ -124,6 +124,7 @@ struct MetaRequest {
   bool got_safe;
   bool got_unsafe;
 
+  xlist<MetaRequest*>::item item;
   xlist<MetaRequest*>::item unsafe_item;
   Mutex lock; //for get/set sync
 
@@ -141,7 +142,7 @@ struct MetaRequest {
     dentry(NULL), old_dentry(NULL),
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
-    kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
+    kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0),
     target(0) {
@@ -157,7 +158,7 @@ struct MetaRequest {
     dentry(NULL), old_dentry(NULL),
     resend_mds(-1), num_fwd(0), retry_attempt(0),
     ref(1), reply(0), 
-    kick(false), got_safe(false), got_unsafe(false), unsafe_item(this),
+    kick(false), got_safe(false), got_unsafe(false), item(this), unsafe_item(this),
     lock("MetaRequest lock"),
     caller_cond(0), dispatch_cond(0),
     target(0) {
@@ -187,6 +188,29 @@ struct MetaRequest {
   tid_t get_tid() { return head.tid; }
   filepath& get_filepath() { return path; }
   filepath& get_filepath2() { return path2; }
+
+  bool is_write() {
+    return
+      (head.op & CEPH_MDS_OP_WRITE) || 
+      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC))) ||
+      (head.op == CEPH_MDS_OP_CREATE && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
+  }
+  bool can_forward() {
+    if (is_write() ||
+	head.op == CEPH_MDS_OP_OPEN ||   // do not forward _any_ open request.
+	head.op == CEPH_MDS_OP_CREATE)   // do not forward _any_ open request.
+      return false;
+    return true;
+  }
+  bool auth_is_best() {
+    if (is_write()) 
+      return true;
+    if (head.op == CEPH_MDS_OP_OPEN ||
+	head.op == CEPH_MDS_OP_CREATE ||
+	head.op == CEPH_MDS_OP_READDIR) 
+      return true;
+    return false;    
+  }
 };
 
 
@@ -202,6 +226,7 @@ struct MDSSession {
 
   xlist<InodeCap*> caps;
   xlist<Inode*> flushing_caps;
+  xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
 
   MClientCapRelease *release;
@@ -828,7 +853,6 @@ public:
   void resend_unsafe_requests(int mds);
 
   // mds requests
-
   tid_t last_tid, last_flush_seq;
   map<tid_t, MetaRequest*> mds_requests;
   set<int>                 failed_mds;
@@ -843,7 +867,8 @@ public:
 			   int unless,int force=0);
   void encode_dentry_release(Dentry *dn, MClientRequest *req,
 			     int mds, int drop, int unless);
-  int choose_target_mds(MClientRequest *req);
+  int choose_target_mds(MetaRequest *req);
+  void check_mds_sessions();
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
@@ -852,12 +877,16 @@ public:
   bool   mounted;
   bool   unmounting;
 
-  int    unsafe_sync_write;
+  int local_osd;
+  epoch_t local_osd_epoch;
+
+  int unsafe_sync_write;
 
   int file_stripe_unit;
   int file_stripe_count;
   int object_size;
   int file_replication;
+  int preferred_pg;
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void sync_write_commit(Inode *in);
@@ -946,36 +975,46 @@ protected:
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
 
-  Dentry* link(Dir *dir, const string& name, Inode *in) {
-    Dentry *dn = new Dentry;
-    dn->name = name;
-    
-    // link to dir
-    dn->dir = dir;
-    //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
-    dir->dentries[dn->name] = dn;
+  /**
+   * Don't call this with in==NULL, use get_or_create for that
+   * leave dn set to default NULL unless you're trying to add
+   * a new inode to a pre-created Dentry
+   */
+  Dentry* link(Dir *dir, const string& name, Inode *in, Dentry *dn=NULL) {
+    if (!dn) { //create a new Dentry
+      dn = new Dentry;
+      dn->name = name;
+      
+      // link to dir
+      dn->dir = dir;
+      //cout << "link dir " << dir->parent_inode->ino << " '" << name << "' -> inode " << in->ino << endl;
+      dir->dentries[dn->name] = dn;
+      lru.lru_insert_mid(dn);    // mid or top?
+    }
 
-    // link to inode
-    dn->inode = in;
-    assert(in->dn == 0);
-    in->dn = dn;
-    in->get();
+    if (in) {    // link to inode
+      dn->inode = in;
+      assert(in->dn == 0);
+      in->dn = dn;
+      in->get();
+      
+      if (in->dir) dn->get();  // dir -> dn pin
+    }
 
-    if (in->dir) dn->get();  // dir -> dn pin
-
-    lru.lru_insert_mid(dn);    // mid or top?
     return dn;
   }
 
   void unlink(Dentry *dn, bool keepdir = false) {
     Inode *in = dn->inode;
-    assert(in->dn == dn);
 
     // unlink from inode
-    if (dn->inode->dir) dn->put();        // dir -> dn pin
-    dn->inode = 0;
-    in->dn = 0;
-    put_inode(in);
+    if (in) {
+      assert(in->dn == dn);
+      if (in->dir) dn->put();        // dir -> dn pin
+      dn->inode = 0;
+      in->dn = 0;
+      put_inode(in);
+    }
         
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
@@ -988,14 +1027,20 @@ protected:
     delete dn;
   }
 
-  Dentry *relink_inode(Dir *dir, const string& name, Inode *in) {
+  Dentry *relink_inode(Dir *dir, const string& name, Inode *in, Dentry *newdn=NULL) {
     Dentry *olddn = in->dn;
     Dir *olddir = olddn->dir;  // note: might == dir!
+    bool made_new = false;
 
     // newdn, attach to inode.  don't touch inode ref.
-    Dentry *newdn = new Dentry;
-    newdn->dir = dir;
-    newdn->name = name;
+    if (!newdn) {
+      made_new = true;
+      newdn = new Dentry;
+      newdn->dir = dir;
+      newdn->name = name;
+    } else {
+      assert(newdn->inode == NULL);
+    }
     newdn->inode = in;
     in->dn = newdn;
 
@@ -1013,7 +1058,10 @@ protected:
     
     // link new dn to dir
     dir->dentries[name] = newdn;
-    lru.lru_insert_mid(newdn);
+    if (made_new)
+      lru.lru_insert_mid(newdn);
+    else
+      lru.lru_midtouch(newdn);
     
     // olddir now empty?  (remember, olddir might == dir)
     if (olddir->is_empty()) 
@@ -1178,6 +1226,8 @@ private:
   int _sync_fs();
 
   MClientRequest* make_request_from_Meta(MetaRequest * request);
+  int get_or_create(Inode *dir, const char* name,
+		    Dentry **pdn, bool expect_null=false);
 
 public:
   int mount();
@@ -1260,11 +1310,14 @@ public:
   int get_file_stripe_period(int fd);
   int get_file_replication(int fd);
   int get_file_stripe_address(int fd, loff_t offset, string& address);
+  int get_local_osd();
+  int get_default_preferred_pg(int fd);
 
   void set_default_file_stripe_unit(int stripe_unit);
   void set_default_file_stripe_count(int count);
   void set_default_object_size(int size);
   void set_default_file_replication(int replication);
+  void set_default_preferred_pg(int pg);
 
   int enumerate_layout(int fd, vector<ObjectExtent>& result,
 		       loff_t length, loff_t offset);

@@ -8,6 +8,13 @@
  *
  * we limit fields to those the client actually xcares about
  */
+struct ceph_mds_info {
+	struct ceph_entity_addr addr;
+	s32 state;
+	int num_export_targets;
+	u32 *export_targets;
+};
+
 struct ceph_mdsmap {
 	u32 m_epoch, m_client_epoch, m_last_failure;
 	u32 m_root;
@@ -15,8 +22,7 @@ struct ceph_mdsmap {
 	u32 m_session_autoclose;        /* seconds */
 	u64 m_max_file_size;
 	u32 m_max_mds;                  /* size of m_addr, m_state arrays */
-	struct ceph_entity_addr *m_addr;  /* mds addrs */
-	s32 *m_state;                   /* states */
+	struct ceph_mds_info *m_info;
 
 	/* which object pools file data can be stored in */
 	int m_num_data_pg_pools;
@@ -29,7 +35,7 @@ ceph_mdsmap_get_addr(struct ceph_mdsmap *m, int w)
 {
 	if (w >= m->m_max_mds)
 		return NULL;
-	return &m->m_addr[w];
+	return &m->m_info[w].addr;
 }
 
 static inline int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w)
@@ -37,7 +43,7 @@ static inline int ceph_mdsmap_get_state(struct ceph_mdsmap *m, int w)
 	BUG_ON(w < 0);
 	if (w >= m->m_max_mds)
 		return CEPH_MDS_STATE_DNE;
-	return m->m_state[w];
+	return m->m_info[w].state;
 }
 
 extern int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m);

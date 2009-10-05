@@ -41,7 +41,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
   // make sure our map is readable and up to date
   if (!paxos->is_readable(m->version)) {
-    dout(10) << " waiting for paxos -> readable" << dendl;
+    dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
     paxos->wait_for_readable(new C_RetryMessage(this, m));
     return true;
   }

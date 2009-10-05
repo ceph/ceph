@@ -12,7 +12,7 @@ AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
 # Automake
-AM_INIT_AUTOMAKE(ceph, 0.14)
+AM_INIT_AUTOMAKE(ceph, 0.15)
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 
@@ -49,13 +49,16 @@ RADOSGW=1
 AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
              [true],
-	     [RADOSGW=0])
+	     [RADOSGW=0
+	     if test "x$with_radosgw" != "xcheck"; then
+		AC_MSG_FAILURE([--with-radosgw was given but libfcgi (libfcgi-dev on debian) not found])
+	     fi])
 	     AC_CHECK_LIB([expat], [XML_Parse],
              [true],
-	     [RADOSGW=0])]
-	     if test "$RADOSGW" != "1" -a "x$with_radosgw" != "xcheck"; then
-	     	    AC_MSG_FAILURE([--with-radosgw was given, but libexpat (libexpat1-dev on debian) not found])
-	     fi)
+	     [RADOSGW=0
+	     if test "x$with_radosgw" != "xcheck"; then
+		AC_MSG_FAILURE([--with-radosgw was given but libexpat (libexpat1-dev on debian) not found])
+	     fi])])
 AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 # fuse?
@@ -73,7 +76,7 @@ AS_IF([test "x$with_fuse" != xno],
               ],
              [if test "x$with_fuse" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-fuse was given, but test failed])
+                   [--with-fuse was given but test failed])
                fi
              ])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
@@ -88,7 +91,7 @@ AS_IF([test "x$with_hadoop" != xno],
              [HAVE_JNI=1],
              [if test "x$with_hadoop" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-hadoop was given, but jni.h not found])
+                   [--with-hadoop was given but jni.h not found])
                fi
              ])])
 AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
@@ -109,14 +112,14 @@ AS_IF([test "x$with_ccgnu" == xyes],
              ],
              [if test "x$with_ccgnu" != xcheck; then
                  AC_MSG_FAILURE(
-                   [--with-ccgnu was given, but test failed])
+                   [--with-ccgnu was given but test failed])
                fi
              ], [-ldl -lpthread])])
 AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
 
 # newsyn?  requires mpi.
 #AC_ARG_WITH([newsyn],
-#            [AS_HELP_STRING([--with-newsyn], [build newsyn target, requires mpi])],
+#            [AS_HELP_STRING([--with-newsyn], [build newsyn target requires mpi])],
 #            [],
 #            [with_newsyn=no])
 
@@ -130,17 +133,17 @@ AC_LANG([C++])
 AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP], [], [Description])
 AC_CHECK_HEADER([boost/spirit.hpp],
                 [AC_DEFINE([HAVE_BOOST_SPIRIT_CORE_HPP])],
-                [AC_MSG_ERROR([Sorry, you need to install the Boost spirit parser library (libboost-dev on debian)])])
+                [AC_MSG_ERROR([Sorry you need to install the Boost spirit parser library (libboost-dev on debian)])])
 
 AC_LANG([C])
 
 AC_CHECK_HEADER([histedit.h],
 	[],
-	[AC_MSG_ERROR([Sorry, you need histedit.h (libedit-dev on debian)])])
+	[AC_MSG_ERROR([Sorry you need histedit.h (libedit-dev on debian)])])
 
 AC_CHECK_HEADER([openssl/md5.h],
 	[],
-	[AC_MSG_ERROR([Sorry, you need openssl dev files (libssl-dev on debian)])])
+	[AC_MSG_ERROR([Sorry you need openssl dev files (libssl-dev on debian)])])
 
 AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
 

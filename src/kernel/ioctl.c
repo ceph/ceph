@@ -127,7 +127,7 @@ static long ceph_ioctl_get_dataloc(struct file *file, void __user *arg)
 		struct ceph_entity_addr *a =
 			ceph_osd_addr(osdc->osdmap, dl.osd);
 		if (a)
-			memcpy(&dl.osd_addr, &a->ipaddr, sizeof(dl.osd_addr));
+			memcpy(&dl.osd_addr, &a->in_addr, sizeof(dl.osd_addr));
 	} else {
 		memset(&dl.osd_addr, 0, sizeof(dl.osd_addr));
 	}

@@ -1,3 +1,5 @@
+#include "ceph_debug.h"
+
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
@@ -35,9 +37,9 @@ static int monmap_show(struct seq_file *s, void *p)
 		struct ceph_entity_inst *inst =
 			&client->monc.monmap->mon_inst[i];
 
-		seq_printf(s, "\t%s%lld\t%u.%u.%u.%u:%u\n",
-			       ENTITY_NAME(inst->name),
-			       IPQUADPORT(inst->addr.ipaddr));
+		seq_printf(s, "\t%s%lld\t%s\n",
+			   ENTITY_NAME(inst->name),
+			   pr_addr(&inst->addr.in_addr));
 	}
 	return 0;
 }
@@ -56,12 +58,11 @@ static int mdsmap_show(struct seq_file *s, void *p)
 	seq_printf(s, "session_autoclose %d\n",
 		       client->mdsc.mdsmap->m_session_autoclose);
 	for (i = 0; i < client->mdsc.mdsmap->m_max_mds; i++) {
-		struct ceph_entity_addr *addr = &client->mdsc.mdsmap->m_addr[i];
-		int state = client->mdsc.mdsmap->m_state[i];
+		struct ceph_entity_addr *addr =
+			&client->mdsc.mdsmap->m_info[i].addr;
+		int state = client->mdsc.mdsmap->m_info[i].state;
 
-		seq_printf(s, "\tmds%d\t%u.%u.%u.%u:%u\t(%s)\n",
-			       i,
-			       IPQUADPORT(addr->ipaddr),
+		seq_printf(s, "\tmds%d\t%s\t(%s)\n", i, pr_addr(&addr->in_addr),
 			       ceph_mds_state_name(state));
 	}
 	return 0;
@@ -93,11 +94,10 @@ static int osdmap_show(struct seq_file *s, void *p)
 		int state = client->osdc.osdmap->osd_state[i];
 		char sb[64];
 
-		seq_printf(s,
-		       "\tosd%d\t%u.%u.%u.%u:%u\t%3d%%\t(%s)\n",
-		       i, IPQUADPORT(addr->ipaddr),
-		       ((client->osdc.osdmap->osd_weight[i]*100) >> 16),
-		       ceph_osdmap_state_str(sb, sizeof(sb), state));
+		seq_printf(s, "\tosd%d\t%s\t%3d%%\t(%s)\n",
+			   i, pr_addr(&addr->in_addr),
+			   ((client->osdc.osdmap->osd_weight[i]*100) >> 16),
+			   ceph_osdmap_state_str(sb, sizeof(sb), state));
 	}
 	return 0;
 }
@@ -225,7 +225,8 @@ static int osdc_show(struct seq_file *s, void *pp)
 
 		req = rb_entry(p, struct ceph_osd_request, r_node);
 
-		seq_printf(s, "%lld\tosd%d\t", req->r_tid, req->r_osd->o_osd);
+		seq_printf(s, "%lld\tosd%d\t", req->r_tid,
+			   req->r_osd ? req->r_osd->o_osd : -1);
 
 		head = req->r_request->front.iov_base;
 		op = (void *)(head + 1);
@@ -313,18 +314,12 @@ DEFINE_SHOW_FUNC(osdc_show)
 DEFINE_SHOW_FUNC(dentry_lru_show)
 DEFINE_SHOW_FUNC(caps_show)
 
-int ceph_debugfs_init(void)
+int __init ceph_debugfs_init(void)
 {
-	int ret = -ENOMEM;
-
 	ceph_debugfs_dir = debugfs_create_dir("ceph", NULL);
 	if (!ceph_debugfs_dir)
-		goto out;
+		return -ENOMEM;
 	return 0;
-
-out:
-	ceph_debugfs_cleanup();
-	return ret;
 }
 
 void ceph_debugfs_cleanup(void)
@@ -337,7 +332,7 @@ int ceph_debugfs_client_init(struct ceph_client *client)
 	int ret = 0;
 	char name[80];
 
-	snprintf(name, sizeof(name), FSID_FORMAT ".client%lld", 
+	snprintf(name, sizeof(name), FSID_FORMAT ".client%lld",
 		 PR_FSID(&client->monc.monmap->fsid), client->whoami);
 
 	client->debugfs_dir = debugfs_create_dir(name, ceph_debugfs_dir);

@@ -39,6 +39,7 @@ int ceph_mount();
 int ceph_umount();
 
 int ceph_statfs(const char *path, struct statvfs *stbuf);
+int ceph_get_local_osd();
 
 int ceph_getcwd(char *buf, int buflen);
 int ceph_chdir(const char *s);
@@ -91,11 +92,13 @@ int ceph_fstat(int fd, struct stat *stbuf);
 int ceph_sync_fs();
 int ceph_get_file_stripe_unit(int fh);
 int ceph_get_file_replication(const char *path);
+int ceph_get_default_preferred_pg(int fd);
 int ceph_get_file_stripe_address(int fd, loff_t offset, char *buf, int buflen);
 int ceph_set_default_file_stripe_unit(int stripe);
 int ceph_set_default_file_stripe_count(int count);
 int ceph_set_default_object_size(int size);
 int ceph_set_default_file_replication(int replication);
+int ceph_set_default_preferred_pg(int pg);
 }
 
 #endif

@@ -105,8 +105,8 @@ public:
   void add_simple_op(int o, __u64 off, __u64 len) {
     OSDOp osd_op;
     osd_op.op.op = o;
-    osd_op.op.offset = off;
-    osd_op.op.length = len;
+    osd_op.op.extent.offset = off;
+    osd_op.op.extent.length = len;
     ops.push_back(osd_op);
   }
   void write(__u64 off, __u64 len, bufferlist& bl) {

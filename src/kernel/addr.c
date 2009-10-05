@@ -1,3 +1,4 @@
+#include "ceph_debug.h"
 
 #include <linux/backing-dev.h>
 #include <linux/fs.h>
@@ -7,9 +8,7 @@
 #include <linux/pagevec.h>
 #include <linux/task_io_accounting_ops.h>
 
-#include "ceph_debug.h"
 #include "super.h"
-
 #include "osd_client.h"
 
 /*
@@ -162,8 +161,7 @@ static void ceph_invalidatepage(struct page *page, unsigned long offset)
 	 * warning, in case we end up with accounting problems later.
 	 */
 	if (!PageDirty(page))
-		pr_err("ceph %p invalidatepage %p page not dirty\n", inode,
-		       page);
+		pr_err("%p invalidatepage %p page not dirty\n", inode, page);
 
 	if (offset == 0)
 		ClearPageChecked(page);
@@ -526,7 +524,7 @@ static void writepages_finish(struct ceph_osd_request *req,
 	WARN_ON(le32_to_cpu(replyhead->num_ops) == 0);
 	op = (void *)(replyhead + 1);
 	rc = le32_to_cpu(replyhead->result);
-	bytes = le64_to_cpu(op->length);
+	bytes = le64_to_cpu(op->extent.length);
 
 	if (rc >= 0) {
 		wrote = (bytes + (offset & ~PAGE_CACHE_MASK) + ~PAGE_CACHE_MASK)
@@ -616,14 +614,14 @@ static int ceph_writepages_start(struct address_space *mapping,
 	do_sync = wbc->sync_mode == WB_SYNC_ALL;
 	if (ceph_caps_revoking(ci, CEPH_CAP_FILE_BUFFER))
 		do_sync = 1;
-	dout("writepages_start %p dosync=%d (pdflush=%d mode=%s)\n",
-	     inode, do_sync, current_is_pdflush(),
+	dout("writepages_start %p dosync=%d (mode=%s)\n",
+	     inode, do_sync,
 	     wbc->sync_mode == WB_SYNC_NONE ? "NONE" :
 	     (wbc->sync_mode == WB_SYNC_ALL ? "ALL" : "HOLD"));
 
 	client = ceph_inode_to_client(inode);
 	if (client->mount_state == CEPH_MOUNT_SHUTDOWN) {
-		pr_warning("ceph writepage_start %p on forced umount\n", inode);
+		pr_warning("writepage_start %p on forced umount\n", inode);
 		return -EIO; /* we're in a forced umount, don't write! */
 	}
 	if (client->mount_args.wsize && client->mount_args.wsize < wsize)
@@ -839,7 +837,7 @@ get_more_pages:
 		req->r_num_pages = locked_pages;
 		reqhead = req->r_request->front.iov_base;
 		op = (void *)(reqhead + 1);
-		op->length = cpu_to_le64(len);
+		op->extent.length = cpu_to_le64(len);
 		op->payload_len = cpu_to_le32(len);
 		req->r_request->hdr.data_len = cpu_to_le32(len);
 

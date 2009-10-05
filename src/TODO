@@ -5,14 +5,39 @@ v0.15
 /- msgr: protocol check cleanups; ack seq # fix; 
 /- debian: radosgw package, fix header perms
 /- kclient: GET_DATALOC ioctl
-- kclient: osdc bug fix
-- kclient: clean up debugfs layout
+/- kclient: osdc bug fix
+/- kclient: clean up debugfs layout
+
+v0.16
+- kclient: fix msgr bug (out_qlen thing)
+- kclient cleanup: uninline strings, use pr_fmt, prefix frag_ macros
+- kclient: xattr cleanups
+- kclient: fix invalidate recursion bug
+- libceph: identify self
+- hadoop: set primary replica on self
+- kclient: akpm review fixups
+ - uninline frags
+ - uninline string hash
+ - document data structures
+ - audit all inline in kclient
+ - ceph_buffer and vmalloc?
+ - ceph_i_test smp_mb instead of spinlock
+ - bit ops in messenger
+ - name args in ceph_osd_op union
+- disk format, wire protocol changes
+- use sockaddr_storage; some ipv6 groundwork
+
+- mds: put migration vectors in mdsmap
+
+- revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
 
 - kclient: retry alloc on ENOMEM when reading from connection?
 - client authentication
-- mds: put migration vectors in mdsmap
+- document on-wire protocol
+
 
 bugs
+- mislinked directory?
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 
@@ -66,6 +91,7 @@ kclient
 - make cap import/export more efficient?
 - flock, fnctl locks
 - ACLs
+  - init security xattrs
 - should we try to ref CAP_PIN on special inodes that are open?  
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it
 - inotify for updates from other clients?
@@ -87,6 +113,7 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- clean up monitor session handling
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period

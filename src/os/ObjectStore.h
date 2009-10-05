@@ -23,6 +23,8 @@
 
 #include "include/Distribution.h"
 
+#include "osd/osd_types.h"
+
 #include <sys/stat.h>
 
 #ifdef DARWIN
@@ -128,13 +130,13 @@ public:
     int get_btrfs_len() { return blen; }
     */
 
-    __u64 disk_space_required() {
+    __u64 get_num_bytes() {
       // be conservative!
       __u64 s = 16384 +
 	(ops.size() + oids.size() + cids.size() + lengths.size()) * 4096;
       for (vector<bufferlist>::iterator p = bls.begin(); p != bls.end(); p++)
 	s += bls.size() + 4096;
-      return s;      
+      return s;
     }
 
     bool empty() {

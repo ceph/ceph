@@ -21,6 +21,8 @@
 #include <iostream>
 #include "buffer.h"
 
+#include "ceph_frag.h"
+
 /*
  * 
  * the goal here is to use a binary split strategy to partition a namespace.  
@@ -77,33 +79,33 @@ class frag_t {
   _frag_t _enc;  
   
   frag_t() : _enc(0) { }
-  frag_t(unsigned v, unsigned b) : _enc(frag_make(b, v)) { }
+  frag_t(unsigned v, unsigned b) : _enc(ceph_frag_make(b, v)) { }
   frag_t(_frag_t e) : _enc(e) { }
 
   // constructors
   void from_unsigned(unsigned e) { _enc = e; }
   
   // accessors
-  unsigned value() const { return frag_value(_enc); }
-  unsigned bits() const { return frag_bits(_enc); }
-  unsigned mask() const { return frag_mask(_enc); }
-  unsigned mask_shift() const { return frag_mask_shift(_enc); }
+  unsigned value() const { return ceph_frag_value(_enc); }
+  unsigned bits() const { return ceph_frag_bits(_enc); }
+  unsigned mask() const { return ceph_frag_mask(_enc); }
+  unsigned mask_shift() const { return ceph_frag_mask_shift(_enc); }
 
   operator _frag_t() const { return _enc; }
 
   // tests
-  bool contains(unsigned v) const { return frag_contains_value(_enc, v); }
-  bool contains(frag_t sub) const { return frag_contains_frag(_enc, sub._enc); }
+  bool contains(unsigned v) const { return ceph_frag_contains_value(_enc, v); }
+  bool contains(frag_t sub) const { return ceph_frag_contains_frag(_enc, sub._enc); }
   bool is_root() const { return bits() == 0; }
   frag_t parent() const {
     assert(bits() > 0);
-    return frag_t(frag_parent(_enc));
+    return frag_t(ceph_frag_parent(_enc));
   }
 
   // splitting
   frag_t make_child(int i, int nb) const {
     assert(i < (1<<nb));
-    return frag_t(frag_make_child(_enc, nb, i));
+    return frag_t(ceph_frag_make_child(_enc, nb, i));
   }
   void split(int nb, std::list<frag_t>& fragments) const {
     assert(nb > 0);
@@ -113,22 +115,22 @@ class frag_t {
   }
 
   // binary splitting
-  frag_t left_child() const { return frag_t(frag_left_child(_enc)); }
-  frag_t right_child() const { return frag_t(frag_right_child(_enc)); }
+  frag_t left_child() const { return frag_t(ceph_frag_left_child(_enc)); }
+  frag_t right_child() const { return frag_t(ceph_frag_right_child(_enc)); }
 
-  bool is_left() const { return frag_is_left_child(_enc); }
-  bool is_right() const { return frag_is_right_child(_enc); }
+  bool is_left() const { return ceph_frag_is_left_child(_enc); }
+  bool is_right() const { return ceph_frag_is_right_child(_enc); }
   frag_t get_sibling() const {
     assert(!is_root());
-    return frag_t(frag_sibling(_enc));
+    return frag_t(ceph_frag_sibling(_enc));
   }
 
   // sequencing
-  bool is_leftmost() const { return frag_is_leftmost(_enc); }
-  bool is_rightmost() const { return frag_is_rightmost(_enc); }
+  bool is_leftmost() const { return ceph_frag_is_leftmost(_enc); }
+  bool is_rightmost() const { return ceph_frag_is_rightmost(_enc); }
   frag_t next() const {
     assert(!is_rightmost());
-    return frag_t(frag_next(_enc));
+    return frag_t(ceph_frag_next(_enc));
   }
 };
 

@@ -30,7 +30,7 @@ struct ceph_ioctl_dataloc {
 	__u64 block_offset;          /* out: offset in block */
 	__u64 block_size;            /* out: block length */
 	__s64 osd;                   /* out: osd # */
-	struct sockaddr_in osd_addr; /* out: osd address */
+	struct sockaddr_storage osd_addr; /* out: osd address */
 };
 
 #define CEPH_IOC_GET_DATALOC _IOWR(CEPH_IOCTL_MAGIC, 3,	\

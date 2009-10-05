@@ -835,6 +835,7 @@ public:
     return have_inode(vinodeno_t(ino, snap));
   }
   bool have_inode(vinodeno_t vino) { return inode_map.count(vino) ? true:false; }
+
   CInode* get_inode(vinodeno_t vino) {
     return get_inode(vino.ino, vino.snapid);
   }
@@ -844,16 +845,11 @@ public:
       return inode_map[vino];
     return NULL;
   }
+
   CDir* get_dirfrag(dirfrag_t df) {
     if (!have_inode(df.ino)) return NULL;
     return get_inode(df.ino)->get_dirfrag(df.frag);
   }
-  /*
-  void get_dirfrags_under(dirfrag_t df, list<CDir*>& ls) {
-    if (have_inode(df.ino))
-      inode_map[df.ino]->get_dirfrags_under(df.frag, ls);
-  }
-  */
 
   MDSCacheObject *get_object(MDSCacheObjectInfo &info);
 

@@ -1,10 +1,11 @@
+#include "ceph_debug.h"
+
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 #include "decode.h"
 #include "messenger.h"
@@ -128,7 +129,7 @@ static int caps_use_count;          /* in use */
 static int caps_reserve_count;      /* unused, reserved */
 static int caps_avail_count;        /* unused, unreserved */
 
-void ceph_caps_init(void)
+void __init ceph_caps_init(void)
 {
 	INIT_LIST_HEAD(&caps_list);
 	spin_lock_init(&caps_list_lock);
@@ -202,7 +203,7 @@ int ceph_reserve_caps(struct ceph_cap_reservation *ctx, int need)
 
 out_alloc_count:
 	/* we didn't manage to reserve as much as we needed */
-	pr_warning("ceph reserve caps ctx=%p ENOMEM need=%d got=%d\n",
+	pr_warning("reserve caps ctx=%p ENOMEM need=%d got=%d\n",
 		   ctx, need, have);
 	return ret;
 }
@@ -500,8 +501,7 @@ static void __check_cap_issue(struct ceph_inode_info *ci, struct ceph_cap *cap,
 int ceph_add_cap(struct inode *inode,
 		 struct ceph_mds_session *session, u64 cap_id,
 		 int fmode, unsigned issued, unsigned wanted,
-		 unsigned seq, unsigned mseq, u64 realmino,
-		 unsigned ttl_ms, unsigned long ttl_from, int flags,
+		 unsigned seq, unsigned mseq, u64 realmino, int flags,
 		 struct ceph_cap_reservation *caps_reservation)
 {
 	struct ceph_mds_client *mdsc = &ceph_inode_to_client(inode)->mdsc;
@@ -573,7 +573,7 @@ retry:
 				 &realm->inodes_with_caps);
 			spin_unlock(&realm->inodes_with_caps_lock);
 		} else {
-			pr_err("ceph_add_cap: couldn't find snap realm %llu\n",
+			pr_err("ceph_add_cap: couldn't find snap realm %llx\n",
 			       realmino);
 		}
 	}
@@ -790,6 +790,35 @@ int ceph_caps_revoking(struct ceph_inode_info *ci, int mask)
 	return ret;
 }
 
+int __ceph_caps_used(struct ceph_inode_info *ci)
+{
+	int used = 0;
+	if (ci->i_pin_ref)
+		used |= CEPH_CAP_PIN;
+	if (ci->i_rd_ref)
+		used |= CEPH_CAP_FILE_RD;
+	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
+		used |= CEPH_CAP_FILE_CACHE;
+	if (ci->i_wr_ref)
+		used |= CEPH_CAP_FILE_WR;
+	if (ci->i_wrbuffer_ref)
+		used |= CEPH_CAP_FILE_BUFFER;
+	return used;
+}
+
+/*
+ * wanted, by virtue of open file modes
+ */
+int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
+{
+	int want = 0;
+	int mode;
+	for (mode = 0; mode < 4; mode++)
+		if (ci->i_nr_by_mode[mode])
+			want |= ceph_caps_for_mode(mode);
+	return want;
+}
+
 /*
  * Return caps we have registered with the MDS(s) as 'wanted'.
  */
@@ -843,7 +872,7 @@ void __ceph_remove_cap(struct ceph_cap *cap,
 
 	put_cap(cap, ctx);
 
-	if (!__ceph_is_any_caps(ci)) {
+	if (!__ceph_is_any_caps(ci) && ci->i_snap_realm) {
 		struct ceph_snap_realm *realm = ci->i_snap_realm;
 		spin_lock(&realm->inodes_with_caps_lock);
 		list_del_init(&ci->i_snap_realm_item);
@@ -1347,6 +1376,7 @@ retry_locked:
 	    ci->i_wrbuffer_ref == 0 &&               /* no dirty pages... */
 	    ci->i_rdcache_gen &&                     /* may have cached pages */
 	    file_wanted == 0 &&                      /* no open files */
+	    !ci->i_truncate_pending &&
 	    !tried_invalidate) {
 		u32 invalidating_gen = ci->i_rdcache_gen;
 		int ret;
@@ -1756,7 +1786,7 @@ static void kick_flushing_capsnaps(struct ceph_mds_client *mdsc,
 			     cap, capsnap);
 			__ceph_flush_snaps(ci, &session);
 		} else {
-			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
+			pr_err("%p auth cap %p not mds%d ???\n", inode,
 			       cap, session->s_mds);
 			spin_unlock(&inode->i_lock);
 		}
@@ -1792,7 +1822,7 @@ void ceph_kick_flushing_caps(struct ceph_mds_client *mdsc,
 				spin_unlock(&inode->i_lock);
 			}
 		} else {
-			pr_err("ceph %p auth cap %p not mds%d ???\n", inode,
+			pr_err("%p auth cap %p not mds%d ???\n", inode,
 			       cap, session->s_mds);
 			spin_unlock(&inode->i_lock);
 		}
@@ -2129,17 +2159,13 @@ static int handle_cap_grant(struct inode *inode, struct ceph_mds_caps *grant,
 	     inode, cap, mds, seq, ceph_cap_string(newcaps));
 	dout(" size %llu max_size %llu, i_size %llu\n", size, max_size,
 		inode->i_size);
-start:
-
-	cap->gen = session->s_cap_gen;
-
-	__check_cap_issue(ci, cap, newcaps);
 
 	/*
 	 * If CACHE is being revoked, and we have no dirty buffers,
 	 * try to invalidate (once).  (If there are dirty buffers, we
 	 * will invalidate _after_ writeback.)
 	 */
+restart:
 	if (((cap->issued & ~newcaps) & CEPH_CAP_FILE_CACHE) &&
 	    !ci->i_wrbuffer_ref && !tried_invalidate) {
 		dout("CACHE invalidation\n");
@@ -2161,11 +2187,17 @@ start:
 			ci->i_rdcache_gen = 0;
 			ci->i_rdcache_revoking = 0;
 		}
-		goto start;
+		goto restart;
 	}
+
+	/* side effects now are allowed */
 
 	issued = __ceph_caps_issued(ci, &implemented);
 	issued |= implemented | __ceph_caps_dirty(ci);
+
+	cap->gen = session->s_cap_gen;
+
+	__check_cap_issue(ci, cap, newcaps);
 
 	if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
 		inode->i_mode = le32_to_cpu(grant->mode);
@@ -2253,9 +2285,9 @@ start:
 		dout("grant: %s -> %s\n", ceph_cap_string(cap->issued),
 		     ceph_cap_string(newcaps));
 		cap->issued = newcaps;
-		cap->implemented |= newcaps;    /* add bits only, to
-						 * avoid stepping on a
-						 * pending revocation */
+		cap->implemented |= newcaps; /* add bits only, to
+					      * avoid stepping on a
+					      * pending revocation */
 		wake = 1;
 	}
 
@@ -2493,7 +2525,6 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 	unsigned seq = le32_to_cpu(im->seq);
 	unsigned mseq = le32_to_cpu(im->migrate_seq);
 	u64 realmino = le64_to_cpu(im->realm);
-	unsigned long ttl_ms = le32_to_cpu(im->ttl_ms);
 	u64 cap_id = le64_to_cpu(im->cap_id);
 
 	if (ci->i_cap_exporting_mds >= 0 &&
@@ -2515,8 +2546,7 @@ static void handle_cap_import(struct ceph_mds_client *mdsc,
 			       false);
 	downgrade_write(&mdsc->snap_rwsem);
 	ceph_add_cap(inode, session, cap_id, -1,
-		     issued, wanted, seq, mseq, realmino,
-		     ttl_ms, jiffies - ttl_ms/2, CEPH_CAP_FLAG_AUTH,
+		     issued, wanted, seq, mseq, realmino, CEPH_CAP_FLAG_AUTH,
 		     NULL /* no caps context */);
 	try_flush_caps(inode, session, NULL);
 	up_read(&mdsc->snap_rwsem);

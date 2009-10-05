@@ -64,7 +64,7 @@ int Filer::probe(inodeno_t ino,
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime, flags, fwd, onfinish);
   
   // period (bytes before we jump unto a new set of object(s))
-  __u64 period = ceph_file_layout_period(*layout);
+  __u64 period = layout->fl_stripe_count * layout->fl_object_size;
   
   // start with 1+ periods.
   probe->probing_len = period;
@@ -183,7 +183,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
     // keep probing!
     dout(10) << "_probed probing further" << dendl;
 
-    __u64 period = ceph_file_layout_period(probe->layout);
+    __u64 period = probe->layout.fl_stripe_count * probe->layout.fl_object_size;
     if (probe->fwd) {
       probe->probing_off += probe->probing_len;
       assert(probe->probing_off % period == 0);
@@ -225,9 +225,9 @@ void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
    */
   map< object_t, ObjectExtent > object_extents;
   
-  __u32 object_size = ceph_file_layout_object_size(*layout);
-  __u32 su = ceph_file_layout_su(*layout);
-  __u32 stripe_count = ceph_file_layout_stripe_count(*layout);
+  __u32 object_size = layout->fl_object_size;
+  __u32 su = layout->fl_stripe_unit;
+  __u32 stripe_count = layout->fl_stripe_count;
   assert(object_size >= su);
   __u64 stripes_per_object = object_size / su;
   dout(20) << " stripes_per_object " << stripes_per_object << dendl;

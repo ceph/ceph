@@ -33,6 +33,7 @@ void usage()
   cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
+  cout << "   --test-map-pg <pgid>    map a pgid to osds" << std::endl;
   exit(1);
 }
 

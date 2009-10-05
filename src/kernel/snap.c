@@ -1,8 +1,8 @@
+#include "ceph_debug.h"
 
 #include <linux/radix-tree.h>
 #include <linux/sort.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 #include "decode.h"
 
@@ -347,7 +347,7 @@ fail:
 		ceph_put_snap_context(realm->cached_context);
 		realm->cached_context = NULL;
 	}
-	pr_err("ceph build_snap_context %llx %p fail %d\n", realm->ino,
+	pr_err("build_snap_context %llx %p fail %d\n", realm->ino,
 	       realm, err);
 	return err;
 }
@@ -412,7 +412,7 @@ void ceph_queue_cap_snap(struct ceph_inode_info *ci,
 
 	capsnap = kzalloc(sizeof(*capsnap), GFP_NOFS);
 	if (!capsnap) {
-		pr_err("ceph ENOMEM allocating ceph_cap_snap on %p\n", inode);
+		pr_err("ENOMEM allocating ceph_cap_snap on %p\n", inode);
 		return;
 	}
 
@@ -637,7 +637,7 @@ more:
 bad:
 	err = -EINVAL;
 fail:
-	pr_err("ceph update_snap_trace error %d\n", err);
+	pr_err("update_snap_trace error %d\n", err);
 	return err;
 }
 
@@ -886,7 +886,7 @@ split_skip_inode:
 	return;
 
 bad:
-	pr_err("ceph corrupt snap message from mds%d\n", mds);
+	pr_err("corrupt snap message from mds%d\n", mds);
 out:
 	if (locked_rwsem)
 		up_write(&mdsc->snap_rwsem);

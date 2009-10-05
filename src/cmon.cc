@@ -108,19 +108,15 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  const sockaddr_in *ipaddr = &monmap.get_inst(whoami).addr.ipaddr;
+  entity_addr_t ipaddr = monmap.get_inst(whoami).addr;
   entity_addr_t conf_addr;
   char *mon_addr_str;
 
-  if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str, NULL)) {
-	if (parse_ip_port(mon_addr_str, conf_addr, NULL)) {
-		if ((ipaddr->sin_addr.s_addr != conf_addr.ipaddr.sin_addr.s_addr) ||
-		    (ipaddr->sin_port != conf_addr.ipaddr.sin_port)) {
-			cerr << "WARNING: 'mon addr' config option does not match monmap file" << std::endl
-			     << "         continuing with monmap configuration" << std::endl;
-		}
-	}
-  }
+  if (conf_read_key(NULL, "mon addr", OPT_STR, &mon_addr_str, NULL) &&
+      parse_ip_port(mon_addr_str, conf_addr, NULL) &&
+      ipaddr != conf_addr)
+    cerr << "WARNING: 'mon addr' config option does not match monmap file" << std::endl
+	 << "         continuing with monmap configuration" << std::endl;
 
   // bind
   SimpleMessenger rank;

@@ -87,7 +87,6 @@ Mount Options
 =============
 
   ip=A.B.C.D[:N]
-  port=N
 	Specify the IP and/or port the client should bind to locally.
 	There is normally not much reason to do this.  If the IP is not
 	specified, the client's IP address is determined by looking at the

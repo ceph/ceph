@@ -66,6 +66,8 @@ void MDSMap::print(ostream& out)
 	out << " '" << info.standby_for_name << "'";
       out << ")";
     }
+    if (info.export_targets.size())
+      out << " export_targets=" << info.export_targets;
     out << "\n";    
   }
 

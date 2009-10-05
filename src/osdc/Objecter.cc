@@ -199,6 +199,7 @@ void Objecter::maybe_request_map()
 {
   dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
   monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+  monc->renew_subs();
 }
 
 
@@ -340,12 +341,9 @@ void Objecter::tick()
 
   // reschedule
   timer.add_event_after(g_conf.objecter_tick_interval, new C_Tick(this));
-
-  //resubmit old ops
-  resend_slow_ops();
 }
 
-void Objecter::resend_slow_ops()
+void Objecter::resend_mon_ops()
 {
   utime_t cutoff = g_clock.now();
   cutoff -= g_conf.objecter_mon_retry_interval;
@@ -366,17 +364,6 @@ void Objecter::resend_slow_ops()
       pool_op_submit(p->second);
   }
 }
-
-
-/*
-void Objecter::handle_osd_op_reply(MOSDOpReply *m)
-{
-  if (m->may_write())
-    handle_osd_modify_reply(m);
-  else
-    handle_osd_read_reply(m);
-}
-*/
 
 
 
@@ -448,6 +435,9 @@ tid_t Objecter::op_submit(Op *op)
     
     if (op->version != eversion_t())
       m->set_version(op->version);  // we're replaying this op!
+
+    if (op->priority)
+      m->set_priority(op->priority);
 
     messenger->send_message(m, osdmap->get_inst(pg.primary()));
   } else 
@@ -933,6 +923,12 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
   }
 }
 
+
+void Objecter::ms_handle_reset(const entity_addr_t& addr)
+{
+  if (monc->monmap.contains(addr))
+    resend_mon_ops();
+}
 
 void Objecter::ms_handle_remote_reset(const entity_addr_t& addr)
 {

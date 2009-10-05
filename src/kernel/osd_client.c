@@ -1,3 +1,5 @@
+#include "ceph_debug.h"
+
 #include <linux/err.h>
 #include <linux/highmem.h>
 #include <linux/mm.h>
@@ -5,7 +7,6 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 #include "osd_client.h"
 #include "messenger.h"
@@ -63,8 +64,8 @@ static void calc_layout(struct ceph_osd_client *osdc,
 	sprintf(req->r_oid, "%llx.%08llx", vino.ino, bno);
 	req->r_oid_len = strlen(req->r_oid);
 
-	op->offset = cpu_to_le64(objoff);
-	op->length = cpu_to_le64(objlen);
+	op->extent.offset = cpu_to_le64(objoff);
+	op->extent.length = cpu_to_le64(objlen);
 	req->r_num_pages = calc_pages_for(off, *plen);
 
 	dout("calc_layout %s (%d) %llu~%llu (%d pages)\n",
@@ -204,9 +205,10 @@ struct ceph_osd_request *ceph_osdc_new_request(struct ceph_osd_client *osdc,
 		op++;
 		op->op = cpu_to_le16(opcode == CEPH_OSD_OP_READ ?
 			     CEPH_OSD_OP_MASKTRUNC : CEPH_OSD_OP_SETTRUNC);
-		op->truncate_seq = cpu_to_le32(truncate_seq);
-		prevofs = le64_to_cpu((op-1)->offset);
-		op->truncate_size = cpu_to_le64(truncate_size - (off-prevofs));
+		op->trunc.truncate_seq = cpu_to_le32(truncate_seq);
+		prevofs = le64_to_cpu((op-1)->extent.offset);
+		op->trunc.truncate_size = cpu_to_le64(truncate_size -
+						      (off-prevofs));
 	}
 	if (do_sync) {
 		op++;
@@ -763,7 +765,7 @@ done:
 	return;
 
 bad:
-	pr_err("ceph corrupt osd_op_reply got %d %d expected %d\n",
+	pr_err("corrupt osd_op_reply got %d %d expected %d\n",
 	       (int)msg->front.iov_len, le32_to_cpu(msg->hdr.front_len),
 	       (int)sizeof(*rhead));
 }
@@ -875,7 +877,7 @@ void ceph_osdc_handle_map(struct ceph_osd_client *osdc, struct ceph_msg *msg)
 	ceph_decode_need(&p, end, sizeof(fsid), bad);
 	ceph_decode_copy(&p, &fsid, sizeof(fsid));
 	if (ceph_fsid_compare(&fsid, &osdc->client->monc.monmap->fsid)) {
-		pr_err("ceph got osdmap with wrong fsid, ignoring\n");
+		pr_err("got osdmap with wrong fsid, ignoring\n");
 		return;
 	}
 
@@ -954,7 +956,7 @@ done:
 	return;
 
 bad:
-	pr_err("ceph osdc handle_map corrupt msg\n");
+	pr_err("osdc handle_map corrupt msg\n");
 	up_write(&osdc->map_sem);
 	return;
 }
@@ -1244,7 +1246,7 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 		break;
 
 	default:
-		pr_err("ceph received unknown message type %d %s\n", type,
+		pr_err("received unknown message type %d %s\n", type,
 		       ceph_msg_type_name(type));
 	}
 	ceph_msg_put(msg);

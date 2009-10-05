@@ -317,6 +317,9 @@ libcommon_files = \
 	common/common_init.cc \
 	common/buffer.cc \
 	common/debug.cc \
+	include/ceph_fs.cc \
+	include/ceph_strings.cc \
+	include/ceph_frag.cc \
 	config.cc \
 	common/lockdep.cc
 
@@ -455,6 +458,7 @@ noinst_HEADERS = \
         include/blobhash.h\
         include/buffer.h\
         include/byteorder.h\
+	include/ceph_frag.h\
         include/ceph_fs.h\
 	include/color.h\
 	include/crc32c.h\
@@ -490,7 +494,11 @@ noinst_HEADERS = \
 	kernel/buffer.h\
 	kernel/caps.c\
 	kernel/ceph_debug.h\
+	kernel/ceph_frag.c\
+	kernel/ceph_frag.h\
+	kernel/ceph_fs.c\
 	kernel/ceph_fs.h\
+	kernel/ceph_strings.c\
 	kernel/ceph_ver.h\
 	kernel/crypt.c\
 	kernel/crypt.h\
@@ -507,6 +515,7 @@ noinst_HEADERS = \
 	kernel/inode.c\
 	kernel/ioctl.c\
 	kernel/ioctl.h\
+	kernel/ioctl-number.patch\
 	kernel/kbuild.patch\
 	kernel/mds_client.c\
 	kernel/mds_client.h\
@@ -525,9 +534,11 @@ noinst_HEADERS = \
 	kernel/osdmap.h\
 	kernel/rados.h\
 	kernel/snap.c\
+	kernel/ceph_strings.c\
 	kernel/super.c\
 	kernel/super.h\
 	kernel/types.h\
+	kernel/xattr.c\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
@@ -621,6 +632,7 @@ noinst_HEADERS = \
         messages/MMDSBeacon.h\
         messages/MMDSBoot.h\
         messages/MMDSCacheRejoin.h\
+	messages/MMDSLoadTargets.h\
         messages/MMDSFragmentNotify.h\
         messages/MMDSGetMap.h\
         messages/MMDSMap.h\

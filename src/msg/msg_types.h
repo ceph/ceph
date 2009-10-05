@@ -121,62 +121,114 @@ namespace __gnu_cxx {
  * thus identifies a particular process instance.
  * ipv4 for now.
  */
+WRITE_RAW_ENCODER(ceph_entity_addr)
+WRITE_RAW_ENCODER(sockaddr_storage)
+
 struct entity_addr_t {
-  __u32 erank;
-  __u32 nonce;
-  struct sockaddr_in ipaddr;
+  struct ceph_entity_addr v;
 
-  entity_addr_t() : erank(0), nonce(0) { 
-    memset(&ipaddr, 0, sizeof(ipaddr));
-    ipaddr.sin_family = AF_INET;
+  entity_addr_t() { 
+    memset(&v, 0, sizeof(v));
   }
-  entity_addr_t(const ceph_entity_addr &v) {
-    erank = v.erank;
-    nonce = v.nonce;
-    ipaddr = v.ipaddr;
+  entity_addr_t(const ceph_entity_addr &o) {
+    memcpy(&v, &o, sizeof(v));
   }
 
-  void set_ipquad(int pos, int val) {
-    unsigned char *ipq = (unsigned char*)&ipaddr.sin_addr.s_addr;
+  __u32 get_nonce() const { return v.nonce; }
+  void set_nonce(__u32 n) { v.nonce = n; }
+  
+  __u32 get_erank() const { return v.erank; }
+  void set_erank(__u32 r) { v.erank = r; }
+
+  sockaddr_storage &in_addr() {
+    return *(sockaddr_storage *)&v.in_addr;
+  }
+  sockaddr_in &in4_addr() {
+    return *(sockaddr_in *)&v.in_addr;
+  }
+  sockaddr_in6 &in6_addr() {
+    return *(sockaddr_in6 *)&v.in_addr;
+  }
+
+  void set_in4_quad(int pos, int val) {
+    sockaddr_in *in4 = (sockaddr_in *)&v.in_addr;
+    in4->sin_family = AF_INET;
+    unsigned char *ipq = (unsigned char*)&in4->sin_addr.s_addr;
     ipq[pos] = val;
   }
   void set_port(int port) {
-    ipaddr.sin_port = htons(port);
+    switch (v.in_addr.ss_family) {
+    case AF_INET:
+      ((sockaddr_in *)&v.in_addr)->sin_port = htons(port);
+      break;
+    case AF_INET6:
+      ((sockaddr_in6 *)&v.in_addr)->sin6_port = htons(port);
+      break;
+    default:
+      assert(0);
+    }
   }
-  int get_port() {
-    return ntohs(ipaddr.sin_port);
+  int get_port() const {
+    switch (v.in_addr.ss_family) {
+    case AF_INET:
+      return ntohs(((const sockaddr_in *)&v.in_addr)->sin_port);
+      break;
+    case AF_INET6:
+      return ntohs(((const sockaddr_in6 *)&v.in_addr)->sin6_port);
+      break;
+    }
+    return 0;
   }
 
-  operator ceph_entity_addr() const { 
-    ceph_entity_addr a = { 
-    erank: init_le32(erank), 
-    nonce: init_le32(nonce),
-    ipaddr: ipaddr
-    };
-    return a;
+  operator ceph_entity_addr() const { return v; }
+
+  bool is_local_to(const entity_addr_t &other) const {
+    return ceph_entity_addr_is_local(&v, &other.v);
+  }
+  bool is_same_host(const entity_addr_t &other) const {
+    const ceph_entity_addr *a = &v;
+    const ceph_entity_addr *b = &other.v;
+    if (a->in_addr.ss_family != b->in_addr.ss_family)
+      return false;
+    if (a->in_addr.ss_family == AF_INET)
+      return ((struct sockaddr_in *)&a->in_addr)->sin_addr.s_addr ==
+	((struct sockaddr_in *)&b->in_addr)->sin_addr.s_addr;
+    if (a->in_addr.ss_family == AF_INET6)
+      return memcmp(((struct sockaddr_in6 *)&a->in_addr)->sin6_addr.s6_addr,
+		    ((struct sockaddr_in6 *)&b->in_addr)->sin6_addr.s6_addr,
+		    sizeof(((struct sockaddr_in6 *)&a->in_addr)->sin6_addr.s6_addr));
+    return false;
   }
 
-  bool is_local_to(const entity_addr_t &other) {
-    return 
-      nonce == other.nonce &&
-      memcmp(&ipaddr, &other.ipaddr, sizeof(ipaddr)) == 0;
+  bool is_blank_addr() {
+    switch (v.in_addr.ss_family) {
+    case AF_INET:
+      return ((sockaddr_in *)&v.in_addr)->sin_addr.s_addr == INADDR_ANY;
+    case AF_INET6:
+      {
+	sockaddr_in6 *in6 = (sockaddr_in6 *)&v.in_addr;
+	return in6->sin6_addr.s6_addr32[0] == 0 &&
+	  in6->sin6_addr.s6_addr32[1] == 0 &&
+	  in6->sin6_addr.s6_addr32[2] == 0 &&
+	  in6->sin6_addr.s6_addr32[3] == 0;
+      }
+    default:
+      return true;
+    }
+  }
+
+  void encode(bufferlist& bl) const {
+    ::encode(v, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(v, bl);
   }
 };
-
-inline void encode(const entity_addr_t &a, bufferlist& bl) {
-  encode(a.erank, bl);
-  encode(a.nonce, bl);
-  encode_raw(a.ipaddr, bl);
-}
-inline void decode(entity_addr_t &a, bufferlist::iterator& p) {
-  decode(a.erank, p);
-  decode(a.nonce, p);
-  decode_raw(a.ipaddr, p);
-}
+WRITE_CLASS_ENCODER(entity_addr_t)
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << addr.ipaddr << '/' << addr.nonce << '/' << addr.erank;
+  return out << addr.v.in_addr << '/' << addr.v.nonce << '/' << addr.v.erank;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
@@ -192,8 +244,7 @@ namespace __gnu_cxx {
     size_t operator()( const entity_addr_t& x ) const
     {
       static blobhash H;
-      return H((const char*)&x.ipaddr, sizeof(x.ipaddr)) ^
-	rjhash32(x.erank ^ x.nonce);
+      return H((const char*)&x.v, sizeof(x.v));
     }
   };
 }

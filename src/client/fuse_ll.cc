@@ -341,7 +341,7 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 			    off_t off, struct fuse_file_info *fi)
 {
   (void) fi;
-  
+
   // buffer
   char *buf;
   size_t pos = 0;
@@ -368,12 +368,11 @@ static void ceph_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     st.st_ino = make_fake_ino(de.d_ino, snap);
     st.st_mode = DT_TO_MODE(de.d_type);
 
-    off_t off = client->telldir(dirp);
+    off_t off = de.d_off;
     size_t entrysize = fuse_add_direntry(req, buf + pos, size - pos,
 					 de.d_name, &st, off);
-
     /*
-    cout << "ceph_ll_readdir added " << de.d_name << " at " << pos << " len " << entrysize
+    cout << "ceph_ll_readdir ino " << ino << " added " << de.d_name << " at " << pos << " len " << entrysize
 	 << " (buffer size is " << size << ")" 
 	 << " .. off = " << off
 	 << std::endl;
@@ -477,6 +476,9 @@ int ceph_fuse_ll_main(Client *c, int argc, const char *argv[])
 
   newargv[newargc++] = "-o";
   newargv[newargc++] = "allow_other";
+
+  newargv[newargc++] = "-o";
+  newargv[newargc++] = "default_permissions";
 
   //newargv[newargc++] = "-d";
 

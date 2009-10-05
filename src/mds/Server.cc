@@ -961,8 +961,10 @@ void Server::handle_client_request(MClientRequest *req)
   MDRequest *mdr = mdcache->request_start(req);
   if (!mdr) 
     return;
-  mdr->session = session;
-  session->requests.push_back(&mdr->session_request_item);
+  if (session) {
+    mdr->session = session;
+    session->requests.push_back(&mdr->session_request_item);
+  }
 
   // process embedded cap releases?
   //  (only if NOT replay!)
@@ -2137,9 +2139,7 @@ void Server::handle_client_openc(MDRequest *mdr)
     in->inode.layout.fl_stripe_count = req->head.args.open.stripe_count;
   if (req->head.args.open.object_size)
     in->inode.layout.fl_object_size = req->head.args.open.object_size;
-  /*if(req->head.args->open.file_replication)
-    in->inode.layout.fl_pg_pool.set_size(req->head.args.open.file_replication);
-  */
+  in->inode.layout.fl_pg_preferred = req->head.args.open.preferred;
 
   dn->first = in->first = follows+1;
   
@@ -2428,6 +2428,8 @@ void Server::handle_client_setattr(MDRequest *mdr)
 
   pi = cur->project_inode();
 
+  utime_t now = g_clock.real_now();
+
   if (mask & CEPH_SETATTR_MODE)
     pi->mode = (pi->mode & ~07777) | (req->head.args.setattr.mode & 07777);
   if (mask & CEPH_SETATTR_UID)
@@ -2452,6 +2454,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
       pi->size = req->head.args.setattr.size;
     }
     pi->rstat.rbytes = pi->size;
+    pi->mtime = now;
 
     // adjust client's max_size?
     map<client_t,byte_range_t> new_ranges;
@@ -2464,7 +2467,7 @@ void Server::handle_client_setattr(MDRequest *mdr)
   }
 
   pi->version = cur->pre_dirty();
-  pi->ctime = g_clock.real_now();
+  pi->ctime = now;
 
   // log + wait
   le->metablob.add_client_req(req->get_reqid());
@@ -2554,9 +2557,15 @@ void Server::handle_client_setlayout(MDRequest *mdr)
   // project update
   inode_t *pi = cur->project_inode();
   // FIXME: only set striping parameters, for now.
-  pi->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
-  pi->layout.fl_stripe_count = req->head.args.setlayout.layout.fl_stripe_count;
-  pi->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_object_size > 0)
+    pi->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  else pi->layout.fl_object_size = CEPH_DEFAULT_OBJECT_SIZE;
+  if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
+    pi->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+  else pi->layout.fl_stripe_unit = pi->layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_stripe_count > 0)
+    pi->layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+  else pi->layout.fl_stripe_count = CEPH_DEFAULT_STRIPE_COUNT;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   

@@ -34,6 +34,7 @@ using namespace std;
 class MMDSBeacon;
 class MMDSGetMap;
 class MMonCommand;
+class MMDSLoadTargets;
 
 class MDSMonitor : public PaxosService {
  public:
@@ -78,6 +79,9 @@ class MDSMonitor : public PaxosService {
   bool preprocess_beacon(class MMDSBeacon *m);
   bool prepare_beacon(class MMDSBeacon *m);
   void handle_mds_getmap(MMDSGetMap *m);
+
+  bool preprocess_offload_targets(MMDSLoadTargets *m);
+  bool prepare_offload_targets(MMDSLoadTargets *m);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);

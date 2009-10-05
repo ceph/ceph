@@ -56,6 +56,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 
   ceph_set_default_file_stripe_unit(block_size);
   ceph_set_default_object_size(block_size);
+  ceph_set_default_preferred_pg(ceph_get_local_osd());
 
   if (r < 0) return false;
   r = ceph_mount();

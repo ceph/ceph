@@ -1,3 +1,5 @@
+#include "ceph_debug.h"
+
 #include <linux/bug.h>
 #include <linux/err.h>
 #include <linux/random.h>
@@ -8,7 +10,6 @@
 #include "messenger.h"
 #include "decode.h"
 
-#include "ceph_debug.h"
 #include "super.h"
 
 
@@ -23,7 +24,7 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 
 	/* count */
 	for (i = 0; i < m->m_max_mds; i++)
-		if (m->m_state[i] > 0)
+		if (m->m_info[i].state > 0)
 			n++;
 	if (n == 0)
 		return -1;
@@ -33,7 +34,7 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 	n = r % n;
 	i = 0;
 	for (i = 0; n > 0; i++, n--)
-		while (m->m_state[i] <= 0)
+		while (m->m_info[i].state <= 0)
 			i++;
 
 	return i;
@@ -48,7 +49,7 @@ int ceph_mdsmap_get_random_mds(struct ceph_mdsmap *m)
 struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 {
 	struct ceph_mdsmap *m;
-	int i, n;
+	int i, j, n;
 	int err = -EINVAL;
 	u16 version;
 
@@ -68,9 +69,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 	ceph_decode_64(p, m->m_max_file_size);
 	ceph_decode_32(p, m->m_max_mds);
 
-	m->m_addr = kcalloc(m->m_max_mds, sizeof(*m->m_addr), GFP_NOFS);
-	m->m_state = kcalloc(m->m_max_mds, sizeof(*m->m_state), GFP_NOFS);
-	if (m->m_addr == NULL || m->m_state == NULL)
+	m->m_info = kcalloc(m->m_max_mds, sizeof(*m->m_info), GFP_NOFS);
+	if (m->m_info == NULL)
 		goto badmem;
 
 	/* pick out active nodes from mds_info (state > 0) */
@@ -81,6 +81,8 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		u64 state_seq;
 		u8 infoversion;
 		struct ceph_entity_addr addr;
+		u32 num_export_targets;
+		void *pexport_targets = NULL;
 
 		ceph_decode_need(p, end, sizeof(addr) + 1 + sizeof(u32), bad);
 		*p += sizeof(addr);          /* skip addr key */
@@ -97,13 +99,35 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 		ceph_decode_32(p, state);
 		ceph_decode_64(p, state_seq);
 		ceph_decode_copy(p, &addr, sizeof(addr));
-		*p += sizeof(struct ceph_timespec) + 2*sizeof(u32);
-		dout("mdsmap_decode %d/%d mds%d.%d %u.%u.%u.%u:%u %s\n",
-		     i+1, n, mds, inc, IPQUADPORT(addr.ipaddr),
+		*p += sizeof(struct ceph_timespec);
+		*p += sizeof(u32);
+		ceph_decode_32_safe(p, end, namelen, bad);
+		*p += sizeof(namelen);
+		if (infoversion >= 2) {
+			ceph_decode_32_safe(p, end, num_export_targets, bad);
+			pexport_targets = *p;
+			*p += sizeof(num_export_targets * sizeof(u32));
+		} else {
+			num_export_targets = 0;
+		}
+
+		dout("mdsmap_decode %d/%d mds%d.%d %s %s\n",
+		     i+1, n, mds, inc, pr_addr(&addr.in_addr),
 		     ceph_mds_state_name(state));
 		if (mds >= 0 && mds < m->m_max_mds && state > 0) {
-			m->m_state[mds] = state;
-			m->m_addr[mds] = addr;
+			m->m_info[mds].state = state;
+			m->m_info[mds].addr = addr;
+			m->m_info[mds].num_export_targets = num_export_targets;
+			if (num_export_targets) {
+				m->m_info[mds].export_targets =
+					kcalloc(num_export_targets, sizeof(u32),
+						GFP_NOFS);
+				for (j = 0; j < num_export_targets; j++)
+					ceph_decode_32(&pexport_targets,
+					      m->m_info[mds].export_targets[j]);
+			} else {
+				m->m_info[mds].export_targets = NULL;
+			}
 		}
 	}
 
@@ -125,15 +149,18 @@ struct ceph_mdsmap *ceph_mdsmap_decode(void **p, void *end)
 badmem:
 	err = -ENOMEM;
 bad:
-	pr_err("ceph corrupt mdsmap\n");
+	pr_err("corrupt mdsmap\n");
 	ceph_mdsmap_destroy(m);
 	return ERR_PTR(-EINVAL);
 }
 
 void ceph_mdsmap_destroy(struct ceph_mdsmap *m)
 {
-	kfree(m->m_addr);
-	kfree(m->m_state);
+	int i;
+
+	for (i = 0; i < m->m_max_mds; i++)
+		kfree(m->m_info[i].export_targets);
+	kfree(m->m_info);
 	kfree(m->m_data_pg_pools);
 	kfree(m);
 }

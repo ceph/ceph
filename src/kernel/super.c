@@ -1,6 +1,10 @@
+
+#include "ceph_debug.h"
+
 #include <linux/backing-dev.h>
 #include <linux/fs.h>
 #include <linux/inet.h>
+#include <linux/in6.h>
 #include <linux/module.h>
 #include <linux/mount.h>
 #include <linux/parser.h>
@@ -12,7 +16,6 @@
 #include <linux/version.h>
 #include <linux/vmalloc.h>
 
-#include "ceph_debug.h"
 #include "ceph_ver.h"
 #include "decode.h"
 #include "super.h"
@@ -150,37 +153,28 @@ static void ceph_inode_init_once(struct kmem_cache *cachep, void *foo)
 	inode_init_once(&ci->vfs_inode);
 }
 
-static int init_caches(void)
+static int __init init_caches(void)
 {
-	ceph_inode_cachep = kmem_cache_create("ceph_inode_cache",
-					      sizeof(struct ceph_inode_info),
-					      0, (SLAB_RECLAIM_ACCOUNT|
-						  SLAB_MEM_SPREAD),
-					      ceph_inode_init_once);
+	ceph_inode_cachep = kmem_cache_create("ceph_inode_info",
+				      sizeof(struct ceph_inode_info),
+				      __alignof__(struct ceph_inode_info),
+				      (SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD),
+				      ceph_inode_init_once);
 	if (ceph_inode_cachep == NULL)
 		return -ENOMEM;
 
-	ceph_cap_cachep = kmem_cache_create("ceph_caps_cache",
-					    sizeof(struct ceph_cap),
-					    0, (SLAB_RECLAIM_ACCOUNT|
-						SLAB_MEM_SPREAD),
-					    NULL);
+	ceph_cap_cachep = KMEM_CACHE(ceph_cap,
+				     SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_cap_cachep == NULL)
 		goto bad_cap;
 
-	ceph_dentry_cachep = kmem_cache_create("ceph_dentry_cache",
-					       sizeof(struct ceph_dentry_info),
-					       0, (SLAB_RECLAIM_ACCOUNT|
-						   SLAB_MEM_SPREAD),
-					       NULL);
+	ceph_dentry_cachep = KMEM_CACHE(ceph_dentry_info,
+					SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_dentry_cachep == NULL)
 		goto bad_dentry;
 
-	ceph_file_cachep = kmem_cache_create("ceph_file_cache",
-					     sizeof(struct ceph_file_info),
-					     0, (SLAB_RECLAIM_ACCOUNT|
-						 SLAB_MEM_SPREAD),
-					     NULL);
+	ceph_file_cachep = KMEM_CACHE(ceph_file_info,
+				      SLAB_RECLAIM_ACCOUNT|SLAB_MEM_SPREAD);
 	if (ceph_file_cachep == NULL)
 		goto bad_file;
 
@@ -290,7 +284,6 @@ enum {
 	Opt_fsidmajor,
 	Opt_fsidminor,
 	Opt_monport,
-	Opt_port,
 	Opt_wsize,
 	Opt_rsize,
 	Opt_osdtimeout,
@@ -316,7 +309,6 @@ static match_table_t arg_tokens = {
 	{Opt_fsidmajor, "fsidmajor=%ld"},
 	{Opt_fsidminor, "fsidminor=%ld"},
 	{Opt_monport, "monport=%d"},
-	{Opt_port, "port=%d"},
 	{Opt_wsize, "wsize=%d"},
 	{Opt_rsize, "rsize=%d"},
 	{Opt_osdtimeout, "osdtimeout=%d"},
@@ -339,66 +331,6 @@ static match_table_t arg_tokens = {
 	{-1, NULL}
 };
 
-
-/*
- * Parse an ip[:port] list into an addr array.  Use the default
- * monitor port if a port isn't specified.
- */
-#define ADDR_DELIM(c) ((!c) || (c == ':') || (c == ','))
-
-static int parse_ips(const char *c, const char *end,
-		     struct ceph_entity_addr *addr,
-		     int max_count, int *count)
-{
-	int mon_count;
-	const char *p = c;
-
-	dout("parse_ips on '%.*s'\n", (int)(end-c), c);
-	for (mon_count = 0; mon_count < max_count; mon_count++) {
-		const char *ipend;
-		__be32 quad;
-
-		if (!in4_pton(p, end - p, (u8 *)&quad, ',', &ipend))
-			goto bad;
-		*(__be32 *)&addr[mon_count].ipaddr.sin_addr.s_addr = quad;
-		p = ipend;
-
-		/* port? */
-		if (p < end && *p == ':') {
-			long port = 0;
-
-			p++;
-			while (p < end && *p >= '0' && *p <= '9') {
-				port = (port * 10) + (*p - '0');
-				p++;
-			}
-			if (port > 65535 || port == 0)
-				goto bad;
-			addr[mon_count].ipaddr.sin_port = htons(port);
-		} else
-			addr[mon_count].ipaddr.sin_port = htons(CEPH_MON_PORT);
-
-		dout("parse_ips got %u.%u.%u.%u:%u\n",
-		     IPQUADPORT(addr[mon_count].ipaddr));
-
-		if (p == end)
-			break;
-		if (*p != ',')
-			goto bad;
-		p++;
-	}
-
-	if (p != end)
-		goto bad;
-
-	if (count)
-		*count = mon_count + 1;
-	return 0;
-
-bad:
-	pr_err("ceph parse_ips bad ip '%s'\n", c);
-	return -EINVAL;
-}
 
 static int parse_mount_args(struct ceph_client *client,
 			    int flags, char *options, const char *dev_name,
@@ -431,14 +363,14 @@ static int parse_mount_args(struct ceph_client *client,
 		return -EINVAL;
 	*path = strstr(dev_name, ":/");
 	if (*path == NULL) {
-		pr_err("ceph device name is missing path (no :/ in %s)\n",
+		pr_err("device name is missing path (no :/ in %s)\n",
 		       dev_name);
 		return -EINVAL;
 	}
 
 	/* get mon ip(s) */
-	err = parse_ips(dev_name, *path, mon_addr,
-			CEPH_MAX_MON_MOUNT_ADDR, &num_mon);
+	err = ceph_parse_ips(dev_name, *path, mon_addr,
+			     CEPH_MAX_MON_MOUNT_ADDR, &num_mon);
 	if (err < 0)
 		return err;
 
@@ -450,8 +382,6 @@ static int parse_mount_args(struct ceph_client *client,
 		return -ENOMEM;
 	for (i = 0; i < num_mon; i++) {
 		client->monc.monmap->mon_inst[i].addr = mon_addr[i];
-		client->monc.monmap->mon_inst[i].addr.ipaddr.sin_family =
-			AF_INET;
 		client->monc.monmap->mon_inst[i].addr.erank = 0;
 		client->monc.monmap->mon_inst[i].addr.nonce = 0;
 		client->monc.monmap->mon_inst[i].name.type =
@@ -459,9 +389,7 @@ static int parse_mount_args(struct ceph_client *client,
 		client->monc.monmap->mon_inst[i].name.num = cpu_to_le64(i);
 	}
 	client->monc.monmap->num_mon = num_mon;
-	args->my_addr.ipaddr.sin_family = AF_INET;
-	args->my_addr.ipaddr.sin_addr.s_addr = htonl(0);
-	args->my_addr.ipaddr.sin_port = htons(0);
+	memset(&args->my_addr.in_addr, 0, sizeof(args->my_addr.in_addr));
 
 	/* path on server */
 	*path += 2;
@@ -474,14 +402,14 @@ static int parse_mount_args(struct ceph_client *client,
 			continue;
 		token = match_token((char *)c, arg_tokens, argstr);
 		if (token < 0) {
-			pr_err("ceph bad mount option at '%s'\n", c);
+			pr_err("bad mount option at '%s'\n", c);
 			return -EINVAL;
 
 		}
 		if (token < Opt_ip) {
 			ret = match_int(&argstr[0], &intval);
 			if (ret < 0) {
-				pr_err("ceph bad mount option arg (not int) "
+				pr_err("bad mount option arg (not int) "
 				       "at '%s'\n", c);
 				continue;
 			}
@@ -494,14 +422,11 @@ static int parse_mount_args(struct ceph_client *client,
 		case Opt_fsidminor:
 			*(__le64 *)&args->fsid.fsid[8] = cpu_to_le64(intval);
 			break;
-		case Opt_port:
-			args->my_addr.ipaddr.sin_port = htons(intval);
-			break;
 		case Opt_ip:
-			err = parse_ips(argstr[0].from,
-					argstr[0].to,
-					&args->my_addr,
-					1, NULL);
+			err = ceph_parse_ips(argstr[0].from,
+					     argstr[0].to,
+					     &args->my_addr,
+					     1, NULL);
 			if (err < 0)
 				return err;
 			args->flags |= CEPH_OPT_MYIP;
@@ -615,10 +540,10 @@ static struct ceph_client *ceph_create_client(void)
 	client->wb_wq = create_workqueue("ceph-writeback");
 	if (client->wb_wq == NULL)
 		goto fail;
-	client->pg_inv_wq = create_workqueue("ceph-pg-invalid");
+	client->pg_inv_wq = create_singlethread_workqueue("ceph-pg-invalid");
 	if (client->pg_inv_wq == NULL)
 		goto fail_wb_wq;
-	client->trunc_wq = create_workqueue("ceph-trunc");
+	client->trunc_wq = create_singlethread_workqueue("ceph-trunc");
 	if (client->trunc_wq == NULL)
 		goto fail_pg_inv_wq;
 
@@ -819,12 +744,7 @@ static int ceph_mount(struct ceph_client *client, struct vfsmount *mnt,
 	struct ceph_entity_addr *myaddr = NULL;
 	int err;
 	unsigned long timeout = client->mount_args.mount_timeout * HZ;
-<<<<<<< HEAD:src/kernel/super.c
-	unsigned long started;
-	int which;
-=======
 	unsigned long started = jiffies;  /* note the start time */
->>>>>>> unstable:src/kernel/super.c
 	struct dentry *root;
 
 	dout("mount start\n");
@@ -1145,21 +1065,17 @@ static int ceph_init_bdi(struct super_block *sb, struct ceph_client *client)
 {
 	int err;
 
-	if (client->mount_args.rsize)
+	err = bdi_init(&client->backing_dev_info);
+	if (err < 0)
+		return err;
+
+	/* set ra_pages based on rsize mount option? */
+	if (client->mount_args.rsize >= PAGE_CACHE_SIZE)
 		client->backing_dev_info.ra_pages =
 			(client->mount_args.rsize + PAGE_CACHE_SIZE - 1)
 			>> PAGE_SHIFT;
 
-	if (client->backing_dev_info.ra_pages < (PAGE_CACHE_SIZE >> PAGE_SHIFT))
-		client->backing_dev_info.ra_pages =
-			CEPH_MOUNT_RSIZE_DEFAULT >> PAGE_SHIFT;
-
-	err = bdi_init(&client->backing_dev_info);
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
-	if (err < 0)
-		return err;
-
 	err = bdi_register_dev(&client->backing_dev_info, sb->s_dev);
 #endif
 
@@ -1262,8 +1178,6 @@ static int __init init_ceph(void)
 {
 	int ret = 0;
 
-	pr_info("ceph init (%s)\n", STRINGIFY(CEPH_GIT_VER));
-
 	ret = ceph_debugfs_init();
 	if (ret < 0)
 		goto out;
@@ -1284,7 +1198,13 @@ static int __init init_ceph(void)
 
 	ret = register_filesystem(&ceph_fs_type);
 	if (ret)
+<<<<<<< HEAD:src/kernel/super.c
 		goto out_crypt;
+=======
+		goto out_icache;
+
+	pr_info("loaded (%s)\n", STRINGIFY(CEPH_GIT_VER));
+>>>>>>> origin/unstable:src/kernel/super.c
 	return 0;
 
 out_crypt:

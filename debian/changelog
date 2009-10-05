@@ -1,3 +1,16 @@
+ceph (0.15-1) unstable; urgency=low
+
+  * msgr: clean up protocol checks; ack seq # fix
+  * monclient: fixes
+  * debian: radosgw package, fix header permissions
+  * kclient: checkpatch fixes, cleanups.
+  * kclient: msg revoke, clean up interface
+  * kclient: GET_DATALOC ioctl
+  * kclient: osdc bug fix
+  * kclient: clean up debugfs layout
+
+ -- sage <sage@newdream.net>  Tue, 22 Sep 2009 10:15:00 -0800
+
 ceph (0.14-1) unstable; urgency=low
 
   * mds: dir backpointers updated on rename (for fsck)

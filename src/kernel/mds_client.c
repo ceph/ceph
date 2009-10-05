@@ -1,10 +1,10 @@
+#include "ceph_debug.h"
 
 #include <linux/wait.h>
 #include <linux/sched.h>
+
 #include "mds_client.h"
 #include "mon_client.h"
-
-#include "ceph_debug.h"
 #include "super.h"
 #include "messenger.h"
 #include "decode.h"
@@ -114,7 +114,7 @@ static int parse_reply_info_trace(void **p, void *end,
 bad:
 	err = -EIO;
 out_bad:
-	pr_err("ceph problem parsing mds trace %d\n", err);
+	pr_err("problem parsing mds trace %d\n", err);
 	return err;
 }
 
@@ -185,7 +185,7 @@ done:
 bad:
 	err = -EIO;
 out_bad:
-	pr_err("ceph problem parsing dir contents %d\n", err);
+	pr_err("problem parsing dir contents %d\n", err);
 	return err;
 }
 
@@ -232,7 +232,7 @@ static int parse_reply_info(struct ceph_msg *msg,
 bad:
 	err = -EIO;
 out_bad:
-	pr_err("ceph mds parse_reply err %d\n", err);
+	pr_err("mds parse_reply err %d\n", err);
 	return err;
 }
 
@@ -606,7 +606,7 @@ static struct ceph_msg *create_session_msg(u32 op, u64 seq)
 
 	msg = ceph_msg_new(CEPH_MSG_CLIENT_SESSION, sizeof(*h), 0, 0, NULL);
 	if (IS_ERR(msg)) {
-		pr_err("ceph create_session_msg ENOMEM creating msg\n");
+		pr_err("create_session_msg ENOMEM creating msg\n");
 		return ERR_PTR(PTR_ERR(msg));
 	}
 	h = msg->front.iov_base;
@@ -739,7 +739,7 @@ static int wake_up_session_cb(struct inode *inode, struct ceph_cap *cap,
 
 	spin_lock(&inode->i_lock);
 	if (cap->gen != session->s_cap_gen) {
-		pr_err("ceph failed reconnect %p %llx.%llx cap %p "
+		pr_err("failed reconnect %p %llx.%llx cap %p "
 		       "(gen %d < session %d)\n", inode, ceph_vinop(inode),
 		       cap, cap->gen, session->s_cap_gen);
 		__ceph_remove_cap(cap, NULL);
@@ -769,7 +769,7 @@ static int send_renew_caps(struct ceph_mds_client *mdsc,
 
 	if (time_after_eq(jiffies, session->s_cap_ttl) &&
 	    time_after_eq(session->s_cap_ttl, session->s_renew_requested))
-		pr_info("ceph mds%d caps stale\n", session->s_mds);
+		pr_info("mds%d caps stale\n", session->s_mds);
 
 	/* do not try to renew caps until a recovering mds has reconnected
 	 * with its clients. */
@@ -809,11 +809,10 @@ static void renewed_caps(struct ceph_mds_client *mdsc,
 
 	if (was_stale) {
 		if (time_before(jiffies, session->s_cap_ttl)) {
-			pr_info("ceph mds%d caps renewed\n", session->s_mds);
+			pr_info("mds%d caps renewed\n", session->s_mds);
 			wake = 1;
 		} else {
-			pr_info("ceph mds%d caps still stale\n",
-				session->s_mds);
+			pr_info("mds%d caps still stale\n", session->s_mds);
 		}
 	}
 	dout("renewed_caps mds%d ttl now %lu, was %s, now %s\n",
@@ -1143,8 +1142,7 @@ retry:
 			len += 1 + temp->d_name.len;
 		temp = temp->d_parent;
 		if (temp == NULL) {
-			pr_err("ceph build_path_dentry corrupt dentry %p\n",
-			       dentry);
+			pr_err("build_path_dentry corrupt dentry %p\n", dentry);
 			return ERR_PTR(-EINVAL);
 		}
 	}
@@ -1178,13 +1176,13 @@ retry:
 			path[--pos] = '/';
 		temp = temp->d_parent;
 		if (temp == NULL) {
-			pr_err("ceph build_path_dentry corrupt dentry\n");
+			pr_err("build_path_dentry corrupt dentry\n");
 			kfree(path);
 			return ERR_PTR(-EINVAL);
 		}
 	}
 	if (pos != 0) {
-		pr_err("ceph build_path_dentry did not end path lookup where "
+		pr_err("build_path_dentry did not end path lookup where "
 		       "expected, namelen is %d, pos is %d\n", len, pos);
 		/* presumably this is only possible if racing with a
 		   rename of one of the parent directories (we can not
@@ -1644,7 +1642,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 	if (msg->hdr.src.name.type != CEPH_ENTITY_TYPE_MDS)
 		return;
 	if (msg->front.iov_len < sizeof(*head)) {
-		pr_err("ceph_mdsc_handle_reply got corrupt (short) reply\n");
+		pr_err("mdsc_handle_reply got corrupt (short) reply\n");
 		return;
 	}
 
@@ -1662,7 +1660,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 
 	/* correct session? */
 	if (!req->r_session && req->r_session != session) {
-		pr_err("ceph_mdsc_handle_reply got %llu on session mds%d"
+		pr_err("mdsc_handle_reply got %llu on session mds%d"
 		       " not mds%d\n", tid, session->s_mds,
 		       req->r_session ? req->r_session->s_mds : -1);
 		mutex_unlock(&mdsc->mutex);
@@ -1672,7 +1670,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 	/* dup? */
 	if ((req->r_got_unsafe && !head->safe) ||
 	    (req->r_got_safe && head->safe)) {
-		pr_warning("ceph got a dup %s reply on %llu from mds%d\n",
+		pr_warning("got a dup %s reply on %llu from mds%d\n",
 			   head->safe ? "safe" : "unsafe", tid, mds);
 		mutex_unlock(&mdsc->mutex);
 		goto out;
@@ -1734,7 +1732,7 @@ static void handle_reply(struct ceph_mds_session *session, struct ceph_msg *msg)
 
 	mutex_lock(&session->s_mutex);
 	if (err < 0) {
-		pr_err("ceph_mdsc_handle_reply got corrupt reply mds%d\n", mds);
+		pr_err("mdsc_handle_reply got corrupt reply mds%d\n", mds);
 		goto out_err;
 	}
 
@@ -1830,7 +1828,7 @@ out:
 	return;
 
 bad:
-	pr_err("ceph_mdsc_handle_forward decode error err=%d\n", err);
+	pr_err("mdsc_handle_forward decode error err=%d\n", err);
 }
 
 /*
@@ -1869,7 +1867,7 @@ static void handle_session(struct ceph_mds_session *session,
 
 	if (session->s_state == CEPH_MDS_SESSION_HUNG) {
 		session->s_state = CEPH_MDS_SESSION_OPEN;
-		pr_info("ceph mds%d came back\n", session->s_mds);
+		pr_info("mds%d came back\n", session->s_mds);
 	}
 
 	switch (op) {
@@ -1895,7 +1893,7 @@ static void handle_session(struct ceph_mds_session *session,
 		break;
 
 	case CEPH_SESSION_STALE:
-		pr_info("ceph mds%d caps went stale, renewing\n",
+		pr_info("mds%d caps went stale, renewing\n",
 			session->s_mds);
 		spin_lock(&session->s_cap_lock);
 		session->s_cap_gen++;
@@ -1909,7 +1907,7 @@ static void handle_session(struct ceph_mds_session *session,
 		break;
 
 	default:
-		pr_err("ceph_mdsc_handle_session bad op %d mds%d\n", op, mds);
+		pr_err("mdsc_handle_session bad op %d mds%d\n", op, mds);
 		WARN_ON(1);
 	}
 
@@ -1922,7 +1920,7 @@ static void handle_session(struct ceph_mds_session *session,
 	return;
 
 bad:
-	pr_err("ceph_mdsc_handle_session corrupt message mds%d len %d\n", mds,
+	pr_err("mdsc_handle_session corrupt message mds%d len %d\n", mds,
 	       (int)msg->front.iov_len);
 	return;
 }
@@ -2046,7 +2044,7 @@ static void send_mds_reconnect(struct ceph_mds_client *mdsc, int mds)
 	__le32 *pnum_caps, *pnum_realms;
 	struct encode_caps_data iter_args;
 
-	pr_info("ceph reconnect to recovering mds%d\n", mds);
+	pr_info("reconnect to recovering mds%d\n", mds);
 
 	/* find session */
 	session = __ceph_lookup_mds_session(mdsc, mds);
@@ -2081,7 +2079,7 @@ retry:
 	reply = ceph_msg_new(CEPH_MSG_CLIENT_RECONNECT, len, 0, 0, NULL);
 	if (IS_ERR(reply)) {
 		err = PTR_ERR(reply);
-		pr_err("ceph send_mds_reconnect ENOMEM on %d for mds%d\n",
+		pr_err("send_mds_reconnect ENOMEM on %d for mds%d\n",
 		       len, mds);
 		goto out;
 	}
@@ -2310,8 +2308,7 @@ static void handle_lease(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	session = __ceph_lookup_mds_session(mdsc, mds);
 	mutex_unlock(&mdsc->mutex);
 	if (!session) {
-		pr_err("ceph handle_lease got lease but no session mds%d\n",
-		       mds);
+		pr_err("handle_lease got lease but no session mds%d\n", mds);
 		return;
 	}
 
@@ -2387,7 +2384,7 @@ out:
 	return;
 
 bad:
-	pr_err("ceph corrupt lease message\n");
+	pr_err("corrupt lease message\n");
 }
 
 void ceph_mdsc_lease_send_msg(struct ceph_mds_session *session,
@@ -2535,7 +2532,7 @@ static void delayed_work(struct work_struct *work)
 		if (s->s_ttl && time_after(jiffies, s->s_ttl)) {
 			if (s->s_state == CEPH_MDS_SESSION_OPEN) {
 				s->s_state = CEPH_MDS_SESSION_HUNG;
-				pr_info("ceph mds%d hung\n", s->s_mds);
+				pr_info("mds%d hung\n", s->s_mds);
 			}
 		}
 		if (s->s_state < CEPH_MDS_SESSION_OPEN) {
@@ -2788,7 +2785,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 	ceph_decode_need(&p, end, sizeof(fsid)+2*sizeof(u32), bad);
 	ceph_decode_copy(&p, &fsid, sizeof(fsid));
 	if (ceph_fsid_compare(&fsid, &mdsc->client->monc.monmap->fsid)) {
-		pr_err("ceph got mdsmap with wrong fsid\n");
+		pr_err("got mdsmap with wrong fsid\n");
 		return;
 	}
 	ceph_decode_32(&p, epoch);
@@ -2831,7 +2828,7 @@ void ceph_mdsc_handle_map(struct ceph_mds_client *mdsc, struct ceph_msg *msg)
 bad_unlock:
 	mutex_unlock(&mdsc->mutex);
 bad:
-	pr_err("ceph error decoding mdsmap %d\n", err);
+	pr_err("error decoding mdsmap %d\n", err);
 	return;
 }
 
@@ -2865,7 +2862,7 @@ static void peer_reset(struct ceph_connection *con)
 {
 	struct ceph_mds_session *s = con->private;
 
-	pr_err("ceph mds%d gave us the boot.  IMPLEMENT RECONNECT.\n",
+	pr_err("mds%d gave us the boot.  IMPLEMENT RECONNECT.\n",
 	       s->s_mds);
 }
 
@@ -2899,7 +2896,7 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 		break;
 
 	default:
-		pr_err("ceph received unknown message type %d %s\n", type,
+		pr_err("received unknown message type %d %s\n", type,
 		       ceph_msg_type_name(type));
 	}
 	ceph_msg_put(msg);

@@ -1225,12 +1225,20 @@ void CDir::_fetched(bufferlist &bl)
       } else {
 	// add inode
 	CInode *in = 0;
-	if (cache->have_inode(inode.ino, first)) {
-	  in = cache->get_inode(inode.ino, first);
-	  dout(-12) << "_fetched  got (but i already had) " << *in 
+	if (cache->have_inode(inode.ino, last)) {
+	  in = cache->get_inode(inode.ino, last);
+	  dout(-12) << "_fetched  badness: got (but i already had) " << *in 
 		   << " mode " << in->inode.mode 
 		   << " mtime " << in->inode.mtime << dendl;
-	  assert(0);  // this shouldn't happen!! 
+	  stringstream ss;
+	  string dirpath, inopath;
+	  this->inode->make_path_string(dirpath);
+	  in->make_path_string(inopath);
+	  ss << "loaded dup inode " << inode.ino << " [" << first << "," << last << "] v" << inode.version
+	     << " at " << dirpath << "/" << dname
+	     << ", but inode " << in->vino() << " v" << in->inode.version << " already exists at " << inopath;
+	  cache->mds->logclient.log(LOG_ERROR, ss);
+	  continue;
 	} else {
 	  // inode
 	  in = new CInode(cache, true, first, last);
@@ -1598,6 +1606,8 @@ void CDir::_commit(version_t want)
   OSDMap *osdmap = cache->mds->objecter->osdmap;
   ceph_object_layout ol = osdmap->make_object_layout(oid,
 						     cache->mds->mdsmap->get_metadata_pg_pool());
+
+  m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
 
   cache->mds->objecter->mutate(oid, ol, m, snapc, g_clock.now(), 0,
 			       NULL, new C_Dir_Committed(this, get_version(), inode->inode.last_renamed_version) );

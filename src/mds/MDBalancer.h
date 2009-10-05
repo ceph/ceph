@@ -45,7 +45,7 @@ class MDBalancer {
   utime_t last_heartbeat;
   utime_t last_fragment;
   utime_t last_sample;    
-
+  utime_t rebalance_time; //ensure a consistent view of load for rebalance
 
   // todo
   set<dirfrag_t>   split_queue;
@@ -60,6 +60,9 @@ class MDBalancer {
   map<int,double> my_targets;
   map<int,double> imported;
   map<int,double> exported;
+  //Check if all our current offload targets are in MDSMap
+  bool targets_safe();
+
 
   double try_match(int ex, double& maxex,
                    int im, double& maxim);
@@ -70,7 +73,11 @@ class MDBalancer {
     return mds_meta_load[ex] - target_load - exported[ex];    
   }
 
- public:
+private:
+  //send an MMDSOffloadTargets message to the monitor
+  void send_targets_message();
+
+public:
   MDBalancer(MDS *m) : 
     mds(m),
     beat_epoch(0),
@@ -88,13 +95,17 @@ class MDBalancer {
   void do_fragmenting();
 
   void export_empties();
+  //set up the rebalancing targets for export; maybe time for a name change?
   void do_rebalance(int beat);
+  /*check if the monitor has recorded the current export targets;
+    if it has then do the actual export. Otherwise send off our
+    export targets message again*/
+  void try_rebalance();
   void find_exports(CDir *dir, 
                     double amount, 
                     list<CDir*>& exports, 
                     double& have,
-                    set<CDir*>& already_exporting,
-		    utime_t now);
+                    set<CDir*>& already_exporting);
 
 
   void subtract_export(class CDir *ex);

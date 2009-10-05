@@ -34,14 +34,17 @@ Mount options, syntax.
 EOF
 
 git add $target/ceph/ceph_fs.h
+git add $target/ceph/ceph_fs.c
 git add $target/ceph/msgr.h
 git add $target/ceph/rados.h
+git add $target/ceph/ceph_strings.c
 git commit -s -F - <<EOF
 ceph: on-wire types
 
 These headers describe the types used to exchange messages between the
 Ceph client and various servers.  All types are little-endian and
-packed.
+packed.  These headers are shared between the kernel and userspace, so
+all types are in terms of e.g. __u32.
 
 Additionally, we define a few magic values to identify the current
 version of the protocol(s) in use, so that discrepancies to be
@@ -53,6 +56,8 @@ git add $target/ceph/types.h
 git add $target/ceph/super.h
 git add $target/ceph/ceph_ver.h
 git add $target/ceph/ceph_debug.h
+git add $target/ceph/ceph_frag.h
+git add $target/ceph/ceph_frag.c
 git commit -s -F - <<EOF
 ceph: client types
 
@@ -65,13 +70,14 @@ monitor clients, and the messaging layer.
 EOF
 
 git add $target/ceph/buffer.h
+git add $target/ceph/buffer.c
 git commit -s -F - <<EOF
 ceph: ref counted buffer
 
 struct ceph_buffer is a simple ref-counted buffer.  We transparently
 choose between kmalloc for small buffers and vmalloc for large ones.
 
-This is used for allocating memory for xattr data, among other things.
+This is currently used only for allocating memory for xattr data.
 
 EOF
 
@@ -86,6 +92,7 @@ EOF
 
 
 git add $target/ceph/inode.c
+git add $target/ceph/xattr.c
 git commit -s -F - <<EOF
 ceph: inode operations
 
@@ -353,7 +360,9 @@ EOF
 git apply $cephtree/src/kernel/kbuild.patch
 git add $target/ceph/Makefile
 git add $target/ceph/Kconfig
-git commit -s -F - <<EOF $target/Kconfig $target/ceph/Kconfig $target/Makefile $target/ceph/Makefile
+git apply $cephtree/src/kernel/maintainers.patch
+git add MAINTAINERS
+git commit -s -F - <<EOF
 ceph: Kconfig, Makefile
 
 Kconfig options and Makefile.

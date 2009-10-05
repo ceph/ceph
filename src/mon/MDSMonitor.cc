@@ -21,6 +21,7 @@
 #include "messages/MMDSMap.h"
 #include "messages/MMDSGetMap.h"
 #include "messages/MMDSBeacon.h"
+#include "messages/MMDSLoadTargets.h"
 #include "messages/MMonCommand.h"
 
 #include "messages/MGenericMessage.h"
@@ -135,6 +136,9 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
 
+  case MSG_MDS_OFFLOAD_TARGETS:
+    return preprocess_offload_targets((MMDSLoadTargets*)m);
+
   default:
     assert(0);
     delete m;
@@ -242,6 +246,16 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   return true;
 }
 
+bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
+{
+  dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
+  const entity_addr_t& a = m->get_orig_source_addr();
+  if (mdsmap.mds_info.count(a) &&
+      m->targets == mdsmap.mds_info[a].export_targets)
+    return true;
+  return false;
+}
+
 
 bool MDSMonitor::prepare_update(PaxosServiceMessage *m)
 {
@@ -254,6 +268,9 @@ bool MDSMonitor::prepare_update(PaxosServiceMessage *m)
 
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
+
+  case MSG_MDS_OFFLOAD_TARGETS:
+    return prepare_offload_targets((MMDSLoadTargets*)m);
   
   default:
     assert(0);
@@ -319,6 +336,18 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   
   paxos->wait_for_commit(new C_Updated(this, m));
 
+  return true;
+}
+
+bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
+{
+  const entity_addr_t& a = m->get_orig_source_addr();
+  if (pending_mdsmap.mds_info.count(a)) {
+    dout(10) << "prepare_offload_targets " << a << " " << m->targets << dendl;
+    pending_mdsmap.mds_info[a].export_targets = m->targets;
+  } else {
+    dout(10) << "prepare_offload_targets " << a << " not in map" << dendl;
+  }
   return true;
 }
 

@@ -108,6 +108,11 @@ extern "C" int ceph_statfs(const char *path, struct statvfs *stbuf)
   return client->statfs(path, stbuf);
 }
 
+extern "C" int ceph_get_local_osd()
+{
+  return client->get_local_osd();
+}
+
 extern "C" int ceph_getcwd(char *buf, int buflen)
 {
   string cwd;
@@ -326,6 +331,11 @@ extern "C" int ceph_get_file_replication(const char *path) {
   return rep;
 }
 
+extern "C" int ceph_get_default_preferred_pg(int fd)
+{
+  return client->get_default_preferred_pg(fd);
+}
+
 extern "C" int ceph_set_default_file_stripe_unit(int stripe)
 {
   client->set_default_file_stripe_unit(stripe);
@@ -347,6 +357,12 @@ extern "C" int ceph_set_default_object_size(int size)
 extern "C" int ceph_set_default_file_replication(int replication)
 {
   client->set_default_file_replication(replication);
+  return 0;
+}
+
+extern "C" int ceph_set_default_preferred_pg(int pg)
+{
+  client->set_default_preferred_pg(pg);
   return 0;
 }
 

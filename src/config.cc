@@ -201,7 +201,7 @@ bool parse_ip_port(const char *s, entity_addr_t& a, const char **end)
     s++; off++;
 
     if (count <= 3)
-      a.set_ipquad(count, val);
+      a.set_in4_quad(count, val);
     else 
       a.set_port(val);
     
@@ -420,7 +420,6 @@ static struct config_option config_optionsp[] = {
 	OPTION(mds_client_prealloc_inos, 0, OPT_INT, 1000),
 	OPTION(mds_early_reply, 0, OPT_BOOL, true),
 	OPTION(mds_short_reply_trace, 0, OPT_BOOL, true),
-	OPTION(mds_rdcap_ttl_ms, 0, OPT_INT, 60*1000),
 	OPTION(mds_use_tmap, 0, OPT_BOOL, true),        // use trivialmap for dir updates
 	OPTION(mds_log, 0, OPT_BOOL, true),
 	OPTION(mds_log_unsafe, 0, OPT_BOOL, false),      // only wait for log sync, when it's mostly safe to do so
@@ -476,11 +475,11 @@ static struct config_option config_optionsp[] = {
 	OPTION(osd_stat_refresh_interval, 0, OPT_DOUBLE, .5),
 	OPTION(osd_min_pg_size_without_alive, 0, OPT_INT, 2),  // smallest pg we allow to activate without telling the monitor
 	OPTION(osd_pg_bits, 0, OPT_INT, 6),  // bits per osd
-	OPTION(osd_lpg_bits, 0, OPT_INT, 1),  // bits per osd
+	OPTION(osd_lpg_bits, 0, OPT_INT, 2),  // bits per osd
 	OPTION(osd_object_layout, 0, OPT_INT, CEPH_OBJECT_LAYOUT_HASHINO),
 	OPTION(osd_pg_layout, 0, OPT_INT, CEPH_PG_LAYOUT_CRUSH),
-	OPTION(osd_min_rep, 0, OPT_INT, 2),
-	OPTION(osd_max_rep, 0, OPT_INT, 3),
+	OPTION(osd_min_rep, 0, OPT_INT, 1),
+	OPTION(osd_max_rep, 0, OPT_INT, 10),
 	OPTION(osd_min_raid_width, 0, OPT_INT, 3),
 	OPTION(osd_max_raid_width, 0, OPT_INT, 2),
 	OPTION(osd_maxthreads, 0, OPT_INT, 2),    // 0 == no threading

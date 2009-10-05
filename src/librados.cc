@@ -61,9 +61,9 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
+  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
   void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
 
   Objecter *objecter;
 
@@ -293,6 +293,8 @@ bool RadosClient::init()
     return false;
 
   monclient.set_messenger(messenger);
+  
+  messenger->add_dispatcher_head(this);
 
   rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
@@ -321,6 +323,7 @@ bool RadosClient::init()
 
   objecter->set_client_incarnation(0);
   objecter->init();
+  monclient.renew_subs();
 
   while (osdmap.get_epoch() == 0) {
     dout(1) << "waiting for osdmap" << dendl;
@@ -356,6 +359,19 @@ bool RadosClient::ms_dispatch(Message *m)
   bool ret = _dispatch(m);
   lock.Unlock();
   return ret;
+}
+
+bool RadosClient::ms_handle_reset(Connection *con, const entity_addr_t& addr)
+{
+  Mutex::Locker l(lock);
+  objecter->ms_handle_reset(addr);
+  return false;
+}
+
+void RadosClient::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr)
+{
+  Mutex::Locker l(lock);
+  objecter->ms_handle_remote_reset(addr);
 }
 
 

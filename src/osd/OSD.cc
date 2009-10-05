@@ -682,8 +682,8 @@ PG *OSD::_create_lock_pg(pg_t pgid, ObjectStore::Transaction& t)
   PG *pg = _open_lock_pg(pgid);
 
   // create collection
-  assert(!store->collection_exists(pgid.to_coll()));
-  t.create_collection(pgid.to_coll());
+  assert(!store->collection_exists(coll_t::build_pg_coll(pgid)));
+  t.create_collection(coll_t::build_pg_coll(pgid));
 
   pg->write_info(t);
   pg->write_log(t);
@@ -700,8 +700,8 @@ PG *OSD::_create_lock_new_pg(pg_t pgid, vector<int>& acting, ObjectStore::Transa
 
   PG *pg = _open_lock_pg(pgid, true);
 
-  assert(!store->collection_exists(pgid.to_coll()));
-  t.create_collection(pgid.to_coll());
+  assert(!store->collection_exists(coll_t::build_pg_coll(pgid)));
+  t.create_collection(coll_t::build_pg_coll(pgid));
 
   pg->set_role(0);
   pg->acting.swap(acting);
@@ -749,7 +749,7 @@ void OSD::load_pgs()
        it++) {
     if (*it == 0)
       continue;
-    if (it->snap != 0)
+    if (it->snap != CEPH_NOSNAP)
       continue;
     pg_t pgid = it->pgid;
     PG *pg = _open_lock_pg(pgid);
@@ -1071,8 +1071,9 @@ void OSD::heartbeat()
 
   if (got_sigterm) {
     dout(0) << "got SIGTERM, shutting down" << dendl;
-    messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN),
-			    messenger->get_myinst());
+    Message *m = new MGenericMessage(CEPH_MSG_SHUTDOWN);
+    m->set_priority(CEPH_MSG_PRIO_HIGHEST);
+    messenger->send_message(m, messenger->get_myinst());
     return;
   }
 
@@ -2557,7 +2558,7 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
   pg_t parentid = parent->info.pgid;
 
   vector<sobject_t> olist;
-  store->collection_list(parent->info.pgid.to_coll(), olist);  
+  store->collection_list(coll_t::build_pg_coll(parent->info.pgid), olist);  
 
   for (vector<sobject_t>::iterator p = olist.begin(); p != olist.end(); p++) {
     sobject_t poid = *p;
@@ -2570,8 +2571,8 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
       bufferlist bv;
 
       struct stat st;
-      store->stat(parentid.to_coll(), poid, &st);
-      store->getattr(parentid.to_coll(), poid, OI_ATTR, bv);
+      store->stat(coll_t::build_pg_coll(parentid), poid, &st);
+      store->getattr(coll_t::build_pg_coll(parentid), poid, OI_ATTR, bv);
       object_info_t oi(bv);
 
       if (oi.version > child->info.last_update) {
@@ -2581,16 +2582,16 @@ void OSD::split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction
 	dout(25) << "    not tagging pg with v " << oi.version << " <= " << child->info.last_update << dendl;
       }
 
-      t.collection_add(pgid.to_coll(), parentid.to_coll(), poid);
-      t.collection_remove(parentid.to_coll(), poid);
+      t.collection_add(coll_t::build_pg_coll(pgid), coll_t::build_pg_coll(parentid), poid);
+      t.collection_remove(coll_t::build_pg_coll(parentid), poid);
       if (oi.snaps.size()) {
 	snapid_t first = oi.snaps[0];
-	t.collection_add(pgid.to_snap_coll(first), parentid.to_coll(), poid);
-	t.collection_remove(parentid.to_snap_coll(first), poid);
+	t.collection_add(coll_t::build_snap_pg_coll(pgid, first), coll_t::build_pg_coll(parentid), poid);
+	t.collection_remove(coll_t::build_snap_pg_coll(parentid, first), poid);
 	if (oi.snaps.size() > 1) {
 	  snapid_t last = oi.snaps[oi.snaps.size()-1];
-	  t.collection_add(pgid.to_snap_coll(last), parentid.to_coll(), poid);
-	  t.collection_remove(parentid.to_snap_coll(last), poid);
+	  t.collection_add(coll_t::build_snap_pg_coll(pgid, last), coll_t::build_pg_coll(parentid), poid);
+	  t.collection_remove(coll_t::build_snap_pg_coll(parentid, last), poid);
 	}
       }
 
@@ -3286,14 +3287,14 @@ void OSD::_remove_pg(PG *pg)
        p != pg->snap_collections.end();
        p++) {
     vector<sobject_t> olist;      
-    store->collection_list(pgid.to_snap_coll(*p), olist);
+    store->collection_list(coll_t::build_snap_pg_coll(pgid, *p), olist);
     dout(10) << "_remove_pg " << pgid << " snap " << *p << " " << olist.size() << " objects" << dendl;
     for (vector<sobject_t>::iterator q = olist.begin();
 	 q != olist.end();
 	 q++) {
       ObjectStore::Transaction t;
-      t.remove(pgid.to_snap_coll(*p), *q);
-      t.remove(pgid.to_coll(), *q);          // we may hit this twice, but it's harmless
+      t.remove(coll_t::build_snap_pg_coll(pgid, *p), *q);
+      t.remove(coll_t::build_pg_coll(pgid), *q);          // we may hit this twice, but it's harmless
       store->apply_transaction(t);
 
       if ((++n & 0xff) == 0) {
@@ -3307,19 +3308,19 @@ void OSD::_remove_pg(PG *pg)
       }
     }
     ObjectStore::Transaction t;
-    t.remove_collection(pgid.to_snap_coll(*p));
+    t.remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
     store->apply_transaction(t);
   }
 
   // (what remains of the) main collection
   vector<sobject_t> olist;
-  store->collection_list(pgid.to_coll(), olist);
+  store->collection_list(coll_t::build_pg_coll(pgid), olist);
   dout(10) << "_remove_pg " << pgid << " " << olist.size() << " objects" << dendl;
   for (vector<sobject_t>::iterator p = olist.begin();
        p != olist.end();
        p++) {
     ObjectStore::Transaction t;
-    t.remove(pgid.to_coll(), *p);
+    t.remove(coll_t::build_pg_coll(pgid), *p);
     store->apply_transaction(t);
 
     if ((++n & 0xff) == 0) {
@@ -3348,7 +3349,7 @@ void OSD::_remove_pg(PG *pg)
 
   {
     ObjectStore::Transaction t;
-    t.remove_collection(pgid.to_coll());
+    t.remove_collection(coll_t::build_pg_coll(pgid));
     store->apply_transaction(t);
   }
   
@@ -4093,8 +4094,8 @@ void OSD::init_op_flags(MOSDOp *op)
 	bufferlist::iterator bp = iter->data.begin();
 	int is_write, is_read;
 	string cname, mname;
-	bp.copy(iter->op.class_len, cname);
-	bp.copy(iter->op.method_len, mname);
+	bp.copy(iter->op.cls.class_len, cname);
+	bp.copy(iter->op.cls.method_len, mname);
 	is_read = class_handler->get_method_flags(cname, mname) & CLS_METHOD_RD;
 	is_write = class_handler->get_method_flags(cname, mname) & CLS_METHOD_WR;
 	dout(0) << "class " << cname << " method " << mname

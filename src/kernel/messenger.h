@@ -14,14 +14,6 @@
 struct ceph_msg;
 struct ceph_connection;
 
-#define IPQUADPORT(n)							\
-	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr) >> 24)) & 0xFF, \
-	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr)) >> 16) & 0xFF, \
-	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))>>8) & 0xFF, \
-	(unsigned int)((be32_to_cpu((n).sin_addr.s_addr))) & 0xFF, \
-	(unsigned int)(ntohs((n).sin_port))
-
-
 extern struct workqueue_struct *ceph_msgr_wq;       /* receive work queue */
 
 /*
@@ -54,17 +46,7 @@ struct ceph_connection_operations {
 			      int want);
 };
 
-static inline const char *ceph_name_type_str(int t)
-{
-	switch (t) {
-	case CEPH_ENTITY_TYPE_MON: return "mon";
-	case CEPH_ENTITY_TYPE_MDS: return "mds";
-	case CEPH_ENTITY_TYPE_OSD: return "osd";
-	case CEPH_ENTITY_TYPE_CLIENT: return "client";
-	case CEPH_ENTITY_TYPE_ADMIN: return "admin";
-	default: return "???";
-	}
-}
+extern const char *ceph_name_type_str(int t);
 
 /* use format string %s%d */
 #define ENTITY_NAME(n) ceph_name_type_str((n).type), le64_to_cpu((n).num)
@@ -165,7 +147,6 @@ struct ceph_connection {
 	struct mutex out_mutex;
 	struct list_head out_queue;
 	struct list_head out_sent;   /* sending or sent but unacked */
-	unsigned out_qlen;
 	u64 out_seq;		     /* last message queued for send */
 	u64 out_seq_sent;            /* last message sent */
 	bool out_keepalive_pending;
@@ -213,6 +194,13 @@ struct ceph_connection {
 	struct delayed_work work;	    /* send|recv work */
 	unsigned long       delay;          /* current delay interval */
 };
+
+
+extern const char *pr_addr(const struct sockaddr_storage *ss);
+extern int ceph_parse_ips(const char *c, const char *end,
+			  struct ceph_entity_addr *addr,
+			  int max_count, int *count);
+
 
 extern int ceph_msgr_init(void);
 extern void ceph_msgr_exit(void);

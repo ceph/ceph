@@ -16,6 +16,7 @@
 
 #include "MDBalancer.h"
 #include "MDS.h"
+#include "mon/MonClient.h"
 #include "MDSMap.h"
 #include "CInode.h"
 #include "CDir.h"
@@ -25,6 +26,7 @@
 #include "include/Context.h"
 #include "msg/Messenger.h"
 #include "messages/MHeartbeat.h"
+#include "messages/MMDSLoadTargets.h"
 
 #include <vector>
 #include <map>
@@ -331,7 +333,7 @@ void MDBalancer::do_rebalance(int beat)
 {
   int cluster_size = mds->get_mds_map()->get_num_mds();
   int whoami = mds->get_nodeid();
-  utime_t now = g_clock.now();
+  rebalance_time = g_clock.now();
 
   dump_pop_map();
 
@@ -347,7 +349,7 @@ void MDBalancer::do_rebalance(int beat)
   // rescale!  turn my mds_load back into meta_load units
   double load_fac = 1.0;
   if (mds_load[whoami].mds_load() > 0) {
-    double metald = mds_load[whoami].auth.meta_load(now);
+    double metald = mds_load[whoami].auth.meta_load(rebalance_time);
     double mdsld = mds_load[whoami].mds_load();
     load_fac = metald / mdsld;
     dout(7) << " load_fac is " << load_fac 
@@ -484,9 +486,25 @@ void MDBalancer::do_rebalance(int beat)
       }
     }
   }
+  send_targets_message();
+  try_rebalance();
+}
 
 
 
+void MDBalancer::try_rebalance()
+{
+  if (!targets_safe()) {
+      //can't rebalance until it has all our targets!
+      dout(10) << "MDBalancer::try_rebalance can't rebalance when mds is missing some of our targets! Resending targets message" << dendl;
+      send_targets_message();
+      return;
+  }
+  //if the MDSMap has old targets we don't want...
+  if (mds->mdsmap->get_mds_info(mds->whoami).
+      export_targets.size() != my_targets.size())
+    send_targets_message();
+  
   // make a sorted list of my imports
   map<double,CDir*>    import_pop_map;
   multimap<int,CDir*>  import_from_map;
@@ -499,7 +517,7 @@ void MDBalancer::do_rebalance(int beat)
     CDir *im = *it;
     if (im->get_inode()->is_stray()) continue;
 
-    double pop = im->pop_auth_subtree.meta_load(now);
+    double pop = im->pop_auth_subtree.meta_load(rebalance_time);
     if (g_conf.mds_bal_idle_threshold > 0 &&
 	pop < g_conf.mds_bal_idle_threshold &&
         im->inode != mds->mdcache->get_root() &&
@@ -566,7 +584,7 @@ void MDBalancer::do_rebalance(int beat)
         
         if (dir->inode->is_root()) continue;
         if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
-        double pop = dir->pop_auth_subtree.meta_load(now);
+        double pop = dir->pop_auth_subtree.meta_load(rebalance_time);
         assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
         
         if (pop <= amount-have) {
@@ -623,7 +641,7 @@ void MDBalancer::do_rebalance(int beat)
          pot != candidates.end();
          pot++) {
       if ((*pot)->get_inode()->is_stray()) continue;
-      find_exports(*pot, amount, exports, have, already_exporting, now);
+      find_exports(*pot, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD) 
         break;
     }
@@ -634,7 +652,7 @@ void MDBalancer::do_rebalance(int beat)
       dout(-5) << "   - exporting " 
 	       << (*it)->pop_auth_subtree
 	       << " "
-	       << (*it)->pop_auth_subtree.meta_load(now) 
+	       << (*it)->pop_auth_subtree.meta_load(rebalance_time) 
 	       << " to mds" << target 
                << " " << **it 
                << dendl;
@@ -644,17 +662,43 @@ void MDBalancer::do_rebalance(int beat)
 
   dout(5) << "rebalance done" << dendl;
   show_imports();
-  
 }
 
+inline void MDBalancer::send_targets_message()
+{
+  set<int32_t> targets;
+  for (map<int, double>::iterator i = my_targets.begin();
+       i != my_targets.end();
+       ++i)
+    targets.insert(i->first);
+  MMDSLoadTargets* m = new MMDSLoadTargets(targets);
+  mds->monc->send_mon_message(m);
+}
 
+/* returns true if all my_target MDS are in the MDSMap.
+ */
+bool MDBalancer::targets_safe() {
+  //get MonMap's idea of my_targets
+  const set<int32_t>& map_targets = 
+    mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+  //check if the current MonMap has all our targets
+  for (map<int,double>::iterator i = my_targets.begin();
+       i != my_targets.end();
+       ++i) {
+    if (!map_targets.count(i->first)) {
+      dout(20) << "At least one target mds (" << i->first
+	       << ") not in MDSMap" << dendl;
+      return false;
+    }
+  }
+  return true;
+}
 
 void MDBalancer::find_exports(CDir *dir, 
                               double amount, 
                               list<CDir*>& exports, 
                               double& have,
-                              set<CDir*>& already_exporting,
-			      utime_t now)
+                              set<CDir*>& already_exporting)
 {
   double need = amount - have;
   if (need < amount * g_conf.mds_bal_min_start)
@@ -667,7 +711,7 @@ void MDBalancer::find_exports(CDir *dir,
   list<CDir*> bigger_rep, bigger_unrep;
   multimap<double, CDir*> smaller;
 
-  double dir_pop = dir->pop_auth_subtree.meta_load(now);
+  double dir_pop = dir->pop_auth_subtree.meta_load(rebalance_time);
   dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << dendl;
 
   double subdir_sum = 0;
@@ -690,7 +734,7 @@ void MDBalancer::find_exports(CDir *dir,
       if (subdir->is_frozen()) continue;  // can't export this right now!
       
       // how popular?
-      double pop = subdir->pop_auth_subtree.meta_load(now);
+      double pop = subdir->pop_auth_subtree.meta_load(rebalance_time);
       subdir_sum += pop;
       dout(15) << "   subdir pop " << pop << " " << *subdir << dendl;
 
@@ -738,7 +782,7 @@ void MDBalancer::find_exports(CDir *dir,
        it != bigger_unrep.end();
        it++) {
     dout(15) << "   descending into " << **it << dendl;
-    find_exports(*it, amount, exports, have, already_exporting, now);
+    find_exports(*it, amount, exports, have, already_exporting);
     if (have > needmin)
       return;
   }
@@ -761,15 +805,12 @@ void MDBalancer::find_exports(CDir *dir,
        it != bigger_rep.end();
        it++) {
     dout(7) << "   descending into replicated " << **it << dendl;
-    find_exports(*it, amount, exports, have, already_exporting, now);
+    find_exports(*it, amount, exports, have, already_exporting);
     if (have > needmin)
       return;
   }
 
 }
-
-
-
 
 void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
 {

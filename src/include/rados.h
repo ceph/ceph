@@ -2,8 +2,8 @@
 #define __RADOS_H
 
 /*
- * Data types for RADOS, the distributed object storage layer used by
- * the Ceph file system.
+ * Data types for the Ceph distributed object storage layer RADOS
+ * (Reliable Autonomic Distributed Object Store).
  */
 
 #include "msgr.h"
@@ -25,9 +25,9 @@ static inline int ceph_fsid_compare(const struct ceph_fsid *a,
  * ino, object, etc.
  */
 typedef __le64 ceph_snapid_t;
-#define CEPH_MAXSNAP ((__u64)(-3))
-#define CEPH_SNAPDIR ((__u64)(-1))
-#define CEPH_NOSNAP  ((__u64)(-2))
+#define CEPH_SNAPDIR ((__u64)(-1))  /* reserved for hidden .snap dir */
+#define CEPH_NOSNAP  ((__u64)(-2))  /* "head", "live" revision */
+#define CEPH_MAXSNAP ((__u64)(-3))  /* largest valid snapid */
 
 struct ceph_timespec {
 	__le32 tv_sec;
@@ -55,19 +55,14 @@ struct ceph_timespec {
  * placement group.
  * we encode this into one __le64.
  */
-#define CEPH_PG_TYPE_REP     1
-#define CEPH_PG_TYPE_RAID4   2
 union ceph_pg {
 	__u64 pg64;
 	struct {
 		__s16 preferred; /* preferred primary osd */
 		__u16 ps;        /* placement seed */
-		__u32 pool;      /* implies crush ruleset */
-	} pg;
+		__u32 pool;      /* object pool */
+	} __attribute__ ((packed)) pg;
 } __attribute__ ((packed));
-
-#define ceph_pg_is_rep(pg)   ((pg).pg.type == CEPH_PG_TYPE_REP)
-#define ceph_pg_is_raid4(pg) ((pg).pg.type == CEPH_PG_TYPE_RAID4)
 
 /*
  * pg_pool is a set of pgs storing a pool of objects
@@ -86,15 +81,17 @@ union ceph_pg {
  *
  *  lpgp_num -- as above.
  */
+#define CEPH_PG_TYPE_REP     1
+#define CEPH_PG_TYPE_RAID4   2
 struct ceph_pg_pool {
-	__u8 type;
-	__u8 size;
-	__u8 crush_ruleset;
-	__le32 pg_num, pgp_num;
-	__le32 lpg_num, lpgp_num;
-	__le32 last_change;     /* most recent epoch changed */
-	__le64 snap_seq;
-	__le32 snap_epoch;
+	__u8 type;                /* CEPH_PG_TYPE_* */
+	__u8 size;                /* number of osds in each pg */
+	__u8 crush_ruleset;       /* crush placement rule */
+	__le32 pg_num, pgp_num;   /* number of pg's */
+	__le32 lpg_num, lpgp_num; /* number of localized pg's */
+	__le32 last_change;       /* most recent epoch changed */
+	__le64 snap_seq;          /* seq for per-pool snapshot */
+	__le32 snap_epoch;        /* epoch of last snap */
 	__le32 num_snaps;
 	__le32 num_removed_snap_intervals;
 } __attribute__ ((packed));
@@ -121,7 +118,7 @@ static inline int ceph_stable_mod(int x, int b, int bmask)
  */
 struct ceph_object_layout {
 	__le64 ol_pgid;           /* raw pg, with _full_ ps precision. */
-	__le32 ol_stripe_unit;
+	__le32 ol_stripe_unit;    /* for per-object parity, if any */
 } __attribute__ ((packed));
 
 /*
@@ -270,56 +267,7 @@ static inline int ceph_osd_op_mode_modify(int op)
 #define CEPH_OSD_TMAP_SET 's'
 #define CEPH_OSD_TMAP_RM  'r'
 
-static inline const char *ceph_osd_op_name(int op)
-{
-	switch (op) {
-	case CEPH_OSD_OP_READ: return "read";
-	case CEPH_OSD_OP_STAT: return "stat";
-
-	case CEPH_OSD_OP_MASKTRUNC: return "masktrunc";
-
-	case CEPH_OSD_OP_WRITE: return "write";
-	case CEPH_OSD_OP_DELETE: return "delete";
-	case CEPH_OSD_OP_TRUNCATE: return "truncate";
-	case CEPH_OSD_OP_ZERO: return "zero";
-	case CEPH_OSD_OP_WRITEFULL: return "writefull";
-
-	case CEPH_OSD_OP_APPEND: return "append";
-	case CEPH_OSD_OP_STARTSYNC: return "startsync";
-	case CEPH_OSD_OP_SETTRUNC: return "settrunc";
-	case CEPH_OSD_OP_TRIMTRUNC: return "trimtrunc";
-
-	case CEPH_OSD_OP_TMAPUP: return "tmapup";
-	case CEPH_OSD_OP_TMAPGET: return "tmapget";
-	case CEPH_OSD_OP_TMAPPUT: return "tmapput";
-
-	case CEPH_OSD_OP_GETXATTR: return "getxattr";
-	case CEPH_OSD_OP_GETXATTRS: return "getxattrs";
-	case CEPH_OSD_OP_SETXATTR: return "setxattr";
-	case CEPH_OSD_OP_SETXATTRS: return "setxattrs";
-	case CEPH_OSD_OP_RESETXATTRS: return "resetxattrs";
-	case CEPH_OSD_OP_RMXATTR: return "rmxattr";
-
-	case CEPH_OSD_OP_PULL: return "pull";
-	case CEPH_OSD_OP_PUSH: return "push";
-	case CEPH_OSD_OP_BALANCEREADS: return "balance-reads";
-	case CEPH_OSD_OP_UNBALANCEREADS: return "unbalance-reads";
-	case CEPH_OSD_OP_SCRUB: return "scrub";
-
-	case CEPH_OSD_OP_WRLOCK: return "wrlock";
-	case CEPH_OSD_OP_WRUNLOCK: return "wrunlock";
-	case CEPH_OSD_OP_RDLOCK: return "rdlock";
-	case CEPH_OSD_OP_RDUNLOCK: return "rdunlock";
-	case CEPH_OSD_OP_UPLOCK: return "uplock";
-	case CEPH_OSD_OP_DNLOCK: return "dnlock";
-
-	case CEPH_OSD_OP_CALL: return "call";
-
-	case CEPH_OSD_OP_PGLS: return "pgls";
-
-	default: return "???";
-	}
-}
+extern const char *ceph_osd_op_name(int op);
 
 
 /*
@@ -342,7 +290,7 @@ enum {
 };
 
 enum {
-	CEPH_OSD_OP_FLAG_EXCL = 1,
+	CEPH_OSD_OP_FLAG_EXCL = 1,      /* EXCL object create */
 };
 
 #define EOLDSNAPC    ERESTART  /* ORDERSNAP flag set; writer has old snapc*/
@@ -353,31 +301,29 @@ enum {
  * payload
  */
 struct ceph_osd_op {
-	__le16 op;
+	__le16 op;           /* CEPH_OSD_OP_* */
+	__le32 flags;        /* CEPH_OSD_FLAG_* */
 	union {
 		struct {
 			__le64 offset, length;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) extent;
 		struct {
 			__le32 name_len;
 			__le32 value_len;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) xattr;
 		struct {
 			__le64 truncate_size;
 			__le32 truncate_seq;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) trunc;
 		struct {
 			__u8 class_len;
 			__u8 method_len;
 			__u8 argc;
 			__le32 indata_len;
-		} __attribute__ ((packed));
+		} __attribute__ ((packed)) cls;
 		struct {
-			__le64 pgls_cookie, count;
-		} __attribute__ ((packed));
-		struct {
-			__le32 flags;
-		} __attribute__ ((packed));
+			__le64 cookie, count;
+		} __attribute__ ((packed)) pgls;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
@@ -387,19 +333,19 @@ struct ceph_osd_op {
  * ceph_osd_op object operations.
  */
 struct ceph_osd_request_head {
-	__le64 tid;
-	__le32 client_inc;
-	struct ceph_object_layout layout;
-	__le32 osdmap_epoch;
+	__le64 tid;                        /* transaction id */
+	__le32 client_inc;                 /* client incarnation */
+	struct ceph_object_layout layout;  /* pgid */
+	__le32 osdmap_epoch;               /* client's osdmap epoch */
 
 	__le32 flags;
 
-	struct ceph_timespec mtime;
+	struct ceph_timespec mtime;        /* for mutations only */
 	struct ceph_eversion reassert_version; /* if we are replaying op */
 
-	__le32 object_len;
+	__le32 object_len;     /* length of object name */
 
-	__le64 snapid;
+	__le64 snapid;         /* snapid to read */
 	__le64 snap_seq;       /* writer's snap context */
 	__le32 num_snaps;
 
@@ -408,16 +354,16 @@ struct ceph_osd_request_head {
 } __attribute__ ((packed));
 
 struct ceph_osd_reply_head {
-	__le64 tid;
-	__le32 client_inc;
+	__le64 tid;                       /* transaction id */
+	__le32 client_inc;                /* client incarnation */
 	__le32 flags;
 	struct ceph_object_layout layout;
 	__le32 osdmap_epoch;
-	struct ceph_eversion reassert_version;
+	struct ceph_eversion reassert_version; /* for replaying uncommitted */
 
-	__le32 result;
+	__le32 result;                    /* result code */
 
-	__le32 object_len;
+	__le32 object_len;                /* length of object name */
 	__le32 num_ops;
 	struct ceph_osd_op ops[0];  /* ops[], object */
 } __attribute__ ((packed));

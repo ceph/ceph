@@ -1,10 +1,10 @@
+#include "ceph_debug.h"
 
 #include <linux/sched.h>
 #include <linux/file.h>
 #include <linux/namei.h>
 #include <linux/writeback.h>
 
-#include "ceph_debug.h"
 #include "super.h"
 #include "mds_client.h"
 
@@ -52,6 +52,7 @@ prepare_open_request(struct super_block *sb, int flags, int create_mode)
 	req->r_fmode = ceph_flags_to_mode(flags);
 	req->r_args.open.flags = cpu_to_le32(flags);
 	req->r_args.open.mode = cpu_to_le32(create_mode);
+	req->r_args.open.preferred = -1;
 out:
 	return req;
 }
@@ -788,7 +789,6 @@ static ssize_t ceph_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		       unsigned long nr_segs, loff_t pos)
 {
 	struct file *file = iocb->ki_filp;
-	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = file->f_dentry->d_inode;
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_osd_client *osdc = &ceph_client(inode->i_sb)->osdc;
@@ -823,9 +823,15 @@ retry_snap:
 	} else {
 		ret = generic_file_aio_write(iocb, iov, nr_segs, pos);
 
-		if (ret >= 0 &&
-		    ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL))
-			ret = sync_page_range(inode, mapping, pos, ret);
+		if ((ret >= 0 || ret == -EIOCBQUEUED) &&
+		    ((file->f_flags & O_SYNC) || IS_SYNC(file->f_mapping->host)
+		     || ceph_osdmap_flag(osdc->osdmap, CEPH_OSDMAP_NEARFULL)))
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32)
+			ret = vfs_fsync_range(file, file->f_path.dentry,
+					      pos, pos + ret - 1, 1);
+#else
+			ret = sync_page_range(inode, &inode->i_data, pos, ret);
+#endif
 	}
 	if (ret >= 0) {
 		spin_lock(&inode->i_lock);

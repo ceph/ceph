@@ -131,7 +131,7 @@ public:
     ::encode(data_subset, payload);
     ::encode(clone_subsets, payload);
     if (ops.size())
-      header.data_off = ops[0].op.offset;
+      header.data_off = ops[0].op.extent.offset;
     else
       header.data_off = 0;
   }

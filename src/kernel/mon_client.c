@@ -1,10 +1,10 @@
+#include "ceph_debug.h"
 
 #include <linux/types.h>
 #include <linux/random.h>
 #include <linux/sched.h>
-#include "mon_client.h"
 
-#include "ceph_debug.h"
+#include "mon_client.h"
 #include "super.h"
 #include "decode.h"
 
@@ -66,8 +66,8 @@ struct ceph_monmap *ceph_monmap_decode(void *p, void *end)
 	dout("monmap_decode epoch %d, num_mon %d\n", m->epoch,
 	     m->num_mon);
 	for (i = 0; i < m->num_mon; i++)
-		dout("monmap_decode  mon%d is %u.%u.%u.%u:%u\n", i,
-		     IPQUADPORT(m->mon_inst[i].addr.ipaddr));
+		dout("monmap_decode  mon%d is %s\n", i,
+		     pr_addr(&m->mon_inst[i].addr.in_addr));
 	return m;
 
 bad:
@@ -208,8 +208,8 @@ static void handle_subscribe_ack(struct ceph_mon_client *monc,
 	ceph_decode_32_safe(&p, end, seconds, bad);
 	mutex_lock(&monc->mutex);
 	if (monc->hunting) {
-		pr_info("ceph mon%d %u.%u.%u.%u:%u session established\n",
-			monc->cur_mon, IPQUADPORT(monc->con->peer_addr.ipaddr));
+		pr_info("mon%d %s session established\n",
+			monc->cur_mon, pr_addr(&monc->con->peer_addr.in_addr));
 		monc->hunting = false;
 	}
 	dout("handle_subscribe_ack after %d seconds\n", seconds);
@@ -218,7 +218,7 @@ static void handle_subscribe_ack(struct ceph_mon_client *monc,
 	mutex_unlock(&monc->mutex);
 	return;
 bad:
-	pr_err("ceph got corrupt subscribe-ack msg\n");
+	pr_err("got corrupt subscribe-ack msg\n");
 }
 
 /*
@@ -324,7 +324,7 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	ceph_decode_32_safe(&p, end, result, bad);
 	ceph_decode_32_safe(&p, end, len, bad);
 	if (result) {
-		pr_err("ceph mount denied: %.*s (%d)\n", len, (char *)p,
+		pr_err("mount denied: %.*s (%d)\n", len, (char *)p,
 		       result);
 		err = result;
 		goto out;
@@ -335,7 +335,7 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	ceph_decode_need(&p, end, len, bad);
 	monmap = ceph_monmap_decode(p, p + len);
 	if (IS_ERR(monmap)) {
-		pr_err("ceph problem decoding monmap, %d\n",
+		pr_err("problem decoding monmap, %d\n",
 		       (int)PTR_ERR(monmap));
 		err = -EINVAL;
 		goto out;
@@ -353,7 +353,7 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	client->whoami = cnum;
 	client->msgr->inst.name.type = CEPH_ENTITY_TYPE_CLIENT;
 	client->msgr->inst.name.num = cpu_to_le64(cnum);
-	pr_info("ceph client%lld fsid " FSID_FORMAT "\n",
+	pr_info("client%lld fsid " FSID_FORMAT "\n",
 		client->whoami, PR_FSID(&client->monc.monmap->fsid));
 
 	ceph_debugfs_client_init(client);
@@ -363,7 +363,7 @@ static void handle_mount_ack(struct ceph_mon_client *monc, struct ceph_msg *msg)
 	goto out;
 
 bad:
-	pr_err("ceph error decoding mount_ack message\n");
+	pr_err("error decoding mount_ack message\n");
 out:
 	client->mount_err = err;
 	mutex_unlock(&monc->mutex);
@@ -400,7 +400,7 @@ static void handle_statfs_reply(struct ceph_mon_client *monc,
 	return;
 
 bad:
-	pr_err("ceph corrupt statfs reply, no tid\n");
+	pr_err("corrupt statfs reply, no tid\n");
 }
 
 /*
@@ -452,7 +452,7 @@ int ceph_monc_do_statfs(struct ceph_mon_client *monc, struct ceph_statfs *buf)
 	req.delay = BASE_DELAY_INTERVAL;
 	if (radix_tree_insert(&monc->statfs_request_tree, req.tid, &req) < 0) {
 		mutex_unlock(&monc->mutex);
-		pr_err("ceph ENOMEM in do_statfs\n");
+		pr_err("ENOMEM in do_statfs\n");
 		return -ENOMEM;
 	}
 	monc->num_statfs_requests++;
@@ -621,7 +621,7 @@ static void dispatch(struct ceph_connection *con, struct ceph_msg *msg)
 		break;
 
 	default:
-		pr_err("ceph received unknown message type %d %s\n", type,
+		pr_err("received unknown message type %d %s\n", type,
 		       ceph_msg_type_name(type));
 	}
 	ceph_msg_put(msg);
@@ -664,9 +664,9 @@ static void mon_fault(struct ceph_connection *con)
 		goto out;
 
 	if (monc->con && !monc->hunting)
-		pr_info("ceph mon%d %u.%u.%u.%u:%u session lost, "
+		pr_info("mon%d %s session lost, "
 			"hunting for new mon\n", monc->cur_mon,
-			IPQUADPORT(monc->con->peer_addr.ipaddr));
+			pr_addr(&monc->con->peer_addr.in_addr));
 
 	__close_session(monc);
 	if (!monc->hunting) {

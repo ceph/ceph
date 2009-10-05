@@ -74,7 +74,8 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   dout(10) << "accepter.bind" << dendl;
   
   // use whatever user specified (if anything)
-  sockaddr_in listen_addr = g_my_addr.ipaddr;
+  sockaddr_in listen_addr = g_my_addr.in4_addr();
+  listen_addr.sin_family = AF_INET;
 
   /* socket creation */
   listen_sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -96,7 +97,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr, sizeof(listen_addr));
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
+      derr(0) << "accepter.bind unable to bind to " << g_my_addr.in_addr()
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
     }
@@ -110,7 +111,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     }
     if (rc < 0) {
       char buf[80];
-      derr(0) << "accepter.bind unable to bind to " << g_my_addr.ipaddr
+      derr(0) << "accepter.bind unable to bind to " << g_my_addr.in_addr()
 	      << " on any port in range " << CEPH_PORT_START << "-" << CEPH_PORT_LAST
 	      << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -errno;
@@ -127,7 +128,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   rc = ::listen(listen_sd, 128);
   if (rc < 0) {
     char buf[80];
-    derr(0) << "accepter.bind unable to listen on " << g_my_addr.ipaddr 
+    derr(0) << "accepter.bind unable to listen on " << g_my_addr.in_addr()
 	    << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     return -errno;
   }
@@ -138,15 +139,13 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   else 
     rank->need_addr = true;
   if (rank->rank_addr.get_port() == 0) {
-    entity_addr_t tmp;
-    tmp.ipaddr = listen_addr;
-    rank->rank_addr.set_port(tmp.get_port());
+    rank->rank_addr.in4_addr() = listen_addr;
     if (force_nonce >= 0)
-      rank->rank_addr.nonce = force_nonce;
+      rank->rank_addr.v.nonce = force_nonce;
     else
-      rank->rank_addr.nonce = getpid(); // FIXME: pid might not be best choice here.
+      rank->rank_addr.v.nonce = getpid(); // FIXME: pid might not be best choice here.
   }
-  rank->rank_addr.erank = 0;
+  rank->rank_addr.v.erank = 0;
 
   dout(1) << "accepter.bind rank_addr is " << rank->rank_addr << " need_addr=" << rank->need_addr << dendl;
   return 0;
@@ -353,7 +352,7 @@ void SimpleMessenger::Endpoint::ready()
 
 int SimpleMessenger::Endpoint::shutdown()
 {
-  dout(10) << "shutdown " << get_myaddr() << dendl;
+  dout(0) << "shutdown " << get_myaddr() << dendl;
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
@@ -394,8 +393,7 @@ int SimpleMessenger::Endpoint::send_message(Message *m, entity_inst_t dest)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << m->get_source_inst()
-          << " --> " << dest.name << " " << dest.addr
+  dout(1) << "--> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
@@ -413,8 +411,7 @@ int SimpleMessenger::Endpoint::forward_message(Message *m, entity_inst_t dest)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << m->get_source()
-          << " **> " << dest.name << " " << dest.addr
+  dout(1) << "**> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
@@ -435,8 +432,8 @@ int SimpleMessenger::Endpoint::lazy_send_message(Message *m, entity_inst_t dest)
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
-  dout(1) << "lazy " << m->get_source()
-          << " --> " << dest.name << " " << dest.addr
+  dout(1) << "lazy "
+	  << " --> " << dest.name << " " << dest.addr
           << " -- " << *m
     	  << " -- ?+" << m->get_data().length()
 	  << " " << m 
@@ -464,7 +461,7 @@ void SimpleMessenger::Endpoint::mark_down(entity_addr_t a)
 entity_addr_t SimpleMessenger::Endpoint::get_myaddr()
 {
   entity_addr_t a = rank->rank_addr;
-  a.erank = my_rank;
+  a.v.erank = my_rank;
   return a;  
 }
 
@@ -542,8 +539,8 @@ int SimpleMessenger::Pipe::accept()
 
   // and peer's socket addr (they might not know their ip)
   entity_addr_t socket_addr;
-  socklen_t len = sizeof(socket_addr.ipaddr);
-  int r = ::getpeername(sd, (sockaddr*)&socket_addr.ipaddr, &len);
+  socklen_t len = sizeof(socket_addr.in_addr());
+  int r = ::getpeername(sd, (sockaddr*)&socket_addr.v.in_addr, &len);
   if (r < 0) {
     char buf[80];
     dout(0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
@@ -580,13 +577,13 @@ int SimpleMessenger::Pipe::accept()
     return -1;
   }
   dout(10) << "accept peer addr is " << peer_addr << dendl;
-  if (peer_addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+  if (peer_addr.is_blank_addr()) {
     // peer apparently doesn't know what ip they have; figure it out for them.
-    entity_addr_t was = peer_addr;
-    peer_addr.ipaddr = socket_addr.ipaddr;
-    peer_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+    int port = peer_addr.get_port();
+    peer_addr.v.in_addr = socket_addr.v.in_addr;
+    peer_addr.set_port(port);
     dout(0) << "accept peer addr is really " << peer_addr
-	    << " (they said " << was << ", socket is " << socket_addr << ")" << dendl;
+	    << " (socket is " << socket_addr << ")" << dendl;
   }
   
   ceph_msg_connect connect;
@@ -860,10 +857,10 @@ int SimpleMessenger::Pipe::connect()
   char buf[80];
 
   // connect!
-  dout(10) << "connecting to " << peer_addr.ipaddr << dendl;
-  rc = ::connect(sd, (sockaddr*)&peer_addr.ipaddr, sizeof(peer_addr.ipaddr));
+  dout(10) << "connecting to " << peer_addr << dendl;
+  rc = ::connect(sd, (sockaddr*)&peer_addr.v.in_addr, sizeof(peer_addr.v.in_addr));
   if (rc < 0) {
-    dout(2) << "connect error " << peer_addr.ipaddr
+    dout(2) << "connect error " << peer_addr
 	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
@@ -907,9 +904,9 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(20) << "connect read peer addr " << paddr << " on socket " << sd << dendl;
   if (!peer_addr.is_local_to(paddr)) {
-    if (paddr.ipaddr.sin_addr.s_addr == 0 &&
-	peer_addr.ipaddr.sin_port == paddr.ipaddr.sin_port &&
-	peer_addr.nonce == paddr.nonce) {
+    if (paddr.is_blank_addr() &&
+	peer_addr.get_port() == paddr.get_port() &&
+	peer_addr.get_nonce() == paddr.get_nonce()) {
       dout(0) << "connect claims to be " 
 	      << paddr << " not " << peer_addr << " - presumably this is the same node!" << dendl;
     } else {
@@ -1224,7 +1221,7 @@ void SimpleMessenger::Pipe::report_failures()
       break;
 
     if (policy.drop_msg_callback) {
-      unsigned srcrank = m->get_source_inst().addr.erank;
+      unsigned srcrank = m->get_source_inst().addr.v.erank;
       if (srcrank >= rank->max_local || rank->local[srcrank] == 0) {
 	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
       } else if (rank->local[srcrank]->is_stopped()) {
@@ -1599,9 +1596,10 @@ Message *SimpleMessenger::Pipe::read_message()
 
   // ok, now it's safe to change the header..
   // munge source address?
-  if (header.src.addr.ipaddr.sin_addr.s_addr == htonl(INADDR_ANY)) {
+  entity_addr_t srcaddr = header.src.addr;
+  if (srcaddr.is_blank_addr()) {
     dout(10) << "reader munging src addr " << header.src << " to be " << peer_addr << dendl;
-    header.orig_src.addr.ipaddr = header.src.addr.ipaddr = peer_addr.ipaddr;
+    header.orig_src.addr.in_addr = header.src.addr.in_addr = peer_addr.in_addr();
   }
 
   // read front
@@ -2152,22 +2150,22 @@ void SimpleMessenger::unregister_entity(Endpoint *msgr)
 void SimpleMessenger::submit_message(Message *m, const entity_inst_t& dest, bool lazy)
 {
   const entity_addr_t& dest_addr = dest.addr;
-  m->get_header().dst_erank = dest_addr.erank;
+  m->get_header().dst_erank = dest_addr.v.erank;
 
   assert(m->nref.test() == 0);
 
   // lookup
   entity_addr_t dest_proc_addr = dest_addr;
-  dest_proc_addr.erank = 0;
+  dest_proc_addr.v.erank = 0;
 
   lock.Lock();
   {
     // local?
     if (rank_addr.is_local_to(dest_addr)) {
-      if (dest_addr.erank < max_local && local[dest_addr.erank]) {
+      if (dest_addr.get_erank() < max_local && local[dest_addr.get_erank()]) {
         // local
         dout(20) << "submit_message " << *m << " local" << dendl;
-	local[dest_addr.erank]->queue_message(m);
+	local[dest_addr.get_erank()]->queue_message(m);
       } else {
         derr(0) << "submit_message " << *m << " " << dest_addr << " local but not in local map?  dropping." << dendl;
         //assert(0);  // hmpf, this is probably mds->mon beacon from newsyn.
@@ -2270,14 +2268,14 @@ void SimpleMessenger::wait()
   lock.Unlock();
   
   // done!  clean up.
-  dout(20) << "wait: stopping accepter thread" << dendl;
+  dout(0) << "wait: stopping accepter thread" << dendl;
   accepter.stop();
   dout(20) << "wait: stopped accepter thread" << dendl;
 
   // close+reap all pipes
   lock.Lock();
   {
-    dout(10) << "wait: closing pipes" << dendl;
+    dout(0) << "wait: closing pipes" << dendl;
     list<Pipe*> toclose;
     for (hash_map<entity_addr_t,Pipe*>::iterator i = rank_pipe.begin();
          i != rank_pipe.end();
@@ -2293,8 +2291,8 @@ void SimpleMessenger::wait()
     }
 
     reaper();
-    dout(10) << "wait: waiting for pipes " << pipes << " to close" << dendl;
     while (!pipes.empty()) {
+      dout(0) << "wait: waiting for pipes " << pipes << " to close" << dendl;
       wait_cond.Wait(lock);
       reaper();
     }
@@ -2302,7 +2300,7 @@ void SimpleMessenger::wait()
   lock.Unlock();
 
   dout(10) << "wait: done." << dendl;
-  dout(1) << "shutdown complete." << dendl;
+  dout(0) << "shutdown complete." << dendl;
   remove_pid_file();
   started = false;
   my_type = -1;
@@ -2330,9 +2328,9 @@ void SimpleMessenger::mark_down(entity_addr_t addr)
 void SimpleMessenger::learned_addr(entity_addr_t peer_addr_for_me)
 {
   lock.Lock();
-  entity_addr_t was = rank_addr;
-  rank_addr.ipaddr = peer_addr_for_me.ipaddr;
-  rank_addr.ipaddr.sin_port = was.ipaddr.sin_port;
+  int port = rank_addr.get_port();
+  rank_addr.in_addr() = peer_addr_for_me.in_addr();
+  rank_addr.set_port(port);
   dout(1) << "learned my addr " << rank_addr << dendl;
   need_addr = false;
   lock.Unlock();

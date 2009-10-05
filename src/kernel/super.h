@@ -1,6 +1,8 @@
 #ifndef _FS_CEPH_SUPER_H
 #define _FS_CEPH_SUPER_H
 
+#include "ceph_debug.h"
+
 #include <asm/unaligned.h>
 #include <linux/backing-dev.h>
 #include <linux/completion.h>
@@ -11,7 +13,6 @@
 #include <linux/wait.h>
 
 #include "types.h"
-#include "ceph_debug.h"
 #include "messenger.h"
 #include "msgpool.h"
 #include "mon_client.h"
@@ -400,32 +401,15 @@ static inline bool ceph_i_test(struct inode *inode, unsigned mask)
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	bool r;
 
-	spin_lock(&inode->i_lock);
+	smp_mb();
 	r = (ci->i_ceph_flags & mask) == mask;
-	spin_unlock(&inode->i_lock);
 	return r;
 }
 
 
 /* find a specific frag @f */
-static inline struct ceph_inode_frag *
-__ceph_find_frag(struct ceph_inode_info *ci, u32 f)
-{
-	struct rb_node *n = ci->i_fragtree.rb_node;
-
-	while (n) {
-		struct ceph_inode_frag *frag =
-			rb_entry(n, struct ceph_inode_frag, node);
-		int c = frag_compare(f, frag->frag);
-		if (c < 0)
-			n = n->rb_left;
-		else if (c > 0)
-			n = n->rb_right;
-		else
-			return frag;
-	}
-	return NULL;
-}
+extern struct ceph_inode_frag *__ceph_find_frag(struct ceph_inode_info *ci,
+						u32 f);
 
 /*
  * choose fragment for value @v.  copy frag content to pfrag, if leaf
@@ -554,35 +538,9 @@ static inline int __ceph_caps_dirty(struct ceph_inode_info *ci)
 extern int __ceph_mark_dirty_caps(struct ceph_inode_info *ci, int mask);
 
 extern int ceph_caps_revoking(struct ceph_inode_info *ci, int mask);
+extern int __ceph_caps_used(struct ceph_inode_info *ci);
 
-static inline int __ceph_caps_used(struct ceph_inode_info *ci)
-{
-	int used = 0;
-	if (ci->i_pin_ref)
-		used |= CEPH_CAP_PIN;
-	if (ci->i_rd_ref)
-		used |= CEPH_CAP_FILE_RD;
-	if (ci->i_rdcache_ref || ci->i_rdcache_gen)
-		used |= CEPH_CAP_FILE_CACHE;
-	if (ci->i_wr_ref)
-		used |= CEPH_CAP_FILE_WR;
-	if (ci->i_wrbuffer_ref)
-		used |= CEPH_CAP_FILE_BUFFER;
-	return used;
-}
-
-/*
- * wanted, by virtue of open file modes
- */
-static inline int __ceph_caps_file_wanted(struct ceph_inode_info *ci)
-{
-	int want = 0;
-	int mode;
-	for (mode = 0; mode < 4; mode++)
-		if (ci->i_nr_by_mode[mode])
-			want |= ceph_caps_for_mode(mode);
-	return want;
-}
+extern int __ceph_caps_file_wanted(struct ceph_inode_info *ci);
 
 /*
  * wanted, by virtue of open file modes AND cap refs (buffered/cached data)
@@ -824,12 +782,15 @@ extern int ceph_permission(struct inode *inode, int mask);
 extern int ceph_setattr(struct dentry *dentry, struct iattr *attr);
 extern int ceph_getattr(struct vfsmount *mnt, struct dentry *dentry,
 			struct kstat *stat);
+
+/* xattr.c */
 extern int ceph_setxattr(struct dentry *, const char *, const void *,
 			 size_t, int);
 extern ssize_t ceph_getxattr(struct dentry *, const char *, void *, size_t);
 extern ssize_t ceph_listxattr(struct dentry *, char *, size_t);
 extern int ceph_removexattr(struct dentry *, const char *);
 extern void __ceph_build_xattrs_blob(struct ceph_inode_info *ci);
+extern void __ceph_destroy_xattrs(struct ceph_inode_info *ci);
 
 /* caps.c */
 extern const char *ceph_cap_string(int c);
@@ -838,8 +799,7 @@ extern void ceph_handle_caps(struct ceph_mds_session *session,
 extern int ceph_add_cap(struct inode *inode,
 			struct ceph_mds_session *session, u64 cap_id,
 			int fmode, unsigned issued, unsigned wanted,
-			unsigned cap, unsigned seq, u64 realmino,
-			unsigned ttl_ms, unsigned long ttl_from, int flags,
+			unsigned cap, unsigned seq, u64 realmino, int flags,
 			struct ceph_cap_reservation *caps_reservation);
 extern void __ceph_remove_cap(struct ceph_cap *cap,
 			      struct ceph_cap_reservation *ctx);
@@ -915,23 +875,8 @@ extern void ceph_dentry_lru_del(struct dentry *dn);
  * our d_ops vary depending on whether the inode is live,
  * snapshotted (read-only), or a virtual ".snap" directory.
  */
-int ceph_init_dentry_private(struct dentry *dentry);
+int ceph_init_dentry(struct dentry *dentry);
 
-static inline int ceph_init_dentry(struct dentry *dentry)
-{
-	int ret;
-
-	if (ceph_snap(dentry->d_parent->d_inode) == CEPH_NOSNAP)
-		dentry->d_op = &ceph_dentry_ops;
-	else if (ceph_snap(dentry->d_parent->d_inode) == CEPH_SNAPDIR)
-		dentry->d_op = &ceph_snapdir_dentry_ops;
-	else
-		dentry->d_op = &ceph_snap_dentry_ops;
-
-	ret = ceph_init_dentry_private(dentry);
-
-	return ret;
-}
 
 /* ioctl.c */
 extern long ceph_ioctl(struct file *file, unsigned int cmd, unsigned long arg);

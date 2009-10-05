@@ -45,6 +45,9 @@ class MStatfsReply;
 struct ObjectOperation {
   vector<OSDOp> ops;
   int flags;
+  int priority;
+
+  ObjectOperation() : flags(0), priority(0) {}
 
   void add_op(int op) {
     int s = ops.size();
@@ -55,16 +58,16 @@ struct ObjectOperation {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.offset = off;
-    ops[s].op.length = len;
+    ops[s].op.extent.offset = off;
+    ops[s].op.extent.length = len;
     ops[s].data.claim_append(bl);
   }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.name_len = (name ? strlen(name) : 0);
-    ops[s].op.value_len = data.length();
+    ops[s].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[s].op.xattr.value_len = data.length();
     if (name)
       ops[s].data.append(name);
     ops[s].data.append(data);
@@ -73,19 +76,19 @@ struct ObjectOperation {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.class_len = strlen(cname);
-    ops[s].op.method_len = strlen(method);
-    ops[s].op.indata_len = indata.length();
-    ops[s].data.append(cname, ops[s].op.class_len);
-    ops[s].data.append(method, ops[s].op.method_len);
+    ops[s].op.cls.class_len = strlen(cname);
+    ops[s].op.cls.method_len = strlen(method);
+    ops[s].op.cls.indata_len = indata.length();
+    ops[s].data.append(cname, ops[s].op.cls.class_len);
+    ops[s].data.append(method, ops[s].op.cls.method_len);
     ops[s].data.append(indata);
   }
   void add_pgls(int op, __u64 count, __u64 cookie) {
     int s = ops.size();
     ops.resize(s+1);
     ops[s].op.op = op;
-    ops[s].op.count = count;
-    ops[s].op.pgls_cookie = cookie;
+    ops[s].op.pgls.count = count;
+    ops[s].op.pgls.cookie = cookie;
   }
 
   // ------
@@ -163,8 +166,6 @@ struct ObjectOperation {
   void call(const char *cname, const char *method, bufferlist &indata) {
     add_call(CEPH_OSD_OP_CALL, cname, method, indata);
   }
- 
-  ObjectOperation() : flags(0) {}
 };
 
 
@@ -197,7 +198,6 @@ class Objecter {
     void finish(int r) { ob->tick(); }
   };
   void tick();
-  void resend_slow_ops();
 
   /*** track pending operations ***/
   // read
@@ -215,7 +215,7 @@ class Objecter {
     bufferlist inbl;
     bufferlist *outbl;
 
-    int flags;
+    int flags, priority;
     Context *onack, *oncommit;
 
     tid_t tid;
@@ -227,7 +227,7 @@ class Objecter {
     Op(const object_t& o, ceph_object_layout& l, vector<OSDOp>& op,
        int f, Context *ac, Context *co) :
       oid(o), layout(l), 
-      snapid(CEPH_NOSNAP), outbl(0), flags(f), onack(ac), oncommit(co), 
+      snapid(CEPH_NOSNAP), outbl(0), flags(f), priority(0), onack(ac), oncommit(co), 
       tid(0), attempts(0),
       paused(false) {
       ops.swap(op);
@@ -384,12 +384,14 @@ class Objecter {
 
   void _list_reply(ListContext *list_context, bufferlist *bl, Context *final_finish);
 
+  void resend_mon_ops();
 
  public:
   Objecter(Messenger *m, MonClient *mc, OSDMap *om, Mutex& l) : 
     messenger(m), monc(mc), osdmap(om),
     last_tid(0), client_inc(-1),
     num_unacked(0), num_uncommitted(0),
+    last_seen_version(0),
     client_lock(l), timer(l)
   { }
   ~Objecter() { }
@@ -428,6 +430,7 @@ private:
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit) {
     Op *o = new Op(oid, ol, op.ops, flags, onack, oncommit);
+    o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
     return op_submit(o);
@@ -437,6 +440,7 @@ private:
 	     snapid_t snapid, bufferlist *pbl, int flags,
 	     Context *onack) {
     Op *o = new Op(oid, ol, op.ops, flags, onack, NULL);
+    o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
     return op_submit(o);
@@ -460,8 +464,8 @@ private:
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_READ;
-    ops[0].op.offset = off;
-    ops[0].op.length = len;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
     Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
     o->snapid = snap;
     o->outbl = pbl;
@@ -473,8 +477,8 @@ private:
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_GETXATTR;
-    ops[0].op.name_len = (name ? strlen(name) : 0);
-    ops[0].op.value_len = 0;
+    ops[0].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[0].op.xattr.value_len = 0;
     if (name)
       ops[0].data.append(name);
     Op *o = new Op(oid, ol, ops, flags, onfinish, 0);
@@ -517,8 +521,8 @@ private:
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITE;
-    ops[0].op.offset = off;
-    ops[0].op.length = len;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
     ops[0].data = bl;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
@@ -530,8 +534,8 @@ private:
 		   Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_WRITEFULL;
-    ops[0].op.offset = 0;
-    ops[0].op.length = bl.length();
+    ops[0].op.extent.offset = 0;
+    ops[0].op.extent.length = bl.length();
     ops[0].data = bl;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
@@ -543,8 +547,8 @@ private:
              Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_ZERO;
-    ops[0].op.offset = off;
-    ops[0].op.length = len;
+    ops[0].op.extent.offset = off;
+    ops[0].op.extent.length = len;
     Op *o = new Op(oid, ol, ops, flags, onack, oncommit);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -588,8 +592,8 @@ private:
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_SETXATTR;
-    ops[0].op.name_len = (name ? strlen(name) : 0);
-    ops[0].op.value_len = bl.length();
+    ops[0].op.xattr.name_len = (name ? strlen(name) : 0);
+    ops[0].op.xattr.value_len = bl.length();
     if (name)
       ops[0].data.append(name);
    ops[0].data.append(bl);
@@ -697,6 +701,7 @@ public:
     }
   }
 
+  void ms_handle_reset(const entity_addr_t& addr);
   void ms_handle_remote_reset(const entity_addr_t& addr);
 
 };

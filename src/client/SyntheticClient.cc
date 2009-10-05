@@ -2270,8 +2270,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       ObjectOperation m;
       OSDOp op;
       op.op.op = CEPH_OSD_OP_WRITE;
-      op.op.offset = 0;
-      op.op.length = osize;
+      op.op.extent.offset = 0;
+      op.op.extent.length = osize;
       op.data = bl;
       m.ops.push_back(op);
       if (do_sync) {

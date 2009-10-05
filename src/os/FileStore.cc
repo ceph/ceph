@@ -19,6 +19,8 @@
 
 #include "FileJournal.h"
 
+#include "osd/osd_types.h"
+
 #include "common/Timer.h"
 
 #include <unistd.h>
@@ -40,6 +42,8 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
+#include <sstream>
+
 
 #define ATTR_MAX 80
 
@@ -47,6 +51,11 @@
 #ifndef DARWIN
 # include <linux/ioctl.h>
 # define BTRFS_IOCTL_MAGIC 0x94
+struct btrfs_ioctl_trans_resv_start {
+	__u64 bytes, ops;
+};
+# define BTRFS_IOC_TRANS_RESV_START _IOW(BTRFS_IOCTL_MAGIC, 5,	\
+					struct btrfs_ioctl_trans_resv_start)
 # define BTRFS_IOC_TRANS_START  _IO(BTRFS_IOCTL_MAGIC, 6)
 # define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
 # define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
@@ -248,23 +257,15 @@ bool FileStore::parse_object(char *s, sobject_t& o)
 
 bool FileStore::parse_coll(char *s, coll_t& c)
 {
-  if (strlen(s) == 33 && s[16] == '.') {
-    s[16] = 0;
-    c.pgid = strtoull(s, 0, 16);
-    c.snap = strtoull(s+17, 0, 16);
-    return true;
-  } else 
-    return false;
+  bool r = c.parse(s);
+  dout(0) << "parse " << s << " -> " << c << " = " << r << dendl;
+  return r;
 }
 
 void FileStore::get_cdir(coll_t cid, char *s) 
 {
-  assert(sizeof(cid) == 16);
-#ifdef __LP64__
-  sprintf(s, "%s/%016lx.%016lx", basedir.c_str(), cid.pgid, (__u64)cid.snap);
-#else
-  sprintf(s, "%s/%016llx.%016llx", basedir.c_str(), cid.pgid, (__u64)cid.snap);
-#endif
+  s += sprintf(s, "%s/", basedir.c_str());
+  s += cid.print(s);
 }
 
 void FileStore::get_coname(coll_t cid, const sobject_t& oid, char *s) 
@@ -494,8 +495,16 @@ int FileStore::mount()
   // is this btrfs?
   Transaction empty;
   btrfs = 1;
+  btrfs_trans_resv_start = true;
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
+  if (r != 0) {
+    dout(0) << "mount lame, new TRANS_RESV_START ioctl is NOT supported" << dendl;
+    btrfs_trans_resv_start = false;
+    r = apply_transaction(empty, 0);
+  } else {
+    dout(0) << "mount yay, new TRANS_RESV_START ioctl is supported" << dendl;
+  }
   if (r == 0) {
     // do we have the shiny new CLONE_RANGE ioctl?
     btrfs = 2;
@@ -553,7 +562,7 @@ unsigned FileStore::apply_transaction(Transaction &t,
   op_start();
 
   // non-atomic implementation
-  int id = _transaction_start(0);// t.get_trans_len());
+  int id = _transaction_start(t.get_num_bytes(), t.get_num_ops());
   if (id < 0) {
     op_journal_start();
     op_finish();
@@ -586,7 +595,15 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 {
   op_start();
 
-  int id = _transaction_start(0);// t.get_trans_len());
+  __u64 bytes = 0, ops = 0;
+  for (list<Transaction*>::iterator p = tls.begin();
+       p != tls.end();
+       p++) {
+    bytes += (*p)->get_num_bytes();
+    ops += (*p)->get_num_ops();
+  }
+
+  int id = _transaction_start(bytes, ops);
   if (id < 0) {
     op_journal_start();
     op_finish();
@@ -623,7 +640,7 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 
 // btrfs transaction start/end interface
 
-int FileStore::_transaction_start(int len)
+int FileStore::_transaction_start(__u64 bytes, __u64 ops)
 {
 #ifdef DARWIN
   return 0;
@@ -639,7 +656,17 @@ int FileStore::_transaction_start(int len)
  	    << " from btrfs open" << dendl;
     assert(0);
   }
-  if (::ioctl(fd, BTRFS_IOC_TRANS_START) < 0) {
+
+  int r;
+  if (btrfs_trans_resv_start) {
+    btrfs_ioctl_trans_resv_start resv;
+    resv.bytes = bytes;
+    resv.ops = ops;
+    r = ::ioctl(fd, BTRFS_IOC_TRANS_RESV_START, (unsigned long)&resv);
+  } else {
+    r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
+  }
+  if (r < 0) {
     derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs ioctl" << dendl;    
     ::close(fd);

@@ -2,11 +2,9 @@
 #define __FS_CEPH_BUFFER_H
 
 #include <linux/mm.h>
+#include <linux/vmalloc.h>
 #include <linux/types.h>
 #include <linux/uio.h>
-#include <linux/vmalloc.h>
-
-#include "ceph_debug.h"
 
 /*
  * a simple reference counted buffer.
@@ -21,35 +19,8 @@ struct ceph_buffer {
 	bool is_vmalloc;
 };
 
-static inline struct ceph_buffer *ceph_buffer_new(gfp_t gfp)
-{
-	struct ceph_buffer *b;
-
-	b = kmalloc(sizeof(*b), gfp);
-	if (!b)
-		return NULL;
-	atomic_set(&b->nref, 1);
-	b->vec.iov_base = NULL;
-	b->vec.iov_len = 0;
-	b->alloc_len = 0;
-	return b;
-}
-
-static inline int ceph_buffer_alloc(struct ceph_buffer *b, int len, gfp_t gfp)
-{
-	if (len <= PAGE_SIZE) {
-		b->vec.iov_base = kmalloc(len, gfp);
-		b->is_vmalloc = false;
-	} else {
-		b->vec.iov_base = __vmalloc(len, gfp, PAGE_KERNEL);
-		b->is_vmalloc = true;
-	}
-	if (!b->vec.iov_base)
-		return -ENOMEM;
-	b->alloc_len = len;
-	b->vec.iov_len = len;
-	return 0;
-}
+struct ceph_buffer *ceph_buffer_new(gfp_t gfp);
+int ceph_buffer_alloc(struct ceph_buffer *b, int len, gfp_t gfp);
 
 static inline struct ceph_buffer *ceph_buffer_get(struct ceph_buffer *b)
 {
@@ -72,13 +43,13 @@ static inline void ceph_buffer_put(struct ceph_buffer *b)
 
 static inline struct ceph_buffer *ceph_buffer_new_alloc(int len, gfp_t gfp)
 {
-	struct ceph_buffer *b = ceph_buffer_new(gfp);
+       struct ceph_buffer *b = ceph_buffer_new(gfp);
 
-	if (b && ceph_buffer_alloc(b, len, gfp) < 0) {
-		ceph_buffer_put(b);
-		b = NULL;
-	}
-	return b;
+       if (b && ceph_buffer_alloc(b, len, gfp) < 0) {
+               ceph_buffer_put(b);
+               b = NULL;
+       }
+       return b;
 }
 
 #endif

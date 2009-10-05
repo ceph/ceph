@@ -1,8 +1,9 @@
+#include "ceph_debug.h"
+
 #include <linux/exportfs.h>
 #include <asm/unaligned.h>
 
 #include "super.h"
-#include "ceph_debug.h"
 
 /*
  * NFS export support
@@ -97,7 +98,7 @@ static struct dentry *__fh_to_dentry(struct super_block *sb,
 #endif
 
 	if (!dentry) {
-		pr_err("ceph fh_to_dentry %llx -- inode %p but ENOMEM\n",
+		pr_err("fh_to_dentry %llx -- inode %p but ENOMEM\n",
 		       fh->ino, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
@@ -157,7 +158,7 @@ static struct dentry *__cfh_to_dentry(struct super_block *sb,
 	dentry = d_alloc_anon(inode);
 #endif
 	if (!dentry) {
-		pr_err("ceph cfh_to_dentry %llx -- inode %p but ENOMEM\n",
+		pr_err("cfh_to_dentry %llx -- inode %p but ENOMEM\n",
 		       cfh->ino, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);
@@ -199,7 +200,7 @@ static struct dentry *ceph_fh_to_parent(struct super_block *sb,
 	if (fh_type == 1)
 		return ERR_PTR(-ESTALE);
 
-	pr_debug("ceph_fh_to_parent %llx/%d\n", cfh->parent_ino,
+	pr_debug("fh_to_parent %llx/%d\n", cfh->parent_ino,
 		 cfh->parent_name_hash);
 
 	vino.ino = cfh->ino;
@@ -214,7 +215,7 @@ static struct dentry *ceph_fh_to_parent(struct super_block *sb,
 	dentry = d_alloc_anon(inode);
 #endif
 	if (!dentry) {
-		pr_err("ceph fh_to_parent %llx -- inode %p but ENOMEM\n",
+		pr_err("fh_to_parent %llx -- inode %p but ENOMEM\n",
 		       cfh->ino, inode);
 		iput(inode);
 		return ERR_PTR(-ENOMEM);

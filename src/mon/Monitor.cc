@@ -420,6 +420,7 @@ bool Monitor::ms_dispatch(Message *m)
       
       // MDSs
     case MSG_MDS_BEACON:
+    case MSG_MDS_OFFLOAD_TARGETS:
     case CEPH_MSG_MDS_GETMAP:
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;

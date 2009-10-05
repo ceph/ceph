@@ -21,7 +21,7 @@
  * whenever the wire protocol changes.  try to keep this string length
  * constant.
  */
-#define CEPH_BANNER "ceph v019"
+#define CEPH_BANNER "ceph v021"
 #define CEPH_BANNER_MAX_LEN 30
 
 
@@ -42,7 +42,7 @@ static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
  * network, e.g. 'mds0' or 'osd3'.
  */
 struct ceph_entity_name {
-	__u8 type;
+	__u8 type;      /* CEPH_ENTITY_TYPE_* */
 	__le64 num;
 } __attribute__ ((packed));
 
@@ -58,14 +58,14 @@ struct ceph_entity_name {
 struct ceph_entity_addr {
 	__le32 erank;  /* entity's rank in process */
 	__le32 nonce;  /* unique id for process (e.g. pid) */
-	struct sockaddr_in ipaddr;
+	struct sockaddr_storage in_addr;
 } __attribute__ ((packed));
 
 static inline bool ceph_entity_addr_is_local(const struct ceph_entity_addr *a,
 					     const struct ceph_entity_addr *b)
 {
 	return a->nonce == b->nonce &&
-		a->ipaddr.sin_addr.s_addr == b->ipaddr.sin_addr.s_addr;
+		memcmp(&a->in_addr, &b->in_addr, sizeof(a->in_addr)) == 0;
 }
 
 static inline bool ceph_entity_addr_equal(const struct ceph_entity_addr *a,
@@ -90,21 +90,21 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_RETRY_GLOBAL  5  /* server->client + gseq: try again
 					  with higher gseq */
 #define CEPH_MSGR_TAG_CLOSE         6  /* closing pipe */
-#define CEPH_MSGR_TAG_MSG          10  /* message */
-#define CEPH_MSGR_TAG_ACK          11  /* message ack */
-#define CEPH_MSGR_TAG_KEEPALIVE    12  /* just a keepalive byte! */
-#define CEPH_MSGR_TAG_BADPROTOVER  13  /* bad protocol version */
+#define CEPH_MSGR_TAG_MSG           7  /* message */
+#define CEPH_MSGR_TAG_ACK           8  /* message ack */
+#define CEPH_MSGR_TAG_KEEPALIVE     9  /* just a keepalive byte! */
+#define CEPH_MSGR_TAG_BADPROTOVER  10  /* bad protocol version */
 
 
 /*
  * connection negotiation
  */
 struct ceph_msg_connect {
-	__le32 host_type;  /* CEPH_ENTITY_TYPE_* */
-	__le32 global_seq;
-	__le32 connect_seq;
+	__le32 host_type;    /* CEPH_ENTITY_TYPE_* */
+	__le32 global_seq;   /* count connections initiated by this host */
+	__le32 connect_seq;  /* count connections initiated in this session */
 	__le32 protocol_version;
-	__u8  flags;
+	__u8  flags;         /* CEPH_MSG_CONNECT_* */
 } __attribute__ ((packed));
 
 struct ceph_msg_connect_reply {
