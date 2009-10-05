@@ -95,8 +95,9 @@ public:
   void do_fragmenting();
 
   void export_empties();
-  //set up the rebalancing targets for export; maybe time for a name change?
-  void do_rebalance(int beat);
+  //set up the rebalancing targets for export and do one if the
+  //MDSMap is up to date
+  void prep_rebalance(int beat);
   /*check if the monitor has recorded the current export targets;
     if it has then do the actual export. Otherwise send off our
     export targets message again*/

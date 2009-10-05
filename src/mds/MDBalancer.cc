@@ -252,7 +252,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   if (mds_load.size() == cluster_size) {
     // let's go!
     //export_empties();  // no!
-    do_rebalance(m->get_beat());
+    prep_rebalance(m->get_beat());
   }
   
   // done
@@ -329,7 +329,7 @@ void MDBalancer::do_fragmenting()
 
 
 
-void MDBalancer::do_rebalance(int beat)
+void MDBalancer::prep_rebalance(int beat)
 {
   int cluster_size = mds->get_mds_map()->get_num_mds();
   int whoami = mds->get_nodeid();
@@ -342,7 +342,7 @@ void MDBalancer::do_rebalance(int beat)
   imported.clear();
   exported.clear();
 
-  dout(5) << " do_rebalance: cluster loads are" << dendl;
+  dout(5) << " prep_rebalance: cluster loads are" << dendl;
 
   mds->mdcache->migrator->clear_export_queue();
 
@@ -378,7 +378,7 @@ void MDBalancer::do_rebalance(int beat)
 
   // target load
   target_load = total_load / (double)cluster_size;
-  dout(5) << "do_rebalance:  my load " << my_load 
+  dout(5) << "prep_rebalance:  my load " << my_load 
           << "   target " << target_load 
           << "   total " << total_load 
           << dendl;
