@@ -778,28 +778,25 @@ int Client::choose_target_mds(MetaRequest *req)
 }
 
 
-void Client::check_mds_sessions()
+void Client::connect_mds_targets(int mds)
 {
-  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
-       p != mds_sessions.end();
-       p++) {
-    int mds = p->first;
-    MDSSession &s = p->second;
-    if (!s.requests.empty()) {
-      const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
-      for (set<int>::const_iterator q = info.export_targets.begin();
-	   q != info.export_targets.end();
-	   q++) {
-	if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
-	  dout(10) << "check_mds_sessions opening mds" << mds
-		   << " export target mds" << *q << dendl;
-	  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
-				  mdsmap->get_inst(*q));
-	  waiting_for_session[*q].size();
-	}
+  //this function shouldn't be called unless we lost a connection
+  assert (mds_sessions.count(mds));
+  MDSSession &s = mds_sessions[mds];
+  if (!s.requests.empty()) {
+    const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
+    for (set<int>::const_iterator q = info.export_targets.begin();
+	 q != info.export_targets.end();
+	 q++) {
+      if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
+	dout(10) << "check_mds_sessions opening mds" << mds
+		 << " export target mds" << *q << dendl;
+	messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
+				mdsmap->get_inst(*q));
+	waiting_for_session[*q].size();
       }
     }
-  }  
+  }
 }
 
 int Client::make_request(MetaRequest *request, 
@@ -895,9 +892,6 @@ int Client::make_request(MetaRequest *request,
 
     // send request.
     send_request(request, mds);
-
-    // make sure we have needed mds sessions open
-    check_mds_sessions();
 
     // wait for signal
     dout(20) << "awaiting reply|forward|kick on " << &cond << dendl;
@@ -1357,8 +1351,6 @@ void Client::handle_mds_map(MMDSMap* m)
   delete oldmap;
   delete m;
 
-  check_mds_sessions();
-
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
 
@@ -1410,6 +1402,9 @@ void Client::send_reconnect(int mds)
     // reset my cap seq number
     mds_sessions[mds].seq = 0;
 
+    //connect to the mds' offload targets
+    connect_mds_targets(mds);
+    //make sure unsafe requests get saved
     resend_unsafe_requests(mds);
   } else {
     dout(10) << " i had no session with this mds" << dendl;
