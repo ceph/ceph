@@ -42,6 +42,13 @@ public:
   // on deliberate reset of connection by remote
   //  implies incoming messages dropped; possibly/probably some of our previous outgoing too.
   virtual void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) = 0;
+
+  
+  // authorization handshake provides mutual authentication of peers.
+  //  connecting side
+  virtual bool ms_get_authorizer(int dest_type, bufferlist& authorizer);
+  //  accepting side
+  virtual bool ms_verify_authorizer(Connection *con, bufferlist& authorizer, bufferlist& authorizer_reply);
 };
 
 #endif

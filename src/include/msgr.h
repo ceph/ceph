@@ -104,6 +104,7 @@ struct ceph_msg_connect {
 	__le32 global_seq;   /* count connections initiated by this host */
 	__le32 connect_seq;  /* count connections initiated in this session */
 	__le32 protocol_version;
+	__le32 authorizer_len;
 	__u8  flags;         /* CEPH_MSG_CONNECT_* */
 } __attribute__ ((packed));
 
@@ -112,6 +113,7 @@ struct ceph_msg_connect_reply {
 	__le32 global_seq;
 	__le32 connect_seq;
 	__le32 protocol_version;
+	__le32 authorizer_len;
 	__u8 flags;
 } __attribute__ ((packed));
 

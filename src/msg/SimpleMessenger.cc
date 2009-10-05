@@ -939,12 +939,16 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
 
+  bufferlist authorizer;
+  //get_authorizer(peer_type, authorizer);
+
   while (1) {
     ceph_msg_connect connect;
     connect.host_type = rank->my_type;
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
+    connect.authorizer_len = authorizer.length();
     connect.flags = 0;
     if (policy.lossy_tx)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;
@@ -954,6 +958,12 @@ int SimpleMessenger::Pipe::connect()
     msg.msg_iov = msgvec;
     msg.msg_iovlen = 1;
     msglen = msgvec[0].iov_len;
+    if (authorizer.length()) {
+      msgvec[1].iov_base = authorizer.c_str();
+      msgvec[1].iov_len = authorizer.length();
+      msg.msg_iovlen++;
+      msglen += msgvec[1].iov_len;
+    }
 
     dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
