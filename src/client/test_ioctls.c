@@ -11,7 +11,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include "../kernel/ioctl.h"
+#include "ioctl.h"
 
 int main(int argc, char **argv)
 {

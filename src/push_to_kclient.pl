@@ -15,7 +15,7 @@ until (-d "$dir/.git") {
     $dir .= "/..";
 }
 
-print "copy changed shared files from $dir to $kernel...\n";
+print "pushing changed shared files from $dir to $kernel...\n";
 my @files = split(/\n/, `cat $kernel/fs/ceph/README`);
 for (@files) {
     next if /^#/;
@@ -23,6 +23,9 @@ for (@files) {
     #print "$dir/$orig -> $new\n";
     system "cp -uv $dir/$orig $kernel/$new";
 }
+
+print "pulling changed shared files from $dir to $kernel...\n";
+system "cp -uv $kernel/fs/ceph/ioctl.h $dir/src/client/ioctl.h";
 
 print "done.\n";
 
