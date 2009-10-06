@@ -274,12 +274,17 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
   _finish_hunting();
 
-  // monmap
-  bufferlist::iterator p = m->monmap_bl.begin();
-  ::decode(monmap, p);
+  if (m->result) {
+    mount_err = m->result;
+    dout(0) << "mount error " << m->result << " (" << m->result_msg << ")" << dendl;
+  } else {
+    // monmap
+    bufferlist::iterator p = m->monmap_bl.begin();
+    ::decode(monmap, p);
 
-  clientid = m->client;
-  messenger->set_myname(entity_name_t::CLIENT(m->client.v));
+    clientid = m->client;
+    messenger->set_myname(entity_name_t::CLIENT(m->client.v));
+  }
 
   mount_cond.SignalAll();
   

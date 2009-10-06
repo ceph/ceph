@@ -264,8 +264,6 @@ void Client::init()
 
   monclient->init();
 
-  tick();
-
   // do logger crap only once per process.
   static bool did_init = false;
   if (did_init) return;
@@ -2736,6 +2734,8 @@ int Client::mount()
   monclient->renew_subs();
 
   mounted = true;
+
+  tick(); // start tick
   
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 

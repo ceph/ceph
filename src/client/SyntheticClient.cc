@@ -306,7 +306,10 @@ int SyntheticClient::run()
   dout(15) << "initing" << dendl;
   client->init();
   dout(15) << "mounting" << dendl;
-  client->mount();
+  if (client->mount() < 0) {
+    client->shutdown();
+    return -1;
+  }
 
   //run_start = g_clock.now();
   run_until = utime_t(0,0);
