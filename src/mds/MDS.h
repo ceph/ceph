@@ -304,6 +304,7 @@ class MDS : public Dispatcher {
 
  private:
   bool ms_dispatch(Message *m);
+  bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new);
 
  public:
   MDS(const char *n, Messenger *m, MonClient *mc);

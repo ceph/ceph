@@ -92,6 +92,7 @@ void KeyRing::set_rotating(RotatingSecrets& secrets)
   for (; iter != secrets.secrets.end(); ++iter) {
     ExpiringCryptoKey& key = iter->second;
 
+    dout(0) << "id: " << iter->first << dendl;
     dout(0) << "key.expiration: " << key.expiration << dendl;
     bufferptr& bp = key.key.get_secret();
     bufferlist bl;
@@ -129,15 +130,34 @@ bool KeyRing::get_service_secret(uint32_t service_id, uint64_t secret_id, Crypto
   Mutex::Locker l(lock);
   /* we ignore the service id, there's only one service id that we're handling */
 
+{
+  map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.begin();
+  dout(0) << "dumping rotating secrets: this=" << dendl;
+
+  for (; iter != rotating_secrets.secrets.end(); ++iter) {
+    ExpiringCryptoKey& key = iter->second;
+
+    dout(0) << "id: " << iter->first << dendl;
+    dout(0) << "key.expiration: " << key.expiration << dendl;
+    bufferptr& bp = key.key.get_secret();
+    bufferlist bl;
+    bl.append(bp);
+    hexdump(" key", bl.c_str(), bl.length());
+  }
+}
+
   map<uint64_t, ExpiringCryptoKey>::iterator iter = rotating_secrets.secrets.find(secret_id);
-  if (iter == rotating_secrets.secrets.end())
+  if (iter == rotating_secrets.secrets.end()) {
+    dout(0) << "could not find secret_id=" << secret_id << dendl;
     return false;
+  }
 
   ExpiringCryptoKey& key = iter->second;
-  if (key.expiration < g_clock.now()) {
+  if (key.expiration > g_clock.now()) {
     secret = key.key;
     return true;
   }
+  dout(0) << "secret expired!" << dendl;
   return false;
 }
 

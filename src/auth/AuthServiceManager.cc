@@ -171,7 +171,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(CEPHX_PRINCIPAL_AUTH, mon->keys_server, indata, auth_ticket_info, tmp_bl)) {
+      if (!verify_authorizer(mon->keys_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
 

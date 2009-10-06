@@ -105,8 +105,6 @@ protected:
 
   LogClient   logclient;
 
-  KeyRing     keyring;
-
   AuthorizeServer authorizer;
 
 
@@ -838,6 +836,11 @@ protected:
   bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
   void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
   void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new);
+  bool ms_verify_authorizer(Connection *con, int peer_type,
+				    bufferlist& authorizer, bufferlist& authorizer_reply,
+				    bool& isvalid);
+
 
  public:
   OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0);

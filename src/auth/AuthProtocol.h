@@ -102,6 +102,23 @@ using namespace std;
 
 class Monitor;
 
+static inline uint32_t peer_id_to_entity_type(int peer_id)
+{
+  switch (peer_id) {
+  case CEPH_ENTITY_TYPE_MON:
+    return CEPHX_PRINCIPAL_MON;
+  case CEPH_ENTITY_TYPE_MDS:
+    return CEPHX_PRINCIPAL_MDS;
+  case CEPH_ENTITY_TYPE_OSD:
+    return CEPHX_PRINCIPAL_OSD;
+  case CEPH_ENTITY_TYPE_CLIENT:
+    return CEPHX_PRINCIPAL_CLIENT;
+  default:
+    return 0;
+  /* case CEPH_ENTITY_TYPE_ADMIN: */
+  }
+}
+
 struct EntityName {
   uint32_t entity_type;
   string name;

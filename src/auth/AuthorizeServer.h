@@ -46,6 +46,7 @@ public:
 
   bool init();
   void handle_request(MAuthorize *m);
+  int verify_authorizer(int peer_type, bufferlist::iterator& indata, bufferlist& result_bl);
 };
 
 #endif

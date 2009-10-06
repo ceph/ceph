@@ -64,6 +64,14 @@ class RadosClient : public Dispatcher
   bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
   void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
   void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
+  bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new) {
+    dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
+
+    if (monclient.auth.build_authorizer(dest_type, authorizer) < 0)
+      return false;
+
+    return true;
+  }
 
   Objecter *objecter;
 
@@ -304,7 +312,7 @@ bool RadosClient::init()
   rank.start(1);
   messenger->add_dispatcher_head(this);
 
-//  monclient.set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD);
+  monclient.set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD);
   monclient.init();
 
   if (monclient.get_monmap() < 0)

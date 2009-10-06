@@ -167,6 +167,7 @@ WRITE_CLASS_ENCODER(AuthAuthorizeReply);
  * AuthTicketHandler
  */
 struct AuthTicketHandler {
+  uint32_t service_id;
   CryptoKey session_key;
   uint64_t secret_id;
   AuthBlob ticket;        // opaque to us
@@ -198,7 +199,11 @@ struct AuthTicketsManager {
 
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 
-  AuthTicketHandler& get_handler(uint32_t type) { return tickets_map[type]; }
+  AuthTicketHandler& get_handler(uint32_t type) {
+    AuthTicketHandler& handler = tickets_map[type];
+    handler.service_id = type;
+    return handler;
+  }
   bool build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& context);
   bool has_key(uint32_t service_id);
 };
@@ -339,7 +344,7 @@ extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 
 class KeysServer;
 
-extern bool verify_authorizer(uint32_t service_id, KeysKeeper& keys, bufferlist::iterator& indata,
+extern bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
 #endif

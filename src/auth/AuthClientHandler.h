@@ -199,6 +199,8 @@ public:
   int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout);
   int authorize(uint32_t service_id, double timeout);
   void tick();
+
+  int build_authorizer(int peer_id, bufferlist& bl);
 };
 
 

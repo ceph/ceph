@@ -603,15 +603,22 @@ int SimpleMessenger::Pipe::accept()
       goto fail_unlocked;
     }
 
-    bp = buffer::create(connect.authorizer_len);
-    if (tcp_read(sd, bp.c_str(), connect.authorizer_len) < 0) {
-      dout(10) << "accept couldn't read connect authorizer" << dendl;
-      goto fail_unlocked;
-    }
+
+    dout(0) << "accepting: connect.authorize_len=" << connect.authorizer_len << " rc=" << rc << " " << connect.protocol_version << "sizeof=" << sizeof(connect) << " " << connect.flags << dendl;
     authorizer.clear();
-    authorizer.push_back(bp);
+    if (connect.authorizer_len) {
+      bp = buffer::create(connect.authorizer_len);
+      if (tcp_read(sd, bp.c_str(), connect.authorizer_len) < 0) {
+        dout(10) << "accept couldn't read connect authorizer" << dendl;
+        goto fail_unlocked;
+      }
+      authorizer.push_back(bp);
+    }
     authorizer_reply.clear();
 
+    dout(0) << "accept got peer connect_seq " << connect.connect_seq
+	     << " global_seq " << connect.global_seq
+	     << dendl;
     dout(20) << "accept got peer connect_seq " << connect.connect_seq
 	     << " global_seq " << connect.global_seq
 	     << dendl;
@@ -977,6 +984,7 @@ int SimpleMessenger::Pipe::connect()
     connect.connect_seq = cseq;
     connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
     connect.authorizer_len = authorizer.length();
+    dout(0) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
     connect.flags = 0;
     if (policy.lossy_tx)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;
@@ -993,6 +1001,8 @@ int SimpleMessenger::Pipe::connect()
       msglen += msgvec[1].iov_len;
     }
 
+    dout(0) << "connect sending gseq=" << gseq << " cseq=" << cseq
+	     << " proto=" << connect.protocol_version << dendl;
     dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
     if (do_sendmsg(sd, &msg, msglen)) {
@@ -1027,6 +1037,7 @@ int SimpleMessenger::Pipe::connect()
 
     if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
       dout(0) << "connect got BADAUTHORIZER" << dendl;
+      authorizer.clear();
       lock.Unlock();
       rank->get_authorizer(peer_type, authorizer, true);  // try harder
       continue;

@@ -293,7 +293,7 @@ EOF
             $SUDO $CEPH_ADM -i $key_fn auth add mds.$name
 	fi
 	
-	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
+	# run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
 	
 	mds=$(($mds + 1))
 	[ $mds -eq $CEPH_NUM_MDS ] && break

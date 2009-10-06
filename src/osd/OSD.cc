@@ -233,7 +233,7 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logger(NULL),
   store(NULL),
   logclient(messenger, &mc->monmap),
-  authorizer(m, &keyring),
+  authorizer(m, &g_keyring),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
@@ -1511,6 +1511,34 @@ bool OSD::ms_dispatch(Message *m)
   osd_lock.Unlock();
   return true;
 }
+
+bool OSD::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
+{
+  dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
+
+  if (monc->auth.build_authorizer(dest_type, authorizer) < 0)
+    return false;
+
+  return true;
+}
+
+bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
+				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
+				    bool& isvalid)
+{
+  bufferlist::iterator iter = authorizer_data.begin();
+
+  if (!authorizer_data.length())
+    return -EPERM;
+
+  int ret = authorizer.verify_authorizer(peer_type, iter, authorizer_reply);
+  dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
+
+  isvalid = (ret >= 0);
+ 
+  return true;
+};
+
 
 void OSD::do_waiters()
 {

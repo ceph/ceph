@@ -508,3 +508,18 @@ void AuthClientHandler::tick()
 
 }
 
+int AuthClientHandler::build_authorizer(int peer_id, bufferlist& bl)
+{
+  uint32_t service_id = peer_id_to_entity_type(peer_id);
+
+  AuthContext ctx;
+
+  dout(0) << "going to build authorizer for peer_id=" << peer_id << " service_id=" << service_id << dendl;
+
+  if (!tickets.build_authorizer(service_id, bl, ctx))
+    return -EINVAL;
+
+  dout(0) << "authorizer built successfully" << dendl;
+
+  return 0;
+}

@@ -1164,7 +1164,19 @@ bool MDS::ms_dispatch(Message *m)
   return ret;
 }
 
+bool MDS::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
+{
+  dout(0) << "MDS::ms_get_authorizer type=" << dest_type << dendl;
 
+  /* monitor authorization is being handled on different layer */
+  if (dest_type == CEPH_ENTITY_TYPE_MON)
+    return true;
+
+  if (monc->auth.build_authorizer(dest_type, authorizer) < 0)
+    return false;
+
+  return true;
+}
 
 bool MDS::_dispatch(Message *m)
 {

@@ -140,8 +140,11 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
     uint32_t type;
     ::decode(type, indata);
     dout(0) << "received key type=" << type << dendl;
-    if (!tickets_map[type].verify_service_ticket_reply(secret, indata))
+    AuthTicketHandler& handler = tickets_map[type];
+    if (!handler.verify_service_ticket_reply(secret, indata)) {
       return false;
+    }
+    handler.service_id = type;
   }
 
   if (!indata.end())
@@ -158,6 +161,10 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
 bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
 {
   ctx.timestamp = g_clock.now();
+
+  dout(0) << "build_authorizer: service_id=" << service_id << dendl;
+
+  ::encode(service_id, bl);
 
   ::encode(ticket, bl);
 
@@ -189,11 +196,14 @@ bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, A
  *
  * {timestamp + 1}^session_key
  */
-bool verify_authorizer(uint32_t service_id, KeysKeeper& keys, bufferlist::iterator& indata,
+bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
+  uint32_t service_id;
   uint64_t secret_id;
   CryptoKey service_secret;
+
+  ::decode(service_id, indata);
 
   ::decode(secret_id, indata);
   if (!keys.get_service_secret(service_id, secret_id, service_secret)) {

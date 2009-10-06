@@ -101,7 +101,7 @@ int AuthorizeServer::do_authorize(bufferlist::iterator& indata, bufferlist& resu
       ret = 0;
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(CEPHX_PRINCIPAL_MON, *keys, indata, auth_ticket_info, tmp_bl)) {
+      if (!::verify_authorizer(*keys, indata, auth_ticket_info, tmp_bl)) {
         dout(0) << "could not verify authorizer" << dendl;
         ret = -EPERM;
       }
@@ -113,6 +113,22 @@ int AuthorizeServer::do_authorize(bufferlist::iterator& indata, bufferlist& resu
     break;
   }
   build_cephx_response_header(request_type, ret, result_bl);
+
+  return ret;
+}
+
+int AuthorizeServer::verify_authorizer(int peer_type, bufferlist::iterator& indata, bufferlist& result_bl)
+{
+  int ret = 0;
+  AuthServiceTicketInfo auth_ticket_info;
+  try {
+    if (!::verify_authorizer(*keys, indata, auth_ticket_info, result_bl)) {
+      dout(0) << "could not verify authorizer" << dendl;
+      ret = -EPERM;
+    }
+  } catch (buffer::error *err) {
+    ret = -EINVAL;
+  }
 
   return ret;
 }
