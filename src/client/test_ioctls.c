@@ -26,7 +26,7 @@ int main(int argc, char **argv)
 	}
 	fn = argv[1];
 
-	fd = open(fn, O_CREAT|O_RDWR);
+	fd = open(fn, O_CREAT|O_RDWR, 0644);
 	if (fd < 0) {
 		perror("couldn't open file");
 		return 1;
