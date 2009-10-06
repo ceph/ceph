@@ -9,7 +9,12 @@ snapshot=$3
 
 if [ "$repo" = "unstable" ]; then
     versuffix=`date "+%Y%m%d%H%M%S"`
-    finalvers="$vers.$versuffix"
+#    if [ `echo $vers | sed 's/[^\.]//g'` = ".." ]; then
+#	finalvers="$vers$versuffix"
+#    else
+#	finalvers="$vers.$versuffix"
+#    fi
+    finalvers="${vers}git$versuffix"
     debdate=`date "+%a, %d %b %Y %X %z"`
 else
     finalvers="$vers"
