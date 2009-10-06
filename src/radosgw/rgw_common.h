@@ -163,14 +163,20 @@ struct RGWObjEnt {
   char etag[MD5_DIGEST_LENGTH * 2 + 1];
 
   void encode(bufferlist& bl) const {
-     ::encode(name, bl);
-     ::encode(size, bl);
-     ::encode(mtime, bl);
+    __u64 s = size;
+    __u32 mt = mtime;
+    ::encode(name, bl);
+    ::encode(s, bl);
+    ::encode(mt, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    __u32 mt;
+    __u64 s;
     ::decode(name, bl);
-    ::decode(size, bl);
-    ::decode(mtime, bl);
+    ::decode(s, bl);
+    ::decode(mt, bl);
+    size = s;
+    mtime = mt;
   }
 };
 WRITE_CLASS_ENCODER(RGWObjEnt)
