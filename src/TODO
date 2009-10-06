@@ -27,13 +27,17 @@ v0.16
 - disk format, wire protocol changes
 - use sockaddr_storage; some ipv6 groundwork
 
+v0.16.1
 - mds: put migration vectors in mdsmap
+- rgw: fix
+- include buffer.c in kernel package, tarball
 
+v0.17
+
+
+- mon cluster expansion, contraction
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
-
 - kclient: retry alloc on ENOMEM when reading from connection?
-- client authentication
-- document on-wire protocol
 
 
 bugs
@@ -42,7 +46,7 @@ bugs
 - weird osd_lock contention during osd restart?
 
 later
-- mon cluster expansion, contraction
+- document on-wire protocol
 - authentication
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
@@ -85,6 +89,7 @@ repair
 - mds scrubbing
 
 kclient
+- use page lists for large messages?  e.g. reconnect
 - make caps reservations per-client
 - fix up ESTALE handling
 - don't retry on ENOMEM on non-nofail requests in kick_requests
