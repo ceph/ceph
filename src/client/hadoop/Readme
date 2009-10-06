@@ -1,0 +1,17 @@
+This directory contains:
+CephFSInterface.cc/h: A C++ JNI library used by the Hadoop Java code.
+ceph: A directory containing all the Java source files for a 
+Hadoop-compliant CephFileSystem.
+HADOOP-ceph.patch: A patch for Hadoop. It should apply fine to the trunk 
+build but will need some (minor) edits to apply to a .20 version. This 
+patch adds in all the files contained in the ceph dir as well as making 
+some changes so that Hadoop's configuration code will recognize the 
+CephFileSystem properties and classes. It is possible that this will be 
+out-of-date compared to the files contained in the ceph dir, so you 
+should apply this patch and then copy ceph/* into the appropriate Hadoop 
+dir.
+
+There are also a number of javah-generated C header files which are used 
+in writing CephFSInterface but can be safely ignored otherwise.
+
+Configuration instructions are included in Javadoc format in the ceph dir.
