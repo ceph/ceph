@@ -464,56 +464,6 @@ noinst_HEADERS = \
         include/uofs.h\
         include/utime.h\
         include/xlist.h\
-	kernel/Kconfig\
-        kernel/Makefile\
-	kernel/addr.c\
-	kernel/buffer.c\
-	kernel/buffer.h\
-	kernel/caps.c\
-	kernel/ceph_debug.h\
-	kernel/ceph_frag.c\
-	kernel/ceph_frag.h\
-	kernel/ceph_fs.c\
-	kernel/ceph_fs.h\
-	kernel/ceph_strings.c\
-	kernel/ceph_ver.h\
-        kernel/crush/crush.c\
-        kernel/crush/crush.h\
-        kernel/crush/hash.h\
-        kernel/crush/mapper.c\
-        kernel/crush/mapper.h\
-	kernel/debugfs.c\
-	kernel/decode.h\
-	kernel/dir.c\
-	kernel/export.c\
-	kernel/file.c\
-	kernel/inode.c\
-	kernel/ioctl.c\
-	kernel/ioctl.h\
-	kernel/ioctl-number.patch\
-	kernel/kbuild.patch\
-	kernel/mds_client.c\
-	kernel/mds_client.h\
-	kernel/mdsmap.c\
-	kernel/mdsmap.h\
-	kernel/messenger.c\
-	kernel/messenger.h\
-	kernel/mon_client.c\
-	kernel/mon_client.h\
-	kernel/msgpool.c\
-	kernel/msgpool.h\
-	kernel/msgr.h\
-	kernel/osd_client.c\
-	kernel/osd_client.h\
-	kernel/osdmap.c\
-	kernel/osdmap.h\
-	kernel/rados.h\
-	kernel/snap.c\
-	kernel/ceph_strings.c\
-	kernel/super.c\
-	kernel/super.h\
-	kernel/types.h\
-	kernel/xattr.c\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
