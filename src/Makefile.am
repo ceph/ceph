@@ -467,6 +467,7 @@ noinst_HEADERS = \
 	kernel/Kconfig\
         kernel/Makefile\
 	kernel/addr.c\
+	kernel/buffer.c\
 	kernel/buffer.h\
 	kernel/caps.c\
 	kernel/ceph_debug.h\
