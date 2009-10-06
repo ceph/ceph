@@ -42,19 +42,6 @@ install: build
 	mkdir -p etc/ceph
 	cp src/sample.ceph.conf etc/ceph
 
-	# kernel module source
-	mkdir -p usr/src/modules/ceph
-	(cd src/kernel ; tar -hvcf - * ) | ( cd usr/src/modules/ceph ; tar -xf - )
-	touch usr/src/modules/ceph/NEWS
-	touch usr/src/modules/ceph/README
-	mkdir -p usr/src/modules/ceph/debian
-	-cp debian/* usr/src/modules/ceph/debian
-	rm usr/src/modules/ceph/debian/init.*
-	rm usr/src/modules/ceph/debian/ceph.init
-	mv usr/src/modules/ceph/debian/rules.modules.in usr/src/modules/ceph/debian/rules
-	chmod +x usr/src/modules/ceph/debian/rules
-	( cd usr/src ; tar -cjf ceph.tar.bz2 modules )
-
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
