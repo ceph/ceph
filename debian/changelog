@@ -1,3 +1,10 @@
+ceph (0.16.1-1) unstable; urgency=low
+
+  * missing buffer.c
+  * rgw build problem on i386
+
+ -- sage <sage@newdream.net>  Tue, 06 Oct 2009 10:29:00 -0800
+
 ceph (0.16-1) unstable; urgency=low
 
   * libceph: identify self
@@ -9,7 +16,7 @@ ceph (0.16-1) unstable; urgency=low
   * kclient: lots of inline cleanups
   * kclient: misc akpm review cleanups
 
- -- sage <sage@newdream.net>  Tue, 05 Oct 2009 14:54:00 -0800
+ -- sage <sage@newdream.net>  Mon, 05 Oct 2009 14:54:00 -0800
 
 ceph (0.15-1) unstable; urgency=low
 
