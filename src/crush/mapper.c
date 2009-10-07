@@ -299,7 +299,7 @@ static int crush_choose(struct crush_map *map,
 	struct crush_bucket *in = bucket;
 	int r;
 	int i;
-	int item;
+	int item = 0;
 	int itemtype;
 	int collide, reject;
 	const int orig_tries = 5; /* attempts before we fall back to search */
