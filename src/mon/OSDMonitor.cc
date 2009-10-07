@@ -941,7 +941,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       osdmap.print_summary(ss);
       r = 0;
     }
-    else if (m->cmd[1] == "dump") {
+    else if (m->cmd[1] == "dump" ||
+	     m->cmd[1] == "getmap" ||
+	     m->cmd[1] == "getcrushmap") {
       OSDMap *p = &osdmap;
       if (m->cmd.size() > 2) {
 	epoch_t e = atoi(m->cmd[2].c_str());
@@ -956,24 +958,22 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	}
       }
       if (p) {
-	stringstream ds;
-	p->print(ds);
-	rdata.append(ds);
-	ss << "dumped osdmap epoch " << p->get_epoch();
+	if (m->cmd[1] == "dump") {
+	  stringstream ds;
+	  p->print(ds);
+	  rdata.append(ds);
+	  ss << "dumped osdmap epoch " << p->get_epoch();
+	} else if (m->cmd[1] == "getmap") {
+	  p->encode(rdata);
+	  ss << "got osdmap epoch " << p->get_epoch();
+	} else if (m->cmd[1] == "getcrushmap") {
+	  p->crush.encode(rdata);
+	  ss << "got crush map from osdmap epoch " << p->get_epoch();
+	}
 	if (p != &osdmap)
 	  delete p;
 	r = 0;
       }
-    }
-    else if (m->cmd[1] == "getmap") {
-      osdmap.encode(rdata);
-      ss << "got osdmap epoch " << osdmap.get_epoch();
-      r = 0;
-    }
-    else if (m->cmd[1] == "getcrushmap") {
-      osdmap.crush.encode(rdata);
-      ss << "got crush map from osdmap epoch " << osdmap.get_epoch();
-      r = 0;
     }
     else if (m->cmd[1] == "getmaxosd") {
       ss << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
