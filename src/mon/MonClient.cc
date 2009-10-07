@@ -394,6 +394,9 @@ void MonClient::_open_session()
 void MonClient::_reopen_session()
 {
   dout(10) << "_reopen_session" << dendl;
+  state = MC_STATE_NONE;
+  auth_handler.reset();
+  authorize_handler.reset();
   _pick_new_mon();
   _open_session();
 }

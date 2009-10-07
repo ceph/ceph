@@ -58,11 +58,6 @@ protected:
 
   virtual void _reset() {}
 
-  void reset() {
-    status = 0;
-    _reset();
-  }
-
   Cond cond;
 
   virtual int _handle_response(int ret, bufferlist::iterator& iter) = 0;
@@ -78,7 +73,13 @@ public:
 
   int handle_response(int ret, bufferlist::iterator& iter);
   int do_request(double timeout);
-  int do_async_request(double timeout);
+
+  void reset() {
+    status = 0;
+    _reset();
+  }
+
+ int do_async_request(double timeout);
 };
 
 class AuthClientAuthenticateHandler : public AuthClientProtocolHandler {
@@ -120,6 +121,9 @@ public:
              AuthClientProtocolHandler(client), want(_want), have(_have) { reset(); }
   void set_want_keys(__u32 keys) {
     want = keys;
+  }
+  void add_want_keys(__u32 keys) {
+    want |= keys;
   }
 };
 
@@ -200,7 +204,7 @@ public:
   int authorize(uint32_t service_id, double timeout);
   void tick();
 
-  int build_authorizer(int peer_id, bufferlist& bl);
+  int build_authorizer(uint32_t service_id, bufferlist& bl);
 };
 
 

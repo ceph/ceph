@@ -234,6 +234,10 @@ public:
   void set_want_keys(uint32_t want) {
     auth_handler.set_want_keys(want | CEPHX_PRINCIPAL_MON);
   }
+
+  void add_want_keys(uint32_t want) {
+    auth_handler.add_want_keys(want);
+  }
 };
 
 #endif

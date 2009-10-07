@@ -28,6 +28,7 @@
 struct KeysServerData {
   version_t version;
   version_t rotating_ver;
+  utime_t next_rotating_time;
 
   /* for each entity */
   map<EntityName, CryptoKey> secrets;
@@ -40,12 +41,14 @@ struct KeysServerData {
   void encode(bufferlist& bl) const {
     ::encode(version, bl);
     ::encode(rotating_ver, bl);
+    ::encode(next_rotating_time, bl);
     ::encode(secrets, bl);
     ::encode(rotating_secrets, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(version, bl);
     ::decode(rotating_ver, bl);
+    ::decode(next_rotating_time, bl);
     ::decode(secrets, bl);
     ::decode(rotating_secrets, bl);
   }
@@ -81,28 +84,13 @@ struct KeysServerData {
 WRITE_CLASS_ENCODER(KeysServerData);
 
 class KeysServer : public KeysKeeper {
- class C_RotateTimeout : public Context {
-  protected:
-    KeysServer *server;
-    double timeout;
-  public:
-    C_RotateTimeout(KeysServer *s, double to) :
-                                        server(s), timeout(to) {
-    }
-    void finish(int r) {
-      if (r >= 0) server->rotate_timeout(timeout);
-    }
-  };
-
   KeysServerData data;
 
   Mutex lock;
 
-  SafeTimer timer;
-  Context *rotate_event;
-
   void _rotate_secret(uint32_t service_id, int factor);
   void _generate_all_rotating_secrets(bool init);
+  bool _check_rotate();
 public:
   KeysServer();
 

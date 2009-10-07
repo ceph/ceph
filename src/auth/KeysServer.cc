@@ -92,7 +92,7 @@ bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret, map<string,
   return true;
 }
 
-KeysServer::KeysServer() : lock("KeysServer::lock"), timer(lock)
+KeysServer::KeysServer() : lock("KeysServer::lock")
 {
 }
 
@@ -103,16 +103,14 @@ int KeysServer::start_server(bool init)
   if (init) {
     _generate_all_rotating_secrets(init);
   }
-  rotate_event = new C_RotateTimeout(this, KEY_ROTATE_TIME);
-  if (!rotate_event)
-    return -ENOMEM;
-  timer.add_event_after(KEY_ROTATE_TIME, rotate_event);
   return 0;
 }
 
 void KeysServer::_generate_all_rotating_secrets(bool init)
 {
   data.rotating_ver++;
+  data.next_rotating_time = g_clock.now();
+  data.next_rotating_time += KEY_ROTATE_TIME;
   dout(0) << "generate_all_rotating_secrets()" << dendl;
 
   int i = KEY_ROTATE_NUM;
@@ -155,13 +153,14 @@ void KeysServer::_rotate_secret(uint32_t service_id, int factor)
   data.add_rotating_secret(service_id, ek);
 }
 
-void KeysServer::rotate_timeout(double timeout)
+bool KeysServer::_check_rotate()
 {
-  dout(0) << "KeysServer::rotate_timeout" << dendl;
-  _generate_all_rotating_secrets(false);
-
-  rotate_event = new C_RotateTimeout(this, timeout);
-  timer.add_event_after(timeout, rotate_event);
+  if (g_clock.now() > data.next_rotating_time) {
+    dout(0) << "KeysServer::check_rotate: need to rotate keys" << dendl;
+    _generate_all_rotating_secrets(false);
+    return true;
+  }
+  return false;
 }
 
 bool KeysServer::get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps)
@@ -248,6 +247,8 @@ void KeysServer::list_secrets(stringstream& ss)
 bool KeysServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
 {
   Mutex::Locker l(lock);
+
+  _check_rotate(); 
 
   if (data.rotating_ver <= rotating_ver)
     return false;

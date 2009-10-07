@@ -88,8 +88,9 @@ void AuthMonitor::on_active()
   if (!mon->is_leader())
     return;
   mon->keys_server.start_server(true);
-
+/*
   check_rotate();
+*/
 }
 
 void AuthMonitor::create_initial(bufferlist& bl)
@@ -320,6 +321,10 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     } catch (buffer::error *err) {
       ret = -EINVAL;
       dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+    }
+    if (ret == -EIO) {
+      paxos->wait_for_active(new C_RetryMessage(this, m));
+      return true;
     }
   }
   MAuthReply *reply = new MAuthReply(&response_bl, ret);

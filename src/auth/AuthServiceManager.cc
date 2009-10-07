@@ -105,11 +105,15 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
   default:
     return -EINVAL;
   }
-  state++;
 
   if (!ret && piggyback) {
     ret = handle_cephx_protocol(indata, result_bl);
   }
+
+  if (!ret || (ret == -EAGAIN)) {
+    state++;
+  }
+  dout(0) << "returning with state=" << state << dendl;
   return ret;
 }
 

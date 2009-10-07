@@ -1515,8 +1515,14 @@ bool OSD::ms_dispatch(Message *m)
 bool OSD::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
 {
   dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
+  uint32_t want = peer_id_to_entity_type(dest_type);
 
-  if (monc->auth.build_authorizer(dest_type, authorizer) < 0)
+  if (force_new) {
+    if (monc->wait_auth_rotating(10) < 0)
+      return false;
+  }
+
+  if (monc->auth.build_authorizer(want, authorizer) < 0)
     return false;
 
   return true;

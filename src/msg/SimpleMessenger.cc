@@ -604,7 +604,7 @@ int SimpleMessenger::Pipe::accept()
     }
 
 
-    dout(0) << "accepting: connect.authorize_len=" << connect.authorizer_len << " rc=" << rc << " " << connect.protocol_version << "sizeof=" << sizeof(connect) << " " << connect.flags << dendl;
+    dout(0) << "accepting: connect.authorize_len=" << connect.authorizer_len << dendl;
     authorizer.clear();
     if (connect.authorizer_len) {
       bp = buffer::create(connect.authorizer_len);
@@ -840,6 +840,8 @@ int SimpleMessenger::Pipe::accept()
 
 int SimpleMessenger::Pipe::connect()
 {
+  bool got_bad_auth = false;
+
   dout(10) << "connect " << connect_seq << dendl;
   assert(lock.is_locked());
 
@@ -1037,6 +1039,9 @@ int SimpleMessenger::Pipe::connect()
 
     if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
       dout(0) << "connect got BADAUTHORIZER" << dendl;
+      if (got_bad_auth)
+        goto stop_locked;
+      got_bad_auth = true;
       authorizer.clear();
       lock.Unlock();
       rank->get_authorizer(peer_type, authorizer, true);  // try harder

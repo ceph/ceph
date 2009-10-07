@@ -250,7 +250,6 @@ public:
 
   // -- service interface --
   void wait_for_active(Context *c) {
-    assert(!is_active());
     waiting_for_active.push_back(c);
   }
 

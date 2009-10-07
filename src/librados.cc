@@ -66,8 +66,8 @@ class RadosClient : public Dispatcher
   void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
   bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new) {
     dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
-
-    if (monclient.auth.build_authorizer(dest_type, authorizer) < 0)
+    uint32_t want = peer_id_to_entity_type(dest_type);
+    if (monclient.auth.build_authorizer(want, authorizer) < 0)
       return false;
 
     return true;
@@ -372,14 +372,18 @@ bool RadosClient::ms_dispatch(Message *m)
 bool RadosClient::ms_handle_reset(Connection *con, const entity_addr_t& addr)
 {
   Mutex::Locker l(lock);
-  objecter->ms_handle_reset(addr);
+  if (objecter) {
+    objecter->ms_handle_reset(addr);
+  }
   return false;
 }
 
 void RadosClient::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr)
 {
   Mutex::Locker l(lock);
-  objecter->ms_handle_remote_reset(addr);
+  if (objecter) {
+    objecter->ms_handle_remote_reset(addr);
+  }
 }
 
 
