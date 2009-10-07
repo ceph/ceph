@@ -44,6 +44,9 @@ public:
   friend class Clock;
  
  public:
+  bool is_zero() {
+    return (tv.tv_sec == 0) && (tv.tv_usec == 0);
+  }
   void normalize() {
     if (tv.tv_usec > 1000*1000) {
       tv.tv_sec += tv.tv_usec / (1000*1000);
