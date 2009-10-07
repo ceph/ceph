@@ -534,10 +534,6 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
     for (int j=0; j<n; j++) {
       int item = crush.get_bucket_item(i, j);
       int w = crush.get_bucket_item_weight(i, j);
-      if (!w) {
-	dopos = true;
-	continue;
-      }
       out << "\titem ";
       print_item_name(out, item, crush);
       out << " weight ";
