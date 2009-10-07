@@ -4022,13 +4022,11 @@ void Client::seekdir(DIR *dirp, loff_t offset)
 
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
-  dout(3) << "open enter(" << relpath << ", " << flags << ") = " << dendl;
+  dout(3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;
   Mutex::Locker lock(client_lock);
   tout << "open" << std::endl;
   tout << relpath << std::endl;
   tout << flags << std::endl;
-
-  dout(5) << "open(" << relpath << ", " << flags << ", " << mode << ")" << dendl;
 
   Fh *fh = NULL;
 
@@ -5339,7 +5337,13 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
     
   trim_cache();
 
-  dout(3) << "create(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  dout(3) << "create(" << path << ", 0" << oct << mode << dec 
+	  << " layout " << file_stripe_unit
+	  << ' ' << file_stripe_count
+	  << ' ' << object_size
+	  << ' ' << file_replication
+	  << ' ' << preferred_pg
+	  <<") = " << res << dendl;
   return res;
 }
 
@@ -5803,7 +5807,9 @@ void Client::set_default_file_replication(int replication)
 void Client::set_default_preferred_pg(int pg)
 {
   if (pg >= 0)
-  preferred_pg = pg;
+    preferred_pg = pg;
+  else
+    dout(5) << "Attempt to set preferred_pg " << pg << " < 0!" << dendl;
 }
 
 int Client::describe_layout(int fd, ceph_file_layout *lp)
