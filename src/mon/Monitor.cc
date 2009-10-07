@@ -544,6 +544,8 @@ bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
   if (!s)
     return false;
 
+  Mutex::Locker l(lock);
+
   dout(10) << "reset/close on session " << s->inst << dendl;
   session_map.remove_session(s);
   s->put();
@@ -668,7 +670,7 @@ void Monitor::tick()
   while (!p.end()) {
     Session *s = *p;
     ++p;
-    if (s->until < now) {
+    if (!s->until.is_zero() && (s->until < now)) {
       dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->inst.addr);
       session_map.remove_session(s);
