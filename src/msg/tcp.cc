@@ -51,6 +51,37 @@ int tcp_write(int sd, char *buf, int len)
 }
 */
 
+int tcp_read(int sd, char *buf, int len) {
+  while (len > 0) {
+    int got = ::recv( sd, buf, len, 0 );
+    if (got <= 0) {
+      //generic_dout(18) << "tcp_read socket " << sd << " closed" << dendl;
+      return -1;
+    }
+    len -= got;
+    buf += got;
+    //generic_dout(DBL) << "tcp_read got " << got << ", " << len << " left" << dendl;
+  }
+  return len;
+}
+
+int tcp_write(int sd, const char *buf, int len) {
+  //generic_dout(DBL) << "tcp_write writing " << len << dendl;
+  assert(len > 0);
+  while (len > 0) {
+    int did = ::send( sd, buf, len, 0 );
+    if (did < 0) {
+      //generic_dout(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
+      //generic_derr(1) << "tcp_write error did = " << did << "  errno " << errno << " " << strerror(errno) << dendl;
+      return did;
+    }
+    len -= did;
+    buf += did;
+    //generic_dout(DBL) << "tcp_write did " << did << ", " << len << " left" << dendl;
+  }
+  return 0;
+}
+
 int tcp_hostlookup(char *str, sockaddr_in& ta)
 {
   char *host = str;
