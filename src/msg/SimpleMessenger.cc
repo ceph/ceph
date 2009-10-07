@@ -878,7 +878,7 @@ int SimpleMessenger::Pipe::connect()
     goto fail;
   }
   opened_socket();
-  
+#if 0
   // bind any port
   myAddr.sin_family = AF_INET;
   myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -891,6 +891,7 @@ int SimpleMessenger::Pipe::connect()
 	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     goto fail;
   }
+#endif
 
   char buf[80];
 
