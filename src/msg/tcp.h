@@ -21,7 +21,7 @@ inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 
 inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
 {
-  char buf[NI_MAXHOST];
+  char buf[NI_MAXHOST] = { 0 };
   getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
   return out << buf;
 }
