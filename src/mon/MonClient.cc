@@ -394,9 +394,11 @@ void MonClient::_open_session()
 void MonClient::_reopen_session()
 {
   dout(10) << "_reopen_session" << dendl;
-  state = MC_STATE_NONE;
-  auth_handler.reset();
-  authorize_handler.reset();
+  if (state != MC_STATE_HAVE_SESSION) {
+    state = MC_STATE_NONE;
+    auth_handler.reset();
+    authorize_handler.reset();
+  }
   _pick_new_mon();
   _open_session();
 }
@@ -436,8 +438,13 @@ void MonClient::tick()
     auth.send_session_request(this, &auth_handler, 30.0);
     return;
   }
-  if (state != MC_STATE_HAVE_SESSION)
+  if (state != MC_STATE_HAVE_SESSION) {
+    if (hunting) {
+      dout(0) << "continuing hunt" << dendl;
+      _reopen_session();
+    }
     return;
+  }
 
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
