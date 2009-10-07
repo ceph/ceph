@@ -8,7 +8,7 @@ my $kernel = shift @ARGV || die $usage;
 die $usage unless -d $kernel;
 die $usage unless -e "$kernel/fs/ceph/README";
 
-die "not in a git tree" unless `git-rev-parse HEAD`;
+die "not in a git tree" unless `cd $kernel && git rev-parse HEAD`;
 
 my $dir = '.';
 until (-d "$dir/.git") {
