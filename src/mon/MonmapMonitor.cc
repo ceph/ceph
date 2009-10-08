@@ -64,6 +64,7 @@ void MonmapMonitor::create_pending()
 {
   pending_map = *mon->monmap;
   pending_map.epoch++;
+  pending_map.last_changed = g_clock.now();
   dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
 }
 
@@ -84,6 +85,7 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *message)
 {
   MMonAdd *m = (MMonAdd *) message;
   pending_map.add(m->address);
+  pending_map.last_changed = g_clock.now();
   return true;
 }
 
