@@ -15,15 +15,21 @@ using std::ostream;
 inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
   char buf[NI_MAXHOST] = { 0 };
-  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
-  return out << buf;
+  char serv[20] = { 0 };
+  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
+	      serv, sizeof(serv),
+	      NI_NUMERICHOST | NI_NUMERICSERV);
+  return out << buf << ':' << serv;
 }
 
 inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
 {
   char buf[NI_MAXHOST] = { 0 };
-  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf), 0, 0, NI_NUMERICHOST);
-  return out << buf;
+  char serv[20] = { 0 };
+  getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
+	      serv, sizeof(serv),
+	      NI_NUMERICHOST | NI_NUMERICSERV);
+  return out << buf << ':' << serv;
 }
 
 
