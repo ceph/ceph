@@ -7,6 +7,8 @@
 #ifndef _CEPH_BYTEORDER_H
 #define _CEPH_BYTEORDER_H
 
+#include "endian.h"
+
 static __inline__ __u16 swab16(__u16 val) 
 {
   return (val >> 8) | (val << 8);
