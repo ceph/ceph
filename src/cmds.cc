@@ -81,7 +81,7 @@ int main(int argc, const char **argv)
   rank.set_default_policy(SimpleMessenger::Policy::stateful_server());
   rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
   rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossy_fast_fail());
 
   rank.start();
   
