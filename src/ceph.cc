@@ -605,7 +605,6 @@ int main(int argc, const char **argv, const char *envp[])
   
   // start up network
   SimpleMessenger rank;
-  rank.bind();
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->add_dispatcher_head(&dispatcher);
 

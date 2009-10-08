@@ -281,8 +281,7 @@ bool RadosClient::init()
   if (monclient.build_initial_monmap() < 0)
     return false;
 
-  rank.bind();
-  dout(1) << "starting at " << rank.get_rank_addr() << dendl;
+  dout(1) << "starting msgr at " << rank.get_rank_addr() << dendl;
 
   messenger = rank.register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);

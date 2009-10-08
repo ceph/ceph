@@ -405,6 +405,7 @@ private:
   Mutex lock;
   Cond  wait_cond;  // for wait()
   bool started;
+  bool did_bind;
 
   // where i listen
   bool need_addr;
@@ -444,11 +445,12 @@ private:
   }
 
 public:
-  SimpleMessenger() : accepter(this),
-	   lock("SimpleMessenger::lock"), started(false), need_addr(true),
-	   max_local(0), num_local(0),
-	   my_type(-1),
-	   global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
+  SimpleMessenger() :
+    accepter(this),
+    lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
+    max_local(0), num_local(0),
+    my_type(-1),
+    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
   ~SimpleMessenger() { }
 
   //void set_listen_addr(tcpaddr_t& a);

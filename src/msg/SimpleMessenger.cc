@@ -148,6 +148,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   rank->rank_addr.v.erank = 0;
 
   dout(1) << "accepter.bind rank_addr is " << rank->rank_addr << " need_addr=" << rank->need_addr << dendl;
+  rank->did_bind = true;
   return 0;
 }
 
@@ -162,8 +163,6 @@ int SimpleMessenger::Accepter::start()
   sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
-  sigaction(SIGUSR2, &sa, NULL);
-  sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
 
   // start thread
   create();
@@ -1999,7 +1998,10 @@ int SimpleMessenger::start(bool nodaemon)
     return 0;
   }
 
-  dout(1) << "rank.start at " << rank_addr << dendl;
+  if (!did_bind)
+    rank_addr.v.nonce = getpid();
+
+  dout(1) << "rank.start" << dendl;
   started = true;
   lock.Unlock();
 
@@ -2041,8 +2043,18 @@ int SimpleMessenger::start(bool nodaemon)
   if (g_conf.kill_after) 
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
+  // set noop handlers for SIGUSR2, SIGPIPE
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = noop_signal_handler;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+  sigaction(SIGUSR2, &sa, NULL);
+  sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
+
   // go!
-  accepter.start();
+  if (did_bind)
+    accepter.start();
   return 0;
 }
 
@@ -2254,9 +2266,11 @@ void SimpleMessenger::wait()
   lock.Unlock();
   
   // done!  clean up.
-  dout(0) << "wait: stopping accepter thread" << dendl;
-  accepter.stop();
-  dout(20) << "wait: stopped accepter thread" << dendl;
+  if (did_bind) {
+    dout(0) << "wait: stopping accepter thread" << dendl;
+    accepter.stop();
+    dout(20) << "wait: stopped accepter thread" << dendl;
+  }
 
   // close+reap all pipes
   lock.Lock();
@@ -2289,6 +2303,7 @@ void SimpleMessenger::wait()
   dout(0) << "shutdown complete." << dendl;
   remove_pid_file();
   started = false;
+  did_bind = false;
   my_type = -1;
 }
 

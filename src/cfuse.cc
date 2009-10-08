@@ -69,8 +69,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   // start up network
   SimpleMessenger rank;
-  rank.bind();
-  cout << "bound to " << rank.get_rank_addr() << ", mounting ceph" << std::endl;
+  cout << "mounting ceph" << std::endl;
 
   Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &mc);
 
