@@ -1476,7 +1476,8 @@ CDentry* Server::prepare_null_dentry(MDRequest *mdr, CDir *dir, const string& dn
  *
  * create a new inode.  set c/m/atime.  hit dir pop.
  */
-CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino) 
+CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino,
+				  ceph_file_layout *layout) 
 {
   CInode *in = new CInode(mdcache);
   
@@ -1515,7 +1516,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino)
 
   in->inode.version = 1;
   in->inode.nlink = 1;   // FIXME
-  if (in->inode.is_dir())
+  if (layout)
+    in->inode.layout = *layout;
+  else if (in->inode.is_dir())
     in->inode.layout = mds->mdcache->default_dir_layout;
   else
     in->inode.layout = mds->mdcache->default_file_layout;
@@ -2085,6 +2088,22 @@ void Server::handle_client_openc(MDRequest *mdr)
   client_t client = mdr->get_client();
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
+
+  // validate layout
+  ceph_file_layout layout = mds->mdcache->default_file_layout;
+  if (req->head.args.open.stripe_unit)
+    layout.fl_stripe_unit = req->head.args.open.stripe_unit;
+  if (req->head.args.open.stripe_count)
+    layout.fl_stripe_count = req->head.args.open.stripe_count;
+  if (req->head.args.open.object_size)
+    layout.fl_object_size = req->head.args.open.object_size;
+  layout.fl_pg_preferred = req->head.args.open.preferred;
+    
+  if (!ceph_file_layout_is_valid(&layout)) {
+    dout(10) << " invalid initial file layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
   
   bool excl = (req->head.args.open.flags & O_EXCL);
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -2107,6 +2126,8 @@ void Server::handle_client_openc(MDRequest *mdr)
     return;
   }
 
+  
+
   // created null dn.
 
   CInode *diri = dn->get_dir()->get_inode();
@@ -2119,7 +2140,7 @@ void Server::handle_client_openc(MDRequest *mdr)
 
   int cmode = ceph_flags_to_mode(req->head.args.open.flags);
 
-  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino));
+  CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), &layout);
   assert(in);
   
   // it's a file.
@@ -2132,14 +2153,6 @@ void Server::handle_client_openc(MDRequest *mdr)
     in->inode.client_ranges[client].last = in->inode.get_layout_size_increment();
   }
   in->inode.rstat.rfiles = 1;
-
-  if (req->head.args.open.stripe_unit)
-    in->inode.layout.fl_stripe_unit = req->head.args.open.stripe_unit;
-  if (req->head.args.open.stripe_count)
-    in->inode.layout.fl_stripe_count = req->head.args.open.stripe_count;
-  if (req->head.args.open.object_size)
-    in->inode.layout.fl_object_size = req->head.args.open.object_size;
-  in->inode.layout.fl_pg_preferred = req->head.args.open.preferred;
 
   dn->first = in->first = follows+1;
   
@@ -2550,21 +2563,29 @@ void Server::handle_client_setlayout(MDRequest *mdr)
     return;
   }
 
+  // validate layout
+  // FIXME: only set striping parameters, for now.
+  ceph_file_layout layout;
+
+  if (req->head.args.setlayout.layout.fl_object_size > 0)
+    layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
+  if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
+    layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
+  if (req->head.args.setlayout.layout.fl_stripe_count > 0)
+    layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
+  if (!ceph_file_layout_is_valid(&layout)) {
+    dout(10) << "bad layout" << dendl;
+    reply_request(mdr, -EINVAL);
+    return;
+  }
+
   xlocks.insert(&cur->filelock);
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
   // project update
   inode_t *pi = cur->project_inode();
-
-  // FIXME: only set striping parameters, for now.
-  if (req->head.args.setlayout.layout.fl_object_size > 0)
-    pi->layout.fl_object_size = req->head.args.setlayout.layout.fl_object_size;
-  if (req->head.args.setlayout.layout.fl_stripe_unit > 0)
-    pi->layout.fl_stripe_unit = req->head.args.setlayout.layout.fl_stripe_unit;
-  if (req->head.args.setlayout.layout.fl_stripe_count > 0)
-    pi->layout.fl_stripe_count=req->head.args.setlayout.layout.fl_stripe_count;
-
+  pi->layout = layout;
   pi->version = cur->pre_dirty();
   pi->ctime = g_clock.real_now();
   
