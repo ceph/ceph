@@ -823,7 +823,6 @@ int SimpleMessenger::Pipe::connect()
   
   char tag = -1;
   int rc;
-  struct sockaddr_in myAddr;
   struct msghdr msg;
   struct iovec msgvec[2];
   int msglen;
@@ -840,20 +839,6 @@ int SimpleMessenger::Pipe::connect()
     goto fail;
   }
   opened_socket();
-#if 0
-  // bind any port
-  myAddr.sin_family = AF_INET;
-  myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  myAddr.sin_port = htons( 0 );    
-  dout(10) << "binding to " << myAddr << dendl;
-  rc = ::bind(sd, (struct sockaddr *)&myAddr, sizeof(myAddr));
-  if (rc < 0) {
-    char buf[80];
-    dout(2) << "bind error " << myAddr
-	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    goto fail;
-  }
-#endif
 
   char buf[80];
 
