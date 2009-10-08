@@ -99,7 +99,7 @@ lib_LTLIBRARIES =
 
 # libceph
 libceph_la_SOURCES = \
-	client/libceph.cc \
+	libceph.cc \
 	client/Client.cc \
 	msg/SimpleMessenger.cc \
 	${libcommon_a_SOURCES} \

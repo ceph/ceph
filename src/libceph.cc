@@ -1,4 +1,4 @@
-#include "libceph.h"
+#include "client/libceph.h"
 
 #include <string.h>
 #include <fcntl.h>
@@ -8,7 +8,7 @@
 #include "messages/MMonMap.h"
 #include "common/common_init.h"
 #include "msg/SimpleMessenger.h"
-#include "Client.h"
+#include "client/Client.h"
 
 /* ************* ************* ************* *************
  * C interface

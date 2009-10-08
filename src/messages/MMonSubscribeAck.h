@@ -19,6 +19,7 @@
 
 struct MMonSubscribeAck : public Message {
   __u32 interval;
+  ceph_fsid fsid;
   
   MMonSubscribeAck(int i = 0) : Message(CEPH_MSG_MON_SUBSCRIBE_ACK),
 				interval(i) {}
@@ -31,9 +32,12 @@ struct MMonSubscribeAck : public Message {
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(interval, p);
+    if (!p.end())
+      ::decode(fsid, p);
   }
   void encode_payload() {
     ::encode(interval, payload);
+    ::encode(fsid, payload);
   }
 };
 
