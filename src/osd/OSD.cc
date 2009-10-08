@@ -2845,30 +2845,21 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
       }
     }
 
-    // ok!
-    dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
-    pg->info.history.merge(it->history);
+    if (pg->peer_info.count(from) &&
+	pg->peer_info[from].last_update == it->last_update) {
+      dout(10) << *pg << " got dup osd" << from << " info " << *it << dendl;
+    } else {
+      dout(10) << *pg << " got osd" << from << " info " << *it << dendl;
+      pg->peer_info[from] = *it;
+      pg->info.history.merge(it->history);
 
-    // save info.
-    bool had = pg->peer_info.count(from);
-    pg->peer_info[from] = *it;
-
-    // stray?
-    bool acting = pg->is_acting(from);
-    if (!acting) {
-      if (pg->stray_purged.count(from)) {
-	dout(10) << *pg << " osd" << from << " sent racing info " << *it << "; already purging/purged" << dendl;
-      } else {
+      // stray?
+      if (!pg->is_acting(from)) {
 	dout(10) << *pg << " osd" << from << " has stray content: " << *it << dendl;
 	pg->stray_set.insert(from);
 	pg->state_clear(PG_STATE_CLEAN);
       }
-    }
-
-    if (had) {
-      // hmm, maybe keep an eye out for cases where we see this, but peer should happen.
-      dout(10) << *pg << " hmm, already had notify info from osd" << from << ": " << *it << dendl;
-    } else {
+      
       pg->peer(t, query_map, &info_map);
       pg->update_stats();
     }
