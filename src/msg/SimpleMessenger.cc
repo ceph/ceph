@@ -138,6 +138,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     rank->need_addr = false;
   else 
     rank->need_addr = true;
+
   if (rank->rank_addr.get_port() == 0) {
     rank->rank_addr.in4_addr() = listen_addr;
     if (force_nonce >= 0)

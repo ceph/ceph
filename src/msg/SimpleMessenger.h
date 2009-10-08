@@ -466,11 +466,6 @@ public:
     return ++global_seq;
   }
 
-  void set_addr(entity_addr_t a) {
-    rank_addr = a;
-    need_addr = false;
-  }
-
   Endpoint *register_entity(entity_name_t addr);
   void rename_entity(Endpoint *ms, entity_name_t newaddr);
   void unregister_entity(Endpoint *ms);
