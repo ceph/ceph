@@ -58,6 +58,7 @@ struct SessionMap {
     s->sub_map.clear();
     s->item.remove_myself();
     s->put();
+    s->closed = true;
   }
 
   Session *new_session(entity_inst_t i) {

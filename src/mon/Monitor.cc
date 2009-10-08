@@ -473,6 +473,10 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   bool reply = false;
 
   Session *s = (Session *)m->get_connection()->get_priv();
+  if (s && s->closed) {
+    s->put();
+    s = NULL;
+  }
   if (!s) {
     s = session_map.new_session(m->get_source_inst());
     m->get_connection()->set_priv(s->get());
@@ -520,6 +524,9 @@ bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
   dout(10) << "reset/close on session " << s->inst << dendl;
   session_map.remove_session(s);
   s->put();
+
+  // remove from connection, too.
+  con->set_priv(NULL);
   return true;
 }
 
