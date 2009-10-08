@@ -98,11 +98,13 @@ private:
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
-  void _sub_want_onetime(nstring what, version_t have) {
+  bool _sub_want_onetime(nstring what, version_t have) {
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
+      return true;
     }
+    return false;
   }
   void _sub_got(nstring what, version_t have) {
     if (sub_have.count(what)) {
@@ -122,9 +124,9 @@ public:
     Mutex::Locker l(monc_lock);
     _sub_want(what, have);
   }
-  void sub_want_onetime(nstring what, version_t have) {
+  bool sub_want_onetime(nstring what, version_t have) {
     Mutex::Locker l(monc_lock);
-    _sub_want_onetime(what, have);
+    return _sub_want_onetime(what, have);
   }
   void sub_got(nstring what, version_t have) {
     Mutex::Locker l(monc_lock);
