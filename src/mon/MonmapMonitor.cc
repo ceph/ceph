@@ -72,7 +72,7 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 {
   dout(10) << "encode_pending epoch " << pending_map.epoch << dendl;
 
-  assert(paxos->get_version() + 1 == pending_map.epoch);
+  assert(mon->monmap->epoch + 1 == pending_map.epoch);
   pending_map.encode(bl);
 }
 

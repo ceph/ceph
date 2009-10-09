@@ -21,8 +21,8 @@
 #define PAXOS_CLIENTMAP  3
 #define PAXOS_LOG        4
 #define PAXOS_CLASS      5
-#define PAXOS_NUM        6
-#define PAXOS_MONMAP     7
+#define PAXOS_MONMAP     6
+#define PAXOS_NUM        7
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
