@@ -33,12 +33,29 @@ v0.16.1
 - include buffer.c in kernel package, tarball
 
 v0.17
+- kclient: fix multiple mds mdsmap decoding
+- kclient: fix mon subscription renewal
+- crush: fix crush map creation with empty buckets (occurs on larger clusters)
+- osdmap: fix encoding bug (crashes kclient); make kclient not crash
 
 
 - mon cluster expansion, contraction
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
 - kclient: retry alloc on ENOMEM when reading from connection?
 
+- simplify msgr failure model
+   mon<->mon lossless, p2p
+   osd<->osd lossless, p2p
+   mds<->mds lossless, p2p
+   osdc<->osd lossy, client/server
+   monc<->mon lossy, client/server
+   client<->mds lossless, client/server
+
+
+pending wire, disk format changes
+- add fsid to MMonSubscribeAck
+- hmm, version field in msg header?
+- timestamp in MonMap
 
 bugs
 - mislinked directory?
@@ -118,6 +135,8 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- client session object
+  - track client's osdmap; and only share latest osdmap with them once!
 - clean up monitor session handling
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
