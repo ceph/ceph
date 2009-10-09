@@ -101,6 +101,7 @@ public:
   int start_server(bool init);
   void rotate_timeout(double timeout);
 
+  int build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
   /* get current secret for specific service type */
   bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key, uint64_t& secret_id);
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, uint64_t& secret_id);

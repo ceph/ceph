@@ -109,6 +109,8 @@ extern void build_authenticate_request(EntityName& principal_name, entity_addr_t
 				       bufferlist& request);
 
 
+extern bool build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
+
 extern void build_service_ticket_request(uint32_t keys,
 					 bufferlist& request);
 
@@ -169,7 +171,7 @@ WRITE_CLASS_ENCODER(AuthAuthorizeReply);
 struct AuthTicketHandler {
   uint32_t service_id;
   CryptoKey session_key;
-  uint64_t secret_id;
+//  uint64_t secret_id;
   AuthBlob ticket;        // opaque to us
   utime_t renew_after, expires;
   bool has_key_flag;

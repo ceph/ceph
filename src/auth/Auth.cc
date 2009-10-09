@@ -34,6 +34,21 @@ void build_service_ticket_request(uint32_t keys,
 }
 
 
+bool build_service_ticket(SessionAuthInfo& info, bufferlist& reply)
+{
+  AuthServiceTicketInfo ticket_info;
+  ticket_info.session_key = info.session_key;
+  ticket_info.ticket = info.ticket;
+  ::encode(info.secret_id, reply);
+  dout(0) << "encoded info.secret_id=" << info.secret_id << dendl;
+  if (info.service_secret.get_secret().length())
+    hexdump("service_secret", info.service_secret.get_secret().c_str(), info.service_secret.get_secret().length());
+  if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
+    return false;
+
+  return true;
+}
+
 /*
  * AUTH SERVER: authenticate
  *
@@ -69,13 +84,8 @@ bool build_service_ticket_reply(
     if (encode_encrypt(msg_a, principal_secret, reply) < 0)
       return false;
 
-    AuthServiceTicketInfo ticket_info;
-    ticket_info.session_key = info.session_key;
-    ticket_info.ticket = info.ticket;
-    ::encode(info.secret_id, reply);
-    dout(0) << "encoded info.secret_id=" << info.secret_id << dendl;
-    if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
-      return false;
+    if (!build_service_ticket(info, reply))
+      return false; 
 
     ++ticket_iter;
   }
@@ -206,10 +216,13 @@ bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
   ::decode(service_id, indata);
 
   ::decode(secret_id, indata);
+  dout(0) << "decrypted service_id=" << service_id << " secret_id=" << secret_id << dendl;
   if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
     dout(0) << "could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
     return false;
   }
+  if (service_secret.get_secret().length())
+    hexdump("service_secret", service_secret.get_secret().c_str(), service_secret.get_secret().length());
   if (decode_decrypt(ticket_info, service_secret, indata) < 0) {
     dout(0) << "could not decrypt ticket info" << dendl;
     return false;

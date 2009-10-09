@@ -292,3 +292,22 @@ bool KeysServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
   return true;
 }
 
+int KeysServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
+{
+  if (get_service_secret(service_id, info.service_secret, info.secret_id) < 0) {
+    return -EPERM;
+  }
+
+  info.ticket.name = auth_ticket_info.ticket.name;
+  info.ticket.addr = auth_ticket_info.ticket.addr;
+  info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
+
+  generate_secret(info.session_key);
+
+  info.service_id = service_id;
+	  
+  info.ticket.caps = auth_ticket_info.ticket.caps;
+
+  return 0;
+}
+

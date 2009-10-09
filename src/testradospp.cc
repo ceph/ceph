@@ -35,6 +35,8 @@ int main(int argc, const char **argv)
      exit(1);
   }
 
+  cout << "rados_initialize completed" << std::endl;
+
   time_t tm;
   bufferlist bl, bl2;
   char buf[128];
@@ -106,6 +108,7 @@ int main(int argc, const char **argv)
   cout << "remove result=" << r << std::endl;
   rados.close_pool(pool);
 #endif
+  rados.shutdown();
 
   return 0;
 }

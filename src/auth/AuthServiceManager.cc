@@ -188,26 +188,12 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       vector<SessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
         if (ticket_req.keys & service_id) {
-          uint64_t secret_id;
-          CryptoKey service_secret;
-          if (mon->keys_server.get_service_secret(service_id, service_secret, secret_id) < 0) {
-            ret = -EPERM;
+          SessionAuthInfo info;
+          int r = mon->keys_server.build_session_auth_info(service_id, auth_ticket_info, info);
+          if (r < 0) {
+            ret = r;
             break;
           }
-
-          SessionAuthInfo info;
-	  info.ticket.name = auth_ticket_info.ticket.name;
-	  info.ticket.addr = auth_ticket_info.ticket.addr;
-	  info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
-
-          mon->keys_server.generate_secret(info.session_key);
-
-          mon->keys_server.get_service_secret(service_id, info.service_secret, info.secret_id);
-
-          info.service_id = service_id;
-          info.secret_id = secret_id;
-	  
-	  info.ticket.caps = auth_ticket_info.ticket.caps;
 
           info_vec.push_back(info);
         }
@@ -218,23 +204,6 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       ret = 0;
     }
     break;
-#if 0
-  case CEPHX_OPEN_SESSION:
-    {
-      dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
-
-      ret = 0;
-      bufferlist tmp_bl;
-      AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(CEPHX_PRINCIPAL_MON, mon->keys_server, indata, auth_ticket_info, tmp_bl)) {
-        dout(0) << "could not verify authorizer" << dendl;
-        ret = -EPERM;
-      }
-      build_cephx_response_header(request_type, ret, result_bl);
-      result_bl.claim_append(tmp_bl);
-    }
-    break;
-#endif
   default:
     ret = -EINVAL;
     build_cephx_response_header(request_type, -EINVAL, result_bl);

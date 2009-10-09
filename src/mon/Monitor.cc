@@ -755,3 +755,36 @@ void Monitor::handle_route(MRoute *m)
   m->msg = NULL;
   delete m;
 }
+
+bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
+{
+  AuthServiceTicketInfo auth_ticket_info;
+
+  SessionAuthInfo info;
+  int ret;
+  uint32_t service_id = peer_id_to_entity_type(dest_type);
+
+
+  ret = keys_server.build_session_auth_info(service_id, auth_ticket_info, info);
+  if (ret < 0) {
+    return false;
+  }
+
+  bufferlist ticket_data;
+  ret = build_service_ticket(info, ticket_data);
+  if (ret < 0)
+    return false;
+
+  bufferlist::iterator iter = ticket_data.begin();
+  AuthTicketHandler handler;
+  ::decode(handler.ticket, iter);
+
+  handler.service_id = service_id;
+  handler.session_key = info.session_key;
+
+  AuthContext ctx;
+  handler.build_authorizer(authorizer, ctx);
+  
+  return true;
+}
+
