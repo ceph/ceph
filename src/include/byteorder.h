@@ -7,7 +7,7 @@
 #ifndef _CEPH_BYTEORDER_H
 #define _CEPH_BYTEORDER_H
 
-#include "endian.h"
+#include <endian.h>
 
 static __inline__ __u16 swab16(__u16 val) 
 {
