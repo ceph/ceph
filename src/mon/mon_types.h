@@ -37,6 +37,6 @@ inline const char *get_paxos_name(int p) {
   }
 }
 
-#define CEPH_MON_ONDISK_MAGIC "ceph mon volume v010"
+#define CEPH_MON_ONDISK_MAGIC "ceph mon volume v011"
 
 #endif
