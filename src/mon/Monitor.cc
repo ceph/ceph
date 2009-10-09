@@ -372,6 +372,10 @@ bool Monitor::ms_dispatch(Message *m)
 
   if (connection) {
     s = (Session *)connection->get_priv();
+    if (s && s->closed) {
+      s->put();
+      s = NULL;
+    }
     if (!s) {
       s = session_map.new_session(m->get_source_inst());
       m->get_connection()->set_priv(s->get());
