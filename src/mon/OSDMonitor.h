@@ -67,7 +67,6 @@ private:
   void send_to_waiting();     // send current map to waiters.
   void send_full(entity_inst_t dest);
   void send_incremental(entity_inst_t dest, epoch_t since);
-  void bcast_full_osd();
  
   void handle_osd_getmap(class MOSDGetMap *m);
 
@@ -160,10 +159,6 @@ private:
   void send_latest(entity_inst_t i, epoch_t start=0);
 
   void blacklist(entity_addr_t a, utime_t until);
-
-  void fake_osd_failure(int osd, bool down);
-  void fake_osdmap_update();
-  void fake_reorg();
 
   void check_subs();
   void check_sub(Subscription *sub);

@@ -75,32 +75,6 @@ void OSDMonitor::fake_osd_failure(int osd, bool down)
   propose_pending();
 }
 
-void OSDMonitor::fake_osdmap_update()
-{
-  dout(1) << "fake_osdmap_update" << dendl;
-  propose_pending();
-
-  // tell a random osd
-  int osd = rand() % g_conf.num_osd;
-  send_latest(osdmap.get_inst(osd));
-}
-
-
-void OSDMonitor::fake_reorg() 
-{
-  int r = rand() % g_conf.num_osd;
-  
-  if (osdmap.is_out(r)) {
-    dout(1) << "fake_reorg marking osd" << r << " in" << dendl;
-    pending_inc.new_weight[r] = CEPH_OSD_IN;
-  } else {
-    dout(1) << "fake_reorg marking osd" << r << " out" << dendl;
-    pending_inc.new_weight[r] = CEPH_OSD_OUT;
-  }
-
-  propose_pending();
-  send_latest(osdmap.get_inst(r));  // after
-}
 
 
 /************ MAPS ****************/
@@ -777,24 +751,6 @@ void OSDMonitor::send_incremental(entity_inst_t dest, epoch_t from)
   
   mon->messenger->send_message(m, dest);
 }
-
-
-void OSDMonitor::bcast_full_osd()
-{
-  epoch_t e = osdmap.get_epoch();
-  dout(1) << "bcast_full_osd epoch " << e << dendl;
-
-  // tell osds
-  set<int32_t> osds;
-  osdmap.get_all_osds(osds);
-  for (set<int32_t>::iterator it = osds.begin();
-       it != osds.end();
-       it++) {
-    if (osdmap.is_down(*it)) continue;
-    send_full(osdmap.get_inst(*it));
-  }  
-}
-
 
 
 void OSDMonitor::blacklist(entity_addr_t a, utime_t until)
