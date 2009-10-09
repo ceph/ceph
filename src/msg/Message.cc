@@ -529,3 +529,26 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 }
 
 
+void encode_message(Message *msg, bufferlist& payload)
+{
+  bufferlist front, middle, data;
+  msg->encode();
+  ::encode(msg->get_header(), payload);
+  ::encode(msg->get_footer(), payload);
+  ::encode(msg->get_payload(), payload);
+  ::encode(msg->get_middle(), payload);
+  ::encode(msg->get_data(), payload);
+}
+
+Message *decode_message(bufferlist::iterator& p)
+{
+  ceph_msg_header h;
+  ceph_msg_footer f;
+  bufferlist fr, mi, da;
+  ::decode(h, p);
+  ::decode(f, p);
+  ::decode(fr, p);
+  ::decode(mi, p);
+  ::decode(da, p);
+  return decode_message(h, f, fr, mi, da);
+}

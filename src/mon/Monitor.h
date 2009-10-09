@@ -149,10 +149,27 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
-  void send_reply(Message *req, Message *reply, entity_inst_t to);
-  void send_reply(Message *req, Message *reply) {
+  // request routing
+  struct RoutedRequest {
+    __u64 tid;
+    bufferlist request_bl;
+    Session *session;
+
+    ~RoutedRequest() {
+      if (session)
+	session->put();
+    }
+  };
+  __u64 routed_request_tid;
+  map<__u64, RoutedRequest*> routed_requests;
+  
+  void forward_request_leader(PaxosServiceMessage *req);
+  void send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to);
+  void send_reply(PaxosServiceMessage *req, Message *reply) {
     send_reply(req, reply, req->get_orig_source_inst());
   }
+  void resend_routed_requests();
+  void remove_session(Session *s);
 
   void inject_args(const entity_inst_t& inst, string& args, version_t version) {
     vector<string> a(1);

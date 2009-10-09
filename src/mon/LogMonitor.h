@@ -45,15 +45,14 @@ private:
 
   bool preprocess_log(MLog *m);
   bool prepare_log(MLog *m);
-  void _updated_log(MLog *m, entity_inst_t who);
+  void _updated_log(MLog *m);
 
   struct C_Log : public Context {
     LogMonitor *logmon;
     MLog *ack;
-    entity_inst_t who;
-    C_Log(LogMonitor *p, MLog *a, entity_inst_t w) : logmon(p), ack(a), who(w) {}
+    C_Log(LogMonitor *p, MLog *a) : logmon(p), ack(a) {}
     void finish(int r) {
-      logmon->_updated_log(ack, who);
+      logmon->_updated_log(ack);
     }    
   };
 

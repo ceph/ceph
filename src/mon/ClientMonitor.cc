@@ -162,8 +162,8 @@ bool ClientMonitor::preprocess_mount(MClientMount *m)
     
     string s;
     getline(ss, s);
-    mon->messenger->send_message(new MClientMountAck(-1, -EPERM, s.c_str()),
-				 m->get_orig_source_inst());
+    mon->send_reply(m, new MClientMountAck(-1, -EPERM, s.c_str()));
+    delete m;
     return true;
   }
   
@@ -222,11 +222,6 @@ void ClientMonitor::_mounted(client_t client, MClientMount *m)
   mon->monmap->encode(ack->monmap_bl);
 
   mon->send_reply(m, ack, to);
-
-  // also send latest mds and osd maps
-  //mon->mdsmon()->send_latest(to);
-  //mon->osdmon()->send_latest(to);
-
   delete m;
 }
 

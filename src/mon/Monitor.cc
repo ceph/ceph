@@ -203,6 +203,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
     (*p)->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
+
+  resend_routed_requests();
 } 
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
@@ -218,6 +220,8 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
     (*p)->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
+
+  resend_routed_requests();
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -312,14 +316,113 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   delete m;
 }
 
-void Monitor::send_reply(Message *req, Message *reply, entity_inst_t to)
+
+// ------------------------
+// request/reply routing
+
+void Monitor::forward_request_leader(PaxosServiceMessage *req)
 {
-  if (req->get_source().is_mon()) {
-    messenger->send_message(new MRoute(reply, to), req->get_source_inst());
+  int mon = get_leader();
+  Session *session = 0;
+  if (req->get_connection())
+    session = (Session *)req->get_connection()->get_priv();
+  if (req->session_mon >= 0) {
+    dout(10) << "forward_request won't double fwd request " << *req << dendl;
+    delete req;
+  } else if (session && !session->closed) {
+    RoutedRequest *rr = new RoutedRequest;
+    rr->tid = ++routed_request_tid;
+
+    dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
+
+    encode_message(req, rr->request_bl);
+    rr->session = (Session *)session->get();
+    routed_requests[rr->tid] = rr;
+
+    session->routed_request_tids.insert(rr->tid);
+    
+    dout(10) << " noting that i mon" << whoami << " own this requests's session" << dendl;
+    req->session_mon = whoami;
+    req->session_mon_tid = rr->tid;
+    req->clear_payload();
+    
+    messenger->forward_message(req, monmap->get_inst(mon));
+  } else {
+    dout(10) << "forward_request no session for request " << *req << dendl;
+    delete req;
+  }
+}
+
+void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to)
+{
+  if (req->session_mon >= 0) {
+    if (req->session_mon < (int)monmap->size()) {
+      dout(15) << "send_reply routing reply to " << to << " via mon" << req->session_mon
+	       << " for request " << *req << dendl;
+      messenger->send_message(new MRoute(req->session_mon_tid, reply, to),
+			      monmap->get_inst(req->session_mon));
+    } else
+      dout(2) << "send_reply mon" << req->session_mon << " dne, dropping reply " << *reply
+	      << " to " << *req << " for " << to << dendl;
   } else {
     messenger->send_message(reply, to);
   }
 }
+
+void Monitor::handle_route(MRoute *m)
+{
+  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+  
+  // look it up
+  if (routed_requests.count(m->session_mon_tid)) {
+    RoutedRequest *rr = routed_requests[m->session_mon_tid];
+    messenger->send_message(m->msg, rr->session->inst);
+    m->msg = NULL;
+    routed_requests.erase(m->session_mon_tid);
+    rr->session->routed_request_tids.insert(rr->tid);
+    delete rr;
+  } else {
+    dout(10) << " don't have routed request tid " << m->session_mon_tid << ", dropping" << dendl;
+  }
+  delete m;
+}
+
+void Monitor::resend_routed_requests()
+{
+  dout(10) << "resend_routed_requests" << dendl;
+  int mon = get_leader();
+  for (map<__u64, RoutedRequest*>::iterator p = routed_requests.begin();
+       p != routed_requests.end();
+       p++) {
+    RoutedRequest *rr = p->second;
+
+    bufferlist::iterator q = rr->request_bl.begin();
+    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(q);
+
+    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
+    req->session_mon = whoami;
+    req->session_mon_tid = rr->tid;
+    req->clear_payload();
+    messenger->forward_message(req, monmap->get_inst(mon));
+  }  
+}
+
+void Monitor::remove_session(Session *s)
+{
+  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  session_map.remove_session(s);
+  for (set<__u64>::iterator p = s->routed_request_tids.begin();
+       p != s->routed_request_tids.end();
+       p++) {
+    if (routed_requests.count(*p)) {
+      RoutedRequest *rr = routed_requests[*p];
+      dout(10) << " dropping routed request " << rr->tid << dendl;
+      delete rr;
+      routed_requests.erase(*p);
+    }
+  }
+}
+
 
 void Monitor::handle_observe(MMonObserve *m)
 {
@@ -545,7 +648,7 @@ bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
   Mutex::Locker l(lock);
 
   dout(10) << "reset/close on session " << s->inst << dendl;
-  session_map.remove_session(s);
+  remove_session(s);
   s->put();
 
   // remove from connection, too.
@@ -674,7 +777,7 @@ void Monitor::tick()
     if (s->until < now) {
       dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->inst.addr);
-      session_map.remove_session(s);
+      remove_session(s);
     }
   }
 
@@ -749,11 +852,3 @@ void Monitor::handle_class(MClass *m)
 }
 
 
-void Monitor::handle_route(MRoute *m)
-{
-  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
-  
-  messenger->send_message(m->msg, m->dest);
-  m->msg = NULL;
-  delete m;
-}

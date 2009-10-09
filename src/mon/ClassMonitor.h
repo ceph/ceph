@@ -47,15 +47,14 @@ private:
 
   bool preprocess_class(MClass *m);
   bool prepare_class(MClass *m);
-  void _updated_class(MClass *m, entity_inst_t who);
+  void _updated_class(MClass *m);
 
   struct C_Class : public Context {
     ClassMonitor *classmon;
     MClass *ack;
-    entity_inst_t who;
-    C_Class(ClassMonitor *p, MClass *a, entity_inst_t w) : classmon(p), ack(a), who(w) {}
+    C_Class(ClassMonitor *p, MClass *a) : classmon(p), ack(a) {}
     void finish(int r) {
-      classmon->_updated_class(ack, who);
+      classmon->_updated_class(ack);
     }    
   };
 

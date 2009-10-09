@@ -56,9 +56,7 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
 
   // leader?
   if (!mon->is_leader()) {
-    // fw to leader
-    dout(10) << " fw to leader mon" << mon->get_leader() << dendl;
-    mon->messenger->forward_message(m, mon->monmap->get_inst(mon->get_leader()));
+    mon->forward_request_leader(m);
     return true;
   }
   

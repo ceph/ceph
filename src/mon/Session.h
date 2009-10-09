@@ -36,6 +36,7 @@ struct Session : public RefCountedObject {
   utime_t until;
   bool closed;
   xlist<Session*>::item item;
+  set<__u64> routed_request_tids;
 
   map<nstring, Subscription*> sub_map;
 

@@ -260,14 +260,14 @@ bool LogMonitor::prepare_log(MLog *m)
     }
   }
 
-  paxos->wait_for_commit(new C_Log(this, m, m->get_orig_source_inst()));
+  paxos->wait_for_commit(new C_Log(this, m));
   return true;
 }
 
-void LogMonitor::_updated_log(MLog *m, entity_inst_t who)
+void LogMonitor::_updated_log(MLog *m)
 {
-  dout(7) << "_updated_log for " << who << dendl;
-  mon->messenger->send_message(new MLogAck(m->fsid, m->entries.rbegin()->seq), who);
+  dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
+  mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
   delete m;
 }
 

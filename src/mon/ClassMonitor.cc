@@ -255,15 +255,15 @@ bool ClassMonitor::prepare_class(MClass *m)
     }
   }
 
-  paxos->wait_for_commit(new C_Class(this, m, m->get_orig_source_inst()));
+  paxos->wait_for_commit(new C_Class(this, m));
   return true;
 }
 
-void ClassMonitor::_updated_class(MClass *m, entity_inst_t who)
+void ClassMonitor::_updated_class(MClass *m)
 {
-  dout(7) << "_updated_class for " << who << dendl;
+  dout(7) << "_updated_class for " << m->get_orig_source_inst() << dendl;
   ClassImpl impl = *(m->impl.rbegin());
-  mon->messenger->send_message(new MClassAck(m->fsid, impl.seq), who);
+  mon->send_reply(m, new MClassAck(m->fsid, impl.seq));
   delete m;
 }
 
@@ -487,7 +487,7 @@ void ClassMonitor::handle_request(MClass *m)
     }
   }
   reply->action = CLASS_RESPONSE;
-  mon->messenger->send_message(reply, m->get_orig_source_inst());
+  mon->send_reply(m, reply);
   delete m;
 }
 

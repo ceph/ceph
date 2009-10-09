@@ -43,6 +43,14 @@ v0.17
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
 - kclient: retry alloc on ENOMEM when reading from connection?
 
+- kill mon->osd
+  - MRoute breaks if we bounce between multiple monitors
+  - monitor may drop our request if cluster changes, but session doesn't reset
+  - kill shutdown msg
+- kill mon->mds
+  - beacon reply
+  - kill shutdown msg
+
 - simplify msgr failure model
    mon<->mon lossless, p2p
    osd<->osd lossless, p2p

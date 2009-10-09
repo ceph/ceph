@@ -236,9 +236,9 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr].stamp = g_clock.now();  
   last_beacon[addr].seq = seq;
-  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_name(),
-					      mdsmap.get_epoch(), state, seq), 
-			       m->get_orig_source_inst());
+  mon->send_reply(m,
+		  new MMDSBeacon(mon->monmap->fsid, m->get_name(),
+				 mdsmap.get_epoch(), state, seq));
 
   // done
  out:

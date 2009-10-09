@@ -312,7 +312,6 @@ public:
   }
 
   void encode();
-
 };
 
 extern Message *decode_message(ceph_msg_header &header, ceph_msg_footer& footer,
@@ -321,5 +320,8 @@ inline ostream& operator<<(ostream& out, Message& m) {
   m.print(out);
   return out;
 }
+
+extern void encode_message(Message *m, bufferlist& bl);
+extern Message *decode_message(bufferlist::iterator& bl);
 
 #endif
