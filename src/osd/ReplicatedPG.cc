@@ -534,6 +534,11 @@ void ReplicatedPG::do_op(MOSDOp *op)
       return;
     }
 
+    if (is_dup(ctx->reqid)) {
+      dout(3) << "do_op dup " << ctx->reqid << ", doing WRNOOP" << dendl;
+      noop = true;
+    }
+
     // version
     ctx->at_version = log.head;
     if (!noop) {
@@ -541,23 +546,18 @@ void ReplicatedPG::do_op(MOSDOp *op)
       ctx->at_version.version++;
       assert(ctx->at_version > info.last_update);
       assert(ctx->at_version > log.head);
+
+      // set version in op, for benefit of client and our eventual reply.  if !noop!
+      op->set_version(ctx->at_version);
     }
 
     ctx->mtime = op->get_mtime();
     
-    // set version in op, for benefit of client and our eventual reply
-    op->set_version(ctx->at_version);
-
     dout(10) << "do_op " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version 
 	     << " snapc " << ctx->snapc
 	     << " snapset " << obc->obs.ssc->snapset
 	     << dendl;  
-
-    if (is_dup(ctx->reqid)) {
-      dout(3) << "do_op dup " << ctx->reqid << ", doing WRNOOP" << dendl;
-      noop = true;
-    }
   } else {
     dout(10) << "do_op " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version
