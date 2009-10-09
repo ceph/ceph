@@ -22,10 +22,12 @@
 #define PAXOS_LOG        4
 #define PAXOS_CLASS      5
 #define PAXOS_NUM        6
+#define PAXOS_MONMAP     7
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
   case PAXOS_MDSMAP: return "mdsmap";
+  case PAXOS_MONMAP: return "monmap";
   case PAXOS_OSDMAP: return "osdmap";
   case PAXOS_CLIENTMAP: return "clientmap";
   case PAXOS_PGMAP: return "pgmap";

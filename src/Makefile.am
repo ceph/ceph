@@ -318,6 +318,7 @@ libmon_a_SOURCES = \
 	mon/PaxosService.cc \
 	mon/OSDMonitor.cc \
 	mon/MDSMonitor.cc \
+	mon/MonmapMonitor.cc \
 	mon/ClientMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
@@ -610,6 +611,7 @@ noinst_HEADERS = \
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/MDSMonitor.h\
+	mon/MonmapMonitor.h\
         mon/MonClient.h\
         mon/MonMap.h\
         mon/Monitor.h\
