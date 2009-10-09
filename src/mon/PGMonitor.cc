@@ -377,15 +377,15 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     */
   }
   
-  paxos->wait_for_commit(new C_Stats(this, ack, stats->get_orig_source_inst()));
-  delete stats;
+  paxos->wait_for_commit(new C_Stats(this, stats, ack));
   return true;
 }
 
-void PGMonitor::_updated_stats(MPGStatsAck *ack, entity_inst_t who)
+void PGMonitor::_updated_stats(MPGStats *req, MPGStatsAck *ack)
 {
-  dout(7) << "_updated_stats for " << who << dendl;
-  mon->messenger->send_message(ack, who);
+  dout(7) << "_updated_stats for " << req->get_orig_source_inst() << dendl;
+  mon->send_reply(req, ack);
+  delete req;
 }
 
 

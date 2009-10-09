@@ -44,8 +44,6 @@ v0.17
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 - kill mon->osd
-  - MRoute breaks if we bounce between multiple monitors
-  - monitor may drop our request if cluster changes, but session doesn't reset
   - kill shutdown msg
 - kill mon->mds
   - beacon reply
