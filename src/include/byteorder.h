@@ -33,11 +33,14 @@ static __inline__ __u64 swab64(__u64 val)
 }
 
 // mswab == maybe swab (if not LE)
-#if __BYTEORDER == __BIG_ENDIAN
+#if __BYTE_ORDER == __BIG_ENDIAN
 # define mswab64(a) swab64(a)
 # define mswab32(a) swab32(a)
 # define mswab16(a) swab16(a)
 #else
+# if __BYTE_ORDER != __LITTLE_ENDIAN
+#  warning __BYTE_ORDER is not defined, assuming little endian
+# endif
 # define mswab64(a) (a)
 # define mswab32(a) (a)
 # define mswab16(a) (a)
