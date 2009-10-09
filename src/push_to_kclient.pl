@@ -21,11 +21,11 @@ for (@files) {
     next if /^#/;
     my ($orig, $new) = split(/\s+/, $_);
     #print "$dir/$orig -> $new\n";
-    system "cp -uv $dir/$orig $kernel/$new";
+    system "cp -v $dir/$orig $kernel/$new";
 }
 
 print "pulling changed shared files from $dir to $kernel...\n";
-system "cp -uv $kernel/fs/ceph/ioctl.h $dir/src/client/ioctl.h";
+system "cp -v $kernel/fs/ceph/ioctl.h $dir/src/client/ioctl.h";
 
 print "done.\n";
 
