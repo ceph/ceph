@@ -509,9 +509,6 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
 	   << " seq " << m->get_seq() << dendl;
   version_t seq = m->get_seq();
 
-  // make note of which mon 
-  monc->note_mon_leader(m->get_source().num());
-
   // update lab
   if (beacon_seq_stamp.count(seq)) {
     assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);

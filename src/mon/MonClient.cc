@@ -303,7 +303,7 @@ void MonClient::_pick_new_mon()
 {
   if (cur_mon >= 0)
     messenger->mark_down(monmap.get_inst(cur_mon).addr);
-  cur_mon = monmap.pick_mon(true);
+  cur_mon = rand() % monmap.size();
   dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
 
@@ -354,8 +354,7 @@ void MonClient::tick()
     if (now > sub_renew_after)
       _renew_subs();
 
-    int oldmon = monmap.pick_mon();
-    messenger->send_keepalive(monmap.mon_inst[oldmon]);
+    messenger->send_keepalive(monmap.mon_inst[cur_mon]);
   }
 
   timer.add_event_after(10.0, new C_Tick(this));

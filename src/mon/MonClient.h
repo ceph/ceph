@@ -155,10 +155,6 @@ public:
     Mutex::Locker l(monc_lock);
     _send_mon_message(m);
   }
-  void note_mon_leader(int m) {
-    Mutex::Locker l(monc_lock);
-    monmap.last_mon = m;
-  }
   void reopen_session() {
     Mutex::Locker l(monc_lock);
     _reopen_session();
