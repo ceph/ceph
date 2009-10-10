@@ -24,7 +24,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v023"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v024"
 
 
 

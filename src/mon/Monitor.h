@@ -116,6 +116,7 @@ public:
 
   class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
+  class MonmapMonitor *monmon() { return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP]; }
   class OSDMonitor *osdmon() { return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP]; }
   class ClientMonitor *clientmon() { return (class ClientMonitor *)paxos_service[PAXOS_CLIENTMAP]; }
   class ClassMonitor *classmon() { return (class ClassMonitor *)paxos_service[PAXOS_CLASS]; }
@@ -123,6 +124,7 @@ public:
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
+  friend class MonmapMonitor;
   friend class ClientMonitor;
   friend class PGMonitor;
   friend class LogMonitor;

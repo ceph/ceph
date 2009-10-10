@@ -26,11 +26,13 @@ class MonMap {
   epoch_t epoch;       // what epoch/version of the monmap
   ceph_fsid_t fsid;
   vector<entity_inst_t> mon_inst;
+  utime_t last_changed;
 
   int       last_mon;    // last mon i talked to
 
   MonMap() : epoch(0), last_mon(-1) {
     memset(&fsid, 0, sizeof(fsid));
+    last_changed = g_clock.now();
   }
 
   ceph_fsid_t& get_fsid() { return fsid; }
@@ -89,6 +91,7 @@ class MonMap {
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
     ::encode(mon_inst, blist);
+    ::encode(last_changed, blist);
   }  
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
@@ -100,6 +103,7 @@ class MonMap {
     ::decode_raw(fsid, p);
     ::decode(epoch, p);
     ::decode(mon_inst, p);
+    ::decode(last_changed, p);
   }
 
 
