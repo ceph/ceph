@@ -68,8 +68,6 @@ private:
   void send_full(entity_inst_t dest);
   void send_incremental(entity_inst_t dest, epoch_t since);
  
-  void handle_osd_getmap(class MOSDGetMap *m);
-
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
   void _reported_failure(MOSDFailure *m);

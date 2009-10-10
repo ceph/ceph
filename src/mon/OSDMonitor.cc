@@ -23,7 +23,6 @@
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MPoolOp.h"
@@ -196,10 +195,6 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
 
   switch (m->get_type()) {
     // READs
-  case CEPH_MSG_OSD_GETMAP:
-    handle_osd_getmap((MOSDGetMap*)m);
-    return true;
-    
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
 
@@ -291,28 +286,6 @@ bool OSDMonitor::should_propose(double& delay)
 // ---------------------------
 // READs
 
-void OSDMonitor::handle_osd_getmap(MOSDGetMap *m)
-{
-  dout(7) << "handle_osd_getmap from " << m->get_orig_source()
-	  << " start " << m->get_start_epoch()
-	  << dendl;
-  
-  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
-    dout(0) << "handle_osd_getmap on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    goto out;
-  }
-
-  if (m->get_start_epoch()) {
-    if (m->get_start_epoch() <= osdmap.get_epoch())
-	send_incremental(m->get_orig_source_inst(), m->get_start_epoch());
-    else
-      waiting_for_map[m->get_orig_source_inst()] = m->get_start_epoch();
-  } else
-    send_full(m->get_orig_source_inst());
-  
- out:
-  delete m;
-}
 
 // ---------------------------
 // UPDATEs

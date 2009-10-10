@@ -45,6 +45,7 @@ v0.17
 
 - kill mon->osd
   - kill shutdown msg
+  - route send_full/send_latest...
 - kill mon->mds
   - beacon reply
   - kill shutdown msg

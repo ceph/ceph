@@ -114,7 +114,6 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 #define CEPH_MSG_CLIENT_CAPRELEASE      0x313
 
 /* osd */
-#define CEPH_MSG_OSD_GETMAP       40
 #define CEPH_MSG_OSD_MAP          41
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43

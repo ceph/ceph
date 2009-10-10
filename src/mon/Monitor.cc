@@ -321,6 +321,11 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
 
 // ------------------------
 // request/reply routing
+//
+// a client/mds/osd will connect to a random monitor.  we need to forward any
+// messages requiring state updates to the leader, and then route any replies
+// back via the correct monitor and back to them.  (the monitor will not
+// initiate any connections.)
 
 void Monitor::forward_request_leader(PaxosServiceMessage *req)
 {
@@ -508,7 +513,6 @@ bool Monitor::ms_dispatch(Message *m)
       break;
 
       // OSDs
-    case CEPH_MSG_OSD_GETMAP:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_IN:

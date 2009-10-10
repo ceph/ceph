@@ -50,7 +50,6 @@ using namespace std;
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
@@ -289,9 +288,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case CEPH_MSG_OSD_MAP:
     m = new MOSDMap;
-    break;
-  case CEPH_MSG_OSD_GETMAP:
-    m = new MOSDGetMap;
     break;
 
   case MSG_OSD_PG_NOTIFY:

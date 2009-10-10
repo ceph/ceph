@@ -576,7 +576,6 @@ noinst_HEADERS = \
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
         messages/MOSDFailure.h\
-        messages/MOSDGetMap.h\
         messages/MOSDIn.h\
         messages/MOSDMap.h\
         messages/MOSDOp.h\
