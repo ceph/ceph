@@ -49,7 +49,6 @@ using namespace std;
 
 #include "messages/MGenericMessage.h"
 
-#include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 
 #include "osdc/Filer.h"
@@ -862,8 +861,7 @@ int Client::make_request(MetaRequest *request,
       Cond cond;
 
       if (!mdsmap->is_active(mds)) {
-	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
-	//monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
+	dout(10) << "no address for mds" << mds << ", waiting for new mdsmap" << dendl;
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 

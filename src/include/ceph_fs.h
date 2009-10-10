@@ -100,7 +100,6 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 #define CEPH_MSG_MON_SUBSCRIBE_ACK      16
 
 /* client <-> mds */
-#define CEPH_MSG_MDS_GETMAP             20
 #define CEPH_MSG_MDS_MAP                21
 
 #define CEPH_MSG_CLIENT_SESSION         22

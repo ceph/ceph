@@ -384,7 +384,10 @@ void Monitor::handle_route(MRoute *m)
     rr->session->routed_request_tids.insert(rr->tid);
     delete rr;
   } else {
-    dout(10) << " don't have routed request tid " << m->session_mon_tid << ", dropping" << dendl;
+    dout(10) << " don't have routed request tid " << m->session_mon_tid
+	     << ", trying to send anyway" << dendl;
+    messenger->send_message(m->msg, m->dest);
+    m->msg = NULL;
   }
   delete m;
 }
@@ -520,7 +523,6 @@ bool Monitor::ms_dispatch(Message *m)
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
-    case CEPH_MSG_MDS_GETMAP:
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 

@@ -557,7 +557,6 @@ noinst_HEADERS = \
         messages/MMDSCacheRejoin.h\
 	messages/MMDSLoadTargets.h\
         messages/MMDSFragmentNotify.h\
-        messages/MMDSGetMap.h\
         messages/MMDSMap.h\
         messages/MMDSResolve.h\
         messages/MMDSResolveAck.h\

@@ -82,7 +82,6 @@ using namespace std;
 
 #include "messages/MMDSSlaveRequest.h"
 
-#include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"
@@ -372,9 +371,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     m = new MMDSSlaveRequest;
     break;
 
-  case CEPH_MSG_MDS_GETMAP:
-    m = new MMDSGetMap;
-    break;
   case CEPH_MSG_MDS_MAP:
     m = new MMDSMap;
     break;
