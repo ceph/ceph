@@ -50,32 +50,6 @@ static ostream& _prefix(Monitor *mon, OSDMap& osdmap) {
 }
 
 
-// FAKING
-
-class C_Mon_FakeOSDFailure : public Context {
-  OSDMonitor *mon;
-  int osd;
-  bool down;
-public:
-  C_Mon_FakeOSDFailure(OSDMonitor *m, int o, bool d) : mon(m), osd(o), down(d) {}
-  void finish(int r) {
-    mon->fake_osd_failure(osd,down);
-  }
-};
-
-void OSDMonitor::fake_osd_failure(int osd, bool down) 
-{
-  if (down) {
-    dout(1) << "fake_osd_failure DOWN osd" << osd << dendl;
-    pending_inc.new_down[osd] = false;
-  } else {
-    dout(1) << "fake_osd_failure OUT osd" << osd << dendl;
-    pending_inc.new_weight[osd] = CEPH_OSD_OUT;
-  }
-  propose_pending();
-}
-
-
 
 /************ MAPS ****************/
 
