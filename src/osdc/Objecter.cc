@@ -25,7 +25,6 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
@@ -141,7 +140,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else {
 	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	  monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
+	  monc->sub_want_onetime("osdmap", osdmap->get_epoch());
 	  break;
 	}
 	
@@ -173,7 +172,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	scan_pgs(changed_pgs);
       } else {
 	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
-	monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), 0));
+	monc->sub_want_onetime("osdmap", 0);
       }
     }
 

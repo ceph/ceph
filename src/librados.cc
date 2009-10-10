@@ -37,7 +37,6 @@ using namespace std;
 
 #include "osdc/Objecter.h"
 
-#include "messages/MOSDGetMap.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 

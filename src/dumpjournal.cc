@@ -23,7 +23,6 @@ using namespace std;
 #include "mon/MonClient.h"
 #include "msg/SimpleMessenger.h"
 #include "osd/OSDMap.h"
-#include "messages/MOSDGetMap.h"
 #include "osdc/Objecter.h"
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"

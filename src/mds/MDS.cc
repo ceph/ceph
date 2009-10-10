@@ -54,7 +54,6 @@
 #include "messages/MGenericMessage.h"
 
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
@@ -642,12 +641,6 @@ void MDS::handle_mds_map(MMDSMap *m)
     // update messenger.
     dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
     messenger->set_myname(entity_name_t::MDS(whoami));
-
-    // do i need an osdmap?
-    if (oldwhoami < 0) {
-      // we need an osdmap too.
-      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), 0));
-    }
   }
 
   // tell objecter my incarnation

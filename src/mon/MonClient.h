@@ -103,7 +103,8 @@ private:
       sub_have[what].have = have;
       sub_have[what].onetime = true;
       return true;
-    }
+    } else
+      sub_have[what].have = have;
     return false;
   }
   void _sub_got(nstring what, version_t have) {

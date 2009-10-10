@@ -53,7 +53,6 @@
 #include "messages/MOSDPGTemp.h"
 
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -1141,7 +1140,7 @@ void OSD::heartbeat()
     if (now - last_mon_heartbeat > g_conf.osd_mon_heartbeat_interval) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
+      monc->sub_want_onetime("osdmap", osdmap->get_epoch());
     }
   }
 
@@ -1668,10 +1667,9 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 void OSD::wait_for_new_map(Message *m)
 {
-  // ask 
-  if (waiting_for_osdmap.empty()) {
-    monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
-  }
+  // ask?
+  if (waiting_for_osdmap.empty())
+    monc->sub_want_onetime("osdmap", osdmap->get_epoch());
   
   waiting_for_osdmap.push_back(m);
 }
@@ -1890,7 +1888,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
-      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), cur+1));
+      monc->sub_want_onetime("osdmap", cur);
       break;
     }
 
