@@ -45,7 +45,8 @@ v0.17
 
 - kill mon->osd
   - kill shutdown msg
-  - route send_full/send_latest...
+  - notify random osd when a map commits?
+  - send map on MPGStats, sometimes?
 - kill mon->mds
   - beacon reply
   - kill shutdown msg
