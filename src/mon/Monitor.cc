@@ -782,7 +782,7 @@ void Monitor::tick()
   while (!p.end()) {
     Session *s = *p;
     ++p;
-    if (s->until < now) {
+    if (s->until != utime_t() && s->until < now) {
       dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->inst.addr);
       remove_session(s);
