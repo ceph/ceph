@@ -821,7 +821,13 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist monmapbl;
   monmap->encode(monmapbl);
   store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  
-  store->put_bl_ss(monmapbl, "monmap", "latest");
+
+  // latest, too.. but make this conform to paxos stash latest format
+  bufferlist latest;
+  version_t v = monmap->get_epoch();
+  ::encode(v, latest);
+  ::encode(monmapbl, latest);
+  store->put_bl_ss(latest, "monmap", "latest");
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;

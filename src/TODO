@@ -59,6 +59,8 @@ v0.17
    monc<->mon lossy, client/server
    client<->mds lossless, client/server
 
+- mon: revisit session trim logic... s->until == utime_t()?  :/
+
 
 pending wire, disk format changes
 - add fsid to MMonSubscribeAck

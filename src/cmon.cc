@@ -94,14 +94,22 @@ int main(int argc, const char **argv)
   }
 
   // monmap?
-  bufferlist mapbl;
-  store.get_bl_ss(mapbl, "monmap/latest", 0);
-  if (mapbl.length() == 0) {
-    cerr << "mon fs missing 'monmap'" << std::endl;
-    exit(1);
-  }
   MonMap monmap;
-  monmap.decode(mapbl);
+  {
+    bufferlist latest;
+    store.get_bl_ss(latest, "monmap/latest", 0);
+    if (latest.length() == 0) {
+      cerr << "mon fs missing 'monmap'" << std::endl;
+      exit(1);
+    }
+    bufferlist::iterator p = latest.begin();
+    version_t v;
+    ::decode(v, p);
+    bufferlist mapbl;
+    ::decode(mapbl, p);
+    monmap.decode(mapbl);
+    assert(v == monmap.get_epoch());
+  }
 
   if ((unsigned)whoami >= monmap.size() || whoami < 0) {
     cerr << "mon" << whoami << " does not exist in monmap" << std::endl;
