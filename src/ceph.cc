@@ -199,6 +199,16 @@ void handle_notify(MMonObserveNotify *notify)
       }
       break;
     }
+
+  case PAXOS_MONMAP:
+    {
+      mc.monmap.decode(notify->bl);
+      dout(0) << "   mon " << mc.monmap << dendl;
+    }
+    break;
+
+  default:
+    dout(0) << "  ignoring unknown machine id " << notify->machine_id << dendl;
   }
 
   map_ver[notify->machine_id] = notify->ver;
