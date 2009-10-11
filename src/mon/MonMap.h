@@ -116,6 +116,8 @@ class MonMap {
   int write(const char *fn);
   int read(const char *fn);
 
+  void print(ostream& out);
+  void print_summary(ostream& out);
 };
 
 inline void encode(MonMap &m, bufferlist &bl) {
@@ -123,6 +125,11 @@ inline void encode(MonMap &m, bufferlist &bl) {
 }
 inline void decode(MonMap &m, bufferlist::iterator &p) {
   m.decode(p);
+}
+
+inline ostream& operator<<(ostream& out, MonMap& m) {
+  m.print_summary(out);
+  return out;
 }
 
 #endif

@@ -32,15 +32,6 @@ void usage()
   exit(1);
 }
 
-void printmap(const char *me, MonMap *m)
-{
-  cout << me << ": monmap: epoch " << m->epoch << std::endl
-       << me << ": monmap: fsid " << m->fsid << std::endl;
-  for (unsigned i=0; i<m->mon_inst.size(); i++)
-    cout << me << ": monmap:  " //<< "mon" << i << " " 
-	 << m->mon_inst[i] << std::endl;
-}
-
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -131,7 +122,7 @@ int main(int argc, const char **argv)
     monmap.epoch++;
 
   if (print) 
-    printmap(me, &monmap);
+    monmap.print(cout);
 
   if (modified) {
     // write it out

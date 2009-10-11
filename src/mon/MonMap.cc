@@ -26,3 +26,21 @@ int MonMap::read(const char *fn)
   decode(bl);
   return 0;
 }
+
+void MonMap::print_summary(ostream& out)
+{
+  out << "e" << epoch << ": "
+      << mon_inst.size() << " mons at";
+  for (unsigned i = 0; i<mon_inst.size(); i++)
+    out << " " << mon_inst[i].addr;
+}
+ 
+void MonMap::print(ostream& out)
+{
+  out << "epoch " << epoch << "\n";
+  out << "fsid " << fsid << "\n";
+  out << "last_changed " << last_changed << "\n";
+  for (unsigned i=0; i<mon_inst.size(); i++) {
+    out << "\t" << mon_inst[i] << "\n";
+  }
+}
