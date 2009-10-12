@@ -635,6 +635,7 @@ void OSDMonitor::send_to_waiting()
       if (from <= osdmap.get_epoch()) {
 	while (!p->second.empty()) {
 	  send_incremental(p->second.front(), from);
+	  delete p->second.front();
 	  p->second.pop_front();
 	}
       } else {
@@ -645,6 +646,7 @@ void OSDMonitor::send_to_waiting()
     } else {
       while (!p->second.empty()) {
 	send_full(p->second.front());
+	delete p->second.front();
 	p->second.pop_front();
       }
     }
@@ -662,6 +664,7 @@ void OSDMonitor::send_latest(PaxosServiceMessage *m, epoch_t start)
       send_full(m);
     else
       send_incremental(m, start);
+    delete m;
   } else {
     dout(5) << "send_latest to " << m->get_orig_source_inst()
 	    << " start " << start << " later" << dendl;
@@ -674,7 +677,6 @@ void OSDMonitor::send_full(PaxosServiceMessage *m)
 {
   dout(5) << "send_full to " << m->get_orig_source_inst() << dendl;
   mon->send_reply(m, new MOSDMap(mon->monmap->fsid, &osdmap));
-  delete m;
 }
 
 MOSDMap *OSDMonitor::build_incremental(epoch_t from)
@@ -707,7 +709,6 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t from)
 	  << " to " << req->get_orig_source_inst() << dendl;
   MOSDMap *m = build_incremental(from);
   mon->send_reply(req, m);
-  delete req;
 }
 
 

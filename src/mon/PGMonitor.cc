@@ -266,13 +266,12 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
 {
   int from = stats->get_orig_source().num();
 
-  /*
   // first, just see if they need a new osdmap.  but 
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
+      mon->osdmon()->paxos->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
-    mon->osdmon()->send_latest(stats->get_orig_source_inst(), stats->epoch+1);
-  */
+    mon->osdmon()->send_latest(stats, stats->epoch+1);
 
   // any new osd or pg info?
   if (pg_map.osd_stat.count(from) ||

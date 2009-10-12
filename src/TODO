@@ -46,7 +46,6 @@ v0.17
 - kill mon->osd
   - notify random osd when a map commits?
   - how to tell osds to scrub?
-  - send map on MPGStats, sometimes?
 
 - simplify msgr failure model
    mon<->mon lossless, p2p
