@@ -225,7 +225,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply->h.st.num_objects = pg_map.pg_sum.num_objects;
 
   // reply
-  mon->messenger->send_message(reply, statfs->get_orig_source_inst());
+  mon->send_reply(statfs, reply);
  out:
   delete statfs;
 }
@@ -253,7 +253,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     reply->pool_stats[*p] = pg_map.pg_pool_sum[poolid];
   }
 
-  mon->messenger->send_message(reply, m->get_orig_source_inst());
+  mon->send_reply(m, reply);
 
  out:
   delete m;
@@ -292,7 +292,9 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
        p != stats->pg_stat.end();
        p++)
     ack->pg_stat[p->first] = p->second.reported;
-  mon->messenger->send_message(ack, stats->get_orig_source_inst());
+  mon->send_reply(stats, ack);
+
+  delete stats;
   return true;
 }
 
