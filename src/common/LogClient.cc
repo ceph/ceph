@@ -79,11 +79,12 @@ void LogClient::_send_log()
     return;
   MLog *log = new MLog(monmap->get_fsid(), log_queue);
 
-  int mon;
-  if (messenger->get_myname().is_mon())
-    mon = messenger->get_myname().num();  // if we are a monitor, queue for ourselves
-  else
-    mon = monmap->pick_mon();
+  if (mon < 0) {
+    if (messenger->get_myname().is_mon())
+      mon = messenger->get_myname().num();  // if we are a monitor, queue for ourselves
+    else
+      mon = rand() % monmap->mon_inst.size();
+  }
 
   dout(10) << "send_log to mon" << mon << dendl;
   messenger->send_message(log, monmap->get_inst(mon));

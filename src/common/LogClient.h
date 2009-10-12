@@ -31,6 +31,7 @@ class MonMap;
 class LogClient : public Dispatcher {
   Messenger *messenger;
   MonMap *monmap;
+  int mon;
 
   bool ms_dispatch(Message *m);
   bool is_synchronous;
@@ -56,7 +57,7 @@ class LogClient : public Dispatcher {
   void set_synchronous(bool sync) { is_synchronous = sync; }
 
   LogClient(Messenger *m, MonMap *mm) : 
-    messenger(m), monmap(mm), is_synchronous(false),
+    messenger(m), monmap(mm), mon(-1), is_synchronous(false),
     log_lock("LogClient::log_lock"), last_log(0) { }
 };
 
