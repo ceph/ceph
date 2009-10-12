@@ -139,8 +139,7 @@ bool PGMonitor::update_from_paxos()
       paxosv > 10)
     paxos->trim_to(paxosv - 10);
 
-  if (mon->is_leader())
-    send_pg_creates();
+  send_pg_creates();
 
   return true;
 }
