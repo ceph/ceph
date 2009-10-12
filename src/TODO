@@ -44,12 +44,10 @@ v0.17
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 - kill mon->osd
-  - kill shutdown msg
   - notify random osd when a map commits?
+  - how to tell osds to scrub?
   - send map on MPGStats, sometimes?
-- kill mon->mds
-  - beacon reply
-  - kill shutdown msg
+  - pg creates?
 
 - simplify msgr failure model
    mon<->mon lossless, p2p

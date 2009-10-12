@@ -150,8 +150,6 @@ void OSDMonitor::encode_pending(bufferlist &bl)
        i != pending_inc.new_down.end();
        i++) {
     dout(2) << " osd" << i->first << " DOWN clean=" << (int)i->second << dendl;
-    // no: this screws up map delivery on shutdown
-    //mon->messenger->mark_down(osdmap.get_addr(i->first));
   }
   for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up.begin();
        i != pending_inc.new_up.end(); 
@@ -1316,7 +1314,7 @@ bool OSDMonitor::prepare_pool_op_create (MPoolOp *m)
 void OSDMonitor::_pool_op(MPoolOp *m, int replyCode, epoch_t epoch)
 {
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->tid,
-					     replyCode, epoch, mon->get_epoch());
-  mon->messenger->send_message(reply, m->get_orig_source_inst());
+					 replyCode, epoch, mon->get_epoch());
+  mon->send_reply(m, reply);
   delete m;
 }
