@@ -86,6 +86,7 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *message)
   MMonAdd *m = (MMonAdd *) message;
   pending_map.add(m->address);
   pending_map.last_changed = g_clock.now();
+  delete message;
   return true;
 }
 
