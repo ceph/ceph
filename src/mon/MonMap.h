@@ -29,9 +29,7 @@ class MonMap {
   utime_t last_changed;
   utime_t created;
 
-  int       last_mon;    // last mon i talked to
-
-  MonMap() : epoch(0), last_mon(-1) {
+  MonMap() : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
     last_changed = created = g_clock.now();
   }
@@ -70,15 +68,6 @@ class MonMap {
       if (mon_inst[i].addr == a) 
 	return true;
     return false;
-  }
-
-  // pick a mon.  
-  // choice should be stable, unless we explicitly ask for a new one.
-  int pick_mon(bool newmon=false) { 
-    if (newmon || (last_mon < 0)) {
-      last_mon = rand() % mon_inst.size();
-    }
-    return last_mon;    
   }
 
   const entity_inst_t &get_inst(unsigned m) {
