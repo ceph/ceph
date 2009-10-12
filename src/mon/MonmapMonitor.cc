@@ -34,7 +34,8 @@ static ostream& _prefix(Monitor *mon) {
 
 void MonmapMonitor::create_initial(bufferlist& bl)
 {
-  //what is this function supposed to do?
+  /* Since the MonMap belongs to the Monitor and is initialized
+  by it, we don't need to do anything here. */
 }
 
 bool MonmapMonitor::update_from_paxos()
