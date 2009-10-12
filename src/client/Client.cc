@@ -5804,10 +5804,10 @@ void Client::set_default_file_replication(int replication)
 
 void Client::set_default_preferred_pg(int pg)
 {
-  if (pg >= 0)
+  if (pg >= -1)
     preferred_pg = pg;
   else
-    dout(5) << "Attempt to set preferred_pg " << pg << " < 0!" << dendl;
+    dout(5) << "Attempt to set preferred_pg " << pg << " < -1!" << dendl;
 }
 
 int Client::describe_layout(int fd, ceph_file_layout *lp)
