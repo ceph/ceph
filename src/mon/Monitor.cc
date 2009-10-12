@@ -504,10 +504,6 @@ bool Monitor::ms_dispatch(Message *m)
       handle_mon_get_map((MMonGetMap*)m);
       break;
 
-    case CEPH_MSG_SHUTDOWN:
-      handle_shutdown(m);
-      break;
-      
     case MSG_MON_COMMAND:
       handle_command((MMonCommand*)m);
       break;
@@ -708,37 +704,6 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
 }
 
 
-void Monitor::handle_shutdown(Message *m)
-{
-  assert(m->get_source().is_mon());
-  if (m->get_source().num() == get_leader()) {
-    dout(1) << "shutdown from leader " << m->get_source() << dendl;
-
-    if (is_leader()) {
-      // stop osds.
-      set<int32_t> ls;
-      osdmon()->osdmap.get_all_osds(ls);
-      for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
-	if (osdmon()->osdmap.is_down(*it)) continue;
-	dout(10) << "sending shutdown to osd" << *it << dendl;
-	messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, 0),
-				osdmon()->osdmap.get_inst(*it));
-      }
-      osdmon()->mark_all_down();
-      
-      // monitors too.
-      for (unsigned i=0; i<monmap->size(); i++)
-	if ((int)i != whoami)
-	  messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, 0), 
-				  monmap->get_inst(i));
-    }
-
-    shutdown();
-  } else {
-    dout(1) << "ignoring shutdown from non-leader " << m->get_source() << dendl;
-  }
-  delete m;
-}
 
 
 

@@ -142,7 +142,6 @@ public:
   // messages
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  void handle_shutdown(Message *m);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_class(MClass *m);

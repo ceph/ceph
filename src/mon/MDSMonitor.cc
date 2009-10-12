@@ -361,13 +361,14 @@ void MDSMonitor::_updated(MMDSBeacon *m)
 void MDSMonitor::committed()
 {
   // hackish: did all mds's shut down?
+  /*
   if (mon->is_leader() &&
       g_conf.mon_stop_with_last_mds &&
       mdsmap.get_epoch() > 1 &&
       mdsmap.is_stopped()) 
     mon->messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				 mon->monmap->get_inst(mon->whoami));
-
+  */
   tick();
 }
 

@@ -189,6 +189,7 @@ mds
   - rename: importing inode... also journal imported client map?
 
 mon
+- how to tell osd to cleanly shut down
 - mds injectargs N should take mds# or id.  * should bcast to standy mds's.
 - paxos need to clean up old states.
   - default: simple max of (state count, min age), so that we have at least N hours of history, say?
