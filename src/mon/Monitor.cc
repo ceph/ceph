@@ -255,6 +255,10 @@ void Monitor::handle_command(MMonCommand *m)
       clientmon()->dispatch(m);
       return;
     }
+    if (m->cmd[0] == "mon") {
+      monmon()->dispatch(m);
+      return;
+    }
     if (m->cmd[0] == "stop") {
       shutdown();
       reply_command(m, 0, "stopping", 0);

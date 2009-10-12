@@ -16,7 +16,7 @@
 #include "Monitor.h"
 #include "MonitorStore.h"
 
-#include "messages/MMonAdd.h"
+#include "messages/MMonCommand.h"
 #include "common/Timer.h"
 
 #include <sstream>
@@ -84,8 +84,15 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
 
 bool MonmapMonitor::prepare_update(PaxosServiceMessage *message)
 {
-  MMonAdd *m = (MMonAdd *) message;
-  pending_map.add(m->address);
+  MMonCommand *m = (MMonCommand *) message;
+  if (m->cmd[1] != "add") {
+    dout(0) << "Unrecognized MonmapMonitor command!" << dendl;
+    delete message;
+    return false;
+  }
+  entity_addr_t addr;
+  parse_ip_port(m->cmd[2].c_str(), addr);
+  pending_map.add(addr);
   pending_map.last_changed = g_clock.now();
   delete message;
   return true;
