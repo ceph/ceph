@@ -303,16 +303,6 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	    lock.Unlock();
 	    ms_deliver_handle_reset(con, a);
 	    con->put();
-	  } else if ((long)m == BAD_FAILED) {
-	    lock.Lock();
-	    Connection *con = failed_q.front().con;
-	    m = failed_q.front().msg;
-	    entity_addr_t a = failed_q.front().addr;
-	    failed_q.pop_front();
-	    lock.Unlock();
-	    ms_deliver_handle_failure(con, m, a);
-	    con->put();
-	    m->put();
 	  } else {
 	    dout(1) << "<== " << m->get_source_inst()
 		    << " " << m->get_seq()
@@ -1206,18 +1196,6 @@ void SimpleMessenger::Pipe::report_failures()
     Message *m = _get_next_outgoing();
     if (!m)
       break;
-
-    if (policy.drop_msg_callback) {
-      unsigned srcrank = m->get_source_inst().addr.v.erank;
-      if (srcrank >= rank->max_local || rank->local[srcrank] == 0) {
-	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
-      } else if (rank->local[srcrank]->is_stopped()) {
-	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
-      } else {
-	dout(10) << "fail on " << *m << dendl;
-	rank->local[srcrank]->queue_failure(connection_state->get(), m, peer_addr);
-      }
-    }
     m->put();
   }
 }

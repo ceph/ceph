@@ -117,12 +117,6 @@ protected:
 	 p++)
       (*p)->ms_handle_remote_reset(con, peer);
   }
-  void ms_deliver_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      (*p)->ms_handle_failure(con, m, peer);
-  }
 
   // shutdown
   virtual int shutdown() = 0;

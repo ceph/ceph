@@ -29,9 +29,6 @@ public:
   // how i receive messages
   virtual bool ms_dispatch(Message *m) = 0;
 
-  // how i deal with transmission failures.
-  virtual void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) = 0;
-
   /*
    * on any connection reset.
    * this indicates that the ordered+reliable delivery semantics have 

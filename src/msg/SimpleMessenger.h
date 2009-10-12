@@ -322,16 +322,9 @@ private:
       lock.Unlock();
     }
 
-    enum { BAD_REMOTE_RESET, BAD_RESET, BAD_FAILED };
+    enum { BAD_REMOTE_RESET, BAD_RESET };
     list<pair<Connection*,entity_addr_t> > remote_reset_q;
     list<pair<Connection*,entity_addr_t> > reset_q;
-    struct fail_item {
-      Connection *con;
-      Message *msg;
-      entity_addr_t addr;
-      fail_item(Connection *c, Message *m, entity_addr_t a) : con(c), msg(m), addr(a) {}
-    };
-    list<fail_item> failed_q;
 
     void queue_remote_reset(Connection *con, entity_addr_t a) {
       lock.Lock();
@@ -344,14 +337,6 @@ private:
       lock.Lock();
       reset_q.push_back(pair<Connection*,entity_addr_t>(con, a));
       dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
-      cond.Signal();
-      lock.Unlock();
-    }
-    void queue_failure(Connection *con, Message *m, entity_addr_t a) {
-      lock.Lock();
-      m->get();
-      failed_q.push_back(fail_item(con, m, a));
-      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
       cond.Signal();
       lock.Unlock();
     }

@@ -369,8 +369,6 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) {}
-
   bool ms_handle_reset(Connection *con, const entity_addr_t& peer) {
     lock.Lock();
     if (observe)

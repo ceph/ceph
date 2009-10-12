@@ -5934,11 +5934,6 @@ int Client::get_local_osd()
 
 // ===============================
 
-void Client::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr)
-{
-  dout(0) << "ms_handle_failure " << *m << " to " << addr << dendl;
-}
-
 bool Client::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
 {
   dout(0) << "ms_handle_reset on " << addr << dendl;

@@ -1388,12 +1388,6 @@ bool MDS::_dispatch(Message *m)
 
 
 
-void MDS::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) 
-{
-  Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_failure to " << addr << " on " << *m << dendl;
-}
-
 bool MDS::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
 {
   Mutex::Locker l(mds_lock);
