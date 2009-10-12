@@ -179,9 +179,12 @@ void OSDMonitor::committed()
   // tell any osd
   int r = osdmap.get_any_up_osd();
   if (r >= 0) {
-    dout(10) << "committed, telling random osd" << r << " all about it" << dendl;
-    //send_latest(osdmap.get_inst(r), osdmap.get_epoch() - 1);  // whatev, they'll request more if they need it
-#warning hmm, fixme?
+    Session *s = mon->session_map.get_random_osd_session();
+    if (s) {
+      dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+      MOSDMap *m = build_incremental(osdmap.get_epoch() - 1);  // whatev, they'll request more if they need it
+      mon->messenger->send_message(m, s->inst);
+    }
   }
 }
 

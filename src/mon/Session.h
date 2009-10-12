@@ -49,15 +49,26 @@ struct Session : public RefCountedObject {
   }
 };
 
+
 struct SessionMap {
   xlist<Session*> sessions;
   map<nstring, xlist<Subscription*> > subs;
+  multimap<int, Session*> by_osd;
 
   void remove_session(Session *s) {
     for (map<nstring,Subscription*>::iterator p = s->sub_map.begin(); p != s->sub_map.end(); ++p)
       p->second->type_item.remove_myself();
     s->sub_map.clear();
     s->item.remove_myself();
+    if (s->inst.name.is_osd()) {
+      for (multimap<int,Session*>::iterator p = by_osd.find(s->inst.name.num());
+	   p->first == s->inst.name.num();
+	   p++)
+	if (p->second == s) {
+	  by_osd.erase(p);
+	  break;
+	}
+    }
     s->put();
     s->closed = true;
   }
@@ -65,9 +76,24 @@ struct SessionMap {
   Session *new_session(entity_inst_t i) {
     Session *s = new Session(i);
     sessions.push_back(&s->item);
+    if (i.name.is_osd())
+      by_osd.insert(pair<int,Session*>(i.name.num(), s));
     s->get();  // caller gets a ref
     return s;
   }
+  
+  Session *get_random_osd_session() {
+    // ok, this isn't actually random, but close enough.
+    if (by_osd.empty())
+      return 0;
+    int n = by_osd.rbegin()->first + 1;
+    int r = rand() % n;
+    multimap<int,Session*>::iterator p = by_osd.lower_bound(r);
+    if (p == by_osd.end())
+      p--;
+    return p->second;
+  }
+
 
   void add_update_sub(Session *s, const nstring& what, version_t have, bool onetime) {
     Subscription *sub = 0;

@@ -44,7 +44,6 @@ v0.17
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 - kill mon->osd
-  - notify random osd when a map commits?
   - how to tell osds to scrub?
 
 - simplify msgr failure model
