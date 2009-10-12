@@ -92,8 +92,17 @@ bool MonmapMonitor::prepare_update(PaxosServiceMessage *message)
   }
   entity_addr_t addr;
   parse_ip_port(m->cmd[2].c_str(), addr);
-  pending_map.add(addr);
-  pending_map.last_changed = g_clock.now();
+  bufferlist rdata;
+  if (!pending_map.contains(addr)) {
+    pending_map.add(addr);
+    pending_map.last_changed = g_clock.now();
+    mon->reply_command(m, 0, "added mon to map",
+		       rdata, paxos->get_version());
+  }
+  else {
+    mon->reply_command(m, -EINVAL, "mon already exists",
+		       rdata, paxos->get_version());
+  }
   delete message;
   return true;
 }
