@@ -425,7 +425,7 @@ int OSD::init()
   monc->renew_subs();  
 
   // announce to monitor i exist and have booted.
-  do_mon_report();
+  send_boot();
   
   op_tp.start();
   recovery_tp.start();
@@ -1208,51 +1208,26 @@ void OSD::do_mon_report()
 
   last_mon_report = g_clock.now();
 
-  // are prior reports still pending?
-  bool retry = false;
-  if (is_booting()) {
-    dout(10) << "boot still pending" << dendl;
-    retry = true;
-  }
-  if (osdmap->exists(whoami) && 
-      up_thru_pending &&
-      up_thru_pending < osdmap->get_up_thru(whoami)) {
-    dout(10) << "up_thru_pending " << up_thru_pending << " < " << osdmap->get_up_thru(whoami) 
-	     << " -- still pending" << dendl;
-    retry = true;
-  }
-  pg_stat_queue_lock.Lock();
-  if (!pg_stat_queue.empty() || osd_stat_pending) {
-    dout(10) << "pg_stat_queue not empty" << dendl;
-    retry = true;
-  }
-  pg_stat_queue_lock.Unlock();
-
-  if (retry) {
-    monc->reopen_session();
-    dout(10) << "picked a new mon" << dendl;
-  }
-
   // do any pending reports
-  logclient.send_log();
-  if (is_booting())
-    send_boot();
   send_alive();
   send_pg_temp();
   send_failures();
   send_pg_stats();
-  class_handler->resend_class_requests();
 }
 
-bool OSD::ms_handle_reset(Connection *con)
+void OSD::ms_handle_connect(Connection *con)
 {
-  dout(10) << "ms_handle_reset " << con->get_peer_addr() << dendl;
-  
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    // ...
+    Mutex::Locker l(osd_lock);
+    dout(10) << "ms_handle_connect on mon" << dendl;
+    if (is_booting())
+      send_boot();
+    send_alive();
+    send_pg_temp();
+    send_failures();
+    send_pg_stats();
+    class_handler->resend_class_requests();
   }
-
-  return false;
 }
 
 
