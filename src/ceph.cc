@@ -369,17 +369,20 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) {
-    lock.Lock();
-    if (observe)
-      send_observe_requests();
-    if (pending_cmd.size())
-      send_command();
-    lock.Unlock();
-    return true;
+  bool ms_handle_reset(Connection *con) {
+    if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+      lock.Lock();
+      if (observe)
+	send_observe_requests();
+      if (pending_cmd.size())
+	send_command();
+      lock.Unlock();
+      return true;
+    }
+    return false;
   }
 
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  void ms_handle_remote_reset(Connection *con) {}
 
 } dispatcher;
 

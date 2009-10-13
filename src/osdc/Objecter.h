@@ -701,8 +701,8 @@ public:
     }
   }
 
-  void ms_handle_reset(const entity_addr_t& addr);
-  void ms_handle_remote_reset(const entity_addr_t& addr);
+  void ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con);
 
 };
 

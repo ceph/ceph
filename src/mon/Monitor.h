@@ -195,8 +195,8 @@ public:
 
  private:
   bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con) {}
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

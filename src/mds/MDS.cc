@@ -1388,18 +1388,18 @@ bool MDS::_dispatch(Message *m)
 
 
 
-bool MDS::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
+bool MDS::ms_handle_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_reset on " << addr << dendl;
-  objecter->ms_handle_reset(addr);
+  dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
+  objecter->ms_handle_reset(con);
   return false;
 }
 
 
-void MDS::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
+void MDS::ms_handle_remote_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
-  objecter->ms_handle_remote_reset(addr);
+  dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
+  objecter->ms_handle_remote_reset(con);
 }

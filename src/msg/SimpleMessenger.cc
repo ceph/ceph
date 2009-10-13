@@ -293,7 +293,7 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	    entity_addr_t a = remote_reset_q.front().second;
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_remote_reset(con, a);
+	    ms_deliver_handle_remote_reset(con);
 	    con->put();
  	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
@@ -301,7 +301,7 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	    entity_addr_t a = reset_q.front().second;
 	    reset_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_reset(con, a);
+	    ms_deliver_handle_reset(con);
 	    con->put();
 	  } else {
 	    dout(1) << "<== " << m->get_source_inst()

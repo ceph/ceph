@@ -5934,17 +5934,17 @@ int Client::get_local_osd()
 
 // ===============================
 
-bool Client::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
+bool Client::ms_handle_reset(Connection *con) 
 {
-  dout(0) << "ms_handle_reset on " << addr << dendl;
+  dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
-  objecter->ms_handle_reset(addr);
+  objecter->ms_handle_reset(con);
   return false;
 }
 
-void Client::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
+void Client::ms_handle_remote_reset(Connection *con) 
 {
-  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+  dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
-  objecter->ms_handle_remote_reset(addr);
+  objecter->ms_handle_remote_reset(con);
 }

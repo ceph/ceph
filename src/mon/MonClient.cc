@@ -320,15 +320,22 @@ void MonClient::_reopen_session()
   }
 }
 
-bool MonClient::ms_handle_reset(Connection *con, const entity_addr_t& peer)
+bool MonClient::ms_handle_reset(Connection *con)
 {
-  dout(10) << "ms_handle_reset " << peer << dendl;
-  if (hunting)
-    return true;
-
-  dout(0) << "hunting for new mon" << dendl;
-  hunting = true;
-  _reopen_session();
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    if (con->get_peer_addr() != monmap.get_inst(cur_mon).addr) {
+      dout(10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
+      return true;
+    }
+    
+    dout(10) << "ms_handle_reset current mon" << con->get_peer_addr() << dendl;
+    if (hunting)
+      return true;
+    
+    dout(0) << "hunting for new mon" << dendl;
+    hunting = true;
+    _reopen_session();
+  }
   return false;
 }
 

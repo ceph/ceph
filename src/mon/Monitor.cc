@@ -647,18 +647,22 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   delete m;
 }
 
-bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
+bool Monitor::ms_handle_reset(Connection *con)
 {
+  // ignore lossless monitor sessions
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
+    return false;
+
   Session *s = (Session *)con->get_priv();
   if (!s)
     return false;
-
+  
   Mutex::Locker l(lock);
-
+  
   dout(10) << "reset/close on session " << s->inst << dendl;
   remove_session(s);
   s->put();
-
+    
   // remove from connection, too.
   con->set_priv(NULL);
   return true;

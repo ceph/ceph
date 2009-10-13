@@ -207,8 +207,8 @@ public:
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     };
-    bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
-    void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+    bool ms_handle_reset(Connection *con) { return false; }
+    void ms_handle_remote_reset(Connection *con) {}
   public:
     OSD *osd;
     HeartbeatDispatcher(OSD *o) : osd(o) {}
@@ -815,8 +815,8 @@ protected:
 
  private:
   bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con) {}
 
  public:
   OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0);

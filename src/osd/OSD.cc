@@ -1244,6 +1244,18 @@ void OSD::do_mon_report()
   class_handler->resend_class_requests();
 }
 
+bool OSD::ms_handle_reset(Connection *con)
+{
+  dout(10) << "ms_handle_reset " << con->get_peer_addr() << dendl;
+  
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    // ...
+  }
+
+  return false;
+}
+
+
 
 void OSD::send_boot()
 {

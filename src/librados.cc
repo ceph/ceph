@@ -58,8 +58,8 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con);
 
   Objecter *objecter;
 
@@ -341,17 +341,17 @@ bool RadosClient::ms_dispatch(Message *m)
   return ret;
 }
 
-bool RadosClient::ms_handle_reset(Connection *con, const entity_addr_t& addr)
+bool RadosClient::ms_handle_reset(Connection *con)
 {
   Mutex::Locker l(lock);
-  objecter->ms_handle_reset(addr);
+  objecter->ms_handle_reset(con);
   return false;
 }
 
-void RadosClient::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr)
+void RadosClient::ms_handle_remote_reset(Connection *con)
 {
   Mutex::Locker l(lock);
-  objecter->ms_handle_remote_reset(addr);
+  objecter->ms_handle_remote_reset(con);
 }
 
 
