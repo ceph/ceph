@@ -116,11 +116,10 @@ bool LogClient::ms_dispatch(Message *m)
 }
 
 
-bool LogClient::ms_handle_reset(Connection *con)
+void LogClient::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    dout(10) << "ms_handle_reset on mon " << con->get_peer_addr() << ", resending pending log events" << dendl;
+    dout(10) << "ms_handle_connect on mon " << con->get_peer_addr() << ", resending pending log events" << dendl;
     send_log();
   }
-  return false;
 }

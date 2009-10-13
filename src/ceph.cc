@@ -231,26 +231,16 @@ static void send_observe_requests()
 
   bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
-    if (registered.count(i))
-      continue;
     MMonObserve *m = new MMonObserve(mc.monmap.fsid, i, map_ver[i]);
     dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
     mc.send_mon_message(m);
     sent = true;
   }
 
+  registered.clear();
   float seconds = g_conf.paxos_observer_timeout/2;
-  float retry_seconds = 5.0;
-  if (!sent) {
-    // success.  clear for renewal.
-    registered.clear();
-    dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-    timer.add_event_after(seconds, new C_ObserverRefresh(false));
-  } else {
-    //is_timeout = true;
-    dout(1) << " refresh after " << retry_seconds << " with new mon" << dendl;
-    timer.add_event_after(retry_seconds, new C_ObserverRefresh(true));
-  }
+  dout(1) << " refresh after " << seconds << " with same mon" << dendl;
+  timer.add_event_after(seconds, new C_ObserverRefresh(false));
 }
 
 
@@ -369,7 +359,7 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  bool ms_handle_reset(Connection *con) {
+  void ms_handle_connect(Connection *con) {
     if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       lock.Lock();
       if (observe)
@@ -377,11 +367,9 @@ class Admin : public Dispatcher {
       if (pending_cmd.size())
 	send_command();
       lock.Unlock();
-      return true;
     }
-    return false;
   }
-
+  bool ms_handle_reset(Connection *con) { return false; }
   void ms_handle_remote_reset(Connection *con) {}
 
 } dispatcher;

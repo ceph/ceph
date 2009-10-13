@@ -1388,6 +1388,13 @@ bool MDS::_dispatch(Message *m)
 
 
 
+void MDS::ms_handle_connect(Connection *con) 
+{
+  Mutex::Locker l(mds_lock);
+  dout(0) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  objecter->ms_handle_connect(con);
+}
+
 bool MDS::ms_handle_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);

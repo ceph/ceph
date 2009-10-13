@@ -58,6 +58,7 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
+  void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
 
@@ -339,6 +340,12 @@ bool RadosClient::ms_dispatch(Message *m)
   bool ret = _dispatch(m);
   lock.Unlock();
   return ret;
+}
+
+void RadosClient::ms_handle_connect(Connection *con)
+{
+  Mutex::Locker l(lock);
+  objecter->ms_handle_connect(con);
 }
 
 bool RadosClient::ms_handle_reset(Connection *con)

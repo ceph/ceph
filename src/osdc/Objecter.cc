@@ -923,10 +923,16 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 }
 
 
-void Objecter::ms_handle_reset(Connection *con)
+void Objecter::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
+}
+
+void Objecter::ms_handle_reset(Connection *con)
+{
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)
+    maybe_request_map();
 }
 
 void Objecter::ms_handle_remote_reset(Connection *con)

@@ -701,6 +701,7 @@ public:
     }
   }
 
+  void ms_handle_connect(Connection *con);
   void ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
 
