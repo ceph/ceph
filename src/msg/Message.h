@@ -158,9 +158,11 @@ struct Connection : public RefCountedObject {
   atomic_t nref;
   Mutex lock;
   RefCountedObject *priv;
+  int peer_type;
+  entity_addr_t peer_addr;
 
 public:
-  Connection() : nref(1), lock("Connection::lock"), priv(NULL) {}
+  Connection() : nref(1), lock("Connection::lock"), priv(NULL), peer_type(-1) {}
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
@@ -190,6 +192,13 @@ public:
       return priv->get();
     return NULL;
   }
+
+  int get_peer_type() { return peer_type; }
+  void set_peer_type(int t) { peer_type = t; }
+
+  const entity_addr_t& get_peer_addr() { return peer_addr; }
+  void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
+
 };
 
 

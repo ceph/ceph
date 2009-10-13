@@ -193,11 +193,21 @@ private:
     static const Pipe& Server(int s);
     static const Pipe& Client(const entity_addr_t& pi);
 
-    entity_addr_t& get_peer_addr() { return peer_addr; }
 
     __u32 get_out_seq() { return out_seq; }
 
     bool is_queued() { return !q.empty() || keepalive; }
+
+    entity_addr_t& get_peer_addr() { return peer_addr; }
+
+    void set_peer_addr(const entity_addr_t& a) {
+      peer_addr = a;
+      connection_state->set_peer_addr(a);
+    }
+    void set_peer_type(int t) {
+      peer_type = t;
+      connection_state->set_peer_type(t);
+    }
 
     void register_pipe();
     void unregister_pipe();

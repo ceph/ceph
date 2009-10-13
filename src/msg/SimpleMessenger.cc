@@ -575,6 +575,7 @@ int SimpleMessenger::Pipe::accept()
     dout(0) << "accept peer addr is really " << peer_addr
 	    << " (socket is " << socket_addr << ")" << dendl;
   }
+  set_peer_addr(peer_addr);  // so that connection_state gets set up
   
   ceph_msg_connect connect;
   ceph_msg_connect_reply reply;
@@ -596,7 +597,7 @@ int SimpleMessenger::Pipe::accept()
     rank->lock.Lock();
 
     // note peer's type, flags
-    peer_type = connect.host_type;
+    set_peer_type(connect.host_type);
     policy = rank->get_policy(connect.host_type);
     dout(10) << "accept of host_type " << connect.host_type
 	     << ", policy.lossy=" << policy.lossy
@@ -2044,9 +2045,9 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   
   // create pipe
   Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
-  pipe->peer_type = type;
+  pipe->set_peer_type(type);
+  pipe->set_peer_addr(addr);
   pipe->policy = get_policy(type);
-  pipe->peer_addr = addr;
   pipe->start_writer();
   pipe->register_pipe();
   pipes.insert(pipe);
