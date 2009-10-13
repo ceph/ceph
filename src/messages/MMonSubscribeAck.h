@@ -32,8 +32,7 @@ struct MMonSubscribeAck : public Message {
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(interval, p);
-    if (!p.end())
-      ::decode(fsid, p);
+    ::decode(fsid, p);
   }
   void encode_payload() {
     ::encode(interval, payload);
