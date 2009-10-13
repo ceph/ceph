@@ -317,7 +317,10 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   DIR *dirp;
   int r;
   r = ceph_opendir(c_path, &dirp);
-  if (r<0) return NULL;
+  if (r<0) {
+    env->ReleaseStringUTFChars(j_path, c_path);
+    return NULL;
+  }
   int buflen = 100; //good default?
   char *buf = new char[buflen];
   string *ent;
@@ -349,17 +352,13 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   
   if (r < 0) return NULL;
 
-  dout(10) << "checking for empty dir" << dendl;
-  int dir_size = contents.size();
-  assert ( dir_size>= 0);
-
   // Create a Java String array of the size of the directory listing
   jclass stringClass = env->FindClass("java/lang/String");
   if (stringClass == NULL) {
     dout(0) << "ERROR: java String class not found; dying a horrible, painful death" << dendl;
     assert(0);
   }
-  jobjectArray dirListingStringArray = (jobjectArray) env->NewObjectArray(dir_size, stringClass, NULL);
+  jobjectArray dirListingStringArray = (jobjectArray) env->NewObjectArray(contents.size(), stringClass, NULL);
   if(dirListingStringArray == NULL) return NULL;
 
   // populate the array with the elements of the directory list
@@ -367,7 +366,6 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
   for (list<string>::iterator it = contents.begin();
        it != contents.end();
        it++) {
-    assert (i < dir_size);
     env->SetObjectArrayElement(dirListingStringArray, i, 
 			       env->NewStringUTF(it->c_str()));
     ++i;
