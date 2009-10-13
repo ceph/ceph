@@ -95,7 +95,7 @@ public class CephOutputStream extends OutputStream {
    */
   @Override
 	public synchronized void write(int b) throws IOException {
-      if(debug) debug("CephOutputStream.write: writing a single byte to fd " + fileHandle);
+      debug("CephOutputStream.write: writing a single byte to fd " + fileHandle);
 
       if (closed) {
 				throw new IOException("CephOutputStream.write: cannot write " + 
@@ -106,7 +106,7 @@ public class CephOutputStream extends OutputStream {
       buf[0] = (byte) b;    
       int result = ceph_write(fileHandle, buf, 0, 1);
       if (1 != result)
-				if(debug) debug("CephOutputStream.write: failed writing a single byte to fd "
+				debug("CephOutputStream.write: failed writing a single byte to fd "
 												+ fileHandle + ": Ceph write() result = " + result);
       return;
     }
@@ -117,13 +117,12 @@ public class CephOutputStream extends OutputStream {
    * @param off the position in the file to start writing at.
    * @param len The number of bytes to actually write.
    * @throws IOException if you have closed the CephOutputStream, or
-   * the write fails.
-   * @throws NullPointerException if buf is null.
-   * @throws IndexOutOfBoundsException if len > buf.length.
+	 * if buf is null or len > buf.length, or
+	 * if the write fails due to a Ceph error.
    */
   @Override
 	public synchronized void write(byte buf[], int off, int len) throws IOException {
-			if(debug) debug("CephOutputStream.write: writing " + len + 
+			debug("CephOutputStream.write: writing " + len + 
 											" bytes to fd " + fileHandle);
       // make sure stream is open
       if (closed) {
@@ -133,13 +132,13 @@ public class CephOutputStream extends OutputStream {
 
       // sanity check
       if (null == buf) {
-				throw new NullPointerException("CephOutputStream.write: cannot write " + len + 
+				throw new IOException("CephOutputStream.write: cannot write " + len + 
 																			 "bytes to fd " + fileHandle + ": write buffer is null");
       }
 
       // check for proper index bounds
       if((off < 0) || (len < 0) || (off + len > buf.length)) {
-				throw new IndexOutOfBoundsException("CephOutputStream.write: Indices out of bounds for write: "
+				throw new IOException("CephOutputStream.write: Indices out of bounds for write: "
 																						+ "write length is " + len + ", buffer offset is " 
 																						+ off +", and buffer size is " + buf.length);
       }
@@ -176,7 +175,7 @@ public class CephOutputStream extends OutputStream {
    */
   @Override
 	public synchronized void close() throws IOException {
-      if(debug) debug("CephOutputStream.close:enter");
+      debug("CephOutputStream.close:enter");
       if (closed) {
 				throw new IOException("Stream closed");
       }
@@ -187,7 +186,7 @@ public class CephOutputStream extends OutputStream {
       }
 	
       closed = true;
-      if(debug) debug("CephOutputStream.close:exit");
+      debug("CephOutputStream.close:exit");
     }
 
   private void debug(String out) {

@@ -27,7 +27,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-//import java.lang.IndexOutOfBoundsException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSInputStream;
@@ -71,7 +70,7 @@ public class CephInputStream extends FSInputStream {
     fileHandle = fh;
     closed = false;
     debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
-    if(debug) debug("CephInputStream constructor: initializing stream with fh "
+    debug("CephInputStream constructor: initializing stream with fh "
 										+ fh + " and file length " + flength);
       
   }
@@ -97,7 +96,7 @@ public class CephInputStream extends FSInputStream {
     }
 
   public synchronized void seek(long targetPos) throws IOException {
-    if(debug) debug("CephInputStream.seek: Seeking to position " + targetPos +
+    debug("CephInputStream.seek: Seeking to position " + targetPos +
 										" on fd " + fileHandle);
     if (targetPos > fileLength) {
       throw new IOException("CephInputStream.seek: failed seeking to position " + targetPos +
@@ -123,7 +122,7 @@ public class CephInputStream extends FSInputStream {
    */
   @Override
 	public synchronized int read() throws IOException {
-      if(debug) debug("CephInputStream.read: Reading a single byte from fd " + fileHandle
+      debug("CephInputStream.read: Reading a single byte from fd " + fileHandle
 											+ " by calling general read function");
 
       byte result[] = new byte[1];
@@ -142,19 +141,19 @@ public class CephInputStream extends FSInputStream {
    */
   @Override
 	public synchronized int read(byte buf[], int off, int len) throws IOException {
-      if(debug) debug("CephInputStream.read: Reading " + len  + " bytes from fd " + fileHandle);
+      debug("CephInputStream.read: Reading " + len  + " bytes from fd " + fileHandle);
       
       if (closed) {
 				throw new IOException("CephInputStream.read: cannot read " + len  + 
 															" bytes from fd " + fileHandle + ": stream closed");
       }
       if (null == buf) {
-				throw new NullPointerException("Read buffer is null");
+				throw new IOException("Read buffer is null");
       }
       
       // check for proper index bounds
       if((off < 0) || (len < 0) || (off + len > buf.length)) {
-				throw new IndexOutOfBoundsException("CephInputStream.read: Indices out of bounds for read: "
+				throw new IOException("CephInputStream.read: Indices out of bounds for read: "
 																						+ "read length is " + len + ", buffer offset is " 
 																						+ off +", and buffer size is " + buf.length);
       }
@@ -162,7 +161,7 @@ public class CephInputStream extends FSInputStream {
       // ensure we're not past the end of the file
       if (getPos() >= fileLength) 
 				{
-					if(debug) debug("CephInputStream.read: cannot read " + len  + 
+					debug("CephInputStream.read: cannot read " + len  + 
 													" bytes from fd " + fileHandle + ": current position is " +
 													getPos() + " and file length is " + fileLength);
 	  
@@ -171,10 +170,10 @@ public class CephInputStream extends FSInputStream {
       // actually do the read
       int result = ceph_read(fileHandle, buf, off, len);
       if (result < 0)
-				if(debug) debug("CephInputStream.read: Reading " + len
+				debug("CephInputStream.read: Reading " + len
 												+ " bytes from fd " + fileHandle + " failed.");
 
-      if(debug) debug("CephInputStream.read: Reading " + len  + " bytes from fd " 
+      debug("CephInputStream.read: Reading " + len  + " bytes from fd " 
 											+ fileHandle + ": succeeded in reading " + result + " bytes");   
       return result;
 		}
@@ -184,7 +183,7 @@ public class CephInputStream extends FSInputStream {
    */
   @Override
 	public void close() throws IOException {
-    if(debug) debug("CephOutputStream.close:enter");
+    debug("CephOutputStream.close:enter");
     if (closed) {
       throw new IOException("Stream closed");
     }
@@ -194,7 +193,7 @@ public class CephInputStream extends FSInputStream {
       throw new IOException("Close failed!");
     }
     closed = true;
-    if(debug) debug("CephOutputStream.close:exit");
+    debug("CephOutputStream.close:exit");
   }
 
   private void debug(String out) {
