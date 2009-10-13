@@ -5936,7 +5936,7 @@ int Client::get_local_osd()
 
 void Client::ms_handle_connect(Connection *con)
 {
-  dout(0) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  dout(10) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
   objecter->ms_handle_connect(con);
 }
