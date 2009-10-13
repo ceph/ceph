@@ -3693,14 +3693,15 @@ int Client::opendir(const char *relpath, DIR **dirpp)
 
 int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid) 
 {
-  int r = 0;
   *dirpp = new DirResult(in);
+  if (!in->is_dir())
+    return -ENOTDIR;
   (*dirpp)->set_frag(in->dirfragtree[0]);
-  if (in->dir)
+  if(in->dir)
     (*dirpp)->release_count = in->dir->release_count;
   dout(10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
-  dout(3) << "_opendir(" << in->ino << ") = " << r << " (" << *dirpp << ")" << dendl;
-  return r;
+  dout(3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
+  return 0;
 }
 
 void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
