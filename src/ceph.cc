@@ -617,7 +617,6 @@ int main(int argc, const char **argv, const char *envp[])
   messenger->add_dispatcher_head(&dispatcher);
 
   rank.start();
-  rank.set_default_policy(SimpleMessenger::Policy::lossy_fail_after(1.0));
 
   mc.set_messenger(messenger);
   mc.init();

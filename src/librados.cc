@@ -290,11 +290,6 @@ bool RadosClient::init()
   
   messenger->add_dispatcher_head(this);
 
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
-  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossless());  // mds does its own timeout/markdown
-
   rank.start(1);
 
   objecter = new Objecter(messenger, &monclient, &osdmap, lock);

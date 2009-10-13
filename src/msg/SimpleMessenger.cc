@@ -470,7 +470,7 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix() {
 		<< " sd=" << sd
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
-		<< " ltx=" << policy.lossy_tx
+		<< " l=" << policy.lossy
 		<< ").";
 }
 
@@ -598,9 +598,9 @@ int SimpleMessenger::Pipe::accept()
     // note peer's type, flags
     peer_type = connect.host_type;
     policy = rank->get_policy(connect.host_type);
-    dout(10) << "accept host_type " << connect.host_type
-	     << ", setting policy, lossy_tx=" << policy.lossy_tx << dendl;
-    lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
+    dout(10) << "accept of host_type " << connect.host_type
+	     << ", policy.lossy=" << policy.lossy
+	     << dendl;
 
     memset(&reply, 0, sizeof(reply));
     reply.protocol_version = get_proto_version(rank->my_type, peer_type, false);
@@ -632,12 +632,13 @@ int SimpleMessenger::Pipe::accept()
 		 << " <= " << connect.global_seq << ", looks ok" << dendl;
       }
       
-      if (existing->policy.lossy_tx) {
-	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
+      if (existing->policy.lossy) {
+	dout(-10) << "accept replacing existing (lossy) channel (new one lossy="
+		  << policy.lossy << ")" << dendl;
 	existing->was_session_reset();
 	goto replace;
       }
-      if (lossy_rx) {
+      /*if (lossy_rx) {
 	if (existing->state == STATE_STANDBY) {
 	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless "
 		    << existing << dendl;
@@ -649,7 +650,7 @@ int SimpleMessenger::Pipe::accept()
 	}
 	existing->lock.Unlock();
 	goto fail;
-      }
+	}*/
 
       dout(-10) << "accept connect_seq " << connect.connect_seq
 		<< " vs existing " << existing->connect_seq
@@ -762,7 +763,7 @@ int SimpleMessenger::Pipe::accept()
   reply.global_seq = rank->get_global_seq();
   reply.connect_seq = connect_seq;
   reply.flags = 0;
-  if (policy.lossy_tx)
+  if (policy.lossy)
     reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
   // ok!
@@ -922,8 +923,8 @@ int SimpleMessenger::Pipe::connect()
     connect.connect_seq = cseq;
     connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
     connect.flags = 0;
-    if (policy.lossy_tx)
-      connect.flags |= CEPH_MSG_CONNECT_LOSSY;
+    if (policy.lossy)
+      connect.flags |= CEPH_MSG_CONNECT_LOSSY;  // this is fyi, actually, server decides!
     memset(&msg, 0, sizeof(msg));
     msgvec[0].iov_base = (char*)&connect;
     msgvec[0].iov_len = sizeof(connect);
@@ -995,12 +996,12 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_READY) {
       // hooray!
       peer_global_seq = reply.global_seq;
-      lossy_rx = reply.flags & CEPH_MSG_CONNECT_LOSSY;
+      policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
       state = STATE_OPEN;
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
       first_fault = last_attempt = utime_t();
-      dout(20) << "connect success " << connect_seq << ", lossy_rx = " << lossy_rx << dendl;
+      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
 
       if (!reader_running) {
 	dout(20) << "connect starting reader" << dendl;
@@ -1102,7 +1103,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   }
 
   // lossy channel?
-  if (policy.lossy_tx) {
+  if (policy.lossy) {
     dout(10) << "fault on lossy channel, failing" << dendl;
     was_session_reset();
     fail();
@@ -1117,7 +1118,7 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
     } else {
-      dout(0) << "fault nothing to send, going to standby" << dendl;
+      dout(0) << "fault with nothing to send, going to standby" << dendl;
       state = STATE_STANDBY;
     }
     return;
@@ -1125,30 +1126,29 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
 
   utime_t now = g_clock.now();
   if (state != STATE_CONNECTING) {
-    if (!onconnect) dout(0) << "fault initiating reconnect" << dendl;
+    if (!onconnect)
+      dout(0) << "fault initiating reconnect" << dendl;
     connect_seq++;
     state = STATE_CONNECTING;
     first_fault = now;
   } else if (first_fault.sec() == 0) {
-    if (!onconnect) dout(0) << "fault first fault" << dendl;
+    if (!onconnect)
+      dout(0) << "fault first fault" << dendl;
     first_fault = now;
   } else {
+
+#warning clean me up
+
     utime_t failinterval = now - first_fault;
     utime_t retryinterval = now - last_attempt;
     if (!onconnect) dout(10) << "fault failure was " << failinterval 
 			     << " ago, last attempt was at " << last_attempt
 			     << ", " << retryinterval << " ago" << dendl;
-    if (policy.fail_interval > 0 && failinterval > policy.fail_interval) {
-      // give up
-      dout(0) << "fault giving up" << dendl;
-      fail();
-    } else if (retryinterval < policy.retry_interval) {
-      // wait
-      now += (policy.retry_interval - retryinterval);
-      dout(10) << "fault waiting until " << now << dendl;
-      cond.WaitUntil(lock, now);
-      dout(10) << "fault done waiting or woke up" << dendl;
-    }
+    // wait
+    now += 1.0;
+    dout(10) << "fault waiting until " << now << dendl;
+    cond.WaitUntil(lock, now);
+    dout(10) << "fault done waiting or woke up" << dendl;
   }
   last_attempt = now;
 }
@@ -1309,7 +1309,7 @@ void SimpleMessenger::Pipe::reader()
       }
       in_seq++;
 
-      if (!lossy_rx && in_seq != m->get_seq()) {
+      if (!policy.lossy && in_seq != m->get_seq()) {
 	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
