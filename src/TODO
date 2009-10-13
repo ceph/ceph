@@ -37,7 +37,9 @@ v0.17
 - kclient: fix mon subscription renewal
 - crush: fix crush map creation with empty buckets (occurs on larger clusters)
 - osdmap: fix encoding bug (crashes kclient); make kclient not crash
-
+- msgr: simplified policy, failure model
+- mon: less push, more pull
+- mon: request routing
 
 - mon cluster expansion, contraction
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
@@ -46,16 +48,8 @@ v0.17
 - kill mon->osd
   - how to tell osds to scrub?
 
-- simplify msgr failure model
-   mon<->mon lossless, p2p
-   osd<->osd lossless, p2p
-   mds<->mds lossless, p2p
-   osdc<->osd lossy, client/server
-   monc<->mon lossy, client/server
-   client<->mds lossless, client/server
-
 - mon: revisit session trim logic... s->until == utime_t()?  :/
-
+- osd: fix monitor message resend, reset crap
 
 pending wire, disk format changes
 - add fsid to MMonSubscribeAck
