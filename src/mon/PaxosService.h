@@ -76,6 +76,7 @@ public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
 					proposal_timer(0),
 					have_pending(false) { }
+  virtual ~PaxosService() {}
 
   const char *get_machine_name();
   
