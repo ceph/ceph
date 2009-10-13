@@ -33,7 +33,7 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, PaxosServiceMessage *m_) : svc(s), m(m_) {}
     void finish(int r) {
-      svc->dispatch(m);//FIX_ME
+      svc->dispatch(m);
     }
   };
   class C_Active : public Context {
