@@ -21,12 +21,9 @@ package org.apache.hadoop.fs.ceph;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
-import java.io.File;
 import java.io.OutputStream;
 import java.net.URI;
-import java.util.Set;
 import java.util.EnumSet;
-import java.util.Vector;
 import java.lang.Math;
 
 import org.apache.hadoop.conf.Configuration;
