@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 vers=`grep AM_INIT_AUTOMAKE configure.ac | head -1 | cut '-d '  -f 2 | sed 's/)//'`
 echo vers $vers
 
@@ -23,8 +25,8 @@ fi
 echo final vers $finalvers
 
 echo cleanup
-rm *.deb *.tar.gz *.changes *.dsc
-rm -rf ceph-$vers*
+rm *.deb *.tar.gz *.changes *.dsc || true
+rm -rf ceph-$vers* || true
 
 echo generating git version stamp
 cd src
