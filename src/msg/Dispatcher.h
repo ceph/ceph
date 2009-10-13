@@ -29,6 +29,9 @@ public:
   // how i receive messages
   virtual bool ms_dispatch(Message *m) = 0;
 
+  // after a connection connects
+  virtual void ms_handle_connect(Connection *con) { };
+
   /*
    * on any connection reset.
    * this indicates that the ordered+reliable delivery semantics have 

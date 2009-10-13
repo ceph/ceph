@@ -104,6 +104,12 @@ protected:
 		    << dendl;
     assert(0);
   }
+  void ms_deliver_handle_connect(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      (*p)->ms_handle_connect(con);
+  }
   void ms_deliver_handle_reset(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();

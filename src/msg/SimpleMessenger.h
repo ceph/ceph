@@ -296,21 +296,29 @@ private:
       lock.Unlock();
     }
 
-    enum { BAD_REMOTE_RESET, BAD_RESET };
+    enum { D_CONNECT, D_BAD_REMOTE_RESET, D_BAD_RESET };
+    list<Connection*> connect_q;
     list<Connection*> remote_reset_q;
     list<Connection*> reset_q;
 
+    void queue_connect(Connection *con) {
+      lock.Lock();
+      connect_q.push_back(con);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)D_CONNECT);
+      cond.Signal();
+      lock.Unlock();
+    }
     void queue_remote_reset(Connection *con) {
       lock.Lock();
       remote_reset_q.push_back(con);
-      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_REMOTE_RESET);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)D_BAD_REMOTE_RESET);
       cond.Signal();
       lock.Unlock();
     }
     void queue_reset(Connection *con) {
       lock.Lock();
       reset_q.push_back(con);
-      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)D_BAD_RESET);
       cond.Signal();
       lock.Unlock();
     }

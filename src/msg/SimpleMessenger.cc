@@ -287,14 +287,21 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	  }
           Message *m = ls.front();
           ls.pop_front();
-	  if ((long)m == BAD_REMOTE_RESET) {
+	  if ((long)m == D_BAD_REMOTE_RESET) {
 	    lock.Lock();
 	    Connection *con = remote_reset_q.front();
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
 	    ms_deliver_handle_remote_reset(con);
 	    con->put();
- 	  } else if ((long)m == BAD_RESET) {
+ 	  } else if ((long)m == D_CONNECT) {
+	    lock.Lock();
+	    Connection *con = connect_q.front();
+	    connect_q.pop_front();
+	    lock.Unlock();
+	    ms_deliver_handle_connect(con);
+	    con->put();
+ 	  } else if ((long)m == D_BAD_RESET) {
 	    lock.Lock();
 	    Connection *con = reset_q.front();
 	    reset_q.pop_front();
@@ -1001,6 +1008,10 @@ int SimpleMessenger::Pipe::connect()
       assert(connect_seq == reply.connect_seq);
       backoff = utime_t();
       dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
+
+      for (unsigned i=0; i<rank->local.size(); i++) 
+	if (rank->local[i])
+	  rank->local[i]->queue_connect(connection_state->get());
 
       if (!reader_running) {
 	dout(20) << "connect starting reader" << dendl;
