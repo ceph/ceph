@@ -289,16 +289,14 @@ void SimpleMessenger::Endpoint::dispatch_entry()
           ls.pop_front();
 	  if ((long)m == BAD_REMOTE_RESET) {
 	    lock.Lock();
-	    Connection *con = remote_reset_q.front().first;
-	    entity_addr_t a = remote_reset_q.front().second;
+	    Connection *con = remote_reset_q.front();
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
 	    ms_deliver_handle_remote_reset(con);
 	    con->put();
  	  } else if ((long)m == BAD_RESET) {
 	    lock.Lock();
-	    Connection *con = reset_q.front().first;
-	    entity_addr_t a = reset_q.front().second;
+	    Connection *con = reset_q.front();
 	    reset_q.pop_front();
 	    lock.Unlock();
 	    ms_deliver_handle_reset(con);
@@ -1157,7 +1155,7 @@ void SimpleMessenger::Pipe::fail()
 
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
-      rank->local[i]->queue_reset(connection_state->get(), peer_addr);
+      rank->local[i]->queue_reset(connection_state->get());
 
   // unregister
   lock.Unlock();
@@ -1175,7 +1173,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   report_failures();
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
-      rank->local[i]->queue_remote_reset(connection_state->get(), peer_addr);
+      rank->local[i]->queue_remote_reset(connection_state->get());
 
   out_seq = 0;
   in_seq = 0;
