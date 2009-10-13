@@ -1,4 +1,4 @@
-// -*- mode:Java; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:Java; tab-width:2; c-basic-offset:2; indent-tabs-mode:t -*- 
 /**
  *
  * Licensed under the Apache License, Version 2.0
@@ -72,7 +72,7 @@ public class CephInputStream extends FSInputStream {
     closed = false;
     debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
     if(debug) debug("CephInputStream constructor: initializing stream with fh "
-	  + fh + " and file length " + flength);
+										+ fh + " and file length " + flength);
       
   }
   /** Ceph likes things to be closed before it shuts down,
@@ -92,16 +92,16 @@ public class CephInputStream extends FSInputStream {
    * Find the number of bytes remaining in the file.
    */
   @Override
-  public synchronized int available() throws IOException {
+	public synchronized int available() throws IOException {
       return (int) (fileLength - getPos());
     }
 
   public synchronized void seek(long targetPos) throws IOException {
     if(debug) debug("CephInputStream.seek: Seeking to position " + targetPos +
-	  " on fd " + fileHandle);
+										" on fd " + fileHandle);
     if (targetPos > fileLength) {
       throw new IOException("CephInputStream.seek: failed seeking to position " + targetPos +
-			    " on fd " + fileHandle + ": Cannot seek after EOF " + fileLength);
+														" on fd " + fileHandle + ": Cannot seek after EOF " + fileLength);
     }
     ceph_seek_from_start(fileHandle, targetPos);
   }
@@ -122,9 +122,9 @@ public class CephInputStream extends FSInputStream {
    * @return the next byte.
    */
   @Override
-  public synchronized int read() throws IOException {
+	public synchronized int read() throws IOException {
       if(debug) debug("CephInputStream.read: Reading a single byte from fd " + fileHandle
-	    + " by calling general read function");
+											+ " by calling general read function");
 
       byte result[] = new byte[1];
       if (getPos() >= fileLength) return -1;
@@ -141,49 +141,49 @@ public class CephInputStream extends FSInputStream {
    * @return 0 if successful, otherwise an error code.
    */
   @Override
-  public synchronized int read(byte buf[], int off, int len) throws IOException {
+	public synchronized int read(byte buf[], int off, int len) throws IOException {
       if(debug) debug("CephInputStream.read: Reading " + len  + " bytes from fd " + fileHandle);
       
       if (closed) {
-	throw new IOException("CephInputStream.read: cannot read " + len  + 
-			      " bytes from fd " + fileHandle + ": stream closed");
+				throw new IOException("CephInputStream.read: cannot read " + len  + 
+															" bytes from fd " + fileHandle + ": stream closed");
       }
       if (null == buf) {
-	throw new NullPointerException("Read buffer is null");
+				throw new NullPointerException("Read buffer is null");
       }
       
       // check for proper index bounds
       if((off < 0) || (len < 0) || (off + len > buf.length)) {
-	throw new IndexOutOfBoundsException("CephInputStream.read: Indices out of bounds for read: "
-			    + "read length is " + len + ", buffer offset is " 
-			    + off +", and buffer size is " + buf.length);
+				throw new IndexOutOfBoundsException("CephInputStream.read: Indices out of bounds for read: "
+																						+ "read length is " + len + ", buffer offset is " 
+																						+ off +", and buffer size is " + buf.length);
       }
       
       // ensure we're not past the end of the file
       if (getPos() >= fileLength) 
-	{
-	  if(debug) debug("CephInputStream.read: cannot read " + len  + 
-			     " bytes from fd " + fileHandle + ": current position is " +
-			     getPos() + " and file length is " + fileLength);
+				{
+					if(debug) debug("CephInputStream.read: cannot read " + len  + 
+													" bytes from fd " + fileHandle + ": current position is " +
+													getPos() + " and file length is " + fileLength);
 	  
-	  return -1;
-	}
+					return -1;
+				}
       // actually do the read
       int result = ceph_read(fileHandle, buf, off, len);
       if (result < 0)
-	if(debug) debug("CephInputStream.read: Reading " + len
-			   + " bytes from fd " + fileHandle + " failed.");
+				if(debug) debug("CephInputStream.read: Reading " + len
+												+ " bytes from fd " + fileHandle + " failed.");
 
       if(debug) debug("CephInputStream.read: Reading " + len  + " bytes from fd " 
-	    + fileHandle + ": succeeded in reading " + result + " bytes");   
+											+ fileHandle + ": succeeded in reading " + result + " bytes");   
       return result;
-  }
+		}
 
   /**
    * Close the CephInputStream and release the associated filehandle.
    */
   @Override
-  public void close() throws IOException {
+	public void close() throws IOException {
     if(debug) debug("CephOutputStream.close:enter");
     if (closed) {
       throw new IOException("Stream closed");
