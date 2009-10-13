@@ -41,8 +41,6 @@ import org.apache.hadoop.util.Progressable;
  */
 public class CephOutputStream extends OutputStream {
 
-  private int bufferSize;
-
   private boolean closed;
 
   private int fileHandle;
@@ -50,7 +48,6 @@ public class CephOutputStream extends OutputStream {
   private boolean debug;
 
 
-  private native long ceph_seek_from_start(int fh, long pos);
   private native long ceph_getpos(int fh);
   private native int ceph_close(int fh);
   private native int ceph_write(int fh, byte[] buffer, int buffer_offset, int length);

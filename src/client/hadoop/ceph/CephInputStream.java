@@ -39,8 +39,6 @@ import org.apache.hadoop.fs.FSInputStream;
  */
 public class CephInputStream extends FSInputStream {
 
-  private int bufferSize;
-
   private boolean closed;
 
   private int fileHandle;

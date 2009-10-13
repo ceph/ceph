@@ -75,15 +75,12 @@ public class CephFileSystem extends FileSystem {
   private boolean initialized = false;
 
   private boolean debug = false;
-  private String cephDebugLevel;
-  private String monAddr;
   private String fs_default_name;
   
   private native boolean ceph_initializeClient(String arguments, int block_size);
   private native String  ceph_getcwd();
   private native boolean ceph_setcwd(String path);
   private native boolean ceph_rmdir(String path);
-  private native boolean ceph_mkdir(String path);
   private native boolean ceph_unlink(String path);
   private native boolean ceph_rename(String old_path, String new_path);
   private native boolean ceph_exists(String path);
