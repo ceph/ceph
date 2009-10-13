@@ -42,6 +42,7 @@ v0.17
 - mon: request routing
 
 - mon cluster expansion, contraction
+
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
 - kclient: retry alloc on ENOMEM when reading from connection?
 
@@ -49,12 +50,10 @@ v0.17
   - how to tell osds to scrub?
 
 - mon: revisit session trim logic... s->until == utime_t()?  :/
-- osd: fix monitor message resend, reset crap
 
 pending wire, disk format changes
 - add fsid to MMonSubscribeAck
 - hmm, version field in msg header?
-- timestamp in MonMap
 
 bugs
 - mislinked directory?

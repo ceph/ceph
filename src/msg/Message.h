@@ -228,6 +228,7 @@ public:
   Message(int t) : connection(NULL), nref(0) {
     memset(&header, 0, sizeof(header));
     header.type = t;
+    header.version = 1;
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
