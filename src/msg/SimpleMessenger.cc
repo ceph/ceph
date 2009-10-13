@@ -1000,7 +1000,7 @@ int SimpleMessenger::Pipe::connect()
       state = STATE_OPEN;
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
-      first_fault = last_attempt = utime_t();
+      backoff = utime_t();
       dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
 
       if (!reader_running) {
@@ -1124,33 +1124,26 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
     return;
   } 
 
+
   utime_t now = g_clock.now();
   if (state != STATE_CONNECTING) {
     if (!onconnect)
       dout(0) << "fault initiating reconnect" << dendl;
     connect_seq++;
     state = STATE_CONNECTING;
-    first_fault = now;
-  } else if (first_fault.sec() == 0) {
+    backoff = utime_t();
+  } else if (backoff == utime_t()) {
     if (!onconnect)
       dout(0) << "fault first fault" << dendl;
-    first_fault = now;
+    backoff.set_from_double(g_conf.ms_initial_backoff);
   } else {
-
-#warning clean me up
-
-    utime_t failinterval = now - first_fault;
-    utime_t retryinterval = now - last_attempt;
-    if (!onconnect) dout(10) << "fault failure was " << failinterval 
-			     << " ago, last attempt was at " << last_attempt
-			     << ", " << retryinterval << " ago" << dendl;
-    // wait
-    now += 1.0;
-    dout(10) << "fault waiting until " << now << dendl;
-    cond.WaitUntil(lock, now);
+    dout(10) << "fault waiting " << backoff << dendl;
+    cond.WaitInterval(lock, backoff);
+    backoff += backoff;
+    if (backoff > g_conf.ms_max_backoff)
+      backoff.set_from_double(g_conf.ms_max_backoff);
     dout(10) << "fault done waiting or woke up" << dendl;
   }
-  last_attempt = now;
 }
 
 void SimpleMessenger::Pipe::fail()

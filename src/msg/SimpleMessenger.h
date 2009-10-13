@@ -103,8 +103,7 @@ private:
   protected:
     Connection *connection_state;
 
-    utime_t first_fault;   // time of original failure
-    utime_t last_attempt;  // time of last reconnect attempt
+    utime_t backoff;         // backoff time
 
     bool reader_running;
     bool writer_running;

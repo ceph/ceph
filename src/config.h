@@ -117,8 +117,8 @@ struct md_config_t {
   */
 
   bool ms_tcp_nodelay;
-  double ms_retry_interval;
-  double ms_fail_interval;
+  double ms_initial_backoff;
+  double ms_max_backoff;
   bool ms_die_on_failure;
   bool ms_nocrc;
   bool ms_die_on_bad_msg;

@@ -341,8 +341,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
-	OPTION(ms_retry_interval, 0, OPT_DOUBLE, 2.0),  // how often to attempt reconnect
-	OPTION(ms_fail_interval, 0, OPT_DOUBLE, 15.0),  // fail after this long
+	OPTION(ms_initial_backoff, 0, OPT_DOUBLE, .2),
+	OPTION(ms_max_backoff, 0, OPT_DOUBLE, 15.0),
 	OPTION(ms_die_on_failure, 0, OPT_BOOL, false),
 	OPTION(ms_nocrc, 0, OPT_BOOL, false),
 	OPTION(ms_die_on_bad_msg, 0, OPT_BOOL, false),
