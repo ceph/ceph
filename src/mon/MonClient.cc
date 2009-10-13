@@ -322,19 +322,21 @@ void MonClient::_reopen_session()
 
 bool MonClient::ms_handle_reset(Connection *con)
 {
+  Mutex::Locker lock(monc_lock);
+
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     if (con->get_peer_addr() != monmap.get_inst(cur_mon).addr) {
       dout(10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
       return true;
+    } else {
+      dout(10) << "ms_handle_reset current mon " << con->get_peer_addr() << dendl;
+      if (hunting)
+	return true;
+      
+      dout(0) << "hunting for new mon" << dendl;
+      hunting = true;
+      _reopen_session();
     }
-    
-    dout(10) << "ms_handle_reset current mon" << con->get_peer_addr() << dendl;
-    if (hunting)
-      return true;
-    
-    dout(0) << "hunting for new mon" << dendl;
-    hunting = true;
-    _reopen_session();
   }
   return false;
 }
@@ -354,6 +356,7 @@ void MonClient::tick()
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
     _reopen_session();
+
   } else {
     // just renew as needed
     utime_t now = g_clock.now();
