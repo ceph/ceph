@@ -39,9 +39,27 @@ public class CephOutputStream extends OutputStream {
 
   private boolean debug;
 
-
+	/*
+	 * Get the current position in a file (as a long) of a given filehandle.
+	 * Returns: (long) current file position on success, or a
+	 *  negative error code on failure.
+	 */
   private native long ceph_getpos(int fh);
+	/*
+	 * Closes the given file. Returns 0 on success, or a negative
+	 * error code otherwise.
+	 */
   private native int ceph_close(int fh);
+	/*
+	 * Write the given buffer contents to the given filehandle.
+	 * Inputs:
+	 *  int fh: The filehandle to write to.
+	 *  byte[] buffer: The buffer to write from
+	 *  int buffer_offset: The position in the buffer to write from
+	 *  int length: The number of (sequential) bytes to write.
+	 * Returns: int, on success the number of bytes written, on failure
+	 *  a negative error code.
+	 */
   private native int ceph_write(int fh, byte[] buffer, int buffer_offset, int length);
 
 

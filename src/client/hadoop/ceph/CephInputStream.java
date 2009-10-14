@@ -40,9 +40,36 @@ public class CephInputStream extends FSInputStream {
 
   private boolean debug;
 
+	/*
+	 * Reads into the given byte array from the current position.
+	 * Inputs:
+	 *  int fh: the filehandle to read from
+	 *  byte[] buffer: the byte array to read into
+	 *  int buffer_offset: where in the buffer to start writing
+	 *  int length: how much to read.
+	 * There'd better be enough space in the buffer to write all
+	 * the data from the given offset!
+	 * Returns: the number of bytes read on success (as an int),
+	 *  or an error code otherwise.	 */
   private native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
+	/*
+	 * Seeks to the given position in the given file.
+	 * Inputs:
+	 *  int fh: The filehandle to seek in.
+	 *  long pos: The position to seek to.
+	 * Returns: the new position (as a long) of the filehandle on success,
+	 *  or a negative error code on failure.	 */
   private native long ceph_seek_from_start(int fh, long pos);
+	/*
+	 * Get the current position in a file (as a long) of a given filehandle.
+	 * Returns: (long) current file position on success, or a
+	 *  negative error code on failure.
+	 */
   private native long ceph_getpos(int fh);
+	/*
+	 * Closes the given file. Returns 0 on success, or a negative
+	 * error code otherwise.
+	 */
   private native int ceph_close(int fh);
     
   /**

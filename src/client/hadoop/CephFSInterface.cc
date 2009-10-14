@@ -741,6 +741,15 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTi
  * Method:    ceph_read
  * Signature: (JI[BII)I
  * Reads into the given byte array from the current position.
+ * Inputs:
+ *  jint fh: the filehandle to read from
+ *  jbyteArray j_buffer: the byte array to read into
+ *  jint buffer_offset: where in the buffer to start writing
+ *  jint length: how much to read.
+ * There'd better be enough space in the buffer to write all
+ * the data from the given offset!
+ * Returns: the number of bytes read on success (as jint),
+ *  or an error code otherwise.
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
   (JNIEnv *env, jobject obj, jint fh, jbyteArray j_buffer, jint buffer_offset, jint length)
@@ -748,10 +757,8 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
   dout(10) << "In read" << dendl;
 
 
-  // IMPORTANT NOTE: Hadoop read arguments are a bit different from POSIX so we
-  // have to convert.  The read is *always* from the current position in the file,
-  // and buffer_offset is the location in the *buffer* where we start writing.
-
+  // Make sure to convert the Hadoop read arguments into a
+  // more ceph-friendly form
   jint result; 
 
   // Step 1: get a pointer to the buffer.
@@ -775,7 +782,12 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
  * Class:     org_apache_hadoop_fs_ceph_CephInputStream
  * Method:    ceph_seek_from_start
  * Signature: (JIJ)J
- * Seeks to the given position.
+ * Seeks to the given position in the given file.
+ * Inputs:
+ *  jint fh: The filehandle to seek in.
+ *  jlong pos: The position to seek to.
+ * Returns: the new position (as a jlong) of the filehandle on success,
+ *  or a negative error code on failure.
  */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1seek_1from_1start
   (JNIEnv *env, jobject obj, jint fh, jlong pos)
@@ -785,6 +797,15 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1see
   return ceph_lseek(fh, pos, SEEK_SET);
 }
 
+/*
+ * Class:     org_apache_hadoop_fs_ceph_CephInputStream
+ * Method:    ceph_getpos
+ * Signature: (I)J
+ *
+ * Get the current position in a file (as a jlong) of a given filehandle.
+ * Returns: jlong current file position on success, or a
+ *  negative error code on failure.
+ */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1getpos
   (JNIEnv *env, jobject obj, jint fh)
 {
@@ -798,7 +819,8 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1get
  * Class:     org_apache_hadoop_fs_ceph_CephInputStream
  * Method:    ceph_close
  * Signature: (JI)I
- * Closes the file.
+ * Closes the given file. Returns 0 on success (it will always succeed
+ *  unless it dies in a horrible fiery assert failure).
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1close
   (JNIEnv *env, jobject obj, jint fh)
@@ -826,6 +848,9 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1se
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_getpos
  * Signature: (JI)J
+ * Get the current position in a file (as a jlong) of a given filehandle.
+ * Returns: jlong current file position on success, or a
+ *  negative error code on failure.
  */
 JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1getpos
   (JNIEnv *env, jobject obj, jint fh)
@@ -840,6 +865,8 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1ge
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_close
  * Signature: (I)I
+ * Closes the given file. Returns 0 on success (it will always succeed
+ *  unless it dies in a horrible fiery assert failure).
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1close
   (JNIEnv *env, jobject obj, jint fh)
@@ -853,6 +880,14 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1clo
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_write
  * Signature: (I[BII)I
+ * Write the given buffer contents to the given filehandle.
+ * Inputs:
+ *  jint fh: The filehandle to write to.
+ *  jbyteArray j_buffer: The buffer to write from
+ *  jint buffer_offset: The position in the buffer to write from
+ *  jint length: The number of (sequential) bytes to write.
+ * Returns: jint, on success the number of bytes written, on failure
+ *  a negative error code.
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1write
   (JNIEnv *env, jobject obj, jint fh, jbyteArray j_buffer, jint buffer_offset, jint length)
