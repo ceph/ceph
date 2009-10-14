@@ -828,14 +828,16 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 
   bufferlist::iterator iter = authorizer_data.begin();
 
+  isvalid = true;
+
   if (!authorizer_data.length())
-    return -EPERM;
+    return true; /* we're not picky */
 
   int ret = authorizer.verify_authorizer(peer_type, iter, authorizer_reply);
   dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);
- 
+
   return true;
 };
 
