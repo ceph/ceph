@@ -487,6 +487,13 @@ bool Monitor::ms_dispatch(Message *m)
       s = session_map.new_session(m->get_source_inst());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+
+      if (!s->inst.name.is_mon()) {
+	// set an initial timeout here, so we will trim this session even if they don't
+	// do anything.
+	s->until = g_clock.now();
+	s->until += g_conf.mon_subscribe_interval;
+      }
     } else {
       dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
     }
@@ -612,11 +619,9 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
     s = NULL;
   }
   if (!s) {
-    s = session_map.new_session(m->get_source_inst());
-    m->get_connection()->set_priv(s->get());
-    dout(10) << " new session " << s << " for " << s->inst << dendl;
-  } else {
-    dout(10) << " existing session " << s << " for " << s->inst << dendl;
+    dout(10) << " no session for " << *m << " from " << m->get_source_inst() << dendl;
+    delete m;
+    return;
   }
 
   s->until = g_clock.now();
@@ -755,7 +760,12 @@ void Monitor::tick()
   while (!p.end()) {
     Session *s = *p;
     ++p;
-    if (s->until != utime_t() && s->until < now) {
+    
+    // don't trim monitors
+    if (s->inst.name.is_mon())
+      continue; 
+
+    if (s->until < now) {
       dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->inst.addr);
       remove_session(s);
