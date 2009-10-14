@@ -293,6 +293,7 @@ WRITE_CLASS_ENCODER(RotatingSecrets);
 
 class KeysKeeper {
 public:
+  virtual bool get_secret(EntityName& name, CryptoKey& secret, map<string, bufferlist>& caps) = 0;
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
 };
 

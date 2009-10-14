@@ -91,6 +91,7 @@ class KeysServer : public KeysKeeper {
   void _rotate_secret(uint32_t service_id, int factor);
   void _generate_all_rotating_secrets(bool init);
   bool _check_rotate();
+  int _build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
 public:
   KeysServer();
 
@@ -102,6 +103,9 @@ public:
   void rotate_timeout(double timeout);
 
   int build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
+  int build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
+                                        CryptoKey& service_secret, uint64_t secret_id);
+
   /* get current secret for specific service type */
   bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key, uint64_t& secret_id);
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, uint64_t& secret_id);

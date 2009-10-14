@@ -167,8 +167,6 @@ struct EntityName {
 
     if (pos < 0)
       return false;
-    if (pos >= (int)s.size())
-      return false;
    
     string pre = s.substr(0, pos);
     const char *pres = pre.c_str();

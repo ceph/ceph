@@ -39,6 +39,10 @@ public:
 
   bool need_rotating_secrets();
 
+  bool get_secret(EntityName& name, CryptoKey& secret, map<string, bufferlist>& caps) {
+    get_master(secret);
+    return true;
+  }
   bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
 };
 

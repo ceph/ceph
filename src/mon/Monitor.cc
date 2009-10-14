@@ -127,6 +127,9 @@ void Monitor::init()
   for (vector<Paxos*>::iterator p = paxos.begin(); p != paxos.end(); p++)
     (*p)->init();
 
+  for (vector<PaxosService*>::iterator ps = paxos_service.begin(); ps != paxos_service.end(); ps++)
+    (*ps)->init();
+
   logclient.set_synchronous(true);
   
   // i'm ready!
@@ -768,10 +771,34 @@ bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool forc
   int ret;
   uint32_t service_id = peer_id_to_entity_type(dest_type);
 
+  dout(0) << "ms_get_authorizer service_id=" << service_id << dendl;
 
-  ret = keys_server.build_session_auth_info(service_id, auth_ticket_info, info);
-  if (ret < 0) {
-    return false;
+  if (service_id != CEPHX_PRINCIPAL_MON) {
+    ret = keys_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    if (ret < 0) {
+      return false;
+    }
+  } else {
+    EntityName name;
+    name.entity_type = CEPHX_PRINCIPAL_MON;
+
+    CryptoKey secret;
+    map<string, bufferlist> caps;
+    if (!keys_server.get_secret(name, secret, caps)) {
+      dout(0) << "couldn't get secret for mon service!" << dendl;
+      stringstream ss;
+      keys_server.list_secrets(ss);
+      dout(0) << ss.str() << dendl;
+      return false;
+    }
+    /* mon to mon authentication uses the private monitor shared key and not the
+       rotating key */
+    ret = keys_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
+    if (ret < 0) {
+      return false;
+    }
+    dout(0) << "built session auth_info for use with mon" << dendl;
+
   }
 
   bufferlist ticket_data;
@@ -779,6 +806,7 @@ bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool forc
   if (ret < 0)
     return false;
 
+  dout(0) << "built service ticket" << dendl;
   bufferlist::iterator iter = ticket_data.begin();
   AuthTicketHandler handler;
   ::decode(handler.ticket, iter);
@@ -791,4 +819,23 @@ bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool forc
   
   return true;
 }
+
+bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
+				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
+				    bool& isvalid)
+{
+  dout(0) << "Monitor::verify_authorizer start" << dendl;
+
+  bufferlist::iterator iter = authorizer_data.begin();
+
+  if (!authorizer_data.length())
+    return -EPERM;
+
+  int ret = authorizer.verify_authorizer(peer_type, iter, authorizer_reply);
+  dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
+
+  isvalid = (ret >= 0);
+ 
+  return true;
+};
 

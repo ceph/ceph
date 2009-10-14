@@ -83,6 +83,8 @@ class AuthMonitor : public PaxosService {
   void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions
+
+  void init();
 };
 
 #endif

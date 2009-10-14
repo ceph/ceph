@@ -193,6 +193,9 @@ public:
   void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
   void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
   bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new);
+  bool ms_verify_authorizer(Connection *con, int peer_type,
+				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
+				    bool& isvalid);
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

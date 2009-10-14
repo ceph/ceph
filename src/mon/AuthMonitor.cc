@@ -96,8 +96,6 @@ void AuthMonitor::on_active()
 void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(0) << "create_initial -- creating initial map" << dendl;
-  AuthLibIncremental inc;
-
   if (g_conf.keys_file) {
     map<string, CryptoKey> keys_map;
     dout(0) << "reading initial keys file " << dendl;
@@ -124,6 +122,8 @@ void AuthMonitor::create_initial(bufferlist& bl)
               continue;
             }
             entry.secret = iter->second; 
+            AuthLibIncremental inc;
+
             ::encode(entry, inc.info);
             inc.op = AUTH_INC_ADD;
             pending_auth.push_back(inc);
@@ -134,6 +134,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
     }
   }
 
+  AuthLibIncremental inc;
   AuthLibEntry l;
   ::encode(l, inc.info);
   inc.op = AUTH_INC_NOP;
@@ -189,6 +190,7 @@ bool AuthMonitor::update_from_paxos()
       switch (inc.op) {
       case AUTH_INC_ADD:
         if (!entry.rotating) {
+          derr(0) << "got entry name=" << entry.name.to_str() << dendl;
           mon->keys_server.add_secret(entry.name, entry.secret);
         } else {
           derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
@@ -219,6 +221,31 @@ bool AuthMonitor::update_from_paxos()
   paxos->stash_latest(paxosv, bl);
 
   return true;
+}
+
+void AuthMonitor::init()
+{
+  version_t paxosv = paxos->get_version();
+  version_t keys_ver = mon->keys_server.get_ver();
+
+  dout(0) << "AuthMonitor::init() paxosv=" << paxosv << dendl;
+
+  if (paxosv == keys_ver) return;
+  assert(paxosv >= keys_ver);
+
+  if (keys_ver == 0 && paxosv > 1) {
+    // startup: just load latest full map
+    bufferlist latest;
+    version_t v = paxos->get_latest(latest);
+    if (v) {
+      dout(0) << "AuthMonitor::init() startup: loading summary e" << v << dendl;
+      bufferlist::iterator p = latest.begin();
+      ::decode(mon->keys_server, p);
+    }
+  }
+
+  /* should only happen on the first time */
+  update_from_paxos();
 }
 
 void AuthMonitor::create_pending()

@@ -111,6 +111,8 @@ public:
 
   virtual void tick() {}
 
+  virtual void init() {}
+
 };
 
 #endif

@@ -220,6 +220,7 @@ EOF
 			echo
 		fi
 
+	        $SUDO $CEPH_BIN/authtool --gen-key --name=mon. $monkeys_fn
 	        $SUDO $CEPH_BIN/authtool --gen-key --name=client.admin $monkeys_fn
 
 		# build a fresh fs monmap, mon fs

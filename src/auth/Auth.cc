@@ -217,9 +217,19 @@ bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
 
   ::decode(secret_id, indata);
   dout(0) << "decrypted service_id=" << service_id << " secret_id=" << secret_id << dendl;
-  if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
-    dout(0) << "could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
-    return false;
+  if (secret_id == (uint64_t)-1) {
+    EntityName name;
+    name.entity_type = service_id;
+    map<string, bufferlist> caps;
+    if (!keys.get_secret(name, service_secret, caps)) {
+      dout(0) << "could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      return false;
+    }
+  } else {
+    if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
+      dout(0) << "could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      return false;
+    }
   }
   if (service_secret.get_secret().length())
     hexdump("service_secret", service_secret.get_secret().c_str(), service_secret.get_secret().length());
