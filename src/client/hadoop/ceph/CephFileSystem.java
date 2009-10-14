@@ -744,13 +744,14 @@ public class CephFileSystem extends FileSystem {
     //get the block size
     long blockSize = ceph_getblocksize(abs_path.toString());
     BlockLocation[] locations =
-      new BlockLocation[(int)Math.ceil((len-start)/(float)blockSize)];
+      new BlockLocation[(int)Math.ceil(len/(float)blockSize)];
     for (int i = 0; i < locations.length; ++i) {
       String host = ceph_hosts(fh, start + i*blockSize);
       String[] hostArray = new String[1];
       hostArray[0] = host;
       locations[i] = new BlockLocation(hostArray, hostArray,
-																			 start+i*blockSize, blockSize);
+																			 start+i*blockSize-(start % blockSize),
+																			 blockSize);
     }
     ceph_close(fh);
     return locations;
