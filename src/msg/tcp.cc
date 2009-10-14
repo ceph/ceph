@@ -11,7 +11,9 @@ int tcp_read(int sd, char *buf, int len) {
   while (len > 0) {
     int got = ::recv( sd, buf, len, 0 );
     if (got <= 0) {
-      //generic_dout(18) << "tcp_read socket " << sd << " closed" << dendl;
+      //char buf[100];
+      //generic_dout(0) << "tcp_read socket " << sd << " returned " << got
+      //<< " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       return -1;
     }
     len -= got;

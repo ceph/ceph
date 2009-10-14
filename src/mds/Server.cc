@@ -590,7 +590,7 @@ void Server::reconnect_tick()
 
 void Server::recall_client_state(float ratio)
 {
-  int max_caps_per_client = g_conf.mds_cache_size * .8;
+  int max_caps_per_client = (int)(g_conf.mds_cache_size * .8);
   int min_caps_per_client = 100;
 
   dout(10) << "recall_client_state " << ratio
@@ -613,7 +613,7 @@ void Server::recall_client_state(float ratio)
 	     << dendl;
 
     if (session->caps.size() > min_caps_per_client) {	
-      int newlim = session->caps.size() * ratio;
+      int newlim = (int)(session->caps.size() * ratio);
       if (newlim > max_caps_per_client)
 	newlim = max_caps_per_client;
       MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
