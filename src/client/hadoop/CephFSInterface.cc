@@ -140,25 +140,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
   return success;
 }
 
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_mkdir
- * Signature: (Ljava/lang/String;)Z
- * Creates a directory with full permissions.
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
-  (JNIEnv *env, jobject, jstring j_path)
-{
-  dout(10) << "CephFSInterface: In mkdir" << dendl;
-
-  const char *c_path = env->GetStringUTFChars(j_path, 0);
-  if (c_path == NULL) return false;
-  jboolean success = (0 == ceph_mkdir(c_path, 0xFF)) ? JNI_TRUE : JNI_FALSE; 
-  env->ReleaseStringUTFChars(j_path, c_path);
-  return success;
-}
-
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_unlink
@@ -829,20 +810,6 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1clos
 
   return ceph_close(fh);
 }
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
- * Method:    ceph_seek_from_start
- * Signature: (JIJ)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1seek_1from_1start
-  (JNIEnv *env, jobject obj, jint fh, jlong pos)
-{
-  dout(10) << "In CephOutputStream::ceph_seek_from_start" << dendl;
-
-   return ceph_lseek(fh, pos, SEEK_SET);  
- }
-
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream

@@ -48,14 +48,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_mkdir
- * Signature: (Ljava/lang/String;)Z
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
-  (JNIEnv *, jobject, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_unlink
  * Signature: (Ljava/lang/String;)Z
  */
@@ -237,14 +229,6 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1get
  */
 JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1close
   (JNIEnv *, jobject, jint);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
- * Method:    ceph_seek_from_start
- * Signature: (IJ)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1seek_1from_1start
-  (JNIEnv *, jobject, jint, jlong);
 
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream

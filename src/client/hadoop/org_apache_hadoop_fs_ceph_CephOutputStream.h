@@ -9,14 +9,6 @@ extern "C" {
 #endif
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
- * Method:    ceph_seek_from_start
- * Signature: (IJ)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1seek_1from_1start
-  (JNIEnv *, jobject, jint, jlong);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
  * Method:    ceph_getpos
  * Signature: (I)J
  */

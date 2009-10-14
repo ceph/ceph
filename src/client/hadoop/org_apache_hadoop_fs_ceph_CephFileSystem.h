@@ -9,6 +9,8 @@ extern "C" {
 #endif
 #undef org_apache_hadoop_fs_ceph_CephFileSystem_EEXIST
 #define org_apache_hadoop_fs_ceph_CephFileSystem_EEXIST 17L
+#undef org_apache_hadoop_fs_ceph_CephFileSystem_ENOENT
+#define org_apache_hadoop_fs_ceph_CephFileSystem_ENOENT 2L
 /*
  * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
  * Method:    ceph_initializeClient
@@ -39,14 +41,6 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
  * Signature: (Ljava/lang/String;)Z
  */
 JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1rmdir
-  (JNIEnv *, jobject, jstring);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
- * Method:    ceph_mkdir
- * Signature: (Ljava/lang/String;)Z
- */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
   (JNIEnv *, jobject, jstring);
 
 /*
