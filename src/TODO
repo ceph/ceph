@@ -44,6 +44,8 @@ v0.17
 - mon cluster expansion, contraction
 
 - revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
+
+- kclient: msgs built with a page list
 - kclient: retry alloc on ENOMEM when reading from connection?
 
 - kill mon->osd
@@ -52,8 +54,6 @@ v0.17
 - mon: revisit session trim logic... s->until == utime_t()?  :/
 
 pending wire, disk format changes
-- add fsid to MMonSubscribeAck
-- hmm, version field in msg header?
 
 bugs
 - mislinked directory?
@@ -104,6 +104,7 @@ repair
 - mds scrubbing
 
 kclient
+- add cap to release if we get fouled up in fill_inode et al?
 - use page lists for large messages?  e.g. reconnect
 - make caps reservations per-client
 - fix up ESTALE handling
