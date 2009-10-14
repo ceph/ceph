@@ -235,6 +235,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   dout(0) << "handle_command " << *m << dendl;
+  bufferlist rdata;
   string rs;
   int r = -EINVAL;
   if (!m->cmd.empty()) {
@@ -278,34 +279,11 @@ void Monitor::handle_command(MMonCommand *m)
       classmon()->dispatch(m);
       return;
     }
-    if (m->cmd[0] == "mon") {
-      if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
-	vector<string> args(2);
-	args[0] = "_injectargs";
-	args[1] = m->cmd[3];
-	if (m->cmd[2] == "*") {
-	  for (unsigned i=0; i<monmap->size(); i++)
-	    inject_args(monmap->get_inst(i), args, 0);
-	  r = 0;
-	  rs = "ok bcast";
-	} else {
-	  errno = 0;
-	  int who = strtol(m->cmd[2].c_str(), 0, 10);
-	  if (!errno && who >= 0) {
-	    inject_args(monmap->get_inst(who), args, 0);
-	    r = 0;
-	    rs = "ok";
-	  } else 
-	    rs = "specify mon number or *";
-	}
-      } else
-	rs = "unrecognized mon command";
-    } else 
-      rs = "unrecognized subsystem";
+    rs = "unrecognized subsystem";
   } else 
     rs = "no command";
 
-  reply_command(m, r, rs, 0);
+  reply_command(m, r, rs, rdata, 0);
 }
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t version)

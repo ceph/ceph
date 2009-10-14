@@ -79,32 +79,112 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
 {
+  switch (m->get_type()) {
+    // READs
+  case MSG_MON_COMMAND:
+    return preprocess_command((MMonCommand*)m);
+  default:
+    assert(0);
+    delete m;
+    return true;
+  }
+}
+
+bool MonmapMonitor::preprocess_command(MMonCommand *m)
+{
+  int r = -1;
+  bufferlist rdata;
+  stringstream ss;
+
+  if (m->cmd.size() > 1) {
+    if (m->cmd[1] == "stat") {
+      mon->monmap->print_summary(ss);
+      r = 0;
+    }
+    else if (m->cmd.size() == 2 && m->cmd[1] == "getmap") {
+      mon->monmap->encode(rdata);
+      r = 0;
+      ss << "got latest monmap";
+    }
+    else if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
+      vector<string> args(2);
+      args[0] = "_injectargs";
+      args[1] = m->cmd[3];
+      if (m->cmd[2] == "*") {
+	for (unsigned i=0; i<mon->monmap->size(); i++)
+	  mon->inject_args(mon->monmap->get_inst(i), args, 0);
+	r = 0;
+	ss << "ok bcast";
+      } else {
+	errno = 0;
+	int who = strtol(m->cmd[2].c_str(), 0, 10);
+	if (!errno && who >= 0) {
+	  mon->inject_args(mon->monmap->get_inst(who), args, 0);
+	  r = 0;
+	  ss << "ok";
+	} else 
+	  ss << "specify mon number or *";
+      }
+    } 
+  }
+
+  if (r != -1) {
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(m, r, rs, rdata, paxos->get_version());
+    return true;
+  } else
+    return false;
+}
+
+
+bool MonmapMonitor::prepare_update(PaxosServiceMessage *m)
+{
+  dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
+  
+  switch (m->get_type()) {
+  case MSG_MON_COMMAND:
+    return prepare_command((MMonCommand*)m);
+  default:
+    assert(0);
+    delete m;
+  }
+
   return false;
 }
 
-bool MonmapMonitor::prepare_update(PaxosServiceMessage *message)
+bool MonmapMonitor::prepare_command(MMonCommand *m)
 {
-  MMonCommand *m = (MMonCommand *) message;
-  if (m->cmd[1] != "add") {
-    dout(0) << "Unrecognized MonmapMonitor command!" << dendl;
-    delete message;
-    return false;
-  }
-  entity_addr_t addr;
-  parse_ip_port(m->cmd[2].c_str(), addr);
-  bufferlist rdata;
-  if (!pending_map.contains(addr)) {
-    pending_map.add(addr);
-    pending_map.last_changed = g_clock.now();
-    mon->reply_command(m, 0, "added mon to map",
-		       rdata, paxos->get_version());
-  }
-  else {
-    mon->reply_command(m, -EINVAL, "mon already exists",
-		       rdata, paxos->get_version());
-  }
-  delete message;
-  return true;
+  stringstream ss;
+  string rs;
+  int err = -EINVAL;
+  if (m->cmd.size() > 1) {
+    if (m->cmd.size() == 2 && m->cmd[1] == "add") {
+      entity_addr_t addr;
+      parse_ip_port(m->cmd[2].c_str(), addr);
+      bufferlist rdata;
+      if (pending_map.contains(addr)) {
+	err = -EEXIST;
+	ss << "mon " << addr << " already exists";
+	goto out;
+      }
+
+      pending_map.add(addr);
+      pending_map.last_changed = g_clock.now();
+      ss << "added mon " << addr;
+      getline(ss, rs);
+      paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
+      return true;
+    }
+    else
+      ss << "unknown command " << m->cmd[1];
+  } else
+    ss << "no command?";
+  
+out:
+  getline(ss, rs);
+  mon->reply_command(m, err, rs, paxos->get_version());
+  return false;
 }
 
 bool MonmapMonitor::should_propose(double& delay)
