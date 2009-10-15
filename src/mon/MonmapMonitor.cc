@@ -125,7 +125,9 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
 	} else 
 	  ss << "specify mon number or *";
       }
-    } 
+    }
+    else if (m->cmd[1] == "add")
+      return false;
   }
 
   if (r != -1) {
@@ -159,7 +161,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   string rs;
   int err = -EINVAL;
   if (m->cmd.size() > 1) {
-    if (m->cmd.size() == 2 && m->cmd[1] == "add") {
+    if (m->cmd.size() == 3 && m->cmd[1] == "add") {
       entity_addr_t addr;
       parse_ip_port(m->cmd[2].c_str(), addr);
       bufferlist rdata;
@@ -171,7 +173,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 
       pending_map.add(addr);
       pending_map.last_changed = g_clock.now();
-      ss << "added mon " << addr;
+      ss << "added mon" << (pending_map.size()-1) << " at " << addr;
       getline(ss, rs);
       paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, paxos->get_version()));
       return true;
