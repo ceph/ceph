@@ -20,10 +20,12 @@
 package org.apache.hadoop.fs.ceph;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.commons.logging.Log;
 
 class CephTalker extends CephFS {
 	//we write a constructor so we can load the libraries
-	public CephTalker(Configuration conf) {
+	public CephTalker(Configuration conf, Log log) {
+		super(conf, log);
 		System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
 		System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
 	}
