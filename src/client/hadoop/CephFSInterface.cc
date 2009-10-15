@@ -12,7 +12,7 @@ using namespace std;
 const static int IP_ADDR_LENGTH = 24;//a buffer size; may want to up for IPv6.
 static int path_size;
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_initializeClient
  * Signature: (Ljava/lang/String;I)Z
  *
@@ -22,7 +22,7 @@ static int path_size;
  *  jint block_size -- the size in bytes to use for blocks
  * Returns: true on success, false otherwise
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1initializeClient
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initializeClient
   (JNIEnv *env, jobject obj, jstring j_args, jint block_size)
 {
   dout(3) << "CephFSInterface: Initializing Ceph client:" << dendl;
@@ -72,13 +72,13 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_getcwd
  * Signature: (J)Ljava/lang/String;
  *
  * Returns the current working directory.(absolute) as a jstring
  */
-JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getcwd
+JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getcwd
   (JNIEnv *env, jobject obj)
 {
   dout(10) << "CephFSInterface: In getcwd" << dendl;
@@ -97,7 +97,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_setcwd
  * Signature: (Ljava/lang/String;)Z
  *
@@ -106,7 +106,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ge
  *  jstring j_path: The path (relative or absolute) to switch to
  * Returns: true on success, false otherwise.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setcwd
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setcwd
 (JNIEnv *env, jobject obj, jstring j_path)
 {
   dout(10) << "CephFSInterface: In setcwd" << dendl;
@@ -119,7 +119,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_rmdir
  * Signature: (Ljava/lang/String;)Z
  *
@@ -128,7 +128,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
  *  jstring j_path: The path (relative or absolute) to the directory
  * Returns: true on successful delete; false otherwise
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1rmdir
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1rmdir
   (JNIEnv *env, jobject, jstring j_path)
 {
   dout(10) << "CephFSInterface: In rmdir" << dendl;
@@ -141,7 +141,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_unlink
  * Signature: (Ljava/lang/String;)Z
  * Given a path, unlinks it.
@@ -149,7 +149,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
  *  jstring j_path: The path (relative or absolute) to the file or empty dir
  * Returns: true if the unlink occurred, false otherwise.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1unlink
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1unlink
   (JNIEnv *env, jobject, jstring j_path)
 {
   const char *c_path = env->GetStringUTFChars(j_path, 0);
@@ -161,7 +161,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_rename
  * Signature: (Ljava/lang/String;Ljava/lang/String;)Z
  * Changes a given path name to a new name.
@@ -170,7 +170,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1u
  *  jstring j_to: The new name for the path.
  * Returns: true if the rename occurred, false otherwise
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1rename
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1rename
   (JNIEnv *env, jobject, jstring j_from, jstring j_to)
 {
   dout(10) << "CephFSInterface: In rename" << dendl;
@@ -189,13 +189,13 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1r
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_exists
  * Signature: (Ljava/lang/String;)Z
  * Returns true if it the input path exists, false
  * if it does not or there is an unexpected failure.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1exists
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1exists
 (JNIEnv *env, jobject, jstring j_path)
 {
 
@@ -220,7 +220,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_getblocksize
  * Signature: (Ljava/lang/String;)J
  * Get the block size for a given path.
@@ -230,7 +230,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1e
  * Returns: block size (as a long) if the path exists, otherwise a negative
  *  number corresponding to the standard C++ error codes (which are positive).
  */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getblocksize
+JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getblocksize
   (JNIEnv *env, jobject obj, jstring j_path)
 {
   dout(10) << "In getblocksize" << dendl;
@@ -256,12 +256,12 @@ JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getb
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_isfile
  * Signature: (Ljava/lang/String;)Z
  * Returns true if the given path is a file; false otherwise.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1isfile
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1isfile
   (JNIEnv *env, jobject obj, jstring j_path)
 {
   dout(10) << "In isfile" << dendl;
@@ -282,12 +282,12 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_isdirectory
  * Signature: (Ljava/lang/String;)Z
  * Returns true if the given path is a directory, false otherwise.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1isdirectory
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1isdirectory
   (JNIEnv *env, jobject, jstring j_path)
 {
   dout(10) << "In isdirectory" << dendl;
@@ -307,7 +307,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_getdir
  * Signature: (Ljava/lang/String;)[Ljava/lang/String;
  * Get the contents of a given directory.
@@ -317,7 +317,7 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1i
  *  NULL if there is an error (ie, path is not a dir). This listing
  *  will not contain . or .. entries.
  */
-JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1getdir
+JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getdir
 (JNIEnv *env, jobject obj, jstring j_path)
 {
   dout(10) << "In getdir" << dendl;
@@ -387,13 +387,13 @@ JNIEXPORT jobjectArray JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_cep
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_mkdirs
  * Signature: (Ljava/lang/String;I)I
  * Create the specified directory and any required intermediate ones with the
  * given mode.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdirs
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1mkdirs
 (JNIEnv *env, jobject, jstring j_path, jint mode)
 {
   dout(10) << "In Hadoop mk_dirs" << dendl;
@@ -410,7 +410,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_open_for_append
  * Signature: (Ljava/lang/String;)I
  * Open a file to append. If the file does not exist, it will be created.
@@ -419,7 +419,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1mkdir
  *  jstring j_path: The path to open.
  * Returns: a jint filehandle, or a number<0 if an error occurs.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1append
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1open_1for_1append
 (JNIEnv *env, jobject obj, jstring j_path)
 {
   dout(10) << "In hadoop open_for_append" << dendl;
@@ -436,7 +436,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_open_for_read
  * Signature: (Ljava/lang/String;)I
  * Open a file for reading.
@@ -445,7 +445,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
  *  jstring j_path: The path to open.
  * Returns: a jint filehandle, or a number<0 if an error occurs.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1read
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1open_1for_1read
   (JNIEnv *env, jobject obj, jstring j_path)
 {
   dout(10) << "In open_for_read" << dendl;
@@ -463,7 +463,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_open_for_overwrite
  * Signature: (Ljava/lang/String;)I
  * Opens a file for overwriting; creates it if necessary.
@@ -473,7 +473,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
  *  jint mode: The mode to open with.
  * Returns: a jint filehandle, or a number<0 if an error occurs.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_1for_1overwrite
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1open_1for_1overwrite
   (JNIEnv *env, jobject obj, jstring j_path, jint mode)
 {
   dout(10) << "In open_for_overwrite" << dendl;
@@ -491,21 +491,21 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1open_
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_close
  * Signature: (I)I
  * Closes a given filehandle.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1close
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1close
 (JNIEnv *env, jobject ojb, jint fh)
 {
-  dout(10) << "In CephFileSystem::ceph_close" << dendl;
+  dout(10) << "In CephTalker::ceph_close" << dendl;
 
   return ceph_close(fh);
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_setPermission
  * Signature: (Ljava/lang/String;I)Z
  * Change the mode on a path.
@@ -515,7 +515,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1close
  * Returns: true if the mode is properly applied, false if there
  *  is any error.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setPermission
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setPermission
 (JNIEnv *env, jobject obj, jstring j_path, jint j_new_mode)
 {
   const char *c_path = env->GetStringUTFChars(j_path, 0);
@@ -527,14 +527,14 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_kill_client
  * Signature: (J)Z
  * 
  * Closes the Ceph client. This should be called before shutting down
  * (multiple times is okay but redundant).
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1kill_1client
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1kill_1client
   (JNIEnv *env, jobject obj)
 {  
   ceph_deinitialize();  
@@ -542,17 +542,17 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1k
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_stat
  * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/Stat;)Z
  * Get the statistics on a path returned in a custom format defined
- *  in CephFileSystem.
+ *  in CephTalker.
  * Inputs:
  *  jstring j_path: The path to stat.
  *  jobject j_stat: The stat object to fill.
  * Returns: true if the stat is successful, false otherwise.
  */
-JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1stat
+JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1stat
 (JNIEnv *env, jobject obj, jstring j_path, jobject j_stat)
 {
   //setup variables
@@ -595,16 +595,16 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1s
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_statfs
  * Signature: (Ljava/lang/String;Lorg/apache/hadoop/fs/ceph/CephFileSystem/CephStat;)I
- * Statfs a filesystem in a custom format defined in CephFileSystem.
+ * Statfs a filesystem in a custom format defined in CephTalker.
  * Inputs:
  *  jstring j_path: A path on the filesystem that you wish to stat.
  *  jobject j_ceph_stat: The CephStat object to fill.
  * Returns: true if successful and the CephStat is filled; false otherwise.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statfs
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1statfs
 (JNIEnv *env, jobject obj, jstring j_path, jobject j_cephstat)
 {
   //setup variables
@@ -635,7 +635,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statf
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_replication
  * Signature: (Ljava/lang/String;)I
  * Check how many times a path should be replicated (if it is
@@ -644,7 +644,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1statf
  *  jstring j_path: The path to check.
  * Returns: an int containing the number of times replicated.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1replication
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1replication
 (JNIEnv *env, jobject obj, jstring j_path)
 {
   //get c-string of path, send off to libceph, release c-string, return
@@ -656,7 +656,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1repli
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_hosts
  * Signature: (IJ)Ljava/lang/String;
  * Find the IP:port addresses of the primary OSD for a given file and offset.
@@ -665,7 +665,7 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1repli
  *  jlong j_offset: The offset to get the location of.
  * Returns: a jstring of the location as IP, or NULL if there is an error.
  */
-JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1hosts
+JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1hosts
 (JNIEnv *env, jobject obj, jint j_fh, jlong j_offset)
 {
   //get the address
@@ -687,7 +687,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ho
 }
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephFileSystem
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_setTimes
  * Signature: (Ljava/lang/String;JJ)I
  * Set the mtime and atime for a given path.
@@ -697,7 +697,7 @@ JNIEXPORT jstring JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1ho
  *  jlong atime: The atime to set, in millis since epoch (-1 to not set)
  * Returns: 0 if successful, an error code otherwise.
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephFileSystem_ceph_1setTimes
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setTimes
 (JNIEnv *env, jobject obj, jstring j_path, jlong mtime, jlong atime)
 {
   const char *c_path = env->GetStringUTFChars(j_path, 0);
