@@ -476,7 +476,7 @@ static guint32 dissect_ceph_footer(tvbuff_t *tvb, proto_tree *tree, guint32 offs
 	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_front_crc, tvb, offset+4, 4, TRUE);
 	proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_middle_crc, tvb, offset+8, 4, TRUE);
 	data_crc_item = proto_tree_add_item(ceph_footer_tree, hf_ceph_footer_data_crc, tvb, offset+12, 4, TRUE);
-    proto_item_append_text(data_crc_item, " (calculated %x)", data_crc);
+	proto_item_append_text(data_crc_item, " (calculated %x)", data_crc);
 
 	offset += 12;
 	return offset;
@@ -531,7 +531,7 @@ static guint32 dissect_ceph_server_connect(tvbuff_t *tvb, proto_tree *tree, guin
 	ceph_header_tree = proto_item_add_subtree(ceph_sub_item, ett_ceph);
 
 	offset = dissect_ceph_entity_addr(tvb, ceph_header_tree, offset);
-
+	offset = dissect_ceph_entity_addr(tvb, ceph_header_tree, offset);
 	msg = (struct ceph_msg_connect_reply *)tvb_get_ptr(tvb, offset, sizeof(struct ceph_msg_connect_reply));
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, tag, "%d");
 	PROTO_ADD_TEXT(struct ceph_msg_connect_reply, msg, global_seq, "%d");
@@ -1093,6 +1093,7 @@ static guint get_ceph_message_len(packet_info *pinfo, tvbuff_t *tvb, int offset)
 				sizeof(struct ceph_msg_connect);
 		} else
 			len = sizeof(CEPH_BANNER) - 1 +
+				sizeof(struct ceph_entity_addr) +
 				sizeof(struct ceph_entity_addr) +
 				sizeof(struct ceph_msg_connect_reply);
 
