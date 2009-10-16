@@ -1961,6 +1961,9 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   delete m;
 
+
+  if (is_booting())
+    send_boot();
 }
 
 
