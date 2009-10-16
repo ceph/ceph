@@ -32,7 +32,7 @@
 
 #define DOUT_SUBSYS monc
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "monclient: "
+#define dout_prefix *_dout << dbeginl << "monclient" << (hunting ? "(hunting)":"") << ": "
 
 
 /*
@@ -41,6 +41,8 @@
  */
 int MonClient::build_initial_monmap()
 {
+  dout(10) << "build_initial_monmap" << dendl;
+
   // file?
   if (g_conf.monmap) {
     const char *monmap_fn = g_conf.monmap;
