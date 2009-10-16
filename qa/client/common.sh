@@ -3,7 +3,7 @@
 [ -z "$bindir" ] && bindir="."       # location of init-ceph
 [ -z "$conf" ] && conf="$basedir/ceph.conf"
 [ -z "$mnt" ] && mnt="/c"
-[ -z "$monhost" ] && monhost="cephbooter"
+[ -z "$monhost" ] && monhost="cosd0"
 
 set -e
 
