@@ -623,7 +623,7 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   // ???
 
   if (reply)
-    messenger->send_message(new MMonSubscribeAck((int)g_conf.mon_subscribe_interval),
+    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf.mon_subscribe_interval),
 			    m->get_source_inst());
 
   s->put();
