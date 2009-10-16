@@ -111,6 +111,7 @@ int MonClient::get_monmap()
   dout(10) << "get_monmap" << dendl;
   Mutex::Locker l(monc_lock);
   
+  _sub_want("monmap", monmap.get_epoch());
   want_monmap = true;
   if (cur_mon < 0)
     _reopen_session();
@@ -119,7 +120,6 @@ int MonClient::get_monmap()
     map_cond.Wait(monc_lock);
 
   dout(10) << "get_monmap done" << dendl;
-
   return 0;
 }
 
@@ -248,6 +248,7 @@ int MonClient::mount(double mount_timeout)
   }
 
   // only first mounter does the work
+  _sub_want("monmap", monmap.get_epoch());
   mounting++;
   if (mounting == 1) {
     if (cur_mon < 0)
