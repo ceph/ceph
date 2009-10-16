@@ -138,7 +138,7 @@ public:
   MonClient() : messenger(NULL), cur_mon(-1),
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
-		hunting(false),
+		hunting(true),
 		mounting(0), mount_err(0) { }
   ~MonClient() {
     timer.cancel_all_events();

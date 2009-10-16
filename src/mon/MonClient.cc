@@ -161,6 +161,8 @@ int MonClient::get_monmap_privately()
     messenger = 0;
   }
  
+  hunting = true;  // reset this to true!
+
   if (monmap.epoch)
     return 0;
   return -1;
@@ -169,8 +171,6 @@ int MonClient::get_monmap_privately()
 
 bool MonClient::ms_dispatch(Message *m)
 {
-  dout(10) << "dispatch " << *m << dendl;
-
   if (my_addr == entity_addr_t())
     my_addr = messenger->get_myaddr();
 
