@@ -26,18 +26,18 @@
 	mon osd down out interval = 0  ; 10 minutes
 
 [mon0]
-	host = cephbooter
-	mon addr = 10.3.14.232:6789
-	log dir = /data/cephbooter
-
-[mon1]
 	host = cosd0
 	mon addr = 10.3.14.95:6789
 	log dir = /data/cosd0
 
+[mon1]
+	host = cosd1
+	mon addr = 10.3.14.96:6789
+	log dir = /data/cosd1
+
 [mon2]
-	host = ceph4
-	mon addr = 10.3.14.67:6789
+	host = cosd2
+	mon addr = 10.3.14.97:6789
 	log dir = /data/ceph4
 
 
