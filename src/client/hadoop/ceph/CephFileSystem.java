@@ -80,7 +80,6 @@ public class CephFileSystem extends FileSystem {
    */
   public CephFileSystem() {
     root = new Path("/");
-    ceph.debug("CephFileSystem:exit", ceph.DEBUG);
   }
 
   /**
@@ -104,7 +103,6 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
-    ceph.debug("initialize:enter", ceph.DEBUG);
     if (!initialized) {
       super.initialize(uri, conf);
       setConf(conf);
@@ -205,7 +203,7 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("append: Open for append failed on path \"" +
 														abs_path.toString() + "\"");
     }
-    CephOutputStream cephOStream = new CephOutputStream(getConf(), fd);
+    CephOutputStream cephOStream = new CephOutputStream(getConf(), ceph, fd);
     ceph.debug("append:exit", ceph.DEBUG);
     return new FSDataOutputStream(cephOStream, statistics);
   }
@@ -509,7 +507,7 @@ public class CephFileSystem extends FileSystem {
     }
       
     // Step 4: create the stream
-    OutputStream cephOStream = new CephOutputStream(getConf(), fh);
+    OutputStream cephOStream = new CephOutputStream(getConf(), ceph, fh);
     ceph.debug("create:exit", ceph.DEBUG);
     return new FSDataOutputStream(cephOStream, statistics);
 	}
@@ -552,7 +550,7 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("Failed to get file size for file " + abs_path.toString() + 
 														" but succeeded in opening file. Something bizarre is going on.");
     }
-    FSInputStream cephIStream = new CephInputStream(getConf(), fh, size);
+    FSInputStream cephIStream = new CephInputStream(getConf(), ceph, fh, size);
     ceph.debug("open:exit", ceph.DEBUG);
     return new FSDataInputStream(cephIStream);
 	}

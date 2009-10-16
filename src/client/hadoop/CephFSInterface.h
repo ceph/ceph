@@ -199,59 +199,35 @@ JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1setTimes
   (JNIEnv *, jobject, jstring, jlong, jlong);
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephInputStream
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_read
  * Signature: (I[BII)I
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1read
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1read
   (JNIEnv *, jobject, jint, jbyteArray, jint, jint);
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephInputStream
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_seek_from_start
  * Signature: (IJ)J
  */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1seek_1from_1start
+JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1seek_1from_1start
   (JNIEnv *, jobject, jint, jlong);
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephInputStream
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_getpos
  * Signature: (I)J
  */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1getpos
+JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1getpos
   (JNIEnv *, jobject, jint);
 
 /*
- * Class:     org_apache_hadoop_fs_ceph_CephInputStream
- * Method:    ceph_close
- * Signature: (I)I
- */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephInputStream_ceph_1close
-  (JNIEnv *, jobject, jint);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
- * Method:    ceph_getpos
- * Signature: (I)J
- */
-JNIEXPORT jlong JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1getpos
-  (JNIEnv *, jobject, jint);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
- * Method:    ceph_close
- * Signature: (I)I
- */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1close
-  (JNIEnv *, jobject, jint);
-
-/*
- * Class:     org_apache_hadoop_fs_ceph_CephOutputStream
+ * Class:     org_apache_hadoop_fs_ceph_CephTalker
  * Method:    ceph_write
  * Signature: (I[BII)I
  */
-JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephOutputStream_ceph_1write
+JNIEXPORT jint JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1write
   (JNIEnv *, jobject, jint, jbyteArray, jint, jint);
 
 #ifdef __cplusplus

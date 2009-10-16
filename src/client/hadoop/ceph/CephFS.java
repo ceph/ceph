@@ -146,7 +146,8 @@ abstract class CephFS {
 	 */
   abstract protected int ceph_open_for_overwrite(String path, int mode);
 	/*
-	 * Closes a given filehandle.
+	 * Closes the given file. Returns 0 on success, or a negative
+	 * error code otherwise.
 	 */
   abstract protected int ceph_close(int filehandle);
 	/*
@@ -204,7 +205,45 @@ abstract class CephFS {
 	 * Returns: 0 if successful, an error code otherwise.
 	 */
   abstract protected int ceph_setTimes(String path, long mtime, long atime);
+	/*
+	 * Get the current position in a file (as a long) of a given filehandle.
+	 * Returns: (long) current file position on success, or a
+	 *  negative error code on failure.
+	 */
+  abstract protected long ceph_getpos(int fh);
+	/*
+	 * Write the given buffer contents to the given filehandle.
+	 * Inputs:
+	 *  int fh: The filehandle to write to.
+	 *  byte[] buffer: The buffer to write from
+	 *  int buffer_offset: The position in the buffer to write from
+	 *  int length: The number of (sequential) bytes to write.
+	 * Returns: int, on success the number of bytes written, on failure
+	 *  a negative error code.
+	 */
+  abstract protected int ceph_write(int fh, byte[] buffer, int buffer_offset, int length);
 
+	/*
+	 * Reads into the given byte array from the current position.
+	 * Inputs:
+	 *  int fh: the filehandle to read from
+	 *  byte[] buffer: the byte array to read into
+	 *  int buffer_offset: where in the buffer to start writing
+	 *  int length: how much to read.
+	 * There'd better be enough space in the buffer to write all
+	 * the data from the given offset!
+	 * Returns: the number of bytes read on success (as an int),
+	 *  or an error code otherwise.	 */
+  protected native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
+	/*
+	 * Seeks to the given position in the given file.
+	 * Inputs:
+	 *  int fh: The filehandle to seek in.
+	 *  long pos: The position to seek to.
+	 * Returns: the new position (as a long) of the filehandle on success,
+	 *  or a negative error code on failure.	 */
+  protected native long ceph_seek_from_start(int fh, long pos);
+    
 	protected void debug(String statement, int priority) {
     if (debug) System.err.println(statement);
 		switch(priority) {
