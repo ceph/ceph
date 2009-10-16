@@ -260,11 +260,8 @@ int MonClient::mount(double mount_timeout)
     mount_cond.Wait(monc_lock);
   mounting--;
 
-  if (clientid >= 0) {
+  if (clientid >= 0)
     dout(5) << "mount success, client" << clientid << dendl;
-
-    _sub_want("monmap", monmap.get_epoch());
-  }
 
   return mount_err;
 }
