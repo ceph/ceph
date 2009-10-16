@@ -342,6 +342,22 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
   }
 }
 
+void Monitor::try_send_message(Message *m, entity_inst_t to)
+{
+  dout(10) << "try_send_message " << *m << " to " << to << dendl;
+
+  bufferlist bl;
+  encode_message(m, bl);
+
+  messenger->send_message(m, to);
+
+  for (int i=0; i<(int)monmap->size(); i++) {
+    if (i != whoami)
+      messenger->send_message(new MRoute(0, bl, to),
+			      monmap->get_inst(i));
+  }
+}
+
 void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to)
 {
   if (req->session_mon >= 0) {
@@ -433,7 +449,7 @@ void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args, versi
   dout(10) << "inject_args " << inst << " " << args << dendl;
   MMonCommand *c = new MMonCommand(monmap->fsid, version);
   c->cmd = args;
-  messenger->send_message(c, inst);
+  try_send_message(c, inst);
 }
 
 

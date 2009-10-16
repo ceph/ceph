@@ -165,6 +165,7 @@ public:
   map<__u64, RoutedRequest*> routed_requests;
   
   void forward_request_leader(PaxosServiceMessage *req);
+  void try_send_message(Message *m, entity_inst_t to);
   void send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to);
   void send_reply(PaxosServiceMessage *req, Message *reply) {
     send_reply(req, reply, req->get_orig_source_inst());
