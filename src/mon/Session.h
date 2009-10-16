@@ -69,8 +69,8 @@ struct SessionMap {
 	  break;
 	}
     }
-    s->put();
     s->closed = true;
+    s->put();
   }
 
   Session *new_session(entity_inst_t i) {

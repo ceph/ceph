@@ -402,7 +402,6 @@ void Monitor::resend_routed_requests()
 void Monitor::remove_session(Session *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
-  session_map.remove_session(s);
   for (set<__u64>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
        p++) {
@@ -413,6 +412,7 @@ void Monitor::remove_session(Session *s)
       routed_requests.erase(*p);
     }
   }
+  session_map.remove_session(s);
 }
 
 
