@@ -44,6 +44,10 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 mount_ceph_SOURCES = mount/mount.ceph.c
 sbin_PROGRAMS += mount.ceph
 
+
+core: cmon cosd cmds mkmonfs ceph cconf monmaptool osdmaptool crushtool
+
+
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
 dupstore_SOURCES = dupstore.cc
