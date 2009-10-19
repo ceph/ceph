@@ -141,6 +141,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	else {
 	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
 	  monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+	  monc->renew_subs();
 	  break;
 	}
 	
@@ -173,6 +174,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
       } else {
 	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
 	monc->sub_want_onetime("osdmap", 0);
+	monc->renew_subs();
       }
     }
 
