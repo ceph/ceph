@@ -1,3 +1,17 @@
+ceph (0.17) unstable; urgency=low
+
+  * kclient: fix multiple mds mdsmap decoding
+  * kclient: fix mon subscription renewal
+  * crush: fix map creation with empty buckets (larger clusters)
+  * osdmap: fix encoding bug (crashed kclient)
+  * msgr: simplified policy, failure model
+  * mon: less push, more pull
+  * mon: request routing. clients keep single session with single monitor
+  * mon cluster expansion works
+  * osd: fix pg parsing, restarts on larger clusters
+
+ -- sage <sage@newdream.net>  Mon, 19 Oct 2009 15:20:00 -0800
+
 ceph (0.16.1-1) unstable; urgency=low
 
   * missing buffer.c
