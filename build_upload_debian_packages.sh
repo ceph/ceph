@@ -65,7 +65,7 @@ fi
 
 cd ceph-$finalvers
 ./autogen.sh
-dpkg-buildpackage -rfakeroot
+dpkg-buildpackage -rfakeroot -us -uc
 cd ..
 
 # upload
