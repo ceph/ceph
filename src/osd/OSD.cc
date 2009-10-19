@@ -1141,6 +1141,7 @@ void OSD::heartbeat()
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
       monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+      monc->renew_subs();
     }
   }
 
@@ -1655,8 +1656,10 @@ void OSD::handle_scrub(MOSDScrub *m)
 void OSD::wait_for_new_map(Message *m)
 {
   // ask?
-  if (waiting_for_osdmap.empty())
+  if (waiting_for_osdmap.empty()) {
     monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+    monc->renew_subs();
+  }
   
   waiting_for_osdmap.push_back(m);
 }
@@ -1876,6 +1879,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     else {
       dout(10) << "handle_osd_map missing epoch " << cur+1 << dendl;
       monc->sub_want_onetime("osdmap", cur);
+      monc->renew_subs();
       break;
     }
 
