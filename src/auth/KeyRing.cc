@@ -59,8 +59,8 @@ bool KeyRing::load_master(const char *filename)
 
   bufferlist::iterator iter = bl.begin();
 
-  map<string, CryptoKey> m;
-  map<string, CryptoKey>::iterator miter;
+  map<string, EntityAuth> m;
+  map<string, EntityAuth>::iterator miter;
 
   ::decode(m, iter);
 
@@ -74,7 +74,7 @@ bool KeyRing::load_master(const char *filename)
     if (miter == m.end())
       return false; 
   }
-  master = miter->second;
+  master = miter->second.key;
 
   return true;
 }

@@ -33,14 +33,14 @@ void build_service_ticket_request(uint32_t keys,
   ::encode(ticket_req, request);
 }
 
-
 bool build_service_ticket(SessionAuthInfo& info, bufferlist& reply)
 {
   AuthServiceTicketInfo ticket_info;
   ticket_info.session_key = info.session_key;
   ticket_info.ticket = info.ticket;
+  ticket_info.ticket.caps = info.ticket.caps;
   ::encode(info.secret_id, reply);
-  dout(0) << "encoded info.secret_id=" << info.secret_id << dendl;
+  dout(0) << "encoded info.secret_id=" << info.secret_id <<  " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
   if (info.service_secret.get_secret().length())
     hexdump("service_secret", info.service_secret.get_secret().c_str(), info.service_secret.get_secret().length());
   if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
@@ -220,8 +220,7 @@ bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
   if (secret_id == (uint64_t)-1) {
     EntityName name;
     name.entity_type = service_id;
-    map<string, bufferlist> caps;
-    if (!keys.get_secret(name, service_secret, caps)) {
+    if (!keys.get_secret(name, service_secret)) {
       dout(0) << "could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
       return false;
     }
@@ -237,6 +236,7 @@ bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
     dout(0) << "could not decrypt ticket info" << dendl;
     return false;
   }
+  dout(0) << "decoded ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
 
   AuthAuthorize auth_msg;
   if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0) {

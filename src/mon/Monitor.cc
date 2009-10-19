@@ -783,8 +783,7 @@ bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool forc
     name.entity_type = CEPHX_PRINCIPAL_MON;
 
     CryptoKey secret;
-    map<string, bufferlist> caps;
-    if (!keys_server.get_secret(name, secret, caps)) {
+    if (!keys_server.get_secret(name, secret)) {
       dout(0) << "couldn't get secret for mon service!" << dendl;
       stringstream ss;
       keys_server.list_secrets(ss);

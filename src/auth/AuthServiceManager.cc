@@ -70,9 +70,8 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
       ::decode(req, indata);
 
       CryptoKey secret;
-      map<string,bufferlist> caps;
       dout(0) << "entity_name=" << entity_name.to_str() << dendl;
-      if (!mon->keys_server.get_secret(entity_name, secret, caps)) {
+      if (!mon->keys_server.get_secret(entity_name, secret)) {
         dout(0) << "couldn't find entity name: " << entity_name.to_str() << dendl;
 	ret = -EPERM;
 	break;
@@ -140,7 +139,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       SessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (mon->keys_server.get_secret(req.name, principal_secret, info.ticket.caps) < 0) {
+      if (mon->keys_server.get_secret(req.name, principal_secret) < 0) {
 	ret = -EPERM;
 	break;
       }
@@ -185,6 +184,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
         break;
       }
 
+      ret = 0;
       vector<SessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
         if (ticket_req.keys & service_id) {
@@ -198,10 +198,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
           info_vec.push_back(info);
         }
       }
-
       build_cephx_response_header(request_type, ret, result_bl);
       build_service_ticket_reply(auth_ticket_info.session_key, info_vec, result_bl);
-      ret = 0;
     }
     break;
   default:

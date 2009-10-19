@@ -97,7 +97,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
 {
   dout(0) << "create_initial -- creating initial map" << dendl;
   if (g_conf.keys_file) {
-    map<string, CryptoKey> keys_map;
+    map<string, EntityAuth> keys_map;
     dout(0) << "reading initial keys file " << dendl;
     bufferlist bl;
     int r = bl.read_file(g_conf.keys_file);
@@ -111,7 +111,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
         cerr << "error reading file " << g_conf.keys_file << std::endl;
       }
       if (read_ok) {
-        map<string, CryptoKey>::iterator iter = keys_map.begin();
+        map<string, EntityAuth>::iterator iter = keys_map.begin();
         for (; iter != keys_map.end(); ++iter) {
           string n = iter->first;
           if (!n.empty()) {
@@ -121,7 +121,7 @@ void AuthMonitor::create_initial(bufferlist& bl)
               dout(0) << "bad entity name " << n << dendl;
               continue;
             }
-            entry.secret = iter->second; 
+            entry.auth = iter->second; 
             AuthLibIncremental inc;
 
             ::encode(entry, inc.info);
@@ -191,7 +191,7 @@ bool AuthMonitor::update_from_paxos()
       case AUTH_INC_ADD:
         if (!entry.rotating) {
           derr(0) << "got entry name=" << entry.name.to_str() << dendl;
-          mon->keys_server.add_secret(entry.name, entry.secret);
+          mon->keys_server.add_auth(entry.name, entry.auth);
         } else {
           derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
         }
@@ -482,8 +482,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       bufferlist bl = m->get_data();
       dout(0) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
       bufferlist::iterator iter = bl.begin();
-      map<string, CryptoKey> crypto_map;
-      map<string, CryptoKey>::iterator miter;
+      map<string, EntityAuth> crypto_map;
+      map<string, EntityAuth>::iterator miter;
       try {
         ::decode(crypto_map, iter);
       } catch (buffer::error *err) {
@@ -503,7 +503,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
           string s = miter->first;
           entry.name.from_str(s);
         }
-        entry.secret = miter->second;
+        entry.auth = miter->second;
         ::encode(entry, inc.info);
         inc.op = AUTH_INC_ADD;
         pending_auth.push_back(inc);

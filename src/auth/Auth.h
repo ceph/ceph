@@ -25,6 +25,21 @@ class Cond;
 
 #define AUTH_ENC_MAGIC 0xff009cad8826aa55
 
+struct EntityAuth {
+  CryptoKey key;
+  map<string, bufferlist> caps;
+
+  void encode(bufferlist& bl) const {
+    ::encode(key, bl);
+    ::encode(caps, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(key, bl);
+    ::decode(caps, bl);
+  }
+};
+WRITE_CLASS_ENCODER(EntityAuth)
+
 struct AuthContext {
   int status;
   // int id;
@@ -41,7 +56,7 @@ struct AuthTicket {
   EntityName name;
   entity_addr_t addr;
   utime_t created, renew_after, expires;
-  map<string, bufferlist> caps;
+  bufferlist caps;
   __u32 flags;
 
   AuthTicket() : flags(0) {}
@@ -233,13 +248,11 @@ struct AuthServiceTicketInfo {
   CryptoKey session_key;
 
   void encode(bufferlist& bl) const {
-    ::encode(ticket.renew_after, bl);
-    ::encode(ticket.expires, bl);
+    ::encode(ticket, bl);
     ::encode(session_key, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(ticket.renew_after, bl);
-    ::decode(ticket.expires, bl);
+    ::decode(ticket, bl);
     ::decode(session_key, bl);
   }
 };
@@ -293,7 +306,7 @@ WRITE_CLASS_ENCODER(RotatingSecrets);
 
 class KeysKeeper {
 public:
-  virtual bool get_secret(EntityName& name, CryptoKey& secret, map<string, bufferlist>& caps) = 0;
+  virtual bool get_secret(EntityName& name, CryptoKey& secret) = 0;
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
 };
 

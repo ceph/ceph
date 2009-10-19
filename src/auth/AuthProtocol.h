@@ -102,6 +102,29 @@ using namespace std;
 
 class Monitor;
 
+static inline void get_entity_type_str(uint32_t entity_type,string& s) {
+   switch (entity_type) {
+     case CEPHX_PRINCIPAL_AUTH:
+       s = "auth";
+       break;
+     case CEPHX_PRINCIPAL_MON:
+       s = "mon";
+       break;
+     case CEPHX_PRINCIPAL_OSD:
+       s = "osd";
+       break;
+     case CEPHX_PRINCIPAL_MDS:
+       s = "mds";
+       break;
+     case CEPHX_PRINCIPAL_CLIENT:
+       s = "client";
+       break;
+     default:
+       s = "???";
+       break;
+   }
+}
+
 static inline uint32_t peer_id_to_entity_type(int peer_id)
 {
   switch (peer_id) {
@@ -133,26 +156,7 @@ struct EntityName {
   }
 
   void to_str(string& str) const {
-    switch (entity_type) {
-      case CEPHX_PRINCIPAL_AUTH:
-        str = "auth";
-        break;
-      case CEPHX_PRINCIPAL_MON:
-        str = "mon";
-        break;
-      case CEPHX_PRINCIPAL_OSD:
-        str = "osd";
-        break;
-      case CEPHX_PRINCIPAL_MDS:
-        str = "mds";
-        break;
-      case CEPHX_PRINCIPAL_CLIENT:
-        str = "client";
-        break;
-      default:
-        str = "???";
-        break;
-    }
+    get_entity_type_str(entity_type, str);
     str.append(".");
     str.append(name);
   }
@@ -194,6 +198,10 @@ struct EntityName {
   void from_type_id(const char *type, const char *id) {
     set_type(type);
     name = id;
+  }
+
+  void get_type_str(string& s) {
+    get_entity_type_str(entity_type, s);
   }
 };
 WRITE_CLASS_ENCODER(EntityName);

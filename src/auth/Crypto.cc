@@ -137,7 +137,7 @@ int CryptoAES::encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out)
   int total_out = 0;
   int outlen;
 #define OUT_BUF_EXTRA 128
-  unsigned char outbuf[outlen + OUT_BUF_EXTRA];
+  unsigned char outbuf[max_out + OUT_BUF_EXTRA];
 
   dout(0) << "secret.length=" << secret.length() << dendl;
 

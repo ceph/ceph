@@ -24,7 +24,7 @@ struct AuthLibEntry {
   bool rotating;
 
   EntityName name;
-  CryptoKey secret;
+  EntityAuth auth;
 
   bufferlist rotating_bl;
 
@@ -33,7 +33,7 @@ struct AuthLibEntry {
     ::encode(r, bl); 
     if (!rotating) {
       ::encode(name, bl);
-      ::encode(secret, bl);
+      ::encode(auth, bl);
     } else {
       ::encode(rotating_bl, bl);
     }
@@ -44,7 +44,7 @@ struct AuthLibEntry {
     rotating = (bool)r;
     if (!rotating) {
       ::decode(name, bl);
-      ::decode(secret, bl);
+      ::decode(auth, bl);
     } else {
       ::decode(rotating_bl, bl);
     }
@@ -84,43 +84,6 @@ struct AuthLibIncremental {
   }
 };
 WRITE_CLASS_ENCODER(AuthLibIncremental)
-#if 0
-struct AuthLibrary {
-  version_t version;
-  KeysServerData keys;
-
-  AuthLibrary() : version(0) {}
-
-  void add_secret(const EntityName& name, CryptoKey& secret) {
-    keys.add_secret(name, secret);
-  }
-
-  void add(AuthLibEntry& entry) {
-    if (entry.rotating) {
-      keys.add_rotating_secret(entry.service_id, entry.rotating_secret);
-    } else {
-      add_secret(entry.name, entry.secret);
-    }
-  }
-
-  void remove(const EntityName& name) {
-    keys.remove_secret(name);
-  }
-
-  bool contains(EntityName& name) {
-    return keys.contains(name);
-  }
-  void encode(bufferlist& bl) const {
-    ::encode(version, bl);
-    ::encode(keys, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(version, bl);
-    ::decode(keys, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthLibrary)
-#endif
 
 inline ostream& operator<<(ostream& out, const AuthLibEntry& e)
 {

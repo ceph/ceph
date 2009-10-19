@@ -16,13 +16,15 @@ using namespace std;
 
 #include "config.h"
 
+#include "common/ConfUtils.h"
 #include "common/common_init.h"
 #include "auth/Crypto.h"
 #include "auth/KeysServer.h"
+#include "auth/Auth.h"
 
 void usage()
 {
-  cout << " usage: [--gen-key] [--name] [--list] <filename>" << std::endl;
+  cout << " usage: [--gen-key] [--name=<name>] [--caps=<filename>] [--list] <filename>" << std::endl;
   exit(1);
 }
 
@@ -40,6 +42,7 @@ int main(int argc, const char **argv)
   bool gen_key = false;
   bool list = false;
   const char *name = "";
+  const char *caps_fn = NULL;
 
   FOR_EACH_ARG(args) {
     if (CONF_ARG_EQ("gen-key", 'g')) {
@@ -48,6 +51,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&name, OPT_STR);
     } else if (CONF_ARG_EQ("list", 'l')) {
       CONF_SAFE_SET_ARG_VAL(&list, OPT_BOOL);
+    } else if (CONF_ARG_EQ("caps", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&caps_fn, OPT_STR);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -58,8 +63,16 @@ int main(int argc, const char **argv)
     usage();
   }
 
-  map<string, CryptoKey> keys_map;
+  map<string, EntityAuth> keys_map;
   string s = name;
+
+
+  if (caps_fn) {
+    if (!name || !(*name)) {
+      cerr << "can't specify caps without name" << std::endl;
+      exit(1);
+    }
+  }
 
   CryptoKey key;
   key.create(CEPH_SECRET_AES);
@@ -77,17 +90,45 @@ int main(int argc, const char **argv)
   }
 
   if (gen_key) {
-    keys_map[s] = key;
+    keys_map[s].key = key;
   }
 
   if (list) {
-    map<string, CryptoKey>::iterator iter = keys_map.begin();
+    map<string, EntityAuth>::iterator iter = keys_map.begin();
     for (; iter != keys_map.end(); ++iter) {
       string n = iter->first;
       if (n.empty()) {
         cout << "<default key>" << std::endl;
       } else {
         cout << n << std::endl;
+      }
+      map<string, bufferlist>::iterator capsiter = iter->second.caps.begin();
+      for (; capsiter != iter->second.caps.end(); ++capsiter) {
+        bufferlist::iterator dataiter = capsiter->second.begin();
+        string caps;
+        ::decode(caps, dataiter);
+	cout << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
+      }
+    }
+  }
+
+  if (caps_fn) {
+    map<string, bufferlist>& caps = keys_map[s].caps;
+    ConfFile *cf = new ConfFile(caps_fn);
+    if (!cf->parse()) {
+      cerr << "could not parse caps file " << caps_fn << std::endl;
+      exit(1);
+    }
+    const char *key_names[] = { "mon", "osd", "mds", NULL };
+    for (int i=0; key_names[i]; i++) {
+      char *val;
+      cf->read("global", key_names[i], &val, NULL);
+      if (val) {
+        bufferlist bl;
+        ::encode(val, bl);
+        string s(key_names[i]);
+        caps[s] = bl; 
+        free(val);
       }
     }
   }

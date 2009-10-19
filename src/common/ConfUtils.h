@@ -57,6 +57,7 @@ public:
 	ConfSection(std::string sec_name) : name(sec_name) { }
 
 	const std::string& get_name() { return name; }
+        ConfList& get_list() { return conf_list; }
 };
 
 typedef std::map<std::string, ConfSection *> SectionMap;

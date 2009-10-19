@@ -31,7 +31,7 @@ struct KeysServerData {
   utime_t next_rotating_time;
 
   /* for each entity */
-  map<EntityName, CryptoKey> secrets;
+  map<EntityName, EntityAuth> secrets;
 
   /* for each service type */
   map<uint32_t, RotatingSecrets> rotating_secrets;
@@ -57,12 +57,12 @@ struct KeysServerData {
     return (secrets.find(name) != secrets.end());
   }
 
-  void add_secret(const EntityName& name, CryptoKey& secret) {
-    secrets[name] = secret;
+  void add_auth(const EntityName& name, EntityAuth& auth) {
+    secrets[name] = auth;
   }
 
   void remove_secret(const EntityName& name) {
-    map<EntityName, CryptoKey>::iterator iter = secrets.find(name);
+    map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
     if (iter == secrets.end())
       return;
     secrets.erase(iter);
@@ -75,11 +75,12 @@ struct KeysServerData {
   bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id);
   bool get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id);
   bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret);
-  bool get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps);
+  bool get_secret(EntityName& name, CryptoKey& secret);
+  bool get_caps(EntityName& name, string& type, bufferlist& caps);
 
-  map<EntityName, CryptoKey>::iterator secrets_begin() { return secrets.begin(); }
-  map<EntityName, CryptoKey>::iterator secrets_end() { return secrets.end(); }
-  map<EntityName, CryptoKey>::iterator find_name(EntityName& name) { return secrets.find(name); }
+  map<EntityName, EntityAuth>::iterator secrets_begin() { return secrets.begin(); }
+  map<EntityName, EntityAuth>::iterator secrets_end() { return secrets.end(); }
+  map<EntityName, EntityAuth>::iterator find_name(EntityName& name) { return secrets.find(name); }
 };
 WRITE_CLASS_ENCODER(KeysServerData);
 
@@ -97,7 +98,8 @@ public:
 
   bool generate_secret(CryptoKey& secret);
 
-  bool get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps);
+  bool get_secret(EntityName& name, CryptoKey& secret);
+  bool get_caps(EntityName& name, string& type, bufferlist& caps);
   bool get_active_rotating_secret(EntityName& name, CryptoKey& secret);
   int start_server(bool init);
   void rotate_timeout(double timeout);
@@ -132,9 +134,9 @@ public:
     data.version = ver;
   }
 
-  void add_secret(const EntityName& name, CryptoKey& secret) {
+  void add_auth(const EntityName& name, EntityAuth& auth) {
     Mutex::Locker l(lock);
-    data.add_secret(name, secret);
+    data.add_auth(name, auth);
   }
 
   void remove_secret(const EntityName& name) {

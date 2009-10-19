@@ -81,13 +81,29 @@ bool KeysServerData::get_service_secret(uint32_t service_id, uint64_t secret_id,
   return true;
 }
 
-bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps)
+bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret)
 {
-  map<EntityName, CryptoKey>::iterator iter = secrets.find(name);
+  map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
   if (iter == secrets.end())
     return false;
 
-  secret = iter->second;
+  secret = iter->second.key;
+
+  return true;
+}
+
+bool KeysServerData::get_caps(EntityName& name, string& type, bufferlist& caps)
+{
+  dout(0) << "get_caps: name=" << name.to_str() << dendl;
+  map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
+  if (iter == secrets.end())
+    return false;
+
+  dout(0) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
+  map<string, bufferlist>::iterator capsiter = iter->second.caps.find(type);
+  if (capsiter != iter->second.caps.end()) {
+    caps = capsiter->second;
+  }
 
   return true;
 }
@@ -163,11 +179,18 @@ bool KeysServer::_check_rotate()
   return false;
 }
 
-bool KeysServer::get_secret(EntityName& name, CryptoKey& secret, map<string,bufferlist>& caps)
+bool KeysServer::get_secret(EntityName& name, CryptoKey& secret)
 {
   Mutex::Locker l(lock);
 
-  return data.get_secret(name, secret, caps);
+  return data.get_secret(name, secret);
+}
+
+bool KeysServer::get_caps(EntityName& name, string& type, bufferlist& caps)
+{
+  Mutex::Locker l(lock);
+
+  return data.get_caps(name, type, caps);
 }
 
 bool KeysServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
@@ -213,7 +236,10 @@ bool KeysServer::generate_secret(EntityName& name, CryptoKey& secret)
 
   Mutex::Locker l(lock);
 
-  data.add_secret(name, secret);
+  EntityAuth auth;
+  auth.key = secret;
+
+  data.add_auth(name, auth);
 
   return true;
 }
@@ -229,14 +255,22 @@ void KeysServer::list_secrets(stringstream& ss)
 {
   Mutex::Locker l(lock);
 
-  map<EntityName, CryptoKey>::iterator mapiter = data.secrets_begin();
+  map<EntityName, EntityAuth>::iterator mapiter = data.secrets_begin();
   if (mapiter != data.secrets_end()) {
     ss << "installed auth entries: " << std::endl;      
 
     while (mapiter != data.secrets_end()) {
       const EntityName& name = mapiter->first;
       ss << name.to_str() << std::endl;
-      
+
+      map<string, bufferlist>::iterator capsiter = mapiter->second.caps.begin();
+      for (; capsiter != mapiter->second.caps.end(); ++capsiter) {
+        bufferlist::iterator dataiter = capsiter->second.begin();
+        string caps;
+        ::decode(caps, dataiter);
+	ss << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
+      }
+     
       ++mapiter;
     }
   } else {
@@ -275,11 +309,11 @@ bool KeysServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
 {
   Mutex::Locker l(lock);
 
-  map<EntityName, CryptoKey>::iterator mapiter = data.find_name(name);
+  map<EntityName, EntityAuth>::iterator mapiter = data.find_name(name);
   if (mapiter == data.secrets_end())
     return false;
 
-  CryptoKey& specific_key = mapiter->second;
+  CryptoKey& specific_key = mapiter->second.key;
 
   map<uint32_t, RotatingSecrets>::iterator rotate_iter = data.rotating_secrets.find(name.entity_type);
   if (rotate_iter == data.rotating_secrets.end())
@@ -301,8 +335,13 @@ int KeysServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketI
   generate_secret(info.session_key);
 
   info.service_id = service_id;
-	  
-  info.ticket.caps = auth_ticket_info.ticket.caps;
+
+  string s;
+  get_entity_type_str(service_id, s);
+
+  if (!data.get_caps(info.ticket.name, s, info.ticket.caps)) {
+    return -EINVAL;
+  }
 
   return 0;
 }
@@ -312,6 +351,8 @@ int KeysServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketIn
   if (get_service_secret(service_id, info.service_secret, info.secret_id) < 0) {
     return -EPERM;
   }
+
+  Mutex::Locker l(lock);
 
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }

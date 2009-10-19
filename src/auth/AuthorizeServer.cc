@@ -96,15 +96,10 @@ int AuthorizeServer::do_authorize(bufferlist::iterator& indata, bufferlist& resu
   switch (request_type) {
   case CEPHX_OPEN_SESSION:
     {
-       dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
+      dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
 
-      ret = 0;
       bufferlist tmp_bl;
-      AuthServiceTicketInfo auth_ticket_info;
-      if (!::verify_authorizer(*keys, indata, auth_ticket_info, tmp_bl)) {
-        dout(0) << "could not verify authorizer" << dendl;
-        ret = -EPERM;
-      }
+      ret = verify_authorizer(0, indata, tmp_bl);
       result_bl.claim_append(tmp_bl);
     }
     break;
@@ -125,6 +120,13 @@ int AuthorizeServer::verify_authorizer(int peer_type, bufferlist::iterator& inda
     if (!::verify_authorizer(*keys, indata, auth_ticket_info, result_bl)) {
       dout(0) << "could not verify authorizer" << dendl;
       ret = -EPERM;
+    }
+    dout(0) << "caps len=" << auth_ticket_info.ticket.caps.length() << dendl;
+    if (auth_ticket_info.ticket.caps.length()) {
+      string caps;
+      bufferlist::iterator iter = auth_ticket_info.ticket.caps.begin();
+      ::decode(caps, iter);
+      dout(0) << "got caps: " << caps << dendl;
     }
   } catch (buffer::error *err) {
     ret = -EINVAL;
