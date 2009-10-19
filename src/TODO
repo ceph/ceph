@@ -41,8 +41,7 @@ v0.17
 - mon: less push, more pull
 - mon: request routing
 - mon cluster expansion
-
-- revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
+- osd: fix pg parsing, restarts on larger clusters
 
 - kclient: msgs built with a page list
 - kclient: retry alloc on ENOMEM when reading from connection?
