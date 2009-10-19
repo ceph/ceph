@@ -639,6 +639,11 @@ private:
     // calculate ps (placement seed)
     static hash<object_t> H;
     ps_t ps = H(oid);
+
+    // mix in preferred osd, so we don't get the same peers for all of the placement pgs (e.g. 0.0p*)
+    if (preferred >= 0)
+      ps += preferred;
+
     /*
     ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {
