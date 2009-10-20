@@ -38,7 +38,6 @@
 #include "common/LogClient.h"
 
 #include "auth/KeysServer.h"
-#include "auth/AuthorizeServer.h"
 
 
 class MonitorStore;
@@ -50,9 +49,8 @@ class MMonObserve;
 class MMonSubscribe;
 class MClass;
 class MAuthRotating;
+class MAuthorize;
 class MRoute;
-
-class AuthorizeServer;
 
 class Monitor : public Dispatcher {
 public:
@@ -74,7 +72,6 @@ public:
 
   KeysServer keys_server;
 
-  AuthorizeServer authorizer;
 
 
   // -- local storage --
@@ -157,6 +154,9 @@ public:
   void handle_observe(MMonObserve *m);
   void handle_class(MClass *m);
   void handle_route(MRoute *m);
+  void handle_authorize(MAuthorize *m);
+
+  int do_authorize(bufferlist::iterator& indata, bufferlist& result_bl);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);

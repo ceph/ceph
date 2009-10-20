@@ -32,7 +32,6 @@
 #include "include/LogEntry.h"
 
 #include "auth/KeyRing.h"
-#include "auth/AuthorizeServer.h"
 
 #include <map>
 using namespace std;
@@ -104,8 +103,6 @@ protected:
   ObjectStore *store;
 
   LogClient   logclient;
-
-  AuthorizeServer authorizer;
 
 
   int whoami;

@@ -233,7 +233,6 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   logger(NULL),
   store(NULL),
   logclient(messenger, &mc->monmap),
-  authorizer(m, &g_keyring),
   whoami(id),
   dev_path(dev), journal_path(jdev),
   state(STATE_BOOTING), boot_epoch(0), up_epoch(0),
@@ -425,8 +424,6 @@ int OSD::init()
 
   heartbeat_messenger->add_dispatcher_head(&heartbeat_dispatcher);
 
-  authorizer.init();
-  
   monc->init();
 
   monc->sub_want("monmap", 0);
@@ -1532,12 +1529,13 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
 				    bool& isvalid)
 {
+  AuthServiceTicketInfo auth_ticket_info;
   bufferlist::iterator iter = authorizer_data.begin();
 
   if (!authorizer_data.length())
     return -EPERM;
 
-  int ret = authorizer.verify_authorizer(peer_type, iter, authorizer_reply);
+  int ret = verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);

@@ -290,7 +290,6 @@ libcommon_a_SOURCES = \
 libcommon_files = \
 	auth/Auth.cc \
 	auth/AuthClientHandler.cc \
-	auth/AuthorizeServer.cc \
 	auth/AuthServiceManager.cc \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
@@ -394,7 +393,6 @@ libclient_a_SOURCES = \
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
 	auth/Auth.h\
-	auth/AuthorizeServer.h\
 	auth/AuthProtocol.h\
 	auth/AuthServiceManager.h\
 	auth/KeyRing.h\
