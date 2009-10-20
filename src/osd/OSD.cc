@@ -182,11 +182,10 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   ObjectStore::Transaction t;
   t.create_collection(0);
   t.write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-  store->apply_transaction(t);
-
+  int r = store->apply_transaction(t);
   store->umount();
   delete store;
-  return 0;
+  return r;
 }
 
 int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& whoami)
@@ -513,13 +512,17 @@ int OSD::shutdown()
   superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
-  store->apply_transaction(t);
+  int r = store->apply_transaction(t);
+  if (r) {
+    char buf[80];
+    dout(0) << "error writing superblock " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+  }
 
   // flush data to disk
   osd_lock.Unlock();
   dout(10) << "sync" << dendl;
   store->sync();
-  int r = store->umount();
+  r = store->umount();
   delete store;
   store = 0;
   dout(10) << "sync done" << dendl;
@@ -1769,7 +1772,13 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
     ObjectStore::Transaction ft;
     ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    store->apply_transaction(ft);
+    int r = store->apply_transaction(ft);
+    if (r) {
+      char buf[80];
+      dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      shutdown();
+      return;
+    }
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1795,7 +1804,13 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
     ObjectStore::Transaction ft;
     ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
-    store->apply_transaction(ft);
+    int r = store->apply_transaction(ft);
+    if (r) {
+      char buf[80];
+      dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+      shutdown();
+      return;
+    }
 
     if (p->first > superblock.newest_map)
       superblock.newest_map = p->first;
@@ -1837,7 +1852,13 @@ void OSD::handle_osd_map(MOSDMap *m)
       osdmap->encode(bl);
       ObjectStore::Transaction ft;
       ft.write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
-      store->apply_transaction(ft);
+      int r = store->apply_transaction(ft);
+      if (r) {
+	char buf[80];
+	dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+	shutdown();
+	return;
+      }
 
       // notify messenger
       for (map<int32_t,uint8_t>::iterator i = inc.new_down.begin();
@@ -1952,7 +1973,13 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // superblock and commit
   write_superblock(t);
-  store->apply_transaction(t);
+  int r = store->apply_transaction(t);
+  if (r) {
+    char buf[80];
+    dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    shutdown();
+    return;
+  }
   store->sync();
 
   map_lock.put_write();
@@ -2510,7 +2537,8 @@ void OSD::kick_pg_split_queue()
       pg->unlock();
       created++;
     }
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
 
     // remove from queue
     pg_split_ready.erase(p);
@@ -2675,7 +2703,8 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     }
   }
 
-  store->apply_transaction(t);
+  int tr = store->apply_transaction(t);
+  assert(tr == 0);
 
   for (vector<PG*>::iterator p = to_peer.begin(); p != to_peer.end(); p++) {
     PG *pg = *p;
@@ -2858,7 +2887,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
     pg->unlock();
   }
   
-  unsigned tr = store->apply_transaction(t);
+  int tr = store->apply_transaction(t);
   assert(tr == 0);
 
   do_queries(query_map);
@@ -2913,7 +2942,8 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     pg->info.history = info.history;
     pg->write_info(t);
     pg->write_log(t);
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
     created++;
   } else {
     pg = _lookup_lock_pg(info.pgid);
@@ -2969,7 +2999,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     }
   }
 
-  unsigned tr = store->apply_transaction(t);
+  int tr = store->apply_transaction(t);
   assert(tr == 0);
 
   pg->unlock();
@@ -3048,7 +3078,8 @@ void OSD::handle_pg_trim(MOSDPGTrim *m)
       ObjectStore::Transaction t;
       pg->trim(t, m->trim_to);
       pg->write_info(t);
-      store->apply_transaction(t);
+      int tr = store->apply_transaction(t);
+      assert(tr == 0);
     }
     pg->unlock();
   }
@@ -3112,7 +3143,8 @@ void OSD::handle_pg_query(MOSDPGQuery *m)
       pg->info.history = history;
       pg->write_info(t);
       pg->write_log(t);
-      store->apply_transaction(t);
+      int tr = store->apply_transaction(t);
+      assert(tr == 0);
       created++;
 
       dout(10) << *pg << " dne (before), but i am role " << role << dendl;
@@ -3239,7 +3271,8 @@ void OSD::_remove_pg(PG *pg)
     ObjectStore::Transaction t;
     pg->write_info(t);
     t.remove(0, pg->log_oid);
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
   }
 
   int n = 0;
@@ -3257,7 +3290,8 @@ void OSD::_remove_pg(PG *pg)
       ObjectStore::Transaction t;
       t.remove(coll_t::build_snap_pg_coll(pgid, *p), *q);
       t.remove(coll_t::build_pg_coll(pgid), *q);          // we may hit this twice, but it's harmless
-      store->apply_transaction(t);
+      int tr = store->apply_transaction(t);
+      assert(tr == 0);
 
       if ((++n & 0xff) == 0) {
 	pg->unlock();
@@ -3271,7 +3305,8 @@ void OSD::_remove_pg(PG *pg)
     }
     ObjectStore::Transaction t;
     t.remove_collection(coll_t::build_snap_pg_coll(pgid, *p));
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
   }
 
   // (what remains of the) main collection
@@ -3283,7 +3318,8 @@ void OSD::_remove_pg(PG *pg)
        p++) {
     ObjectStore::Transaction t;
     t.remove(coll_t::build_pg_coll(pgid), *p);
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
 
     if ((++n & 0xff) == 0) {
       pg->unlock();
@@ -3312,7 +3348,8 @@ void OSD::_remove_pg(PG *pg)
   {
     ObjectStore::Transaction t;
     t.remove_collection(coll_t::build_pg_coll(pgid));
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
   }
   
   // remove from map
@@ -3414,7 +3451,8 @@ void OSD::generate_backlog(PG *pg)
       pg->write_info(t);
     if (pg->dirty_log)
       pg->write_log(t);
-    store->apply_transaction(t);
+    int tr = store->apply_transaction(t);
+    assert(tr == 0);
   }
 
  out2:
@@ -3459,7 +3497,8 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 	pg->replay_until == activate_at) {
       ObjectStore::Transaction t;
       pg->activate(t);
-      store->apply_transaction(t);
+      int tr = store->apply_transaction(t);
+      assert(tr == 0);
     }
     pg->unlock();
   }

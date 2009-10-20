@@ -1619,7 +1619,8 @@ void PG::finish_recovery()
 
   ObjectStore::Transaction t;
   write_info(t);
-  osd->store->apply_transaction(t, finish_sync_event);
+  int tr = osd->store->apply_transaction(t, finish_sync_event);
+  assert(tr == 0);
 }
 
 void PG::_finish_recovery(Context *c)
@@ -2079,7 +2080,8 @@ void PG::read_log(ObjectStore *store)
 	::encode(oi, bl);
 	ObjectStore::Transaction t;
 	t.setattr(coll_t::build_pg_coll(info.pgid), i->soid, OI_ATTR, bl);
-	osd->store->apply_transaction(t);
+	int tr = osd->store->apply_transaction(t);
+	assert(tr == 0);
 
 	stringstream ss;
 	ss << info.pgid << " rebuilt missing xattr on " << i->soid;

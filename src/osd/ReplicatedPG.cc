@@ -831,7 +831,8 @@ bool ReplicatedPG::snap_trimmer()
 	t.setattr(coll_t::build_pg_coll(info.pgid), snapoid, SS_ATTR, bl);
       }
 
-      osd->store->apply_transaction(t);
+      int tr = osd->store->apply_transaction(t);
+      assert(tr == 0);
 
       // give other threads a chance at this pg
       unlock();
@@ -844,7 +845,8 @@ bool ReplicatedPG::snap_trimmer()
     snap_collections.erase(sn);
     write_info(t);
     t.remove_collection(c);
-    osd->store->apply_transaction(t);
+    int tr = osd->store->apply_transaction(t);
+    assert(tr == 0);
  
     info.snap_trimq.erase(sn);
   }  
@@ -854,7 +856,8 @@ bool ReplicatedPG::snap_trimmer()
 
   ObjectStore::Transaction t;
   write_info(t);
-  osd->store->apply_transaction(t);
+  int tr = osd->store->apply_transaction(t);
+  assert(tr == 0);
   unlock();
   return true;
 }
@@ -1848,9 +1851,11 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   list<ObjectStore::Transaction*> tls;
   tls.push_back(&repop->ctx->op_t);
   tls.push_back(&repop->ctx->local_t);
-  unsigned r = osd->store->apply_transactions(tls, oncommit);
-  if (r)
+  int r = osd->store->apply_transactions(tls, oncommit);
+  if (r) {
     dout(-10) << "apply_repop  apply transaction return " << r << " on " << *repop << dendl;
+    assert(0);
+  }
   
   // discard my reference to the buffer
   repop->ctx->op->get_data().clear();
@@ -2520,9 +2525,10 @@ void ReplicatedPG::sub_op_modify(MOSDSubOp *op)
     
   C_OSD_RepModifyCommit *oncommit = new C_OSD_RepModifyCommit(this, op, ackerosd,
 							      info.last_complete);
-  unsigned r = osd->store->apply_transactions(tls, oncommit);
+  int r = osd->store->apply_transactions(tls, oncommit);
   if (r) {
     derr(0) << "error applying transaction: r = " << r << dendl;
+    assert(0);
   }
 
   // ack myself.
@@ -3163,7 +3169,7 @@ void ReplicatedPG::sub_op_push(MOSDSubOp *op)
 
   // apply to disk!
   write_info(t);
-  unsigned r = osd->store->apply_transaction(t, new C_OSD_Commit(this, info.history.same_acting_since,
+  int r = osd->store->apply_transaction(t, new C_OSD_Commit(this, info.history.same_acting_since,
 								 info.last_complete));
   assert(r == 0);
 
@@ -3391,7 +3397,8 @@ int ReplicatedPG::recover_primary(int max)
 
 	    put_object_context(headobc);
 
-	    osd->store->apply_transaction(t);
+	    int tr = osd->store->apply_transaction(t);
+	    assert(tr == 0);
 	    missing.got(latest->soid, latest->version);
 	    missing_loc.erase(latest->soid);
 	    continue;
