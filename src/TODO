@@ -43,11 +43,17 @@ v0.17
 - mon cluster expansion
 - osd: fix pg parsing, restarts on larger clusters
 
+v0.18
+
+- qa
+- basic ENOSPC handling
+- osd: rebuild pg log
+- osd: handle storage errors
+
+- rebuild mds hierarchy
+
 - kclient: msgs built with a page list
 - kclient: retry alloc on ENOMEM when reading from connection?
-
-- kill mon->osd
-  - how to tell osds to scrub?
 
 
 pending wire, disk format changes
