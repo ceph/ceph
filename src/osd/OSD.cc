@@ -1538,6 +1538,21 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   int ret = verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
 
+  Mutex::Locker l(session_lock);
+
+  Session *s = _get_session(con);
+
+  if (s) {
+    if (auth_ticket_info.ticket.caps.length() > 0) {
+      bufferlist::iterator iter = auth_ticket_info.ticket.caps.begin();
+      s->caps.parse(iter);
+    }
+
+    s->put();
+  } else {
+    derr(0) << "got a NULL session" << dendl;
+  }
+
   isvalid = (ret >= 0);
  
   return true;
@@ -4145,18 +4160,26 @@ void OSD::init_op_flags(MOSDOp *op)
   }
 }
 
+OSD::Session *OSD::_get_session(Connection *c)
+{
+  Session *s = (Session *)c->get_priv();
+  if (!s) {
+    s = new Session;
+    c->set_priv(s->get());
+    dout(10) << " new session " << s << dendl;
+  }
+
+  return s;
+}
+
+
 
 void OSD::handle_auth(MAuth *m)
 {
   dout(10) << "handle_auth " << *m << dendl;
   Mutex::Locker l(session_lock);
 
-  Session *s = (Session *)m->get_connection()->get_priv();
-  if (!s) {
-    s = new Session;
-    m->get_connection()->set_priv(s->get());
-    dout(10) << " new session " << s << dendl;
-  }
+  Session *s = _get_session(m->get_connection());
 
   /*
   bufferlist::iterator p = m->auth_payload.begin();
@@ -4172,3 +4195,158 @@ void OSD::handle_auth(MAuth *m)
   s->put();
   delete m;
 }
+
+bool OSD::OSDCaps::get_next_token(string s, size_t& pos, string& token)
+{
+  int start = s.find_first_not_of(" \t", pos);
+  int end;
+
+  if (s[start] == '=' || s[start] == ',' || s[start] == ';') {
+    end = pos + 1;
+  } else {
+    end = s.find_first_of(";,= \t", start+1);
+  }
+
+  if (start < 0) {
+    return false; 
+  }
+
+  if (end < 0) {
+    end=s.size();
+  }
+
+  token = s.substr(start, end - start);
+
+  pos = end;
+
+  return true;
+}
+
+bool OSD::OSDCaps::parse(bufferlist::iterator& iter)
+{
+  string s;
+
+  try {
+    ::decode(s, iter);
+
+    *_dout << "decoded caps: " << s << std::endl;
+
+    size_t pos = 0;
+    string token;
+    bool init = true;
+
+    bool op_allow = false;
+    bool op_deny = false;
+    bool cmd_pool = false;
+    bool any_cmd = false;
+    bool got_eq = false;
+    list<int> num_list;
+    bool last_is_comma = false;
+    int cap_val = 0;
+
+    while (pos < s.size()) {
+      if (init) {
+        op_allow = false;
+        op_deny = false;
+        cmd_pool = false;
+        any_cmd = false;
+        got_eq = false;
+        last_is_comma = false;
+        cap_val = 0;
+        init = false;
+        num_list.clear();
+      }
+
+#define ASSERT_STATE(x) \
+do { \
+  if (!(x)) { \
+       *_dout << "error parsing caps at pos=" << pos << " (" #x ")" << std::endl; \
+  } \
+} while (0)
+
+      if (get_next_token(s, pos, token)) {
+        if (token.compare("=") == 0) {
+          ASSERT_STATE(any_cmd);
+          got_eq = true;
+        } else if (token.compare("allow") == 0) {
+          ASSERT_STATE((!op_allow) && (!op_deny));
+          op_allow = true;
+        } else if (token.compare("deny") == 0) {
+          ASSERT_STATE((!op_allow) && (!op_deny));
+          op_deny = true;
+        } else if (token.compare("pools") == 0) {
+          ASSERT_STATE(op_allow || op_deny);
+          cmd_pool = true;
+          any_cmd = true;
+        } else if (token.compare("r") == 0) {
+          ASSERT_STATE(op_allow || op_deny);
+          cap_val = OSD_POOL_CAP_R;
+        } else if (token.compare("w") == 0) {
+          ASSERT_STATE(op_allow || op_deny);
+          cap_val = OSD_POOL_CAP_W;
+        } else if (token.compare("rw") == 0) {
+          ASSERT_STATE(op_allow || op_deny);
+          cap_val = OSD_POOL_CAP_RW;
+        } else if (token.compare(";") != 0) {
+          ASSERT_STATE(got_eq);
+          if (token.compare(",") == 0) {
+            ASSERT_STATE(!last_is_comma);
+          } else {
+            last_is_comma = false;
+            int num = strtol(token.c_str(), NULL, 10);
+            num_list.push_back(num);
+          }
+        }
+
+        if (token.compare(";") == 0 || pos >= s.size()) {
+          if (got_eq) {
+            ASSERT_STATE(num_list.size() > 0);
+            list<int>::iterator iter;
+            for (iter = num_list.begin(); iter != num_list.end(); ++iter) {
+              OSDPoolCap& cap = pools_map[*iter];
+              if (op_allow) {
+                cap.allow |= cap_val;
+              } else {
+                cap.deny |= cap_val;
+              }
+            }
+          } else {
+            if (op_allow) {
+              default_action |= cap_val;
+            } else {
+              default_action &= ~cap_val;
+            }
+          }
+          init = true;
+        }
+        
+      }
+    }
+  } catch (buffer::error *err) {
+    return false;
+  }
+
+  *_dout << "default=" << default_action << std::endl;
+  map<int, OSDPoolCap>::iterator it;
+  for (it = pools_map.begin(); it != pools_map.end(); ++it) {
+    *_dout << it->first << " -> (" << it->second.allow << "." << it->second.deny << ")" << std::endl;
+  }
+
+
+  return true;
+}
+
+int OSD::OSDCaps::get_pool_cap(int pool_id)
+{
+  int cap = default_action;
+
+  map<int, OSDPoolCap>::iterator iter = pools_map.find(pool_id);
+  if (iter != pools_map.end()) {
+    OSDPoolCap& c = iter->second;
+    cap |= c.allow;
+    cap &= ~c.deny;
+  }
+
+  return cap;
+}
+
