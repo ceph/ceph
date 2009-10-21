@@ -243,8 +243,10 @@ int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlis
 
   ::encode(header, bl);
 
-  if (!ticket_handler.build_authorizer(bl, ctx))
+  if (!ticket_handler.build_authorizer(authorizer))
     return -EINVAL;
+
+  bl.claim_append(authorizer.bl);
 
   build_service_ticket_request(want, bl);
   
@@ -357,8 +359,10 @@ int AuthClientAuthorizeHandler::_build_request()
   ::encode(header, bl);
   utime_t now;
 
-  if (!client->tickets.build_authorizer(service_id, bl, ctx))
+  if (!client->tickets.build_authorizer(service_id, authorizer))
     return -EINVAL;
+
+  bl.claim_append(authorizer.bl);
 
   return 0;
 }
@@ -377,19 +381,8 @@ int AuthClientAuthorizeHandler::_handle_response(int ret, bufferlist::iterator& 
   switch (header.request_type & CEPHX_REQUEST_TYPE_MASK) {
   case CEPHX_OPEN_SESSION:
     {
-      AuthTicketHandler& ticket_handler = client->tickets.get_handler(service_id);
-      AuthAuthorizeReply reply;
-      if (!ticket_handler.decode_reply_authorizer(iter, reply)) {
-        ret = -EINVAL;
-        break;
-      }
-      ret = 0;
-      bool result = ticket_handler.verify_reply_authorizer(ctx, reply);
-      if (!result) {
-        ret = -EPERM;
-      }
-
-       break;
+      ret = authorizer.verify_reply(iter);
+      break;
     }
     break;
   default:
@@ -508,16 +501,15 @@ void AuthClientHandler::tick()
 
 }
 
-int AuthClientHandler::build_authorizer(uint32_t service_id, bufferlist& bl)
+int AuthClientHandler::build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer)
 {
-  AuthContext ctx;
-
   dout(0) << "going to build authorizer for peer_id=" << service_id << " service_id=" << service_id << dendl;
 
-  if (!tickets.build_authorizer(service_id, bl, ctx))
+  if (!tickets.build_authorizer(service_id, authorizer))
     return -EINVAL;
 
   dout(0) << "authorizer built successfully" << dendl;
 
   return 0;
 }
+

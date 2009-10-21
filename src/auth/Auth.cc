@@ -168,19 +168,20 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
  *
  * ticket, {timestamp}^session_key
  */
-bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
+bool AuthTicketHandler::build_authorizer(AuthAuthorizer& authorizer)
 {
-  ctx.timestamp = g_clock.now();
+  authorizer.session_key = session_key;
+  authorizer.ctx.timestamp = g_clock.now();
 
   dout(0) << "build_authorizer: service_id=" << service_id << dendl;
 
-  ::encode(service_id, bl);
+  ::encode(service_id, authorizer.bl);
 
-  ::encode(ticket, bl);
+  ::encode(ticket, authorizer.bl);
 
   AuthAuthorize msg;
-  msg.now = ctx.timestamp;
-  if (encode_encrypt(msg, session_key, bl) < 0)
+  msg.now = authorizer.ctx.timestamp;
+  if (encode_encrypt(msg, session_key, authorizer.bl) < 0)
     return false;
 
   return true;
@@ -191,14 +192,14 @@ bool AuthTicketHandler::build_authorizer(bufferlist& bl, AuthContext& ctx)
  *
  * ticket, {timestamp}^session_key
  */
-bool AuthTicketsManager::build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& ctx)
+bool AuthTicketsManager::build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer)
 {
   map<uint32_t, AuthTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return false;
 
   AuthTicketHandler& handler = iter->second;
-  return handler.build_authorizer(bl, ctx);
+  return handler.build_authorizer(authorizer);
 }
 
 /*
@@ -255,11 +256,11 @@ bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
   if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
     return false;
 
-  dout(0) << "verify_authorizer: ok" << dendl;
+  dout(0) << "verify_authorizer: ok reply_bl.length()=" << reply_bl.length() <<  dendl;
 
   return true;
 }
-
+#if 0
 bool AuthTicketHandler::decode_reply_authorizer(bufferlist::iterator& indata, AuthAuthorizeReply& reply)
 {
   if (decode_decrypt(reply, session_key, indata) < 0)
@@ -279,6 +280,19 @@ bool AuthTicketHandler::verify_reply_authorizer(AuthContext& ctx, AuthAuthorizeR
 
   return false;
 }
+#endif
 
+bool AuthAuthorizer::verify_reply(bufferlist::iterator& indata)
+{
+  AuthAuthorizeReply reply;
 
+  if (decode_decrypt(reply, session_key, indata) < 0)
+    return false;
+
+  if (ctx.timestamp + 1 != reply.timestamp) {
+    return false;
+  }
+
+  return true;
+}
 

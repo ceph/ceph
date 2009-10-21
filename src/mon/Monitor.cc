@@ -920,7 +920,7 @@ int Monitor::do_authorize(bufferlist::iterator& indata, bufferlist& result_bl)
   return ret;
 }
 
-bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)
 {
   AuthServiceTicketInfo auth_ticket_info;
 
@@ -970,8 +970,7 @@ bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool forc
   handler.service_id = service_id;
   handler.session_key = info.session_key;
 
-  AuthContext ctx;
-  handler.build_authorizer(authorizer, ctx);
+  handler.build_authorizer(authorizer);
   
   return true;
 }

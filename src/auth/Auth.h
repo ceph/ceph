@@ -180,6 +180,17 @@ struct AuthAuthorizeReply {
 WRITE_CLASS_ENCODER(AuthAuthorizeReply);
 
 
+struct AuthAuthorizer {
+  CryptoKey session_key;
+  AuthContext ctx;
+
+  bufferlist bl;
+
+  bool build_authorizer();
+  bool verify_reply(bufferlist::iterator& reply);
+  void clear() { bl.clear(); }
+};
+
 /*
  * AuthTicketHandler
  */
@@ -201,9 +212,11 @@ struct AuthTicketHandler {
   bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 #endif
   // to access the service
-  bool build_authorizer(bufferlist& bl, AuthContext& ctx);
+  bool build_authorizer(AuthAuthorizer& authorizer);
+#if 0
   bool decode_reply_authorizer(bufferlist::iterator& indata, AuthAuthorizeReply& reply);
   bool verify_reply_authorizer(AuthContext& ctx, AuthAuthorizeReply& reply);
+#endif
 
   bool has_key() { return has_key_flag; }
 };
@@ -221,7 +234,7 @@ struct AuthTicketsManager {
     handler.service_id = type;
     return handler;
   }
-  bool build_authorizer(uint32_t service_id, bufferlist& bl, AuthContext& context);
+  bool build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
   bool has_key(uint32_t service_id);
 };
 

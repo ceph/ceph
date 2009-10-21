@@ -60,7 +60,7 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
-  bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new) {
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new) {
     dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
     uint32_t want = peer_id_to_entity_type(dest_type);
     if (monclient.auth.build_authorizer(want, authorizer) < 0)

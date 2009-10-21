@@ -600,7 +600,6 @@ int SimpleMessenger::Pipe::accept()
     }
 
 
-    dout(0) << "accepting: connect.authorize_len=" << connect.authorizer_len << dendl;
     authorizer.clear();
     if (connect.authorizer_len) {
       bp = buffer::create(connect.authorizer_len);
@@ -609,8 +608,8 @@ int SimpleMessenger::Pipe::accept()
         goto fail_unlocked;
       }
       authorizer.push_back(bp);
+      authorizer_reply.clear();
     }
-    authorizer_reply.clear();
 
     dout(0) << "accept got peer connect_seq " << connect.connect_seq
 	     << " global_seq " << connect.global_seq
@@ -767,7 +766,7 @@ int SimpleMessenger::Pipe::accept()
     rc = tcp_write(sd, (char*)&reply, sizeof(reply));
     if (rc < 0)
       goto fail_unlocked;
-    if (authorizer_reply.length()) {
+    if (reply.authorizer_len) {
       rc = tcp_write(sd, authorizer_reply.c_str(), authorizer_reply.length());
       if (rc < 0)
 	goto fail_unlocked;
@@ -804,6 +803,7 @@ int SimpleMessenger::Pipe::accept()
   reply.global_seq = rank->get_global_seq();
   reply.connect_seq = connect_seq;
   reply.flags = 0;
+  reply.authorizer_len = authorizer_reply.length();
   if (policy.lossy)
     reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
@@ -814,6 +814,12 @@ int SimpleMessenger::Pipe::accept()
   rc = tcp_write(sd, (char*)&reply, sizeof(reply));
   if (rc < 0)
     goto fail;
+
+  if (reply.authorizer_len) {
+    rc = tcp_write(sd, authorizer_reply.c_str(), authorizer_reply.length());
+    if (rc < 0)
+      goto fail;
+  }
 
   lock.Lock();
   if (state != STATE_CLOSED) {
@@ -863,7 +869,8 @@ int SimpleMessenger::Pipe::connect()
   char banner[strlen(CEPH_BANNER)];
   entity_addr_t paddr;
   entity_addr_t peer_addr_for_me, socket_addr;
-  bufferlist authorizer;
+  AuthAuthorizer authorizer;
+  bufferlist authorizer_reply;
 
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -968,7 +975,7 @@ int SimpleMessenger::Pipe::connect()
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
-    connect.authorizer_len = authorizer.length();
+    connect.authorizer_len = authorizer.bl.length();
     dout(0) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
     connect.flags = 0;
     if (policy.lossy)
@@ -979,9 +986,9 @@ int SimpleMessenger::Pipe::connect()
     msg.msg_iov = msgvec;
     msg.msg_iovlen = 1;
     msglen = msgvec[0].iov_len;
-    if (authorizer.length()) {
-      msgvec[1].iov_base = authorizer.c_str();
-      msgvec[1].iov_len = authorizer.length();
+    if (authorizer.bl.length()) {
+      msgvec[1].iov_base = authorizer.bl.c_str();
+      msgvec[1].iov_len = authorizer.bl.length();
       msg.msg_iovlen++;
       msglen += msgvec[1].iov_len;
     }
@@ -1007,6 +1014,18 @@ int SimpleMessenger::Pipe::connect()
 	     << " proto " << reply.protocol_version
 	     << " flags " << (int)reply.flags
 	     << dendl;
+
+    authorizer_reply.clear();
+
+    if (reply.authorizer_len) {
+      dout(10) << "reply.authorizer_len=" << reply.authorizer_len << dendl;
+      bufferptr bp = buffer::create(reply.authorizer_len);
+      if (tcp_read(sd, bp.c_str(), reply.authorizer_len) < 0) {
+        dout(10) << "connect couldn't read connect authorizer_reply" << dendl;
+        goto fail;
+      }
+      authorizer_reply.push_back(bp);
+    }
 
     lock.Lock();
     if (state != STATE_CONNECTING) {
@@ -2129,7 +2148,7 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
 
 
 
-bool SimpleMessenger::get_authorizer(int peer_type, bufferlist& authorizer, bool force_new)
+bool SimpleMessenger::get_authorizer(int peer_type, AuthAuthorizer& authorizer, bool force_new)
 {
   for (unsigned r = 0; r < max_local; r++) {
     if (!local[r])

@@ -51,7 +51,7 @@ protected:
   Context *timeout_event;
   uint32_t id;
   Mutex lock;
-  AuthContext ctx;
+  AuthAuthorizer authorizer;
 
   // session state
   int status;
@@ -204,7 +204,7 @@ public:
   int authorize(uint32_t service_id, double timeout);
   void tick();
 
-  int build_authorizer(uint32_t service_id, bufferlist& bl);
+  int build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
 };
 
 

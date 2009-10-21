@@ -124,7 +124,7 @@ protected:
       (*p)->ms_handle_remote_reset(con);
   }
 
-  bool ms_deliver_get_authorizer(int peer_type, bufferlist& authorizer, bool force_new) {
+  bool ms_deliver_get_authorizer(int peer_type, AuthAuthorizer& authorizer, bool force_new) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)

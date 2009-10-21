@@ -1499,7 +1499,7 @@ bool OSD::ms_dispatch(Message *m)
   return true;
 }
 
-bool OSD::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
+bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)
 {
   dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
   uint32_t want = peer_id_to_entity_type(dest_type);
@@ -1578,10 +1578,6 @@ void OSD::_dispatch(Message *m)
   dout(20) << "_dispatch " << m << " " << *m << dendl;
 
   switch (m->get_type()) {
-
-  case CEPH_MSG_AUTH:
-    handle_auth((MAuth*)m);
-    break;
 
     // -- don't need lock -- 
   case CEPH_MSG_PING:
