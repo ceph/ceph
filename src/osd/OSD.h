@@ -32,7 +32,6 @@
 #include "include/LogEntry.h"
 
 #include "auth/KeyRing.h"
-#include "auth/AuthorizeServer.h"
 
 #include <map>
 using namespace std;
@@ -41,6 +40,11 @@ using namespace std;
 #include <ext/hash_set>
 using namespace __gnu_cxx;
 
+
+
+#define OSD_POOL_CAP_R 0x1
+#define OSD_POOL_CAP_W 0x2
+#define OSD_POOL_CAP_RW (OSD_POOL_CAP_R | OSD_POOL_CAP_W)
 
 enum {
   l_osd_first = 10000,
@@ -104,8 +108,6 @@ protected:
   ObjectStore *store;
 
   LogClient   logclient;
-
-  AuthorizeServer authorizer;
 
 
   int whoami;
@@ -181,12 +183,30 @@ private:
 
   // -- sessions --
 public:
+  struct OSDPoolCap {
+    int allow;
+    int deny;
+    OSDPoolCap() : allow(0), deny(0) {}
+  };
+
+  class OSDCaps {
+    map<int, OSDPoolCap> pools_map;
+    int default_action;
+    bool get_next_token(string s, size_t& pos, string& token);
+  public:
+    OSDCaps() : default_action(0) {}
+    bool parse(bufferlist::iterator& iter);
+    int get_pool_cap(int pool_id);
+  };
   struct Session : public RefCountedObject {
     AuthTicket ticket;
+    OSDCaps caps;
   };
 
 private:
   Mutex session_lock;
+
+  Session *_get_session(Connection *c);
   
   void handle_auth(MAuth *m);
 

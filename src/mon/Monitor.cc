@@ -40,6 +40,9 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
+#include "messages/MAuthorize.h"
+#include "messages/MAuthReply.h"
+
 #include "common/Timer.h"
 #include "common/Clock.h"
 
@@ -53,8 +56,6 @@
 #include "AuthMonitor.h"
 
 #include "osd/OSDMap.h"
-
-#include "auth/AuthorizeServer.h"
 
 #include "config.h"
 
@@ -81,7 +82,6 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   monmap(map),
   logclient(messenger, monmap),
   timer(lock), tick_timer(0),
-  authorizer(m, &keys_server),
   store(s),
   
   state(STATE_STARTING), stopping(false),
@@ -137,7 +137,6 @@ void Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
   messenger->add_dispatcher_head(&logclient);
-  authorizer.init();
   
   // start ticker
   reset_tick();
@@ -608,6 +607,11 @@ bool Monitor::ms_dispatch(Message *m)
     case MSG_CLASS:
       handle_class((MClass *)m);
       break;
+
+    case CEPH_MSG_AUTHORIZE:
+      handle_authorize((class MAuthorize*)m);
+      break;
+
       
     default:
       ret = false;
@@ -854,6 +858,68 @@ void Monitor::handle_class(MClass *m)
   }
 }
 
+void Monitor::handle_authorize(MAuthorize *m)
+{
+  dout(0) << "AuthorizeServer::handle_request() blob_size=" << m->get_auth_payload().length() << dendl;
+  int ret = 0;
+
+  Session *s = (Session *)m->get_connection()->get_priv();
+  s->put();
+
+  bufferlist response_bl;
+  bufferlist::iterator indata = m->auth_payload.begin();
+
+  CephXPremable pre;
+  ::decode(pre, indata);
+  dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
+  ::encode(pre, response_bl);
+
+  // handle the request
+  try {
+    ret = do_authorize(indata, response_bl);
+  } catch (buffer::error *err) {
+    ret = -EINVAL;
+    dout(0) << "caught error when trying to handle authorize request, probably malformed request" << dendl;
+  }
+  MAuthReply *reply = new MAuthReply(&response_bl, ret);
+  messenger->send_message(reply, m->get_orig_source_inst());
+}
+
+int Monitor::do_authorize(bufferlist::iterator& indata, bufferlist& result_bl)
+{
+  struct CephXRequestHeader cephx_header;
+
+  ::decode(cephx_header, indata);
+
+  uint16_t request_type = cephx_header.request_type & CEPHX_REQUEST_TYPE_MASK;
+  int ret;
+
+  dout(0) << "request_type=" << request_type << dendl;
+
+  switch (request_type) {
+  case CEPHX_OPEN_SESSION:
+    {
+      dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
+      AuthServiceTicketInfo auth_ticket_info;
+
+      bufferlist tmp_bl;
+      ret = verify_authorizer(keys_server, indata, auth_ticket_info, tmp_bl);
+      result_bl.claim_append(tmp_bl);
+    }
+    break;
+  default:
+    ret = -EINVAL;
+    break;
+  }
+
+  struct CephXResponseHeader header;
+  header.request_type = request_type;
+  header.status = ret;
+  ::encode(header, result_bl);
+
+  return ret;
+}
+
 bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)
 {
   AuthServiceTicketInfo auth_ticket_info;
@@ -917,13 +983,14 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   dout(0) << "Monitor::verify_authorizer start" << dendl;
 
   bufferlist::iterator iter = authorizer_data.begin();
+  AuthServiceTicketInfo auth_ticket_info;
 
   isvalid = true;
 
   if (!authorizer_data.length())
     return true; /* we're not picky */
 
-  int ret = authorizer.verify_authorizer(peer_type, iter, authorizer_reply);
+  int ret = verify_authorizer(keys_server, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);
