@@ -291,7 +291,7 @@ libcommon_files = \
 	auth/Auth.cc \
 	auth/AuthClientHandler.cc \
 	auth/AuthorizeServer.cc \
-	auth/AuthServiceManager.cc \
+	auth/AuthServiceHandler.cc \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
 	auth/KeyRing.cc \
@@ -396,7 +396,7 @@ noinst_HEADERS = \
 	auth/Auth.h\
 	auth/AuthorizeServer.h\
 	auth/AuthProtocol.h\
-	auth/AuthServiceManager.h\
+	auth/AuthServiceHandler.h\
 	auth/KeyRing.h\
 	auth/KeysServer.h\
 	auth/Crypto.h\

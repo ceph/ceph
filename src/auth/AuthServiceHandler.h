@@ -31,14 +31,6 @@ public:
   virtual int handle_request(bufferlist::iterator& indata, bufferlist& result) = 0;
 };
 
-class AuthServiceManager
-{
-  Monitor *mon;
-
-public:
-  AuthServiceManager(Monitor *m) : mon(m) {}
-
-  AuthServiceHandler *get_auth_handler(set<__u32>& supported);
-};
+extern AuthServiceHandler *get_auth_handler(Monitor *mon, set<__u32>& supported);
 
 #endif

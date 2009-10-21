@@ -13,7 +13,7 @@
  */
 
 
-#include "AuthServiceManager.h"
+#include "AuthServiceHandler.h"
 #include "AuthProtocol.h"
 #include "Auth.h"
 
@@ -222,7 +222,7 @@ void CephAuthService_X::build_cephx_response_header(int request_type, int status
 
 // --------------
 
-AuthServiceHandler *AuthServiceManager::get_auth_handler(set<__u32>& supported)
+AuthServiceHandler *get_auth_handler(Monitor *mon, set<__u32>& supported)
 {
   if (supported.count(CEPH_AUTH_CEPH)) {
     return new CephAuthService_X(mon);

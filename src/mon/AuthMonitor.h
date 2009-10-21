@@ -27,8 +27,6 @@ using namespace std;
 #include "include/AuthLibrary.h"
 
 #include "auth/KeysServer.h"
-#include "auth/AuthServiceManager.h"
-
 
 class MMonCommand;
 class MAuth;
@@ -39,8 +37,6 @@ class AuthMonitor : public PaxosService {
   void auth_usage(stringstream& ss);
   vector<AuthLibIncremental> pending_auth;
   version_t last_rotating_ver;
-
-  AuthServiceManager auth_mgr;
 
   void on_active();
 
@@ -78,8 +74,7 @@ class AuthMonitor : public PaxosService {
 
   void check_rotate();
  public:
-  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0),
-				       auth_mgr(mn) {}
+  AuthMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p), last_rotating_ver(0) {}
   void pre_auth(MAuth *m);
   
   void tick();  // check state, take actions

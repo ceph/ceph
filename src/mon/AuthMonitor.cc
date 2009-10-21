@@ -27,6 +27,8 @@
 #include "include/AuthLibrary.h"
 #include "common/Timer.h"
 
+#include "auth/AuthServiceHandler.h"
+
 #include "osd/osd_types.h"
 #include "osd/PG.h"  // yuck
 
@@ -335,7 +337,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     }
 
     if (!ret) {
-      s->auth_handler = auth_mgr.get_auth_handler(supported);
+      s->auth_handler = get_auth_handler(mon, supported);
       if (!s->auth_handler)
 	ret = -EPERM;
     }

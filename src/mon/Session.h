@@ -18,7 +18,7 @@
 #include "include/xlist.h"
 #include "msg/msg_types.h"
 
-#include "auth/AuthServiceManager.h"
+#include "auth/AuthServiceHandler.h"
 
 struct Session;
 
