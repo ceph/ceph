@@ -31,14 +31,16 @@ class MonMap;
 class LogClient : public Dispatcher {
   Messenger *messenger;
   MonMap *monmap;
+  int mon;
 
   bool ms_dispatch(Message *m);
   bool is_synchronous;
   void _send_log();
 
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) { return false; }
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  void ms_handle_connect(Connection *con);
+
+  bool ms_handle_reset(Connection *con) { return false; }
+  void ms_handle_remote_reset(Connection *con) {}
 
 
  public:
@@ -56,7 +58,7 @@ class LogClient : public Dispatcher {
   void set_synchronous(bool sync) { is_synchronous = sync; }
 
   LogClient(Messenger *m, MonMap *mm) : 
-    messenger(m), monmap(mm), is_synchronous(false),
+    messenger(m), monmap(mm), mon(-1), is_synchronous(false),
     log_lock("LogClient::log_lock"), last_log(0) { }
 };
 

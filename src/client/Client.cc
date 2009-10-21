@@ -49,7 +49,6 @@ using namespace std;
 
 #include "messages/MGenericMessage.h"
 
-#include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 
 #include "osdc/Filer.h"
@@ -263,8 +262,6 @@ void Client::init()
   messenger->add_dispatcher_head(this);
 
   monclient->init();
-
-  tick();
 
   // do logger crap only once per process.
   static bool did_init = false;
@@ -778,28 +775,25 @@ int Client::choose_target_mds(MetaRequest *req)
 }
 
 
-void Client::check_mds_sessions()
+void Client::connect_mds_targets(int mds)
 {
-  for (map<int,MDSSession>::iterator p = mds_sessions.begin();
-       p != mds_sessions.end();
-       p++) {
-    int mds = p->first;
-    MDSSession &s = p->second;
-    if (!s.requests.empty()) {
-      const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
-      for (set<int>::const_iterator q = info.export_targets.begin();
-	   q != info.export_targets.end();
-	   q++) {
-	if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
-	  dout(10) << "check_mds_sessions opening mds" << mds
-		   << " export target mds" << *q << dendl;
-	  messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
-				  mdsmap->get_inst(*q));
-	  waiting_for_session[*q].size();
-	}
+  //this function shouldn't be called unless we lost a connection
+  assert (mds_sessions.count(mds));
+  MDSSession &s = mds_sessions[mds];
+  if (!s.requests.empty()) {
+    const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
+    for (set<int>::const_iterator q = info.export_targets.begin();
+	 q != info.export_targets.end();
+	 q++) {
+      if (mds_sessions.count(*q) == 0 && waiting_for_session.count(mds) == 0) {
+	dout(10) << "check_mds_sessions opening mds" << mds
+		 << " export target mds" << *q << dendl;
+	messenger->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN),
+				mdsmap->get_inst(*q));
+	waiting_for_session[*q].size();
       }
     }
-  }  
+  }
 }
 
 int Client::make_request(MetaRequest *request, 
@@ -867,8 +861,7 @@ int Client::make_request(MetaRequest *request,
       Cond cond;
 
       if (!mdsmap->is_active(mds)) {
-	dout(10) << "no address for mds" << mds << ", requesting new mdsmap" << dendl;
-	//monclient->send_mon_message(new MMDSGetMap(monclient->get_fsid(), mdsmap->get_epoch()));
+	dout(10) << "no address for mds" << mds << ", waiting for new mdsmap" << dendl;
 	waiting_for_mdsmap.push_back(&cond);
 	cond.Wait(client_lock);
 
@@ -895,9 +888,6 @@ int Client::make_request(MetaRequest *request,
 
     // send request.
     send_request(request, mds);
-
-    // make sure we have needed mds sessions open
-    check_mds_sessions();
 
     // wait for signal
     dout(20) << "awaiting reply|forward|kick on " << &cond << dendl;
@@ -1357,8 +1347,6 @@ void Client::handle_mds_map(MMDSMap* m)
   delete oldmap;
   delete m;
 
-  check_mds_sessions();
-
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
 
@@ -1410,6 +1398,9 @@ void Client::send_reconnect(int mds)
     // reset my cap seq number
     mds_sessions[mds].seq = 0;
 
+    //connect to the mds' offload targets
+    connect_mds_targets(mds);
+    //make sure unsafe requests get saved
     resend_unsafe_requests(mds);
   } else {
     dout(10) << " i had no session with this mds" << dendl;
@@ -2741,6 +2732,8 @@ int Client::mount()
   monclient->renew_subs();
 
   mounted = true;
+
+  tick(); // start tick
   
   dout(2) << "mounted: have osdmap " << osdmap->get_epoch() 
 	  << " and mdsmap " << mdsmap->get_epoch() 
@@ -3697,14 +3690,15 @@ int Client::opendir(const char *relpath, DIR **dirpp)
 
 int Client::_opendir(Inode *in, DirResult **dirpp, int uid, int gid) 
 {
-  int r = 0;
   *dirpp = new DirResult(in);
+  if (!in->is_dir())
+    return -ENOTDIR;
   (*dirpp)->set_frag(in->dirfragtree[0]);
-  if (in->dir)
+  if(in->dir)
     (*dirpp)->release_count = in->dir->release_count;
   dout(10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
-  dout(3) << "_opendir(" << in->ino << ") = " << r << " (" << *dirpp << ")" << dendl;
-  return r;
+  dout(3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
+  return 0;
 }
 
 void Client::_readdir_add_dirent(DirResult *dirp, const string& name, Inode *in)
@@ -4024,13 +4018,11 @@ void Client::seekdir(DIR *dirp, loff_t offset)
 
 int Client::open(const char *relpath, int flags, mode_t mode) 
 {
-  dout(3) << "open enter(" << relpath << ", " << flags << ") = " << dendl;
+  dout(3) << "open enter(" << relpath << ", " << flags << "," << mode << ") = " << dendl;
   Mutex::Locker lock(client_lock);
   tout << "open" << std::endl;
   tout << relpath << std::endl;
   tout << flags << std::endl;
-
-  dout(5) << "open(" << relpath << ", " << flags << ", " << mode << ")" << dendl;
 
   Fh *fh = NULL;
 
@@ -5341,7 +5333,13 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
     
   trim_cache();
 
-  dout(3) << "create(" << path << ", 0" << oct << mode << dec << ") = " << res << dendl;
+  dout(3) << "create(" << path << ", 0" << oct << mode << dec 
+	  << " layout " << file_stripe_unit
+	  << ' ' << file_stripe_count
+	  << ' ' << object_size
+	  << ' ' << file_replication
+	  << ' ' << preferred_pg
+	  <<") = " << res << dendl;
   return res;
 }
 
@@ -5804,8 +5802,10 @@ void Client::set_default_file_replication(int replication)
 
 void Client::set_default_preferred_pg(int pg)
 {
-  if (pg >= 0)
-  preferred_pg = pg;
+  if (pg >= -1)
+    preferred_pg = pg;
+  else
+    dout(5) << "Attempt to set preferred_pg " << pg << " < -1!" << dendl;
 }
 
 int Client::describe_layout(int fd, ceph_file_layout *lp)
@@ -5932,22 +5932,24 @@ int Client::get_local_osd()
 
 // ===============================
 
-void Client::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr)
+void Client::ms_handle_connect(Connection *con)
 {
-  dout(0) << "ms_handle_failure " << *m << " to " << addr << dendl;
+  dout(10) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  Mutex::Locker l(client_lock);
+  objecter->ms_handle_connect(con);
 }
 
-bool Client::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
+bool Client::ms_handle_reset(Connection *con) 
 {
-  dout(0) << "ms_handle_reset on " << addr << dendl;
+  dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
-  objecter->ms_handle_reset(addr);
+  objecter->ms_handle_reset(con);
   return false;
 }
 
-void Client::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
+void Client::ms_handle_remote_reset(Connection *con) 
 {
-  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
+  dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
-  objecter->ms_handle_remote_reset(addr);
+  objecter->ms_handle_remote_reset(con);
 }

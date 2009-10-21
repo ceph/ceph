@@ -24,7 +24,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v023"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v024"
 
 
 
@@ -147,7 +147,7 @@ struct pg_t {
     int pool;
     int ps;
     int preferred;
-    int r = sscanf(s, "%d.%xp%x", &pool, &ps, &preferred);
+    int r = sscanf(s, "%d.%xp%d", &pool, &ps, &preferred);
     if (r < 2)
       return false;
     u.pg.pool = pool;

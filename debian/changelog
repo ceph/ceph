@@ -1,3 +1,37 @@
+ceph (0.17) unstable; urgency=low
+
+  * kclient: fix multiple mds mdsmap decoding
+  * kclient: fix mon subscription renewal
+  * crush: fix map creation with empty buckets (larger clusters)
+  * osdmap: fix encoding bug (crashed kclient)
+  * msgr: simplified policy, failure model
+  * mon: less push, more pull
+  * mon: request routing. clients keep single session with single monitor
+  * mon cluster expansion works
+  * osd: fix pg parsing, restarts on larger clusters
+
+ -- sage <sage@newdream.net>  Mon, 19 Oct 2009 15:20:00 -0800
+
+ceph (0.16.1-1) unstable; urgency=low
+
+  * missing buffer.c
+  * rgw build problem on i386
+
+ -- sage <sage@newdream.net>  Tue, 06 Oct 2009 10:29:00 -0800
+
+ceph (0.16-1) unstable; urgency=low
+
+  * libceph: identify self
+  * hadoop: write to local osd
+  * disk format, wire changes
+  * use sockaddr_storage throughout
+  * kclient: fix msgr bug
+  * kclient: uninline strings, use pr_fmt, prefix frag_ macros
+  * kclient: lots of inline cleanups
+  * kclient: misc akpm review cleanups
+
+ -- sage <sage@newdream.net>  Mon, 05 Oct 2009 14:54:00 -0800
+
 ceph (0.15-1) unstable; urgency=low
 
   * msgr: clean up protocol checks; ack seq # fix

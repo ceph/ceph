@@ -1,5 +1,8 @@
-/* Do not modify this file.  */
-/* It is created automatically by the Makefile.  */
+/*
+ * Do not modify this file.
+ *
+ * It is created automatically by Makefile or Makefile.nmake.
+ */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"

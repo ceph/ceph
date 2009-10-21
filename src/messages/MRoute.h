@@ -21,37 +21,32 @@
 #include "include/encoding.h"
 
 struct MRoute : public Message {
+  __u64 session_mon_tid;
   Message *msg;
   entity_inst_t dest;
   
   MRoute() : Message(MSG_ROUTE), msg(NULL) {}
-  MRoute(Message *m, entity_inst_t i) : Message(MSG_ROUTE), msg(m), dest(i) {}
+  MRoute(__u64 t, Message *m, entity_inst_t i) :
+    Message(MSG_ROUTE), session_mon_tid(t), msg(m), dest(i) {}
+  MRoute(__u64 t, bufferlist bl, entity_inst_t i) :
+    Message(MSG_ROUTE), session_mon_tid(t), dest(i) {
+    bufferlist::iterator p = bl.begin();
+    msg = decode_message(p);
+  }
   ~MRoute() {
     delete msg;
   }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(session_mon_tid, p);
     ::decode(dest, p);
-    ceph_msg_header h;
-    ceph_msg_footer f;
-    bufferlist fr, mi, da;
-    ::decode(h, p);
-    ::decode(f, p);
-    ::decode(fr, p);
-    ::decode(mi, p);
-    ::decode(da, p);
-    msg = decode_message(h, f, fr, mi, da);
+    msg = decode_message(p);
   }
   void encode_payload() {
+    ::encode(session_mon_tid, payload);
     ::encode(dest, payload);
-    bufferlist front, middle, data;
-    msg->encode();
-    ::encode(msg->get_header(), payload);
-    ::encode(msg->get_footer(), payload);
-    ::encode(msg->get_payload(), payload);
-    ::encode(msg->get_middle(), payload);
-    ::encode(msg->get_data(), payload);
+    encode_message(msg, payload);
   }
 
   const char *get_type_name() { return "route"; }

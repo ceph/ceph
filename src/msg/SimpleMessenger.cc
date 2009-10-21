@@ -138,6 +138,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
     rank->need_addr = false;
   else 
     rank->need_addr = true;
+
   if (rank->rank_addr.get_port() == 0) {
     rank->rank_addr.in4_addr() = listen_addr;
     if (force_nonce >= 0)
@@ -148,6 +149,7 @@ int SimpleMessenger::Accepter::bind(int64_t force_nonce)
   rank->rank_addr.v.erank = 0;
 
   dout(1) << "accepter.bind rank_addr is " << rank->rank_addr << " need_addr=" << rank->need_addr << dendl;
+  rank->did_bind = true;
   return 0;
 }
 
@@ -162,8 +164,6 @@ int SimpleMessenger::Accepter::start()
   sa.sa_flags = 0;
   sigemptyset(&sa.sa_mask);
   sigaction(SIGUSR1, &sa, NULL);
-  sigaction(SIGUSR2, &sa, NULL);
-  sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
 
   // start thread
   create();
@@ -287,32 +287,27 @@ void SimpleMessenger::Endpoint::dispatch_entry()
 	  }
           Message *m = ls.front();
           ls.pop_front();
-	  if ((long)m == BAD_REMOTE_RESET) {
+	  if ((long)m == D_BAD_REMOTE_RESET) {
 	    lock.Lock();
-	    Connection *con = remote_reset_q.front().first;
-	    entity_addr_t a = remote_reset_q.front().second;
+	    Connection *con = remote_reset_q.front();
 	    remote_reset_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_remote_reset(con, a);
+	    ms_deliver_handle_remote_reset(con);
 	    con->put();
- 	  } else if ((long)m == BAD_RESET) {
+ 	  } else if ((long)m == D_CONNECT) {
 	    lock.Lock();
-	    Connection *con = reset_q.front().first;
-	    entity_addr_t a = reset_q.front().second;
+	    Connection *con = connect_q.front();
+	    connect_q.pop_front();
+	    lock.Unlock();
+	    ms_deliver_handle_connect(con);
+	    con->put();
+ 	  } else if ((long)m == D_BAD_RESET) {
+	    lock.Lock();
+	    Connection *con = reset_q.front();
 	    reset_q.pop_front();
 	    lock.Unlock();
-	    ms_deliver_handle_reset(con, a);
+	    ms_deliver_handle_reset(con);
 	    con->put();
-	  } else if ((long)m == BAD_FAILED) {
-	    lock.Lock();
-	    Connection *con = failed_q.front().con;
-	    m = failed_q.front().msg;
-	    entity_addr_t a = failed_q.front().addr;
-	    failed_q.pop_front();
-	    lock.Unlock();
-	    ms_deliver_handle_failure(con, m, a);
-	    con->put();
-	    m->put();
 	  } else {
 	    dout(1) << "<== " << m->get_source_inst()
 		    << " " << m->get_seq()
@@ -352,7 +347,7 @@ void SimpleMessenger::Endpoint::ready()
 
 int SimpleMessenger::Endpoint::shutdown()
 {
-  dout(0) << "shutdown " << get_myaddr() << dendl;
+  dout(10) << "shutdown " << get_myaddr() << dendl;
   
   // stop my dispatch thread
   if (dispatch_thread.am_self()) {
@@ -480,7 +475,7 @@ ostream& SimpleMessenger::Pipe::_pipe_prefix() {
 		<< " sd=" << sd
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
-		<< " ltx=" << policy.lossy_tx
+		<< " l=" << policy.lossy
 		<< ").";
 }
 
@@ -585,6 +580,7 @@ int SimpleMessenger::Pipe::accept()
     dout(0) << "accept peer addr is really " << peer_addr
 	    << " (socket is " << socket_addr << ")" << dendl;
   }
+  set_peer_addr(peer_addr);  // so that connection_state gets set up
   
   ceph_msg_connect connect;
   ceph_msg_connect_reply reply;
@@ -626,11 +622,11 @@ int SimpleMessenger::Pipe::accept()
     rank->lock.Lock();
 
     // note peer's type, flags
-    peer_type = connect.host_type;
+    set_peer_type(connect.host_type);
     policy = rank->get_policy(connect.host_type);
-    dout(10) << "accept host_type " << connect.host_type
-	     << ", setting policy, lossy_tx=" << policy.lossy_tx << dendl;
-    lossy_rx = connect.flags & CEPH_MSG_CONNECT_LOSSY;
+    dout(10) << "accept of host_type " << connect.host_type
+	     << ", policy.lossy=" << policy.lossy
+	     << dendl;
 
     memset(&reply, 0, sizeof(reply));
     reply.protocol_version = get_proto_version(rank->my_type, peer_type, false);
@@ -671,12 +667,13 @@ int SimpleMessenger::Pipe::accept()
 		 << " <= " << connect.global_seq << ", looks ok" << dendl;
       }
       
-      if (existing->policy.lossy_tx) {
-	dout(-10) << "accept replacing existing (lossy) channel" << dendl;
+      if (existing->policy.lossy) {
+	dout(-10) << "accept replacing existing (lossy) channel (new one lossy="
+		  << policy.lossy << ")" << dendl;
 	existing->was_session_reset();
 	goto replace;
       }
-      if (lossy_rx) {
+      /*if (lossy_rx) {
 	if (existing->state == STATE_STANDBY) {
 	  dout(-10) << "accept incoming lossy connection, kicking outgoing lossless "
 		    << existing << dendl;
@@ -688,7 +685,7 @@ int SimpleMessenger::Pipe::accept()
 	}
 	existing->lock.Unlock();
 	goto fail;
-      }
+	}*/
 
       dout(-10) << "accept connect_seq " << connect.connect_seq
 		<< " vs existing " << existing->connect_seq
@@ -807,7 +804,7 @@ int SimpleMessenger::Pipe::accept()
   reply.global_seq = rank->get_global_seq();
   reply.connect_seq = connect_seq;
   reply.flags = 0;
-  if (policy.lossy_tx)
+  if (policy.lossy)
     reply.flags = reply.flags | CEPH_MSG_CONNECT_LOSSY;
 
   // ok!
@@ -860,7 +857,6 @@ int SimpleMessenger::Pipe::connect()
   
   char tag = -1;
   int rc;
-  struct sockaddr_in myAddr;
   struct msghdr msg;
   struct iovec msgvec[2];
   int msglen;
@@ -878,20 +874,6 @@ int SimpleMessenger::Pipe::connect()
     goto fail;
   }
   opened_socket();
-#if 0
-  // bind any port
-  myAddr.sin_family = AF_INET;
-  myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  myAddr.sin_port = htons( 0 );    
-  dout(10) << "binding to " << myAddr << dendl;
-  rc = ::bind(sd, (struct sockaddr *)&myAddr, sizeof(myAddr));
-  if (rc < 0) {
-    char buf[80];
-    dout(2) << "bind error " << myAddr
-	     << ", " << errno << ": " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    goto fail;
-  }
-#endif
 
   char buf[80];
 
@@ -989,8 +971,8 @@ int SimpleMessenger::Pipe::connect()
     connect.authorizer_len = authorizer.length();
     dout(0) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
     connect.flags = 0;
-    if (policy.lossy_tx)
-      connect.flags |= CEPH_MSG_CONNECT_LOSSY;
+    if (policy.lossy)
+      connect.flags |= CEPH_MSG_CONNECT_LOSSY;  // this is fyi, actually, server decides!
     memset(&msg, 0, sizeof(msg));
     msgvec[0].iov_base = (char*)&connect;
     msgvec[0].iov_len = sizeof(connect);
@@ -1080,12 +1062,16 @@ int SimpleMessenger::Pipe::connect()
     if (reply.tag == CEPH_MSGR_TAG_READY) {
       // hooray!
       peer_global_seq = reply.global_seq;
-      lossy_rx = reply.flags & CEPH_MSG_CONNECT_LOSSY;
+      policy.lossy = reply.flags & CEPH_MSG_CONNECT_LOSSY;
       state = STATE_OPEN;
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
-      first_fault = last_attempt = utime_t();
-      dout(20) << "connect success " << connect_seq << ", lossy_rx = " << lossy_rx << dendl;
+      backoff = utime_t();
+      dout(20) << "connect success " << connect_seq << ", lossy = " << policy.lossy << dendl;
+
+      for (unsigned i=0; i<rank->local.size(); i++) 
+	if (rank->local[i])
+	  rank->local[i]->queue_connect(connection_state->get());
 
       if (!reader_running) {
 	dout(20) << "connect starting reader" << dendl;
@@ -1187,8 +1173,9 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
   }
 
   // lossy channel?
-  if (policy.lossy_tx) {
+  if (policy.lossy) {
     dout(10) << "fault on lossy channel, failing" << dendl;
+    was_session_reset();
     fail();
     return;
   }
@@ -1201,40 +1188,32 @@ void SimpleMessenger::Pipe::fault(bool onconnect, bool onread)
       dout(10) << "fault on connect, or already closing, and q empty: setting closed." << dendl;
       state = STATE_CLOSED;
     } else {
-      dout(0) << "fault nothing to send, going to standby" << dendl;
+      dout(0) << "fault with nothing to send, going to standby" << dendl;
       state = STATE_STANDBY;
     }
     return;
   } 
 
+
   utime_t now = g_clock.now();
   if (state != STATE_CONNECTING) {
-    if (!onconnect) dout(0) << "fault initiating reconnect" << dendl;
+    if (!onconnect)
+      dout(0) << "fault initiating reconnect" << dendl;
     connect_seq++;
     state = STATE_CONNECTING;
-    first_fault = now;
-  } else if (first_fault.sec() == 0) {
-    if (!onconnect) dout(0) << "fault first fault" << dendl;
-    first_fault = now;
+    backoff = utime_t();
+  } else if (backoff == utime_t()) {
+    if (!onconnect)
+      dout(0) << "fault first fault" << dendl;
+    backoff.set_from_double(g_conf.ms_initial_backoff);
   } else {
-    utime_t failinterval = now - first_fault;
-    utime_t retryinterval = now - last_attempt;
-    if (!onconnect) dout(10) << "fault failure was " << failinterval 
-			     << " ago, last attempt was at " << last_attempt
-			     << ", " << retryinterval << " ago" << dendl;
-    if (policy.fail_interval > 0 && failinterval > policy.fail_interval) {
-      // give up
-      dout(0) << "fault giving up" << dendl;
-      fail();
-    } else if (retryinterval < policy.retry_interval) {
-      // wait
-      now += (policy.retry_interval - retryinterval);
-      dout(10) << "fault waiting until " << now << dendl;
-      cond.WaitUntil(lock, now);
-      dout(10) << "fault done waiting or woke up" << dendl;
-    }
+    dout(10) << "fault waiting " << backoff << dendl;
+    cond.WaitInterval(lock, backoff);
+    backoff += backoff;
+    if (backoff > g_conf.ms_max_backoff)
+      backoff.set_from_double(g_conf.ms_max_backoff);
+    dout(10) << "fault done waiting or woke up" << dendl;
   }
-  last_attempt = now;
 }
 
 void SimpleMessenger::Pipe::fail()
@@ -1247,7 +1226,7 @@ void SimpleMessenger::Pipe::fail()
 
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
-      rank->local[i]->queue_reset(connection_state->get(), peer_addr);
+      rank->local[i]->queue_reset(connection_state->get());
 
   // unregister
   lock.Unlock();
@@ -1265,7 +1244,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   report_failures();
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
-      rank->local[i]->queue_remote_reset(connection_state->get(), peer_addr);
+      rank->local[i]->queue_remote_reset(connection_state->get());
 
   out_seq = 0;
   in_seq = 0;
@@ -1280,18 +1259,6 @@ void SimpleMessenger::Pipe::report_failures()
     Message *m = _get_next_outgoing();
     if (!m)
       break;
-
-    if (policy.drop_msg_callback) {
-      unsigned srcrank = m->get_source_inst().addr.v.erank;
-      if (srcrank >= rank->max_local || rank->local[srcrank] == 0) {
-	dout(1) << "fail on " << *m << ", srcrank " << srcrank << " dne, dropping" << dendl;
-      } else if (rank->local[srcrank]->is_stopped()) {
-	dout(1) << "fail on " << *m << ", dispatcher stopping, ignoring." << dendl;
-      } else {
-	dout(10) << "fail on " << *m << dendl;
-	rank->local[srcrank]->queue_failure(connection_state->get(), m, peer_addr);
-      }
-    }
     m->put();
   }
 }
@@ -1405,7 +1372,7 @@ void SimpleMessenger::Pipe::reader()
       }
       in_seq++;
 
-      if (!lossy_rx && in_seq != m->get_seq()) {
+      if (!policy.lossy && in_seq != m->get_seq()) {
 	dout(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
@@ -2074,7 +2041,10 @@ int SimpleMessenger::start(bool nodaemon)
     return 0;
   }
 
-  dout(1) << "rank.start at " << rank_addr << dendl;
+  if (!did_bind)
+    rank_addr.v.nonce = getpid();
+
+  dout(1) << "rank.start" << dendl;
   started = true;
   lock.Unlock();
 
@@ -2116,8 +2086,18 @@ int SimpleMessenger::start(bool nodaemon)
   if (g_conf.kill_after) 
     g_timer.add_event_after(g_conf.kill_after, new C_Die);
 
+  // set noop handlers for SIGUSR2, SIGPIPE
+  struct sigaction sa;
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_handler = noop_signal_handler;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+  sigaction(SIGUSR2, &sa, NULL);
+  sigaction(SIGPIPE, &sa, NULL);  // mask SIGPIPE too.  FIXME: i'm quite certain this is a roundabout way to do that.
+
   // go!
-  accepter.start();
+  if (did_bind)
+    accepter.start();
   return 0;
 }
 
@@ -2134,9 +2114,9 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
   
   // create pipe
   Pipe *pipe = new Pipe(this, Pipe::STATE_CONNECTING);
-  pipe->peer_type = type;
+  pipe->set_peer_type(type);
+  pipe->set_peer_addr(addr);
   pipe->policy = get_policy(type);
-  pipe->peer_addr = addr;
   pipe->start_writer();
   pipe->register_pipe();
   pipes.insert(pipe);
@@ -2351,14 +2331,16 @@ void SimpleMessenger::wait()
   lock.Unlock();
   
   // done!  clean up.
-  dout(0) << "wait: stopping accepter thread" << dendl;
-  accepter.stop();
-  dout(20) << "wait: stopped accepter thread" << dendl;
+  if (did_bind) {
+    dout(20) << "wait: stopping accepter thread" << dendl;
+    accepter.stop();
+    dout(20) << "wait: stopped accepter thread" << dendl;
+  }
 
   // close+reap all pipes
   lock.Lock();
   {
-    dout(0) << "wait: closing pipes" << dendl;
+    dout(10) << "wait: closing pipes" << dendl;
     list<Pipe*> toclose;
     for (hash_map<entity_addr_t,Pipe*>::iterator i = rank_pipe.begin();
          i != rank_pipe.end();
@@ -2374,8 +2356,8 @@ void SimpleMessenger::wait()
     }
 
     reaper();
+    dout(10) << "wait: waiting for pipes " << pipes << " to close" << dendl;
     while (!pipes.empty()) {
-      dout(0) << "wait: waiting for pipes " << pipes << " to close" << dendl;
       wait_cond.Wait(lock);
       reaper();
     }
@@ -2383,9 +2365,10 @@ void SimpleMessenger::wait()
   lock.Unlock();
 
   dout(10) << "wait: done." << dendl;
-  dout(0) << "shutdown complete." << dendl;
+  dout(1) << "shutdown complete." << dendl;
   remove_pid_file();
   started = false;
+  did_bind = false;
   my_type = -1;
 }
 

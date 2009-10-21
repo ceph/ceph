@@ -79,11 +79,12 @@ void LogClient::_send_log()
     return;
   MLog *log = new MLog(monmap->get_fsid(), log_queue);
 
-  int mon;
-  if (messenger->get_myname().is_mon())
-    mon = messenger->get_myname().num();  // if we are a monitor, queue for ourselves
-  else
-    mon = monmap->pick_mon();
+  if (mon < 0) {
+    if (messenger->get_myname().is_mon())
+      mon = messenger->get_myname().num();  // if we are a monitor, queue for ourselves
+    else
+      mon = rand() % monmap->mon_inst.size();
+  }
 
   dout(10) << "send_log to mon" << mon << dendl;
   messenger->send_message(log, monmap->get_inst(mon));
@@ -115,3 +116,10 @@ bool LogClient::ms_dispatch(Message *m)
 }
 
 
+void LogClient::ms_handle_connect(Connection *con)
+{
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    dout(10) << "ms_handle_connect on mon " << con->get_peer_addr() << ", resending pending log events" << dendl;
+    send_log();
+  }
+}

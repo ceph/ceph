@@ -60,10 +60,9 @@ private:
   SafeTimer timer;
 
   bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
+  bool ms_handle_reset(Connection *con);
 
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  void ms_handle_remote_reset(Connection *con) {}
 
   void handle_monmap(MMonMap *m);
 
@@ -132,11 +131,14 @@ private:
     sub_have[what].have = have;
     sub_have[what].onetime = false;
   }
-  void _sub_want_onetime(nstring what, version_t have) {
+  bool _sub_want_onetime(nstring what, version_t have) {
     if (sub_have.count(what) == 0) {
       sub_have[what].have = have;
       sub_have[what].onetime = true;
-    }
+      return true;
+    } else
+      sub_have[what].have = have;
+    return false;
   }
   void _sub_got(nstring what, version_t have) {
     if (sub_have.count(what)) {
@@ -162,9 +164,9 @@ public:
     Mutex::Locker l(monc_lock);
     _sub_want(what, have);
   }
-  void sub_want_onetime(nstring what, version_t have) {
+  bool sub_want_onetime(nstring what, version_t have) {
     Mutex::Locker l(monc_lock);
-    _sub_want_onetime(what, have);
+    return _sub_want_onetime(what, have);
   }
   void sub_got(nstring what, version_t have) {
     Mutex::Locker l(monc_lock);
@@ -194,10 +196,6 @@ public:
   void send_mon_message(Message *m) {
     Mutex::Locker l(monc_lock);
     _send_mon_message(m);
-  }
-  void note_mon_leader(int m) {
-    Mutex::Locker l(monc_lock);
-    monmap.last_mon = m;
   }
   void reopen_session() {
     Mutex::Locker l(monc_lock);

@@ -55,15 +55,16 @@ private:
 
   bool preprocess_pg_stats(MPGStats *stats);
   bool prepare_pg_stats(MPGStats *stats);
-  void _updated_stats(MPGStatsAck *ack, entity_inst_t who);
+  void _updated_stats(MPGStats *req, MPGStatsAck *ack);
 
   struct C_Stats : public Context {
     PGMonitor *pgmon;
+    MPGStats *req;
     MPGStatsAck *ack;
     entity_inst_t who;
-    C_Stats(PGMonitor *p, MPGStatsAck *a, entity_inst_t w) : pgmon(p), ack(a), who(w) {}
+    C_Stats(PGMonitor *p, MPGStats *r, MPGStatsAck *a) : pgmon(p), req(r), ack(a) {}
     void finish(int r) {
-      pgmon->_updated_stats(ack, who);
+      pgmon->_updated_stats(req, ack);
     }    
   };
 

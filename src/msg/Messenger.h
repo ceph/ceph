@@ -104,24 +104,24 @@ protected:
 		    << dendl;
     assert(0);
   }
-  void ms_deliver_handle_reset(Connection *con, const entity_addr_t& peer) {
+  void ms_deliver_handle_connect(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      if ((*p)->ms_handle_reset(con, peer))
+      (*p)->ms_handle_connect(con);
+  }
+  void ms_deliver_handle_reset(Connection *con) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 p++)
+      if ((*p)->ms_handle_reset(con))
 	return;
   }
-  void ms_deliver_handle_remote_reset(Connection *con, const entity_addr_t& peer) {
+  void ms_deliver_handle_remote_reset(Connection *con) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      (*p)->ms_handle_remote_reset(con, peer);
-  }
-  void ms_deliver_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) {
-    for (list<Dispatcher*>::iterator p = dispatchers.begin();
-	 p != dispatchers.end();
-	 p++)
-      (*p)->ms_handle_failure(con, m, peer);
+      (*p)->ms_handle_remote_reset(con);
   }
 
   bool ms_deliver_get_authorizer(int peer_type, bufferlist& authorizer, bool force_new) {

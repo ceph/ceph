@@ -40,7 +40,7 @@
 
 #define DOUT_SUBSYS monc
 #undef dout_prefix
-#define dout_prefix *_dout << dbeginl << "monclient: "
+#define dout_prefix *_dout << dbeginl << "monclient" << (hunting ? "(hunting)":"") << ": "
 
 
 /*
@@ -49,6 +49,8 @@
  */
 int MonClient::build_initial_monmap()
 {
+  dout(10) << "build_initial_monmap" << dendl;
+
   // file?
   if (g_conf.monmap) {
     const char *monmap_fn = g_conf.monmap;
@@ -117,6 +119,7 @@ int MonClient::get_monmap()
   dout(10) << "get_monmap" << dendl;
   Mutex::Locker l(monc_lock);
   
+  _sub_want("monmap", monmap.get_epoch());
   want_monmap = true;
   if (cur_mon < 0)
     _reopen_session();
@@ -125,7 +128,6 @@ int MonClient::get_monmap()
     map_cond.Wait(monc_lock);
 
   dout(10) << "get_monmap done" << dendl;
-
   return 0;
 }
 
@@ -138,8 +140,6 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   if (!messenger) {
     rank = new SimpleMessenger;
-    rank->bind();
-    rank->set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
     messenger = rank->register_entity(entity_name_t::CLIENT(-1));
     messenger->add_dispatcher_head(this);
     rank->start(true);  // do not daemonize!
@@ -171,6 +171,8 @@ int MonClient::get_monmap_privately()
     messenger = 0;
   }
  
+  hunting = true;  // reset this to true!
+
   if (monmap.epoch)
     return 0;
   return -1;
@@ -179,8 +181,6 @@ int MonClient::get_monmap_privately()
 
 bool MonClient::ms_dispatch(Message *m)
 {
-  dout(10) << "dispatch " << *m << dendl;
-
   if (my_addr == entity_addr_t())
     my_addr = messenger->get_myaddr();
 
@@ -267,6 +267,7 @@ int MonClient::mount(double mount_timeout)
   }
 
   // only first mounter does the work
+  _sub_want("monmap", monmap.get_epoch());
   mounting++;
   if (mounting == 1) {
     if (cur_mon < 0)
@@ -278,11 +279,8 @@ int MonClient::mount(double mount_timeout)
     mount_cond.Wait(monc_lock);
   mounting--;
 
-  if (clientid >= 0) {
+  if (clientid >= 0)
     dout(5) << "mount success, client" << clientid << dendl;
-
-    _sub_want("monmap", monmap.get_epoch());
-  }
 
   return mount_err;
 }
@@ -293,12 +291,17 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
   _finish_hunting();
 
-  // monmap
-  bufferlist::iterator p = m->monmap_bl.begin();
-  ::decode(monmap, p);
+  if (m->result) {
+    mount_err = m->result;
+    dout(0) << "mount error " << m->result << " (" << m->result_msg << ")" << dendl;
+  } else {
+    // monmap
+    bufferlist::iterator p = m->monmap_bl.begin();
+    ::decode(monmap, p);
 
-  clientid = m->client;
-  messenger->set_myname(entity_name_t::CLIENT(m->client.v));
+    clientid = m->client;
+    messenger->set_myname(entity_name_t::CLIENT(m->client.v));
+  }
 
   mount_cond.SignalAll();
   delete m;
@@ -361,7 +364,7 @@ void MonClient::_pick_new_mon()
 {
   if (cur_mon >= 0)
     messenger->mark_down(monmap.get_inst(cur_mon).addr);
-  cur_mon = monmap.pick_mon(true);
+  cur_mon = rand() % monmap.size();
   dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
 
@@ -404,15 +407,24 @@ void MonClient::_reopen_session()
 }
 
 
-bool MonClient::ms_handle_reset(Connection *con, const entity_addr_t& peer)
+bool MonClient::ms_handle_reset(Connection *con)
 {
-  dout(10) << "ms_handle_reset " << peer << dendl;
-  if (hunting)
-    return true;
+  Mutex::Locker lock(monc_lock);
 
-  dout(0) << "hunting for new mon" << dendl;
-  hunting = true;
-  _reopen_session();
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    if (con->get_peer_addr() != monmap.get_inst(cur_mon).addr) {
+      dout(10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
+      return true;
+    } else {
+      dout(10) << "ms_handle_reset current mon " << con->get_peer_addr() << dendl;
+      if (hunting)
+	return true;
+      
+      dout(0) << "hunting for new mon" << dendl;
+      hunting = true;
+      _reopen_session();
+    }
+  }
   return false;
 }
 
@@ -449,14 +461,14 @@ void MonClient::tick()
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
     _reopen_session();
+
   } else {
     // just renew as needed
     utime_t now = g_clock.now();
     if (now > sub_renew_after)
       _renew_subs();
 
-    int oldmon = monmap.pick_mon();
-    messenger->send_keepalive(monmap.mon_inst[oldmon]);
+    messenger->send_keepalive(monmap.mon_inst[cur_mon]);
   }
 
   auth.tick();

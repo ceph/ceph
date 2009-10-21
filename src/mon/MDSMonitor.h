@@ -78,7 +78,6 @@ class MDSMonitor : public PaxosService {
 
   bool preprocess_beacon(class MMDSBeacon *m);
   bool prepare_beacon(class MMDSBeacon *m);
-  void handle_mds_getmap(MMDSGetMap *m);
 
   bool preprocess_offload_targets(MMDSLoadTargets *m);
   bool prepare_offload_targets(MMDSLoadTargets *m);
@@ -95,16 +94,6 @@ class MDSMonitor : public PaxosService {
 
 public:
   MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
-
-  // sending the map
-private:
-  list<entity_inst_t> waiting_for_map;
-
-  void send_full(entity_inst_t dest);
-  void send_to_waiting();
-
-public:
-  void send_latest(entity_inst_t dest);
 
   void tick();     // check state, take actions
   void do_stop();

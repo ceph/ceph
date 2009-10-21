@@ -162,8 +162,8 @@ bool ClientMonitor::preprocess_mount(MClientMount *m)
     
     string s;
     getline(ss, s);
-    mon->messenger->send_message(new MClientMountAck(-1, -EPERM, s.c_str()),
-				 m->get_orig_source_inst());
+    mon->send_reply(m, new MClientMountAck(-1, -EPERM, s.c_str()));
+    delete m;
     return true;
   }
   
@@ -190,7 +190,6 @@ bool ClientMonitor::preprocess_mount(MClientMount *m)
 
 bool ClientMonitor::prepare_mount(MClientMount *m)
 {
-  stringstream ss;
   entity_addr_t addr = m->get_orig_source_addr();
 
   assert(next_client <= client_map.next_client);
@@ -203,8 +202,6 @@ bool ClientMonitor::prepare_mount(MClientMount *m)
   dout(10) << "mount: assigned client" << client << " to " << addr << dendl;
   
   paxos->wait_for_commit(new C_Mounted(this, client, (MClientMount*)m));
-  ss << "client" << client << " " << addr;
-  mon->get_logclient()->log(LOG_INFO, ss);
   return true;
 }
 
@@ -215,6 +212,10 @@ void ClientMonitor::_mounted(client_t client, MClientMount *m)
   to.name = entity_name_t::CLIENT(client.v);
 
   dout(10) << "_mounted client" << client << " at " << to << dendl;
+
+  stringstream ss;
+  ss << "client" << client << " " << to.addr;
+  mon->get_logclient()->log(LOG_INFO, ss);
   
   // reply with client ticket
   MClientMountAck *ack = new MClientMountAck;
@@ -222,11 +223,6 @@ void ClientMonitor::_mounted(client_t client, MClientMount *m)
   mon->monmap->encode(ack->monmap_bl);
 
   mon->send_reply(m, ack, to);
-
-  // also send latest mds and osd maps
-  //mon->mdsmon()->send_latest(to);
-  //mon->osdmon()->send_latest(to);
-
   delete m;
 }
 

@@ -260,14 +260,14 @@ bool LogMonitor::prepare_log(MLog *m)
     }
   }
 
-  paxos->wait_for_commit(new C_Log(this, m, m->get_orig_source_inst()));
+  paxos->wait_for_commit(new C_Log(this, m));
   return true;
 }
 
-void LogMonitor::_updated_log(MLog *m, entity_inst_t who)
+void LogMonitor::_updated_log(MLog *m)
 {
-  dout(7) << "_updated_log for " << who << dendl;
-  mon->messenger->send_message(new MLogAck(m->fsid, m->entries.rbegin()->seq), who);
+  dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
+  mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
   delete m;
 }
 
@@ -278,88 +278,6 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
   int r = -1;
   bufferlist rdata;
   stringstream ss;
-
-  /*
-  if (m->cmd.size() > 1) {
-    if (m->cmd[1] == "stat") {
-      ss << *this;
-      r = 0;
-    }
-    else if (m->cmd[1] == "getmap") {
-      pg_map.encode(rdata);
-      ss << "got pgmap version " << pg_map.version;
-      r = 0;
-    }
-    else if (m->cmd[1] == "send_pg_creates") {
-      send_pg_creates();
-      ss << "sent pg creates ";
-      r = 0;
-    }
-    else if (m->cmd[1] == "dump") {
-      ss << "version " << pg_map.version << std::endl;
-      ss << "last_osdmap_epoch " << pg_map.last_osdmap_epoch << std::endl;
-      ss << "last_pg_scan " << pg_map.last_pg_scan << std::endl;
-      ss << "pg_stat\tobjects\tkb\tbytes\tv\treported\tstate\tosds" << std::endl;
-      for (set<pg_t>::iterator p = pg_map.pg_set.begin();
-	   p != pg_map.pg_set.end();
-	   p++) {
-	pg_stat_t &st = pg_map.pg_stat[*p];
-	ss << *p 
-	   << "\t" << st.num_objects
-	   << "\t" << st.num_kb
-	   << "\t" << st.num_bytes
-	   << "\t" << pg_state_string(st.state)
-	   << "\t" << st.version
-	   << "\t" << st.reported
-	   << "\t" << st.acting
-	   << std::endl;
-      }
-      ss << "osdstat\tobject\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
-      for (hash_map<int,osd_stat_t>::iterator p = pg_map.osd_stat.begin();
-	   p != pg_map.osd_stat.end();
-	   p++)
-	ss << p->first
-	   << "\t" << p->second.num_objects
-	   << "\t" << p->second.kb_used
-	   << "\t" << p->second.kb_avail 
-	   << "\t" << p->second.kb
-	   << "\t" << p->second.hb_in
-	   << "\t" << p->second.hb_out
-	   << std::endl;
-      while (!ss.eof()) {
-	string s;
-	getline(ss, s);
-	rdata.append(s.c_str(), s.length());
-	rdata.append("\n", 1);
-      }
-      ss << "ok";
-      r = 0;
-    }
-    else if (m->cmd[1] == "scrub" && m->cmd.size() == 3) {
-      pg_t pgid;
-      r = -EINVAL;
-      if (pgid.parse(m->cmd[2].c_str())) {
-	if (mon->pgmon->pg_map.pg_stat.count(pgid)) {
-	  if (mon->pgmon->pg_map.pg_stat[pgid].acting.size()) {
-	    int osd = mon->pgmon->pg_map.pg_stat[pgid].acting[0];
-	    if (mon->osdmon->osdmap.is_up(osd)) {
-	      vector<pg_t> pgs(1);
-	      pgs[0] = pgid;
-	      mon->messenger->send_message(new MOSDScrub(mon->monmap->fsid, pgs),
-					   mon->osdmon->osdmap.get_inst(osd));
-	      ss << "instructing pg " << pgid << " on osd" << osd << " to scrub";
-	      r = 0;
-	    } else
-	      ss << "pg " << pgid << " primary osd" << osd << " not up";
-	  } else
-	    ss << "pg " << pgid << " has no primary osd";
-	} else
-	  ss << "pg " << pgid << " dne";
-      } else
-	ss << "invalid pgid '" << m->cmd[2] << "'";
-    }
-  }
-  */
 
   if (r != -1) {
     string rs;

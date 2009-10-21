@@ -26,11 +26,12 @@ class MonMap {
   epoch_t epoch;       // what epoch/version of the monmap
   ceph_fsid_t fsid;
   vector<entity_inst_t> mon_inst;
+  utime_t last_changed;
+  utime_t created;
 
-  int       last_mon;    // last mon i talked to
-
-  MonMap() : epoch(0), last_mon(-1) {
+  MonMap() : epoch(0) {
     memset(&fsid, 0, sizeof(fsid));
+    last_changed = created = g_clock.now();
   }
 
   ceph_fsid_t& get_fsid() { return fsid; }
@@ -69,15 +70,6 @@ class MonMap {
     return false;
   }
 
-  // pick a mon.  
-  // choice should be stable, unless we explicitly ask for a new one.
-  int pick_mon(bool newmon=false) { 
-    if (newmon || (last_mon < 0)) {
-      last_mon = rand() % mon_inst.size();
-    }
-    return last_mon;    
-  }
-
   const entity_inst_t &get_inst(unsigned m) {
     assert(m < mon_inst.size());
     return mon_inst[m];
@@ -89,6 +81,8 @@ class MonMap {
     ::encode_raw(fsid, blist);
     ::encode(epoch, blist);
     ::encode(mon_inst, blist);
+    ::encode(last_changed, blist);
+    ::encode(created, blist);
   }  
   void decode(bufferlist& blist) {
     bufferlist::iterator p = blist.begin();
@@ -100,6 +94,8 @@ class MonMap {
     ::decode_raw(fsid, p);
     ::decode(epoch, p);
     ::decode(mon_inst, p);
+    ::decode(last_changed, p);
+    ::decode(created, p);
   }
 
 
@@ -112,6 +108,8 @@ class MonMap {
   int write(const char *fn);
   int read(const char *fn);
 
+  void print(ostream& out);
+  void print_summary(ostream& out);
 };
 
 inline void encode(MonMap &m, bufferlist &bl) {
@@ -119,6 +117,11 @@ inline void encode(MonMap &m, bufferlist &bl) {
 }
 inline void decode(MonMap &m, bufferlist::iterator &p) {
   m.decode(p);
+}
+
+inline ostream& operator<<(ostream& out, MonMap& m) {
+  m.print_summary(out);
+  return out;
 }
 
 #endif

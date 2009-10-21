@@ -510,7 +510,7 @@ int FileStore::mount()
     btrfs = 2;
     int r = _do_clone_range(fsid_fd, -1, 0, 1);
     if (r == -EBADF) {
-      dout(0) << "mount detected shiny new btrfs" << dendl;      
+      dout(0) << "mount detected btrfs" << dendl;      
     } else {
       dout(0) << "mount detected dingey old btrfs (r=" << r << " " << strerror_r(-r, buf, sizeof(buf)) << ")" << dendl;
       btrfs = 1;

@@ -148,7 +148,7 @@ public:
     map<int32_t,entity_addr_t> new_up;
     map<int32_t,uint8_t> new_down;
     map<int32_t,uint32_t> new_weight;
-    map<pg_t,vector<int> > new_pg_temp;     // [] to remove
+    map<pg_t,vector<int32_t> > new_pg_temp;     // [] to remove
     map<int32_t,epoch_t> new_up_thru;
     map<int32_t,pair<epoch_t,epoch_t> > new_last_clean_interval;
     map<int32_t,epoch_t> new_lost;
@@ -639,6 +639,11 @@ private:
     // calculate ps (placement seed)
     static hash<object_t> H;
     ps_t ps = H(oid);
+
+    // mix in preferred osd, so we don't get the same peers for all of the placement pgs (e.g. 0.0p*)
+    if (preferred >= 0)
+      ps += preferred;
+
     /*
     ps_t ps;  // NOTE: keep full precision, here!
     switch (g_conf.osd_object_layout) {

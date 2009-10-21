@@ -333,6 +333,13 @@ crush_make_straw_bucket(int type,
 
 	i=0;
 	while (i < size) {
+		/* zero weight items get 0 length straws! */
+		if (weights[reverse[i]] == 0) {
+			bucket->straws[reverse[i]] = 0;
+			i++;
+			continue;
+		}
+
 		/* set this item's straw */
 		bucket->straws[reverse[i]] = straw * 0x10000;
 		/*printf("item %d at %d weight %d straw %d (%lf)\n",

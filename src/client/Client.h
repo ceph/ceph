@@ -868,7 +868,7 @@ public:
   void encode_dentry_release(Dentry *dn, MClientRequest *req,
 			     int mds, int drop, int unless);
   int choose_target_mds(MetaRequest *req);
-  void check_mds_sessions();
+  void connect_mds_targets(int mds);
   void send_request(MetaRequest *request, int mds);
   void kick_requests(int mds, bool signal);
   void handle_client_request_forward(MClientRequestForward *reply);
@@ -1093,9 +1093,9 @@ protected:
   friend class SyntheticClient;
   bool ms_dispatch(Message *m);
 
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer);
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
+  void ms_handle_connect(Connection *con);
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con);
 
 
  public:

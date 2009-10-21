@@ -37,7 +37,6 @@ using namespace std;
 
 #include "osdc/Objecter.h"
 
-#include "messages/MOSDGetMap.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 
@@ -61,9 +60,6 @@ class RadosClient : public Dispatcher
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer);
   bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new) {
     dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
     uint32_t want = peer_id_to_entity_type(dest_type);
@@ -72,6 +68,10 @@ class RadosClient : public Dispatcher
 
     return true;
   }
+  void ms_handle_connect(Connection *con);
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con);
+
 
   Objecter *objecter;
 
@@ -292,8 +292,7 @@ bool RadosClient::init()
   if (monclient.build_initial_monmap() < 0)
     return false;
 
-  rank.bind();
-  dout(1) << "starting at " << rank.get_rank_addr() << dendl;
+  dout(1) << "starting msgr at " << rank.get_rank_addr() << dendl;
 
   messenger = rank.register_entity(entity_name_t::CLIENT(-1));
   assert_warn(messenger);
@@ -303,11 +302,6 @@ bool RadosClient::init()
   monclient.set_messenger(messenger);
   
   messenger->add_dispatcher_head(this);
-
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
-  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_CLIENT, SimpleMessenger::Policy::lossless());  // mds does its own timeout/markdown
 
   rank.start(1);
   messenger->add_dispatcher_head(this);
@@ -369,21 +363,23 @@ bool RadosClient::ms_dispatch(Message *m)
   return ret;
 }
 
-bool RadosClient::ms_handle_reset(Connection *con, const entity_addr_t& addr)
+void RadosClient::ms_handle_connect(Connection *con)
 {
   Mutex::Locker l(lock);
-  if (objecter) {
-    objecter->ms_handle_reset(addr);
-  }
+  objecter->ms_handle_connect(con);
+}
+
+bool RadosClient::ms_handle_reset(Connection *con)
+{
+  Mutex::Locker l(lock);
+  objecter->ms_handle_reset(con);
   return false;
 }
 
-void RadosClient::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr)
+void RadosClient::ms_handle_remote_reset(Connection *con)
 {
   Mutex::Locker l(lock);
-  if (objecter) {
-    objecter->ms_handle_remote_reset(addr);
-  }
+  objecter->ms_handle_remote_reset(con);
 }
 
 

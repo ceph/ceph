@@ -152,8 +152,10 @@ int RGWRados::list_objects(string& id, string& bucket, int max, string& prefix, 
       }
     }
 
-    if (rados->stat(pool, map_iter->second, &obj.size, &obj.mtime) < 0)
+    __u64 s;
+    if (rados->stat(pool, map_iter->second, &s, &obj.mtime) < 0)
       continue;
+    obj.size = s;
 
     bufferlist bl; 
     obj.etag[0] = '\0';
@@ -356,7 +358,7 @@ int RGWRados::get_obj(std::string& bucket, std::string& obj,
             struct rgw_err *err)
 {
   int r = -EINVAL;
-  size_t size, len;
+  __u64 size, len;
   bufferlist etag;
   time_t mtime;
   bufferlist bl;

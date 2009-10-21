@@ -122,7 +122,6 @@ namespace __gnu_cxx {
  * ipv4 for now.
  */
 WRITE_RAW_ENCODER(ceph_entity_addr)
-WRITE_RAW_ENCODER(sockaddr_storage)
 
 struct entity_addr_t {
   struct ceph_entity_addr v;

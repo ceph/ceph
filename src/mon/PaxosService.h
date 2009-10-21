@@ -33,7 +33,7 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, PaxosServiceMessage *m_) : svc(s), m(m_) {}
     void finish(int r) {
-      svc->dispatch(m);//FIX_ME
+      svc->dispatch(m);
     }
   };
   class C_Active : public Context {
@@ -76,6 +76,7 @@ public:
   PaxosService(Monitor *mn, Paxos *p) : mon(mn), paxos(p),
 					proposal_timer(0),
 					have_pending(false) { }
+  virtual ~PaxosService() {}
 
   const char *get_machine_name();
   
@@ -94,17 +95,74 @@ public:
   bool dispatch(PaxosServiceMessage *m);
 
   // you implement
+  /*
+   * Create the initial state for your system.
+   * In some of ours the state is actually set up
+   * elsewhere so this does nothing.
+   */
   virtual void create_initial(bufferlist& bl) = 0;
-  virtual bool update_from_paxos() = 0;    // assimilate latest state from paxos
-  virtual void create_pending() = 0;       // [leader] create new pending structures
-  virtual void encode_pending(bufferlist& bl) = 0; // [leader] finish and encode pending for next paxos state
+
+  /*
+   * Query the Paxos system for the latest state and apply it if
+   * it's newer than the current Monitor state.
+   * Return true on success.
+   */
+  virtual bool update_from_paxos() = 0;
+
+  /*
+   * This function is only called on a leader. Create the pending state.
+   * (this created state is then modified by incoming messages).
+   * Called at startup and after every Paxos ratification round.
+   */
+  virtual void create_pending() = 0;
+
+  /*
+   * This function is only called on a leader. Encode the pending state
+   * into a bufferlist for ratification and transmission
+   * as the next state.
+   */
+  virtual void encode_pending(bufferlist& bl) = 0;
+
+  /*
+   * As this function is NOT overridden in any of our code,
+   * but it is called in election_finished if have_pending.
+   */
   virtual void discard_pending() { }       // [leader] discard pending
 
-  virtual bool preprocess_query(PaxosServiceMessage *m) = 0;  // true if processed (e.g., read-only)
+  /*
+   * Look at the query; if the query can be handled without changing
+   * state, do so.
+   * Return true if the query was handled (ie, was a read that got answered,
+   * was a state change that has no effect), false otherwise.
+   */
+  virtual bool preprocess_query(PaxosServiceMessage *m) = 0;
+
+  /*
+   * This function is only called on the leader. Apply the message
+   * to the pending state.
+   */
   virtual bool prepare_update(PaxosServiceMessage *m) = 0;
+
+  /*
+   * Determine if the Paxos system should vote on pending, and
+   * if so how long it should wait to vote.
+   * Returns true if the Paxos system should propose,
+   * and fills in the delay paramater with the wait time
+   * (so you can limit update traffic spamming).
+   */
   virtual bool should_propose(double &delay);
 
+  /*
+   * This is called when the Paxos state goes to active.
+   * It's a courtesy method if you have things you want/need
+   * to do at that time.
+   */
   virtual void on_active() { }
+
+  /*
+   * Another courtesy method. Called when the Paxos
+   * system enters a leader election.
+   */
   virtual void on_election_start() { }
 
   virtual void committed() = 0;            // [leader] called after a proposed value commits

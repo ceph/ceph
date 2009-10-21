@@ -135,8 +135,6 @@ int main(int argc, const char **argv)
   SimpleMessenger rank;
   rank.bind();
 
-  rank.set_addr(mc.get_my_addr());
-
   cout << "starting osd" << whoami
        << " at " << rank.get_rank_addr() 
        << " osd_data " << g_conf.osd_data
@@ -156,8 +154,8 @@ int main(int argc, const char **argv)
     return 1;
 
   rank.set_default_policy(SimpleMessenger::Policy::stateless_server());
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fast_fail());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::client());
+  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless_peer());
 
   rank.start();
 

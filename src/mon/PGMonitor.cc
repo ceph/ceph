@@ -139,8 +139,7 @@ bool PGMonitor::update_from_paxos()
       paxosv > 10)
     paxos->trim_to(paxosv - 10);
 
-  if (mon->is_leader())
-    send_pg_creates();
+  send_pg_creates();
 
   return true;
 }
@@ -226,7 +225,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   reply->h.st.num_objects = pg_map.pg_sum.num_objects;
 
   // reply
-  mon->messenger->send_message(reply, statfs->get_orig_source_inst());
+  mon->send_reply(statfs, reply);
  out:
   delete statfs;
 }
@@ -254,7 +253,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     reply->pool_stats[*p] = pg_map.pg_pool_sum[poolid];
   }
 
-  mon->messenger->send_message(reply, m->get_orig_source_inst());
+  mon->send_reply(m, reply);
 
  out:
   delete m;
@@ -270,8 +269,9 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   // first, just see if they need a new osdmap.  but 
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 && 
+      mon->osdmon()->paxos->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
-    mon->osdmon()->send_latest(stats->get_orig_source_inst(), stats->epoch+1);
+    mon->osdmon()->send_latest(stats, stats->epoch+1);
 
   // any new osd or pg info?
   if (pg_map.osd_stat.count(from) ||
@@ -292,7 +292,9 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
        p != stats->pg_stat.end();
        p++)
     ack->pg_stat[p->first] = p->second.reported;
-  mon->messenger->send_message(ack, stats->get_orig_source_inst());
+  mon->send_reply(stats, ack);
+
+  delete stats;
   return true;
 }
 
@@ -377,15 +379,15 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     */
   }
   
-  paxos->wait_for_commit(new C_Stats(this, ack, stats->get_orig_source_inst()));
-  delete stats;
+  paxos->wait_for_commit(new C_Stats(this, stats, ack));
   return true;
 }
 
-void PGMonitor::_updated_stats(MPGStatsAck *ack, entity_inst_t who)
+void PGMonitor::_updated_stats(MPGStats *req, MPGStatsAck *ack)
 {
-  dout(7) << "_updated_stats for " << who << dendl;
-  mon->messenger->send_message(ack, who);
+  dout(7) << "_updated_stats for " << req->get_orig_source_inst() << dendl;
+  mon->send_reply(req, ack);
+  delete req;
 }
 
 
@@ -652,9 +654,9 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	    if (mon->osdmon()->osdmap.is_up(osd)) {
 	      vector<pg_t> pgs(1);
 	      pgs[0] = pgid;
-	      mon->messenger->send_message(new MOSDScrub(mon->monmap->fsid, pgs,
-							 m->cmd[1] == "repair"),
-					   mon->osdmon()->osdmap.get_inst(osd));
+	      mon->try_send_message(new MOSDScrub(mon->monmap->fsid, pgs,
+						  m->cmd[1] == "repair"),
+				    mon->osdmon()->osdmap.get_inst(osd));
 	      ss << "instructing pg " << pgid << " on osd" << osd << " to " << m->cmd[1];
 	      r = 0;
 	    } else

@@ -1,4 +1,4 @@
-// -*- mode:Java; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:Java; tab-width:2; c-basic-offset:2; indent-tabs-mode:t -*- 
 /**
  *
  * Licensed under the Apache License, Version 2.0
@@ -21,12 +21,9 @@ package org.apache.hadoop.fs.ceph;
 
 import java.io.IOException;
 import java.io.FileNotFoundException;
-import java.io.File;
 import java.io.OutputStream;
 import java.net.URI;
-import java.util.Set;
 import java.util.EnumSet;
-import java.util.Vector;
 import java.lang.Math;
 
 import org.apache.hadoop.conf.Configuration;
@@ -66,51 +63,23 @@ import org.apache.hadoop.fs.CreateFlag;
  */
 public class CephFileSystem extends FileSystem {
 
-  private static final int EEXIST = 17;
-  private static final int ENOENT = 2;
+  protected static final int EEXIST = 17;
+  protected static final int ENOENT = 2;
 
   private URI uri;
 
   private final Path root;
   private boolean initialized = false;
+	private CephFS ceph = null;
 
   private boolean debug = false;
-  private String cephDebugLevel;
-  private String monAddr;
   private String fs_default_name;
-  
-  private native boolean ceph_initializeClient(String arguments, int block_size);
-  private native String  ceph_getcwd();
-  private native boolean ceph_setcwd(String path);
-  private native boolean ceph_rmdir(String path);
-  private native boolean ceph_mkdir(String path);
-  private native boolean ceph_unlink(String path);
-  private native boolean ceph_rename(String old_path, String new_path);
-  private native boolean ceph_exists(String path);
-  private native long    ceph_getblocksize(String path);
-  private native boolean ceph_isdirectory(String path);
-  private native boolean ceph_isfile(String path);
-  private native String[] ceph_getdir(String path);
-  private native int ceph_mkdirs(String path, int mode);
-  private native int ceph_open_for_append(String path);
-  private native int ceph_open_for_read(String path);
-  private native int ceph_open_for_overwrite(String path, int mode);
-  private native int ceph_close(int filehandle);
-  private native boolean ceph_setPermission(String path, int mode);
-  private native boolean ceph_kill_client();
-  private native boolean ceph_stat(String path, Stat fill);
-  private native int ceph_statfs(String Path, CephStat fill);
-  private native int ceph_replication(String path);
-  private native String ceph_hosts(int fh, long offset);
-  private native int ceph_setTimes(String path, long mtime, long atime);
 
   /**
    * Create a new CephFileSystem.
    */
   public CephFileSystem() {
-    if(debug) debug("CephFileSystem:enter");
     root = new Path("/");
-    if(debug) debug("CephFileSystem:exit");
   }
 
   /**
@@ -119,8 +88,7 @@ public class CephFileSystem extends FileSystem {
    */
   public URI getUri() {
     if (!initialized) return null;
-    if(debug) debug("getUri:enter");
-    if(debug) debug("getUri:exit with return " + uri);
+    ceph.debug("getUri:exit with return " + uri, ceph.DEBUG);
     return uri;
   }
 
@@ -135,53 +103,65 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
-    if(debug) debug("initialize:enter");
     if (!initialized) {
-      System.load(conf.get("fs.ceph.libDir")+"/libhadoopcephfs.so");
-      System.load(conf.get("fs.ceph.libDir")+"/libceph.so");
       super.initialize(uri, conf);
       setConf(conf);
       this.uri = URI.create(uri.getScheme() + "://" + uri.getAuthority());  
-      statistics = getStatistics(uri.getScheme(), getClass());  
+      statistics = getStatistics(uri.getScheme(), getClass());
+
+			if (ceph == null) {
+				ceph = new CephTalker(conf, LOG);
+			}
       
       fs_default_name = conf.get("fs.default.name");
-      debug = ("true".equals(conf.get("fs.ceph.debug", "false")));
       //build up the arguments for Ceph
       String arguments = "CephFSInterface";
       arguments += conf.get("fs.ceph.commandLine", "");
       if (conf.get("fs.ceph.clientDebug") != null) {
-	arguments += " --debug_client ";
-	arguments += conf.get("fs.ceph.clientDebug");
+				arguments += " --debug_client ";
+				arguments += conf.get("fs.ceph.clientDebug");
       }
       if (conf.get("fs.ceph.messengerDebug") != null) {
-	arguments += " --debug_ms ";
-	arguments += conf.get("fs.ceph.messengerDebug");
+				arguments += " --debug_ms ";
+				arguments += conf.get("fs.ceph.messengerDebug");
       }
       if (conf.get("fs.ceph.monAddr") != null) {
-	arguments += " -m ";
-	arguments += conf.get("fs.ceph.monAddr");
+				arguments += " -m ";
+				arguments += conf.get("fs.ceph.monAddr");
       }
-	arguments += " --client-readahead-max-periods="
-	  + conf.get("fs.ceph.readahead", "1");
+      arguments += " --client-readahead-max-periods="
+				+ conf.get("fs.ceph.readahead", "1");
       //make sure they gave us a ceph monitor address or conf file
+			ceph.debug("initialize:Ceph intialization arguments: " + arguments, ceph.INFO);
       if ( (conf.get("fs.ceph.monAddr") == null) &&
-	   (arguments.indexOf("-m") == -1) &&
-	   (arguments.indexOf("-c") == -1) ) {
-	if(debug) debug("You need to specify a Ceph monitor address.");
-	throw new IOException("You must specify a Ceph monitor address or config file!");
+					 (arguments.indexOf("-m") == -1) &&
+					 (arguments.indexOf("-c") == -1) ) {
+				ceph.debug("initialize:You need to specify a Ceph monitor address.", ceph.FATAL);
+				throw new IOException("You must specify a Ceph monitor address or config file!");
       }
       //  Initialize the client
-      if (!ceph_initializeClient(arguments,
-				 conf.getInt("fs.ceph.blockSize", 1<<26))) {
-	if(debug) debug("Ceph initialization failed!");
-	throw new IOException("Ceph initialization failed!");
+      if (!ceph.ceph_initializeClient(arguments,
+																 conf.getInt("fs.ceph.blockSize", 1<<26))) {
+				ceph.debug("initialize:Ceph initialization failed!", ceph.FATAL);
+				throw new IOException("Ceph initialization failed!");
       }
       initialized = true;
-      if(debug) debug("Initialized client. Setting cwd to /");
-      ceph_setcwd("/");
+      ceph.debug("initialize:Ceph initialized client. Setting cwd to /", ceph.INFO);
+      ceph.ceph_setcwd("/");
     }
-    if(debug) debug("initialize:exit");
+    ceph.debug("initialize:exit", ceph.DEBUG);
   }
+
+	/**
+	 * Used for testing purposes, this version of initialize
+	 * sets the given CephFS instead of defaulting to a
+	 * CephTalker (with its assumed real Ceph instance to talk to).
+	 */
+	protected void initialize(URI uri, Configuration conf, CephFS ceph_fs)
+		throws IOException{
+		ceph = ceph_fs;
+		initialize(uri, conf);
+	}
 
   /**
    * Close down the CephFileSystem. Runs the base-class close method
@@ -190,12 +170,13 @@ public class CephFileSystem extends FileSystem {
    */
   @Override
   public void close() throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-			 +"CephFileSystem before calling other methods.");
-    if(debug) debug("close:enter");
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("close:enter", ceph.DEBUG);
     super.close();//this method does stuff, make sure it's run!
-    ceph_kill_client();
-    if(debug) debug("close:exit");
+		ceph.debug("close: Calling ceph_kill_client from Java", ceph.TRACE);
+    ceph.ceph_kill_client();
+    ceph.debug("close:exit", ceph.DEBUG);
   }
 
   /**
@@ -208,20 +189,22 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException If initialize() hasn't been called or the file cannot be found or appended to.
    */
   public FSDataOutputStream append (Path file, int bufferSize,
-				    Progressable progress) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-			 +"CephFileSystem before calling other methods.");
-    if(debug) debug("append:enter with path " + file + " bufferSize " + bufferSize);
+																		Progressable progress) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("append:enter with path " + file + " bufferSize " + bufferSize, ceph.DEBUG);
     Path abs_path = makeAbsolute(file);
     if (progress!=null) progress.progress();
-    int fd = ceph_open_for_append(abs_path.toString());
+		ceph.debug("append: Entering ceph_open_for_append from Java", ceph.TRACE);
+    int fd = ceph.ceph_open_for_append(abs_path.toString());
+		ceph.debug("append: Returned to Java", ceph.TRACE);
     if (progress!=null) progress.progress();
     if( fd < 0 ) { //error in open
       throw new IOException("append: Open for append failed on path \"" +
-			    abs_path.toString() + "\"");
+														abs_path.toString() + "\"");
     }
-    CephOutputStream cephOStream = new CephOutputStream(getConf(), fd);
-    if(debug) debug("append:exit");
+    CephOutputStream cephOStream = new CephOutputStream(getConf(), ceph, fd);
+    ceph.debug("append:exit", ceph.DEBUG);
     return new FSDataOutputStream(cephOStream, statistics);
   }
 
@@ -231,10 +214,10 @@ public class CephFileSystem extends FileSystem {
    */
   public Path getWorkingDirectory() {
     if (!initialized) return null;
-    if(debug) debug("getWorkingDirectory:enter");
-    if(debug) debug("Working directory is " + ceph_getcwd());
-    if(debug) debug("getWorkingDirectory:exit");
-    return new Path(fs_default_name + ceph_getcwd());
+    ceph.debug("getWorkingDirectory:enter", ceph.DEBUG);
+		String cwd = ceph.ceph_getcwd();
+    ceph.debug("getWorkingDirectory:exit with path " + cwd, ceph.DEBUG);
+    return new Path(fs_default_name + ceph.ceph_getcwd());
   }
 
   /**
@@ -245,15 +228,14 @@ public class CephFileSystem extends FileSystem {
    * @param dir The directory to change to.
    */
   @Override
-  public void setWorkingDirectory(Path dir) {
+	public void setWorkingDirectory(Path dir) {
     if (!initialized) return;
-    if(debug) debug("setWorkingDirecty:enter with new working dir " + dir);
+    ceph.debug("setWorkingDirecty:enter with new working dir " + dir, ceph.DEBUG);
     Path abs_path = makeAbsolute(dir);
-    if(debug) debug("calling ceph_setcwd from Java");
-    if (!ceph_setcwd(abs_path.toString()))
-      if(debug) debug("Warning:ceph_setcwd failed for some reason on path " + abs_path);
-    if(debug) debug("returned from ceph_setcwd to Java" );
-    if(debug) debug("setWorkingDirectory:exit");
+    ceph.debug("setWorkingDirectory:calling ceph_setcwd from Java", ceph.TRACE);
+    if (!ceph.ceph_setcwd(abs_path.toString()))
+      ceph.debug("setWorkingDirectory: WARNING! ceph_setcwd failed for some reason on path " + abs_path, ceph.ERROR);
+    ceph.debug("setWorkingDirectory:exit", ceph.DEBUG);
   }
 
   /**
@@ -264,22 +246,22 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
-  public boolean exists(Path path) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("exists:enter with path " + path);
+	public boolean exists(Path path) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("exists:enter with path " + path, ceph.DEBUG);
     boolean result;
     Path abs_path = makeAbsolute(path);
     if (abs_path.equals(root)) {
       result = true;
     }
     else {
-      if(debug) debug("Calling ceph_exists from Java on path "
-	    + abs_path.toString() + ":");
-      result =  ceph_exists(abs_path.toString());
-      if(debug) debug("Returned from ceph_exists to Java");
+      ceph.debug("exists:Calling ceph_exists from Java on path "
+											+ abs_path.toString(), ceph.TRACE);
+      result =  ceph.ceph_exists(abs_path.toString());
+      ceph.debug("exists:Returned from ceph_exists to Java", ceph.TRACE);
     }
-    if(debug) debug("exists:exit with value " + result);
+    ceph.debug("exists:exit with value " + result, ceph.DEBUG);
     return result;
   }
 
@@ -292,14 +274,13 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException if initialize() hasn't been called.
    */
   public boolean mkdirs(Path path, FsPermission perms) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("mkdirs:enter with path " + path);
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("mkdirs:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
-    if(debug) debug("calling ceph_mkdirs from Java");
-    int result = ceph_mkdirs(abs_path.toString(), (int)perms.toShort());
-    if(debug) debug("Returned from ceph_mkdirs to Java with result " + result);
-    if(debug) debug("mkdirs:exit with result " + result);
+    ceph.debug("mkdirs:calling ceph_mkdirs from Java", ceph.TRACE);
+    int result = ceph.ceph_mkdirs(abs_path.toString(), (int)perms.toShort());
+    ceph.debug("mkdirs:exit with result " + result, ceph.DEBUG);
     if (result != 0)
       return false;
     else return true;
@@ -313,19 +294,20 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
-  public boolean isFile(Path path) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("isFile:enter with path " + path);
+	public boolean isFile(Path path) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("isFile:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     boolean result;
     if (abs_path.equals(root)) {
       result =  false;
     }
     else {
-      result = ceph_isfile(abs_path.toString());
+			ceph.debug("isFile:entering ceph_isfile from Java", ceph.TRACE);
+      result = ceph.ceph_isfile(abs_path.toString());
     }
-    if(debug) debug("isFile:exit with result " + result);
+    ceph.debug("isFile:exit with result " + result, ceph.DEBUG);
     return result;
   }
 
@@ -337,21 +319,21 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
-  public boolean isDirectory(Path path) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("isDirectory:enter with path " + path);
+	public boolean isDirectory(Path path) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("isDirectory:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     boolean result;
     if (abs_path.equals(root)) {
       result = true;
     }
     else {
-      if(debug) debug("calling ceph_isdirectory from Java");
-      result = ceph_isdirectory(abs_path.toString());
-      if(debug) debug("Returned from ceph_isdirectory to Java");
+      ceph.debug("calling ceph_isdirectory from Java", ceph.TRACE);
+      result = ceph.ceph_isdirectory(abs_path.toString());
+      ceph.debug("Returned from ceph_isdirectory to Java", ceph.TRACE);
     }
-    if(debug) debug("isDirectory:exit with result " + result);
+    ceph.debug("isDirectory:exit with result " + result, ceph.DEBUG);
     return result;
   }
 
@@ -364,31 +346,32 @@ public class CephFileSystem extends FileSystem {
    * @throws FileNotFoundException if the path could not be resolved.
    */
   public FileStatus getFileStatus(Path path) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("getFileStatus:enter with path " + path);
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("getFileStatus:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     //sadly, Ceph doesn't really do uids/gids just yet, but
     //everything else is filled
     FileStatus status;
     Stat lstat = new Stat();
-    if(ceph_stat(abs_path.toString(), lstat)) {
+		ceph.debug("getFileStatus: calling ceph_stat from Java", ceph.TRACE);
+    if(ceph.ceph_stat(abs_path.toString(), lstat)) {
       status = new FileStatus(lstat.size, lstat.is_dir,
-			      ceph_replication(abs_path.toString()),
-			      lstat.block_size,
-			      lstat.mod_time,
-			      lstat.access_time,
-			      new FsPermission((short)lstat.mode),
-			      null,
-			      null,
-			      new Path(fs_default_name+abs_path.toString()));
+															ceph.ceph_replication(abs_path.toString()),
+															lstat.block_size,
+															lstat.mod_time,
+															lstat.access_time,
+															new FsPermission((short)lstat.mode),
+															null,
+															null,
+															new Path(fs_default_name+abs_path.toString()));
     }
     else { //fail out
-	throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
-					+ path + " does not exist or could not be accessed");
+			throw new FileNotFoundException("org.apache.hadoop.fs.ceph.CephFileSystem: File "
+																			+ path + " does not exist or could not be accessed");
     }
 
-    if(debug) debug("getFileStatus:exit");
+    ceph.debug("getFileStatus:exit", ceph.DEBUG);
     return status;
   }
 
@@ -401,17 +384,17 @@ public class CephFileSystem extends FileSystem {
    * @throws FileNotFoundException if the input path can't be found.
    */
   public FileStatus[] listStatus(Path path) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("listStatus:enter with path " + path);
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("listStatus:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     Path[] paths = listPaths(abs_path);
     if (paths != null) {
       FileStatus[] statuses = new FileStatus[paths.length];
       for (int i = 0; i < paths.length; ++i) {
-	statuses[i] = getFileStatus(paths[i]);
+				statuses[i] = getFileStatus(paths[i]);
       }
-      if(debug) debug("listStatus:exit");
+      ceph.debug("listStatus:exit", ceph.DEBUG);
       return statuses;
     }
     if (!isFile(path)) throw new FileNotFoundException(); //if we get here, listPaths returned null
@@ -420,11 +403,15 @@ public class CephFileSystem extends FileSystem {
   }
 
   @Override
-    public void setPermission(Path p, FsPermission permission) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
+  public void setPermission(Path p, FsPermission permission) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+		ceph.debug("setPermission:enter with path " + p
+					+ " and permissions " + permission, ceph.DEBUG);
     Path abs_path = makeAbsolute(p);
-    ceph_setPermission(abs_path.toString(), permission.toShort());
+		ceph.debug("setPermission:calling ceph_setpermission from Java", ceph.TRACE);
+    ceph.ceph_setPermission(abs_path.toString(), permission.toShort());
+		ceph.debug("setPermission:exit", ceph.DEBUG);
   }
 
   /**
@@ -433,15 +420,19 @@ public class CephFileSystem extends FileSystem {
    * @param mtime Set modification time in number of millis since Jan 1, 1970.
    * @param atime Set access time in number of millis since Jan 1, 1970.
    */
-@Override
-  public void setTimes(Path p, long mtime, long atime) throws IOException {
-  if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-  Path abs_path = makeAbsolute(p);
-  int r = ceph_setTimes(abs_path.toString(), mtime, atime);
-  if (r<0) throw new IOException ("Failed to set times on path "
-				  + abs_path.toString() + " Error code: " + r);
-}
+	@Override
+	public void setTimes(Path p, long mtime, long atime) throws IOException {
+		if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+		ceph.debug("setTimes:enter with path " + p + " mtime:" + mtime +
+					" atime:" + atime, ceph.DEBUG);
+		Path abs_path = makeAbsolute(p);
+		ceph.debug("setTimes:calling ceph_setTimes from Java", ceph.TRACE);
+		int r = ceph.ceph_setTimes(abs_path.toString(), mtime, atime);
+		if (r<0) throw new IOException ("Failed to set times on path "
+																		+ abs_path.toString() + " Error code: " + r);
+		ceph.debug("setTimes:exit", ceph.DEBUG);
+	}
 
   /**
    * Create a new file and open an FSDataOutputStream that's connected to it.
@@ -462,17 +453,17 @@ public class CephFileSystem extends FileSystem {
    * failure in attempting to open for append with Ceph.
    */
   public FSDataOutputStream create(Path path,
-				   FsPermission permission,
-				   EnumSet<CreateFlag> flag,
-				   //boolean overwrite,
-				   int bufferSize,
-				   short replication,
-				   long blockSize,
-				   Progressable progress
-				   ) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("create:enter with path " + path);
+																	 FsPermission permission,
+																	 EnumSet<CreateFlag> flag,
+																	 //boolean overwrite,
+																	 int bufferSize,
+																	 short replication,
+																	 long blockSize,
+																	 Progressable progress
+																	 ) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("create:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     if (progress!=null) progress.progress();
     // We ignore replication since that's not configurable here, and
@@ -484,13 +475,13 @@ public class CephFileSystem extends FileSystem {
     boolean exists = exists(abs_path);
     if (exists) {
       if(isDirectory(abs_path))
-	throw new IOException("create: Cannot overwrite existing directory \""
-			      + path.toString() + "\" with a file");
+				throw new IOException("create: Cannot overwrite existing directory \""
+															+ path.toString() + "\" with a file");
       //if (!overwrite)
       if (!flag.contains(CreateFlag.OVERWRITE))
-	throw new IOException("createRaw: Cannot open existing file \"" 
-			      + abs_path.toString() 
-			      + "\" for writing without overwrite flag");
+				throw new IOException("createRaw: Cannot open existing file \"" 
+															+ abs_path.toString() 
+															+ "\" for writing without overwrite flag");
     }
 
     if (progress!=null) progress.progress();
@@ -499,27 +490,27 @@ public class CephFileSystem extends FileSystem {
     if (!exists) {
       Path parent = abs_path.getParent();
       if (parent != null) { // if parent is root, we're done
-	int r = ceph_mkdirs(parent.toString(), permission.toShort());
-	if (!(r==0 || r==-EEXIST))
-	  throw new IOException ("Error creating parent directory; code: " + r);
+				int r = ceph.ceph_mkdirs(parent.toString(), permission.toShort());
+				if (!(r==0 || r==-EEXIST))
+					throw new IOException ("Error creating parent directory; code: " + r);
       }
       if (progress!=null) progress.progress();
     }
     // Step 3: open the file
-    if(debug) debug("calling ceph_open_for_overwrite from Java");
-    int fh = ceph_open_for_overwrite(abs_path.toString(), (int)permission.toShort());
+    ceph.debug("calling ceph_open_for_overwrite from Java", ceph.TRACE);
+    int fh = ceph.ceph_open_for_overwrite(abs_path.toString(), (int)permission.toShort());
     if (progress!=null) progress.progress();
-    if(debug) debug("Returned from ceph_open_for_overwrite to Java with fh " + fh);
+    ceph.debug("Returned from ceph_open_for_overwrite to Java with fh " + fh, ceph.TRACE);
     if (fh < 0) {
       throw new IOException("create: Open for overwrite failed on path \"" + 
-			    path.toString() + "\"");
+														path.toString() + "\"");
     }
       
     // Step 4: create the stream
-    OutputStream cephOStream = new CephOutputStream(getConf(), fh);
-    if(debug) debug("create:exit");
+    OutputStream cephOStream = new CephOutputStream(getConf(), ceph, fh);
+    ceph.debug("create:exit", ceph.DEBUG);
     return new FSDataOutputStream(cephOStream, statistics);
-    }
+	}
 
   /**
    * Open a Ceph file and attach the file handle to an FSDataInputStream.
@@ -530,37 +521,39 @@ public class CephFileSystem extends FileSystem {
    * directory, or there is an error getting data to set up the FSDataInputStream.
    */
   public FSDataInputStream open(Path path, int bufferSize) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("open:enter with path " + path);
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("open:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     
-    int fh = ceph_open_for_read(abs_path.toString());
+    int fh = ceph.ceph_open_for_read(abs_path.toString());
     if (fh < 0) { //uh-oh, something's bad!
       if (fh == -ENOENT) //well that was a stupid open
-	throw new IOException("open:  absolute path \""  + abs_path.toString()
-			      + "\" does not exist");
+				throw new IOException("open:  absolute path \""  + abs_path.toString()
+															+ "\" does not exist");
       else //hrm...the file exists but we can't open it :(
-	throw new IOException("open: Failed to open file " + abs_path.toString());
+				throw new IOException("open: Failed to open file " + abs_path.toString());
     }
 
     if(isDirectory(abs_path)) { //yes, it is possible to open Ceph directories
       //but that doesn't mean you should in Hadoop!
-      ceph_close(fh);
+      ceph.ceph_close(fh);
       throw new IOException("open:  absolute path \""  + abs_path.toString()
-			    + "\" is a directory!");
+														+ "\" is a directory!");
     }
     Stat lstat = new Stat();
-    ceph_stat(abs_path.toString(), lstat);
+		ceph.debug("open:calling ceph_stat from Java", ceph.TRACE);
+    ceph.ceph_stat(abs_path.toString(), lstat);
+		ceph.debug("open:returned to Java", ceph.TRACE);
     long size = lstat.size;
     if (size < 0) {
       throw new IOException("Failed to get file size for file " + abs_path.toString() + 
-			    " but succeeded in opening file. Something bizarre is going on.");
+														" but succeeded in opening file. Something bizarre is going on.");
     }
-    FSInputStream cephIStream = new CephInputStream(getConf(), fh, size);
-    if(debug) debug("open:exit");
+    FSInputStream cephIStream = new CephInputStream(getConf(), ceph, fh, size);
+    ceph.debug("open:exit", ceph.DEBUG);
     return new FSDataInputStream(cephIStream);
-    }
+	}
 
   /**
    * Rename a file or directory.
@@ -570,16 +563,15 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
-  public boolean rename(Path src, Path dst) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("rename:enter");
-    if(debug) debug("calling ceph_rename from Java");
+	public boolean rename(Path src, Path dst) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("rename:enter with src:" + src + " and dest:" + dst, ceph.DEBUG);
     Path abs_src = makeAbsolute(src);
     Path abs_dst = makeAbsolute(dst);
-    boolean result = ceph_rename(abs_src.toString(), abs_dst.toString());
-    if(debug) debug("return from ceph_rename to Java with result " + result);
-    if(debug) debug("rename:exit");
+    ceph.debug("calling ceph_rename from Java", ceph.TRACE);
+    boolean result = ceph.ceph_rename(abs_src.toString(), abs_dst.toString());
+    ceph.debug("rename:exit with result: " + result, ceph.DEBUG);
     return result;
   }
 
@@ -598,28 +590,48 @@ public class CephFileSystem extends FileSystem {
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
-  public BlockLocation[] getFileBlockLocations(FileStatus file,
-			  long start, long len) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
+	public BlockLocation[] getFileBlockLocations(FileStatus file,
+																								 long start, long len) throws IOException {
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+		ceph.debug("getFileBlockLocations:enter with path " + file.getPath() +
+					", start pos " + start + ", length " + len, ceph.DEBUG);
     //sanitize and get the filehandle
     Path abs_path = makeAbsolute(file.getPath());
-    int fh = ceph_open_for_read(abs_path.toString());
+		ceph.debug("getFileBlockLocations:call ceph_open_for_read from Java", ceph.TRACE);
+    int fh = ceph.ceph_open_for_read(abs_path.toString());
+		ceph.debug("getFileBlockLocations:return from ceph_open_for_read to Java with fh "
+					+ fh, ceph.TRACE);
     if (fh < 0) {
+			ceph.debug("getFileBlockLocations:got error " + fh +
+						", exiting and returning null!", ceph.ERROR);
       return null;
     }
     //get the block size
-    long blockSize = ceph_getblocksize(abs_path.toString());
+		ceph.debug("getFileBlockLocations:call ceph_getblocksize from Java", ceph.TRACE);
+    long blockSize = ceph.ceph_getblocksize(abs_path.toString());
+		ceph.debug("getFileBlockLocations:return from ceph_getblocksize", ceph.TRACE);
     BlockLocation[] locations =
-      new BlockLocation[(int)Math.ceil((len-start)/(float)blockSize)];
+      new BlockLocation[(int)Math.ceil(len/(float)blockSize)];
+		long offset;
     for (int i = 0; i < locations.length; ++i) {
-      String host = ceph_hosts(fh, start + i*blockSize);
+			offset = start + i*blockSize;
+			ceph.debug("getFileBlockLocations:call ceph_hosts from Java on fh "
+						+ fh + " and offset " + offset, ceph.TRACE);
+      String host = ceph.ceph_hosts(fh, offset);
+			ceph.debug("getFileBlockLocations:return from ceph_hosts to Java with host "
+						+ host, ceph.TRACE);
       String[] hostArray = new String[1];
       hostArray[0] = host;
       locations[i] = new BlockLocation(hostArray, hostArray,
-				       start+i*blockSize, blockSize);
+																			 start+i*blockSize-(start % blockSize),
+																			 blockSize);
     }
-    ceph_close(fh);
+		ceph.debug("getFileBlockLocations:call ceph_close from Java on fh "
+					+ fh, ceph.TRACE);
+    ceph.ceph_close(fh);
+		ceph.debug("getFileBlockLocations:return with " + locations.length
+					+ " locations", ceph.DEBUG);
     return locations;
   }
   
@@ -632,21 +644,22 @@ public class CephFileSystem extends FileSystem {
    * stat somehow fails.
    */
   @Override
-  public FsStatus getStatus (Path path) throws IOException {
-    if (!initialized) throw new IOException("You have to initialize the"
-		      + " CephFileSystem before calling other methods.");
-    if(debug) debug("getStatus:enter");
+	public FsStatus getStatus (Path path) throws IOException {
+    if (!initialized) throw new IOException("You have to initialize the "
+																						+ " CephFileSystem before calling other methods.");
+    ceph.debug("getStatus:enter with path " + path, ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     
-    //currently(Ceph .14) Ceph actually ignores the path
+    //currently(Ceph .16) Ceph actually ignores the path
     //but we still pass it in; if Ceph stops ignoring we may need more
     //error-checking code.
     CephStat ceph_stat = new CephStat();
-    int result = ceph_statfs(abs_path.toString(), ceph_stat);
+		ceph.debug("getStatus:calling ceph_statfs from Java", ceph.TRACE);
+    int result = ceph.ceph_statfs(abs_path.toString(), ceph_stat);
     if (result!=0) throw new IOException("Somehow failed to statfs the Ceph filesystem. Error code: " + result);
-    if(debug) debug("getStatus:exit");
+    ceph.debug("getStatus:exit successfully", ceph.DEBUG);
     return new FsStatus(ceph_stat.capacity,
-			ceph_stat.used, ceph_stat.remaining);
+												ceph_stat.used, ceph_stat.remaining);
   }
 
   /**
@@ -661,25 +674,26 @@ public class CephFileSystem extends FileSystem {
    * or you attempt to delete the root directory.
    */
   public boolean delete(Path path, boolean recursive) throws IOException {
-    if (!initialized) throw new IOException ("You have to initialize the"
-		       +"CephFileSystem before calling other methods.");
-    if(debug) debug("delete:enter");
+    if (!initialized) throw new IOException ("You have to initialize the "
+																						 +"CephFileSystem before calling other methods.");
+    ceph.debug("delete:enter with path " + path + " and recursive=" + recursive,
+					ceph.DEBUG);
     Path abs_path = makeAbsolute(path);
     
-    if(debug) debug("delete: Deleting path " + abs_path.toString());
     // sanity check
     if (abs_path.equals(root))
       throw new IOException("Error: deleting the root directory is a Bad Idea.");
-
     if (!exists(abs_path)) return false;
 
     // if the path is a file, try to delete it.
     if (isFile(abs_path)) {
-      boolean result = ceph_unlink(abs_path.toString());
+			ceph.debug("delete:calling ceph_unlink from Java with path " + abs_path,
+						ceph.TRACE);
+      boolean result = ceph.ceph_unlink(abs_path.toString());
       if(!result)
-	if(debug) debug("delete: failed to delete file \"" +
-			abs_path.toString() + "\".");
-      if(debug) debug("delete:exit");
+				ceph.debug("delete: failed to delete file \"" +
+												abs_path.toString() + "\".", ceph.ERROR);
+      ceph.debug("delete:exit with success=" + result, ceph.DEBUG);
       return result;
     }
 
@@ -691,26 +705,28 @@ public class CephFileSystem extends FileSystem {
     //get the entries; listPaths will remove . and .. for us
     Path[] contents = listPaths(abs_path);
     if (contents == null) {
-      if(debug) debug("delete: Failed to read contents of directory \"" +
-		      abs_path.toString() + "\" while trying to delete it");
-      if(debug) debug("delete:exit");
+      ceph.debug("delete: Failed to read contents of directory \"" +
+						abs_path.toString() +
+						"\" while trying to delete it, BAILING", ceph.ERROR);
       return false;
     }
     // delete the entries
+		ceph.debug("delete: recursively calling delete on contents of "
+					+ abs_path, ceph.DEBUG);
     for (Path p : contents) {
       if (!delete(p, true)) {
-	if(debug) debug("delete: Failed to delete file \"" + 
-			p.toString() + "\" while recursively deleting \""
-			+ abs_path.toString() + "\"" );
-	if(debug) debug("delete:exit");
-	return false;
+				ceph.debug("delete: Failed to delete file \"" + 
+												p.toString() + "\" while recursively deleting \""
+												+ abs_path.toString() + "\", BAILING", ceph.ERROR );
+				return false;
       }
     }
     //if we've come this far it's a now-empty directory, so delete it!
-    boolean result = ceph_rmdir(abs_path.toString());
+    boolean result = ceph.ceph_rmdir(abs_path.toString());
     if (!result)
-      if(debug) debug("delete: failed to delete \"" + abs_path.toString() + "\"");
-    if(debug) debug("delete:exit");
+      ceph.debug("delete: failed to delete \"" + abs_path.toString()
+						+ "\", BAILING", ceph.ERROR);
+    ceph.debug("delete:exit", ceph.DEBUG);
     return result;
   }
 
@@ -720,7 +736,7 @@ public class CephFileSystem extends FileSystem {
    * by a separate Ceph configuration.
    */
   @Override
-  public short getDefaultReplication() {
+	public short getDefaultReplication() {
     return 1;
   }
 
@@ -729,41 +745,41 @@ public class CephFileSystem extends FileSystem {
    * @return the default block size, in bytes, as a long.
    */
   @Override
-  public long getDefaultBlockSize() {
+	public long getDefaultBlockSize() {
     return getConf().getInt("fs.ceph.blockSize", 1<<26);
   }
 
   // Makes a Path absolute. In a cheap, dirty hack, we're
   // also going to strip off any fs_default_name prefix we see. 
   private Path makeAbsolute(Path path) {
-    if(debug) debug("makeAbsolute:enter with path " + path);
+    ceph.debug("makeAbsolute:enter with path " + path, ceph.NOLOG);
     if (path == null) return new Path("/");
     // first, check for the prefix
     if (path.toString().startsWith(fs_default_name)) {	  
       Path stripped_path = new Path(path.toString().substring(fs_default_name.length()));
-      if(debug) debug("makeAbsolute:exit with path " + stripped_path);
+      ceph.debug("makeAbsolute:exit with path " + stripped_path, ceph.NOLOG);
       return stripped_path;
     }
 
     if (path.isAbsolute()) {
-      if(debug) debug("makeAbsolute:exit with path " + path);
+      ceph.debug("makeAbsolute:exit with path " + path, ceph.NOLOG);
       return path;
     }
-    Path new_path = new Path(ceph_getcwd(), path);
-    if(debug) debug("makeAbsolute:exit with path " + new_path);
+    Path new_path = new Path(ceph.ceph_getcwd(), path);
+    ceph.debug("makeAbsolute:exit with path " + new_path, ceph.NOLOG);
     return new_path;
   }
  
   private Path[] listPaths(Path path) throws IOException {
-    if(debug) debug("listPaths:enter with path " + path);
+    ceph.debug("listPaths:enter with path " + path, ceph.NOLOG);
     String dirlist[];
 
     Path abs_path = makeAbsolute(path);
 
     // If it's a directory, get the listing. Otherwise, complain and give up.
-    if(debug) debug("calling ceph_getdir from Java with path " + abs_path);
-    dirlist = ceph_getdir(abs_path.toString());
-    if(debug) debug("returning from ceph_getdir to Java");
+    ceph.debug("calling ceph_getdir from Java with path " + abs_path, ceph.NOLOG);
+    dirlist = ceph.ceph_getdir(abs_path.toString());
+    ceph.debug("returning from ceph_getdir to Java", ceph.NOLOG);
 
     if (dirlist == null) {
       throw new IOException("listPaths: path " + path.toString() + " is not a directory.");
@@ -772,24 +788,22 @@ public class CephFileSystem extends FileSystem {
     // convert the strings to Paths
     Path[] paths = new Path[dirlist.length];
     for (int i = 0; i < dirlist.length; ++i) {
-      if(debug) debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
-			 dirlist[i] + "\"");
+      ceph.debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
+											dirlist[i] + "\"", ceph.NOLOG);
       // convert each listing to an absolute path
       Path raw_path = new Path(dirlist[i]);
       if (raw_path.isAbsolute())
-	paths[i] = raw_path;
+				paths[i] = raw_path;
       else
-	paths[i] = new Path(abs_path, raw_path);
+				paths[i] = new Path(abs_path, raw_path);
     }
-    if(debug) debug("listPaths:exit");
+    ceph.debug("listPaths:exit", ceph.NOLOG);
     return paths;
   }
 
-  private void debug(String statement) {
-    System.err.println(statement);
-  }
+  
 
-  private static class Stat {
+  static class Stat {
     public long size;
     public boolean is_dir;
     public long block_size;
@@ -800,7 +814,7 @@ public class CephFileSystem extends FileSystem {
     public Stat(){}
   }
 
-  private static class CephStat {
+  static class CephStat {
     public long capacity;
     public long used;
     public long remaining;

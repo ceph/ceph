@@ -94,14 +94,22 @@ int main(int argc, const char **argv)
   }
 
   // monmap?
-  bufferlist mapbl;
-  store.get_bl_ss(mapbl, "monmap/latest", 0);
-  if (mapbl.length() == 0) {
-    cerr << "mon fs missing 'monmap'" << std::endl;
-    exit(1);
-  }
   MonMap monmap;
-  monmap.decode(mapbl);
+  {
+    bufferlist latest;
+    store.get_bl_ss(latest, "monmap/latest", 0);
+    if (latest.length() == 0) {
+      cerr << "mon fs missing 'monmap'" << std::endl;
+      exit(1);
+    }
+    bufferlist::iterator p = latest.begin();
+    version_t v;
+    ::decode(v, p);
+    bufferlist mapbl;
+    ::decode(mapbl, p);
+    monmap.decode(mapbl);
+    assert(v == monmap.get_epoch());
+  }
 
   if ((unsigned)whoami >= monmap.size() || whoami < 0) {
     cerr << "mon" << whoami << " does not exist in monmap" << std::endl;
@@ -141,9 +149,7 @@ int main(int argc, const char **argv)
   rank.start();  // may daemonize
 
   rank.set_default_policy(SimpleMessenger::Policy::stateless_server());
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossy_fail_after(2.0));
-  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossy_fail_after(2.0));
+  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossless_peer());
 
   mon->init();
   rank.wait();

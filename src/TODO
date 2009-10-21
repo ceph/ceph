@@ -27,14 +27,36 @@ v0.16
 - disk format, wire protocol changes
 - use sockaddr_storage; some ipv6 groundwork
 
+v0.16.1
 - mds: put migration vectors in mdsmap
+- rgw: fix
+- include buffer.c in kernel package, tarball
 
-- revert 4fe2e6acb9d3613ca041774c1243940d1c8c9c9c
+v0.17
+- kclient: fix multiple mds mdsmap decoding
+- kclient: fix mon subscription renewal
+- crush: fix crush map creation with empty buckets (occurs on larger clusters)
+- osdmap: fix encoding bug (crashes kclient); make kclient not crash
+- msgr: simplified policy, failure model
+- mon: less push, more pull
+- mon: request routing
+- mon cluster expansion
+- osd: fix pg parsing, restarts on larger clusters
 
+v0.18
+
+- qa
+- basic ENOSPC handling
+- osd: rebuild pg log
+- osd: handle storage errors
+
+- rebuild mds hierarchy
+
+- kclient: msgs built with a page list
 - kclient: retry alloc on ENOMEM when reading from connection?
-- client authentication
-- document on-wire protocol
 
+
+pending wire, disk format changes
 
 bugs
 - mislinked directory?
@@ -42,7 +64,7 @@ bugs
 - weird osd_lock contention during osd restart?
 
 later
-- mon cluster expansion, contraction
+- document on-wire protocol
 - authentication
 - client reconnect after long eviction; and slow delayed reconnect
 - ENOSPC
@@ -85,6 +107,8 @@ repair
 - mds scrubbing
 
 kclient
+- add cap to release if we get fouled up in fill_inode et al?
+- use page lists for large messages?  e.g. reconnect
 - make caps reservations per-client
 - fix up ESTALE handling
 - don't retry on ENOMEM on non-nofail requests in kick_requests
@@ -113,6 +137,8 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- client session object
+  - track client's osdmap; and only share latest osdmap with them once!
 - clean up monitor session handling
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
@@ -158,6 +184,8 @@ mds
   - rename: importing inode... also journal imported client map?
 
 mon
+- how to shrink cluster?
+- how to tell osd to cleanly shut down
 - mds injectargs N should take mds# or id.  * should bcast to standy mds's.
 - paxos need to clean up old states.
   - default: simple max of (state count, min age), so that we have at least N hours of history, say?

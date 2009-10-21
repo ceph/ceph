@@ -127,6 +127,7 @@ public:
 
   class PGMonitor *pgmon() { return (class PGMonitor *)paxos_service[PAXOS_PGMAP]; }
   class MDSMonitor *mdsmon() { return (class MDSMonitor *)paxos_service[PAXOS_MDSMAP]; }
+  class MonmapMonitor *monmon() { return (class MonmapMonitor *)paxos_service[PAXOS_MONMAP]; }
   class OSDMonitor *osdmon() { return (class OSDMonitor *)paxos_service[PAXOS_OSDMAP]; }
   class ClientMonitor *clientmon() { return (class ClientMonitor *)paxos_service[PAXOS_CLIENTMAP]; }
   class ClassMonitor *classmon() { return (class ClassMonitor *)paxos_service[PAXOS_CLASS]; }
@@ -135,6 +136,7 @@ public:
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
+  friend class MonmapMonitor;
   friend class ClientMonitor;
   friend class PGMonitor;
   friend class LogMonitor;
@@ -152,7 +154,6 @@ public:
   // messages
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  void handle_shutdown(Message *m);
   void handle_command(class MMonCommand *m);
   void handle_observe(MMonObserve *m);
   void handle_class(MClass *m);
@@ -161,10 +162,28 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
-  void send_reply(Message *req, Message *reply, entity_inst_t to);
-  void send_reply(Message *req, Message *reply) {
+  // request routing
+  struct RoutedRequest {
+    __u64 tid;
+    bufferlist request_bl;
+    Session *session;
+
+    ~RoutedRequest() {
+      if (session)
+	session->put();
+    }
+  };
+  __u64 routed_request_tid;
+  map<__u64, RoutedRequest*> routed_requests;
+  
+  void forward_request_leader(PaxosServiceMessage *req);
+  void try_send_message(Message *m, entity_inst_t to);
+  void send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to);
+  void send_reply(PaxosServiceMessage *req, Message *reply) {
     send_reply(req, reply, req->get_orig_source_inst());
   }
+  void resend_routed_requests();
+  void remove_session(Session *s);
 
   void inject_args(const entity_inst_t& inst, string& args, version_t version) {
     vector<string> a(1);
@@ -189,13 +208,12 @@ public:
 
  private:
   bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer);
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& peer) { }
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
   bool ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
 				    bool& isvalid);
+  bool ms_handle_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con) {}
 
  public:
   Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map);

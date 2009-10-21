@@ -46,6 +46,10 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 mount_ceph_SOURCES = mount/mount.ceph.c
 sbin_PROGRAMS += mount.ceph
 
+
+core: cmon cosd cmds mkmonfs ceph cconf monmaptool osdmaptool crushtool
+
+
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
 dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lcrypto
 dupstore_SOURCES = dupstore.cc
@@ -101,7 +105,7 @@ lib_LTLIBRARIES =
 
 # libceph
 libceph_la_SOURCES = \
-	client/libceph.cc \
+	libceph.cc \
 	client/Client.cc \
 	msg/SimpleMessenger.cc \
 	${libcommon_a_SOURCES} \
@@ -334,6 +338,7 @@ libmon_a_SOURCES = \
 	mon/PaxosService.cc \
 	mon/OSDMonitor.cc \
 	mon/MDSMonitor.cc \
+	mon/MonmapMonitor.cc \
 	mon/ClientMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
@@ -407,6 +412,7 @@ noinst_HEADERS = \
         client/Trace.h\
         client/fuse.h\
         client/fuse_ll.h\
+	client/ioctl.h\
 	client/libceph.h\
         client/hadoop/CephFSInterface.h\
 	cls_acl.cc\
@@ -487,58 +493,6 @@ noinst_HEADERS = \
         include/uofs.h\
         include/utime.h\
         include/xlist.h\
-	kernel/Kconfig\
-        kernel/Makefile\
-	kernel/addr.c\
-	kernel/armor.c\
-	kernel/buffer.h\
-	kernel/caps.c\
-	kernel/ceph_debug.h\
-	kernel/ceph_frag.c\
-	kernel/ceph_frag.h\
-	kernel/ceph_fs.c\
-	kernel/ceph_fs.h\
-	kernel/ceph_strings.c\
-	kernel/ceph_ver.h\
-	kernel/crypt.c\
-	kernel/crypt.h\
-        kernel/crush/crush.c\
-        kernel/crush/crush.h\
-        kernel/crush/hash.h\
-        kernel/crush/mapper.c\
-        kernel/crush/mapper.h\
-	kernel/debugfs.c\
-	kernel/decode.h\
-	kernel/dir.c\
-	kernel/export.c\
-	kernel/file.c\
-	kernel/inode.c\
-	kernel/ioctl.c\
-	kernel/ioctl.h\
-	kernel/ioctl-number.patch\
-	kernel/kbuild.patch\
-	kernel/mds_client.c\
-	kernel/mds_client.h\
-	kernel/mdsmap.c\
-	kernel/mdsmap.h\
-	kernel/messenger.c\
-	kernel/messenger.h\
-	kernel/mon_client.c\
-	kernel/mon_client.h\
-	kernel/msgpool.c\
-	kernel/msgpool.h\
-	kernel/msgr.h\
-	kernel/osd_client.c\
-	kernel/osd_client.h\
-	kernel/osdmap.c\
-	kernel/osdmap.h\
-	kernel/rados.h\
-	kernel/snap.c\
-	kernel/ceph_strings.c\
-	kernel/super.c\
-	kernel/super.h\
-	kernel/types.h\
-	kernel/xattr.c\
 	mds/locks.c\
 	mds/locks.h\
         mds/Anchor.h\
@@ -634,7 +588,6 @@ noinst_HEADERS = \
         messages/MMDSCacheRejoin.h\
 	messages/MMDSLoadTargets.h\
         messages/MMDSFragmentNotify.h\
-        messages/MMDSGetMap.h\
         messages/MMDSMap.h\
         messages/MMDSResolve.h\
         messages/MMDSResolveAck.h\
@@ -653,7 +606,6 @@ noinst_HEADERS = \
         messages/MOSDAlive.h\
         messages/MOSDBoot.h\
         messages/MOSDFailure.h\
-        messages/MOSDGetMap.h\
         messages/MOSDIn.h\
         messages/MOSDMap.h\
         messages/MOSDOp.h\
@@ -687,6 +639,7 @@ noinst_HEADERS = \
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/MDSMonitor.h\
+	mon/MonmapMonitor.h\
         mon/MonClient.h\
         mon/MonMap.h\
         mon/Monitor.h\

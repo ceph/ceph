@@ -45,6 +45,7 @@
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
+#include "MonmapMonitor.h"
 #include "ClientMonitor.h"
 #include "PGMonitor.h"
 #include "LogMonitor.h"
@@ -92,6 +93,7 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos(PAXOS_NUM), paxos_service(PAXOS_NUM)
 {
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
+  paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
   paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
   paxos_service[PAXOS_CLIENTMAP] = new ClientMonitor(this, add_paxos(PAXOS_CLIENTMAP));
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
@@ -212,6 +214,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active)
     (*p)->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
+
+  resend_routed_requests();
 } 
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l) 
@@ -227,6 +231,8 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l)
     (*p)->peon_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++)
     (*p)->election_finished();
+
+  resend_routed_requests();
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -238,6 +244,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   dout(0) << "handle_command " << *m << dendl;
+  bufferlist rdata;
   string rs;
   int r = -EINVAL;
   if (!m->cmd.empty()) {
@@ -256,6 +263,10 @@ void Monitor::handle_command(MMonCommand *m)
     }
     if (m->cmd[0] == "client") {
       clientmon()->dispatch(m);
+      return;
+    }
+    if (m->cmd[0] == "mon") {
+      monmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "stop") {
@@ -281,34 +292,11 @@ void Monitor::handle_command(MMonCommand *m)
       authmon()->dispatch(m);
       return;
     }
-  if (m->cmd[0] == "mon") {
-      if (m->cmd[1] == "injectargs" && m->cmd.size() == 4) {
-	vector<string> args(2);
-	args[0] = "_injectargs";
-	args[1] = m->cmd[3];
-	if (m->cmd[2] == "*") {
-	  for (unsigned i=0; i<monmap->size(); i++)
-	    inject_args(monmap->get_inst(i), args, 0);
-	  r = 0;
-	  rs = "ok bcast";
-	} else {
-	  errno = 0;
-	  int who = strtol(m->cmd[2].c_str(), 0, 10);
-	  if (!errno && who >= 0) {
-	    inject_args(monmap->get_inst(who), args, 0);
-	    r = 0;
-	    rs = "ok";
-	  } else 
-	    rs = "specify mon number or *";
-	}
-      } else
-	rs = "unrecognized mon command";
-    } else 
-      rs = "unrecognized subsystem";
+    rs = "unrecognized subsystem";
   } else 
     rs = "no command";
 
-  reply_command(m, r, rs, 0);
+  reply_command(m, r, rs, rdata, 0);
 }
 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t version)
@@ -325,14 +313,137 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   delete m;
 }
 
-void Monitor::send_reply(Message *req, Message *reply, entity_inst_t to)
+
+// ------------------------
+// request/reply routing
+//
+// a client/mds/osd will connect to a random monitor.  we need to forward any
+// messages requiring state updates to the leader, and then route any replies
+// back via the correct monitor and back to them.  (the monitor will not
+// initiate any connections.)
+
+void Monitor::forward_request_leader(PaxosServiceMessage *req)
 {
-  if (req->get_source().is_mon()) {
-    messenger->send_message(new MRoute(reply, to), req->get_source_inst());
+  int mon = get_leader();
+  Session *session = 0;
+  if (req->get_connection())
+    session = (Session *)req->get_connection()->get_priv();
+  if (req->session_mon >= 0) {
+    dout(10) << "forward_request won't double fwd request " << *req << dendl;
+    delete req;
+  } else if (session && !session->closed) {
+    RoutedRequest *rr = new RoutedRequest;
+    rr->tid = ++routed_request_tid;
+
+    dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
+
+    encode_message(req, rr->request_bl);
+    rr->session = (Session *)session->get();
+    routed_requests[rr->tid] = rr;
+
+    session->routed_request_tids.insert(rr->tid);
+    
+    dout(10) << " noting that i mon" << whoami << " own this requests's session" << dendl;
+    req->session_mon = whoami;
+    req->session_mon_tid = rr->tid;
+    req->clear_payload();
+    
+    messenger->forward_message(req, monmap->get_inst(mon));
+  } else {
+    dout(10) << "forward_request no session for request " << *req << dendl;
+    delete req;
+  }
+}
+
+void Monitor::try_send_message(Message *m, entity_inst_t to)
+{
+  dout(10) << "try_send_message " << *m << " to " << to << dendl;
+
+  bufferlist bl;
+  encode_message(m, bl);
+
+  messenger->send_message(m, to);
+
+  for (int i=0; i<(int)monmap->size(); i++) {
+    if (i != whoami)
+      messenger->send_message(new MRoute(0, bl, to),
+			      monmap->get_inst(i));
+  }
+}
+
+void Monitor::send_reply(PaxosServiceMessage *req, Message *reply, entity_inst_t to)
+{
+  if (req->session_mon >= 0) {
+    if (req->session_mon < (int)monmap->size()) {
+      dout(15) << "send_reply routing reply to " << to << " via mon" << req->session_mon
+	       << " for request " << *req << dendl;
+      messenger->send_message(new MRoute(req->session_mon_tid, reply, to),
+			      monmap->get_inst(req->session_mon));
+    } else
+      dout(2) << "send_reply mon" << req->session_mon << " dne, dropping reply " << *reply
+	      << " to " << *req << " for " << to << dendl;
   } else {
     messenger->send_message(reply, to);
   }
 }
+
+void Monitor::handle_route(MRoute *m)
+{
+  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+  
+  // look it up
+  if (routed_requests.count(m->session_mon_tid)) {
+    RoutedRequest *rr = routed_requests[m->session_mon_tid];
+    messenger->send_message(m->msg, rr->session->inst);
+    m->msg = NULL;
+    routed_requests.erase(m->session_mon_tid);
+    rr->session->routed_request_tids.insert(rr->tid);
+    delete rr;
+  } else {
+    dout(10) << " don't have routed request tid " << m->session_mon_tid
+	     << ", trying to send anyway" << dendl;
+    messenger->send_message(m->msg, m->dest);
+    m->msg = NULL;
+  }
+  delete m;
+}
+
+void Monitor::resend_routed_requests()
+{
+  dout(10) << "resend_routed_requests" << dendl;
+  int mon = get_leader();
+  for (map<__u64, RoutedRequest*>::iterator p = routed_requests.begin();
+       p != routed_requests.end();
+       p++) {
+    RoutedRequest *rr = p->second;
+
+    bufferlist::iterator q = rr->request_bl.begin();
+    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(q);
+
+    dout(10) << " resend to mon" << mon << " tid " << rr->tid << " " << *req << dendl;
+    req->session_mon = whoami;
+    req->session_mon_tid = rr->tid;
+    req->clear_payload();
+    messenger->forward_message(req, monmap->get_inst(mon));
+  }  
+}
+
+void Monitor::remove_session(Session *s)
+{
+  dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  for (set<__u64>::iterator p = s->routed_request_tids.begin();
+       p != s->routed_request_tids.end();
+       p++) {
+    if (routed_requests.count(*p)) {
+      RoutedRequest *rr = routed_requests[*p];
+      dout(10) << " dropping routed request " << rr->tid << dendl;
+      delete rr;
+      routed_requests.erase(*p);
+    }
+  }
+  session_map.remove_session(s);
+}
+
 
 void Monitor::handle_observe(MMonObserve *m)
 {
@@ -351,7 +462,7 @@ void Monitor::inject_args(const entity_inst_t& inst, vector<string>& args, versi
   dout(10) << "inject_args " << inst << " " << args << dendl;
   MMonCommand *c = new MMonCommand(monmap->fsid, version);
   c->cmd = args;
-  messenger->send_message(c, inst);
+  try_send_message(c, inst);
 }
 
 
@@ -383,6 +494,13 @@ bool Monitor::ms_dispatch(Message *m)
       s = session_map.new_session(m->get_source_inst());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+
+      if (!s->inst.name.is_mon()) {
+	// set an initial timeout here, so we will trim this session even if they don't
+	// do anything.
+	s->until = g_clock.now();
+	s->until += g_conf.mon_subscribe_interval;
+      }
     } else {
       dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
     }
@@ -400,10 +518,6 @@ bool Monitor::ms_dispatch(Message *m)
       handle_mon_get_map((MMonGetMap*)m);
       break;
 
-    case CEPH_MSG_SHUTDOWN:
-      handle_shutdown(m);
-      break;
-      
     case MSG_MON_COMMAND:
       handle_command((MMonCommand*)m);
       break;
@@ -413,7 +527,6 @@ bool Monitor::ms_dispatch(Message *m)
       break;
 
       // OSDs
-    case CEPH_MSG_OSD_GETMAP:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_IN:
@@ -428,7 +541,6 @@ bool Monitor::ms_dispatch(Message *m)
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
-    case CEPH_MSG_MDS_GETMAP:
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -538,15 +650,19 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   // ???
 
   if (reply)
-    messenger->send_message(new MMonSubscribeAck(g_conf.mon_subscribe_interval),
+    messenger->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf.mon_subscribe_interval),
 			    m->get_source_inst());
 
   s->put();
   delete m;
 }
 
-bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
+bool Monitor::ms_handle_reset(Connection *con)
 {
+  // ignore lossless monitor sessions
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
+    return false;
+
   Session *s = (Session *)con->get_priv();
   if (!s)
     return false;
@@ -554,8 +670,11 @@ bool Monitor::ms_handle_reset(Connection *con, const entity_addr_t& peer)
   Mutex::Locker l(lock);
 
   dout(10) << "reset/close on session " << s->inst << dendl;
-  session_map.remove_session(s);
+  remove_session(s);
   s->put();
+    
+  // remove from connection, too.
+  con->set_priv(NULL);
   return true;
 }
 
@@ -599,37 +718,6 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
 }
 
 
-void Monitor::handle_shutdown(Message *m)
-{
-  assert(m->get_source().is_mon());
-  if (m->get_source().num() == get_leader()) {
-    dout(1) << "shutdown from leader " << m->get_source() << dendl;
-
-    if (is_leader()) {
-      // stop osds.
-      set<int32_t> ls;
-      osdmon()->osdmap.get_all_osds(ls);
-      for (set<int32_t>::iterator it = ls.begin(); it != ls.end(); it++) {
-	if (osdmon()->osdmap.is_down(*it)) continue;
-	dout(10) << "sending shutdown to osd" << *it << dendl;
-	messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, 0),
-				osdmon()->osdmap.get_inst(*it));
-      }
-      osdmon()->mark_all_down();
-      
-      // monitors too.
-      for (unsigned i=0; i<monmap->size(); i++)
-	if ((int)i != whoami)
-	  messenger->send_message(new PaxosServiceMessage(CEPH_MSG_SHUTDOWN, 0), 
-				  monmap->get_inst(i));
-    }
-
-    shutdown();
-  } else {
-    dout(1) << "ignoring shutdown from non-leader " << m->get_source() << dendl;
-  }
-  delete m;
-}
 
 
 
@@ -677,10 +765,16 @@ void Monitor::tick()
   while (!p.end()) {
     Session *s = *p;
     ++p;
-    if (!s->until.is_zero() && (s->until < now)) {
-      dout(10) << " trimming session " << s->inst << " (until " << s->until << " < now " << now << ")" << dendl;
+    
+    // don't trim monitors
+    if (s->inst.name.is_mon())
+      continue; 
+
+    if (!s->until.is_zero() && s->until < now) {
+      dout(10) << " trimming session " << s->inst
+	       << " (until " << s->until << " < now " << now << ")" << dendl;
       messenger->mark_down(s->inst.addr);
-      session_map.remove_session(s);
+      remove_session(s);
     }
   }
 
@@ -716,7 +810,13 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist monmapbl;
   monmap->encode(monmapbl);
   store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  
-  store->put_bl_ss(monmapbl, "monmap", "latest");
+
+  // latest, too.. but make this conform to paxos stash latest format
+  bufferlist latest;
+  version_t v = monmap->get_epoch();
+  ::encode(v, latest);
+  ::encode(monmapbl, latest);
+  store->put_bl_ss(latest, "monmap", "latest");
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;
@@ -752,15 +852,6 @@ void Monitor::handle_class(MClass *m)
       assert(0);
       break;
   }
-}
-
-void Monitor::handle_route(MRoute *m)
-{
-  dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
-  
-  messenger->send_message(m->msg, m->dest);
-  m->msg = NULL;
-  delete m;
 }
 
 bool Monitor::ms_get_authorizer(int dest_type, bufferlist& authorizer, bool force_new)

@@ -225,6 +225,16 @@ void handle_notify(MMonObserveNotify *notify)
       }
       break;
     }
+
+  case PAXOS_MONMAP:
+    {
+      mc.monmap.decode(notify->bl);
+      dout(0) << "   mon " << mc.monmap << dendl;
+    }
+    break;
+
+  default:
+    dout(0) << "  ignoring unknown machine id " << notify->machine_id << dendl;
   }
 
   map_ver[notify->machine_id] = notify->ver;
@@ -247,26 +257,16 @@ static void send_observe_requests()
 
   bool sent = false;
   for (int i=0; i<PAXOS_NUM; i++) {
-    if (registered.count(i))
-      continue;
     MMonObserve *m = new MMonObserve(mc.monmap.fsid, i, map_ver[i]);
     dout(1) << "mon" << " <- observe " << get_paxos_name(i) << dendl;
     mc.send_mon_message(m);
     sent = true;
   }
 
+  registered.clear();
   float seconds = g_conf.paxos_observer_timeout/2;
-  float retry_seconds = 5.0;
-  if (!sent) {
-    // success.  clear for renewal.
-    registered.clear();
-    dout(1) << " refresh after " << seconds << " with same mon" << dendl;
-    timer.add_event_after(seconds, new C_ObserverRefresh(false));
-  } else {
-    //is_timeout = true;
-    dout(1) << " refresh after " << retry_seconds << " with new mon" << dendl;
-    timer.add_event_after(retry_seconds, new C_ObserverRefresh(true));
-  }
+  dout(1) << " refresh after " << seconds << " with same mon" << dendl;
+  timer.add_event_after(seconds, new C_ObserverRefresh(false));
 }
 
 
@@ -385,19 +385,18 @@ class Admin : public Dispatcher {
     return true;
   }
 
-  void ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) {}
-
-  bool ms_handle_reset(Connection *con, const entity_addr_t& peer) {
-    lock.Lock();
-    if (observe)
-      send_observe_requests();
-    if (pending_cmd.size())
-      send_command();
-    lock.Unlock();
-    return true;
+  void ms_handle_connect(Connection *con) {
+    if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+      lock.Lock();
+      if (observe)
+	send_observe_requests();
+      if (pending_cmd.size())
+	send_command();
+      lock.Unlock();
+    }
   }
-
-  void ms_handle_remote_reset(Connection *con, const entity_addr_t& peer) {}
+  bool ms_handle_reset(Connection *con) { return false; }
+  void ms_handle_remote_reset(Connection *con) {}
 
 } dispatcher;
 
@@ -631,12 +630,10 @@ int main(int argc, const char **argv, const char *envp[])
   
   // start up network
   SimpleMessenger rank;
-  rank.bind();
   messenger = rank.register_entity(entity_name_t::ADMIN());
   messenger->add_dispatcher_head(&dispatcher);
 
   rank.start();
-  rank.set_default_policy(SimpleMessenger::Policy::lossy_fail_after(1.0));
 
   mc.set_messenger(messenger);
   mc.init();

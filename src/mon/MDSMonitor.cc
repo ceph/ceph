@@ -19,7 +19,6 @@
 #include "OSDMonitor.h"
 
 #include "messages/MMDSMap.h"
-#include "messages/MMDSGetMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMonCommand.h"
@@ -93,7 +92,6 @@ bool MDSMonitor::update_from_paxos()
   dout(4) << "new map" << dendl;
   print_map(mdsmap, 0);
 
-  send_to_waiting();
   check_subs();
 
   return true;
@@ -129,10 +127,6 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
   case MSG_MDS_BEACON:
     return preprocess_beacon((MMDSBeacon*)m);
     
-  case CEPH_MSG_MDS_GETMAP:
-    handle_mds_getmap((MMDSGetMap*)m);
-    return true;
-
   case MSG_MON_COMMAND:
     return preprocess_command((MMonCommand*)m);
 
@@ -145,15 +139,6 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
     return true;
   }
 }
-
-void MDSMonitor::handle_mds_getmap(MMDSGetMap *m)
-{
-  if (m->version < mdsmap.get_epoch())
-    send_full(m->get_orig_source_inst());
-  else
-    waiting_for_map.push_back(m->get_orig_source_inst());
-}
-
 
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
@@ -179,7 +164,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   if (pending_mdsmap.is_dne(addr)) {
     if (state != MDSMap::STATE_BOOT) {
       dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
-      send_latest(m->get_orig_source_inst());
+      mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
       goto out;
     } else {
       return false;  // not booted yet.
@@ -236,9 +221,9 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
   last_beacon[addr].stamp = g_clock.now();  
   last_beacon[addr].seq = seq;
-  mon->messenger->send_message(new MMDSBeacon(mon->monmap->fsid, m->get_name(),
-					      mdsmap.get_epoch(), state, seq), 
-			       m->get_orig_source_inst());
+  mon->send_reply(m,
+		  new MMDSBeacon(mon->monmap->fsid, m->get_name(),
+				 mdsmap.get_epoch(), state, seq));
 
   // done
  out:
@@ -366,7 +351,7 @@ void MDSMonitor::_updated(MMDSBeacon *m)
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
-    send_latest(m->get_orig_source_inst());
+    mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
   }
 
   delete m;
@@ -376,13 +361,14 @@ void MDSMonitor::_updated(MMDSBeacon *m)
 void MDSMonitor::committed()
 {
   // hackish: did all mds's shut down?
+  /*
   if (mon->is_leader() &&
       g_conf.mon_stop_with_last_mds &&
       mdsmap.get_epoch() > 1 &&
       mdsmap.is_stopped()) 
     mon->messenger->send_message(new MGenericMessage(CEPH_MSG_SHUTDOWN), 
 				 mon->monmap->get_inst(mon->whoami));
-
+  */
   tick();
 }
 
@@ -534,30 +520,6 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 }
 
 
-void MDSMonitor::send_full(entity_inst_t dest)
-{
-  dout(11) << "send_full to " << dest << dendl;
-  mon->messenger->send_message(new MMDSMap(mon->monmap->fsid, &mdsmap), dest);
-}
-
-void MDSMonitor::send_to_waiting()
-{
-  dout(10) << "send_to_waiting " << mdsmap.get_epoch() << dendl;
-  for (list<entity_inst_t>::iterator i = waiting_for_map.begin();
-       i != waiting_for_map.end();
-       i++) 
-    send_full(*i);
-  waiting_for_map.clear();
-}
-
-void MDSMonitor::send_latest(entity_inst_t dest)
-{
-  if (paxos->is_readable()) 
-    send_full(dest);
-  else
-    waiting_for_map.push_back(dest);
-}
-
 void MDSMonitor::check_subs()
 {
   nstring type = "mdsmap";
@@ -572,7 +534,8 @@ void MDSMonitor::check_subs()
 void MDSMonitor::check_sub(Subscription *sub)
 {
   if (sub->last < mdsmap.get_epoch()) {
-    send_full(sub->session->inst);
+    mon->messenger->send_message(new MMDSMap(mon->monmap->fsid, &mdsmap),
+				 sub->session->inst);
     if (sub->onetime)
       mon->session_map.remove_sub(sub);
     else

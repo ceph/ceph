@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <wctype.h>
 
 #include <map>
 #include <list>
@@ -42,14 +43,70 @@ static int is_delim(char c, const char *delim)
 	return 0;
 }
 
+static wchar_t get_ucs2(unsigned char **pstr)
+{
+	unsigned char *s = *pstr;
+	wchar_t wc = 0;
+	int b, i;
+	int num_bytes = 0;
+
+	if (*s <= 0x7f) {
+		wc = *s;
+		*pstr = ++s;
+		return wc;
+	}
+
+	b=0x40;
+	while (b & *s) {
+		num_bytes++;
+		b >>= 1;
+	}
+	if (!num_bytes)
+		return *s; /* this is not a correctly encoded utf8 */
+
+	wc = *s & (b-1);
+	wc <<= (num_bytes * 6);
+
+	s++;
+
+	for (i=0; i<num_bytes; i++, s++) {
+		int shift;
+		wchar_t w;
+		if ((*s & 0xc0) != 0x80) {
+			*pstr = s;
+			return 0; /* not a valid utf8 */
+		}
+		shift = (num_bytes - i - 1) * 6;
+		w = *s & 0x3f;
+		w <<= shift;
+		wc |= w;
+	}
+	*pstr = s;
+	return wc;
+}
+
+static void skip_whitespace(char **pstr, const char *delim)
+{
+	unsigned char *str = (unsigned char *)*pstr;
+	wchar_t wc;
+
+	do {
+		while (*str && is_delim((char)*str, delim)) {
+			str++;
+		}
+		if (!*str)
+			return;
+		*pstr = (char *)str;
+		wc = get_ucs2(&str);
+	} while (!iswprint(wc));
+}
+
 static char *get_next_tok(char *str, const char *delim, int alloc, char **p)
 {
 	int i=0;
 	char *out;
 
-	while (*str && is_delim(*str, delim)) {
-		str++;
-	}
+        skip_whitespace(&str, delim);
 
 	if (*str == '"') {
 		while (str[i] && !is_delim(str[i], _eol_delim)) {

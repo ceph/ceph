@@ -54,7 +54,6 @@
 #include "messages/MGenericMessage.h"
 
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
@@ -514,9 +513,6 @@ void MDS::handle_mds_beacon(MMDSBeacon *m)
 	   << " seq " << m->get_seq() << dendl;
   version_t seq = m->get_seq();
 
-  // make note of which mon 
-  monc->note_mon_leader(m->get_source().num());
-
   // update lab
   if (beacon_seq_stamp.count(seq)) {
     assert(beacon_seq_stamp[seq] > beacon_last_acked_stamp);
@@ -650,12 +646,6 @@ void MDS::handle_mds_map(MMDSMap *m)
     // update messenger.
     dout(1) << "handle_mds_map i am now mds" << whoami << "." << incarnation << dendl;
     messenger->set_myname(entity_name_t::MDS(whoami));
-
-    // do i need an osdmap?
-    if (oldwhoami < 0) {
-      // we need an osdmap too.
-      monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), 0));
-    }
   }
 
   // tell objecter my incarnation
@@ -1421,24 +1411,25 @@ bool MDS::_dispatch(Message *m)
 
 
 
-void MDS::ms_handle_failure(Connection *con, Message *m, const entity_addr_t& addr) 
+void MDS::ms_handle_connect(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_failure to " << addr << " on " << *m << dendl;
+  dout(0) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  objecter->ms_handle_connect(con);
 }
 
-bool MDS::ms_handle_reset(Connection *con, const entity_addr_t& addr) 
+bool MDS::ms_handle_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_reset on " << addr << dendl;
-  objecter->ms_handle_reset(addr);
+  dout(0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
+  objecter->ms_handle_reset(con);
   return false;
 }
 
 
-void MDS::ms_handle_remote_reset(Connection *con, const entity_addr_t& addr) 
+void MDS::ms_handle_remote_reset(Connection *con) 
 {
   Mutex::Locker l(mds_lock);
-  dout(0) << "ms_handle_remote_reset on " << addr << dendl;
-  objecter->ms_handle_remote_reset(addr);
+  dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
+  objecter->ms_handle_remote_reset(con);
 }

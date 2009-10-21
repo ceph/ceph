@@ -34,13 +34,14 @@ class Monitor;
 class MOSDBoot;
 class MMonCommand;
 class MPoolSnap;
+class MOSDMap;
 
 class OSDMonitor : public PaxosService {
 public:
   OSDMap osdmap;
 
 private:
-  map<entity_inst_t, epoch_t> waiting_for_map;  // who -> start epoch
+  map<epoch_t, list<PaxosServiceMessage*> > waiting_for_map;
 
   // [leader]
   OSDMap::Incremental pending_inc;
@@ -65,12 +66,10 @@ private:
 
   // ...
   void send_to_waiting();     // send current map to waiters.
-  void send_full(entity_inst_t dest);
-  void send_incremental(entity_inst_t dest, epoch_t since);
-  void bcast_full_osd();
+  void send_full(PaxosServiceMessage *m);
+  MOSDMap *build_incremental(epoch_t from);
+  void send_incremental(PaxosServiceMessage *m, epoch_t since);
  
-  void handle_osd_getmap(class MOSDGetMap *m);
-
   bool preprocess_failure(class MOSDFailure *m);
   bool prepare_failure(class MOSDFailure *m);
   void _reported_failure(MOSDFailure *m);
@@ -81,7 +80,7 @@ private:
 
   bool preprocess_alive(class MOSDAlive *m);
   bool prepare_alive(class MOSDAlive *m);
-  void _reply_map(Message *m, epoch_t e);
+  void _reply_map(PaxosServiceMessage *m, epoch_t e);
 
   bool preprocess_pgtemp(class MOSDPGTemp *m);
   bool prepare_pgtemp(class MOSDPGTemp *m);
@@ -107,9 +106,9 @@ private:
 
   struct C_ReplyMap : public Context {
     OSDMonitor *osdmon;
-    Message *m;
+    PaxosServiceMessage *m;
     epoch_t e;
-    C_ReplyMap(OSDMonitor *o, Message *mm, epoch_t ee) : osdmon(o), m(mm), e(ee) {}
+    C_ReplyMap(OSDMonitor *o, PaxosServiceMessage *mm, epoch_t ee) : osdmon(o), m(mm), e(ee) {}
     void finish(int r) {
       osdmon->_reply_map(m, e);
     }    
@@ -157,13 +156,9 @@ private:
 
   void mark_all_down();
 
-  void send_latest(entity_inst_t i, epoch_t start=0);
+  void send_latest(PaxosServiceMessage *m, epoch_t start=0);
 
   void blacklist(entity_addr_t a, utime_t until);
-
-  void fake_osd_failure(int osd, bool down);
-  void fake_osdmap_update();
-  void fake_reorg();
 
   void check_subs();
   void check_sub(Subscription *sub);

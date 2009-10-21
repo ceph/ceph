@@ -69,16 +69,11 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   // start up network
   SimpleMessenger rank;
-  rank.bind();
-  cout << "bound to " << rank.get_rank_addr() << ", mounting ceph" << std::endl;
+  cout << "mounting ceph" << std::endl;
 
   Client *client = new Client(rank.register_entity(entity_name_t::CLIENT()), &mc);
 
   rank.start();
-
-  rank.set_policy(entity_name_t::TYPE_MON, SimpleMessenger::Policy::lossy_fail_after(1.0));
-  rank.set_policy(entity_name_t::TYPE_MDS, SimpleMessenger::Policy::lossless());
-  rank.set_policy(entity_name_t::TYPE_OSD, SimpleMessenger::Policy::lossless());
 
   // start client
   client->init();

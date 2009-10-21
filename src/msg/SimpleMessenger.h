@@ -39,50 +39,16 @@ using namespace __gnu_cxx;
 class SimpleMessenger {
 public:
   struct Policy {
-    bool lossy_tx;                // 
+    bool lossy;
     bool server;
-    float retry_interval;         // initial retry interval.  0 => fail immediately (lossy_tx=true)
-    float fail_interval;          // before we call ms_handle_failure (lossy_tx=true)
-    bool drop_msg_callback;
-    bool fail_callback;
-    bool remote_reset_callback;
-    Policy() : 
-      lossy_tx(false), server(false),
-      retry_interval(g_conf.ms_retry_interval),
-      fail_interval(g_conf.ms_fail_interval),
-      drop_msg_callback(true),
-      fail_callback(true),
-      remote_reset_callback(true) {}
 
-    Policy(bool tx, bool sr, float r, float f, bool dmc, bool fc, bool rrc) :
-      lossy_tx(tx), server(sr),
-      retry_interval(r), fail_interval(f),
-      drop_msg_callback(dmc),
-      fail_callback(fc),
-      remote_reset_callback(rrc) {}
+    Policy(bool l=false, bool s=false) :
+      lossy(l), server(s) {}
 
-    // new
-    static Policy stateful_server() { return Policy(false, true, g_conf.ms_retry_interval, 0,
-						    true, true, true); }
-    static Policy stateless_server() { return Policy(true, true, -1, -1,
-						     true, true, true); }
-
-    // old
-    static Policy lossless() { return Policy(false, false,
-					     g_conf.ms_retry_interval, 0,
-					     true, true, true); }
-    static Policy lossy_fail_after(float f) {
-      return Policy(true, false,
-		    MIN(g_conf.ms_retry_interval, f), f,
-		    true, true, true);
-    }
-    static Policy lossy_fast_fail() { return Policy(true, false, -1, -1, true, true, true); }
-
-    /*
-    static Policy fast_fail() { return Policy(-1, -1, true, true, true); }
-    static Policy fail_after(float f) { return Policy(MIN(g_conf.ms_retry_interval, f), f, true, true, true); }
-    static Policy retry_forever() { return Policy(g_conf.ms_retry_interval, -1, false, true, true); }
-    */
+    static Policy stateful_server() { return Policy(false, true); }
+    static Policy stateless_server() { return Policy(true, true); }
+    static Policy lossless_peer() { return Policy(false, false); }
+    static Policy client() { return Policy(false, false); }
   };
 
 
@@ -130,7 +96,6 @@ private:
     int peer_type;
     entity_addr_t peer_addr;
     Policy policy;
-    bool lossy_rx;
     
     Mutex lock;
     int state;
@@ -138,8 +103,7 @@ private:
   protected:
     Connection *connection_state;
 
-    utime_t first_fault;   // time of original failure
-    utime_t last_attempt;  // time of last reconnect attempt
+    utime_t backoff;         // backoff time
 
     bool reader_running;
     bool writer_running;
@@ -229,11 +193,21 @@ private:
     static const Pipe& Server(int s);
     static const Pipe& Client(const entity_addr_t& pi);
 
-    entity_addr_t& get_peer_addr() { return peer_addr; }
 
     __u32 get_out_seq() { return out_seq; }
 
     bool is_queued() { return !q.empty() || keepalive; }
+
+    entity_addr_t& get_peer_addr() { return peer_addr; }
+
+    void set_peer_addr(const entity_addr_t& a) {
+      peer_addr = a;
+      connection_state->set_peer_addr(a);
+    }
+    void set_peer_type(int t) {
+      peer_type = t;
+      connection_state->set_peer_type(t);
+    }
 
     void register_pipe();
     void unregister_pipe();
@@ -322,36 +296,29 @@ private:
       lock.Unlock();
     }
 
-    enum { BAD_REMOTE_RESET, BAD_RESET, BAD_FAILED };
-    list<pair<Connection*,entity_addr_t> > remote_reset_q;
-    list<pair<Connection*,entity_addr_t> > reset_q;
-    struct fail_item {
-      Connection *con;
-      Message *msg;
-      entity_addr_t addr;
-      fail_item(Connection *c, Message *m, entity_addr_t a) : con(c), msg(m), addr(a) {}
-    };
-    list<fail_item> failed_q;
+    enum { D_CONNECT, D_BAD_REMOTE_RESET, D_BAD_RESET };
+    list<Connection*> connect_q;
+    list<Connection*> remote_reset_q;
+    list<Connection*> reset_q;
 
-    void queue_remote_reset(Connection *con, entity_addr_t a) {
+    void queue_connect(Connection *con) {
       lock.Lock();
-      remote_reset_q.push_back(pair<Connection*,entity_addr_t>(con, a));
-      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_REMOTE_RESET);
+      connect_q.push_back(con);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)D_CONNECT);
       cond.Signal();
       lock.Unlock();
     }
-    void queue_reset(Connection *con, entity_addr_t a) {
+    void queue_remote_reset(Connection *con) {
       lock.Lock();
-      reset_q.push_back(pair<Connection*,entity_addr_t>(con, a));
-      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_RESET);
+      remote_reset_q.push_back(con);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)D_BAD_REMOTE_RESET);
       cond.Signal();
       lock.Unlock();
     }
-    void queue_failure(Connection *con, Message *m, entity_addr_t a) {
+    void queue_reset(Connection *con) {
       lock.Lock();
-      m->get();
-      failed_q.push_back(fail_item(con, m, a));
-      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)BAD_FAILED);
+      reset_q.push_back(con);
+      dispatch_queue[CEPH_MSG_PRIO_HIGHEST].push_back((Message*)D_BAD_RESET);
       cond.Signal();
       lock.Unlock();
     }
@@ -405,6 +372,7 @@ private:
   Mutex lock;
   Cond  wait_cond;  // for wait()
   bool started;
+  bool did_bind;
 
   // where i listen
   bool need_addr;
@@ -444,11 +412,12 @@ private:
   }
 
 public:
-  SimpleMessenger() : accepter(this),
-	   lock("SimpleMessenger::lock"), started(false), need_addr(true),
-	   max_local(0), num_local(0),
-	   my_type(-1),
-	   global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
+  SimpleMessenger() :
+    accepter(this),
+    lock("SimpleMessenger::lock"), started(false), did_bind(false), need_addr(true),
+    max_local(0), num_local(0),
+    my_type(-1),
+    global_seq_lock("SimpleMessenger::global_seq_lock"), global_seq(0) { }
   ~SimpleMessenger() { }
 
   //void set_listen_addr(tcpaddr_t& a);
@@ -462,11 +431,6 @@ public:
     if (old > global_seq)
       global_seq = old;
     return ++global_seq;
-  }
-
-  void set_addr(entity_addr_t a) {
-    rank_addr = a;
-    need_addr = false;
   }
 
   bool get_authorizer(int peer_type, bufferlist& bl, bool force_new);

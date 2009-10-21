@@ -19,7 +19,7 @@
  * Ceph release version
  */
 #define CEPH_VERSION_MAJOR 0
-#define CEPH_VERSION_MINOR 15
+#define CEPH_VERSION_MINOR 17
 #define CEPH_VERSION_PATCH 0
 
 #define _CEPH_STRINGIFY(x) #x
@@ -37,10 +37,10 @@
  */
 #define CEPH_OSD_PROTOCOL     7 /* cluster internal */
 #define CEPH_MDS_PROTOCOL     9 /* cluster internal */
-#define CEPH_MON_PROTOCOL     4 /* cluster internal */
-#define CEPH_OSDC_PROTOCOL   20 /* server/client */
+#define CEPH_MON_PROTOCOL     5 /* cluster internal */
+#define CEPH_OSDC_PROTOCOL   21 /* server/client */
 #define CEPH_MDSC_PROTOCOL   29 /* server/client */
-#define CEPH_MONC_PROTOCOL   14 /* server/client */
+#define CEPH_MONC_PROTOCOL   15 /* server/client */
 
 
 #define CEPH_INO_ROOT  1
@@ -72,9 +72,9 @@ struct ceph_file_layout {
 	__le32 fl_pg_pool;      /* namespace, crush ruleset, rep level */
 } __attribute__ ((packed));
 
-#define CEPH_DEFAULT_OBJECT_SIZE 2<<22
-#define CEPH_DEFAULT_STRIPE_COUNT 1
+#define CEPH_MIN_STRIPE_UNIT 65536
 
+int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 
 
 /*
@@ -117,7 +117,6 @@ struct ceph_secret {
 #define CEPH_MSG_AUTH_REPLY		19
 
 /* client <-> mds */
-#define CEPH_MSG_MDS_GETMAP             20
 #define CEPH_MSG_MDS_MAP                21
 
 #define CEPH_MSG_CLIENT_SESSION         22
@@ -132,13 +131,11 @@ struct ceph_secret {
 #define CEPH_MSG_CLIENT_CAPRELEASE      0x313
 
 /* osd */
-#define CEPH_MSG_OSD_GETMAP       40
 #define CEPH_MSG_OSD_MAP          41
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43
 
 /* auth */
-
 #define CEPH_AUTH_NONE	0
 #define CEPH_AUTH_CEPH	1
 
@@ -146,8 +143,14 @@ struct ceph_auth_type {
 	__le32 type;
 } __attribute__ ((packed));
 
-struct ceph_mon_statfs {
+struct ceph_mon_request_header {
 	__le64 have_version;
+	__le16 session_mon;
+	__le64 session_mon_tid;
+} __attribute__ ((packed));
+
+struct ceph_mon_statfs {
+	struct ceph_mon_request_header monhdr;
 	struct ceph_fsid fsid;
 	__le64 tid;
 } __attribute__ ((packed));
@@ -186,25 +189,29 @@ struct ceph_mon_auth_x_request {
 } __attribute__ ((packed));
 
 struct ceph_osd_getmap {
-	__le64 have_version;
+	struct ceph_mon_request_header monhdr;
 	struct ceph_fsid fsid;
 	__le32 start;
 } __attribute__ ((packed));
 
 struct ceph_mds_getmap {
-	__le64 have_version;
+	struct ceph_mon_request_header monhdr;
 	struct ceph_fsid fsid;
 } __attribute__ ((packed));
 
 struct ceph_client_mount {
-	__le64 have_version;
+	struct ceph_mon_request_header monhdr;
 } __attribute__ ((packed));
 
 struct ceph_mon_subscribe_item {
-	__le64 have;
+	__le64 have_version;	__le64 have;
 	__u8 onetime;
 } __attribute__ ((packed));
 
+struct ceph_mon_subscribe_ack {
+	__le32 duration;         /* seconds */
+	struct ceph_fsid fsid;
+} __attribute__ ((packed));
 
 /*
  * mds states

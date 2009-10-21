@@ -25,7 +25,6 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
@@ -141,7 +140,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else {
 	  dout(3) << "handle_osd_map requesting missing epoch " << osdmap->get_epoch()+1 << dendl;
-	  monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), osdmap->get_epoch()+1));
+	  monc->sub_want_onetime("osdmap", osdmap->get_epoch());
+	  monc->renew_subs();
 	  break;
 	}
 	
@@ -173,7 +173,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	scan_pgs(changed_pgs);
       } else {
 	dout(3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
-	monc->send_mon_message(new MOSDGetMap(monc->get_fsid(), 0));
+	monc->sub_want_onetime("osdmap", 0);
+	monc->renew_subs();
       }
     }
 
@@ -198,8 +199,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 void Objecter::maybe_request_map()
 {
   dout(10) << "maybe_request_map subscribing (onetime) to next osd map" << dendl;
-  monc->sub_want_onetime("osdmap", osdmap->get_epoch());
-  monc->renew_subs();
+  if (monc->sub_want_onetime("osdmap", osdmap->get_epoch()))
+    monc->renew_subs();
 }
 
 
@@ -924,15 +925,21 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 }
 
 
-void Objecter::ms_handle_reset(const entity_addr_t& addr)
+void Objecter::ms_handle_connect(Connection *con)
 {
-  if (monc->monmap.contains(addr))
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     resend_mon_ops();
 }
 
-void Objecter::ms_handle_remote_reset(const entity_addr_t& addr)
+void Objecter::ms_handle_reset(Connection *con)
 {
-  if (osdmap->have_addr(addr))
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)
+    maybe_request_map();
+}
+
+void Objecter::ms_handle_remote_reset(Connection *con)
+{
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)
     maybe_request_map();
 }
 

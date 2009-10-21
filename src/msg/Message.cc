@@ -49,7 +49,6 @@ using namespace std;
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDMap.h"
-#include "messages/MOSDGetMap.h"
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
@@ -84,7 +83,6 @@ using namespace std;
 
 #include "messages/MMDSSlaveRequest.h"
 
-#include "messages/MMDSGetMap.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
 #include "messages/MMDSLoadTargets.h"
@@ -291,9 +289,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case CEPH_MSG_OSD_MAP:
     m = new MOSDMap;
     break;
-  case CEPH_MSG_OSD_GETMAP:
-    m = new MOSDGetMap;
-    break;
 
   case MSG_OSD_PG_NOTIFY:
     m = new MOSDPGNotify;
@@ -382,9 +377,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     m = new MMDSSlaveRequest;
     break;
 
-  case CEPH_MSG_MDS_GETMAP:
-    m = new MMDSGetMap;
-    break;
   case CEPH_MSG_MDS_MAP:
     m = new MMDSMap;
     break;
@@ -547,3 +539,26 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 }
 
 
+void encode_message(Message *msg, bufferlist& payload)
+{
+  bufferlist front, middle, data;
+  msg->encode();
+  ::encode(msg->get_header(), payload);
+  ::encode(msg->get_footer(), payload);
+  ::encode(msg->get_payload(), payload);
+  ::encode(msg->get_middle(), payload);
+  ::encode(msg->get_data(), payload);
+}
+
+Message *decode_message(bufferlist::iterator& p)
+{
+  ceph_msg_header h;
+  ceph_msg_footer f;
+  bufferlist fr, mi, da;
+  ::decode(h, p);
+  ::decode(f, p);
+  ::decode(fr, p);
+  ::decode(mi, p);
+  ::decode(da, p);
+  return decode_message(h, f, fr, mi, da);
+}
