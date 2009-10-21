@@ -332,7 +332,6 @@ libcrush_a_SOURCES = \
 
 libmon_a_SOURCES = \
 	auth/AuthServiceHandler.cc \
-	auth/AuthorizeServer.cc \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
 	mon/PaxosService.cc \
