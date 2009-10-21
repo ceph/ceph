@@ -1027,6 +1027,15 @@ int SimpleMessenger::Pipe::connect()
       authorizer_reply.push_back(bp);
     }
 
+    if (authorizer.bl.length()) {
+      bufferlist::iterator iter = authorizer_reply.begin();
+      dout(0) << "verifying authorize reply, len=" << authorizer_reply.length() << dendl;
+      if (!authorizer.verify_reply(iter)) {
+        dout(0) << "failed verifying authorize reply" << dendl;
+        goto fail;
+      }
+    }
+
     lock.Lock();
     if (state != STATE_CONNECTING) {
       dout(0) << "connect got RESETSESSION but no longer connecting" << dendl;
