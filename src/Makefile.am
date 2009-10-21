@@ -291,7 +291,6 @@ libcommon_files = \
 	auth/Auth.cc \
 	auth/AuthClientHandler.cc \
 	auth/AuthorizeServer.cc \
-	auth/AuthServiceHandler.cc \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
 	auth/KeyRing.cc \
@@ -329,6 +328,7 @@ libcrush_a_SOURCES = \
 	crush/crush.c
 
 libmon_a_SOURCES = \
+	auth/AuthServiceHandler.cc \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
 	mon/PaxosService.cc \
