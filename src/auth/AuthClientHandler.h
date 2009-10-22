@@ -124,11 +124,6 @@ class AuthClientHandler {
   friend class AuthClientProtocolHandler;
 
   Mutex lock;
-  Cond keys_cond;
-
-
-  /* ceph-x protocol */
-  utime_t auth_ts;
 
   AuthClient *client;
 
@@ -143,7 +138,6 @@ public:
   entity_addr_t addr;
   uint32_t want;
   uint32_t have;
-  CryptoKey secret;
 
   AuthTicketManager tickets;
 
@@ -163,15 +157,6 @@ public:
     Mutex::Locker l(lock);
     return (want & have) == have;
   }
-  bool wait_for_keys(double timeout) {
-    Mutex::Locker l(lock);
-    utime_t t;
-    t += timeout;
-    while ((want & have) != have)
-      keys_cond.WaitInterval(lock, t);
-    return (want & have) == have;
-  }
-
   int handle_response(int trans_id, Message *response);
 
   int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler);
