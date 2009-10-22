@@ -312,14 +312,14 @@ void MonClient::handle_auth(MAuthReply *m)
   delete m;
 
   if (ret == -EAGAIN) {
-    auth.send_session_request(this, &auth_handler, 30.0);
+    auth.send_session_request(this, &auth_handler);
   } else {
     switch (state) {
     case MC_STATE_AUTHENTICATING:
       {
         dout(0) << "done authenticating" << dendl;
         state = MC_STATE_AUTHENTICATED;
-        auth.send_session_request(this, &authorize_handler, 30.0);
+        auth.send_session_request(this, &authorize_handler);
       }
       break;
     case MC_STATE_AUTHENTICATED:
@@ -377,7 +377,7 @@ void MonClient::_reopen_session()
     state = MC_STATE_AUTHENTICATING;
     auth_handler.reset();
     authorize_handler.reset();
-    auth.send_session_request(this, &auth_handler, 30.0);
+    auth.send_session_request(this, &auth_handler);
   }
 
   if (g_keyring.need_rotating_secrets())

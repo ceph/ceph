@@ -25,8 +25,7 @@
 
 
 AuthClientProtocolHandler::AuthClientProtocolHandler(AuthClientHandler *client) : 
-                        msg(NULL), got_response(false), got_timeout(false),
-                        timeout_event(NULL), lock("AuthClientProtocolHandler")
+                        msg(NULL), got_response(false), lock("AuthClientProtocolHandler")
 {
   dout(0) << "AuthClientProtocolHandler::AuthClientProtocolHandler" << dendl;
   this->client = client;
@@ -48,39 +47,12 @@ int AuthClientProtocolHandler::build_request()
   return ret;
 }
 
-int AuthClientProtocolHandler::do_async_request(double timeout)
+int AuthClientProtocolHandler::do_async_request()
 {
   got_response = false;
   client->client->send_auth_message(msg);
 
-#if 0
-  // schedule timeout?
-  assert(timeout_event == 0);
-  timeout_event = new C_OpTimeout(this, timeout);
-  client->timer.add_event_after(timeout, timeout_event);
-
-
-  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
-
-  // finish.
-  if (timeout_event) {
-    client->timer.cancel_event(timeout_event);
-    timeout_event = NULL;
-  }
-#endif
-
   return 0;
-}
-
-void AuthClientProtocolHandler::_request_timeout(double timeout)
-{
-  dout(10) << "_request_timeout" << dendl;
-  timeout_event = NULL;
-  if (!got_response) {
-    got_timeout = 1;
-    cond.Signal();
-  }
-  status = -ETIMEDOUT;
 }
 
 int AuthClientProtocolHandler::handle_response(int ret, bufferlist::iterator& iter)
@@ -397,7 +369,7 @@ int AuthClientHandler::handle_response(int trans_id, Message *response)
   return handler->handle_response(ret, iter);
 }
 
-int AuthClientHandler::send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout)
+int AuthClientHandler::send_session_request(AuthClient *client, AuthClientProtocolHandler *handler)
 {
   Mutex::Locker l(lock);
   this->client = client;
@@ -408,7 +380,7 @@ int AuthClientHandler::send_session_request(AuthClient *client, AuthClientProtoc
   if (err < 0)
     return err;
 
-  err = handler->do_async_request(timeout);
+  err = handler->do_async_request();
   dout(0) << "handler.do_async_request returned " << err << dendl;
 
   return err;

@@ -30,25 +30,10 @@ class AuthClient;
 class AuthClientHandler;
 
 class AuthClientProtocolHandler {
- class C_OpTimeout : public Context {
-  protected:
-    AuthClientProtocolHandler *client;
-    double timeout;
-  public:
-    C_OpTimeout(AuthClientProtocolHandler *handler, double to) :
-                                        client(handler), timeout(to) {
-    }
-    void finish(int r) {
-      if (r >= 0) client->_request_timeout(timeout);
-    }
-  };
-
 protected:
   AuthClientHandler *client;
   Message *msg;
   bool got_response;
-  bool got_timeout;
-  Context *timeout_event;
   uint32_t id;
   Mutex lock;
   AuthAuthorizer authorizer;
@@ -65,7 +50,6 @@ protected:
   virtual Message *_get_new_msg() = 0;
   virtual bufferlist& _get_msg_bl(Message *m) = 0;
 
-  void _request_timeout(double timeout);
 public:
   AuthClientProtocolHandler(AuthClientHandler *ch);
   virtual ~AuthClientProtocolHandler();
@@ -78,7 +62,7 @@ public:
     _reset();
   }
 
- int do_async_request(double timeout);
+ int do_async_request();
 };
 
 class AuthClientAuthenticateHandler : public AuthClientProtocolHandler {
@@ -106,7 +90,6 @@ protected:
     response_state = 0;
     cephx_request_state = 0;
     cephx_response_state = 0;
-    timeout_event = NULL;
   }
 
   bool request_pending();
@@ -149,19 +132,12 @@ class AuthClientHandler {
 
   AuthClient *client;
 
-  Message *build_authenticate_request();
-
-
-  SafeTimer timer;
-
   uint32_t max_proto_handlers;
   map<uint32_t, AuthClientProtocolHandler *> handlers_map;
 
   AuthClientProtocolHandler *_get_proto_handler(uint32_t id);
   uint32_t _add_proto_handler(AuthClientProtocolHandler *handler);
 
-  void _authenticate_request_timeout(double timeout);
-  int _do_authenticate_request(double timeout);
 public:
   EntityName name;
   entity_addr_t addr;
@@ -172,7 +148,7 @@ public:
   AuthTicketManager tickets;
 
   AuthClientHandler() : lock("AuthClientHandler::lock"),
-			client(NULL), timer(lock), max_proto_handlers(0) { }
+			client(NULL), max_proto_handlers(0) { }
   void init(EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
@@ -198,7 +174,7 @@ public:
 
   int handle_response(int trans_id, Message *response);
 
-  int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout);
+  int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler);
   void tick();
 
   int build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
