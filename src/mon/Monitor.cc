@@ -892,7 +892,7 @@ int Monitor::do_authorize(bufferlist::iterator& indata, bufferlist& result_bl)
   ::decode(cephx_header, indata);
 
   uint16_t request_type = cephx_header.request_type & CEPHX_REQUEST_TYPE_MASK;
-  int ret;
+  int ret = 0;
 
   dout(0) << "request_type=" << request_type << dendl;
 
@@ -903,7 +903,8 @@ int Monitor::do_authorize(bufferlist::iterator& indata, bufferlist& result_bl)
       AuthServiceTicketInfo auth_ticket_info;
 
       bufferlist tmp_bl;
-      ret = verify_authorizer(key_server, indata, auth_ticket_info, tmp_bl);
+      if (!verify_authorizer(key_server, indata, auth_ticket_info, tmp_bl))
+        ret = -EPERM;
       result_bl.claim_append(tmp_bl);
     }
     break;
