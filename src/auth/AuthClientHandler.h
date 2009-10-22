@@ -72,7 +72,6 @@ public:
   int build_request();
 
   int handle_response(int ret, bufferlist::iterator& iter);
-  int do_request(double timeout);
 
   void reset() {
     status = 0;
@@ -199,9 +198,7 @@ public:
 
   int handle_response(int trans_id, Message *response);
 
-  int start_session(AuthClient *client, double timeout);
   int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout);
-  int authorize(uint32_t service_id, double timeout);
   void tick();
 
   int build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);

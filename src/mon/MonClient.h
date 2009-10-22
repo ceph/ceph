@@ -114,8 +114,6 @@ public:
   int wait_auth_rotating(double timeout);
 
   int mount(double mount_timeout);
-  int authenticate(double timeout);
-  int authorize(double timeout);
  
   int wait_authenticate(double timeout);
 

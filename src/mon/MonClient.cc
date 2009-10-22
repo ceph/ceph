@@ -340,15 +340,6 @@ void MonClient::handle_auth(MAuthReply *m)
 }
 
 
-int MonClient::authenticate(double timeout)
-{
-  Mutex::Locker lock(monc_lock);
-
-  auth_timeout = timeout;
-
-  return auth.start_session(this, timeout);
-}
-
 // ---------
 
 void MonClient::_send_mon_message(Message *m, bool force)
@@ -513,11 +504,6 @@ int MonClient::wait_authenticate(double timeout)
   dout(0) << "wait_authenticate ended, returned " << ret << dendl;
 
   return ret;
-}
-
-int MonClient::authorize(double timeout)
-{
-  return auth.authorize(CEPH_ENTITY_TYPE_MON, timeout);
 }
 
 int MonClient::_start_auth_rotating()

@@ -48,29 +48,6 @@ int AuthClientProtocolHandler::build_request()
   return ret;
 }
 
-int AuthClientProtocolHandler::do_request(double timeout)
-{
-  got_response = false;
-  client->client->send_auth_message(msg);
-
-  // schedule timeout?
-  assert(timeout_event == 0);
-  timeout_event = new C_OpTimeout(this, timeout);
-  client->timer.add_event_after(timeout, timeout_event);
-
-  cond.Wait(lock);
-
-  dout(0) << "got_response=" << got_response << " got_timeout=" << got_timeout << dendl;
-
-  // finish.
-  if (timeout_event) {
-    client->timer.cancel_event(timeout_event);
-    timeout_event = NULL;
-  }
-
-  return status;
-}
-
 int AuthClientProtocolHandler::do_async_request(double timeout)
 {
   got_response = false;
@@ -420,37 +397,11 @@ int AuthClientHandler::handle_response(int trans_id, Message *response)
   return handler->handle_response(ret, iter);
 }
 
-int AuthClientHandler::start_session(AuthClient *client, double timeout)
-{
-  Mutex::Locker l(lock);
-  this->client = client;
-  dout(10) << "start_session" << dendl;
-
-  AuthClientAuthenticateHandler handler(this, want, have);
-
-  int err;
-
-  do {
-    err = handler.build_request();
-    dout(0) << "handler.build_request returned " << err << dendl;
-    if (err < 0)
-      return err;
-
-    err = handler.do_request(timeout);
-    dout(0) << "handler.do_request returned " << err << dendl;
-    if (err < 0 && err != -EAGAIN)
-      return err;
-
-  } while (err == -EAGAIN);
-
-  return err;
-}
-
 int AuthClientHandler::send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout)
 {
   Mutex::Locker l(lock);
   this->client = client;
-  dout(10) << "start_session" << dendl;
+  dout(10) << "send_session_request" << dendl;
 
   int err = handler->build_request();
   dout(0) << "handler.build_request returned " << err << dendl;
@@ -463,21 +414,6 @@ int AuthClientHandler::send_session_request(AuthClient *client, AuthClientProtoc
   return err;
 }
 
-int AuthClientHandler::authorize(uint32_t service_id, double timeout)
-{
-  Mutex::Locker l(lock);
-  AuthClientAuthorizeHandler handler(this, service_id);
-
-  int ret = handler.build_request();
-  if (ret < 0)
-    return ret;
-
-  ret = handler.do_request(timeout);
-
-  dout(0) << "authorize returned " << ret << dendl;
-
-  return ret;
-}
 
 void AuthClientHandler::tick()
 {
