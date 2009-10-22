@@ -57,7 +57,7 @@ int AuthClientProtocolHandler::build_request()
 int AuthClientProtocolHandler::do_request(double timeout)
 {
   got_response = false;
-  client->client->send_message(msg);
+  client->client->send_auth_message(msg);
 
   // schedule timeout?
   assert(timeout_event == 0);
@@ -80,7 +80,7 @@ int AuthClientProtocolHandler::do_request(double timeout)
 int AuthClientProtocolHandler::do_async_request(double timeout)
 {
   got_response = false;
-  client->client->send_message(msg);
+  client->client->send_auth_message(msg);
 
 #if 0
   // schedule timeout?

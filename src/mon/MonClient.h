@@ -61,7 +61,6 @@ private:
 
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
-
   void ms_handle_remote_reset(Connection *con) {}
 
   void handle_monmap(MMonMap *m);
@@ -98,11 +97,12 @@ private:
   Cond authenticate_cond;
   utime_t mount_started;
 
+  list<Message*> waiting_for_session;
+
   void _finish_hunting();
-  void _open_session();
   void _reopen_session();
   void _pick_new_mon();
-  void _send_mon_message(Message *m);
+  void _send_mon_message(Message *m, bool force=false);
   void _send_mount();
   void handle_mount_ack(MClientMountAck* m);
 
@@ -227,7 +227,9 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
 
-  void send_message(Message *m);
+  void send_auth_message(Message *m) {
+    _send_mon_message(m, true);
+  }
 
   void set_want_keys(uint32_t want) {
     auth_handler.set_want_keys(want | CEPHX_PRINCIPAL_MON);

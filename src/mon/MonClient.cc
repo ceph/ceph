@@ -327,8 +327,11 @@ void MonClient::handle_auth(MAuthReply *m)
       {
         dout(0) << "done authorizing" << dendl;
         state = MC_STATE_HAVE_SESSION;
+	while (!waiting_for_session.empty()) {
+	  _send_mon_message(waiting_for_session.front());
+	  waiting_for_session.pop_front();
+	}
         authenticate_cond.SignalAll();
-        _open_session();
       }
       break;
     default:
@@ -349,15 +352,14 @@ int MonClient::authenticate(double timeout)
 
 // ---------
 
-void MonClient::_send_mon_message(Message *m)
+void MonClient::_send_mon_message(Message *m, bool force)
 {
   assert(cur_mon >= 0);
-  messenger->send_message(m, monmap.mon_inst[cur_mon]);
-}
-
-void MonClient::send_message(Message *m)
-{
-  _send_mon_message(m);
+  if (force || state == MC_STATE_HAVE_SESSION) {
+    messenger->send_message(m, monmap.mon_inst[cur_mon]);
+  } else {
+    waiting_for_session.push_back(m);
+  }
 }
 
 void MonClient::_pick_new_mon()
@@ -368,42 +370,35 @@ void MonClient::_pick_new_mon()
   dout(10) << "_pick_new_mon picked mon" << cur_mon << dendl;
 }
 
-void MonClient::_open_session()
+void MonClient::_reopen_session()
 {
-  dout(0) << "_open_session" << dendl;
-  if (state == MC_STATE_NONE) {
+  dout(10) << "_reopen_session" << dendl;
+
+  _pick_new_mon();
+
+  // throw out old queued messages
+  while (!waiting_for_session.empty()) {
+    delete waiting_for_session.front();
+    waiting_for_session.pop_front();
+  }
+
+  // restart authentication process?
+  if (state != MC_STATE_HAVE_SESSION) {
     state = MC_STATE_AUTHENTICATING;
+    auth_handler.reset();
+    authorize_handler.reset();
     auth.send_session_request(this, &auth_handler, 30.0);
-    return;
   }
 
-  if (state != MC_STATE_HAVE_SESSION)
-    return;
-
-  if (g_keyring.need_rotating_secrets()) {
+  if (g_keyring.need_rotating_secrets())
     _start_auth_rotating();
-  }
-  dout(0) << "_open_session 2" << dendl;
 
   if (mounting)
     _send_mount();
   if (!sub_have.empty())
     _renew_subs();
-  if (!mounting && sub_have.empty()) {
+  if (!mounting && sub_have.empty())
     _send_mon_message(new MMonGetMap);
-  }
-}
-
-void MonClient::_reopen_session()
-{
-  dout(10) << "_reopen_session" << dendl;
-  if (state != MC_STATE_HAVE_SESSION) {
-    state = MC_STATE_NONE;
-    auth_handler.reset();
-    authorize_handler.reset();
-  }
-  _pick_new_mon();
-  _open_session();
 }
 
 
@@ -443,19 +438,6 @@ void MonClient::tick()
   if (g_keyring.need_rotating_secrets()) {
     dout(0) << "MonClient::tick: need rotating secret" << dendl;
     _start_auth_rotating();
-  }
-
-  if (state == MC_STATE_NONE) {
-    state = MC_STATE_AUTHENTICATING;
-    auth.send_session_request(this, &auth_handler, 30.0);
-    return;
-  }
-  if (state != MC_STATE_HAVE_SESSION) {
-    if (hunting) {
-      dout(0) << "continuing hunt" << dendl;
-      _reopen_session();
-    }
-    return;
   }
 
   if (hunting) {

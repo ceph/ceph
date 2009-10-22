@@ -20,7 +20,7 @@ class Message;
 
 class AuthClient {
 public:
-  virtual void send_message(Message *m) = 0;
+  virtual void send_auth_message(Message *m) = 0;
 };
 
 
