@@ -55,6 +55,8 @@ public:
   int create(int type);
   int encrypt(const bufferlist& in, bufferlist& out);
   int decrypt(const bufferlist& in, bufferlist& out);
+
+  void to_str(string& s);
 };
 WRITE_CLASS_ENCODER(CryptoKey);
 

@@ -293,3 +293,11 @@ void CryptoKey::print(ostream &out) const
   foo[r] = 0;
   out << foo;
 }
+
+void CryptoKey::to_str(string& s)
+{
+  int len = secret.length() * 4;
+  char buf[len];
+  hex2str(secret.c_str(), secret.length(), buf, len);
+  s = buf;
+}

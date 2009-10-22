@@ -106,7 +106,7 @@ int main(int argc, const char **argv)
       } else {
         cout << n << std::endl;
       }
-      cout << "\tkey " << iter->second.key << std::endl;
+      cout << "\tkey: " << iter->second.key << std::endl;
       map<string, bufferlist>::iterator capsiter = iter->second.caps.begin();
       for (; capsiter != iter->second.caps.end(); ++capsiter) {
         bufferlist::iterator dataiter = capsiter->second.begin();
