@@ -145,7 +145,6 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       }
 
       info.ticket.name = req.name;
-      info.ticket.addr = req.addr;
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
 
       mon->key_server.generate_secret(session_key);

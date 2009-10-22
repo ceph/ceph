@@ -15,10 +15,10 @@
  *
  * principal_name, principal_addr.  "please authenticate me."
  */
-void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
+void build_authenticate_request(EntityName& principal_name,
 				bufferlist& request)
 {
-  AuthAuthenticateRequest req(principal_name, principal_addr);
+  AuthAuthenticateRequest req(principal_name);
   ::encode(req, request);
 }
 

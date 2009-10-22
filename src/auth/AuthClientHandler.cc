@@ -168,7 +168,7 @@ int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlis
 
     ::encode(header, bl);
 
-    build_authenticate_request(client->name, client->addr, bl);
+    build_authenticate_request(client->name, bl);
     cephx_request_state = 1;
     return 0;
   }

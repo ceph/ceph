@@ -135,7 +135,6 @@ class AuthClientHandler {
 
 public:
   EntityName name;
-  entity_addr_t addr;
   uint32_t want;
   uint32_t have;
 

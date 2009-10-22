@@ -49,7 +49,6 @@ static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
  */
 struct AuthTicket {
   EntityName name;
-  entity_addr_t addr;
   utime_t created, renew_after, expires;
   bufferlist caps;
   __u32 flags;
@@ -68,7 +67,6 @@ struct AuthTicket {
     __u8 v = 1;
     ::encode(v, bl);
     ::encode(name, bl);
-    ::encode(addr, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
     ::encode(caps, bl);
@@ -78,7 +76,6 @@ struct AuthTicket {
     __u8 v;
     ::decode(v, bl);
     ::decode(name, bl);
-    ::decode(addr, bl);
     ::decode(created, bl);
     ::decode(expires, bl);
     ::decode(caps, bl);
@@ -115,8 +112,7 @@ struct SessionAuthInfo {
 /*
  * Authentication
  */
-extern void build_authenticate_request(EntityName& principal_name, entity_addr_t& principal_addr,
-				       bufferlist& request);
+extern void build_authenticate_request(EntityName& principal_name, bufferlist& request);
 
 
 extern bool build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
@@ -130,19 +126,16 @@ extern bool build_service_ticket_reply(CryptoKey& principal_secret,
 
 struct AuthAuthenticateRequest {
   EntityName name;
-  entity_addr_t addr;
 
   AuthAuthenticateRequest() {}
-  AuthAuthenticateRequest(EntityName& principal_name, entity_addr_t principal_addr) :
-    name(principal_name), addr(principal_addr) {}
+  AuthAuthenticateRequest(EntityName& principal_name) :
+    name(principal_name) {}
 
   void encode(bufferlist& bl) const {
     ::encode(name, bl);
-    ::encode(addr, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(name, bl);
-    ::decode(addr, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthAuthenticateRequest)
