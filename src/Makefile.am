@@ -311,6 +311,7 @@ libcommon_files = \
 	common/WorkQueue.cc \
 	common/ConfUtils.cc \
 	common/MemoryModel.cc \
+	common/armor.c \
 	mon/MonMap.cc \
 	mon/MonClient.cc \
 	osd/OSDMap.cc \
@@ -417,6 +418,7 @@ noinst_HEADERS = \
 	cls_crypto.cc\
 	cm.txt\
         common/arch.h\
+        common/armor.h\
 	common/debug.h\
 	common/lockdep.h\
 	common/BackTrace.h\
