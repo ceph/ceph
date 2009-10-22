@@ -171,7 +171,7 @@ bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
 bool AuthTicketHandler::build_authorizer(AuthAuthorizer& authorizer)
 {
   authorizer.session_key = session_key;
-  authorizer.ctx.timestamp = g_clock.now();
+  authorizer.timestamp = g_clock.now();
 
   dout(0) << "build_authorizer: service_id=" << service_id << dendl;
 
@@ -180,7 +180,7 @@ bool AuthTicketHandler::build_authorizer(AuthAuthorizer& authorizer)
   ::encode(ticket, authorizer.bl);
 
   AuthAuthorize msg;
-  msg.now = authorizer.ctx.timestamp;
+  msg.now = authorizer.timestamp;
   if (encode_encrypt(msg, session_key, authorizer.bl) < 0)
     return false;
 
@@ -260,27 +260,6 @@ bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
 
   return true;
 }
-#if 0
-bool AuthTicketHandler::decode_reply_authorizer(bufferlist::iterator& indata, AuthAuthorizeReply& reply)
-{
-  if (decode_decrypt(reply, session_key, indata) < 0)
-    return false;
-
-  return true;
-}
-
-/*
- * PRINCIPAL: verify reply is authentic
- */
-bool AuthTicketHandler::verify_reply_authorizer(AuthContext& ctx, AuthAuthorizeReply& reply)
-{
-  if (ctx.timestamp + 1 == reply.timestamp) {
-    return true;
-  }
-
-  return false;
-}
-#endif
 
 bool AuthAuthorizer::verify_reply(bufferlist::iterator& indata)
 {
@@ -289,7 +268,7 @@ bool AuthAuthorizer::verify_reply(bufferlist::iterator& indata)
   if (decode_decrypt(reply, session_key, indata) < 0)
     return false;
 
-  if (ctx.timestamp + 1 != reply.timestamp) {
+  if (timestamp + 1 != reply.timestamp) {
     return false;
   }
 
