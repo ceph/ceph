@@ -1650,7 +1650,7 @@ do { \
       switch (m->get_type()) {
 
       case MSG_OSD_PG_CREATE:
-        ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
+        ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
 	handle_pg_create((MOSDPGCreate*)m);
 	break;
         
