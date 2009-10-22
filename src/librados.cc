@@ -298,6 +298,10 @@ bool RadosClient::init()
   if (!messenger)
     return false;
 
+  objecter = new Objecter(messenger, &monclient, &osdmap, lock);
+  if (!objecter)
+    return false;
+
   monclient.set_messenger(messenger);
   
   messenger->add_dispatcher_head(this);
@@ -315,9 +319,6 @@ bool RadosClient::init()
 
   monclient.mount(g_conf.client_mount_timeout);
 
-  objecter = new Objecter(messenger, &monclient, &osdmap, lock);
-  if (!objecter)
-    return false;
 
 
   lock.Lock();
