@@ -22,7 +22,7 @@ struct MAuth : public PaxosServiceMessage {
 
   MAuth() : PaxosServiceMessage(CEPH_MSG_AUTH, 0) { }
 
-  const char *get_type_name() { return "client_auth"; }
+  const char *get_type_name() { return "auth"; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

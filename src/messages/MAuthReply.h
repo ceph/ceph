@@ -32,8 +32,10 @@ struct MAuthReply : public Message {
 
   const char *get_type_name() { return "auth_reply"; }
   void print(ostream& o) {
-    o << "auth_reply(" << result;
-    if (result_msg.length()) o << " " << result_msg;
+    char buf[80];
+    o << "auth_reply(" << result << " " << strerror_r(-result, buf, sizeof(buf));
+    if (result_msg.length())
+      o << ": " << result_msg;
     o << ")";
   }
 
