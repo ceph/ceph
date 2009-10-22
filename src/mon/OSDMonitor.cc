@@ -271,6 +271,11 @@ bool OSDMonitor::should_propose(double& delay)
   if (pending_inc.fullmap.length())
     return true;
 
+  if (pending_inc.new_flags & CEPH_OSDMAP_FULL) { //get that info out there!
+    delay = 0.0;
+    return true;
+  }
+
   // adjust osd weights?
   if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
     dout(0) << " adjusting osd weights based on " << osd_weight << dendl;
@@ -802,6 +807,9 @@ void OSDMonitor::tick()
     }
   }
 
+  //if map is set to full, get that info out there!
+  if (pending_inc.new_flags & CEPH_OSDMAP_FULL)
+    do_propose = true;
 
   // ---------------
 #define SWAP_PRIMARIES_AT_START 0

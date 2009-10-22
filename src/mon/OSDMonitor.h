@@ -163,6 +163,11 @@ private:
   void check_subs();
   void check_sub(Subscription *sub);
 
+  void add_flag(int flag) {
+    if (pending_inc.new_flags < 0)
+      pending_inc.new_flags = osdmap.flags;
+    pending_inc.new_flags |= flag;
+  }
 };
 
 #endif

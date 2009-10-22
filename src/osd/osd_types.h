@@ -26,7 +26,8 @@
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v024"
 
-
+#define CEPH_OSD_NEARFULL_RATIO .8
+#define CEPH_OSD_FULL_RATIO .95
 
 
 
