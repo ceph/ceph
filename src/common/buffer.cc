@@ -21,13 +21,15 @@
 
 atomic_t buffer_total_alloc;
 
-int buffer::list::read_file(const char *fn)
+int buffer::list::read_file(const char *fn, bool silent)
 {
   struct stat st;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    char buf[80];
-    cerr << "can't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+    if (!silent) {
+      char buf[80];
+      cerr << "can't open " << fn << ": " << strerror_r(errno, buf, sizeof(buf)) << std::endl;
+    }
     return -errno;
   }
   ::fstat(fd, &st);

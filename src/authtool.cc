@@ -78,7 +78,7 @@ int main(int argc, const char **argv)
   key.create(CEPH_SECRET_AES);
 
   bufferlist bl;
-  int r = bl.read_file(fn);
+  int r = bl.read_file(fn, true);
   if (r >= 0) {
     try {
       bufferlist::iterator iter = bl.begin();
@@ -87,6 +87,11 @@ int main(int argc, const char **argv)
       cerr << "error reading file " << fn << std::endl;
       exit(1);
     }
+  } else if (r == -ENOENT) {
+    cout << "creating " << fn << std::endl;
+  } else {
+    cerr << "can't open " << fn << ": " << strerror(errno) << std::endl;
+    exit(1);
   }
 
   if (gen_key) {

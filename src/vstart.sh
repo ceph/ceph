@@ -185,6 +185,7 @@ echo "ip $IP"
 
 monkeys_fn=monkeys.bin
 CEPH_ADM="$CEPH_BIN/ceph -k $monkeys_fn -I admin"
+test -e $monkeys_fn && rm $monkeys_fn
 
 if [ "$start_mon" -eq 1 ]; then
 	if [ "$new" -eq 1 ]; then
@@ -250,7 +251,7 @@ EOF
 
 		for f in `seq 0 $((CEPH_NUM_MON-1))`
 		do
-		    echo $CEPH_BIN/mkmonfs --clobber --mon-data dev/mon$f -i $f --monmap .ceph_monmap --osdmap .ceph_osdmap
+		    echo $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=$monkeys_fn
 		    $CEPH_BIN/mkmonfs -c $conf --clobber --mon-data=dev/mon$f -i $f --monmap=.ceph_monmap --osdmap=.ceph_osdmap --keys-file=$monkeys_fn
 		done
 	fi
