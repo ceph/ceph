@@ -24,7 +24,6 @@
 #include "messages/MAuthMonAck.h"
 #include "messages/MAuthRotating.h"
 
-#include "include/AuthLibrary.h"
 #include "common/Timer.h"
 
 #include "auth/AuthServiceHandler.h"
@@ -54,15 +53,11 @@ ostream& operator<<(ostream& out, AuthMonitor& pm)
 
 void AuthMonitor::check_rotate()
 {
-  AuthLibEntry entry;
-  if (!mon->key_server.updated_rotating(entry.rotating_bl, last_rotating_ver))
+  KeyServerData::Incremental inc;
+  inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
+  if (!mon->key_server.updated_rotating(inc.rotating_bl, last_rotating_ver))
     return;
   dout(0) << "AuthMonitor::tick() updated rotating, now calling propose_pending" << dendl;
-
-  AuthLibIncremental inc;
-  inc.op = AUTH_INC_SET_ROTATING;
-  entry.rotating = true;
-  ::encode(entry, inc.info);
   pending_auth.push_back(inc);
   propose_pending();
 }
@@ -118,16 +113,13 @@ void AuthMonitor::create_initial(bufferlist& bl)
           string n = iter->first;
           if (!n.empty()) {
             dout(0) << "read key for entry: " << n << dendl;
-            AuthLibEntry entry;
-            if (!entry.name.from_str(n)) {
+	    KeyServerData::Incremental inc;
+            if (!inc.name.from_str(n)) {
               dout(0) << "bad entity name " << n << dendl;
               continue;
             }
-            entry.auth = iter->second; 
-            AuthLibIncremental inc;
-
-            ::encode(entry, inc.info);
-            inc.op = AUTH_INC_ADD;
+            inc.auth = iter->second; 
+            inc.op = KeyServerData::AUTH_INC_ADD;
             pending_auth.push_back(inc);
           }
         }
@@ -136,27 +128,10 @@ void AuthMonitor::create_initial(bufferlist& bl)
     }
   }
 
-  AuthLibIncremental inc;
-  AuthLibEntry l;
-  ::encode(l, inc.info);
-  inc.op = AUTH_INC_NOP;
+  KeyServerData::Incremental inc;
+  inc.op = KeyServerData::AUTH_INC_NOP;
   pending_auth.push_back(inc);
 }
-
-bool AuthMonitor::store_entry(AuthLibEntry& entry)
-{
-  string entry_str;
-
-  entry.name.to_str(entry_str);
-
-  bufferlist bl;
-  ::encode(entry, bl);
-  mon->store->put_bl_ss(bl, "auth_lib", entry_str.c_str());
-  dout(0) << "adding name=" << entry_str << dendl;
-
-  return true;
-}
-
 
 bool AuthMonitor::update_from_paxos()
 {
@@ -184,35 +159,12 @@ bool AuthMonitor::update_from_paxos()
     assert(success);
 
     bufferlist::iterator p = bl.begin();
-    AuthLibIncremental inc;
     while (!p.end()) {
+      KeyServerData::Incremental inc;
       ::decode(inc, p);
-      AuthLibEntry entry;
-      inc.decode_entry(entry);
-      switch (inc.op) {
-      case AUTH_INC_ADD:
-        if (!entry.rotating) {
-          derr(0) << "got entry name=" << entry.name.to_str() << dendl;
-          mon->key_server.add_auth(entry.name, entry.auth);
-        } else {
-          derr(0) << "got AUTH_INC_ADD with entry.rotating" << dendl;
-        }
-        break;
-      case AUTH_INC_DEL:
-        mon->key_server.remove_secret(entry.name);
-        break;
-      case AUTH_INC_SET_ROTATING:
-        {
-          dout(0) << "AuthMonitor::update_from_paxos: decode_rotating" << dendl;
-          mon->key_server.decode_rotating(entry.rotating_bl);
-        }
-        break;
-      case AUTH_INC_NOP:
-        break;
-      default:
-        assert(0);
-      }
+      mon->key_server.apply_data_incremental(inc);
     }
+
     keys_ver++;
     mon->key_server.set_ver(keys_ver);
   }
@@ -259,7 +211,7 @@ void AuthMonitor::create_pending()
 void AuthMonitor::encode_pending(bufferlist &bl)
 {
   dout(10) << "encode_pending v " << (paxos->get_version() + 1) << dendl;
-  for (vector<AuthLibIncremental>::iterator p = pending_auth.begin();
+  for (vector<KeyServerData::Incremental>::iterator p = pending_auth.begin();
        p != pending_auth.end();
        p++)
     p->encode(bl);
@@ -389,12 +341,11 @@ bool AuthMonitor::preprocess_auth_mon(MAuthMon *m)
   dout(10) << "preprocess_auth_mon " << *m << " from " << m->get_orig_source() << dendl;
   
   int num_new = 0;
-  for (deque<AuthLibEntry>::iterator p = m->info.begin();
+  for (deque<pair<EntityName,EntityAuth> >::iterator p = m->info.begin();
        p != m->info.end();
-       p++) {
-    if (!mon->key_server.contains((*p).name))
+       p++)
+    if (!mon->key_server.contains(p->first))
       num_new++;
-  }
   if (!num_new) {
     dout(10) << "  nothing new" << dendl;
     return true;
@@ -411,11 +362,15 @@ bool AuthMonitor::prepare_auth_mon(MAuthMon *m)
     delete m;
     return false;
   }
-  for (deque<AuthLibEntry>::iterator p = m->info.begin();
+  for (deque<pair<EntityName,EntityAuth> >::iterator p = m->info.begin();
        p != m->info.end(); p++) {
     dout(10) << " writing auth " << *p << dendl;
-    AuthLibIncremental inc;
-    ::encode(*p, inc.info);
+    
+    KeyServerData::Incremental inc;
+    inc.name = p->first;
+    inc.auth = p->second;
+    assert(m->action == AUTH_SET);
+    inc.op = KeyServerData::AUTH_INC_ADD;
     pending_auth.push_back(inc);
   }
 
@@ -471,10 +426,10 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   if (m->cmd.size() > 1) {
     if (m->cmd[1] == "add" && m->cmd.size() >= 2) {
       string entity_name;
-      AuthLibEntry entry;
+      KeyServerData::Incremental inc;
       if (m->cmd.size() >= 3) {
         entity_name = m->cmd[2];
-        if (!entry.name.from_str(entity_name)) {
+        if (!inc.name.from_str(entity_name)) {
           ss << "bad entity name";
           rs = -EINVAL;
           goto done;
@@ -485,7 +440,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       dout(0) << "AuthMonitor::prepare_command bl.length()=" << bl.length() << dendl;
       bufferlist::iterator iter = bl.begin();
       map<string, EntityAuth> crypto_map;
-      map<string, EntityAuth>::iterator miter;
       try {
         ::decode(crypto_map, iter);
       } catch (buffer::error *err) {
@@ -494,20 +448,19 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
         goto done;
       }
 
-      for (miter = crypto_map.begin(); miter != crypto_map.end(); ++miter) {
-        AuthLibIncremental inc;
+      for (map<string, EntityAuth>::iterator miter = crypto_map.begin(); miter != crypto_map.end(); ++miter) {
+	KeyServerData::Incremental inc;
         dout(0) << "storing auth for " << entity_name  << dendl;
         if (miter->first.empty()) {
           if (entity_name.empty())
             continue;
-          entry.name.from_str(entity_name);
+          inc.name.from_str(entity_name);
         } else {
           string s = miter->first;
-          entry.name.from_str(s);
+          inc.name.from_str(s);
         }
-        entry.auth = miter->second;
-        ::encode(entry, inc.info);
-        inc.op = AUTH_INC_ADD;
+        inc.auth = miter->second;
+        inc.op = KeyServerData::AUTH_INC_ADD;
         pending_auth.push_back(inc);
       }
       ss << "updated";
@@ -516,16 +469,14 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       return true;
     } else if (m->cmd[1] == "del" && m->cmd.size() >= 3) {
       string name = m->cmd[2];
-      AuthLibEntry entry;
-      entry.name.from_str(name);
-      if (!mon->key_server.contains(entry.name)) {
+      KeyServerData::Incremental inc;
+      inc.name.from_str(name);
+      if (!mon->key_server.contains(inc.name)) {
         ss << "couldn't find entry " << name;
         rs = -ENOENT;
         goto done;
       }
-      AuthLibIncremental inc;
-      ::encode(entry, inc.info);
-      inc.op = AUTH_INC_DEL;
+      inc.op = KeyServerData::AUTH_INC_DEL;
       pending_auth.push_back(inc);
 
       ss << "updated";

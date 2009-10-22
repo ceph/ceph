@@ -49,6 +49,12 @@ struct KeyServerData {
     ::decode(rotating_secrets, bl);
   }
 
+  void decode_rotating(bufferlist& rotating_bl) {
+    bufferlist::iterator iter = rotating_bl.begin();
+    ::decode(rotating_ver, iter);
+    ::decode(rotating_secrets, iter);
+  }
+
   bool contains(EntityName& name) {
     return (secrets.find(name) != secrets.end());
   }
@@ -77,8 +83,74 @@ struct KeyServerData {
   map<EntityName, EntityAuth>::iterator secrets_begin() { return secrets.begin(); }
   map<EntityName, EntityAuth>::iterator secrets_end() { return secrets.end(); }
   map<EntityName, EntityAuth>::iterator find_name(EntityName& name) { return secrets.find(name); }
+
+
+  // -- incremental updates --
+  typedef enum {
+    AUTH_INC_NOP,
+    AUTH_INC_ADD,
+    AUTH_INC_DEL,
+    AUTH_INC_SET_ROTATING,
+  } IncrementalOp;
+
+  struct Incremental {
+    IncrementalOp op;
+    bufferlist rotating_bl;  // if SET_ROTATING.  otherwise,
+    EntityName name;
+    EntityAuth auth;
+    
+    void encode(bufferlist& bl) const {
+      __u32 _op = (__u32)op;
+      ::encode(_op, bl);
+      if (op == AUTH_INC_SET_ROTATING) {
+	::encode(rotating_bl, bl);
+      } else {
+	::encode(name, bl);
+	::encode(auth, bl);
+      }
+    }
+    void decode(bufferlist::iterator& bl) {
+      __u32 _op;
+      ::decode(_op, bl);
+      op = (IncrementalOp)_op;
+      assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
+      if (op == AUTH_INC_SET_ROTATING) {
+	::decode(rotating_bl, bl);
+      } else {
+	::decode(name, bl);
+	::decode(auth, bl);
+      }
+    }
+  };
+
+  void apply_incremental(Incremental& inc) {
+    switch (inc.op) {
+    case AUTH_INC_ADD:
+      add_auth(inc.name, inc.auth);
+      break;
+      
+    case AUTH_INC_DEL:
+      remove_secret(inc.name);
+      break;
+
+    case AUTH_INC_SET_ROTATING:
+      decode_rotating(inc.rotating_bl);
+      break;
+
+    case AUTH_INC_NOP:
+      break;
+
+    default:
+      assert(0);
+    }
+  }
+
 };
 WRITE_CLASS_ENCODER(KeyServerData);
+WRITE_CLASS_ENCODER(KeyServerData::Incremental);
+
+
+
 
 class KeyServer : public KeyStore {
   KeyServerData data;
@@ -125,6 +197,9 @@ public:
     return data.version;    
   }
 
+  void apply_data_incremental(KeyServerData::Incremental& inc) {
+    data.apply_incremental(inc);
+  }
   void set_ver(version_t ver) {
     Mutex::Locker l(lock);
     data.version = ver;
@@ -150,7 +225,6 @@ public:
   }
 
   bool updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver);
-  void decode_rotating(bufferlist& rotating_bl);
 
   bool get_rotating_encrypted(EntityName& name, bufferlist& enc_bl);
 

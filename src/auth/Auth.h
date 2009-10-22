@@ -38,6 +38,10 @@ struct EntityAuth {
 };
 WRITE_CLASS_ENCODER(EntityAuth)
 
+static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
+  return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
+}
+
 /*
  * The ticket (if properly validated) authorizes the principal use
  * services as described by 'caps' during the specified validity

@@ -15,8 +15,6 @@
 #ifndef __MAUTHMONACK_H
 #define __MHAUTHMONACK_H
 
-#include "include/AuthLibrary.h"
-
 class MAuthMonAck : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;

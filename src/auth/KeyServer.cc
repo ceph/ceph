@@ -297,16 +297,6 @@ bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ve
   return true;
 }
 
-void KeyServer::decode_rotating(bufferlist& rotating_bl)
-{
-  Mutex::Locker l(lock);
-
-  bufferlist::iterator iter = rotating_bl.begin();
-
-  ::decode(data.rotating_ver, iter);
-  ::decode(data.rotating_secrets, iter);
-}
-
 bool KeyServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
 {
   Mutex::Locker l(lock);

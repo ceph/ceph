@@ -210,6 +210,11 @@ inline bool operator<(const EntityName& a, const EntityName& b) {
   return (a.entity_type < b.entity_type) || (a.entity_type == b.entity_type && a.name < b.name);
 }
 
+static inline ostream& operator<<(ostream& out, const EntityName& n) {
+  return out << n.to_str();
+}
+
+
 struct CephXPremable {
   uint32_t trans_id;
 

@@ -15,7 +15,6 @@
 #ifndef __MAUTHMON_H
 #define __MAUTHMON_H
 
-#include "include/AuthLibrary.h"
 #include "messages/PaxosServiceMessage.h"
 
 enum {
@@ -28,7 +27,7 @@ enum {
 class MAuthMon : public PaxosServiceMessage {
 public:
   ceph_fsid_t fsid;
-  deque<AuthLibEntry> info;
+  deque<pair<EntityName, EntityAuth> > info;
   deque<bool> add;
   version_t last;
   __s32 action;
@@ -53,7 +52,7 @@ public:
        out << "SET, ";
        break;
     case AUTH_RESPONSE:
-       out << "SET, ";
+       out << "RESPONSE, ";
        break;
     default:
        out << "Unknown op, ";

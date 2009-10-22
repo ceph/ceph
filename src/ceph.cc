@@ -74,7 +74,6 @@ Context *resend_event = 0;
 #include "mds/MDSMap.h"
 #include "include/LogEntry.h"
 #include "include/ClassLibrary.h"
-#include "include/AuthLibrary.h"
 
 #include "mon/mon_types.h"
 
@@ -218,11 +217,10 @@ void handle_notify(MMonObserveNotify *notify)
 	}
 #endif
       } else {
-	AuthLibEntry entry;
-
 	while (!p.end()) {
-          entry.decode(p);
-	  dout(0) << "   auth " << entry.name.to_str() << dendl;
+	  KeyServerData::Incremental inc;
+          inc.decode(p);
+	  dout(0) << "   auth " << inc.name.to_str() << dendl;
 	}
       }
       break;
