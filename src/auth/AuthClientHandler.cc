@@ -361,15 +361,14 @@ void AuthClientHandler::tick()
 
 }
 
-int AuthClientHandler::build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer)
+bool AuthClientHandler::build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer)
 {
   dout(0) << "going to build authorizer for peer_id=" << service_id << " service_id=" << service_id << dendl;
 
   if (!tickets.build_authorizer(service_id, authorizer))
-    return -EINVAL;
+    return false;
 
   dout(0) << "authorizer built successfully" << dendl;
-
-  return 0;
+  return true;
 }
 

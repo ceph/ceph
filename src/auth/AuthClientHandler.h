@@ -150,7 +150,7 @@ public:
   int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler);
   void tick();
 
-  int build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
+  bool build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
 };
 
 
