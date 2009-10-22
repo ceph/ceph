@@ -150,7 +150,7 @@ static int ceph_generic_auth_init(struct ceph_auth_data *data)
 }
 
 static int ceph_supported_auth[] = { CEPH_AUTH_NONE,
-				     CEPH_AUTH_CEPH };
+				     CEPH_AUTH_CEPHX };
 
 static int ceph_generic_auth_create_request(struct ceph_client *client,
 				     struct ceph_auth_data *data, char **blob, int *len)

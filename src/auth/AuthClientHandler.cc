@@ -141,7 +141,7 @@ int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
       CephXEnvRequest1 req;
       req.name = client->name;
       set<__u32> supported;
-      supported.insert(CEPH_AUTH_CEPH);
+      supported.insert(CEPH_AUTH_CEPHX);
       ::encode(supported, bl);
       ::encode(req, bl);
     }

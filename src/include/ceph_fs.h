@@ -137,7 +137,7 @@ struct ceph_secret {
 
 /* auth */
 #define CEPH_AUTH_NONE	0
-#define CEPH_AUTH_CEPH	1
+#define CEPH_AUTH_CEPHX	1
 
 struct ceph_auth_type {
 	__le32 type;

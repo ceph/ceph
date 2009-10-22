@@ -224,9 +224,8 @@ void CephAuthService_X::build_cephx_response_header(int request_type, int status
 
 AuthServiceHandler *get_auth_handler(Monitor *mon, set<__u32>& supported)
 {
-  if (supported.count(CEPH_AUTH_CEPH)) {
+  if (supported.count(CEPH_AUTH_CEPHX))
     return new CephAuthService_X(mon);
-  }
   return NULL;
 }
 
