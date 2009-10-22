@@ -263,9 +263,7 @@ void KeyServer::list_secrets(stringstream& ss)
       const EntityName& name = mapiter->first;
       ss << name.to_str() << std::endl;
 
-      string k;
-      mapiter->second.key.to_str(k);
-      ss << "\tkey: " << k << std::endl;
+      ss << "\tkey: " << mapiter->second.key << std::endl;
 
       map<string, bufferlist>::iterator capsiter = mapiter->second.caps.begin();
       for (; capsiter != mapiter->second.caps.end(); ++capsiter) {
