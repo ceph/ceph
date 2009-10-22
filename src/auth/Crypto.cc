@@ -18,6 +18,7 @@
 
 #include "include/ceph_fs.h"
 #include "config.h"
+#include "common/armor.h"
 
 #include <errno.h>
 
@@ -283,4 +284,12 @@ int CryptoKey::decrypt(const bufferlist& in, bufferlist& out)
   if (!h)
     return -EOPNOTSUPP;
   return h->decrypt(this->secret, in, out);
+}
+
+void CryptoKey::print(ostream &out) const
+{
+  char foo[secret.length() * 2];
+  int r = ceph_armor(foo, secret.c_str(), secret.c_str() + secret.length());
+  foo[r] = 0;
+  out << foo;
 }
