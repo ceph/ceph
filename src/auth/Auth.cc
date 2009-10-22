@@ -251,7 +251,7 @@ bool verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
   AuthAuthorizeReply reply;
   // reply.trans_id = auth_msg.trans_id;
   reply.timestamp = auth_msg.now;
-  reply.timestamp += 1;
+  reply.timestamp.sec_ref() += 1;
   if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
     return false;
 
@@ -264,10 +264,15 @@ bool AuthAuthorizer::verify_reply(bufferlist::iterator& indata)
 {
   AuthAuthorizeReply reply;
 
-  if (decode_decrypt(reply, session_key, indata) < 0)
+  if (decode_decrypt(reply, session_key, indata) < 0) {
+    dout(0) << " coudln't decrypt auth reply" << dendl;
     return false;
+  }
 
-  if (timestamp + 1 != reply.timestamp) {
+  utime_t expect = timestamp;
+  expect.sec_ref() += 1;
+  if (expect != reply.timestamp) {
+    dout(0) << " bad ts got " << reply.timestamp << " expect " << expect << " sent " << timestamp << dendl;
     return false;
   }
 
