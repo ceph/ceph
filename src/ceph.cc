@@ -28,6 +28,8 @@ using namespace std;
 #include "common/Timer.h"
 #include "common/common_init.h"
 
+#include "auth/KeyServer.h"
+
 #ifndef DARWIN
 #include <envz.h>
 #endif // DARWIN
