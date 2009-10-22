@@ -46,12 +46,11 @@ public:
 int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& result_bl)
 {
   int ret = 0;
-  bool piggyback = false;
 
   dout(0) << "CephAuthService_X: handle request" << dendl;
   dout(0) << "state=" << state << dendl;
 
-  switch(state) {
+  switch (state) {
   case 0:
     {
       CephXEnvRequest1 req;
@@ -92,59 +91,26 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
       if (req.key != expected_key) {
         dout(0) << "unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
         ret = -EPERM;
-      } else {
-	ret = 0;
-        piggyback = req.piggyback;
+	break;
       }
-    }
-    break;
 
-  case 2:
-    return handle_cephx_protocol(indata, result_bl);
-  default:
-    return -EINVAL;
-  }
-
-  if (!ret && piggyback) {
-    ret = handle_cephx_protocol(indata, result_bl);
-  }
-
-  if (!ret || (ret == -EAGAIN)) {
-    state++;
-  }
-  dout(0) << "returning with state=" << state << dendl;
-  return ret;
-}
-
-int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, bufferlist& result_bl)
-{
-  struct CephXRequestHeader cephx_header;
-
-  ::decode(cephx_header, indata);
-
-  uint16_t request_type = cephx_header.request_type & CEPHX_REQUEST_TYPE_MASK;
-  int ret = -EAGAIN;
-
-  dout(0) << "request_type=" << request_type << dendl;
-
-  switch (request_type) {
-  case CEPHX_GET_AUTH_SESSION_KEY:
-    {
       dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
+      struct CephXRequestHeader cephx_header;
+      ::decode(cephx_header, indata);
 
-      AuthAuthenticateRequest req;
-      ::decode(req, indata);
+      AuthAuthenticateRequest areq;
+      ::decode(areq, indata);
 
       CryptoKey session_key;
       SessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (mon->key_server.get_secret(req.name, principal_secret) < 0) {
+      if (mon->key_server.get_secret(areq.name, principal_secret) < 0) {
 	ret = -EPERM;
 	break;
       }
 
-      info.ticket.name = req.name;
+      info.ticket.name = areq.name;
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
 
       mon->key_server.generate_secret(session_key);
@@ -160,7 +126,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       vector<SessionAuthInfo> info_vec;
       info_vec.push_back(info);
 
-      build_cephx_response_header(request_type, 0, result_bl);
+      build_cephx_response_header(cephx_header.request_type, 0, result_bl);
       if (!build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
         ret = -EIO;
         break;
@@ -168,9 +134,12 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     }
     break;
 
-  case CEPHX_GET_PRINCIPAL_SESSION_KEY:
-    dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
+  case 2:
     {
+      struct CephXRequestHeader cephx_header;
+      ::decode(cephx_header, indata);
+      dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
+
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
       if (!verify_authorizer(mon->key_server, indata, auth_ticket_info, tmp_bl)) {
@@ -197,16 +166,19 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
           info_vec.push_back(info);
         }
       }
-      build_cephx_response_header(request_type, ret, result_bl);
+      build_cephx_response_header(cephx_header.request_type, ret, result_bl);
       build_service_ticket_reply(auth_ticket_info.session_key, info_vec, result_bl);
     }
     break;
+
   default:
-    ret = -EINVAL;
-    build_cephx_response_header(request_type, -EINVAL, result_bl);
-    break;
+    return -EINVAL;
   }
 
+  if (!ret || (ret == -EAGAIN)) {
+    state++;
+  }
+  dout(0) << "returning with state=" << state << dendl;
   return ret;
 }
 

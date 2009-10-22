@@ -69,17 +69,10 @@ class AuthClientAuthenticateHandler : public AuthClientProtocolHandler {
   int request_state;
   int response_state;
 
-  int cephx_request_state;
-  int cephx_response_state;
-
   /* envelope protocol parameters */
   uint64_t server_challenge;
 
-  /* envelope protocol */
   int generate_authenticate_request(bufferlist& bl);
-  /* auth protocol */
-  int generate_cephx_authenticate_request(bufferlist& bl);
-  int handle_cephx_response(bufferlist::iterator& indata);
 
   uint32_t want;
   uint32_t have;
@@ -88,11 +81,7 @@ protected:
   void _reset() {
     request_state = 0;
     response_state = 0;
-    cephx_request_state = 0;
-    cephx_response_state = 0;
   }
-
-  bool request_pending();
 
   int _build_request();
   int _handle_response(int ret, bufferlist::iterator& iter);

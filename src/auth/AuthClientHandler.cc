@@ -77,7 +77,7 @@ int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
     return -EINVAL;
   }
 
-  switch(request_state) {
+  switch (request_state) {
   case 0:
     /* initialize  */
     { 
@@ -90,7 +90,7 @@ int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
     }
     break;
   case 1:
-   /* authenticate */
+    /* authenticate */
     {
       /* FIXME: init req fields */
       CephXEnvRequest2 req;
@@ -110,113 +110,83 @@ int AuthClientAuthenticateHandler::generate_authenticate_request(bufferlist& bl)
       }
       req.piggyback = 1;
       ::encode(req, bl);
-      request_state++;
-      return generate_cephx_authenticate_request(bl);
+
+      /* we first need to get the principle/auth session key */
+      CephXRequestHeader header;
+      header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
+      ::encode(header, bl);
+      build_authenticate_request(client->name, bl);
+      request_state = 2;
+      return 0;
     }
     break;
+
+  case 2:
+    /* get service tickets */
+    {
+      dout(0) << "want=" << hex << want << " have=" << have << dec << dendl;
+      if (want == have) {
+	response_state = 2;
+	return 0;
+      }
+
+      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+      if (!ticket_handler.build_authorizer(authorizer))
+	return -EINVAL;
+
+      CephXRequestHeader header;
+      header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
+      ::encode(header, bl);
+      
+      bl.claim_append(authorizer.bl);
+      build_service_ticket_request(want, bl);
+    }
+    break;
+
   default:
-    return generate_cephx_authenticate_request(bl);
+    assert(0);
   }
   request_state++;
   return 0;
 }
 
-int AuthClientAuthenticateHandler::_handle_response(int ret, bufferlist::iterator& iter)
+int AuthClientAuthenticateHandler::_handle_response(int ret, bufferlist::iterator& indata)
 {
-
   if (ret != 0 && ret != -EAGAIN) {
     response_state = request_state;
-    cephx_response_state = cephx_request_state;
     return ret;
   }
 
   dout(0) << "AuthClientHandler::handle_response()" << dendl;
-  switch(response_state) {
+  switch (response_state) {
   case 0:
     /* initialize  */
     { 
       CephXEnvResponse1 response;
 
       response_state++;
-      ::decode(response, iter);
+      ::decode(response, indata);
       server_challenge = response.server_challenge;
     }
     break;
   case 1:
     /* authenticate */
     {
-      response_state++;
-      return handle_cephx_response(iter);
-    }
-    break;
-  default:
-    return handle_cephx_response(iter);
-  }
-  return -EAGAIN;
-}
+      struct CephXResponseHeader header;
+      ::decode(header, indata);
 
-int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlist& bl)
-{
-  CephXRequestHeader header;
-  AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+      dout(0) << "request_type=" << hex << header.request_type << dec << dendl;
+      dout(0) << "handle_cephx_response()" << dendl;
 
-  if (!ticket_handler.has_key()) {
-    dout(0) << "auth ticket: doesn't have key" << dendl;
-    /* we first need to get the principle/auth session key */
-
-    header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
-
-    ::encode(header, bl);
-
-    build_authenticate_request(client->name, bl);
-    cephx_request_state = 1;
-    return 0;
-  }
-
-  dout(0) << "want=" << hex << want << " have=" << have << dec << dendl;
-
-  cephx_request_state = 2;
-
-  if (want == have) {
-    cephx_response_state = 2;
-    return 0;
-  }
-
-  header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
-
-  ::encode(header, bl);
-
-  if (!ticket_handler.build_authorizer(authorizer))
-    return -EINVAL;
-
-  bl.claim_append(authorizer.bl);
-
-  build_service_ticket_request(want, bl);
-  
-  return 0;
-}
-
-int AuthClientAuthenticateHandler::handle_cephx_response(bufferlist::iterator& indata)
-{
-  int ret = 0;
-  struct CephXResponseHeader header;
-  ::decode(header, indata);
-
-  dout(0) << "request_type=" << hex << header.request_type << dec << dendl;
-  dout(0) << "handle_cephx_response()" << dendl;
-
-  switch (header.request_type & CEPHX_REQUEST_TYPE_MASK) {
-  case CEPHX_GET_AUTH_SESSION_KEY:
-    cephx_response_state = 1;
-    dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
-
-    {
+      response_state = 2;
+      dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
+      
       CryptoKey secret;
       g_keyring.get_master(secret);
-
+	
       if (!client->tickets.verify_service_ticket_reply(secret, indata)) {
-        dout(0) << "could not verify service_ticket reply" << dendl;
-        return -EPERM;
+	dout(0) << "could not verify service_ticket reply" << dendl;
+	return -EPERM;
       }
       dout(0) << "want=" << want << " have=" << have << dendl;
       if (want != have)
@@ -224,32 +194,27 @@ int AuthClientAuthenticateHandler::handle_cephx_response(bufferlist::iterator& i
     }
     break;
 
-  case CEPHX_GET_PRINCIPAL_SESSION_KEY:
-    cephx_response_state = 2;
-    dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
+  case 2:
     {
+      struct CephXResponseHeader header;
+      ::decode(header, indata);
+      response_state = 3;
+      dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
+
       AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
   
       if (!client->tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
         dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }
+      ret = 0;
     }
-    ret = 0;
     break;
 
   default:
-    dout(0) << "header.request_type = " << hex << header.request_type << dec << dendl;
-    ret = -EINVAL;
-    break;
+    assert(0);
   }
-
   return ret;
-}
-
-bool AuthClientAuthenticateHandler::request_pending() {
-  dout(0) << "request_pending(): request_state=" << cephx_request_state << " cephx_response_state=" << cephx_response_state << dendl;
-  return (request_state != response_state) || (cephx_request_state != cephx_response_state);
 }
 
 int AuthClientAuthenticateHandler::_build_request()
