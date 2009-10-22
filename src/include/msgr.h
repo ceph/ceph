@@ -46,11 +46,13 @@ struct ceph_entity_name {
 	__le64 num;
 } __attribute__ ((packed));
 
-#define CEPH_ENTITY_TYPE_MON    1
-#define CEPH_ENTITY_TYPE_MDS    2
-#define CEPH_ENTITY_TYPE_OSD    3
-#define CEPH_ENTITY_TYPE_CLIENT 4
-#define CEPH_ENTITY_TYPE_ADMIN  5
+#define CEPH_ENTITY_TYPE_MON     1
+#define CEPH_ENTITY_TYPE_MDS     2
+#define CEPH_ENTITY_TYPE_OSD     4
+#define CEPH_ENTITY_TYPE_CLIENT  8
+#define CEPH_ENTITY_TYPE_ADMIN  16
+
+const char *ceph_entity_type_name(int type);
 
 /*
  * entity_addr -- network address

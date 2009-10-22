@@ -50,14 +50,7 @@ public:
   __s64 num() const { return _num; }
   int type() const { return _type; }
   const char *type_str() const {
-    switch (type()) {
-    case TYPE_MDS: return "mds"; 
-    case TYPE_OSD: return "osd"; 
-    case TYPE_MON: return "mon"; 
-    case TYPE_CLIENT: return "client"; 
-    case TYPE_ADMIN: return "admin";
-    default: return "unknown";
-    }    
+    return ceph_entity_type_name(type());
   }
 
   bool is_new() const { return num() < 0; }
