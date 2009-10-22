@@ -265,11 +265,6 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();
 
-  CephXPremable pre;
-  ::decode(pre, indata);
-  dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
-  ::encode(pre, response_bl);
-
   // set up handler?
   if (!s->auth_handler) {
     set<__u32> supported;
@@ -301,7 +296,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
       return true;
     }
   }
-  MAuthReply *reply = new MAuthReply(&response_bl, ret);
+  MAuthReply *reply = new MAuthReply(m->trans_id, &response_bl, ret);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
   return true;
 }

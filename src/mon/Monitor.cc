@@ -868,11 +868,6 @@ void Monitor::handle_authorize(MAuthorize *m)
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();
 
-  CephXPremable pre;
-  ::decode(pre, indata);
-  dout(0) << "CephXPremable id=" << pre.trans_id << dendl;
-  ::encode(pre, response_bl);
-
   // handle the request
   try {
     ret = do_authorize(indata, response_bl);
@@ -880,7 +875,7 @@ void Monitor::handle_authorize(MAuthorize *m)
     ret = -EINVAL;
     dout(0) << "caught error when trying to handle authorize request, probably malformed request" << dendl;
   }
-  MAuthReply *reply = new MAuthReply(&response_bl, ret);
+  MAuthReply *reply = new MAuthReply(m->trans_id, &response_bl, ret);
   messenger->send_message(reply, m->get_orig_source_inst());
 }
 

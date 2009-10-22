@@ -167,19 +167,6 @@ static inline ostream& operator<<(ostream& out, const EntityName& n) {
 }
 
 
-struct CephXPremable {
-  uint32_t trans_id;
-
-  void encode(bufferlist& bl) const {
-    ::encode(trans_id, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    ::decode(trans_id, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CephXPremable)
-
 /* 
   Ceph X-Envelope protocol
 */

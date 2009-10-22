@@ -197,7 +197,7 @@ public:
     return (want & have) == have;
   }
 
-  int handle_response(Message *response);
+  int handle_response(int trans_id, Message *response);
 
   int start_session(AuthClient *client, double timeout);
   int send_session_request(AuthClient *client, AuthClientProtocolHandler *handler, double timeout);

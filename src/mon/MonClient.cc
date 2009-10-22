@@ -308,7 +308,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
-  int ret = auth.handle_response(m);
+  int ret = auth.handle_response(m->trans_id, m);
   delete m;
 
   if (ret == -EAGAIN) {

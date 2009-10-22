@@ -42,12 +42,6 @@ int AuthClientProtocolHandler::build_request()
   msg = _get_new_msg();
   if (!msg)
     return -ENOMEM;
-  bufferlist& bl = _get_msg_bl(msg);
-
-  CephXPremable pre;
-  dout(0) << "pre=" << id << dendl;
-  pre.trans_id = id;
-  ::encode(pre, bl);
 
   int ret = _build_request(); 
 
@@ -322,7 +316,7 @@ int AuthClientAuthenticateHandler::_build_request()
 Message *AuthClientAuthenticateHandler::_get_new_msg()
 {
   MAuth *m = new MAuth;
-
+  m->trans_id = id;
   return m;
 }
 
@@ -334,7 +328,7 @@ bufferlist& AuthClientAuthenticateHandler::_get_msg_bl(Message *m)
 Message *AuthClientAuthorizeHandler::_get_new_msg()
 {
   MAuthorize *m = new MAuthorize;
-
+  m->trans_id = id;
   return m;
 }
 
@@ -410,26 +404,19 @@ uint32_t AuthClientHandler::_add_proto_handler(AuthClientProtocolHandler *handle
   return id;
 }
 
-int AuthClientHandler::handle_response(Message *response)
+int AuthClientHandler::handle_response(int trans_id, Message *response)
 {
-  bufferlist bl;
-  int ret;
-
   MAuthReply* m = (MAuthReply *)response;
-  bl = m->result_bl;
-  ret = m->result;
-
-  CephXPremable pre;
-  bufferlist::iterator iter = bl.begin();
-  ::decode(pre, iter);
+  int ret = m->result;
 
   lock.Lock();
-  AuthClientProtocolHandler *handler = _get_proto_handler(pre.trans_id);
+  AuthClientProtocolHandler *handler = _get_proto_handler(trans_id);
   lock.Unlock();
-  dout(0) << "AuthClientHandler::handle_response(): got response " << *response << " trans_id=" << pre.trans_id << " handler=" << handler << dendl;
+  dout(0) << "AuthClientHandler::handle_response(): got response " << *response << " trans_id=" << trans_id << " handler=" << handler << dendl;
   if (!handler)
     return -EINVAL;
 
+  bufferlist::iterator iter = m->result_bl.begin();
   return handler->handle_response(ret, iter);
 }
 
