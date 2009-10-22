@@ -170,7 +170,7 @@ public:
   uint32_t have;
   CryptoKey secret;
 
-  AuthTicketsManager tickets;
+  AuthTicketManager tickets;
 
   AuthClientHandler() : lock("AuthClientHandler::lock"),
 			client(NULL), timer(lock), max_proto_handlers(0) { }

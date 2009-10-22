@@ -127,7 +127,7 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   return true;
 }
 
-bool AuthTicketsManager::has_key(uint32_t service_id)
+bool AuthTicketManager::has_key(uint32_t service_id)
 {
   map<uint32_t, AuthTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
@@ -139,7 +139,7 @@ bool AuthTicketsManager::has_key(uint32_t service_id)
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
  */
-bool AuthTicketsManager::verify_service_ticket_reply(CryptoKey& secret,
+bool AuthTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 					      bufferlist::iterator& indata)
 {
   uint32_t num;
@@ -192,7 +192,7 @@ bool AuthTicketHandler::build_authorizer(AuthAuthorizer& authorizer)
  *
  * ticket, {timestamp}^session_key
  */
-bool AuthTicketsManager::build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer)
+bool AuthTicketManager::build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer)
 {
   map<uint32_t, AuthTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())

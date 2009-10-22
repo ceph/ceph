@@ -23,8 +23,6 @@
 
 class Cond;
 
-#define AUTH_ENC_MAGIC 0xff009cad8826aa55
-
 struct EntityAuth {
   CryptoKey key;
   map<string, bufferlist> caps;
@@ -190,7 +188,6 @@ struct AuthAuthorizer {
 struct AuthTicketHandler {
   uint32_t service_id;
   CryptoKey session_key;
-//  uint64_t secret_id;
   AuthBlob ticket;        // opaque to us
   utime_t renew_after, expires;
   bool has_key_flag;
@@ -200,23 +197,17 @@ struct AuthTicketHandler {
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
-#if 0
-  // to build a new ServiceTicket, to access different service
-  bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
-#endif
   // to access the service
   bool build_authorizer(AuthAuthorizer& authorizer);
 
   bool has_key() { return has_key_flag; }
 };
 
-struct AuthTicketsManager {
+struct AuthTicketManager {
   map<uint32_t, AuthTicketHandler> tickets_map;
 
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
-
-  bool get_session_keys(uint32_t keys, entity_addr_t& principal_addr, bufferlist& bl);
 
   AuthTicketHandler& get_handler(uint32_t type) {
     AuthTicketHandler& handler = tickets_map[type];
@@ -312,6 +303,18 @@ public:
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
 };
 
+static inline bool auth_principal_needs_rotating_keys(EntityName& name)
+{
+  return ((name.entity_type == CEPHX_PRINCIPAL_OSD) ||
+          (name.entity_type == CEPHX_PRINCIPAL_MDS));
+}
+
+
+/*
+ * encode+encrypt macros
+ */
+#define AUTH_ENC_MAGIC 0xff009cad8826aa55
+
 template <class T>
 int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
   uint64_t magic;
@@ -348,20 +351,13 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
   return 0;
 }
 
-static inline bool auth_principal_needs_rotating_keys(EntityName& name)
-{
-  return ((name.entity_type == CEPHX_PRINCIPAL_OSD) ||
-          (name.entity_type == CEPHX_PRINCIPAL_MDS));
-}
+
 
 /*
  * Verify authorizer and generate reply authorizer
  */
 extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 					  bufferlist::iterator& indata);
-
-class KeysServer;
-
 extern bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
