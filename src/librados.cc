@@ -62,9 +62,10 @@ class RadosClient : public Dispatcher
 
   bool ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new) {
     dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
-    if (monclient.auth.build_authorizer(dest_type, authorizer) < 0)
-      return false;
-    return true;
+    /* monitor authorization is being handled on different layer */
+    if (dest_type == CEPH_ENTITY_TYPE_MON)
+      return true;
+    return monclient.auth.build_authorizer(dest_type, authorizer);
   }
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
