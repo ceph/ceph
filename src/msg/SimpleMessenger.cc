@@ -611,9 +611,6 @@ int SimpleMessenger::Pipe::accept()
       authorizer_reply.clear();
     }
 
-    dout(0) << "accept got peer connect_seq " << connect.connect_seq
-	     << " global_seq " << connect.global_seq
-	     << dendl;
     dout(20) << "accept got peer connect_seq " << connect.connect_seq
 	     << " global_seq " << connect.global_seq
 	     << dendl;
@@ -642,7 +639,7 @@ int SimpleMessenger::Pipe::accept()
     if (rank->verify_authorizer(connection_state, peer_type,
 				authorizer, authorizer_reply, authorizer_valid) &&
 	!authorizer_valid) {
-      dout(10) << "accept bad authorizer" << dendl;
+      dout(0) << "accept bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
       rank->lock.Unlock();
       goto reply;
@@ -976,7 +973,7 @@ int SimpleMessenger::Pipe::connect()
     connect.connect_seq = cseq;
     connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
     connect.authorizer_len = authorizer.bl.length();
-    dout(0) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
+    dout(10) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
     connect.flags = 0;
     if (policy.lossy)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;  // this is fyi, actually, server decides!
@@ -993,8 +990,6 @@ int SimpleMessenger::Pipe::connect()
       msglen += msgvec[1].iov_len;
     }
 
-    dout(0) << "connect sending gseq=" << gseq << " cseq=" << cseq
-	     << " proto=" << connect.protocol_version << dendl;
     dout(10) << "connect sending gseq=" << gseq << " cseq=" << cseq
 	     << " proto=" << connect.protocol_version << dendl;
     if (do_sendmsg(sd, &msg, msglen)) {
@@ -1029,7 +1024,7 @@ int SimpleMessenger::Pipe::connect()
 
     if (authorizer.bl.length()) {
       bufferlist::iterator iter = authorizer_reply.begin();
-      dout(0) << "verifying authorize reply, len=" << authorizer_reply.length() << dendl;
+      dout(10) << "verifying authorize reply, len=" << authorizer_reply.length() << dendl;
       if (!authorizer.verify_reply(iter)) {
         dout(0) << "failed verifying authorize reply" << dendl;
         goto fail;
