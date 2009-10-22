@@ -1,6 +1,5 @@
 
 #include "Auth.h"
-#include "KeysServer.h"
 #include "common/Clock.h"
 
 #include "config.h"
@@ -207,7 +206,7 @@ bool AuthTicketManager::build_authorizer(uint32_t service_id, AuthAuthorizer& au
  *
  * {timestamp + 1}^session_key
  */
-bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
+bool verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
   uint32_t service_id;

@@ -26,7 +26,7 @@ using namespace std;
 
 #include "include/AuthLibrary.h"
 
-#include "auth/KeysServer.h"
+#include "auth/KeyServer.h"
 
 class MMonCommand;
 class MAuth;

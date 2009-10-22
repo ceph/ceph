@@ -205,7 +205,7 @@ void handle_notify(MMonObserveNotify *notify)
     {
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
-	KeysServerData data;
+	KeyServerData data;
 	::decode(data, p);
 	dout(0) << "   auth " << dendl;
 #if 0

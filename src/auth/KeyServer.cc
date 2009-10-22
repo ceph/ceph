@@ -14,7 +14,7 @@
 
 #include "config.h"
 
-#include "KeysServer.h"
+#include "KeyServer.h"
 
 #include "Crypto.h"
 #include "common/Timer.h"
@@ -34,7 +34,7 @@ void RotatingSecrets::add(ExpiringCryptoKey& key)
   }
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
+bool KeyServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
 {
   map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end())
@@ -52,7 +52,7 @@ bool KeysServerData::get_service_secret(uint32_t service_id, ExpiringCryptoKey& 
   return true;
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id)
+bool KeyServerData::get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id)
 {
   ExpiringCryptoKey e;
 
@@ -64,7 +64,7 @@ bool KeysServerData::get_service_secret(uint32_t service_id, CryptoKey& secret, 
   return true;
 }
 
-bool KeysServerData::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
+bool KeyServerData::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
 {
   map<uint32_t, RotatingSecrets>::iterator iter = rotating_secrets.find(service_id);
   if (iter == rotating_secrets.end())
@@ -81,7 +81,7 @@ bool KeysServerData::get_service_secret(uint32_t service_id, uint64_t secret_id,
   return true;
 }
 
-bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret)
+bool KeyServerData::get_secret(EntityName& name, CryptoKey& secret)
 {
   map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
   if (iter == secrets.end())
@@ -92,7 +92,7 @@ bool KeysServerData::get_secret(EntityName& name, CryptoKey& secret)
   return true;
 }
 
-bool KeysServerData::get_caps(EntityName& name, string& type, bufferlist& caps)
+bool KeyServerData::get_caps(EntityName& name, string& type, bufferlist& caps)
 {
   dout(0) << "get_caps: name=" << name.to_str() << dendl;
   map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
@@ -108,11 +108,11 @@ bool KeysServerData::get_caps(EntityName& name, string& type, bufferlist& caps)
   return true;
 }
 
-KeysServer::KeysServer() : lock("KeysServer::lock")
+KeyServer::KeyServer() : lock("KeyServer::lock")
 {
 }
 
-int KeysServer::start_server(bool init)
+int KeyServer::start_server(bool init)
 {
   Mutex::Locker l(lock);
 
@@ -122,7 +122,7 @@ int KeysServer::start_server(bool init)
   return 0;
 }
 
-void KeysServer::_generate_all_rotating_secrets(bool init)
+void KeyServer::_generate_all_rotating_secrets(bool init)
 {
   data.rotating_ver++;
   data.next_rotating_time = g_clock.now();
@@ -159,7 +159,7 @@ void KeysServer::_generate_all_rotating_secrets(bool init)
   }
 }
 
-void KeysServer::_rotate_secret(uint32_t service_id, int factor)
+void KeyServer::_rotate_secret(uint32_t service_id, int factor)
 {
   ExpiringCryptoKey ek;
   generate_secret(ek.key);
@@ -169,52 +169,52 @@ void KeysServer::_rotate_secret(uint32_t service_id, int factor)
   data.add_rotating_secret(service_id, ek);
 }
 
-bool KeysServer::_check_rotate()
+bool KeyServer::_check_rotate()
 {
   if (g_clock.now() > data.next_rotating_time) {
-    dout(0) << "KeysServer::check_rotate: need to rotate keys" << dendl;
+    dout(0) << "KeyServer::check_rotate: need to rotate keys" << dendl;
     _generate_all_rotating_secrets(false);
     return true;
   }
   return false;
 }
 
-bool KeysServer::get_secret(EntityName& name, CryptoKey& secret)
+bool KeyServer::get_secret(EntityName& name, CryptoKey& secret)
 {
   Mutex::Locker l(lock);
 
   return data.get_secret(name, secret);
 }
 
-bool KeysServer::get_caps(EntityName& name, string& type, bufferlist& caps)
+bool KeyServer::get_caps(EntityName& name, string& type, bufferlist& caps)
 {
   Mutex::Locker l(lock);
 
   return data.get_caps(name, type, caps);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
+bool KeyServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
 {
   Mutex::Locker l(lock);
 
   return data.get_service_secret(service_id, secret, secret_id);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id)
+bool KeyServer::get_service_secret(uint32_t service_id, CryptoKey& secret, uint64_t& secret_id)
 {
   Mutex::Locker l(lock);
 
   return data.get_service_secret(service_id, secret, secret_id);
 }
 
-bool KeysServer::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
+bool KeyServer::get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret)
 {
   Mutex::Locker l(lock);
 
   return data.get_service_secret(service_id, secret_id, secret);
 }
 
-bool KeysServer::generate_secret(CryptoKey& secret)
+bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;
   CryptoHandler *crypto = ceph_crypto_mgr.get_crypto(CEPH_SECRET_AES);
@@ -229,7 +229,7 @@ bool KeysServer::generate_secret(CryptoKey& secret)
   return true;
 }
 
-bool KeysServer::generate_secret(EntityName& name, CryptoKey& secret)
+bool KeyServer::generate_secret(EntityName& name, CryptoKey& secret)
 {
   if (!generate_secret(secret))
     return false;
@@ -244,14 +244,14 @@ bool KeysServer::generate_secret(EntityName& name, CryptoKey& secret)
   return true;
 }
 
-bool KeysServer::contains(EntityName& name)
+bool KeyServer::contains(EntityName& name)
 {
   Mutex::Locker l(lock);
 
   return data.contains(name);
 }
 
-void KeysServer::list_secrets(stringstream& ss)
+void KeyServer::list_secrets(stringstream& ss)
 {
   Mutex::Locker l(lock);
 
@@ -278,7 +278,7 @@ void KeysServer::list_secrets(stringstream& ss)
   }
 }
 
-bool KeysServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
+bool KeyServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_ver)
 {
   Mutex::Locker l(lock);
 
@@ -295,7 +295,7 @@ bool KeysServer::updated_rotating(bufferlist& rotating_bl, version_t& rotating_v
   return true;
 }
 
-void KeysServer::decode_rotating(bufferlist& rotating_bl)
+void KeyServer::decode_rotating(bufferlist& rotating_bl)
 {
   Mutex::Locker l(lock);
 
@@ -305,7 +305,7 @@ void KeysServer::decode_rotating(bufferlist& rotating_bl)
   ::decode(data.rotating_secrets, iter);
 }
 
-bool KeysServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
+bool KeyServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
 {
   Mutex::Locker l(lock);
 
@@ -326,7 +326,7 @@ bool KeysServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
   return true;
 }
 
-int KeysServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
+int KeyServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
 {
   info.ticket.name = auth_ticket_info.ticket.name;
   info.ticket.addr = auth_ticket_info.ticket.addr;
@@ -346,7 +346,7 @@ int KeysServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketI
   return 0;
 }
 
-int KeysServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
+int KeyServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
 {
   if (get_service_secret(service_id, info.service_secret, info.secret_id) < 0) {
     return -EPERM;
@@ -357,7 +357,7 @@ int KeysServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketIn
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
 
-int KeysServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
+int KeyServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
                                         CryptoKey& service_secret, uint64_t secret_id)
 {
   info.service_secret = service_secret;

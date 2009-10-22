@@ -1,4 +1,4 @@
-#include "auth/KeysServer.h"
+#include "auth/KeyServer.h"
 
 #include "config.h"
 
@@ -8,7 +8,7 @@
 int main(int argc, char *argv[])
 {
 
-  KeysServer server;
+  KeyServer server;
 
   dout(0) << "server created" << dendl;
 

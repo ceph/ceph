@@ -18,7 +18,6 @@
 #include "include/types.h"
 #include "include/encoding.h"
 #include "auth/Auth.h"
-#include "auth/KeysServer.h"
 
 struct AuthLibEntry {
   bool rotating;

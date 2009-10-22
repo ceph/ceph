@@ -297,7 +297,15 @@ struct RotatingSecrets {
 };
 WRITE_CLASS_ENCODER(RotatingSecrets);
 
-class KeysKeeper {
+
+
+/*
+ * Key management
+ */ 
+#define KEY_ROTATE_TIME 20
+#define KEY_ROTATE_NUM 3
+
+class KeyStore {
 public:
   virtual bool get_secret(EntityName& name, CryptoKey& secret) = 0;
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id, CryptoKey& secret) = 0;
@@ -358,7 +366,7 @@ int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
  */
 extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
 					  bufferlist::iterator& indata);
-extern bool verify_authorizer(KeysKeeper& keys, bufferlist::iterator& indata,
+extern bool verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
                        AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
 #endif

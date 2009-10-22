@@ -71,7 +71,7 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
 
       CryptoKey secret;
       dout(0) << "entity_name=" << entity_name.to_str() << dendl;
-      if (!mon->keys_server.get_secret(entity_name, secret)) {
+      if (!mon->key_server.get_secret(entity_name, secret)) {
         dout(0) << "couldn't find entity name: " << entity_name.to_str() << dendl;
 	ret = -EPERM;
 	break;
@@ -139,7 +139,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       SessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (mon->keys_server.get_secret(req.name, principal_secret) < 0) {
+      if (mon->key_server.get_secret(req.name, principal_secret) < 0) {
 	ret = -EPERM;
 	break;
       }
@@ -148,11 +148,11 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       info.ticket.addr = req.addr;
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
 
-      mon->keys_server.generate_secret(session_key);
+      mon->key_server.generate_secret(session_key);
 
       info.session_key = session_key;
       info.service_id = CEPHX_PRINCIPAL_AUTH;
-      if (!mon->keys_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, info.service_secret, info.secret_id)) {
+      if (!mon->key_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, info.service_secret, info.secret_id)) {
         dout(0) << "could not get service secret for auth subsystem" << dendl;
         ret = -EIO;
         break;
@@ -174,7 +174,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
     {
       bufferlist tmp_bl;
       AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(mon->keys_server, indata, auth_ticket_info, tmp_bl)) {
+      if (!verify_authorizer(mon->key_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
 
@@ -189,7 +189,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
         if (ticket_req.keys & service_id) {
           SessionAuthInfo info;
-          int r = mon->keys_server.build_session_auth_info(service_id, auth_ticket_info, info);
+          int r = mon->key_server.build_session_auth_info(service_id, auth_ticket_info, info);
           if (r < 0) {
             ret = r;
             break;

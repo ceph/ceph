@@ -903,7 +903,7 @@ int Monitor::do_authorize(bufferlist::iterator& indata, bufferlist& result_bl)
       AuthServiceTicketInfo auth_ticket_info;
 
       bufferlist tmp_bl;
-      ret = verify_authorizer(keys_server, indata, auth_ticket_info, tmp_bl);
+      ret = verify_authorizer(key_server, indata, auth_ticket_info, tmp_bl);
       result_bl.claim_append(tmp_bl);
     }
     break;
@@ -931,7 +931,7 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool 
   dout(0) << "ms_get_authorizer service_id=" << service_id << dendl;
 
   if (service_id != CEPHX_PRINCIPAL_MON) {
-    ret = keys_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
     if (ret < 0) {
       return false;
     }
@@ -940,16 +940,16 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool 
     name.entity_type = CEPHX_PRINCIPAL_MON;
 
     CryptoKey secret;
-    if (!keys_server.get_secret(name, secret)) {
+    if (!key_server.get_secret(name, secret)) {
       dout(0) << "couldn't get secret for mon service!" << dendl;
       stringstream ss;
-      keys_server.list_secrets(ss);
+      key_server.list_secrets(ss);
       dout(0) << ss.str() << dendl;
       return false;
     }
     /* mon to mon authentication uses the private monitor shared key and not the
        rotating key */
-    ret = keys_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
     if (ret < 0) {
       return false;
     }
@@ -989,7 +989,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   if (!authorizer_data.length())
     return true; /* we're not picky */
 
-  int ret = verify_authorizer(keys_server, iter, auth_ticket_info, authorizer_reply);
+  int ret = verify_authorizer(key_server, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);

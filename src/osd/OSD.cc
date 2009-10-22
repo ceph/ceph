@@ -80,8 +80,6 @@
 
 #include "common/ClassHandler.h"
 
-#include "auth/KeysServer.h"
-
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>

@@ -25,7 +25,7 @@
   key of that service
 */
 
-class KeyRing : public KeysKeeper {
+class KeyRing : public KeyStore {
   CryptoKey master;
   RotatingSecrets rotating_secrets;
   Mutex lock;

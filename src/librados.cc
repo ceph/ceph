@@ -65,7 +65,6 @@ class RadosClient : public Dispatcher
     uint32_t want = peer_id_to_entity_type(dest_type);
     if (monclient.auth.build_authorizer(want, authorizer) < 0)
       return false;
-
     return true;
   }
   void ms_handle_connect(Connection *con);

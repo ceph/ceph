@@ -21,11 +21,7 @@
 #include "common/Timer.h"
 #include "Auth.h"
 
-#define KEY_ROTATE_TIME 20
-#define KEY_ROTATE_NUM 3
-
-
-struct KeysServerData {
+struct KeyServerData {
   version_t version;
   version_t rotating_ver;
   utime_t next_rotating_time;
@@ -36,7 +32,7 @@ struct KeysServerData {
   /* for each service type */
   map<uint32_t, RotatingSecrets> rotating_secrets;
 
-  KeysServerData() : version(0), rotating_ver(0) {}
+  KeyServerData() : version(0), rotating_ver(0) {}
 
   void encode(bufferlist& bl) const {
     ::encode(version, bl);
@@ -82,10 +78,10 @@ struct KeysServerData {
   map<EntityName, EntityAuth>::iterator secrets_end() { return secrets.end(); }
   map<EntityName, EntityAuth>::iterator find_name(EntityName& name) { return secrets.find(name); }
 };
-WRITE_CLASS_ENCODER(KeysServerData);
+WRITE_CLASS_ENCODER(KeyServerData);
 
-class KeysServer : public KeysKeeper {
-  KeysServerData data;
+class KeyServer : public KeyStore {
+  KeyServerData data;
 
   Mutex lock;
 
@@ -94,7 +90,7 @@ class KeysServer : public KeysKeeper {
   bool _check_rotate();
   int _build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
 public:
-  KeysServer();
+  KeyServer();
 
   bool generate_secret(CryptoKey& secret);
 
@@ -148,7 +144,7 @@ public:
     Mutex::Locker l(lock);
     data.add_rotating_secret(service_id, key);
   }
-  void clone_to(KeysServerData& dst) {
+  void clone_to(KeyServerData& dst) {
     Mutex::Locker l(lock);
     dst = data;
   }
@@ -160,7 +156,7 @@ public:
 
   Mutex& get_lock() { return lock; }
 };
-WRITE_CLASS_ENCODER(KeysServer);
+WRITE_CLASS_ENCODER(KeyServer);
 
 
 

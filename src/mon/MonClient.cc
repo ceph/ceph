@@ -32,7 +32,6 @@
 
 #include "auth/Auth.h"
 #include "auth/AuthProtocol.h"
-#include "auth/KeysServer.h"
 #include "auth/KeyRing.h"
 
 #include "config.h"

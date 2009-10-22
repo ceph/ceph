@@ -297,7 +297,7 @@ libcommon_files = \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
 	auth/KeyRing.cc \
-	auth/KeysServer.cc \
+	auth/KeyServer.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
@@ -402,7 +402,7 @@ noinst_HEADERS = \
 	auth/AuthProtocol.h\
 	auth/AuthServiceHandler.h\
 	auth/KeyRing.h\
-	auth/KeysServer.h\
+	auth/KeyServer.h\
 	auth/Crypto.h\
 	auth/ExportControl.h\
 	ceph_ver.h \

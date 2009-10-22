@@ -19,7 +19,6 @@
 
 #include "Crypto.h"
 #include "auth/KeyRing.h"
-#include "auth/KeysServer.h"
 
 using namespace std;
 
