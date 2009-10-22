@@ -926,18 +926,18 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool 
 
   SessionAuthInfo info;
   int ret;
-  uint32_t service_id = peer_id_to_entity_type(dest_type);
+  uint32_t service_id = dest_type;
 
   dout(0) << "ms_get_authorizer service_id=" << service_id << dendl;
 
-  if (service_id != CEPHX_PRINCIPAL_MON) {
+  if (service_id != CEPH_ENTITY_TYPE_MON) {
     ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
     if (ret < 0) {
       return false;
     }
   } else {
     EntityName name;
-    name.entity_type = CEPHX_PRINCIPAL_MON;
+    name.entity_type = CEPH_ENTITY_TYPE_MON;
 
     CryptoKey secret;
     if (!key_server.get_secret(name, secret)) {

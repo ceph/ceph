@@ -180,8 +180,8 @@ public:
 		timer(monc_lock),
 		hunting(false),
 		mounting(0), mount_err(0),
-                auth_handler(&auth, CEPHX_PRINCIPAL_MON, 0),
-                authorize_handler(&auth, CEPHX_PRINCIPAL_MON) { }
+                auth_handler(&auth, CEPH_ENTITY_TYPE_MON, 0),
+                authorize_handler(&auth, CEPH_ENTITY_TYPE_MON) { }
   ~MonClient() {
     timer.cancel_all_events();
   }
@@ -232,7 +232,7 @@ public:
   }
 
   void set_want_keys(uint32_t want) {
-    auth_handler.set_want_keys(want | CEPHX_PRINCIPAL_MON);
+    auth_handler.set_want_keys(want | CEPH_ENTITY_TYPE_MON);
   }
 
   void add_want_keys(uint32_t want) {

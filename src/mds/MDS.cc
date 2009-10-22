@@ -378,7 +378,7 @@ int MDS::init()
   // get monmap
   monc->set_messenger(messenger);
 
-  monc->set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD | CEPHX_PRINCIPAL_MDS);
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
   monc->init();
 
   monc->get_monmap();
@@ -1158,18 +1158,17 @@ bool MDS::ms_dispatch(Message *m)
 bool MDS::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)
 {
   dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
+
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-
-  uint32_t want = peer_id_to_entity_type(dest_type);
 
   if (force_new) {
     if (monc->wait_auth_rotating(10) < 0)
       return false;
   }
 
-  if (monc->auth.build_authorizer(want, authorizer) < 0)
+  if (monc->auth.build_authorizer(dest_type, authorizer) < 0)
     return false;
 
   return true;

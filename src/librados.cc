@@ -62,8 +62,7 @@ class RadosClient : public Dispatcher
 
   bool ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new) {
     dout(0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
-    uint32_t want = peer_id_to_entity_type(dest_type);
-    if (monclient.auth.build_authorizer(want, authorizer) < 0)
+    if (monclient.auth.build_authorizer(dest_type, authorizer) < 0)
       return false;
     return true;
   }
@@ -309,7 +308,7 @@ bool RadosClient::init()
   rank.start(1);
   messenger->add_dispatcher_head(this);
 
-  monclient.set_want_keys(CEPHX_PRINCIPAL_MON | CEPHX_PRINCIPAL_OSD);
+  monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   monclient.init();
 
   if (monclient.get_monmap() < 0)

@@ -51,8 +51,9 @@ struct ceph_entity_name {
 #define CEPH_ENTITY_TYPE_OSD     4
 #define CEPH_ENTITY_TYPE_CLIENT  8
 #define CEPH_ENTITY_TYPE_ADMIN  16
+#define CEPH_ENTITY_TYPE_AUTH   32
 
-const char *ceph_entity_type_name(int type);
+extern const char *ceph_entity_type_name(int type);
 
 /*
  * entity_addr -- network address

@@ -83,14 +83,6 @@ using namespace std;
   the service, using that ticket.
 */
 
-#define CEPHX_PRINCIPAL_AUTH            0x0001
-#define CEPHX_PRINCIPAL_MON             0x0002
-#define CEPHX_PRINCIPAL_OSD             0x0004
-#define CEPHX_PRINCIPAL_MDS             0x0008
-#define CEPHX_PRINCIPAL_CLIENT          0x0010
-
-#define CEPHX_PRINCIPAL_TYPE_MASK       0x00FF
-
 /* authenticate requests */
 #define CEPHX_GET_AUTH_SESSION_KEY      0x0100
 #define CEPHX_GET_PRINCIPAL_SESSION_KEY 0x0200
@@ -101,46 +93,6 @@ using namespace std;
 #define CEPHX_REQUEST_TYPE_MASK         0x0F00
 
 class Monitor;
-
-static inline void get_entity_type_str(uint32_t entity_type,string& s) {
-   switch (entity_type) {
-     case CEPHX_PRINCIPAL_AUTH:
-       s = "auth";
-       break;
-     case CEPHX_PRINCIPAL_MON:
-       s = "mon";
-       break;
-     case CEPHX_PRINCIPAL_OSD:
-       s = "osd";
-       break;
-     case CEPHX_PRINCIPAL_MDS:
-       s = "mds";
-       break;
-     case CEPHX_PRINCIPAL_CLIENT:
-       s = "client";
-       break;
-     default:
-       s = "???";
-       break;
-   }
-}
-
-static inline uint32_t peer_id_to_entity_type(int peer_id)
-{
-  switch (peer_id) {
-  case CEPH_ENTITY_TYPE_MON:
-    return CEPHX_PRINCIPAL_MON;
-  case CEPH_ENTITY_TYPE_MDS:
-    return CEPHX_PRINCIPAL_MDS;
-  case CEPH_ENTITY_TYPE_OSD:
-    return CEPHX_PRINCIPAL_OSD;
-  case CEPH_ENTITY_TYPE_CLIENT:
-    return CEPHX_PRINCIPAL_CLIENT;
-  default:
-    return 0;
-  /* case CEPH_ENTITY_TYPE_ADMIN: */
-  }
-}
 
 struct EntityName {
   uint32_t entity_type;
@@ -156,7 +108,7 @@ struct EntityName {
   }
 
   void to_str(string& str) const {
-    get_entity_type_str(entity_type, str);
+    str.append(ceph_entity_type_name(entity_type));
     str.append(".");
     str.append(name);
   }
@@ -184,15 +136,15 @@ struct EntityName {
 
   void set_type(const char *type) {
     if (strcmp(type, "auth") == 0) {
-      entity_type = CEPHX_PRINCIPAL_AUTH;
+      entity_type = CEPH_ENTITY_TYPE_AUTH;
     } else if (strcmp(type, "mon") == 0) {
-      entity_type = CEPHX_PRINCIPAL_MON;
+      entity_type = CEPH_ENTITY_TYPE_MON;
     } else if (strcmp(type, "osd") == 0) {
-      entity_type = CEPHX_PRINCIPAL_OSD;
+      entity_type = CEPH_ENTITY_TYPE_OSD;
     } else if (strcmp(type, "mds") == 0) {
-      entity_type = CEPHX_PRINCIPAL_MDS;
+      entity_type = CEPH_ENTITY_TYPE_MDS;
     } else {
-      entity_type = CEPHX_PRINCIPAL_CLIENT;
+      entity_type = CEPH_ENTITY_TYPE_CLIENT;
     }
   }
   void from_type_id(const char *type, const char *id) {
@@ -201,7 +153,7 @@ struct EntityName {
   }
 
   void get_type_str(string& s) {
-    get_entity_type_str(entity_type, s);
+    s = ceph_entity_type_name(entity_type);
   }
 };
 WRITE_CLASS_ENCODER(EntityName);

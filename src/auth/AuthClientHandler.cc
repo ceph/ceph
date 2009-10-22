@@ -215,7 +215,7 @@ int AuthClientAuthenticateHandler::_handle_response(int ret, bufferlist::iterato
 int AuthClientAuthenticateHandler::generate_cephx_authenticate_request(bufferlist& bl)
 {
   CephXRequestHeader header;
-  AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+  AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
 
   if (!ticket_handler.has_key()) {
     dout(0) << "auth ticket: doesn't have key" << dendl;
@@ -285,7 +285,7 @@ int AuthClientAuthenticateHandler::handle_cephx_response(bufferlist::iterator& i
     cephx_response_state = 2;
     dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY" << dendl;
     {
-      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPHX_PRINCIPAL_AUTH);
+      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
   
       if (!client->tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
         dout(0) << "could not verify service_ticket reply" << dendl;

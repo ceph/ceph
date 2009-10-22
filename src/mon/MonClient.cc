@@ -517,7 +517,7 @@ int MonClient::wait_authenticate(double timeout)
 
 int MonClient::authorize(double timeout)
 {
-  return auth.authorize(CEPHX_PRINCIPAL_MON, timeout);
+  return auth.authorize(CEPH_ENTITY_TYPE_MON, timeout);
 }
 
 int MonClient::_start_auth_rotating()

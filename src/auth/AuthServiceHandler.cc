@@ -151,8 +151,8 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
       mon->key_server.generate_secret(session_key);
 
       info.session_key = session_key;
-      info.service_id = CEPHX_PRINCIPAL_AUTH;
-      if (!mon->key_server.get_service_secret(CEPHX_PRINCIPAL_AUTH, info.service_secret, info.secret_id)) {
+      info.service_id = CEPH_ENTITY_TYPE_AUTH;
+      if (!mon->key_server.get_service_secret(CEPH_ENTITY_TYPE_AUTH, info.service_secret, info.secret_id)) {
         dout(0) << "could not get service secret for auth subsystem" << dendl;
         ret = -EIO;
         break;
@@ -186,7 +186,7 @@ int CephAuthService_X::handle_cephx_protocol(bufferlist::iterator& indata, buffe
 
       ret = 0;
       vector<SessionAuthInfo> info_vec;
-      for (uint32_t service_id = 1; service_id != (CEPHX_PRINCIPAL_TYPE_MASK + 1); service_id <<= 1) {
+      for (uint32_t service_id = 1; service_id <= ticket_req.keys; service_id <<= 1) {
         if (ticket_req.keys & service_id) {
           SessionAuthInfo info;
           int r = mon->key_server.build_session_auth_info(service_id, auth_ticket_info, info);

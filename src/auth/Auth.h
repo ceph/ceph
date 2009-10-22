@@ -317,8 +317,8 @@ public:
 
 static inline bool auth_principal_needs_rotating_keys(EntityName& name)
 {
-  return ((name.entity_type == CEPHX_PRINCIPAL_OSD) ||
-          (name.entity_type == CEPHX_PRINCIPAL_MDS));
+  return ((name.entity_type == CEPH_ENTITY_TYPE_OSD) ||
+          (name.entity_type == CEPH_ENTITY_TYPE_MDS));
 }
 
 

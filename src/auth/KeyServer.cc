@@ -135,10 +135,10 @@ void KeyServer::_generate_all_rotating_secrets(bool init)
     i = 1;
 
   for (; i <= KEY_ROTATE_NUM; i++) {
-    _rotate_secret(CEPHX_PRINCIPAL_AUTH, i);
-    _rotate_secret(CEPHX_PRINCIPAL_MON, i);
-    _rotate_secret(CEPHX_PRINCIPAL_OSD, i);
-    _rotate_secret(CEPHX_PRINCIPAL_MDS, i);
+    _rotate_secret(CEPH_ENTITY_TYPE_AUTH, i);
+    _rotate_secret(CEPH_ENTITY_TYPE_MON, i);
+    _rotate_secret(CEPH_ENTITY_TYPE_OSD, i);
+    _rotate_secret(CEPH_ENTITY_TYPE_MDS, i);
   }
 
   dout(0) << "generated: " << dendl;
@@ -328,8 +328,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketIn
 
   info.service_id = service_id;
 
-  string s;
-  get_entity_type_str(service_id, s);
+  string s = ceph_entity_type_name(service_id);
 
   if (!data.get_caps(info.ticket.name, s, info.ticket.caps)) {
     return -EINVAL;
