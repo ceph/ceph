@@ -3751,10 +3751,6 @@ void OSD::handle_op(MOSDOp *op)
   else
     pgid = osdmap->raw_pg_to_pg(op->get_pg());
 
-  // get and lock *pg.
-  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
-
-
   logger->set(l_osd_buf, buffer_total_alloc.test());
 
   utime_t now = g_clock.now();
@@ -3762,10 +3758,43 @@ void OSD::handle_op(MOSDOp *op)
   // set up op flags
   init_op_flags(op);
 
+  Session *session = (Session *)op->get_connection()->get_priv();
+  if (!session) {
+    dout(0) << "WARNING: no session for op" << dendl;
+    reply_op_error(op, -EPERM);
+    return;
+  }
+
+  OSDCaps& caps = session->caps;
+  int pool = pgid.pool();
+  int perm = caps.get_pool_cap(pool);
+
+  dout(0) << "request for pool=" << pool << " perm=" << perm << " may_read=" << op->may_read() << " may_write=" << op->may_write() << dendl;
+
+  if (op->may_read()) {
+    if (!(perm & OSD_POOL_CAP_R)) {
+      dout(0) << "no READ permission to access pool " << pool << dendl;
+      reply_op_error(op, -EPERM);
+      return;
+    }
+  }
+
+  if (op->may_write()) {
+    if (!(perm & OSD_POOL_CAP_W)) {
+      dout(0) << "no WRITE permission to access pool " << pool << dendl;
+      reply_op_error(op, -EPERM);
+      return;
+    }
+  }
+
+  // get and lock *pg.
+  PG *pg = _have_pg(pgid) ? _lookup_lock_pg(pgid):0;
+
   // update qlen stats
   stat_oprate.hit(now);
   stat_ops++;
   stat_qlen += pending_ops;
+
   if (!op->may_write()) {
     stat_rd_ops++;
     if (op->get_source().is_osd()) {

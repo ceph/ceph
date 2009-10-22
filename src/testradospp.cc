@@ -48,14 +48,22 @@ int main(int argc, const char **argv)
   object_t oid("bar");
 
   rados_pool_t pool;
+
   int r = rados.open_pool("data", &pool);
   cout << "open pool result = " << r << " pool = " << pool << std::endl;
 
-  rados.write(pool, oid, 0, bl, bl.length());
-  rados.write(pool, oid, 0, bl, bl.length() - 1);
-  rados.write(pool, oid, 0, bl, bl.length() - 2);
-  rados.write(pool, oid, 0, bl, bl.length() - 3);
-  rados.write(pool, oid, 0, bl, bl.length() - 4);
+  r = rados.write(pool, oid, 0, bl, bl.length());
+  cout << "rados.write returned " << r << std::endl;
+  r = rados.write(pool, oid, 0, bl, bl.length() - 1);
+  cout << "rados.write returned " << r << std::endl;
+  r = rados.write(pool, oid, 0, bl, bl.length() - 2);
+  cout << "rados.write returned " << r << std::endl;
+  r = rados.write(pool, oid, 0, bl, bl.length() - 3);
+  cout << "rados.write returned " << r << std::endl;
+  r = rados.write(pool, oid, 0, bl, bl.length() - 4);
+  cout << "rados.write returned " << r << std::endl;
+  r = rados.read(pool, oid, 0, bl, bl.length() - 4);
+  cout << "rados.read returned " << r << std::endl;
   r = rados.exec(pool, oid, "crypto", "md5", bl, bl2);
   cout << "exec returned " << r <<  " buf size=" << bl2.length() << std::endl;
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
