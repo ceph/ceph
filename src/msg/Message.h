@@ -36,8 +36,6 @@
 #define MSG_GETPOOLSTATS           58
 #define MSG_GETPOOLSTATSREPLY      59
 
-#define MSG_AUTHMON                60
-#define MSG_AUTHMON_ACK            61
 #define MSG_AUTH_ROTATING          62
 
 #define MSG_POOLOP                 49

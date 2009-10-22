@@ -546,7 +546,6 @@ bool Monitor::ms_dispatch(Message *m)
       // auth
     case CEPH_MSG_AUTH:
     case MSG_AUTH_ROTATING:
-    case MSG_AUTHMON:
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 

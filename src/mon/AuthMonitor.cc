@@ -20,8 +20,6 @@
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
-#include "messages/MAuthMon.h"
-#include "messages/MAuthMonAck.h"
 #include "messages/MAuthRotating.h"
 
 #include "common/Timer.h"
@@ -230,9 +228,6 @@ bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
   case MSG_AUTH_ROTATING:
     return preprocess_auth_rotating((MAuthRotating *)m);
 
-  case MSG_AUTHMON:
-    return preprocess_auth_mon((MAuthMon*)m);
-
   default:
     assert(0);
     delete m;
@@ -246,8 +241,6 @@ bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
     return prepare_command((MMonCommand*)m);
-  case MSG_AUTHMON:
-    return prepare_auth_mon((MAuthMon*)m);
   default:
     assert(0);
     delete m;
@@ -331,58 +324,6 @@ bool AuthMonitor::preprocess_auth_rotating(MAuthRotating *m)
   mon->messenger->send_message(reply, m->get_orig_source_inst());
   delete m;
   return true;
-}
-
-
-// auth mon
-
-bool AuthMonitor::preprocess_auth_mon(MAuthMon *m)
-{
-  dout(10) << "preprocess_auth_mon " << *m << " from " << m->get_orig_source() << dendl;
-  
-  int num_new = 0;
-  for (deque<pair<EntityName,EntityAuth> >::iterator p = m->info.begin();
-       p != m->info.end();
-       p++)
-    if (!mon->key_server.contains(p->first))
-      num_new++;
-  if (!num_new) {
-    dout(10) << "  nothing new" << dendl;
-    return true;
-  }
-  return false;
-}
-
-bool AuthMonitor::prepare_auth_mon(MAuthMon *m) 
-{
-  dout(10) << "prepare_auth " << *m << " from " << m->get_orig_source() << dendl;
-
-  if (ceph_fsid_compare(&m->fsid, &mon->monmap->fsid)) {
-    dout(0) << "handle_auth on fsid " << m->fsid << " != " << mon->monmap->fsid << dendl;
-    delete m;
-    return false;
-  }
-  for (deque<pair<EntityName,EntityAuth> >::iterator p = m->info.begin();
-       p != m->info.end(); p++) {
-    dout(10) << " writing auth " << *p << dendl;
-    
-    KeyServerData::Incremental inc;
-    inc.name = p->first;
-    inc.auth = p->second;
-    assert(m->action == AUTH_SET);
-    inc.op = KeyServerData::AUTH_INC_ADD;
-    pending_auth.push_back(inc);
-  }
-
-  paxos->wait_for_commit(new C_Auth(this, m, m->get_orig_source_inst()));
-  return true;
-}
-
-void AuthMonitor::_updated_auth(MAuthMon *m, entity_inst_t who)
-{
-  dout(7) << "_updated_auth for " << who << dendl;
-  mon->messenger->send_message(new MAuthMonAck(m->fsid, m->last), who);
-  delete m;
 }
 
 void AuthMonitor::auth_usage(stringstream& ss)

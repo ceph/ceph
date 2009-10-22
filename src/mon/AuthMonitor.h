@@ -52,20 +52,6 @@ class AuthMonitor : public PaxosService {
 
   bool preprocess_auth_rotating(MAuthRotating *m);
 
-  bool preprocess_auth_mon(MAuthMon *m);
-  bool prepare_auth_mon(MAuthMon *m);
-  void _updated_auth(MAuthMon *m, entity_inst_t who);
-
-  struct C_Auth : public Context {
-    AuthMonitor *authmon;
-    MAuthMon *ack;
-    entity_inst_t who;
-    C_Auth(AuthMonitor *p, MAuthMon *a, entity_inst_t w) : authmon(p), ack(a), who(w) {}
-    void finish(int r) {
-      authmon->_updated_auth(ack, who);
-    }    
-  };
-
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
