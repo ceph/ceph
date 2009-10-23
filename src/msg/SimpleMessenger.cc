@@ -964,7 +964,7 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
 
-  rank->get_authorizer(peer_type, false);
+  authorizer = rank->get_authorizer(peer_type, false);
 
   while (1) {
     ceph_msg_connect connect;
@@ -975,7 +975,8 @@ int SimpleMessenger::Pipe::connect()
     connect.authorizer_protocol = authorizer ? authorizer->protocol : 0;
     connect.authorizer_len = authorizer ? authorizer->bl.length() : 0;
     if (authorizer) 
-      dout(10) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
+      dout(10) << "connect.authorizer_len=" << connect.authorizer_len
+	       << " protocol=" << connect.authorizer_protocol << dendl;
     connect.flags = 0;
     if (policy.lossy)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;  // this is fyi, actually, server decides!
