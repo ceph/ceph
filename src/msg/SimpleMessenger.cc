@@ -867,7 +867,6 @@ int SimpleMessenger::Pipe::connect()
   entity_addr_t paddr;
   entity_addr_t peer_addr_for_me, socket_addr;
   AuthAuthorizer *authorizer = NULL;
-  bufferlist authorizer_reply;
 
   // create socket?
   sd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -964,9 +963,12 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
 
-  authorizer = rank->get_authorizer(peer_type, false);
 
   while (1) {
+    delete authorizer;
+    authorizer = rank->get_authorizer(peer_type, false);
+    bufferlist authorizer_reply;
+
     ceph_msg_connect connect;
     connect.host_type = rank->my_type;
     connect.global_seq = gseq;
@@ -1020,20 +1022,19 @@ int SimpleMessenger::Pipe::connect()
       bufferptr bp = buffer::create(reply.authorizer_len);
       if (tcp_read(sd, bp.c_str(), reply.authorizer_len) < 0) {
         dout(10) << "connect couldn't read connect authorizer_reply" << dendl;
-        goto fail;
+	goto fail;
       }
       authorizer_reply.push_back(bp);
     }
 
-    if (authorizer && authorizer->bl.length()) {
+    if (authorizer) {
       bufferlist::iterator iter = authorizer_reply.begin();
-      dout(10) << "verifying authorize reply, len=" << authorizer_reply.length() << dendl;
-      if (!authorizer->verify_reply(iter)) {
+      if (authorizer_reply.length() == 0 ||
+	  !authorizer->verify_reply(iter)) {
         dout(0) << "failed verifying authorize reply" << dendl;
-        goto fail;
+	goto fail;
       }
     }
-    delete authorizer;
 
     lock.Lock();
     if (state != STATE_CONNECTING) {
@@ -1120,6 +1121,7 @@ int SimpleMessenger::Pipe::connect()
     dout(3) << "connect fault, but state != connecting, stopping" << dendl;
 
  stop_locked:
+  delete authorizer;
   return -1;
 }
 
