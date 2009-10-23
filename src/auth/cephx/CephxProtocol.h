@@ -87,6 +87,10 @@
 #include "../Auth.h"
 
 
+/*
+ * Authentication
+ */
+
 // initial server -> client challenge
 struct CephXServerChallenge {
   __u64 server_challenge;
@@ -101,7 +105,7 @@ struct CephXServerChallenge {
 WRITE_CLASS_ENCODER(CephXServerChallenge);
 
 
-// request/reply headers
+// request/reply headers, for subsequent exchanges.
 
 struct CephXRequestHeader {
   __u16 request_type;
@@ -130,7 +134,7 @@ struct CephXResponseHeader {
 };
 WRITE_CLASS_ENCODER(CephXResponseHeader);
 
-
+// client -> server response to challenge
 struct CephXAuthenticate {
   EntityName name;
   __u64 client_challenge;
@@ -144,15 +148,14 @@ struct CephXAuthenticate {
   void decode(bufferlist::iterator& bl) {
     ::decode(name, bl);
     ::decode(client_challenge, bl);
-     ::decode(key, bl);
+    ::decode(key, bl);
  }
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)
 
 
-
 /*
- * Authentication
+ * getting service tickets
  */
 extern bool cephx_build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
 
@@ -176,15 +179,16 @@ struct CephXServiceTicketRequest {
 WRITE_CLASS_ENCODER(CephXServiceTicketRequest);
 
 
+/*
+ * Authorize
+ */
+
 struct CephXAuthorizeReply {
-  // uint32_t trans_id;
   utime_t timestamp;
   void encode(bufferlist& bl) const {
-    // ::encode(trans_id, bl);
     ::encode(timestamp, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    // ::decode(trans_id, bl);
     ::decode(timestamp, bl);
   }
 };
@@ -202,7 +206,7 @@ struct CephXAuthorizer : public AuthAuthorizer {
 };
 
 /*
- * CephXTicketHandler
+ * TicketHandler
  */
 struct CephXTicketHandler {
   uint32_t service_id;
@@ -271,14 +275,11 @@ struct CephXServiceTicketInfo {
 WRITE_CLASS_ENCODER(CephXServiceTicketInfo);
 
 struct CephXAuthorize {
-  // uint32_t trans_id;
   utime_t now;
   void encode(bufferlist& bl) const {
-    // ::encode(trans_id, bl);
     ::encode(now, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    // ::decode(trans_id, bl);
     ::decode(now, bl);
   }
 };

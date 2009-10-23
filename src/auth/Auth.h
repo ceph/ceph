@@ -184,7 +184,9 @@ struct SessionAuthInfo {
 };
 
 
-
+/*
+ * abstract authorizer class
+ */
 struct AuthAuthorizer {
   __u32 protocol;
   bufferlist bl;
