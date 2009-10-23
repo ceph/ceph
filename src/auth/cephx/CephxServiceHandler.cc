@@ -88,7 +88,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
 
       CryptoKey session_key;
-      SessionAuthInfo info;
+      CephXSessionAuthInfo info;
 
       CryptoKey principal_secret;
       if (key_server->get_secret(req.name, principal_secret) < 0) {
@@ -109,7 +109,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
         break;
       }
 
-      vector<SessionAuthInfo> info_vec;
+      vector<CephXSessionAuthInfo> info_vec;
       info_vec.push_back(info);
 
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
@@ -135,11 +135,11 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       dout(0) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
-      vector<SessionAuthInfo> info_vec;
+      vector<CephXSessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id <= ticket_req.keys; service_id <<= 1) {
         if (ticket_req.keys & service_id) {
 	  dout(0) << " adding key for service " << service_id << dendl;
-          SessionAuthInfo info;
+          CephXSessionAuthInfo info;
           int r = key_server->build_session_auth_info(service_id, auth_ticket_info, info);
           if (r < 0) {
             ret = r;

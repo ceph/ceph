@@ -175,14 +175,6 @@ struct AuthBlob {
 };
 WRITE_CLASS_ENCODER(AuthBlob);
 
-struct SessionAuthInfo {
-  uint32_t service_id;
-  uint64_t secret_id;
-  AuthTicket ticket;
-  CryptoKey session_key;
-  CryptoKey service_secret;
-};
-
 
 /*
  * abstract authorizer class

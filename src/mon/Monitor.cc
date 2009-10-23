@@ -855,7 +855,7 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool
 {
   CephXServiceTicketInfo auth_ticket_info;
 
-  SessionAuthInfo info;
+  CephXSessionAuthInfo info;
   int ret;
   uint32_t service_id = dest_type;
 

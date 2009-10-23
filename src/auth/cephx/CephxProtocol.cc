@@ -11,7 +11,7 @@
  * Authentication
  */
 
-bool cephx_build_service_ticket(SessionAuthInfo& info, bufferlist& reply)
+bool cephx_build_service_ticket(CephXSessionAuthInfo& info, bufferlist& reply)
 {
   CephXServiceTicketInfo ticket_info;
   ticket_info.session_key = info.session_key;
@@ -37,17 +37,17 @@ bool cephx_build_service_ticket(SessionAuthInfo& info, bufferlist& reply)
  */
 bool cephx_build_service_ticket_reply(
                      CryptoKey& principal_secret,
-                     vector<SessionAuthInfo> ticket_info_vec,
+                     vector<CephXSessionAuthInfo> ticket_info_vec,
                      bufferlist& reply)
 {
-  vector<SessionAuthInfo>::iterator ticket_iter = ticket_info_vec.begin(); 
+  vector<CephXSessionAuthInfo>::iterator ticket_iter = ticket_info_vec.begin(); 
 
   uint32_t num = ticket_info_vec.size();
   ::encode(num, reply);
   dout(0) << "encoding " << num << " tickets with secret " << principal_secret << dendl;
 
   while (ticket_iter != ticket_info_vec.end()) {
-    SessionAuthInfo& info = *ticket_iter;
+    CephXSessionAuthInfo& info = *ticket_iter;
 
     ::encode(info.service_id, reply);
 

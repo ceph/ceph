@@ -157,14 +157,23 @@ WRITE_CLASS_ENCODER(CephXAuthenticate)
 /*
  * getting service tickets
  */
-extern bool cephx_build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
+struct CephXSessionAuthInfo {
+  uint32_t service_id;
+  uint64_t secret_id;
+  AuthTicket ticket;
+  CryptoKey session_key;
+  CryptoKey service_secret;
+};
+
+
+extern bool cephx_build_service_ticket(CephXSessionAuthInfo& ticket_info, bufferlist& reply);
 
 extern void cephx_build_service_ticket_request(uint32_t keys,
 					 bufferlist& request);
 
 extern bool cephx_build_service_ticket_reply(CryptoKey& principal_secret,
-				       vector<SessionAuthInfo> ticket_info,
-				       bufferlist& reply);
+					     vector<CephXSessionAuthInfo> ticket_info,
+					     bufferlist& reply);
 
 struct CephXServiceTicketRequest {
   uint32_t keys;
