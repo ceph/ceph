@@ -85,6 +85,9 @@ int CephxClientHandler::build_request(bufferlist& bl)
 int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 {
   dout(0) << "cephx handle_response ret = " << ret << " state " << state << dendl;
+  
+  if (ret < 0)
+    return ret; // hrm!
 
   if (state == STATE_START) {
     CephXServerChallenge ch;
@@ -150,4 +153,17 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   return ret;
 }
 
+
+
+AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
+{
+  dout(0) << "going to build authorizer for peer_id=" << service_id << " service_id=" << service_id << dendl;
+  
+  AuthAuthorizer *a = new AuthAuthorizer;
+  if (!tickets.build_authorizer(service_id, authorizer))
+    return 0;
+
+  dout(0) << "authorizer built successfully" << dendl;
+  return a;
+}
 

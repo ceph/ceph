@@ -65,7 +65,7 @@ public:
 
   virtual void tick() = 0;
 
-  bool build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
+  virtual AuthAuthorizer *build_authorizer(uint32_t service_id) = 0;
 };
 
 

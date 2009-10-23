@@ -1502,16 +1502,20 @@ bool OSD::ms_dispatch(Message *m)
   return true;
 }
 
-bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)
+bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
   dout(0) << "OSD::ms_get_authorizer type=" << dest_type << dendl;
+
+  if (dest_type == CEPH_ENTITY_TYPE_MON)
+    return true;
 
   if (force_new) {
     if (monc->wait_auth_rotating(10) < 0)
       return false;
   }
 
-  return monc->auth->build_authorizer(dest_type, authorizer);
+  *authorizer = monc->auth->build_authorizer(dest_type);
+  return *authorizer != NULL;
 }
 
 bool OSD::ms_verify_authorizer(Connection *con, int peer_type,

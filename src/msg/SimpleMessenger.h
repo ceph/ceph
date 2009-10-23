@@ -433,7 +433,7 @@ public:
     return ++global_seq;
   }
 
-  bool get_authorizer(int peer_type, AuthAuthorizer& bl, bool force_new);
+  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
   bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
 			 bool& isvalid);
 

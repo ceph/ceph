@@ -866,7 +866,7 @@ int SimpleMessenger::Pipe::connect()
   char banner[strlen(CEPH_BANNER)];
   entity_addr_t paddr;
   entity_addr_t peer_addr_for_me, socket_addr;
-  AuthAuthorizer authorizer;
+  AuthAuthorizer *authorizer = NULL;
   bufferlist authorizer_reply;
 
   // create socket?
@@ -964,7 +964,7 @@ int SimpleMessenger::Pipe::connect()
   }
   dout(10) << "connect sent my addr " << rank->rank_addr << dendl;
 
-  rank->get_authorizer(peer_type, authorizer, false);
+  rank->get_authorizer(peer_type, false);
 
   while (1) {
     ceph_msg_connect connect;
@@ -972,8 +972,10 @@ int SimpleMessenger::Pipe::connect()
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.protocol_version = get_proto_version(rank->my_type, peer_type, true);
-    connect.authorizer_len = authorizer.bl.length();
-    dout(10) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
+    connect.authorizer_protocol = authorizer ? authorizer->protocol : 0;
+    connect.authorizer_len = authorizer ? authorizer->bl.length() : 0;
+    if (authorizer) 
+      dout(10) << "connect.authorizer_len=" << connect.authorizer_len << dendl;
     connect.flags = 0;
     if (policy.lossy)
       connect.flags |= CEPH_MSG_CONNECT_LOSSY;  // this is fyi, actually, server decides!
@@ -983,9 +985,9 @@ int SimpleMessenger::Pipe::connect()
     msg.msg_iov = msgvec;
     msg.msg_iovlen = 1;
     msglen = msgvec[0].iov_len;
-    if (authorizer.bl.length()) {
-      msgvec[1].iov_base = authorizer.bl.c_str();
-      msgvec[1].iov_len = authorizer.bl.length();
+    if (authorizer) {
+      msgvec[1].iov_base = authorizer->bl.c_str();
+      msgvec[1].iov_len = authorizer->bl.length();
       msg.msg_iovlen++;
       msglen += msgvec[1].iov_len;
     }
@@ -1022,14 +1024,15 @@ int SimpleMessenger::Pipe::connect()
       authorizer_reply.push_back(bp);
     }
 
-    if (authorizer.bl.length()) {
+    if (authorizer && authorizer->bl.length()) {
       bufferlist::iterator iter = authorizer_reply.begin();
       dout(10) << "verifying authorize reply, len=" << authorizer_reply.length() << dendl;
-      if (!authorizer.verify_reply(iter)) {
+      if (!authorizer->verify_reply(iter)) {
         dout(0) << "failed verifying authorize reply" << dendl;
         goto fail;
       }
     }
+    delete authorizer;
 
     lock.Lock();
     if (state != STATE_CONNECTING) {
@@ -1048,9 +1051,8 @@ int SimpleMessenger::Pipe::connect()
       if (got_bad_auth)
         goto stop_locked;
       got_bad_auth = true;
-      authorizer.clear();
       lock.Unlock();
-      rank->get_authorizer(peer_type, authorizer, true);  // try harder
+      authorizer = rank->get_authorizer(peer_type, true);  // try harder
       continue;
     }
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
@@ -2152,14 +2154,17 @@ SimpleMessenger::Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr, 
 
 
 
-bool SimpleMessenger::get_authorizer(int peer_type, AuthAuthorizer& authorizer, bool force_new)
+AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
 {
+  AuthAuthorizer *a;
   for (unsigned r = 0; r < max_local; r++) {
     if (!local[r])
       continue;
-    return local[r]->ms_deliver_get_authorizer(peer_type, authorizer, force_new);
+    a = local[r]->ms_deliver_get_authorizer(peer_type, force_new);
+    if (a)
+      return a;
   }
-  return false;
+  return 0;
 }
 
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,

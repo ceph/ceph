@@ -124,13 +124,14 @@ protected:
       (*p)->ms_handle_remote_reset(con);
   }
 
-  bool ms_deliver_get_authorizer(int peer_type, AuthAuthorizer& authorizer, bool force_new) {
+  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
+    AuthAuthorizer *a;
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      if ((*p)->ms_get_authorizer(peer_type, authorizer, force_new))
-	return true;
-    return false;
+      if ((*p)->ms_get_authorizer(peer_type, &a, force_new))
+	return a;
+    return NULL;
   }
   bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,

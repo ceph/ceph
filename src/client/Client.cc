@@ -5954,9 +5954,9 @@ void Client::ms_handle_remote_reset(Connection *con)
   objecter->ms_handle_remote_reset(con);
 }
 
-bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)
+bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-  return monclient->auth->build_authorizer(dest_type, authorizer);
+  return monclient->auth->build_authorizer(dest_type);
 }

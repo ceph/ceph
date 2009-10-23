@@ -228,6 +228,7 @@ struct AuthAuthorizer {
   CryptoKey session_key;
   utime_t timestamp;
 
+  __u32 protocol;
   bufferlist bl;
 
   bool build_authorizer();
