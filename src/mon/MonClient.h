@@ -173,6 +173,8 @@ public:
 		monc_lock("MonClient::monc_lock"),
 		timer(monc_lock),
 		hunting(false),
+		want_monmap(false),
+		want_keys(0),
 		mounting(0), mount_err(0),
 		auth(NULL) { }
   ~MonClient() {
