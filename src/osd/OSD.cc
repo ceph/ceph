@@ -1514,7 +1514,11 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
       return false;
   }
 
+  if (dest_type == CEPH_ENTITY_TYPE_MON)
+    return false;
+
   *authorizer = monc->auth->build_authorizer(dest_type);
+
   return *authorizer != NULL;
 }
 
@@ -1525,10 +1529,14 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
   AuthServiceTicketInfo auth_ticket_info;
   bufferlist::iterator iter = authorizer_data.begin();
 
-  if (protocol != CEPH_AUTH_CEPHX)
+  if (protocol != CEPH_AUTH_CEPHX) {
+    dout(0) << "verify authorizer, wrong protocol: " << protocol << dendl;
     return false;
-  if (!authorizer_data.length())
+  }
+  if (!authorizer_data.length()) {
+    dout(0) << "verify authorizer, authorizer_data.length()=0" << dendl;
     return false;
+  }
 
   int ret = verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
