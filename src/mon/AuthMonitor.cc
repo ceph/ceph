@@ -280,7 +280,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
       }
       
       if (!ret) {
-	s->auth_handler = get_auth_handler(mon, supported);
+	s->auth_handler = get_auth_service_handler(&mon->key_server, supported);
 	if (!s->auth_handler)
 	  ret = -EPERM;
 	else {

@@ -333,6 +333,7 @@ libcrush_a_SOURCES = \
 	crush/crush.c
 
 libmon_a_SOURCES = \
+	auth/cephx/CephxServiceHandler.cc \
 	auth/AuthServiceHandler.cc \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
@@ -401,6 +402,7 @@ libclient_a_SOURCES = \
 noinst_HEADERS = \
 	auth/cephx/CephxProtocol.h\
 	auth/cephx/CephxClientHandler.h\
+	auth/cephx/CephxServiceHandler.h\
 	auth/Auth.h\
 	auth/AuthServiceHandler.h\
 	auth/KeyRing.h\

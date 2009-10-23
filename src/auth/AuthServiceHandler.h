@@ -18,20 +18,15 @@
 #include "include/types.h"
 #include "config.h"
 
-class Monitor;
+class KeyServer;
 
-class AuthServiceHandler {
-protected:
-  Monitor *mon;
-
-public:
-  AuthServiceHandler(Monitor *m) : mon(m) { }
+struct AuthServiceHandler {
   virtual ~AuthServiceHandler() { }
 
   virtual int start_session(bufferlist& result) = 0;
   virtual int handle_request(bufferlist::iterator& indata, bufferlist& result) = 0;
 };
 
-extern AuthServiceHandler *get_auth_handler(Monitor *mon, set<__u32>& supported);
+extern AuthServiceHandler *get_auth_service_handler(KeyServer *ks, set<__u32>& supported);
 
 #endif
