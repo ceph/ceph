@@ -851,9 +851,9 @@ void Monitor::handle_class(MClass *m)
   }
 }
 
-bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  AuthServiceTicketInfo auth_ticket_info;
+  CephXServiceTicketInfo auth_ticket_info;
 
   SessionAuthInfo info;
   int ret;
@@ -889,19 +889,19 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool 
   }
 
   bufferlist ticket_data;
-  ret = build_service_ticket(info, ticket_data);
+  ret = cephx_build_service_ticket(info, ticket_data);
   if (ret < 0)
     return false;
 
   dout(0) << "built service ticket" << dendl;
   bufferlist::iterator iter = ticket_data.begin();
-  AuthTicketHandler handler;
+  CephXTicketHandler handler;
   ::decode(handler.ticket, iter);
 
   handler.service_id = service_id;
   handler.session_key = info.session_key;
 
-  handler.build_authorizer(authorizer);
+  *authorizer = handler.build_authorizer();
   
   return true;
 }
@@ -916,7 +916,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     return false;
 
   bufferlist::iterator iter = authorizer_data.begin();
-  AuthServiceTicketInfo auth_ticket_info;
+  CephXServiceTicketInfo auth_ticket_info;
 
 
   isvalid = true;
@@ -924,7 +924,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
   if (!authorizer_data.length())
     return true; /* we're not picky */
 
-  int ret = verify_authorizer(key_server, iter, auth_ticket_info, authorizer_reply);
+  int ret = cephx_verify_authorizer(key_server, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "Monitor::verify_authorizer returns " << ret << dendl;
 
   isvalid = (ret >= 0);

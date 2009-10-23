@@ -24,7 +24,7 @@ using namespace std;
 #include "PaxosService.h"
 #include "mon/Monitor.h"
 
-#include "auth/KeyServer.h"
+#include "auth/cephx/CephxKeyServer.h"
 
 class MMonCommand;
 class MAuth;

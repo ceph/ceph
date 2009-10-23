@@ -113,7 +113,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info_vec.push_back(info);
 
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      if (!build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
+      if (!cephx_build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
         ret = -EIO;
         break;
       }
@@ -125,16 +125,13 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
 
       bufferlist tmp_bl;
-      AuthServiceTicketInfo auth_ticket_info;
-      if (!verify_authorizer(*key_server, indata, auth_ticket_info, tmp_bl)) {
+      CephXServiceTicketInfo auth_ticket_info;
+      if (!cephx_verify_authorizer(*key_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
       }
 
-      AuthServiceTicketRequest ticket_req;
-      if (!verify_service_ticket_request(ticket_req, indata)) {
-        ret = -EPERM;
-        break;
-      }
+      CephXServiceTicketRequest ticket_req;
+      ::decode(ticket_req, indata);
       dout(0) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
@@ -152,7 +149,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
         }
       }
       build_cephx_response_header(cephx_header.request_type, ret, result_bl);
-      build_service_ticket_reply(auth_ticket_info.session_key, info_vec, result_bl);
+      cephx_build_service_ticket_reply(auth_ticket_info.session_key, info_vec, result_bl);
     }
     break;
 

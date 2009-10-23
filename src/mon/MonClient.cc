@@ -584,20 +584,9 @@ void MonClient::handle_auth_rotating_response(MAuthRotating *m)
 {
   Mutex::Locker l(monc_lock);
 
+  if (auth)
+    auth->handle_rotating_response(m->status, m->response_bl);
+
   auth_cond.SignalAll();
-
-  dout(0) << "MonClient::handle_auth_rotating_response got_response status=" << m->status << " length=" << m->response_bl.length() << dendl;
-
-  if (!m->status) {
-    RotatingSecrets secrets;
-    CryptoKey secret_key;
-    g_keyring.get_master(secret_key);
-    bufferlist::iterator iter = m->response_bl.begin();
-    if (decode_decrypt(secrets, secret_key, iter) == 0) {
-      g_keyring.set_rotating(secrets);
-    } else {
-      derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
-    }
-  }
 }
 

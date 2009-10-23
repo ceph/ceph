@@ -80,6 +80,8 @@
 
 #include "common/ClassHandler.h"
 
+#include "auth/cephx/CephxProtocol.h"
+
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
@@ -1526,7 +1528,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid)
 {
-  AuthServiceTicketInfo auth_ticket_info;
+  CephXServiceTicketInfo auth_ticket_info;
   bufferlist::iterator iter = authorizer_data.begin();
 
   if (protocol != CEPH_AUTH_CEPHX) {
@@ -1538,7 +1540,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     return false;
   }
 
-  int ret = verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
+  int ret = cephx_verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
 
   Mutex::Locker l(session_lock);

@@ -182,7 +182,7 @@ testcrypto_LDADD = libcommon.a -lcrypto
 bin_PROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libcommon.a -lcrypto
+testkeys_LDADD = libmon.a libcommon.a -lcrypto
 bin_PROGRAMS += testkeys
 ## object classes
 
@@ -292,13 +292,12 @@ libcommon_a_SOURCES = \
 
 # this list ommits the ceph_ver.c file
 libcommon_files = \
-	auth/Auth.cc \
 	auth/AuthClientHandler.cc \
 	auth/cephx/CephxClientHandler.cc \
+	auth/cephx/CephxProtocol.cc \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
 	auth/KeyRing.cc \
-	auth/KeyServer.cc \
 	common/LogClient.cc \
 	msg/Message.cc \
 	common/Logger.cc \
@@ -333,6 +332,7 @@ libcrush_a_SOURCES = \
 	crush/crush.c
 
 libmon_a_SOURCES = \
+	auth/cephx/CephxKeyServer.cc \
 	auth/cephx/CephxServiceHandler.cc \
 	auth/AuthServiceHandler.cc \
 	mon/Monitor.cc \
@@ -400,13 +400,13 @@ libclient_a_SOURCES = \
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
+	auth/cephx/CephxKeyServer.h\
 	auth/cephx/CephxProtocol.h\
 	auth/cephx/CephxClientHandler.h\
 	auth/cephx/CephxServiceHandler.h\
 	auth/Auth.h\
 	auth/AuthServiceHandler.h\
 	auth/KeyRing.h\
-	auth/KeyServer.h\
 	auth/Crypto.h\
 	auth/ExportControl.h\
 	ceph_ver.h \

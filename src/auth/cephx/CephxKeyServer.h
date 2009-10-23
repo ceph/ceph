@@ -17,9 +17,9 @@
 
 #include "config.h"
 
-#include "Crypto.h"
+#include "CephxProtocol.h"
+
 #include "common/Timer.h"
-#include "Auth.h"
 
 struct KeyServerData {
   version_t version;
@@ -160,7 +160,7 @@ class KeyServer : public KeyStore {
   void _rotate_secret(uint32_t service_id, int factor);
   void _generate_all_rotating_secrets(bool init);
   bool _check_rotate();
-  int _build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
+  int _build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
 public:
   KeyServer();
 
@@ -172,8 +172,8 @@ public:
   int start_server(bool init);
   void rotate_timeout(double timeout);
 
-  int build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
-  int build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
+  int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info);
+  int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
                                         CryptoKey& service_secret, uint64_t secret_id);
 
   /* get current secret for specific service type */

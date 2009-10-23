@@ -28,13 +28,9 @@ class AuthClientHandler;
 
 class AuthClientHandler {
 protected:
-  AuthAuthorizer authorizer;
-
   EntityName name;
   uint32_t want;
   uint32_t have;
-
-  AuthTicketManager tickets;
 
 public:
   AuthClientHandler() : want(0), have(0) {}
@@ -62,6 +58,7 @@ public:
   virtual void reset() = 0;
   virtual int build_request(bufferlist& bl) = 0;
   virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
+  virtual int handle_rotating_response(int ret, bufferlist& bl) = 0;
 
   virtual void tick() = 0;
 

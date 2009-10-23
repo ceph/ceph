@@ -64,12 +64,15 @@ int CephxClientHandler::build_request(bufferlist& bl)
       header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
       ::encode(header, bl);
 
-      AuthTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
-      if (!ticket_handler.build_authorizer(authorizer))
+      CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+      authorizer = ticket_handler.build_authorizer();
+      if (!authorizer)
 	return -EINVAL;
-      bl.claim_append(authorizer.bl);
+      bl.claim_append(authorizer->bl);
 
-      build_service_ticket_request(want, bl);
+      CephXServiceTicketRequest req;
+      req.keys = want;
+      ::encode(req, bl);
     }
     break;
 
@@ -128,7 +131,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
   case STATE_GETTING_SESSION_KEYS:
     {
-      AuthTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+      CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
       dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY session_key " << ticket_handler.session_key << dendl;
   
       if (!tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
@@ -158,12 +161,25 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 {
   dout(0) << "going to build authorizer for peer_id=" << service_id << " service_id=" << service_id << dendl;
-  
-  AuthAuthorizer *a = new AuthAuthorizer;
-  if (!tickets.build_authorizer(service_id, authorizer))
-    return 0;
-
-  dout(0) << "authorizer built successfully" << dendl;
-  return a;
+  return tickets.build_authorizer(service_id);
 }
 
+
+
+int CephxClientHandler::handle_rotating_response(int ret, bufferlist& bl)
+{
+  dout(0) << "handle_rotating_response " << ret << " length=" << bl.length() << dendl;
+
+  if (!ret) {
+    RotatingSecrets secrets;
+    CryptoKey secret_key;
+    g_keyring.get_master(secret_key);
+    bufferlist::iterator iter = bl.begin();
+    if (decode_decrypt(secrets, secret_key, iter) == 0) {
+      g_keyring.set_rotating(secrets);
+    } else {
+      derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+    }
+  }
+  return 0;
+}

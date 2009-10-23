@@ -16,6 +16,7 @@
 #define __CEPHXCLIENTHANDLER_H
 
 #include "../AuthClientHandler.h"
+#include "CephxProtocol.h"
 
 class CephxClientHandler : public AuthClientHandler {
   enum {
@@ -28,17 +29,23 @@ class CephxClientHandler : public AuthClientHandler {
   /* envelope protocol parameters */
   uint64_t server_challenge;
   
+  CephXAuthorizer *authorizer;
+  CephXTicketManager tickets;
 
 public:
-  CephxClientHandler() {
+  CephxClientHandler() : authorizer(0) {
     reset();
   }
 
   void reset() {
+    delete authorizer;
+    authorizer = 0;
     state = STATE_START;
   }
   int build_request(bufferlist& bl);
   int handle_response(int ret, bufferlist::iterator& iter);
+  int handle_rotating_response(int ret, bufferlist& bl);
+
 
   int get_protocol() { return CEPH_AUTH_CEPHX; }
   

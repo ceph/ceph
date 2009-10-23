@@ -14,11 +14,8 @@
 
 #include "config.h"
 
-#include "KeyServer.h"
-
-#include "Crypto.h"
+#include "CephxKeyServer.h"
 #include "common/Timer.h"
-#include "Auth.h"
 
 #include <sstream>
 
@@ -317,7 +314,7 @@ bool KeyServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
   return true;
 }
 
-int KeyServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
+int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
 {
   info.ticket.name = auth_ticket_info.ticket.name;
   info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
@@ -335,7 +332,7 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, AuthServiceTicketIn
   return 0;
 }
 
-int KeyServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
+int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info)
 {
   if (get_service_secret(service_id, info.service_secret, info.secret_id) < 0) {
     return -EPERM;
@@ -346,7 +343,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInf
   return _build_session_auth_info(service_id, auth_ticket_info, info);
 }
 
-int KeyServer::build_session_auth_info(uint32_t service_id, AuthServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
+int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, SessionAuthInfo& info,
                                         CryptoKey& service_secret, uint64_t secret_id)
 {
   info.service_secret = service_secret;

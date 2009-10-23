@@ -184,142 +184,22 @@ struct SessionAuthInfo {
 };
 
 
-/*
- * Authentication
- */
-extern bool build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
-
-extern void build_service_ticket_request(uint32_t keys,
-					 bufferlist& request);
-
-extern bool build_service_ticket_reply(CryptoKey& principal_secret,
-				       vector<SessionAuthInfo> ticket_info,
-				       bufferlist& reply);
-
-struct AuthServiceTicketRequest {
-  uint32_t keys;
-
-  void encode(bufferlist& bl) const {
-    ::encode(keys, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(keys, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthServiceTicketRequest);
-
-
-struct AuthAuthorizeReply {
-  // uint32_t trans_id;
-  utime_t timestamp;
-  void encode(bufferlist& bl) const {
-    // ::encode(trans_id, bl);
-    ::encode(timestamp, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    // ::decode(trans_id, bl);
-    ::decode(timestamp, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthAuthorizeReply);
-
 
 struct AuthAuthorizer {
-  CryptoKey session_key;
-  utime_t timestamp;
-
   __u32 protocol;
   bufferlist bl;
 
-  bool build_authorizer();
-  bool verify_reply(bufferlist::iterator& reply);
-  void clear() { bl.clear(); }
-
-  AuthAuthorizer() : protocol(CEPH_AUTH_CEPHX) {}
+  AuthAuthorizer(__u32 p) : protocol(p) {}
+  virtual ~AuthAuthorizer() {}
+  virtual bool verify_reply(bufferlist::iterator& reply) = 0;
 };
+
 
 /*
- * AuthTicketHandler
- */
-struct AuthTicketHandler {
-  uint32_t service_id;
-  CryptoKey session_key;
-  AuthBlob ticket;        // opaque to us
-  utime_t renew_after, expires;
-  bool has_key_flag;
-
-  AuthTicketHandler() : service_id(0), has_key_flag(false) {}
-
-  // to build our ServiceTicket
-  bool verify_service_ticket_reply(CryptoKey& principal_secret,
-				 bufferlist::iterator& indata);
-  // to access the service
-  bool build_authorizer(AuthAuthorizer& authorizer);
-
-  bool has_key() { return has_key_flag; }
-};
-
-struct AuthTicketManager {
-  map<uint32_t, AuthTicketHandler> tickets_map;
-
-  bool verify_service_ticket_reply(CryptoKey& principal_secret,
-				 bufferlist::iterator& indata);
-
-  AuthTicketHandler& get_handler(uint32_t type) {
-    AuthTicketHandler& handler = tickets_map[type];
-    handler.service_id = type;
-    return handler;
-  }
-  bool build_authorizer(uint32_t service_id, AuthAuthorizer& authorizer);
-  bool has_key(uint32_t service_id);
-};
-
-
-/* A */
-struct AuthServiceTicket {
-  CryptoKey session_key;
-  utime_t validity;
-
-  void encode(bufferlist& bl) const {
-    ::encode(session_key, bl);
-    ::encode(validity, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(session_key, bl);
-    ::decode(validity, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthServiceTicket);
-
-/* B */
-struct AuthServiceTicketInfo {
-  AuthTicket ticket;
-  CryptoKey session_key;
-
-  void encode(bufferlist& bl) const {
-    ::encode(ticket, bl);
-    ::encode(session_key, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(ticket, bl);
-    ::decode(session_key, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthServiceTicketInfo);
-
-struct AuthAuthorize {
-  // uint32_t trans_id;
-  utime_t now;
-  void encode(bufferlist& bl) const {
-    // ::encode(trans_id, bl);
-    ::encode(now, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    // ::decode(trans_id, bl);
-    ::decode(now, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthAuthorize);
+ * Key management
+ */ 
+#define KEY_ROTATE_TIME 20
+#define KEY_ROTATE_NUM 3
 
 struct ExpiringCryptoKey {
   CryptoKey key;
@@ -355,11 +235,6 @@ WRITE_CLASS_ENCODER(RotatingSecrets);
 
 
 
-/*
- * Key management
- */ 
-#define KEY_ROTATE_TIME 20
-#define KEY_ROTATE_NUM 3
 
 class KeyStore {
 public:
@@ -373,60 +248,5 @@ static inline bool auth_principal_needs_rotating_keys(EntityName& name)
           (name.entity_type == CEPH_ENTITY_TYPE_MDS));
 }
 
-
-/*
- * encode+encrypt macros
- */
-#define AUTH_ENC_MAGIC 0xff009cad8826aa55
-
-template <class T>
-int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
-  uint64_t magic;
-  bufferlist bl_enc, bl;
-  ::decode(bl_enc, iter);
-
-  int ret = key.decrypt(bl_enc, bl);
-  if (ret < 0) {
-    generic_dout(0) << "error from decrypt " << ret << dendl;
-    return ret;
-  }
-
-  bufferlist::iterator iter2 = bl.begin();
-  ::decode(magic, iter2);
-  if (magic != AUTH_ENC_MAGIC) {
-    generic_dout(0) << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC << dendl;
-    return -EPERM;
-  }
-
-  ::decode(t, iter2);
-
-  return 0;
-}
-
-template <class T>
-int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
-  uint64_t magic = AUTH_ENC_MAGIC;
-  bufferlist bl;
-  ::encode(magic, bl);
-  ::encode(t, bl);
-
-  bufferlist bl_enc;
-  int ret = key.encrypt(bl, bl_enc);
-  if (ret < 0)
-    return ret;
-
-  ::encode(bl_enc, out);
-  return 0;
-}
-
-
-
-/*
- * Verify authorizer and generate reply authorizer
- */
-extern bool verify_service_ticket_request(AuthServiceTicketRequest& ticket_req,
-					  bufferlist::iterator& indata);
-extern bool verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
-                       AuthServiceTicketInfo& ticket_info, bufferlist& reply_bl);
 
 #endif

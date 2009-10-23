@@ -151,5 +151,194 @@ WRITE_CLASS_ENCODER(CephXAuthenticate)
 
 
 
+/*
+ * Authentication
+ */
+extern bool cephx_build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
+
+extern void cephx_build_service_ticket_request(uint32_t keys,
+					 bufferlist& request);
+
+extern bool cephx_build_service_ticket_reply(CryptoKey& principal_secret,
+				       vector<SessionAuthInfo> ticket_info,
+				       bufferlist& reply);
+
+struct CephXServiceTicketRequest {
+  uint32_t keys;
+
+  void encode(bufferlist& bl) const {
+    ::encode(keys, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(keys, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXServiceTicketRequest);
+
+
+struct CephXAuthorizeReply {
+  // uint32_t trans_id;
+  utime_t timestamp;
+  void encode(bufferlist& bl) const {
+    // ::encode(trans_id, bl);
+    ::encode(timestamp, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    // ::decode(trans_id, bl);
+    ::decode(timestamp, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXAuthorizeReply);
+
+
+struct CephXAuthorizer : public AuthAuthorizer {
+  CryptoKey session_key;
+  utime_t timestamp;
+
+  CephXAuthorizer() : AuthAuthorizer(CEPH_AUTH_CEPHX) {}
+
+  bool build_authorizer();
+  bool verify_reply(bufferlist::iterator& reply);
+};
+
+/*
+ * CephXTicketHandler
+ */
+struct CephXTicketHandler {
+  uint32_t service_id;
+  CryptoKey session_key;
+  AuthBlob ticket;        // opaque to us
+  utime_t renew_after, expires;
+  bool has_key_flag;
+
+  CephXTicketHandler() : service_id(0), has_key_flag(false) {}
+
+  // to build our ServiceTicket
+  bool verify_service_ticket_reply(CryptoKey& principal_secret,
+				 bufferlist::iterator& indata);
+  // to access the service
+  CephXAuthorizer *build_authorizer();
+
+  bool has_key() { return has_key_flag; }
+};
+
+struct CephXTicketManager {
+  map<uint32_t, CephXTicketHandler> tickets_map;
+
+  bool verify_service_ticket_reply(CryptoKey& principal_secret,
+				 bufferlist::iterator& indata);
+
+  CephXTicketHandler& get_handler(uint32_t type) {
+    CephXTicketHandler& handler = tickets_map[type];
+    handler.service_id = type;
+    return handler;
+  }
+  CephXAuthorizer *build_authorizer(uint32_t service_id);
+  bool has_key(uint32_t service_id);
+};
+
+
+/* A */
+struct CephXServiceTicket {
+  CryptoKey session_key;
+  utime_t validity;
+
+  void encode(bufferlist& bl) const {
+    ::encode(session_key, bl);
+    ::encode(validity, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(session_key, bl);
+    ::decode(validity, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXServiceTicket);
+
+/* B */
+struct CephXServiceTicketInfo {
+  AuthTicket ticket;
+  CryptoKey session_key;
+
+  void encode(bufferlist& bl) const {
+    ::encode(ticket, bl);
+    ::encode(session_key, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(ticket, bl);
+    ::decode(session_key, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXServiceTicketInfo);
+
+struct CephXAuthorize {
+  // uint32_t trans_id;
+  utime_t now;
+  void encode(bufferlist& bl) const {
+    // ::encode(trans_id, bl);
+    ::encode(now, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    // ::decode(trans_id, bl);
+    ::decode(now, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXAuthorize);
+
+/*
+ * Verify authorizer and generate reply authorizer
+ */
+extern bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
+				    CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl);
+
+
+
+
+
+
+/*
+ * encode+encrypt macros
+ */
+#define AUTH_ENC_MAGIC 0xff009cad8826aa55
+
+template <typename T>
+int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
+  uint64_t magic;
+  bufferlist bl_enc, bl;
+  ::decode(bl_enc, iter);
+
+  int ret = key.decrypt(bl_enc, bl);
+  if (ret < 0) {
+    generic_dout(0) << "error from decrypt " << ret << dendl;
+    return ret;
+  }
+
+  bufferlist::iterator iter2 = bl.begin();
+  ::decode(magic, iter2);
+  if (magic != AUTH_ENC_MAGIC) {
+    generic_dout(0) << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC << dendl;
+    return -EPERM;
+  }
+
+  ::decode(t, iter2);
+
+  return 0;
+}
+
+template <typename T>
+int encode_encrypt(const T& t, CryptoKey& key, bufferlist& out) {
+  uint64_t magic = AUTH_ENC_MAGIC;
+  bufferlist bl;
+  ::encode(magic, bl);
+  ::encode(t, bl);
+
+  bufferlist bl_enc;
+  int ret = key.encrypt(bl, bl_enc);
+  if (ret < 0)
+    return ret;
+
+  ::encode(bl_enc, out);
+  return 0;
+}
+
 
 #endif

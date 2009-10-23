@@ -1,4 +1,4 @@
-#include "auth/KeyServer.h"
+#include "auth/cephx/CephxKeyServer.h"
 
 #include "config.h"
 
