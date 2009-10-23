@@ -26,7 +26,10 @@ public:
 
   MAuthRotating() : PaxosServiceMessage(MSG_AUTH_ROTATING, 0) { }
 
-  const char *get_type_name() { return "get auth_rotating_secret request/response"; }
+  const char *get_type_name() { return "auth_rotating"; }
+  void print(ostream& out) {
+    out << "auth_rotating(" << status << " " << entity_name << " " << response_bl.length() << " bytes)";
+  }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

@@ -242,6 +242,8 @@ void MonClient::init()
   dout(10) << "init" << dendl;
   messenger->add_dispatcher_head(this);
 
+  entity_name = *g_conf.entity_name;
+  
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
 }
@@ -312,7 +314,7 @@ void MonClient::handle_auth(MAuthReply *m)
 	return;
       }
       auth->set_want_keys(want_keys);
-      auth->init(*g_conf.entity_name);
+      auth->init(entity_name);
     } else {
       auth->reset();
     }
@@ -542,18 +544,14 @@ int MonClient::wait_authenticate(double timeout)
 
 int MonClient::_start_auth_rotating()
 {
-  if (!auth_principal_needs_rotating_keys(entity_name))
+  if (!auth_principal_needs_rotating_keys(entity_name)) {
+    dout(0) << "_start_auth_rotating not needed by " << entity_name << dendl;
     return 0;
+  }
 
-  MAuthRotating *m = new MAuthRotating();
-  if (!m)
-    return -ENOMEM;
-
+  MAuthRotating *m = new MAuthRotating;
   m->entity_name = entity_name;
-
-  dout(0) << "MonClient::_start_auth_rotating sending message" << dendl;
   _send_mon_message(m);
-
   return 0;
 }
 
