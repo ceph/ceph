@@ -326,19 +326,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     dout(10) << " got osd " << from << " " << stats->osd_stat << " (first report)" << dendl;
 
   //Check how full the OSD is; set OSDMap to full/near-full if needed
-  float ratio = ((float)stats->osd_stat.kb_used) / (float) stats->osd_stat.kb;
-  if ( ratio > CEPH_OSD_FULL_RATIO ) {
-    dout(5) << "osd" << from << " has ratio " << ratio 
-	    << "which is beyond CEPH_OSD_FULL_RATIO "
-	    << CEPH_OSD_FULL_RATIO << dendl;
-    mon->osdmon()->add_flag(CEPH_OSDMAP_FULL);
-  } else if ( ratio > CEPH_OSD_NEARFULL_RATIO ) {
-    dout(10) << "osd" << from << " has ratio " << ratio 
-	    << "which is beyond CEPH_OSD_NEARFULL_RATIO "
-	    << CEPH_OSD_NEARFULL_RATIO << dendl;
-    mon->osdmon()->add_flag(CEPH_OSDMAP_NEARFULL);
-  }
-
+  mon->osdmon()->handle_osd_stat(stats->osd_stat, from);
   // apply to live map too (screw consistency)
   /*
     actually, no, don't.  that screws up our "latest" stash.  and can
