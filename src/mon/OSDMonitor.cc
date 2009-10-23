@@ -847,7 +847,8 @@ void OSDMonitor::tick()
   }
 
   //if map full setting has changed, get that info out there!
-  if ((pending_inc.new_flags ^ osdmap.flags) & CEPH_OSDMAP_FULL) {
+  if (pending_inc.new_flags != -1 &&
+      (pending_inc.new_flags ^ osdmap.flags) & CEPH_OSDMAP_FULL) {
     dout(1) << "New setting for CEPH_OSDMAP_FULL -- doing propose" << dendl;
     do_propose = true;
   }
