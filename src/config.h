@@ -102,6 +102,7 @@ struct md_config_t {
   int debug_monc;
   int debug_paxos;
   int debug_tp;
+  int debug_auth;
 
   // clock
   bool clock_lock;

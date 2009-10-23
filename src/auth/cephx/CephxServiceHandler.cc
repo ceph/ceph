@@ -25,13 +25,18 @@
 
 #include "config.h"
 
+#define DOUT_SUBSYS auth
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "cephx server " << entity_name << ": "
 
 int CephxServiceHandler::start_session(bufferlist& result_bl)
 {
-  CephXServerChallenge ch;
   get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
   if (!server_challenge)
     server_challenge = 1;  // always non-zero.
+  dout(10) << "start_session server_challenge " << server_challenge << dendl;
+
+  CephXServerChallenge ch;
   ch.server_challenge = server_challenge;
   ::encode(ch, result_bl);
   return CEPH_AUTH_CEPHX;
@@ -41,12 +46,8 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 {
   int ret = 0;
 
-  dout(0) << "CephxServiceHandler: handle request" << dendl;
-
   struct CephXRequestHeader cephx_header;
   ::decode(cephx_header, indata);
-
-  dout(0) << "op = " << cephx_header.request_type << dendl;
 
   switch (cephx_header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -57,9 +58,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       entity_name = req.name;
 
       CryptoKey secret;
-      dout(0) << "entity_name=" << entity_name.to_str() << dendl;
+      dout(10) << "handle_request get_auth_session_key for " << entity_name << dendl;
       if (!key_server->get_secret(entity_name, secret)) {
-        dout(0) << "couldn't find entity name: " << entity_name.to_str() << dendl;
+        dout(0) << "couldn't find entity name: " << entity_name << dendl;
 	ret = -EPERM;
 	break;
       }
@@ -79,14 +80,12 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       for (int pos = 0; pos + sizeof(req.key) <= key_enc.length(); pos+=sizeof(req.key), p++) {
         expected_key ^= *p;
       }
-      dout(0) << "checking key: req.key=" << hex << req.key << " expected_key=" << expected_key << dec << dendl;
+      dout(0) << " checking key: req.key=" << hex << req.key << " expected_key=" << expected_key << dec << dendl;
       if (req.key != expected_key) {
-        dout(0) << "unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
+        dout(0) << " unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
         ret = -EPERM;
 	break;
       }
-
-      dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
 
       CryptoKey session_key;
       CephXSessionAuthInfo info;
@@ -105,7 +104,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       info.session_key = session_key;
       info.service_id = CEPH_ENTITY_TYPE_AUTH;
       if (!key_server->get_service_secret(CEPH_ENTITY_TYPE_AUTH, info.service_secret, info.secret_id)) {
-        dout(0) << "could not get service secret for auth subsystem" << dendl;
+        dout(0) << " could not get service secret for auth subsystem" << dendl;
         ret = -EIO;
         break;
       }
@@ -120,14 +119,14 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       }
 
       if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON, caps)) {
-        dout(0) << "could not get mon caps for " << entity_name << dendl;
+        dout(0) << " could not get mon caps for " << entity_name << dendl;
       }
     }
     break;
 
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     {
-      dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
+      dout(10) << "handle_request get_principal_session_key" << dendl;
 
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
@@ -137,13 +136,13 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       CephXServiceTicketRequest ticket_req;
       ::decode(ticket_req, indata);
-      dout(0) << " ticket_req.keys = " << ticket_req.keys << dendl;
+      dout(10) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
       vector<CephXSessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id <= ticket_req.keys; service_id <<= 1) {
         if (ticket_req.keys & service_id) {
-	  dout(0) << " adding key for service " << service_id << dendl;
+	  dout(10) << " adding key for service " << service_id << dendl;
           CephXSessionAuthInfo info;
           int r = key_server->build_session_auth_info(service_id, auth_ticket_info, info);
           if (r < 0) {
@@ -160,7 +159,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
   case CEPHX_GET_ROTATING_KEY:
     {
-      dout(10) << "getting rotating secret for " << entity_name << dendl;
+      dout(10) << "handle_request getting rotating secret for " << entity_name << dendl;
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
       key_server->get_rotating_encrypted(entity_name, result_bl);
       ret = 0;
@@ -168,6 +167,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     break;
 
   default:
+    dout(10) << "handle_request unkonwn op " << cephx_header.request_type << dendl;
     return -EINVAL;
   }
   return ret;

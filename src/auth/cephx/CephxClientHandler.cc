@@ -20,9 +20,16 @@
 
 #include "../KeyRing.h"
 
+#include "config.h"
+
+#define DOUT_SUBSYS auth
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "cephx client: "
+
+
 int CephxClientHandler::build_request(bufferlist& bl)
 {
-  dout(0) << "state=" << state << dendl;
+  dout(0) << "build_request state " << state << dendl;
 
   switch (state) {
   case STATE_START:
@@ -52,13 +59,15 @@ int CephxClientHandler::build_request(bufferlist& bl)
         req.key ^= *p;
       }
       ::encode(req, bl);
+
+      dout(10) << "get auth session key: client_challenge " << req.client_challenge << dendl;
     }
     break;
 
   case STATE_GETTING_SESSION_KEYS:
     /* get service tickets */
     {
-      dout(0) << "want=" << hex << want << " have=" << have << dec << dendl;
+      dout(0) << "get service keys: want=" << hex << want << " have=" << have << dec << dendl;
 
       CephXRequestHeader header;
       header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
@@ -87,7 +96,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
 
 int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 {
-  dout(0) << "cephx handle_response ret = " << ret << " state " << state << dendl;
+  dout(10) << "handle_response ret = " << ret << " state " << state << dendl;
   
   if (ret < 0)
     return ret; // hrm!
@@ -96,6 +105,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     CephXServerChallenge ch;
     ::decode(ch, indata);
     server_challenge = ch.server_challenge;
+    dout(10) << " got initial server challenge " << server_challenge << dendl;
     state = STATE_GETTING_MON_KEY;
     return -EAGAIN;
   }
@@ -106,11 +116,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   switch (header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
     {
-      dout(0) << "request_type=" << hex << header.request_type << dec << dendl;
-      dout(0) << "handle_cephx_response()" << dendl;
-
-      dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
-      
+      dout(10) << " get_auth_session_key" << dendl;
       CryptoKey secret;
       g_keyring.get_master(secret);
 	
@@ -118,7 +124,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 	dout(0) << "could not verify service_ticket reply" << dendl;
 	return -EPERM;
       }
-      dout(0) << "want=" << want << " have=" << have << dendl;
+      dout(10) << " want=" << want << " have=" << have << dendl;
       if (want != have) {
 	state = STATE_GETTING_SESSION_KEYS;
 	ret = -EAGAIN;
@@ -132,7 +138,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     {
       CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
-      dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY session_key " << ticket_handler.session_key << dendl;
+      dout(10) << " get_principal_session_key session_key " << ticket_handler.session_key << dendl;
   
       if (!tickets.verify_service_ticket_reply(ticket_handler.session_key, indata)) {
         dout(0) << "could not verify service_ticket reply" << dendl;
@@ -147,6 +153,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
   case CEPHX_GET_ROTATING_KEY:
     {
+      dout(10) << " get_rotating_key" << dendl;
       RotatingSecrets secrets;
       CryptoKey secret_key;
       g_keyring.get_master(secret_key);
@@ -159,7 +166,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     break;
 
   default:
-    assert(0);
+   dout(0) << " unknown request_type " << header.request_type << dendl;
+   assert(0);
   }
   return ret;
 }
@@ -168,13 +176,14 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
 AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 {
-  dout(0) << "going to build authorizer for peer_id=" << service_id << " service_id=" << service_id << dendl;
+  dout(10) << "build_authorizer for service " << service_id << dendl;
   return tickets.build_authorizer(service_id);
 }
 
 
 void CephxClientHandler::build_rotating_request(bufferlist& bl)
 {
+  dout(10) << "build_rotating_request" << dendl;
   CephXRequestHeader header;
   header.request_type = CEPHX_GET_ROTATING_KEY;
   ::encode(header, bl);
