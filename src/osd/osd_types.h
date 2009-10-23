@@ -1252,5 +1252,4 @@ inline ostream& operator<<(ostream& out, const OSDOp& op) {
   return out;
 }
 
-
 #endif

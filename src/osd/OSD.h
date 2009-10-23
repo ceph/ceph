@@ -93,7 +93,6 @@ class ObjectStore;
 class OSDMap;
 class MLog;
 class MClass;
-class MAuth;
 
 
 class OSD : public Dispatcher {
@@ -183,35 +182,30 @@ private:
 
   // -- sessions --
 public:
+  typedef __u8 rwx_t;
   struct OSDPoolCap {
-    int allow;
-    int deny;
+    rwx_t allow;
+    rwx_t deny;
     OSDPoolCap() : allow(0), deny(0) {}
   };
 
-  class OSDCaps {
+  struct OSDCaps {
     map<int, OSDPoolCap> pools_map;
-    int default_action;
+    rwx_t default_action;
     bool get_next_token(string s, size_t& pos, string& token);
-    bool is_rwx(string& token, int& cap_val);
-  public:
+    bool is_rwx(string& token, rwx_t& cap_val);
+
     OSDCaps() : default_action(0) {}
     bool parse(bufferlist::iterator& iter);
     int get_pool_cap(int pool_id);
   };
+
   struct Session : public RefCountedObject {
     AuthTicket ticket;
     OSDCaps caps;
   };
 
 private:
-  Mutex session_lock;
-
-  Session *_get_session(Connection *c);
-  
-  void handle_auth(MAuth *m);
-
-
   // -- heartbeat --
   Mutex heartbeat_lock;
   Cond heartbeat_cond;
@@ -889,5 +883,21 @@ protected:
 
   void init_op_flags(MOSDOp *op);
 };
+
+static inline ostream& operator<<(ostream& out, OSD::rwx_t p) {
+  if (p & OSD_POOL_CAP_R)
+    out << "r";
+  if (p & OSD_POOL_CAP_W)
+    out << "w";
+  if (p & OSD_POOL_CAP_X)
+    out << "x";
+  return out;
+}
+static inline ostream& operator<<(ostream& out, const OSD::OSDPoolCap& pc) {
+  return out << "(allow " << pc.allow << ", deny " << pc.deny << ")";
+}
+static inline ostream& operator<<(ostream& out, const OSD::OSDCaps& c) {
+  return out << "osdcaps(pools=" << c.pools_map << " default=" << c.default_action << ")";
+}
 
 #endif

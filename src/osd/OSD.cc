@@ -41,7 +41,6 @@
 
 #include "messages/MGenericMessage.h"
 #include "messages/MPing.h"
-#include "messages/MAuth.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDOp.h"
@@ -237,7 +236,6 @@ OSD::OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev, c
   op_tp("OSD::op_tp", g_conf.osd_maxthreads),
   recovery_tp("OSD::recovery_tp", 1),
   disk_tp("OSD::disk_tp", 2),
-  session_lock("OSD::session_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_epoch(0),
   heartbeat_messenger(hbm),
@@ -1516,11 +1514,7 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
       return false;
   }
 
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return false;
-
   *authorizer = monc->auth->build_authorizer(dest_type);
-
   return *authorizer != NULL;
 }
 
@@ -1542,24 +1536,25 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 
   int ret = cephx_verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
-
-  Mutex::Locker l(session_lock);
-
-  Session *s = _get_session(con);
-
-  if (s) {
+  if (ret) {
+    isvalid = false;
+  } else {
+    isvalid = true;
+    Session *s = (Session *)con->get_priv();
+    if (!s) {
+      s = new Session;
+      con->set_priv(s->get());
+      dout(10) << " new session " << s << dendl;
+    }
+    
     if (auth_ticket_info.ticket.caps.length() > 0) {
       bufferlist::iterator iter = auth_ticket_info.ticket.caps.begin();
       s->caps.parse(iter);
+      dout(10) << " session " << s << " has caps " << s->caps << dendl;
     }
-
+    
     s->put();
-  } else {
-    derr(0) << "got a NULL session" << dendl;
   }
-
-  isvalid = (ret >= 0);
- 
   return true;
 };
 
@@ -4265,42 +4260,6 @@ void OSD::init_op_flags(MOSDOp *op)
   }
 }
 
-OSD::Session *OSD::_get_session(Connection *c)
-{
-  Session *s = (Session *)c->get_priv();
-  if (!s) {
-    s = new Session;
-    c->set_priv(s->get());
-    dout(10) << " new session " << s << dendl;
-  }
-
-  return s;
-}
-
-
-
-void OSD::handle_auth(MAuth *m)
-{
-  dout(10) << "handle_auth " << *m << dendl;
-  Mutex::Locker l(session_lock);
-
-  Session *s = _get_session(m->get_connection());
-
-  /*
-  bufferlist::iterator p = m->auth_payload.begin();
-  AuthBlob blob;
-  ::decode(blob, p);
-
-  AuthTicket ticket;
-  decode_decrypt(blob.blob, 
-  ::decode(
-  */
-
-
-  s->put();
-  delete m;
-}
-
 bool OSD::OSDCaps::get_next_token(string s, size_t& pos, string& token)
 {
   int start = s.find_first_not_of(" \t", pos);
@@ -4327,7 +4286,7 @@ bool OSD::OSDCaps::get_next_token(string s, size_t& pos, string& token)
   return true;
 }
 
-bool OSD::OSDCaps::is_rwx(string& token, int& cap_val)
+bool OSD::OSDCaps::is_rwx(string& token, rwx_t& cap_val)
 {
   const char *t = token.c_str();
   int val = 0;
@@ -4373,7 +4332,7 @@ bool OSD::OSDCaps::parse(bufferlist::iterator& iter)
     bool got_eq = false;
     list<int> num_list;
     bool last_is_comma = false;
-    int cap_val = 0;
+    rwx_t cap_val = 0;
 
     while (pos < s.size()) {
       if (init) {
