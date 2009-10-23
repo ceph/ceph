@@ -22,7 +22,6 @@
 
 #include "common/Timer.h"
 
-#include "auth/AuthClient.h"
 #include "auth/AuthClientHandler.h"
 
 #include "messages/MMonSubscribe.h"
@@ -37,12 +36,12 @@ class MAuthRotating;
 
 enum MonClientState {
   MC_STATE_NONE,
+  MC_STATE_NEGOTIATING,
   MC_STATE_AUTHENTICATING,
-  MC_STATE_AUTHENTICATED,
   MC_STATE_HAVE_SESSION,
 };
 
-class MonClient : public Dispatcher, public AuthClient {
+class MonClient : public Dispatcher {
 public:
   MonMap monmap;
 private:
@@ -149,8 +148,7 @@ private:
 
   // auth tickets
 public:
-  AuthClientHandler auth;
-  double auth_timeout;
+  AuthClientHandler *auth;
 public:
   void renew_subs() {
     Mutex::Locker l(monc_lock);
@@ -176,7 +174,7 @@ public:
 		timer(monc_lock),
 		hunting(false),
 		mounting(0), mount_err(0),
-		auth(this) { }
+		auth(NULL) { }
   ~MonClient() {
     timer.cancel_all_events();
   }
@@ -227,11 +225,15 @@ public:
   }
 
   void set_want_keys(uint32_t want) {
-    auth.set_want_keys(want | CEPH_ENTITY_TYPE_MON);
+    want_keys = want;
+    if (auth)
+      auth->set_want_keys(want | CEPH_ENTITY_TYPE_MON);
   }
 
   void add_want_keys(uint32_t want) {
-    auth.add_want_keys(want);
+    want_keys |= want;
+    if (auth)
+      auth->add_want_keys(want);
   }
 };
 

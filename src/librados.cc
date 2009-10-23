@@ -63,7 +63,7 @@ class RadosClient : public Dispatcher
     /* monitor authorization is being handled on different layer */
     if (dest_type == CEPH_ENTITY_TYPE_MON)
       return true;
-    return monclient.auth.build_authorizer(dest_type, authorizer);
+    return monclient.auth->build_authorizer(dest_type, authorizer);
   }
   void ms_handle_connect(Connection *con);
   bool ms_handle_reset(Connection *con);
@@ -295,6 +295,7 @@ bool RadosClient::init()
   assert_warn(messenger);
   if (!messenger)
     return false;
+  dout(1) << "starting objecter" << dendl;
 
   objecter = new Objecter(messenger, &monclient, &osdmap, lock);
   if (!objecter)
@@ -307,7 +308,9 @@ bool RadosClient::init()
   rank.start(1);
   messenger->add_dispatcher_head(this);
 
+  dout(1) << "setting wanted keys" << dendl;
   monclient.set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
+  dout(1) << "iit" << dendl;
   monclient.init();
 
   if (monclient.get_monmap() < 0)

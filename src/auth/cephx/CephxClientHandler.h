@@ -17,7 +17,7 @@
 
 #include "../AuthClientHandler.h"
 
-class CephxClientHandler : public AuthClientProtocolHandler {
+class CephxClientHandler : public AuthClientHandler {
   enum {
     STATE_START,
     STATE_GETTING_MON_KEY,
@@ -30,7 +30,7 @@ class CephxClientHandler : public AuthClientProtocolHandler {
   
 
 public:
-  CephxClientHandler(AuthClientHandler *c) : AuthClientProtocolHandler(c) {
+  CephxClientHandler() {
     reset();
   }
 
@@ -41,6 +41,8 @@ public:
   int handle_response(int ret, bufferlist::iterator& iter);
 
   int get_protocol() { return CEPH_AUTH_CEPHX; }
+  
+  void tick() {}
 };
 
 #endif

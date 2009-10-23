@@ -242,10 +242,6 @@ void MonClient::init()
   dout(10) << "init" << dendl;
   messenger->add_dispatcher_head(this);
 
-  entity_name = *g_conf.entity_name;
-
-  auth.init(entity_name);
-
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
 }
@@ -307,8 +303,34 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
-  int ret = auth.handle_response(m);
+  if (state == MC_STATE_NEGOTIATING) {
+    if (!auth || (int)m->protocol != auth->get_protocol()) {
+      delete auth;
+      auth = get_auth_client_handler(m->protocol);
+      if (!auth) {
+	delete m;
+	return;
+      }
+      auth->set_want_keys(want_keys);
+      auth->init(*g_conf.entity_name);
+    } else {
+      auth->reset();
+    }
+    state = MC_STATE_AUTHENTICATING;
+  }
+  assert(auth);
+
+  bufferlist::iterator p = m->result_bl.begin();
+  int ret = auth->handle_response(m->result, p);
   delete m;
+
+  if (ret == -EAGAIN) {
+    MAuth *m = new MAuth;
+    m->protocol = auth->get_protocol();
+    ret = auth->build_request(m->auth_payload);
+    _send_mon_message(m, true);
+    return;
+  }
 
   if (ret == 0) {
     state = MC_STATE_HAVE_SESSION;
@@ -380,9 +402,15 @@ void MonClient::_reopen_session()
 
   // restart authentication process?
   if (state != MC_STATE_HAVE_SESSION) {
-    state = MC_STATE_AUTHENTICATING;
-    auth.reset();
-    auth.send_request();
+    state = MC_STATE_NEGOTIATING;
+
+    set<__u32> supported;
+    supported.insert(CEPH_AUTH_CEPHX);
+    dout(0) << " sending supported protocol list " << supported << dendl;
+    MAuth *m = new MAuth;
+    m->protocol = 0;
+    ::encode(supported, m->auth_payload);
+    _send_mon_message(m, true);
   }
 
   if (g_keyring.need_rotating_secrets())
@@ -448,7 +476,8 @@ void MonClient::tick()
     messenger->send_keepalive(monmap.mon_inst[cur_mon]);
   }
 
-  auth.tick();
+  if (auth)
+    auth->tick();
 
   timer.add_event_after(10.0, new C_Tick(this));
 }

@@ -245,7 +245,7 @@ struct AuthTicketHandler {
   utime_t renew_after, expires;
   bool has_key_flag;
 
-  AuthTicketHandler() : has_key_flag(false) {}
+  AuthTicketHandler() : service_id(0), has_key_flag(false) {}
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,

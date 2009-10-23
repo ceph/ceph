@@ -1511,7 +1511,7 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool forc
       return false;
   }
 
-  return monc->auth.build_authorizer(dest_type, authorizer);
+  return monc->auth->build_authorizer(dest_type, authorizer);
 }
 
 bool OSD::ms_verify_authorizer(Connection *con, int peer_type,

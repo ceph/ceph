@@ -96,20 +96,14 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 {
   AuthServiceTicket msg_a;
 
-  bufferptr& s1 = secret.get_secret();
-  if (s1.length()) {
-    hexdump("decoding, using key", s1.c_str(), s1.length());
-  }
   if (decode_decrypt(msg_a, secret, indata) < 0) {
     dout(0) << "failed service ticket reply decode with secret " << secret << dendl;
     return false;
   }
-  dout(0) << "decoded message" << dendl;
   ::decode(ticket, indata);
-  dout(0) << "decoded ticket secret_id=" << ticket.secret_id << dendl;
-
-  bufferptr& s = msg_a.session_key.get_secret();
-  hexdump("decoded ticket.session key", s.c_str(), s.length());
+  dout(0) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
+	  << " secret_id " << ticket.secret_id
+	  << " session_key " << msg_a.session_key << dendl;  
   session_key = msg_a.session_key;
   has_key_flag = true;
   return true;
@@ -132,13 +126,13 @@ bool AuthTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 {
   uint32_t num;
   ::decode(num, indata);
-  dout(0) << "received " << num << " keys" << dendl;
+  dout(0) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
     ::decode(type, indata);
-    dout(0) << "received key type=" << type << dendl;
     AuthTicketHandler& handler = tickets_map[type];
+    handler.service_id = type;
     if (!handler.verify_service_ticket_reply(secret, indata)) {
       return false;
     }
