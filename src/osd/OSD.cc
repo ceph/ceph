@@ -1534,11 +1534,9 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     return false;
   }
 
-  int ret = cephx_verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
-  dout(0) << "OSD::verify_authorizer returns " << ret << dendl;
-  if (ret) {
-    isvalid = false;
-  } else {
+  isvalid = cephx_verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
+  dout(0) << "OSD::verify_authorizer isvalid=" << isvalid << dendl;
+  if (isvalid) {
     isvalid = true;
     Session *s = (Session *)con->get_priv();
     if (!s) {
