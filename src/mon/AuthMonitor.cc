@@ -258,9 +258,10 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 {
   dout(0) << "preprocess_auth() blob_size=" << m->get_auth_payload().length() << dendl;
   int ret = 0;
+  bufferlist caps;
+  MAuthReply *reply;
 
   Session *s = (Session *)m->get_connection()->get_priv();
-  s->put();
 
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();
@@ -293,20 +294,25 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
   } else if (s->auth_handler) {
     // handle the request
     try {
-      ret = s->auth_handler->handle_request(indata, response_bl);
+      ret = s->auth_handler->handle_request(indata, response_bl, caps);
+      if (caps.length()) {
+        s->caps.parse(caps);
+      }
     } catch (buffer::error *err) {
       ret = -EINVAL;
       dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
     }
     if (ret == -EIO) {
       paxos->wait_for_active(new C_RetryMessage(this, m));
-      return true;
+      goto done;
     }
   } else {
     ret = -EINVAL;  // no protocol selected?
   }
-  MAuthReply *reply = new MAuthReply(proto, &response_bl, ret);
+  reply = new MAuthReply(proto, &response_bl, ret);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
+done:
+  s->put();
   return true;
 }
 

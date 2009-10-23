@@ -314,6 +314,20 @@ bool KeyServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
   return true;
 }
 
+bool KeyServer::_get_service_caps(EntityName& name, uint32_t service_id, bufferlist& caps)
+{
+  string s = ceph_entity_type_name(service_id);
+
+  return data.get_caps(name, s, caps);
+}
+
+bool KeyServer::get_service_caps(EntityName& name, uint32_t service_id, bufferlist& caps)
+{
+  Mutex::Locker l(lock);
+  return _get_service_caps(name, service_id, caps);
+}
+
+
 int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info)
 {
   info.ticket.name = auth_ticket_info.ticket.name;

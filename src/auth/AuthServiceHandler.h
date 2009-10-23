@@ -24,7 +24,7 @@ struct AuthServiceHandler {
   virtual ~AuthServiceHandler() { }
 
   virtual int start_session(bufferlist& result) = 0;
-  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result) = 0;
+  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result, bufferlist& caps) = 0;
 };
 
 extern AuthServiceHandler *get_auth_service_handler(KeyServer *ks, set<__u32>& supported);

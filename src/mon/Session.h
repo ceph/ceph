@@ -32,6 +32,12 @@ struct Subscription {
   Subscription(Session *s, const nstring& t) : session(s), type(t), type_item(this) {};
 };
 
+class MonCaps {
+  bool get_next_token(string s, size_t& pos, string& token);
+public:
+  MonCaps() {}
+  bool parse(bufferlist& bl) { return true; }
+};
 
 struct Session : public RefCountedObject {
   entity_inst_t inst;
@@ -39,6 +45,7 @@ struct Session : public RefCountedObject {
   bool closed;
   xlist<Session*>::item item;
   set<__u64> routed_request_tids;
+  MonCaps caps;
 
   map<nstring, Subscription*> sub_map;
 

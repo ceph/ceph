@@ -36,7 +36,7 @@ int CephxServiceHandler::start_session(bufferlist& result_bl)
   return CEPH_AUTH_CEPHX;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl)
+int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps)
 {
   int ret = 0;
 
@@ -116,6 +116,10 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       if (!cephx_build_service_ticket_reply(principal_secret, info_vec, result_bl)) {
         ret = -EIO;
         break;
+      }
+
+      if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON, caps)) {
+        dout(0) << "could not get mon caps for " << entity_name << dendl;
       }
     }
     break;

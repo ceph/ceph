@@ -161,6 +161,7 @@ class KeyServer : public KeyStore {
   void _generate_all_rotating_secrets(bool init);
   bool _check_rotate();
   int _build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
+  bool _get_service_caps(EntityName& name, uint32_t service_id, bufferlist& caps);
 public:
   KeyServer();
 
@@ -229,6 +230,7 @@ public:
   bool get_rotating_encrypted(EntityName& name, bufferlist& enc_bl);
 
   Mutex& get_lock() { return lock; }
+  bool get_service_caps(EntityName& name, uint32_t service_id, bufferlist& caps);
 };
 WRITE_CLASS_ENCODER(KeyServer);
 
