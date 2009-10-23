@@ -339,8 +339,7 @@ void MonClient::handle_auth(MAuthReply *m)
       authenticate_cond.SignalAll();
     }
   
-    if (g_keyring.need_rotating_secrets())
-      _start_auth_rotating();
+    _check_auth_rotating();
 
     auth_cond.SignalAll();
   }
@@ -460,11 +459,8 @@ void MonClient::tick()
 {
   dout(10) << "tick" << dendl;
 
-  if (g_keyring.need_rotating_secrets()) {
-    dout(0) << "MonClient::tick: need rotating secret" << dendl;
-    _start_auth_rotating();
-  }
-
+  _check_auth_rotating();
+  
   if (hunting) {
     dout(0) << "continuing hunt" << dendl;
     _reopen_session();
@@ -540,10 +536,13 @@ int MonClient::wait_authenticate(double timeout)
   return ret;
 }
 
-int MonClient::_start_auth_rotating()
+int MonClient::_check_auth_rotating()
 {
+  if (!g_keyring.need_rotating_secrets())
+    return 0;
+
   if (!auth_principal_needs_rotating_keys(entity_name)) {
-    dout(0) << "_start_auth_rotating not needed by " << entity_name << dendl;
+    dout(20) << "_check_auth_rotating not needed by " << entity_name << dendl;
     return 0;
   }
 
