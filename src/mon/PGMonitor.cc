@@ -275,7 +275,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
     mon->osdmon()->send_latest(stats, stats->epoch+1);
 
   // any new osd or pg info?
-  if (pg_map.osd_stat.count(from) ||
+  if (!pg_map.osd_stat.count(from) ||
       pg_map.osd_stat[from] != stats->osd_stat)
     return false;  // new osd stat
 
