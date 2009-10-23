@@ -294,6 +294,7 @@ libcommon_a_SOURCES = \
 libcommon_files = \
 	auth/Auth.cc \
 	auth/AuthClientHandler.cc \
+	auth/cephx/CephxClientHandler.cc \
 	auth/Crypto.cc \
 	auth/ExportControl.cc \
 	auth/KeyRing.cc \
@@ -398,8 +399,9 @@ libclient_a_SOURCES = \
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
+	auth/cephx/CephxProtocol.h\
+	auth/cephx/CephxClientHandler.h\
 	auth/Auth.h\
-	auth/AuthProtocol.h\
 	auth/AuthServiceHandler.h\
 	auth/KeyRing.h\
 	auth/KeyServer.h\
@@ -541,7 +543,6 @@ noinst_HEADERS = \
         mds/mdstypes.h\
         mds/snap.h\
         messages/MAuth.h\
-        messages/MAuthorize.h\
         messages/MAuthReply.h\
         messages/MAuthRotating.h\
 	messages/MClass.h\

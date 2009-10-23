@@ -19,7 +19,6 @@
 #include "Crypto.h"
 #include "common/Timer.h"
 #include "Auth.h"
-#include "AuthProtocol.h"
 
 #include <sstream>
 

@@ -65,7 +65,6 @@ using namespace std;
 #include "messages/MMonGetMap.h"
 
 #include "messages/MAuth.h"
-#include "messages/MAuthorize.h"
 #include "messages/MAuthReply.h"
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
@@ -323,9 +322,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
    // auth
   case CEPH_MSG_AUTH:
     m = new MAuth;
-    break;
-  case CEPH_MSG_AUTHORIZE:
-    m = new MAuthorize;
     break;
   case CEPH_MSG_AUTH_REPLY:
     m = new MAuthReply;

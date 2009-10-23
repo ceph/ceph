@@ -14,7 +14,7 @@
 
 
 #include "AuthServiceHandler.h"
-#include "AuthProtocol.h"
+#include "cephx/CephxProtocol.h"
 #include "Auth.h"
 
 #include "mon/Monitor.h"
@@ -37,11 +37,22 @@ public:
   CephAuthService_X(Monitor *m) : AuthServiceHandler(m), state(0) {}
   ~CephAuthService_X() {}
 
+  int start_session(bufferlist& result_bl);
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl);
   int handle_cephx_protocol(bufferlist::iterator& indata, bufferlist& result_bl);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };
 
+
+int CephAuthService_X::start_session(bufferlist& result_bl)
+{
+  CephXEnvResponse1 response;
+  get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
+  response.server_challenge = server_challenge;
+  ::encode(response, result_bl);
+  state = 1;
+  return CEPH_AUTH_CEPHX;
+}
 
 int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& result_bl)
 {
@@ -52,21 +63,14 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
 
   switch (state) {
   case 0:
-    {
-      CephXEnvRequest1 req;
-      ::decode(req, indata);
-      entity_name = req.name;
-      CephXEnvResponse1 response;
-      get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
-      response.server_challenge = server_challenge;
-      ::encode(response, result_bl);
-      ret = -EAGAIN;
-    }
+    assert(0);
     break;
   case 1:
     {
-      CephXEnvRequest2 req;
+      CephXGetMonKey req;
       ::decode(req, indata);
+
+      entity_name = req.name;
 
       CryptoKey secret;
       dout(0) << "entity_name=" << entity_name.to_str() << dendl;
@@ -151,18 +155,19 @@ int CephAuthService_X::handle_request(bufferlist::iterator& indata, bufferlist& 
         ret = -EPERM;
         break;
       }
+      dout(0) << " ticket_req.keys = " << ticket_req.keys << dendl;
 
       ret = 0;
       vector<SessionAuthInfo> info_vec;
       for (uint32_t service_id = 1; service_id <= ticket_req.keys; service_id <<= 1) {
         if (ticket_req.keys & service_id) {
+	  dout(0) << " adding key for service " << service_id << dendl;
           SessionAuthInfo info;
           int r = mon->key_server.build_session_auth_info(service_id, auth_ticket_info, info);
           if (r < 0) {
             ret = r;
             break;
           }
-
           info_vec.push_back(info);
         }
       }

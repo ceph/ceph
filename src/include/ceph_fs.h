@@ -113,8 +113,7 @@ struct ceph_secret {
 #define CEPH_MSG_MON_SUBSCRIBE          15
 #define CEPH_MSG_MON_SUBSCRIBE_ACK      16
 #define CEPH_MSG_AUTH			17
-#define CEPH_MSG_AUTHORIZE		18
-#define CEPH_MSG_AUTH_REPLY		19
+#define CEPH_MSG_AUTH_REPLY		18
 
 /* client <-> mds */
 #define CEPH_MSG_MDS_MAP                21

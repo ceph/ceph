@@ -31,7 +31,6 @@
 #include "MonMap.h"
 
 #include "auth/Auth.h"
-#include "auth/AuthProtocol.h"
 #include "auth/KeyRing.h"
 
 #include "config.h"
@@ -308,12 +307,18 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
-  int ret = auth.handle_response(m->trans_id, m);
+  int ret = auth.handle_response(m);
   delete m;
 
-  if (ret == -EAGAIN) {
-    auth.send_session_request(this, &auth_handler);
-  } else {
+  if (ret == 0) {
+    state = MC_STATE_HAVE_SESSION;
+    while (!waiting_for_session.empty()) {
+      _send_mon_message(waiting_for_session.front());
+      waiting_for_session.pop_front();
+    }
+    authenticate_cond.SignalAll();
+  }
+  /*
     switch (state) {
     case MC_STATE_AUTHENTICATING:
       {
@@ -337,6 +342,7 @@ void MonClient::handle_auth(MAuthReply *m)
       assert(false);
     }
   }
+  */
 }
 
 
@@ -375,9 +381,8 @@ void MonClient::_reopen_session()
   // restart authentication process?
   if (state != MC_STATE_HAVE_SESSION) {
     state = MC_STATE_AUTHENTICATING;
-    auth_handler.reset();
-    authorize_handler.reset();
-    auth.send_session_request(this, &auth_handler);
+    auth.reset();
+    auth.send_request();
   }
 
   if (g_keyring.need_rotating_secrets())

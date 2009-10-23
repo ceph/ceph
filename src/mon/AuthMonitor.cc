@@ -265,25 +265,32 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();
 
+  __u32 proto = m->protocol;
+
   // set up handler?
-  if (!s->auth_handler) {
-    set<__u32> supported;
-   
-    try {
-      ::decode(supported, indata);
-    } catch (buffer::error *e) {
-      dout(0) << "failed to decode message auth message" << dendl;
-      ret = -EINVAL;
+  if (m->protocol == 0) {
+    if (!s->auth_handler) {
+      set<__u32> supported;
+      
+      try {
+	::decode(supported, indata);
+      } catch (buffer::error *e) {
+	dout(0) << "failed to decode message auth message" << dendl;
+	ret = -EINVAL;
+      }
+      
+      if (!ret) {
+	s->auth_handler = get_auth_handler(mon, supported);
+	if (!s->auth_handler)
+	  ret = -EPERM;
+	else {
+	  proto = s->auth_handler->start_session(response_bl);
+	}
+      }
+    } else {
+      ret = -EINVAL;  // can only select protocol once per connection
     }
-
-    if (!ret) {
-      s->auth_handler = get_auth_handler(mon, supported);
-      if (!s->auth_handler)
-	ret = -EPERM;
-    }
-  }
-
-  if (s->auth_handler && !ret) {
+  } else if (s->auth_handler) {
     // handle the request
     try {
       ret = s->auth_handler->handle_request(indata, response_bl);
@@ -295,8 +302,10 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
       paxos->wait_for_active(new C_RetryMessage(this, m));
       return true;
     }
+  } else {
+    ret = -EINVAL;  // no protocol selected?
   }
-  MAuthReply *reply = new MAuthReply(m->trans_id, &response_bl, ret);
+  MAuthReply *reply = new MAuthReply(proto, &response_bl, ret);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
   return true;
 }

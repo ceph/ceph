@@ -40,8 +40,6 @@ using namespace std;
 #include "messages/MClientMount.h"
 #include "messages/MClientMountAck.h"
 
-#include "auth/AuthProtocol.h"
-
 #include "include/librados.h"
 
 #define RADOS_LIST_MAX_ENTRIES 1024

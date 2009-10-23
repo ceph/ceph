@@ -16,12 +16,87 @@
 #define __AUTHTYPES_H
 
 #include "Crypto.h"
-#include "AuthProtocol.h"
 #include "msg/msg_types.h"
+
+#include "config.h"
 
 #include <errno.h>
 
 class Cond;
+
+struct EntityName {
+  uint32_t entity_type;
+  string name;
+
+  void encode(bufferlist& bl) const {
+    ::encode(entity_type, bl);
+    ::encode(name, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(entity_type, bl);
+    ::decode(name, bl);
+  }
+
+  void to_str(string& str) const {
+    str.append(ceph_entity_type_name(entity_type));
+    str.append(".");
+    str.append(name);
+  }
+  string to_str() const {
+    string s;
+    to_str(s);
+    return s;
+  }
+
+  bool from_str(string& s) {
+    int pos = s.find('.');
+
+    if (pos < 0)
+      return false;
+   
+    string pre = s.substr(0, pos);
+    const char *pres = pre.c_str();
+
+    set_type(pres);
+
+    name = s.substr(pos + 1);
+
+    return true;
+  }
+
+  void set_type(const char *type) {
+    if (strcmp(type, "auth") == 0) {
+      entity_type = CEPH_ENTITY_TYPE_AUTH;
+    } else if (strcmp(type, "mon") == 0) {
+      entity_type = CEPH_ENTITY_TYPE_MON;
+    } else if (strcmp(type, "osd") == 0) {
+      entity_type = CEPH_ENTITY_TYPE_OSD;
+    } else if (strcmp(type, "mds") == 0) {
+      entity_type = CEPH_ENTITY_TYPE_MDS;
+    } else {
+      entity_type = CEPH_ENTITY_TYPE_CLIENT;
+    }
+  }
+  void from_type_id(const char *type, const char *id) {
+    set_type(type);
+    name = id;
+  }
+
+  void get_type_str(string& s) {
+    s = ceph_entity_type_name(entity_type);
+  }
+};
+WRITE_CLASS_ENCODER(EntityName);
+
+inline bool operator<(const EntityName& a, const EntityName& b) {
+  return (a.entity_type < b.entity_type) || (a.entity_type == b.entity_type && a.name < b.name);
+}
+
+static inline ostream& operator<<(ostream& out, const EntityName& n) {
+  return out << n.to_str();
+}
+
+
 
 struct EntityAuth {
   CryptoKey key;
@@ -327,13 +402,17 @@ int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
   ::decode(bl_enc, iter);
 
   int ret = key.decrypt(bl_enc, bl);
-  if (ret < 0)
+  if (ret < 0) {
+    generic_dout(0) << "error from decrypt " << ret << dendl;
     return ret;
+  }
 
   bufferlist::iterator iter2 = bl.begin();
   ::decode(magic, iter2);
-  if (magic != AUTH_ENC_MAGIC)
+  if (magic != AUTH_ENC_MAGIC) {
+    generic_dout(0) << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC << dendl;
     return -EPERM;
+  }
 
   ::decode(t, iter2);
 

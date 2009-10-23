@@ -12,16 +12,8 @@
  * 
  */
 
-#ifndef __AUTHPROTOCOL_H
-#define __AUTHPROTOCOL_H
-
-#include <map>
-#include <set>
-using namespace std;
-
-#include "include/types.h"
-
-#include "config.h"
+#ifndef __CEPHXPROTOCOL_H
+#define __CEPHXPROTOCOL_H
 
 /*
   Ceph X protocol
@@ -92,96 +84,14 @@ using namespace std;
 
 #define CEPHX_REQUEST_TYPE_MASK         0x0F00
 
-class Monitor;
 
-struct EntityName {
-  uint32_t entity_type;
-  string name;
+#include "../Auth.h"
 
-  void encode(bufferlist& bl) const {
-    ::encode(entity_type, bl);
-    ::encode(name, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(entity_type, bl);
-    ::decode(name, bl);
-  }
-
-  void to_str(string& str) const {
-    str.append(ceph_entity_type_name(entity_type));
-    str.append(".");
-    str.append(name);
-  }
-  string to_str() const {
-    string s;
-    to_str(s);
-    return s;
-  }
-
-  bool from_str(string& s) {
-    int pos = s.find('.');
-
-    if (pos < 0)
-      return false;
-   
-    string pre = s.substr(0, pos);
-    const char *pres = pre.c_str();
-
-    set_type(pres);
-
-    name = s.substr(pos + 1);
-
-    return true;
-  }
-
-  void set_type(const char *type) {
-    if (strcmp(type, "auth") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_AUTH;
-    } else if (strcmp(type, "mon") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_MON;
-    } else if (strcmp(type, "osd") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_OSD;
-    } else if (strcmp(type, "mds") == 0) {
-      entity_type = CEPH_ENTITY_TYPE_MDS;
-    } else {
-      entity_type = CEPH_ENTITY_TYPE_CLIENT;
-    }
-  }
-  void from_type_id(const char *type, const char *id) {
-    set_type(type);
-    name = id;
-  }
-
-  void get_type_str(string& s) {
-    s = ceph_entity_type_name(entity_type);
-  }
-};
-WRITE_CLASS_ENCODER(EntityName);
-
-inline bool operator<(const EntityName& a, const EntityName& b) {
-  return (a.entity_type < b.entity_type) || (a.entity_type == b.entity_type && a.name < b.name);
-}
-
-static inline ostream& operator<<(ostream& out, const EntityName& n) {
-  return out << n.to_str();
-}
 
 
 /* 
   Ceph X-Envelope protocol
 */
-struct CephXEnvRequest1 {
-  EntityName name;
-
-  void encode(bufferlist& bl) const {
-    ::encode(name, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CephXEnvRequest1)
-
 struct CephXEnvResponse1 {
   uint64_t server_challenge;
 
@@ -194,23 +104,23 @@ struct CephXEnvResponse1 {
 };
 WRITE_CLASS_ENCODER(CephXEnvResponse1);
 
-struct CephXEnvRequest2 {
-  uint64_t client_challenge;
-  uint64_t key;
-  char piggyback; /* do we piggyback X protocol */
+struct CephXGetMonKey {
+  EntityName name;
+  __u64 client_challenge;
+  __u64 key;
 
   void encode(bufferlist& bl) const {
+    ::encode(name, bl);
     ::encode(client_challenge, bl);
     ::encode(key, bl);
-    ::encode(piggyback, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
     ::decode(client_challenge, bl);
-    ::decode(key, bl);
-    ::decode(piggyback, bl);
-  }
+     ::decode(key, bl);
+ }
 };
-WRITE_CLASS_ENCODER(CephXEnvRequest2);
+WRITE_CLASS_ENCODER(CephXGetMonKey)
 
 
 struct CephXRequestHeader {
@@ -239,6 +149,7 @@ struct CephXResponseHeader {
   }
 };
 WRITE_CLASS_ENCODER(CephXResponseHeader);
+
 
 
 #endif

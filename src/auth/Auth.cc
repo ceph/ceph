@@ -65,7 +65,7 @@ bool build_service_ticket_reply(
 
   uint32_t num = ticket_info_vec.size();
   ::encode(num, reply);
-  dout(0) << "encoding " << num << " tickets" << dendl;
+  dout(0) << "encoding " << num << " tickets with secret " << principal_secret << dendl;
 
   while (ticket_iter != ticket_info_vec.end()) {
     SessionAuthInfo& info = *ticket_iter;
@@ -112,8 +112,10 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   if (s1.length()) {
     hexdump("decoding, using key", s1.c_str(), s1.length());
   }
-  if (decode_decrypt(msg_a, secret, indata) < 0)
+  if (decode_decrypt(msg_a, secret, indata) < 0) {
+    dout(0) << "failed service ticket reply decode with secret " << secret << dendl;
     return false;
+  }
   dout(0) << "decoded message" << dendl;
   ::decode(ticket, indata);
   dout(0) << "decoded ticket secret_id=" << ticket.secret_id << dendl;
@@ -122,7 +124,6 @@ bool AuthTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   hexdump("decoded ticket.session key", s.c_str(), s.length());
   session_key = msg_a.session_key;
   has_key_flag = true;
-
   return true;
 }
 

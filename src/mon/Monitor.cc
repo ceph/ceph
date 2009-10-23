@@ -40,7 +40,6 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
-#include "messages/MAuthorize.h"
 #include "messages/MAuthReply.h"
 
 #include "common/Timer.h"
@@ -607,11 +606,6 @@ bool Monitor::ms_dispatch(Message *m)
       handle_class((MClass *)m);
       break;
 
-    case CEPH_MSG_AUTHORIZE:
-      handle_authorize((class MAuthorize*)m);
-      break;
-
-      
     default:
       ret = false;
     }
@@ -855,64 +849,6 @@ void Monitor::handle_class(MClass *m)
       assert(0);
       break;
   }
-}
-
-void Monitor::handle_authorize(MAuthorize *m)
-{
-  dout(0) << "AuthorizeServer::handle_request() blob_size=" << m->get_auth_payload().length() << dendl;
-  int ret = 0;
-
-  Session *s = (Session *)m->get_connection()->get_priv();
-  s->put();
-
-  bufferlist response_bl;
-  bufferlist::iterator indata = m->auth_payload.begin();
-
-  // handle the request
-  try {
-    ret = do_authorize(indata, response_bl);
-  } catch (buffer::error *err) {
-    ret = -EINVAL;
-    dout(0) << "caught error when trying to handle authorize request, probably malformed request" << dendl;
-  }
-  MAuthReply *reply = new MAuthReply(m->trans_id, &response_bl, ret);
-  messenger->send_message(reply, m->get_orig_source_inst());
-}
-
-int Monitor::do_authorize(bufferlist::iterator& indata, bufferlist& result_bl)
-{
-  struct CephXRequestHeader cephx_header;
-
-  ::decode(cephx_header, indata);
-
-  uint16_t request_type = cephx_header.request_type & CEPHX_REQUEST_TYPE_MASK;
-  int ret = 0;
-
-  dout(0) << "request_type=" << request_type << dendl;
-
-  switch (request_type) {
-  case CEPHX_OPEN_SESSION:
-    {
-      dout(0) << "CEPHX_OPEN_SESSION " << cephx_header.request_type << dendl;
-      AuthServiceTicketInfo auth_ticket_info;
-
-      bufferlist tmp_bl;
-      if (!verify_authorizer(key_server, indata, auth_ticket_info, tmp_bl))
-        ret = -EPERM;
-      result_bl.claim_append(tmp_bl);
-    }
-    break;
-  default:
-    ret = -EINVAL;
-    break;
-  }
-
-  struct CephXResponseHeader header;
-  header.request_type = request_type;
-  header.status = ret;
-  ::encode(header, result_bl);
-
-  return ret;
 }
 
 bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new)

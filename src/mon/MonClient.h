@@ -150,8 +150,6 @@ private:
   // auth tickets
 public:
   AuthClientHandler auth;
-  AuthClientAuthenticateHandler auth_handler;
-  AuthClientAuthorizeHandler authorize_handler;
   double auth_timeout;
 public:
   void renew_subs() {
@@ -178,8 +176,7 @@ public:
 		timer(monc_lock),
 		hunting(false),
 		mounting(0), mount_err(0),
-                auth_handler(&auth, CEPH_ENTITY_TYPE_MON, 0),
-                authorize_handler(&auth, CEPH_ENTITY_TYPE_MON) { }
+		auth(this) { }
   ~MonClient() {
     timer.cancel_all_events();
   }
@@ -230,11 +227,11 @@ public:
   }
 
   void set_want_keys(uint32_t want) {
-    auth_handler.set_want_keys(want | CEPH_ENTITY_TYPE_MON);
+    auth.set_want_keys(want | CEPH_ENTITY_TYPE_MON);
   }
 
   void add_want_keys(uint32_t want) {
-    auth_handler.add_want_keys(want);
+    auth.add_want_keys(want);
   }
 };
 
