@@ -347,7 +347,8 @@ libmon_a_SOURCES = \
 	mon/ClassMonitor.cc \
 	mon/AuthMonitor.cc \
 	mon/Elector.cc \
-	mon/MonitorStore.cc
+	mon/MonitorStore.cc \
+	mon/MonCaps.cc
 
 libmds_a_SOURCES = \
 	mds/MDS.cc \
@@ -642,6 +643,7 @@ noinst_HEADERS = \
 	mon/LogMonitor.h\
         mon/MDSMonitor.h\
 	mon/MonmapMonitor.h\
+        mon/MonCaps.h\
         mon/MonClient.h\
         mon/MonMap.h\
         mon/Monitor.h\

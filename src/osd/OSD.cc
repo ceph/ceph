@@ -4264,7 +4264,7 @@ bool OSD::OSDCaps::get_next_token(string s, size_t& pos, string& token)
   int end;
 
   if (s[start] == '=' || s[start] == ',' || s[start] == ';') {
-    end = pos + 1;
+    end = start + 1;
   } else {
     end = s.find_first_of(";,= \t", start+1);
   }
@@ -4408,10 +4408,10 @@ do { \
     return false;
   }
 
-  generic_dout(0) << "default=" << default_action << dendl;
+  generic_dout(0) << "default=" << (int)default_action << dendl;
   map<int, OSDPoolCap>::iterator it;
   for (it = pools_map.begin(); it != pools_map.end(); ++it) {
-    generic_dout(0) << it->first << " -> (" << it->second.allow << "." << it->second.deny << ")" << dendl;
+    generic_dout(0) << it->first << " -> (" << (int)it->second.allow << "." << (int)it->second.deny << ")" << dendl;
   }
 
   return true;

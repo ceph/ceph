@@ -292,7 +292,8 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     try {
       ret = s->auth_handler->handle_request(indata, response_bl, caps);
       if (caps.length()) {
-        s->caps.parse(caps);
+        bufferlist::iterator iter = caps.begin();
+        s->caps.parse(iter);
       }
     } catch (buffer::error *err) {
       ret = -EINVAL;
