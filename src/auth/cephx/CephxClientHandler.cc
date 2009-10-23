@@ -29,7 +29,7 @@
 
 int CephxClientHandler::build_request(bufferlist& bl)
 {
-  dout(0) << "build_request state " << state << dendl;
+  dout(10) << "build_request state " << state << dendl;
 
   switch (state) {
   case STATE_START:

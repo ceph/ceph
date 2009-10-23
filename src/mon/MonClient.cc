@@ -410,7 +410,6 @@ void MonClient::_reopen_session()
 
     set<__u32> supported;
     supported.insert(CEPH_AUTH_CEPHX);
-    dout(0) << " sending supported protocol list " << supported << dendl;
     MAuth *m = new MAuth;
     m->protocol = 0;
     ::encode(supported, m->auth_payload);

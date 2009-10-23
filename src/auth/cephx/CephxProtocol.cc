@@ -21,9 +21,8 @@ bool cephx_build_service_ticket(CephXSessionAuthInfo& info, bufferlist& reply)
   ticket_info.ticket = info.ticket;
   ticket_info.ticket.caps = info.ticket.caps;
   ::encode(info.secret_id, reply);
-  dout(0) << "encoded info.secret_id=" << info.secret_id <<  " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
-  if (info.service_secret.get_secret().length())
-    hexdump("service_secret", info.service_secret.get_secret().c_str(), info.service_secret.get_secret().length());
+  dout(10) << "build_service_ticket encoded info.secret_id=" << info.secret_id
+	   <<  " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
   if (encode_encrypt(ticket_info, info.service_secret, reply) < 0)
     return false;
 
@@ -43,32 +42,24 @@ bool cephx_build_service_ticket_reply(
                      vector<CephXSessionAuthInfo> ticket_info_vec,
                      bufferlist& reply)
 {
-  vector<CephXSessionAuthInfo>::iterator ticket_iter = ticket_info_vec.begin(); 
-
   uint32_t num = ticket_info_vec.size();
   ::encode(num, reply);
-  dout(0) << "encoding " << num << " tickets with secret " << principal_secret << dendl;
+  dout(10) << "build_service_ticket_reply encoding " << num
+	   << " tickets with secret " << principal_secret << dendl;
 
-  while (ticket_iter != ticket_info_vec.end()) {
+  for (vector<CephXSessionAuthInfo>::iterator ticket_iter = ticket_info_vec.begin(); 
+       ticket_iter != ticket_info_vec.end();
+       ++ticket_iter) {
     CephXSessionAuthInfo& info = *ticket_iter;
-
     ::encode(info.service_id, reply);
 
     CephXServiceTicket msg_a;
-
-    bufferptr& s1 = principal_secret.get_secret();
-    if (s1.length()) {
-      hexdump("encoding, using key", s1.c_str(), s1.length());
-    }
-
     msg_a.session_key = info.session_key;
     if (encode_encrypt(msg_a, principal_secret, reply) < 0)
       return false;
 
     if (!cephx_build_service_ticket(info, reply))
       return false; 
-
-    ++ticket_iter;
   }
   return true;
 }
@@ -83,13 +74,13 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   CephXServiceTicket msg_a;
 
   if (decode_decrypt(msg_a, secret, indata) < 0) {
-    dout(0) << "failed service ticket reply decode with secret " << secret << dendl;
+    dout(0) << "verify_service_ticket_reply failed decode_decrypt with secret " << secret << dendl;
     return false;
   }
   ::decode(ticket, indata);
-  dout(0) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
-	  << " secret_id " << ticket.secret_id
-	  << " session_key " << msg_a.session_key << dendl;  
+  dout(10) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
+	   << " secret_id " << ticket.secret_id
+	   << " session_key " << msg_a.session_key << dendl;  
   session_key = msg_a.session_key;
   has_key_flag = true;
   return true;
@@ -112,7 +103,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 {
   uint32_t num;
   ::decode(num, indata);
-  dout(0) << "verify_service_ticket_reply got " << num << " keys" << dendl;
+  dout(10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
@@ -142,7 +133,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer()
   a->session_key = session_key;
   a->timestamp = g_clock.now();
 
-  dout(0) << "build_authorizer: service_id=" << service_id << dendl;
+  dout(10) << "build_authorizer service_id=" << service_id << " session_key " << session_key << dendl;
 
   ::encode(service_id, a->bl);
   ::encode(ticket, a->bl);
@@ -184,33 +175,30 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
   CryptoKey service_secret;
 
   ::decode(service_id, indata);
-
   ::decode(secret_id, indata);
-  dout(0) << "decrypted service_id=" << service_id << " secret_id=" << secret_id << dendl;
+  dout(10) << "verify_authorizer decrypted service_id=" << service_id << " secret_id=" << secret_id << dendl;
+
   if (secret_id == (uint64_t)-1) {
     EntityName name;
     name.entity_type = service_id;
     if (!keys.get_secret(name, service_secret)) {
-      dout(0) << "could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      dout(0) << "verify_authorizer could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
       return false;
     }
   } else {
     if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
-      dout(0) << "could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      dout(0) << "verify_authorizer could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
       return false;
     }
   }
-  if (service_secret.get_secret().length())
-    hexdump("service_secret", service_secret.get_secret().c_str(), service_secret.get_secret().length());
   if (decode_decrypt(ticket_info, service_secret, indata) < 0) {
-    dout(0) << "could not decrypt ticket info" << dendl;
+    dout(0) << "verify_authorizer could not decrypt ticket info" << dendl;
     return false;
   }
-  dout(0) << "decoded ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
 
   CephXAuthorize auth_msg;
   if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0) {
-    dout(0) << "could not decrypt authorize request" << dendl;
+    dout(0) << "verify_authorizercould not decrypt authorize request" << dendl;
     return false;
   }
 
@@ -225,8 +213,7 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
   if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
     return false;
 
-  dout(0) << "verify_authorizer: ok reply_bl.length()=" << reply_bl.length() <<  dendl;
-
+  dout(10) << "verify_authorizer ok reply_bl.length()=" << reply_bl.length() <<  dendl;
   return true;
 }
 
@@ -235,17 +222,17 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
   CephXAuthorizeReply reply;
 
   if (decode_decrypt(reply, session_key, indata) < 0) {
-    dout(0) << " coudln't decrypt auth reply" << dendl;
+    dout(0) << "verify_authorizer_reply coudln't decrypt with " << session_key << dendl;
     return false;
   }
 
   utime_t expect = timestamp;
   expect.sec_ref() += 1;
   if (expect != reply.timestamp) {
-    dout(0) << " bad ts got " << reply.timestamp << " expect " << expect << " sent " << timestamp << dendl;
+    dout(0) << "verify_authorizer_reply bad ts got " << reply.timestamp << " expected " << expect
+	    << " sent " << timestamp << dendl;
     return false;
   }
-
   return true;
 }
 
