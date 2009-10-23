@@ -133,11 +133,12 @@ protected:
     return false;
   }
   bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
-				    bufferlist& authorizer, bufferlist& authorizer_reply, bool& isvalid) {
+				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+				    bool& isvalid) {
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 p++)
-      if ((*p)->ms_verify_authorizer(con, peer_type, authorizer, authorizer_reply, isvalid))
+      if ((*p)->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid))
 	return true;
     return false;
   }

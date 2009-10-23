@@ -206,8 +206,8 @@ public:
   bool ms_dispatch(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
-				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
-				    bool& isvalid);
+			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+			    bool& isvalid);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 

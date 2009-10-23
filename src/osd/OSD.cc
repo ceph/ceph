@@ -1515,14 +1515,16 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool forc
 }
 
 bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
-				    bufferlist& authorizer_data, bufferlist& authorizer_reply,
-				    bool& isvalid)
+			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+			       bool& isvalid)
 {
   AuthServiceTicketInfo auth_ticket_info;
   bufferlist::iterator iter = authorizer_data.begin();
 
+  if (protocol != CEPH_AUTH_CEPHX)
+    return false;
   if (!authorizer_data.length())
-    return -EPERM;
+    return false;
 
   int ret = verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
   dout(0) << "OSD::verify_authorizer returns " << ret << dendl;

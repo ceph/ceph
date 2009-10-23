@@ -434,7 +434,7 @@ public:
   }
 
   bool get_authorizer(int peer_type, AuthAuthorizer& bl, bool force_new);
-  bool verify_authorizer(Connection *con, int peer_type, bufferlist& auth, bufferlist& auth_reply,
+  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
 			 bool& isvalid);
 
   Endpoint *register_entity(entity_name_t addr);

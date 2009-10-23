@@ -637,7 +637,7 @@ int SimpleMessenger::Pipe::accept()
     }
     
     if (rank->verify_authorizer(connection_state, peer_type,
-				authorizer, authorizer_reply, authorizer_valid) &&
+				connect.authorizer_protocol, authorizer, authorizer_reply, authorizer_valid) &&
 	!authorizer_valid) {
       dout(0) << "accept bad authorizer" << dendl;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
@@ -2163,13 +2163,13 @@ bool SimpleMessenger::get_authorizer(int peer_type, AuthAuthorizer& authorizer, 
 }
 
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
-					bufferlist& authorizer, bufferlist& authorizer_reply,
+					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 					bool& isvalid)
 {
   for (unsigned r = 0; r < max_local; r++) {
     if (!local[r])
       continue;
-    return local[r]->ms_deliver_verify_authorizer(con, peer_type, authorizer, authorizer_reply, isvalid);
+    return local[r]->ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid);
   }
   return false;
 }

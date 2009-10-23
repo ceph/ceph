@@ -49,7 +49,7 @@ public:
   virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer& authorizer, bool force_new) { return false; };
   //  accepting side
   virtual bool ms_verify_authorizer(Connection *con, int peer_type,
-				    bufferlist& authorizer, bufferlist& authorizer_reply,
+				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 				    bool& isvalid) { return false; };
 };
 
