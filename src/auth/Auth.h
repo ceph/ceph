@@ -187,9 +187,6 @@ struct SessionAuthInfo {
 /*
  * Authentication
  */
-extern void build_authenticate_request(EntityName& principal_name, bufferlist& request);
-
-
 extern bool build_service_ticket(SessionAuthInfo& ticket_info, bufferlist& reply);
 
 extern void build_service_ticket_request(uint32_t keys,
@@ -198,22 +195,6 @@ extern void build_service_ticket_request(uint32_t keys,
 extern bool build_service_ticket_reply(CryptoKey& principal_secret,
 				       vector<SessionAuthInfo> ticket_info,
 				       bufferlist& reply);
-
-struct AuthAuthenticateRequest {
-  EntityName name;
-
-  AuthAuthenticateRequest() {}
-  AuthAuthenticateRequest(EntityName& principal_name) :
-    name(principal_name) {}
-
-  void encode(bufferlist& bl) const {
-    ::encode(name, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthAuthenticateRequest)
 
 struct AuthServiceTicketRequest {
   uint32_t keys;

@@ -28,10 +28,10 @@
 
 int CephxServiceHandler::start_session(bufferlist& result_bl)
 {
-  CephXEnvResponse1 response;
+  CephXServerChallenge ch;
   get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
-  response.server_challenge = server_challenge;
-  ::encode(response, result_bl);
+  ch.server_challenge = server_challenge;
+  ::encode(ch, result_bl);
   state = 1;
   return CEPH_AUTH_CEPHX;
 }
@@ -43,13 +43,18 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
   dout(0) << "CephxServiceHandler: handle request" << dendl;
   dout(0) << "state=" << state << dendl;
 
+  struct CephXRequestHeader cephx_header;
+  ::decode(cephx_header, indata);
+
+  dout(0) << "op = " << cephx_header.request_type << dendl;
+
   switch (state) {
   case 0:
     assert(0);
     break;
   case 1:
     {
-      CephXGetMonKey req;
+      CephXAuthenticate req;
       ::decode(req, indata);
 
       entity_name = req.name;
@@ -81,22 +86,17 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       }
 
       dout(0) << "CEPHX_GET_AUTH_SESSION_KEY" << dendl;
-      struct CephXRequestHeader cephx_header;
-      ::decode(cephx_header, indata);
-
-      AuthAuthenticateRequest areq;
-      ::decode(areq, indata);
 
       CryptoKey session_key;
       SessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (key_server->get_secret(areq.name, principal_secret) < 0) {
+      if (key_server->get_secret(req.name, principal_secret) < 0) {
 	ret = -EPERM;
 	break;
       }
 
-      info.ticket.name = areq.name;
+      info.ticket.name = req.name;
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
 
       key_server->generate_secret(session_key);
@@ -122,8 +122,6 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
   case 2:
     {
-      struct CephXRequestHeader cephx_header;
-      ::decode(cephx_header, indata);
       dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
 
       bufferlist tmp_bl;

@@ -10,18 +10,6 @@
  * Authentication
  */
 
-/*
- * PRINCIPAL: request authentication
- *
- * principal_name, principal_addr.  "please authenticate me."
- */
-void build_authenticate_request(EntityName& principal_name,
-				bufferlist& request)
-{
-  AuthAuthenticateRequest req(principal_name);
-  ::encode(req, request);
-}
-
 void build_service_ticket_request(uint32_t keys,
 				  bufferlist& request)
 {

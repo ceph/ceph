@@ -31,8 +31,11 @@ int CephxClientHandler::build_request(bufferlist& bl)
   case STATE_GETTING_MON_KEY:
     /* authenticate */
     {
-      /* FIXME: init req fields */
-      CephXGetMonKey req;
+      CephXRequestHeader header;
+      header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
+      ::encode(header, bl);
+
+      CephXAuthenticate req;
       req.name = client->name;
       CryptoKey secret;
       g_keyring.get_master(secret);
@@ -49,13 +52,6 @@ int CephxClientHandler::build_request(bufferlist& bl)
         req.key ^= *p;
       }
       ::encode(req, bl);
-
-      /* we first need to get the principle/auth session key */
-      CephXRequestHeader header;
-      header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
-      ::encode(header, bl);
-      build_authenticate_request(client->name, bl);
-      return 0;
     }
     break;
 
@@ -64,15 +60,15 @@ int CephxClientHandler::build_request(bufferlist& bl)
     {
       dout(0) << "want=" << hex << client->want << " have=" << client->have << dec << dendl;
 
-      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
-      if (!ticket_handler.build_authorizer(authorizer))
-	return -EINVAL;
-
       CephXRequestHeader header;
       header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
       ::encode(header, bl);
-      
+
+      AuthTicketHandler& ticket_handler = client->tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+      if (!ticket_handler.build_authorizer(authorizer))
+	return -EINVAL;
       bl.claim_append(authorizer.bl);
+
       build_service_ticket_request(client->want, bl);
     }
     break;
@@ -90,23 +86,20 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 {
   dout(0) << "cephx handle_response ret = " << ret << " state " << state << dendl;
 
-  switch (state) {
-  case STATE_START:
-    /* initialize  */
-    { 
-      CephXEnvResponse1 response;
-      ::decode(response, indata);
-      server_challenge = response.server_challenge;
-      state = STATE_GETTING_MON_KEY;
-      ret = -EAGAIN;
-    }
-    break;
-  case STATE_GETTING_MON_KEY:
-    /* authenticate */
-    {
-      struct CephXResponseHeader header;
-      ::decode(header, indata);
+  if (state == STATE_START) {
+    CephXServerChallenge ch;
+    ::decode(ch, indata);
+    server_challenge = ch.server_challenge;
+    state = STATE_GETTING_MON_KEY;
+    return -EAGAIN;
+  }
 
+  struct CephXResponseHeader header;
+  ::decode(header, indata);
+
+  switch (state) {
+  case STATE_GETTING_MON_KEY:
+    {
       dout(0) << "request_type=" << hex << header.request_type << dec << dendl;
       dout(0) << "handle_cephx_response()" << dendl;
 

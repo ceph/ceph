@@ -82,18 +82,14 @@
 /* authorize requests */
 #define CEPHX_OPEN_SESSION              0x0300
 
-#define CEPHX_REQUEST_TYPE_MASK         0x0F00
-
+#define CEPHX_REQUEST_TYPE_MASK            0x0F00
 
 #include "../Auth.h"
 
 
-
-/* 
-  Ceph X-Envelope protocol
-*/
-struct CephXEnvResponse1 {
-  uint64_t server_challenge;
+// initial server -> client challenge
+struct CephXServerChallenge {
+  __u64 server_challenge;
 
   void encode(bufferlist& bl) const {
     ::encode(server_challenge, bl);
@@ -102,29 +98,13 @@ struct CephXEnvResponse1 {
     ::decode(server_challenge, bl);
   }
 };
-WRITE_CLASS_ENCODER(CephXEnvResponse1);
+WRITE_CLASS_ENCODER(CephXServerChallenge);
 
-struct CephXGetMonKey {
-  EntityName name;
-  __u64 client_challenge;
-  __u64 key;
 
-  void encode(bufferlist& bl) const {
-    ::encode(name, bl);
-    ::encode(client_challenge, bl);
-    ::encode(key, bl);
-  }
-  void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-    ::decode(client_challenge, bl);
-     ::decode(key, bl);
- }
-};
-WRITE_CLASS_ENCODER(CephXGetMonKey)
-
+// request/reply headers
 
 struct CephXRequestHeader {
-  uint16_t request_type;
+  __u16 request_type;
 
   void encode(bufferlist& bl) const {
     ::encode(request_type, bl);
@@ -149,6 +129,26 @@ struct CephXResponseHeader {
   }
 };
 WRITE_CLASS_ENCODER(CephXResponseHeader);
+
+
+struct CephXAuthenticate {
+  EntityName name;
+  __u64 client_challenge;
+  __u64 key;
+
+  void encode(bufferlist& bl) const {
+    ::encode(name, bl);
+    ::encode(client_challenge, bl);
+    ::encode(key, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(name, bl);
+    ::decode(client_challenge, bl);
+     ::decode(key, bl);
+ }
+};
+WRITE_CLASS_ENCODER(CephXAuthenticate)
+
 
 
 
