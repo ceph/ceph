@@ -42,9 +42,9 @@ using namespace __gnu_cxx;
 
 
 
-#define OSD_POOL_CAP_R 0x1
-#define OSD_POOL_CAP_W 0x2
-#define OSD_POOL_CAP_RW (OSD_POOL_CAP_R | OSD_POOL_CAP_W)
+#define OSD_POOL_CAP_R 0x01
+#define OSD_POOL_CAP_W 0x02
+#define OSD_POOL_CAP_X 0x04
 
 enum {
   l_osd_first = 10000,
@@ -193,6 +193,7 @@ public:
     map<int, OSDPoolCap> pools_map;
     int default_action;
     bool get_next_token(string s, size_t& pos, string& token);
+    bool is_rwx(string& token, int& cap_val);
   public:
     OSDCaps() : default_action(0) {}
     bool parse(bufferlist::iterator& iter);

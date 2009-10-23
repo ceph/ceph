@@ -3769,7 +3769,8 @@ void OSD::handle_op(MOSDOp *op)
   int pool = pgid.pool();
   int perm = caps.get_pool_cap(pool);
 
-  dout(0) << "request for pool=" << pool << " perm=" << perm << " may_read=" << op->may_read() << " may_write=" << op->may_write() << dendl;
+  dout(0) << "request for pool=" << pool << " perm=" << perm << " may_read=" << op->may_read() << " may_write=" << op->may_write()
+          << " may_exec=" << op->may_exec() << dendl;
 
   if (op->may_read()) {
     if (!(perm & OSD_POOL_CAP_R)) {
@@ -3782,6 +3783,14 @@ void OSD::handle_op(MOSDOp *op)
   if (op->may_write()) {
     if (!(perm & OSD_POOL_CAP_W)) {
       dout(0) << "no WRITE permission to access pool " << pool << dendl;
+      reply_op_error(op, -EPERM);
+      return;
+    }
+  }
+
+  if (op->may_exec()) {
+    if (!(perm & OSD_POOL_CAP_X)) {
+      dout(0) << "no EXEC permission to access pool " << pool << dendl;
       reply_op_error(op, -EPERM);
       return;
     }
@@ -4200,7 +4209,7 @@ void OSD::init_op_flags(MOSDOp *op)
   vector<OSDOp>::iterator iter;
 
   // did client explicitly set either bit?
-  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE);
+  op->rmw_flags = op->get_flags() & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE|CEPH_OSD_FLAG_EXEC);
 
   // implicitly set bits based on op codes, called methods.
   for (iter = op->ops.begin(); iter != op->ops.end(); ++iter) {
@@ -4208,6 +4217,8 @@ void OSD::init_op_flags(MOSDOp *op)
       op->rmw_flags |= CEPH_OSD_FLAG_WRITE;
     if (iter->op.op & CEPH_OSD_OP_MODE_RD)
       op->rmw_flags |= CEPH_OSD_FLAG_READ;
+    if ((iter->op.op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_EXEC)
+      op->rmw_flags |= CEPH_OSD_FLAG_EXEC;
 
     // set PGOP flag if there are PG ops
     if (ceph_osd_op_type_pg(iter->op.op))
@@ -4300,6 +4311,32 @@ bool OSD::OSDCaps::get_next_token(string s, size_t& pos, string& token)
   return true;
 }
 
+bool OSD::OSDCaps::is_rwx(string& token, int& cap_val)
+{
+  const char *t = token.c_str();
+  int val = 0;
+
+  while (*t) {
+    switch (*t) {
+    case 'r':
+      val |= OSD_POOL_CAP_R;
+      break;
+    case 'w':
+      val |= OSD_POOL_CAP_W;
+      break;
+    case 'x':
+      val |= OSD_POOL_CAP_X;
+      break;
+    default:
+      return false;
+    }
+    t++;
+  }
+
+  cap_val = val;
+  return true;
+}
+
 bool OSD::OSDCaps::parse(bufferlist::iterator& iter)
 {
   string s;
@@ -4356,15 +4393,8 @@ do { \
           ASSERT_STATE(op_allow || op_deny);
           cmd_pool = true;
           any_cmd = true;
-        } else if (token.compare("r") == 0) {
+        } else if (is_rwx(token, cap_val)) {
           ASSERT_STATE(op_allow || op_deny);
-          cap_val = OSD_POOL_CAP_R;
-        } else if (token.compare("w") == 0) {
-          ASSERT_STATE(op_allow || op_deny);
-          cap_val = OSD_POOL_CAP_W;
-        } else if (token.compare("rw") == 0) {
-          ASSERT_STATE(op_allow || op_deny);
-          cap_val = OSD_POOL_CAP_RW;
         } else if (token.compare(";") != 0) {
           ASSERT_STATE(got_eq);
           if (token.compare(",") == 0) {
