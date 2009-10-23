@@ -234,6 +234,8 @@ struct AuthAuthorizer {
   bool build_authorizer();
   bool verify_reply(bufferlist::iterator& reply);
   void clear() { bl.clear(); }
+
+  AuthAuthorizer() : protocol(CEPH_AUTH_CEPHX) {}
 };
 
 /*
