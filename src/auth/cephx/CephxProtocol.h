@@ -78,9 +78,7 @@
 /* authenticate requests */
 #define CEPHX_GET_AUTH_SESSION_KEY      0x0100
 #define CEPHX_GET_PRINCIPAL_SESSION_KEY 0x0200
-
-/* authorize requests */
-#define CEPHX_OPEN_SESSION              0x0300
+#define CEPHX_GET_ROTATING_KEY          0x0400
 
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 

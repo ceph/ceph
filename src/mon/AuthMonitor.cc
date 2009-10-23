@@ -20,7 +20,6 @@
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
-#include "messages/MAuthRotating.h"
 
 #include "common/Timer.h"
 
@@ -225,9 +224,6 @@ bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
   case CEPH_MSG_AUTH:
     return preprocess_auth((MAuth *)m);
 
-  case MSG_AUTH_ROTATING:
-    return preprocess_auth_rotating((MAuthRotating *)m);
-
   default:
     assert(0);
     delete m;
@@ -313,26 +309,6 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
   mon->messenger->send_message(reply, m->get_orig_source_inst());
 done:
   s->put();
-  return true;
-}
-
-
-bool AuthMonitor::preprocess_auth_rotating(MAuthRotating *m)
-{
-  dout(10) << "handle_request " << *m << " from " << m->get_orig_source() << dendl;
-  MAuthRotating *reply = new MAuthRotating();
-
-  if (!reply)
-    return true;
-
-  if (mon->key_server.get_rotating_encrypted(m->entity_name, reply->response_bl)) {
-    reply->status = 0;
-  } else {
-    reply->status = -EPERM;
-  }
-  
-  mon->messenger->send_message(reply, m->get_orig_source_inst());
-  delete m;
   return true;
 }
 

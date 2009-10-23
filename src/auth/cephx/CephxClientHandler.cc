@@ -103,8 +103,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   struct CephXResponseHeader header;
   ::decode(header, indata);
 
-  switch (state) {
-  case STATE_GETTING_MON_KEY:
+  switch (header.request_type) {
+  case CEPHX_GET_AUTH_SESSION_KEY:
     {
       dout(0) << "request_type=" << hex << header.request_type << dec << dendl;
       dout(0) << "handle_cephx_response()" << dendl;
@@ -129,7 +129,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     }
     break;
 
-  case STATE_GETTING_SESSION_KEYS:
+  case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     {
       CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
       dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY session_key " << ticket_handler.session_key << dendl;
@@ -145,9 +145,17 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     }
     break;
 
-  case STATE_DONE:
-    // ignore?
-    ret = 0;
+  case CEPHX_GET_ROTATING_KEY:
+    {
+      RotatingSecrets secrets;
+      CryptoKey secret_key;
+      g_keyring.get_master(secret_key);
+      if (decode_decrypt(secrets, secret_key, indata) == 0) {
+	g_keyring.set_rotating(secrets);
+      } else {
+	derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
+      }
+    }
     break;
 
   default:
@@ -165,21 +173,10 @@ AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 }
 
 
-
-int CephxClientHandler::handle_rotating_response(int ret, bufferlist& bl)
+void CephxClientHandler::build_rotating_request(bufferlist& bl)
 {
-  dout(0) << "handle_rotating_response " << ret << " length=" << bl.length() << dendl;
-
-  if (!ret) {
-    RotatingSecrets secrets;
-    CryptoKey secret_key;
-    g_keyring.get_master(secret_key);
-    bufferlist::iterator iter = bl.begin();
-    if (decode_decrypt(secrets, secret_key, iter) == 0) {
-      g_keyring.set_rotating(secrets);
-    } else {
-      derr(0) << "could not set rotating key: decode_decrypt failed" << dendl;
-    }
-  }
-  return 0;
+  CephXRequestHeader header;
+  header.request_type = CEPHX_GET_ROTATING_KEY;
+  ::encode(header, bl);
 }
+

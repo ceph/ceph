@@ -125,7 +125,6 @@ using namespace std;
 #include "messages/MLock.h"
 
 #include "messages/MClass.h"
-#include "messages/MAuthRotating.h"
 
 #include "config.h"
 
@@ -502,10 +501,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   case MSG_CLASS:
     m = new MClass();
-    break;
-
-  case MSG_AUTH_ROTATING:
-    m = new MAuthRotating();
     break;
 
   default:

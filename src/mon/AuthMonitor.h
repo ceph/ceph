@@ -29,7 +29,6 @@ using namespace std;
 class MMonCommand;
 class MAuth;
 class MAuthMon;
-class MAuthRotating;
 
 class AuthMonitor : public PaxosService {
   void auth_usage(stringstream& ss);
@@ -49,8 +48,6 @@ class AuthMonitor : public PaxosService {
   bool prepare_update(PaxosServiceMessage *m);
 
   bool preprocess_auth(MAuth *m);
-
-  bool preprocess_auth_rotating(MAuthRotating *m);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);

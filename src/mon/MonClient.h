@@ -109,7 +109,6 @@ public:
   void set_entity_name(EntityName name) { entity_name = name; }
 
   int _start_auth_rotating();
-  int _wait_auth_rotating(double timeout);
   int wait_auth_rotating(double timeout);
 
   int mount(double mount_timeout);

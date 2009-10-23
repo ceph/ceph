@@ -44,8 +44,7 @@ public:
   }
   int build_request(bufferlist& bl);
   int handle_response(int ret, bufferlist::iterator& iter);
-  int handle_rotating_response(int ret, bufferlist& bl);
-
+  void build_rotating_request(bufferlist& bl);
 
   int get_protocol() { return CEPH_AUTH_CEPHX; }
   

@@ -22,12 +22,11 @@ class KeyServer;
 
 class CephxServiceHandler  : public AuthServiceHandler {
   KeyServer *key_server;
-  int state;
   uint64_t server_challenge;
   EntityName entity_name;
 
 public:
-  CephxServiceHandler(KeyServer *ks) : key_server(ks), state(0) {}
+  CephxServiceHandler(KeyServer *ks) : key_server(ks), server_challenge(0) {}
   ~CephxServiceHandler() {}
   
   int start_session(bufferlist& result_bl);

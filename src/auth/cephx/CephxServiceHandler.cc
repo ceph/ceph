@@ -30,9 +30,10 @@ int CephxServiceHandler::start_session(bufferlist& result_bl)
 {
   CephXServerChallenge ch;
   get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
+  if (!server_challenge)
+    server_challenge = 1;  // always non-zero.
   ch.server_challenge = server_challenge;
   ::encode(ch, result_bl);
-  state = 1;
   return CEPH_AUTH_CEPHX;
 }
 
@@ -41,18 +42,14 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
   int ret = 0;
 
   dout(0) << "CephxServiceHandler: handle request" << dendl;
-  dout(0) << "state=" << state << dendl;
 
   struct CephXRequestHeader cephx_header;
   ::decode(cephx_header, indata);
 
   dout(0) << "op = " << cephx_header.request_type << dendl;
 
-  switch (state) {
-  case 0:
-    assert(0);
-    break;
-  case 1:
+  switch (cephx_header.request_type) {
+  case CEPHX_GET_AUTH_SESSION_KEY:
     {
       CephXAuthenticate req;
       ::decode(req, indata);
@@ -67,6 +64,10 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	break;
       }
 
+      if (!server_challenge) {
+	ret = -EPERM;
+	break;
+      }      
       bufferlist key, key_enc;
       ::encode(server_challenge, key);
       ::encode(req.client_challenge, key);
@@ -124,7 +125,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     }
     break;
 
-  case 2:
+  case CEPHX_GET_PRINCIPAL_SESSION_KEY:
     {
       dout(0) << "CEPHX_GET_PRINCIPAL_SESSION_KEY " << cephx_header.request_type << dendl;
 
@@ -157,14 +158,18 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     }
     break;
 
+  case CEPHX_GET_ROTATING_KEY:
+    {
+      dout(10) << "getting rotating secret for " << entity_name << dendl;
+      build_cephx_response_header(cephx_header.request_type, 0, result_bl);
+      key_server->get_rotating_encrypted(entity_name, result_bl);
+      ret = 0;
+    }
+    break;
+
   default:
     return -EINVAL;
   }
-
-  if (!ret || (ret == -EAGAIN)) {
-    state++;
-  }
-  dout(0) << "returning with state=" << state << dendl;
   return ret;
 }
 

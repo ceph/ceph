@@ -546,7 +546,6 @@ noinst_HEADERS = \
         mds/snap.h\
         messages/MAuth.h\
         messages/MAuthReply.h\
-        messages/MAuthRotating.h\
 	messages/MClass.h\
 	messages/MClassAck.h\
         messages/MClientCaps.h\

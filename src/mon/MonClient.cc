@@ -24,7 +24,6 @@
 #include "messages/MClientMountAck.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
-#include "messages/MAuthRotating.h"
 #include "common/ConfUtils.h"
 
 #include "MonClient.h"
@@ -198,10 +197,6 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
     handle_subscribe_ack((MMonSubscribeAck*)m);
     return true;
-
-  case MSG_AUTH_ROTATING:
-    handle_auth_rotating_response((MAuthRotating*)m);
-    return true;
   }
 
 
@@ -335,13 +330,21 @@ void MonClient::handle_auth(MAuthReply *m)
   }
 
   if (ret == 0) {
-    state = MC_STATE_HAVE_SESSION;
-    while (!waiting_for_session.empty()) {
-      _send_mon_message(waiting_for_session.front());
-      waiting_for_session.pop_front();
+    if (state != MC_STATE_HAVE_SESSION) {
+      state = MC_STATE_HAVE_SESSION;
+      while (!waiting_for_session.empty()) {
+	_send_mon_message(waiting_for_session.front());
+	waiting_for_session.pop_front();
+      }
+      authenticate_cond.SignalAll();
     }
-    authenticate_cond.SignalAll();
+  
+    if (g_keyring.need_rotating_secrets())
+      _start_auth_rotating();
+
+    auth_cond.SignalAll();
   }
+
   /*
     switch (state) {
     case MC_STATE_AUTHENTICATING:
@@ -414,9 +417,6 @@ void MonClient::_reopen_session()
     ::encode(supported, m->auth_payload);
     _send_mon_message(m, true);
   }
-
-  if (g_keyring.need_rotating_secrets())
-    _start_auth_rotating();
 
   if (mounting)
     _send_mount();
@@ -536,9 +536,7 @@ int MonClient::wait_authenticate(double timeout)
     _reopen_session();
 
   int ret = authenticate_cond.WaitInterval(monc_lock, interval);
-
   dout(0) << "wait_authenticate ended, returned " << ret << dendl;
-
   return ret;
 }
 
@@ -549,42 +547,25 @@ int MonClient::_start_auth_rotating()
     return 0;
   }
 
-  MAuthRotating *m = new MAuthRotating;
-  m->entity_name = entity_name;
-  _send_mon_message(m);
+  if (auth) {
+    MAuth *m = new MAuth;
+    m->protocol = auth->get_protocol();
+    auth->build_rotating_request(m->auth_payload);
+    _send_mon_message(m);
+  }
   return 0;
-}
-
-int MonClient::_wait_auth_rotating(double timeout)
-{
-  utime_t interval;
-  interval += timeout;
-
-  int ret = auth_cond.WaitInterval(monc_lock, interval);
-
-  return ret;
 }
 
 int MonClient::wait_auth_rotating(double timeout)
 {
   Mutex::Locker l(monc_lock);
-
-  if (!auth_principal_needs_rotating_keys(entity_name))
-    return 0;
-
-  if (!g_keyring.need_rotating_secrets())
-    return 0;
-
-  return _wait_auth_rotating(timeout);
+  utime_t interval;
+  interval += timeout;
+  
+  while (auth_principal_needs_rotating_keys(entity_name) &&
+	 g_keyring.need_rotating_secrets())
+    auth_cond.WaitInterval(monc_lock, interval);
+  return 0;
 }
 
-void MonClient::handle_auth_rotating_response(MAuthRotating *m)
-{
-  Mutex::Locker l(monc_lock);
-
-  if (auth)
-    auth->handle_rotating_response(m->status, m->response_bl);
-
-  auth_cond.SignalAll();
-}
 
