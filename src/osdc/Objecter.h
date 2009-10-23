@@ -308,7 +308,12 @@ public:
     C_List(ListContext *lc, Context * finish, bufferlist *b, Objecter *ob) :
       list_context(lc), final_finish(finish), bl(b), objecter(ob) {}
     void finish(int r) {
-      objecter->_list_reply(list_context, bl, final_finish);
+      if (r >= 0) {
+        objecter->_list_reply(list_context, bl, final_finish);
+      } else {
+        final_finish->finish(r);
+        delete final_finish;
+      }
     }
   };
   
