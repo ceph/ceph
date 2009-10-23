@@ -4346,7 +4346,7 @@ bool OSD::OSDCaps::parse(bufferlist::iterator& iter)
   try {
     ::decode(s, iter);
 
-    *_dout << "decoded caps: " << s << std::endl;
+    generic_dout(0) << "decoded caps: " << s << std::endl;
 
     size_t pos = 0;
     string token;
@@ -4391,7 +4391,8 @@ do { \
         } else if (token.compare("deny") == 0) {
           ASSERT_STATE((!op_allow) && (!op_deny));
           op_deny = true;
-        } else if (token.compare("pools") == 0) {
+        } else if ((token.compare("pools") == 0) ||
+                   (token.compare("pool") == 0)) {
           ASSERT_STATE(op_allow || op_deny);
           cmd_pool = true;
           any_cmd = true;
@@ -4436,12 +4437,11 @@ do { \
     return false;
   }
 
-  *_dout << "default=" << default_action << std::endl;
+  generic_dout(0) << "default=" << default_action << std::endl;
   map<int, OSDPoolCap>::iterator it;
   for (it = pools_map.begin(); it != pools_map.end(); ++it) {
-    *_dout << it->first << " -> (" << it->second.allow << "." << it->second.deny << ")" << std::endl;
+    generic_dout(0) << it->first << " -> (" << it->second.allow << "." << it->second.deny << ")" << std::endl;
   }
-
 
   return true;
 }
