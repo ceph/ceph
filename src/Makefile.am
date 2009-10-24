@@ -384,6 +384,7 @@ libosd_a_SOURCES = \
 	osd/ReplicatedPG.cc \
 	osd/Ager.cc \
 	osd/OSD.cc \
+	osd/OSDCaps.cc \
         common/ClassHandler.cc
 #	osd/RAID4PG.cc
 

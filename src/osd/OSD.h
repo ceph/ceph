@@ -25,6 +25,7 @@
 
 #include "os/ObjectStore.h"
 #include "PG.h"
+#include "OSDCaps.h"
 
 #include "common/DecayCounter.h"
 #include "common/ClassHandler.h"
@@ -42,9 +43,6 @@ using namespace __gnu_cxx;
 
 
 
-#define OSD_POOL_CAP_R 0x01
-#define OSD_POOL_CAP_W 0x02
-#define OSD_POOL_CAP_X 0x04
 
 enum {
   l_osd_first = 10000,
@@ -182,24 +180,6 @@ private:
 
   // -- sessions --
 public:
-  typedef __u8 rwx_t;
-  struct OSDPoolCap {
-    rwx_t allow;
-    rwx_t deny;
-    OSDPoolCap() : allow(0), deny(0) {}
-  };
-
-  struct OSDCaps {
-    map<int, OSDPoolCap> pools_map;
-    rwx_t default_action;
-    bool get_next_token(string s, size_t& pos, string& token);
-    bool is_rwx(string& token, rwx_t& cap_val);
-
-    OSDCaps() : default_action(0) {}
-    bool parse(bufferlist::iterator& iter);
-    int get_pool_cap(int pool_id);
-  };
-
   struct Session : public RefCountedObject {
     AuthTicket ticket;
     OSDCaps caps;
@@ -884,20 +864,5 @@ protected:
   void init_op_flags(MOSDOp *op);
 };
 
-static inline ostream& operator<<(ostream& out, OSD::rwx_t p) {
-  if (p & OSD_POOL_CAP_R)
-    out << "r";
-  if (p & OSD_POOL_CAP_W)
-    out << "w";
-  if (p & OSD_POOL_CAP_X)
-    out << "x";
-  return out;
-}
-static inline ostream& operator<<(ostream& out, const OSD::OSDPoolCap& pc) {
-  return out << "(allow " << pc.allow << ", deny " << pc.deny << ")";
-}
-static inline ostream& operator<<(ostream& out, const OSD::OSDCaps& c) {
-  return out << "osdcaps(pools=" << c.pools_map << " default=" << c.default_action << ")";
-}
 
 #endif
