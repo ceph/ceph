@@ -31,24 +31,29 @@ protected:
   EntityName name;
   uint32_t want;
   uint32_t have;
+  uint32_t need;
 
 public:
-  AuthClientHandler() : want(0), have(0) {}
+  AuthClientHandler() : want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0) {}
   virtual ~AuthClientHandler() {}
 
   void init(EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
-    want = keys;
+    want = keys | CEPH_ENTITY_TYPE_AUTH;
+    validate_tickets();
   }
   void add_want_keys(__u32 keys) {
     want |= keys;
+    validate_tickets();
   }   
 
   bool have_keys(__u32 k) {
+    validate_tickets();
     return (k & have) == have;
   }
   bool have_keys() {
+    validate_tickets();
     return (want & have) == have;
   }
 
@@ -63,6 +68,8 @@ public:
   virtual void tick() = 0;
 
   virtual AuthAuthorizer *build_authorizer(uint32_t service_id) = 0;
+
+  virtual void validate_tickets() = 0;
 };
 
 

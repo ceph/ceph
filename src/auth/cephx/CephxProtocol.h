@@ -230,7 +230,8 @@ struct CephXTicketHandler {
   // to access the service
   CephXAuthorizer *build_authorizer();
 
-  bool has_key() { return has_key_flag; }
+  bool has_key();
+  bool needs_key();
 };
 
 struct CephXTicketManager {
@@ -246,6 +247,8 @@ struct CephXTicketManager {
   }
   CephXAuthorizer *build_authorizer(uint32_t service_id);
   bool has_key(uint32_t service_id);
+  bool needs_key(uint32_t service_id);
+  void validate_tickets(uint32_t mask, uint32_t& need);
 };
 
 

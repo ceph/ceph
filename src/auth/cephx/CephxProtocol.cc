@@ -86,12 +86,38 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   return true;
 }
 
+bool CephXTicketHandler::has_key()
+{
+  if (has_key_flag) {
+    has_key_flag = g_clock.now() < expires;
+  }
+
+  return has_key_flag;
+}
+
+bool CephXTicketHandler::needs_key()
+{
+  if (has_key_flag) {
+    return (!expires.is_zero()) && (g_clock.now() >= renew_after);
+  }
+
+  return true;
+}
+
 bool CephXTicketManager::has_key(uint32_t service_id)
 {
   map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return false;
   return iter->second.has_key();
+}
+
+bool CephXTicketManager::needs_key(uint32_t service_id)
+{
+  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  if (iter == tickets_map.end())
+    return true;
+  return iter->second.needs_key();
 }
 
 /*
@@ -108,6 +134,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
     ::decode(type, indata);
+    dout(0) << "got key for service_id=" << type << dendl;
     CephXTicketHandler& handler = tickets_map[type];
     handler.service_id = type;
     if (!handler.verify_service_ticket_reply(secret, indata)) {
@@ -132,8 +159,6 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer()
   CephXAuthorizer *a = new CephXAuthorizer;
   a->session_key = session_key;
   a->timestamp = g_clock.now();
-
-  dout(10) << "build_authorizer service_id=" << service_id << " session_key " << session_key << dendl;
 
   ::encode(service_id, a->bl);
   ::encode(ticket, a->bl);
@@ -160,6 +185,17 @@ CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
 
   CephXTicketHandler& handler = iter->second;
   return handler.build_authorizer();
+}
+
+void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& need)
+{
+  uint32_t i;
+  need = 0;
+  for (i = 1; i<=mask; i<<=1) {
+    if ((mask & i) && needs_key(i)) {
+      need |= i;
+    }
+  }
 }
 
 /*
