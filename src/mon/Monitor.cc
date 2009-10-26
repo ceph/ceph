@@ -481,10 +481,14 @@ bool Monitor::ms_dispatch(Message *m)
 
   Connection *connection = m->get_connection();
   Session *s = NULL;
+  bool reuse_caps = false;
+  MonCaps caps;
 
   if (connection) {
     s = (Session *)connection->get_priv();
     if (s && s->closed) {
+      caps = s->caps;
+      reuse_caps = true;
       s->put();
       s = NULL;
     }
@@ -499,6 +503,8 @@ bool Monitor::ms_dispatch(Message *m)
 	s->until = g_clock.now();
 	s->until += g_conf.mon_subscribe_interval;
       }
+      if (reuse_caps)
+        s->caps = caps;
     } else {
       dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
     }
