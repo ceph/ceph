@@ -510,14 +510,9 @@ bool Monitor::ms_dispatch(Message *m)
     }
   }
 
-  int c = s->caps.get_caps(PAXOS_MONMAP);
-  if ((c & (MON_CAP_RW)) == (MON_CAP_RW)) {
-    dout(0) << "has rw caps" << dendl;
-  }
 #define ALLOW_CAPS(service_id, allow_caps) \
 do { \
-  int c = s->caps.get_caps(service_id); \
-  if ((c & (allow_caps)) != (allow_caps)) { \
+  if (s && ((int)s->caps.get_caps(service_id) & (allow_caps)) != (allow_caps)) { \
     dout(0) << "filtered out request due to caps " \
            << " allowing=" << #allow_caps << " message=" << *m << dendl; \
     delete m; \
