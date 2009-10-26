@@ -74,7 +74,7 @@ int main(int argc, const char **argv)
   }
 
   CryptoKey key;
-  key.create(CEPH_SECRET_AES);
+  key.create(CEPH_CRYPTO_AES);
 
   bufferlist bl;
   int r = bl.read_file(fn, true);

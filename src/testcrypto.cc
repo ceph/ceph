@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
   char aes_key[AES_KEY_LEN];
   memset(aes_key, 0x77, sizeof(aes_key));
   bufferptr keybuf(aes_key, sizeof(aes_key));
-  CryptoKey key(CEPH_SECRET_AES, g_clock.now(), keybuf);
+  CryptoKey key(CEPH_CRYPTO_AES, g_clock.now(), keybuf);
 
   const char *msg="hello! this is a message\n";
   char pad[16];

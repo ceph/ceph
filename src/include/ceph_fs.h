@@ -77,18 +77,13 @@ struct ceph_file_layout {
 int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 
 
-/*
- * An encryption key/secret.
- */
-struct ceph_crypto_key {
-	__le16 type;
-	struct ceph_timespec created;
-	__le16 len;
-	char key[];
-} __attribute__ ((packed));
+/* crypto algorithms */
+#define CEPH_CRYPTO_NONE 0x0
+#define CEPH_CRYPTO_AES  0x1
 
-#define CEPH_SECRET_NONE 0x0
-#define CEPH_SECRET_AES  0x1
+/* security/authentication protocols */
+#define CEPH_AUTH_NONE	 0x0
+#define CEPH_AUTH_CEPHX	 0x1
 
 
 /*********************************************
@@ -134,14 +129,6 @@ struct ceph_crypto_key {
 #define CEPH_MSG_OSD_OP           42
 #define CEPH_MSG_OSD_OPREPLY      43
 
-/* auth */
-#define CEPH_AUTH_NONE	0
-#define CEPH_AUTH_CEPHX	1
-
-struct ceph_auth_type {
-	__le32 type;
-} __attribute__ ((packed));
-
 struct ceph_mon_request_header {
 	__le64 have_version;
 	__le16 session_mon;
@@ -164,27 +151,6 @@ struct ceph_mon_statfs_reply {
 	__le64 tid;
 	__le64 version;
 	struct ceph_statfs st;
-} __attribute__ ((packed));
-
-struct ceph_mon_auth_req_hdr {
-	__le64 have_version;
-} __attribute__ ((packed));
-
-struct ceph_mon_auth_init_req {
-	__le32 num_auth;
-	struct ceph_auth_type auth_type[0];
-} __attribute__ ((packed));
-
-struct ceph_mon_auth_reply_hdr {
-	__le32 status;
-} __attribute__ ((packed));
-
-struct ceph_mon_auth_x_reply {
-	__le64 server_challenge;
-} __attribute__ ((packed));
-
-struct ceph_mon_auth_x_request {
-	__le64 client_challenge;
 } __attribute__ ((packed));
 
 struct ceph_osd_getmap {
