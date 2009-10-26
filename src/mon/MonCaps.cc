@@ -194,3 +194,16 @@ do { \
   return true;
 }
 
+rwx_t MonCaps::get_caps(int service)
+{
+  int caps = default_action;
+  map<int, MonServiceCap>::iterator it = services_map.find(service);
+  if (it != services_map.end()) {
+    MonServiceCap& sc = it->second;
+    caps |= sc.allow;
+    caps &= ~sc.deny;
+    
+  }
+  return caps;
+}
+

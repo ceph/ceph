@@ -38,6 +38,7 @@ class MonCaps {
 public:
   MonCaps() : default_action(0) {}
   bool parse(bufferlist::iterator& iter);
+  rwx_t get_caps(int service);
 };
 
 #endif
