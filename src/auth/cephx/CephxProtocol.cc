@@ -80,7 +80,8 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   ::decode(ticket, indata);
   dout(10) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
 	   << " secret_id " << ticket.secret_id
-	   << " session_key " << msg_a.session_key << dendl;  
+	   << " session_key " << msg_a.session_key
+           << " validity=" << msg_a.validity << dendl;
   session_key = msg_a.session_key;
   has_key_flag = true;
   return true;

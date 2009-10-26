@@ -537,6 +537,13 @@ int MonClient::wait_authenticate(double timeout)
 
 int MonClient::_check_auth_rotating()
 {
+  if (state == MC_STATE_HAVE_SESSION && auth && auth->need_tickets()) {
+    MAuth *m = new MAuth;
+    m->protocol = auth->get_protocol();
+    auth->build_request(m->auth_payload);
+    _send_mon_message(m);
+  }
+
   if (!g_keyring.need_rotating_secrets())
     return 0;
 

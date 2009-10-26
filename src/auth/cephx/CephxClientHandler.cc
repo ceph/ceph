@@ -190,3 +190,9 @@ void CephxClientHandler::validate_tickets()
   tickets.validate_tickets(want, need);
 }
 
+bool CephxClientHandler::need_tickets()
+{
+  validate_tickets();
+  return (need != 0);
+}
+

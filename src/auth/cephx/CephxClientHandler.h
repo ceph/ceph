@@ -53,7 +53,7 @@ public:
   AuthAuthorizer *build_authorizer(uint32_t service_id);
 
   void validate_tickets();
-
+  bool need_tickets();
 };
 
 #endif

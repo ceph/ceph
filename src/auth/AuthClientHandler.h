@@ -70,6 +70,7 @@ public:
   virtual AuthAuthorizer *build_authorizer(uint32_t service_id) = 0;
 
   virtual void validate_tickets() = 0;
+  virtual bool need_tickets() = 0;
 };
 
 
