@@ -325,8 +325,6 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   else
     dout(10) << " got osd " << from << " " << stats->osd_stat << " (first report)" << dendl;
 
-  //Check how full the OSD is; set OSDMap to full/near-full if needed
-  mon->osdmon()->handle_osd_stat(stats->osd_stat, from);
   // apply to live map too (screw consistency)
   /*
     actually, no, don't.  that screws up our "latest" stash.  and can

@@ -271,13 +271,6 @@ bool OSDMonitor::should_propose(double& delay)
   if (pending_inc.fullmap.length())
     return true;
 
-  if ((pending_inc.new_flags ^ osdmap.flags)
-      & CEPH_OSDMAP_FULL) { //get that info out there!
-    dout(1) << "should_propose returning true, 0.0 because full status changed! " << dendl;
-    delay = 0.0;
-    return true;
-  }
-
   // adjust osd weights?
   if (osd_weight.size() == (unsigned)osdmap.get_max_osd()) {
     dout(0) << " adjusting osd weights based on " << osd_weight << dendl;
@@ -756,44 +749,6 @@ void OSDMonitor::check_sub(Subscription *sub)
   }
 }
 
-void OSDMonitor::handle_osd_stat(osd_stat_t& stat, int from)
-{
-  float ratio = ((float)stat.kb_used) / (float) stat.kb;
-  if ( ratio > CEPH_OSD_FULL_RATIO ) {
-    dout(5) << "osd" << from << " has ratio " << ratio 
-	    << "which is beyond CEPH_OSD_FULL_RATIO "
-	    << CEPH_OSD_FULL_RATIO << dendl;
-    add_flag(CEPH_OSDMAP_FULL);
-    full_osds.insert(from);
-  }
-  else if ( ratio > CEPH_OSD_NEARFULL_RATIO ) {
-    dout(10) << "osd" << from << " has ratio " << ratio 
-	     << "which is beyond CEPH_OSD_NEARFULL_RATIO "
-	     << CEPH_OSD_NEARFULL_RATIO << dendl;
-    add_flag(CEPH_OSDMAP_NEARFULL);
-    nearfull_osds.insert(from);
-    if (full_osds.erase(from)) { //it actually erased an element
-      if (full_osds.empty()) {
-	dout(1) << "full_osds is empty, removing full flag!" << dendl;
-	remove_flag(CEPH_OSDMAP_FULL);
-      }
-    }
-  }
-  else {//it's not full or near-full
-    if (full_osds.erase(from)) {
-      dout(1) << "erased osd" << from << "from full_osds" << dendl;
-      if (full_osds.empty()) {
-	dout(1) << "full_osds is empty, removing full flag!" << dendl;
-	remove_flag(CEPH_OSDMAP_FULL);
-      }
-    }
-    if (nearfull_osds.erase(from)) {
-      if (nearfull_osds.empty())
-	remove_flag(CEPH_OSDMAP_NEARFULL);
-    }
-  }
-}
-
 // TICK
 
 
@@ -847,10 +802,19 @@ void OSDMonitor::tick()
   }
 
   //if map full setting has changed, get that info out there!
-  if (pending_inc.new_flags != -1 &&
-      (pending_inc.new_flags ^ osdmap.flags) & CEPH_OSDMAP_FULL) {
-    dout(1) << "New setting for CEPH_OSDMAP_FULL -- doing propose" << dendl;
-    do_propose = true;
+  if (mon->pgmon()->paxos->is_readable()) {
+    if (!mon->pgmon()->pg_map.full_osds.empty()) {
+      dout(5) << "There are full osds, setting full flag" << dendl;
+      add_flag(CEPH_OSDMAP_FULL);
+    } else {
+      dout(10) << "No full osds, removing full flag (if it's set)" << dendl;
+      remove_flag(CEPH_OSDMAP_FULL);
+    }
+    if (pending_inc.new_flags != -1 &&
+	(pending_inc.new_flags ^ osdmap.flags) & CEPH_OSDMAP_FULL) {
+      dout(1) << "New setting for CEPH_OSDMAP_FULL -- doing propose" << dendl;
+      do_propose = true;
+    }
   }
   // ---------------
 #define SWAP_PRIMARIES_AT_START 0
