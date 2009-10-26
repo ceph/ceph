@@ -80,9 +80,9 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 /*
  * An encryption key/secret.
  */
-struct ceph_secret {
+struct ceph_crypto_key {
 	__le16 type;
-	__le64 timestamp;
+	struct ceph_timespec created;
 	__le16 len;
 	char key[];
 } __attribute__ ((packed));
