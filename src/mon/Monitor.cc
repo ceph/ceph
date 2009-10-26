@@ -510,6 +510,21 @@ bool Monitor::ms_dispatch(Message *m)
     }
   }
 
+  int c = s->caps.get_caps(PAXOS_MONMAP);
+  if ((c & (MON_CAP_RW)) == (MON_CAP_RW)) {
+    dout(0) << "has rw caps" << dendl;
+  }
+#define ALLOW_CAPS(service_id, allow_caps) \
+do { \
+  int c = s->caps.get_caps(service_id); \
+  if ((c & (allow_caps)) != (allow_caps)) { \
+    dout(0) << "filtered out request due to caps " \
+           << " allowing=" << #allow_caps << " message=" << *m << dendl; \
+    delete m; \
+    break; \
+  } \
+} while (0)
+
   {
     switch (m->get_type()) {
       
@@ -537,24 +552,31 @@ bool Monitor::ms_dispatch(Message *m)
     case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
-    case MSG_REMOVE_SNAPS:
+      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_R);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      
+    case MSG_REMOVE_SNAPS:
+      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RW);
+      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      break;
+
       // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
+      ALLOW_CAPS(PAXOS_MDSMAP, MON_CAP_RW);
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // auth
     case CEPH_MSG_AUTH:
+      /* no need to check caps here */
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // clients
     case CEPH_MSG_CLIENT_MOUNT:
+      ALLOW_CAPS(PAXOS_CLIENTMAP, MON_CAP_RW);
       paxos_service[PAXOS_CLIENTMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
@@ -562,15 +584,18 @@ bool Monitor::ms_dispatch(Message *m)
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
+      ALLOW_CAPS(PAXOS_CLIENTMAP, MON_CAP_R);
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
     case MSG_POOLOP:
-     paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
+      ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_RX);
+      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
       // log
     case MSG_LOG:
+      ALLOW_CAPS(PAXOS_LOG, MON_CAP_RW);
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 

@@ -21,6 +21,9 @@
 #define MON_CAP_W 0x2
 #define MON_CAP_X 0x4
 
+#define MON_CAP_RW (MON_CAP_R | MON_CAP_W)
+#define MON_CAP_RX (MON_CAP_R | MON_CAP_X)
+
 typedef __u8 rwx_t;
 
 struct MonServiceCap {
