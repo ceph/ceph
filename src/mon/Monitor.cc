@@ -512,11 +512,13 @@ bool Monitor::ms_dispatch(Message *m)
 
 #define ALLOW_CAPS(service_id, allow_caps) \
 do { \
+  if (connection && connection->get_peer_type() & CEPH_ENTITY_TYPE_MON) \
+    break; \
   if (s && ((int)s->caps.get_caps(service_id) & (allow_caps)) != (allow_caps)) { \
     dout(0) << "filtered out request due to caps " \
            << " allowing=" << #allow_caps << " message=" << *m << dendl; \
     delete m; \
-    break; \
+    goto out; \
   } \
 } while (0)
 
@@ -635,6 +637,7 @@ do { \
       ret = false;
     }
   }
+out:
   if (s) {
     s->put();
   }
