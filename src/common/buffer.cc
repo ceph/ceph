@@ -15,11 +15,22 @@
 
 #include "config.h"
 #include "include/types.h"
+#include "armor.h"
 
 #include <errno.h>
 #include <fstream>
 
 atomic_t buffer_total_alloc;
+
+
+void buffer::list::encode_base64(buffer::list& o)
+{
+  bufferptr bp(length() * 4 / 3 + 1);
+  int l = ceph_armor(bp.c_str(), c_str(), c_str() + length());
+  bp.set_length(l);
+  o.push_back(bp);
+}
+
 
 int buffer::list::read_file(const char *fn, bool silent)
 {

@@ -115,8 +115,11 @@ int main(int argc, const char **argv)
       }
     }
   } else if (print_key) {
-    if (keys_map.count(s))
-      cout << keys_map[s].key << std::endl;
+    if (keys_map.count(s)) {
+      string a;
+      keys_map[s].key.encode_base64(a);
+      cout << a << std::endl;
+    }
     else
       cerr << "entity " << s << " not found" << std::endl;
   }

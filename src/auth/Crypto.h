@@ -51,6 +51,15 @@ public:
   int set_secret(int type, bufferptr& s);
   bufferptr& get_secret() { return secret; }
 
+  void encode_base64(string& s) {
+    bufferlist bl;
+    encode(bl);
+    bufferlist e;
+    bl.encode_base64(e);
+    e.append('\0');
+    s = e.c_str();
+  }
+
   // --
   int create(int type);
   int encrypt(const bufferlist& in, bufferlist& out);

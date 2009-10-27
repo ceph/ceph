@@ -1088,6 +1088,8 @@ public:
 	}*/
     }
 
+    void encode_base64(list& o);
+
     void hexdump(std::ostream &out);
     int read_file(const char *fn, bool silent=false);
     int write_file(const char *fn);
