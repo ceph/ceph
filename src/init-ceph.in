@@ -180,7 +180,7 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
 
-    get_conf pid_file "" "pid file"
+    get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
 
     case "$command" in
 	start)

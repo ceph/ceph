@@ -10,7 +10,6 @@
 - commit
 - git tag version
 - build debs for amd64, i386
-- make dist, upload to ceph.newdream.net:ceph.newdream.net/downloads
 - email ml + post news entry
 
 - rebase kclient_clean

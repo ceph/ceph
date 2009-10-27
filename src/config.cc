@@ -306,7 +306,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_dir, 0, OPT_STR, "/var/log/ceph"),		// if daemonize == true
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
-	OPTION(pid_file, 0, OPT_STR, 0),
+	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
 	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
 	OPTION(fake_clock, 0, OPT_BOOL, false),
