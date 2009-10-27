@@ -23,7 +23,7 @@ using namespace std;
 
 void usage()
 {
-  cout << " usage: [--gen-key] [--name=<name>] [--caps=<filename>] [--list] <filename>" << std::endl;
+  cout << " usage: [--gen-key] [--name=<name>] [--caps=<filename>] [--list] [--print-key] <filename>" << std::endl;
   exit(1);
 }
 
@@ -40,6 +40,7 @@ int main(int argc, const char **argv)
   const char *fn = 0;
   bool gen_key = false;
   bool list = false;
+  bool print_key = true;
   const char *name = "";
   const char *caps_fn = NULL;
 
@@ -52,6 +53,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&list, OPT_BOOL);
     } else if (CONF_ARG_EQ("caps", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&caps_fn, OPT_STR);
+    } else if (CONF_ARG_EQ("print-key", 'p')) {
+      CONF_SAFE_SET_ARG_VAL(&print_key, OPT_BOOL);
     } else if (!fn) {
       fn = args[i];
     } else 
@@ -65,16 +68,12 @@ int main(int argc, const char **argv)
   map<string, EntityAuth> keys_map;
   string s = name;
 
-
   if (caps_fn) {
     if (!name || !(*name)) {
       cerr << "can't specify caps without name" << std::endl;
       exit(1);
     }
   }
-
-  CryptoKey key;
-  key.create(CEPH_CRYPTO_AES);
 
   bufferlist bl;
   int r = bl.read_file(fn, true);
@@ -94,10 +93,10 @@ int main(int argc, const char **argv)
   }
 
   if (gen_key) {
+    CryptoKey key;
+    key.create(CEPH_CRYPTO_AES);
     keys_map[s].key = key;
-  }
-
-  if (list) {
+  } else if (list) {
     map<string, EntityAuth>::iterator iter = keys_map.begin();
     for (; iter != keys_map.end(); ++iter) {
       string n = iter->first;
@@ -115,6 +114,11 @@ int main(int argc, const char **argv)
 	cout << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
       }
     }
+  } else if (print_key) {
+    if (keys_map.count(s))
+      cout << keys_map[s].key << std::endl;
+    else
+      cerr << "entity " << s << " not found" << std::endl;
   }
 
   if (caps_fn) {
