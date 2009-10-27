@@ -19,12 +19,7 @@
 #include "CephxProtocol.h"
 
 class CephxClientHandler : public AuthClientHandler {
-  enum {
-    STATE_START,
-    STATE_GETTING_MON_KEY,
-    STATE_GETTING_SESSION_KEYS,
-    STATE_DONE
-  } state;
+  bool starting;
   
   /* envelope protocol parameters */
   uint64_t server_challenge;
@@ -40,7 +35,7 @@ public:
   void reset() {
     delete authorizer;
     authorizer = 0;
-    state = STATE_START;
+    starting = true;
   }
   int build_request(bufferlist& bl);
   int handle_response(int ret, bufferlist::iterator& iter);

@@ -34,7 +34,7 @@ int CephxServiceHandler::start_session(bufferlist& result_bl)
   get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
   if (!server_challenge)
     server_challenge = 1;  // always non-zero.
-  dout(10) << "start_session server_challenge " << server_challenge << dendl;
+  dout(10) << "start_session server_challenge " << hex << server_challenge << dec << dendl;
 
   CephXServerChallenge ch;
   ch.server_challenge = server_challenge;

@@ -29,11 +29,7 @@
 
 int CephxClientHandler::build_request(bufferlist& bl)
 {
-  dout(10) << "build_request state " << state << dendl;
-
-  switch (state == STATE_START) {
-    return 0;
-  }
+  dout(10) << "build_request" << dendl;
 
   validate_tickets();
 
@@ -91,17 +87,17 @@ int CephxClientHandler::build_request(bufferlist& bl)
 
 int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 {
-  dout(10) << "handle_response ret = " << ret << " state " << state << dendl;
+  dout(10) << "handle_response ret = " << ret << dendl;
   
   if (ret < 0)
     return ret; // hrm!
 
-  if (state == STATE_START) {
+  if (starting) {
     CephXServerChallenge ch;
     ::decode(ch, indata);
     server_challenge = ch.server_challenge;
     dout(10) << " got initial server challenge " << server_challenge << dendl;
-    state = STATE_GETTING_MON_KEY;
+    starting = false;
     return -EAGAIN;
   }
 
@@ -121,13 +117,10 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
       }
       dout(10) << " want=" << want << " need=" << need << " have=" << have << dendl;
       validate_tickets();
-      if (need) {
-	state = STATE_GETTING_SESSION_KEYS;
+      if (need)
 	ret = -EAGAIN;
-      } else {
-	state = STATE_DONE;
+      else
 	ret = 0;
-      }
     }
     break;
 
@@ -140,10 +133,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
         dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }
-      if (want == have) {
-	state = STATE_DONE;
+      if (want == have)
 	ret = 0;
-      }
     }
     break;
 
