@@ -80,7 +80,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       for (int pos = 0; pos + sizeof(req.key) <= key_enc.length(); pos+=sizeof(req.key), p++) {
         expected_key ^= *p;
       }
-      dout(0) << " checking key: req.key=" << hex << req.key << " expected_key=" << expected_key << dec << dendl;
+      dout(20) << " checking key: req.key=" << hex << req.key << " expected_key=" << expected_key << dec << dendl;
       if (req.key != expected_key) {
         dout(0) << " unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
         ret = -EPERM;
@@ -96,8 +96,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	break;
       }
 
-      info.ticket.name = req.name;
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
+      info.ticket.name = req.name;
+      info.validity += g_conf.auth_mon_ticket_ttl;
 
       key_server->generate_secret(session_key);
 
@@ -149,6 +150,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
             ret = r;
             break;
           }
+          info.validity += g_conf.auth_service_ticket_ttl;
           info_vec.push_back(info);
         }
       }

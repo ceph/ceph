@@ -122,7 +122,7 @@ void KeyServer::_generate_all_rotating_secrets(bool init)
 {
   data.rotating_ver++;
   data.next_rotating_time = g_clock.now();
-  data.next_rotating_time += KEY_ROTATE_TIME;
+  data.next_rotating_time += g_conf.auth_mon_ticket_ttl;
   dout(0) << "generate_all_rotating_secrets()" << dendl;
 
   int i = KEY_ROTATE_NUM;
@@ -160,7 +160,7 @@ void KeyServer::_rotate_secret(uint32_t service_id, int factor)
   ExpiringCryptoKey ek;
   generate_secret(ek.key);
   ek.expiration = g_clock.now();
-  ek.expiration += (KEY_ROTATE_TIME * factor);
+  ek.expiration += (g_conf.auth_mon_ticket_ttl * factor);
   
   data.add_rotating_secret(service_id, ek);
 }

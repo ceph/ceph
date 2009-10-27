@@ -31,6 +31,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
 {
   dout(10) << "build_request" << dendl;
 
+  dout(10) << "validate_tickets: want=" << want << " need=" << need << " have=" << have << dendl;
   validate_tickets();
 
   dout(10) << "want=" << want << " need=" << need << " have=" << have << dendl;
@@ -65,7 +66,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
 
   if (need) {
     /* get service tickets */
-    dout(10) << "get service keys: want=" << hex << want << " need=" << need << " have=" << have << dec << dendl;
+    dout(10) << "get service keys: want=" << want << " need=" << need << " have=" << have << dendl;
 
     CephXRequestHeader header;
     header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
@@ -133,8 +134,10 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
         dout(0) << "could not verify service_ticket reply" << dendl;
         return -EPERM;
       }
-      if (want == have)
+      validate_tickets();
+      if (!need) {
 	ret = 0;
+      }
     }
     break;
 
@@ -178,12 +181,15 @@ void CephxClientHandler::build_rotating_request(bufferlist& bl)
 
 void CephxClientHandler::validate_tickets()
 {
-  tickets.validate_tickets(want, need);
+  tickets.validate_tickets(want, have, need);
 }
 
 bool CephxClientHandler::need_tickets()
 {
   validate_tickets();
+
+  dout(20) << "need_tickets: want=" << want << " need=" << need << " have=" << have << dendl;
+
   return (need != 0);
 }
 

@@ -538,6 +538,7 @@ int MonClient::wait_authenticate(double timeout)
 int MonClient::_check_auth_rotating()
 {
   if (state == MC_STATE_HAVE_SESSION && auth && auth->need_tickets()) {
+    dout(10) << "need new tickets!" << dendl;
     MAuth *m = new MAuth;
     m->protocol = auth->get_protocol();
     auth->build_request(m->auth_payload);

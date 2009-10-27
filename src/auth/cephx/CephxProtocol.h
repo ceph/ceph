@@ -161,6 +161,7 @@ struct CephXSessionAuthInfo {
   AuthTicket ticket;
   CryptoKey session_key;
   CryptoKey service_secret;
+  utime_t validity;
 };
 
 
@@ -220,9 +221,9 @@ struct CephXTicketHandler {
   CryptoKey session_key;
   AuthBlob ticket;        // opaque to us
   utime_t renew_after, expires;
-  bool has_key_flag;
+  bool have_key_flag;
 
-  CephXTicketHandler() : service_id(0), has_key_flag(false) {}
+  CephXTicketHandler() : service_id(0), have_key_flag(false) {}
 
   // to build our ServiceTicket
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
@@ -230,8 +231,8 @@ struct CephXTicketHandler {
   // to access the service
   CephXAuthorizer *build_authorizer();
 
-  bool has_key();
-  bool needs_key();
+  bool have_key();
+  bool need_key();
 };
 
 struct CephXTicketManager {
@@ -246,9 +247,10 @@ struct CephXTicketManager {
     return handler;
   }
   CephXAuthorizer *build_authorizer(uint32_t service_id);
-  bool has_key(uint32_t service_id);
-  bool needs_key(uint32_t service_id);
-  void validate_tickets(uint32_t mask, uint32_t& need);
+  bool have_key(uint32_t service_id);
+  bool need_key(uint32_t service_id);
+  void set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need);
+  void validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need);
 };
 
 

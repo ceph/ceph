@@ -55,6 +55,7 @@ bool cephx_build_service_ticket_reply(
 
     CephXServiceTicket msg_a;
     msg_a.session_key = info.session_key;
+    msg_a.validity = info.validity;
     if (encode_encrypt(msg_a, principal_secret, reply) < 0)
       return false;
 
@@ -83,42 +84,74 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 	   << " session_key " << msg_a.session_key
            << " validity=" << msg_a.validity << dendl;
   session_key = msg_a.session_key;
-  has_key_flag = true;
+  if (!msg_a.validity.is_zero()) {
+    expires = g_clock.now();
+    expires += msg_a.validity;
+    renew_after = expires;
+    renew_after -= ((double)msg_a.validity.sec() / 4);
+    dout(10) << "ticket expires=" << expires << " renew_after=" << renew_after << dendl;
+  }
+  
+  have_key_flag = true;
   return true;
 }
 
-bool CephXTicketHandler::has_key()
+bool CephXTicketHandler::have_key()
 {
-  if (has_key_flag) {
-    has_key_flag = g_clock.now() < expires;
+  if (have_key_flag) {
+    dout(20) << "have_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
+    have_key_flag = g_clock.now() < expires;
   }
 
-  return has_key_flag;
+  return have_key_flag;
 }
 
-bool CephXTicketHandler::needs_key()
+bool CephXTicketHandler::need_key()
 {
-  if (has_key_flag) {
+  if (have_key_flag) {
+    dout(20) << "need_key: g_clock.now()=" << g_clock.now() << " renew_after=" << renew_after << " expires=" << expires << dendl;
     return (!expires.is_zero()) && (g_clock.now() >= renew_after);
   }
 
   return true;
 }
 
-bool CephXTicketManager::has_key(uint32_t service_id)
+bool CephXTicketManager::have_key(uint32_t service_id)
 {
   map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return false;
-  return iter->second.has_key();
+  return iter->second.have_key();
 }
 
-bool CephXTicketManager::needs_key(uint32_t service_id)
+bool CephXTicketManager::need_key(uint32_t service_id)
 {
   map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
   if (iter == tickets_map.end())
     return true;
-  return iter->second.needs_key();
+  return iter->second.need_key();
+}
+
+void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need)
+{
+  map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
+  if (iter == tickets_map.end()) {
+    have &= ~service_id;
+    need |= service_id;
+    dout(0) << "couldn't find entry for service_id " << service_id << dendl;
+    return;
+  }
+
+  dout(10) << "service_id=" << service_id << " need=" << iter->second.need_key() << " have=" << iter->second.have_key() << dendl;
+  if (iter->second.need_key())
+    need |= service_id;
+  else
+    need &= ~service_id;
+
+  if (iter->second.have_key())
+    have |= service_id;
+  else
+    have &= ~service_id;
 }
 
 /*
@@ -188,13 +221,13 @@ CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
   return handler.build_authorizer();
 }
 
-void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& need)
+void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need)
 {
   uint32_t i;
   need = 0;
   for (i = 1; i<=mask; i<<=1) {
-    if ((mask & i) && needs_key(i)) {
-      need |= i;
+    if (mask & i) {
+      set_have_need_key(i, have, need);
     }
   }
 }

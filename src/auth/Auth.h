@@ -192,7 +192,6 @@ struct AuthAuthorizer {
 /*
  * Key management
  */ 
-#define KEY_ROTATE_TIME 20
 #define KEY_ROTATE_NUM 3
 
 struct ExpiringCryptoKey {

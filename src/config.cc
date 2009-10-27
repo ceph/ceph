@@ -365,7 +365,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(mon_clientid_prealloc, 0, OPT_INT, 100),   // how many clientids to prealloc
 	OPTION(paxos_propose_interval, 0, OPT_DOUBLE, 1.0),  // gather updates for this long before proposing a map update
 	OPTION(paxos_observer_timeout, 0, OPT_DOUBLE, 5*60), // gather updates for this long before proposing a map update
-	OPTION(auth_mon_ticket_ttl, 0, OPT_DOUBLE, 60*60*24),
+	OPTION(auth_mon_ticket_ttl, 0, OPT_DOUBLE, 60*60*12),
 	OPTION(auth_service_ticket_ttl, 0, OPT_DOUBLE, 60*60),
 	OPTION(auth_nonce_len, 0, OPT_INT, 16),
 	OPTION(client_cache_size, 0, OPT_INT, 1000),
