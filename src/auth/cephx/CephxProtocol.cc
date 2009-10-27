@@ -135,7 +135,7 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
     ::decode(type, indata);
-    dout(0) << "got key for service_id=" << type << dendl;
+    dout(10) << "got key for service_id=" << type << dendl;
     CephXTicketHandler& handler = tickets_map[type];
     handler.service_id = type;
     if (!handler.verify_service_ticket_reply(secret, indata)) {

@@ -20,6 +20,11 @@
 #include "Crypto.h"
 #include "auth/KeyRing.h"
 
+#define DOUT_SUBSYS auth
+#undef dout_prefix
+#define dout_prefix *_dout << dbeginl << "auth: "
+
+
 using namespace std;
 
 KeyRing g_keyring;
@@ -65,7 +70,7 @@ bool KeyRing::load_master(const char *filename)
 
   string name = g_conf.entity_name->to_str();
 
-  dout(0) << "looking for key entry name=" << name << dendl;
+  dout(10) << "looking for key entry name=" << name << dendl;
 
   miter = m.find(name);
   if (miter == m.end()) {
@@ -74,7 +79,7 @@ bool KeyRing::load_master(const char *filename)
       return false; 
   }
   master = miter->second.key;
-
+  dout(1) << "loaded key file " << filename << dendl;
   return true;
 }
 

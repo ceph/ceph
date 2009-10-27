@@ -32,11 +32,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
     _dout_open_log();
 
   if (init_keys) {
-    if (g_keyring.load_master(g_conf.keys_file)) {
-      dout(0) << "successfuly loaded secret key from " << g_conf.keys_file << dendl;
-    } else {
-      dout(0) << "failed to load secret key from " << g_conf.keys_file << dendl;
-    }
+    g_keyring.load_master(g_conf.keys_file);
   }
 }
 
