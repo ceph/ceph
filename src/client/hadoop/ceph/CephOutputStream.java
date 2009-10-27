@@ -91,7 +91,7 @@ public class CephOutputStream extends OutputStream {
       // Stick the byte in a buffer and write it
       byte buf[] = new byte[1];
       buf[0] = (byte) b;    
-      int result = ceph.ceph_write(fileHandle, buf, 0, 1);
+      int result = write(buf, 0, 1);
       if (1 != result)
 				ceph.debug("CephOutputStream.write: failed writing a single byte to fd "
 												+ fileHandle + ": Ceph write() result = " + result,
@@ -161,10 +161,12 @@ ceph.WARN);
 
 
 			//if we make it here, the buffer's huge, so just flush the old buffer...
-			result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
-			if (result < 0 || result != bufUsed)
-				throw new IOException("CephOutputStream.write: Failed to write some buffered data to fd " + fileHandle);
-			bufUsed = 0;
+			if (bufUsed > 0) {
+				result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
+				if (result < 0 || result != bufUsed)
+					throw new IOException("CephOutputStream.write: Failed to write some buffered data to fd " + fileHandle);
+				bufUsed = 0;
+			}
 			//...and then write ful buf
       result = ceph.ceph_write(fileHandle, buf, off, len);
       if (result < 0) {
@@ -190,14 +192,16 @@ ceph.WARN);
 			}
 			if (bufUsed == 0) return;
 			int result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
+			int oldbufUsed = bufUsed;
+			bufUsed = 0;
       if (result < 0) {
-				throw new IOException("CephOutputStream.write: Write of " + len + 
+				throw new IOException("CephOutputStream.write: Write of " + oldbufUsed + 
 															"bytes to fd " + fileHandle + " failed");
       }
-      if (result != len) {
-				throw new IOException("CephOutputStream.write: Write of " + len + 
+      if (result != oldbufUsed) {
+				throw new IOException("CephOutputStream.write: Write of " + oldbufUsed + 
 															"bytes to fd " + fileHandle + "was incomplete:  only "
-															+ result + " of " + len + " bytes were written.");
+															+ result + " of " + oldbufUsed + " bytes were written.");
       }
 			return;
 	}
@@ -210,7 +214,7 @@ ceph.WARN);
 	public synchronized void close() throws IOException {
       ceph.debug("CephOutputStream.close:enter", ceph.TRACE);
       if (closed) {
-				throw new IOException("Stream closed");
+				throw new IOException("Stream already closed");
       }
 			flush();
       int result = ceph.ceph_close(fileHandle);

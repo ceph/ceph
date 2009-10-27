@@ -97,14 +97,14 @@ public class CephInputStream extends FSInputStream {
       throw new IOException("CephInputStream.seek: failed seeking to position " + targetPos +
 														" on fd " + fileHandle + ": Cannot seek after EOF " + fileLength);
     }
-		if ((cephPos-targetPos < buffer.length) && -1 != bufPos && cephPos >= 0) {
-			bufPos = buffer.length - (cephPos - targetPos);
+		if ((cephPos-targetPos < buffer.length) && -1 != bufPos && cephPos >= targetPos) {
+			bufPos = buffer.length - (int)(cephPos - targetPos);
 		} else {
 			cephPos = ceph.ceph_seek_from_start(fileHandle, targetPos);
+			bufPos = -1;
 			if (cephPos < 0) {
 				throw new IOException ("Ceph failed to seek to new position!");
 			}
-			bufPos = -1;
 		}
   }
 
@@ -203,14 +203,14 @@ public class CephInputStream extends FSInputStream {
 
 
       int result = ceph.ceph_read(fileHandle, buf, off+read, len-read);
-			cephPos += len-read;
       if (result < 0)
 				ceph.debug("CephInputStream.read: Reading " + len
 									 + " bytes from fd " + fileHandle + " failed.", ceph.WARN);
 
       ceph.debug("CephInputStream.read: Reading " + len  + " bytes from fd " 
 								 + fileHandle + ": succeeded in reading " + result + " bytes",
-								 ceph.TRACE);   
+								 ceph.TRACE);
+			cephPos += len-read;
       return result;
 		}
 
