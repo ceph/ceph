@@ -75,6 +75,7 @@ char *mount_resolve_dest(char *orig_str)
 	tok = strtok(orig_str, ",");
 
 	while (tok) {
+		struct addrinfo hint;
 		struct addrinfo *res, *ores;
 		int r;
 
@@ -88,7 +89,10 @@ char *mount_resolve_dest(char *orig_str)
 
 		/*printf("name '%s' port '%s'\n", tok, port_str);*/
 
-		r = getaddrinfo(tok, port_str, NULL, &res);
+		memset(&hint, 0, sizeof(hint));
+		hint.ai_protocol = AF_INET;
+
+		r = getaddrinfo(tok, port_str, &hint, &res);
 		if (r < 0) {
 			printf("server name not found: %s (%s)\n", tok, strerror(errno));
 			free(new_str);
@@ -103,7 +107,10 @@ char *mount_resolve_dest(char *orig_str)
 				    host, sizeof(host),
 				    port, sizeof(port),
 				    NI_NUMERICSERV | NI_NUMERICHOST);
-			/*printf(" host %s port %s\n", host, port);*/
+			/*printf(" host %s port %s flags %d family %d socktype %d proto %d sanonname %s\n",
+			       host, port,
+			       res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
+			       res->ai_canonname);*/
 			pos = safe_cat(&new_str, &len, pos, host);
 			if (port_str) {
 				pos = safe_cat(&new_str, &len, pos, ":");
