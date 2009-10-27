@@ -522,10 +522,21 @@ do { \
   } \
 } while (0)
 
+#define ALLOW_MESSAGES_FROM(peers) \
+do { \
+  if ((connection && connection->get_peer_type() & (peers)) == 0) { \
+    dout(0) << "filtered out request, peer=" << connection->get_peer_type() \
+           << " allowing=" << #peers << " message=" << *m << dendl; \
+    delete m; \
+    goto out; \
+  } \
+} while (0)
+
   {
     switch (m->get_type()) {
       
     case MSG_ROUTE:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
       handle_route((MRoute*)m);
       break;
 
@@ -535,10 +546,12 @@ do { \
       break;
 
     case MSG_MON_COMMAND:
+      /* FIXME: only admin can do it */
       handle_command((MMonCommand*)m);
       break;
 
     case CEPH_MSG_MON_SUBSCRIBE:
+      /* FIXME: check what's being subscribed, filter accordingly */
       handle_subscribe((MMonSubscribe*)m);
       break;
 
@@ -549,6 +562,7 @@ do { \
     case MSG_OSD_OUT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       ALLOW_CAPS(PAXOS_OSDMAP, MON_CAP_R);
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
@@ -599,6 +613,8 @@ do { \
       // paxos
     case MSG_MON_PAXOS:
       {
+        ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+
 	MMonPaxos *pm = (MMonPaxos*)m;
 
 	// sanitize
@@ -626,10 +642,12 @@ do { \
 
       // elector messages
     case MSG_MON_ELECTION:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
       elector.dispatch(m);
       break;
 
     case MSG_CLASS:
+      ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_OSD);
       handle_class((MClass *)m);
       break;
 
