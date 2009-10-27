@@ -91,11 +91,7 @@ public class CephOutputStream extends OutputStream {
       // Stick the byte in a buffer and write it
       byte buf[] = new byte[1];
       buf[0] = (byte) b;    
-      int result = write(buf, 0, 1);
-      if (1 != result)
-				ceph.debug("CephOutputStream.write: failed writing a single byte to fd "
-												+ fileHandle + ": Ceph write() result = " + result,
-ceph.WARN);
+      write(buf, 0, 1);
       return;
     }
 
@@ -110,76 +106,61 @@ ceph.WARN);
    */
   @Override
 	public synchronized void write(byte buf[], int off, int len) throws IOException {
-			ceph.debug("CephOutputStream.write: writing " + len + 
-											" bytes to fd " + fileHandle, ceph.TRACE);
-      // make sure stream is open
-      if (closed) {
-				throw new IOException("CephOutputStream.write: cannot write " + len + 
-															"bytes to fd " + fileHandle + ": stream closed");
-      }
-
-      // sanity check
-      if (null == buf) {
-				throw new IOException("CephOutputStream.write: cannot write " + len + 
-																			 "bytes to fd " + fileHandle + ": write buffer is null");
-      }
-
-      // check for proper index bounds
-      if((off < 0) || (len < 0) || (off + len > buf.length)) {
-				throw new IOException("CephOutputStream.write: Indices out of bounds for write: "
-																						+ "write length is " + len + ", buffer offset is " 
-																						+ off +", and buffer size is " + buf.length);
-      }
-
-			int result;
-
-      // if there's lots of space left, write to the buffer and return
-			if (bufUsed + len < buffer.length) {
-				for (int i = 0; i < len; ++i) {
-					buffer[bufUsed+i] = buf[off+i];
-				}
-				bufUsed += len;
-				return;
+		ceph.debug("CephOutputStream.write: writing " + len + 
+							 " bytes to fd " + fileHandle, ceph.TRACE);
+		// make sure stream is open
+		if (closed) {
+			throw new IOException("CephOutputStream.write: cannot write " + len + 
+														"bytes to fd " + fileHandle + ": stream closed");
+		}
+		
+		// sanity check
+		if (null == buf) {
+		}
+		
+		// check for proper index bounds
+		if((off < 0) || (len < 0) || (off + len > buf.length)) {
+		}
+		
+		int result;
+		int write;
+		while (len>0) {
+			write = Math.min(len, buffer.length - bufUsed);
+			try {
+				System.arraycopy(buf, off, buffer, bufUsed, write);
 			}
-
-			//if len isn't too large, fill buffer, write, and fill with rest
-			if (bufUsed + len < 2*buffer.length) {
-				for (int i = 0; i + bufUsed < buffer.length; ++i) {
-					buffer[bufUsed+i] = buf[off+i];
-				}
-				int sent = len - (buffer.length - bufUsed);
-				result = ceph.ceph_write(fileHandle, buffer, 0, buffer.length);
-				if (result != buffer.length)
-					throw new IOException("CephOutputStream.write: Failed to write some buffered data to fd " + fileHandle);
-				off += sent;
-				for (int i = 0; i + sent < len; ++i) {
-					buffer[i] = buf[off+i];
-				}
-				bufUsed = len - sent;
-				return;
+			catch (IndexOutOfBoundsException ie) {
+				throw new IOException("CephOutputStream.write: Indices out of bounds: "
+															+ "write length is " + len
+															+ ", buffer offset is " + off
+															+ ", and buffer size is " + buf.length);
 			}
-
-
-			//if we make it here, the buffer's huge, so just flush the old buffer...
-			if (bufUsed > 0) {
+			catch (ArrayStoreException ae) {
+				throw new IOException("Uh-oh, CephOutputStream failed to do an array"
+															+ "copy due to type mismatch...");
+			}
+			catch (NullPointerException ne) {
+				throw new IOException("CephOutputStream.write: cannot write "
+															+ len + "bytes to fd " + fileHandle
+															+ ": buffer is null");
+			}
+			bufUsed += write;
+			len -= write;
+			off += write;
+			if (bufUsed == buffer.length) {
 				result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
-				if (result < 0 || result != bufUsed)
-					throw new IOException("CephOutputStream.write: Failed to write some buffered data to fd " + fileHandle);
+				if (result < 0)
+					throw new IOException("CephOutputStream.write: Buffered write of "
+																+ bufUsed + " bytes failed!");
+				if (result != bufUsed)
+					throw new IOException("CephOutputStream.write: Wrote only "
+																+ result + " bytes of " + bufUsed
+																+ "in buffer!");
 				bufUsed = 0;
 			}
-			//...and then write ful buf
-      result = ceph.ceph_write(fileHandle, buf, off, len);
-      if (result < 0) {
-				throw new IOException("CephOutputStream.write: Write of " + len + 
-															"bytes to fd " + fileHandle + " failed");
-      }
-      if (result != len) {
-				throw new IOException("CephOutputStream.write: Write of " + len + 
-															"bytes to fd " + fileHandle + "was incomplete:  only "
-															+ result + " of " + len + " bytes were written.");
-      }
-      return; 
-    }
+		}
+		return; 
+	}
    
   /**
    * Flush the buffered data.
@@ -192,16 +173,16 @@ ceph.WARN);
 			}
 			if (bufUsed == 0) return;
 			int result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
-			int oldbufUsed = bufUsed;
-			bufUsed = 0;
       if (result < 0) {
-				throw new IOException("CephOutputStream.write: Write of " + oldbufUsed + 
-															"bytes to fd " + fileHandle + " failed");
+				throw new IOException("CephOutputStream.write: Write of "
+															+ bufUsed + "bytes to fd "
+															+ fileHandle + " failed");
       }
-      if (result != oldbufUsed) {
-				throw new IOException("CephOutputStream.write: Write of " + oldbufUsed + 
-															"bytes to fd " + fileHandle + "was incomplete:  only "
-															+ result + " of " + oldbufUsed + " bytes were written.");
+      if (result != bufUsed) {
+				throw new IOException("CephOutputStream.write: Write of " + bufUsed
+															+ "bytes to fd " + fileHandle
+															+ "was incomplete:  only " + result + " of "
+															+ bufUsed + " bytes were written.");
       }
 			return;
 	}
