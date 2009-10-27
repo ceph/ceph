@@ -158,7 +158,14 @@ inline utime_t& operator-=(utime_t& l, const utime_t& r) {
   return l;
 }
 inline utime_t& operator-=(utime_t& l, double f) {
-  l += -f;
+  double fs = trunc(f);
+  double us = (f - fs) * (double)1000000.0;
+  l.sec_ref() -= (long)fs;
+  if (us) {
+    l.sec_ref()--;
+    l.usec_ref() = 1000000 + l.usec_ref() - (long)us;
+  }
+  l.normalize();
   return l;
 }
 
