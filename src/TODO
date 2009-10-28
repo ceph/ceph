@@ -44,9 +44,9 @@ v0.17
 - osd: fix pg parsing, restarts on larger clusters
 
 v0.18
+- basic ENOSPC handling
 
 - qa
-- basic ENOSPC handling
 - osd: rebuild pg log
 - osd: handle storage errors
 
@@ -62,16 +62,12 @@ bugs
 - mislinked directory?
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
+- rstat corruption on kernal untar, make, rm -f (maybe due to mds restart?)
 
 later
 - document on-wire protocol
 - authentication
 - client reconnect after long eviction; and slow delayed reconnect
-- ENOSPC
-  - space reservation in ObjectStore, redeemed by Transactions?
-  - reserved as PG goes active; reservation canceled when pg goes inactive
-  - something similar during recovery
-  - ?
 - repair
 - mds security enforcement
 - client, user authentication
@@ -134,9 +130,10 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- gracefully handle ENOSPC
+- gracefully handle EIO?
 - client session object
   - track client's osdmap; and only share latest osdmap with them once!
-- clean up monitor session handling
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
@@ -213,7 +210,7 @@ cas
    A framework for analyzing and improving content-based chunking algorithms.
    Tech. Rep. HPL-2005-30(R.1), Hewlett Packard Laboratories, Palo Alto, 2005. 
 
-s3
+radosgw
  - handle gracefully location related requests
  - logging control (?)
  - parse date/time better
