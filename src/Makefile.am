@@ -108,7 +108,7 @@ libcrush_la_SOURCES = \
 	crush/crush.c
 libcrush_la_CFLAGS = ${AM_CFLAGS}
 libcrush_la_CXXFLAGS = ${AM_CXXFLAGS}
-libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*'
+libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*' -lm
 lib_LTLIBRARIES += libcrush.la
 
 # libceph
@@ -117,12 +117,11 @@ libceph_la_SOURCES = \
 	client/Client.cc \
 	msg/SimpleMessenger.cc \
 	${libcommon_a_SOURCES} \
-	${libcrush_a_SOURCES} \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
 libceph_la_LIBADD = libcrush.la
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
+libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
@@ -139,7 +138,7 @@ librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 librados_la_LIBADD = libcrush.la
-librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^rados_.*'
+librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^rados_.*' -lpthread
 lib_LTLIBRARIES += librados.la
 
 librados_a_SOURCES = ${librados_SOURCES}
@@ -147,15 +146,15 @@ librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc
-rados_LDADD = librados.la libcrush.la -lpthread -lm
+rados_LDADD = librados.la -lpthread -lm
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
-testrados_LDADD = librados.la libcrush.la -lpthread -lm
+testrados_LDADD = librados.la -lpthread -lm
 testradospp_SOURCES = testradospp.cc
-testradospp_LDADD = librados.la libcrush.la -lpthread -lm
+testradospp_LDADD = librados.la -lpthread -lm
 radosacl_SOURCES = radosacl.cc
-radosacl_LDADD = librados.la libcrush.la -lpthread -lm
+radosacl_LDADD = librados.la -lpthread -lm
 bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_RADOSGW
@@ -202,7 +201,7 @@ BUILT_SOURCES += libcls_acl.so
 if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
-libhadoopcephfs_la_LIBADD = libceph.la libcrush.la
+libhadoopcephfs_la_LIBADD = libceph.la
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'

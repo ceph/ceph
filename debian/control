@@ -131,7 +131,7 @@ Description: debugging symbols for librados1
 Package: librados1-dev
 Architecture: any
 Section: libdevel
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1, librados1
+Depends: ${shlibs:Depends}, ${misc:Depends}, librados1
 Description: RADOS distributed object store client library (development files)
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
@@ -166,7 +166,7 @@ Description: debugging symbols for libceph1
 Package: libceph1-dev
 Architecture: any
 Section: libdevel
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
+Depends: ${shlibs:Depends}, ${misc:Depends}, libceph1
 Description: Ceph distributed file system client library (development files)
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
@@ -178,7 +178,7 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, libcrush1, librados1
+Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, librados1
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
