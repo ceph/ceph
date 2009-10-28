@@ -111,7 +111,7 @@ libceph_la_SOURCES = \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
+libceph_la_LDFLAGS = -version-info 0:0:0 -export-symbols-regex 'ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
@@ -135,7 +135,7 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
-librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
+librados_la_LDFLAGS = -version-info 0:0:0 -export-symbols-regex 'rados_.*'
 lib_LTLIBRARIES += librados.la
 librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${AM_CFLAGS}
@@ -202,7 +202,7 @@ libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
 libhadoopcephfs_la_LIBADD = libceph.la libcrush.la
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
-libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
+libhadoopcephfs_la_LDFLAGS = -version-info 0:0:0 -export-symbols-regex 'hadoopcephfs_.*'
 lib_LTLIBRARIES += libhadoopcephfs.la
 endif
 
