@@ -1,0 +1,61 @@
+.TH RGW 8
+.SH NAME
+rgw_admin \- rados REST gateway user administration utility
+.SH SYNOPSIS
+.B rgw_admin
+[ \fB\-\-user\-gen\fR ]
+[ \fB\-\-user\-modify\fR ]
+[ \fB\-\-read\-policy\fR ]
+[ \fB\-\-list\-buckets\fR ] [ options ... ]
+.SH DESCRIPTION
+.B rgw_admin
+is a RADOS gateway user administration utility. It allows creating and modifying users.
+.SH OPTIONS
+.TP
+\fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
+Use \fIceph.conf\fP configuration file instead of the default \fI/etc/ceph/ceph.conf\fP
+to determine monitor addresses during startup.
+.TP
+\fB\-m\fI monaddress[:port]\fR
+Connect to specified monitor (instead of looking through \fIceph.conf\fR).
+.TP
+\fB\-\-user\-gen\fR
+Generate a new user.
+.TP
+\fB\-\-user\-modify\fR
+Modify an existing user.
+.TP
+\fB\-\-read\-policy\fR
+Show the ACL policy of an bucket or object.
+.TP
+\fB\-\-list\-buckets\fR
+Dump the list of buckets that belong to a specific user.
+.TP
+\fB\-\-uid=\fIid\fR
+Specify the user id for this operation.
+.TP
+\fB\-\-key=\fIkey\fR
+Configure the secret key for this user.
+.TP
+\fB\-\-display\-name=\fIname\fR
+Configure the display name of the user.
+.TP
+\fB\-\-bucket=\fIbucket\fR
+Specify the bucket name.
+.TP
+\fB\-\-object=\fIobject\fR
+Specify the object name.
+.SH EXAMPLES
+To generate a new user:
+.IP
+ $ ./rgw_admin --user-gen --display-name="johnny rotten" --email=johnny@rotten.com
+ User ID: CHBQFRTG26I8DGJDGQLW
+ Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
+ Display Name: johnny rotten
+.PP
+.SH AVAILABILITY
+.B rgw_admin
+is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
+http://ceph.newdream.net/wiki for more information.
+.SH SEE ALSO
+.BR ceph (8)
