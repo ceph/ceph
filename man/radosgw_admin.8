@@ -1,14 +1,14 @@
-.TH RGW 8
+.TH RADOSGW_ADMIN 8
 .SH NAME
-rgw_admin \- rados REST gateway user administration utility
+radosgw_admin \- rados REST gateway user administration utility
 .SH SYNOPSIS
-.B rgw_admin
+.B radosgw_admin
 [ \fB\-\-user\-gen\fR ]
 [ \fB\-\-user\-modify\fR ]
 [ \fB\-\-read\-policy\fR ]
 [ \fB\-\-list\-buckets\fR ] [ options ... ]
 .SH DESCRIPTION
-.B rgw_admin
+.B radosgw_admin
 is a RADOS gateway user administration utility. It allows creating and modifying users.
 .SH OPTIONS
 .TP
@@ -48,13 +48,13 @@ Specify the object name.
 .SH EXAMPLES
 To generate a new user:
 .IP
- $ ./rgw_admin --user-gen --display-name="johnny rotten" --email=johnny@rotten.com
+ $ ./radosgw_admin --user-gen --display-name="johnny rotten" --email=johnny@rotten.com
  User ID: CHBQFRTG26I8DGJDGQLW
  Secret Key: QR6cI/31N+J0VKVgHSpEGVSfEEsmf6PyXG040KCB
  Display Name: johnny rotten
 .PP
 .SH AVAILABILITY
-.B rgw_admin
+.B radosgw_admin
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
 http://ceph.newdream.net/wiki for more information.
 .SH SEE ALSO

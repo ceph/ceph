@@ -1,4 +1,4 @@
-.TH RGW 8
+.TH RADOSGW 8
 .SH NAME
 radosgw \- rados REST gateway
 .SH SYNOPSIS
@@ -38,7 +38,7 @@ An apache example configuration for using the RADOS gateway:
       Options +ExecCGI
       AllowOverride All
       SetHandler fcgid-script
-      FCGIWrapper /var/www/fcgi-scripts/web1/rgw .fcgi
+      FCGIWrapper /var/www/fcgi-scripts/web1/radosgw .fcgi
       Order allow,deny
       Allow from all
       AuthBasicAuthoritative Off
@@ -52,7 +52,7 @@ An apache example configuration for using the RADOS gateway:
   ServerSignature Off
 </VirtualHost>
 .PP
-And the corresponding rgw script:
+And the corresponding radosgw script:
 .IP
 #!/bin/sh
 /usr/bin/radosgw -c /etc/ceph.conf
