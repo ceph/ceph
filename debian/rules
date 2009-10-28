@@ -70,7 +70,10 @@ binary-arch: build install
 #	dh_installinfo
 	dh_installman
 	dh_link
-	dh_strip -k # --dbg-package=ceph-dbg --dbg-package=ceph-fuse-dbg #--dbg-package=libcrush1-dbg --dbg-package=libceph1-dbg --dbg-package=librados1-dbg --dbg-package=radosgw-dbg
+
+	dh_strip -k
+	debian/move_dbg_files.sh
+
 	dh_compress
 	dh_fixperms
 #	dh_perl

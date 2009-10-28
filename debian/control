@@ -73,6 +73,7 @@ Description: CRUSH placement algorithm
 Package: libcrush1-dbg
 Architecture: any
 Section: debug
+Priority: extra
 Depends: libcrush1 (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for libcrush1
  CRUSH is a pseudo-random hash-like algorithm for mapping inputs to
@@ -117,6 +118,7 @@ Description: RADOS distributed object store client library
 Package: librados1-dbg
 Architecture: any
 Section: debug
+Priority: extra
 Depends: librados1 (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for librados1
  RADOS is a reliable, autonomic distributed object storage cluster
@@ -151,6 +153,7 @@ Description: Ceph distributed file system client library
 Package: libceph1-dbg
 Architecture: any
 Section: debug
+Priority: extra
 Depends: libceph1 (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for libceph1
  Ceph is a distributed network file system designed to provide
@@ -187,6 +190,7 @@ Description: REST gateway for RADOS distributed object store
 Package: radosgw-dbg
 Architecture: any
 Section: debug
+Priority: extra
 Depends: radosgw (= ${binary:Version}), ${misc:Depends}
 Description: debugging symbols for radosgw
  RADOS is a distributed object store used by the Ceph distributed
