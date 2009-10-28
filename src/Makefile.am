@@ -10,35 +10,35 @@ bin_SCRIPTS = crun
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
-cmon_LDADD = libmon.a libcrush.a libcommon.a 
+cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm
 bin_PROGRAMS += cmon
 
 # osd
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl
+cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm
 bin_PROGRAMS += cosd
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
-cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a
+cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm
 bin_PROGRAMS += cmds
 
 # admin tools
 ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
-ceph_LDADD = libcrush.a libcommon.a -ledit
+ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm
 mkmonfs_SOURCES = mkmonfs.cc
-mkmonfs_LDADD = libmon.a libcrush.a libcommon.a
+mkmonfs_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm
 cconf_SOURCES = cconf.cc
-cconf_LDADD = libcommon.a
+cconf_LDADD = libcommon.a -lpthread -lm
 bin_PROGRAMS += ceph mkmonfs cconf
 
 monmaptool_SOURCES = monmaptool.cc
-monmaptool_LDADD = libcommon.a
+monmaptool_LDADD = libcommon.a -lpthread -lm
 crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcrush.a libcommon.a 
+crushtool_LDADD = libcrush.a libcommon.a -lpthread -lm
 osdmaptool_SOURCES = osdmaptool.cc
-osdmaptool_LDADD = libcrush.a libcommon.a
+osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c
@@ -49,20 +49,20 @@ core: cmon cosd cmds mkmonfs ceph cconf monmaptool osdmaptool crushtool
 
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libcommon.a
+dupstore_LDADD = libos.a libcommon.a -lpthread -lm
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libcommon.a
+streamtest_LDADD = libos.a libcommon.a -lpthread -lm
 bin_PROGRAMS += dumpjournal dupstore streamtest
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
-csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a
+csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm
 bin_PROGRAMS += csyn
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
-testmsgr_LDADD = libcommon.a
+testmsgr_LDADD = libcommon.a -lpthread -lm
 bin_PROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
@@ -71,7 +71,7 @@ bin_PROGRAMS += test_ioctls
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a
+cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm
 bin_PROGRAMS += cfuse
 
 #if WITH_DEBUG
@@ -86,7 +86,7 @@ endif
 # debug targets?
 if WITH_DEBUG
 psim_SOURCES = psim.cc
-psim_LDADD = libcrush.a libcommon.a
+psim_LDADD = libcrush.a libcommon.a -lpthread -lm
 bin_PROGRAMS += psim
 
 #fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
@@ -101,6 +101,16 @@ endif
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
 
+# libcrush.so
+libcrush_la_SOURCES = \
+	crush/builder.c \
+	crush/mapper.c \
+	crush/crush.c
+libcrush_la_CFLAGS = ${AM_CFLAGS}
+libcrush_la_CXXFLAGS = ${AM_CXXFLAGS}
+libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*'
+lib_LTLIBRARIES += libcrush.la
+
 # libceph
 libceph_la_SOURCES = \
 	libceph.cc \
@@ -111,21 +121,13 @@ libceph_la_SOURCES = \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
+libceph_la_LIBADD = libcrush.la
+libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libceph.la
+testceph_LDADD = libceph.la libcrush.la -lpthread -lm
 bin_PROGRAMS += testceph
-
-# libcrush.so
-libcrush_la_SOURCES = \
-	crush/builder.c \
-	crush/mapper.c \
-	crush/crush.c
-libcrush_la_CFLAGS = ${AM_CFLAGS}
-libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*'
-lib_LTLIBRARIES += libcrush.la
 
 # librados
 librados_SOURCES = \
@@ -136,22 +138,24 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
-librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
+librados_la_LIBADD = libcrush.la
+librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^rados_.*'
 lib_LTLIBRARIES += librados.la
+
 librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc
-rados_LDADD = librados.la libcrush.la
+rados_LDADD = librados.la libcrush.la -lpthread -lm
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
-testrados_LDADD = librados.la libcrush.la
+testrados_LDADD = librados.la libcrush.la -lpthread -lm
 testradospp_SOURCES = testradospp.cc
-testradospp_LDADD = librados.la libcrush.la
+testradospp_LDADD = librados.la libcrush.la -lpthread -lm
 radosacl_SOURCES = radosacl.cc
-radosacl_LDADD = librados.la libcrush.la
+radosacl_LDADD = librados.la libcrush.la -lpthread -lm
 bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_RADOSGW
@@ -168,9 +172,9 @@ libradosgw_a_CFLAGS = ${AM_CFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
-radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
+radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat -lpthread -lm
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
-radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
+radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat -lpthread -lm
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
@@ -225,7 +229,7 @@ BUILT_SOURCES += init-ceph mkcephfs
 
 ##
 INCLUDES = 
-LDADD = -lpthread 
+LDADD =
 
 AM_CXXFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
 AM_CFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
