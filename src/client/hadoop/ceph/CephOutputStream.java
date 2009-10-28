@@ -39,15 +39,20 @@ public class CephOutputStream extends OutputStream {
 
   private int fileHandle;
 
+	private byte[] buffer;
+	private int bufUsed = 0;
+
   /**
    * Construct the CephOutputStream.
    * @param conf The FileSystem configuration.
    * @param fh The Ceph filehandle to connect to.
    */
-  public CephOutputStream(Configuration conf, CephFS cephfs, int fh) {
+  public CephOutputStream(Configuration conf, CephFS cephfs,
+													int fh, int bufferSize) {
 		ceph = cephfs;
     fileHandle = fh;
     closed = false;
+		buffer = new byte[bufferSize];
   }
 
   /**Ceph likes things to be closed before it shuts down,
@@ -126,8 +131,42 @@ ceph.WARN);
 																						+ off +", and buffer size is " + buf.length);
       }
 
-      // write!
-      int result = ceph.ceph_write(fileHandle, buf, off, len);
+			int result;
+
+      // if there's lots of space left, write to the buffer and return
+			if (bufUsed + len < buffer.length) {
+				for (int i = 0; i < len; ++i) {
+					buffer[bufUsed+i] = buf[off+i];
+				}
+				bufUsed += len;
+				return;
+			}
+
+			//if len isn't too large, fill buffer, write, and fill with rest
+			if (bufUsed + len < 2*buffer.length) {
+				for (int i = 0; i + bufUsed < buffer.length; ++i) {
+					buffer[bufUsed+i] = buf[off+i];
+				}
+				int sent = len - (buffer.length - bufUsed);
+				result = ceph.ceph_write(fileHandle, buffer, 0, buffer.length);
+				if (result != buffer.length)
+					throw new IOException("CephOutputStream.write: Failed to write some buffered data to fd " + fileHandle);
+				off += sent;
+				for (int i = 0; i + sent < len; ++i) {
+					buffer[i] = buf[off+i];
+				}
+				bufUsed = len - sent;
+				return;
+			}
+
+
+			//if we make it here, the buffer's huge, so just flush the old buffer...
+			result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
+			if (result < 0 || result != bufUsed)
+				throw new IOException("CephOutputStream.write: Failed to write some buffered data to fd " + fileHandle);
+			bufUsed = 0;
+			//...and then write ful buf
+      result = ceph.ceph_write(fileHandle, buf, off, len);
       if (result < 0) {
 				throw new IOException("CephOutputStream.write: Write of " + len + 
 															"bytes to fd " + fileHandle + " failed");
@@ -141,16 +180,27 @@ ceph.WARN);
     }
    
   /**
-   * Flush the written data. It doesn't actually do anything; all writes are synchronous.
-   * @throws IOException if you've closed the stream.
+   * Flush the buffered data.
+   * @throws IOException if you've closed the stream or the write fails.
    */
   @Override
 	public synchronized void flush() throws IOException {
 			if (closed) {
 				throw new IOException("Stream closed");
 			}
+			if (bufUsed == 0) return;
+			int result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
+      if (result < 0) {
+				throw new IOException("CephOutputStream.write: Write of " + len + 
+															"bytes to fd " + fileHandle + " failed");
+      }
+      if (result != len) {
+				throw new IOException("CephOutputStream.write: Write of " + len + 
+															"bytes to fd " + fileHandle + "was incomplete:  only "
+															+ result + " of " + len + " bytes were written.");
+      }
 			return;
-		}
+	}
   
   /**
    * Close the CephOutputStream.
@@ -162,7 +212,7 @@ ceph.WARN);
       if (closed) {
 				throw new IOException("Stream closed");
       }
-
+			flush();
       int result = ceph.ceph_close(fileHandle);
       if (result != 0) {
 				throw new IOException("Close failed!");

@@ -4510,6 +4510,10 @@ int Client::_write(Fh *f, __s64 offset, __u64 size, const char *buf)
 {
   if ((__u64)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
+
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL))
+    return -ENOSPC;
+
   //dout(7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
   Inode *in = f->inode;
 

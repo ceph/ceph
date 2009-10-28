@@ -54,4 +54,6 @@ class CephTalker extends CephFS {
   protected native int ceph_setTimes(String path, long mtime, long atime);
   protected native long ceph_getpos(int fh);
   protected native int ceph_write(int fh, byte[] buffer, int buffer_offset, int length);
+	protected native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
+	protected native long ceph_seek_from_start(int fh, long pos);
 }

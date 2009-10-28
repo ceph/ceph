@@ -749,7 +749,6 @@ void OSDMonitor::check_sub(Subscription *sub)
   }
 }
 
-
 // TICK
 
 
@@ -802,7 +801,21 @@ void OSDMonitor::tick()
     }
   }
 
-
+  //if map full setting has changed, get that info out there!
+  if (mon->pgmon()->paxos->is_readable()) {
+    if (!mon->pgmon()->pg_map.full_osds.empty()) {
+      dout(5) << "There are full osds, setting full flag" << dendl;
+      add_flag(CEPH_OSDMAP_FULL);
+    } else {
+      dout(10) << "No full osds, removing full flag (if it's set)" << dendl;
+      remove_flag(CEPH_OSDMAP_FULL);
+    }
+    if (pending_inc.new_flags != -1 &&
+	(pending_inc.new_flags ^ osdmap.flags) & CEPH_OSDMAP_FULL) {
+      dout(1) << "New setting for CEPH_OSDMAP_FULL -- doing propose" << dendl;
+      do_propose = true;
+    }
+  }
   // ---------------
 #define SWAP_PRIMARIES_AT_START 0
 #define SWAP_TIME 1

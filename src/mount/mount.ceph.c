@@ -75,8 +75,9 @@ char *mount_resolve_dest(char *orig_str)
 	tok = strtok(orig_str, ",");
 
 	while (tok) {
-		struct hostent *ent;
-		char addr[16];
+		struct addrinfo hint;
+		struct addrinfo *res, *ores;
+		int r;
 
 		port_str = strchr(tok, ':');
 		if (port_str) {
@@ -86,26 +87,40 @@ char *mount_resolve_dest(char *orig_str)
 				port_str = NULL;
 		}
 
-		ent = gethostbyname(tok);
+		/*printf("name '%s' port '%s'\n", tok, port_str);*/
 
-		if (!ent) {
-			printf("server name not found: %s\n", tok);
+		memset(&hint, 0, sizeof(hint));
+		hint.ai_protocol = AF_INET;
+
+		r = getaddrinfo(tok, port_str, &hint, &res);
+		if (r < 0) {
+			printf("server name not found: %s (%s)\n", tok, strerror(errno));
 			free(new_str);
 			return 0;
 		}
 
-		snprintf(addr, sizeof(addr), "%u.%u.%u.%u", 
-			(unsigned char)ent->h_addr[0], 
-			(unsigned char)ent->h_addr[1], 
-			(unsigned char)ent->h_addr[2], 
-			(unsigned char)ent->h_addr[3]);
-
-		pos = safe_cat(&new_str, &len, pos, addr);
-
-		if (port_str) {
-			pos = safe_cat(&new_str, &len, pos, ":");
-			pos = safe_cat(&new_str, &len, pos, port_str);
+		/* build resolved addr list */
+		ores = res;
+		while (res) {
+			char host[40], port[40];
+			getnameinfo(res->ai_addr, res->ai_addrlen,
+				    host, sizeof(host),
+				    port, sizeof(port),
+				    NI_NUMERICSERV | NI_NUMERICHOST);
+			/*printf(" host %s port %s flags %d family %d socktype %d proto %d sanonname %s\n",
+			       host, port,
+			       res->ai_flags, res->ai_family, res->ai_socktype, res->ai_protocol,
+			       res->ai_canonname);*/
+			pos = safe_cat(&new_str, &len, pos, host);
+			if (port_str) {
+				pos = safe_cat(&new_str, &len, pos, ":");
+				pos = safe_cat(&new_str, &len, pos, port);
+			}
+			res = res->ai_next;
+			if (res)
+				pos = safe_cat(&new_str, &len, pos, ",");
 		}
+		freeaddrinfo(ores);
 
 		tok = strtok(NULL, ",");
 		if (tok)

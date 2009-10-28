@@ -48,7 +48,6 @@ private:
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
   map<int,double> osd_weight;
-
   // svc
 public:  
   void create_initial(bufferlist& bl);
@@ -163,6 +162,21 @@ private:
   void check_subs();
   void check_sub(Subscription *sub);
 
+  void add_flag(int flag) {
+    if (!(osdmap.flags & flag)) {
+      if (pending_inc.new_flags < 0)
+	pending_inc.new_flags = osdmap.flags;
+      pending_inc.new_flags |= flag;
+    }
+  }
+
+  void remove_flag(int flag) {
+    if(osdmap.flags & flag) {
+      if (pending_inc.new_flags < 0)
+	pending_inc.new_flags = osdmap.flags;
+      pending_inc.new_flags &= ~flag;
+    }
+  }
 };
 
 #endif

@@ -40,6 +40,10 @@ public class CephInputStream extends FSInputStream {
 
 	private CephFS ceph;
 
+	private byte[] buffer;
+	private int bufPos = -1;
+	private long cephPos = 0;
+
   /**
    * Create a new CephInputStream.
    * @param conf The system configuration. Unused.
@@ -48,13 +52,14 @@ public class CephInputStream extends FSInputStream {
    * you will need to close and re-open it to access the new data.
    */
   public CephInputStream(Configuration conf, CephFS cephfs,
-												 int fh, long flength) {
+												 int fh, long flength, int bufferSize) {
     // Whoever's calling the constructor is responsible for doing the actual ceph_open
     // call and providing the file handle.
     fileLength = flength;
     fileHandle = fh;
     closed = false;
 		ceph = cephfs;
+		buffer = new byte[bufferSize];
     ceph.debug("CephInputStream constructor: initializing stream with fh "
 										+ fh + " and file length " + flength, ceph.DEBUG);
       
@@ -70,8 +75,13 @@ public class CephInputStream extends FSInputStream {
   }
 
   public synchronized long getPos() throws IOException {
-    return ceph.ceph_getpos(fileHandle);
+		if (bufPos == -1) {
+			cephPos = ceph.ceph_getpos(fileHandle);
+			return cephPos;
+		}
+		return cephPos - buffer.length + bufPos;
   }
+
   /**
    * Find the number of bytes remaining in the file.
    */
@@ -87,7 +97,15 @@ public class CephInputStream extends FSInputStream {
       throw new IOException("CephInputStream.seek: failed seeking to position " + targetPos +
 														" on fd " + fileHandle + ": Cannot seek after EOF " + fileLength);
     }
-    ceph.ceph_seek_from_start(fileHandle, targetPos);
+		if ((cephPos-targetPos < buffer.length) && -1 != bufPos && cephPos >= 0) {
+			bufPos = buffer.length - (cephPos - targetPos);
+		} else {
+			cephPos = ceph.ceph_seek_from_start(fileHandle, targetPos);
+			if (cephPos < 0) {
+				throw new IOException ("Ceph failed to seek to new position!");
+			}
+			bufPos = -1;
+		}
   }
 
   /**
@@ -156,8 +174,36 @@ public class CephInputStream extends FSInputStream {
 	  
 					return -1;
 				}
-      // actually do the read
-      int result = ceph.ceph_read(fileHandle, buf, off, len);
+			//if the read can be satisfied from buffer, do so.
+			if (bufPos + len < buffer.length) {
+				//refill buffer if it's empty
+				if (bufPos == -1) {
+					ceph.ceph_read(fileHandle, buffer, 0, buffer.length);
+					cephPos = ceph.ceph_getpos(fileHandle);
+					bufPos = 0;
+				}
+				for (int i = 0; i < len; ++i)
+					buf[off+i] = buffer[bufPos+i];
+				bufPos += len;
+				return len;
+			}
+
+			//otherwise copy the rest of the buffer in, and then read straight
+			//into buf if we still need more data
+			int read = 0;
+			if (bufPos != -1) {
+				read =  buffer.length - bufPos;
+				for (int i = 0; i < read; ++i)
+					buf[off+i] = buffer[bufPos+i];
+				bufPos = -1; //no data in buffer now;
+			}
+
+			if (read == len)
+				return read;
+
+
+      int result = ceph.ceph_read(fileHandle, buf, off+read, len-read);
+			cephPos += len-read;
       if (result < 0)
 				ceph.debug("CephInputStream.read: Reading " + len
 									 + " bytes from fd " + fileHandle + " failed.", ceph.WARN);

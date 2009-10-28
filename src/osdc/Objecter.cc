@@ -121,6 +121,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
 	bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR);
+
+	if (was_pauserd || was_pausewr)
+	  maybe_request_map();
     
 	if (m->incremental_maps.count(e)) {
 	  dout(3) << "handle_osd_map decoding incremental epoch " << e << dendl;
@@ -182,6 +185,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
     if (!changed_pgs.empty())
       kick_requests(changed_pgs);
   }
+
+  //now check if the map is full -- we want to subscribe if it is!
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL) & CEPH_OSDMAP_FULL)
+    maybe_request_map();
   
   map<epoch_t,list<Context*> >::iterator p = waiting_for_map.begin();
   while (p != waiting_for_map.end() &&

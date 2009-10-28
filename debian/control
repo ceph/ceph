@@ -8,13 +8,13 @@ Standards-Version: 3.7.2
 Package: ceph
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libedit2
-Recommends: fuse-utils, ceph-fuse, libceph, librados, libcrush
-Description: distributed file system
- Ceph is a distributed network file system designed to provide
+Recommends: fuse-utils, ceph-fuse, libceph1, librados1, libcrush1
+Description: distributed storage and file system
+ Ceph is a distributed storage and network file system designed to provide
  excellent performance, reliability, and scalability.
  .
- This package contains all server daemons and tools for creating,
- running, and administering a Ceph file system.
+ This package contains all server daemons and management tools for creating,
+ running, and administering a Ceph storage cluster.
 
 Package: ceph-fuse
 Architecture: any
@@ -28,67 +28,89 @@ Description: FUSE-based client for the Ceph distributed file system
  .
  Because the FUSE-based client has certain inherent performance
  limitations, it is recommended that the native Linux kernel client
- be used if possible (see ceph-kclient-source).  If it is not
- practical to load a kernel module (insufficient privileges, older
- kernel, etc.), then the FUSE client will do.
+ be used if possible.  If it is not practical to load a kernel module
+ (insufficient privileges, older kernel, etc.), then the FUSE client will
+ do.
 
-Package: libcrush
+Package: libcrush1
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: CRUSH mapping algorithm
+Description: CRUSH placement algorithm
  CRUSH is a pseudo-random hash-like algorithm for mapping inputs to
- a changing hierarchy of devices.  It was originally designed for use
- in storage clusters, where one wants to minimize movement of objects
- between servers when servers fail or are added to the cluster.
+ a changing hierarchy of devices without a centralized directory.  It was
+ originally designed for mapping data objects to storage servesr, although it
+ may be useful in other domains.  Because large systems are inherently
+ dynamic, CRUSH is designed to facilitate the addition and removal of devices
+ while minimizing unnecessary object movement.  The algorithm accommodates a
+ wide variety of data replication and reliability mechanisms and distributes
+ data in terms of user-defined policies that enforce separation of replicas
+ across failure domains.
 
-Package: libcrush-dev
+Package: libcrush1-dev
 Architecture: any
+Section: libdevel
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: CRUSH mapping algorithm (development files)
  CRUSH is a pseudo-random hash-like algorithm for mapping inputs to
- a changing hierarchy of devices.  It was originally designed for use
- in storage clusters, where one wants to minimize movement of objects
- between servers when servers fail or are added to the cluster.
+ a changing hierarchy of devices without a centralized directory.  It was
+ originally designed for mapping data objects to storage servesr, although it
+ may be useful in other domains.  Because large systems are inherently
+ dynamic, CRUSH is designed to facilitate the addition and removal of devices
+ while minimizing unnecessary object movement.  The algorithm accommodates a
+ wide variety of data replication and reliability mechanisms and distributes
+ data in terms of user-defined policies that enforce separation of replicas
+ across failure domains.
+ .
+ This package contains development files needed for building applications that
+ link against libcrush.
 
-Package: librados
+Package: librados1
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: RADOS distributed object store client library
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
  shared library allowing applications to access the distributed object
  store using a simple file-like interface.
 
-Package: librados-dev
+Package: librados1-dev
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush, librados
+Section: libdevel
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1, librados1
 Description: RADOS distributed object store client library (development files)
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
  shared library allowing applications to access the distributed object
  store using a simple file-like interface.
+ .
+ This package contains development files needed for building applications that
+ link against librados.
 
-Package: libceph
+Package: libceph1
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: Ceph distributed file system client library
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
 
-Package: libceph-dev
+Package: libceph1-dev
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush
+Section: libdevel
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: Ceph distributed file system client library (development files)
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
  shared library allowing applications to access a Ceph distributed
  file system via a POSIX-like interface.
+ .
+ This package contains development files needed for building applications that
+ link against libceph.
 
 Package: radosgw
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, libcrush, librados
+Depends: ${shlibs:Depends}, ${misc:Depends}, libexpat1, libcrush1, librados1
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the

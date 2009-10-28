@@ -33,6 +33,8 @@ public:
   hash_map<pg_t,pg_stat_t> pg_stat;
   set<pg_t>                pg_set;
   hash_map<int,osd_stat_t> osd_stat;
+  set<int> full_osds;
+  set<int> nearfull_osds;
 
   class Incremental {
   public:
@@ -83,7 +85,23 @@ public:
 	stat_osd_sub(osd_stat[p->first]);
       osd_stat[p->first] = p->second;
       stat_osd_add(p->second);
+      //update the full/nearful_osd sets
+      int from = p->first;
+      float ratio = ((float)p->second.kb_used) / (float) p->second.kb;
+      if ( ratio > full_ratio ) {
+	full_osds.insert(from);
+	//sets don't double-insert so this might be a (very expensive) null-op
+      }
+      else if ( ratio > nearfull_ratio ) {
+	nearfull_osds.insert(from);
+	full_osds.erase(from);
+      }
+      else {//it's not full or near-full
+	full_osds.erase(from);
+	nearfull_osds.erase(from);
+      }
     }
+
     for (set<int>::iterator p = inc.osd_stat_rm.begin();
 	 p != inc.osd_stat_rm.end();
 	 p++) 
@@ -103,6 +121,9 @@ public:
   hash_map<int,pool_stat_t> pg_pool_sum;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
+
+  float full_ratio;
+  float nearfull_ratio;
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   
@@ -142,8 +163,10 @@ public:
 
   PGMap() : version(0),
 	    last_osdmap_epoch(0), last_pg_scan(0),
-	    num_pg(0), 
-	    num_osd(0) {}
+	    num_pg(0),
+	    num_osd(0),
+	    full_ratio(CEPH_OSD_FULL_RATIO),
+	    nearfull_ratio(CEPH_OSD_NEARFULL_RATIO) {}
 
   void encode(bufferlist &bl) {
     ::encode(version, bl);
@@ -176,6 +199,8 @@ public:
     ss << "version " << version << std::endl;
     ss << "last_osdmap_epoch " << last_osdmap_epoch << std::endl;
     ss << "last_pg_scan " << last_pg_scan << std::endl;
+    ss << "full_ratio " << full_ratio << std::endl;
+    ss << "nearfull_ratio " << nearfull_ratio << std::endl;
     ss << "pg_stat\tobjects\tmip\tdegr\tkb\tbytes\tlog\tdisklog\tstate\tv\treported\tup\tacting\tlast_scrub" << std::endl;
     for (set<pg_t>::iterator p = pg_set.begin();
 	 p != pg_set.end();
@@ -220,7 +245,6 @@ public:
        << "\t" << pg_sum.log_size
        << "\t" << pg_sum.ondisk_log_size
        << std::endl;
-
     ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
     for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
 	 p != osd_stat.end();

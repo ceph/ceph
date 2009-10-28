@@ -126,6 +126,7 @@ libcrush_la_SOURCES = \
 	crush/mapper.c \
 	crush/crush.c
 libcrush_la_CFLAGS = ${AM_CFLAGS}
+libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*'
 lib_LTLIBRARIES += libcrush.la
 
 # librados
@@ -157,24 +158,22 @@ bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_RADOSGW
 libradosgw_a_SOURCES = \
-	radosgw/rgw_fs.cc \
-	radosgw/rgw_rados.cc \
-	radosgw/rgw_acl.cc \
-	radosgw/rgw_user.cc \
-	radosgw/rgw_access.cc \
-	radosgw/rgw_op.cc \
-	radosgw/rgw_rest.cc \
-	radosgw/rgw_common.cc
+	rgw/rgw_fs.cc \
+	rgw/rgw_rados.cc \
+	rgw/rgw_acl.cc \
+	rgw/rgw_user.cc \
+	rgw/rgw_access.cc \
+	rgw/rgw_op.cc \
+	rgw/rgw_rest.cc \
+	rgw/rgw_common.cc
 libradosgw_a_CFLAGS = ${AM_CFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
-rgw_SOURCES = radosgw/rgw_main.cc
-rgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
-rgw_admin_SOURCES = radosgw/rgw_admin.cc
-rgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
-rgw_aclparser_SOURCES = radosgw/rgw_aclparser.cc
-rgw_aclparser_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
-bin_PROGRAMS += rgw rgw_admin rgw_aclparser
+radosgw_SOURCES = rgw/rgw_main.cc
+radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
+radosgw_admin_SOURCES = rgw/rgw_admin.cc
+radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
+bin_PROGRAMS += radosgw radosgw_admin
 endif
 
 testcrypto_SOURCES = testcrypto.cc
@@ -689,14 +688,14 @@ noinst_HEADERS = \
         osdc/Journaler.h\
         osdc/ObjectCacher.h\
         osdc/Objecter.h\
-	radosgw/rgw_access.h\
-	radosgw/rgw_acl.h\
-	radosgw/rgw_fs.h\
-	radosgw/rgw_rados.h\
-	radosgw/rgw_op.h\
-	radosgw/rgw_rest.h\
-	radosgw/rgw_common.h\
-	radosgw/rgw_user.h\
+	rgw/rgw_access.h\
+	rgw/rgw_acl.h\
+	rgw/rgw_fs.h\
+	rgw/rgw_rados.h\
+	rgw/rgw_op.h\
+	rgw/rgw_rest.h\
+	rgw/rgw_common.h\
+	rgw/rgw_user.h\
 	sample.ceph.conf
 
 all_sources = $(cmon_SOURCES) $(ceph_SOURCES) $(mkmonfs_SOURCES) $(authtool_SOURCES) $(monmaptool_SOURCES) \

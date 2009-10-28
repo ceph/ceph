@@ -63,9 +63,6 @@ import org.apache.hadoop.fs.CreateFlag;
  */
 public class CephFileSystem extends FileSystem {
 
-  protected static final int EEXIST = 17;
-  protected static final int ENOENT = 2;
-
   private URI uri;
 
   private final Path root;
@@ -203,7 +200,8 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("append: Open for append failed on path \"" +
 														abs_path.toString() + "\"");
     }
-    CephOutputStream cephOStream = new CephOutputStream(getConf(), ceph, fd);
+    CephOutputStream cephOStream = new CephOutputStream(getConf(),
+																												ceph, fd, bufferSize);
     ceph.debug("append:exit", ceph.DEBUG);
     return new FSDataOutputStream(cephOStream, statistics);
   }
@@ -491,7 +489,7 @@ public class CephFileSystem extends FileSystem {
       Path parent = abs_path.getParent();
       if (parent != null) { // if parent is root, we're done
 				int r = ceph.ceph_mkdirs(parent.toString(), permission.toShort());
-				if (!(r==0 || r==-EEXIST))
+				if (!(r==0 || r==-ceph.EEXIST))
 					throw new IOException ("Error creating parent directory; code: " + r);
       }
       if (progress!=null) progress.progress();
@@ -507,7 +505,8 @@ public class CephFileSystem extends FileSystem {
     }
       
     // Step 4: create the stream
-    OutputStream cephOStream = new CephOutputStream(getConf(), ceph, fh);
+    OutputStream cephOStream = new CephOutputStream(getConf(),
+																										ceph, fh, bufferSize);
     ceph.debug("create:exit", ceph.DEBUG);
     return new FSDataOutputStream(cephOStream, statistics);
 	}
@@ -528,7 +527,7 @@ public class CephFileSystem extends FileSystem {
     
     int fh = ceph.ceph_open_for_read(abs_path.toString());
     if (fh < 0) { //uh-oh, something's bad!
-      if (fh == -ENOENT) //well that was a stupid open
+      if (fh == -ceph.ENOENT) //well that was a stupid open
 				throw new IOException("open:  absolute path \""  + abs_path.toString()
 															+ "\" does not exist");
       else //hrm...the file exists but we can't open it :(
@@ -550,7 +549,8 @@ public class CephFileSystem extends FileSystem {
       throw new IOException("Failed to get file size for file " + abs_path.toString() + 
 														" but succeeded in opening file. Something bizarre is going on.");
     }
-    FSInputStream cephIStream = new CephInputStream(getConf(), ceph, fh, size);
+    FSInputStream cephIStream = new CephInputStream(getConf(), ceph,
+																										fh, size, bufferSize);
     ceph.debug("open:exit", ceph.DEBUG);
     return new FSDataInputStream(cephIStream);
 	}

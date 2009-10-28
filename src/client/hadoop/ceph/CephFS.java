@@ -34,6 +34,9 @@ abstract class CephFS {
 	protected static final int TRACE = 5;
 	protected static final int NOLOG = 6;
 
+  protected static final int EEXIST = 17;
+  protected static final int ENOENT = 2;
+
 	private boolean debug = false;
 	private Log LOG;
 
@@ -165,7 +168,7 @@ abstract class CephFS {
 	 */
   abstract protected boolean ceph_kill_client();
 	/*
-	 * Get the statistics on a path returned in a custom format defined below.
+	 * Get the statistics on a path returned in a custom format.
 	 * Inputs:
 	 *  String path: The path to stat.
 	 *  Stat fill: The stat object to fill.
@@ -177,9 +180,10 @@ abstract class CephFS {
 	 * Inputs:
 	 *  String path: A path on the filesystem that you wish to stat.
 	 *  CephStat fill: The CephStat object to fill.
-	 * Returns: true if successful and the CephStat is filled; false otherwise.
+	 * Returns: 0 if successful and the CephStat is filled; a negative
+	 *  error code otherwise.
 	 */
-  abstract protected int ceph_statfs(String Path, CephFileSystem.CephStat fill);
+  abstract protected int ceph_statfs(String path, CephFileSystem.CephStat fill);
 	/*
 	 * Check how many times a path should be replicated (if it is
 	 * degraded it may not actually be replicated this often).
@@ -189,7 +193,7 @@ abstract class CephFS {
 	 */
   abstract protected int ceph_replication(String path);
 	/*
-	 * Find the IP:port addresses of the primary OSD for a given file and offset.
+	 * Find the IP address of the primary OSD for a given file and offset.
 	 * Inputs:
 	 *  int fh: The filehandle for the file.
 	 *  long offset: The offset to get the location of.
@@ -234,7 +238,7 @@ abstract class CephFS {
 	 * the data from the given offset!
 	 * Returns: the number of bytes read on success (as an int),
 	 *  or an error code otherwise.	 */
-  protected native int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
+  abstract protected int ceph_read(int fh, byte[] buffer, int buffer_offset, int length);
 	/*
 	 * Seeks to the given position in the given file.
 	 * Inputs:
@@ -242,7 +246,7 @@ abstract class CephFS {
 	 *  long pos: The position to seek to.
 	 * Returns: the new position (as a long) of the filehandle on success,
 	 *  or a negative error code on failure.	 */
-  protected native long ceph_seek_from_start(int fh, long pos);
+  abstract protected long ceph_seek_from_start(int fh, long pos);
     
 	protected void debug(String statement, int priority) {
     if (debug) System.err.println(statement);
