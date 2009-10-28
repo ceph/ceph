@@ -9,6 +9,9 @@ repo=$1
 arch=$2
 snapshot=$3
 
+[ -z "$repo" ] && echo no repo && exit 1
+[ -z "$arch" ] && echo no arch && exit 1
+
 if [ "$repo" = "unstable" ]; then
     versuffix=`date "+%Y%m%d%H%M%S"`
 #    if [ `echo $vers | sed 's/[^\.]//g'` = ".." ]; then
