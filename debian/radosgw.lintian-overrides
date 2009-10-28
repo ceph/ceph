@@ -1,0 +1,2 @@
+# we are LGPL, so there is no problem linking with OpenSSL
+radosgw binary: possible-gpl-code-linked-with-openssl

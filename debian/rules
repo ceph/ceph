@@ -42,6 +42,9 @@ install: build
 	mkdir -p etc/ceph
 	cp src/sample.ceph.conf etc/ceph
 
+	mkdir -p usr/share/lintian/overrides
+	cp debian/radosgw.lintian-overrides usr/share/lintian/overrides/radosgw
+
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.

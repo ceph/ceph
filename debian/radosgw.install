@@ -1,3 +1,4 @@
 usr/bin/rgw
 usr/bin/rgw_admin
 usr/bin/rgw_aclparser
+usr/share/lintian/overrides/radosgw
