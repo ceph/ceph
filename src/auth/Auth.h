@@ -85,6 +85,10 @@ struct EntityName {
   void get_type_str(string& s) {
     s = ceph_entity_type_name(entity_type);
   }
+
+  bool is_admin() {
+    return (name.compare("admin") == 0);
+  }
 };
 WRITE_CLASS_ENCODER(EntityName);
 

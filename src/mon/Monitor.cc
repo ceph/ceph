@@ -483,6 +483,8 @@ bool Monitor::ms_dispatch(Message *m)
   Session *s = NULL;
   bool reuse_caps = false;
   MonCaps caps;
+  EntityName entity_name;
+  bool src_is_mon;
 
   if (connection) {
     s = (Session *)connection->get_priv();
@@ -508,11 +510,14 @@ bool Monitor::ms_dispatch(Message *m)
     } else {
       dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
     }
+    if (s->auth_handler) {
+      entity_name = s->auth_handler->get_entity_name();
+    }
   }
-
+  src_is_mon = (connection && connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
 #define ALLOW_CAPS(service_id, allow_caps) \
 do { \
-  if (connection && connection->get_peer_type() & CEPH_ENTITY_TYPE_MON) \
+  if (src_is_mon) \
     break; \
   if (s && ((int)s->caps.get_caps(service_id) & (allow_caps)) != (allow_caps)) { \
     dout(0) << "filtered out request due to caps " \
@@ -532,6 +537,18 @@ do { \
   } \
 } while (0)
 
+#define EXIT_NOT_ADMIN \
+do { \
+  if (!entity_name.is_admin()) { \
+    dout(0) << "filtered out request (not admin), peer=" << connection->get_peer_type() \
+           << " entity_name=" << entity_name.to_str() << " message=" << *m << dendl; \
+    delete m; \
+    goto out; \
+  } \
+} while (0)
+
+#define IS_NOT_ADMIN (!src_is_mon) && (!entity_name.is_admin())
+
   {
     switch (m->get_type()) {
       
@@ -542,11 +559,16 @@ do { \
 
       // misc
     case CEPH_MSG_MON_GET_MAP:
+      /* public.. no need for checks */
       handle_mon_get_map((MMonGetMap*)m);
       break;
 
     case MSG_MON_COMMAND:
-      /* FIXME: only admin can do it */
+      if (IS_NOT_ADMIN) {
+        string rs="Access denied";
+        reply_command((MMonCommand *)m, -EACCES, rs, 0);
+        EXIT_NOT_ADMIN;
+      }
       handle_command((MMonCommand*)m);
       break;
 
@@ -637,6 +659,9 @@ do { \
       break;
 
     case MSG_MON_OBSERVE:
+      if (IS_NOT_ADMIN) {
+        EXIT_NOT_ADMIN;
+      }
       handle_observe((MMonObserve *)m);
       break;
 
