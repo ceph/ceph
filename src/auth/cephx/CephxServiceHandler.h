@@ -32,6 +32,7 @@ public:
   int start_session(bufferlist& result_bl);
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
+  EntityName& get_entity_name() { return entity_name; }
 };
 
 #endif

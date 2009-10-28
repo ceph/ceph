@@ -524,7 +524,7 @@ do { \
 
 #define ALLOW_MESSAGES_FROM(peers) \
 do { \
-  if ((connection && connection->get_peer_type() & (peers)) == 0) { \
+  if ((connection && connection->get_peer_type() & (peers | CEPH_ENTITY_TYPE_MON)) == 0) { \
     dout(0) << "filtered out request, peer=" << connection->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
     delete m; \

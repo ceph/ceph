@@ -291,6 +291,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     // handle the request
     try {
       ret = s->auth_handler->handle_request(indata, response_bl, caps);
+      dout(20) << "handled request for entity_name=" << s->auth_handler->get_entity_name().to_str() << dendl;
       if (caps.length()) {
         bufferlist::iterator iter = caps.begin();
         s->caps.parse(iter);

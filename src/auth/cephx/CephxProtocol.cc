@@ -138,7 +138,7 @@ void CephXTicketManager::set_have_need_key(uint32_t service_id, uint32_t& have, 
   if (iter == tickets_map.end()) {
     have &= ~service_id;
     need |= service_id;
-    dout(0) << "couldn't find entry for service_id " << service_id << dendl;
+    dout(10) << "couldn't find entry for service_id " << service_id << dendl;
     return;
   }
 
