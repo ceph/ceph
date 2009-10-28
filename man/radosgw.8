@@ -1,13 +1,13 @@
 .TH RGW 8
 .SH NAME
-rgw \- rados REST gateway
+radosgw \- rados REST gateway
 .SH SYNOPSIS
-.B rgw
+.B radosgw
 .SH DESCRIPTION
-.B rgw
+.B radosgw
 is an HTTP REST gateway for the RADOS object store, a part of the Ceph
 distributed storage system.  It is implemented as a FastCGI module using
-libfcgi, and can be used in conjunction any FastCGI capable web server.
+libfcgi, and can be used in conjunction with any FastCGI capable web server.
 .SH OPTIONS
 .TP
 \fB\-c\fI ceph.conf\fR, \fB\-\-conf=\fIceph.conf\fR
@@ -17,15 +17,47 @@ to determine monitor addresses during startup.
 \fB\-m\fI monaddress[:port]\fR
 Connect to specified monitor (instead of looking through \fIceph.conf\fR).
 .SH EXAMPLES
-To grab a copy of the current OSD map:
+An apache example configuration for using the RADOS gateway:
 .IP
-ceph -m 1.2.3.4:6789 osd getmap -o osdmap
+<VirtualHost *:80>
+  ServerName rgw.example1.com
+  ServerAlias rgw
+  ServerAdmin webmaster@example1.com
+  DocumentRoot /var/www/web1/web/
+
+  #turn engine on
+  RewriteEngine On
+
+  #following is important for RGW/rados
+  RewriteRule             ^/([a-zA-Z0-9\-\_\.]*)([/]?.*)  /s3gw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+  <IfModule mod_fcgid.c>
+    SuexecUserGroup web1 web1
+    PHP_Fix_Pathinfo_Enable 1
+    <Directory /var/www/web1/web/>
+      Options +ExecCGI
+      AllowOverride All
+      SetHandler fcgid-script
+      FCGIWrapper /var/www/fcgi-scripts/web1/rgw .fcgi
+      Order allow,deny
+      Allow from all
+      AuthBasicAuthoritative Off
+    </Directory>
+  </IfModule>
+
+  AllowEncodedSlashes On
+
+  # ErrorLog /var/log/apache2/error.log
+  # CustomLog /var/log/apache2/access.log combined
+  ServerSignature Off
+</VirtualHost>
 .PP
-To get a dump of placement group (PG) state:
+And the corresponding rgw script:
 .IP
-ceph pg dump -o pg.txt
+#!/bin/sh
+/usr/bin/radosgw -c /etc/ceph.conf
 .SH AVAILABILITY
-.B rgw
+.B radosgw
 is part of the Ceph distributed file system.  Please refer to the Ceph wiki at
 http://ceph.newdream.net/wiki for more information.
 .SH SEE ALSO
