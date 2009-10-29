@@ -58,6 +58,8 @@ private:
   Mutex monc_lock;
   SafeTimer timer;
 
+  set<__u32> auth_supported;
+
   bool ms_dispatch(Message *m);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}

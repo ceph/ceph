@@ -110,6 +110,7 @@ struct md_config_t {
 
   // auth
   char *keys_file;
+  char *supported_auth;
 
   // messenger
 

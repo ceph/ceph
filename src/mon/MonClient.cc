@@ -32,6 +32,8 @@
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 
+#include "include/str_list.h"
+
 #include "config.h"
 
 
@@ -241,6 +243,23 @@ void MonClient::init()
   
   Mutex::Locker l(monc_lock);
   timer.add_event_after(10.0, new C_Tick(this));
+
+
+  auth_supported.clear();
+  string str = g_conf.supported_auth;
+  list<string> sup_list;
+  get_str_list(str, sup_list);
+  for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
+    if (iter->compare("cephx") == 0) {
+      dout(0) << "supporting cephx auth protocol" << dendl;
+      auth_supported.insert(CEPH_AUTH_CEPHX);
+    } else if (iter->compare("none") == 0) {
+      auth_supported.insert(CEPH_AUTH_NONE);
+      dout(0) << "supporting *none* auth protocol" << dendl;
+    } else {
+      dout(0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
+    }
+  }
 }
 
 void MonClient::shutdown()
@@ -408,12 +427,9 @@ void MonClient::_reopen_session()
   if (state != MC_STATE_HAVE_SESSION) {
     state = MC_STATE_NEGOTIATING;
 
-    set<__u32> supported;
-    supported.insert(CEPH_AUTH_CEPHX);
-    /* supported.insert(CEPH_AUTH_NONE); */
     MAuth *m = new MAuth;
     m->protocol = 0;
-    ::encode(supported, m->auth_payload);
+    ::encode(auth_supported, m->auth_payload);
     ::encode(entity_name, m->auth_payload);
     _send_mon_message(m, true);
   }

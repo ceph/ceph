@@ -341,6 +341,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(debug_tp, 0, OPT_INT, 0),
 	OPTION(debug_auth, 0, OPT_INT, 1),
 	OPTION(keys_file, 'k', OPT_STR, "keys.bin"),
+	OPTION(supported_auth, 0, OPT_STR, "cephx, none"),
 	OPTION(clock_lock, 0, OPT_BOOL, false),
 	OPTION(clock_tare, 0, OPT_BOOL, false),
 	OPTION(ms_tcp_nodelay, 0, OPT_BOOL, true),
