@@ -64,6 +64,13 @@ bugs
 - weird osd_lock contention during osd restart?
 - rstat corruption on kernal untar, make, rm -f (maybe due to mds restart?)
 
+greg
+- osd: use client session to control osdmaps to clients (auth branch)
+- osd: error handling
+- uclient: readdir from cache
+- replicate rstat error?
+- mds: basic auth checks
+
 later
 - document on-wire protocol
 - authentication
