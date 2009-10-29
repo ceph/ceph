@@ -181,22 +181,6 @@ struct AuthTicket {
 };
 WRITE_CLASS_ENCODER(AuthTicket)
 
-struct AuthBlob {
-  uint64_t secret_id;
-  bufferlist blob;
-
-  void encode(bufferlist& bl) const {
-    ::encode(secret_id, bl);
-    ::encode(blob, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    ::decode(secret_id, bl);
-    ::decode(blob, bl);
-  }
-};
-WRITE_CLASS_ENCODER(AuthBlob);
-
 
 /*
  * abstract authorizer class

@@ -227,13 +227,31 @@ struct CephXAuthorizer : public AuthAuthorizer {
   bool verify_reply(bufferlist::iterator& reply);
 };
 
+
+struct CephXTicketBlob {
+  uint64_t secret_id;
+  bufferlist blob;
+
+  void encode(bufferlist& bl) const {
+    ::encode(secret_id, bl);
+    ::encode(blob, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    ::decode(secret_id, bl);
+    ::decode(blob, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXTicketBlob);
+
+
 /*
  * TicketHandler
  */
 struct CephXTicketHandler {
   uint32_t service_id;
   CryptoKey session_key;
-  AuthBlob ticket;        // opaque to us
+  CephXTicketBlob ticket;        // opaque to us
   utime_t renew_after, expires;
   bool have_key_flag;
 
