@@ -17,16 +17,19 @@
 
 #include "include/types.h"
 #include "config.h"
+#include "Auth.h"
 
 class KeyServer;
 
 struct AuthServiceHandler {
+  EntityName entity_name;
+
   virtual ~AuthServiceHandler() { }
 
-  virtual int start_session(bufferlist& result) = 0;
-  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result, bufferlist& caps) = 0;
+  virtual int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result) = 0;
+  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result, AuthCapsInfo& caps) = 0;
 
-  virtual EntityName& get_entity_name() = 0;
+  EntityName& get_entity_name() { return entity_name; }
 };
 
 extern AuthServiceHandler *get_auth_service_handler(KeyServer *ks, set<__u32>& supported);

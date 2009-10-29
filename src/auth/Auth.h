@@ -121,6 +121,24 @@ static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
   return out << "auth(key=" << a.key << " with " << a.caps.size() << " caps)";
 }
 
+struct AuthCapsInfo {
+  bool allow_all;
+  bufferlist caps;
+
+ void encode(bufferlist& bl) const {
+    uint32_t a = (uint32_t)allow_all;
+    ::encode(a, bl);
+    ::encode(caps, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    uint32_t a;
+    ::decode(a, bl);
+    allow_all = (bool)a;
+    ::decode(caps, bl);
+  }
+};
+WRITE_CLASS_ENCODER(AuthCapsInfo)
+
 /*
  * The ticket (if properly validated) authorizes the principal use
  * services as described by 'caps' during the specified validity
@@ -129,7 +147,7 @@ static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
 struct AuthTicket {
   EntityName name;
   utime_t created, renew_after, expires;
-  bufferlist caps;
+  AuthCapsInfo caps;
   __u32 flags;
 
   AuthTicket() : flags(0) {}

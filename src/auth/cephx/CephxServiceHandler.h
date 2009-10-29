@@ -23,16 +23,14 @@ class KeyServer;
 class CephxServiceHandler  : public AuthServiceHandler {
   KeyServer *key_server;
   uint64_t server_challenge;
-  EntityName entity_name;
 
 public:
   CephxServiceHandler(KeyServer *ks) : key_server(ks), server_challenge(0) {}
   ~CephxServiceHandler() {}
   
-  int start_session(bufferlist& result_bl);
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps);
+  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl);
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
-  EntityName& get_entity_name() { return entity_name; }
 };
 
 #endif

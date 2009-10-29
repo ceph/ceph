@@ -88,8 +88,10 @@ bool KeyServerData::get_secret(EntityName& name, CryptoKey& secret)
   return true;
 }
 
-bool KeyServerData::get_caps(EntityName& name, string& type, bufferlist& caps)
+bool KeyServerData::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_info)
 {
+  caps_info.allow_all = false;
+
   dout(0) << "get_caps: name=" << name.to_str() << dendl;
   map<EntityName, EntityAuth>::iterator iter = secrets.find(name);
   if (iter == secrets.end())
@@ -98,7 +100,7 @@ bool KeyServerData::get_caps(EntityName& name, string& type, bufferlist& caps)
   dout(0) << "get_secret: num of caps=" << iter->second.caps.size() << dendl;
   map<string, bufferlist>::iterator capsiter = iter->second.caps.find(type);
   if (capsiter != iter->second.caps.end()) {
-    caps = capsiter->second;
+    caps_info.caps = capsiter->second;
   }
 
   return true;
@@ -182,11 +184,11 @@ bool KeyServer::get_secret(EntityName& name, CryptoKey& secret)
   return data.get_secret(name, secret);
 }
 
-bool KeyServer::get_caps(EntityName& name, string& type, bufferlist& caps)
+bool KeyServer::get_caps(EntityName& name, string& type, AuthCapsInfo& caps_info)
 {
   Mutex::Locker l(lock);
 
-  return data.get_caps(name, type, caps);
+  return data.get_caps(name, type, caps_info);
 }
 
 bool KeyServer::get_service_secret(uint32_t service_id, ExpiringCryptoKey& secret, uint64_t& secret_id)
@@ -314,17 +316,17 @@ bool KeyServer::get_rotating_encrypted(EntityName& name, bufferlist& enc_bl)
   return true;
 }
 
-bool KeyServer::_get_service_caps(EntityName& name, uint32_t service_id, bufferlist& caps)
+bool KeyServer::_get_service_caps(EntityName& name, uint32_t service_id, AuthCapsInfo& caps_info)
 {
   string s = ceph_entity_type_name(service_id);
 
-  return data.get_caps(name, s, caps);
+  return data.get_caps(name, s, caps_info);
 }
 
-bool KeyServer::get_service_caps(EntityName& name, uint32_t service_id, bufferlist& caps)
+bool KeyServer::get_service_caps(EntityName& name, uint32_t service_id, AuthCapsInfo& caps_info)
 {
   Mutex::Locker l(lock);
-  return _get_service_caps(name, service_id, caps);
+  return _get_service_caps(name, service_id, caps_info);
 }
 
 

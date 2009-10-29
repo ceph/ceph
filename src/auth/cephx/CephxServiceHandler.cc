@@ -29,8 +29,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "cephx server " << entity_name << ": "
 
-int CephxServiceHandler::start_session(bufferlist& result_bl)
+int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl)
 {
+  entity_name = name;
+
   get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
   if (!server_challenge)
     server_challenge = 1;  // always non-zero.
@@ -42,7 +44,7 @@ int CephxServiceHandler::start_session(bufferlist& result_bl)
   return CEPH_AUTH_CEPHX;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps)
+int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
 {
   int ret = 0;
 
@@ -54,8 +56,6 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     {
       CephXAuthenticate req;
       ::decode(req, indata);
-
-      entity_name = req.name;
 
       CryptoKey secret;
       dout(10) << "handle_request get_auth_session_key for " << entity_name << dendl;
@@ -91,13 +91,13 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       CephXSessionAuthInfo info;
 
       CryptoKey principal_secret;
-      if (key_server->get_secret(req.name, principal_secret) < 0) {
+      if (key_server->get_secret(entity_name, principal_secret) < 0) {
 	ret = -EPERM;
 	break;
       }
 
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
-      info.ticket.name = req.name;
+      info.ticket.name = entity_name;
       info.validity += g_conf.auth_mon_ticket_ttl;
 
       key_server->generate_secret(session_key);

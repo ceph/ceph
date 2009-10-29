@@ -21,6 +21,8 @@
 #define OSD_POOL_CAP_W 0x02
 #define OSD_POOL_CAP_X 0x04
 
+#define OSD_POOL_CAP_ALL (OSD_POOL_CAP_R | OSD_POOL_CAP_W | OSD_POOL_CAP_X)
+
 typedef __u8 rwx_t;
 
 static inline ostream& operator<<(ostream& out, rwx_t p) {
@@ -47,12 +49,15 @@ static inline ostream& operator<<(ostream& out, const OSDPoolCap& pc) {
 struct OSDCaps {
   map<int, OSDPoolCap> pools_map;
   rwx_t default_action;
+  bool allow_all;
+
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   
-  OSDCaps() : default_action(0) {}
+  OSDCaps() : default_action(0), allow_all(false) {}
   bool parse(bufferlist::iterator& iter);
   int get_pool_cap(int pool_id);
+  void set_allow_all(bool allow) { allow_all = allow; }
 };
 
 static inline ostream& operator<<(ostream& out, const OSDCaps& c) {

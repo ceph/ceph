@@ -21,8 +21,9 @@
 #define MON_CAP_W 0x2
 #define MON_CAP_X 0x4
 
-#define MON_CAP_RW (MON_CAP_R | MON_CAP_W)
-#define MON_CAP_RX (MON_CAP_R | MON_CAP_X)
+#define MON_CAP_RW  (MON_CAP_R | MON_CAP_W)
+#define MON_CAP_RX  (MON_CAP_R | MON_CAP_X)
+#define MON_CAP_ALL (MON_CAP_R | MON_CAP_W | MON_CAP_X)
 
 typedef __u8 rwx_t;
 
@@ -38,10 +39,12 @@ class MonCaps {
   bool get_next_token(string s, size_t& pos, string& token);
   bool is_rwx(string& token, rwx_t& cap_val);
   int get_service_id(string& token);
+  bool allow_all;
 public:
-  MonCaps() : default_action(0) {}
+  MonCaps() : default_action(0), allow_all(false) {}
   bool parse(bufferlist::iterator& iter);
   rwx_t get_caps(int service);
+  void set_allow_all(bool allow) { allow_all = allow; }
 };
 
 #endif

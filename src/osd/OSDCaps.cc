@@ -167,6 +167,9 @@ int OSDCaps::get_pool_cap(int pool_id)
 {
   int cap = default_action;
 
+  if (allow_all)
+    return OSD_POOL_CAP_ALL;
+
   map<int, OSDPoolCap>::iterator iter = pools_map.find(pool_id);
   if (iter != pools_map.end()) {
     OSDPoolCap& c = iter->second;

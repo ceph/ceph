@@ -1544,9 +1544,13 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
       con->set_priv(s->get());
       dout(10) << " new session " << s << dendl;
     }
-    
-    if (auth_ticket_info.ticket.caps.length() > 0) {
-      bufferlist::iterator iter = auth_ticket_info.ticket.caps.begin();
+
+    AuthCapsInfo& caps_info = auth_ticket_info.ticket.caps;
+
+    s->caps.set_allow_all(caps_info.allow_all);
+ 
+    if (caps_info.caps.length() > 0) {
+      bufferlist::iterator iter = caps_info.caps.begin();
       s->caps.parse(iter);
       dout(10) << " session " << s << " has caps " << s->caps << dendl;
     }

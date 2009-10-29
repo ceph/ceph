@@ -136,17 +136,14 @@ WRITE_CLASS_ENCODER(CephXResponseHeader);
 struct CephXAuthenticate {
   __u64 client_challenge;
   __u64 key;
-  EntityName name;
 
   void encode(bufferlist& bl) const {
     ::encode(client_challenge, bl);
     ::encode(key, bl);
-    ::encode(name, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(client_challenge, bl);
     ::decode(key, bl);
-    ::decode(name, bl);
  }
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)

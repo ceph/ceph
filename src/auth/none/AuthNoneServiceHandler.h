@@ -19,16 +19,19 @@
 #include "../Auth.h"
 
 class AuthNoneServiceHandler  : public AuthServiceHandler {
-  EntityName entity_name;
-
 public:
   AuthNoneServiceHandler()  {}
   ~AuthNoneServiceHandler() {}
   
-  int start_session(bufferlist& result_bl) { return CEPH_AUTH_NONE; }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps) { return 0; }
+  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl) {
+    entity_name = name;
+    return CEPH_AUTH_NONE;
+  }
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {
+    caps.allow_all = true;
+    return 0;
+  }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
-  EntityName& get_entity_name() { return entity_name; }
 };
 
 #endif

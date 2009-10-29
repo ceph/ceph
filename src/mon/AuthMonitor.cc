@@ -254,7 +254,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 {
   dout(0) << "preprocess_auth() blob_size=" << m->get_auth_payload().length() << dendl;
   int ret = 0;
-  bufferlist caps;
+  AuthCapsInfo caps_info;
   MAuthReply *reply;
 
   Session *s = (Session *)m->get_connection()->get_priv();
@@ -266,11 +266,14 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 
   // set up handler?
   if (m->protocol == 0) {
+    EntityName entity_name;
+
     if (!s->auth_handler) {
       set<__u32> supported;
       
       try {
 	::decode(supported, indata);
+        ::decode(entity_name, indata);
       } catch (buffer::error *e) {
 	dout(0) << "failed to decode message auth message" << dendl;
 	ret = -EINVAL;
@@ -281,7 +284,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 	if (!s->auth_handler)
 	  ret = -EPERM;
 	else {
-	  proto = s->auth_handler->start_session(response_bl);
+	  proto = s->auth_handler->start_session(entity_name, indata, response_bl);
 	}
       }
     } else {
@@ -290,10 +293,11 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
   } else if (s->auth_handler) {
     // handle the request
     try {
-      ret = s->auth_handler->handle_request(indata, response_bl, caps);
+      ret = s->auth_handler->handle_request(indata, response_bl, caps_info);
       dout(20) << "handled request for entity_name=" << s->auth_handler->get_entity_name().to_str() << dendl;
-      if (caps.length()) {
-        bufferlist::iterator iter = caps.begin();
+      s->caps.set_allow_all(caps_info.allow_all);
+      if (caps_info.caps.length()) {
+        bufferlist::iterator iter = caps_info.caps.begin();
         s->caps.parse(iter);
       }
     } catch (buffer::error *err) {

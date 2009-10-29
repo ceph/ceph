@@ -196,6 +196,9 @@ do { \
 
 rwx_t MonCaps::get_caps(int service)
 {
+  if (allow_all)
+    return MON_CAP_ALL;
+
   int caps = default_action;
   map<int, MonServiceCap>::iterator it = services_map.find(service);
   if (it != services_map.end()) {

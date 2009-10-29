@@ -410,9 +410,11 @@ void MonClient::_reopen_session()
 
     set<__u32> supported;
     supported.insert(CEPH_AUTH_CEPHX);
+    /* supported.insert(CEPH_AUTH_NONE); */
     MAuth *m = new MAuth;
     m->protocol = 0;
     ::encode(supported, m->auth_payload);
+    ::encode(entity_name, m->auth_payload);
     _send_mon_message(m, true);
   }
 

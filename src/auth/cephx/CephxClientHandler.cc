@@ -43,7 +43,6 @@ int CephxClientHandler::build_request(bufferlist& bl)
     ::encode(header, bl);
 
     CephXAuthenticate req;
-    req.name = name;
     CryptoKey secret;
     g_keyring.get_master(secret);
     bufferlist key, key_enc;

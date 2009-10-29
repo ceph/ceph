@@ -541,8 +541,7 @@ do { \
 do { \
   if (!entity_name.is_admin()) { \
     dout(0) << "filtered out request (not admin), peer=" << connection->get_peer_type() \
-           << " entity_name=" << entity_name.to_str() << " message=" << *m << dendl; \
-    delete m; \
+           << " entity_name=" << entity_name.to_str() << dendl; \
     goto out; \
   } \
 } while (0)
