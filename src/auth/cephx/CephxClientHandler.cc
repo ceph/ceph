@@ -42,21 +42,12 @@ int CephxClientHandler::build_request(bufferlist& bl)
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
     ::encode(header, bl);
 
-    CephXAuthenticate req;
     CryptoKey secret;
     g_keyring.get_master(secret);
-    bufferlist key, key_enc;
+
+    CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
-    ::encode(server_challenge, key);
-    ::encode(req.client_challenge, key);
-    int ret = encode_encrypt(key, secret, key_enc);
-    if (ret < 0)
-      return ret;
-    req.key = 0;
-    const uint64_t *p = (const uint64_t *)key_enc.c_str();
-    for (int pos = 0; pos + sizeof(req.key) <= key_enc.length(); pos+=sizeof(req.key), p++) {
-      req.key ^= *p;
-    }
+    cephx_calc_client_server_challenge(secret, server_challenge, req.client_challenge, &req.key);
     ::encode(req, bl);
 
     dout(10) << "get auth session key: client_challenge " << req.client_challenge << dendl;

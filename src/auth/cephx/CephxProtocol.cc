@@ -10,6 +10,26 @@
 
 
 
+int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge, __u64 client_challenge, __u64 *key)
+{
+  bufferlist bl, enc;
+  ::encode(server_challenge, bl);
+  ::encode(client_challenge, bl);
+
+  int ret = encode_encrypt(bl, secret, enc);
+  if (ret < 0)
+    return ret;
+
+  __u64 k = 0;
+  const uint64_t *p = (const uint64_t *)enc.c_str();
+  for (int pos = 0; pos + sizeof(k) <= enc.length(); pos+=sizeof(k), p++) {
+    k ^= *p;
+  }
+  *key = k;
+  return 0;
+}
+
+
 /*
  * Authentication
  */

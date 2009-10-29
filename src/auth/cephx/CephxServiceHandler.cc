@@ -69,20 +69,15 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	ret = -EPERM;
 	break;
       }      
-      bufferlist key, key_enc;
-      ::encode(server_challenge, key);
-      ::encode(req.client_challenge, key);
-      ret = encode_encrypt(key, secret, key_enc);
-      if (ret < 0)
-        break;
-      uint64_t expected_key = 0;
-      const uint64_t *p = (const uint64_t *)key_enc.c_str();
-      for (int pos = 0; pos + sizeof(req.key) <= key_enc.length(); pos+=sizeof(req.key), p++) {
-        expected_key ^= *p;
-      }
-      dout(20) << " checking key: req.key=" << hex << req.key << " expected_key=" << expected_key << dec << dendl;
+
+      __u64 expected_key;
+      cephx_calc_client_server_challenge(secret, server_challenge, req.client_challenge, &expected_key);
+
+      dout(20) << " checking key: req.key=" << hex << req.key
+	       << " expected_key=" << expected_key << dec << dendl;
       if (req.key != expected_key) {
-        dout(0) << " unexpected key: req.key=" << req.key << " expected_key=" << expected_key << dendl;
+        dout(0) << " unexpected key: req.key=" << hex << req.key
+		<< " expected_key=" << expected_key << dec << dendl;
         ret = -EPERM;
 	break;
       }

@@ -148,6 +148,9 @@ struct CephXAuthenticate {
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)
 
+int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge, __u64 client_challenge,
+				       __u64 *key);
+
 
 /*
  * getting service tickets
