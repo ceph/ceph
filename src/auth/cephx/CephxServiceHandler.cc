@@ -128,6 +128,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       CephXServiceTicketInfo auth_ticket_info;
       if (!cephx_verify_authorizer(*key_server, indata, auth_ticket_info, tmp_bl)) {
         ret = -EPERM;
+	break;
       }
 
       CephXServiceTicketRequest ticket_req;

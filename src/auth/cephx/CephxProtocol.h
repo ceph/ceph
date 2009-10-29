@@ -319,12 +319,12 @@ struct CephXServiceTicketInfo {
 WRITE_CLASS_ENCODER(CephXServiceTicketInfo);
 
 struct CephXAuthorize {
-  utime_t now;
+  __u64 nonce;
   void encode(bufferlist& bl) const {
-    ::encode(now, bl);
+    ::encode(nonce, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(now, bl);
+    ::decode(nonce, bl);
   }
 };
 WRITE_CLASS_ENCODER(CephXAuthorize);
