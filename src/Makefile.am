@@ -405,6 +405,9 @@ noinst_HEADERS = \
 	auth/cephx/CephxProtocol.h\
 	auth/cephx/CephxClientHandler.h\
 	auth/cephx/CephxServiceHandler.h\
+	auth/none/AuthNoneClientHandler.h\
+	auth/none/AuthNoneServiceHandler.h\
+	auth/none/AuthNoneProtocol.h\
 	auth/Auth.h\
 	auth/AuthServiceHandler.h\
 	auth/KeyRing.h\

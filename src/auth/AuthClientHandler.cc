@@ -22,12 +22,15 @@
 #include "messages/MAuthReply.h"
 
 #include "cephx/CephxClientHandler.h"
+#include "none/AuthNoneClientHandler.h"
 
 AuthClientHandler *get_auth_client_handler(int proto)
 {
   switch (proto) {
   case CEPH_AUTH_CEPHX:
     return new CephxClientHandler();
+  case CEPH_AUTH_NONE:
+    return new AuthNoneClientHandler();
   default:
     return NULL;
   }

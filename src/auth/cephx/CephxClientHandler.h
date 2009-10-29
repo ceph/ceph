@@ -12,7 +12,7 @@
  * 
  */
 
-#ifndef __CEPHXLIENTHANDLER_H
+#ifndef __CEPHXCLIENTHANDLER_H
 #define __CEPHXCLIENTHANDLER_H
 
 #include "../AuthClientHandler.h"

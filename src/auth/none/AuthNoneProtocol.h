@@ -12,17 +12,15 @@
  * 
  */
 
-#include "AuthServiceHandler.h"
-#include "cephx/CephxServiceHandler.h"
-#include "none/AuthNoneServiceHandler.h"
+#ifndef __AUTHNONEPROTOCOL_H
+#define __AUTHNONEPROTOCOL_H
 
-AuthServiceHandler *get_auth_service_handler(KeyServer *ks, set<__u32>& supported)
-{
-  if (supported.count(CEPH_AUTH_CEPHX))
-    return new CephxServiceHandler(ks);
-  if (supported.count(CEPH_AUTH_NONE))
-    return new AuthNoneServiceHandler();
-  return NULL;
-}
+#include "../Auth.h"
 
+struct AuthNoneAuthorizer : public AuthAuthorizer {
+  AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
+  bool build_authorizer() { return true; }
+  bool verify_reply(bufferlist::iterator& reply) { return true; }
+};
 
+#endif

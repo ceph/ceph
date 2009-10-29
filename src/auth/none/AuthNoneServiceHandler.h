@@ -12,26 +12,22 @@
  * 
  */
 
-#ifndef __CEPHXSERVICEHANDLER_H
-#define __CEPHXSERVICEHANDLER_H
+#ifndef __AUTHNONESERVICEHANDLER_H
+#define __AUTHNONESERVICEHANDLER_H
 
 #include "../AuthServiceHandler.h"
 #include "../Auth.h"
 
-class KeyServer;
-
-class CephxServiceHandler  : public AuthServiceHandler {
-  KeyServer *key_server;
-  uint64_t server_challenge;
+class AuthNoneServiceHandler  : public AuthServiceHandler {
   EntityName entity_name;
 
 public:
-  CephxServiceHandler(KeyServer *ks) : key_server(ks), server_challenge(0) {}
-  ~CephxServiceHandler() {}
+  AuthNoneServiceHandler()  {}
+  ~AuthNoneServiceHandler() {}
   
-  int start_session(bufferlist& result_bl);
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps);
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl);
+  int start_session(bufferlist& result_bl) { return 0; }
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps) { return 0; }
+  void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
   EntityName& get_entity_name() { return entity_name; }
 };
 
