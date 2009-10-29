@@ -206,19 +206,19 @@ WRITE_CLASS_ENCODER(CephXServiceTicketRequest);
  */
 
 struct CephXAuthorizeReply {
-  utime_t timestamp;
+  __u64 nonce_plus_one;
   void encode(bufferlist& bl) const {
-    ::encode(timestamp, bl);
+    ::encode(nonce_plus_one, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(timestamp, bl);
+    ::decode(nonce_plus_one, bl);
   }
 };
 WRITE_CLASS_ENCODER(CephXAuthorizeReply);
 
 
 struct CephXAuthorizer : public AuthAuthorizer {
-  utime_t timestamp;
+  __u64 nonce;
   CryptoKey session_key;
 
   CephXAuthorizer() : AuthAuthorizer(CEPH_AUTH_CEPHX) {}

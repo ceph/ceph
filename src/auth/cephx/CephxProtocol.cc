@@ -212,13 +212,13 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer()
 {
   CephXAuthorizer *a = new CephXAuthorizer;
   a->session_key = session_key;
-  a->timestamp = g_clock.now();
+  a->nonce = ((__u64)rand() << 32) + rand();
 
   ::encode(service_id, a->bl);
   ::encode(ticket, a->bl);
 
   CephXAuthorize msg;
-  msg.now = a->timestamp;
+  msg.nonce = a->nonce;
   if (encode_encrypt(msg, session_key, a->bl) < 0) {
     delete a;
     return 0;
@@ -298,8 +298,7 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
    */
   CephXAuthorizeReply reply;
   // reply.trans_id = auth_msg.trans_id;
-  reply.timestamp = auth_msg.now;
-  reply.timestamp.sec_ref() += 1;
+  reply.nonce_plus_one = auth_msg.nonce + 1;
   if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
     return false;
 
@@ -316,11 +315,10 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
     return false;
   }
 
-  utime_t expect = timestamp;
-  expect.sec_ref() += 1;
-  if (expect != reply.timestamp) {
-    dout(0) << "verify_authorizer_reply bad ts got " << reply.timestamp << " expected " << expect
-	    << " sent " << timestamp << dendl;
+  __u32 expect = nonce + 1;
+  if (expect != reply.nonce_plus_one) {
+    dout(0) << "verify_authorizer_reply bad ts got " << reply.nonce_plus_one << " expected " << expect
+	    << " sent " << nonce << dendl;
     return false;
   }
   return true;
