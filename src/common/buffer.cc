@@ -88,7 +88,7 @@ int buffer::list::write_file(const char *fn)
   return 0;
 }
 
-void buffer::list::hexdump(std::ostream &out)
+void buffer::list::hexdump(std::ostream &out) const
 {
   out.setf(std::ios::right);
   out.fill('0');

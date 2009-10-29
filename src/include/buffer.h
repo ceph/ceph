@@ -941,11 +941,11 @@ public:
     /*
      * get a char
      */
-    const char& operator[](unsigned n) {
+    const char& operator[](unsigned n) const {
       if (n >= _len)
 	throw new end_of_buffer;
 
-      for (std::list<ptr>::iterator p = _buffers.begin();
+      for (std::list<ptr>::const_iterator p = _buffers.begin();
 	   p != _buffers.end();
 	   p++) {
 	if (n >= p->length()) {
@@ -1090,7 +1090,7 @@ public:
 
     void encode_base64(list& o);
 
-    void hexdump(std::ostream &out);
+    void hexdump(std::ostream &out) const;
     int read_file(const char *fn, bool silent=false);
     int write_file(const char *fn);
     __u32 crc32c(__u32 crc) {
