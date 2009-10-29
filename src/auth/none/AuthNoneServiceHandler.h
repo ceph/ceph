@@ -25,7 +25,7 @@ public:
   AuthNoneServiceHandler()  {}
   ~AuthNoneServiceHandler() {}
   
-  int start_session(bufferlist& result_bl) { return 0; }
+  int start_session(bufferlist& result_bl) { return CEPH_AUTH_NONE; }
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, bufferlist& caps) { return 0; }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
   EntityName& get_entity_name() { return entity_name; }
