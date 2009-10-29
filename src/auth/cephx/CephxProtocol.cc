@@ -315,9 +315,9 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
     return false;
   }
 
-  __u32 expect = nonce + 1;
+  __u64 expect = nonce + 1;
   if (expect != reply.nonce_plus_one) {
-    dout(0) << "verify_authorizer_reply bad ts got " << reply.nonce_plus_one << " expected " << expect
+    dout(0) << "verify_authorizer_reply bad nonce got " << reply.nonce_plus_one << " expected " << expect
 	    << " sent " << nonce << dendl;
     return false;
   }

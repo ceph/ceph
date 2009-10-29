@@ -275,7 +275,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 	::decode(supported, indata);
         ::decode(entity_name, indata);
       } catch (buffer::error *e) {
-	dout(0) << "failed to decode message auth message" << dendl;
+	dout(0) << "failed to decode initial auth message" << dendl;
 	ret = -EINVAL;
       }
       
