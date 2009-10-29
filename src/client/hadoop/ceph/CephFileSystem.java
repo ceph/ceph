@@ -79,6 +79,17 @@ public class CephFileSystem extends FileSystem {
     root = new Path("/");
   }
 
+	/**
+	 * Used for testing purposes, this constructor
+	 * sets the given CephFS instead of defaulting to a
+	 * CephTalker (with its assumed real Ceph instance to talk to).
+	 */
+	public CephFileSystem(CephFS ceph_fs, String default_path) {
+		root = new Path("/");
+		ceph = ceph_fs;
+		fs_default_name = default_path;
+	}
+
   /**
    * Lets you get the URI of this CephFileSystem.
    * @return the URI.
@@ -109,8 +120,9 @@ public class CephFileSystem extends FileSystem {
 			if (ceph == null) {
 				ceph = new CephTalker(conf, LOG);
 			}
-      
-      fs_default_name = conf.get("fs.default.name");
+      if (null == fs_default_name) {
+				fs_default_name = conf.get("fs.default.name");
+			}
       //build up the arguments for Ceph
       String arguments = "CephFSInterface";
       arguments += conf.get("fs.ceph.commandLine", "");
@@ -148,17 +160,6 @@ public class CephFileSystem extends FileSystem {
     }
     ceph.debug("initialize:exit", ceph.DEBUG);
   }
-
-	/**
-	 * Used for testing purposes, this version of initialize
-	 * sets the given CephFS instead of defaulting to a
-	 * CephTalker (with its assumed real Ceph instance to talk to).
-	 */
-	protected void initialize(URI uri, Configuration conf, CephFS ceph_fs)
-		throws IOException{
-		ceph = ceph_fs;
-		initialize(uri, conf);
-	}
 
   /**
    * Close down the CephFileSystem. Runs the base-class close method
