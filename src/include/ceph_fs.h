@@ -82,8 +82,9 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 #define CEPH_CRYPTO_AES  0x1
 
 /* security/authentication protocols */
-#define CEPH_AUTH_NONE	 0x0
-#define CEPH_AUTH_CEPHX	 0x1
+#define CEPH_AUTH_UNKNOWN	0x0
+#define CEPH_AUTH_NONE	 	0x1
+#define CEPH_AUTH_CEPHX	 	0x2
 
 
 /*********************************************
