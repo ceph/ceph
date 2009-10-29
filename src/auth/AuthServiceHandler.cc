@@ -19,6 +19,8 @@
 #include "include/str_list.h"
 #include "config.h"
 
+#define DOUT_SUBSYS auth
+
 static bool _supported_initialized = false;
 static Mutex _supported_lock("auth_service_handler_init");
 static map<int, bool> auth_supported;
@@ -30,11 +32,11 @@ static void _init_supported(void)
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     if (iter->compare("cephx") == 0) {
-      dout(0) << "supporting cephx auth protocol" << dendl;
+      dout(10) << "supporting cephx auth protocol" << dendl;
       auth_supported[CEPH_AUTH_CEPHX] = true;
     } else if (iter->compare("none") == 0) {
       auth_supported[CEPH_AUTH_NONE] = true;
-      dout(0) << "supporting *none* auth protocol" << dendl;
+      dout(10) << "supporting *none* auth protocol" << dendl;
     } else {
       dout(0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }

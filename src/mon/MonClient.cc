@@ -251,11 +251,11 @@ void MonClient::init()
   get_str_list(str, sup_list);
   for (list<string>::iterator iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
     if (iter->compare("cephx") == 0) {
-      dout(0) << "supporting cephx auth protocol" << dendl;
+      dout(10) << "supporting cephx auth protocol" << dendl;
       auth_supported.insert(CEPH_AUTH_CEPHX);
     } else if (iter->compare("none") == 0) {
       auth_supported.insert(CEPH_AUTH_NONE);
-      dout(0) << "supporting *none* auth protocol" << dendl;
+      dout(10) << "supporting *none* auth protocol" << dendl;
     } else {
       dout(0) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }
