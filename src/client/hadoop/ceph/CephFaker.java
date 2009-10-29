@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 class CephFaker extends CephFS {
 	
 	FileSystem localFS;
+	String localPrefix;
 	int blockSize;
 	Configuration conf;
 	Hashtable<Integer, Object> files;
@@ -60,7 +61,8 @@ class CephFaker extends CephFS {
 		 * command-line arguments. */
 		try {
 			localFS = FileSystem.getLocal(conf);
-			localFS.setWorkingDirectory(new Path(conf.get("test.build.data", "/tmp")));
+			localPrefix = conf.get("hadoop.tmp.dir", "/tmp");
+			localFS.setWorkingDirectory(new Path(localPrefix));
 		}
 		catch (IOException e) {
 			return false;
@@ -69,17 +71,17 @@ class CephFaker extends CephFS {
 	}
 
 	protected String ceph_getcwd() {
-		return localFS.getWorkingDirectory().toString();
+		return sanitize_path(localFS.getWorkingDirectory().toString());
 	}
 
 	protected boolean ceph_setcwd(String path) {
-		localFS.setWorkingDirectory(new Path(path));
+		localFS.setWorkingDirectory(new Path(prepare_path(path)));
 		return true;
 	}
 
 	//the caller is responsible for ensuring empty dirs
 	protected boolean ceph_rmdir(String pth) {
-		Path path = new Path(pth);
+		Path path = new Path(prepare_path(pth));
 		boolean ret = false;
 		try {
 			if (localFS.listStatus(path).length <= 1) {
@@ -92,6 +94,7 @@ class CephFaker extends CephFS {
 
 	//this needs to work on (empty) directories too
 	protected boolean ceph_unlink(String path) {
+		path = prepare_path(path);
 		boolean ret = false;
 		if (ceph_isdirectory(path)) {
 			ret = ceph_rmdir(path);
@@ -106,6 +109,8 @@ class CephFaker extends CephFS {
 	}
 
 	protected boolean ceph_rename(String oldName, String newName) {
+		oldName = prepare_path(oldName);
+		newName = prepare_path(newName);
 		boolean ret = false;
 		try {
 			ret = localFS.rename(new Path(oldName), new Path(newName));
@@ -115,6 +120,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected boolean ceph_exists(String path) {
+		path = prepare_path(path);
 		boolean ret = false;
 		try {
 			ret = localFS.exists(new Path(path));
@@ -124,6 +130,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected long ceph_getblocksize(String path) {
+		path = prepare_path(path);
 		try {
 			FileStatus status = localFS.getFileStatus(new Path(path));
 			return status.getBlockSize();
@@ -137,6 +144,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected boolean ceph_isdirectory(String path) {
+		path = prepare_path(path);
 		boolean ret = false;
 		try {
 			FileStatus status = localFS.getFileStatus(new Path(path));
@@ -147,6 +155,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected boolean ceph_isfile(String path) {
+		path = prepare_path(path);
 		boolean ret = false;
 		try {
 			FileStatus status = localFS.getFileStatus(new Path(path));
@@ -157,6 +166,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected String[] ceph_getdir(String path) {
+		path = prepare_path(path);
 		if (!ceph_isdirectory(path)) {
 			return null;
 		}
@@ -164,7 +174,7 @@ class CephFaker extends CephFS {
 			FileStatus[] stats = localFS.listStatus(new Path(path));
 			String[] names = new String[stats.length];
 			for (int i=0; i<stats.length; ++i) {
-				names[i] = stats[i].getPath().toString();
+				names[i] = sanitize_path(stats[i].getPath().toString());
 			}
 			return names;
 		}
@@ -173,17 +183,14 @@ class CephFaker extends CephFS {
 	}
 
 	protected int ceph_mkdirs(String path, int mode) {
-		boolean success = false;
+		path = prepare_path(path);
 		try {
-			success = localFS.mkdirs(new Path(path), new FsPermission((short)mode));
+			if(localFS.mkdirs(new Path(path), new FsPermission((short)mode)))
+				return 0;
 		}
-		catch (IOException e) { }
-		if (success) {
-			return 0;
-		}
-		if (ceph_isdirectory(path)) {
+		catch (IOException e) { System.out.println(e); }
+		if (ceph_isdirectory(path))
 			return -EEXIST; //apparently it already existed
-		}
 		return -1;
 	}
 
@@ -193,6 +200,7 @@ class CephFaker extends CephFS {
 	 * it's okay.
 	 */
 	protected int ceph_open_for_append(String path) {
+		path = prepare_path(path);
 		FSDataOutputStream stream;
 		try {
 			stream = localFS.append(new Path(path));
@@ -205,6 +213,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected int ceph_open_for_read(String path) {
+		path = prepare_path(path);
 		FSDataInputStream stream;
 		try {
 			stream = localFS.open(new Path(path));
@@ -217,6 +226,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected int ceph_open_for_overwrite(String path, int mode) {
+		path = prepare_path(path);
 		FSDataOutputStream stream;
 		try {
 			stream = localFS.create(new Path(path));
@@ -244,6 +254,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected boolean ceph_setPermission(String pth, int mode) {
+		pth = prepare_path(pth);
 		Path path = new Path(pth);
 		boolean ret = false;
 		try {
@@ -264,6 +275,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected boolean ceph_stat(String pth, CephFileSystem.Stat fill) {
+		pth = prepare_path(pth);
 		Path path = new Path(pth);
 		boolean ret = false;
 		try {
@@ -281,7 +293,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected int ceph_statfs(String pth, CephFileSystem.CephStat fill) {
-		Path path = new Path(pth);
+		pth = prepare_path(pth);
 		try {
 			FsStatus stat = localFS.getStatus();
 			fill.capacity = stat.getCapacity();
@@ -294,6 +306,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected int ceph_replication(String path) {
+		path = prepare_path(path);
 		int ret = -1; //-1 for failure
 		try {
 			ret = localFS.getFileStatus(new Path(path)).getReplication();
@@ -316,6 +329,7 @@ class CephFaker extends CephFS {
 	}
 
 	protected int ceph_setTimes(String pth, long mtime, long atime) {
+		pth = prepare_path(pth);
 		Path path = new Path(pth);
 		int ret = -1; //generic fail
 		try {
@@ -381,5 +395,27 @@ class CephFaker extends CephFS {
 		catch (IOException e) {}
 		catch (NullPointerException f) {}
 		return (int)ret;
+	}
+
+	/*
+	 * We need to remove the localFS file prefix before returning to Ceph
+	 */
+	private String sanitize_path(String path) {
+		debug("sanitize_path(" + path + ")", INFO);
+		if (path.startsWith("file:"))
+			path = path.substring("file:".length());
+		if (path.startsWith(localPrefix))
+			path = "/" + path.substring(localPrefix.length());
+		return path;
+	}
+
+	/*
+	 * If it's an absolute path we need to shove the
+	 * test dir onto the front as a prefix.
+	 */
+	private String prepare_path(String path) {
+		if (path.startsWith("/"))
+			return localPrefix + path.substring(1);
+		return path;
 	}
 }
