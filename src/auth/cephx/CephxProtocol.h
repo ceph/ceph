@@ -148,6 +148,20 @@ struct CephXAuthenticate {
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)
 
+struct CephXChallengeBlob {
+  __u64 server_challenge, client_challenge;
+  
+  void encode(bufferlist& bl) const {
+    ::encode(server_challenge, bl);
+    ::encode(client_challenge, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(server_challenge, bl);
+    ::decode(client_challenge, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXChallengeBlob)
+
 int cephx_calc_client_server_challenge(CryptoKey& secret, __u64 server_challenge, __u64 client_challenge,
 				       __u64 *key);
 
