@@ -20,6 +20,7 @@
 
 package org.apache.hadoop.fs.ceph;
 
+import java.net.URI;
 import java.util.Hashtable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -44,6 +45,7 @@ class CephFaker extends CephFS {
 	Hashtable<Integer, Object> files;
 	Hashtable<Integer, String> filenames;
 	int fileCount = 0;
+	boolean initialized = false;
 	
 	public CephFaker(Configuration con, Log log) {
 		super(con, log);
@@ -53,19 +55,34 @@ class CephFaker extends CephFS {
 	}
 	
 	protected boolean ceph_initializeClient(String args, int block_size) {
-		//let's remember the default block_size
-		blockSize = block_size;
-		/* for a real Ceph deployment, this starts up the client, 
-		 * sets debugging levels, etc. We just need to get the
-		 * local FileSystem to use, and we'll ignore any
-		 * command-line arguments. */
-		try {
-			localFS = FileSystem.getLocal(conf);
-			localPrefix = conf.get("hadoop.tmp.dir", "/tmp");
-			localFS.setWorkingDirectory(new Path(localPrefix));
-		}
-		catch (IOException e) {
-			return false;
+		if (!initialized) {
+			//let's remember the default block_size
+			blockSize = block_size;
+			/* for a real Ceph deployment, this starts up the client, 
+			 * sets debugging levels, etc. We just need to get the
+			 * local FileSystem to use, and we'll ignore any
+			 * command-line arguments. */
+			try {
+				localFS = FileSystem.getLocal(conf);
+				localFS.initialize(URI.create("file://localhost"), conf);
+				String userpath = "/user/" + System.getProperty("user.name");
+				localPrefix = localFS.getWorkingDirectory().toString();
+				int userpathinworkingdir = localPrefix.indexOf(userpath);
+				if (-1 == userpathinworkingdir)
+					userpathinworkingdir = localPrefix.length();
+				localPrefix = localPrefix.substring(0, userpathinworkingdir);
+
+				localFS.setWorkingDirectory(new Path(localPrefix
+																						 +"/user/"
+																						 + System.getProperty("user.name")));
+				//I don't know why, but the unit tests expect the default
+				//working dir to be /user/username, so satisfy them!
+				debug("localPrefix is " + localPrefix, INFO);
+			}
+			catch (IOException e) {
+				return false;
+			}
+			initialized = true;
 		}
 		return true;
 	}
@@ -173,8 +190,10 @@ class CephFaker extends CephFS {
 		try {
 			FileStatus[] stats = localFS.listStatus(new Path(path));
 			String[] names = new String[stats.length];
+			String name;
 			for (int i=0; i<stats.length; ++i) {
-				names[i] = sanitize_path(stats[i].getPath().toString());
+				name = stats[i].getPath().toString();
+				names[i] = name.substring(name.lastIndexOf(Path.SEPARATOR)+1);
 			}
 			return names;
 		}
@@ -184,11 +203,12 @@ class CephFaker extends CephFS {
 
 	protected int ceph_mkdirs(String path, int mode) {
 		path = prepare_path(path);
+		debug("ceph_mkdirs on " + path, INFO);
 		try {
 			if(localFS.mkdirs(new Path(path), new FsPermission((short)mode)))
 				return 0;
 		}
-		catch (IOException e) { System.out.println(e); }
+		catch (IOException e) { debug(e.toString(), ERROR); }
 		if (ceph_isdirectory(path))
 			return -EEXIST; //apparently it already existed
 		return -1;
@@ -268,6 +288,12 @@ class CephFaker extends CephFS {
 	//rather than try and match a Ceph deployment's behavior exactly,
 	//just make bad things happen if they try and call methods after this
 	protected boolean ceph_kill_client() {
+		debug("ceph_kill_client", INFO);
+		localFS.setWorkingDirectory(new Path(localPrefix));
+		debug("working dir is now " + localFS.getWorkingDirectory(), INFO);
+		try{
+			localFS.close(); }
+		catch (Exception e) {}
 		localFS = null;
 		files = null;
 		filenames = null;
@@ -402,10 +428,14 @@ class CephFaker extends CephFS {
 	 */
 	private String sanitize_path(String path) {
 		debug("sanitize_path(" + path + ")", INFO);
-		if (path.startsWith("file:"))
-			path = path.substring("file:".length());
-		if (path.startsWith(localPrefix))
-			path = "/" + path.substring(localPrefix.length());
+		/*		if (path.startsWith("file:"))
+					path = path.substring("file:".length()); */
+		if (path.startsWith(localPrefix)) {
+			path = path.substring(localPrefix.length());
+			if (path.length() == 0) //it was a root path
+				path = "/";
+		}
+		debug("sanitize_path returning " + path, INFO);
 		return path;
 	}
 
@@ -414,8 +444,14 @@ class CephFaker extends CephFS {
 	 * test dir onto the front as a prefix.
 	 */
 	private String prepare_path(String path) {
+		debug("prepare_path(" + path + ")", INFO);
 		if (path.startsWith("/"))
-			return localPrefix + path.substring(1);
+			return localPrefix + path;
+		else if (path.equals("..")) {
+			if (ceph_getcwd().equals("/"))
+				path = "."; // you can't go up past root!
+		}
+		debug("prepare_path returning" + path, INFO);
 		return path;
 	}
 }
