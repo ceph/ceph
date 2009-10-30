@@ -21,6 +21,7 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
+#include "include/str_list.h"
 #include "common/Timer.h"
 
 #include "auth/AuthServiceHandler.h"
@@ -94,7 +95,14 @@ void AuthMonitor::create_initial(bufferlist& bl)
     map<string, EntityAuth> keys_map;
     dout(0) << "reading initial keys file " << dendl;
     bufferlist bl;
-    int r = bl.read_file(g_conf.keys_file);
+
+    string k = g_conf.keys_file;
+    list<string> ls;
+    get_str_list(k, ls);
+    int r;
+    for (list<string>::iterator p = ls.begin(); p != ls.end(); p++)
+      if ((r = bl.read_file(g_conf.keys_file)) >= 0)
+	break;
     if (r >= 0) {
       bool read_ok = false;
       try {

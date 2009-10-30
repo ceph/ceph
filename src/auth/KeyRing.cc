@@ -16,6 +16,7 @@
 #include <map>
 
 #include "config.h"
+#include "include/str_list.h"
 
 #include "Crypto.h"
 #include "auth/KeyRing.h"
@@ -29,11 +30,22 @@ using namespace std;
 
 KeyRing g_keyring;
 
-bool KeyRing::load_master(const char *filename)
+bool KeyRing::load_master(const char *filename_list)
 {
-  int fd = open(filename, O_RDONLY);
+  string k = filename_list;
+  string filename;
+  list<string> ls;
+  get_str_list(k, ls);
+  int fd;
+  for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
+    fd = open(p->c_str(), O_RDONLY);
+    if (fd >= 0) {
+      filename = *p;
+      break;
+    }
+  }
   if (fd < 0) {
-    dout(0) << "can't open key file " << filename << dendl;
+    dout(0) << "can't open key file(s) " << filename_list << dendl;
     return false;
   }
 
