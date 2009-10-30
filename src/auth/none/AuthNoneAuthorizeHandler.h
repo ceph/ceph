@@ -12,18 +12,16 @@
  * 
  */
 
-#ifndef __AUTHNONEPROTOCOL_H
-#define __AUTHNONEPROTOCOL_H
+#ifndef __AUTHNONEAUTHORIZEHANDLER_H
+#define __AUTHNONEAUTHORIZEHANDLER_H
 
-#include "../Auth.h"
+#include "../AuthAuthorizeHandler.h"
 
-struct AuthNoneAuthorizer : public AuthAuthorizer {
-  AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
-  bool build_authorizer() {
-    ::encode(g_conf.entity_name, bl);
-    return 0;
-  }
-  bool verify_reply(bufferlist::iterator& reply) { return true; }
+struct AuthNoneAuthorizeHandler : public AuthAuthorizeHandler {
+  bool verify_authorizer(bufferlist& authorizer_data, bufferlist& authorizer_reply,
+                                              EntityName& entity_name, AuthCapsInfo& caps_info);
 };
+
+
 
 #endif

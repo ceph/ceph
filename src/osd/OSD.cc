@@ -79,7 +79,7 @@
 
 #include "common/ClassHandler.h"
 
-#include "auth/cephx/CephxProtocol.h"
+#include "auth/AuthAuthorizeHandler.h"
 
 #include <iostream>
 #include <errno.h>
@@ -1522,30 +1522,31 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid)
 {
-  CephXServiceTicketInfo auth_ticket_info;
-  bufferlist::iterator iter = authorizer_data.begin();
+  bool is_valid;
 
-  if (protocol != CEPH_AUTH_CEPHX) {
-    dout(0) << "verify authorizer, wrong protocol: " << protocol << dendl;
-    return false;
-  }
-  if (!authorizer_data.length()) {
-    dout(0) << "verify authorizer, authorizer_data.length()=0" << dendl;
-    return false;
+  AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
+  if (!authorize_handler) {
+    is_valid = false;
+    return true;
   }
 
-  isvalid = cephx_verify_authorizer(g_keyring, iter, auth_ticket_info, authorizer_reply);
-  dout(0) << "OSD::verify_authorizer isvalid=" << isvalid << dendl;
+  AuthCapsInfo caps_info;
+  EntityName name;
+
+  is_valid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, caps_info);
+
   if (isvalid) {
-    isvalid = true;
     Session *s = (Session *)con->get_priv();
     if (!s) {
       s = new Session;
+      if (!s) {
+        dout(0) << "ouch.. out of memory, can't open session" << dendl;
+        isvalid = false;
+        return false;
+      }
       con->set_priv(s->get());
       dout(10) << " new session " << s << dendl;
     }
-
-    AuthCapsInfo& caps_info = auth_ticket_info.ticket.caps;
 
     s->caps.set_allow_all(caps_info.allow_all);
  

@@ -181,7 +181,7 @@ private:
   // -- sessions --
 public:
   struct Session : public RefCountedObject {
-    AuthTicket ticket;
+    EntityName entity_name;
     OSDCaps caps;
   };
 

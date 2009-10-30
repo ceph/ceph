@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __AUTHSERVICEMANAGER_H
-#define __AUTHSERVICEMANAGER_H
+#ifndef __AUTHSERVICEHANDLER_H
+#define __AUTHSERVICEHANDLER_H
 
 #include "include/types.h"
 #include "config.h"
