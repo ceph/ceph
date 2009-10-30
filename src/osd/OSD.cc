@@ -1522,18 +1522,18 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
 			       bool& isvalid)
 {
-  bool is_valid;
-
   AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
   if (!authorize_handler) {
-    is_valid = false;
+    isvalid = false;
     return true;
   }
 
   AuthCapsInfo caps_info;
   EntityName name;
 
-  is_valid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, caps_info);
+  isvalid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, caps_info);
+
+  dout(10) << "OSD::ms_verify_authorizer name=" << name << dendl;
 
   if (isvalid) {
     Session *s = (Session *)con->get_priv();
