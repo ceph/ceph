@@ -63,7 +63,7 @@ public:
   virtual void reset() = 0;
   virtual int build_request(bufferlist& bl) = 0;
   virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
-  virtual void build_rotating_request(bufferlist& bl) = 0;
+  virtual bool build_rotating_request(bufferlist& bl) = 0;
 
   virtual void tick() = 0;
 

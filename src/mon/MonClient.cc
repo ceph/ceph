@@ -574,8 +574,11 @@ int MonClient::_check_auth_rotating()
   if (auth) {
     MAuth *m = new MAuth;
     m->protocol = auth->get_protocol();
-    auth->build_rotating_request(m->auth_payload);
-    _send_mon_message(m);
+    if (auth->build_rotating_request(m->auth_payload)) {
+      _send_mon_message(m);
+    } else {
+      delete m;
+    }
   }
   return 0;
 }

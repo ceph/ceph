@@ -985,12 +985,16 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 {
   dout(0) << "Monitor::verify_authorizer start" << dendl;
 
+  if (protocol == CEPH_AUTH_NONE) {
+    isvalid = true;
+    return true;
+  }
+
   if (protocol != CEPH_AUTH_CEPHX)
     return false;
 
   bufferlist::iterator iter = authorizer_data.begin();
   CephXServiceTicketInfo auth_ticket_info;
-
 
   isvalid = true;
 

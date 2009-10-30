@@ -161,12 +161,13 @@ AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id)
 }
 
 
-void CephxClientHandler::build_rotating_request(bufferlist& bl)
+bool CephxClientHandler::build_rotating_request(bufferlist& bl)
 {
   dout(10) << "build_rotating_request" << dendl;
   CephXRequestHeader header;
   header.request_type = CEPHX_GET_ROTATING_KEY;
   ::encode(header, bl);
+  return true;
 }
 
 void CephxClientHandler::validate_tickets()
