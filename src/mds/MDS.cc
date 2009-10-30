@@ -62,6 +62,8 @@
 
 #include "messages/MMonCommand.h"
 
+#include "auth/AuthAuthorizeHandler.h"
+
 #include "config.h"
 
 #define DOUT_SUBSYS mds
@@ -1460,3 +1462,50 @@ void MDS::ms_handle_remote_reset(Connection *con)
   dout(0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
   objecter->ms_handle_remote_reset(con);
 }
+
+bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
+			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+			       bool& isvalid)
+{
+  bool is_valid;
+
+  AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
+  if (!authorize_handler) {
+    is_valid = false;
+    return true;
+  }
+
+  AuthCapsInfo caps_info;
+  EntityName name;
+
+  is_valid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, caps_info);
+
+#if 0
+  if (isvalid) {
+    Session *s = (Session *)con->get_priv();
+    if (!s) {
+      s = new Session;
+      if (!s) {
+        dout(0) << "ouch.. out of memory, can't open session" << dendl;
+        isvalid = false;
+        return false;
+      }
+      con->set_priv(s->get());
+      dout(10) << " new session " << s << dendl;
+    }
+
+    s->caps.set_allow_all(caps_info.allow_all);
+ 
+    if (caps_info.caps.length() > 0) {
+      bufferlist::iterator iter = caps_info.caps.begin();
+      s->caps.parse(iter);
+      dout(10) << " session " << s << " has caps " << s->caps << dendl;
+    }
+    
+    s->put();
+  }
+#endif
+  return true;
+};
+
+
