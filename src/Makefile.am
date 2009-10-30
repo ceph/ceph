@@ -293,6 +293,7 @@ libcommon_a_SOURCES = \
 libcommon_files = \
 	auth/AuthAuthorizeHandler.cc \
 	auth/AuthClientHandler.cc \
+	auth/AuthSupported.cc \
 	auth/cephx/CephxAuthorizeHandler.cc \
 	auth/cephx/CephxClientHandler.cc \
 	auth/cephx/CephxProtocol.cc \
@@ -415,6 +416,7 @@ noinst_HEADERS = \
 	auth/none/AuthNoneServiceHandler.h\
 	auth/none/AuthNoneProtocol.h\
 	auth/Auth.h\
+	auth/AuthSupported.h\
 	auth/AuthServiceHandler.h\
 	auth/AuthAuthorizeHandler.h\
 	auth/KeyRing.h\
