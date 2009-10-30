@@ -85,6 +85,7 @@ public class CephFileSystem extends FileSystem {
 	 * CephTalker (with its assumed real Ceph instance to talk to).
 	 */
 	public CephFileSystem(CephFS ceph_fs, String default_path) {
+		super();
 		root = new Path("/");
 		ceph = ceph_fs;
 		fs_default_name = default_path;
@@ -783,7 +784,7 @@ public class CephFileSystem extends FileSystem {
     ceph.debug("returning from ceph_getdir to Java", ceph.NOLOG);
 
     if (dirlist == null) {
-      throw new IOException("listPaths: path " + path.toString() + " is not a directory.");
+      return null;
     }
     
     // convert the strings to Paths
