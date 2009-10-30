@@ -1,5 +1,5 @@
-#ifndef __USER_H
-#define __USER_H
+#ifndef __RGW_USER_H
+#define __RGW_USER_H
 
 #include <string>
 

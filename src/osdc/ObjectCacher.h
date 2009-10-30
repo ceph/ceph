@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
-#ifndef __OBJECTCACHER_H_
-#define __OBJECTCACHER_H_
+#ifndef __OBJECTCACHER_H
+#define __OBJECTCACHER_H
 
 #include "include/types.h"
 #include "include/lru.h"

@@ -12,8 +12,8 @@
  * 
  */
 
-#ifndef __CEPH_LOG_H
-#define __CEPH_LOG_H
+#ifndef __CEPH_LOGENTRY_H
+#define __CEPH_LOGENTRY_H
 
 #include "include/types.h"
 #include "include/encoding.h"

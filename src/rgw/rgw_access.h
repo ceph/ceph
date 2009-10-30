@@ -1,5 +1,5 @@
-#ifndef __RGWACCESS_H
-#define __RGWACCESS_H
+#ifndef __RGW_ACCESS_H
+#define __RGW_ACCESS_H
 
 #include <time.h>
 #include <string>

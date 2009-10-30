@@ -13,8 +13,8 @@
  */
 
 
-#ifndef __MOSDGETMAPACK_H
-#define __MOSDGETMAPACK_H
+#ifndef __MOSDMAP_H
+#define __MOSDMAP_H
 
 #include "msg/Message.h"
 #include "osd/OSDMap.h"

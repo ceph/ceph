@@ -1,5 +1,5 @@
-#ifndef __RGWOP_H
-#define __RGWOP_H
+#ifndef __RGW_OP_H
+#define __RGW_OP_H
 
 #include <string>
 

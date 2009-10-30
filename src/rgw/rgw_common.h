@@ -1,5 +1,5 @@
-#ifndef __RGWCOMMON_H
-#define __RGWCOMMON_H
+#ifndef __RGW_COMMON_H
+#define __RGW_COMMON_H
 
 #include "fcgiapp.h"
 
