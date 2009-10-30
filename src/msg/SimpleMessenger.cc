@@ -1029,8 +1029,7 @@ int SimpleMessenger::Pipe::connect()
 
     if (authorizer) {
       bufferlist::iterator iter = authorizer_reply.begin();
-      if (authorizer_reply.length() == 0 ||
-	  !authorizer->verify_reply(iter)) {
+      if (!authorizer->verify_reply(iter)) {
         dout(0) << "failed verifying authorize reply" << dendl;
 	goto fail;
       }
