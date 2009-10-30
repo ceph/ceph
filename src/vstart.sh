@@ -144,6 +144,7 @@ else
         lockdep = 1
         debug ms = 1
         debug mds = 20
+        debug auth = 20
         debug monc = 20
         mds log max segments = 2'
 fi

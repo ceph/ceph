@@ -302,7 +302,8 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
   if (encode_encrypt(reply, ticket_info.session_key, reply_bl) < 0)
     return false;
 
-  dout(10) << "verify_authorizer ok reply_bl.length()=" << reply_bl.length() <<  dendl;
+  dout(10) << "verify_authorizer ok nonce " << hex << auth_msg.nonce << dec
+	   << " reply_bl.length()=" << reply_bl.length() <<  dendl;
   return true;
 }
 

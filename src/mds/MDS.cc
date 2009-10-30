@@ -1465,10 +1465,8 @@ void MDS::ms_handle_remote_reset(Connection *con)
 
 bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid)
+			       bool& is_valid)
 {
-  bool is_valid;
-
   AuthAuthorizeHandler *authorize_handler = get_authorize_handler(protocol);
   if (!authorize_handler) {
     is_valid = false;

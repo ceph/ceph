@@ -30,5 +30,7 @@ AuthAuthorizeHandler *get_authorize_handler(int protocol)
   if (iter != authorizers.end())
     return iter->second;
 
+  dout(0) << "get_authorize_handler protocol " << protocol << " not supported" << dendl;
+
   return NULL;
 }
