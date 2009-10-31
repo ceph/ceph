@@ -221,16 +221,14 @@ public class CephInputStream extends FSInputStream {
   @Override
 	public void close() throws IOException {
     ceph.debug("CephOutputStream.close:enter", ceph.TRACE);
-    if (closed) {
-      throw new IOException("Stream closed");
-    }
-
-    int result = ceph.ceph_close(fileHandle);
-    closed = true;
-    if (result != 0) {
-      throw new IOException("Close somehow failed!"
-														+ "Don't try and use this stream again, though");
-    }
-    ceph.debug("CephOutputStream.close:exit", ceph.TRACE);
-  }
+    if (!closed) {
+			int result = ceph.ceph_close(fileHandle);
+			closed = true;
+			if (result != 0) {
+				throw new IOException("Close somehow failed!"
+															+ "Don't try and use this stream again, though");
+			}
+			ceph.debug("CephOutputStream.close:exit", ceph.TRACE);
+		}
+	}
 }

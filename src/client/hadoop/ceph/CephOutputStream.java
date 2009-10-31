@@ -168,23 +168,22 @@ public class CephOutputStream extends OutputStream {
    */
   @Override
 	public synchronized void flush() throws IOException {
-			if (closed) {
-				throw new IOException("Stream closed");
+			if (!closed) {
+				if (bufUsed == 0) return;
+				int result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
+				if (result < 0) {
+					throw new IOException("CephOutputStream.write: Write of "
+																+ bufUsed + "bytes to fd "
+																+ fileHandle + " failed");
+				}
+				if (result != bufUsed) {
+					throw new IOException("CephOutputStream.write: Write of " + bufUsed
+																+ "bytes to fd " + fileHandle
+																+ "was incomplete:  only " + result + " of "
+																+ bufUsed + " bytes were written.");
+				}
+				return;
 			}
-			if (bufUsed == 0) return;
-			int result = ceph.ceph_write(fileHandle, buffer, 0, bufUsed);
-      if (result < 0) {
-				throw new IOException("CephOutputStream.write: Write of "
-															+ bufUsed + "bytes to fd "
-															+ fileHandle + " failed");
-      }
-      if (result != bufUsed) {
-				throw new IOException("CephOutputStream.write: Write of " + bufUsed
-															+ "bytes to fd " + fileHandle
-															+ "was incomplete:  only " + result + " of "
-															+ bufUsed + " bytes were written.");
-      }
-			return;
 	}
   
   /**
@@ -194,17 +193,15 @@ public class CephOutputStream extends OutputStream {
   @Override
 	public synchronized void close() throws IOException {
       ceph.debug("CephOutputStream.close:enter", ceph.TRACE);
-      if (closed) {
-				throw new IOException("Stream already closed");
-      }
-			flush();
-      int result = ceph.ceph_close(fileHandle);
-      if (result != 0) {
-				throw new IOException("Close failed!");
-      }
-	
-      closed = true;
-      ceph.debug("CephOutputStream.close:exit", ceph.TRACE);
-    }
-
+      if (!closed) {
+				flush();
+				int result = ceph.ceph_close(fileHandle);
+				if (result != 0) {
+					throw new IOException("Close failed!");
+				}
+				
+				closed = true;
+				ceph.debug("CephOutputStream.close:exit", ceph.TRACE);
+			}
+	}
 }
