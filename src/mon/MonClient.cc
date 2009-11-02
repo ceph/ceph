@@ -588,6 +588,10 @@ int MonClient::wait_auth_rotating(double timeout)
   Mutex::Locker l(monc_lock);
   utime_t interval;
   interval += timeout;
+
+  if (auth->get_protocol() == CEPH_AUTH_NONE) {
+    return 0;
+  }
   
   while (auth_principal_needs_rotating_keys(entity_name) &&
 	 g_keyring.need_rotating_secrets())
