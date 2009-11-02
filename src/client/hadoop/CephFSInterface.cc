@@ -181,8 +181,10 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1renam
     env->ReleaseStringUTFChars(j_from, c_from);
     return false;
   }
-
-  jboolean success = (0 <= ceph_rename(c_from, c_to)) ? JNI_TRUE : JNI_FALSE; 
+  jboolean success = false;
+  struct stat stbuf;
+  if (ceph_lstat(c_to, &stbuf) < 0) //Hadoop doesn't want to overwrite files in a rename
+    success = (0 <= ceph_rename(c_from, c_to)) ? JNI_TRUE : JNI_FALSE; 
   env->ReleaseStringUTFChars(j_from, c_from);
   env->ReleaseStringUTFChars(j_to, c_to);
   return success;

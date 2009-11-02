@@ -34,6 +34,7 @@ abstract class CephFS {
 	protected static final int TRACE = 5;
 	protected static final int NOLOG = 6;
 
+	protected static final int ENOTDIR = 20;
   protected static final int EEXIST = 17;
   protected static final int ENOENT = 2;
 

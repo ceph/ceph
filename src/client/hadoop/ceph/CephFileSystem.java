@@ -28,6 +28,7 @@ import java.lang.Math;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -142,7 +143,7 @@ public class CephFileSystem extends FileSystem {
       arguments += " --client-readahead-max-periods="
 				+ conf.get("fs.ceph.readahead", "1");
       //make sure they gave us a ceph monitor address or conf file
-			ceph.debug("initialize:Ceph intialization arguments: " + arguments, ceph.INFO);
+			ceph.debug("initialize:Ceph initialization arguments: " + arguments, ceph.INFO);
       if ( (conf.get("fs.ceph.monAddr") == null) &&
 					 (arguments.indexOf("-m") == -1) &&
 					 (arguments.indexOf("-c") == -1) ) {
@@ -234,7 +235,7 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(dir);
     ceph.debug("setWorkingDirectory:calling ceph_setcwd from Java", ceph.TRACE);
     if (!ceph.ceph_setcwd(abs_path.toString()))
-      ceph.debug("setWorkingDirectory: WARNING! ceph_setcwd failed for some reason on path " + abs_path, ceph.ERROR);
+      ceph.debug("setWorkingDirectory: WARNING! ceph_setcwd failed for some reason on path " + abs_path, ceph.WARN);
     ceph.debug("setWorkingDirectory:exit", ceph.DEBUG);
   }
 
@@ -273,6 +274,7 @@ public class CephFileSystem extends FileSystem {
    * @return true if successful, false otherwise
    * @throws IOException if initialize() hasn't been called.
    */
+	@Override
   public boolean mkdirs(Path path, FsPermission perms) throws IOException {
     if (!initialized) throw new IOException ("You have to initialize the "
 																						 +"CephFileSystem before calling other methods.");
@@ -280,10 +282,17 @@ public class CephFileSystem extends FileSystem {
     Path abs_path = makeAbsolute(path);
     ceph.debug("mkdirs:calling ceph_mkdirs from Java", ceph.TRACE);
     int result = ceph.ceph_mkdirs(abs_path.toString(), (int)perms.toShort());
-    ceph.debug("mkdirs:exit with result " + result, ceph.DEBUG);
-    if (result != 0)
+    if (result != 0) {
+			ceph.debug("mkdirs: make directory " + abs_path
+								 + "Failing with result " + result, ceph.WARN);
+			if (ceph.ENOTDIR == result)
+				throw new FileAlreadyExistsException("Parent path is not a directory");
       return false;
-    else return true;
+		}
+    else {
+			ceph.debug("mkdirs:exiting succesfully", ceph.DEBUG);
+			return true;
+		}
   }
 
   /**
@@ -386,7 +395,7 @@ public class CephFileSystem extends FileSystem {
   public FileStatus[] listStatus(Path path) throws IOException {
     if (!initialized) throw new IOException ("You have to initialize the "
 																						 +"CephFileSystem before calling other methods.");
-    ceph.debug("listStatus:enter with path " + path, ceph.DEBUG);
+    ceph.debug("listStatus:enter with path " + path, ceph.WARN);
     Path abs_path = makeAbsolute(path);
     Path[] paths = listPaths(abs_path);
     if (paths != null) {
@@ -573,6 +582,16 @@ public class CephFileSystem extends FileSystem {
     Path abs_dst = makeAbsolute(dst);
     ceph.debug("calling ceph_rename from Java", ceph.TRACE);
     boolean result = ceph.ceph_rename(abs_src.toString(), abs_dst.toString());
+		if (!result) {
+			if (isDirectory(abs_dst)) { //move the srcdir into destdir
+				ceph.debug("ceph_rename failed but dst is a directory!", ceph.NOLOG);
+				Path new_dst = new Path(abs_dst, abs_src.getName());
+				result = rename(abs_src, new_dst);
+				ceph.debug("attempt to move " + abs_src.toString()
+									 + " to " + new_dst.toString()
+									 + "has result:" + result, ceph.NOLOG);
+			}
+		}
     ceph.debug("rename:exit with result: " + result, ceph.DEBUG);
     return result;
   }
@@ -701,9 +720,6 @@ public class CephFileSystem extends FileSystem {
 
     /* The path is a directory, so recursively try to delete its contents,
        and then delete the directory. */
-    if (!recursive) {
-      throw new IOException("Directories must be deleted recursively!");
-    }
     //get the entries; listPaths will remove . and .. for us
     Path[] contents = listPaths(abs_path);
     if (contents == null) {
@@ -711,6 +727,9 @@ public class CephFileSystem extends FileSystem {
 						abs_path.toString() +
 						"\" while trying to delete it, BAILING", ceph.ERROR);
       return false;
+    }
+    if (!recursive && contents.length > 0) {
+      throw new IOException("Directories must be deleted recursively!");
     }
     // delete the entries
 		ceph.debug("delete: recursively calling delete on contents of "
@@ -791,7 +810,7 @@ public class CephFileSystem extends FileSystem {
     Path[] paths = new Path[dirlist.length];
     for (int i = 0; i < dirlist.length; ++i) {
       ceph.debug("Raw enumeration of paths in \"" + abs_path.toString() + "\": \"" +
-											dirlist[i] + "\"", ceph.NOLOG);
+											dirlist[i] + "\"", ceph.TRACE);
       // convert each listing to an absolute path
       Path raw_path = new Path(dirlist[i]);
       if (raw_path.isAbsolute())

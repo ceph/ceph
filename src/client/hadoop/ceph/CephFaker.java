@@ -29,6 +29,7 @@ import java.io.IOException;
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsStatus;
@@ -131,12 +132,14 @@ class CephFaker extends CephFS {
 	protected boolean ceph_rename(String oldName, String newName) {
 		oldName = prepare_path(oldName);
 		newName = prepare_path(newName);
-		boolean ret = false;
 		try {
-			ret = localFS.rename(new Path(oldName), new Path(newName));
+			Path parent = new Path(newName).getParent();
+			Path newPath = new Path(newName);
+			if (localFS.exists(parent) && !localFS.exists(newPath))
+				return localFS.rename(new Path(oldName), newPath);
+			return false;
 		}
-		catch (IOException e) { }
-		return ret;
+		catch (IOException e) { return false; }
 	}
 
 	protected boolean ceph_exists(String path) {
@@ -165,13 +168,11 @@ class CephFaker extends CephFS {
 
 	protected boolean ceph_isdirectory(String path) {
 		path = prepare_path(path);
-		boolean ret = false;
 		try {
 			FileStatus status = localFS.getFileStatus(new Path(path));
-			ret = status.isDir();
+			return status.isDir();
 		}
-		catch (IOException e) {}
-		return ret;
+		catch (IOException e) { return false; }
 	}
 
 	protected boolean ceph_isfile(String path) {
@@ -211,7 +212,8 @@ class CephFaker extends CephFS {
 			if(localFS.mkdirs(new Path(path), new FsPermission((short)mode)))
 				return 0;
 		}
-		catch (IOException e) { debug(e.toString(), ERROR); }
+		catch (FileAlreadyExistsException fe) { return ENOTDIR; }
+		catch (IOException e) {}
 		if (ceph_isdirectory(path))
 			return -EEXIST; //apparently it already existed
 		return -1;
