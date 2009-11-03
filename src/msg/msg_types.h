@@ -121,91 +121,114 @@ namespace __gnu_cxx {
  * thus identifies a particular process instance.
  * ipv4 for now.
  */
-WRITE_RAW_ENCODER(ceph_entity_addr)
+
+/*
+ * encode sockaddr.ss_family in big endian
+ */
+static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
+  struct sockaddr_storage ss = a;
+  ss.ss_family = htons(ss.ss_family);
+  ::encode_raw(ss, bl);
+}
+static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
+  ::decode_raw(a, bl);
+  a.ss_family = ntohs(a.ss_family);
+}
 
 struct entity_addr_t {
-  struct ceph_entity_addr v;
+  __u32 erank;
+  __u32 nonce;
+  sockaddr_storage addr;
 
-  entity_addr_t() { 
-    memset(&v, 0, sizeof(v));
+  entity_addr_t() : erank(0), nonce(0) { 
+    memset(&addr, 0, sizeof(addr));
   }
   entity_addr_t(const ceph_entity_addr &o) {
-    memcpy(&v, &o, sizeof(v));
+    erank = o.erank;
+    nonce = o.nonce;
+    addr = o.in_addr;
+    addr.ss_family = ntohs(addr.ss_family);
   }
 
-  __u32 get_nonce() const { return v.nonce; }
-  void set_nonce(__u32 n) { v.nonce = n; }
+  __u32 get_nonce() const { return nonce; }
+  void set_nonce(__u32 n) { nonce = n; }
   
-  __u32 get_erank() const { return v.erank; }
-  void set_erank(__u32 r) { v.erank = r; }
+  __u32 get_erank() const { return erank; }
+  void set_erank(__u32 r) { erank = r; }
 
-  sockaddr_storage &in_addr() {
-    return *(sockaddr_storage *)&v.in_addr;
+  sockaddr_storage &ss_addr() {
+    return addr;
   }
   sockaddr_in &in4_addr() {
-    return *(sockaddr_in *)&v.in_addr;
+    return *(sockaddr_in *)&addr;
   }
   sockaddr_in6 &in6_addr() {
-    return *(sockaddr_in6 *)&v.in_addr;
+    return *(sockaddr_in6 *)&addr;
   }
 
   void set_in4_quad(int pos, int val) {
-    sockaddr_in *in4 = (sockaddr_in *)&v.in_addr;
+    sockaddr_in *in4 = (sockaddr_in *)&addr;
     in4->sin_family = AF_INET;
     unsigned char *ipq = (unsigned char*)&in4->sin_addr.s_addr;
     ipq[pos] = val;
   }
   void set_port(int port) {
-    switch (v.in_addr.ss_family) {
+    switch (addr.ss_family) {
     case AF_INET:
-      ((sockaddr_in *)&v.in_addr)->sin_port = htons(port);
+      ((sockaddr_in *)&addr)->sin_port = htons(port);
       break;
     case AF_INET6:
-      ((sockaddr_in6 *)&v.in_addr)->sin6_port = htons(port);
+      ((sockaddr_in6 *)&addr)->sin6_port = htons(port);
       break;
     default:
       assert(0);
     }
   }
   int get_port() const {
-    switch (v.in_addr.ss_family) {
+    switch (addr.ss_family) {
     case AF_INET:
-      return ntohs(((const sockaddr_in *)&v.in_addr)->sin_port);
+      return ntohs(((const sockaddr_in *)&addr)->sin_port);
       break;
     case AF_INET6:
-      return ntohs(((const sockaddr_in6 *)&v.in_addr)->sin6_port);
+      return ntohs(((const sockaddr_in6 *)&addr)->sin6_port);
       break;
     }
     return 0;
   }
 
-  operator ceph_entity_addr() const { return v; }
-
-  bool is_local_to(const entity_addr_t &other) const {
-    return ceph_entity_addr_is_local(&v, &other.v);
+  operator ceph_entity_addr() const {
+    ceph_entity_addr a;
+    a.erank = erank;
+    a.nonce = nonce;
+    a.in_addr = addr;
+    a.in_addr.ss_family = htons(addr.ss_family);
+    return a;
   }
-  bool is_same_host(const entity_addr_t &other) const {
-    const ceph_entity_addr *a = &v;
-    const ceph_entity_addr *b = &other.v;
-    if (a->in_addr.ss_family != b->in_addr.ss_family)
+
+  bool is_local_to(const entity_addr_t &o) const {
+    return nonce == o.nonce &&
+      memcmp(&addr, &o.addr, sizeof(addr)) == 0;
+  }
+  bool is_same_host(const entity_addr_t &o) const {
+    if (addr.ss_family != o.addr.ss_family)
       return false;
-    if (a->in_addr.ss_family == AF_INET)
-      return ((struct sockaddr_in *)&a->in_addr)->sin_addr.s_addr ==
-	((struct sockaddr_in *)&b->in_addr)->sin_addr.s_addr;
-    if (a->in_addr.ss_family == AF_INET6)
-      return memcmp(((struct sockaddr_in6 *)&a->in_addr)->sin6_addr.s6_addr,
-		    ((struct sockaddr_in6 *)&b->in_addr)->sin6_addr.s6_addr,
-		    sizeof(((struct sockaddr_in6 *)&a->in_addr)->sin6_addr.s6_addr));
+    if (addr.ss_family == AF_INET)
+      return ((struct sockaddr_in *)&addr)->sin_addr.s_addr ==
+	((struct sockaddr_in *)&o.addr)->sin_addr.s_addr;
+    if (addr.ss_family == AF_INET6)
+      return memcmp(((struct sockaddr_in6 *)&addr)->sin6_addr.s6_addr,
+		    ((struct sockaddr_in6 *)&o.addr)->sin6_addr.s6_addr,
+		    sizeof(((struct sockaddr_in6 *)&addr)->sin6_addr.s6_addr));
     return false;
   }
 
   bool is_blank_addr() {
-    switch (v.in_addr.ss_family) {
+    switch (addr.ss_family) {
     case AF_INET:
-      return ((sockaddr_in *)&v.in_addr)->sin_addr.s_addr == INADDR_ANY;
+      return ((sockaddr_in *)&addr)->sin_addr.s_addr == INADDR_ANY;
     case AF_INET6:
       {
-	sockaddr_in6 *in6 = (sockaddr_in6 *)&v.in_addr;
+	sockaddr_in6 *in6 = (sockaddr_in6 *)&addr;
 	return in6->sin6_addr.s6_addr32[0] == 0 &&
 	  in6->sin6_addr.s6_addr32[1] == 0 &&
 	  in6->sin6_addr.s6_addr32[2] == 0 &&
@@ -217,17 +240,21 @@ struct entity_addr_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(v, bl);
+    ::encode(erank, bl);
+    ::encode(nonce, bl);
+    ::encode(addr, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(v, bl);
+    ::decode(erank, bl);
+    ::decode(nonce, bl);
+    ::decode(addr, bl);
   }
 };
 WRITE_CLASS_ENCODER(entity_addr_t)
 
 inline ostream& operator<<(ostream& out, const entity_addr_t &addr)
 {
-  return out << addr.v.in_addr << '/' << addr.v.nonce << '/' << addr.v.erank;
+  return out << addr.addr << '/' << addr.nonce << '/' << addr.erank;
 }
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
@@ -243,7 +270,7 @@ namespace __gnu_cxx {
     size_t operator()( const entity_addr_t& x ) const
     {
       static blobhash H;
-      return H((const char*)&x.v, sizeof(x.v));
+      return H((const char*)&x, sizeof(x));
     }
   };
 }
@@ -308,7 +335,8 @@ inline ostream& operator<<(ostream& out, const entity_inst_t &i)
 }
 inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
 {
-  return out << *(const entity_inst_t*)&i;
+  entity_inst_t n = i;
+  return out << n;
 }
 
 

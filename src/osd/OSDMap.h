@@ -407,7 +407,7 @@ private:
     assert(exists(osd));
     entity_inst_t i(entity_name_t::OSD(osd),
 		    osd_addr[osd]);
-    i.addr.v.erank = i.addr.v.erank + 1;  // heartbeat addr erank is regular addr erank + 1
+    i.addr.erank = i.addr.erank + 1;  // heartbeat addr erank is regular addr erank + 1
     return i;
   }
 

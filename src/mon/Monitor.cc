@@ -680,6 +680,7 @@ void Monitor::check_subs()
 
 void Monitor::check_sub(Subscription *sub)
 {
+  dout(0) << "check_sub monmap last " << sub->last << " have " << monmap->get_epoch() << dendl;
   if (sub->last < monmap->get_epoch()) {
     send_latest_monmap(sub->session->inst);
     if (sub->onetime)
