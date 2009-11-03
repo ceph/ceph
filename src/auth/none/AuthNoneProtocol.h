@@ -20,7 +20,7 @@
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
   bool build_authorizer() {
-    ::encode(g_conf.entity_name, bl);
+    ::encode(*g_conf.entity_name, bl);
     return 0;
   }
   bool verify_reply(bufferlist::iterator& reply) { return true; }

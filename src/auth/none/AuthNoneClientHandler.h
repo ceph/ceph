@@ -32,7 +32,12 @@ public:
   
   void tick() {}
 
-  AuthAuthorizer *build_authorizer(uint32_t service_id) { return new AuthNoneAuthorizer(); }
+  AuthAuthorizer *build_authorizer(uint32_t service_id) {
+    AuthNoneAuthorizer *auth = new AuthNoneAuthorizer();
+    if (auth)
+      auth->build_authorizer();
+    return auth;
+  }
 
   void validate_tickets() { }
   bool need_tickets() { return false; }
