@@ -33,8 +33,10 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
 
   //construct an arguments vector
   vector<string> args_vec;
+  string arg;
   size_t i = 0;
   size_t j = 0;
+  bool local_writes = false;
   while (1) {
     j = args.find(' ', i);
     if (j == string::npos) {
@@ -46,8 +48,13 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
       args_vec.push_back(args.substr(i, args.size()));
       break;
     }
-    if (j!=i) //if there are two spaces in a row, dont' make a new arg
-      args_vec.push_back(args.substr(i, j-i));
+    if (j!=i) { //if there are two spaces in a row, don't make a new arg
+      arg = args.substr(i, j-i);
+      if (arg.compare("set_local_pg") == 0)
+	local_writes = true;
+      else
+	args_vec.push_back(arg);
+    }
     i = j+1;
   }
 
@@ -66,8 +73,8 @@ JNIEXPORT jboolean JNICALL Java_org_apache_hadoop_fs_ceph_CephTalker_ceph_1initi
   if (r < 0) return false;
   r = ceph_mount();
   if (r < 0) return false;
-
-  ceph_set_default_preferred_pg(ceph_get_local_osd());
+  if (local_writes)
+    ceph_set_default_preferred_pg(ceph_get_local_osd());
   return true;
 }
 
