@@ -293,6 +293,9 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 	  ret = -EPERM;
 	else {
 	  proto = s->auth_handler->start_session(entity_name, indata, response_bl);
+          if (proto == CEPH_AUTH_NONE) {
+            s->caps.set_allow_all(true);
+          }
 	}
       }
     } else {
