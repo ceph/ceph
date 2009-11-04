@@ -102,8 +102,17 @@ ostream& operator<<(ostream& out, CDir& dir)
       << "=" << dir.fnode.fragstat.nfiles
       << "+" << dir.fnode.fragstat.nsubdirs;
   out << " rb=" << dir.fnode.rstat.rbytes << "/" << dir.fnode.accounted_rstat.rbytes;
+  if (dir.is_projected())
+    out << "|" << dir.get_projected_fnode()->rstat.rbytes
+	<< "/" << dir.get_projected_fnode()->accounted_rstat.rbytes;
   out << " rf=" << dir.fnode.rstat.rfiles << "/" << dir.fnode.accounted_rstat.rfiles;
+  if (dir.is_projected())
+    out << "|" << dir.get_projected_fnode()->rstat.rfiles
+	<< "/" << dir.get_projected_fnode()->accounted_rstat.rfiles;
   out << " rd=" << dir.fnode.rstat.rsubdirs << "/" << dir.fnode.accounted_rstat.rsubdirs;
+  if (dir.is_projected())
+    out << "|" << dir.get_projected_fnode()->rstat.rsubdirs
+	<< "/" << dir.get_projected_fnode()->accounted_rstat.rsubdirs;
 
   out << " hs=" << dir.get_num_head_items() << "+" << dir.get_num_head_null();
   out << ",ss=" << dir.get_num_snap_items() << "+" << dir.get_num_snap_null();
