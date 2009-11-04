@@ -133,9 +133,9 @@ public:
       }
     } history;
     
-    Info(pg_t p=0) : pgid(p), 
-                     log_backlog(false)
-    { }
+    Info() : log_backlog(false) {}
+    Info(pg_t p) : pgid(p), log_backlog(false) { }
+
     bool is_uptodate() const { return last_update == last_complete; }
     bool is_empty() const { return last_update.version == 0; }
     bool dne() const { return history.epoch_created == 0; }

@@ -161,7 +161,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     object_t oid("disk_bw_test");
     for (int i=0; i<1000; i++) {
       ObjectStore::Transaction t;
-      t.write(0, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
+      t.write(meta_coll, sobject_t(oid, 0), i*bl.length(), bl.length(), bl);
       store->apply_transaction(t);
     }
     store->sync();
@@ -169,7 +169,7 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
     end -= start;
     cout << "measured " << (1000.0 / (double)end) << " mb/sec" << std::endl;
     ObjectStore::Transaction tr;
-    tr.remove(0, sobject_t(oid, 0));
+    tr.remove(meta_coll, sobject_t(oid, 0));
     store->apply_transaction(tr);
     
     // set osd weight
@@ -180,8 +180,8 @@ int OSD::mkfs(const char *dev, const char *jdev, ceph_fsid_t fsid, int whoami)
   ::encode(sb, bl);
 
   ObjectStore::Transaction t;
-  t.create_collection(0);
-  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.create_collection(meta_coll);
+  t.write(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
   int r = store->apply_transaction(t);
   store->umount();
   delete store;
@@ -199,7 +199,7 @@ int OSD::peek_super(const char *dev, nstring& magic, ceph_fsid_t& fsid, int& who
 
   OSDSuperblock sb;
   bufferlist bl;
-  err = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  err = store->read(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   store->umount();
   delete store;
 
@@ -556,13 +556,13 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 
   bufferlist bl;
   ::encode(superblock, bl);
-  t.write(0, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+  t.write(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
 }
 
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(0, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  int r = store->read(meta_coll, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
   if (r < 0)
     return r;
 
@@ -732,7 +732,7 @@ void OSD::load_pgs()
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        it++) {
-    if (*it == 0)
+    if (*it == meta_coll)
       continue;
     if (it->snap != CEPH_NOSNAP)
       continue;
@@ -1760,7 +1760,7 @@ void OSD::handle_osd_map(MOSDMap *m)
        p != m->maps.end();
        p++) {
     sobject_t poid = get_osdmap_pobject_name(p->first);
-    if (store->exists(0, poid)) {
+    if (store->exists(meta_coll, poid)) {
       dout(10) << "handle_osd_map already had full map epoch " << p->first << dendl;
       logger->inc(l_osd_mapfdup);
       bufferlist bl;
@@ -1771,7 +1771,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     dout(10) << "handle_osd_map got full map epoch " << p->first << dendl;
     ObjectStore::Transaction ft;
-    ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    ft.write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
     int r = store->apply_transaction(ft);
     if (r) {
       char buf[80];
@@ -1792,7 +1792,7 @@ void OSD::handle_osd_map(MOSDMap *m)
        p != m->incremental_maps.end();
        p++) {
     sobject_t poid = get_inc_osdmap_pobject_name(p->first);
-    if (store->exists(0, poid)) {
+    if (store->exists(meta_coll, poid)) {
       dout(10) << "handle_osd_map already had incremental map epoch " << p->first << dendl;
       logger->inc(l_osd_mapidup);
       bufferlist bl;
@@ -1803,7 +1803,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
     dout(10) << "handle_osd_map got incremental map epoch " << p->first << dendl;
     ObjectStore::Transaction ft;
-    ft.write(0, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
+    ft.write(meta_coll, poid, 0, p->second.length(), p->second);  // store _outside_ transaction; activate_map reads it.
     int r = store->apply_transaction(ft);
     if (r) {
       char buf[80];
@@ -1831,7 +1831,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     OSDMap::Incremental inc;
 
     if (m->incremental_maps.count(cur+1) ||
-        store->exists(0, get_inc_osdmap_pobject_name(cur+1))) {
+        store->exists(meta_coll, get_inc_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding inc map epoch " << cur+1 << dendl;
       
       bufferlist bl;
@@ -1851,7 +1851,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       bl.clear();
       osdmap->encode(bl);
       ObjectStore::Transaction ft;
-      ft.write(0, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
+      ft.write(meta_coll, get_osdmap_pobject_name(cur+1), 0, bl.length(), bl);
       int r = store->apply_transaction(ft);
       if (r) {
 	char buf[80];
@@ -1876,7 +1876,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
     }
     else if (m->maps.count(cur+1) ||
-             store->exists(0, get_osdmap_pobject_name(cur+1))) {
+             store->exists(meta_coll, get_osdmap_pobject_name(cur+1))) {
       dout(10) << "handle_osd_map decoding full map epoch " << cur+1 << dendl;
       bufferlist bl;
       if (m->maps.count(cur+1))
@@ -2310,12 +2310,12 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
 
 bool OSD::get_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(0, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  return store->read(meta_coll, get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 bool OSD::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
-  return store->read(0, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  return store->read(meta_coll, get_inc_osdmap_pobject_name(e), 0, 0, bl) >= 0;
 }
 
 OSDMap *OSD::get_map(epoch_t epoch)
@@ -3270,7 +3270,7 @@ void OSD::_remove_pg(PG *pg)
   {
     ObjectStore::Transaction t;
     pg->write_info(t);
-    t.remove(0, pg->log_oid);
+    t.remove(meta_coll, pg->log_oid);
     int tr = store->apply_transaction(t);
     assert(tr == 0);
   }

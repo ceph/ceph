@@ -45,6 +45,8 @@ v0.17
 
 v0.18
 - basic ENOSPC handling
+- big endian fix
+
 
 - qa
 - osd: rebuild pg log

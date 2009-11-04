@@ -118,17 +118,14 @@ struct pg_t {
     v.pool = pool;
     v.preferred = pref;   // hack: avoid negative.
   }
-  pg_t(uint64_t n) { *(__le64*)&v = n; }
   pg_t(const ceph_pg& cpg) {
     v = cpg;
   }
 
-  ps_t ps() { return v.ps; }
-  int pool() { return v.pool; }
-  int preferred() { return (__s16)v.preferred; }   // hack: avoid negative.
+  ps_t ps() const { return v.ps; }
+  int pool() const { return v.pool; }
+  int preferred() const { return (__s16)v.preferred; }   // hack: avoid negative.
   
-  operator uint64_t() const { return *(__le64*)&v; }
-
   /*coll_t to_coll() const {
     return coll_t(u.pg64, 0); 
   }
@@ -160,6 +157,26 @@ struct pg_t {
 
 } __attribute__ ((packed));
 
+inline bool operator<(const pg_t& l, const pg_t& r) {
+  return memcmp(&l, &r, sizeof(l)) < 0;
+}
+inline bool operator<=(const pg_t& l, const pg_t& r) {
+  return memcmp(&l, &r, sizeof(l)) <= 0;
+}
+inline bool operator==(const pg_t& l, const pg_t& r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+inline bool operator!=(const pg_t& l, const pg_t& r) {
+  return memcmp(&l, &r, sizeof(l)) != 0;
+}
+inline bool operator>(const pg_t& l, const pg_t& r) {
+  return memcmp(&l, &r, sizeof(l)) > 0;
+}
+inline bool operator>=(const pg_t& l, const pg_t& r) {
+  return memcmp(&l, &r, sizeof(l)) >= 0;
+}
+
+
 inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.v, bl); }
 inline void decode(pg_t &pgid, bufferlist::iterator& p) { 
   decode_raw(pgid.v, p); 
@@ -183,8 +200,8 @@ namespace __gnu_cxx {
   {
     size_t operator()( const pg_t& x ) const
     {
-      static rjhash<uint64_t> H;
-      return H(x);
+      static hash<uint32_t> H;
+      return H(x.pool() ^ x.ps() ^ x.preferred());
     }
   };
 }
@@ -196,7 +213,8 @@ struct coll_t {
   pg_t pgid;
   snapid_t snap;
 
-  coll_t(__u64 p=0, snapid_t s=0) : pgid(p), snap(s) {}
+  coll_t() : snap(0) {}
+  coll_t(pg_t p, snapid_t s) : pgid(p), snap(s) {}
   
   static coll_t build_pg_coll(pg_t p) {
     return coll_t(p, CEPH_NOSNAP);
@@ -271,13 +289,15 @@ inline bool operator>=(const coll_t& l, const coll_t& r) {
 namespace __gnu_cxx {
   template<> struct hash<coll_t> {
     size_t operator()(const coll_t &c) const { 
-      static rjhash<uint32_t> H;
+      static hash<pg_t> H;
       static rjhash<uint64_t> I;
       return H(c.pgid) ^ I(c.snap);
     }
   };
 }
 
+
+const coll_t meta_coll;
 
 
 

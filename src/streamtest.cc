@@ -107,7 +107,7 @@ int main(int argc, const char **argv)
   }
 
   ObjectStore::Transaction ft;
-  ft.create_collection(0);
+  ft.create_collection(coll_t());
   fs->apply_transaction(ft);
 
   utime_t now = g_clock.now();
@@ -121,7 +121,7 @@ int main(int argc, const char **argv)
     utime_t start = now;
     set_start(pos, now);
     ObjectStore::Transaction t;
-    t.write(0, poid, pos, bytes, bl);
+    t.write(coll_t(), poid, pos, bytes, bl);
     fs->apply_transaction(t, new C_Commit(pos));
     now = g_clock.now();
     set_ack(pos, now);

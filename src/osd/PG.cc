@@ -1842,8 +1842,8 @@ void PG::write_log(ObjectStore::Transaction& t)
   ondisklog.head = bl.length();
   
   // write it
-  t.remove(0, log_oid );
-  t.write(0, log_oid , 0, bl.length(), bl);
+  t.remove(meta_coll, log_oid );
+  t.write(meta_coll, log_oid , 0, bl.length(), bl);
 
   bufferlist blb(sizeof(ondisklog));
   ::encode(ondisklog, blb);
@@ -1900,7 +1900,7 @@ void PG::trim_ondisklog_to(ObjectStore::Transaction& t, eversion_t v)
   t.collection_setattr(coll_t::build_pg_coll(info.pgid), "ondisklog", blb);
 
   if (!g_conf.osd_preserve_trimmed_log)
-    t.zero(0, log_oid, 0, ondisklog.tail & ~4095);
+    t.zero(meta_coll, log_oid, 0, ondisklog.tail & ~4095);
 }
 
 void PG::trim_peers()
@@ -1943,7 +1943,7 @@ void PG::append_log(ObjectStore::Transaction &t, bufferlist& bl,
   if (ondisklog.head % 4096 < (ondisklog.head + bl.length()) % 4096)
     ondisklog.block_map[ondisklog.head] = log_version;  // log_version is last event in prev. block
 
-  t.write(0, log_oid, ondisklog.head, bl.length(), bl );
+  t.write(meta_coll, log_oid, ondisklog.head, bl.length(), bl );
   
   ondisklog.head += bl.length();
 
@@ -1971,7 +1971,7 @@ void PG::read_log(ObjectStore *store)
   if (ondisklog.head > 0) {
     // read
     bufferlist bl;
-    store->read(0, log_oid, ondisklog.tail, ondisklog.length(), bl);
+    store->read(meta_coll, log_oid, ondisklog.tail, ondisklog.length(), bl);
     if (bl.length() < ondisklog.length()) {
       dout(0) << "read_log got " << bl.length() << " bytes, expected " 
 	      << ondisklog.head << "-" << ondisklog.tail << "="
