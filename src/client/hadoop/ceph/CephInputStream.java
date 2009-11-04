@@ -174,7 +174,7 @@ public class CephInputStream extends FSInputStream {
 				ceph.debug("CephInputStream.read: cannot read " + len  + 
 									 " bytes from fd " + fileHandle + ": current position is "
 									 + getPos() + " and file length is " + fileLength,
-									 ceph.WARN);
+									 ceph.DEBUG);
 				
 				return -1;
 			}

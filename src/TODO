@@ -69,7 +69,6 @@ greg
 - osd: use client session to control osdmaps to clients (auth branch)
 - osd: error handling
 - uclient: readdir from cache
-- replicate rstat error?
 - mds: basic auth checks
 
 later

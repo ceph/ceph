@@ -114,14 +114,6 @@ public class CephOutputStream extends OutputStream {
 														"bytes to fd " + fileHandle + ": stream closed");
 		}
 		
-		// sanity check
-		if (null == buf) {
-		}
-		
-		// check for proper index bounds
-		if((off < 0) || (len < 0) || (off + len > buf.length)) {
-		}
-		
 		int result;
 		int write;
 		while (len>0) {
@@ -137,7 +129,7 @@ public class CephOutputStream extends OutputStream {
 			}
 			catch (ArrayStoreException ae) {
 				throw new IOException("Uh-oh, CephOutputStream failed to do an array"
-															+ "copy due to type mismatch...");
+															+ " copy due to type mismatch...");
 			}
 			catch (NullPointerException ne) {
 				throw new IOException("CephOutputStream.write: cannot write "
@@ -155,9 +147,11 @@ public class CephOutputStream extends OutputStream {
 				if (result != bufUsed)
 					throw new IOException("CephOutputStream.write: Wrote only "
 																+ result + " bytes of " + bufUsed
-																+ "in buffer!");
+																+ " in buffer! Data may be lost or written"
+																+ " twice to Ceph!");
 				bufUsed = 0;
 			}
+
 		}
 		return; 
 	}
@@ -182,6 +176,7 @@ public class CephOutputStream extends OutputStream {
 																+ "was incomplete:  only " + result + " of "
 																+ bufUsed + " bytes were written.");
 				}
+				bufUsed = 0;
 				return;
 			}
 	}
