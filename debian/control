@@ -57,6 +57,8 @@ Description: debugging symbols for ceph-fuse
  This package contains the debugging symbols for ceph-fuse.
 
 Package: libcrush1
+Conflicts: libcrush
+Replaces: libcrush
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: CRUSH placement algorithm
@@ -107,6 +109,8 @@ Description: CRUSH mapping algorithm (development files)
  link against libcrush.
 
 Package: librados1
+Conflicts: librados
+Replaces: librados
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: RADOS distributed object store client library
@@ -142,6 +146,8 @@ Description: RADOS distributed object store client library (development files)
  link against librados.
 
 Package: libceph1
+Conflicts: libceph
+Replaces: libceph
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}, libcrush1
 Description: Ceph distributed file system client library
