@@ -673,7 +673,7 @@ private:
     // construct object layout
     pg_t pgid = pg_t(ps, pg_pool, preferred);
     ceph_object_layout layout;
-    layout.ol_pgid = pgid.u.pg64;
+    layout.ol_pgid = pgid.v;
     layout.ol_stripe_unit = object_stripe_unit;
     return layout;
   }
@@ -688,7 +688,7 @@ private:
     pg_pool_t pool = get_pg_pool(pg_pool);
 
     pg_t pgid = pg_t(seed, pg_pool, -1);
-    layout.ol_pgid = pgid.u.pg64;
+    layout.ol_pgid = pgid.v;
     layout.ol_stripe_unit = 0;
 
     return pool.get_pg_num();

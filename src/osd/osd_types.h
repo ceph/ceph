@@ -109,27 +109,25 @@ enum {
 
 // placement group id
 struct pg_t {
-  union ceph_pg u;
+  struct ceph_pg v;
 
-  pg_t() { u.pg64 = 0; }
-  pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
+  pg_t() { memset(&v, 0, sizeof(v)); }
+  pg_t(const pg_t& o) { v = o.v; }
   pg_t(ps_t seed, int pool, int pref) {
-    u.pg64 = 0;
-    u.pg.ps = seed;
-    u.pg.pool = pool;
-    u.pg.preferred = pref;   // hack: avoid negative.
-    assert(sizeof(u.pg) == sizeof(u.pg64));
+    v.ps = seed;
+    v.pool = pool;
+    v.preferred = pref;   // hack: avoid negative.
   }
-  pg_t(uint64_t v) { u.pg64 = v; }
+  pg_t(uint64_t n) { *(__le64*)&v = n; }
   pg_t(const ceph_pg& cpg) {
-    u = cpg;
+    v = cpg;
   }
 
-  ps_t ps() { return u.pg.ps; }
-  int pool() { return u.pg.pool; }
-  int preferred() { return u.pg.preferred; }   // hack: avoid negative.
+  ps_t ps() { return v.ps; }
+  int pool() { return v.pool; }
+  int preferred() { return (__s16)v.preferred; }   // hack: avoid negative.
   
-  operator uint64_t() const { return u.pg64; }
+  operator uint64_t() const { return *(__le64*)&v; }
 
   /*coll_t to_coll() const {
     return coll_t(u.pg64, 0); 
@@ -151,22 +149,20 @@ struct pg_t {
     int r = sscanf(s, "%d.%xp%d", &pool, &ps, &preferred);
     if (r < 2)
       return false;
-    u.pg.pool = pool;
-    u.pg.ps = ps;
+    v.pool = pool;
+    v.ps = ps;
     if (r == 3)
-      u.pg.preferred = preferred;
+      v.preferred = preferred;
     else
-      u.pg.preferred = -1;
+      v.preferred = -1;
     return true;
   }
 
 } __attribute__ ((packed));
 
-inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.u.pg64, bl); }
+inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.v, bl); }
 inline void decode(pg_t &pgid, bufferlist::iterator& p) { 
-  __u64 v;
-  decode_raw(v, p); 
-  pgid.u.pg64 = v;
+  decode_raw(pgid.v, p); 
 }
 
 
@@ -628,9 +624,9 @@ struct pg_pool_t {
    */
   pg_t raw_pg_to_pg(pg_t pg) const {
     if (pg.preferred() >= 0 && v.lpg_num)
-      pg.u.pg.ps = ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask);
+      pg.v.ps = ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask);
     else
-      pg.u.pg.ps = ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask);
+      pg.v.ps = ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask);
     return pg;
   }
   

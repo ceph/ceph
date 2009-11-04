@@ -1631,7 +1631,7 @@ int SyntheticClient::dump_placement(string& fn) {
   for (vector<ObjectExtent>::iterator i = extents.begin(); 
        i != extents.end(); ++i) {
     
-    int osd = client->osdmap->get_pg_primary(pg_t(i->layout.ol_pgid.v));
+    int osd = client->osdmap->get_pg_primary(pg_t(i->layout.ol_pgid));
 
     // run through all the buffer extents
     for (map<__u32,__u32>::iterator j = i ->buffer_extents.begin();
