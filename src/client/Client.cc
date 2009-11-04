@@ -4788,7 +4788,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_favail = -1;
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
-  stbuf->f_namemax = 1024;  // ??
+  stbuf->f_namemax = PAGE_SIZE;  // ??
 
   return 0;
 }
