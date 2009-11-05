@@ -183,6 +183,9 @@ public:
   struct Session : public RefCountedObject {
     EntityName entity_name;
     OSDCaps caps;
+    epoch_t last_sent_epoch;
+
+  Session() : last_sent_epoch(0) {}
   };
 
 private:
@@ -402,7 +405,8 @@ private:
 
   hash_map<entity_name_t, epoch_t>  peer_map_epoch;  // FIXME types
 
-  bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch);
+  bool _share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
+			   Session *session = 0);
   void _share_map_outgoing(const entity_inst_t& inst);
 
   void wait_for_new_map(Message *m);

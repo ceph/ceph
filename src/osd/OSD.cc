@@ -1028,7 +1028,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
     heartbeat_inst[from] = m->get_source_inst();
 
     if (locked && m->map_epoch)
-      _share_map_incoming(m->get_source_inst(), m->map_epoch);
+      _share_map_incoming(m->get_source_inst(), m->map_epoch,
+			  (Session*) m->get_connection()->get_priv());
   }
 
   if (heartbeat_from.count(from) &&
@@ -1037,7 +1038,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
     // only take peer stat or share map now if map_lock is uncontended
     if (locked) {
       if (m->map_epoch)
-	_share_map_incoming(m->get_source_inst(), m->map_epoch);
+	_share_map_incoming(m->get_source_inst(), m->map_epoch,
+			    (Session*) m->get_connection()->get_priv());
       take_peer_stat(from, m->peer_stat);  // only with map_lock held!
     }
 
@@ -1412,7 +1414,8 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 // --------------------------------------
 // dispatch
 
-bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
+bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch,
+			      Session* session)
 {
   bool shared = false;
   dout(20) << "_share_map_incoming " << inst << " " << epoch << dendl;
@@ -1420,7 +1423,17 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
 
   // does client have old map?
   if (inst.name.is_client()) {
-    if (epoch < osdmap->get_epoch()) {
+    bool sendmap = epoch < osdmap->get_epoch();
+    if (sendmap && session) {
+      if ( session->last_sent_epoch < osdmap->get_epoch() ) {
+	session->last_sent_epoch = osdmap->get_epoch();
+      }
+      else {
+	sendmap = false; //we don't need to send it out again
+	dout(15) << inst.name << " already sent incremental to update from epoch "<< epoch << dendl;
+      }
+    }
+    if (sendmap) {
       dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
       send_incremental_map(epoch, inst, true);
       shared = true;
@@ -3754,7 +3767,8 @@ void OSD::handle_op(MOSDOp *op)
   }
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
+		      (Session*) op->get_connection()->get_priv());
 
   throttle_op_queue();
 
@@ -3980,7 +3994,8 @@ void OSD::handle_sub_op(MOSDSubOp *op)
   if (!require_same_or_newer_map(op, op->map_epoch)) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->map_epoch);
+  _share_map_incoming(op->get_source_inst(), op->map_epoch,
+		      (Session*)op->get_connection()->get_priv());
 
   if (!_have_pg(pgid)) {
     // hmm.
@@ -4028,8 +4043,8 @@ void OSD::handle_sub_op_reply(MOSDSubOpReply *op)
   if (!require_same_or_newer_map(op, op->get_map_epoch())) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(op->get_source_inst(), op->get_map_epoch());
-
+  _share_map_incoming(op->get_source_inst(), op->get_map_epoch(),
+		      (Session*)op->get_connection()->get_priv());
   if (!_have_pg(pgid)) {
     // hmm.
     delete op;
