@@ -91,7 +91,7 @@ public class CephInputStream extends FSInputStream {
 	}
 
 	/*
-	 * Make sure this works!
+	 * Get the current position of the stream.
 	 */
   public synchronized long getPos() throws IOException {
 		return cephPos - bufValid + bufPos;
@@ -151,11 +151,12 @@ public class CephInputStream extends FSInputStream {
     }
 
   /**
-   * Read a specified number of bytes into a byte[] from the file.
+   * Read a specified number of bytes from the file into a byte[].
    * @param buf the byte array to read into.
    * @param off the offset to start at in the file
    * @param len the number of bytes to read
    * @return 0 if successful, otherwise an error code.
+	 * @throws IOException on bad input.
    */
   @Override
 	public synchronized int read(byte buf[], int off, int len)

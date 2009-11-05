@@ -101,7 +101,7 @@ public class CephOutputStream extends OutputStream {
    * @param off the position in the file to start writing at.
    * @param len The number of bytes to actually write.
    * @throws IOException if you have closed the CephOutputStream, or
-	 * if buf is null or len > buf.length, or
+	 * if buf is null or off + len > buf.length, or
 	 * if the write fails due to a Ceph error.
    */
   @Override

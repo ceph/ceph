@@ -182,7 +182,7 @@ public class CephFileSystem extends FileSystem {
   /**
    * Get an FSDataOutputStream to append onto a file.
    * @param file The File you want to append onto
-   * @param bufferSize Ceph does internal buffering; this is ignored.
+   * @param bufferSize Ceph does internal buffering but you can buffer in the Java code as well if you like.
    * @param progress The Progressable to report progress to.
    * Reporting is limited but exists.
    * @return An FSDataOutputStream that connects to the file on Ceph.
@@ -272,7 +272,8 @@ public class CephFileSystem extends FileSystem {
    * @param path The directory path to create
    * @param perms The permissions to apply to the created directories.
    * @return true if successful, false otherwise
-   * @throws IOException if initialize() hasn't been called.
+   * @throws IOException if initialize() hasn't been called or the path
+	 *  is a child of a file.
    */
 	@Override
   public boolean mkdirs(Path path, FsPermission perms) throws IOException {
@@ -299,7 +300,7 @@ public class CephFileSystem extends FileSystem {
    * Check if a path is a file. This is moderately faster than the
    * generic implementation.
    * @param path The path to check.
-   * @return true if the path is a file, false otherwise.
+   * @return true if the path is definitely a file, false otherwise.
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
@@ -324,7 +325,7 @@ public class CephFileSystem extends FileSystem {
    * Check if a path is a directory. This is moderately faster than
    * the generic implementation.
    * @param path The path to check
-   * @return true if the path is a directory, false otherwise.
+   * @return true if the path is definitely a directory, false otherwise.
    * @throws IOException if initialize() hasn't been called.
    */
   @Override
@@ -449,7 +450,8 @@ public class CephFileSystem extends FileSystem {
    * @param permission The permissions to apply to the file.
    * @param flag If CreateFlag.OVERWRITE, overwrite any existing
    * file with this name; otherwise don't.
-   * @param bufferSize Ceph does internal buffering; this is ignored.
+   * @param bufferSize Ceph does internal buffering, but you can buffer
+	 *   in the Java code too if you like.
    * @param replication Ignored by Ceph. This can be
    * configured via Ceph configuration.
    * @param blockSize Ignored by Ceph. You can set client-wide block sizes
@@ -525,7 +527,8 @@ public class CephFileSystem extends FileSystem {
   /**
    * Open a Ceph file and attach the file handle to an FSDataInputStream.
    * @param path The file to open
-   * @param bufferSize Ceph does internal buffering; this is ignored.
+   * @param bufferSize Ceph does internal buffering; but you can buffer in
+	 *   the Java code too if you like.
    * @return FSDataInputStream reading from the given path.
    * @throws IOException if initialize() hasn't been called, the path DNE or is a
    * directory, or there is an error getting data to set up the FSDataInputStream.
@@ -660,7 +663,7 @@ public class CephFileSystem extends FileSystem {
    * Get usage statistics on the Ceph filesystem.
    * @param path A path to the partition you're interested in.
    * Ceph doesn't partition, so this is ignored.
-   * @return FsStatus reporting capacity, usage, and remaining spac.
+   * @return FsStatus reporting capacity, usage, and remaining space.
    * @throws IOException if initialize() hasn't been called, or the
    * stat somehow fails.
    */
@@ -686,7 +689,7 @@ public class CephFileSystem extends FileSystem {
   /**
    * Delete the given path, and optionally its children.
    * @param path the path to delete.
-   * @param recursive If the path is a directory and this is false,
+   * @param recursive If the path is a non-empty directory and this is false,
    * delete will throw an IOException. If path is a file this is ignored.
    * @return true if the delete succeeded, false otherwise (including if
    * path doesn't exist).
