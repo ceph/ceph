@@ -662,10 +662,8 @@ int FileStore::_transaction_start(__u64 bytes, __u64 ops)
     btrfs_ioctl_trans_resv_start resv;
     resv.bytes = bytes;
     resv.ops = ops;
-    dout(0) << " doing IOC_TRANS_RESV_START" << dendl;
     r = ::ioctl(fd, BTRFS_IOC_TRANS_RESV_START, (unsigned long)&resv);
   } else {
-    dout(0) << " doing IOC_TRANS_START" << dendl;
     r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
   }
   if (r < 0) {
