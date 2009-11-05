@@ -90,7 +90,9 @@ char *mount_resolve_dest(char *orig_str)
 		/*printf("name '%s' port '%s'\n", tok, port_str);*/
 
 		memset(&hint, 0, sizeof(hint));
-		hint.ai_protocol = AF_INET;
+		hint.ai_family = AF_INET;
+		hint.ai_socktype = SOCK_STREAM;
+		hint.ai_protocol = IPPROTO_TCP;
 
 		r = getaddrinfo(tok, port_str, &hint, &res);
 		if (r < 0) {
