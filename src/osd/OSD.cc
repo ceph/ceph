@@ -3723,11 +3723,9 @@ void OSD::handle_op(MOSDOp *op)
     }
 
     // modify
-    if ((!pg->is_primary() ||
-	 !pg->same_for_modify_since(op->get_map_epoch()))) {
-      dout(7) << "handle_op pg changed " << pg->info.history
-	      << " after " << op->get_map_epoch() 
-	      << ", dropping" << dendl;
+    if (!pg->is_primary() ||
+	!pg->same_for_modify_since(op->get_map_epoch())) {
+      dout(7) << *pg << " changed for write after " << op->get_map_epoch() << ", dropping" << dendl;
       assert(op->get_map_epoch() < osdmap->get_epoch());
       pg->unlock();
       delete op;
@@ -3744,9 +3742,7 @@ void OSD::handle_op(MOSDOp *op)
   } else {
     // read
     if (!pg->same_for_read_since(op->get_map_epoch())) {
-      dout(7) << "handle_op pg changed " << pg->info.history
-	      << " after " << op->get_map_epoch() 
-	      << ", dropping" << dendl;
+      dout(7) << *pg << " changed for read after " << op->get_map_epoch() << ", dropping" << dendl;
       assert(op->get_map_epoch() < osdmap->get_epoch());
       pg->unlock();
       delete op;
