@@ -475,9 +475,12 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 {
   dout(7) << "_booted " << m->get_orig_source_inst() 
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
-  stringstream ss;
-  ss << m->get_orig_source_inst() << " boot";
-  mon->get_logclient()->log(LOG_INFO, ss);
+
+  if (logit) {
+    stringstream ss;
+    ss << m->get_orig_source_inst() << " boot";
+    mon->get_logclient()->log(LOG_INFO, ss);
+  }
 
   send_latest(m, m->sb.current_epoch+1);
 }
