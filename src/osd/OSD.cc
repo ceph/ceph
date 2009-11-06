@@ -423,9 +423,6 @@ int OSD::init()
   monc->sub_want("monmap", 0);
   monc->renew_subs();  
 
-  // announce to monitor i exist and have booted.
-  send_boot();
-  
   op_tp.start();
   recovery_tp.start();
   disk_tp.start();
