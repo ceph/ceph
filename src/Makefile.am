@@ -105,7 +105,8 @@ lib_LTLIBRARIES =
 libcrush_la_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
-	crush/crush.c
+	crush/crush.c \
+	crush/hash.c
 libcrush_la_CFLAGS = ${AM_CFLAGS}
 libcrush_la_CXXFLAGS = ${AM_CXXFLAGS}
 libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*' -lm
@@ -316,7 +317,8 @@ libcommon_files = \
 libcrush_a_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
-	crush/crush.c
+	crush/crush.c \
+	crush/hash.c
 
 libmon_a_SOURCES = \
 	mon/Monitor.cc \
