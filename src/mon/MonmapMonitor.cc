@@ -29,13 +29,13 @@ static ostream& _prefix(Monitor *mon) {
   return *_dout << dbeginl
 		<< "mon" << mon->whoami
 		<< (mon->is_starting() ? (const char*)"(starting)":(mon->is_leader() ? (const char*)"(leader)":(mon->is_peon() ? (const char*)"(peon)":(const char*)"(?\?)")))
-		<< ".client v" << mon->monmap->epoch << " ";
+		<< ".monmap v" << mon->monmap->epoch << " ";
 }
 
 void MonmapMonitor::create_initial(bufferlist& bl)
 {
-  /* Since the MonMap belongs to the Monitor and is initialized
-  by it, we don't need to do anything here. */
+  pending_map.decode(bl);
+  dout(10) << "create_initial was fed epoch " << pending_map.epoch << dendl;
 }
 
 bool MonmapMonitor::update_from_paxos()
@@ -73,7 +73,8 @@ void MonmapMonitor::encode_pending(bufferlist& bl)
 {
   dout(10) << "encode_pending epoch " << pending_map.epoch << dendl;
 
-  assert(mon->monmap->epoch + 1 == pending_map.epoch);
+  assert(mon->monmap->epoch + 1 == pending_map.epoch ||
+	 pending_map.epoch == 1);  // special case mkfs!
   pending_map.encode(bl);
 }
 

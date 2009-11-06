@@ -68,6 +68,7 @@ static ostream& _prefix(Monitor *mon) {
 		     (mon->is_peon() ? 
 		      (const char*)"(peon)" : 
 		      (const char*)"(?\?)")))
+		<< " e" << mon->monmap->get_epoch()
 		<< " ";
 }
 
@@ -798,14 +799,6 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
   bufferlist monmapbl;
   monmap->encode(monmapbl);
-  store->put_bl_sn(monmapbl, "monmap", monmap->epoch);  
-
-  // latest, too.. but make this conform to paxos stash latest format
-  bufferlist latest;
-  version_t v = monmap->get_epoch();
-  ::encode(v, latest);
-  ::encode(monmapbl, latest);
-  store->put_bl_ss(latest, "monmap", "latest");
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); p++) {
     PaxosService *svc = *p;
@@ -815,6 +808,8 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     svc->create_pending();
     if (svc->paxos->machine_id == PAXOS_OSDMAP)
       svc->create_initial(osdmapbl);
+    else if (svc->paxos->machine_id == PAXOS_MONMAP)
+      svc->create_initial(monmapbl);
     else
       svc->create_initial(bl);
     // commit to paxos
@@ -822,6 +817,13 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     store->put_bl_sn(bl, svc->get_machine_name(), 1);
     store->put_int(1, svc->get_machine_name(), "last_committed");
   }
+
+  // stash latest monmap
+  bufferlist latest;
+  version_t v = monmap->get_epoch();
+  ::encode(v, latest);
+  ::encode(monmapbl, latest);
+  store->put_bl_ss(latest, "monmap", "latest");
 
   return 0;
 }
