@@ -107,8 +107,14 @@ repair
 - mds scrubbing
 
 kclient
-- add cap to release if we get fouled up in fill_inode et al?
+- ENOMEM
+  - message pools
+  - sockets?  (this can actual generates a lockdep warning :/)
 - use page lists for large messages?  e.g. reconnect
+- fs-portable file layout virtual xattr (see Andreas' -fsdevel thread)
+- statlite
+- audit/combine/rework/whatever invalidate, writeback threads and associated invariants
+- add cap to release if we get fouled up in fill_inode et al?
 - make caps reservations per-client
 - fix up ESTALE handling
 - don't retry on ENOMEM on non-nofail requests in kick_requests
