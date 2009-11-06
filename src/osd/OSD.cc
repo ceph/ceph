@@ -1402,7 +1402,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
   if (inst.name.is_client()) {
     if (epoch < osdmap->get_epoch()) {
       dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
-      send_incremental_map(epoch, inst, true);
+      send_incremental_map(epoch, inst);
       shared = true;
     }
   }
@@ -1422,7 +1422,7 @@ bool OSD::_share_map_incoming(const entity_inst_t& inst, epoch_t epoch)
     if (peer_map_epoch[inst.name] < osdmap->get_epoch()) {
       dout(10) << inst.name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
       peer_map_epoch[inst.name] = osdmap->get_epoch();  // so we don't send it again.
-      send_incremental_map(epoch, osdmap->get_inst(inst.name.num()), true);
+      send_incremental_map(epoch, osdmap->get_inst(inst.name.num()));
       shared = true;
     }
   }
@@ -1439,7 +1439,7 @@ void OSD::_share_map_outgoing(const entity_inst_t& inst)
   if (peer_map_epoch.count(inst.name)) {
     epoch_t pe = peer_map_epoch[inst.name];
     if (pe < osdmap->get_epoch()) {
-      send_incremental_map(pe, inst, true);
+      send_incremental_map(pe, inst);
       peer_map_epoch[inst.name] = osdmap->get_epoch();
     }
   } else {
@@ -2277,7 +2277,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
 }
 
 
-void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full, bool lazy)
+void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy)
 {
   dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
            << " to " << inst << dendl;
@@ -2292,7 +2292,7 @@ void OSD::send_incremental_map(epoch_t since, const entity_inst_t& inst, bool fu
       m->incremental_maps[e].claim(bl);
     } else if (get_map_bl(e,bl)) {
       m->maps[e].claim(bl);
-      if (!full) break;
+      break;
     }
     else {
       assert(0);  // we should have all maps.
@@ -2428,7 +2428,7 @@ bool OSD::require_same_or_newer_map(Message *m, epoch_t epoch)
     if (!osdmap->have_inst(from) ||
 	osdmap->get_addr(from) != m->get_source_inst().addr) {
       dout(-7) << "from dead osd" << from << ", dropping, sharing map" << dendl;
-      send_incremental_map(epoch, m->get_source_inst(), true, true);
+      send_incremental_map(epoch, m->get_source_inst(), true);
       delete m;
       return false;
     }

@@ -412,7 +412,7 @@ private:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map(epoch_t e, OSDMap::Incremental &inc);
   
-  void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool full, bool lazy=false);
+  void send_incremental_map(epoch_t since, const entity_inst_t& inst, bool lazy=false);
 
 
 protected:
