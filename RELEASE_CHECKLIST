@@ -12,4 +12,7 @@
 - build debs for amd64, i386
 - email ml + post news entry
 
-- rebase kclient_clean
+- make matching commit, tag for ceph-client.git
+
+- pull into -standalone.git
+- update -standalone.git debian/changelog to match
