@@ -1532,7 +1532,10 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
   }
   
   plen = bl.length() - plen_off - sizeof(__u32);
-  bl.copy_in(plen_off, sizeof(__u32), (char*)&plen);
+
+  __le32 eplen;
+  eplen = plen;
+  bl.copy_in(plen_off, sizeof(eplen), (char*)&eplen);
 }
 
 
