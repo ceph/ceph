@@ -70,6 +70,7 @@ using namespace std;
 #include "messages/MClientMountAck.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
+#include "messages/MMonGlobalID.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -325,6 +326,10 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
   case CEPH_MSG_AUTH_REPLY:
     m = new MAuthReply;
     break;
+
+  case MSG_MON_GLOBAL_ID:
+    m = new MMonGlobalID;
+    break; 
 
     // clients
   case CEPH_MSG_CLIENT_MOUNT:

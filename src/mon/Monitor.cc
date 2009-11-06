@@ -601,6 +601,7 @@ do { \
       break;
 
       // auth
+    case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
