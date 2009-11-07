@@ -24,12 +24,10 @@ using namespace std;
 #include "PaxosService.h"
 #include "mon/Monitor.h"
 
-#include "messages/MMonGlobalID.h"
-#include "messages/MMonGlobalIDReply.h"
-
 class MMonCommand;
 class MAuth;
 class MAuthMon;
+class MMonGlobalID;
 
 #define MIN_GLOBAL_ID 0x1000
 

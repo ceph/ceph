@@ -21,7 +21,6 @@
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonGlobalID.h"
-#include "messages/MMonGlobalIDReply.h"
 
 #include "include/str_list.h"
 #include "common/Timer.h"
@@ -203,7 +202,7 @@ bool AuthMonitor::update_from_paxos()
   if (last_allocated_id == (uint64_t)-1) {
     last_allocated_id = max_global_id;
   }
-  dout(0) << "JJJ update_from_paxos() last_allocated_id=" << last_allocated_id << " max_global_id=" << max_global_id << dendl;
+  dout(10) << "update_from_paxos() last_allocated_id=" << last_allocated_id << " max_global_id=" << max_global_id << dendl;
 
   bufferlist bl;
   ::encode(max_global_id, bl);
@@ -220,7 +219,7 @@ void AuthMonitor::increase_max_global_id()
   assert(mon->is_leader());
 
   max_global_id += GLOBAL_ID_DELTA;
-  dout(0) << "JJJ increasing max_global_id to " << max_global_id << dendl;
+  dout(0) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
@@ -311,14 +310,14 @@ void AuthMonitor::committed()
 
 void AuthMonitor::election_finished()
 {
+  dout(10) << "AuthMonitor::election_starting" << dendl;
   last_allocated_id = -1;
-  dout(0) << "AuthMonitor::election_starting" << dendl;
 }
 
 uint64_t AuthMonitor::assign_global_id(MAuth *m)
 {
   int total_mon = mon->monmap->size();
-  dout(0) << "JJJ AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->whoami << "/" << total_mon << " last_allocated="
+  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->whoami << "/" << total_mon << " last_allocated="
           << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
 
   uint64_t next_global_id = last_allocated_id + 1;
@@ -328,12 +327,12 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m)
     if (reminder)
       reminder = total_mon - reminder;
     next_global_id += reminder + mon->whoami;
-    dout(0) << "JJJ next_global_id should be " << next_global_id << dendl;
+    dout(10) << "next_global_id should be " << next_global_id << dendl;
   }
 
   while (next_global_id >= max_global_id) {
     if (!mon->is_leader()) {
-      dout(0) << "JJJ not the leader, forwarding request to the leader" << dendl;
+      dout(10) << "not the leader, forwarding request to the leader" << dendl;
       int leader = mon->get_leader();
       MMonGlobalID *req = new MMonGlobalID();
       req->old_max_id = max_global_id;
@@ -341,7 +340,7 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m)
       paxos->wait_for_commit(new C_RetryMessage(this, m));
       return 0;
     } else {
-      dout(0) << "JJJ increasing max_global_id" << dendl;
+      dout(10) << "increasing max_global_id" << dendl;
       increase_max_global_id();
     }
   }
@@ -544,7 +543,7 @@ done:
 
 bool AuthMonitor::prepare_global_id(MMonGlobalID *m)
 {
-  dout(0) << "JJJ AuthMonitor::prepare_global_id" << dendl;
+  dout(10) << "AuthMonitor::prepare_global_id" << dendl;
   increase_max_global_id();
 
   return true;
