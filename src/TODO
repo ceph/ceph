@@ -63,6 +63,8 @@ v0.18
 pending wire, disk format changes
 
 bugs
+- kclient cap reconnect on mds restart
+- zeros in pg log, followed by valid data.
 - mislinked directory?
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
