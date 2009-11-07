@@ -637,8 +637,8 @@ private:
 
   ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     // calculate ps (placement seed)
-    static hash<object_t> H;
-    ps_t ps = H(oid);
+    pg_pool_t pool = get_pg_pool(pg_pool);
+    ps_t ps = ceph_str_hash(pool.v.object_hash, oid.name.c_str(), oid.name.length());
 
     // mix in preferred osd, so we don't get the same peers for all of the placement pgs (e.g. 0.0p*)
     if (preferred >= 0)

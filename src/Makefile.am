@@ -309,6 +309,7 @@ libcommon_files = \
 	common/buffer.cc \
 	common/debug.cc \
 	include/ceph_fs.cc \
+	include/ceph_hash.cc \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
 	config.cc \
@@ -447,6 +448,7 @@ noinst_HEADERS = \
         include/byteorder.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
+        include/ceph_hash.h\
 	include/color.h\
 	include/crc32c.h\
         include/cstring.h\

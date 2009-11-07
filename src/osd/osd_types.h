@@ -555,6 +555,10 @@ struct pg_pool_t {
   unsigned get_type() const { return v.type; }
   unsigned get_size() const { return v.size; }
   int get_crush_ruleset() const { return v.crush_ruleset; }
+  int get_object_hash() const { return v.object_hash; }
+  const char *get_object_hash_name() const {
+    return ceph_str_hash_name(get_object_hash());
+  }
   epoch_t get_last_change() const { return v.last_change; }
   epoch_t get_snap_epoch() const { return v.snap_epoch; }
   snapid_t get_snap_seq() const { return snapid_t(v.snap_seq); }
@@ -686,6 +690,7 @@ inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
   }
   out << " pg_size " << p.get_size()
       << " crush_ruleset " << p.get_crush_ruleset()
+      << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
       << " lpg_num " << p.get_lpg_num()

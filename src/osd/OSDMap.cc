@@ -106,6 +106,7 @@ void OSDMap::build_simple(epoch_t e, ceph_fsid_t &fsid,
     pools[pool].v.type = CEPH_PG_TYPE_REP;
     pools[pool].v.size = 2;
     pools[pool].v.crush_ruleset = p->first;
+    pools[pool].v.object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].v.pg_num = num_osd << pg_bits;
     pools[pool].v.pgp_num = num_osd << pg_bits;
     pools[pool].v.lpg_num = lpg_bits ? (1 << (lpg_bits-1)) : 0;
