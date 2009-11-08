@@ -158,22 +158,34 @@ struct pg_t {
 } __attribute__ ((packed));
 
 inline bool operator<(const pg_t& l, const pg_t& r) {
-  return memcmp(&l, &r, sizeof(l)) < 0;
+  return l.pool() < r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() < r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() < r.ps()))));
 }
 inline bool operator<=(const pg_t& l, const pg_t& r) {
-  return memcmp(&l, &r, sizeof(l)) <= 0;
+  return l.pool() < r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() < r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() <= r.ps()))));
 }
 inline bool operator==(const pg_t& l, const pg_t& r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
+  return l.pool() == r.pool() &&
+    l.preferred() == r.preferred() &&
+    l.ps() == r.ps();
 }
 inline bool operator!=(const pg_t& l, const pg_t& r) {
-  return memcmp(&l, &r, sizeof(l)) != 0;
+  return l.pool() != r.pool() ||
+    l.preferred() != r.preferred() ||
+    l.ps() != r.ps();
 }
 inline bool operator>(const pg_t& l, const pg_t& r) {
-  return memcmp(&l, &r, sizeof(l)) > 0;
+  return l.pool() > r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() > r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() > r.ps()))));
 }
 inline bool operator>=(const pg_t& l, const pg_t& r) {
-  return memcmp(&l, &r, sizeof(l)) >= 0;
+  return l.pool() > r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() > r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() >= r.ps()))));
 }
 
 
