@@ -3,6 +3,8 @@
 
 #define CRUSH_HASH_RJENKINS1   0
 
+#define CRUSH_HASH_DEFAULT CRUSH_HASH_RJENKINS1
+
 extern const char *crush_hash_name(int type);
 
 extern __u32 crush_hash32(int type, __u32 a);

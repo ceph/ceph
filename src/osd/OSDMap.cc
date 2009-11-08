@@ -171,7 +171,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
 	rweights[i] += 0x10000;
       }
 
-      crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_UNIFORM, 1, j, items, weights);
+      crush_bucket *domain = crush_make_bucket(CRUSH_BUCKET_UNIFORM, CRUSH_HASH_DEFAULT, 1, j, items, weights);
       ritems[i] = crush_add_bucket(crush.crush, 0, domain);
       dout(20) << "added domain bucket i " << ritems[i] << " of size " << j << dendl;
 
@@ -181,7 +181,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
     }
     
     // root
-    crush_bucket *root = crush_make_bucket(CRUSH_BUCKET_STRAW, 2, ndom, ritems, rweights);
+    crush_bucket *root = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 2, ndom, ritems, rweights);
     int rootid = crush_add_bucket(crush.crush, 0, root);
     crush.set_item_name(rootid, "root");
 
@@ -206,7 +206,7 @@ void OSDMap::build_simple_crush_map(CrushWrapper& crush, map<int, const char*>& 
       weights[i] = 0x10000;
     }
 
-    crush_bucket *b = crush_make_bucket(CRUSH_BUCKET_STRAW, 1, num_osd, items, weights);
+    crush_bucket *b = crush_make_bucket(CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 1, num_osd, items, weights);
     int rootid = crush_add_bucket(crush.crush, 0, b);
     crush.set_item_name(rootid, "root");
 

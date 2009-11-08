@@ -141,7 +141,7 @@ int crush_add_bucket(struct crush_map *map,
 /* uniform bucket */
 
 struct crush_bucket_uniform *
-crush_make_uniform_bucket(int type, int size,
+crush_make_uniform_bucket(int hash, int type, int size,
 			  int *items,
 			  int item_weight)
 {
@@ -151,8 +151,8 @@ crush_make_uniform_bucket(int type, int size,
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_UNIFORM;
+	bucket->h.hash = hash;
 	bucket->h.type = type;
-	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 	bucket->h.weight = size * item_weight;
 
@@ -170,7 +170,7 @@ crush_make_uniform_bucket(int type, int size,
 /* list bucket */
 
 struct crush_bucket_list*
-crush_make_list_bucket(int type, int size,
+crush_make_list_bucket(int hash, int type, int size,
 		       int *items,
 		       int *weights)
 {
@@ -181,8 +181,8 @@ crush_make_list_bucket(int type, int size,
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_LIST;
+	bucket->h.hash = hash;
 	bucket->h.type = type;
-	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
@@ -228,7 +228,7 @@ static int parent(int n)
 }
 
 struct crush_bucket_tree*
-crush_make_tree_bucket(int type, int size,
+crush_make_tree_bucket(int hash, int type, int size,
 		       int *items,    /* in leaf order */
 		       int *weights)
 {
@@ -240,8 +240,8 @@ crush_make_tree_bucket(int type, int size,
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_TREE;
+	bucket->h.hash = hash;
 	bucket->h.type = type;
-	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
@@ -282,7 +282,8 @@ crush_make_tree_bucket(int type, int size,
 /* straw bucket */
 
 struct crush_bucket_straw *
-crush_make_straw_bucket(int type,
+crush_make_straw_bucket(int hash, 
+			int type,
 			int size,
 			int *items,
 			int *weights)
@@ -297,8 +298,8 @@ crush_make_straw_bucket(int type,
 	bucket = malloc(sizeof(*bucket));
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_STRAW;
+	bucket->h.hash = hash;
 	bucket->h.type = type;
-	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
@@ -382,7 +383,7 @@ crush_make_straw_bucket(int type,
 
 
 struct crush_bucket*
-crush_make_bucket(int alg, int type, int size,
+crush_make_bucket(int alg, int hash, int type, int size,
 		  int *items,
 		  int *weights)
 {
@@ -394,16 +395,16 @@ crush_make_bucket(int alg, int type, int size,
 			item_weight = weights[0];
 		else
 			item_weight = 0;
-		return (struct crush_bucket *)crush_make_uniform_bucket(type, size, items, item_weight);
+		return (struct crush_bucket *)crush_make_uniform_bucket(hash, type, size, items, item_weight);
 
 	case CRUSH_BUCKET_LIST:
-		return (struct crush_bucket *)crush_make_list_bucket(type, size, items, weights);
+		return (struct crush_bucket *)crush_make_list_bucket(hash, type, size, items, weights);
 
 	case CRUSH_BUCKET_TREE:
-		return (struct crush_bucket *)crush_make_tree_bucket(type, size, items, weights);
+		return (struct crush_bucket *)crush_make_tree_bucket(hash, type, size, items, weights);
 
 	case CRUSH_BUCKET_STRAW:
-		return (struct crush_bucket *)crush_make_straw_bucket(type, size, items, weights);
+		return (struct crush_bucket *)crush_make_straw_bucket(hash, type, size, items, weights);
 	}
 	return 0;
 }
