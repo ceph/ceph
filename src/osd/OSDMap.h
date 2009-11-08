@@ -640,35 +640,13 @@ private:
     pg_pool_t pool = get_pg_pool(pg_pool);
     ps_t ps = ceph_str_hash(pool.v.object_hash, oid.name.c_str(), oid.name.length());
 
-    // mix in preferred osd, so we don't get the same peers for all of the placement pgs (e.g. 0.0p*)
+    // mix in preferred osd, so we don't get the same peers for
+    // all of the placement pgs (e.g. 0.0p*)
     if (preferred >= 0)
       ps += preferred;
 
-    /*
-    ps_t ps;  // NOTE: keep full precision, here!
-    switch (g_conf.osd_object_layout) {
-    case CEPH_OBJECT_LAYOUT_LINEAR:
-      ps = oid.bno + oid.ino;
-      break;
-      
-    case CEPH_OBJECT_LAYOUT_HASHINO:
-      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
-      break;
-
-    case CEPH_OBJECT_LAYOUT_HASH:
-      //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
-      //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
-      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
-      break;
-
-    default:
-      assert(0);
-      }*/
-    
-
-    //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
+    //cout << "preferred " << preferred << " num "
+    // << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
     pg_t pgid = pg_t(ps, pg_pool, preferred);
@@ -720,6 +698,7 @@ private:
 	osds.push_back( (i + pps*size) % g_conf.num_osd );
       break;
       
+#if 0
     case CEPH_PG_LAYOUT_HYBRID:
       {
 	int h = crush_hash32(CRUSH_HASH_RJENKINS1, pps);
@@ -744,6 +723,7 @@ private:
 	}      
       }
       break;
+#endif
       
     default:
       assert(0);
