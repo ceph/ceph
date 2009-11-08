@@ -804,7 +804,7 @@ int main(int argc, const char **argv)
 	  dout(0) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
-	crush_bucket *b = crush_make_bucket(buckettype, type, j, items, weights);
+	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
 	int id = crush_add_bucket(crush.crush, 0, b);
 	rootid = id;
 
