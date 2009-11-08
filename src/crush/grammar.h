@@ -17,10 +17,10 @@
 
 //#define BOOST_SPIRIT_DEBUG
 
-#include <boost/spirit/core.hpp>
-#include <boost/spirit/tree/ast.hpp>
-#include <boost/spirit/tree/tree_to_xml.hpp>
-using namespace boost::spirit;
+#include <boost/spirit/include/classic_core.hpp>
+#include <boost/spirit/include/classic_ast.hpp>
+#include <boost/spirit/include/classic_tree_to_xml.hpp>
+using namespace boost::spirit::classic;
 
 struct crush_grammar : public grammar<crush_grammar>
 {
