@@ -24,26 +24,26 @@ using namespace boost::spirit;
 
 struct crush_grammar : public grammar<crush_grammar>
 {
-  static const int _int = 1;
-  static const int _posint = 2;
-  static const int _negint = 3;
-  static const int _name = 4;
-
-  static const int _device = 12;
-  static const int _bucket_type = 13;
-  static const int _bucket_id = 14;
-  static const int _bucket_alg = 15;
-  static const int _bucket_item = 16;
-  static const int _bucket = 17;
-
-  static const int _step_take = 18;
-  static const int _step_choose = 19;
-  static const int _step_chooseleaf = 20;
-  static const int _step_emit = 21;
-  static const int _step = 22;
-  static const int _crushrule = 23;
-
-  static const int _crushmap = 24;
+  enum {
+    _int = 1,
+    _posint,
+    _negint,
+    _name,
+    _device,
+    _bucket_type,
+    _bucket_id,
+    _bucket_alg,
+    _bucket_hash,
+    _bucket_item,
+    _bucket,
+    _step_take,
+    _step_choose,
+    _step_chooseleaf,
+    _step_emit,
+    _step,
+    _crushrule,
+    _crushmap,
+  };
 
   template <typename ScannerT>
   struct definition
@@ -55,15 +55,16 @@ struct crush_grammar : public grammar<crush_grammar>
 
     rule<ScannerT, parser_context<>, parser_tag<_device> >      device;
 
-    rule<ScannerT, parser_context<>, parser_tag<_bucket_type> >      bucket_type;
+    rule<ScannerT, parser_context<>, parser_tag<_bucket_type> >    bucket_type;
 
     rule<ScannerT, parser_context<>, parser_tag<_bucket_id> >      bucket_id;
-    rule<ScannerT, parser_context<>, parser_tag<_bucket_alg> >      bucket_alg;
-    rule<ScannerT, parser_context<>, parser_tag<_bucket_item> >      bucket_item;
+    rule<ScannerT, parser_context<>, parser_tag<_bucket_alg> >     bucket_alg;
+    rule<ScannerT, parser_context<>, parser_tag<_bucket_hash> >    bucket_hash;
+    rule<ScannerT, parser_context<>, parser_tag<_bucket_item> >    bucket_item;
     rule<ScannerT, parser_context<>, parser_tag<_bucket> >      bucket;
 
     rule<ScannerT, parser_context<>, parser_tag<_step_take> >      step_take;
-    rule<ScannerT, parser_context<>, parser_tag<_step_choose> >      step_choose;
+    rule<ScannerT, parser_context<>, parser_tag<_step_choose> >    step_choose;
     rule<ScannerT, parser_context<>, parser_tag<_step_chooseleaf> >      step_chooseleaf;
     rule<ScannerT, parser_context<>, parser_tag<_step_emit> >      step_emit;
     rule<ScannerT, parser_context<>, parser_tag<_step> >      step;
@@ -93,6 +94,8 @@ struct crush_grammar : public grammar<crush_grammar>
 				     str_p("list") |
 				     str_p("tree") |
 				     str_p("straw") );
+      bucket_hash = str_p("hash") >> ( integer |
+				       str_p("rjenkins1") );
       bucket_item = str_p("item") >> name
 				  >> !( str_p("weight") >> real_p )
 				  >> !( str_p("pos") >> posint );

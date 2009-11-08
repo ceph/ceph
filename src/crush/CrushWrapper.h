@@ -291,6 +291,11 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return b->alg;
   }
+  int get_bucket_hash(int id) {
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return PTR_ERR(b);
+    return b->hash;
+  }
   int get_bucket_size(int id) {
     crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return PTR_ERR(b);
@@ -369,6 +374,7 @@ public:
 
       ::encode(crush->buckets[i]->id, bl);
       ::encode(crush->buckets[i]->type, bl);
+      ::encode(crush->buckets[i]->hash, bl);
       ::encode(crush->buckets[i]->alg, bl);
       ::encode(crush->buckets[i]->weight, bl);
       ::encode(crush->buckets[i]->size, bl);
@@ -463,6 +469,7 @@ public:
 
       ::decode(crush->buckets[i]->id, blp);
       ::decode(crush->buckets[i]->type, blp);
+      ::decode(crush->buckets[i]->hash, blp);
       ::decode(crush->buckets[i]->alg, blp);
       ::decode(crush->buckets[i]->weight, blp);
       ::decode(crush->buckets[i]->size, blp);

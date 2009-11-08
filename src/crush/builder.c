@@ -152,6 +152,7 @@ crush_make_uniform_bucket(int type, int size,
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_UNIFORM;
 	bucket->h.type = type;
+	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 	bucket->h.weight = size * item_weight;
 
@@ -181,6 +182,7 @@ crush_make_list_bucket(int type, int size,
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_LIST;
 	bucket->h.type = type;
+	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
@@ -239,6 +241,7 @@ crush_make_tree_bucket(int type, int size,
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_TREE;
 	bucket->h.type = type;
+	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);
@@ -295,6 +298,7 @@ crush_make_straw_bucket(int type,
 	memset(bucket, 0, sizeof(*bucket));
 	bucket->h.alg = CRUSH_BUCKET_STRAW;
 	bucket->h.type = type;
+	bucket->h.hash = CRUSH_HASH_RJENKINS1;
 	bucket->h.size = size;
 
 	bucket->h.items = malloc(sizeof(__u32)*size);

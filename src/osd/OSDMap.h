@@ -722,7 +722,7 @@ private:
       
     case CEPH_PG_LAYOUT_HYBRID:
       {
-	int h = crush_hash32(pps);
+	int h = crush_hash32(CRUSH_HASH_RJENKINS1, pps);
 	for (unsigned i=0; i<size; i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
@@ -734,7 +734,7 @@ private:
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
-	    osd = crush_hash32_3(i, pps, t) % g_conf.num_osd;
+	    osd = crush_hash32_3(CRUSH_HASH_RJENKINS1, i, pps, t) % g_conf.num_osd;
 	    unsigned j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;

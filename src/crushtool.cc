@@ -531,6 +531,9 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
     }
     out << "\n";
 
+    int hash = crush.get_bucket_hash(i);
+    out << "\thash " << hash << "\t# " << crush_hash_name(hash) << "\n";
+
     for (int j=0; j<n; j++) {
       int item = crush.get_bucket_item(i, j);
       int w = crush.get_bucket_item_weight(i, j);
