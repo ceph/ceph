@@ -102,8 +102,6 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout);
 /* client <-> monitor */
 #define CEPH_MSG_MON_MAP                4
 #define CEPH_MSG_MON_GET_MAP            5
-#define CEPH_MSG_CLIENT_MOUNT           10
-#define CEPH_MSG_CLIENT_MOUNT_ACK       11
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 #define CEPH_MSG_MON_SUBSCRIBE          15

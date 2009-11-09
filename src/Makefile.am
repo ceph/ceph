@@ -345,7 +345,6 @@ libmon_a_SOURCES = \
 	mon/OSDMonitor.cc \
 	mon/MDSMonitor.cc \
 	mon/MonmapMonitor.cc \
-	mon/ClientMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
 	mon/ClassMonitor.cc \
@@ -564,8 +563,6 @@ noinst_HEADERS = \
         messages/MClientCaps.h\
         messages/MClientCapRelease.h\
         messages/MClientLease.h\
-        messages/MClientMount.h\
-        messages/MClientMountAck.h\
         messages/MClientReconnect.h\
         messages/MClientReply.h\
         messages/MClientRequest.h\
@@ -649,8 +646,6 @@ noinst_HEADERS = \
         messages/MStatfsReply.h\
 	messages/PaxosServiceMessage.h\
         mon/ClassMonitor.h\
-        mon/ClientMap.h\
-        mon/ClientMonitor.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
         mon/MDSMonitor.h\

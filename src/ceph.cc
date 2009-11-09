@@ -67,9 +67,7 @@ Context *resend_event = 0;
 
 
 // observe (push)
-#include "mon/ClientMap.h"
 #include "mon/PGMap.h"
-#include "mon/ClientMap.h"
 #include "osd/OSDMap.h"
 #include "mds/MDSMap.h"
 #include "include/LogEntry.h"
@@ -84,7 +82,6 @@ int observe = 0;
 static PGMap pgmap;
 static MDSMap mdsmap;
 static OSDMap osdmap;
-static ClientMap clientmap;
 
 static set<int> registered;
 
@@ -146,14 +143,6 @@ void handle_notify(MMonObserveNotify *notify)
 	osdmap.apply_incremental(inc);
       }
       dout(0) << "   osd " << osdmap << dendl;
-    }
-    break;
-
-  case PAXOS_CLIENTMAP:
-    {
-      bufferlist::iterator p = notify->bl.begin();
-      clientmap.decode(p);
-      dout(0) << "client " << clientmap << dendl;
     }
     break;
 

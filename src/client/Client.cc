@@ -35,8 +35,6 @@ using namespace std;
 
 #include "messages/MMonMap.h"
 
-#include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
 #include "messages/MClientSession.h"
 #include "messages/MClientReconnect.h"
 #include "messages/MClientRequest.h"
@@ -2719,11 +2717,14 @@ int Client::mount()
   }
 
   client_lock.Unlock();
-  int r = monclient->mount(g_conf.client_mount_timeout);
+  int r = monclient->authenticate(g_conf.client_mount_timeout);
   client_lock.Lock();
   if (r < 0)
     return r;
   
+  whoami = monclient->get_global_id();
+  messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+
   whoami = messenger->get_myname().num();
 
   objecter->init();

@@ -18,19 +18,17 @@
 #define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1
 #define PAXOS_OSDMAP     2
-#define PAXOS_CLIENTMAP  3
-#define PAXOS_LOG        4
-#define PAXOS_CLASS      5
-#define PAXOS_MONMAP     6
-#define PAXOS_AUTH       7
-#define PAXOS_NUM        8
+#define PAXOS_LOG        3
+#define PAXOS_CLASS      4
+#define PAXOS_MONMAP     5
+#define PAXOS_AUTH       6
+#define PAXOS_NUM        7
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
   case PAXOS_MDSMAP: return "mdsmap";
   case PAXOS_MONMAP: return "monmap";
   case PAXOS_OSDMAP: return "osdmap";
-  case PAXOS_CLIENTMAP: return "clientmap";
   case PAXOS_PGMAP: return "pgmap";
   case PAXOS_LOG: return "logm";
   case PAXOS_CLASS: return "class";

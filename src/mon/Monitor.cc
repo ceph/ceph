@@ -35,8 +35,6 @@
 #include "messages/MClass.h"
 #include "messages/MRoute.h"
 
-#include "messages/MClientMountAck.h"
-
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
@@ -48,7 +46,6 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MonmapMonitor.h"
-#include "ClientMonitor.h"
 #include "PGMonitor.h"
 #include "LogMonitor.h"
 #include "ClassMonitor.h"
@@ -94,7 +91,6 @@ Monitor::Monitor(int w, MonitorStore *s, Messenger *m, MonMap *map) :
   paxos_service[PAXOS_MDSMAP] = new MDSMonitor(this, add_paxos(PAXOS_MDSMAP));
   paxos_service[PAXOS_MONMAP] = new MonmapMonitor(this, add_paxos(PAXOS_MONMAP));
   paxos_service[PAXOS_OSDMAP] = new OSDMonitor(this, add_paxos(PAXOS_OSDMAP));
-  paxos_service[PAXOS_CLIENTMAP] = new ClientMonitor(this, add_paxos(PAXOS_CLIENTMAP));
   paxos_service[PAXOS_PGMAP] = new PGMonitor(this, add_paxos(PAXOS_PGMAP));
   paxos_service[PAXOS_LOG] = new LogMonitor(this, add_paxos(PAXOS_LOG));
   paxos_service[PAXOS_CLASS] = new ClassMonitor(this, add_paxos(PAXOS_CLASS));
@@ -257,10 +253,6 @@ void Monitor::handle_command(MMonCommand *m)
     }
     if (m->cmd[0] == "pg") {
       pgmon()->dispatch(m);
-      return;
-    }
-    if (m->cmd[0] == "client") {
-      clientmon()->dispatch(m);
       return;
     }
     if (m->cmd[0] == "mon") {
@@ -607,17 +599,11 @@ do { \
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // clients
-    case CEPH_MSG_CLIENT_MOUNT:
-      ALLOW_CAPS(PAXOS_CLIENTMAP, MON_CAP_RW);
-      paxos_service[PAXOS_CLIENTMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
-
       // pg
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
-      ALLOW_CAPS(PAXOS_CLIENTMAP, MON_CAP_R);
+      ALLOW_CAPS(PAXOS_PGMAP, MON_CAP_R);
       paxos_service[PAXOS_PGMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 

@@ -15,13 +15,11 @@
 #include "msg/SimpleMessenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonMap.h"
-#include "messages/MClientMount.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 
 #include "include/nstring.h"
 
-#include "messages/MClientMountAck.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "common/ConfUtils.h"
@@ -188,10 +186,6 @@ bool MonClient::ms_dispatch(Message *m)
     handle_monmap((MMonMap*)m);
     return true;
 
-  case CEPH_MSG_CLIENT_MOUNT_ACK:
-    handle_mount_ack((MClientMountAck*)m);
-    return true;
-
   case CEPH_MSG_AUTH_REPLY:
     handle_auth((MAuthReply*)m);
     return true;
@@ -225,14 +219,6 @@ void MonClient::handle_monmap(MMonMap *m)
 }
 
 // ----------------------
-// mount
-
-void MonClient::_send_mount()
-{
-  dout(10) << "_send_mount" << dendl;
-  _send_mon_message(new MClientMount);
-  mount_started = g_clock.now();
-}
 
 void MonClient::init()
 {
@@ -267,54 +253,26 @@ void MonClient::shutdown()
   timer.cancel_all_events();
 }
 
-int MonClient::mount(double mount_timeout)
+int MonClient::authenticate(double timeout)
 {
   Mutex::Locker lock(monc_lock);
 
   if (clientid >= 0) {
-    dout(5) << "already mounted" << dendl;;
+    dout(5) << "already authenticated" << dendl;;
     return 0;
   }
 
-  // only first mounter does the work
   _sub_want("monmap", monmap.get_epoch());
-  mounting++;
-  if (mounting == 1) {
-    if (cur_mon < 0)
-      _reopen_session();
-    else
-      _send_mount();
-  }
-  while (clientid < 0 && !mount_err)
-    mount_cond.Wait(monc_lock);
-  mounting--;
+  if (cur_mon < 0)
+    _reopen_session();
+
+  while (clientid < 0 && !authenticate_err)
+    authenticate_cond.Wait(monc_lock);
 
   if (clientid >= 0)
-    dout(5) << "mount success, client" << clientid << dendl;
+    dout(5) << "authenticate success, client" << clientid << dendl;
 
-  return mount_err;
-}
-
-void MonClient::handle_mount_ack(MClientMountAck* m)
-{
-  dout(10) << "handle_mount_ack " << *m << dendl;
-
-  _finish_hunting();
-
-  if (m->result) {
-    mount_err = m->result;
-    dout(0) << "mount error " << m->result << " (" << m->result_msg << ")" << dendl;
-  } else {
-    // monmap
-    bufferlist::iterator p = m->monmap_bl.begin();
-    ::decode(monmap, p);
-
-    clientid = m->client;
-    messenger->set_myname(entity_name_t::CLIENT(m->client.v));
-  }
-
-  mount_cond.SignalAll();
-  delete m;
+  return authenticate_err;
 }
 
 void MonClient::handle_auth(MAuthReply *m)
@@ -335,8 +293,9 @@ void MonClient::handle_auth(MAuthReply *m)
     }
     try {
       ::decode(global_id, p);
+      clientid = global_id;
       auth->set_global_id(global_id);
-      dout(0) << "decoded global_id=" << global_id << dendl;
+      dout(1) << "my global_id is " << global_id << dendl;
     } catch (buffer::error *err) {
       delete m;
       return;
@@ -356,6 +315,9 @@ void MonClient::handle_auth(MAuthReply *m)
     return;
   }
 
+  _finish_hunting();
+
+  authenticate_err = ret;
   if (ret == 0) {
     if (state != MC_STATE_HAVE_SESSION) {
       state = MC_STATE_HAVE_SESSION;
@@ -367,35 +329,8 @@ void MonClient::handle_auth(MAuthReply *m)
     }
   
     _check_auth_rotating();
-
-    auth_cond.SignalAll();
   }
-
-  /*
-    switch (state) {
-    case MC_STATE_AUTHENTICATING:
-      {
-        dout(0) << "done authenticating" << dendl;
-        state = MC_STATE_AUTHENTICATED;
-        auth.send_session_request(this, &authorize_handler);
-      }
-      break;
-    case MC_STATE_AUTHENTICATED:
-      {
-        dout(0) << "done authorizing" << dendl;
-        state = MC_STATE_HAVE_SESSION;
-	while (!waiting_for_session.empty()) {
-	  _send_mon_message(waiting_for_session.front());
-	  waiting_for_session.pop_front();
-	}
-        authenticate_cond.SignalAll();
-      }
-      break;
-    default:
-      assert(false);
-    }
-  }
-  */
+  auth_cond.SignalAll();
 }
 
 
@@ -442,12 +377,8 @@ void MonClient::_reopen_session()
     _send_mon_message(m, true);
   }
 
-  if (mounting)
-    _send_mount();
   if (!sub_have.empty())
     _renew_subs();
-  if (!mounting && sub_have.empty())
-    _send_mon_message(new MMonGetMap);
 }
 
 

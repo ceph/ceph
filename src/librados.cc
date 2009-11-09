@@ -37,9 +37,6 @@ using namespace std;
 
 #include "osdc/Objecter.h"
 
-#include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
-
 #include "include/librados.h"
 
 #define RADOS_LIST_MAX_ENTRIES 1024
@@ -314,13 +311,7 @@ bool RadosClient::init()
   dout(1) << "iit" << dendl;
   monclient.init();
 
-  if (monclient.get_monmap() < 0)
-    return false;
-
-  monclient.wait_authenticate(30.0);
-
-  monclient.mount(g_conf.client_mount_timeout);
-
+  monclient.authenticate(g_conf.client_mount_timeout);
 
 
   lock.Lock();

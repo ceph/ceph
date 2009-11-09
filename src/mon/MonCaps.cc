@@ -70,8 +70,6 @@ int MonCaps::get_service_id(string& token)
     return PAXOS_MONMAP;
   } else if (token.compare("osdmap") == 0) {
     return PAXOS_OSDMAP;
-  } else if (token.compare("clientmap") == 0) {
-    return PAXOS_CLIENTMAP;
   } else if (token.compare("log") == 0) {
     return PAXOS_LOG;
   } else if (token.compare("class") == 0) {

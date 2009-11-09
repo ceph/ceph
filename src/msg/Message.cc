@@ -66,8 +66,6 @@ using namespace std;
 
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
-#include "messages/MClientMount.h"
-#include "messages/MClientMountAck.h"
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 #include "messages/MMonGlobalID.h"
@@ -332,12 +330,6 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
     break; 
 
     // clients
-  case CEPH_MSG_CLIENT_MOUNT:
-    m = new MClientMount;
-    break;
-  case CEPH_MSG_CLIENT_MOUNT_ACK:
-    m = new MClientMountAck;
-    break;
   case CEPH_MSG_MON_SUBSCRIBE:
     m = new MMonSubscribe;
     break;

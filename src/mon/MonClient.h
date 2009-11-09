@@ -28,7 +28,6 @@
 
 class MonMap;
 class MMonMap;
-class MClientMountAck;
 class MMonSubscribeAck;
 class MAuthReply;
 class MAuthRotating;
@@ -91,14 +90,12 @@ private:
 
   uint64_t global_id;
 
-  // mount
+  // authenticate
 private:
   client_t clientid;
-  int mounting;
-  int mount_err;
-  Cond mount_cond, map_cond;
+  Cond map_cond;
   Cond authenticate_cond;
-  utime_t mount_started;
+  int authenticate_err;
 
   list<Message*> waiting_for_session;
 
@@ -106,8 +103,6 @@ private:
   void _reopen_session();
   void _pick_new_mon();
   void _send_mon_message(Message *m, bool force=false);
-  void _send_mount();
-  void handle_mount_ack(MClientMountAck* m);
 
 public:
   void set_entity_name(EntityName name) { entity_name = name; }
@@ -115,8 +110,7 @@ public:
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
 
-  int mount(double mount_timeout);
- 
+  int authenticate(double timeout);
   int wait_authenticate(double timeout);
 
   // mon subscriptions
@@ -178,7 +172,7 @@ public:
 		hunting(false),
 		want_monmap(false),
 		want_keys(0), global_id(0),
-		mounting(0), mount_err(0),
+		authenticate_err(0),
 		auth(NULL) { }
   ~MonClient() {
     timer.cancel_all_events();
@@ -222,6 +216,8 @@ public:
     Mutex::Locker l(monc_lock);
     return monmap.size();
   }
+
+  client_t get_global_id() { return clientid; }
 
   void set_messenger(Messenger *m) { messenger = m; }
 
