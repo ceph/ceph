@@ -63,7 +63,7 @@ int CephxClientHandler::build_request(bufferlist& bl)
     ::encode(header, bl);
 
     CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
-    authorizer = ticket_handler.build_authorizer();
+    authorizer = ticket_handler.build_authorizer(global_id);
     if (!authorizer)
       return -EINVAL;
     bl.claim_append(authorizer->bl);

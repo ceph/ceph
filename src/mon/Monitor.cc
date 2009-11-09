@@ -933,6 +933,8 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool
   int ret;
   uint32_t service_id = dest_type;
 
+  auth_ticket_info.ticket.global_id = 0;
+
   dout(0) << "ms_get_authorizer service_id=" << service_id << dendl;
 
   if (service_id != CEPH_ENTITY_TYPE_MON) {
@@ -975,7 +977,7 @@ bool Monitor::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool
   handler.service_id = service_id;
   handler.session_key = info.session_key;
 
-  *authorizer = handler.build_authorizer();
+  *authorizer = handler.build_authorizer(0);
   
   return true;
 }

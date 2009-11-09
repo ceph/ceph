@@ -146,6 +146,7 @@ WRITE_CLASS_ENCODER(AuthCapsInfo)
  */
 struct AuthTicket {
   EntityName name;
+  uint64_t global_id; /* global instance id */
   utime_t created, renew_after, expires;
   AuthCapsInfo caps;
   __u32 flags;
@@ -164,6 +165,7 @@ struct AuthTicket {
     __u8 v = 1;
     ::encode(v, bl);
     ::encode(name, bl);
+    ::encode(global_id, bl);
     ::encode(created, bl);
     ::encode(expires, bl);
     ::encode(caps, bl);
@@ -173,6 +175,7 @@ struct AuthTicket {
     __u8 v;
     ::decode(v, bl);
     ::decode(name, bl);
+    ::decode(global_id, bl);
     ::decode(created, bl);
     ::decode(expires, bl);
     ::decode(caps, bl);

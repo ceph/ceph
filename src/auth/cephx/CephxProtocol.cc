@@ -208,12 +208,13 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
  *
  * ticket, {timestamp}^session_key
  */
-CephXAuthorizer *CephXTicketHandler::build_authorizer()
+CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
 {
   CephXAuthorizer *a = new CephXAuthorizer;
   a->session_key = session_key;
   a->nonce = ((__u64)rand() << 32) + rand();
 
+  ::encode(global_id, a->bl);
   ::encode(service_id, a->bl);
   ::encode(ticket, a->bl);
 
@@ -238,7 +239,7 @@ CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
     return false;
 
   CephXTicketHandler& handler = iter->second;
-  return handler.build_authorizer();
+  return handler.build_authorizer(global_id);
 }
 
 void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need)
@@ -262,8 +263,10 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
 {
   uint32_t service_id;
   uint64_t secret_id;
+  uint64_t global_id;
   CryptoKey service_secret;
 
+  ::decode(global_id, indata);
   ::decode(service_id, indata);
   ::decode(secret_id, indata);
   dout(10) << "verify_authorizer decrypted service_id=" << service_id << " secret_id=" << secret_id << dendl;
@@ -285,6 +288,13 @@ bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
     dout(0) << "verify_authorizer could not decrypt ticket info" << dendl;
     return false;
   }
+
+  if (ticket_info.ticket.global_id != global_id) {
+    dout(0) << "verify_authorizer global_id mismatch: declared id=" << global_id << " ticket_id=" << ticket_info.ticket.global_id << dendl;
+    return false;
+  }
+
+  dout(10) << "verify_authorizer global_id=" << global_id << dendl;
 
   CephXAuthorize auth_msg;
   if (decode_decrypt(auth_msg, ticket_info.session_key, indata) < 0) {

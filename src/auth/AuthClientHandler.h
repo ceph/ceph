@@ -29,6 +29,7 @@ class AuthClientHandler;
 class AuthClientHandler {
 protected:
   EntityName name;
+  uint64_t global_id;
   uint32_t want;
   uint32_t have;
   uint32_t need;
@@ -71,6 +72,8 @@ public:
 
   virtual void validate_tickets() = 0;
   virtual bool need_tickets() = 0;
+
+  virtual void set_global_id(uint64_t id) = 0;
 };
 
 

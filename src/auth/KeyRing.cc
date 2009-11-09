@@ -36,7 +36,7 @@ bool KeyRing::load_master(const char *filename_list)
   string filename;
   list<string> ls;
   get_str_list(k, ls);
-  int fd;
+  int fd = -1;
   for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
     fd = open(p->c_str(), O_RDONLY);
     if (fd >= 0) {

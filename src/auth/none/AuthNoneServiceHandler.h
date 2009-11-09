@@ -23,7 +23,7 @@ public:
   AuthNoneServiceHandler()  {}
   ~AuthNoneServiceHandler() {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl) {
+  int start_session(EntityName& name, uint64_t global_id, bufferlist::iterator& indata, bufferlist& result_bl) {
     entity_name = name;
     return CEPH_AUTH_NONE;
   }

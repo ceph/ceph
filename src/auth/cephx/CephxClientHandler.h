@@ -49,6 +49,11 @@ public:
 
   void validate_tickets();
   bool need_tickets();
+
+  void set_global_id(uint64_t id) {
+    global_id = id;
+    tickets.global_id = id;
+  }
 };
 
 #endif

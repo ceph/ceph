@@ -41,6 +41,8 @@ public:
 
   void validate_tickets() { }
   bool need_tickets() { return false; }
+
+  void set_global_id(uint64_t id) { global_id = id; }
 };
 
 #endif

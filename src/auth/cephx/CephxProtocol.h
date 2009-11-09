@@ -261,7 +261,7 @@ struct CephXTicketHandler {
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);
   // to access the service
-  CephXAuthorizer *build_authorizer();
+  CephXAuthorizer *build_authorizer(uint64_t global_id);
 
   bool have_key();
   bool need_key();
@@ -269,6 +269,9 @@ struct CephXTicketHandler {
 
 struct CephXTicketManager {
   map<uint32_t, CephXTicketHandler> tickets_map;
+  uint64_t global_id;
+
+  CephXTicketManager() : global_id(0) {}
 
   bool verify_service_ticket_reply(CryptoKey& principal_secret,
 				 bufferlist::iterator& indata);

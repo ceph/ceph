@@ -333,6 +333,7 @@ bool KeyServer::get_service_caps(EntityName& name, uint32_t service_id, AuthCaps
 int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info)
 {
   info.ticket.name = auth_ticket_info.ticket.name;
+  info.ticket.global_id = auth_ticket_info.ticket.global_id;
   info.ticket.init_timestamps(g_clock.now(), g_conf.auth_service_ticket_ttl);
 
   generate_secret(info.session_key);

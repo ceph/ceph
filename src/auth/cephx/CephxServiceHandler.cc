@@ -29,9 +29,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << dbeginl << "cephx server " << entity_name << ": "
 
-int CephxServiceHandler::start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl)
+int CephxServiceHandler::start_session(EntityName& name, uint64_t global_id, bufferlist::iterator& indata, bufferlist& result_bl)
 {
   entity_name = name;
+  this->global_id = global_id;
 
   get_random_bytes((char *)&server_challenge, sizeof(server_challenge));
   if (!server_challenge)
@@ -93,6 +94,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       info.ticket.init_timestamps(g_clock.now(), g_conf.auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
+      info.ticket.global_id = global_id;
       info.validity += g_conf.auth_mon_ticket_ttl;
 
       key_server->generate_secret(session_key);
