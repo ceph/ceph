@@ -140,12 +140,6 @@ void AuthMonitor::create_initial(bufferlist& bl)
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
-  
-#if 0
-  KeyServerData::Incremental auth_inc;
-  auth_inc.op = KeyServerData::AUTH_INC_NOP;
-  push_cephx_inc(auth_inc);
-#endif
 }
 
 bool AuthMonitor::update_from_paxos()
@@ -180,10 +174,9 @@ bool AuthMonitor::update_from_paxos()
       ::decode(inc, p);
       switch (inc.inc_type) {
       case GLOBAL_ID:
-        {
-          max_global_id = inc.max_global_id;
-          break;
-        }
+	max_global_id = inc.max_global_id;
+	break;
+
       case AUTH_DATA:
         {
           KeyServerData::Incremental auth_inc;
@@ -215,10 +208,9 @@ bool AuthMonitor::update_from_paxos()
 
 void AuthMonitor::increase_max_global_id()
 {
-#define GLOBAL_ID_DELTA 100
   assert(mon->is_leader());
 
-  max_global_id += GLOBAL_ID_DELTA;
+  max_global_id += g_conf.mon_globalid_prealloc;
   dout(0) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;
@@ -283,7 +275,6 @@ bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
 
   case MSG_MON_GLOBAL_ID:
     return false;
-
 
   default:
     assert(0);
