@@ -834,6 +834,7 @@ protected:
   int shutdown();
 
   void reply_op_error(MOSDOp *op, int r);
+  void handle_misdirected_op(PG *pg, MOSDOp *op);
 
   void handle_scrub(class MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);

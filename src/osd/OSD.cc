@@ -3628,6 +3628,22 @@ void OSD::reply_op_error(MOSDOp *op, int err)
   delete op;
 }
 
+void OSD::handle_misdirected_op(PG *pg, MOSDOp *op)
+{
+  if (op->get_map_epoch() < pg->info.history.same_primary_since) {
+    dout(7) << *pg << " changed after " << op->get_map_epoch() << ", dropping" << dendl;
+    delete op;
+  } else {
+    dout(7) << *pg << " misdirected op in " << op->get_map_epoch() << dendl;
+    stringstream ss;
+    ss << op->get_source_inst() << " misdirected " << op->get_reqid()
+       << " " << pg->info.pgid << " to osd" << whoami
+       << " not " << pg->acting;
+    logclient.log(LOG_WARN, ss);
+    reply_op_error(op, -ENXIO);
+  }
+}
+
 void OSD::handle_op(MOSDOp *op)
 {
   // require same or newer map
@@ -3722,10 +3738,8 @@ void OSD::handle_op(MOSDOp *op)
     // modify
     if (!pg->is_primary() ||
 	!pg->same_for_modify_since(op->get_map_epoch())) {
-      dout(7) << *pg << " changed for write after " << op->get_map_epoch() << ", dropping" << dendl;
-      assert(op->get_map_epoch() < osdmap->get_epoch());
+      handle_misdirected_op(pg, op);
       pg->unlock();
-      delete op;
       return;
     }
     
@@ -3739,10 +3753,8 @@ void OSD::handle_op(MOSDOp *op)
   } else {
     // read
     if (!pg->same_for_read_since(op->get_map_epoch())) {
-      dout(7) << *pg << " changed for read after " << op->get_map_epoch() << ", dropping" << dendl;
-      assert(op->get_map_epoch() < osdmap->get_epoch());
+      handle_misdirected_op(pg, op);
       pg->unlock();
-      delete op;
       return;
     }
 
