@@ -224,7 +224,11 @@ void AuthMonitor::increase_max_global_id()
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
-  propose_pending();
+}
+
+bool AuthMonitor::should_propose(double& delay)
+{
+  return (pending_auth.size() > 0);
 }
 
 void AuthMonitor::init()
