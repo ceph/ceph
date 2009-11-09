@@ -329,7 +329,7 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 
   while (next_global_id >= max_global_id) {
     if (!mon->is_leader()) {
-      dout(10) << "not the leader, forwarding request to the leader" << dendl;
+      dout(10) << "not the leader, requesting more ids from leader" << dendl;
       int leader = mon->get_leader();
       MMonGlobalID *req = new MMonGlobalID();
       req->old_max_id = max_global_id;
@@ -373,7 +373,9 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       s->global_id = assign_global_id(m, paxos_writable);
       if (!s->global_id) {
         s->put();
-        return false;
+	if (mon->is_leader())
+	  return false;
+        return true;
       }
 
       set<__u32> supported;

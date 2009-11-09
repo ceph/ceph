@@ -509,6 +509,8 @@ void Paxos::handle_commit(MMonPaxos *commit)
   mon->store->put_int(last_committed, machine_name, "last_committed");
   
   delete commit;
+
+  finish_contexts(waiting_for_commit);
 }
 
 void Paxos::extend_lease()
