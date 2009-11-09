@@ -89,6 +89,8 @@ private:
 
   uint32_t want_keys;
 
+  uint64_t global_id;
+
   // mount
 private:
   client_t clientid;
@@ -175,7 +177,7 @@ public:
 		timer(monc_lock),
 		hunting(false),
 		want_monmap(false),
-		want_keys(0),
+		want_keys(0), global_id(0),
 		mounting(0), mount_err(0),
 		auth(NULL) { }
   ~MonClient() {

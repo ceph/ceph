@@ -319,6 +319,7 @@ void MonClient::handle_mount_ack(MClientMountAck* m)
 
 void MonClient::handle_auth(MAuthReply *m)
 {
+  bufferlist::iterator p = m->result_bl.begin();
   if (state == MC_STATE_NEGOTIATING) {
     if (!auth || (int)m->protocol != auth->get_protocol()) {
       delete auth;
@@ -332,11 +333,17 @@ void MonClient::handle_auth(MAuthReply *m)
     } else {
       auth->reset();
     }
+    try {
+      ::decode(global_id, p);
+      dout(0) << "decoded global_id=" << global_id << dendl;
+    } catch (buffer::error *err) {
+      delete m;
+      return;
+    }
     state = MC_STATE_AUTHENTICATING;
   }
   assert(auth);
 
-  bufferlist::iterator p = m->result_bl.begin();
   int ret = auth->handle_response(m->result, p);
   delete m;
 

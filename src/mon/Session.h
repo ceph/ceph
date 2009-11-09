@@ -41,13 +41,14 @@ struct Session : public RefCountedObject {
   xlist<Session*>::item item;
   set<__u64> routed_request_tids;
   MonCaps caps;
+  uint64_t global_id;
 
   map<nstring, Subscription*> sub_map;
 
   AuthServiceHandler *auth_handler;
 
   Session(entity_inst_t i) : inst(i), closed(false), item(this),
-			     auth_handler(NULL) {}
+			     global_id(0), auth_handler(NULL) {}
   ~Session() {
     generic_dout(0) << "~Session " << this << dendl;
     // we should have been removed before we get destructed; see SessionMap::remove_session()

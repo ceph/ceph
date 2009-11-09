@@ -370,8 +370,8 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     EntityName entity_name;
 
     if (!s->auth_handler) {
-      uint64_t global_id = assign_global_id(m);
-      if (!global_id)
+      s->global_id = assign_global_id(m);
+      if (!s->global_id)
         goto done;
 
       set<__u32> supported;
@@ -389,6 +389,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 	if (!s->auth_handler)
 	  ret = -EPERM;
 	else {
+          ::encode(s->global_id, response_bl);
 	  proto = s->auth_handler->start_session(entity_name, indata, response_bl);
           if (proto == CEPH_AUTH_NONE) {
             s->caps.set_allow_all(true);
