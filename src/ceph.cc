@@ -193,25 +193,21 @@ void handle_notify(MMonObserveNotify *notify)
 
   case PAXOS_AUTH:
     {
+#if 0
       bufferlist::iterator p = notify->bl.begin();
       if (notify->is_latest) {
 	KeyServerData data;
 	::decode(data, p);
 	dout(0) << "   auth " << dendl;
-#if 0
-	// show the first class info
-        map<EntityName, CryptoKey>::iterator mapiter = list.keys.secrets_begin();
-	if (mapiter != list.keys.secrets_end()) {
-	    dout(0) << "   auth " <<  mapiter->first.to_str() << dendl;
-	}
-#endif
       } else {
 	while (!p.end()) {
-	  KeyServerData::Incremental inc;
+	  AuthMonitor::Incremental inc;
           inc.decode(p);
 	  dout(0) << "   auth " << inc.name.to_str() << dendl;
 	}
       }
+#endif
+      /* ignoring auth incremental.. don't want to decode it */
       break;
     }
 
