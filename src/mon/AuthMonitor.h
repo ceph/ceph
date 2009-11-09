@@ -90,7 +90,7 @@ private:
   void create_pending();  // prepare a new pending
   bool prepare_global_id(MMonGlobalID *m);
   void increase_max_global_id();
-  uint64_t assign_global_id(MAuth *m);
+  uint64_t assign_global_id(MAuth *m, bool should_increase_max);
   void encode_pending(bufferlist &bl);  // propose pending update to peers
 
   void committed();
@@ -98,12 +98,10 @@ private:
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
 
-  bool preprocess_auth(MAuth *m);
+  bool prep_auth(MAuth *m, bool paxos_writable);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
-
-  uint64_t assign_next_global_id();
 
   void check_rotate();
  public:

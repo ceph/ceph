@@ -275,7 +275,7 @@ bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
     return preprocess_command((MMonCommand*)m);
 
   case CEPH_MSG_AUTH:
-    return preprocess_auth((MAuth *)m);
+    return prep_auth((MAuth *)m, false);
 
   case MSG_MON_GLOBAL_ID:
     return false;
@@ -296,6 +296,8 @@ bool AuthMonitor::prepare_update(PaxosServiceMessage *m)
     return prepare_command((MMonCommand*)m);
   case MSG_MON_GLOBAL_ID:
     return prepare_global_id((MMonGlobalID*)m); 
+  case CEPH_MSG_AUTH:
+    return prep_auth((MAuth *)m, true);
   default:
     assert(0);
     delete m;
@@ -314,7 +316,7 @@ void AuthMonitor::election_finished()
   last_allocated_id = -1;
 }
 
-uint64_t AuthMonitor::assign_global_id(MAuth *m)
+uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 {
   int total_mon = mon->monmap->size();
   dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->whoami << "/" << total_mon << " last_allocated="
@@ -340,6 +342,9 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m)
       paxos->wait_for_commit(new C_RetryMessage(this, m));
       return 0;
     } else {
+      if (!should_increase_max)
+        return 0;
+
       dout(10) << "increasing max_global_id" << dendl;
       increase_max_global_id();
     }
@@ -351,9 +356,9 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m)
 }
 
 
-bool AuthMonitor::preprocess_auth(MAuth *m)
+bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 {
-  dout(0) << "preprocess_auth() blob_size=" << m->get_auth_payload().length() << dendl;
+  dout(0) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
   int ret = 0;
   AuthCapsInfo caps_info;
   MAuthReply *reply;
@@ -370,9 +375,11 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
     EntityName entity_name;
 
     if (!s->auth_handler) {
-      s->global_id = assign_global_id(m);
-      if (!s->global_id)
-        goto done;
+      s->global_id = assign_global_id(m, paxos_writable);
+      if (!s->global_id) {
+        s->put();
+        return false;
+      }
 
       set<__u32> supported;
       
@@ -390,7 +397,7 @@ bool AuthMonitor::preprocess_auth(MAuth *m)
 	  ret = -EPERM;
 	else {
           ::encode(s->global_id, response_bl);
-	  proto = s->auth_handler->start_session(entity_name, indata, response_bl);
+	  proto = s->auth_handler->start_session(entity_name, s->global_id, indata, response_bl);
           if (proto == CEPH_AUTH_NONE) {
             s->caps.set_allow_all(true);
           }
