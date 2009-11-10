@@ -499,13 +499,15 @@ int FileStore::mount()
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
   if (r != 0) {
-    dout(0) << "mount lame, new TRANS_RESV_START ioctl is NOT supported" << dendl;
+    dout(0) << "mount btrfs TRANS_RESV_START ioctl NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     btrfs_trans_resv_start = false;
     r = apply_transaction(empty, 0);
   } else {
-    dout(0) << "mount yay, new TRANS_RESV_START ioctl is supported" << dendl;
+    dout(0) << "mount btrfs TRANS_RESV_START ioctl is supported" << dendl;
   }
   if (r == 0) {
+    dout(0) << "mount btrfs RESV_START ioctl is supported" << dendl;
+
     // do we have the shiny new CLONE_RANGE ioctl?
     btrfs = 2;
     int r = _do_clone_range(fsid_fd, -1, 0, 1);
@@ -516,7 +518,8 @@ int FileStore::mount()
       btrfs = 1;
     }
   } else {
-    dout(0) << "mount did NOT detect btrfs: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    dout(0) << "mount btrfs RESV_START ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = 0;
   }
 
