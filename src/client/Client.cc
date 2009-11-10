@@ -261,6 +261,8 @@ void Client::init()
 
   monclient->init();
   monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
+  monclient->sub_want("mdsmap", mdsmap->get_epoch());
+  monclient->sub_want_onetime("osdmap", 0);
 
   // do logger crap only once per process.
   static bool did_init = false;
@@ -2726,12 +2728,7 @@ int Client::mount()
   whoami = monclient->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
 
-  whoami = messenger->get_myname().num();
-
   objecter->init();
-
-  monclient->sub_want("mdsmap", mdsmap->get_epoch());
-  monclient->renew_subs();
 
   mounted = true;
 
