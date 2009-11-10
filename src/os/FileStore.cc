@@ -1254,7 +1254,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
     assert(ut.ops_completed == ops.size());
     r = 0;
   } else {
-    dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
+    if (i < ops.size())
+      dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
 
     char errbuf[100];
     dout(10) << "USERTRANS ioctl (" << ops.size() << " ops) r = " << r
