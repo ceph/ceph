@@ -56,6 +56,10 @@ streamtest_SOURCES = streamtest.cc
 streamtest_LDADD = libos.a libcommon.a -lpthread -lm
 bin_PROGRAMS += dumpjournal dupstore streamtest
 
+test_trans_SOURCES = test_trans.cc
+test_trans_LDADD = libos.a libcommon.a -lpthread -lm
+bin_PROGRAMS += test_trans
+
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
 csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm

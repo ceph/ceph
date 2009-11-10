@@ -1207,16 +1207,17 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
   }
 
   ut.num_ops = ops.size();
-  ut.ops_ptr = (unsigned long long)&ops[0];
+  ut.ops_ptr = (__u64)&ops[0];
   ut.num_fds = 2;
   ut.metadata_ops = ops.size();
   ut.flags = 0;
 
   dout(20) << "USERTRANS ioctl on " << ops.size() << " ops" << dendl;
   int r = ::ioctl(op_fd, BTRFS_IOC_USERTRANS, &ut);
-  dout(10) << "USERTRANS ioctl on " << ops.size() << " ops = " << r << dendl;
+  dout(10) << "USERTRANS ioctl on " << ops.size() << " r = " << r
+	   << ", completed " << ut.ops_completed << " ops" << dendl;
   if (r >= 0) {
-    for (unsigned i=0; i<ops.size(); i++)
+    for (unsigned i=0; i<ut.ops_completed; i++)
       dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
     assert(ut.ops_completed == ops.size());
     r = 0;
