@@ -562,12 +562,16 @@ int main(int argc, const char **argv, const char *envp[])
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
   common_init(args, "ceph", false, true);
-  char *fname;
 
   vec_to_argv(args, argc, argv);
 
   srand(getpid());
 
+  // default to 'admin' user
+  if (!g_conf.id || !g_conf.id[0])
+    g_conf.id = "admin";
+
+  char *fname;
   bufferlist indata;
   vector<const char*> nargs;
 
