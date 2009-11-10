@@ -383,9 +383,7 @@ int MDS::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD | CEPH_ENTITY_TYPE_MDS);
   monc->init();
 
-  monc->get_monmap();
-
-  monc->wait_authenticate(30.0);
+  monc->authenticate(30.0);
   monc->wait_auth_rotating(30.0);
 
   mds_lock.Lock();

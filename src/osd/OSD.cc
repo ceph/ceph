@@ -423,11 +423,10 @@ int OSD::init()
   monc->init();
 
   monc->sub_want("monmap", 0);
-  monc->renew_subs();  
 
   osd_lock.Unlock();
 
-  monc->wait_authenticate(30.0);
+  monc->authenticate(30.0);
   monc->wait_auth_rotating(30.0);
 
   osd_lock.Lock();
