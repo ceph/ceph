@@ -91,12 +91,6 @@ ostream& operator<<(ostream& out, btrfs_ioctl_usertrans_op& o)
   default:
     out << "unknown";
   }
-  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_SAVE) out << " FD_SAVE(" << o.fd_num << ")";
-  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG0) out << " FD_ARG0";
-  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG1) out << " FD_ARG1";
-  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG2) out << " FD_ARG2";
-  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG3) out << " FD_ARG3";
-  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG4) out << " FD_ARG4";
   return out;
 }
 
@@ -857,14 +851,16 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[0] = (unsigned long)fn;
 	  op.args[1] = O_WRONLY | O_CREAT;
 	  op.args[2] = 0644;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_SAVE;
-	  op.fd_num = 0;
+	  op.args[3] = 0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_CLOSE;
 	  op.args[0] = 0;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_NE;
 	  ops.push_back(op);
 	}
 	break;
@@ -891,8 +887,9 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[0] = (__s64)fn;
 	  op.args[1] = O_WRONLY|O_CREAT;
 	  op.args[2] = 0644;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_SAVE;
-	  op.fd_num = 0;
+	  op.args[3] = 0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  assert(len == bl.length());
@@ -905,7 +902,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	    op.args[1] = (__s64)(*it).c_str();
 	    op.args[2] = (__s64)(*it).length();
 	    op.args[3] = off;
-	    op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	    op.rval = op.args[2];
+	    op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_NE;
 	    ops.push_back(op);
 	    off += op.args[2];
 	  }
@@ -913,7 +911,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_CLOSE;
 	  op.args[0] = 0;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_NE;
 	  ops.push_back(op);
 	}
 	break;
@@ -928,6 +927,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.op = BTRFS_IOC_UT_OP_TRUNCATE;
 	  op.args[0] = (__s64)fn;
 	  op.args[1] = t->get_length();
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_NE;
 	  ops.push_back(op);
 	}
 	break;
@@ -942,6 +943,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_UNLINK;
 	  op.args[0] = (__u64)fn;
+	  op.rval = 0;
+	  //op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_NE;
 	  ops.push_back(op);
 	}
 	break;
@@ -969,6 +972,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[2] = (__u64)bl.c_str();
 	  op.args[3] = bl.length();
 	  op.args[4] = 0;	  
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_NE;
 	  ops.push_back(op);
 	}
 	break;
@@ -999,6 +1004,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	    op.args[2] = (__u64)p->second.c_str();
 	    op.args[3] = p->second.length();
 	    op.args[4] = 0;	  
+	    op.rval = 0;
+	    op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	    ops.push_back(op);
 	  }
 	}
@@ -1022,6 +1029,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.op = BTRFS_IOC_UT_OP_REMOVEXATTR;
 	  op.args[0] = (__u64)fn;
 	  op.args[1] = (__u64)aname;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 	}
 	break;
@@ -1044,6 +1053,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	    op.op = BTRFS_IOC_UT_OP_REMOVEXATTR;
 	    op.args[0] = (__u64)fn;
 	    op.args[1] = (__u64)aname;
+	    op.rval = 0;
+	    op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	    ops.push_back(op);
 	  }
 	}
@@ -1065,7 +1076,9 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.op = BTRFS_IOC_UT_OP_OPEN;
 	  op.args[0] = (__u64)fn;
 	  op.args[1] = O_RDONLY;
-	  op.fd_num = 0;
+	  op.args[2] = 0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  memset(&op, 0, sizeof(op));
@@ -1073,7 +1086,9 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[0] = (__u64)fn2;
 	  op.args[1] = O_WRONLY|O_CREAT|O_TRUNC;
 	  op.args[2] = 0644;
-	  op.fd_num = 1;
+	  op.args[3] = 1;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 	  
 	  memset(&op, 0, sizeof(op));
@@ -1082,17 +1097,18 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[1] = 0;
 	  op.args[2] = 0;
 	  op.args[3] = 0;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0 | BTRFS_IOC_UT_OP_FLAG_FD_ARG1;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_CLOSE;
 	  op.args[0] = 0;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  op.args[0] = 1;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
 	  ops.push_back(op);
 	}
 	break;
@@ -1113,7 +1129,9 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.op = BTRFS_IOC_UT_OP_OPEN;
 	  op.args[0] = (__u64)fn;
 	  op.args[1] = O_RDONLY;
-	  op.fd_num = 0;
+	  op.args[2] = 0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  memset(&op, 0, sizeof(op));
@@ -1121,7 +1139,9 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[0] = (__u64)fn2;
 	  op.args[1] = O_WRONLY|O_CREAT|O_TRUNC;
 	  op.args[2] = 0644;
-	  op.fd_num = 1;
+	  op.args[3] = 1;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 	  
 	  memset(&op, 0, sizeof(op));
@@ -1130,13 +1150,15 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.args[1] = 0;
 	  op.args[2] = t->get_length(); // offset
 	  op.args[3] = t->get_length(); // length
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0 | BTRFS_IOC_UT_OP_FLAG_FD_ARG1;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_CLOSE;
 	  op.args[0] = 0;
-	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 
 	  op.args[0] = 1;
@@ -1154,6 +1176,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.op = BTRFS_IOC_UT_OP_MKDIR;
 	  op.args[0] = (__u64)fn;
 	  op.args[1] = 0755;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 	}
 	break;
@@ -1167,6 +1191,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_RMDIR;
 	  op.args[0] = (__u64)fn;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 	}
 	break;
@@ -1187,6 +1213,8 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 	  op.op = BTRFS_IOC_UT_OP_LINK;
 	  op.args[0] = (__u64)fn;
 	  op.args[1] = (__u64)nfn;
+	  op.rval = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FAIL_ON_LT;
 	  ops.push_back(op);
 	}
 	break;
@@ -1210,17 +1238,29 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
   ut.ops_ptr = (__u64)&ops[0];
   ut.num_fds = 2;
   ut.metadata_ops = ops.size();
-  ut.flags = 0;
+  ut.flags = BTRFS_IOC_UT_FLAG_WEDGEONFAIL;
 
-  dout(20) << "USERTRANS ioctl on " << ops.size() << " ops" << dendl;
+  dout(20) << "USERTRANS ioctl (" << ops.size() << " ops)" << dendl;
+  for (unsigned i=0; i<ops.size(); i++)
+    dout(20) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " =? " << ops[i].rval << dendl;
+  
   int r = ::ioctl(op_fd, BTRFS_IOC_USERTRANS, &ut);
-  dout(10) << "USERTRANS ioctl on " << ops.size() << " r = " << r
-	   << ", completed " << ut.ops_completed << " ops" << dendl;
+  unsigned i;
+  for (i=0; i<ut.ops_completed; i++)
+    dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
   if (r >= 0) {
-    for (unsigned i=0; i<ut.ops_completed; i++)
-      dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
+    dout(10) << "USERTRANS ioctl (" << ops.size() << " ops) r = " << r
+	     << ", completed " << ut.ops_completed << " ops" << dendl;
     assert(ut.ops_completed == ops.size());
     r = 0;
+  } else {
+    dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
+
+    char errbuf[100];
+    dout(10) << "USERTRANS ioctl (" << ops.size() << " ops) r = " << r
+	     << " (" << strerror_r(errno, errbuf, sizeof(errbuf)) << ")"
+	     << ", completed " << ut.ops_completed << " ops" << dendl;
+    r = --errno;
   }
   
   if (start_sync)
