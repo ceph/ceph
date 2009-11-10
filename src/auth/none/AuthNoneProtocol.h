@@ -18,10 +18,8 @@
 #include "../Auth.h"
 
 struct AuthNoneAuthorizer : public AuthAuthorizer {
-  uint64_t global_id;
-
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
-  bool build_authorizer() {
+  bool build_authorizer(uint64_t global_id) {
     ::encode(*g_conf.entity_name, bl);
     ::encode(global_id, bl);
     return 0;
