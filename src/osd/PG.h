@@ -775,10 +775,10 @@ public:
 
   bool choose_acting(int newest_update_osd);
   bool recover_master_log(map< int, map<pg_t,Query> >& query_map);
-  void peer(ObjectStore::Transaction& t, 
+  void peer(ObjectStore::Transaction& t, list<Context*>& tfin,
 	    map< int, map<pg_t,Query> >& query_map,
 	    map<int, MOSDPGInfo*> *activator_map=0);
-  void activate(ObjectStore::Transaction& t, 
+  void activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		map<int, MOSDPGInfo*> *activator_map=0);
 
   virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
@@ -789,7 +789,7 @@ public:
 
   Context *finish_sync_event;
 
-  void finish_recovery();
+  void finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin);
   void _finish_recovery(Context *c);
   void cancel_recovery();
   void clear_recovery_state();

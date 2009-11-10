@@ -3443,7 +3443,11 @@ int ReplicatedPG::recover_primary(int max)
   uptodate_set.insert(osd->whoami);
   if (is_all_uptodate()) {
     dout(-7) << "recover_primary complete" << dendl;
-    finish_recovery();
+    ObjectStore::Transaction t;
+    C_Contexts *fin = new C_Contexts;
+    finish_recovery(t, fin->contexts);
+    int tr = osd->store->apply_transaction(t, fin);
+    assert(tr == 0);
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
   }
@@ -3492,7 +3496,11 @@ int ReplicatedPG::recover_replicas(int max)
   dout(-10) << "recover_replicas - nothing to do!" << dendl;
 
   if (is_all_uptodate()) {
-    finish_recovery();
+    ObjectStore::Transaction t;
+    C_Contexts *fin = new C_Contexts;
+    finish_recovery(t, fin->contexts);
+    int tr = osd->store->apply_transaction(t, fin);
+    assert(tr == 0);
   } else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
   }

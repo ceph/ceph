@@ -1749,6 +1749,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   assert(osd_lock.is_locked());
 
   ObjectStore::Transaction t;
+  C_Contexts *fin = new C_Contexts;
   
   logger->inc(l_osd_map);
 
@@ -1932,7 +1933,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     if (osdmap->is_up(whoami) &&
 	osdmap->get_addr(whoami) == messenger->get_myaddr()) {
       // yay!
-      activate_map(t);
+      activate_map(t, fin->contexts);
 
       // process waiters
       take_waiters(waiting_for_osdmap);
@@ -1970,7 +1971,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // superblock and commit
   write_superblock(t);
-  int r = store->apply_transaction(t);
+  int r = store->apply_transaction(t, fin);
   if (r) {
     char buf[80];
     dout(0) << "error writing map: " << r << " " << strerror_r(-r, buf, sizeof(buf)) << dendl;
@@ -2221,7 +2222,7 @@ void OSD::advance_map(ObjectStore::Transaction& t)
   }
 }
 
-void OSD::activate_map(ObjectStore::Transaction& t)
+void OSD::activate_map(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   assert(osd_lock.is_locked());
 
@@ -2249,7 +2250,7 @@ void OSD::activate_map(ObjectStore::Transaction& t)
       // i am (inactive) primary
       if (!pg->is_peering() || 
 	  (pg->need_up_thru && up_thru >= pg->info.history.same_acting_since))
-	pg->peer(t, query_map, &info_map);
+	pg->peer(t, tfin, query_map, &info_map);
     }
     else if (pg->is_stray() &&
 	     pg->get_primary() >= 0) {
@@ -2503,6 +2504,7 @@ void OSD::kick_pg_split_queue()
 
     // create and lock children
     ObjectStore::Transaction t;
+    C_Contexts *fin = new C_Contexts;
     map<pg_t,PG*> children;
     for (set<pg_t>::iterator q = p->second.begin();
 	 q != p->second.end();
@@ -2529,12 +2531,12 @@ void OSD::kick_pg_split_queue()
 
       wake_pg_waiters(pg->info.pgid);
 
-      pg->peer(t, query_map, &info_map);
+      pg->peer(t, fin->contexts, query_map, &info_map);
       pg->update_stats();
       pg->unlock();
       created++;
     }
-    int tr = store->apply_transaction(t);
+    int tr = store->apply_transaction(t, fin);
     assert(tr == 0);
 
     // remove from queue
@@ -2624,6 +2626,7 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
   map<int, MOSDPGInfo*> info_map;
 
   ObjectStore::Transaction t;
+  C_Contexts *fin = new C_Contexts;
   vector<PG*> to_peer;
 
   for (map<pg_t,MOSDPGCreate::create_rec>::iterator p = m->mkpg.begin();
@@ -2700,17 +2703,17 @@ void OSD::handle_pg_create(MOSDPGCreate *m)
     }
   }
 
-  int tr = store->apply_transaction(t);
-  assert(tr == 0);
-
   for (vector<PG*>::iterator p = to_peer.begin(); p != to_peer.end(); p++) {
     PG *pg = *p;
     pg->lock();
     wake_pg_waiters(pg->info.pgid);
-    pg->peer(t, query_map, &info_map);
+    pg->peer(t, fin->contexts, query_map, &info_map);
     pg->update_stats();
     pg->unlock();
   }
+
+  int tr = store->apply_transaction(t, fin);
+  assert(tr == 0);
 
   do_queries(query_map);
   do_infos(info_map);
@@ -2788,6 +2791,7 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
   if (!require_same_or_newer_map(m, m->get_epoch())) return;
 
   ObjectStore::Transaction t;
+  C_Contexts *fin = new C_Contexts;
   
   // look for unknown PGs i'm primary for
   map< int, map<pg_t,PG::Query> > query_map;
@@ -2878,13 +2882,13 @@ void OSD::handle_pg_notify(MOSDPGNotify *m)
 	pg->state_clear(PG_STATE_CLEAN);
       }
       
-      pg->peer(t, query_map, &info_map);
+      pg->peer(t, fin->contexts, query_map, &info_map);
       pg->update_stats();
     }
     pg->unlock();
   }
   
-  int tr = store->apply_transaction(t);
+  int tr = store->apply_transaction(t, fin);
   assert(tr == 0);
 
   do_queries(query_map);
@@ -2916,6 +2920,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 			   int& created)
 {
   ObjectStore::Transaction t;
+  C_Contexts *fin = new C_Contexts;
 
   PG *pg = 0;
   if (!_have_pg(info.pgid)) {
@@ -2972,7 +2977,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
 	
 	// peer
 	map< int, map<pg_t,PG::Query> > query_map;
-	pg->peer(t, query_map, info_map);
+	pg->peer(t, fin->contexts, query_map, info_map);
 	pg->update_stats();
 	do_queries(query_map);
       } else {
@@ -2986,7 +2991,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
       // i am REPLICA
       if (!pg->is_active()) {
 	pg->merge_log(t, info, log, missing, from);
-	pg->activate(t, info_map);
+	pg->activate(t, fin->contexts, info_map);
       } else {
 	// just update our stats
 	dout(10) << *pg << " writing updated stats" << dendl;
@@ -2996,7 +3001,7 @@ void OSD::_process_pg_info(epoch_t epoch, int from,
     }
   }
 
-  int tr = store->apply_transaction(t);
+  int tr = store->apply_transaction(t, fin);
   assert(tr == 0);
 
   pg->unlock();
@@ -3442,13 +3447,14 @@ void OSD::generate_backlog(PG *pg)
 
     map< int, map<pg_t,PG::Query> > query_map;    // peer -> PG -> get_summary_since
     ObjectStore::Transaction t;
-    pg->peer(t, query_map, NULL);
+    C_Contexts *fin = new C_Contexts;
+    pg->peer(t, fin->contexts, query_map, NULL);
     do_queries(query_map);
     if (pg->dirty_info)
       pg->write_info(t);
     if (pg->dirty_log)
       pg->write_log(t);
-    int tr = store->apply_transaction(t);
+    int tr = store->apply_transaction(t, fin);
     assert(tr == 0);
   }
 
@@ -3493,8 +3499,9 @@ void OSD::activate_pg(pg_t pgid, utime_t activate_at)
 	pg->get_role() == 0 &&
 	pg->replay_until == activate_at) {
       ObjectStore::Transaction t;
-      pg->activate(t);
-      int tr = store->apply_transaction(t);
+      C_Contexts *fin = new C_Contexts;
+      pg->activate(t, fin->contexts);
+      int tr = store->apply_transaction(t, fin);
       assert(tr == 0);
     }
     pg->unlock();
