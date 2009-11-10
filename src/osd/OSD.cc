@@ -1542,8 +1542,9 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 
   AuthCapsInfo caps_info;
   EntityName name;
+  uint64_t global_id;
 
-  isvalid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, caps_info);
+  isvalid = authorize_handler->verify_authorizer(authorizer_data, authorizer_reply, name, global_id, caps_info);
 
   dout(10) << "OSD::ms_verify_authorizer name=" << name << dendl;
 

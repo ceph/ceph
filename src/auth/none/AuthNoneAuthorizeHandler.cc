@@ -4,12 +4,13 @@
 
 
 bool AuthNoneAuthorizeHandler::verify_authorizer(bufferlist& authorizer_data, bufferlist& authorizer_reply,
-                                              EntityName& entity_name, AuthCapsInfo& caps_info)
+                                              EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info)
 {
   bufferlist::iterator iter = authorizer_data.begin();
 
   try {
     ::decode(entity_name, iter);
+    ::decode(global_id, iter);
   } catch (buffer::error *err) {
     return false;
   }
