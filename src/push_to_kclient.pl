@@ -24,8 +24,9 @@ for (@files) {
     system "cp -v $dir/$orig $kernel/$new";
 }
 
-print "pulling changed shared files from $dir to $kernel...\n";
+print "pulling changed shared files from $kernel to $dir...\n";
 system "cp -v $kernel/fs/ceph/ioctl.h $dir/src/client/ioctl.h";
+system "cp -v $kernel/fs/btrfs/ioctl.h $dir/src/os/btrfs_ioctl.h";
 
 print "done.\n";
 

@@ -48,58 +48,10 @@
 #define ATTR_MAX 80
 
 #ifndef __CYGWIN__
-#ifndef DARWIN
-# include <linux/ioctl.h>
-# define BTRFS_IOCTL_MAGIC 0x94
-struct btrfs_ioctl_trans_resv_start {
-	__u64 bytes, ops;
-};
-# define BTRFS_IOC_TRANS_RESV_START _IOW(BTRFS_IOCTL_MAGIC, 5,	\
-					struct btrfs_ioctl_trans_resv_start)
-# define BTRFS_IOC_TRANS_START  _IO(BTRFS_IOCTL_MAGIC, 6)
-# define BTRFS_IOC_TRANS_END    _IO(BTRFS_IOCTL_MAGIC, 7)
-# define BTRFS_IOC_SYNC         _IO(BTRFS_IOCTL_MAGIC, 8)
-# define BTRFS_IOC_CLONE        _IOW(BTRFS_IOCTL_MAGIC, 9, int)
-#define BTRFS_IOC_WAIT_FOR_SYNC _IO(BTRFS_IOCTL_MAGIC, 5)
-struct btrfs_ioctl_clone_range_args {
-  __s64 src_fd;
-  __u64 src_offset, src_length;
-  __u64 dest_offset;
-};
-
-#define BTRFS_IOC_CLONE_RANGE _IOW(BTRFS_IOCTL_MAGIC, 13, \
-				  struct btrfs_ioctl_clone_range_args)
-
-// alternate usertrans interface...
-#define BTRFS_IOC_USERTRANS_OPEN   1
-#define BTRFS_IOC_USERTRANS_CLOSE  2
-#define BTRFS_IOC_USERTRANS_SEEK   3
-#define BTRFS_IOC_USERTRANS_WRITE  5
-#define BTRFS_IOC_USERTRANS_UNLINK 6
-#define BTRFS_IOC_USERTRANS_MKDIR  7
-#define BTRFS_IOC_USERTRANS_RMDIR  8
-#define BTRFS_IOC_USERTRANS_TRUNCATE  9
-#define BTRFS_IOC_USERTRANS_SETXATTR 10
-#define BTRFS_IOC_USERTRANS_REMOVEXATTR  11
-#define BTRFS_IOC_USERTRANS_CLONE 12
-
-struct btrfs_ioctl_usertrans_op {
-	__u64 op;
-	__s64 args[5];
-	__s64 rval;
-};
-
-struct btrfs_ioctl_usertrans {
-	__u64 len;
-	struct btrfs_ioctl_usertrans_op ops[0];
-};
-
-#define BTRFS_IOC_USERTRANS  _IOW(BTRFS_IOCTL_MAGIC, 13,	\
-				  struct btrfs_ioctl_usertrans)
-
+# ifndef DARWIN
+#  include "btrfs_ioctl.h"
+# endif
 #endif
-#endif
-
 
 #include "config.h"
 
@@ -495,30 +447,33 @@ int FileStore::mount()
   // is this btrfs?
   Transaction empty;
   btrfs = 1;
-  btrfs_trans_resv_start = true;
+  btrfs_usertrans = true;
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
-  if (r != 0) {
-    dout(0) << "mount btrfs TRANS_RESV_START ioctl NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
-    btrfs_trans_resv_start = false;
-    r = apply_transaction(empty, 0);
+  if (r == 0) {
+    dout(0) << "mount btrfs USERTRANS ioctl is supported" << dendl;
   } else {
-    dout(0) << "mount btrfs TRANS_RESV_START ioctl is supported" << dendl;
+    dout(0) << "mount btrfs USERTRANS ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    btrfs_usertrans = false;
+    r = apply_transaction(empty, 0);
+    if (r == 0) {
+      dout(0) << "mount btrfs TRANS_START ioctl is supported" << dendl;
+    } else {
+      dout(0) << "mount btrfs TRANS_START ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+    }
   }
   if (r == 0) {
-    dout(0) << "mount btrfs RESV_START ioctl is supported" << dendl;
-
     // do we have the shiny new CLONE_RANGE ioctl?
     btrfs = 2;
     int r = _do_clone_range(fsid_fd, -1, 0, 1);
     if (r == -EBADF) {
-      dout(0) << "mount detected btrfs" << dendl;      
+      dout(0) << "mount btrfs CLONE_RANGE ioctl is supported" << dendl;
     } else {
-      dout(0) << "mount detected dingey old btrfs (r=" << r << " " << strerror_r(-r, buf, sizeof(buf)) << ")" << dendl;
+      dout(0) << "mount btrfs CLONE_RANGE ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
       btrfs = 1;
     }
+    dout(0) << "mount detected btrfs" << dendl;      
   } else {
-    dout(0) << "mount btrfs RESV_START ioctl is NOT supported: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = 0;
   }
@@ -562,40 +517,16 @@ unsigned FileStore::apply_transaction(Transaction &t,
 				      Context *onjournal,
 				      Context *ondisk)
 {
-  op_start();
-
-  // non-atomic implementation
-  int id = _transaction_start(t.get_num_bytes(), t.get_num_ops());
-  if (id < 0) {
-    op_journal_start();
-    op_finish();
-    return id;
-  }
-
-  int r = _apply_transaction(t);
-
-  _transaction_finish(id);
-
-  op_journal_start();
-  dout(10) << "op_seq is " << op_seq << dendl;
-  if (r >= 0) {
-    journal_transaction(t, onjournal, ondisk);
-
-    ::pwrite(op_fd, &op_seq, sizeof(op_seq), 0);
-
-  } else {
-    delete onjournal;
-    delete ondisk;
-  }
-
-  op_finish();
-  return r;
+  list<Transaction*> tls;
+  tls.push_back(&t);
+  return apply_transactions(tls, onjournal, ondisk);
 }
 
 unsigned FileStore::apply_transactions(list<Transaction*> &tls,
 				       Context *onjournal,
 				       Context *ondisk)
 {
+  int r = 0;
   op_start();
 
   __u64 bytes = 0, ops = 0;
@@ -606,23 +537,26 @@ unsigned FileStore::apply_transactions(list<Transaction*> &tls,
     ops += (*p)->get_num_ops();
   }
 
-  int id = _transaction_start(bytes, ops);
-  if (id < 0) {
-    op_journal_start();
-    op_finish();
-    return id;
+  if (btrfs_usertrans) {
+    r = _do_usertrans(tls);
+  } else {
+    int id = _transaction_start(bytes, ops);
+    if (id < 0) {
+      op_journal_start();
+      op_finish();
+      return id;
+    }
+    
+    for (list<Transaction*>::iterator p = tls.begin();
+	 p != tls.end();
+	 p++) {
+      r = _apply_transaction(**p);
+      if (r < 0)
+	break;
+    }
+    
+    _transaction_finish(id);
   }
-
-  int r = 0;
-  for (list<Transaction*>::iterator p = tls.begin();
-       p != tls.end();
-       p++) {
-    r = _apply_transaction(**p);
-    if (r < 0)
-      break;
-  }
-
-  _transaction_finish(id);
 
   op_journal_start();
   dout(10) << "op_seq is " << op_seq << dendl;
@@ -660,15 +594,7 @@ int FileStore::_transaction_start(__u64 bytes, __u64 ops)
     assert(0);
   }
 
-  int r;
-  if (btrfs_trans_resv_start) {
-    btrfs_ioctl_trans_resv_start resv;
-    resv.bytes = bytes;
-    resv.ops = ops;
-    r = ::ioctl(fd, BTRFS_IOC_TRANS_RESV_START, (unsigned long)&resv);
-  } else {
-    r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
-  }
+  int r = ::ioctl(fd, BTRFS_IOC_TRANS_START);
   if (r < 0) {
     derr(0) << "transaction_start got " << strerror_r(errno, buf, sizeof(buf))
  	    << " from btrfs ioctl" << dendl;    
@@ -848,424 +774,412 @@ unsigned FileStore::_apply_transaction(Transaction& t)
 
   /*********************************************/
 
-
-#if 0
-/*
- * compound btrfs usertrans thinger version
- */
-unsigned FileStore::apply_transaction(Transaction &t, Context *onsafe)
+int FileStore::_do_usertrans(list<Transaction*>& ls)
 {
-#ifdef DARWIN
-  return ObjectStore::apply_transaction(t, onsafe);
-#else
+  btrfs_ioctl_usertrans ut;
+  vector<btrfs_ioctl_usertrans_op> ops;
+  list<char*> str;
+  bool start_sync = false;
+  btrfs_ioctl_usertrans_op op;
+  
+  memset(&ut, 0, sizeof(ut));
 
-  // no btrfs transaction support?
-  // or, use trans start/end ioctls?
-  if (!btrfs || btrfs_trans_start_end) {
-    bufferlist tbl;
-    t.encode(tbl);  // apply_transaction modifies t; encode first
-    op_start();
-    int r = ObjectStore::apply_transaction(t);
-    dout(10) << "op_seq is " << op_seq << dendl;
-    if (r >= 0)
-      journal_transaction(tbl, onsafe);
-    else
-      delete onsafe;
-    op_finish();
-    return r;
-  }
+  for (list<Transaction*>::iterator p = ls.begin(); p != ls.end(); p++) {
+    Transaction *t = *p;
 
-  // create transaction
-  int len = t.get_btrfs_len();
-  dout(20) << "apply_transaction allocation btrfs usertrans len " << len << dendl;
-  btrfs_ioctl_usertrans *trans =
-    (btrfs_ioctl_usertrans *)new char[sizeof(*trans) + len * sizeof(trans->ops[0])];
+    while (t->have_op()) {
+      int opcode = t->get_op();
 
-  trans->len = 0;
+      memset(&op, 0, sizeof(op));
 
-  list<char *> str;
+      switch (opcode) {
+      case Transaction::OP_TOUCH:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(t->get_cid(), t->get_oid(), fn);
 
-  while (t.have_op()) {
-    int op = t.get_op();
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_OPEN;
+	  op.args[0] = (unsigned long)fn;
+	  op.args[1] = O_WRONLY | O_CREAT;
+	  op.args[2] = 0644;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_SAVE;
+	  op.fd_num = 0;
+	  ops.push_back(op);
 
-    switch (op) {
-
-    case Transaction::OP_WRITE:
-    case Transaction::OP_ZERO:   // write actual zeros.
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	__u64 offset, len;
-	t.get_length(offset);
-	t.get_length(len);
-	bufferlist bl;
-	if (op == Transaction::OP_WRITE)
-	  t.get_bl(bl);
-	else {
-	  bufferptr bp(len);
-	  bp.zero();
-	  bl.push_back(bp);
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_CLOSE;
+	  op.args[0] = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  ops.push_back(op);
 	}
-	
-	dout(10) << "write" << dendl;
-	//write(cid, oid, offset, len, bl, 0);
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_coname(cid, oid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_OPEN;
-	trans->ops[trans->len].args[0] = (__s64)fn;
-	trans->ops[trans->len].args[1] = O_WRONLY|O_CREAT;
-	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SEEK;
-	trans->ops[trans->len].args[0] = -1;
-	trans->ops[trans->len].args[1] = offset;
-	trans->ops[trans->len].args[2] = (__s64)&trans->ops[trans->len].args[4];  // whatever.
-	trans->ops[trans->len].args[3] = SEEK_SET;
-	trans->len++;
-	for (list<bufferptr>::const_iterator it = bl.buffers().begin();
-	     it != bl.buffers().end();
-	     it++) {
-	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_WRITE;
-	  trans->ops[trans->len].args[0] = -1;
-	  trans->ops[trans->len].args[1] = (__s64)(*it).c_str();
-	  trans->ops[trans->len].args[2] = (__s64)(*it).length();
-	  trans->len++;
+	break;
+
+      case Transaction::OP_WRITE:
+      case Transaction::OP_ZERO:   // write actual zeros.
+	{
+	  __u64 off = t->get_length();
+	  __u64 len = t->get_length();
+	  bufferlist bl;
+	  if (opcode == Transaction::OP_WRITE)
+	    bl = t->get_bl();
+	  else {
+	    bufferptr bp(len);
+	    bp.zero();
+	    bl.push_back(bp);
+	  }
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(t->get_cid(), t->get_oid(), fn);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_OPEN;
+	  op.args[0] = (__s64)fn;
+	  op.args[1] = O_WRONLY|O_CREAT;
+	  op.args[2] = 0644;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_SAVE;
+	  op.fd_num = 0;
+	  ops.push_back(op);
+
+	  assert(len == bl.length());
+	  for (list<bufferptr>::const_iterator it = bl.buffers().begin();
+	       it != bl.buffers().end();
+	       it++) {
+	    memset(&op, 0, sizeof(op));
+	    op.op = BTRFS_IOC_UT_OP_PWRITE;
+	    op.args[0] = 0;
+	    op.args[1] = (__s64)(*it).c_str();
+	    op.args[2] = (__s64)(*it).length();
+	    op.args[3] = off;
+	    op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	    ops.push_back(op);
+	    off += op.args[2];
+	  }
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_CLOSE;
+	  op.args[0] = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  ops.push_back(op);
 	}
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
-	trans->ops[trans->len].args[0] = -1;
-	trans->len++;
-      }
-      break;
+	break;
       
-    case Transaction::OP_TRIMCACHE:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	__u64 offset, len;
-	t.get_length(offset);
-	t.get_length(len);
-	trim_from_cache(cid, oid, offset, len);
-      }
-      break;
-      
-    case Transaction::OP_TRUNCATE:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	__u64 len;
-	t.get_length(len);
-	//truncate(cid, oid, len, 0);
-	
-	dout(10) << "truncate" << dendl;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_coname(cid, oid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_TRUNCATE;
-	trans->ops[trans->len].args[0] = (__s64)fn;
-	trans->ops[trans->len].args[1] = len;
-	trans->len++;
-      }
-      break;
-      
-    case Transaction::OP_REMOVE:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	//remove(cid, oid, 0);
-	
-	dout(10) << "remove " << cid << " " << oid << dendl;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_coname(cid, oid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_UNLINK;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	trans->len++;
-      }
-      break;
-      
-    case Transaction::OP_SETATTR:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	const char *attrname;
-	t.get_attrname(attrname);
-	bufferlist bl;
-	t.get_bl(bl);
-	//setattr(cid, oid, attrname, bl.c_str(), bl.length(), 0);
-	dout(10) << "setattr " << cid << " " << oid << dendl;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_coname(cid, oid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	char aname[ATTR_MAX];
-	sprintf(aname, "user.ceph.%s", attrname);
-	trans->ops[trans->len].args[1] = (__u64)aname;
-	trans->ops[trans->len].args[2] = (__u64)bl.c_str();
-	trans->ops[trans->len].args[3] = bl.length();
-	trans->ops[trans->len].args[4] = 0;	  
-	trans->len++;
-      }
-      break;
+      case Transaction::OP_TRUNCATE:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(t->get_cid(), t->get_oid(), fn);
 
-
-    case Transaction::OP_SETATTRS:
-    case Transaction::OP_COLL_SETATTRS:
-      {
-	// make note of old attrs
-	map<nstring,bufferptr> oldattrs;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-
-	if (op == Transaction::OP_SETATTRS) {
-	  coll_t cid;
-	  t.get_cid(cid);
-	  sobject_t oid;
-	  t.get_oid(oid);
-	  getattrs(cid, oid, oldattrs);
-	  get_coname(cid, oid, fn);
-	} else {
-	  coll_t cid;
-	  t.get_cid(cid);
-	  collection_getattrs(cid, oldattrs);
-	  get_cdir(cid, fn);
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_TRUNCATE;
+	  op.args[0] = (__s64)fn;
+	  op.args[1] = t->get_length();
+	  ops.push_back(op);
 	}
-	map<nstring,bufferptr> *pattrset;
-	t.get_pattrset(pattrset);
-	
-	for (map<nstring,bufferptr>::iterator p = pattrset->begin();
-	     p != pattrset->end();
-	     p++) {
-	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
-	  trans->ops[trans->len].args[0] = (__u64)fn;
+	break;
+      
+      case Transaction::OP_COLL_REMOVE:
+      case Transaction::OP_REMOVE:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(t->get_cid(), t->get_oid(), fn);
+	  
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_UNLINK;
+	  op.args[0] = (__u64)fn;
+	  ops.push_back(op);
+	}
+	break;
+      
+      case Transaction::OP_SETATTR:
+      case Transaction::OP_COLL_SETATTR:
+	{
+	  bufferlist bl = t->get_bl();
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+
+	  if (opcode == Transaction::OP_SETATTR)
+	    get_coname(t->get_cid(), t->get_oid(), fn);
+	  else
+	    get_cdir(t->get_cid(), fn);
+
 	  char *aname = new char[ATTR_MAX];
 	  str.push_back(aname);
-	  sprintf(aname, "user.ceph.%s", p->first.c_str());
-	  trans->ops[trans->len].args[1] = (__u64)aname;
-	  trans->ops[trans->len].args[2] = (__u64)p->second.c_str();
-	  trans->ops[trans->len].args[3] = p->second.length();
-	  trans->ops[trans->len].args[4] = 0;	  
-	  trans->len++;
-	  oldattrs.erase(p->first);
+	  sprintf(aname, "user.ceph.%s", aname);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_SETXATTR;
+	  op.args[0] = (__u64)fn;
+	  op.args[1] = (__u64)aname;
+	  op.args[2] = (__u64)bl.c_str();
+	  op.args[3] = bl.length();
+	  op.args[4] = 0;	  
+	  ops.push_back(op);
 	}
-	
-	// and remove any leftovers
-	for (map<nstring,bufferptr>::iterator p = oldattrs.begin();
-	     p != oldattrs.end();
-	     p++) {
-	  trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
-	  trans->ops[trans->len].args[0] = (__u64)fn;
-	  trans->ops[trans->len].args[1] = (__u64)p->first.c_str();
-	  trans->len++;
+	break;
+
+      case Transaction::OP_SETATTRS:
+      case Transaction::OP_COLL_SETATTRS:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  
+	  if (opcode == Transaction::OP_SETATTRS)
+	    get_coname(t->get_cid(), t->get_oid(), fn);
+	  else
+	    get_cdir(t->get_cid(), fn);
+	  
+	  const map<nstring,bufferptr>& aset = t->get_attrset();
+	  for (map<nstring,bufferptr>::const_iterator p = aset.begin();
+	       p != aset.end();
+	       p++) {
+	    char *aname = new char[ATTR_MAX];
+	    str.push_back(aname);
+	    sprintf(aname, "user.ceph.%s", p->first.c_str());
+
+	    memset(&op, 0, sizeof(op));
+	    op.op = BTRFS_IOC_UT_OP_SETXATTR;
+	    op.args[0] = (__u64)fn;
+	    op.args[1] = (__u64)aname;
+	    op.args[2] = (__u64)p->second.c_str();
+	    op.args[3] = p->second.length();
+	    op.args[4] = 0;	  
+	    ops.push_back(op);
+	  }
 	}
-      }
-      break;
+	break;
       
-    case Transaction::OP_RMATTR:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	const char *attrname;
-	t.get_attrname(attrname);
-	//rmattr(cid, oid, attrname, 0);
-	
-	dout(10) << "rmattr " << cid << " " << oid << dendl;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_coname(cid, oid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	trans->ops[trans->len].args[1] = (__u64)attrname;
-	trans->len++;
-      }
-      break;
+      case Transaction::OP_RMATTR:
+      case Transaction::OP_COLL_RMATTR:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  if (opcode == Transaction::OP_RMATTR)
+	    get_coname(t->get_cid(), t->get_oid(), fn);
+	  else
+	    get_cdir(t->get_cid(), fn);
+
+	  char *aname = new char[ATTR_MAX];
+	  str.push_back(aname);
+	  sprintf(aname, "user.ceph.%s", t->get_attrname());
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_REMOVEXATTR;
+	  op.args[0] = (__u64)fn;
+	  op.args[1] = (__u64)aname;
+	  ops.push_back(op);
+	}
+	break;
+
+      case Transaction::OP_RMATTRS:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(t->get_cid(), t->get_oid(), fn);
+
+	  map<nstring,bufferptr> aset;
+	  _getattrs(fn, aset);
+	  
+	  for (map<nstring,bufferptr>::iterator p = aset.begin(); p != aset.end(); p++) {
+	    char *aname = new char[ATTR_MAX];
+	    str.push_back(aname);
+	    sprintf(aname, "user.ceph.%s", p->first.c_str());
+
+	    memset(&op, 0, sizeof(op));
+	    op.op = BTRFS_IOC_UT_OP_REMOVEXATTR;
+	    op.args[0] = (__u64)fn;
+	    op.args[1] = (__u64)aname;
+	    ops.push_back(op);
+	  }
+	}
+	break;
       
-    case Transaction::OP_CLONE:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	sobject_t noid;
-	t.get_oid(noid);
-	clone(cid, oid, noid);
-	
-	dout(10) << "clone " << cid << " " << oid << dendl;
-	char *ofn = new char[PATH_MAX];
-	str.push_back(ofn);
-	char *nfn = new char[PATH_MAX];
-	str.push_back(nfn);
-	get_coname(cid, oid, ofn);
-	get_coname(cid, noid, nfn);
-	
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_OPEN;
-	trans->ops[trans->len].args[0] = (__u64)nfn;
-	trans->ops[trans->len].args[1] = O_WRONLY;
-	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_OPEN;
-	trans->ops[trans->len].args[0] = (__u64)ofn;
-	trans->ops[trans->len].args[1] = O_RDONLY;
-	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLONE;
-	trans->ops[trans->len].args[0] = -2;
-	trans->ops[trans->len].args[1] = -1;
-	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
-	trans->ops[trans->len].args[0] = -1;
-	trans->len++;
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_CLOSE;
-	trans->ops[trans->len].args[0] = -2;
-	trans->len++;
-      }
-      break;
+      case Transaction::OP_CLONE:
+	{
+	  coll_t cid = t->get_cid();
+
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(cid, t->get_oid(), fn);
+
+	  char *fn2 = new char[PATH_MAX];
+	  str.push_back(fn2);
+	  get_coname(cid, t->get_oid(), fn2);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_OPEN;
+	  op.args[0] = (__u64)fn;
+	  op.args[1] = O_RDONLY;
+	  op.fd_num = 0;
+	  ops.push_back(op);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_OPEN;
+	  op.args[0] = (__u64)fn2;
+	  op.args[1] = O_WRONLY|O_CREAT|O_TRUNC;
+	  op.args[2] = 0644;
+	  op.fd_num = 1;
+	  ops.push_back(op);
+	  
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_CLONERANGE;
+	  op.args[0] = 1;
+	  op.args[1] = 0;
+	  op.args[2] = 0;
+	  op.args[3] = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0 | BTRFS_IOC_UT_OP_FLAG_FD_ARG1;
+	  ops.push_back(op);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_CLOSE;
+	  op.args[0] = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  ops.push_back(op);
+
+	  op.args[0] = 1;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  ops.push_back(op);
+	}
+	break;
+
+      case Transaction::OP_CLONERANGE:
+	{
+	  coll_t cid = t->get_cid();
+
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(cid, t->get_oid(), fn);
+
+	  char *fn2 = new char[PATH_MAX];
+	  str.push_back(fn2);
+	  get_coname(cid, t->get_oid(), fn2);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_OPEN;
+	  op.args[0] = (__u64)fn;
+	  op.args[1] = O_RDONLY;
+	  op.fd_num = 0;
+	  ops.push_back(op);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_OPEN;
+	  op.args[0] = (__u64)fn2;
+	  op.args[1] = O_WRONLY|O_CREAT|O_TRUNC;
+	  op.args[2] = 0644;
+	  op.fd_num = 1;
+	  ops.push_back(op);
+	  
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_CLONERANGE;
+	  op.args[0] = 1;
+	  op.args[1] = 0;
+	  op.args[2] = t->get_length(); // offset
+	  op.args[3] = t->get_length(); // length
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0 | BTRFS_IOC_UT_OP_FLAG_FD_ARG1;
+	  ops.push_back(op);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_CLOSE;
+	  op.args[0] = 0;
+	  op.flags = BTRFS_IOC_UT_OP_FLAG_FD_ARG0;
+	  ops.push_back(op);
+
+	  op.args[0] = 1;
+	  ops.push_back(op);
+	}
+	break;
       
-    case Transaction::OP_MKCOLL:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	//create_collection(cid, 0);
-	dout(10) << "mkcoll " << cid << dendl;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_cdir(cid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_MKDIR;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	trans->ops[trans->len].args[1] = 0644;
- 	trans->len++;
-     }
-      break;
+      case Transaction::OP_MKCOLL:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_cdir(t->get_cid(), fn);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_MKDIR;
+	  op.args[0] = (__u64)fn;
+	  op.args[1] = 0755;
+	  ops.push_back(op);
+	}
+	break;
       
-    case Transaction::OP_RMCOLL:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	//destroy_collection(cid, 0);
-	dout(10) << "rmcoll " << cid << dendl;
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_cdir(cid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_RMDIR;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	trans->ops[trans->len].args[1] = 0644;
-	trans->len++;
-      }
-      break;
+      case Transaction::OP_RMCOLL:
+	{
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_cdir(t->get_cid(), fn);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_RMDIR;
+	  op.args[0] = (__u64)fn;
+	  ops.push_back(op);
+	}
+	break;
       
-    case Transaction::OP_COLL_ADD:
-      {
-	coll_t cid, ocid;
-	t.get_cid(cid);
-	t.get_cid(ocid);
-	sobject_t oid;
-	t.get_oid(oid);
-	collection_add(cid, ocid, oid, 0);
+      case Transaction::OP_COLL_ADD:
+	{
+	  const sobject_t& oid = t->get_oid();
+	  
+	  char *fn = new char[PATH_MAX];
+	  str.push_back(fn);
+	  get_coname(t->get_cid(), oid, fn);
+
+	  char *nfn = new char[PATH_MAX];
+	  str.push_back(nfn);
+	  get_coname(t->get_cid(), oid, nfn);
+
+	  memset(&op, 0, sizeof(op));
+	  op.op = BTRFS_IOC_UT_OP_LINK;
+	  op.args[0] = (__u64)fn;
+	  op.args[1] = (__u64)nfn;
+	  ops.push_back(op);
+	}
+	break;
+      
+      case Transaction::OP_STARTSYNC:
+	{
+	  start_sync = true;
+	}
+	break;
+
+      default:
+	cerr << "bad op " << opcode << std::endl;
 	assert(0);
       }
-      break;
-      
-    case Transaction::OP_COLL_REMOVE:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	sobject_t oid;
-	t.get_oid(oid);
-	collection_remove(cid, oid, 0);
-	assert(0);
-      }
-      break;
-      
-    case Transaction::OP_COLL_SETATTR:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	const char *attrname;
-	t.get_attrname(attrname);
-	bufferlist bl;
-	t.get_bl(bl);
-	dout(10) << "coll_setattr " << cid << dendl;
-	//collection_setattr(cid, attrname, bl.c_str(), bl.length(), 0);
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_cdir(cid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_SETXATTR;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	char aname[ATTR_MAX];
-	sprintf(aname, "user.ceph.%s", attrname);
-	trans->ops[trans->len].args[1] = (__u64)aname;
-	trans->ops[trans->len].args[2] = (__u64)bl.c_str();
-	trans->ops[trans->len].args[3] = bl.length();
-	trans->ops[trans->len].args[4] = 0;	  
- 	trans->len++;
-     }
-      break;
-      
-    case Transaction::OP_COLL_RMATTR:
-      {
-	coll_t cid;
-	t.get_cid(cid);
-	const char *attrname;
-	t.get_attrname(attrname);
-	dout(10) << "coll_rmattr " << cid << dendl;
-	//collection_rmattr(cid, attrname, 0);
-	char *fn = new char[PATH_MAX];
-	str.push_back(fn);
-	get_cdir(cid, fn);
-	trans->ops[trans->len].op = BTRFS_IOC_USERTRANS_REMOVEXATTR;
-	trans->ops[trans->len].args[0] = (__u64)fn;
-	trans->ops[trans->len].args[1] = (__u64)attrname;
- 	trans->len++;
-      }
-      break;
+    }    
 
-      
-    default:
-      cerr << "bad op " << op << std::endl;
-      assert(0);
-    }
-  }  
-
-  dout(20) << "apply_transaction final btrfs usertrans len is " << trans->len << dendl;
-  assert((int)trans->len <= (int)len);
-
-  // apply
-  int r = 0;
-  if (trans->len) {
-    r = ::ioctl(fsid_fd, BTRFS_IOC_USERTRANS, (unsigned long)trans);
-    if (r < 0) {
-      derr(0) << "apply_transaction_end got " << strerror_r(errno, buf, sizeof(buf))
-	      << " from btrfs usertrans ioctl" << dendl;    
-      r = -errno;
-    } 
+    ut.data_bytes += t->get_num_bytes();
   }
-  delete[] (char *)trans;
 
+  ut.num_ops = ops.size();
+  ut.ops_ptr = (unsigned long long)&ops[0];
+  ut.num_fds = 2;
+  ut.metadata_ops = ops.size();
+  ut.flags = 0;
+
+  dout(10) << "do_usertrans on " << ops.size() << " ops" << dendl;
+
+  int r = ::ioctl(op_fd, BTRFS_IOC_USERTRANS, &ut);
+  dout(10) << "do_usertrans on " << ops.size() << " ops = " << r << dendl;
+  if (r >= 0) {
+    assert(r == (int)ops.size());
+    for (unsigned i=0; i<ops.size(); i++)
+      dout(10) << "op " << i << " ret " << ops[i].rval << dendl;
+    r = 0;
+  }
+  
+  if (start_sync)
+    _start_sync();
+   
   while (!str.empty()) {
-    delete[] str.front();
+    delete str.front();
     str.pop_front();
-  }
-
-  if (r >= 0)
-    journal_transaction(t, onsafe);
-  else
-    delete onsafe;
+  }      
 
   return r;
-#endif /* DARWIN */
 }
-
-#endif 
 
 
 

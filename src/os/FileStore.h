@@ -38,7 +38,7 @@ class FileStore : public JournalingObjectStore {
   __u64 fsid;
   
   int btrfs;
-  bool btrfs_trans_resv_start;
+  bool btrfs_usertrans;
   bool btrfs_trans_start_end;
   int fsid_fd, op_fd;
 
@@ -81,7 +81,7 @@ class FileStore : public JournalingObjectStore {
  public:
   FileStore(const char *base, const char *jdev = 0) : 
     basedir(base), journalpath(jdev ? jdev:""),
-    btrfs(false), btrfs_trans_resv_start(false), btrfs_trans_start_end(false),
+    btrfs(false), btrfs_trans_start_end(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
@@ -99,6 +99,7 @@ class FileStore : public JournalingObjectStore {
   int _transaction_start(__u64 bytes, __u64 ops);
   void _transaction_finish(int id);
   unsigned _apply_transaction(Transaction& t);
+  int _do_usertrans(list<Transaction*>& tls);
 
   // ------------------
   // objects
