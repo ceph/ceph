@@ -50,6 +50,57 @@
 #ifndef __CYGWIN__
 # ifndef DARWIN
 #  include "btrfs_ioctl.h"
+
+ostream& operator<<(ostream& out, btrfs_ioctl_usertrans_op& o)
+{
+  switch (o.op) {
+  case BTRFS_IOC_UT_OP_OPEN:
+    out << "open " << (const char *)o.args[0] << " " << oct << "0" << o.args[1] << dec;
+    break;
+  case BTRFS_IOC_UT_OP_CLOSE:
+    out << "close " << o.args[0];
+    break;
+  case BTRFS_IOC_UT_OP_PWRITE:
+    out << "pwrite " << o.args[0] << " " << (void *)o.args[1] << " " << o.args[2] << "~" << o.args[3];
+    break;
+  case BTRFS_IOC_UT_OP_UNLINK:
+    out << "unlink " << (const char *)o.args[0];
+    break;
+  case BTRFS_IOC_UT_OP_LINK:
+    out << "link " << (const char *)o.args[0] << " " << (const char *)o.args[1];
+    break;
+  case BTRFS_IOC_UT_OP_MKDIR:
+    out << "mkdir " << (const char *)o.args[0];
+    break;
+  case BTRFS_IOC_UT_OP_RMDIR:
+    out << "rmdir " << (const char *)o.args[0];
+    break;
+  case BTRFS_IOC_UT_OP_TRUNCATE:
+    out << "truncate " << (const char*)o.args[0] << " " << o.args[1];
+    break;
+  case BTRFS_IOC_UT_OP_SETXATTR:
+    out << "setxattr " << (const char*)o.args[0] << " " << (const char *)o.args[1] << " "
+	<< (void *)o.args[2] << " " << o.args[3];
+    break;
+  case BTRFS_IOC_UT_OP_REMOVEXATTR:
+    out << "removexattr " << (const char*)o.args[0] << " " << (const char *)o.args[1];
+    break;
+  case BTRFS_IOC_UT_OP_CLONERANGE:
+    out << "clonerange " << o.args[0] << " " << o.args[1] << " " << o.args[2] << "~" << o.args[3];
+    break;
+  default:
+    out << "unknown";
+  }
+  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_SAVE) out << " FD_SAVE(" << o.fd_num << ")";
+  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG0) out << " FD_ARG0";
+  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG1) out << " FD_ARG1";
+  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG2) out << " FD_ARG2";
+  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG3) out << " FD_ARG3";
+  if (o.flags & BTRFS_IOC_UT_OP_FLAG_FD_ARG4) out << " FD_ARG4";
+  return out;
+}
+
+
 # endif
 #endif
 
@@ -406,24 +457,6 @@ int FileStore::mount()
 
   dout(10) << "mount fsid is " << fsid << dendl;
 
-  // install signal handler for SIGINT, SIGTERM
-  sig_lock.Lock();
-  if (!sig_installed) {
-    dout(10) << "mount installing signal handler to (somewhat) protect transactions" << dendl;
-    sigset_t trans_sigmask;
-    sigemptyset(&trans_sigmask);
-    sigaddset(&trans_sigmask, SIGINT);
-    sigaddset(&trans_sigmask, SIGTERM);
-
-    memset(&safe_sigint, 0, sizeof(safe_sigint));
-    safe_sigint.sa_sigaction = handle_signal;
-    safe_sigint.sa_mask = trans_sigmask;
-    sigaction(SIGTERM, &safe_sigint, &old_sigterm);
-    sigaction(SIGINT, &safe_sigint, &old_sigint);
-    sig_installed = true;
-  }
-  sig_lock.Unlock();
-
   // get epoch
   sprintf(fn, "%s/commit_op_seq", basedir.c_str());
   op_fd = ::open(fn, O_CREAT|O_RDWR, 0644);
@@ -476,6 +509,26 @@ int FileStore::mount()
   } else {
     dout(0) << "mount did NOT detect btrfs" << dendl;
     btrfs = 0;
+  }
+
+  // install signal handler for SIGINT, SIGTERM?
+  if (!btrfs_usertrans) {
+    sig_lock.Lock();
+    if (!sig_installed) {
+      dout(10) << "mount installing signal handler to (somewhat) protect transactions" << dendl;
+      sigset_t trans_sigmask;
+      sigemptyset(&trans_sigmask);
+      sigaddset(&trans_sigmask, SIGINT);
+      sigaddset(&trans_sigmask, SIGTERM);
+      
+      memset(&safe_sigint, 0, sizeof(safe_sigint));
+      safe_sigint.sa_sigaction = handle_signal;
+      safe_sigint.sa_mask = trans_sigmask;
+      sigaction(SIGTERM, &safe_sigint, &old_sigterm);
+      sigaction(SIGINT, &safe_sigint, &old_sigint);
+      sig_installed = true;
+    }
+    sig_lock.Unlock();
   }
 
   // all okay.
@@ -907,7 +960,7 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
 
 	  char *aname = new char[ATTR_MAX];
 	  str.push_back(aname);
-	  sprintf(aname, "user.ceph.%s", aname);
+	  sprintf(aname, "user.ceph.%s", t->get_attrname());
 
 	  memset(&op, 0, sizeof(op));
 	  op.op = BTRFS_IOC_UT_OP_SETXATTR;
@@ -1159,14 +1212,13 @@ int FileStore::_do_usertrans(list<Transaction*>& ls)
   ut.metadata_ops = ops.size();
   ut.flags = 0;
 
-  dout(10) << "do_usertrans on " << ops.size() << " ops" << dendl;
-
+  dout(20) << "USERTRANS ioctl on " << ops.size() << " ops" << dendl;
   int r = ::ioctl(op_fd, BTRFS_IOC_USERTRANS, &ut);
-  dout(10) << "do_usertrans on " << ops.size() << " ops = " << r << dendl;
+  dout(10) << "USERTRANS ioctl on " << ops.size() << " ops = " << r << dendl;
   if (r >= 0) {
-    assert(r == (int)ops.size());
     for (unsigned i=0; i<ops.size(); i++)
-      dout(10) << "op " << i << " ret " << ops[i].rval << dendl;
+      dout(10) << "USERTRANS ioctl op[" << i << "] " << ops[i] << " = " << ops[i].rval << dendl;
+    assert(ut.ops_completed == ops.size());
     r = 0;
   }
   
