@@ -38,6 +38,11 @@ bool KeyRing::load_master(const char *filename_list)
   get_str_list(k, ls);
   int fd = -1;
   for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
+    // subst in home dir?
+    size_t pos = p->find("~/");
+    if (pos != string::npos)
+      p->replace(pos, 1, getenv("HOME"));
+
     fd = open(p->c_str(), O_RDONLY);
     if (fd >= 0) {
       filename = *p;
