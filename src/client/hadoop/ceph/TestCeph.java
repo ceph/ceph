@@ -25,15 +25,18 @@ import java.io.IOException;
 import java.net.URI;
 import org.apache.hadoop.fs.FileSystemContractBaseTest;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 
 public class TestCeph extends FileSystemContractBaseTest {
 
 	@Override
     protected void setUp() throws IOException {
     Configuration conf = new Configuration();
-    CephFileSystem cephfs = new CephFileSystem();
-    CephFaker cephfaker = new CephFaker(conf, cephfs.LOG);
-    cephfs.initialize(URI.create("ceph://null"), conf, cephfaker);
+    CephFaker cephfaker = new CephFaker(conf, FileSystem.LOG);
+    CephFileSystem cephfs = new CephFileSystem(cephfaker, "ceph://null");
+    cephfs.initialize(URI.create("ceph://null"), conf);
 		fs = cephfs;
+		cephfs.setWorkingDirectory(new Path(getDefaultWorkingDirectory()));
 	}
 }

@@ -34,6 +34,7 @@ abstract class CephFS {
 	protected static final int TRACE = 5;
 	protected static final int NOLOG = 6;
 
+	protected static final int ENOTDIR = 20;
   protected static final int EEXIST = 17;
   protected static final int ENOENT = 2;
 
@@ -55,7 +56,7 @@ abstract class CephFS {
 	abstract protected boolean ceph_initializeClient(String arguments, int block_size);
 	
 	/*
-	 * Returns the current working directory.(absolute) as a String
+	 * Returns the current working directory (absolute) as a String
 	 */
 	abstract protected String ceph_getcwd();
 	/*
@@ -66,7 +67,7 @@ abstract class CephFS {
 	 */
 	abstract protected boolean ceph_setcwd(String path);
 	/*
-	 * Given a path to a directory, removes the directory.if empty.
+	 * Given a path to a directory, removes the directory if empty.
 	 * Inputs:
 	 *  jstring j_path: The path (relative or absolute) to the directory
 	 * Returns: true on successful delete; false otherwise
@@ -80,7 +81,7 @@ abstract class CephFS {
 	 */
   abstract protected boolean ceph_unlink(String path);
 	/*
-	 * Changes a given path name to a new name.
+	 * Changes a given path name to a new name, assuming new_path doesn't exist.
 	 * Inputs:
 	 *  jstring j_from: The path whose name you want to change.
 	 *  jstring j_to: The new name for the path.
@@ -168,7 +169,8 @@ abstract class CephFS {
 	 */
   abstract protected boolean ceph_kill_client();
 	/*
-	 * Get the statistics on a path returned in a custom format.
+	 * Get the statistics on a path returned in a custom format defined
+	 * in CephFileSystem.
 	 * Inputs:
 	 *  String path: The path to stat.
 	 *  Stat fill: The stat object to fill.

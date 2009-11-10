@@ -64,19 +64,19 @@ documentation.
 &lt;property&gt;
   &lt;name&gt;fs.ceph.debug&lt;/name&gt;
   &lt;value&gt;true&lt;/value&gt;
-  &lt;description&gt;If true, the Java-based code will print debugging information.&lt;/description&gt;
+  &lt;description&gt;If true, the Java-based code will print debugging information to standard error. This is useful if attempting to debug a Ceph issue as it puts both outputs in the same place.&lt;/description&gt;
 &lt;/property&gt;
 
 &lt;property&gt;
   &lt;name&gt;fs.ceph.clientDebug&lt;/name&gt;
   &lt;value&gt;1&lt;/value&gt;
-  &lt;description&gt;If non-zero, the Ceph client will print debugging information (a higher number=more debugging).&lt;/description&gt;
+  &lt;description&gt;If non-zero, the Ceph client will print debugging information to standard error (a higher number=more debugging).&lt;/description&gt;
 &lt;/property&gt;
 
 &lt;property&gt;
   &lt;name&gt;fs.ceph.messengerDebug&lt;/name&gt;
   &lt;value&gt;1&lt;/value&gt;
-  &lt;description&gt;If non-zero, the Ceph messenger will print debugging information (a higher number=more debugging)&lt;/description&gt;
+  &lt;description&gt;If non-zero, the Ceph messenger will print debugging information to standard error(a higher number=more debugging)&lt;/description&gt;
 &lt;/property&gt;
 
 &lt;property&gt;
@@ -88,7 +88,8 @@ documentation.
 &lt;property&gt;
   &lt;name&gt;fs.ceph.commandLine&lt;/name&gt;
   &lt;value&gt;a string&lt;/value&gt;
-  &lt;description&gt;If you prefer, you may enter any of Ceph's command-line configuration here and it will get passed to the C client. Note that any filled-in configuration options will override what you put here.&lt;/description&gt;
+  &lt;description&gt;If you prefer, you may enter any of Ceph's command-line configuration here and it will get passed to the C client. Note that any filled-in configuration options will override what you put here. <br>
+By default, Ceph performs writes across the network rather than locally. To force local writes, add "set_local_pg" in this property.&lt;/description&gt;
 &lt;/property&gt;
 </pre>
   

@@ -24,7 +24,7 @@
 
 
 
-#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v024"
+#define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
 #define CEPH_OSD_NEARFULL_RATIO .8
 #define CEPH_OSD_FULL_RATIO .95
@@ -109,28 +109,23 @@ enum {
 
 // placement group id
 struct pg_t {
-  union ceph_pg u;
+  struct ceph_pg v;
 
-  pg_t() { u.pg64 = 0; }
-  pg_t(const pg_t& o) { u.pg64 = o.u.pg64; }
+  pg_t() { memset(&v, 0, sizeof(v)); }
+  pg_t(const pg_t& o) { v = o.v; }
   pg_t(ps_t seed, int pool, int pref) {
-    u.pg64 = 0;
-    u.pg.ps = seed;
-    u.pg.pool = pool;
-    u.pg.preferred = pref;   // hack: avoid negative.
-    assert(sizeof(u.pg) == sizeof(u.pg64));
+    v.ps = seed;
+    v.pool = pool;
+    v.preferred = pref;   // hack: avoid negative.
   }
-  pg_t(uint64_t v) { u.pg64 = v; }
   pg_t(const ceph_pg& cpg) {
-    u = cpg;
+    v = cpg;
   }
 
-  ps_t ps() { return u.pg.ps; }
-  int pool() { return u.pg.pool; }
-  int preferred() { return u.pg.preferred; }   // hack: avoid negative.
+  ps_t ps() const { return v.ps; }
+  int pool() const { return v.pool; }
+  int preferred() const { return (__s16)v.preferred; }   // hack: avoid negative.
   
-  operator uint64_t() const { return u.pg64; }
-
   /*coll_t to_coll() const {
     return coll_t(u.pg64, 0); 
   }
@@ -151,22 +146,52 @@ struct pg_t {
     int r = sscanf(s, "%d.%xp%d", &pool, &ps, &preferred);
     if (r < 2)
       return false;
-    u.pg.pool = pool;
-    u.pg.ps = ps;
+    v.pool = pool;
+    v.ps = ps;
     if (r == 3)
-      u.pg.preferred = preferred;
+      v.preferred = preferred;
     else
-      u.pg.preferred = -1;
+      v.preferred = -1;
     return true;
   }
 
 } __attribute__ ((packed));
 
-inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.u.pg64, bl); }
+inline bool operator<(const pg_t& l, const pg_t& r) {
+  return l.pool() < r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() < r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() < r.ps()))));
+}
+inline bool operator<=(const pg_t& l, const pg_t& r) {
+  return l.pool() < r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() < r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() <= r.ps()))));
+}
+inline bool operator==(const pg_t& l, const pg_t& r) {
+  return l.pool() == r.pool() &&
+    l.preferred() == r.preferred() &&
+    l.ps() == r.ps();
+}
+inline bool operator!=(const pg_t& l, const pg_t& r) {
+  return l.pool() != r.pool() ||
+    l.preferred() != r.preferred() ||
+    l.ps() != r.ps();
+}
+inline bool operator>(const pg_t& l, const pg_t& r) {
+  return l.pool() > r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() > r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() > r.ps()))));
+}
+inline bool operator>=(const pg_t& l, const pg_t& r) {
+  return l.pool() > r.pool() ||
+    (l.pool() == r.pool() && (l.preferred() > r.preferred() ||
+			      (l.preferred() == r.preferred() && (l.ps() >= r.ps()))));
+}
+
+
+inline void encode(pg_t pgid, bufferlist& bl) { encode_raw(pgid.v, bl); }
 inline void decode(pg_t &pgid, bufferlist::iterator& p) { 
-  __u64 v;
-  decode_raw(v, p); 
-  pgid.u.pg64 = v;
+  decode_raw(pgid.v, p); 
 }
 
 
@@ -187,8 +212,8 @@ namespace __gnu_cxx {
   {
     size_t operator()( const pg_t& x ) const
     {
-      static rjhash<uint64_t> H;
-      return H(x);
+      static hash<uint32_t> H;
+      return H(x.pool() ^ x.ps() ^ x.preferred());
     }
   };
 }
@@ -200,7 +225,8 @@ struct coll_t {
   pg_t pgid;
   snapid_t snap;
 
-  coll_t(__u64 p=0, snapid_t s=0) : pgid(p), snap(s) {}
+  coll_t() : snap(0) {}
+  coll_t(pg_t p, snapid_t s) : pgid(p), snap(s) {}
   
   static coll_t build_pg_coll(pg_t p) {
     return coll_t(p, CEPH_NOSNAP);
@@ -275,13 +301,15 @@ inline bool operator>=(const coll_t& l, const coll_t& r) {
 namespace __gnu_cxx {
   template<> struct hash<coll_t> {
     size_t operator()(const coll_t &c) const { 
-      static rjhash<uint32_t> H;
+      static hash<pg_t> H;
       static rjhash<uint64_t> I;
       return H(c.pgid) ^ I(c.snap);
     }
   };
 }
 
+
+const coll_t meta_coll;
 
 
 
@@ -539,6 +567,10 @@ struct pg_pool_t {
   unsigned get_type() const { return v.type; }
   unsigned get_size() const { return v.size; }
   int get_crush_ruleset() const { return v.crush_ruleset; }
+  int get_object_hash() const { return v.object_hash; }
+  const char *get_object_hash_name() const {
+    return ceph_str_hash_name(get_object_hash());
+  }
   epoch_t get_last_change() const { return v.last_change; }
   epoch_t get_snap_epoch() const { return v.snap_epoch; }
   snapid_t get_snap_seq() const { return snapid_t(v.snap_seq); }
@@ -628,9 +660,9 @@ struct pg_pool_t {
    */
   pg_t raw_pg_to_pg(pg_t pg) const {
     if (pg.preferred() >= 0 && v.lpg_num)
-      pg.u.pg.ps = ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask);
+      pg.v.ps = ceph_stable_mod(pg.ps(), v.lpg_num, lpg_num_mask);
     else
-      pg.u.pg.ps = ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask);
+      pg.v.ps = ceph_stable_mod(pg.ps(), v.pg_num, pg_num_mask);
     return pg;
   }
   
@@ -641,7 +673,7 @@ struct pg_pool_t {
    */
   ps_t raw_pg_to_pps(pg_t pg) const {
     if (pg.preferred() >= 0 && v.lpgp_num)
-      return ceph_stable_mod(pg.ps(), v.lpgp_num, lpgp_num_mask + pg.pool());
+      return ceph_stable_mod(pg.ps(), v.lpgp_num, lpgp_num_mask) + pg.pool();
     else
       return ceph_stable_mod(pg.ps(), v.pgp_num, pgp_num_mask) + pg.pool();
   }
@@ -670,6 +702,7 @@ inline ostream& operator<<(ostream& out, const pg_pool_t& p) {
   }
   out << " pg_size " << p.get_size()
       << " crush_ruleset " << p.get_crush_ruleset()
+      << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
       << " lpg_num " << p.get_lpg_num()

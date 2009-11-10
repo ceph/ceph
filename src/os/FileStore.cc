@@ -706,6 +706,7 @@ void FileStore::_transaction_finish(int fd)
   ::unlink(fn);
   
   dout(10) << "transaction_finish " << fd << dendl;
+  ::ioctl(fd, BTRFS_IOC_TRANS_END);
   ::close(fd);
 
   sig_lock.Lock();

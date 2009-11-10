@@ -16,22 +16,22 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
 extern int crush_add_bucket(struct crush_map *map,
 			    int bucketno,
 			    struct crush_bucket *bucket);
-struct crush_bucket *crush_make_bucket(int alg, int type, int size, int *items, int *weights);
+struct crush_bucket *crush_make_bucket(int alg, int hash, int type, int size, int *items, int *weights);
 
 struct crush_bucket_uniform *
-crush_make_uniform_bucket(int type, int size,
+crush_make_uniform_bucket(int hash, int type, int size,
 			  int *items,
 			  int item_weight);
 struct crush_bucket_list*
-crush_make_list_bucket(int type, int size,
+crush_make_list_bucket(int hash, int type, int size,
 		       int *items,
 		       int *weights);
 struct crush_bucket_tree*
-crush_make_tree_bucket(int type, int size,
+crush_make_tree_bucket(int hash, int type, int size,
 		       int *items,    /* in leaf order */
 		       int *weights);
 struct crush_bucket_straw *
-crush_make_straw_bucket(int type, int size,
+crush_make_straw_bucket(int hash, int type, int size,
 			int *items,
 			int *weights);
 

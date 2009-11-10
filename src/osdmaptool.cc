@@ -62,6 +62,7 @@ int main(int argc, const char **argv)
   const char *import_crush = 0;
   list<entity_addr_t> add, rm;
   const char *test_map_pg = 0;
+  const char *test_map_object = 0;
   bool test_crush = false;
 
   FOR_EACH_ARG(args) {
@@ -84,6 +85,8 @@ int main(int argc, const char **argv)
       CONF_SAFE_SET_ARG_VAL(&import_crush, OPT_STR);
     } else if (CONF_ARG_EQ("test_map_pg", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&test_map_pg, OPT_STR);
+    } else if (CONF_ARG_EQ("test_map_object", '\0')) {
+      CONF_SAFE_SET_ARG_VAL(&test_map_object, OPT_STR);
     } else if (CONF_ARG_EQ("test_crush", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&test_crush, OPT_BOOL);
     } else if (!fn)
@@ -160,6 +163,20 @@ int main(int argc, const char **argv)
     cout << me << ": exported crush map to " << export_crush << std::endl;
   }  
 
+  if (test_map_object) {
+    object_t oid(test_map_object);
+    ceph_object_layout ol = osdmap.make_object_layout(oid, 0);
+    
+    pg_t pgid;
+    pgid.v = ol.ol_pgid;
+
+    vector<int> acting;
+    osdmap.pg_to_acting_osds(pgid, acting);
+    cout << " object '" << oid
+	 << "' -> " << pgid
+	 << " -> " << acting
+	 << std::endl;
+  }  
   if (test_map_pg) {
     pg_t pgid;
     if (pgid.parse(test_map_pg) < 0) {
@@ -204,7 +221,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (!print && !modified && !export_crush && !import_crush && !test_map_pg) {
+  if (!print && !modified && !export_crush && !import_crush && !test_map_pg && !test_map_object) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }

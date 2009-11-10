@@ -1,3 +1,4 @@
 usr/bin/radosgw
 usr/bin/radosgw_admin
-usr/share/lintian/overrides/radosgw
+usr/share/man/man8/radosgw.8
+usr/share/man/man8/radosgw_admin.8

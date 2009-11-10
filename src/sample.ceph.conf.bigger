@@ -67,7 +67,7 @@
 	debug journal = 20
 	log dir = /data/cosd$id
 	osd data = /mnt/osd$id
-	btrfs options = "user_xattr,flushoncommit,usertrans"
+	btrfs options = "flushoncommit,wedgeabortedtrans"
 ;	user = root
 
 ;	osd journal = /mnt/osd$id/journal

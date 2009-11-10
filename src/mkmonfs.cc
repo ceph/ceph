@@ -21,6 +21,7 @@
 #include "mds/MDSMap.h"
 #include "osd/OSDMap.h"
 #include "mon/PGMap.h"
+#include "common/common_init.h"
 
 void usage() 
 {
@@ -38,6 +39,7 @@ int main(int argc, const char **argv)
 
   bool clobber = false;
   const char *fsdir = g_conf.mon_data;
+
   int whoami = -1;
   const char *monmapfn = g_conf.monmap;
   const char *osdmapfn = 0;
@@ -50,18 +52,17 @@ int main(int argc, const char **argv)
     } else if (CONF_ARG_EQ("osdmap", '\0')) {
       CONF_SAFE_SET_ARG_VAL(&osdmapfn, OPT_STR);
     } else {
-  cerr << "2 " <<  args[i] << std::endl;
       usage();
     }
   }
-  if (!fsdir || !monmapfn || whoami < 0)
+  if (!g_conf.mon_data || !monmapfn || whoami < 0)
     usage();
 
   if (!clobber) {
     // make sure it doesn't exist
     struct stat st;
-    if (::lstat(fsdir, &st) == 0) {
-      cerr << "monfs dir " << fsdir << " already exists; remove it first" << std::endl;
+    if (::lstat(g_conf.mon_data, &st) == 0) {
+      cerr << "monfs dir " << g_conf.mon_data << " already exists; remove it first" << std::endl;
       usage();
     }
   }
@@ -79,10 +80,10 @@ int main(int argc, const char **argv)
     exit(1);
 
   // go
-  MonitorStore store(fsdir);
+  MonitorStore store(g_conf.mon_data);
   Monitor mon(whoami, &store, 0, &monmap);
   mon.mkfs(osdmapbl);
-  cout << argv[0] << ": created monfs at " << fsdir 
+  cout << argv[0] << ": created monfs at " << g_conf.mon_data 
        << " for mon" << whoami
        << std::endl;
   return 0;

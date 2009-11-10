@@ -45,7 +45,7 @@ signal_daemon() {
     signal=$4
     action=$5
     [ -z "$action" ] && action="Stopping"
-    echo -n "$action ceph $name on $host..."
+    echo -n "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ]; then
         pid=`cat $pidfile`
         if [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; then
@@ -64,7 +64,7 @@ stop_daemon() {
     signal=$4
     action=$5
     [ -z "$action" ] && action="Stopping"
-    echo -n "$action ceph $name on $host..."
+    echo -n "$action Ceph $name on $host..."
     do_cmd "while [ 1 ]; do 
 	[ -e $pidfile ] || break
 	pid=\`cat $pidfile\`
@@ -180,7 +180,7 @@ for name in $what; do
 	first_dev=`echo $btrfs_devs | cut '-d ' -f 1`
     fi
 
-    get_conf pid_file "" "pid file"
+    get_conf pid_file "/var/run/ceph/$type.$id.pid" "pid file"
 
     case "$command" in
 	start)
@@ -199,14 +199,15 @@ for name in $what; do
 
 	    cmd="$wrap $cmd $runmode"
 	    
-	    echo Starting ceph $name on $host...
 	    if [ $dobtrfs -eq 1 ] && [ -n "$btrfs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
 		get_conf btrfs_opt "flushoncommit" "btrfs options"
 		[ -n "$btrfs_opt" ] && btrfs_opt="-o $btrfs_opt"
 		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
+		echo Mounting Btrfs on $host:$btrfs_path
 		do_root_cmd "modprobe btrfs ; btrfsctl -a ; egrep -q '^[^ ]+ $btrfs_path' /proc/mounts || mount -t btrfs $btrfs_opt $first_dev $btrfs_path"
 	    fi
+	    echo Starting Ceph $name on $host...
 	    get_conf pre_start_eval "" "pre start eval"
 	    [ -n "$pre_start_eval" ] && $pre_start_eval
 	    get_conf pre_start "" "pre start command"

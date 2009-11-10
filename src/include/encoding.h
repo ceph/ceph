@@ -142,38 +142,6 @@ inline void decode(triple<A,B,C> &t, bufferlist::iterator &p)
 }
 
 
-// list (pointers)
-/*template<class T>
-inline void encode(const std::list<T*>& ls, bufferlist& bl)
-{
-  // should i pre- or post- count?
-  if (!ls.empty()) {
-    unsigned pos = bl.length();
-    __u32 n = 0;
-    encode(n, bl);
-    for (typename std::list<T*>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
-      n++;
-      encode(**p, bl);
-    }
-    bl.copy_in(pos, sizeof(n), (char*)&n);
-  } else {
-    __u32 n = ls.size();    // FIXME: this is slow on a list.
-    encode(n, bl);
-    for (typename std::list<T*>::const_iterator p = ls.begin(); p != ls.end(); ++p)
-      encode(**p, bl);
-  }
-}
-template<class T>
-inline void decode(std::list<T*>& ls, bufferlist::iterator& p)
-{
-  __u32 n;
-  decode(n, p);
-  ls.clear();
-  while (n--)
-    ls.push_back(new T(p));
-    }*/
-
-
 // list
 template<class T>
 inline void encode(const std::list<T>& ls, bufferlist& bl)
@@ -181,13 +149,15 @@ inline void encode(const std::list<T>& ls, bufferlist& bl)
   // should i pre- or post- count?
   if (!ls.empty()) {
     unsigned pos = bl.length();
-    __u32 n = 0;
+    unsigned n = 0;
     encode(n, bl);
     for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
       n++;
       encode(*p, bl);
     }
-    bl.copy_in(pos, sizeof(n), (char*)&n);
+    __le32 en;
+    en = n;
+    bl.copy_in(pos, sizeof(en), (char*)&en);
   } else {
     __u32 n = ls.size();    // FIXME: this is slow on a list.
     encode(n, bl);

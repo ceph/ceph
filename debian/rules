@@ -42,9 +42,6 @@ install: build
 	mkdir -p etc/ceph
 	cp src/sample.ceph.conf etc/ceph
 
-	mkdir -p usr/share/lintian/overrides
-	cp debian/radosgw.lintian-overrides usr/share/lintian/overrides/radosgw
-
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
@@ -70,7 +67,10 @@ binary-arch: build install
 #	dh_installinfo
 	dh_installman
 	dh_link
-#	dh_strip
+
+	dh_strip -k
+	debian/move_dbg_files.sh
+
 	dh_compress
 	dh_fixperms
 #	dh_perl

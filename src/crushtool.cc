@@ -113,6 +113,7 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 
   int id = 0;  // none, yet!
   int alg = -1;
+  int hash = -1;
   set<int> used_items;
   int size = 0;
   
@@ -136,6 +137,13 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
 	cerr << "unknown bucket alg '" << a << "'" << std::endl;
 	exit(1);
       }
+    }
+    else if (tag == "hash") {
+      string a = string_node(sub->children[1]);
+      if (a == "rjenkins1")
+	hash = CRUSH_HASH_RJENKINS1;
+      else
+	hash = atoi(a.c_str());
     }
     else if (tag == "item") {
       // first, just determine which item pos's are already used
@@ -214,7 +222,7 @@ void parse_bucket(iter_t const& i, CrushWrapper &crush)
   item_id[name] = id;
   item_weight[id] = bucketweight;
   
-  crush.add_bucket(id, alg, type, size, &items[0], &weights[0]);
+  crush.add_bucket(id, alg, hash, type, size, &items[0], &weights[0]);
   crush.set_item_name(id, name.c_str());
 }
 
@@ -531,6 +539,9 @@ int decompile_crush(CrushWrapper &crush, ostream &out)
     }
     out << "\n";
 
+    int hash = crush.get_bucket_hash(i);
+    out << "\thash " << hash << "\t# " << crush_hash_name(hash) << "\n";
+
     for (int j=0; j<n; j++) {
       int item = crush.get_bucket_item(i, j);
       int w = crush.get_bucket_item_weight(i, j);
@@ -793,7 +804,7 @@ int main(int argc, const char **argv)
 	  dout(0) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
-	crush_bucket *b = crush_make_bucket(buckettype, type, j, items, weights);
+	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
 	int id = crush_add_bucket(crush.crush, 0, b);
 	rootid = id;
 

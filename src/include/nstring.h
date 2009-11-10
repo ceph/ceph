@@ -9,6 +9,8 @@ typedef tstring nstring;
 typedef cstring nstring;
 #endif
 
+#include "ceph_hash.h"
+
 static inline bool operator==(const nstring &l, const char *s) {
   return strcmp(l.c_str(), s) == 0;
 }
@@ -43,7 +45,7 @@ namespace __gnu_cxx {
     {
       //static hash<const char*> H;
       //return H(x.c_str());
-      return ceph_full_name_hash(x.c_str(), x.length());
+      return ceph_str_hash_linux(x.c_str(), x.length());
     }
   };
 }

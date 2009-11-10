@@ -44,9 +44,13 @@ v0.17
 - osd: fix pg parsing, restarts on larger clusters
 
 v0.18
+- basic ENOSPC handling
+- big endian fixes (required protocol/disk format change)
+
+
+- mount btrfs by UUID?
 
 - qa
-- basic ENOSPC handling
 - osd: rebuild pg log
 - osd: handle storage errors
 
@@ -59,19 +63,22 @@ v0.18
 pending wire, disk format changes
 
 bugs
+- kclient cap reconnect on mds restart
+- zeros in pg log, followed by valid data.
 - mislinked directory?
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
+
+greg
+- osd: use client session to control osdmaps to clients (auth branch)
+- osd: error handling
+- uclient: readdir from cache
+- mds: basic auth checks
 
 later
 - document on-wire protocol
 - authentication
 - client reconnect after long eviction; and slow delayed reconnect
-- ENOSPC
-  - space reservation in ObjectStore, redeemed by Transactions?
-  - reserved as PG goes active; reservation canceled when pg goes inactive
-  - something similar during recovery
-  - ?
 - repair
 - mds security enforcement
 - client, user authentication
@@ -104,8 +111,14 @@ repair
 - mds scrubbing
 
 kclient
-- add cap to release if we get fouled up in fill_inode et al?
+- ENOMEM
+  - message pools
+  - sockets?  (this can actual generates a lockdep warning :/)
 - use page lists for large messages?  e.g. reconnect
+- fs-portable file layout virtual xattr (see Andreas' -fsdevel thread)
+- statlite
+- audit/combine/rework/whatever invalidate, writeback threads and associated invariants
+- add cap to release if we get fouled up in fill_inode et al?
 - make caps reservations per-client
 - fix up ESTALE handling
 - don't retry on ENOMEM on non-nofail requests in kick_requests
@@ -134,9 +147,10 @@ btrfs
 - ioctl to pull out data csum?
 
 osd
+- gracefully handle ENOSPC
+- gracefully handle EIO?
 - client session object
   - track client's osdmap; and only share latest osdmap with them once!
-- clean up monitor session handling
 - what to do with lost objects.. continue peering?
 - segregate backlog from log ondisk?
 - preserve pg logs on disk for longer period
@@ -213,7 +227,7 @@ cas
    A framework for analyzing and improving content-based chunking algorithms.
    Tech. Rep. HPL-2005-30(R.1), Hewlett Packard Laboratories, Palo Alto, 2005. 
 
-s3
+radosgw
  - handle gracefully location related requests
  - logging control (?)
  - parse date/time better

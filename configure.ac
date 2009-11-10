@@ -30,8 +30,8 @@ AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 
 # Checks for libraries.
-AC_CHECK_LIB([m], [pow])
-AC_CHECK_LIB([pthread], [pthread_create])
+AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
+AC_CHECK_LIB([pthread], [pthread_create], [true], AC_MSG_FAILURE([libpthread not found]))
 
 # debug crap?
 AC_ARG_WITH([debug],
@@ -114,7 +114,7 @@ AS_IF([test "x$with_ccgnu" == xyes],
                  AC_MSG_FAILURE(
                    [--with-ccgnu was given but test failed])
                fi
-             ], [-ldl -lpthread])])
+             ], [-ldl])])
 AM_CONDITIONAL(WITH_CCGNU, test "WITH_CCGNU" = "1")
 
 # newsyn?  requires mpi.

@@ -15,7 +15,10 @@
 #ifndef __BUFFER_H
 #define __BUFFER_H
 
-#define _XOPEN_SOURCE 600
+#ifndef _XOPEN_SOURCE
+# define _XOPEN_SOURCE 600
+#endif
+
 #include <stdlib.h>
 #ifdef DARWIN
 

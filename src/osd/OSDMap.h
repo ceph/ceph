@@ -407,7 +407,7 @@ private:
     assert(exists(osd));
     entity_inst_t i(entity_name_t::OSD(osd),
 		    osd_addr[osd]);
-    i.addr.v.erank = i.addr.v.erank + 1;  // heartbeat addr erank is regular addr erank + 1
+    i.addr.erank = i.addr.erank + 1;  // heartbeat addr erank is regular addr erank + 1
     return i;
   }
 
@@ -637,43 +637,21 @@ private:
 
   ceph_object_layout make_object_layout(object_t oid, int pg_pool, int preferred=-1, int object_stripe_unit = 0) {
     // calculate ps (placement seed)
-    static hash<object_t> H;
-    ps_t ps = H(oid);
+    pg_pool_t pool = get_pg_pool(pg_pool);
+    ps_t ps = ceph_str_hash(pool.v.object_hash, oid.name.c_str(), oid.name.length());
 
-    // mix in preferred osd, so we don't get the same peers for all of the placement pgs (e.g. 0.0p*)
+    // mix in preferred osd, so we don't get the same peers for
+    // all of the placement pgs (e.g. 0.0p*)
     if (preferred >= 0)
       ps += preferred;
 
-    /*
-    ps_t ps;  // NOTE: keep full precision, here!
-    switch (g_conf.osd_object_layout) {
-    case CEPH_OBJECT_LAYOUT_LINEAR:
-      ps = oid.bno + oid.ino;
-      break;
-      
-    case CEPH_OBJECT_LAYOUT_HASHINO:
-      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.ino>>32), num, num_mask);
-      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
-      break;
-
-    case CEPH_OBJECT_LAYOUT_HASH:
-      //ps = stable_mod(H( (oid.bno & oid.ino) ^ ((oid.bno^oid.ino) >> 32) ), num, num_mask);
-      //ps = stable_mod(H(oid.bno) + H(oid.ino)^H(oid.ino>>32), num, num_mask);
-      //ps = stable_mod(oid.bno + H(oid.bno+oid.ino)^H(oid.bno+oid.ino>>32), num, num_mask);
-      ps = oid.bno + crush_hash32_2(oid.ino, oid.ino>>32);
-      break;
-
-    default:
-      assert(0);
-      }*/
-    
-
-    //cout << "preferred " << preferred << " num " << num << " mask " << num_mask << " ps " << ps << endl;
+    //cout << "preferred " << preferred << " num "
+    // << num << " mask " << num_mask << " ps " << ps << endl;
 
     // construct object layout
     pg_t pgid = pg_t(ps, pg_pool, preferred);
     ceph_object_layout layout;
-    layout.ol_pgid = pgid.u.pg64;
+    layout.ol_pgid = pgid.v;
     layout.ol_stripe_unit = object_stripe_unit;
     return layout;
   }
@@ -688,7 +666,7 @@ private:
     pg_pool_t pool = get_pg_pool(pg_pool);
 
     pg_t pgid = pg_t(seed, pg_pool, -1);
-    layout.ol_pgid = pgid.u.pg64;
+    layout.ol_pgid = pgid.v;
     layout.ol_stripe_unit = 0;
 
     return pool.get_pg_num();
@@ -720,9 +698,10 @@ private:
 	osds.push_back( (i + pps*size) % g_conf.num_osd );
       break;
       
+#if 0
     case CEPH_PG_LAYOUT_HYBRID:
       {
-	int h = crush_hash32(pps);
+	int h = crush_hash32(CRUSH_HASH_RJENKINS1, pps);
 	for (unsigned i=0; i<size; i++) 
 	  osds.push_back( (h+i) % g_conf.num_osd );
       }
@@ -734,7 +713,7 @@ private:
 	  int t = 1;
 	  int osd = 0;
 	  while (t++) {
-	    osd = crush_hash32_3(i, pps, t) % g_conf.num_osd;
+	    osd = crush_hash32_3(CRUSH_HASH_RJENKINS1, i, pps, t) % g_conf.num_osd;
 	    unsigned j = 0;
 	    for (; j<i; j++) 
 	      if (osds[j] == osd) break;
@@ -744,6 +723,7 @@ private:
 	}      
       }
       break;
+#endif
       
     default:
       assert(0);

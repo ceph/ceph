@@ -272,7 +272,7 @@ bool PGMonitor::preprocess_pg_stats(MPGStats *stats)
   if (stats->had_map_for > 30.0 && 
       mon->osdmon()->paxos->is_readable() &&
       stats->epoch < mon->osdmon()->osdmap.get_epoch())
-    mon->osdmon()->send_latest(stats, stats->epoch+1);
+    mon->osdmon()->send_latest_now_nodelete(stats, stats->epoch+1);
 
   // any new osd or pg info?
   if (!pg_map.osd_stat.count(from) ||
@@ -472,9 +472,9 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
     parent = pgid;
     while (1) {
       // remove most significant bit
-      int msb = pool.calc_bits_of(parent.u.pg.ps);
+      int msb = pool.calc_bits_of(parent.v.ps);
       if (!msb) break;
-      parent.u.pg.ps &= ~(1<<(msb-1));
+      parent.v.ps = parent.v.ps & ~(1<<(msb-1));
       split_bits++;
       dout(10) << " is " << pgid << " parent " << parent << " ?" << dendl;
       //if (parent.u.pg.ps < mon->osdmon->osdmap.get_pgp_num()) {

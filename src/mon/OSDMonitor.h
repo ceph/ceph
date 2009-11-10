@@ -156,6 +156,9 @@ private:
   void mark_all_down();
 
   void send_latest(PaxosServiceMessage *m, epoch_t start=0);
+  void send_latest_now_nodelete(PaxosServiceMessage *m, epoch_t start=0) {
+    send_incremental(m, start);
+  }
 
   void blacklist(entity_addr_t a, utime_t until);
 

@@ -1,19 +1,10 @@
 This package was debianized by Sage Weil <sage@newdream.net> on
 Mon, 28 Jan 2008 14:58:17 -0800.
 
-It was downloaded from <http://ceph.newdream.net/>
+It was downloaded from <http://ceph.newdream.net/>.
 
-Upstream Author: 
+Upstream Author: Sage Weil <sage@newdream.net>
 
-    Sage Weil <sage@newdream.net>
+Copyright: (c) 2004-2009 by Sage Weil <sage@newdream.net>
 
-Copyright: 
-
-    <Copyright (C) 2008 Sage Weil>
-
-License:
-
-    LGPL2
-
-The Debian packaging is (C) 2008, Sage Weil <sage@newdream.net> and
-is licensed under the GPL, see `/usr/share/common-licenses/GPL'.
+License: LGPL2.1 (see /usr/share/common-licenses/LGPL-2.1)

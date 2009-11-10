@@ -19,7 +19,8 @@ inline ostream& operator<<(ostream& out, const sockaddr_storage &ss)
   getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
 	      serv, sizeof(serv),
 	      NI_NUMERICHOST | NI_NUMERICSERV);
-  return out << buf << ':' << serv;
+  return out //<< ss.ss_family << ":"
+	     << buf << ':' << serv;
 }
 
 inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
@@ -29,7 +30,8 @@ inline ostream& operator<<(ostream& out, const sockaddr_in &ss)
   getnameinfo((struct sockaddr *)&ss, sizeof(ss), buf, sizeof(buf),
 	      serv, sizeof(serv),
 	      NI_NUMERICHOST | NI_NUMERICSERV);
-  return out << buf << ':' << serv;
+  return out //<< ss.sin_family << ":"
+	     << buf << ':' << serv;
 }
 
 

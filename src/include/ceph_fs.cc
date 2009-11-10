@@ -72,33 +72,3 @@ int ceph_caps_for_mode(int mode)
 	}
 	return 0;
 }
-
-/* Name hashing routines. Initial hash value */
-/* Hash courtesy of the R5 hash in reiserfs modulo sign bits */
-#define ceph_init_name_hash()		0
-
-/* partial hash update function. Assume roughly 4 bits per character */
-static unsigned long ceph_partial_name_hash(unsigned long c,
-					    unsigned long prevhash)
-{
-	return (prevhash + (c << 4) + (c >> 4)) * 11;
-}
-
-/*
- * Finally: cut down the number of bits to a int value (and try to avoid
- * losing bits)
- */
-static unsigned long ceph_end_name_hash(unsigned long hash)
-{
-	return hash & 0xffffffff;
-}
-
-/* Compute the hash for a name string. */
-unsigned int ceph_full_name_hash(const char *name, unsigned int len)
-{
-	unsigned long hash = ceph_init_name_hash();
-	while (len--)
-		hash = ceph_partial_name_hash(*name++, hash);
-	return ceph_end_name_hash(hash);
-}
-

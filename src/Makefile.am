@@ -10,37 +10,37 @@ bin_SCRIPTS = crun
 
 # monitor
 cmon_SOURCES = cmon.cc msg/SimpleMessenger.cc
-cmon_LDADD = libmon.a libcrush.a libcommon.a -lcrypto
+cmon_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += cmon
 
 # osd
 cosd_SOURCES = cosd.cc msg/SimpleMessenger.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
-cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lcrypto
+cosd_LDADD = libosd.a libos.a libcrush.a libcommon.a -ldl -lpthread -lm -lcrypto
 bin_PROGRAMS += cosd
 
 # mds
 cmds_SOURCES = cmds.cc msg/SimpleMessenger.cc
-cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lcrypto
+cmds_LDADD = libmds.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += cmds
 
 # admin tools
 ceph_SOURCES = ceph.cc msg/SimpleMessenger.cc
-ceph_LDADD = libcrush.a libcommon.a -ledit -lcrypto
+ceph_LDADD = libcrush.a libcommon.a -ledit -lpthread -lm -lcrypto
 mkmonfs_SOURCES = mkmonfs.cc
-mkmonfs_LDADD = libmon.a libcrush.a libcommon.a -lcrypto
+mkmonfs_LDADD = libmon.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 cconf_SOURCES = cconf.cc
-cconf_LDADD = libcommon.a -lcrypto
+cconf_LDADD = libcommon.a -lpthread -lm -lcrypto
 authtool_SOURCES = authtool.cc
-authtool_LDADD = libcommon.a -lcrypto
+authtool_LDADD = libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += ceph mkmonfs cconf authtool
 
 monmaptool_SOURCES = monmaptool.cc
-monmaptool_LDADD = libcommon.a -lcrypto
+monmaptool_LDADD = libcommon.a -lpthread -lm -lcrypto
 crushtool_SOURCES = crushtool.cc
-crushtool_LDADD = libcrush.a libcommon.a -lcrypto
+crushtool_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 osdmaptool_SOURCES = osdmaptool.cc
-osdmaptool_LDADD = libcrush.a libcommon.a -lcrypto
+osdmaptool_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
 mount_ceph_SOURCES = mount/mount.ceph.c
@@ -51,20 +51,20 @@ core: cmon cosd cmds mkmonfs ceph cconf monmaptool osdmaptool crushtool
 
 
 dumpjournal_SOURCES = dumpjournal.cc msg/SimpleMessenger.cc
-dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lcrypto
+dumpjournal_LDADD = libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 dupstore_SOURCES = dupstore.cc
-dupstore_LDADD = libos.a libcommon.a -lcrypto
+dupstore_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
 streamtest_SOURCES = streamtest.cc
-streamtest_LDADD = libos.a libcommon.a -lcrypto
+streamtest_LDADD = libos.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += dumpjournal dupstore streamtest
 
 # synthetic client
 csyn_SOURCES = csyn.cc msg/SimpleMessenger.cc
-csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lcrypto
+csyn_LDADD = libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += csyn
 
 testmsgr_SOURCES = testmsgr.cc msg/SimpleMessenger.cc
-testmsgr_LDADD = libcommon.a -lcrypto
+testmsgr_LDADD = libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testmsgr
 
 test_ioctls_SOURCES = client/test_ioctls.c
@@ -73,7 +73,7 @@ bin_PROGRAMS += test_ioctls
 # fuse targets?
 if WITH_FUSE
 cfuse_SOURCES = cfuse.cc msg/SimpleMessenger.cc client/fuse.cc client/fuse_ll.cc
-cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lcrypto
+cfuse_LDADD = -lfuse libclient.a libosdc.a libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += cfuse
 
 #if WITH_DEBUG
@@ -88,7 +88,7 @@ endif
 # debug targets?
 if WITH_DEBUG
 psim_SOURCES = psim.cc
-psim_LDADD = libcrush.a libcommon.a -lcrypto
+psim_LDADD = libcrush.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += psim
 
 #fakesyn_SOURCES = fakesyn.cc msg/FakeMessenger.cc
@@ -103,31 +103,33 @@ endif
 BUILT_SOURCES =
 lib_LTLIBRARIES = 
 
+# libcrush.so
+libcrush_la_SOURCES = \
+	crush/builder.c \
+	crush/mapper.c \
+	crush/crush.c \
+	crush/hash.c
+libcrush_la_CFLAGS = ${AM_CFLAGS}
+libcrush_la_CXXFLAGS = ${AM_CXXFLAGS}
+libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*' -lm
+lib_LTLIBRARIES += libcrush.la
+
 # libceph
 libceph_la_SOURCES = \
 	libceph.cc \
 	client/Client.cc \
 	msg/SimpleMessenger.cc \
 	${libcommon_a_SOURCES} \
-	${libcrush_a_SOURCES} \
 	${libosdc_a_SOURCES}
 libceph_la_CFLAGS = ${AM_CFLAGS}
 libceph_la_CXXFLAGS= ${AM_CXXFLAGS}
-libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'ceph_.*'
+libceph_la_LIBADD = libcrush.la
+libceph_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^ceph_.*' -lpthread
 lib_LTLIBRARIES += libceph.la
 
 testceph_SOURCES = client/testceph.cc
-testceph_LDADD = libceph.la -lcrypto
+testceph_LDADD = libceph.la libcrush.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testceph
-
-# libcrush.so
-libcrush_la_SOURCES = \
-	crush/builder.c \
-	crush/mapper.c \
-	crush/crush.c
-libcrush_la_CFLAGS = ${AM_CFLAGS}
-libcrush_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'crush_.*'
-lib_LTLIBRARIES += libcrush.la
 
 # librados
 librados_SOURCES = \
@@ -138,22 +140,24 @@ librados_SOURCES = \
 librados_la_SOURCES = ${librados_SOURCES}
 librados_la_CFLAGS = ${AM_CFLAGS}
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
-librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'rados_.*'
+librados_la_LIBADD = libcrush.la
+librados_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex '^rados_.*' -lpthread
 lib_LTLIBRARIES += librados.la
+
 librados_a_SOURCES = ${librados_SOURCES}
 librados_a_CFLAGS = ${AM_CFLAGS}
 librados_a_CXXFLAGS = ${AM_CXXFLAGS}
 
 rados_SOURCES = rados.cc
-rados_LDADD = librados.la libcrush.la -lcrypto
+rados_LDADD = librados.la -lpthread -lm -lcrypto
 bin_PROGRAMS += rados
 
 testrados_SOURCES = testrados.c
-testrados_LDADD = librados.la libcrush.a -lcrypto
+testrados_LDADD = librados.la -lpthread -lm -lcrypto
 testradospp_SOURCES = testradospp.cc
-testradospp_LDADD = librados.a libcrush.la -lcrypto
+testradospp_LDADD = librados.la -lpthread -lm -lcrypto
 radosacl_SOURCES = radosacl.cc
-radosacl_LDADD = librados.la libcrush.la -lcrypto
+radosacl_LDADD = librados.la -lpthread -lm -lcrypto
 bin_PROGRAMS += testrados testradospp radosacl
 
 if WITH_RADOSGW
@@ -170,18 +174,18 @@ libradosgw_a_CFLAGS = ${AM_CFLAGS}
 # lib_LTLIBRARIES += libradosgw.a
 
 radosgw_SOURCES = rgw/rgw_main.cc
-radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
+radosgw_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat -lpthread -lm
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
-radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat
+radosgw_admin_LDADD = libradosgw.a librados.a libcrush.a -lfcgi -lcrypto -lexpat -lpthread -lm
 bin_PROGRAMS += radosgw radosgw_admin
 endif
 
 testcrypto_SOURCES = testcrypto.cc
-testcrypto_LDADD = libcommon.a -lcrypto
+testcrypto_LDADD = libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testcrypto
 
 testkeys_SOURCES = testkeys.cc
-testkeys_LDADD = libmon.a libcommon.a -lcrypto
+testkeys_LDADD = libmon.a libcommon.a -lpthread -lm -lcrypto
 bin_PROGRAMS += testkeys
 ## object classes
 
@@ -207,7 +211,7 @@ BUILT_SOURCES += libcls_acl.so
 if WITH_HADOOPCLIENT
 JAVA_BASE = /usr/lib/jvm/java-6-sun
 libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
-libhadoopcephfs_la_LIBADD = libceph.la libcrush.la
+libhadoopcephfs_la_LIBADD = libceph.la
 libhadoopcephfs_la_CFLAGS = ${AM_CFLAGS}
 libhadoopcephfs_la_CXXFLAGS = ${AM_CXXFLAGS}
 libhadoopcephfs_la_LDFLAGS = -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
@@ -234,7 +238,7 @@ BUILT_SOURCES += init-ceph mkcephfs
 
 ##
 INCLUDES = 
-LDADD = -lpthread 
+LDADD =
 
 AM_CXXFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
 AM_CFLAGS = -Wall -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -rdynamic
@@ -325,6 +329,7 @@ libcommon_files = \
 	common/buffer.cc \
 	common/debug.cc \
 	include/ceph_fs.cc \
+	include/ceph_hash.cc \
 	include/ceph_strings.cc \
 	include/ceph_frag.cc \
 	config.cc \
@@ -333,7 +338,8 @@ libcommon_files = \
 libcrush_a_SOURCES = \
 	crush/builder.c \
 	crush/mapper.c \
-	crush/crush.c
+	crush/crush.c \
+	crush/hash.c
 
 libmon_a_SOURCES = \
 	auth/cephx/CephxKeyServer.cc \
@@ -482,6 +488,7 @@ noinst_HEADERS = \
         include/byteorder.h\
 	include/ceph_frag.h\
         include/ceph_fs.h\
+        include/ceph_hash.h\
 	include/color.h\
 	include/crc32c.h\
         include/cstring.h\

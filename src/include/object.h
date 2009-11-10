@@ -69,7 +69,7 @@ namespace __gnu_cxx {
     size_t operator()(const object_t& r) const { 
       //static hash<nstring> H;
       //return H(r.name);
-      return ceph_full_name_hash(r.name.c_str(), r.name.length());
+      return ceph_str_hash_linux(r.name.c_str(), r.name.length());
     }
   };
 }
