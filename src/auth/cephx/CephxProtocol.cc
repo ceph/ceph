@@ -221,6 +221,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
   CephXAuthorize msg;
   msg.nonce = a->nonce;
   if (encode_encrypt(msg, session_key, a->bl) < 0) {
+    dout(0) << "failed to encrypt authorizer" << dendl;
     delete a;
     return 0;
   }
@@ -235,8 +236,10 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id)
 CephXAuthorizer *CephXTicketManager::build_authorizer(uint32_t service_id)
 {
   map<uint32_t, CephXTicketHandler>::iterator iter = tickets_map.find(service_id);
-  if (iter == tickets_map.end())
-    return false;
+  if (iter == tickets_map.end()) {
+    dout(0) << "no TicketHandler for service " << service_id << dendl;
+    return NULL;
+  }
 
   CephXTicketHandler& handler = iter->second;
   return handler.build_authorizer(global_id);

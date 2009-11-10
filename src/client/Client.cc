@@ -260,6 +260,7 @@ void Client::init()
   messenger->add_dispatcher_head(this);
 
   monclient->init();
+  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
 
   // do logger crap only once per process.
   static bool did_init = false;
@@ -5963,5 +5964,6 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-  return monclient->auth->build_authorizer(dest_type);
+  *authorizer = monclient->auth->build_authorizer(dest_type);
+  return true;
 }
