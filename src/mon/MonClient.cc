@@ -295,7 +295,7 @@ void MonClient::handle_auth(MAuthReply *m)
       ::decode(global_id, p);
       clientid = global_id;
       auth->set_global_id(global_id);
-      dout(1) << "my global_id is " << global_id << dendl;
+      dout(10) << "my global_id is " << global_id << dendl;
     } catch (buffer::error *err) {
       delete m;
       return;

@@ -359,6 +359,11 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   MAuthReply *reply;
 
   Session *s = (Session *)m->get_connection()->get_priv();
+  if (!s) {
+    dout(10) << "no session, dropping" << dendl;
+    delete m;
+    return true;
+  }
 
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();

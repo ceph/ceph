@@ -683,6 +683,11 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
   bool reply = false;
 
   Session *s = (Session *)m->get_connection()->get_priv();
+  if (!s) {
+    dout(10) << " no session, dropping" << dendl;
+    delete m;
+    return;
+  }
 
   s->until = g_clock.now();
   s->until += g_conf.mon_subscribe_interval;
