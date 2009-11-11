@@ -3239,11 +3239,15 @@ void OSD::handle_pg_remove(MOSDPGRemove *m)
 
     pg = _lookup_lock_pg(pgid);
     if (pg->info.history.same_acting_since <= m->get_epoch()) {
-      dout(10) << *pg << " removing." << dendl;
-      assert(pg->get_role() == -1);
-      assert(pg->get_primary() == m->get_source().num());
-      pg->deleting = true;
-      remove_wq.queue(pg);
+      if (pg->deleting) {
+	dout(10) << *pg << " already removing." << dendl;
+      } else {
+	dout(10) << *pg << " removing." << dendl;
+	assert(pg->get_role() == -1);
+	assert(pg->get_primary() == m->get_source().num());
+	pg->deleting = true;
+	remove_wq.queue(pg);
+      }
     } else {
       dout(10) << *pg << " ignoring remove request, pg changed in epoch "
 	       << pg->info.history.same_acting_since << " > " << m->get_epoch() << dendl;

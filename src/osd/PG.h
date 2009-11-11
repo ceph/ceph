@@ -586,9 +586,9 @@ protected:
   Cond _cond;
   atomic_t ref;
 
+public:
   bool deleting;  // true while RemoveWQ should be chewing on us
 
-public:
   void lock(bool no_lockdep=false) {
     //generic_dout(0) << this << " " << info.pgid << " lock" << dendl;
     _lock.Lock(no_lockdep);
@@ -1053,6 +1053,9 @@ inline ostream& operator<<(ostream& out, const PG& pg)
   }
   if (pg.info.snap_trimq.size())
     out << " snaptrimq=" << pg.info.snap_trimq;
+
+  if (pg.deleting)
+    out << " DELETING";
   out << "]";
 
 
