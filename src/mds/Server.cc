@@ -1816,7 +1816,8 @@ void Server::handle_client_stat(MDRequest *mdr)
   client_t client = mdr->get_client();
   int issued = 0;
   Capability *cap = ref->get_client_cap(client);
-  if (cap)
+  if (cap && (mdr->snapid == CEPH_NOSNAP ||
+	      mdr->snapid <= cap->client_follows))
     issued = cap->issued();
 
   int mask = req->head.args.getattr.mask;
