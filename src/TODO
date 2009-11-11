@@ -67,6 +67,8 @@ v0.18
 pending wire, disk format changes
 
 bugs
+- rados needs to check for -p for lots of arguments (currently seg faults on say ./rados mksnap foo)
+- rados: fix usage, it's -p, not -P
 - kclient cap reconnect on mds restart
 - zeros in pg log, followed by valid data.
 - mislinked directory?
@@ -74,7 +76,6 @@ bugs
 - weird osd_lock contention during osd restart?
 
 greg
-- osd: use client session to control osdmaps to clients (auth branch)
 - osd: error handling
 - uclient: readdir from cache
 - mds: basic auth checks
