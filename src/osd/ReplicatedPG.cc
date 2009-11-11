@@ -1118,7 +1118,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       { // write full object
 	bufferlist nbl;
 	bp.copy(op.extent.length, nbl);
-	t.truncate(coll_t::build_pg_coll(info.pgid), soid, 0);
+	if (ctx->obs->exists)
+	  t.truncate(coll_t::build_pg_coll(info.pgid), soid, 0);
 	t.write(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
@@ -1200,7 +1201,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     
     case CEPH_OSD_OP_DELETE:
       { // delete
-	t.remove(coll_t::build_pg_coll(info.pgid), soid);  // no clones, delete!
+	if (ctx->obs->exists)
+	  t.remove(coll_t::build_pg_coll(info.pgid), soid);  // no clones, delete!
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
 	  add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
