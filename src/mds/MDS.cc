@@ -1084,9 +1084,9 @@ void MDS::stopping_start()
 {
   dout(2) << "stopping_start" << dendl;
 
-  if (mdsmap.get_num_mds() == 1) {
-    //we're the only mds up!
-    dout(0) << "We are the last MDS in cluster! Suiciding!" << dendl;
+  if (mdsmap->get_num_mds() == 1 && !sessionmap->empty()) {
+    // we're the only mds up!
+    dout(0) << "we are the last MDS, and have mounted clients: we cannot flush our journal.  suicide!" << dendl;
     suicide();
   }
 

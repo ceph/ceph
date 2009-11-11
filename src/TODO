@@ -48,7 +48,8 @@ v0.18
 - big endian fixes (required protocol/disk format change)
 - improved object -> pg hash function; selectable
 - selectable crush hash function(s)
-
+- mds restart bug fixes
+- kclient mds reconnect bug fixes
 
 
 - mount btrfs by UUID?
