@@ -1084,6 +1084,12 @@ void MDS::stopping_start()
 {
   dout(2) << "stopping_start" << dendl;
 
+  if (mdsmap.get_num_mds() == 1) {
+    //we're the only mds up!
+    dout(0) << "We are the last MDS in cluster! Suiciding!" << dendl;
+    suicide();
+  }
+
   // start cache shutdown
   mdcache->shutdown_start();
   
@@ -1380,6 +1386,9 @@ bool MDS::_dispatch(Message *m)
     if (mdcache->shutdown_pass()) {
       dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to down:stopped" << dendl;
       stopping_done();
+    }
+    else {
+      dout(7) << "shutdown_pass=false" << dendl;
     }
   }
   return true;
