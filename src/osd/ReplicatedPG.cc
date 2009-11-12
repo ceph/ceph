@@ -495,7 +495,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   else
     assert(0);
   if (!ok) {
-    dout(10) << "do_op waiting on obc " << *obc << dendl;
+    dout(10) << "do_op waiting on mode " << mode << dendl;
     mode.waiting.push_back(op);
     return;
   }
