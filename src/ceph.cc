@@ -569,7 +569,7 @@ int main(int argc, const char **argv, const char *envp[])
 
   // default to 'admin' user
   if (!g_conf.id || !g_conf.id[0])
-    g_conf.id = "admin";
+    g_conf.id = strdup("admin");
 
   char *fname;
   bufferlist indata;
