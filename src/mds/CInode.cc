@@ -1230,8 +1230,22 @@ void CInode::finish_scatter_gather_update(int type)
       }
       pi->rstat.version++;
       dout(20) << " final rstat " << pi->rstat << dendl;
-      assert(pi->rstat.rfiles >= 0);
-      assert(pi->rstat.rsubdirs >= 0);
+
+      //assert(pi->rstat.rfiles >= 0);
+      if (pi->rstat.rfiles < 0) {
+	stringstream ss;
+	ss << "rfiles underflow " << pi->rstat.rfiles << " on " << *this;
+	mdcache->mds->logclient.log(LOG_ERROR, ss);
+	pi->rstat.rfiles = 0;
+      }
+
+      //assert(pi->rstat.rsubdirs >= 0);
+      if (pi->rstat.rsubdirs < 0) {
+	stringstream ss;
+	ss << "rsubdirs underflow " << pi->rstat.rfiles << " on " << *this;
+	mdcache->mds->logclient.log(LOG_ERROR, ss);
+	pi->rstat.rsubdirs = 0;
+      }
     }
     break;
 
