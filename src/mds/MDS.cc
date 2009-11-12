@@ -1089,6 +1089,12 @@ void MDS::stopping_start()
 {
   dout(2) << "stopping_start" << dendl;
 
+  if (mdsmap->get_num_mds() == 1 && !sessionmap.empty()) {
+    // we're the only mds up!
+    dout(0) << "we are the last MDS, and have mounted clients: we cannot flush our journal.  suicide!" << dendl;
+    suicide();
+  }
+
   // start cache shutdown
   mdcache->shutdown_start();
   
@@ -1438,6 +1444,9 @@ do { \
     if (mdcache->shutdown_pass()) {
       dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to down:stopped" << dendl;
       stopping_done();
+    }
+    else {
+      dout(7) << "shutdown_pass=false" << dendl;
     }
   }
   return true;

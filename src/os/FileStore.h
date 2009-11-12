@@ -38,9 +38,13 @@ class FileStore : public JournalingObjectStore {
   __u64 fsid;
   
   int btrfs;
-  bool btrfs_trans_resv_start;
+  bool btrfs_snap;
+  bool btrfs_usertrans;
   bool btrfs_trans_start_end;
   int fsid_fd, op_fd;
+
+  int snapdir_fd;
+  deque<__u64> snaps;
 
   // fake attrs?
   FakeAttrs attrs;
@@ -63,6 +67,7 @@ class FileStore : public JournalingObjectStore {
   // sync thread
   Mutex lock;
   Cond sync_cond;
+  __u64 sync_epoch;
   bool stop;
   void sync_entry();
   struct SyncThread : public Thread {
@@ -76,17 +81,30 @@ class FileStore : public JournalingObjectStore {
 
   void sync_fs(); // actuall sync underlying fs
 
+  // flusher thread
+  Cond flusher_cond;
+  list<__u64> flusher_queue;
+  void flusher_entry();
+  struct FlusherThread : public Thread {
+    FileStore *fs;
+    FlusherThread(FileStore *f) : fs(f) {}
+    void *entry() {
+      fs->flusher_entry();
+      return 0;
+    }
+  } flusher_thread;
+  void queue_flusher(int fd, __u64 off, __u64 len);
   int open_journal();
 
  public:
   FileStore(const char *base, const char *jdev = 0) : 
     basedir(base), journalpath(jdev ? jdev:""),
-    btrfs(false), btrfs_trans_resv_start(false), btrfs_trans_start_end(false),
+    btrfs(false), btrfs_snap(false), btrfs_usertrans(false), btrfs_trans_start_end(false),
     fsid_fd(-1), op_fd(-1),
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
-    stop(false), sync_thread(this) { }
+    sync_epoch(0), stop(false), sync_thread(this), flusher_thread(this) { }
 
   int mount();
   int umount();
@@ -99,6 +117,7 @@ class FileStore : public JournalingObjectStore {
   int _transaction_start(__u64 bytes, __u64 ops);
   void _transaction_finish(int id);
   unsigned _apply_transaction(Transaction& t);
+  int _do_usertrans(list<Transaction*>& tls);
 
   // ------------------
   // objects

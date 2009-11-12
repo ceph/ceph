@@ -51,7 +51,7 @@ void usage()
   cerr << "              default is 16 concurrent IOs and 1 MB writes size\n\n";
 
   cerr << "Options:\n";
-  cerr << "   -P pool\n";
+  cerr << "   -p pool\n";
   cerr << "   --pool=pool\n";
   cerr << "        select given pool by name\n";
   cerr << "   -s name\n";
@@ -459,7 +459,7 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "mksnap") == 0) {
-    if (nargs.size() < 2)
+    if (!pool || nargs.size() < 2)
       usage();
     
     ret = rados.snap_create(p, nargs[1]);
@@ -472,7 +472,7 @@ int main(int argc, const char **argv)
   }
 
   else if (strcmp(nargs[0], "rmsnap") == 0) {
-    if (nargs.size() < 2)
+    if (!pool || nargs.size() < 2)
       usage();
     
     ret = rados.snap_remove(p, nargs[1]);
@@ -485,7 +485,7 @@ int main(int argc, const char **argv)
   }
   
   else if (strcmp(nargs[0], "bench") == 0) {
-    if (nargs.size() < 2)
+    if (!pool || nargs.size() < 2)
       usage();
     int seconds = atoi(nargs[1]);
     int sync = 0;

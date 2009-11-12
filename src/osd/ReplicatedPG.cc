@@ -495,7 +495,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   else
     assert(0);
   if (!ok) {
-    dout(10) << "do_op waiting on obc " << *obc << dendl;
+    dout(10) << "do_op waiting on mode " << mode << dendl;
     mode.waiting.push_back(op);
     return;
   }
@@ -1118,7 +1118,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
       { // write full object
 	bufferlist nbl;
 	bp.copy(op.extent.length, nbl);
-	t.truncate(coll_t::build_pg_coll(info.pgid), soid, 0);
+	if (ctx->obs->exists)
+	  t.truncate(coll_t::build_pg_coll(info.pgid), soid, 0);
 	t.write(coll_t::build_pg_coll(info.pgid), soid, op.extent.offset, op.extent.length, nbl);
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
@@ -1200,7 +1201,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
     
     case CEPH_OSD_OP_DELETE:
       { // delete
-	t.remove(coll_t::build_pg_coll(info.pgid), soid);  // no clones, delete!
+	if (ctx->obs->exists)
+	  t.remove(coll_t::build_pg_coll(info.pgid), soid);  // no clones, delete!
 	if (ssc->snapset.clones.size()) {
 	  snapid_t newest = *ssc->snapset.clones.rbegin();
 	  add_interval_usage(ssc->snapset.clone_overlap[newest], info.stats);
@@ -3443,7 +3445,11 @@ int ReplicatedPG::recover_primary(int max)
   uptodate_set.insert(osd->whoami);
   if (is_all_uptodate()) {
     dout(-7) << "recover_primary complete" << dendl;
-    finish_recovery();
+    ObjectStore::Transaction t;
+    C_Contexts *fin = new C_Contexts;
+    finish_recovery(t, fin->contexts);
+    int tr = osd->store->apply_transaction(t, fin);
+    assert(tr == 0);
   } else {
     dout(-10) << "recover_primary primary now complete, starting peer recovery" << dendl;
   }
@@ -3492,7 +3498,11 @@ int ReplicatedPG::recover_replicas(int max)
   dout(-10) << "recover_replicas - nothing to do!" << dendl;
 
   if (is_all_uptodate()) {
-    finish_recovery();
+    ObjectStore::Transaction t;
+    C_Contexts *fin = new C_Contexts;
+    finish_recovery(t, fin->contexts);
+    int tr = osd->store->apply_transaction(t, fin);
+    assert(tr == 0);
   } else {
     dout(10) << "recover_replicas not all uptodate, acting " << acting << ", uptodate " << uptodate_set << dendl;
   }

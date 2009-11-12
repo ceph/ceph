@@ -46,7 +46,13 @@ v0.17
 v0.18
 - basic ENOSPC handling
 - big endian fixes (required protocol/disk format change)
-
+- improved object -> pg hash function; selectable
+- selectable crush hash function(s)
+- mds restart bug fixes
+- kclient mds reconnect bug fixes
+- fixed mds log trimming bug
+- fixed mds cap vs snap deadlock
+- filestore faster flushing
 
 - mount btrfs by UUID?
 
@@ -63,14 +69,14 @@ v0.18
 pending wire, disk format changes
 
 bugs
-- kclient cap reconnect on mds restart
-- zeros in pg log, followed by valid data.
+- mds rstat bug (on 2* cp -av usr + 11_kernel_untar_build)
+mds/CInode.cc: In function 'virtual void CInode::finish_scatter_gather_update(int)':
+mds/CInode.cc:1233: FAILED assert(pi->rstat.rfiles >= 0)
 - mislinked directory?
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 
 greg
-- osd: use client session to control osdmaps to clients (auth branch)
 - osd: error handling
 - uclient: readdir from cache
 - mds: basic auth checks

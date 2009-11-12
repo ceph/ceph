@@ -387,8 +387,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(fuse_direct_io, 0, OPT_INT, 0),
 	OPTION(fuse_ll, 0, OPT_BOOL, true),
 	OPTION(client_oc, 0, OPT_BOOL, true),
-	OPTION(client_oc_size, 0, OPT_INT, 1024*1024* 64),    // MB * n
-	OPTION(client_oc_max_dirty, 0, OPT_INT, 1024*1024* 48),    // MB * n  (dirty OR tx.. bigish)
+	OPTION(client_oc_size, 0, OPT_INT, 1024*1024* 200),    // MB * n
+	OPTION(client_oc_max_dirty, 0, OPT_INT, 1024*1024* 100),    // MB * n  (dirty OR tx.. bigish)
 	OPTION(client_oc_target_dirty, 0, OPT_INT, 1024*1024* 8), // target dirty (keep this smallish)
 	// note: the max amount of "in flight" dirty data is roughly (max - target)
 	OPTION(client_oc_max_sync_write, 0, OPT_LONGLONG, 128*1024),   // sync writes >= this use wrlock
@@ -507,6 +507,8 @@ static struct config_option config_optionsp[] = {
 	OPTION(filestore_fake_collections, 0, OPT_BOOL, false),
 	OPTION(filestore_dev, 0, OPT_STR, 0),
 	OPTION(filestore_btrfs_trans, 0, OPT_BOOL, true),
+	OPTION(filestore_flusher, 0, OPT_BOOL, true),
+	OPTION(filestore_sync_flush, 0, OPT_BOOL, false),
 	OPTION(ebofs, 0, OPT_BOOL, false),
 	OPTION(ebofs_cloneable, 0, OPT_BOOL, true),
 	OPTION(ebofs_verify, 0, OPT_BOOL, false),

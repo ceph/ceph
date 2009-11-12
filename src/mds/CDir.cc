@@ -1296,13 +1296,13 @@ void CDir::_fetched(bufferlist &bl)
      */
     if (committed_version == 0 &&     
 	dn &&
-	dn->get_version() <= fnode.version &&
+	dn->get_version() <= got_fnode.version &&
 	dn->is_dirty()) {
       dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
       dn->mark_clean();
 
       if (dn->get_linkage()->get_inode()) {
-	assert(dn->get_linkage()->get_inode()->get_version() <= fnode.version);
+	assert(dn->get_linkage()->get_inode()->get_version() <= got_fnode.version);
 	dout(10) << "_fetched  had underwater inode " << *dn->get_linkage()->get_inode() << ", marking clean" << dendl;
 	dn->get_linkage()->get_inode()->mark_clean();
       }
@@ -1699,7 +1699,11 @@ void CDir::_committed(version_t v, version_t lrv)
   while (p != waiting_for_commit.end()) {
     map<version_t, list<Context*> >::iterator n = p;
     n++;
-    if (p->first > committed_version) break; // haven't committed this far yet.
+    if (p->first > committed_version) {
+      dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
+      _commit(p->first);
+      break;
+    }
     cache->mds->queue_waiters(p->second);
     waiting_for_commit.erase(p);
     p = n;

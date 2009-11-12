@@ -415,7 +415,7 @@ private:
   void note_up_osd(int osd);
   
   void advance_map(ObjectStore::Transaction& t);
-  void activate_map(ObjectStore::Transaction& t);
+  void activate_map(ObjectStore::Transaction& t, list<Context*>& tfin);
 
   // osd map cache (past osd maps)
   map<epoch_t,OSDMap*> map_cache;

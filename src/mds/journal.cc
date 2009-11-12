@@ -157,6 +157,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     assert(!mds->mdlog->is_capped()); // hmm FIXME
     EOpen *le = 0;
     LogSegment *ls = mds->mdlog->get_current_segment();
+    assert(ls != this);
     xlist<CInode*>::iterator p = open_files.begin();
     while (!p.end()) {
       CInode *in = *p;

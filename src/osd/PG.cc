@@ -1202,7 +1202,7 @@ bool PG::recover_master_log(map< int, map<pg_t,Query> >& query_map)
 }
 
 
-void PG::peer(ObjectStore::Transaction& t, 
+void PG::peer(ObjectStore::Transaction& t, list<Context*>& tfin,
               map< int, map<pg_t,Query> >& query_map,
 	      map<int, MOSDPGInfo*> *activator_map)
 {
@@ -1385,14 +1385,14 @@ void PG::peer(ObjectStore::Transaction& t,
   } 
   else if (!is_active()) {
     // -- ok, activate!
-    activate(t, activator_map);
+    activate(t, tfin, activator_map);
   }
   else if (is_all_uptodate()) 
-    finish_recovery();
+    finish_recovery(t, tfin);
 }
 
 
-void PG::activate(ObjectStore::Transaction& t,
+void PG::activate(ObjectStore::Transaction& t, list<Context*>& tfin,
 		  map<int, MOSDPGInfo*> *activator_map)
 {
   assert(!is_active());
@@ -1545,7 +1545,7 @@ void PG::activate(ObjectStore::Transaction& t,
     
     // all clean?
     if (is_all_uptodate()) 
-      finish_recovery();
+      finish_recovery(t, tfin);
     else {
       dout(10) << "activate not all replicas are uptodate, queueing recovery" << dendl;
       osd->queue_for_recovery(this);
@@ -1604,7 +1604,7 @@ struct C_PG_FinishRecovery : public Context {
   }
 };
 
-void PG::finish_recovery()
+void PG::finish_recovery(ObjectStore::Transaction& t, list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
   state_set(PG_STATE_CLEAN);
@@ -1612,15 +1612,13 @@ void PG::finish_recovery()
 
   clear_recovery_state();
 
+  write_info(t);
+
   /*
    * sync all this before purging strays.  but don't block!
    */
   finish_sync_event = new C_PG_FinishRecovery(this);
-
-  ObjectStore::Transaction t;
-  write_info(t);
-  int tr = osd->store->apply_transaction(t, finish_sync_event);
-  assert(tr == 0);
+  tfin.push_back(finish_sync_event);
 }
 
 void PG::_finish_recovery(Context *c)
