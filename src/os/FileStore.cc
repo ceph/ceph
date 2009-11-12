@@ -1589,7 +1589,8 @@ int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t
 void FileStore::queue_flusher(int fd, __u64 off, __u64 len)
 {
   lock.Lock();
-  dout(10) << "queue_flusher fd " << fd << " " << off << "~" << len << dendl;
+  dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len << dendl;
+  flusher_queue.push_back(sync_epoch);
   flusher_queue.push_back(fd);
   flusher_queue.push_back(off);
   flusher_queue.push_back(len);
@@ -1608,17 +1609,20 @@ void FileStore::flusher_entry()
       
       lock.Unlock();
       while (!q.empty()) {
+	__u64 ep = q.front();
+	q.pop_front();
 	int fd = q.front();
 	q.pop_front();
 	__u64 off = q.front();
 	q.pop_front();
 	__u64 len = q.front();
 	q.pop_front();
-	if (!stop) {
-	  dout(10) << "flusher_entry flushing+closing " << fd << dendl;
+	if (!stop && ep == sync_epoch) {
+	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
 	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
 	} else 
-	  dout(10) << "flusher_entry JUST closing " << fd << dendl;
+	  dout(10) << "flusher_entry JUST closing " << fd << " (stop=" << stop << ", ep=" << ep
+		   << ", sync_epoch=" << sync_epoch << ")" << dendl;
 	::close(fd);
       }
       lock.Lock();
@@ -1664,10 +1668,14 @@ void FileStore::sync_entry()
     lock.Unlock();
     
     if (commit_start()) {
-      dout(15) << "sync_entry committing " << op_seq << dendl;
       utime_t start = g_clock.now();
-
       __u64 cp = op_seq;
+
+      // make flusher stop flushing previously queued stuff
+      sync_epoch++;
+
+      dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
+
 
       if (btrfs_snap) {
 	btrfs_ioctl_vol_args snapargs;
@@ -1680,7 +1688,7 @@ void FileStore::sync_entry()
 		<< " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
 	snaps.push_back(cp);
       }
-      
+
       commit_started();
 
       if (!btrfs_snap) {
