@@ -310,6 +310,8 @@ struct md_config_t {
   bool  filestore_fake_collections;
   const char  *filestore_dev;
   bool filestore_btrfs_trans;
+  bool filestore_flusher;
+  bool filestore_sync_flush;
   
   // ebofs
   bool  ebofs;

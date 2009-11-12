@@ -47,6 +47,9 @@
 
 #define ATTR_MAX 80
 
+#define COMMIT_SNAP_DIR "commit_snaps"
+#define COMMIT_SNAP_ITEM "%lld"
+
 #ifndef __CYGWIN__
 # ifndef DARWIN
 #  include "btrfs_ioctl.h"
@@ -469,12 +472,40 @@ int FileStore::mount()
   }
   journal_start();
   sync_thread.create();
+  flusher_thread.create();
 
 
   // is this btrfs?
   Transaction empty;
   btrfs = 1;
-  btrfs_usertrans = true;
+
+  btrfs_snap = false;
+  if (btrfs_snap) {
+    char dirname[100];
+    sprintf(dirname, "%s/%s", basedir.c_str(), COMMIT_SNAP_DIR);
+    ::mkdir(dirname, 0755);
+    snapdir_fd = ::open(dirname, O_RDONLY);
+
+    // get snap list
+    DIR *dir = ::opendir(dirname);
+    if (!dir)
+      return -errno;
+
+    struct dirent sde, *de;
+    while (::readdir_r(dir, &sde, &de) == 0) {
+      if (!de)
+	break;
+      long long unsigned c;
+      if (sscanf(de->d_name, COMMIT_SNAP_ITEM, &c) == 1)
+	snaps.push_back(c);
+    }
+    
+    ::closedir(dir);
+
+    dout(0) << " found snaps " << snaps << dendl;
+  }
+
+  btrfs_usertrans = false;
   btrfs_trans_start_end = true;  // trans start/end interface
   r = apply_transaction(empty, 0);
   if (r == 0) {
@@ -538,8 +569,10 @@ int FileStore::umount()
   lock.Lock();
   stop = true;
   sync_cond.Signal();
+  flusher_cond.Signal();
   lock.Unlock();
   sync_thread.join();
+  flusher_thread.join();
 
   journal_stop();
 
@@ -1417,8 +1450,14 @@ int FileStore::_write(coll_t cid, const sobject_t& oid,
     if (did < 0) {
       derr(0) << "couldn't write to " << fn << " len " << len << " off " << offset << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
     }
-    
-    ::close(fd);
+
+    if (g_conf.filestore_flusher)
+      queue_flusher(fd, offset, len);
+    else {
+      if (g_conf.filestore_sync_flush)
+	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+      ::close(fd);
+    }
     r = did;
   }
 
@@ -1547,6 +1586,54 @@ int FileStore::_clone_range(coll_t cid, const sobject_t& oldoid, const sobject_t
 }
 
 
+void FileStore::queue_flusher(int fd, __u64 off, __u64 len)
+{
+  lock.Lock();
+  dout(10) << "queue_flusher fd " << fd << " " << off << "~" << len << dendl;
+  flusher_queue.push_back(fd);
+  flusher_queue.push_back(off);
+  flusher_queue.push_back(len);
+  flusher_cond.Signal();
+  lock.Unlock();
+}
+
+void FileStore::flusher_entry()
+{
+  lock.Lock();
+  dout(20) << "flusher_entry start" << dendl;
+  while (true) {
+    if (!flusher_queue.empty()) {
+      list<__u64> q;
+      q.swap(flusher_queue);
+      
+      lock.Unlock();
+      while (!q.empty()) {
+	int fd = q.front();
+	q.pop_front();
+	__u64 off = q.front();
+	q.pop_front();
+	__u64 len = q.front();
+	q.pop_front();
+	if (!stop) {
+	  dout(10) << "flusher_entry flushing+closing " << fd << dendl;
+	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
+	} else 
+	  dout(10) << "flusher_entry JUST closing " << fd << dendl;
+	::close(fd);
+      }
+      lock.Lock();
+    } else {
+      if (stop)
+	break;
+      dout(20) << "flusher_entry sleeping" << dendl;
+      flusher_cond.Wait(lock);
+      dout(20) << "flusher_entry awoke" << dendl;
+    }
+  }
+  dout(20) << "flusher_entry finish" << dendl;
+  lock.Unlock();
+}
+
 void FileStore::sync_entry()
 {
   Cond othercond;
@@ -1575,29 +1662,64 @@ void FileStore::sync_entry()
     }
 
     lock.Unlock();
-
+    
     if (commit_start()) {
       dout(15) << "sync_entry committing " << op_seq << dendl;
+      utime_t start = g_clock.now();
 
       __u64 cp = op_seq;
-      
-      commit_started();
-      
-      if (btrfs) {
-	// do a full btrfs commit
-	::ioctl(op_fd, BTRFS_IOC_SYNC);
-      } else {
-	// make the file system's journal commit.
-	//  this works with ext3, but NOT ext4
-	::fsync(op_fd);  
+
+      if (btrfs_snap) {
+	btrfs_ioctl_vol_args snapargs;
+	snapargs.fd = snapdir_fd;
+	sprintf(snapargs.name, COMMIT_SNAP_ITEM, (long long unsigned)cp);
+	dout(0) << "taking snap '" << snapargs.name << "'" << dendl;
+	int r = ::ioctl(snapargs.fd, BTRFS_IOC_SNAP_CREATE, &snapargs);
+	char buf[100];
+	dout(0) << "snap create '" << snapargs.name << "' got " << r
+		<< " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	snaps.push_back(cp);
       }
       
+      commit_started();
+
+      if (!btrfs_snap) {
+	if (btrfs) {
+	  dout(15) << "sync_entry doing btrfs sync" << dendl;
+	  // do a full btrfs commit
+	  ::ioctl(op_fd, BTRFS_IOC_SYNC);
+	} else {
+	  // make the file system's journal commit.
+	  //  this works with ext3, but NOT ext4
+	  ::fsync(op_fd);  
+	}
+      }
+      
+      utime_t done = g_clock.now();
+      done -= start;
+      dout(10) << "sync_entry commit took " << done << dendl;
       commit_finish();
+
+      // remove old snaps?
+      if (false && btrfs_snap) {
+	while (snaps.size() > 2) {
+	  btrfs_ioctl_vol_args snapargs;
+	  snapargs.fd = snapdir_fd;
+	  sprintf(snapargs.name, COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
+	  snaps.pop_front();
+	  dout(0) << "removing snap '" << snapargs.name << "'" << dendl;
+	  int r = ::ioctl(snapargs.fd, BTRFS_IOC_SNAP_DESTROY, &snapargs);
+	  char buf[100];
+	  dout(0) << "snap destroyed '" << snapargs.name << "' got " << r
+		  << " " << strerror_r(r < 0 ? errno : 0, buf, sizeof(buf)) << dendl;
+	}
+      }
+
       dout(15) << "sync_entry committed to op_seq " << cp << dendl;
     }
-
+    
     lock.Lock();
-
+    
   }
   lock.Unlock();
 }
