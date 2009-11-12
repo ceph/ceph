@@ -122,10 +122,11 @@ private:
   int num;
   bool any;  /* if true, OR, otherwise, AND */
 
-  bool sub_finish(int num, int r) {
-    //cout << "C_Gather sub_finish " << this << " got " << r << " of " << waitfor << endl;
+  bool sub_finish(void *sub, int num, int r) {
     assert(waitfor.count(num));
     waitfor.erase(num);
+
+    //generic_dout(0) << this << ".sub_finish(r=" << r << ") " << sub << " " << num << " of " << waitfor << dendl;
 
     if (r < 0 && result == 0)
       result = r;
@@ -154,7 +155,7 @@ private:
   public:
     C_GatherSub(C_Gather *g, int n) : gather(g), num(n) {}
     void finish(int r) {
-      if (gather->sub_finish(num, r)) {
+      if (gather->sub_finish((void *)this, num, r)) {
 	delete gather;   // last one!
 	gather = 0;
       }
@@ -181,7 +182,9 @@ public:
   Context *new_sub() {
     num++;
     waitfor.insert(num);
-    return new C_GatherSub(this, num);
+    Context *s = new C_GatherSub(this, num);
+    //generic_dout(0) << this << ".new_sub " << num << " " << s << dendl;
+    return s;
   }
   void rm_sub(int n) {
     num--;
