@@ -1,0 +1,82 @@
+; ---------------------
+[group cephnet]
+        addr = 10.3.14.0/24
+
+[mount /]
+        allow = "%cephnet"
+
+; ---------------------
+[global]
+	pid file = /home/sage/ceph/src/out/$name.pid
+	logger dir = /home/sage/ceph/src/log
+	log sym dir = /home/sage/ceph/src/out
+	chdir = /home/sage/ceph/src
+	restart on core dump = false
+	user = sage
+	pre start command = "cp /home/sage/ceph/src/c$type /tmp/c$type.`date +%Y%m%d.%H%M%S`"
+
+; ---------------------
+[mon]
+	mon data = /data/mon$num
+	debug mon = 20
+	debug ms = 1
+	mon osd down out interval = 0  ; 10 minutes
+
+[mon0]
+	host = sepia1
+	mon addr = 10.3.14.128:6789
+	log dir = /data/sepia1
+
+; ---------------------
+[mds]
+	debug mds = 20
+	debug ms = 1
+;	debug journaler = 20
+;	log dir = /data/ceph4
+;	log dir = /home/sage/ceph/src/log
+
+[mds.foo]
+	host = sepia1
+	log dir = /data/sepia1
+;	valgrind = --tool=massif
+
+
+; ---------------------
+[osd]
+	debug ms = 1
+	debug osd = 20
+	debug filestore = 10
+	debug journal = 20
+
+	log dir = /data/sepia$id
+
+	osd data = /mnt/osd$id
+	btrfs devs = /dev/sdb
+	btrfs options = "flushoncommit"
+
+	osd journal = /dev/sda8
+
+;	user = root
+
+;	osd journal = /mnt/osd$id/journal
+;	osd journal size = 1000
+;	osd journal = "/dev/disk/by-path/pci-0000:05:02.0-scsi-6:0:0:0"
+	filestore max sync interval = 5
+
+;	btrfs devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0"
+;	valgrind = "--tool=memcheck --log-file=/data/cosd$id/v.osd$id"
+
+[osd2]
+	host = sepia2
+[osd3]
+	host = sepia3
+[osd4]
+	host = sepia4
+[osd5]
+	host = sepia5
+[osd6]
+	host = sepia6
+[osd7]
+	host = sepia7
+[osd8]
+	host = sepia8
