@@ -502,7 +502,9 @@ Message *decode_message(ceph_msg_header& header, ceph_msg_footer& footer,
 
   default:
     dout(0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
-    assert(0);
+    if (g_conf.ms_die_on_bad_msg)
+      assert(0);
+    return 0;
   }
   
   m->set_header(header);
