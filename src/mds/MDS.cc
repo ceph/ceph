@@ -1179,7 +1179,7 @@ bool MDS::_dispatch(Message *m)
 #define ALLOW_MESSAGES_FROM(peers) \
 do { \
   if ((m->get_connection()->get_peer_type() & (peers)) == 0) { \
-    dout(0) << "filtered out request, peer=" << m->get_connection()->get_peer_type() \
+    dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
     delete m; \
     return true; \
@@ -1247,11 +1247,6 @@ do { \
 	mdcache->dispatch(m);
 	break;
 	
-      case MDS_PORT_LOCKER:
-        ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
-	locker->dispatch(m);
-	break;
-	
       case MDS_PORT_MIGRATOR:
         ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
 	mdcache->migrator->dispatch(m);
@@ -1288,6 +1283,19 @@ do { \
 	      server->handle_request(req);
 	    }
 	  }
+	  break;
+
+        case MSG_MDS_LOCK:
+        case MSG_MDS_INODEFILECAPS:
+          ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
+	  locker->dispatch(m);
+          break;
+
+        case CEPH_MSG_CLIENT_CAPS:
+        case CEPH_MSG_CLIENT_CAPRELEASE:
+        case CEPH_MSG_CLIENT_LEASE:
+          ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_CLIENT);
+	  locker->dispatch(m);
 	  break;
 	  
 	  // OSD

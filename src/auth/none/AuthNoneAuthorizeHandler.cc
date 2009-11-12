@@ -12,6 +12,7 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(bufferlist& authorizer_data, bu
     ::decode(entity_name, iter);
     ::decode(global_id, iter);
   } catch (buffer::error *err) {
+    dout(0) << "AuthNoneAuthorizeHandle::verify_authorizer() failed to decode" << dendl;
     return false;
   }
 
