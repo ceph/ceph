@@ -775,6 +775,14 @@ public:
     if (pxlocker) *pxlocker = (xlocker >> shift) & mask;
     return (c >> shift) & mask;
   }
+  bool is_any_caps_wanted() {
+    for (map<client_t,Capability*>::iterator it = client_caps.begin();
+         it != client_caps.end();
+         it++)
+      if (it->second->wanted())
+	return true;
+    return false;
+  }
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = 0xffff) {
     int w = 0;
     int loner = 0, other = 0;

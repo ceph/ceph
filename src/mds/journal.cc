@@ -163,7 +163,7 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
       CInode *in = *p;
       ++p;
       if (in->is_any_caps()) {
-	if (in->get_caps_wanted()) {
+	if (in->is_any_caps_wanted()) {
 	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
 	  if (!le) le = new EOpen(mds->mdlog);
 	  le->add_clean_inode(in);

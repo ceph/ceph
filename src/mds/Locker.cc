@@ -1499,7 +1499,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   // newer log segments.
   LogEvent *le;
   EMetaBlob *metablob;
-  if (in->is_any_caps()) {
+  if (in->is_any_caps_wanted()) {   
     EOpen *eo = new EOpen(mds->mdlog);
     eo->add_ino(in->ino());
     metablob = &eo->metablob;
@@ -1582,8 +1582,8 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
   CInode *cur = cap->get_inode();
   if (cap->wanted() == 0) {
     if (cur->xlist_open_file.is_on_xlist() &&
-	cur->get_caps_wanted() == 0) {
-      dout(10) << " removing from open file list " << *cur << dendl;
+	!cur->is_any_caps_wanted()) {
+      dout(10) << " removing unwanted file from open file list " << *cur << dendl;
       cur->xlist_open_file.remove_myself();
     }
   } else {

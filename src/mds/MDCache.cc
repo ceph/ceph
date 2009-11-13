@@ -4030,8 +4030,8 @@ void MDCache::clean_open_file_lists()
     while (!q.end()) {
       CInode *in = *q;
       ++q;
-      if (!in->is_any_caps()) {
-	dout(10) << " unlisting capless inode " << *in << dendl;
+      if (!in->is_any_caps_wanted()) {
+	dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
 	in->xlist_open_file.remove_myself();
       }
     }
