@@ -5,6 +5,7 @@
 #include "include/color.h"
 
 #include "auth/KeyRing.h"
+#include "auth/AuthSupported.h"
 
 void common_init(std::vector<const char*>& args, const char *module_type, bool daemon, bool init_keys)
 {
@@ -31,7 +32,7 @@ void common_init(std::vector<const char*>& args, const char *module_type, bool d
   if (!g_conf.log_to_stdout)
     _dout_open_log();
 
-  if (init_keys) {
+  if (init_keys && is_supported_auth(CEPH_AUTH_CEPHX)) {
     g_keyring.load_master(g_conf.keys_file);
   }
 }
