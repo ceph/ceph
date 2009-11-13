@@ -155,12 +155,14 @@ int MonClient::get_monmap_privately()
     utime_t interval(1, 0);
     map_cond.WaitInterval(monc_lock, interval);
   }
-  
+
   if (temp_msgr) {
+    monc_lock.Unlock();
     messenger->shutdown();
     rank->wait();
     messenger->destroy();
     messenger = 0;
+    monc_lock.Lock();
   }
  
   hunting = true;  // reset this to true!
