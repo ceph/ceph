@@ -446,9 +446,9 @@ void Server::reconnect_clients()
     reconnect_gather_finish();
     return;
   }
+
+  // clients will get the mdsmap and discover we're reconnecting via the monitor.
   
-  dout(7) << "reconnect_clients -- sending mdsmap to clients with sessions" << dendl;
-  mds->bcast_mds_map();  // send mdsmap to all client sessions
   reconnect_start = g_clock.now();
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
 }
