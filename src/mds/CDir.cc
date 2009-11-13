@@ -1699,7 +1699,11 @@ void CDir::_committed(version_t v, version_t lrv)
   while (p != waiting_for_commit.end()) {
     map<version_t, list<Context*> >::iterator n = p;
     n++;
-    if (p->first > committed_version) break; // haven't committed this far yet.
+    if (p->first > committed_version) {
+      dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
+      _commit(p->first);
+      break;
+    }
     cache->mds->queue_waiters(p->second);
     waiting_for_commit.erase(p);
     p = n;

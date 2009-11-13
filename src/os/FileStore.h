@@ -67,6 +67,7 @@ class FileStore : public JournalingObjectStore {
   // sync thread
   Mutex lock;
   Cond sync_cond;
+  __u64 sync_epoch;
   bool stop;
   void sync_entry();
   struct SyncThread : public Thread {
@@ -103,7 +104,7 @@ class FileStore : public JournalingObjectStore {
     attrs(this), fake_attrs(false), 
     collections(this), fake_collections(false),
     lock("FileStore::lock"),
-    stop(false), sync_thread(this), flusher_thread(this) { }
+    sync_epoch(0), stop(false), sync_thread(this), flusher_thread(this) { }
 
   int mount();
   int umount();
