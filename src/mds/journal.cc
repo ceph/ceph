@@ -162,11 +162,24 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
     while (!p.end()) {
       CInode *in = *p;
       ++p;
-      dout(20) << "try_to_expire requeueing open file " << *in << dendl;
-      assert(in->is_any_caps());
-      if (!le) le = new EOpen(mds->mdlog);
-      le->add_clean_inode(in);
-      ls->open_files.push_back(&in->xlist_open_file);
+      if (in->is_any_caps()) {
+	dout(20) << "try_to_expire requeueing open file " << *in << dendl;
+	if (!le) le = new EOpen(mds->mdlog);
+	le->add_clean_inode(in);
+	ls->open_files.push_back(&in->xlist_open_file);
+      } else {
+	/*
+	 * we can get a capless inode here if we replay an open file, the client fails to
+	 * reconnect it, but does REPLAY an open request (that adds it to the logseg).  AFAICS
+	 * it's ok for the client to replay an open on a file it doesn't have in it's cache
+	 * anymore.
+	 *
+	 * this makes the mds less sensitive to strict open_file consistency, although it does
+	 * make it easier to miss subtle problems.
+	 */
+	dout(20) << "try_to_expire not requeueing and delisting capless file " << *in << dendl;
+	in->xlist_open_file.remove_myself();
+      }
     }
     if (le) {
       if (!gather) gather = new C_Gather;
