@@ -163,10 +163,16 @@ C_Gather *LogSegment::try_to_expire(MDS *mds)
       CInode *in = *p;
       ++p;
       if (in->is_any_caps()) {
-	dout(20) << "try_to_expire requeueing open file " << *in << dendl;
-	if (!le) le = new EOpen(mds->mdlog);
-	le->add_clean_inode(in);
-	ls->open_files.push_back(&in->xlist_open_file);
+	if (in->get_caps_wanted()) {
+	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
+	  if (!le) le = new EOpen(mds->mdlog);
+	  le->add_clean_inode(in);
+	  ls->open_files.push_back(&in->xlist_open_file);
+	} else {
+	  // drop inodes that aren't wanted
+	  dout(20) << "try_to_expire not requeueing and delisting unwanted file " << *in << dendl;
+	  in->xlist_open_file.remove_myself();
+	}
       } else {
 	/*
 	 * we can get a capless inode here if we replay an open file, the client fails to
