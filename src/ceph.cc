@@ -561,6 +561,9 @@ int main(int argc, const char **argv, const char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+
+  ceph_set_default_id("admin");
+
   common_init(args, "ceph", false, true);
 
   vec_to_argv(args, argc, argv);

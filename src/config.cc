@@ -48,6 +48,13 @@ static ExportControl *ec = NULL;
 
 static void fini_g_conf();
 
+const char *g_default_id = "guest";
+
+void ceph_set_default_id(const char *id)
+{
+  g_default_id = strdup(id);
+}
+
 class ConfFileDestructor
 {
 public:
@@ -947,7 +954,7 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
   bool conf_specified = false;
 
   if (!g_conf.id)
-    g_conf.id = (char *)"";
+    g_conf.id = (char *)g_default_id;
   if (!g_conf.type)
     g_conf.type = (char *)"";
 

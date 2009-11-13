@@ -34,6 +34,9 @@ extern struct ceph_file_layout g_default_file_layout;
 extern entity_addr_t g_my_addr;
 
 extern bool g_daemon;
+extern const char *g_default_id;
+
+extern void ceph_set_default_id(const char *id);
 
 struct EntityName;
 
