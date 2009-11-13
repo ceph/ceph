@@ -38,10 +38,7 @@ int main(int argc, const char **argv)
   common_init(args, "mon", false, false);
 
   bool clobber = false;
-  const char *fsdir = g_conf.mon_data;
-
   int whoami = -1;
-  const char *monmapfn = g_conf.monmap;
   const char *osdmapfn = 0;
 
   FOR_EACH_ARG(args) {
@@ -55,7 +52,7 @@ int main(int argc, const char **argv)
       usage();
     }
   }
-  if (!g_conf.mon_data || !monmapfn || whoami < 0)
+  if (!g_conf.mon_data || !g_conf.monmap || whoami < 0)
     usage();
 
   if (!clobber) {
@@ -69,7 +66,7 @@ int main(int argc, const char **argv)
 
   // load monmap
   bufferlist monmapbl, osdmapbl;
-  int err = monmapbl.read_file(monmapfn);
+  int err = monmapbl.read_file(g_conf.monmap);
   if (err < 0)
     exit(1);
   MonMap monmap;
