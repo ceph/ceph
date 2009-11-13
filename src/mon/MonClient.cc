@@ -74,31 +74,32 @@ int MonClient::build_initial_monmap()
   }
 
   // config file?
-  ConfFile a(g_conf.conf);
-  ConfFile b("ceph.conf");
-  ConfFile *c = 0;
-  
-  if (a.parse())
-    c = &a;
-  else if (b.parse())
-    c = &b;
-  if (c) {
-    static string monstr;
-    for (int i=0; i<15; i++) {
-      char monname[20];
-      char *val = 0;
-      sprintf(monname, "mon%d", i);
-      c->read(monname, "mon addr", &val, 0);
-      if (!val || !val[0])
+  string conf = g_conf.conf;
+  list<string> ls;
+  get_str_list(conf, ls);
+  if (!ls.empty()) {
+    for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
+      ConfFile c(p->c_str());
+      if (c.parse()) {
+	static string monstr;
+	for (int i=0; i<15; i++) {
+	  char monname[20];
+	  char *val = 0;
+	  sprintf(monname, "mon%d", i);
+	  c.read(monname, "mon addr", &val, 0);
+	  if (!val || !val[0])
+	    break;
+	  
+	  entity_inst_t inst;
+	  if (!parse_ip_port(val, inst.addr)) {
+	    cerr << "unable to parse conf's addr for " << monname << " (" << val << ")" << std::endl;
+	    continue;
+	  }
+	  inst.name = entity_name_t::MON(monmap.mon_inst.size());
+	  monmap.add_mon(inst);
+	}
 	break;
-      
-      entity_inst_t inst;
-      if (!parse_ip_port(val, inst.addr)) {
-	cerr << "unable to parse conf's addr for " << monname << " (" << val << ")" << std::endl;
-	continue;
       }
-      inst.name = entity_name_t::MON(monmap.mon_inst.size());
-      monmap.add_mon(inst);
     }
     if (monmap.size())
       return 0;

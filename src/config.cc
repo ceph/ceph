@@ -32,6 +32,7 @@
 stringtable g_stab;
 
 #include "include/atomic.h"
+#include "include/str_list.h"
 
 #include "osd/osd_types.h"
 
@@ -315,7 +316,7 @@ static struct config_option config_optionsp[] = {
 	OPTION(log_sym_dir, 0, OPT_STR, 0),
 	OPTION(log_to_stdout, 0, OPT_BOOL, true),
 	OPTION(pid_file, 0, OPT_STR, "/var/run/ceph/$type.$id.pid"),
-	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf"),
+	OPTION(conf, 'c', OPT_STR, "/etc/ceph/ceph.conf, ~/ceph/config, ceph.conf"),
 	OPTION(chdir, 0, OPT_STR, "/"),
 	OPTION(fake_clock, 0, OPT_BOOL, false),
 	OPTION(fakemessenger_serialize, 0, OPT_BOOL, true),
@@ -1011,12 +1012,21 @@ void parse_startup_config_options(std::vector<const char*>& args, bool isdaemon,
   if (cf)
 	delete cf;
 
-  cf = new ConfFile(g_conf.conf);
+  // open new conf
+  string fn = g_conf.conf;
+  list<string> ls;
+  get_str_list(fn, ls);
+  bool read_conf = false;
+  for (list<string>::iterator p = ls.begin(); p != ls.end(); p++) {
+    cf = new ConfFile(p->c_str());
+    read_conf = parse_config_file(cf, true);
+    if (read_conf)
+      break;
+    delete cf;
+  }
 
-  int ret = parse_config_file(cf, true);
-
-  if (conf_specified && !ret) {
-    cerr << "error reading config file " << g_conf.conf << std::endl;
+  if (conf_specified && !read_conf) {
+    cerr << "error reading config file(s) " << g_conf.conf << std::endl;
     exit(1);
   }
 
