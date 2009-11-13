@@ -426,6 +426,7 @@ noinst_HEADERS = \
 	auth/none/AuthNoneProtocol.h\
 	auth/Auth.h\
 	auth/AuthSupported.h\
+	auth/AuthClientHandler.h\
 	auth/AuthServiceHandler.h\
 	auth/AuthAuthorizeHandler.h\
 	auth/KeyRing.h\
@@ -514,6 +515,7 @@ noinst_HEADERS = \
         include/rangeset.h\
 	include/rados.h\
         include/statlite.h\
+	include/str_list.h\
         include/triple.h\
         include/tstring.h\
         include/types.h\
@@ -569,6 +571,7 @@ noinst_HEADERS = \
         mds/snap.h\
         messages/MAuth.h\
         messages/MAuthReply.h\
+	messages/MCacheExpire.h\
 	messages/MClass.h\
 	messages/MClassAck.h\
         messages/MClientCaps.h\
@@ -620,6 +623,7 @@ noinst_HEADERS = \
         messages/MMonCommandAck.h\
         messages/MMonElection.h\
         messages/MMonGetMap.h\
+	messages/MMonGlobalID.h\
         messages/MMonMap.h\
         messages/MMonObserve.h\
         messages/MMonObserveNotify.h\
@@ -656,6 +660,7 @@ noinst_HEADERS = \
         messages/MStatfs.h\
         messages/MStatfsReply.h\
 	messages/PaxosServiceMessage.h\
+	mon/AuthMonitor.h\
         mon/ClassMonitor.h\
         mon/Elector.h\
 	mon/LogMonitor.h\
@@ -695,6 +700,7 @@ noinst_HEADERS = \
         osbdb/OSBDB.h\
         osd/Ager.h\
         osd/OSD.h\
+        osd/OSDCaps.h\
         osd/OSDMap.h\
         osd/ObjectVersioner.h\
         osd/PG.h\
