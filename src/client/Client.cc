@@ -591,7 +591,6 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
  */
 Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 {
-  MClientRequest *req = request->request;
   MClientReply *reply = request->reply;
 
   dout(10) << "insert_trace from " << from << " mds" << mds << dendl;
@@ -647,7 +646,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     assert(inode_map.count(vino));
     Inode *diri = inode_map[vino];
     
-    string dname = req->get_filepath().last_dentry();
+    string dname = request->path.last_dentry();
     
     LeaseStat dlease;
     dlease.duration_ms = 0;
@@ -1025,26 +1024,26 @@ void Client::encode_dentry_release(Dentry *dn, MClientRequest *req,
  * Additionally, if you set any *drop member, you'd better have
  * set the corresponding dentry!
  */
-void Client::encode_cap_releases(MetaRequest *req, int mds) {
+void Client::encode_cap_releases(MetaRequest *req, MClientRequest *m, int mds) {
   dout(20) << "encode_cap_releases enter (req: "
 	   << req << ", mds: " << mds << ")" << dendl;
   if (req->inode_drop && req->inode)
-    encode_inode_release(req->inode, req->request,
+    encode_inode_release(req->inode, m,
 			 mds, req->inode_drop,
 			 req->inode_unless);
   
   if (req->old_inode_drop && req->old_inode)
-    encode_inode_release(req->old_inode, req->request,
+    encode_inode_release(req->old_inode, m,
 			 mds, req->old_inode_drop,
 			 req->old_inode_unless);
   
   if (req->dentry_drop && req->dentry)
-    encode_dentry_release(req->dentry, req->request,
+    encode_dentry_release(req->dentry, m,
 			  mds, req->dentry_drop,
 			  req->dentry_unless);
   
   if (req->old_dentry_drop && req->old_dentry)
-    encode_dentry_release(req->old_dentry, req->request,
+    encode_dentry_release(req->old_dentry, m,
 			  mds, req->old_dentry_drop,
 			  req->old_dentry_unless);
   dout(25) << "encode_cap_releases exit (req: "
@@ -1100,33 +1099,28 @@ void Client::handle_client_session(MClientSession *m)
 
 void Client::send_request(MetaRequest *request, int mds)
 {
-  MClientRequest *r = request->request;
   // make the request
   dout(10) << "send_request rebuilding request " << request->get_tid()
 	   << " for mds" << mds << dendl;
-  r = make_request_from_Meta(request);
+  MClientRequest *r = make_request_from_Meta(request);
   if (request->dentry)
     r->set_dentry_wanted();
   if (request->got_unsafe)
     r->set_replayed_op();
-
-  request->request = r;
-  encode_cap_releases(request, mds);
-  request->request = 0;
-
   r->set_mdsmap_epoch(mdsmap->get_epoch());
+
+  encode_cap_releases(request, r, mds);
 
   if (request->mds == -1) {
     request->sent_stamp = g_clock.now();
     dout(20) << "send_request set sent_stamp to " << request->sent_stamp << dendl;
   }
+  request->mds = mds;
 
   mds_sessions[mds].requests.push_back(&request->item);
 
   dout(10) << "send_request " << *r << " to mds" << mds << dendl;
   messenger->send_message(r, mdsmap->get_inst(mds));
-  
-  request->mds = mds;
 }
 
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
