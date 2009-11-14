@@ -1889,13 +1889,8 @@ void Client::flush_snaps(Inode *in)
   // pick auth mds
   int mds = -1;
   int mseq = 0;
-  for (map<int,InodeCap*>::iterator p = in->caps.begin(); p != in->caps.end(); p++) {
-    if (p->second->issued & CEPH_CAP_ANY_WR) {
-      mds = p->first;
-      mseq = p->second->mseq;
-      break;
-    }
-  }
+  assert(in->auth_cap);
+  mds = in->auth_cap->session->inst.name.num();
   assert(mds >= 0);
 
   for (map<snapid_t,CapSnap>::iterator p = in->cap_snaps.begin(); p != in->cap_snaps.end(); p++) {
