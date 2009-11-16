@@ -69,10 +69,11 @@ v0.18
 pending wire, disk format changes
 
 bugs
+- SIGBUS
 - mds rstat bug (on 2* cp -av usr + 11_kernel_untar_build)
 mds/CInode.cc: In function 'virtual void CInode::finish_scatter_gather_update(int)':
 mds/CInode.cc:1233: FAILED assert(pi->rstat.rfiles >= 0)
-- mislinked directory?
+- mislinked directory?  (cpusr.sh, mv /c/* /c/t, more cpusr, ls /c/t)
 - premature filejournal trimming?
 - weird osd_lock contention during osd restart?
 
