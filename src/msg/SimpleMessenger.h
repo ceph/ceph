@@ -201,7 +201,8 @@ private:
     entity_addr_t& get_peer_addr() { return peer_addr; }
 
     void set_peer_addr(const entity_addr_t& a) {
-      peer_addr = a;
+      if (&peer_addr != &a)  // shut up valgrind
+	peer_addr = a;
       connection_state->set_peer_addr(a);
     }
     void set_peer_type(int t) {
