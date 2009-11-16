@@ -1324,7 +1324,7 @@ do { \
     }
   }
 
-  assert(check_from);
+  //assert(check_from);
 
 
   if (laggy)
