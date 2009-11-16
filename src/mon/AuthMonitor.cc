@@ -240,6 +240,7 @@ void AuthMonitor::init()
     if (v) {
       dout(0) << "AuthMonitor::init() startup: loading summary e" << v << dendl;
       bufferlist::iterator p = latest.begin();
+      ::decode(max_global_id, p);
       ::decode(mon->key_server, p);
     }
   }
