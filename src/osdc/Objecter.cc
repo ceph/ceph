@@ -85,7 +85,7 @@ void Objecter::dispatch(Message *m)
     break;
 
   default:
-    dout(1) << "don't know message type " << m->get_type() << dendl;
+    dout(0) << "don't know message type " << m->get_type() << dendl;
     assert(0);
   }
 }
@@ -333,7 +333,7 @@ void Objecter::tick()
        i++) {
     if (!i->second.active_tids.empty() &&
 	i->second.last < cutoff) {
-      dout(10) << "tick pg " << i->first << " is laggy: " << i->second.active_tids << dendl;
+      dout(1) << " pg " << i->first << " is laggy: " << i->second.active_tids << dendl;
       maybe_request_map();
       //break;
 
