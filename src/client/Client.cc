@@ -4910,7 +4910,6 @@ Inode *Client::open_snapdir(Inode *diri)
     in->ctime = diri->ctime;
     in->size = diri->size;
 
-    in->mode = S_IFDIR | 0600;
     in->dirfragtree.clear();
     inode_map[vino] = in;
     in->snapdir_parent = diri;
