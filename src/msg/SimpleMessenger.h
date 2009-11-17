@@ -134,8 +134,6 @@ private:
 
     void was_session_reset();
 
-    void drop_msgs();
-
     // threads
     class Reader : public Thread {
       Pipe *pipe;

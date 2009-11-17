@@ -1174,8 +1174,8 @@ void SimpleMessenger::Pipe::fail()
 
   stop();
 
-  drop_msgs();
-
+  discard_queue();
+  
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
       rank->local[i]->queue_reset(connection_state->get());
@@ -1186,7 +1186,7 @@ void SimpleMessenger::Pipe::was_session_reset()
   assert(lock.is_locked());
 
   dout(10) << "was_session_reset" << dendl;
-  drop_msgs();
+  discard_queue();
 
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
@@ -1195,18 +1195,6 @@ void SimpleMessenger::Pipe::was_session_reset()
   out_seq = 0;
   in_seq = 0;
   connect_seq = 0;
-}
-
-void SimpleMessenger::Pipe::drop_msgs()
-{
-  assert(lock.is_locked());
-
-  while (1) {
-    Message *m = _get_next_outgoing();
-    if (!m)
-      break;
-    m->put();
-  }
 }
 
 void SimpleMessenger::Pipe::stop()
