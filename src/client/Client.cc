@@ -85,6 +85,7 @@ ostream& operator<<(ostream &out, Inode &in)
       << " open=" << in.open_by_mode
       << " ref=" << in.ref
       << " caps=" << ccap_string(in.caps_issued())
+      << " mode=" << oct << in.mode << dec
       << " mtime=" << in.mtime;
   if (in.dirty_caps)
     out << " dirty_caps=" << ccap_string(in.dirty_caps);
@@ -437,48 +438,48 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from, int mds)
     }
   }
   
-  if (st->cap.caps & CEPH_CAP_PIN) {
-    in->ino = st->vino.ino;
-    in->snapid = st->vino.snapid;
-    in->rdev = st->rdev;
-    in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
+  assert(st->cap.caps & CEPH_CAP_PIN);   // right??
 
-    if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
-      in->mode = st->mode;
-      in->uid = st->uid;
-      in->gid = st->gid;
-    }
+  in->ino = st->vino.ino;
+  in->snapid = st->vino.snapid;
+  in->rdev = st->rdev;
+  in->dirfragtree = st->dirfragtree;  // FIXME look at the mask!
 
-    if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
-      in->nlink = st->nlink;
-    }
+  if ((issued & CEPH_CAP_AUTH_EXCL) == 0) {
+    in->mode = st->mode;
+    in->uid = st->uid;
+    in->gid = st->gid;
+  }
 
-    if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
-	st->xattrbl.length() &&
-	st->xattr_version > in->xattr_version) {
-      bufferlist::iterator p = st->xattrbl.begin();
-      ::decode(in->xattrs, p);
-      in->xattr_version = st->xattr_version;
-    }
+  if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
+    in->nlink = st->nlink;
+  }
 
-    in->dirstat = st->dirstat;
-    in->rstat = st->rstat;
+  if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+      st->xattrbl.length() &&
+      st->xattr_version > in->xattr_version) {
+    bufferlist::iterator p = st->xattrbl.begin();
+    ::decode(in->xattrs, p);
+    in->xattr_version = st->xattr_version;
+  }
 
-    in->layout = st->layout;
-    in->ctime = st->ctime;
-    in->max_size = st->max_size;  // right?
+  in->dirstat = st->dirstat;
+  in->rstat = st->rstat;
 
-    update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
-			   st->time_warp_seq, st->ctime, st->mtime, st->atime,
-			   issued);
-
-    if (in->is_dir() &&
-	(st->cap.caps & CEPH_CAP_FILE_SHARED) &&
-	in->dirstat.nfiles == 0 &&
-	in->dirstat.nsubdirs == 0) {
-      dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
-      in->flags |= I_COMPLETE;
-    }
+  in->layout = st->layout;
+  in->ctime = st->ctime;
+  in->max_size = st->max_size;  // right?
+  
+  update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
+			 st->time_warp_seq, st->ctime, st->mtime, st->atime,
+			 issued);
+  
+  if (in->is_dir() &&
+      (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
+      in->dirstat.nfiles == 0 &&
+      in->dirstat.nsubdirs == 0) {
+    dout(10) << " marking I_COMPLETE on empty dir " << *in << dendl;
+    in->flags |= I_COMPLETE;
   }
 
   // symlink?
@@ -608,6 +609,11 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
   if (reply->snapbl.length())
     update_snap_trace(reply->snapbl);
 
+  dout(10) << " hrm " 
+	   << " is_target=" << (int)reply->head.is_target
+	   << " is_dentry=" << (int)reply->head.is_dentry
+	   << dendl;
+
   InodeStat dirst;
   DirStat dst;
   string dname;
@@ -643,6 +649,7 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
     }
   } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
 	     reply->head.op == CEPH_MDS_OP_MKSNAP) {
+    dout(10) << " faking snap lookup weirdness" << dendl;
     // fake it for snap lookup
     vinodeno_t vino = ist.vino;
     vino.snapid = CEPH_SNAPDIR;
