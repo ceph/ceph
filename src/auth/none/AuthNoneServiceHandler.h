@@ -23,11 +23,11 @@ public:
   AuthNoneServiceHandler()  {}
   ~AuthNoneServiceHandler() {}
   
-  int start_session(EntityName& name, uint64_t global_id, bufferlist::iterator& indata, bufferlist& result_bl) {
+  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl) {
     entity_name = name;
     return CEPH_AUTH_NONE;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) {
     caps.allow_all = true;
     return 0;
   }

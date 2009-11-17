@@ -74,6 +74,7 @@ public:
   virtual bool need_tickets() = 0;
 
   virtual void set_global_id(uint64_t id) = 0;
+  uint64_t get_global_id() { return global_id; }
 };
 
 

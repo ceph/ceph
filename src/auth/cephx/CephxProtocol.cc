@@ -256,6 +256,37 @@ void CephXTicketManager::validate_tickets(uint32_t mask, uint32_t& have, uint32_
   }
 }
 
+bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, AuthTicket& ticket)
+{
+  uint64_t secret_id = ticket_blob.secret_id;
+  CryptoKey service_secret;
+  CephXServiceTicketInfo ticket_info;
+
+  if (!ticket_blob.blob.length()) {
+    return false;
+  }
+
+  if (secret_id == (uint64_t)-1) {
+    if (!keys.get_secret(*g_conf.entity_name, service_secret)) {
+      dout(0) << "ceph_decode_ticket could not get general service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      return false;
+    }
+  } else {
+    if (!keys.get_service_secret(service_id, secret_id, service_secret)) {
+      dout(0) << "ceph_decode_ticket could not get service secret for service_id=" << service_id << " secret_id=" << secret_id << dendl;
+      return false;
+    }
+  }
+
+  if (decode_decrypt_enc_bl(ticket_info, service_secret, ticket_blob.blob) < 0) {
+    dout(0) << "ceph_decode_ticket could not decrypt ticket info" << dendl;
+    return false;
+  }
+
+  ticket = ticket_info.ticket;
+  return true;
+}
+
 /*
  * SERVICE: verify authorizer and generate reply authorizer
  *

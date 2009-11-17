@@ -132,18 +132,37 @@ struct CephXResponseHeader {
 };
 WRITE_CLASS_ENCODER(CephXResponseHeader);
 
+struct CephXTicketBlob {
+  uint64_t secret_id;
+  bufferlist blob;
+
+  void encode(bufferlist& bl) const {
+    ::encode(secret_id, bl);
+    ::encode(blob, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    ::decode(secret_id, bl);
+    ::decode(blob, bl);
+  }
+};
+WRITE_CLASS_ENCODER(CephXTicketBlob);
+
 // client -> server response to challenge
 struct CephXAuthenticate {
   __u64 client_challenge;
   __u64 key;
+  CephXTicketBlob old_ticket;
 
   void encode(bufferlist& bl) const {
     ::encode(client_challenge, bl);
     ::encode(key, bl);
+    ::encode(old_ticket, bl);
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(client_challenge, bl);
     ::decode(key, bl);
+    ::decode(old_ticket, bl);
  }
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)
@@ -227,22 +246,6 @@ struct CephXAuthorizer : public AuthAuthorizer {
   bool verify_reply(bufferlist::iterator& reply);
 };
 
-
-struct CephXTicketBlob {
-  uint64_t secret_id;
-  bufferlist blob;
-
-  void encode(bufferlist& bl) const {
-    ::encode(secret_id, bl);
-    ::encode(blob, bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    ::decode(secret_id, bl);
-    ::decode(blob, bl);
-  }
-};
-WRITE_CLASS_ENCODER(CephXTicketBlob);
 
 
 /*
@@ -333,6 +336,11 @@ struct CephXAuthorize {
 WRITE_CLASS_ENCODER(CephXAuthorize);
 
 /*
+ * Decode an extract ticket
+ */
+bool cephx_decode_ticket(KeyStore& keys, uint32_t service_id, CephXTicketBlob& ticket_blob, AuthTicket& ticket);
+
+/*
  * Verify authorizer and generate reply authorizer
  */
 extern bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata,
@@ -349,10 +357,9 @@ extern bool cephx_verify_authorizer(KeyStore& keys, bufferlist::iterator& indata
 #define AUTH_ENC_MAGIC 0xff009cad8826aa55
 
 template <typename T>
-int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
+int decode_decrypt_enc_bl(T& t, CryptoKey key, bufferlist& bl_enc) {
   uint64_t magic;
-  bufferlist bl_enc, bl;
-  ::decode(bl_enc, iter);
+  bufferlist bl;
 
   int ret = key.decrypt(bl_enc, bl);
   if (ret < 0) {
@@ -370,6 +377,14 @@ int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
   ::decode(t, iter2);
 
   return 0;
+}
+
+template <typename T>
+int decode_decrypt(T& t, CryptoKey key, bufferlist::iterator& iter) {
+  bufferlist bl_enc;
+  ::decode(bl_enc, iter);
+
+  return decode_decrypt_enc_bl(t, key, bl_enc);
 }
 
 template <typename T>

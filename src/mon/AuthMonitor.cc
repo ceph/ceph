@@ -376,14 +376,6 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     EntityName entity_name;
 
     if (!s->auth_handler) {
-      s->global_id = assign_global_id(m, paxos_writable);
-      if (!s->global_id) {
-        s->put();
-	if (mon->is_leader())
-	  return false;
-        return true;
-      }
-
       set<__u32> supported;
       
       try {
@@ -399,8 +391,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 	if (!s->auth_handler)
 	  ret = -EPERM;
 	else {
-          ::encode(s->global_id, response_bl);
-	  proto = s->auth_handler->start_session(entity_name, s->global_id, indata, response_bl);
+	  proto = s->auth_handler->start_session(entity_name, indata, response_bl);
           if (proto == CEPH_AUTH_NONE) {
             s->caps.set_allow_all(true);
           }
@@ -411,8 +402,35 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     }
   } else if (s->auth_handler) {
     // handle the request
+
+    if (!s->global_id) {
+      s->global_id = assign_global_id(m, paxos_writable);
+      if (!s->global_id) {
+        s->put();
+	if (mon->is_leader())
+	  return false;
+        return true;
+      }
+    }
+
     try {
-      ret = s->auth_handler->handle_request(indata, response_bl, caps_info);
+      bufferlist bl;
+      uint64_t global_id = s->global_id;
+      ret = s->auth_handler->handle_request(indata, bl, global_id, caps_info);
+      if (global_id != s->global_id) {
+        s->global_id = global_id;
+      }
+
+      /* done authenticating, let other side know of the selected global_id */
+      bool encode_global_id = (ret != -EAGAIN) && (s->notified_global_id != s->global_id);
+
+      ::encode((__u8)encode_global_id, response_bl);
+      if (encode_global_id) {
+        ::encode(global_id, response_bl);
+        s->notified_global_id = s->global_id;
+      }
+     
+      response_bl.claim_append(bl);
       dout(20) << "handled request for entity_name=" << s->auth_handler->get_entity_name().to_str() << dendl;
       s->caps.set_allow_all(caps_info.allow_all);
       if (caps_info.caps.length()) {

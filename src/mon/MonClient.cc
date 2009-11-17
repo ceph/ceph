@@ -294,16 +294,21 @@ void MonClient::handle_auth(MAuthReply *m)
     } else {
       auth->reset();
     }
+    state = MC_STATE_AUTHENTICATING;
+  } else {
     try {
-      ::decode(global_id, p);
-      clientid = global_id;
-      auth->set_global_id(global_id);
-      dout(10) << "my global_id is " << global_id << dendl;
+      __u8 assigned_id;
+      ::decode(assigned_id, p);
+      if (assigned_id) {
+        ::decode(global_id, p);
+        clientid = global_id;
+        auth->set_global_id(global_id);
+        dout(10) << "my global_id is " << auth->get_global_id() << dendl;
+      }
     } catch (buffer::error *err) {
       delete m;
       return;
     }
-    state = MC_STATE_AUTHENTICATING;
   }
   assert(auth);
 

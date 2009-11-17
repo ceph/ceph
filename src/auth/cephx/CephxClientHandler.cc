@@ -36,6 +36,8 @@ int CephxClientHandler::build_request(bufferlist& bl)
 
   dout(10) << "want=" << want << " need=" << need << " have=" << have << dendl;
 
+  CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+
   if (need & CEPH_ENTITY_TYPE_AUTH) {
     /* authenticate */
     CephXRequestHeader header;
@@ -48,6 +50,14 @@ int CephxClientHandler::build_request(bufferlist& bl)
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
     cephx_calc_client_server_challenge(secret, server_challenge, req.client_challenge, &req.key);
+
+    req.old_ticket = ticket_handler.ticket;
+
+    if (req.old_ticket.blob.length()) {
+      dout(0) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
+      hexdump("encoded ticket:", req.old_ticket.blob.c_str(), req.old_ticket.blob.length());
+    }
+
     ::encode(req, bl);
 
     dout(10) << "get auth session key: client_challenge " << req.client_challenge << dendl;
@@ -62,7 +72,6 @@ int CephxClientHandler::build_request(bufferlist& bl)
     header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
     ::encode(header, bl);
 
-    CephXTicketHandler& ticket_handler = tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
     authorizer = ticket_handler.build_authorizer(global_id);
     if (!authorizer)
       return -EINVAL;

@@ -1519,6 +1519,8 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
     return true;
 
   if (force_new) {
+    /* the MonClient checks keys every tick(), so we should just wait for that cycle
+       to get through */
     if (monc->wait_auth_rotating(10) < 0)
       return false;
   }

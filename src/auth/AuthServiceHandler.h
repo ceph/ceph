@@ -29,8 +29,8 @@ struct AuthServiceHandler {
 
   virtual ~AuthServiceHandler() { }
 
-  virtual int start_session(EntityName& name, uint64_t global_id, bufferlist::iterator& indata, bufferlist& result) = 0;
-  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result, AuthCapsInfo& caps) = 0;
+  virtual int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result) = 0;
+  virtual int handle_request(bufferlist::iterator& indata, bufferlist& result, uint64_t& global_id, AuthCapsInfo& caps) = 0;
 
   EntityName& get_entity_name() { return entity_name; }
 };

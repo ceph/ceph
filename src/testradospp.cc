@@ -36,6 +36,8 @@ int main(int argc, const char **argv)
   }
 
   cout << "rados_initialize completed" << std::endl;
+  cout << "*** press enter to continue ***" << std::endl;
+  getchar();
 
   time_t tm;
   bufferlist bl, bl2;
@@ -59,8 +61,6 @@ int main(int argc, const char **argv)
   r = rados.write(pool, oid, 0, bl, bl.length() - 2);
   cout << "rados.write returned " << r << std::endl;
   r = rados.write(pool, oid, 0, bl, bl.length() - 3);
-  cout << "*** press enter to continue ***" << std::endl;
-  getchar();
   cout << "rados.write returned " << r << std::endl;
   r = rados.write(pool, oid, 0, bl, bl.length() - 4);
   cout << "rados.write returned " << r << std::endl;
