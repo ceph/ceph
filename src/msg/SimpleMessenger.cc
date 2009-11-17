@@ -53,11 +53,6 @@ static ostream& _prefix(SimpleMessenger *rank) {
 #define opened_socket() //dout(20) << "opened_socket " << ++sockopen << dendl;
 
 
-#ifdef DARWIN
-sig_t old_sigint_handler = 0;
-#else
-sighandler_t old_sigint_handler = 0;
-#endif
 
 /********************************************
  * Accepter
@@ -223,7 +218,8 @@ void *SimpleMessenger::Accepter::entry()
       }
       rank->lock.Unlock();
     } else {
-      dout(0) << "accepter no incoming connection?  sd = " << sd << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+      dout(0) << "accepter no incoming connection?  sd = " << sd
+	      << " errno " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
       if (++errors > 4)
 	break;
     }
@@ -1221,6 +1217,7 @@ void SimpleMessenger::Pipe::report_failures()
 void SimpleMessenger::Pipe::stop()
 {
   dout(10) << "stop" << dendl;
+  assert(lock.is_locked());
   state = STATE_CLOSED;
   cond.Signal();
   if (sd >= 0) {
@@ -1333,8 +1330,8 @@ void SimpleMessenger::Pipe::reader()
 	derr(0) << "reader got bad seq " << m->get_seq() << " expected " << in_seq
 		<< " for " << *m << " from " << m->get_source() << dendl;
 	assert(in_seq == m->get_seq()); // for now!
-	fault(false, true);
 	delete m;
+	fault(false, true);
 	continue;
       }
 
@@ -2209,6 +2206,7 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 {
   const entity_addr_t dest_addr = dest.addr;
   entity_addr_t dest_proc_addr = dest_addr;
+
   lock.Lock();
   {
     // local?
@@ -2256,10 +2254,9 @@ void SimpleMessenger::wait()
     if (num_local == 0) {
       dout(10) << "wait: everything stopped" << dendl;
       break;   // everything stopped.
-    } else {
-      dout(10) << "wait: local still has " << local.size() << " items, waiting" << dendl;
     }
-    
+
+    dout(10) << "wait: local still has " << local.size() << " items, waiting" << dendl;
     wait_cond.Wait(lock);
   }
   lock.Unlock();
