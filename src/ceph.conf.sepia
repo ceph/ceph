@@ -26,6 +26,7 @@
 	host = sepia1
 	mon addr = 10.3.14.128:6789
 	log dir = /data/sepia1
+	valgrind = "--tool=memcheck --log-file=/data/sepia1/v.mon$id"
 
 ; ---------------------
 [mds]
@@ -64,7 +65,7 @@
 	filestore max sync interval = 5
 
 ;	btrfs devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0"
-;	valgrind = "--tool=memcheck --log-file=/data/cosd$id/v.osd$id"
+	valgrind = "--tool=memcheck --log-file=/data/sepia$id/v.osd$id"
 
 [osd2]
 	host = sepia2
