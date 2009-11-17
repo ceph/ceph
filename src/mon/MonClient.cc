@@ -207,15 +207,18 @@ void MonClient::handle_monmap(MMonMap *m)
   dout(10) << "handle_monmap " << *m << dendl;
   monc_lock.Lock();
 
-  _finish_hunting();
-
   bufferlist::iterator p = m->monmapbl.begin();
   ::decode(monmap, p);
+
+  dout(10) << " got monmap " << monmap.epoch << dendl;
 
   _sub_got("monmap", monmap.get_epoch());
 
   map_cond.Signal();
   want_monmap = false;
+
+  if (cur_mon >= 0)
+    _finish_hunting();
 
   monc_lock.Unlock();
   delete m;
