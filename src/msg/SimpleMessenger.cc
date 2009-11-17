@@ -2199,15 +2199,10 @@ void SimpleMessenger::send_keepalive(const entity_inst_t& dest)
 	  pipe->lock.Unlock();
 	}
       }
-      if (!pipe) {
-	dout(20) << "send_keepalive remote, " << dest_addr << ", new pipe." << dendl;
-	// not connected.
-	pipe = connect_rank(dest_proc_addr, dest.name.type());
-	pipe->send_keepalive();
-      }
+      if (!pipe)
+	dout(20) << "send_keepalive no pipe for " << dest_addr << ", doing nothing." << dendl;
     }
   }
-
   lock.Unlock();
 }
 
