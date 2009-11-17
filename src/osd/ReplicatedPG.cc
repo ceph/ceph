@@ -486,6 +486,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   }    
   
   bool ok;
+  dout(10) << "do_op mode is " << mode << dendl;
   if (op->may_read() && op->may_write())
     ok = mode.try_rmw(client);
   else if (op->may_write())
@@ -506,7 +507,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
     return;
   }
 
-  dout(10) << "mode now " << mode << dendl;
+  dout(10) << "do_op mode now " << mode << dendl;
 
   const sobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, op->get_reqid(), op->ops, op->get_data(),
@@ -1871,8 +1872,9 @@ void ReplicatedPG::apply_repop(RepGather *repop)
     repop->ctx->clone_obc = 0;
   }
 
+  dout(10) << "apply_repop mode was " << mode << dendl;
   mode.finish_write();
-  dout(10) << "mode now " << mode << dendl;
+  dout(10) << "apply_repop mode now " << mode << " (finish_write)" << dendl;
 
   put_object_context(repop->obc);
   repop->obc = 0;
@@ -2028,9 +2030,10 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
 
   RepGather *repop = new RepGather(ctx, obc, noop, rep_tid, info.last_complete);
 
+  dout(10) << "new_repop mode was " << mode << dendl;
   mode.start_write();
   obc->get();  // we take a ref
-  dout(10) << "mode now " << mode << dendl;
+  dout(10) << "new_repop mode now " << mode << " (start_write)" << dendl;
 
   // initialize gather sets
   for (unsigned i=0; i<acting.size(); i++) {
