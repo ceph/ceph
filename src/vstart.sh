@@ -362,9 +362,9 @@ EOF
 	osd = "allow rwx"
 	mds = "allow"
 EOF
-		$SUDO $CEPH_BIN/authtool --gen-key --name=mds.$name --caps=$mds_caps $key_fn
-		$SUDO $CEPH_ADM -i $key_fn auth add mds.$name
 	    fi
+	    $SUDO $CEPH_BIN/authtool --gen-key --name=mds.$name --caps=$mds_caps $key_fn
+	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name
 	fi
 	
 	run 'mds' $CEPH_BIN/cmds -i $name $ARGS $CMDS_ARGS
