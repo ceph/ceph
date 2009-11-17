@@ -354,10 +354,9 @@ void MonClient::tick()
   dout(10) << "tick" << dendl;
 
   if (hunting) {
-    dout(0) << "continuing hunt" << dendl;
+    dout(1) << "continuing hunt" << dendl;
     _reopen_session();
-
-  } else {
+  } else if (cur_mon >= 0) {
     // just renew as needed
     utime_t now = g_clock.now();
     if (now > sub_renew_after)
