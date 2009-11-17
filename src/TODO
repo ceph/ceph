@@ -53,6 +53,7 @@ v0.18
 - fixed mds log trimming bug
 - fixed mds cap vs snap deadlock
 - filestore faster flushing
+- uclient and kclient snapshot fixes
 
 - mount btrfs by UUID?
 
