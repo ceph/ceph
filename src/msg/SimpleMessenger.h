@@ -133,7 +133,7 @@ private:
 
     void was_session_reset();
 
-    void report_failures();
+    void drop_msgs();
 
     // threads
     class Reader : public Thread {

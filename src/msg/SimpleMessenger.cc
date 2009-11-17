@@ -1173,18 +1173,12 @@ void SimpleMessenger::Pipe::fail()
   assert(lock.is_locked());
 
   stop();
-  report_failures();
+
+  drop_msgs();
 
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
       rank->local[i]->queue_reset(connection_state->get());
-
-  // unregister
-  lock.Unlock();
-  rank->lock.Lock();
-  unregister_pipe();
-  rank->lock.Unlock();
-  lock.Lock();
 }
 
 void SimpleMessenger::Pipe::was_session_reset()
@@ -1192,7 +1186,8 @@ void SimpleMessenger::Pipe::was_session_reset()
   assert(lock.is_locked());
 
   dout(10) << "was_session_reset" << dendl;
-  report_failures();
+  drop_msgs();
+
   for (unsigned i=0; i<rank->local.size(); i++) 
     if (rank->local[i])
       rank->local[i]->queue_remote_reset(connection_state->get());
@@ -1202,10 +1197,10 @@ void SimpleMessenger::Pipe::was_session_reset()
   connect_seq = 0;
 }
 
-void SimpleMessenger::Pipe::report_failures()
+void SimpleMessenger::Pipe::drop_msgs()
 {
-  // report failures
-  q[CEPH_MSG_PRIO_HIGHEST].splice(q[CEPH_MSG_PRIO_HIGHEST].begin(), sent);
+  assert(lock.is_locked());
+
   while (1) {
     Message *m = _get_next_outgoing();
     if (!m)
