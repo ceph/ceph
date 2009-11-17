@@ -593,7 +593,10 @@ Inode* Client::insert_trace(MetaRequest *request, utime_t from, int mds)
 {
   MClientReply *reply = request->reply;
 
-  dout(10) << "insert_trace from " << from << " mds" << mds << dendl;
+  dout(10) << "insert_trace from " << from << " mds" << mds 
+	   << " is_target=" << (int)reply->head.is_target
+	   << " is_dentry=" << (int)reply->head.is_dentry
+	   << dendl;
 
   bufferlist::iterator p = reply->get_trace_bl().begin();
   if (p.end()) {
@@ -1721,7 +1724,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
   int flush = 0;
   __u64 flush_tid = 0;
 
-  int retain = wanted;
+  int retain = wanted | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
       retain |= CEPH_CAP_ANY;
@@ -3474,7 +3477,7 @@ int Client::setattr(const char *relpath, struct stat_precise *attr, int mask)
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat) 
 {
-  dout(10) << "fill_stat on " << in->ino << " snap/dev" << in->snapid 
+  dout(10) << "fill_stat on " << in->ino << " snap/dev=" << in->snapid 
 	   << " mode 0" << oct << in->mode << dec
 	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
   memset(st, 0, sizeof(struct stat));
