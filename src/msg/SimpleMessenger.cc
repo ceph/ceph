@@ -1876,9 +1876,11 @@ void SimpleMessenger::reaper()
 
   while (!pipe_reap_queue.empty()) {
     Pipe *p = pipe_reap_queue.front();
-    dout(10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
-    p->unregister_pipe();
     pipe_reap_queue.pop_front();
+    dout(10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
+    p->lock.Lock();
+    p->lock.Unlock();
+    p->unregister_pipe();
     assert(pipes.count(p));
     pipes.erase(p);
     p->join();
@@ -2241,18 +2243,13 @@ void SimpleMessenger::wait()
   lock.Lock();
   {
     dout(10) << "wait: closing pipes" << dendl;
-    list<Pipe*> toclose;
-    for (hash_map<entity_addr_t,Pipe*>::iterator i = rank_pipe.begin();
-         i != rank_pipe.end();
-         i++)
-      toclose.push_back(i->second);
-    for (list<Pipe*>::iterator i = toclose.begin();
-	 i != toclose.end();
-	 i++) {
-      (*i)->unregister_pipe();
-      (*i)->lock.Lock();
-      (*i)->stop();
-      (*i)->lock.Unlock();
+
+    while (!rank_pipe.empty()) {
+      Pipe *p = rank_pipe.begin()->second;
+      p->unregister_pipe();
+      p->lock.Lock();
+      p->stop();
+      p->lock.Unlock();
     }
 
     reaper();
