@@ -222,6 +222,7 @@ osd
 - optimize remove wrt recovery pushes?
 
 uclient
+- fix client_lock vs other mutex with C_SafeCond
 - clean up check_caps to more closely mirror kclient logic
 - readdir from cache
 - fix readdir vs fragment race by keeping a separate frag pos, and ignoring dentries below it

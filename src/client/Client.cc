@@ -4766,13 +4766,19 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 
   ceph_statfs stats;
 
+  Mutex lock("Client::statfs::lock");
   Cond cond;
   bool done;
+  int rval;
 
-  objecter->get_fs_stats(stats, new C_Cond(&cond, &done));
+  objecter->get_fs_stats(stats, new C_SafeCond(&lock, &cond, &done, &rval));
 
-  while(!done) 
-    cond.Wait(client_lock);
+  client_lock.Unlock();
+  lock.Lock();
+  while (!done) 
+    cond.Wait(lock);
+  lock.Unlock();
+  client_lock.Lock();
 
   memset(stbuf, 0, sizeof(*stbuf));
   //divide the results by 4 to give them as Posix expects
@@ -4789,7 +4795,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = PAGE_SIZE;  // ??
 
-  return 0;
+  return rval;
 }
 
 int Client::ll_statfs(vinodeno_t vino, struct statvfs *stbuf)
