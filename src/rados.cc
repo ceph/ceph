@@ -47,7 +47,7 @@ void usage()
   cerr << "   mksnap foo  -- create snap 'foo'\n";
   cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
 
-  cerr << "   bench <seconds> [-t concurrentwrites] [-b writesize] [verify] [sync]\n";
+  cerr << "   bench <seconds> [-t concurrentwrites] [-b writesize] [verify]\n";
   cerr << "              default is 16 concurrent IOs and 4 MB writes size\n\n";
 
   cerr << "Options:\n";
@@ -150,7 +150,7 @@ void *status_printer(void * data_store) {
 
 
 int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
-	      int concurrentios, int writeSize, int readOffResults, int sync) {
+	      int concurrentios, int writeSize, int readOffResults) {
   
   cout << "Maintaining " << concurrentios << " concurrent writes of "
        << writeSize << " bytes for at least "
@@ -287,17 +287,29 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     char matchName[128];
     object_t oid;
     bufferlist actualContents;
+    utime_t start_time;
+    utime_t lat;
+    double total_latency = 0;
+    double avg_latency;
+    double avg_bw;
     for (int i = 0; i < writesCompleted; ++i ) {
       snprintf(matchName, 128, "Object %s:%d", iTime, i);
       oid = object_t(matchName);
       snprintf(contentsChars, writeSize, "I'm the %dth object!", i);
+      start_time = g_clock.now();
       rados.read(pool, oid, 0, actualContents, writeSize);
+      lat = g_clock.now() - start_time;
+      total_latency += (double) lat;
       if (strcmp(contentsChars, actualContents.c_str()) != 0 ) {
 	cerr << "Object " << matchName << " is not correct!";
 	++errors;
       }
       actualContents.clear();
     }
+    avg_latency = total_latency / writesCompleted;
+    avg_bw = writesCompleted * writeSize / (total_latency) / (1024 *1024);
+    cout << "read avg latency: " << avg_latency
+	 << " read avg bw: " << avg_bw << std::endl;
   }
   double bandwidth;
   bandwidth = ((double)writesCompleted)*((double)writeSize)/(double)timePassed;
@@ -590,17 +602,14 @@ int main(int argc, const char **argv)
     if (!pool || nargs.size() < 2)
       usage();
     int seconds = atoi(nargs[1]);
-    int sync = 0;
     int verify = 0;
     for (unsigned i=2; i<nargs.size(); i++) {
-      if (strcmp(nargs[i], "sync") == 0)
-	sync = 1;
-      else if (strcmp(nargs[i], "verify") == 0)
+      if (strcmp(nargs[i], "verify") == 0)
 	verify = 1;
       else
 	usage();
     }
-    aio_bench(rados, p, seconds, concurrent_ios, write_size, verify, sync);
+    aio_bench(rados, p, seconds, concurrent_ios, write_size, verify);
   }
   else {
     cerr << "unrecognized command " << nargs[0] << std::endl;
