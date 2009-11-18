@@ -487,6 +487,7 @@ void ReplicatedPG::do_op(MOSDOp *op)
   
   bool ok;
   dout(10) << "do_op mode is " << mode << dendl;
+  assert(!mode.wake);   // we should never have woken waiters here.
   if (op->may_read() && op->may_write())
     ok = mode.try_rmw(client);
   else if (op->may_write())
