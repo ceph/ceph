@@ -274,6 +274,9 @@ public:
   static raw* claim_malloc(unsigned len, char *buf) {
     return new raw_malloc(len, buf);
   }
+  static raw* create_static(unsigned len, char *buf) {
+    return new raw_static(buf, len);
+  }
 
   static raw* create_page_aligned(unsigned len) {
 #ifndef __CYGWIN__
