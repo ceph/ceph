@@ -373,7 +373,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   EntityName entity_name;
 
   // set up handler?
-  if (m->protocol == 0 &&!s->auth_handler) {
+  if (m->protocol == 0 && !s->auth_handler) {
     set<__u32> supported;
     
     try {
@@ -392,16 +392,23 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       goto reply;
     }
     start = true;
-  } else {
-    ret = -EINVAL;  // can only select protocol once per connection
-    goto reply;
+  } else if (!s->auth_handler) {
+      dout(0) << "protocol specified but no s->auth_handler" << dendl;
+      ret = -EINVAL;
+      goto reply;
   }
 
-  // assign a new global_id?
+  /* assign a new global_id? we assume this should only happen on the first
+     request. If a client tries to send it later, it'll screw up its auth
+     session */
   if (!s->global_id) {
     s->global_id = assign_global_id(m, paxos_writable);
     if (!s->global_id) {
       s->put();
+
+      delete s->auth_handler;
+      s->auth_handler = NULL;
+
       if (mon->is_leader())
 	return false;
       return true;
@@ -417,6 +424,10 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
       // request
       ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info);
     }
+    if (ret == -EIO) {
+      paxos->wait_for_active(new C_RetryMessage(this, m));
+      goto done;
+    }
     s->caps.set_allow_all(caps_info.allow_all);
     if (caps_info.caps.length()) {
       bufferlist::iterator iter = caps_info.caps.begin();
@@ -427,9 +438,10 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
   }
 
- reply:
+reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
+done:
   s->put();
   return true;
 }

@@ -294,26 +294,18 @@ void MonClient::handle_auth(MAuthReply *m)
       }
       auth->set_want_keys(want_keys);
       auth->init(entity_name);
+      auth->set_global_id(global_id);
     } else {
       auth->reset();
     }
     state = MC_STATE_AUTHENTICATING;
-  } else {
-    try {
-      __u8 assigned_id;
-      ::decode(assigned_id, p);
-      if (assigned_id) {
-        ::decode(global_id, p);
-        clientid = global_id;
-        auth->set_global_id(global_id);
-        dout(10) << "my global_id is " << auth->get_global_id() << dendl;
-      }
-    } catch (buffer::error *err) {
-      delete m;
-      return;
-    }
   }
   assert(auth);
+  if (m->global_id) {
+    global_id = m->global_id;
+    auth->set_global_id(global_id);
+    dout(10) << "my global_id is " << m->global_id << dendl;
+  }
 
   int ret = auth->handle_response(m->result, p);
   delete m;
@@ -385,6 +377,7 @@ void MonClient::_reopen_session()
     m->protocol = 0;
     ::encode(auth_supported, m->auth_payload);
     ::encode(entity_name, m->auth_payload);
+    ::encode(global_id, m->auth_payload);
     _send_mon_message(m, true);
   }
 

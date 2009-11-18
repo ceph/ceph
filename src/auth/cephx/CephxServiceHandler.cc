@@ -172,7 +172,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     break;
 
   default:
-    dout(10) << "handle_request unkonwn op " << cephx_header.request_type << dendl;
+    dout(10) << "handle_request unknown op " << cephx_header.request_type << dendl;
     return -EINVAL;
   }
   return ret;
