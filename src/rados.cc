@@ -159,7 +159,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
   Rados::AioCompletion* completions[concurrentios];
   char* name[concurrentios];
   bufferlist* contents[concurrentios];
-  char contentsChars[writeSize];
+  char* contentsChars = new char[writeSize];
   double totalLatency = 0;
   double minLatency=9999.0; // this better be higher than initial latency!
   double maxLatency=0;
@@ -331,6 +331,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
 
   pthread_join(print_thread, NULL);
 
+  delete contentsChars;
   delete data;
   return 0;
 }
