@@ -83,6 +83,10 @@ int FileJournal::_open(bool forwrite, bool create)
 #endif
   }
 
+  // static zeroed buffer for alignment padding
+  zero_buf = new char[header.alignment];
+  memset(zero_buf, 0, header.alignment);
+
   dout(2) << "_open " << fn << " fd " << fd 
 	  << ": " << max_size << " bytes, block size " << block_size << dendl;
 
@@ -397,8 +401,7 @@ void FileJournal::prepare_multi_write(bufferlist& bl)
     // pad...
     if (queue_pos % header.alignment) {
       int pad = header.alignment - (queue_pos % header.alignment);
-      bufferptr bp(pad);
-      bp.zero();
+      bufferptr bp = buffer::create_static(pad, zero_buf);
       bl.push_back(bp);
       queue_pos += pad;
       //dout(20) << "   padding with " << pad << " bytes, queue_pos now " << queue_pos << dendl;

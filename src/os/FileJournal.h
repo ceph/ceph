@@ -65,6 +65,8 @@ public:
 private:
   string fn;
 
+  char *zero_buf;
+
   off64_t max_size;
   size_t block_size;
   bool directio;
@@ -134,6 +136,7 @@ private:
  public:
   FileJournal(__u64 fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false) : 
     Journal(fsid, fin, sync_cond), fn(f),
+    zero_buf(NULL),
     max_size(0), block_size(0),
     directio(dio),
     writing(false), must_write_header(false),
@@ -143,7 +146,9 @@ private:
     fd(-1),
     write_lock("FileJournal::write_lock"),
     write_stop(false), write_thread(this) { }
-  ~FileJournal() {}
+  ~FileJournal() {
+    delete zero_buf;
+  }
 
   int create();
   int open(__u64 last_seq);
