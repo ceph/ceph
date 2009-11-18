@@ -48,7 +48,7 @@ void usage()
   cerr << "   rmsnap foo  -- remove snap 'foo'\n\n";
 
   cerr << "   bench <seconds> [-t concurrentwrites] [-b writesize] [verify] [sync]\n";
-  cerr << "              default is 16 concurrent IOs and 2 MB writes size\n\n";
+  cerr << "              default is 16 concurrent IOs and 4 MB writes size\n\n";
 
   cerr << "Options:\n";
   cerr << "   -p pool\n";
@@ -94,15 +94,22 @@ void *status_printer(void * data_store) {
   ONE_SECOND.set_from_double(1.0);
   dataLock.Lock();
   while(!data->done) {
-    if (i % 20 == 0)
-      cout << setfill(' ') << setw(10) << "in flight"
+    if (i % 20 == 0) {
+      if (i > 0)
+	cout << "min lat: " << *data->min_latency
+	     << " max lat: " << *data->max_latency
+	     << " avg lat: " << *data->avg_latency << std::endl;
+      //I'm naughty and don't reset the fill
+      cout << setfill(' ') 
+	   << setw(5) << "sec" 
+	   << setw(8) << "Cur ops"
 	   << setw(10) << "started"
 	   << setw(10) << "finished"
 	   << setw(10) << "avg MB/s"
-	   << setw(10) << "dyn MB/s"
+	   << setw(10) << "cur MB/s"
 	   << setw(10) << "last lat"
-	   << setw(10) << "avg lat"
-	   << setw(10) << "seconds" << std::endl;
+	   << setw(10) << "avg lat" << std::endl;
+    }
     bandwidth = (double)(*data->finished - previous_writes)
       * (data->writeSize)
       / (1024*1024)
@@ -112,25 +119,27 @@ void *status_printer(void * data_store) {
     if (previous_writes != *data->finished) {
       previous_writes = *data->finished;
       cycleSinceChange = 0;
-      cout << setfill(' ') << setw(10) << *data->in_flight
+      cout << setfill(' ') 
+	   << setw(5) << i
+	   << setw(8) << *data->in_flight
 	   << setw(10) << *data->started
 	   << setw(10) << *data->finished
 	   << setw(10) << avg_bandwidth
 	   << setw(10) << bandwidth
 	   << setw(10) << (double)*data->cur_latency
-	   << setw(10) << *data->avg_latency
-	   << setw(10) << i << std::endl;
+	   << setw(10) << *data->avg_latency << std::endl;
     }
     else {
-      cout << setfill(' ') << setw(10) << *data->in_flight
+      cout << setfill(' ')
+	   << setw(5) << i
+	   << setw(8) << *data->in_flight
 	   << setw(10) << *data->started
 	   << setw(10) << *data->finished
 	   << setw(10) << avg_bandwidth
 	   << setw(10) << '0'
 	   << setw(10) << '-'
-	   << setw(10) << *data->avg_latency
-	   << setw(10) << i << std::endl;
-    }
+	   << setw(10) << *data->avg_latency << std::endl;
+	}
     ++i;
     ++cycleSinceChange;
     cond.WaitInterval(dataLock, ONE_SECOND);
@@ -251,7 +260,6 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
     contents[slot] = newContents;
   }
 
-  cerr << "Waiting for last writes to finish\n";
   while (writesCompleted < writesMade) {
     slot = writesCompleted % concurrentios;
     completions[slot]->wait_for_safe();
@@ -302,8 +310,7 @@ int aio_bench(Rados& rados, rados_pool_t pool, int secondsToRun,
        << "Bandwidth (MB/sec):    " << bw << std::endl
        << "Average Latency:       " << avgLatency << std::endl
        << "Max latency:           " << maxLatency << std::endl
-       << "Min latency:           " << minLatency << std::endl
-       << "Time waiting for Rados:" << totalLatency/concurrentios << std::endl;
+       << "Min latency:           " << minLatency << std::endl;
 
   if (readOffResults) {
     if (errors) cout << "WARNING: There were " << errors << " total errors in copying!\n";
