@@ -263,7 +263,7 @@ int MonClient::authenticate(double timeout)
 {
   Mutex::Locker lock(monc_lock);
 
-  if (clientid >= 0) {
+  if (state == MC_STATE_HAVE_SESSION) {
     dout(5) << "already authenticated" << dendl;;
     return 0;
   }
@@ -272,11 +272,12 @@ int MonClient::authenticate(double timeout)
   if (cur_mon < 0)
     _reopen_session();
 
-  while (clientid < 0 && !authenticate_err)
+  while (state != MC_STATE_HAVE_SESSION && !authenticate_err)
     authenticate_cond.Wait(monc_lock);
 
-  if (clientid >= 0)
-    dout(5) << "authenticate success, client" << clientid << dendl;
+  if (state == MC_STATE_HAVE_SESSION) {
+    dout(5) << "authenticate success, global_id" << global_id << dendl;
+  }
 
   return authenticate_err;
 }
@@ -301,7 +302,7 @@ void MonClient::handle_auth(MAuthReply *m)
     state = MC_STATE_AUTHENTICATING;
   }
   assert(auth);
-  if (m->global_id) {
+  if (m->global_id && m->global_id != global_id) {
     global_id = m->global_id;
     auth->set_global_id(global_id);
     dout(10) << "my global_id is " << m->global_id << dendl;

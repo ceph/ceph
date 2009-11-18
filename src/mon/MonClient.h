@@ -92,7 +92,6 @@ private:
 
   // authenticate
 private:
-  client_t clientid;
   Cond map_cond;
   Cond authenticate_cond;
   int authenticate_err;
@@ -217,7 +216,7 @@ public:
     return monmap.size();
   }
 
-  client_t get_global_id() { return clientid; }
+  uint64_t get_global_id() { return global_id; }
 
   void set_messenger(Messenger *m) { messenger = m; }
 
