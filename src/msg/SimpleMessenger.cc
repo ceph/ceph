@@ -1380,42 +1380,10 @@ void SimpleMessenger::Pipe::reader()
 
  
   // reap?
-  bool reap = false;
   reader_running = false;
-  if (!writer_running)
-    reap = true;
-
-  lock.Unlock();
-
-  if (reap) {
-    dout(10) << "reader queueing for reap" << dendl;
-    if (sd >= 0) {
-      ::close(sd);
-      sd = -1;
-      closed_socket();
-    }
-    rank->lock.Lock();
-    {
-      rank->pipe_reap_queue.push_back(this);
-      rank->wait_cond.Signal();
-    }
-    rank->lock.Unlock();
-  }
-
+  unlock_maybe_reap();
   dout(10) << "reader done" << dendl;
 }
-
-/*
-class FakeSocketError : public Context {
-  int sd;
-public:
-  FakeSocketError(int s) : sd(s) {}
-  void finish(int r) {
-    cout << "faking socket error on " << sd << std::endl;
-    ::close(sd);
-  }
-};
-*/
 
 /* write msgs to socket.
  * also, client.
@@ -1519,28 +1487,34 @@ void SimpleMessenger::Pipe::writer()
   dout(20) << "writer finishing" << dendl;
 
   // reap?
-  bool reap = false;
   writer_running = false;
-  if (!reader_running) reap = true;
+  unlock_maybe_reap();
+  dout(10) << "writer done" << dendl;
+}
 
-  lock.Unlock();
-  
-  if (reap) {
-    dout(10) << "writer queueing for reap" << dendl;
+void SimpleMessenger::Pipe::unlock_maybe_reap()
+{
+  if (!reader_running && !writer_running) {
+    // close
     if (sd >= 0) {
       ::close(sd);
       sd = -1;
       closed_socket();
     }
+
+    lock.Unlock();
+
+    // queue for reap
+    dout(10) << "unlock_maybe_reap queueing for reap" << dendl;
     rank->lock.Lock();
     {
       rank->pipe_reap_queue.push_back(this);
       rank->wait_cond.Signal();
     }
     rank->lock.Unlock();
+  } else {
+    lock.Unlock();
   }
-
-  dout(10) << "writer done" << dendl;
 }
 
 

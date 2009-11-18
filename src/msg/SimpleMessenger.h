@@ -121,6 +121,7 @@ private:
     int connect();  // client handshake
     void reader();
     void writer();
+    void unlock_maybe_reap();
 
     Message *read_message();
     int write_message(Message *m);
