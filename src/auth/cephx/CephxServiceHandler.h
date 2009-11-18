@@ -28,7 +28,7 @@ public:
   CephxServiceHandler(KeyServer *ks) : key_server(ks), server_challenge(0) {}
   ~CephxServiceHandler() {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl);
+  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps);
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps);
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };

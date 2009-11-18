@@ -20,13 +20,14 @@
 struct MAuthReply : public Message {
   __u32 protocol;
   __s32 result;
+  __u64 global_id;      // if zero, meaningless
   cstring result_msg;
   bufferlist result_bl;
 
   MAuthReply() : Message(CEPH_MSG_AUTH_REPLY), protocol(0), result(0) {}
-  MAuthReply(__u32 p, bufferlist *bl = NULL, int r = 0, const char *msg = 0) :
+  MAuthReply(__u32 p, bufferlist *bl = NULL, int r = 0, __u64 gid=0, const char *msg = 0) :
     Message(CEPH_MSG_AUTH_REPLY),
-    protocol(p), result(r),
+    protocol(p), result(r), global_id(gid),
     result_msg(msg) {
     if (bl)
       result_bl = *bl;
@@ -45,12 +46,14 @@ struct MAuthReply : public Message {
     bufferlist::iterator p = payload.begin();
     ::decode(protocol, p);
     ::decode(result, p);
+    ::decode(global_id, p);
     ::decode(result_bl, p);
     ::decode(result_msg, p);
   }
   void encode_payload() {
     ::encode(protocol, payload);
     ::encode(result, payload);
+    ::encode(global_id, payload);
     ::encode(result_bl, payload);
     ::encode(result_msg, payload);
   }

@@ -355,9 +355,6 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 {
   dout(0) << "prep_auth() blob_size=" << m->get_auth_payload().length() << dendl;
-  int ret = 0;
-  AuthCapsInfo caps_info;
-  MAuthReply *reply;
 
   Session *s = (Session *)m->get_connection()->get_priv();
   if (!s) {
@@ -366,91 +363,73 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     return true;
   }
 
+  int ret = 0;
+  AuthCapsInfo caps_info;
+  MAuthReply *reply;
   bufferlist response_bl;
   bufferlist::iterator indata = m->auth_payload.begin();
-
   __u32 proto = m->protocol;
+  bool start = false;
+  EntityName entity_name;
 
   // set up handler?
-  if (m->protocol == 0) {
-    EntityName entity_name;
-
-    if (!s->auth_handler) {
-      set<__u32> supported;
-      
-      try {
-	::decode(supported, indata);
-        ::decode(entity_name, indata);
-      } catch (buffer::error *e) {
-	dout(0) << "failed to decode initial auth message" << dendl;
-	ret = -EINVAL;
-      }
-      
-      if (!ret) {
-	s->auth_handler = get_auth_service_handler(&mon->key_server, supported);
-	if (!s->auth_handler)
-	  ret = -EPERM;
-	else {
-	  proto = s->auth_handler->start_session(entity_name, indata, response_bl);
-          if (proto == CEPH_AUTH_NONE) {
-            s->caps.set_allow_all(true);
-          }
-	}
-      }
-    } else {
-      ret = -EINVAL;  // can only select protocol once per connection
-    }
-  } else if (s->auth_handler) {
-    // handle the request
-
-    if (!s->global_id) {
-      s->global_id = assign_global_id(m, paxos_writable);
-      if (!s->global_id) {
-        s->put();
-	if (mon->is_leader())
-	  return false;
-        return true;
-      }
-    }
-
+  if (m->protocol == 0 &&!s->auth_handler) {
+    set<__u32> supported;
+    
     try {
-      bufferlist bl;
-      uint64_t global_id = s->global_id;
-      ret = s->auth_handler->handle_request(indata, bl, global_id, caps_info);
-      if (global_id != s->global_id) {
-        s->global_id = global_id;
-      }
-
-      /* done authenticating, let other side know of the selected global_id */
-      bool encode_global_id = (ret != -EAGAIN) && (s->notified_global_id != s->global_id);
-
-      ::encode((__u8)encode_global_id, response_bl);
-      if (encode_global_id) {
-        ::encode(global_id, response_bl);
-        s->notified_global_id = s->global_id;
-      }
-     
-      response_bl.claim_append(bl);
-      dout(20) << "handled request for entity_name=" << s->auth_handler->get_entity_name().to_str() << dendl;
-      s->caps.set_allow_all(caps_info.allow_all);
-      if (caps_info.caps.length()) {
-        bufferlist::iterator iter = caps_info.caps.begin();
-        s->caps.parse(iter);
-      }
-    } catch (buffer::error *err) {
+      ::decode(supported, indata);
+      ::decode(entity_name, indata);
+      ::decode(s->global_id, indata);
+    } catch (buffer::error *e) {
+      dout(0) << "failed to decode initial auth message" << dendl;
       ret = -EINVAL;
-      dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+      goto reply;
     }
-    if (ret == -EIO) {
-      paxos->wait_for_active(new C_RetryMessage(this, m));
-      goto done;
+
+    s->auth_handler = get_auth_service_handler(&mon->key_server, supported);
+    if (!s->auth_handler) {
+      ret = -EPERM;
+      goto reply;
     }
+    start = true;
   } else {
-    ret = -EINVAL;  // no protocol selected?
+    ret = -EINVAL;  // can only select protocol once per connection
+    goto reply;
   }
-  reply = new MAuthReply(proto, &response_bl, ret);
+
+  // assign a new global_id?
+  if (!s->global_id) {
+    s->global_id = assign_global_id(m, paxos_writable);
+    if (!s->global_id) {
+      s->put();
+      if (mon->is_leader())
+	return false;
+      return true;
+    }
+  }
+
+  try {
+    if (start) {
+      // new session
+      proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
+      ret = 0;
+    } else {
+      // request
+      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info);
+    }
+    s->caps.set_allow_all(caps_info.allow_all);
+    if (caps_info.caps.length()) {
+      bufferlist::iterator iter = caps_info.caps.begin();
+      s->caps.parse(iter);
+    }
+  } catch (buffer::error *err) {
+    ret = -EINVAL;
+    dout(0) << "caught error when trying to handle auth request, probably malformed request" << dendl;
+  }
+
+ reply:
+  reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->messenger->send_message(reply, m->get_orig_source_inst());
-done:
   s->put();
   return true;
 }
