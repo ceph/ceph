@@ -103,6 +103,7 @@ protected:
 
   int whoami;
   const char *dev_path, *journal_path;
+  bool mknewjournal;
 
   class C_Tick : public Context {
     OSD *osd;
@@ -820,7 +821,7 @@ protected:
   void ms_handle_remote_reset(Connection *con) {}
 
  public:
-  OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0);
+  OSD(int id, Messenger *m, Messenger *hbm, MonClient *mc, const char *dev = 0, const char *jdev = 0, bool newjournal=false);
   ~OSD();
 
   // static bits
