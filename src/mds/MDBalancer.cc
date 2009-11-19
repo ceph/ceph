@@ -689,7 +689,7 @@ inline void MDBalancer::send_targets_message()
        i != my_targets.end();
        ++i)
     targets.insert(i->first);
-  MMDSLoadTargets* m = new MMDSLoadTargets(targets);
+  MMDSLoadTargets* m = new MMDSLoadTargets(mds->monc->get_global_id(), targets);
   mds->monc->send_mon_message(m);
 }
 

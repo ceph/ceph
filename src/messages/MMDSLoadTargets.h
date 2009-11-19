@@ -23,25 +23,28 @@ using std::map;
 
 class MMDSLoadTargets : public Message {
  public:
+  __u64 global_id;
   set<int32_t> targets;
 
   MMDSLoadTargets() : Message(MSG_MDS_OFFLOAD_TARGETS) {}
 
-  MMDSLoadTargets(set<int32_t>& mds_targets) :
+  MMDSLoadTargets(__u64 g, set<int32_t>& mds_targets) :
     Message(MSG_MDS_OFFLOAD_TARGETS),
-    targets(mds_targets) {}
+    global_id(g), targets(mds_targets) {}
 
   const char* get_type_name() { return "mds_load_targets"; }
   void print(ostream& o) {
-    o << "mds_load_targets(" << targets << ")";
+    o << "mds_load_targets(" << global_id << " " << targets << ")";
   }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    ::decode(global_id, p);
     ::decode(targets, p);
   }
 
   void encode_payload() {
+    ::encode(global_id, payload);
     ::encode(targets, payload);
   }
 };

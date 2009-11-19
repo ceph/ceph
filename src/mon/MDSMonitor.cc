@@ -144,6 +144,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
   entity_addr_t addr = m->get_orig_source_inst().addr;
   int state = m->get_state();
+  __u64 gid = m->get_global_id();
   version_t seq = m->get_seq();
   MDSMap::mds_info_t info;
 
@@ -161,7 +162,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     return false;
 
   // booted, but not in map?
-  if (pending_mdsmap.is_dne(addr)) {
+  if (pending_mdsmap.is_dne_gid(gid)) {
     if (state != MDSMap::STATE_BOOT) {
       dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
       mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
@@ -170,7 +171,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
       return false;  // not booted yet.
     }
   }
-  info = pending_mdsmap.get_info(addr);
+  info = pending_mdsmap.get_info_gid(gid);
 
   // old seq?
   if (info.state_seq > seq) {
@@ -219,10 +220,10 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
  ignore:
   // note time and reply
   dout(15) << "mds_beacon " << *m << " noting time and replying" << dendl;
-  last_beacon[addr].stamp = g_clock.now();  
-  last_beacon[addr].seq = seq;
+  last_beacon[gid].stamp = g_clock.now();  
+  last_beacon[gid].seq = seq;
   mon->send_reply(m,
-		  new MMDSBeacon(mon->monmap->fsid, m->get_name(),
+		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
 				 mdsmap.get_epoch(), state, seq));
 
   // done
@@ -234,9 +235,9 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
 {
   dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
-  const entity_addr_t& a = m->get_orig_source_addr();
-  if (mdsmap.mds_info.count(a) &&
-      m->targets == mdsmap.mds_info[a].export_targets)
+  __u64 gid = m->global_id;
+  if (mdsmap.mds_info.count(gid) &&
+      m->targets == mdsmap.mds_info[gid].export_targets)
     return true;
   return false;
 }
@@ -272,13 +273,15 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   // -- this is an update --
   dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source_inst() << dendl;
   entity_addr_t addr = m->get_orig_source_inst().addr;
+  __u64 gid = m->get_global_id();
   int state = m->get_state();
   version_t seq = m->get_seq();
 
   // boot?
   if (state == MDSMap::STATE_BOOT) {
     // add
-    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
+    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
+    info.global_id = gid;
     info.name = m->get_name();
     info.rank = -1;
     info.addr = addr;
@@ -288,12 +291,12 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     info.standby_for_name = m->get_standby_for_name();
 
     // initialize the beacon timer
-    last_beacon[addr].stamp = g_clock.now();
-    last_beacon[addr].seq = seq;
+    last_beacon[gid].stamp = g_clock.now();
+    last_beacon[gid].seq = seq;
 
   } else {
     // state change
-    MDSMap::mds_info_t& info = pending_mdsmap.get_info(addr);
+    MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
 
     if (info.laggy()) {
       dout(10) << "prepare_beacon clearly laggy flag on " << addr << dendl;
@@ -308,8 +311,8 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
       pending_mdsmap.up.erase(info.rank);
       pending_mdsmap.in.erase(info.rank);
       pending_mdsmap.stopped.insert(info.rank);
-      pending_mdsmap.mds_info.erase(addr);  // last! info is a ref into this map
-      last_beacon.erase(addr);
+      pending_mdsmap.mds_info.erase(gid);  // last! info is a ref into this map
+      last_beacon.erase(gid);
     } else {
       info.state = state;
       info.state_seq = seq;
@@ -326,12 +329,12 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
 {
-  const entity_addr_t& a = m->get_orig_source_addr();
-  if (pending_mdsmap.mds_info.count(a)) {
-    dout(10) << "prepare_offload_targets " << a << " " << m->targets << dendl;
-    pending_mdsmap.mds_info[a].export_targets = m->targets;
+  __u64 gid = m->global_id;
+  if (pending_mdsmap.mds_info.count(gid)) {
+    dout(10) << "prepare_offload_targets " << gid << " " << m->targets << dendl;
+    pending_mdsmap.mds_info[gid].export_targets = m->targets;
   } else {
-    dout(10) << "prepare_offload_targets " << a << " not in map" << dendl;
+    dout(10) << "prepare_offload_targets " << gid << " not in map" << dendl;
   }
   return true;
 }
@@ -472,9 +475,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       int who = atoi(m->cmd[2].c_str());
       if (mdsmap.is_active(who)) {
 	r = 0;
-	entity_addr_t a = pending_mdsmap.up[who];
-	ss << "telling mds" << who << " " << a << " to stop";
-	pending_mdsmap.mds_info[a].state = MDSMap::STATE_STOPPING;
+	__u64 gid = pending_mdsmap.up[who];
+	ss << "telling mds" << who << " " << pending_mdsmap.mds_info[gid].addr << " to stop";
+	pending_mdsmap.mds_info[gid].state = MDSMap::STATE_STOPPING;
       } else {
 	r = -EEXIST;
 	ss << "mds" << who << " not active (" 
@@ -563,13 +566,13 @@ void MDSMonitor::tick()
     string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
-    entity_addr_t addr;
-    if (!pending_mdsmap.find_standby_for(mds, name, addr))
+    __u64 newgid = pending_mdsmap.find_standby_for(mds, name);
+    if (!newgid)
       break;
 
-    dout(1) << "adding standby " << addr << " as mds" << mds << dendl;
+    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[newgid];
+    dout(1) << "adding standby " << info.addr << " as mds" << mds << dendl;
     
-    MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
     info.rank = mds;
     if (pending_mdsmap.stopped.count(mds)) {
       info.state = MDSMap::STATE_STARTING;
@@ -578,7 +581,7 @@ void MDSMonitor::tick()
       info.state = MDSMap::STATE_CREATING;
     info.inc = ++pending_mdsmap.inc[mds];
     pending_mdsmap.in.insert(mds);
-    pending_mdsmap.up[mds] = addr;
+    pending_mdsmap.up[mds] = newgid;
     do_propose = true;
   }
 
@@ -588,54 +591,54 @@ void MDSMonitor::tick()
   cutoff -= g_conf.mds_beacon_grace;
 
   // make sure last_beacon is fully populated
-  for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
+  for (map<__u64,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
        p != pending_mdsmap.mds_info.end();
        ++p) 
-    if (last_beacon.count(p->second.addr) == 0) {
+    if (last_beacon.count(p->first) == 0) {
       const MDSMap::mds_info_t& info = p->second;
       dout(10) << " adding " << p->second.addr << " mds" << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " to last_beacon" << dendl;
-      last_beacon[p->second.addr].stamp = g_clock.now();
-      last_beacon[p->second.addr].seq = 0;
+      last_beacon[p->first].stamp = g_clock.now();
+      last_beacon[p->first].seq = 0;
     }
 
   if (mon->osdmon()->paxos->is_writeable()) {
 
     bool propose_osdmap = false;
 
-    map<entity_addr_t, beacon_info_t>::iterator p = last_beacon.begin();
+    map<__u64, beacon_info_t>::iterator p = last_beacon.begin();
     while (p != last_beacon.end()) {
-      entity_addr_t addr = p->first;
+      __u64 gid = p->first;
       utime_t since = p->second.stamp;
       __u64 seq = p->second.seq;
       p++;
       
-      if (pending_mdsmap.mds_info.count(addr) == 0) {
+      if (pending_mdsmap.mds_info.count(gid) == 0) {
 	// clean it out
-	last_beacon.erase(addr);
+	last_beacon.erase(gid);
 	continue;
       }
 
       if (since >= cutoff)
 	continue;
 
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[addr];
+      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
 
-      dout(10) << "no beacon from " << addr << " mds" << info.rank << "." << info.inc
+      dout(10) << "no beacon from " << info.addr << " mds" << info.rank << "." << info.inc
 	       << " " << ceph_mds_state_name(info.state)
 	       << " since " << since << dendl;
       
       // are we in?
       // and is there a non-laggy standby that can take over for us?
-      entity_addr_t sa;
+      __u64 sgid;
       if (info.rank >= 0 &&
 	  info.state != CEPH_MDS_STATE_STANDBY &&
-	  pending_mdsmap.find_standby_for(info.rank, info.name, sa)) {
-	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
-	dout(10) << " replacing " << addr << " mds" << info.rank << "." << info.inc
+	  (sgid = pending_mdsmap.find_standby_for(info.rank, info.name)) != 0) {
+	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
+	dout(10) << " replacing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
-		 << " with " << si.name << " " << sa << dendl;
+		 << " with " << sgid << "/" << si.name << " " << info.addr << dendl;
 	switch (info.state) {
 	case MDSMap::STATE_CREATING:
 	case MDSMap::STATE_STARTING:
@@ -658,36 +661,36 @@ void MDSMonitor::tick()
 	info.state_seq = seq;
 	if (si.state > 0) {
 	  si.inc = ++pending_mdsmap.inc[info.rank];
-	  pending_mdsmap.up[info.rank] = sa;
+	  pending_mdsmap.up[info.rank] = sgid;
 	  pending_mdsmap.last_failure = pending_mdsmap.epoch;
 	}
-	pending_mdsmap.mds_info.erase(addr);
+	pending_mdsmap.mds_info.erase(gid);
 
 	if (si.state > 0) {
 	  // blacklist
 	  utime_t until = now;
 	  until += g_conf.mds_blacklist_interval;
-	  mon->osdmon()->blacklist(addr, until);
+	  mon->osdmon()->blacklist(info.addr, until);
 	  propose_osdmap = true;
 	}
 	
 	do_propose = true;
       } else if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-	dout(10) << " failing " << addr << " mds" << info.rank << "." << info.inc
+	dout(10) << " failing " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << dendl;
-	pending_mdsmap.mds_info.erase(addr);
+	pending_mdsmap.mds_info.erase(gid);
 	do_propose = true;
       } else if (!info.laggy()) {
 	// just mark laggy
-	dout(10) << " marking " << addr << " mds" << info.rank << "." << info.inc
+	dout(10) << " marking " << info.addr << " mds" << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
 		 << " laggy" << dendl;
 	info.laggy_since = now;
 	do_propose = true;
       }
       
-      last_beacon.erase(addr);
+      last_beacon.erase(gid);
     }
 
     if (propose_osdmap)
@@ -703,16 +706,17 @@ void MDSMonitor::tick()
     set<int>::iterator p = failed.begin();
     while (p != failed.end()) {
       int f = *p++;
-      entity_addr_t sa;
+      __u64 sgid;
       string name;  // FIXME
-      if (pending_mdsmap.find_standby_for(f, name, sa)) {
-	dout(0) << " taking over failed mds" << f << " with " << sa << dendl;
-	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sa];
+      sgid = pending_mdsmap.find_standby_for(f, name);
+      if (sgid) {
+	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
+	dout(0) << " taking over failed mds" << f << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
 	si.state = MDSMap::STATE_REPLAY;
 	si.rank = f;
 	si.inc = ++pending_mdsmap.inc[f];
 	pending_mdsmap.in.insert(f);
-	pending_mdsmap.up[f] = sa;
+	pending_mdsmap.up[f] = sgid;
 	do_propose = true;
       }
     }
@@ -724,8 +728,8 @@ void MDSMonitor::tick()
       pending_mdsmap.get_num_mds(MDSMap::STATE_STANDBY) >= pending_mdsmap.get_num_mds()) {
     // see which nodes are shadowed
     set<int> shadowed;
-    map<int, set<entity_addr_t> > avail;
-    for (map<entity_addr_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
+    map<int, set<__u64> > avail;
+    for (map<__u64,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
 	 p != pending_mdsmap.mds_info.end();
 	 p++) {
       if (p->second.state == MDSMap::STATE_STANDBY_REPLAY) 
@@ -743,18 +747,18 @@ void MDSMonitor::tick()
 	continue;  // already shadowed.
       if (pending_mdsmap.get_state(*p) < MDSMap::STATE_ACTIVE)
 	continue;  // only shadow active mds
-      entity_addr_t s;
+      __u64 sgid;
       if (avail[*p].size()) {
-	s = *avail[*p].begin();
+	sgid = *avail[*p].begin();
 	avail[*p].erase(avail[*p].begin());
       } else if (avail[-1].size()) {
-	s = *avail[-1].begin();
+	sgid = *avail[-1].begin();
 	avail[-1].erase(avail[-1].begin());
       } else
 	continue;
-      dout(10) << "mds" << *p << " will be shadowed by " << s << dendl;
+      dout(10) << "mds" << *p << " will be shadowed by " << sgid << dendl;
 
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[s];
+      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[sgid];
       info.rank = *p;
       info.state = MDSMap::STATE_STANDBY_REPLAY;
       do_propose = true;
@@ -778,8 +782,9 @@ void MDSMonitor::do_stop()
   dout(7) << "do_stop stopping active mds nodes" << dendl;
   print_map(mdsmap);
 
-  map<entity_addr_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
+  map<__u64,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
   while (p != pending_mdsmap.mds_info.end()) {
+    __u64 gid = p->first;
     MDSMap::mds_info_t& info = p->second;
     p++;
     switch (info.state) {
@@ -791,7 +796,7 @@ void MDSMonitor::do_stop()
       pending_mdsmap.stopped.insert(info.rank);
     case MDSMap::STATE_CREATING:
       pending_mdsmap.up.erase(info.rank);
-      pending_mdsmap.mds_info.erase(info.addr);
+      pending_mdsmap.mds_info.erase(gid);
       pending_mdsmap.in.erase(info.rank);
       break;
     case MDSMap::STATE_REPLAY:
@@ -802,7 +807,7 @@ void MDSMonitor::do_stop()
       // BUG: hrm, if this is the case, the STOPPING guys won't be able to stop, will they?
       pending_mdsmap.failed.insert(info.rank);
       pending_mdsmap.up.erase(info.rank);
-      pending_mdsmap.mds_info.erase(info.addr);
+      pending_mdsmap.mds_info.erase(gid);
       pending_mdsmap.in.erase(info.rank);
       break;
     }

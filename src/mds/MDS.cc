@@ -496,7 +496,7 @@ void MDS::beacon_send()
 
   beacon_seq_stamp[beacon_last_seq] = g_clock.now();
   
-  MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), name, mdsmap->get_epoch(), 
+  MMDSBeacon *beacon = new MMDSBeacon(monc->get_fsid(), monc->get_global_id(), name, mdsmap->get_epoch(), 
 				      want_state, beacon_last_seq);
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
@@ -606,8 +606,8 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // see who i am
   addr = messenger->get_myaddr();
-  whoami = mdsmap->get_rank(addr);
-  state = mdsmap->get_state(addr);
+  whoami = mdsmap->get_rank_gid(monc->get_global_id());
+  state = mdsmap->get_state_gid(monc->get_global_id());
   dout(10) << "map says i am " << addr << " mds" << whoami << " state " << ceph_mds_state_name(state) << dendl;
 
   if (state != oldstate)

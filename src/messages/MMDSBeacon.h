@@ -23,6 +23,7 @@
 
 class MMDSBeacon : public PaxosServiceMessage {
   ceph_fsid_t fsid;
+  __u64 global_id;
   string name;
 
   __u32 state;
@@ -32,12 +33,13 @@ class MMDSBeacon : public PaxosServiceMessage {
 
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0) {}
-  MMDSBeacon(const ceph_fsid_t &f, string& n, epoch_t les, int st, version_t se) : 
+  MMDSBeacon(const ceph_fsid_t &f, __u64 g, string& n, epoch_t les, int st, version_t se) : 
     PaxosServiceMessage(MSG_MDS_BEACON, les), 
-    fsid(f), name(n), state(st), seq(se),
+    fsid(f), global_id(g), name(n), state(st), seq(se),
     standby_for_rank(-1) { }
 
   ceph_fsid_t& get_fsid() { return fsid; }
+  __u64 get_global_id() { return global_id; }
   string& get_name() { return name; }
   epoch_t get_last_epoch_seen() { return version; }
   int get_state() { return state; }
@@ -50,13 +52,14 @@ class MMDSBeacon : public PaxosServiceMessage {
   void set_standby_for_name(string& n) { standby_for_name = n; }
 
   void print(ostream& out) {
-    out << "mdsbeacon(" << name << " " << ceph_mds_state_name(state) 
+    out << "mdsbeacon(" << global_id << "/" << name << " " << ceph_mds_state_name(state) 
 	<< " seq " << seq << " v" << version << ")";
   }
 
   void encode_payload() {
     paxos_encode();
     ::encode(fsid, payload);
+    ::encode(global_id, payload);
     ::encode(state, payload);
     ::encode(seq, payload);
     ::encode(name, payload);
@@ -67,6 +70,7 @@ class MMDSBeacon : public PaxosServiceMessage {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
+    ::decode(global_id, p);
     ::decode(state, p);
     ::decode(seq, p);
     ::decode(name, p);

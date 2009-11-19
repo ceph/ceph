@@ -38,18 +38,19 @@ void MDSMap::print(ostream& out)
       << "failed <" << failed << ">\n"
       << "stopped <" << stopped << ">\n";
 
-  multimap< pair<unsigned,unsigned>, entity_addr_t > foo;
-  for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
+  multimap< pair<unsigned,unsigned>, __u64 > foo;
+  for (map<__u64,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
        p++)
-    foo.insert(pair<pair<unsigned,unsigned>,entity_addr_t>(pair<unsigned,unsigned>(p->second.rank, p->second.inc-1), p->first));
+    foo.insert(pair<pair<unsigned,unsigned>,__u64>(pair<unsigned,unsigned>(p->second.rank, p->second.inc-1), p->first));
 
-  for (multimap< pair<unsigned,unsigned>, entity_addr_t >::iterator p = foo.begin();
+  for (multimap< pair<unsigned,unsigned>, __u64 >::iterator p = foo.begin();
        p != foo.end();
        p++) {
     mds_info_t& info = mds_info[p->second];
     
-    out << info.addr
+    out << p->second << ": "
+	<< info.addr
 	<< " '" << info.name << "'"
 	<< " mds" << info.rank
 	<< "." << info.inc
@@ -78,7 +79,7 @@ void MDSMap::print(ostream& out)
 void MDSMap::print_summary(ostream& out) 
 {
   map<string,int> by_state;
-  for (map<entity_addr_t,mds_info_t>::iterator p = mds_info.begin();
+  for (map<__u64,mds_info_t>::iterator p = mds_info.begin();
        p != mds_info.end();
        p++) {
     string s = ceph_mds_state_name(p->second.state);

@@ -90,7 +90,7 @@ class MDSMonitor : public PaxosService {
     utime_t stamp;
     __u64 seq;
   };
-  map<entity_addr_t, beacon_info_t> last_beacon;
+  map<__u64, beacon_info_t> last_beacon;
 
 public:
   MDSMonitor(Monitor *mn, Paxos *p) : PaxosService(mn, p) { }
