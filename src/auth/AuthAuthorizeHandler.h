@@ -20,6 +20,7 @@
 #include "Auth.h"
 
 struct AuthAuthorizeHandler {
+  virtual ~AuthAuthorizeHandler() {}
   virtual bool verify_authorizer(bufferlist& authorizer_data, bufferlist& authorizer_reply,
                                  EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info) = 0;
 };

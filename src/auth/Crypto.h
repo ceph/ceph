@@ -81,6 +81,7 @@ static inline ostream& operator<<(ostream& out, const CryptoKey& k)
  */
 class CryptoHandler {
 public:
+  virtual ~CryptoHandler() {}
   virtual int create(bufferptr& secret) = 0;
   virtual int validate_secret(bufferptr& secret) = 0;
   virtual int encrypt(bufferptr& secret, const bufferlist& in, bufferlist& out) = 0;
