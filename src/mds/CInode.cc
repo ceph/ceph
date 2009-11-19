@@ -119,12 +119,26 @@ ostream& operator<<(ostream& out, CInode& in)
   }
 
   out << " rb=" << in.inode.rstat.rbytes;
-  if (in.is_projected()) out << "/" << in.inode.accounted_rstat.rbytes;
+  if (in.inode.rstat.rbytes != in.inode.accounted_rstat.rbytes)
+    out << "/" << in.inode.accounted_rstat.rbytes;
+  if (in.is_projected()) 
+    out << "(" << in.get_projected_inode()->rstat.rbytes
+	<< "/" << in.get_projected_inode()->accounted_rstat.rbytes << ")";
+
   out << " rf=" << in.inode.rstat.rfiles;
-  if (in.is_projected()) out << "/" << in.inode.accounted_rstat.rfiles;
+  if (in.inode.rstat.rfiles != in.inode.accounted_rstat.rfiles)
+    out << "/" << in.inode.accounted_rstat.rfiles;
+  if (in.is_projected()) 
+    out << "(" << in.get_projected_inode()->rstat.rfiles
+	<< "/" << in.get_projected_inode()->accounted_rstat.rfiles << ")";
+
   out << " rd=" << in.inode.rstat.rsubdirs;
-  if (in.is_projected()) out << "/" << in.inode.accounted_rstat.rsubdirs;
-  
+  if (in.inode.rstat.rsubdirs != in.inode.accounted_rstat.rsubdirs)
+    out << "/" << in.inode.accounted_rstat.rsubdirs;
+  if (in.is_projected()) 
+    out << "(" << in.get_projected_inode()->rstat.rsubdirs
+	<< "/" << in.get_projected_inode()->accounted_rstat.rsubdirs << ")";
+
   // locks
   out << " " << in.authlock;
   out << " " << in.linklock;
