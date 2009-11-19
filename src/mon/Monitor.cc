@@ -344,6 +344,8 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     dout(10) << "forward_request no session for request " << *req << dendl;
     delete req;
   }
+  if (session)
+    session->put();
 }
 
 void Monitor::try_send_message(Message *m, entity_inst_t to)
