@@ -444,7 +444,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
 		 onfinish);
 }
 
-void ObjectCacher::bh_read_finish(sobject_t oid, loff_t start, size_t length, bufferlist &bl)
+void ObjectCacher::bh_read_finish(sobject_t oid, loff_t start, __u64 length, bufferlist &bl)
 {
   //lock.Lock();
   dout(7) << "bh_read_finish " 
@@ -608,7 +608,7 @@ void ObjectCacher::lock_ack(list<sobject_t>& oids, tid_t tid)
   }
 }
 
-void ObjectCacher::bh_write_ack(sobject_t oid, loff_t start, size_t length, tid_t tid)
+void ObjectCacher::bh_write_ack(sobject_t oid, loff_t start, __u64 length, tid_t tid)
 {
   //lock.Lock();
   
@@ -677,7 +677,7 @@ void ObjectCacher::bh_write_ack(sobject_t oid, loff_t start, size_t length, tid_
   //lock.Unlock();
 }
 
-void ObjectCacher::bh_write_commit(sobject_t oid, loff_t start, size_t length, tid_t tid)
+void ObjectCacher::bh_write_commit(sobject_t oid, loff_t start, __u64 length, tid_t tid)
 {
   //lock.Lock();
   
@@ -809,7 +809,7 @@ int ObjectCacher::readx(OSDRead *rd, inodeno_t ino, Context *onfinish)
 {
   bool success = true;
   list<BufferHead*> hit_ls;
-  map<size_t, bufferlist> stripe_map;  // final buffer offset -> substring
+  map<__u64, bufferlist> stripe_map;  // final buffer offset -> substring
 
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
@@ -868,9 +868,9 @@ int ObjectCacher::readx(OSDRead *rd, inodeno_t ino, Context *onfinish)
       loff_t opos = ex_it->offset;
       map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
       assert(bh_it->second->start() <= opos);
-      size_t bhoff = opos - bh_it->second->start();
+      __u64 bhoff = opos - bh_it->second->start();
       map<__u32,__u32>::iterator f_it = ex_it->buffer_extents.begin();
-      size_t foff = 0;
+      __u64 foff = 0;
       while (1) {
         BufferHead *bh = bh_it->second;
         assert(opos == (loff_t)(bh->start() + bhoff));
@@ -880,7 +880,7 @@ int ObjectCacher::readx(OSDRead *rd, inodeno_t ino, Context *onfinish)
                  << " frag " << f_it->first << "~" << f_it->second << " +" << foff
                  << dendl;
 
-        size_t len = MIN(f_it->second - foff,
+        __u64 len = MIN(f_it->second - foff,
                          bh->length() - bhoff);
 	bufferlist bit;  // put substr here first, since substr_of clobbers, and
 	                 // we may get multiple bh's at this stripe_map position
@@ -921,10 +921,10 @@ int ObjectCacher::readx(OSDRead *rd, inodeno_t ino, Context *onfinish)
   dout(10) << "readx has all buffers" << dendl;
   
   // ok, assemble into result buffer.
-  size_t pos = 0;
+  __u64 pos = 0;
   if (rd->bl) {
     rd->bl->clear();
-    for (map<size_t,bufferlist>::iterator i = stripe_map.begin();
+    for (map<__u64,bufferlist>::iterator i = stripe_map.begin();
 	 i != stripe_map.end();
 	 i++) {
       assert(pos == i->first);
@@ -972,7 +972,7 @@ int ObjectCacher::writex(OSDWrite *wr, inodeno_t ino)
          f_it != ex_it->buffer_extents.end();
          f_it++) {
       dout(10) << "writex writing " << f_it->first << "~" << f_it->second << " into " << *bh << " at " << opos << dendl;
-      size_t bhoff = bh->start() - opos;
+      __u64 bhoff = bh->start() - opos;
       assert(f_it->second <= bh->length() - bhoff);
 
       // get the frag we're mapping in
@@ -1006,7 +1006,7 @@ int ObjectCacher::writex(OSDWrite *wr, inodeno_t ino)
  
 
 // blocking wait for write.
-bool ObjectCacher::wait_for_write(size_t len, Mutex& lock)
+bool ObjectCacher::wait_for_write(__u64 len, Mutex& lock)
 {
   int blocked = 0;
 

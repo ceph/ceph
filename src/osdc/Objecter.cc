@@ -824,7 +824,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
 			       bufferlist *bl, Context *onfinish)
 {
   // all done
-  size_t bytes_read = 0;
+  __u64 bytes_read = 0;
   
   dout(15) << "_sg_read_finish" << dendl;
 

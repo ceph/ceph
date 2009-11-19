@@ -415,19 +415,19 @@ class ObjectCacher {
   void wrunlock(Object *o);
 
  public:
-  void bh_read_finish(sobject_t oid, loff_t offset, size_t length, bufferlist &bl);
-  void bh_write_ack(sobject_t oid, loff_t offset, size_t length, tid_t t);
-  void bh_write_commit(sobject_t oid, loff_t offset, size_t length, tid_t t);
+  void bh_read_finish(sobject_t oid, loff_t offset, __u64 length, bufferlist &bl);
+  void bh_write_ack(sobject_t oid, loff_t offset, __u64 length, tid_t t);
+  void bh_write_commit(sobject_t oid, loff_t offset, __u64 length, tid_t t);
   void lock_ack(list<sobject_t>& oids, tid_t tid);
 
   class C_ReadFinish : public Context {
     ObjectCacher *oc;
     sobject_t oid;
     loff_t start;
-    size_t length;
+    __u64 length;
   public:
     bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, sobject_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_ReadFinish(ObjectCacher *c, sobject_t o, loff_t s, __u64 l) : oc(c), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_read_finish(oid, start, length, bl);
     }
@@ -437,10 +437,10 @@ class ObjectCacher {
     ObjectCacher *oc;
     sobject_t oid;
     loff_t start;
-    size_t length;
+    __u64 length;
   public:
     tid_t tid;
-    C_WriteAck(ObjectCacher *c, sobject_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_WriteAck(ObjectCacher *c, sobject_t o, loff_t s, __u64 l) : oc(c), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_write_ack(oid, start, length, tid);
     }
@@ -449,10 +449,10 @@ class ObjectCacher {
     ObjectCacher *oc;
     sobject_t oid;
     loff_t start;
-    size_t length;
+    __u64 length;
   public:
     tid_t tid;
-    C_WriteCommit(ObjectCacher *c, sobject_t o, loff_t s, size_t l) : oc(c), oid(o), start(s), length(l) {}
+    C_WriteCommit(ObjectCacher *c, sobject_t o, loff_t s, __u64 l) : oc(c), oid(o), start(s), length(l) {}
     void finish(int r) {
       oc->bh_write_commit(oid, start, length, tid);
     }
@@ -525,7 +525,7 @@ class ObjectCacher {
   bool is_cached(inodeno_t ino, vector<ObjectExtent>& extents, snapid_t snapid);
 
   // write blocking
-  bool wait_for_write(size_t len, Mutex& lock);
+  bool wait_for_write(__u64 len, Mutex& lock);
   
   // blocking.  atomic+sync.
   int atomic_sync_readx(OSDRead *rd, inodeno_t ino, Mutex& lock);
@@ -555,14 +555,14 @@ class ObjectCacher {
 
   /*** async+caching (non-blocking) file interface ***/
   int file_is_cached(inodeno_t ino, ceph_file_layout *layout, snapid_t snapid,
-		     loff_t offset, size_t len) {
+		     loff_t offset, __u64 len) {
     vector<ObjectExtent> extents;
     filer.file_to_extents(ino, layout, offset, len, extents);
     return is_cached(ino, extents, snapid);
   }
 
   int file_read(inodeno_t ino, ceph_file_layout *layout, snapid_t snapid,
-                loff_t offset, size_t len, 
+                loff_t offset, __u64 len, 
                 bufferlist *bl,
 		int flags,
                 Context *onfinish) {
@@ -572,7 +572,7 @@ class ObjectCacher {
   }
 
   int file_write(inodeno_t ino, ceph_file_layout *layout, const SnapContext& snapc,
-                 loff_t offset, size_t len, 
+                 loff_t offset, __u64 len, 
                  bufferlist& bl, utime_t mtime, int flags) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
     filer.file_to_extents(ino, layout, offset, len, wr->extents);
@@ -585,7 +585,7 @@ class ObjectCacher {
 
   int file_atomic_sync_read(inodeno_t ino, ceph_file_layout *layout, 
 			    snapid_t snapid,
-                            loff_t offset, size_t len, 
+                            loff_t offset, __u64 len, 
                             bufferlist *bl, int flags,
                             Mutex &lock) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
@@ -595,7 +595,7 @@ class ObjectCacher {
 
   int file_atomic_sync_write(inodeno_t ino, ceph_file_layout *layout, 
 			     const SnapContext& snapc,
-                             loff_t offset, size_t len, 
+                             loff_t offset, __u64 len, 
                              bufferlist& bl, utime_t mtime, int flags,
                              Mutex &lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);

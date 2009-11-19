@@ -480,7 +480,7 @@ private:
   }
 
   tid_t read(const object_t& oid, ceph_object_layout ol, 
-	     __u64 off, size_t len, snapid_t snap, bufferlist *pbl, int flags,
+	     __u64 off, __u64 len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_READ;
@@ -536,7 +536,7 @@ private:
     return op_submit(o);
   }
   tid_t write(const object_t& oid, ceph_object_layout ol,
-	      __u64 off, size_t len, const SnapContext& snapc, const bufferlist &bl,
+	      __u64 off, __u64 len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
               Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
@@ -563,7 +563,7 @@ private:
     return op_submit(o);
   }
   tid_t zero(const object_t& oid, ceph_object_layout ol, 
-	     __u64 off, size_t len, const SnapContext& snapc, utime_t mtime, int flags,
+	     __u64 off, __u64 len, const SnapContext& snapc, utime_t mtime, int flags,
              Context *onack, Context *oncommit) {
     vector<OSDOp> ops(1);
     ops[0].op.op = CEPH_OSD_OP_ZERO;

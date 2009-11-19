@@ -97,7 +97,7 @@ class Filer {
    * ranges in objects on (primary) osds)
    */
   void file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-		       __u64 offset, size_t len,
+		       __u64 offset, __u64 len,
 		       vector<ObjectExtent>& extents);
 
 
@@ -109,7 +109,7 @@ class Filer {
 	   ceph_file_layout *layout,
 	   snapid_t snap,
            __u64 offset, 
-           size_t len, 
+           __u64 len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
            Context *onfinish) {
@@ -125,7 +125,7 @@ class Filer {
 	    ceph_file_layout *layout,
 	    const SnapContext& snapc,
 	    __u64 offset, 
-            size_t len, 
+            __u64 len, 
             bufferlist& bl,
 	    utime_t mtime,
             int flags, 
@@ -141,7 +141,7 @@ class Filer {
 	       ceph_file_layout *layout,
 	       const SnapContext& snapc,
 	       __u64 offset,
-	       size_t len,
+	       __u64 len,
 	       __u32 truncate_seq,
 	       utime_t mtime,
 	       int flags,
@@ -178,7 +178,7 @@ class Filer {
 	   ceph_file_layout *layout,
 	   const SnapContext& snapc,
 	   __u64 offset,
-           size_t len,
+           __u64 len,
 	   utime_t mtime,
 	   int flags,
            Context *onack,
@@ -208,7 +208,7 @@ class Filer {
 	     ceph_file_layout *layout,
 	     const SnapContext& snapc,
 	     __u64 offset,
-	     size_t len,
+	     __u64 len,
 	     utime_t mtime,
 	     int flags,
 	     Context *onack,

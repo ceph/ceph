@@ -211,7 +211,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, __u64 size, utime_t mtime
 
 
 void Filer::file_to_extents(inodeno_t ino, ceph_file_layout *layout,
-                            __u64 offset, size_t len,
+                            __u64 offset, __u64 len,
                             vector<ObjectExtent>& extents)
 {
   dout(10) << "file_to_extents " << offset << "~" << len 
