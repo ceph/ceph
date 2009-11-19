@@ -302,7 +302,7 @@ MDSTableServer *MDS::get_table_server(int t)
 void MDS::send_message_mds(Message *m, int mds)
 {
   // send mdsmap first?
-  if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
+  if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
     messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap), 
 			    mdsmap->get_inst(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
@@ -314,6 +314,8 @@ void MDS::send_message_mds(Message *m, int mds)
 
 void MDS::forward_message_mds(Message *m, int mds)
 {
+  assert(mds != whoami);
+
   // client request?
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
       ((MClientRequest*)m)->get_orig_source().is_client()) {
