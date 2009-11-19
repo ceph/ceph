@@ -441,7 +441,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	errno = 0;
 	int who = strtol(m->cmd[2].c_str(), 0, 10);
 	if (!errno && who >= 0) {
-	  if (mdsmap.is_active(who)) {
+	  if (mdsmap.is_up(who)) {
 	    mon->inject_args(mdsmap.get_inst(who), m->cmd[3], paxos->get_version());
 	    r = 0;
 	    ss << "ok";
